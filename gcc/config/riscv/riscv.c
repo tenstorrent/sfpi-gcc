@@ -3410,6 +3410,14 @@ riscv_print_operand (FILE *file, rtx op, int letter)
         fputs ("i", file);
       break;
 
+    case 'S':
+      if (code != CONST_INT)
+	output_operand_lossage ("invalid use of '%%%c'", letter);
+      if (INTVAL(op) < 4  ||  INTVAL(op) > 15)
+	output_operand_lossage ("invalid register number %d", INTVAL(op));
+      fprintf (file, "%s", reg_names[INTVAL(op) + SFPU_REG_FIRST]);
+      break;
+
     default:
       switch (code)
 	{
