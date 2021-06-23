@@ -124,7 +124,7 @@
   (const_string "unknown"))
 
 ;; Main data type used by the insn
-(define_attr "mode" "unknown,none,QI,HI,SI,DI,TI,SF,DF,TF"
+(define_attr "mode" "unknown,none,QI,HI,SI,DI,TI,SF,DF,TF,V64SF"
   (const_string "unknown"))
 
 ;; True if the main data type is twice the size of a word.
@@ -2869,3 +2869,4 @@
 (include "pic.md")
 (include "generic.md")
 (include "sifive-7.md")
+(include "sfpu.md")

@@ -274,6 +274,10 @@ const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FRAME_REGS,	FRAME_REGS,
+	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
 };
 
 /* Costs to use when optimizing for rocket.  */
@@ -4766,6 +4770,9 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
   if (FP_REG_P (regno))
     return (GET_MODE_SIZE (mode) + UNITS_PER_FP_REG - 1) / UNITS_PER_FP_REG;
 
+  if (SFPU_REG_P (regno)  &&  mode == V64SFmode)
+    return 1;
+
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 }
@@ -4796,6 +4803,13 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
       if (GET_MODE_UNIT_SIZE (mode) > UNITS_PER_FP_REG
 	  || (!call_used_or_fixed_reg_p (regno)
 	      && GET_MODE_UNIT_SIZE (mode) > UNITS_PER_FP_ARG))
+	return false;
+    }
+  else if (SFPU_REG_P (regno))
+    {
+      if (mode != V64SFmode)
+        return false;
+      if (!SFPU_REG_P (regno + nregs - 1))
 	return false;
     }
   else
@@ -4833,6 +4847,9 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
 
   if (reg_class_subset_p (rclass, GR_REGS))
     return riscv_hard_regno_nregs (GP_REG_FIRST, mode);
+
+  if (reg_class_subset_p (SFPU_REGS, rclass))
+    return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;
 }
@@ -5605,6 +5622,16 @@ riscv_asan_shadow_offset (void)
   return TARGET_64BIT ? (HOST_WIDE_INT_1 << 29) : 0;
 }
 
+bool
+riscv_vector_mode_supported_p(machine_mode mode)
+{
+  switch (mode) {
+		case V64SFmode: return true;
+	  default: return false;
+	}
+	return false;
+}
+
 /* Initialize the GCC target structure.  */
 #undef TARGET_ASM_ALIGNED_HI_OP
 #define TARGET_ASM_ALIGNED_HI_OP "\t.half\t"
@@ -5795,6 +5822,9 @@ riscv_asan_shadow_offset (void)
 #undef  TARGET_DEFAULT_TARGET_FLAGS
 #define TARGET_DEFAULT_TARGET_FLAGS (MASK_BIG_ENDIAN)
 #endif
+
+#undef TARGET_VECTOR_MODE_SUPPORTED_P 
+#define TARGET_VECTOR_MODE_SUPPORTED_P riscv_vector_mode_supported_p
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
