@@ -146,12 +146,17 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
 
   /* Tenstorrent SFPU builtins */
-  DIRECT_BUILTIN (sfpload, RISCV_V64SF_FTYPE_USI_USI,         sfpu),
-  DIRECT_BUILTIN (sfpmul,  RISCV_V64SF_FTYPE_V64SF_V64SF_USI, sfpu),
+  DIRECT_BUILTIN (sfpload,  RISCV_V64SF_FTYPE_USI_USI,               sfpu),
+  DIRECT_BUILTIN (sfploadi, RISCV_V64SF_FTYPE_USI_UHI,               sfpu),
+  DIRECT_BUILTIN (sfpmov,   RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
+  DIRECT_BUILTIN (sfpmul,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
+  DIRECT_BUILTIN (sfpmad,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
 
   DIRECT_NO_TARGET_BUILTIN (sfpsetcc, RISCV_VOID_FTYPE_USI_V64SF_USI, sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpencc,  RISCV_VOID_FTYPE_USI_USI,       sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpcompc, RISCV_VOID_FTYPE,               sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfppushc, RISCV_VOID_FTYPE,               sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfppopc,  RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpstore, RISCV_VOID_FTYPE_V64SF_USI_USI, sfpu)
 };
 
