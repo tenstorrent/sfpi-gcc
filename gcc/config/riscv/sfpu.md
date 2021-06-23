@@ -24,6 +24,10 @@
   ;; Tenstorrent SFPU unspecs.
   UNSPECV_SFPLOAD
   UNSPECV_SFPSTORE
+  UNSPECV_SFPMUL
+  UNSPECV_SFPSETCC
+  UNSPECV_SFPENCC
+  UNSPECV_SFPCOMPC
 ])
 
 (define_expand "movv64sf"
@@ -61,3 +65,28 @@
   "TARGET_SFPU"
   "SFPSTORE\t%0, %1, %2")
 
+(define_insn "riscv_sfpmul"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPMUL))]
+  "TARGET_SFPU"
+  "SFPMUL\t%0, %1, %2, %3")
+
+(define_insn "riscv_sfpsetcc"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "O")
+                     (match_operand:V64SF 1 "register_operand"  "x")
+                     (match_operand:SI    2 "immediate_operand" "M")] UNSPECV_SFPSETCC)]
+  "TARGET_SFPU"
+  "SFPSETCC\t%0, %1, %2")
+
+(define_insn "riscv_sfpencc"
+  [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "O")
+                     (match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPENCC)]
+  "TARGET_SFPU"
+  "SFPENCC\t%0, %1")
+
+(define_insn "riscv_sfpcompc"
+  [(unspec_volatile [(const_int 0)] UNSPECV_SFPCOMPC)]
+  "TARGET_SFPU"
+  "SFPCOMPC")
