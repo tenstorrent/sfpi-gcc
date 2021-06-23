@@ -27,8 +27,16 @@
   UNSPECV_SFPSTORE
   UNSPECV_SFPMUL
   UNSPECV_SFPMAD_VVV
+  UNSPECV_SFPMAD_IVV
+  UNSPECV_SFPMAD_VIV
+  UNSPECV_SFPMAD_VVI
+  UNSPECV_SFPMAD_IIV
+  UNSPECV_SFPMAD_VII
+  UNSPECV_SFPMAD_IVI
+  UNSPECV_SFPMAD_III
   UNSPECV_SFPMOV
-  UNSPECV_SFPSETCC
+  UNSPECV_SFPSETCCI
+  UNSPECV_SFPSETCCV
   UNSPECV_SFPENCC
   UNSPECV_SFPCOMPC
   UNSPECV_SFPPUSHC
@@ -92,21 +100,89 @@
   "TARGET_SFPU"
   "SFPMUL\t%0, %1, %2, %3")
 
-(define_insn "riscv_sfpmad"
+(define_insn "riscv_sfpmadvvv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
                           (match_operand:V64SF 2 "register_operand"  "x")
                           (match_operand:V64SF 3 "register_operand"  "x")
                           (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_VVV))]
   "TARGET_SFPU"
-  "SFPMAD\t%0, %1, %2, %3, %4")
+  "SFPMAD\t%1, %2, %3, %4, %0")
 
-(define_insn "riscv_sfpsetcc"
-  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "O")
-                     (match_operand:V64SF 1 "register_operand"  "x")
-                     (match_operand:SI    2 "immediate_operand" "M")] UNSPECV_SFPSETCC)]
+(define_insn "riscv_sfpmadivv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "M")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_IVV))]
   "TARGET_SFPU"
-  "SFPSETCC\t%0, %1, %2")
+  "SFPMAD\t%S1, %2, %3, %4, %0")
+
+(define_insn "riscv_sfpmadviv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_VIV))]
+  "TARGET_SFPU"
+  "SFPMAD\t%1, %S2, %3, %4, %0")
+
+(define_insn "riscv_sfpmadvvi"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_VVI))]
+  "TARGET_SFPU"
+  "SFPMAD\t%1, %2, %S3, %4, %0")
+
+(define_insn "riscv_sfpmadiiv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "M")
+                          (match_operand:SI    2 "immediate_operand" "M")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_IIV))]
+  "TARGET_SFPU"
+  "SFPMAD\t%S1, %S2, %3, %4, %0")
+
+(define_insn "riscv_sfpmadvii"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M")
+                          (match_operand:SI    3 "immediate_operand" "M")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_VII))]
+  "TARGET_SFPU"
+  "SFPMAD\t%1, %S2, %S3, %4, %0")
+
+(define_insn "riscv_sfpmadivi"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "M")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_IVI))]
+  "TARGET_SFPU"
+  "SFPMAD\t%S1, %2, %S3, %4, %0")
+
+(define_insn "riscv_sfpmadiii"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "M")
+                          (match_operand:SI    2 "immediate_operand" "M")
+                          (match_operand:SI    3 "immediate_operand" "M")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPMAD_III))]
+  "TARGET_SFPU"
+  "SFPMAD\t%S1, %S2, %S3, %4, %0")
+
+(define_insn "riscv_sfpsetcci"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "O")
+                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_SFPSETCCI)]
+  "TARGET_SFPU"
+  "SFPSETCC\t%0, L0, %2")
+
+(define_insn "riscv_sfpsetccv"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
+                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_SFPSETCCV)]
+  "TARGET_SFPU"
+  "SFPSETCC\t0, %1, %2")
 
 (define_insn "riscv_sfpencc"
   [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "O")
