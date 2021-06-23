@@ -70,6 +70,10 @@ mdiv
 Target Report Mask(DIV)
 Use hardware instructions for integer division.
 
+msfpu
+Target Report Mask(SFPU)
+Generate code for Tenstorrent SFPU.
+
 march=
 Target Report RejectNegative Joined
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be

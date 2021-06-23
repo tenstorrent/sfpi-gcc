@@ -27,6 +27,9 @@
 (define_register_constraint "j" "SIBCALL_REGS"
   "@internal")
 
+(define_register_constraint "x" "SFPU_REGS"
+  "Any of the SFPU Registers L0 - L3")
+
 ;; Avoid using register t0 for JALR's argument, because for some
 ;; microarchitectures that is a return-address stack hint.
 (define_register_constraint "l" "JALR_REGS"
@@ -53,6 +56,21 @@
   "A U-type 20-bit signed immediate."
   (and (match_code "const_int")
        (match_test "LUI_OPERAND (ival)")))
+
+(define_constraint "M"
+  "A 4-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 15)")))
+
+(define_constraint "N"
+  "A 16-bit unsigned immediate for SFPU load/store instruction offsets."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 65535)")))
+
+(define_constraint "O"
+  "A 12-bit unsigned immediate for SFPU imm12_math operands."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 4096)")))
 
 ;; Floating-point constant +0.0, used for FCVT-based moves when FMV is
 ;; not available in RV32.

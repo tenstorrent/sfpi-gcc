@@ -257,9 +257,10 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
    - 32 floating point registers
    - 2 fake registers:
 	- ARG_POINTER_REGNUM
-	- FRAME_POINTER_REGNUM */
+	- FRAME_POINTER_REGNUM
+   - 16 SFPU registers */
 
-#define FIRST_PSEUDO_REGISTER 66
+#define FIRST_PSEUDO_REGISTER 82
 
 /* x0, sp, gp, and tp are fixed.  */
 
@@ -271,6 +272,7 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   /* Others.  */							\
+  1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   1, 1									\
 }
 
@@ -285,6 +287,7 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1,			\
   1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,			\
   /* Others.  */							\
+  1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   1, 1									\
 }
 
@@ -305,6 +308,10 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 #define FP_REG_LAST  63
 #define FP_REG_NUM   (FP_REG_LAST - FP_REG_FIRST + 1)
 
+#define SFPU_REG_FIRST 66
+#define SFPU_REG_LAST  81
+#define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
+
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
    compatibility, no hard register can be assigned this column if it
@@ -315,12 +322,15 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   ((unsigned int) ((int) (REGNO) - GP_REG_FIRST) < GP_REG_NUM)
 #define FP_REG_P(REGNO)  \
   ((unsigned int) ((int) (REGNO) - FP_REG_FIRST) < FP_REG_NUM)
+#define SFPU_REG_P(REGNO)  \
+  ((unsigned int) ((int) (REGNO) - SFPU_REG_FIRST) < SFPU_REG_NUM)
 
 /* True when REGNO is in SIBCALL_REGS set.  */
 #define SIBCALL_REG_P(REGNO)	\
   TEST_HARD_REG_BIT (reg_class_contents[SIBCALL_REGS], REGNO)
 
 #define FP_REG_RTX_P(X) (REG_P (X) && FP_REG_P (REGNO (X)))
+#define SFPU_REG_RTX_P(X) (REG_P (X) && SFPU_REG_P (REGNO (X)))
 
 /* Use s0 as the frame pointer if it is so requested.  */
 #define HARD_FRAME_POINTER_REGNUM 8
@@ -394,6 +404,7 @@ enum reg_class
   GR_REGS,			/* integer registers */
   FP_REGS,			/* floating-point registers */
   FRAME_REGS,			/* arg pointer and frame pointer */
+  SFPU_REGS,                    /* SFPU registers for Tenstorrent */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -414,6 +425,7 @@ enum reg_class
   "GR_REGS",								\
   "FP_REGS",								\
   "FRAME_REGS",								\
+  "SFPU_REGS",								\
   "ALL_REGS"								\
 }
 
@@ -436,7 +448,8 @@ enum reg_class
   { 0xffffffff, 0x00000000, 0x00000000 },	/* GR_REGS */		\
   { 0x00000000, 0xffffffff, 0x00000000 },	/* FP_REGS */		\
   { 0x00000000, 0x00000000, 0x00000003 },	/* FRAME_REGS */	\
-  { 0xffffffff, 0xffffffff, 0x00000003 }	/* ALL_REGS */		\
+  { 0x00000000, 0x00000000, 0x0003fffc },	/* SFPU_REGS */ 	\
+  { 0xffffffff, 0xffffffff, 0x0003ffff }	/* ALL_REGS */		\
 }
 
 /* A C expression whose value is a register class containing hard
@@ -476,6 +489,8 @@ enum reg_class
   60, 61, 62, 63,							\
   /* Call-saved FPRs.  */						\
   40, 41, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,			\
+  /* SFPU Registers.  */						\
+  66, 67, 68, 69,							\
   /* None of the remaining classes have defined call-saved		\
      registers.  */							\
   64, 65								\
@@ -736,7 +751,9 @@ typedef struct {
   "fs0", "fs1", "fa0", "fa1", "fa2", "fa3", "fa4", "fa5",	\
   "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",	\
   "fs8", "fs9", "fs10","fs11","ft8", "ft9", "ft10","ft11",	\
-  "arg", "frame", }
+  "arg", "frame", "L0", "L1", "L2", "L3", "L4", "L5", "L6",     \
+  "L7", "L8", "L9", "L10", "L11", "L12", "L13", "L14", "L15"	\
+}
 
 #define ADDITIONAL_REGISTER_NAMES					\
 {									\

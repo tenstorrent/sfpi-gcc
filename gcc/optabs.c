@@ -7438,6 +7438,8 @@ maybe_gen_insn (enum insn_code icode, unsigned int nops,
 
   switch (nops)
     {
+    case 0:
+      return GEN_FCN (icode) ();
     case 1:
       return GEN_FCN (icode) (ops[0].value);
     case 2:
