@@ -72,6 +72,11 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 4096)")))
 
+(define_constraint "P"
+  "A 12-bit unsigned immediate for SFPU load/store instruction offsets."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -2048, 2047)")))
+
 ;; Floating-point constant +0.0, used for FCVT-based moves when FMV is
 ;; not available in RV32.
 (define_constraint "G"
