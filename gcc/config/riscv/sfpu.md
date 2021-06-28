@@ -191,7 +191,7 @@
 
 (define_insn "riscv_sfpshfti"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "N")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "P")
                           (match_operand:V64SF 2 "register_operand"  "0")
                           (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPSHFTI))]
   "TARGET_SFPU"
