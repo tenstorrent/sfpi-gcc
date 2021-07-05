@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME2(A, B, C) RISCV_##A##_FTYPE_##B##_##C
 #define RISCV_FTYPE_NAME3(A, B, C, D) RISCV_##A##_FTYPE_##B##_##C##_##D
 #define RISCV_FTYPE_NAME4(A, B, C, D, E) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
+#define RISCV_FTYPE_NAME5(A, B, C, D, E, F) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -140,6 +141,8 @@ tree v64SF_type_node;
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D
 #define RISCV_FTYPE_ATYPES4(A, B, C, D, E) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E
+#define RISCV_FTYPE_ATYPES5(A, B, C, D, E, F) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
@@ -179,6 +182,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfpdivp2,   RISCV_V64SF_FTYPE_USI_V64SF_USI,         sfpu),
   DIRECT_BUILTIN (sfpexexp,   RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfpexman,   RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
+  DIRECT_BUILTIN (sfplut,     RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI, sfpu),
 
   DIRECT_NO_TARGET_BUILTIN (sfpsetcci, RISCV_VOID_FTYPE_USI_USI,       sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpsetccv, RISCV_VOID_FTYPE_V64SF_USI,     sfpu),

@@ -62,6 +62,15 @@
   UNSPECV_SFPCOMPC
   UNSPECV_SFPPUSHC
   UNSPECV_SFPPOPC
+  UNSPECV_SFPLUT
+])
+
+(define_constants [
+  ;; Tenstorrent SFPU registers.
+	(LREG0 66)
+	(LREG1 67)
+	(LREG2 68)
+	(LREG3 69)
 ])
 
 (define_expand "movv64sf"
@@ -79,9 +88,28 @@
   "TARGET_SFPU  &&
    (   register_operand (operands[0], V64SFmode)
     || reg_or_0_operand (operands[1], V64SFmode))"
-  "@SFPMOV\t%1, %0, 0
-    SFPMOV\t%1, %0, 0
-    SFPMOV\t%1, %0, 0"
+	{
+	  switch (which_alternative) {
+		  case 0:
+			  return "SFPMOV\t%1, %0, 0";
+				break;
+
+			case 1:
+			case 2:
+				if (INSN_HAS_LOCATION (insn)) {
+					error_at(INSN_LOCATION(insn), "Error: Not enough SFPU registers.  Need to spill.  Exiting!\n");
+					exit(1);
+				} else {
+					error("Error: Not enough SFPU registers.  Need to spill.  Exiting!\n");
+					exit(1);
+				}
+				break;
+
+			default:
+			  gcc_unreachable();
+				break;
+		}
+	}
   [(set_attr "move_type" "fmove,fpload,fpstore")
    (set_attr "mode" "V64SF")])
 
@@ -377,4 +405,14 @@
   [(unspec_volatile [(const_int 0)] UNSPECV_SFPPOPC)]
   "TARGET_SFPU"
   "SFPPOPC")
+
+(define_insn "riscv_sfplut"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q3")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "Q0")
+                          (match_operand:V64SF 2 "register_operand"  "Q1")
+                          (match_operand:V64SF 3 "register_operand"  "Q2")
+                          (match_operand:V64SF 4 "register_operand"  "0")
+                          (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_SFPLUT))]
+  "TARGET_SFPU"
+  "SFPLUT\t%0, %5")
 

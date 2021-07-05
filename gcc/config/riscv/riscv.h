@@ -404,6 +404,10 @@ enum reg_class
   GR_REGS,			/* integer registers */
   FP_REGS,			/* floating-point registers */
   FRAME_REGS,			/* arg pointer and frame pointer */
+  SFPU_REGS_L0,                 /* SFPU register L0 for Tenstorrent */
+  SFPU_REGS_L1,                 /* SFPU register L1 for Tenstorrent */
+  SFPU_REGS_L2,                 /* SFPU register L2 for Tenstorrent */
+  SFPU_REGS_L3,                 /* SFPU register L3 for Tenstorrent */
   SFPU_REGS,                    /* SFPU registers for Tenstorrent */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
@@ -425,6 +429,10 @@ enum reg_class
   "GR_REGS",								\
   "FP_REGS",								\
   "FRAME_REGS",								\
+  "SFPU_REGS_L0",							\
+  "SFPU_REGS_L1",							\
+  "SFPU_REGS_L2",							\
+  "SFPU_REGS_L3",							\
   "SFPU_REGS",								\
   "ALL_REGS"								\
 }
@@ -448,6 +456,10 @@ enum reg_class
   { 0xffffffff, 0x00000000, 0x00000000 },	/* GR_REGS */		\
   { 0x00000000, 0xffffffff, 0x00000000 },	/* FP_REGS */		\
   { 0x00000000, 0x00000000, 0x00000003 },	/* FRAME_REGS */	\
+  { 0x00000000, 0x00000000, 0x00000004 },	/* SFPU_REGS_L0 */ 	\
+  { 0x00000000, 0x00000000, 0x00000008 },	/* SFPU_REGS_L1 */ 	\
+  { 0x00000000, 0x00000000, 0x00000010 },	/* SFPU_REGS_L2 */ 	\
+  { 0x00000000, 0x00000000, 0x00000020 },	/* SFPU_REGS_L3 */ 	\
   { 0x00000000, 0x00000000, 0x0003fffc },	/* SFPU_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0x0003ffff }	/* ALL_REGS */		\
 }
