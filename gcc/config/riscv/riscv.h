@@ -76,12 +76,14 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{" FPIE_OR_FPIC_SPEC ":-fpic} \
 %{march=*} \
 %{mabi=*} \
-%(subtarget_asm_spec)"
+%(subtarget_asm_spec) \
+%{msfpu:-march=rv32imay} "
 
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS					\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
-"%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "
+"%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "       \
+"%{msfpu:-msfpu -march=rv32imafdcy -mabi=ilp32d} "
 
 #define TARGET_DEFAULT_CMODEL CM_MEDLOW
 

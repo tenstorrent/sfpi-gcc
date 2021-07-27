@@ -45,5 +45,6 @@ RISCV_CORE("sifive-s76",      "rv64imafdc", "sifive-7-series")
 
 RISCV_CORE("sifive-u54",      "rv64imafdc", "sifive-5-series")
 RISCV_CORE("sifive-u74",      "rv64imafdc", "sifive-7-series")
+RISCV_CORE("sifive-u74-sfp",  "rv64imafdcy","sifive-7-series with SFPU")
 
 #undef RISCV_CORE
