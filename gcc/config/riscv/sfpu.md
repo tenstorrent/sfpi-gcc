@@ -23,6 +23,10 @@
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
   UNSPECV_SFPLOAD
+  UNSPECV_SFPLOADL0
+  UNSPECV_SFPLOADL1
+  UNSPECV_SFPLOADL2
+  UNSPECV_SFPLOADL3
   UNSPECV_SFPLOADI
   UNSPECV_SFPSTORE_V
   UNSPECV_SFPSTORE_R
@@ -116,6 +120,30 @@
                           (match_operand:SI 2 "immediate_operand" "N")] UNSPECV_SFPLOAD))]
   "TARGET_SFPU"
   "SFPLOAD\t%0, %1, %2")
+
+(define_insn "riscv_sfploadl0"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q0")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPLOADL0))]
+  "TARGET_SFPU"
+  "")
+
+(define_insn "riscv_sfploadl1"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q1")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPLOADL1))]
+  "TARGET_SFPU"
+  "")
+
+(define_insn "riscv_sfploadl2"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q2")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPLOADL2))]
+  "TARGET_SFPU"
+  "")
+
+(define_insn "riscv_sfploadl3"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q3")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPLOADL3))]
+  "TARGET_SFPU"
+  "")
 
 (define_insn "riscv_sfploadi"
   [(set (match_operand:V64SF 0 "register_operand" "=x,x")
