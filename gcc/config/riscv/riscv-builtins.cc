@@ -158,6 +158,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfpaddi,     RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
   DIRECT_BUILTIN (sfpiadd_v,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfpiadd_i,   RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
+  DIRECT_BUILTIN (sfpiadd_r,   RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
   DIRECT_BUILTIN (sfpshft_v,   RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
   DIRECT_BUILTIN (sfpshft_i,   RISCV_V64SF_FTYPE_V64SF_USI,             sfpu),
   DIRECT_BUILTIN (sfpabs,      RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
@@ -190,7 +191,8 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_NO_TARGET_BUILTIN (sfpcompc,   RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfppushc,   RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfppopc,    RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpstore,   RISCV_VOID_FTYPE_V64SF_USI_USI, sfpu)
+  DIRECT_NO_TARGET_BUILTIN (sfpstore_v, RISCV_VOID_FTYPE_V64SF_USI_USI, sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfpstore_r, RISCV_VOID_FTYPE_USI_USI_USI,   sfpu)
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
