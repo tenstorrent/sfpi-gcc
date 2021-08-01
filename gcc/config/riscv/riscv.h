@@ -112,7 +112,7 @@ ASM_MISA_SPEC
 #define DRIVER_SELF_SPECS					\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
 "%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "       \
-"%{msfpu:-msfpu -march=rv32imafdcy -mabi=ilp32d} "
+"%{msfpu:-msfpu -march=rv32imay -mabi=ilp32} "
 
 #define TARGET_DEFAULT_CMODEL CM_MEDLOW
 
