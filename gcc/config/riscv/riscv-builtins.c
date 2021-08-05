@@ -192,7 +192,8 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_NO_TARGET_BUILTIN (sfppushc,   RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfppopc,    RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpstore_v, RISCV_VOID_FTYPE_V64SF_USI_USI, sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpstore_r, RISCV_VOID_FTYPE_USI_USI_USI,   sfpu)
+  DIRECT_NO_TARGET_BUILTIN (sfpstore_r, RISCV_VOID_FTYPE_USI_USI_USI,   sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfpnop,     RISCV_VOID_FTYPE,               sfpu)
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the

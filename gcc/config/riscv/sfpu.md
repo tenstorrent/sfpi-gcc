@@ -65,6 +65,7 @@
   UNSPECV_SFPPUSHC
   UNSPECV_SFPPOPC
   UNSPECV_SFPLUT
+  UNSPECV_SFPNOP
 ])
 
 (define_constants [
@@ -98,13 +99,7 @@
 
 			case 1:
 			case 2:
-				if (INSN_HAS_LOCATION (insn)) {
-					error_at(INSN_LOCATION(insn), "Error: Not enough SFPU registers.  Need to spill.  Exiting!\n");
-					exit(1);
-				} else {
-					error("Error: Not enough SFPU registers.  Need to spill.  Exiting!\n");
-					exit(1);
-				}
+				return "SFPILLEGAL";
 				break;
 
 			default:
@@ -432,4 +427,9 @@
                           (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_SFPLUT))]
   "TARGET_SFPU"
   "SFPLUT\t%0, %5")
+
+(define_insn "riscv_sfpnop"
+  [(unspec_volatile [(const_int 0)] UNSPECV_SFPNOP)]
+  "TARGET_SFPU"
+  "SFPNOP")
 
