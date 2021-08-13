@@ -3696,6 +3696,21 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	output_addr_const (file, newop);
 	break;
       }
+
+    case 's':
+      if (code == CONST_INT)
+	fprintf (file, "%d", INTVAL(op));
+      else
+	gcc_unreachable();
+      break;
+
+    case 'u':
+      if (code == CONST_INT)
+	fprintf (file, "%u", ((unsigned)(INTVAL(op) & 0xFFFF)));
+      else
+	gcc_unreachable();
+      break;
+
     default:
       switch (code)
 	{
