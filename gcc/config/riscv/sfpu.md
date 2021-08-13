@@ -118,11 +118,13 @@
   "SFPLOAD\t%0, %1, %2")
 
 (define_insn "riscv_sfploadi"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")
-                          (match_operand:HI 2 "immediate_operand" "N")] UNSPECV_SFPLOADI))]
+  [(set (match_operand:V64SF 0 "register_operand" "=x,x")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M,M")
+                          (match_operand:SI 2 "immediate_operand" "R,N")] UNSPECV_SFPLOADI))]
   "TARGET_SFPU"
-  "SFPLOADI\t%0, %1, %2")
+  "@
+  SFPLOADI\t%0, %1, %s2
+  SFPLOADI\t%0, %1, %u2")
 
 (define_insn "riscv_sfpstore_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
