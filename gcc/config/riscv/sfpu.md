@@ -191,7 +191,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")
                           (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPMUL))]
   "TARGET_SFPU"
-  "SFPMUL\t%0, %1, %2, %3")
+  "SFPMUL\t%1, %2, L4, %0, %3")
 
 (define_insn "riscv_sfpadd"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -199,7 +199,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")
                           (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPADD))]
   "TARGET_SFPU"
-  "SFPADD\t%0, %1, %2, %3")
+  "SFPADD\tL10, %1, %2, %0, %3")
 
 (define_insn "riscv_sfpiadd_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
