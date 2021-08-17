@@ -123,18 +123,30 @@
     || reg_or_0_operand (operands[1], V64SFmode))"
   {
     switch (which_alternative) {
-      case 0:
-        return "SFPMOV\t%1, %0, 0";
-        break;
+    case 0:
+      // Note: must re-enable all elements until we know if we are in a predicated state
+      output_asm_insn("SFPPUSHC", operands);
+      output_asm_insn("SFPENCC\t3, 2", operands);
+      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("SFPMOV\t%1, %0, 0", operands);
+      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("SFPPOPC", operands);
+      return "SFPNOP";
+      break;
 
-      case 1:
-      case 2:
-        return "SFPILLEGAL";
-        break;
+    case 1:
+    case 2:
+      if (INSN_HAS_LOCATION (insn)) {
+        error_at(INSN_LOCATION(insn), "Error: cannot read/write SFPU register (spill or function invocation) - exiting!");
+      } else {
+        error("Error: cannot read/write SFPU register (spill or function invocation) - exiting!");
+      }
+      return "SFPILLEGAL";
 
-      default:
-        gcc_unreachable();
-        break;
+    default:
+      gcc_unreachable();
+      break;
     }
   }
   [(set_attr "move_type" "fmove,fpload,fpstore")
