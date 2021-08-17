@@ -19,26 +19,44 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+; & means early clobber, written before inputs are used, cannot reuse input reg
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
+  ;; INT for internal
+  ;; IMM for immediate
+  ;; REG for register
   UNSPECV_SFPLOAD
+  UNSPECV_SFPLOAD_INT_IMM
+  UNSPECV_SFPLOAD_INT_REG
   UNSPECV_SFPLOADL0
   UNSPECV_SFPLOADL1
   UNSPECV_SFPLOADL2
   UNSPECV_SFPLOADL3
   UNSPECV_SFPLOADI
+  UNSPECV_SFPLOADI_INT_IMM
+  UNSPECV_SFPLOADI_INT_REG
   UNSPECV_SFPSTORE_V
+  UNSPECV_SFPSTORE_V_INT_IMM
+  UNSPECV_SFPSTORE_V_INT_REG
   UNSPECV_SFPSTORE_R
+  UNSPECV_SFPSTORE_R_INT_IMM
+  UNSPECV_SFPSTORE_R_INT_REG
   UNSPECV_SFPMULI
   UNSPECV_SFPADDI
+  UNSPECV_SFPADDI_INT_IMM
+  UNSPECV_SFPADDI_INT_REG
   UNSPECV_SFPMUL
   UNSPECV_SFPADD
   UNSPECV_SFPIADD_V
   UNSPECV_SFPIADD_I
+  UNSPECV_SFPIADD_I_INT_IMM
+  UNSPECV_SFPIADD_I_INT_REG
   UNSPECV_SFPIADD_R
   UNSPECV_SFPSHFT_V
   UNSPECV_SFPSHFT_I
+  UNSPECV_SFPSHFT_I_INT_IMM
+  UNSPECV_SFPSHFT_I_INT_REG
   UNSPECV_SFPABS
   UNSPECV_SFPAND
   UNSPECV_SFPOR
@@ -46,10 +64,16 @@
   UNSPECV_SFPLZ
   UNSPECV_SFPSETMAN_V
   UNSPECV_SFPSETMAN_I
+  UNSPECV_SFPSETMAN_I_INT_IMM
+  UNSPECV_SFPSETMAN_I_INT_REG
   UNSPECV_SFPSETEXP_V
   UNSPECV_SFPSETEXP_I
+  UNSPECV_SFPSETEXP_I_INT_IMM
+  UNSPECV_SFPSETEXP_I_INT_REG
   UNSPECV_SFPSETSGN_V
   UNSPECV_SFPSETSGN_I
+  UNSPECV_SFPSETSGN_I_INT_IMM
+  UNSPECV_SFPSETSGN_I_INT_REG
   UNSPECV_SFPMAD_VVV
   UNSPECV_SFPMAD_RVV
   UNSPECV_SFPMAD_VRV
@@ -60,6 +84,8 @@
   UNSPECV_SFPMAD_RRR
   UNSPECV_SFPMOV
   UNSPECV_SFPDIVP2
+  UNSPECV_SFPDIVP2_INT_IMM
+  UNSPECV_SFPDIVP2_INT_REG
   UNSPECV_SFPEXEXP
   UNSPECV_SFPEXMAN
   UNSPECV_SFPSETCC_I
@@ -114,12 +140,48 @@
   [(set_attr "move_type" "fmove,fpload,fpstore")
    (set_attr "mode" "V64SF")])
 
-(define_insn "riscv_sfpload"
+(define_expand "riscv_sfpload"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
+                          (match_operand:SI 2 "immediate_operand" "")
+                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_SFPLOAD))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpload_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpload_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpload_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")
-                          (match_operand:SI 2 "immediate_operand" "N")] UNSPECV_SFPLOAD))]
+                          (match_operand:SI 2 "immediate_operand" "N")] UNSPECV_SFPLOAD_INT_IMM))]
   "TARGET_SFPU"
   "SFPLOAD\t%0, %1, %2")
+
+(define_insn "riscv_sfpload_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI 1 "address_operand"  "r")
+                          (match_operand:SI 2 "immediate_operand" "M")
+                          (match_operand:SI 3 "nonmemory_operand" "r")] UNSPECV_SFPLOAD_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 "=&r"))]
+  "TARGET_SFPU"
+{
+    int value = TT_OP_SFPLOAD(REGNO(operands[0]) - SFPU_REG_FIRST, INTVAL(operands[2]), 0);
+    operands[2] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%4, %2", operands);
+    output_asm_insn ("slli\t%5, %3, 16", operands);
+    output_asm_insn ("srli\t%5, %5, 16", operands);
+    output_asm_insn ("add\t%4, %4, %5", operands);
+    return "sw\t%4,0(%1)";
+}
+)
 
 (define_insn "riscv_sfploadl0"
   [(set (match_operand:V64SF 0 "register_operand" "=Q0")
@@ -145,28 +207,138 @@
   "TARGET_SFPU"
   "")
 
-(define_insn "riscv_sfploadi"
+(define_expand "riscv_sfploadi"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
+                          (match_operand:SI 2 "immediate_operand" "")
+                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_SFPLOADI))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfploadi_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfploadi_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfploadi_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x,x")
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M,M")
-                          (match_operand:SI 2 "immediate_operand" "R,N")] UNSPECV_SFPLOADI))]
+                          (match_operand:SI 2 "immediate_operand" "R,N")] UNSPECV_SFPLOADI_INT_IMM))]
   "TARGET_SFPU"
   "@
   SFPLOADI\t%0, %1, %s2
   SFPLOADI\t%0, %1, %u2")
 
-(define_insn "riscv_sfpstore_v"
+(define_insn "riscv_sfploadi_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI 1 "address_operand"  "r")
+                          (match_operand:SI 2 "immediate_operand" "M")
+                          (match_operand:SI 3 "nonmemory_operand" "r")] UNSPECV_SFPLOADI_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 "=&r"))]
+  "TARGET_SFPU"
+{
+  int value = TT_OP_SFPLOADI(REGNO(operands[0]) - SFPU_REG_FIRST, INTVAL(operands[2]), 0);
+  operands[2] = gen_rtx_CONST_INT(SImode, value);
+
+  output_asm_insn ("li\t%4, %2", operands);
+  output_asm_insn ("slli\t%5, %3, 16", operands);
+  output_asm_insn ("srli\t%5, %5, 16", operands);
+  output_asm_insn ("add\t%4, %4, %5", operands);
+  return "sw\t%4,0(%1)";
+}
+)
+
+(define_expand "riscv_sfpstore_v"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
+                     (match_operand:V64SF 1 "register_operand"  "")
+                     (match_operand:SI    2 "immediate_operand" "")
+                     (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_SFPSTORE_V)]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpstore_v_int_imm(operands[1], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpstore_v_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpstore_v_int_imm"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
                      (match_operand:SI    1 "immediate_operand" "M")
-                     (match_operand:SI    2 "immediate_operand" "N")] UNSPECV_SFPSTORE_V)]
+                     (match_operand:SI    2 "immediate_operand" "N")] UNSPECV_SFPSTORE_V_INT_IMM)]
   "TARGET_SFPU"
   "SFPSTORE\t%0, %1, %2")
 
-(define_insn "riscv_sfpstore_r"
+(define_insn "riscv_sfpstore_v_int_reg"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "r")
+                     (match_operand:V64SF 1 "register_operand"  "x")
+                     (match_operand:SI    2 "immediate_operand" "M")
+                     (match_operand:SI    3 "nonmemory_operand" "r")] UNSPECV_SFPSTORE_V_INT_REG)
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 "=&r"))]
+  "TARGET_SFPU"
+{
+  int value = TT_OP_SFPSTORE(REGNO(operands[1]) - SFPU_REG_FIRST, INTVAL(operands[2]), 0);
+  operands[2] = gen_rtx_CONST_INT(SImode, value);
+
+  output_asm_insn ("li\t%4, %2", operands);
+  output_asm_insn ("slli\t%5, %3, 16", operands);
+  output_asm_insn ("srli\t%5, %5, 16", operands);
+  output_asm_insn ("add\t%4, %4, %5", operands);
+  return "sw\t%4,0(%0)";
+}
+)
+
+(define_expand "riscv_sfpstore_r"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
+                     (match_operand:SI    1 "immediate_operand" "")
+                     (match_operand:SI    2 "immediate_operand" "")
+                     (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_SFPSTORE_R)]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpstore_r_int_imm(operands[1], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpstore_r_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpstore_r_int_imm"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "M")
                      (match_operand:SI    1 "immediate_operand" "M")
-                     (match_operand:SI    2 "immediate_operand" "N")] UNSPECV_SFPSTORE_R)]
+                     (match_operand:SI    2 "immediate_operand" "N")] UNSPECV_SFPSTORE_R_INT_IMM)]
   "TARGET_SFPU"
   "SFPSTORE\t%S0, %1, %2")
+
+(define_insn "riscv_sfpstore_r_int_reg"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "r")
+                     (match_operand:SI    1 "immediate_operand" "M")
+                     (match_operand:SI    2 "immediate_operand" "M")
+                     (match_operand:SI    3 "nonmemory_operand" "r")] UNSPECV_SFPSTORE_R_INT_REG)
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 "=&r"))]
+  "TARGET_SFPU"
+{
+  int regno = INTVAL(operands[1]);
+  if (regno < 4 || regno > 15) output_operand_lossage ("invalid register number %d", regno);
+  int value = TT_OP_SFPSTORE(regno, INTVAL(operands[2]), 0);
+  operands[2] = gen_rtx_CONST_INT(SImode, value);
+
+  output_asm_insn ("li\t%4, %2", operands);
+  output_asm_insn ("slli\t%5, %3, 16", operands);
+  output_asm_insn ("srli\t%5, %5, 16", operands);
+  output_asm_insn ("add\t%4, %4, %5", operands);
+  return "sw\t%4,0(%0)";
+}
+)
 
 (define_insn "riscv_sfpmuli"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -176,21 +348,99 @@
   "TARGET_SFPU"
   "SFPMULI\t%2, %0, %3")
 
-(define_insn "riscv_sfpaddi"
+(define_expand "riscv_sfpaddi"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_SFPADDI))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpaddi_int_imm(operands[0], operands[2], operands[3], operands[4]));
+  } else {
+    emit_insn (gen_riscv_sfpaddi_int_reg(operands[0], operands[1], operands[2], operands[3], operands[4]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpaddi_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:SI    2 "immediate_operand" "N")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPADDI))]
+                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPADDI_INT_IMM))]
   "TARGET_SFPU"
   "SFPADDI\t%2, %0, %3")
 
-(define_insn "riscv_sfpdivp2"
+(define_insn "riscv_sfpaddi_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "r")
+                          (match_operand:V64SF 2 "register_operand"  "0")
+	                  (match_operand:SI    3 "nonmemory_operand" "r")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPADDI_INT_REG))
+        (clobber (match_scratch:SI 5 "=&r"))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+  int value = TT_OP_SFPADDI(0, REGNO(operands[0]) - SFPU_REG_FIRST, INTVAL(operands[4]));
+  operands[4] = gen_rtx_CONST_INT(SImode, value);
+
+  output_asm_insn ("li\t%5, %4", operands);
+  output_asm_insn ("slli\t%6, %3, 16", operands);
+  output_asm_insn ("srli\t%6, %6, 8", operands);
+  output_asm_insn ("add\t%5, %5, %6", operands);
+  return "sw\t%5,0(%1)";
+}
+)
+
+(define_expand "riscv_sfpdivp2"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
+                          (match_operand:SI    2 "nonmemory_operand" "")
+                          (match_operand:V64SF 3 "register_operand"  "")
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_SFPDIVP2))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[2]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpdivp2_int_imm(operands[0], operands[2], operands[3], operands[4]));
+  } else {
+    emit_insn (gen_riscv_sfpdivp2_int_reg(operands[0], operands[1], operands[2], operands[3], operands[4]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpdivp2_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI    1 "immediate_operand" "P")
                           (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPDIVP2))]
+                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPDIVP2_INT_IMM))]
   "TARGET_SFPU"
   "SFPDIVP2\t%1, %2, %0, %3")
+
+(define_insn "riscv_sfpdivp2_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "r")
+                          (match_operand:SI    2 "nonmemory_operand" "r")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPDIVP2_INT_REG))
+        (clobber (match_scratch:SI 5 "=&r"))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+    int lreg_c = REGNO(operands[3]) - SFPU_REG_FIRST;
+    int lreg_dest = REGNO(operands[0]) - SFPU_REG_FIRST;
+    int value = TT_OP_SFPDIVP2(0, lreg_c, lreg_dest, INTVAL(operands[4]));
+    operands[4] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%5, %4", operands);
+    output_asm_insn ("slli\t%6, %2, 20", operands);
+    output_asm_insn ("srli\t%6, %6, 8", operands);
+    output_asm_insn ("add\t%5, %5, %6", operands);
+    return "sw\t%5,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpexexp"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -237,13 +487,53 @@
   "TARGET_SFPU"
   "SFPIADD\t0, %2, %0, %3")
 
-(define_insn "riscv_sfpiadd_i"
+(define_expand "riscv_sfpiadd_i"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_SFPIADD_I))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpiadd_i_int_imm(operands[0], operands[2], operands[3], operands[4]));
+  } else {
+    emit_insn (gen_riscv_sfpiadd_i_int_reg(operands[0], operands[1], operands[2], operands[3], operands[4]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpiadd_i_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
                           (match_operand:SI    2 "immediate_operand" "n")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPIADD_I))]
+                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPIADD_I_INT_IMM))]
   "TARGET_SFPU"
   "SFPIADD\t%2, %1, %0, %3")
+
+(define_insn "riscv_sfpiadd_i_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"   "r")
+                          (match_operand:V64SF 2 "register_operand"  "0")
+                          (match_operand:SI    3 "nonmemory_operand" "r")
+                          (match_operand:SI    4 "immediate_operand" "M")] UNSPECV_SFPIADD_I_INT_REG))
+        (clobber (match_scratch:SI 5 "=&r"))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+    int lreg_c = REGNO(operands[2]) - SFPU_REG_FIRST;
+    int lreg_d = REGNO(operands[0]) - SFPU_REG_FIRST;
+    int value = TT_OP_SFPIADD(0, lreg_c, lreg_d, INTVAL(operands[4]));
+    operands[4] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%5, %4", operands);
+    output_asm_insn ("slli\t%6, %3, 20", operands);
+    output_asm_insn ("srli\t%6, %6, 8", operands);
+    output_asm_insn ("add\t%5, %5, %6", operands);
+    return "sw\t%5,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpiadd_r"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -260,12 +550,49 @@
   "TARGET_SFPU"
   "SFPSHFT\t0, %2, %0, 0")
 
-(define_insn "riscv_sfpshft_i"
+(define_expand "riscv_sfpshft_i"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_SFPSHFT_I))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpshft_i_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpshft_i_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpshft_i_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "immediate_operand" "P")] UNSPECV_SFPSHFT_I))]
+                          (match_operand:SI    2 "immediate_operand" "P")] UNSPECV_SFPSHFT_I_INT_IMM))]
   "TARGET_SFPU"
   "SFPSHFT\t%2, L0, %0, 1")
+
+(define_insn "riscv_sfpshft_i_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "r")
+                          (match_operand:V64SF 2 "register_operand"  "0")
+                          (match_operand:SI    3 "nonmemory_operand" "r")] UNSPECV_SFPSHFT_I_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 ""))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+    int value = TT_OP_SFPSHFT(0, 0, REGNO(operands[0]) - SFPU_REG_FIRST, 1);
+    operands[5] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%4, %5", operands);
+    output_asm_insn ("slli\t%6, %3, 20", operands);
+    output_asm_insn ("srli\t%6, %6, 8", operands);
+    output_asm_insn ("add\t%4, %4, %6", operands);
+    return "sw\t%4,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpabs"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -308,12 +635,51 @@
   "TARGET_SFPU"
   "SFPSETMAN\t0, %2, %0, 0")
 
-(define_insn "riscv_sfpsetman_i"
+(define_expand "riscv_sfpsetman_i"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand" "")
+                          (match_operand:SI    2 "nonmemory_operand" "")
+                          (match_operand:V64SF 3 "register_operand"  "")] UNSPECV_SFPSETMAN_I))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[2]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpsetman_i_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpsetman_i_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpsetman_i_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI    1 "immediate_operand" "P")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETMAN_I))]
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETMAN_I_INT_IMM))]
   "TARGET_SFPU"
   "SFPSETMAN\t%1, %2, %0, 1")
+
+(define_insn "riscv_sfpsetman_i_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "address_operand" "r")
+                          (match_operand:SI    2 "nonmemory_operand" "r")
+                          (match_operand:V64SF 3 "register_operand"  "x")] UNSPECV_SFPSETMAN_I_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 "=&r"))
+        (clobber (match_scratch:SI 6 ""))]
+  "TARGET_SFPU"
+{
+    int lreg_c = REGNO(operands[3]) - SFPU_REG_FIRST;
+    int lreg_d = REGNO(operands[0]) - SFPU_REG_FIRST;
+    int value = TT_OP_SFPSETMAN(0, lreg_c, lreg_d, 1);
+    operands[6] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%4, %6", operands);
+    output_asm_insn ("slli\t%5, %2, 20", operands);
+    output_asm_insn ("srli\t%5, %5, 8", operands);
+    output_asm_insn ("add\t%4, %4, %5", operands);
+    return "sw\t%4,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpsetexp_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -322,12 +688,51 @@
   "TARGET_SFPU"
   "SFPSETEXP\t0, %2, %0, 0")
 
-(define_insn "riscv_sfpsetexp_i"
+(define_expand "riscv_sfpsetexp_i"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:V64SF 1 "address_operand"  "")
+                          (match_operand:SI    2 "nonmemory_operand" "")
+                          (match_operand:V64SF 3 "register_operand"  "")] UNSPECV_SFPSETEXP_I))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[2]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpsetexp_i_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpsetexp_i_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpsetexp_i_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI    1 "immediate_operand" "P")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETEXP_I))]
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETEXP_I_INT_IMM))]
   "TARGET_SFPU"
   "SFPSETEXP\t%1, %2, %0, 1")
+
+(define_insn "riscv_sfpsetexp_i_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "address_operand"  "r")
+                          (match_operand:SI    2 "nonmemory_operand" "r")
+                          (match_operand:V64SF 3 "register_operand"  "x")] UNSPECV_SFPSETEXP_I_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 ""))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+    int lreg_c = REGNO(operands[3]) - SFPU_REG_FIRST;
+    int lreg_d = REGNO(operands[0]) - SFPU_REG_FIRST;
+    int value = TT_OP_SFPSETEXP(0, lreg_c, lreg_d, 1);
+    operands[5] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%4, %5", operands);
+    output_asm_insn ("slli\t%6, %2, 20", operands);
+    output_asm_insn ("srli\t%6, %6, 8", operands);
+    output_asm_insn ("add\t%4, %4, %6", operands);
+    return "sw\t%4,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpsetsgn_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -336,12 +741,51 @@
   "TARGET_SFPU"
   "SFPSETSGN\t0, %2, %0, 0")
 
-(define_insn "riscv_sfpsetsgn_i"
+(define_expand "riscv_sfpsetsgn_i"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand" "")
+                          (match_operand:SI    2 "nonmemory_operand" "")
+                          (match_operand:V64SF 3 "register_operand"  "")] UNSPECV_SFPSETSGN_I))]
+  "TARGET_SFPU"
+{
+  if (GET_CODE(operands[2]) == CONST_INT) {
+    emit_insn (gen_riscv_sfpsetsgn_i_int_imm(operands[0], operands[2], operands[3]));
+  } else {
+    emit_insn (gen_riscv_sfpsetsgn_i_int_reg(operands[0], operands[1], operands[2], operands[3]));
+  }
+  DONE;
+}
+)
+
+(define_insn "riscv_sfpsetsgn_i_int_imm"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI    1 "immediate_operand" "N")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETSGN_I))]
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPSETSGN_I_INT_IMM))]
   "TARGET_SFPU"
   "SFPSETSGN\t%1, %2, %0, 1")
+
+(define_insn "riscv_sfpsetsgn_i_int_reg"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "address_operand" "r")
+                          (match_operand:SI    2 "nonmemory_operand" "r")
+                          (match_operand:V64SF 3 "register_operand"  "x")] UNSPECV_SFPSETSGN_I_INT_REG))
+        (clobber (match_scratch:SI 4 "=&r"))
+        (clobber (match_scratch:SI 5 ""))
+        (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_SFPU"
+{
+    int lreg_c = REGNO(operands[3]) - SFPU_REG_FIRST;
+    int lreg_d = REGNO(operands[0]) - SFPU_REG_FIRST;
+    int value = TT_OP_SFPSETEXP(0, lreg_c, lreg_d, 1);
+    operands[5] = gen_rtx_CONST_INT(SImode, value);
+
+    output_asm_insn ("li\t%4, %5", operands);
+    output_asm_insn ("slli\t%6, %2, 20", operands);
+    output_asm_insn ("srli\t%6, %6, 8", operands);
+    output_asm_insn ("add\t%4, %4, %6", operands);
+    return "sw\t%4,0(%1)";
+}
+)
 
 (define_insn "riscv_sfpmad_vvv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
