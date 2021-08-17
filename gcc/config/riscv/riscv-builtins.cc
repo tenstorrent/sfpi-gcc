@@ -128,6 +128,7 @@ tree v64SF_type_node;
 #define RISCV_ATYPE_USI unsigned_intSI_type_node
 #define RISCV_ATYPE_UHI unsigned_intHI_type_node
 #define RISCV_ATYPE_V64SF v64SF_type_node
+#define RISCV_ATYPE_POINTER ptr_type_node
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -153,29 +154,29 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfploadl1,   RISCV_V64SF_FTYPE_USI,                   sfpu),
   DIRECT_BUILTIN (sfploadl2,   RISCV_V64SF_FTYPE_USI,                   sfpu),
   DIRECT_BUILTIN (sfploadl3,   RISCV_V64SF_FTYPE_USI,                   sfpu),
-  DIRECT_BUILTIN (sfpload,     RISCV_V64SF_FTYPE_USI_USI,               sfpu),
-  DIRECT_BUILTIN (sfploadi,    RISCV_V64SF_FTYPE_USI_USI,               sfpu),
+  DIRECT_BUILTIN (sfpload,     RISCV_V64SF_FTYPE_POINTER_USI_USI,       sfpu),
+  DIRECT_BUILTIN (sfploadi,    RISCV_V64SF_FTYPE_POINTER_USI_USI,       sfpu),
   DIRECT_BUILTIN (sfpmov,      RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfpmul,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfpadd,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfpmuli,     RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
-  DIRECT_BUILTIN (sfpaddi,     RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
+  DIRECT_BUILTIN (sfpaddi,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
   DIRECT_BUILTIN (sfpiadd_v,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpiadd_i,   RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
+  DIRECT_BUILTIN (sfpiadd_i,   RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
   DIRECT_BUILTIN (sfpiadd_r,   RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
   DIRECT_BUILTIN (sfpshft_v,   RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpshft_i,   RISCV_V64SF_FTYPE_V64SF_USI,             sfpu),
+  DIRECT_BUILTIN (sfpshft_i,   RISCV_V64SF_FTYPE_POINTER_V64SF_USI,     sfpu),
   DIRECT_BUILTIN (sfpabs,      RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfpand,      RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
   DIRECT_BUILTIN (sfpor,       RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
   DIRECT_BUILTIN (sfpnot,      RISCV_V64SF_FTYPE_V64SF,                 sfpu),
   DIRECT_BUILTIN (sfplz,       RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfpsetexp_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetexp_i, RISCV_V64SF_FTYPE_USI_V64SF,             sfpu),
+  DIRECT_BUILTIN (sfpsetexp_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
   DIRECT_BUILTIN (sfpsetman_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetman_i, RISCV_V64SF_FTYPE_USI_V64SF,             sfpu),
+  DIRECT_BUILTIN (sfpsetman_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
   DIRECT_BUILTIN (sfpsetsgn_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetsgn_i, RISCV_V64SF_FTYPE_USI_V64SF,             sfpu),
+  DIRECT_BUILTIN (sfpsetsgn_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
   DIRECT_BUILTIN (sfpmad_vvv,  RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
   DIRECT_BUILTIN (sfpmad_rvv,  RISCV_V64SF_FTYPE_USI_V64SF_V64SF_USI,   sfpu),
   DIRECT_BUILTIN (sfpmad_vrv,  RISCV_V64SF_FTYPE_V64SF_USI_V64SF_USI,   sfpu),
@@ -184,7 +185,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfpmad_vrr,  RISCV_V64SF_FTYPE_V64SF_USI_USI_USI,     sfpu),
   DIRECT_BUILTIN (sfpmad_rvr,  RISCV_V64SF_FTYPE_USI_V64SF_USI_USI,     sfpu),
   DIRECT_BUILTIN (sfpmad_rrr,  RISCV_V64SF_FTYPE_USI_USI_USI_USI,       sfpu),
-  DIRECT_BUILTIN (sfpdivp2,    RISCV_V64SF_FTYPE_USI_V64SF_USI,         sfpu),
+  DIRECT_BUILTIN (sfpdivp2,    RISCV_V64SF_FTYPE_POINTER_USI_V64SF_USI, sfpu),
   DIRECT_BUILTIN (sfpexexp,    RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfpexman,    RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
   DIRECT_BUILTIN (sfplut,      RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI, sfpu),
@@ -195,8 +196,8 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_NO_TARGET_BUILTIN (sfpcompc,   RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfppushc,   RISCV_VOID_FTYPE,               sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfppopc,    RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpstore_v, RISCV_VOID_FTYPE_V64SF_USI_USI, sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpstore_r, RISCV_VOID_FTYPE_USI_USI_USI,   sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfpstore_v, RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI, sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfpstore_r, RISCV_VOID_FTYPE_POINTER_USI_USI_USI,   sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpnop,     RISCV_VOID_FTYPE,               sfpu)
 };
 
