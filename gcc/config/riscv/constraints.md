@@ -85,7 +85,7 @@
        (match_test "IN_RANGE (ival, 0, 4096)")))
 
 (define_constraint "P"
-  "A 12-bit unsigned immediate for SFPU load/store instruction offsets."
+  "A 12-bit signed immediate for SFPU load/store instruction offsets."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -2048, 2047)")))
 
