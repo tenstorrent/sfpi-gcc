@@ -212,7 +212,7 @@
 (define_insn "riscv_sfpiadd_i"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
-                          (match_operand:SI    2 "immediate_operand" "P")
+                          (match_operand:SI    2 "immediate_operand" "n")
                           (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPIADD_I))]
   "TARGET_SFPU"
   "SFPIADD\t%2, %1, %0, %3")
