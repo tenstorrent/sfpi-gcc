@@ -105,14 +105,14 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{mlittle-endian} \
 %(subtarget_asm_spec) \
 %(subtarget_asm_spec) \
-%{msfpu:-march=rv32imay} "
+%{msfpu:-march=rv32iy} "
 ASM_MISA_SPEC
 
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS					\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
 "%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "       \
-"%{msfpu:-msfpu -march=rv32imay -mabi=ilp32} "
+"%{msfpu:-msfpu -march=rv32iy -mabi=ilp32} "
 
 #define TARGET_DEFAULT_CMODEL CM_MEDLOW
 
