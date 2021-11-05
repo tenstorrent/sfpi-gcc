@@ -42,6 +42,7 @@
   UNSPECV_SFPSTORE
   UNSPECV_SFPSTORE_INT
   UNSPECV_SFPMULI
+  UNSPECV_SFPMULI_INT
   UNSPECV_SFPADDI
   UNSPECV_SFPADDI_INT
   UNSPECV_SFPMUL
@@ -314,43 +315,38 @@
   "TARGET_SFPU"
   "SFPSTORE\t%0, %1, %2")
 
-(define_insn "riscv_sfpmuli"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "immediate_operand" "N")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPMULI))]
-  "TARGET_SFPU"
-{
-  output_asm_insn("SFPMULI\t%2, %0, %3", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
 
-(define_expand "riscv_sfpaddi"
+(define_int_iterator muliaddi [UNSPECV_SFPMULI UNSPECV_SFPADDI])
+(define_int_attr muliaddi_name [(UNSPECV_SFPMULI "muli") (UNSPECV_SFPADDI "addi")])
+(define_int_attr muliaddi_call [(UNSPECV_SFPMULI "MULI") (UNSPECV_SFPADDI "ADDI")])
+(define_expand "riscv_sfp<muliaddi_name>"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_SFPADDI))]
+                          (match_operand:SI    4 "immediate_operand" "")] muliaddi))]
   "TARGET_SFPU"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_riscv_sfpaddi_int(operands[0], operands[2], operands[3], operands[4]));
+    emit_insn (gen_riscv_sfp<muliaddi_name>_int(operands[0], operands[2], operands[3], operands[4]));
   } else {
-    int base = TT_OP_SFPADDI(0, 0, INTVAL(operands[4]));
+    int base = TT_OP_SFP<muliaddi_call>(0, 0, INTVAL(operands[4]));
     riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 16, 8, 4);
   }
   DONE;
 })
 
-(define_insn "riscv_sfpaddi_int"
+(define_int_iterator muliaddi_int [UNSPECV_SFPMULI_INT UNSPECV_SFPADDI_INT])
+(define_int_attr muliaddi_int_name [(UNSPECV_SFPMULI_INT "muli") (UNSPECV_SFPADDI_INT "addi")])
+(define_int_attr muliaddi_int_call [(UNSPECV_SFPMULI_INT "MULI") (UNSPECV_SFPADDI_INT "ADDI")])
+(define_insn "riscv_sfp<muliaddi_int_name>_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:SI    2 "nonmemory_operand" "N")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPADDI_INT))]
+                          (match_operand:SI    3 "immediate_operand" "M")] muliaddi_int))]
   "TARGET_SFPU"
 {
-  output_asm_insn("SFPADDI\t%2, %0, %3", operands);
+  output_asm_insn("SFP<muliaddi_int_call>\t%2, %0, %3", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
