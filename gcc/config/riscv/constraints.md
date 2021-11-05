@@ -82,7 +82,7 @@
 (define_constraint "O"
   "A 12-bit unsigned immediate for SFPU imm12_math operands."
   (and (match_code "const_int")
-       (match_test "IN_RANGE (ival, 0, 4096)")))
+       (match_test "IN_RANGE (ival, 0, 4095)")))
 
 (define_constraint "P"
   "A 12-bit signed immediate for SFPU load/store instruction offsets."
