@@ -29,6 +29,10 @@
   UNSPECV_SFPASSIGNLR
   UNSPECV_SFPASSIGNLR_INT
   UNSPECV_SFPKEEPALIVE
+  UNSPECV_SFPKEEPALIVE0_INT
+  UNSPECV_SFPKEEPALIVE1_INT
+  UNSPECV_SFPKEEPALIVE2_INT
+  UNSPECV_SFPKEEPALIVE3_INT
   UNSPECV_SFPLOAD
   UNSPECV_SFPLOAD_LV
   UNSPECV_SFPLOAD_INT
@@ -194,8 +198,22 @@
   "TARGET_SFPU"
   "")
 
-(define_insn "riscv_sfpkeepalive"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x")] UNSPECV_SFPKEEPALIVE)]
+(define_expand "riscv_sfpkeepalive"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
+                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_SFPKEEPALIVE)]
+
+  "TARGET_SFPU"
+{
+  static rtx (*fn_ptr[4])(rtx) = {gen_riscv_sfpkeepalive0_int, gen_riscv_sfpkeepalive1_int, 
+                                  gen_riscv_sfpkeepalive2_int, gen_riscv_sfpkeepalive3_int};
+  emit_insn(fn_ptr[INTVAL(operands[1])](operands[0]));
+  DONE;
+})
+
+(define_int_iterator keepalive_int [UNSPECV_SFPKEEPALIVE0_INT UNSPECV_SFPKEEPALIVE1_INT UNSPECV_SFPKEEPALIVE2_INT UNSPECV_SFPKEEPALIVE3_INT])
+(define_int_attr keepalive_int_name [(UNSPECV_SFPKEEPALIVE0_INT "0") (UNSPECV_SFPKEEPALIVE1_INT "1") (UNSPECV_SFPKEEPALIVE2_INT "2") (UNSPECV_SFPKEEPALIVE3_INT "3")])
+(define_insn "riscv_sfpkeepalive<keepalive_int_name>_int"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "Q<keepalive_int_name>")] keepalive_int)]
   "TARGET_SFPU"
   "")
 
