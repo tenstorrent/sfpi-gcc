@@ -164,7 +164,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfpmul_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
   DIRECT_BUILTIN (sfpadd,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfpadd_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpmuli,     RISCV_V64SF_FTYPE_V64SF_USI_USI,         sfpu),
+  DIRECT_BUILTIN (sfpmuli,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
   DIRECT_BUILTIN (sfpaddi,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
   DIRECT_BUILTIN (sfpiadd_v,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfpiadd_i,   RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
