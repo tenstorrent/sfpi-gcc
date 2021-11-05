@@ -530,7 +530,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "nonmemory_operand" "n, n")
+                          (match_operand:SI    3 "immediate_operand" "P, P")
                           (match_operand:SI    4 "immediate_operand" "M, M")] UNSPECV_SFPIADD_I_INT))]
   "TARGET_SFPU"
 {
@@ -671,7 +671,7 @@
 (define_insn "riscv_sfpset<set_float_name_i_int>_i_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:SI    2 "nonmemory_operand" "N, N")
+                          (match_operand:SI    2 "immediate_operand" "O, O")
                           (match_operand:V64SF 3 "register_operand"  "x, x")] set_float_op_i_int))]
   "TARGET_SFPU"
 {
