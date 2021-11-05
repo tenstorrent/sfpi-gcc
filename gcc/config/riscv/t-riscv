@@ -23,6 +23,11 @@ riscv-shorten-memrefs.o: $(srcdir)/config/riscv/riscv-shorten-memrefs.c
 	$(COMPILE) $<
 	$(POSTCOMPILE)
 
+sfpu.o: $(srcdir)/config/riscv/sfpu.c $(CONFIG_H) $(SYSTEM_H) \
+    coretypes.h $(srcdir)/config/riscv/sfpu-protos.h $(srcdir)/config/riscv/sfpu_ops.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
+	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+		$(srcdir)/config/riscv/sfpu.c
+
 PASSES_EXTRA += $(srcdir)/config/riscv/riscv-passes.def
 
 $(common_out_file): $(srcdir)/config/riscv/riscv-cores.def
