@@ -198,7 +198,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (sfpexman_lv, RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
   DIRECT_BUILTIN (sfplut,      RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI, sfpu),
 
-  DIRECT_NO_TARGET_BUILTIN (sfpkeepalive,RISCV_VOID_FTYPE_V64SF,        sfpu),
+  DIRECT_NO_TARGET_BUILTIN (sfpkeepalive,RISCV_VOID_FTYPE_V64SF_USI,    sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpsetcc_i, RISCV_VOID_FTYPE_USI_USI,       sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpsetcc_v, RISCV_VOID_FTYPE_V64SF_USI,     sfpu),
   DIRECT_NO_TARGET_BUILTIN (sfpencc,    RISCV_VOID_FTYPE_USI_USI,       sfpu),
