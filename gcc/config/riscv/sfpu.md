@@ -19,6 +19,8 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+(include "sfpu-predicates.md")
+
 ; & in spec means early clobber, written before inputs are used, cannot reuse input reg
 
 (define_c_enum "unspecv" [
@@ -918,39 +920,4 @@
   return riscv_sfpu_output_nonimm_store_and_nops("sw\t%6,0(%1)", INTVAL(operands[2]), operands);
 })
 
-;;; Peephole optimizations
-
-; These are un-optimizations to ensure a NOP fits between a store/load
-(define_peephole2
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "immediate_operand" "")
-                     (match_operand:SI    2 "immediate_operand" "")] UNSPECV_SFPSTORE_INT)
-   (set (match_operand:V64SF 3 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_SFPLOAD_INT))]
-  "TARGET_SFPU"
-  [(const_int 0)]
-{
-  emit_insn(gen_riscv_sfpstore_int(operands[0], operands[1], operands[2]));
-  emit_insn(gen_riscv_sfpnop());
-  emit_insn(gen_riscv_sfpload_int(operands[3], operands[4], operands[5], operands[6]));
-})
-
-(define_peephole2
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "address_operand"   "")
-                     (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "immediate_operand" "")
-                     (match_operand:SI    4 "register_operand"  "")] UNSPECV_SFPNONIMM_STORE)
-   (set (match_operand:V64SF 5 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 6 "nonmemory_operand" "")
-                          (match_operand:SI    7 "immediate_operand" "")
-                          (match_operand:SI    8 "immediate_operand" "")] UNSPECV_SFPLOAD_INT))
-   (clobber (match_scratch:SI 9 ""))]
-  "TARGET_SFPU"
-  [(const_int 0)]
-{
-  emit_insn(gen_riscv_sfpnonimm_store(operands[0], operands[1], GEN_INT(1), operands[2], operands[3], operands[4]));
-  emit_insn(gen_riscv_sfpload_int(operands[5], operands[6], operands[7], operands[8]));
-})
+(include "sfpu-peephole.md")
