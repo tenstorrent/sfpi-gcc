@@ -3412,4 +3412,8 @@ fipa-ra
 Common Report Var(flag_ipa_ra) Optimization
 Use caller save register across calls if possible.
 
+friscv-sfpu-cc
+Common Var(flag_riscv_sfpu_cc)
+Optimize riscv sfpu CC usage.
+
 ; This comment is to ensure we retain the blank line above.
