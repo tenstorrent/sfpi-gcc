@@ -1410,6 +1410,7 @@ OBJS = \
 	gimple-range-fold.o \
 	gimple-range-gori.o \
 	gimple-range-trace.o \
+	gimple-riscv-sfpu-cc.o \
 	gimple-ssa-backprop.o \
 	gimple-ssa-evrp.o \
 	gimple-ssa-evrp-analyze.o \

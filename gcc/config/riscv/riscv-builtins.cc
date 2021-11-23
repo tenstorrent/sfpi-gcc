@@ -36,6 +36,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "stor-layout.h"
 #include "expr.h"
 #include "langhooks.h"
+#include <map>
+#include <string>
+
+static std::map<std::string, tree> string_to_fndecl;
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -262,6 +266,7 @@ riscv_init_builtins (void)
 	  riscv_builtin_decls[i]
 	    = add_builtin_function (d->name, type, i, BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
+	  string_to_fndecl.insert (std::pair<std::string, tree> (d->name, riscv_builtin_decls[i]));
 	}
     }
 }
@@ -370,4 +375,16 @@ riscv_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
 		  build_call_expr (frflags, 0), NULL_TREE, NULL_TREE);
   *clear = build_call_expr (fsflags, 1, old_flags);
   *update = NULL_TREE;
+}
+
+/* Return fn decl based on string from string_to_fndecl map.  */
+
+tree
+riscv_get_builtin_fn_decl (std::string str)
+{
+  auto itr = string_to_fndecl.find(str);
+  if (itr != string_to_fndecl.end())
+    return string_to_fndecl.at (str);
+  else
+    return NULL;
 }
