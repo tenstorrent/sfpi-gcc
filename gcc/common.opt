@@ -3416,4 +3416,8 @@ friscv-sfpu-cc
 Common Var(flag_riscv_sfpu_cc)
 Optimize riscv sfpu CC usage.
 
+friscv-sfpu-combine
+Common Var(flag_riscv_sfpu_combine)
+Combine instructions for riscv sfpu
+
 ; This comment is to ensure we retain the blank line above.
