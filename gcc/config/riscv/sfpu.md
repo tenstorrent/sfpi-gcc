@@ -28,6 +28,7 @@
   ;; INT for internal
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
+  UNSPECV_SFPASSIGN_LV
   UNSPECV_SFPASSIGNLR
   UNSPECV_SFPASSIGNLR_INT
   UNSPECV_SFPKEEPALIVE
@@ -183,6 +184,17 @@
     output_asm_insn("SFPNOP", operands);
     return "SFPNOP";
   })
+
+(define_insn "riscv_sfpassign_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec [(match_operand:V64SF 1 "register_operand"  "0")
+                 (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPASSIGN_LV))]
+  "TARGET_SFPU"
+{
+    output_asm_insn("SFPMOV\t%2, %0, 0", operands);
+    output_asm_insn("SFPNOP", operands);
+    return "SFPNOP";
+})
 
 (define_expand "riscv_sfpassignlr"
   [(set (match_operand:V64SF 0 "register_operand" "")
