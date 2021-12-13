@@ -49,18 +49,9 @@
 #include <map>
 #include <iostream>
 #include <tuple>
+#include "config/riscv/sfpu.h"
 
 using namespace std;
-
-// These stmts can combine w/ iadd_i
-enum combine_stmt_enum {
-  combine_stmt_iadd_i,
-  combine_stmt_iadd_i_lv,
-  combine_stmt_iadd_v,
-  combine_stmt_exexp,
-  combine_stmt_exexp_lv,
-  combine_stmt_none
-};
 
 static long int
 get_int_arg(gcall *stmt, unsigned int arg)
@@ -71,35 +62,6 @@ get_int_arg(gcall *stmt, unsigned int arg)
     return *(decl->int_cst.val);
   }
   return -1;
-}
-
-static bool
-get_call(gcall **stmt, const char **call, gimple *gimp)
-{
-  *stmt = dyn_cast<gcall *> (gimp);
-  tree fn_ptr = gimple_call_fn (*stmt);
-
-  if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
-    {
-      tree fn_decl = TREE_OPERAND (fn_ptr, 0);
-      *call = IDENTIFIER_POINTER (DECL_NAME (fn_decl));
-      return true;
-    }
-
-  return false;
-}
-
-static bool
-get_call(gcall **stmt, const char **call, gimple_stmt_iterator gsi)
-{
-  gimple *g = gsi_stmt (gsi);
-
-  if (g->code == GIMPLE_CALL)
-    {
-      return get_call(stmt, call, g);
-    }
-
-  return false;
 }
 
 // Starting from gsi, find the stmt using cond_src as the LHS, return in prior_gsi
@@ -131,55 +93,35 @@ find_prior_assignment(gimple_stmt_iterator *prior_gsi, gimple_stmt_iterator gsi,
 }
 
 // Return whether the call/stmt can be combined with an iadd_i
-static combine_stmt_enum
-can_combine_iadd_i(const char *call, gcall *stmt)
+static bool
+can_combine_iadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt)
 {
-  if (strcmp(call, "__builtin_riscv_sfpiadd_i") == 0 &&
-      (get_int_arg(stmt, 3) == 5))
-    {
-      return combine_stmt_iadd_i;
-    }
-  else if (strcmp(call, "__builtin_riscv_sfpiadd_i_lv") == 0 &&
-	   (get_int_arg(stmt, 4) == 5))
-    {
-      return combine_stmt_iadd_i_lv;
-    }
-  else if (strcmp(call, "__builtin_riscv_sfpiadd_v") == 0 &&
-	   (get_int_arg(stmt, 2) == 4 || get_int_arg(stmt, 2) == 6))
-    {
-      return combine_stmt_iadd_v;
-    }
-  else if (strcmp(call, "__builtin_riscv_sfpexexp") == 0 &&
-      (get_int_arg(stmt, 1) == 0))
-    {
-      return combine_stmt_exexp;
-    }
-  else if (strcmp(call, "__builtin_riscv_sfpexexp_lv") == 0 &&
-      (get_int_arg(stmt, 2) == 0))
-    {
-      return combine_stmt_exexp_lv;
-    }
-
-  return combine_stmt_none;
+  return
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i && get_int_arg(stmt, 3) == 5) ||
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_lv && get_int_arg(stmt, 4) == 5) ||
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_v &&
+     (get_int_arg(stmt, 2) == 4 || get_int_arg(stmt, 2) == 6)) ||
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, 1) == 0) ||
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && (get_int_arg(stmt, 2) == 0));
 }
 
 // Combine stmt (an iadd_i) with candidate_stmt by updating mod1/im of
 // candidate_stmt
 static void
-combine_iadd_i(const combine_stmt_enum which, gcall *stmt, gcall *candidate_stmt)
+combine_iadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candidate_stmt)
 {
   int candidate_mod1 = get_int_arg(candidate_stmt, 3);
 
-  switch (which) {
-  case combine_stmt_iadd_i:
+  switch (insnd->id) {
+  case riscv_sfpu_insn_data::sfpiadd_i:
     // Use mod1, imm from candidate
     gimple_call_set_arg(stmt, 3, gimple_call_arg(candidate_stmt, 3));
     break;
-  case combine_stmt_iadd_i_lv:
+  case riscv_sfpu_insn_data::sfpiadd_i_lv:
       // Use mod1, imm from candidate
       gimple_call_set_arg(stmt, 4, gimple_call_arg(candidate_stmt, 3));
     break;
-  case combine_stmt_iadd_v:
+  case riscv_sfpu_insn_data::sfpiadd_v:
     {
       int assign_mod1 = get_int_arg(stmt, 2);
       int new_mod1 = (candidate_mod1 & ~1) | (assign_mod1 & ~4);
@@ -188,46 +130,17 @@ combine_iadd_i(const combine_stmt_enum which, gcall *stmt, gcall *candidate_stmt
       gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, new_mod1));
     }
     break;
-  case combine_stmt_exexp:
+  case riscv_sfpu_insn_data::sfpexexp:
     // candidate_mod1 is 1 or 9, which map to 2 and 10 for exexp
     gimple_call_set_arg(stmt, 1, build_int_cst(integer_type_node, candidate_mod1 + 1));
     break;
-  case combine_stmt_exexp_lv:
+  case riscv_sfpu_insn_data::sfpexexp_lv:
     // candidate_mod1 is 1 or 9, which map to 2 and 10 for exexp
     gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, candidate_mod1 + 1));
     break;
   default:
     gcc_unreachable();
   }
-}
-
-// Returns true iff the statement is setting the CC
-static bool
-is_cc_setting_stmt(gimple_stmt_iterator gsi)
-{
-  gcall *stmt;
-  const char *call;
-
-  if (get_call(&stmt, &call, gsi))
-    {
-      // Note the wrapper won't emit an iadd_v that sets the CC
-      if ((strcmp(call, "__builtin_riscv_sfpsetcc") == 0) ||
-	  (strcmp(call, "__builtin_riscv_popc") == 0) ||
-	  (strcmp(call, "__builtin_riscv_sfpcompc") == 0) ||
-	  (strcmp(call, "__builtin_riscv_sfpiadd_i") == 0 &&
-	   (get_int_arg(stmt, 3) == 1 || get_int_arg(stmt, 3) == 9)) ||
-	  (strcmp(call, "__builtin_riscv_sfpiadd_i_lv") == 0 &&
-	   (get_int_arg(stmt, 4) == 1 || get_int_arg(stmt, 4) == 9)) ||
-	  (strcmp(call, "__builtin_riscv_sfpexexp") == 0 &&
-	   (get_int_arg(stmt, 1) == 2 || get_int_arg(stmt, 1) == 10)) ||
-	  (strcmp(call, "__builtin_riscv_sfpexexp_lv") == 0 &&
-	   (get_int_arg(stmt, 2) == 2 || get_int_arg(stmt, 2) == 10)))
-	{
-	  return true;
-	}
-    }
-
-  return false;
 }
 
 // Returns true iff a stmt between gsi and last is a CC setting stmt
@@ -238,7 +151,9 @@ intervening_cc_stmt(gimple_stmt_iterator gsi, gimple_stmt_iterator last)
 
   while (gsi.ptr != last.ptr)
   {
-    if (is_cc_setting_stmt(gsi))
+    gcall *stmt;
+    const riscv_sfpu_insn_data *insnd;
+    if (riscv_sfpu_p (&insnd ,&stmt, gsi) && riscv_sfpu_sets_cc(insnd, stmt))
      {
        return true;
      }
@@ -260,16 +175,19 @@ intervening_use(tree var, gimple_stmt_iterator start, gimple_stmt_iterator end)
     {
       gimple *g = USE_STMT(use_p);
 
-      gimple_stmt_iterator gsi = start;
-      while (gsi.ptr != end.ptr)
+      // XXXX should the DEBUG stmts get deleted?  Or moved?
+      // They will now occur above the assignment
+      if (g->code != GIMPLE_DEBUG)
 	{
-	  // XXXX should the DEBUG stmts get deleted?  Or moved?
-	  // They will now occur above the assignment
-	  if (g->code != GIMPLE_DEBUG && g == gsi_stmt (gsi))
+	  gimple_stmt_iterator gsi = start;
+	  while (gsi.ptr != end.ptr)
 	    {
-	      return true;
+	      if (g == gsi_stmt (gsi))
+		{
+		  return true;
+		}
+	      gsi_next (&gsi);
 	    }
-	  gsi_next (&gsi);
 	}
     }
 
@@ -304,11 +222,12 @@ static void transform (function *fun)
       while (!gsi_end_p (candidate_gsi))
 	{
 	  gcall *candidate_stmt;
-	  const char *candidate_call;
-	  if (get_call(&candidate_stmt, &candidate_call, candidate_gsi))
+	  const riscv_sfpu_insn_data *candidate_insnd;
+
+	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 	      // Check for candidate iadd_i that sets the CC and compares to 0
-	      if (strcmp(candidate_call, "__builtin_riscv_sfpiadd_i") == 0 &&
+	      if (candidate_insnd->id == riscv_sfpu_insn_data::sfpiadd_i &&
 		  (get_int_arg(candidate_stmt, 2) == 0) &&
 		  (get_int_arg(candidate_stmt, 3) == 1 || get_int_arg(candidate_stmt, 3) == 9) &&
 		  gimple_call_lhs(candidate_stmt) == nullptr)
@@ -321,18 +240,17 @@ static void transform (function *fun)
 					    gimple_call_arg(candidate_stmt, 1)))
 		    {
 		      gcall *assign_stmt;
-		      const char *assign_call;
-		      get_call(&assign_stmt, &assign_call, assign_gsi);
+		      const riscv_sfpu_insn_data *assign_insd;
+		      riscv_sfpu_p(&assign_insd, &assign_stmt, assign_gsi);
 
 		      if (!intervening_cc_stmt(assign_gsi, candidate_gsi) &&
 			  !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
 			{
 			  // Check to see if the assignment is one of the targeted optimizations
-			  combine_stmt_enum kind = can_combine_iadd_i(assign_call, assign_stmt);
-			  if (kind != combine_stmt_none)
+			  if (can_combine_iadd_i(assign_insd, assign_stmt))
 			    {
 			      // Found a replaceable iadd_i
-			      combine_iadd_i(kind, assign_stmt, candidate_stmt);
+			      combine_iadd_i(assign_insd, assign_stmt, candidate_stmt);
 
 			      // Move target
 			      gsi_move_before(&assign_gsi, &candidate_gsi);

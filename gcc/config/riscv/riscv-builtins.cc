@@ -37,9 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "langhooks.h"
 #include <map>
-#include <string>
-
-static std::map<std::string, tree> string_to_fndecl;
+#include "sfpu.h"
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -152,67 +150,17 @@ tree v64SF_type_node;
 #define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
 
+static const int first_sfpu_builtin = 2;
+
 static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
+  // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-  DIRECT_BUILTIN (sfpassign_lv,RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpassignlr, RISCV_V64SF_FTYPE_USI,                   sfpu),
-  DIRECT_BUILTIN (sfpload,     RISCV_V64SF_FTYPE_POINTER_USI_USI,       sfpu),
-  DIRECT_BUILTIN (sfpload_lv,  RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfploadi,    RISCV_V64SF_FTYPE_POINTER_USI_USI,       sfpu),
-  DIRECT_BUILTIN (sfploadi_lv, RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfpmov,      RISCV_V64SF_FTYPE_V64SF_USI,             sfpu),
-  DIRECT_BUILTIN (sfpmov_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpmul,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpmul_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpadd,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpadd_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpmuli,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfpaddi,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfpiadd_v,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpiadd_i,   RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfpiadd_i_lv,RISCV_V64SF_FTYPE_POINTER_V64SF_V64SF_USI_USI, sfpu),
-  DIRECT_BUILTIN (sfpshft_v,   RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpshft_i,   RISCV_V64SF_FTYPE_POINTER_V64SF_USI,     sfpu),
-  DIRECT_BUILTIN (sfpabs,      RISCV_V64SF_FTYPE_V64SF_USI,             sfpu),
-  DIRECT_BUILTIN (sfpabs_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpand,      RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpor,       RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpnot,      RISCV_V64SF_FTYPE_V64SF,                 sfpu),
-  DIRECT_BUILTIN (sfpnot_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfplz,       RISCV_V64SF_FTYPE_V64SF_USI,             sfpu),
-  DIRECT_BUILTIN (sfplz_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpsetexp_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetexp_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
-  DIRECT_BUILTIN (sfpsetexp_i_lv,RISCV_V64SF_FTYPE_POINTER_V64SF_USI_V64SF, sfpu),
-  DIRECT_BUILTIN (sfpsetman_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetman_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
-  DIRECT_BUILTIN (sfpsetman_i_lv, RISCV_V64SF_FTYPE_POINTER_V64SF_USI_V64SF, sfpu),
-  DIRECT_BUILTIN (sfpsetsgn_v, RISCV_V64SF_FTYPE_V64SF_V64SF,           sfpu),
-  DIRECT_BUILTIN (sfpsetsgn_i, RISCV_V64SF_FTYPE_POINTER_USI_V64SF,     sfpu),
-  DIRECT_BUILTIN (sfpsetsgn_i_lv,RISCV_V64SF_FTYPE_POINTER_V64SF_USI_V64SF, sfpu),
-  DIRECT_BUILTIN (sfpmad,      RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpmad_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpdivp2,    RISCV_V64SF_FTYPE_POINTER_USI_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpdivp2_lv, RISCV_V64SF_FTYPE_POINTER_V64SF_USI_V64SF_USI, sfpu),
-  DIRECT_BUILTIN (sfpexexp,    RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
-  DIRECT_BUILTIN (sfpexexp_lv, RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfpexman,    RISCV_V64SF_FTYPE_V64SF_UHI,             sfpu),
-  DIRECT_BUILTIN (sfpexman_lv, RISCV_V64SF_FTYPE_V64SF_V64SF_USI,       sfpu),
-  DIRECT_BUILTIN (sfplut,      RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI, sfpu),
-
-  DIRECT_NO_TARGET_BUILTIN (sfpkeepalive,RISCV_VOID_FTYPE_V64SF_USI,    sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpsetcc_i, RISCV_VOID_FTYPE_USI_USI,       sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpsetcc_v, RISCV_VOID_FTYPE_V64SF_USI,     sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpencc,    RISCV_VOID_FTYPE_USI_USI,       sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpcompc,   RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfppushc,   RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfppopc,    RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpstore,   RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI, sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpnop,     RISCV_VOID_FTYPE,               sfpu),
-  DIRECT_NO_TARGET_BUILTIN (sfpillegal, RISCV_VOID_FTYPE,               sfpu)
+#define SFPU_BUILTIN(op, fmt, en, cc, lv, pslv) DIRECT_BUILTIN(op, fmt, en),
+#define SFPU_NO_TGT_BUILTIN(op, fmt, en, cc, lv, pslv) DIRECT_NO_TARGET_BUILTIN(op, fmt, en),
+#include "sfpu-insn.h"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
@@ -267,7 +215,10 @@ riscv_init_builtins (void)
 	  riscv_builtin_decls[i]
 	    = add_builtin_function (d->name, type, i, BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
-	  string_to_fndecl.insert (std::pair<std::string, tree> (d->name, riscv_builtin_decls[i]));
+	  if (i >= first_sfpu_builtin)
+	    {
+	      riscv_sfpu_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
+	    }
 	}
     }
 }
@@ -376,16 +327,4 @@ riscv_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
 		  build_call_expr (frflags, 0), NULL_TREE, NULL_TREE);
   *clear = build_call_expr (fsflags, 1, old_flags);
   *update = NULL_TREE;
-}
-
-/* Return fn decl based on string from string_to_fndecl map.  */
-
-tree
-riscv_get_builtin_fn_decl (std::string str)
-{
-  auto itr = string_to_fndecl.find(str);
-  if (itr != string_to_fndecl.end())
-    return string_to_fndecl.at (str);
-  else
-    return NULL;
 }
