@@ -1,16 +1,21 @@
 #define INCLUDE_STRING
+#include <map>
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "backend.h"
+#include "target.h"
 #include "tm.h"
 #include "rtl.h"
+#include "tree.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
 #include "regs.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "recog.h"
 #include "output.h"
 #include "alias.h"
-#include "tree.h"
 #include "stringpool.h"
 #include "attribs.h"
 #include "varasm.h"
@@ -34,6 +39,183 @@
 #include "predict.h"
 #include "tree-pass.h"
 #include "sfpu-protos.h"
+#include "sfpu.h"
+
+struct cmp_str
+{
+   bool operator()(const char *a, const char *b) const
+   {
+      return std::strcmp(a, b) < 0;
+   }
+};
+
+static std::map<const char*, riscv_sfpu_insn_data&, cmp_str> insn_map;
+
+static riscv_sfpu_insn_data sfpu_insn_data[] = {
+#define SFPU_BUILTIN(id, fmt, en, cc, lv, pslv) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, pslv },
+#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, pslv) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, pslv },
+#include "sfpu-insn.h"
+  { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0 }
+};
+
+void
+riscv_sfpu_insert_insn(int idx, const char* name, tree decl)
+{
+  sfpu_insn_data[idx].decl = decl;
+  insn_map.insert(std::pair<const char*, riscv_sfpu_insn_data&>(name, sfpu_insn_data[idx]));
+}
+
+const riscv_sfpu_insn_data*
+riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id)
+{
+  return &sfpu_insn_data[id];
+}
+
+const riscv_sfpu_insn_data*
+riscv_sfpu_get_insn_data(const char *name)
+{
+  auto match = insn_map.find(name);
+  if (match == insn_map.end())
+    {
+      return &sfpu_insn_data[riscv_sfpu_insn_data::nonsfpu];
+    }
+  else
+    {
+      return &match->second;
+    }
+}
+
+const riscv_sfpu_insn_data *
+riscv_sfpu_get_insn_data(const gcall *stmt)
+{
+  tree fn_ptr = gimple_call_fn (stmt);
+
+  if (fn_ptr)
+    {
+      return riscv_sfpu_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (TREE_OPERAND (fn_ptr, 0))));
+    }
+  else
+    {
+      return nullptr;
+    }
+}
+
+bool
+riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *gimp)
+{
+  bool found = false;
+
+  *stmt = dyn_cast<gcall *> (gimp);
+  tree fn_ptr = gimple_call_fn (*stmt);
+
+  if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
+    {
+      tree fn_decl = TREE_OPERAND (fn_ptr, 0);
+      *insnd = riscv_sfpu_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (fn_decl)));
+      found = true;
+    }
+
+  return found;
+}
+
+bool
+riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
+{
+  bool found = false;
+  gimple *g = gsi_stmt (gsi);
+
+  if (g->code == GIMPLE_CALL)
+    {
+      found = riscv_sfpu_p(insnd, stmt, g);
+    }
+
+  return found;
+}
+
+// Relies on live instructions being next in sequence in the insn table
+const riscv_sfpu_insn_data *
+riscv_sfpu_get_live_version(const riscv_sfpu_insn_data *insnd)
+{
+  const riscv_sfpu_insn_data *out = nullptr;
+
+  if (insnd->id < riscv_sfpu_insn_data::nonsfpu)
+    {
+      if (sfpu_insn_data[insnd->id + 1].live)
+	{
+	  out = &sfpu_insn_data[insnd->id + 1];
+	}
+    }
+
+  return out;
+}
+
+const riscv_sfpu_insn_data *
+riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd)
+{
+  const riscv_sfpu_insn_data *out = nullptr;
+
+  if (insnd->id > 0)
+    {
+      if (!sfpu_insn_data[insnd->id - 1].live)
+	{
+	  out = &sfpu_insn_data[insnd->id - 1];
+	}
+    }
+
+  return out;
+}
+
+static long int
+get_int_arg(gcall *stmt, unsigned int arg)
+{
+  tree decl = gimple_call_arg(stmt, arg);
+  if (decl)
+  {
+    return *(decl->int_cst.val);
+  }
+  return -1;
+}
+
+bool
+riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
+{
+  bool sets_cc = false;
+  long int arg;
+
+  if (insnd->can_set_cc)
+    {
+      if (insnd->id == riscv_sfpu_insn_data::sfpiadd_i)
+	{
+	  arg = get_int_arg (stmt, 3);
+	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
+	    sets_cc = true;
+	}
+      else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_v)
+	{
+	  arg = get_int_arg (stmt, 2);
+	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
+	    sets_cc = true;
+	}
+      else if (insnd->id == riscv_sfpu_insn_data::sfpexexp)
+	{
+	  arg = get_int_arg (stmt, 1);
+	  if (arg == 2 || arg == 3 || arg == 8 || arg == 9 || arg == 10 || arg == 11)
+	    sets_cc = true;
+	}
+      else if (insnd->id == riscv_sfpu_insn_data::sfplz)
+	{
+	  arg = get_int_arg (stmt, 1);
+	  if (arg == 2 || arg == 8 || arg == 10)
+	    sets_cc = true;
+	}
+      else
+	{
+	  sets_cc = true;
+	}
+    }
+
+  return sets_cc;
+}
 
 rtx riscv_sfpu_gen_const0_vector()
 {

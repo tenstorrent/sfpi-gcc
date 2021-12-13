@@ -45,13 +45,12 @@
 #include "profile.h"
 #include <string.h>
 #include <vector>
-#include <string>
 #include <map>
 #include <iostream>
 #include <tuple>
-using namespace std;
+#include "config/riscv/sfpu.h"
 
-extern tree riscv_get_builtin_fn_decl (std::string str);
+using namespace std;
 
 // This pass optimizes 2 things:
 // 1) The outermost pushc/popc: remove pushc, turn popc into encc
@@ -73,26 +72,21 @@ static void transform (function *fun)
     gsi = gsi_start_bb (bb);
     while (!gsi_end_p (gsi))
       {
+	gcall *stmt;
+	const riscv_sfpu_insn_data *insnd;
 	gimple *g = gsi_stmt (gsi);
-	if (g->code == GIMPLE_CALL)
+	if (riscv_sfpu_p(&insnd, &stmt, gsi))
 	  {
-	    gcall *stmt = dyn_cast<gcall *> (g);
-	    tree fn_ptr = gimple_call_fn (stmt);
-	    if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
+	    if (insnd->id == riscv_sfpu_insn_data::sfppushc ||
+		insnd->id == riscv_sfpu_insn_data::sfppopc)
 	      {
-		tree fn_decl = TREE_OPERAND (fn_ptr, 0);
-		const char *target_call = IDENTIFIER_POINTER (DECL_NAME (fn_decl));
-		if (strcmp(target_call, "__builtin_riscv_sfppushc") == 0 ||
-		    strcmp(target_call, "__builtin_riscv_sfppopc") == 0)
+		if (sfpu_bb != nullptr)
 		  {
-		    if (sfpu_bb != nullptr)
-		      {
-			// Multiple BBs contain sfpu instructions, bail
-			return;
-		      }
-		    sfpu_bb = bb;
-		    break;
+		    // Multiple BBs contain sfpu instructions, bail
+		    return;
 		  }
+		sfpu_bb = bb;
+		break;
 	      }
 	  }
 	gsi_next (&gsi);
@@ -109,97 +103,88 @@ static void transform (function *fun)
   gsi = gsi_start_bb (sfpu_bb);
   while (!gsi_end_p (gsi))
     {
-      gimple *g = gsi_stmt (gsi);
-      if (g->code == GIMPLE_CALL)
+      gcall *stmt;
+      const riscv_sfpu_insn_data *insnd;
+      if (riscv_sfpu_p(&insnd, &stmt, gsi))
 	{
-	  gcall *stmt = dyn_cast<gcall *> (g);
-	  tree fn_ptr = gimple_call_fn (stmt);
-	  if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
+	  if (insnd->id == riscv_sfpu_insn_data::sfppushc)
 	    {
-	      tree fn_decl = TREE_OPERAND (fn_ptr, 0);
-	      const char *target_call = IDENTIFIER_POINTER (DECL_NAME (fn_decl));
-	      if (strcmp(target_call, "__builtin_riscv_sfppushc") == 0)
+	      prior_removable = false;
+	      if (stack.size() == 0)
 		{
-		  prior_removable = false;
-		  if (stack.size() == 0)
-		    {
-		      // Remove outermost pushc
-		      gimple *stmt = gsi_stmt (gsi);
-		      release_defs(stmt);
-		      unlink_stmt_vdef(stmt);
-		      gsi_remove(&gsi, true);
-		      stack.push_back(make_tuple(false, gsi));
-		      // Avoid the gsi_next at the end since we removed the inst
-		      continue;
-		    }
-		  else
-		    {
-		      stack.push_back(make_tuple(false, gsi));
-		    }
-		}
-	      else if (strcmp(target_call, "__builtin_riscv_sfpcompc") == 0)
-		{
-		  // Set compc to true for current pushc
-		  if (stack.size() == 0) {
-		    error("Error: malformed program, sfpcompc outside of pushc/popc - exiting!");
-		  }
-
-		  prior_removable = false;
-		  stack.back() = make_tuple(true, get<1>(stack.back()));
-		}
-	      else if (strcmp(target_call, "__builtin_riscv_sfppopc") == 0)
-		{
-		  if (stack.size() == 0) {
-		    error("Error: malformed program, popc without matching pushc - exiting!");
-		  }
-
-		  if (prior_removable) {
-		    gimple *stmt = gsi_stmt (prior_pushc);
-		    unlink_stmt_vdef(stmt);
-		    release_defs(stmt);
-		    gsi_remove(&prior_pushc, true);
-
-		    stmt = gsi_stmt (prior_popc);
-		    unlink_stmt_vdef(stmt);
-		    release_defs(stmt);
-		    gsi_remove(&prior_popc, true);
-		  }
-
-		  // Not removable if we saw a compc
-		  prior_removable = !get<0>(stack.back()); 
-		  prior_pushc = get<1>(stack.back());
-		  prior_popc = gsi;
-
-		  stack.pop_back();
-		  if (stack.size() == 0)
-		    {
-		      // Replace outermost popc with encc
-		      tree new_insn = riscv_get_builtin_fn_decl("__builtin_riscv_sfpencc");
-		      gimple *new_stmt = gimple_build_call(new_insn, 2, size_int(3), size_int(10));
-		      if (new_stmt == nullptr) {
-			gcc_unreachable();
-		      }
-
-		      move_ssa_defining_stmt_for_defs (new_stmt, stmt);
-		      gimple_set_vuse (new_stmt, gimple_vuse (stmt));
-		      gimple_set_vdef (new_stmt, gimple_vdef (stmt));
-		      gimple_set_location (new_stmt, gimple_location (stmt));
-		      gimple_set_block (new_stmt, gimple_block (stmt));
-		      gsi_replace(&gsi, new_stmt, true);
-		      update_stmt (new_stmt);
-		      prior_removable = false;
-		    }
+		  // Remove outermost pushc
+		  gimple *stmt = gsi_stmt (gsi);
+		  release_defs(stmt);
+		  unlink_stmt_vdef(stmt);
+		  gsi_remove(&gsi, true);
+		  stack.push_back(make_tuple(false, gsi));
+		  // Avoid the gsi_next at the end since we removed the inst
+		  continue;
 		}
 	      else
 		{
-		  // Could be smarter about the non-__builtin_riscv_sfp
-		  // calls, but bail if anything else comes in to be safe
-		  // "Other" instructions
+		  stack.push_back(make_tuple(false, gsi));
+		}
+	    }
+	  else if (insnd->id == riscv_sfpu_insn_data::sfpcompc)
+	    {
+	      // Set compc to true for current pushc
+	      if (stack.size() == 0) {
+		error("Error: malformed program, sfpcompc outside of pushc/popc - exiting!");
+	      }
+
+	      prior_removable = false;
+	      stack.back() = make_tuple(true, get<1>(stack.back()));
+	    }
+	  else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
+	    {
+	      if (stack.size() == 0) {
+		error("Error: malformed program, popc without matching pushc - exiting!");
+	      }
+
+	      if (prior_removable) {
+		gimple *stmt = gsi_stmt (prior_pushc);
+		unlink_stmt_vdef(stmt);
+		release_defs(stmt);
+		gsi_remove(&prior_pushc, true);
+
+		stmt = gsi_stmt (prior_popc);
+		unlink_stmt_vdef(stmt);
+		release_defs(stmt);
+		gsi_remove(&prior_popc, true);
+	      }
+
+	      // Not removable if we saw a compc
+	      prior_removable = !get<0>(stack.back()); 
+	      prior_pushc = get<1>(stack.back());
+	      prior_popc = gsi;
+
+	      stack.pop_back();
+	      if (stack.size() == 0)
+		{
+		  // Replace outermost popc with encc
+		  const riscv_sfpu_insn_data *new_insnd =
+		    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpencc);
+		  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, size_int(3), size_int(10));
+		  if (new_stmt == nullptr) {
+		    gcc_unreachable();
+		  }
+
+		  move_ssa_defining_stmt_for_defs (new_stmt, stmt);
+		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
+		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
+		  gimple_set_location (new_stmt, gimple_location (stmt));
+		  gimple_set_block (new_stmt, gimple_block (stmt));
+		  gsi_replace(&gsi, new_stmt, true);
+		  update_stmt (new_stmt);
 		  prior_removable = false;
 		}
 	    }
 	  else
 	    {
+	      // Could be smarter about the non-__builtin_riscv_sfp
+	      // calls, but bail if anything else comes in to be safe
+	      // "Other" instructions
 	      prior_removable = false;
 	    }
 	}
