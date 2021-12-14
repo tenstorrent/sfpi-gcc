@@ -256,9 +256,9 @@ static void transform (function *fun)
 			      gsi_move_before(&assign_gsi, &candidate_gsi);
 
 			      // Remove candidate
-			      release_defs(candidate_stmt);
 			      unlink_stmt_vdef(candidate_stmt);
 			      gsi_remove(&candidate_gsi, true);
+			      release_defs(candidate_stmt);
 			    }
 			}
 		    }

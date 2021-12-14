@@ -114,9 +114,10 @@ static void transform (function *fun)
 		{
 		  // Remove outermost pushc
 		  gimple *stmt = gsi_stmt (gsi);
-		  release_defs(stmt);
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
+		  release_defs(stmt);
+
 		  stack.push_back(make_tuple(false, gsi));
 		  // Avoid the gsi_next at the end since we removed the inst
 		  continue;
@@ -145,13 +146,13 @@ static void transform (function *fun)
 	      if (prior_removable) {
 		gimple *stmt = gsi_stmt (prior_pushc);
 		unlink_stmt_vdef(stmt);
-		release_defs(stmt);
 		gsi_remove(&prior_pushc, true);
+		release_defs(stmt);
 
 		stmt = gsi_stmt (prior_popc);
 		unlink_stmt_vdef(stmt);
-		release_defs(stmt);
 		gsi_remove(&prior_popc, true);
+		release_defs(stmt);
 	      }
 
 	      // Not removable if we saw a compc
