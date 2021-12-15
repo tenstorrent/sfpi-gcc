@@ -3420,4 +3420,8 @@ friscv-sfpu-combine
 Common Var(flag_riscv_sfpu_combine)
 Combine instructions for riscv sfpu
 
+friscv-sfpu-live
+Common Var(flag_riscv_sfpu_live)
+Handle predicated variable liveness
+
 ; This comment is to ensure we retain the blank line above.
