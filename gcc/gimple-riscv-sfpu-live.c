@@ -82,6 +82,7 @@ enum {
 //               has decreased (POPC) or for the first generation...
 //   force: For the statement to be live (happens when a BB is hit mulitple
 //          times w/ different levels
+static const int liveness_undefined = 0xFFFF;
 struct liveness_data {
   unsigned int level;
   unsigned int generation;
@@ -263,6 +264,13 @@ static liveness_data
 get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 			gimple *def_g, const call_liveness& liveness)
 {
+  if (def_g == nullptr)
+    {
+      DUMP("      null gimple, unassigned var\n");
+      data.level = liveness_undefined;
+      return data;
+    }
+
   if (def_g->code == GIMPLE_PHI)
     {
       DUMP("      process phi\n");
@@ -287,19 +295,27 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
     {
       gcall *stmt = dyn_cast<gcall *>(def_g);
 
-      const riscv_sfpu_insn_data * insnd = riscv_sfpu_get_insn_data(stmt);
-      if (insnd && insnd->id != riscv_sfpu_insn_data::nonsfpu && insnd->live)
+      if (stmt == nullptr)
 	{
-	  DUMP("      chase assignment\n");
-	  // If the defining statement is another _lv insn, chase it through
-	  unsigned int live_arg = find_live_arg (stmt);
-	  data = get_def_stmt_liveness_1(fn, visited, data,
-					 SSA_NAME_DEF_STMT(gimple_call_arg(stmt, live_arg)), liveness);
+	  DUMP("      null statement, unassigned var\n");
+	  data.level = liveness_undefined;
 	}
       else
 	{
-	  // The chain ends at a non-live insn, use its liveness as the result
-	  data = liveness.find(stmt)->second;
+	  const riscv_sfpu_insn_data * insnd = riscv_sfpu_get_insn_data(stmt);
+	  if (insnd && insnd->id != riscv_sfpu_insn_data::nonsfpu && insnd->live)
+	    {
+	      DUMP("      chase assignment\n");
+	      // If the defining statement is another _lv insn, chase it through
+	      unsigned int live_arg = find_live_arg (stmt);
+	      data = get_def_stmt_liveness_1(fn, visited, data,
+					     SSA_NAME_DEF_STMT(gimple_call_arg(stmt, live_arg)), liveness);
+	    }
+	  else
+	    {
+	      // The chain ends at a non-live insn, use its liveness as the result
+	      data = liveness.find(stmt)->second;
+	    }
 	}
     }
 
@@ -409,6 +425,11 @@ break_liveness(function *fn, call_liveness liveness)
 
 	  DUMP("    liveness: cur %d def %d force %d\n",
 		       cur_stmt_liveness.level, def_stmt_liveness.level, cur_stmt_liveness.force);
+
+	  if (def_stmt_liveness.level == liveness_undefined)
+	    {
+	      continue;
+	    }
 
 	  if ((cur_stmt_liveness.level <= def_stmt_liveness.level &&
 	       cur_stmt_liveness.generation <= def_stmt_liveness.generation) ||
