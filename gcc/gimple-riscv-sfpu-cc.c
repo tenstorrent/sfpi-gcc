@@ -50,57 +50,21 @@
 #include <tuple>
 #include "config/riscv/sfpu.h"
 
+#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+
 using namespace std;
 
-// This pass optimizes 2 things:
-// 1) The outermost pushc/popc: remove pushc, turn popc into encc
-// 2) Tail popc: if 2 popcs occur without intervening instructions and the
-//    inner pushc/popc did not have a compc in between, the inner pushc/popc
-//    can be removed.  Tricky because you have to track the prior popc
-//
-// For now, this handles only the case of all the sfpu push/pop instructions
-// falling within one BB which covers most of the existing kernels.
-static void transform (function *fun)
+//////////////////////////////////////////////////////////////////////////////
+// bool in tuple tracks whether or not a COMPC was seen at this stack depth
+static void
+process_block_stmts(basic_block bb,
+		    vector<tuple<bool, gimple_stmt_iterator>> &stack)
 {
-  vector<tuple<bool, gimple_stmt_iterator>> stack;
-  basic_block bb, sfpu_bb;
   gimple_stmt_iterator gsi, prior_pushc, prior_popc;
   bool prior_removable = false;
 
-  sfpu_bb = nullptr;
-  FOR_EACH_BB_FN (bb, fun) {
-    gsi = gsi_start_bb (bb);
-    while (!gsi_end_p (gsi))
-      {
-	gcall *stmt;
-	const riscv_sfpu_insn_data *insnd;
-	gimple *g = gsi_stmt (gsi);
-	if (riscv_sfpu_p(&insnd, &stmt, gsi))
-	  {
-	    if (insnd->id == riscv_sfpu_insn_data::sfppushc ||
-		insnd->id == riscv_sfpu_insn_data::sfppopc)
-	      {
-		if (sfpu_bb != nullptr)
-		  {
-		    // Multiple BBs contain sfpu instructions, bail
-		    return;
-		  }
-		sfpu_bb = bb;
-		break;
-	      }
-	  }
-	gsi_next (&gsi);
-      }
-  }
-
-  if (sfpu_bb == nullptr)
-    {
-      // Got nuthin
-      return;
-    }
-
   // Find all function calls
-  gsi = gsi_start_bb (sfpu_bb);
+  gsi = gsi_start_bb (bb);
   while (!gsi_end_p (gsi))
     {
       gcall *stmt;
@@ -110,8 +74,12 @@ static void transform (function *fun)
 	  if (insnd->id == riscv_sfpu_insn_data::sfppushc)
 	    {
 	      prior_removable = false;
+	      DUMP("PUSHC: stack size %d\n", stack.size());
+
 	      if (stack.size() == 0)
 		{
+		  DUMP("  removing outermost pushc\n");
+
 		  // Remove outermost pushc
 		  gimple *stmt = gsi_stmt (gsi);
 		  unlink_stmt_vdef(stmt);
@@ -139,11 +107,18 @@ static void transform (function *fun)
 	    }
 	  else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
 	    {
+	      DUMP("POPC: stack size %d\n", stack.size());
+
 	      if (stack.size() == 0) {
 		error("Error: malformed program, popc without matching pushc - exiting!");
 	      }
 
-	      if (prior_removable) {
+	      // Only remove inner PUSHC/POPC if they fall within a bb
+	      // since different paths may differ in intervening instructions
+	      if (prior_removable &&
+		  prior_pushc.bb == prior_popc.bb &&
+		  prior_popc.bb == gsi.bb) {
+		DUMP("  removing inner PUSHC/POPC\n");
 		gimple *stmt = gsi_stmt (prior_pushc);
 		unlink_stmt_vdef(stmt);
 		gsi_remove(&prior_pushc, true);
@@ -163,6 +138,8 @@ static void transform (function *fun)
 	      stack.pop_back();
 	      if (stack.size() == 0)
 		{
+		  DUMP("  replacing outermost popc with encc\n");
+
 		  // Replace outermost popc with encc
 		  const riscv_sfpu_insn_data *new_insnd =
 		    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpencc);
@@ -183,6 +160,7 @@ static void transform (function *fun)
 	    }
 	  else
 	    {
+	      DUMP("Intervening %s\n", insnd->name);
 	      // Could be smarter about the non-__builtin_riscv_sfp
 	      // calls, but bail if anything else comes in to be safe
 	      // "Other" instructions
@@ -192,6 +170,61 @@ static void transform (function *fun)
 
       gsi_next (&gsi);
     }
+}
+
+static void
+process_block(basic_block bb,
+	      vector<bool>& bd,
+	      vector<tuple<bool, gimple_stmt_iterator>> stack)
+{
+  edge_iterator ei;
+  edge e;
+
+  // If we hit the same BB multiple times, the stack depth must always be the
+  // same.  The liveness pass asserts this.  If this is ever found to not be
+  // true, we'll have to bail on optimizing the CC for that BB.
+
+  DUMP("Process block %d\n", bb->index);
+  if (!bd[bb->index])
+    {
+      // Haven't visited this BB before
+      process_block_stmts(bb, stack);
+      bd[bb->index] = true;
+
+      // When we leave, EDGE_COUNT == 0, stack must be empty
+      gcc_assert(EDGE_COUNT(bb->succs) != 0 || stack.size() == 0);
+
+      FOR_EACH_EDGE(e, ei, bb->succs)
+	{
+	  // When we leave, EDGE_COUNT == 0, stack must be empty
+	  process_block(e->dest, bd, stack);
+	}
+    }
+}
+
+// This pass optimizes 2 things:
+// 1) The outermost pushc/popc: remove pushc, turn popc into encc
+// 2) Tail popc: if 2 popcs occur without intervening instructions and the
+//    inner pushc/popc did not have a compc in between, the inner pushc/popc
+//    can be removed.  Tricky because you have to track the prior popc.
+//    The inner push/pop and the outer pop must all be in the same BB
+static void transform (function *fn)
+{
+  vector<tuple<bool, gimple_stmt_iterator>> stack;
+  vector<bool> bd;
+
+  if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn->decl)) != NULL)
+    {
+      // Skip the wrapper code, only process instantiated functions
+      return;
+    }
+
+  DUMP("CC pass on: %s\n", function_name(fn));
+
+  stack.reserve(16);
+  bd.resize(n_basic_blocks_for_fn(fn));
+
+  process_block(ENTRY_BLOCK_PTR_FOR_FN(fn), bd, stack);
 }
 
 namespace {
