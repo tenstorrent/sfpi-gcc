@@ -548,13 +548,16 @@ fold_live_assign (function *fn)
 	  {
 	    tree lhs = gimple_call_lhs (stmt);
 	    tree live_arg = gimple_call_arg (stmt, 0);
+	    tree assgn_arg = gimple_call_arg (stmt, 1);
 
 	    gimple_stmt_iterator prev_gsi = gsi;
 	    gsi_prev_nondebug (&prev_gsi);
 	    gcall *prev_stmt;
 	    const riscv_sfpu_insn_data *prev_insnd;
+
 	    if (riscv_sfpu_p (&prev_insnd, &prev_stmt, prev_gsi) &&
-		prev_insnd->id != riscv_sfpu_insn_data::nonsfpu)
+		prev_insnd->id != riscv_sfpu_insn_data::nonsfpu &&
+		dyn_cast<gcall *>(SSA_NAME_DEF_STMT (assgn_arg)) == prev_stmt)
 	      {
 		DUMP("    folding %s\n", prev_insnd->name);
 
