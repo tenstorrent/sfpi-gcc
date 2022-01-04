@@ -121,13 +121,14 @@ process_block_stmts(basic_block bb,
 	      found_sfpu = true;
 	      if (insnd->id == riscv_sfpu_insn_data::sfppushc)
 		{
+		  stack.push_back(*current);
 		  if (!*cascading)
 		    {
-		      current->generation = *gen_count;
 		      (*gen_count)++;
 		      *cascading = true;
 		    }
-		  stack.push_back(*current);
+		  current->generation = *gen_count;
+		  DUMP("      pushed to l=%d, g=%d\n", current->level, current->generation);
 		}
 	      else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
 		{
@@ -136,6 +137,7 @@ process_block_stmts(basic_block bb,
 		      error("Error: malformed program, popc without matching pushc - exiting!");
 		    }
 		  *current = stack.back();
+		  DUMP("      popped to l=%d, g=%d)\n", current->level, current->generation);
 		  *cascading = false;
 		  stack.pop_back();
 		}
