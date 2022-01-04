@@ -3,6 +3,8 @@
 
 #include "sfpu_ops.h"
 
+extern rtx riscv_sfpu_clamp_signed(rtx v, unsigned int mask);
+extern rtx riscv_sfpu_clamp_unsigned(rtx v, unsigned int mask);
 extern rtx riscv_sfpu_gen_const0_vector();
 extern void riscv_sfpu_emit_nonimm_dst(rtx buf_addr, rtx dst, int nnops, rtx dst_lv,
 				       rtx imm, int base, int lshft, int rshft, int dst_shft);
