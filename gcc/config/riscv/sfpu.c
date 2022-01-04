@@ -217,6 +217,26 @@ riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
   return sets_cc;
 }
 
+rtx riscv_sfpu_clamp_signed(rtx v, unsigned int mask)
+{
+  int i = INTVAL(v);
+  int out = i & mask;
+
+  if (i & (mask + 1)) {
+    out |= ~mask;
+  }
+
+  return GEN_INT(out);
+}
+
+rtx riscv_sfpu_clamp_unsigned(rtx v, unsigned int mask)
+{
+  int i = INTVAL(v);
+  int out = i & mask;
+
+  return GEN_INT(out);
+}
+
 rtx riscv_sfpu_gen_const0_vector()
 {
     int i;
@@ -296,7 +316,19 @@ void riscv_sfpu_emit_sfploadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 void riscv_sfpu_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_sfpiadd_i_int(dst, lv, src, imm, mod));
+    int i = INTVAL(imm);
+    unsigned int extra_bits = (i & ~0xFFF);
+
+    if (extra_bits != 0 && extra_bits != ~0xFFF) {
+      //  Have a 16 bit imm
+      rtx tmp = gen_reg_rtx(V64SFmode);
+      emit_insn(gen_riscv_sfploadi_int(tmp, lv, GEN_INT(4), riscv_sfpu_clamp_signed(imm, 0x7FFF)));
+
+      // Map 1->0, 9->8, 5->4 for valid MOD values
+      emit_insn(gen_riscv_sfpiadd_v(dst, tmp, src, GEN_INT(INTVAL(mod) - 1)));
+    } else {
+      emit_insn(gen_riscv_sfpiadd_i_int(dst, lv, src, riscv_sfpu_clamp_signed(imm, 0x7FF), mod));
+    }
   } else {
     int mod1 = INTVAL(mod);
     int base = TT_OP_SFPIADD(0, 0, 0, mod1);
@@ -308,7 +340,7 @@ void riscv_sfpu_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx 
 void riscv_sfpu_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_sfpdivp2_int(dst, lv, imm, src, mod));
+    emit_insn(gen_riscv_sfpdivp2_int(dst, lv, riscv_sfpu_clamp_signed(imm, 0x7FF), src, mod));
   } else {
     int base = TT_OP_SFPDIVP2(0, 0, 0, INTVAL(mod));
     riscv_sfpu_emit_nonimm_dst_src(addr, dst, 2, lv, src, imm, base, 20, 8, 4, 8);
