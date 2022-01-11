@@ -5,6 +5,58 @@
 #ifndef GCC_RISCV_SFPU_H
 #define GCC_RISCV_SFPU_H
 
+constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
+constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
+constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
+constexpr unsigned int SFPLOADI_MOD0_SHORT = 4;
+
+constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
+constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
+constexpr unsigned int SFPEXEXP_MOD1_SET_CC_SGN_EXP = 2;
+constexpr unsigned int SFPEXEXP_MOD1_SET_CC_COMP_EXP = 8;
+constexpr unsigned int SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP = 10;
+
+constexpr unsigned int SFPSETCC_MOD1_LREG_LT0 = 0;
+constexpr unsigned int SFPSETCC_MOD1_IMM_BIT0 = 1;
+constexpr unsigned int SFPSETCC_MOD1_LREG_NE0 = 2;
+constexpr unsigned int SFPSETCC_MOD1_LREG_GTE0 = 4;
+constexpr unsigned int SFPSETCC_MOD1_LREG_EQ0 = 6;
+constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
+
+constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
+constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
+constexpr unsigned int SFPIADD_MOD1_ARG_2SCOMP_LREG_DST = 2;
+constexpr unsigned int SFPIADD_MOD1_CC_LT0 = 0;
+constexpr unsigned int SFPIADD_MOD1_CC_NONE = 4;
+constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
+
+constexpr unsigned int SFPCMP_EX_MOD1_CC_NONE = 0;
+constexpr unsigned int SFPCMP_EX_MOD1_CC_LT0 = 1;
+constexpr unsigned int SFPCMP_EX_MOD1_CC_EQ0 = 3;
+constexpr unsigned int SFPCMP_EX_MOD1_CC_GTE0 = 5;
+constexpr unsigned int SFPCMP_EX_MOD1_CC_NE0 = 7;
+constexpr unsigned int SFPCMP_EX_MOD1_CC_MASK = 7;
+
+constexpr unsigned int SFPSCMP_EX_MOD1_FMT_A = 8;
+
+constexpr unsigned int SFPIADD_EX_MOD1_IS_SUB = 16;
+
+constexpr unsigned int SFPIADD_I_EX_MOD1_SIGNED = 8;
+constexpr unsigned int SFPIADD_I_EX_MOD1_IS_12BITS = 32;
+
+constexpr unsigned int CREG_IDX_0 = 4;
+constexpr unsigned int CREG_IDX_0P692871094 = 5;
+constexpr unsigned int CREG_IDX_NEG_1P00683594 = 6;
+constexpr unsigned int CREG_IDX_1P442382813 = 7;
+constexpr unsigned int CREG_IDX_0P836914063 = 8;
+constexpr unsigned int CREG_IDX_NEG_0P5 = 9;
+constexpr unsigned int CREG_IDX_1 = 10;
+constexpr unsigned int CREG_IDX_NEG_1 = 11;
+constexpr unsigned int CREG_IDX_0P001953125 = 12;
+constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
+constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
+constexpr unsigned int CREG_IDX_TILEID = 15;
+
 struct riscv_sfpu_insn_data {
   enum insn_id {
 #define SFPU_BUILTIN(id, fmt, en, cc, lv, pslv) id,

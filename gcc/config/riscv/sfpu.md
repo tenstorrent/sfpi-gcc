@@ -53,8 +53,11 @@
   UNSPECV_SFPADD
   UNSPECV_SFPADD_LV
   UNSPECV_SFPIADD_V
+  UNSPECV_SFPIADD_V_EX
   UNSPECV_SFPIADD_I
   UNSPECV_SFPIADD_I_LV
+  UNSPECV_SFPIADD_I_EX
+  UNSPECV_SFPIADD_I_EX_LV
   UNSPECV_SFPIADD_I_INT
   UNSPECV_SFPSHFT_V
   UNSPECV_SFPSHFT_I
@@ -99,6 +102,8 @@
   UNSPECV_SFPEXMAN_INT
   UNSPECV_SFPSETCC_I
   UNSPECV_SFPSETCC_V
+  UNSPECV_SFPSCMP_EX
+  UNSPECV_SFPVCMP_EX
   UNSPECV_SFPENCC
   UNSPECV_SFPCOMPC
   UNSPECV_SFPPUSHC
@@ -187,8 +192,8 @@
 
 (define_insn "riscv_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec [(match_operand:V64SF 1 "register_operand"  "0")
-                 (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPASSIGN_LV))]
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_SFPASSIGN_LV))]
   "TARGET_SFPU"
 {
     output_asm_insn("SFPMOV\t%2, %0, 0", operands);
@@ -201,9 +206,7 @@
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_SFPASSIGNLR))]
   "TARGET_SFPU"
 {
-  int lregnum = INTVAL(operands[1]);
-  SET_REGNO(operands[0], SFPU_REG_FIRST + lregnum);
-  emit_insn(gen_riscv_sfpassignlr_int(operands[0]));
+  riscv_sfpu_emit_sfpassignlr(operands[0], operands[1]);
   DONE;
 })
 
@@ -594,6 +597,45 @@
   return "SFPNOP";
 })
 
+(define_expand "riscv_sfpiadd_v_ex"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_SFPIADD_V_EX))]
+  "TARGET_SFPU"
+{
+  riscv_sfpu_emit_sfpiadd_v_ex(operands[0], operands[1], operands[2], operands[3]);
+  DONE;
+})
+
+
+(define_expand "riscv_sfpiadd_i_ex"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_SFPIADD_I_EX))]
+  "TARGET_SFPU"
+{
+  rtx live = riscv_sfpu_gen_const0_vector();
+  riscv_sfpu_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  DONE;
+})
+
+(define_expand "riscv_sfpiadd_i_ex_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:V64SF 3 "register_operand"  "")
+                          (match_operand:SI    4 "nonmemory_operand" "")
+                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_SFPIADD_I_EX_LV))]
+  "TARGET_SFPU"
+{
+  rtx live = operands[2];
+  riscv_sfpu_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  DONE;
+})
+
 (define_insn "riscv_sfpshft_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
@@ -815,6 +857,27 @@
 {
   output_asm_insn("SFPSETCC\t0, %0, %1", operands);
   return "SFPNOP";
+})
+
+(define_expand "riscv_sfpscmp_ex"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
+                     (match_operand:V64SF 1 "register_operand"  "")
+                     (match_operand:SI    2 "nonmemory_operand" "")
+                     (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPSCMP_EX)]
+  "TARGET_SFPU"
+{
+  riscv_sfpu_emit_sfpscmp_ex(operands[0], operands[1], operands[2], operands[3]);
+  DONE;
+})
+
+(define_expand "riscv_sfpvcmp_ex"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
+                     (match_operand:V64SF 1 "register_operand"  "")
+                     (match_operand:SI    2 "immediate_operand" "")] UNSPECV_SFPVCMP_EX)]
+  "TARGET_SFPU"
+{
+  riscv_sfpu_emit_sfpvcmp_ex(operands[0], operands[1], operands[2]);
+  DONE;
 })
 
 (define_insn "riscv_sfpencc"
