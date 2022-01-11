@@ -94,50 +94,71 @@ find_prior_assignment(gimple_stmt_iterator *prior_gsi, gimple_stmt_iterator gsi,
 
 // Return whether the call/stmt can be combined with an iadd_i
 static bool
-can_combine_iadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt)
+can_combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd,
+		      gcall *stmt,
+		      bool is_sign_bit_cc)
 {
   return
-    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i && get_int_arg(stmt, 3) == 5) ||
-    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_lv && get_int_arg(stmt, 4) == 5) ||
-    (insnd->id == riscv_sfpu_insn_data::sfpiadd_v &&
-     (get_int_arg(stmt, 2) == 4 || get_int_arg(stmt, 2) == 6)) ||
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, 1) == 0) ||
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && (get_int_arg(stmt, 2) == 0));
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex &&
+     (get_int_arg(stmt, 3) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex_lv &&
+     (get_int_arg(stmt, 4) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+
+    (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex &&
+     (get_int_arg(stmt, 2) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, 1) == 0 && is_sign_bit_cc) ||
+
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && get_int_arg(stmt, 2) == 0 && is_sign_bit_cc);
 }
 
-// Combine stmt (an iadd_i) with candidate_stmt by updating mod1/im of
-// candidate_stmt
+// Combine candidate_stmt (an iadd_i_ex) with stmt by updating mod1/imm of
+// stmt
 static void
-combine_iadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candidate_stmt)
+combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candidate_stmt)
 {
   int candidate_mod1 = get_int_arg(candidate_stmt, 3);
 
   switch (insnd->id) {
-  case riscv_sfpu_insn_data::sfpiadd_i:
-    // Use mod1, imm from candidate
-    gimple_call_set_arg(stmt, 3, gimple_call_arg(candidate_stmt, 3));
-    break;
-  case riscv_sfpu_insn_data::sfpiadd_i_lv:
-      // Use mod1, imm from candidate
-      gimple_call_set_arg(stmt, 4, gimple_call_arg(candidate_stmt, 3));
-    break;
-  case riscv_sfpu_insn_data::sfpiadd_v:
+  case riscv_sfpu_insn_data::sfpiadd_i_ex:
     {
-      int assign_mod1 = get_int_arg(stmt, 2);
-      int new_mod1 = (candidate_mod1 & ~1) | (assign_mod1 & ~4);
-
-      // Use mod1
-      gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, new_mod1));
+      int old_sub = get_int_arg(stmt, 3) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, 3,
+			  build_int_cst(integer_type_node,
+					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
+    }
+    break;
+  case riscv_sfpu_insn_data::sfpiadd_i_ex_lv:
+    {
+      int old_sub = get_int_arg(stmt, 4) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, 4,
+			  build_int_cst(integer_type_node,
+					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
+    }
+    break;
+  case riscv_sfpu_insn_data::sfpiadd_v_ex:
+    {
+      int old_sub = get_int_arg(stmt, 2) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, 2,
+			  build_int_cst(integer_type_node,
+					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpexexp:
-    // candidate_mod1 is 1 or 9, which map to 2 and 10 for exexp
-    gimple_call_set_arg(stmt, 1, build_int_cst(integer_type_node, candidate_mod1 + 1));
-    break;
+    {
+      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ?
+	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
+      gimple_call_set_arg(stmt, 1, build_int_cst(integer_type_node, mod1));
+      break;
+    }
   case riscv_sfpu_insn_data::sfpexexp_lv:
-    // candidate_mod1 is 1 or 9, which map to 2 and 10 for exexp
-    gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, candidate_mod1 + 1));
-    break;
+    {
+      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ?
+	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
+      gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, mod1));
+      break;
+    }
   default:
     gcc_unreachable();
   }
@@ -227,13 +248,17 @@ static void transform (function *fun)
 	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 	      // Check for candidate iadd_i that sets the CC and compares to 0
-	      if (candidate_insnd->id == riscv_sfpu_insn_data::sfpiadd_i &&
+	      if (candidate_insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex &&
 		  (get_int_arg(candidate_stmt, 2) == 0) &&
-		  (get_int_arg(candidate_stmt, 3) == 1 || get_int_arg(candidate_stmt, 3) == 9) &&
+		  ((get_int_arg(candidate_stmt, 3) & SFPCMP_EX_MOD1_CC_MASK) != 0) &&
 		  gimple_call_lhs(candidate_stmt) == nullptr)
 		{
 		  // Got a candidate
 		  gimple_stmt_iterator assign_gsi;
+		  int mod1 = get_int_arg(candidate_stmt, 3);
+		  bool is_sign_bit_cc =
+		    ((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ||
+		    ((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_GTE0);
 
 		  // Find when this variable was assigned
 		  if (find_prior_assignment(&assign_gsi, candidate_gsi,
@@ -247,10 +272,10 @@ static void transform (function *fun)
 			  !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
 			{
 			  // Check to see if the assignment is one of the targeted optimizations
-			  if (can_combine_iadd_i(assign_insd, assign_stmt))
+			  if (can_combine_iadd_i_ex(assign_insd, assign_stmt, is_sign_bit_cc))
 			    {
 			      // Found a replaceable iadd_i
-			      combine_iadd_i(assign_insd, assign_stmt, candidate_stmt);
+			      combine_iadd_i_ex(assign_insd, assign_stmt, candidate_stmt);
 
 			      // Move target
 			      gsi_move_before(&assign_gsi, &candidate_gsi);
