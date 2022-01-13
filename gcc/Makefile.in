@@ -1413,6 +1413,7 @@ OBJS = \
 	gimple-riscv-sfpu-cc.o \
 	gimple-riscv-sfpu-combine.o \
 	gimple-riscv-sfpu-live.o \
+	gimple-riscv-sfpu-move.o \
 	gimple-ssa-backprop.o \
 	gimple-ssa-evrp.o \
 	gimple-ssa-evrp-analyze.o \

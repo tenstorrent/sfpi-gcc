@@ -501,6 +501,7 @@ extern gimple_opt_pass *make_pass_adjust_alignment (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_live (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_riscv_sfpu_move (gcc::context *ctxt);
 
 /* IPA Passes */
 extern simple_ipa_opt_pass *make_pass_ipa_lower_emutls (gcc::context *ctxt);

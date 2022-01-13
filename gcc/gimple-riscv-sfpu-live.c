@@ -598,7 +598,7 @@ fold_live_assign (function *fn)
 		    update_ssa (TODO_update_ssa);
 		    continue;
 		  }
-		else if (prev_insnd->pseudo_live)
+		else if (prev_insnd->uses_dst_as_src())
 		  {
 		    // Copy the pseudo-live arg
 		    // XXXX
