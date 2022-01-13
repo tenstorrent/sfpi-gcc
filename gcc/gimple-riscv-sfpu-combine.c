@@ -126,7 +126,7 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candida
       int old_sub = get_int_arg(stmt, 3) & SFPIADD_EX_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, 3,
 			  build_int_cst(integer_type_node,
-					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
+					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpiadd_i_ex_lv:
@@ -134,7 +134,7 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candida
       int old_sub = get_int_arg(stmt, 4) & SFPIADD_EX_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, 4,
 			  build_int_cst(integer_type_node,
-					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
+					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpiadd_v_ex:
@@ -142,7 +142,7 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candida
       int old_sub = get_int_arg(stmt, 2) & SFPIADD_EX_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, 2,
 			  build_int_cst(integer_type_node,
-					candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB | old_sub));
+					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpexexp:
