@@ -71,7 +71,9 @@ struct riscv_sfpu_insn_data {
   tree decl;
   const bool can_set_cc;
   const bool live;
-  const bool pseudo_live;
+  const int dst_arg_pos;
+
+  inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
 
 extern void riscv_sfpu_insert_insn(int idx, const char*name, tree decl);
@@ -88,5 +90,6 @@ extern const riscv_sfpu_insn_data * riscv_sfpu_get_live_version(const riscv_sfpu
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd);
 
 extern bool riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt);
+extern bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *stmt);
 
 #endif

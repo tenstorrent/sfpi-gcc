@@ -240,6 +240,21 @@ riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
   return sets_cc;
 }
 
+bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *stmt)
+{
+  return
+      insnd->id == riscv_sfpu_insn_data::sfpand ||
+
+      insnd->id == riscv_sfpu_insn_data::sfpor ||
+
+      (insnd->id == riscv_sfpu_insn_data::sfpiadd_v &&
+       (get_int_arg (stmt, 2) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST) == 0) ||
+
+      (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex &&
+       (get_int_arg (stmt, 2) & SFPIADD_EX_MOD1_IS_SUB) == 0);
+}
+
+
 rtx riscv_sfpu_clamp_signed(rtx v, unsigned int mask)
 {
   int i = INTVAL(v);
