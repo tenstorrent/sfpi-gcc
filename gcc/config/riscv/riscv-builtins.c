@@ -158,8 +158,8 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_BUILTIN(op, fmt, en, cc, lv, pslv) DIRECT_BUILTIN(op, fmt, en),
-#define SFPU_NO_TGT_BUILTIN(op, fmt, en, cc, lv, pslv) DIRECT_NO_TARGET_BUILTIN(op, fmt, en),
+#define SFPU_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_BUILTIN(op, fmt, en),
+#define SFPU_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_NO_TARGET_BUILTIN(op, fmt, en),
 #include "sfpu-insn.h"
 };
 

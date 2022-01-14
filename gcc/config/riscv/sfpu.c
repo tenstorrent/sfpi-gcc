@@ -63,8 +63,8 @@ static unsigned int cmp_ex_to_setcc_mod1_map[] = {
 static std::map<const char*, riscv_sfpu_insn_data&, cmp_str> insn_map;
 
 static riscv_sfpu_insn_data sfpu_insn_data[] = {
-#define SFPU_BUILTIN(id, fmt, en, cc, lv, pslv) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, pslv },
-#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, pslv) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, pslv },
+#define SFPU_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
+#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
 #include "sfpu-insn.h"
   { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0 }
 };
@@ -112,18 +112,20 @@ riscv_sfpu_get_insn_data(const gcall *stmt)
 }
 
 bool
-riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *gimp)
+riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *g)
 {
   bool found = false;
 
-  *stmt = dyn_cast<gcall *> (gimp);
+  if (g == nullptr || g->code != GIMPLE_CALL) return false;
+
+  *stmt = dyn_cast<gcall *> (g);
   tree fn_ptr = gimple_call_fn (*stmt);
 
   if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
     {
       tree fn_decl = TREE_OPERAND (fn_ptr, 0);
       *insnd = riscv_sfpu_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (fn_decl)));
-      found = true;
+      found = (*insnd != nullptr && (*insnd)->id != riscv_sfpu_insn_data::nonsfpu);
     }
 
   return found;
@@ -135,7 +137,7 @@ riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_itera
   bool found = false;
   gimple *g = gsi_stmt (gsi);
 
-  if (g->code == GIMPLE_CALL)
+  if (g != nullptr && g->code == GIMPLE_CALL)
     {
       found = riscv_sfpu_p(insnd, stmt, g);
     }
@@ -163,14 +165,11 @@ riscv_sfpu_get_live_version(const riscv_sfpu_insn_data *insnd)
 const riscv_sfpu_insn_data *
 riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd)
 {
-  const riscv_sfpu_insn_data *out = nullptr;
+  const riscv_sfpu_insn_data *out = insnd;
 
-  if (insnd->id > 0)
+  if (insnd->live)
     {
-      if (!sfpu_insn_data[insnd->id - 1].live)
-	{
-	  out = &sfpu_insn_data[insnd->id - 1];
-	}
+      out = &sfpu_insn_data[insnd->id - 1];
     }
 
   return out;
@@ -182,6 +181,7 @@ get_int_arg(gcall *stmt, unsigned int arg)
   tree decl = gimple_call_arg(stmt, arg);
   if (decl)
   {
+    gcc_assert(TREE_CODE(decl) == INTEGER_CST);
     return *(decl->int_cst.val);
   }
   return -1;
