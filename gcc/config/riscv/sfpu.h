@@ -5,6 +5,10 @@
 #ifndef GCC_RISCV_SFPU_H
 #define GCC_RISCV_SFPU_H
 
+constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
+constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
+constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
+
 constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
 constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
@@ -59,8 +63,8 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_BUILTIN(id, fmt, en, cc, lv, pslv) id,
-#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, pslv) id,
+#define SFPU_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
 #include "sfpu-insn.h"
 
     nonsfpu
@@ -71,7 +75,9 @@ struct riscv_sfpu_insn_data {
   tree decl;
   const bool can_set_cc;
   const bool live;
+  const bool has_half_offset;
   const int dst_arg_pos;
+  const int mod_pos;
 
   inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
@@ -84,7 +90,6 @@ extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const gcall *stmt);
 
 extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, const gcall *stmt);
 
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_live_version(const riscv_sfpu_insn_data *insnd);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd);
