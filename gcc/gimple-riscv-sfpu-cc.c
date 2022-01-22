@@ -167,6 +167,11 @@ process_block_stmts(basic_block bb,
 	      prior_removable = false;
 	    }
 	}
+      else if (gsi_stmt(gsi)->code == GIMPLE_CALL)
+	{
+	  DUMP("Intervening fn call\n");
+	  prior_removable = false;
+	}
 
       gsi_next (&gsi);
     }
