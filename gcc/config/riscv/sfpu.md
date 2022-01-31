@@ -50,8 +50,10 @@
   UNSPECV_SFPADDI_INT
   UNSPECV_SFPMUL
   UNSPECV_SFPMUL_LV
+  UNSPECV_SFPMUL_INT
   UNSPECV_SFPADD
   UNSPECV_SFPADD_LV
+  UNSPECV_SFPADD_INT
   UNSPECV_SFPIADD_V
   UNSPECV_SFPIADD_V_EX
   UNSPECV_SFPIADD_I
@@ -504,31 +506,45 @@
 
 (define_int_iterator muladd [UNSPECV_SFPMUL UNSPECV_SFPADD])
 (define_int_attr muladd_name [(UNSPECV_SFPMUL "mul") (UNSPECV_SFPADD "add")])
-(define_int_attr muladd_call [(UNSPECV_SFPMUL "MUL\t%1, %2, L4") (UNSPECV_SFPADD "ADD\tL10, %1, %2")])
-(define_insn "riscv_sfp<muladd_name>"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
-                          (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M")] muladd))]
+(define_expand "riscv_sfp<muladd_name>"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "immediate_operand" "")] muladd))]
   "TARGET_SFPU"
 {
-  output_asm_insn("SFP<muladd_call>, %0, %3", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  rtx live = riscv_sfpu_gen_const0_vector();
+  emit_insn (gen_riscv_sfp<muladd_name>_int(operands[0], live, operands[1], operands[2], operands[3]));
+  DONE;
 })
 
 (define_int_iterator muladd_lv [UNSPECV_SFPMUL_LV UNSPECV_SFPADD_LV])
 (define_int_attr muladd_name_lv [(UNSPECV_SFPMUL_LV "mul") (UNSPECV_SFPADD_LV "add")])
-(define_int_attr muladd_call_lv [(UNSPECV_SFPMUL_LV "MUL\t%2, %3, L4") (UNSPECV_SFPADD_LV "ADD\tL10, %2, %3")])
-(define_insn "riscv_sfp<muladd_name_lv>_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
-                          (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:V64SF 3 "register_operand"  "x")
-                          (match_operand:SI    4 "immediate_operand" "M")] muladd_lv))]
+(define_expand "riscv_sfp<muladd_name_lv>_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:V64SF 3 "register_operand"  "")
+                          (match_operand:SI    4 "immediate_operand" "")] muladd_lv))]
   "TARGET_SFPU"
 {
-  output_asm_insn("SFP<muladd_call_lv>, %0, %4", operands);
+  rtx live = operands[1];
+  emit_insn (gen_riscv_sfp<muladd_name_lv>_int(operands[0], live, operands[2], operands[3], operands[4]));
+  DONE;
+})
+
+(define_int_iterator muladd_int [UNSPECV_SFPMUL_INT UNSPECV_SFPADD_INT])
+(define_int_attr muladd_name_int [(UNSPECV_SFPMUL_INT "mul") (UNSPECV_SFPADD_INT "add")])
+(define_int_attr muladd_call_int [(UNSPECV_SFPMUL_INT "MUL\t%2, %3, L4") (UNSPECV_SFPADD_INT "ADD\tL10, %2, %3")])
+(define_insn "riscv_sfp<muladd_name_int>_int"
+  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
+        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
+                          (match_operand:V64SF 2 "register_operand"  "x, x")
+                          (match_operand:V64SF 3 "register_operand"  "x, x")
+                          (match_operand:SI    4 "immediate_operand" "M, M")] muladd_int))]
+  "TARGET_SFPU"
+{
+  output_asm_insn("SFP<muladd_call_int>, %0, %4", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
