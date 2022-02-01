@@ -963,9 +963,14 @@
   "TARGET_SFPU"
 {
   operands[4] = gen_rtx_CONST_INT(SImode, INTVAL(operands[4]) +
-                                          ((REGNO(operands[0]) - SFPU_REG_FIRST) << INTVAL(operands[5])));
+                                          (riscv_sfpu_regno(operands[0]) << INTVAL(operands[5])));
   output_asm_insn("li\t%7,%4", operands);
   output_asm_insn("add\t%7, %7, %6", operands);
+
+  char lv[10];
+  asm_fprintf(asm_out_file, "# Op(%x) %s d(%d)\n", UINTVAL(operands[4]) >> 24,
+                            riscv_sfpu_lv_regno_str(lv, operands[3]), riscv_sfpu_regno(operands[0]));
+
   return riscv_sfpu_output_nonimm_store_and_nops("sw\t%7,0(%1)", INTVAL(operands[2]), operands);
 })
 
@@ -984,10 +989,16 @@
   "TARGET_SFPU"
 {
   operands[5] = gen_rtx_CONST_INT(SImode, INTVAL(operands[5]) +
-                                          ((REGNO(operands[0]) - SFPU_REG_FIRST) << INTVAL(operands[6])) +
-                                          ((REGNO(operands[4]) - SFPU_REG_FIRST) << INTVAL(operands[7])));
+                                          (riscv_sfpu_regno(operands[0]) << INTVAL(operands[6])) +
+                                          (riscv_sfpu_regno(operands[4]) << INTVAL(operands[7])));
   output_asm_insn("li\t%9,%5", operands);
   output_asm_insn("add\t%9, %9, %8", operands);
+
+  char lv[10];
+  asm_fprintf(asm_out_file, "# Op(%x) %s d(%d) s(%d)\n", UINTVAL(operands[5]) >> 24,
+                            riscv_sfpu_lv_regno_str(lv, operands[3]),
+                            riscv_sfpu_regno(operands[0]), riscv_sfpu_regno(operands[4]));
+
   return riscv_sfpu_output_nonimm_store_and_nops("sw\t%9,0(%1)", INTVAL(operands[2]), operands);
 })
 
@@ -1007,9 +1018,12 @@
   "TARGET_SFPU"
 {
   operands[3] = gen_rtx_CONST_INT(SImode, INTVAL(operands[3]) +
-                                          ((REGNO(operands[0]) - SFPU_REG_FIRST) << INTVAL(operands[4])));
+                                          (riscv_sfpu_regno(operands[0]) << INTVAL(operands[4])));
   output_asm_insn("li\t%6,%3", operands);
   output_asm_insn("add\t%6, %6, %5", operands);
+
+  asm_fprintf(asm_out_file, "# Op(%x) s(%d)\n", UINTVAL(operands[3]) >> 24, riscv_sfpu_regno(operands[0]));
+
   return riscv_sfpu_output_nonimm_store_and_nops("sw\t%6,0(%1)", INTVAL(operands[2]), operands);
 })
 

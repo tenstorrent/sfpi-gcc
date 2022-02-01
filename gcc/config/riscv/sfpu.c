@@ -287,6 +287,17 @@ rtx riscv_sfpu_gen_const0_vector()
     return gen_rtx_CONST_VECTOR(V64SFmode, gen_rtvec_v(64, vec));
 }
 
+const char* riscv_sfpu_lv_regno_str(char *str, rtx operand)
+{
+  if (GET_CODE(operand) == CONST_VECTOR) {
+    sprintf(str, "-");
+  } else {
+    sprintf(str, "lv(%d) ", REGNO(operand) - SFPU_REG_FIRST);
+  }
+
+  return str;
+}
+
 void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr)
 {
   int lregnum = INTVAL(lr);
@@ -328,7 +339,7 @@ void riscv_sfpu_emit_nonimm_store(rtx buf_addr, rtx src, int nnops, rtx imm, int
     emit_insn(gen_riscv_sfpnonimm_store(src, buf_addr, GEN_INT(nnops), GEN_INT(base), GEN_INT(src_shft), insn));
 }
 
-char const * riscv_sfpu_output_nonimm_store_and_nops(char *sw, int nnops, rtx operands[])
+char const * riscv_sfpu_output_nonimm_store_and_nops(const char *sw, int nnops, rtx operands[])
 {
   char const *out = sw;
   while (nnops-- > 0) {
