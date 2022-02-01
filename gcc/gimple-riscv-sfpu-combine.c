@@ -377,22 +377,6 @@ match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
     ((*prior_insnd)->id == id);
 }
 
-static inline bool
-match_prior_assignment2(riscv_sfpu_insn_data::insn_id id1,
-			riscv_sfpu_insn_data::insn_id id2,
-			const riscv_sfpu_insn_data **prior_insnd,
-			gcall **prior_stmt,
-			gimple_stmt_iterator *prior_gsi,
-			tree src)
-{
-  gimple *assign_g = SSA_NAME_DEF_STMT(src);
-  riscv_sfpu_p(prior_insnd, prior_stmt, assign_g);
-  *prior_gsi = gsi_for_stmt(assign_g);
-  return
-    riscv_sfpu_p(prior_insnd, prior_stmt, *prior_gsi) &&
-    (((*prior_insnd)->id == id1) || ((*prior_insnd)->id == id2));
-}
-
 // Mads increase register pressure so need to be careful to not turn compiling
 // code into non-compiling code by agressively creating mads.  Ideally, the
 // programmer who runs out of registers could re-stucture their code to
