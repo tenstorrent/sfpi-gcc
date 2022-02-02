@@ -5,6 +5,8 @@
 #ifndef GCC_RISCV_SFPU_H
 #define GCC_RISCV_SFPU_H
 
+constexpr unsigned int SFP_LREG_COUNT = 4;
+
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
