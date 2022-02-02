@@ -55,6 +55,18 @@
 
 using namespace std;
 
+static long int
+get_int_arg(gcall *stmt, unsigned int arg)
+{
+  tree decl = gimple_call_arg(stmt, arg);
+  if (decl)
+  {
+    gcc_assert(TREE_CODE(decl) == INTEGER_CST);
+    return *(decl->int_cst.val);
+  }
+  return -1;
+}
+
 static bool
 subsequent_use(tree var, gimple_stmt_iterator gsi)
 {
@@ -86,6 +98,40 @@ subsequent_use(tree var, gimple_stmt_iterator gsi)
   return false;
 }
 
+static inline bool
+match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
+		       const riscv_sfpu_insn_data **prior_insnd,
+		       gcall **prior_stmt,
+		       gimple_stmt_iterator *prior_gsi,
+		       tree src)
+{
+  gimple *assign_g = SSA_NAME_DEF_STMT(src);
+  riscv_sfpu_p(prior_insnd, prior_stmt, assign_g);
+  *prior_gsi = gsi_for_stmt(assign_g);
+  return
+    riscv_sfpu_p(prior_insnd, prior_stmt, *prior_gsi) &&
+    ((*prior_insnd)->id == id);
+}
+
+static inline void
+insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi)
+{
+  DUMP("  inserting move\n");
+
+  // Insert a move
+  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data("__builtin_riscv_sfpmov");
+  gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
+  tree var = create_tmp_var (TREE_TYPE(dst_arg));
+  tree name = make_ssa_name (var, mov_stmt);
+  gimple_call_set_lhs (mov_stmt, name);
+  gimple_call_set_arg(mov_stmt, 0, dst_arg);
+  gimple_call_set_arg(mov_stmt, 1, build_int_cst(integer_type_node, 0));
+  gsi_insert_before (&gsi, mov_stmt, GSI_SAME_STMT);
+
+  gimple_call_set_arg(stmt, dst_arg_pos, name);
+  update_ssa (TODO_update_ssa);
+}
+
 // On Grayskull, the mov instruction is not aware of the CC state
 // This means a compiler generated move consists of pushc/encc/mov/popc (plus nops).
 // This pass avoids moves when possible (by swapping operands) and injects
@@ -107,48 +153,49 @@ static void transform (function *fun)
 
 	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi) &&
               candidate_insnd->id != riscv_sfpu_insn_data::nonsfpu &&
-              candidate_insnd->uses_dst_as_src() &&
-              subsequent_use(gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos), candidate_gsi))
+	      candidate_insnd->uses_dst_as_src())
 	    {
-              DUMP("Processing %s\n", candidate_insnd->name);
+	      tree dst_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos);
 
-              bool swapped = false;
-              tree dst_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos);
+	      if (subsequent_use(dst_arg, candidate_gsi))
+		{
+		  DUMP("Processing %s\n", candidate_insnd->name);
 
-              // Try to swap operands to eliminate the need for a move
-              if (riscv_sfpu_permutable_operands(candidate_insnd, candidate_stmt))
-                {
-                  // Note: all dst_arg_as_src insns' src_arg_pos immediately follows dst_arg_pos
-                  tree src_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1);
+		  bool swapped = false;
 
-                  if (!subsequent_use(src_arg, candidate_gsi)) {
-                    DUMP("  swapping arguments\n");
+		  // Try to swap operands to eliminate the need for a move
+		  if (riscv_sfpu_permutable_operands(candidate_insnd, candidate_stmt))
+		    {
+		      // Note: all dst_arg_as_src insns' src_arg_pos immediately follows dst_arg_pos
+		      tree src_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1);
 
-                    // Swap args
-                    gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, src_arg);
-                    gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1, dst_arg);
-                    swapped = true;
-                  }
-                }
+		      if (!subsequent_use(src_arg, candidate_gsi)) {
+			DUMP("  swapping arguments\n");
 
-              if (!swapped)
-                {
-                  DUMP("  inserting move\n");
+			// Swap args
+			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, src_arg);
+			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1, dst_arg);
+			swapped = true;
+		      }
+		    }
 
-                  // Insert a move
-                  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data("__builtin_riscv_sfpmov");
-		  gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
-                  tree var = create_tmp_var (TREE_TYPE(dst_arg));
-                  tree name = make_ssa_name (var, mov_stmt);
-		  gimple_call_set_lhs (mov_stmt, name);
-                  gimple_call_set_arg(mov_stmt, 0, dst_arg);
-                  gimple_call_set_arg(mov_stmt, 1, build_int_cst(integer_type_node, 0));
-                  gsi_insert_before (&candidate_gsi, mov_stmt, GSI_SAME_STMT);
-
-                  gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, name);
-
-                  update_ssa (TODO_update_ssa);
-                }
+		  if (!swapped)
+		    {
+		      insert_move(dst_arg, candidate_insnd->dst_arg_pos, candidate_stmt, candidate_gsi);
+		    }
+		}
+	      else
+		{
+		  gimple_stmt_iterator assign_gsi;
+		  gcall *assign_stmt;
+		  const riscv_sfpu_insn_data *assign_insnd;
+		  if (match_prior_assignment(riscv_sfpu_insn_data::sfpassignlr,
+					     &assign_insnd, &assign_stmt, &assign_gsi, dst_arg) &&
+		      get_int_arg(assign_stmt, 0) > SFP_LREG_COUNT)
+		    {
+		      insert_move(dst_arg, candidate_insnd->dst_arg_pos, candidate_stmt, candidate_gsi);
+		    }
+		}
 	    }
 
 	  gsi_next (&candidate_gsi);
