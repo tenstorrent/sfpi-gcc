@@ -199,16 +199,16 @@ intervening_cc_stmt(gimple_stmt_iterator gsi, gimple_stmt_iterator last)
   return false;
 }
 
-// Returns true iff a stmt between gsi and last sets the CC or is not a part
+// Returns true iff a stmt between start and gsi sets the CC or is not a part
 // of calculating arg.	Need to follow the chain of operations so the case,
 // for example, where one of the arguments gets negated is handled. Actually,
 // let's just handle that case
 static bool
-intervening_unrelated_or_cc_stmt(tree arg, gimple_stmt_iterator first, gimple_stmt_iterator gsi)
+intervening_unrelated_or_cc_stmt(tree arg, gimple_stmt_iterator start, gimple_stmt_iterator gsi)
 {
   gsi_prev (&gsi);
 
-  while (gsi.ptr != first.ptr)
+  while (gsi.ptr != start.ptr)
   {
     gcall *stmt;
     const riscv_sfpu_insn_data *insnd;
@@ -332,10 +332,11 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
       gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, 1));
       gcall *assign_stmt;
       const riscv_sfpu_insn_data *assign_insnd;
-      riscv_sfpu_p(&assign_insnd, &assign_stmt, assign_g);
+      bool is_sfpu = riscv_sfpu_p(&assign_insnd, &assign_stmt, assign_g);
       gimple_stmt_iterator assign_gsi = gsi_for_stmt(assign_g);
 
-      if (gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
+      if (is_sfpu &&
+	  gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 	  !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
 	  !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
 	{
@@ -521,6 +522,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 					       &assign_insnd, &assign_stmt, &assign_gsi,
 					       gimple_call_arg(candidate_stmt, which_arg + live)) &&
 			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
+			gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 			!intervening_cc_stmt(assign_gsi, candidate_gsi) &&
 			(!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)));
 
@@ -531,11 +533,12 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 					      &assign_insnd, &assign_stmt, &assign_gsi,
 					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
 		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
+		       gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 		       !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
 		       (!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)));
 	}
 
-      if (found_one && gsi_bb(assign_gsi) == gsi_bb(candidate_gsi))
+      if (found_one)
 	{
 	  DUMP("  found a matching %s...\n", assign_insnd->name);
 
