@@ -667,9 +667,8 @@ remove_unused_loadis(function *fun)
 	  if (riscv_sfpu_p(&insnd, &stmt, gsi))
 	    {
 	      tree lhs = gimple_call_lhs(stmt);
-	      if (lhs != nullptr &&
-		  insnd->id == riscv_sfpu_insn_data::sfploadi &&
-		  has_zero_uses(lhs))
+	      if (insnd->id == riscv_sfpu_insn_data::sfploadi &&
+		  (lhs == nullptr || has_zero_uses(lhs)))
 		{
 		  DUMP("  removing %p %p %s %p\n", insnd, stmt, insnd->name, lhs);
 
