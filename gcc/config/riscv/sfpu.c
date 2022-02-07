@@ -52,11 +52,8 @@ struct cmp_str
 static unsigned int cmp_ex_to_setcc_mod1_map[] = {
   0,
   SFPSETCC_MOD1_LREG_LT0,
-  0,
   SFPSETCC_MOD1_LREG_EQ0,
-  0,
   SFPSETCC_MOD1_LREG_GTE0,
-  0,
   SFPSETCC_MOD1_LREG_NE0,
 };
 
@@ -385,12 +382,15 @@ void riscv_sfpu_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx 
 // Handles:
 //   - signed/unsigned immediate value
 //   - >12 bits (>11 bits for unsigned)
-//   - comparators: <, ==, !=, >= (<= and > are converted higher up)
+//   - comparators: <, ==, !=, >=, <=, >
 //   - use of SETCC vs IADD for perf
 //
 // For comparisons:
 //   compare  < 0 or >= 0  use setcc
 //   compare == 0 or != 0  use setcc
+//
+//   <=, > use multiple instructions, <= uses a COMPC which relies on the
+//   wrapper emitting a PUSHC as a "fence" for the COMPC when needed
 //
 // Below, n is either not 0 or unknown
 //   compare  < n or >= n  use iadd_i (subtract and compare)
@@ -403,16 +403,27 @@ void riscv_sfpu_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx 
 void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
 {
   unsigned int modi = INTVAL(mod);
-  bool need_loadi = true;
-
-  bool is_signed = ((modi & SFPIADD_I_EX_MOD1_SIGNED) == SFPIADD_I_EX_MOD1_SIGNED);
   unsigned int cmp = modi & SFPCMP_EX_MOD1_CC_MASK;
+  unsigned int base_mod = modi & ~SFPCMP_EX_MOD1_CC_MASK;
+
+  // Decompose aggregate comparisons, recurse
+  if (cmp == SFPCMP_EX_MOD1_CC_LTE || cmp == SFPCMP_EX_MOD1_CC_GT) {
+    riscv_sfpu_emit_sfpiadd_i_ex(dst, lv, addr, src, imm, GEN_INT(base_mod | SFPCMP_EX_MOD1_CC_GTE));
+    riscv_sfpu_emit_sfpiadd_i_ex(dst, lv, addr, dst, GEN_INT(0), GEN_INT(base_mod | SFPCMP_EX_MOD1_CC_NE));
+    if (cmp == SFPCMP_EX_MOD1_CC_LTE) {
+      emit_insn(gen_riscv_sfpcompc());
+    }
+    return;
+  }
+
+  bool need_loadi = true;
+  bool is_signed = ((modi & SFPIADD_I_EX_MOD1_SIGNED) == SFPIADD_I_EX_MOD1_SIGNED);
   bool is_12bits = modi & SFPIADD_I_EX_MOD1_IS_12BITS;
   bool is_const_int = GET_CODE(imm) == CONST_INT;
   bool is_sub = ((modi & SFPIADD_EX_MOD1_IS_SUB) != 0);
   int iv = is_const_int ? INTVAL(imm) : 0xffffffff;
 
-  // Figure out if we need to do a loadi
+  // Figure out if we need to do a loadi (>12 bits signed/unsigned)
   if (is_const_int) {
     iv = is_sub ? -iv : iv;
     if (is_signed && (iv >= 2048 || iv < -2048)) {
@@ -438,9 +449,9 @@ void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
     riscv_sfpu_emit_sfploadi(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm);
 
     unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
-    if (cmp == SFPCMP_EX_MOD1_CC_LT0 || cmp == SFPCMP_EX_MOD1_CC_GTE0) {
+    if (cmp == SFPCMP_EX_MOD1_CC_LT || cmp == SFPCMP_EX_MOD1_CC_GTE) {
       // Perform op w/ compare
-      mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT0) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+      mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
       emit_insn(gen_riscv_sfpiadd_v(dst, dst, src, GEN_INT(mod1)));
       need_setcc = false;
     } else {
@@ -450,9 +461,9 @@ void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
     }
   } else if (is_const_int) {
     if (iv != 0) {
-      if (cmp == SFPCMP_EX_MOD1_CC_LT0 || cmp == SFPCMP_EX_MOD1_CC_GTE0) {
+      if (cmp == SFPCMP_EX_MOD1_CC_LT || cmp == SFPCMP_EX_MOD1_CC_GTE) {
 	// Perform op w/ compare
-	unsigned int mod1 = (cmp == SFPCMP_EX_MOD1_CC_LT0) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+	unsigned int mod1 = (cmp == SFPCMP_EX_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
 	emit_insn(gen_riscv_sfpiadd_i_int(dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
 	need_setcc = false;
       } else {
@@ -477,9 +488,9 @@ void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
     gcc_assert(is_12bits);
     gcc_assert(false);
     unsigned int mod1 = SFPIADD_MOD1_ARG_IMM;
-    if (cmp == SFPCMP_EX_MOD1_CC_LT0 || cmp == SFPCMP_EX_MOD1_CC_GTE0) {
+    if (cmp == SFPCMP_EX_MOD1_CC_LT || cmp == SFPCMP_EX_MOD1_CC_GTE) {
       // Perform op w/ compare
-      mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT0) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+      mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
       need_setcc = false;
     } else {
       set_cc_arg = dst;
@@ -497,11 +508,24 @@ void riscv_sfpu_emit_sfpiadd_v_ex(rtx dst, rtx srcb, rtx srca, rtx mod)
 {
   unsigned int modi = INTVAL(mod);
   unsigned int cmp = modi & SFPCMP_EX_MOD1_CC_MASK;
+  unsigned int base_mod = modi & ~SFPCMP_EX_MOD1_CC_MASK;
+
+  // Decompose aggregate comparisons, recurse
+  if (cmp == SFPCMP_EX_MOD1_CC_LTE || cmp == SFPCMP_EX_MOD1_CC_GT) {
+    riscv_sfpu_emit_sfpiadd_v_ex(dst, srcb, srca, GEN_INT(base_mod | SFPCMP_EX_MOD1_CC_GTE));
+    emit_insn(gen_riscv_sfpsetcc_v(dst, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    if (cmp == SFPCMP_EX_MOD1_CC_LTE) {
+      emit_insn(gen_riscv_sfpcompc());
+    }
+    return;
+  }
+
   bool is_sub = ((modi & SFPIADD_EX_MOD1_IS_SUB) != 0);
   unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
-  if (cmp == SFPCMP_EX_MOD1_CC_LT0 || cmp == SFPCMP_EX_MOD1_CC_GTE0) {
+
+  if (cmp == SFPCMP_EX_MOD1_CC_LT || cmp == SFPCMP_EX_MOD1_CC_GTE) {
     // Perform op w/ compare
-    mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT0) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+    mod1 |= (cmp == SFPCMP_EX_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
     emit_insn(gen_riscv_sfpiadd_v(dst, srcb, srca, GEN_INT(mod1)));
   } else {
     // Perform op w/o compare

@@ -161,14 +161,14 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candida
     break;
   case riscv_sfpu_insn_data::sfpexexp:
     {
-      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ?
+      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
       gimple_call_set_arg(stmt, 1, build_int_cst(integer_type_node, mod1));
       break;
     }
   case riscv_sfpu_insn_data::sfpexexp_lv:
     {
-      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ?
+      int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
       gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, mod1));
       break;
@@ -325,8 +325,8 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
       // Got a candidate
       int mod1 = get_int_arg(candidate_stmt, 3);
       bool is_sign_bit_cc =
-	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT0) ||
-	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_GTE0);
+	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ||
+	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_GTE);
 
       // Find when this variable was assigned
       gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, 1));
