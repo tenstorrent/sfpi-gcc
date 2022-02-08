@@ -63,7 +63,7 @@ static riscv_sfpu_insn_data sfpu_insn_data[] = {
 #define SFPU_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
 #define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
 #include "sfpu-insn.h"
-  { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0 }
+  { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0 }
 };
 
 void
