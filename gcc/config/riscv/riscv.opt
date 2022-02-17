@@ -79,7 +79,7 @@ Target Mask(DIV)
 Use hardware instructions for integer division.
 
 msfpu
-Target Report Mask(SFPU)
+Target Report Mask(SFPU) Bool Var(flag_sfpu) Init(0)
 Generate code for Tenstorrent SFPU.
 
 march=

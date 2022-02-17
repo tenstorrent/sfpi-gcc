@@ -234,7 +234,11 @@ public:
 unsigned int
 pass_riscv_sfpu_move::execute (function *fun)
 {
-  transform (fun);
+  if (flag_sfpu)
+    {
+      transform (fun);
+    }
+
   return 0;
 }
 
