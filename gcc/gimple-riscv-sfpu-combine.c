@@ -279,12 +279,15 @@ get_single_use(tree var, gimple **gout)
 	  gimple *g = USE_STMT(use_p);
 
 	  if (g->code != GIMPLE_DEBUG)
-	    if (single)
-	      {
-		return false;
-	      }
-	  single = true;
-	  *gout = g;
+	    {
+	      if (single)
+		{
+		  return false;
+		}
+
+	      single = true;
+	      *gout = g;
+	    }
 	}
     }
 
@@ -612,6 +615,8 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
 	  riscv_sfpu_p(&use_insnd, &use_stmt, use_g) &&
 	  use_insnd->id == riscv_sfpu_insn_data::sfpadd)
 	{
+	  DUMP("  ...has a single use %s\n", use_insnd->name);
+
 	  int which_arg = (gimple_call_arg(use_stmt, live + 0) == candidate_lhs) ? 1 : 0;
 	  gimple_stmt_iterator assign_gsi;
 	  gcall *assign_stmt;
@@ -670,7 +675,7 @@ remove_unused_loadis(function *fun)
 	      if (insnd->id == riscv_sfpu_insn_data::sfploadi &&
 		  (lhs == nullptr || has_zero_uses(lhs)))
 		{
-		  DUMP("  removing %p %p %s %p\n", insnd, stmt, insnd->name, lhs);
+		  DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
 
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
