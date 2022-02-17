@@ -8029,7 +8029,9 @@ dump_function_to_file (tree fndecl, FILE *file, dump_flags_t flags)
   arg = DECL_ARGUMENTS (fndecl);
   while (arg)
     {
+      fprintf(file, "abc");
       print_generic_expr (file, TREE_TYPE (arg), dump_flags);
+      fprintf(file, "def");
       fprintf (file, " ");
       print_generic_expr (file, arg, dump_flags);
       if (DECL_CHAIN (arg))
