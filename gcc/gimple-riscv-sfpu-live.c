@@ -134,7 +134,8 @@ process_block_stmts(basic_block bb,
 		{
 		  if (stack.size() == 0)
 		    {
-		      error("Error: malformed program, popc without matching pushc - exiting!");
+		      location_t location = gimple_nonartificial_location(stmt);
+		      error_at(location, "malformed program, popc without matching pushc");
 		    }
 		  *current = stack.back();
 		  DUMP("      popped to l=%d, g=%d)\n", current->level, current->generation);
@@ -150,7 +151,8 @@ process_block_stmts(basic_block bb,
 		    {
 		      if (stack.size() == 0)
 			{
-			  error("Error: malformed program, %s outside of pushc/popc - exiting!", insnd->name);
+			  location_t location = gimple_nonartificial_location(stmt);
+			  error_at(location, "malformed program, %s outside of pushc/popc", insnd->name);
 			}
 		      current->level++;
 		    }
@@ -166,7 +168,8 @@ process_block_stmts(basic_block bb,
 
 // Process a block
 static bool
-process_block(basic_block bb,
+process_block(function *fn,
+	      basic_block bb,
 	      block_data& bd,
 	      liveness_data current,
 	      bool cascading,
@@ -224,11 +227,14 @@ process_block(basic_block bb,
   bool found_sfpu = process_block_stmts(bb, &current, &cascading, &gen_count, stack, liveness);
 
   // When we leave, EDGE_COUNT == 0, stack must be empty
-  gcc_assert(EDGE_COUNT(bb->succs) != 0 || stack.size() == 0);
+  if (EDGE_COUNT(bb->succs) == 0 && stack.size() != 0)
+    {
+      error_at(EXPR_LOCATION(fn->decl), "malformed program, pushc without matching popc");
+    }
 
   FOR_EACH_EDGE(e, ei, bb->succs)
     {
-      found_sfpu = process_block(e->dest, bd, current, cascading, gen_count, stack, liveness) || found_sfpu;
+      found_sfpu = process_block(fn, e->dest, bd, current, cascading, gen_count, stack, liveness) || found_sfpu;
     }
 
   return found_sfpu;
@@ -664,7 +670,7 @@ transform (function *fn)
   stack.reserve(16);
   bd.resize(n_basic_blocks_for_fn(fn));
 
-  if (process_block(ENTRY_BLOCK_PTR_FOR_FN(fn), bd, liveness_data(0, 0, false), true, 0, stack, liveness))
+  if (process_block(fn, ENTRY_BLOCK_PTR_FOR_FN(fn), bd, liveness_data(0, 0, false), true, 0, stack, liveness))
     {
       break_liveness(fn, liveness);
       fold_live_assign(fn);
