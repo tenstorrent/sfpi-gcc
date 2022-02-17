@@ -158,17 +158,18 @@
 
     case 1:
       if (INSN_HAS_LOCATION (insn)) {
-        error_at(INSN_LOCATION(insn), "Error: cannot load SFPU register (uninit var or non-inline function definition?)- exiting!");
+        error_at(INSN_LOCATION(insn), "cannot load sfpu register");
       } else {
-        error("Error: cannot load SFPU register (uninit var or non-inline function definition?) - exiting!");
+        error("cannot load sfpu register");
       }
+      gcc_assert(0);
       return "SFPILLEGAL";
 
     case 2:
       if (INSN_HAS_LOCATION (insn)) {
-        error_at(INSN_LOCATION(insn), "Error: cannot store SFPU register (spill or function invocation?) - exiting!");
+        fatal_error(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
       } else {
-        error("Error: cannot store SFPU register (spill or function invocation?) - exiting!");
+        error("cannot store sfpu register (register spill)");
       }
       return "SFPILLEGAL";
 
