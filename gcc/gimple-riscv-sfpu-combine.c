@@ -114,47 +114,48 @@ can_combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd,
 {
   return
     (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex &&
-     (get_int_arg(stmt, 3) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_pos) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
 
     (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex_lv &&
-     (get_int_arg(stmt, 4) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_pos) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
 
     (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex &&
-     (get_int_arg(stmt, 2) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_pos) & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_NONE) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, 1) == 0 && is_sign_bit_cc) ||
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && get_int_arg(stmt, 2) == 0 && is_sign_bit_cc);
+    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc);
 }
 
 // Combine candidate_stmt (an iadd_i_ex) with stmt by updating mod1/imm of
 // stmt
 static void
-combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candidate_stmt)
+combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt,
+		  const riscv_sfpu_insn_data *candidate_insnd, gcall *candidate_stmt)
 {
-  int candidate_mod1 = get_int_arg(candidate_stmt, 3);
+  int candidate_mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
 
   switch (insnd->id) {
   case riscv_sfpu_insn_data::sfpiadd_i_ex:
     {
-      int old_sub = get_int_arg(stmt, 3) & SFPIADD_EX_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, 3,
+      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_pos,
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpiadd_i_ex_lv:
     {
-      int old_sub = get_int_arg(stmt, 4) & SFPIADD_EX_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, 4,
+      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_pos,
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpiadd_v_ex:
     {
-      int old_sub = get_int_arg(stmt, 2) & SFPIADD_EX_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, 2,
+      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPIADD_EX_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_pos,
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
     }
@@ -163,14 +164,14 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt, gcall *candida
     {
       int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, 1, build_int_cst(integer_type_node, mod1));
+      gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod1));
       break;
     }
   case riscv_sfpu_insn_data::sfpexexp_lv:
     {
       int mod1 = ((candidate_mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, 2, build_int_cst(integer_type_node, mod1));
+      gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod1));
       break;
     }
   default:
@@ -319,20 +320,20 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
 
   // Check for candidate iadd_i that sets the CC and compares to 0
   if (candidate_insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex &&
-      is_int_arg(candidate_stmt, 2) && (get_int_arg(candidate_stmt, 2) == 0) &&
-      ((get_int_arg(candidate_stmt, 3) & SFPCMP_EX_MOD1_CC_MASK) != 0) &&
+      is_int_arg(candidate_stmt, SFPIADD_EX_IMM_ARG_POS) && (get_int_arg(candidate_stmt, SFPIADD_EX_IMM_ARG_POS) == 0) &&
+      ((get_int_arg(candidate_stmt, candidate_insnd->mod_pos) & SFPCMP_EX_MOD1_CC_MASK) != 0) &&
       gimple_call_lhs(candidate_stmt) == nullptr)
     {
       DUMP("Trying to combine %s\n", candidate_insnd->name);
 
       // Got a candidate
-      int mod1 = get_int_arg(candidate_stmt, 3);
+      int mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
       bool is_sign_bit_cc =
 	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LT) ||
 	((mod1 & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_GTE);
 
       // Find when this variable was assigned
-      gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, 1));
+      gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, SFPIADD_EX_SRC_ARG_POS));
       gcall *assign_stmt;
       const riscv_sfpu_insn_data *assign_insnd;
       bool is_sfpu = riscv_sfpu_p(&assign_insnd, &assign_stmt, assign_g);
@@ -348,7 +349,7 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
 	    {
 		DUMP("	combining with %s\n", assign_insnd->name);
 		// Found a replaceable iadd_i
-		combine_iadd_i_ex(assign_insnd, assign_stmt, candidate_stmt);
+		combine_iadd_i_ex(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
 
 		// Move target
 		gsi_move_before(&assign_gsi, &candidate_gsi);
@@ -546,13 +547,12 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	  DUMP("  found a matching %s...\n", assign_insnd->name);
 
 	  // muli/addi only support fp16b
-	  if (get_int_arg(assign_stmt, 1) == SFPLOADI_MOD0_FLOATB)
+	  if (get_int_arg(assign_stmt, assign_insnd->mod_pos) == SFPLOADI_MOD0_FLOATB)
 	    {
 	      char name[32];
 	      sprintf(name, "__builtin_riscv_%si",
 		      riscv_sfpu_get_notlive_version(candidate_insnd)->name);
-
-	      DUMP("  combine %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, name);
+	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, name);
 
 	      // Create <add,mul>i
 	      // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
@@ -625,9 +625,9 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
 				     &assign_insnd, &assign_stmt, &assign_gsi,
 				     gimple_call_arg(use_stmt, which_arg + live)))
 	    {
-	      if (is_int_arg(assign_stmt, 2))
+	      if (is_int_arg(assign_stmt, SFPLOADI_IMM_ARG_POS))
 		{
-		  int offset = get_int_arg(assign_stmt, 2);
+		  int offset = get_int_arg(assign_stmt, SFPLOADI_IMM_ARG_POS);
 
 		  if (offset == half || offset == neg_half)
 		    {

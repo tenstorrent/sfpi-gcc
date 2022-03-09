@@ -11,6 +11,8 @@ constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
 
+constexpr unsigned int SFPLOADI_IMM_ARG_POS = 2;
+constexpr unsigned int SFPLOADI_LV_IMM_ARG_POS = 3;
 constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
 constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
@@ -48,6 +50,8 @@ constexpr unsigned int SFPCMP_EX_MOD1_CC_MASK = 7;
 constexpr unsigned int SFPSCMP_EX_MOD1_FMT_A = 8;
 
 constexpr unsigned int SFPIADD_EX_MOD1_IS_SUB = 16;
+constexpr unsigned int SFPIADD_EX_SRC_ARG_POS = 1;
+constexpr unsigned int SFPIADD_EX_IMM_ARG_POS = 2;
 
 constexpr unsigned int SFPIADD_I_EX_MOD1_SIGNED = 8;
 constexpr unsigned int SFPIADD_I_EX_MOD1_IS_12BITS = 32;
