@@ -188,43 +188,37 @@ bool
 riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
 {
   bool sets_cc = false;
-  long int arg;
 
   if (insnd->can_set_cc)
     {
+      long int arg = (insnd->mod_pos != -1) ? get_int_arg (stmt, insnd->mod_pos) : 0;
       if (insnd->id == riscv_sfpu_insn_data::sfpiadd_i)
 	{
-	  arg = get_int_arg (stmt, 3);
 	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex)
 	{
-	  arg = get_int_arg (stmt, 3);
 	  if (arg & SFPCMP_EX_MOD1_CC_MASK)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_v)
 	{
-	  arg = get_int_arg (stmt, 2);
 	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex)
 	{
-	  arg = get_int_arg (stmt, 2);
 	  if (arg & SFPCMP_EX_MOD1_CC_MASK)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpexexp)
 	{
-	  arg = get_int_arg (stmt, 1);
 	  if (arg == 2 || arg == 3 || arg == 8 || arg == 9 || arg == 10 || arg == 11)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfplz)
 	{
-	  arg = get_int_arg (stmt, 1);
 	  if (arg == 2 || arg == 8 || arg == 10)
 	    sets_cc = true;
 	}
