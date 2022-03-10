@@ -132,7 +132,7 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 	      gimple_call_set_arg (loadi_use_stmt, 2, build_int_cst(integer_type_node, 0));
 
 	      gimple_set_location (loadi_use_stmt, assign_location);
-	      gimple_set_modified (loadi_use_stmt, true);
+	      update_stmt(loadi_use_stmt);
 	      gsi_replace(gsi, loadi_use_stmt, GSI_SAME_STMT);
 
 	      update_ssa (TODO_update_ssa);

@@ -105,4 +105,6 @@ extern const riscv_sfpu_insn_data * riscv_sfpu_get_notlive_version(const riscv_s
 extern bool riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt);
 extern bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *stmt);
 
+extern void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt);
+
 #endif

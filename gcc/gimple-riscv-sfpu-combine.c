@@ -93,7 +93,7 @@ subsequent_use(tree var, gimple_stmt_iterator gsi)
 		{
 		  if (g == USE_STMT(use_p))
 		    {
-		      DUMP("Found a subsequent use\n");
+		      DUMP("  found a subsequent use\n");
 		      return true;
 		    }
 		}
@@ -348,6 +348,7 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
 	  if (can_combine_iadd_i_ex(assign_insnd, assign_stmt, is_sign_bit_cc))
 	    {
 		DUMP("	combining with %s\n", assign_insnd->name);
+
 		// Found a replaceable iadd_i
 		combine_iadd_i_ex(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
 
@@ -355,9 +356,22 @@ try_combine_iadd_i_ex(const riscv_sfpu_insn_data *candidate_insnd,
 		gsi_move_before(&assign_gsi, &candidate_gsi);
 
 		// Remove candidate
+		riscv_sfpu_prep_stmt_for_deletion(candidate_stmt);
+
 		unlink_stmt_vdef(candidate_stmt);
 		gsi_remove(&candidate_gsi, true);
 		release_defs(candidate_stmt);
+
+		tree lhs = gimple_call_lhs(assign_stmt);
+		if (lhs != NULL_TREE && has_zero_uses(lhs))
+		  {
+		    DUMP("  lhs has zero uses, removing\n");
+		    unlink_stmt_vdef(assign_stmt);
+		    release_defs(assign_stmt);
+		    gimple_call_set_lhs(assign_stmt, NULL_TREE);
+		  }
+
+		update_stmt(assign_stmt);
 
 		combined = true;
 	    }
@@ -436,7 +450,7 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 						assign_gsi, candidate_gsi) &&
 	      has_single_use(assign_lhs))
 	    {
-	      DUMP("  combine %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
+	      DUMP("  combining %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
 
 	      // Create mad
 	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(live ?
@@ -454,9 +468,8 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 	      gimple_call_set_arg(mad_stmt, live + 3, build_int_cst(integer_type_node, mod));
 
 	      gimple_call_set_lhs(mad_stmt, gimple_call_lhs(candidate_stmt));
-
 	      gimple_set_location(mad_stmt, gimple_location (candidate_stmt));
-	      gimple_set_modified(mad_stmt, true);
+	      update_stmt(mad_stmt);
 	      gsi_insert_before(&candidate_gsi, mad_stmt, GSI_SAME_STMT);
 
 	      // Delete add
@@ -565,9 +578,8 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 							     get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
 
 	      gimple_call_set_lhs(opi_stmt, gimple_call_lhs(candidate_stmt));
-
 	      gimple_set_location(opi_stmt, gimple_location (candidate_stmt));
-	      gimple_set_modified(opi_stmt, true);
+	      update_stmt(opi_stmt);
 	      gsi_insert_before(&candidate_gsi, opi_stmt, GSI_SAME_STMT);
 
 	      // Delete op
@@ -631,14 +643,16 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
 
 		  if (offset == half || offset == neg_half)
 		    {
-		      DUMP("  ...has a loadi of 0.5\n");
+		      DUMP("  ...has a loadi of 0.5, combining\n");
 
 		      int mod1 = (offset == half) ? SFPMAD_MOD1_OFFSET_POSH : SFPMAD_MOD1_OFFSET_NEGH;
 		      gimple_call_set_arg(candidate_stmt, candidate_insnd->mod_pos,
 					  build_int_cst(integer_type_node, mod1));
 
+		      unlink_stmt_vdef(candidate_stmt);
+		      release_defs(candidate_stmt);
 		      gimple_call_set_lhs(candidate_stmt, gimple_call_lhs(use_stmt));
-		      gimple_set_modified(candidate_stmt, true);
+		      update_stmt(candidate_stmt);
 
 		      gimple_stmt_iterator gsi = gsi_for_stmt(use_stmt);
 		      gsi_remove(&gsi, true);
@@ -676,6 +690,9 @@ remove_unused_loadis(function *fun)
 		  (lhs == nullptr || has_zero_uses(lhs)))
 		{
 		  DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
+
+		  // Remove candidate
+		  riscv_sfpu_prep_stmt_for_deletion(stmt);
 
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);

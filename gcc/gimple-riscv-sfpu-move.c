@@ -127,8 +127,11 @@ insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi
   gimple_call_set_arg(mov_stmt, 0, dst_arg);
   gimple_call_set_arg(mov_stmt, 1, build_int_cst(integer_type_node, 0));
   gsi_insert_before (&gsi, mov_stmt, GSI_SAME_STMT);
+  update_stmt(mov_stmt);
 
   gimple_call_set_arg(stmt, dst_arg_pos, name);
+  update_stmt(stmt);
+
   update_ssa (TODO_update_ssa);
 }
 
@@ -175,6 +178,7 @@ static void transform (function *fun)
 			// Swap args
 			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, src_arg);
 			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1, dst_arg);
+			update_stmt(candidate_stmt);
 			swapped = true;
 		      }
 		    }
