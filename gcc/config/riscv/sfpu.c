@@ -38,6 +38,8 @@
 #include "builtins.h"
 #include "predict.h"
 #include "tree-pass.h"
+#include "ssa.h"
+#include "tree-ssa.h"
 #include "sfpu-protos.h"
 #include "sfpu.h"
 
@@ -287,6 +289,43 @@ const char* riscv_sfpu_lv_regno_str(char *str, rtx operand)
   }
 
   return str;
+}
+
+// If a stmt's single use args aren't tracked back to their
+// defs and deleted prior to deleting the stmt, errors occur w/
+// flag_checking=1
+// There has to be an internal version of this...
+void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt)
+{
+  for (unsigned int i = 0; i < gimple_call_num_args (stmt); i++)
+    {
+      tree arg = gimple_call_arg(stmt, i);
+
+      if (TREE_CODE(arg) == SSA_NAME && num_imm_uses (arg) == 1)
+	{
+	  gimple *def_g = SSA_NAME_DEF_STMT (arg);
+
+	  if (def_g->code == GIMPLE_PHI)
+	    {
+	      // XXXX handle phi
+	      // this seems to work fine and SSA checks are ok w/ doing nothing
+	    }
+	  else if (def_g->code == GIMPLE_CALL)
+	    {
+	      tree lhs_name = gimple_call_lhs (def_g);
+	      gimple_call_set_lhs(def_g, NULL_TREE);
+	      release_ssa_name(lhs_name);
+	      update_stmt (def_g);
+	    }
+	  else if (def_g->code == GIMPLE_ASSIGN)
+	    {
+	      unlink_stmt_vdef(def_g);
+	      gimple_stmt_iterator gsi = gsi_for_stmt(def_g);
+	      gsi_remove(&gsi, true);
+	      release_defs(def_g);
+	    }
+	}
+    }
 }
 
 void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr)

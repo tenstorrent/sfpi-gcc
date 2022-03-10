@@ -128,7 +128,7 @@ process_block_stmts(basic_block bb,
 		      *cascading = true;
 		    }
 		  current->generation = *gen_count;
-		  DUMP("      pushed to l=%d, g=%d\n", current->level, current->generation);
+		  DUMP("      pushed to (l=%d, g=%d)\n", current->level, current->generation);
 		}
 	      else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
 		{
@@ -138,7 +138,7 @@ process_block_stmts(basic_block bb,
 		      error_at(location, "malformed program, popc without matching pushc");
 		    }
 		  *current = stack.back();
-		  DUMP("      popped to l=%d, g=%d)\n", current->level, current->generation);
+		  DUMP("      popped to (l=%d, g=%d)\n", current->level, current->generation);
 		  *cascading = false;
 		  stack.pop_back();
 		}
@@ -311,18 +311,36 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
       else
 	{
 	  const riscv_sfpu_insn_data * insnd = riscv_sfpu_get_insn_data(stmt);
-	  if (insnd && insnd->id != riscv_sfpu_insn_data::nonsfpu && insnd->live)
+	  if (insnd && insnd->id != riscv_sfpu_insn_data::nonsfpu)
 	    {
-	      DUMP("      chase assignment\n");
-	      // If the defining statement is another _lv insn, chase it through
-	      unsigned int live_arg = find_live_arg (stmt);
-	      data = get_def_stmt_liveness_1(fn, visited, data,
-					     SSA_NAME_DEF_STMT(gimple_call_arg(stmt, live_arg)), liveness);
+	      if (insnd->live)
+		{
+		  DUMP("      chase assignment\n");
+		  // If the defining statement is another _lv insn, chase it through
+		  unsigned int live_arg = find_live_arg (stmt);
+		  data = get_def_stmt_liveness_1(fn, visited, data,
+						 SSA_NAME_DEF_STMT(gimple_call_arg(stmt, live_arg)), liveness);
+		}
+	      else
+		{
+		  // The chain ends at a non-live insn, use its liveness as the result
+		  if (liveness.find(stmt) == liveness.end())
+		    {
+		      // This is a malformed program
+		      DUMP("      confused, malformed program?\n");
+		      gcc_assert(0);
+		    }
+		  else
+		    {
+		      DUMP("      found base non-live assignment\n");
+		      data = liveness.find(stmt)->second;
+		    }
+		}
 	    }
 	  else
 	    {
-	      // The chain ends at a non-live insn, use its liveness as the result
-	      data = liveness.find(stmt)->second;
+	      DUMP("      confused, chased to a non-sfpu instruction\n");
+	      gcc_assert(0);
 	    }
 	}
     }
@@ -345,33 +363,6 @@ get_def_stmt_liveness(function *fn, gcall *stmt, const call_liveness& liveness)
   gimple *def_g = SSA_NAME_DEF_STMT (gimple_call_arg(stmt, live_arg));
 
   return get_def_stmt_liveness_1(fn, visited, data, def_g, liveness);
-}
-
-// If the argument in arg has one use, then that use is in a stmt that is about
-// to be deleted.  Set the defining statement to produce NULL and release the defs
-static void
-cleanup_arg_ssa(tree arg)
-{
-  if (num_imm_uses (arg) == 1)
-    {
-      gimple *def_g = SSA_NAME_DEF_STMT (arg);
-
-      if (def_g->code == GIMPLE_PHI)
-	{
-	  // XXXX handle phi
-	  // this seems to work fine and SSA checks are ok w/ doing nothing
-	  DUMP("    cleanup_arg_ssa do nothing for phi\n");
-	}
-      else
-	{
-	  DUMP("    cleanup_arg_ssa handling call\n");
-
-	  gimple_call_set_lhs(def_g, NULL_TREE);
-	  tree lhs_name = gimple_call_lhs (def_g);
-	  release_ssa_name(lhs_name);
-	  update_stmt (def_g);
-	}
-    }
 }
 
 static void
@@ -411,7 +402,7 @@ copy_args_to_live_insn (gimple *new_stmt, unsigned int live_arg, gcall *stmt)
 // live and breaks the liveness connection by either deleting the sfpassign_lv
 // (livness assignment) or changing the instruction to the non-live version
 static void
-break_liveness(function *fn, call_liveness liveness)
+break_liveness(function *fn, call_liveness& liveness)
 {
   DUMP("  Break liveness\n");
   call_liveness::iterator it;
@@ -493,15 +484,18 @@ break_liveness(function *fn, call_liveness liveness)
 
 		  // Update SSA for the 2 arguments of the assign
 		  gcc_assert(gimple_call_num_args(stmt) == 2);
-		  cleanup_arg_ssa (gimple_call_arg(stmt, 0));
-		  cleanup_arg_ssa (gimple_call_arg(stmt, 1));
 
+		  riscv_sfpu_prep_stmt_for_deletion(stmt);
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
 		  release_defs(stmt);
 		}
 	      else
 		{
+		  // XXXX Hmm, this code path should no longer be hit by the
+		  // wrapper.  Remove in the future when the design is fully
+		  // stabilized
+
 		  // For all other instructions replace insn w/ non-live
 		  // version and remove the "live" variable
 		  const riscv_sfpu_insn_data *new_insnd = riscv_sfpu_get_notlive_version(insnd);
@@ -515,7 +509,9 @@ break_liveness(function *fn, call_liveness liveness)
 
 		  gimple_stmt_iterator psi = gsi_for_stmt (stmt);
 		  move_ssa_defining_stmt_for_defs (new_stmt, stmt);
+		  // XXXXX not fully correct - vuse doesn't include the live variable
 		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
+
 		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		  gimple_set_location (new_stmt, gimple_location (stmt));
 		  if (gimple_block (new_stmt) == NULL_TREE)
@@ -525,6 +521,9 @@ break_liveness(function *fn, call_liveness liveness)
 
 		  gsi_replace (&psi, new_stmt, false);
 		  update_stmt (new_stmt);
+
+		  // Set the liveness level for the new instruction in the liveness dbase
+		  liveness.insert(pair<gcall *, liveness_data>(dyn_cast<gcall *>(new_stmt), cur_stmt_liveness));
 		}
 	    }
 	}
@@ -537,6 +536,9 @@ break_liveness(function *fn, call_liveness liveness)
 //    ssa2 = __builtin_riscv_sfpassign_lv(ssa_live, ssa1)
 // into:
 //    ssa2 = __builtin_riscv_sfp<foo>_lv(..., ssa_live, ...)
+//
+// Note: the statement "liveness" database is no longer used and does not need
+// to be maintained by the changes below
 static void
 fold_live_assign (function *fn)
 {
@@ -551,7 +553,7 @@ fold_live_assign (function *fn)
       {
 	gcall *stmt;
 	const riscv_sfpu_insn_data *insnd;
-	if (riscv_sfpu_p (&insnd ,&stmt, gsi) &&
+	if (riscv_sfpu_p (&insnd, &stmt, gsi) &&
 	    insnd->id == riscv_sfpu_insn_data::sfpassign_lv)
 	  {
 	    tree lhs = gimple_call_lhs (stmt);
@@ -591,52 +593,20 @@ fold_live_assign (function *fn)
 		    gimple_set_vuse (new_stmt, gimple_vuse (prev_stmt));
 
 		    gimple_set_location (new_stmt, gimple_location (prev_stmt));
-		    gimple_set_modified (new_stmt, true);
 		    gsi_insert_before(&prev_gsi, new_stmt, GSI_SAME_STMT);
+		    update_stmt(new_stmt);
 
+		    riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
 		    unlink_stmt_vdef(prev_stmt);
 		    gsi_remove(&prev_gsi, true);
 		    release_defs(prev_stmt);
 
 		    // Remove candidate
+		    riscv_sfpu_prep_stmt_for_deletion(stmt);
 		    gsi_remove(&gsi, true);
 
 		    update_ssa (TODO_update_ssa);
 		    continue;
-		  }
-		else if (prev_insnd->uses_dst_as_src())
-		  {
-		    // Copy the pseudo-live arg
-		    // XXXX
-		    // Optimization potential, not clear it is attainable with
-		    // the information present.  Consider cases, eg:
-		    // a = a - b;
-		    // b = a - b;
-		    // c = a - b;
-		    // Where all of a, b, c need to be preserved
-		    // I believe these could all be handled by a compiler
-		    // generated move that respects the CC (vs a move of the
-		    // whole register), except the compiler thinks that after
-		    // the move the 2 registers are interchangeable, which
-		    // they are not.  So, present solution looks like:
-		    //    move whole register
-		    //    subtract
-		    //    live move result into place
-		    // Yikes
-#if 0
-		    gimple_call_set_lhs (prev_stmt, lhs);
-		    if (lhs != nullptr)
-		      {
-			gimple_set_vdef (prev_stmt, gimple_vdef (stmt));
-			SSA_NAME_DEF_STMT (lhs) = prev_stmt;
-		      }
-
-		    gimple_set_modified (prev_stmt, true);
-		    unlink_stmt_vdef(prev_stmt);
-		    gsi_remove(&gsi, true);
-		    release_defs(prev_stmt);
-		    continue;
-#endif
 		  }
 	      }
 	  }
