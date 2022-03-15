@@ -613,7 +613,8 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
 
   // XXXX todo: handle _lv versions.  gets complicated
   if (candidate_insnd->id == riscv_sfpu_insn_data::sfpadd ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpmul)
+      candidate_insnd->id == riscv_sfpu_insn_data::sfpmul ||
+      candidate_insnd->id == riscv_sfpu_insn_data::sfpmad)
     {
       DUMP("Found %s, looking to see if its use is an add of +/-0.5f...\n", candidate_insnd->name);
 
