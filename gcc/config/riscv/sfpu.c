@@ -462,7 +462,7 @@ void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
     if (is_signed && (iv >= 2048 || iv < -2048)) {
       //  Need 16 bit signed imm
       imm = riscv_sfpu_clamp_signed(imm, 0x7FFF);
-    } else if (!is_signed && (iv >= 1024 || iv < -1024)) {
+    } else if (!is_signed && (iv >= 2048)) {
       //  Need 16 bit unsigned imm
       imm = riscv_sfpu_clamp_unsigned(imm, 0xFFFF);
     } else {
