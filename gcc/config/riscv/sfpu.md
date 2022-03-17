@@ -39,8 +39,8 @@
   UNSPECV_SFPLOAD
   UNSPECV_SFPLOAD_LV
   UNSPECV_SFPLOAD_INT
-  UNSPECV_SFPLOADI
-  UNSPECV_SFPLOADI_LV
+  UNSPECV_SFPLOADI_EX
+  UNSPECV_SFPLOADI_EX_LV
   UNSPECV_SFPLOADI_INT
   UNSPECV_SFPSTORE
   UNSPECV_SFPSTORE_INT
@@ -274,29 +274,28 @@
    SFPLOAD\t%0, %2, %3")
 
 
-;;; SFPLOADI and SFPLOADI_LV
-(define_expand "riscv_sfploadi"
+(define_expand "riscv_sfploadi_ex"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_SFPLOADI))]
+                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_SFPLOADI_EX))]
   "TARGET_SFPU"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_emit_sfploadi(operands[0], live, operands[1], operands[2], operands[3]);
+  riscv_sfpu_emit_sfploadi_ex(operands[0], live, operands[1], operands[2], operands[3]);
   DONE;
 })
 
-(define_expand "riscv_sfploadi_lv"
+(define_expand "riscv_sfploadi_ex_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_SFPLOADI_LV))]
+                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_SFPLOADI_EX_LV))]
   "TARGET_SFPU"
 {
   rtx live = operands[2];
-  riscv_sfpu_emit_sfploadi(operands[0], live, operands[1], operands[3], operands[4]);
+  riscv_sfpu_emit_sfploadi_ex(operands[0], live, operands[1], operands[3], operands[4]);
   DONE;
 })
 

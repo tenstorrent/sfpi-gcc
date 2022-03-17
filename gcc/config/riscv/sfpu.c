@@ -389,7 +389,7 @@ void riscv_sfpu_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
   }
 }
 
-void riscv_sfpu_emit_sfploadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
+void riscv_sfpu_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 {
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_sfploadi_int(dst, lv, mod, imm));
@@ -479,7 +479,7 @@ void riscv_sfpu_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
   if (need_loadi) {
     // Load imm into dst
     int loadi_mod = is_signed ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT;
-    riscv_sfpu_emit_sfploadi(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm);
+    riscv_sfpu_emit_sfploadi_ex(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm);
 
     unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
     if (cmp == SFPCMP_EX_MOD1_CC_LT || cmp == SFPCMP_EX_MOD1_CC_GTE) {
@@ -596,7 +596,7 @@ void riscv_sfpu_emit_sfpscmp_ex(rtx addr, rtx v, rtx f, rtx mod)
       default:
 	int loadi_mod = ((INTVAL(mod) & SFPSCMP_EX_MOD1_FMT_A) == SFPSCMP_EX_MOD1_FMT_A) ?
 	    SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB;
-	riscv_sfpu_emit_sfploadi(ref_val, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), f);
+	riscv_sfpu_emit_sfploadi_ex(ref_val, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), f);
 	break;
       }
     }
@@ -604,7 +604,7 @@ void riscv_sfpu_emit_sfpscmp_ex(rtx addr, rtx v, rtx f, rtx mod)
       need_sub = true;
       int loadi_mod = ((INTVAL(mod) & SFPSCMP_EX_MOD1_FMT_A) == SFPSCMP_EX_MOD1_FMT_A) ?
 	  SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB;
-      riscv_sfpu_emit_sfploadi(ref_val, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), f);
+      riscv_sfpu_emit_sfploadi_ex(ref_val, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), f);
   }
 
   unsigned int cmp = INTVAL(mod) & SFPCMP_EX_MOD1_CC_MASK;
