@@ -17,6 +17,7 @@ constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
 constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
 constexpr unsigned int SFPLOADI_MOD0_SHORT = 4;
+constexpr unsigned int SFPLOADIEX_MOD0_FLOAT = 16;
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;

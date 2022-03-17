@@ -535,7 +535,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
       int which_arg = 0;
 
       // Only combine live if we are writing to the same arg as the dst arg
-      bool found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfploadi,
+      bool found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfploadi_ex,
 					       &assign_insnd, &assign_stmt, &assign_gsi,
 					       gimple_call_arg(candidate_stmt, which_arg + live)) &&
 			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -546,7 +546,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
       if (!found_one)
 	{
 	  which_arg = 1;
-	  found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfploadi,
+	  found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfploadi_ex,
 					      &assign_insnd, &assign_stmt, &assign_gsi,
 					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
 		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -634,7 +634,7 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
 	  gimple_stmt_iterator assign_gsi;
 	  gcall *assign_stmt;
 	  const riscv_sfpu_insn_data *assign_insnd;
-	  if (match_prior_assignment(riscv_sfpu_insn_data::sfploadi,
+	  if (match_prior_assignment(riscv_sfpu_insn_data::sfploadi_ex,
 				     &assign_insnd, &assign_stmt, &assign_gsi,
 				     gimple_call_arg(use_stmt, which_arg + live)))
 	    {
@@ -687,7 +687,7 @@ remove_unused_loadis(function *fun)
 	  if (riscv_sfpu_p(&insnd, &stmt, gsi))
 	    {
 	      tree lhs = gimple_call_lhs(stmt);
-	      if (insnd->id == riscv_sfpu_insn_data::sfploadi &&
+	      if (insnd->id == riscv_sfpu_insn_data::sfploadi_ex &&
 		  (lhs == nullptr || has_zero_uses(lhs)))
 		{
 		  DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
