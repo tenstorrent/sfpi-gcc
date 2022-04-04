@@ -254,7 +254,7 @@ static const struct riscv_tune_param *tune_param;
 enum riscv_microarchitecture_type riscv_microarchitecture;
 
 /* Index R is the smallest register class that contains register R.  */
-const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
+enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   GR_REGS,	GR_REGS,	GR_REGS,	GR_REGS,
   GR_REGS,	GR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
   JALR_REGS,	JALR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
@@ -272,7 +272,7 @@ const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FRAME_REGS,	FRAME_REGS,
-	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+	SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
 	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
 	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
 	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
@@ -4852,6 +4852,25 @@ riscv_conditional_register_usage (void)
     {
       for (int regno = FP_REG_FIRST; regno <= FP_REG_LAST; regno++)
 	call_used_regs[regno] = 1;
+    }
+
+  if (TARGET_WORMHOLE)
+    {
+      reg_class_contents[SFPU_REGS_L4].elts[0] = 0x00000040;
+      reg_class_contents[SFPU_REGS_L5].elts[0] = 0x00000080;
+      reg_class_contents[SFPU_REGS_L6].elts[0] = 0x00000100;
+      reg_class_contents[SFPU_REGS_L7].elts[0] = 0x00000200;
+
+      riscv_regno_to_class[SFPU_REG_FIRST + 4] = SFPU_REGS_L4;
+      riscv_regno_to_class[SFPU_REG_FIRST + 5] = SFPU_REGS_L5;
+      riscv_regno_to_class[SFPU_REG_FIRST + 6] = SFPU_REGS_L6;
+      riscv_regno_to_class[SFPU_REG_FIRST + 7] = SFPU_REGS_L7;
+
+      for (int i = 4; i < 8; i++)
+        {
+	  fixed_regs[SFPU_REG_FIRST + i] = 0;
+	  call_used_regs[SFPU_REG_FIRST + i] = 0;
+	}
     }
 }
 
