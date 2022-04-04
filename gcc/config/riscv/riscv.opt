@@ -82,6 +82,14 @@ msfpu
 Target Report Mask(SFPU) Bool Var(flag_sfpu) Init(0)
 Generate code for Tenstorrent SFPU.
 
+mgrayskull
+Target Report Mask(GRAYSKULL) Bool Var(flag_grayskull) Init(0)
+Generate code for Tenstorrent SFPU - Grayskull.
+
+mwormhole
+Target Report Mask(WORMHOLE) Bool Var(flag_wormhole) Init(0)
+Generate code for Tenstorrent SFPU - Wormhole.
+
 march=
 Target RejectNegative Joined Negative(march=)
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be

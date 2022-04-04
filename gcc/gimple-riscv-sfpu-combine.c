@@ -702,7 +702,8 @@ remove_unused_loadis(function *fun)
 		  removed = true;
 		}
 	    }
-	  gsi_next (&gsi);
+	  if (!gsi_end_p(gsi))
+	    gsi_next (&gsi);
 	}
     }
 

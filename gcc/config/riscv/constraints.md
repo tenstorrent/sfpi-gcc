@@ -42,6 +42,18 @@
 (define_register_constraint "Q3" "SFPU_REGS_L3"
   "SFPU Register L3")
 
+(define_register_constraint "Q4" "SFPU_REGS_L4"
+  "SFPU Register L4")
+
+(define_register_constraint "Q5" "SFPU_REGS_L5"
+  "SFPU Register L5")
+
+(define_register_constraint "Q6" "SFPU_REGS_L6"
+  "SFPU Register L6")
+
+(define_register_constraint "Q7" "SFPU_REGS_L7"
+  "SFPU Register L7")
+
 ;; Avoid using register t0 for JALR's argument, because for some
 ;; microarchitectures that is a return-address stack hint.
 (define_register_constraint "l" "JALR_REGS"

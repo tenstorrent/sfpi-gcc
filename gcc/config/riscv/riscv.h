@@ -447,6 +447,10 @@ enum reg_class
   SFPU_REGS_L1,                 /* SFPU register L1 for Tenstorrent */
   SFPU_REGS_L2,                 /* SFPU register L2 for Tenstorrent */
   SFPU_REGS_L3,                 /* SFPU register L3 for Tenstorrent */
+  SFPU_REGS_L4,                 /* SFPU register L4 for Tenstorrent */
+  SFPU_REGS_L5,                 /* SFPU register L5 for Tenstorrent */
+  SFPU_REGS_L6,                 /* SFPU register L6 for Tenstorrent */
+  SFPU_REGS_L7,                 /* SFPU register L7 for Tenstorrent */
   SFPU_REGS,                    /* SFPU registers for Tenstorrent */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
@@ -472,6 +476,10 @@ enum reg_class
   "SFPU_REGS_L1",							\
   "SFPU_REGS_L2",							\
   "SFPU_REGS_L3",							\
+  "SFPU_REGS_L4",							\
+  "SFPU_REGS_L5",							\
+  "SFPU_REGS_L6",							\
+  "SFPU_REGS_L7",							\
   "SFPU_REGS",								\
   "ALL_REGS"								\
 }
@@ -499,6 +507,10 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000008 },	/* SFPU_REGS_L1 */ 	\
   { 0x00000000, 0x00000000, 0x00000010 },	/* SFPU_REGS_L2 */ 	\
   { 0x00000000, 0x00000000, 0x00000020 },	/* SFPU_REGS_L3 */ 	\
+  { 0x00000000, 0x00000000, 0x00000000 },	/* SFPU_REGS_L4 */ 	\
+  { 0x00000000, 0x00000000, 0x00000000 },	/* SFPU_REGS_L5 */ 	\
+  { 0x00000000, 0x00000000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
+  { 0x00000000, 0x00000000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
   { 0x00000000, 0x00000000, 0x0003fffc },	/* SFPU_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0x0003ffff }	/* ALL_REGS */		\
 }
@@ -541,7 +553,7 @@ enum reg_class
   /* Call-saved FPRs.  */						\
   40, 41, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,			\
   /* SFPU Registers.  */						\
-  66, 67, 68, 69,							\
+  66, 67, 68, 69, 70, 71, 72, 73,                                       \
   /* None of the remaining classes have defined call-saved		\
      registers.  */							\
   64, 65								\
@@ -981,7 +993,7 @@ while (0)
 #define SET_RATIO(speed) (CLEAR_RATIO (speed) - ((speed) ? 0 : 2))
 
 #ifndef USED_FOR_TARGET
-extern const enum reg_class riscv_regno_to_class[];
+extern enum reg_class riscv_regno_to_class[];
 extern bool riscv_slow_unaligned_access_p;
 extern unsigned riscv_stack_boundary;
 #endif
