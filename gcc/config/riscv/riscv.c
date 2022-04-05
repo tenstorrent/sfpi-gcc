@@ -4856,10 +4856,10 @@ riscv_conditional_register_usage (void)
 
   if (TARGET_WORMHOLE)
     {
-      reg_class_contents[SFPU_REGS_L4].elts[0] = 0x00000040;
-      reg_class_contents[SFPU_REGS_L5].elts[0] = 0x00000080;
-      reg_class_contents[SFPU_REGS_L6].elts[0] = 0x00000100;
-      reg_class_contents[SFPU_REGS_L7].elts[0] = 0x00000200;
+      reg_class_contents[SFPU_REGS_L4].elts[1] = 0x00000040;
+      reg_class_contents[SFPU_REGS_L5].elts[1] = 0x00000080;
+      reg_class_contents[SFPU_REGS_L6].elts[1] = 0x00000100;
+      reg_class_contents[SFPU_REGS_L7].elts[1] = 0x00000200;
 
       riscv_regno_to_class[SFPU_REG_FIRST + 4] = SFPU_REGS_L4;
       riscv_regno_to_class[SFPU_REG_FIRST + 5] = SFPU_REGS_L5;
