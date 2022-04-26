@@ -77,7 +77,8 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{march=*} \
 %{mabi=*} \
 %(subtarget_asm_spec) \
-%{msfpu:-march=rv32iy} "
+%{msfpu:-march=rv32iy} \
+%{mwormhole:-march=rv32iw -mwormhole} "
 
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS					\
