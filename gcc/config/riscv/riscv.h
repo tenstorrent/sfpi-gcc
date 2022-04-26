@@ -105,7 +105,8 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{mlittle-endian} \
 %(subtarget_asm_spec) \
 %(subtarget_asm_spec) \
-%{msfpu:-march=rv32iy} "
+%{msfpu:-march=rv32iy} \
+%{mwormhole:-march=rv32iw -mwormhole} "
 ASM_MISA_SPEC
 
 #undef DRIVER_SELF_SPECS
