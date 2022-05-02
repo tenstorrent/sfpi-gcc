@@ -646,6 +646,7 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"d", &gcc_options::x_target_flags, MASK_DOUBLE_FLOAT},
   {"c", &gcc_options::x_target_flags, MASK_RVC},
   {"y", &gcc_options::x_target_flags, MASK_RVC},
+  {"w", &gcc_options::x_target_flags, MASK_RVC},
   {NULL, NULL, 0}
 };
 
