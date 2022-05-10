@@ -94,6 +94,7 @@ struct riscv_builtin_description {
 
 AVAIL (hard_float, TARGET_HARD_FLOAT)
 AVAIL (sfpu, TARGET_SFPU)
+AVAIL (wormhole, TARGET_WORMHOLE)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -122,6 +123,15 @@ AVAIL (sfpu, TARGET_SFPU)
    and AVAIL are as for RISCV_BUILTIN.  */
 #define DIRECT_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
   RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
+		FUNCTION_TYPE, AVAIL)
+
+#define RISCV_WORMHOLE_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
+  { CODE_FOR_riscv_ ## INSN, "__builtin_riscv_" NAME,			\
+    BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
+#define DIRECT_WORMHOLE_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
+  RISCV_WORMHOLE_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
+#define DIRECT_WORMHOLE_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
+  RISCV_WORMHOLE_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
 		FUNCTION_TYPE, AVAIL)
 
 tree v64SF_type_node;
@@ -160,6 +170,8 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   /* Tenstorrent SFPU builtins */
 #define SFPU_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_BUILTIN(op, fmt, en),
 #define SFPU_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_NO_TARGET_BUILTIN(op, fmt, en),
+#define WORMHOLE_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_WORMHOLE_BUILTIN(op, fmt, en),
+#define WORMHOLE_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_WORMHOLE_NO_TARGET_BUILTIN(op, fmt, en),
 #include "sfpu-insn.h"
 };
 

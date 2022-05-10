@@ -64,5 +64,7 @@ SFPU_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI,  sf
 SFPU_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                        sfpu, 0, 0, 0, -1, -1)
 SFPU_NO_TGT_BUILTIN (sfpillegal,     RISCV_VOID_FTYPE,                        sfpu, 0, 0, 0, -1, -1)
 
+WORMHOLE_BUILTIN (wormhole_sfpload,         RISCV_V64SF_FTYPE_POINTER_USI_USI_USI,         wormhole, 0, 0, 0, -1,  1)
+
 #undef SFPU_BUILTIN
 #undef SFPU_NO_TGT_BUILTIN

@@ -31,3 +31,5 @@ sfpu.o: $(srcdir)/config/riscv/sfpu.c $(CONFIG_H) $(SYSTEM_H) \
 PASSES_EXTRA += $(srcdir)/config/riscv/riscv-passes.def
 
 $(common_out_file): $(srcdir)/config/riscv/riscv-cores.def
+
+EXTRA_HEADERS += $(srcdir)/config/riscv/sfpu-internals.h

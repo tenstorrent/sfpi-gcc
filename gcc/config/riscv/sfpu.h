@@ -74,7 +74,11 @@ struct riscv_sfpu_insn_data {
   enum insn_id {
 #define SFPU_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
 #define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define WORMHOLE_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define WORMHOLE_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
 #include "sfpu-insn.h"
+#undef WORMHOLE_BUILTIN
+#undef WORMHOLE_NO_TGT_BUILTIN
 
     nonsfpu
   };
