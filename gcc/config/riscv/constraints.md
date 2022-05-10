@@ -28,7 +28,7 @@
   "@internal")
 
 (define_register_constraint "x" "SFPU_REGS"
-  "Any of the SFPU Registers L0 - L3")
+  "Any of the SFPU Registers L0 - L3 (L0 - L7 for Wormhole)")
 
 (define_register_constraint "Q0" "SFPU_REGS_L0"
   "SFPU Register L0")
