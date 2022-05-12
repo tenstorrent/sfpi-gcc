@@ -47,6 +47,7 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME4(A, B, C, D, E) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
 #define RISCV_FTYPE_NAME5(A, B, C, D, E, F) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
 #define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
+#define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -159,6 +160,8 @@ tree v64SF_type_node;
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F
 #define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
+#define RISCV_FTYPE_ATYPES8(A, B, C, D, E, F, G, H, I) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, RISCV_ATYPE_##I
 
 static const int first_sfpu_builtin = 2;
 
