@@ -322,3 +322,15 @@ void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rt
     riscv_sfpu_emit_nonimm_dst_src(addr, dst, 2, lv, src, imm, base, 20, 8, 4, 8);
   }
 }
+
+void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod)
+{
+  if (GET_CODE(imm) == CONST_INT) {
+    emit_insn(gen_riscv_wh_sfpstochrnd_i_int(dst, lv, mode, riscv_sfpu_clamp_unsigned(imm, 0xFF), src, mod));
+  } else {
+    int mod1 = INTVAL(mod);
+    int imode = INTVAL(mode);
+    int base = TT_OP_WH_SFP_STOCH_RND(imode, 0, 0, 0, 0, mod1);
+    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 24, 8, 4, 8);
+  }
+}

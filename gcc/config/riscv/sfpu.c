@@ -61,11 +61,13 @@ unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[] = {
 
 static std::map<const char*, riscv_sfpu_insn_data&, cmp_str> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 61;
+static const int NUMBER_OF_INTRINSICS = 73;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
 #define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
+#define SFPU_GS_PAD_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0 },
+#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0},
 #include "sfpu-insn.h"
     { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0 }
   },
@@ -82,8 +84,33 @@ static const char* riscv_sfpu_builtin_name_stub;
 void
 riscv_sfpu_insert_insn(int idx, const char* name, tree decl)
 {
-  sfpu_insn_data[idx].decl = decl;
-  insn_map.insert(std::pair<const char*, riscv_sfpu_insn_data&>(name, sfpu_insn_data[idx]));
+  // Due to PADding, there will be gaps in the builtin table, so the name we
+  // are looking for occurs after idx.  Assume that no ARCH is so small that
+  // the math below doesn't work.
+
+  int arch = idx / NUMBER_OF_INTRINSICS;
+  int offset = idx % NUMBER_OF_INTRINSICS;
+
+  while (offset < NUMBER_OF_INTRINSICS * NUMBER_OF_ARCHES)
+    {
+      // string is __rvtt_builtin_XX_<name>
+      if (strcmp(sfpu_insn_data_target[arch][offset].name, &name[18]) == 0)
+	{
+	  sfpu_insn_data_target[arch][offset].decl = decl;
+	  insn_map.insert(std::pair<const char*, riscv_sfpu_insn_data&>(name, sfpu_insn_data_target[arch][offset]));
+	  return;
+	}
+      offset++;
+      if (offset == NUMBER_OF_INTRINSICS)
+	{
+	  offset = 0;
+	  arch++;
+	}
+    }
+
+  fprintf(stderr, "Failed to match insn %d named %s to builtin for arch index %d starting at builtin %d\n",
+	  idx, name, arch, offset);
+  gcc_assert(0);
 }
 
 void
@@ -108,7 +135,8 @@ riscv_sfpu_init_builtins()
 	{
 	  if (sfpu_insn_data_target[0][j].id != sfpu_insn_data_target[i][j].id)
 	    {
-	      fprintf(stderr, "SFPU intrinsic table element (%d, %d) does not match!\n", i, j);
+	      fprintf(stderr, "SFPU intrinsic table element (%d, %d) does not match (%d != %d)!\n",
+		      i, j, sfpu_insn_data_target[0][j].id, sfpu_insn_data_target[i][j].id);
 	      gcc_assert(0);
 	    }
 	}

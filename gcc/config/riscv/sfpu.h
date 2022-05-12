@@ -74,8 +74,8 @@ struct riscv_sfpu_insn_data {
   enum insn_id {
 #define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
 #define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define SFPU_PAD_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define SFPU_PAD_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_GS_PAD_BUILTIN(id) id,
+#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) id,
 #include "sfpu-insn.h"
 
     nonsfpu
