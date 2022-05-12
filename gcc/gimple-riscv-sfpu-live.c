@@ -678,7 +678,7 @@ public:
 unsigned int
 pass_riscv_sfpu_live::execute (function *fun)
 {
-  if (flag_sfpu)
+  if (flag_grayskull || flag_wormhole)
     {
       transform (fun);
     }

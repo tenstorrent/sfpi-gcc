@@ -453,9 +453,11 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 	      DUMP("  combining %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
 
 	      // Create mad
-	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(live ?
-									       "__builtin_riscv_sfpmad_lv" :
-									       "__builtin_riscv_sfpmad");
+	      char name[32];
+	      sprintf(name, "%s_sfpmad%s",
+		      riscv_sfpu_get_builtin_name_stub(),
+		      live ? "_lv" : "");
+	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(name);
 	      gimple* mad_stmt = gimple_build_call(mad_insnd->decl, 4 + live);
 	      if (live)
 		{
@@ -563,7 +565,8 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	  if (get_int_arg(assign_stmt, assign_insnd->mod_pos) == SFPLOADI_MOD0_FLOATB)
 	    {
 	      char name[32];
-	      sprintf(name, "__builtin_riscv_%si",
+	      sprintf(name, "%s_%si",
+		      riscv_sfpu_get_builtin_name_stub(),
 		      riscv_sfpu_get_notlive_version(candidate_insnd)->name);
 	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, name);
 
@@ -814,7 +817,7 @@ public:
 unsigned int
 pass_riscv_sfpu_combine::execute (function *fun)
 {
-  if (flag_sfpu)
+  if (flag_grayskull || flag_wormhole)
     {
       transform (fun);
     }

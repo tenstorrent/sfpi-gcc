@@ -72,13 +72,11 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define SFPU_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define WORMHOLE_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define WORMHOLE_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_PAD_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_PAD_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
 #include "sfpu-insn.h"
-#undef WORMHOLE_BUILTIN
-#undef WORMHOLE_NO_TGT_BUILTIN
 
     nonsfpu
   };
@@ -95,7 +93,11 @@ struct riscv_sfpu_insn_data {
   inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
 
+extern unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[];
+
 extern void riscv_sfpu_insert_insn(int idx, const char*name, tree decl);
+extern void riscv_sfpu_init_builtins();
+extern const char * riscv_sfpu_get_builtin_name_stub();
 
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const char *call);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id);

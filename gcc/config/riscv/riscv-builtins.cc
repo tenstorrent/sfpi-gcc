@@ -93,8 +93,8 @@ struct riscv_builtin_description {
 };
 
 AVAIL (hard_float, TARGET_HARD_FLOAT)
-AVAIL (sfpu, TARGET_SFPU)
-AVAIL (wormhole, TARGET_WORMHOLE)
+AVAIL (grayskull, TARGET_SFPU_GS)
+AVAIL (wormhole, TARGET_SFPU_WH)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -125,13 +125,13 @@ AVAIL (wormhole, TARGET_WORMHOLE)
   RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
 		FUNCTION_TYPE, AVAIL)
 
-#define RISCV_WORMHOLE_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
-  { CODE_FOR_riscv_ ## INSN, "__builtin_riscv_" NAME,			\
+#define RISCV_SFPU_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
+  { CODE_FOR_riscv_ ## INSN, "__builtin_rvtt_" NAME,			\
     BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
-#define DIRECT_WORMHOLE_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
-  RISCV_WORMHOLE_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
-#define DIRECT_WORMHOLE_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
-  RISCV_WORMHOLE_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
+#define DIRECT_SFPU_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
+  RISCV_SFPU_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
+#define DIRECT_SFPU_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
+  RISCV_SFPU_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
 		FUNCTION_TYPE, AVAIL)
 
 tree v64SF_type_node;
@@ -168,10 +168,10 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_BUILTIN(op, fmt, en),
-#define SFPU_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_NO_TARGET_BUILTIN(op, fmt, en),
-#define WORMHOLE_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_WORMHOLE_BUILTIN(op, fmt, en),
-#define WORMHOLE_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_WORMHOLE_NO_TARGET_BUILTIN(op, fmt, en),
+#define SFPU_GS_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_BUILTIN(gs_##op, fmt, en),
+#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, en),
+#define SFPU_WH_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_BUILTIN(wh_##op, fmt, en),
+#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, en),
 #include "sfpu-insn.h"
 };
 
@@ -233,6 +233,8 @@ riscv_init_builtins (void)
 	    }
 	}
     }
+
+  riscv_sfpu_init_builtins();
 }
 
 /* Implement TARGET_BUILTIN_DECL.  */
