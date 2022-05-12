@@ -281,7 +281,7 @@ public:
 unsigned int
 pass_riscv_sfpu_warn::execute (function *fun)
 {
-  if (flag_sfpu)
+  if (flag_grayskull || flag_wormhole)
     {
       process (fun);
     }

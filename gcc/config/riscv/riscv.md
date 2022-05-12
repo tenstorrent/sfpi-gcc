@@ -2521,4 +2521,5 @@
 (include "generic.md")
 (include "sifive-7.md")
 (include "sfpu.md")
-(include "sfpu-wormhole.md")
+(include "sfpu-gs.md")
+(include "sfpu-wh.md")

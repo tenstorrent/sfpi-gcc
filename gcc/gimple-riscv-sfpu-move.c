@@ -119,7 +119,9 @@ insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi
   DUMP("  inserting move\n");
 
   // Insert a move
-  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data("__builtin_riscv_sfpmov");
+  char fname[32];
+  sprintf(fname, "%s_sfpmov", riscv_sfpu_get_builtin_name_stub());
+  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data(fname);
   gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
   tree var = create_tmp_var (TREE_TYPE(dst_arg));
   tree name = make_ssa_name (var, mov_stmt);
@@ -238,7 +240,7 @@ public:
 unsigned int
 pass_riscv_sfpu_move::execute (function *fun)
 {
-  if (flag_sfpu)
+  if (flag_grayskull || flag_wormhole)
     {
       transform (fun);
     }

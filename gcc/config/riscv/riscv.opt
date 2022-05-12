@@ -70,16 +70,12 @@ mdiv
 Target Report Mask(DIV)
 Use hardware instructions for integer division.
 
-msfpu
-Target Report Mask(SFPU) Bool Var(flag_sfpu) Init(0)
-Generate code for Tenstorrent SFPU.
-
 mgrayskull
-Target Report Mask(GRAYSKULL) Bool Var(flag_grayskull) Init(0)
+Target Report Mask(SFPU_GS) Bool Var(flag_grayskull) Init(0)
 Generate code for Tenstorrent SFPU - Grayskull.
 
 mwormhole
-Target Report Mask(WORMHOLE) Bool Var(flag_wormhole) Init(0)
+Target Report Mask(SFPU_WH) Bool Var(flag_wormhole) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole.
 
 march=

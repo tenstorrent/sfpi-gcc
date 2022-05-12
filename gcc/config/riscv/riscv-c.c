@@ -62,12 +62,6 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_fsqrt");
     }
 
-  if (TARGET_SFPU)
-    builtin_define ("__riscv_sfpu");
-
-  if (TARGET_WORMHOLE)
-    builtin_define ("__riscv_sfpu_wormhole");
-
   switch (riscv_abi)
     {
     case ABI_ILP32E:
