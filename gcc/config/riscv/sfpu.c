@@ -454,3 +454,45 @@ char const * riscv_sfpu_output_nonimm_store_and_nops(const char *sw, int nnops, 
   }
   return out;
 }
+
+uint32_t riscv_sfpu_fp32_to_fp16a(const uint32_t val)
+{
+    // https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion
+    // Handles denorms.  May be costly w/ non-immediate values
+    const unsigned int b = val + 0x00001000;
+    const unsigned int e = (b & 0x7F800000) >> 23;
+    const unsigned int m = b & 0x007FFFFF;
+    const unsigned int result =
+       (b & 0x80000000) >> 16 |
+       (e > 112) * ((((e - 112) << 10) &0x7C00) | m >> 13) |
+       ((e < 113) & (e > 101)) * ((((0x007FF000 + m) >> (125 -e )) + 1) >> 1) |
+       (e > 143) * 0x7FFF;
+#if 0
+    // Simple/faster but less complete
+    const unsigned int result =
+       ((val >> 16) & 0x8000) |
+       ((((val & 0x7F800000) - 0x38000000) >> 13) & 0x7c00) |
+       ((val >> 13) & 0x03FF);
+#endif
+
+    return result;
+}
+
+uint32_t riscv_sfpu_fp32_to_fp16b(const uint32_t val)
+{
+    return val >> 16;
+}
+
+uint32_t riscv_sfpu_scmp2loadi_mod(int mod)
+{
+  int fmt = mod & SFPSCMP_EX_MOD1_FMT_MASK;
+
+  if (fmt == SFPSCMP_EX_MOD1_FMT_A) {
+    return SFPLOADI_MOD0_FLOATA;
+  }
+  if (fmt == SFPSCMP_EX_MOD1_FMT_B) {
+    return SFPLOADI_MOD0_FLOATB;
+  }
+
+  return SFPLOADI_EX_MOD0_FLOAT;
+}
