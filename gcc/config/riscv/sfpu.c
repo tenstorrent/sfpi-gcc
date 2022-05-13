@@ -64,18 +64,18 @@ static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 73;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
-#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
-#define SFPU_GS_PAD_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0 },
-#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0},
+#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
+#define SFPU_GS_PAD_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0 },
+#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0 },
 #include "sfpu-insn.h"
-    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0 }
+    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0 }
   },
   {
-#define SFPU_WH_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
-#define SFPU_WH_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp },
+#define SFPU_WH_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
+#define SFPU_WH_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
 #include "sfpu-insn.h"
-    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0 }
+    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0 }
   }
 };
 
@@ -534,4 +534,28 @@ bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *
   }
 
   return representable;
+}
+
+bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
+				   gcall **stmt,
+				   gimple_stmt_iterator gsi,
+				   bool allow_empty)
+{
+  gimple_stmt_iterator next_gsi = gsi;
+  gsi_next_nondebug(&next_gsi);
+  bool done = false;
+  while (!done && !gsi_end_p(next_gsi))
+    {
+      if (riscv_sfpu_p(insnd, stmt, next_gsi) &&
+          ((*insnd)->schedule != -1 || allow_empty))
+        {
+          done = true;
+        }
+      else
+        {
+          gsi_next_nondebug(&next_gsi);
+        }
+    }
+
+  return done;
 }

@@ -345,6 +345,7 @@ void riscv_sfpu_wh_emit_sfpscmp_ex(rtx addr, rtx v, rtx f, rtx mod)
     rtx tmp = gen_reg_rtx(V64SFmode);
     riscv_sfpu_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
     emit_insn(gen_riscv_wh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
+    emit_insn(gen_riscv_wh_sfpnop());
     v = tmp;
   }
 
@@ -367,6 +368,7 @@ void riscv_sfpu_wh_emit_sfpvcmp_ex(rtx v1, rtx v2, rtx mod)
 
   riscv_sfpu_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
   emit_insn(gen_riscv_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
+  emit_insn(gen_riscv_wh_sfpnop());
 
   unsigned int cmp = INTVAL(mod) & SFPCMP_EX_MOD1_CC_MASK;
   if (cmp == SFPCMP_EX_MOD1_CC_LTE || cmp == SFPCMP_EX_MOD1_CC_GT) {

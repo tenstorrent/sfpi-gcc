@@ -485,6 +485,7 @@ extern gimple_opt_pass *make_pass_riscv_sfpu_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_move (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_riscv_sfpu_schedule (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_warn (gcc::context *ctxt);
 
 /* IPA Passes */

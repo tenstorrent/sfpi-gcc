@@ -152,12 +152,8 @@
       // Note: must re-enable all elements until we know if we are in a predicated state
       output_asm_insn("SFPPUSHC", operands);
       output_asm_insn("SFPENCC\t3, 2", operands);
-      output_asm_insn("SFPNOP", operands);
       output_asm_insn("SFPMOV\t%1, %0, 0", operands);
-      output_asm_insn("SFPNOP", operands);
-      output_asm_insn("SFPNOP", operands);
-      output_asm_insn("SFPPOPC", operands);
-      return "SFPNOP";
+      return "SFPPOPC";
       break;
 
     case 1:
@@ -192,22 +188,16 @@
   "TARGET_SFPU_WH  &&
    (   register_operand (operands[0], V64SFmode)
     || reg_or_0_operand (operands[1], V64SFmode))"
-  {
-    output_asm_insn("SFPMOV\t%1, %0, 0", operands);
-    output_asm_insn("SFPNOP", operands);
-    return "SFPNOP";
-  })
+  "SFPMOV\t%1, %0, 0"
+)
 
 (define_insn "riscv_wh_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPASSIGN_LV))]
   "TARGET_SFPU_WH"
-{
-    output_asm_insn("SFPMOV\t%2, %0, 0", operands);
-    output_asm_insn("SFPNOP", operands);
-    return "SFPNOP";
-})
+  "SFPMOV\t%2, %0, 0"
+)
 
 (define_expand "riscv_wh_sfpassignlr"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -379,11 +369,8 @@
                           (match_operand:SI    2 "nonmemory_operand" "n")
                           (match_operand:SI    3 "immediate_operand" "M")] wormhole_muliaddi_int))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFP<wormhole_muliaddi_int_call>\t%2, %0, %3", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFP<wormhole_muliaddi_int_call>\t%2, %0, %3"
+)
 
 (define_expand "riscv_wh_sfpdivp2"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -419,11 +406,8 @@
                           (match_operand:V64SF 3 "register_operand"  "x, x")
                           (match_operand:SI    4 "immediate_operand" "M, M")] UNSPECV_WH_SFPDIVP2_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPDIVP2\t%2, %3, %0, %4", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPDIVP2\t%2, %3, %0, %4"
+)
 
 (define_int_iterator wormhole_simple_op
   [UNSPECV_WH_SFPEXEXP
@@ -502,22 +486,8 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:SI    3 "immediate_operand" "M, M")] wormhole_simple_op_int))]
   "TARGET_SFPU_WH"
-{
-    output_asm_insn("SFP<wormhole_simple_op_call_int>\t%2, %0, %3", operands);
-
-    int mod1 = INTVAL(operands[3]);
-    // EXEXP and LZ require 3 nops when setting the CC
-    if (((<wormhole_simple_op_id_int> == UNSPECV_WH_SFPEXEXP_INT) &&
-         (mod1 == 2 || mod1 == 3 || mod1 == 8 || mod1 == 9 || mod1 == 10 || mod1 == 11)) ||
-        ((<wormhole_simple_op_id_int> == UNSPECV_WH_SFPLZ_INT) &&
-         (mod1 == 2 || mod1 == 8 || mod1 == 10 || mod1 == 11))) {
-      output_asm_insn("SFPNOP", operands);
-    }
-
-    output_asm_insn("SFPNOP", operands);
-
-    return "SFPNOP";
-})
+  "SFP<wormhole_simple_op_call_int>\t%2, %0, %3"
+)
 
 (define_int_iterator wormhole_muladd [UNSPECV_WH_SFPMUL UNSPECV_WH_SFPADD])
 (define_int_attr wormhole_muladd_name [(UNSPECV_WH_SFPMUL "mul") (UNSPECV_WH_SFPADD "add")])
@@ -558,11 +528,8 @@
                           (match_operand:V64SF 3 "register_operand"  "x, x")
                           (match_operand:SI    4 "immediate_operand" "M, M")] wormhole_muladd_int))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFP<wormhole_muladd_call_int>, %0, %4", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFP<wormhole_muladd_call_int>, %0, %4"
+)
 
 (define_insn "riscv_wh_sfpiadd_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -570,17 +537,8 @@
                           (match_operand:V64SF 2 "register_operand"  "x")
                           (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_WH_SFPIADD_V))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPIADD\t0, %2, %0, %3", operands);
-  output_asm_insn("SFPNOP", operands);
-
-  int mod1 = INTVAL(operands[3]);
-  // Careful - this includes a few "reserved" values
-  if (mod1 < 3 || mod1 > 7) {
-    output_asm_insn("SFPNOP", operands);
-  }
-  return "SFPNOP";
-})
+  "SFPIADD\t0, %2, %0, %3"
+)
 
 (define_expand "riscv_wh_sfpiadd_i"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -616,17 +574,8 @@
                           (match_operand:SI    3 "immediate_operand" "n, n")
                           (match_operand:SI    4 "immediate_operand" "M, M")] UNSPECV_WH_SFPIADD_I_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPIADD\t%3, %2, %0, %4", operands);
-  output_asm_insn("SFPNOP", operands);
-
-  int mod1 = INTVAL(operands[4]);
-  // Careful - this includes a few "reserved" values
-  if (mod1 < 3 || mod1 > 7) {
-    output_asm_insn("SFPNOP", operands);
-  }
-  return "SFPNOP";
-})
+  "SFPIADD\t%3, %2, %0, %4"
+)
 
 (define_expand "riscv_wh_sfpiadd_v_ex"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -672,11 +621,8 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPSHFT_V))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSHFT\t0, %2, %0, 0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPSHFT\t0, %2, %0, 0"
+)
 
 (define_expand "riscv_wh_sfpshft_i"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -699,44 +645,32 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:SI    2 "nonmemory_operand" "n")] UNSPECV_WH_SFPSHFT_I_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSHFT\t%2, L0, %0, 1", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPSHFT\t%2, L0, %0, 1"
+)
 
 (define_insn "riscv_wh_sfpand"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPAND))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPAND\t%2, %0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPAND\t%2, %0"
+)
 
 (define_insn "riscv_wh_sfpor"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPOR))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPOR\t%2, %0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPOR\t%2, %0"
+)
 
 (define_insn "riscv_wh_sfpxor"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPXOR))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPXOR\t%2, %0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPXOR\t%2, %0"
+)
 
 (define_expand "riscv_wh_sfpnot"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -764,11 +698,8 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")] UNSPECV_WH_SFPNOT_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPNOT\t%2, %0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPNOT\t%2, %0"
+)
 
 (define_expand "riscv_wh_sfpcast"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -819,7 +750,7 @@
                           (match_operand:SI    3 "immediate_operand" "")] UNSPECV_WH_SFPSHFT2_E_LV))]
   "TARGET_SFPU_WH"
 {
-  rtx live = operands[2];
+  rtx live = operands[1];
   emit_insn (gen_riscv_wh_sfpshft2_e_int(operands[0], live, operands[2], operands[3]));
   DONE;
 })
@@ -830,7 +761,13 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:SI    3 "immediate_operand" "M, M")] UNSPECV_WH_SFPSHFT2_E_INT))]
   "TARGET_SFPU_WH"
-  "SFPSHFT2\t0, %2, %0, %3")
+{
+  int mod = INTVAL(operands[3]);
+  // This routine handles a subset of mod values that all require a NOP
+  gcc_assert(mod == 3 || mod == 4);
+  output_asm_insn("SFPSHFT2\t0, %2, %0, %3", operands);
+  return "SFPNOP";
+})
 
 (define_expand "riscv_wh_sfpstochrnd_i"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -916,11 +853,8 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] wormhole_set_float_op_v))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSET<wormhole_set_float_call_v>\t0, %2, %0, 0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPSET<wormhole_set_float_call_v>\t0, %2, %0, 0"
+)
 
 (define_int_iterator wormhole_set_float_op_i [UNSPECV_WH_SFPSETEXP_I UNSPECV_WH_SFPSETSGN_I])
 (define_int_attr wormhole_set_float_name_i [(UNSPECV_WH_SFPSETEXP_I "exp") (UNSPECV_WH_SFPSETSGN_I "sgn")])
@@ -974,11 +908,8 @@
                           (match_operand:SI    2 "immediate_operand" "n, n")
                           (match_operand:V64SF 3 "register_operand"  "x, x")] wormhole_set_float_op_i_int))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSET<wormhole_set_float_call_i_int>\t%2, %3, %0, 1", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPSET<wormhole_set_float_call_i_int>\t%2, %3, %0, 1"
+)
 
 (define_expand "riscv_wh_sfpsetman_i"
   [(set (match_operand:V64SF 0 "register_operand")
@@ -1013,11 +944,8 @@
                           (match_operand:SI    2 "immediate_operand" "n, n")
                           (match_operand:V64SF 3 "register_operand"  "x, x")] UNSPECV_WH_SFPSETMAN_I_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSETMAN\t%2, %3, %0, 1", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPSETMAN\t%2, %3, %0, 1"
+)
 
 (define_expand "riscv_wh_sfpmad"
   [(set (match_operand:V64SF 0 "register_operand" "")
@@ -1054,29 +982,22 @@
                           (match_operand:V64SF 4 "register_operand"  "x, x")
                           (match_operand:SI    5 "immediate_operand" "M, M")] UNSPECV_WH_SFPMAD_INT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPMAD\t%2, %3, %4, %0, %5", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPMAD\t%2, %3, %4, %0, %5"
+)
 
 (define_insn "riscv_wh_sfpsetcc_i"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "n")
                      (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_WH_SFPSETCC_I)]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSETCC\t%0, L0, %1", operands);
-  return "SFPNOP";
-})
+  "SFPSETCC\t%0, L0, %1"
+)
 
 (define_insn "riscv_wh_sfpsetcc_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
                      (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_WH_SFPSETCC_V)]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPSETCC\t0, %0, %1", operands);
-  return "SFPNOP";
-})
+  "SFPSETCC\t0, %0, %1"
+)
 
 (define_expand "riscv_wh_sfpscmp_ex"
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
@@ -1103,18 +1024,14 @@
   [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "n")
                      (match_operand:SI 1 "immediate_operand" "M")] UNSPECV_WH_SFPENCC)]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPENCC\t%0, %1", operands);
-  return "SFPNOP";
-})
+  "SFPENCC\t%0, %1"
+)
 
 (define_insn "riscv_wh_sfpcompc"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPCOMPC)]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPCOMPC", operands);
-  return "SFPNOP";
-})
+  "SFPCOMPC"
+)
 
 (define_insn "riscv_wh_sfppushc"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPPUSHC)]
@@ -1124,10 +1041,8 @@
 (define_insn "riscv_wh_sfppopc"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPPOPC)]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPPOPC", operands);
-  return "SFPNOP";
-})
+  "SFPPOPC"
+)
 
 (define_insn "riscv_wh_sfplut"
   [(set (match_operand:V64SF 0 "register_operand" "=Q3")
@@ -1137,11 +1052,8 @@
                           (match_operand:V64SF 4 "register_operand"  "0")
                           (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_WH_SFPLUT))]
   "TARGET_SFPU_WH"
-{
-  output_asm_insn("SFPLUT\t%0, %5", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
-})
+  "SFPLUT\t%0, %5"
+)
 
 (define_insn "riscv_wh_sfplutfp32_3r"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -1151,7 +1063,10 @@
                           (match_operand:V64SF 4 "register_operand"  "Q3")
                           (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_WH_SFPLUTFP32_3R))]
   "TARGET_SFPU_WH"
-  "SFPLUTFP32\t%0, %5")
+{
+  output_asm_insn("SFPLUTFP32\t%0, %5", operands);
+  return "SFPNOP";
+})
 
 (define_insn "riscv_wh_sfplutfp32_6r"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
@@ -1164,7 +1079,10 @@
                           (match_operand:V64SF 7 "register_operand"  "Q3")
                           (match_operand:SI    8 "immediate_operand" "M")] UNSPECV_WH_SFPLUTFP32_6R))]
   "TARGET_SFPU_WH"
-  "SFPLUTFP32\t%0, %8")
+{
+  output_asm_insn("SFPLUTFP32\t%0, %8", operands);
+  return "SFPNOP";
+})
 
 (define_insn "riscv_wh_sfpconfig_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "Q0")

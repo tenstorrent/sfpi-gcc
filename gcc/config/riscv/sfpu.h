@@ -83,8 +83,8 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp) id,
+#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) id,
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) id,
 #define SFPU_GS_PAD_BUILTIN(id) id,
 #define SFPU_GS_PAD_NO_TGT_BUILTIN(id) id,
 #include "sfpu-insn.h"
@@ -100,6 +100,7 @@ struct riscv_sfpu_insn_data {
   const bool has_half_offset;
   const int dst_arg_pos;
   const int mod_pos;
+  const int schedule;
 
   inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
@@ -129,5 +130,9 @@ extern bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn
 extern uint32_t riscv_sfpu_fp32_to_fp16a(const uint32_t val);
 extern uint32_t riscv_sfpu_fp32_to_fp16b(const uint32_t val);
 extern uint32_t riscv_sfpu_scmp2loadi_mod(int mod);
+extern bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
+					  gcall **stmt,
+					  gimple_stmt_iterator gsi,
+					  bool allow_empty);
 
 #endif

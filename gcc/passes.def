@@ -407,6 +407,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_riscv_sfpu_cc);
   NEXT_PASS (pass_riscv_sfpu_combine);
   NEXT_PASS (pass_riscv_sfpu_move);
+  NEXT_PASS (pass_riscv_sfpu_schedule);
 
   NEXT_PASS (pass_expand);
 
