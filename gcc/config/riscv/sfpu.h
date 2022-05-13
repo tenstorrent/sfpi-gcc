@@ -38,6 +38,9 @@ constexpr unsigned int SFPSETCC_MOD1_LREG_GTE0 = 4;
 constexpr unsigned int SFPSETCC_MOD1_LREG_EQ0 = 6;
 constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
 
+constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
+constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
+
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
 constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
 constexpr unsigned int SFPIADD_MOD1_ARG_2SCOMP_LREG_DST = 2;

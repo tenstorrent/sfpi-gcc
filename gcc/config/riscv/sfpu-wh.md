@@ -1034,14 +1034,14 @@
 )
 
 (define_insn "riscv_wh_sfppushc"
-  [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPPUSHC)]
+  [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "M")] UNSPECV_WH_SFPPUSHC)]
   "TARGET_SFPU_WH"
-  "SFPPUSHC")
+  "SFPPUSHC\t%0")
 
 (define_insn "riscv_wh_sfppopc"
-  [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPPOPC)]
+  [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "M")] UNSPECV_WH_SFPPOPC)]
   "TARGET_SFPU_WH"
-  "SFPPOPC"
+  "SFPPOPC\t%0"
 )
 
 (define_insn "riscv_wh_sfplut"
