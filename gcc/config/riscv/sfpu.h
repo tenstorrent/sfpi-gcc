@@ -23,6 +23,7 @@ constexpr unsigned int SFPLOADI_EX_MOD0_32BIT_MASK = 16;
 constexpr unsigned int SFPLOADI_EX_MOD0_INT32 = 16;
 constexpr unsigned int SFPLOADI_EX_MOD0_UINT32 = 17;
 constexpr unsigned int SFPLOADI_EX_MOD0_FLOAT = 18;
+constexpr unsigned int SFPLOADI_EX_IMM_POS = 2;
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
@@ -123,6 +124,7 @@ extern bool riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt);
 extern bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *stmt);
 
 extern void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt);
+extern bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *insnd);
 
 extern uint32_t riscv_sfpu_fp32_to_fp16a(const uint32_t val);
 extern uint32_t riscv_sfpu_fp32_to_fp16b(const uint32_t val);

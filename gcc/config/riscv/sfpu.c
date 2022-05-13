@@ -496,3 +496,42 @@ uint32_t riscv_sfpu_scmp2loadi_mod(int mod)
 
   return SFPLOADI_EX_MOD0_FLOAT;
 }
+
+bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *insnd)
+{
+  int mod0 = get_int_arg(stmt, insnd->mod_pos);
+  bool representable = false;
+  tree arg = gimple_call_arg(stmt, SFPLOADI_EX_IMM_POS);
+
+  switch (mod0) {
+  case SFPLOADI_MOD0_FLOATB:
+    *value = arg;
+    representable = true;
+    break;
+
+  case SFPLOADI_MOD0_FLOATA:
+    // Corner case.  Someone requested fp16a, but the value fits in fp16b
+    // XXXXX ignore for now
+    break;
+
+  case SFPLOADI_EX_MOD0_FLOAT:
+    if (TREE_CODE(arg) == INTEGER_CST) {
+      unsigned int inval = *(arg->int_cst.val);
+      unsigned int man = inval & 0x007FFFFF;
+      int exp = ((inval >> 23) & 0xFF) - 127;
+
+      if ((man & 0xFFFF) == 0) {
+       // Fits in fp16b
+       representable = true;
+       *value = build_int_cst(integer_type_node, riscv_sfpu_fp32_to_fp16b(inval));
+      }
+    }
+    break;
+
+  default:
+    // Other fmts are int fmts
+    break;
+  }
+
+  return representable;
+}
