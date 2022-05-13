@@ -48,7 +48,7 @@ void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rt
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_wh_sfpload_int(dst, lv, mod, mode, imm));
   } else {
-    int base = TT_OP_WH_SFPLOAD(0, INTVAL(mod), 0, 0);
+    int base = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
     riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
   }
 }

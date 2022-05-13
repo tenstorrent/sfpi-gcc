@@ -328,14 +328,15 @@
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
                      (match_operand:V64SF 1 "register_operand"  "")
                      (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_WH_SFPSTORE)]
+                     (match_operand:SI    3 "immediate_operand" "")
+                     (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_WH_SFPSTORE)]
   "TARGET_SFPU_WH"
 {
-  if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_riscv_wh_sfpstore_int(operands[1], operands[2], operands[3]));
+  if (GET_CODE(operands[4]) == CONST_INT) {
+    emit_insn (gen_riscv_wh_sfpstore_int(operands[1], operands[2], operands[3], operands[4]));
   } else {
-    int base = TT_OP_WH_SFPSTORE(0, INTVAL(operands[2]), 0, 0);
-    riscv_sfpu_emit_nonimm_store(operands[0], operands[1], 0, operands[3], base, 16, 16, 20);
+    int base = TT_OP_WH_SFPSTORE(0, INTVAL(operands[2]), INTVAL(operands[3]), 0);
+    riscv_sfpu_emit_nonimm_store(operands[0], operands[1], 0, operands[4], base, 16, 16, 20);
   }
   DONE;
 })
@@ -343,9 +344,10 @@
 (define_insn "riscv_wh_sfpstore_int"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
                      (match_operand:SI    1 "immediate_operand" "M")
-                     (match_operand:SI    2 "nonmemory_operand" "N")] UNSPECV_WH_SFPSTORE_INT)]
+                     (match_operand:SI    2 "immediate_operand" "M")
+                     (match_operand:SI    3 "nonmemory_operand" "N")] UNSPECV_WH_SFPSTORE_INT)]
   "TARGET_SFPU_WH"
-  "SFPSTORE\t%0, %1, %2")
+  "SFPSTORE\t%0, %1, %2, %3")
 
 
 (define_int_iterator wormhole_muliaddi [UNSPECV_WH_SFPMULI UNSPECV_WH_SFPADDI])
