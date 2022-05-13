@@ -171,10 +171,10 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_GS_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_BUILTIN(gs_##op, fmt, en),
-#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, en),
-#define SFPU_WH_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_BUILTIN(wh_##op, fmt, en),
-#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, en),
+#define SFPU_GS_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_BUILTIN(gs_##op, fmt, en),
+#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, en),
+#define SFPU_WH_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_BUILTIN(wh_##op, fmt, en),
+#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, en),
 #include "sfpu-insn.h"
 };
 
