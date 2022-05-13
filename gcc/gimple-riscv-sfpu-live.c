@@ -93,6 +93,17 @@ struct liveness_data {
 
 typedef map<gcall *, struct liveness_data> call_liveness;
 
+static long int
+get_int_arg(gcall *stmt, unsigned int arg)
+{
+  tree decl = gimple_call_arg(stmt, arg);
+  if (decl)
+    {
+      gcc_assert(TREE_CODE(decl) == INTEGER_CST);
+      return *(decl->int_cst.val);
+    }
+  return -1;
+}
 
 //////////////////////////////////////////////////////////////////////////////
 static bool
@@ -121,6 +132,13 @@ process_block_stmts(basic_block bb,
 	      found_sfpu = true;
 	      if (insnd->id == riscv_sfpu_insn_data::sfppushc)
 		{
+		  bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
+
+		  if (is_replace)
+		    {
+		      stack.pop_back();
+		    }
+
 		  stack.push_back(*current);
 		  if (!*cascading)
 		    {

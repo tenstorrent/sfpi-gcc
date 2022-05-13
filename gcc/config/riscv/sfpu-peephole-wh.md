@@ -44,17 +44,17 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand")
                           (match_operand:V64SF 2 "register_operand")
                           (match_operand:SI    3 "const_0_operand")] UNSPECV_WH_SFPLZ_INT))
-   (unspec_volatile [(const_int 0)] UNSPECV_WH_SFPPUSHC)
+   (unspec_volatile [(match_operand:SI    4 "immediate_operand")] UNSPECV_WH_SFPPUSHC)
    (unspec_volatile [(match_dup:V64SF     2)
-                     (match_operand:SI    4 "const_setcc_z_or_nez")] UNSPECV_WH_SFPSETCC_V)]
+                     (match_operand:SI    5 "const_setcc_z_or_nez")] UNSPECV_WH_SFPSETCC_V)]
 
   "TARGET_SFPU_WH"
   [(const_int 0)]
 {
-  int mod1b = INTVAL(operands[4]);
+  int mod1b = INTVAL(operands[5]);
   // Only legal values of SETCC are 2 or 6 which map to 2 and 10
   rtx mod = GEN_INT((mod1b == 2) ? 2 : 10);
 
-  emit_insn(gen_riscv_wh_sfppushc());
+  emit_insn(gen_riscv_wh_sfppushc(operands[4]));
   emit_insn(gen_riscv_wh_sfplz_int(operands[0], operands[1], operands[2], mod));
 })

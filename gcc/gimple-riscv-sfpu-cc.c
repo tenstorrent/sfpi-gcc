@@ -54,14 +54,30 @@
 
 using namespace std;
 
+static long int
+get_int_arg(gcall *stmt, unsigned int arg)
+{
+  tree decl = gimple_call_arg(stmt, arg);
+  if (decl)
+  {
+    gcc_assert(TREE_CODE(decl) == INTEGER_CST);
+    return *(decl->int_cst.val);
+  }
+  return -1;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // bool in tuple tracks whether or not a COMPC was seen at this stack depth
 static void
 process_block_stmts(basic_block bb,
-		    vector<tuple<bool, gimple_stmt_iterator>> &stack)
+		    vector<tuple<bool, bool, gimple_stmt_iterator>> &stack)
 {
+  constexpr int tuple_prior_removable = 0;
+  constexpr int tuple_prior_replace = 1;
+  constexpr int tuple_gsi = 2;
   gimple_stmt_iterator gsi, prior_pushc, prior_popc;
   bool prior_removable = false;
+  bool prior_is_replace = false;
 
   // Find all function calls
   gsi = gsi_start_bb (bb);
@@ -73,66 +89,84 @@ process_block_stmts(basic_block bb,
 	{
 	  if (insnd->id == riscv_sfpu_insn_data::sfppushc)
 	    {
+	      bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
+
 	      prior_removable = false;
-	      DUMP("PUSHC: stack size %d\n", stack.size());
+	      DUMP("PUSHC(%s): stack size %d\n", is_replace ? "replace" : "push", stack.size());
 
 	      if (stack.size() == 0)
 		{
+		  if (is_replace) {
+		    error("malformed program, pushc replace at outer level\n");
+		  }
+
 		  DUMP("  removing outermost pushc\n");
 
 		  // Remove outermost pushc
-		  gimple *stmt = gsi_stmt (gsi);
-		  unlink_stmt_vdef(stmt);
+		  gimple *g = gsi_stmt (gsi);
+		  unlink_stmt_vdef(g);
 		  gsi_remove(&gsi, true);
-		  release_defs(stmt);
+		  release_defs(g);
 
-		  stack.push_back(make_tuple(false, gsi));
+		  stack.push_back(make_tuple(false, false, gsi));
 		  // Avoid the gsi_next at the end since we removed the inst
 		  continue;
 		}
 	      else
 		{
-		  stack.push_back(make_tuple(false, gsi));
+		  if (is_replace)
+		    {
+		      stack.pop_back();
+		    }
+		  prior_is_replace = is_replace;
+		  stack.push_back(make_tuple(false, is_replace, gsi));
 		}
 	    }
 	  else if (insnd->id == riscv_sfpu_insn_data::sfpcompc)
 	    {
 	      // Set compc to true for current pushc
 	      if (stack.size() == 0) {
-		error("Error: malformed program, sfpcompc outside of pushc/popc - exiting!");
+		error("malformed program, sfpcompc outside of pushc/popc - exiting!");
 	      }
 
 	      prior_removable = false;
-	      stack.back() = make_tuple(true, get<1>(stack.back()));
+	      stack.back() = make_tuple(true, get<tuple_prior_replace>(stack.back()), get<tuple_gsi>(stack.back()));
 	    }
 	  else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
 	    {
 	      DUMP("POPC: stack size %d\n", stack.size());
 
 	      if (stack.size() == 0) {
-		error("Error: malformed program, popc without matching pushc - exiting!");
+		error("malformed program, popc without matching pushc - exiting!");
 	      }
 
 	      // Only remove inner PUSHC/POPC if they fall within a bb
 	      // since different paths may differ in intervening instructions
 	      if (prior_removable &&
 		  prior_pushc.bb == prior_popc.bb &&
-		  prior_popc.bb == gsi.bb) {
-		DUMP("  removing inner PUSHC/POPC\n");
-		gimple *stmt = gsi_stmt (prior_pushc);
-		unlink_stmt_vdef(stmt);
-		gsi_remove(&prior_pushc, true);
-		release_defs(stmt);
+		  prior_popc.bb == gsi.bb)
+		{
 
-		stmt = gsi_stmt (prior_popc);
-		unlink_stmt_vdef(stmt);
-		gsi_remove(&prior_popc, true);
-		release_defs(stmt);
+		  DUMP("  removing inner PUSHC\n");
+		  gimple *g = gsi_stmt (prior_pushc);
+		  unlink_stmt_vdef(g);
+		  gsi_remove(&prior_pushc, true);
+		  release_defs(g);
+
+		  if (!prior_is_replace)
+		    {
+		      DUMP("  removing inner POPC\n");
+		      gimple *g = gsi_stmt (prior_popc);
+		      unlink_stmt_vdef(g);
+		      gsi_remove(&prior_popc, true);
+		      release_defs(g);
+		    }
 	      }
 
 	      // Not removable if we saw a compc
-	      prior_removable = !get<0>(stack.back()); 
-	      prior_pushc = get<1>(stack.back());
+	      prior_removable = !get<tuple_prior_removable>(stack.back()); 
+	      prior_is_replace = get<tuple_prior_replace>(stack.back());
+	      prior_pushc = get<tuple_gsi>(stack.back());
 	      prior_popc = gsi;
 
 	      stack.pop_back();
@@ -180,7 +214,7 @@ process_block_stmts(basic_block bb,
 static void
 process_block(basic_block bb,
 	      vector<bool>& bd,
-	      vector<tuple<bool, gimple_stmt_iterator>> stack)
+	      vector<tuple<bool, bool, gimple_stmt_iterator>> stack)
 {
   edge_iterator ei;
   edge e;
@@ -215,7 +249,7 @@ process_block(basic_block bb,
 //    The inner push/pop and the outer pop must all be in the same BB
 static void transform (function *fn)
 {
-  vector<tuple<bool, gimple_stmt_iterator>> stack;
+  vector<tuple<bool, bool, gimple_stmt_iterator>> stack;
   vector<bool> bd;
 
   if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn->decl)) != NULL)
