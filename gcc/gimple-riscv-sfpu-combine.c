@@ -562,7 +562,8 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	  DUMP("  found a matching %s...\n", assign_insnd->name);
 
 	  // muli/addi only support fp16b
-	  if (get_int_arg(assign_stmt, assign_insnd->mod_pos) == SFPLOADI_MOD0_FLOATB)
+	  tree value;
+	  if (riscv_sfpu_get_fp16b(&value, assign_stmt, assign_insnd))
 	    {
 	      char name[32];
 	      sprintf(name, "%s_%si",
@@ -576,7 +577,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	      gimple* opi_stmt = gimple_build_call(opi_insnd->decl, 4);
 	      gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
 	      gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
-	      gimple_call_set_arg(opi_stmt, 2, gimple_call_arg(assign_stmt, 2));
+	      gimple_call_set_arg(opi_stmt, 2, value);
 	      gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node,
 							     get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
 
@@ -731,19 +732,21 @@ static void transform (function *fun)
     {
       bool update = false;
 
-      candidate_gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (candidate_gsi))
-	{
-	  gcall *candidate_stmt;
-	  const riscv_sfpu_insn_data *candidate_insnd;
+      if (flag_grayskull) {
+	candidate_gsi = gsi_start_bb (bb);
+	while (!gsi_end_p (candidate_gsi))
+	  {
+	    gcall *candidate_stmt;
+	    const riscv_sfpu_insn_data *candidate_insnd;
 
-	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+	    if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 	      update |= try_combine_add_half(candidate_insnd, candidate_stmt);
 	    }
 
-	  gsi_next (&candidate_gsi);
-	}
+	    gsi_next (&candidate_gsi);
+	  }
+      }
 
       update |= remove_unused_loadis(fun);
       if (update) update_ssa(TODO_update_ssa);
