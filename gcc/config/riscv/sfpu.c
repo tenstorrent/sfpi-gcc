@@ -404,13 +404,6 @@ void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt)
     }
 }
 
-void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr)
-{
-  int lregnum = INTVAL(lr);
-  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
-  emit_insn(gen_riscv_sfpassignlr_int(dst));
-}
-
 void riscv_sfpu_emit_nonimm_dst(rtx buf_addr, rtx dst, int nnops, rtx dst_lv, rtx imm,
 				int base, int lshft, int rshft, int dst_shft)
 {

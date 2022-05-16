@@ -37,6 +37,12 @@
   UNSPECV_SFPNONIMM_STORE
 ])
 
+(define_insn "riscv_sfpassignlr_int"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLR_INT))]
+  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "")
+
 (define_insn "riscv_sfpnonimm_dst"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
