@@ -121,8 +121,11 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 		}
 	      else
 		{
-		  warning_at (assign_location, OPT_Wuninitialized,
-			      "%qD is used uninitialized in this function", SSA_NAME_VAR (lhs));
+                 if (SSA_NAME_VAR(lhs) != nullptr)
+                   {
+                     warning_at (assign_location, OPT_Wuninitialized,
+                                 "%qD is used uninitialized in this function", SSA_NAME_VAR (lhs));
+                   }
 		}
 
 	      gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 3);
