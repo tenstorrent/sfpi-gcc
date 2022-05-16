@@ -927,6 +927,14 @@
   "TARGET_SFPU_GS"
   "SFPNOP")
 
+(define_insn "riscv_gs_sfpincrwc"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "")
+                     (match_operand:SI    1 "immediate_operand" "")
+                     (match_operand:SI    2 "immediate_operand" "")
+                     (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPINCRWC)]
+  "TARGET_SFPU_GS"
+  "SFPINCRWC\t%0, %1, %2, %3")
+
 (define_insn "riscv_gs_sfpillegal"
   [(unspec_volatile [(const_int 0)] UNSPECV_SFPILLEGAL)]
   "TARGET_SFPU_GS || TARGET_SFPU_WH"
