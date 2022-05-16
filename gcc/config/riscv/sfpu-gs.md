@@ -193,7 +193,7 @@
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_GS_SFPASSIGNLR))]
   "TARGET_SFPU_GS"
 {
-  riscv_sfpu_emit_sfpassignlr(operands[0], operands[1]);
+  riscv_sfpu_gs_emit_sfpassignlr(operands[0], operands[1]);
   DONE;
 })
 
