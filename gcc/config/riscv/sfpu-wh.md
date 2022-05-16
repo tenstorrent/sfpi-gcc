@@ -1045,7 +1045,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=Q3")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "Q0")
                           (match_operand:V64SF 2 "register_operand"  "Q1")
-                          (match_operand:V64SF 3 "register_operand"  "Q4")
+                          (match_operand:V64SF 3 "register_operand"  "Q2")
                           (match_operand:V64SF 4 "register_operand"  "0")
                           (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_WH_SFPLUT))]
   "TARGET_SFPU_WH"
@@ -1058,11 +1058,14 @@
                           (match_operand:V64SF 2 "register_operand"  "Q1")
                           (match_operand:V64SF 3 "register_operand"  "Q2")
                           (match_operand:V64SF 4 "register_operand"  "Q3")
-                          (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_WH_SFPLUTFP32_3R))]
+                          (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_WH_SFPLUTFP32_3R))
+        (clobber (match_scratch:V64SF 6 "=Q7"))
+        (match_scratch:SI 7)]
   "TARGET_SFPU_WH"
 {
-  output_asm_insn("SFPLUTFP32\t%0, %5", operands);
-  return "SFPNOP";
+  operands[7] = GEN_INT(riscv_sfpu_regno(operands[0]));
+  output_asm_insn("SFPLOADI\t%6, 2, %7", operands);
+  return "SFPLUTFP32\t%0, %5";
 })
 
 (define_insn "riscv_wh_sfplutfp32_6r"
@@ -1077,8 +1080,7 @@
                           (match_operand:SI    8 "immediate_operand" "M")] UNSPECV_WH_SFPLUTFP32_6R))]
   "TARGET_SFPU_WH"
 {
-  output_asm_insn("SFPLUTFP32\t%0, %8", operands);
-  return "SFPNOP";
+  return "SFPLUTFP32\t%0, %8";
 })
 
 (define_insn "riscv_wh_sfpconfig_v"
