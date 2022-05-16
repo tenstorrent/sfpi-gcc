@@ -518,7 +518,6 @@ bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *
     if (TREE_CODE(arg) == INTEGER_CST) {
       unsigned int inval = *(arg->int_cst.val);
       unsigned int man = inval & 0x007FFFFF;
-      int exp = ((inval >> 23) & 0xFF) - 127;
 
       if ((man & 0xFFFF) == 0) {
        // Fits in fp16b

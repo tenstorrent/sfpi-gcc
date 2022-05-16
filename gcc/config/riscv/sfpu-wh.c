@@ -198,10 +198,10 @@ void riscv_sfpu_wh_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
   bool is_sub = ((modi & SFPIADD_EX_MOD1_IS_SUB) != 0);
   int iv = is_const_int ? INTVAL(imm) : 0xffffffff;
 
-  // Figure out if we need to do a loadi (>12 bits signed/unsigned)
+  // Figure out if we need to do a loadi (>12 bits signed)
   if (is_const_int) {
     iv = is_sub ? -iv : iv;
-    if (!((is_signed && (iv >= 2048 || iv < -2048)) || (!is_signed && (iv >= 2048)))) {
+    if (!(iv >= 2048 || iv < -2048)) {
       need_loadi = false;
       imm = GEN_INT(iv);
     }
@@ -227,6 +227,7 @@ void riscv_sfpu_wh_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
       // Perform op w/o compare, compare with SETCC
       mod1 |= SFPIADD_MOD1_CC_NONE;
       emit_insn(gen_riscv_wh_sfpiadd_v(dst, dst, src, GEN_INT(mod1)));
+      set_cc_arg = dst;
     }
   } else if (is_const_int) {
     if (iv != 0) {
