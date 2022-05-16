@@ -29,18 +29,13 @@
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
   UNSPECV_SFPASSIGNLR_INT
+  UNSPECV_SFPINCRWC
   UNSPECV_SFPILLEGAL
   UNSPECV_SFPNONIMM_DST
   UNSPECV_SFPNONIMM_DST_SRC
   UNSPECV_SFPNONIMM_SRC
   UNSPECV_SFPNONIMM_STORE
 ])
-
-(define_insn "riscv_sfpassignlr_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLR_INT))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
-  "")
 
 (define_insn "riscv_sfpnonimm_dst"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
