@@ -150,6 +150,7 @@
     switch (which_alternative) {
     case 0:
       // Note: must re-enable all elements until we know if we are in a predicated state
+      output_asm_insn("SFPNOP", operands);
       return "SFPMOV\t%1, %0, 2";
       break;
 
