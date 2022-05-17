@@ -122,10 +122,10 @@ void riscv_sfpu_gs_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
 
   // Figure out if we need to do a loadi (>12 bits signed)
   if (is_const_int) {
-    iv = is_sub ? -iv : iv;
-    if (!(iv >= 2048 || iv < -2048)) {
+    int range_iv = is_sub ? -iv : iv;
+    if (!(range_iv >= 2048 || range_iv < -2048)) {
       need_loadi = false;
-      imm = GEN_INT(iv);
+      imm = GEN_INT(range_iv);
     }
   } else if (is_12bits) {
     need_loadi = false;
