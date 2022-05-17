@@ -137,6 +137,18 @@ void riscv_sfpu_gs_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
   if (need_loadi) {
     // Load imm into dst
     int loadi_mod = is_signed ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT;
+    if (is_const_int) {
+      if (is_signed) {
+	if (iv >= 32768) {
+	  iv &= 0x7fff;
+	} else if (iv < -32768) {
+	  iv |= ~0x7fff;
+	}
+      } else if (iv >= 65536) {
+	iv &= 0xffff;
+      }
+      imm = GEN_INT(iv);
+    }
     riscv_sfpu_gs_emit_sfploadi_ex(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm);
 
     unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
