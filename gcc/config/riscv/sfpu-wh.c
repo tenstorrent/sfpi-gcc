@@ -95,7 +95,7 @@ void riscv_sfpu_wh_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 	   load_32bit = false;
 	   new_mod = SFPLOADI_MOD0_FLOATB;
 	   int_imm = riscv_sfpu_fp32_to_fp16b(int_imm);
-	 } else if ((man & 0x1FFF) == 0 && exp < 17 && exp >= -15) {
+	 } else if ((man & 0x1FFF) == 0 && exp < 16 && exp >= -14) {
 	   // Fits in fp16a
 	   load_32bit = false;
 	   new_mod = SFPLOADI_MOD0_FLOATA;
