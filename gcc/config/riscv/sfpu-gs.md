@@ -190,7 +190,7 @@
 
 (define_expand "riscv_gs_sfpassignlr"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M")] UNSPECV_GS_SFPASSIGNLR))]
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_GS_SFPASSIGNLR))]
   "TARGET_SFPU_GS"
 {
   riscv_sfpu_gs_emit_sfpassignlr(operands[0], operands[1]);
@@ -199,7 +199,7 @@
 
 (define_expand "riscv_gs_sfpkeepalive"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_GS_SFPKEEPALIVE)]
+                     (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_GS_SFPKEEPALIVE)]
 
   "TARGET_SFPU_GS"
 {
@@ -248,8 +248,8 @@
 (define_insn "riscv_gs_sfpload_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:SI    2 "immediate_operand" "M, M")
-                          (match_operand:SI    3 "immediate_operand" "N, N")] UNSPECV_GS_SFPLOAD_INT))]
+                          (match_operand:SI    2 "immediate_operand" "M04U, M04U")
+                          (match_operand:SI    3 "immediate_operand" "M16U, M16U")] UNSPECV_GS_SFPLOAD_INT))]
   "TARGET_SFPU_GS"
   "@
    SFPLOAD\t%0, %2, %3
@@ -284,8 +284,8 @@
 (define_insn "riscv_gs_sfploadi_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x,x,x,x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E,E,0,0")
-                          (match_operand:SI    2 "immediate_operand" "M,M,M,M")
-                          (match_operand:SI    3 "immediate_operand" "R,N,R,N")] UNSPECV_GS_SFPLOADI_INT))]
+                          (match_operand:SI    2 "immediate_operand" "M04U,M04U,M04U,M04U")
+                          (match_operand:SI    3 "immediate_operand" "M16S,M16U,M16S,M16U")] UNSPECV_GS_SFPLOADI_INT))]
   "TARGET_SFPU_GS"
   "@
   SFPLOADI\t%0, %2, %s3
@@ -301,7 +301,8 @@
   "TARGET_SFPU_GS"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_riscv_gs_sfpstore_int(operands[1], operands[2], operands[3]));
+    emit_insn (gen_riscv_gs_sfpstore_int(operands[1], operands[2],
+                                         riscv_sfpu_clamp_unsigned(operands[3], 0x7FFF)));
   } else {
     int base = TT_OP_GS_SFPSTORE(0, INTVAL(operands[2]), 0);
     riscv_sfpu_emit_nonimm_store(operands[0], operands[1], 0, operands[3], base, 16, 16, 20);
@@ -311,8 +312,8 @@
 
 (define_insn "riscv_gs_sfpstore_int"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
-                     (match_operand:SI    1 "immediate_operand" "M")
-                     (match_operand:SI    2 "nonmemory_operand" "N")] UNSPECV_GS_SFPSTORE_INT)]
+                     (match_operand:SI    1 "immediate_operand" "M04U")
+                     (match_operand:SI    2 "nonmemory_operand" "M16U")] UNSPECV_GS_SFPSTORE_INT)]
   "TARGET_SFPU_GS"
   "SFPSTORE\t%0, %1, %2")
 
@@ -329,7 +330,8 @@
   "TARGET_SFPU_GS"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_riscv_gs_sfp<muliaddi_name>_int(operands[0], operands[2], operands[3], operands[4]));
+    emit_insn (gen_riscv_gs_sfp<muliaddi_name>_int(operands[0], operands[2],
+               riscv_sfpu_clamp_unsigned(operands[3], 0xFFFF), operands[4]));
   } else {
     int base = TT_OP_GS_SFP<muliaddi_call>(0, 0, INTVAL(operands[4]));
     riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 16, 8, 4);
@@ -343,8 +345,8 @@
 (define_insn "riscv_gs_sfp<muliaddi_int_name>_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "nonmemory_operand" "n")
-                          (match_operand:SI    3 "immediate_operand" "M")] muliaddi_int))]
+                          (match_operand:SI    2 "immediate_operand" "M16U")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] muliaddi_int))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFP<muliaddi_int_call>\t%2, %0, %3", operands);
@@ -384,7 +386,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:SI    2 "immediate_operand" "n, n")
                           (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M, M")] UNSPECV_GS_SFPDIVP2_INT))]
+                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPDIVP2_INT))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPDIVP2\t%2, %3, %0, %4", operands);
@@ -467,7 +469,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "immediate_operand" "M, M")] simple_op_int))]
+                          (match_operand:SI    3 "immediate_operand" "M04U, M04U")] simple_op_int))]
   "TARGET_SFPU_GS"
 {
     output_asm_insn("SFP<simple_op_call_int>\t%2, %0, %3", operands);
@@ -523,7 +525,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M, M")] muladd_int))]
+                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] muladd_int))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFP<muladd_call_int>, %0, %4", operands);
@@ -535,7 +537,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_GS_SFPIADD_V))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_GS_SFPIADD_V))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPIADD\t0, %2, %0, %3", operands);
@@ -581,7 +583,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:SI    3 "immediate_operand" "n, n")
-                          (match_operand:SI    4 "immediate_operand" "M, M")] UNSPECV_GS_SFPIADD_I_INT))]
+                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPIADD_I_INT))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPIADD\t%3, %2, %0, %4", operands);
@@ -599,7 +601,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M")] UNSPECV_GS_SFPIADD_V_EX))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_GS_SFPIADD_V_EX))]
   "TARGET_SFPU_GS"
 {
   riscv_sfpu_gs_emit_sfpiadd_v_ex(operands[0], operands[1], operands[2], operands[3]);
@@ -664,7 +666,7 @@
 (define_insn "riscv_gs_sfpshft_i_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "nonmemory_operand" "n")] UNSPECV_GS_SFPSHFT_I_INT))]
+                          (match_operand:SI    2 "immediate_operand" "M12S")] UNSPECV_GS_SFPSHFT_I_INT))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPSHFT\t%2, L0, %0, 1", operands);
@@ -831,7 +833,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:V64SF 3 "register_operand"  "x, x")
                           (match_operand:V64SF 4 "register_operand"  "x, x")
-                          (match_operand:SI    5 "immediate_operand" "M, M")] UNSPECV_GS_SFPMAD_INT))]
+                          (match_operand:SI    5 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPMAD_INT))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPMAD\t%2, %3, %4, %0, %5", operands);
@@ -840,8 +842,8 @@
 })
 
 (define_insn "riscv_gs_sfpsetcc_i"
-  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "n")
-                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_GS_SFPSETCC_I)]
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "M01U")
+                     (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_GS_SFPSETCC_I)]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPSETCC\t%0, L0, %1", operands);
@@ -850,7 +852,7 @@
 
 (define_insn "riscv_gs_sfpsetcc_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
-                     (match_operand:SI    1 "immediate_operand" "M")] UNSPECV_GS_SFPSETCC_V)]
+                     (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_GS_SFPSETCC_V)]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPSETCC\t0, %0, %1", operands);
@@ -879,8 +881,8 @@
 })
 
 (define_insn "riscv_gs_sfpencc"
-  [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "n")
-                     (match_operand:SI 1 "immediate_operand" "M")] UNSPECV_GS_SFPENCC)]
+  [(unspec_volatile [(match_operand:SI 0 "immediate_operand" "M02U")
+                     (match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_GS_SFPENCC)]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPENCC\t%0, %1", operands);
@@ -914,7 +916,7 @@
                           (match_operand:V64SF 2 "register_operand"  "Q1")
                           (match_operand:V64SF 3 "register_operand"  "Q2")
                           (match_operand:V64SF 4 "register_operand"  "0")
-                          (match_operand:SI    5 "immediate_operand" "M")] UNSPECV_GS_SFPLUT))]
+                          (match_operand:SI    5 "immediate_operand" "M04U")] UNSPECV_GS_SFPLUT))]
   "TARGET_SFPU_GS"
 {
   output_asm_insn("SFPLUT\t%0, %5", operands);
