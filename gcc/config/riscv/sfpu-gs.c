@@ -46,7 +46,7 @@
 void riscv_sfpu_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_gs_sfpload_int(dst, lv, mod, imm));
+    emit_insn(gen_riscv_gs_sfpload_int(dst, lv, mod, riscv_sfpu_clamp_unsigned(imm, 0xFFFF)));
   } else {
     int base = TT_OP_GS_SFPLOAD(0, INTVAL(mod), 0);
     riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
@@ -56,7 +56,7 @@ void riscv_sfpu_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 void riscv_sfpu_gs_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_gs_sfploadi_int(dst, lv, mod, imm));
+    emit_insn(gen_riscv_gs_sfploadi_int(dst, lv, mod, riscv_sfpu_clamp_signed(imm, 0x7FFF)));
   } else {
     int base = TT_OP_GS_SFPLOADI(0, INTVAL(mod), 0);
     riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);

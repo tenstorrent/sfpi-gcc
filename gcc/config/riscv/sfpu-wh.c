@@ -46,7 +46,7 @@
 void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpload_int(dst, lv, mod, mode, imm));
+    emit_insn(gen_riscv_wh_sfpload_int(dst, lv, mod, mode, riscv_sfpu_clamp_unsigned(imm, 0x3FFF)));
   } else {
     int base = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
     riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
@@ -132,8 +132,7 @@ void riscv_sfpu_wh_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
     }
   } else {
     if (GET_CODE(imm) == CONST_INT) {
-      // XXXXX mask off the upper bits of imm?	does a >16bit int cause a compiler crash?
-      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), imm));
+      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), riscv_sfpu_clamp_signed(imm, 0x7FFF)));
     } else {
       int base = TT_OP_WH_SFPLOADI(0, int_mod, 0);
       riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
@@ -396,7 +395,7 @@ void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rt
 void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpstochrnd_i_int(dst, lv, mode, riscv_sfpu_clamp_unsigned(imm, 0xFF), src, mod));
+    emit_insn(gen_riscv_wh_sfpstochrnd_i_int(dst, lv, mode, riscv_sfpu_clamp_unsigned(imm, 0x1F), src, mod));
   } else {
     int mod1 = INTVAL(mod);
     int imode = INTVAL(mode);

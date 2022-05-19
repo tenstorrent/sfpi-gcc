@@ -81,25 +81,50 @@
   (and (match_code "const_int")
        (match_test "LUI_OPERAND (ival)")))
 
-(define_constraint "M"
+(define_constraint "M01U"
+  "A 1-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 1)")))
+
+(define_constraint "M02U"
+  "A 2-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 3)")))
+
+(define_constraint "M04U"
   "A 4-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 15)")))
 
-(define_constraint "N"
+(define_constraint "M05U"
+  "A 5-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 31)")))
+
+(define_constraint "M12S"
+  "A 12-bit signed immediate for SFPU."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -2048, 2047)")))
+
+(define_constraint "M12U"
+  "A 12-bit unsigned immediate for SFPU."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 4095)")))
+
+(define_constraint "M14U"
+  "A 14-bit unsigned immediate for SFPU."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 16383)")))
+
+(define_constraint "M16U"
   "A 16-bit unsigned immediate for SFPU load/store instruction offsets."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 65535)")))
 
-(define_constraint "R"
+(define_constraint "M16S"
   "A 16-bit signed immediate for SFPU load/store instruction offsets."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -32768, 32767)")))
-
-(define_constraint "P"
-  "A 8-bit unsigned immediate for SFPU."
-  (and (match_code "const_int")
-       (match_test "IN_RANGE (ival, 0, 255)")))
 
 ;; Floating-point constant +0.0, used for FCVT-based moves when FMV is
 ;; not available in RV32.
