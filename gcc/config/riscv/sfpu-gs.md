@@ -111,15 +111,6 @@
   UNSPECV_GS_SFPNOP
 ])
 
-(define_expand "movv64sf"
-  [(set (match_operand:V64SF 0 "")
-        (match_operand:V64SF 1 ""))]
-  ""
-{
-  if (riscv_legitimize_move (V64SFmode, operands[0], operands[1]))
-    DONE;
-})
-
 (define_insn "*movv64sf_hardfloat"
   [(set (match_operand:V64SF 0 "nonimmediate_operand" "=x,x,m")
         (match_operand:V64SF 1 "move_operand"         " x,m,x"))]
