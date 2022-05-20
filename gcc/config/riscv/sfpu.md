@@ -37,6 +37,15 @@
   UNSPECV_SFPNONIMM_STORE
 ])
 
+(define_expand "movv64sf"
+  [(set (match_operand:V64SF 0 "")
+        (match_operand:V64SF 1 ""))]
+  ""
+{
+  if (riscv_legitimize_move (V64SFmode, operands[0], operands[1]))
+    DONE;
+})
+
 (define_insn "riscv_sfpassignlr_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLR_INT))]
