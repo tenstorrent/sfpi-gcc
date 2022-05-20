@@ -164,7 +164,7 @@ SFPU_WH_BUILTIN (sfpstochrnd_i,   RISCV_V64SF_FTYPE_POINTER_USI_USI_V64SF_USI,  
 SFPU_WH_BUILTIN (sfpstochrnd_i_lv,RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_V64SF_USI, wormhole, 0, 1, 0, -1,  5, 0)
 SFPU_WH_BUILTIN (sfpstochrnd_v,   RISCV_V64SF_FTYPE_USI_V64SF_V64SF_USI,             wormhole, 0, 0, 0, -1,  3, 0)
 SFPU_WH_BUILTIN (sfpstochrnd_v_lv,RISCV_V64SF_FTYPE_V64SF_USI_V64SF_V64SF_USI,       wormhole, 0, 1, 0, -1,  4, 0)
-SFPU_WH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,     wormhole, 0, 0, 0,  3,  4, 1)
+SFPU_WH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,     wormhole, 0, 0, 0, -1,  4, 1)
 SFPU_WH_BUILTIN (sfplutfp32_6r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_USI, wormhole, 0, 0, 0, -1,  7, 1)
 
 SFPU_WH_NO_TGT_BUILTIN (sfpkeepalive,   RISCV_VOID_FTYPE_V64SF_USI,                  wormhole, 0, 0, 0, -1, -1,-1)
