@@ -453,11 +453,9 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 	      DUMP("  combining %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
 
 	      // Create mad
-	      char name[32];
-	      sprintf(name, "%s_sfpmad%s",
-		      riscv_sfpu_get_builtin_name_stub(),
-		      live ? "_lv" : "");
-	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(name);
+	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(live ?
+									       riscv_sfpu_insn_data::sfpmad_lv :
+									       riscv_sfpu_insn_data::sfpmad);
 	      gimple* mad_stmt = gimple_build_call(mad_insnd->decl, 4 + live);
 	      if (live)
 		{

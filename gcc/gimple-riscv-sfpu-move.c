@@ -119,9 +119,7 @@ insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi
   DUMP("  inserting move\n");
 
   // Insert a move
-  char fname[32];
-  sprintf(fname, "%s_sfpmov", riscv_sfpu_get_builtin_name_stub());
-  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data(fname);
+  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpmov);
   gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
   tree var = create_tmp_var (TREE_TYPE(dst_arg));
   tree name = make_ssa_name (var, mov_stmt);
