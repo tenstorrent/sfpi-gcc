@@ -500,6 +500,7 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_rvtt_nonimm);
       NEXT_PASS (pass_rvtt_schedule);
       NEXT_PASS (pass_postreload);
+      NEXT_PASS (pass_rvtt_replay);
       PUSH_INSERT_PASSES_WITHIN (pass_postreload)
 	  NEXT_PASS (pass_postreload_cse);
 	  NEXT_PASS (pass_gcse2);

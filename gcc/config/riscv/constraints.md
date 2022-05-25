@@ -101,6 +101,11 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 31)")))
 
+(define_constraint "MP5U"
+  "A 5-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 32)")))
+
 (define_constraint "M12S"
   "A 12-bit signed immediate for SFPU."
   (and (match_code "const_int")

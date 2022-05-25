@@ -3619,4 +3619,8 @@ frvtt-sfpu-warn
 Common Var(flag_rvtt_warn) Init(1)
 Generate warnings for sfpu operations.
 
+frvtt-sfpu-replay
+Common Var(flag_rvtt_replay) Init(1)
+Optimize for replay instruction
+
 ; This comment is to ensure we retain the blank line above.
