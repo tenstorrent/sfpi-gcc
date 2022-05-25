@@ -1080,7 +1080,7 @@
 
 (define_insn "rvtt_wh_sfpreplay"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M04U")
-                     (match_operand:SI    1 "immediate_operand"  "M04U")
+                     (match_operand:SI    1 "immediate_operand"  "MP5U")
                      (match_operand:SI    2 "immediate_operand"  "M01U")
                      (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_WH_SFPREPLAY)]
   "TARGET_RVTT_WH"

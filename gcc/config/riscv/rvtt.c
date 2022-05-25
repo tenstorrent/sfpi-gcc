@@ -843,9 +843,14 @@ int rvtt_get_insn_operand_count(const rtx_insn *insn)
     operands = XEXP(pat, 1);
     if (GET_CODE(operands) == UNSPEC_VOLATILE) {
       count = XVECLEN(operands, 0);
-    } else {
-      gcc_assert(GET_CODE(operands) == REG);
+    } else if (GET_CODE(operands) == REG) {
       count = 1;
+    } else {
+      // XXXXX the only way to hit this is w/ a a load/store/spill
+      // which makes the program invalid, return anything
+      // This will be an easter egg when load/store/spill is supported...
+      gcc_assert(GET_CODE(operands) == MEM);
+      return 0;
     }
     break;
 
