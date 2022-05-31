@@ -128,6 +128,7 @@
   UNSPECV_WH_SFPLUTFP32_3R
   UNSPECV_WH_SFPLUTFP32_6R
   UNSPECV_WH_SFPCONFIG_V
+  UNSPECV_WH_SFPREPLAY
   UNSPECV_WH_SFPNOP
 ])
 
@@ -1082,6 +1083,14 @@
                      (match_operand:SI    1 "immediate_operand"  "M04U")] UNSPECV_WH_SFPCONFIG_V)]
   "TARGET_SFPU_WH"
   "SFPCONFIG\t0, %1, 0")
+
+(define_insn "riscv_wh_sfpreplay"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M04U")
+                     (match_operand:SI    1 "immediate_operand"  "M04U")
+                     (match_operand:SI    2 "immediate_operand"  "M01U")
+                     (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_WH_SFPREPLAY)]
+  "TARGET_SFPU_WH"
+  "SFPREPLAY\t%0, %1, %2, %3")
 
 (define_insn "riscv_wh_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPNOP)]
