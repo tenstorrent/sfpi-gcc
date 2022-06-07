@@ -25,8 +25,8 @@ extern void riscv_sfpu_gs_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, r
 extern void riscv_sfpu_gs_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
 extern void riscv_sfpu_gs_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
 extern void riscv_sfpu_gs_emit_sfpiadd_v_ex(rtx dst, rtx srcb, rtx srca, rtx mod);
-extern void riscv_sfpu_gs_emit_sfpscmp_ex(rtx addr, rtx v1, rtx f, rtx mod);
-extern void riscv_sfpu_gs_emit_sfpvcmp_ex(rtx v1, rtx v2, rtx mod);
+extern void riscv_sfpu_gs_emit_sfpfcmps_ex(rtx addr, rtx v1, rtx f, rtx mod);
+extern void riscv_sfpu_gs_emit_sfpfcmpv_ex(rtx v1, rtx v2, rtx mod);
 extern void riscv_sfpu_gs_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod);
 
 extern void riscv_sfpu_wh_emit_sfpassignlr(rtx dst, rtx lr);
@@ -35,8 +35,8 @@ extern void riscv_sfpu_wh_emit_sfploadi_ex(rtx dst, rtx lv, rtx addr, rtx mod, r
 extern void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
 extern void riscv_sfpu_wh_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
 extern void riscv_sfpu_wh_emit_sfpiadd_v_ex(rtx dst, rtx srcb, rtx srca, rtx mod);
-extern void riscv_sfpu_wh_emit_sfpscmp_ex(rtx addr, rtx v1, rtx f, rtx mod);
-extern void riscv_sfpu_wh_emit_sfpvcmp_ex(rtx v1, rtx v2, rtx mod);
+extern void riscv_sfpu_wh_emit_sfpfcmps_ex(rtx addr, rtx v1, rtx f, rtx mod);
+extern void riscv_sfpu_wh_emit_sfpfcmpv_ex(rtx v1, rtx v2, rtx mod);
 extern void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod);
 extern void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod);
 extern void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod);

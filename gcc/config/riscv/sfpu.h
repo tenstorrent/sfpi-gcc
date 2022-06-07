@@ -41,6 +41,8 @@ constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
 constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
+constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
+
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
 constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
 constexpr unsigned int SFPIADD_MOD1_ARG_2SCOMP_LREG_DST = 2;
@@ -56,6 +58,10 @@ constexpr unsigned int SFPCMP_EX_MOD1_CC_NE = 4;
 constexpr unsigned int SFPCMP_EX_MOD1_CC_LTE = 5;
 constexpr unsigned int SFPCMP_EX_MOD1_CC_GT = 6;
 constexpr unsigned int SFPCMP_EX_MOD1_CC_MASK = 7;
+
+constexpr unsigned int SFPBOOL_EX_MOD1_OR = 1;
+constexpr unsigned int SFPBOOL_EX_MOD1_AND = 2;
+constexpr unsigned int SFPBOOL_EX_MOD1_NOT = 3;
 
 constexpr unsigned int SFPSCMP_EX_MOD1_FMT_A = 8;
 constexpr unsigned int SFPSCMP_EX_MOD1_FMT_B = 16;

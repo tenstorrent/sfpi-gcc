@@ -307,7 +307,7 @@ void riscv_sfpu_wh_emit_sfpiadd_v_ex(rtx dst, rtx srcb, rtx srca, rtx mod)
   }
 }
 
-void riscv_sfpu_wh_emit_sfpscmp_ex(rtx addr, rtx v, rtx f, rtx mod)
+void riscv_sfpu_wh_emit_sfpfcmps_ex(rtx addr, rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
   rtx ref_val = gen_reg_rtx(V64SFmode);
@@ -361,7 +361,7 @@ void riscv_sfpu_wh_emit_sfpscmp_ex(rtx addr, rtx v, rtx f, rtx mod)
 }
 
 // Compare two vectors by subtracting v2 from v1 and doing a setcc
-void riscv_sfpu_wh_emit_sfpvcmp_ex(rtx v1, rtx v2, rtx mod)
+void riscv_sfpu_wh_emit_sfpfcmpv_ex(rtx v1, rtx v2, rtx mod)
 {
   rtx tmp = gen_reg_rtx(V64SFmode);
   rtx neg1 = gen_reg_rtx(V64SFmode);

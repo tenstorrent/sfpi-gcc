@@ -1358,6 +1358,7 @@ OBJS = \
 	gimple-pretty-print.o \
 	gimple-riscv-sfpu-cc.o \
 	gimple-riscv-sfpu-combine.o \
+	gimple-riscv-sfpu-expand.o \
 	gimple-riscv-sfpu-live.o \
 	gimple-riscv-sfpu-move.o \
 	gimple-riscv-sfpu-warn.o \

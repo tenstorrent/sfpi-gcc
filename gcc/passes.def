@@ -403,6 +403,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_gen_hsail);
 
   NEXT_PASS (pass_riscv_sfpu_warn);
+  NEXT_PASS (pass_riscv_sfpu_expand);
   NEXT_PASS (pass_riscv_sfpu_live);
   NEXT_PASS (pass_riscv_sfpu_cc);
   NEXT_PASS (pass_riscv_sfpu_combine);

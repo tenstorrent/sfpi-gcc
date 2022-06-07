@@ -483,6 +483,7 @@ extern gimple_opt_pass *make_pass_coroutine_early_expand_ifns (gcc::context *ctx
 extern gimple_opt_pass *make_pass_adjust_alignment (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_combine (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_riscv_sfpu_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_move (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_schedule (gcc::context *ctxt);
