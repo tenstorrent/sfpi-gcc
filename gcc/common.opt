@@ -3615,6 +3615,10 @@ friscv-sfpu-combine
 Common Var(flag_riscv_sfpu_combine)
 Combine instructions for riscv sfpu
 
+friscv-sfpu-expand
+Common Var(flag_riscv_sfpu_expand)
+Expand riscv sfpu interface intrinsics to back end intrinsics
+
 friscv-sfpu-live
 Common Var(flag_riscv_sfpu_live)
 Handle predicated variable liveness

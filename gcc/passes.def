@@ -433,6 +433,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_warn_function_noreturn);
 
   NEXT_PASS (pass_riscv_sfpu_warn);
+  NEXT_PASS (pass_riscv_sfpu_expand);
   NEXT_PASS (pass_riscv_sfpu_live);
   NEXT_PASS (pass_riscv_sfpu_cc);
   NEXT_PASS (pass_riscv_sfpu_combine);
