@@ -156,7 +156,12 @@ copy_and_replace_icmp(gcall *stmt, riscv_sfpu_insn_data::insn_id id)
   remove_stmt(stmt);
 
   // Make the iadd do a subtract for the compare
+  // Make sure other code knows this is a compare
   int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPIADD_EX_MOD1_IS_SUB;
+  if (id == riscv_sfpu_insn_data::sfpiadd_i_ex)
+    {
+      mod |= SFPIADD_I_EX_MOD1_DST_UNUSED;
+    }
   gimple_call_set_arg(new_stmt, new_insnd->mod_pos, build_int_cst(integer_type_node, mod));
 
   return new_stmt;

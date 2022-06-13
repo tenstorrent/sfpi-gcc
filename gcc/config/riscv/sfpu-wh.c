@@ -195,6 +195,7 @@ void riscv_sfpu_wh_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
   bool is_12bits = modi & SFPIADD_I_EX_MOD1_IS_12BITS;
   bool is_const_int = GET_CODE(imm) == CONST_INT;
   bool is_sub = ((modi & SFPIADD_EX_MOD1_IS_SUB) != 0);
+  bool dst_unused = ((modi & SFPIADD_I_EX_MOD1_DST_UNUSED) != 0);
   int iv = is_const_int ? INTVAL(imm) : 0xffffffff;
 
   // Figure out if we need to do a loadi (>12 bits signed)
@@ -241,7 +242,7 @@ void riscv_sfpu_wh_emit_sfpiadd_i_ex(rtx dst, rtx lv, rtx addr, rtx src, rtx imm
 					  GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
 	set_cc_arg = dst;
       }
-    } else if ((cmp & SFPCMP_EX_MOD1_CC_MASK) == 0) {
+    } else if (!dst_unused) {
       // An add or subtract against 0 isn't particularly interesting, but
       // we need to keep the register usage correct since dst is now src
       emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, imm,

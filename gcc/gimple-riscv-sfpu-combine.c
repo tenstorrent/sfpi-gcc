@@ -141,7 +141,8 @@ combine_iadd_i_ex(const riscv_sfpu_insn_data *insnd, gcall *stmt,
       int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPIADD_EX_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, insnd->mod_pos,
 			  build_int_cst(integer_type_node,
-					(candidate_mod1 & ~SFPIADD_EX_MOD1_IS_SUB) | old_sub));
+					(candidate_mod1 & ~(SFPIADD_EX_MOD1_IS_SUB | SFPIADD_I_EX_MOD1_DST_UNUSED)) |
+					old_sub));
     }
     break;
   case riscv_sfpu_insn_data::sfpiadd_i_ex_lv:
