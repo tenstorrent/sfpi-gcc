@@ -74,6 +74,7 @@ constexpr unsigned int SFPIADD_EX_IMM_ARG_POS = 2;
 
 constexpr unsigned int SFPIADD_I_EX_MOD1_SIGNED = 8;
 constexpr unsigned int SFPIADD_I_EX_MOD1_IS_12BITS = 32;
+constexpr unsigned int SFPIADD_I_EX_MOD1_DST_UNUSED = 64;
 
 constexpr unsigned int SFPSETMAN_EX_MOD1_16BITIMM = 2;
 
