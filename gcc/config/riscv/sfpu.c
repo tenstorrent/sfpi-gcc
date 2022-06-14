@@ -275,9 +275,9 @@ riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
 	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
 	    sets_cc = true;
 	}
-      else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_i_ex)
+      else if (insnd->id == riscv_sfpu_insn_data::sfpxiadd_i)
 	{
-	  if (arg & SFPCMP_EX_MOD1_CC_MASK)
+	  if (arg & SFPXCMP_MOD1_CC_MASK)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_v)
@@ -285,9 +285,9 @@ riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt)
 	  if (arg == 0 || arg == 1 || arg == 2 || arg == 8 || arg == 9 || arg == 10 || arg == 12 || arg == 13 || arg == 14)
 	    sets_cc = true;
 	}
-      else if (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex)
+      else if (insnd->id == riscv_sfpu_insn_data::sfpxiadd_v)
 	{
-	  if (arg & SFPCMP_EX_MOD1_CC_MASK)
+	  if (arg & SFPXCMP_MOD1_CC_MASK)
 	    sets_cc = true;
 	}
       else if (insnd->id == riscv_sfpu_insn_data::sfpexexp)
@@ -319,8 +319,8 @@ bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *st
       (insnd->id == riscv_sfpu_insn_data::sfpiadd_v &&
        (get_int_arg (stmt, 2) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST) == 0) ||
 
-      (insnd->id == riscv_sfpu_insn_data::sfpiadd_v_ex &&
-       (get_int_arg (stmt, 2) & SFPIADD_EX_MOD1_IS_SUB) == 0);
+      (insnd->id == riscv_sfpu_insn_data::sfpxiadd_v &&
+       (get_int_arg (stmt, 2) & SFPXIADD_MOD1_IS_SUB) == 0);
 }
 
 
@@ -478,23 +478,23 @@ uint32_t riscv_sfpu_fp32_to_fp16b(const uint32_t val)
 
 uint32_t riscv_sfpu_scmp2loadi_mod(int mod)
 {
-  int fmt = mod & SFPSCMP_EX_MOD1_FMT_MASK;
+  int fmt = mod & SFPXSCMP_MOD1_FMT_MASK;
 
-  if (fmt == SFPSCMP_EX_MOD1_FMT_A) {
+  if (fmt == SFPXSCMP_MOD1_FMT_A) {
     return SFPLOADI_MOD0_FLOATA;
   }
-  if (fmt == SFPSCMP_EX_MOD1_FMT_B) {
+  if (fmt == SFPXSCMP_MOD1_FMT_B) {
     return SFPLOADI_MOD0_FLOATB;
   }
 
-  return SFPLOADI_EX_MOD0_FLOAT;
+  return SFPXLOADI_MOD0_FLOAT;
 }
 
 bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *insnd)
 {
   int mod0 = get_int_arg(stmt, insnd->mod_pos);
   bool representable = false;
-  tree arg = gimple_call_arg(stmt, SFPLOADI_EX_IMM_POS);
+  tree arg = gimple_call_arg(stmt, SFPXLOADI_IMM_POS);
 
   switch (mod0) {
   case SFPLOADI_MOD0_FLOATB:
@@ -507,7 +507,7 @@ bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *
     // XXXXX ignore for now
     break;
 
-  case SFPLOADI_EX_MOD0_FLOAT:
+  case SFPXLOADI_MOD0_FLOAT:
     if (TREE_CODE(arg) == INTEGER_CST) {
       unsigned int inval = *(arg->int_cst.val);
       unsigned int man = inval & 0x007FFFFF;
