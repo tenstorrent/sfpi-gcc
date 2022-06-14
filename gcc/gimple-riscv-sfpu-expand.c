@@ -83,43 +83,43 @@ remove_stmt(gcall *stmt)
 static int
 negate_cmp_mod(int mod)
 {
-    int op = mod & SFPCMP_EX_MOD1_CC_MASK;
+    int op = mod & SFPXCMP_MOD1_CC_MASK;
     int new_op;
 
     switch (op) {
-    case SFPCMP_EX_MOD1_CC_LT:
-	new_op = SFPCMP_EX_MOD1_CC_GTE;
+    case SFPXCMP_MOD1_CC_LT:
+	new_op = SFPXCMP_MOD1_CC_GTE;
 	break;
-    case SFPCMP_EX_MOD1_CC_NE:
-	new_op = SFPCMP_EX_MOD1_CC_EQ;
+    case SFPXCMP_MOD1_CC_NE:
+	new_op = SFPXCMP_MOD1_CC_EQ;
 	break;
-    case SFPCMP_EX_MOD1_CC_GTE:
-	new_op = SFPCMP_EX_MOD1_CC_LT;
+    case SFPXCMP_MOD1_CC_GTE:
+	new_op = SFPXCMP_MOD1_CC_LT;
 	break;
-    case SFPCMP_EX_MOD1_CC_EQ:
-	new_op = SFPCMP_EX_MOD1_CC_NE;
+    case SFPXCMP_MOD1_CC_EQ:
+	new_op = SFPXCMP_MOD1_CC_NE;
 	break;
-    case SFPCMP_EX_MOD1_CC_LTE:
-	new_op = SFPCMP_EX_MOD1_CC_GT;
+    case SFPXCMP_MOD1_CC_LTE:
+	new_op = SFPXCMP_MOD1_CC_GT;
 	break;
-    case SFPCMP_EX_MOD1_CC_GT:
-	new_op = SFPCMP_EX_MOD1_CC_LTE;
+    case SFPXCMP_MOD1_CC_GT:
+	new_op = SFPXCMP_MOD1_CC_LTE;
 	break;
     }
 
-    return (mod & ~SFPCMP_EX_MOD1_CC_MASK) | new_op;
+    return (mod & ~SFPXCMP_MOD1_CC_MASK) | new_op;
 }
 
 static bool
 cmp_issues_compc(int mod)
 {
-  return (mod & SFPCMP_EX_MOD1_CC_MASK) == SFPCMP_EX_MOD1_CC_LTE;
+  return (mod & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LTE;
 }
 
 static int get_bool_type(int op, bool negate)
 {
-  if (op == SFPBOOL_EX_MOD1_OR) return negate ? SFPBOOL_EX_MOD1_AND : SFPBOOL_EX_MOD1_OR;
-  if (op == SFPBOOL_EX_MOD1_AND) return negate ? SFPBOOL_EX_MOD1_OR : SFPBOOL_EX_MOD1_AND;
+  if (op == SFPXBOOL_MOD1_OR) return negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR;
+  if (op == SFPXBOOL_MOD1_AND) return negate ? SFPXBOOL_MOD1_OR : SFPXBOOL_MOD1_AND;
   gcc_assert(0);
 }
 
@@ -157,10 +157,10 @@ copy_and_replace_icmp(gcall *stmt, riscv_sfpu_insn_data::insn_id id)
 
   // Make the iadd do a subtract for the compare
   // Make sure other code knows this is a compare
-  int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPIADD_EX_MOD1_IS_SUB;
-  if (id == riscv_sfpu_insn_data::sfpiadd_i_ex)
+  int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPXIADD_MOD1_IS_SUB;
+  if (id == riscv_sfpu_insn_data::sfpxiadd_i)
     {
-      mod |= SFPIADD_I_EX_MOD1_DST_UNUSED;
+      mod |= SFPXIADD_MOD1_DST_UNUSED;
     }
   gimple_call_set_arg(new_stmt, new_insnd->mod_pos, build_int_cst(integer_type_node, mod));
 
@@ -231,7 +231,7 @@ static tree
 emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val)
 {
   const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfploadi_ex);
+    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 3, nullp, size_int(SFPLOADI_MOD0_SHORT), size_int(val));
 
@@ -247,7 +247,7 @@ static tree
 emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree in, int val)
 {
   const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfploadi_ex_lv);
+    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi_lv);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 4, nullp, in, size_int(SFPLOADI_MOD0_SHORT), size_int(val));
   gimple_set_vuse(new_stmt, in); // XXXXX
@@ -285,10 +285,10 @@ static void
 process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
 		  bool *negated, gcall *stmt, int op, bool negate)
 {
-  DUMP("    process %s n:%d\n", op == SFPBOOL_EX_MOD1_AND ? "AND" : "OR", negate);
+  DUMP("    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
 
   bool negate_node = false;
-  if (get_bool_type(op, negate) == SFPBOOL_EX_MOD1_OR)
+  if (get_bool_type(op, negate) == SFPXBOOL_MOD1_OR)
     {
       negate_node = true;
       negate = !negate;
@@ -344,8 +344,8 @@ process_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
 
   switch (insnd->id)
     {
-    case riscv_sfpu_insn_data::sfpfcmps_ex:
-    case riscv_sfpu_insn_data::sfpfcmpv_ex:
+    case riscv_sfpu_insn_data::sfpxfcmps:
+    case riscv_sfpu_insn_data::sfpxfcmpv:
       {
 	int mod = flip_negated_cmp(stmt, insnd, negate);
 	if (cmp_issues_compc(mod)) *negated = true;
@@ -354,22 +354,22 @@ process_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpicmps_ex:
-    case riscv_sfpu_insn_data::sfpicmpv_ex:
+    case riscv_sfpu_insn_data::sfpxicmps:
+    case riscv_sfpu_insn_data::sfpxicmpv:
       {
 	// iadd insns return a vector while icmp insns return an int, remap
 	int mod = flip_negated_cmp(stmt, insnd, negate);
 	if (cmp_issues_compc(mod)) *negated = true;
-	stmt = copy_and_replace_icmp(stmt, (insnd->id == riscv_sfpu_insn_data::sfpicmps_ex) ?
-				     riscv_sfpu_insn_data::sfpiadd_i_ex : riscv_sfpu_insn_data::sfpiadd_v_ex);
+	stmt = copy_and_replace_icmp(stmt, (insnd->id == riscv_sfpu_insn_data::sfpxicmps) ?
+				     riscv_sfpu_insn_data::sfpxiadd_i : riscv_sfpu_insn_data::sfpxiadd_v);
 	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpbool_ex:
+    case riscv_sfpu_insn_data::sfpxbool:
       {
 	  int op = get_int_arg(stmt, 0);
-	  if (op == SFPBOOL_EX_MOD1_NOT)
+	  if (op == SFPXBOOL_MOD1_NOT)
 	    {
 	      process_tree(pre_gsip, post_gsip, negated,
 			   dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, 1))), !negate);
@@ -393,7 +393,7 @@ process_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
 // The hardware does not support OR and generates some comparisons (LTE, GE)
 // by ANDing others together and issuing a compc.  This requires refactoring
 // boolean expressions using De Moragan's laws.	 The root of a tree is anchored
-// by an sfpcond_ex.  All dependent operations are chained to this by their
+// by an sfpxcond.  All dependent operations are chained to this by their
 // return values.  This pass traverses the tree, more or less deletes it and
 // replaces it with one that works w/ the HW.
 static void
@@ -412,7 +412,7 @@ transform (function *fun)
 	  const riscv_sfpu_insn_data *insnd;
 
 	  if (riscv_sfpu_p(&insnd, &stmt, gsi) &&
-	      insnd->id == riscv_sfpu_insn_data::sfpcond_ex)
+	      insnd->id == riscv_sfpu_insn_data::sfpxcond)
 	    {
 	      gimple_stmt_iterator next_gsi = gsi;
 	      gsi_next(&next_gsi);

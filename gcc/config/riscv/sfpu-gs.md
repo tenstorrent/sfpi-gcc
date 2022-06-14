@@ -36,8 +36,8 @@
   UNSPECV_GS_SFPLOAD
   UNSPECV_GS_SFPLOAD_LV
   UNSPECV_GS_SFPLOAD_INT
-  UNSPECV_GS_SFPLOADI_EX
-  UNSPECV_GS_SFPLOADI_EX_LV
+  UNSPECV_GS_SFPXLOADI
+  UNSPECV_GS_SFPXLOADI_LV
   UNSPECV_GS_SFPLOADI_INT
   UNSPECV_GS_SFPSTORE
   UNSPECV_GS_SFPSTORE_INT
@@ -52,11 +52,11 @@
   UNSPECV_GS_SFPADD_LV
   UNSPECV_GS_SFPADD_INT
   UNSPECV_GS_SFPIADD_V
-  UNSPECV_GS_SFPIADD_V_EX
+  UNSPECV_GS_SFPXIADD_V
   UNSPECV_GS_SFPIADD_I
   UNSPECV_GS_SFPIADD_I_LV
-  UNSPECV_GS_SFPIADD_I_EX
-  UNSPECV_GS_SFPIADD_I_EX_LV
+  UNSPECV_GS_SFPXIADD_I
+  UNSPECV_GS_SFPXIADD_I_LV
   UNSPECV_GS_SFPIADD_I_INT
   UNSPECV_GS_SFPSHFT_V
   UNSPECV_GS_SFPSHFT_I
@@ -101,12 +101,12 @@
   UNSPECV_GS_SFPEXMAN_INT
   UNSPECV_GS_SFPSETCC_I
   UNSPECV_GS_SFPSETCC_V
-  UNSPECV_GS_SFPFCMPS_EX
-  UNSPECV_GS_SFPFCMPV_EX
-  UNSPECV_GS_SFPICMPS_EX
-  UNSPECV_GS_SFPICMPV_EX
-  UNSPECV_GS_SFPBOOL_EX
-  UNSPECV_GS_SFPCOND_EX
+  UNSPECV_GS_SFPXFCMPS
+  UNSPECV_GS_SFPXFCMPV
+  UNSPECV_GS_SFPXICMPS
+  UNSPECV_GS_SFPXICMPV
+  UNSPECV_GS_SFPXBOOL
+  UNSPECV_GS_SFPXCOND
   UNSPECV_GS_SFPENCC
   UNSPECV_GS_SFPCOMPC
   UNSPECV_GS_SFPPUSHC
@@ -251,28 +251,28 @@
    SFPLOAD\t%0, %2, %3")
 
 
-(define_expand "riscv_gs_sfploadi_ex"
+(define_expand "riscv_gs_sfpxloadi"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_GS_SFPLOADI_EX))]
+                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_GS_SFPXLOADI))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfploadi_ex(operands[0], live, operands[1], operands[2], operands[3]);
+  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3]);
   DONE;
 })
 
-(define_expand "riscv_gs_sfploadi_ex_lv"
+(define_expand "riscv_gs_sfpxloadi_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_GS_SFPLOADI_EX_LV))]
+                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_GS_SFPXLOADI_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfploadi_ex(operands[0], live, operands[1], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[3], operands[4]);
   DONE;
 })
 
@@ -592,42 +592,42 @@
   return "SFPNOP";
 })
 
-(define_expand "riscv_gs_sfpiadd_v_ex"
+(define_expand "riscv_gs_sfpxiadd_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_GS_SFPIADD_V_EX))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_GS_SFPXIADD_V))]
   "TARGET_SFPU_GS"
 {
-  riscv_sfpu_gs_emit_sfpiadd_v_ex(operands[0], operands[1], operands[2], operands[3]);
+  riscv_sfpu_gs_emit_sfpxiadd_v(operands[0], operands[1], operands[2], operands[3]);
   DONE;
 })
 
 
-(define_expand "riscv_gs_sfpiadd_i_ex"
+(define_expand "riscv_gs_sfpxiadd_i"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
   DONE;
 })
 
-(define_expand "riscv_gs_sfpiadd_i_ex_lv"
+(define_expand "riscv_gs_sfpxiadd_i_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:V64SF 3 "register_operand"  "")
                           (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I_EX_LV))]
+                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
   DONE;
 })
 
@@ -854,26 +854,26 @@
   return "SFPNOP";
 })
 
-(define_expand "riscv_gs_sfpfcmps_ex"
+(define_expand "riscv_gs_sfpxfcmps"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPFCMPS_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPXFCMPS))]
   "TARGET_SFPU_GS"
 {
-  riscv_sfpu_gs_emit_sfpfcmps_ex(operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxfcmps(operands[1], operands[2], operands[3], operands[4]);
   DONE;
 })
 
-(define_expand "riscv_gs_sfpfcmpv_ex"
+(define_expand "riscv_gs_sfpxfcmpv"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_GS_SFPFCMPV_EX))]
+                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_GS_SFPXFCMPV))]
   "TARGET_SFPU_GS"
 {
-  riscv_sfpu_gs_emit_sfpfcmpv_ex(operands[1], operands[2], operands[3]);
+  riscv_sfpu_gs_emit_sfpxfcmpv(operands[1], operands[2], operands[3]);
   DONE;
 })
 
@@ -926,37 +926,37 @@
   "TARGET_SFPU_GS"
   "SFPNOP")
 
-(define_expand "riscv_gs_sfpicmps_ex"
+(define_expand "riscv_gs_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPICMPS_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPXICMPS))]
   "TARGET_SFPU_GS"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_gs_sfpicmpv_ex"
+(define_expand "riscv_gs_sfpxicmpv"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_GS_SFPICMPV_EX))]
+                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_GS_SFPXICMPV))]
   "TARGET_SFPU_GS"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_gs_sfpbool_ex"
+(define_expand "riscv_gs_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_GS_SFPBOOL_EX))]
+        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_GS_SFPXBOOL))]
   "TARGET_SFPU_GS"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_gs_sfpcond_ex"
-  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_GS_SFPCOND_EX)]
+(define_expand "riscv_gs_sfpxcond"
+  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_GS_SFPXCOND)]
   "TARGET_SFPU_GS"
 {
   gcc_assert(0);

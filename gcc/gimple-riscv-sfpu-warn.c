@@ -106,7 +106,7 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 	  if (riscv_sfpu_p(&insnd, &use_stmt, use))
 	    {
 	      DUMP(" found an uninitialized vector used later\n");
-	      const riscv_sfpu_insn_data* loadi_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfploadi_ex);
+	      const riscv_sfpu_insn_data* loadi_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
 
 	      location_t assign_location = gimple_location (g);
 	      // Assume any "uninitialized" variables in a function that

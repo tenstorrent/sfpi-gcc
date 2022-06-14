@@ -40,8 +40,8 @@
   UNSPECV_WH_SFPLOAD
   UNSPECV_WH_SFPLOAD_LV
   UNSPECV_WH_SFPLOAD_INT
-  UNSPECV_WH_SFPLOADI_EX
-  UNSPECV_WH_SFPLOADI_EX_LV
+  UNSPECV_WH_SFPXLOADI
+  UNSPECV_WH_SFPXLOADI_LV
   UNSPECV_WH_SFPLOADI_INT
   UNSPECV_WH_SFPSTORE
   UNSPECV_WH_SFPSTORE_INT
@@ -56,11 +56,11 @@
   UNSPECV_WH_SFPADD_LV
   UNSPECV_WH_SFPADD_INT
   UNSPECV_WH_SFPIADD_V
-  UNSPECV_WH_SFPIADD_V_EX
+  UNSPECV_WH_SFPXIADD_V
   UNSPECV_WH_SFPIADD_I
   UNSPECV_WH_SFPIADD_I_LV
-  UNSPECV_WH_SFPIADD_I_EX
-  UNSPECV_WH_SFPIADD_I_EX_LV
+  UNSPECV_WH_SFPXIADD_I
+  UNSPECV_WH_SFPXIADD_I_LV
   UNSPECV_WH_SFPIADD_I_INT
   UNSPECV_WH_SFPSHFT_V
   UNSPECV_WH_SFPSHFT_I
@@ -106,12 +106,12 @@
   UNSPECV_WH_SFPEXMAN_INT
   UNSPECV_WH_SFPSETCC_I
   UNSPECV_WH_SFPSETCC_V
-  UNSPECV_WH_SFPFCMPS_EX
-  UNSPECV_WH_SFPFCMPV_EX
-  UNSPECV_WH_SFPICMPS_EX
-  UNSPECV_WH_SFPICMPV_EX
-  UNSPECV_WH_SFPBOOL_EX
-  UNSPECV_WH_SFPCOND_EX
+  UNSPECV_WH_SFPXFCMPS
+  UNSPECV_WH_SFPXFCMPV
+  UNSPECV_WH_SFPXICMPS
+  UNSPECV_WH_SFPXICMPV
+  UNSPECV_WH_SFPXBOOL
+  UNSPECV_WH_SFPXCOND
   UNSPECV_WH_SFPENCC
   UNSPECV_WH_SFPCOMPC
   UNSPECV_WH_SFPPUSHC
@@ -271,28 +271,28 @@
 
 
 ;;; SFPLOADI and SFPLOADI_LV
-(define_expand "riscv_wh_sfploadi_ex"
+(define_expand "riscv_wh_sfpxloadi"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_WH_SFPLOADI_EX))]
+                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_WH_SFPXLOADI))]
   "TARGET_SFPU_WH"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_wh_emit_sfploadi_ex(operands[0], live, operands[1], operands[2], operands[3]);
+  riscv_sfpu_wh_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3]);
   DONE;
 })
 
-(define_expand "riscv_wh_sfploadi_ex_lv"
+(define_expand "riscv_wh_sfpxloadi_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_WH_SFPLOADI_EX_LV))]
+                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_WH_SFPXLOADI_LV))]
   "TARGET_SFPU_WH"
 {
   rtx live = operands[2];
-  riscv_sfpu_wh_emit_sfploadi_ex(operands[0], live, operands[1], operands[3], operands[4]);
+  riscv_sfpu_wh_emit_sfpxloadi(operands[0], live, operands[1], operands[3], operands[4]);
   DONE;
 })
 
@@ -573,42 +573,42 @@
   "SFPIADD\t%3, %2, %0, %4"
 )
 
-(define_expand "riscv_wh_sfpiadd_v_ex"
+(define_expand "riscv_wh_sfpxiadd_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_WH_SFPIADD_V_EX))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_WH_SFPXIADD_V))]
   "TARGET_SFPU_WH"
 {
-  riscv_sfpu_wh_emit_sfpiadd_v_ex(operands[0], operands[1], operands[2], operands[3]);
+  riscv_sfpu_wh_emit_sfpxiadd_v(operands[0], operands[1], operands[2], operands[3]);
   DONE;
 })
 
 
-(define_expand "riscv_wh_sfpiadd_i_ex"
+(define_expand "riscv_wh_sfpxiadd_i"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPIADD_I_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPXIADD_I))]
   "TARGET_SFPU_WH"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_wh_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_wh_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
   DONE;
 })
 
-(define_expand "riscv_wh_sfpiadd_i_ex_lv"
+(define_expand "riscv_wh_sfpxiadd_i_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:V64SF 3 "register_operand"  "")
                           (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_WH_SFPIADD_I_EX_LV))]
+                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_WH_SFPXIADD_I_LV))]
   "TARGET_SFPU_WH"
 {
   rtx live = operands[2];
-  riscv_sfpu_wh_emit_sfpiadd_i_ex(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  riscv_sfpu_wh_emit_sfpxiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
   DONE;
 })
 
@@ -995,26 +995,26 @@
   "SFPSETCC\t0, %0, %1"
 )
 
-(define_expand "riscv_wh_sfpfcmps_ex"
+(define_expand "riscv_wh_sfpxfcmps"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPFCMPS_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPXFCMPS))]
   "TARGET_SFPU_WH"
 {
-  riscv_sfpu_wh_emit_sfpfcmps_ex(operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_wh_emit_sfpxfcmps(operands[1], operands[2], operands[3], operands[4]);
   DONE;
 })
 
-(define_expand "riscv_wh_sfpfcmpv_ex"
+(define_expand "riscv_wh_sfpxfcmpv"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_WH_SFPFCMPV_EX))]
+                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_WH_SFPXFCMPV))]
   "TARGET_SFPU_WH"
 {
-  riscv_sfpu_wh_emit_sfpfcmpv_ex(operands[1], operands[2], operands[3]);
+  riscv_sfpu_wh_emit_sfpxfcmpv(operands[1], operands[2], operands[3]);
   DONE;
 })
 
@@ -1103,37 +1103,37 @@
   "TARGET_SFPU_WH"
   "SFPNOP")
 
-(define_expand "riscv_wh_sfpicmps_ex"
+(define_expand "riscv_wh_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPICMPS_EX))]
+                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPXICMPS))]
   "TARGET_SFPU_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_wh_sfpicmpv_ex"
+(define_expand "riscv_wh_sfpxicmpv"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_WH_SFPICMPV_EX))]
+                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_WH_SFPXICMPV))]
   "TARGET_SFPU_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_wh_sfpbool_ex"
+(define_expand "riscv_wh_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_WH_SFPBOOL_EX))]
+        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_WH_SFPXBOOL))]
   "TARGET_SFPU_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_wh_sfpcond_ex"
-  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_WH_SFPCOND_EX)]
+(define_expand "riscv_wh_sfpxcond"
+  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_WH_SFPXCOND)]
   "TARGET_SFPU_WH"
 {
   gcc_assert(0);
