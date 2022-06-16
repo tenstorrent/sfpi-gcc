@@ -316,6 +316,8 @@ bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *st
 
       insnd->id == riscv_sfpu_insn_data::sfpor ||
 
+      insnd->id == riscv_sfpu_insn_data::sfpxor ||
+
       (insnd->id == riscv_sfpu_insn_data::sfpiadd_v &&
        (get_int_arg (stmt, 2) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST) == 0) ||
 
