@@ -68,14 +68,13 @@ get_int_arg(gcall *stmt, unsigned int arg)
 }
 
 static bool
-subsequent_use(tree var, gimple_stmt_iterator gsi)
+subsequent_use_in_bb(tree var, gimple_stmt_iterator gsi)
 {
   use_operand_p use_p;
   imm_use_iterator iter;
 
   if (!has_zero_uses(var))
     {
-      gsi_next (&gsi);
       while (!gsi_end_p (gsi))
         {
           gimple *g = gsi_stmt (gsi);
@@ -93,6 +92,36 @@ subsequent_use(tree var, gimple_stmt_iterator gsi)
 
           gsi_next (&gsi);
         }
+    }
+
+  return false;
+}
+
+static bool
+subsequent_use(tree var, gimple_stmt_iterator gsi)
+{
+  gsi_next (&gsi);
+  if (subsequent_use_in_bb(var, gsi))
+    {
+      return true;
+    }
+
+  basic_block assign_bb = gimple_bb(SSA_NAME_DEF_STMT(var));
+
+  basic_block bb = gsi_bb(gsi);
+  edge_iterator ei;
+  edge e;
+  FOR_EACH_EDGE(e, ei, bb->succs)
+    {
+      if (e->dest != assign_bb)
+	{
+	  gimple_stmt_iterator next_gsi = gsi_start_bb (e->dest);
+	  if (!gsi_end_p(next_gsi) &&
+	      subsequent_use_in_bb(var, next_gsi))
+	    {
+	      return true;
+	    }
+	}
     }
 
   return false;
