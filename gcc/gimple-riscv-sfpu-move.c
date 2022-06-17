@@ -113,11 +113,23 @@ match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
     ((*prior_insnd)->id == id);
 }
 
+static inline bool
+is_const_reg(tree arg)
+{
+  gimple_stmt_iterator assign_gsi;
+  gcall *assign_stmt;
+  const riscv_sfpu_insn_data *assign_insnd;
+
+  return
+    TREE_CODE(arg) == SSA_NAME &&
+    match_prior_assignment(riscv_sfpu_insn_data::sfpassignlr,
+			   &assign_insnd, &assign_stmt, &assign_gsi, arg) &&
+    (get_int_arg(assign_stmt, 0) > SFP_LREG_COUNT);
+}
+
 static inline void
 insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi)
 {
-  DUMP("  inserting move\n");
-
   // Insert a move
   const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpmov);
   gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
@@ -135,10 +147,20 @@ insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi
   update_ssa (TODO_update_ssa);
 }
 
-// On Grayskull, the mov instruction is not aware of the CC state
-// This means a compiler generated move consists of pushc/encc/mov/popc (plus nops).
-// This pass avoids moves when possible (by swapping operands) and injects
-// simple moves when necessary to avoid the later compiler generated movs
+// There are 2 kinds of moves that the compiler generates which I call:
+// 1) Necessary moves: these occur when an insn is a dst-as-src operation and
+//    the src and dst are used later or when the destination register is not
+//    writable. Done properly, these operations need to obey the CC state.
+//    Sometimes they can be avoided by swapping arguments to the insn.
+// 2) Unnecessary moves: sometimes the compiler switches registers for no
+//    explicable reason.  Often the old register goes dead and so these can
+//    get cleaned up, however, sometimes it is hard to detect what is going on
+//    and how it can get cleaned up.  It is hard to create test cases to find
+//    these, in all cases to date (6/16/22) the CC state must be respected.
+//
+// If #1 was handled by the compiler, then it would be hard/impossible to
+// determine whether the move should obey the CC state.  So...these are
+// handled in this pass.
 static void transform (function *fun)
 {
   basic_block bb;
@@ -158,45 +180,33 @@ static void transform (function *fun)
               candidate_insnd->id != riscv_sfpu_insn_data::nonsfpu &&
 	      candidate_insnd->uses_dst_as_src())
 	    {
+	      DUMP("Processing %s\n", candidate_insnd->name);
+
+	      // Note: all dst_arg_as_src insns' src_arg_pos immediately follows dst_arg_pos (hack)
+	      tree src_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1);
 	      tree dst_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos);
 
-	      if (subsequent_use(dst_arg, candidate_gsi))
+	      bool permutable = riscv_sfpu_permutable_operands(candidate_insnd, candidate_stmt);
+	      bool src_is_const_reg = permutable && is_const_reg(src_arg);
+	      bool dst_is_const_reg = is_const_reg(dst_arg);
+
+	      if (dst_is_const_reg || subsequent_use(dst_arg, candidate_gsi))
 		{
-		  DUMP("Processing %s\n", candidate_insnd->name);
-
-		  bool swapped = false;
-
 		  // Try to swap operands to eliminate the need for a move
-		  if (riscv_sfpu_permutable_operands(candidate_insnd, candidate_stmt))
+		  if (!src_is_const_reg &&
+		      permutable &&
+		      !subsequent_use(src_arg, candidate_gsi))
 		    {
-		      // Note: all dst_arg_as_src insns' src_arg_pos immediately follows dst_arg_pos
-		      tree src_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1);
+		      DUMP("  swapping arguments\n");
 
-		      if (!subsequent_use(src_arg, candidate_gsi)) {
-			DUMP("  swapping arguments\n");
-
-			// Swap args
-			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, src_arg);
-			gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1, dst_arg);
-			update_stmt(candidate_stmt);
-			swapped = true;
-		      }
+		      gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos, src_arg);
+		      gimple_call_set_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1, dst_arg);
+		      update_stmt(candidate_stmt);
 		    }
-
-		  if (!swapped)
+		  else
 		    {
-		      insert_move(dst_arg, candidate_insnd->dst_arg_pos, candidate_stmt, candidate_gsi);
-		    }
-		}
-	      else
-		{
-		  gimple_stmt_iterator assign_gsi;
-		  gcall *assign_stmt;
-		  const riscv_sfpu_insn_data *assign_insnd;
-		  if (match_prior_assignment(riscv_sfpu_insn_data::sfpassignlr,
-					     &assign_insnd, &assign_stmt, &assign_gsi, dst_arg) &&
-		      get_int_arg(assign_stmt, 0) > SFP_LREG_COUNT)
-		    {
+		      DUMP("  inserting move\n");
+		      
 		      insert_move(dst_arg, candidate_insnd->dst_arg_pos, candidate_stmt, candidate_gsi);
 		    }
 		}
