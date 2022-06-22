@@ -105,8 +105,10 @@
   UNSPECV_GS_SFPXFCMPV
   UNSPECV_GS_SFPXICMPS
   UNSPECV_GS_SFPXICMPV
+  UNSPECV_GS_SFPXVIF
   UNSPECV_GS_SFPXBOOL
-  UNSPECV_GS_SFPXCOND
+  UNSPECV_GS_SFPXCONDB
+  UNSPECV_GS_SFPXCONDI
   UNSPECV_GS_SFPENCC
   UNSPECV_GS_SFPCOMPC
   UNSPECV_GS_SFPPUSHC
@@ -947,6 +949,14 @@
   gcc_assert(0);
 })
 
+(define_expand "riscv_gs_sfpxvif"
+  [(set (match_operand:SI 0 "register_operand" "")
+        (unspec_volatile [(const_int 0)] UNSPECV_GS_SFPXVIF))]
+  "TARGET_SFPU_GS"
+{
+  gcc_assert(0);
+})
+
 (define_expand "riscv_gs_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_GS_SFPXBOOL))]
@@ -955,8 +965,17 @@
   gcc_assert(0);
 })
 
-(define_expand "riscv_gs_sfpxcond"
-  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_GS_SFPXCOND)]
+(define_expand "riscv_gs_sfpxcondb"
+  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")
+                     (match_operand:SI 1 "register_operand"  "")] UNSPECV_GS_SFPXCONDB)]
+  "TARGET_SFPU_GS"
+{
+  gcc_assert(0);
+})
+
+(define_expand "riscv_gs_sfpxcondi"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_GS_SFPXCONDI))]
   "TARGET_SFPU_GS"
 {
   gcc_assert(0);
