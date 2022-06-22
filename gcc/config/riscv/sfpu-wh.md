@@ -110,8 +110,10 @@
   UNSPECV_WH_SFPXFCMPV
   UNSPECV_WH_SFPXICMPS
   UNSPECV_WH_SFPXICMPV
+  UNSPECV_WH_SFPXVIF
   UNSPECV_WH_SFPXBOOL
-  UNSPECV_WH_SFPXCOND
+  UNSPECV_WH_SFPXCONDB
+  UNSPECV_WH_SFPXCONDI
   UNSPECV_WH_SFPENCC
   UNSPECV_WH_SFPCOMPC
   UNSPECV_WH_SFPPUSHC
@@ -1124,6 +1126,14 @@
   gcc_assert(0);
 })
 
+(define_expand "riscv_wh_sfpxvif"
+  [(set (match_operand:SI 0 "register_operand" "")
+        (unspec_volatile [(const_int 0)] UNSPECV_WH_SFPXVIF))]
+  "TARGET_SFPU_WH"
+{
+  gcc_assert(0);
+})
+
 (define_expand "riscv_wh_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_WH_SFPXBOOL))]
@@ -1132,8 +1142,17 @@
   gcc_assert(0);
 })
 
-(define_expand "riscv_wh_sfpxcond"
-  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")] UNSPECV_WH_SFPXCOND)]
+(define_expand "riscv_wh_sfpxcondb"
+  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")
+                     (match_operand:SI 1 "register_operand"  "")] UNSPECV_WH_SFPXCONDB)]
+  "TARGET_SFPU_WH"
+{
+  gcc_assert(0);
+})
+
+(define_expand "riscv_wh_sfpxcondi"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_WH_SFPXCONDI))]
   "TARGET_SFPU_WH"
 {
   gcc_assert(0);

@@ -70,10 +70,18 @@ constexpr unsigned int SFPXSCMP_MOD1_FMT_A = 8;
 constexpr unsigned int SFPXSCMP_MOD1_FMT_B = 16;
 constexpr unsigned int SFPXSCMP_MOD1_FMT_FLOAT = 32;
 constexpr unsigned int SFPXSCMP_MOD1_FMT_MASK = 0x38;
+constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
 constexpr unsigned int SFPXBOOL_MOD1_OR = 1;
 constexpr unsigned int SFPXBOOL_MOD1_AND = 2;
 constexpr unsigned int SFPXBOOL_MOD1_NOT = 3;
+constexpr unsigned int SFPXBOOL_LEFT_TREE_ARG_POS = 1;
+constexpr unsigned int SFPXBOOL_RIGHT_TREE_ARG_POS = 2;
+
+constexpr unsigned int SFPXCONDB_TREE_ARG_POS = 0;
+constexpr unsigned int SFPXCONDB_START_ARG_POS = 1;
+
+constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 
 constexpr unsigned int SFPXSETMAN_MOD1_16BITIMM = 2;
 

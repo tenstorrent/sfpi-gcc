@@ -83,6 +83,8 @@ SFPU_GS_BUILTIN (sfpxfcmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,              
 SFPU_GS_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_POINTER_V64SF_USI_USI,             grayskull, 1, 0, 0, -1,  3, 0)
 SFPU_GS_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                   grayskull, 1, 0, 0, -1,  2, 0)
 SFPU_GS_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                       grayskull, 0, 0, 0, -1, -1, 0)
+SFPU_GS_BUILTIN (sfpxcondi,       RISCV_V64SF_FTYPE_USI,                             grayskull, 0, 0, 0, -1, -1, 0)
+SFPU_GS_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                   grayskull, 0, 0, 0, -1, -1, 0)
 SFPU_GS_PAD_BUILTIN (sfpxor)
 SFPU_GS_PAD_BUILTIN (sfpcast)
 SFPU_GS_PAD_BUILTIN (sfpcast_lv)
@@ -106,7 +108,7 @@ SFPU_GS_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI, 
 SFPU_GS_PAD_NO_TGT_BUILTIN (sfpconfig_v)
 SFPU_GS_NO_TGT_BUILTIN (sfpincrwc,      RISCV_VOID_FTYPE_USI_USI_USI_USI,            grayskull, 0, 0, 0, -1, -1,-1)
 SFPU_GS_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                            grayskull, 0, 0, 0, -1, -1, 0)
-SFPU_GS_NO_TGT_BUILTIN (sfpxcond,       RISCV_VOID_FTYPE_USI,                        grayskull, 0, 0, 0, -1, -1, 0)
+SFPU_GS_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                    grayskull, 0, 0, 0, -1, -1, 0)
 
 
 // Wormhole builtin intrinsics
@@ -163,6 +165,8 @@ SFPU_WH_BUILTIN (sfpxfcmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,              
 SFPU_WH_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_POINTER_V64SF_USI_USI,             wormhole, 1, 0, 0, -1,  3, 0)
 SFPU_WH_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                   wormhole, 1, 0, 0, -1,  2, 0)
 SFPU_WH_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                       wormhole, 0, 0, 0, -1, -1, 0)
+SFPU_WH_BUILTIN (sfpxcondi,       RISCV_V64SF_FTYPE_USI,                             wormhole, 0, 0, 0, -1, -1, 0)
+SFPU_WH_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                   wormhole, 0, 0, 0, -1, -1, 0)
 SFPU_WH_BUILTIN (sfpxor,          RISCV_V64SF_FTYPE_V64SF_V64SF,                     wormhole, 0, 0, 0,  0, -1, 0)
 SFPU_WH_BUILTIN (sfpcast,         RISCV_V64SF_FTYPE_V64SF_USI,                       wormhole, 0, 0, 0, -1,  1, 0)
 SFPU_WH_BUILTIN (sfpcast_lv,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                 wormhole, 0, 1, 0, -1,  2, 0)
@@ -186,7 +190,7 @@ SFPU_WH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI_U
 SFPU_WH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_V64SF_USI,                  wormhole, 0, 0, 0, -1, -1, 0)
 SFPU_WH_NO_TGT_BUILTIN (sfpincrwc,      RISCV_VOID_FTYPE_USI_USI_USI_USI,            wormhole, 0, 0, 0, -1, -1,-1)
 SFPU_WH_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                            wormhole, 0, 0, 0, -1, -1, 0)
-SFPU_WH_NO_TGT_BUILTIN (sfpxcond,       RISCV_VOID_FTYPE_USI,                        wormhole, 0, 0, 0, -1, -1, 0)
+SFPU_WH_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                    wormhole, 0, 0, 0, -1, -1, 0)
 
 #undef SFPU_GS_PAD_BUILTIN
 #undef SFPU_GS_PAD_NO_TGT_BUILTIN
