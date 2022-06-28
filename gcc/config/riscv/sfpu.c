@@ -1,5 +1,5 @@
 #define INCLUDE_STRING
-#include <map>
+#include <unordered_map>
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -43,11 +43,24 @@
 #include "sfpu-protos.h"
 #include "sfpu.h"
 
-struct cmp_str
+
+const int riscv_sfpu_name_stub_len = 18;
+struct str_cmp
 {
   bool operator()(const char *a, const char *b) const
   {
-     return std::strcmp(a, b) < 0;
+     return std::strcmp(&a[riscv_sfpu_name_stub_len], &b[riscv_sfpu_name_stub_len]) == 0;
+  }
+};
+
+struct str_hash
+{
+  std::size_t operator()(const char *cstr) const
+  {
+    std::size_t hash = 5381;
+    for ( cstr = cstr+riscv_sfpu_name_stub_len; *cstr != '\0' ; ++cstr)
+      hash = (hash * 33) + *cstr;
+    return hash;
   }
 };
 
@@ -59,7 +72,7 @@ unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[] = {
   SFPSETCC_MOD1_LREG_NE0,
 };
 
-static std::map<const char*, riscv_sfpu_insn_data&, cmp_str> insn_map;
+static std::unordered_map<const char*, riscv_sfpu_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 79;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
@@ -94,7 +107,7 @@ riscv_sfpu_insert_insn(int idx, const char* name, tree decl)
   while (offset < NUMBER_OF_INTRINSICS * NUMBER_OF_ARCHES)
     {
       // string is __rvtt_builtin_XX_<name>
-      if (strcmp(sfpu_insn_data_target[arch][offset].name, &name[18]) == 0)
+      if (strcmp(sfpu_insn_data_target[arch][offset].name, &name[riscv_sfpu_name_stub_len]) == 0)
 	{
 	  sfpu_insn_data_target[arch][offset].decl = decl;
 	  insn_map.insert(std::pair<const char*, riscv_sfpu_insn_data&>(name, sfpu_insn_data_target[arch][offset]));

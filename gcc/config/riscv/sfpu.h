@@ -128,7 +128,6 @@ extern void riscv_sfpu_insert_insn(int idx, const char*name, tree decl);
 extern void riscv_sfpu_init_builtins();
 extern const char * riscv_sfpu_get_builtin_name_stub();
 
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const char *call);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const gcall *stmt);
 

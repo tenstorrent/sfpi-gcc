@@ -43,11 +43,8 @@
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <string.h>
 #include <vector>
-#include <string>
-#include <map>
-#include <iostream>
+#include <unordered_map>
 #include <tuple>
 #include "config/riscv/sfpu.h"
 
@@ -91,7 +88,7 @@ struct liveness_data {
   liveness_data(unsigned int l, unsigned int g, bool f) : level(l), generation(g), force(f) {}
 };
 
-typedef map<gcall *, struct liveness_data> call_liveness;
+typedef unordered_map<gcall *, struct liveness_data> call_liveness;
 
 static long int
 get_int_arg(gcall *stmt, unsigned int arg)

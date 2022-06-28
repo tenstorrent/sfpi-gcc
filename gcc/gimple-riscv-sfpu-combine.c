@@ -490,6 +490,13 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
   return combined;
 }
 
+static inline void
+validate_assumptions()
+{
+  gcc_assert(riscv_sfpu_insn_data::sfpmul + 2 == riscv_sfpu_insn_data::sfpmuli);
+  gcc_assert(riscv_sfpu_insn_data::sfpadd + 2 == riscv_sfpu_insn_data::sfpaddi);
+}
+
 // Combine mul/add w/ loadi to make muli/addi
 //
 // We can aggessively generate mulis and addis since there is little downside
@@ -520,6 +527,8 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 		     gimple_stmt_iterator candidate_gsi)
 {
   bool combined = false;
+
+  validate_assumptions();
 
   if (candidate_insnd->id == riscv_sfpu_insn_data::sfpmul ||
       candidate_insnd->id == riscv_sfpu_insn_data::sfpmul_lv ||
@@ -564,15 +573,11 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	  tree value;
 	  if (riscv_sfpu_get_fp16b(&value, assign_stmt, assign_insnd))
 	    {
-	      char name[32];
-	      sprintf(name, "%s_%si",
-		      riscv_sfpu_get_builtin_name_stub(),
-		      riscv_sfpu_get_notlive_version(candidate_insnd)->name);
 	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, name);
 
 	      // Create <add,mul>i
 	      // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
-	      const riscv_sfpu_insn_data *opi_insnd = riscv_sfpu_get_insn_data(name);
+	      const riscv_sfpu_insn_data *opi_insnd = riscv_sfpu_get_notlive_version(candidate_insnd) + 2;
 	      gimple* opi_stmt = gimple_build_call(opi_insnd->decl, 4);
 	      gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
 	      gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));

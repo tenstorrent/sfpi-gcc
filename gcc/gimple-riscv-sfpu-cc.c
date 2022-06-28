@@ -43,10 +43,7 @@
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <string.h>
 #include <vector>
-#include <map>
-#include <iostream>
 #include <tuple>
 #include "config/riscv/sfpu.h"
 
