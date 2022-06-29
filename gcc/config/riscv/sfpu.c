@@ -74,7 +74,7 @@ unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[] = {
 
 static std::unordered_map<const char*, riscv_sfpu_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 79;
+static const int NUMBER_OF_INTRINSICS = 83;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
