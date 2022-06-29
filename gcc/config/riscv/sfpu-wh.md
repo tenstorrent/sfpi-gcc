@@ -135,6 +135,10 @@
   UNSPECV_WH_SFPLUTFP32_6R
   UNSPECV_WH_SFPCONFIG_V
   UNSPECV_WH_SFPREPLAY
+  UNSPECV_WH_SFPSWAP
+  UNSPECV_WH_SFPTRANSP
+  UNSPECV_WH_SFPSHFT2_G
+  UNSPECV_WH_SFPSHFT2_GE
   UNSPECV_WH_SFPNOP
 ])
 
@@ -1082,9 +1086,7 @@
                           (match_operand:V64SF 7 "register_operand"  "Q3")
                           (match_operand:SI    8 "immediate_operand" "M04U")] UNSPECV_WH_SFPLUTFP32_6R))]
   "TARGET_SFPU_WH"
-{
-  return "SFPLUTFP32\t%0, %8";
-})
+  "SFPLUTFP32\t%0, %8")
 
 (define_insn "riscv_wh_sfpconfig_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "Q0")
@@ -1099,6 +1101,42 @@
                      (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_WH_SFPREPLAY)]
   "TARGET_SFPU_WH"
   "SFPREPLAY\t%0, %1, %2, %3")
+
+(define_insn "riscv_wh_sfpswap"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")
+                     (match_operand:V64SF 1 "register_operand"   "+x")
+                     (match_operand:SI    2 "immediate_operand"  "M04U")] UNSPECV_WH_SFPSWAP)]
+  "TARGET_SFPU_WH"
+{
+  output_asm_insn("SFPSWAP\t%1, %0, %2", operands);
+  return "SFPNOP";
+})
+
+(define_insn "riscv_wh_sfptransp"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+Q0")
+                     (match_operand:V64SF 1 "register_operand"   "+Q1")
+                     (match_operand:V64SF 2 "register_operand"   "+Q2")
+                     (match_operand:V64SF 3 "register_operand"   "+Q3")] UNSPECV_WH_SFPTRANSP)]
+  "TARGET_SFPU_WH"
+  "SFPTRANSP")
+
+(define_insn "riscv_wh_sfpshft2_g"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+Q0")
+                     (match_operand:V64SF 1 "register_operand"   "+Q1")
+                     (match_operand:V64SF 2 "register_operand"   "+Q2")
+                     (match_operand:V64SF 3 "register_operand"   "+Q3")
+                     (match_operand:SI    4 "immediate_operand"  "M04U")] UNSPECV_WH_SFPSHFT2_G)]
+  "TARGET_SFPU_WH"
+  "SFPSHFT2\t0, L0, L0, %0, %1, %2, %3, %4")
+
+(define_insn "riscv_wh_sfpshft2_ge"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "x")
+                     (match_operand:V64SF 1 "register_operand"   "+Q0")
+                     (match_operand:V64SF 2 "register_operand"   "+Q1")
+                     (match_operand:V64SF 3 "register_operand"   "+Q2")
+                     (match_operand:V64SF 4 "register_operand"   "+Q3")] UNSPECV_WH_SFPSHFT2_GE)]
+  "TARGET_SFPU_WH"
+  "SFPSHFT2\t0, %0, L0, %1, %2, %3, %4, 2")
 
 (define_insn "riscv_wh_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPNOP)]

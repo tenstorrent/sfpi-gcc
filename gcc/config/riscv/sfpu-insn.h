@@ -109,6 +109,10 @@ SFPU_GS_PAD_NO_TGT_BUILTIN (sfpconfig_v)
 SFPU_GS_NO_TGT_BUILTIN (sfpincrwc,      RISCV_VOID_FTYPE_USI_USI_USI_USI,            grayskull, 0, 0, 0, -1, -1,-1)
 SFPU_GS_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                            grayskull, 0, 0, 0, -1, -1, 0)
 SFPU_GS_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                    grayskull, 0, 0, 0, -1, -1, 0)
+SFPU_GS_PAD_NO_TGT_BUILTIN (sfpswap)
+SFPU_GS_PAD_NO_TGT_BUILTIN (sfptransp)
+SFPU_GS_PAD_NO_TGT_BUILTIN (sfpshft2_g)
+SFPU_GS_PAD_NO_TGT_BUILTIN (sfpshft2_ge)
 
 
 // Wormhole builtin intrinsics
@@ -191,6 +195,10 @@ SFPU_WH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_V64SF_USI,             
 SFPU_WH_NO_TGT_BUILTIN (sfpincrwc,      RISCV_VOID_FTYPE_USI_USI_USI_USI,            wormhole, 0, 0, 0, -1, -1,-1)
 SFPU_WH_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                            wormhole, 0, 0, 0, -1, -1, 0)
 SFPU_WH_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                    wormhole, 0, 0, 0, -1, -1, 0)
+SFPU_WH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,            wormhole, 0, 0, 0, -1,  2, 0)
+SFPU_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,    wormhole, 0, 0, 0, -1, -1, 0)
+SFPU_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,wormhole, 0, 0, 0, -1,  4, 0)
+SFPU_WH_NO_TGT_BUILTIN (sfpshft2_ge,  RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,wormhole, 0, 0, 0, -1, -1, 0)
 
 #undef SFPU_GS_PAD_BUILTIN
 #undef SFPU_GS_PAD_NO_TGT_BUILTIN
