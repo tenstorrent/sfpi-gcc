@@ -357,7 +357,7 @@
                riscv_sfpu_clamp_unsigned(operands[3], 0xFFFF), operands[4]));
   } else {
     int base = TT_OP_WH_SFP<wormhole_muliaddi_call>(0, 0, INTVAL(operands[4]));
-    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 16, 8, 4);
+    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 0, operands[2], operands[3], base, 16, 8, 4);
   }
   DONE;
 })
@@ -637,7 +637,7 @@
     emit_insn (gen_riscv_wh_sfpshft_i_int(operands[0], operands[2], riscv_sfpu_clamp_signed(operands[3], 0x7FF)));
   } else {
     int base = TT_OP_WH_SFPSHFT(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 20, 8, 4);
+    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 0, operands[2], operands[3], base, 20, 8, 4);
   }
   DONE;
 })
@@ -874,7 +874,7 @@
                                   riscv_sfpu_clamp_unsigned(operands[2], 0xFFF), operands[3]));
   } else {
     int base = TT_OP_WH_SFPSET<wormhole_set_float_call_i>(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 2, live, operands[3], operands[2], base, 20, 8, 4, 8);
+    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 0, live, operands[3], operands[2], base, 20, 8, 4, 8);
   }
   DONE;
 })
@@ -896,7 +896,7 @@
                                    riscv_sfpu_clamp_unsigned(operands[3], 0xFFF), operands[4]));
   } else {
     int base = TT_OP_WH_SFPSET<wormhole_set_float_call_i_lv>(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 2, live, operands[4], operands[3], base, 20, 8, 4, 8);
+    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 0, live, operands[4], operands[3], base, 20, 8, 4, 8);
   }
   DONE;
 })
