@@ -136,6 +136,7 @@
   UNSPECV_WH_SFPCONFIG_V
   UNSPECV_WH_SFPREPLAY
   UNSPECV_WH_SFPSWAP
+  UNSPECV_WH_SFPSWAP_INT
   UNSPECV_WH_SFPTRANSP
   UNSPECV_WH_SFPSHFT2_G
   UNSPECV_WH_SFPSHFT2_GE
@@ -1099,15 +1100,23 @@
   "TARGET_SFPU_WH"
   "SFPREPLAY\t%0, %1, %2, %3")
 
-(define_insn "riscv_wh_sfpswap"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")
-                     (match_operand:V64SF 1 "register_operand"   "+x")
-                     (match_operand:SI    2 "immediate_operand"  "M04U")] UNSPECV_WH_SFPSWAP)]
+(define_expand "riscv_wh_sfpswap"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "")
+                     (match_operand:V64SF 1 "register_operand"   "")
+                     (match_operand:SI    2 "immediate_operand"  "")] UNSPECV_WH_SFPSWAP)]
   "TARGET_SFPU_WH"
 {
-  output_asm_insn("SFPSWAP\t%1, %0, %2", operands);
-  return "SFPNOP";
+  emit_insn (gen_riscv_wh_sfpswap_int(operands[0], operands[1], operands[2]));
+  emit_insn (gen_riscv_wh_sfpnop());
+  DONE;
 })
+
+(define_insn "riscv_wh_sfpswap_int"
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")
+                     (match_operand:V64SF 1 "register_operand"   "+x")
+                     (match_operand:SI    2 "immediate_operand"  "M04U")] UNSPECV_WH_SFPSWAP_INT)]
+  "TARGET_SFPU_WH"
+  "SFPSWAP\t%1, %0, %2")
 
 (define_insn "riscv_wh_sfptransp"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+Q0")
