@@ -455,6 +455,9 @@ void riscv_sfpu_emit_nonimm_store(rtx buf_addr, rtx src, int nnops, rtx imm, int
 
 char const * riscv_sfpu_output_nonimm_store_and_nops(const char *sw, int nnops, rtx operands[])
 {
+  // Replay pass on wormhole assumes insns only emit 1 insn
+  // Should split this out to clean it up, assert it for now
+  gcc_assert(flag_wormhole == 0 || nnops == 0);
   char const *out = sw;
   while (nnops-- > 0) {
      output_asm_insn(out, operands);

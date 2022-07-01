@@ -147,8 +147,7 @@ void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
   } else {
     int mod1 = INTVAL(mod);
     int base = TT_OP_WH_SFPIADD(0, 0, 0, mod1);
-    int nnops = (mod1 < 3 || mod1 > 7) ? 3 : 2;
-    riscv_sfpu_emit_nonimm_dst_src(addr, dst, nnops, lv, src, imm, base, 20, 8, 4, 8);
+    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
   }
 }
 
@@ -389,7 +388,7 @@ void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rt
     emit_insn(gen_riscv_wh_sfpdivp2_int(dst, lv, riscv_sfpu_clamp_signed(imm, 0x7FF), src, mod));
   } else {
     int base = TT_OP_WH_SFPDIVP2(0, 0, 0, INTVAL(mod));
-    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 2, lv, src, imm, base, 20, 8, 4, 8);
+    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
   }
 }
 
@@ -419,7 +418,7 @@ void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, r
   } else {
     if (INTVAL(mod) == SFPXSETMAN_MOD1_16BITIMM) {
       int base = TT_OP_WH_SFPSETMAN(0, 0, 0, 1);
-      riscv_sfpu_emit_nonimm_dst_src(addr, dst, 2, lv, src, imm, base, 20, 8, 4, 8);
+      riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
     } else {
       riscv_sfpu_wh_emit_sfpxloadi(dst, lv, addr,
 				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm);
