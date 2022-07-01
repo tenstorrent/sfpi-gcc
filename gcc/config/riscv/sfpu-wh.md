@@ -741,7 +741,7 @@
   "TARGET_SFPU_WH"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  emit_insn (gen_riscv_wh_sfpshft2_e_int(operands[0], live, operands[1], operands[2]));
+  riscv_sfpu_wh_emit_sfpshft2_e(operands[0], live, operands[1], operands[2]);
   DONE;
 })
 
@@ -753,7 +753,7 @@
   "TARGET_SFPU_WH"
 {
   rtx live = operands[1];
-  emit_insn (gen_riscv_wh_sfpshft2_e_int(operands[0], live, operands[2], operands[3]));
+  riscv_sfpu_wh_emit_sfpshft2_e(operands[0], live, operands[2], operands[3]);
   DONE;
 })
 
@@ -763,13 +763,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:SI    3 "immediate_operand" "M04U, M04U")] UNSPECV_WH_SFPSHFT2_E_INT))]
   "TARGET_SFPU_WH"
-{
-  int mod = INTVAL(operands[3]);
-  // This routine handles a subset of mod values that all require a NOP
-  gcc_assert(mod == 3 || mod == 4);
-  output_asm_insn("SFPSHFT2\t0, %2, %0, %3", operands);
-  return "SFPNOP";
-})
+  "SFPSHFT2\t0, %2, %0, %3")
 
 (define_expand "riscv_wh_sfpstochrnd_i"
   [(set (match_operand:V64SF 0 "register_operand" "")

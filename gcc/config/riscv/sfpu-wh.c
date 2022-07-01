@@ -434,3 +434,27 @@ void riscv_sfpu_wh_emit_sfpassignlr(rtx dst, rtx lr)
   SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
   emit_insn(gen_riscv_sfpassignlr_int(dst));
 }
+
+void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
+{
+  int modi = INTVAL(mod);
+
+  // This routine handles a subset of mod values that all require a NOP
+  gcc_assert(modi == 3 || modi == 4);
+
+  if (modi == 4) {
+    // WH_B0 HW bug (issue #3240): the shftr version of the ins doesn't set the
+    // value shifted into place to 0 but instead uses the previous value (eg,
+    // from a ror) Here we clear that value to 0 by rotating in the 0 register
+    // Optimization potential to not do this if the previous insn was a shftr
+
+    rtx live_const = riscv_sfpu_gen_const0_vector();
+    rtx lreg9 = gen_reg_rtx(V64SFmode);
+    SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
+    emit_insn (gen_riscv_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
+    emit_insn(gen_riscv_wh_sfpnop());
+  }
+
+  emit_insn (gen_riscv_wh_sfpshft2_e_int(dst, live, src, mod));
+  emit_insn(gen_riscv_wh_sfpnop());
+}
