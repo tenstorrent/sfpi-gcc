@@ -1064,6 +1064,9 @@
         (match_scratch:SI 7)]
   "TARGET_SFPU_WH"
 {
+  // Note: this insn must emit 2 insns, ie, this can't be done in an expand as
+  // the hard regno is only known at reload time, not at expand time
+  // This mean, e.g., the REPLAY pass must know this insn is really 2 insns
   operands[7] = GEN_INT(riscv_sfpu_regno(operands[0]));
   output_asm_insn("SFPLOADI\t%6, 2, %7", operands);
   return "SFPLUTFP32\t%0, %5";
