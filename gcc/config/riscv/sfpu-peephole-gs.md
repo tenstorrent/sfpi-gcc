@@ -43,19 +43,21 @@
                      (match_operand:SI    1 "address_operand"   "")
                      (match_operand:SI    2 "immediate_operand" "")
                      (match_operand:SI    3 "immediate_operand" "")
-                     (match_operand:SI    4 "register_operand"  "")] UNSPECV_SFPNONIMM_STORE)
-   (set (match_operand:V64SF 5 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 6 "nonmemory_operand" "")
-                          (match_operand:SI    7 "immediate_operand" "")
-                          (match_operand:SI    8 "immediate_operand" "")] UNSPECV_GS_SFPLOAD_INT))
-   (clobber (match_scratch:SI 9 ""))]
+                     (match_operand:SI    4 "register_operand"  "")
+                     (match_operand:SI    5 "immediate_operand"  "")
+                     (match_operand:SI    6 "immediate_operand"  "")] UNSPECV_SFPNONIMM_STORE)
+   (set (match_operand:V64SF 7 "register_operand" "")
+        (unspec_volatile [(match_operand:V64SF 8 "nonmemory_operand" "")
+                          (match_operand:SI    9 "immediate_operand" "")
+                          (match_operand:SI   10 "immediate_operand" "")] UNSPECV_GS_SFPLOAD_INT))
+   (clobber (match_scratch:SI 11 ""))]
   "TARGET_SFPU_GS"
   [(const_int 0)]
 {
-  emit_insn(gen_riscv_sfpnonimm_store(operands[0], operands[1], GEN_INT(1), operands[2], operands[3], operands[4]));
-  emit_insn(gen_riscv_gs_sfpload_int(operands[5], operands[6], operands[7], operands[8]));
+  emit_insn(gen_riscv_sfpnonimm_store(operands[0], operands[1], GEN_INT(1), operands[3],
+                                      operands[4], operands[5], operands[6]));
+  emit_insn(gen_riscv_gs_sfpload_int(operands[7], operands[8], operands[9], operands[10]));
 })
-
 
 ;; LZ
 (define_peephole2

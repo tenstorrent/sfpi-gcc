@@ -47,6 +47,7 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME4(A, B, C, D, E) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
 #define RISCV_FTYPE_NAME5(A, B, C, D, E, F) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
 #define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
+#define RISCV_FTYPE_NAME7(A, B, C, D, E, F, G, H) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
 #define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
 
 /* Classifies the prototype of a built-in function.  */
@@ -161,6 +162,8 @@ tree v64SF_type_node;
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F
 #define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
+#define RISCV_FTYPE_ATYPES7(A, B, C, D, E, F, G, H) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H
 #define RISCV_FTYPE_ATYPES8(A, B, C, D, E, F, G, H, I) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, RISCV_ATYPE_##I
 
@@ -172,12 +175,12 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(op, fmt, sfpu),
-#define SFPU_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(op, fmt, sfpu),
-#define SFPU_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(gs_##op, fmt, grayskull),
-#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
-#define SFPU_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(wh_##op, fmt, wormhole),
-#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
+#define SFPU_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(op, fmt, sfpu),
+#define SFPU_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define SFPU_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(gs_##op, fmt, grayskull),
+#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
+#define SFPU_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(wh_##op, fmt, wormhole),
+#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #include "sfpu-insn.h"
 };
 

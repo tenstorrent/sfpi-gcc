@@ -43,111 +43,97 @@
 #include "sfpu-protos.h"
 #include "sfpu.h"
 
-void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm)
+void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_wh_sfpload_int(dst, lv, mod, mode, riscv_sfpu_clamp_unsigned(imm, 0x3FFF)));
   } else {
-    int base = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
-    riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
+    unsigned long int op = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
+    emit_insn(gen_riscv_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm)
+void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
 {
   int int_mod = INTVAL(mod);
 
   if (int_mod & SFPXLOADI_MOD0_32BIT_MASK) {
-    // Wormhole only (mask above ensures this)
-    if (GET_CODE(imm) == CONST_INT) {
-      unsigned int int_imm = INTVAL(imm);
-      bool load_32bit = true;
-      unsigned int new_mod;
+    // Early nonimm pass assures this
+    gcc_assert(GET_CODE(imm) == CONST_INT);
 
-      switch (int_mod) {
-      case SFPXLOADI_MOD0_INT32:
-       // This gets interesting since we can do a signed load of a 16 bit
-       // positive integer by using an unsigned load to fill the upper bits
-       // with 0s
-       if (!(static_cast<int>(int_imm) > 32767 || static_cast<int>(int_imm) < -32768)) {
-	 new_mod = SFPLOADI_MOD0_SHORT;
-	 load_32bit = false;
-       } else if (static_cast<int>(int_imm) >= 0 && static_cast<int>(int_imm) < 65536) {
-	   new_mod = SFPLOADI_MOD0_USHORT;
-	   load_32bit = false;
-       }
-       break;
+    unsigned int int_imm = INTVAL(imm);
+    bool load_32bit = true;
+    unsigned int new_mod;
 
-      case SFPXLOADI_MOD0_UINT32:
-       if (int_imm <= 0xFFFF) {
-	 new_mod = SFPLOADI_MOD0_USHORT;
-	 load_32bit = false;
-       }
-       break;
-
-      case SFPXLOADI_MOD0_FLOAT:
-       {
-	 unsigned int man = int_imm & 0x007FFFFF;
-	 int exp = ((int_imm >> 23) & 0xFF) - 127;
-
-	 if ((man & 0xFFFF) == 0) {
-	   // Fits in fp16b
-	   load_32bit = false;
-	   new_mod = SFPLOADI_MOD0_FLOATB;
-	   int_imm = riscv_sfpu_fp32_to_fp16b(int_imm);
-	 } else if ((man & 0x1FFF) == 0 && exp < 16 && exp >= -14) {
-	   // Fits in fp16a
-	   load_32bit = false;
-	   new_mod = SFPLOADI_MOD0_FLOATA;
-	   int_imm = riscv_sfpu_fp32_to_fp16a(int_imm);
-	 }
-
-	 imm = GEN_INT(int_imm);
-       }
-       break;
-
-      default:
-       gcc_assert(0);
+    switch (int_mod) {
+    case SFPXLOADI_MOD0_INT32:
+      // This gets interesting since we can do a signed load of a 16 bit
+      // positive integer by using an unsigned load to fill the upper bits
+      // with 0s
+      if (!(static_cast<int>(int_imm) > 32767 || static_cast<int>(int_imm) < -32768)) {
+	new_mod = SFPLOADI_MOD0_SHORT;
+	load_32bit = false;
+      } else if (static_cast<int>(int_imm) >= 0 && static_cast<int>(int_imm) < 65536) {
+	new_mod = SFPLOADI_MOD0_USHORT;
+	load_32bit = false;
       }
-      if (load_32bit) {
-       emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(SFPLOADI_MOD0_UPPER), GEN_INT(int_imm >> 16)));
-       emit_insn(gen_riscv_wh_sfploadi_int(dst, dst, GEN_INT(SFPLOADI_MOD0_LOWER), GEN_INT(int_imm & 0xFFFF)));
-      } else {
-       emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(new_mod), imm));
+      break;
+
+    case SFPXLOADI_MOD0_UINT32:
+      if (int_imm <= 0xFFFF) {
+	new_mod = SFPLOADI_MOD0_USHORT;
+	load_32bit = false;
       }
+      break;
+
+    case SFPXLOADI_MOD0_FLOAT:
+      {
+	unsigned int man = int_imm & 0x007FFFFF;
+	int exp = ((int_imm >> 23) & 0xFF) - 127;
+
+	if ((man & 0xFFFF) == 0) {
+	  // Fits in fp16b
+	  load_32bit = false;
+	  new_mod = SFPLOADI_MOD0_FLOATB;
+	  int_imm = riscv_sfpu_fp32_to_fp16b(int_imm);
+	} else if ((man & 0x1FFF) == 0 && exp < 16 && exp >= -14) {
+	  // Fits in fp16a
+	  load_32bit = false;
+	  new_mod = SFPLOADI_MOD0_FLOATA;
+	  int_imm = riscv_sfpu_fp32_to_fp16a(int_imm);
+	}
+
+	imm = GEN_INT(int_imm);
+      }
+      break;
+
+    default:
+      gcc_assert(0);
+    }
+    if (load_32bit) {
+      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(SFPLOADI_MOD0_UPPER), GEN_INT(int_imm >> 16)));
+      emit_insn(gen_riscv_wh_sfploadi_int(dst, dst, GEN_INT(SFPLOADI_MOD0_LOWER), GEN_INT(int_imm & 0xFFFF)));
     } else {
-      rtx riscv_tmp = gen_reg_rtx(SImode);
-
-      // XXXX If this were done higher up (before LICM), there could be code
-      // re-use/optimization
-
-      int base = TT_OP_WH_SFPLOADI(0, SFPLOADI_MOD0_LOWER, 0);
-      emit_insn(gen_ashlsi3(riscv_tmp, imm, GEN_INT(16)));
-      emit_insn(gen_lshrsi3(riscv_tmp, riscv_tmp, GEN_INT(16)));
-      riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, riscv_tmp, base, 16, 16, 20);
-
-      base = TT_OP_WH_SFPLOADI(0, SFPLOADI_MOD0_UPPER, 0);
-      emit_insn(gen_lshrsi3(riscv_tmp, imm, GEN_INT(16)));
-      riscv_sfpu_emit_nonimm_dst(addr, dst, 0, dst, riscv_tmp, base, 16, 16, 20);
+      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(new_mod), imm));
     }
   } else {
     if (GET_CODE(imm) == CONST_INT) {
       emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), riscv_sfpu_clamp_signed(imm, 0x7FFF)));
     } else {
-      int base = TT_OP_WH_SFPLOADI(0, int_mod, 0);
-      riscv_sfpu_emit_nonimm_dst(addr, dst, 0, lv, imm, base, 16, 16, 20);
+      unsigned long int op = TT_OP_WH_SFPLOADI(0, int_mod, 0);
+      emit_insn(gen_riscv_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
     }
   }
 }
 
-void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
+void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, riscv_sfpu_clamp_signed(imm, 0x7FF), mod));
   } else {
-    int mod1 = INTVAL(mod);
-    int base = TT_OP_WH_SFPIADD(0, 0, 0, mod1);
-    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
+    unsigned int mod1 = UINTVAL(mod);
+    unsigned long int op = TT_OP_WH_SFPIADD(0, 0, 0, mod1);
+    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
@@ -205,7 +191,9 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
       imm = GEN_INT(iv);
     }
   } else if (is_12bits) {
-    need_loadi = false;
+    // Future work
+    //need_loadi = false;
+    gcc_assert(0);
   }
 
   rtx set_cc_arg = src;
@@ -214,7 +202,7 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
   if (need_loadi) {
     // Load imm into dst
     int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-    riscv_sfpu_wh_emit_sfpxloadi(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm);
+    riscv_sfpu_wh_emit_sfpxloadi(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm, GEN_INT(0), GEN_INT(0));
 
     unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
     if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
@@ -248,23 +236,12 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
                                         GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
     }
   } else {
-    // This code path handles the case where the operand isn't a CONST_INT (so
+    // This code path could handle the case where the operand isn't a CONST_INT (so
     // the value isn't known at compile time) but some (future) mechanism
     // (wrapper API or pragma) ensures that the resulting value fits in 12
     // bits and so an IADDI can be used.
-
-    // The code below isn't used yet and doesn't handle negation properly
     gcc_assert(is_12bits);
     gcc_assert(false);
-    unsigned int mod1 = SFPIADD_MOD1_ARG_IMM;
-    if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
-      // Perform op w/ compare
-      mod1 |= (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-      need_setcc = false;
-    } else {
-      set_cc_arg = dst;
-    }
-    riscv_sfpu_wh_emit_sfpiadd_i(dst, lv, addr, src, imm, GEN_INT(mod1));
   }
 
   if (need_setcc) {
@@ -313,29 +290,25 @@ void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   rtx ref_val = gen_reg_rtx(V64SFmode);
   int int_mod = INTVAL(mod);
 
-  if (GET_CODE(f) == CONST_INT) {
-    unsigned int fval = INTVAL(f);
-    // Wrapper will convert 0 to -0
-    unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
-    if (fval != 0 &&
-	((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000) ||
-	 (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000))) {
-      need_sub = true;
-      if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000) ||
-	  (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80)) {
-	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
-      } else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
-		 (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80)) {
-	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
-      } else {
-	riscv_sfpu_wh_emit_sfpxloadi(ref_val, riscv_sfpu_gen_const0_vector(), addr,
-				     GEN_INT(riscv_sfpu_scmp2loadi_mod(fmt)), f);
-      }
-    }
-  } else {
-      need_sub = true;
+  gcc_assert(GET_CODE(f) == CONST_INT);
+  unsigned int fval = INTVAL(f);
+  // Wrapper will convert 0 to -0
+  unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
+  if (fval != 0 &&
+      ((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000) ||
+       (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000))) {
+    need_sub = true;
+    if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000) ||
+	(fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80)) {
+      riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
+    } else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
+	       (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80)) {
+      riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
+    } else {
       riscv_sfpu_wh_emit_sfpxloadi(ref_val, riscv_sfpu_gen_const0_vector(), addr,
-				   GEN_INT(riscv_sfpu_scmp2loadi_mod(INTVAL(mod))), f);
+				   GEN_INT(riscv_sfpu_scmp2loadi_mod(fmt)), f,
+				   GEN_INT(0), GEN_INT(0));
+    }
   }
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
@@ -382,48 +355,43 @@ void riscv_sfpu_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
   }
 }
 
-void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod)
+void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_wh_sfpdivp2_int(dst, lv, riscv_sfpu_clamp_signed(imm, 0x7FF), src, mod));
   } else {
-    int base = TT_OP_WH_SFPDIVP2(0, 0, 0, INTVAL(mod));
-    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
+    unsigned long int op = TT_OP_WH_SFPDIVP2(0, 0, 0, UINTVAL(mod));
+    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod)
+void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     emit_insn(gen_riscv_wh_sfpstochrnd_i_int(dst, lv, mode, riscv_sfpu_clamp_unsigned(imm, 0x1F), src, mod));
   } else {
-    int mod1 = INTVAL(mod);
-    int imode = INTVAL(mode);
-    int base = TT_OP_WH_SFP_STOCH_RND(imode, 0, 0, 0, 0, mod1);
-    riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 24, 8, 4, 8);
+    unsigned int mod1 = UINTVAL(mod);
+    unsigned int imode = UINTVAL(mode);
+    unsigned long int op = TT_OP_WH_SFP_STOCH_RND(imode, 0, 0, 0, 0, mod1);
+    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod)
+void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     unsigned int iv = INTVAL(imm);
     if (iv > 4095) {
       riscv_sfpu_wh_emit_sfpxloadi(dst, lv, addr,
-				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm);
+				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm, GEN_INT(0), GEN_INT(0));
       emit_insn(gen_riscv_wh_sfpsetman_v(dst, dst, src));
     } else {
       emit_insn (gen_riscv_wh_sfpsetman_i_int(dst, lv, imm, src));
     }
   } else {
-    if (INTVAL(mod) == SFPXSETMAN_MOD1_16BITIMM) {
-      int base = TT_OP_WH_SFPSETMAN(0, 0, 0, 1);
-      riscv_sfpu_emit_nonimm_dst_src(addr, dst, 0, lv, src, imm, base, 20, 8, 4, 8);
-    } else {
-      riscv_sfpu_wh_emit_sfpxloadi(dst, lv, addr,
-				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm);
-      emit_insn(gen_riscv_wh_sfpsetman_v(dst, dst, src));
-    }
+    gcc_assert(INTVAL(mod) == SFPXSETMAN_MOD1_16BITIMM);
+    unsigned long int op = TT_OP_WH_SFPSETMAN(0, 0, 0, 1);
+    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
@@ -435,7 +403,7 @@ void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
   gcc_assert(modi == 3 || modi == 4);
 
   if (modi == 4) {
-    // WH_B0 HW bug (issue #3240): the shftr version of the ins doesn't set the
+    // WH_B0 HW bug (issue #3240): the shftr version of the insn doesn't set the
     // value shifted into place to 0 but instead uses the previous value (eg,
     // from a ror) Here we clear that value to 0 by rotating in the 0 register
     // Optimization potential to not do this if the previous insn was a shftr

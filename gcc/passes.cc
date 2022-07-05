@@ -2038,6 +2038,7 @@ pass_manager::dump_profile_report () const
 static void
 execute_function_todo (function *fn, void *data)
 {
+  //  flag_checking = 1;
   bool from_ipa_pass = (cfun == NULL);
   unsigned int flags = (size_t)data;
   flags &= ~fn->last_verified;

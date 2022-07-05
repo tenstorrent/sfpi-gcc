@@ -43,15 +43,14 @@
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <string.h>
 #include <vector>
-#include <tuple>
-#include <iostream>
 #include "config/riscv/sfpu.h"
 
 using namespace std;
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+
+static std::vector<tree> load_imm_map;
 
 static bool
 is_int_arg(gcall *stmt, unsigned int arg)
@@ -573,17 +572,35 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 	  tree value;
 	  if (riscv_sfpu_get_fp16b(&value, assign_stmt, assign_insnd))
 	    {
-	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, name);
+	      const riscv_sfpu_insn_data *opi_insnd = riscv_sfpu_get_notlive_version(candidate_insnd) + 2;
+	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
 
 	      // Create <add,mul>i
 	      // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
-	      const riscv_sfpu_insn_data *opi_insnd = riscv_sfpu_get_notlive_version(candidate_insnd) + 2;
-	      gimple* opi_stmt = gimple_build_call(opi_insnd->decl, 4);
+	      gcall* opi_stmt = gimple_build_call(opi_insnd->decl, 6);
 	      gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
 	      gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
 	      gimple_call_set_arg(opi_stmt, 2, value);
-	      gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node,
+	      gimple_call_set_arg(opi_stmt, 5, build_int_cst(integer_type_node,
 							     get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
+
+	      if (TREE_CODE(value) == SSA_NAME)
+		{
+		  // Have an fp16b as an non-immediate value
+		  // 2 issues to worry about:
+		  //  - the loadi shft/mask is different from the addi/muli shft/mask
+		  //  - loop unrolling may create multiple related uses
+		  // Issue new nonimm-prologue for the addi, track to see if it can be re-used
+		  tree old_add = gimple_call_arg(assign_stmt, assign_insnd->nonimm_pos + 1);
+		  int unique_id = get_int_arg(assign_stmt, assign_insnd->nonimm_pos + 2);
+		  gcc_assert((unique_id & 1) == 0);
+		  riscv_sfpu_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
+		}
+	      else
+		{
+		  gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node, 0));
+		  gimple_call_set_arg(opi_stmt, 4, build_int_cst(integer_type_node, 0));
+		}
 
 	      gimple_call_set_lhs(opi_stmt, gimple_call_lhs(candidate_stmt));
 	      gimple_set_location(opi_stmt, gimple_location (candidate_stmt));
@@ -730,6 +747,7 @@ static void transform (function *fun)
 {
   basic_block bb;
   gimple_stmt_iterator candidate_gsi;
+  load_imm_map.reserve(20);
 
   // Pass one: combine iadd
   FOR_EACH_BB_FN (bb, fun)
@@ -790,6 +808,12 @@ static void transform (function *fun)
 
       update |= remove_unused_loadis(fun);
       if (update) update_ssa(TODO_update_ssa);
+    }
+
+  if (load_imm_map.size() != 0)
+    {
+      riscv_sfpu_cleanup_nonimm_lis(fun);
+      load_imm_map.resize(0);
     }
 }
 

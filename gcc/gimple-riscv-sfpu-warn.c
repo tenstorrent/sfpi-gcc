@@ -124,11 +124,13 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
                    }
 		}
 
-	      gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 3);
+	      gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 5);
 	      gimple_call_set_lhs (loadi_use_stmt, lhs);
 	      gimple_call_set_arg (loadi_use_stmt, 0, build_int_cst_type(build_pointer_type (void_type_node), 0));
 	      gimple_call_set_arg (loadi_use_stmt, 1, build_int_cst(integer_type_node, 0));
 	      gimple_call_set_arg (loadi_use_stmt, 2, build_int_cst(integer_type_node, 0));
+	      gimple_call_set_arg (loadi_use_stmt, 3, build_int_cst(integer_type_node, 0));
+	      gimple_call_set_arg (loadi_use_stmt, 4, build_int_cst(integer_type_node, 0));
 
 	      gimple_set_location (loadi_use_stmt, assign_location);
 	      update_stmt(loadi_use_stmt);
