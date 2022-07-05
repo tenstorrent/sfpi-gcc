@@ -1361,6 +1361,8 @@ OBJS = \
 	gimple-riscv-sfpu-expand.o \
 	gimple-riscv-sfpu-live.o \
 	gimple-riscv-sfpu-move.o \
+	gimple-riscv-sfpu-nonimm-expand.o \
+	gimple-riscv-sfpu-nonimm-tag.o \
 	gimple-riscv-sfpu-warn.o \
 	gimple-riscv-sfpu-schedule.o \
 	gimple-ssa-backprop.o \
@@ -1511,6 +1513,7 @@ OBJS = \
 	reorg.o \
 	resource.o \
 	rtl-error.o \
+	rtl-riscv-sfpu-nonimm.o \
 	rtl-tests.o \
 	rtl.o \
 	rtlhash.o \

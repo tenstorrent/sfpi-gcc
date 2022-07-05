@@ -234,7 +234,7 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
   const riscv_sfpu_insn_data *new_insnd =
     riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 3, nullp, size_int(SFPLOADI_MOD0_SHORT), size_int(val));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 5, nullp, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
 
   tree tmp = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
   gimple_call_set_lhs (new_stmt, tmp);
@@ -250,7 +250,7 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
   const riscv_sfpu_insn_data *new_insnd =
     riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi_lv);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 4, nullp, in, size_int(SFPLOADI_MOD0_SHORT), size_int(val));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 6, nullp, in, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
   if (lhs == NULL_TREE)
     {
       lhs = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);

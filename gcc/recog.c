@@ -2253,7 +2253,9 @@ extract_insn (rtx_insn *insn)
 	   && GET_CODE (SET_SRC (XVECEXP (body, 0, 0))) == ASM_OPERANDS)
 	  || GET_CODE (XVECEXP (body, 0, 0)) == ASM_OPERANDS
 	  || GET_CODE (XVECEXP (body, 0, 0)) == ASM_INPUT)
+	{
 	goto asm_insn;
+	}
       else
 	goto normal_insn;
     case ASM_OPERANDS:

@@ -1,6 +1,7 @@
 #include <tree.h>
 
 #include <map>
+#include <vector>
 
 #ifndef GCC_RISCV_SFPU_H
 #define GCC_RISCV_SFPU_H
@@ -100,10 +101,11 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
-#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
-#define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
+#define SFPU_INTERNAL(id, nim) id,
+#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
+#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
+#define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
 #define SFPU_GS_PAD_BUILTIN(id) id,
 #define SFPU_GS_PAD_NO_TGT_BUILTIN(id) id,
 #include "sfpu-insn.h"
@@ -120,8 +122,8 @@ struct riscv_sfpu_insn_data {
   const int dst_arg_pos;
   const int mod_pos;
   const int schedule;
-  const int nonimm_pos;
-  const int li_pos;
+  const int nonimm_pos;	// +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
+  const bool internal;
   const unsigned int nonimm_mask;
   const int nonimm_shft;
 
@@ -133,12 +135,24 @@ extern unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[];
 extern void riscv_sfpu_insert_insn(int idx, const char*name, tree decl);
 extern void riscv_sfpu_init_builtins();
 extern const char * riscv_sfpu_get_builtin_name_stub();
+extern tree riscv_sfpu_emit_nonimm_prologue(unsigned int unique_id,
+					    const riscv_sfpu_insn_data *insnd,
+					    gcall *stmt,
+					    gimple_stmt_iterator gsi);
+extern void riscv_sfpu_link_nonimm_prologue(std::vector<tree> &load_imm_map,
+					    unsigned int unique_id,
+					    tree old_add,
+					    const riscv_sfpu_insn_data *insnd,
+					    gcall *stmt);
+extern void riscv_sfpu_cleanup_nonimm_lis(function *fun);
 
+extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const char *name);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const gcall *stmt);
 
 extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
+extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, rtx_insn *insn);
 
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_live_version(const riscv_sfpu_insn_data *insnd);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd);

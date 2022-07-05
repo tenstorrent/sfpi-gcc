@@ -414,15 +414,14 @@ break_liveness(function *fn, call_liveness& liveness)
 
       if (insnd->id != riscv_sfpu_insn_data::nonsfpu && insnd->live)
 	{
-	  // Find which position the "live" arg is in
-	  unsigned int live_arg = find_live_arg (stmt);
-
 	  // Get the defining statement and it's cc_count for this SSA
 	  liveness_data cur_stmt_liveness = it->second;
 	  liveness_data def_stmt_liveness = get_def_stmt_liveness(fn, stmt, liveness);
 
-	  DUMP("    liveness: cur %d def %d force %d\n",
-		       cur_stmt_liveness.level, def_stmt_liveness.level, cur_stmt_liveness.force);
+	  DUMP("    liveness: cur %d def %d curgen %d defgen %d force %d\n",
+	       cur_stmt_liveness.level, def_stmt_liveness.level,
+	       cur_stmt_liveness.generation, def_stmt_liveness.generation,
+	       cur_stmt_liveness.force);
 
 	  if (def_stmt_liveness.level == liveness_undefined)
 	    {
@@ -535,6 +534,20 @@ fold_live_assign (function *fn)
 	      {
 		DUMP("    folding %s\n", prev_insnd->name);
 
+		gcall *prev2_stmt = nullptr;
+		if (prev_insnd->live)
+		  {
+		    // The only _lv insns at this point are from the non-imm
+		    // path injecting sfpxloadi_lv for a 32 bit load
+		    // Back up one insn and propogate liveness there
+		    DUMP("    handling nonimm %s\n", prev_insnd->name);
+		    gcc_assert(prev_insnd->id == riscv_sfpu_insn_data::sfpxloadi_lv);
+		    prev2_stmt = prev_stmt;
+		    gsi_prev_nondebug (&prev_gsi);
+		    riscv_sfpu_p (&prev_insnd, &prev_stmt, prev_gsi);
+		    gcc_assert(prev_insnd->id == riscv_sfpu_insn_data::sfpxloadi);
+		  }
+
 		const riscv_sfpu_insn_data *new_insnd = riscv_sfpu_get_live_version(prev_insnd);
 		if (new_insnd != nullptr)
 		  {
@@ -542,7 +555,6 @@ fold_live_assign (function *fn)
 		    DUMP("    building new %s\n", new_insnd->name);
 		    gimple *new_stmt = gimple_build_call (new_insnd->decl,
 							  gimple_call_num_args (prev_stmt) + 1);
-		    gimple_call_set_lhs (new_stmt, lhs);
 
 		    // Find which position the "live" arg is in
 		    unsigned int live_arg_num = find_live_arg (prev_stmt);
@@ -551,22 +563,29 @@ fold_live_assign (function *fn)
 		    // Copy the live arg
 		    gimple_call_set_arg (new_stmt, live_arg_num, live_arg);
 
-		    // XXXX THIS vuse doesn't include the use of the live arg!!!!
-		    // Need to create new vuse based on prev_stmt but add in
-		    // the live arg then set that here
-		    gimple_set_vuse (new_stmt, gimple_vuse (prev_stmt));
-
 		    gimple_set_location (new_stmt, gimple_location (prev_stmt));
 		    gsi_insert_before(&prev_gsi, new_stmt, GSI_SAME_STMT);
 		    update_stmt(new_stmt);
 
-		    riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
-		    unlink_stmt_vdef(prev_stmt);
-		    gsi_remove(&prev_gsi, true);
-		    release_defs(prev_stmt);
+		    if (prev2_stmt == nullptr)
+		      {
+			gimple_call_set_lhs (new_stmt, lhs);
+			riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
+			unlink_stmt_vdef(prev_stmt);
+			gsi_remove(&prev_gsi, true);
+			release_defs(prev_stmt);
+		      }
+		    else
+		      {
+			DUMP("    updating both lhs'\n");
+			gimple_call_set_lhs (new_stmt, gimple_call_lhs(prev_stmt));
+			gimple_call_set_lhs (prev2_stmt, lhs);
+			update_stmt(prev2_stmt);
+			riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
+			gsi_remove(&prev_gsi, true);
+		      }
 
 		    // Remove candidate
-		    riscv_sfpu_prep_stmt_for_deletion(stmt);
 		    gsi_remove(&gsi, true);
 
 		    update_ssa (TODO_update_ssa);

@@ -205,11 +205,13 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_GS_SFPLOAD))]
+                          (match_operand:SI 3 "nonmemory_operand" "")
+                          (match_operand:SI 4 "register_operand" "")
+                          (match_operand:SI 5 "immediate_operand" "")] UNSPECV_GS_SFPLOAD))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpload(operands[0], live, operands[1], operands[2], operands[3]);
+  riscv_sfpu_gs_emit_sfpload(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5]);
   DONE;
 })
 
@@ -218,11 +220,13 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_GS_SFPLOAD_LV))]
+                          (match_operand:SI    4 "nonmemory_operand" "")
+                          (match_operand:SI    5 "register_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPLOAD_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpload(operands[0], live, operands[1], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpload(operands[0], live, operands[1], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
 
@@ -241,11 +245,13 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")] UNSPECV_GS_SFPXLOADI))]
+                          (match_operand:SI 3 "nonmemory_operand" "")
+                          (match_operand:SI 4 "register_operand"  "")
+                          (match_operand:SI 5 "immediate_operand" "")] UNSPECV_GS_SFPXLOADI))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3]);
+  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5]);
   DONE;
 })
 
@@ -254,11 +260,13 @@
         (unspec [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")] UNSPECV_GS_SFPXLOADI_LV))]
+                          (match_operand:SI    4 "nonmemory_operand" "")
+                          (match_operand:SI    5 "register_operand"  "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPXLOADI_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxloadi(operands[0], live, operands[1], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
 
@@ -278,15 +286,17 @@
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
                      (match_operand:V64SF 1 "register_operand"  "")
                      (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_GS_SFPSTORE)]
+                     (match_operand:SI    3 "nonmemory_operand" "")
+                     (match_operand:SI    4 "register_operand"  "")
+                     (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPSTORE)]
   "TARGET_SFPU_GS"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
     emit_insn (gen_riscv_gs_sfpstore_int(operands[1], operands[2],
                                          riscv_sfpu_clamp_unsigned(operands[3], 0x7FFF)));
   } else {
-    int base = TT_OP_GS_SFPSTORE(0, INTVAL(operands[2]), 0);
-    riscv_sfpu_emit_nonimm_store(operands[0], operands[1], 0, operands[3], base, 16, 16, 20);
+    unsigned long int op = TT_OP_GS_SFPSTORE(0, INTVAL(operands[2]), 0);
+    emit_insn (gen_riscv_sfpnonimm_store(operands[1], operands[0], GEN_INT(0), GEN_INT(20), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })
@@ -307,15 +317,17 @@
         (unspec [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] muliaddi))]
+                          (match_operand:SI    4 "register_operand"  "")
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] muliaddi))]
   "TARGET_SFPU_GS"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
     emit_insn (gen_riscv_gs_sfp<muliaddi_name>_int(operands[0], operands[2],
-               riscv_sfpu_clamp_unsigned(operands[3], 0xFFFF), operands[4]));
+               riscv_sfpu_clamp_unsigned(operands[3], 0xFFFF), operands[6]));
   } else {
-    int base = TT_OP_GS_SFP<muliaddi_call>(0, 0, INTVAL(operands[4]));
-    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 16, 8, 4);
+    unsigned long int op = TT_OP_GS_SFP<muliaddi_call>(0, 0, INTVAL(operands[6]));
+    emit_insn (gen_riscv_sfpnonimm_dst(operands[0], operands[1], GEN_INT(2), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })
@@ -339,12 +351,14 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:SI    2 "nonmemory_operand" "")
-                          (match_operand:V64SF 3 "register_operand"  "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPDIVP2))]
+                          (match_operand:SI    3 "register_operand"  "")
+                          (match_operand:SI    4 "immediate_operand" "")
+                          (match_operand:V64SF 5 "register_operand"  "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPDIVP2))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpdivp2(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpdivp2(operands[0], live, operands[1], operands[2], operands[5], operands[6], operands[3], operands[4]);
   DONE;
 })
 
@@ -353,12 +367,14 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:V64SF 4 "register_operand"  "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPDIVP2_LV))]
+                          (match_operand:SI    4 "register_operand"  "")
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:V64SF 6 "register_operand"  "")
+                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_GS_SFPDIVP2_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpdivp2(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  riscv_sfpu_gs_emit_sfpdivp2(operands[0], live, operands[1], operands[3], operands[6], operands[7], operands[4], operands[5]);
   DONE;
 })
 
@@ -537,11 +553,13 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I))]
+                          (match_operand:SI    4 "immediate_operand" "")
+                          (match_operand:SI    5 "register_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
 
@@ -551,11 +569,13 @@
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:V64SF 3 "register_operand"  "")
                           (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I_LV))]
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    6 "register_operand" "")
+                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_GS_SFPIADD_I_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  riscv_sfpu_gs_emit_sfpiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[5], operands[6], operands[7]);
   DONE;
 })
 
@@ -595,11 +615,13 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I))]
+                          (match_operand:SI    4 "immediate_operand" "")
+                          (match_operand:SI    5 "nonmemory_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
-  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[6]);
   DONE;
 })
 
@@ -609,11 +631,13 @@
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:V64SF 3 "register_operand"  "")
                           (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I_LV))]
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    6 "nonmemory_operand" "")
+                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_GS_SFPXIADD_I_LV))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
-  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[5]);
+  riscv_sfpu_gs_emit_sfpxiadd_i(operands[0], live, operands[1], operands[3], operands[4], operands[7]);
   DONE;
 })
 
@@ -632,14 +656,16 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "nonmemory_operand" "")] UNSPECV_GS_SFPSHFT_I))]
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "register_operand" "")
+                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_GS_SFPSHFT_I))]
   "TARGET_SFPU_GS"
 {
   if (GET_CODE(operands[3]) == CONST_INT) {
     emit_insn (gen_riscv_gs_sfpshft_i_int(operands[0], operands[2], riscv_sfpu_clamp_signed(operands[3], 0x7FF)));
   } else {
-    int base = TT_OP_GS_SFPSHFT(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst(operands[1], operands[0], 2, operands[2], operands[3], base, 20, 8, 4);
+    unsigned long int op = TT_OP_GS_SFPSHFT(0, 0, 0, 1);
+    emit_insn (gen_riscv_sfpnonimm_dst(operands[0], operands[1], GEN_INT(2), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })
@@ -730,16 +756,18 @@
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:SI    2 "nonmemory_operand")
-                          (match_operand:V64SF 3 "register_operand")] set_float_op_i))]
+                          (match_operand:SI    3 "register_operand")
+                          (match_operand:SI    4 "immediate_operand")
+                          (match_operand:V64SF 5 "register_operand")] set_float_op_i))]
   "TARGET_SFPU_GS"
 {
   rtx live = riscv_sfpu_gen_const0_vector();
   if (GET_CODE(operands[2]) == CONST_INT) {
     emit_insn (gen_riscv_gs_sfpset<set_float_name_i>_i_int(operands[0], live,
-                                                        riscv_sfpu_clamp_unsigned(operands[2], 0xFFF), operands[3]));
+                                                        riscv_sfpu_clamp_unsigned(operands[2], 0xFFF), operands[5]));
   } else {
-    int base = TT_OP_GS_SFPSET<set_float_call_i>(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 2, live, operands[3], operands[2], base, 20, 8, 4, 8);
+    unsigned long int op = TT_OP_GS_SFPSET<set_float_call_i>(0, 0, 0, 1);
+    emit_insn (gen_riscv_sfpnonimm_dst_src(operands[0], operands[1], GEN_INT(2), live, operands[5], GEN_INT(4), GEN_INT(8), operands[3], GEN_INT(op), operands[4]));
   }
   DONE;
 })
@@ -752,16 +780,19 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:V64SF 2 "register_operand")
                           (match_operand:SI    3 "nonmemory_operand")
-                          (match_operand:V64SF 4 "register_operand")] set_float_op_i_lv))]
+                          (match_operand:SI    4 "register_operand")
+                          (match_operand:SI    5 "immediate_operand")
+                          (match_operand:V64SF 6 "register_operand")] set_float_op_i_lv))]
   "TARGET_SFPU_GS"
 {
   rtx live = operands[2];
   if (GET_CODE(operands[3]) == CONST_INT) {
     emit_insn (gen_riscv_gs_sfpset<set_float_name_i_lv>_i_int(operands[0], live,
-                                                           riscv_sfpu_clamp_unsigned(operands[3], 0xFFF), operands[4]));
+                                                           riscv_sfpu_clamp_unsigned(operands[3], 0xFFF), operands[6]));
   } else {
-    int base = TT_OP_GS_SFPSET<set_float_call_i_lv>(0, 0, 0, 1);
-    riscv_sfpu_emit_nonimm_dst_src(operands[1], operands[0], 2, live, operands[4], operands[3], base, 20, 8, 4, 8);
+    unsigned long int op = TT_OP_GS_SFPSET<set_float_call_i_lv>(0, 0, 0, 1);
+    emit_insn (gen_riscv_sfpnonimm_dst_src(operands[0], operands[1], GEN_INT(4),
+               live, operands[6], GEN_INT(4), GEN_INT(8), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })
@@ -845,10 +876,12 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_GS_SFPXFCMPS))]
+                          (match_operand:SI    4 "immediate_operand" "")
+                          (match_operand:SI    5 "nonmemory_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPXFCMPS))]
   "TARGET_SFPU_GS"
 {
-  riscv_sfpu_gs_emit_sfpxfcmps(operands[1], operands[2], operands[3], operands[4]);
+  riscv_sfpu_gs_emit_sfpxfcmps(operands[1], operands[2], operands[3], operands[6]);
   DONE;
 })
 
