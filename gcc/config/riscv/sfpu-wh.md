@@ -153,7 +153,7 @@
     switch (which_alternative) {
     case 0:
       // Note: must re-enable all elements until we know if we are in a predicated state
-      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("SFPWNOP", operands);
       return "SFPMOV\t%1, %0, 2";
       break;
 
@@ -1147,7 +1147,7 @@
 (define_insn "riscv_wh_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPNOP)]
   "TARGET_SFPU_WH"
-  "SFPNOP")
+  "SFPWNOP")
 
 (define_expand "riscv_wh_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand" "")
