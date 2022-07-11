@@ -323,10 +323,10 @@ void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
       need_sub = true;
       if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000) ||
 	  (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80)) {
-	riscv_sfpu_wh_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
+	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
       } else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
 		 (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80)) {
-	riscv_sfpu_wh_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
+	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
       } else {
 	riscv_sfpu_wh_emit_sfpxloadi(ref_val, riscv_sfpu_gen_const0_vector(), addr,
 				     GEN_INT(riscv_sfpu_scmp2loadi_mod(fmt)), f);
@@ -343,7 +343,7 @@ void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   if (need_sub) {
     rtx neg_one = gen_reg_rtx(V64SFmode);
     rtx tmp = gen_reg_rtx(V64SFmode);
-    riscv_sfpu_wh_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
+    riscv_sfpu_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
     emit_insn(gen_riscv_wh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
     emit_insn(gen_riscv_wh_sfpnop());
     v = tmp;
@@ -366,7 +366,7 @@ void riscv_sfpu_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
   rtx tmp = gen_reg_rtx(V64SFmode);
   rtx neg1 = gen_reg_rtx(V64SFmode);
 
-  riscv_sfpu_wh_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
+  riscv_sfpu_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
   emit_insn(gen_riscv_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
   emit_insn(gen_riscv_wh_sfpnop());
 
@@ -425,13 +425,6 @@ void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, r
       emit_insn(gen_riscv_wh_sfpsetman_v(dst, dst, src));
     }
   }
-}
-
-void riscv_sfpu_wh_emit_sfpassignlr(rtx dst, rtx lr)
-{
-  int lregnum = INTVAL(lr);
-  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
-  emit_insn(gen_riscv_sfpassignlr_int(dst));
 }
 
 void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)

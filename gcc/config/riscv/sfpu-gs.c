@@ -257,13 +257,13 @@ void riscv_sfpu_gs_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
       switch (fval) {
 	// Could add more CReg values here, doubt they show up in cmp
       case 0x3f80:
-	riscv_sfpu_gs_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
+	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
 	break;
       case 0xbf00:
-	riscv_sfpu_gs_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_0P5));
+	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_0P5));
 	break;
       case 0xbf80:
-	riscv_sfpu_gs_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
+	riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
 	break;
       default:
 	int loadi_mod = ((INTVAL(mod) & SFPXSCMP_MOD1_FMT_A) == SFPXSCMP_MOD1_FMT_A) ?
@@ -284,7 +284,7 @@ void riscv_sfpu_gs_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   if (need_sub) {
     rtx neg_one = gen_reg_rtx(V64SFmode);
     rtx tmp = gen_reg_rtx(V64SFmode);
-    riscv_sfpu_gs_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
+    riscv_sfpu_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
     emit_insn(gen_riscv_gs_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
     v = tmp;
   }
@@ -306,7 +306,7 @@ void riscv_sfpu_gs_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
   rtx tmp = gen_reg_rtx(V64SFmode);
   rtx neg1 = gen_reg_rtx(V64SFmode);
 
-  riscv_sfpu_gs_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
+  riscv_sfpu_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
   emit_insn(gen_riscv_gs_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
@@ -329,11 +329,4 @@ void riscv_sfpu_gs_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rt
     int base = TT_OP_GS_SFPDIVP2(0, 0, 0, INTVAL(mod));
     riscv_sfpu_emit_nonimm_dst_src(addr, dst, 2, lv, src, imm, base, 20, 8, 4, 8);
   }
-}
-
-void riscv_sfpu_gs_emit_sfpassignlr(rtx dst, rtx lr)
-{
-  int lregnum = INTVAL(lr);
-  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
-  emit_insn(gen_riscv_sfpassignlr_int(dst));
 }
