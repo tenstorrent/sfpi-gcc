@@ -44,12 +44,13 @@
 #include "sfpu.h"
 
 
+const int riscv_sfpu_name_stub_no_arch_len = 15;
 const int riscv_sfpu_name_stub_len = 18;
 struct str_cmp
 {
   bool operator()(const char *a, const char *b) const
   {
-     return std::strcmp(&a[riscv_sfpu_name_stub_len], &b[riscv_sfpu_name_stub_len]) == 0;
+     return std::strcmp(&a[riscv_sfpu_name_stub_no_arch_len], &b[riscv_sfpu_name_stub_no_arch_len]) == 0;
   }
 };
 
@@ -58,7 +59,7 @@ struct str_hash
   std::size_t operator()(const char *cstr) const
   {
     std::size_t hash = 5381;
-    for ( cstr = cstr+riscv_sfpu_name_stub_len; *cstr != '\0' ; ++cstr)
+    for (cstr = cstr+riscv_sfpu_name_stub_no_arch_len; *cstr != '\0' ; ++cstr)
       hash = (hash * 33) + *cstr;
     return hash;
   }
@@ -77,18 +78,22 @@ static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 83;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
-#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
-#define SFPU_GS_PAD_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0 },
-#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0 },
+#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_GS_PAD_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 #include "sfpu-insn.h"
-    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0 }
+    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
   },
   {
-#define SFPU_WH_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
-#define SFPU_WH_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched },
+#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_WH_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
+#define SFPU_WH_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis },
 #include "sfpu-insn.h"
-    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0 }
+    { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
   }
 };
 
@@ -107,7 +112,8 @@ riscv_sfpu_insert_insn(int idx, const char* name, tree decl)
   while (offset < NUMBER_OF_INTRINSICS * NUMBER_OF_ARCHES)
     {
       // string is __rvtt_builtin_XX_<name>
-      if (strcmp(sfpu_insn_data_target[arch][offset].name, &name[riscv_sfpu_name_stub_len]) == 0)
+      if ((strcmp(sfpu_insn_data_target[arch][offset].name, &name[riscv_sfpu_name_stub_no_arch_len]) == 0) || 
+	  (strcmp(sfpu_insn_data_target[arch][offset].name, &name[riscv_sfpu_name_stub_len]) == 0))
 	{
 	  sfpu_insn_data_target[arch][offset].decl = decl;
 	  insn_map.insert(std::pair<const char*, riscv_sfpu_insn_data&>(name, sfpu_insn_data_target[arch][offset]));
@@ -568,4 +574,11 @@ bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
     }
 
   return done;
+}
+
+void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr)
+{
+  int lregnum = INTVAL(lr);
+  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
+  emit_insn(gen_riscv_sfpassignlr_int(dst));
 }

@@ -96,6 +96,7 @@ struct riscv_builtin_description {
 AVAIL (hard_float, TARGET_HARD_FLOAT)
 AVAIL (grayskull, TARGET_SFPU_GS)
 AVAIL (wormhole, TARGET_SFPU_WH)
+AVAIL (sfpu, (TARGET_SFPU_GS || TARGET_SFPU_WH))
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -171,10 +172,12 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_GS_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_BUILTIN(gs_##op, fmt, en),
-#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, en),
-#define SFPU_WH_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_BUILTIN(wh_##op, fmt, en),
-#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, en, cc, lv, hho, dap, mp, sched) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, en),
+#define SFPU_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(op, fmt, sfpu),
+#define SFPU_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define SFPU_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(gs_##op, fmt, grayskull),
+#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
+#define SFPU_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_BUILTIN(wh_##op, fmt, wormhole),
+#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #include "sfpu-insn.h"
 };
 

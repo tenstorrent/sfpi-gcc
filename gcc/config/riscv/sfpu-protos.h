@@ -19,7 +19,8 @@ extern void riscv_sfpu_emit_nonimm_src(rtx buf_addr, rtx src, int nnops, rtx imm
 extern void riscv_sfpu_emit_nonimm_store(rtx buf_addr, rtx src, int nnops, rtx imm, int base, int lshft, int rshft, int src_shft);
 extern char const * riscv_sfpu_output_nonimm_store_and_nops(const char *sw, int nnops, rtx operands[]);
 
-extern void riscv_sfpu_gs_emit_sfpassignlr(rtx dst, rtx lr);
+extern void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr);
+
 extern void riscv_sfpu_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm);
 extern void riscv_sfpu_gs_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm);
 extern void riscv_sfpu_gs_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
@@ -29,7 +30,6 @@ extern void riscv_sfpu_gs_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
 extern void riscv_sfpu_gs_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
 extern void riscv_sfpu_gs_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod);
 
-extern void riscv_sfpu_wh_emit_sfpassignlr(rtx dst, rtx lr);
 extern void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm);
 extern void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm);
 extern void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);

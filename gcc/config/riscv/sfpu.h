@@ -100,8 +100,10 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_GS_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) id,
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, en, cc, lv, hho, dap, mp, sched) id,
+#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
+#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
+#define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
+#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, lip, nim, nis) id,
 #define SFPU_GS_PAD_BUILTIN(id) id,
 #define SFPU_GS_PAD_NO_TGT_BUILTIN(id) id,
 #include "sfpu-insn.h"
@@ -118,6 +120,10 @@ struct riscv_sfpu_insn_data {
   const int dst_arg_pos;
   const int mod_pos;
   const int schedule;
+  const int nonimm_pos;
+  const int li_pos;
+  const unsigned int nonimm_mask;
+  const int nonimm_shft;
 
   inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
