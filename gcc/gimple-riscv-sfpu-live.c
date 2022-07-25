@@ -381,22 +381,6 @@ get_def_stmt_liveness(function *fn, gcall *stmt, const call_liveness& liveness)
 }
 
 static void
-copy_args_from_live_insn (gimple *new_stmt, unsigned int live_arg, gcall *stmt)
-{
-  // Copy initial args
-  for (unsigned int i = 0; i < live_arg; i++)
-    {
-      gimple_call_set_arg (new_stmt, i, gimple_call_arg (stmt, i));
-    }
-
-  // Shift remaining arguments by 1
-  for (unsigned int i = live_arg; i < gimple_call_num_args (stmt); i++)
-    {
-      gimple_call_set_arg (new_stmt, i, gimple_call_arg (stmt, i + 1));
-    }
-}
-
-static void
 copy_args_to_live_insn (gimple *new_stmt, unsigned int live_arg, gcall *stmt)
 {
   // Copy initial args
@@ -504,41 +488,6 @@ break_liveness(function *fn, call_liveness& liveness)
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
 		  release_defs(stmt);
-		}
-	      else
-		{
-		  // XXXX Hmm, this code path should no longer be hit by the
-		  // wrapper.  Remove in the future when the design is fully
-		  // stabilized
-
-		  // For all other instructions replace insn w/ non-live
-		  // version and remove the "live" variable
-		  const riscv_sfpu_insn_data *new_insnd = riscv_sfpu_get_notlive_version(insnd);
-		  DUMP("    replacing %s with %s\n", insnd->name, new_insnd->name);
-
-		  gimple* new_stmt = gimple_build_call (new_insnd->decl, gimple_call_num_args(stmt) - 1);
-		  gcc_assert(new_stmt != nullptr);
-		  gimple_call_set_lhs (new_stmt, gimple_call_lhs (stmt));
-
-		  copy_args_from_live_insn (new_stmt, live_arg, stmt);
-
-		  gimple_stmt_iterator psi = gsi_for_stmt (stmt);
-		  move_ssa_defining_stmt_for_defs (new_stmt, stmt);
-		  // XXXXX not fully correct - vuse doesn't include the live variable
-		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
-
-		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
-		  gimple_set_location (new_stmt, gimple_location (stmt));
-		  if (gimple_block (new_stmt) == NULL_TREE)
-		    {
-		      gimple_set_block (new_stmt, gimple_block (stmt));
-		    }
-
-		  gsi_replace (&psi, new_stmt, false);
-		  update_stmt (new_stmt);
-
-		  // Set the liveness level for the new instruction in the liveness dbase
-		  liveness.insert(pair<gcall *, liveness_data>(dyn_cast<gcall *>(new_stmt), cur_stmt_liveness));
 		}
 	    }
 	}
