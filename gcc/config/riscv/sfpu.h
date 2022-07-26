@@ -53,8 +53,9 @@ constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
 
 constexpr unsigned int SFPXIADD_MOD1_SIGNED = 8;
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
-constexpr unsigned int SFPXIADD_MOD1_IS_12BITS = 32;
-constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 64;
+constexpr unsigned int SFPXIADD_MOD1_12BIT = 32;
+constexpr unsigned int SFPXIADD_MOD1_16BIT = 64;
+constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128;
 constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;
 constexpr unsigned int SFPXIADD_IMM_ARG_POS = 2;
 
@@ -83,8 +84,6 @@ constexpr unsigned int SFPXCONDB_TREE_ARG_POS = 0;
 constexpr unsigned int SFPXCONDB_START_ARG_POS = 1;
 
 constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
-
-constexpr unsigned int SFPXSETMAN_MOD1_16BITIMM = 2;
 
 constexpr unsigned int CREG_IDX_0 = 4;
 constexpr unsigned int CREG_IDX_0P692871094 = 5;
