@@ -115,7 +115,7 @@ void riscv_sfpu_gs_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
 
   bool need_loadi = true;
   bool is_signed = ((modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED);
-  bool is_12bits = modi & SFPXIADD_MOD1_IS_12BITS;
+  bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
   bool is_const_int = GET_CODE(imm) == CONST_INT;
   bool is_sub = ((modi & SFPXIADD_MOD1_IS_SUB) != 0);
   bool dst_unused = ((modi & SFPXIADD_MOD1_DST_UNUSED) != 0);

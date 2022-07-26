@@ -237,7 +237,6 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
     break;
 
   case riscv_sfpu_insn_data::sfpsetman_i:
-    gcc_assert(get_int_arg(stmt, insnd->mod_pos) != SFPXSETMAN_MOD1_16BITIMM);
       {
 	DUMP("  expanding %s to sfpxloadi+sfpsetman_v\n", insnd->name);
 	tree tmp = flag_grayskull ?
@@ -252,8 +251,10 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
   case riscv_sfpu_insn_data::sfpxicmps:
       {
 	DUMP("  expanding %s to sfpxloadi+sfpxicmpv\n", insnd->name);
-	tree tmp = flag_grayskull ?
-	  emit_sfpxloadi(SFPLOADI_MOD0_USHORT, insnd, stmt, gsip) :
+	int mod = get_int_arg(stmt, insnd->mod_pos);
+	tree tmp = (flag_grayskull || (mod & SFPXIADD_MOD1_16BIT)) ?
+	  emit_sfpxloadi((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
+			 insnd, stmt, gsip) :
 	  emit_32bit_sfpxloads(insnd, stmt, gsip);
 	emit_sfpxicmpv(tmp, insnd, stmt, gsip);
 	gsi_remove(gsip, true);
@@ -281,11 +282,10 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
 	DUMP("  expanding %s to sfpxloadi+sfpxiadd_v\n", insnd->name);
 	int mod = get_int_arg(stmt, insnd->mod_pos);
 	// Only supports 32 bit non-imm loads for wh so far...
-	tree tmp = (flag_grayskull) ?
+	tree tmp = (flag_grayskull || (mod & SFPXIADD_MOD1_16BIT)) ?
 	  emit_sfpxloadi((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
 			 insnd, stmt, gsip) :
 	  emit_32bit_sfpxloads(insnd, stmt, gsip);
-
 	emit_sfpxiadd_v(tmp, mod & SFPXIADD_MOD1_IS_SUB, stmt, gsip);
 	gsi_remove(gsip, true);
 	gsi_prev(gsip);

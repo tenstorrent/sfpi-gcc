@@ -177,7 +177,7 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
 
   bool need_loadi = true;
   bool is_signed = ((modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED);
-  bool is_12bits = modi & SFPXIADD_MOD1_IS_12BITS;
+  bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
   bool is_const_int = GET_CODE(imm) == CONST_INT;
   bool is_sub = ((modi & SFPXIADD_MOD1_IS_SUB) != 0);
   bool dst_unused = ((modi & SFPXIADD_MOD1_DST_UNUSED) != 0);
@@ -389,9 +389,7 @@ void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, r
       emit_insn (gen_riscv_wh_sfpsetman_i_int(dst, lv, imm, src));
     }
   } else {
-    gcc_assert(INTVAL(mod) == SFPXSETMAN_MOD1_16BITIMM);
-    unsigned long int op = TT_OP_WH_SFPSETMAN(0, 0, 0, 1);
-    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
+    gcc_assert(0);
   }
 }
 
