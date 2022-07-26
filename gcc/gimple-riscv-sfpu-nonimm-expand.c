@@ -237,11 +237,12 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
     break;
 
   case riscv_sfpu_insn_data::sfpsetman_i:
+    // Note: grayskull hw bug makes setman_v useless, plus the TF32 mantissa
+    // is 10 bits and setman_i loads 12 bits
+    if (flag_wormhole)
       {
 	DUMP("  expanding %s to sfpxloadi+sfpsetman_v\n", insnd->name);
-	tree tmp = flag_grayskull ?
-	  emit_sfpxloadi(SFPLOADI_MOD0_USHORT, insnd, stmt, gsip) :
-	  emit_32bit_sfpxloads(insnd, stmt, gsip);
+	tree tmp = emit_32bit_sfpxloads(insnd, stmt, gsip);
 	emit_sfpsetman_v(tmp, stmt, gsip);
 	gsi_remove(gsip, true);
 	gsi_prev(gsip);
