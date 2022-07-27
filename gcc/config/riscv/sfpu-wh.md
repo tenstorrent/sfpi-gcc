@@ -146,7 +146,6 @@
     switch (which_alternative) {
     case 0:
       // Note: must re-enable all elements until we know if we are in a predicated state
-      output_asm_insn("SFPWNOP", operands);
       return "SFPMOV\t%1, %0, 2";
       break;
 
@@ -1137,7 +1136,6 @@
   "TARGET_SFPU_WH"
 {
   emit_insn (gen_riscv_wh_sfpswap_int(operands[0], operands[1], operands[2]));
-  emit_insn (gen_riscv_wh_sfpnop());
   DONE;
 })
 
