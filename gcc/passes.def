@@ -440,7 +440,6 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_riscv_sfpu_cc);
   NEXT_PASS (pass_riscv_sfpu_combine);
   NEXT_PASS (pass_riscv_sfpu_move);
-  NEXT_PASS (pass_riscv_sfpu_schedule);
 
   NEXT_PASS (pass_expand);
 
@@ -499,6 +498,7 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_ira);
       NEXT_PASS (pass_reload);
       NEXT_PASS (pass_riscv_sfpu_nonimm);
+      NEXT_PASS (pass_riscv_sfpu_schedule);
       NEXT_PASS (pass_postreload);
       PUSH_INSERT_PASSES_WITHIN (pass_postreload)
 	  NEXT_PASS (pass_postreload_cse);

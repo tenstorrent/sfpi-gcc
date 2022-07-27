@@ -100,7 +100,7 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct riscv_sfpu_insn_data {
   enum insn_id {
-#define SFPU_INTERNAL(id, nim) id,
+#define SFPU_INTERNAL(id, nim, sched) id,
 #define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
 #define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
 #define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
@@ -120,7 +120,7 @@ struct riscv_sfpu_insn_data {
   const bool has_half_offset;
   const int dst_arg_pos;
   const int mod_pos;
-  const int schedule;
+  const int schedule;   // see INSN_SCHEDULE_* flags above
   const int nonimm_pos;	// +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
   const bool internal;
   const unsigned int nonimm_mask;
@@ -144,6 +144,7 @@ extern void riscv_sfpu_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 					    const riscv_sfpu_insn_data *insnd,
 					    gcall *stmt);
 extern void riscv_sfpu_cleanup_nonimm_lis(function *fun);
+extern rtx riscv_sfpu_get_insn_operands(int *noperands, rtx_insn *insn);
 
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const char *name);
 extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id);
@@ -168,6 +169,10 @@ extern uint32_t riscv_sfpu_scmp2loadi_mod(int mod);
 extern bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
 					  gcall **stmt,
 					  gimple_stmt_iterator gsi,
-					  bool allow_empty);
+					  bool allow_non_sfpu = false);
+extern bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
+					  rtx_insn **next_insn,
+					  rtx_insn *insn,
+					  bool allow_non_sfpu = false);
 
 #endif

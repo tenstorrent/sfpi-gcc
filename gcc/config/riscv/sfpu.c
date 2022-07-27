@@ -81,7 +81,7 @@ static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 85;
 static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
-#define SFPU_INTERNAL(id, nim) { riscv_sfpu_insn_data::id, #id, nullptr, false, false, false, -1, -1, -1, nim, true, 0, 0 },
+#define SFPU_INTERNAL(id, nim, sched) { riscv_sfpu_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, nim, true, 0, 0 },
 #define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
 #define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
 #define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
@@ -92,7 +92,7 @@ static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_IN
     { riscv_sfpu_insn_data::nonsfpu, "nonsfpu", nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 }
   },
   {
-#define SFPU_INTERNAL(id, nim) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, -1, -1, -1, nim, true, 0, 0 },
+#define SFPU_INTERNAL(id, nim, sched) { riscv_sfpu_insn_data::id, #id, nullptr, 0, 0, 0, -1, -1, sched, nim, true, 0, 0 },
 #define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
 #define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
 #define SFPU_WH_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) { riscv_sfpu_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis },
@@ -495,7 +495,7 @@ void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt)
 char const * riscv_sfpu_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[])
 {
   // Replay pass on wormhole assumes insns only emit 1 insn
-  // Should split this out to clean it up, assert it for now
+  nnops &= INSN_SCHED_NOP_MASK;
   gcc_assert(flag_wormhole == 0 || nnops == 0);
   char const *out = sw;
   while (nnops-- > 0) {
@@ -588,28 +588,41 @@ bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *
 bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
 				   gcall **stmt,
 				   gimple_stmt_iterator gsi,
-				   bool allow_empty)
+				   bool allow_non_sfpu)
 {
   gimple_stmt_iterator next_gsi = gsi;
   gsi_next_nondebug(&next_gsi);
-  bool done = false;
-  while (!done && !gsi_end_p(next_gsi))
+  while (!gsi_end_p(next_gsi))
     {
-      // XXXXX load_immediate isn't really an sfpu insn
-      // create a more generic mechanism for this
       if (riscv_sfpu_p(insnd, stmt, next_gsi) &&
-	  (*insnd)->id != riscv_sfpu_insn_data::load_immediate &&
-          ((*insnd)->schedule != -1 || allow_empty))
+	  (!((*insnd)->schedule & INSN_SCHED_NON_SFPU) || allow_non_sfpu))
         {
-          done = true;
+	  return true;
         }
-      else
-        {
-          gsi_next_nondebug(&next_gsi);
-        }
+      gsi_next_nondebug(&next_gsi);
     }
 
-  return done;
+  return false;
+}
+
+bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
+				   rtx_insn **next_insn,
+				   rtx_insn *insn,
+				   bool allow_non_sfpu)
+{
+  basic_block bb = BLOCK_FOR_INSN(insn);
+  while (insn != BB_END(bb))
+    {
+      insn = NEXT_INSN(insn);
+      if (riscv_sfpu_p(insnd, insn) &&
+	  (!((*insnd)->schedule & INSN_SCHED_NON_SFPU) || allow_non_sfpu))
+	{
+	  *next_insn = insn;
+	  return true;
+	}
+    }
+
+  return false;
 }
 
 void riscv_sfpu_emit_sfpassignlr(rtx dst, rtx lr)
@@ -803,4 +816,35 @@ riscv_sfpu_cleanup_nonimm_lis(function *fun)
 	    }
 	}
     }
+}
+
+rtx riscv_sfpu_get_insn_operands(int *noperands, rtx_insn *insn)
+{
+  rtx pat = PATTERN(insn);
+  int code = GET_CODE(pat);
+  rtx operands;
+
+  if (code == PARALLEL) {
+    pat = XVECEXP(pat, 0, 0);
+    code = GET_CODE(pat);
+  }
+
+  switch (code) {
+  case SET:
+    operands = XEXP(pat, 1);
+    *noperands = XVECLEN(operands, 0);
+    break;
+
+  case UNSPEC_VOLATILE:
+    operands = pat;
+    *noperands = XVECLEN(operands, 0);
+    break;
+
+  default:
+    fprintf(stderr, "unexpected pattern in sfpu insn, %d %s", code, insn_data[INSN_CODE(insn)].name);
+    gcc_assert(0);
+    break;
+  }
+
+  return operands;
 }

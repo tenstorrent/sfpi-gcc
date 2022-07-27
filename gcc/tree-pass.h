@@ -505,7 +505,6 @@ extern gimple_opt_pass *make_pass_riscv_sfpu_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_move (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_nonimm_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_nonimm_tag (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_riscv_sfpu_schedule (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_riscv_sfpu_warn (gcc::context *ctxt);
 
 /* IPA Passes */
@@ -647,6 +646,7 @@ extern rtl_opt_pass *make_pass_dwarf2_frame (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_final (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rtl_seqabstr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_riscv_sfpu_nonimm (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_riscv_sfpu_schedule (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_release_ssa_names (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_early_inline (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_local_fn_summary (gcc::context *ctxt);
