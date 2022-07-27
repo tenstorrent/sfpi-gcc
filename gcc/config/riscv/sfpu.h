@@ -120,7 +120,7 @@ struct riscv_sfpu_insn_data {
   const bool has_half_offset;
   const int dst_arg_pos;
   const int mod_pos;
-  const int schedule;   // see INSN_SCHEDULE_* flags above
+  const int schedule;   // see INSN_SCHEDULE_* flags in sfpu-protos.h
   const int nonimm_pos;	// +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
   const bool internal;
   const unsigned int nonimm_mask;

@@ -318,7 +318,6 @@ void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
     rtx tmp = gen_reg_rtx(V64SFmode);
     riscv_sfpu_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
     emit_insn(gen_riscv_wh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
-    emit_insn(gen_riscv_wh_sfpnop());
     v = tmp;
   }
 
@@ -341,7 +340,6 @@ void riscv_sfpu_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 
   riscv_sfpu_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
   emit_insn(gen_riscv_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
-  emit_insn(gen_riscv_wh_sfpnop());
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
@@ -410,9 +408,7 @@ void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
     rtx lreg9 = gen_reg_rtx(V64SFmode);
     SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
     emit_insn (gen_riscv_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
-    emit_insn(gen_riscv_wh_sfpnop());
   }
 
   emit_insn (gen_riscv_wh_sfpshft2_e_int(dst, live, src, mod));
-  emit_insn(gen_riscv_wh_sfpnop());
 }
