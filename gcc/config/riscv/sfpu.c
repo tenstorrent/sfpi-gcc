@@ -102,6 +102,8 @@ static riscv_sfpu_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_IN
   }
 };
 
+static std::vector<const riscv_sfpu_insn_data *> sfpu_rtl_insn_ptrs;
+
 static riscv_sfpu_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* riscv_sfpu_builtin_name_stub;
 void
@@ -139,6 +141,53 @@ riscv_sfpu_insert_insn(int idx, const char* name, tree decl)
   gcc_assert(0);
 }
 
+static const riscv_sfpu_insn_data *
+init_rtx_insnd(int code)
+{
+  DUMP("trying to lookup rtx name %d %s\n", code, insn_data[code].name);
+
+  if (strncmp(insn_data[code].name, "riscv_", 6) == 0) {
+    // There are multiple possible matches to the table name from the rtl [name]
+    // due to expand calls going to _int insns and other internal names
+    // Input is riscv_[name], matches can be:
+    //  - name (literal match)
+    //  - __builtin_rvtt_[arch]_name (matches a builtin)
+    //  - __builtin_rvtt_[arch]_name (minus _int) (matches an internal name)
+    //  - [arch]_namex_int (change sfpname to sfpxname (matches an sfpx builtin)
+
+    // Try name
+    const riscv_sfpu_insn_data *tmp = riscv_sfpu_get_insn_data(&insn_data[code].name[6]);
+    if (tmp->id != riscv_sfpu_insn_data::nonsfpu) return tmp;
+
+    // Try __builtin_rvtt_[arch]_name
+    char name[100];
+    int len = strlen(insn_data[code].name);
+    sprintf(name, "__builtin_rvtt_");
+    strncpy(&name[riscv_sfpu_name_stub_no_arch_len], &insn_data[code].name[6], len - 6);
+    name[len + riscv_sfpu_name_stub_no_arch_len - 6] = 0;
+    tmp = riscv_sfpu_get_insn_data(name);
+    if (tmp->id != riscv_sfpu_insn_data::nonsfpu) return tmp;
+
+    // Try __builtin_rvtt_[arch]_name (minus _int)
+    if (strcmp(&insn_data[code].name[len - 4], "_int") == 0) {
+      name[len + riscv_sfpu_name_stub_no_arch_len - 10] = 0;
+      tmp = riscv_sfpu_get_insn_data(name);
+      if (tmp->id != riscv_sfpu_insn_data::nonsfpu) return tmp;
+
+      // Try [arch]_namex_int (change sfpname to sfpxname (matches an sfpx builtin)
+      strncpy(&name[riscv_sfpu_name_stub_no_arch_len + 7],
+	      &name[riscv_sfpu_name_stub_no_arch_len + 6],
+	      strlen(name) - (riscv_sfpu_name_stub_no_arch_len + 6));
+      name[riscv_sfpu_name_stub_no_arch_len + 6] = 'x';
+      name[len + riscv_sfpu_name_stub_no_arch_len - 9] = 0;
+      tmp = riscv_sfpu_get_insn_data(name);
+      if (tmp->id != riscv_sfpu_insn_data::nonsfpu) return tmp;
+    }
+  }
+
+  return &sfpu_insn_data[riscv_sfpu_insn_data::nonsfpu];
+}
+
 void
 riscv_sfpu_init_builtins()
 {
@@ -162,6 +211,7 @@ riscv_sfpu_init_builtins()
 								      sfpu_insn_data[i]));
       }
     }
+
   // If these asserts fire, the sfpu-insn.h instruction tables are out of sync
   // across architectures
   for (int i = 1; i < NUMBER_OF_ARCHES; i++)
@@ -177,6 +227,12 @@ riscv_sfpu_init_builtins()
 	}
 
       gcc_assert(sfpu_insn_data_target[i][NUMBER_OF_INTRINSICS - 1].id == riscv_sfpu_insn_data::nonsfpu);
+    }
+
+  sfpu_rtl_insn_ptrs.resize(NUM_INSN_CODES);
+  for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
+    {
+      sfpu_rtl_insn_ptrs[i] = init_rtx_insnd(i);
     }
 }
 
@@ -258,58 +314,9 @@ riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_itera
 bool
 riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, rtx_insn *insn)
 {
-  static const riscv_sfpu_insn_data sentinel(sfpu_insn_data_target[0][0]);
-  static std::vector<const riscv_sfpu_insn_data *> insnds;
-
   int code = INSN_CODE(insn);
-  if (code == -1) return false;
-  if (code < static_cast<int>(insnds.size()) &&
-      insnds[code] != nullptr) {
-    if (insnds[code] == &sentinel) {
-      return false;
-    } else {
-      *insnd = insnds[code];
-      return true;
-    }
-  }
-
-  if (code >= static_cast<int>(insnds.size()))
-    {
-      insnds.reserve(400);
-      insnds.resize(code + 1, nullptr);
-    }
-
-  if (strncmp(insn_data[code].name, "riscv_", 6) == 0) {
-    // These namespaces are a mess
-    // Try looking up w/o the riscv_ and then w/ thta replaces by __builtin_rvtt_
-    const riscv_sfpu_insn_data *tmp = riscv_sfpu_get_insn_data(&insn_data[code].name[6]);
-    if (tmp->id != riscv_sfpu_insn_data::nonsfpu) {
-      insnds[code] = tmp;
-      gcc_assert(tmp->internal);
-      return riscv_sfpu_p(insnd, insn);
-    }
-
-    char name[100];
-    int len = strlen(insn_data[code].name);
-    sprintf(name, "__builtin_rvtt_");
-    if (strcmp(&insn_data[code].name[len - 4], "_int") == 0)
-      {
-	strncpy(&name[riscv_sfpu_name_stub_no_arch_len], &insn_data[code].name[6], len - 10);
-	name[len + riscv_sfpu_name_stub_no_arch_len - 10] = 0;
-      }
-    else
-      {
-	strncpy(&name[riscv_sfpu_name_stub_no_arch_len], &insn_data[code].name[6], len - 6);
-	name[len + riscv_sfpu_name_stub_no_arch_len - 6] = 0;
-      }
-
-    tmp = riscv_sfpu_get_insn_data(name);
-    insnds[code] = (tmp->id == riscv_sfpu_insn_data::nonsfpu) ? &sentinel : tmp;
-  } else {
-    insnds[code] = &sentinel;
-  }
-
-  return riscv_sfpu_p(insnd, insn);
+  *insnd = (code == -1) ? &sfpu_insn_data[riscv_sfpu_insn_data::nonsfpu] : sfpu_rtl_insn_ptrs[code];
+  return (*insnd)->id != riscv_sfpu_insn_data::nonsfpu;
 }
 
 // Relies on live instructions being next in sequence in the insn table
