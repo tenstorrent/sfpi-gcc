@@ -354,7 +354,7 @@
                riscv_sfpu_clamp_unsigned(operands[3], 0xFFFF), operands[6]));
   } else {
     unsigned long int op = TT_OP_WH_SFP<wormhole_muliaddi_call>(0, 0, INTVAL(operands[6]));
-    emit_insn (gen_riscv_sfpnonimm_dst(operands[0], operands[1], GEN_INT(0), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
+    emit_insn (gen_riscv_sfpnonimm_dst(operands[0], operands[1], GEN_INT(INSN_SCHED_DYN), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })
