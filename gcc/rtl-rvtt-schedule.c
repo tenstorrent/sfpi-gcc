@@ -81,68 +81,64 @@ static void transform (function *fn)
       rtx_insn *insn;
 
       FOR_BB_INSNS (bb, insn)
-       {
-	 const rvtt_insn_data *insnd;
+	{
+	  const rvtt_insn_data *insnd;
 
-	 int len;
-	 if (NONDEBUG_INSN_P(insn) &&
-	     rvtt_p(&insnd, insn))
-	   {
-	     if ((insnd->schedule & INSN_SCHED_DYN) ||
-		 ((insnd->schedule & INSN_SCHED_IN_ARG) &&
-		  INTVAL(rvtt_get_insn_operand(insnd->schedule & INSN_SCHED_ARG_MASK, insn)) != 0))
-	       {
-		 DUMP("  dynamic scheduling %s\n", insnd->name);
+	  int len;
+	  if (NONDEBUG_INSN_P(insn) &&
+	      rvtt_p(&insnd, insn))
+	    {
+	      if (insnd->schedule_p() &&
+		  (!insnd->schedule_in_arg_p() ||
+		   (insnd->schedule_from_arg_p(insn))))
+		{
+		  if (insnd->schedule_dynamic_p(insn))
+		    {
+		      DUMP("  dynamic scheduling %s\n", insnd->name);
+		      rtx_insn *next_insn;
+		      const rvtt_insn_data *next_insnd;
+		      if (rvtt_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
+			{
+			  rtx pat = PATTERN(insn);
+			  if (GET_CODE (pat) == PARALLEL)
+			    {
+			      pat = XVECEXP(pat, 0, 0);
+			    }
+			  gcc_assert(GET_CODE (pat) == SET);
+			  rtx reg = XEXP(pat, 0);
 
-		 rtx_insn *next_insn;
-		 const rvtt_insn_data *next_insnd;
-		 if (rvtt_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
-		   {
-		     // Get the register written
-		     rtx pat = PATTERN(insn);
-		     if (GET_CODE (pat) == PARALLEL)
-		       {
-			 pat = XVECEXP(pat, 0, 0);
-		       }
-		     gcc_assert(GET_CODE (pat) == SET);
-		     rtx regw = XEXP(pat, 0);
-
-		     DUMP("  next insn, reg: %s %d\n", next_insnd->name, REGNO(regw) - SFPU_REG_FIRST);
-		     if (reg_referenced_p(regw, next_insn))
-		       {
-			 DUMP("	next stmt (%s) uses lhs, inserting NOP\n", next_insnd->name);
-			 insert_nop(insn);
-			 update = true;
-		       }
-		     else
-		       {
-			 DUMP("	next stmt (%s) is independent, all good\n", next_insnd->name);
-		       }
-		   }
-		 else
-		   {
-		     // The stmt needing scheduling is the last stmt in the BB
-		     // For now, just add a NOP.  XXXX Could chase down all the next
-		     // BBs and possibly do better
-		     DUMP(" last stmt in BB, inserting NOP\n");
-		     insert_nop(insn);
-		   }
-	       }
-	     else if (insnd->schedule & INSN_SCHED_NOP_MASK)
-	       {
-		 gcc_assert((insnd->schedule & INSN_SCHED_DYN) == 0);
-		 DUMP("  static scheduling %s\n", insnd->name);
-
-		 int count = (insnd->schedule & INSN_SCHED_IN_ARG) ?
-		   INTVAL(rvtt_get_insn_operand(insnd->schedule & INSN_SCHED_ARG_MASK, insn)) :
-		   insnd->schedule & INSN_SCHED_NOP_MASK;
-
-		 for (int i = 0; i < count; i++)
-		   {
-		     insert_nop(insn);
-		   }
-	       }
-	   }
+			  DUMP("  next insn, reg: %s %d\n", next_insnd->name, REGNO(reg) - SFPU_REG_FIRST);
+			  if (reg_referenced_p(reg, next_insn))
+			    {
+			      DUMP("     next stmt (%s) uses lhs, inserting NOP\n", next_insnd->name);
+			      insert_nop(insn);
+			      update = true;
+			    }
+			  else
+			    {
+			      DUMP("     next stmt (%s) is independent, all good\n", next_insnd->name);
+			    }
+			}
+		      else
+			{
+			  // The stmt needing scheduling is the last stmt in the BB
+			  // For now, just add a NOP.  XXXX Could chase down all the next
+			  // BBs and possibly do better
+			  DUMP(" last stmt in BB, inserting NOP\n");
+			  insert_nop(insn);
+			}
+		    }
+		  else
+		    {
+		      DUMP("  static scheduling %s\n", insnd->name);
+		      int count = insnd->schedule_static_nops(insn);
+		      for (int i = 0; i < count; i++)
+			{
+			  insert_nop(insn);
+			}
+		    }
+		}
+	    }
        }
     }
 }

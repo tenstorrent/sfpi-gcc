@@ -3,7 +3,7 @@
 // Columns are: name, decl, enable, can_set_cc, live, has_half_offset, dst_arg_pos, mod1_pos
 
 #ifndef RVTT_INTERNAL
-#define RVTT_INTERNAL(a, b, c)
+#define RVTT_INTERNAL(a, b, c, d)
 #endif
 
 #ifndef RVTT_BUILTIN
@@ -54,11 +54,11 @@
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns
-RVTT_INTERNAL (sfpnonimm_dst,     5, 0x41)
-RVTT_INTERNAL (sfpnonimm_dst_src, 7, 0x41)
-RVTT_INTERNAL (sfpnonimm_src,     5, 0x42)
-RVTT_INTERNAL (sfpnonimm_store,   5, 0x42)
-RVTT_INTERNAL (sfpgccmov_cc,     -1, 0x00)
+RVTT_INTERNAL (sfpnonimm_dst,     5, 0x40,  1)
+RVTT_INTERNAL (sfpnonimm_dst_src, 7, 0x40,  1)
+RVTT_INTERNAL (sfpnonimm_src,     5, 0x40,  2)
+RVTT_INTERNAL (sfpnonimm_store,   5, 0x40,  2)
+RVTT_INTERNAL (sfpgccmov_cc,     -1, 0x00, -1)
 
 // Common builtin intrinsics
 RVTT_BUILTIN (load_immediate,  RISCV_USI_FTYPE_USI,                                              0, 0, 0, -1, -1, 0x10, -1,      0, 0)
