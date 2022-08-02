@@ -9,10 +9,8 @@ constexpr unsigned int SFPNONIMM_ID_FALLBACK_FLAG = 0xFF000000;
 #define rvtt_sfpu_regno(operand) (REGNO(operand) - SFPU_REG_FIRST)
 
 constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
-constexpr unsigned int INSN_SCHED_ARG_MASK = 0x0F;  // overloaded low bits contain arg for nops
 constexpr unsigned int INSN_SCHED_NON_SFPU = 0x10;  // insns that don't go down sfpu pipe
 constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic # of nops (schedulable)
-constexpr unsigned int INSN_SCHED_IN_ARG   = 0x40;  // nops found in arg <n>
 
 extern const char* rvtt_sfpu_lv_regno_str(char *str, rtx operand);
 

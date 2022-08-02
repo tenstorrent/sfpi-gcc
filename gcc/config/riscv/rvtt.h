@@ -2,6 +2,7 @@
 
 #include <map>
 #include <vector>
+#include "config/riscv/rvtt-protos.h"
 
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
@@ -100,7 +101,7 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 
 struct rvtt_insn_data {
   enum insn_id {
-#define RVTT_INTERNAL(id, nim, sched) id,
+#define RVTT_INTERNAL(id, nim, sched, gp) id,
 #define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_GS_INTERNAL(id, sched) id,
@@ -120,15 +121,24 @@ struct rvtt_insn_data {
   const bool can_set_cc;
   const bool live;
   const bool has_half_offset;
-  const int dst_arg_pos;
-  const int mod_pos;
-  const int schedule;   // see INSN_SCHEDULE_* flags in rvtt-protos.h
-  const int nonimm_pos;	// +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
-  const bool internal;
+  const short dst_arg_pos;
+  const short mod_pos;
+  const short schedule;    // see INSN_SCHEDULE_* flags in rvtt-protos.h
+  const short nonimm_pos;  // +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
+  const bool rtlonly;      // true if no associated builtin
+  const short generic_pos ; // arg pos of arg w/ schedule info or -1 if na
   const unsigned int nonimm_mask;
-  const int nonimm_shft;
+  const short nonimm_shft;
 
-  inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
+  inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
+
+  inline bool schedule_p() const { return schedule != -1; }
+  inline bool schedule_in_arg_p() const { return generic_pos != -1; }
+  inline bool schedule_non_sfpu_p() const { return schedule & INSN_SCHED_NON_SFPU; }
+  inline int schedule_arg_pos() const { return generic_pos; }
+  inline bool schedule_from_arg_p(rtx_insn *insn) const;
+  inline bool schedule_dynamic_p(rtx_insn *insn) const;
+  inline int schedule_static_nops(rtx_insn *insn) const;
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
@@ -177,5 +187,24 @@ extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
 				    rtx_insn **next_insn,
 				    rtx_insn *insn,
 				    bool allow_non_sfpu = false);
+
+inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const
+{
+  return INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & (INSN_SCHED_NOP_MASK | INSN_SCHED_DYN);
+}
+
+inline bool rvtt_insn_data::schedule_dynamic_p(rtx_insn *insn) const
+{
+  return schedule_in_arg_p() ?
+    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_DYN) :
+    (schedule & INSN_SCHED_DYN);
+}
+
+inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
+{
+  return schedule_in_arg_p() ?
+    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_NOP_MASK) :
+    (schedule & INSN_SCHED_NOP_MASK);
+}
 
 #endif

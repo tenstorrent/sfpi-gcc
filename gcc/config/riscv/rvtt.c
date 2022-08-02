@@ -81,27 +81,27 @@ static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 122;
 static rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
-#define RVTT_INTERNAL(id, nim, sched) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, nim, true, 0, 0 },
-#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_GS_INTERNAL(id, sched) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, -1, true, 0, 0 },
-#define RVTT_GS_PAD_INTERNAL(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 },
-#define RVTT_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_GS_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 },
-#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 },
+#define RVTT_INTERNAL(id, nim, sched, gp) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, nim, true, gp, 0, 0 },
+#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_GS_INTERNAL(id, sched) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, -1, true, -1, 0, 0 },
+#define RVTT_GS_PAD_INTERNAL(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, -1, 0, 0 },
+#define RVTT_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_GS_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, -1, 0, 0 },
+#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, false, false, false, 0, 0, 0, 0, false, -1, 0, 0 },
 #include "rvtt-insn.h"
-    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 }
+    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, false, false, false, 0, 0, 0, 0, false, -1, 0, 0 }
   },
   {
-#define RVTT_INTERNAL(id, nim, sched) { rvtt_insn_data::id, #id, nullptr, 0, 0, 0, -1, -1, sched, nim, true, 0, 0 },
-#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_WH_INTERNAL(id, sched) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, -1, true, 0, 0 },
-#define RVTT_WH_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
-#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, nim, nis },
+#define RVTT_INTERNAL(id, nim, sched, gp) { rvtt_insn_data::id, #id, nullptr, 0, 0, 0, -1, -1, sched, nim, true, gp, 0, 0 },
+#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_WH_INTERNAL(id, sched) { rvtt_insn_data::id, #id, nullptr, false, false, false, -1, -1, sched, -1, true, -1, 0, 0 },
+#define RVTT_WH_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
+#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, cc, lv, hho, dap, mp, sched, nip, false, -1, nim, nis },
 #include "rvtt-insn.h"
-    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, false, false, false, 0, 0, 0, 0, false, 0, 0 }
+    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, false, false, false, 0, 0, 0, 0, false, -1, 0, 0 }
   }
 };
 
@@ -211,7 +211,7 @@ rvtt_init_builtins()
   // Fill in the non-builtin internal insns
   for (int i = 0; i < NUMBER_OF_INTRINSICS; i++)
     {
-      if (sfpu_insn_data[i].internal) {
+      if (sfpu_insn_data[i].rtlonly) {
 	insn_map.insert(std::pair<const char*, rvtt_insn_data&>(sfpu_insn_data[i].name,
 								sfpu_insn_data[i]));
       }
