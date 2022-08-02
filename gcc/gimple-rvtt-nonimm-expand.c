@@ -44,7 +44,7 @@
 #include "asan.h"
 #include "profile.h"
 #include <vector>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -83,11 +83,11 @@ finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt
 
 static tree
 emit_sfpxloadi(int mod,
-	       const riscv_sfpu_insn_data *insnd,
+	       const rvtt_insn_data *insnd,
 	       gcall *stmt, gimple_stmt_iterator *gsip)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
 
   tree addr = gimple_call_arg(stmt, 0);
   tree val = gimple_call_arg(stmt, insnd->nonimm_pos);
@@ -103,7 +103,7 @@ emit_sfpxloadi(int mod,
   gimple_call_set_lhs(new_stmt, lhs);
   finish_new_insn(gsip, true, new_stmt, stmt);
 
-  riscv_sfpu_link_nonimm_prologue(load_imm_map, unique_id,
+  rvtt_link_nonimm_prologue(load_imm_map, unique_id,
 				  gimple_call_arg(stmt, insnd->nonimm_pos + 1),
 				  new_insnd, new_stmt);
 
@@ -112,7 +112,7 @@ emit_sfpxloadi(int mod,
 
 static void
 emit_sfpxloadi_lv(tree lhs, tree lower, unsigned int unique_id,
-		  const riscv_sfpu_insn_data *insnd,
+		  const rvtt_insn_data *insnd,
 		  gcall *stmt,
 		  gimple_stmt_iterator *gsip,
 		  bool before)
@@ -122,8 +122,8 @@ emit_sfpxloadi_lv(tree lhs, tree lower, unsigned int unique_id,
   // leveraged to handle the shifting/masking by ensuring the 2nd load
   // is the UPPER bits
 
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi_lv);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxloadi_lv);
 
   gcall *new_stmt = gimple_build_call(new_insnd->decl, 6);
   gimple_call_set_arg(new_stmt, 0, gimple_call_arg(stmt, 0));  // pointer
@@ -134,14 +134,14 @@ emit_sfpxloadi_lv(tree lhs, tree lower, unsigned int unique_id,
   gimple_call_set_arg(new_stmt, 5, build_int_cst(integer_type_node, 0)); // id
   gimple_call_set_lhs(new_stmt, lhs);
 
-  riscv_sfpu_link_nonimm_prologue(load_imm_map, unique_id,
+  rvtt_link_nonimm_prologue(load_imm_map, unique_id,
 				  gimple_call_arg(stmt, insnd->nonimm_pos + 1),
 				  new_insnd, new_stmt);
   finish_new_insn(gsip, before, new_stmt, stmt);
 }
 
 static tree
-emit_32bit_sfpxloads(const riscv_sfpu_insn_data *insnd,
+emit_32bit_sfpxloads(const rvtt_insn_data *insnd,
 		     gcall *stmt,
 		     gimple_stmt_iterator *gsip)
 {
@@ -155,8 +155,8 @@ emit_32bit_sfpxloads(const riscv_sfpu_insn_data *insnd,
 static void
 emit_sfpsetman_v(tree val, gimple *stmt, gimple_stmt_iterator *gsip)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpsetman_v);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpsetman_v);
 
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 2);
   gimple_call_set_arg(new_stmt, 0, val);
@@ -167,12 +167,12 @@ emit_sfpsetman_v(tree val, gimple *stmt, gimple_stmt_iterator *gsip)
 
 static void
 emit_sfpxfcmpv(tree val,
-	       const riscv_sfpu_insn_data *insnd,
+	       const rvtt_insn_data *insnd,
 	       gcall *stmt,
 	       gimple_stmt_iterator *gsip)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxfcmpv);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxfcmpv);
 
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 3);
   int mod = get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK;
@@ -185,12 +185,12 @@ emit_sfpxfcmpv(tree val,
 
 static void
 emit_sfpxicmpv(tree val,
-	       const riscv_sfpu_insn_data *insnd,
+	       const rvtt_insn_data *insnd,
 	       gcall *stmt,
 	       gimple_stmt_iterator *gsip)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxicmpv);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxicmpv);
 
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 3);
   int mod = get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK;
@@ -207,8 +207,8 @@ emit_sfpxiadd_v(tree val,
 		gcall *stmt,
 		gimple_stmt_iterator *gsip)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxiadd_v);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxiadd_v);
 
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 3);
   gimple_call_set_arg(new_stmt, 0, val);
@@ -219,10 +219,10 @@ emit_sfpxiadd_v(tree val,
 }
 
 static void
-expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_iterator *gsip)
+expand_complex(gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *gsip)
 {
   switch (insnd->id) {
-  case riscv_sfpu_insn_data::sfpxloadi:
+  case rvtt_insn_data::sfpxloadi:
     if ((get_int_arg(stmt, insnd->mod_pos) & SFPXLOADI_MOD0_32BIT_MASK) != 0)
       {
 	gcc_assert(!flag_grayskull);
@@ -236,7 +236,7 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
       }
     break;
 
-  case riscv_sfpu_insn_data::sfpsetman_i:
+  case rvtt_insn_data::sfpsetman_i:
     // Note: grayskull hw bug makes setman_v useless, plus the TF32 mantissa
     // is 10 bits and setman_i loads 12 bits
     if (flag_wormhole)
@@ -249,7 +249,7 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
       }
     break;
 
-  case riscv_sfpu_insn_data::sfpxicmps:
+  case rvtt_insn_data::sfpxicmps:
       {
 	DUMP("  expanding %s to sfpxloadi+sfpxicmpv\n", insnd->name);
 	int mod = get_int_arg(stmt, insnd->mod_pos);
@@ -263,7 +263,7 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
       }
     break;
 
-  case riscv_sfpu_insn_data::sfpxfcmps:
+  case rvtt_insn_data::sfpxfcmps:
       {
 	DUMP("  expanding %s to sfpxloadi+sfpxfcmpv\n", insnd->name);
 	int fmt = get_int_arg(stmt, insnd->mod_pos) & SFPXSCMP_MOD1_FMT_MASK;
@@ -278,7 +278,7 @@ expand_complex(gcall *stmt, const riscv_sfpu_insn_data *insnd, gimple_stmt_itera
       }
     break;
 
-  case riscv_sfpu_insn_data::sfpxiadd_i:
+  case rvtt_insn_data::sfpxiadd_i:
       {
 	DUMP("  expanding %s to sfpxloadi+sfpxiadd_v\n", insnd->name);
 	int mod = get_int_arg(stmt, insnd->mod_pos);
@@ -327,9 +327,9 @@ transform (function *fun)
       while (!gsi_end_p (gsi))
 	{
 	  gcall *stmt;
-	  const riscv_sfpu_insn_data *insnd;
+	  const rvtt_insn_data *insnd;
 
-	  if (riscv_sfpu_p(&insnd, &stmt, gsi) &&
+	  if (rvtt_p(&insnd, &stmt, gsi) &&
 	      insnd->nonimm_pos != -1)
 	    {
 	      tree immarg = gimple_call_arg(stmt, insnd->nonimm_pos);
@@ -361,7 +361,7 @@ transform (function *fun)
       //  - one use in an assignment which is a sum, which is unused, delete both
       //  - one use in an assignment which is a sum which is used
       DUMP("  expand-nonimm cleanup...\n");
-      riscv_sfpu_cleanup_nonimm_lis(fun);
+      rvtt_cleanup_nonimm_lis(fun);
       load_imm_map.resize(0);
       update_ssa (TODO_update_ssa);
     }
@@ -369,10 +369,10 @@ transform (function *fun)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_nonimm_expand =
+const pass_data pass_data_rvtt_nonimm_expand =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_nonimm_expand", /* name */
+  "rvtt_nonimm_expand", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -382,21 +382,21 @@ const pass_data pass_data_riscv_sfpu_nonimm_expand =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_nonimm_expand : public gimple_opt_pass
+class pass_rvtt_nonimm_expand : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_nonimm_expand (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_nonimm_expand, ctxt)
+  pass_rvtt_nonimm_expand (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_nonimm_expand, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_nonimm_expand
+}; // class pass_rvtt_nonimm_expand
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_nonimm_expand pass.	*/
+/* Entry point to rvtt_nonimm_expand pass.	*/
 unsigned int
-pass_riscv_sfpu_nonimm_expand::execute (function *fun)
+pass_rvtt_nonimm_expand::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -406,7 +406,7 @@ pass_riscv_sfpu_nonimm_expand::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_nonimm_expand (gcc::context *ctxt)
+make_pass_rvtt_nonimm_expand (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_nonimm_expand (ctxt);
+  return new pass_rvtt_nonimm_expand (ctxt);
 }

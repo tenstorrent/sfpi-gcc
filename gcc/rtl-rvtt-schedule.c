@@ -36,8 +36,8 @@
 #include "rtl-iter.h"
 #include "print-rtl.h"
 #include "function-abi.h"
-#include "config/riscv/sfpu.h"
-#include "config/riscv/sfpu-protos.h"
+#include "config/riscv/rvtt.h"
+#include "config/riscv/rvtt-protos.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -45,19 +45,18 @@ using namespace std;
 
 static void insert_nop(rtx_insn *insn)
 {
-  emit_insn_after(gen_riscv_wh_sfpnop(), insn);
+  emit_insn_after(gen_rvtt_wh_sfpnop(), insn);
 }
 
 static bool reg_referenced_p(rtx reg, rtx_insn *insn)
 {
-  int noperands;
-  rtx operands = riscv_sfpu_get_insn_operands(&noperands, insn);
+  int noperands = rvtt_get_insn_operand_count(insn);
 
-  unsigned int regno = riscv_sfpu_regno(reg);
+  unsigned int regno = rvtt_sfpu_regno(reg);
   for (int i = 0; i < noperands; i++) {
-    rtx operand = XVECEXP(operands, 0, i);
+    rtx operand = rvtt_get_insn_operand(i, insn);
     if (GET_CODE(operand) == REG &&
-	regno == riscv_sfpu_regno(operand)) {
+	regno == rvtt_sfpu_regno(operand)) {
       return true;
     }
   }
@@ -83,32 +82,33 @@ static void transform (function *fn)
 
       FOR_BB_INSNS (bb, insn)
        {
-	 const riscv_sfpu_insn_data *insnd;
+	 const rvtt_insn_data *insnd;
 
 	 int len;
 	 if (NONDEBUG_INSN_P(insn) &&
-	     riscv_sfpu_p(&insnd, insn))
+	     rvtt_p(&insnd, insn))
 	   {
 	     if ((insnd->schedule & INSN_SCHED_DYN) ||
 		 ((insnd->schedule & INSN_SCHED_IN_ARG) &&
-		  INTVAL(XVECEXP(riscv_sfpu_get_insn_operands(&len, insn), 0, insnd->schedule & INSN_SCHED_ARG_MASK)) != 0))
+		  INTVAL(rvtt_get_insn_operand(insnd->schedule & INSN_SCHED_ARG_MASK, insn)) != 0))
 	       {
 		 DUMP("  dynamic scheduling %s\n", insnd->name);
 
 		 rtx_insn *next_insn;
-		 const riscv_sfpu_insn_data *next_insnd;
-		 if (riscv_sfpu_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
+		 const rvtt_insn_data *next_insnd;
+		 if (rvtt_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
 		   {
+		     // Get the register written
 		     rtx pat = PATTERN(insn);
 		     if (GET_CODE (pat) == PARALLEL)
 		       {
 			 pat = XVECEXP(pat, 0, 0);
 		       }
 		     gcc_assert(GET_CODE (pat) == SET);
-		     rtx reg = XEXP(pat, 0);
+		     rtx regw = XEXP(pat, 0);
 
-		     DUMP("  next insn, reg: %s %d\n", next_insnd->name, REGNO(reg) - SFPU_REG_FIRST);
-		     if (reg_referenced_p(reg, next_insn))
+		     DUMP("  next insn, reg: %s %d\n", next_insnd->name, REGNO(regw) - SFPU_REG_FIRST);
+		     if (reg_referenced_p(regw, next_insn))
 		       {
 			 DUMP("	next stmt (%s) uses lhs, inserting NOP\n", next_insnd->name);
 			 insert_nop(insn);
@@ -134,7 +134,7 @@ static void transform (function *fn)
 		 DUMP("  static scheduling %s\n", insnd->name);
 
 		 int count = (insnd->schedule & INSN_SCHED_IN_ARG) ?
-		   INTVAL(XVECEXP(riscv_sfpu_get_insn_operands(&len, insn), 0, insnd->schedule & INSN_SCHED_ARG_MASK)) :
+		   INTVAL(rvtt_get_insn_operand(insnd->schedule & INSN_SCHED_ARG_MASK, insn)) :
 		   insnd->schedule & INSN_SCHED_NOP_MASK;
 
 		 for (int i = 0; i < count; i++)
@@ -149,10 +149,10 @@ static void transform (function *fn)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_schedule =
+const pass_data pass_data_rvtt_schedule =
 {
   RTL_PASS, /* type */
-  "riscv_sfpu_schedule", /* name */
+  "rvtt_schedule", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -162,21 +162,21 @@ const pass_data pass_data_riscv_sfpu_schedule =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_schedule : public rtl_opt_pass
+class pass_rvtt_schedule : public rtl_opt_pass
 {
 public:
-  pass_riscv_sfpu_schedule (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_riscv_sfpu_schedule, ctxt)
+  pass_rvtt_schedule (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_rvtt_schedule, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_schedule
+}; // class pass_rvtt_schedule
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_schedule pass.	*/
+/* Entry point to rvtt_schedule pass.	*/
 unsigned int
-pass_riscv_sfpu_schedule::execute (function *fun)
+pass_rvtt_schedule::execute (function *fun)
 {
   if (flag_wormhole)
     {
@@ -187,7 +187,7 @@ pass_riscv_sfpu_schedule::execute (function *fun)
 }
 
 rtl_opt_pass *
-make_pass_riscv_sfpu_schedule (gcc::context *ctxt)
+make_pass_rvtt_schedule (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_schedule (ctxt);
+  return new pass_rvtt_schedule (ctxt);
 }

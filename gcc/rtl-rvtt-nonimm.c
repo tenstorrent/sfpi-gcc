@@ -37,7 +37,7 @@
 #include "print-rtl.h"
 #include "function-abi.h"
 #include <vector>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -46,14 +46,14 @@ using namespace std;
 // Return the operation (opcode, imm values, operands) and id for the insn
 static void get_opid(unsigned int *op,
 		     unsigned int *id,
-		     const riscv_sfpu_insn_data *insnd,
+		     const rvtt_insn_data *insnd,
 		     rtx pat)
 {
   unsigned int dst_regno, dst_regshft, src_regno, src_regshft;
 
   switch (insnd->id) {
-  case riscv_sfpu_insn_data::sfpnonimm_dst:
-    dst_regno = riscv_sfpu_regno(XEXP(pat, 0));
+  case rvtt_insn_data::sfpnonimm_dst:
+    dst_regno = rvtt_sfpu_regno(XEXP(pat, 0));
     dst_regshft = INTVAL(XVECEXP(XEXP(pat, 1), 0, 3));
     src_regno = 0;
     src_regshft = 0;
@@ -61,20 +61,20 @@ static void get_opid(unsigned int *op,
     *id = INTVAL(XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos + 1));
     break;
 
-  case riscv_sfpu_insn_data::sfpnonimm_dst_src:
-    dst_regno = riscv_sfpu_regno(XEXP(pat, 0));
+  case rvtt_insn_data::sfpnonimm_dst_src:
+    dst_regno = rvtt_sfpu_regno(XEXP(pat, 0));
     dst_regshft = INTVAL(XVECEXP(XEXP(pat, 1), 0, 4));
-    src_regno = riscv_sfpu_regno(XVECEXP(XEXP(pat, 1), 0, 3));
+    src_regno = rvtt_sfpu_regno(XVECEXP(XEXP(pat, 1), 0, 3));
     src_regshft = INTVAL(XVECEXP(XEXP(pat, 1), 0, 5));
     *op = INTVAL(XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos));
     *id = INTVAL(XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos + 1));
     break;
 
-  case riscv_sfpu_insn_data::sfpnonimm_src:
-  case riscv_sfpu_insn_data::sfpnonimm_store:
+  case rvtt_insn_data::sfpnonimm_src:
+  case rvtt_insn_data::sfpnonimm_store:
     dst_regno = 0;
     dst_regshft = 0;
-    src_regno = riscv_sfpu_regno(XVECEXP(pat, 0, 0));
+    src_regno = rvtt_sfpu_regno(XVECEXP(pat, 0, 0));
     src_regshft = INTVAL(XVECEXP(pat, 0, 3));
     *op = INTVAL(XVECEXP(pat, 0, insnd->nonimm_pos));
     *id = INTVAL(XVECEXP(pat, 0, insnd->nonimm_pos + 1));
@@ -91,20 +91,20 @@ static void get_opid(unsigned int *op,
        *id, insnd->name, dst_regno, dst_regshft, src_regno, src_regshft, *op);
 }
 
-static void set_opid(const riscv_sfpu_insn_data *insnd,
+static void set_opid(const rvtt_insn_data *insnd,
 		     rtx pat,
 		     unsigned int offset,
 		     unsigned int val)
 
 {
   switch (insnd->id) {
-  case riscv_sfpu_insn_data::sfpnonimm_dst:
-  case riscv_sfpu_insn_data::sfpnonimm_dst_src:
+  case rvtt_insn_data::sfpnonimm_dst:
+  case rvtt_insn_data::sfpnonimm_dst_src:
     XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos + offset) = GEN_INT(val);
     break;
 
-  case riscv_sfpu_insn_data::sfpnonimm_src:
-  case riscv_sfpu_insn_data::sfpnonimm_store:
+  case rvtt_insn_data::sfpnonimm_src:
+  case rvtt_insn_data::sfpnonimm_store:
     XVECEXP(pat, 0, insnd->nonimm_pos + offset) = GEN_INT(val);
     break;
 
@@ -139,10 +139,10 @@ void transform(function *cfn)
 
       FOR_BB_INSNS (bb, insn)
        {
-	 const riscv_sfpu_insn_data *insnd;
+	 const rvtt_insn_data *insnd;
 	 if (NONDEBUG_INSN_P(insn) &&
-	     riscv_sfpu_p(&insnd, insn) &&
-	     insnd->id == riscv_sfpu_insn_data::load_immediate)
+	     rvtt_p(&insnd, insn) &&
+	     insnd->id == rvtt_insn_data::load_immediate)
 	   {
 	     rtx li_pat = PATTERN(insn);
 	     unsigned int id = INTVAL(XVECEXP(XEXP(li_pat, 1), 0, 0));
@@ -166,10 +166,10 @@ void transform(function *cfn)
 
       FOR_BB_INSNS (bb, insn)
        {
-	 const riscv_sfpu_insn_data *insnd;
+	 const rvtt_insn_data *insnd;
 
 	 if (NONDEBUG_INSN_P(insn) &&
-	     riscv_sfpu_p(&insnd, insn) &&
+	     rvtt_p(&insnd, insn) &&
 	     insnd->nonimm_pos != -1 &&
 	     insnd->internal)
 	   {
@@ -213,10 +213,10 @@ void transform(function *cfn)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_nonimm =
+const pass_data pass_data_rvtt_nonimm =
 {
   RTL_PASS, /* type */
-  "riscv_sfpu_nonimm", /* name */
+  "rvtt_nonimm", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -226,11 +226,11 @@ const pass_data pass_data_riscv_sfpu_nonimm =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_nonimm : public rtl_opt_pass
+class pass_rvtt_nonimm : public rtl_opt_pass
 {
 public:
-  pass_riscv_sfpu_nonimm (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_riscv_sfpu_nonimm, ctxt)
+  pass_rvtt_nonimm (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_rvtt_nonimm, ctxt)
   {}
 
   /* opt_pass methods: */
@@ -242,12 +242,12 @@ public:
        }
       return 0;
     }
-}; // class pass_riscv_sfpu_nonimm
+}; // class pass_rvtt_nonimm
 
 } // anon namespace
 
 rtl_opt_pass *
-make_pass_riscv_sfpu_nonimm (gcc::context *ctxt)
+make_pass_rvtt_nonimm (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_nonimm (ctxt);
+  return new pass_rvtt_nonimm (ctxt);
 }

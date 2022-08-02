@@ -43,7 +43,7 @@
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -87,16 +87,16 @@ transform (function *fun)
       while (!gsi_end_p (gsi))
 	{
 	  gcall *stmt;
-	  const riscv_sfpu_insn_data *insnd;
+	  const rvtt_insn_data *insnd;
 
-	  if (riscv_sfpu_p(&insnd, &stmt, gsi) &&
+	  if (rvtt_p(&insnd, &stmt, gsi) &&
 	      insnd->nonimm_pos != -1)
 	    {
 	      tree immarg = gimple_call_arg(stmt, insnd->nonimm_pos);
 	      if (TREE_CODE(immarg) == SSA_NAME)
 		{
 		  DUMP("  nonimm %s, id %d\n", insnd->name, unique_id);
-		  tree sum = riscv_sfpu_emit_nonimm_prologue(unique_id, insnd, stmt, gsi);
+		  tree sum = rvtt_emit_nonimm_prologue(unique_id, insnd, stmt, gsi);
 
 		  // Update insn to make insnd->nonimm_pos+1 contain the sum
 		  gimple_call_set_arg(stmt, insnd->nonimm_pos + 1, sum);
@@ -122,10 +122,10 @@ transform (function *fun)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_nonimm_tag =
+const pass_data pass_data_rvtt_nonimm_tag =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_nonimm_tag", /* name */
+  "rvtt_nonimm_tag", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -135,21 +135,21 @@ const pass_data pass_data_riscv_sfpu_nonimm_tag =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_nonimm_tag : public gimple_opt_pass
+class pass_rvtt_nonimm_tag : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_nonimm_tag (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_nonimm_tag, ctxt)
+  pass_rvtt_nonimm_tag (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_nonimm_tag, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_nonimm_tag
+}; // class pass_rvtt_nonimm_tag
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_nonimm_tag pass.	*/
+/* Entry point to rvtt_nonimm_tag pass.	*/
 unsigned int
-pass_riscv_sfpu_nonimm_tag::execute (function *fun)
+pass_rvtt_nonimm_tag::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -159,7 +159,7 @@ pass_riscv_sfpu_nonimm_tag::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_nonimm_tag (gcc::context *ctxt)
+make_pass_rvtt_nonimm_tag (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_nonimm_tag (ctxt);
+  return new pass_rvtt_nonimm_tag (ctxt);
 }

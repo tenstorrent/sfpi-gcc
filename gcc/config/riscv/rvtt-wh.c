@@ -40,20 +40,20 @@
 #include "tree-pass.h"
 #include "ssa.h"
 #include "tree-ssa.h"
-#include "sfpu-protos.h"
-#include "sfpu.h"
+#include "rvtt-protos.h"
+#include "rvtt.h"
 
-void riscv_sfpu_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpload_int(dst, lv, mod, mode, riscv_sfpu_clamp_unsigned(imm, 0x3FFF)));
+    emit_insn(gen_rvtt_wh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned(imm, 0x3FFF)));
   } else {
     unsigned long int op = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
-    emit_insn(gen_riscv_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
+    emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
 {
   int int_mod = INTVAL(mod);
 
@@ -95,12 +95,12 @@ void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, r
 	  // Fits in fp16b
 	  load_32bit = false;
 	  new_mod = SFPLOADI_MOD0_FLOATB;
-	  int_imm = riscv_sfpu_fp32_to_fp16b(int_imm);
+	  int_imm = rvtt_fp32_to_fp16b(int_imm);
 	} else if ((man & 0x1FFF) == 0 && exp < 16 && exp >= -14) {
 	  // Fits in fp16a
 	  load_32bit = false;
 	  new_mod = SFPLOADI_MOD0_FLOATA;
-	  int_imm = riscv_sfpu_fp32_to_fp16a(int_imm);
+	  int_imm = rvtt_fp32_to_fp16a(int_imm);
 	}
 
 	imm = GEN_INT(int_imm);
@@ -111,29 +111,29 @@ void riscv_sfpu_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, r
       gcc_assert(0);
     }
     if (load_32bit) {
-      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(SFPLOADI_MOD0_UPPER), GEN_INT(int_imm >> 16)));
-      emit_insn(gen_riscv_wh_sfploadi_int(dst, dst, GEN_INT(SFPLOADI_MOD0_LOWER), GEN_INT(int_imm & 0xFFFF)));
+      emit_insn(gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(SFPLOADI_MOD0_UPPER), GEN_INT(int_imm >> 16)));
+      emit_insn(gen_rvtt_wh_sfploadi_int(dst, dst, GEN_INT(SFPLOADI_MOD0_LOWER), GEN_INT(int_imm & 0xFFFF)));
     } else {
-      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(new_mod), imm));
+      emit_insn(gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(new_mod), imm));
     }
   } else {
     if (GET_CODE(imm) == CONST_INT) {
-      emit_insn(gen_riscv_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), riscv_sfpu_clamp_signed(imm, 0x7FFF)));
+      emit_insn(gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF)));
     } else {
       unsigned long int op = TT_OP_WH_SFPLOADI(0, int_mod, 0);
-      emit_insn(gen_riscv_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
+      emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
     }
   }
 }
 
-void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, riscv_sfpu_clamp_signed(imm, 0x7FF), mod));
+    emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, rvtt_clamp_signed(imm, 0x7FF), mod));
   } else {
     unsigned int mod1 = UINTVAL(mod);
     unsigned long int op = TT_OP_WH_SFPIADD(0, 0, 0, mod1);
-    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
+    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
@@ -159,7 +159,7 @@ void riscv_sfpu_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, r
 // is either <= n or > n and we care about the result.  The code below doesn't
 // handle it and if it did, the result would be inefficient.
 //
-void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
+void rvtt_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
 {
   unsigned int modi = INTVAL(mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
@@ -167,10 +167,10 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    riscv_sfpu_wh_emit_sfpxiadd_i(dst, lv, addr, src, imm, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
-    riscv_sfpu_wh_emit_sfpxiadd_i(dst, lv, addr, dst, GEN_INT(0), GEN_INT(base_mod | SFPXCMP_MOD1_CC_NE));
+    rvtt_wh_emit_sfpxiadd_i(dst, lv, addr, src, imm, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
+    rvtt_wh_emit_sfpxiadd_i(dst, lv, addr, dst, GEN_INT(0), GEN_INT(base_mod | SFPXCMP_MOD1_CC_NE));
     if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_riscv_wh_sfpcompc());
+      emit_insn(gen_rvtt_wh_sfpcompc());
     }
     return;
   }
@@ -202,18 +202,18 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
   if (need_loadi) {
     // Load imm into dst
     int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-    riscv_sfpu_wh_emit_sfpxloadi(dst, riscv_sfpu_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm, GEN_INT(0), GEN_INT(0));
+    rvtt_wh_emit_sfpxloadi(dst, rvtt_gen_const0_vector(), addr, GEN_INT(loadi_mod), imm, GEN_INT(0), GEN_INT(0));
 
     unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
     if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
       // Perform op w/ compare
       mod1 |= (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-      emit_insn(gen_riscv_wh_sfpiadd_v(dst, dst, src, GEN_INT(mod1)));
+      emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, dst, src, GEN_INT(mod1)));
       need_setcc = false;
     } else {
       // Perform op w/o compare, compare with SETCC
       mod1 |= SFPIADD_MOD1_CC_NONE;
-      emit_insn(gen_riscv_wh_sfpiadd_v(dst, dst, src, GEN_INT(mod1)));
+      emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, dst, src, GEN_INT(mod1)));
       set_cc_arg = dst;
     }
   } else if (is_const_int) {
@@ -221,18 +221,18 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
       if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
 	// Perform op w/ compare
 	unsigned int mod1 = (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
+	emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
 	need_setcc = false;
       } else {
 	// Perform op w/o compare
-	emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, imm,
+	emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm,
 					  GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
 	set_cc_arg = dst;
       }
     } else if (!dst_unused) {
       // An add or subtract against 0 isn't particularly interesting, but
       // we need to keep the register usage correct since dst is now src
-      emit_insn(gen_riscv_wh_sfpiadd_i_int(dst, lv, src, imm,
+      emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm,
                                         GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
     }
   } else {
@@ -245,12 +245,12 @@ void riscv_sfpu_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, 
   }
 
   if (need_setcc) {
-    emit_insn(gen_riscv_wh_sfpsetcc_v(set_cc_arg, GEN_INT(riscv_sfpu_cmp_ex_to_setcc_mod1_map[cmp])));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(set_cc_arg, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
   }
 }
 
 // See comment block above sfpiadd_i_ex
-void riscv_sfpu_wh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
+void rvtt_wh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
 {
   unsigned int modi = INTVAL(mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
@@ -258,10 +258,10 @@ void riscv_sfpu_wh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    riscv_sfpu_wh_emit_sfpxiadd_v(dst, srcb, srca, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
-    emit_insn(gen_riscv_wh_sfpsetcc_v(dst, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    rvtt_wh_emit_sfpxiadd_v(dst, srcb, srca, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(dst, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
     if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_riscv_wh_sfpcompc());
+      emit_insn(gen_rvtt_wh_sfpcompc());
     }
     return;
   }
@@ -272,19 +272,19 @@ void riscv_sfpu_wh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
   if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
     // Perform op w/ compare
     mod1 |= (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-    emit_insn(gen_riscv_wh_sfpiadd_v(dst, srcb, srca, GEN_INT(mod1)));
+    emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, srcb, srca, GEN_INT(mod1)));
   } else {
     // Perform op w/o compare
     mod1 |= SFPIADD_MOD1_CC_NONE;
-    emit_insn(gen_riscv_wh_sfpiadd_v(dst, srcb, srca, GEN_INT(mod1)));
+    emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, srcb, srca, GEN_INT(mod1)));
     if (cmp != 0) {
       // Must be EQ0 or NE0, compare with SETCC
-      emit_insn(gen_riscv_wh_sfpsetcc_v(dst, GEN_INT(riscv_sfpu_cmp_ex_to_setcc_mod1_map[cmp])));
+      emit_insn(gen_rvtt_wh_sfpsetcc_v(dst, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
     }
   }
 }
 
-void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
+void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
   rtx ref_val = gen_reg_rtx(V64SFmode);
@@ -300,98 +300,98 @@ void riscv_sfpu_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
     need_sub = true;
     if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000) ||
 	(fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80)) {
-      riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_1));
+      rvtt_emit_sfpassignlreg(ref_val, GEN_INT(CREG_IDX_1));
     } else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
 	       (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80)) {
-      riscv_sfpu_emit_sfpassignlr(ref_val, GEN_INT(CREG_IDX_NEG_1));
+      rvtt_emit_sfpassignlreg(ref_val, GEN_INT(CREG_IDX_NEG_1));
     } else {
-      riscv_sfpu_wh_emit_sfpxloadi(ref_val, riscv_sfpu_gen_const0_vector(), addr,
-				   GEN_INT(riscv_sfpu_scmp2loadi_mod(fmt)), f,
-				   GEN_INT(0), GEN_INT(0));
+      rvtt_wh_emit_sfpxloadi(ref_val, rvtt_gen_const0_vector(), addr,
+			     GEN_INT(rvtt_scmp2loadi_mod(fmt)), f,
+			     GEN_INT(0), GEN_INT(0));
     }
   }
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
-  rtx setcc_mod = GEN_INT(riscv_sfpu_cmp_ex_to_setcc_mod1_map[cmp]);
+  rtx setcc_mod = GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp]);
   if (need_sub) {
     rtx neg_one = gen_reg_rtx(V64SFmode);
     rtx tmp = gen_reg_rtx(V64SFmode);
-    riscv_sfpu_emit_sfpassignlr(neg_one, GEN_INT(CREG_IDX_NEG_1));
-    emit_insn(gen_riscv_wh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
+    rvtt_emit_sfpassignlreg(neg_one, GEN_INT(CREG_IDX_NEG_1));
+    emit_insn(gen_rvtt_wh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
     v = tmp;
   }
 
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    emit_insn(gen_riscv_wh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
-    emit_insn(gen_riscv_wh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
     if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_riscv_wh_sfpcompc());
+      emit_insn(gen_rvtt_wh_sfpcompc());
     }
   } else {
-    emit_insn(gen_riscv_wh_sfpsetcc_v(v, setcc_mod));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(v, setcc_mod));
   }
 }
 
 // Compare two vectors by subtracting v2 from v1 and doing a setcc
-void riscv_sfpu_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
+void rvtt_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 {
   rtx tmp = gen_reg_rtx(V64SFmode);
   rtx neg1 = gen_reg_rtx(V64SFmode);
 
-  riscv_sfpu_emit_sfpassignlr(neg1, GEN_INT(CREG_IDX_NEG_1));
-  emit_insn(gen_riscv_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
+  rvtt_emit_sfpassignlreg(neg1, GEN_INT(CREG_IDX_NEG_1));
+  emit_insn(gen_rvtt_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    emit_insn(gen_riscv_wh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
-    emit_insn(gen_riscv_wh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
     if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_riscv_wh_sfpcompc());
+      emit_insn(gen_rvtt_wh_sfpcompc());
     }
   } else {
-    emit_insn(gen_riscv_wh_sfpsetcc_v(tmp, GEN_INT(riscv_sfpu_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
+    emit_insn(gen_rvtt_wh_sfpsetcc_v(tmp, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpdivp2_int(dst, lv, riscv_sfpu_clamp_signed(imm, 0x7FF), src, mod));
+    emit_insn(gen_rvtt_wh_sfpdivp2_int(dst, lv, rvtt_clamp_signed(imm, 0x7FF), src, mod));
   } else {
     unsigned long int op = TT_OP_WH_SFPDIVP2(0, 0, 0, UINTVAL(mod));
-    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
+    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_riscv_wh_sfpstochrnd_i_int(dst, lv, mode, riscv_sfpu_clamp_unsigned(imm, 0x1F), src, mod));
+    emit_insn(gen_rvtt_wh_sfpstochrnd_i_int(dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod));
   } else {
     unsigned int mod1 = UINTVAL(mod);
     unsigned int imode = UINTVAL(mode);
     unsigned long int op = TT_OP_WH_SFP_STOCH_RND(imode, 0, 0, 0, 0, mod1);
-    emit_insn(gen_riscv_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
+    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
   }
 }
 
-void riscv_sfpu_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
     unsigned int iv = INTVAL(imm);
     if (iv > 4095) {
-      riscv_sfpu_wh_emit_sfpxloadi(dst, lv, addr,
+      rvtt_wh_emit_sfpxloadi(dst, lv, addr,
 				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm, GEN_INT(0), GEN_INT(0));
-      emit_insn(gen_riscv_wh_sfpsetman_v(dst, dst, src));
+      emit_insn(gen_rvtt_wh_sfpsetman_v(dst, dst, src));
     } else {
-      emit_insn (gen_riscv_wh_sfpsetman_i_int(dst, lv, imm, src));
+      emit_insn (gen_rvtt_wh_sfpsetman_i_int(dst, lv, imm, src));
     }
   } else {
     gcc_assert(0);
   }
 }
 
-void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
+void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
 {
   int modi = INTVAL(mod);
 
@@ -404,11 +404,11 @@ void riscv_sfpu_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
     // from a ror) Here we clear that value to 0 by rotating in the 0 register
     // Optimization potential to not do this if the previous insn was a shftr
 
-    rtx live_const = riscv_sfpu_gen_const0_vector();
+    rtx live_const = rvtt_gen_const0_vector();
     rtx lreg9 = gen_reg_rtx(V64SFmode);
     SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
-    emit_insn (gen_riscv_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
+    emit_insn (gen_rvtt_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
   }
 
-  emit_insn (gen_riscv_wh_sfpshft2_e_int(dst, live, src, mod));
+  emit_insn (gen_rvtt_wh_sfpshft2_e_int(dst, live, src, mod));
 }

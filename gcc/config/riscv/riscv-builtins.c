@@ -37,7 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "langhooks.h"
 #include <map>
-#include "sfpu.h"
+#include "rvtt.h"
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -95,9 +95,9 @@ struct riscv_builtin_description {
 };
 
 AVAIL (hard_float, TARGET_HARD_FLOAT)
-AVAIL (grayskull, TARGET_SFPU_GS)
-AVAIL (wormhole, TARGET_SFPU_WH)
-AVAIL (sfpu, (TARGET_SFPU_GS || TARGET_SFPU_WH))
+AVAIL (grayskull, TARGET_RVTT_GS)
+AVAIL (wormhole, TARGET_RVTT_WH)
+AVAIL (sfpu, (TARGET_RVTT_GS || TARGET_RVTT_WH))
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -128,14 +128,14 @@ AVAIL (sfpu, (TARGET_SFPU_GS || TARGET_SFPU_WH))
   RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
 		FUNCTION_TYPE, AVAIL)
 
-#define RISCV_SFPU_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
-  { CODE_FOR_riscv_ ## INSN, "__builtin_rvtt_" NAME,			\
+#define _RVTT_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
+  { CODE_FOR_rvtt_ ## INSN, "__builtin_rvtt_" NAME,			\
     BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
-#define DIRECT_SFPU_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
-  RISCV_SFPU_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
-#define DIRECT_SFPU_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)		\
-  RISCV_SFPU_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
-		FUNCTION_TYPE, AVAIL)
+#define DIRECT_RVTT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
+  _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
+#define DIRECT_RVTT_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)	\
+  _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
+ 		FUNCTION_TYPE, AVAIL)
 
 tree v64SF_type_node;
 
@@ -175,13 +175,13 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define SFPU_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(op, fmt, sfpu),
-#define SFPU_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(op, fmt, sfpu),
-#define SFPU_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(gs_##op, fmt, grayskull),
-#define SFPU_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
-#define SFPU_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_BUILTIN(wh_##op, fmt, wormhole),
-#define SFPU_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, ntr, nim, nis) DIRECT_SFPU_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
-#include "sfpu-insn.h"
+#define RVTT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
+#define RVTT_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define RVTT_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(gs_##op, fmt, grayskull),
+#define RVTT_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
+#define RVTT_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
+#include "rvtt-insn.h"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
@@ -238,12 +238,12 @@ riscv_init_builtins (void)
 	  riscv_builtin_decl_index[d->icode] = i;
 	  if (i >= first_sfpu_builtin)
 	    {
-	      riscv_sfpu_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
+	      rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
 	    }
 	}
     }
 
-  riscv_sfpu_init_builtins();
+  rvtt_init_builtins();
 }
 
 /* Implement TARGET_BUILTIN_DECL.  */

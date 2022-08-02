@@ -45,7 +45,7 @@
 #include "profile.h"
 #include <string.h>
 #include <unordered_set>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -97,12 +97,12 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 
       FOR_EACH_IMM_USE_STMT (use, iter, lhs)
 	{
-	  const riscv_sfpu_insn_data *insnd;
+	  const rvtt_insn_data *insnd;
 	  gcall *use_stmt;
-	  if (riscv_sfpu_p(&insnd, &use_stmt, use))
+	  if (rvtt_p(&insnd, &use_stmt, use))
 	    {
 	      DUMP(" found an uninitialized vector used later\n");
-	      const riscv_sfpu_insn_data* loadi_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
+	      const rvtt_insn_data* loadi_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
 
 	      location_t assign_location = gimple_location (g);
 	      // Assume any "uninitialized" variables in a function that
@@ -175,9 +175,9 @@ is_sfpu_def(tree def, unordered_set<tree>& visited)
   else
     {
       gcall *stmt;
-      const riscv_sfpu_insn_data *insnd;
+      const rvtt_insn_data *insnd;
 
-      return riscv_sfpu_p (&insnd, &stmt, def_stmt);
+      return rvtt_p (&insnd, &stmt, def_stmt);
     }
 }
 
@@ -253,10 +253,10 @@ process (function *fun)
     }
 }
 
-const pass_data pass_data_riscv_sfpu_warn =
+const pass_data pass_data_rvtt_warn =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_warn", /* name */
+  "rvtt_warn", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -266,21 +266,21 @@ const pass_data pass_data_riscv_sfpu_warn =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_warn : public gimple_opt_pass
+class pass_rvtt_warn : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_warn (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_warn, ctxt)
+  pass_rvtt_warn (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_warn, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_warn
+}; // class pass_rvtt_warn
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_warn pass.	*/
+/* Entry point to rvtt_warn pass.	*/
 unsigned int
-pass_riscv_sfpu_warn::execute (function *fun)
+pass_rvtt_warn::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -291,7 +291,7 @@ pass_riscv_sfpu_warn::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_warn (gcc::context *ctxt)
+make_pass_rvtt_warn (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_warn (ctxt);
+  return new pass_rvtt_warn (ctxt);
 }

@@ -45,7 +45,7 @@
 #include "profile.h"
 #include <vector>
 #include <tuple>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -81,10 +81,10 @@ process_block_stmts(basic_block bb,
   while (!gsi_end_p (gsi))
     {
       gcall *stmt;
-      const riscv_sfpu_insn_data *insnd;
-      if (riscv_sfpu_p(&insnd, &stmt, gsi))
+      const rvtt_insn_data *insnd;
+      if (rvtt_p(&insnd, &stmt, gsi))
 	{
-	  if (insnd->id == riscv_sfpu_insn_data::sfppushc)
+	  if (insnd->id == rvtt_insn_data::sfppushc)
 	    {
 	      bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
 
@@ -119,7 +119,7 @@ process_block_stmts(basic_block bb,
 		  stack.push_back(make_tuple(false, is_replace, gsi));
 		}
 	    }
-	  else if (insnd->id == riscv_sfpu_insn_data::sfpcompc)
+	  else if (insnd->id == rvtt_insn_data::sfpcompc)
 	    {
 	      // Set compc to true for current pushc
 	      if (stack.size() == 0) {
@@ -129,7 +129,7 @@ process_block_stmts(basic_block bb,
 	      prior_removable = false;
 	      stack.back() = make_tuple(true, get<tuple_prior_replace>(stack.back()), get<tuple_gsi>(stack.back()));
 	    }
-	  else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
+	  else if (insnd->id == rvtt_insn_data::sfppopc)
 	    {
 	      DUMP("POPC: stack size %d\n", stack.size());
 
@@ -172,8 +172,8 @@ process_block_stmts(basic_block bb,
 		  DUMP("  replacing outermost popc with encc\n");
 
 		  // Replace outermost popc with encc
-		  const riscv_sfpu_insn_data *new_insnd =
-		    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpencc);
+		  const rvtt_insn_data *new_insnd =
+		    rvtt_get_insn_data(rvtt_insn_data::sfpencc);
 		  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, size_int(3), size_int(10));
 		  if (new_stmt == nullptr) {
 		    gcc_unreachable();
@@ -265,10 +265,10 @@ static void transform (function *fn)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_cc =
+const pass_data pass_data_rvtt_cc =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_cc", /* name */
+  "rvtt_cc", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -278,21 +278,21 @@ const pass_data pass_data_riscv_sfpu_cc =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_cc : public gimple_opt_pass
+class pass_rvtt_cc : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_cc (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_cc, ctxt)
+  pass_rvtt_cc (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_cc, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_cc
+}; // class pass_rvtt_cc
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_cc pass.	*/
+/* Entry point to rvtt_cc pass.	*/
 unsigned int
-pass_riscv_sfpu_cc::execute (function *fun)
+pass_rvtt_cc::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -303,7 +303,7 @@ pass_riscv_sfpu_cc::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_cc (gcc::context *ctxt)
+make_pass_rvtt_cc (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_cc (ctxt);
+  return new pass_rvtt_cc (ctxt);
 }
