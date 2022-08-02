@@ -601,7 +601,7 @@ bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
   while (!gsi_end_p(next_gsi))
     {
       if (rvtt_p(insnd, stmt, next_gsi) &&
-	  (!((*insnd)->schedule & INSN_SCHED_NON_SFPU) || allow_non_sfpu))
+	  (!(*insnd)->schedule_non_sfpu_p() || allow_non_sfpu))
         {
 	  return true;
         }
@@ -621,7 +621,7 @@ bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
     {
       insn = NEXT_INSN(insn);
       if (rvtt_p(insnd, insn) &&
-	  (!((*insnd)->schedule & INSN_SCHED_NON_SFPU) || allow_non_sfpu))
+	  (!(*insnd)->schedule_non_sfpu_p() || allow_non_sfpu))
 	{
 	  *next_insn = insn;
 	  return true;
@@ -855,7 +855,7 @@ int rvtt_get_insn_operand_count(rtx_insn *insn)
     break;
 
   default:
-    fprintf(stderr, "unexpected pattern in sfpu insn, %d %s", code, insn_data[INSN_CODE(insn)].name);
+    fprintf(stderr, "unexpected pattern in sfpu insn, %d %s\n", code, insn_data[INSN_CODE(insn)].name);
     gcc_assert(0);
     break;
   }
@@ -898,4 +898,22 @@ rtx rvtt_get_insn_operand(int which, rtx_insn *insn)
   }
 
   return op;
+}
+
+int rvtt_get_insn_dst_sfpu_regno(rtx_insn *insn)
+{
+  rtx pat = PATTERN(insn);
+  if (GET_CODE (pat) == PARALLEL)
+    {
+      pat = XVECEXP(pat, 0, 0);
+    }
+  if (GET_CODE (pat) == SET)
+    {
+      rtx reg = XEXP(pat, 0);
+      return rvtt_sfpu_regno(reg);
+    }
+  else
+    {
+      return -1;
+    }
 }
