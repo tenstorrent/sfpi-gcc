@@ -48,11 +48,10 @@ static void insert_nop(rtx_insn *insn)
   emit_insn_after(gen_rvtt_wh_sfpnop(), insn);
 }
 
-static bool reg_referenced_p(rtx reg, rtx_insn *insn)
+static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
 {
   int noperands = rvtt_get_insn_operand_count(insn);
 
-  unsigned int regno = rvtt_sfpu_regno(reg);
   for (int i = 0; i < noperands; i++) {
     rtx operand = rvtt_get_insn_operand(i, insn);
     if (GET_CODE(operand) == REG &&
@@ -69,9 +68,9 @@ static bool reg_referenced_p(rtx reg, rtx_insn *insn)
 // any instruction which uses the MAD unit, which are:	MAD, LUT, LUT32,
 // MUL(I), ADD(I).  Note that SWAP/SHFT2 always require a NOP and that is
 // emitted along with the instruction and not handled here.
-static void transform (function *fn)
+static void transform ()
 {
-  DUMP("Schedule pass on: %s\n", function_name(fn));
+  DUMP("Schedule pass on: %s\n", function_name(cfun));
 
   bool update = false;
   basic_block bb;
@@ -99,16 +98,13 @@ static void transform (function *fn)
 		      const rvtt_insn_data *next_insnd;
 		      if (rvtt_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
 			{
-			  rtx pat = PATTERN(insn);
-			  if (GET_CODE (pat) == PARALLEL)
-			    {
-			      pat = XVECEXP(pat, 0, 0);
-			    }
-			  gcc_assert(GET_CODE (pat) == SET);
-			  rtx reg = XEXP(pat, 0);
+			  int regint = rvtt_get_insn_dst_sfpu_regno(insn);
+			  gcc_assert(regint != -1);
+			  unsigned int regno = regint;
 
-			  DUMP("  next insn, reg: %s %d\n", next_insnd->name, REGNO(reg) - SFPU_REG_FIRST);
-			  if (reg_referenced_p(reg, next_insn))
+			  DUMP("  next insn, reg: %s %d\n", next_insnd->name, regno);
+
+			  if (reg_referenced_p(regno, next_insn))
 			    {
 			      DUMP("     next stmt (%s) uses lhs, inserting NOP\n", next_insnd->name);
 			      insert_nop(insn);
@@ -172,11 +168,11 @@ public:
 
 /* Entry point to rvtt_schedule pass.	*/
 unsigned int
-pass_rvtt_schedule::execute (function *fun)
+pass_rvtt_schedule::execute (function *)
 {
   if (flag_wormhole)
     {
-      transform (fun);
+      transform ();
     }
 
   return 0;
