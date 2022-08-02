@@ -42,7 +42,7 @@ extern void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
 extern void rvtt_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
 extern void rvtt_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
+extern void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
 extern void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx lv, rtx src, rtx mod);
 extern const char * rvtt_emit_testcode(rtx operands[]);
 

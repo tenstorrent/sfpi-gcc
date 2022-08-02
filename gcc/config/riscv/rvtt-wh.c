@@ -375,7 +375,7 @@ void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rt
   }
 }
 
-void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
+void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src)
 {
   if (GET_CODE(imm) == CONST_INT) {
     unsigned int iv = INTVAL(imm);

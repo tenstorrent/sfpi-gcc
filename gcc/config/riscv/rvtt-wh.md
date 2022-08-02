@@ -899,8 +899,7 @@
   "TARGET_RVTT_WH"
 {
   rtx live = rvtt_gen_const0_vector();
-  rvtt_wh_emit_sfpsetman(operands[0], live, operands[1], operands[2],
-                               operands[5], operands[6], operands[3], operands[4]);
+  rvtt_wh_emit_sfpsetman(operands[0], live, operands[1], operands[2], operands[5]);
   DONE;
 })
 
@@ -916,8 +915,7 @@
   "TARGET_RVTT_WH"
 {
   rtx live = operands[2];
-  rvtt_wh_emit_sfpsetman(operands[0], live, operands[1], operands[3],
-                               operands[6], operands[7], operands[4], operands[5]);
+  rvtt_wh_emit_sfpsetman(operands[0], live, operands[1], operands[3], operands[6]);
   DONE;
 })
 
