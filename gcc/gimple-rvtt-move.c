@@ -48,7 +48,7 @@
 #include <string>
 #include <iostream>
 #include <tuple>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -127,17 +127,17 @@ subsequent_use(tree var, gimple_stmt_iterator gsi)
 }
 
 static inline bool
-match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
-		       const riscv_sfpu_insn_data **prior_insnd,
+match_prior_assignment(rvtt_insn_data::insn_id id,
+		       const rvtt_insn_data **prior_insnd,
 		       gcall **prior_stmt,
 		       gimple_stmt_iterator *prior_gsi,
 		       tree src)
 {
   gimple *assign_g = SSA_NAME_DEF_STMT(src);
-  riscv_sfpu_p(prior_insnd, prior_stmt, assign_g);
+  rvtt_p(prior_insnd, prior_stmt, assign_g);
   *prior_gsi = gsi_for_stmt(assign_g);
   return
-    riscv_sfpu_p(prior_insnd, prior_stmt, *prior_gsi) &&
+    rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
     ((*prior_insnd)->id == id);
 }
 
@@ -146,11 +146,11 @@ is_const_reg(tree arg)
 {
   gimple_stmt_iterator assign_gsi;
   gcall *assign_stmt;
-  const riscv_sfpu_insn_data *assign_insnd;
+  const rvtt_insn_data *assign_insnd;
 
   return
     TREE_CODE(arg) == SSA_NAME &&
-    match_prior_assignment(riscv_sfpu_insn_data::sfpassignlr,
+    match_prior_assignment(rvtt_insn_data::sfpassignlreg,
 			   &assign_insnd, &assign_stmt, &assign_gsi, arg) &&
     (get_int_arg(assign_stmt, 0) > SFP_LREG_COUNT);
 }
@@ -159,7 +159,7 @@ static inline void
 insert_move(tree dst_arg, int dst_arg_pos, gcall *stmt, gimple_stmt_iterator gsi)
 {
   // Insert a move
-  const riscv_sfpu_insn_data *mov_insnd = riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpmov);
+  const rvtt_insn_data *mov_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpmov);
   gimple* mov_stmt = gimple_build_call (mov_insnd->decl, 2);
   tree var = create_tmp_var (TREE_TYPE(dst_arg));
   tree name = make_ssa_name (var, mov_stmt);
@@ -202,10 +202,10 @@ static void transform (function *fun)
       while (!gsi_end_p (candidate_gsi))
 	{
 	  gcall *candidate_stmt;
-	  const riscv_sfpu_insn_data *candidate_insnd;
+	  const rvtt_insn_data *candidate_insnd;
 
-	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi) &&
-              candidate_insnd->id != riscv_sfpu_insn_data::nonsfpu &&
+	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi) &&
+	      candidate_insnd->id != rvtt_insn_data::nonsfpu &&
 	      candidate_insnd->uses_dst_as_src())
 	    {
 	      DUMP("Processing %s\n", candidate_insnd->name);
@@ -214,7 +214,7 @@ static void transform (function *fun)
 	      tree src_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos + 1);
 	      tree dst_arg = gimple_call_arg(candidate_stmt, candidate_insnd->dst_arg_pos);
 
-	      bool permutable = riscv_sfpu_permutable_operands(candidate_insnd, candidate_stmt);
+	      bool permutable = rvtt_permutable_operands(candidate_insnd, candidate_stmt);
 	      bool src_is_const_reg = permutable && is_const_reg(src_arg);
 	      bool dst_is_const_reg = is_const_reg(dst_arg);
 
@@ -247,10 +247,10 @@ static void transform (function *fun)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_move =
+const pass_data pass_data_rvtt_move =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_move", /* name */
+  "rvtt_move", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -260,21 +260,21 @@ const pass_data pass_data_riscv_sfpu_move =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_move : public gimple_opt_pass
+class pass_rvtt_move : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_move (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_move, ctxt)
+  pass_rvtt_move (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_move, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_move
+}; // class pass_rvtt_move
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_move pass.	*/
+/* Entry point to rvtt_move pass.	*/
 unsigned int
-pass_riscv_sfpu_move::execute (function *fun)
+pass_rvtt_move::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -285,7 +285,7 @@ pass_riscv_sfpu_move::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_move (gcc::context *ctxt)
+make_pass_rvtt_move (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_move (ctxt);
+  return new pass_rvtt_move (ctxt);
 }

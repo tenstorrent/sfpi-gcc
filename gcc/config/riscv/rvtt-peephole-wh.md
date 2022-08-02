@@ -29,14 +29,14 @@
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    4 "const_setcc_z_or_nez")] UNSPECV_WH_SFPSETCC_V)]
 
-  "TARGET_SFPU_WH"
+  "TARGET_RVTT_WH"
   [(const_int 0)]
 {
   int mod1b = INTVAL(operands[4]);
   // Only legal values of SETCC are 2 or 6 which map to 2 and 10
   rtx mod = GEN_INT((mod1b == 2) ? 2 : 10);
 
-  emit_insn(gen_riscv_wh_sfplz_int(operands[0], operands[1], operands[2], mod));
+  emit_insn(gen_rvtt_wh_sfplz_int(operands[0], operands[1], operands[2], mod));
 })
 
 (define_peephole2
@@ -48,13 +48,13 @@
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    5 "const_setcc_z_or_nez")] UNSPECV_WH_SFPSETCC_V)]
 
-  "TARGET_SFPU_WH"
+  "TARGET_RVTT_WH"
   [(const_int 0)]
 {
   int mod1b = INTVAL(operands[5]);
   // Only legal values of SETCC are 2 or 6 which map to 2 and 10
   rtx mod = GEN_INT((mod1b == 2) ? 2 : 10);
 
-  emit_insn(gen_riscv_wh_sfppushc(operands[4]));
-  emit_insn(gen_riscv_wh_sfplz_int(operands[0], operands[1], operands[2], mod));
+  emit_insn(gen_rvtt_wh_sfppushc(operands[4]));
+  emit_insn(gen_rvtt_wh_sfplz_int(operands[0], operands[1], operands[2], mod));
 })

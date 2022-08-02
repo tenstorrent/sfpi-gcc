@@ -44,7 +44,7 @@
 #include "asan.h"
 #include "profile.h"
 #include <vector>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 using namespace std;
 
@@ -107,35 +107,35 @@ subsequent_use(tree var, gimple_stmt_iterator gsi)
 
 // Return whether the call/stmt can be combined with an iadd_i
 static bool
-can_combine_sfpxiadd_i(const riscv_sfpu_insn_data *insnd,
+can_combine_sfpxiadd_i(const rvtt_insn_data *insnd,
 		       gcall *stmt,
 		       bool is_sign_bit_cc)
 {
   return
-    (insnd->id == riscv_sfpu_insn_data::sfpxiadd_i &&
+    (insnd->id == rvtt_insn_data::sfpxiadd_i &&
      (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpxiadd_i_lv &&
+    (insnd->id == rvtt_insn_data::sfpxiadd_i_lv &&
      (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpxiadd_v &&
+    (insnd->id == rvtt_insn_data::sfpxiadd_v &&
      (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc) ||
+    (insnd->id == rvtt_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc) ||
 
-    (insnd->id == riscv_sfpu_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc);
+    (insnd->id == rvtt_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc);
 }
 
 // Combine candidate_stmt (an sfpxiadd_i) with stmt by updating mod1/imm of
 // stmt
 static void
-combine_sfpxiadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt,
-		   const riscv_sfpu_insn_data *candidate_insnd, gcall *candidate_stmt)
+combine_sfpxiadd_i(const rvtt_insn_data *insnd, gcall *stmt,
+		   const rvtt_insn_data *candidate_insnd, gcall *candidate_stmt)
 {
   int candidate_mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
 
   switch (insnd->id) {
-  case riscv_sfpu_insn_data::sfpxiadd_i:
+  case rvtt_insn_data::sfpxiadd_i:
     {
       int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, insnd->mod_pos,
@@ -144,7 +144,7 @@ combine_sfpxiadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt,
 					old_sub));
     }
     break;
-  case riscv_sfpu_insn_data::sfpxiadd_i_lv:
+  case rvtt_insn_data::sfpxiadd_i_lv:
     {
       int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, insnd->mod_pos,
@@ -152,7 +152,7 @@ combine_sfpxiadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt,
 					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
     }
     break;
-  case riscv_sfpu_insn_data::sfpxiadd_v:
+  case rvtt_insn_data::sfpxiadd_v:
     {
       int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
       gimple_call_set_arg(stmt, insnd->mod_pos,
@@ -160,14 +160,14 @@ combine_sfpxiadd_i(const riscv_sfpu_insn_data *insnd, gcall *stmt,
 					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
     }
     break;
-  case riscv_sfpu_insn_data::sfpexexp:
+  case rvtt_insn_data::sfpexexp:
     {
       int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
       gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod1));
       break;
     }
-  case riscv_sfpu_insn_data::sfpexexp_lv:
+  case rvtt_insn_data::sfpexexp_lv:
     {
       int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
@@ -188,8 +188,8 @@ intervening_cc_stmt(gimple_stmt_iterator gsi, gimple_stmt_iterator last)
   while (gsi.ptr != last.ptr)
   {
     gcall *stmt;
-    const riscv_sfpu_insn_data *insnd;
-    if (riscv_sfpu_p (&insnd ,&stmt, gsi) && riscv_sfpu_sets_cc(insnd, stmt))
+    const rvtt_insn_data *insnd;
+    if (rvtt_p (&insnd ,&stmt, gsi) && rvtt_sets_cc(insnd, stmt))
      {
        return true;
      }
@@ -212,10 +212,10 @@ intervening_unrelated_or_cc_stmt(tree arg, gimple_stmt_iterator start, gimple_st
   while (gsi.ptr != start.ptr)
   {
     gcall *stmt;
-    const riscv_sfpu_insn_data *insnd;
-    if (riscv_sfpu_p (&insnd ,&stmt, gsi))
+    const rvtt_insn_data *insnd;
+    if (rvtt_p (&insnd ,&stmt, gsi))
       {
-	if (riscv_sfpu_sets_cc(insnd, stmt))
+	if (rvtt_sets_cc(insnd, stmt))
 	  {
 	    return true;
 	  }
@@ -225,7 +225,7 @@ intervening_unrelated_or_cc_stmt(tree arg, gimple_stmt_iterator start, gimple_st
 	  {
 	    return true;
 	  }
-	else if (insnd->id == riscv_sfpu_insn_data::sfpmov)
+	else if (insnd->id == rvtt_insn_data::sfpmov)
 	  {
 	    arg = gimple_call_arg(stmt, 0);
 	  }
@@ -312,14 +312,14 @@ get_single_use(tree var, gimple **gout)
 //  - move the assignment stmt to the location of the candidate stmt
 //  - delete the candidate iadd_i
 static bool
-try_combine_sfpxiadd_i(const riscv_sfpu_insn_data *candidate_insnd,
+try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
 		       gcall *candidate_stmt,
 		       gimple_stmt_iterator candidate_gsi)
 {
   bool combined = false;
 
   // Check for candidate iadd_i that sets the CC and compares to 0
-  if (candidate_insnd->id == riscv_sfpu_insn_data::sfpxiadd_i &&
+  if (candidate_insnd->id == rvtt_insn_data::sfpxiadd_i &&
       is_int_arg(candidate_stmt, SFPXIADD_IMM_ARG_POS) && (get_int_arg(candidate_stmt, SFPXIADD_IMM_ARG_POS) == 0) &&
       ((get_int_arg(candidate_stmt, candidate_insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) != 0) &&
       gimple_call_lhs(candidate_stmt) == nullptr)
@@ -335,11 +335,11 @@ try_combine_sfpxiadd_i(const riscv_sfpu_insn_data *candidate_insnd,
       // Find when this variable was assigned
       gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, SFPXIADD_SRC_ARG_POS));
       gcall *assign_stmt;
-      const riscv_sfpu_insn_data *assign_insnd;
-      bool is_sfpu = riscv_sfpu_p(&assign_insnd, &assign_stmt, assign_g);
+      const rvtt_insn_data *assign_insnd;
+      bool is_rvtt = rvtt_p(&assign_insnd, &assign_stmt, assign_g);
       gimple_stmt_iterator assign_gsi = gsi_for_stmt(assign_g);
 
-      if (is_sfpu &&
+      if (is_rvtt &&
 	  gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 	  !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
 	  !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
@@ -356,7 +356,7 @@ try_combine_sfpxiadd_i(const riscv_sfpu_insn_data *candidate_insnd,
 		gsi_move_before(&assign_gsi, &candidate_gsi);
 
 		// Remove candidate
-		riscv_sfpu_prep_stmt_for_deletion(candidate_stmt);
+		rvtt_prep_stmt_for_deletion(candidate_stmt);
 
 		unlink_stmt_vdef(candidate_stmt);
 		gsi_remove(&candidate_gsi, true);
@@ -382,17 +382,17 @@ try_combine_sfpxiadd_i(const riscv_sfpu_insn_data *candidate_insnd,
 }
 
 static inline bool
-match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
-		       const riscv_sfpu_insn_data **prior_insnd,
+match_prior_assignment(rvtt_insn_data::insn_id id,
+		       const rvtt_insn_data **prior_insnd,
 		       gcall **prior_stmt,
 		       gimple_stmt_iterator *prior_gsi,
 		       tree src)
 {
   gimple *assign_g = SSA_NAME_DEF_STMT(src);
-  riscv_sfpu_p(prior_insnd, prior_stmt, assign_g);
+  rvtt_p(prior_insnd, prior_stmt, assign_g);
   *prior_gsi = gsi_for_stmt(assign_g);
   return
-    riscv_sfpu_p(prior_insnd, prior_stmt, *prior_gsi) &&
+    rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
     ((*prior_insnd)->id == id);
 }
 
@@ -405,20 +405,20 @@ match_prior_assignment(riscv_sfpu_insn_data::insn_id id,
 //   - mads are not created across CC or BB boundaries (some of which may be
 //   - managable).  future work - could handle CC boundaries w/ code motion
 static bool
-try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
+try_gen_mad(const rvtt_insn_data *candidate_insnd,
 	    gcall *candidate_stmt,
 	    gimple_stmt_iterator candidate_gsi)
 {
   bool combined = false;
 
-  if (candidate_insnd->id == riscv_sfpu_insn_data::sfpadd ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpadd_lv)
+  if (candidate_insnd->id == rvtt_insn_data::sfpadd ||
+      candidate_insnd->id == rvtt_insn_data::sfpadd_lv)
     {
       DUMP("Trying to combine %s for mad\n", candidate_insnd->name);
 
       gimple_stmt_iterator assign_gsi;
       gcall *assign_stmt;
-      const riscv_sfpu_insn_data *assign_insnd;
+      const rvtt_insn_data *assign_insnd;
       int live = candidate_insnd->live;
       int which_arg = 0;
 
@@ -426,7 +426,7 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 
       // Both the add and the mul can't have mod set
       // Not worrying about optimizing -.5 and +.5, just avoiding +.5 and +.5
-      bool found_one = match_prior_assignment(riscv_sfpu_insn_data::sfpmul,
+      bool found_one = match_prior_assignment(rvtt_insn_data::sfpmul,
 					      &assign_insnd, &assign_stmt, &assign_gsi,
 					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
 	  (candidate_mod == 0 || get_int_arg(assign_stmt, assign_insnd->mod_pos) == 0);
@@ -434,7 +434,7 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
       if (!found_one)
 	{
 	  which_arg = 1;
-	  found_one = match_prior_assignment(riscv_sfpu_insn_data::sfpmul,
+	  found_one = match_prior_assignment(rvtt_insn_data::sfpmul,
 					     &assign_insnd, &assign_stmt, &assign_gsi,
 					     gimple_call_arg(candidate_stmt, which_arg + live)) &&
 	      (candidate_mod == 0 || get_int_arg(assign_stmt, assign_insnd->mod_pos) == 0);
@@ -453,9 +453,9 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 	      DUMP("  combining %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
 
 	      // Create mad
-	      const riscv_sfpu_insn_data *mad_insnd = riscv_sfpu_get_insn_data(live ?
-									       riscv_sfpu_insn_data::sfpmad_lv :
-									       riscv_sfpu_insn_data::sfpmad);
+	      const rvtt_insn_data *mad_insnd = rvtt_get_insn_data(live ?
+								   rvtt_insn_data::sfpmad_lv :
+								   rvtt_insn_data::sfpmad);
 	      gimple* mad_stmt = gimple_build_call(mad_insnd->decl, 4 + live);
 	      if (live)
 		{
@@ -492,8 +492,8 @@ try_gen_mad(const riscv_sfpu_insn_data *candidate_insnd,
 static inline void
 validate_assumptions()
 {
-  gcc_assert(riscv_sfpu_insn_data::sfpmul + 2 == riscv_sfpu_insn_data::sfpmuli);
-  gcc_assert(riscv_sfpu_insn_data::sfpadd + 2 == riscv_sfpu_insn_data::sfpaddi);
+  gcc_assert(rvtt_insn_data::sfpmul + 2 == rvtt_insn_data::sfpmuli);
+  gcc_assert(rvtt_insn_data::sfpadd + 2 == rvtt_insn_data::sfpaddi);
 }
 
 // Combine mul/add w/ loadi to make muli/addi
@@ -521,7 +521,7 @@ validate_assumptions()
 // (in theory the code could pick the right one).  This is uninteresting as
 // operating on two immediates should be done outside of SFPU anyway...
 static bool
-try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
+try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 		     gcall *candidate_stmt,
 		     gimple_stmt_iterator candidate_gsi)
 {
@@ -529,22 +529,22 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 
   validate_assumptions();
 
-  if (candidate_insnd->id == riscv_sfpu_insn_data::sfpmul ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpmul_lv ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpadd ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpadd_lv)
+  if (candidate_insnd->id == rvtt_insn_data::sfpmul ||
+      candidate_insnd->id == rvtt_insn_data::sfpmul_lv ||
+      candidate_insnd->id == rvtt_insn_data::sfpadd ||
+      candidate_insnd->id == rvtt_insn_data::sfpadd_lv)
     {
       DUMP("Trying to combine %s into %si\n", candidate_insnd->name,
-	   riscv_sfpu_get_notlive_version(candidate_insnd)->name);
+	   rvtt_get_notlive_version(candidate_insnd)->name);
 
       int live = candidate_insnd->live;
       gimple_stmt_iterator assign_gsi;
       gcall *assign_stmt;
-      const riscv_sfpu_insn_data *assign_insnd;
+      const rvtt_insn_data *assign_insnd;
       int which_arg = 0;
 
       // Only combine live if we are writing to the same arg as the dst arg
-      bool found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfpxloadi,
+      bool found_one = (match_prior_assignment(rvtt_insn_data::sfpxloadi,
 					       &assign_insnd, &assign_stmt, &assign_gsi,
 					       gimple_call_arg(candidate_stmt, which_arg + live)) &&
 			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -555,7 +555,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
       if (!found_one)
 	{
 	  which_arg = 1;
-	  found_one = (match_prior_assignment(riscv_sfpu_insn_data::sfpxloadi,
+	  found_one = (match_prior_assignment(rvtt_insn_data::sfpxloadi,
 					      &assign_insnd, &assign_stmt, &assign_gsi,
 					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
 		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -570,9 +570,9 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 
 	  // muli/addi only support fp16b
 	  tree value;
-	  if (riscv_sfpu_get_fp16b(&value, assign_stmt, assign_insnd))
+	  if (rvtt_get_fp16b(&value, assign_stmt, assign_insnd))
 	    {
-	      const riscv_sfpu_insn_data *opi_insnd = riscv_sfpu_get_notlive_version(candidate_insnd) + 2;
+	      const rvtt_insn_data *opi_insnd = rvtt_get_notlive_version(candidate_insnd) + 2;
 	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
 
 	      // Create <add,mul>i
@@ -594,7 +594,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 		  tree old_add = gimple_call_arg(assign_stmt, assign_insnd->nonimm_pos + 1);
 		  int unique_id = get_int_arg(assign_stmt, assign_insnd->nonimm_pos + 2);
 		  gcc_assert((unique_id & 1) == 0);
-		  riscv_sfpu_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
+		  rvtt_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
 		}
 	      else
 		{
@@ -629,7 +629,7 @@ try_gen_muli_or_addi(const riscv_sfpu_insn_data *candidate_insnd,
 //   an add or mul
 //   with only a single use which is an add of .5
 static bool
-try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
+try_combine_add_half(const rvtt_insn_data *candidate_insnd,
 		     gcall *candidate_stmt)
 {
   const int half = 0x3f00;
@@ -637,9 +637,9 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
   bool combined = false;
 
   // XXXX todo: handle _lv versions.  gets complicated
-  if (candidate_insnd->id == riscv_sfpu_insn_data::sfpadd ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpmul ||
-      candidate_insnd->id == riscv_sfpu_insn_data::sfpmad)
+  if (candidate_insnd->id == rvtt_insn_data::sfpadd ||
+      candidate_insnd->id == rvtt_insn_data::sfpmul ||
+      candidate_insnd->id == rvtt_insn_data::sfpmad)
     {
       DUMP("Found %s, looking to see if its use is an add of +/-0.5f...\n", candidate_insnd->name);
 
@@ -647,19 +647,19 @@ try_combine_add_half(const riscv_sfpu_insn_data *candidate_insnd,
       int live = candidate_insnd->live;
       gimple *use_g;
       gcall *use_stmt;
-      const riscv_sfpu_insn_data *use_insnd;
+      const rvtt_insn_data *use_insnd;
 
       if (get_single_use(candidate_lhs, &use_g) &&
-	  riscv_sfpu_p(&use_insnd, &use_stmt, use_g) &&
-	  use_insnd->id == riscv_sfpu_insn_data::sfpadd)
+	  rvtt_p(&use_insnd, &use_stmt, use_g) &&
+	  use_insnd->id == rvtt_insn_data::sfpadd)
 	{
 	  DUMP("  ...has a single use %s\n", use_insnd->name);
 
 	  int which_arg = (gimple_call_arg(use_stmt, live + 0) == candidate_lhs) ? 1 : 0;
 	  gimple_stmt_iterator assign_gsi;
 	  gcall *assign_stmt;
-	  const riscv_sfpu_insn_data *assign_insnd;
-	  if (match_prior_assignment(riscv_sfpu_insn_data::sfpxloadi,
+	  const rvtt_insn_data *assign_insnd;
+	  if (match_prior_assignment(rvtt_insn_data::sfpxloadi,
 				     &assign_insnd, &assign_stmt, &assign_gsi,
 				     gimple_call_arg(use_stmt, which_arg + live)))
 	    {
@@ -708,17 +708,17 @@ remove_unused_loadis(function *fun)
       while (!gsi_end_p(gsi))
 	{
 	  gcall *stmt;
-	  const riscv_sfpu_insn_data *insnd;
-	  if (riscv_sfpu_p(&insnd, &stmt, gsi))
+	  const rvtt_insn_data *insnd;
+	  if (rvtt_p(&insnd, &stmt, gsi))
 	    {
 	      tree lhs = gimple_call_lhs(stmt);
-	      if (insnd->id == riscv_sfpu_insn_data::sfpxloadi &&
+	      if (insnd->id == rvtt_insn_data::sfpxloadi &&
 		  (lhs == nullptr || has_zero_uses(lhs)))
 		{
 		  DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
 
 		  // Remove candidate
-		  riscv_sfpu_prep_stmt_for_deletion(stmt);
+		  rvtt_prep_stmt_for_deletion(stmt);
 
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
@@ -759,9 +759,9 @@ static void transform (function *fun)
 	while (!gsi_end_p (candidate_gsi))
 	  {
 	    gcall *candidate_stmt;
-	    const riscv_sfpu_insn_data *candidate_insnd;
+	    const rvtt_insn_data *candidate_insnd;
 
-	    if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+	    if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 	      update |= try_combine_add_half(candidate_insnd, candidate_stmt);
 	    }
@@ -778,9 +778,9 @@ static void transform (function *fun)
       while (!gsi_end_p (candidate_gsi))
 	{
 	  gcall *candidate_stmt;
-	  const riscv_sfpu_insn_data *candidate_insnd;
+	  const rvtt_insn_data *candidate_insnd;
 
-	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 	      update |= try_combine_sfpxiadd_i(candidate_insnd, candidate_stmt, candidate_gsi);
 	      update |= try_gen_mad(candidate_insnd, candidate_stmt, candidate_gsi);
@@ -796,9 +796,9 @@ static void transform (function *fun)
       while (!gsi_end_p (candidate_gsi))
 	{
 	  gcall *candidate_stmt;
-	  const riscv_sfpu_insn_data *candidate_insnd;
+	  const rvtt_insn_data *candidate_insnd;
 
-	  if (riscv_sfpu_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
 		update |= try_gen_muli_or_addi(candidate_insnd, candidate_stmt, candidate_gsi);
 	    }
@@ -812,17 +812,17 @@ static void transform (function *fun)
 
   if (load_imm_map.size() != 0)
     {
-      riscv_sfpu_cleanup_nonimm_lis(fun);
+      rvtt_cleanup_nonimm_lis(fun);
       load_imm_map.resize(0);
     }
 }
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_combine =
+const pass_data pass_data_rvtt_combine =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_combine", /* name */
+  "rvtt_combine", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -832,21 +832,21 @@ const pass_data pass_data_riscv_sfpu_combine =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_combine : public gimple_opt_pass
+class pass_rvtt_combine : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_combine (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_combine, ctxt)
+  pass_rvtt_combine (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_combine, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_combine
+}; // class pass_rvtt_combine
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_combine pass.	*/
+/* Entry point to rvtt_combine pass.	*/
 unsigned int
-pass_riscv_sfpu_combine::execute (function *fun)
+pass_rvtt_combine::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -857,7 +857,7 @@ pass_riscv_sfpu_combine::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_combine (gcc::context *ctxt)
+make_pass_rvtt_combine (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_combine (ctxt);
+  return new pass_rvtt_combine (ctxt);
 }

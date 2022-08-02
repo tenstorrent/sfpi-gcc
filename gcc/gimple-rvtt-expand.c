@@ -43,10 +43,8 @@
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <string.h>
-#include <vector>
 #include <unordered_map>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -74,7 +72,7 @@ get_int_arg(gcall *stmt, unsigned int arg)
 static void
 remove_stmt(gimple *g)
 {
-  riscv_sfpu_prep_stmt_for_deletion(g);
+  rvtt_prep_stmt_for_deletion(g);
   unlink_stmt_vdef(g);
   gimple_stmt_iterator gsi = gsi_for_stmt(g);
   gsi_remove(&gsi, true);
@@ -125,7 +123,7 @@ static int get_bool_type(int op, bool negate)
 }
 
 static int
-flip_negated_cmp(gcall *stmt, const riscv_sfpu_insn_data *insnd, bool negate)
+flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
 {
   int mod = get_int_arg(stmt, insnd->mod_pos);
   if (negate)
@@ -139,9 +137,9 @@ flip_negated_cmp(gcall *stmt, const riscv_sfpu_insn_data *insnd, bool negate)
 }
 
 static gcall*
-copy_and_replace_icmp(gcall *stmt, riscv_sfpu_insn_data::insn_id id)
+copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
 {
-  const riscv_sfpu_insn_data *new_insnd = riscv_sfpu_get_insn_data(id);
+  const rvtt_insn_data *new_insnd = rvtt_get_insn_data(id);
   int nargs = gimple_call_num_args(stmt);
   gcall * new_stmt = gimple_build_call(new_insnd->decl, nargs);
   for (int i = 0; i < nargs; i++)
@@ -159,7 +157,7 @@ copy_and_replace_icmp(gcall *stmt, riscv_sfpu_insn_data::insn_id id)
   // Make the iadd do a subtract for the compare
   // Make sure other code knows this is a compare
   int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPXIADD_MOD1_IS_SUB;
-  if (id == riscv_sfpu_insn_data::sfpxiadd_i)
+  if (id == rvtt_insn_data::sfpxiadd_i)
     {
       mod |= SFPXIADD_MOD1_DST_UNUSED;
     }
@@ -188,8 +186,8 @@ finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt
 static void
 emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfppushc);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfppushc);
   gimple *new_stmt;
   if (flag_grayskull)
     {
@@ -205,8 +203,8 @@ emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 static void
 emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfppopc);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfppopc);
   gimple *new_stmt;
   if (flag_grayskull)
     {
@@ -222,8 +220,8 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 static void
 emit_compc(gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpcompc);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpcompc);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 0);
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
@@ -231,8 +229,8 @@ emit_compc(gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
 static tree
 emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 5, nullp, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
 
@@ -247,8 +245,8 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 static tree
 emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int val, bool emit_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpxloadi_lv);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpxloadi_lv);
   tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 6, nullp, in, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
   if (lhs == NULL_TREE)
@@ -265,8 +263,8 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
 static void
 emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
 {
-  const riscv_sfpu_insn_data *new_insnd =
-    riscv_sfpu_get_insn_data(riscv_sfpu_insn_data::sfpsetcc_v);
+  const rvtt_insn_data *new_insnd =
+    rvtt_get_insn_data(rvtt_insn_data::sfpsetcc_v);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, in, size_int(SFPSETCC_MOD1_LREG_EQ0));
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
@@ -274,17 +272,17 @@ emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
 static gcall *
 find_top_of_cond_tree(gcall *stmt)
 {
-  const riscv_sfpu_insn_data *insnd = riscv_sfpu_get_insn_data(stmt);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
 
   switch (insnd->id)
     {
-    case riscv_sfpu_insn_data::sfpxfcmps:
-    case riscv_sfpu_insn_data::sfpxfcmpv:
-    case riscv_sfpu_insn_data::sfpxicmps:
-    case riscv_sfpu_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxicmpv:
       break;
 
-    case riscv_sfpu_insn_data::sfpxbool:
+    case rvtt_insn_data::sfpxbool:
       {
 	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
 	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
@@ -292,13 +290,13 @@ find_top_of_cond_tree(gcall *stmt)
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxcondi:
       // Should never get this deep
       gcc_assert(0);
       break;
 
     default:
-      fprintf(stderr, "Illegal riscv sfpu builtin found in conditional tree: %s\n", insnd->name);
+      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
       gcc_assert(0);
     }
 
@@ -313,8 +311,8 @@ mark_vif_stmts(gimple_stmt_iterator top,
 	 !gsi_end_p(top))
     {
       gcall* stmt;
-      const riscv_sfpu_insn_data *insnd;
-      if (riscv_sfpu_p(&insnd, &stmt, top))
+      const rvtt_insn_data *insnd;
+      if (rvtt_p(&insnd, &stmt, top))
 	{
 	  if (vif_stmts.find(stmt) == vif_stmts.end())
 	    {
@@ -370,7 +368,7 @@ expand_xcondi(gcall *stmt)
   emit_popc(&gsi, top, false);
 
   // Delete the stmt, but not it's DEFs!
-  riscv_sfpu_prep_stmt_for_deletion(stmt);
+  rvtt_prep_stmt_for_deletion(stmt);
   gsi = gsi_for_stmt(stmt);
   gsi_remove(&gsi, true);
 }
@@ -513,9 +511,9 @@ process_tree_phi(gcall *stmt, gimple *child)
       else if (origin->code == GIMPLE_CALL)
 	{
 	  gcall *origin_stmt = dyn_cast<gcall *>(origin);
-	  const riscv_sfpu_insn_data *origin_insnd;
-	  origin_insnd = riscv_sfpu_get_insn_data(origin_stmt);
-	  if (origin_insnd->id == riscv_sfpu_insn_data::sfpxcondi)
+	  const rvtt_insn_data *origin_insnd;
+	  origin_insnd = rvtt_get_insn_data(origin_stmt);
+	  if (origin_insnd->id == rvtt_insn_data::sfpxcondi)
 	    {
 	      process_tree(origin_stmt, stmt);
 	    }
@@ -529,13 +527,13 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 		  gcall *stmt, gcall *parent,
 		  bool negate)
 {
-  const riscv_sfpu_insn_data *insnd = riscv_sfpu_get_insn_data(stmt);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
   DUMP("  process %s n:%d\n", insnd->name, negate);
 
   switch (insnd->id)
     {
-    case riscv_sfpu_insn_data::sfpxfcmps:
-    case riscv_sfpu_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
       {
 	int mod = flip_negated_cmp(stmt, insnd, negate);
 	if (cmp_issues_compc(mod)) *negated = true;
@@ -544,7 +542,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxicmps:
       {
 	// Note: negation happens at the use of these trees below the fall thru
 	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXSCMP_SRC_ARG_POS));
@@ -555,8 +553,8 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 	else if (child->code == GIMPLE_CALL) // could be inline asm...
 	  {
 	    gcall *child_call = dyn_cast<gcall *>(child);
-	    const riscv_sfpu_insn_data *child_insnd = riscv_sfpu_get_insn_data(child_call);
-	    if (child_insnd->id == riscv_sfpu_insn_data::sfpxcondi)
+	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data(child_call);
+	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
 	      {
 		DUMP("  descending to process xcondi before xicmps\n");
 		// Process child before fixing up this insn
@@ -570,18 +568,18 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       }
       // Fall thru
 
-    case riscv_sfpu_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxicmpv:
       {
 	// iadd insns return a vector while icmp insns return an int, remap
 	int mod = flip_negated_cmp(stmt, insnd, negate);
 	if (cmp_issues_compc(mod)) *negated = true;
-	stmt = copy_and_replace_icmp(stmt, (insnd->id == riscv_sfpu_insn_data::sfpxicmps) ?
-				     riscv_sfpu_insn_data::sfpxiadd_i : riscv_sfpu_insn_data::sfpxiadd_v);
+	stmt = copy_and_replace_icmp(stmt, (insnd->id == rvtt_insn_data::sfpxicmps) ?
+				     rvtt_insn_data::sfpxiadd_i : rvtt_insn_data::sfpxiadd_v);
 	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpxbool:
+    case rvtt_insn_data::sfpxbool:
       {
 	  int op = get_int_arg(stmt, 0);
 	  if (op == SFPXBOOL_MOD1_NOT)
@@ -597,12 +595,12 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       }
       break;
 
-    case riscv_sfpu_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxcondi:
       process_xcondi(stmt, parent, false);
       break;
 
     default:
-      fprintf(stderr, "Illegal riscv sfpu builtin found in conditional tree: %s\n", insnd->name);
+      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
       gcc_assert(0);
     }
 }
@@ -646,9 +644,9 @@ transform (function *fun)
 	  gsi_next(&next_gsi);
 
 	  gcall *stmt;
-	  const riscv_sfpu_insn_data *insnd;
-	  if (riscv_sfpu_p(&insnd, &stmt, gsi) &&
-	      insnd->id == riscv_sfpu_insn_data::sfpxcondb)
+	  const rvtt_insn_data *insnd;
+	  if (rvtt_p(&insnd, &stmt, gsi) &&
+	      insnd->id == rvtt_insn_data::sfpxcondb)
 	    {
 	      DUMP("  process xcondb\n");
 	      // This will be the sfpxvif stmt
@@ -679,10 +677,10 @@ transform (function *fun)
 	  gsi_next(&next_gsi);
 
 	  gcall *stmt;
-	  const riscv_sfpu_insn_data *insnd;
-	  if (riscv_sfpu_p(&insnd, &stmt, gsi))
+	  const rvtt_insn_data *insnd;
+	  if (rvtt_p(&insnd, &stmt, gsi))
 	    {
-	      if (insnd->id == riscv_sfpu_insn_data::sfpxcondi)
+	      if (insnd->id == rvtt_insn_data::sfpxcondi)
 		{
 		  DUMP("  process xcondi tree\n");
 		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
@@ -701,10 +699,10 @@ transform (function *fun)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_expand =
+const pass_data pass_data_rvtt_expand =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_expand", /* name */
+  "rvtt_expand", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -714,21 +712,21 @@ const pass_data pass_data_riscv_sfpu_expand =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_expand : public gimple_opt_pass
+class pass_rvtt_expand : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_expand (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_expand, ctxt)
+  pass_rvtt_expand (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_expand, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_expand
+}; // class pass_rvtt_expand
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_expand pass.	*/
+/* Entry point to rvtt_expand pass.	*/
 unsigned int
-pass_riscv_sfpu_expand::execute (function *fun)
+pass_rvtt_expand::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -739,7 +737,7 @@ pass_riscv_sfpu_expand::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_expand (gcc::context *ctxt)
+make_pass_rvtt_expand (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_expand (ctxt);
+  return new pass_rvtt_expand (ctxt);
 }

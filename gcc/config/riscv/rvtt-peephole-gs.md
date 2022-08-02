@@ -29,12 +29,12 @@
         (unspec_volatile [(match_operand:V64SF 4 "nonmemory_operand" "")
                           (match_operand:SI    5 "immediate_operand" "")
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_GS_SFPLOAD_INT))]
-  "TARGET_SFPU_GS"
+  "TARGET_RVTT_GS"
   [(const_int 0)]
 {
-  emit_insn(gen_riscv_gs_sfpstore_int(operands[0], operands[1], operands[2]));
-  emit_insn(gen_riscv_gs_sfpnop());
-  emit_insn(gen_riscv_gs_sfpload_int(operands[3], operands[4], operands[5], operands[6]));
+  emit_insn(gen_rvtt_gs_sfpstore_int(operands[0], operands[1], operands[2]));
+  emit_insn(gen_rvtt_gs_sfpnop());
+  emit_insn(gen_rvtt_gs_sfpload_int(operands[3], operands[4], operands[5], operands[6]));
 })
 
 ;; Un-optimization to ensure a NOP fits between a store/load
@@ -51,12 +51,12 @@
                           (match_operand:SI    9 "immediate_operand" "")
                           (match_operand:SI   10 "immediate_operand" "")] UNSPECV_GS_SFPLOAD_INT))
    (clobber (match_scratch:SI 11 ""))]
-  "TARGET_SFPU_GS"
+  "TARGET_RVTT_GS"
   [(const_int 0)]
 {
-  emit_insn(gen_riscv_sfpnonimm_store(operands[0], operands[1], GEN_INT(1), operands[3],
-                                      operands[4], operands[5], operands[6]));
-  emit_insn(gen_riscv_gs_sfpload_int(operands[7], operands[8], operands[9], operands[10]));
+  emit_insn(gen_rvtt_sfpnonimm_store(operands[0], operands[1], GEN_INT(1), operands[3],
+                                     operands[4], operands[5], operands[6]));
+  emit_insn(gen_rvtt_gs_sfpload_int(operands[7], operands[8], operands[9], operands[10]));
 })
 
 ;; LZ
@@ -68,14 +68,14 @@
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    4 "const_setcc_z_or_nez")] UNSPECV_GS_SFPSETCC_V)]
 
-  "TARGET_SFPU_GS"
+  "TARGET_RVTT_GS"
   [(const_int 0)]
 {
   int mod1b = INTVAL(operands[4]);
   // Only legal values of SETCC are 2 or 6 which map to 2 and 10
   rtx mod = GEN_INT((mod1b == 2) ? 2 : 10);
 
-  emit_insn(gen_riscv_gs_sfplz_int(operands[0], operands[1], operands[2], mod));
+  emit_insn(gen_rvtt_gs_sfplz_int(operands[0], operands[1], operands[2], mod));
 })
 
 (define_peephole2
@@ -87,13 +87,13 @@
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    4 "const_setcc_z_or_nez")] UNSPECV_GS_SFPSETCC_V)]
 
-  "TARGET_SFPU_GS"
+  "TARGET_RVTT_GS"
   [(const_int 0)]
 {
   int mod1b = INTVAL(operands[4]);
   // Only legal values of SETCC are 2 or 6 which map to 2 and 10
   rtx mod = GEN_INT((mod1b == 2) ? 2 : 10);
 
-  emit_insn(gen_riscv_gs_sfppushc());
-  emit_insn(gen_riscv_gs_sfplz_int(operands[0], operands[1], operands[2], mod));
+  emit_insn(gen_rvtt_gs_sfppushc());
+  emit_insn(gen_rvtt_gs_sfplz_int(operands[0], operands[1], operands[2], mod));
 })

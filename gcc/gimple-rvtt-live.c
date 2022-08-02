@@ -46,7 +46,7 @@
 #include <vector>
 #include <unordered_map>
 #include <tuple>
-#include "config/riscv/sfpu.h"
+#include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -121,13 +121,13 @@ process_block_stmts(basic_block bb,
   while (!gsi_end_p (gsi))
     {
       gcall *stmt;
-      const riscv_sfpu_insn_data *insnd;
-      if (riscv_sfpu_p(&insnd, &stmt, gsi))
+      const rvtt_insn_data *insnd;
+      if (rvtt_p(&insnd, &stmt, gsi))
 	{
-	  if (insnd->id != riscv_sfpu_insn_data::nonsfpu)
+	  if (insnd->id != rvtt_insn_data::nonsfpu)
 	    {
 	      found_sfpu = true;
-	      if (insnd->id == riscv_sfpu_insn_data::sfppushc)
+	      if (insnd->id == rvtt_insn_data::sfppushc)
 		{
 		  bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
 
@@ -145,7 +145,7 @@ process_block_stmts(basic_block bb,
 		  current->generation = *gen_count;
 		  DUMP("      pushed to (l=%d, g=%d)\n", current->level, current->generation);
 		}
-	      else if (insnd->id == riscv_sfpu_insn_data::sfppopc)
+	      else if (insnd->id == rvtt_insn_data::sfppopc)
 		{
 		  if (stack.size() == 0)
 		    {
@@ -161,8 +161,8 @@ process_block_stmts(basic_block bb,
 		{
 		  gcc_assert(liveness.find(stmt) == liveness.end());
 		  liveness.insert(pair<gcall *, liveness_data>(stmt, *current));
-		  if (riscv_sfpu_sets_cc(insnd, stmt) &&
-		      insnd->id != riscv_sfpu_insn_data::sfpencc)
+		  if (rvtt_sets_cc(insnd, stmt) &&
+		      insnd->id != rvtt_insn_data::sfpencc)
 		    {
 		      if (stack.size() == 0)
 			{
@@ -219,8 +219,8 @@ process_block(function *fn,
 	  while (!gsi_end_p (gsi))
 	    {
 	      gcall *stmt;
-	      const riscv_sfpu_insn_data *insnd;
-	      if (riscv_sfpu_p(&insnd, &stmt, gsi))
+	      const rvtt_insn_data *insnd;
+	      if (rvtt_p(&insnd, &stmt, gsi))
 		{
 		  auto loc = liveness.find(stmt);
 		  if (loc != liveness.end())
@@ -325,8 +325,8 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 	}
       else
 	{
-	  const riscv_sfpu_insn_data * insnd = riscv_sfpu_get_insn_data(stmt);
-	  if (insnd && insnd->id != riscv_sfpu_insn_data::nonsfpu)
+	  const rvtt_insn_data * insnd = rvtt_get_insn_data(stmt);
+	  if (insnd && insnd->id != rvtt_insn_data::nonsfpu)
 	    {
 	      if (insnd->live)
 		{
@@ -410,9 +410,9 @@ break_liveness(function *fn, call_liveness& liveness)
   for (it = liveness.begin(); it != liveness.end(); it++)
     {
       gcall *stmt = it->first;
-      const riscv_sfpu_insn_data *insnd = riscv_sfpu_get_insn_data(stmt);
+      const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
 
-      if (insnd->id != riscv_sfpu_insn_data::nonsfpu && insnd->live)
+      if (insnd->id != rvtt_insn_data::nonsfpu && insnd->live)
 	{
 	  // Get the defining statement and it's cc_count for this SSA
 	  liveness_data cur_stmt_liveness = it->second;
@@ -432,7 +432,7 @@ break_liveness(function *fn, call_liveness& liveness)
 	       cur_stmt_liveness.generation <= def_stmt_liveness.generation) ||
 	      cur_stmt_liveness.force)
 	    {
-	      if (insnd->id == riscv_sfpu_insn_data::sfpassign_lv)
+	      if (insnd->id == rvtt_insn_data::sfpassign_lv)
 		{
 		  DUMP("    removing sfpassign\n");
 		  tree lhs = gimple_call_lhs (stmt);
@@ -483,7 +483,7 @@ break_liveness(function *fn, call_liveness& liveness)
 		  // Update SSA for the 2 arguments of the assign
 		  gcc_assert(gimple_call_num_args(stmt) == 2);
 
-		  riscv_sfpu_prep_stmt_for_deletion(stmt);
+		  rvtt_prep_stmt_for_deletion(stmt);
 		  unlink_stmt_vdef(stmt);
 		  gsi_remove(&gsi, true);
 		  release_defs(stmt);
@@ -515,9 +515,9 @@ fold_live_assign (function *fn)
     while (!gsi_end_p (gsi))
       {
 	gcall *stmt;
-	const riscv_sfpu_insn_data *insnd;
-	if (riscv_sfpu_p (&insnd, &stmt, gsi) &&
-	    insnd->id == riscv_sfpu_insn_data::sfpassign_lv)
+	const rvtt_insn_data *insnd;
+	if (rvtt_p (&insnd, &stmt, gsi) &&
+	    insnd->id == rvtt_insn_data::sfpassign_lv)
 	  {
 	    tree lhs = gimple_call_lhs (stmt);
 	    tree live_arg = gimple_call_arg (stmt, 0);
@@ -526,10 +526,10 @@ fold_live_assign (function *fn)
 	    gimple_stmt_iterator prev_gsi = gsi;
 	    gsi_prev_nondebug (&prev_gsi);
 	    gcall *prev_stmt;
-	    const riscv_sfpu_insn_data *prev_insnd;
+	    const rvtt_insn_data *prev_insnd;
 
-	    if (riscv_sfpu_p (&prev_insnd, &prev_stmt, prev_gsi) &&
-		prev_insnd->id != riscv_sfpu_insn_data::nonsfpu &&
+	    if (rvtt_p (&prev_insnd, &prev_stmt, prev_gsi) &&
+		prev_insnd->id != rvtt_insn_data::nonsfpu &&
 		dyn_cast<gcall *>(SSA_NAME_DEF_STMT (assgn_arg)) == prev_stmt)
 	      {
 		DUMP("    folding %s\n", prev_insnd->name);
@@ -541,14 +541,14 @@ fold_live_assign (function *fn)
 		    // path injecting sfpxloadi_lv for a 32 bit load
 		    // Back up one insn and propogate liveness there
 		    DUMP("    handling nonimm %s\n", prev_insnd->name);
-		    gcc_assert(prev_insnd->id == riscv_sfpu_insn_data::sfpxloadi_lv);
+		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfpxloadi_lv);
 		    prev2_stmt = prev_stmt;
 		    gsi_prev_nondebug (&prev_gsi);
-		    riscv_sfpu_p (&prev_insnd, &prev_stmt, prev_gsi);
-		    gcc_assert(prev_insnd->id == riscv_sfpu_insn_data::sfpxloadi);
+		    rvtt_p (&prev_insnd, &prev_stmt, prev_gsi);
+		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfpxloadi);
 		  }
 
-		const riscv_sfpu_insn_data *new_insnd = riscv_sfpu_get_live_version(prev_insnd);
+		const rvtt_insn_data *new_insnd = rvtt_get_live_version(prev_insnd);
 		if (new_insnd != nullptr)
 		  {
 		    // Create _lv version of prev, delete assign stmt, delete prev_stmt
@@ -570,7 +570,7 @@ fold_live_assign (function *fn)
 		    if (prev2_stmt == nullptr)
 		      {
 			gimple_call_set_lhs (new_stmt, lhs);
-			riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
+			rvtt_prep_stmt_for_deletion(prev_stmt);
 			unlink_stmt_vdef(prev_stmt);
 			gsi_remove(&prev_gsi, true);
 			release_defs(prev_stmt);
@@ -581,7 +581,7 @@ fold_live_assign (function *fn)
 			gimple_call_set_lhs (new_stmt, gimple_call_lhs(prev_stmt));
 			gimple_call_set_lhs (prev2_stmt, lhs);
 			update_stmt(prev2_stmt);
-			riscv_sfpu_prep_stmt_for_deletion(prev_stmt);
+			rvtt_prep_stmt_for_deletion(prev_stmt);
 			gsi_remove(&prev_gsi, true);
 		      }
 
@@ -632,10 +632,10 @@ transform (function *fn)
 
 namespace {
 
-const pass_data pass_data_riscv_sfpu_live =
+const pass_data pass_data_rvtt_live =
 {
   GIMPLE_PASS, /* type */
-  "riscv_sfpu_live", /* name */
+  "rvtt_live", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -645,21 +645,21 @@ const pass_data pass_data_riscv_sfpu_live =
   0, /* todo_flags_finish */
 };
 
-class pass_riscv_sfpu_live : public gimple_opt_pass
+class pass_rvtt_live : public gimple_opt_pass
 {
 public:
-  pass_riscv_sfpu_live (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_riscv_sfpu_live, ctxt)
+  pass_rvtt_live (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_live, ctxt)
   {}
 
   virtual unsigned int execute (function *);
-}; // class pass_riscv_sfpu_live
+}; // class pass_rvtt_live
 
 } // anon namespace
 
-/* Entry point to riscv_sfpu_live pass.	*/
+/* Entry point to rvtt_live pass.	*/
 unsigned int
-pass_riscv_sfpu_live::execute (function *fun)
+pass_rvtt_live::execute (function *fun)
 {
   if (flag_grayskull || flag_wormhole)
     {
@@ -670,7 +670,7 @@ pass_riscv_sfpu_live::execute (function *fun)
 }
 
 gimple_opt_pass *
-make_pass_riscv_sfpu_live (gcc::context *ctxt)
+make_pass_rvtt_live (gcc::context *ctxt)
 {
-  return new pass_riscv_sfpu_live (ctxt);
+  return new pass_rvtt_live (ctxt);
 }

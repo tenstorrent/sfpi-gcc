@@ -19,7 +19,7 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-(include "sfpu-predicates.md")
+(include "rvtt-predicates.md")
 
 ; & in spec means early clobber, written before inputs are used, cannot reuse input reg
 
@@ -29,8 +29,8 @@
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
   UNSPECV_LOAD_IMMEDIATE
-  UNSPECV_SFPASSIGNLR
-  UNSPECV_SFPASSIGNLR_INT
+  UNSPECV_SFPASSIGNLREG
+  UNSPECV_SFPASSIGNLREG_INT
   UNSPECV_SFPXFCMPV
   UNSPECV_SFPXICMPS
   UNSPECV_SFPXICMPV
@@ -39,7 +39,6 @@
   UNSPECV_SFPXCONDB
   UNSPECV_SFPXCONDI
   UNSPECV_SFPINCRWC
-  UNSPECV_SFPILLEGAL
   UNSPECV_SFPNONIMM_DST
   UNSPECV_SFPNONIMM_DST_SRC
   UNSPECV_SFPNONIMM_SRC
@@ -55,32 +54,32 @@
     DONE;
 })
 
-(define_insn "riscv_load_immediate"
+(define_insn "rvtt_load_immediate"
   [(set (match_operand:SI 0 "register_operand" "=r")
          (unspec [(match_operand:SI   1 "immediate_operand" "")] UNSPECV_LOAD_IMMEDIATE))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   static char str[100];
   sprintf(str, "%s\t# %lx", "li\t%0, %1", INTVAL(operands[1]));
   return str;
 })
 
-(define_expand "riscv_sfpassignlr"
+(define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_SFPASSIGNLR))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
-  riscv_sfpu_emit_sfpassignlr(operands[0], operands[1]);
+  rvtt_emit_sfpassignlreg(operands[0], operands[1]);
   DONE;
 })
 
-(define_insn "riscv_sfpassignlr_int"
+(define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLR_INT))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+        (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
   "")
 
-(define_insn "riscv_sfpnonimm_dst"
+(define_insn "rvtt_sfpnonimm_dst"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
                           (match_operand:SI    2 "immediate_operand" "i, i") ; # nops
@@ -91,7 +90,7 @@
                           (match_operand:SI    7 "immediate_operand" "i, i") ; loadimm id/fallback flag
                                                                          ] UNSPECV_SFPNONIMM_DST))
         (clobber (match_scratch:SI 8 "=&r, &r"))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[7]);
@@ -101,7 +100,7 @@
     unsigned int op = INTVAL(operands[6]);
     unsigned int mask = 0xF << INTVAL(operands[4]);
     unsigned int old_reg = op & mask;
-    unsigned int new_reg = riscv_sfpu_regno(operands[0]) << INTVAL(operands[4]);
+    unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[4]);
     unsigned int reg_update = old_reg ^ new_reg;
     if (reg_update == 0) { // otherwise, why fallback?
       fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
@@ -118,12 +117,12 @@
   }
 
   static char out[200];
-  char lv[10];
-  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d)", mn, UINTVAL(operands[6]) >> 24, riscv_sfpu_lv_regno_str(lv, operands[3]), riscv_sfpu_regno(operands[0]));
-  return riscv_sfpu_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  char lv[20];
+  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d)", mn, UINTVAL(operands[6]) >> 24, rvtt_sfpu_lv_regno_str(lv, operands[3]), rvtt_sfpu_regno(operands[0]));
+  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
 })
 
-(define_insn "riscv_sfpnonimm_dst_src"
+(define_insn "rvtt_sfpnonimm_dst_src"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
                           (match_operand:SI    2 "immediate_operand" "i, i") ; # nops
@@ -136,7 +135,7 @@
                           (match_operand:SI    9 "immediate_operand" "i, i") ; loadimm id/fallback flag
                                                                          ] UNSPECV_SFPNONIMM_DST_SRC))
         (clobber (match_scratch:SI 10 "=&r, &r"))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[9]);
@@ -148,8 +147,8 @@
     unsigned int src_mask = 0xF << INTVAL(operands[6]);
     unsigned int old_reg = op & (dst_mask | src_mask);
     unsigned int new_reg =
-        (riscv_sfpu_regno(operands[0]) << INTVAL(operands[5])) |
-        (riscv_sfpu_regno(operands[4]) << INTVAL(operands[6]));
+        (rvtt_sfpu_regno(operands[0]) << INTVAL(operands[5])) |
+        (rvtt_sfpu_regno(operands[4]) << INTVAL(operands[6]));
 
     unsigned int reg_update = old_reg ^ new_reg;
     if (reg_update == 0) { // otherwise, why fallback?
@@ -167,16 +166,16 @@
   }
 
   static char out[200];
-  char lv[10];
-  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d) s(lr%d)", mn, UINTVAL(operands[8]) >> 24, riscv_sfpu_lv_regno_str(lv, operands[3]), riscv_sfpu_regno(operands[0]), riscv_sfpu_regno(operands[4]));
-  return riscv_sfpu_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  char lv[20];
+  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d) s(lr%d)", mn, UINTVAL(operands[8]) >> 24, rvtt_sfpu_lv_regno_str(lv, operands[3]), rvtt_sfpu_regno(operands[0]), rvtt_sfpu_regno(operands[4]));
+  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
 })
 
 ;;; Differentiate between src and store as store is used in the peephole un-optimization
 (define_int_iterator nonimm_srcstore [UNSPECV_SFPNONIMM_SRC UNSPECV_SFPNONIMM_STORE])
 (define_int_attr nonimm_srcstore_name [(UNSPECV_SFPNONIMM_SRC "src") (UNSPECV_SFPNONIMM_STORE "store")])
 
-(define_insn "riscv_sfpnonimm_<nonimm_srcstore_name>"
+(define_insn "rvtt_sfpnonimm_<nonimm_srcstore_name>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x") ; src
                      (match_operand:SI    1 "address_operand"   "r") ; instrn_buf_add
                      (match_operand:SI    2 "immediate_operand" "i") ; # nops
@@ -186,7 +185,7 @@
                      (match_operand:SI    6 "immediate_operand" "i") ; loadimm id/fallback flag
                                                                          ] nonimm_srcstore)
             (clobber (match_scratch:SI    7 "=&r"))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[6]);
@@ -196,7 +195,7 @@
     unsigned int op = INTVAL(operands[5]);
     unsigned int mask = 0xF << INTVAL(operands[3]);
     unsigned int old_reg = op & mask;
-    unsigned int new_reg = riscv_sfpu_regno(operands[0]) << INTVAL(operands[3]);
+    unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[3]);
     unsigned int reg_update = old_reg ^ new_reg;
     if (reg_update == 0) { // otherwise, why fallback?
       fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
@@ -213,11 +212,11 @@
   }
 
   static char out[200];
-  sprintf(out, "%s\t# Op(0x%lx) s(lr%d)", mn, UINTVAL(operands[5]) >> 24, riscv_sfpu_regno(operands[0]));
-  return riscv_sfpu_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  sprintf(out, "%s\t# Op(0x%lx) s(lr%d)", mn, UINTVAL(operands[5]) >> 24, rvtt_sfpu_regno(operands[0]));
+  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
 })
 
-(define_expand "riscv_sfpxicmps"
+(define_expand "rvtt_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
@@ -225,57 +224,57 @@
                           (match_operand:SI    4 "nonmemory_operand" "")
                           (match_operand:SI    5 "immediate_operand" "")
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_SFPXICMPS))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_sfpxicmpv"
+(define_expand "rvtt_sfpxicmpv"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPXICMPV))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_sfpxvif"
+(define_expand "rvtt_sfpxvif"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPXVIF))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_sfpxbool"
+(define_expand "rvtt_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXBOOL))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_sfpxcondb"
+(define_expand "rvtt_sfpxcondb"
   [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")
                      (match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDB)]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_expand "riscv_sfpxcondi"
+(define_expand "rvtt_sfpxcondi"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDI))]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
 {
   gcc_assert(0);
 })
 
-(define_insn "riscv_sfpincrwc"
+(define_insn "rvtt_sfpincrwc"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "")
                      (match_operand:SI    1 "immediate_operand" "")
                      (match_operand:SI    2 "immediate_operand" "")
                      (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPINCRWC)]
-  "TARGET_SFPU_GS || TARGET_SFPU_WH"
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
   "SFPINCRWC\t%0, %1, %2, %3")

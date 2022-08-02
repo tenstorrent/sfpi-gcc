@@ -3,8 +3,8 @@
 #include <map>
 #include <vector>
 
-#ifndef GCC_RISCV_SFPU_H
-#define GCC_RISCV_SFPU_H
+#ifndef GCC_RVTT_H
+#define GCC_RVTT_H
 
 constexpr unsigned int SFP_LREG_COUNT = 4;
 
@@ -98,16 +98,18 @@ constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
 constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
-struct riscv_sfpu_insn_data {
+struct rvtt_insn_data {
   enum insn_id {
-#define SFPU_INTERNAL(id, nim, sched) id,
-#define SFPU_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
-#define SFPU_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
-#define SFPU_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
-#define SFPU_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, in, nim, nis) id,
-#define SFPU_GS_PAD_BUILTIN(id) id,
-#define SFPU_GS_PAD_NO_TGT_BUILTIN(id) id,
-#include "sfpu-insn.h"
+#define RVTT_INTERNAL(id, nim, sched) id,
+#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_INTERNAL(id, sched) id,
+#define RVTT_GS_PAD_INTERNAL(id) id,
+#define RVTT_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_PAD_BUILTIN(id) id,
+#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) id,
+#include "rvtt-insn.h"
 
     nonsfpu
   };
@@ -120,7 +122,7 @@ struct riscv_sfpu_insn_data {
   const bool has_half_offset;
   const int dst_arg_pos;
   const int mod_pos;
-  const int schedule;   // see INSN_SCHEDULE_* flags in sfpu-protos.h
+  const int schedule;   // see INSN_SCHEDULE_* flags in rvtt-protos.h
   const int nonimm_pos;	// +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
   const bool internal;
   const unsigned int nonimm_mask;
@@ -129,50 +131,51 @@ struct riscv_sfpu_insn_data {
   inline bool uses_dst_as_src() const { return dst_arg_pos != -1; }
 };
 
-extern unsigned int riscv_sfpu_cmp_ex_to_setcc_mod1_map[];
+extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 
-extern void riscv_sfpu_insert_insn(int idx, const char*name, tree decl);
-extern void riscv_sfpu_init_builtins();
-extern const char * riscv_sfpu_get_builtin_name_stub();
-extern tree riscv_sfpu_emit_nonimm_prologue(unsigned int unique_id,
-					    const riscv_sfpu_insn_data *insnd,
-					    gcall *stmt,
-					    gimple_stmt_iterator gsi);
-extern void riscv_sfpu_link_nonimm_prologue(std::vector<tree> &load_imm_map,
-					    unsigned int unique_id,
-					    tree old_add,
-					    const riscv_sfpu_insn_data *insnd,
-					    gcall *stmt);
-extern void riscv_sfpu_cleanup_nonimm_lis(function *fun);
-extern rtx riscv_sfpu_get_insn_operands(int *noperands, rtx_insn *insn);
+extern void rvtt_insert_insn(int idx, const char*name, tree decl);
+extern void rvtt_init_builtins();
+extern const char * rvtt_get_builtin_name_stub();
+extern tree rvtt_emit_nonimm_prologue(unsigned int unique_id,
+				      const rvtt_insn_data *insnd,
+				      gcall *stmt,
+				      gimple_stmt_iterator gsi);
+extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
+				      unsigned int unique_id,
+				      tree old_add,
+				      const rvtt_insn_data *insnd,
+				      gcall *stmt);
+extern void rvtt_cleanup_nonimm_lis(function *fun);
+extern int rvtt_get_insn_operand_count(rtx_insn *insn);
+extern rtx rvtt_get_insn_operand(int which, rtx_insn *insn);
 
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const char *name);
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const riscv_sfpu_insn_data::insn_id id);
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_insn_data(const gcall *stmt);
+extern const rvtt_insn_data * rvtt_get_insn_data(const char *name);
+extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
+extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
 
-extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple *gimp);
-extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-extern bool riscv_sfpu_p(const riscv_sfpu_insn_data **insnd, rtx_insn *insn);
+extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
+extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
+extern bool rvtt_p(const rvtt_insn_data **insnd, rtx_insn *insn);
 
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_live_version(const riscv_sfpu_insn_data *insnd);
-extern const riscv_sfpu_insn_data * riscv_sfpu_get_notlive_version(const riscv_sfpu_insn_data *insnd);
+extern const rvtt_insn_data * rvtt_get_live_version(const rvtt_insn_data *insnd);
+extern const rvtt_insn_data * rvtt_get_notlive_version(const rvtt_insn_data *insnd);
 
-extern bool riscv_sfpu_sets_cc(const riscv_sfpu_insn_data *insnd, gcall *stmt);
-extern bool riscv_sfpu_permutable_operands(const riscv_sfpu_insn_data *insnd, gcall *stmt);
+extern bool rvtt_sets_cc(const rvtt_insn_data *insnd, gcall *stmt);
+extern bool rvtt_permutable_operands(const rvtt_insn_data *insnd, gcall *stmt);
 
-extern void riscv_sfpu_prep_stmt_for_deletion(gimple *stmt);
-extern bool riscv_sfpu_get_fp16b(tree *value, gcall *stmt, const riscv_sfpu_insn_data *insnd);
+extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
+extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd);
 
-extern uint32_t riscv_sfpu_fp32_to_fp16a(const uint32_t val);
-extern uint32_t riscv_sfpu_fp32_to_fp16b(const uint32_t val);
-extern uint32_t riscv_sfpu_scmp2loadi_mod(int mod);
-extern bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
-					  gcall **stmt,
-					  gimple_stmt_iterator gsi,
-					  bool allow_non_sfpu = false);
-extern bool riscv_sfpu_get_next_sfpu_insn(const riscv_sfpu_insn_data **insnd,
-					  rtx_insn **next_insn,
-					  rtx_insn *insn,
-					  bool allow_non_sfpu = false);
+extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
+extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
+extern uint32_t rvtt_scmp2loadi_mod(int mod);
+extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
+				    gcall **stmt,
+				    gimple_stmt_iterator gsi,
+				    bool allow_non_sfpu = false);
+extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
+				    rtx_insn **next_insn,
+				    rtx_insn *insn,
+				    bool allow_non_sfpu = false);
 
 #endif

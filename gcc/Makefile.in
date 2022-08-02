@@ -1410,14 +1410,14 @@ OBJS = \
 	gimple-range-fold.o \
 	gimple-range-gori.o \
 	gimple-range-trace.o \
-	gimple-riscv-sfpu-cc.o \
-	gimple-riscv-sfpu-combine.o \
-	gimple-riscv-sfpu-expand.o \
-	gimple-riscv-sfpu-live.o \
-	gimple-riscv-sfpu-move.o \
-	gimple-riscv-sfpu-nonimm-expand.o \
-	gimple-riscv-sfpu-nonimm-tag.o \
-	gimple-riscv-sfpu-warn.o \
+	gimple-rvtt-cc.o \
+	gimple-rvtt-combine.o \
+	gimple-rvtt-expand.o \
+	gimple-rvtt-live.o \
+	gimple-rvtt-move.o \
+	gimple-rvtt-nonimm-expand.o \
+	gimple-rvtt-nonimm-tag.o \
+	gimple-rvtt-warn.o \
 	gimple-ssa-backprop.o \
 	gimple-ssa-evrp.o \
 	gimple-ssa-evrp-analyze.o \
@@ -1572,8 +1572,8 @@ OBJS = \
 	rtl-ssa/changes.o \
 	rtl-ssa/functions.o \
 	rtl-ssa/insns.o \
-	rtl-riscv-sfpu-nonimm.o \
-	rtl-riscv-sfpu-schedule.o \
+	rtl-rvtt-nonimm.o \
+	rtl-rvtt-schedule.o \
 	rtl-tests.o \
 	rtl.o \
 	rtlhash.o \
