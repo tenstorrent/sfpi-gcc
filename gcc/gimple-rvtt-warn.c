@@ -282,7 +282,7 @@ public:
 unsigned int
 pass_rvtt_warn::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_rvtt_warn && (flag_grayskull || flag_wormhole))
     {
       process (fun);
     }
