@@ -3608,15 +3608,15 @@ Common Var(flag_ipa_ra) Optimization
 Use caller save register across calls if possible.
 
 frvtt-sfpu-cc
-Common Var(flag_rvtt_cc)
+Common Var(flag_rvtt_cc) Init(1)
 Optimize riscv sfpu CC usage.
 
 frvtt-sfpu-combine
-Common Var(flag_rvtt_combine)
-Combine instructions for riscv sfpu
+Common Var(flag_rvtt_combine) Init(1)
+Combine instructions for riscv sfpu.
 
-friscv-sfpu-warn
-Common Var(flag_rvtt_warn)
-Generate warnings for sfpu operations
+frvtt-sfpu-warn
+Common Var(flag_rvtt_warn) Init(1)
+Generate warnings for sfpu operations.
 
 ; This comment is to ensure we retain the blank line above.

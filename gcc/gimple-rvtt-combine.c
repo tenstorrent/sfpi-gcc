@@ -848,7 +848,7 @@ public:
 unsigned int
 pass_rvtt_combine::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_rvtt_combine && (flag_grayskull || flag_wormhole))
     {
       transform (fun);
     }
