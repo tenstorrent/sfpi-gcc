@@ -419,7 +419,7 @@ try_gen_mad(const rvtt_insn_data *candidate_insnd,
       gimple_stmt_iterator assign_gsi;
       gcall *assign_stmt;
       const rvtt_insn_data *assign_insnd;
-      int live = candidate_insnd->live;
+      int live = candidate_insnd->live_p();
       int which_arg = 0;
 
       int candidate_mod = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
@@ -537,7 +537,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       DUMP("Trying to combine %s into %si\n", candidate_insnd->name,
 	   rvtt_get_notlive_version(candidate_insnd)->name);
 
-      int live = candidate_insnd->live;
+      int live = candidate_insnd->live_p();
       gimple_stmt_iterator assign_gsi;
       gcall *assign_stmt;
       const rvtt_insn_data *assign_insnd;
@@ -644,7 +644,7 @@ try_combine_add_half(const rvtt_insn_data *candidate_insnd,
       DUMP("Found %s, looking to see if its use is an add of +/-0.5f...\n", candidate_insnd->name);
 
       tree candidate_lhs = gimple_call_lhs(candidate_stmt);
-      int live = candidate_insnd->live;
+      int live = candidate_insnd->live_p();
       gimple *use_g;
       gcall *use_stmt;
       const rvtt_insn_data *use_insnd;

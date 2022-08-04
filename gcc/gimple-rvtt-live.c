@@ -328,7 +328,7 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 	  const rvtt_insn_data * insnd = rvtt_get_insn_data(stmt);
 	  if (insnd && insnd->id != rvtt_insn_data::nonsfpu)
 	    {
-	      if (insnd->live)
+	      if (insnd->live_p())
 		{
 		  DUMP("      chase assignment\n");
 		  // If the defining statement is another _lv insn, chase it through
@@ -412,7 +412,7 @@ break_liveness(function *fn, call_liveness& liveness)
       gcall *stmt = it->first;
       const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
 
-      if (insnd->id != rvtt_insn_data::nonsfpu && insnd->live)
+      if (insnd->id != rvtt_insn_data::nonsfpu && insnd->live_p())
 	{
 	  // Get the defining statement and it's cc_count for this SSA
 	  liveness_data cur_stmt_liveness = it->second;
@@ -535,7 +535,7 @@ fold_live_assign (function *fn)
 		DUMP("    folding %s\n", prev_insnd->name);
 
 		gcall *prev2_stmt = nullptr;
-		if (prev_insnd->live)
+		if (prev_insnd->live_p())
 		  {
 		    // The only _lv insns at this point are from the non-imm
 		    // path injecting sfpxloadi_lv for a 32 bit load

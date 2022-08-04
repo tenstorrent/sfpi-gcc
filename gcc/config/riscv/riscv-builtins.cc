@@ -175,12 +175,12 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define RVTT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
-#define RVTT_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
-#define RVTT_GS_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(gs_##op, fmt, grayskull),
-#define RVTT_GS_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
-#define RVTT_WH_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
-#define RVTT_WH_NO_TGT_BUILTIN(op, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
+#define RVTT_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define RVTT_GS_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(gs_##op, fmt, grayskull),
+#define RVTT_GS_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
+#define RVTT_WH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #include "rvtt-insn.h"
 };
 

@@ -171,7 +171,7 @@ void transform(function *cfn)
 	 if (NONDEBUG_INSN_P(insn) &&
 	     rvtt_p(&insnd, insn) &&
 	     insnd->nonimm_pos != -1 &&
-	     insnd->rtlonly)
+	     insnd->rtl_only_p())
 	   {
 	     gcc_assert(GET_CODE(PATTERN(insn)) == PARALLEL);
 	     rtx pat = XVECEXP(PATTERN(insn), 0, 0);

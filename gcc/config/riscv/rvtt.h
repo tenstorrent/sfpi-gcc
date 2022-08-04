@@ -99,15 +99,23 @@ constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
 constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
+constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01;
+constexpr unsigned int INSN_FLAGS_LIVE               = 0x02;
+constexpr unsigned int INSN_FLAGS_HAS_HALF_OFFSET    = 0x04;
+constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
+constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if an sfpu insn (eg, incrwc)
+constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
+constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
+
 struct rvtt_insn_data {
   enum insn_id {
-#define RVTT_INTERNAL(id, nim, sched, gp) id,
-#define RVTT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_INTERNAL(id, sched) id,
-#define RVTT_GS_PAD_INTERNAL(id) id,
-#define RVTT_GS_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, cc, lv, hho, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_RTL_ONLY(id, nip, sched, gp) id,
+#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_RTL_ONLY(id, fl, sched) id,
+#define RVTT_GS_PAD_RTL_ONLY(id) id,
+#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_GS_PAD_BUILTIN(id) id,
 #define RVTT_GS_PAD_NO_TGT_BUILTIN(id) id,
 #include "rvtt-insn.h"
@@ -118,23 +126,25 @@ struct rvtt_insn_data {
   const enum insn_id id;
   const char *name;
   tree decl;
-  const bool can_set_cc;
-  const bool live;
-  const bool has_half_offset;
+  const unsigned short flags;  // see flags above
   const short dst_arg_pos;
   const short mod_pos;
   const short schedule;    // see INSN_SCHEDULE_* flags in rvtt-protos.h
   const short nonimm_pos;  // +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
-  const bool rtlonly;      // true if no associated builtin
   const short generic_pos ; // arg pos of arg w/ schedule info or -1 if na
   const unsigned int nonimm_mask;
   const short nonimm_shft;
 
+  inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
+  inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
+  inline bool has_half_offset_p() const { return flags & INSN_FLAGS_HAS_HALF_OFFSET; }
+  inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
+  inline bool non_sfpu_p() const { return flags & INSN_FLAGS_NON_SFPU; }
+  inline bool non_tt_p() const { return flags & INSN_FLAGS_NON_TT; }
+  inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
-
   inline bool schedule_p() const { return schedule != -1; }
   inline bool schedule_in_arg_p() const { return generic_pos != -1; }
-  inline bool schedule_non_sfpu_p() const { return schedule & INSN_SCHED_NON_SFPU; }
   inline int schedule_arg_pos() const { return generic_pos; }
   inline bool schedule_from_arg_p(rtx_insn *insn) const;
   inline bool schedule_dynamic_p(rtx_insn *insn) const;
