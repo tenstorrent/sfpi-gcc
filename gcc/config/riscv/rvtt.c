@@ -900,7 +900,7 @@ rtx rvtt_get_insn_operand(int which, rtx_insn *insn)
   return op;
 }
 
-int rvtt_get_insn_dst_sfpu_regno(rtx_insn *insn)
+int rvtt_get_insn_dst_regno(rtx_insn *insn)
 {
   rtx pat = PATTERN(insn);
   if (GET_CODE (pat) == PARALLEL)
@@ -910,7 +910,7 @@ int rvtt_get_insn_dst_sfpu_regno(rtx_insn *insn)
   if (GET_CODE (pat) == SET)
     {
       rtx reg = XEXP(pat, 0);
-      return rvtt_sfpu_regno(reg);
+      return REGNO(reg);
     }
   else
     {

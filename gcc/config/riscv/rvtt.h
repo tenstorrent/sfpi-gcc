@@ -197,7 +197,7 @@ extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
 				    rtx_insn **next_insn,
 				    rtx_insn *insn,
 				    bool allow_non_sfpu = false);
-extern int rvtt_get_insn_dst_sfpu_regno(rtx_insn *insn);
+extern int rvtt_get_insn_dst_regno(rtx_insn *insn);
 
 inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const
 {

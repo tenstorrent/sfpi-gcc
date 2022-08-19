@@ -101,8 +101,8 @@ static void transform ()
 		      const rvtt_insn_data *next_insnd;
 		      if (rvtt_get_next_sfpu_insn(&next_insnd, &next_insn, insn))
 			{
-			  int regint = rvtt_get_insn_dst_sfpu_regno(insn);
-			  gcc_assert(regint != -1);
+			  int regint = rvtt_get_insn_dst_regno(insn) - SFPU_REG_FIRST;
+			  gcc_assert(regint != -1 - SFPU_REG_FIRST);
 			  unsigned int regno = regint;
 
 			  DUMP("  next insn, reg: %s %d\n", next_insnd->name, regno);
