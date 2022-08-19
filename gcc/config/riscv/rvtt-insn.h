@@ -3,7 +3,7 @@
 // Columns are: name, decl, enable, can_set_cc, live, has_half_offset, dst_arg_pos, mod1_pos
 
 #ifndef RVTT_RTL_ONLY
-#define RVTT_RTL_ONLY(a, b, c, d)
+#define RVTT_RTL_ONLY(a, b, c)
 #endif
 
 #ifndef RVTT_BUILTIN
@@ -54,11 +54,11 @@
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns
-RVTT_RTL_ONLY (sfpnonimm_dst,     5, 0x40,  1)
-RVTT_RTL_ONLY (sfpnonimm_dst_src, 7, 0x40,  1)
-RVTT_RTL_ONLY (sfpnonimm_src,     5, 0x40,  2)
-RVTT_RTL_ONLY (sfpnonimm_store,   5, 0x40,  2)
-RVTT_RTL_ONLY (sfpgccmov_cc,     -1, 0x00, -1)
+RVTT_RTL_ONLY (sfpnonimm_dst,     5,  1)
+RVTT_RTL_ONLY (sfpnonimm_dst_src, 7,  1)
+RVTT_RTL_ONLY (sfpnonimm_src,     5,  2)
+RVTT_RTL_ONLY (sfpnonimm_store,   5,  2)
+RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
 
 // Common builtin intrinsics
 RVTT_BUILTIN (load_immediate,  RISCV_USI_FTYPE_USI,                                              0x30, -1, -1, 0x00, -1,      0, 0)
