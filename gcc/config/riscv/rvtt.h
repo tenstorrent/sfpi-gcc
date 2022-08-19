@@ -109,7 +109,7 @@ constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't
 
 struct rvtt_insn_data {
   enum insn_id {
-#define RVTT_RTL_ONLY(id, nip, sched, gp) id,
+#define RVTT_RTL_ONLY(id, nip, gp) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_GS_RTL_ONLY(id, fl, sched) id,
