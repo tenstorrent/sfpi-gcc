@@ -63,18 +63,21 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   return false;
 }
 
-// Perform instruction scheduling.  For wormhole this means adding a NOP or
-// moving a non-dependent instruction into the single instruction shadow of
-// any instruction which uses the MAD unit, which are:	MAD, LUT, LUT32,
-// MUL(I), ADD(I).  Note that SWAP/SHFT2 always require a NOP and that is
-// emitted along with the instruction and not handled here.
+// Perform instruction scheduling
+//
+// For wormhole there is dynamic and static schedule.  Dynamic scheduling
+// requires adding a NOP or moving a non-dependent instruction into the single
+// instruction shadow of ny instruction which uses the MAD unit, which are:
+// MAD, LUT, LUT32, MUL(I), ADD(I).  Presently, this only inserts a NOP.
+//
+// SWAP/SHFT2 are statically scheduled and always require a NOP.
 static void transform ()
 {
   DUMP("Schedule pass on: %s\n", function_name(cfun));
 
   bool update = false;
   basic_block bb;
-  // Processes the nonimm instructions
+
   FOR_EACH_BB_FN (bb, cfun)
     {
       rtx_insn *insn;
@@ -89,7 +92,7 @@ static void transform ()
 	    {
 	      if (insnd->schedule_p() &&
 		  (!insnd->schedule_in_arg_p() ||
-		   (insnd->schedule_from_arg_p(insn))))
+		   insnd->schedule_from_arg_p(insn)))
 		{
 		  if (insnd->schedule_dynamic_p(insn))
 		    {
