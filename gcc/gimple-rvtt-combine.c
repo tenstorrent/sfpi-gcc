@@ -542,6 +542,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       gcall *assign_stmt;
       const rvtt_insn_data *assign_insnd;
       int which_arg = 0;
+      tree value;
 
       // Only combine live if we are writing to the same arg as the dst arg
       bool found_one = (match_prior_assignment(rvtt_insn_data::sfpxloadi,
@@ -550,7 +551,8 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
 			gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 			!intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-			(!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)));
+			(!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)) &&
+			rvtt_get_fp16b(&value, assign_stmt, assign_insnd));
 
       if (!found_one)
 	{
@@ -561,58 +563,54 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
 		       gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
 		       !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-		       (!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)));
+		       (!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)) &&
+		       rvtt_get_fp16b(&value, assign_stmt, assign_insnd));
 	}
 
       if (found_one)
 	{
 	  DUMP("  found a matching %s...\n", assign_insnd->name);
 
-	  // muli/addi only support fp16b
-	  tree value;
-	  if (rvtt_get_fp16b(&value, assign_stmt, assign_insnd))
+	  const rvtt_insn_data *opi_insnd = rvtt_get_notlive_version(candidate_insnd) + 2;
+	  DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
+
+	  // Create <add,mul>i
+	  // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
+	  gcall* opi_stmt = gimple_build_call(opi_insnd->decl, 6);
+	  gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
+	  gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
+	  gimple_call_set_arg(opi_stmt, 2, value);
+	  gimple_call_set_arg(opi_stmt, 5, build_int_cst(integer_type_node,
+							 get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
+
+	  if (TREE_CODE(value) == SSA_NAME)
 	    {
-	      const rvtt_insn_data *opi_insnd = rvtt_get_notlive_version(candidate_insnd) + 2;
-	      DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
-
-	      // Create <add,mul>i
-	      // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
-	      gcall* opi_stmt = gimple_build_call(opi_insnd->decl, 6);
-	      gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
-	      gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
-	      gimple_call_set_arg(opi_stmt, 2, value);
-	      gimple_call_set_arg(opi_stmt, 5, build_int_cst(integer_type_node,
-							     get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
-
-	      if (TREE_CODE(value) == SSA_NAME)
-		{
-		  // Have an fp16b as an non-immediate value
-		  // 2 issues to worry about:
-		  //  - the loadi shft/mask is different from the addi/muli shft/mask
-		  //  - loop unrolling may create multiple related uses
-		  // Issue new nonimm-prologue for the addi, track to see if it can be re-used
-		  tree old_add = gimple_call_arg(assign_stmt, assign_insnd->nonimm_pos + 1);
-		  int unique_id = get_int_arg(assign_stmt, assign_insnd->nonimm_pos + 2);
-		  gcc_assert((unique_id & 1) == 0);
-		  rvtt_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
-		}
-	      else
-		{
-		  gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node, 0));
-		  gimple_call_set_arg(opi_stmt, 4, build_int_cst(integer_type_node, 0));
-		}
-
-	      gimple_call_set_lhs(opi_stmt, gimple_call_lhs(candidate_stmt));
-	      gimple_set_location(opi_stmt, gimple_location (candidate_stmt));
-	      update_stmt(opi_stmt);
-	      gsi_insert_before(&candidate_gsi, opi_stmt, GSI_SAME_STMT);
-
-	      // Delete op
-	      unlink_stmt_vdef(candidate_stmt);
-	      gsi_remove(&candidate_gsi, true);
-
-	      combined = true;
+	      // Have an fp16b as an non-immediate value
+	      // 2 issues to worry about:
+	      //  - the loadi shft/mask is different from the addi/muli shft/mask
+	      //  - loop unrolling may create multiple related uses
+	      // Issue new nonimm-prologue for the addi, track to see if it can be re-used
+	      tree old_add = gimple_call_arg(assign_stmt, assign_insnd->nonimm_pos + 1);
+	      int unique_id = get_int_arg(assign_stmt, assign_insnd->nonimm_pos + 2);
+	      gcc_assert((unique_id & 1) == 0);
+	      rvtt_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
 	    }
+	  else
+	    {
+	      gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node, 0));
+	      gimple_call_set_arg(opi_stmt, 4, build_int_cst(integer_type_node, 0));
+	    }
+
+	  gimple_call_set_lhs(opi_stmt, gimple_call_lhs(candidate_stmt));
+	  gimple_set_location(opi_stmt, gimple_location (candidate_stmt));
+	  update_stmt(opi_stmt);
+	  gsi_insert_before(&candidate_gsi, opi_stmt, GSI_SAME_STMT);
+
+	  // Delete op
+	  unlink_stmt_vdef(candidate_stmt);
+	  gsi_remove(&candidate_gsi, true);
+
+	  combined = true;
 	}
     }
 
@@ -694,42 +692,38 @@ try_combine_add_half(const rvtt_insn_data *candidate_insnd,
 }
 
 static bool
-remove_unused_loadis(function *fun)
+remove_unused_loadis(basic_block bb)
 {
   DUMP("Checking for unused loadi(s)\n");
 
   bool removed = false;
-  basic_block bb;
   gimple_stmt_iterator gsi;
 
-  FOR_EACH_BB_FN (bb, fun)
+  gsi = gsi_start_bb(bb);
+  while (!gsi_end_p(gsi))
     {
-      gsi = gsi_start_bb(bb);
-      while (!gsi_end_p(gsi))
+      gcall *stmt;
+      const rvtt_insn_data *insnd;
+      if (rvtt_p(&insnd, &stmt, gsi))
 	{
-	  gcall *stmt;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p(&insnd, &stmt, gsi))
+	  tree lhs = gimple_call_lhs(stmt);
+	  if (insnd->id == rvtt_insn_data::sfpxloadi &&
+	      (lhs == nullptr || has_zero_uses(lhs)))
 	    {
-	      tree lhs = gimple_call_lhs(stmt);
-	      if (insnd->id == rvtt_insn_data::sfpxloadi &&
-		  (lhs == nullptr || has_zero_uses(lhs)))
-		{
-		  DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
+	      DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
 
-		  // Remove candidate
-		  rvtt_prep_stmt_for_deletion(stmt);
+	      // Remove candidate
+	      rvtt_prep_stmt_for_deletion(stmt);
 
-		  unlink_stmt_vdef(stmt);
-		  gsi_remove(&gsi, true);
-		  release_defs(stmt);
+	      unlink_stmt_vdef(stmt);
+	      gsi_remove(&gsi, true);
+	      release_defs(stmt);
 
-		  removed = true;
-		}
+	      removed = true;
 	    }
-	  if (!gsi_end_p(gsi))
-	    gsi_next (&gsi);
 	}
+      if (!gsi_end_p(gsi))
+	gsi_next (&gsi);
     }
 
   return removed;
@@ -768,10 +762,10 @@ static void transform (function *fun)
 
 	    gsi_next (&candidate_gsi);
 	  }
-      }
 
-      update |= remove_unused_loadis(fun);
-      if (update) update_ssa(TODO_update_ssa);
+	update |= remove_unused_loadis(bb);
+	if (update) update_ssa(TODO_update_ssa);
+      }
 
       update = false;
       candidate_gsi = gsi_start_bb (bb);
@@ -806,7 +800,7 @@ static void transform (function *fun)
 	  gsi_next (&candidate_gsi);
 	}
 
-      update |= remove_unused_loadis(fun);
+      update |= remove_unused_loadis(bb);
       if (update) update_ssa(TODO_update_ssa);
     }
 
