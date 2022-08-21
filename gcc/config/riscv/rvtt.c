@@ -318,7 +318,7 @@ rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
 }
 
 bool
-rvtt_p(const rvtt_insn_data **insnd, rtx_insn *insn)
+rvtt_p(const rvtt_insn_data **insnd, const rtx_insn *insn)
 {
   int code = INSN_CODE(insn);
   *insnd = (code == -1) ? &sfpu_insn_data[rvtt_insn_data::nonsfpu] : sfpu_rtl_insn_ptrs[code];
@@ -826,7 +826,7 @@ rvtt_cleanup_nonimm_lis(function *fun)
 
 // The code below makes me sad.  This is much harder because the operands can
 // either be an array or a single operand (rather than an array of 1)...
-int rvtt_get_insn_operand_count(rtx_insn *insn)
+int rvtt_get_insn_operand_count(const rtx_insn *insn)
 {
   rtx pat = PATTERN(insn);
   int code = GET_CODE(pat);
@@ -863,7 +863,7 @@ int rvtt_get_insn_operand_count(rtx_insn *insn)
   return count;
 }
 
-rtx rvtt_get_insn_operand(int which, rtx_insn *insn)
+rtx rvtt_get_insn_operand(int which, const rtx_insn *insn)
 {
   rtx pat = PATTERN(insn);
   int code = GET_CODE(pat);
@@ -900,7 +900,7 @@ rtx rvtt_get_insn_operand(int which, rtx_insn *insn)
   return op;
 }
 
-int rvtt_get_insn_dst_regno(rtx_insn *insn)
+int rvtt_get_insn_dst_regno(const rtx_insn *insn)
 {
   rtx pat = PATTERN(insn);
   if (GET_CODE (pat) == PARALLEL)

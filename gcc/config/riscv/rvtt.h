@@ -130,7 +130,7 @@ struct rvtt_insn_data {
   const short dst_arg_pos;
   const short mod_pos;
   const short schedule;    // see INSN_SCHEDULE_* flags in rvtt-protos.h
-  const short nonimm_pos;  // +0 raw, +1 raw + load_immediate, +2 unique_id/insn value
+  const short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
   const short generic_pos ; // arg pos of arg w/ schedule info or -1 if na
   const unsigned int nonimm_mask;
   const short nonimm_shft;
@@ -149,6 +149,10 @@ struct rvtt_insn_data {
   inline bool schedule_from_arg_p(rtx_insn *insn) const;
   inline bool schedule_dynamic_p(rtx_insn *insn) const;
   inline int schedule_static_nops(rtx_insn *insn) const;
+
+  inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
+  inline int nonimm_op_arg_pos() const { return nonimm_pos; }
+  inline int nonimm_idflag_arg_pos() const { return nonimm_pos + 1; }
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
@@ -166,8 +170,8 @@ extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt);
 extern void rvtt_cleanup_nonimm_lis(function *fun);
-extern int rvtt_get_insn_operand_count(rtx_insn *insn);
-extern rtx rvtt_get_insn_operand(int which, rtx_insn *insn);
+extern int rvtt_get_insn_operand_count(const rtx_insn *insn);
+extern rtx rvtt_get_insn_operand(int which, const rtx_insn *insn);
 
 extern const rvtt_insn_data * rvtt_get_insn_data(const char *name);
 extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
@@ -175,7 +179,7 @@ extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
 
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-extern bool rvtt_p(const rvtt_insn_data **insnd, rtx_insn *insn);
+extern bool rvtt_p(const rvtt_insn_data **insnd, const rtx_insn *insn);
 
 extern const rvtt_insn_data * rvtt_get_live_version(const rvtt_insn_data *insnd);
 extern const rvtt_insn_data * rvtt_get_notlive_version(const rvtt_insn_data *insnd);
@@ -197,7 +201,7 @@ extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
 				    rtx_insn **next_insn,
 				    rtx_insn *insn,
 				    bool allow_non_sfpu = false);
-extern int rvtt_get_insn_dst_regno(rtx_insn *insn);
+extern int rvtt_get_insn_dst_regno(const rtx_insn *insn);
 
 inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const
 {
