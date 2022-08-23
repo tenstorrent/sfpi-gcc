@@ -46,6 +46,8 @@
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
+unsigned int rvtt_sfpu_lreg_count_global;
+
 const int rvtt_name_stub_no_arch_len = 15;
 const int rvtt_name_stub_len = 18;
 
@@ -117,8 +119,10 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
   int arch;
   if (flag_grayskull) {
     arch = 0;
+    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_GS;
   } else if (flag_wormhole) {
     arch = 1;
+    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
   } else {
     return;
   }

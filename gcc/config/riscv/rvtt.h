@@ -7,8 +7,6 @@
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
 
-constexpr unsigned int SFP_LREG_COUNT = 4;
-
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
@@ -106,6 +104,10 @@ constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no buil
 constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if an sfpu insn (eg, incrwc)
 constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
+
+constexpr unsigned int SFPU_LREG_COUNT_GS = 4;
+constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
+extern unsigned int rvtt_sfpu_lreg_count_global;
 
 struct rvtt_insn_data {
   enum insn_id {
