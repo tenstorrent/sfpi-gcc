@@ -152,7 +152,7 @@ is_const_reg(tree arg)
     TREE_CODE(arg) == SSA_NAME &&
     match_prior_assignment(rvtt_insn_data::sfpassignlreg,
 			   &assign_insnd, &assign_stmt, &assign_gsi, arg) &&
-    (get_int_arg(assign_stmt, 0) > SFP_LREG_COUNT);
+    (get_int_arg(assign_stmt, 0) > rvtt_sfpu_lreg_count_global);
 }
 
 static inline void
