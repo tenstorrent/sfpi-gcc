@@ -510,7 +510,7 @@ char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands
   char const *out = sw;
   while (nnops-- > 0) {
      output_asm_insn(out, operands);
-     out = "SFPNOP";
+     out = "TTNOP";
   }
   return out;
 }
