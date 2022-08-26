@@ -277,4 +277,4 @@
                      (match_operand:SI    2 "immediate_operand" "")
                      (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPINCRWC)]
   "TARGET_RVTT_GS || TARGET_RVTT_WH"
-  "SFPINCRWC\t%0, %1, %2, %3")
+  "TTINCRWC\t%0, %1, %2, %3")

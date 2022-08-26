@@ -322,7 +322,7 @@
                      (match_operand:SI    2 "immediate_operand" "M04U")
                      (match_operand:SI    3 "nonmemory_operand" "M14U")] UNSPECV_WH_SFPSTORE_INT)]
   "TARGET_RVTT_WH"
-  "SFPSTORE\t%0, %3, %1, %2")
+  "SFPSTORE\t%3, %0, %1, %2")
 
 
 (define_int_iterator wormhole_muliaddi [UNSPECV_WH_SFPMULI UNSPECV_WH_SFPADDI])
@@ -1084,7 +1084,7 @@
                      (match_operand:SI    2 "immediate_operand"  "M01U")
                      (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_WH_SFPREPLAY)]
   "TARGET_RVTT_WH"
-  "SFPREPLAY\t%0, %1, %2, %3")
+  "TTREPLAY\t%0, %1, %2, %3")
 
 (define_expand "rvtt_wh_sfpswap"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "")
@@ -1132,6 +1132,6 @@
 (define_insn "rvtt_wh_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPNOP)]
   "TARGET_RVTT_WH"
-  "SFPWNOP")
+  "SFPNOP")
 
 (include "rvtt-peephole-wh.md")

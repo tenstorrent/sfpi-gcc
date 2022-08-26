@@ -121,12 +121,12 @@
       // Note: must re-enable all elements until we know if we are in a predicated state
       output_asm_insn("SFPPUSHC", operands);
       output_asm_insn("SFPENCC\t3, 2", operands);
-      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("TTNOP", operands);
       output_asm_insn("SFPMOV\t%0, %1, 0", operands);
-      output_asm_insn("SFPNOP", operands);
-      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("TTNOP", operands);
+      output_asm_insn("TTNOP", operands);
       output_asm_insn("SFPPOPC", operands);
-      return "SFPNOP";
+      return "TTNOP";
       break;
 
     case 1:
@@ -161,8 +161,8 @@
   "TARGET_RVTT_GS"
 {
     output_asm_insn("SFPMOV\t%0, %2, 0", operands);
-    output_asm_insn("SFPNOP", operands);
-    return "SFPNOP";
+    output_asm_insn("TTNOP", operands);
+    return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfppreservelreg"
@@ -293,7 +293,7 @@
                      (match_operand:SI    1 "immediate_operand" "M04U")
                      (match_operand:SI    2 "nonmemory_operand" "M16U")] UNSPECV_GS_SFPSTORE_INT)]
   "TARGET_RVTT_GS"
-  "SFPSTORE\t%0, %2, %1")
+  "SFPSTORE\t%2, %0, %1")
 
 
 (define_int_iterator muliaddi [UNSPECV_GS_SFPMULI UNSPECV_GS_SFPADDI])
@@ -330,8 +330,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFP<muliaddi_int_call>\t%0, %2, %3", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpdivp2"
@@ -374,8 +374,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPDIVP2\t%0, %3, %2, %4", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_int_iterator simple_op
@@ -464,12 +464,12 @@
          (mod1 == 2 || mod1 == 3 || mod1 == 8 || mod1 == 9 || mod1 == 10 || mod1 == 11)) ||
         ((<simple_op_id_int> == UNSPECV_GS_SFPLZ_INT) &&
          (mod1 == 2 || mod1 == 8 || mod1 == 10 || mod1 == 11))) {
-      output_asm_insn("SFPNOP", operands);
+      output_asm_insn("TTNOP", operands);
     }
 
-    output_asm_insn("SFPNOP", operands);
+    output_asm_insn("TTNOP", operands);
 
-    return "SFPNOP";
+    return "TTNOP";
 })
 
 (define_int_iterator muladd [UNSPECV_GS_SFPMUL UNSPECV_GS_SFPADD])
@@ -513,8 +513,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFP<muladd_call_int>, %4", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpiadd_v_int"
@@ -525,14 +525,14 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPIADD\t%0, %2, 0, %3", operands);
-  output_asm_insn("SFPNOP", operands);
+  output_asm_insn("TTNOP", operands);
 
   int mod1 = INTVAL(operands[3]);
   // Careful - this includes a few "reserved" values
   if (mod1 < 3 || mod1 > 7) {
-    output_asm_insn("SFPNOP", operands);
+    output_asm_insn("TTNOP", operands);
   }
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpiadd_i_int"
@@ -544,14 +544,14 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPIADD\t%0, %2, %3, %4", operands);
-  output_asm_insn("SFPNOP", operands);
+  output_asm_insn("TTNOP", operands);
 
   int mod1 = INTVAL(operands[4]);
   // Careful - this includes a few "reserved" values
   if (mod1 < 3 || mod1 > 7) {
-    output_asm_insn("SFPNOP", operands);
+    output_asm_insn("TTNOP", operands);
   }
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpxiadd_v"
@@ -604,8 +604,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSHFT\t%0, %2, 0, 0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpshft_i"
@@ -633,8 +633,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSHFT\t%0, L0, %2, 1", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpand"
@@ -644,8 +644,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPAND\t%0, %2", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpor"
@@ -655,8 +655,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPOR\t%0, %2", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpnot"
@@ -687,8 +687,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPNOT\t%0, %2", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_int_iterator set_float_op_v [UNSPECV_GS_SFPSETEXP_V UNSPECV_GS_SFPSETMAN_V UNSPECV_GS_SFPSETSGN_V])
@@ -701,8 +701,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSET<set_float_call_v>\t%0, %2, 0, 0", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_int_iterator set_float_op_i [UNSPECV_GS_SFPSETEXP_I UNSPECV_GS_SFPSETMAN_I UNSPECV_GS_SFPSETSGN_I])
@@ -764,8 +764,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSET<set_float_call_i_int>\t%0, %3, %2, 1", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpmad"
@@ -805,8 +805,8 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPMAD\t%0, %2, %3, %4, %5", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpsetcc_i"
@@ -815,7 +815,7 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSETCC\tL0, %0, %1", operands);
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpsetcc_v"
@@ -824,7 +824,7 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPSETCC\t%0, 0, %1", operands);
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_expand "rvtt_gs_sfpxfcmps"
@@ -858,7 +858,7 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPENCC\t%0, %1", operands);
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpcompc"
@@ -866,7 +866,7 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPCOMPC", operands);
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfppushc"
@@ -879,7 +879,7 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPPOPC", operands);
-  return "SFPNOP";
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfplut"
@@ -892,13 +892,13 @@
   "TARGET_RVTT_GS"
 {
   output_asm_insn("SFPLUT\t%0, %5", operands);
-  output_asm_insn("SFPNOP", operands);
-  return "SFPNOP";
+  output_asm_insn("TTNOP", operands);
+  return "TTNOP";
 })
 
 (define_insn "rvtt_gs_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_GS_SFPNOP)]
   "TARGET_RVTT_GS"
-  "SFPNOP")
+  "TTNOP")
 
 (include "rvtt-peephole-gs.md")
