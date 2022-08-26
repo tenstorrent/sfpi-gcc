@@ -532,16 +532,25 @@ static void vote_for_sequences()
 
 // Pick the sequence that saves the most insns.
 // For now, we only get 1 sequence per fn
+// In the case of a tie, pick the one that starts earliest.  This helps
+// stabilize assembly tests where the result can flip back and forth for
+// unknown reasons as well as starting earlier may lead to extra bonus insns
+// saved when a partial sequence can be used (since we don't vote for partial
+// sequences yet)
 static void pick_sequence(int *start, int *length)
 {
   int most_saved = 0;
+  int earliest = 0xFFFF;
+
   for (auto const& iter : sequence_map)
     {
       int saved = iter.second->length * (iter.second->votes - 1) - iter.second->votes;
       DUMP("    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length, iter.second->votes, saved);
-      if (saved > most_saved)
+      if (saved > most_saved ||
+	  (saved != 0 && saved == most_saved && iter.second->start < earliest))
 	{
 	  most_saved = saved;
+	  earliest = iter.second->start;
 	  *start = iter.second->start;
 	  *length = iter.second->length;
 	}
