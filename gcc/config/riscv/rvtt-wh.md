@@ -1076,7 +1076,7 @@
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "Q0")
                      (match_operand:SI    1 "immediate_operand"  "M04U")] UNSPECV_WH_SFPCONFIG_V)]
   "TARGET_RVTT_WH"
-  "SFPCONFIG\t%0, %1, 0")
+  "SFPCONFIG\t%1, 0, 0")
 
 (define_insn "rvtt_wh_sfpreplay"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M04U")
