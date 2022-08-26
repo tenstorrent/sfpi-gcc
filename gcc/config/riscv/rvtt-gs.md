@@ -122,7 +122,7 @@
       output_asm_insn("SFPPUSHC", operands);
       output_asm_insn("SFPENCC\t3, 2", operands);
       output_asm_insn("SFPNOP", operands);
-      output_asm_insn("SFPMOV\t%1, %0, 0", operands);
+      output_asm_insn("SFPMOV\t%0, %1, 0", operands);
       output_asm_insn("SFPNOP", operands);
       output_asm_insn("SFPNOP", operands);
       output_asm_insn("SFPPOPC", operands);
@@ -160,7 +160,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_GS_SFPASSIGN_LV))]
   "TARGET_RVTT_GS"
 {
-    output_asm_insn("SFPMOV\t%2, %0, 0", operands);
+    output_asm_insn("SFPMOV\t%0, %2, 0", operands);
     output_asm_insn("SFPNOP", operands);
     return "SFPNOP";
 })
@@ -224,8 +224,8 @@
                           (match_operand:SI    3 "immediate_operand" "M16U, M16U")] UNSPECV_GS_SFPLOAD_INT))]
   "TARGET_RVTT_GS"
   "@
-   SFPLOAD\t%0, %2, %3
-   SFPLOAD\t%0, %2, %3")
+   SFPLOAD\t%0, %3, %2
+   SFPLOAD\t%0, %3, %2")
 
 
 (define_expand "rvtt_gs_sfpxloadi"
@@ -264,10 +264,10 @@
                           (match_operand:SI    3 "immediate_operand" "M16S,M16U,M16S,M16U")] UNSPECV_GS_SFPLOADI_INT))]
   "TARGET_RVTT_GS"
   "@
-  SFPLOADI\t%0, %2, %s3
-  SFPLOADI\t%0, %2, %u3
-  SFPLOADI\t%0, %2, %s3
-  SFPLOADI\t%0, %2, %u3")
+  SFPLOADI\t%0, %s3, %2
+  SFPLOADI\t%0, %u3, %2
+  SFPLOADI\t%0, %s3, %2
+  SFPLOADI\t%0, %u3, %2")
 
 (define_expand "rvtt_gs_sfpstore"
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
@@ -293,7 +293,7 @@
                      (match_operand:SI    1 "immediate_operand" "M04U")
                      (match_operand:SI    2 "nonmemory_operand" "M16U")] UNSPECV_GS_SFPSTORE_INT)]
   "TARGET_RVTT_GS"
-  "SFPSTORE\t%0, %1, %2")
+  "SFPSTORE\t%0, %2, %1")
 
 
 (define_int_iterator muliaddi [UNSPECV_GS_SFPMULI UNSPECV_GS_SFPADDI])
@@ -329,7 +329,7 @@
                           (match_operand:SI    3 "immediate_operand" "M04U")] muliaddi_int))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFP<muliaddi_int_call>\t%2, %0, %3", operands);
+  output_asm_insn("SFP<muliaddi_int_call>\t%0, %2, %3", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -373,7 +373,7 @@
                           (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPDIVP2_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPDIVP2\t%2, %3, %0, %4", operands);
+  output_asm_insn("SFPDIVP2\t%0, %3, %2, %4", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -456,7 +456,7 @@
                           (match_operand:SI    3 "immediate_operand" "M04U, M04U")] simple_op_int))]
   "TARGET_RVTT_GS"
 {
-    output_asm_insn("SFP<simple_op_call_int>\t%2, %0, %3", operands);
+    output_asm_insn("SFP<simple_op_call_int>\t%0, %2, %3", operands);
 
     int mod1 = INTVAL(operands[3]);
     // EXEXP and LZ require 3 nops when setting the CC
@@ -503,7 +503,7 @@
 
 (define_int_iterator muladd_int [UNSPECV_GS_SFPMUL_INT UNSPECV_GS_SFPADD_INT])
 (define_int_attr muladd_name_int [(UNSPECV_GS_SFPMUL_INT "mul") (UNSPECV_GS_SFPADD_INT "add")])
-(define_int_attr muladd_call_int [(UNSPECV_GS_SFPMUL_INT "MUL\t%2, %3, L4") (UNSPECV_GS_SFPADD_INT "ADD\tL10, %2, %3")])
+(define_int_attr muladd_call_int [(UNSPECV_GS_SFPMUL_INT "MUL\t%0, %2, %3, L4") (UNSPECV_GS_SFPADD_INT "ADD\t%0, L10, %2, %3")])
 (define_insn "rvtt_gs_sfp<muladd_name_int>_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
@@ -512,7 +512,7 @@
                           (match_operand:SI    4 "immediate_operand" "M04U, M04U")] muladd_int))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFP<muladd_call_int>, %0, %4", operands);
+  output_asm_insn("SFP<muladd_call_int>, %4", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -524,7 +524,7 @@
                           (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_GS_SFPIADD_V_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPIADD\t0, %2, %0, %3", operands);
+  output_asm_insn("SFPIADD\t%0, %2, 0, %3", operands);
   output_asm_insn("SFPNOP", operands);
 
   int mod1 = INTVAL(operands[3]);
@@ -543,7 +543,7 @@
                           (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPIADD_I_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPIADD\t%3, %2, %0, %4", operands);
+  output_asm_insn("SFPIADD\t%0, %2, %3, %4", operands);
   output_asm_insn("SFPNOP", operands);
 
   int mod1 = INTVAL(operands[4]);
@@ -603,7 +603,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_GS_SFPSHFT_V))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSHFT\t0, %2, %0, 0", operands);
+  output_asm_insn("SFPSHFT\t%0, %2, 0, 0", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -632,7 +632,7 @@
                           (match_operand:SI    2 "immediate_operand" "M12S")] UNSPECV_GS_SFPSHFT_I_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSHFT\t%2, L0, %0, 1", operands);
+  output_asm_insn("SFPSHFT\t%0, L0, %2, 1", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -643,7 +643,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_GS_SFPAND))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPAND\t%2, %0", operands);
+  output_asm_insn("SFPAND\t%0, %2", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -654,7 +654,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_GS_SFPOR))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPOR\t%2, %0", operands);
+  output_asm_insn("SFPOR\t%0, %2", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -686,7 +686,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")] UNSPECV_GS_SFPNOT_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPNOT\t%2, %0", operands);
+  output_asm_insn("SFPNOT\t%0, %2", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -700,7 +700,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x")] set_float_op_v))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSET<set_float_call_v>\t0, %2, %0, 0", operands);
+  output_asm_insn("SFPSET<set_float_call_v>\t%0, %2, 0, 0", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -763,7 +763,7 @@
                           (match_operand:V64SF 3 "register_operand"  "x, x")] set_float_op_i_int))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSET<set_float_call_i_int>\t%2, %3, %0, 1", operands);
+  output_asm_insn("SFPSET<set_float_call_i_int>\t%0, %3, %2, 1", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -804,7 +804,7 @@
                           (match_operand:SI    5 "immediate_operand" "M04U, M04U")] UNSPECV_GS_SFPMAD_INT))]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPMAD\t%2, %3, %4, %0, %5", operands);
+  output_asm_insn("SFPMAD\t%0, %2, %3, %4, %5", operands);
   output_asm_insn("SFPNOP", operands);
   return "SFPNOP";
 })
@@ -814,7 +814,7 @@
                      (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_GS_SFPSETCC_I)]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSETCC\t%0, L0, %1", operands);
+  output_asm_insn("SFPSETCC\tL0, %0, %1", operands);
   return "SFPNOP";
 })
 
@@ -823,7 +823,7 @@
                      (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_GS_SFPSETCC_V)]
   "TARGET_RVTT_GS"
 {
-  output_asm_insn("SFPSETCC\t0, %0, %1", operands);
+  output_asm_insn("SFPSETCC\t%0, 0, %1", operands);
   return "SFPNOP";
 })
 
