@@ -209,6 +209,14 @@ static inline hash_type compute_seq_hash(hash_type insn_hash, hash_type seq_hash
 
 // devise_strategy
 //
+// This code is over-designed.  I was concerned w/ the O(n^2) nature of the
+// algorithm and so wanted to reduce the number of insns that could start a
+// sequence by, e.g, only starting when a load/loadi was found.  Turns out
+// this is actually pretty fast and the 32 insn limit caps the O(n^2)ness.
+//
+// I'm leaving the code in place for now, despite the fact that is is
+// disabled.
+//
 // Reduce complexity by reducing how many insns get processed:
 //   - load/loadi demark possible sequence starts
 //   - we expect loops to be unrolled by 8 bracketed by load
@@ -286,7 +294,10 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
     }
   gcc_assert(insn_count < 65536);
 
-  // Determine which insns can start a sequence
+  *strategy = strategy_every_insn;
+  *count = insn_count;
+
+#if 0  // Determine which insns can start a sequence
   // Typically, there will be 8 loads in a kernel, but these may not be in one
   // BB if the loop is unrolled (or we have multiple BBs) in which case we
   // should look for more ways to start a sequence
@@ -310,7 +321,8 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
       *strategy = strategy_first_insn;
       *count = insn_count;
     }
-  //*strategy |= strategy_every_insn;
+#endif
+
   DUMP(" strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
        *strategy, insn_count, *count, loads, loadis);
 }
