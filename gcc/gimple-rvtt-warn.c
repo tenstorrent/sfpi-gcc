@@ -82,6 +82,26 @@ check_function_decl(function *fun)
   return bad;
 }
 
+static void
+warn_replace_stmt(gimple_stmt_iterator *gsi, tree lhs, location_t loc)
+{
+  const rvtt_insn_data* loadi_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
+
+  gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 5);
+  gimple_call_set_lhs (loadi_use_stmt, lhs);
+  gimple_call_set_arg (loadi_use_stmt, 0, build_int_cst_type(build_pointer_type (void_type_node), 0));
+  gimple_call_set_arg (loadi_use_stmt, 1, build_int_cst(integer_type_node, 0));
+  gimple_call_set_arg (loadi_use_stmt, 2, build_int_cst(integer_type_node, 0));
+  gimple_call_set_arg (loadi_use_stmt, 3, build_int_cst(integer_type_node, 0));
+  gimple_call_set_arg (loadi_use_stmt, 4, build_int_cst(integer_type_node, 0));
+
+  gimple_set_location (loadi_use_stmt, loc);
+  update_stmt(loadi_use_stmt);
+  gsi_replace(gsi, loadi_use_stmt, GSI_SAME_STMT);
+  update_ssa (TODO_update_ssa);
+}
+
+
 // Throws a warning when an SPFU vector is used uninitialized
 static void
 handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator *gsi)
@@ -102,7 +122,6 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 	  if (rvtt_p(&insnd, &use_stmt, use))
 	    {
 	      DUMP(" found an uninitialized vector used later\n");
-	      const rvtt_insn_data* loadi_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
 
 	      location_t assign_location = gimple_location (g);
 	      // Assume any "uninitialized" variables in a function that
@@ -124,19 +143,7 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
                    }
 		}
 
-	      gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 5);
-	      gimple_call_set_lhs (loadi_use_stmt, lhs);
-	      gimple_call_set_arg (loadi_use_stmt, 0, build_int_cst_type(build_pointer_type (void_type_node), 0));
-	      gimple_call_set_arg (loadi_use_stmt, 1, build_int_cst(integer_type_node, 0));
-	      gimple_call_set_arg (loadi_use_stmt, 2, build_int_cst(integer_type_node, 0));
-	      gimple_call_set_arg (loadi_use_stmt, 3, build_int_cst(integer_type_node, 0));
-	      gimple_call_set_arg (loadi_use_stmt, 4, build_int_cst(integer_type_node, 0));
-
-	      gimple_set_location (loadi_use_stmt, assign_location);
-	      update_stmt(loadi_use_stmt);
-	      gsi_replace(gsi, loadi_use_stmt, GSI_SAME_STMT);
-
-	      update_ssa (TODO_update_ssa);
+	      warn_replace_stmt(gsi, lhs, assign_location);
 	    }
 	}
     }
@@ -246,6 +253,26 @@ process (function *fun)
 	      else
 		{
 		  handle_write(g);
+		}
+	    }
+	  else if (gimple_code(g) == GIMPLE_CALL)
+	    {
+	      for (unsigned int i = 0; i < gimple_call_num_args(g); i++)
+		{
+		  tree arg = gimple_call_arg(g, i);
+		  if (VECTOR_FLOAT_TYPE_P(TREE_TYPE(arg)))
+		    {
+		      gimple * def_stmt = SSA_NAME_DEF_STMT (arg);
+
+		      if (def_stmt == nullptr || gimple_code(def_stmt) == GIMPLE_NOP)
+			{
+			  location_t assign_location = gimple_location (def_stmt);
+			  warning_at (assign_location, OPT_Wuninitialized,
+				      "%qD is used uninitialized in this function", SSA_NAME_VAR (arg));
+
+			  warn_replace_stmt(&gsi, gimple_call_lhs(g), assign_location);
+			}
+		    }
 		}
 	    }
 
