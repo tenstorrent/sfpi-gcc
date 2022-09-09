@@ -183,7 +183,6 @@ process_block_stmts(basic_block bb,
 		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
 		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		  gimple_set_location (new_stmt, gimple_location (stmt));
-		  gimple_set_block (new_stmt, gimple_block (stmt));
 		  gsi_replace(&gsi, new_stmt, true);
 		  update_stmt (new_stmt);
 		  prior_removable = false;

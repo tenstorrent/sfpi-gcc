@@ -171,7 +171,6 @@ finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt
 {
   gcc_assert(new_stmt != nullptr);
   gimple_set_location (new_stmt, gimple_location (stmt));
-  gimple_set_block (new_stmt, gimple_block (stmt));
   update_stmt (new_stmt);
   if (insert_before)
     {
