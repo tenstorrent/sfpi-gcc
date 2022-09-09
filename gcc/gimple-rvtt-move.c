@@ -133,12 +133,18 @@ match_prior_assignment(rvtt_insn_data::insn_id id,
 		       gimple_stmt_iterator *prior_gsi,
 		       tree src)
 {
+  bool result = false;
+
   gimple *assign_g = SSA_NAME_DEF_STMT(src);
-  rvtt_p(prior_insnd, prior_stmt, assign_g);
-  *prior_gsi = gsi_for_stmt(assign_g);
-  return
-    rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
-    ((*prior_insnd)->id == id);
+  if (rvtt_p(prior_insnd, prior_stmt, assign_g)) {
+    *prior_gsi = gsi_for_stmt(assign_g);
+
+    result = 
+      rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
+      ((*prior_insnd)->id == id);
+  }
+
+  return result;
 }
 
 static inline bool

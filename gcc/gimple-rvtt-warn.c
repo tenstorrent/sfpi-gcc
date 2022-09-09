@@ -149,7 +149,8 @@ is_sfpu_def(tree def, unordered_set<tree>& visited)
 {
   gimple * def_stmt = SSA_NAME_DEF_STMT (def);
 
-  if (gimple_code(def_stmt) == GIMPLE_PHI)
+  if (def_stmt != nullptr &&
+      gimple_code(def_stmt) == GIMPLE_PHI)
     {
       int n = gimple_phi_num_args (def_stmt);
       DUMP(" chasing phi with %d els\n", n);

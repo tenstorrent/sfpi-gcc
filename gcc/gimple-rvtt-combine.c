@@ -349,46 +349,48 @@ try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
       gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, SFPXIADD_SRC_ARG_POS));
       gcall *assign_stmt;
       const rvtt_insn_data *assign_insnd;
-      bool is_rvtt = rvtt_p(&assign_insnd, &assign_stmt, assign_g);
-      gimple_stmt_iterator assign_gsi = gsi_for_stmt(assign_g);
 
-      if (is_rvtt &&
-	  gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
-	  !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-	  !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
+      if (rvtt_p(&assign_insnd, &assign_stmt, assign_g))
 	{
-	  // Check to see if the assignment is one of the targeted optimizations
-	  if (can_combine_sfpxiadd_i(assign_insnd, assign_stmt, is_sign_bit_cc))
+	  gimple_stmt_iterator assign_gsi = gsi_for_stmt(assign_g);
+
+	  if (gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
+	      !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
+	      !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
 	    {
-		DUMP("	combining with %s\n", assign_insnd->name);
+	      // Check to see if the assignment is one of the targeted optimizations
+	      if (can_combine_sfpxiadd_i(assign_insnd, assign_stmt, is_sign_bit_cc))
+		{
+		  DUMP("	combining with %s\n", assign_insnd->name);
 
-		// Found a replaceable iadd_i
-		combine_sfpxiadd_i(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
+		  // Found a replaceable iadd_i
+		  combine_sfpxiadd_i(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
 
-		fixup_vuse_vdef(assign_gsi, candidate_gsi);
+		  fixup_vuse_vdef(assign_gsi, candidate_gsi);
 
-		// Move target
-		gsi_move_before(&assign_gsi, &candidate_gsi);
+		  // Move target
+		  gsi_move_before(&assign_gsi, &candidate_gsi);
 
-		// Remove candidate
-		rvtt_prep_stmt_for_deletion(candidate_stmt);
+		  // Remove candidate
+		  rvtt_prep_stmt_for_deletion(candidate_stmt);
 
-		unlink_stmt_vdef(candidate_stmt);
-		gsi_remove(&candidate_gsi, true);
-		release_defs(candidate_stmt);
+		  unlink_stmt_vdef(candidate_stmt);
+		  gsi_remove(&candidate_gsi, true);
+		  release_defs(candidate_stmt);
 
-		tree lhs = gimple_call_lhs(assign_stmt);
-		if (lhs != NULL_TREE && has_zero_uses(lhs))
-		  {
-		    DUMP("  lhs has zero uses, removing\n");
-		    unlink_stmt_vdef(assign_stmt);
-		    release_defs(assign_stmt);
-		    gimple_call_set_lhs(assign_stmt, NULL_TREE);
-		  }
+		  tree lhs = gimple_call_lhs(assign_stmt);
+		  if (lhs != NULL_TREE && has_zero_uses(lhs))
+		    {
+		      DUMP("  lhs has zero uses, removing\n");
+		      unlink_stmt_vdef(assign_stmt);
+		      release_defs(assign_stmt);
+		      gimple_call_set_lhs(assign_stmt, NULL_TREE);
+		    }
 
-		update_stmt(assign_stmt);
+		  update_stmt(assign_stmt);
 
-		combined = true;
+		  combined = true;
+		}
 	    }
 	}
     }
@@ -403,12 +405,17 @@ match_prior_assignment(rvtt_insn_data::insn_id id,
 		       gimple_stmt_iterator *prior_gsi,
 		       tree src)
 {
+  bool result = false;
+
   gimple *assign_g = SSA_NAME_DEF_STMT(src);
-  rvtt_p(prior_insnd, prior_stmt, assign_g);
-  *prior_gsi = gsi_for_stmt(assign_g);
-  return
-    rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
-    ((*prior_insnd)->id == id);
+  if (rvtt_p(prior_insnd, prior_stmt, assign_g)) {
+      *prior_gsi = gsi_for_stmt(assign_g);
+
+      result = rvtt_p(prior_insnd, prior_stmt, *prior_gsi) &&
+	((*prior_insnd)->id == id);
+  }
+
+  return result;
 }
 
 // Mads increase register pressure so need to be careful to not turn compiling
