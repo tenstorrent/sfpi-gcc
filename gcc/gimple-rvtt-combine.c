@@ -265,6 +265,19 @@ intervening_use(tree var, gimple_stmt_iterator start, gimple_stmt_iterator end)
   return false;
 }
 
+static void
+fixup_vuse_vdef(gimple_stmt_iterator keep_gsi, gimple_stmt_iterator old_gsi)
+{
+  gimple *keep_g = gsi_stmt(keep_gsi);
+  gimple *old_g = gsi_stmt(old_gsi);
+
+  tree keep_vdef = gimple_vdef(keep_g);
+  tree keep_vuse = gimple_vuse(keep_g);
+  gimple_set_vuse(keep_g, gimple_vuse(old_g));
+  gimple_set_vdef(keep_g, gimple_vdef(old_g));
+  gimple_set_modified(keep_g, true);
+}
+
 static bool
 get_single_use(tree var, gimple **gout)
 {
@@ -351,6 +364,8 @@ try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
 
 		// Found a replaceable iadd_i
 		combine_sfpxiadd_i(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
+
+		fixup_vuse_vdef(assign_gsi, candidate_gsi);
 
 		// Move target
 		gsi_move_before(&assign_gsi, &candidate_gsi);
