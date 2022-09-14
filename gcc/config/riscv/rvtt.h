@@ -101,7 +101,8 @@ constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01;
 constexpr unsigned int INSN_FLAGS_LIVE               = 0x02;
 constexpr unsigned int INSN_FLAGS_HAS_HALF_OFFSET    = 0x04;
 constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
-constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if an sfpu insn (eg, incrwc)
+// Next 3 are exclusive
+constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an sfpu insn (eg, incrwc)
 constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
 
@@ -141,7 +142,7 @@ struct rvtt_insn_data {
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
   inline bool has_half_offset_p() const { return flags & INSN_FLAGS_HAS_HALF_OFFSET; }
   inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
-  inline bool non_sfpu_p() const { return flags & INSN_FLAGS_NON_SFPU; }
+  inline bool odd_bird_p() const { return flags & (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY); }
   inline bool non_tt_p() const { return flags & INSN_FLAGS_NON_TT; }
   inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
@@ -151,6 +152,7 @@ struct rvtt_insn_data {
   inline bool schedule_from_arg_p(rtx_insn *insn) const;
   inline bool schedule_dynamic_p(rtx_insn *insn) const;
   inline int schedule_static_nops(rtx_insn *insn) const;
+  inline bool schedule_has_dynamic_dependency_p(rtx_insn *insn) const;
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
   inline int nonimm_op_arg_pos() const { return nonimm_pos; }
@@ -195,14 +197,16 @@ extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd
 extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
 extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
 extern uint32_t rvtt_scmp2loadi_mod(int mod);
-extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
-				    gcall **stmt,
-				    gimple_stmt_iterator gsi,
-				    bool allow_non_sfpu = false);
-extern bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
-				    rtx_insn **next_insn,
-				    rtx_insn *insn,
-				    bool allow_non_sfpu = false);
+extern bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
+			       gcall **stmt,
+			       gimple_stmt_iterator gsi,
+			       bool test_initial = false,
+			       int allow_flags = 0);
+extern bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
+			       rtx_insn **next_insn,
+			       rtx_insn *insn,
+			       bool test_initial = false,
+			       int allow_flags = 0);
 extern int rvtt_get_insn_dst_regno(const rtx_insn *insn);
 
 inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const
@@ -217,6 +221,12 @@ inline bool rvtt_insn_data::schedule_dynamic_p(rtx_insn *insn) const
     (schedule & INSN_SCHED_DYN);
 }
 
+inline bool rvtt_insn_data::schedule_has_dynamic_dependency_p(rtx_insn *insn) const
+{
+  return schedule_in_arg_p() ?
+    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_DYN_DEP) :
+    (schedule & INSN_SCHED_DYN_DEP);
+}
 inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
 {
   return schedule_in_arg_p() ?

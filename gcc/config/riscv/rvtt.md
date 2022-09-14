@@ -82,7 +82,7 @@
 (define_insn "rvtt_sfpnonimm_dst"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
-                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops
+                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops / scheduling info
                           (match_operand:V64SF 3 "nonmemory_operand" "E, 0") ; live lreg_dst
                           (match_operand:SI    4 "immediate_operand" "i, i") ; dst reg shft
                           (match_operand:SI    5 "register_operand"  "r, r") ; nonimm value to store
@@ -125,7 +125,7 @@
 (define_insn "rvtt_sfpnonimm_dst_src"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
-                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops
+                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops / scheduling info
                           (match_operand:V64SF 3 "nonmemory_operand" "E, 0") ; live lreg_dst
                           (match_operand:V64SF 4 "register_operand"  "x, x") ; lreg_src
                           (match_operand:SI    5 "immediate_operand" "i, i") ; dst shft
@@ -178,7 +178,7 @@
 (define_insn "rvtt_sfpnonimm_<nonimm_srcstore_name>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x") ; src
                      (match_operand:SI    1 "address_operand"   "r") ; instrn_buf_add
-                     (match_operand:SI    2 "immediate_operand" "i") ; # nops
+                     (match_operand:SI    2 "immediate_operand" "i") ; # nops / scheduling info
                      (match_operand:SI    3 "immediate_operand" "i") ; src shft
                      (match_operand:SI    4 "register_operand"  "r") ; non imm value to store
                      (match_operand:DI    5 "immediate_operand" "i") ; op
