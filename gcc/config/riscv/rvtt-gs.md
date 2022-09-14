@@ -283,7 +283,7 @@
                                          rvtt_clamp_unsigned(operands[3], 0x7FFF)));
   } else {
     unsigned long int op = TT_OP_GS_SFPSTORE(0, INTVAL(operands[2]), 0);
-    emit_insn (gen_rvtt_sfpnonimm_store(operands[1], operands[0], GEN_INT(0), GEN_INT(20), operands[4], GEN_INT(op), operands[5]));
+    emit_insn (gen_rvtt_sfpnonimm_store(operands[1], operands[0], GEN_INT(INSN_SCHED_DYN), GEN_INT(20), operands[4], GEN_INT(op), operands[5]));
   }
   DONE;
 })

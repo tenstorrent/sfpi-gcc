@@ -9,7 +9,8 @@ constexpr unsigned int SFPNONIMM_ID_FALLBACK_FLAG = 0xFF000000;
 #define rvtt_sfpu_regno(operand) (REGNO(operand) - SFPU_REG_FIRST)
 
 constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
-constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic # of nops (schedulable)
+constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic scheduling flag
+constexpr unsigned int INSN_SCHED_DYN_DEP  = 0x40;  // has a dependency on a prior insn type
 
 extern const char* rvtt_sfpu_lv_regno_str(char *str, rtx operand);
 

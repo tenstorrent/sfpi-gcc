@@ -212,9 +212,16 @@ rvtt_init_builtins()
   }
   sfpu_insn_data = sfpu_insn_data_target[arch];
 
-  // Fill in the non-builtin internal insns
+  // Fill in the non-builtin internal insns, sanity check the table
   for (int i = 0; i < NUMBER_OF_INTRINSICS; i++)
     {
+      const int all_types_flag = (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY);
+      const int type_flag = sfpu_insn_data[i].flags & all_types_flag;
+      gcc_assert(type_flag == 0 ||
+		 type_flag == INSN_FLAGS_NON_SFPU ||
+		 type_flag == INSN_FLAGS_NON_TT ||
+		 type_flag == INSN_FLAGS_EMPTY);
+
       if (sfpu_insn_data[i].rtl_only_p()) {
 	insn_map.insert(std::pair<const char*, rvtt_insn_data&>(sfpu_insn_data[i].name,
 								sfpu_insn_data[i]));
@@ -595,17 +602,22 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
   return representable;
 }
 
-bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
-				   gcall **stmt,
-				   gimple_stmt_iterator gsi,
-				   bool allow_non_sfpu)
+bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
+			gcall **stmt,
+			gimple_stmt_iterator gsi,
+			bool test_initial,
+			int allow_flags)
 {
   gimple_stmt_iterator next_gsi = gsi;
-  gsi_next_nondebug(&next_gsi);
+  if (!test_initial)
+    {
+      gsi_next_nondebug(&next_gsi);
+    }
+
   while (!gsi_end_p(next_gsi))
     {
       if (rvtt_p(insnd, stmt, next_gsi) &&
-	  (!(*insnd)->non_sfpu_p() || allow_non_sfpu))
+	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
         {
 	  return true;
         }
@@ -615,21 +627,29 @@ bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
   return false;
 }
 
-bool rvtt_get_next_sfpu_insn(const rvtt_insn_data **insnd,
-				   rtx_insn **next_insn,
-				   rtx_insn *insn,
-				   bool allow_non_sfpu)
+bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
+			rtx_insn **next_insn,
+			rtx_insn *insn,
+			bool test_initial,
+			int allow_flags)
 {
   basic_block bb = BLOCK_FOR_INSN(insn);
-  while (insn != BB_END(bb))
+
+  if (!test_initial)
     {
       insn = NEXT_INSN(insn);
-      if (rvtt_p(insnd, insn) &&
-	  (!(*insnd)->non_sfpu_p() || allow_non_sfpu))
+    }
+
+  while (insn != NEXT_INSN(BB_END(bb)))
+    {
+      if (NONDEBUG_INSN_P(insn) &&
+	  rvtt_p(insnd, insn) &&
+	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
 	{
 	  *next_insn = insn;
 	  return true;
 	}
+      insn = NEXT_INSN(insn);
     }
 
   return false;

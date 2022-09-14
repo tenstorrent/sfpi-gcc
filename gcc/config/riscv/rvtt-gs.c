@@ -49,7 +49,7 @@ void rvtt_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonim
     emit_insn(gen_rvtt_gs_sfpload_int(dst, lv, mod, rvtt_clamp_unsigned(imm, 0xFFFF)));
   } else {
     unsigned long int op = TT_OP_GS_SFPLOAD(0, INTVAL(mod), 0);
-    emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
+    emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(INSN_SCHED_DYN_DEP), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
   }
 }
 
