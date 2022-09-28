@@ -269,8 +269,7 @@ check_store(rtx_insn *insn)
       struct insn_link *links;
       rtx_insn *extend_insn = nullptr;
 
-      // Links can be either for the address of the DEST (don't care)
-      // or the SRC
+      // Links can be either for the address of the DEST (don't care) or the SRC
       rtx src = SET_SRC(pat);
       rtx srcreg = SUBREG_REG(src);
       FOR_EACH_LOG_LINK (links, insn)
@@ -287,7 +286,7 @@ check_store(rtx_insn *insn)
 	      gcc_assert(GET_MODE(SET_DEST(lpat)) == GET_MODE(XEXP(src, 0)));
 	      extend_insn = links->insn;
 	    }
-	  else if (refers_to_regno_p(REGNO(srcreg), END_REGNO(srcreg), links->insn, nullptr))
+	  else if (refers_to_regno_p(REGNO(srcreg), links->insn))
 	    {
 	      if (GET_CODE(lpat) == SET &&
 		  GET_CODE(SET_DEST(lpat)) == MEM &&
@@ -296,6 +295,7 @@ check_store(rtx_insn *insn)
 		{
 		  DUMP("  found another %s store ", mode == QImode ? "QI" : "HI");
 		  extend_insn = nullptr;
+		  break;
 		}
 	      else
 		{
@@ -366,8 +366,8 @@ transform(function *fn)
   max_uid_known = get_max_uid ();
   uid_log_links = XCNEWVEC (struct insn_link *, max_uid_known + 1);
   gcc_obstack_init (&insn_link_obstack);
-  create_log_links ();
   df_analyze();
+  create_log_links ();
 
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -410,6 +410,8 @@ public:
   }
 
   /* opt_pass methods: */
+  virtual bool gate (function *) { return (optimize > 0); }
+
   virtual unsigned int execute (function *cfn)
     {
       if (flag_rvtt_rmext)
