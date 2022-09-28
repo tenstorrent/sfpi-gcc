@@ -453,6 +453,7 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_combine);
       NEXT_PASS (pass_if_after_combine);
       NEXT_PASS (pass_jump_after_combine);
+      NEXT_PASS (pass_rvtt_rmext);
       NEXT_PASS (pass_partition_blocks);
       NEXT_PASS (pass_outof_cfg_layout_mode);
       NEXT_PASS (pass_split_all_insns);

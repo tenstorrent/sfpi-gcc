@@ -1515,6 +1515,7 @@ OBJS = \
 	rtl-rvtt-gsl1war.o \
 	rtl-rvtt-nonimm.o \
 	rtl-rvtt-replay.o \
+	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
 	rtl-tests.o \
 	rtl.o \

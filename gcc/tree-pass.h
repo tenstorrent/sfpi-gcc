@@ -630,6 +630,7 @@ extern rtl_opt_pass *make_pass_final (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rtl_seqabstr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_gsl1war (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_nonimm (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_release_ssa_names (gcc::context *ctxt);

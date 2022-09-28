@@ -3428,4 +3428,8 @@ frvtt-sfpu-replay
 Common Var(flag_rvtt_replay) Init(1)
 Generate sfpu replay instruction.
 
+frvtt-rmext
+Common Var(flag_rvtt_rmext) Init(1)
+TT specific removal of extraneous zero/sign extension ops
+
 ; This comment is to ensure we retain the blank line above.
