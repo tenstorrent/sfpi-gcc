@@ -144,9 +144,18 @@
   {
     switch (which_alternative) {
     case 0:
-      // Note: must re-enable all elements until we know if we are in a predicated state
-      return "SFPMOV\t%0, %1, 2";
-      break;
+      if (flag_wormhole_a0) {
+        // Note: must re-enable all elements until we know if we are in a predicated state
+        output_asm_insn("SFPPUSHC\t0", operands);
+        output_asm_insn("SFPENCC\t3, 2", operands);
+        output_asm_insn("SFPMOV\t%0, %1, 0", operands);
+        output_asm_insn("SFPPOPC\t0", operands);
+        return "TTNOP";
+      } else {
+        // Note: must re-enable all elements until we know if we are in a predicated state
+        return "SFPMOV\t%0, %1, 2";
+        break;
+      }
 
     case 1:
       if (INSN_HAS_LOCATION (insn)) {

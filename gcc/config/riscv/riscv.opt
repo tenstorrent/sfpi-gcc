@@ -78,6 +78,10 @@ mwormhole
 Target Report Mask(RVTT_WH) Bool Var(flag_wormhole) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole.
 
+mwormhole_a0
+Target Report Mask(RVTT_WH) Bool Var(flag_wormhole_a0) Init(0)
+Generate code for Tenstorrent SFPU - Wormhole a0 Si.
+
 march=
 Target Report RejectNegative Joined
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be
