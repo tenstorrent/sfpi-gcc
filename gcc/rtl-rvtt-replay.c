@@ -798,7 +798,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_wormhole && flag_rvtt_replay)
+      if (flag_wormhole && !flag_wormhole_a0 && flag_rvtt_replay)
 	{
 	  transform (cfn);
 	}
