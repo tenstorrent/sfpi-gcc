@@ -179,7 +179,6 @@ process_block_stmts(basic_block bb,
 		    gcc_unreachable();
 		  }
 
-		  move_ssa_defining_stmt_for_defs (new_stmt, stmt);
 		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
 		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		  gimple_set_location (new_stmt, gimple_location (stmt));
