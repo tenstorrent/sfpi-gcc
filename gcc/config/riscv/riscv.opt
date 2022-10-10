@@ -79,15 +79,15 @@ Target Mask(DIV)
 Use hardware instructions for integer division.
 
 mgrayskull
-Target Report Mask(RVTT_GS) Bool Var(flag_grayskull) Init(0)
+Target Mask(RVTT_GS) Bool Var(flag_grayskull) Init(0)
 Generate code for Tenstorrent SFPU - Grayskull.
 
 mwormhole
-Target Report Mask(RVTT_WH) Bool Var(flag_wormhole) Init(0)
+Target Mask(RVTT_WH) Bool Var(flag_wormhole) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole.
 
 mwormhole_a0
-Target Report Mask(RVTT_WH) Bool Var(flag_wormhole_a0) Init(0)
+Target Bool Var(flag_wormhole_a0) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole a0 Si.
 
 march=
