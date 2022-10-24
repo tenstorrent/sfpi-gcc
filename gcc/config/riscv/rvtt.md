@@ -20,6 +20,7 @@
 ;; <http://www.gnu.org/licenses/>.
 
 (include "rvtt-predicates.md")
+(include "rvtt-tune.md")
 
 ; & in spec means early clobber, written before inputs are used, cannot reuse input reg
 
