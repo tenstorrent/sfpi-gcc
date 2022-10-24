@@ -42,7 +42,8 @@ extern enum riscv_code_model riscv_cmodel;
 /* Keep this list in sync with define_attr "tune" in riscv.md.  */
 enum riscv_microarchitecture_type {
   generic,
-  sifive_7
+  sifive_7,
+  rvtt_b1
 };
 extern enum riscv_microarchitecture_type riscv_microarchitecture;
 

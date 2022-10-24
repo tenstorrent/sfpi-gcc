@@ -317,6 +317,19 @@ static const struct riscv_tune_param optimize_size_tune_info = {
   false,					/* slow_unaligned_access */
 };
 
+/* Costs to use when optimizing for rvtt_b1.  */
+static const struct riscv_tune_param rocket_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (4), COSTS_N_INSNS (4)},	/* int_mul */
+  {COSTS_N_INSNS (6), COSTS_N_INSNS (6)},	/* int_div */
+  1,						/* issue_rate */
+  3,						/* branch_cost */
+  5,						/* memory_cost */
+  true,						/* slow_unaligned_access */
+};
+
 static tree riscv_handle_fndecl_attribute (tree *, tree, tree, int, bool *);
 static tree riscv_handle_type_attribute (tree *, tree, tree, int, bool *);
 
@@ -352,6 +365,7 @@ static const struct riscv_tune_info riscv_tune_info_table[] = {
   { "sifive-3-series", generic, &rocket_tune_info },
   { "sifive-5-series", generic, &rocket_tune_info },
   { "sifive-7-series", sifive_7, &sifive_7_tune_info },
+  { "rvtt-b1", rvtt_b1, &rvtt_b1_tune_info },
   { "size", generic, &optimize_size_tune_info },
 };
 
