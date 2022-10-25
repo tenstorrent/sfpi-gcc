@@ -6901,6 +6901,10 @@ simplify_subreg (machine_mode outermode, rtx op,
 	}
 
       /* Recurse for further possible simplifications.  */
+      if (innermostmode == VOIDmode)
+	{
+	  return NULL_RTX;
+	}
       newx = simplify_subreg (outermode, SUBREG_REG (op), innermostmode,
 			      final_offset);
       if (newx)

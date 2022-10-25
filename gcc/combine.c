@@ -5990,8 +5990,8 @@ combine_simplify_rtx (rtx x, machine_mode op0_mode, int in_dest,
 	break;
       {
 	rtx temp;
-	temp = simplify_subreg (mode, SUBREG_REG (x), op0_mode,
-				SUBREG_BYTE (x));
+	temp = (op0_mode == VOIDmode) ? NULL_RTX : simplify_subreg (mode, SUBREG_REG (x), op0_mode,
+								    SUBREG_BYTE (x));
 	if (temp)
 	  return temp;
 
@@ -8427,7 +8427,7 @@ make_compound_operation_int (scalar_int_mode mode, rtx *x_ptr,
 	tem = make_compound_operation (inner, subreg_code);
 
 	simplified
-	  = simplify_subreg (mode, tem, GET_MODE (inner), SUBREG_BYTE (x));
+	  = (GET_MODE (inner) == VOIDmode) ? NULL_RTX : simplify_subreg (mode, tem, GET_MODE (inner), SUBREG_BYTE (x));
 	if (simplified)
 	  tem = simplified;
 
