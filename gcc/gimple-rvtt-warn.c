@@ -85,6 +85,7 @@ check_function_decl(function *fun)
 static void
 warn_replace_stmt(gimple_stmt_iterator *gsi, tree lhs, location_t loc)
 {
+  DUMP("  replacing stmt\n");
   const rvtt_insn_data* loadi_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
 
   gimple *loadi_use_stmt = gimple_build_call (loadi_insnd->decl, 5);
@@ -242,6 +243,8 @@ process (function *fun)
       while (!gsi_end_p (gsi))
 	{
 	  gimple *g = gsi_stmt (gsi);
+	  gcall *stmt;
+	  const rvtt_insn_data *insnd;
 
 	  if (gimple_code(g) == GIMPLE_ASSIGN &&
 	      gimple_assign_rhs_class(g) == GIMPLE_SINGLE_RHS)
@@ -255,7 +258,8 @@ process (function *fun)
 		  handle_write(g);
 		}
 	    }
-	  else if (gimple_code(g) == GIMPLE_CALL)
+	  else if (gimple_code(g) == GIMPLE_CALL &&
+		   rvtt_p (&insnd, &stmt, g))
 	    {
 	      for (unsigned int i = 0; i < gimple_call_num_args(g); i++)
 		{
