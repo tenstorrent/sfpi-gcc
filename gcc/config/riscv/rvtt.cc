@@ -307,8 +307,11 @@ rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *g)
   if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
     {
       tree fn_decl = TREE_OPERAND (fn_ptr, 0);
-      *insnd = rvtt_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (fn_decl)));
-      found = (*insnd != nullptr && (*insnd)->id != rvtt_insn_data::nonsfpu);
+      if (TREE_CODE(fn_decl) == FUNCTION_DECL)
+	{
+	  *insnd = rvtt_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (fn_decl)));
+	  found = (*insnd != nullptr && (*insnd)->id != rvtt_insn_data::nonsfpu);
+	}
     }
 
   return found;
