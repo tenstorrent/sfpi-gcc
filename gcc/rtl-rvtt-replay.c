@@ -652,7 +652,8 @@ static void update_insns(basic_block bb, int which, int length)
   hash_type seq_hash = 0;
   rtx_insn *start_insn = nullptr;
   rtx_insn *last_rvtt_insn = nullptr;
-  while (insn != BB_END(bb))
+
+  FOR_BB_INSNS(bb, insn)
     {
       const rvtt_insn_data *insnd;
       if (NONDEBUG_INSN_P(insn) &&
@@ -687,8 +688,6 @@ static void update_insns(basic_block bb, int which, int length)
 	  i++;
 	  last_rvtt_insn = insn;
 	}
-
-      insn = NEXT_INSN(insn);
     }
 
   if (count != 0)
