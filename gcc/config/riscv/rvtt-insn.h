@@ -38,6 +38,14 @@
 #define RVTT_GS_NO_TGT_BUILTIN(a, b, c, d, e, f, g, h, i)
 #endif
 
+#ifndef RVTT_WH_PAD_BUILTIN
+#define RVTT_WH_PAD_BUILTIN(a)
+#endif
+
+#ifndef RVTT_WH_PAD_NO_TGT_BUILTIN
+#define RVTT_WH_PAD_NO_TGT_BUILTIN(a)
+#endif
+
 #ifndef RVTT_WH_RTL_ONLY
 #define RVTT_WH_RTL_ONLY(a, b, c)
 #endif
@@ -68,10 +76,17 @@ RVTT_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                 
 RVTT_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxcondi,       RISCV_V64SF_FTYPE_USI,                                            0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                                  0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (reg_read,        RISCV_USI_FTYPE_USI,                                              0x20, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_ptr,     RISCV_POINTER_FTYPE_POINTER,                                      0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_si,      RISCV_SI_FTYPE_SI,                                                0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_usi,     RISCV_USI_FTYPE_USI,                                              0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_hi,      RISCV_SI_FTYPE_HI,                                                0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_uhi,     RISCV_USI_FTYPE_UHI,                                              0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_qi,      RISCV_SI_FTYPE_QI,                                                0xa0, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (l1_load_uqi,     RISCV_USI_FTYPE_UQI,                                              0xa0, -1, -1, 0x00, -1,      0, 0)
 
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpincrwc,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
-
 
 // Grayskull internal (rtl only) insns
 RVTT_GS_RTL_ONLY(sfpload_int,             0x08, 0x40)
@@ -169,6 +184,7 @@ RVTT_GS_PAD_BUILTIN (sfpstochrnd_v_lv)
 RVTT_GS_PAD_BUILTIN (sfplutfp32_3r)
 RVTT_GS_PAD_BUILTIN (sfplutfp32_6r)
 
+RVTT_GS_NO_TGT_BUILTIN (l1_load_war,    RISCV_VOID_FTYPE_USI,                                       0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_GS_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_GS_NO_TGT_BUILTIN (sfpsetcc_i,     RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_GS_NO_TGT_BUILTIN (sfpsetcc_v,     RISCV_VOID_FTYPE_V64SF_USI,                                 0x01, -1,  1, 0x00, -1,      0, 0)
@@ -282,6 +298,7 @@ RVTT_WH_BUILTIN (sfpstochrnd_v_lv,RISCV_V64SF_FTYPE_V64SF_USI_V64SF_V64SF_USI,  
 RVTT_WH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x00, -1,  4, 0x21, -1,      0, 0)
 RVTT_WH_BUILTIN (sfplutfp32_6r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_USI,  0x00, -1,  7, 0x21, -1,      0, 0)
 
+RVTT_WH_PAD_NO_TGT_BUILTIN (l1_load_war)
 RVTT_WH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpsetcc_i,     RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpsetcc_v,     RISCV_VOID_FTYPE_V64SF_USI,                                 0x01, -1,  1, 0x00, -1,      0, 0)

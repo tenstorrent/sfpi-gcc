@@ -25,6 +25,7 @@
   ;; Tenstorrent SFPU unspecs.
   ;; INT for internal
   ;; LV for keep dst reg alive as input for predicated liveness
+  UNSPECV_GS_L1_LOAD_WAR
   UNSPECV_GS_SFPASSIGN_LV
   UNSPECV_GS_SFPPRESERVELREG
   UNSPECV_GS_SFPPRESERVELREG0_INT
@@ -108,6 +109,11 @@
   UNSPECV_GS_SFPLUT
   UNSPECV_GS_SFPNOP
 ])
+
+(define_insn "rvtt_gs_l1_load_war"
+  [(unspec_volatile [(match_operand:SI 0)] UNSPECV_GS_L1_LOAD_WAR)]
+  "TARGET_RVTT_GS"
+  "mv\t%0,%0\t# GS L1 war")
 
 (define_insn "rvtt_gs_sfpgccmov_cc"
   [(set (match_operand:V64SF 0 "nonimmediate_operand" "=x,x,m")
