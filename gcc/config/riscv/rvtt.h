@@ -106,6 +106,8 @@ constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an 
 constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
 
+constexpr unsigned int INSN_FLAGS_L1_LOAD            = 0x80;  // gather all l1 loads into 1 test
+
 constexpr unsigned int SFPU_LREG_COUNT_GS = 4;
 constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
 extern unsigned int rvtt_sfpu_lreg_count_global;
@@ -153,6 +155,7 @@ struct rvtt_insn_data {
   inline bool schedule_dynamic_p(rtx_insn *insn) const;
   inline int schedule_static_nops(rtx_insn *insn) const;
   inline bool schedule_has_dynamic_dependency_p(rtx_insn *insn) const;
+  inline bool l1_load_p() const { return flags & INSN_FLAGS_L1_LOAD; }
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
   inline int nonimm_op_arg_pos() const { return nonimm_pos; }

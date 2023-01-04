@@ -24,11 +24,20 @@
 
 ; & in spec means early clobber, written before inputs are used, cannot reuse input reg
 
+(define_mode_iterator RVTT_ANY_INT [SI HI QI])
+(define_mode_attr rvtt_any_int_mode_name [(SI "si") (HI "hi") (QI "qi")])
+(define_mode_attr rvtt_any_int_mode_mnem [(SI "w") (HI "h") (QI "b")])
+(define_mode_attr rvtt_any_uint_mode_load_mod [(SI "") (HI "u") (QI "u")])
+
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
   ;; INT for internal
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
+  UNSPEC_L1_LOAD_PTR
+  UNSPEC_L1_LOAD
+  UNSPEC_L1_LOAD_U
+  UNSPEC_REG_READ
   UNSPECV_LOAD_IMMEDIATE
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
@@ -46,6 +55,8 @@
   UNSPECV_SFPNONIMM_STORE
 ])
 
+(define_attr "rvtt_type" "na,rvtt_l1_load,rvtt_reg_read" (const_string "na"))
+
 (define_expand "movv64sf"
   [(set (match_operand:V64SF 0 "")
         (match_operand:V64SF 1 ""))]
@@ -54,6 +65,34 @@
   if (riscv_legitimize_move (V64SFmode, operands[0], operands[1]))
     DONE;
 })
+
+(define_insn "rvtt_l1_load_ptr"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec [(match_operand:SI 1 "nonimmediate_operand" "m")] UNSPEC_L1_LOAD_PTR))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
+  "lw\t%0,%1\t# L1 load"
+  [(set_attr "rvtt_type" "rvtt_l1_load")])
+
+(define_insn "rvtt_l1_load_<rvtt_any_int_mode_name>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec [(match_operand:RVTT_ANY_INT 1 "nonimmediate_operand" "m")] UNSPEC_L1_LOAD))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
+  "l<rvtt_any_int_mode_mnem>\t%0,%1\t# L1 load"
+  [(set_attr "rvtt_type" "rvtt_l1_load")])
+
+(define_insn "rvtt_l1_load_u<rvtt_any_int_mode_name>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec [(match_operand:RVTT_ANY_INT 1 "nonimmediate_operand" "m")] UNSPEC_L1_LOAD_U))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
+  "l<rvtt_any_int_mode_mnem><rvtt_any_uint_mode_load_mod>\t%0,%1\t# L1 load"
+  [(set_attr "rvtt_type" "rvtt_l1_load")])
+
+(define_insn "rvtt_reg_read"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec [(match_operand:SI 1 "nonimmediate_operand" "m")] UNSPEC_REG_READ))]
+  "TARGET_RVTT_GS || TARGET_RVTT_WH"
+  "lw\t%0,%1\t# Reg load"
+  [(set_attr "rvtt_type" "rvtt_reg_read")])
 
 (define_insn "rvtt_load_immediate"
   [(set (match_operand:SI 0 "register_operand" "=r")

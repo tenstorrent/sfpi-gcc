@@ -1572,6 +1572,8 @@ OBJS = \
 	rtl-ssa/changes.o \
 	rtl-ssa/functions.o \
 	rtl-ssa/insns.o \
+	rtl-rvtt-l1reorder.o \
+	rtl-rvtt-gsl1war.o \
 	rtl-rvtt-nonimm.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-schedule.o \

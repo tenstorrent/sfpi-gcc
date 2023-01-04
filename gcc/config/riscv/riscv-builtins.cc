@@ -141,8 +141,12 @@ tree v64SF_type_node;
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
+#define RISCV_ATYPE_SI intSI_type_node
+#define RISCV_ATYPE_HI intHI_type_node
+#define RISCV_ATYPE_QI intQI_type_node
 #define RISCV_ATYPE_USI unsigned_intSI_type_node
 #define RISCV_ATYPE_UHI unsigned_intHI_type_node
+#define RISCV_ATYPE_UQI unsigned_intQI_type_node
 #define RISCV_ATYPE_V64SF v64SF_type_node
 #define RISCV_ATYPE_POINTER ptr_type_node
 
