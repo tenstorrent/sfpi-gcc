@@ -266,7 +266,7 @@ process_bb(basic_block bb, bb_data& bbd)
 		  DUMP("  found an %s loading reg %d, updating war reg\n", insnd->name, l1_war_reg);
 		}
 	      else if (code != -1 &&
-		       classify == INSN &&
+		       (classify == INSN || classify == JUMP_INSN) &&
 		       refers_to_regno_p(l1_war_reg, l1_war_reg + 1, insn, nullptr))
 		{
 		  DUMP("  a %s refers to l1 loaded reg %d, resetting ll_count\n",
@@ -392,7 +392,7 @@ process_bb(basic_block bb, bb_data& bbd)
     {
       if (!bbd[e->dest->index].visited)
 	{
-	  DUMP("  going from bb %d to bb %d\n", bb->index, e->dest->index);
+	  DUMP(" going from bb %d to bb %d\n", bb->index, e->dest->index);
 	  process_bb(e->dest, bbd);
 	}
     }
