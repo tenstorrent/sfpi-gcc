@@ -77,29 +77,52 @@ static void
 replace_load_from_l1_with_l1_load(const rvtt_insn_data *insnd, rtx_insn *insn)
 {
   rtx pat = PATTERN(insn);
+
+  unsigned int src_code = GET_CODE(SET_SRC(pat));
+  if (src_code == CONST_INT ||
+      src_code == NE ||
+      src_code == EQ ||
+      src_code == REG)
+    {
+      // These conditions are probably not an exhaustive list...
+      DUMP("  load from l1 was optimized away, ignoring\n");
+      return;
+    }
+
+  // q/h use zero/sign extension which are handled implicitly by the
+  // intrinsic, the XEXP in the switch below removes them
+
+  rtx set_src = SET_SRC(pat);
   rtx new_insn;
   switch (insnd->id)
     {
     case rvtt_insn_data::l1_load_qi:
-      new_insn = gen_rvtt_l1_load_qi(SET_DEST(pat), XEXP(SET_SRC(pat), 0));
+      gcc_assert(GET_CODE(XEXP(set_src, 0)) == MEM);
+      new_insn = gen_rvtt_l1_load_qi(SET_DEST(pat), XEXP(set_src, 0));
       break;
     case rvtt_insn_data::l1_load_uqi:
-      new_insn = gen_rvtt_l1_load_uqi(SET_DEST(pat), XEXP(SET_SRC(pat), 0));
+      gcc_assert(GET_CODE(XEXP(set_src, 0)) == MEM);
+      new_insn = gen_rvtt_l1_load_uqi(SET_DEST(pat), XEXP(set_src, 0));
       break;
     case rvtt_insn_data::l1_load_hi:
-      new_insn = gen_rvtt_l1_load_hi(SET_DEST(pat), XEXP(SET_SRC(pat), 0));
+      gcc_assert(GET_CODE(XEXP(set_src, 0)) == MEM);
+      new_insn = gen_rvtt_l1_load_hi(SET_DEST(pat), XEXP(set_src, 0));
       break;
     case rvtt_insn_data::l1_load_uhi:
-      new_insn = gen_rvtt_l1_load_uhi(SET_DEST(pat), XEXP(SET_SRC(pat), 0));
+      gcc_assert(GET_CODE(XEXP(set_src, 0)) == MEM);
+      new_insn = gen_rvtt_l1_load_uhi(SET_DEST(pat), XEXP(set_src, 0));
       break;
     case rvtt_insn_data::l1_load_si:
-      new_insn = gen_rvtt_l1_load_si(SET_DEST(pat), SET_SRC(pat));
+      gcc_assert(GET_CODE(set_src) == MEM);
+      new_insn = gen_rvtt_l1_load_si(SET_DEST(pat), set_src);
       break;
     case rvtt_insn_data::l1_load_usi:
-      new_insn = gen_rvtt_l1_load_usi(SET_DEST(pat), SET_SRC(pat));
+      gcc_assert(GET_CODE(set_src) == MEM);
+      new_insn = gen_rvtt_l1_load_usi(SET_DEST(pat), set_src);
       break;
     case rvtt_insn_data::l1_load_ptr:
-      new_insn = gen_rvtt_l1_load_usi(SET_DEST(pat), SET_SRC(pat));
+      gcc_assert(GET_CODE(set_src) == MEM);
+      new_insn = gen_rvtt_l1_load_usi(SET_DEST(pat), set_src);
       break;
     default:
       gcc_unreachable();
@@ -117,15 +140,26 @@ find_store_to_stack(rtx_insn **insn)
   gcc_assert(GET_CODE(pat) == SET);
   rtx mem = XVECEXP(XEXP(pat, 1), 0, 0);
   gcc_assert(GET_CODE(mem) == MEM);
-  rtx plus = XEXP(mem, 0);
-  gcc_assert(GET_CODE(plus) == PLUS);
-  rtx reg = XEXP(plus, 0);
-  rtx offset = XEXP(plus, 1);
-  int offset_value = INTVAL(offset);
-  gcc_assert(GET_CODE(reg) == REG);
-  gcc_assert(GET_CODE(offset) == CONST_INT);
-  int sp = REGNO(reg);
-  gcc_assert(sp == stack_pointer_reg);
+  rtx plus_or_reg = XEXP(mem, 0);
+  int offset_value;
+  if (GET_CODE(plus_or_reg) == REG)
+    {
+      int sp = REGNO(plus_or_reg);
+      gcc_assert(sp == stack_pointer_reg);
+      offset_value = 0;
+    }
+  else
+    {
+      rtx plus = plus_or_reg;
+      gcc_assert(GET_CODE(plus) == PLUS);
+      rtx reg = XEXP(plus, 0);
+      rtx offset = XEXP(plus, 1);
+      offset_value = INTVAL(offset);
+      gcc_assert(GET_CODE(reg) == REG);
+      gcc_assert(GET_CODE(offset) == CONST_INT);
+      int sp = REGNO(reg);
+      gcc_assert(sp == stack_pointer_reg);
+    }
 
   basic_block bb = BLOCK_FOR_INSN(*insn);
 
@@ -227,7 +261,11 @@ find_and_replace_load_with_l1_load(vector<bool>& visited,
   FOR_EACH_EDGE(e, ei, bb->preds)
     {
       num_edges++;
-      if (!visited[e->src->index])
+      // If we get to bb 0, then we didn't find what we are looking for and
+      // the value read was passed in as an argument to this function.  This
+      // probably can't happen except in a test scenario - reading a pointer
+      // and not what the pointer points to
+      if (!visited[e->src->index] && e->src->index != 0)
 	{
 	  all_paths_found &= find_and_replace_load_with_l1_load(visited, insnd, BB_END(e->src), reg);
 	}
