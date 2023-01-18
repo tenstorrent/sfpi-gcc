@@ -99,7 +99,7 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 131;
+static const int NUMBER_OF_INTRINSICS = 123;
 static rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },

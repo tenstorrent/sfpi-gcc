@@ -21,15 +21,16 @@
 
 ;; Profile for grayskull and wormhole b1 CPUs
 
-;; Put rvtt types first since the "type"=="unknown" is a catch-all they'll match
-(define_insn_reservation "rvtt_reg_read" 4
+(define_insn_reservation "rvtt_l1_load_ptr" 12
   (and (eq_attr "tune" "rvtt_b1")
-       (eq_attr "rvtt_type" "rvtt_reg_read"))
+       (eq_attr "type" "load,fpload")
+       (match_test "rvtt_l1_load_p(PATTERN(insn))"))
   "alu")
 
-(define_insn_reservation "rvtt_l1_load" 8
+(define_insn_reservation "rvtt_reg_load_ptr" 4
   (and (eq_attr "tune" "rvtt_b1")
-       (eq_attr "rvtt_type" "rvtt_l1_load"))
+       (eq_attr "type" "load,fpload")
+       (match_test "rvtt_reg_load_p(PATTERN(insn))"))
   "alu")
 
 (define_insn_reservation "rvtt_alu" 1

@@ -468,8 +468,6 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_ira);
       NEXT_PASS (pass_reload);
 
-      NEXT_PASS (pass_rvtt_l1reorder);
-
       NEXT_PASS (pass_rvtt_nonimm);
       NEXT_PASS (pass_rvtt_schedule);
       NEXT_PASS (pass_postreload);
