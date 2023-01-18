@@ -195,6 +195,13 @@ bb_insn_before_jump(basic_block bb)
     }
 }
 
+static bool
+load_p(rtx pat)
+{
+  return GET_CODE(pat) == SET &&
+    contains_mem_rtx_p(SET_SRC(pat));
+}
+
 // The general idea here is to go through the insns and once an L1 load is
 // seen, starting counting local memory loads before enough have been hit, then
 // emit the workaround.  Details:
@@ -243,12 +250,12 @@ process_bb(basic_block bb, bb_data& bbd)
 	  rvtt_p (&insnd, insn);
 	  if (ll_count == -1)
 	    {
-	      if (insnd->l1_load_p())
+	      if (rvtt_needs_gs_l1_war_p(insn_pat))
 		{
 		  ll_count = 0;
 		  resolves_all = true;
 		  l1_war_reg = rvtt_get_insn_dst_regno(insn);
-		  DUMP("  found an %s loading reg %d, war pending\n", insnd->name, l1_war_reg);
+		  DUMP("  found an l1 load of reg %d, war pending\n", l1_war_reg);
 		}
 	      else if (insnd->id == rvtt_insn_data::l1_load_war)
 		{
@@ -259,11 +266,11 @@ process_bb(basic_block bb, bb_data& bbd)
 	  else
 	    {
 	      int classify = my_classify_insn(insn_pat);
-	      if (insnd->l1_load_p())
+	      if (rvtt_needs_gs_l1_war_p(insn_pat))
 		{
 		  resolves_all = true;
 		  l1_war_reg = rvtt_get_insn_dst_regno(insn);
-		  DUMP("  found an %s loading reg %d, updating war reg\n", insnd->name, l1_war_reg);
+		  DUMP("  found an l1 load of reg %d, updating war reg\n", l1_war_reg);
 		}
 	      else if (code != -1 &&
 		       (classify == INSN || classify == JUMP_INSN) &&
@@ -294,19 +301,14 @@ process_bb(basic_block bb, bb_data& bbd)
 		  DUMP("  %s with l1 active, emitting WAR\n", GET_RTX_NAME(classify));
 		  emit_war(&first_war, resolves_all, insn, l1_war_reg, &bbe, &ll_count);
 		}
-	      else if (GET_CODE(insn_pat) == SET &&
-		       insnd->id != rvtt_insn_data::l1_load_si)
+	      else if (load_p(insn_pat))
 		{
-		  rtx src = SET_SRC(insn_pat);
-		  if (contains_mem_rtx_p(src))
+		  ll_count++;
+		  DUMP("  local load w/ l1 active, bumped ll_count to %d\n", ll_count);
+		  if (ll_count == 5)
 		    {
-		      ll_count++;
-		      DUMP("  local load w/ l1 active, bumped ll_count to %d\n", ll_count);
-		      if (ll_count == 5)
-			{
-			  DUMP("  local load is 5, emitting WAR\n");
-			  emit_war(&first_war, resolves_all, insn, l1_war_reg, &bbe, &ll_count);
-			}
+		      DUMP("  local load is 5, emitting WAR\n");
+		      emit_war(&first_war, resolves_all, insn, l1_war_reg, &bbe, &ll_count);
 		    }
 		}
 	      else if (GET_CODE(insn_pat) == PARALLEL)
@@ -316,7 +318,7 @@ process_bb(basic_block bb, bb_data& bbd)
 		      rtx sub = XVECEXP(insn_pat, 0, i);
 		      DUMP("  processing parallel %s\n", GET_RTX_NAME(GET_CODE(sub)));
 
-		      if (contains_mem_rtx_p(sub))
+		      if (contains_mem_rtx_p(sub))// XXXX check for SET and check the SRC
 			{
 			  ll_count++;
 			  DUMP("    load in parallel w/ l1 active, ll_bumped count to %d\n", ll_count);
