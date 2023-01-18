@@ -65,6 +65,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
+DEBUG_FUNCTION void debug_tree (tree node);
+
 unsigned int rvtt_sfpu_lreg_count_global;
 
 const int rvtt_name_stub_no_arch_len = 15;
@@ -969,4 +971,77 @@ int rvtt_get_insn_dst_regno(const rtx_insn *insn)
     {
       return -1;
     }
+}
+
+static bool rvtt_has_attrib_p(const char *attrib, const rtx pat)
+{
+  if (GET_CODE(pat) == SET)
+    {
+      rtx src = SET_SRC(pat);
+      if (GET_CODE(src) == ZERO_EXTEND ||
+	  GET_CODE(src) == SIGN_EXTEND)
+	{
+	  src = XEXP(src, 0);
+	}
+
+      if (GET_CODE(src) == MEM &&
+	  MEM_EXPR(src) != NULL_TREE)
+	{
+	  tree exp = MEM_EXPR(src);
+	  if (TREE_CODE(exp) == PARM_DECL ||
+	      TREE_CODE(exp) == VAR_DECL)
+	    {
+	      // Top level PARM/VAR DECL's are address calculation
+	      // (fingers crossed...)
+	      return false;
+	    }
+
+	  while (TREE_CODE(exp) != MEM_REF &&
+		 TREE_CODE(exp) != TARGET_MEM_REF &&
+		 TREE_CODE(exp) != PARM_DECL &&
+		 TREE_CODE(exp) != VAR_DECL)
+	    {
+	      if (TREE_CODE(exp) == ARRAY_REF ||
+		  TREE_CODE(exp) == COMPONENT_REF)
+		{
+		  exp = TREE_OPERAND(exp, 0);
+		}
+	      else
+		{
+		  debug_rtx(pat);
+		  debug_tree(MEM_EXPR(src));
+		  gcc_unreachable();
+		}
+	    }
+	  gcc_assert(TREE_CODE(exp) == MEM_REF ||
+		     TREE_CODE(exp) == TARGET_MEM_REF ||
+		     TREE_CODE(exp) == PARM_DECL ||
+		     TREE_CODE(exp) == VAR_DECL);
+
+	  tree decl = (TREE_CODE(exp) == PARM_DECL ||
+		       TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+	  if (decl != NULL_TREE &&
+	      lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
+	    {
+	      return true;
+	    }
+	}
+    }
+
+  return false;
+}
+
+bool rvtt_needs_gs_l1_war_p(const rtx pat)
+{
+  return rvtt_has_attrib_p("rvtt_l1_ptr", pat) || rvtt_has_attrib_p("rvtt_reg_ptr", pat);
+}
+
+bool rvtt_l1_load_p(const rtx pat)
+{
+  return rvtt_has_attrib_p("rvtt_l1_ptr", pat);
+}
+
+bool rvtt_reg_load_p(const rtx pat)
+{
+  return rvtt_has_attrib_p("rvtt_reg_ptr", pat);
 }

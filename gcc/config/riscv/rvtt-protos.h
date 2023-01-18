@@ -62,5 +62,8 @@ extern void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx 
 extern void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
 extern void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx lv, rtx src, rtx mod);
 extern const char * rvtt_emit_testcode(rtx operands[]);
+extern bool rvtt_needs_gs_l1_war_p(const rtx pat);
+extern bool rvtt_l1_load_p(const rtx pat);
+extern bool rvtt_reg_load_p(const rtx pat);
 
 #endif /* ! GCC_RVTT_PROTOS_H */

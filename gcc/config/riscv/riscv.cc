@@ -367,6 +367,12 @@ static const struct attribute_spec riscv_attribute_table[] =
   { "interrupt", 0, 1, false, true, true, false,
     riscv_handle_type_attribute, NULL },
 
+  { "rvtt_l1_ptr", 0, 0, false, true, false, true,
+    riscv_handle_type_attribute, NULL },
+
+  { "rvtt_reg_ptr", 0, 0, false, true, false, true,
+    riscv_handle_type_attribute, NULL },
+
   /* The last attribute spec is set to be NULL.  */
   { NULL,	0,  0, false, false, false, false, NULL, NULL }
 };
@@ -3714,7 +3720,7 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 
     case 's':
       if (code == CONST_INT)
-	fprintf (file, "%d", INTVAL(op));
+	fprintf (file, "%ld", INTVAL(op));
       else
 	gcc_unreachable();
       break;
