@@ -55,6 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl-iter.h"
 #include "print-rtl.h"
 #include "function-abi.h"
+#include "domwalk.h"
 #include <vector>
 #include "config/riscv/rvtt.h"
 
@@ -83,6 +84,17 @@ using namespace std;
 
 typedef vector<bb_entry> bb_data;
 
+class gsl1war_dom_walker : public dom_walker
+{
+ public:
+  gsl1war_dom_walker(bb_data& inbbd) : dom_walker(CDI_DOMINATORS), bbd(inbbd) {}
+  ~gsl1war_dom_walker() {}
+
+  edge before_dom_children(basic_block bb) FINAL OVERRIDE;
+
+ private:
+  bb_data& bbd;
+};
 
 // Copied (and modified) from rtl.c.  This is potentially subject to rot.
 //
@@ -220,9 +232,9 @@ load_p(rtx pat)
 // If a BB is hit multiple times, all entires after the first must have a
 // count less than or equal to the count the first time the BB was
 // encountered.
-static void
-process_bb(basic_block bb, bb_data& bbd)
+edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 {
+  DUMP(" processing bb[%d]\n", bb->index);
   bb_entry& bbe = bbd[bb->index];
   bbe.visited = true;
 
@@ -347,8 +359,9 @@ process_bb(basic_block bb, bb_data& bbd)
 	  // If this block doesn't conform, then force the war at the end of this block
 	  bb_entry& dst_bbe = bbd[e->dest->index];
 
-	  DUMP("  checking BB[%d] w/ inited %d ll_count %d l1_reg %d dst.ll %d dst.ll_all %d dst.ll_inc %d dst.l1_reg %d\n",
+	  DUMP("  checking BB[%d] w/ visited %d inited %d ll_count %d l1_reg %d dst.ll %d dst.ll_all %d dst.ll_inc %d dst.l1_reg %d\n",
 	       e->dest->index,
+	       dst_bbe.visited,
 	       dst_bbe.inited,
 	       ll_count,
 	       l1_war_reg,
@@ -364,10 +377,21 @@ process_bb(basic_block bb, bb_data& bbd)
 		dst_bbe.ll_before_resolve_incoming == -1 &&
 		ll_count > dst_bbe.ll_incoming)))
 	    {
-	      children_can_handle = false;
-	      DUMP("    checked BB[%d], emitting WAR\n", e->dest->index);
-	      emit_war(&first_war, resolves_all, bb_insn_before_jump(bb), l1_war_reg, &bbe, &ll_count);
-	      break;
+	      if (!dst_bbe.visited &&
+		  dst_bbe.inited &&
+		  dst_bbe.ll_before_resolve_all == -1 &&
+		  dst_bbe.ll_before_resolve_incoming == -1 &&
+		  dst_bbe.l1_war_reg_incoming == l1_war_reg)
+		{
+		  DUMP("    checked BB[%d], not visited yet restricting ll_count from %d to %d", e->dest->index, dst_bbe.ll_incoming, ll_count);
+		}
+	      else
+		{
+		  children_can_handle = false;
+		  DUMP("    checked BB[%d], emitting WAR\n", e->dest->index);
+		  emit_war(&first_war, resolves_all, bb_insn_before_jump(bb), l1_war_reg, &bbe, &ll_count);
+		  break;
+		}
 	    }
 	  else
 	    {
@@ -383,21 +407,19 @@ process_bb(basic_block bb, bb_data& bbd)
 	      if (!dst_bbe.inited)
 		{
 		  dst_bbe.inited = true;
-		  dst_bbe.ll_incoming = ll_count;
+		  if (ll_count > dst_bbe.ll_incoming)
+		    {
+		      // Restrict ll_count based on this bb.  ll_incoming was
+		      // either -1, or we hit the restriction code above
+		      dst_bbe.ll_incoming = ll_count;
+		    }
 		  dst_bbe.l1_war_reg_incoming = l1_war_reg;
 		}
 	    }
 	}
     }
 
-  FOR_EACH_EDGE(e, ei, bb->succs)
-    {
-      if (!bbd[e->dest->index].visited)
-	{
-	  DUMP(" going from bb %d to bb %d\n", bb->index, e->dest->index);
-	  process_bb(e->dest, bbd);
-	}
-    }
+  return NULL;
 }
 
 static void
@@ -417,7 +439,9 @@ transform(function *fn)
       bbe.ll_before_resolve_all = -1;
     }
 
-  process_bb(ENTRY_BLOCK_PTR_FOR_FN(fn), bbd);
+  calculate_dominance_info(CDI_DOMINATORS);
+  gsl1war_dom_walker dw(bbd);
+  dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
 namespace {
