@@ -127,7 +127,7 @@ hash_type find_writer(int regno, const rtx_insn *insn)
   basic_block bb = BLOCK_FOR_INSN(insn);
 
   const rtx_insn *tmp = insn;
-  while (tmp != BB_HEAD(bb))
+  while (tmp != PREV_INSN(BB_HEAD(bb)))
     {
       if (NONDEBUG_INSN_P(tmp) &&
 	  regno == rvtt_get_insn_dst_regno(tmp))
