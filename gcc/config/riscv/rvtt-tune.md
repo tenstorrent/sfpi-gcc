@@ -1,7 +1,6 @@
-;; Generic DFA-based pipeline description for RISC-V targets.
-;; Copyright (C) 2011-2020 Free Software Foundation, Inc.
-;; Contributed by Andrew Waterman (andrew@sifive.com).
-;; Based on MIPS target for GNU compiler.
+;; TT tune profile
+;; Copyright (C) 2022 Free Software Foundation, Inc.
+;; Contributed by Paul Keller (pkeller@tenstorrent.com)
 
 ;; This file is part of GCC.
 

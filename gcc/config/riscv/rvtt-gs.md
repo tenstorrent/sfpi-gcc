@@ -1,6 +1,6 @@
 ;; Machine description for Tenstorrent SFPU Intrinsics.
 ;; Copyright (C) 2011-2020 Free Software Foundation, Inc.
-;; Contributed by Ayonam Ray (ayonam@helprack.com)
+;; Contributed by Paul Keller (pkeller@tenstorrent.com)
 ;; Based on RISC-V target for GNU compiler.
 
 ;; This file is part of GCC.
