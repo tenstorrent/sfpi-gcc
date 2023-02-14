@@ -3432,4 +3432,12 @@ frvtt-rmext
 Common Var(flag_rvtt_rmext) Init(1)
 TT specific removal of extraneous zero/sign extension ops
 
+frvtt-hll
+Common Var(flag_rvtt_hll) Init(1)
+TT specific scheduling of high latency loads
+
+frvtt-gsl1war
+Common Var(flag_rvtt_gsl1war) Init(1)
+TT specific workaround the GS l1 arbiter bug (disabling may result in hangs)
+
 ; This comment is to ensure we retain the blank line above.

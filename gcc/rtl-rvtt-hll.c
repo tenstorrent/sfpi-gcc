@@ -61,6 +61,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
+const int stack_ptr_regno = 2;
+
 using namespace std;
 
 // A BB can resolve its parents' L1 loads by:
@@ -185,6 +187,27 @@ load_p(rtx pat)
     contains_mem_rtx_p(SET_SRC(pat));
 }
 
+static bool
+nonstack_store_p(rtx pat)
+{
+  return
+    GET_CODE(pat) == SET &&
+    contains_mem_rtx_p(SET_DEST(pat)) &&
+    !refers_to_regno_p(stack_ptr_regno, pat);
+}
+
+static bool
+volatile_store_p(rtx pat)
+{
+  return MEM_VOLATILE_P(SET_DEST(pat));
+}
+
+static bool
+volatile_load_p(rtx pat)
+{
+  return MEM_VOLATILE_P(SET_SRC(pat));
+}
+
 static void
 set_l1_war_reg(vector<int>& l1_war_regs, int reg)
 {
@@ -196,7 +219,7 @@ static bool refers_to_any_regno_p(vector<int>& regs, rtx_insn *insn)
 {
   for (auto reg : regs)
     {
-      if (refers_to_regno_p(reg, reg + 1, PATTERN(insn), nullptr))
+      if (refers_to_regno_p(reg, PATTERN(insn)))
 	{
 	  return true;
 	}
@@ -249,8 +272,8 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
   vector<int>l1_war_regs = bbe.l1_war_reg_incoming;
   int ll_count = bbe.ll_incoming;
 
-  rtx_insn *insn = BB_HEAD(bb);
-  FOR_BB_INSNS_SAFE(bb, insn)
+  rtx_insn *insn, *next;
+  FOR_BB_INSNS_SAFE(bb, insn, next)
     {
       if (GET_CODE(insn) == NOTE &&
 	  NOTE_KIND(insn) == NOTE_INSN_EPILOGUE_BEG &&
@@ -526,7 +549,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 }
 
 static void
-transform(function *fn)
+workaround_gs_l1(function *fn)
 {
   DUMP("TT riscv GS rtl l1 war pass on: %s\n", function_name(fn));
 
@@ -548,12 +571,272 @@ transform(function *fn)
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
+#define LOG_LINKS(INSN)		(uid_log_links[insn_uid_check (INSN)])
+#define FOR_EACH_LOG_LINK(L, INSN)				\
+  for ((L) = LOG_LINKS (INSN); (L); (L) = (L)->next)
+
+
+struct hl_load_use {
+  rtx_insn *insn;     // the insn that uses a hl load
+  int n_lls;          // the number of local loads from def to use
+};
+
+// hl: high latency
+struct hl_load {
+  rtx_insn *insn;             // the high latency load insn (L1/reg)
+  basic_block bb;             // bb for insn (why why why)
+  vector<hl_load_use> uses;   // each of the uses (until re-def) of this reg
+  int ll_to_bb_end;           // number of local loads until the BB ends
+};
+
+typedef vector<struct hl_load_use> hl_load_uses;
+
+// Build up a vectory of hl_loads such that:
+//  - there is one entry per L1/reg load in reverse order
+//  - each entry points to the insn, all the uses of the def of that insn
+//    including the number of local loads between the def and use, the
+//    previous use of that register in the BB (if there is one) and the number
+//    of ll_loads between this def an the end of the BB
+static void
+create_log_links (function *fn, vector<hl_load>& hl_loads)
+{
+  basic_block bb;
+  rtx_insn *insn;
+  df_ref use;
+
+  vector<hl_load_uses> all_uses;
+  all_uses.resize(max_reg_num());
+
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      int ll_to_bb_end = 0;
+
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+
+	  df_ref def;
+	  rtx insn_pat = PATTERN(insn);
+	  if (load_p(insn_pat))
+	    {
+	      if (rvtt_l1_load_p(insn_pat) ||
+		  rvtt_reg_load_p(insn_pat))
+		{
+		  def = df_single_def(DF_INSN_INFO_GET(insn));
+		  gcc_assert(def != nullptr);
+
+		  unsigned int regno = DF_REF_REGNO (def);
+		  auto& uses = all_uses[regno];
+
+		  struct hl_load hll;
+		  hll.insn = insn;
+		  hll.bb = bb;
+		  hll.uses = uses;
+		  hll.ll_to_bb_end = ll_to_bb_end;
+		  hl_loads.push_back(hll);
+		}
+	      else
+		{
+		  // Hit an LL load, iterate over all registers and all uses and
+		  // bump the LL load counts. Yuck
+		  ll_to_bb_end++;
+		  for (auto& uses : all_uses)
+		    {
+		      for (auto& use : uses)
+			{
+			  use.n_lls++;
+			}
+		    }
+		}
+	    }
+
+	  FOR_EACH_INSN_DEF (def, insn)
+	    {
+	      unsigned int regno = DF_REF_REGNO (def);
+	      all_uses[regno].resize(0);
+	    }
+
+	  FOR_EACH_INSN_USE (use, insn)
+	    {
+	      unsigned int regno = DF_REF_REGNO (use);
+
+	      struct hl_load_use hl_use;
+	      hl_use.insn = insn;
+	      hl_use.n_lls = 0;
+	      all_uses[regno].push_back(hl_use);
+	    }
+	}
+
+      for (auto &uses : all_uses)
+	{
+	  uses.resize(0);
+	}
+    }
+}
+
+static bool can_move_past(rtx_insn *base, rtx_insn *query)
+{
+  df_ref base_def, query_def;
+
+  rtx pat = PATTERN(query);
+  if (GET_CODE(pat) == UNSPEC_VOLATILE ||
+      GET_CODE(pat) == ASM_INPUT ||
+      GET_CODE(pat) == ASM_OPERANDS)
+    {
+      return false;
+    }
+
+  if (GET_CODE(pat) == PARALLEL)
+    {
+      for (int i = XVECLEN (pat, 0) - 1; i >= 0; i--)
+	{
+	  rtx sub = XVECEXP(pat, 0, i);
+
+	  bool store = nonstack_store_p(sub);
+	  if ((store && !rvtt_store_has_restrict_p(sub)) ||
+	      (store && volatile_store_p(sub)) ||
+	      (load_p(sub) && volatile_load_p(sub)))
+	    {
+	      return false;
+	    }
+	}
+    }
+  else
+    {
+      bool store = nonstack_store_p(pat);
+      if ((store && !rvtt_store_has_restrict_p(pat)) ||
+	  (store && volatile_store_p(pat)) ||
+	  (load_p(pat) && volatile_load_p(pat)))
+	{
+	  return false;
+	}
+    }
+
+  FOR_EACH_INSN_DEF (query_def, query)
+    {
+      // If query defines what base defines
+      FOR_EACH_INSN_DEF (base_def, base)
+	{
+	  if (DF_REF_REGNO(base_def) == DF_REF_REGNO(query_def))
+	    {
+	      return false;
+	    }
+	}
+
+      // If query defines what base uses
+      df_ref use;
+      FOR_EACH_INSN_USE (use, base)
+	{
+	  if (DF_REF_REGNO(use) == DF_REF_REGNO(query_def))
+	    {
+	      return false;
+	    }
+	}
+    }
+
+  // If base defines what query uses
+  FOR_EACH_INSN_DEF (base_def, base)
+    {
+      FOR_EACH_INSN_USE (query_def, query)
+	{
+	  if (DF_REF_REGNO(base_def) == DF_REF_REGNO(query_def))
+	    {
+	      return false;
+	    }
+	}
+    }
+
+  return true;
+}
+
+static void
+move_insn(rtx_insn *insn, rtx_insn *where, bool after)
+{
+  remove_insn(insn);
+  SET_PREV_INSN(insn) = NULL_RTX;
+  SET_NEXT_INSN(insn) = NULL_RTX;
+
+  if (after)
+    {
+      emit_insn_after(insn, where);
+    }
+  else
+    {
+      emit_insn_before(insn, where);
+    }
+}
+
+static void
+schedule_hll(function *fn)
+{
+  DUMP("TT riscv GS rtl l1 schedule pass on: %s\n", function_name(fn));
+
+  vector<hl_load> hl_loads;
+  create_log_links(fn, hl_loads);
+
+  for (int i = hl_loads.size() - 1; i >= 0; i--)
+    {
+      hl_load &hll = hl_loads[i];
+      DUMP("  processing L1 load with %zu uses\n", hll.uses.size());
+
+      // Move load up
+      rtx_insn *insn = PREV_INSN(hll.insn);
+      // Not sure why BLOCK_FOR_INSN(insn) would be null here
+      rtx_insn *anchor = nullptr;
+
+      while (insn && insn != PREV_INSN(BB_HEAD(hll.bb)))
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      if (!can_move_past(hll.insn, insn))
+		{
+		  break;
+		}
+	      anchor = insn;
+	    }
+	  insn = PREV_INSN(insn);
+	}
+
+      if (anchor)
+	{
+	  DUMP("  moving load up\n");
+	  move_insn(hll.insn, anchor, false);
+	}
+
+      // Move uses down.  First use should be lowest
+      for (auto &use : hll.uses)
+	{
+	  anchor = nullptr;
+	  insn = NEXT_INSN(use.insn);
+	  while (insn && insn != NEXT_INSN(BB_END(hll.bb)))
+	    {
+	      if (NONDEBUG_INSN_P(insn))
+		{
+		  if (!can_move_past(use.insn, insn))
+		    {
+		      break;
+		    }
+		  anchor = insn;
+		}
+	      insn = NEXT_INSN(insn);
+	    }
+
+	  if (anchor)
+	    {
+	      DUMP("  moving use down\n");
+	      move_insn(use.insn, anchor, false);
+	    }
+	}
+    }
+}
+
 namespace {
 
-const pass_data pass_data_rvtt_gsl1war =
+const pass_data pass_data_rvtt_hll =
 {
   RTL_PASS, /* type */
-  "rvtt_gsl1war", /* name */
+  "rvtt_hll", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -563,29 +846,34 @@ const pass_data pass_data_rvtt_gsl1war =
   0, /* todo_flags_finish */
 };
 
-class pass_rvtt_gsl1war : public rtl_opt_pass
+class pass_rvtt_hll : public rtl_opt_pass
 {
 public:
-  pass_rvtt_gsl1war (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rvtt_gsl1war, ctxt)
+  pass_rvtt_hll (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_rvtt_hll, ctxt)
   {
   }
 
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_grayskull)
+      if (flag_rvtt_hll)
 	{
-	  transform (cfn);
+	  schedule_hll(cfn);
+	}
+
+      if (flag_grayskull && flag_rvtt_gsl1war)
+	{
+	  workaround_gs_l1(cfn);
 	}
       return 0;
     }
-}; // class pass_rvtt_gsl1war
+}; // class pass_rvtt_hll
 
 } // anon namespace
 
 rtl_opt_pass *
-make_pass_rvtt_gsl1war (gcc::context *ctxt)
+make_pass_rvtt_hll (gcc::context *ctxt)
 {
-  return new pass_rvtt_gsl1war (ctxt);
+  return new pass_rvtt_hll (ctxt);
 }

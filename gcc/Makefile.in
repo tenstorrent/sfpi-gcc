@@ -1512,7 +1512,7 @@ OBJS = \
 	reorg.o \
 	resource.o \
 	rtl-error.o \
-	rtl-rvtt-gsl1war.o \
+	rtl-rvtt-hll.o \
 	rtl-rvtt-nonimm.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
