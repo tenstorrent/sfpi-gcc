@@ -1572,6 +1572,7 @@ OBJS = \
 	rtl-ssa/changes.o \
 	rtl-ssa/functions.o \
 	rtl-ssa/insns.o \
+	rtl-rvtt-hll.o \
 	rtl-rvtt-nonimm.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \

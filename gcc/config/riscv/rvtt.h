@@ -257,4 +257,6 @@ inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
     (schedule & INSN_SCHED_NOP_MASK);
 }
 
+extern bool rvtt_store_has_restrict_p(const rtx pat);
+
 #endif
