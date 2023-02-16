@@ -21,23 +21,29 @@
 
 ;; Profile for grayskull and wormhole b1 CPUs
 
+;; Theory says at least 6, empirically determined that 12 is up on the flat
+;; part of the curve
 (define_insn_reservation "rvtt_l1_load_ptr" 12
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload")
        (match_test "rvtt_l1_load_p(PATTERN(insn))"))
   "alu")
 
+;; Theory says 4, empirically determined that 4 works well
 (define_insn_reservation "rvtt_reg_load_ptr" 4
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload")
        (match_test "rvtt_reg_load_p(PATTERN(insn))"))
   "alu")
 
-(define_insn_reservation "rvtt_alu" 1
+;; See below, harder to justify why 2 does better for ALU ops, but it does
+(define_insn_reservation "rvtt_alu" 2
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "unknown,const,arith,shift,slt,multi,auipc,nop,logical,move"))
   "alu")
 
+;; Theory says 1, interestingly, 3 does better presumably since a dependency
+;; after an L1 load stalls the L1 load since this is an in-order machine
 (define_insn_reservation "rvtt_load" 3
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload"))
