@@ -1002,9 +1002,18 @@ static bool rvtt_load_has_attrib_p(const char *attrib, const rtx pat)
 		 TREE_CODE(exp) != VAR_DECL)
 	    {
 	      if (TREE_CODE(exp) == ARRAY_REF ||
-		  TREE_CODE(exp) == COMPONENT_REF)
+		  TREE_CODE(exp) == COMPONENT_REF ||
+		  TREE_CODE(exp) == BIT_FIELD_REF ||
+		  TREE_CODE(exp) == VIEW_CONVERT_EXPR)
 		{
 		  exp = TREE_OPERAND(exp, 0);
+		}
+	      else if (TREE_CODE(exp) == STRING_CST ||
+		       TREE_CODE(exp) == VECTOR_CST ||
+		       TREE_CODE(exp) == RESULT_DECL)
+		{
+		  // CST won't be in L1
+		  return false;
 		}
 	      else
 		{
@@ -1047,9 +1056,17 @@ bool rvtt_store_has_restrict_p(const rtx pat)
 		 TREE_CODE(exp) != VAR_DECL)
 	    {
 	      if (TREE_CODE(exp) == ARRAY_REF ||
-		  TREE_CODE(exp) == COMPONENT_REF)
+		  TREE_CODE(exp) == COMPONENT_REF ||
+		  TREE_CODE(exp) == BIT_FIELD_REF ||
+		  TREE_CODE(exp) == VIEW_CONVERT_EXPR)
 		{
 		  exp = TREE_OPERAND(exp, 0);
+		}
+	      else if (TREE_CODE(exp) == STRING_CST ||
+		       TREE_CODE(exp) == VECTOR_CST ||
+		       TREE_CODE(exp) == RESULT_DECL)
+		{
+		  return false;
 		}
 	      else
 		{
