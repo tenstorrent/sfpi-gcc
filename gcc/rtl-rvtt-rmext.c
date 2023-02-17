@@ -366,6 +366,8 @@ transform(function *fn)
   max_uid_known = get_max_uid ();
   uid_log_links = XCNEWVEC (struct insn_link *, max_uid_known + 1);
   gcc_obstack_init (&insn_link_obstack);
+  df_set_flags (DF_LR_RUN_DCE);
+  df_note_add_problem ();
   df_analyze();
   create_log_links ();
 
@@ -398,7 +400,7 @@ const pass_data pass_data_rvtt_rmext =
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
-  0, /* todo_flags_finish */
+  TODO_df_finish, /* todo_flags_finish */
 };
 
 class pass_rvtt_rmext : public rtl_opt_pass

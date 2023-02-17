@@ -773,6 +773,9 @@ schedule_hll(function *fn)
   DUMP("TT riscv GS rtl l1 schedule pass on: %s\n", function_name(fn));
 
   vector<hl_load> hl_loads;
+  df_set_flags (DF_LR_RUN_DCE);
+  df_note_add_problem ();
+  df_analyze();
   create_log_links(fn, hl_loads);
 
   for (int i = hl_loads.size() - 1; i >= 0; i--)
@@ -843,7 +846,7 @@ const pass_data pass_data_rvtt_hll =
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
-  0, /* todo_flags_finish */
+  TODO_df_finish, /* todo_flags_finish */
 };
 
 class pass_rvtt_hll : public rtl_opt_pass
@@ -857,7 +860,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_rvtt_hll)
+      if (flag_rvtt_hll && optimize > 0)
 	{
 	  schedule_hll(cfn);
 	}
