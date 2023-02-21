@@ -59,6 +59,7 @@ along with GCC; see the file COPYING3.  If not see
 #include <vector>
 #include "config/riscv/rvtt.h"
 
+//#define DUMP_ANALYSIS
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
 const int stack_ptr_regno = 2;
@@ -574,6 +575,7 @@ workaround_gs_hll(function *fn)
 
 struct hl_load_use {
   rtx_insn *insn;     // the insn that uses a hl load
+  int insn_count;
 };
 
 // hl: high latency
@@ -581,6 +583,7 @@ struct hl_load {
   rtx_insn *insn;             // the high latency load insn (hll/reg)
   basic_block bb;             // bb for insn (why why why)
   vector<hl_load_use> uses;   // each of the uses (until re-def) of this reg
+  int insn_count;
 };
 
 typedef vector<struct hl_load_use> hl_load_uses;
@@ -603,6 +606,7 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 
   FOR_EACH_BB_FN (bb, fn)
     {
+      int insn_count = 0;
       FOR_BB_INSNS_REVERSE (bb, insn)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
@@ -625,6 +629,7 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 		  hll.insn = insn;
 		  hll.bb = bb;
 		  hll.uses = uses;
+		  hll.insn_count = insn_count;
 		  hl_loads.push_back(hll);
 		}
 	    }
@@ -641,8 +646,11 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 
 	      struct hl_load_use hl_use;
 	      hl_use.insn = insn;
+	      hl_use.insn_count = insn_count;
 	      all_uses[regno].push_back(hl_use);
 	    }
+
+	  insn_count++;
 	}
 
       for (auto &uses : all_uses)
@@ -898,6 +906,76 @@ schedule_hll(function *fn)
     }
 }
 
+#ifdef DUMP_ANALYSIS
+static void
+anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
+{
+  vector<hl_load> hl_loads;
+  df_set_flags (DF_LR_RUN_DCE);
+  df_note_add_problem ();
+  df_analyze();
+  create_log_links(fn, hl_loads);
+
+  for (int i = hl_loads.size() - 1; i >= 0; i--)
+    {
+      hl_load &hll = hl_loads[i];
+
+      int max = -1;
+      for (auto &use : hll.uses)
+	{
+	  max = (use.insn_count > max) ? use.insn_count : max;
+	}
+
+      if (max != -1)
+	{
+	  int cycles = hll.insn_count - max;
+	  if (cycles >= (int)hist.size())
+	    {
+	      hist.resize(cycles + 1);
+	    }
+	  hist[cycles]++;
+	}
+    }
+
+  n_hlls += hl_loads.size();
+}
+
+static void
+print_results(function *fn, vector<int>& hist, int n_hlls)
+{
+  if (hist.size() != 0)
+    {
+      fprintf(stderr, "\nCumulative load to use after %s\n", function_name(fn));
+    }
+  int total = 0;
+  int cycles = 0;
+  for (int i = 0; i < (int)hist.size(); i++)
+    {
+      total += hist[i];
+      cycles += i * hist[i];
+      fprintf(stderr, "%2d: %d\n", i, hist[i]);
+    }
+  int median = 0;
+  int count = 0;
+  for (int i = 0; i < (int)hist.size(); i++)
+    {
+      count += hist[i];
+      if (count > total / 2)
+	{
+	  median = i;
+	  break;
+	}
+    }
+
+  if (hist.size() != 0)
+    {
+      fprintf(stderr, "Total uses: %d hlls %d\n", total, n_hlls);
+      fprintf(stderr, "Average: %f\n", (float)cycles / (float)total);
+      fprintf(stderr, "Median: %d\n", median);
+    }
+}
+#endif
+
 namespace {
 
 const pass_data pass_data_rvtt_hll =
@@ -915,10 +993,19 @@ const pass_data pass_data_rvtt_hll =
 
 class pass_rvtt_hll : public rtl_opt_pass
 {
+private:
+#ifdef DUMP_ANALYSIS
+  int n_hlls;
+  vector<int>hll_load_to_use_hist;
+#endif
+
 public:
   pass_rvtt_hll (gcc::context *ctxt)
     : rtl_opt_pass (pass_data_rvtt_hll, ctxt)
   {
+#ifdef DUMP_ANALYSIS
+    n_hlls = 0;
+#endif
   }
 
   /* opt_pass methods: */
@@ -927,6 +1014,10 @@ public:
       if (flag_rvtt_hll && optimize > 0)
 	{
 	  schedule_hll(cfn);
+#ifdef DUMP_ANALYSIS
+	  anaylze_results(cfn, hll_load_to_use_hist, n_hlls);
+	  print_results(cfn, hll_load_to_use_hist, n_hlls);
+#endif
 	}
 
       if (flag_grayskull && flag_rvtt_gshllwar)
