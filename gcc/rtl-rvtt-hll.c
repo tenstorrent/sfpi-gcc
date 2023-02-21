@@ -65,30 +65,30 @@ const int stack_ptr_regno = 2;
 
 using namespace std;
 
-// A BB can resolve its parents' L1 loads by:
-//  1) reading the incoming_l1_war_reg
-//  2) issuing an L1 load (updates l1_war_reg) and reading the result
+// A BB can resolve its parents' HLL loads by:
+//  1) reading the incoming war reg
+//  2) issuing a load (updates HLL or otherwise) and reading the result
 //
 // #2 is a stronger result as any parent BB with an ll_count low enough can be
-// resolved. If the BB reads the incoming_l1_war_reg, then other parents must
-// depend on the same reg or resolve the L1 load themselves
+// resolved. If the BB reads the incoming reg, then other parents must
+// depend on the same reg or resolve the HLL load themselves
 // The present implementation  doesn't try to get correct results for both #1
 // and #2, instead it tracks the first workaround hit and classifies it as one
 // or the other.  Future work if valuable...
 struct bb_entry {
   bool inited;                      // true once populated w/ incoming data
   int ll_incoming;                  // #ll for first parent BB to get to this BB
-  vector<int> l1_war_reg_incoming;  // regs passed in that can resolve the parent
+  vector<int> hll_war_reg_incoming; // regs passed in that can resolve the parent
   int ll_before_resolve_all;        // #ll before all WARs are resolved (-1 if NA)
 };
 
 typedef vector<bb_entry> bb_data;
 
-class gsl1war_dom_walker : public dom_walker
+class gshllwar_dom_walker : public dom_walker
 {
  public:
-  gsl1war_dom_walker(bb_data& inbbd) : dom_walker(CDI_DOMINATORS), bbd(inbbd) {}
-  ~gsl1war_dom_walker() {}
+  gshllwar_dom_walker(bb_data& inbbd) : dom_walker(CDI_DOMINATORS), bbd(inbbd) {}
+  ~gshllwar_dom_walker() {}
 
   edge before_dom_children(basic_block bb) FINAL OVERRIDE;
 
@@ -152,14 +152,14 @@ my_classify_insn (rtx x)
 
 static void
 emit_war(rtx_insn *where,
-	 int l1_war_reg,
+	 int hll_war_reg,
 	 int *ll_count)
 {
-  DUMP("    emitting WAR with reg %d\n", l1_war_reg);
+  DUMP("    emitting WAR with reg %d\n", hll_war_reg);
 
   *ll_count = -1;
 
-  rtx reg = gen_rtx_REG(SImode, l1_war_reg);
+  rtx reg = gen_rtx_REG(SImode, hll_war_reg);
   emit_insn_before(gen_rvtt_gs_l1_load_war(reg), where);
 }
 
@@ -181,9 +181,10 @@ bb_insn_before_jump(basic_block bb)
 }
 
 static bool
-load_p(rtx pat)
+load_mem_p(rtx pat)
 {
   return GET_CODE(pat) == SET &&
+    GET_CODE(SET_SRC(pat)) != CALL &&
     contains_mem_rtx_p(SET_SRC(pat));
 }
 
@@ -205,14 +206,14 @@ volatile_store_p(rtx pat)
 static bool
 volatile_load_p(rtx pat)
 {
-  return MEM_VOLATILE_P(SET_SRC(pat));
+  return load_mem_p(pat) && MEM_VOLATILE_P(SET_SRC(pat));
 }
 
 static void
-set_l1_war_reg(vector<int>& l1_war_regs, int reg)
+set_hll_war_reg(vector<int>& hll_war_regs, int reg)
 {
-  l1_war_regs.clear();
-  l1_war_regs.push_back(reg);
+  hll_war_regs.clear();
+  hll_war_regs.push_back(reg);
 }
 
 static bool refers_to_any_regno_p(vector<int>& regs, rtx_insn *insn)
@@ -229,47 +230,47 @@ static bool refers_to_any_regno_p(vector<int>& regs, rtx_insn *insn)
 }
 
 //
-// This code works around the GS L1 arbiter HW bug
+// This code works around the GS HLL arbiter HW bug
 //
-// The idea is to go through the insns and once an L1 load is seen count the
+// The idea is to go through the insns and once an HLL load is seen count the
 // local memory loads and emit the workaround before enough local
 // loads have been hit to result in a hang.  The workaround consists of a use
-// of a register that was the target of the most recent L1 load or a
+// of a register that was the target of the most recent HLL load or a
 // subsequent local memory load - these guarentee all loads have been
 // resolved.  Note that the ordering of the code itself will workaround most
 // of the potential hangs without explicitly emitting a workaround.
 // Details:
-//  - track the most recent L1 load
-//  - track all loads after the latest L1 load
+//  - track the most recent HLL load
+//  - track all loads after the latest HLL load
 //  - reset the count if the target register of a load is referenced as an
-//    input operand.  Note that we only track the most recent L1 load and
+//    input operand.  Note that we only track the most recent HLL load and
 //    subsequent local loads.  In theory, we could track all of them and
-//    reduce the count if an earlier L1 load lands, in practice this is
-//    unlikely to occur since the latency of L1 loads is so high that the
+//    reduce the count if an earlier HLL load lands, in practice this is
+//    unlikely to occur since the latency of HLL loads is so high that the
 //    compiler hoists them all together - tracking the most recent is probably
 //    sufficient.  Revisit if needed
 //  - reset the count if a manual workaround is encountered
 //  - delete manually inserted workarounds that are not needed
-//  - emit the workaround if the local load after L1 load count gets too high
+//  - emit the workaround if the local load after HLL load count gets too high
 //    (4 are allowed)
 //  - abort on certain instructions (eg, inline assembly)
 //
 // In addition, BBs are traversed and the local load count is carried into the
 // next BB.  The BBs are visted in dom order, so all parents of a BB have been
 // visited before the BB.  Each BB is responsible for resolving any unresolved
-// L1 loads in the parents.  The first parent forces its requirements on the
+// HLL loads in the parents.  The first parent forces its requirements on the
 // child, subsequent parents either must conform or restrict those
 // requirements.  If they cannot, then any pending workaround is emitted in
 // those parents, otherwise the workaround is pushed in the child.
-edge gsl1war_dom_walker::before_dom_children(basic_block bb)
+edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 {
   bb_entry& bbe = bbd[bb->index];
-  gcc_assert(bbe.l1_war_reg_incoming.size() <= 1);
+  gcc_assert(bbe.hll_war_reg_incoming.size() <= 1);
   DUMP(" processing bb[%d], in_ll %d, reg %d, ll_all %d\n", bb->index, bbe.ll_incoming,
-       bbe.l1_war_reg_incoming.size() == 0 ? -1 : bbe.l1_war_reg_incoming[0],
+       bbe.hll_war_reg_incoming.size() == 0 ? -1 : bbe.hll_war_reg_incoming[0],
        bbe.ll_before_resolve_all);
 
-  vector<int>l1_war_regs = bbe.l1_war_reg_incoming;
+  vector<int>hll_war_regs = bbe.hll_war_reg_incoming;
   int ll_count = bbe.ll_incoming;
 
   rtx_insn *insn, *next;
@@ -279,9 +280,9 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	  NOTE_KIND(insn) == NOTE_INSN_EPILOGUE_BEG &&
 	  ll_count != -1)
 	{
-	  DUMP("  epilogue beginning with l1 active, emitting WAR\n");
+	  DUMP("  epilogue beginning with hll active, emitting WAR\n");
 	  // Note: could return here, no harm in continuing since war is done
-	  emit_war(insn, l1_war_regs[0], &ll_count);
+	  emit_war(insn, hll_war_regs[0], &ll_count);
 	}
       else if (NONDEBUG_INSN_P(insn))
 	{
@@ -291,11 +292,11 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	  rvtt_p (&insnd, insn);
 	  if (ll_count == -1)
 	    {
-	      if (rvtt_needs_gs_l1_war_p(insn_pat))
+	      if (rvtt_needs_gs_hll_war_p(insn_pat))
 		{
 		  ll_count = 0;
-		  set_l1_war_reg(l1_war_regs, rvtt_get_insn_dst_regno(insn));
-		  DUMP("  found an l1 load of reg %d, war pending\n", l1_war_regs[0]);
+		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
+		  DUMP("  found an hll load of reg %d, war pending\n", hll_war_regs[0]);
 		}
 	      else if (insnd->id == rvtt_insn_data::l1_load_war)
 		{
@@ -306,27 +307,27 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	  else
 	    {
 	      int classify = my_classify_insn(insn_pat);
-	      if (rvtt_needs_gs_l1_war_p(insn_pat))
+	      if (rvtt_needs_gs_hll_war_p(insn_pat))
 		{
-		  set_l1_war_reg(l1_war_regs, rvtt_get_insn_dst_regno(insn));
-		  DUMP("  found an l1 load of reg %d, updating war regs\n", l1_war_regs[0]);
+		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
+		  DUMP("  found an hll load of reg %d, updating war regs\n", hll_war_regs[0]);
 		}
 	      else if (code != -1 &&
 		       (classify == INSN || classify == JUMP_INSN) &&
-		       refers_to_any_regno_p(l1_war_regs, insn))
+		       refers_to_any_regno_p(hll_war_regs, insn))
 		{
-		  DUMP("  a %s refers to l1 loaded reg %d, resetting ll_count\n",
-		       insn_data[code].name, l1_war_regs[0]);
+		  DUMP("  a %s refers to hll loaded reg %d, resetting ll_count\n",
+		       insn_data[code].name, hll_war_regs[0]);
 		  ll_count = -1;
 		}
 	      else if (insnd->id == rvtt_insn_data::l1_load_war)
 		{
 		  int reg = REGNO(rvtt_get_insn_operand(0, insn));
-		  if (reg != l1_war_regs[0])
+		  if (reg != hll_war_regs[0])
 		    {
-		      DUMP("  found a %s for reg %d mismatching last l1_war_reg %d\n", insnd->name, reg, l1_war_regs[0]);
+		      DUMP("  found a %s for reg %d mismatching last hll_war_reg %d\n", insnd->name, reg, hll_war_regs[0]);
 		      // XXXX, what's the best warning code for this?
-		      warning(OPT_Wunused, "__builtin_rvtt_gs_%s found using out of date L1 loaded register, deleted\n", insnd->name);
+		      warning(OPT_Wunused, "__builtin_rvtt_gs_%s found using out of date hll loaded register, deleted\n", insnd->name);
 		      set_insn_deleted(insn);
 		    }
 		  else
@@ -337,22 +338,22 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 		}
 	      else if (classify != INSN && classify != JUMP_INSN)
 		{
-		  DUMP("  %s with l1 active, emitting WAR\n", GET_RTX_NAME(classify));
-		  emit_war(insn, l1_war_regs[0], &ll_count);
+		  DUMP("  %s with hll active, emitting WAR\n", GET_RTX_NAME(classify));
+		  emit_war(insn, hll_war_regs[0], &ll_count);
 		}
-	      else if (load_p(insn_pat))
+	      else if (load_mem_p(insn_pat))
 		{
 		  ll_count++;
 		  int reg = rvtt_get_insn_dst_regno(insn);
-		  DUMP("  local load of %d w/ l1 active, bumped ll_count to %d\n", reg, ll_count);
+		  DUMP("  local load of %d w/ hll active, bumped ll_count to %d\n", reg, ll_count);
 		  if (ll_count == 5)
 		    {
 		      DUMP("  local load is 5, emitting WAR\n");
-		      emit_war(insn, l1_war_regs[0], &ll_count);
+		      emit_war(insn, hll_war_regs[0], &ll_count);
 		    }
 		  else
 		    {
-		      l1_war_regs.push_back(reg);
+		      hll_war_regs.push_back(reg);
 		    }
 		}
 	      else if (GET_CODE(insn_pat) == PARALLEL)
@@ -362,19 +363,19 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 		      rtx sub = XVECEXP(insn_pat, 0, i);
 		      DUMP("  processing parallel %s\n", GET_RTX_NAME(GET_CODE(sub)));
 
-		      if (load_p(sub))
+		      if (load_mem_p(sub))
 			{
 			  ll_count++;
 			  int reg = REGNO(SET_DEST(sub));
-			  DUMP("    load of %d in parallel w/ l1 active, ll_bumped count to %d\n", reg, ll_count);
+			  DUMP("    load of %d in parallel w/ hll active, ll_bumped count to %d\n", reg, ll_count);
 			  if (ll_count == 5)
 			    {
 			      DUMP("  local load is 5 with parallel, emitting WAR\n");
-			      emit_war(insn, l1_war_regs[0], &ll_count);
+			      emit_war(insn, hll_war_regs[0], &ll_count);
 			    }
 			  else
 			    {
-			      l1_war_regs.push_back(reg);
+			      hll_war_regs.push_back(reg);
 			    }
 			  break;
 			}
@@ -396,22 +397,22 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	  // If this block doesn't conform, then force the war at the end of this block
 	  bb_entry& dst_bbe = bbd[e->dest->index];
 
-	  DUMP("  checking BB[%d] w/ inited %d ll_count %d l1_reg %d dst.ll %d dst.ll_all %d dst.l1_reg %d\n",
+	  DUMP("  checking BB[%d] w/ inited %d ll_count %d hll_reg %d dst.ll %d dst.ll_all %d dst.hll_reg %d\n",
 	       e->dest->index,
 	       dst_bbe.inited,
 	       ll_count,
-	       l1_war_regs[0],
+	       hll_war_regs[0],
 	       dst_bbe.ll_incoming,
 	       dst_bbe.ll_before_resolve_all,
-	       (dst_bbe.ll_incoming == -1) ? -1 : dst_bbe.l1_war_reg_incoming[0]);
+	       (dst_bbe.ll_incoming == -1) ? -1 : dst_bbe.hll_war_reg_incoming[0]);
 
 	  if ((dst_bbe.ll_before_resolve_all != -1 && dst_bbe.ll_before_resolve_all + ll_count < 5) ||
 	      !dst_bbe.inited ||
-	      (dst_bbe.inited && dst_bbe.l1_war_reg_incoming[0] == l1_war_regs[0]))
+	      (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0]))
 	    {
 	      DUMP("    checked BB[%d], all ok\n", e->dest->index);
 	    }
-	  else if (dst_bbe.inited && dst_bbe.l1_war_reg_incoming[0] == l1_war_regs[0] && ll_count > dst_bbe.ll_incoming)
+	  else if (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0] && ll_count > dst_bbe.ll_incoming)
 	    {
 	      DUMP("    checked BB[%d], restricting ll_count from %d to %d\n", e->dest->index, dst_bbe.ll_incoming, ll_count);
 	    }
@@ -419,7 +420,7 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	    {
 	      DUMP("    checked BB[%d], can't handle, emitting WAR\n", e->dest->index);
 	      children_can_handle = false;
-	      emit_war(bb_insn_before_jump(bb), l1_war_regs[0], &ll_count);
+	      emit_war(bb_insn_before_jump(bb), hll_war_regs[0], &ll_count);
 	      break;
 	    }
 	}
@@ -432,7 +433,7 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 	      if (!dst_bbe.inited)
 		{
 		  dst_bbe.inited = true;
-		  dst_bbe.l1_war_reg_incoming.push_back(l1_war_regs[0]);
+		  dst_bbe.hll_war_reg_incoming.push_back(hll_war_regs[0]);
 		  dst_bbe.ll_incoming = ll_count;
 		}
 	      else if (ll_count > dst_bbe.ll_incoming)
@@ -450,7 +451,7 @@ edge gsl1war_dom_walker::before_dom_children(basic_block bb)
 
 // Process each BB, count the number of local loads that occur before any load
 // is resolved by a use.  Set ll_before_resolve_all to that value (that use
-// will resolve any incoming L1 load after ll_before_resolve_all local
+// will resolve any incoming hll load after ll_before_resolve_all local
 // loads).
 static void pre_populate_bbd(bb_data &bbd, function *fn)
 {
@@ -459,7 +460,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
   FOR_EACH_BB_FN (bb, fn)
     {
       bb_entry& bbe = bbd[bb->index];
-      vector<int>l1_war_regs = bbe.l1_war_reg_incoming;
+      vector<int>hll_war_regs = bbe.hll_war_reg_incoming;
       rtx_insn *insn;
       int ll_count = 0;
       FOR_BB_INSNS(bb, insn)
@@ -472,13 +473,13 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 	      rvtt_p (&insnd, insn);
 	      int classify = my_classify_insn(insn_pat);
 
-	      if (rvtt_needs_gs_l1_war_p(insn_pat))
+	      if (rvtt_needs_gs_hll_war_p(insn_pat))
 		{
-		  l1_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
+		  hll_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
 		}
 	      else if (code != -1 &&
 		       (classify == INSN || classify == JUMP_INSN) &&
-		       refers_to_any_regno_p(l1_war_regs, insn))
+		       refers_to_any_regno_p(hll_war_regs, insn))
 		{
 		  bbe.ll_before_resolve_all = ll_count;
 		  break;
@@ -487,7 +488,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 		{
 		  int reg = REGNO(rvtt_get_insn_operand(0, insn));
 		  bool found = false;
-		  for (auto warreg : l1_war_regs)
+		  for (auto warreg : hll_war_regs)
 		    {
 		      if (reg == warreg)
 			{
@@ -503,7 +504,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 		  bbe.ll_before_resolve_all = 5;
 		  break;
 		}
-	      else if (load_p(insn_pat))
+	      else if (load_mem_p(insn_pat))
 		{
 		  ll_count++;
 		  if (ll_count == 5)
@@ -513,7 +514,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 		    }
 		  else
 		    {
-		      l1_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
+		      hll_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
 		    }
 		}
 	      else if (GET_CODE(insn_pat) == PARALLEL)
@@ -523,7 +524,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 		    {
 		      rtx sub = XVECEXP(insn_pat, 0, i);
 
-		      if (load_p(sub))
+		      if (load_mem_p(sub))
 			{
 			  ll_count++;
 			  if (ll_count == 5)
@@ -534,7 +535,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 			    }
 			  else
 			    {
-			      l1_war_regs.push_back(REGNO(SET_DEST(sub)));
+			      hll_war_regs.push_back(REGNO(SET_DEST(sub)));
 			    }
 			}
 		    }
@@ -544,14 +545,14 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 	}
 
       DUMP("  done preprocess bb[%d]: resolve_all: %d\n", bb->index, bbe.ll_before_resolve_all);
-      bbe.l1_war_reg_incoming.resize(0);
+      bbe.hll_war_reg_incoming.resize(0);
     }
 }
 
 static void
-workaround_gs_l1(function *fn)
+workaround_gs_hll(function *fn)
 {
-  DUMP("TT riscv GS rtl l1 war pass on: %s\n", function_name(fn));
+  DUMP("TT riscv GS rtl hll war pass on: %s\n", function_name(fn));
 
   bb_data bbd;
   bbd.resize(n_basic_blocks_for_fn(fn));
@@ -559,40 +560,33 @@ workaround_gs_l1(function *fn)
     {
       bbe.inited = false;
       bbe.ll_incoming = -1;
-      bbe.l1_war_reg_incoming.resize(0);
-      bbe.l1_war_reg_incoming.reserve(5);
+      bbe.hll_war_reg_incoming.resize(0);
+      bbe.hll_war_reg_incoming.reserve(5);
       bbe.ll_before_resolve_all = -1;
     }
 
   pre_populate_bbd(bbd, fn);
 
   calculate_dominance_info(CDI_DOMINATORS);
-  gsl1war_dom_walker dw(bbd);
+  gshllwar_dom_walker dw(bbd);
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
-#define LOG_LINKS(INSN)		(uid_log_links[insn_uid_check (INSN)])
-#define FOR_EACH_LOG_LINK(L, INSN)				\
-  for ((L) = LOG_LINKS (INSN); (L); (L) = (L)->next)
-
-
 struct hl_load_use {
   rtx_insn *insn;     // the insn that uses a hl load
-  int n_lls;          // the number of local loads from def to use
 };
 
 // hl: high latency
 struct hl_load {
-  rtx_insn *insn;             // the high latency load insn (L1/reg)
+  rtx_insn *insn;             // the high latency load insn (hll/reg)
   basic_block bb;             // bb for insn (why why why)
   vector<hl_load_use> uses;   // each of the uses (until re-def) of this reg
-  int ll_to_bb_end;           // number of local loads until the BB ends
 };
 
 typedef vector<struct hl_load_use> hl_load_uses;
 
 // Build up a vectory of hl_loads such that:
-//  - there is one entry per L1/reg load in reverse order
+//  - there is one entry per hll/reg load in reverse order
 //  - each entry points to the insn, all the uses of the def of that insn
 //    including the number of local loads between the def and use, the
 //    previous use of that register in the BB (if there is one) and the number
@@ -609,8 +603,6 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 
   FOR_EACH_BB_FN (bb, fn)
     {
-      int ll_to_bb_end = 0;
-
       FOR_BB_INSNS_REVERSE (bb, insn)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
@@ -618,7 +610,7 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 
 	  df_ref def;
 	  rtx insn_pat = PATTERN(insn);
-	  if (load_p(insn_pat))
+	  if (load_mem_p(insn_pat))
 	    {
 	      if (rvtt_l1_load_p(insn_pat) ||
 		  rvtt_reg_load_p(insn_pat))
@@ -633,21 +625,7 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 		  hll.insn = insn;
 		  hll.bb = bb;
 		  hll.uses = uses;
-		  hll.ll_to_bb_end = ll_to_bb_end;
 		  hl_loads.push_back(hll);
-		}
-	      else
-		{
-		  // Hit an LL load, iterate over all registers and all uses and
-		  // bump the LL load counts. Yuck
-		  ll_to_bb_end++;
-		  for (auto& uses : all_uses)
-		    {
-		      for (auto& use : uses)
-			{
-			  use.n_lls++;
-			}
-		    }
 		}
 	    }
 
@@ -663,7 +641,6 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 
 	      struct hl_load_use hl_use;
 	      hl_use.insn = insn;
-	      hl_use.n_lls = 0;
 	      all_uses[regno].push_back(hl_use);
 	    }
 	}
@@ -675,12 +652,87 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
     }
 }
 
-static bool can_move_past(rtx_insn *base, rtx_insn *query)
+static bool
+get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
+{
+  if (GET_CODE(pat) == ZERO_EXTEND ||
+      GET_CODE(pat) == SIGN_EXTEND)
+    {
+      pat = XEXP(pat, 0);
+    }
+  if (GET_CODE(pat) == ASM_OPERANDS)
+    {
+      return false;
+    }
+  gcc_assert(MEM_P(pat));
+
+  if (REG_P(XEXP(pat, 0)))
+    {
+      *reg = REGNO(XEXP(pat, 0));;
+      *offset = 0;
+    }
+  else if (GET_CODE(XEXP(pat, 0)) != PLUS)
+    {
+      return false;
+    }
+  else
+    {
+      gcc_assert(GET_CODE(XEXP(pat, 0)) == PLUS &&
+		 REG_P(XEXP(XEXP(pat, 0), 0)) &&
+		 CONST_INT_P((XEXP(XEXP(pat, 0), 1))));
+      *reg = REGNO(XEXP(XEXP(pat, 0), 0));
+      *offset = INTVAL(XEXP(XEXP(pat, 0), 1));
+    }
+
+  return true;
+}
+
+static bool
+can_move_past_load_or_store(rtx base, rtx pat)
+{
+  if (load_mem_p(base))
+    {
+      if (nonstack_store_p(pat))
+	{
+	  int store_reg, store_offset;
+	  int load_reg, load_offset;
+	  if (!get_mem_reg_and_offset(SET_DEST(pat), &store_reg, &store_offset) ||
+	      !get_mem_reg_and_offset(SET_SRC(base), &load_reg, &load_offset))
+	    {
+	      return false;
+	    }
+
+	  // Conservative, could check the size of the operation
+	  // Also, relies on aligned accesses
+	  if (store_reg == load_reg &&
+	      store_offset < load_offset + 4 && store_offset >= load_offset)
+	    {
+	      return false;
+	    }
+
+	  return rvtt_store_has_restrict_p(pat) && !volatile_store_p(pat);
+	}
+
+      return !volatile_load_p(pat);
+    }
+
+  if (nonstack_store_p(base) && nonstack_store_p(pat))
+    {
+      return rvtt_store_has_restrict_p(base) || rvtt_store_has_restrict_p(pat);
+    }
+
+  return true;
+}
+
+static bool
+can_move_past(rtx_insn *base, rtx_insn *query)
 {
   df_ref base_def, query_def;
 
   rtx pat = PATTERN(query);
-  if (GET_CODE(pat) == UNSPEC_VOLATILE ||
+  int classify = my_classify_insn(pat);
+  if (classify != INSN ||
+      GET_CODE(pat) == UNSPEC_VOLATILE ||
       GET_CODE(pat) == ASM_INPUT ||
       GET_CODE(pat) == ASM_OPERANDS)
     {
@@ -693,24 +745,17 @@ static bool can_move_past(rtx_insn *base, rtx_insn *query)
 	{
 	  rtx sub = XVECEXP(pat, 0, i);
 
-	  bool store = nonstack_store_p(sub);
-	  if ((store && !rvtt_store_has_restrict_p(sub)) ||
-	      (store && volatile_store_p(sub)) ||
-	      (load_p(sub) && volatile_load_p(sub)))
+	  if (!can_move_past_load_or_store(PATTERN(base), sub) ||
+	      !can_move_past_load_or_store(sub, PATTERN(base)))
 	    {
 	      return false;
 	    }
 	}
     }
-  else
+  else if (!can_move_past_load_or_store(PATTERN(base), pat) ||
+	   !can_move_past_load_or_store(pat, PATTERN(base)))
     {
-      bool store = nonstack_store_p(pat);
-      if ((store && !rvtt_store_has_restrict_p(pat)) ||
-	  (store && volatile_store_p(pat)) ||
-	  (load_p(pat) && volatile_load_p(pat)))
-	{
-	  return false;
-	}
+      return false;
     }
 
   FOR_EACH_INSN_DEF (query_def, query)
@@ -767,10 +812,17 @@ move_insn(rtx_insn *insn, rtx_insn *where, bool after)
     }
 }
 
+// "Schedule" high latency loads
+// This is a dirt simple attempt to improve the scheduling of insns dependent
+// on hlls.  The code first pushes hlls "up" as high as possible in the BB,
+// then pushes their dependencies (uses) "down" as low as possible in the BB.
+// No effort is made to check interdependencies between these hlls or uses or
+// to check a chain of dependencies and move the chain down.  At least, not
+// yet...
 static void
 schedule_hll(function *fn)
 {
-  DUMP("TT riscv GS rtl l1 schedule pass on: %s\n", function_name(fn));
+  DUMP("TT riscv GS rtl hll schedule pass on: %s\n", function_name(fn));
 
   vector<hl_load> hl_loads;
   df_set_flags (DF_LR_RUN_DCE);
@@ -781,7 +833,7 @@ schedule_hll(function *fn)
   for (int i = hl_loads.size() - 1; i >= 0; i--)
     {
       hl_load &hll = hl_loads[i];
-      DUMP("  processing L1 load with %zu uses\n", hll.uses.size());
+      DUMP("  processing hll load\n");
 
       // Move load up
       rtx_insn *insn = PREV_INSN(hll.insn);
@@ -806,29 +858,41 @@ schedule_hll(function *fn)
 	  DUMP("  moving load up\n");
 	  move_insn(hll.insn, anchor, false);
 	}
+    }
+
+  for (int i = hl_loads.size() - 1; i >= 0; i--)
+    {
+      hl_load &hll = hl_loads[i];
+      DUMP("  processing hll load with %zu uses\n", hll.uses.size());
 
       // Move uses down.  First use should be lowest
+      rtx_insn *insn = PREV_INSN(hll.insn);
+      // Not sure why BLOCK_FOR_INSN(insn) would be null here
+      rtx_insn *anchor = nullptr;
       for (auto &use : hll.uses)
 	{
 	  anchor = nullptr;
-	  insn = NEXT_INSN(use.insn);
-	  while (insn && insn != NEXT_INSN(BB_END(hll.bb)))
+	  if (my_classify_insn(PATTERN(use.insn)) == INSN)
 	    {
-	      if (NONDEBUG_INSN_P(insn))
+	      insn = NEXT_INSN(use.insn);
+	      while (insn && insn != NEXT_INSN(BB_END(hll.bb)))
 		{
-		  if (!can_move_past(use.insn, insn))
+		  if (NONDEBUG_INSN_P(insn))
 		    {
-		      break;
+		      if (!can_move_past(use.insn, insn))
+			{
+			  break;
+			}
+		      anchor = insn;
 		    }
-		  anchor = insn;
+		  insn = NEXT_INSN(insn);
 		}
-	      insn = NEXT_INSN(insn);
-	    }
 
-	  if (anchor)
-	    {
-	      DUMP("  moving use down\n");
-	      move_insn(use.insn, anchor, false);
+	      if (anchor)
+		{
+		  DUMP("  moving use down\n");
+		  move_insn(use.insn, anchor, true);
+		}
 	    }
 	}
     }
@@ -865,9 +929,9 @@ public:
 	  schedule_hll(cfn);
 	}
 
-      if (flag_grayskull && flag_rvtt_gsl1war)
+      if (flag_grayskull && flag_rvtt_gshllwar)
 	{
-	  workaround_gs_l1(cfn);
+	  workaround_gs_hll(cfn);
 	}
       return 0;
     }
