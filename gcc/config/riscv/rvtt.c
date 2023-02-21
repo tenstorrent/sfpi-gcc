@@ -1004,7 +1004,9 @@ static bool rvtt_load_has_attrib_p(const char *attrib, const rtx pat)
 	      if (TREE_CODE(exp) == ARRAY_REF ||
 		  TREE_CODE(exp) == COMPONENT_REF ||
 		  TREE_CODE(exp) == BIT_FIELD_REF ||
-		  TREE_CODE(exp) == VIEW_CONVERT_EXPR)
+		  TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
+		  TREE_CODE(exp) == REALPART_EXPR ||
+		  TREE_CODE(exp) == IMAGPART_EXPR)
 		{
 		  exp = TREE_OPERAND(exp, 0);
 		}
@@ -1029,11 +1031,11 @@ static bool rvtt_load_has_attrib_p(const char *attrib, const rtx pat)
 
 	  tree decl = (TREE_CODE(exp) == PARM_DECL ||
 		       TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
-	  if (decl != NULL_TREE &&
-	      lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
-	    {
-	      return true;
-	    }
+	 if (decl != NULL_TREE &&
+	     lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
+	   {
+	     return true;
+	   }
 	}
     }
 
@@ -1058,7 +1060,9 @@ bool rvtt_store_has_restrict_p(const rtx pat)
 	      if (TREE_CODE(exp) == ARRAY_REF ||
 		  TREE_CODE(exp) == COMPONENT_REF ||
 		  TREE_CODE(exp) == BIT_FIELD_REF ||
-		  TREE_CODE(exp) == VIEW_CONVERT_EXPR)
+		  TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
+		  TREE_CODE(exp) == REALPART_EXPR ||
+		  TREE_CODE(exp) == IMAGPART_EXPR)
 		{
 		  exp = TREE_OPERAND(exp, 0);
 		}
@@ -1093,7 +1097,7 @@ bool rvtt_store_has_restrict_p(const rtx pat)
   return false;
 }
 
-bool rvtt_needs_gs_l1_war_p(const rtx pat)
+bool rvtt_needs_gs_hll_war_p(const rtx pat)
 {
   return rvtt_load_has_attrib_p("rvtt_l1_ptr", pat) || rvtt_load_has_attrib_p("rvtt_reg_ptr", pat);
 }

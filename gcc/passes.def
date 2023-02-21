@@ -505,14 +505,17 @@ along with GCC; see the file COPYING3.  If not see
 	  NEXT_PASS (pass_compute_alignments);
 	  NEXT_PASS (pass_variable_tracking);
 	  NEXT_PASS (pass_free_cfg);
+
+          // Note: this pass should run as late as possible, ideally just before
+          // final.  However, the machine reorg pass, when using -msave-restore,
+          // injects an insn that causes df_analyze to crash, so run before that
+	  NEXT_PASS (pass_rvtt_hll);
+
 	  NEXT_PASS (pass_machine_reorg);
 	  NEXT_PASS (pass_cleanup_barriers);
 	  NEXT_PASS (pass_delay_slots);
 	  NEXT_PASS (pass_split_for_shorten_branches);
 	  NEXT_PASS (pass_convert_to_eh_region_ranges);
-
-	  NEXT_PASS (pass_rvtt_hll);
-
 	  NEXT_PASS (pass_shorten_branches);
 	  NEXT_PASS (pass_set_nothrow_function_flags);
 	  NEXT_PASS (pass_dwarf2_frame);
