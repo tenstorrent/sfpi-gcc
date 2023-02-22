@@ -195,7 +195,11 @@ nonstack_store_p(rtx pat)
   return
     GET_CODE(pat) == SET &&
     contains_mem_rtx_p(SET_DEST(pat)) &&
+#if !RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS
     !refers_to_regno_p(stack_ptr_regno, pat);
+#else
+    true;
+#endif
 }
 
 static bool

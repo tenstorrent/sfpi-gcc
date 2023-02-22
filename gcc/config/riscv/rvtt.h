@@ -27,6 +27,10 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
 
+// Set this to 1 before running gcc test suite so the hll code paths get
+// heavily exercised (vs skipped entirely if not set)
+#define RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS 0
+
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
