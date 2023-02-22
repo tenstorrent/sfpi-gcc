@@ -66,6 +66,8 @@ const int stack_ptr_regno = 2;
 
 using namespace std;
 
+static int top_of_bb_n_moved = 0;
+
 // A BB can resolve its parents' HLL loads by:
 //  1) reading the incoming war reg
 //  2) issuing a load (updates HLL or otherwise) and reading the result
@@ -836,7 +838,7 @@ move_insn(rtx_insn *insn, rtx_insn *where, bool after)
     }
 }
 
-static void
+static bool
 move_down(basic_block bb, rtx_insn *use_insn)
 {
   rtx_insn *insn = NEXT_INSN(use_insn);
@@ -859,6 +861,8 @@ move_down(basic_block bb, rtx_insn *use_insn)
       DUMP("  moving use down\n");
       move_insn(use_insn, anchor, true);
     }
+
+  return anchor != nullptr;
 }
 
 // "Schedule" high latency loads
@@ -916,6 +920,7 @@ schedule_hll(function *fn)
     }
 
   // Push uses down
+  // Metrics are better processing top to bottom
   for (int i = hl_loads.size() - 1; i >= 0; i--)
     {
       hl_load &hll = hl_loads[i];
@@ -951,7 +956,7 @@ schedule_hll(function *fn)
 		    {
 		      if (DF_REF_REGNO(def) == bb_reg_open_uses[bb->index][i])
 			{
-			  move_down(bb, insn);
+			  top_of_bb_n_moved += move_down(bb, insn);
 			}
 		    }
 		}
@@ -971,9 +976,11 @@ anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
   df_set_flags (DF_LR_RUN_DCE);
   df_note_add_problem ();
   df_analyze();
-  create_hll_data(fn, hl_loads);
+  vector<vector<int>> bb_reg_open_uses;
+  bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
+  create_hll_data(fn, hl_loads, bb_reg_open_uses);
 
-  for (int i = hl_loads.size() - 1; i >= 0; i--)
+  for (int i = 0; i < hl_loads.size(); i++)
     {
       hl_load &hll = hl_loads[i];
 
@@ -986,11 +993,17 @@ anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
       if (max != -1)
 	{
 	  int cycles = hll.insn_count - max;
+	  gcc_assert(cycles != 0);
 	  if (cycles >= (int)hist.size())
 	    {
 	      hist.resize(cycles + 1);
 	    }
 	  hist[cycles]++;
+	}
+      else
+	{
+	  // Hack, store open hll loads at the end of a BB in [0]
+	  hist[0]++;
 	}
     }
 
@@ -1006,15 +1019,19 @@ print_results(function *fn, vector<int>& hist, int n_hlls)
     }
   int total = 0;
   int cycles = 0;
-  for (int i = 0; i < (int)hist.size(); i++)
+  int cycles6 = 0;
+  int cycles8 = 0;
+  for (int i = 1; i < (int)hist.size(); i++)
     {
       total += hist[i];
       cycles += i * hist[i];
+      cycles6 += ((i > 6) ? 6 : i) * hist[i];
+      cycles8 += ((i > 8) ? 8 : i) * hist[i];
       fprintf(stderr, "%2d: %d\n", i, hist[i]);
     }
   int median = 0;
   int count = 0;
-  for (int i = 0; i < (int)hist.size(); i++)
+  for (int i = 1; i < (int)hist.size(); i++)
     {
       count += hist[i];
       if (count > total / 2)
@@ -1026,8 +1043,12 @@ print_results(function *fn, vector<int>& hist, int n_hlls)
 
   if (hist.size() != 0)
     {
+      fprintf(stderr, "TODO: these metrics count L1->use, ignore LL/etc in shadow\n");
       fprintf(stderr, "Total uses: %d hlls %d\n", total, n_hlls);
-      fprintf(stderr, "Average: %f\n", (float)cycles / (float)total);
+      fprintf(stderr, "#open at end of BB %d, moved %d down\n", hist[0], top_of_bb_n_moved);
+      fprintf(stderr, "Average6: %f\n", (float)cycles6 / (float)total);
+      fprintf(stderr, "Average8: %f\n", (float)cycles8 / (float)total);
+      fprintf(stderr, "Average : %f\n", (float)cycles / (float)total);
       fprintf(stderr, "Median: %d\n", median);
     }
 }
