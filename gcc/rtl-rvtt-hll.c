@@ -598,8 +598,11 @@ typedef vector<struct hl_load_use> hl_load_uses;
 //    including the number of local loads between the def and use, the
 //    previous use of that register in the BB (if there is one) and the number
 //    of ll_loads between this def an the end of the BB
+//
+// Also, creates the a list of registers loaded but not used (open uses) at
+// the end of the bb
 static void
-create_log_links (function *fn, vector<hl_load>& hl_loads)
+create_hll_data (function *fn, vector<hl_load>& hl_loads, vector<vector<int>>& bb_reg_open_uses)
 {
   basic_block bb;
   rtx_insn *insn;
@@ -632,6 +635,15 @@ create_log_links (function *fn, vector<hl_load>& hl_loads)
 		  struct hl_load hll;
 		  hll.insn = insn;
 		  hll.bb = bb;
+		  if (uses.size() == 0)
+		    {
+		      edge_iterator ei;
+		      edge e;
+		      FOR_EACH_EDGE(e, ei, bb->succs)
+			{
+			  bb_reg_open_uses[e->dest->index].push_back(regno);
+			}
+		    }
 		  hll.uses = uses;
 		  hll.insn_count = insn_count;
 		  hl_loads.push_back(hll);
@@ -824,6 +836,31 @@ move_insn(rtx_insn *insn, rtx_insn *where, bool after)
     }
 }
 
+static void
+move_down(basic_block bb, rtx_insn *use_insn)
+{
+  rtx_insn *insn = NEXT_INSN(use_insn);
+  rtx_insn *anchor = nullptr;
+  while (insn && insn != NEXT_INSN(BB_END(bb)))
+    {
+      if (NONDEBUG_INSN_P(insn))
+	{
+	  if (!can_move_past(use_insn, insn))
+	    {
+	      break;
+	    }
+	  anchor = insn;
+	}
+      insn = NEXT_INSN(insn);
+    }
+
+  if (anchor)
+    {
+      DUMP("  moving use down\n");
+      move_insn(use_insn, anchor, true);
+    }
+}
+
 // "Schedule" high latency loads
 // This is a dirt simple attempt to improve the scheduling of insns dependent
 // on hlls.  The code first pushes hlls "up" as high as possible in the BB,
@@ -831,6 +868,8 @@ move_insn(rtx_insn *insn, rtx_insn *where, bool after)
 // No effort is made to check interdependencies between these hlls or uses or
 // to check a chain of dependencies and move the chain down.  At least, not
 // yet...
+// A third pass tries to push uses down when an hll is carried into a
+// subsequent BB
 static void
 schedule_hll(function *fn)
 {
@@ -840,8 +879,11 @@ schedule_hll(function *fn)
   df_set_flags (DF_LR_RUN_DCE);
   df_note_add_problem ();
   df_analyze();
-  create_log_links(fn, hl_loads);
+  vector<vector<int>> bb_reg_open_uses;
+  bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
+  create_hll_data(fn, hl_loads, bb_reg_open_uses);
 
+  // Push loads up
   for (int i = hl_loads.size() - 1; i >= 0; i--)
     {
       hl_load &hll = hl_loads[i];
@@ -872,6 +914,7 @@ schedule_hll(function *fn)
 	}
     }
 
+  // Push uses down
   for (int i = hl_loads.size() - 1; i >= 0; i--)
     {
       hl_load &hll = hl_loads[i];
@@ -880,32 +923,41 @@ schedule_hll(function *fn)
       // Move uses down.  First use should be lowest
       rtx_insn *insn = PREV_INSN(hll.insn);
       // Not sure why BLOCK_FOR_INSN(insn) would be null here
-      rtx_insn *anchor = nullptr;
       for (auto &use : hll.uses)
 	{
-	  anchor = nullptr;
 	  if (my_classify_insn(PATTERN(use.insn)) == INSN)
 	    {
-	      insn = NEXT_INSN(use.insn);
-	      while (insn && insn != NEXT_INSN(BB_END(hll.bb)))
-		{
-		  if (NONDEBUG_INSN_P(insn))
-		    {
-		      if (!can_move_past(use.insn, insn))
-			{
-			  break;
-			}
-		      anchor = insn;
-		    }
-		  insn = NEXT_INSN(insn);
-		}
-
-	      if (anchor)
-		{
-		  DUMP("  moving use down\n");
-		  move_insn(use.insn, anchor, true);
-		}
+	      move_down(hll.bb, use.insn);
 	    }
+	}
+    }
+
+  // Push uses at the start of a BB carried in from prior BB down
+  // Only look at the first 6 insns of the BB
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      int count = 0;
+      rtx_insn *insn = BB_HEAD(bb);
+      while (insn && insn != NEXT_INSN(BB_END(bb)) && count < 6)
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      for (int i = 0; i < bb_reg_open_uses[bb->index].size(); i++)
+		{
+		  df_ref def;
+		  FOR_EACH_INSN_USE (def, insn)
+		    {
+		      if (DF_REF_REGNO(def) == bb_reg_open_uses[bb->index][i])
+			{
+			  move_down(bb, insn);
+			}
+		    }
+		}
+	      count++;
+	    }
+
+	  insn = NEXT_INSN(insn);
 	}
     }
 }
@@ -918,7 +970,7 @@ anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
   df_set_flags (DF_LR_RUN_DCE);
   df_note_add_problem ();
   df_analyze();
-  create_log_links(fn, hl_loads);
+  create_hll_data(fn, hl_loads);
 
   for (int i = hl_loads.size() - 1; i >= 0; i--)
     {
