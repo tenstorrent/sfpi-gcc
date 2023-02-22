@@ -884,7 +884,8 @@ schedule_hll(function *fn)
   create_hll_data(fn, hl_loads, bb_reg_open_uses);
 
   // Push loads up
-  for (int i = hl_loads.size() - 1; i >= 0; i--)
+  // Metrics are better processing bottom to top
+  for (int i = 0; i < hl_loads.size(); i++)
     {
       hl_load &hll = hl_loads[i];
       DUMP("  processing hll load\n");
