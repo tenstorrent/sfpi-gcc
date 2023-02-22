@@ -67,6 +67,7 @@ const int stack_ptr_regno = 2;
 using namespace std;
 
 static int top_of_bb_n_moved = 0;
+static const int load_shadow = 8;
 
 // A BB can resolve its parents' HLL loads by:
 //  1) reading the incoming war reg
@@ -579,23 +580,29 @@ workaround_gs_hll(function *fn)
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
-struct hl_load_use {
-  rtx_insn *insn;     // the insn that uses a hl load
+enum load_type {
+  LL_LOAD,
+  L1_LOAD,
+  REG_LOAD
+};
+
+struct load_use {
+  rtx_insn *insn;
   int insn_count;
 };
 
-// hl: high latency
-struct hl_load {
-  rtx_insn *insn;             // the high latency load insn (hll/reg)
+struct load_def {
+  rtx_insn *insn;             // the load insn
+  enum load_type type;        // (ll/l1/reg)
   basic_block bb;             // bb for insn (why why why)
-  vector<hl_load_use> uses;   // each of the uses (until re-def) of this reg
+  vector<load_use> uses;      // each of the uses (until re-def) of this reg
   int insn_count;
 };
 
-typedef vector<struct hl_load_use> hl_load_uses;
+typedef vector<struct load_use> load_uses;
 
-// Build up a vectory of hl_loads such that:
-//  - there is one entry per hll/reg load in reverse order
+// Build up a vector of load_defs such that:
+//  - there is one entry per load load in reverse order
 //  - each entry points to the insn, all the uses of the def of that insn
 //    including the number of local loads between the def and use, the
 //    previous use of that register in the BB (if there is one) and the number
@@ -604,13 +611,15 @@ typedef vector<struct hl_load_use> hl_load_uses;
 // Also, creates the a list of registers loaded but not used (open uses) at
 // the end of the bb
 static void
-create_hll_data (function *fn, vector<hl_load>& hl_loads, vector<vector<int>>& bb_reg_open_uses)
+create_load_data (function *fn,
+		  vector<load_def>& load_defs,
+		  vector<vector<unsigned int>>& bb_reg_open_uses)
 {
   basic_block bb;
   rtx_insn *insn;
   df_ref use;
 
-  vector<hl_load_uses> all_uses;
+  vector<load_uses> all_uses;
   all_uses.resize(max_reg_num());
 
   FOR_EACH_BB_FN (bb, fn)
@@ -625,31 +634,31 @@ create_hll_data (function *fn, vector<hl_load>& hl_loads, vector<vector<int>>& b
 	  rtx insn_pat = PATTERN(insn);
 	  if (load_mem_p(insn_pat))
 	    {
-	      if (rvtt_l1_load_p(insn_pat) ||
-		  rvtt_reg_load_p(insn_pat))
+	      def = df_single_def(DF_INSN_INFO_GET(insn));
+	      gcc_assert(def != nullptr);
+
+	      unsigned int regno = DF_REF_REGNO (def);
+	      auto& uses = all_uses[regno];
+
+	      struct load_def ld;
+	      ld.insn = insn;
+	      ld.bb = bb;
+	      if (rvtt_l1_load_p(insn_pat)) ld.type = L1_LOAD;
+	      else if (rvtt_reg_load_p(insn_pat)) ld.type = REG_LOAD;
+	      else ld.type = LL_LOAD;
+
+	      if (ld.type != LL_LOAD && uses.size() == 0)
 		{
-		  def = df_single_def(DF_INSN_INFO_GET(insn));
-		  gcc_assert(def != nullptr);
-
-		  unsigned int regno = DF_REF_REGNO (def);
-		  auto& uses = all_uses[regno];
-
-		  struct hl_load hll;
-		  hll.insn = insn;
-		  hll.bb = bb;
-		  if (uses.size() == 0)
+		  edge_iterator ei;
+		  edge e;
+		  FOR_EACH_EDGE(e, ei, bb->succs)
 		    {
-		      edge_iterator ei;
-		      edge e;
-		      FOR_EACH_EDGE(e, ei, bb->succs)
-			{
-			  bb_reg_open_uses[e->dest->index].push_back(regno);
-			}
+		      bb_reg_open_uses[e->dest->index].push_back(regno);
 		    }
-		  hll.uses = uses;
-		  hll.insn_count = insn_count;
-		  hl_loads.push_back(hll);
 		}
+	      ld.uses = uses;
+	      ld.insn_count = insn_count;
+	      load_defs.push_back(ld);
 	    }
 
 	  FOR_EACH_INSN_DEF (def, insn)
@@ -662,7 +671,7 @@ create_hll_data (function *fn, vector<hl_load>& hl_loads, vector<vector<int>>& b
 	    {
 	      unsigned int regno = DF_REF_REGNO (use);
 
-	      struct hl_load_use hl_use;
+	      struct load_use hl_use;
 	      hl_use.insn = insn;
 	      hl_use.insn_count = insn_count;
 	      all_uses[regno].push_back(hl_use);
@@ -879,31 +888,38 @@ schedule_hll(function *fn)
 {
   DUMP("TT riscv GS rtl hll schedule pass on: %s\n", function_name(fn));
 
-  vector<hl_load> hl_loads;
+  vector<load_def> load_defs;
   df_set_flags (DF_LR_RUN_DCE);
   df_note_add_problem ();
   df_analyze();
-  vector<vector<int>> bb_reg_open_uses;
+
+  // Registers defined in hlls not used within the BB
+  vector<vector<unsigned int>> bb_reg_open_uses;
   bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
-  create_hll_data(fn, hl_loads, bb_reg_open_uses);
+
+  create_load_data(fn, load_defs, bb_reg_open_uses);
 
   // Push loads up
   // Metrics are better processing bottom to top
-  for (int i = 0; i < hl_loads.size(); i++)
+  for (unsigned int i = 0; i < load_defs.size(); i++)
     {
-      hl_load &hll = hl_loads[i];
+      load_def &ld = load_defs[i];
+      if (ld.type == LL_LOAD)
+	{
+	  continue;
+	}
       DUMP("  processing hll load\n");
 
       // Move load up
-      rtx_insn *insn = PREV_INSN(hll.insn);
+      rtx_insn *insn = PREV_INSN(ld.insn);
       // Not sure why BLOCK_FOR_INSN(insn) would be null here
       rtx_insn *anchor = nullptr;
 
-      while (insn && insn != PREV_INSN(BB_HEAD(hll.bb)))
+      while (insn && insn != PREV_INSN(BB_HEAD(ld.bb)))
 	{
 	  if (NONDEBUG_INSN_P(insn))
 	    {
-	      if (!can_move_past(hll.insn, insn))
+	      if (!can_move_past(ld.insn, insn))
 		{
 		  break;
 		}
@@ -915,25 +931,29 @@ schedule_hll(function *fn)
       if (anchor)
 	{
 	  DUMP("  moving load up\n");
-	  move_insn(hll.insn, anchor, false);
+	  move_insn(ld.insn, anchor, false);
 	}
     }
 
   // Push uses down
   // Metrics are better processing top to bottom
-  for (int i = hl_loads.size() - 1; i >= 0; i--)
+  for (int i = load_defs.size() - 1; i >= 0; i--)
     {
-      hl_load &hll = hl_loads[i];
-      DUMP("  processing hll load with %zu uses\n", hll.uses.size());
+      load_def &ld = load_defs[i];
+
+      if (ld.type == LL_LOAD)
+	{
+	  continue;
+	}
+      DUMP("  processing hll load with %zu uses\n", ld.uses.size());
 
       // Move uses down.  First use should be lowest
-      rtx_insn *insn = PREV_INSN(hll.insn);
       // Not sure why BLOCK_FOR_INSN(insn) would be null here
-      for (auto &use : hll.uses)
+      for (auto &use : ld.uses)
 	{
 	  if (my_classify_insn(PATTERN(use.insn)) == INSN)
 	    {
-	      move_down(hll.bb, use.insn);
+	      move_down(ld.bb, use.insn);
 	    }
 	}
     }
@@ -949,7 +969,7 @@ schedule_hll(function *fn)
 	{
 	  if (NONDEBUG_INSN_P(insn))
 	    {
-	      for (int i = 0; i < bb_reg_open_uses[bb->index].size(); i++)
+	      for (unsigned int i = 0; i < bb_reg_open_uses[bb->index].size(); i++)
 		{
 		  df_ref def;
 		  FOR_EACH_INSN_USE (def, insn)
@@ -968,32 +988,107 @@ schedule_hll(function *fn)
     }
 }
 
+// This could be folded into schedule_hll however since insns move around
+// their insn_count changes and the book keeping for that is nasty.  This is
+// simpler and faster (2*O(n) vs O(n^2)) (unless there's some clever way to do
+// the bookkeeping incrementally)
+static void
+schedule_ll(function *fn)
+{
+  DUMP("TT riscv GS rtl ll schedule pass on: %s\n", function_name(fn));
+
+  vector<load_def> load_defs;
+  df_set_flags (DF_LR_RUN_DCE);
+  df_note_add_problem ();
+  df_analyze();
+
+  // Registers defined in hlls not used within the BB
+  vector<vector<unsigned int>> bb_reg_open_uses;
+  bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
+
+  create_load_data(fn, load_defs, bb_reg_open_uses);
+
+  // Push local uses down if in shadow of hll
+  // Metrics are better processing top to bottom
+  int hll_insn_count = -100;
+  for (int i = load_defs.size() - 1; i >= 0; i--)
+    {
+      load_def &ld = load_defs[i];
+
+      if (ld.type != LL_LOAD)
+	{
+	  hll_insn_count = ld.insn_count;
+	  continue;
+	}
+
+      if (ld.insn_count < hll_insn_count &&
+	  ld.insn_count > hll_insn_count - load_shadow)
+	{
+	  for (auto &use : ld.uses)
+	    {
+	      if (my_classify_insn(PATTERN(use.insn)) == INSN)
+		{
+		  move_down(ld.bb, use.insn);
+		}
+	    }
+	}
+    }
+}
+
 #ifdef DUMP_ANALYSIS
 static void
 anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
 {
-  vector<hl_load> hl_loads;
+  vector<load_def> load_defs;
   df_set_flags (DF_LR_RUN_DCE);
   df_note_add_problem ();
   df_analyze();
-  vector<vector<int>> bb_reg_open_uses;
+  vector<vector<unsigned int>> bb_reg_open_uses;
   bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
-  create_hll_data(fn, hl_loads, bb_reg_open_uses);
+  create_load_data(fn, load_defs, bb_reg_open_uses);
 
-  for (int i = 0; i < hl_loads.size(); i++)
+  // Remember: load_defs and insn_count are in reverse order
+  for (unsigned int i = 0; i < load_defs.size(); i++)
     {
-      hl_load &hll = hl_loads[i];
+      load_def &ld = load_defs[i];
 
+      if (ld.type == LL_LOAD)
+	{
+	  continue;
+	}
+
+      // Find the # cycles until resolution
+      // insns are numbers high to low
       int max = -1;
-      for (auto &use : hll.uses)
+      for (auto &use : ld.uses)
 	{
 	  max = (use.insn_count > max) ? use.insn_count : max;
 	}
 
+      for (int j = i - 1; j >= 0; j--)
+	{
+	  if (load_defs[j].bb != ld.bb) break;
+
+	  // See if a load (hll or not) occurs in the shadow of the current load
+	  if (load_defs[j].insn_count > ld.insn_count - load_shadow)
+	    {
+	      // Bring in the max if this load is gating
+	      for (auto &use : load_defs[j].uses)
+		{
+		  max = (use.insn_count > max) ? use.insn_count : max;
+		}
+	    }
+	  else
+	    {
+	      // We've moved out of the shadow range, stop looking for more
+	      break;
+	    }
+	}
+
       if (max != -1)
 	{
-	  int cycles = hll.insn_count - max;
-	  gcc_assert(cycles != 0);
+	  int cycles = ld.insn_count - max;
+	  gcc_assert(cycles > 0);
 	  if (cycles >= (int)hist.size())
 	    {
 	      hist.resize(cycles + 1);
@@ -1005,9 +1100,9 @@ anaylze_results(function *fn, vector<int> &hist, int& n_hlls)
 	  // Hack, store open hll loads at the end of a BB in [0]
 	  hist[0]++;
 	}
-    }
 
-  n_hlls += hl_loads.size();
+      n_hlls++;
+    }
 }
 
 static void
@@ -1092,6 +1187,7 @@ public:
       if (flag_rvtt_hll && optimize > 0)
 	{
 	  schedule_hll(cfn);
+	  schedule_ll(cfn);
 #ifdef DUMP_ANALYSIS
 	  anaylze_results(cfn, hll_load_to_use_hist, n_hlls);
 	  print_results(cfn, hll_load_to_use_hist, n_hlls);
