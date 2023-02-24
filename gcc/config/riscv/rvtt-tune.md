@@ -36,15 +36,14 @@
        (match_test "rvtt_reg_load_p(PATTERN(insn))"))
   "alu")
 
-;; See below, harder to justify why 2 does better for ALU ops, but it does
-(define_insn_reservation "rvtt_alu" 2
+(define_insn_reservation "rvtt_alu" 1
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "unknown,const,arith,shift,slt,multi,auipc,nop,logical,move"))
   "alu")
 
-;; Theory says 1, interestingly, 3 does better presumably since a dependency
-;; after an L1 load stalls the L1 load since this is an in-order machine
-(define_insn_reservation "rvtt_load" 3
+;; Theory says 1.  2 does better in some tests, 3 better/worse in many tests.
+;; I think this makes more room for the L1 load stalls
+(define_insn_reservation "rvtt_load" 2
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload"))
   "alu")
