@@ -57,6 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "function-abi.h"
 #include "domwalk.h"
 #include <vector>
+#include <unordered_map>
 #include "config/riscv/rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
@@ -66,11 +67,9 @@ const int stack_ptr_regno = 2;
 using namespace std;
 
 static int top_of_bb_n_moved = 0;
-static const int max_move_down = 8;
 static const int l1_load_shadow = 6;
-static const int l1_load_shadow_conservative = 8;
 static const int reg_load_shadow = 4;
-static const int reg_load_shadow_conservative = 6;
+static const int local_load_shadow = 1;
 
 // A BB can resolve its parents' HLL loads by:
 //  1) reading the incoming war reg
@@ -311,7 +310,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	  rvtt_p (&insnd, insn);
 	  if (ll_count == -1)
 	    {
-	      if (rvtt_needs_gs_hll_war_p(insn_pat))
+	      if (rvtt_hll_p(insn_pat))
 		{
 		  ll_count = 0;
 		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
@@ -326,7 +325,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	  else
 	    {
 	      int classify = my_classify_insn(insn_pat);
-	      if (rvtt_needs_gs_hll_war_p(insn_pat))
+	      if (rvtt_hll_p(insn_pat))
 		{
 		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
 		  DUMP("  found an hll load of reg %d, updating war regs\n", hll_war_regs[0]);
@@ -424,7 +423,6 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	       dst_bbe.ll_incoming,
 	       dst_bbe.ll_before_resolve_all,
 	       (dst_bbe.ll_incoming == -1) ? -1 : dst_bbe.hll_war_reg_incoming[0]);
-
 	  if ((dst_bbe.ll_before_resolve_all != -1 && dst_bbe.ll_before_resolve_all + ll_count < 5) ||
 	      !dst_bbe.inited ||
 	      (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0]))
@@ -492,7 +490,7 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 	      rvtt_p (&insnd, insn);
 	      int classify = my_classify_insn(insn_pat);
 
-	      if (rvtt_needs_gs_hll_war_p(insn_pat))
+	      if (rvtt_hll_p(insn_pat))
 		{
 		  hll_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
 		}
@@ -591,63 +589,94 @@ workaround_gs_hll(function *fn)
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
-enum load_type {
-  LL_LOAD,
-  L1_LOAD,
-  REG_LOAD
+class load_type {
+ private:
+  int lt;
+
+ public:
+  static const int ll_load = 1;
+  static const int l1_load = 2;
+  static const int reg_load = 4;
+  static const int load_use = 8;
+
+  load_type() : lt(0) {}
+  void add_flavor(int flavor) { lt |= flavor; }
+  void add_flavor(load_type& in) { lt |= in.lt; }
+  bool ll_load_p() { return (lt & ll_load) != 0; }
+  bool l1_load_p() { return (lt & l1_load) != 0; }
+  bool reg_load_p() { return (lt & reg_load) != 0; }
+  bool use_p() { return (lt & load_use) != 0; }
+  bool hll_p() { return (lt & (l1_load | reg_load)) != 0; }
+
+  int get_shadow()
+  {
+    return (l1_load_p()) ? l1_load_shadow : ((reg_load_p()) ? reg_load_shadow : local_load_shadow);
+  }
+};
+
+struct load_def;
+struct sched_insn_data;
+
+struct load_base {
+  load_type init_type;        // (ll/l1/reg | use)
+  int init_insn_count;        // up from the bottom of the bb
+  sched_insn_data *id;        // pointer back to the adjustable insn_count
+  rtx_insn *insn;             // the load insn
 };
 
 struct load_dep {
-  rtx_insn *insn;
-  int insn_count;
-  vector<load_dep> child_deps;
+  struct load_base base;
+  bool moved;
+  load_def *def;
 };
 
 struct load_def {
-  enum load_type type;        // (ll/l1/reg)
-  rtx_insn *insn;             // the load insn
-  int insn_count;             // up from the bottom of the bb
-  basic_block bb;             // bb for insn (why why why)
+  struct load_base base;
+  basic_block bb;             // bb for insn
   vector<load_dep> uses;      // each of the uses of this reg
 };
 
 typedef vector<struct load_dep> load_deps;
 
+struct sched_insn_data {
+  load_type type;
+  int insn_count;
+  load_def *def;             // only used for use
+};
+
+static unordered_map<rtx_insn *, sched_insn_data> insn_count_map;
+
 // Build up a vector of load_defs such that:
-//  - there is one entry per load load in reverse order
+//  - there is one entry per load in reverse order
 //  - each entry points to the insn, all the uses of the def of that insn
-//    including the number of local loads between the def and use, the
-//    previous use of that register in the BB (if there is one) and the number
-//    of ll_loads between this def an the end of the BB
-//
-// Also, creates the a list of registers loaded but not used (open uses) at
+//    and the insn count (up from the bottom of the BB)
+// Also create the a list of registers loaded but not used (open uses) at
 // the end of the bb
 static void
 create_load_data (function *fn,
 		  vector<load_def>& load_defs,
-		  vector<vector<unsigned int>>& bb_reg_open_uses)
+		  vector<vector<load_def *>>& bb_reg_open_defs)
 {
   basic_block bb;
   rtx_insn *insn;
   df_ref use;
 
-  // This does too much copying/allocating
-  // Maybe make some vectors static
-  // Timing this pass makes it seem like not an issue
   vector<load_deps> all_uses;
   all_uses.resize(max_reg_num());
-  vector<load_dep>child_uses;
+  insn_count_map.clear();
 
-  FOR_EACH_BB_FN (bb, fn)
+  // General algorithm doesn't care about BB order, printing is easier if the
+  // BBs and insns are in the same order
+  FOR_EACH_BB_REVERSE_FN (bb, fn)
     {
       int insn_count = 0;
       FOR_BB_INSNS_REVERSE (bb, insn)
 	{
-	  if (!NONDEBUG_INSN_P (insn))
-	    continue;
-
 	  // For some reason these can be null and that messes up add_insn_[before/after]
 	  BLOCK_FOR_INSN(insn) = bb;
+
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
 
 	  rtx insn_pat = PATTERN(insn);
 	  // This can be a load and have null def for example with
@@ -661,32 +690,15 @@ create_load_data (function *fn,
 		  auto& uses = all_uses[regno];
 
 		  struct load_def ld;
-		  ld.insn = insn;
+		  ld.base.insn = insn;
 		  ld.bb = bb;
-		  if (rvtt_l1_load_p(insn_pat)) ld.type = L1_LOAD;
-		  else if (rvtt_reg_load_p(insn_pat)) ld.type = REG_LOAD;
-		  else ld.type = LL_LOAD;
+		  if (rvtt_l1_load_p(insn_pat)) ld.base.init_type.add_flavor(load_type::l1_load);
+		  else if (rvtt_reg_load_p(insn_pat)) ld.base.init_type.add_flavor(load_type::reg_load);
+		  else ld.base.init_type.add_flavor(load_type::ll_load);
 
-		  if (ld.type != LL_LOAD && uses.size() == 0)
-		    {
-		      edge_iterator ei;
-		      edge e;
-		      FOR_EACH_EDGE(e, ei, bb->succs)
-			{
-			  bb_reg_open_uses[e->dest->index].push_back(regno);
-			}
-		    }
 		  ld.uses = uses;
-		  ld.insn_count = insn_count;
+		  ld.base.init_insn_count = insn_count;
 		  load_defs.push_back(ld);
-		}
-
-	      unsigned int regno = DF_REF_REGNO (def);
-	      gcc_assert(child_uses.size() == 0);
-	      child_uses.swap(all_uses[regno]);
-	      for (auto& child : child_uses)
-		{
-		  child.child_deps.resize(0);
 		}
 	    }
 
@@ -701,14 +713,17 @@ create_load_data (function *fn,
 	      unsigned int regno = DF_REF_REGNO (use);
 
 	      struct load_dep hl_use;
-	      hl_use.insn = insn;
-	      hl_use.insn_count = insn_count;
+	      hl_use.base.insn = insn;
+	      hl_use.moved = false;
+	      hl_use.base.init_insn_count = insn_count;
+	      hl_use.base.init_type.add_flavor(load_type::load_use);
 	      all_uses[regno].push_back(hl_use);
-	      all_uses[regno][all_uses[regno].size()-1].child_deps = child_uses;
 	    }
 
-	  child_uses.resize(0);
-	  insn_count++;
+	  if (GET_CODE(insn_pat) != USE)
+	    {
+	      insn_count++;
+	    }
 	}
 
       for (auto &uses : all_uses)
@@ -717,32 +732,74 @@ create_load_data (function *fn,
 	}
     }
 
+  // Note: a use could also be a def
+  // store insn_count once and point back
+  for (auto& ld : load_defs)
+    {
+      sched_insn_data lsid;
+      auto result = insn_count_map.insert(pair<rtx_insn *, sched_insn_data>(ld.base.insn, lsid));
+      ld.base.id = &result.first->second;
+      result.first->second.insn_count = ld.base.init_insn_count;
+      result.first->second.type.add_flavor(ld.base.init_type);
+
+      if (ld.base.init_type.hll_p() && ld.uses.size() == 0)
+	{
+	  edge_iterator ei;
+	  edge e;
+	  FOR_EACH_EDGE(e, ei, ld.bb->succs)
+	    {
+	      bb_reg_open_defs[e->dest->index].push_back(&ld);
+	    }
+	}
+
+      for (auto& use : ld.uses)
+	{
+	  use.def = &ld;
+	  sched_insn_data usid;
+	  usid.def = use.def;
+	  auto result = insn_count_map.insert(pair<rtx_insn *, sched_insn_data>(use.base.insn, usid));
+	  use.base.id = &result.first->second;
+	  result.first->second.insn_count = use.base.init_insn_count;
+	  result.first->second.type.add_flavor(use.base.init_type);
+	}
+    }
+
   all_uses.resize(0);
 }
 
-// Find the # cycles until resolution of the load in ld (-1 if not resolved)
+// Find the cycle when load in ld is resolved (-1 if not resolved)
 static int
-get_cycles_to_resolution(vector<load_def>& load_defs, int which, load_def& ld)
+get_cycle_of_resolution(vector<load_def>& load_defs, int which, load_def& ld, bool go_to_the_end = false, load_dep **resolving_use = nullptr)
 {
   // insn counts are numbered high to low
   int max = -1;
   for (auto &use : ld.uses)
     {
-      max = (use.insn_count > max) ? use.insn_count : max;
+      if (use.base.id->insn_count > max)
+	{
+	  max = use.base.id->insn_count;
+	  if (resolving_use != nullptr) *resolving_use = &use;
+	}
     }
 
-  int shadow = (ld.type == L1_LOAD) ? l1_load_shadow_conservative : reg_load_shadow_conservative;
+  int shadow = ld.base.id->type.get_shadow();
+  shadow = go_to_the_end ? 1000000 : shadow;
+
   for (int j = which - 1; j >= 0; j--)
     {
       if (load_defs[j].bb != ld.bb) break;
 
       // See if a load (hll or not) occurs in the shadow of the current load
-      if (load_defs[j].insn_count > ld.insn_count - shadow)
+      if (load_defs[j].base.id->insn_count > ld.base.id->insn_count - shadow)
 	{
 	  // Bring in the max if this load is gating
 	  for (auto &use : load_defs[j].uses)
 	    {
-	      max = (use.insn_count > max) ? use.insn_count : max;
+	      if (use.base.id->insn_count > max)
+		{
+		  max = use.base.id->insn_count;
+		  if (resolving_use != nullptr) *resolving_use = &use;
+		}
 	    }
 	}
       else
@@ -864,7 +921,6 @@ can_move_past(rtx_insn *base, rtx_insn *query)
   if (GET_CODE(base_pat) == PARALLEL ||
       GET_CODE(query_pat) == PARALLEL)
     {
-      // future work???
       return false;
     }
   else if (!can_move_past_load_or_store(base_pat, query_pat) ||
@@ -910,6 +966,48 @@ can_move_past(rtx_insn *base, rtx_insn *query)
   return true;
 }
 
+// The next two routines come from emit-rtl modified so that they don't run
+// into the prologue/epilogue
+static rtx_insn *
+my_prev_nonnote_nondebug_insn_bb (rtx_insn *insn)
+{
+  rtx_insn *last = PREV_INSN(BB_HEAD(BLOCK_FOR_INSN(insn)));
+  while (insn)
+    {
+      insn = PREV_INSN (insn);
+      if (insn == 0 || insn == last)
+	break;
+      if (DEBUG_INSN_P (insn))
+	continue;
+      if (!NOTE_P (insn))
+	break;
+      if (NOTE_INSN_BASIC_BLOCK_P (insn))
+	return NULL;
+    }
+
+  return insn;
+}
+
+static rtx_insn *
+my_next_nonnote_nondebug_insn_bb (rtx_insn *insn)
+{
+  rtx_insn *last = NEXT_INSN(BB_END(BLOCK_FOR_INSN(insn)));
+  while (insn)
+    {
+      insn = NEXT_INSN (insn);
+      if (insn == 0 || insn == last)
+	break;
+      if (DEBUG_INSN_P (insn))
+	continue;
+      if (!NOTE_P (insn))
+	break;
+      if (NOTE_INSN_BASIC_BLOCK_P (insn))
+	return NULL;
+    }
+
+  return insn;
+}
+
 static void
 move_insn(rtx_insn *insn, rtx_insn *where, bool after)
 {
@@ -928,14 +1026,27 @@ move_insn(rtx_insn *insn, rtx_insn *where, bool after)
 }
 
 static void
+adjust_insn_count(rtx_insn *insn, int amt)
+{
+  auto ic = insn_count_map.find(insn);
+  if (ic != insn_count_map.end())
+    {
+      ic->second.insn_count += amt;
+    }
+}
+
+static int
 move_up(rtx_insn *def_insn, int how_far)
 {
-  // Move load up
+  // Move insn up
+  if (def_insn == nullptr) return 0;
+
   rtx_insn *insn = PREV_INSN(def_insn);
   rtx_insn *anchor = nullptr;
 
   basic_block bb = BLOCK_FOR_INSN(def_insn);
-  while (insn && insn != PREV_INSN(BB_HEAD(bb)) && how_far > 0)
+  int move_count = 0;
+  while (insn && insn != PREV_INSN(BB_HEAD(bb)) && move_count < how_far)
     {
       if (NONDEBUG_INSN_P(insn))
 	{
@@ -943,27 +1054,34 @@ move_up(rtx_insn *def_insn, int how_far)
 	    {
 	      break;
 	    }
-	  how_far--;
 	  anchor = insn;
+	  move_count++;
 	}
       insn = PREV_INSN(insn);
     }
 
+  DUMP("  moving def up %d (wanted %d)\n", move_count, how_far);
   if (anchor)
     {
-      DUMP("  moving load up\n");
+      adjust_insn_count(def_insn, move_count);
+      adjust_insn_count(anchor, -move_count);
       move_insn(def_insn, anchor, false);
     }
+
+  return move_count;
 }
 
-static bool
-move_down(rtx_insn *use_insn)
+static int
+move_down(rtx_insn *use_insn, int how_far)
 {
+  if (use_insn == nullptr) return 0;
+
   rtx_insn *insn = NEXT_INSN(use_insn);
   rtx_insn *anchor = nullptr;
-  int count = 0;
+
   basic_block bb = BLOCK_FOR_INSN(use_insn);
-  while (insn && insn != NEXT_INSN(BB_END(bb)) && count < max_move_down)
+  int move_count = 0;
+  while (insn && insn != NEXT_INSN(BB_END(bb)) && move_count < how_far)
     {
       if (NONDEBUG_INSN_P(insn))
 	{
@@ -972,68 +1090,228 @@ move_down(rtx_insn *use_insn)
 	      break;
 	    }
 	  anchor = insn;
-	  count++;
+	  move_count++;
 	}
       insn = NEXT_INSN(insn);
     }
 
+  DUMP("  moving use down %d (wanted %d)\n", move_count, how_far);
   if (anchor)
     {
-      DUMP("  moving use down\n");
+      adjust_insn_count(use_insn, -move_count);
+      adjust_insn_count(anchor, move_count);
       move_insn(use_insn, anchor, true);
     }
 
-  return anchor != nullptr;
+  return move_count;
+}
+
+static bool
+can_push_up_one(rtx_insn *move_insn, rtx_insn *target_insn)
+{
+  auto move_insn_d = insn_count_map.find(move_insn);
+
+  // If move_insn is a use, don't push it up passed its def's shadow
+  if (move_insn_d != insn_count_map.end() &&
+      move_insn_d->second.type.use_p())
+    {
+      int shadow = move_insn_d->second.def->base.id->type.get_shadow();
+      if (move_insn_d->second.insn_count > move_insn_d->second.def->base.id->insn_count - shadow)
+	{
+	  // XXXXX unless moving this up allows something further down to move up as well
+	  return false;
+	}
+    }
+
+  return can_move_past(move_insn, target_insn);
+}
+
+static bool
+can_push_down_one(rtx_insn *move_insn, rtx_insn *target_insn)
+{
+  auto move_insn_d = insn_count_map.find(move_insn);
+
+  // If move_insn is a load, don't push it down into its use's shadow
+  if (move_insn_d != insn_count_map.end() &&
+      move_insn_d->second.type.hll_p())
+    {
+      // For now, assuming it is always bad which is a fairly safe assumption
+      return false;
+    }
+
+  return can_move_past(move_insn, target_insn);
+}
+
+static bool
+can_push_insnset_up_passed(rtx_insn *insn, rtx_insn *target_insn)
+{
+  while (insn != target_insn)
+    {
+      if (!can_push_up_one(insn, target_insn)) return false;
+
+      insn = my_prev_nonnote_nondebug_insn_bb(insn);
+    }
+
+  return true;
+}
+
+static bool
+can_push_insnset_down_passed(rtx_insn *insn, rtx_insn *target_insn)
+{
+  while (insn != target_insn)
+    {
+      if (!can_push_down_one(insn, target_insn)) return false;
+
+      insn = my_next_nonnote_nondebug_insn_bb(insn);
+    }
+
+  return true;
 }
 
 static void
-push_uses_down(load_def &ld)
+push_insnset_up_passed(rtx_insn *insn, rtx_insn *target_insn, int move_count)
 {
-  // Move uses down.  First use should be lowest
-  for (int i = ld.uses.size() - 1; i >= 0; i--)
+  rtx_insn *where = target_insn;
+  while (insn != target_insn)
     {
-      auto &use = ld.uses[i];
+      rtx_insn *prev_insn = my_prev_nonnote_nondebug_insn_bb(insn);
 
-      if (my_classify_insn(PATTERN(use.insn)) == INSN)
+      move_insn(insn, where, false);
+      adjust_insn_count(insn, 1);
+      where = insn;
+      insn = prev_insn;
+    }
+
+  adjust_insn_count(target_insn, -move_count);
+}
+
+static void
+push_insnset_down_passed(rtx_insn *insn, rtx_insn *target_insn, int move_count)
+{
+  rtx_insn *where = target_insn;
+  while (insn != target_insn)
+    {
+      rtx_insn *next_insn = my_next_nonnote_nondebug_insn_bb(insn);
+
+      move_insn(insn, where, true);
+      adjust_insn_count(insn, -1);
+      where = insn;
+      insn = next_insn;
+    }
+
+  adjust_insn_count(target_insn, move_count);
+}
+
+// Try to move insn up how_far
+// If it doesn't move on its own (conflict above), try moving sets of insns up
+// to max_set_size up together (address calculations often occur just before a
+// load)
+static void
+push_load_up(rtx_insn *insn, int how_far, int max_set_size)
+{
+  how_far -= move_up(insn, how_far);
+  int set_size = 2;
+  rtx_insn *last_insn = PREV_INSN(BB_HEAD(BLOCK_FOR_INSN(insn)));
+  while (set_size <= max_set_size &&
+	 how_far > (set_size - 1))
+    {
+      rtx_insn *target_insn = insn;
+      for (int i = 0; i < set_size && target_insn != last_insn && target_insn != nullptr; i++)
 	{
-	  // Move children down
-	  if (!move_down(use.insn))
-	    {
-	      for (auto &child_use : use.child_deps)
-		{
-		  if (my_classify_insn(PATTERN(child_use.insn)) == INSN)
-		    {
-		      move_down(child_use.insn);
-		    }
-		}
+	  target_insn = my_prev_nonnote_nondebug_insn_bb(target_insn);
+	}
+      if (target_insn == last_insn || target_insn == nullptr) break;
 
-	      move_down(use.insn);
-	    }
+      // Try to move up to max_set_size insns
+      // Don't push the last above the previous load (how_far > set_size - 1)
+      if (can_push_insnset_up_passed(insn, target_insn))
+	{
+	  push_insnset_up_passed(insn, target_insn, set_size);
+	  how_far--;
+	}
+      else
+	{
+	  // Try to move a larger block
+	  set_size++;
+	}
+    }
+}
+
+static void
+push_use_down(rtx_insn *insn, int how_far, int max_set_size)
+{
+  how_far -= move_down(insn, how_far);
+  int set_size = 2;
+  rtx_insn *last_insn = NEXT_INSN(BB_END(BLOCK_FOR_INSN(insn)));
+  while (set_size <= max_set_size &&
+	 how_far > (set_size - 1))
+    {
+      rtx_insn *target_insn = insn;
+      for (int i = 0; i < set_size && target_insn != last_insn && target_insn != nullptr; i++)
+	{
+	  target_insn = my_next_nonnote_nondebug_insn_bb(target_insn);
+	}
+      if (target_insn == last_insn || target_insn == nullptr) break;
+
+      // Try to move up to max_set_size insns
+      // Don't push the last above the previous load (how_far > set_size - 1)
+      if (can_push_insnset_down_passed(insn, target_insn))
+	{
+	  push_insnset_down_passed(insn, target_insn, set_size);
+	  how_far--;
+	}
+      else
+	{
+	  // Try to move a larger block
+	  set_size++;
+	}
+    }
+}
+
+// Finds the gating use (earliest use within the shadow) and pushes it down.
+// Doing so may expose a different use as a new gating use, so this iterates.
+// We must be careful as 2 insns could repeatedly swap locations or a use
+// could be pushed down out of the shadow but then the next use, when pushed
+// down, could result in the previous use getting moved back into the shadow.
+// Current implementaion just moves an insn once, and (hackily) tries to push
+// a bit further if there are multiple uses (rare case).
+//
+// push_to is the insn_count to push the use down.  how_far isn't used here
+// because the use insn can change depending on how this loop executes (ie, we
+// need an absolute not relative position)
+static void
+push_gating_use_down(vector<load_def>& defs, int which, load_def& ld, int push_to)
+{
+  // Find gating insn
+  load_dep *target_use = nullptr;
+  int max = get_cycle_of_resolution(defs, which, ld, false, &target_use);
+
+  if (target_use != nullptr)
+    {
+      while (max > push_to && !target_use->moved)
+	{
+	  push_use_down(target_use->base.insn, target_use->base.id->insn_count - push_to, 3);
+	  target_use->moved = true;
+
+	  max = get_cycle_of_resolution(defs, which, ld, false, &target_use);
 	}
     }
 }
 
 // "Schedule" high latency loads
-// This is a dirt simple attempt to improve the scheduling of insns dependent
+// This is a simple attempt to improve the scheduling of insns dependent
 // on hlls.  The code first pushes hlls "up" as high as possible in the BB,
-// then pushes their dependencies (uses) "down" as low as possible in the BB.
-// No effort is made to check interdependencies between these hlls or uses or
-// to check a chain of dependencies and move the chain down.  At least, not
-// yet...
-// A third pass tries to push uses down when an hll is carried into a
-// subsequent BB
-// I wrote what seemed like a better version of this simpled minded approach,
-// it:
-//  - moved sequential insns above the load up
-//  - moved sequential insns below the use down
-//  - flipped the order of uses of shadowed loads to be correct
-// Metrics on the code were slightly better but not worth the risk (may have
-// been luck).  In general I've found behavior to be non-intuitive, I suspect
-// that is because moving insns around like this with overlapping loads, high
-// register pressure, volatile insns, etc results in as much negative impact
-// as positive.  May need a "real" algorithm with more in depth analysis.  Or,
-// maybe need to change the code base this is optimizing to be less
-// constrained.
+// then pushes their dependencies (uses) "down" as low as possible in the
+// BB. (disabled)
+//
+// I've tried a few (simple) variations on this theme all of which produce
+// results within noise of each other.  Seems either pushing uses down or
+// loads up gains almost everything there is to gain.  I suspect that is a
+// sign the compiler is already doing a decent job: improving one load just
+// hurts another.
+//
+// Perhaps a "real" algorithm could do better, but I suspect there isn't much
+// more to be had and enough time has been sunk on this already...
 static void
 schedule_hll(function *fn)
 {
@@ -1042,115 +1320,85 @@ schedule_hll(function *fn)
   vector<load_def> load_defs;
 
   // Registers defined in hlls not used within the BB
-  vector<vector<unsigned int>> bb_reg_open_uses;
-  bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
+  vector<vector<load_def *>> bb_reg_open_defs;
+  bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
 
-  create_load_data(fn, load_defs, bb_reg_open_uses);
-
-  // Push loads up
-  // Metrics are better processing bottom to top
-  for (unsigned int i = 0; i < load_defs.size(); i++)
+  create_load_data(fn, load_defs, bb_reg_open_defs);
+  load_def *prev_hll = nullptr;
+  for (int i = load_defs.size() - 1; i >= 0; i--)
     {
-      load_def &ld = load_defs[i];
-      if (ld.type == LL_LOAD)
+      load_def& ld = load_defs[i];
+      if (!ld.base.id->type.hll_p())
 	{
 	  continue;
 	}
       DUMP("  processing hll load\n");
 
-#if 0
-      int max = get_cycles_to_resolution(load_defs, i, ld);
-      int shadow = (ld.type == L1_LOAD) ? l1_load_shadow_conservative : reg_load_shadow_conservative;
-      int how_far = (max == -1) ? shadow : shadow - max;
-#else
-      int how_far = 100; // very far
-#endif
-      move_up(ld.insn, how_far);
-    }
-
-  // Push uses down
-  // Metrics are better processing top to bottom
-  for (int i = load_defs.size() - 1; i >= 0; i--)
-    {
-      load_def &ld = load_defs[i];
-
-      if (ld.type == LL_LOAD)
+      int dist_to_gate = 100;
+      int shadow = ld.base.id->type.get_shadow();
+      if (prev_hll != nullptr)
 	{
-	  continue;
+	  dist_to_gate = prev_hll->base.id->insn_count - ld.base.id->insn_count;
+	  int cycle_of_resolution = get_cycle_of_resolution(load_defs, i, ld);
+	  if (cycle_of_resolution < ld.base.id->insn_count - shadow)
+	    {
+	      // If this ld doesn't benefit from being moved up, then
+	      // don't move up if it is robbing the prior ld
+	      // Do move up otherwise as this may help later loads
+	      for (auto& use : prev_hll->uses)
+		{
+		  if (use.base.insn == ld.base.insn)
+		    {
+		      // Previous ld has an anti-dependence on ld
+		      dist_to_gate -= prev_hll->base.id->type.get_shadow();
+		    }
+		}
+	    }
 	}
-      DUMP("  processing hll load with %zu uses\n", ld.uses.size());
 
-      push_uses_down(ld);
+      push_load_up(ld.base.insn, dist_to_gate - 1, 3);
+      push_gating_use_down(load_defs, i, ld, min(ld.base.id->insn_count - shadow, 0));
+
+      prev_hll = &ld;
     }
 
   // Push uses at the start of a BB carried in from prior BB down
-  // Only look at the first 6 insns of the BB
+  // Only look at the first few insns of the BB
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
-      int count = 0;
-      rtx_insn *insn = BB_HEAD(bb);
-      while (insn && insn != NEXT_INSN(BB_END(bb)) && count < 6)
+      if (bb_reg_open_defs[bb->index].size() > 0)
 	{
-	  if (NONDEBUG_INSN_P(insn))
+	  int count = 0;
+	  rtx_insn *insn = BB_HEAD(bb);
+	  while (insn && insn != NEXT_INSN(BB_END(bb)) && count < l1_load_shadow)
 	    {
-	      for (unsigned int i = 0; i < bb_reg_open_uses[bb->index].size(); i++)
+	      if (NONDEBUG_INSN_P(insn))
 		{
-		  df_ref def;
-		  FOR_EACH_INSN_USE (def, insn)
+		  for (unsigned int i = 0; i < bb_reg_open_defs[bb->index].size(); i++)
 		    {
-		      if (DF_REF_REGNO(def) == bb_reg_open_uses[bb->index][i])
+		      load_def& ld = *bb_reg_open_defs[bb->index][i];
+		      unsigned int regno = DF_REF_REGNO(df_single_def(DF_INSN_INFO_GET(ld.base.insn)));
+		      df_ref use;
+		      FOR_EACH_INSN_USE (use, insn)
 			{
-			  top_of_bb_n_moved += move_down(insn);
+			  if (DF_REF_REGNO(use) == regno)
+			    {
+			      int shadow = ld.base.id->type.get_shadow();
+			      int how_far = shadow - ld.base.id->insn_count - count;
+
+			      // XXXXXX use push_gating_use_down
+			      bool moved = (move_down(insn, how_far) != 0);
+			      top_of_bb_n_moved += moved;
+			      break;
+			    }
 			}
 		    }
+		  count++;
 		}
-	      count++;
+
+	      insn = NEXT_INSN(insn);
 	    }
-
-	  insn = NEXT_INSN(insn);
-	}
-    }
-}
-
-// This could be folded into schedule_hll however since insns move around
-// their insn_count changes and the book keeping for that is nasty.  This is
-// simpler and faster (2*O(n) vs O(n^2)) (unless there's some clever way to do
-// the bookkeeping incrementally)
-static void
-schedule_ll(function *fn)
-{
-  DUMP("TT riscv GS rtl ll schedule pass on: %s\n", function_name(fn));
-
-  vector<load_def> load_defs;
-
-  // Registers defined in hlls not used within the BB
-  vector<vector<unsigned int>> bb_reg_open_uses;
-  bb_reg_open_uses.resize(n_basic_blocks_for_fn(fn));
-
-  create_load_data(fn, load_defs, bb_reg_open_uses);
-
-  // Push local uses down if in shadow of hll
-  // Metrics are better processing top to bottom
-  int hll_insn_count = 0;
-  int bb = -1;
-  for (int i = load_defs.size() - 1; i >= 0; i--)
-    {
-      load_def &ld = load_defs[i];
-
-      if (ld.type != LL_LOAD)
-	{
-	  bb = ld.bb->index;
-	  hll_insn_count = ld.insn_count;
-	  continue;
-	}
-
-      int shadow = (ld.type == L1_LOAD) ? l1_load_shadow : reg_load_shadow;
-      if (bb == ld.bb->index &&
-	  ld.insn_count < hll_insn_count &&
-	  ld.insn_count > hll_insn_count - shadow)
-	{
-	  push_uses_down(ld);
 	}
     }
 }
@@ -1162,10 +1410,10 @@ get_closest_use(vector<load_dep>& uses)
   load_dep *closest_use = nullptr;
   for (auto &use : uses)
     {
-      if (use.insn_count > max)
+      if (use.base.id->insn_count > max)
 	{
 	  closest_use = &use;
-	  max = use.insn_count;
+	  max = use.base.id->insn_count;
 	}
     }
 
@@ -1177,8 +1425,6 @@ get_closest_use(vector<load_dep>& uses)
 // Paradoxically, scheduling improves by move uses up if the uses in shadows
 // of other loads are out of order, eg, load1 load2 use2 use1 improves by
 // moving use1 prior to use2
-// Note: this worked well w/ a different scheduling algorithm, but works
-// poorly with this one and so is disabled
 static void
 schedule_shadows(function *fn)
 {
@@ -1187,7 +1433,7 @@ schedule_shadows(function *fn)
   vector<load_def> load_defs;
 
   // Registers defined in hlls not used within the BB
-  vector<vector<unsigned int>> bb_reg_open_defs;
+  vector<vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
 
   create_load_data(fn, load_defs, bb_reg_open_defs);
@@ -1196,36 +1442,40 @@ schedule_shadows(function *fn)
     {
       load_def& ld = load_defs[i];
 
-      if (ld.type == LL_LOAD) continue;
+      if (ld.base.id->type.ll_load_p()) continue;
 
       // Get the cycle this ld is resolved
       load_dep *closest_use = get_closest_use(ld.uses);
       int bb = ld.bb->index;
-      if (closest_use != nullptr)
+      int shadow = ld.base.id->type.get_shadow();
+      int dist = ld.base.id->insn_count - closest_use->base.id->insn_count;
+      if (closest_use != nullptr && dist < shadow)
 	{
 	  // Find lds in the shadow of this ld
-	  int max = -1;
+	  int max = closest_use->base.id->insn_count;
 	  load_dep *overall_closest_shadow_use = nullptr;
-	  int shadow = (ld.type == L1_LOAD) ? l1_load_shadow : reg_load_shadow;
 	  for (int j = i - 1; j >= 0; j--)
 	    {
 	      if (bb != load_defs[j].bb->index ||
-		  load_defs[j].insn_count < ld.insn_count - shadow) break;
+		  load_defs[j].base.id->insn_count < ld.base.id->insn_count - shadow) break;
 
 	      // Get the cycle this ld is resolved
 	      load_dep *closest_shadow_use = get_closest_use(load_defs[j].uses);
 
-	      if (closest_shadow_use != nullptr && closest_shadow_use->insn_count > max)
+	      if (closest_shadow_use != nullptr && closest_shadow_use->base.id->insn_count > max)
 		{
-		  max = closest_shadow_use->insn_count;
+		  max = closest_shadow_use->base.id->insn_count;
 		  overall_closest_shadow_use = closest_shadow_use;
 		}
 	    }
 
-	  if (max != -1 && overall_closest_shadow_use->insn_count > closest_use->insn_count)
+	  if (overall_closest_shadow_use != nullptr && overall_closest_shadow_use->base.id->insn_count > closest_use->base.id->insn_count)
 	    {
 	      DUMP("  shuffling uses\n");
-	      move_up(closest_use->insn, 1);
+
+	      // XXXXX try moving closest_use down first.  also, don't move if not 100% successful
+	      int how_far = overall_closest_shadow_use->base.id->insn_count - closest_use->base.id->insn_count;
+	      move_up(closest_use->base.insn, how_far);
 	    }
 	}
     }
@@ -1239,18 +1489,19 @@ class analysis {
   vector<int>reg_hist;
 
  public:
+  analysis() : n_l1s(0), n_regs(0) {}
   ~analysis() { print(); }
   void analyze(function *fn);
   void print();
-  void bump_hist(enum load_type which, int cycles);
+  void bump_hist(load_type& which, int cycles);
   void print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cycles_high);
 };
 
 analysis analg;
 
-void analysis::bump_hist(enum load_type which_type, int cycles)
+void analysis::bump_hist(load_type& which_type, int cycles)
 {
-  vector<int>& hist = (which_type == L1_LOAD) ? l1_hist : reg_hist;
+  vector<int>& hist = (which_type.l1_load_p()) ? l1_hist : reg_hist;
   if (cycles >= (int)hist.size())
     {
       hist.resize(cycles + 1);
@@ -1262,7 +1513,7 @@ void analysis::analyze(function *fn)
 {
   vector<load_def> load_defs;
 
-  vector<vector<unsigned int>> bb_reg_open_defs;
+  vector<vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
   create_load_data(fn, load_defs, bb_reg_open_defs);
 
@@ -1271,16 +1522,13 @@ void analysis::analyze(function *fn)
     {
       load_def& ld = load_defs[i];
 
-      if (ld.type == LL_LOAD)
-	{
-	  continue;
-	}
+      if (ld.base.id->type.ll_load_p()) continue;
 
-      int max = get_cycles_to_resolution(load_defs, i, ld);
+      int max = get_cycle_of_resolution(load_defs, i, ld, true);
 
       if (max != -1)
 	{
-	  int cycles = ld.insn_count - max;
+	  int cycles = ld.base.id->insn_count - max;
 
 #if 0
 	  if (cycles == 1)
@@ -1322,15 +1570,15 @@ void analysis::analyze(function *fn)
 	    }
 #endif
 	  gcc_assert(cycles > 0);
-	  bump_hist(ld.type, cycles);
+	  bump_hist(ld.base.id->type, cycles);
 	}
       else
 	{
 	  // Hack, store open hll loads at the end of a BB in [0]
-	  bump_hist(ld.type, 0);
+	  bump_hist(ld.base.id->type, 0);
 	}
 
-      if (ld.type == L1_LOAD)
+      if (ld.base.id->type.l1_load_p())
 	{
 	  n_l1s++;
 	}
@@ -1356,7 +1604,7 @@ void analysis::print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cyc
       cyclesh += ((i > cycles_high) ? cycles_high : i) * hist[i];
       fprintf(stderr, "%d ", hist[i]);
     }
-  fprintf(stderr, ":(%d)\n", hist.size() - 1);
+  fprintf(stderr, ":(%zu)\n", hist.size() - 1);
 
   int median = 0;
   int count = 0;
@@ -1378,8 +1626,8 @@ void analysis::print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cyc
     }
 
   fprintf(stderr, "Median: %d\n", median);
-  fprintf(stderr, "Totals: hlls %d, uses %d, #open at end of BB %d, moved %d down\n",
-	  n_hlls, total, hist[0], top_of_bb_n_moved);
+  fprintf(stderr, "Totals: hlls %d, uses %d, %d open at end of BB\n",
+	  n_hlls, total, hist[0]);
 }
 
 void analysis::print()
@@ -1396,6 +1644,10 @@ void analysis::print()
     {
       fprintf(stderr, "Reg Load Histogram\n");
       print_hist(reg_hist, n_regs, 4, 6);
+    }
+  if (top_of_bb_n_moved > 0)
+    {
+      fprintf(stderr, "moved %d open at top of BB down\n", top_of_bb_n_moved);
     }
 }
 
@@ -1434,8 +1686,7 @@ public:
 	  df_analyze();
 
 	  schedule_hll(cfn);
-	  schedule_ll(cfn);
-	  //schedule_shadows(cfn);
+	  schedule_shadows(cfn);
 
 	  if (flag_rvtt_dump_hll_stats)
 	    {
