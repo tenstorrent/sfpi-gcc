@@ -1101,7 +1101,7 @@ bool rvtt_store_has_restrict_p(const rtx pat)
   return false;
 }
 
-bool rvtt_needs_gs_hll_war_p(const rtx pat)
+bool rvtt_hll_p(const rtx pat)
 {
   return rvtt_load_has_attrib_p("rvtt_l1_ptr", pat) || rvtt_load_has_attrib_p("rvtt_reg_ptr", pat);
 }
