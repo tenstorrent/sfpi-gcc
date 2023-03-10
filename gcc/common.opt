@@ -3440,4 +3440,8 @@ frvtt-gsl1war
 Common Var(flag_rvtt_gshllwar) Init(1)
 TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
 
+frvtt-dump-hll-stats
+Common Var(flag_rvtt_dump_hll_stats) Init(0)
+TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
+
 ; This comment is to ensure we retain the blank line above.
