@@ -234,6 +234,81 @@ handle_write(gimple *g)
     }
 }
 
+static void
+check_for_mult_div_ops (gimple *g)
+{
+  if (g->code == GIMPLE_ASSIGN &&
+      gimple_assign_rhs_class(g) == GIMPLE_BINARY_RHS)
+    {
+      tree_code op = gimple_assign_rhs_code (g);
+      if (op == MULT_EXPR ||
+	  op == TRUNC_DIV_EXPR ||
+	  op == CEIL_DIV_EXPR ||
+	  op == FLOOR_DIV_EXPR ||
+	  op == ROUND_DIV_EXPR ||
+	  op == TRUNC_MOD_EXPR ||
+	  op == CEIL_MOD_EXPR ||
+	  op == FLOOR_MOD_EXPR ||
+	  op == ROUND_MOD_EXPR)
+	{
+	  tree rhs1 = gimple_assign_rhs1(g);
+	  tree rhs2 = gimple_assign_rhs2(g);
+	  if (TREE_CODE(rhs1) != INTEGER_CST &&
+	      TREE_CODE(rhs2) != INTEGER_CST)
+	    {
+	      if (op == MULT_EXPR)
+		{
+		  error_at (gimple_nonartificial_location (g), "detected multiply operation");
+		}
+	      else
+		{
+		  error_at (gimple_nonartificial_location (g), "detected divide operation");
+		}
+	    }
+	}
+    }
+}
+
+void check_sfpu(function *fun, gimple_stmt_iterator gsi, gimple *g, bool bad_fun_decl)
+{
+  gcall *stmt;
+  const rvtt_insn_data *insnd;
+
+  if (gimple_code(g) == GIMPLE_ASSIGN &&
+      gimple_assign_rhs_class(g) == GIMPLE_SINGLE_RHS)
+    {
+      if (gimple_assign_rhs_code (g) == MEM_REF)
+	{
+	  handle_uninit(fun, bad_fun_decl, g, &gsi);
+	}
+      else
+	{
+	  handle_write(g);
+	}
+    }
+  else if (gimple_code(g) == GIMPLE_CALL &&
+	   rvtt_p (&insnd, &stmt, g))
+    {
+      for (unsigned int i = 0; i < gimple_call_num_args(g); i++)
+	{
+	  tree arg = gimple_call_arg(g, i);
+	  if (VECTOR_FLOAT_TYPE_P(TREE_TYPE(arg)))
+	    {
+	      gimple * def_stmt = SSA_NAME_DEF_STMT (arg);
+
+	      if (def_stmt == nullptr || gimple_code(def_stmt) == GIMPLE_NOP)
+		{
+		  location_t assign_location = gimple_location (def_stmt);
+		  warning_at (assign_location, OPT_Wuninitialized,
+			      "%qD is used uninitialized in this function", SSA_NAME_VAR (arg));
+
+		  warn_replace_stmt(&gsi, gimple_call_lhs(g), assign_location);
+		}
+	    }
+	}
+    }
+}
+
 // This flags 3 issues that, if not "corrected" here, result in the RTL layer
 // loading and/or storing a register and the resulting cryptic message about
 // spilling not being implemented for SFPU.  The 3 issues are:
@@ -248,7 +323,7 @@ handle_write(gimple *g)
 // see how to find the namespace from the type name...)
 
 static void
-process (function *fun)
+process (function *fun, bool sfpu_warn, bool multdiv_err)
 {
   basic_block bb;
 
@@ -262,42 +337,9 @@ process (function *fun)
       while (!gsi_end_p (gsi))
 	{
 	  gimple *g = gsi_stmt (gsi);
-	  gcall *stmt;
-	  const rvtt_insn_data *insnd;
 
-	  if (gimple_code(g) == GIMPLE_ASSIGN &&
-	      gimple_assign_rhs_class(g) == GIMPLE_SINGLE_RHS)
-	    {
-	      if (gimple_assign_rhs_code (g) == MEM_REF)
-		{
-		  handle_uninit(fun, bad_fun_decl, g, &gsi);
-		}
-	      else
-		{
-		  handle_write(g);
-		}
-	    }
-	  else if (gimple_code(g) == GIMPLE_CALL &&
-		   rvtt_p (&insnd, &stmt, g))
-	    {
-	      for (unsigned int i = 0; i < gimple_call_num_args(g); i++)
-		{
-		  tree arg = gimple_call_arg(g, i);
-		  if (VECTOR_FLOAT_TYPE_P(TREE_TYPE(arg)))
-		    {
-		      gimple * def_stmt = SSA_NAME_DEF_STMT (arg);
-
-		      if (def_stmt == nullptr || gimple_code(def_stmt) == GIMPLE_NOP)
-			{
-			  location_t assign_location = gimple_location (def_stmt);
-			  warning_at (assign_location, OPT_Wuninitialized,
-				      "%qD is used uninitialized in this function", SSA_NAME_VAR (arg));
-
-			  warn_replace_stmt(&gsi, gimple_call_lhs(g), assign_location);
-			}
-		    }
-		}
-	    }
+	  if (multdiv_err) check_for_mult_div_ops(g);
+	  if (sfpu_warn) check_sfpu(fun, gsi, g, bad_fun_decl);
 
 	  gsi_next (&gsi);
 	}
@@ -333,9 +375,10 @@ public:
 unsigned int
 pass_rvtt_warn::execute (function *fun)
 {
-  if (flag_rvtt_warn && (flag_grayskull || flag_wormhole))
+  bool sfpu_warn = (flag_rvtt_warn && (flag_grayskull || flag_wormhole));
+  if (sfpu_warn || flag_rvtt_error_multdiv)
     {
-      process (fun);
+      process (fun, sfpu_warn, flag_rvtt_error_multdiv);
     }
 
   return 0;

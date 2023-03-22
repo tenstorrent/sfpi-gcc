@@ -3444,4 +3444,8 @@ frvtt-dump-hll-stats
 Common Var(flag_rvtt_dump_hll_stats) Init(0)
 TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
 
+frvtt-error-multdiv
+Common Var(flag_rvtt_error_multdiv) Init(0)
+TT error out when a multiply or divide operation is encountered.
+
 ; This comment is to ensure we retain the blank line above.
