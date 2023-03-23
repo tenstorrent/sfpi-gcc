@@ -612,6 +612,14 @@ class load_type {
   {
     return (l1_load_p()) ? l1_load_shadow : ((reg_load_p()) ? reg_load_shadow : local_load_shadow);
   }
+
+  const char *get_name()
+  {
+    if (ll_load_p()) return "ll";
+    if (l1_load_p()) return "l1";
+    if (reg_load_p()) return "rl";
+    return "??";
+  }
 };
 
 struct load_def;
@@ -620,7 +628,7 @@ struct sched_insn_data;
 struct load_base {
   load_type init_type;        // (ll/l1/reg | use)
   int init_insn_count;        // up from the bottom of the bb
-  sched_insn_data *id;        // pointer back to the adjustable insn_count
+  sched_insn_data *id;        // pointer back to the, eg, adjustable insn_count
   rtx_insn *insn;             // the load insn
 };
 
@@ -697,7 +705,7 @@ create_load_data (function *fn,
 		  else ld.base.init_type.add_flavor(load_type::ll_load);
 
 		  ld.uses = uses;
-		  ld.base.init_insn_count = insn_count;
+		  ld.base.init_insn_count = (GET_CODE(insn_pat) == USE) ? insn_count - 1 : insn_count;
 		  load_defs.push_back(ld);
 		}
 	    }
@@ -715,7 +723,7 @@ create_load_data (function *fn,
 	      struct load_dep hl_use;
 	      hl_use.base.insn = insn;
 	      hl_use.moved = false;
-	      hl_use.base.init_insn_count = insn_count;
+	      hl_use.base.init_insn_count = (GET_CODE(insn_pat) == USE) ? insn_count - 1 : insn_count;
 	      hl_use.base.init_type.add_flavor(load_type::load_use);
 	      all_uses[regno].push_back(hl_use);
 	    }
@@ -767,9 +775,9 @@ create_load_data (function *fn,
   all_uses.resize(0);
 }
 
-// Find the cycle when load in ld is resolved (-1 if not resolved)
+// Find the instruction count (ic) when load in ld is resolved (-1 if not resolved)
 static int
-get_cycle_of_resolution(vector<load_def>& load_defs, int which, load_def& ld, bool go_to_the_end = false, load_dep **resolving_use = nullptr)
+get_ic_of_resolution(vector<load_def>& load_defs, int which, load_def& ld, bool go_to_the_end = false, load_dep **resolving_use = nullptr)
 {
   // insn counts are numbered high to low
   int max = -1;
@@ -898,6 +906,7 @@ movable(rtx_insn *insn)
   rtx pat = PATTERN(insn);
   int classify = my_classify_insn(pat);
   if (classify != INSN ||
+      GET_CODE(pat) == USE ||
       GET_CODE(pat) == UNSPEC_VOLATILE ||
       GET_CODE(pat) == ASM_INPUT ||
       GET_CODE(pat) == ASM_OPERANDS)
@@ -1284,7 +1293,7 @@ push_gating_use_down(vector<load_def>& defs, int which, load_def& ld, int push_t
 {
   // Find gating insn
   load_dep *target_use = nullptr;
-  int max = get_cycle_of_resolution(defs, which, ld, false, &target_use);
+  int max = get_ic_of_resolution(defs, which, ld, false, &target_use);
 
   if (target_use != nullptr)
     {
@@ -1293,7 +1302,7 @@ push_gating_use_down(vector<load_def>& defs, int which, load_def& ld, int push_t
 	  push_use_down(target_use->base.insn, target_use->base.id->insn_count - push_to, 3);
 	  target_use->moved = true;
 
-	  max = get_cycle_of_resolution(defs, which, ld, false, &target_use);
+	  max = get_ic_of_resolution(defs, which, ld, false, &target_use);
 	}
     }
 }
@@ -1339,8 +1348,8 @@ schedule_hll(function *fn)
       if (prev_hll != nullptr)
 	{
 	  dist_to_gate = prev_hll->base.id->insn_count - ld.base.id->insn_count;
-	  int cycle_of_resolution = get_cycle_of_resolution(load_defs, i, ld);
-	  if (cycle_of_resolution < ld.base.id->insn_count - shadow)
+	  int ic_of_resolution = get_ic_of_resolution(load_defs, i, ld);
+	  if (ic_of_resolution < ld.base.id->insn_count - shadow)
 	    {
 	      // If this ld doesn't benefit from being moved up, then
 	      // don't move up if it is robbing the prior ld
@@ -1444,7 +1453,7 @@ schedule_shadows(function *fn)
 
       if (ld.base.id->type.ll_load_p()) continue;
 
-      // Get the cycle this ld is resolved
+      // Get the ic this ld is resolved
       load_dep *closest_use = get_closest_use(ld.uses);
       int bb = ld.bb->index;
       int shadow = ld.base.id->type.get_shadow();
@@ -1459,7 +1468,7 @@ schedule_shadows(function *fn)
 	      if (bb != load_defs[j].bb->index ||
 		  load_defs[j].base.id->insn_count < ld.base.id->insn_count - shadow) break;
 
-	      // Get the cycle this ld is resolved
+	      // Get the ic this ld is resolved
 	      load_dep *closest_shadow_use = get_closest_use(load_defs[j].uses);
 
 	      if (closest_shadow_use != nullptr && closest_shadow_use->base.id->insn_count > max)
@@ -1481,32 +1490,190 @@ schedule_shadows(function *fn)
     }
 }
 
+static void
+print_uses(const vector<load_def>& load_defs,
+	   const vector<load_dep *>& deps,
+	   int index, int init_ic, bool print_ic = false)
+{
+  int end_ic = (index == 0) ? 0 : load_defs[index - 1].base.id->insn_count;
+
+  bool needcr = true;
+  for (int ic = init_ic; ic > end_ic; ic--)
+    {
+      if (deps[ic] != nullptr)
+	{
+	  if (ic == init_ic && !print_ic)
+	    {
+	      fprintf(stderr, "\tuse ");
+	    }
+	  else
+	    {
+	      if (needcr && !print_ic)
+		{
+		  fprintf(stderr, "\n");
+		  needcr = false;
+		}
+	      fprintf(stderr, "%4d:%4d\t\tuse ", ic, INSN_UID(deps[ic]->base.insn));
+	    }
+
+	  df_ref ruse;
+	  FOR_EACH_INSN_USE (ruse, deps[ic]->base.insn)
+	    {
+	      int regno = DF_REF_REGNO(ruse);
+	      fprintf(stderr, "%d ", regno);
+	    }
+	  needcr = false;
+	  fprintf(stderr, "\n");
+	}
+    }
+
+  if (needcr && !print_ic)
+    {
+      fprintf(stderr, "\n");
+    }
+}
+
+static int
+get_max_ic(basic_block bb, int base)
+{
+  int init_ic = 0;
+  rtx_insn *insn = BB_HEAD(bb);
+  while (insn && insn != NEXT_INSN(BB_END(bb)))
+    {
+      if (NONDEBUG_INSN_P(insn))
+	{
+	  auto matched = insn_count_map.find(insn);
+	  if (matched != insn_count_map.end())
+	    {
+	      break;
+	    }
+	  if (GET_CODE(PATTERN(insn)) != USE)
+	    {
+	      init_ic++;
+	    }
+	}
+      insn = NEXT_INSN(insn);
+    }
+  gcc_assert(insn != NEXT_INSN(BB_END(bb)));
+
+  return init_ic + base;
+}
+
+static void
+print_hll_schedule(function *fn)
+{
+  vector<load_def> load_defs;
+
+  vector<vector<load_def *>> bb_reg_open_defs;
+  bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
+  create_load_data(fn, load_defs, bb_reg_open_defs);
+
+  int index = load_defs.size() - 1;
+  fprintf(stderr, "HLL schedule dump for: %s\n", function_name(fn));
+  if (index < 0) return;
+
+  vector<load_dep *>deps;
+  deps.reserve(1000);
+
+  // Early out if this fn has 0 hlls
+  bool any_hlls = false;
+  for (auto& ld : load_defs)
+    {
+      if (ld.base.id->type.hll_p())
+	{
+	  any_hlls = true;
+	  break;
+	}
+    }
+  if (!any_hlls) return;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      load_def *ld = &load_defs[index];
+      // Skip over initial local loads
+      while (bb->index == ld->bb->index && !ld->base.id->type.hll_p())
+	{
+	  if (--index < 0) break;
+	  ld = &load_defs[index];
+	}
+
+      // Skip this BB or exit if no hlls
+      if (index < 0 || bb->index != ld->bb->index)
+	{
+	  fprintf(stderr, "BB:%d <none>\n", bb->index);
+	  if (index < 0) return;
+	  continue;
+	}
+
+      // Figure out max ic count in this BB
+      int max_ic = get_max_ic(bb, ld->base.id->insn_count);
+      deps.resize(max_ic + 1);
+      for (int i = 0; i < max_ic; i++) deps[i] = nullptr;
+
+      fprintf(stderr, "BB:%d (%d insns)\n", bb->index, max_ic);
+      int ic = -1;
+      do
+	{
+	  ic = ld->base.id->insn_count;
+	  load_dep *res_use = nullptr;
+	  int ic_of_resolution = get_ic_of_resolution(load_defs, index, *ld, true, &res_use);
+	  if (ic_of_resolution >= 0)
+	    {
+	      deps[ic_of_resolution] = res_use;
+	    }
+	  if (ld->uses.size() > 0)
+	    {
+	      load_dep& use = ld->uses[ld->uses.size() - 1];
+	      deps[use.base.id->insn_count] = &use;
+	    }
+
+	  unsigned int regno = DF_REF_REGNO(df_single_def(DF_INSN_INFO_GET(ld->base.insn)));
+	  fprintf(stderr, "%4d:%4d\t%s%s %d",
+		  ld->base.id->insn_count,
+		  INSN_UID(ld->base.insn),
+		  volatile_load_p(PATTERN(ld->base.insn)) ? "v" : "",
+		  ld->base.id->type.get_name(),
+		  regno);
+	  print_uses(load_defs, deps, index, ic);
+
+	  if (--index < 0) break;
+	  ld = &load_defs[index];
+	} while (bb->index == ld->bb->index);
+
+      if (index < 0) break;
+
+      print_uses(load_defs, deps, index, ic, true);
+    }
+}
+
 class analysis {
  private:
   int n_l1s;
   int n_regs;
+  int cycle_count;
   vector<int>l1_hist;
   vector<int>reg_hist;
 
  public:
-  analysis() : n_l1s(0), n_regs(0) {}
+  analysis() : n_l1s(0), n_regs(0), cycle_count(0) {}
   ~analysis() { print(); }
   void analyze(function *fn);
   void print();
-  void bump_hist(load_type& which, int cycles);
-  void print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cycles_high);
+  void bump_hist(load_type& which, int ic);
+  void print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high);
 };
 
 analysis analg;
 
-void analysis::bump_hist(load_type& which_type, int cycles)
+void analysis::bump_hist(load_type& which_type, int ic)
 {
   vector<int>& hist = (which_type.l1_load_p()) ? l1_hist : reg_hist;
-  if (cycles >= (int)hist.size())
+  if (ic >= (int)hist.size())
     {
-      hist.resize(cycles + 1);
+      hist.resize(ic + 1);
     }
-  hist[cycles]++;
+  hist[ic]++;
 }
 
 void analysis::analyze(function *fn)
@@ -1524,53 +1691,13 @@ void analysis::analyze(function *fn)
 
       if (ld.base.id->type.ll_load_p()) continue;
 
-      int max = get_cycle_of_resolution(load_defs, i, ld, true);
+      int max = get_ic_of_resolution(load_defs, i, ld, true);
 
       if (max != -1)
 	{
-	  int cycles = ld.base.id->insn_count - max;
-
-#if 0
-	  if (cycles == 1)
-	    {
-	      fprintf(stderr, "++++++++++ bb:%d uid:%d\n", ld.bb->index, INSN_UID(ld.insn));
-	      rtx_insn *xxx = PREV_INSN(ld.insn);
-	      while (!NONDEBUG_INSN_P(xxx) && xxx != NULL)
-		{
-		  xxx = PREV_INSN(xxx);
-		}
-	      if (xxx != NULL)
-		{
-		  rtx xxxpat = PATTERN(xxx);
-		  if (rvtt_l1_load_p(xxxpat)) fprintf(stderr, "l1: ");
-		  if (rvtt_reg_load_p(xxxpat)) fprintf(stderr, "rl: ");
-		  if (volatile_load_p(xxxpat)) fprintf(stderr, "vl: ");
-		  if (volatile_store_p(xxxpat)) fprintf(stderr, "vs: ");
-		  debug_rtx(xxx);
-		}
-	      else fprintf(stderr, "----\n");
-
-	      debug_rtx(ld.insn);
-
-	      if (xxx != NULL)
-		{
-		  xxx = NEXT_INSN(ld.insn);
-		  while (!NONDEBUG_INSN_P(xxx) && xxx != NULL)
-		    {
-		      xxx = NEXT_INSN(xxx);
-		    }
-		  rtx xxxpat = PATTERN(xxx);
-		  if (rvtt_l1_load_p(xxxpat)) fprintf(stderr, "l1: ");
-		  if (rvtt_reg_load_p(xxxpat)) fprintf(stderr, "rl: ");
-		  if (volatile_load_p(xxxpat)) fprintf(stderr, "vl: ");
-		  if (volatile_store_p(xxxpat)) fprintf(stderr, "vs: ");
-		  debug_rtx(xxx);
-		}
-	      else fprintf(stderr, "*****\n");
-	    }
-#endif
-	  gcc_assert(cycles > 0);
-	  bump_hist(ld.base.id->type, cycles);
+	  int ic = ld.base.id->insn_count - max;
+	  gcc_assert(ic > 0);
+	  bump_hist(ld.base.id->type, ic);
 	}
       else
 	{
@@ -1587,21 +1714,90 @@ void analysis::analyze(function *fn)
 	  n_regs++;
 	}
     }
+
+  // The cycle count for each insn, initially all 1s
+  vector<int> cycles;
+
+  // Generate cycle counts, add to total
+  // This is a better metric than the histogram
+  basic_block bb;
+  int ld_idx = load_defs.size() - 1;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      int max_ic = 0;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      max_ic++;
+	    }
+	}
+      cycles.resize(max_ic);
+      int ic = 0;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      cycles[ic++] = (GET_CODE(PATTERN(insn)) == USE) ? 0 : 1;
+	    }
+	}
+
+      ic = 0;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (ld_idx < 0) break;
+	  if (!NONDEBUG_INSN_P(insn)) continue;
+
+	  load_def& ld = load_defs[ld_idx];
+	  if (insn == ld.base.insn)
+	    {
+	      if (ld.base.id->type.hll_p())
+		{
+		  load_dep *use = nullptr;
+		  get_ic_of_resolution(load_defs, ld_idx, ld, false, &use);
+		  rtx_insn *inner_insn = NEXT_INSN(insn);
+		  int shadow = ld.base.id->type.get_shadow();
+		  int inner_ic = ic + 1;
+		  while (use != nullptr && inner_insn != use->base.insn && shadow > 0)
+		    {
+		      if (NONDEBUG_INSN_P(inner_insn))
+			{
+			  shadow -= cycles[inner_ic++];
+			}
+		      inner_insn = NEXT_INSN(inner_insn);
+		    }
+		  // Skip USE
+		  while (cycles[inner_ic] == 0) inner_ic++;
+		  if (shadow != 0 && shadow > cycles[inner_ic] && use != nullptr)
+		    {
+		      cycles[inner_ic] = shadow;
+		    }
+		}
+	      ld_idx--;
+	    }
+	  ic++;
+	}
+      for (auto &el : cycles)
+	{
+	  cycle_count += el;
+	}
+    }
 }
 
-void analysis::print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cycles_high)
+void analysis::print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high)
 {
   int total = 0;
-  int cycles = 0;
-  int cyclesl = 0;
-  int cyclesh = 0;
+  int ic = 0;
+  int icl = 0;
+  int ich = 0;
   fprintf(stderr, "(1): ");
   for (int i = 1; i < (int)hist.size(); i++)
     {
       total += hist[i];
-      cycles += i * hist[i];
-      cyclesl += ((i > cycles_low) ? cycles_low : i) * hist[i];
-      cyclesh += ((i > cycles_high) ? cycles_high : i) * hist[i];
+      ic += i * hist[i];
+      icl += ((i > ic_low) ? ic_low : i) * hist[i];
+      ich += ((i > ic_high) ? ic_high : i) * hist[i];
       fprintf(stderr, "%d ", hist[i]);
     }
   fprintf(stderr, ":(%zu)\n", hist.size() - 1);
@@ -1620,9 +1816,9 @@ void analysis::print_hist(vector<int>& hist, int n_hlls, int cycles_low, int cyc
 
   if (total != 0)
     {
-      fprintf(stderr, "Average%d: %f\n", cycles_low, (float)cyclesl / (float)total);
-      fprintf(stderr, "Average%d: %f\n", cycles_high, (float)cyclesh / (float)total);
-      fprintf(stderr, "Average : %f\n", (float)cycles / (float)total);
+      fprintf(stderr, "Average%d: %f\n", ic_low, (float)icl / (float)total);
+      fprintf(stderr, "Average%d: %f\n", ic_high, (float)ich / (float)total);
+      fprintf(stderr, "Average : %f\n", (float)ic / (float)total);
     }
 
   fprintf(stderr, "Median: %d\n", median);
@@ -1649,6 +1845,7 @@ void analysis::print()
     {
       fprintf(stderr, "moved %d open at top of BB down\n", top_of_bb_n_moved);
     }
+  fprintf(stderr, "Cycles top to bottom: %d\n", cycle_count);
 }
 
 namespace {
@@ -1687,6 +1884,7 @@ public:
 
 	  schedule_hll(cfn);
 	  schedule_shadows(cfn);
+	  //print_hll_schedule(cfn);
 
 	  if (flag_rvtt_dump_hll_stats)
 	    {
