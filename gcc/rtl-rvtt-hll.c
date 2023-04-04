@@ -607,6 +607,7 @@ class load_type {
   bool reg_load_p() { return (lt & reg_load) != 0; }
   bool use_p() { return (lt & load_use) != 0; }
   bool hll_p() { return (lt & (l1_load | reg_load)) != 0; }
+  bool any_load_p() { return (lt & (ll_load | l1_load | reg_load)) != 0; }
 
   int get_shadow()
   {
@@ -670,7 +671,7 @@ create_load_data (function *fn,
   df_ref use;
 
   vector<load_deps> all_uses;
-  all_uses.resize(max_reg_num());
+  all_uses.resize(FIRST_PSEUDO_REGISTER);
   insn_count_map.clear();
 
   // General algorithm doesn't care about BB order, printing is easier if the
@@ -742,6 +743,7 @@ create_load_data (function *fn,
 
   // Note: a use could also be a def
   // store insn_count once and point back
+  // XXXX a use of 2 loads will only point back to one of the loads (semi-rare)
   for (auto& ld : load_defs)
     {
       sched_insn_data lsid;
@@ -764,11 +766,11 @@ create_load_data (function *fn,
 	{
 	  use.def = &ld;
 	  sched_insn_data usid;
-	  usid.def = use.def;
 	  auto result = insn_count_map.insert(pair<rtx_insn *, sched_insn_data>(use.base.insn, usid));
 	  use.base.id = &result.first->second;
 	  result.first->second.insn_count = use.base.init_insn_count;
 	  result.first->second.type.add_flavor(use.base.init_type);
+	  result.first->second.def = use.def;
 	}
     }
 
@@ -860,6 +862,7 @@ get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
 static bool
 can_move_past_load_or_store(rtx base, rtx pat)
 {
+  // XXXX seems we could move a volatile load passed a stack load
   if ((volatile_store_p(base) || volatile_load_p(base)) &&
       (store_mem_p(pat) || load_mem_p(pat)))
     {
@@ -1138,22 +1141,36 @@ can_push_up_one(rtx_insn *move_insn, rtx_insn *target_insn)
 static bool
 can_push_down_one(rtx_insn *move_insn, rtx_insn *target_insn)
 {
+#if 0
+  // Hurts slightly.  Hmm.
   auto move_insn_d = insn_count_map.find(move_insn);
+  auto target_insn_d = insn_count_map.find(target_insn);
 
-  // If move_insn is a load, don't push it down into its use's shadow
+  // Don't move across another load, messes up schedule_shadows
   if (move_insn_d != insn_count_map.end() &&
-      move_insn_d->second.type.hll_p())
+      move_insn_d->second.type.hll_p() &&
+      target_insn_d != insn_count_map.end() &&
+      target_insn_d->second.type.any_load_p())
     {
-      // For now, assuming it is always bad which is a fairly safe assumption
       return false;
     }
-
+#endif
   return can_move_past(move_insn, target_insn);
 }
 
 static bool
-can_push_insnset_up_passed(rtx_insn *insn, rtx_insn *target_insn)
+can_push_insnset_up_passed(rtx_insn *insn, rtx_insn *target_insn, bool can_cross_load)
 {
+  if (!can_cross_load)
+    {
+      auto target_insn_d = insn_count_map.find(target_insn);
+      if (target_insn_d != insn_count_map.end() &&
+	  target_insn_d->second.type.any_load_p())
+	{
+	  return false;
+	}
+    }
+
   while (insn != target_insn)
     {
       if (!can_push_up_one(insn, target_insn)) return false;
@@ -1215,11 +1232,11 @@ push_insnset_down_passed(rtx_insn *insn, rtx_insn *target_insn, int move_count)
 // If it doesn't move on its own (conflict above), try moving sets of insns up
 // to max_set_size up together (address calculations often occur just before a
 // load)
-static void
-push_load_up(rtx_insn *insn, int how_far, int max_set_size)
+static bool
+push_load_up(rtx_insn *insn, int in_how_far, int max_set_size, bool can_cross_load)
 {
-  how_far -= move_up(insn, how_far);
-  int set_size = 2;
+  int set_size = 1;
+  int how_far = in_how_far;
   rtx_insn *last_insn = PREV_INSN(BB_HEAD(BLOCK_FOR_INSN(insn)));
   while (set_size <= max_set_size &&
 	 how_far > (set_size - 1))
@@ -1233,7 +1250,7 @@ push_load_up(rtx_insn *insn, int how_far, int max_set_size)
 
       // Try to move up to max_set_size insns
       // Don't push the last above the previous load (how_far > set_size - 1)
-      if (can_push_insnset_up_passed(insn, target_insn))
+      if (can_push_insnset_up_passed(insn, target_insn, can_cross_load))
 	{
 	  push_insnset_up_passed(insn, target_insn, set_size);
 	  how_far--;
@@ -1244,13 +1261,15 @@ push_load_up(rtx_insn *insn, int how_far, int max_set_size)
 	  set_size++;
 	}
     }
+
+  return how_far != in_how_far;
 }
 
 static void
-push_use_down(rtx_insn *insn, int how_far, int max_set_size)
+push_use_down(rtx_insn *insn, int in_how_far, int max_set_size)
 {
-  how_far -= move_down(insn, how_far);
-  int set_size = 2;
+  int set_size = 1;
+  int how_far = in_how_far;
   rtx_insn *last_insn = NEXT_INSN(BB_END(BLOCK_FOR_INSN(insn)));
   while (set_size <= max_set_size &&
 	 how_far > (set_size - 1))
@@ -1308,8 +1327,14 @@ push_gating_use_down(vector<load_def>& defs, int which, load_def& ld, int push_t
 }
 
 // "Schedule" high latency loads
-// This is a simple attempt to improve the scheduling of insns dependent
-// on hlls.  The code first pushes hlls "up" as high as possible in the BB,
+// This project nearly killed me - way too much effort for too little return.
+// I kept at it as it always seemed there was an issue causing unexpected
+// behavior that may improve the results when fixed.  I think that is still
+// the case.  Ugh.
+//
+// This last iteration tries to "do no harm" by not moving things that benefit
+// one load a the expense of another.  This means that load/use order are
+// preserved.  The code first pushes hlls "up" as high as possible in the BB,
 // then pushes their dependencies (uses) "down" as low as possible in the
 // BB. (disabled)
 //
@@ -1365,7 +1390,7 @@ schedule_hll(function *fn)
 	    }
 	}
 
-      push_load_up(ld.base.insn, dist_to_gate - 1, 3);
+      push_load_up(ld.base.insn, dist_to_gate - 1, 3, false);
       push_gating_use_down(load_defs, i, ld, min(ld.base.id->insn_count - shadow, 0));
 
       prev_hll = &ld;
@@ -1429,11 +1454,10 @@ get_closest_use(vector<load_dep>& uses)
   return closest_use;
 }
 
-// The schedule routines can fail locally by leaving the resolution of
-// shadowed loads out of order.  Clean that up.
-// Paradoxically, scheduling improves by move uses up if the uses in shadows
-// of other loads are out of order, eg, load1 load2 use2 use1 improves by
-// moving use1 prior to use2
+// When the uses' of multiple loads falls out of order, scheduling runs into
+// issues as sliding loads/uses around may not have the intended effect.  This
+// pass schedules loads/uses that fall in the shadows of other hll loads to
+// preserve the order of resolution.
 static void
 schedule_shadows(function *fn)
 {
@@ -1451,7 +1475,7 @@ schedule_shadows(function *fn)
     {
       load_def& ld = load_defs[i];
 
-      if (ld.base.id->type.ll_load_p()) continue;
+      if (!ld.base.id->type.hll_p()) continue;
 
       // Get the ic this ld is resolved
       load_dep *closest_use = get_closest_use(ld.uses);
@@ -1463,6 +1487,7 @@ schedule_shadows(function *fn)
 	  // Find lds in the shadow of this ld
 	  int max = closest_use->base.id->insn_count;
 	  load_dep *overall_closest_shadow_use = nullptr;
+	  load_def *overall_closest_shadow_ld = nullptr;
 	  for (int j = i - 1; j >= 0; j--)
 	    {
 	      if (bb != load_defs[j].bb->index ||
@@ -1475,16 +1500,21 @@ schedule_shadows(function *fn)
 		{
 		  max = closest_shadow_use->base.id->insn_count;
 		  overall_closest_shadow_use = closest_shadow_use;
+		  overall_closest_shadow_ld = &load_defs[j];
 		}
 	    }
 
-	  if (overall_closest_shadow_use != nullptr && overall_closest_shadow_use->base.id->insn_count > closest_use->base.id->insn_count)
+	  if (overall_closest_shadow_use != nullptr &&
+	      overall_closest_shadow_use->base.id->insn_count > closest_use->base.id->insn_count)
 	    {
 	      DUMP("  shuffling uses\n");
 
-	      // XXXXX try moving closest_use down first.  also, don't move if not 100% successful
-	      int how_far = overall_closest_shadow_use->base.id->insn_count - closest_use->base.id->insn_count;
-	      move_up(closest_use->base.insn, how_far);
+	      int dist_between_lds = ld.base.id->insn_count - overall_closest_shadow_ld->base.id->insn_count;
+	      int dist_between_uses = overall_closest_shadow_use->base.id->insn_count - closest_use->base.id->insn_count;
+	      if (!push_load_up(overall_closest_shadow_ld->base.insn, dist_between_lds, dist_between_lds, true))
+		{
+		  push_use_down(overall_closest_shadow_use->base.insn, dist_between_uses, dist_between_uses);
+		}
 	    }
 	}
     }
@@ -1882,8 +1912,8 @@ public:
 	  df_note_add_problem ();
 	  df_analyze();
 
-	  schedule_hll(cfn);
 	  schedule_shadows(cfn);
+	  schedule_hll(cfn);
 	  //print_hll_schedule(cfn);
 
 	  if (flag_rvtt_dump_hll_stats)
