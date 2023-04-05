@@ -681,9 +681,6 @@ create_load_data (function *fn,
       int insn_count = 0;
       FOR_BB_INSNS_REVERSE (bb, insn)
 	{
-	  // For some reason these can be null and that messes up add_insn_[before/after]
-	  BLOCK_FOR_INSN(insn) = bb;
-
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 

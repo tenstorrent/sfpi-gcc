@@ -504,13 +504,15 @@ along with GCC; see the file COPYING3.  If not see
       PUSH_INSERT_PASSES_WITHIN (pass_late_compilation)
 	  NEXT_PASS (pass_compute_alignments);
 	  NEXT_PASS (pass_variable_tracking);
-	  NEXT_PASS (pass_free_cfg);
 
           // Note: this pass should run as late as possible, ideally just before
           // final.  However, the machine reorg pass, when using -msave-restore,
           // injects an insn that causes df_analyze to crash, so run before that
+          // And, free_cfg pass calls free_bb_for_insn resulting in problems
+          // w/ df_analyze, so call before that
 	  NEXT_PASS (pass_rvtt_hll);
 
+	  NEXT_PASS (pass_free_cfg);
 	  NEXT_PASS (pass_machine_reorg);
 	  NEXT_PASS (pass_cleanup_barriers);
 	  NEXT_PASS (pass_delay_slots);
