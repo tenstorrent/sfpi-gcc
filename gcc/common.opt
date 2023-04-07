@@ -3440,9 +3440,9 @@ frvtt-gsl1war
 Common Var(flag_rvtt_gshllwar) Init(1)
 TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
 
-frvtt-dump-hll-stats
-Common Var(flag_rvtt_dump_hll_stats) Init(0)
-TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
+frvtt-dump-stats
+Common Var(flag_rvtt_dump_stats) Init(0)
+Dump riscv code stats (eg, hll histogram, insn count, stack load count, etc)
 
 frvtt-error-multdiv
 Common Var(flag_rvtt_error_multdiv) Init(0)

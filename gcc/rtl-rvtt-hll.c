@@ -195,6 +195,15 @@ load_mem_p(rtx pat)
 }
 
 static bool
+stack_load_mem_p(rtx pat)
+{
+  return GET_CODE(pat) == SET &&
+    GET_CODE(SET_SRC(pat)) != CALL &&
+    contains_mem_rtx_p(SET_SRC(pat)) &&
+    refers_to_regno_p(stack_ptr_regno, pat);
+}
+
+static bool
 store_mem_p(rtx pat)
 {
   return GET_CODE(pat) == SET &&
@@ -213,6 +222,15 @@ nonstack_store_p(rtx pat)
 #else
     true;
 #endif
+}
+
+static bool
+stack_store_p(rtx pat)
+{
+  return
+    GET_CODE(pat) == SET &&
+    contains_mem_rtx_p(SET_DEST(pat)) &&
+    refers_to_regno_p(stack_ptr_regno, pat);
 }
 
 static bool
@@ -1679,11 +1697,16 @@ class analysis {
   int n_l1s;
   int n_regs;
   int cycle_count;
+  int n_bbs;
+  int n_insns;
+  int n_stack_lds;
+  int n_stack_sts;
+
   vector<int>l1_hist;
   vector<int>reg_hist;
 
  public:
-  analysis() : n_l1s(0), n_regs(0), cycle_count(0) {}
+  analysis() : n_l1s(0), n_regs(0), cycle_count(0), n_bbs(0), n_insns(0), n_stack_lds(0), n_stack_sts(0) {}
   ~analysis() { print(); }
   void analyze(function *fn);
   void print();
@@ -1751,6 +1774,7 @@ void analysis::analyze(function *fn)
   int ld_idx = load_defs.size() - 1;
   FOR_EACH_BB_FN (bb, fn)
     {
+      n_bbs++;
       rtx_insn *insn;
       int max_ic = 0;
       FOR_BB_INSNS (bb, insn)
@@ -1767,6 +1791,10 @@ void analysis::analyze(function *fn)
 	  if (NONDEBUG_INSN_P(insn))
 	    {
 	      cycles[ic++] = (GET_CODE(PATTERN(insn)) == USE) ? 0 : 1;
+
+	      n_insns++;
+	      n_stack_lds += stack_load_mem_p(PATTERN(insn));
+	      n_stack_sts += stack_store_p(PATTERN(insn));
 	    }
 	}
 
@@ -1855,7 +1883,7 @@ void analysis::print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high
 
 void analysis::print()
 {
-  if (!flag_rvtt_dump_hll_stats) return;
+  if (!flag_rvtt_dump_stats) return;
 
   if (l1_hist.size() != 0)
     {
@@ -1872,6 +1900,10 @@ void analysis::print()
     {
       fprintf(stderr, "moved %d open at top of BB down\n", top_of_bb_n_moved);
     }
+  fprintf(stderr, "BBs: %d\n", n_bbs);
+  fprintf(stderr, "Insns: %d\n", n_insns);
+  fprintf(stderr, "Stack lds: %d\n", n_stack_lds);
+  fprintf(stderr, "Stack sts: %d\n", n_stack_sts);
   fprintf(stderr, "Cycles top to bottom: %d\n", cycle_count);
 }
 
@@ -1913,7 +1945,7 @@ public:
 	  schedule_hll(cfn);
 	  //print_hll_schedule(cfn);
 
-	  if (flag_rvtt_dump_hll_stats)
+	  if (flag_rvtt_dump_stats)
 	    {
 	      analg.analyze(cfn);
 	    }
