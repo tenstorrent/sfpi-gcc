@@ -42,6 +42,8 @@
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
+using namespace std;
+
 // The insn_link/log links code below was shamelessly copied from combine.c
 
 struct insn_link {
@@ -195,6 +197,62 @@ create_log_links (void)
   free (next_use);
 }
 
+typedef unordered_map<rtx_insn *, vector<rtx_insn *>> insn_map;
+
+// Build up a map of insns from a def to all of its uses
+// This is modeled after create_log_links.  TODO: replace create_log_link with
+// this routine for the other use cases
+static void
+create_links (function *fn, insn_map& map)
+{
+  basic_block bb;
+  rtx_insn *insn;
+
+  vector<vector<rtx_insn *>> all_uses;
+  all_uses.resize(max_reg_num());
+
+  // General algorithm doesn't care about BB order, printing is easier if the
+  // BBs and insns are in the same order
+  FOR_EACH_BB_REVERSE_FN (bb, fn)
+    {
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+
+	  // This can be a load and have null def for example with
+	  // asm_operands defining multiple defs
+	  df_ref def = df_single_def(DF_INSN_INFO_GET(insn));
+	  if (def != nullptr)
+	    {
+	      unsigned int regno = DF_REF_REGNO (def);
+	      auto& uses = all_uses[regno];
+	      map.insert(pair<rtx_insn *, vector<rtx_insn *>>(insn, uses));
+	    }
+
+	  FOR_EACH_INSN_DEF (def, insn)
+	    {
+	      unsigned int regno = DF_REF_REGNO (def);
+	      all_uses[regno].resize(0);
+	    }
+
+	  df_ref use;
+	  FOR_EACH_INSN_USE (use, insn)
+	    {
+	      unsigned int regno = DF_REF_REGNO (use);
+	      all_uses[regno].push_back(insn);
+	    }
+	}
+
+      for (auto &uses : all_uses)
+	{
+	  uses.resize(0);
+	}
+    }
+
+  all_uses.resize(0);
+}
+
 static void
 check_extend(rtx_insn *insn)
 {
@@ -252,92 +310,96 @@ check_extend(rtx_insn *insn)
 }
 
 static void
-check_store(rtx_insn *insn)
+check_store(insn_map& map, rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
-
-  machine_mode mode;
   if (GET_CODE(pat) == SET &&
-      GET_CODE(SET_DEST(pat)) == MEM &&
-      SUBREG_P(SET_SRC(pat)) &&
-      ((mode = GET_MODE(SET_DEST(pat))) == HImode ||
-       mode == QImode) &&
-      dead_or_set_p(insn, SUBREG_REG(SET_SRC(pat))))
+      GET_CODE(SET_DEST(pat)) == REG &&
+      (GET_CODE(SET_SRC(pat)) == ZERO_EXTEND ||
+       GET_CODE(SET_SRC(pat)) == SIGN_EXTEND) &&
+      SUBREG_P(XEXP(SET_SRC(pat), 0)))
     {
-      DUMP("  found a %s store, ", mode == QImode ? "QI" : "HI");
+      machine_mode mode = GET_MODE(XEXP(SET_SRC(pat), 0));
+      gcc_assert(mode == HImode || mode == QImode);
+      DUMP("  found a %s %s, ", mode == QImode ? "QI" : "HI", insn_data[INSN_CODE(insn)].name);
 
-      struct insn_link *links;
-      rtx_insn *extend_insn = nullptr;
-
-      // Links can be either for the address of the DEST (don't care) or the SRC
-      rtx src = SET_SRC(pat);
-      rtx srcreg = SUBREG_REG(src);
-      FOR_EACH_LOG_LINK (links, insn)
+      const auto& uses = map.find(insn);
+      if (uses != map.end())
 	{
-	  rtx lpat = PATTERN(links->insn);
-	  if (GET_CODE(lpat) == SET &&
-	      GET_CODE(SET_DEST(lpat)) == REG &&
-	      REGNO(SET_DEST(lpat)) == REGNO(srcreg) &&
-	      (GET_CODE(SET_SRC(lpat)) == ZERO_EXTEND ||
-	       GET_CODE(SET_SRC(lpat)) == SIGN_EXTEND) &&
-	      SUBREG_P(XEXP(SET_SRC(lpat), 0)) &&
-	      dead_or_set_p(links->insn, SUBREG_REG(XEXP(SET_SRC(lpat), 0))))
+	  rtx dst = SET_DEST(pat);
+	  unsigned int dstreg = REGNO(SET_DEST(pat));
+	  bool all_uses_are_stores = true;
+	  rtx_insn *last_store = nullptr;
+	  for (rtx_insn *use : uses->second)
 	    {
-	      gcc_assert(GET_MODE(SET_DEST(lpat)) == GET_MODE(XEXP(src, 0)));
-	      extend_insn = links->insn;
-	    }
-	  else if (refers_to_regno_p(REGNO(srcreg), links->insn))
-	    {
-	      if (GET_CODE(lpat) == SET &&
-		  GET_CODE(SET_DEST(lpat)) == MEM &&
-		  SUBREG_P(SET_SRC(lpat)) &&
-		  GET_MODE(SET_DEST(lpat)) == mode)
+	      rtx upat = PATTERN(use);
+
+	      if (GET_CODE(upat) == SET &&
+		  GET_CODE(SET_DEST(upat)) == MEM &&
+		  SUBREG_P(SET_SRC(upat)) &&
+		  GET_MODE(SET_DEST(upat)) == mode &&
+		  REGNO(SUBREG_REG(SET_SRC(upat))) == dstreg)
 		{
-		  DUMP("  found another %s store ", mode == QImode ? "QI" : "HI");
-		  extend_insn = nullptr;
-		  break;
+		  if (dead_or_set_p(use, dst))
+		    {
+		      last_store = use;
+		    }
 		}
 	      else
 		{
-		  extend_insn = nullptr;
-		  break;
+		  all_uses_are_stores = false;
 		}
 	    }
-	}
 
-      if (extend_insn)
-	{
-	  unsigned int regno = REGNO(SUBREG_REG(SET_SRC(pat)));
-	  rtx *link;
-	  for (link = &REG_NOTES (insn); *link; link = &XEXP (*link, 1))
+	  if (all_uses_are_stores && last_store != nullptr)
 	    {
-	      if (REG_NOTE_KIND (*link) == REG_DEAD &&
-		  REG_P(XEXP (*link, 0)) &&
-		  REGNO (XEXP (*link, 0)) <= regno &&
-		  END_REGNO (XEXP (*link, 0)) > regno)
+	      // Update all uses
+	      bool successful = true;
+	      for (rtx_insn *use : uses->second)
 		{
-		  break;
+		  successful = successful &&
+		    validate_change(last_store, &SUBREG_REG(SET_SRC(PATTERN(use))),
+				    SUBREG_REG(XEXP(SET_SRC(pat), 0)), true);
+		  if (!successful) break;
 		}
-	    }
-	  gcc_assert(*link);
 
-	  if (validate_change(insn, &SUBREG_REG(SET_SRC(PATTERN(insn))),
-			      SUBREG_REG(XEXP(SET_SRC(PATTERN(extend_insn)), 0)), true) &&
-	      validate_change(insn, link,
-			      find_reg_note(extend_insn, REG_DEAD, SET_DEST(XEXP(SET_SRC(PATTERN(extend_insn)), 0))), true) &&
-	      apply_change_group())
-	    {
-	      DUMP("merged store, deleted extend\n");
-	      set_insn_deleted(extend_insn);
+	      // Update regnotes of last use
+	      rtx *link;
+	      for (link = &REG_NOTES (last_store); *link; link = &XEXP (*link, 1))
+		{
+		  if (REG_NOTE_KIND (*link) == REG_DEAD &&
+		      REG_P(XEXP (*link, 0)) &&
+		      REGNO (XEXP (*link, 0)) <= dstreg &&
+		      END_REGNO (XEXP (*link, 0)) > dstreg)
+		    {
+		      break;
+		    }
+		}
+	      gcc_assert(*link);
+
+	      successful = successful &&
+		validate_change(last_store, link,
+				find_reg_note(insn, REG_DEAD, XEXP(SET_SRC(pat), 0)),
+				true);
+
+	      if (successful && apply_change_group())
+		{
+		  DUMP("merged %zu store(s), deleted extend\n", uses->second.size());
+		  set_insn_deleted(insn);
+		}
+	      else
+		{
+		  gcc_unreachable();
+		}
 	    }
 	  else
 	    {
-	      gcc_unreachable();
+	      DUMP("has either a non-store use\n");
 	    }
 	}
       else
 	{
-	  DUMP("either src not set by extend or other subsequent use\n");
+	  DUMP("with no uses\n");
 	}
     }
 }
@@ -434,6 +496,8 @@ transform(function *fn)
   df_note_add_problem ();
   df_analyze();
   create_log_links ();
+  insn_map map;
+  create_links (fn, map);
 
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -443,7 +507,7 @@ transform(function *fn)
 	  if (NONDEBUG_INSN_P(insn))
 	    {
 	      check_extend(insn);
-	      check_store(insn);
+	      check_store(map, insn);
 	      check_shift(insn);
 	    }
 	}
