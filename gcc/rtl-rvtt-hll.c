@@ -70,6 +70,7 @@ static int top_of_bb_n_moved = 0;
 static const int l1_load_shadow = 6;
 static const int reg_load_shadow = 4;
 static const int local_load_shadow = 1;
+static int n_gs_hll_wars = 0;
 
 // A BB can resolve its parents' HLL loads by:
 //  1) reading the incoming war reg
@@ -164,6 +165,7 @@ emit_war(rtx_insn *where,
   DUMP("    emitting WAR with reg %d\n", hll_war_reg);
 
   *ll_count = -1;
+  n_gs_hll_wars++;
 
   rtx reg = gen_rtx_REG(SImode, hll_war_reg);
   emit_insn_before(gen_rvtt_gs_l1_load_war(reg), where);
@@ -1904,6 +1906,10 @@ void analysis::print()
   fprintf(stderr, "Insns: %d\n", n_insns);
   fprintf(stderr, "Stack lds: %d\n", n_stack_lds);
   fprintf(stderr, "Stack sts: %d\n", n_stack_sts);
+  if (flag_grayskull && flag_rvtt_gshllwar)
+    {
+      fprintf(stderr, "GS arbiter wars: %d\n", n_gs_hll_wars);
+    }
   fprintf(stderr, "Cycles top to bottom: %d\n", cycle_count);
 }
 
