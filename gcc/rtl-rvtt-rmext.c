@@ -337,7 +337,71 @@ check_store(rtx_insn *insn)
 	}
       else
 	{
-	  DUMP("src not set by extend or other intervening use\n");
+	  DUMP("either src not set by extend or other subsequent use\n");
+	}
+    }
+}
+
+// Look for a left shift after a zero/sign extend
+// Replace with a shift left/shift right (saves a shift)
+//
+// Haven't seen a shift before by a zero/sign extend, could
+// handle that case as well
+static void
+check_shift(rtx_insn *insn)
+{
+  rtx pat = PATTERN (insn);
+
+  if (GET_CODE(pat) == SET &&
+      GET_CODE(SET_DEST(pat)) == REG &&
+      GET_CODE(SET_SRC(pat)) == ASHIFT &&
+      GET_CODE(XEXP(SET_SRC(pat), 0)) == REG &&
+      GET_CODE(XEXP(SET_SRC(pat), 1)) == CONST_INT &&
+      dead_or_set_p(insn, XEXP(SET_SRC(pat), 0)))
+    {
+      DUMP("  found an ashift");
+
+      struct insn_link *links;
+      rtx_insn *extend_insn = nullptr;
+      rtx src = XEXP(SET_SRC(pat), 0);
+      FOR_EACH_LOG_LINK (links, insn)
+	{
+	  rtx lpat = PATTERN(links->insn);
+	  if (GET_CODE(lpat) == SET &&
+	      GET_CODE(SET_DEST(lpat)) == REG &&
+	      GET_MODE(SET_DEST(lpat)) == SImode &&
+	      REGNO(SET_DEST(lpat)) == REGNO(src) &&
+	      (GET_CODE(SET_SRC(lpat)) == ZERO_EXTEND ||
+	       GET_CODE(SET_SRC(lpat)) == SIGN_EXTEND) &&
+	      SUBREG_P(XEXP(SET_SRC(lpat), 0)) &&
+	      GET_MODE(XEXP(SET_SRC(lpat), 0)) == HImode)
+	    {
+	      extend_insn = links->insn;
+	    }
+	}
+      if (extend_insn != nullptr)
+	{
+	  DUMP(", merging with subsequent extend\n");
+
+	  // We know we are going from HI to SI mode...
+	  int amt = INTVAL(XEXP(SET_SRC(pat), 1));
+	  rtx ashft = gen_rtx_ASHIFT(SImode, XEXP(XEXP(SET_SRC(PATTERN(extend_insn)), 0), 0), GEN_INT(16));
+	  rtx shftrt = GET_CODE(SET_SRC(PATTERN(extend_insn))) == ZERO_EXTEND ?
+	    gen_rtx_LSHIFTRT(SImode, XEXP(SET_SRC(pat), 0), GEN_INT(16 - amt)) :
+	    gen_rtx_ASHIFTRT(SImode, XEXP(SET_SRC(pat), 0), GEN_INT(16 - amt));
+
+	  if (!(validate_change(extend_insn, &(SET_SRC(PATTERN(extend_insn))), ashft, true) &&
+		validate_change(insn, &(SET_SRC(PATTERN(insn))), shftrt, true) &&
+		apply_change_group()))
+	    {
+	      debug_rtx(insn);
+	      debug_rtx(extend_insn);
+	      gcc_unreachable();
+	    }
+	}
+      else
+	{
+	  DUMP(", no viable matching extend\n");
 	}
     }
 }
@@ -380,6 +444,7 @@ transform(function *fn)
 	    {
 	      check_extend(insn);
 	      check_store(insn);
+	      check_shift(insn);
 	    }
 	}
     }
