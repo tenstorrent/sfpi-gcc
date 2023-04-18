@@ -1950,11 +1950,11 @@ public:
 	  schedule_shadows(cfn);
 	  schedule_hll(cfn);
 	  //print_hll_schedule(cfn);
+	}
 
-	  if (flag_rvtt_dump_stats)
-	    {
-	      analg.analyze(cfn);
-	    }
+      if (flag_rvtt_dump_stats)
+	{
+	  analg.analyze(cfn);
 	}
 
       if (flag_grayskull && flag_rvtt_gshllwar)
