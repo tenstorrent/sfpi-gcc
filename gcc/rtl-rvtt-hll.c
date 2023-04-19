@@ -1701,6 +1701,7 @@ class analysis {
   int cycle_count;
   int n_bbs;
   int n_insns;
+  int n_sfpu;
   int n_stack_lds;
   int n_stack_sts;
 
@@ -1708,7 +1709,7 @@ class analysis {
   vector<int>reg_hist;
 
  public:
-  analysis() : n_l1s(0), n_regs(0), cycle_count(0), n_bbs(0), n_insns(0), n_stack_lds(0), n_stack_sts(0) {}
+  analysis() : n_l1s(0), n_regs(0), cycle_count(0), n_bbs(0), n_insns(0), n_sfpu(0), n_stack_lds(0), n_stack_sts(0) {}
   ~analysis() { print(); }
   void analyze(function *fn);
   void print();
@@ -1797,6 +1798,9 @@ void analysis::analyze(function *fn)
 	      n_insns++;
 	      n_stack_lds += stack_load_mem_p(PATTERN(insn));
 	      n_stack_sts += stack_store_p(PATTERN(insn));
+
+	      const rvtt_insn_data *insnd;
+	      n_sfpu += rvtt_p(&insnd, insn);
 	    }
 	}
 
@@ -1807,6 +1811,7 @@ void analysis::analyze(function *fn)
 	  if (!NONDEBUG_INSN_P(insn)) continue;
 
 	  load_def& ld = load_defs[ld_idx];
+
 	  if (insn == ld.base.insn)
 	    {
 	      if (ld.base.id->type.hll_p())
@@ -1906,6 +1911,7 @@ void analysis::print()
   fprintf(stderr, "Insns: %d\n", n_insns);
   fprintf(stderr, "Stack lds: %d\n", n_stack_lds);
   fprintf(stderr, "Stack sts: %d\n", n_stack_sts);
+  if (n_sfpu != 0) fprintf(stderr, "SFPU: %d\n", n_sfpu);
   if (flag_grayskull && flag_rvtt_gshllwar)
     {
       fprintf(stderr, "GS arbiter wars: %d\n", n_gs_hll_wars);
