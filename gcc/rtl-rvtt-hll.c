@@ -1496,10 +1496,11 @@ schedule_shadows(function *fn)
 
       // Get the ic this ld is resolved
       load_dep *closest_use = get_closest_use(ld.uses);
+      if (closest_use == nullptr) continue;
       int bb = ld.bb->index;
       int shadow = ld.base.id->type.get_shadow();
       int dist = ld.base.id->insn_count - closest_use->base.id->insn_count;
-      if (closest_use != nullptr && dist < shadow)
+      if (dist < shadow)
 	{
 	  // Find lds in the shadow of this ld
 	  int max = closest_use->base.id->insn_count;
