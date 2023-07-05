@@ -106,7 +106,7 @@ constexpr unsigned int strategy_loadi       = 0x2;
 constexpr unsigned int strategy_first_insn  = 0x4;
 constexpr unsigned int strategy_every_insn  = 0x8;
 
-constexpr int replay_max_insns = 32;
+static int replay_max_insns = 32;
 
 constexpr hash_type dst_hash_salt = 0x100000000;
 constexpr hash_type reg_hash_salt = 0x200000000;
@@ -818,6 +818,7 @@ public:
     {
       if (flag_wormhole && !flag_wormhole_a0 && flag_rvtt_replay)
 	{
+	  replay_max_insns = rvtt_replay_buffer_size;
 	  transform (cfn);
 	}
       return 0;

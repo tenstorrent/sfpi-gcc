@@ -3428,6 +3428,10 @@ frvtt-sfpu-replay
 Common Var(flag_rvtt_replay) Init(1)
 Generate sfpu replay instruction.
 
+frvtt-sfpu-replay-buffer-size=
+Common Joined RejectNegative Var(rvtt_replay_buffer_size) UInteger Init(32) IntegerRange(1,32)
+Generate sfpu replay instruction.
+
 frvtt-rmext
 Common Var(flag_rvtt_rmext) Init(1)
 TT specific removal of extraneous zero/sign extension ops.
