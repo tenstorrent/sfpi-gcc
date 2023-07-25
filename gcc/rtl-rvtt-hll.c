@@ -888,7 +888,7 @@ can_move_past_load_or_store(rtx base, rtx pat)
 
   if (load_mem_p(base))
     {
-      if (nonstack_store_p(pat))
+      if (store_mem_p(pat))
 	{
 	  int store_reg, store_offset;
 	  int load_reg, load_offset;
