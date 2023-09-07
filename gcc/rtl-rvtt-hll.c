@@ -1948,15 +1948,19 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_rvtt_hll && optimize > 0)
+      if (optimize > 0)
 	{
+	  // Interesting, this cleans up some extraneous moves
+	  // Leave it in (found after disabling hll pass)
 	  df_set_flags (DF_LR_RUN_DCE);
 	  df_note_add_problem ();
 	  df_analyze();
 
-	  schedule_shadows(cfn);
-	  schedule_hll(cfn);
-	  //print_hll_schedule(cfn);
+	  if (flag_rvtt_hll) {
+	    schedule_shadows(cfn);
+	    schedule_hll(cfn);
+	    //print_hll_schedule(cfn);
+	  }
 	}
 
       if (flag_rvtt_dump_stats)
