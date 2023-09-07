@@ -91,6 +91,11 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 3)")))
 
+(define_constraint "M03U"
+  "A 3-bit unsigned immediate for SFPU instruction modifiers."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 7)")))
+
 (define_constraint "M04U"
   "A 4-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")

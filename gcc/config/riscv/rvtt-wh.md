@@ -254,7 +254,7 @@
 (define_insn "rvtt_wh_sfpload_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:SI    2 "immediate_operand" "M02U, M02U")
+                          (match_operand:SI    2 "immediate_operand" "M03U, M03U")
                           (match_operand:SI    3 "immediate_operand" "M04U, M04U")
                           (match_operand:SI    4 "immediate_operand" "M14U, M14U")] UNSPECV_WH_SFPLOAD_INT))]
   "TARGET_RVTT_WH"
@@ -327,7 +327,7 @@
 
 (define_insn "rvtt_wh_sfpstore_int"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
-                     (match_operand:SI    1 "immediate_operand" "M02U")
+                     (match_operand:SI    1 "immediate_operand" "M03U")
                      (match_operand:SI    2 "immediate_operand" "M04U")
                      (match_operand:SI    3 "nonmemory_operand" "M14U")] UNSPECV_WH_SFPSTORE_INT)]
   "TARGET_RVTT_WH"
