@@ -609,6 +609,51 @@ workaround_gs_hll(function *fn)
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
 }
 
+// GS and WH have a read after write hazard bug where loading a word after a
+// byte or half store issues the load before the store
+// Fix that by issuing a load to the same address to force a pipe stall
+// Can't issue word/byte loads to register space, so skip the war there
+// On GS, the load can invoke the hll workaround, so need to use a "valid"
+// (non r0) register
+static void
+workaround_gswh_raw(function *fn)
+{
+  DUMP("RAW pass on: %s\n", function_name(cfn));
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      rtx insn_pat = PATTERN(insn);
+	      if (store_mem_p(insn_pat))
+		{
+		  machine_mode mode = GET_MODE(SET_SRC(insn_pat));
+		  if (mode == HImode || mode == QImode)
+		    {
+		      // Found a potential RAW issue store
+		      if (!rvtt_reg_store_p(insn_pat))
+			{
+			  // Use the same register as used in the insn if we need th hll war
+			  int regno = (flag_grayskull && rvtt_l1_store_p(insn_pat)) ?
+			    REGNO(SET_SRC(insn_pat)) : 0;
+
+			  rtx reg = gen_rtx_REG(SImode, regno);
+			  rtx extend = gen_rtx_ZERO_EXTEND(SImode, SET_DEST(insn_pat));
+			  rtx new_insn = gen_rtx_SET(reg, extend);
+			  emit_insn_after(new_insn, insn);
+			  // need to update regnotes for the src?
+			}
+		    }
+		}
+	    }
+	}
+    }
+}
+
 class load_type {
  private:
   int lt;
@@ -1966,6 +2011,11 @@ public:
       if (flag_rvtt_dump_stats)
 	{
 	  analg.analyze(cfn);
+	}
+
+      if (flag_grayskull || flag_wormhole)
+	{
+	  workaround_gswh_raw(cfn);
 	}
 
       if (flag_grayskull && flag_rvtt_gshllwar)
