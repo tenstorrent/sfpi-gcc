@@ -78,14 +78,16 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{mabi=*} \
 %(subtarget_asm_spec) \
 %{mgrayskull:} \
-%{mwormhole:-mwormhole} "
+%{mwormhole:-mwormhole} " \
+%{mblackhole:-mblackhole} "
 
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS					\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
 "%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "       \
 "%{mgrayskull:-mgrayskull} "					\
-"%{mwormhole:-mwormhole} "
+"%{mwormhole:-mwormhole} "					\
+"%{mblackhole:-mblackhole} "
 
 #define TARGET_DEFAULT_CMODEL CM_MEDLOW
 
