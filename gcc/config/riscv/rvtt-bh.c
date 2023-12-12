@@ -65,7 +65,7 @@ along with GCC; see the file COPYING3.  If not see
 void rvtt_bh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
 {
   if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_rvtt_bh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned(imm, 0x3FFF)));
+    emit_insn(gen_rvtt_bh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned(imm, 0x1FFF)));
   } else {
     unsigned long int op = TT_OP_BH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
     emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
