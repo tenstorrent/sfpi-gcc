@@ -245,8 +245,8 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:SI    2 "immediate_operand" "M04U, M04U")
-                          (match_operand:SI    3 "immediate_operand" "M02U, M02U")
-                          (match_operand:SI    4 "immediate_operand" "M14U, M14U")] UNSPECV_BH_SFPLOAD_INT))]
+                          (match_operand:SI    3 "immediate_operand" "M03U, M03U")
+                          (match_operand:SI    4 "immediate_operand" "M13U, M13U")] UNSPECV_BH_SFPLOAD_INT))]
   "TARGET_RVTT_BH"
   "@
    SFPLOAD\t%0, %4, %2, %3
@@ -307,7 +307,7 @@
 {
   if (GET_CODE(operands[4]) == CONST_INT) {
     emit_insn (gen_rvtt_bh_sfpstore_int(operands[1], operands[2],operands[3],
-                                         rvtt_clamp_unsigned(operands[4], 0x3FFF)));
+                                         rvtt_clamp_unsigned(operands[4], 0x1FFF)));
   } else {
     unsigned long int op = TT_OP_BH_SFPSTORE(0, INTVAL(operands[2]), INTVAL(operands[3]), 0);
     emit_insn (gen_rvtt_sfpnonimm_store(operands[1], operands[0], GEN_INT(0), GEN_INT(20), operands[5], GEN_INT(op), operands[6]));
@@ -318,8 +318,8 @@
 (define_insn "rvtt_bh_sfpstore_int"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
                      (match_operand:SI    1 "immediate_operand" "M04U")
-                     (match_operand:SI    2 "immediate_operand" "M02U")
-                     (match_operand:SI    3 "nonmemory_operand" "M14U")] UNSPECV_BH_SFPSTORE_INT)]
+                     (match_operand:SI    2 "immediate_operand" "M03U")
+                     (match_operand:SI    3 "nonmemory_operand" "M13U")] UNSPECV_BH_SFPSTORE_INT)]
   "TARGET_RVTT_BH"
   "SFPSTORE\t%3, %0, %1, %2")
 

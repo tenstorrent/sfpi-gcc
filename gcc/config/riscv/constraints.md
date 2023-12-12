@@ -121,6 +121,11 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 4095)")))
 
+(define_constraint "M13U"
+  "A 13-bit unsigned immediate for SFPU."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 8191)")))
+
 (define_constraint "M14U"
   "A 14-bit unsigned immediate for SFPU."
   (and (match_code "const_int")
