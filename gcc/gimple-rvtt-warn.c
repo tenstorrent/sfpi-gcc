@@ -375,7 +375,7 @@ public:
 unsigned int
 pass_rvtt_warn::execute (function *fun)
 {
-  bool sfpu_warn = (flag_rvtt_warn && (flag_grayskull || flag_wormhole));
+  bool sfpu_warn = (flag_rvtt_warn && (flag_grayskull || flag_wormhole || flag_blackhole));
   if (sfpu_warn || flag_rvtt_error_multdiv)
     {
       process (fun, sfpu_warn, flag_rvtt_error_multdiv);

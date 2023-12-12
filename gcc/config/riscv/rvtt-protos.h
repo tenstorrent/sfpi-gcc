@@ -22,6 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "sfpu-ops-gs.h"
 #include "sfpu-ops-wh.h"
+#include "sfpu-ops-bh.h"
 
 constexpr unsigned int SFPNONIMM_ID_FALLBACK_FLAG = 0xFF000000;
 
@@ -61,6 +62,19 @@ extern void rvtt_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, r
 extern void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
 extern void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx lv, rtx src, rtx mod);
+
+extern void rvtt_bh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
+extern void rvtt_bh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
+extern void rvtt_bh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
+extern void rvtt_bh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
+extern void rvtt_bh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
+extern void rvtt_bh_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
+extern void rvtt_bh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
+extern void rvtt_bh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
+extern void rvtt_bh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
+extern void rvtt_bh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
+extern void rvtt_bh_emit_sfpshft2_e(rtx dst, rtx lv, rtx src, rtx mod);
+
 extern const char * rvtt_emit_testcode(rtx operands[]);
 extern bool rvtt_hll_p(const rtx pat);
 extern bool rvtt_l1_load_p(const rtx pat);

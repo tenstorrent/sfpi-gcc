@@ -78,7 +78,7 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{mabi=*} \
 %(subtarget_asm_spec) \
 %{mgrayskull:} \
-%{mwormhole:-mwormhole} " \
+%{mwormhole:-mwormhole} \
 %{mblackhole:-mblackhole} "
 
 #undef DRIVER_SELF_SPECS

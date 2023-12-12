@@ -301,7 +301,7 @@ public:
 unsigned int
 pass_rvtt_move::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_grayskull || flag_wormhole || flag_blackhole)
     {
       transform (fun);
     }

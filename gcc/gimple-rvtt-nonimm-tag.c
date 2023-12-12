@@ -170,7 +170,7 @@ public:
 unsigned int
 pass_rvtt_nonimm_tag::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_grayskull || flag_wormhole || flag_blackhole)
     {
       transform (fun);
     }

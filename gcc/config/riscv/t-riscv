@@ -25,7 +25,7 @@ riscv-shorten-memrefs.o: $(srcdir)/config/riscv/riscv-shorten-memrefs.c
 	$(POSTCOMPILE)
 
 rvtt.o: $(srcdir)/config/riscv/rvtt.c $(CONFIG_H) $(SYSTEM_H) \
-    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
+    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(srcdir)/config/riscv/sfpu-ops-bh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/rvtt.c
 
@@ -38,6 +38,11 @@ rvtt-wh.o: $(srcdir)/config/riscv/rvtt-wh.c $(CONFIG_H) $(SYSTEM_H) \
     coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/rvtt-wh.c
+
+rvtt-bh.o: $(srcdir)/config/riscv/rvtt-bh.c $(CONFIG_H) $(SYSTEM_H) \
+    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-bh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
+	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+		$(srcdir)/config/riscv/rvtt-bh.c
 
 PASSES_EXTRA += $(srcdir)/config/riscv/riscv-passes.def
 

@@ -79,6 +79,26 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_WH_NO_TGT_BUILTIN(a, b, c, d, e, f, g, h, i)
 #endif
 
+#ifndef RVTT_BH_PAD_BUILTIN
+#define RVTT_BH_PAD_BUILTIN(a)
+#endif
+
+#ifndef RVTT_BH_PAD_NO_TGT_BUILTIN
+#define RVTT_BH_PAD_NO_TGT_BUILTIN(a)
+#endif
+
+#ifndef RVTT_BH_RTL_ONLY
+#define RVTT_BH_RTL_ONLY(a, b, c)
+#endif
+
+#ifndef RVTT_BH_BUILTIN
+#define RVTT_BH_BUILTIN(a, b, c, d, e, f, g, h, i)
+#endif
+
+#ifndef RVTT_BH_NO_TGT_BUILTIN
+#define RVTT_BH_NO_TGT_BUILTIN(a, b, c, d, e, f, g, h, i)
+#endif
+
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
 // This can be ensured by using the RVTT_PAD_XX define
 
@@ -328,6 +348,120 @@ RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
 
+
+// Blackhole internal (rtl only) insns
+RVTT_BH_RTL_ONLY(sfpload_int,             0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfploadi_int,            0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpstore_int,            0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpmuli_int,             0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfpaddi_int,             0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfpmul_int,              0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfpadd_int,              0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfpiadd_v_int,           0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpiadd_i_int,           0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpshft_i_int,           0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpabs_int,              0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpnot_int,              0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfplz_int,               0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpsetman_i_int,         0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpsetexp_i_int,         0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpsetsgn_i_int,         0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpmad_int,              0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfpmov_int,              0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpexexp_int,            0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpexman_int,            0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg0_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg1_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg2_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg3_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg4_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg5_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg6_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfppreservelreg7_int,    0x48, 0x00)
+RVTT_BH_RTL_ONLY(sfpcast_int,             0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
+RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)
+RVTT_BH_RTL_ONLY(sfpswap_int,             0x08, 0x01)
+
+// Blackhole builtin intrinsics
+RVTT_BH_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpload,         RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_USI_USI,                    0x00, -1,  2, 0x00,  3, 0x3FFF, 0)
+RVTT_BH_BUILTIN (sfpload_lv,      RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI_USI,              0x02, -1,  3, 0x00,  4, 0x3FFF, 0)
+RVTT_BH_BUILTIN (sfpxloadi,       RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_USI,                        0x00, -1,  1, 0x00,  2, 0xFFFF, 0)
+RVTT_BH_BUILTIN (sfpxloadi_lv,    RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                  0x02, -1,  2, 0x00,  3, 0xFFFF0000, -16)
+RVTT_BH_BUILTIN (sfpmov,          RISCV_V64SF_FTYPE_V64SF_USI,                                      0x00, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmov_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmul,          RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x00, -1,  2, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmul_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI,                          0x02, -1,  3, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmuli,         RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                  0x00,  1,  5, 0x21,  2, 0xFFFF, 8)
+RVTT_BH_BUILTIN (sfpadd,          RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x00, -1,  2, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpadd_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI,                          0x02, -1,  3, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpaddi,         RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                  0x00,  1,  5, 0x21,  2, 0xFFFF, 8)
+RVTT_BH_BUILTIN (sfpxiadd_v,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x01,  0,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpxiadd_i,      RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                  0x01, -1,  5, 0x00,  2,      0, 0)
+RVTT_BH_BUILTIN (sfpxiadd_i_lv,   RISCV_V64SF_FTYPE_POINTER_V64SF_V64SF_USI_USI_USI_USI,            0x03, -1,  6, 0x00,  3,      0, 0)
+RVTT_BH_BUILTIN (sfpshft_v,       RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpshft_i,       RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI,                      0x00,  1, -1, 0x00,  2,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpabs,          RISCV_V64SF_FTYPE_V64SF_USI,                                      0x00, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpabs_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpand,          RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpor,           RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpnot,          RISCV_V64SF_FTYPE_V64SF,                                          0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpnot_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfplz,           RISCV_V64SF_FTYPE_V64SF_USI,                                      0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfplz_lv,        RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x03, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpsetexp_v,     RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpsetexp_i,     RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_V64SF,                      0x00, -1, -1, 0x00,  1,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpsetexp_i_lv,  RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_V64SF,                0x02, -1, -1, 0x00,  2,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpsetman_v,     RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpsetman_i,     RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_V64SF_USI,                  0x00, -1,  5, 0x00,  1,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpsetman_i_lv,  RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_V64SF_USI,            0x02, -1,  6, 0x00,  2,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpsetsgn_v,     RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpsetsgn_i,     RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_V64SF,                      0x00, -1, -1, 0x00,  1,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpsetsgn_i_lv,  RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_V64SF,                0x02, -1, -1, 0x00,  2,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpmad,          RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI,                          0x00, -1,  3, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmad_lv,       RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x02, -1,  4, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpdivp2,        RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_V64SF_USI,                  0x00, -1,  5, 0x00,  1,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpdivp2_lv,     RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_V64SF_USI,            0x02, -1,  6, 0x00,  2,  0xFFF, 12)
+RVTT_BH_BUILTIN (sfpexexp,        RISCV_V64SF_FTYPE_V64SF_UHI,                                      0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpexexp_lv,     RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x03, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpexman,        RISCV_V64SF_FTYPE_V64SF_UHI,                                      0x00, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpexman_lv,     RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfplut,          RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x00,  3,  4, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpxfcmps,       RISCV_USI_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                    0x01, -1,  5, 0x00,  2,      0, 0)
+RVTT_BH_BUILTIN (sfpxfcmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                                  0x01, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpxor,          RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x00,  0, -1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpcast,         RISCV_V64SF_FTYPE_V64SF_USI,                                      0x00, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpcast_lv,      RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpshft2_e,      RISCV_V64SF_FTYPE_V64SF_USI,                                      0x00, -1,  1, 0x01, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpshft2_e_lv,   RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x01, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpstochrnd_i,   RISCV_V64SF_FTYPE_POINTER_USI_USI_USI_USI_V64SF_USI,              0x00, -1,  6, 0x00,  2,   0xFF, 8)
+RVTT_BH_BUILTIN (sfpstochrnd_i_lv,RISCV_V64SF_FTYPE_POINTER_V64SF_USI_USI_USI_USI_V64SF_USI,        0x02, -1,  7, 0x00,  3,   0xFF, 8)
+RVTT_BH_BUILTIN (sfpstochrnd_v,   RISCV_V64SF_FTYPE_USI_V64SF_V64SF_USI,                            0x00, -1,  3, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpstochrnd_v_lv,RISCV_V64SF_FTYPE_V64SF_USI_V64SF_V64SF_USI,                      0x02, -1,  4, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x00, -1,  4, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfplutfp32_6r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_USI,  0x00, -1,  7, 0x21, -1,      0, 0)
+
+RVTT_BH_PAD_NO_TGT_BUILTIN (l1_load_war)
+RVTT_BH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpsetcc_i,     RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpsetcc_v,     RISCV_VOID_FTYPE_V64SF_USI,                                 0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpencc,        RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpcompc,       RISCV_VOID_FTYPE,                                           0x01, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfppushc,       RISCV_VOID_FTYPE_USI,                                       0x00, -1,  0, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfppopc,        RISCV_VOID_FTYPE_USI,                                       0x01, -1,  0, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_POINTER_V64SF_USI_USI_USI_USI_USI,         0x00, -1,  3, 0x00,  4, 0x3FFF, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_V64SF_USI,                                 0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,                           0x00, -1,  2, 0x01, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,                   0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,               0x00, -1,  4, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
+
 #undef RVTT_RTL_ONLY
 #undef RVTT_BUILTIN
 #undef RVTT_NO_TGT_BUILTIN
@@ -342,3 +476,8 @@ RVTT_WH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,       
 #undef RVTT_WH_RTL_ONLY
 #undef RVTT_WH_BUILTIN
 #undef RVTT_WH_NO_TGT_BUILTIN
+#undef RVTT_BH_PAD_BUILTIN
+#undef RVTT_BH_PAD_NO_TGT_BUILTIN
+#undef RVTT_BH_RTL_ONLY
+#undef RVTT_BH_BUILTIN
+#undef RVTT_BH_NO_TGT_BUILTIN

@@ -132,10 +132,12 @@ constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't
 
 constexpr unsigned int SFPU_LREG_COUNT_GS = 4;
 constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
+constexpr unsigned int SFPU_LREG_COUNT_BH = 8;
 extern unsigned int rvtt_sfpu_lreg_count_global;
 
 struct rvtt_insn_data {
   enum insn_id {
+    // Note: this only pulls the "id" from the macros so GS/WH/BH/etc are equivalent
 #define RVTT_RTL_ONLY(id, nip, gp) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,

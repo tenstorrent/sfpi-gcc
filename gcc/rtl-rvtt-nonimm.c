@@ -255,7 +255,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_grayskull || flag_wormhole)
+      if (flag_grayskull || flag_wormhole || flag_blackhole)
        {
 	 transform (cfn);
        }

@@ -4874,7 +4874,7 @@ riscv_conditional_register_usage (void)
 	call_used_regs[regno] = 1;
     }
 
-  if (TARGET_RVTT_WH)
+  if (TARGET_RVTT_WH || TARGET_RVTT_BH)
     {
       reg_class_contents[SFPU_REGS_L4].elts[1] = 0x00000040;
       reg_class_contents[SFPU_REGS_L5].elts[1] = 0x00000080;

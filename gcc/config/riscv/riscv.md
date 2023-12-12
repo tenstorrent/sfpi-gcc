@@ -2523,3 +2523,4 @@
 (include "rvtt.md")
 (include "rvtt-gs.md")
 (include "rvtt-wh.md")
+(include "rvtt-bh.md")

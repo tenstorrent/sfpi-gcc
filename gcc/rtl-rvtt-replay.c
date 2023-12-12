@@ -629,9 +629,15 @@ static bool do_update(bool first, int i, int count, int length,
 	{
 	  DUMP("    inserting replay capture at %d\n", i - count);
 	  first = false;
-	  emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
-						 GEN_INT(1), GEN_INT(1)),
-			   start_insn);
+	  if (flag_wormhole) {
+	    emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
+						   GEN_INT(1), GEN_INT(1)),
+			     start_insn);
+	  } else if (flag_blackhole) {
+	    emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
+						   GEN_INT(1), GEN_INT(1)),
+			     start_insn);
+	  }
 	}
     }
   else if (count > 1)
@@ -648,9 +654,15 @@ static bool do_update(bool first, int i, int count, int length,
 	    }
 	  start_insn = NEXT_INSN(start_insn);
 	}
-      emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
-					     GEN_INT(0), GEN_INT(0)),
-		       insn);
+      if (flag_wormhole) {
+	emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
+					       GEN_INT(0), GEN_INT(0)),
+			 insn);
+      } else if (flag_blackhole) {
+	emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
+					       GEN_INT(0), GEN_INT(0)),
+			 insn);
+      }
     }
 
   return first;
@@ -816,7 +828,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_wormhole && !flag_wormhole_a0 && flag_rvtt_replay)
+      if (((flag_wormhole && !flag_wormhole_a0) || flag_blackhole) && flag_rvtt_replay)
 	{
 	  replay_max_insns = rvtt_replay_buffer_size;
 	  transform (cfn);
