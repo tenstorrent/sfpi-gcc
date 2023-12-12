@@ -68,9 +68,17 @@ static void insert_nop_after(rtx_insn *insn)
     {
       emit_insn_after(gen_rvtt_gs_sfpnop(), insn);
     }
-  else
+  else if (flag_wormhole)
     {
       emit_insn_after(gen_rvtt_wh_sfpnop(), insn);
+    }
+  else if (flag_blackhole)
+    {
+      emit_insn_after(gen_rvtt_bh_sfpnop(), insn);
+    }
+  else
+    {
+      gcc_assert(0);
     }
 }
 
@@ -126,9 +134,9 @@ static void dynamic_schedule_gs(rtx_insn *insn)
     }
 }
 
-static void insert_nop_if_needed_wh(rtx_insn *insn,
-				    const rvtt_insn_data *next_insnd,
-				    rtx_insn *next_insn)
+static void insert_nop_if_needed_wh_bh(rtx_insn *insn,
+				       const rvtt_insn_data *next_insnd,
+				       rtx_insn *next_insn)
 {
   int regint = rvtt_get_insn_dst_regno(insn) - SFPU_REG_FIRST;
   gcc_assert(regint != -1 - SFPU_REG_FIRST);
@@ -147,14 +155,14 @@ static void insert_nop_if_needed_wh(rtx_insn *insn,
     }
 }
 
-static void dynamic_schedule_wh(rtx_insn *insn)
+static void dynamic_schedule_wh_bh(rtx_insn *insn)
 {
   rtx_insn *next_insn;
   const rvtt_insn_data *next_insnd;
 
   if (rvtt_get_next_insn(&next_insnd, &next_insn, insn))
     {
-      insert_nop_if_needed_wh(insn, next_insnd, next_insn);
+      insert_nop_if_needed_wh_bh(insn, next_insnd, next_insn);
     }
   else
     {
@@ -173,7 +181,7 @@ static void dynamic_schedule_wh(rtx_insn *insn)
 	      rvtt_get_next_insn(&next_insnd, &next_insn, bb_start_insn))
 	    {
 	      DUMP(" found a child w/ a dependency, inserting nop\n");
-	      insert_nop_if_needed_wh(insn, next_insnd, next_insn);
+	      insert_nop_if_needed_wh_bh(insn, next_insnd, next_insn);
 	      break;
 	    }
 	}
@@ -182,7 +190,7 @@ static void dynamic_schedule_wh(rtx_insn *insn)
 
 // Perform instruction scheduling
 //
-// For wormhole there is dynamic and static schedule.  Dynamic scheduling
+// For wormhole/blackhole there is dynamic and static schedule.  Dynamic scheduling
 // requires adding a NOP or moving a non-dependent instruction into the single
 // instruction shadow of ny instruction which uses the MAD unit, which are:
 // MAD, LUT, LUT32, MUL(I), ADD(I).  Presently, this only inserts a NOP.
@@ -222,10 +230,10 @@ static void transform ()
 			}
 		      else
 			{
-			  dynamic_schedule_wh(insn);
+			  dynamic_schedule_wh_bh(insn);
 			}
 		    }
-		  else if (flag_wormhole)
+		  else if (flag_wormhole || flag_blackhole)
 		    {
 		      DUMP("  static scheduling %s\n", insnd->name);
 		      int count = insnd->schedule_static_nops(insn);
@@ -271,7 +279,7 @@ public:
 unsigned int
 pass_rvtt_schedule::execute (function *)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_grayskull || flag_wormhole || flag_blackhole)
     {
       transform ();
     }

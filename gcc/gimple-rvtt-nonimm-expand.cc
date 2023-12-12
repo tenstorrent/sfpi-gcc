@@ -257,7 +257,7 @@ expand_complex(gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *g
   case rvtt_insn_data::sfpsetman_i:
     // Note: grayskull hw bug makes setman_v useless, plus the TF32 mantissa
     // is 10 bits and setman_i loads 12 bits
-    if (flag_wormhole)
+    if (flag_wormhole || flag_blackhole)
       {
 	DUMP("  expanding %s to sfpxloadi+sfpsetman_v\n", insnd->name);
 	tree tmp = emit_32bit_sfpxloads(insnd, stmt, gsip);
@@ -416,7 +416,7 @@ public:
 unsigned int
 pass_rvtt_nonimm_expand::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
+  if (flag_grayskull || flag_wormhole || flag_blackhole)
     {
       transform (fun);
     }

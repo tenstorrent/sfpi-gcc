@@ -99,8 +99,14 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
   SFPSETCC_MOD1_LREG_NE0,
 };
 
+static char* arch_name_abbrev_list[] = {
+  "_gs_",
+  "_wh_",
+  "_bh_",
+};
+
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
-static const int NUMBER_OF_ARCHES = 2;
+static const int NUMBER_OF_ARCHES = 3;
 static const int NUMBER_OF_INTRINSICS = 123;
 static rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -127,6 +133,18 @@ static rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSI
 #define RVTT_WH_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
 #include "rvtt-insn.h"
     { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 }
+  },
+  {
+#define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },
+#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
+#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
+#define RVTT_BH_RTL_ONLY(id, fl, sched) { rvtt_insn_data::id, #id, nullptr, fl, -1, -1, sched, -1, -1, 0, 0 },
+#define RVTT_BH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
+#define RVTT_BH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
+#define RVTT_BH_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
+#define RVTT_BH_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
+#include "rvtt-insn.h"
+    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 }
   }
 };
 
@@ -137,6 +155,7 @@ static const char* rvtt_builtin_name_stub;
 void
 rvtt_insert_insn(int idx, const char* name, tree decl)
 {
+  // Search the table starting from where we left off last time
   static int start = 0;
 
   int arch;
@@ -146,6 +165,9 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
   } else if (flag_wormhole) {
     arch = 1;
     rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
+  } else if (flag_blackhole) {
+    arch = 2;
+    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_BH;
   } else {
     return;
   }
@@ -184,21 +206,20 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
 //  - rtl only (internal/post-expand) insns match w/o _rvtt_[xx]_ where xx is
 //    the arch
 static const rvtt_insn_data *
-init_rtx_insnd(int code)
+init_rtx_insnd(int code, int arch)
 {
   DUMP("trying to lookup rtx name %d %s\n", code, insn_data[code].name);
 
-  const char *other_arch;
-  if (flag_grayskull) {
-    other_arch = "_wh_";
-  } else if (flag_wormhole) {
-    other_arch = "_gs_";
-  } else {
-    return &sfpu_insn_data[rvtt_insn_data::nonsfpu];
+  bool matches_other_arch = false;
+  for (int i = 0; i < NUMBER_OF_ARCHES; i++) {
+    if (i != arch &&
+	strstr(insn_data[code].name, arch_name_abbrev_list[i]) != nullptr) {
+      matches_other_arch = true;
+      break;
+    }
   }
 
-  if (strncmp(insn_data[code].name, "rvtt_", 5) == 0 &&
-      strstr(insn_data[code].name, other_arch) == nullptr) {
+  if (strncmp(insn_data[code].name, "rvtt_", 5) == 0 && !matches_other_arch) {
     // Try <__builtin_rvtt_>name
     char name[100];
     sprintf(name, "__builtin_%s", insn_data[code].name);
@@ -213,7 +234,7 @@ init_rtx_insnd(int code)
     tmp = rvtt_get_insn_data(&insn_data[code].name[8]);
     if (tmp->id != rvtt_insn_data::nonsfpu) return tmp;
 
-    fprintf(stderr, "Failed to match rvtt insn %s\n", insn_data[code].name);
+    fprintf(stderr, "Failed to match rvtt insn %s for arch index %d\n", insn_data[code].name, arch);
     gcc_assert(0);
   }
 
@@ -230,6 +251,9 @@ rvtt_init_builtins()
   } else if (flag_wormhole) {
     arch = 1;
     rvtt_builtin_name_stub = "__builtin_rvtt_wh";
+  } else if (flag_blackhole) {
+    arch = 2;
+    rvtt_builtin_name_stub = "__builtin_rvtt_bh";
   } else {
     return;
   }
@@ -272,7 +296,7 @@ rvtt_init_builtins()
   sfpu_rtl_insn_ptrs.resize(NUM_INSN_CODES);
   for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
     {
-      sfpu_rtl_insn_ptrs[i] = init_rtx_insnd(i);
+      sfpu_rtl_insn_ptrs[i] = init_rtx_insnd(i, arch);
     }
 }
 
@@ -537,9 +561,9 @@ void rvtt_prep_stmt_for_deletion(gimple *stmt)
 
 char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[])
 {
-  // Replay pass on wormhole assumes insns only emit 1 insn
+  // Replay pass on wormhole/blackhole assumes insns only emit 1 insn
   nnops &= INSN_SCHED_NOP_MASK;
-  gcc_assert(flag_wormhole == 0 || nnops == 0);
+  gcc_assert(flag_wormhole == 0 || flag_blackhole == 0 || nnops == 0);
   char const *out = sw;
   while (nnops-- > 0) {
      output_asm_insn(out, operands);
