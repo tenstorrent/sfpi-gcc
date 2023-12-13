@@ -21,7 +21,9 @@ along with GCC; see the file COPYING3.  If not see
 
 // The _lv instructions MUST follow the non-live versions of the same instruction
 
-// Columns are: name, decl, enable, can_set_cc, live, has_half_offset, dst_arg_pos, mod1_pos
+// RTL ONLY doesn't create a builtin intrinsic
+// NO_TGT doesn't return a value
+// PAD ensures that each arch has the same # insns (PAD aren't instanced)
 
 #ifndef RVTT_RTL_ONLY
 #define RVTT_RTL_ONLY(a, b, c)
@@ -67,6 +69,10 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_WH_PAD_NO_TGT_BUILTIN(a)
 #endif
 
+#ifndef RVTT_WH_PAD_RTL_ONLY
+#define RVTT_WH_PAD_RTL_ONLY(a)
+#endif
+
 #ifndef RVTT_WH_RTL_ONLY
 #define RVTT_WH_RTL_ONLY(a, b, c)
 #endif
@@ -108,6 +114,14 @@ RVTT_RTL_ONLY (sfpnonimm_dst_src, 7,  1)
 RVTT_RTL_ONLY (sfpnonimm_src,     5,  2)
 RVTT_RTL_ONLY (sfpnonimm_store,   5,  2)
 RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
+
+// flags: see INSN_FLAGS in rvtt.h
+// dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
+// mod_pos: which argument number contains the mod value
+// schedule: non-zero if this instruction needs scheduling (nop pads), see INSN_SCHED_* in rvtt-protos.h
+// nonimm_pos: argument position of the nonimm argument (runtime supplied immediate), -1 otherwise
+// nonimm_mask: bit mask to get to the nonimm value (eg, 0xFFFF for 16 bit nonimm)
+// nonimm_shft: shift to right justify the nonimm value
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, schedule, nonimm_pos, nonimm_mask, nonimm_shft)
 RVTT_BUILTIN (load_immediate,  RISCV_USI_FTYPE_USI,                                              0x20, -1, -1, 0x00, -1,      0, 0)
@@ -157,6 +171,8 @@ RVTT_GS_PAD_RTL_ONLY(sfpshft2_e_int)
 RVTT_GS_PAD_RTL_ONLY(sfpstochrnd_i_int)
 RVTT_GS_PAD_RTL_ONLY(sfpstochrnd_v_int)
 RVTT_GS_PAD_RTL_ONLY(sfpswap_int)
+RVTT_GS_PAD_RTL_ONLY(sfpmul24_int)
+RVTT_GS_PAD_RTL_ONLY(sfparecip_int)
 
 // Grayskull builtin intrinsics
 RVTT_GS_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
@@ -216,6 +232,12 @@ RVTT_GS_PAD_BUILTIN (sfpstochrnd_v)
 RVTT_GS_PAD_BUILTIN (sfpstochrnd_v_lv)
 RVTT_GS_PAD_BUILTIN (sfplutfp32_3r)
 RVTT_GS_PAD_BUILTIN (sfplutfp32_6r)
+RVTT_GS_PAD_BUILTIN (sfpmul24)
+RVTT_GS_PAD_BUILTIN (sfpmul24_lv)
+RVTT_GS_PAD_BUILTIN (sfpgt)
+RVTT_GS_PAD_BUILTIN (sfple)
+RVTT_GS_PAD_BUILTIN (sfparecip)
+RVTT_GS_PAD_BUILTIN (sfparecip_lv)
 
 RVTT_GS_NO_TGT_BUILTIN (l1_load_war,    RISCV_VOID_FTYPE_USI,                                       0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_GS_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
@@ -271,6 +293,8 @@ RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpswap_int,             0x08, 0x01)
+RVTT_WH_PAD_RTL_ONLY(sfpmul24_int)
+RVTT_WH_PAD_RTL_ONLY(sfparecip_int)
 
 // Wormhole builtin intrinsics
 RVTT_WH_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
@@ -330,6 +354,12 @@ RVTT_WH_BUILTIN (sfpstochrnd_v,   RISCV_V64SF_FTYPE_USI_V64SF_V64SF_USI,        
 RVTT_WH_BUILTIN (sfpstochrnd_v_lv,RISCV_V64SF_FTYPE_V64SF_USI_V64SF_V64SF_USI,                      0x02, -1,  4, 0x00, -1,      0, 0)
 RVTT_WH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x00, -1,  4, 0x21, -1,      0, 0)
 RVTT_WH_BUILTIN (sfplutfp32_6r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_USI,  0x00, -1,  7, 0x21, -1,      0, 0)
+RVTT_WH_PAD_BUILTIN (sfpmul24)
+RVTT_WH_PAD_BUILTIN (sfpmul24_lv)
+RVTT_WH_PAD_BUILTIN (sfpgt)
+RVTT_WH_PAD_BUILTIN (sfple)
+RVTT_WH_PAD_BUILTIN (sfparecip)
+RVTT_WH_PAD_BUILTIN (sfparecip_lv)
 
 RVTT_WH_PAD_NO_TGT_BUILTIN (l1_load_war)
 RVTT_WH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
@@ -385,6 +415,8 @@ RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpswap_int,             0x08, 0x01)
+RVTT_BH_RTL_ONLY(sfpmul24_int,            0x08, 0x21)
+RVTT_BH_RTL_ONLY(sfparecip_int,           0x08, 0x00)
 
 // Blackhole builtin intrinsics
 RVTT_BH_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
@@ -444,6 +476,12 @@ RVTT_BH_BUILTIN (sfpstochrnd_v,   RISCV_V64SF_FTYPE_USI_V64SF_V64SF_USI,        
 RVTT_BH_BUILTIN (sfpstochrnd_v_lv,RISCV_V64SF_FTYPE_V64SF_USI_V64SF_V64SF_USI,                      0x02, -1,  4, 0x00, -1,      0, 0)
 RVTT_BH_BUILTIN (sfplutfp32_3r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,                    0x00, -1,  4, 0x21, -1,      0, 0)
 RVTT_BH_BUILTIN (sfplutfp32_6r,   RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_V64SF_USI,  0x00, -1,  7, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmul24,        RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x00, -1,  2, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpmul24_lv,     RISCV_V64SF_FTYPE_V64SF_V64SF_V64SF_USI,                          0x02, -1,  3, 0x21, -1,      0, 0)
+RVTT_BH_BUILTIN (sfpgt,           RISCV_V64SF_FTYPE_V64SF_USI,                                      0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfple,           RISCV_V64SF_FTYPE_V64SF_USI,                                      0x01, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfparecip,       RISCV_V64SF_FTYPE_V64SF_USI,                                      0x00, -1,  1, 0x00, -1,      0, 0)
+RVTT_BH_BUILTIN (sfparecip_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF_USI,                                0x02, -1,  2, 0x00, -1,      0, 0)
 
 RVTT_BH_PAD_NO_TGT_BUILTIN (l1_load_war)
 RVTT_BH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
@@ -473,11 +511,13 @@ RVTT_BH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,       
 #undef RVTT_GS_NO_TGT_BUILTIN
 #undef RVTT_WH_PAD_BUILTIN
 #undef RVTT_WH_PAD_NO_TGT_BUILTIN
+#undef RVTT_WH_PAD_RTL_ONLY
 #undef RVTT_WH_RTL_ONLY
 #undef RVTT_WH_BUILTIN
 #undef RVTT_WH_NO_TGT_BUILTIN
 #undef RVTT_BH_PAD_BUILTIN
 #undef RVTT_BH_PAD_NO_TGT_BUILTIN
+#undef RVTT_BH_PAD_RTL_ONLY
 #undef RVTT_BH_RTL_ONLY
 #undef RVTT_BH_BUILTIN
 #undef RVTT_BH_NO_TGT_BUILTIN
