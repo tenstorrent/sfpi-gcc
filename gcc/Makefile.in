@@ -1356,6 +1356,7 @@ OBJS = \
 	gimple-loop-versioning.o \
 	gimple-low.o \
 	gimple-pretty-print.o \
+	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-expand.o \

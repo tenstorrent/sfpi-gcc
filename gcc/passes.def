@@ -410,6 +410,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_rvtt_cc);
   NEXT_PASS (pass_rvtt_combine);
   NEXT_PASS (pass_rvtt_move);
+  NEXT_PASS (pass_rvtt_attrib);
 
   NEXT_PASS (pass_expand);
 
