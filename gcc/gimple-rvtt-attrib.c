@@ -1,4 +1,4 @@
-/* Pass to optimize SFPU condition codes
+/* Pass to restore lost memory space pointer attributes
    Copyright (C) 2022 Free Software Foundation, Inc.
    Contributed by Paul Keller (pkeller@tenstorrent.com).
 
