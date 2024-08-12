@@ -1206,7 +1206,7 @@
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:SI    3 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPARECIP_INT))]
   "TARGET_RVTT_BH"
-  "SFPARECIP\t0, %2, %0, %3"
+  "SFPARECIP\t%0, %2, 0, %3"
 )
 
 (define_insn "rvtt_bh_sfpgt"
@@ -1214,7 +1214,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x, x")
                           (match_operand:SI    2 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPGT))]
   "TARGET_RVTT_BH"
-  "SFPGT\t0, %1, %0, %2"
+  "SFPGT\t%0, %1, 0, %2"
 )
 
 (define_insn "rvtt_bh_sfple"
@@ -1222,7 +1222,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x, x")
                           (match_operand:SI    2 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPLE))]
   "TARGET_RVTT_BH"
-  "SFPLE\t0, %1, %0, %2"
+  "SFPLE\t%0, %1, 0, %2"
 )
 
 (include "rvtt-peephole-bh.md")
