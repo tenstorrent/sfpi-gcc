@@ -594,7 +594,7 @@ riscv_subset_list::lookup (const char *subset, int major_version,
 static const char *
 riscv_supported_std_ext (void)
 {
-  return "mafdqlcbjktpvnywu";
+  return "mafdqlcbjktpvnyw";
 }
 
 /* Parsing subset version.
