@@ -58,28 +58,31 @@ along with GCC; see the file COPYING3.  If not see
 #include "config/riscv/rvtt.h"
 #include "config/riscv/rvtt-protos.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+#if 0
+// FIXME: should dump to the dump file.
+#define DUMP(...) fprintf (stderr, __VA_ARGS__)
+#else
+// Sadly deploying sizeof here results in a bunch of LHS or comma has
+// no effect warnings.
+#define DUMP(...) (void)0
+#endif
 
 using namespace std;
 
-static void insert_nop_after(rtx_insn *insn)
+static void
+insert_nop_after (rtx_insn *insn)
 {
+  rtx nop = NULL_RTX;
+
   if (flag_grayskull)
-    {
-      emit_insn_after(gen_rvtt_gs_sfpnop(), insn);
-    }
+    nop = gen_rvtt_gs_sfpnop();
   else if (flag_wormhole)
-    {
-      emit_insn_after(gen_rvtt_wh_sfpnop(), insn);
-    }
+    nop = gen_rvtt_wh_sfpnop();
   else if (flag_blackhole)
-    {
-      emit_insn_after(gen_rvtt_bh_sfpnop(), insn);
-    }
+    nop = gen_rvtt_bh_sfpnop();
   else
-    {
-      gcc_assert(0);
-    }
+    gcc_unreachable ();
+  emit_insn_after (nop, insn);
 }
 
 static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
@@ -87,6 +90,10 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   int noperands = rvtt_get_insn_operand_count(insn);
 
   for (int i = 0; i < noperands; i++) {
+    // FIXME: we're looking at all operands, not just input ops.
+    // That's probably harmlessly more work. Divergent control flow
+    // could cause us to overwrite the output register and not need a
+    // NOP though.
     rtx operand = rvtt_get_insn_operand(i, insn);
     if (GET_CODE(operand) == REG &&
 	regno == rvtt_sfpu_regno(operand)) {
@@ -97,103 +104,116 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   return false;
 }
 
-static void dynamic_schedule_gs(rtx_insn *insn)
+static void dynamic_schedule_gs (rtx_insn *insn)
 {
   rtx_insn *next_insn;
   const rvtt_insn_data *next_insnd;
 
-  if (rvtt_get_next_insn(&next_insnd, &next_insn, insn, false, INSN_FLAGS_NON_SFPU))
+  if (rvtt_get_next_insn (&next_insnd, &next_insn, insn, false,
+			  INSN_FLAGS_NON_SFPU))
     {
-      if (next_insnd->schedule_has_dynamic_dependency_p(next_insn))
-	{
-	  insert_nop_after(insn);
-	}
+      if (next_insnd->schedule_has_dynamic_dependency_p (next_insn))
+	insert_nop_after (insn);
     }
   else
     {
       // The stmt needing scheduling is the last stmt in the BB
       // If any child has a dependent insn at the start, then we add a nop at
       // the end of this BB
-      DUMP(" last stmt in BB, checking children\n");
+      DUMP (" last stmt in BB, checking children\n");
 
-      basic_block bb = BLOCK_FOR_INSN(insn);
+      basic_block bb = BLOCK_FOR_INSN (insn);
       edge_iterator ei;
       edge e;
-      FOR_EACH_EDGE(e, ei, bb->succs)
+      FOR_EACH_EDGE (e, ei, bb->succs)
 	{
-	  rtx_insn *bb_start_insn = BB_HEAD(e->dest);
-	  if (bb_start_insn != nullptr &&
-	      rvtt_get_next_insn(&next_insnd, &next_insn, bb_start_insn, true, INSN_FLAGS_NON_SFPU) &&
-	      next_insnd->schedule_has_dynamic_dependency_p(next_insn))
+	  rtx_insn *bb_start_insn = BB_HEAD (e->dest);
+	  if (bb_start_insn != nullptr
+	      && rvtt_get_next_insn (&next_insnd, &next_insn, bb_start_insn,
+				     true, INSN_FLAGS_NON_SFPU)
+	      && next_insnd->schedule_has_dynamic_dependency_p (next_insn))
 	    {
-	      DUMP(" found a child w/ a dependency, inserting nop\n");
-	      insert_nop_after(insn);
+	      DUMP (" found a child w/ a dependency, inserting nop\n");
+	      insert_nop_after (insn);
 	      break;
 	    }
 	}
     }
 }
 
-static void insert_nop_if_needed_wh_bh(rtx_insn *insn,
-				       const rvtt_insn_data *next_insnd,
-				       rtx_insn *next_insn)
+
+/* Walk the BB graph from BB:probe_insn until we meet an SPU
+   insn. Return true if the SPU insn is dependent.  Populate VISITED
+   with the BB's we marked.  */
+
+static bool
+walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
+	    std::vector<basic_block> &visited)
 {
-  int regint = rvtt_get_insn_dst_regno(insn) - SFPU_REG_FIRST;
-  gcc_assert(regint != -1 - SFPU_REG_FIRST);
-  unsigned int regno = regint;
-
-  DUMP("  next insn, reg: %s %d\n", next_insnd->name, regno);
-
-  if (reg_referenced_p(regno, next_insn))
+  if (check_probe)
     {
-      DUMP("     next stmt (%s) uses lhs, inserting NOP\n", next_insnd->name);
-      insert_nop_after(insn);
+      // Each block, other than the starting block, should only be
+      // walked once -- don't get trapped in a loop of non-SPU
+      // insns. The starting block should be walked exactly twice, if
+      // reachable.
+      if (bb->flags & BB_VISITED)
+	return false;
+      bb->flags |= BB_VISITED;
+      visited.push_back (bb);
     }
-  else
+
+  const rvtt_insn_data *insn_data;
+  if (probe_insn
+      && rvtt_get_next_insn (&insn_data, &probe_insn, probe_insn, check_probe))
     {
-      DUMP("     next stmt (%s) is independent, all good\n", next_insnd->name);
+      // We've met an SPU insn. If it is dependent, we'll need to
+      // insert a nop.  If it is non-dependent, it's filling the
+      // original insn's shadow, so any following dependent insn will
+      // be fine. Either way, we're done searching this BB.
+      bool is_dependent = reg_referenced_p (regno, probe_insn);
+      DUMP ("Found %sdependent insn at %s\n",
+	    is_dependent ? "" : "non-", probe_insn->name);
+      return is_dependent;
     }
+
+  // Walk all the successors
+  edge_iterator ei;
+  edge e;
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    if (walk_blocks (regno, e->dest, BB_HEAD (e->dest), true, visited))
+      return true;
+
+  // We didn't find anything
+  return false;
 }
 
-static void dynamic_schedule_wh_bh(rtx_insn *insn)
+/* Insert a nop after ORIG_INSN, if there is a depednent SPU insn in
+   its latency shadow.  */
+
+static void
+dynamic_schedule_wh_bh (rtx_insn *orig_insn, std::vector<basic_block> &visited)
 {
-  rtx_insn *next_insn;
-  const rvtt_insn_data *next_insnd;
+  gcc_assert (visited.empty ());
 
-  if (rvtt_get_next_insn(&next_insnd, &next_insn, insn))
-    {
-      insert_nop_if_needed_wh_bh(insn, next_insnd, next_insn);
-    }
-  else
-    {
-      // The stmt needing scheduling is the last stmt in the BB
-      // If any child has a dependent insn at the start, then we add a nop at
-      // the end of this BB
-      DUMP(" last stmt in BB, checking children\n");
+  if (walk_blocks (rvtt_get_insn_dst_regno (orig_insn) - SFPU_REG_FIRST,
+		   BLOCK_FOR_INSN (orig_insn), orig_insn, false, visited)) {
+    insert_nop_after (orig_insn);
+    DUMP ("Inserting nop after %s\n", orig_insn->name);
+  }
 
-      basic_block bb = BLOCK_FOR_INSN(insn);
-      edge_iterator ei;
-      edge e;
-      FOR_EACH_EDGE(e, ei, bb->succs)
-	{
-	  rtx_insn *bb_start_insn = BB_HEAD(e->dest);
-	  if (bb_start_insn != nullptr &&
-	      rvtt_get_next_insn(&next_insnd, &next_insn, bb_start_insn))
-	    {
-	      DUMP(" found a child w/ a dependency, inserting nop\n");
-	      insert_nop_if_needed_wh_bh(insn, next_insnd, next_insn);
-	      break;
-	    }
-	}
-    }
+  for (auto *bb : visited)
+    bb->flags &= ~BB_VISITED;
+  visited.clear ();
 }
 
 // Perform instruction scheduling
 //
-// For wormhole/blackhole there is dynamic and static schedule.  Dynamic scheduling
-// requires adding a NOP or moving a non-dependent instruction into the single
-// instruction shadow of ny instruction which uses the MAD unit, which are:
-// MAD, LUT, LUT32, MUL(I), ADD(I).  Presently, this only inserts a NOP.
+// For wormhole/blackhole there is dynamic and static schedule.
+// Dynamic scheduling requires adding a NOP into the single
+// instruction shadow of any instruction that uses the MAD unit, which
+// are: MAD, LUT, LUT32, MUL(I), ADD(I). An alternative to
+// NOP-insertion is to move a non-dependent instruction into that
+// slot, but we do not implement that.
 //
 // SWAP/SHFT2 are statically scheduled and always require a NOP.
 //
@@ -202,9 +222,12 @@ static void dynamic_schedule_wh_bh(rtx_insn *insn)
 // "dynamic" since it depends on the instructions
 static void transform ()
 {
-  DUMP("Schedule pass on: %s\n", function_name(cfun));
+  DUMP ("Schedule pass on: %s\n", function_name(cfun));
 
   basic_block bb;
+
+  // We want to reuse the same vector, to avoid reallocations.
+  std::vector<basic_block> visited;
 
   FOR_EACH_BB_FN (bb, cfun)
     {
@@ -214,34 +237,25 @@ static void transform ()
 	{
 	  const rvtt_insn_data *insnd;
 
-	  if (NONDEBUG_INSN_P(insn) &&
-	      rvtt_p(&insnd, insn))
+	  if (NONDEBUG_INSN_P (insn) && rvtt_p (&insnd, insn)
+	      && insnd->schedule_p ()
+	      && (!insnd->schedule_in_arg_p ()
+		  || insnd->schedule_from_arg_p (insn)))
 	    {
-	      if (insnd->schedule_p() &&
-		  (!insnd->schedule_in_arg_p() ||
-		   insnd->schedule_from_arg_p(insn)))
+	      if (insnd->schedule_dynamic_p (insn))
 		{
-		  if (insnd->schedule_dynamic_p(insn))
-		    {
-		      DUMP("  dynamic scheduling %s\n", insnd->name);
-		      if (flag_grayskull)
-			{
-			  dynamic_schedule_gs(insn);
-			}
-		      else
-			{
-			  dynamic_schedule_wh_bh(insn);
-			}
-		    }
-		  else if (flag_wormhole || flag_blackhole)
-		    {
-		      DUMP("  static scheduling %s\n", insnd->name);
-		      int count = insnd->schedule_static_nops(insn);
-		      for (int i = 0; i < count; i++)
-			{
-			  insert_nop_after(insn);
-			}
-		    }
+		  DUMP ("  dynamic scheduling %s\n", insnd->name);
+		  if (flag_grayskull)
+		    dynamic_schedule_gs (insn);
+		  else
+		    dynamic_schedule_wh_bh (insn, visited);
+		}
+	      else if (flag_wormhole || flag_blackhole)
+		{
+		  DUMP ("  static scheduling %s\n", insnd->name);
+		  int count = insnd->schedule_static_nops (insn);
+		  for (int i = 0; i < count; i++)
+		    insert_nop_after(insn);
 		}
 	    }
        }
