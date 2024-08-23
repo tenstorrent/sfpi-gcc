@@ -191,12 +191,13 @@ walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
    its latency shadow.  */
 
 static void
-dynamic_schedule_wh_bh (rtx_insn *orig_insn, std::vector<basic_block> &visited)
+dynamic_schedule_wh_bh (basic_block bb, rtx_insn *orig_insn,
+			std::vector<basic_block> &visited)
 {
   gcc_assert (visited.empty ());
 
   if (walk_blocks (rvtt_get_insn_dst_regno (orig_insn) - SFPU_REG_FIRST,
-		   BLOCK_FOR_INSN (orig_insn), orig_insn, false, visited)) {
+		   bb, orig_insn, false, visited)) {
     insert_nop_after (orig_insn);
     DUMP ("Inserting nop after %s\n", orig_insn->name);
   }
@@ -224,11 +225,11 @@ static void transform ()
 {
   DUMP ("Schedule pass on: %s\n", function_name(cfun));
 
-  basic_block bb;
-
   // We want to reuse the same vector, to avoid reallocations.
   std::vector<basic_block> visited;
+  visited.reserve (n_basic_blocks_for_fn (cfun));
 
+  basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
       rtx_insn *insn;
@@ -248,7 +249,7 @@ static void transform ()
 		  if (flag_grayskull)
 		    dynamic_schedule_gs (insn);
 		  else
-		    dynamic_schedule_wh_bh (insn, visited);
+		    dynamic_schedule_wh_bh (bb, insn, visited);
 		}
 	      else if (flag_wormhole || flag_blackhole)
 		{
