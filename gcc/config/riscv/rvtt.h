@@ -261,5 +261,7 @@ inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
 }
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
+extern bool rvtt_reg_store_p(const rtx pat);
+extern bool rvtt_l1_store_p(const rtx pat);
 
 #endif

@@ -158,9 +158,9 @@ my_classify_insn (rtx x)
 }
 
 static void
-emit_war(rtx_insn *where,
-	 int hll_war_reg,
-	 int *ll_count)
+emit_l1_war(rtx_insn *where,
+	    int hll_war_reg,
+	    int *ll_count)
 {
   DUMP("    emitting WAR with reg %d\n", hll_war_reg);
 
@@ -267,6 +267,43 @@ static bool refers_to_any_regno_p(vector<int>& regs, rtx_insn *insn)
   return false;
 }
 
+static bool
+get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
+{
+  if (GET_CODE(pat) == ZERO_EXTEND ||
+      GET_CODE(pat) == SIGN_EXTEND)
+    {
+      pat = XEXP(pat, 0);
+    }
+  if (GET_CODE(pat) == ASM_OPERANDS)
+    {
+      return false;
+    }
+  gcc_assert(MEM_P(pat));
+
+  if (REG_P(XEXP(pat, 0)))
+    {
+      *reg = REGNO(XEXP(pat, 0));;
+      *offset = 0;
+    }
+  else if (GET_CODE(XEXP(pat, 0)) != PLUS &&
+	   GET_CODE(XEXP(pat, 0)) != LO_SUM)
+    {
+      return false;
+    }
+  else
+    {
+      gcc_assert((GET_CODE(XEXP(pat, 0)) == PLUS ||
+		  GET_CODE(XEXP(pat, 0)) == LO_SUM) &&
+		 REG_P(XEXP(XEXP(pat, 0), 0)));
+
+      *offset = CONST_INT_P((XEXP(XEXP(pat, 0), 1))) ? INTVAL(XEXP(XEXP(pat, 0), 1)) : 0;
+      *reg = REGNO(XEXP(XEXP(pat, 0), 0));
+    }
+
+  return true;
+}
+
 //
 // This code works around the GS HLL arbiter HW bug
 //
@@ -320,7 +357,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	{
 	  DUMP("  epilogue beginning with hll active, emitting WAR\n");
 	  // Note: could return here, no harm in continuing since war is done
-	  emit_war(insn, hll_war_regs[0], &ll_count);
+	  emit_l1_war(insn, hll_war_regs[0], &ll_count);
 	}
       else if (NONDEBUG_INSN_P(insn))
 	{
@@ -377,7 +414,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	      else if (classify != INSN && classify != JUMP_INSN)
 		{
 		  DUMP("  %s with hll active, emitting WAR\n", GET_RTX_NAME(classify));
-		  emit_war(insn, hll_war_regs[0], &ll_count);
+		  emit_l1_war(insn, hll_war_regs[0], &ll_count);
 		}
 	      else if (load_mem_p(insn_pat))
 		{
@@ -387,7 +424,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 		  if (ll_count == 5)
 		    {
 		      DUMP("  local load is 5, emitting WAR\n");
-		      emit_war(insn, hll_war_regs[0], &ll_count);
+		      emit_l1_war(insn, hll_war_regs[0], &ll_count);
 		    }
 		  else
 		    {
@@ -409,7 +446,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 			  if (ll_count == 5)
 			    {
 			      DUMP("  local load is 5 with parallel, emitting WAR\n");
-			      emit_war(insn, hll_war_regs[0], &ll_count);
+			      emit_l1_war(insn, hll_war_regs[0], &ll_count);
 			    }
 			  else
 			    {
@@ -457,7 +494,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	    {
 	      DUMP("    checked BB[%d], can't handle, emitting WAR\n", e->dest->index);
 	      children_can_handle = false;
-	      emit_war(bb_insn_before_jump(bb), hll_war_regs[0], &ll_count);
+	      emit_l1_war(bb_insn_before_jump(bb), hll_war_regs[0], &ll_count);
 	      break;
 	    }
 	}
@@ -607,6 +644,77 @@ workaround_gs_hll(function *fn)
   calculate_dominance_info(CDI_DOMINATORS);
   gshllwar_dom_walker dw(bbd);
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
+}
+
+static void
+emit_raw_war(rtx_insn *insn, int war_regno, rtx war_pat)
+{
+  rtx reg = gen_rtx_REG(SImode, war_regno);
+  rtx extend = gen_rtx_ZERO_EXTEND(SImode, war_pat);
+  rtx new_insn = gen_rtx_SET(reg, extend);
+  emit_insn_before(new_insn, insn);
+}
+
+// GS and WH have a read after write hazard bug where loading a word after a
+// byte or half store issues the load before the store
+// Fix that by issuing a load to the same address to force a pipe stall
+// Can't issue word/byte loads to register space, so skip the war there
+// On GS, the load can invoke the hll workaround, so need to use a "valid"
+// (non r0) register
+static void
+workaround_gswh_raw(function *cfn)
+{
+  DUMP("RAW pass on: %s\n", function_name(cfn));
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      rtx_insn *insn;
+      bool war_pending = false;
+      int war_regno = 0;
+      int war_ptr_regno = 0;
+      rtx war_pat;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (NONDEBUG_INSN_P(insn))
+	    {
+	      rtx insn_pat = PATTERN(insn);
+	      if (store_mem_p(insn_pat))
+		{
+		  machine_mode mode = GET_MODE(SET_SRC(insn_pat));
+		  if (mode == HImode || mode == QImode)
+		    {
+		      // Found a potential RAW issue store
+		      if (!rvtt_reg_store_p(insn_pat))
+			{
+			  // Use the same register as used in the insn if we need th hll war
+			  war_regno = (flag_grayskull && rvtt_l1_store_p(insn_pat)) ?
+			    REGNO(SET_SRC(insn_pat)) : 0;
+			  int dummy_offset;
+			  get_mem_reg_and_offset(SET_DEST(insn_pat), &war_ptr_regno, &dummy_offset);
+			  war_pat = SET_DEST(insn_pat);
+			  war_pending = true;
+			}
+		    }
+		}
+	      else if (war_pending &&
+		       (load_mem_p(insn_pat) ||
+			(GET_CODE(insn_pat) == SET &&
+			 (refers_to_regno_p(war_ptr_regno, SET_DEST(insn_pat)) ||
+			  refers_to_regno_p(war_regno, SET_DEST(insn_pat))))))
+		{
+		  // Emit the war when we hit a load or if either reg gets modified
+		  emit_raw_war(insn, war_regno, war_pat);
+		  war_pending = false;
+		}
+	    }
+	}
+      if (war_pending)
+	{
+	  emit_raw_war(BB_END(bb), war_regno, war_pat);
+	  war_pending = false;
+	}
+    }
 }
 
 class load_type {
@@ -837,41 +945,6 @@ get_ic_of_resolution(vector<load_def>& load_defs, int which, load_def& ld, bool 
     }
 
   return max;
-}
-
-static bool
-get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
-{
-  if (GET_CODE(pat) == ZERO_EXTEND ||
-      GET_CODE(pat) == SIGN_EXTEND)
-    {
-      pat = XEXP(pat, 0);
-    }
-  if (GET_CODE(pat) == ASM_OPERANDS)
-    {
-      return false;
-    }
-  gcc_assert(MEM_P(pat));
-
-  if (REG_P(XEXP(pat, 0)))
-    {
-      *reg = REGNO(XEXP(pat, 0));;
-      *offset = 0;
-    }
-  else if (GET_CODE(XEXP(pat, 0)) != PLUS)
-    {
-      return false;
-    }
-  else
-    {
-      gcc_assert(GET_CODE(XEXP(pat, 0)) == PLUS &&
-		 REG_P(XEXP(XEXP(pat, 0), 0)) &&
-		 CONST_INT_P((XEXP(XEXP(pat, 0), 1))));
-      *reg = REGNO(XEXP(XEXP(pat, 0), 0));
-      *offset = INTVAL(XEXP(XEXP(pat, 0), 1));
-    }
-
-  return true;
 }
 
 // XXXX clean this up, overlapping restrictions crept in
@@ -1966,6 +2039,11 @@ public:
       if (flag_rvtt_dump_stats)
 	{
 	  analg.analyze(cfn);
+	}
+
+      if (flag_grayskull || flag_wormhole)
+	{
+	  workaround_gswh_raw(cfn);
 	}
 
       if (flag_grayskull && flag_rvtt_gshllwar)
