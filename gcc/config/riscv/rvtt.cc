@@ -999,74 +999,70 @@ int rvtt_get_insn_dst_regno(const rtx_insn *insn)
     }
 }
 
-static bool rvtt_load_has_attrib_p(const char *attrib, const rtx pat)
+static bool rvtt_has_attrib_p(const char *attrib, rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE(pat) == ZERO_EXTEND ||
+      GET_CODE(pat) == SIGN_EXTEND)
     {
-      rtx src = SET_SRC(pat);
-      if (GET_CODE(src) == ZERO_EXTEND ||
-	  GET_CODE(src) == SIGN_EXTEND)
+      pat = XEXP(pat, 0);
+    }
+
+  if (GET_CODE(pat) == MEM &&
+      MEM_EXPR(pat) != NULL_TREE)
+    {
+      tree exp = MEM_EXPR(pat);
+      if (TREE_CODE(exp) == PARM_DECL ||
+	  TREE_CODE(exp) == VAR_DECL)
 	{
-	  src = XEXP(src, 0);
+	  // Top level PARM/VAR DECL's are address calculation
+	  // (fingers crossed...)
+	  return false;
 	}
 
-      if (GET_CODE(src) == MEM &&
-	  MEM_EXPR(src) != NULL_TREE)
+      while (TREE_CODE(exp) != MEM_REF &&
+	     TREE_CODE(exp) != TARGET_MEM_REF &&
+	     TREE_CODE(exp) != PARM_DECL &&
+	     TREE_CODE(exp) != VAR_DECL)
 	{
-	  tree exp = MEM_EXPR(src);
-	  if (TREE_CODE(exp) == PARM_DECL ||
-	      TREE_CODE(exp) == VAR_DECL)
+	  if (TREE_CODE(exp) == ARRAY_REF ||
+	      TREE_CODE(exp) == COMPONENT_REF ||
+	      TREE_CODE(exp) == BIT_FIELD_REF ||
+	      TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
+	      TREE_CODE(exp) == REALPART_EXPR ||
+	      TREE_CODE(exp) == IMAGPART_EXPR)
 	    {
-	      // Top level PARM/VAR DECL's are address calculation
-	      // (fingers crossed...)
+	      exp = TREE_OPERAND(exp, 0);
+	    }
+	  else if (TREE_CODE(exp) == STRING_CST ||
+		   TREE_CODE(exp) == VECTOR_CST ||
+		   TREE_CODE(exp) == RESULT_DECL)
+	    {
+	      // CST won't be in L1
 	      return false;
 	    }
-
-	  while (TREE_CODE(exp) != MEM_REF &&
-		 TREE_CODE(exp) != TARGET_MEM_REF &&
-		 TREE_CODE(exp) != PARM_DECL &&
-		 TREE_CODE(exp) != VAR_DECL)
+	  else
 	    {
-	      if (TREE_CODE(exp) == ARRAY_REF ||
-		  TREE_CODE(exp) == COMPONENT_REF ||
-		  TREE_CODE(exp) == BIT_FIELD_REF ||
-		  TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
-		  TREE_CODE(exp) == REALPART_EXPR ||
-		  TREE_CODE(exp) == IMAGPART_EXPR)
-		{
-		  exp = TREE_OPERAND(exp, 0);
-		}
-	      else if (TREE_CODE(exp) == STRING_CST ||
-		       TREE_CODE(exp) == VECTOR_CST ||
-		       TREE_CODE(exp) == RESULT_DECL)
-		{
-		  // CST won't be in L1
-		  return false;
-		}
-	      else
-		{
-		  debug_rtx(pat);
-		  debug_tree(MEM_EXPR(src));
-		  gcc_unreachable();
-		}
+	      debug_rtx(pat);
+	      debug_tree(MEM_EXPR(pat));
+	      gcc_unreachable();
 	    }
-	  gcc_assert(TREE_CODE(exp) == MEM_REF ||
-		     TREE_CODE(exp) == TARGET_MEM_REF ||
-		     TREE_CODE(exp) == PARM_DECL ||
-		     TREE_CODE(exp) == VAR_DECL);
+	}
+      gcc_assert(TREE_CODE(exp) == MEM_REF ||
+		 TREE_CODE(exp) == TARGET_MEM_REF ||
+		 TREE_CODE(exp) == PARM_DECL ||
+		 TREE_CODE(exp) == VAR_DECL);
 
 #if !RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS
-	  tree decl = (TREE_CODE(exp) == PARM_DECL ||
-		       TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
-	  if (decl != NULL_TREE &&
-	      lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
-	    {
-	      return true;
-	    }
-#else
+      tree decl = (TREE_CODE(exp) == PARM_DECL ||
+		   TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+      if (decl != NULL_TREE &&
+	  lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
+	{
 	  return true;
-#endif
 	}
+#else
+      return true;
+#endif
     }
 
   return false;
@@ -1127,17 +1123,47 @@ bool rvtt_store_has_restrict_p(const rtx pat)
   return false;
 }
 
-bool rvtt_hll_p(const rtx pat)
-{
-  return rvtt_load_has_attrib_p("rvtt_l1_ptr", pat) || rvtt_load_has_attrib_p("rvtt_reg_ptr", pat);
-}
-
 bool rvtt_l1_load_p(const rtx pat)
 {
-  return rvtt_load_has_attrib_p("rvtt_l1_ptr", pat);
+  if (GET_CODE(pat) == SET)
+    {
+      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_SRC(pat));
+    }
+
+  return false;
 }
 
 bool rvtt_reg_load_p(const rtx pat)
 {
-  return rvtt_load_has_attrib_p("rvtt_reg_ptr", pat);
+  if (GET_CODE(pat) == SET)
+    {
+      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_SRC(pat));
+    }
+
+  return false;
+}
+
+bool rvtt_hll_p(const rtx pat)
+{
+  return rvtt_l1_load_p(pat) || rvtt_reg_load_p(pat);
+}
+
+bool rvtt_l1_store_p(const rtx pat)
+{
+  if (GET_CODE(pat) == SET)
+    {
+      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_DEST(pat));
+    }
+
+  return false;
+}
+
+bool rvtt_reg_store_p(const rtx pat)
+{
+  if (GET_CODE(pat) == SET)
+    {
+      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_DEST(pat));
+    }
+
+  return false;
 }
