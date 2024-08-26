@@ -225,9 +225,7 @@ static void transform ()
 {
   DUMP ("Schedule pass on: %s\n", function_name(cfun));
 
-  // We want to reuse the same vector, to avoid reallocations.
   std::vector<basic_block> visited;
-  visited.reserve (n_basic_blocks_for_fn (cfun));
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
@@ -248,8 +246,11 @@ static void transform ()
 		  DUMP ("  dynamic scheduling %s\n", insnd->name);
 		  if (flag_grayskull)
 		    dynamic_schedule_gs (insn);
-		  else
+		  else {
+		    // Reserve space now we know we need it
+		    visited.reserve (n_basic_blocks_for_fn (cfun));
 		    dynamic_schedule_wh_bh (bb, insn, visited);
+		  }
 		}
 	      else if (flag_wormhole || flag_blackhole)
 		{
