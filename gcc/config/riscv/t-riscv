@@ -39,10 +39,10 @@ rvtt-wh.o: $(srcdir)/config/riscv/rvtt-wh.cc $(CONFIG_H) $(SYSTEM_H) \
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/rvtt-wh.cc
 
-rvtt-bh.o: $(srcdir)/config/riscv/rvtt-bh.c $(CONFIG_H) $(SYSTEM_H) \
+rvtt-bh.o: $(srcdir)/config/riscv/rvtt-bh.cc $(CONFIG_H) $(SYSTEM_H) \
     coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-bh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
-		$(srcdir)/config/riscv/rvtt-bh.c
+		$(srcdir)/config/riscv/rvtt-bh.cc
 
 PASSES_EXTRA += $(srcdir)/config/riscv/riscv-passes.def
 
