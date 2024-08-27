@@ -56,6 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "print-rtl.h"
 #include "function-abi.h"
 #include "domwalk.h"
+#include "cfgbuild.h"
 #include <vector>
 #include <unordered_map>
 #include "config/riscv/rvtt.h"
@@ -159,33 +160,19 @@ my_classify_insn (rtx x)
 
 static void
 emit_l1_war(rtx_insn *where,
+	    bool before,
 	    int hll_war_reg,
 	    int *ll_count)
 {
-  DUMP("    emitting WAR with reg %d\n", hll_war_reg);
-
+  DUMP("    emitting l1 WAR with reg %d\n", hll_war_reg);
   *ll_count = -1;
   n_gs_hll_wars++;
 
   rtx reg = gen_rtx_REG(SImode, hll_war_reg);
-  emit_insn_before(gen_rvtt_gs_l1_load_war(reg), where);
-}
-
-// Return the last insn in the BB unless it is a jump, then return the insn
-// before that
-static rtx_insn *
-bb_insn_before_jump(basic_block bb)
-{
-  rtx_insn *insn = BB_END(bb);
-  rtx insn_pat = PATTERN(insn);
-  if (my_classify_insn(insn_pat) == JUMP_INSN)
-    {
-      return insn;
-    }
+  if (before)
+    emit_insn_before(gen_rvtt_gs_l1_load_war(reg), where);
   else
-    {
-      return NEXT_INSN(insn);
-    }
+    emit_insn_after(gen_rvtt_gs_l1_load_war(reg), where);
 }
 
 static bool
@@ -357,7 +344,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	{
 	  DUMP("  epilogue beginning with hll active, emitting WAR\n");
 	  // Note: could return here, no harm in continuing since war is done
-	  emit_l1_war(insn, hll_war_regs[0], &ll_count);
+	  emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
 	}
       else if (NONDEBUG_INSN_P(insn))
 	{
@@ -414,7 +401,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	      else if (classify != INSN && classify != JUMP_INSN)
 		{
 		  DUMP("  %s with hll active, emitting WAR\n", GET_RTX_NAME(classify));
-		  emit_l1_war(insn, hll_war_regs[0], &ll_count);
+		  emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
 		}
 	      else if (load_mem_p(insn_pat))
 		{
@@ -424,7 +411,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 		  if (ll_count == 5)
 		    {
 		      DUMP("  local load is 5, emitting WAR\n");
-		      emit_l1_war(insn, hll_war_regs[0], &ll_count);
+		      emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
 		    }
 		  else
 		    {
@@ -446,7 +433,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 			  if (ll_count == 5)
 			    {
 			      DUMP("  local load is 5 with parallel, emitting WAR\n");
-			      emit_l1_war(insn, hll_war_regs[0], &ll_count);
+			      emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
 			    }
 			  else
 			    {
@@ -480,6 +467,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	       dst_bbe.ll_incoming,
 	       dst_bbe.ll_before_resolve_all,
 	       (dst_bbe.ll_incoming == -1) ? -1 : dst_bbe.hll_war_reg_incoming[0]);
+
 	  if ((dst_bbe.ll_before_resolve_all != -1 && dst_bbe.ll_before_resolve_all + ll_count < 5) ||
 	      !dst_bbe.inited ||
 	      (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0]))
@@ -494,7 +482,7 @@ edge gshllwar_dom_walker::before_dom_children(basic_block bb)
 	    {
 	      DUMP("    checked BB[%d], can't handle, emitting WAR\n", e->dest->index);
 	      children_can_handle = false;
-	      emit_l1_war(bb_insn_before_jump(bb), hll_war_regs[0], &ll_count);
+	      emit_l1_war(BB_END(bb), control_flow_insn_p(BB_END(bb)), hll_war_regs[0], &ll_count);
 	      break;
 	    }
 	}
@@ -644,15 +632,24 @@ workaround_gs_hll(function *fn)
   calculate_dominance_info(CDI_DOMINATORS);
   gshllwar_dom_walker dw(bbd);
   dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
+
+  DUMP("TT riscv GS rtl hll war pass finished for: %s\n", function_name(fn));
 }
 
 static void
-emit_raw_war(rtx_insn *insn, int war_regno, rtx war_pat)
+emit_raw_war(rtx_insn *insn, bool before, int war_regno, rtx war_pat)
 {
   rtx reg = gen_rtx_REG(SImode, war_regno);
   rtx extend = gen_rtx_ZERO_EXTEND(SImode, war_pat);
   rtx new_insn = gen_rtx_SET(reg, extend);
-  emit_insn_before(new_insn, insn);
+  if (before)
+    {
+      emit_insn_before(new_insn, insn);
+    }
+  else
+    {
+      emit_insn_after(new_insn, insn);
+    }
 }
 
 // GS and WH have a read after write hazard bug where loading a word after a
@@ -669,6 +666,7 @@ workaround_gswh_raw(function *cfn)
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
+      DUMP("Processing BB %d\n", bb->index);
       rtx_insn *insn;
       bool war_pending = false;
       int war_regno = 0;
@@ -679,6 +677,7 @@ workaround_gswh_raw(function *cfn)
 	  if (NONDEBUG_INSN_P(insn))
 	    {
 	      rtx insn_pat = PATTERN(insn);
+	      int classify = my_classify_insn(insn_pat);
 	      if (store_mem_p(insn_pat))
 		{
 		  machine_mode mode = GET_MODE(SET_SRC(insn_pat));
@@ -694,27 +693,32 @@ workaround_gswh_raw(function *cfn)
 			  get_mem_reg_and_offset(SET_DEST(insn_pat), &war_ptr_regno, &dummy_offset);
 			  war_pat = SET_DEST(insn_pat);
 			  war_pending = true;
+			  DUMP("raw war pending for [%d]->%d\n", war_ptr_regno, war_regno);
 			}
 		    }
 		}
 	      else if (war_pending &&
-		       (load_mem_p(insn_pat) ||
-			(GET_CODE(insn_pat) == SET &&
-			 (refers_to_regno_p(war_ptr_regno, SET_DEST(insn_pat)) ||
-			  refers_to_regno_p(war_regno, SET_DEST(insn_pat))))))
+		       (classify != INSN ||
+			(load_mem_p(insn_pat) ||
+			 (GET_CODE(insn_pat) == SET &&
+			  (refers_to_regno_p(war_ptr_regno, SET_DEST(insn_pat)) ||
+			   refers_to_regno_p(war_regno, SET_DEST(insn_pat)))))))
 		{
 		  // Emit the war when we hit a load or if either reg gets modified
-		  emit_raw_war(insn, war_regno, war_pat);
+		  DUMP("emitting raw war before load\n", war_ptr_regno, war_regno);
+		  emit_raw_war(insn, true, war_regno, war_pat);
 		  war_pending = false;
 		}
 	    }
 	}
       if (war_pending)
 	{
-	  emit_raw_war(BB_END(bb), war_regno, war_pat);
+	  DUMP("emitting raw war at end of bb\n");
+	  emit_raw_war(BB_END(bb), control_flow_insn_p(BB_END(bb)), war_regno, war_pat);
 	  war_pending = false;
 	}
     }
+  DUMP("out raw pass\n");
 }
 
 class load_type {
@@ -2041,6 +2045,7 @@ public:
 	  analg.analyze(cfn);
 	}
 
+      // This must come before the hll pass as it introduces loads
       if (flag_grayskull || flag_wormhole)
 	{
 	  workaround_gswh_raw(cfn);
