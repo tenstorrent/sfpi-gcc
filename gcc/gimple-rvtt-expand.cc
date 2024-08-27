@@ -102,7 +102,7 @@ static int
 negate_cmp_mod(int mod)
 {
     int op = mod & SFPXCMP_MOD1_CC_MASK;
-    int new_op;
+    int new_op = 0;
 
     switch (op) {
     case SFPXCMP_MOD1_CC_LT:

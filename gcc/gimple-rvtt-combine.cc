@@ -290,8 +290,6 @@ fixup_vuse_vdef(gimple_stmt_iterator keep_gsi, gimple_stmt_iterator old_gsi)
   gimple *keep_g = gsi_stmt(keep_gsi);
   gimple *old_g = gsi_stmt(old_gsi);
 
-  tree keep_vdef = gimple_vdef(keep_g);
-  tree keep_vuse = gimple_vuse(keep_g);
   gimple_set_vuse(keep_g, gimple_vuse(old_g));
   gimple_set_vdef(keep_g, gimple_vdef(old_g));
   gimple_set_modified(keep_g, true);
