@@ -2428,7 +2428,8 @@
 
 (define_expand "tablejump"
   [(set (pc) (match_operand 0 "register_operand" ""))
-	      (use (label_ref (match_operand 1 "" "")))]
+	      (use (label_ref (match_operand 1 "" "")))
+	      (use (label_ref (match_operand 2 "" "")))]
   ""
 {
   if (CASE_VECTOR_PC_RELATIVE)
@@ -2437,15 +2438,16 @@
 					 NULL_RTX, 0, OPTAB_DIRECT);
 
   if (CASE_VECTOR_PC_RELATIVE && Pmode == DImode)
-    emit_jump_insn (gen_tablejumpdi (operands[0], operands[1]));
+    emit_jump_insn (gen_tablejumpdi (operands[0], operands[1], operands[2]));
   else
-    emit_jump_insn (gen_tablejumpsi (operands[0], operands[1]));
+    emit_jump_insn (gen_tablejumpsi (operands[0], operands[1], operands[2]));
   DONE;
 })
 
 (define_insn "tablejump<mode>"
   [(set (pc) (match_operand:GPR 0 "register_operand" "l"))
-   (use (label_ref (match_operand 1 "" "")))]
+   (use (label_ref (match_operand 1 "" "")))
+   (use (label_ref (match_operand 2 "" "")))]
   ""
   "jr\t%0"
   [(set_attr "type" "jump")

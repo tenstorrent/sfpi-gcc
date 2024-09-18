@@ -736,7 +736,10 @@ typedef struct {
 
 #define JUMP_TABLES_IN_TEXT_SECTION 0
 #define CASE_VECTOR_MODE SImode
-#define CASE_VECTOR_PC_RELATIVE (riscv_cmodel != CM_MEDLOW)
+  // -1 means the table address and the table contents are
+  // -pc-relative, but to specitic code labels. This is needed for our
+  // -XIP code generation. The table can be placed in text or data.
+#define CASE_VECTOR_PC_RELATIVE (riscv_cmodel != CM_MEDLOW ? 1 : -1)
 
 /* The load-address macro is used for PC-relative addressing of symbols
    that bind locally.  Don't use it for symbols that should be addressed

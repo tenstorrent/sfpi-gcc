@@ -321,7 +321,7 @@ extern void maybe_optimize_sub_cmp_0 (enum tree_code, tree *, tree *);
 
 /* Two different ways of generating switch statements.  */
 extern int try_casesi (tree, tree, tree, tree, rtx, rtx, rtx, profile_probability);
-extern int try_tablejump (tree, tree, tree, tree, rtx, rtx, profile_probability);
+extern int try_tablejump (tree, tree, tree, tree, rtx, rtx, rtx, profile_probability);
 
 extern int safe_from_p (const_rtx, tree, int);
 

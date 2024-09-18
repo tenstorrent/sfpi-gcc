@@ -95,7 +95,7 @@ static rtx do_store_flag (sepops, rtx, machine_mode);
 #ifdef PUSH_ROUNDING
 static void emit_single_push_insn (machine_mode, rtx, tree);
 #endif
-static void do_tablejump (rtx, machine_mode, rtx, rtx, rtx,
+static void do_tablejump (rtx, machine_mode, rtx, rtx, rtx, rtx,
 			  profile_probability);
 static rtx const_vector_from_tree (tree);
 static tree tree_expr_size (const_tree);
@@ -12865,7 +12865,7 @@ try_casesi (tree index_type, tree index_expr, tree minval, tree range,
 
 static void
 do_tablejump (rtx index, machine_mode mode, rtx range, rtx table_label,
-	      rtx default_label, profile_probability default_probability)
+	      rtx code_label, rtx default_label, profile_probability default_probability)
 {
   rtx temp, vector;
 
@@ -12933,17 +12933,18 @@ do_tablejump (rtx index, machine_mode mode, rtx range, rtx table_label,
   vector = gen_const_mem (CASE_VECTOR_MODE, index);
   convert_move (temp, vector, 0);
 
-  emit_jump_insn (targetm.gen_tablejump (temp, table_label));
-
-  /* If we are generating PIC code or if the table is PC-relative, the
-     table and JUMP_INSN must be adjacent, so don't output a BARRIER.  */
-  if (! CASE_VECTOR_PC_RELATIVE && ! flag_pic)
-    emit_barrier ();
+  if (code_label != table_label)
+    {
+      LABEL_PRESERVE_P (code_label) = true;
+      emit_label (code_label);
+    }
+  emit_jump_insn (targetm.gen_tablejump (temp, code_label, table_label));
+  emit_barrier ();  
 }
 
 int
 try_tablejump (tree index_type, tree index_expr, tree minval, tree range,
-	       rtx table_label, rtx default_label, 
+	       rtx table_label, rtx code_label, rtx default_label, 
 	       profile_probability default_probability)
 {
   rtx index;
@@ -12962,7 +12963,7 @@ try_tablejump (tree index_type, tree index_expr, tree minval, tree range,
 			       TYPE_MODE (TREE_TYPE (range)),
 			       expand_normal (range),
 			       TYPE_UNSIGNED (TREE_TYPE (range))),
-		table_label, default_label, default_probability);
+		table_label, code_label, default_label, default_probability);
   return 1;
 }
 
