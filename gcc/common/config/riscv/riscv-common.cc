@@ -189,6 +189,10 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"zvl32768b", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zvl65536b", ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"xttgs", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"xttwh", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"xttbh", ISA_SPEC_CLASS_NONE, 1, 0},
+
   /* Terminate the list.  */
   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
 };
@@ -1140,7 +1144,10 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"zvl32768b", &gcc_options::x_riscv_zvl_flags, MASK_ZVL32768B},
   {"zvl65536b", &gcc_options::x_riscv_zvl_flags, MASK_ZVL65536B},
 
-
+  {"xttgs", &gcc_options::x_riscv_tt_flags, MASK_TT_GS},
+  {"xttwh", &gcc_options::x_riscv_tt_flags, MASK_TT_WH},
+  {"xttbh", &gcc_options::x_riscv_tt_flags, MASK_TT_BH},
+  
   {NULL, NULL, 0}
 };
 

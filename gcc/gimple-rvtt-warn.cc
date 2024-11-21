@@ -117,7 +117,7 @@ warn_replace_stmt(gimple_stmt_iterator *gsi, tree lhs, location_t loc)
 
   gimple_set_location (loadi_use_stmt, loc);
   update_stmt(loadi_use_stmt);
-  gsi_replace(gsi, loadi_use_stmt, GSI_SAME_STMT);
+  gsi_replace(gsi, loadi_use_stmt, false);
   update_ssa (TODO_update_ssa);
 }
 
@@ -375,11 +375,9 @@ public:
 unsigned int
 pass_rvtt_warn::execute (function *fun)
 {
-  bool sfpu_warn = (flag_rvtt_warn && (flag_grayskull || flag_wormhole || flag_blackhole));
+  bool sfpu_warn = flag_rvtt_warn && TARGET_RVTT;
   if (sfpu_warn || flag_rvtt_error_multdiv)
-    {
-      process (fun, sfpu_warn, flag_rvtt_error_multdiv);
-    }
+    process (fun, sfpu_warn, flag_rvtt_error_multdiv);
 
   return 0;
 }

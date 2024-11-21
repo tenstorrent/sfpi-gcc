@@ -687,7 +687,7 @@ workaround_gswh_raw(function *cfn)
 		      if (!rvtt_reg_store_p(insn_pat))
 			{
 			  // Use the same register as used in the insn if we need th hll war
-			  war_regno = (flag_grayskull && rvtt_l1_store_p(insn_pat)) ?
+			  war_regno = (TARGET_RVTT_GS && rvtt_l1_store_p(insn_pat)) ?
 			    REGNO(SET_SRC(insn_pat)) : 0;
 			  int dummy_offset;
 			  get_mem_reg_and_offset(SET_DEST(insn_pat), &war_ptr_regno, &dummy_offset);
@@ -1990,10 +1990,8 @@ void analysis::print()
   fprintf(stderr, "Stack lds: %d\n", n_stack_lds);
   fprintf(stderr, "Stack sts: %d\n", n_stack_sts);
   if (n_sfpu != 0) fprintf(stderr, "SFPU: %d\n", n_sfpu);
-  if (flag_grayskull && flag_rvtt_gshllwar)
-    {
-      fprintf(stderr, "GS arbiter wars: %d\n", n_gs_hll_wars);
-    }
+  if (TARGET_RVTT_GS && flag_rvtt_gshllwar)
+    fprintf(stderr, "GS arbiter wars: %d\n", n_gs_hll_wars);
   fprintf(stderr, "Cycles top to bottom: %d\n", cycle_count);
 }
 
@@ -2046,15 +2044,11 @@ public:
 	}
 
       // This must come before the hll pass as it introduces loads
-      if (flag_grayskull || flag_wormhole)
-	{
-	  workaround_gswh_raw(cfn);
-	}
+      if (TARGET_RVTT_GS || TARGET_RVTT_WH)
+	workaround_gswh_raw(cfn);
 
-      if (flag_grayskull && flag_rvtt_gshllwar)
-	{
-	  workaround_gs_hll(cfn);
-	}
+      if (TARGET_RVTT_GS && flag_rvtt_gshllwar)
+	workaround_gs_hll(cfn);
 
       return 0;
     }

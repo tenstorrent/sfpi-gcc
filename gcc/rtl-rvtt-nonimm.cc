@@ -255,10 +255,8 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_grayskull || flag_wormhole || flag_blackhole)
-       {
-	 transform (cfn);
-       }
+      if (TARGET_RVTT)
+	transform (cfn);
       return 0;
     }
 }; // class pass_rvtt_nonimm

@@ -485,7 +485,7 @@ try_gen_mad(const rvtt_insn_data *candidate_insnd,
 
 	  tree assign_lhs = gimple_call_lhs(assign_stmt);
 
-	  if (!intervening_unrelated_or_cc_stmt(gimple_call_arg(candidate_stmt, live + which_arg ^ 1),
+	  if (!intervening_unrelated_or_cc_stmt(gimple_call_arg(candidate_stmt, (live + which_arg) ^ 1),
 						assign_gsi, candidate_gsi) &&
 	      has_single_use(assign_lhs))
 	    {
@@ -787,7 +787,7 @@ static void transform (function *fun)
     {
       bool update = false;
 
-      if (flag_grayskull) {
+      if (TARGET_RVTT_GS) {
 	candidate_gsi = gsi_start_bb (bb);
 	while (!gsi_end_p (candidate_gsi))
 	  {
@@ -881,10 +881,8 @@ public:
 unsigned int
 pass_rvtt_combine::execute (function *fun)
 {
-  if (flag_rvtt_combine && (flag_grayskull || flag_wormhole || flag_blackhole))
-    {
-      transform (fun);
-    }
+  if (flag_rvtt_combine && TARGET_RVTT)
+    transform (fun);
 
   return 0;
 }

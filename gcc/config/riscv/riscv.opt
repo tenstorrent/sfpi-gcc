@@ -78,21 +78,9 @@ mdiv
 Target Mask(DIV)
 Use hardware instructions for integer division.
 
-mgrayskull
-Target Mask(RVTT_GS) Bool Var(flag_grayskull) Init(0)
-Generate code for Tenstorrent SFPU - Grayskull.
-
-mwormhole
-Target Mask(RVTT_WH) Bool Var(flag_wormhole) Init(0)
-Generate code for Tenstorrent SFPU - Wormhole.
-
 mwormhole_a0
 Target Bool Var(flag_wormhole_a0) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole a0 Si.
-
-mblackhole
-Target Mask(RVTT_BH) Bool Var(flag_blackhole) Init(0)
-Generate code for Tenstorrent SFPU - Blackhole.
 
 march=
 Target RejectNegative Joined Negative(march=)
@@ -224,6 +212,9 @@ int riscv_vector_elen_flags
 
 TargetVariable
 int riscv_zvl_flags
+
+TargetVariable
+int riscv_tt_flags
 
 Enum
 Name(isa_spec_class) Type(enum riscv_isa_spec_class)

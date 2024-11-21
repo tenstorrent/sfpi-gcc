@@ -629,11 +629,11 @@ static bool do_update(bool first, int i, int count, int length,
 	{
 	  DUMP("    inserting replay capture at %d\n", i - count);
 	  first = false;
-	  if (flag_wormhole) {
+	  if (TARGET_RVTT_WH) {
 	    emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
 						   GEN_INT(1), GEN_INT(1)),
 			     start_insn);
-	  } else if (flag_blackhole) {
+	  } else if (TARGET_RVTT_BH) {
 	    emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
 						   GEN_INT(1), GEN_INT(1)),
 			     start_insn);
@@ -654,11 +654,11 @@ static bool do_update(bool first, int i, int count, int length,
 	    }
 	  start_insn = NEXT_INSN(start_insn);
 	}
-      if (flag_wormhole) {
+      if (TARGET_RVTT_WH) {
 	emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
 					       GEN_INT(0), GEN_INT(0)),
 			 insn);
-      } else if (flag_blackhole) {
+      } else if (TARGET_RVTT_BH) {
 	emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
 					       GEN_INT(0), GEN_INT(0)),
 			 insn);
@@ -828,7 +828,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (((flag_wormhole && !flag_wormhole_a0) || flag_blackhole) && flag_rvtt_replay)
+      if (flag_rvtt_replay && ((TARGET_RVTT_WH && !flag_wormhole_a0) || TARGET_RVTT_BH))
 	{
 	  replay_max_insns = rvtt_replay_buffer_size;
 	  transform (cfn);

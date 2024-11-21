@@ -207,14 +207,10 @@ emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
   gimple *new_stmt;
-  if (flag_grayskull)
-    {
-      new_stmt = gimple_build_call(new_insnd->decl, 0);
-    }
+  if (TARGET_RVTT_GS)
+    new_stmt = gimple_build_call(new_insnd->decl, 0);
   else
-    {
-      new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPUSHCC_MOD1_PUSH));
-    }
+    new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPUSHCC_MOD1_PUSH));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
@@ -224,14 +220,10 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
   gimple *new_stmt;
-  if (flag_grayskull)
-    {
-      new_stmt = gimple_build_call(new_insnd->decl, 0);
-    }
+  if (TARGET_RVTT_GS)
+    new_stmt = gimple_build_call(new_insnd->decl, 0);
   else
-    {
-      new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPOPCC_MOD1_POP));
-    }
+    new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPOPCC_MOD1_POP));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
@@ -746,10 +738,8 @@ public:
 unsigned int
 pass_rvtt_expand::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole || flag_blackhole)
-    {
-      transform (fun);
-    }
+  if (TARGET_RVTT)
+    transform (fun);
 
   return 0;
 }

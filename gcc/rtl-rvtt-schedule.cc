@@ -74,11 +74,11 @@ insert_nop_after (rtx_insn *insn)
 {
   rtx nop = NULL_RTX;
 
-  if (flag_grayskull)
+  if (TARGET_RVTT_GS)
     nop = gen_rvtt_gs_sfpnop();
-  else if (flag_wormhole)
+  else if (TARGET_RVTT_WH)
     nop = gen_rvtt_wh_sfpnop();
-  else if (flag_blackhole)
+  else if (TARGET_RVTT_BH)
     nop = gen_rvtt_bh_sfpnop();
   else
     gcc_unreachable ();
@@ -244,7 +244,7 @@ static void transform ()
 	      if (insnd->schedule_dynamic_p (insn))
 		{
 		  DUMP ("  dynamic scheduling %s\n", insnd->name);
-		  if (flag_grayskull)
+		  if (TARGET_RVTT_GS)
 		    dynamic_schedule_gs (insn);
 		  else {
 		    // Reserve space now we know we need it
@@ -252,7 +252,7 @@ static void transform ()
 		    dynamic_schedule_wh_bh (bb, insn, visited);
 		  }
 		}
-	      else if (flag_wormhole || flag_blackhole)
+	      else if (TARGET_RVTT_WH || TARGET_RVTT_BH)
 		{
 		  DUMP ("  static scheduling %s\n", insnd->name);
 		  int count = insnd->schedule_static_nops (insn);
@@ -295,10 +295,8 @@ public:
 unsigned int
 pass_rvtt_schedule::execute (function *)
 {
-  if (flag_grayskull || flag_wormhole || flag_blackhole)
-    {
-      transform ();
-    }
+  if (TARGET_RVTT)
+    transform ();
 
   return 0;
 }
