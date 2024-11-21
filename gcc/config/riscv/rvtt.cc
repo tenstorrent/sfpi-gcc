@@ -161,13 +161,13 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
   static int start = 0;
 
   int arch;
-  if (flag_grayskull) {
+  if (TARGET_RVTT_GS) {
     arch = 0;
     rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_GS;
-  } else if (flag_wormhole) {
+  } else if (TARGET_RVTT_WH) {
     arch = 1;
     rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
-  } else if (flag_blackhole) {
+  } else if (TARGET_RVTT_BH) {
     arch = 2;
     rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_BH;
   } else {
@@ -247,13 +247,13 @@ void
 rvtt_init_builtins()
 {
   int arch;
-  if (flag_grayskull) {
+  if (TARGET_RVTT_GS) {
     arch = 0;
     rvtt_builtin_name_stub = "__builtin_rvtt_gs";
-  } else if (flag_wormhole) {
+  } else if (TARGET_RVTT_WH) {
     arch = 1;
     rvtt_builtin_name_stub = "__builtin_rvtt_wh";
-  } else if (flag_blackhole) {
+  } else if (TARGET_RVTT_BH) {
     arch = 2;
     rvtt_builtin_name_stub = "__builtin_rvtt_bh";
   } else {
@@ -565,7 +565,7 @@ char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands
 {
   // Replay pass on wormhole/blackhole assumes insns only emit 1 insn
   nnops &= INSN_SCHED_NOP_MASK;
-  gcc_assert(flag_wormhole == 0 || flag_blackhole == 0 || nnops == 0);
+  gcc_assert(!TARGET_RVTT_WH || !TARGET_RVTT_BH || nnops == 0);
   char const *out = sw;
   while (nnops-- > 0) {
      output_asm_insn(out, operands);

@@ -311,10 +311,8 @@ public:
 unsigned int
 pass_rvtt_cc::execute (function *fun)
 {
-  if (flag_rvtt_cc && (flag_grayskull || flag_wormhole || flag_blackhole))
-    {
-      transform (fun);
-    }
+  if (flag_rvtt_cc && TARGET_RVTT)
+    transform (fun);
 
   return 0;
 }

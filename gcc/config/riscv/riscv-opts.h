@@ -154,4 +154,16 @@ enum stack_protector_guard {
    ? 0 \
    : 32 << (__builtin_popcount (riscv_zvl_flags) - 1))
 
+
+// At-most one bit can be set (attributes are usually independent, hence bits,
+// but that's not how this behaves)
+#define MASK_TT_GS (1 << 0)
+#define MASK_TT_WH (1 << 1)
+#define MASK_TT_BH (1 << 2)
+
+#define TARGET_RVTT_GS ((riscv_tt_flags & MASK_TT_GS) != 0)
+#define TARGET_RVTT_WH ((riscv_tt_flags & MASK_TT_WH) != 0)
+#define TARGET_RVTT_BH ((riscv_tt_flags & MASK_TT_BH) != 0)
+#define TARGET_RVTT (riscv_tt_flags != 0)
+
 #endif /* ! GCC_RISCV_OPTS_H */

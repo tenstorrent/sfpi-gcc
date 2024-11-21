@@ -64,6 +64,14 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_fsqrt");
     }
 
+  // Unfortunately in the user's namespace
+  if (TARGET_RVTT_GS)
+    builtin_define("ARCH_GRAYSKULL");
+  if (TARGET_RVTT_WH)
+    builtin_define("ARCH_WORMHOLE");
+  if (TARGET_RVTT_BH)
+    builtin_define("ARCH_BLACKHOLE");
+
   switch (riscv_abi)
     {
     case ABI_ILP32E:

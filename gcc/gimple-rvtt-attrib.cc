@@ -248,10 +248,8 @@ public:
 unsigned int
 pass_rvtt_attrib::execute (function *fun)
 {
-  if (flag_grayskull || flag_wormhole)
-    {
-      transform (fun);
-    }
+  if (TARGET_RVTT_GS || TARGET_RVTT_WH)
+    transform (fun);
 
   return 0;
 }
