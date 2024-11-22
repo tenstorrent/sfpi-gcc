@@ -1,5 +1,5 @@
 // { dg-do compile }
-// { dg-additional-options "-mwormhole -march=rv32imw -mtune=rvtt-b1 -mabi=ilp32 -fno-inline -O2 -fno-exceptions" }
+// { dg-additional-options "-mcpu=tt-wh -mabi=ilp32 -fno-inline -O2 -fno-exceptions" }
 
 // Read after write race with different sized accesses and different
 // effective addresses.
