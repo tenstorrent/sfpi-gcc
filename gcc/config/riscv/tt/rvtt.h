@@ -22,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include <map>
 #include <vector>
-#include "config/riscv/rvtt-protos.h"
+#include "rvtt-protos.h"
 
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H

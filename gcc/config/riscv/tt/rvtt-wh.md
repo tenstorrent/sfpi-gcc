@@ -1143,4 +1143,4 @@
   "TARGET_RVTT_WH"
   "SFPNOP")
 
-(include "rvtt-peephole-wh.md")
+(include "tt/rvtt-peephole-wh.md")

@@ -62,7 +62,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include "config/riscv/rvtt.h"
+#include "rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 

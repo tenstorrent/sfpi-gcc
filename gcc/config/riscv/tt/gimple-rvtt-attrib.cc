@@ -66,7 +66,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "profile.h"
 #include <vector>
 #include <tuple>
-#include "config/riscv/rvtt.h"
+#include "rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 

@@ -57,7 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "function-abi.h"
 #include <vector>
 #include <unordered_map>
-#include "config/riscv/rvtt.h"
+#include "rvtt.h"
 
 //#define ENABLE_DUMP
 
