@@ -37,7 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "langhooks.h"
 #include <map>
-#include "rvtt.h"
+#include "tt/rvtt.h"
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -188,7 +188,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
 #define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_BH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
 #define RVTT_BH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
-#include "rvtt-insn.h"
+#include "tt/rvtt-insn.h"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the

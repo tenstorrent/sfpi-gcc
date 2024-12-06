@@ -59,7 +59,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgbuild.h"
 #include <vector>
 #include <unordered_map>
-#include "config/riscv/rvtt.h"
+#include "rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 

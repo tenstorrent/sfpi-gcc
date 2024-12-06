@@ -64,7 +64,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "profile.h"
 #include <string.h>
 #include <unordered_set>
-#include "config/riscv/rvtt.h"
+#include "rvtt.h"
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 

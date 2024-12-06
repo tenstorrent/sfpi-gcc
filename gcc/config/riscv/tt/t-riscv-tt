@@ -1,0 +1,23 @@
+
+RVTT_OBJS := rvtt.o \
+	rvtt-gs.o rvtt-wh.o rvtt-bh.o \
+	gimple-rvtt-attrib.o \
+	gimple-rvtt-cc.o \
+	gimple-rvtt-combine.o \
+	gimple-rvtt-expand.o \
+	gimple-rvtt-live.o \
+	gimple-rvtt-move.o \
+	gimple-rvtt-nonimm-expand.o \
+	gimple-rvtt-nonimm-tag.o \
+	gimple-rvtt-warn.o \
+	rtl-rvtt-hll.o \
+	rtl-rvtt-nonimm.o \
+	rtl-rvtt-replay.o \
+	rtl-rvtt-rmext.o \
+	rtl-rvtt-schedule.o
+
+OBJS += $(RVTT_OBJS)
+
+$(RVTT_OBJS): %.o: $(srcdir)/config/riscv/tt/%.cc
+	$(COMPILE) $<
+	$(POSTCOMPILE)

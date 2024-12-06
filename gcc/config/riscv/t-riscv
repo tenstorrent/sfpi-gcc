@@ -1,8 +1,8 @@
 riscv-builtins.o: $(srcdir)/config/riscv/riscv-builtins.cc $(CONFIG_H) \
   $(SYSTEM_H) coretypes.h $(TM_H) $(RTL_H) $(TREE_H) $(RECOG_H) langhooks.h \
   $(DIAGNOSTIC_CORE_H) $(OPTABS_H) $(srcdir)/config/riscv/riscv-ftypes.def \
-  $(srcdir)/config/riscv/riscv-modes.def $(srcdir)/config/riscv/rvtt.h \
-  $(srcdir)/config/riscv/rvtt-insn.h
+  $(srcdir)/config/riscv/riscv-modes.def \
+  config/riscv/tt/rvtt.h config/riscv/tt/rvtt-insn.h
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/riscv-builtins.cc
 
@@ -23,26 +23,6 @@ riscv-d.o: $(srcdir)/config/riscv/riscv-d.cc
 riscv-shorten-memrefs.o: $(srcdir)/config/riscv/riscv-shorten-memrefs.cc
 	$(COMPILE) $<
 	$(POSTCOMPILE)
-
-rvtt.o: $(srcdir)/config/riscv/rvtt.cc $(CONFIG_H) $(SYSTEM_H) \
-    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(srcdir)/config/riscv/sfpu-ops-bh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
-	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
-		$(srcdir)/config/riscv/rvtt.cc
-
-rvtt-gs.o: $(srcdir)/config/riscv/rvtt-gs.cc $(CONFIG_H) $(SYSTEM_H) \
-    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
-	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
-		$(srcdir)/config/riscv/rvtt-gs.cc
-
-rvtt-wh.o: $(srcdir)/config/riscv/rvtt-wh.cc $(CONFIG_H) $(SYSTEM_H) \
-    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-wh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
-	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
-		$(srcdir)/config/riscv/rvtt-wh.cc
-
-rvtt-bh.o: $(srcdir)/config/riscv/rvtt-bh.cc $(CONFIG_H) $(SYSTEM_H) \
-    coretypes.h $(srcdir)/config/riscv/rvtt-protos.h $(srcdir)/config/riscv/rvtt-insn.h $(srcdir)/config/riscv/sfpu-ops-gs.h $(srcdir)/config/riscv/sfpu-ops-bh.h $(TM_H) $(TREE_H) output.h $(C_COMMON_H) $(TARGET_H)
-	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
-		$(srcdir)/config/riscv/rvtt-bh.cc
 
 PASSES_EXTRA += $(srcdir)/config/riscv/riscv-passes.def
 

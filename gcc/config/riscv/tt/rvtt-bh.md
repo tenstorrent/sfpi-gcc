@@ -1225,4 +1225,4 @@
   "SFPLE\t%0, %1, 0, %2"
 )
 
-(include "rvtt-peephole-bh.md")
+(include "tt/rvtt-peephole-bh.md")

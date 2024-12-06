@@ -55,8 +55,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl-iter.h"
 #include "print-rtl.h"
 #include "function-abi.h"
-#include "config/riscv/rvtt.h"
-#include "config/riscv/rvtt-protos.h"
+#include "rvtt.h"
+#include "rvtt-protos.h"
 
 #if 0
 // FIXME: should dump to the dump file.
