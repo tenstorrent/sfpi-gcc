@@ -103,7 +103,6 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 %{mno-relax} \
 %{mbig-endian} \
 %{mlittle-endian} \
-%(subtarget_asm_spec) \
 %(subtarget_asm_spec)" \
 ASM_MISA_SPEC
 
@@ -994,7 +993,7 @@ while (0)
 #define SET_RATIO(speed) (CLEAR_RATIO (speed) - ((speed) ? 0 : 2))
 
 #ifndef USED_FOR_TARGET
-extern enum reg_class riscv_regno_to_class[];
+extern /*const*/ enum reg_class riscv_regno_to_class[];
 extern bool riscv_slow_unaligned_access_p;
 extern unsigned riscv_stack_boundary;
 #endif

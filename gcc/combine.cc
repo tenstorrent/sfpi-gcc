@@ -5870,7 +5870,7 @@ combine_simplify_rtx (rtx x, machine_mode op0_mode, int in_dest,
       if (GET_MODE_CLASS (GET_MODE (SUBREG_REG (x))) == MODE_CC)
 	break;
       {
-	rtx temp;
+	rtx temp; // FIXME: Suspicious difference?
 	temp = (op0_mode == VOIDmode) ? NULL_RTX : simplify_subreg (mode, SUBREG_REG (x), op0_mode,
 								    SUBREG_BYTE (x));
 	if (temp)
@@ -8321,7 +8321,7 @@ make_compound_operation_int (scalar_int_mode mode, rtx *x_ptr,
 
 	tem = make_compound_operation (inner, subreg_code);
 
-	simplified
+	simplified // FIXME:Suspicious difference.
 	  = (GET_MODE (inner) == VOIDmode) ? NULL_RTX : simplify_subreg (mode, tem, GET_MODE (inner), SUBREG_BYTE (x));
 	if (simplified)
 	  tem = simplified;

@@ -256,7 +256,7 @@ static const struct riscv_tune_param *tune_param;
 enum riscv_microarchitecture_type riscv_microarchitecture;
 
 /* Index R is the smallest register class that contains register R.  */
-enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
+/*const*/ enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   GR_REGS,	GR_REGS,	GR_REGS,	GR_REGS,
   GR_REGS,	GR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
   JALR_REGS,	JALR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
@@ -5215,6 +5215,7 @@ riscv_conditional_register_usage (void)
 
   if (TARGET_RVTT_WH || TARGET_RVTT_BH)
     {
+      // FIXME: This seems suspicous
       reg_class_contents[SFPU_REGS_L4].elts[1] = 0x00000040;
       reg_class_contents[SFPU_REGS_L5].elts[1] = 0x00000080;
       reg_class_contents[SFPU_REGS_L6].elts[1] = 0x00000100;
