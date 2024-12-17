@@ -223,7 +223,9 @@ ix86_convert_const_wide_int_to_broadcast (machine_mode mode, rtx op)
      broadcast only if vector broadcast is available.  */
   if (!TARGET_AVX
       || !CONST_WIDE_INT_P (op)
-      || standard_sse_constant_p (op, mode))
+      || standard_sse_constant_p (op, mode)
+      || (CONST_WIDE_INT_NUNITS (op) * HOST_BITS_PER_WIDE_INT
+	  != GET_MODE_BITSIZE (mode)))
     return nullptr;
 
   HOST_WIDE_INT val = CONST_WIDE_INT_ELT (op, 0);
@@ -347,6 +349,23 @@ ix86_expand_move (machine_mode mode, rtx operands[])
       op1 = convert_to_mode (mode, op1, 1);
 
     default:
+      break;
+
+    case SUBREG:
+      /* As not all values in XFmode are representable in real_value,
+	 we might be called with unfoldable SUBREGs of constants.  */
+      if (mode == XFmode
+	  && CONSTANT_P (SUBREG_REG (op1))
+	  && can_create_pseudo_p ())
+	{
+	  machine_mode imode = GET_MODE (SUBREG_REG (op1));
+	  rtx r = force_const_mem (imode, SUBREG_REG (op1));
+	  if (r)
+	    r = validize_mem (r);
+	  else
+	    r = force_reg (imode, SUBREG_REG (op1));
+	  op1 = simplify_gen_subreg (mode, r, imode, SUBREG_BYTE (op1));
+	}
       break;
     }
 
@@ -8461,6 +8480,8 @@ ix86_expand_set_or_cpymem (rtx dst, rtx src, rtx count_exp, rtx val_exp,
 
       if (TARGET_AVX256_SPLIT_REGS && GET_MODE_BITSIZE (move_mode) > 128)
 	move_mode = TImode;
+      if (TARGET_AVX512_SPLIT_REGS && GET_MODE_BITSIZE (move_mode) > 256)
+	move_mode = OImode;
 
       /* Find the corresponding vector mode with the same size as MOVE_MODE.
 	 MOVE_MODE is an integer mode at the moment (SI, DI, TI, etc.).  */
@@ -12234,7 +12255,7 @@ ix86_expand_vec_set_builtin (tree exp)
   op1 = expand_expr (arg1, NULL_RTX, mode1, EXPAND_NORMAL);
   elt = get_element_number (TREE_TYPE (arg0), arg2);
 
-  if (GET_MODE (op1) != mode1 && GET_MODE (op1) != VOIDmode)
+  if (GET_MODE (op1) != mode1)
     op1 = convert_modes (mode1, GET_MODE (op1), op1, true);
 
   op0 = force_reg (tmode, op0);
@@ -13269,6 +13290,25 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget,
 
       if (pat)
 	emit_insn (pat);
+      return 0;
+
+    case IX86_BUILTIN_LDTILECFG:
+    case IX86_BUILTIN_STTILECFG:
+      arg0 = CALL_EXPR_ARG (exp, 0);
+      op0 = expand_normal (arg0);
+
+      if (!address_operand (op0, VOIDmode))
+	{
+	  op0 = convert_memory_address (Pmode, op0);
+	  op0 = copy_addr_to_reg (op0);
+	}
+      op0 = gen_rtx_MEM (XImode, op0);
+      if (fcode == IX86_BUILTIN_LDTILECFG)
+	icode = CODE_FOR_ldtilecfg;
+      else
+	icode = CODE_FOR_sttilecfg;
+      pat = GEN_FCN (icode) (op0);
+      emit_insn (pat);
       return 0;
 
     case IX86_BUILTIN_LLWPCB:

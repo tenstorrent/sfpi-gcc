@@ -249,7 +249,7 @@ static cp_token_cache *cp_token_cache_new
 static tree cp_parser_late_noexcept_specifier
   (cp_parser *, tree);
 static void noexcept_override_late_checks
-  (tree, tree);
+  (tree);
 
 static void cp_parser_initial_pragma
   (cp_token *);
@@ -2660,7 +2660,7 @@ static tree cp_parser_objc_struct_declaration
 /* Utility Routines */
 
 static cp_expr cp_parser_lookup_name
-  (cp_parser *, tree, enum tag_types, bool, bool, bool, tree *, location_t);
+  (cp_parser *, tree, enum tag_types, int, bool, bool, tree *, location_t);
 static tree cp_parser_lookup_name_simple
   (cp_parser *, tree, location_t);
 static tree cp_parser_maybe_treat_template_as_class
@@ -10157,7 +10157,10 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p,
 		      || (TREE_CODE (TREE_TYPE (TREE_OPERAND (current.lhs, 0)))
 			  != BOOLEAN_TYPE))))
 	  /* Avoid warning for !!b == y where b is boolean.  */
-	  && (!DECL_P (tree_strip_any_location_wrapper (current.lhs))
+	  && (!(DECL_P (tree_strip_any_location_wrapper (current.lhs))
+		|| (TREE_CODE (current.lhs) == NON_LVALUE_EXPR
+		    && DECL_P (tree_strip_any_location_wrapper
+					    (TREE_OPERAND (current.lhs, 0)))))
 	      || TREE_TYPE (current.lhs) == NULL_TREE
 	      || TREE_CODE (TREE_TYPE (current.lhs)) != BOOLEAN_TYPE))
 	warn_logical_not_parentheses (current.loc, current.tree_type,
@@ -11510,11 +11513,8 @@ cp_parser_lambda_declarator_opt (cp_parser* parser, tree lambda_expr)
      an opening angle if present.  */
   if (cp_lexer_next_token_is (parser->lexer, CPP_LESS))
     {
-      if (cxx_dialect < cxx14)
-	pedwarn (parser->lexer->next_token->location, OPT_Wc__14_extensions,
-		 "lambda templates are only available with "
-		 "%<-std=c++14%> or %<-std=gnu++14%>");
-      else if (pedantic && cxx_dialect < cxx20)
+      if (cxx_dialect < cxx20
+	  && (pedantic || cxx_dialect < cxx14))
 	pedwarn (parser->lexer->next_token->location, OPT_Wc__20_extensions,
 		 "lambda templates are only available with "
 		 "%<-std=c++20%> or %<-std=gnu++20%>");
@@ -18587,7 +18587,7 @@ cp_parser_template_name (cp_parser* parser,
   /* Look up the name.  */
   decl = cp_parser_lookup_name (parser, identifier,
 				tag_type,
-				/*is_template=*/true,
+				/*is_template=*/1 + template_keyword_p,
 				/*is_namespace=*/false,
 				check_dependency_p,
 				/*ambiguous_decls=*/NULL,
@@ -25874,6 +25874,11 @@ cp_parser_class_specifier_1 (cp_parser* parser)
   saved_in_unbraced_linkage_specification_p
     = parser->in_unbraced_linkage_specification_p;
   parser->in_unbraced_linkage_specification_p = false;
+  /* 'this' from an enclosing non-static member function is unavailable.  */
+  tree saved_ccp = current_class_ptr;
+  tree saved_ccr = current_class_ref;
+  current_class_ptr = NULL_TREE;
+  current_class_ref = NULL_TREE;
 
   /* Start the class.  */
   if (nested_name_specifier_p)
@@ -26092,8 +26097,6 @@ cp_parser_class_specifier_1 (cp_parser* parser)
       /* If there are noexcept-specifiers that have not yet been processed,
 	 take care of them now.  Do this before processing NSDMIs as they
 	 may depend on noexcept-specifiers already having been processed.  */
-      tree save_ccp = current_class_ptr;
-      tree save_ccr = current_class_ref;
       FOR_EACH_VEC_SAFE_ELT (unparsed_noexcepts, ix, decl)
 	{
 	  tree ctx = DECL_CONTEXT (decl);
@@ -26145,7 +26148,7 @@ cp_parser_class_specifier_1 (cp_parser* parser)
 	  /* The finish_struct call above performed various override checking,
 	     but it skipped unparsed noexcept-specifier operands.  Now that we
 	     have resolved them, check again.  */
-	  noexcept_override_late_checks (type, decl);
+	  noexcept_override_late_checks (decl);
 
 	  /* Remove any member-function parameters from the symbol table.  */
 	  pop_injected_parms ();
@@ -26169,8 +26172,8 @@ cp_parser_class_specifier_1 (cp_parser* parser)
 	  cp_parser_late_parsing_nsdmi (parser, decl);
 	}
       vec_safe_truncate (unparsed_nsdmis, 0);
-      current_class_ptr = save_ccp;
-      current_class_ref = save_ccr;
+      current_class_ptr = NULL_TREE;
+      current_class_ref = NULL_TREE;
       if (pushed_scope)
 	pop_scope (pushed_scope);
 
@@ -26202,6 +26205,8 @@ cp_parser_class_specifier_1 (cp_parser* parser)
     = saved_num_template_parameter_lists;
   parser->in_unbraced_linkage_specification_p
     = saved_in_unbraced_linkage_specification_p;
+  current_class_ptr = saved_ccp;
+  current_class_ref = saved_ccr;
 
   return type;
 }
@@ -27868,14 +27873,13 @@ cp_parser_late_noexcept_specifier (cp_parser *parser, tree default_arg)
 }
 
 /* Perform late checking of overriding function with respect to their
-   noexcept-specifiers.  TYPE is the class and FNDECL is the function
-   that potentially overrides some virtual function with the same
-   signature.  */
+   noexcept-specifiers.  FNDECL is the member function that potentially
+   overrides some virtual function with the same signature.  */
 
 static void
-noexcept_override_late_checks (tree type, tree fndecl)
+noexcept_override_late_checks (tree fndecl)
 {
-  tree binfo = TYPE_BINFO (type);
+  tree binfo = TYPE_BINFO (DECL_CONTEXT (fndecl));
   tree base_binfo;
 
   if (DECL_STATIC_FUNCTION_P (fndecl))
@@ -30381,7 +30385,7 @@ prefer_type_arg (tag_types tag_type)
    refer to types are ignored.
 
    If IS_TEMPLATE is TRUE, bindings that do not refer to templates are
-   ignored.
+   ignored.  If IS_TEMPLATE IS 2, the 'template' keyword was specified.
 
    If IS_NAMESPACE is TRUE, bindings that do not refer to namespaces
    are ignored.
@@ -30396,7 +30400,7 @@ prefer_type_arg (tag_types tag_type)
 static cp_expr
 cp_parser_lookup_name (cp_parser *parser, tree name,
 		       enum tag_types tag_type,
-		       bool is_template,
+		       int is_template,
 		       bool is_namespace,
 		       bool check_dependency,
 		       tree *ambiguous_decls,
@@ -30581,7 +30585,14 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
       else
 	decl = NULL_TREE;
 
-      if (!decl)
+      /* If we didn't find a member and have dependent bases, the member lookup
+	 is now dependent.  */
+      if (!dep && !decl && any_dependent_bases_p (object_type))
+	dep = true;
+
+      if (dep && is_template == 2)
+	/* The template keyword specifies a dependent template.  */;
+      else if (!decl)
 	/* Look it up in the enclosing context.  DR 141: When looking for a
 	   template-name after -> or ., only consider class templates.  */
 	decl = lookup_name (name, is_namespace ? LOOK_want::NAMESPACE
@@ -30594,8 +30605,7 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
 
       /* If we know we're looking for a type (e.g. A in p->A::x),
 	 mock up a typename.  */
-      if (!decl && object_type && tag_type != none_type
-	  && dependentish_scope_p (object_type))
+      if (!decl && dep && tag_type != none_type)
 	{
 	  tree type = build_typename_type (object_type, name, name,
 					   typename_type);
@@ -33667,14 +33677,32 @@ class_decl_loc_t::diag_mismatched_tags (tree type_decl)
 	 be (and inevitably is) at index zero.  */
       tree spec = specialization_of (type);
       cdlguide = class2loc.get (spec);
+      /* It's possible that we didn't find SPEC.  Consider:
+
+	   template<typename T> struct A {
+	     template<typename U> struct W { };
+	   };
+	   struct A<int>::W<int> w; // #1
+
+	 where while parsing A and #1 we've stashed
+	   A<T>
+	   A<T>::W<U>
+	   A<int>::W<int>
+	 into CLASS2LOC.  If TYPE is A<int>::W<int>, specialization_of
+	 will yield A<int>::W<U> which may be in CLASS2LOC if we had
+	 an A<int> class specialization, but otherwise won't be in it.
+	 So try to look up A<T>::W<U>.  */
+      if (!cdlguide)
+	{
+	  spec = DECL_TEMPLATE_RESULT (most_general_template (spec));
+	  cdlguide = class2loc.get (spec);
+	}
+      /* Now we really should have found something.  */
       gcc_assert (cdlguide != NULL);
     }
-  else
-    {
-      /* Skip declarations that consistently use the same class-key.  */
-      if (def_class_key != none_type)
-	return;
-    }
+  /* Skip declarations that consistently use the same class-key.  */
+  else if (def_class_key != none_type)
+    return;
 
   /* Set if a definition for the class has been seen.  */
   const bool def_p = cdlguide->def_p ();
@@ -47638,7 +47666,7 @@ cp_parser_pragma_unroll (cp_parser *parser, cp_token *pragma_tok)
   location_t location = cp_lexer_peek_token (parser->lexer)->location;
   tree expr = cp_parser_constant_expression (parser);
   unsigned short unroll;
-  expr = maybe_constant_value (expr);
+  expr = fold_non_dependent_expr (expr);
   HOST_WIDE_INT lunroll = 0;
   if (!INTEGRAL_TYPE_P (TREE_TYPE (expr))
       || TREE_CODE (expr) != INTEGER_CST

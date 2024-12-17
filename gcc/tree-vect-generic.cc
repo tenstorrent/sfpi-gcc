@@ -183,7 +183,16 @@ tree_vec_extract (gimple_stmt_iterator *gsi, tree type,
   opr.resimplify (NULL, follow_all_ssa_edges);
   gimple_seq stmts = NULL;
   tree res = maybe_push_res_to_seq (&opr, &stmts);
-  gcc_assert (res);
+  if (!res)
+    {
+      /* This can happen if SSA_NAME_OCCURS_IN_ABNORMAL_PHI are
+	 used.  Build BIT_FIELD_REF manually otherwise.  */
+      t = build3 (BIT_FIELD_REF, type, t, bitsize, bitpos);
+      res = make_ssa_name (type);
+      gimple *g = gimple_build_assign (res, t);
+      gsi_insert_before (gsi, g, GSI_SAME_STMT);
+      return res;
+    }
   gsi_insert_seq_before (gsi, stmts, GSI_SAME_STMT);
   return res;
 }
@@ -1072,6 +1081,15 @@ expand_vector_condition (gimple_stmt_iterator *gsi, bitmap dce_ssa_names)
       return true;
     }
 
+  /* If a has vector boolean type and is a comparison, above
+     expand_vec_cond_expr_p might fail, even if both the comparison and
+     VEC_COND_EXPR could be supported individually.  See PR109176.  */
+  if (a_is_comparison
+      && VECTOR_BOOLEAN_TYPE_P (TREE_TYPE (a))
+      && expand_vec_cond_expr_p (type, TREE_TYPE (a), SSA_NAME)
+      && expand_vec_cmp_expr_p (TREE_TYPE (a1), TREE_TYPE (a), code))
+    return true;
+
   /* Handle vector boolean types with bitmasks.  If there is a comparison
      and we can expand the comparison into the vector boolean bitmask,
      or otherwise if it is compatible with type, we can transform
@@ -1358,12 +1376,16 @@ optimize_vector_constructor (gimple_stmt_iterator *gsi)
   gsi_replace (gsi, g, false);
 }
 
-/* Return a type for the widest vector mode whose components are of type
-   TYPE, or NULL_TREE if none is found.  */
+/* Return a type for the widest vector mode with the same element type as
+   type ORIGINAL_VECTOR_TYPE, with at most the same number of elements as type
+   ORIGINAL_VECTOR_TYPE and that is supported by the target for an operation
+   with optab OP, or return NULL_TREE if none is found.  */
 
 static tree
-type_for_widest_vector_mode (tree type, optab op)
+type_for_widest_vector_mode (tree original_vector_type, optab op)
 {
+  gcc_assert (VECTOR_TYPE_P (original_vector_type));
+  tree type = TREE_TYPE (original_vector_type);
   machine_mode inner_mode = TYPE_MODE (type);
   machine_mode best_mode = VOIDmode, mode;
   poly_int64 best_nunits = 0;
@@ -1386,7 +1408,9 @@ type_for_widest_vector_mode (tree type, optab op)
   FOR_EACH_MODE_FROM (mode, mode)
     if (GET_MODE_INNER (mode) == inner_mode
 	&& maybe_gt (GET_MODE_NUNITS (mode), best_nunits)
-	&& optab_handler (op, mode) != CODE_FOR_nothing)
+	&& optab_handler (op, mode) != CODE_FOR_nothing
+	&& known_le (GET_MODE_NUNITS (mode),
+		     TYPE_VECTOR_SUBPARTS (original_vector_type)))
       best_mode = mode, best_nunits = GET_MODE_NUNITS (mode);
 
   if (best_mode == VOIDmode)
@@ -1714,9 +1738,8 @@ get_compute_type (enum tree_code code, optab op, tree type)
 	  || optab_handler (op, TYPE_MODE (type)) == CODE_FOR_nothing))
     {
       tree vector_compute_type
-	= type_for_widest_vector_mode (TREE_TYPE (type), op);
+	= type_for_widest_vector_mode (type, op);
       if (vector_compute_type != NULL_TREE
-	  && subparts_gt (compute_type, vector_compute_type)
 	  && maybe_ne (TYPE_VECTOR_SUBPARTS (vector_compute_type), 1U)
 	  && (optab_handler (op, TYPE_MODE (vector_compute_type))
 	      != CODE_FOR_nothing))
@@ -1887,10 +1910,9 @@ expand_vector_conversion (gimple_stmt_iterator *gsi)
       /* Can't use get_compute_type here, as supportable_convert_operation
 	 doesn't necessarily use an optab and needs two arguments.  */
       tree vec_compute_type
-	= type_for_widest_vector_mode (TREE_TYPE (arg_type), mov_optab);
+	= type_for_widest_vector_mode (arg_type, mov_optab);
       if (vec_compute_type
-	  && VECTOR_MODE_P (TYPE_MODE (vec_compute_type))
-	  && subparts_gt (arg_type, vec_compute_type))
+	  && VECTOR_MODE_P (TYPE_MODE (vec_compute_type)))
 	{
 	  unsigned HOST_WIDE_INT nelts
 	    = constant_lower_bound (TYPE_VECTOR_SUBPARTS (vec_compute_type));

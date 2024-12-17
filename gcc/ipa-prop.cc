@@ -347,6 +347,8 @@ ipa_print_node_jump_functions_for_edge (FILE *f, struct cgraph_edge *cs)
 	    }
 	  if (jump_func->value.pass_through.agg_preserved)
 	    fprintf (f, ", agg_preserved");
+	  if (jump_func->value.pass_through.refdesc_decremented)
+	    fprintf (f, ", refdesc_decremented");
 	  fprintf (f, "\n");
 	}
       else if (type == IPA_JF_ANCESTOR)
@@ -572,6 +574,7 @@ ipa_set_jf_simple_pass_through (struct ipa_jump_func *jfunc, int formal_id,
   jfunc->value.pass_through.formal_id = formal_id;
   jfunc->value.pass_through.operation = NOP_EXPR;
   jfunc->value.pass_through.agg_preserved = agg_preserved;
+  jfunc->value.pass_through.refdesc_decremented = false;
 }
 
 /* Set JFUNC to be an unary pass through jump function.  */
@@ -585,6 +588,7 @@ ipa_set_jf_unary_pass_through (struct ipa_jump_func *jfunc, int formal_id,
   jfunc->value.pass_through.formal_id = formal_id;
   jfunc->value.pass_through.operation = operation;
   jfunc->value.pass_through.agg_preserved = false;
+  jfunc->value.pass_through.refdesc_decremented = false;
 }
 /* Set JFUNC to be an arithmetic pass through jump function.  */
 
@@ -597,6 +601,7 @@ ipa_set_jf_arith_pass_through (struct ipa_jump_func *jfunc, int formal_id,
   jfunc->value.pass_through.formal_id = formal_id;
   jfunc->value.pass_through.operation = operation;
   jfunc->value.pass_through.agg_preserved = false;
+  jfunc->value.pass_through.refdesc_decremented = false;
 }
 
 /* Set JFUNC to be an ancestor jump function.  */
@@ -3303,7 +3308,13 @@ update_jump_functions_after_inlining (struct cgraph_edge *cs,
 		  ipa_set_jf_unknown (dst);
 		  break;
 		case IPA_JF_CONST:
-		  ipa_set_jf_cst_copy (dst, src);
+		  {
+		    bool rd = ipa_get_jf_pass_through_refdesc_decremented (dst);
+		    ipa_set_jf_cst_copy (dst, src);
+		    if (rd)
+		      ipa_zap_jf_refdesc (dst);
+		  }
+
 		  break;
 
 		case IPA_JF_PASS_THROUGH:
@@ -3683,7 +3694,7 @@ remove_described_reference (symtab_node *symbol, struct ipa_cst_ref_desc *rdesc)
   if (!origin)
     return false;
   to_del = origin->caller->find_reference (symbol, origin->call_stmt,
-					   origin->lto_stmt_uid);
+					   origin->lto_stmt_uid, IPA_REF_ADDR);
   if (!to_del)
     return false;
 
@@ -4147,7 +4158,8 @@ propagate_controlled_uses (struct cgraph_edge *cs)
       struct ipa_jump_func *jf = ipa_get_ith_jump_func (args, i);
       struct ipa_cst_ref_desc *rdesc;
 
-      if (jf->type == IPA_JF_PASS_THROUGH)
+      if (jf->type == IPA_JF_PASS_THROUGH
+	  && !ipa_get_jf_pass_through_refdesc_decremented (jf))
 	{
 	  int src_idx, c, d;
 	  src_idx = ipa_get_jf_pass_through_formal_id (jf);
@@ -4175,7 +4187,8 @@ propagate_controlled_uses (struct cgraph_edge *cs)
 	      if (t && TREE_CODE (t) == ADDR_EXPR
 		  && TREE_CODE (TREE_OPERAND (t, 0)) == FUNCTION_DECL
 		  && (n = cgraph_node::get (TREE_OPERAND (t, 0)))
-		  && (ref = new_root->find_reference (n, NULL, 0)))
+		  && (ref = new_root->find_reference (n, NULL, 0,
+						      IPA_REF_ADDR)))
 		{
 		  if (dump_file)
 		    fprintf (dump_file, "ipa-prop: Removing cloning-created "
@@ -4223,7 +4236,7 @@ propagate_controlled_uses (struct cgraph_edge *cs)
 			 && clone != rdesc->cs->caller)
 		    {
 		      struct ipa_ref *ref;
-		      ref = clone->find_reference (n, NULL, 0);
+		      ref = clone->find_reference (n, NULL, 0, IPA_REF_ADDR);
 		      if (ref)
 			{
 			  if (dump_file)
@@ -4449,7 +4462,8 @@ ipa_edge_args_sum_t::duplicate (cgraph_edge *src, cgraph_edge *dst,
 		   gcc_checking_assert (n);
 		   ipa_ref *ref
 		     = src->caller->find_reference (n, src->call_stmt,
-						    src->lto_stmt_uid);
+						    src->lto_stmt_uid,
+						    IPA_REF_ADDR);
 		   gcc_checking_assert (ref);
 		   dst->caller->clone_reference (ref, ref->stmt);
 
@@ -4753,6 +4767,7 @@ ipa_write_jump_function (struct output_block *ob,
 	  streamer_write_uhwi (ob, jump_func->value.pass_through.formal_id);
 	  bp = bitpack_create (ob->main_stream);
 	  bp_pack_value (&bp, jump_func->value.pass_through.agg_preserved, 1);
+	  gcc_assert (!jump_func->value.pass_through.refdesc_decremented);
 	  streamer_write_bitpack (&bp);
 	}
       else if (TREE_CODE_CLASS (jump_func->value.pass_through.operation)
@@ -6081,6 +6096,163 @@ ipcp_transform_function (struct cgraph_node *node)
   return modified_mem_access ? TODO_update_ssa_only_virtuals : 0;
 }
 
+/* Return true if the two pass_through components of two jump functions are
+   known to be equivalent.  AGG_JF denotes whether they are part of aggregate
+   functions or not.  The function can be used before the IPA phase of IPA-CP
+   or inlining because it cannot cope with refdesc changes these passes can
+   carry out.  */
+
+static bool
+ipa_agg_pass_through_jf_equivalent_p (ipa_pass_through_data *ipt1,
+				      ipa_pass_through_data *ipt2,
+				      bool agg_jf)
+
+{
+  gcc_assert (agg_jf ||
+	      (!ipt1->refdesc_decremented && !ipt2->refdesc_decremented));
+  if (ipt1->operation != ipt2->operation
+      || ipt1->formal_id != ipt2->formal_id
+      || (!agg_jf && (ipt1->agg_preserved != ipt2->agg_preserved)))
+    return false;
+  if (((ipt1->operand != NULL_TREE) != (ipt2->operand != NULL_TREE))
+      || (ipt1->operand
+	  && !values_equal_for_ipcp_p (ipt1->operand, ipt2->operand)))
+    return false;
+  return true;
+}
+
+/* Return true if the two aggregate jump functions are known to be equivalent.
+   The function can be used before the IPA phase of IPA-CP or inlining because
+   it cannot cope with refdesc changes these passes can carry out.  */
+
+static bool
+ipa_agg_jump_functions_equivalent_p (ipa_agg_jf_item *ajf1,
+				     ipa_agg_jf_item *ajf2)
+{
+  if (ajf1->offset != ajf2->offset
+      || ajf1->jftype != ajf2->jftype
+      || !types_compatible_p (ajf1->type, ajf2->type))
+    return false;
+
+  switch (ajf1->jftype)
+    {
+    case IPA_JF_CONST:
+      if (!values_equal_for_ipcp_p (ajf1->value.constant,
+				    ajf2->value.constant))
+	return false;
+      break;
+    case IPA_JF_PASS_THROUGH:
+      {
+	ipa_pass_through_data *ipt1 = &ajf1->value.pass_through;
+	ipa_pass_through_data *ipt2 = &ajf2->value.pass_through;
+	if (!ipa_agg_pass_through_jf_equivalent_p (ipt1, ipt2, true))
+	  return false;
+      }
+      break;
+    case IPA_JF_LOAD_AGG:
+      {
+	ipa_load_agg_data *ila1 = &ajf1->value.load_agg;
+	ipa_load_agg_data *ila2 = &ajf2->value.load_agg;
+	if (!ipa_agg_pass_through_jf_equivalent_p (&ila1->pass_through,
+						   &ila2->pass_through, true))
+	  return false;
+	if (ila1->offset != ila2->offset
+	    || ila1->by_ref != ila2->by_ref
+	    || !types_compatible_p (ila1->type, ila2->type))
+	  return false;
+      }
+      break;
+    default:
+	gcc_unreachable ();
+    }
+  return true;
+}
+
+/* Return true if the two jump functions are known to be equivalent.  The
+   function can be used before the IPA phase of IPA-CP or inlining because it
+   cannot cope with refdesc changes these passes can carry out.  */
+
+bool
+ipa_jump_functions_equivalent_p (ipa_jump_func *jf1, ipa_jump_func *jf2)
+{
+  if (jf1->type != jf2->type)
+    return false;
+
+  switch (jf1->type)
+    {
+    case IPA_JF_UNKNOWN:
+      break;
+    case IPA_JF_CONST:
+      {
+	tree cst1 = ipa_get_jf_constant (jf1);
+	tree cst2 = ipa_get_jf_constant (jf2);
+	if (!values_equal_for_ipcp_p (cst1, cst2))
+	  return false;
+
+	ipa_cst_ref_desc *rd1 = jfunc_rdesc_usable (jf1);
+	ipa_cst_ref_desc *rd2 = jfunc_rdesc_usable (jf2);
+	if (rd1 && rd2)
+	  {
+	    gcc_assert (rd1->refcount == 1
+			&& rd2->refcount == 1);
+	    gcc_assert (!rd1->next_duplicate && !rd2->next_duplicate);
+	  }
+	else if (rd1)
+	  return false;
+	else if (rd2)
+	  return false;
+      }
+      break;
+    case IPA_JF_PASS_THROUGH:
+      {
+	ipa_pass_through_data *ipt1 = &jf1->value.pass_through;
+	ipa_pass_through_data *ipt2 = &jf2->value.pass_through;
+	if (!ipa_agg_pass_through_jf_equivalent_p (ipt1, ipt2, false))
+	  return false;
+      }
+      break;
+    case IPA_JF_ANCESTOR:
+      {
+	ipa_ancestor_jf_data *ia1 = &jf1->value.ancestor;
+	ipa_ancestor_jf_data *ia2 = &jf2->value.ancestor;
+
+	if (ia1->formal_id != ia2->formal_id
+	    || ia1->agg_preserved != ia2->agg_preserved
+	    || ia1->keep_null != ia2->keep_null
+	    || ia1->offset != ia2->offset)
+	  return false;
+      }
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  if (((jf1->bits != nullptr) != (jf2->bits != nullptr))
+      || (jf1->bits && ((jf1->bits->value != jf2->bits->value)
+			|| (jf1->bits->mask != jf2->bits->mask))))
+    return false;
+
+  if (((jf1->m_vr != nullptr) != (jf2->m_vr != nullptr))
+      || (jf1->m_vr && *jf1->m_vr != *jf2->m_vr))
+    return false;
+
+  unsigned alen = vec_safe_length (jf1->agg.items);
+  if (vec_safe_length (jf2->agg.items) != alen)
+    return false;
+
+  if (!alen)
+    return true;
+
+  if (jf1->agg.by_ref != jf2->agg.by_ref)
+    return false;
+
+  for (unsigned i = 0 ; i < alen; i++)
+    if (!ipa_agg_jump_functions_equivalent_p (&(*jf1->agg.items)[i],
+					      &(*jf2->agg.items)[i]))
+      return false;
+
+  return true;
+}
 
 /* Return true if OTHER describes same agg value.  */
 bool

@@ -69,8 +69,23 @@ along with GCC; see the file COPYING3.  If not see
 #define SUBTARGET_ASM_SPEC ""
 #endif
 
+#if HAVE_AS_MRELAX_OPTION && HAVE_AS_COND_BRANCH_RELAXATION
+#define ASM_MRELAX_DEFAULT "%{!mrelax:%{!mno-relax:-mrelax}}"
+#else
+#define ASM_MRELAX_DEFAULT "%{!mrelax:%{!mno-relax:-mno-relax}}"
+#endif
+
+#if HAVE_AS_MRELAX_OPTION
+#define ASM_MRELAX_SPEC \
+  "%{!mno-pass-mrelax-to-as:%{mrelax} %{mno-relax} " ASM_MRELAX_DEFAULT "}"
+#else
+#define ASM_MRELAX_SPEC \
+  "%{mpass-mrelax-to-as:%{mrelax} %{mno-relax} " ASM_MRELAX_DEFAULT "}"
+#endif
+
 #undef ASM_SPEC
-#define ASM_SPEC "%{mabi=*} %{subtarget_asm_spec}"
+#define ASM_SPEC \
+  "%{mabi=*} " ASM_MRELAX_SPEC " %(subtarget_asm_spec)"
 
 /* Extra switches sometimes passed to the linker.  */
 
@@ -561,7 +576,8 @@ enum reg_class
   64, 65, 66, 67, 68, 69, 70, 71, 72, 73}
 
 #define IMM_BITS 12
-#define IMM_REACH (1LL << IMM_BITS)
+#define IMM_REACH (HOST_WIDE_INT_1 << IMM_BITS)
+#define HWIT_1U HOST_WIDE_INT_1U
 
 /* True if VALUE is an unsigned 6-bit number.  */
 
@@ -589,18 +605,20 @@ enum reg_class
 /* True if VALUE can be loaded into a register using LU12I.  */
 
 #define LU12I_OPERAND(VALUE) \
-  (((VALUE) | ((1UL << 31) - IMM_REACH)) == ((1UL << 31) - IMM_REACH) \
-   || ((VALUE) | ((1UL << 31) - IMM_REACH)) + IMM_REACH == 0)
+  (((VALUE) | ((HWIT_1U << 31) - IMM_REACH)) == ((HWIT_1U << 31) - IMM_REACH) \
+   || ((VALUE) | ((HWIT_1U << 31) - IMM_REACH)) + IMM_REACH == 0)
 
 /* True if VALUE can be loaded into a register using LU32I.  */
 
 #define LU32I_OPERAND(VALUE) \
-  (((VALUE) | (((1ULL << 19) - 1) << 32)) == (((1ULL << 19) - 1) << 32) \
-   || ((VALUE) | (((1ULL << 19) - 1) << 32)) + (1ULL << 32) == 0)
+  (((VALUE) | (((HWIT_1U << 19) - 1) << 32)) == (((HWIT_1U << 19) - 1) << 32) \
+   || ((VALUE) | (((HWIT_1U << 19) - 1) << 32)) + (HWIT_1U << 32) == 0)
 
 /* True if VALUE can be loaded into a register using LU52I.  */
 
-#define LU52I_OPERAND(VALUE) (((VALUE) | (0xfffULL << 52)) == (0xfffULL << 52))
+#define HWIT_UC_0xFFF HOST_WIDE_INT_UC(0xfff)
+#define LU52I_OPERAND(VALUE) \
+  (((VALUE) | (HWIT_UC_0xFFF << 52)) == (HWIT_UC_0xFFF << 52))
 
 /* Return a value X with the low 12 bits clear, and such that
    VALUE - X is a signed 12-bit value.  */
@@ -669,7 +687,7 @@ enum reg_class
    point values.  */
 
 #define GP_RETURN (GP_REG_FIRST + 4)
-#define FP_RETURN ((TARGET_SOFT_FLOAT) ? GP_RETURN : (FP_REG_FIRST + 0))
+#define FP_RETURN ((TARGET_SOFT_FLOAT_ABI) ? GP_RETURN : (FP_REG_FIRST + 0))
 
 #define MAX_ARGS_IN_REGISTERS 8
 
@@ -975,11 +993,6 @@ typedef struct {
 
 #define ASM_OUTPUT_ALIGN(STREAM, LOG) fprintf (STREAM, "\t.align\t%d\n", (LOG))
 
-/* "nop" instruction 54525952 (andi $r0,$r0,0) is
-   used for padding.  */
-#define ASM_OUTPUT_ALIGN_WITH_NOP(STREAM, LOG) \
-  fprintf (STREAM, "\t.align\t%d,54525952,4\n", (LOG))
-
 /* This is how to output an assembler line to advance the location
    counter by SIZE bytes.  */
 
@@ -1142,6 +1155,11 @@ struct GTY (()) machine_function
 /* The largest type that can be passed in floating-point registers.  */
 /* TODO: according to mabi.  */
 #define UNITS_PER_FP_ARG  \
-  (TARGET_HARD_FLOAT ? (TARGET_DOUBLE_FLOAT ? 8 : 4) : 0)
+  (TARGET_HARD_FLOAT_ABI ? (TARGET_DOUBLE_FLOAT_ABI ? 8 : 4) : 0)
 
 #define FUNCTION_VALUE_REGNO_P(N) ((N) == GP_RETURN || (N) == FP_RETURN)
+
+/* LoongArch maintains ICache/DCache coherency by hardware,
+   we just need "ibar" to avoid instruction hazard here.  */
+#undef  CLEAR_INSN_CACHE
+#define CLEAR_INSN_CACHE(beg, end) __builtin_loongarch_ibar (0)

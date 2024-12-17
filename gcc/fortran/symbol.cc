@@ -1108,6 +1108,12 @@ gfc_add_contiguous (symbol_attribute *attr, const char *name, locus *where)
   if (check_used (attr, name, where))
     return false;
 
+  if (attr->contiguous)
+    {
+      duplicate_attr ("CONTIGUOUS", where);
+      return false;
+    }
+
   attr->contiguous = 1;
   return gfc_check_conflict (attr, name, where);
 }
@@ -3755,7 +3761,11 @@ free_old_symbol (gfc_symbol *sym)
   if (sym->old_symbol == NULL)
     return;
 
-  if (sym->old_symbol->as != sym->as)
+  if (sym->old_symbol->as != NULL
+      && sym->old_symbol->as != sym->as
+      && !(sym->ts.type == BT_CLASS
+	   && sym->ts.u.derived->attr.is_class
+	   && sym->old_symbol->as == CLASS_DATA (sym)->as))
     gfc_free_array_spec (sym->old_symbol->as);
 
   if (sym->old_symbol->value != sym->value)
@@ -4709,6 +4719,13 @@ gfc_copy_formal_args_intr (gfc_symbol *dest, gfc_intrinsic_sym *src,
       formal_arg->sym->attr.flavor = FL_VARIABLE;
       formal_arg->sym->attr.dummy = 1;
 
+      /* Do not treat an actual deferred-length character argument wrongly
+	 as template for the formal argument.  */
+      if (formal_arg->sym->ts.type == BT_CHARACTER
+	  && !(formal_arg->sym->attr.allocatable
+	       || formal_arg->sym->attr.pointer))
+	formal_arg->sym->ts.deferred = false;
+
       if (formal_arg->sym->ts.type == BT_CHARACTER)
 	formal_arg->sym->ts.u.cl = gfc_new_charlen (gfc_current_ns, NULL);
 
@@ -5132,6 +5149,10 @@ gfc_type_compatible (gfc_typespec *ts1, gfc_typespec *ts2)
   bool is_derived2 = (ts2->type == BT_DERIVED);
   bool is_union1 = (ts1->type == BT_UNION);
   bool is_union2 = (ts2->type == BT_UNION);
+
+  /* A boz-literal-constant has no type.  */
+  if (ts1->type == BT_BOZ || ts2->type == BT_BOZ)
+    return false;
 
   if (is_class1
       && ts1->u.derived->components

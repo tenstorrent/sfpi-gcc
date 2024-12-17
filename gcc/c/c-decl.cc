@@ -1306,7 +1306,10 @@ pop_scope (void)
 	      && scope != external_scope)
 	    {
 	      if (!TREE_USED (p))
-		warning (OPT_Wunused_variable, "unused variable %q+D", p);
+		{
+		  warning (OPT_Wunused_variable, "unused variable %q+D", p);
+		  suppress_warning (p, OPT_Wunused_variable);
+		}
 	      else if (DECL_CONTEXT (p) == current_function_decl)
 		warning_at (DECL_SOURCE_LOCATION (p),
 			    OPT_Wunused_but_set_variable,
@@ -8696,6 +8699,17 @@ finish_incomplete_vars (tree incomplete_vars, bool toplevel)
     }
 }
 
+/* TYPE is a struct or union that we're applying may_alias to after the body is
+   parsed.  Fixup any POINTER_TO types.  */
+
+static void
+c_fixup_may_alias (tree type)
+{
+  for (tree t = TYPE_POINTER_TO (type); t; t = TYPE_NEXT_PTR_TO (t))
+    for (tree v = TYPE_MAIN_VARIANT (t); v; v = TYPE_NEXT_VARIANT (v))
+      TYPE_REF_CAN_ALIAS_ALL (v) = true;
+}
+
 /* Fill in the fields of a RECORD_TYPE or UNION_TYPE node, T.
    LOC is the location of the RECORD_TYPE or UNION_TYPE's definition.
    FIELDLIST is a chain of FIELD_DECL nodes for the fields.
@@ -8969,6 +8983,10 @@ finish_struct (location_t loc, tree t, tree fieldlist, tree attributes,
       TYPE_TRANSPARENT_AGGR (t) = 0;
       warning_at (loc, 0, "union cannot be made transparent");
     }
+
+  if (lookup_attribute ("may_alias", TYPE_ATTRIBUTES (t)))
+    for (x = TYPE_MAIN_VARIANT (t); x; x = TYPE_NEXT_VARIANT (x))
+      c_fixup_may_alias (x);
 
   tree incomplete_vars = C_TYPE_INCOMPLETE_VARS (TYPE_MAIN_VARIANT (t));
   for (x = TYPE_MAIN_VARIANT (t); x; x = TYPE_NEXT_VARIANT (x))

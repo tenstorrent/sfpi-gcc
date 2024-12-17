@@ -1970,7 +1970,7 @@ operator_lshift::fold_range (irange &r, tree type,
       if (op2.undefined_p ())
 	r.set_undefined ();
       else
-	r.set_varying (type);
+	r.set_zero (type);
       return true;
     }
 
@@ -2240,7 +2240,7 @@ operator_rshift::fold_range (irange &r, tree type,
       if (op2.undefined_p ())
 	r.set_undefined ();
       else
-	r.set_varying (type);
+	r.set_zero (type);
       return true;
     }
 
@@ -3230,6 +3230,9 @@ operator_bitwise_xor::op1_range (irange &r, tree type,
 	    r.set_varying (type);
 	  else if (op2.zero_p ())
 	    r = range_true (type);
+	  // See get_bool_state for the rationale
+	  else if (op2.contains_p (build_zero_cst (op2.type ())))
+	    r = range_true_and_false (type);
 	  else
 	    r = range_false (type);
 	  break;
@@ -3822,7 +3825,17 @@ operator_addr_expr::op1_range (irange &r, tree type,
 			       const irange &op2,
 			       relation_kind rel ATTRIBUTE_UNUSED) const
 {
-  return operator_addr_expr::fold_range (r, type, lhs, op2);
+   if (empty_range_varying (r, type, lhs, op2))
+    return true;
+
+  // Return a non-null pointer of the LHS type (passed in op2), but only
+  // if we cant overflow, eitherwise a no-zero offset could wrap to zero.
+  // See PR 111009.
+  if (!contains_zero_p (lhs) && TYPE_OVERFLOW_UNDEFINED (type))
+    r = range_nonzero (type);
+  else
+    r.set_varying (type);
+  return true;
 }
 
 

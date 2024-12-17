@@ -193,10 +193,11 @@ public:
   /* Clone reference REF to this symtab_node and set its stmt to STMT.  */
   ipa_ref *clone_reference (ipa_ref *ref, gimple *stmt);
 
-  /* Find the structure describing a reference to REFERRED_NODE
-     and associated with statement STMT.  */
+  /* Find the structure describing a reference to REFERRED_NODE of USE_TYPE and
+     associated with statement STMT or LTO_STMT_UID.  */
   ipa_ref *find_reference (symtab_node *referred_node, gimple *stmt,
-			   unsigned int lto_stmt_uid);
+			   unsigned int lto_stmt_uid,
+			   enum ipa_ref_use use_type);
 
   /* Remove all references that are associated with statement STMT.  */
   void remove_stmt_references (gimple *stmt);
@@ -474,6 +475,9 @@ public:
   /* Return the cgraph node that has ASMNAME for its DECL_ASSEMBLER_NAME.
      Return NULL if there's no such node.  */
   static symtab_node *get_for_asmname (const_tree asmname);
+
+  /* Check symbol table for callees of IFUNC resolvers.  */
+  static void check_ifunc_callee_symtab_nodes (void);
 
   /* Verify symbol table for internal consistency.  */
   static DEBUG_FUNCTION void verify_symtab_nodes (void);
@@ -891,7 +895,9 @@ struct GTY((tag ("SYMTAB_FUNCTION"))) cgraph_node : public symtab_node
       versionable (false), can_change_signature (false),
       redefined_extern_inline (false), tm_may_enter_irr (false),
       ipcp_clone (false), declare_variant_alt (false),
-      calls_declare_variant_alt (false), m_uid (uid), m_summary_id (-1)
+      calls_declare_variant_alt (false),
+      called_by_ifunc_resolver (false),
+      m_uid (uid), m_summary_id (-1)
   {}
 
   /* Remove the node from cgraph and all inline clones inlined into it.
@@ -1490,6 +1496,8 @@ struct GTY((tag ("SYMTAB_FUNCTION"))) cgraph_node : public symtab_node
   unsigned declare_variant_alt : 1;
   /* True if the function calls declare_variant_alt functions.  */
   unsigned calls_declare_variant_alt : 1;
+  /* Set if the function is called by an IFUNC resolver.  */
+  unsigned called_by_ifunc_resolver : 1;
 
 private:
   /* Unique id of the node.  */
@@ -1832,9 +1840,16 @@ public:
      speculative indirect call, remove "speculative" of the indirect call and
      also redirect stmt to it's final direct target.
 
+     When called from within tree-inline, KILLED_SSAs has to contain the
+     pointer to killed_new_ssa_names within the copy_body_data structure and
+     SSAs discovered to be useless (if LHS is removed) will be added to it,
+     otherwise it needs to be NULL.
+
      It is up to caller to iteratively transform each "speculative"
      direct call as appropriate.  */
-  static gimple *redirect_call_stmt_to_callee (cgraph_edge *e);
+  static gimple *redirect_call_stmt_to_callee (cgraph_edge *e,
+					       hash_set <tree>
+					       *killed_ssas = nullptr);
 
   /* Create clone of edge in the node N represented
      by CALL_EXPR the callgraph.  */

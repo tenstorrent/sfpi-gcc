@@ -417,6 +417,7 @@ toolexeclibgounicode_DATA = \
 # Some internal packages are needed to bootstrap the gc toolchain.
 toolexeclibgointernaldir = $(toolexeclibgodir)/internal
 toolexeclibgointernal_DATA = \
+	internal/lazyregexp.gox \
 	internal/reflectlite.gox \
 	internal/unsafeheader.gox
 
@@ -568,6 +569,7 @@ s-goroot: Makefile
 	rm -f goroot.go.tmp
 	echo "package runtime" > goroot.go.tmp
 	echo 'var defaultGOROOT = `$(prefix)`' >> goroot.go.tmp
+	echo 'var buildVersion = `'`cat $(srcdir)/VERSION | sed 1q`' '`$(GOC) --version | sed 1q`'`' >> goroot.go.tmp
 	$(SHELL) $(srcdir)/mvifdiff.sh goroot.go.tmp goroot.go
 	$(STAMP) $@
 

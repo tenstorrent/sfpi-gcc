@@ -571,6 +571,26 @@ visit_conflict (gimple *, tree op, tree, void *data)
   return false;
 }
 
+/* Helper function for add_scope_conflicts_1.  For USE on
+   a stmt, if it is a SSA_NAME and in its SSA_NAME_DEF_STMT is known to be
+   based on some ADDR_EXPR, invoke VISIT on that ADDR_EXPR.  */
+
+static inline void
+add_scope_conflicts_2 (tree use, bitmap work,
+		       walk_stmt_load_store_addr_fn visit)
+{
+  if (TREE_CODE (use) == SSA_NAME
+      && (POINTER_TYPE_P (TREE_TYPE (use))
+	  || INTEGRAL_TYPE_P (TREE_TYPE (use))))
+    {
+      gimple *g = SSA_NAME_DEF_STMT (use);
+      if (is_gimple_assign (g))
+	if (tree op = gimple_assign_rhs1 (g))
+	  if (TREE_CODE (op) == ADDR_EXPR)
+	    visit (g, TREE_OPERAND (op, 0), op, work);
+    }
+}
+
 /* Helper routine for add_scope_conflicts, calculating the active partitions
    at the end of BB, leaving the result in WORK.  We're called to generate
    conflicts when FOR_CONFLICT is true, otherwise we're just tracking
@@ -583,6 +603,8 @@ add_scope_conflicts_1 (basic_block bb, bitmap work, bool for_conflict)
   edge_iterator ei;
   gimple_stmt_iterator gsi;
   walk_stmt_load_store_addr_fn visit;
+  use_operand_p use_p;
+  ssa_op_iter iter;
 
   bitmap_clear (work);
   FOR_EACH_EDGE (e, ei, bb->preds)
@@ -593,7 +615,10 @@ add_scope_conflicts_1 (basic_block bb, bitmap work, bool for_conflict)
   for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
       gimple *stmt = gsi_stmt (gsi);
+      gphi *phi = as_a <gphi *> (stmt);
       walk_stmt_load_store_addr_ops (stmt, work, NULL, NULL, visit);
+      FOR_EACH_PHI_ARG (use_p, phi, iter, SSA_OP_USE)
+	add_scope_conflicts_2 (USE_FROM_PTR (use_p), work, visit);
     }
   for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
@@ -613,8 +638,7 @@ add_scope_conflicts_1 (basic_block bb, bitmap work, bool for_conflict)
 	}
       else if (!is_gimple_debug (stmt))
 	{
-	  if (for_conflict
-	      && visit == visit_op)
+	  if (for_conflict && visit == visit_op)
 	    {
 	      /* If this is the first real instruction in this BB we need
 	         to add conflicts for everything live at this point now.
@@ -634,6 +658,8 @@ add_scope_conflicts_1 (basic_block bb, bitmap work, bool for_conflict)
 	      visit = visit_conflict;
 	    }
 	  walk_stmt_load_store_addr_ops (stmt, work, visit, visit, visit);
+	  FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
+	    add_scope_conflicts_2 (USE_FROM_PTR (use_p), work, visit);
 	}
     }
 }
@@ -3635,7 +3661,7 @@ expand_asm_stmt (gasm *stmt)
 		emit_insn (copy_insn (PATTERN (curr)));
 	      rtx_insn *copy = get_insns ();
 	      end_sequence ();
-	      insert_insn_on_edge (copy, e);
+	      prepend_insn_to_edge (copy, e);
 	    }
 	}
     }
@@ -5349,6 +5375,10 @@ expand_debug_expr (tree exp)
     case VEC_WIDEN_MULT_ODD_EXPR:
     case VEC_WIDEN_LSHIFT_HI_EXPR:
     case VEC_WIDEN_LSHIFT_LO_EXPR:
+    case VEC_WIDEN_PLUS_HI_EXPR:
+    case VEC_WIDEN_PLUS_LO_EXPR:
+    case VEC_WIDEN_MINUS_HI_EXPR:
+    case VEC_WIDEN_MINUS_LO_EXPR:
     case VEC_PERM_EXPR:
     case VEC_DUPLICATE_EXPR:
     case VEC_SERIES_EXPR:
@@ -5385,6 +5415,8 @@ expand_debug_expr (tree exp)
     case WIDEN_MULT_EXPR:
     case WIDEN_MULT_PLUS_EXPR:
     case WIDEN_MULT_MINUS_EXPR:
+    case WIDEN_PLUS_EXPR:
+    case WIDEN_MINUS_EXPR:
       if (SCALAR_INT_MODE_P (GET_MODE (op0))
 	  && SCALAR_INT_MODE_P (mode))
 	{
@@ -5397,6 +5429,10 @@ expand_debug_expr (tree exp)
 	    op1 = simplify_gen_unary (ZERO_EXTEND, mode, op1, inner_mode);
 	  else
 	    op1 = simplify_gen_unary (SIGN_EXTEND, mode, op1, inner_mode);
+	  if (TREE_CODE (exp) == WIDEN_PLUS_EXPR)
+	    return simplify_gen_binary (PLUS, mode, op0, op1);
+	  else if (TREE_CODE (exp) == WIDEN_MINUS_EXPR)
+	    return simplify_gen_binary (MINUS, mode, op0, op1);
 	  op0 = simplify_gen_binary (MULT, mode, op0, op1);
 	  if (TREE_CODE (exp) == WIDEN_MULT_EXPR)
 	    return op0;

@@ -26,8 +26,14 @@
 using max_size_t = std::ranges::__detail::__max_size_type;
 using max_diff_t = std::ranges::__detail::__max_diff_type;
 using rep_t = max_size_t::__rep;
+#if __SIZEOF_INT128__
+using signed_rep_t = __int128;
+#else
+using signed_rep_t = long long;
+#endif
 
 static_assert(sizeof(max_size_t) == sizeof(max_diff_t));
+static_assert(sizeof(rep_t) == sizeof(signed_rep_t));
 
 static_assert(std::regular<max_size_t>);
 static_assert(std::totally_ordered<max_size_t>);
@@ -54,6 +60,8 @@ test01()
   static_assert(max_diff_t(3) % -2 == 1);
   static_assert(max_diff_t(-3) << 1 == -6);
   static_assert(max_diff_t(-3) >> 1 == -2);
+  static_assert(max_diff_t(-3) >> 2 == -1);
+  static_assert(max_diff_t(-3) >> 10 == -1);
   static_assert(max_diff_t(3) >> 1 == 1);
   static_assert(max_diff_t(3) >> 2 == 0);
 
@@ -188,12 +196,12 @@ template<bool signed_p, bool shorten_p>
 void
 test02()
 {
-  using hw_type = std::conditional_t<signed_p, signed rep_t, rep_t>;
+  using hw_type = std::conditional_t<signed_p, signed_rep_t, rep_t>;
   using max_type = std::conditional_t<signed_p, max_diff_t, max_size_t>;
   using shorten_type = std::conditional_t<shorten_p, hw_type, max_type>;
   const int hw_type_bit_size = sizeof(hw_type) * __CHAR_BIT__;
-  const int limit = 1000;
-  const int log2_limit = 10;
+  const unsigned limit = 100;
+  const int log2_limit = 7;
   static_assert((1 << log2_limit) >= limit);
   const int min = (signed_p ? -limit : 0);
   const int max = limit;
@@ -246,12 +254,12 @@ template<bool signed_p, bool toggle_base_p>
 void
 test03()
 {
-  using hw_type = std::conditional_t<signed_p, signed rep_t, rep_t>;
+  using hw_type = std::conditional_t<signed_p, signed_rep_t, rep_t>;
   using max_type = std::conditional_t<signed_p, max_diff_t, max_size_t>;
   using base_type = std::conditional_t<toggle_base_p, hw_type, max_type>;
   constexpr int hw_type_bit_size = sizeof(hw_type) * __CHAR_BIT__;
-  constexpr int limit = 1000;
-  constexpr int log2_limit = 10;
+  constexpr unsigned limit = 100;
+  constexpr int log2_limit = 7;
   static_assert((1 << log2_limit) >= limit);
   const int min = (signed_p ? -limit : 0);
   const int max = limit;

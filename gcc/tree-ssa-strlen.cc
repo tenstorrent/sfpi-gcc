@@ -1136,14 +1136,15 @@ get_range_strlen_phi (tree src, gphi *phi,
 
       /* Adjust the minimum and maximum length determined so far and
 	 the upper bound on the array size.  */
-      if (!pdata->minlen
-	  || tree_int_cst_lt (argdata.minlen, pdata->minlen))
+      if (TREE_CODE (argdata.minlen) == INTEGER_CST
+	  && (!pdata->minlen
+	      || tree_int_cst_lt (argdata.minlen, pdata->minlen)))
 	pdata->minlen = argdata.minlen;
 
-      if (!pdata->maxlen
-	  || (argdata.maxlen
-	      && TREE_CODE (argdata.maxlen) == INTEGER_CST
-	      && tree_int_cst_lt (pdata->maxlen, argdata.maxlen)))
+      if (TREE_CODE (argdata.maxlen) == INTEGER_CST
+	  && (!pdata->maxlen
+	      || (argdata.maxlen
+		  && tree_int_cst_lt (pdata->maxlen, argdata.maxlen))))
 	pdata->maxlen = argdata.maxlen;
 
       if (!pdata->maxbound
@@ -3360,7 +3361,8 @@ strlen_pass::handle_builtin_memcpy (built_in_function bcode)
       && !integer_zerop (len))
     {
       maybe_warn_overflow (stmt, false, len, olddsi, false, true);
-      adjust_last_stmt (olddsi, stmt, false);
+      if (tree_fits_uhwi_p (len))
+	adjust_last_stmt (olddsi, stmt, false);
     }
 
   int idx = get_stridx (src, stmt);
@@ -4699,7 +4701,7 @@ strlen_pass::count_nonzero_bytes (tree exp, gimple *stmt,
 
   /* Compute the number of leading nonzero bytes in the representation
      and update the minimum and maximum.  */
-  unsigned n = prep ? strnlen (prep, nbytes) : nbytes;
+  unsigned HOST_WIDE_INT n = prep ? strnlen (prep, nbytes) : nbytes;
 
   if (n < lenrange[0])
     lenrange[0] = n;
@@ -5006,6 +5008,9 @@ strlen_pass::handle_store (bool *zero_write)
 
   if (si != NULL)
     {
+      /* The count_nonzero_bytes call above might have unshared si.
+	 Fetch it again from the vector.  */
+      si = get_strinfo (idx);
       /* The corresponding element is set to 1 if the first and last
 	 element, respectively, of the sequence of characters being
 	 written over the string described by SI ends before

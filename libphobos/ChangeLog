@@ -1,3 +1,49 @@
+2024-06-20  Release Manager
+
+	* GCC 12.4.0 released.
+
+2024-04-21  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* configure.tgt: Enable libphobos for Darwin >= 12.
+
+2024-04-04  Iain Sandoe  <iainsandoe@Apollo-3-VM-Lion-0-187.local>
+
+	Backported from master:
+	2023-07-01  Iain Sandoe  <iainsandoe@Apollo-3-VM-Lion-0-187.local>
+
+	PR d/103944
+	* testsuite/libphobos.gc/forkgc2.d: Skip for Darwin.
+
+2023-11-07  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	Backported from master:
+	2023-11-07  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	* libdruntime/core/cpuid.d (getCpuInfo0B): Limit number of times loop
+	runs.
+
+2023-06-06  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	* src/MERGE: Merge upstream phobos 8e8aaae50.
+
+2023-05-08  Release Manager
+
+	* GCC 12.3.0 released.
+
+2022-12-13  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	* libdruntime/core/stdc/fenv.d: Compile in MIPS uClibc bindings on
+	MIPS_Any targets.
+	* libdruntime/core/stdc/math.d: Likewise.
+	* libdruntime/core/sys/posix/dlfcn.d: Likewise.
+	* libdruntime/core/sys/posix/setjmp.d: Add MIPS64 definitions for
+	CRuntime_UClibc.
+	* libdruntime/core/sys/posix/sys/types.d: Likewise.
+	* src/std/path.d (expandTilde): Handle more errno codes that could be
+	left set by getpwnam_r.
+	* src/std/random.d: Use D_LP64 in unittests.
+	* src/std/stdio.d: Set CRuntime_UClibc as GENERIC_IO target.
+
 2022-08-19  Release Manager
 
 	* GCC 12.2.0 released.

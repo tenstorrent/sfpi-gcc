@@ -3196,6 +3196,35 @@ real_minus_onep (const_tree expr)
     }
 }
 
+/* Return true if T could be a floating point zero.  */
+
+bool
+real_maybe_zerop (const_tree expr)
+{
+  switch (TREE_CODE (expr))
+    {
+    case REAL_CST:
+      /* Can't use real_zerop here, as it always returns false for decimal
+	 floats.  And can't use TREE_REAL_CST (expr).cl == rvc_zero
+	 either, as decimal zeros are rvc_normal.  */
+      return real_equal (&TREE_REAL_CST (expr), &dconst0);
+    case COMPLEX_CST:
+      return (real_maybe_zerop (TREE_REALPART (expr))
+	      || real_maybe_zerop (TREE_IMAGPART (expr)));
+    case VECTOR_CST:
+      {
+	unsigned count = vector_cst_encoded_nelts (expr);
+	for (unsigned int i = 0; i < count; ++i)
+	  if (real_maybe_zerop (VECTOR_CST_ENCODED_ELT (expr, i)))
+	    return true;
+	return false;
+      }
+    default:
+      /* Perhaps for SSA_NAMEs we could query frange.  */
+      return true;
+    }
+}
+
 /* Nonzero if EXP is a constant or a cast of a constant.  */
 
 bool
@@ -5620,7 +5649,8 @@ build_qualified_type (tree type, int type_quals MEM_STAT_DECL)
   return t;
 }
 
-/* Create a variant of type T with alignment ALIGN.  */
+/* Create a variant of type T with alignment ALIGN which
+   is measured in bits.  */
 
 tree
 build_aligned_type (tree type, unsigned int align)
@@ -10094,6 +10124,8 @@ build_opaque_vector_type (tree innertype, poly_int64 nunits)
   TYPE_NEXT_VARIANT (cand) = TYPE_NEXT_VARIANT (t);
   TYPE_NEXT_VARIANT (t) = cand;
   TYPE_MAIN_VARIANT (cand) = TYPE_MAIN_VARIANT (t);
+  /* Type variants have no alias set defined.  */
+  TYPE_ALIAS_SET (cand) = -1;
   return cand;
 }
 
@@ -11951,6 +11983,18 @@ strip_invariant_refs (const_tree op)
       op = TREE_OPERAND (op, 0);
     }
 
+  return op;
+}
+
+/* Strip handled components with zero offset from OP.  */
+
+tree
+strip_zero_offset_components (tree op)
+{
+  while (TREE_CODE (op) == COMPONENT_REF
+	 && integer_zerop (DECL_FIELD_OFFSET (TREE_OPERAND (op, 1)))
+	 && integer_zerop (DECL_FIELD_BIT_OFFSET (TREE_OPERAND (op, 1))))
+    op = TREE_OPERAND (op, 0);
   return op;
 }
 

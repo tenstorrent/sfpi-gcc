@@ -6818,7 +6818,9 @@ ix86_compute_frame_layout (void)
 	 stack clash protections are enabled and the allocated frame is
 	 larger than the probe interval, then use pushes to save
 	 callee saved registers.  */
-      || (flag_stack_clash_protection && to_allocate > get_probe_interval ()))
+      || (flag_stack_clash_protection
+	  && !ix86_target_stack_probe ()
+	  && to_allocate > get_probe_interval ()))
     frame->save_regs_using_mov = false;
 
   if (ix86_using_red_zone ()
@@ -8266,10 +8268,11 @@ ix86_elim_entry_set_got (rtx reg)
       rtx pat = PATTERN (c_insn);
       if (GET_CODE (pat) == PARALLEL)
 	{
-	  rtx vec = XVECEXP (pat, 0, 0);
-	  if (GET_CODE (vec) == SET
-	      && XINT (XEXP (vec, 1), 1) == UNSPEC_SET_GOT
-	      && REGNO (XEXP (vec, 0)) == REGNO (reg))
+	  rtx set = XVECEXP (pat, 0, 0);
+	  if (GET_CODE (set) == SET
+	      && GET_CODE (SET_SRC (set)) == UNSPEC
+	      && XINT (SET_SRC (set), 1) == UNSPEC_SET_GOT
+	      && REGNO (SET_DEST (set)) == REGNO (reg))
 	    delete_insn (c_insn);
 	}
     }
@@ -8703,8 +8706,11 @@ ix86_expand_prologue (void)
       sse_registers_saved = true;
     }
 
-  /* If stack clash protection is requested, then probe the stack.  */
-  if (allocate >= 0 && flag_stack_clash_protection)
+  /* If stack clash protection is requested, then probe the stack, unless it
+     is already probed on the target.  */
+  if (allocate >= 0
+      && flag_stack_clash_protection
+      && !ix86_target_stack_probe ())
     {
       ix86_adjust_stack_and_probe (allocate, int_registers_saved, false);
       allocate = 0;
@@ -12233,8 +12239,8 @@ output_pic_addr_const (FILE *file, rtx x, int code)
       assemble_name (asm_out_file, buf);
       break;
 
-    case CONST_INT:
-      fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (x));
+    CASE_CONST_SCALAR_INT:
+      output_addr_const (file, x);
       break;
 
     case CONST:
@@ -14411,8 +14417,12 @@ ix86_avx_u128_mode_needed (rtx_insn *insn)
 	 modes wider than 256 bits.  It's only safe to issue a
 	 vzeroupper if all SSE registers are clobbered.  */
       const function_abi &abi = insn_callee_abi (insn);
-      if (!hard_reg_set_subset_p (reg_class_contents[SSE_REGS],
-				  abi.mode_clobbers (V4DImode)))
+      /* Should be safe to issue an vzeroupper before sibling_call_p.
+	 Also there not mode_exit for sibling_call, so there could be
+	 missing vzeroupper for that.  */
+      if (!(SIBLING_CALL_P (insn)
+	    || hard_reg_set_subset_p (reg_class_contents[SSE_REGS],
+				      abi.mode_clobbers (V4DImode))))
 	return AVX_U128_ANY;
 
       return AVX_U128_CLEAN;
@@ -14550,7 +14560,19 @@ ix86_avx_u128_mode_after (int mode, rtx_insn *insn)
       bool avx_upper_reg_found = false;
       note_stores (insn, ix86_check_avx_upper_stores, &avx_upper_reg_found);
 
-      return avx_upper_reg_found ? AVX_U128_DIRTY : AVX_U128_CLEAN;
+      if (avx_upper_reg_found)
+	return AVX_U128_DIRTY;
+
+      /* If the function desn't clobber any sse registers or only clobber
+	 128-bit part, Then vzeroupper isn't issued before the function exit.
+	 the status not CLEAN but ANY after the function.  */
+      const function_abi &abi = insn_callee_abi (insn);
+      if (!(SIBLING_CALL_P (insn)
+	    || hard_reg_set_subset_p (reg_class_contents[SSE_REGS],
+				      abi.mode_clobbers (V4DImode))))
+	return AVX_U128_ANY;
+
+      return  AVX_U128_CLEAN;
     }
 
   /* Otherwise, return current mode.  Remember that if insn
@@ -16552,10 +16574,18 @@ assign_386_stack_local (machine_mode mode, enum ix86_stack_slot n)
     if (s->mode == mode && s->n == n)
       return validize_mem (copy_rtx (s->rtl));
 
+  int align = 0;
+  /* For DImode with SLOT_FLOATxFDI_387 use 32-bit
+     alignment with -m32 -mpreferred-stack-boundary=2.  */
+  if (mode == DImode
+      && !TARGET_64BIT
+      && n == SLOT_FLOATxFDI_387
+      && ix86_preferred_stack_boundary < GET_MODE_ALIGNMENT (DImode))
+    align = 32;
   s = ggc_alloc<stack_local_entry> ();
   s->n = n;
   s->mode = mode;
-  s->rtl = assign_stack_local (mode, GET_MODE_SIZE (mode), 0);
+  s->rtl = assign_stack_local (mode, GET_MODE_SIZE (mode), align);
 
   s->next = ix86_stack_locals;
   ix86_stack_locals = s;
@@ -18351,6 +18381,15 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	}
       break;
 
+    case IX86_BUILTIN_PBLENDVB256:
+    case IX86_BUILTIN_BLENDVPS256:
+    case IX86_BUILTIN_BLENDVPD256:
+      /* pcmpeqb/d/q is under avx2, w/o avx2, it's veclower
+	 to scalar operations and not combined back.  */
+      if (!TARGET_AVX2)
+	break;
+
+      /* FALLTHRU.  */
     case IX86_BUILTIN_BLENDVPD:
       /* blendvpd is under sse4.1 but pcmpgtq is under sse4.2,
 	 w/o sse4.2, it's veclowered to scalar operations and
@@ -18359,10 +18398,7 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	break;
       /* FALLTHRU.  */
     case IX86_BUILTIN_PBLENDVB128:
-    case IX86_BUILTIN_PBLENDVB256:
     case IX86_BUILTIN_BLENDVPS:
-    case IX86_BUILTIN_BLENDVPS256:
-    case IX86_BUILTIN_BLENDVPD256:
       gcc_assert (n_args == 3);
       arg0 = gimple_call_arg (stmt, 0);
       arg1 = gimple_call_arg (stmt, 1);
@@ -18377,8 +18413,10 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	      tree itype = GET_MODE_INNER (TYPE_MODE (type)) == E_SFmode
 		? intSI_type_node : intDI_type_node;
 	      type = get_same_sized_vectype (itype, type);
-	      arg2 = gimple_build (&stmts, VIEW_CONVERT_EXPR, type, arg2);
 	    }
+	  else
+	    type = signed_type_for (type);
+	  arg2 = gimple_build (&stmts, VIEW_CONVERT_EXPR, type, arg2);
 	  tree zero_vec = build_zero_cst (type);
 	  tree cmp_type = truth_type_for (type);
 	  tree cmp = gimple_build (&stmts, LT_EXPR, cmp_type, arg2, zero_vec);
@@ -18910,6 +18948,13 @@ ix86_vectorize_builtin_scatter (const_tree vectype,
   enum ix86_builtins code;
 
   if (!TARGET_AVX512F)
+    return NULL_TREE;
+
+  if (known_eq (TYPE_VECTOR_SUBPARTS (vectype), 2u)
+      ? !TARGET_USE_SCATTER_2PARTS
+      : (known_eq (TYPE_VECTOR_SUBPARTS (vectype), 4u)
+	 ? !TARGET_USE_SCATTER_4PARTS
+	 : !TARGET_USE_SCATTER_8PARTS))
     return NULL_TREE;
 
   if ((TREE_CODE (index_type) != INTEGER_TYPE
@@ -20212,10 +20257,13 @@ ix86_vec_cost (machine_mode mode, int cost)
 
   if (GET_MODE_BITSIZE (mode) == 128
       && TARGET_SSE_SPLIT_REGS)
-    return cost * 2;
-  if (GET_MODE_BITSIZE (mode) > 128
+    return cost * GET_MODE_BITSIZE (mode) / 64;
+  else if (GET_MODE_BITSIZE (mode) > 128
       && TARGET_AVX256_SPLIT_REGS)
     return cost * GET_MODE_BITSIZE (mode) / 128;
+  else if (GET_MODE_BITSIZE (mode) > 256
+      && TARGET_AVX512_SPLIT_REGS)
+    return cost * GET_MODE_BITSIZE (mode) / 256;
   return cost;
 }
 
@@ -21182,6 +21230,7 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
   rtx this_reg, tmp, fnaddr;
   unsigned int tmp_regno;
   rtx_insn *insn;
+  int saved_flag_force_indirect_call = flag_force_indirect_call;
 
   if (TARGET_64BIT)
     tmp_regno = R10_REG;
@@ -21194,6 +21243,9 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
 	tmp_regno = DX_REG;
       else
 	tmp_regno = CX_REG;
+
+      if (flag_pic)
+  flag_force_indirect_call = 0;
     }
 
   emit_note (NOTE_INSN_PROLOGUE_END);
@@ -21361,6 +21413,8 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
   final (insn, file, 1);
   final_end_function ();
   assemble_end_function (thunk_fndecl, fnname);
+
+  flag_force_indirect_call = saved_flag_force_indirect_call;
 }
 
 static void
@@ -21478,7 +21532,10 @@ x86_function_profiler (FILE *file, int labelno ATTRIBUTE_UNUSED)
   if (TARGET_64BIT)
     {
 #ifndef NO_PROFILE_COUNTERS
-      fprintf (file, "\tleaq\t%sP%d(%%rip),%%r11\n", LPREFIX, labelno);
+      if (ASSEMBLER_DIALECT == ASM_INTEL)
+	fprintf (file, "\tlea\tr11, %sP%d[rip]\n", LPREFIX, labelno);
+      else
+	fprintf (file, "\tleaq\t%sP%d(%%rip), %%r11\n", LPREFIX, labelno);
 #endif
 
       if (!TARGET_PECOFF)
@@ -21489,12 +21546,29 @@ x86_function_profiler (FILE *file, int labelno ATTRIBUTE_UNUSED)
 	      /* NB: R10 is caller-saved.  Although it can be used as a
 		 static chain register, it is preserved when calling
 		 mcount for nested functions.  */
-	      fprintf (file, "1:\tmovabsq\t$%s, %%r10\n\tcall\t*%%r10\n",
-		       mcount_name);
+	      if (ASSEMBLER_DIALECT == ASM_INTEL)
+		fprintf (file, "1:\tmovabs\tr10, OFFSET FLAT:%s\n"
+			       "\tcall\tr10\n", mcount_name);
+	      else
+		fprintf (file, "1:\tmovabsq\t$%s, %%r10\n\tcall\t*%%r10\n",
+			 mcount_name);
 	      break;
 	    case CM_LARGE_PIC:
 #ifdef NO_PROFILE_COUNTERS
-	      fprintf (file, "1:\tmovabsq\t$_GLOBAL_OFFSET_TABLE_-1b, %%r11\n");
+	      if (ASSEMBLER_DIALECT == ASM_INTEL)
+		{
+		  fprintf (file, "1:movabs\tr11, "
+				 "OFFSET FLAT:_GLOBAL_OFFSET_TABLE_-1b\n");
+		  fprintf (file, "\tlea\tr10, 1b[rip]\n");
+		  fprintf (file, "\tadd\tr10, r11\n");
+		  fprintf (file, "\tmovabs\tr11, OFFSET FLAT:%s@PLTOFF\n",
+			   mcount_name);
+		  fprintf (file, "\tadd\tr10, r11\n");
+		  fprintf (file, "\tcall\tr10\n");
+		  break;
+		}
+	      fprintf (file,
+		       "1:\tmovabsq\t$_GLOBAL_OFFSET_TABLE_-1b, %%r11\n");
 	      fprintf (file, "\tleaq\t1b(%%rip), %%r10\n");
 	      fprintf (file, "\taddq\t%%r11, %%r10\n");
 	      fprintf (file, "\tmovabsq\t$%s@PLTOFF, %%r11\n", mcount_name);
@@ -21506,7 +21580,11 @@ x86_function_profiler (FILE *file, int labelno ATTRIBUTE_UNUSED)
 	      break;
 	    case CM_SMALL_PIC:
 	    case CM_MEDIUM_PIC:
-	      fprintf (file, "1:\tcall\t*%s@GOTPCREL(%%rip)\n", mcount_name);
+	      if (ASSEMBLER_DIALECT == ASM_INTEL)
+		fprintf (file, "1:\tcall\t[QWORD PTR %s@GOTPCREL[rip]]\n",
+			 mcount_name);
+	      else
+		fprintf (file, "1:\tcall\t*%s@GOTPCREL(%%rip)\n", mcount_name);
 	      break;
 	    default:
 	      x86_print_call_or_nop (file, mcount_name);
@@ -21519,23 +21597,37 @@ x86_function_profiler (FILE *file, int labelno ATTRIBUTE_UNUSED)
   else if (flag_pic)
     {
 #ifndef NO_PROFILE_COUNTERS
-      fprintf (file, "\tleal\t%sP%d@GOTOFF(%%ebx),%%" PROFILE_COUNT_REGISTER "\n",
-	       LPREFIX, labelno);
+      if (ASSEMBLER_DIALECT == ASM_INTEL)
+	fprintf (file,
+		 "\tlea\t" PROFILE_COUNT_REGISTER ", %sP%d@GOTOFF[ebx]\n",
+		 LPREFIX, labelno);
+      else
+	fprintf (file,
+		 "\tleal\t%sP%d@GOTOFF(%%ebx), %%" PROFILE_COUNT_REGISTER "\n",
+		 LPREFIX, labelno);
 #endif
-      fprintf (file, "1:\tcall\t*%s@GOT(%%ebx)\n", mcount_name);
+      if (ASSEMBLER_DIALECT == ASM_INTEL)
+	fprintf (file, "1:\tcall\t[DWORD PTR %s@GOT[ebx]]\n", mcount_name);
+      else
+	fprintf (file, "1:\tcall\t*%s@GOT(%%ebx)\n", mcount_name);
     }
   else
     {
 #ifndef NO_PROFILE_COUNTERS
-      fprintf (file, "\tmovl\t$%sP%d,%%" PROFILE_COUNT_REGISTER "\n",
-	       LPREFIX, labelno);
+      if (ASSEMBLER_DIALECT == ASM_INTEL)
+	fprintf (file,
+		 "\tmov\t" PROFILE_COUNT_REGISTER ", OFFSET FLAT:%sP%d\n",
+		 LPREFIX, labelno);
+      else
+	fprintf (file, "\tmovl\t$%sP%d, %%" PROFILE_COUNT_REGISTER "\n",
+		 LPREFIX, labelno);
 #endif
       x86_print_call_or_nop (file, mcount_name);
     }
 
   if (flag_record_mcount
-	|| lookup_attribute ("fentry_section",
-                                DECL_ATTRIBUTES (current_function_decl)))
+      || lookup_attribute ("fentry_section",
+			   DECL_ATTRIBUTES (current_function_decl)))
     {
       const char *sname = "__mcount_loc";
 
@@ -22792,12 +22884,14 @@ ix86_reassociation_width (unsigned int op, machine_mode mode)
       /* Integer vector instructions execute in FP unit
 	 and can execute 3 additions and one multiplication per cycle.  */
       if ((ix86_tune == PROCESSOR_ZNVER1 || ix86_tune == PROCESSOR_ZNVER2
-	   || ix86_tune == PROCESSOR_ZNVER3)
+	   || ix86_tune == PROCESSOR_ZNVER3 || ix86_tune == PROCESSOR_ZNVER4)
    	  && INTEGRAL_MODE_P (mode) && op != PLUS && op != MINUS)
 	return 1;
 
       /* Account for targets that splits wide vectors into multiple parts.  */
-      if (TARGET_AVX256_SPLIT_REGS && GET_MODE_BITSIZE (mode) > 128)
+      if (TARGET_AVX512_SPLIT_REGS && GET_MODE_BITSIZE (mode) > 256)
+	div = GET_MODE_BITSIZE (mode) / 256;
+      else if (TARGET_AVX256_SPLIT_REGS && GET_MODE_BITSIZE (mode) > 128)
 	div = GET_MODE_BITSIZE (mode) / 128;
       else if (TARGET_SSE_SPLIT_REGS && GET_MODE_BITSIZE (mode) > 64)
 	div = GET_MODE_BITSIZE (mode) / 64;

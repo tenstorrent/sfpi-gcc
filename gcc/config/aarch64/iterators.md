@@ -303,6 +303,9 @@
 
 (define_mode_iterator TX [TI TF])
 
+;; TX plus V16QImode.
+(define_mode_iterator TX_V16QI [TI TF V16QI])
+
 ;; Advanced SIMD opaque structure modes.
 (define_mode_iterator VSTRUCT [OI CI XI])
 
@@ -3111,6 +3114,8 @@
 			       UNSPEC_FRINT64Z UNSPEC_FRINT64X])
 
 (define_int_iterator SVE_BRK_UNARY [UNSPEC_BRKA UNSPEC_BRKB])
+
+(define_int_iterator SVE_BRKP [UNSPEC_BRKPA UNSPEC_BRKPB])
 
 (define_int_iterator SVE_BRK_BINARY [UNSPEC_BRKN UNSPEC_BRKPA UNSPEC_BRKPB])
 

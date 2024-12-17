@@ -93,7 +93,9 @@ static bitmap need_eh_cleanup;
 static bitmap need_ab_cleanup;
 
 /* STMT is a statement that may write into memory.  Analyze it and
-   initialize WRITE to describe how STMT affects memory.
+   initialize WRITE to describe how STMT affects memory.  When
+   MAY_DEF_OK is true then the function initializes WRITE to what
+   the stmt may define.
 
    Return TRUE if the statement was analyzed, FALSE otherwise.
 
@@ -101,7 +103,7 @@ static bitmap need_ab_cleanup;
    can be achieved by analyzing more statements.  */
 
 static bool
-initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write)
+initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write, bool may_def_ok = false)
 {
   /* It's advantageous to handle certain mem* functions.  */
   if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))
@@ -148,7 +150,8 @@ initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write)
     }
   else if (tree lhs = gimple_get_lhs (stmt))
     {
-      if (TREE_CODE (lhs) != SSA_NAME)
+      if (TREE_CODE (lhs) != SSA_NAME
+	  && (may_def_ok || !stmt_could_throw_p (cfun, stmt)))
 	{
 	  ao_ref_init (write, lhs);
 	  return true;
@@ -356,11 +359,11 @@ setup_live_bytes_from_ref (ao_ref *ref, sbitmap live_bytes)
   return false;
 }
 
-/* Compute the number of elements that we can trim from the head and
-   tail of ORIG resulting in a bitmap that is a superset of LIVE.
+/* Compute the number of stored bytes that we can trim from the head and
+   tail of REF.  LIVE is the bitmap of stores to REF that are still live.
 
-   Store the number of elements trimmed from the head and tail in
-   TRIM_HEAD and TRIM_TAIL.
+   Store the number of bytes trimmed from the head and tail in TRIM_HEAD
+   and TRIM_TAIL respectively.
 
    STMT is the statement being trimmed and is used for debugging dump
    output only.  */
@@ -369,10 +372,17 @@ static void
 compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
 	       gimple *stmt)
 {
-  /* We use sbitmaps biased such that ref->offset is bit zero and the bitmap
-     extends through ref->size.  So we know that in the original bitmap
-     bits 0..ref->size were true.  We don't actually need the bitmap, just
-     the REF to compute the trims.  */
+  *trim_head = 0;
+  *trim_tail = 0;
+
+  /* We use bitmaps biased such that ref->offset is contained in bit zero and
+     the bitmap extends through ref->max_size, so we know that in the original
+     bitmap bits 0 .. ref->max_size were true.  But we need to check that this
+     covers the bytes of REF exactly.  */
+  const unsigned int align = known_alignment (ref->offset);
+  if ((align > 0 && align < BITS_PER_UNIT)
+      || !known_eq (ref->size, ref->max_size))
+    return;
 
   /* Now identify how much, if any of the tail we can chop off.  */
   HOST_WIDE_INT const_size;
@@ -397,8 +407,6 @@ compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
 			       last_orig) <= 0)
 	*trim_tail = 0;
     }
-  else
-    *trim_tail = 0;
 
   /* Identify how much, if any of the head we can chop off.  */
   int first_orig = 0;
@@ -456,8 +464,7 @@ compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
 	}
     }
 
-  if ((*trim_head || *trim_tail)
-      && dump_file && (dump_flags & TDF_DETAILS))
+  if ((*trim_head || *trim_tail) && dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "  Trimming statement (head = %d, tail = %d): ",
 	       *trim_head, *trim_tail);
@@ -466,12 +473,12 @@ compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
     }
 }
 
-/* STMT initializes an object from COMPLEX_CST where one or more of the
-   bytes written may be dead stores.  REF is a representation of the
-   memory written.  LIVE is the bitmap of stores that are actually live.
+/* STMT initializes an object from COMPLEX_CST where one or more of the bytes
+   written may be dead stores.  REF is a representation of the memory written.
+   LIVE is the bitmap of stores to REF that are still live.
 
-   Attempt to rewrite STMT so that only the real or imaginary part of
-   the object is actually stored.  */
+   Attempt to rewrite STMT so that only the real or the imaginary part of the
+   object is actually stored.  */
 
 static void
 maybe_trim_complex_store (ao_ref *ref, sbitmap live, gimple *stmt)
@@ -507,11 +514,10 @@ maybe_trim_complex_store (ao_ref *ref, sbitmap live, gimple *stmt)
 }
 
 /* STMT initializes an object using a CONSTRUCTOR where one or more of the
-   bytes written are dead stores.  ORIG is the bitmap of bytes stored by
-   STMT.  LIVE is the bitmap of stores that are actually live.
+   bytes written are dead stores.  REF is a representation of the memory
+   written.  LIVE is the bitmap of stores to REF that are still live.
 
-   Attempt to rewrite STMT so that only the real or imaginary part of
-   the object is actually stored.
+   Attempt to rewrite STMT so that it writes fewer memory locations.
 
    The most common case for getting here is a CONSTRUCTOR with no elements
    being used to zero initialize an object.  We do not try to handle other
@@ -733,9 +739,9 @@ maybe_trim_memstar_call (ao_ref *ref, sbitmap live, gimple *stmt)
     }
 }
 
-/* STMT is a memory write where one or more bytes written are dead
-   stores.  ORIG is the bitmap of bytes stored by STMT.  LIVE is the
-   bitmap of stores that are actually live.
+/* STMT is a memory write where one or more bytes written are dead stores.
+   REF is a representation of the memory written.  LIVE is the bitmap of
+   stores to REF that are still live.
 
    Attempt to rewrite STMT so that it writes fewer memory locations.  Right
    now we only support trimming at the start or end of the memory region.
@@ -930,14 +936,6 @@ dse_classify_store (ao_ref *ref, gimple *stmt,
 
       if (gimple_code (temp) == GIMPLE_PHI)
 	{
-	  /* If we visit this PHI by following a backedge then we have to
-	     make sure ref->ref only refers to SSA names that are invariant
-	     with respect to the loop represented by this PHI node.  */
-	  if (dominated_by_p (CDI_DOMINATORS, gimple_bb (stmt),
-			      gimple_bb (temp))
-	      && !for_each_index (ref->ref ? &ref->ref : &ref->base,
-				  check_name, gimple_bb (temp)))
-	    return DSE_STORE_LIVE;
 	  defvar = PHI_RESULT (temp);
 	  bitmap_set_bit (visited, SSA_NAME_VERSION (defvar));
 	}
@@ -971,6 +969,15 @@ dse_classify_store (ao_ref *ref, gimple *stmt,
 	      if (!bitmap_bit_p (visited,
 				 SSA_NAME_VERSION (PHI_RESULT (use_stmt))))
 		{
+		  /* If we visit this PHI by following a backedge then we have
+		     to make sure ref->ref only refers to SSA names that are
+		     invariant with respect to the loop represented by this
+		     PHI node.  */
+		  if (dominated_by_p (CDI_DOMINATORS, gimple_bb (stmt),
+				      gimple_bb (use_stmt))
+		      && !for_each_index (ref->ref ? &ref->ref : &ref->base,
+					  check_name, gimple_bb (use_stmt)))
+		    return DSE_STORE_LIVE;
 		  defs.safe_push (use_stmt);
 		  if (!first_phi_def)
 		    first_phi_def = use_stmt;
@@ -1292,8 +1299,10 @@ dse_optimize_stmt (function *fun, gimple_stmt_iterator *gsi, sbitmap live_bytes)
 
   ao_ref ref;
   /* If this is not a store we can still remove dead call using
-     modref summary.  */
-  if (!initialize_ao_ref_for_dse (stmt, &ref))
+     modref summary.  Note we specifically allow ref to be initialized
+     to a conservative may-def since we are looking for followup stores
+     to kill all of it.  */
+  if (!initialize_ao_ref_for_dse (stmt, &ref, true))
     {
       dse_optimize_call (gsi, live_bytes);
       return;

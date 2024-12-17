@@ -1919,9 +1919,8 @@ maybe_register_def (def_operand_p def_p, gimple *stmt,
 	  tree tracked_var = target_for_debug_bind (sym);
 	  if (tracked_var)
 	    {
-	      gimple *note = gimple_build_debug_bind (tracked_var, def, stmt);
-	      /* If stmt ends the bb, insert the debug stmt on the single
-		 non-EH edge from the stmt.  */
+	      /* If stmt ends the bb, insert the debug stmt on the non-EH
+		 edge(s) from the stmt.  */
 	      if (gsi_one_before_end_p (gsi) && stmt_ends_bb_p (stmt))
 		{
 		  basic_block bb = gsi_bb (gsi);
@@ -1930,33 +1929,46 @@ maybe_register_def (def_operand_p def_p, gimple *stmt,
 		  FOR_EACH_EDGE (e, ei, bb->succs)
 		    if (!(e->flags & EDGE_EH))
 		      {
-			gcc_checking_assert (!ef);
+			/* asm goto can have multiple non-EH edges from the
+			   stmt.  Insert on all of them where it is
+			   possible.  */
+			gcc_checking_assert (!ef || (gimple_code (stmt)
+						     == GIMPLE_ASM));
 			ef = e;
-		      }
-		  /* If there are other predecessors to ef->dest, then
-		     there must be PHI nodes for the modified
-		     variable, and therefore there will be debug bind
-		     stmts after the PHI nodes.  The debug bind notes
-		     we'd insert would force the creation of a new
-		     block (diverging codegen) and be redundant with
-		     the post-PHI bind stmts, so don't add them.
+			/* If there are other predecessors to ef->dest, then
+			   there must be PHI nodes for the modified
+			   variable, and therefore there will be debug bind
+			   stmts after the PHI nodes.  The debug bind notes
+			   we'd insert would force the creation of a new
+			   block (diverging codegen) and be redundant with
+			   the post-PHI bind stmts, so don't add them.
 
-		     As for the exit edge, there wouldn't be redundant
-		     bind stmts, but there wouldn't be a PC to bind
-		     them to either, so avoid diverging the CFG.  */
-		  if (ef && single_pred_p (ef->dest)
-		      && ef->dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
-		    {
-		      /* If there were PHI nodes in the node, we'd
-			 have to make sure the value we're binding
-			 doesn't need rewriting.  But there shouldn't
-			 be PHI nodes in a single-predecessor block,
-			 so we just add the note.  */
-		      gsi_insert_on_edge_immediate (ef, note);
-		    }
+			   As for the exit edge, there wouldn't be redundant
+			   bind stmts, but there wouldn't be a PC to bind
+			   them to either, so avoid diverging the CFG.  */
+			if (e
+			    && single_pred_p (e->dest)
+			    && gimple_seq_empty_p (phi_nodes (e->dest))
+			    && e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+			  {
+			    /* If there were PHI nodes in the node, we'd
+			       have to make sure the value we're binding
+			       doesn't need rewriting.  But there shouldn't
+			       be PHI nodes in a single-predecessor block,
+			       so we just add the note.  */
+			    gimple *note
+			      = gimple_build_debug_bind (tracked_var, def,
+							 stmt);
+			    gsi_insert_on_edge_immediate (ef, note);
+			  }
+		      }
 		}
 	      else
-		gsi_insert_after (&gsi, note, GSI_SAME_STMT);
+		{
+		  gimple *note
+		    = gimple_build_debug_bind (tracked_var, def, stmt);
+		  gsi_insert_after (&gsi, note, GSI_SAME_STMT);
+		}
 	    }
 	}
 
@@ -2095,7 +2107,6 @@ rewrite_update_phi_arguments (basic_block bb)
 		 symbol we may find NULL arguments.  That's why we
 		 take the symbol from the LHS of the PHI node.  */
 	      reaching_def = get_reaching_def (lhs_sym);
-
 	    }
 	  else
 	    {
@@ -2107,8 +2118,9 @@ rewrite_update_phi_arguments (basic_block bb)
 		reaching_def = get_reaching_def (arg);
 	    }
 
-          /* Update the argument if there is a reaching def.  */
-	  if (reaching_def)
+	  /* Update the argument if there is a reaching def different
+	     from arg.  */
+	  if (reaching_def && reaching_def != arg)
 	    {
 	      location_t locus;
 	      int arg_i = PHI_ARG_INDEX_FROM_USE (arg_p);
@@ -2118,6 +2130,10 @@ rewrite_update_phi_arguments (basic_block bb)
 	      /* Virtual operands do not need a location.  */
 	      if (virtual_operand_p (reaching_def))
 		locus = UNKNOWN_LOCATION;
+	      /* If SSA update didn't insert this PHI the argument
+		 might have a location already, keep that.  */
+	      else if (gimple_phi_arg_has_location (phi, arg_i))
+		locus = gimple_phi_arg_location (phi, arg_i);
 	      else
 		{
 		  gimple *stmt = SSA_NAME_DEF_STMT (reaching_def);
@@ -2134,7 +2150,6 @@ rewrite_update_phi_arguments (basic_block bb)
 
 	      gimple_phi_arg_set_location (phi, arg_i, locus);
 	    }
-
 
 	  if (e->flags & EDGE_ABNORMAL)
 	    SSA_NAME_OCCURS_IN_ABNORMAL_PHI (USE_FROM_PTR (arg_p)) = 1;

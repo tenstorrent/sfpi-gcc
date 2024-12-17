@@ -471,6 +471,8 @@ extern int rs6000_vector_align[];
 #define TARGET_EXTSWSLI	(TARGET_MODULO && TARGET_POWERPC64)
 #define TARGET_MADDLD	TARGET_MODULO
 
+/* TARGET_DIRECT_MOVE is redundant to TARGET_P8_VECTOR, so alias it to that.  */
+#define TARGET_DIRECT_MOVE	TARGET_P8_VECTOR
 #define TARGET_XSCVDPSPN	(TARGET_DIRECT_MOVE || TARGET_P8_VECTOR)
 #define TARGET_XSCVSPDPN	(TARGET_DIRECT_MOVE || TARGET_P8_VECTOR)
 #define TARGET_VADDUQM		(TARGET_P8_VECTOR && TARGET_POWERPC64)
@@ -492,7 +494,7 @@ extern int rs6000_vector_align[];
    memory support.  */
 #define TARGET_SYNC_HI_QI	(TARGET_QUAD_MEMORY			\
 				 || TARGET_QUAD_MEMORY_ATOMIC		\
-				 || TARGET_DIRECT_MOVE)
+				 || TARGET_POWER8)
 
 #define TARGET_SYNC_TI		TARGET_QUAD_MEMORY_ATOMIC
 
@@ -648,10 +650,6 @@ extern unsigned char rs6000_recip_bits[];
 /* Target #defines.  */
 #define TARGET_CPU_CPP_BUILTINS() \
   rs6000_cpu_cpp_builtins (pfile)
-
-/* Target hooks for D language.  */
-#define TARGET_D_CPU_VERSIONS rs6000_d_target_versions
-#define TARGET_D_REGISTER_CPU_TARGET_INFO rs6000_d_register_target_info
 
 /* This is used by rs6000_cpu_cpp_builtins to indicate the byte order
    we're compiling for.  Some configurations may need to override it.  */
@@ -2636,3 +2634,9 @@ while (0)
        rs6000_asm_output_opcode (STREAM);				\
     }									\
   while (0)
+
+/* Disable generation of scalar modulo instructions due to performance issues
+   with certain input values.  This can be removed in the future when the
+   issues have been resolved.  */
+#define RS6000_DISABLE_SCALAR_MODULO 1
+

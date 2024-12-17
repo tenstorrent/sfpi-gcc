@@ -46,7 +46,7 @@ namespace __detail
    */
 
   typedef long _StateIdT;
-  static const _StateIdT _S_invalid_state_id  = -1;
+  _GLIBCXX17_INLINE constexpr _StateIdT _S_invalid_state_id  = -1;
 
   template<typename _CharT>
     using _Matcher = std::function<bool (_CharT)>;
@@ -110,7 +110,7 @@ namespace __detail
 
 #ifdef _GLIBCXX_DEBUG
     std::ostream&
-    _M_print(std::ostream& ostr) const;
+    _M_print(std::ostream& __ostr) const;
 
     // Prints graphviz dot commands for state.
     std::ostream&

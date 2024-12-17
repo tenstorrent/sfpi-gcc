@@ -32,15 +32,35 @@
 
 #pragma GCC system_header
 
+#if __cplusplus >= 202002L
 #include <concepts>
 #include <bits/ptr_traits.h>	// to_address
 #include <bits/ranges_cmp.h>	// identity, ranges::less
 
-#if __cpp_lib_concepts
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+  /** A sentinel type that can be used to check for the end of a range.
+   *
+   * For some iterator types the past-the-end sentinel value is independent
+   * of the underlying sequence, and a default sentinel can be used with them.
+   * For example, a `std::counted_iterator` keeps a count of how many elements
+   * remain, and so checking for the past-the-end value only requires checking
+   * if that count has reached zero. A past-the-end `std::istream_iterator` is
+   * equal to the default-constructed value, which can be easily checked.
+   *
+   * Comparing iterators of these types to `std::default_sentinel` is a
+   * convenient way to check if the end has been reached.
+   *
+   * @since C++20
+   */
+  struct default_sentinel_t { };
+
+  /// A default sentinel value.
+  inline constexpr default_sentinel_t default_sentinel{};
+
+#if __cpp_lib_concepts
   struct input_iterator_tag;
   struct output_iterator_tag;
   struct forward_iterator_tag;
@@ -751,19 +771,34 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       && invocable<_Fn, iter_reference_t<_Is>...>
     using indirect_result_t = invoke_result_t<_Fn, iter_reference_t<_Is>...>;
 
+  namespace __detail
+  {
+    template<typename _Iter, typename _Proj>
+      struct __projected
+      {
+	struct __type
+	{
+	  using value_type = remove_cvref_t<indirect_result_t<_Proj&, _Iter>>;
+	  indirect_result_t<_Proj&, _Iter> operator*() const; // not defined
+	};
+      };
+
+    template<weakly_incrementable _Iter, typename _Proj>
+      struct __projected<_Iter, _Proj>
+      {
+	struct __type
+	{
+	  using value_type = remove_cvref_t<indirect_result_t<_Proj&, _Iter>>;
+	  using difference_type = iter_difference_t<_Iter>;
+	  indirect_result_t<_Proj&, _Iter> operator*() const; // not defined
+	};
+      };
+  } // namespace __detail
+
   /// [projected], projected
   template<indirectly_readable _Iter,
 	   indirectly_regular_unary_invocable<_Iter> _Proj>
-    struct projected
-    {
-      using value_type = remove_cvref_t<indirect_result_t<_Proj&, _Iter>>;
-
-      indirect_result_t<_Proj&, _Iter> operator*() const; // not defined
-    };
-
-  template<weakly_incrementable _Iter, typename _Proj>
-    struct incrementable_traits<projected<_Iter, _Proj>>
-    { using difference_type = iter_difference_t<_Iter>; };
+    using projected = typename __detail::__projected<_Iter, _Proj>::__type;
 
   // [alg.req], common algorithm requirements
 
@@ -924,9 +959,6 @@ namespace ranges
 
   inline constexpr unreachable_sentinel_t unreachable_sentinel{};
 
-  struct default_sentinel_t { };
-  inline constexpr default_sentinel_t default_sentinel{};
-
   // This is the namespace for [range.access] CPOs.
   namespace ranges::__cust_access
   {
@@ -983,7 +1015,8 @@ namespace ranges
 
   } // namespace __detail
 
+#endif // C++20 library concepts
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
-#endif // C++20 library concepts
+#endif // C++20
 #endif // _ITERATOR_CONCEPTS_H

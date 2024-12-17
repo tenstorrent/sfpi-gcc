@@ -69,6 +69,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
    *
    *  @ingroup strings
    *  @ingroup sequences
+   *  @headerfile string
+   *  @since C++98
    *
    *  @tparam _CharT  Type of character
    *  @tparam _Traits  Traits for character type, defaults to
@@ -271,7 +273,15 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       _GLIBCXX20_CONSTEXPR
       bool
       _M_is_local() const
-      { return _M_data() == _M_local_data(); }
+      {
+	if (_M_data() == _M_local_data())
+	  {
+	    if (_M_string_length > _S_local_capacity)
+	      __builtin_unreachable();
+	    return true;
+	  }
+	return false;
+      }
 
       // Create & Destroy
       _GLIBCXX20_CONSTEXPR
@@ -352,8 +362,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       {
 #if __cpp_lib_is_constant_evaluated
 	if (std::is_constant_evaluated())
-	  for (_CharT& __c : _M_local_buf)
-	    __c = _CharT();
+	  for (size_type __i = 0; __i <= _S_local_capacity; ++__i)
+	    _M_local_buf[__i] = _CharT();
 #endif
 	return _M_local_data();
       }
@@ -672,6 +682,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       {
 	if (__str._M_is_local())
 	  {
+	    (void)_M_use_local_data();
 	    traits_type::copy(_M_local_buf, __str._M_local_buf,
 			      __str.length() + 1);
 	  }
@@ -685,7 +696,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	// basic_stringbuf relies on writing into unallocated capacity so
 	// we mess up the contents if we put a '\0' in the string.
 	_M_length(__str.length());
-	__str._M_data(__str._M_local_data());
+	__str._M_data(__str._M_use_local_data());
 	__str._M_set_length(0);
       }
 
@@ -711,6 +722,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       {
 	if (__str._M_is_local())
 	  {
+	    (void)_M_use_local_data();
 	    traits_type::copy(_M_local_buf, __str._M_local_buf,
 			      __str.length() + 1);
 	    _M_length(__str.length());
@@ -722,7 +734,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	    _M_data(__str._M_data());
 	    _M_length(__str.length());
 	    _M_capacity(__str._M_allocated_capacity);
-	    __str._M_data(__str._M_local_buf);
+	    __str._M_data(__str._M_use_local_data());
 	    __str._M_set_length(0);
 	  }
 	else
@@ -750,7 +762,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	_GLIBCXX20_CONSTEXPR
         basic_string(_InputIterator __beg, _InputIterator __end,
 		     const _Alloc& __a = _Alloc())
-	: _M_dataplus(_M_local_data(), __a)
+	: _M_dataplus(_M_local_data(), __a), _M_string_length(0)
 	{
 #if __cplusplus >= 201103L
 	  _M_construct(__beg, __end, std::__iterator_category(__beg));

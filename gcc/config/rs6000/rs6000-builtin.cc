@@ -168,7 +168,7 @@ rs6000_builtin_is_supported (enum rs6000_gen_builtins fncode)
     case ENB_P7_64:
       return TARGET_POPCNTD && TARGET_POWERPC64;
     case ENB_P8:
-      return TARGET_DIRECT_MOVE;
+      return TARGET_POWER8;
     case ENB_P8V:
       return TARGET_P8_VECTOR;
     case ENB_P9:
@@ -869,7 +869,7 @@ rs6000_init_builtins (void)
 	    continue;
 	  if (e == ENB_MMA && !TARGET_MMA)
 	    continue;
-	  tree fntype = rs6000_builtin_info[i].fntype;
+	  tree fntype = rs6000_builtin_info_fntype[i];
 	  tree t = TREE_TYPE (fntype);
 	  fprintf (stderr, "%s %s (", rs6000_type_string (t),
 		   rs6000_builtin_info[i].bifname);
@@ -1121,7 +1121,12 @@ rs6000_gimple_fold_mma_builtin (gimple_stmt_iterator *gsi,
       unsigned nvec = (fncode == RS6000_BIF_DISASSEMBLE_ACC) ? 4 : 2;
       tree dst_ptr = gimple_call_arg (stmt, 0);
       tree src_ptr = gimple_call_arg (stmt, 1);
-      tree src_type = TREE_TYPE (src_ptr);
+      tree src_type = (fncode == RS6000_BIF_DISASSEMBLE_ACC)
+		      ? build_pointer_type (vector_quad_type_node)
+		      : build_pointer_type (vector_pair_type_node);
+      if (TREE_TYPE (src_ptr) != src_type)
+	src_ptr = build1 (NOP_EXPR, src_type, src_ptr);
+
       tree src = create_tmp_reg_or_ssa_name (TREE_TYPE (src_type));
       gimplify_assign (src, build_simple_mem_ref (src_ptr), &new_seq);
 
@@ -1293,6 +1298,11 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
   tree arg0, arg1, lhs, temp;
   enum tree_code bcode;
   gimple *g;
+
+  /* For an unresolved overloaded builtin, return early here since there
+     is no builtin info for it and we are unable to fold it.  */
+  if (fn_code > RS6000_OVLD_NONE)
+    return false;
 
   size_t uns_fncode = (size_t) fn_code;
   enum insn_code icode = rs6000_builtin_info[uns_fncode].icode;
@@ -1910,7 +1920,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	tree lhs_type = TREE_TYPE (lhs);
 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
 	  required alignment (power) is 4 bytes regardless of data type.  */
-	tree align_ltype = build_aligned_type (lhs_type, 4);
+	tree align_ltype = build_aligned_type (lhs_type, 32);
 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
 	   the tree using the value from arg0.  The resulting type will match
 	   the type of arg1.  */
@@ -1954,7 +1964,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	tree arg2_type = ptr_type_node;
 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
 	   required alignment (power) is 4 bytes regardless of data type.  */
-	tree align_stype = build_aligned_type (arg0_type, 4);
+	tree align_stype = build_aligned_type (arg0_type, 32);
 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
 	   the tree using the value from arg1.  */
 	gimple_seq stmts = NULL;
@@ -2859,17 +2869,17 @@ lxvrse_expand_builtin (rtx target, insn_code icode, rtx *op,
   if (icode == CODE_FOR_vsx_lxvrbx)
     {
       temp1  = simplify_gen_subreg (V16QImode, tiscratch, TImode, 0);
-      emit_insn (gen_vsx_sign_extend_qi_v2di (discratch, temp1));
+      emit_insn (gen_vsx_sign_extend_v16qi_v2di (discratch, temp1));
     }
   else if (icode == CODE_FOR_vsx_lxvrhx)
     {
       temp1  = simplify_gen_subreg (V8HImode, tiscratch, TImode, 0);
-      emit_insn (gen_vsx_sign_extend_hi_v2di (discratch, temp1));
+      emit_insn (gen_vsx_sign_extend_v8hi_v2di (discratch, temp1));
     }
   else if (icode == CODE_FOR_vsx_lxvrwx)
     {
       temp1  = simplify_gen_subreg (V4SImode, tiscratch, TImode, 0);
-      emit_insn (gen_vsx_sign_extend_si_v2di (discratch, temp1));
+      emit_insn (gen_vsx_sign_extend_v4si_v2di (discratch, temp1));
     }
   else if (icode == CODE_FOR_vsx_lxvrdx)
     discratch = simplify_gen_subreg (V2DImode, tiscratch, TImode, 0);
@@ -2952,7 +2962,7 @@ stv_expand_builtin (insn_code icode, rtx *op,
 
       rtx addr;
       if (op[1] == const0_rtx)
-	addr = gen_rtx_MEM (Pmode, op[2]);
+	addr = gen_rtx_MEM (tmode, op[2]);
       else
 	{
 	  op[1] = copy_to_mode_reg (Pmode, op[1]);
@@ -3295,6 +3305,14 @@ rs6000_expand_builtin (tree exp, rtx target, rtx /* subtarget */,
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
   enum rs6000_gen_builtins fcode
     = (enum rs6000_gen_builtins) DECL_MD_FUNCTION_CODE (fndecl);
+
+  /* Emit error message if it's an unresolved overloaded builtin.  */
+  if (fcode > RS6000_OVLD_NONE)
+    {
+      error ("unresolved overload for builtin %qF", fndecl);
+      return const0_rtx;
+    }
+
   size_t uns_fcode = (size_t)fcode;
   enum insn_code icode = rs6000_builtin_info[uns_fcode].icode;
 

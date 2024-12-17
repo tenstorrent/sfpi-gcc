@@ -6901,7 +6901,7 @@ build_new_op (const op_location_t &loc, enum tree_code code, int flags,
     case TRUTH_ORIF_EXPR:
     case TRUTH_AND_EXPR:
     case TRUTH_OR_EXPR:
-      if (complain & tf_warning)
+      if ((complain & tf_warning) && !processing_template_decl)
 	warn_logical_operator (loc, code, boolean_type_node,
 			       code_orig_arg1, arg1,
 			       code_orig_arg2, arg2);
@@ -8135,7 +8135,15 @@ convert_like_internal (conversion *convs, tree expr, tree fn, int argnum,
       break;
     };
 
-  expr = convert_like (next_conversion (convs), expr, fn, argnum,
+  conversion *nc = next_conversion (convs);
+  if (convs->kind == ck_ref_bind && nc->kind == ck_qual
+      && !convs->need_temporary_p)
+    /* direct_reference_binding might have inserted a ck_qual under
+       this ck_ref_bind for the benefit of conversion sequence ranking.
+       Don't actually perform that conversion.  */
+    nc = next_conversion (nc);
+
+  expr = convert_like (nc, expr, fn, argnum,
 		       convs->kind == ck_ref_bind
 		       ? issue_conversion_warnings : false,
 		       c_cast_p, complain & ~tf_no_cleanup);
@@ -8215,19 +8223,6 @@ convert_like_internal (conversion *convs, tree expr, tree fn, int argnum,
     case ck_ref_bind:
       {
 	tree ref_type = totype;
-
-	/* direct_reference_binding might have inserted a ck_qual under
-	   this ck_ref_bind for the benefit of conversion sequence ranking.
-	   Ignore the conversion; we'll create our own below.  */
-	if (next_conversion (convs)->kind == ck_qual
-	    && !convs->need_temporary_p)
-	  {
-	    gcc_assert (same_type_p (TREE_TYPE (expr),
-				     next_conversion (convs)->type));
-	    /* Strip the cast created by the ck_qual; cp_build_addr_expr
-	       below expects an lvalue.  */
-	    STRIP_NOPS (expr);
-	  }
 
 	if (convs->bad_p && !next_conversion (convs)->bad_p)
 	  {
@@ -11966,6 +11961,8 @@ joust_maybe_elide_copy (z_candidate *&cand)
   if (!DECL_COPY_CONSTRUCTOR_P (fn) && !DECL_MOVE_CONSTRUCTOR_P (fn))
     return false;
   conversion *conv = cand->convs[0];
+  if (conv->kind == ck_ambig)
+    return false;
   gcc_checking_assert (conv->kind == ck_ref_bind);
   conv = next_conversion (conv);
   if (conv->kind == ck_user && !TYPE_REF_P (conv->type))
@@ -12949,7 +12946,7 @@ set_up_extended_ref_temp (tree decl, tree expr, vec<tree, va_gc> **cleanups,
 
   /* If the initializer is constant, put it in DECL_INITIAL so we get
      static initialization and use in constant expressions.  */
-  init = maybe_constant_init (expr);
+  init = maybe_constant_init (expr, var, /*manifestly_const_eval=*/true);
   /* As in store_init_value.  */
   init = cp_fully_fold (init);
   if (TREE_CONSTANT (init))

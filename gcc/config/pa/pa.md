@@ -5071,23 +5071,25 @@
 						    (match_dup 2))))
 		       (const_int 0))])]
   ""
-  "")
+  "
+{
+  if (TARGET_64BIT)
+    operands[2] = force_reg (DImode, operands[2]);
+}")
 
 (define_insn ""
-  [(set (match_operand:DI 0 "register_operand" "=r,r")
-	(plus:DI (match_operand:DI 1 "reg_or_0_operand" "%rM,rM")
-		 (match_operand:DI 2 "arith11_operand" "r,I")))
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (match_operand:DI 1 "reg_or_0_operand" "%rM")
+		 (match_operand:DI 2 "register_operand" "r")))
    (trap_if (ne (plus:TI (sign_extend:TI (match_dup 1))
 			 (sign_extend:TI (match_dup 2)))
 		(sign_extend:TI (plus:DI (match_dup 1)
 					 (match_dup 2))))
 	    (const_int 0))]
   "TARGET_64BIT"
-  "@
-  add,tsv,* %2,%1,%0
-  addi,tsv,* %2,%1,%0"
-  [(set_attr "type" "binary,binary")
-   (set_attr "length" "4,4")])
+  "add,tsv,* %2,%1,%0"
+  [(set_attr "type" "binary")
+   (set_attr "length" "4")])
 
 (define_insn ""
   [(set (match_operand:DI 0 "register_operand" "=r")
@@ -5262,23 +5264,25 @@
 						     (match_dup 2))))
 		       (const_int 0))])]
   ""
-  "")
+  "
+{
+  if (TARGET_64BIT)
+    operands[1] = force_reg (DImode, operands[1]);
+}")
 
 (define_insn ""
-  [(set (match_operand:DI 0 "register_operand" "=r,r")
-	(minus:DI (match_operand:DI 1 "arith11_operand" "r,I")
-		  (match_operand:DI 2 "reg_or_0_operand" "rM,rM")))
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI (match_operand:DI 1 "register_operand" "r")
+		  (match_operand:DI 2 "reg_or_0_operand" "rM")))
    (trap_if (ne (minus:TI (sign_extend:TI (match_dup 1))
 			  (sign_extend:TI (match_dup 2)))
 		(sign_extend:TI (minus:DI (match_dup 1)
 					  (match_dup 2))))
 	    (const_int 0))]
   "TARGET_64BIT"
-  "@
-  {subo|sub,tsv} %1,%2,%0
-  {subio|subi,tsv} %1,%2,%0"
-  [(set_attr "type" "binary,binary")
-   (set_attr "length" "4,4")])
+  "sub,tsv,* %1,%2,%0"
+  [(set_attr "type" "binary")
+   (set_attr "length" "4")])
 
 (define_insn ""
   [(set (match_operand:DI 0 "register_operand" "=r,&r")
@@ -10484,13 +10488,13 @@ add,l %2,%3,%3\;bv,n %%r0(%3)"
 (define_insn "atomic_storedi_1"
   [(set (mem:DI (match_operand:SI 0 "register_operand" "r,r"))
         (match_operand:DI 1 "reg_or_0_operand" "M,r"))
-   (clobber (match_scratch:DI 2 "=X,f"))]
+   (clobber (match_scratch:DI 2 "=f,f"))]
   "!TARGET_64BIT && !TARGET_SOFT_FLOAT"
   "@
-   {fstds|fstd} %%fr0,0(%0)
+   fcpy,dbl %%fr0,%2\n\t{fstds|fstd} %2,0(%0)
    {stws|stw} %1,-16(%%sp)\n\t{stws|stw} %R1,-12(%%sp)\n\t{fldds|fldd} -16(%%sp),%2\n\t{fstds|fstd} %2,0(%0)"
   [(set_attr "type" "move,move")
-   (set_attr "length" "4,16")])
+   (set_attr "length" "8,16")])
 
 ;; PA 2.0 hardware supports out-of-order execution of loads and stores, so
 ;; we need memory barriers to enforce program order for memory references

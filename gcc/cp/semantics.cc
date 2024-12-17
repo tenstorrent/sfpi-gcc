@@ -627,6 +627,17 @@ set_cleanup_locs (tree stmts, location_t loc)
       set_cleanup_locs (stmt, loc);
 }
 
+/* True iff the innermost block scope is a try block.  */
+
+static bool
+at_try_scope ()
+{
+  cp_binding_level *b = current_binding_level;
+  while (b && b->kind == sk_cleanup)
+    b = b->level_chain;
+  return b && b->kind == sk_try;
+}
+
 /* Finish a scope.  */
 
 tree
@@ -634,10 +645,13 @@ do_poplevel (tree stmt_list)
 {
   tree block = NULL;
 
-  maybe_splice_retval_cleanup (stmt_list);
+  bool was_try = at_try_scope ();
 
   if (stmts_are_full_exprs_p ())
     block = poplevel (kept_level_p (), 1, 0);
+
+  /* This needs to come after poplevel merges sk_cleanup statement_lists.  */
+  maybe_splice_retval_cleanup (stmt_list, was_try);
 
   stmt_list = pop_stmt_list (stmt_list);
 
@@ -786,7 +800,11 @@ simplify_loop_decl_cond (tree *cond_p, tree body)
   *cond_p = boolean_true_node;
 
   if_stmt = begin_if_stmt ();
-  cond = cp_build_unary_op (TRUTH_NOT_EXPR, cond, false, tf_warning_or_error);
+  cond_p = &cond;
+  while (TREE_CODE (*cond_p) == ANNOTATE_EXPR)
+    cond_p = &TREE_OPERAND (*cond_p, 0);
+  *cond_p = cp_build_unary_op (TRUTH_NOT_EXPR, *cond_p, false,
+			       tf_warning_or_error);
   finish_if_stmt_cond (cond, if_stmt);
   finish_break_stmt ();
   finish_then_clause (if_stmt);
@@ -1012,6 +1030,7 @@ tree
 finish_if_stmt_cond (tree cond, tree if_stmt)
 {
   cond = maybe_convert_cond (cond);
+  maybe_warn_for_constant_evaluated (cond, IF_STMT_CONSTEXPR_P (if_stmt));
   if (IF_STMT_CONSTEXPR_P (if_stmt)
       && !type_dependent_expression_p (cond)
       && require_constant_expression (cond)
@@ -1020,12 +1039,9 @@ finish_if_stmt_cond (tree cond, tree if_stmt)
 	 converted to bool.  */
       && TYPE_MAIN_VARIANT (TREE_TYPE (cond)) == boolean_type_node)
     {
-      maybe_warn_for_constant_evaluated (cond, /*constexpr_if=*/true);
       cond = instantiate_non_dependent_expr (cond);
       cond = cxx_constant_value (cond, NULL_TREE);
     }
-  else
-    maybe_warn_for_constant_evaluated (cond, /*constexpr_if=*/false);
   finish_cond (&IF_COND (if_stmt), cond);
   add_stmt (if_stmt);
   THEN_CLAUSE (if_stmt) = push_stmt_list ();
@@ -2357,7 +2373,8 @@ finish_qualified_id_expr (tree qualifying_class,
 
   /* If EXPR occurs as the operand of '&', use special handling that
      permits a pointer-to-member.  */
-  if (address_p && done)
+  if (address_p && done
+      && TREE_CODE (qualifying_class) != ENUMERAL_TYPE)
     {
       if (TREE_CODE (expr) == SCOPE_REF)
 	expr = TREE_OPERAND (expr, 1);
@@ -2920,13 +2937,18 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
       if (TREE_CODE (result) == CALL_EXPR
 	  && really_overloaded_fn (orig_fn))
 	{
-	  orig_fn = CALL_EXPR_FN (result);
-	  if (TREE_CODE (orig_fn) == COMPONENT_REF)
+	  tree sel_fn = CALL_EXPR_FN (result);
+	  if (TREE_CODE (sel_fn) == COMPONENT_REF)
 	    {
 	      /* The non-dependent result of build_new_method_call.  */
-	      orig_fn = TREE_OPERAND (orig_fn, 1);
-	      gcc_assert (BASELINK_P (orig_fn));
+	      sel_fn = TREE_OPERAND (sel_fn, 1);
+	      gcc_assert (BASELINK_P (sel_fn));
 	    }
+	  else if (TREE_CODE (sel_fn) == ADDR_EXPR)
+	    /* Our original callee wasn't wrapped in an ADDR_EXPR,
+	       so strip this ADDR_EXPR added by build_over_call.  */
+	    sel_fn = TREE_OPERAND (sel_fn, 0);
+	  orig_fn = sel_fn;
 	}
 
       result = build_call_vec (TREE_TYPE (result), orig_fn, orig_args);
@@ -4146,6 +4168,7 @@ finish_id_expression_1 (tree id_expression,
 		    : CP_ID_KIND_UNQUALIFIED)));
 
       if (dependent_p
+	  && !scope
 	  && DECL_P (decl)
 	  && any_dependent_type_attributes_p (DECL_ATTRIBUTES (decl)))
 	/* Dependent type attributes on the decl mean that the TREE_TYPE is
@@ -4822,6 +4845,7 @@ public:
   tree var;
   tree result;
   hash_table<nofree_ptr_hash <tree_node> > visited;
+  bool in_nrv_cleanup;
 };
 
 /* Helper function for walk_tree, used by finalize_nrv below.  */
@@ -4838,14 +4862,51 @@ finalize_nrv_r (tree* tp, int* walk_subtrees, void* data)
     *walk_subtrees = 0;
   /* Change all returns to just refer to the RESULT_DECL; this is a nop,
      but differs from using NULL_TREE in that it indicates that we care
-     about the value of the RESULT_DECL.  */
+     about the value of the RESULT_DECL.  But preserve anything appended
+     by check_return_expr.  */
   else if (TREE_CODE (*tp) == RETURN_EXPR)
-    TREE_OPERAND (*tp, 0) = dp->result;
+    {
+      tree *p = &TREE_OPERAND (*tp, 0);
+      while (TREE_CODE (*p) == COMPOUND_EXPR)
+	p = &TREE_OPERAND (*p, 0);
+      gcc_checking_assert (TREE_CODE (*p) == INIT_EXPR
+			   && TREE_OPERAND (*p, 0) == dp->result);
+      *p = dp->result;
+    }
   /* Change all cleanups for the NRV to only run when an exception is
      thrown.  */
   else if (TREE_CODE (*tp) == CLEANUP_STMT
 	   && CLEANUP_DECL (*tp) == dp->var)
-    CLEANUP_EH_ONLY (*tp) = 1;
+    {
+      dp->in_nrv_cleanup = true;
+      cp_walk_tree (&CLEANUP_BODY (*tp), finalize_nrv_r, data, 0);
+      dp->in_nrv_cleanup = false;
+      cp_walk_tree (&CLEANUP_EXPR (*tp), finalize_nrv_r, data, 0);
+      *walk_subtrees = 0;
+
+      CLEANUP_EH_ONLY (*tp) = true;
+
+      /* If a cleanup might throw, we need to clear current_retval_sentinel on
+	 the exception path so an outer cleanup added by
+	 maybe_splice_retval_cleanup doesn't run.  */
+      if (current_retval_sentinel
+	  && cp_function_chain->throwing_cleanup)
+	{
+	  tree clear = build2 (MODIFY_EXPR, boolean_type_node,
+			       current_retval_sentinel,
+			       boolean_false_node);
+
+	  /* We're already only on the EH path, just prepend it.  */
+	  tree &exp = CLEANUP_EXPR (*tp);
+	  exp = build2 (COMPOUND_EXPR, void_type_node, clear, exp);
+	}
+    }
+  /* Disable maybe_splice_retval_cleanup within the NRV cleanup scope, we don't
+     want to destroy the retval before the variable goes out of scope.  */
+  else if (TREE_CODE (*tp) == CLEANUP_STMT
+	   && dp->in_nrv_cleanup
+	   && CLEANUP_DECL (*tp) == dp->result)
+    CLEANUP_EXPR (*tp) = void_node;
   /* Replace the DECL_EXPR for the NRV with an initialization of the
      RESULT_DECL, if needed.  */
   else if (TREE_CODE (*tp) == DECL_EXPR
@@ -4901,6 +4962,7 @@ finalize_nrv (tree *tp, tree var, tree result)
 
   data.var = var;
   data.result = result;
+  data.in_nrv_cleanup = false;
   cp_walk_tree (tp, finalize_nrv_r, &data, 0);
 }
 
@@ -9482,16 +9544,15 @@ finish_omp_target_clauses (location_t loc, tree body, tree *clauses_ptr)
 {
   omp_target_walk_data data;
   data.this_expr_accessed = false;
+  data.current_object = NULL_TREE;
 
-  tree ct = current_nonlambda_class_type ();
-  if (ct)
-    {
-      tree object = maybe_dummy_object (ct, NULL);
-      object = maybe_resolve_dummy (object, true);
-      data.current_object = object;
-    }
-  else
-    data.current_object = NULL_TREE;
+  if (DECL_NONSTATIC_MEMBER_P (current_function_decl) && current_class_ptr)
+    if (tree ct = current_nonlambda_class_type ())
+      {
+	tree object = maybe_dummy_object (ct, NULL);
+	object = maybe_resolve_dummy (object, true);
+	data.current_object = object;
+      }
 
   if (DECL_LAMBDA_FUNCTION_P (current_function_decl))
     {
@@ -9691,7 +9752,9 @@ finish_omp_target_clauses (location_t loc, tree body, tree *clauses_ptr)
 
 	for (tree c = *clauses_ptr; c; c = OMP_CLAUSE_CHAIN (c))
 	  {
-	    /* If map(this->ptr[:N] already exists, avoid creating another
+	    if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
+	      continue;
+	    /* If map(this->ptr[:N]) already exists, avoid creating another
 	       such map.  */
 	    tree decl = OMP_CLAUSE_DECL (c);
 	    if ((TREE_CODE (decl) == INDIRECT_REF
@@ -11601,7 +11664,7 @@ is_corresponding_member_aggr (location_t loc, tree basetype1, tree membertype1,
   tree ret = boolean_false_node;
   while (1)
     {
-      bool r = next_common_initial_seqence (field1, field2);
+      bool r = next_common_initial_sequence (field1, field2);
       if (field1 == NULL_TREE || field2 == NULL_TREE)
 	break;
       if (r
@@ -11973,6 +12036,38 @@ check_trait_type (tree type)
   return !!complete_type_or_else (strip_array_types (type), NULL_TREE);
 }
 
+/* True iff the conversion (if any) would be a direct reference
+   binding, not requiring complete types.  This is LWG2939.  */
+
+static bool
+same_type_ref_bind_p (cp_trait_kind kind, tree type1, tree type2)
+{
+  tree from, to;
+  switch (kind)
+    {
+      /* These put the target type first.  */
+    case CPTK_IS_CONSTRUCTIBLE:
+    case CPTK_IS_NOTHROW_CONSTRUCTIBLE:
+    case CPTK_IS_TRIVIALLY_CONSTRUCTIBLE:
+      to = type1;
+      from = type2;
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+
+  if (TREE_CODE (to) != REFERENCE_TYPE || !from)
+    return false;
+  if (TREE_CODE (from) == TREE_VEC && TREE_VEC_LENGTH (from) == 1)
+    from = TREE_VEC_ELT (from, 0);
+  else if (TREE_CODE (from) == TREE_LIST && !TREE_CHAIN (from))
+    from = TREE_VALUE (from);
+  return (TYPE_P (from)
+	  && (same_type_ignoring_top_level_qualifiers_p
+	      (non_reference (to), non_reference (from))));
+}
+
 /* Process a trait expression.  */
 
 tree
@@ -12022,10 +12117,15 @@ finish_trait_expr (location_t loc, cp_trait_kind kind, tree type1, tree type2)
     case CPTK_IS_CONSTRUCTIBLE:
       break;
 
-    case CPTK_IS_TRIVIALLY_ASSIGNABLE:
     case CPTK_IS_TRIVIALLY_CONSTRUCTIBLE:
-    case CPTK_IS_NOTHROW_ASSIGNABLE:
     case CPTK_IS_NOTHROW_CONSTRUCTIBLE:
+      /* Don't check completeness for direct reference binding.  */;
+      if (same_type_ref_bind_p (kind, type1, type2))
+	break;
+      gcc_fallthrough ();
+
+    case CPTK_IS_NOTHROW_ASSIGNABLE:
+    case CPTK_IS_TRIVIALLY_ASSIGNABLE:
       if (!check_trait_type (type1)
 	  || !check_trait_type (type2))
 	return error_mark_node;

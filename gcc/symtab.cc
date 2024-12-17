@@ -748,12 +748,13 @@ symtab_node::clone_reference (ipa_ref *ref, gimple *stmt)
   return ref2;
 }
 
-/* Find the structure describing a reference to REFERRED_NODE
-   and associated with statement STMT.  */
+/* Find the structure describing a reference to REFERRED_NODE of USE_TYPE and
+   associated with statement STMT or LTO_STMT_UID.  */
 
 ipa_ref *
 symtab_node::find_reference (symtab_node *referred_node,
-			     gimple *stmt, unsigned int lto_stmt_uid)
+			     gimple *stmt, unsigned int lto_stmt_uid,
+			     enum ipa_ref_use use_type)
 {
   ipa_ref *r = NULL;
   int i;
@@ -761,6 +762,7 @@ symtab_node::find_reference (symtab_node *referred_node,
   for (i = 0; iterate_reference (i, r); i++)
     if (r->referred == referred_node
 	&& !r->speculative
+	&& r->use == use_type
 	&& ((stmt && r->stmt == stmt)
 	    || (lto_stmt_uid && r->lto_stmt_uid == lto_stmt_uid)
 	    || (!stmt && !lto_stmt_uid && !r->stmt && !r->lto_stmt_uid)))
@@ -1364,6 +1366,98 @@ symtab_node::verify (void)
 	internal_error ("symtab_node::verify failed");
       }
   timevar_pop (TV_CGRAPH_VERIFY);
+}
+
+/* Return true and set *DATA to true if NODE is an ifunc resolver.  */
+
+static bool
+check_ifunc_resolver (cgraph_node *node, void *data)
+{
+  if (node->ifunc_resolver)
+    {
+      bool *is_ifunc_resolver = (bool *) data;
+      *is_ifunc_resolver = true;
+      return true;
+    }
+  return false;
+}
+
+static bitmap ifunc_ref_map;
+
+/* Return true if any caller of NODE is an ifunc resolver.  */
+
+static bool
+is_caller_ifunc_resolver (cgraph_node *node)
+{
+  bool is_ifunc_resolver = false;
+
+  for (cgraph_edge *e = node->callers; e; e = e->next_caller)
+    {
+      /* Return true if caller is known to be an IFUNC resolver.  */
+      if (e->caller->called_by_ifunc_resolver)
+	return true;
+
+      /* Check for recursive call.  */
+      if (e->caller == node)
+	continue;
+
+      /* Skip if it has been visited.  */
+      unsigned int uid = e->caller->get_uid ();
+      if (!bitmap_set_bit (ifunc_ref_map, uid))
+	continue;
+
+      if (is_caller_ifunc_resolver (e->caller))
+	{
+	  /* Return true if caller is an IFUNC resolver.  */
+	  e->caller->called_by_ifunc_resolver = true;
+	  return true;
+	}
+
+      /* Check if caller's alias is an IFUNC resolver.  */
+      e->caller->call_for_symbol_and_aliases (check_ifunc_resolver,
+					      &is_ifunc_resolver,
+					      true);
+      if (is_ifunc_resolver)
+	{
+	  /* Return true if caller's alias is an IFUNC resolver.  */
+	  e->caller->called_by_ifunc_resolver = true;
+	  return true;
+	}
+    }
+
+  return false;
+}
+
+/* Check symbol table for callees of IFUNC resolvers.  */
+
+void
+symtab_node::check_ifunc_callee_symtab_nodes (void)
+{
+  symtab_node *node;
+
+  bitmap_obstack_initialize (NULL);
+  ifunc_ref_map = BITMAP_ALLOC (NULL);
+
+  FOR_EACH_SYMBOL (node)
+    {
+      cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
+      if (!cnode)
+	continue;
+
+      unsigned int uid = cnode->get_uid ();
+      if (bitmap_bit_p (ifunc_ref_map, uid))
+	continue;
+      bitmap_set_bit (ifunc_ref_map, uid);
+
+      bool is_ifunc_resolver = false;
+      cnode->call_for_symbol_and_aliases (check_ifunc_resolver,
+					  &is_ifunc_resolver, true);
+      if (is_ifunc_resolver || is_caller_ifunc_resolver (cnode))
+	cnode->called_by_ifunc_resolver = true;
+    }
+
+  BITMAP_FREE (ifunc_ref_map);
+  bitmap_obstack_release (NULL);
 }
 
 /* Verify symbol table for internal consistency.  */

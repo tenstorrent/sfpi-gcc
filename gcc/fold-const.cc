@@ -84,6 +84,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "vec-perm-indices.h"
 #include "asan.h"
 #include "gimple-range.h"
+#include "internal-fn.h"
 
 /* Nonzero if we are folding constants inside an initializer or a C++
    manifestly-constant-evaluated context; zero otherwise.
@@ -3351,9 +3352,6 @@ operand_compare::operand_equal_p (const_tree arg0, const_tree arg1,
 		if (compare_address
 		    && (flags & OEP_ADDRESS_OF_SAME_FIELD) == 0)
 		  {
-		    if (TREE_OPERAND (arg0, 2)
-			|| TREE_OPERAND (arg1, 2))
-		      return OP_SAME_WITH_NULL (2);
 		    tree field0 = TREE_OPERAND (arg0, 1);
 		    tree field1 = TREE_OPERAND (arg1, 1);
 
@@ -3864,17 +3862,10 @@ operand_compare::hash_operand (const_tree t, inchash::hash &hstate,
 	      if (sflags & OEP_ADDRESS_OF)
 		{
 		  hash_operand (TREE_OPERAND (t, 0), hstate, flags);
-		  if (TREE_OPERAND (t, 2))
-		    hash_operand (TREE_OPERAND (t, 2), hstate,
-				  flags & ~OEP_ADDRESS_OF);
-		  else
-		    {
-		      tree field = TREE_OPERAND (t, 1);
-		      hash_operand (DECL_FIELD_OFFSET (field),
-				    hstate, flags & ~OEP_ADDRESS_OF);
-		      hash_operand (DECL_FIELD_BIT_OFFSET (field),
-				    hstate, flags & ~OEP_ADDRESS_OF);
-		    }
+		  hash_operand (DECL_FIELD_OFFSET (TREE_OPERAND (t, 1)),
+				hstate, flags & ~OEP_ADDRESS_OF);
+		  hash_operand (DECL_FIELD_BIT_OFFSET (TREE_OPERAND (t, 1)),
+				hstate, flags & ~OEP_ADDRESS_OF);
 		  return;
 		}
 	      break;
@@ -6198,7 +6189,6 @@ static tree
 merge_truthop_with_opposite_arm (location_t loc, tree op, tree cmpop,
 				 bool rhs_only)
 {
-  tree type = TREE_TYPE (cmpop);
   enum tree_code code = TREE_CODE (cmpop);
   enum tree_code truthop_code = TREE_CODE (op);
   tree lhs = TREE_OPERAND (op, 0);
@@ -6213,6 +6203,8 @@ merge_truthop_with_opposite_arm (location_t loc, tree op, tree cmpop,
 
   if (TREE_CODE_CLASS (code) != tcc_comparison)
     return NULL_TREE;
+
+  tree type = TREE_TYPE (TREE_OPERAND (cmpop, 0));
 
   if (rhs_code == truthop_code)
     {
@@ -8432,6 +8424,8 @@ native_encode_initializer (tree init, unsigned char *ptr, int len,
 		  if (BYTES_BIG_ENDIAN != WORDS_BIG_ENDIAN)
 		    return 0;
 
+		  if (TREE_CODE (val) == NON_LVALUE_EXPR)
+		    val = TREE_OPERAND (val, 0);
 		  if (TREE_CODE (val) != INTEGER_CST)
 		    return 0;
 
@@ -8849,11 +8843,13 @@ native_interpret_expr (tree type, const unsigned char *ptr, int len)
 	     valid values that GCC can't really represent accurately.
 	     See PR95450.  Even for other modes, e.g. x86 XFmode can have some
 	     bit combinationations which GCC doesn't preserve.  */
-	  unsigned char buf[24];
+	  unsigned char buf[24 * 2];
 	  scalar_float_mode mode = SCALAR_FLOAT_TYPE_MODE (type);
 	  int total_bytes = GET_MODE_SIZE (mode);
+	  memcpy (buf + 24, ptr, total_bytes);
+	  clear_type_padding_in_mask (type, buf + 24);
 	  if (native_encode_expr (ret, buf, total_bytes, 0) != total_bytes
-	      || memcmp (ptr, buf, total_bytes) != 0)
+	      || memcmp (buf + 24, buf, total_bytes) != 0)
 	    return NULL_TREE;
 	  return ret;
 	}
@@ -14281,7 +14277,7 @@ multiple_of_p (tree type, const_tree top, const_tree bottom, bool nowrap)
 	      && TREE_CODE (op2) == INTEGER_CST
 	      && integer_pow2p (bottom)
 	      && wi::multiple_of_p (wi::to_widest (op2),
-				    wi::to_widest (bottom), UNSIGNED))
+				    wi::to_widest (bottom), SIGNED))
 	    return 1;
 
 	  op1 = gimple_assign_rhs1 (stmt);
@@ -14866,7 +14862,6 @@ tree_call_nonnegative_warnv_p (tree type, combined_fn fn, tree arg0, tree arg1,
     CASE_CFN_FFS:
     CASE_CFN_PARITY:
     CASE_CFN_POPCOUNT:
-    CASE_CFN_CLZ:
     CASE_CFN_CLRSB:
     case CFN_BUILT_IN_BSWAP16:
     case CFN_BUILT_IN_BSWAP32:
@@ -14874,6 +14869,22 @@ tree_call_nonnegative_warnv_p (tree type, combined_fn fn, tree arg0, tree arg1,
     case CFN_BUILT_IN_BSWAP128:
       /* Always true.  */
       return true;
+
+    CASE_CFN_CLZ:
+      if (fn != CFN_CLZ)
+	return true;
+      else if (INTEGRAL_TYPE_P (TREE_TYPE (arg0)))
+	{
+	  tree atype = TREE_TYPE (arg0);
+	  int val = 0;
+	  if (direct_internal_fn_supported_p (IFN_CLZ, atype,
+					      OPTIMIZE_FOR_BOTH)
+	      && CLZ_DEFINED_VALUE_AT_ZERO (SCALAR_INT_TYPE_MODE (atype),
+					    val) == 2
+	      && val >= 0)
+	    return true;
+	}
+      break;
 
     CASE_CFN_SQRT:
     CASE_CFN_SQRT_FN:

@@ -577,7 +577,7 @@ namespace
   create_dir(const fs::path& p, fs::perms perm, std::error_code& ec)
   {
     bool created = false;
-#ifdef _GLIBCXX_HAVE_SYS_STAT_H
+#if _GLIBCXX_USE_MKDIR
     posix::mode_t mode = static_cast<std::underlying_type_t<fs::perms>>(perm);
     if (posix::mkdir(p.c_str(), mode))
       {
@@ -735,7 +735,7 @@ fs::path
 fs::current_path(error_code& ec)
 {
   path p;
-#ifdef _GLIBCXX_HAVE_UNISTD_H
+#if _GLIBCXX_USE_GETCWD
 #if defined __GLIBC__ || defined _GLIBCXX_FILESYSTEM_IS_WINDOWS
   if (char_ptr cwd = char_ptr{posix::getcwd(nullptr, 0)})
     {
@@ -783,7 +783,7 @@ fs::current_path(error_code& ec)
 	}
     }
 #endif  // __GLIBC__
-#else   // _GLIBCXX_HAVE_UNISTD_H
+#else   // _GLIBCXX_USE_GETCWD
   ec = std::make_error_code(std::errc::function_not_supported);
 #endif
   return p;
@@ -801,7 +801,7 @@ fs::current_path(const path& p)
 void
 fs::current_path(const path& p, error_code& ec) noexcept
 {
-#ifdef _GLIBCXX_HAVE_UNISTD_H
+#if _GLIBCXX_USE_CHDIR
   if (posix::chdir(p.c_str()))
     ec.assign(errno, std::generic_category());
   else
@@ -897,7 +897,7 @@ fs::equivalent(const path& p1, const path& p2, error_code& ec) noexcept
       return st1.st_dev == st2.st_dev && st1.st_ino == st2.st_ino;
 #endif
     }
-  else if (!exists(s1) && !exists(s2))
+  else if (!exists(s1) || !exists(s2))
     ec = std::make_error_code(std::errc::no_such_file_or_directory);
   else if (err)
     ec.assign(err, std::generic_category());
@@ -1097,6 +1097,7 @@ void
 fs::permissions(const path& p, perms prms, perm_options opts,
 		error_code& ec) noexcept
 {
+#if _GLIBCXX_USE_FCHMODAT || _GLIBCXX_USE_CHMOD
   const bool replace = is_set(opts, perm_options::replace);
   const bool add = is_set(opts, perm_options::add);
   const bool remove = is_set(opts, perm_options::remove);
@@ -1138,6 +1139,9 @@ fs::permissions(const path& p, perms prms, perm_options opts,
     ec.assign(err, std::generic_category());
   else
     ec.clear();
+#else
+  ec = std::make_error_code(std::errc::function_not_supported);
+#endif
 }
 
 fs::path
@@ -1301,6 +1305,7 @@ fs::remove_all(const path& p)
     }
     // Directory is empty now, will remove it below.
     break;
+#ifndef __AVR__
   case ENOENT:
     // Our work here is done.
     return 0;
@@ -1308,6 +1313,7 @@ fs::remove_all(const path& p)
   case ELOOP:
     // Not a directory, will remove below.
     break;
+#endif
   default:
     // An error occurred.
     _GLIBCXX_THROW_OR_ABORT(filesystem_error("cannot remove all", p, ec));
@@ -1338,6 +1344,7 @@ fs::remove_all(const path& p, error_code& ec)
     }
     // Directory is empty now, will remove it below.
     break;
+#ifndef __AVR__
   case ENOENT:
     // Our work here is done.
     ec.clear();
@@ -1346,6 +1353,7 @@ fs::remove_all(const path& p, error_code& ec)
   case ELOOP:
     // Not a directory, will remove below.
     break;
+#endif
   default:
     // An error occurred.
     return -1;

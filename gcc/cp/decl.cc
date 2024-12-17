@@ -691,6 +691,7 @@ poplevel (int keep, int reverse, int functionbody)
 		else
 		  warning_at (DECL_SOURCE_LOCATION (decl),
 			      OPT_Wunused_variable, "unused variable %qD", decl);
+		suppress_warning (decl, OPT_Wunused_variable);
 	      }
 	    else if (DECL_CONTEXT (decl) == current_function_decl
 		     // For -Wunused-but-set-variable leave references alone.
@@ -954,9 +955,7 @@ static bool
 function_requirements_equivalent_p (tree newfn, tree oldfn)
 {
   /* In the concepts TS, the combined constraints are compared.  */
-  if (cxx_dialect < cxx20
-      && (DECL_TEMPLATE_SPECIALIZATION (newfn)
-	  <= DECL_TEMPLATE_SPECIALIZATION (oldfn)))
+  if (cxx_dialect < cxx20)
     {
       tree ci1 = get_constraints (oldfn);
       tree ci2 = get_constraints (newfn);
@@ -1490,6 +1489,8 @@ merge_default_template_args (tree new_parms, tree old_parms, bool class_p)
       tree old_parm = TREE_VALUE (TREE_VEC_ELT (old_parms, i));
       tree& new_default = TREE_PURPOSE (TREE_VEC_ELT (new_parms, i));
       tree& old_default = TREE_PURPOSE (TREE_VEC_ELT (old_parms, i));
+      if (error_operand_p (new_parm) || error_operand_p (old_parm))
+	return false;
       if (new_default != NULL_TREE && old_default != NULL_TREE)
 	{
 	  auto_diagnostic_group d;
@@ -2665,10 +2666,11 @@ duplicate_decls (tree newdecl, tree olddecl, bool hiding, bool was_hidden)
 		  = TINFO_USED_TEMPLATE_ID (new_template_info);
 	    }
 
-	  if (non_templated_friend_p (olddecl))
-	    /* Don't copy tinfo from a non-templated friend (PR105761).  */;
-	  else
-	    DECL_TEMPLATE_INFO (newdecl) = DECL_TEMPLATE_INFO (olddecl);
+	  /* We don't want to copy template info from a non-templated friend
+	     (PR105761), but these shouldn't have DECL_TEMPLATE_INFO now.  */
+	  gcc_checking_assert (!DECL_TEMPLATE_INFO (olddecl)
+			       || !non_templated_friend_p (olddecl));
+	  DECL_TEMPLATE_INFO (newdecl) = DECL_TEMPLATE_INFO (olddecl);
 	}
 
       if (DECL_DECLARES_FUNCTION_P (newdecl))
@@ -3647,6 +3649,8 @@ check_goto (tree decl)
       ent->uses = new_use;
       return;
     }
+
+  cp_function_chain->backward_goto = true;
 
   bool saw_catch = false, complained = false;
   int identified = 0;
@@ -8137,6 +8141,9 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	    d_init = build_x_compound_expr_from_list (d_init, ELK_INIT,
 						      tf_warning_or_error);
 	  d_init = resolve_nondeduced_context (d_init, tf_warning_or_error);
+	  /* Force auto deduction now.  Use tf_none to avoid redundant warnings
+	     on deprecated-14.C.  */
+	  mark_single_function (d_init, tf_none);
 	}
       enum auto_deduction_context adc = adc_variable_type;
       if (VAR_P (decl) && DECL_DECOMPOSITION_P (decl))
@@ -8235,6 +8242,14 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	      && !TYPE_REF_P (type))
 	    TREE_CONSTANT (decl) = 1;
 	}
+      /* This is handled mostly by gimplify.cc, but we have to deal with
+	 not warning about int x = x; as it is a GCC extension to turn off
+	 this warning but only if warn_init_self is zero.  */
+      if (!DECL_EXTERNAL (decl)
+	  && !TREE_STATIC (decl)
+	  && decl == tree_strip_any_location_wrapper (init)
+	  && !warning_enabled_at (DECL_SOURCE_LOCATION (decl), OPT_Winit_self))
+	suppress_warning (decl, OPT_Winit_self);
     }
 
   if (flag_openmp
@@ -8509,8 +8524,10 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 
       if (var_definition_p
 	  /* With -fmerge-all-constants, gimplify_init_constructor
-	     might add TREE_STATIC to the variable.  */
-	  && (TREE_STATIC (decl) || flag_merge_constants >= 2))
+	     might add TREE_STATIC to aggregate variables.  */
+	  && (TREE_STATIC (decl)
+	      || (flag_merge_constants >= 2
+		  && AGGREGATE_TYPE_P (type))))
 	{
 	  /* If a TREE_READONLY variable needs initialization
 	     at runtime, it is no longer readonly and we need to
@@ -8527,6 +8544,18 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  /* Likewise if it needs destruction.  */
 	  if (!decl_maybe_constant_destruction (decl, type))
 	    TREE_READONLY (decl) = 0;
+	}
+      else if (VAR_P (decl)
+	       && CP_DECL_THREAD_LOCAL_P (decl)
+	       && (!DECL_EXTERNAL (decl) || flag_extern_tls_init)
+	       && (was_readonly || TREE_READONLY (decl))
+	       && var_needs_tls_wrapper (decl))
+	{
+	  /* TLS variables need dynamic initialization by the TLS wrapper
+	     function, we don't want to hoist accesses to it before the
+	     wrapper.  */
+	  was_readonly = 0;
+	  TREE_READONLY (decl) = 0;
 	}
 
       make_rtl_for_nonlocal_decl (decl, init, asmspec);
@@ -12274,11 +12303,14 @@ grokdeclarator (const cp_declarator *declarator,
 	{
 	  if (typedef_decl)
 	    {
-	      pedwarn (loc, OPT_Wpedantic, "%qs specified with %qT",
-		       key, type);
+	      pedwarn (loc, OPT_Wpedantic,
+		       "%qs specified with typedef-name %qD",
+		       key, typedef_decl);
 	      ok = !flag_pedantic_errors;
-	      type = DECL_ORIGINAL_TYPE (typedef_decl);
-	      typedef_decl = NULL_TREE;
+	      /* PR108099: __int128_t comes from c_common_nodes_and_builtins,
+		 and is not built as a typedef.  */
+	      if (is_typedef_decl (typedef_decl))
+		type = DECL_ORIGINAL_TYPE (typedef_decl);
 	    }
 	  else if (declspecs->decltype_p)
 	    error_at (loc, "%qs specified with %<decltype%>", key);
@@ -12331,7 +12363,7 @@ grokdeclarator (const cp_declarator *declarator,
       else if (type == char_type_node)
 	type = unsigned_char_type_node;
       else if (typedef_decl)
-	type = unsigned_type_for (type);
+	type = c_common_unsigned_type (type);
       else
 	type = unsigned_type_node;
     }
@@ -12345,6 +12377,8 @@ grokdeclarator (const cp_declarator *declarator,
     type = long_integer_type_node;
   else if (short_p)
     type = short_integer_type_node;
+  else if (signed_p && typedef_decl)
+    type = c_common_signed_type (type);
 
   if (decl_spec_seq_has_spec_p (declspecs, ds_complex))
     {
@@ -12960,7 +12994,7 @@ grokdeclarator (const cp_declarator *declarator,
 			  "an array", name);
 		return error_mark_node;
 	      }
-	    if (constinit_p)
+	    if (constinit_p && funcdecl_p)
 	      {
 		error_at (declspecs->locations[ds_constinit],
 			  "%<constinit%> on function return type is not "
@@ -14175,7 +14209,8 @@ grokdeclarator (const cp_declarator *declarator,
 		      return error_mark_node;
 		  }
 
-		decl = do_friend (ctype, unqualified_id, decl,
+		tree scope = ctype ? ctype : in_namespace;
+		decl = do_friend (scope, unqualified_id, decl,
 				  flags, funcdef_flag);
 		return decl;
 	      }

@@ -973,6 +973,11 @@ match_simplify_replacement (basic_block cond_bb, basic_block middle_bb,
       if (!single_pred_p (middle_bb))
 	return false;
 
+      /* The middle bb cannot have phi nodes as we don't
+	 move those assignments yet. */
+      if (!gimple_seq_empty_p (phi_nodes (middle_bb)))
+	return false;
+
       stmt_to_move = last_and_only_stmt (middle_bb);
       if (!stmt_to_move)
 	return false;
@@ -1449,6 +1454,12 @@ value_replacement (basic_block cond_bb, basic_block middle_bb,
 		  default:
 		    break;
 		  }
+	      if (equal_p)
+		/* After the optimization PHI result can have value
+		   which it couldn't have previously.
+		   We could instead of resetting it union the range
+		   info with oarg.  */
+		reset_flow_sensitive_info (gimple_phi_result (phi));
 	      if (equal_p && MAY_HAVE_DEBUG_BIND_STMTS)
 		{
 		  imm_use_iterator imm_iter;
@@ -1962,6 +1973,10 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 	  || gimple_code (assign) != GIMPLE_ASSIGN)
 	return false;
 
+      /* There cannot be any phi nodes in the middle bb. */
+      if (!gimple_seq_empty_p (phi_nodes (middle_bb)))
+	return false;
+
       lhs = gimple_assign_lhs (assign);
       ass_code = gimple_assign_rhs_code (assign);
       if (ass_code != MAX_EXPR && ass_code != MIN_EXPR)
@@ -2003,7 +2018,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 
 	      /* We need BOUND <= LARGER.  */
 	      if (!integer_nonzerop (fold_build2 (LE_EXPR, boolean_type_node,
-						  bound, larger)))
+						  bound, arg_false)))
 		return false;
 	    }
 	  else if (operand_equal_for_phi_arg_p (arg_false, smaller)
@@ -2034,7 +2049,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 
 	      /* We need BOUND >= SMALLER.  */
 	      if (!integer_nonzerop (fold_build2 (GE_EXPR, boolean_type_node,
-						  bound, smaller)))
+						  bound, arg_false)))
 		return false;
 	    }
 	  else
@@ -2074,7 +2089,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 
 	      /* We need BOUND >= LARGER.  */
 	      if (!integer_nonzerop (fold_build2 (GE_EXPR, boolean_type_node,
-						  bound, larger)))
+						  bound, arg_true)))
 		return false;
 	    }
 	  else if (operand_equal_for_phi_arg_p (arg_true, smaller)
@@ -2101,7 +2116,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
 
 	      /* We need BOUND <= SMALLER.  */
 	      if (!integer_nonzerop (fold_build2 (LE_EXPR, boolean_type_node,
-						  bound, smaller)))
+						  bound, arg_true)))
 		return false;
 	    }
 	  else

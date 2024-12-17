@@ -2178,11 +2178,16 @@ verify_tree (tree x, struct tlist **pbefore_sp, struct tlist **pno_sp,
 
     case LSHIFT_EXPR:
     case RSHIFT_EXPR:
-    case COMPONENT_REF:
     case ARRAY_REF:
       if (cxx_dialect >= cxx17)
 	goto sequenced_binary;
       goto do_default;
+
+    case COMPONENT_REF:
+      /* Treat as unary, the other operands aren't evaluated.  */
+      x = TREE_OPERAND (x, 0);
+      writer = 0;
+      goto restart;
 
     default:
     do_default:
@@ -8506,6 +8511,7 @@ convert_vector_to_array_for_subscript (location_t loc,
   if (gnu_vector_type_p (TREE_TYPE (*vecp)))
     {
       tree type = TREE_TYPE (*vecp);
+      tree newitype;
 
       ret = !lvalue_p (*vecp);
 
@@ -8520,8 +8526,12 @@ convert_vector_to_array_for_subscript (location_t loc,
 	 for function parameters.  */
       c_common_mark_addressable_vec (*vecp);
 
+      /* Make sure qualifiers are copied from the vector type to the new element
+	 of the array type.  */
+      newitype = build_qualified_type (TREE_TYPE (type), TYPE_QUALS (type));
+
       *vecp = build1 (VIEW_CONVERT_EXPR,
-		      build_array_type_nelts (TREE_TYPE (type),
+		      build_array_type_nelts (newitype,
 					      TYPE_VECTOR_SUBPARTS (type)),
 		      *vecp);
     }

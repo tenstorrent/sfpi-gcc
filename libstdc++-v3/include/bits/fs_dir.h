@@ -36,8 +36,9 @@
 # include <bits/unique_ptr.h>
 # include <bits/shared_ptr.h>
 
-#if __cplusplus > 201703L
+#if __cplusplus >= 202002L
 # include <compare>	// std::strong_ordering
+# include <bits/iterator_concepts.h>	// std::default_sentinel_t
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -51,6 +52,10 @@ namespace filesystem
    */
 
   /// Information about a file's type and permissions.
+  /**
+   * @headerfile filesystem
+   * @since C++17
+   */
   class file_status
   {
   public:
@@ -93,6 +98,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   class recursive_directory_iterator;
 
   /// The value type used by directory iterators
+  /**
+   * @headerfile filesystem
+   * @since C++17
+   */
   class directory_entry
   {
   public:
@@ -353,7 +362,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     file_type		_M_type = file_type::none;
   };
 
+  /// @cond undocumented
+
   /// Proxy returned by post-increment on directory iterators.
+  /**
+   * @headerfile filesystem
+   * @since C++17
+   */
   struct __directory_iterator_proxy
   {
     const directory_entry& operator*() const& noexcept { return _M_entry; }
@@ -369,8 +384,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
     directory_entry _M_entry;
   };
+  /// @endcond
 
   /// Iterator type for traversing the entries in a single directory.
+  /**
+   * @headerfile filesystem
+   * @since C++17
+   */
   class directory_iterator
   {
   public:
@@ -420,9 +440,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       return __pr;
     }
 
-  private:
-    directory_iterator(const path&, directory_options, error_code*);
-
     friend bool
     operator==(const directory_iterator& __lhs,
                const directory_iterator& __rhs) noexcept
@@ -431,17 +448,33 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	&& !__lhs._M_dir.owner_before(__rhs._M_dir);
     }
 
+#if __cplusplus >= 202002L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 3719. Directory iterators should be usable with default sentinel
+      bool operator==(default_sentinel_t) const noexcept
+      { return *this == directory_iterator(); }
+#endif
+
+#if __cpp_impl_three_way_comparison < 201907L
     friend bool
     operator!=(const directory_iterator& __lhs,
 	       const directory_iterator& __rhs) noexcept
     { return !(__lhs == __rhs); }
+#endif
+
+  private:
+    directory_iterator(const path&, directory_options, error_code*);
 
     friend class recursive_directory_iterator;
 
     std::__shared_ptr<_Dir> _M_dir;
   };
 
-  /// @relates std::filesystem::directory_iterator @{
+  /** @relates std::filesystem::directory_iterator
+   *  @headerfile filesystem
+   *  @since C++17
+   *  @{
+   */
 
   /** @brief Enable range-based `for` using directory_iterator.
    *
@@ -458,6 +491,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   /// @}
 
   /// Iterator type for recursively traversing a directory hierarchy.
+  /**
+   *  @headerfile filesystem
+   *  @since C++17
+   */
   class recursive_directory_iterator
   {
   public:
@@ -519,9 +556,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
     void disable_recursion_pending() noexcept;
 
-  private:
-    recursive_directory_iterator(const path&, directory_options, error_code*);
-
     friend bool
     operator==(const recursive_directory_iterator& __lhs,
                const recursive_directory_iterator& __rhs) noexcept
@@ -530,10 +564,22 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	&& !__lhs._M_dirs.owner_before(__rhs._M_dirs);
     }
 
+#if __cplusplus >= 202002L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 3719. Directory iterators should be usable with default sentinel
+      bool operator==(default_sentinel_t) const noexcept
+      { return *this == recursive_directory_iterator(); }
+#endif
+
+#if __cpp_impl_three_way_comparison < 201907L
     friend bool
     operator!=(const recursive_directory_iterator& __lhs,
                const recursive_directory_iterator& __rhs) noexcept
     { return !(__lhs == __rhs); }
+#endif
+
+  private:
+    recursive_directory_iterator(const path&, directory_options, error_code*);
 
     struct _Dir_stack;
     std::__shared_ptr<_Dir_stack> _M_dirs;
@@ -547,7 +593,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     filesystem::remove_all(const path&);
   };
 
-  /// @relates std::filesystem::recursive_directory_iterator @{
+  /** @relates std::filesystem::directory_iterator
+   *  @headerfile filesystem
+   *  @since C++17
+   *  @{
+   */
 
   /** @brief Enable range-based `for` using recursive_directory_iterator.
    *
