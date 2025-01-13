@@ -123,6 +123,8 @@ negate_cmp_mod(int mod)
     case SFPXCMP_MOD1_CC_GT:
 	new_op = SFPXCMP_MOD1_CC_LTE;
 	break;
+    default:
+      gcc_unreachable();
     }
 
     return (mod & ~SFPXCMP_MOD1_CC_MASK) | new_op;
@@ -155,34 +157,332 @@ flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
   return mod;
 }
 
-static gcall*
-copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
+// Expand icmp[sv] intrinsics into the appropriate subtract
+// sequence. Ordering compares are more complicated than usual, as we
+// must use subtract and it doesn't expose overflow or carry flags.
+
+static void
+expand_icmp (gcall *icmp, const rvtt_insn_data *insnd, gimple_stmt_iterator *begin, gimple_stmt_iterator *end)
 {
-  const rvtt_insn_data *new_insnd = rvtt_get_insn_data(id);
-  int nargs = gimple_call_num_args(stmt);
-  gcall * new_stmt = gimple_build_call(new_insnd->decl, nargs);
+  *end = gsi_for_stmt (icmp);
+  *begin = gsi_none ();
+
+  bool is_const = insnd->id == rvtt_insn_data::sfpxicmps;
+  gcc_assert (is_const || insnd->id == rvtt_insn_data::sfpxicmpv);
+
+  // icmps has an initial pointer argument for the (now determined
+  // unnecessary) instruction synth. (it also has 2 related integer
+  // arguments between the two compared args and the mod arg).
+  tree op_a = gimple_call_arg (icmp, 0 + int (is_const));
+  tree op_b = gimple_call_arg (icmp, 1 + int (is_const));
+  gcc_assert (is_const ? TREE_CODE (op_b) == INTEGER_CST : SSA_VAR_P (op_b));
+
+  gcc_assert (insnd->mod_pos + 1u == gimple_call_num_args (icmp));
+  int mod = get_int_arg (icmp, insnd->mod_pos);
+  int cmp = mod & SFPXCMP_MOD1_CC_MASK;
+  bool is_signed = bool (mod & SFPXIADD_MOD1_SIGNED);
+  auto iadd_code = is_const ? rvtt_insn_data::sfpxiadd_i : rvtt_insn_data::sfpxiadd_v;
+
+  if (cmp == SFPXCMP_MOD1_CC_EQ
+      || cmp == SFPXCMP_MOD1_CC_NE
+      // We used to erroneously handle all compares like
+      // this. Grayskull has insufficient registers to do it right in
+      // all but the simplest of programs.
+      || flag_tt_incorrect_ordering_icmp) {
+    // Equality/inequalitycompare, generate an sfpxiadd
+    const rvtt_insn_data *new_insnd = rvtt_get_insn_data (iadd_code);
+    int nargs = gimple_call_num_args (icmp);
+    gcall *add = gimple_build_call (new_insnd->decl, nargs);
+    gimple_set_location (add, gimple_location (icmp));
+
+    for (int i = 0; i < nargs; i++)
+      gimple_call_set_arg (add, i, gimple_call_arg (icmp, i));
+
+    // It's a subtract whose result is ignored.
+    int add_mod = mod | SFPXIADD_MOD1_IS_SUB | SFPXIADD_MOD1_DST_UNUSED;
+    gimple_call_set_arg (add, insnd->mod_pos,
+			 build_int_cst (integer_type_node, add_mod));
+
+    gimple_call_set_lhs (add, NULL_TREE);
+    gimple_set_vuse (add, gimple_vuse(icmp));
+
+    gsi_insert_after (end, add, GSI_NEW_STMT);
+    *begin = *end;
+
+    remove_stmt (icmp);
+    return;
+  }
+
+  // Ordering compare. A subtract is insufficient, because we have to
+  // deal with overflow. We need to check whether the two operands are
+  // in the same half of the number space, so overflow won't occur.
+  // When they are in different halves, the result is a fixed true, or
+  // a fixed false.
+
+  //                    cond-is   same-sign    diff-sign
+  //  signed a gte b     ~sign      a - b      a
+  //unsigned a gte b     ~sign      a - b      b
+  //  signed a lt  b      sign      a - b      a
+  //unsigned a lt  b      sign      a - b      b
+
+  //  signed a lte b     ~sign      b - a      b
+  //unsigned a lte b     ~sign      b - a      a
+  //  signed a gt  b      sign      b - a      b
+  //unsigned a gt  b      sign      b - a      a
+
+  //  signed a lte cst    sign      a - cst+1  a
+  //unsigned a lte cst    sign      a - cst+1  cst+1
+  //  signed a gt  cst   ~sign      a - cst+1  a
+  //unsigned a gt  cst   ~sign      a - cst+1  cst+1
+
+  bool cond_is_inverted = false;
+  bool inc_const = false;
+  bool swap_ops = false;
+  bool use_a_msb = false;
+
+  switch (cmp)
+    {
+    default:
+      gcc_unreachable ();
+
+    case SFPXCMP_MOD1_CC_GTE:
+      cond_is_inverted = true;
+      [[fallthrough]];
+
+    case SFPXCMP_MOD1_CC_LT:
+      use_a_msb = is_signed;
+      break;
+
+    case SFPXCMP_MOD1_CC_LTE:
+      cond_is_inverted = true;
+      [[fallthrough]];
+
+    case SFPXCMP_MOD1_CC_GT:
+      if (is_const)
+	{
+	  inc_const = true;
+	  cond_is_inverted = !cond_is_inverted;
+	  use_a_msb = is_signed;
+	}
+      else
+	{
+	  swap_ops = true;
+	  use_a_msb = !is_signed;
+	}
+      break;
+    }
+
+  // xor = sfpxor (a, b)
+  // sfpsetcc_v (xor, 4) // set CC from ~MSB
+  // res = sfpmov (b, 2) // copy all of b
+  // res_a = sfpmov (a, 0) // copy enabled bits of a
+  // res = sfpassign (res, res_a)
+  // res = sfpiadd (res, b, 0, 6) // subtract b
+  // sfpencc 3, 10 // get TOS?
+  // sfpsetcc_v res, 0 // set cc from MSB
+  tree type = TREE_TYPE (op_a);
+
+  tree ssa_var = NULL_TREE;
+  tree ssa_msb = NULL_TREE;
+  bool const_msb_set = false;
+
+  if (is_const)
+    {
+      unsigned HOST_WIDE_INT val = TREE_INT_CST_LOW (op_b);
+      if (inc_const)
+	{
+	  val = (val + 1) & 0xffffffff;
+	  op_b = build_int_cst (TREE_TYPE (op_b), val);
+	  // FIXME: What if this wraps from mostpos? Surely in that
+	  // case the result of the compare is already known? (fixed
+	  // true or fixed false)
+	  gcc_assert (val != 0x80000000);
+	}
+      const_msb_set = bool (val & (1ul << 31));
+      ssa_var = op_a;
+      if (!use_a_msb)
+	{
+	  const rvtt_insn_data *encc_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpencc);
+	  gcall *encc_call = gimple_build_call (encc_insnd->decl, 2);
+	  gimple_set_location (encc_call, gimple_location (icmp));
+	  gimple_call_set_arg (encc_call, 0, build_int_cst (integer_type_node, 3));
+	  gimple_call_set_arg (encc_call, 1, build_int_cst (integer_type_node, 10));
+	  gsi_insert_after (end, encc_call, GSI_NEW_STMT);
+	  *begin = *end;
+
+	  const rvtt_insn_data *loadi_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
+	  gcall *loadi_call = gimple_build_call (loadi_insnd->decl, 5);
+	  gimple_set_location (loadi_call, gimple_location (icmp));
+	  gimple_call_set_arg (loadi_call, 0, integer_zero_node);
+	  gimple_call_set_arg (loadi_call, 2, build_int_cst (integer_type_node, val >> 16));
+	  gimple_call_set_arg (loadi_call, loadi_insnd->mod_pos,
+			       build_int_cst (integer_type_node, SFPLOADI_MOD0_SHORT));
+	  gimple_call_set_arg (loadi_call, 3, integer_zero_node);
+	  gimple_call_set_arg (loadi_call, 4, integer_zero_node);
+	  ssa_msb = make_ssa_name (type, loadi_call);
+	  gimple_call_set_lhs (loadi_call, ssa_msb);
+	  gsi_insert_after (end, loadi_call, GSI_NEW_STMT);
+	}
+    }
+  else
+    {
+      // op_a XOR op_b
+      const rvtt_insn_data *xor_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxor);
+      if (xor_insnd->decl)
+	{
+	  gcall *xor_call = gimple_build_call (xor_insnd->decl, 2);
+	  gimple_set_location (xor_call, gimple_location (icmp));
+	  gimple_call_set_arg (xor_call, 0, op_a);
+	  gimple_call_set_arg (xor_call, 1, op_b);
+	  ssa_var = make_ssa_name (type, xor_call);
+	  gimple_call_set_lhs (xor_call, ssa_var);
+	  gsi_insert_after (end, xor_call, GSI_NEW_STMT);
+	  *begin = *end;
+	}
+      else
+	{
+	  // Grayskull has no xor insn, need to synthesize it
+	  // xor: and(or, not(and))
+	  gcc_assert (TARGET_RVTT_GS);
+	  const rvtt_insn_data *or_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpor);
+	  gcall *or_call = gimple_build_call (or_insnd->decl, 2);
+	  gimple_set_location (or_call, gimple_location (icmp));
+	  gimple_call_set_arg (or_call, 0, op_a);
+	  gimple_call_set_arg (or_call, 1, op_b);
+	  tree or_var = make_ssa_name (type, or_call);
+	  gimple_call_set_lhs (or_call, or_var);
+	  gsi_insert_after (end, or_call, GSI_NEW_STMT);
+	  *begin = *end;
+
+	  const rvtt_insn_data *and_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpand);
+	  gcall *and_call = gimple_build_call (and_insnd->decl, 2);
+	  gimple_set_location (and_call, gimple_location (icmp));
+	  gimple_call_set_arg (and_call, 0, op_a);
+	  gimple_call_set_arg (and_call, 1, op_b);
+	  tree and_var = make_ssa_name (type, and_call);
+	  gimple_call_set_lhs (and_call, and_var);
+	  gsi_insert_after (end, and_call, GSI_NEW_STMT);
+
+	  const rvtt_insn_data *not_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpnot);
+	  gcall *not_call = gimple_build_call (not_insnd->decl, 1);
+	  gimple_set_location (not_call, gimple_location (icmp));
+	  gimple_call_set_arg (not_call, 0, and_var);
+	  tree not_var = make_ssa_name (type, not_call);
+	  gimple_call_set_lhs (not_call, not_var);
+	  gsi_insert_after (end, not_call, GSI_NEW_STMT);
+
+	  and_call = gimple_build_call (and_insnd->decl, 2);
+	  gimple_set_location (and_call, gimple_location (icmp));
+	  gimple_call_set_arg (and_call, 0, or_var);
+	  gimple_call_set_arg (and_call, 1, not_var);
+	  ssa_var = make_ssa_name (type, and_call);
+	  gimple_call_set_lhs (and_call, ssa_var);
+	  gsi_insert_after (end, and_call, GSI_NEW_STMT);
+	}
+  }
+
+  // set CC
+  const rvtt_insn_data *setcc_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetcc_v);
+  gcall *setcc_call = gimple_build_call (setcc_insnd->decl, 2);
+  gimple_set_location (setcc_call, gimple_location (icmp));
+  gimple_call_set_arg (setcc_call, 0, ssa_var);
+  // 4: set cc to complement of MSB
+  // 0: set cc to MSB
+  bool need_gs_flip = TARGET_RVTT_GS && (use_a_msb || !is_const);
+  gimple_call_set_arg (setcc_call, 1, build_int_cst (integer_type_node,
+						     const_msb_set ^ need_gs_flip ? 0 : 4));
+  gsi_insert_after (end, setcc_call, GSI_NEW_STMT);
+  if (gsi_end_p (*begin))
+    *begin = *end;
+
+  if (use_a_msb || !is_const)
+    {
+      // copy use_a_msb ? a : b to res
+      const rvtt_insn_data *mov_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmov);
+      gcall *mov1_call = gimple_build_call (mov_insnd->decl, 2);
+      gimple_set_location (mov1_call, gimple_location (icmp));
+      gimple_call_set_arg (mov1_call, 0, use_a_msb ? op_a : op_b);
+      // Copy all of src, ignoring CC (not possible on GS)
+      gimple_call_set_arg (mov1_call, 1, build_int_cst (integer_type_node, TARGET_RVTT_GS ? 0 : 2));
+      ssa_var = make_ssa_name (type, mov1_call);
+      gimple_call_set_lhs (mov1_call, ssa_var);
+      gsi_insert_after (end, mov1_call, GSI_NEW_STMT);
+
+      if (TARGET_RVTT_GS)
+	{
+	  gcc_assert (need_gs_flip);
+	  // Invert enable bits.
+	  const rvtt_insn_data *compc_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpcompc);
+	  gcall *compc_call = gimple_build_call (compc_insnd->decl, 0);
+	  gimple_set_location (compc_call, gimple_location (icmp));
+	  gsi_insert_after (end, compc_call, GSI_NEW_STMT);
+	}
+    }
+  else if (!use_a_msb)
+    {
+      gcc_assert (ssa_msb);
+      ssa_var = ssa_msb;
+    }
+
+  if (use_a_msb == swap_ops || TARGET_RVTT_GS)
+    {
+      // copy swap_ops ? b : a
+      const rvtt_insn_data *mov_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmov_lv);
+      gcall *mov2_call = gimple_build_call (mov_insnd->decl, 3);
+      gimple_set_location (mov2_call, gimple_location (icmp));
+      gimple_call_set_arg (mov2_call, 0, ssa_var);
+      gimple_call_set_arg (mov2_call, 1, swap_ops ? op_b : op_a);
+      // Copy CC-enabled lanes
+      gimple_call_set_arg (mov2_call, 2, integer_zero_node);
+
+      ssa_var = make_ssa_name (type, mov2_call);
+      gimple_call_set_lhs (mov2_call, ssa_var);
+
+      gsi_insert_after (end, mov2_call, GSI_NEW_STMT);
+    }
+
+  const rvtt_insn_data *iadd_insnd = rvtt_get_insn_data (iadd_code);
+  int nargs = gimple_call_num_args (icmp);
+  gcall *iadd_call = gimple_build_call (iadd_insnd->decl, nargs);
+  gimple_set_location (iadd_call, gimple_location (icmp));
+
   for (int i = 0; i < nargs; i++)
-    {
-      gimple_call_set_arg(new_stmt, i, gimple_call_arg(stmt, i));
-    }
-  gimple_set_location(new_stmt, gimple_location(stmt));
-  // The icmp returns an int used in the boolean tree, the iadd return nothing
-  gimple_call_set_lhs(new_stmt, NULL_TREE);
-  gimple_set_vuse(new_stmt, gimple_vuse(stmt));
-  gimple_stmt_iterator gsi = gsi_for_stmt(stmt);
-  gsi_insert_before(&gsi, new_stmt, GSI_SAME_STMT);
-  remove_stmt(stmt);
+    gimple_call_set_arg (iadd_call, i, gimple_call_arg (icmp, i));
+  gimple_call_set_arg (iadd_call, 0 + int (is_const), ssa_var);
+  gimple_call_set_arg (iadd_call, 1 + int (is_const), swap_ops ? op_a : op_b);
+  gimple_call_set_arg (iadd_call, iadd_insnd->mod_pos,
+		       build_int_cst (integer_type_node, SFPXIADD_MOD1_IS_SUB));
+  ssa_var = make_ssa_name (type, iadd_call);
+  gimple_call_set_lhs (iadd_call, ssa_var);
+  gsi_insert_after (end, iadd_call, GSI_NEW_STMT);
 
-  // Make the iadd do a subtract for the compare
-  // Make sure other code knows this is a compare
-  int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPXIADD_MOD1_IS_SUB;
-  if (id == rvtt_insn_data::sfpxiadd_i)
+  const rvtt_insn_data *popc_insnd = rvtt_get_insn_data (rvtt_insn_data::sfppopc);
+  // Grayskull has no mod
+  bool has_mod = popc_insnd->mod_pos >= 0;
+  gcall *popc_call = gimple_build_call (popc_insnd->decl, has_mod ? 1 : 0);
+  gimple_set_location (popc_call, gimple_location (icmp));
+  if (has_mod)
+    // 1: preserve TOS
+    gimple_call_set_arg (popc_call, 0, build_int_cst (integer_type_node, SFPPOPCC_MOD1_COPY));
+  gsi_insert_after (end, popc_call, GSI_NEW_STMT);
+  if (!has_mod)
     {
-      mod |= SFPXIADD_MOD1_DST_UNUSED;
+      // Push it back.
+      const rvtt_insn_data *pushc_insnd = rvtt_get_insn_data (rvtt_insn_data::sfppushc);
+      gcc_assert (pushc_insnd->mod_pos < 0);
+      gcall *pushc_call = gimple_build_call (pushc_insnd->decl, 0);
+      gimple_set_location (pushc_call, gimple_location (icmp));
+      gsi_insert_after (end, pushc_call, GSI_NEW_STMT);
     }
-  gimple_call_set_arg(new_stmt, new_insnd->mod_pos, build_int_cst(integer_type_node, mod));
 
-  return new_stmt;
+  gcall *setcc2_call = gimple_build_call (setcc_insnd->decl, 2);
+  gimple_set_location (setcc2_call, gimple_location (icmp));
+  gimple_call_set_arg (setcc2_call, 0, ssa_var);
+  // 0: copy CC, 4: invert CC
+  gimple_call_set_arg (setcc2_call, 1, build_int_cst (integer_type_node, cond_is_inverted ? 4 : 0));
+  gsi_insert_after (end, setcc2_call, GSI_NEW_STMT);
+
+  remove_stmt (icmp);
 }
 
 static void
@@ -580,12 +880,11 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 
     case rvtt_insn_data::sfpxicmpv:
       {
-	// iadd insns return a vector while icmp insns return an int, remap
-	int mod = flip_negated_cmp(stmt, insnd, negate);
-	if (cmp_issues_compc(mod)) *negated = true;
-	stmt = copy_and_replace_icmp(stmt, (insnd->id == rvtt_insn_data::sfpxicmps) ?
-				     rvtt_insn_data::sfpxiadd_i : rvtt_insn_data::sfpxiadd_v);
-	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
+	int mod = flip_negated_cmp (stmt, insnd, negate);
+	if (cmp_issues_compc (mod))
+	  *negated = true;
+
+	expand_icmp (stmt, insnd, pre_gsip, post_gsip);
       }
       break;
 

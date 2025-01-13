@@ -28155,6 +28155,16 @@ which register to use as base register for reading the canary,
 and from what offset from that base register. There is no default
 register or offset as this is entirely for use within the Linux
 kernel.
+
+@item -mtt-incorrect-ordering-icmp
+Generate short, but incorrect, integer vector ordering compare
+sequences. Specifically integer ordering compares will be signed
+compares with an incorrect behavior when integer overflow occurs.
+This option defaults to on for GraySkull, but off for other targets.
+The correct sequence reauires more live vecctor registers, and
+GraySkull has insufficient registers to generate the correct sequence,
+resulting in a compilation failure.
+
 @end table
 
 @node RL78 Options

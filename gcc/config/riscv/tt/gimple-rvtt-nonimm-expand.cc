@@ -211,10 +211,9 @@ emit_sfpxicmpv(tree val,
     rvtt_get_insn_data(rvtt_insn_data::sfpxicmpv);
 
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 3);
-  int mod = get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK;
   gimple_call_set_arg(new_stmt, 0, val);
   gimple_call_set_arg(new_stmt, 1, gimple_call_arg(stmt, 1));
-  gimple_call_set_arg(new_stmt, 2, build_int_cst(integer_type_node, mod));
+  gimple_call_set_arg(new_stmt, 2, gimple_call_arg(stmt, insnd->mod_pos));
   gimple_call_set_lhs(new_stmt, gimple_call_lhs(stmt));
   finish_new_insn(gsip, true, new_stmt, stmt);
 }

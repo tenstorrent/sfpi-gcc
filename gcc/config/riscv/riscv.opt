@@ -82,6 +82,10 @@ mwormhole_a0
 Target Bool Var(flag_wormhole_a0) Init(0)
 Generate code for Tenstorrent SFPU - Wormhole a0 Si.
 
+mtt-incorrect-ordering-icmp
+Target Int Var(flag_tt_incorrect_ordering_icmp) Init(-1)
+Generate short, but incorrect, integral vector compare sequences
+
 march=
 Target RejectNegative Joined Negative(march=)
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be

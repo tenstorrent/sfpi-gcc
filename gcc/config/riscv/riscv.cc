@@ -5191,6 +5191,10 @@ riscv_option_override (void)
     error ("only one ttgs, ttwh or ttbh extension can be specified");
   if (TARGET_RVTT_GS)
     warning (0, "GraySkull support is deprecated and will be removed in a future release");
+
+  if (flag_tt_incorrect_ordering_icmp < 0)
+    // GS has insufficient registers to generate good compare sequences
+    flag_tt_incorrect_ordering_icmp = TARGET_RVTT_GS;
 }
 
 /* Implement TARGET_CONDITIONAL_REGISTER_USAGE.  */

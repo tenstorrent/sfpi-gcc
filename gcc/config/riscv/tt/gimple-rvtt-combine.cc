@@ -322,8 +322,9 @@ try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
       // Got a candidate
       int mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
       bool is_sign_bit_cc =
-	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ||
-	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_GTE);
+	(mod1 & SFPXIADD_MOD1_SIGNED) != 0
+	&& ((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT
+	    || (mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_GTE);
 
       // Find when this variable was assigned
       gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, SFPXIADD_SRC_ARG_POS));

@@ -74,6 +74,7 @@ constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
+constexpr unsigned int SFPPOPCC_MOD1_COPY = 1;
 
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNE = 0;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNS = 1;
