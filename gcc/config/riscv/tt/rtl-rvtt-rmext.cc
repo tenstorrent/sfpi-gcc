@@ -253,155 +253,147 @@ create_links (function *fn, insn_map& map)
   all_uses.resize(0);
 }
 
-static void
+/* Return TRUE if INSN is deleted.  */
+static bool
 check_extend(rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
-  int which;
 
-  if (GET_CODE(pat) == SET &&
-      ((which = GET_CODE(SET_SRC(pat))) == SIGN_EXTEND ||
-       which == ZERO_EXTEND))
+  if (GET_CODE (pat) != SET)
+    return false;
+
+  int which = GET_CODE (SET_SRC (pat));
+  if (which != SIGN_EXTEND && which != ZERO_EXTEND)
+    return false;
+
+  DUMP ("  found a %s, ", insn_data[INSN_CODE(insn)].name);
+
+  struct insn_link *links;
+  int count = 0;
+  rtx_insn *load_insn = nullptr;
+  FOR_EACH_LOG_LINK (links, insn)
     {
-      DUMP("  found a %s, ", insn_data[INSN_CODE(insn)].name);
-
-      struct insn_link *links;
-      int count = 0;
-      rtx_insn *load_insn = nullptr;
-      FOR_EACH_LOG_LINK (links, insn)
-	{
-	  count++;
-	  rtx lpat = PATTERN(links->insn);
-	  if (GET_CODE(lpat) == SET &&
-	      REG_P(SET_DEST(lpat)) &&
-	      GET_CODE(SET_SRC(lpat)) == MEM &&
-	      // This condition is safe, is it over re-strictive?
-	      GET_MODE(SET_DEST(lpat)) == GET_MODE(XEXP(SET_SRC(pat), 0)) &&
-	      dead_or_set_p(insn, SET_DEST(lpat)))
-	    {
-	      load_insn = links->insn;
-	    }
-	}
-
-      if (load_insn && count == 1)
-	{
-	  rtx lpat = PATTERN(load_insn);
-	  rtx extend = (which == SIGN_EXTEND) ?
-	    gen_rtx_SIGN_EXTEND(SImode, SET_SRC(lpat)) :
-	    gen_rtx_ZERO_EXTEND(SImode, SET_SRC(lpat));
-
-	  if (validate_change(load_insn, &SET_DEST(lpat), SET_DEST(pat), true) &&
-	      validate_change(load_insn, &SET_SRC(lpat), extend, true) &&
-	      apply_change_group())
-	    {
-	      DUMP("merged load, deleted extend\n");
-	      set_insn_deleted(insn);
-	    }
-	  else
-	    {
-	      gcc_unreachable();
-	    }
-	}
-      else
-	{
-	  DUMP("could not merge with load\n");
-	}
+      count++;
+      rtx lpat = PATTERN (links->insn);
+      if (GET_CODE (lpat) == SET
+	  && REG_P(SET_DEST (lpat))
+	  && GET_CODE (SET_SRC (lpat)) == MEM
+	  // This condition is safe, is it over re-strictive?
+	  && GET_MODE (SET_DEST (lpat)) == GET_MODE (XEXP (SET_SRC (pat), 0))
+	  && dead_or_set_p (insn, SET_DEST (lpat)))
+	load_insn = links->insn;
     }
+
+  if (!load_insn || count != 1)
+    {
+      DUMP ("could not merge with load\n");
+      return false;
+    }
+
+  rtx lpat = PATTERN (load_insn);
+  rtx extend = which == SIGN_EXTEND ? gen_rtx_SIGN_EXTEND(SImode, SET_SRC (lpat))
+    : gen_rtx_ZERO_EXTEND(SImode, SET_SRC (lpat));
+  
+  if (validate_change (load_insn, &SET_DEST (lpat), SET_DEST (pat), true)
+      && validate_change (load_insn, &SET_SRC (lpat), extend, true)
+      && apply_change_group ())
+    {
+      DUMP ("merged load, deleted extend\n");
+      set_insn_deleted (insn);
+      return true;
+    }
+
+  // Huh?
+  gcc_unreachable();
 }
 
-static void
+/* Return true if INSN is deleted.  */
+
+static bool
 check_store(insn_map& map, rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
-  if (GET_CODE(pat) == SET &&
-      GET_CODE(SET_DEST(pat)) == REG &&
-      (GET_CODE(SET_SRC(pat)) == ZERO_EXTEND ||
-       GET_CODE(SET_SRC(pat)) == SIGN_EXTEND) &&
-      SUBREG_P(XEXP(SET_SRC(pat), 0)))
+  if (GET_CODE (pat) != SET
+      || GET_CODE (SET_DEST(pat)) != REG
+      || (GET_CODE (SET_SRC (pat)) != ZERO_EXTEND
+	  && GET_CODE (SET_SRC (pat)) != SIGN_EXTEND)
+      || !SUBREG_P (XEXP (SET_SRC (pat), 0)))
+    return false;
+
+  machine_mode mode = GET_MODE (XEXP (SET_SRC (pat), 0));
+  DUMP ("  found a %s %s, ", GET_MODE_NAME (mode), insn_data[INSN_CODE (insn)].name);
+
+  const auto& uses = map.find (insn);
+  if (uses == map.end ())
     {
-      machine_mode mode = GET_MODE(XEXP(SET_SRC(pat), 0));
-      gcc_assert(mode == HImode || mode == QImode);
-      DUMP("  found a %s %s, ", mode == QImode ? "QI" : "HI", insn_data[INSN_CODE(insn)].name);
+      DUMP ("with no uses\n");
+      return false;
+    }
 
-      const auto& uses = map.find(insn);
-      if (uses != map.end())
+  rtx dst = SET_DEST (pat);
+  unsigned int dstreg = REGNO (SET_DEST (pat));
+  bool all_uses_are_stores = true;
+  rtx_insn *last_store = nullptr;
+  for (rtx_insn *use : uses->second)
+    {
+      rtx upat = PATTERN (use);
+
+      if (GET_CODE (upat) == SET
+	  && GET_CODE (SET_DEST (upat)) == MEM
+	  && SUBREG_P (SET_SRC (upat))
+	  && GET_MODE (SET_DEST (upat)) == mode
+	  && REGNO (SUBREG_REG (SET_SRC (upat))) == dstreg)
 	{
-	  rtx dst = SET_DEST(pat);
-	  unsigned int dstreg = REGNO(SET_DEST(pat));
-	  bool all_uses_are_stores = true;
-	  rtx_insn *last_store = nullptr;
-	  for (rtx_insn *use : uses->second)
-	    {
-	      rtx upat = PATTERN(use);
-
-	      if (GET_CODE(upat) == SET &&
-		  GET_CODE(SET_DEST(upat)) == MEM &&
-		  SUBREG_P(SET_SRC(upat)) &&
-		  GET_MODE(SET_DEST(upat)) == mode &&
-		  REGNO(SUBREG_REG(SET_SRC(upat))) == dstreg)
-		{
-		  if (dead_or_set_p(use, dst))
-		    {
-		      last_store = use;
-		    }
-		}
-	      else
-		{
-		  all_uses_are_stores = false;
-		}
-	    }
-
-	  if (all_uses_are_stores && last_store != nullptr)
-	    {
-	      // Update all uses
-	      bool successful = true;
-	      for (rtx_insn *use : uses->second)
-		{
-		  successful = successful &&
-		    validate_change(last_store, &SUBREG_REG(SET_SRC(PATTERN(use))),
-				    SUBREG_REG(XEXP(SET_SRC(pat), 0)), true);
-		  if (!successful) break;
-		}
-
-	      // Update regnotes of last use
-	      rtx *link;
-	      for (link = &REG_NOTES (last_store); *link; link = &XEXP (*link, 1))
-		{
-		  if (REG_NOTE_KIND (*link) == REG_DEAD &&
-		      REG_P(XEXP (*link, 0)) &&
-		      REGNO (XEXP (*link, 0)) <= dstreg &&
-		      END_REGNO (XEXP (*link, 0)) > dstreg)
-		    {
-		      break;
-		    }
-		}
-	      gcc_assert(*link);
-
-	      successful = successful &&
-		validate_change(last_store, link,
-				find_reg_note(insn, REG_DEAD, XEXP(SET_SRC(pat), 0)),
-				true);
-
-	      if (successful && apply_change_group())
-		{
-		  DUMP("merged %zu store(s), deleted extend\n", uses->second.size());
-		  set_insn_deleted(insn);
-		}
-	      else
-		{
-		  gcc_unreachable();
-		}
-	    }
-	  else
-	    {
-	      DUMP("has either a non-store use\n");
-	    }
+	  if (dead_or_set_p (use, dst))
+	    last_store = use;
 	}
       else
-	{
-	  DUMP("with no uses\n");
-	}
+	all_uses_are_stores = false;
     }
+
+  if (!all_uses_are_stores || !last_store)
+    {
+      DUMP ("has either a non-store use or no store\n");
+      return false;
+    }
+
+  // Update all uses
+  bool successful = true;
+  for (rtx_insn *use : uses->second)
+    {
+      successful = validate_change (last_store, &SUBREG_REG (SET_SRC (PATTERN (use))),
+				   SUBREG_REG (XEXP (SET_SRC (pat), 0)), true);
+      if (!successful)
+	break;
+    }
+
+  if (successful)
+    {
+      // Update regnotes of last use
+      rtx *link;
+      for (link = &REG_NOTES (last_store); *link; link = &XEXP (*link, 1))
+	if (REG_NOTE_KIND (*link) == REG_DEAD &&
+	    REG_P (XEXP (*link, 0)) &&
+	    REGNO (XEXP (*link, 0)) <= dstreg &&
+	    END_REGNO (XEXP (*link, 0)) > dstreg)
+	  break;
+
+      gcc_assert(*link);
+
+      successful = validate_change (last_store, link,
+				    find_reg_note (insn, REG_DEAD, XEXP (SET_SRC (pat), 0)),
+				    true);
+    }
+
+  if (successful && apply_change_group())
+    {
+      DUMP("merged %zu store(s), deleted extend\n", uses->second.size());
+      set_insn_deleted(insn);
+      return true;
+    }
+
+  // HUH?
+  gcc_unreachable();
 }
 
 // Look for a left shift after a zero/sign extend
@@ -506,9 +498,9 @@ transform(function *fn)
 	{
 	  if (NONDEBUG_INSN_P(insn))
 	    {
-	      check_extend(insn);
-	      check_store(map, insn);
-	      check_shift(insn);
+	      if (!check_extend(insn)
+		  && !check_store(map, insn))
+		check_shift(insn);
 	    }
 	}
     }

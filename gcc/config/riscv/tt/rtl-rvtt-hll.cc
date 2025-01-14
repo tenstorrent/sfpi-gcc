@@ -178,38 +178,54 @@ emit_l1_war(rtx_insn *where,
 static bool
 load_mem_p(rtx pat)
 {
-  return GET_CODE(pat) == SET &&
-    GET_CODE(SET_SRC(pat)) != CALL &&
-    contains_mem_rtx_p(SET_SRC(pat));
+  if (GET_CODE (pat) != SET)
+    return false;
+
+  if (GET_CODE (SET_DEST (pat)) != REG)
+    return false;
+
+  rtx src = SET_SRC (pat);
+  if (GET_CODE (src) == CALL
+      || GET_CODE (src) == ASM_OPERANDS)
+    return false;
+
+  return contains_mem_rtx_p (src);
 }
 
 static bool
 stack_load_mem_p(rtx pat)
 {
-  return GET_CODE(pat) == SET &&
-    GET_CODE(SET_SRC(pat)) != CALL &&
-    contains_mem_rtx_p(SET_SRC(pat)) &&
-    refers_to_regno_p(stack_ptr_regno, pat);
+  return load_mem_p (pat)
+    && refers_to_regno_p (stack_ptr_regno, pat);
 }
 
 static bool
 store_mem_p(rtx pat)
 {
-  return GET_CODE(pat) == SET &&
-    GET_CODE(SET_DEST(pat)) != CALL &&
-    contains_mem_rtx_p(SET_DEST(pat));
+  if (GET_CODE (pat) != SET)
+    return false;
+
+  if (GET_CODE (SET_SRC (pat)) != REG)
+    return false;
+
+  rtx dst = SET_DEST(pat);
+  if (GET_CODE (dst) == CALL
+      || GET_CODE (dst) == ASM_OPERANDS)
+    return false;
+
+  return contains_mem_rtx_p (dst);
 }
 
 static bool
 nonstack_store_p(rtx pat)
 {
-  return
-    GET_CODE(pat) == SET &&
-    contains_mem_rtx_p(SET_DEST(pat)) &&
+  if (!store_mem_p (pat))
+    return false;
+  
 #if !RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS
-    !refers_to_regno_p(stack_ptr_regno, pat);
+  return !refers_to_regno_p (stack_ptr_regno, pat);
 #else
-    true;
+  return true;
 #endif
 }
 
