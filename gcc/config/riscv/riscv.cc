@@ -674,11 +674,6 @@ riscv_classify_symbol (const_rtx x)
   if (GET_CODE (x) == SYMBOL_REF && flag_pic && !riscv_symbol_binds_local_p (x))
     return SYMBOL_GOT_DISP;
 
-  if (GET_CODE (x) == LABEL_REF || SYMBOL_REF_FUNCTION_P (x)
-      // Detect the .LAn: auipc ... %pcrel_lo(.LAn) sequence
-      || (SYMBOL_REF_LOCAL_P (x) && 0 == memcmp(XSTR (x, 0), ".LA", 3)))
-    return SYMBOL_PCREL;
-
   return riscv_cmodel == CM_MEDLOW ? SYMBOL_ABSOLUTE : SYMBOL_PCREL;
 }
 
