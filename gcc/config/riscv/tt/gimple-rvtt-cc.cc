@@ -201,8 +201,10 @@ process_block_stmts(basic_block bb,
 		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
 		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		  gimple_set_location (new_stmt, gimple_location (stmt));
-		  gsi_replace(&gsi, new_stmt, true);
-		  update_stmt (new_stmt);
+		  unlink_stmt_vdef (stmt);
+		  gsi_remove (&gsi, true);
+		  release_defs (stmt);
+		  gsi_insert_before (&gsi, new_stmt, GSI_NEW_STMT);
 		  prior_removable = false;
 		}
 	    }
@@ -278,6 +280,8 @@ static void transform (function *fn)
   bd.resize(n_basic_blocks_for_fn(fn));
 
   process_block(ENTRY_BLOCK_PTR_FOR_FN(fn), bd, stack);
+
+  update_ssa (TODO_update_ssa);
 }
 
 namespace {
