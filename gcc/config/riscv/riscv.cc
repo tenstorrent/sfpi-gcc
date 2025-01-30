@@ -368,10 +368,10 @@ static const struct attribute_spec riscv_attribute_table[] =
     riscv_handle_type_attribute, NULL },
 
   { "rvtt_l1_ptr", 0, 0, false, true, false, true,
-    riscv_handle_type_attribute, NULL },
+    nullptr, NULL },
 
   { "rvtt_reg_ptr", 0, 0, false, true, false, true,
-    riscv_handle_type_attribute, NULL },
+    nullptr, NULL },
 
   /* The last attribute spec is set to be NULL.  */
   { NULL,	0,  0, false, false, false, false, NULL, NULL }
@@ -2387,6 +2387,20 @@ riscv_output_return ()
     return "";
 
   return "ret";
+}
+
+static int
+riscv_comp_type_attributes (const_tree type1, const_tree type2)
+{
+  if (bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  if (bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  return 1;
 }
 
 
@@ -5882,6 +5896,9 @@ riscv_vector_mode_supported_p(machine_mode mode)
 
 #undef TARGET_VECTOR_MODE_SUPPORTED_P 
 #define TARGET_VECTOR_MODE_SUPPORTED_P riscv_vector_mode_supported_p
+
+#undef TARGET_COMP_TYPE_ATTRIBUTES
+#define TARGET_COMP_TYPE_ATTRIBUTES riscv_comp_type_attributes
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

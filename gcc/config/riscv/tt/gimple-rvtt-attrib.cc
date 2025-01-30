@@ -68,21 +68,18 @@ along with GCC; see the file COPYING3.  If not see
 #include <tuple>
 #include "rvtt.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+#if 0
+#define DUMP(...) (void)fprintf (stderr, __VA_ARGS__)
+#else
+#define DUMP(...) (void)0
+#endif
 
-static tree
-process_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt);
+static tree process_node (std::unordered_map<gimple *, tree>& stmts, gimple *stmt);
 
 static bool
-decl_has_attrib(tree decl, const char *attrib)
+decl_has_attrib (tree decl, const char *attrib)
 {
-  if (decl != NULL_TREE &&
-      lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
-    {
-      return true;
-    }
-
-  return false;
+  return decl && lookup_attribute (attrib, TYPE_ATTRIBUTES (TREE_TYPE (decl)));
 }
 
 static tree
@@ -175,46 +172,43 @@ process_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt)
 
 // GS memory aribiter workaround relies on memory space attributes
 // All targets perform better if memory accesses are tagged with the memory space attributes
-// Unforutnately, some passes drop these attributes
+// Unfortnately, some passes drop these attributes
 // Walking gimple/tree structures at the end of the RTL passes looking for the
 // attributes resulted in crashes, apparently these structures rot during RTL passes
 // So...this pass runs just before expand to propagate the attribs that were
-// dropped as best as possible by walking back through the stmts and tree
-static void transform (function *fn)
+// dropped as best as possible by walking back through the stmts and
+// tree
+// FIXME: This may be because rvtt attributes were being mishandled?
+static void
+transform (function *fn)
 {
-  DUMP("TT attrib pass on %s\n", function_name(fn));
+  DUMP ("TT attrib pass on %s\n", function_name (fn));
 
   std::unordered_map<gimple *, tree> stmts;
-  stmts.reserve(40);
+  stmts.reserve (40);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
-    {
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  tree lhs = gimple_get_lhs(stmt);
-	  if (lhs != NULL_TREE &&
-	      TREE_CODE(lhs) == SSA_NAME &&
-	      POINTER_TYPE_P(TREE_TYPE(lhs)))
-	    {
-	      if (!lookup_attribute("rvtt_l1_ptr", TYPE_ATTRIBUTES(TREE_TYPE(lhs))) &&
-		  !lookup_attribute("rvtt_reg_ptr", TYPE_ATTRIBUTES(TREE_TYPE(lhs))))
-		{
-		  DUMP("no attrib, searching\n");
-		  tree result = process_node(stmts, stmt);
-		  if (result != NULL_TREE)
-		    {
-		      TYPE_ATTRIBUTES(TREE_TYPE(lhs)) = TYPE_ATTRIBUTES(TREE_TYPE(result));
-		      DUMP("found one , adding attribute\n");
-		    }
-		}
-	      else
-		{
-		  DUMP("found attrib, skipping\n");
-		}
-	    }
-	}
-    }
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	tree lhs = gimple_get_lhs (gsi_stmt (gsi));
+	if (lhs != NULL_TREE && TREE_CODE (lhs) == SSA_NAME && POINTER_TYPE_P (TREE_TYPE (lhs)))
+	  {
+	    tree type = TREE_TYPE (lhs);
+	    if (!lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type))
+		&& !lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type)))
+	      {
+		DUMP ("no attrib, searching\n");
+		if (tree result = process_node (stmts, gsi_stmt (gsi)))
+		  {
+		    type = build_type_attribute_variant (type, TYPE_ATTRIBUTES (TREE_TYPE (result)));
+		    TREE_TYPE (lhs) = type;
+		    DUMP ("found one , adding attribute\n");
+		  }
+	      }
+	    else
+	      DUMP ("found attrib, skipping\n");
+	  }
+      }
 }
 
 namespace {
