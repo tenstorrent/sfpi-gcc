@@ -2481,6 +2481,7 @@ riscv*-*-elf* | riscv*-*-rtems*)
 	esac
 	tmake_file="${tmake_file} riscv/t-riscv"
 	tmake_file="${tmake_file} riscv/tt/t-riscv-tt"
+	target_gtfiles="${target_gtfiles} \$(srcdir)/config/riscv/tt/rvtt.h \$(srcdir)/config/riscv/tt/rvtt.cc"
 	gnu_ld=yes
 	gas=yes
 	case $target in

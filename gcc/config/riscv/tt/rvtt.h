@@ -135,22 +135,8 @@ constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
 constexpr unsigned int SFPU_LREG_COUNT_BH = 8;
 extern unsigned int rvtt_sfpu_lreg_count_global;
 
-struct rvtt_insn_data {
-  enum insn_id {
-    // Note: this only pulls the "id" from the macros so GS/WH/BH/etc are equivalent
-#define RVTT_RTL_ONLY(id, nip, gp) id,
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_RTL_ONLY(id, fl, sched) id,
-#define RVTT_GS_PAD_RTL_ONLY(id) id,
-#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_PAD_BUILTIN(id) id,
-#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) id,
-#include "rvtt-insn.h"
-
-    nonsfpu
-  };
+struct GTY(()) rvtt_insn_data {
+  enum insn_id : unsigned;
 
   const enum insn_id id;
   const char *name;
@@ -184,6 +170,22 @@ struct rvtt_insn_data {
   inline int nonimm_op_arg_pos() const { return nonimm_pos; }
   inline int nonimm_idflag_arg_pos() const { return nonimm_pos + 1; }
 };
+
+enum rvtt_insn_data::insn_id : unsigned {
+  // Note: this only pulls the "id" from the macros so GS/WH/BH/etc are equivalent
+#define RVTT_RTL_ONLY(id, nip, gp) id,
+#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_RTL_ONLY(id, fl, sched) id,
+#define RVTT_GS_PAD_RTL_ONLY(id) id,
+#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_GS_PAD_BUILTIN(id) id,
+#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) id,
+#include "rvtt-insn.h"
+
+  nonsfpu,
+    };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 

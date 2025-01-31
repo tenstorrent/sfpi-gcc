@@ -108,7 +108,7 @@ static const char* arch_name_abbrev_list[] = {
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 3;
 static const int NUMBER_OF_INTRINSICS = 131;
-static rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
+static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
@@ -303,44 +303,34 @@ rvtt_init_builtins()
 }
 
 const char *
-rvtt_get_builtin_name_stub()
+rvtt_get_builtin_name_stub ()
 {
   return rvtt_builtin_name_stub;
 }
 
-const rvtt_insn_data*
-rvtt_get_insn_data(const rvtt_insn_data::insn_id id)
+const rvtt_insn_data *
+rvtt_get_insn_data (const rvtt_insn_data::insn_id id)
 {
-  return &sfpu_insn_data[id];
+  auto *res = &sfpu_insn_data[id];
+  gcc_assert (!res->decl || TREE_CODE (res->decl) == FUNCTION_DECL);
+  return res;
 }
 
 const rvtt_insn_data*
 rvtt_get_insn_data(const char *name)
 {
   auto match = insn_map.find(name);
-  if (match == insn_map.end())
-    {
-      return &sfpu_insn_data[rvtt_insn_data::nonsfpu];
-    }
-  else
-    {
-      return &match->second;
-    }
+  auto *res = match == insn_map.end () ? &sfpu_insn_data[rvtt_insn_data::nonsfpu] : &match->second;
+  gcc_assert (!res->decl || TREE_CODE (res->decl) == FUNCTION_DECL);
+  return res;
 }
 
 const rvtt_insn_data *
-rvtt_get_insn_data(const gcall *stmt)
+rvtt_get_insn_data (const gcall *stmt)
 {
   tree fn_ptr = gimple_call_fn (stmt);
 
-  if (fn_ptr)
-    {
-      return rvtt_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (TREE_OPERAND (fn_ptr, 0))));
-    }
-  else
-    {
-      return nullptr;
-    }
+  return fn_ptr ? rvtt_get_insn_data (IDENTIFIER_POINTER (DECL_NAME (TREE_OPERAND (fn_ptr, 0)))) : nullptr;
 }
 
 bool
@@ -1167,3 +1157,5 @@ bool rvtt_reg_store_p(const rtx pat)
 
   return false;
 }
+
+#include "gt-rvtt.h"
