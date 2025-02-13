@@ -32,8 +32,16 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS 0
 
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
-constexpr unsigned int SFPMAD_MOD1_OFFSET_POSH = 1;
-constexpr unsigned int SFPMAD_MOD1_OFFSET_NEGH = 3;
+constexpr unsigned int SFPMAD_MOD1_GS_OFFSET_POS = 1; // Add an offset
+constexpr unsigned int SFPMAD_MOD1_GS_OFFSET_NEG = 3; // Sub an offset
+// A * B + C
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; // negate A operand
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; // negate C operand
+
+constexpr unsigned int SFPMOV_MOD1_NONE = 0;
+constexpr unsigned int SFPMOV_MOD1_COMPL = 1; // negate
+constexpr unsigned int SFPMOV_MOD1_ALL = 2; // copy all lanes
+constexpr unsigned int SFPMOV_MOD1_CFG = 8; // read cfg register
 
 constexpr unsigned int SFPLOADI_IMM_ARG_POS = 2;
 constexpr unsigned int SFPLOADI_LV_IMM_ARG_POS = 3;
