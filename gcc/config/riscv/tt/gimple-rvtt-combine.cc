@@ -435,99 +435,6 @@ match_prior_assignment(rvtt_insn_data::insn_id id,
   return result;
 }
 
-// Mads increase register pressure so need to be careful to not turn compiling
-// code into non-compiling code by agressively creating mads.  Ideally, the
-// programmer who runs out of registers could re-stucture their code to
-// avoid the mads and get it to compile
-// To that end:
-//   - mads are only created if there is exactly one use of the base multiply
-//   - mads are not created across CC or BB boundaries (some of which may be
-//   - managable).  future work - could handle CC boundaries w/ code motion
-static bool
-try_gen_mad(const rvtt_insn_data *candidate_insnd,
-	    gcall *candidate_stmt,
-	    gimple_stmt_iterator candidate_gsi)
-{
-  bool combined = false;
-
-  if (candidate_insnd->id == rvtt_insn_data::sfpadd ||
-      candidate_insnd->id == rvtt_insn_data::sfpadd_lv)
-    {
-      DUMP("Trying to combine %s for mad\n", candidate_insnd->name);
-
-      gimple_stmt_iterator assign_gsi;
-      gcall *assign_stmt;
-      const rvtt_insn_data *assign_insnd;
-      int live = candidate_insnd->live_p();
-      int which_arg = 0;
-
-      int candidate_mod = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
-
-      // Both the add and the mul can't have mod set
-      // Not worrying about optimizing -.5 and +.5, just avoiding +.5 and +.5
-      bool found_one = match_prior_assignment(rvtt_insn_data::sfpmul,
-					      &assign_insnd, &assign_stmt, &assign_gsi,
-					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
-	  (candidate_mod == 0 || get_int_arg(assign_stmt, assign_insnd->mod_pos) == 0);
-
-      if (!found_one)
-	{
-	  which_arg = 1;
-	  found_one = match_prior_assignment(rvtt_insn_data::sfpmul,
-					     &assign_insnd, &assign_stmt, &assign_gsi,
-					     gimple_call_arg(candidate_stmt, which_arg + live)) &&
-	      (candidate_mod == 0 || get_int_arg(assign_stmt, assign_insnd->mod_pos) == 0);
-	}
-
-      if (found_one && gsi_bb(assign_gsi) == gsi_bb(candidate_gsi))
-	{
-	  DUMP("  found a matching %s...\n", assign_insnd->name);
-
-	  tree assign_lhs = gimple_call_lhs(assign_stmt);
-
-	  if (!intervening_unrelated_or_cc_stmt(gimple_call_arg(candidate_stmt, (live + which_arg) ^ 1),
-						assign_gsi, candidate_gsi) &&
-	      has_single_use(assign_lhs))
-	    {
-	      DUMP("  combining %s arg %d w/ mul\n", candidate_insnd->name, which_arg);
-
-	      // Create mad
-	      const rvtt_insn_data *mad_insnd = rvtt_get_insn_data(live ?
-								   rvtt_insn_data::sfpmad_lv :
-								   rvtt_insn_data::sfpmad);
-	      gimple* mad_stmt = gimple_build_call(mad_insnd->decl, 4 + live);
-	      if (live)
-		{
-		  gimple_call_set_arg(mad_stmt, 0, gimple_call_arg(candidate_stmt, 0));
-		}
-	      gimple_call_set_arg(mad_stmt, live + 0, gimple_call_arg(assign_stmt, 0));
-	      gimple_call_set_arg(mad_stmt, live + 1, gimple_call_arg(assign_stmt, 1));
-	      gimple_call_set_arg(mad_stmt, live + 2, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
-	      int mod = (candidate_mod != 0) ? candidate_mod : get_int_arg(assign_stmt, assign_insnd->mod_pos);
-	      gimple_call_set_arg(mad_stmt, live + 3, build_int_cst(integer_type_node, mod));
-
-	      gimple_call_set_lhs(mad_stmt, gimple_call_lhs(candidate_stmt));
-	      gimple_set_location(mad_stmt, gimple_location (candidate_stmt));
-	      update_stmt(mad_stmt);
-	      gsi_insert_before(&candidate_gsi, mad_stmt, GSI_SAME_STMT);
-
-	      // Delete add
-	      // Don't unlink/delete vdef since we are re-using it w/ the mad
-	      gsi_remove(&candidate_gsi, true);
-
-	      // Delete mul
-	      unlink_stmt_vdef(assign_stmt);
-	      gsi_remove(&assign_gsi, true);
-	      release_defs(assign_stmt);
-
-	      combined = true;
-	    }
-	}
-    }
-
-  return combined;
-}
-
 static inline void
 validate_assumptions()
 {
@@ -673,6 +580,9 @@ try_combine_add_half(const rvtt_insn_data *candidate_insnd,
   const int neg_half = 0xbf00;
   bool combined = false;
 
+  // A Greyskull-only feature.
+  gcc_assert (TARGET_RVTT_GS);
+
   // XXXX todo: handle _lv versions.  gets complicated
   if (candidate_insnd->id == rvtt_insn_data::sfpadd ||
       candidate_insnd->id == rvtt_insn_data::sfpmul ||
@@ -708,7 +618,8 @@ try_combine_add_half(const rvtt_insn_data *candidate_insnd,
 		    {
 		      DUMP("  ...has a loadi of 0.5, combining\n");
 
-		      int mod1 = (offset == half) ? SFPMAD_MOD1_OFFSET_POSH : SFPMAD_MOD1_OFFSET_NEGH;
+		      int mod1 = offset == neg_half
+			? SFPMAD_MOD1_GS_OFFSET_NEG : SFPMAD_MOD1_GS_OFFSET_POS;
 		      gimple_call_set_arg(candidate_stmt, candidate_insnd->mod_pos,
 					  build_int_cst(integer_type_node, mod1));
 
@@ -768,6 +679,204 @@ remove_unused_loadis(basic_block bb)
   return removed;
 }
 
+struct probe_t {
+  gimple_stmt_iterator gsi;
+  const rvtt_insn_data *insnd = nullptr;
+  gcall *call = nullptr;
+
+  probe_t () = default;
+  probe_t (gimple_stmt_iterator it) : gsi (it), insnd (nullptr), call (nullptr) {}
+
+  operator bool () const
+  {
+    return bool (call);
+  }
+};
+
+/* Look for add (mul (a, b), c) and turn it into mad (a, b, c).  On BH
+   also consider negates on each input and intermediate.  */
+
+static bool
+try_combine_mul_add (probe_t &probe)
+{
+  if (!(probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv))
+    return false;
+
+  bool is_lv = probe.insnd->live_p ();
+  int mod = get_int_arg (probe.call, probe.insnd->mod_pos);
+  if (TARGET_RVTT_GS && mod)
+    return false;
+  gcc_assert (!mod);
+
+  probe_t mul;
+  int mul_op_no;
+  probe_t negate_add_ops[2];
+
+  if (TARGET_RVTT_BH)
+    // Blackhole can negate a and/or c mad inputs.
+    for (unsigned op_no = 2; op_no--;)
+      if (!(match_prior_assignment (rvtt_insn_data::sfpmov,
+				    &negate_add_ops[op_no].insnd,
+				    &negate_add_ops[op_no].call,
+				    &negate_add_ops[op_no].gsi,
+				    gimple_call_arg (probe.call, op_no + int (is_lv)))
+	    && get_int_arg (negate_add_ops[op_no].call,
+			    negate_add_ops[op_no].insnd->mod_pos) == SFPMOV_MOD1_COMPL
+	    && has_single_use (gimple_call_lhs (negate_add_ops[op_no].call))
+	    && !intervening_cc_stmt (negate_add_ops[op_no].gsi, probe.gsi)))
+	negate_add_ops[op_no].call = nullptr;
+
+  for (mul_op_no = 2; mul_op_no--;)
+    if (match_prior_assignment (rvtt_insn_data::sfpmul,
+				&mul.insnd, &mul.call, &mul.gsi,
+				negate_add_ops[mul_op_no]
+				? gimple_call_arg (negate_add_ops[mul_op_no].call, 0)
+				: gimple_call_arg (probe.call, mul_op_no + int (is_lv)))
+	&& has_single_use (gimple_call_lhs (mul.call))
+	&& !intervening_cc_stmt (mul.gsi, negate_add_ops[mul_op_no]
+				 ? negate_add_ops[mul_op_no].gsi : probe.gsi))
+      break;
+
+  if (mul_op_no < 0)
+    return false;
+
+  probe_t negate_mul_ops[2];
+  if (TARGET_RVTT_BH)
+    for (unsigned op_no = 2; op_no--;)
+      if (!(match_prior_assignment (rvtt_insn_data::sfpmov,
+				    &negate_mul_ops[op_no].insnd,
+				    &negate_mul_ops[op_no].call,
+				    &negate_mul_ops[op_no].gsi,
+				    gimple_call_arg (mul.call, op_no))
+	    && get_int_arg (negate_mul_ops[op_no].call,
+			    negate_mul_ops[op_no].insnd->mod_pos) == SFPMOV_MOD1_COMPL
+	    && has_single_use (gimple_call_lhs (negate_mul_ops[op_no].call))
+	    && !intervening_cc_stmt (negate_mul_ops[op_no].gsi, mul.gsi)))
+	negate_mul_ops[op_no].call = nullptr;
+
+  int mad_mod = get_int_arg (mul.call, mul.insnd->mod_pos);
+  if (TARGET_RVTT_GS && mad_mod)
+    return false;
+  if (negate_add_ops[mul_op_no] ^ negate_mul_ops[0] ^ negate_mul_ops[1])
+    mad_mod ^= SFPMAD_MOD1_BH_COMPL_A;
+  if (negate_add_ops[1 - mul_op_no])
+    mad_mod ^= SFPMAD_MOD1_BH_COMPL_C;
+
+  const rvtt_insn_data *mad_insnd
+    = rvtt_get_insn_data (is_lv ? rvtt_insn_data::sfpmad_lv : rvtt_insn_data::sfpmad);
+  gcall *mad_call = gimple_build_call (mad_insnd->decl, 4 + is_lv);
+  if (is_lv)
+    gimple_call_set_arg (mad_call, 0, gimple_call_arg (probe.call, 0));
+  gimple_call_set_arg (mad_call, is_lv + 0,
+		       negate_mul_ops[0] ? gimple_call_arg (negate_mul_ops[0].call, 0)
+		       : gimple_call_arg (mul.call, 0));
+  gimple_call_set_arg (mad_call, is_lv + 1,
+		       negate_mul_ops[1] ? gimple_call_arg (negate_mul_ops[1].call, 0)
+		       : gimple_call_arg (mul.call, 1));
+  gimple_call_set_arg (mad_call, is_lv + 2,
+		       negate_add_ops[1 - mul_op_no]
+		       ? gimple_call_arg (negate_add_ops[1 - mul_op_no].call, 0)
+		       : gimple_call_arg (probe.call, (1 - mul_op_no) + is_lv));
+  gimple_call_set_arg (mad_call, mad_insnd->mod_pos, build_int_cst (integer_type_node, mad_mod));
+  gimple_call_set_lhs (mad_call, gimple_call_lhs (probe.call));
+  gimple_set_location (mad_call, gimple_location (probe.call));
+
+  update_stmt (mad_call);
+  gsi_insert_after (&probe.gsi, mad_call, GSI_SAME_STMT);
+
+  // Remove the add
+  gsi_remove (&probe.gsi, true);
+
+  // Remove the mul
+  unlink_stmt_vdef (mul.call);
+  gsi_remove (&mul.gsi, true);
+  release_defs (mul.call);
+
+  // Remove the negations
+  for (unsigned ix = 2; ix--;)
+    {
+      if (negate_mul_ops[ix])
+	{
+	  unlink_stmt_vdef (negate_mul_ops[ix].call);
+	  gsi_remove (&negate_mul_ops[ix].gsi, true);
+	  release_defs (negate_mul_ops[ix].call);
+	}
+      if (negate_add_ops[ix])
+	{
+	  unlink_stmt_vdef (negate_add_ops[ix].call);
+	  gsi_remove (&negate_add_ops[ix].gsi, true);
+	  release_defs (negate_add_ops[ix].call);
+	}
+    }
+
+  return true;
+}
+
+/* Look for add (negate (a), b) and turn it into mad (a, -1, b).
+   Return true if combined, GSI points to new muladd insn.  */
+
+static bool
+try_combine_negate_add (probe_t &probe)
+{
+  if (!(probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv))
+    return false;
+
+  bool is_lv = probe.insnd->live_p ();
+  int mod = get_int_arg (probe.call, probe.insnd->mod_pos);
+  if (mod)
+    return false;
+
+  probe_t mov;
+  int op_no;
+  for (op_no = 2; op_no--;)
+    if (match_prior_assignment (rvtt_insn_data::sfpmov,
+				&mov.insnd, &mov.call, &mov.gsi,
+				gimple_call_arg (probe.call, op_no + int (is_lv)))
+	&& get_int_arg (mov.call, mov.insnd->mod_pos) == SFPMOV_MOD1_COMPL
+	&& has_single_use (gimple_call_lhs (mov.call))
+	&& !intervening_cc_stmt (mov.gsi, probe.gsi))
+      break;
+
+  if (op_no < 0)
+    return false;
+
+  // One input was negated, turn this into a suitable mad -1.
+  // FIXME: Is it worth considering if both inputs are negated, and
+  // reassociating the computation?
+
+  const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpassignlreg);
+  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, 1);
+  gimple_call_set_return_slot_opt (lreg_call, true);
+  gimple_set_location (lreg_call, gimple_location (probe.call));
+  gimple_call_set_arg (lreg_call, 0, build_int_cst (integer_type_node, CREG_IDX_NEG_1));
+  tree ssa = make_ssa_name (TREE_TYPE (gimple_call_lhs (mov.call)), lreg_call);
+  gimple_call_set_lhs (lreg_call, ssa);
+  gsi_insert_before (&probe.gsi, lreg_call, GSI_SAME_STMT);
+
+  // sfpmad (maybe-live, a, b, c, mod)
+  const rvtt_insn_data *mad_insnd
+    = rvtt_get_insn_data (is_lv ? rvtt_insn_data::sfpmad_lv : rvtt_insn_data::sfpmad);
+  gcall *mad_call = gimple_build_call (mad_insnd->decl, 4 + is_lv);
+  if (is_lv)
+    gimple_call_set_arg (mad_call, 0, gimple_call_arg (probe.call, 0));
+  gimple_call_set_arg (mad_call, is_lv + 0, ssa);
+  gimple_call_set_arg (mad_call, is_lv + 1, gimple_call_arg (mov.call, 0));
+  gimple_call_set_arg (mad_call, is_lv + 2, gimple_call_arg (probe.call, (1 - op_no) + is_lv));
+  gimple_call_set_arg (mad_call, mad_insnd->mod_pos, build_int_cst (integer_type_node, 0));
+  gimple_call_set_lhs (mad_call, gimple_call_lhs (probe.call));
+  gimple_set_location (mad_call, gimple_location (probe.call));
+
+  update_stmt (mad_call);
+  gsi_insert_after (&probe.gsi, mad_call, GSI_SAME_STMT);
+  gsi_remove (&probe.gsi, true); // GSI will now be at the added MAD
+
+  unlink_stmt_vdef (mov.call);
+  gsi_remove (&mov.gsi, true);
+  release_defs (mov.call);
+
+  return true;
+}
+
 // Optimize stmt sequence by combining builtins.  Handles:
 //   - add/mul w/ one operand a loadi of .5, use mod to handle .5
 //   - sfpxiadd_i w/ sfpxiadd_i, exexp
@@ -776,77 +885,87 @@ remove_unused_loadis(basic_block bb)
 // The order of the half/mad/addi+muli matter, the progression of this
 // ordering eliminates the need, for example, of turning a mad w/ the add of
 // .5 into a mul then trying to recombine into a mad w/ a subsequent add
-static void transform (function *fun)
+static void
+transform (function *fun)
 {
   basic_block bb;
-  gimple_stmt_iterator candidate_gsi;
-  load_imm_map.reserve(20);
+  load_imm_map.reserve (20);
 
   // Pass one: combine iadd
   FOR_EACH_BB_FN (bb, fun)
     {
       bool update = false;
 
-      if (TARGET_RVTT_GS) {
-	candidate_gsi = gsi_start_bb (bb);
-	while (!gsi_end_p (candidate_gsi))
-	  {
-	    gcall *candidate_stmt;
-	    const rvtt_insn_data *candidate_insnd;
-
-	    if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+      if (TARGET_RVTT_GS)
+	{
+	  for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
+	       !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
 	    {
-	      update |= try_combine_add_half(candidate_insnd, candidate_stmt);
+	      gcall *candidate_stmt;
+	      const rvtt_insn_data *candidate_insnd;
+
+	      if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
+		// look for +/-0.5 following a mad/add/mul
+		update |= try_combine_add_half (candidate_insnd, candidate_stmt);
 	    }
 
-	    gsi_next (&candidate_gsi);
-	  }
-
-	update |= remove_unused_loadis(bb);
-	if (update) update_ssa(TODO_update_ssa);
+	update |= remove_unused_loadis (bb);
+	if (update)
+	  update_ssa (TODO_update_ssa);
       }
 
       update = false;
-      candidate_gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (candidate_gsi))
+      for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
+	   !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
 	{
 	  gcall *candidate_stmt;
 	  const rvtt_insn_data *candidate_insnd;
 
-	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
+	  if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
 	    {
-	      update |= try_combine_sfpxiadd_i(candidate_insnd, candidate_stmt, candidate_gsi);
-	      update |= try_gen_mad(candidate_insnd, candidate_stmt, candidate_gsi);
+	      update |= try_combine_sfpxiadd_i (candidate_insnd, candidate_stmt, candidate_gsi);
 	    }
-
-	  gsi_next (&candidate_gsi);
 	}
 
-      if (update) update_ssa(TODO_update_ssa);
+      if (update)
+	update_ssa(TODO_update_ssa);
 
       update = false;
-      candidate_gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (candidate_gsi))
+      for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
+	   !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
 	{
 	  gcall *candidate_stmt;
 	  const rvtt_insn_data *candidate_insnd;
 
-	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi))
-	    {
-		update |= try_gen_muli_or_addi(candidate_insnd, candidate_stmt, candidate_gsi);
-	    }
-
-	  gsi_next (&candidate_gsi);
+	  if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
+	    update |= try_gen_muli_or_addi(candidate_insnd, candidate_stmt, candidate_gsi);
 	}
 
-      update |= remove_unused_loadis(bb);
-      if (update) update_ssa(TODO_update_ssa);
+      update |= remove_unused_loadis (bb);
+      if (update)
+	update_ssa(TODO_update_ssa);
+
+      update = false;
+      for (probe_t probe (gsi_start_bb (bb));
+	   !gsi_end_p (probe.gsi); gsi_next (&probe.gsi))
+	{
+	  if (!rvtt_p (&probe.insnd, &probe.call, probe.gsi))
+	    continue;
+
+	  if (try_combine_mul_add (probe))
+	    update = true;
+	  else if (try_combine_negate_add (probe))
+	    update = true;
+	}
+
+      if (update)
+	update_ssa(TODO_update_ssa);
     }
 
-  if (load_imm_map.size() != 0)
+  if (!load_imm_map.empty())
     {
-      rvtt_cleanup_nonimm_lis(fun);
-      load_imm_map.resize(0);
+      rvtt_cleanup_nonimm_lis (fun);
+      load_imm_map.clear ();
     }
 }
 
