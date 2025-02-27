@@ -141,6 +141,7 @@
   UNSPECV_BH_SFPARECIP_INT
   UNSPECV_BH_SFPGT
   UNSPECV_BH_SFPLE
+  UNSPECV_BH_SFPMOV_CONFIG
 ])
 
 (define_insn "rvtt_bh_sfpgccmov_cc"
@@ -486,6 +487,21 @@
                           (match_operand:SI    3 "immediate_operand" "M04U, M04U")] blackhole_simple_op_int))]
   "TARGET_RVTT_BH"
   "SFP<blackhole_simple_op_call_int>\t%0, %2, %3"
+)
+
+(define_insn "rvtt_bh_sfpmov_config"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_BH_SFPMOV_CONFIG))]
+  "TARGET_RVTT_BH"
+  "SFPMOV\t%0,L%1,8"
+)
+
+(define_insn "rvtt_bh_sfpmov_config_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand" "0")
+			  (match_operand:SI 2 "immediate_operand" "M04U")] UNSPECV_BH_SFPMOV_CONFIG))]
+  "TARGET_RVTT_BH"
+  "SFPMOV\t%0,L%2,8"
 )
 
 (define_int_iterator blackhole_muladd [UNSPECV_BH_SFPMUL UNSPECV_BH_SFPADD])
