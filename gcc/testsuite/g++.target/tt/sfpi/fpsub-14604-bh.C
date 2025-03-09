@@ -18,7 +18,7 @@ void sub1() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub1v:\n\tSFPMAD	L3, L11, L1, L0, 0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub1v:\n\tSFPADD	L3, L10, L0, L1, 2\n\tret\n} } }
 
 void sub2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -28,7 +28,7 @@ void sub2() {
   
   l_reg[LRegs::LReg3] = b;
 }
-// { dg-final { scan-assembler {\n_Z4sub2v:\n\tSFPMAD	L3, L11, L0, L1, 0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub2v:\n\tSFPADD	L3, L10, L1, L0, 2\n\tret\n} } }
 
 void sub3() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -39,7 +39,7 @@ void sub3() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub3v:\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L3, L11, L1, L0, 0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub3v:\n\tSFPADD	L3, L10, L0, L1, 3\n\tret\n} } }
 
 void sub4() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -54,7 +54,7 @@ void sub4() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub4v:\n\tSFPMAD	L3, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPMAD	L3, L11, L1, L0, 0\n\tSFPCOMPC\n\tSFPMAD	L3, L11, L0, L1, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub4v:\n\tSFPMAD	L3, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPADD	L3, L10, L0, L1, 2\n\tSFPCOMPC\n\tSFPADD	L3, L10, L1, L0, 2\n\tSFPENCC	3, 10\n\tret\n} } }
 
 void sub5() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -68,7 +68,7 @@ void sub5() {
   
   l_reg[LRegs::LReg3] = b;
 }
-// { dg-final { scan-assembler {\n_Z4sub5v:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPMAD	L1, L11, L0, L1, 0\n\tSFPCOMPC\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L1, L11, L0, L1, 0\n\tSFPENCC	3, 10\n\tSFPMOV	L3, L1, 2\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub5v:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPADD	L1, L10, L1, L0, 2\n\tSFPCOMPC\n\tSFPMOV	L0, L0, 1\n\tSFPADD	L1, L10, L1, L0, 2\n\tSFPENCC	3, 10\n\tSFPMOV	L3, L1, 2\n\tret\n} } }
 
 void sub6() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -83,4 +83,4 @@ void sub6() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub6v:\n\tSFPMAD	L3, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPMOV	L3, L0, 1\n\tSFPMAD	L3, L11, L1, L3, 0\n\tSFPCOMPC\n\tSFPMAD	L3, L11, L1, L0, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4sub6v:\n\tSFPMAD	L3, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPADD	L3, L10, L0, L1, 3\n\tSFPCOMPC\n\tSFPADD	L3, L10, L0, L1, 2\n\tSFPENCC	3, 10\n\tret\n} } }
