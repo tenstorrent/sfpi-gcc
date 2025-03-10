@@ -23,9 +23,7 @@
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
-  ;; INT for internal
-  ;; LV for keep dst reg alive as input for predicated liveness
-  UNSPECV_BH_SFPASSIGN_LV
+  UNSPECV_BH_SFPASSIGN
   UNSPECV_BH_SFPPRESERVELREG
   UNSPECV_BH_SFPPRESERVELREG0_INT
   UNSPECV_BH_SFPPRESERVELREG1_INT
@@ -36,23 +34,12 @@
   UNSPECV_BH_SFPPRESERVELREG6_INT
   UNSPECV_BH_SFPPRESERVELREG7_INT
   UNSPECV_BH_SFPLOAD
-  UNSPECV_BH_SFPLOAD_LV
-  UNSPECV_BH_SFPLOAD_INT
   UNSPECV_BH_SFPXLOADI
-  UNSPECV_BH_SFPXLOADI_LV
-  UNSPECV_BH_SFPLOADI_INT
   UNSPECV_BH_SFPSTORE
-  UNSPECV_BH_SFPSTORE_INT
   UNSPECV_BH_SFPMULI
-  UNSPECV_BH_SFPMULI_INT
   UNSPECV_BH_SFPADDI
-  UNSPECV_BH_SFPADDI_INT
   UNSPECV_BH_SFPMUL
-  UNSPECV_BH_SFPMUL_LV
-  UNSPECV_BH_SFPMUL_INT
   UNSPECV_BH_SFPADD
-  UNSPECV_BH_SFPADD_LV
-  UNSPECV_BH_SFPADD_INT
   UNSPECV_BH_SFPIADD_V_INT
   UNSPECV_BH_SFPXIADD_V
   UNSPECV_BH_SFPIADD_I
@@ -70,8 +57,6 @@
   UNSPECV_BH_SFPOR
   UNSPECV_BH_SFPXOR
   UNSPECV_BH_SFPNOT
-  UNSPECV_BH_SFPNOT_LV
-  UNSPECV_BH_SFPNOT_INT
   UNSPECV_BH_SFPLZ
   UNSPECV_BH_SFPLZ_LV
   UNSPECV_BH_SFPLZ_INT
@@ -94,8 +79,6 @@
   UNSPECV_BH_SFPMOV_LV
   UNSPECV_BH_SFPMOV_INT
   UNSPECV_BH_SFPDIVP2
-  UNSPECV_BH_SFPDIVP2_LV
-  UNSPECV_BH_SFPDIVP2_INT
   UNSPECV_BH_SFPEXEXP
   UNSPECV_BH_SFPEXEXP_LV
   UNSPECV_BH_SFPEXEXP_INT
@@ -126,7 +109,6 @@
   UNSPECV_BH_SFPCONFIG_V
   UNSPECV_BH_SFPREPLAY
   UNSPECV_BH_SFPSWAP
-  UNSPECV_BH_SFPSWAP_INT
   UNSPECV_BH_SFPTRANSP
   UNSPECV_BH_SFPSHFT2_G
   UNSPECV_BH_SFPSHFT2_GE
@@ -179,15 +161,14 @@
 (define_insn "rvtt_bh_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_BH_SFPASSIGN_LV))]
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_BH_SFPASSIGN))]
   "TARGET_RVTT_BH"
   "SFPMOV\t%0, %2, 0"
 )
 
 (define_expand "rvtt_bh_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "immediate_operand" "M04U")] UNSPECV_BH_SFPPRESERVELREG)]
-
+                     (match_operand:SI    1 "immediate_operand" "")] UNSPECV_BH_SFPPRESERVELREG)]
   "TARGET_RVTT_BH"
 {
   static rtx (*fn_ptr[8])(rtx) = {gen_rvtt_bh_sfppreservelreg0_int, gen_rvtt_bh_sfppreservelreg1_int,
@@ -223,8 +204,8 @@
                           (match_operand:SI 6 "immediate_operand" "")] UNSPECV_BH_SFPLOAD))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
-  rvtt_bh_emit_sfpload(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
+  rvtt_bh_emit_sfpload (operands[0], rvtt_gen_const0_vector(),
+  		        operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
 
@@ -236,11 +217,11 @@
                           (match_operand:SI    4 "immediate_operand" "")
                           (match_operand:SI    5 "nonmemory_operand" "")
                           (match_operand:SI    6 "register_operand" "")
-                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_BH_SFPLOAD_LV))]
+                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_BH_SFPLOAD))]
   "TARGET_RVTT_BH"
 {
-  rtx live = operands[2];
-  rvtt_bh_emit_sfpload(operands[0], live, operands[1], operands[3], operands[4], operands[5], operands[6], operands[7]);
+  rvtt_bh_emit_sfpload (operands[0], operands[2],
+  		        operands[1], operands[3], operands[4], operands[5], operands[6], operands[7]);
   DONE;
 })
 
@@ -249,7 +230,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:SI    2 "immediate_operand" "M04U, M04U")
                           (match_operand:SI    3 "immediate_operand" "M03U, M03U")
-                          (match_operand:SI    4 "immediate_operand" "M13U, M13U")] UNSPECV_BH_SFPLOAD_INT))]
+                          (match_operand:SI    4 "immediate_operand" "M13U, M13U")] UNSPECV_BH_SFPLOAD))]
   "TARGET_RVTT_BH"
   "@
    SFPLOAD\t%0, %4, %2, %3
@@ -266,8 +247,8 @@
                           (match_operand:SI 5 "immediate_operand" "")] UNSPECV_BH_SFPXLOADI))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
-  rvtt_bh_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5]);
+  rvtt_bh_emit_sfpxloadi (operands[0], rvtt_gen_const0_vector(),
+  			  operands[1], operands[2], operands[3], operands[4], operands[5]);
   DONE;
 })
 
@@ -278,11 +259,11 @@
                           (match_operand:SI    3 "immediate_operand" "")
                           (match_operand:SI    4 "nonmemory_operand" "")
                           (match_operand:SI    5 "register_operand"  "")
-                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPXLOADI_LV))]
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPXLOADI))]
   "TARGET_RVTT_BH"
 {
-  rtx live = operands[2];
-  rvtt_bh_emit_sfpxloadi(operands[0], live, operands[1], operands[3], operands[4], operands[5], operands[6]);
+  rvtt_bh_emit_sfpxloadi (operands[0], operands[2],
+  		          operands[1], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
 
@@ -290,7 +271,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x,x,x,x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E,E,0,0")
                           (match_operand:SI    2 "immediate_operand" "M04U,M04U,M04U,M04U")
-                          (match_operand:SI    3 "immediate_operand" "M16S,M16U,M16S,M16U")] UNSPECV_BH_SFPLOADI_INT))]
+                          (match_operand:SI    3 "immediate_operand" "M16S,M16U,M16S,M16U")] UNSPECV_BH_SFPXLOADI))]
   "TARGET_RVTT_BH"
   "@
   SFPLOADI\t%0, %s3, %2
@@ -308,13 +289,15 @@
                      (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPSTORE)]
   "TARGET_RVTT_BH"
 {
-  if (GET_CODE(operands[4]) == CONST_INT) {
-    emit_insn (gen_rvtt_bh_sfpstore_int(operands[1], operands[2],operands[3],
-                                         rvtt_clamp_unsigned(operands[4], 0x1FFF)));
-  } else {
-    unsigned long int op = TT_OP_BH_SFPSTORE(0, INTVAL(operands[2]), INTVAL(operands[3]), 0);
-    emit_insn (gen_rvtt_sfpnonimm_store(operands[1], operands[0], GEN_INT(0), GEN_INT(20), operands[5], GEN_INT(op), operands[6]));
-  }
+  if (GET_CODE(operands[4]) == CONST_INT)
+    emit_insn (gen_rvtt_bh_sfpstore_int (operands[1], operands[2], operands[3],
+                                         rvtt_clamp_unsigned (operands[4], 0x1FFF)));
+  else
+    {
+      unsigned long int op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
+      emit_insn (gen_rvtt_sfpnonimm_store (operands[1], operands[0],
+      					   GEN_INT (0), GEN_INT (20), operands[5], GEN_INT (op), operands[6]));
+    }
   DONE;
 })
 
@@ -322,14 +305,14 @@
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
                      (match_operand:SI    1 "immediate_operand" "M04U")
                      (match_operand:SI    2 "immediate_operand" "M03U")
-                     (match_operand:SI    3 "nonmemory_operand" "M13U")] UNSPECV_BH_SFPSTORE_INT)]
+                     (match_operand:SI    3 "nonmemory_operand" "M13U")] UNSPECV_BH_SFPSTORE)]
   "TARGET_RVTT_BH"
   "SFPSTORE\t%3, %0, %1, %2")
 
 
 (define_int_iterator blackhole_muliaddi [UNSPECV_BH_SFPMULI UNSPECV_BH_SFPADDI])
 (define_int_attr blackhole_muliaddi_name [(UNSPECV_BH_SFPMULI "muli") (UNSPECV_BH_SFPADDI "addi")])
-(define_int_attr blackhole_muliaddi_call [(UNSPECV_BH_SFPMULI "MULI") (UNSPECV_BH_SFPADDI "ADDI")])
+(define_int_attr blackhole_muliaddi_insn [(UNSPECV_BH_SFPMULI "MULI") (UNSPECV_BH_SFPADDI "ADDI")])
 (define_expand "rvtt_bh_sfp<blackhole_muliaddi_name>"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"  "")
@@ -340,26 +323,26 @@
                           (match_operand:SI    6 "immediate_operand" "")] blackhole_muliaddi))]
   "TARGET_RVTT_BH"
 {
-  if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_rvtt_bh_sfp<blackhole_muliaddi_name>_int(operands[0], operands[2],
-               rvtt_clamp_unsigned(operands[3], 0xFFFF), operands[6]));
-  } else {
-    unsigned long int op = TT_OP_BH_SFP<blackhole_muliaddi_call>(0, 0, INTVAL(operands[6]));
-    emit_insn (gen_rvtt_sfpnonimm_dst(operands[0], operands[1], GEN_INT(INSN_SCHED_DYN), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
+  rtx insn;
+  if (GET_CODE (operands[3]) == CONST_INT)
+    insn = gen_rvtt_bh_sfp<blackhole_muliaddi_name>_int (operands[0], operands[2],
+               rvtt_clamp_unsigned (operands[3], 0xFFFF), operands[6]);
+  else {
+    unsigned long int op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
+    insn = gen_rvtt_sfpnonimm_dst (operands[0], operands[1],
+                                   GEN_INT (INSN_SCHED_DYN), operands[2], GEN_INT (4), operands[4], GEN_INT (op), operands[5]);
   }
+  emit_insn (insn);
   DONE;
 })
 
-(define_int_iterator blackhole_muliaddi_int [UNSPECV_BH_SFPMULI_INT UNSPECV_BH_SFPADDI_INT])
-(define_int_attr blackhole_muliaddi_int_name [(UNSPECV_BH_SFPMULI_INT "muli") (UNSPECV_BH_SFPADDI_INT "addi")])
-(define_int_attr blackhole_muliaddi_int_call [(UNSPECV_BH_SFPMULI_INT "MULI") (UNSPECV_BH_SFPADDI_INT "ADDI")])
-(define_insn "rvtt_bh_sfp<blackhole_muliaddi_int_name>_int"
+(define_insn "rvtt_bh_sfp<blackhole_muliaddi_name>_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:SI    2 "immediate_operand" "M16U")
-                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_muliaddi_int))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_muliaddi))]
   "TARGET_RVTT_BH"
-  "SFP<blackhole_muliaddi_int_call>\t%0, %2, %3"
+  "SFP<blackhole_muliaddi_insn>\t%0, %2, %3"
 )
 
 (define_expand "rvtt_bh_sfpdivp2"
@@ -372,8 +355,8 @@
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPDIVP2))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
-  rvtt_bh_emit_sfpdivp2(operands[0], live, operands[1], operands[2], operands[5], operands[6], operands[3], operands[4]);
+  rvtt_bh_emit_sfpdivp2 (operands[0], rvtt_gen_const0_vector (),
+  		         operands[1], operands[2], operands[5], operands[6], operands[3], operands[4]);
   DONE;
 })
 
@@ -385,11 +368,11 @@
                           (match_operand:SI    4 "register_operand"  "")
                           (match_operand:SI    5 "immediate_operand" "")
                           (match_operand:V64SF 6 "register_operand"  "")
-                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_BH_SFPDIVP2_LV))]
+                          (match_operand:SI    7 "immediate_operand" "")] UNSPECV_BH_SFPDIVP2))]
   "TARGET_RVTT_BH"
 {
-  rtx live = operands[2];
-  rvtt_bh_emit_sfpdivp2(operands[0], live, operands[1], operands[3], operands[6], operands[7], operands[4], operands[5]);
+  rvtt_bh_emit_sfpdivp2 (operands[0], operands[2],
+  		         operands[1], operands[3], operands[6], operands[7], operands[4], operands[5]);
   DONE;
 })
 
@@ -398,7 +381,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:SI    2 "immediate_operand" "M12S, M12S")
                           (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPDIVP2_INT))]
+                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPDIVP2))]
   "TARGET_RVTT_BH"
   "SFPDIVP2\t%0, %3, %2, %4"
 )
@@ -500,6 +483,8 @@
 
 (define_int_iterator blackhole_muladd [UNSPECV_BH_SFPMUL UNSPECV_BH_SFPADD])
 (define_int_attr blackhole_muladd_name [(UNSPECV_BH_SFPMUL "mul") (UNSPECV_BH_SFPADD "add")])
+(define_int_attr blackhole_muladd_insn [(UNSPECV_BH_SFPMUL "MUL") (UNSPECV_BH_SFPADD "ADD")])
+(define_int_attr blackhole_muladd_ops [(UNSPECV_BH_SFPMUL "%2, %3, L9") (UNSPECV_BH_SFPADD "L10, %2, %3")])
 (define_expand "rvtt_bh_sfp<blackhole_muladd_name>"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
@@ -507,37 +492,19 @@
                           (match_operand:SI    3 "immediate_operand" "")] blackhole_muladd))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
-  emit_insn (gen_rvtt_bh_sfp<blackhole_muladd_name>_int(operands[0], live, operands[1], operands[2], operands[3]));
+  emit_insn (gen_rvtt_bh_sfp<blackhole_muladd_name>_lv (operands[0], rvtt_gen_const0_vector (),
+  	                                                operands[1], operands[2], operands[3]));
   DONE;
 })
 
-(define_int_iterator blackhole_muladd_lv [UNSPECV_BH_SFPMUL_LV UNSPECV_BH_SFPADD_LV])
-(define_int_attr blackhole_muladd_name_lv [(UNSPECV_BH_SFPMUL_LV "mul") (UNSPECV_BH_SFPADD_LV "add")])
-(define_expand "rvtt_bh_sfp<blackhole_muladd_name_lv>_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:V64SF 3 "register_operand"  "")
-                          (match_operand:SI    4 "immediate_operand" "")] blackhole_muladd_lv))]
-  "TARGET_RVTT_BH"
-{
-  rtx live = operands[1];
-  emit_insn (gen_rvtt_bh_sfp<blackhole_muladd_name_lv>_int(operands[0], live, operands[2], operands[3], operands[4]));
-  DONE;
-})
-
-(define_int_iterator blackhole_muladd_int [UNSPECV_BH_SFPMUL_INT UNSPECV_BH_SFPADD_INT])
-(define_int_attr blackhole_muladd_name_int [(UNSPECV_BH_SFPMUL_INT "mul") (UNSPECV_BH_SFPADD_INT "add")])
-(define_int_attr blackhole_muladd_call_int [(UNSPECV_BH_SFPMUL_INT "MUL\t%0, %2, %3, L9") (UNSPECV_BH_SFPADD_INT "ADD\t%0, L10, %2, %3")])
-(define_insn "rvtt_bh_sfp<blackhole_muladd_name_int>_int"
+(define_insn "rvtt_bh_sfp<blackhole_muladd_name>_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:V64SF 2 "register_operand"  "x, x")
                           (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] blackhole_muladd_int))]
+                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] blackhole_muladd))]
   "TARGET_RVTT_BH"
-  "SFP<blackhole_muladd_call_int>, %4"
+  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops>, %4"
 )
 
 (define_insn "rvtt_bh_sfpiadd_v_int"
@@ -660,31 +627,17 @@
   "SFPXOR\t%0, %2"
 )
 
-(define_expand "rvtt_bh_sfpnot"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")] UNSPECV_BH_SFPNOT))]
+(define_insn "rvtt_bh_sfpnot"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")] UNSPECV_BH_SFPNOT))]
   "TARGET_RVTT_BH"
-{
-  rtx live = rvtt_gen_const0_vector();
-  emit_insn (gen_rvtt_bh_sfpnot_int(operands[0], live, operands[1]));
-  DONE;
-})
+  "SFPNOT\t%0,%1"
+)
 
-(define_expand "rvtt_bh_sfpnot_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")] UNSPECV_BH_SFPNOT_LV))]
-  "TARGET_RVTT_BH"
-{
-  rtx live = operands[1];
-  emit_insn (gen_rvtt_bh_sfpnot_int(operands[0], live, operands[2]));
-  DONE;
-})
-
-(define_insn "rvtt_bh_sfpnot_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")] UNSPECV_BH_SFPNOT_INT))]
+(define_insn "rvtt_bh_sfpnot_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_BH_SFPNOT))]
   "TARGET_RVTT_BH"
   "SFPNOT\t%0, %2"
 )
@@ -1089,20 +1042,10 @@
   "TARGET_RVTT_BH"
   "TTREPLAY\t%0, %1, %2, %3")
 
-(define_expand "rvtt_bh_sfpswap"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "")
-                     (match_operand:V64SF 1 "register_operand"   "")
-                     (match_operand:SI    2 "immediate_operand"  "")] UNSPECV_BH_SFPSWAP)]
-  "TARGET_RVTT_BH"
-{
-  emit_insn (gen_rvtt_bh_sfpswap_int(operands[0], operands[1], operands[2]));
-  DONE;
-})
-
-(define_insn "rvtt_bh_sfpswap_int"
+(define_insn "rvtt_bh_sfpswap"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")
                      (match_operand:V64SF 1 "register_operand"   "+x")
-                     (match_operand:SI    2 "immediate_operand"  "M04U")] UNSPECV_BH_SFPSWAP_INT)]
+                     (match_operand:SI    2 "immediate_operand"  "M04U")] UNSPECV_BH_SFPSWAP)]
   "TARGET_RVTT_BH"
   "SFPSWAP\t%0, %1, %2")
 
@@ -1174,17 +1117,17 @@
 )
 
 (define_insn "rvtt_bh_sfpgt"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x, x")
-                          (match_operand:SI    2 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPGT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M04U")] UNSPECV_BH_SFPGT))]
   "TARGET_RVTT_BH"
   "SFPGT\t%0, %1, 0, %2"
 )
 
 (define_insn "rvtt_bh_sfple"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x, x")
-                          (match_operand:SI    2 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPLE))]
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M04U")] UNSPECV_BH_SFPLE))]
   "TARGET_RVTT_BH"
   "SFPLE\t%0, %1, 0, %2"
 )
