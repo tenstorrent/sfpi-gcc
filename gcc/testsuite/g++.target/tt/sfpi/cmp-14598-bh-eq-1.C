@@ -39,7 +39,7 @@ void fnuvi (int i) {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z5fnuvii:\n\tslli	a5,a0,16\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 1897529344	# 711a0000\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tsrli	a5,a5,16\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# Op\(0x71\) - d\(lr1\)\n\tli	a5, 1897398272	# 71180000\n\tsrli	a0,a0,16\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\)	# Op\(0x71\) lv\(lr1\)  d\(lr1\)\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 6\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z5fnuvii:\n\tlui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)\n\tli	a3, 1897529344	# 711a0000\n\tzext.h	a5,a0\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# Op\(0x71\) - d\(lr1\)\n\tli	a5, 1897398272	# 71180000\n\tsrli	a0,a0,16\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\)	# Op\(0x71\) lv\(lr1\)  d\(lr1\)\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 6\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
 
 void fnuvc () {
     vUInt a = l_reg[LRegs::LReg0];
