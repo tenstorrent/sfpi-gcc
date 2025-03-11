@@ -171,7 +171,6 @@ RVTT_GS_PAD_RTL_ONLY(sfpshft2_e_int)
 RVTT_GS_PAD_RTL_ONLY(sfpstochrnd_i_int)
 RVTT_GS_PAD_RTL_ONLY(sfpstochrnd_v_int)
 RVTT_GS_PAD_RTL_ONLY(sfpswap_int)
-RVTT_GS_PAD_RTL_ONLY(sfpmul24_int)
 
 // Grayskull builtin intrinsics
 RVTT_GS_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
@@ -294,7 +293,6 @@ RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpswap_int,             0x08, 0x01)
-RVTT_WH_PAD_RTL_ONLY(sfpmul24_int)
 
 // Wormhole builtin intrinsics
 RVTT_WH_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)
@@ -417,7 +415,6 @@ RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpswap_int,             0x08, 0x01)
-RVTT_BH_RTL_ONLY(sfpmul24_int,            0x08, 0x21)
 
 // Blackhole builtin intrinsics
 RVTT_BH_BUILTIN (sfpassign_lv,    RISCV_V64SF_FTYPE_V64SF_V64SF,                                    0x02, -1, -1, 0x00, -1,      0, 0)

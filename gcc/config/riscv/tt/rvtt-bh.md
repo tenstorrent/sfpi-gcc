@@ -134,8 +134,6 @@
   UNSPECV_BH_SFPSHFT2_GE
   UNSPECV_BH_SFPNOP
   UNSPECV_BH_SFPMUL24
-  UNSPECV_BH_SFPMUL24_LV
-  UNSPECV_BH_SFPMUL24_INT
   UNSPECV_BH_SFPARECIP
   UNSPECV_BH_SFPGT
   UNSPECV_BH_SFPLE
@@ -1155,40 +1153,23 @@
   "TARGET_RVTT_BH"
   "SFPNOP")
 
-(define_expand "rvtt_bh_sfpmul24"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_BH_SFPMUL24))]
+(define_insn "rvtt_bh_sfpmul24"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_BH_SFPMUL24))]
   "TARGET_RVTT_BH"
-{
-  rtx live = rvtt_gen_const0_vector();
-  emit_insn (gen_rvtt_bh_sfpmul24_int(operands[0], live, operands[1], operands[2], operands[3]));
-  DONE;
-})
+  "SFPMUL24\t%0, %1, %2, %3"
+)
 
-(define_expand "rvtt_bh_sfpmul24_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:V64SF 3 "register_operand"  "")
-                          (match_operand:SI    4 "immediate_operand" "")] UNSPECV_BH_SFPMUL24_LV))]
+(define_insn "rvtt_bh_sfpmul24_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M04U")] UNSPECV_BH_SFPMUL24))]
   "TARGET_RVTT_BH"
-{
-  rtx live = operands[1];
-  emit_insn (gen_rvtt_bh_sfpmul24_int(operands[0], live, operands[2], operands[3], operands[4]));
-  DONE;
-})
-
-(define_insn "rvtt_bh_sfpmul24_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPMUL24_INT))]
-  "TARGET_RVTT_BH"
-  ; Note: L0 is unused, but needed by the ASM
-  "SFPMUL24\t%0, %2, %3, L0, %4"
+  "SFPMUL24\t%0, %2, %3, %4"
 )
 
 (define_insn "rvtt_bh_sfparecip"
