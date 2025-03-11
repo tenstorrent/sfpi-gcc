@@ -107,7 +107,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 3;
-static const int NUMBER_OF_INTRINSICS = 133;
+static const int NUMBER_OF_INTRINSICS = 132;
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },

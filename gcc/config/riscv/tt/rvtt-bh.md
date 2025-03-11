@@ -137,8 +137,6 @@
   UNSPECV_BH_SFPMUL24_LV
   UNSPECV_BH_SFPMUL24_INT
   UNSPECV_BH_SFPARECIP
-  UNSPECV_BH_SFPARECIP_LV
-  UNSPECV_BH_SFPARECIP_INT
   UNSPECV_BH_SFPGT
   UNSPECV_BH_SFPLE
   UNSPECV_BH_SFPMOV_CONFIG
@@ -1193,36 +1191,21 @@
   "SFPMUL24\t%0, %2, %3, L0, %4"
 )
 
-(define_expand "rvtt_bh_sfparecip"
+(define_insn "rvtt_bh_sfparecip"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:SI    2 "immediate_operand" "")] UNSPECV_BH_SFPARECIP))]
   "TARGET_RVTT_BH"
-{
-  rtx live = rvtt_gen_const0_vector();
-  emit_insn (gen_rvtt_bh_sfparecip_int(operands[0], live, operands[1], operands[2]));
-  DONE;
-})
+  "SFPARECIP\t%0, %1, %2"
+)
 
-(define_expand "rvtt_bh_sfparecip_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_BH_SFPARECIP_LV))]
+(define_insn "rvtt_bh_sfparecip_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_BH_SFPARECIP))]
   "TARGET_RVTT_BH"
-{
-  rtx live = operands[1];
-  emit_insn (gen_rvtt_bh_sfparecip_int(operands[0], live, operands[2], operands[3]));
-  DONE;
-})
-
-(define_insn "rvtt_bh_sfparecip_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "immediate_operand" "M04U, M04U")] UNSPECV_BH_SFPARECIP_INT))]
-  "TARGET_RVTT_BH"
-  "SFPARECIP\t%0, %2, 0, %3"
+  "SFPARECIP\t%0, %2, %3"
 )
 
 (define_insn "rvtt_bh_sfpgt"
