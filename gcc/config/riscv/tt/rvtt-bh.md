@@ -252,7 +252,7 @@
       insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfp<blackhole_muliaddi_name>_int,
                                      INSN_SCHED_DYN, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
-  }
+    }
   emit_insn (insn);
   DONE;
 })

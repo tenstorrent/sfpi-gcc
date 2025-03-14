@@ -175,7 +175,6 @@ struct GTY(()) rvtt_insn_data {
   inline bool schedule_from_arg_p(rtx_insn *insn) const;
   inline bool schedule_dynamic_p(rtx_insn *insn) const;
   inline int schedule_static_nops(rtx_insn *insn) const;
-  inline bool schedule_has_dynamic_dependency_p(rtx_insn *insn) const;
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
   inline int nonimm_op_arg_pos() const { return nonimm_pos; }
@@ -249,12 +248,6 @@ inline bool rvtt_insn_data::schedule_dynamic_p(rtx_insn *insn) const
     (schedule & INSN_SCHED_DYN);
 }
 
-inline bool rvtt_insn_data::schedule_has_dynamic_dependency_p(rtx_insn *insn) const
-{
-  return schedule_in_arg_p() ?
-    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_DYN_DEP) :
-    (schedule & INSN_SCHED_DYN_DEP);
-}
 inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
 {
   return schedule_in_arg_p() ?
