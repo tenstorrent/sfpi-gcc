@@ -283,7 +283,7 @@
       unsigned op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
       insn = rvtt_sfpsynth_insn_dst (operands[1], INSN_SCHED_DYN, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
-  }
+    }
   emit_insn (insn);
   DONE;
 })
