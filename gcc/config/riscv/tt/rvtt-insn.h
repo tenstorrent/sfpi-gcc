@@ -93,6 +93,10 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_BH_PAD_NO_TGT_BUILTIN(a)
 #endif
 
+#ifndef RVTT_BH_PAD_RTL_ONLY
+#define RVTT_BH_PAD_RTL_ONLY(a)
+#endif
+
 #ifndef RVTT_BH_RTL_ONLY
 #define RVTT_BH_RTL_ONLY(a, b, c)
 #endif
@@ -410,7 +414,7 @@ RVTT_BH_RTL_ONLY(sfppreservelreg4_int,    0x48, 0x00)
 RVTT_BH_RTL_ONLY(sfppreservelreg5_int,    0x48, 0x00)
 RVTT_BH_RTL_ONLY(sfppreservelreg6_int,    0x48, 0x00)
 RVTT_BH_RTL_ONLY(sfppreservelreg7_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfpcast_int,             0x08, 0x00)
+RVTT_BH_PAD_RTL_ONLY(sfpcast_int)
 RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpstochrnd_v_int,       0x08, 0x00)

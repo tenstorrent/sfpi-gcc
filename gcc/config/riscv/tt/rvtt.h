@@ -75,6 +75,12 @@ constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
+constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNE = 0;
+constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNS = 1;
+// Added in BlackHole:
+constexpr unsigned int SFPCAST_MOD1_SM32_TO_INT32 = 2;
+constexpr unsigned int SFPCAST_MOD1_INT32_TO_SM32 = 3;
+
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
 constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
 constexpr unsigned int SFPIADD_MOD1_ARG_2SCOMP_LREG_DST = 2;
