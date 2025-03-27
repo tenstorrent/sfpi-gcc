@@ -246,6 +246,46 @@ init_rtx_insnd(int code, int arch)
 void
 rvtt_init_builtins()
 {
+#if CHECKING_P
+  {
+    // Check the IDs match up accross each arch
+    static const char *const gs_ids[] = {
+#define RVTT_GS_RTL_ONLY(id, fl, sched) #id,
+#define RVTT_GS_PAD_RTL_ONLY(id) #id,
+#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_GS_PAD_BUILTIN(id) #id,
+#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) #id,
+#include "rvtt-insn.h"
+    };
+
+    static const char *const wh_ids[] = {
+#define RVTT_WH_RTL_ONLY(id, fl, sched) #id,
+#define RVTT_WH_PAD_RTL_ONLY(id) #id,
+#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_WH_PAD_BUILTIN(id) #id,
+#define RVTT_WH_PAD_NO_TGT_BUILTIN(id) #id,
+#include "rvtt-insn.h"
+    };
+
+    static const char *const bh_ids[] = {
+#define RVTT_BH_RTL_ONLY(id, fl, sched) #id,
+#define RVTT_BH_PAD_RTL_ONLY(id) #id,
+#define RVTT_BH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_BH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_BH_PAD_BUILTIN(id) #id,
+#define RVTT_BH_PAD_NO_TGT_BUILTIN(id) #id,
+#include "rvtt-insn.h"
+    };
+
+    gcc_assert (sizeof (gs_ids) == sizeof (wh_ids)
+		&& sizeof (gs_ids) == sizeof (bh_ids));
+    for (unsigned ix = 0; ix != sizeof (gs_ids) / sizeof (gs_ids[0]); ix++)
+      gcc_assert (!strcmp (gs_ids[ix], wh_ids[ix])
+		  && !strcmp (gs_ids[ix], bh_ids[ix]));
+  }
+#endif
   int arch;
   if (TARGET_RVTT_GS) {
     arch = 0;
