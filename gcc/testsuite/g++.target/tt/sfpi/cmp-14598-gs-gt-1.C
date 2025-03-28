@@ -75,3 +75,4 @@ void fns () {
     l_reg[LRegs::LReg0] = r;
 }
 // { dg-final { scan-assembler {\n_Z3fnsv:\n\tSFPIADD	L1, L0, 0, 10\n\tTTNOP\n\tTTNOP\n\tTTNOP\n\tSFPSETCC	L1, 0, 2\n\tTTNOP\n\tSFPCOMPC\n\tTTNOP\n\tSFPPUSHC\n\tSFPENCC	3, 2\n\tTTNOP\n\tSFPMOV	L0, L2, 0\n\tTTNOP\n\tTTNOP\n\tSFPPOPC\n\tTTNOP\n\tSFPMOV	L0, L3, 0\n\tTTNOP\n\tTTNOP\n\tSFPENCC	3, 10\n\tTTNOP\n\tret\n} } }
+// { dg-prune-output "warning: GraySkull support is deprecated" }

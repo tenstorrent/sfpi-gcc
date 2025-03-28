@@ -82,3 +82,4 @@ void sub6() {
   l_reg[LRegs::LReg3] = r;
 }
 // { dg-final { scan-assembler {\n_Z4sub6v:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tTTNOP\n\tTTNOP\n\tSFPSETCC	L2, 0, 0\n\tTTNOP\n\tSFPMOV	L2, L0, 1\n\tTTNOP\n\tTTNOP\n\tSFPMAD	L3, L11, L1, L2, 0\n\tTTNOP\n\tTTNOP\n\tSFPCOMPC\n\tTTNOP\n\tSFPMOV	L3, L0, 0\n\tTTNOP\n\tTTNOP\n\tSFPENCC	3, 10\n\tTTNOP\n\tret\n} } }
+// { dg-prune-output "warning: GraySkull support is deprecated" }

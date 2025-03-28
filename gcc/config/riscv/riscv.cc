@@ -5189,6 +5189,8 @@ riscv_option_override (void)
 
   if (int(TARGET_RVTT_GS) + int(TARGET_RVTT_WH) + int(TARGET_RVTT_BH) > 1)
     error ("only one ttgs, ttwh or ttbh extension can be specified");
+  if (TARGET_RVTT_GS)
+    warning (0, "GraySkull support is deprecated and will be removed in a future release");
 }
 
 /* Implement TARGET_CONDITIONAL_REGISTER_USAGE.  */
