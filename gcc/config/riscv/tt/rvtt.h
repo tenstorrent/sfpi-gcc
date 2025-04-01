@@ -122,6 +122,13 @@ constexpr unsigned int SFPXCONDB_START_ARG_POS = 1;
 
 constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 
+constexpr unsigned int SFPSHFT_MOD1_SHFT_IMM = 1;
+constexpr unsigned int SFPSHFT_MOD1_SHFT_REG = 0;
+// Added in BlackHole
+constexpr unsigned int SFPSHFT_MOD1_LOGICAL = 0;
+constexpr unsigned int SFPSHFT_MOD1_ARITHMETIC = 2;
+constexpr unsigned int SFPSHFT_MOD1_SRC_LREG_C = 4;
+
 constexpr unsigned int CREG_IDX_0 = 4;
 constexpr unsigned int CREG_IDX_0P692871094 = 5;
 constexpr unsigned int CREG_IDX_NEG_1P00683594 = 6;

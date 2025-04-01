@@ -47,9 +47,7 @@
   UNSPECV_BH_SFPXIADD_I
   UNSPECV_BH_SFPXIADD_I_LV
   UNSPECV_BH_SFPIADD_I_INT
-  UNSPECV_BH_SFPSHFT_V
-  UNSPECV_BH_SFPSHFT_I
-  UNSPECV_BH_SFPSHFT_I_INT
+  UNSPECV_BH_SFPSHFT
   UNSPECV_BH_SFPABS
   UNSPECV_BH_SFPABS_LV
   UNSPECV_BH_SFPABS_INT
@@ -572,9 +570,10 @@
 (define_insn "rvtt_bh_sfpshft_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_BH_SFPSHFT_V))]
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI 3 "immediate_operand"  "M04U")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"
-  "SFPSHFT\t%0, %2, 0, 0"
+  "SFPSHFT\t%0, %2, 0, %3"
 )
 
 (define_expand "rvtt_bh_sfpshft_i"
@@ -583,24 +582,30 @@
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
                           (match_operand:SI    4 "register_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")] UNSPECV_BH_SFPSHFT_I))]
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"
 {
-  if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_rvtt_bh_sfpshft_i_int(operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF)));
-  } else {
-    unsigned long int op = TT_OP_BH_SFPSHFT(0, 0, 0, 1);
-    emit_insn (gen_rvtt_sfpnonimm_dst(operands[0], operands[1], GEN_INT(0), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
+  rtx insn;
+  if (GET_CODE (operands[3]) == CONST_INT)
+    insn = gen_rvtt_bh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF), operands[6]);
+  else {
+    unsigned long int op = TT_OP_BH_SFPSHFT(0, 0, 0, INTVAL (operands[6]) | 5);
+    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], const0_rtx, rvtt_gen_const0_vector(),
+				       operands[2], GEN_INT (4), GEN_INT (8),
+				       operands[4], GEN_INT (op), operands[5]);
   }
+  emit_insn (insn);
   DONE;
 })
 
 (define_insn "rvtt_bh_sfpshft_i_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "immediate_operand" "M12S")] UNSPECV_BH_SFPSHFT_I_INT))]
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M12S")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"
-  "SFPSHFT\t%0, L0, %2, 1"
+  "SFPSHFT\t%0, %1, %2, %3 | 5"
 )
 
 (define_insn "rvtt_bh_sfpand"
