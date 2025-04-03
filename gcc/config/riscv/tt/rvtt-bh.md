@@ -320,7 +320,7 @@
   else {
     unsigned long int op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
     insn = gen_rvtt_sfpnonimm_dst (operands[0], operands[1],
-                                   GEN_INT (INSN_SCHED_DYN), operands[2], GEN_INT (4), operands[4], GEN_INT (op), operands[5]);
+                                   const0_rtx, operands[2], GEN_INT (4), operands[4], GEN_INT (op), operands[5]);
   }
   emit_insn (insn);
   DONE;
