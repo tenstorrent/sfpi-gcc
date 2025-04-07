@@ -49,8 +49,6 @@
   UNSPECV_BH_SFPIADD_I_INT
   UNSPECV_BH_SFPSHFT
   UNSPECV_BH_SFPABS
-  UNSPECV_BH_SFPABS_LV
-  UNSPECV_BH_SFPABS_INT
   UNSPECV_BH_SFPAND
   UNSPECV_BH_SFPOR
   UNSPECV_BH_SFPXOR
@@ -74,15 +72,9 @@
   UNSPECV_BH_SFPMAD_LV
   UNSPECV_BH_SFPMAD_INT
   UNSPECV_BH_SFPMOV
-  UNSPECV_BH_SFPMOV_LV
-  UNSPECV_BH_SFPMOV_INT
   UNSPECV_BH_SFPDIVP2
   UNSPECV_BH_SFPEXEXP
-  UNSPECV_BH_SFPEXEXP_LV
-  UNSPECV_BH_SFPEXEXP_INT
   UNSPECV_BH_SFPEXMAN
-  UNSPECV_BH_SFPEXMAN_LV
-  UNSPECV_BH_SFPEXMAN_INT
   UNSPECV_BH_SFPSETCC_I
   UNSPECV_BH_SFPSETCC_V
   UNSPECV_BH_SFPXFCMPS
@@ -308,7 +300,7 @@
   "SFPSTORE\t%3, %0, %1, %2")
 
 
-(define_int_iterator blackhole_muliaddi [UNSPECV_BH_SFPMULI UNSPECV_BH_SFPADDI])
+(define_int_iterator blackhole_muliaddi_op [UNSPECV_BH_SFPMULI UNSPECV_BH_SFPADDI])
 (define_int_attr blackhole_muliaddi_name [(UNSPECV_BH_SFPMULI "muli") (UNSPECV_BH_SFPADDI "addi")])
 (define_int_attr blackhole_muliaddi_insn [(UNSPECV_BH_SFPMULI "MULI") (UNSPECV_BH_SFPADDI "ADDI")])
 (define_expand "rvtt_bh_sfp<blackhole_muliaddi_name>"
@@ -318,7 +310,7 @@
                           (match_operand:SI    3 "nonmemory_operand" "")
                           (match_operand:SI    4 "register_operand"  "")
                           (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] blackhole_muliaddi))]
+                          (match_operand:SI    6 "immediate_operand" "")] blackhole_muliaddi_op))]
   "TARGET_RVTT_BH"
 {
   rtx insn;
@@ -338,7 +330,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:SI    2 "immediate_operand" "M16U")
-                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_muliaddi))]
+                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_muliaddi_op))]
   "TARGET_RVTT_BH"
   "SFP<blackhole_muliaddi_insn>\t%0, %2, %3"
 )
@@ -384,84 +376,40 @@
   "SFPDIVP2\t%0, %3, %2, %4"
 )
 
-(define_int_iterator blackhole_simple_op
+(define_int_iterator blackhole_src_mod_op
   [UNSPECV_BH_SFPEXEXP
    UNSPECV_BH_SFPEXMAN
    UNSPECV_BH_SFPABS
    UNSPECV_BH_SFPMOV
    UNSPECV_BH_SFPLZ])
-(define_int_attr blackhole_simple_op_name
+(define_int_attr blackhole_src_mod_name
   [(UNSPECV_BH_SFPEXEXP "exexp")
    (UNSPECV_BH_SFPEXMAN "exman")
    (UNSPECV_BH_SFPABS "abs")
    (UNSPECV_BH_SFPMOV "mov")
    (UNSPECV_BH_SFPLZ "lz")])
-(define_int_iterator blackhole_simple_op_lv
-  [UNSPECV_BH_SFPEXEXP_LV
-   UNSPECV_BH_SFPEXMAN_LV
-   UNSPECV_BH_SFPABS_LV
-   UNSPECV_BH_SFPMOV_LV
-   UNSPECV_BH_SFPLZ_LV])
-(define_int_attr blackhole_simple_op_name_lv
-  [(UNSPECV_BH_SFPEXEXP_LV "exexp")
-   (UNSPECV_BH_SFPEXMAN_LV "exman")
-   (UNSPECV_BH_SFPABS_LV "abs")
-   (UNSPECV_BH_SFPMOV_LV "mov")
-   (UNSPECV_BH_SFPLZ_LV "lz")])
-(define_int_iterator blackhole_simple_op_int
-  [UNSPECV_BH_SFPEXEXP_INT
-   UNSPECV_BH_SFPEXMAN_INT
-   UNSPECV_BH_SFPABS_INT
-   UNSPECV_BH_SFPMOV_INT
-   UNSPECV_BH_SFPLZ_INT])
-(define_int_attr blackhole_simple_op_name_int
-  [(UNSPECV_BH_SFPEXEXP_INT "exexp")
-   (UNSPECV_BH_SFPEXMAN_INT "exman")
-   (UNSPECV_BH_SFPABS_INT "abs")
-   (UNSPECV_BH_SFPMOV_INT "mov")
-   (UNSPECV_BH_SFPLZ_INT "lz")])
-(define_int_attr blackhole_simple_op_call_int
-  [(UNSPECV_BH_SFPEXEXP_INT "EXEXP")
-   (UNSPECV_BH_SFPEXMAN_INT "EXMAN")
-   (UNSPECV_BH_SFPABS_INT "ABS")
-   (UNSPECV_BH_SFPMOV_INT "MOV")
-   (UNSPECV_BH_SFPLZ_INT "LZ")])
-(define_int_attr blackhole_simple_op_id_int
-  [(UNSPECV_BH_SFPEXEXP_INT "UNSPECV_BH_SFPEXEXP_INT")
-   (UNSPECV_BH_SFPEXMAN_INT "UNSPECV_BH_SFPEXMAN_INT")
-   (UNSPECV_BH_SFPABS_INT "UNSPECV_BH_SFPABS_INT")
-   (UNSPECV_BH_SFPMOV_INT "UNSPECV_BH_SFPMOV_INT")
-   (UNSPECV_BH_SFPLZ_INT "UNSPECV_BH_SFPLZ_INT")])
+(define_int_attr blackhole_src_mod_insn
+  [(UNSPECV_BH_SFPEXEXP "EXEXP")
+   (UNSPECV_BH_SFPEXMAN "EXMAN")
+   (UNSPECV_BH_SFPABS "ABS")
+   (UNSPECV_BH_SFPMOV "MOV")
+   (UNSPECV_BH_SFPLZ "LZ")])
 
-(define_expand "rvtt_bh_sfp<blackhole_simple_op_name>"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:SI    2 "immediate_operand" "")] blackhole_simple_op))]
+(define_insn "rvtt_bh_sfp<blackhole_src_mod_name>"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:SI    2 "immediate_operand" "M04U")] blackhole_src_mod_op))]
   "TARGET_RVTT_BH"
-{
-  rtx live = rvtt_gen_const0_vector();
-  emit_insn (gen_rvtt_bh_sfp<blackhole_simple_op_name>_int(operands[0], live, operands[1], operands[2]));
-  DONE;
-})
+  "SFP<blackhole_src_mod_insn>\t%0, %1, %2"
+)
 
-(define_expand "rvtt_bh_sfp<blackhole_simple_op_name_lv>_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] blackhole_simple_op_lv))]
+(define_insn "rvtt_bh_sfp<blackhole_src_mod_name>_lv"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_src_mod_op))]
   "TARGET_RVTT_BH"
-{
-  emit_insn (gen_rvtt_bh_sfp<blackhole_simple_op_name_lv>_int(operands[0], operands[1], operands[2], operands[3]));
-  DONE;
-})
-
-(define_insn "rvtt_bh_sfp<blackhole_simple_op_name_int>_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "immediate_operand" "M04U, M04U")] blackhole_simple_op_int))]
-  "TARGET_RVTT_BH"
-  "SFP<blackhole_simple_op_call_int>\t%0, %2, %3"
+  "SFP<blackhole_src_mod_insn>\t%0, %2, %3"
 )
 
 (define_insn "rvtt_bh_sfpmov_config"
@@ -479,30 +427,28 @@
   "SFPMOV\t%0,L%2,8"
 )
 
-(define_int_iterator blackhole_muladd [UNSPECV_BH_SFPMUL UNSPECV_BH_SFPADD])
+(define_int_iterator blackhole_muladd_op [UNSPECV_BH_SFPMUL UNSPECV_BH_SFPADD])
 (define_int_attr blackhole_muladd_name [(UNSPECV_BH_SFPMUL "mul") (UNSPECV_BH_SFPADD "add")])
 (define_int_attr blackhole_muladd_insn [(UNSPECV_BH_SFPMUL "MUL") (UNSPECV_BH_SFPADD "ADD")])
-(define_int_attr blackhole_muladd_ops [(UNSPECV_BH_SFPMUL "%2, %3, L9") (UNSPECV_BH_SFPADD "L10, %2, %3")])
-(define_expand "rvtt_bh_sfp<blackhole_muladd_name>"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] blackhole_muladd))]
+(define_int_attr blackhole_muladd_ops [(UNSPECV_BH_SFPMUL "%1, %2, L9") (UNSPECV_BH_SFPADD "L10, %1, %2")])
+(define_int_attr blackhole_muladd_ops_lv [(UNSPECV_BH_SFPMUL "%2, %3, L9") (UNSPECV_BH_SFPADD "L10, %2, %3")])
+(define_insn "rvtt_bh_sfp<blackhole_muladd_name>"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "x")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:SI    3 "immediate_operand" "M04U")] blackhole_muladd_op))]
   "TARGET_RVTT_BH"
-{
-  emit_insn (gen_rvtt_bh_sfp<blackhole_muladd_name>_lv (operands[0], rvtt_gen_const0_vector (),
-  	                                                operands[1], operands[2], operands[3]));
-  DONE;
-})
+  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops>, %3"
+)
 
 (define_insn "rvtt_bh_sfp<blackhole_muladd_name>_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "immediate_operand" "M04U, M04U")] blackhole_muladd))]
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "0")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:SI    4 "immediate_operand" "M04U")] blackhole_muladd_op))]
   "TARGET_RVTT_BH"
-  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops>, %4"
+  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops_lv>, %4"
 )
 
 (define_insn "rvtt_bh_sfpiadd_v_int"
