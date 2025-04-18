@@ -167,14 +167,15 @@ walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
       && rvtt_get_next_insn (&insn_data, &probe_insn, probe_insn, check_probe))
     {
       bool mad_not_setcc = is_muladd && GET_CODE (probe_insn) != CODE_FOR_rvtt_bh_sfpsetcc_v;
+      bool mad_setcc = is_muladd && GET_CODE (probe_insn) == CODE_FOR_rvtt_bh_sfpsetcc_v;
       // We've met an SPU insn. If it is dependent, we'll need to
       // insert a nop.  If it is non-dependent, it's filling the
       // original insn's shadow, so any following dependent insn will
       // be fine. Either way, we're done searching this BB.
       bool is_dependent = reg_referenced_p (regno, probe_insn);
-      DUMP ("Found %sdependent insn at %s (mad_not_setcc=%d)\n",
-	    is_dependent ? "" : "non-", probe_insn->name, mad_not_setcc);
-      return is_dependent && !mad_not_setcc;
+      DUMP ("Found %sdependent insn at %s (mad_not_setcc=%d, mad_setcc=%d)\n",
+	    is_dependent ? "" : "non-", probe_insn->name, mad_not_setcc, mad_setcc);
+      return is_dependent && !mad_setcc;
     }
 
   // Walk all the successors
