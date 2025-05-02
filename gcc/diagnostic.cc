@@ -667,6 +667,8 @@ diagnostic_action_after_output (diagnostic_context *context,
 	if (context->abort_on_error)
 	  real_abort ();
 
+	fnotice (stderr, "gcc %s%s\n", pkgversion_string, version_string);
+
 	if (context->report_bug)
 	  fnotice (stderr, "Please submit a full bug report, "
 		   "with preprocessed source.\n");
