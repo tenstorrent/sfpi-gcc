@@ -74,9 +74,7 @@ insert_nop_after (rtx_insn *insn)
 {
   rtx nop = NULL_RTX;
 
-  if (TARGET_RVTT_GS)
-    nop = gen_rvtt_gs_sfpnop();
-  else if (TARGET_RVTT_WH)
+  if (TARGET_RVTT_WH)
     nop = gen_rvtt_wh_sfpnop();
   else if (TARGET_RVTT_BH)
     nop = gen_rvtt_bh_sfpnop();
@@ -244,13 +242,9 @@ static void transform ()
 	      if (insnd->schedule_dynamic_p (insn))
 		{
 		  DUMP ("  dynamic scheduling %s\n", insnd->name);
-		  if (TARGET_RVTT_GS)
-		    dynamic_schedule_gs (insn);
-		  else {
-		    // Reserve space now we know we need it
-		    visited.reserve (n_basic_blocks_for_fn (cfun));
-		    dynamic_schedule_wh_bh (bb, insn, visited);
-		  }
+		  // Reserve space now we know we need it
+		  visited.reserve (n_basic_blocks_for_fn (cfun));
+		  dynamic_schedule_wh_bh (bb, insn, visited);
 		}
 	      else if (TARGET_RVTT_WH || TARGET_RVTT_BH)
 		{

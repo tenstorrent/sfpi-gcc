@@ -520,84 +520,6 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
   return combined;
 }
 
-// Combine addi of +/- 0.5f w/ add/mul
-//
-// This is tricky.  It would be great to do this step after generating mads
-// and addi/muli, however, by then an add of 0.5 may be turned into a mad and
-// undoing is more work than the complicated pattern search now.
-//
-// So, look for:
-//   an add or mul
-//   with only a single use which is an add of .5
-static bool
-try_combine_add_half(const rvtt_insn_data *candidate_insnd,
-		     gcall *candidate_stmt)
-{
-  const int half = 0x3f00;
-  const int neg_half = 0xbf00;
-  bool combined = false;
-
-  // A Greyskull-only feature.
-  gcc_assert (TARGET_RVTT_GS);
-
-  // XXXX todo: handle _lv versions.  gets complicated
-  if (candidate_insnd->id == rvtt_insn_data::sfpadd ||
-      candidate_insnd->id == rvtt_insn_data::sfpmul ||
-      candidate_insnd->id == rvtt_insn_data::sfpmad)
-    {
-      DUMP("Found %s, looking to see if its use is an add of +/-0.5f...\n", candidate_insnd->name);
-
-      tree candidate_lhs = gimple_call_lhs(candidate_stmt);
-      int live = candidate_insnd->live_p();
-      gimple *use_g;
-      gcall *use_stmt;
-      const rvtt_insn_data *use_insnd;
-
-      if (get_single_use(candidate_lhs, &use_g) &&
-	  rvtt_p(&use_insnd, &use_stmt, use_g) &&
-	  use_insnd->id == rvtt_insn_data::sfpadd)
-	{
-	  DUMP("  ...has a single use %s\n", use_insnd->name);
-
-	  int which_arg = (gimple_call_arg(use_stmt, live + 0) == candidate_lhs) ? 1 : 0;
-	  gimple_stmt_iterator assign_gsi;
-	  gcall *assign_stmt;
-	  const rvtt_insn_data *assign_insnd;
-	  if (match_prior_assignment(rvtt_insn_data::sfpxloadi,
-				     &assign_insnd, &assign_stmt, &assign_gsi,
-				     gimple_call_arg(use_stmt, which_arg + live)))
-	    {
-	      if (is_int_arg(assign_stmt, SFPLOADI_IMM_ARG_POS))
-		{
-		  int offset = get_int_arg(assign_stmt, SFPLOADI_IMM_ARG_POS);
-
-		  if (offset == half || offset == neg_half)
-		    {
-		      DUMP("  ...has a loadi of 0.5, combining\n");
-
-		      int mod1 = offset == neg_half
-			? SFPMAD_MOD1_GS_OFFSET_NEG : SFPMAD_MOD1_GS_OFFSET_POS;
-		      gimple_call_set_arg(candidate_stmt, candidate_insnd->mod_pos,
-					  build_int_cst(integer_type_node, mod1));
-
-		      unlink_stmt_vdef(candidate_stmt);
-		      release_defs(candidate_stmt);
-		      gimple_call_set_lhs(candidate_stmt, gimple_call_lhs(use_stmt));
-		      update_stmt(candidate_stmt);
-
-		      gimple_stmt_iterator gsi = gsi_for_stmt(use_stmt);
-		      gsi_remove(&gsi, true);
-
-		      combined = true;
-		    }
-		}
-	    }
-	}
-    }
-
-  return combined;
-}
-
 static bool
 remove_unused_loadis(basic_block bb)
 {
@@ -661,8 +583,6 @@ try_combine_mul_add (probe_t &probe)
 
   bool is_lv = probe.insnd->live_p ();
   int add_mod = get_int_arg (probe.call, probe.insnd->mod_pos);
-  if (TARGET_RVTT_GS && add_mod)
-    return false;
 
   probe_t mul;
   int mul_op_no = -1;
@@ -694,8 +614,6 @@ try_combine_mul_add (probe_t &probe)
     return false;
 
   int mul_mod = get_int_arg (mul.call, mul.insnd->mod_pos);
-  if (TARGET_RVTT_GS && mul_mod)
-    return false;
 
   int muladd_mod = add_mod ^ mul_mod;
 
@@ -978,25 +896,6 @@ transform (function *fun)
     {
       bool update = false;
 
-      if (TARGET_RVTT_GS)
-	{
-	  for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
-	       !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
-	    {
-	      gcall *candidate_stmt;
-	      const rvtt_insn_data *candidate_insnd;
-
-	      if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
-		// look for +/-0.5 following a mad/add/mul
-		update |= try_combine_add_half (candidate_insnd, candidate_stmt);
-	    }
-
-	update |= remove_unused_loadis (bb);
-	if (update)
-	  update_ssa (TODO_update_ssa);
-      }
-
-      update = false;
       for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
 	   !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
 	{

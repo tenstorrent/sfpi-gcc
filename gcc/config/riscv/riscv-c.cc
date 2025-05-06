@@ -64,8 +64,6 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_fsqrt");
     }
 
-  if (TARGET_RVTT_GS)
-    builtin_define("__riscv_tt_grayskull");
   if (TARGET_RVTT_WH)
     builtin_define("__riscv_tt_wormhole");
   if (TARGET_RVTT_BH)

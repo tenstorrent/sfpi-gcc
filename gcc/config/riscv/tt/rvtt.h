@@ -32,8 +32,6 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS 0
 
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
-constexpr unsigned int SFPMAD_MOD1_GS_OFFSET_POS = 1; // Add an offset
-constexpr unsigned int SFPMAD_MOD1_GS_OFFSET_NEG = 3; // Sub an offset
 // A * B + C
 constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; // negate A operand
 constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; // negate C operand
@@ -151,7 +149,6 @@ constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an 
 constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
 
-constexpr unsigned int SFPU_LREG_COUNT_GS = 4;
 constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
 constexpr unsigned int SFPU_LREG_COUNT_BH = 8;
 extern unsigned int rvtt_sfpu_lreg_count_global;
@@ -193,16 +190,16 @@ struct GTY(()) rvtt_insn_data {
 };
 
 enum rvtt_insn_data::insn_id : unsigned {
-  // Note: this only pulls the "id" from the macros so GS/WH/BH/etc are equivalent
+  // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
 #define RVTT_RTL_ONLY(id, nip, gp) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_RTL_ONLY(id, fl, sched) id,
-#define RVTT_GS_PAD_RTL_ONLY(id) id,
-#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_GS_PAD_BUILTIN(id) id,
-#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) id,
+#define RVTT_WH_RTL_ONLY(id, fl, sched) id,
+#define RVTT_WH_PAD_RTL_ONLY(id) id,
+#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_WH_PAD_BUILTIN(id) id,
+#define RVTT_WH_PAD_NO_TGT_BUILTIN(id) id,
 #include "rvtt-insn.h"
 
   nonsfpu,

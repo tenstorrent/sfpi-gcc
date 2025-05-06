@@ -20,7 +20,6 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RISCV_SFPU_PROTOS_H
 #define GCC_RISCV_SFPU_PROTOS_H
 
-#include "sfpu-ops-gs.h"
 #include "sfpu-ops-wh.h"
 #include "sfpu-ops-bh.h"
 

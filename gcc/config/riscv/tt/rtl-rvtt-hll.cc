@@ -92,18 +92,6 @@ struct bb_entry {
 
 typedef vector<bb_entry> bb_data;
 
-class gshllwar_dom_walker : public dom_walker
-{
- public:
-  gshllwar_dom_walker(bb_data& inbbd) : dom_walker(CDI_DOMINATORS), bbd(inbbd) {}
-  ~gshllwar_dom_walker() {}
-
-  edge before_dom_children(basic_block bb) FINAL OVERRIDE;
-
- private:
-  bb_data& bbd;
-};
-
 // Copied (and modified) from rtl.c.  This is potentially subject to rot.
 //
 // That routine didn't quite do what was needed - primarily because it would
@@ -156,23 +144,6 @@ my_classify_insn (rtx x)
     }
 
   return INSN;
-}
-
-static void
-emit_l1_war(rtx_insn *where,
-	    bool before,
-	    int hll_war_reg,
-	    int *ll_count)
-{
-  DUMP("    emitting l1 WAR with reg %d\n", hll_war_reg);
-  *ll_count = -1;
-  n_gs_hll_wars++;
-
-  rtx reg = gen_rtx_REG(SImode, hll_war_reg);
-  if (before)
-    emit_insn_before(gen_rvtt_gs_l1_load_war(reg), where);
-  else
-    emit_insn_after(gen_rvtt_gs_l1_load_war(reg), where);
 }
 
 static bool
@@ -307,226 +278,6 @@ get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
   return true;
 }
 
-//
-// This code works around the GS HLL arbiter HW bug
-//
-// The idea is to go through the insns and once an HLL load is seen count the
-// local memory loads and emit the workaround before enough local
-// loads have been hit to result in a hang.  The workaround consists of a use
-// of a register that was the target of the most recent HLL load or a
-// subsequent local memory load - these guarentee all loads have been
-// resolved.  Note that the ordering of the code itself will workaround most
-// of the potential hangs without explicitly emitting a workaround.
-// Details:
-//  - track the most recent HLL load
-//  - track all loads after the latest HLL load
-//  - reset the count if the target register of a load is referenced as an
-//    input operand.  Note that we only track the most recent HLL load and
-//    subsequent local loads.  In theory, we could track all of them and
-//    reduce the count if an earlier HLL load lands, in practice this is
-//    unlikely to occur since the latency of HLL loads is so high that the
-//    compiler hoists them all together - tracking the most recent is probably
-//    sufficient.  Revisit if needed
-//  - reset the count if a manual workaround is encountered
-//  - delete manually inserted workarounds that are not needed
-//  - emit the workaround if the local load after HLL load count gets too high
-//    (4 are allowed)
-//  - abort on certain instructions (eg, inline assembly)
-//
-// In addition, BBs are traversed and the local load count is carried into the
-// next BB.  The BBs are visted in dom order, so all parents of a BB have been
-// visited before the BB.  Each BB is responsible for resolving any unresolved
-// HLL loads in the parents.  The first parent forces its requirements on the
-// child, subsequent parents either must conform or restrict those
-// requirements.  If they cannot, then any pending workaround is emitted in
-// those parents, otherwise the workaround is pushed in the child.
-edge gshllwar_dom_walker::before_dom_children(basic_block bb)
-{
-  bb_entry& bbe = bbd[bb->index];
-  gcc_assert(bbe.hll_war_reg_incoming.size() <= 1);
-  DUMP(" processing bb[%d], in_ll %d, reg %d, ll_all %d\n", bb->index, bbe.ll_incoming,
-       bbe.hll_war_reg_incoming.size() == 0 ? -1 : bbe.hll_war_reg_incoming[0],
-       bbe.ll_before_resolve_all);
-
-  vector<int>hll_war_regs = bbe.hll_war_reg_incoming;
-  int ll_count = bbe.ll_incoming;
-
-  rtx_insn *insn, *next;
-  FOR_BB_INSNS_SAFE(bb, insn, next)
-    {
-      if (GET_CODE(insn) == NOTE &&
-	  NOTE_KIND(insn) == NOTE_INSN_EPILOGUE_BEG &&
-	  ll_count != -1)
-	{
-	  DUMP("  epilogue beginning with hll active, emitting WAR\n");
-	  // Note: could return here, no harm in continuing since war is done
-	  emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
-	}
-      else if (NONDEBUG_INSN_P(insn))
-	{
-	  int code = recog_memoized(insn);
-	  rtx insn_pat = PATTERN(insn);
-	  const rvtt_insn_data *insnd;
-	  rvtt_p (&insnd, insn);
-	  if (ll_count == -1)
-	    {
-	      if (rvtt_hll_p(insn_pat))
-		{
-		  ll_count = 0;
-		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
-		  DUMP("  found an hll load of reg %d, war pending\n", hll_war_regs[0]);
-		}
-	      else if (insnd->id == rvtt_insn_data::l1_load_war)
-		{
-		  DUMP("  found a %s, war not pending, removing\n", insnd->name);
-		  set_insn_deleted(insn);
-		}
-	    }
-	  else
-	    {
-	      int classify = my_classify_insn(insn_pat);
-	      if (rvtt_hll_p(insn_pat))
-		{
-		  set_hll_war_reg(hll_war_regs, rvtt_get_insn_dst_regno(insn));
-		  DUMP("  found an hll load of reg %d, updating war regs\n", hll_war_regs[0]);
-		}
-	      else if (code != -1 &&
-		       (classify == INSN || classify == JUMP_INSN) &&
-		       refers_to_any_regno_p(hll_war_regs, insn))
-		{
-		  DUMP("  a %s refers to hll loaded reg %d, resetting ll_count\n",
-		       insn_data[code].name, hll_war_regs[0]);
-		  ll_count = -1;
-		}
-	      else if (insnd->id == rvtt_insn_data::l1_load_war)
-		{
-		  int reg = REGNO(rvtt_get_insn_operand(0, insn));
-		  if (reg != hll_war_regs[0])
-		    {
-		      DUMP("  found a %s for reg %d mismatching last hll_war_reg %d\n", insnd->name, reg, hll_war_regs[0]);
-		      // XXXX, what's the best warning code for this?
-		      warning(OPT_Wunused, "__builtin_rvtt_gs_%s found using out of date hll loaded register, deleted\n", insnd->name);
-		      set_insn_deleted(insn);
-		    }
-		  else
-		    {
-		      DUMP("  found a %s for reg %d, resetting ll_count\n", insnd->name, reg);
-		      ll_count = -1;
-		    }
-		}
-	      else if (classify != INSN && classify != JUMP_INSN)
-		{
-		  DUMP("  %s with hll active, emitting WAR\n", GET_RTX_NAME(classify));
-		  emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
-		}
-	      else if (load_mem_p(insn_pat))
-		{
-		  ll_count++;
-		  int reg = rvtt_get_insn_dst_regno(insn);
-		  DUMP("  local load of %d w/ hll active, bumped ll_count to %d\n", reg, ll_count);
-		  if (ll_count == 5)
-		    {
-		      DUMP("  local load is 5, emitting WAR\n");
-		      emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
-		    }
-		  else
-		    {
-		      hll_war_regs.push_back(reg);
-		    }
-		}
-	      else if (GET_CODE(insn_pat) == PARALLEL)
-		{
-		  for (int i = XVECLEN (insn_pat, 0) - 1; i >= 0; i--)
-		    {
-		      rtx sub = XVECEXP(insn_pat, 0, i);
-		      DUMP("  processing parallel %s\n", GET_RTX_NAME(GET_CODE(sub)));
-
-		      if (load_mem_p(sub))
-			{
-			  ll_count++;
-			  int reg = REGNO(SET_DEST(sub));
-			  DUMP("    load of %d in parallel w/ hll active, ll_bumped count to %d\n", reg, ll_count);
-			  if (ll_count == 5)
-			    {
-			      DUMP("  local load is 5 with parallel, emitting WAR\n");
-			      emit_l1_war(insn, true, hll_war_regs[0], &ll_count);
-			    }
-			  else
-			    {
-			      hll_war_regs.push_back(reg);
-			    }
-			  break;
-			}
-		    }
-		}
-	    }
-	}
-    }
-
-  // If this BB has a pending WAR, see if this can be pushed into all of the children
-  edge_iterator ei;
-  edge e;
-  if (ll_count != -1)
-    {
-      bool children_can_handle = true;
-      FOR_EACH_EDGE(e, ei, bb->succs)
-	{
-	  // If we previously inited the outgoing BB, it's war location is determined
-	  // If this block doesn't conform, then force the war at the end of this block
-	  bb_entry& dst_bbe = bbd[e->dest->index];
-
-	  DUMP("  checking BB[%d] w/ inited %d ll_count %d hll_reg %d dst.ll %d dst.ll_all %d dst.hll_reg %d\n",
-	       e->dest->index,
-	       dst_bbe.inited,
-	       ll_count,
-	       hll_war_regs[0],
-	       dst_bbe.ll_incoming,
-	       dst_bbe.ll_before_resolve_all,
-	       (dst_bbe.ll_incoming == -1) ? -1 : dst_bbe.hll_war_reg_incoming[0]);
-
-	  if ((dst_bbe.ll_before_resolve_all != -1 && dst_bbe.ll_before_resolve_all + ll_count < 5) ||
-	      !dst_bbe.inited ||
-	      (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0]))
-	    {
-	      DUMP("    checked BB[%d], all ok\n", e->dest->index);
-	    }
-	  else if (dst_bbe.inited && dst_bbe.hll_war_reg_incoming[0] == hll_war_regs[0] && ll_count > dst_bbe.ll_incoming)
-	    {
-	      DUMP("    checked BB[%d], restricting ll_count from %d to %d\n", e->dest->index, dst_bbe.ll_incoming, ll_count);
-	    }
-	  else 
-	    {
-	      DUMP("    checked BB[%d], can't handle, emitting WAR\n", e->dest->index);
-	      children_can_handle = false;
-	      emit_l1_war(BB_END(bb), control_flow_insn_p(BB_END(bb)), hll_war_regs[0], &ll_count);
-	      break;
-	    }
-	}
-
-      if (children_can_handle)
-	{
-	  FOR_EACH_EDGE(e, ei, bb->succs)
-	    {
-	      bb_entry& dst_bbe = bbd[e->dest->index];
-	      if (!dst_bbe.inited)
-		{
-		  dst_bbe.inited = true;
-		  dst_bbe.hll_war_reg_incoming.push_back(hll_war_regs[0]);
-		  dst_bbe.ll_incoming = ll_count;
-		}
-	      else if (ll_count > dst_bbe.ll_incoming)
-		{
-		  // Restrict ll_count based on this bb.  ll_incoming was
-		  // either -1, or we hit the restriction code above
-		  dst_bbe.ll_incoming = ll_count;
-		}
-	    }
-	}
-    }
-
-  return NULL;
-}
-
 // Process each BB, count the number of local loads that occur before any load
 // is resolved by a use.  Set ll_before_resolve_all to that value (that use
 // will resolve any incoming hll load after ll_before_resolve_all local
@@ -628,31 +379,6 @@ static void pre_populate_bbd(bb_data &bbd, function *fn)
 }
 
 static void
-workaround_gs_hll(function *fn)
-{
-  DUMP("TT riscv GS rtl hll war pass on: %s\n", function_name(fn));
-
-  bb_data bbd;
-  bbd.resize(n_basic_blocks_for_fn(fn));
-  for (auto& bbe : bbd)
-    {
-      bbe.inited = false;
-      bbe.ll_incoming = -1;
-      bbe.hll_war_reg_incoming.resize(0);
-      bbe.hll_war_reg_incoming.reserve(5);
-      bbe.ll_before_resolve_all = -1;
-    }
-
-  pre_populate_bbd(bbd, fn);
-
-  calculate_dominance_info(CDI_DOMINATORS);
-  gshllwar_dom_walker dw(bbd);
-  dw.walk(ENTRY_BLOCK_PTR_FOR_FN(fn));
-
-  DUMP("TT riscv GS rtl hll war pass finished for: %s\n", function_name(fn));
-}
-
-static void
 emit_raw_war(rtx_insn *insn, bool before, int war_regno, rtx war_pat)
 {
   rtx reg = gen_rtx_REG(SImode, war_regno);
@@ -668,14 +394,12 @@ emit_raw_war(rtx_insn *insn, bool before, int war_regno, rtx war_pat)
     }
 }
 
-// GS and WH have a read after write hazard bug where loading a word after a
+// WH has a read after write hazard bug where loading a word after a
 // byte or half store issues the load before the store
 // Fix that by issuing a load to the same address to force a pipe stall
 // Can't issue word/byte loads to register space, so skip the war there
-// On GS, the load can invoke the hll workaround, so need to use a "valid"
-// (non r0) register
 static void
-workaround_gswh_raw(function *cfn)
+workaround_wh_raw (function *cfn)
 {
   DUMP("RAW pass on: %s\n", function_name(cfn));
 
@@ -703,8 +427,7 @@ workaround_gswh_raw(function *cfn)
 		      if (!rvtt_reg_store_p(insn_pat))
 			{
 			  // Use the same register as used in the insn if we need th hll war
-			  war_regno = (TARGET_RVTT_GS && rvtt_l1_store_p(insn_pat)) ?
-			    REGNO(SET_SRC(insn_pat)) : 0;
+			  war_regno = 0;
 			  int dummy_offset;
 			  get_mem_reg_and_offset(SET_DEST(insn_pat), &war_ptr_regno, &dummy_offset);
 			  war_pat = SET_DEST(insn_pat);
@@ -2006,8 +1729,6 @@ void analysis::print()
   fprintf(stderr, "Stack lds: %d\n", n_stack_lds);
   fprintf(stderr, "Stack sts: %d\n", n_stack_sts);
   if (n_sfpu != 0) fprintf(stderr, "SFPU: %d\n", n_sfpu);
-  if (TARGET_RVTT_GS && flag_rvtt_gshllwar)
-    fprintf(stderr, "GS arbiter wars: %d\n", n_gs_hll_wars);
   fprintf(stderr, "Cycles top to bottom: %d\n", cycle_count);
 }
 
@@ -2060,11 +1781,8 @@ public:
 	}
 
       // This must come before the hll pass as it introduces loads
-      if (TARGET_RVTT_GS || TARGET_RVTT_WH)
-	workaround_gswh_raw(cfn);
-
-      if (TARGET_RVTT_GS && flag_rvtt_gshllwar)
-	workaround_gs_hll(cfn);
+      if (TARGET_RVTT_WH)
+	workaround_wh_raw(cfn);
 
       return 0;
     }
