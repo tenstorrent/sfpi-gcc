@@ -100,28 +100,14 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 };
 
 static const char* arch_name_abbrev_list[] = {
-  "_gs_",
   "_wh_",
   "_bh_",
 };
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
-static const int NUMBER_OF_ARCHES = 3;
+static const int NUMBER_OF_ARCHES = 2;
 static const int NUMBER_OF_INTRINSICS = 131;
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
-  {
-#define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
-#define RVTT_GS_RTL_ONLY(id, fl, sched) { rvtt_insn_data::id, #id, nullptr, fl, -1, -1, sched, -1, -1, 0, 0 },
-#define RVTT_GS_PAD_RTL_ONLY(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
-#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
-#define RVTT_GS_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
-#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 },
-#include "rvtt-insn.h"
-    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, 0, 0, -1, 0, 0 }
-  },
   {
 #define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, sched, nip, -1, nim, nis },
@@ -161,18 +147,18 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
   static int start = 0;
 
   int arch;
-  if (TARGET_RVTT_GS) {
-    arch = 0;
-    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_GS;
-  } else if (TARGET_RVTT_WH) {
-    arch = 1;
-    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
-  } else if (TARGET_RVTT_BH) {
-    arch = 2;
-    rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_BH;
-  } else {
+  if (TARGET_RVTT_WH)
+    {
+      arch = 0;
+      rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
+    }
+  else if (TARGET_RVTT_BH)
+    {
+      arch = 1;
+      rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_BH;
+    }
+  else
     return;
-  }
 
   int offset = start;
   while (offset < NUMBER_OF_INTRINSICS)
@@ -248,17 +234,6 @@ rvtt_init_builtins()
 {
 #if CHECKING_P
   {
-    // Check the IDs match up accross each arch
-    static const char *const gs_ids[] = {
-#define RVTT_GS_RTL_ONLY(id, fl, sched) #id,
-#define RVTT_GS_PAD_RTL_ONLY(id) #id,
-#define RVTT_GS_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_GS_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_GS_PAD_BUILTIN(id) #id,
-#define RVTT_GS_PAD_NO_TGT_BUILTIN(id) #id,
-#include "rvtt-insn.h"
-    };
-
     static const char *const wh_ids[] = {
 #define RVTT_WH_RTL_ONLY(id, fl, sched) #id,
 #define RVTT_WH_PAD_RTL_ONLY(id) #id,
@@ -279,22 +254,17 @@ rvtt_init_builtins()
 #include "rvtt-insn.h"
     };
 
-    gcc_assert (sizeof (gs_ids) == sizeof (wh_ids)
-		&& sizeof (gs_ids) == sizeof (bh_ids));
-    for (unsigned ix = 0; ix != sizeof (gs_ids) / sizeof (gs_ids[0]); ix++)
-      gcc_assert (!strcmp (gs_ids[ix], wh_ids[ix])
-		  && !strcmp (gs_ids[ix], bh_ids[ix]));
+    gcc_assert (sizeof (wh_ids) == sizeof (bh_ids));
+    for (unsigned ix = 0; ix != sizeof (wh_ids) / sizeof (wh_ids[0]); ix++)
+      gcc_assert (!strcmp (wh_ids[ix], bh_ids[ix]));
   }
 #endif
   int arch;
-  if (TARGET_RVTT_GS) {
+  if (TARGET_RVTT_WH) {
     arch = 0;
-    rvtt_builtin_name_stub = "__builtin_rvtt_gs";
-  } else if (TARGET_RVTT_WH) {
-    arch = 1;
     rvtt_builtin_name_stub = "__builtin_rvtt_wh";
   } else if (TARGET_RVTT_BH) {
-    arch = 2;
+    arch = 1;
     rvtt_builtin_name_stub = "__builtin_rvtt_bh";
   } else {
     return;

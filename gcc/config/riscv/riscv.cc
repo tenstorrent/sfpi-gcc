@@ -5187,10 +5187,8 @@ riscv_option_override (void)
       riscv_stack_protector_guard_offset = offs;
     }
 
-  if (int(TARGET_RVTT_GS) + int(TARGET_RVTT_WH) + int(TARGET_RVTT_BH) > 1)
-    error ("only one ttgs, ttwh or ttbh extension can be specified");
-  if (TARGET_RVTT_GS)
-    warning (0, "GraySkull support is deprecated and will be removed in a future release");
+  if (int(TARGET_RVTT_WH) + int(TARGET_RVTT_BH) > 1)
+    error ("only one ttwh or ttbh extension can be specified");
 }
 
 /* Implement TARGET_CONDITIONAL_REGISTER_USAGE.  */

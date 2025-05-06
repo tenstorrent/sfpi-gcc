@@ -163,7 +163,6 @@ emit_32bit_sfpxloads(const rvtt_insn_data *insnd,
 		     gcall *stmt,
 		     gimple_stmt_iterator *gsip)
 {
-  gcc_assert(!TARGET_RVTT_GS);
   tree tmp1 = emit_sfpxloadi(SFPLOADI_MOD0_LOWER, insnd, stmt, gsip);
   tree tmp2 = make_ssa_name (build_vector_type(float_type_node, 64), stmt);
   emit_sfpxloadi_lv(tmp2, tmp1, get_int_arg(stmt, insnd->nonimm_pos + 2) + 1, insnd, stmt, gsip, true);
@@ -243,7 +242,6 @@ expand_complex(gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *g
   case rvtt_insn_data::sfpxloadi:
     if ((get_int_arg(stmt, insnd->mod_pos) & SFPXLOADI_MOD0_32BIT_MASK) != 0)
       {
-	gcc_assert(!TARGET_RVTT_GS);
 	DUMP("  expanding 32 bit %s, replace mod and emit %s\n", insnd->name, (insnd + 1)->name);
 
 	gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, SFPLOADI_MOD0_LOWER));
@@ -271,7 +269,7 @@ expand_complex(gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *g
       {
 	DUMP("  expanding %s to sfpxloadi+sfpxicmpv\n", insnd->name);
 	int mod = get_int_arg(stmt, insnd->mod_pos);
-	tree tmp = TARGET_RVTT_GS || (mod & SFPXIADD_MOD1_16BIT)
+	tree tmp = mod & SFPXIADD_MOD1_16BIT
 	  ? emit_sfpxloadi((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
 			   insnd, stmt, gsip)
 	  : emit_32bit_sfpxloads(insnd, stmt, gsip);
@@ -301,7 +299,7 @@ expand_complex(gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *g
 	DUMP("  expanding %s to sfpxloadi+sfpxiadd_v\n", insnd->name);
 	int mod = get_int_arg(stmt, insnd->mod_pos);
 	// Only supports 32 bit non-imm loads for wh so far...
-	tree tmp = TARGET_RVTT_GS || (mod & SFPXIADD_MOD1_16BIT)
+	tree tmp = mod & SFPXIADD_MOD1_16BIT
 	  ? emit_sfpxloadi((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
 			   insnd, stmt, gsip)
 	  : emit_32bit_sfpxloads(insnd, stmt, gsip);

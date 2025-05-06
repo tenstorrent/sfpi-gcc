@@ -63,7 +63,7 @@
 (define_insn "rvtt_load_immediate"
   [(set (match_operand:SI 0 "register_operand" "=r")
          (unspec [(match_operand:SI   1 "immediate_operand" "")] UNSPECV_LOAD_IMMEDIATE))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char str[100];
   sprintf(str, "%s\t# %lx", "li\t%0, %1", INTVAL(operands[1]));
@@ -73,7 +73,7 @@
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   rvtt_emit_sfpassignlreg(operands[0], operands[1]);
   DONE;
@@ -82,7 +82,7 @@
 (define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "")
 
 (define_insn "rvtt_sfpnonimm_dst"
@@ -96,7 +96,7 @@
                           (match_operand:SI    7 "immediate_operand" "i, i") ; loadimm id/fallback flag
                                                                          ] UNSPECV_SFPNONIMM_DST))
         (clobber (match_scratch:SI 8 "=&r, &r"))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[7]);
@@ -111,7 +111,7 @@
     if (reg_update == 0) { // otherwise, why fallback?
       fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
               id, old_reg, new_reg);
-      gcc_assert(0);
+      gcc_unreachable();
     }
     // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
     operands[4] = gen_rtx_CONST_INT(SImode, reg_update);
@@ -141,7 +141,7 @@
                           (match_operand:SI    9 "immediate_operand" "i, i") ; loadimm id/fallback flag
                                                                          ] UNSPECV_SFPNONIMM_DST_SRC))
         (clobber (match_scratch:SI 10 "=&r, &r"))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[9]);
@@ -160,7 +160,7 @@
     if (reg_update == 0) { // otherwise, why fallback?
       fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
               id, old_reg, new_reg);
-      gcc_assert(0);
+      gcc_unreachable();
     }
     // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
     operands[5] = gen_rtx_CONST_INT(SImode, reg_update);
@@ -191,7 +191,7 @@
                      (match_operand:SI    6 "immediate_operand" "i") ; loadimm id/fallback flag
                                                                          ] nonimm_srcstore)
             (clobber (match_scratch:SI    7 "=&r"))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   const char *mn;
   unsigned int id = INTVAL(operands[6]);
@@ -206,7 +206,7 @@
     if (reg_update == 0) { // otherwise, why fallback?
       fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
               id, old_reg, new_reg);
-      gcc_assert(0);
+      gcc_unreachable();
     }
     // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
     operands[3] = gen_rtx_CONST_INT(SImode, reg_update);
@@ -230,9 +230,9 @@
                           (match_operand:SI    4 "nonmemory_operand" "")
                           (match_operand:SI    5 "immediate_operand" "")
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_SFPXICMPS))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_expand "rvtt_sfpxicmpv"
@@ -240,41 +240,41 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPXICMPV))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_expand "rvtt_sfpxvif"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPXVIF))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_expand "rvtt_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXBOOL))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_expand "rvtt_sfpxcondb"
   [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")
                      (match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDB)]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_expand "rvtt_sfpxcondi"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDI))]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  gcc_assert(0);
+  gcc_unreachable();
 })
 
 (define_insn "rvtt_sfpincrwc"
@@ -282,5 +282,5 @@
                      (match_operand:SI    1 "immediate_operand" "")
                      (match_operand:SI    2 "immediate_operand" "")
                      (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPINCRWC)]
-  "TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "TTINCRWC\t%0, %1, %2, %3")

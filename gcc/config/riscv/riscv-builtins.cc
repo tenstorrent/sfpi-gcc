@@ -95,10 +95,9 @@ struct riscv_builtin_description {
 };
 
 AVAIL (hard_float, TARGET_HARD_FLOAT)
-AVAIL (grayskull, TARGET_RVTT_GS)
 AVAIL (wormhole, TARGET_RVTT_WH)
 AVAIL (blackhole, TARGET_RVTT_BH)
-AVAIL (sfpu, (TARGET_RVTT_GS || TARGET_RVTT_WH || TARGET_RVTT_BH))
+AVAIL (sfpu, (TARGET_RVTT_WH || TARGET_RVTT_BH))
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -182,8 +181,6 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   /* Tenstorrent SFPU builtins */
 #define RVTT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
 #define RVTT_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
-#define RVTT_GS_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(gs_##op, fmt, grayskull),
-#define RVTT_GS_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(gs_##op, fmt, grayskull),
 #define RVTT_WH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_BH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),

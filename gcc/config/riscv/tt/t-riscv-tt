@@ -1,6 +1,6 @@
 
 RVTT_OBJS := rvtt.o \
-	rvtt-gs.o rvtt-wh.o rvtt-bh.o \
+	rvtt-wh.o rvtt-bh.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-combine.o \

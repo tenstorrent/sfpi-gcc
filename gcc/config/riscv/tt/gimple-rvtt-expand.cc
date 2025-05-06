@@ -206,11 +206,7 @@ emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
-  gimple *new_stmt;
-  if (TARGET_RVTT_GS)
-    new_stmt = gimple_build_call(new_insnd->decl, 0);
-  else
-    new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPUSHCC_MOD1_PUSH));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPUSHCC_MOD1_PUSH));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
@@ -219,11 +215,7 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
-  gimple *new_stmt;
-  if (TARGET_RVTT_GS)
-    new_stmt = gimple_build_call(new_insnd->decl, 0);
-  else
-    new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPOPCC_MOD1_POP));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPOPCC_MOD1_POP));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
