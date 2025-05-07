@@ -1084,8 +1084,8 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
 # and the system's installed libraries.
 LIBS = @LIBS@ libcommon.a $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBBACKTRACE) \
 	$(LIBIBERTY) $(LIBDECNUMBER) $(HOST_LIBS)
-BACKENDLIBS = $(ISLLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
-	$(ZLIB) $(ZSTD_LIB)
+BACKENDLIBS = -Wl,-Bstatic $(ISLLIBS) $(GMPLIBS) -Wl,-Bdynamic $(PLUGINLIBS) $(HOST_LIBS) \
+	-Wl,-Bstatic $(ZLIB) $(ZSTD_LIB) -Wl,-Bdynamic 
 # Any system libraries needed just for GNAT.
 SYSLIBS = @GNAT_LIBEXC@
 
