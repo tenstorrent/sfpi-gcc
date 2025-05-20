@@ -62,9 +62,9 @@ along with GCC; see the file COPYING3.  If not see
 //#define ENABLE_DUMP
 
 #ifdef ENABLE_DUMP
-#define DUMP(...) fprintf(stderr, __VA_ARGS__)
+#define DUMP(...) ((void)fprintf(stderr, __VA_ARGS__))
 #else
-#define DUMP(...)
+#define DUMP(...) ((void)0)
 #endif
 
 using namespace std;
@@ -250,7 +250,7 @@ static inline hash_type compute_seq_hash(hash_type insn_hash, hash_type seq_hash
 //     check each 1/nth independently)
 //
 // Cretees the insn_list
-static void devise_strategy(int *count, int *strategy, basic_block bb)
+static void devise_strategy (int *count, int *strategy, basic_block bb)
 {
   rtx_insn *insn;
 
@@ -263,26 +263,22 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
       if (NONDEBUG_INSN_P(insn))
 	{
 	  const rvtt_insn_data *insnd;
-	  if (rvtt_p(&insnd, insn) &&
-	      !insnd->non_tt_p())
+	  if (rvtt_p (&insnd, insn) && !insnd->non_tt_p ())
 	    {
-	      if (insnd->empty_p())
-		{
-		  // Ugly side effect
-		  // Empty insns have served their purpose, delete now
-		  // This simplifies the update routine somewhat
-		  set_insn_deleted(insn);
-		}
+	      if (insnd->empty_p ())
+		// Ugly side effect
+		// Empty insns have served their purpose, delete now
+		// This simplifies the update routine somewhat
+		set_insn_deleted (insn);
 	      else
 		{
 		  int startable = strategy_every_insn;
-		  if (insn_count == 0) startable |= strategy_first_insn;
+		  if (insn_count == 0)
+		    startable |= strategy_first_insn;
 		  if (insnd->id == rvtt_insn_data::sfpload_int)
 		    {
 		      if (first_load == -1)
-			{
-			  first_load = insn_count;
-			}
+			first_load = insn_count;
 		      loads++;
 		      startable |= strategy_load;
 		    }
@@ -299,26 +295,24 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
 		  insn_count++;
 		}
 	    }
-	  else if (insn_list.size() > 0)
+	  else if (insn_list.size () > 0)
 	    {
 	      // The nonimm processing should ensure that riscv insns don't
 	      // interact with sfpu insns.  However, bail on __asm insns
-	      if (INSN_CODE(insn) == -1)
-		{
-		  // These are __asm and maybe other?
-		  insn_list.back().halt = true;
-		}
+	      if (INSN_CODE (insn) == -1)
+		// These are __asm and maybe other?
+		insn_list.back ().halt = true;
 	    }
 	}
     }
-  gcc_assert(insn_count < 65536);
+  gcc_assert (insn_count < 65536);
 
   *strategy = strategy_every_insn;
   *count = insn_count;
 
 #if 0  // Determine which insns can start a sequence
   // Typically, there will be 8 loads in a kernel, but these may not be in one
-  // BB if the loop is unrolled (or we have multiple BBs) in which case we
+  // BB, if the loop is unrolled (or we have multiple BBs), in which case we
   // should look for more ways to start a sequence
   if (loads >= 8)
     {
@@ -331,9 +325,7 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
       *strategy = strategy_loadi;
       *count = insn_count;
       if (loadis < 8)
-	{
-	  *strategy |= strategy_first_insn;
-	}
+	*strategy |= strategy_first_insn;
     }
   else
     {
@@ -342,22 +334,23 @@ static void devise_strategy(int *count, int *strategy, basic_block bb)
     }
 #endif
 
-  DUMP(" strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
-       *strategy, insn_count, *count, loads, loadis);
+  DUMP (" strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
+	*strategy, insn_count, *count, loads, loadis);
 }
 
-static inline void dump_sequences()
+static inline void
+dump_sequences ()
 {
 #ifdef ENABLE_DUMP
   int k = 0;
-  for (auto iteri : sequences) {
-    DUMP("  %d: ", k);
-    for (auto iters : iteri) {
-      DUMP("(s%2d: l%2d h%llx) ",
-	   iters.start, iters.length, iters.hash);
-    }
-    k++;
-    DUMP("\n");
+  for (auto iteri : sequences)
+    {
+      DUMP ("  %d: ", k);
+      for (auto iters : iteri)
+	DUMP ("(s%2d: l%2d h%llx) ",
+	      iters.start, iters.length, iters.hash);
+      k++;
+      DUMP ("\n");
   }
 #endif
 }
@@ -374,49 +367,46 @@ static inline void dump_sequences()
 // (not the full insn list).
 //
 // Creates the sequences structure
-static void generate_sequences(int count, int strategy)
+static void
+generate_sequences (int count, int strategy)
 {
-  DUMP("  generating sequences, scanning %d insns\n", count);
+  DUMP ("  generating sequences, scanning %d insns\n", count);
 
   bool halt = false;
   for (int i = 0; i < count; i++)
     {
       hash_type insn_hash = insn_list[i].hash;
-      DUMP("   #%3d: processing insn (h%llx)\t%s\n", i, insn_hash, insn_data[insn_list[i].code].name);
+      DUMP ("   #%3d: processing insn (h%llx)\t%s\n", i, insn_hash, insn_data[insn_list[i].code].name);
 
       vector<seq_entry> dummy;
-      sequences.push_back(dummy);
+      sequences.push_back (dummy);
 
       // Start a new sequence or track an old sequence
       if ((insn_list[i].startable & strategy) != 0)
 	{
-	  DUMP("      add new sequence %d\n", i);
-	  hash_type seq_hash = compute_seq_hash(insn_hash, 0);
-	  seq_entry new_seq(i, 1, seq_hash);
-	  sequences.back().push_back(new_seq);
+	  DUMP ("      add new sequence %d\n", i);
+	  hash_type seq_hash = compute_seq_hash (insn_hash, 0);
+	  seq_entry new_seq (i, 1, seq_hash);
+	  sequences.back ().push_back (new_seq);
 	}
 
       // Try to extend existing sequences
       if (halt)
-	{
-	  DUMP("      halting sequences at insn %d\n", i);
-	}
+	DUMP ("      halting sequences at insn %d\n", i);
       else if (i != 0)
 	{
 	  for (auto const& cur_seq : sequences[i - 1])
 	    {
 	      if (cur_seq.length == replay_max_insns)
-		{
-		  DUMP("      sequence s:%d l%d reached insn limit %d\n",
-		       cur_seq.start, cur_seq.length, replay_max_insns);
-		}
+		DUMP ("      sequence s:%d l%d reached insn limit %d\n",
+		     cur_seq.start, cur_seq.length, replay_max_insns);
 	      else
 		{
 		  // Extend the sequence's hash
-		  DUMP("      extend sequence s:%d l%d\n", cur_seq.start, cur_seq.length);
-		  hash_type seq_hash = compute_seq_hash(insn_hash, cur_seq.hash);
-		  seq_entry new_seq(cur_seq.start, cur_seq.length + 1, seq_hash);
-		  sequences.back().push_back(new_seq);
+		  DUMP ("      extend sequence s:%d l%d\n", cur_seq.start, cur_seq.length);
+		  hash_type seq_hash = compute_seq_hash (insn_hash, cur_seq.hash);
+		  seq_entry new_seq (cur_seq.start, cur_seq.length + 1, seq_hash);
+		  sequences.back ().push_back (new_seq);
 		}
 	    }
 	}
@@ -424,18 +414,17 @@ static void generate_sequences(int count, int strategy)
       halt = insn_list[i].halt;
     }
 
-  dump_sequences();
+  dump_sequences ();
 }
 
-static void dump_unique_sequences()
+static void
+dump_unique_sequences ()
 {
 #ifdef ENABLE_DUMP
-  DUMP("    ");
+  DUMP ("    ");
   for (auto iter : sequence_map)
-    {
-      DUMP("(s%2d: l%2d) ", iter.second->start, iter.second->length);
-    }
-  DUMP("\n");
+    DUMP ("(s%2d: l%2d) ", iter.second->start, iter.second->length);
+  DUMP ("\n");
 #endif
 }
 
@@ -447,36 +436,34 @@ static void dump_unique_sequences()
 // load+mul+inc but both use the "load" as the base then diverage from there.
 //
 // Creates the sequence_map
-static void map_unique_sequences()
+static void
+map_unique_sequences ()
 {
-  DUMP("  mapping unique sequences\n");
+  DUMP ("  mapping unique sequences\n");
 
   for (auto& insn_iter : sequences)
-    {
-      for (auto& seq_iter : insn_iter)
-	{
-	  auto entry = sequence_map.find(seq_iter.hash);
+    for (auto& seq_iter : insn_iter)
+      {
+	auto entry = sequence_map.find (seq_iter.hash);
 
-	  if (entry == sequence_map.end())
-	    {
-	      DUMP("    mapping unique s:%2d l%2d h%llx\n",
-		   seq_iter.start, seq_iter.length, seq_iter.hash);
-	      sequence_map.insert(pair<hash_type, seq_entry *>(seq_iter.hash, &seq_iter));
-	    }
-	}
-    }
+	if (entry == sequence_map.end ())
+	  {
+	    DUMP("    mapping unique s:%2d l%2d h%llx\n",
+		 seq_iter.start, seq_iter.length, seq_iter.hash);
+	    sequence_map.insert (pair<hash_type, seq_entry *> (seq_iter.hash, &seq_iter));
+	  }
+      }
 
-  dump_unique_sequences();
+  dump_unique_sequences ();
 }
 
-static inline void dump_voted_sequences()
+static inline void
+dump_voted_sequences ()
 {
 #ifdef ENABLE_DUMP
-  DUMP("  all sequence votes:\n");
+  DUMP ("  all sequence votes:\n");
   for (auto iter : sequence_map)
-    {
-      DUMP("    s%2d: l%2d v%d\n", iter.second->start, iter.second->length, iter.second->votes);
-    }
+    DUMP("    s%2d: l%2d v%d\n", iter.second->start, iter.second->length, iter.second->votes);
 #endif
 }
 
@@ -502,63 +489,61 @@ static inline void dump_voted_sequences()
 //    unclear to me if this would have much real world benefit
 //
 // Creates insn_sequences (need a better name)
-static void vote_for_sequences()
+static void
+vote_for_sequences ()
 {
-  DUMP("  voting for sequences, %zu insns\n", insn_list.size());
+  DUMP ("  voting for sequences, %zu insns\n", insn_list.size ());
 
   for (unsigned int i = 0; i < insn_list.size(); i++)
     {
       hash_type insn_hash = insn_list[i].hash;
-      hash_type seq0_hash = compute_seq_hash(insn_hash, 0);
+      hash_type seq0_hash = compute_seq_hash (insn_hash, 0);
 
       vector<seq_entry *> dummy;
-      insn_sequences.push_back(dummy);
-      insn_sequences.back().reserve(sequences.back().size());
+      insn_sequences.push_back (dummy);
+      insn_sequences.back ().reserve (sequences.back ().size ());
 
-      auto entry = sequence_map.find(seq0_hash);
-      if (entry != sequence_map.end())
+      auto entry = sequence_map.find (seq0_hash);
+      if (entry != sequence_map.end ())
 	{
-	  DUMP("    begin new s:%2d l%2d\n", entry->second->start, entry->second->length);
+	  DUMP ("    begin new s:%2d l%2d\n", entry->second->start, entry->second->length);
 	  // This insn starts a new sequence
-	  insn_sequences.back().push_back(entry->second);
+	  insn_sequences.back ().push_back (entry->second);
 	}
 
-      // Try to extend existing sequences
-      if (i != 0)
-	{
-	  for (auto const& cur_seq : insn_sequences[i - 1])
-	    {
-	      hash_type seq_hash = compute_seq_hash(insn_hash, cur_seq->hash);
-	      auto entry = sequence_map.find(seq_hash);
-	      if (entry != sequence_map.end())
-		{
-		  int length = cur_seq->length + 1;
+      if (i == 0)
+	continue;
 
-		  // When a sequence is being tracked, it cannot be started
-		  // again until its full length has been traversed (ie, a
-		  // sequence cannot contain itself)
-		  if (i > entry->second->insn_available)
-		    {
-		      DUMP("    vote for  s%2d: l%2d\n", entry->second->start, entry->second->length);
-		      entry->second->votes++;
-		      entry->second->insn_available = i + length - 1;
-		      insn_sequences.back().push_back(entry->second);
-		    }
-		  else
-		    {
-		      DUMP("   skip overlapped s%2d: l%2d\n",
-			   entry->second->start, entry->second->length);
-		    }
-		}
-	      else
-		{
-		  DUMP("    no match, ending sequence\n");
-		}
+      // Try to extend existing sequences
+      for (auto const& cur_seq : insn_sequences[i - 1])
+	{
+	  hash_type seq_hash = compute_seq_hash (insn_hash, cur_seq->hash);
+	  auto entry = sequence_map.find (seq_hash);
+	  if (entry == sequence_map.end ())
+	    {
+	      DUMP ("    no match, ending sequence\n");
+	      continue;
 	    }
+
+	  int length = cur_seq->length + 1;
+
+	  // When a sequence is being tracked, it cannot be started
+	  // again until its full length has been traversed (ie, a
+	  // sequence cannot contain itself)
+	  if (i > entry->second->insn_available)
+	    {
+	      DUMP ("    vote for  s%2d: l%2d\n", entry->second->start, entry->second->length);
+	      entry->second->votes++;
+	      entry->second->insn_available = i + length - 1;
+	      insn_sequences.back ().push_back (entry->second);
+	    }
+	  else
+	    DUMP ("   skip overlapped s%2d: l%2d\n",
+		  entry->second->start, entry->second->length);
 	}
     }
 
-  dump_voted_sequences();
+  dump_voted_sequences ();
 }
 
 // Pick the sequence that saves the most insns.
@@ -568,7 +553,8 @@ static void vote_for_sequences()
 // unknown reasons as well as starting earlier may lead to extra bonus insns
 // saved when a partial sequence can be used (since we don't vote for partial
 // sequences yet)
-static void pick_sequence(int *start, int *length)
+static void
+pick_sequence (int *start, int *length)
 {
   int most_saved = 0;
   int earliest = 0xFFFF;
@@ -576,9 +562,10 @@ static void pick_sequence(int *start, int *length)
   for (auto const& iter : sequence_map)
     {
       int saved = iter.second->length * (iter.second->votes - 1) - iter.second->votes;
-      DUMP("    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length, iter.second->votes, saved);
-      if (saved > most_saved ||
-	  (saved != 0 && saved == most_saved && iter.second->start < earliest))
+      DUMP ("    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length,
+	    iter.second->votes, saved);
+      if (saved > most_saved
+	  || (saved != 0 && saved == most_saved && iter.second->start < earliest))
 	{
 	  most_saved = saved;
 	  earliest = iter.second->start;
@@ -586,7 +573,7 @@ static void pick_sequence(int *start, int *length)
 	  *length = iter.second->length;
 	}
     }
-  DUMP("  picked s%d: l%d saved %d\n", *start, *length, most_saved);
+  DUMP ("  picked s%d: l%d saved %d\n", *start, *length, most_saved);
 }
 
 // Per the comment above generate_sequence, the final "sequence" may be
@@ -597,79 +584,65 @@ static void pick_sequence(int *start, int *length)
 // This regenerates a lot of info calculated before since uniquify squashed it
 //
 // Create final_sequence_map
-static void collapse_sequence(int start, int length)
+static void
+collapse_sequence (int start, int length)
 {
   for (int i = 0; i < length; i++)
-    {
-      for (auto const& iter : sequences[start + i])
+    for (auto const& iter : sequences[start + i])
+      if (iter.start == start)
 	{
-	  if (iter.start == start)
-	    {
-	      gcc_assert(iter.length == i + 1);
-	      DUMP("    final sequence element s%2d: l%3d\n", iter.start, iter.length);
-	      final_sequence_map.insert(pair<hash_type, const seq_entry *>(iter.hash, &iter));
-	    }
+	  gcc_assert (iter.length == i + 1);
+	  DUMP ("    final sequence element s%2d: l%3d\n", iter.start, iter.length);
+	  final_sequence_map.insert (pair<hash_type, const seq_entry *> (iter.hash, &iter));
 	}
-    }
 }
 
 // Helper fn for update_insns, inserts/deletes insns for a replay
 // IMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANT
-//   See tensix issue #3303 if this code gets updated to issue an SFPREPLAY
+//   See tensix issue #3303 if this code gets updated to issue a TTREPLAY
 //   in load only mode
 // IMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANT
-static bool do_update(bool first, int i, int count, int length,
-		      rtx_insn *start_insn, rtx_insn *insn)
+static bool
+do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
+	   rtx_insn *start_insn, rtx_insn *insn)
 {
-  i = i + 0; // suppress warning, i only used in debug
   if (first)
     {
       // First sequence must be full length
       if (count == length)
 	{
-	  DUMP("    inserting replay capture at %d\n", i - count);
+	  DUMP ("    inserting replay capture at %d\n", i - count);
 	  first = false;
-	  if (TARGET_RVTT_WH) {
-	    emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
-						   GEN_INT(1), GEN_INT(1)),
-			     start_insn);
-	  } else if (TARGET_RVTT_BH) {
-	    emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
-						   GEN_INT(1), GEN_INT(1)),
-			     start_insn);
-	  }
+	  rtx replay = gen_rvtt_ttreplay (GEN_INT (0), GEN_INT (count),
+					  GEN_INT (1), GEN_INT (1));
+	  emit_insn_before (replay, start_insn);
 	}
     }
   else if (count > 1)
     {
       DUMP("    deleting %d insns starting at %d\n", count, i - count);
-      int j = 0;
-      while (j < count)
+
+      for (int j = 0; j < count;)
 	{
 	  // Replay sequences preclude non-sfpu insns
-	  if (NONDEBUG_INSN_P(start_insn))
+	  if (NONDEBUG_INSN_P (start_insn))
 	    {
-	      set_insn_deleted(start_insn);
+	      set_insn_deleted (start_insn);
 	      j++;
 	    }
-	  start_insn = NEXT_INSN(start_insn);
+	  start_insn = NEXT_INSN (start_insn);
 	}
-      if (TARGET_RVTT_WH) {
-	emit_insn_before(gen_rvtt_wh_sfpreplay(GEN_INT(0), GEN_INT(count),
-					       GEN_INT(0), GEN_INT(0)),
-			 insn);
-      } else if (TARGET_RVTT_BH) {
-	emit_insn_before(gen_rvtt_bh_sfpreplay(GEN_INT(0), GEN_INT(count),
-					       GEN_INT(0), GEN_INT(0)),
-			 insn);
-      }
+      rtx replay = gen_rvtt_ttreplay (GEN_INT (0), GEN_INT (count),
+				      GEN_INT (0), GEN_INT (0));
+      emit_insn_before (replay, insn);
     }
 
   return first;
 }
 
 // Remove the duplicated insns and emit the REPLAYs
-static void update_insns(basic_block bb, int which, int length)
+static void
+update_insns (basic_block bb, int which, int length)
 {
   which = which + 0; // suppress warning, which only used in debug
   DUMP("  updating insn sequence with s:%d l:%d\n", which, length);
@@ -684,24 +657,23 @@ static void update_insns(basic_block bb, int which, int length)
   rtx_insn *start_insn = nullptr;
   rtx_insn *last_rvtt_insn = nullptr;
 
-  FOR_BB_INSNS(bb, insn)
+  FOR_BB_INSNS (bb, insn)
     {
       const rvtt_insn_data *insnd;
-      if (NONDEBUG_INSN_P(insn) &&
-	  rvtt_p(&insnd, insn) &&
-	  !insnd->non_tt_p())
+      if (NONDEBUG_INSN_P (insn) && rvtt_p (&insnd, insn)
+	  && !insnd->non_tt_p ())
 	{
 	  hash_type insn_hash = insn_list[i].hash;
-	  hash_type new_hash = compute_seq_hash(insn_hash, seq_hash);
-	  auto entry = final_sequence_map.find(new_hash);
-	  if (count != 0 && (entry == final_sequence_map.end() || halt))
+	  hash_type new_hash = compute_seq_hash (insn_hash, seq_hash);
+	  auto entry = final_sequence_map.find (new_hash);
+	  if (count != 0 && (entry == final_sequence_map.end () || halt))
 	    {
-	      first = do_update(first, i, count, length, start_insn, last_rvtt_insn);
+	      first = do_update (first, i, count, length, start_insn, last_rvtt_insn);
 
 	      count = 0;
 	      seq_hash = 0;
-	      new_hash = compute_seq_hash(insn_hash, seq_hash);
-	      entry = final_sequence_map.find(new_hash);
+	      new_hash = compute_seq_hash (insn_hash, seq_hash);
+	      entry = final_sequence_map.find (new_hash);
 	    }
 	  if (entry != final_sequence_map.end() && !halt)
 	    {
@@ -722,9 +694,7 @@ static void update_insns(basic_block bb, int which, int length)
     }
 
   if (count != 0)
-    {
-      do_update(first, i, count, length, start_insn, last_rvtt_insn);
-    }
+    do_update (first, i, count, length, start_insn, last_rvtt_insn);
 }
 
 // Finding repeats of generic patterns can be costly in either compute or memory
@@ -741,46 +711,35 @@ static void update_insns(basic_block bb, int which, int length)
 // duplicate sequences are removed by using a map.  Finally, the insns are
 // traversed again and each insn votes for the sequences it belongs to, the
 // sequences with the greatest savings (# insns and repeat count) wins.
-static void find_sequence(basic_block bb)
+static void
+find_sequence (basic_block bb)
 {
   int count, strategy;
   int start = -1;
   int length = -1;
 
-  devise_strategy(&count, &strategy, bb);
+  devise_strategy (&count, &strategy, bb);
   if (count != 0)
     {
-      sequences.reserve(count);
-      generate_sequences(count, strategy);
+      sequences.reserve (count);
+      generate_sequences (count, strategy);
 
       // Break the chain of sequences by inserting a dumming insn
-      map_unique_sequences();
-      vote_for_sequences();
-      pick_sequence(&start, &length);
-      collapse_sequence(start, length);
+      map_unique_sequences ();
+      vote_for_sequences ();
+      pick_sequence (&start, &length);
+      collapse_sequence (start, length);
       if (start != -1)
-	{
-	  update_insns(bb, start, length);
-	}
+	update_insns (bb, start, length);
 
-      sequence_map.clear();
-      final_sequence_map.clear();
-      for (auto &iter : sequences)
-	{
-	  iter.resize(0);
-	}
+      sequence_map.clear ();
+      final_sequence_map.clear ();
       sequences.resize(0);
-      for (auto &iter : insn_sequences)
-	{
-	  iter.resize(0);
-	}
       insn_sequences.resize(0);
       insn_list.resize(0);
     }
   else
-    {
-      DUMP("  no sfpu insns, exiting\n");
-    }
+    DUMP("  no sfpu insns, exiting\n");
 }
 
 // The replay pass looks for sequences of instructions that repeat and replaces
@@ -788,16 +747,17 @@ static void find_sequence(basic_block bb)
 //
 // Note that this implementation looks for sequences within a BB which is much
 // easier (I think) than finding loops and replacing them with REPLAY.  TBD.
-static void transform(function *cfn)
+static void
+transform (function *cfn)
 {
-  DUMP("Replay pass on: %s\n", function_name(cfn));
+  DUMP ("Replay pass on: %s\n", function_name (cfn));
 
   basic_block bb;
 
   FOR_EACH_BB_FN (bb, cfn)
     {
-      DUMP(" begin BB\n");
-      find_sequence(bb);
+      DUMP (" begin BB\n");
+      find_sequence (bb);
     }
 }
 
@@ -825,16 +785,38 @@ public:
     insn_list.reserve(200);
   }
 
+  virtual bool gate (function *cfn)
+  {
+    if (!flag_rvtt_replay)
+      return false;
+
+    if (!(TARGET_RVTT_WH || TARGET_RVTT_BH))
+      return false;
+
+    // If there are any replay insns, bail here.  Ideally we'd
+    // continue if there are gaps in the replay allocations. But
+    // that's for another day. Also, perhaps it's cheap or rare enough
+    // to check this condition during building the sequence data
+    // structure.
+    basic_block bb;
+
+    FOR_EACH_BB_FN (bb, cfn)
+      {
+	rtx_insn *insn;
+	FOR_BB_INSNS (bb, insn)
+	  if (INSN_CODE (insn) == CODE_FOR_rvtt_ttreplay)
+	    return false;
+      }
+    return true;
+  } 
+
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
-    {
-      if (flag_rvtt_replay && (TARGET_RVTT_WH || TARGET_RVTT_BH))
-	{
-	  replay_max_insns = rvtt_replay_buffer_size;
-	  transform (cfn);
-	}
-      return 0;
-    }
+  {
+    replay_max_insns = rvtt_replay_buffer_size;
+    transform (cfn);
+    return 0;
+  }
 }; // class pass_rvtt_replay
 
 } // anon namespace
