@@ -49,6 +49,7 @@
   UNSPECV_SFPNONIMM_SRC
   UNSPECV_SFPNONIMM_STORE
   UNSPECV_TTINCRWC
+  UNSPECV_TTREPLAY
 ])
 
 (define_expand "movv64sf"
@@ -284,3 +285,11 @@
                      (match_operand:SI    3 "immediate_operand" "")] UNSPECV_TTINCRWC)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "TTINCRWC\t%0, %1, %2, %3")
+
+(define_insn "rvtt_ttreplay"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M05U")
+                     (match_operand:SI    1 "immediate_operand"  "MP5U")
+                     (match_operand:SI    2 "immediate_operand"  "M01U")
+                     (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_TTREPLAY)]
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TTREPLAY\t%0, %1, %2, %3")

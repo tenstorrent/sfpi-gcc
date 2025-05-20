@@ -88,7 +88,6 @@
   UNSPECV_BH_SFPLUTFP32_3R
   UNSPECV_BH_SFPLUTFP32_6R
   UNSPECV_BH_SFPCONFIG_V
-  UNSPECV_BH_SFPREPLAY
   UNSPECV_BH_SFPSWAP
   UNSPECV_BH_SFPTRANSP
   UNSPECV_BH_SFPSHFT2_G
@@ -976,14 +975,6 @@
                      (match_operand:SI    1 "immediate_operand"  "M04U")] UNSPECV_BH_SFPCONFIG_V)]
   "TARGET_RVTT_BH"
   "SFPCONFIG\t%1, 0, 0")
-
-(define_insn "rvtt_bh_sfpreplay"
-  [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M04U")
-                     (match_operand:SI    1 "immediate_operand"  "MP5U")
-                     (match_operand:SI    2 "immediate_operand"  "M01U")
-                     (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_BH_SFPREPLAY)]
-  "TARGET_RVTT_BH"
-  "TTREPLAY\t%0, %1, %2, %3")
 
 (define_insn "rvtt_bh_sfpswap"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")

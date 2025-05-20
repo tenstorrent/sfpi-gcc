@@ -114,6 +114,7 @@ RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                 
 
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
 
 // Wormhole internal (rtl only) insns
 RVTT_WH_RTL_ONLY(sfpload_int,             0x08, 0x00)
@@ -237,8 +238,6 @@ RVTT_WH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,       
 RVTT_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,               0x00, -1,  4, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
-RVTT_WH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
-
 
 // Blackhole internal (rtl only) insns
 RVTT_BH_RTL_ONLY(sfpload_int,             0x08, 0x00)
@@ -362,7 +361,6 @@ RVTT_BH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,       
 RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,               0x00, -1,  4, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
-RVTT_BH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
 
 #undef RVTT_RTL_ONLY
 #undef RVTT_BUILTIN
