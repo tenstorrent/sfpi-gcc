@@ -98,6 +98,7 @@
   UNSPECV_BH_SFPLUTFP32_6R
   UNSPECV_BH_SFPCONFIG_V
   UNSPECV_BH_SFPREPLAY
+  UNSPECV_BH_SFPRECORD
   UNSPECV_BH_SFPSWAP
   UNSPECV_BH_SFPTRANSP
   UNSPECV_BH_SFPSHFT2_G
@@ -992,6 +993,14 @@
                      (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_BH_SFPREPLAY)]
   "TARGET_RVTT_BH"
   "TTREPLAY\t%0, %1, %2, %3")
+
+(define_insn "rvtt_bh_sfprecord"
+  [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M05U")
+                     (match_operand:SI    1 "immediate_operand"  "MP5U")
+                     (match_operand:SI    2 "immediate_operand"  "M01U")] UNSPECV_BH_SFPRECORD)]
+  /* We'll eventually allow all values in range.  */
+  "TARGET_RVTT_BH && INTVAL (operands[0]) >= 16"
+  "TTREPLAY\t%0, %1, %2, 1")
 
 (define_insn "rvtt_bh_sfpswap"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")

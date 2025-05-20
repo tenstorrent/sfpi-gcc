@@ -234,6 +234,7 @@ RVTT_WH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,       
 RVTT_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,               0x00, -1,  4, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_WH_NO_TGT_BUILTIN (sfprecord,      RISCV_VOID_FTYPE_USI_USI_USI,                               0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
 
 
@@ -356,6 +357,7 @@ RVTT_BH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_V64SF_V64SF_USI,       
 RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF,                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_USI,               0x00, -1,  4, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_V64SF_V64SF_V64SF_V64SF_V64SF,             0x00, -1, -1, 0x00, -1,      0, 0)
+RVTT_BH_NO_TGT_BUILTIN (sfprecord,      RISCV_VOID_FTYPE_USI_USI_USI,                               0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpreplay,      RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
 
 #undef RVTT_RTL_ONLY
