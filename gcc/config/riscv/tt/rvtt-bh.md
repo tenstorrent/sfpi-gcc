@@ -56,18 +56,9 @@
   UNSPECV_BH_SFPLZ
   UNSPECV_BH_SFPLZ_LV
   UNSPECV_BH_SFPLZ_INT
-  UNSPECV_BH_SFPSETMAN_V
-  UNSPECV_BH_SFPSETMAN_I
-  UNSPECV_BH_SFPSETMAN_I_LV
-  UNSPECV_BH_SFPSETMAN_I_INT
-  UNSPECV_BH_SFPSETEXP_V
-  UNSPECV_BH_SFPSETEXP_I
-  UNSPECV_BH_SFPSETEXP_I_LV
-  UNSPECV_BH_SFPSETEXP_I_INT
-  UNSPECV_BH_SFPSETSGN_V
-  UNSPECV_BH_SFPSETSGN_I
-  UNSPECV_BH_SFPSETSGN_I_LV
-  UNSPECV_BH_SFPSETSGN_I_INT
+  UNSPECV_BH_SFPSETMAN
+  UNSPECV_BH_SFPSETEXP
+  UNSPECV_BH_SFPSETSGN
   UNSPECV_BH_SFPMAD
   UNSPECV_BH_SFPMAD_LV
   UNSPECV_BH_SFPMAD_INT
@@ -723,21 +714,20 @@
   "TARGET_RVTT_BH"
   "SFPSTOCHRND\t%0, %3, %4, %5, %2, 0")
 
-(define_int_iterator blackhole_set_float_op_v [UNSPECV_BH_SFPSETEXP_V UNSPECV_BH_SFPSETMAN_V UNSPECV_BH_SFPSETSGN_V])
-(define_int_attr blackhole_set_float_name_v [(UNSPECV_BH_SFPSETEXP_V "exp") (UNSPECV_BH_SFPSETMAN_V "man") (UNSPECV_BH_SFPSETSGN_V "sgn")])
-(define_int_attr blackhole_set_float_call_v [(UNSPECV_BH_SFPSETEXP_V "EXP") (UNSPECV_BH_SFPSETMAN_V "MAN") (UNSPECV_BH_SFPSETSGN_V "SGN")])
-(define_insn "rvtt_bh_sfpset<blackhole_set_float_name_v>_v"
+(define_int_iterator blackhole_set_float_op_v [UNSPECV_BH_SFPSETEXP UNSPECV_BH_SFPSETMAN UNSPECV_BH_SFPSETSGN])
+(define_int_iterator blackhole_set_float_op_i [UNSPECV_BH_SFPSETEXP UNSPECV_BH_SFPSETSGN])
+(define_int_attr blackhole_set_float_name [(UNSPECV_BH_SFPSETEXP "exp") (UNSPECV_BH_SFPSETMAN "man") (UNSPECV_BH_SFPSETSGN "sgn")])
+(define_int_attr blackhole_set_float_insn [(UNSPECV_BH_SFPSETEXP "EXP") (UNSPECV_BH_SFPSETMAN "MAN") (UNSPECV_BH_SFPSETSGN "SGN")])
+
+(define_insn "rvtt_bh_sfpset<blackhole_set_float_name>_v"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
                           (match_operand:V64SF 2 "register_operand"  "x")] blackhole_set_float_op_v))]
   "TARGET_RVTT_BH"
-  "SFPSET<blackhole_set_float_call_v>\t%0, %2, 0, 0"
+  "SFPSET<blackhole_set_float_insn>\t%0, %2, 0, 0"
 )
 
-(define_int_iterator blackhole_set_float_op_i [UNSPECV_BH_SFPSETEXP_I UNSPECV_BH_SFPSETSGN_I])
-(define_int_attr blackhole_set_float_name_i [(UNSPECV_BH_SFPSETEXP_I "exp") (UNSPECV_BH_SFPSETSGN_I "sgn")])
-(define_int_attr blackhole_set_float_call_i [(UNSPECV_BH_SFPSETEXP_I "EXP") (UNSPECV_BH_SFPSETSGN_I "SGN")])
-(define_expand "rvtt_bh_sfpset<blackhole_set_float_name_i>_i"
+(define_expand "rvtt_bh_sfpset<blackhole_set_float_name>_i"
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:SI    2 "nonmemory_operand")
@@ -746,53 +736,55 @@
                           (match_operand:V64SF 5 "register_operand")] blackhole_set_float_op_i))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
-  if (GET_CODE(operands[2]) == CONST_INT) {
-    emit_insn (gen_rvtt_bh_sfpset<blackhole_set_float_name_i>_i_int(operands[0], live,
-                                  rvtt_clamp_unsigned(operands[2], 0xFFF), operands[5]));
-  } else {
-    unsigned long int op = TT_OP_BH_SFPSET<blackhole_set_float_call_i>(0, 0, 0, 1);
-    emit_insn (gen_rvtt_sfpnonimm_dst_src(operands[0], operands[1], GEN_INT(0), live,
-                                           operands[5], GEN_INT(4), GEN_INT(8), operands[3], GEN_INT(op), operands[4]));
-  }
+  rtx insn;
+  if (GET_CODE (operands[2]) == CONST_INT)
+    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_int (operands[0],
+							       rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
+  else
+    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], GEN_INT (0), rvtt_gen_const0_vector (),
+                                       operands[5], GEN_INT (4), GEN_INT (8), operands[3],
+				       GEN_INT (TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1)), operands[4]);
+  emit_insn (insn);
   DONE;
 })
 
-(define_int_iterator blackhole_set_float_op_i_lv [UNSPECV_BH_SFPSETEXP_I_LV UNSPECV_BH_SFPSETSGN_I_LV])
-(define_int_attr blackhole_set_float_name_i_lv [(UNSPECV_BH_SFPSETEXP_I_LV "exp") (UNSPECV_BH_SFPSETSGN_I_LV "sgn")])
-(define_int_attr blackhole_set_float_call_i_lv [(UNSPECV_BH_SFPSETEXP_I_LV "EXP") (UNSPECV_BH_SFPSETSGN_I_LV "SGN")])
-(define_expand "rvtt_bh_sfpset<blackhole_set_float_name_i_lv>_i_lv"
+(define_expand "rvtt_bh_sfpset<blackhole_set_float_name>_i_lv"
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:V64SF 2 "register_operand")
                           (match_operand:SI    3 "nonmemory_operand")
                           (match_operand:SI    4 "register_operand")
                           (match_operand:SI    5 "immediate_operand")
-                          (match_operand:V64SF 6 "register_operand")] blackhole_set_float_op_i_lv))]
+                          (match_operand:V64SF 6 "register_operand")] blackhole_set_float_op_i))]
   "TARGET_RVTT_BH"
 {
-  rtx live = operands[2];
-  if (GET_CODE(operands[3]) == CONST_INT) {
-    emit_insn (gen_rvtt_bh_sfpset<blackhole_set_float_name_i_lv>_i_int(operands[0], live,
-                                   rvtt_clamp_unsigned(operands[3], 0xFFF), operands[6]));
-  } else {
-    unsigned long int op = TT_OP_BH_SFPSET<blackhole_set_float_call_i_lv>(0, 0, 0, 1);
-    emit_insn (gen_rvtt_sfpnonimm_dst_src(operands[0], operands[1], GEN_INT(0),
-               live, operands[6], GEN_INT(4), GEN_INT(8), operands[4], GEN_INT(op), operands[5]));
-  }
+  rtx insn;
+  if (GET_CODE(operands[3]) == CONST_INT)
+    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int(operands[0], operands[2],
+                                   rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
+  else
+    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], GEN_INT (0),
+				       operands[2], operands[6], GEN_INT (4), GEN_INT (8), operands[4],
+				       GEN_INT (TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1)), operands[5]);
+  emit_insn (insn);
   DONE;
 })
 
-(define_int_iterator blackhole_set_float_op_i_int [UNSPECV_BH_SFPSETEXP_I_INT UNSPECV_BH_SFPSETSGN_I_INT])
-(define_int_attr blackhole_set_float_name_i_int [(UNSPECV_BH_SFPSETEXP_I_INT "exp") (UNSPECV_BH_SFPSETSGN_I_INT "sgn")])
-(define_int_attr blackhole_set_float_call_i_int [(UNSPECV_BH_SFPSETEXP_I_INT "EXP") (UNSPECV_BH_SFPSETSGN_I_INT "SGN")])
-(define_insn "rvtt_bh_sfpset<blackhole_set_float_name_i_int>_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
-                          (match_operand:SI    2 "immediate_operand" "M12U, M12U")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")] blackhole_set_float_op_i_int))]
+(define_insn "rvtt_bh_sfpset<blackhole_set_float_name>_i_int"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:SI    1 "immediate_operand" "M12U")
+                          (match_operand:V64SF 2 "register_operand"  "x")] blackhole_set_float_op_i))]
   "TARGET_RVTT_BH"
-  "SFPSET<blackhole_set_float_call_i_int>\t%0, %3, %2, 1"
+  "SFPSET<blackhole_set_float_insn>\t%0, %2, %1, 1"
+)
+
+(define_insn "rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int"
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "register_operand" "0")
+                          (match_operand:SI    2 "immediate_operand" "M12U")
+                          (match_operand:V64SF 3 "register_operand"  "x")] blackhole_set_float_op_i))]
+  "TARGET_RVTT_BH"
+  "SFPSET<blackhole_set_float_insn>\t%0, %3, %2, 1"
 )
 
 (define_expand "rvtt_bh_sfpsetman_i"
@@ -802,7 +794,7 @@
                           (match_operand:SI    3 "register_operand")
                           (match_operand:SI    4 "immediate_operand")
                           (match_operand:V64SF 5 "register_operand")
-                          (match_operand:SI    6 "immediate_operand")] UNSPECV_BH_SFPSETMAN_I))]
+                          (match_operand:SI    6 "immediate_operand")] UNSPECV_BH_SFPSETMAN))]
   "TARGET_RVTT_BH"
 {
   rtx live = rvtt_gen_const0_vector();
@@ -818,7 +810,7 @@
                           (match_operand:SI    4 "register_operand")
                           (match_operand:SI    5 "immediate_operand")
                           (match_operand:V64SF 6 "register_operand")
-                          (match_operand:SI    7 "immediate_operand")] UNSPECV_BH_SFPSETMAN_I_LV))]
+                          (match_operand:SI    7 "immediate_operand")] UNSPECV_BH_SFPSETMAN))]
   "TARGET_RVTT_BH"
 {
   rtx live = operands[2];
@@ -830,7 +822,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand" "E, 0")
                           (match_operand:SI    2 "immediate_operand" "M12U, M12U")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")] UNSPECV_BH_SFPSETMAN_I_INT))]
+                          (match_operand:V64SF 3 "register_operand"  "x, x")] UNSPECV_BH_SFPSETMAN))]
   "TARGET_RVTT_BH"
   "SFPSETMAN\t%0, %3, %2, 1"
 )

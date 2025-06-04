@@ -106,7 +106,8 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 131;
+static const int NUMBER_OF_INTRINSICS = 134;
+
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
 #define RVTT_RTL_ONLY(id, nip, gp) { rvtt_insn_data::id, #id, nullptr, 0x08, -1, -1, 0, nip, gp, 0, 0 },
@@ -208,22 +209,24 @@ init_rtx_insnd(int code, int arch)
   }
 
   if (strncmp(insn_data[code].name, "rvtt_", 5) == 0 && !matches_other_arch) {
-    // Try <__builtin_rvtt_>name
+    // Try <__builtin_>name
     char name[100];
     sprintf(name, "__builtin_%s", insn_data[code].name);
-    const rvtt_insn_data *tmp = rvtt_get_insn_data(name);
+    const rvtt_insn_data *tmp = rvtt_get_insn_data (name);
     if (tmp->id != rvtt_insn_data::nonsfpu) return tmp;
 
     // Try name
-    tmp = rvtt_get_insn_data(&insn_data[code].name[5]);
+    tmp = rvtt_get_insn_data (&insn_data[code].name[5]);
     if (tmp->id != rvtt_insn_data::nonsfpu) return tmp;
 
     // Try name minus arch
     tmp = rvtt_get_insn_data(&insn_data[code].name[8]);
     if (tmp->id != rvtt_insn_data::nonsfpu) return tmp;
 
-    fprintf(stderr, "Failed to match rvtt insn %s for arch index %d\n", insn_data[code].name, arch);
-    gcc_assert(0);
+#if CHECKING_P
+    fprintf (stderr, "Failed to match rvtt insn %s for arch index %d\n", insn_data[code].name, arch);
+    gcc_unreachable ();
+#endif
   }
 
   return &sfpu_insn_data[rvtt_insn_data::nonsfpu];
@@ -307,9 +310,7 @@ rvtt_init_builtins()
 
   sfpu_rtl_insn_ptrs.resize(NUM_INSN_CODES);
   for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
-    {
-      sfpu_rtl_insn_ptrs[i] = init_rtx_insnd(i, arch);
-    }
+    sfpu_rtl_insn_ptrs[i] = init_rtx_insnd (i, arch);
 }
 
 const char *
