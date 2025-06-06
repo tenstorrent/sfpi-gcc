@@ -295,15 +295,7 @@ rvtt_init_builtins()
   for (int i = 1; i < NUMBER_OF_ARCHES; i++)
     {
       for (int j = 0; j < NUMBER_OF_INTRINSICS; j++)
-	{
-	  if (sfpu_insn_data_target[0][j].id != sfpu_insn_data_target[i][j].id)
-	    {
-	      fprintf(stderr, "SFPU intrinsic table element (%d, %d) does not match (%d != %d) (%s != %s)!\n",
-		      i, j, sfpu_insn_data_target[0][j].id, sfpu_insn_data_target[i][j].id,
-		      sfpu_insn_data_target[0][j].name, sfpu_insn_data_target[i][j].name);
-	      gcc_assert(0);
-	    }
-	}
+	gcc_assert (sfpu_insn_data_target[0][j].id == sfpu_insn_data_target[i][j].id);
 
       gcc_assert(sfpu_insn_data_target[i][NUMBER_OF_INTRINSICS - 1].id == rvtt_insn_data::nonsfpu);
     }

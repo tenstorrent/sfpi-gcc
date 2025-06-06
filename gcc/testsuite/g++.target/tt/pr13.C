@@ -17,7 +17,7 @@ inline void calculate_power_iterative(unsigned exponent) {
 	      acc, __builtin_rvtt_wh_sfpmul(acc, in, 0));
 
     __builtin_rvtt_wh_sfpstore(nullptr, acc, 12, 3, 0, 0, 0);
-    __builtin_rvtt_sfpincrwc(0, 2, 0, 0);
+    __builtin_rvtt_ttincrwc(0, 2, 0, 0);
   }
 }
 

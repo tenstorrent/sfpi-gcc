@@ -140,9 +140,9 @@ constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
 constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
-constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01;
-constexpr unsigned int INSN_FLAGS_LIVE               = 0x02;
-constexpr unsigned int INSN_FLAGS_HAS_HALF_OFFSET    = 0x04;
+constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01; // builtin property
+constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
+// no longer needed 0x04;
 constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
 // Next 3 are exclusive
 constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an sfpu insn (eg, incrwc)
@@ -170,7 +170,6 @@ struct GTY(()) rvtt_insn_data {
 
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
-  inline bool has_half_offset_p() const { return flags & INSN_FLAGS_HAS_HALF_OFFSET; }
   inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
   inline bool odd_bird_p() const { return flags & (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY); }
   inline bool non_tt_p() const { return flags & INSN_FLAGS_NON_TT; }

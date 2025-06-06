@@ -44,11 +44,11 @@
   UNSPECV_SFPXBOOL
   UNSPECV_SFPXCONDB
   UNSPECV_SFPXCONDI
-  UNSPECV_SFPINCRWC
   UNSPECV_SFPNONIMM_DST
   UNSPECV_SFPNONIMM_DST_SRC
   UNSPECV_SFPNONIMM_SRC
   UNSPECV_SFPNONIMM_STORE
+  UNSPECV_TTINCRWC
 ])
 
 (define_expand "movv64sf"
@@ -277,10 +277,10 @@
   gcc_unreachable();
 })
 
-(define_insn "rvtt_sfpincrwc"
+(define_insn "rvtt_ttincrwc"
   [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "")
                      (match_operand:SI    1 "immediate_operand" "")
                      (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPINCRWC)]
+                     (match_operand:SI    3 "immediate_operand" "")] UNSPECV_TTINCRWC)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "TTINCRWC\t%0, %1, %2, %3")
