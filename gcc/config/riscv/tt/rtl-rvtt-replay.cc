@@ -828,7 +828,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned int execute (function *cfn)
     {
-      if (flag_rvtt_replay && ((TARGET_RVTT_WH && !flag_wormhole_a0) || TARGET_RVTT_BH))
+      if (flag_rvtt_replay && (TARGET_RVTT_WH || TARGET_RVTT_BH))
 	{
 	  replay_max_insns = rvtt_replay_buffer_size;
 	  transform (cfn);

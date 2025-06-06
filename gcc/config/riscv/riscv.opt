@@ -78,10 +78,6 @@ mdiv
 Target Mask(DIV)
 Use hardware instructions for integer division.
 
-mwormhole_a0
-Target Bool Var(flag_wormhole_a0) Init(0)
-Generate code for Tenstorrent SFPU - Wormhole a0 Si.
-
 march=
 Target RejectNegative Joined Negative(march=)
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be
