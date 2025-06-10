@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
+#include "diagnostic-core.h"
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
@@ -173,6 +174,8 @@ transform (function *fn)
   // Build the opcode-use graph
   std::vector<node_t> graph;
   std::vector<unsigned> opcode_counts;
+  bool immediates = false;
+  bool renumbered = false;
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -196,8 +199,8 @@ transform (function *fn)
 	      graph[opcode_ix].addend = count;
 	    }
 	}
-  bool renumbered = false;
 
+  bool renumbered = false;
   unsigned unique_id = opcode_counts.size () - 1;
   for (auto &node : graph)
     {

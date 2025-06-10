@@ -67,8 +67,10 @@ transform (function *fn)
 	gcall *stmt;
 	const rvtt_insn_data *insnd;
 
-	if (rvtt_p (&insnd, &stmt, gsi)
-	    && insnd->nonimm_pos != -1)
+	if (!rvtt_p (&insnd, &stmt, gsi))
+	  continue;
+
+	if (insnd->nonimm_pos != -1)
 	  {
 	    tree immarg = gimple_call_arg (stmt, insnd->nonimm_pos);
 	    if (TREE_CODE (immarg) == INTEGER_CST)
@@ -84,9 +86,15 @@ transform (function *fn)
 		gimple_call_set_arg (stmt, insnd->nonimm_pos + 2,
 				     build_int_cst (integer_type_node, synth_id));
 	      }
-	    update_stmt (stmt);
-	    updated = true;
 	  }
+	else if (insnd->id == rvtt_insn_data::ttinsn
+		 && TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST)
+	  gimple_call_set_arg (stmt, 0, null_pointer_node);
+	else
+	  continue;
+
+	update_stmt (stmt);
+	updated = true;
       }
 
   if (updated)
