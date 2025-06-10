@@ -47,8 +47,9 @@
 
   UNSPECV_SFPNOP
 
-UNSPECV_TTINCRWC
+  UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
+  UNSPECV_TTINSN
 ])
 
 (define_expand "movv64sf"
@@ -248,3 +249,20 @@ UNSPECV_TTINCRWC
                      (match_operand:SI    3 "const_int_operand"  "N01U")] UNSPECV_TTREPLAY)]
   "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")
+
+(define_insn "rvtt_ttinsn_int"
+  [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,X")
+                     (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] UNSPECV_TTINSN)]
+  "TARGET_RVTT"
+  "@
+   sw\t%1,%0
+   .ttinsn\t%1")
+
+(define_expand "rvtt_ttinsn"
+  [(unspec_volatile [(mem:SI (match_operand:SI    0 "address_operand"  ""))
+                     (match_operand:SI    1 "reg_or_const_int_operand" "")] UNSPECV_TTINSN)]
+  "TARGET_RVTT"
+{
+  emit_insn (gen_rvtt_ttinsn_int (gen_rtx_MEM (SImode, operands[0]), operands[1]));
+  DONE;
+})
