@@ -1,5 +1,8 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 
+namespace ckernel {
+  unsigned *instrn_buffer;
+}
 #include <lltt.h>
 
 void record () {

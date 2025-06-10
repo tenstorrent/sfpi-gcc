@@ -115,6 +115,7 @@ RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                          
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (ttinsn,         RISCV_VOID_FTYPE_POINTER_USI,                               0x10, -1, -1, 0x00, -1,      0, 0)
 
 // Wormhole internal (rtl only) insns
 RVTT_WH_RTL_ONLY(sfpload_int,             0x08, 0x00)
