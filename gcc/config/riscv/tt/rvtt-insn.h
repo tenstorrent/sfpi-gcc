@@ -95,6 +95,10 @@ RVTT_RTL_ONLY (sfpnonimm_src,     5,  2)
 RVTT_RTL_ONLY (sfpnonimm_store,   5,  2)
 RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
 
+RVTT_RTL_ONLY (sfpsynth_insn_dst,     -1, -1)
+RVTT_RTL_ONLY (sfpsynth_insn,         -1, -1)
+RVTT_BUILTIN (load_insn,  RISCV_USI_FTYPE_USI,  0x20, -1, -1, 0x00, -1,      0, 0)
+
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
 // mod_pos: which argument number contains the mod value

@@ -39,6 +39,8 @@ extern rtx rvtt_gen_const0_vector();
 
 extern char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[]);
 
+char const *rvtt_synth_insn_pattern (rtx operands[], bool);
+
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
 
 extern void rvtt_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);

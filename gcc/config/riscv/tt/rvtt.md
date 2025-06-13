@@ -34,6 +34,10 @@
   ;; INT for internal
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
+
+  UNSPEC_LOAD_INSN
+  UNSPECV_SFPSYNTH_INSN
+
   UNSPECV_LOAD_IMMEDIATE
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
@@ -59,6 +63,81 @@
 {
   if (riscv_legitimize_move (V64SFmode, operands[0], operands[1]))
     DONE;
+})
+
+
+;; rvtt_load_insn and rvtt_sfpsynth_insn{,_dst} are used to synthesize
+;; sfp/tt instructions that are injected into the instruction stream.
+;; rvtt_load_insn is tied to 1 or more rvtt_sfpsynth_insn insns
+;; (unrolling can do that). The ID does that (SSA DEP-USE chains are
+;; insufficient as we need to prevent CSE merging the load_insn
+;; builtin calls).  The operand is later replaced with the constant
+;; parts of the instruction encoding (once register allocation has
+;; happened). Because different rvtt_sfpsynth_insns might have
+;; different register uses (but mostly don't) we need to check that
+;; the registers are still consistent and fixup if not at code
+;; emission time.  The rvtt_sfpsynth_insn's use const0_vec for
+;; non-used srcs and/or dsts.
+
+(define_insn "rvtt_load_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+         (unspec [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_LOAD_INSN))]
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+{
+  static char pattern[32];
+  unsigned pos = 0;
+
+  pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
+		    "li\t%%0, %%1\t# Insn(%#x)", unsigned (INTVAL (operands[1])));
+  gcc_assert (pos < sizeof (pattern));
+
+  return pattern;
+})
+
+;; Name the operands, there are too many(!), sadly we can't use them everywhere.
+(define_c_enum "synth_ops" [
+  SYNTH_mem
+  SYNTH_flags
+  SYNTH_synthed
+  SYNTH_opcode
+  SYNTH_id
+  SYNTH_clobber
+  SYNTH_src
+  SYNTH_src_shift
+  SYNTH_dst
+  SYNTH_dst_shift
+  ])
+(define_insn "rvtt_sfpsynth_insn_dst"
+  [(set (match_operand:V64SF 8 "register_operand" "=x") ; result
+        (unspec_volatile [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
+                          (match_operand:SI    1 "const_int_operand" "n") ; flags
+                          (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
+                          (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
+                          (match_operand:SI    4 "const_int_operand" "n") ; id
+			  (match_operand:V64SF 6 "reg_or_cvec_operand" "xz") ; src
+                          (match_operand:SI    7 "const_int_operand" "n") ; src shift
+                          (match_operand:SI    9 "const_int_operand" "n") ; dst shift
+			  (match_operand:V64SF 10 "reg_or_cvec_operand" "8z") ; lv
+                          ] UNSPECV_SFPSYNTH_INSN))
+   (clobber (match_scratch:SI 5 "=&r"))]
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+{
+  return rvtt_synth_insn_pattern (operands, true);
+})
+
+(define_insn "rvtt_sfpsynth_insn"
+  [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,m") ; instrn_buffer
+                     (match_operand:SI    1 "const_int_operand" "n,n") ; flags
+                     (match_operand:SI    2 "register_operand"  "rr,") ; synth'd insn
+                     (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
+                     (match_operand:SI    4 "const_int_operand" "n,n") ; id
+	             (match_operand:V64SF 6 "reg_or_cvec_operand" "x,z") ; src
+                     (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
+                     ] UNSPECV_SFPSYNTH_INSN)
+   (clobber (match_scratch:SI 5 "=&r, X"))]
+  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+{
+  return rvtt_synth_insn_pattern (operands, false);
 })
 
 (define_insn "rvtt_load_immediate"

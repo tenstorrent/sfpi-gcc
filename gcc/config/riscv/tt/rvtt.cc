@@ -106,7 +106,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 134;
+static const int NUMBER_OF_INTRINSICS = 137;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -141,6 +141,7 @@ static std::vector<const rvtt_insn_data *> sfpu_rtl_insn_ptrs;
 
 static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* rvtt_builtin_name_stub;
+
 void
 rvtt_insert_insn(int idx, const char* name, tree decl)
 {
@@ -494,16 +495,16 @@ rtx rvtt_clamp_unsigned(rtx v, unsigned int mask)
   return GEN_INT(out);
 }
 
+// FIXME: It'd be nice to init this once at startup.
+static GTY(()) rtx rvtt_const0_vector_rtx;
+
 rtx rvtt_gen_const0_vector()
 {
-    int i;
-    rtx vec[64];
+  if (!rvtt_const0_vector_rtx)
+    rvtt_const0_vector_rtx = gen_const_vec_duplicate (V64SFmode,
+						      const_double_from_real_value (dconst0, SFmode));
 
-    for (i = 0; i < 64; i++) {
-      vec[i] = const_double_from_real_value(dconst0, SFmode);
-    }
-
-    return gen_rtx_CONST_VECTOR(V64SFmode, gen_rtvec_v(64, vec));
+  return rvtt_const0_vector_rtx;
 }
 
 const char* rvtt_sfpu_lv_regno_str(char *str, rtx operand)
@@ -558,13 +559,74 @@ char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands
 {
   // Replay pass on wormhole/blackhole assumes insns only emit 1 insn
   nnops &= INSN_SCHED_NOP_MASK;
-  gcc_assert(!TARGET_RVTT_WH || !TARGET_RVTT_BH || nnops == 0);
+  gcc_assert(nnops == 0);
   char const *out = sw;
   while (nnops-- > 0) {
      output_asm_insn(out, operands);
      out = "TTNOP";
   }
   return out;
+}
+
+// Generate the assembly for to synthesize an instruction
+char const *
+rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
+{
+  uint32_t reg_mask = 0;
+  uint32_t reg_ops = 0;
+  rtx src_reg = operands[SYNTH_src];
+  if (REG_P (src_reg))
+    {
+      unsigned src_shift = unsigned (INTVAL (operands[SYNTH_src_shift]));
+      reg_mask |= 0xf << src_shift;
+      reg_ops |= rvtt_sfpu_regno (src_reg) << src_shift;
+    }
+  if (has_dst)
+    {
+      rtx dst_reg = operands[SYNTH_dst];
+      gcc_assert (REG_P (dst_reg));
+      unsigned dst_shift = unsigned (INTVAL (operands[SYNTH_dst_shift]));
+      reg_mask |= 0xf << dst_shift;
+      reg_ops |= rvtt_sfpu_regno (dst_reg) << dst_shift;
+    }
+  gcc_assert (reg_mask || !REG_P (operands[SYNTH_clobber]));
+
+  uint32_t opcode = INTVAL (operands[SYNTH_opcode]);
+  char const *update_pattern = "";
+  unsigned synth_opno = SYNTH_synthed;
+  if (uint32_t change = (opcode & reg_mask) ^ reg_ops)
+    {
+      // The register assignments here are different from those of the
+      // first synth encountered.  We must adjust the incomming
+      // pattern.
+      opcode ^= change;
+      operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, change);
+      gcc_assert (SYNTH_clobber == 5 && SYNTH_opcode == 3 && SYNTH_synthed == 2);
+      update_pattern = "li\t%5,%3\n\txor\t%5,%5,%2\n\t";
+      synth_opno = SYNTH_clobber;
+    }
+
+  static char pattern[100];
+  unsigned pos = 0;
+
+  gcc_assert (SYNTH_mem == 0);
+  pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
+		   "%ssw\t%%%u, %%0\t# Op(0x%x)",
+		   update_pattern, synth_opno, opcode >> 24);
+  gcc_assert (SYNTH_src == 6 && SYNTH_dst == 8);
+  if (has_dst)
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%8");
+  if (REG_P (src_reg))
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %6"[has_dst * 2]);
+  pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " Insn(%08x)", opcode);
+
+  // NOPS was a grayskull feature
+  unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
+  gcc_assert (!nops);
+
+  gcc_assert (pos < sizeof (pattern));
+  
+  return pattern;
 }
 
 uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
