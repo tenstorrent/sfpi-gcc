@@ -23,21 +23,32 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-wh.h"
 #include "sfpu-ops-bh.h"
 
-constexpr unsigned int SFPNONIMM_ID_FALLBACK_FLAG = 0xFF000000;
-
-#define rvtt_sfpu_regno(operand) (REGNO(operand) - SFPU_REG_FIRST)
+#define rvtt_sfpu_regno(operand) (REGNO (operand) - SFPU_REG_FIRST)
 
 constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
 constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic scheduling flag
 constexpr unsigned int INSN_SCHED_DYN_DEP  = 0x40;  // has a dependency on a prior insn type
 
-extern const char* rvtt_sfpu_lv_regno_str(char *str, rtx operand);
-
 extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
 extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
 extern rtx rvtt_gen_const0_vector();
 
-extern char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[]);
+char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
+
+rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv);
+inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+				   rtx dst, unsigned dst_shift, rtx lv)
+{
+  return rvtt_sfpsynth_insn_dst (addr, flags, synth, opcode, id,
+				 rvtt_gen_const0_vector (), 0, dst, dst_shift, lv);
+}
+rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+			rtx src, unsigned src_shift);
+inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id)
+{
+  return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_gen_const0_vector (), 0);
+}
 
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
 

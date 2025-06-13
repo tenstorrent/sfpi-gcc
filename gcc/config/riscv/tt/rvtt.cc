@@ -18,50 +18,28 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 #define INCLUDE_STRING
-#include <unordered_map>
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
-#include "tm.h"
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
-#include "regs.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "recog.h"
-#include "output.h"
-#include "alias.h"
 #include "stringpool.h"
 #include "attribs.h"
-#include "varasm.h"
-#include "stor-layout.h"
-#include "calls.h"
-#include "function.h"
-#include "explow.h"
 #include "memmodel.h"
 #include "emit-rtl.h"
-#include "reload.h"
-#include "tm_p.h"
-#include "target.h"
-#include "target-def.h"
-#include "basic-block.h"
-#include "expr.h"
-#include "optabs.h"
-#include "bitmap.h"
 #include "df.h"
-#include "diagnostic.h"
-#include "builtins.h"
-#include "predict.h"
-#include "tree-pass.h"
 #include "ssa.h"
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
-#include <vector>
+#include <unordered_map>
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -106,7 +84,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 134;
+static const int NUMBER_OF_INTRINSICS = 132;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -141,6 +119,7 @@ static std::vector<const rvtt_insn_data *> sfpu_rtl_insn_ptrs;
 
 static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* rvtt_builtin_name_stub;
+
 void
 rvtt_insert_insn(int idx, const char* name, tree decl)
 {
@@ -494,27 +473,16 @@ rtx rvtt_clamp_unsigned(rtx v, unsigned int mask)
   return GEN_INT(out);
 }
 
+// FIXME: It'd be nice to init this once at startup.
+static GTY(()) rtx rvtt_const0_vector_rtx;
+
 rtx rvtt_gen_const0_vector()
 {
-    int i;
-    rtx vec[64];
+  if (!rvtt_const0_vector_rtx)
+    rvtt_const0_vector_rtx = gen_const_vec_duplicate (V64SFmode,
+						      const_double_from_real_value (dconst0, SFmode));
 
-    for (i = 0; i < 64; i++) {
-      vec[i] = const_double_from_real_value(dconst0, SFmode);
-    }
-
-    return gen_rtx_CONST_VECTOR(V64SFmode, gen_rtvec_v(64, vec));
-}
-
-const char* rvtt_sfpu_lv_regno_str(char *str, rtx operand)
-{
-  if (GET_CODE(operand) == CONST_VECTOR) {
-    sprintf(str, "-");
-  } else {
-    sprintf(str, "lv(lr%d) ", REGNO(operand) - SFPU_REG_FIRST);
-  }
-
-  return str;
+  return rvtt_const0_vector_rtx;
 }
 
 // If a stmt's single use args aren't tracked back to their
@@ -554,17 +522,68 @@ void rvtt_prep_stmt_for_deletion(gimple *stmt)
     }
 }
 
-char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[])
+// Generate the assembly for an sfpsynt_insn{,_dst} insn.
+
+char const *
+rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
 {
-  // Replay pass on wormhole/blackhole assumes insns only emit 1 insn
-  nnops &= INSN_SCHED_NOP_MASK;
-  gcc_assert(!TARGET_RVTT_WH || !TARGET_RVTT_BH || nnops == 0);
-  char const *out = sw;
-  while (nnops-- > 0) {
-     output_asm_insn(out, operands);
-     out = "TTNOP";
-  }
-  return out;
+  uint32_t reg_mask = 0;
+  uint32_t reg_ops = 0;
+  rtx src_reg = operands[SYNTH_src];
+  if (REG_P (src_reg))
+    {
+      unsigned src_shift = unsigned (INTVAL (operands[SYNTH_src_shift]));
+      reg_mask |= 0xf << src_shift;
+      reg_ops |= rvtt_sfpu_regno (src_reg) << src_shift;
+    }
+  bool has_dst = clobber_op > SYNTH_dst;
+  if (has_dst)
+    {
+      rtx dst_reg = operands[SYNTH_dst];
+      gcc_assert (REG_P (dst_reg));
+      unsigned dst_shift = unsigned (INTVAL (operands[SYNTH_dst_shift]));
+      reg_mask |= 0xf << dst_shift;
+      reg_ops |= rvtt_sfpu_regno (dst_reg) << dst_shift;
+    }
+  gcc_assert (!reg_mask == !REG_P (operands[clobber_op]));
+
+  uint32_t opcode = INTVAL (operands[SYNTH_opcode]);
+  static char pattern[100];
+  unsigned pos = 0;
+  unsigned synth_opno = SYNTH_synthed;
+  if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
+    {
+      // The register assignments here are different from those of the
+      // first synth encountered.  We must adjust the incomming
+      // pattern.
+      opcode ^= reg_change;
+      operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
+      gcc_assert (SYNTH_opcode == 3 && SYNTH_synthed == 2);
+      pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
+		       "li\t%d,%%3\n\txor\t%d,%d,%%2\n\t", clobber_op, clobber_op, clobber_op);
+      synth_opno = clobber_op;
+    }
+
+  gcc_assert (SYNTH_mem == 0);
+  pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
+		   "sw\t%%%u, %%0\t# %d:%x",
+		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
+  gcc_assert (SYNTH_src == 5 && SYNTH_dst == 7);
+  if (has_dst)
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
+  bool has_lv = REG_P (operands[SYNTH_lv]);
+  if (has_lv)
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
+  if (REG_P (src_reg))
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %5"[!has_lv]);
+
+  // NOPS was a grayskull feature
+  unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
+  gcc_assert (!nops);
+
+  gcc_assert (pos < sizeof (pattern));
+
+  return pattern;
 }
 
 uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
@@ -763,11 +782,12 @@ static tree
 emit_load_imm(unsigned int id, gimple_stmt_iterator *gsip, gimple *stmt)
 {
   const rvtt_insn_data *new_insnd =
-    rvtt_get_insn_data(rvtt_insn_data::load_immediate);
+    rvtt_get_insn_data(rvtt_insn_data::synth_opcode);
 
   tree tmp = make_temp_ssa_name (unsigned_type_node, NULL, "li");
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1);
-  gimple_call_set_arg(new_stmt, 0, build_int_cst(unsigned_type_node, id));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2);
+  gimple_call_set_arg(new_stmt, 0, build_int_cst(unsigned_type_node, 0));
+  gimple_call_set_arg(new_stmt, 1, build_int_cst(unsigned_type_node, id));
   gimple_call_set_lhs (new_stmt, tmp);
   finish_new_insn(gsip, true, new_stmt, stmt);
 
@@ -781,6 +801,24 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
   gimple *new_stmt = gimple_build_assign(tmp, PLUS_EXPR, lop, rop);
   finish_new_insn(gsip, true, new_stmt, stmt);
   return tmp;
+}
+
+rtx
+rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+			rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
+{
+  return gen_rvtt_sfpsynth_insn_dst
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_const0_vector ());
+}
+
+rtx
+rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+		    rtx src, unsigned src_shift)
+{
+  return gen_rvtt_sfpsynth_insn
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+     src, GEN_INT (src_shift));
 }
 
 tree
@@ -843,52 +881,49 @@ void
 rvtt_cleanup_nonimm_lis(function *fun)
 {
   basic_block bb;
-  gimple_stmt_iterator gsi;
 
   FOR_EACH_BB_FN (bb, fun)
     {
-      gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (gsi))
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	   !gsi_end_p (gsi); )
 	{
 	  gcall *stmt;
 	  const rvtt_insn_data *insnd;
-	  bool remove = false;
 
-	  if (rvtt_p(&insnd, &stmt, gsi) &&
-	      insnd->id == rvtt_insn_data::load_immediate)
+	  if (rvtt_p (&insnd, &stmt, gsi) &&
+	      insnd->id == rvtt_insn_data::synth_opcode)
 	    {
-	      tree lhs = gimple_call_lhs(stmt);
+	      tree lhs = gimple_call_lhs (stmt);
 	      gimple *use_stmt;
 	      imm_use_iterator iter;
-	      remove = true;
+	      unsigned num_uses = 0;
+
 	      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
 		{
-		  remove = false;
-		  if (use_stmt->code != GIMPLE_DEBUG)
+		  if (use_stmt->code == GIMPLE_DEBUG)
+		    continue;
+
+		  tree sum_lhs = gimple_assign_lhs (use_stmt);
+		  if (sum_lhs && has_zero_uses (sum_lhs))
 		    {
-		      tree sum_lhs = gimple_assign_lhs(use_stmt);
-		      if (sum_lhs != NULL_TREE && has_zero_uses(sum_lhs))
-			{
-			  DUMP("    ...removing sum\n");
-			  gimple_stmt_iterator gsi_sum = gsi_for_stmt(use_stmt);
-			  gsi_remove(&gsi_sum, true);
-			  remove = true;
-			  break;
-			}
+		      DUMP ("    ...removing sum\n");
+		      gimple_stmt_iterator gsi_sum = gsi_for_stmt (use_stmt);
+		      gsi_remove (&gsi_sum, true);
 		    }
+		  else
+		    num_uses++;
 		}
-	      if (remove)
+
+	      if (!num_uses)
 		{
-		  DUMP("    ...removing %s\n", insnd->name);
-		  unlink_stmt_vdef(stmt);
-		  gsi_remove(&gsi, true);
-		  release_defs(stmt);
+		  DUMP ("    ...removing %s\n", insnd->name);
+		  unlink_stmt_vdef (stmt);
+		  gsi_remove (&gsi, true);
+		  release_defs (stmt);
+		  continue;
 		}
 	    }
-	  if (!remove)
-	    {
-	      gsi_next(&gsi);
-	    }
+	  gsi_next (&gsi);
 	}
     }
 }

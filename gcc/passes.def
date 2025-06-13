@@ -184,7 +184,7 @@ along with GCC; see the file COPYING3.  If not see
      output to the assembler file.  */
   INSERT_PASSES_AFTER (all_passes)
   NEXT_PASS (pass_fixup_cfg);
-  NEXT_PASS (pass_rvtt_nonimm_tag);
+  NEXT_PASS (pass_rvtt_synth_split);
   NEXT_PASS (pass_lower_eh_dispatch);
   NEXT_PASS (pass_oacc_loop_designation);
   NEXT_PASS (pass_omp_oacc_neuter_broadcast);
@@ -434,7 +434,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_warn_function_noreturn);
 
   NEXT_PASS (pass_rvtt_warn);
-  NEXT_PASS (pass_rvtt_nonimm_expand);
+  NEXT_PASS (pass_rvtt_synth_expand);
   NEXT_PASS (pass_rvtt_expand);
   NEXT_PASS (pass_rvtt_live);
   NEXT_PASS (pass_rvtt_cc);
@@ -500,7 +500,7 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_ira);
       NEXT_PASS (pass_reload);
 
-      NEXT_PASS (pass_rvtt_nonimm);
+      NEXT_PASS (pass_rvtt_synth_opcode);
       NEXT_PASS (pass_rvtt_schedule);
       NEXT_PASS (pass_postreload);
       NEXT_PASS (pass_rvtt_replay);

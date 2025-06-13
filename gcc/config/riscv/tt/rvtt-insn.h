@@ -89,11 +89,10 @@ along with GCC; see the file COPYING3.  If not see
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpnonimm_dst,     5,  1)
-RVTT_RTL_ONLY (sfpnonimm_dst_src, 7,  1)
-RVTT_RTL_ONLY (sfpnonimm_src,     5,  2)
-RVTT_RTL_ONLY (sfpnonimm_store,   5,  2)
 RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
+
+RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1)
+RVTT_RTL_ONLY (sfpsynth_insn,         3, 1)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
@@ -104,7 +103,7 @@ RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
 // nonimm_shft: shift to right justify the nonimm value
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, schedule, nonimm_pos, nonimm_mask, nonimm_shft)
-RVTT_BUILTIN (load_immediate,  RISCV_USI_FTYPE_USI,                                              0x20, -1, -1, 0x00, -1,      0, 0)
+RVTT_BUILTIN (synth_opcode,    RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpassignlreg,   RISCV_V64SF_FTYPE_USI,                                            0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_POINTER_V64SF_USI_USI_USI_USI,                    0x01, -1,  5, 0x00,  2,      0, 0)
 RVTT_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                                  0x01, -1,  2, 0x00, -1,      0, 0)

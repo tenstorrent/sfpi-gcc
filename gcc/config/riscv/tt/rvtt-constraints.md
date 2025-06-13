@@ -49,6 +49,10 @@
   "SFPU Register L7")
 
 ;; General constraints
+;; used for unused register inputs
+(define_constraint "z"
+  "Constant vector"
+  (match_code "const_vector"))
 
 (define_constraint "M01U"
   "A 1-bit unsigned immediate for SFPU instruction modifiers."

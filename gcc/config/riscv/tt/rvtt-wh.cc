@@ -64,12 +64,15 @@ along with GCC; see the file COPYING3.  If not see
 
 void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
 {
-  if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_rvtt_wh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned(imm, 0x3FFF)));
-  } else {
-    unsigned long int op = TT_OP_WH_SFPLOAD(0, INTVAL(mod), INTVAL(mode), 0);
-    emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
-  }
+  rtx insn = nullptr; 
+  if (GET_CODE (imm) == CONST_INT)
+    insn = gen_rvtt_wh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned (imm, 0x3FFF));
+  else
+    {
+      unsigned op = TT_OP_WH_SFPLOAD (0, INTVAL (mod), INTVAL (mode), 0);
+      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, dst, 20, lv);
+    }
+  emit_insn (insn);
 }
 
 void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
@@ -136,24 +139,29 @@ void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx non
       emit_insn(gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(new_mod), imm));
     }
   } else {
-    if (GET_CODE(imm) == CONST_INT) {
-      emit_insn(gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF)));
-    } else {
-      unsigned long int op = TT_OP_WH_SFPLOADI(0, int_mod, 0);
-      emit_insn(gen_rvtt_sfpnonimm_dst(dst, addr, GEN_INT(0), lv, GEN_INT(20), nonimm, GEN_INT(op), id));
-    }
+    rtx insn = nullptr;
+    if (GET_CODE(imm) == CONST_INT)
+      insn = gen_rvtt_wh_sfploadi_int(dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF));
+    else
+      {
+	unsigned op = TT_OP_WH_SFPLOADI (0, int_mod, 0);
+	insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, dst, 20, lv);
+      }
+    emit_insn (insn);
   }
 }
 
 void rvtt_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id)
 {
-  if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, rvtt_clamp_signed(imm, 0x7FF), mod));
-  } else {
-    unsigned int mod1 = UINTVAL(mod);
-    unsigned long int op = TT_OP_WH_SFPIADD(0, 0, 0, mod1);
-    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
-  }
+  rtx insn = nullptr;
+  if (GET_CODE (imm) == CONST_INT)
+    insn = gen_rvtt_wh_sfpiadd_i_int (dst, lv, src, rvtt_clamp_signed (imm, 0x7FF), mod);
+  else
+    {
+      unsigned op = TT_OP_WH_SFPIADD (0, 0, 0, UINTVAL (mod));
+      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+    }
+  emit_insn (insn);
 }
 
 // Extended (or external?) iadd_i
@@ -374,24 +382,28 @@ void rvtt_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 
 void rvtt_wh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
-  if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_rvtt_wh_sfpdivp2_int(dst, lv, rvtt_clamp_signed(imm, 0x7FF), src, mod));
-  } else {
-    unsigned long int op = TT_OP_WH_SFPDIVP2(0, 0, 0, UINTVAL(mod));
-    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
-  }
+  rtx insn = nullptr;
+  if (GET_CODE(imm) == CONST_INT)
+    insn = gen_rvtt_wh_sfpdivp2_int (dst, lv, rvtt_clamp_signed (imm, 0x7FF), src, mod);
+  else
+    {
+      unsigned op = TT_OP_WH_SFPDIVP2 (0, 0, 0, INTVAL (mod));
+      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+    }
+  emit_insn (insn);
 }
 
 void rvtt_wh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
-  if (GET_CODE(imm) == CONST_INT) {
-    emit_insn(gen_rvtt_wh_sfpstochrnd_i_int(dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod));
-  } else {
-    unsigned int mod1 = UINTVAL(mod);
-    unsigned int imode = UINTVAL(mode);
-    unsigned long int op = TT_OP_WH_SFP_STOCH_RND(imode, 0, 0, 0, 0, mod1);
-    emit_insn(gen_rvtt_sfpnonimm_dst_src(dst, addr, GEN_INT(0), lv, src, GEN_INT(4), GEN_INT(8), nonimm, GEN_INT(op), id));
-  }
+  rtx insn = nullptr;
+  if (GET_CODE(imm) == CONST_INT)
+    insn = gen_rvtt_wh_sfpstochrnd_i_int(dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod);
+  else
+    {
+      unsigned op = TT_OP_WH_SFP_STOCH_RND (INTVAL (mode), 0, 0, 0, 0, INTVAL (mod));
+      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+    }
+  emit_insn (insn);
 }
 
 void rvtt_wh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src)

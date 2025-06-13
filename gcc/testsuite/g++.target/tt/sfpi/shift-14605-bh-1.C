@@ -29,7 +29,7 @@ void f3(int s) {
   vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_LOGICAL);
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f3i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820405	# 7a000035\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# Op\(0x7a\) - d\(lr3\) s\(lr0\)\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z2f3i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820405	# 2:7a000035\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# 2:7a000035 L3 := L0\n\tret\n} } }
 
 void f4(int s) {
   vInt a = l_reg[LRegs::LReg0];
@@ -37,7 +37,7 @@ void f4(int s) {
   vInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_ARITHMETIC);
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f4i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820407	# 7a000037\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# Op\(0x7a\) - d\(lr3\) s\(lr0\)\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z2f4i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820407	# 2:7a000037\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# 2:7a000037 L3 := L0\n\tret\n} } }
 
 void f5() {
   vUInt a = l_reg[LRegs::LReg0];

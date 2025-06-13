@@ -105,7 +105,7 @@
         (match_operand:V64SF 1 "move_operand"         " x,m,x"))]
   "TARGET_RVTT_BH  &&
    (   register_operand (operands[0], V64SFmode)
-    || reg_or_0_operand (operands[1], V64SFmode))"
+    || register_operand (operands[1], V64SFmode))"
   {
     switch (which_alternative) {
     case 0:
@@ -118,12 +118,12 @@
       } else {
         error("cannot load sfpu register");
       }
-      gcc_assert(0);
+      gcc_unreachable();
       return "SFPILLEGAL";
 
     case 2:
       if (INSN_HAS_LOCATION (insn)) {
-        fatal_error(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
+        error_at(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
       } else {
         error("cannot store sfpu register (register spill)");
       }
@@ -262,22 +262,23 @@
 (define_expand "rvtt_bh_sfpstore"
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
                      (match_operand:V64SF 1 "register_operand"  "")
-                     (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "immediate_operand" "")
-                     (match_operand:SI    4 "nonmemory_operand" "")
-                     (match_operand:SI    5 "register_operand" "")
-                     (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPSTORE)]
+                     (match_operand:SI    2 "const_int_operand" "")
+                     (match_operand:SI    3 "const_int_operand" "")
+                     (match_operand:SI    4 "reg_or_const_int_operand" "")
+                     (match_operand:SI    5 "reg_or_0_operand" "")
+                     (match_operand:SI    6 "const_int_operand" "")] UNSPECV_BH_SFPSTORE)]
   "TARGET_RVTT_BH"
 {
+  rtx insn = nullptr;
   if (GET_CODE(operands[4]) == CONST_INT)
-    emit_insn (gen_rvtt_bh_sfpstore_int (operands[1], operands[2], operands[3],
-                                         rvtt_clamp_unsigned (operands[4], 0x1FFF)));
+    insn = gen_rvtt_bh_sfpstore_int (operands[1], operands[2], operands[3],
+    	                             rvtt_clamp_unsigned (operands[4], 0x1FFF));
   else
     {
-      unsigned long int op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      emit_insn (gen_rvtt_sfpnonimm_store (operands[1], operands[0],
-      					   GEN_INT (0), GEN_INT (20), operands[5], GEN_INT (op), operands[6]));
+      unsigned op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
+      insn = rvtt_sfpsynth_insn (operands[0], 0, operands[5], op, operands[6], operands[1], 20);
     }
+  emit_insn (insn);
   DONE;
 })
 
@@ -295,22 +296,23 @@
 (define_int_attr blackhole_muliaddi_insn [(UNSPECV_BH_SFPMULI "MULI") (UNSPECV_BH_SFPADDI "ADDI")])
 (define_expand "rvtt_bh_sfp<blackhole_muliaddi_name>"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec [(match_operand:SI    1 "address_operand"  "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "register_operand"  "")
-                          (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] blackhole_muliaddi_op))]
+                          (match_operand:SI    3 "reg_or_const_int_operand" "")
+                          (match_operand:SI    4 "reg_or_0_operand"  "")
+                          (match_operand:SI    5 "const_int_operand" "")
+                          (match_operand:SI    6 "const_int_operand" "")] blackhole_muliaddi_op))]
   "TARGET_RVTT_BH"
 {
-  rtx insn;
+  rtx insn = nullptr;
   if (GET_CODE (operands[3]) == CONST_INT)
     insn = gen_rvtt_bh_sfp<blackhole_muliaddi_name>_int (operands[0], operands[2],
                rvtt_clamp_unsigned (operands[3], 0xFFFF), operands[6]);
-  else {
-    unsigned long int op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
-    insn = gen_rvtt_sfpnonimm_dst (operands[0], operands[1],
-                                   GEN_INT (INSN_SCHED_DYN), operands[2], GEN_INT (4), operands[4], GEN_INT (op), operands[5]);
+  else
+    {
+      unsigned op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
+      insn = rvtt_sfpsynth_insn_dst (operands[1], INSN_SCHED_DYN, operands[4], op, operands[5],
+				     operands[0], 4, operands[2]);
   }
   emit_insn (insn);
   DONE;
@@ -516,20 +518,19 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "register_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPSHFT))]
+                          (match_operand:SI    3 "reg_or_const_int_operand" "")
+                          (match_operand:SI    4 "reg_or_0_operand" "")
+                          (match_operand:SI    5 "const_int_operand" "")
+                          (match_operand:SI    6 "const_int_operand" "")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"
 {
   rtx insn;
   if (GET_CODE (operands[3]) == CONST_INT)
     insn = gen_rvtt_bh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF), operands[6]);
   else {
-    unsigned long int op = TT_OP_BH_SFPSHFT(0, 0, 0, INTVAL (operands[6]) | 5);
-    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], const0_rtx, rvtt_gen_const0_vector(),
-				       operands[2], GEN_INT (4), GEN_INT (8),
-				       operands[4], GEN_INT (op), operands[5]);
+    unsigned op = TT_OP_BH_SFPSHFT(0, 0, 0, INTVAL (operands[6]) | 5);
+    insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+    	   			   operands[2], 8, operands[0], 4, nullptr);
   }
   emit_insn (insn);
   DONE;
@@ -729,20 +730,22 @@
 (define_expand "rvtt_bh_sfpset<blackhole_set_float_name>_i"
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
-                          (match_operand:SI    2 "nonmemory_operand")
-                          (match_operand:SI    3 "register_operand")
-                          (match_operand:SI    4 "immediate_operand")
+                          (match_operand:SI    2 "reg_or_const_int_operand")
+                          (match_operand:SI    3 "reg_or_0_operand")
+                          (match_operand:SI    4 "const_int_operand")
                           (match_operand:V64SF 5 "register_operand")] blackhole_set_float_op_i))]
   "TARGET_RVTT_BH"
 {
   rtx insn;
   if (GET_CODE (operands[2]) == CONST_INT)
-    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_int (operands[0],
-							       rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
+    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_int
+      (operands[0], rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
   else
-    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], GEN_INT (0), rvtt_gen_const0_vector (),
-                                       operands[5], GEN_INT (4), GEN_INT (8), operands[3],
-				       GEN_INT (TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1)), operands[4]);
+    {
+      unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
+      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[3], op, operands[4],
+				     operands[5], 4, operands[0], 8, nullptr);
+    }
   emit_insn (insn);
   DONE;
 })
@@ -751,9 +754,9 @@
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:V64SF 2 "register_operand")
-                          (match_operand:SI    3 "nonmemory_operand")
-                          (match_operand:SI    4 "register_operand")
-                          (match_operand:SI    5 "immediate_operand")
+                          (match_operand:SI    3 "reg_or_const_int_operand")
+                          (match_operand:SI    4 "reg_or_0_operand")
+                          (match_operand:SI    5 "const_int_operand")
                           (match_operand:V64SF 6 "register_operand")] blackhole_set_float_op_i))]
   "TARGET_RVTT_BH"
 {
@@ -762,10 +765,12 @@
     insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int(operands[0], operands[2],
                                    rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
   else
-    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], GEN_INT (0),
-				       operands[2], operands[6], GEN_INT (4), GEN_INT (8), operands[4],
-				       GEN_INT (TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1)), operands[5]);
-  emit_insn (insn);
+    {
+      unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
+      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+				     operands[6], 4, operands[0], 8, operands[2]);
+    }
+   emit_insn (insn);
   DONE;
 })
 

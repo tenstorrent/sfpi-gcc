@@ -196,7 +196,15 @@ static hash_type compute_insn_hash(const rvtt_insn_data *insnd,
       rtx op = rvtt_get_insn_operand(i, insn);
       switch GET_CODE(op)
 	{
-	case REG:
+	default:
+	  gcc_unreachable();
+	  break;
+
+	  case MEM:
+	    // FIXME: Find rtl hasher.
+	    break;
+	    
+	  case REG:
 	  val = REGNO(op) | reg_hash_salt;
 	  break;
 
@@ -204,14 +212,9 @@ static hash_type compute_insn_hash(const rvtt_insn_data *insnd,
 	  val = INTVAL(op) | int_hash_salt;
 	  break;
 
-	case CONST_VECTOR:
+	  case CONST_VECTOR: // FIXME: Remove
 	  // The only expected vector constant has a value of all 0s
 	  val = vec_hash_salt;
-	  break;
-
-	default:
-	  fprintf(stderr, "replay unexpected insn pattern in %s\n", insnd->name);
-	  gcc_assert(0);
 	  break;
 	}
 
