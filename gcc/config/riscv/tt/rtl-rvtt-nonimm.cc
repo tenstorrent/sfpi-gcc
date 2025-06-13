@@ -158,18 +158,21 @@ void transform(function *cfn)
 
       FOR_BB_INSNS (bb, insn)
        {
+#if 1
+	 if (NONJUMP_INSN_P (insn) && INSN_CODE (insn) == CODE_FOR_rvtt_load_insn)
+#else
 	 const rvtt_insn_data *insnd;
 	 if (NONDEBUG_INSN_P(insn) &&
 	     rvtt_p(&insnd, insn) &&
-	     insnd->id == rvtt_insn_data::load_immediate)
+	     insnd->id == rvtt_insn_data::load_insn)
+#endif
 	   {
-	     rtx li_pat = PATTERN(insn);
-	     unsigned int id = INTVAL(XVECEXP(XEXP(li_pat, 1), 0, 0));
-	     DUMP("  saving a %s at slot %u\n", insnd->name, id);
+	     rtx unspec = SET_SRC (PATTERN (insn));
+	     unsigned int id = INTVAL (XVECEXP (unspec, 0, 0));
+	     DUMP("  saving a load_insn at slot %u\n", id);
 	     if (load_imm_map.size() <= id)
-	       {
-		 load_imm_map.resize(id + 1);
-	       }
+	       load_imm_map.resize(id + 20);
+	     gcc_assert(!load_imm_map[id]);
 	     load_imm_map[id] = insn;
 	   }
        }
@@ -200,14 +203,23 @@ void transform(function *cfn)
 	     gcc_assert(id < load_imm_map.size());
 	     rtx li_insn = load_imm_map[id];
 	     rtx li_pat = PATTERN(li_insn);
-	     unsigned int li_op = INTVAL(XVECEXP(XEXP(li_pat, 1), 0, 0));
+	     unsigned int li_op = INTVAL(XVECEXP(SET_SRC(li_pat), 0, 0));
 	     // Hasn't been processed if opcode field of operation is 0
 	     if ((li_op & 0xFF000000) == 0)
 	       {
 		 // Set both the li's and insn's opcode to current value
 		 DUMP("    id:%d first use of li, updating\n", id);
 		 set_opid(insnd, pat, 0, op);
-		 XVECEXP(XEXP(li_pat, 1), 0, 0) = gen_rtx_CONST_INT(SImode, op);
+
+		 rtx unspec = SET_SRC (PATTERN (li_insn));
+		 XVECEXP(unspec, 0, 0) = gen_rtx_CONST_INT(SImode, op);
+		 
+		 // FIXME: REmove or fix REG_EQUIV note
+		 if (rtx note = find_reg_equal_equiv_note (li_insn))
+		   {
+		     gcc_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
+		     XEXP (note, 0) = unspec;
+		   }
 	       }
 	     else if (li_op == op)
 	       {
@@ -223,7 +235,7 @@ void transform(function *cfn)
 		 // Set the insn's id to flag a fallback
 		 DUMP("    id:%d ops do not match (old 0x%x new 0x%x), fall back\n", id, li_op, op);
 		 set_opid(insnd, pat, 0, li_op);
-		 set_opid(insnd, pat, 1, id | SFPNONIMM_ID_FALLBACK_FLAG);
+		 //		 set_opid(insnd, pat, 1, id | SFPNONIMM_ID_FALLBACK_FLAG);
 	       }
 	   }
        }

@@ -106,7 +106,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 137;
+static const int NUMBER_OF_INTRINSICS = 136;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -594,13 +594,13 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
   uint32_t opcode = INTVAL (operands[SYNTH_opcode]);
   char const *update_pattern = "";
   unsigned synth_opno = SYNTH_synthed;
-  if (uint32_t change = (opcode & reg_mask) ^ reg_ops)
+  if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
     {
       // The register assignments here are different from those of the
       // first synth encountered.  We must adjust the incomming
       // pattern.
-      opcode ^= change;
-      operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, change);
+      opcode ^= reg_change;
+      operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
       gcc_assert (SYNTH_clobber == 5 && SYNTH_opcode == 3 && SYNTH_synthed == 2);
       update_pattern = "li\t%5,%3\n\txor\t%5,%5,%2\n\t";
       synth_opno = SYNTH_clobber;
@@ -611,14 +611,13 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
 
   gcc_assert (SYNTH_mem == 0);
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "%ssw\t%%%u, %%0\t# Op(0x%x)",
-		   update_pattern, synth_opno, opcode >> 24);
+		   "%ssw\t%%%u, %%0\t# Insn(%#x)",
+		   update_pattern, synth_opno, opcode);
   gcc_assert (SYNTH_src == 6 && SYNTH_dst == 8);
   if (has_dst)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%8");
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " =%%8");
   if (REG_P (src_reg))
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %6"[has_dst * 2]);
-  pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " Insn(%08x)", opcode);
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %6"[!has_dst * 2]);
 
   // NOPS was a grayskull feature
   unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
@@ -825,7 +824,7 @@ static tree
 emit_load_imm(unsigned int id, gimple_stmt_iterator *gsip, gimple *stmt)
 {
   const rvtt_insn_data *new_insnd =
-    rvtt_get_insn_data(rvtt_insn_data::load_immediate);
+    rvtt_get_insn_data(rvtt_insn_data::load_insn);
 
   tree tmp = make_temp_ssa_name (unsigned_type_node, NULL, "li");
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 1);
@@ -917,7 +916,7 @@ rvtt_cleanup_nonimm_lis(function *fun)
 	  bool remove = false;
 
 	  if (rvtt_p(&insnd, &stmt, gsi) &&
-	      insnd->id == rvtt_insn_data::load_immediate)
+	      insnd->id == rvtt_insn_data::load_insn)
 	    {
 	      tree lhs = gimple_call_lhs(stmt);
 	      gimple *use_stmt;

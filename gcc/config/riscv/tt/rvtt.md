@@ -38,7 +38,6 @@
   UNSPEC_LOAD_INSN
   UNSPECV_SFPSYNTH_INSN
 
-  UNSPECV_LOAD_IMMEDIATE
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
   UNSPECV_SFPXFCMPV
@@ -79,16 +78,18 @@
 ;; emission time.  The rvtt_sfpsynth_insn's use const0_vec for
 ;; non-used srcs and/or dsts.
 
+;; FIXME: Make non-volatile
 (define_insn "rvtt_load_insn"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_LOAD_INSN))]
+         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_LOAD_INSN))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char pattern[32];
   unsigned pos = 0;
 
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		    "li\t%%0, %%1\t# Insn(%#x)", unsigned (INTVAL (operands[1])));
+//		    "li\t%%0, %%1\t# Insn(%#x)",
+		    "li\t%%0, %%1\t# %x", unsigned (INTVAL (operands[1])));
   gcc_assert (pos < sizeof (pattern));
 
   return pattern;
@@ -140,16 +141,6 @@
   return rvtt_synth_insn_pattern (operands, false);
 })
 
-(define_insn "rvtt_load_immediate"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec [(match_operand:SI   1 "immediate_operand" "")] UNSPECV_LOAD_IMMEDIATE))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
-{
-  static char str[100];
-  sprintf(str, "%s\t# %lx", "li\t%0, %1", INTVAL(operands[1]));
-  return str;
-})
-
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
@@ -181,26 +172,21 @@
   const char *mn;
   unsigned int id = INTVAL(operands[7]);
 
-  if ((id & 0xFF000000)) {
-    // Fallback
-    unsigned int op = INTVAL(operands[6]);
-    unsigned int mask = 0xF << INTVAL(operands[4]);
-    unsigned int old_reg = op & mask;
-    unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[4]);
-    unsigned int reg_update = old_reg ^ new_reg;
-    if (reg_update == 0) { // otherwise, why fallback?
-      fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
-              id, old_reg, new_reg);
-      gcc_unreachable();
+  unsigned int op = INTVAL(operands[6]);
+  unsigned int mask = 0xF << INTVAL(operands[4]);
+  unsigned int old_reg = op & mask;
+  unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[4]);
+  unsigned int reg_update = old_reg ^ new_reg;
+  if (reg_update)
+    {
+      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
+      operands[4] = gen_rtx_CONST_INT(SImode, reg_update);
+      output_asm_insn("li\t%8, %4", operands);
+      output_asm_insn("xor\t%8, %8, %5", operands);
+      mn = "sw\t%8, 0(%1)";
     }
-    // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-    operands[4] = gen_rtx_CONST_INT(SImode, reg_update);
-    output_asm_insn("li\t%8, %4", operands);
-    output_asm_insn("xor\t%8, %8, %5", operands);
-    mn = "sw\t%8, 0(%1)";
-  } else {
+  else
     mn = "sw\t%5, 0(%1)";
-  }
 
   static char out[200];
   char lv[20];
@@ -226,30 +212,25 @@
   const char *mn;
   unsigned int id = INTVAL(operands[9]);
 
-  if ((id & 0xFF000000)) {
-    // Fallback
-    unsigned int op = INTVAL(operands[8]);
-    unsigned int dst_mask = 0xF << INTVAL(operands[5]);
-    unsigned int src_mask = 0xF << INTVAL(operands[6]);
-    unsigned int old_reg = op & (dst_mask | src_mask);
-    unsigned int new_reg =
+  unsigned int op = INTVAL(operands[8]);
+  unsigned int dst_mask = 0xF << INTVAL(operands[5]);
+  unsigned int src_mask = 0xF << INTVAL(operands[6]);
+  unsigned int old_reg = op & (dst_mask | src_mask);
+  unsigned int new_reg =
         (rvtt_sfpu_regno(operands[0]) << INTVAL(operands[5])) |
         (rvtt_sfpu_regno(operands[4]) << INTVAL(operands[6]));
 
-    unsigned int reg_update = old_reg ^ new_reg;
-    if (reg_update == 0) { // otherwise, why fallback?
-      fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
-              id, old_reg, new_reg);
-      gcc_unreachable();
-    }
-    // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-    operands[5] = gen_rtx_CONST_INT(SImode, reg_update);
-    output_asm_insn("li\t%10, %5", operands);
-    output_asm_insn("xor\t%10, %10, %7", operands);
-    mn = "sw\t%10, 0(%1)";
-  } else {
+  unsigned int reg_update = old_reg ^ new_reg;
+  if (reg_update)
+    {
+      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
+      operands[5] = gen_rtx_CONST_INT(SImode, reg_update);
+      output_asm_insn("li\t%10, %5", operands);
+      output_asm_insn("xor\t%10, %10, %7", operands);
+      mn = "sw\t%10, 0(%1)";
+      }
+  else
     mn = "sw\t%7, 0(%1)";
-  }
 
   static char out[200];
   char lv[20];
@@ -276,26 +257,21 @@
   const char *mn;
   unsigned int id = INTVAL(operands[6]);
 
-  if ((id & 0xFF000000)) {
-    // Fallback
-    unsigned int op = INTVAL(operands[5]);
-    unsigned int mask = 0xF << INTVAL(operands[3]);
-    unsigned int old_reg = op & mask;
-    unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[3]);
-    unsigned int reg_update = old_reg ^ new_reg;
-    if (reg_update == 0) { // otherwise, why fallback?
-      fprintf(stderr, "unexpected non-imm fallback id:0x%x old regs=0x%x new regs=0x%x\n",
-              id, old_reg, new_reg);
-      gcc_unreachable();
+  unsigned int op = INTVAL(operands[5]);
+  unsigned int mask = 0xF << INTVAL(operands[3]);
+  unsigned int old_reg = op & mask;
+  unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[3]);
+  unsigned int reg_update = old_reg ^ new_reg;
+  if (reg_update)
+    {
+      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
+      operands[3] = gen_rtx_CONST_INT(SImode, reg_update);
+      output_asm_insn("li\t%7, %3", operands);
+      output_asm_insn("xor\t%7, %7, %4", operands);
+      mn = "sw\t%7, 0(%1)";
     }
-    // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-    operands[3] = gen_rtx_CONST_INT(SImode, reg_update);
-    output_asm_insn("li\t%7, %3", operands);
-    output_asm_insn("xor\t%7, %7, %4", operands);
-    mn = "sw\t%7, 0(%1)";
-  } else {
+  else
     mn = "sw\t%4, 0(%1)";
-  }
 
   static char out[200];
   sprintf(out, "%s\t# Op(0x%lx) s(lr%d)", mn, UINTVAL(operands[5]) >> 24, rvtt_sfpu_regno(operands[0]));

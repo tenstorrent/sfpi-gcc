@@ -23,9 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-wh.h"
 #include "sfpu-ops-bh.h"
 
-constexpr unsigned int SFPNONIMM_ID_FALLBACK_FLAG = 0xFF000000;
-
-#define rvtt_sfpu_regno(operand) (REGNO(operand) - SFPU_REG_FIRST)
+#define rvtt_sfpu_regno(operand) (REGNO (operand) - SFPU_REG_FIRST)
 
 constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
 constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic scheduling flag
