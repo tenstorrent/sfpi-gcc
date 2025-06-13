@@ -7,11 +7,11 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-expand.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-move.o \
-	gimple-rvtt-nonimm-expand.o \
-	gimple-rvtt-nonimm-tag.o \
+	gimple-rvtt-synth-expand.o \
+	gimple-rvtt-synth-split.o \
 	gimple-rvtt-warn.o \
 	rtl-rvtt-hll.o \
-	rtl-rvtt-nonimm.o \
+	rtl-rvtt-synth-opcode.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o

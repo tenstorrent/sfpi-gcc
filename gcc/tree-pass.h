@@ -504,8 +504,8 @@ extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_nonimm_expand (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_nonimm_tag (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
 
 /* IPA Passes */
@@ -647,7 +647,7 @@ extern rtl_opt_pass *make_pass_dwarf2_frame (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_final (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rtl_seqabstr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_nonimm (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);

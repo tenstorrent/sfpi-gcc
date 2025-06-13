@@ -102,44 +102,6 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   return false;
 }
 
-static void dynamic_schedule_gs (rtx_insn *insn)
-{
-  rtx_insn *next_insn;
-  const rvtt_insn_data *next_insnd;
-
-  if (rvtt_get_next_insn (&next_insnd, &next_insn, insn, false,
-			  INSN_FLAGS_NON_SFPU))
-    {
-      if (next_insnd->schedule_has_dynamic_dependency_p (next_insn))
-	insert_nop_after (insn);
-    }
-  else
-    {
-      // The stmt needing scheduling is the last stmt in the BB
-      // If any child has a dependent insn at the start, then we add a nop at
-      // the end of this BB
-      DUMP (" last stmt in BB, checking children\n");
-
-      basic_block bb = BLOCK_FOR_INSN (insn);
-      edge_iterator ei;
-      edge e;
-      FOR_EACH_EDGE (e, ei, bb->succs)
-	{
-	  rtx_insn *bb_start_insn = BB_HEAD (e->dest);
-	  if (bb_start_insn != nullptr
-	      && rvtt_get_next_insn (&next_insnd, &next_insn, bb_start_insn,
-				     true, INSN_FLAGS_NON_SFPU)
-	      && next_insnd->schedule_has_dynamic_dependency_p (next_insn))
-	    {
-	      DUMP (" found a child w/ a dependency, inserting nop\n");
-	      insert_nop_after (insn);
-	      break;
-	    }
-	}
-    }
-}
-
-
 /* Walk the BB graph from BB:probe_insn until we meet an SPU
    insn. Return true if the SPU insn is dependent.  Populate VISITED
    with the BB's we marked.  */

@@ -21,7 +21,7 @@ void f3(int s) {
   vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s);
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f3i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820353	# 7a000001\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# Op\(0x7a\) lv\(lr0\)  d\(lr0\)\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z2f3i:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 2046820353	# 2:7a000001\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# 2:7a000001 L0 := LV\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
 
 void f5() {
   vUInt a = l_reg[LRegs::LReg0];
@@ -31,4 +31,3 @@ void f5() {
   l_reg[LRegs::LReg3] = r;
 }
 // { dg-final { scan-assembler {\n_Z2f5v:\n\tSFPSHFT	L0, L1, 0, 0\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
-

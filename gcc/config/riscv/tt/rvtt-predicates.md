@@ -42,3 +42,14 @@
 {
   return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 4 || INTVAL(op) == 6);
 })
+
+(define_predicate "const_vec_operand"
+  (match_code "const_vector"))
+
+(define_predicate "reg_or_const_int_operand"
+  (ior (match_operand 0 "register_operand")
+       (match_code "const_int")))
+
+(define_predicate "reg_or_cvec_operand"
+  (ior (match_operand 0 "register_operand")
+       (match_operand 0 "const_vec_operand")))
