@@ -35,7 +35,7 @@
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
 
-  UNSPEC_LOAD_INSN
+  UNSPECV_LOAD_INSN
   UNSPECV_SFPSYNTH_INSN
 
   UNSPECV_SFPASSIGNLREG
@@ -81,7 +81,7 @@
 ;; FIXME: Make non-volatile
 (define_insn "rvtt_load_insn"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_LOAD_INSN))]
+         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPECV_LOAD_INSN))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char pattern[32];
