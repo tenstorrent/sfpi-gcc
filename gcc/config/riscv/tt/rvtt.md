@@ -35,7 +35,7 @@
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
 
-  UNSPECV_LOAD_INSN
+  UNSPECV_SYNTH_OPCODE
   UNSPECV_SFPSYNTH_INSN
 
   UNSPECV_SFPASSIGNLREG
@@ -78,10 +78,10 @@
 ;; emission time.  The rvtt_sfpsynth_insn's use const0_vec for
 ;; non-used srcs and/or dsts.
 
-;; FIXME: Make non-volatile
-(define_insn "rvtt_load_insn"
+;; FIXME: Make non-volatile?
+(define_insn "rvtt_synth_opcode"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPECV_LOAD_INSN))]
+         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPECV_SYNTH_OPCODE))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char pattern[32];

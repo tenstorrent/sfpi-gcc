@@ -824,7 +824,7 @@ static tree
 emit_load_imm(unsigned int id, gimple_stmt_iterator *gsip, gimple *stmt)
 {
   const rvtt_insn_data *new_insnd =
-    rvtt_get_insn_data(rvtt_insn_data::load_insn);
+    rvtt_get_insn_data(rvtt_insn_data::synth_opcode);
 
   tree tmp = make_temp_ssa_name (unsigned_type_node, NULL, "li");
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 1);
@@ -916,7 +916,7 @@ rvtt_cleanup_nonimm_lis(function *fun)
 	  bool remove = false;
 
 	  if (rvtt_p(&insnd, &stmt, gsi) &&
-	      insnd->id == rvtt_insn_data::load_insn)
+	      insnd->id == rvtt_insn_data::synth_opcode)
 	    {
 	      tree lhs = gimple_call_lhs(stmt);
 	      gimple *use_stmt;
