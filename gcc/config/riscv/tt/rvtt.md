@@ -29,13 +29,16 @@
 (define_mode_attr rvtt_any_int_mode_mnem [(SI "w") (HI "h") (QI "b")])
 (define_mode_attr rvtt_any_uint_mode_load_mod [(SI "") (HI "u") (QI "u")])
 
+(define_c_enum "unspec" [
+  UNSPEC_SYNTH_OPCODE
+])
+
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
   ;; INT for internal
   ;; IMM for immediate
   ;; LV for keep dst reg alive as input for predicated liveness
 
-  UNSPECV_SYNTH_OPCODE
   UNSPECV_SFPSYNTH_INSN
 
   UNSPECV_SFPASSIGNLREG
@@ -81,15 +84,14 @@
 ;; FIXME: Make non-volatile?
 (define_insn "rvtt_synth_opcode"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec_volatile [(match_operand:SI   1 "const_int_operand" "n")] UNSPECV_SYNTH_OPCODE))]
+         (unspec [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char pattern[32];
   unsigned pos = 0;
 
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-//		    "li\t%%0, %%1\t# Insn(%#x)",
-		    "li\t%%0, %%1\t# %x", unsigned (INTVAL (operands[1])));
+		   "li\t%%0, %%1\t# %x", unsigned (INTVAL (operands[1])));
   gcc_assert (pos < sizeof (pattern));
 
   return pattern;
