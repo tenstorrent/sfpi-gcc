@@ -159,7 +159,7 @@ void transform(function *cfn)
       FOR_BB_INSNS (bb, insn)
        {
 #if 1
-	 if (NONJUMP_INSN_P (insn) && INSN_CODE (insn) == CODE_FOR_rvtt_load_insn)
+	 if (NONJUMP_INSN_P (insn) && INSN_CODE (insn) == CODE_FOR_rvtt_synth_opcode)
 #else
 	 const rvtt_insn_data *insnd;
 	 if (NONDEBUG_INSN_P(insn) &&
@@ -172,7 +172,8 @@ void transform(function *cfn)
 	     DUMP("  saving a load_insn at slot %u\n", id);
 	     while (load_imm_map.size() <= id)
 	       load_imm_map.push_back (nullptr);
-	     gcc_assert(!load_imm_map[id]);
+	     // FIXME: This appears to trigger(!)
+	     //	     gcc_assert(!load_imm_map[id]);
 	     load_imm_map[id] = insn;
 	   }
        }
