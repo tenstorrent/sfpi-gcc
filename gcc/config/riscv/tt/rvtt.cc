@@ -611,11 +611,14 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
 
   gcc_assert (SYNTH_mem == 0);
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "%ssw\t%%%u, %%0\t# Insn(%#x)",
-		   update_pattern, synth_opno, opcode);
+		   "%ssw\t%%%u, %%0\t# %d:%x",
+		   update_pattern, synth_opno,
+		   unsigned (INTVAL (operands[SYNTH_id])), opcode);
   gcc_assert (SYNTH_src == 6 && SYNTH_dst == 8);
   if (has_dst)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " =%%8");
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%8 :=");
+  if (REG_P (operands[SYNTH_lv]))
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
   if (REG_P (src_reg))
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %6"[!has_dst * 2]);
 
@@ -827,8 +830,9 @@ emit_load_imm(unsigned int id, gimple_stmt_iterator *gsip, gimple *stmt)
     rvtt_get_insn_data(rvtt_insn_data::synth_opcode);
 
   tree tmp = make_temp_ssa_name (unsigned_type_node, NULL, "li");
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1);
-  gimple_call_set_arg(new_stmt, 0, build_int_cst(unsigned_type_node, id));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2);
+  gimple_call_set_arg(new_stmt, 0, build_int_cst(unsigned_type_node, 0));
+  gimple_call_set_arg(new_stmt, 1, build_int_cst(unsigned_type_node, id));
   gimple_call_set_lhs (new_stmt, tmp);
   finish_new_insn(gsip, true, new_stmt, stmt);
 

@@ -84,14 +84,16 @@
 ;; FIXME: Make non-volatile?
 (define_insn "rvtt_synth_opcode"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec [(match_operand:SI   1 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
+         (unspec [(match_operand:SI   1 "const_int_operand" "n")
+	          (match_operand:SI   2 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   static char pattern[32];
   unsigned pos = 0;
 
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "li\t%%0, %%1\t# %x", unsigned (INTVAL (operands[1])));
+		   "li\t%%0, %%1\t# %d:%x", unsigned (INTVAL (operands[2])),
+		   unsigned (INTVAL (operands[1])));
   gcc_assert (pos < sizeof (pattern));
 
   return pattern;
@@ -109,6 +111,7 @@
   SYNTH_src_shift
   SYNTH_dst
   SYNTH_dst_shift
+  SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
   [(set (match_operand:V64SF 8 "register_operand" "=x") ; result

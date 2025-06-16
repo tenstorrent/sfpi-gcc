@@ -168,7 +168,7 @@ void transform(function *cfn)
 #endif
 	   {
 	     rtx unspec = SET_SRC (PATTERN (insn));
-	     unsigned int id = INTVAL (XVECEXP (unspec, 0, 0));
+	     unsigned int id = INTVAL (XVECEXP (unspec, 0, 1));
 	     DUMP("  saving a load_insn at slot %u\n", id);
 	     while (load_imm_map.size() <= id)
 	       load_imm_map.push_back (nullptr);
