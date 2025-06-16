@@ -170,8 +170,8 @@ void transform(function *cfn)
 	     rtx unspec = SET_SRC (PATTERN (insn));
 	     unsigned int id = INTVAL (XVECEXP (unspec, 0, 0));
 	     DUMP("  saving a load_insn at slot %u\n", id);
-	     if (load_imm_map.size() <= id)
-	       load_imm_map.resize(id + 20);
+	     while (load_imm_map.size() <= id)
+	       load_imm_map.push_back (nullptr);
 	     gcc_assert(!load_imm_map[id]);
 	     load_imm_map[id] = insn;
 	   }
