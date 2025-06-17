@@ -37,7 +37,19 @@ extern rtx rvtt_gen_const0_vector();
 
 extern char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands[]);
 
-char const *rvtt_synth_insn_pattern (rtx operands[], bool);
+char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
+
+rtx rvtt_sfpsynth_insn_dst (rtx, unsigned, rtx, unsigned, unsigned, rtx, unsigned, rtx, unsigned, rtx = nullptr);
+inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
+				       rtx dst, unsigned dst_shift, rtx lv = nullptr)
+{
+  return rvtt_sfpsynth_insn_dst(addr, flags, insn, opcode, id, rvtt_gen_const0_vector (), 0, dst, dst_shift, lv);
+}
+rtx rvtt_sfpsynth_insn (rtx, unsigned, rtx, unsigned, unsigned, rtx, unsigned);
+inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id)
+{
+  return rvtt_sfpsynth_insn (addr, flags, insn, opcode, id, rvtt_gen_const0_vector (), 0);
+}
 
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
 

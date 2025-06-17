@@ -106,7 +106,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 136;
+static const int NUMBER_OF_INTRINSICS = 135;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -570,7 +570,7 @@ char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx operands
 
 // Generate the assembly for to synthesize an instruction
 char const *
-rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
+rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
 {
   uint32_t reg_mask = 0;
   uint32_t reg_ops = 0;
@@ -581,6 +581,7 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
       reg_mask |= 0xf << src_shift;
       reg_ops |= rvtt_sfpu_regno (src_reg) << src_shift;
     }
+  bool has_dst = clobber_op > SYNTH_dst;
   if (has_dst)
     {
       rtx dst_reg = operands[SYNTH_dst];
@@ -589,10 +590,11 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
       reg_mask |= 0xf << dst_shift;
       reg_ops |= rvtt_sfpu_regno (dst_reg) << dst_shift;
     }
-  gcc_assert (reg_mask || !REG_P (operands[SYNTH_clobber]));
+  gcc_assert (!reg_mask == !REG_P (operands[clobber_op]));
 
   uint32_t opcode = INTVAL (operands[SYNTH_opcode]);
-  char const *update_pattern = "";
+  static char pattern[100];
+  unsigned pos = 0;
   unsigned synth_opno = SYNTH_synthed;
   if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
     {
@@ -601,19 +603,16 @@ rvtt_synth_insn_pattern (rtx *operands, bool has_dst)
       // pattern.
       opcode ^= reg_change;
       operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
-      gcc_assert (SYNTH_clobber == 5 && SYNTH_opcode == 3 && SYNTH_synthed == 2);
-      update_pattern = "li\t%5,%3\n\txor\t%5,%5,%2\n\t";
-      synth_opno = SYNTH_clobber;
+      gcc_assert (SYNTH_opcode == 3 && SYNTH_synthed == 2);
+      pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
+		       "li\t%d,%%3\n\txor\t%d,%d,%%2\n\t", clobber_op, clobber_op, clobber_op);
+      synth_opno = clobber_op;
     }
-
-  static char pattern[100];
-  unsigned pos = 0;
 
   gcc_assert (SYNTH_mem == 0);
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "%ssw\t%%%u, %%0\t# %d:%x",
-		   update_pattern, synth_opno,
-		   unsigned (INTVAL (operands[SYNTH_id])), opcode);
+		   "sw\t%%%u, %%0\t# %d:%x",
+		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
   gcc_assert (SYNTH_src == 6 && SYNTH_dst == 8);
   if (has_dst)
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%8 :=");
@@ -848,6 +847,24 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
   return tmp;
 }
 
+rtx
+rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
+			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
+{
+  return gen_rvtt_sfpsynth_insn_dst
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), GEN_INT (id),
+     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_const0_vector ());
+}
+
+rtx
+rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
+			rtx src, unsigned src_shift)
+{
+  return gen_rvtt_sfpsynth_insn
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), GEN_INT (id),
+     src, GEN_INT (src_shift));
+}
+
 tree
 rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				const rvtt_insn_data *insnd,
@@ -908,52 +925,49 @@ void
 rvtt_cleanup_nonimm_lis(function *fun)
 {
   basic_block bb;
-  gimple_stmt_iterator gsi;
 
   FOR_EACH_BB_FN (bb, fun)
     {
-      gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (gsi))
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	   !gsi_end_p (gsi); )
 	{
 	  gcall *stmt;
 	  const rvtt_insn_data *insnd;
-	  bool remove = false;
 
-	  if (rvtt_p(&insnd, &stmt, gsi) &&
+	  if (rvtt_p (&insnd, &stmt, gsi) &&
 	      insnd->id == rvtt_insn_data::synth_opcode)
 	    {
-	      tree lhs = gimple_call_lhs(stmt);
+	      tree lhs = gimple_call_lhs (stmt);
 	      gimple *use_stmt;
 	      imm_use_iterator iter;
-	      remove = true;
+	      unsigned num_uses = 0;
+
 	      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
 		{
-		  remove = false;
-		  if (use_stmt->code != GIMPLE_DEBUG)
+		  if (use_stmt->code == GIMPLE_DEBUG)
+		    continue;
+
+		  tree sum_lhs = gimple_assign_lhs (use_stmt);
+		  if (sum_lhs && has_zero_uses (sum_lhs))
 		    {
-		      tree sum_lhs = gimple_assign_lhs(use_stmt);
-		      if (sum_lhs != NULL_TREE && has_zero_uses(sum_lhs))
-			{
-			  DUMP("    ...removing sum\n");
-			  gimple_stmt_iterator gsi_sum = gsi_for_stmt(use_stmt);
-			  gsi_remove(&gsi_sum, true);
-			  remove = true;
-			  break;
-			}
+		      DUMP ("    ...removing sum\n");
+		      gimple_stmt_iterator gsi_sum = gsi_for_stmt (use_stmt);
+		      gsi_remove (&gsi_sum, true);
 		    }
+		  else
+		    num_uses++;
 		}
-	      if (remove)
+
+	      if (!num_uses)
 		{
-		  DUMP("    ...removing %s\n", insnd->name);
-		  unlink_stmt_vdef(stmt);
-		  gsi_remove(&gsi, true);
-		  release_defs(stmt);
+		  DUMP ("    ...removing %s\n", insnd->name);
+		  unlink_stmt_vdef (stmt);
+		  gsi_remove (&gsi, true);
+		  release_defs (stmt);
+		  continue;
 		}
 	    }
-	  if (!remove)
-	    {
-	      gsi_next(&gsi);
-	    }
+	  gsi_next (&gsi);
 	}
     }
 }

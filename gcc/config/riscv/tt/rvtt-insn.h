@@ -92,7 +92,6 @@ along with GCC; see the file COPYING3.  If not see
 RVTT_RTL_ONLY (sfpnonimm_dst,     5,  1)
 RVTT_RTL_ONLY (sfpnonimm_dst_src, 7,  1)
 RVTT_RTL_ONLY (sfpnonimm_src,     5,  2)
-RVTT_RTL_ONLY (sfpnonimm_store,   5,  2)
 RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     -1, -1)

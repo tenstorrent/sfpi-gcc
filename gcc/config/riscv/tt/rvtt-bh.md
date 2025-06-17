@@ -275,7 +275,7 @@
   else
     {
       unsigned long int op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      emit_insn (gen_rvtt_sfpnonimm_store (operands[1], operands[0],
+      emit_insn (gen_rvtt_sfpnonimm_src (operands[1], operands[0],
       					   GEN_INT (0), GEN_INT (20), operands[5], GEN_INT (op), operands[6]));
     }
   DONE;

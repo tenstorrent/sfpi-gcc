@@ -106,7 +106,6 @@
   SYNTH_synthed
   SYNTH_opcode
   SYNTH_id
-  SYNTH_clobber
   SYNTH_src
   SYNTH_src_shift
   SYNTH_dst
@@ -114,21 +113,21 @@
   SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
-  [(set (match_operand:V64SF 8 "register_operand" "=x") ; result
+  [(set (match_operand:V64SF 7 "register_operand" "=x") ; result
         (unspec_volatile [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
                           (match_operand:SI    1 "const_int_operand" "n") ; flags
                           (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
                           (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
                           (match_operand:SI    4 "const_int_operand" "n") ; id
-			  (match_operand:V64SF 6 "reg_or_cvec_operand" "xz") ; src
-                          (match_operand:SI    7 "const_int_operand" "n") ; src shift
-                          (match_operand:SI    9 "const_int_operand" "n") ; dst shift
-			  (match_operand:V64SF 10 "reg_or_cvec_operand" "8z") ; lv
+			  (match_operand:V64SF 5 "reg_or_cvec_operand" "xz") ; src
+                          (match_operand:SI    6 "const_int_operand" "n") ; src shift
+                          (match_operand:SI    8 "const_int_operand" "n") ; dst shift
+			  (match_operand:V64SF 9 "reg_or_cvec_operand" "7z") ; lv
                           ] UNSPECV_SFPSYNTH_INSN))
-   (clobber (match_scratch:SI 5 "=&r"))]
+   (clobber (match_scratch:SI 10 "=&r"))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  return rvtt_synth_insn_pattern (operands, true);
+  return rvtt_synth_insn_pattern (operands, 10);
 })
 
 (define_insn "rvtt_sfpsynth_insn"
@@ -137,13 +136,13 @@
                      (match_operand:SI    2 "register_operand"  "rr,") ; synth'd insn
                      (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
-	             (match_operand:V64SF 6 "reg_or_cvec_operand" "x,z") ; src
-                     (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
+	             (match_operand:V64SF 5 "reg_or_cvec_operand" "x,z") ; src
+                     (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
                      ] UNSPECV_SFPSYNTH_INSN)
-   (clobber (match_scratch:SI 5 "=&r, X"))]
+   (clobber (match_scratch:SI 7 "=&r, X"))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  return rvtt_synth_insn_pattern (operands, false);
+  return rvtt_synth_insn_pattern (operands, 7);
 })
 
 (define_expand "rvtt_sfpassignlreg"
@@ -244,8 +243,8 @@
 })
 
 ;;; Differentiate between src and store as store is used in the peephole un-optimization
-(define_int_iterator nonimm_srcstore [UNSPECV_SFPNONIMM_SRC UNSPECV_SFPNONIMM_STORE])
-(define_int_attr nonimm_srcstore_name [(UNSPECV_SFPNONIMM_SRC "src") (UNSPECV_SFPNONIMM_STORE "store")])
+(define_int_iterator nonimm_srcstore [UNSPECV_SFPNONIMM_SRC])
+(define_int_attr nonimm_srcstore_name [(UNSPECV_SFPNONIMM_SRC "src")])
 
 (define_insn "rvtt_sfpnonimm_<nonimm_srcstore_name>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x") ; src

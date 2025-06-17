@@ -90,7 +90,6 @@ static void get_opid(unsigned int *op,
     break;
 
   case rvtt_insn_data::sfpnonimm_src:
-  case rvtt_insn_data::sfpnonimm_store:
     dst_regno = 0;
     dst_regshft = 0;
     src_regno = rvtt_sfpu_regno(XVECEXP(pat, 0, 0));
@@ -123,7 +122,6 @@ static void set_opid(const rvtt_insn_data *insnd,
     break;
 
   case rvtt_insn_data::sfpnonimm_src:
-  case rvtt_insn_data::sfpnonimm_store:
     XVECEXP(pat, 0, insnd->nonimm_pos + offset) = GEN_INT(val);
     break;
 
