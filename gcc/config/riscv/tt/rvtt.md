@@ -133,7 +133,7 @@
 (define_insn "rvtt_sfpsynth_insn"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,m") ; instrn_buffer
                      (match_operand:SI    1 "const_int_operand" "n,n") ; flags
-                     (match_operand:SI    2 "register_operand"  "rr,") ; synth'd insn
+                     (match_operand:SI    2 "register_operand"  "r,r") ; synth'd insn
                      (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
 	             (match_operand:V64SF 5 "reg_or_cvec_operand" "x,z") ; src
