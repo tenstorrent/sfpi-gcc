@@ -516,8 +516,8 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "reg_or_const_int_operand" "")
-                          (match_operand:SI    4 "register_operand" "")
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "reg_or_const_int_operand" "")
                           (match_operand:SI    5 "const_int_operand" "")
                           (match_operand:SI    6 "const_int_operand" "")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"

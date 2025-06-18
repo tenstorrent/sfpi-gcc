@@ -298,23 +298,20 @@
 (define_expand "rvtt_wh_sfpstore"
   [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
                      (match_operand:V64SF 1 "register_operand"  "")
-                     (match_operand:SI    2 "const_int_operand" "")
-                     (match_operand:SI    3 "const_int_operand" "")
-                     (match_operand:SI    4 "reg_or_const_int_operand" "")
+                     (match_operand:SI    2 "immediate_operand" "")
+                     (match_operand:SI    3 "immediate_operand" "")
+                     (match_operand:SI    4 "nonmemory_operand" "")
                      (match_operand:SI    5 "register_operand" "")
-                     (match_operand:SI    6 "const_int_operand" "")] UNSPECV_WH_SFPSTORE)]
+                     (match_operand:SI    6 "immediate_operand" "")] UNSPECV_WH_SFPSTORE)]
   "TARGET_RVTT_WH"
 {
-  rtx insn;
-  if (GET_CODE (operands[4]) == CONST_INT)
-    insn = gen_rvtt_wh_sfpstore_int (operands[1], operands[2], operands[3],
-                                     rvtt_clamp_unsigned (operands[4], 0x3FFF));
-  else
-    {
-      unsigned long int op = TT_OP_WH_SFPSTORE(0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_insn (operands[0], 0, operands[5], op, operands[6], operands[1], 20);
-    }
-  emit_insn (insn);
+  if (GET_CODE(operands[4]) == CONST_INT) {
+    emit_insn (gen_rvtt_wh_sfpstore_int(operands[1], operands[2],operands[3],
+                                         rvtt_clamp_unsigned(operands[4], 0x3FFF)));
+  } else {
+    unsigned long int op = TT_OP_WH_SFPSTORE(0, INTVAL(operands[2]), INTVAL(operands[3]), 0);
+    emit_insn (gen_rvtt_sfpnonimm_src(operands[1], operands[0], GEN_INT(0), GEN_INT(20), operands[5], GEN_INT(op), operands[6]));
+  }
   DONE;
 })
 
@@ -333,24 +330,20 @@
 (define_expand "rvtt_wh_sfp<wormhole_muliaddi_name>"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI    1 "address_operand"  "")
-                 (match_operand:V64SF 2 "register_operand"  "")
-                 (match_operand:SI    3 "reg_or_const_int_operand" "")
-                 (match_operand:SI    4 "register_operand"  "")
-                 (match_operand:SI    5 "const_int_operand" "")
-                 (match_operand:SI    6 "const_int_operand" "")] wormhole_muliaddi))]
+                          (match_operand:V64SF 2 "register_operand"  "")
+                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    4 "register_operand"  "")
+                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    6 "immediate_operand" "")] wormhole_muliaddi))]
   "TARGET_RVTT_WH"
 {
-  rtx insn;
-  if (GET_CODE(operands[3]) == CONST_INT)
-    insn = gen_rvtt_wh_sfp<wormhole_muliaddi_name>_int 
-      (operands[0], operands[2], rvtt_clamp_unsigned (operands[3], 0xFFFF), operands[6]);
-  else
-    {
-      unsigned long int op = TT_OP_WH_SFP<wormhole_muliaddi_call> (0, 0, INTVAL (operands[6]));
-      insn = rvtt_sfpsynth_insn_dst (operands[1], INSN_SCHED_DYN, operands[4], op, operands[5],
-				     operands[0], 4, operands[2]);
-    }
-  emit_insn (insn);
+  if (GET_CODE(operands[3]) == CONST_INT) {
+    emit_insn (gen_rvtt_wh_sfp<wormhole_muliaddi_name>_int(operands[0], operands[2],
+               rvtt_clamp_unsigned(operands[3], 0xFFFF), operands[6]));
+  } else {
+    unsigned long int op = TT_OP_WH_SFP<wormhole_muliaddi_call>(0, 0, INTVAL(operands[6]));
+    emit_insn (gen_rvtt_sfpnonimm_dst(operands[0], operands[1], GEN_INT(INSN_SCHED_DYN), operands[2], GEN_INT(4), operands[4], GEN_INT(op), operands[5]));
+  }
   DONE;
 })
 

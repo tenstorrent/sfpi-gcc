@@ -850,7 +850,7 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
 
 rtx
 rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
-			rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
+			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
 {
   return gen_rvtt_sfpsynth_insn_dst
     (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), id,
@@ -859,7 +859,7 @@ rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx
 
 rtx
 rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
-		    rtx src, unsigned src_shift)
+			rtx src, unsigned src_shift)
 {
   return gen_rvtt_sfpsynth_insn
     (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), id,
