@@ -105,7 +105,7 @@
         (match_operand:V64SF 1 "move_operand"         " x,m,x"))]
   "TARGET_RVTT_BH  &&
    (   register_operand (operands[0], V64SFmode)
-    || reg_or_0_operand (operands[1], V64SFmode))"
+    || register_operand (operands[1], V64SFmode))"
   {
     switch (which_alternative) {
     case 0:
@@ -118,12 +118,12 @@
       } else {
         error("cannot load sfpu register");
       }
-      gcc_assert(0);
+      gcc_unreachable();
       return "SFPILLEGAL";
 
     case 2:
       if (INSN_HAS_LOCATION (insn)) {
-        fatal_error(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
+        error_at(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
       } else {
         error("cannot store sfpu register (register spill)");
       }
@@ -517,9 +517,9 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "register_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPSHFT))]
+                          (match_operand:SI    4 "reg_or_const_int_operand" "")
+                          (match_operand:SI    5 "const_int_operand" "")
+                          (match_operand:SI    6 "const_int_operand" "")] UNSPECV_BH_SFPSHFT))]
   "TARGET_RVTT_BH"
 {
   rtx insn;
@@ -527,9 +527,8 @@
     insn = gen_rvtt_bh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF), operands[6]);
   else {
     unsigned long int op = TT_OP_BH_SFPSHFT(0, 0, 0, INTVAL (operands[6]) | 5);
-    insn = gen_rvtt_sfpnonimm_dst_src (operands[0], operands[1], const0_rtx, rvtt_gen_const0_vector(),
-				       operands[2], GEN_INT (4), GEN_INT (8),
-				       operands[4], GEN_INT (op), operands[5]);
+    insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+    	   			   operands[2], 8, operands[0], 4, nullptr);
   }
   emit_insn (insn);
   DONE;

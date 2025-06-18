@@ -39,14 +39,15 @@ extern char const * rvtt_output_nonimm_and_nops(const char *sw, int nnops, rtx o
 
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
 
-rtx rvtt_sfpsynth_insn_dst (rtx, unsigned, rtx, unsigned, unsigned, rtx, unsigned, rtx, unsigned, rtx = nullptr);
-inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
-				       rtx dst, unsigned dst_shift, rtx lv = nullptr)
+rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
+			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv);
+inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
+				       rtx dst, unsigned dst_shift, rtx lv)
 {
   return rvtt_sfpsynth_insn_dst(addr, flags, insn, opcode, id, rvtt_gen_const0_vector (), 0, dst, dst_shift, lv);
 }
-rtx rvtt_sfpsynth_insn (rtx, unsigned, rtx, unsigned, unsigned, rtx, unsigned);
-inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id)
+rtx rvtt_sfpsynth_insn (rtx, unsigned, rtx, unsigned, rtx, rtx, unsigned);
+inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id)
 {
   return rvtt_sfpsynth_insn (addr, flags, insn, opcode, id, rvtt_gen_const0_vector (), 0);
 }

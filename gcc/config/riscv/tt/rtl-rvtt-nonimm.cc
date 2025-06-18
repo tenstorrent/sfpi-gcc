@@ -68,9 +68,32 @@ static void get_opid(unsigned int *op,
 		     const rvtt_insn_data *insnd,
 		     rtx pat)
 {
-  unsigned int dst_regno, dst_regshft, src_regno, src_regshft;
+  unsigned int dst_regno = 0, dst_regshft = 0, src_regno = 0, src_regshft = 0;
 
   switch (insnd->id) {
+  default:
+    gcc_unreachable();
+    break;
+
+  case rvtt_insn_data::sfpsynth_insn_dst:
+    dst_regno = rvtt_sfpu_regno(SET_DEST (pat));
+    pat = SET_SRC (pat);
+    dst_regshft = INTVAL (XVECEXP (pat, 0, 7));
+    // FALLTHROUGH
+  case rvtt_insn_data::sfpsynth_insn:
+    {
+      rtx src = XVECEXP (pat, 0, 5);
+      if (REG_P (src))
+	{
+	  src_regno = rvtt_sfpu_regno(src);
+	  src_regshft = INTVAL (XVECEXP (pat, 0, 6));
+	}
+    }
+
+    *op = INTVAL (XVECEXP(pat, 0, 3));
+    *id = INTVAL(XVECEXP(pat, 0, 4));
+    break;
+
   case rvtt_insn_data::sfpnonimm_dst:
     dst_regno = rvtt_sfpu_regno(XEXP(pat, 0));
     dst_regshft = INTVAL(XVECEXP(XEXP(pat, 1), 0, 3));
@@ -97,10 +120,6 @@ static void get_opid(unsigned int *op,
     *op = INTVAL(XVECEXP(pat, 0, insnd->nonimm_pos));
     *id = INTVAL(XVECEXP(pat, 0, insnd->nonimm_pos + 1));
     break;
-
-  default:
-    gcc_assert(0);
-    break;
   }
 
   *op |= (dst_regno << dst_regshft) | (src_regno << src_regshft);
@@ -115,20 +134,28 @@ static void set_opid(const rvtt_insn_data *insnd,
 		     unsigned int val)
 
 {
-  switch (insnd->id) {
-  case rvtt_insn_data::sfpnonimm_dst:
-  case rvtt_insn_data::sfpnonimm_dst_src:
-    XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos + offset) = GEN_INT(val);
-    break;
+  switch (insnd->id)
+    {
+    default:
+      gcc_unreachable();
+      break;
 
-  case rvtt_insn_data::sfpnonimm_src:
-    XVECEXP(pat, 0, insnd->nonimm_pos + offset) = GEN_INT(val);
-    break;
+    case rvtt_insn_data::sfpsynth_insn_dst:
+      pat = SET_SRC (pat);
+      // FALLTHROUGH
+    case rvtt_insn_data::sfpsynth_insn:
+      XVECEXP (pat, 0, 3) = GEN_INT (val);
+      break;
+    
+    case rvtt_insn_data::sfpnonimm_dst:
+    case rvtt_insn_data::sfpnonimm_dst_src:
+      XVECEXP(XEXP(pat, 1), 0, insnd->nonimm_pos + offset) = GEN_INT(val);
+      break;
 
-  default:
-    gcc_assert(0);
-    break;
-  }
+    case rvtt_insn_data::sfpnonimm_src:
+      XVECEXP(pat, 0, insnd->nonimm_pos + offset) = GEN_INT(val);
+      break;
+    }
 }
 
 // This phase of the non-immediate processing works by:
@@ -191,8 +218,9 @@ void transform(function *cfn)
 
 	 if (NONDEBUG_INSN_P(insn) &&
 	     rvtt_p(&insnd, insn) &&
-	     insnd->nonimm_pos != -1 &&
-	     insnd->rtl_only_p())
+	     ((insnd->nonimm_pos != -1 && insnd->rtl_only_p())
+	      || insnd->id == rvtt_insn_data::sfpsynth_insn_dst
+	      || insnd->id == rvtt_insn_data::sfpsynth_insn))
 	   {
 	     gcc_assert(GET_CODE(PATTERN(insn)) == PARALLEL);
 	     rtx pat = XVECEXP(PATTERN(insn), 0, 0);

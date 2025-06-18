@@ -613,20 +613,21 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
 		   "sw\t%%%u, %%0\t# %d:%x",
 		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
-  gcc_assert (SYNTH_src == 6 && SYNTH_dst == 8);
+  gcc_assert (SYNTH_src == 5 && SYNTH_dst == 7);
   if (has_dst)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%8 :=");
-  if (REG_P (operands[SYNTH_lv]))
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
+  bool has_lv = REG_P (operands[SYNTH_lv]);
+  if (has_lv)
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
   if (REG_P (src_reg))
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %6"[!has_dst * 2]);
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %5"[!has_lv]);
 
   // NOPS was a grayskull feature
   unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
   gcc_assert (!nops);
 
   gcc_assert (pos < sizeof (pattern));
-  
+
   return pattern;
 }
 
@@ -848,20 +849,20 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
 }
 
 rtx
-rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
+rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
 			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
 {
   return gen_rvtt_sfpsynth_insn_dst
-    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), GEN_INT (id),
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), id,
      src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_const0_vector ());
 }
 
 rtx
-rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx insn, unsigned opcode, unsigned id,
+rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx insn, unsigned opcode, rtx id,
 			rtx src, unsigned src_shift)
 {
   return gen_rvtt_sfpsynth_insn
-    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), GEN_INT (id),
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), insn, GEN_INT (opcode), id,
      src, GEN_INT (src_shift));
 }
 
