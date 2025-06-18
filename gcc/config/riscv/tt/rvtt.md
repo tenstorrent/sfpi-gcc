@@ -160,126 +160,61 @@
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "")
 
-(define_insn "rvtt_sfpnonimm_dst"
+(define_expand "rvtt_sfpnonimm_dst"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
-                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops / scheduling info
-                          (match_operand:V64SF 3 "nonmemory_operand" "E, 0") ; live lreg_dst
-                          (match_operand:SI    4 "immediate_operand" "i, i") ; dst reg shft
+                          (match_operand:SI    2 "const_int_operand" "i, i") ; # nops / scheduling info
+                          (match_operand:V64SF 3 "reg_or_cvec_operand" "E, 0") ; live lreg_dst
+                          (match_operand:SI    4 "const_int_operand" "i, i") ; dst reg shft
                           (match_operand:SI    5 "register_operand"  "r, r") ; nonimm value to store
-                          (match_operand:DI    6 "immediate_operand" "i, i") ; op
-                          (match_operand:SI    7 "immediate_operand" "i, i") ; loadimm id/fallback flag
-                                                                         ] UNSPECV_SFPNONIMM_DST))
-        (clobber (match_scratch:SI 8 "=&r, &r"))]
+                          (match_operand:DI    6 "const_int_operand" "i, i") ; op
+                          (match_operand:SI    7 "const_int_operand" "i, i") ; loadimm id/fallback flag
+                                                                         ] UNSPECV_SFPNONIMM_DST))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  const char *mn;
-  unsigned int id = INTVAL(operands[7]);
-
-  unsigned int op = INTVAL(operands[6]);
-  unsigned int mask = 0xF << INTVAL(operands[4]);
-  unsigned int old_reg = op & mask;
-  unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[4]);
-  unsigned int reg_update = old_reg ^ new_reg;
-  if (reg_update)
-    {
-      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-      operands[4] = gen_rtx_CONST_INT(SImode, reg_update);
-      output_asm_insn("li\t%8, %4", operands);
-      output_asm_insn("xor\t%8, %8, %5", operands);
-      mn = "sw\t%8, 0(%1)";
-    }
-  else
-    mn = "sw\t%5, 0(%1)";
-
-  static char out[200];
-  char lv[20];
-  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d)", mn, UINTVAL(operands[6]) >> 24, rvtt_sfpu_lv_regno_str(lv, operands[3]), rvtt_sfpu_regno(operands[0]));
-  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  emit_insn (rvtt_sfpsynth_insn_dst (operands[1], INTVAL (operands[2]), operands[5], INTVAL (operands[6]),
+  	 			     operands[7], operands[0], INTVAL (operands[4]), operands[3]));
+  DONE;
 })
 
-(define_insn "rvtt_sfpnonimm_dst_src"
+(define_expand "rvtt_sfpnonimm_dst_src"
   [(set (match_operand:V64SF 0 "register_operand" "=x, x")
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "r, r") ; instrn_buf_add
-                          (match_operand:SI    2 "immediate_operand" "i, i") ; # nops / scheduling info
-                          (match_operand:V64SF 3 "nonmemory_operand" "E, 0") ; live lreg_dst
+                          (match_operand:SI    2 "const_int_operand" "i, i") ; # nops / scheduling info
+                          (match_operand:V64SF 3 "reg_or_cvec_operand" "E, 0") ; live lreg_dst
                           (match_operand:V64SF 4 "register_operand"  "x, x") ; lreg_src
-                          (match_operand:SI    5 "immediate_operand" "i, i") ; dst shft
-                          (match_operand:SI    6 "immediate_operand" "i, i") ; src shft
+                          (match_operand:SI    5 "const_int_operand" "i, i") ; dst shft
+                          (match_operand:SI    6 "const_int_operand" "i, i") ; src shft
                           (match_operand:SI    7 "register_operand"  "r, r") ; non imm value to store
-                          (match_operand:DI    8 "immediate_operand" "i, i") ; op
-                          (match_operand:SI    9 "immediate_operand" "i, i") ; loadimm id/fallback flag
-                                                                         ] UNSPECV_SFPNONIMM_DST_SRC))
-        (clobber (match_scratch:SI 10 "=&r, &r"))]
+                          (match_operand:DI    8 "const_int_operand" "i, i") ; op
+                          (match_operand:SI    9 "const_int_operand" "i, i") ; loadimm id/fallback flag
+                                                                         ] UNSPECV_SFPNONIMM_DST_SRC))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  const char *mn;
-  unsigned int id = INTVAL(operands[9]);
-
-  unsigned int op = INTVAL(operands[8]);
-  unsigned int dst_mask = 0xF << INTVAL(operands[5]);
-  unsigned int src_mask = 0xF << INTVAL(operands[6]);
-  unsigned int old_reg = op & (dst_mask | src_mask);
-  unsigned int new_reg =
-        (rvtt_sfpu_regno(operands[0]) << INTVAL(operands[5])) |
-        (rvtt_sfpu_regno(operands[4]) << INTVAL(operands[6]));
-
-  unsigned int reg_update = old_reg ^ new_reg;
-  if (reg_update)
-    {
-      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-      operands[5] = gen_rtx_CONST_INT(SImode, reg_update);
-      output_asm_insn("li\t%10, %5", operands);
-      output_asm_insn("xor\t%10, %10, %7", operands);
-      mn = "sw\t%10, 0(%1)";
-      }
-  else
-    mn = "sw\t%7, 0(%1)";
-
-  static char out[200];
-  char lv[20];
-  sprintf(out, "%s\t# Op(0x%lx) %s d(lr%d) s(lr%d)", mn, UINTVAL(operands[8]) >> 24, rvtt_sfpu_lv_regno_str(lv, operands[3]), rvtt_sfpu_regno(operands[0]), rvtt_sfpu_regno(operands[4]));
-  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  emit_insn (rvtt_sfpsynth_insn_dst (operands[1], INTVAL (operands[2]), operands[7], INTVAL (operands[8]),
+  	 			     operands[9], operands[4], INTVAL (operands[6]),
+				     operands[0], INTVAL (operands[5]), operands[3]));
+  DONE;
 })
 
 ;;; Differentiate between src and store as store is used in the peephole un-optimization
 (define_int_iterator nonimm_srcstore [UNSPECV_SFPNONIMM_SRC])
 (define_int_attr nonimm_srcstore_name [(UNSPECV_SFPNONIMM_SRC "src")])
 
-(define_insn "rvtt_sfpnonimm_<nonimm_srcstore_name>"
+(define_expand "rvtt_sfpnonimm_<nonimm_srcstore_name>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x") ; src
                      (match_operand:SI    1 "address_operand"   "r") ; instrn_buf_add
-                     (match_operand:SI    2 "immediate_operand" "i") ; # nops / scheduling info
-                     (match_operand:SI    3 "immediate_operand" "i") ; src shft
+                     (match_operand:SI    2 "const_int_operand" "i") ; # nops / scheduling info
+                     (match_operand:SI    3 "const_int_operand" "i") ; src shft
                      (match_operand:SI    4 "register_operand"  "r") ; non imm value to store
-                     (match_operand:DI    5 "immediate_operand" "i") ; op
-                     (match_operand:SI    6 "immediate_operand" "i") ; loadimm id/fallback flag
-                                                                         ] nonimm_srcstore)
-            (clobber (match_scratch:SI    7 "=&r"))]
+                     (match_operand:DI    5 "const_int_operand" "i") ; op
+                     (match_operand:SI    6 "const_int_operand" "i") ; loadimm id/fallback flag
+                                                                         ] nonimm_srcstore)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
-  const char *mn;
-  unsigned int id = INTVAL(operands[6]);
-
-  unsigned int op = INTVAL(operands[5]);
-  unsigned int mask = 0xF << INTVAL(operands[3]);
-  unsigned int old_reg = op & mask;
-  unsigned int new_reg = rvtt_sfpu_regno(operands[0]) << INTVAL(operands[3]);
-  unsigned int reg_update = old_reg ^ new_reg;
-  if (reg_update)
-    {
-      // Use xor instead of and/or so we can update w/ 1 tmp reg in 1 operation
-      operands[3] = gen_rtx_CONST_INT(SImode, reg_update);
-      output_asm_insn("li\t%7, %3", operands);
-      output_asm_insn("xor\t%7, %7, %4", operands);
-      mn = "sw\t%7, 0(%1)";
-    }
-  else
-    mn = "sw\t%4, 0(%1)";
-
-  static char out[200];
-  sprintf(out, "%s\t# Op(0x%lx) s(lr%d)", mn, UINTVAL(operands[5]) >> 24, rvtt_sfpu_regno(operands[0]));
-  return rvtt_output_nonimm_and_nops(out, INTVAL(operands[2]), operands);
+  emit_insn (rvtt_sfpsynth_insn (operands[1], INTVAL (operands[2]), operands[4], INTVAL (operands[5]),
+  	 		     	 operands[6], operands[0], INTVAL (operands[3])));
+  DONE;
 })
 
 (define_expand "rvtt_sfpxicmps"
