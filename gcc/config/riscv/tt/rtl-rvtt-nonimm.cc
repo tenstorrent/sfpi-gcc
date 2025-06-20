@@ -169,8 +169,8 @@ static void set_opid(const rvtt_insn_data *insnd,
 //    new value do not match, the nonimm is flagged to emit the fallback code
 void transform(function *cfn)
 {
-  std::vector<rtx> load_imm_map;
-  load_imm_map.reserve(20);
+  std::vector<rtx> synth_opcodes;
+  std::vector<rtx> duplicates;
 
   DUMP("Nonimm rtl pass on: %s\n", function_name(cfn));
 
@@ -183,28 +183,21 @@ void transform(function *cfn)
 
       FOR_BB_INSNS (bb, insn)
        {
-#if 1
 	 if (NONJUMP_INSN_P (insn) && INSN_CODE (insn) == CODE_FOR_rvtt_synth_opcode)
-#else
-	 const rvtt_insn_data *insnd;
-	 if (NONDEBUG_INSN_P(insn) &&
-	     rvtt_p(&insnd, insn) &&
-	     insnd->id == rvtt_insn_data::load_insn)
-#endif
 	   {
 	     rtx unspec = SET_SRC (PATTERN (insn));
-	     unsigned int id = INTVAL (XVECEXP (unspec, 0, 1));
-	     DUMP("  saving a load_insn at slot %u\n", id);
-	     while (load_imm_map.size() <= id)
-	       load_imm_map.push_back (nullptr);
-	     // FIXME: This appears to trigger(!)
-	     //	     gcc_assert(!load_imm_map[id]);
-	     load_imm_map[id] = insn;
+	     unsigned id = INTVAL (XVECEXP (unspec, 0, 1));
+	     if (synth_opcodes.size () <= id)
+	       synth_opcodes.resize (id + 1);
+	     if (!synth_opcodes[id])
+	       synth_opcodes[id] = insn;
+	     else
+	       duplicates.push_back (insn);
 	   }
        }
     }
 
-  if (load_imm_map.size() == 0)
+  if (synth_opcodes.empty ())
     return;
 
   // Processes the nonimm instructions
@@ -227,8 +220,8 @@ void transform(function *cfn)
 	     unsigned int op, id;
 	     get_opid(&op, &id, insnd, pat);
 
-	     gcc_assert(id < load_imm_map.size());
-	     rtx li_insn = load_imm_map[id];
+	     gcc_assert(id < synth_opcodes.size());
+	     rtx li_insn = synth_opcodes[id];
 	     rtx li_pat = PATTERN(li_insn);
 	     unsigned int li_op = INTVAL(XVECEXP(SET_SRC(li_pat), 0, 0));
 	     // Hasn't been processed if opcode field of operation is 0
@@ -266,6 +259,20 @@ void transform(function *cfn)
 	       }
 	   }
        }
+    }
+
+  // Fixup the duplicates.
+  for (auto *insn : duplicates)
+    {
+      rtx unspec = SET_SRC (PATTERN (insn));
+      unsigned id = INTVAL (XVECEXP (unspec, 0, 1));
+      rtx synth_unspec = SET_SRC (PATTERN (synth_opcodes[id]));
+      XVECEXP (unspec, 0, 0) = XVECEXP (synth_unspec, 0, 0);
+      if (rtx note = find_reg_equal_equiv_note (insn))
+	{
+	  gcc_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
+	  XEXP (note, 0) = unspec;
+	}
     }
 }
 
