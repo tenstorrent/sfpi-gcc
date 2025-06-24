@@ -20,27 +20,9 @@
 ;; <http://www.gnu.org/licenses/>.
 
 (define_predicate "const_setcc_z_or_nez"
-  (match_code "const_int,const_wide_int")
+  (match_code "const_int")
 {
-  return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 2 || INTVAL(op) == 6);
-})
-
-(define_predicate "const_iadd_i_nosetcc"
-  (match_code "const_int,const_wide_int")
-{
-  return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 5);
-})
-
-(define_predicate "const_iadd_i_setcc"
-  (match_code "const_int,const_wide_int")
-{
-  return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 1 || INTVAL(op) == 9);
-})
-
-(define_predicate "const_iadd_v_nosetcc"
-  (match_code "const_int,const_wide_int")
-{
-  return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 4 || INTVAL(op) == 6);
+  return INTVAL (op) == 2 || INTVAL (op) == 6;
 })
 
 (define_predicate "vec0_operand"
