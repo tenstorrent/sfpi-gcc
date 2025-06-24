@@ -117,10 +117,10 @@
                           (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
                           (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
                           (match_operand:SI    4 "const_int_operand" "n") ; id
-			  (match_operand:V64SF 5 "reg_or_cvec_operand" "xz") ; src
+			  (match_operand:V64SF 5 "reg_or_vec0_operand" "xz") ; src
                           (match_operand:SI    6 "const_int_operand" "n") ; src shift
                           (match_operand:SI    8 "const_int_operand" "n") ; dst shift
-			  (match_operand:V64SF 9 "reg_or_cvec_operand" "7z") ; lv
+			  (match_operand:V64SF 9 "reg_or_vec0_operand" "7z") ; lv
                           ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 10 "=&r"))]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
@@ -134,7 +134,7 @@
                      (match_operand:SI    2 "register_operand"  "r,r") ; synth'd insn
                      (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
-	             (match_operand:V64SF 5 "reg_or_cvec_operand" "x,z") ; src
+	             (match_operand:V64SF 5 "reg_or_vec0_operand" "x,z") ; src
                      (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
                      ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 7 "=&r, X"))]
