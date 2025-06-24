@@ -31,38 +31,30 @@ constexpr unsigned int INSN_SCHED_DYN_DEP  = 0x40;  // has a dependency on a pri
 
 extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
 extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
-extern rtx rvtt_gen_const0_vector();
 
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
 
+// We use this value to indicate 'not a register'
+extern GTY(()) rtx rvtt_vec0_rtx;
+
 // Instruction synthesis
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
-
 rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv);
 inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
 				   rtx dst, unsigned dst_shift, rtx lv)
 {
   return rvtt_sfpsynth_insn_dst (addr, flags, synth, opcode, id,
-				 rvtt_gen_const0_vector (), 0, dst, dst_shift, lv);
+				 rvtt_vec0_rtx, 0, dst, dst_shift, lv);
 }
 rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			rtx src, unsigned src_shift);
 inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id)
 {
-  return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_gen_const0_vector (), 0);
+  return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
 }
 
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
-
-extern void rvtt_gs_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
-extern void rvtt_gs_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
-extern void rvtt_gs_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_gs_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod);
-extern void rvtt_gs_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
-extern void rvtt_gs_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
-extern void rvtt_gs_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
-extern void rvtt_gs_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
 
 extern void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);

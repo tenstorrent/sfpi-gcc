@@ -30,6 +30,7 @@
 
 (define_c_enum "unspec" [
   UNSPEC_SYNTH_OPCODE
+  UNSPEC_NONE
 ])
 
 (define_c_enum "unspecv" [
@@ -42,13 +43,7 @@
 
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
-  UNSPECV_SFPXFCMPV
-  UNSPECV_SFPXICMPS
-  UNSPECV_SFPXICMPV
-  UNSPECV_SFPXVIF
-  UNSPECV_SFPXBOOL
-  UNSPECV_SFPXCONDB
-  UNSPECV_SFPXCONDI
+
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
@@ -81,7 +76,7 @@
   [(set (match_operand:SI 0 "register_operand" "=r")
          (unspec [(match_operand:SI   1 "const_int_operand" "n")
 	          (match_operand:SI   2 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
 {
   static char pattern[32];
   unsigned pos = 0;
@@ -116,13 +111,13 @@
                           (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
                           (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
                           (match_operand:SI    4 "const_int_operand" "n") ; id
-			  (match_operand:V64SF 5 "reg_or_cvec_operand" "xz") ; src
+			  (match_operand:V64SF 5 "reg_or_vec0_operand" "xz") ; src
                           (match_operand:SI    6 "const_int_operand" "n") ; src shift
                           (match_operand:SI    8 "const_int_operand" "n") ; dst shift
-			  (match_operand:V64SF 9 "reg_or_cvec_operand" "7z") ; lv
+			  (match_operand:V64SF 9 "reg_or_vec0_operand" "7z") ; lv
                           ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 10 "=&r"))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
 {
   return rvtt_synth_insn_pattern (operands, 10);
 })
@@ -133,19 +128,19 @@
                      (match_operand:SI    2 "register_operand"  "r,r") ; synth'd insn
                      (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
-	             (match_operand:V64SF 5 "reg_or_cvec_operand" "x,z") ; src
+	             (match_operand:V64SF 5 "reg_or_vec0_operand" "x,z") ; src
                      (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
                      ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 7 "=&r, X"))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
 {
   return rvtt_synth_insn_pattern (operands, 7);
 })
 
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "immediate_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec_volatile [(match_operand:SI 1 "const_int_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
+  "TARGET_RVTT"
 {
   rvtt_emit_sfpassignlreg(operands[0], operands[1]);
   DONE;
@@ -154,76 +149,79 @@
 (define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
   "")
+
+;; These builtins are converted by gimple passes, but the insns are still
+;; needed due to the way we expand them.
 
 (define_expand "rvtt_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "nonmemory_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")
-                          (match_operand:SI    6 "immediate_operand" "")] UNSPECV_SFPXICMPS))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec [(match_operand:SI    1 "address_operand"   "")
+                 (match_operand:V64SF 2 "register_operand"  "")
+                 (match_operand:SI    3 "reg_or_const_int_operand" "")
+                 (match_operand:SI    4 "reg_or_0_operand" "")
+                 (match_operand:SI    5 "const_int_operand" "")
+                 (match_operand:SI    6 "const_int_operand" "")] UNSPEC_NONE))]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_expand "rvtt_sfpxicmpv"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")
-                          (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "immediate_operand" "")] UNSPECV_SFPXICMPV))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec [(match_operand:V64SF 1 "register_operand"  "")
+                 (match_operand:V64SF 2 "register_operand"  "")
+                 (match_operand:SI    3 "const_int_operand" "")] UNSPEC_NONE))]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_expand "rvtt_sfpxvif"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(const_int 0)] UNSPECV_SFPXVIF))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec [(const_int 0)] UNSPEC_NONE))]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_expand "rvtt_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXBOOL))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec [(match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE))]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_expand "rvtt_sfpxcondb"
-  [(unspec_volatile [(match_operand:SI 0 "register_operand"  "")
-                     (match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDB)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  [(unspec [(match_operand:SI 0 "register_operand"  "")
+            (match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE)]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_expand "rvtt_sfpxcondi"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "register_operand"  "")] UNSPECV_SFPXCONDI))]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+        (unspec [(match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE))]
+  "TARGET_RVTT"
 {
-  gcc_unreachable();
+  DONE;
 })
 
 (define_insn "rvtt_ttincrwc"
-  [(unspec_volatile [(match_operand:SI    0 "immediate_operand" "")
-                     (match_operand:SI    1 "immediate_operand" "")
-                     (match_operand:SI    2 "immediate_operand" "")
-                     (match_operand:SI    3 "immediate_operand" "")] UNSPECV_TTINCRWC)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")
+                     (match_operand:SI    1 "const_int_operand" "n")
+                     (match_operand:SI    2 "const_int_operand" "n")
+                     (match_operand:SI    3 "const_int_operand" "n")] UNSPECV_TTINCRWC)]
+  "TARGET_RVTT"
   "TTINCRWC\t%0, %1, %2, %3")
 
 (define_insn "rvtt_ttreplay"
-  [(unspec_volatile [(match_operand:SI    0 "immediate_operand"  "M05U")
-                     (match_operand:SI    1 "immediate_operand"  "MP5U")
-                     (match_operand:SI    2 "immediate_operand"  "M01U")
-                     (match_operand:SI    3 "immediate_operand"  "M01U")] UNSPECV_TTREPLAY)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "M05U")
+                     (match_operand:SI    1 "const_int_operand"  "MP5U")
+                     (match_operand:SI    2 "const_int_operand"  "M01U")
+                     (match_operand:SI    3 "const_int_operand"  "M01U")] UNSPECV_TTREPLAY)]
+  "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")
