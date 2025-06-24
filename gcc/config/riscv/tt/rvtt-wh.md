@@ -967,12 +967,12 @@
 })
 
 (define_insn "rvtt_wh_sfpmad_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:V64SF 4 "register_operand"  "x, x")
-                          (match_operand:SI    5 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPMAD_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=x")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "0z")
+                          (match_operand:V64SF 2 "register_operand"  "x")
+                          (match_operand:V64SF 3 "register_operand"  "x")
+                          (match_operand:V64SF 4 "register_operand"  "x")
+                          (match_operand:SI    5 "const_int_operand" "M04U")] UNSPECV_WH_SFPMAD_INT))]
   "TARGET_RVTT_WH"
   "SFPMAD\t%0, %2, %3, %4, %5"
 )
