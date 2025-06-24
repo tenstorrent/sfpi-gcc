@@ -120,6 +120,8 @@ static std::vector<const rvtt_insn_data *> sfpu_rtl_insn_ptrs;
 static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* rvtt_builtin_name_stub;
 
+rtx rvtt_vec0_rtx;
+
 void
 rvtt_insert_insn(int idx, const char* name, tree decl)
 {
@@ -282,6 +284,12 @@ rvtt_init_builtins()
   sfpu_rtl_insn_ptrs.resize(NUM_INSN_CODES);
   for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
     sfpu_rtl_insn_ptrs[i] = init_rtx_insnd (i, arch);
+
+  // The real value cache is not available yet. :(
+  // Perhaps there's a better place for this?
+  rvtt_vec0_rtx = rtx_alloc (CONST_DOUBLE);
+  PUT_MODE (rvtt_vec0_rtx, SFmode);
+  real_from_integer (&rvtt_vec0_rtx->u.rv, SFmode, 0, SIGNED);
 }
 
 const char *
@@ -471,18 +479,6 @@ rtx rvtt_clamp_unsigned(rtx v, unsigned int mask)
   int out = i & mask;
 
   return GEN_INT(out);
-}
-
-// FIXME: It'd be nice to init this once at startup.
-static GTY(()) rtx rvtt_const0_vector_rtx;
-
-rtx rvtt_gen_const0_vector()
-{
-  if (!rvtt_const0_vector_rtx)
-    rvtt_const0_vector_rtx = gen_const_vec_duplicate (V64SFmode,
-						      const_double_from_real_value (dconst0, SFmode));
-
-  return rvtt_const0_vector_rtx;
 }
 
 // If a stmt's single use args aren't tracked back to their
@@ -809,7 +805,7 @@ rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rt
 {
   return gen_rvtt_sfpsynth_insn_dst
     (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
-     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_const0_vector ());
+     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_vec0_rtx);
 }
 
 rtx

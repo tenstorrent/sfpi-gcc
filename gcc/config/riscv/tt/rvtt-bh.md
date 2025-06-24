@@ -184,7 +184,7 @@
                           (match_operand:SI 6 "immediate_operand" "")] UNSPECV_BH_SFPLOAD))]
   "TARGET_RVTT_BH"
 {
-  rvtt_bh_emit_sfpload (operands[0], rvtt_gen_const0_vector(),
+  rvtt_bh_emit_sfpload (operands[0], rvtt_vec0_rtx,
   		        operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
@@ -227,7 +227,7 @@
                           (match_operand:SI 5 "immediate_operand" "")] UNSPECV_BH_SFPXLOADI))]
   "TARGET_RVTT_BH"
 {
-  rvtt_bh_emit_sfpxloadi (operands[0], rvtt_gen_const0_vector(),
+  rvtt_bh_emit_sfpxloadi (operands[0], rvtt_vec0_rtx,
   			  operands[1], operands[2], operands[3], operands[4], operands[5]);
   DONE;
 })
@@ -337,7 +337,7 @@
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPDIVP2))]
   "TARGET_RVTT_BH"
 {
-  rvtt_bh_emit_sfpdivp2 (operands[0], rvtt_gen_const0_vector (),
+  rvtt_bh_emit_sfpdivp2 (operands[0], rvtt_vec0_rtx,
   		         operands[1], operands[2], operands[5], operands[6], operands[3], operands[4]);
   DONE;
 })
@@ -484,7 +484,7 @@
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_BH_SFPXIADD_I))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_bh_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[6]);
   DONE;
 })
@@ -607,7 +607,7 @@
                           (match_operand:SI    2 "immediate_operand" "")] UNSPECV_BH_SFPSHFT2_E))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_bh_emit_sfpshft2_e(operands[0], live, operands[1], operands[2]);
   DONE;
 })
@@ -643,7 +643,7 @@
                           (match_operand:SI    7 "immediate_operand" "")] UNSPECV_BH_SFPSTOCHRND_I))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_bh_emit_sfpstochrnd_i(operands[0], live, operands[1], operands[2], operands[3],
                                    operands[6], operands[7], operands[4], operands[5]);
   DONE;
@@ -685,7 +685,7 @@
                           (match_operand:SI    4 "immediate_operand" "")] UNSPECV_BH_SFPSTOCHRND_V))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_bh_sfpstochrnd_v_int(operands[0], live, operands[1], operands[2], operands[3], operands[4]));
   DONE;
 })
@@ -801,7 +801,7 @@
                           (match_operand:SI    6 "immediate_operand")] UNSPECV_BH_SFPSETMAN))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_bh_emit_sfpsetman(operands[0], live, operands[1], operands[2], operands[5]);
   DONE;
 })
@@ -839,7 +839,7 @@
                           (match_operand:SI    4 "immediate_operand" "")] UNSPECV_BH_SFPMAD))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_bh_sfpmad_int(operands[0], live, operands[1], operands[2], operands[3], operands[4]));
   DONE;
 })

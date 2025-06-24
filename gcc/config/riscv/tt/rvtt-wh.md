@@ -220,7 +220,7 @@
                           (match_operand:SI 6 "immediate_operand" "")] UNSPECV_WH_SFPLOAD))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpload(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
   DONE;
 })
@@ -263,7 +263,7 @@
                           (match_operand:SI 5 "immediate_operand" "")] UNSPECV_WH_SFPXLOADI))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpxloadi(operands[0], live, operands[1], operands[2], operands[3], operands[4], operands[5]);
   DONE;
 })
@@ -377,7 +377,7 @@
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_WH_SFPDIVP2))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpdivp2(operands[0], live, operands[1], operands[2], operands[5], operands[6], operands[3], operands[4]);
   DONE;
 })
@@ -463,7 +463,7 @@
                           (match_operand:SI    2 "immediate_operand" "")] wormhole_simple_op))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfp<wormhole_simple_op_name>_int(operands[0], live, operands[1], operands[2]));
   DONE;
 })
@@ -497,7 +497,7 @@
                           (match_operand:SI    3 "immediate_operand" "")] wormhole_muladd))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfp<wormhole_muladd_name>_int(operands[0], live, operands[1], operands[2], operands[3]));
   DONE;
 })
@@ -571,7 +571,7 @@
                           (match_operand:SI    6 "immediate_operand" "")] UNSPECV_WH_SFPXIADD_I))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpxiadd_i(operands[0], live, operands[1], operands[2], operands[3], operands[6]);
   DONE;
 })
@@ -659,7 +659,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "")] UNSPECV_WH_SFPNOT))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfpnot_int(operands[0], live, operands[1]));
   DONE;
 })
@@ -689,7 +689,7 @@
                           (match_operand:SI    2 "immediate_operand" "")] UNSPECV_WH_SFPCAST))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfpcast_int(operands[0], live, operands[1], operands[2]));
   DONE;
 })
@@ -720,7 +720,7 @@
                           (match_operand:SI    2 "immediate_operand" "")] UNSPECV_WH_SFPSHFT2_E))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpshft2_e(operands[0], live, operands[1], operands[2]);
   DONE;
 })
@@ -756,7 +756,7 @@
                           (match_operand:SI    7 "immediate_operand" "")] UNSPECV_WH_SFPSTOCHRND_I))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpstochrnd_i(operands[0], live, operands[1], operands[2], operands[3],
                                    operands[6], operands[7], operands[4], operands[5]);
   DONE;
@@ -798,7 +798,7 @@
                           (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPSTOCHRND_V))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfpstochrnd_v_int(operands[0], live, operands[1], operands[2], operands[3], operands[4]));
   DONE;
 })
@@ -850,7 +850,7 @@
                           (match_operand:V64SF 5 "register_operand")] wormhole_set_float_op_i))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector ();
+  rtx live = rvtt_vec0_rtx;
   rtx insn = nullptr;
   if (GET_CODE(operands[2]) == CONST_INT)
     insn = gen_rvtt_wh_sfpset<wormhole_set_float_name_i>_i_int
@@ -915,7 +915,7 @@
                           (match_operand:SI    6 "immediate_operand")] UNSPECV_WH_SFPSETMAN_I))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   rvtt_wh_emit_sfpsetman(operands[0], live, operands[1], operands[2], operands[5]);
   DONE;
 })
@@ -953,7 +953,7 @@
                           (match_operand:SI    4 "immediate_operand" "")] UNSPECV_WH_SFPMAD))]
   "TARGET_RVTT_WH"
 {
-  rtx live = rvtt_gen_const0_vector();
+  rtx live = rvtt_vec0_rtx;
   emit_insn (gen_rvtt_wh_sfpmad_int(operands[0], live, operands[1], operands[2], operands[3], operands[4]));
   DONE;
 })
