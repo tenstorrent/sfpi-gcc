@@ -93,7 +93,7 @@ transform (function *fn)
 
   // For each id in use, find the mode opcode value and use that
   std::unordered_map<unsigned, unsigned> map;
-  for (auto synth : synths)
+  for (auto &synth : synths)
     {
       if (!synth.uses)
 	{
@@ -133,8 +133,6 @@ transform (function *fn)
 	  }
       map.clear ();
 
-      rtx op_rtx = gen_rtx_CONST_INT (SImode, opcode);
-
       // Update all the insns
       for (auto *op = synth.ops; op;)
 	{
@@ -144,13 +142,16 @@ transform (function *fn)
 	  op = next;
 
 	  rtx unspec = SET_SRC (PATTERN (insn));
-	  XVECEXP (unspec, 0, 0) = op_rtx;
+	  rtx &op_slot = XVECEXP (unspec, 0, 0);
+	  rtx op_rtx = gen_rtx_CONST_INT (SImode, INTVAL (op_slot) + opcode);
+	  op_slot = op_rtx;
 	  if (rtx note = find_reg_equal_equiv_note (insn))
 	    {
 	      gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
 	      XEXP (note, 0) = unspec;
 	    }
 	}
+      rtx op_rtx = gen_rtx_CONST_INT (SImode, opcode);
       for (auto *use = synth.uses; use;)
 	{
 	  rtx_insn *insn = use->insn ();

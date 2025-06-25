@@ -266,78 +266,14 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
 //     immediate values in the expand pass).
 //   - any prologue incorrectly generated for immediate insns is deleted (see
 //     nonimm tag pass)
-static void
+static unsigned
 transform (function *fn)
 {
   DUMP ("Expand-nonimm pass on: %s\n", function_name (fn));
 
-  basic_block bb;
-
-#if 0
-  // Optimizations may have duplicated synth_opcode builtins. Renumber
-  // the duplicates Using SSA def/use chains to locate their use (s).
-  // ??? This might interfere with the relay optimization?? Make
-  // sfpsynth_opcode intrinsic a const fn first.
-  std::vector<gcall *> synth_opcodes;
-  std::vector<gcall *> duplicates;
-  FOR_EACH_BB_FN (bb, fn)
-    for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gcall *stmt;
-	const rvtt_insn_data *insnd;
-
-	if (!rvtt_p (&insnd, &stmt, gsi)
-	    || insnd->id != rvtt_insn_data::synth_opcode)
-	  continue;
-
-	unsigned id = TREE_INT_CST_LOW (gimple_call_arg (stmt, 1));
-	if (synth_opcodes.size () <= id)
-	  synth_opcodes.resize (id + 1);
-	if (!synth_opcodes[id])
-	  synth_opcodes[id] = stmt;
-	else
-	  duplicates.push_back (stmt);
-      }
-  if (synth_opcodes.empty ())
-    // Nothing to do
-    return;
-
-  unsigned unique_id = synth_opcodes.size () + 1;
-  for (auto *dup : duplicates)
-    {
-      tree id_cst = build_int_cst (integer_type_node, unique_id);
-      // Find the use of this via the intermediate add.
-      tree lhs = gimple_call_lhs (dup);
-      gimple *sum;
-      imm_use_iterator sum_iter;
-      FOR_EACH_IMM_USE_STMT (sum, sum_iter, lhs)
-	{
-	  if (sum->code == GIMPLE_DEBUG)
-	    continue;
-
-	  if (tree sum_lhs = gimple_assign_lhs (sum))
-	    {
-	      gimple *use;
-	      imm_use_iterator use_iter;
-	      FOR_EACH_IMM_USE_STMT (use, use_iter, sum_lhs)
-		{
-		  if (use->code != GIMPLE_CALL)
-		    continue;
-		  auto *use_call = static_cast<gcall *> (use);
-		  auto insnd = rvtt_get_insn_data (use_call);
-		  gcc_assert (insnd && insnd->nonimm_pos >= 0);
-		  gimple_call_set_arg (use_call, insnd->nonimm_pos + 2, id_cst);
-		}
-	    }
-	}
-      gimple_call_set_arg (dup, 1, id_cst);
-      unique_id += 2;
-    }
-#endif
-  
-  load_imm_map.reserve (20);
-
   bool updated = false;
+
+  basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
@@ -346,37 +282,25 @@ transform (function *fn)
 	  gcall *stmt;
 	  const rvtt_insn_data *insnd;
 
-	  if (rvtt_p (&insnd, &stmt, gsi) && insnd->nonimm_pos != -1)
+	  if (!rvtt_p (&insnd, &stmt, gsi))
+	    continue;
+
+	  if (insnd->nonimm_pos < 0)
+	    continue;
+
+	  if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == SSA_NAME)
 	    {
-	      tree immarg = gimple_call_arg (stmt, insnd->nonimm_pos);
-	      if (TREE_CODE (immarg) == SSA_NAME)
-		expand_complex (stmt, insnd, &gsi);
-	      else
-		{
-		  // We have an immediate value, remove the unnecessary
-		  // synth arg (other uses of it might remain)
-		  gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
-		  update_stmt (stmt);
-		}
+	      expand_complex (stmt, insnd, &gsi);
 	      updated = true;
 	    }
+	  else
+	    gcc_assert (!TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->nonimm_pos + 1)));
 	}
     }
 
-  if (updated)
-    {
-      update_ssa (TODO_update_ssa);
+  load_imm_map.resize (0);
 
-      // Cleanup: remove unused insns created by the nonimm mess...
-      // Find load_immediates which will be in 1 of 3 states:
-      //  - no uses, delete
-      //  - one use in an assignment which is a sum, which is unused, delete both
-      //  - one use in an assignment which is a sum which is used
-      DUMP ("  expand-nonimm cleanup...\n");
-      rvtt_cleanup_nonimm_lis (fn);
-      load_imm_map.resize (0);
-      update_ssa (TODO_update_ssa);
-    }
+  return updated ? TODO_update_ssa : 0;
 }
 
 namespace {
@@ -387,7 +311,7 @@ const pass_data pass_data_rvtt_synth_expand =
   "rvtt_synth_expand", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  0, /* properties_required */
+  PROP_ssa, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
@@ -407,8 +331,7 @@ public:
   }
   virtual unsigned execute (function *fn) override
   {
-    transform (fn);
-    return 0;
+    return transform (fn);
   }
 };
 

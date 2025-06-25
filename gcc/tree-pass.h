@@ -505,6 +505,7 @@ extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
 
