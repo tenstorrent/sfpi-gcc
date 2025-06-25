@@ -93,7 +93,7 @@ transform (function *fn)
 
   // For each id in use, find the mode opcode value and use that
   std::unordered_map<unsigned, unsigned> map;
-  for (auto synth : synths)
+  for (auto &synth : synths)
     {
       if (!synth.uses)
 	{
