@@ -58,6 +58,7 @@ transform (function *fn)
 {
   basic_block bb;
 
+  bool updated = false;
   unsigned int synth_id = 0;
   FOR_EACH_BB_FN (bb, fn)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
@@ -71,20 +72,24 @@ transform (function *fn)
 	  {
 	    tree immarg = gimple_call_arg (stmt, insnd->nonimm_pos);
 	    if (TREE_CODE (immarg) == INTEGER_CST)
-	      continue;
-	    synth_id += 2; // We may need to insert another one later
-	    tree sum = rvtt_emit_nonimm_prologue (synth_id, insnd, stmt, gsi);
+	      gimple_call_set_arg (stmt, 0, null_pointer_node);
+	    else
+	      {
+		synth_id += 2; // We may need to insert another one later
+		tree sum = rvtt_emit_nonimm_prologue (synth_id, insnd, stmt, gsi);
 
-	    // Update insn to make insnd->nonimm_pos+1 contain the sum
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, sum);
-	    // Save unique_id in insn's id field
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2,
-				build_int_cst (integer_type_node, synth_id));
+		// Update insn to make insnd->nonimm_pos+1 contain the sum
+		gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, sum);
+		// Save unique_id in insn's id field
+		gimple_call_set_arg (stmt, insnd->nonimm_pos + 2,
+				     build_int_cst (integer_type_node, synth_id));
+	      }
 	    update_stmt (stmt);
+	    updated = true;
 	  }
       }
 
-  if (synth_id)
+  if (updated)
     update_ssa (TODO_update_ssa);
 }
 
@@ -96,7 +101,7 @@ const pass_data pass_data_rvtt_synth_split =
   "rvtt_synth_split", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  0, /* properties_required */
+  PROP_ssa, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */

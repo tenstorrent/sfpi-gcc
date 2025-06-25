@@ -218,7 +218,6 @@ extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      tree old_add,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt);
-extern void rvtt_cleanup_nonimm_lis(function *fun);
 extern int rvtt_get_insn_operand_count(const rtx_insn *insn);
 extern rtx rvtt_get_insn_operand(int which, const rtx_insn *insn);
 
