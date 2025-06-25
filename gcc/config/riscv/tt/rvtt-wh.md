@@ -576,7 +576,7 @@
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:V64SF 3 "register_operand"  "")
                           (match_operand:SI    4 "nonmemory_operand" "")
-                          (match_operand:SI    5 "immediate_operand" "")
+                          (match_operand:SI    5 "const_int_operand" "")
                           (match_operand:SI    6 "nonmemory_operand" "")
                           (match_operand:SI    7 "const_int_operand" "")] UNSPECV_WH_SFPXIADD_I_LV))]
   "TARGET_RVTT_WH"

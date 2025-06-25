@@ -287,9 +287,10 @@ rvtt_init_builtins()
 
   // The real value cache is not available yet. :(
   // Perhaps there's a better place for this?
-  rvtt_vec0_rtx = rtx_alloc (CONST_DOUBLE);
-  PUT_MODE (rvtt_vec0_rtx, SFmode);
-  real_from_integer (&rvtt_vec0_rtx->u.rv, SFmode, 0, SIGNED);
+  rtx sf0 = rtx_alloc (CONST_DOUBLE);
+  PUT_MODE (sf0, SFmode);
+  real_from_integer (&sf0->u.rv, SFmode, 0, SIGNED);
+  rvtt_vec0_rtx = rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
 }
 
 const char *
