@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "rvtt.h"
+#include <unordered_map>
 
 // This phase of the non-immediate processing works by:
 //  - finding all of the load_immediate calls and creating a lookup table
@@ -41,94 +42,125 @@ along with GCC; see the file COPYING3.  If not see
 static void
 transform (function *fn)
 {
-  std::vector<rtx> synth_opcodes;
-  std::vector<rtx> duplicates;
+  struct synth
+  {
+    rtx_insn_list *ops = nullptr; // synth_opcode's
+    rtx_insn_list *uses = nullptr; // synth_insn's
+  };
+  std::vector<synth> synths;
 
   basic_block bb;
 
-  // Generate lookup table of synth_opcode insns
+  // Gather
   FOR_EACH_BB_FN (bb, fn)
     {
       rtx_insn *insn;
 
       FOR_BB_INSNS (bb, insn)
-	if (NONJUMP_INSN_P (insn) && INSN_CODE (insn) == CODE_FOR_rvtt_synth_opcode)
-	  {
-	    rtx unspec = SET_SRC (PATTERN (insn));
-	    unsigned id = INTVAL (XVECEXP (unspec, 0, 1));
-	    if (synth_opcodes.size () <= id)
-	      synth_opcodes.resize (id + 1);
-	    if (!synth_opcodes[id])
-	      synth_opcodes[id] = insn;
-	    else
-	      duplicates.push_back (insn);
-	  }
+	{
+	  if (!NONJUMP_INSN_P (insn))
+	    continue;
+
+	  unsigned id = 0;
+	  bool is_opcode = INSN_CODE (insn) == CODE_FOR_rvtt_synth_opcode;
+	  bool has_dst = false;
+	  if (is_opcode)
+	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 1));
+	  else
+	    {
+	      has_dst = INSN_CODE (insn) == CODE_FOR_rvtt_sfpsynth_insn_dst;
+	      if (!has_dst && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_insn)
+		// Nothing here.
+		continue;
+
+	      rtx pat = XVECEXP (PATTERN (insn), 0, 0);
+	      rtx ops = has_dst ? SET_SRC (pat) : pat;
+	      id = INTVAL (XVECEXP (ops, 0, 4));
+	    }
+	  if (synths.size () <= id)
+	    synths.resize (id + 1);
+
+	  auto &elt = synths[id];
+	  auto &slot = is_opcode ? elt.ops : elt.uses;
+	  slot = alloc_INSN_LIST (insn, slot);
+	}
     }
 
-  if (synth_opcodes.empty ())
+  if (synths.empty ())
     // Nothing to do.
     return;
 
-  // Processes the synth_insns
-  // Potential optimization: Find all the uses of each synth_opcode
-  // and pick the most common match, rather than the first.
-  FOR_EACH_BB_FN (bb, fn)
+  // For each id in use, find the mode opcode value and use that
+  std::unordered_map<unsigned, unsigned> map;
+  for (auto synth : synths)
     {
-      rtx_insn *insn;
-
-      FOR_BB_INSNS (bb, insn)
-       {
-	 if (!NONJUMP_INSN_P (insn))
-	   continue;
-	 bool has_dst = INSN_CODE (insn) == CODE_FOR_rvtt_sfpsynth_insn_dst;
-	 if (!has_dst && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_insn)
-	   continue;
-	
-	 rtx pat = XVECEXP (PATTERN (insn), 0, 0);
-	 rtx ops = has_dst ? SET_SRC (pat) : pat;
-
-	 unsigned id = INTVAL (XVECEXP (ops, 0, 4));
-
-	 gcc_checking_assert (id < synth_opcodes.size ());
-	 rtx synth_insn = synth_opcodes[id];
-	 rtx synth_unspec = SET_SRC (PATTERN (synth_insn));
-	 rtx &synth_opcode_rtx = XVECEXP (synth_unspec, 0, 0);
-
-	 if (!INTVAL (synth_opcode_rtx))
-	   {
-	     // Hasn't been set yet
-	     unsigned opcode = INTVAL (XVECEXP (ops, 0, 3));
-	     if (has_dst)
-	       opcode |= rvtt_sfpu_regno (SET_DEST (pat)) << INTVAL (XVECEXP (ops, 0, 7));
-	     rtx src = XVECEXP (ops, 0, 5);
-	     if (REG_P (src))
-	       opcode |= rvtt_sfpu_regno (src) << INTVAL (XVECEXP (ops, 0, 6));
-
-	     synth_opcode_rtx = gen_rtx_CONST_INT (SImode, opcode);
-	     if (rtx note = find_reg_equal_equiv_note (synth_insn))
-	       {
-		 gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
-		 XEXP (note, 0) = synth_unspec;
-	       }
-	   }
-
-	 // Store the synthed opcode in the synth_insn so it knows if
-	 // it needs to fix things.
-	 XVECEXP (ops, 0, 3) = synth_opcode_rtx;
-       }
-    }
-
-  // Fixup the duplicates.
-  for (auto *insn : duplicates)
-    {
-      rtx unspec = SET_SRC (PATTERN (insn));
-      unsigned id = INTVAL (XVECEXP (unspec, 0, 1));
-      rtx synth_unspec = SET_SRC (PATTERN (synth_opcodes[id]));
-      XVECEXP (unspec, 0, 0) = XVECEXP (synth_unspec, 0, 0);
-      if (rtx note = find_reg_equal_equiv_note (insn))
+      if (!synth.uses)
 	{
-	  gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
-	  XEXP (note, 0) = unspec;
+	  gcc_assert (!synth.ops);
+	  continue;
+	}
+      gcc_assert (synth.ops);
+
+      // Count the use patterns
+      for (auto *use = synth.uses; use; use = use->next ())
+	{
+	  rtx_insn *insn = use->insn ();
+	  unsigned opcode = 0;
+	  rtx pat = XVECEXP (PATTERN (insn), 0, 0);
+	  if (GET_CODE (pat) == SET)
+	    {
+	      rtx dst = SET_DEST (pat);
+	      pat = SET_SRC (pat);
+	      opcode |= rvtt_sfpu_regno (dst) << INTVAL (XVECEXP (pat, 0, 7));
+	    }
+	  rtx src = XVECEXP (pat, 0, 5);
+	  if (REG_P (src))
+	    opcode |= rvtt_sfpu_regno (src) << INTVAL (XVECEXP (pat, 0, 6));
+	  opcode |= INTVAL (XVECEXP (pat, 0, 3));
+
+	  map[opcode]++;
+	}
+
+      // Find the mode
+      unsigned count = 0;
+      unsigned opcode = 0;
+      for (auto &slot : map)
+	if (slot.second > count)
+	  {
+	    count = slot.second;
+	    opcode = slot.first;
+	  }
+      map.clear ();
+
+      rtx op_rtx = gen_rtx_CONST_INT (SImode, opcode);
+
+      // Update all the insns
+      for (auto *op = synth.ops; op;)
+	{
+	  rtx_insn *insn = op->insn ();
+	  auto *next = op->next ();
+	  free_INSN_LIST_node (op);
+	  op = next;
+
+	  rtx unspec = SET_SRC (PATTERN (insn));
+	  XVECEXP (unspec, 0, 0) = op_rtx;
+	  if (rtx note = find_reg_equal_equiv_note (insn))
+	    {
+	      gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
+	      XEXP (note, 0) = unspec;
+	    }
+	}
+      for (auto *use = synth.uses; use;)
+	{
+	  rtx_insn *insn = use->insn ();
+	  auto *next = use->next ();
+	  free_INSN_LIST_node (use);
+	  use = next;
+
+	  rtx ops = XVECEXP (PATTERN (insn), 0, 0);
+	  if (GET_CODE (ops) == SET)
+	    ops = SET_SRC (ops);
+	  XVECEXP (ops, 0, 3) = op_rtx;
 	}
     }
 }
