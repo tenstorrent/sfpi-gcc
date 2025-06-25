@@ -887,57 +887,6 @@ rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
   update_stmt (stmt);
 }
 
-void
-rvtt_cleanup_nonimm_lis(function *fun)
-{
-  basic_block bb;
-
-  FOR_EACH_BB_FN (bb, fun)
-    {
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-	   !gsi_end_p (gsi); )
-	{
-	  gcall *stmt;
-	  const rvtt_insn_data *insnd;
-
-	  if (rvtt_p (&insnd, &stmt, gsi) &&
-	      insnd->id == rvtt_insn_data::synth_opcode)
-	    {
-	      tree lhs = gimple_call_lhs (stmt);
-	      gimple *use_stmt;
-	      imm_use_iterator iter;
-	      unsigned num_uses = 0;
-
-	      FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
-		{
-		  if (use_stmt->code == GIMPLE_DEBUG)
-		    continue;
-
-		  tree sum_lhs = gimple_assign_lhs (use_stmt);
-		  if (sum_lhs && has_zero_uses (sum_lhs))
-		    {
-		      DUMP ("    ...removing sum\n");
-		      gimple_stmt_iterator gsi_sum = gsi_for_stmt (use_stmt);
-		      gsi_remove (&gsi_sum, true);
-		    }
-		  else
-		    num_uses++;
-		}
-
-	      if (!num_uses)
-		{
-		  DUMP ("    ...removing %s\n", insnd->name);
-		  unlink_stmt_vdef (stmt);
-		  gsi_remove (&gsi, true);
-		  release_defs (stmt);
-		  continue;
-		}
-	    }
-	  gsi_next (&gsi);
-	}
-    }
-}
-
 // The code below makes me sad.  This is much harder because the operands can
 // either be an array or a single operand (rather than an array of 1)...
 int rvtt_get_insn_operand_count(const rtx_insn *insn)

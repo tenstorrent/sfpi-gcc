@@ -953,11 +953,7 @@ transform (function *fun)
 	update_ssa(TODO_update_ssa);
     }
 
-  if (!load_imm_map.empty())
-    {
-      rvtt_cleanup_nonimm_lis (fun);
-      load_imm_map.clear ();
-    }
+  load_imm_map.clear ();
 }
 
 namespace {
