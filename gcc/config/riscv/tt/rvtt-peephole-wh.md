@@ -23,7 +23,7 @@
 ;; LZ
 (define_peephole2
   [(set (match_operand:V64SF 0 "register_operand")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand")
+        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand")
                           (match_operand:V64SF 2 "register_operand")
                           (match_operand:SI    3 "const_0_operand")] UNSPECV_WH_SFPLZ_INT))
    (unspec_volatile [(match_dup:V64SF     2)
@@ -41,7 +41,7 @@
 
 (define_peephole2
   [(set (match_operand:V64SF 0 "register_operand")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand")
+        (unspec_volatile [(match_operand:V64SF 1 "nonmemory_operand")
                           (match_operand:V64SF 2 "register_operand")
                           (match_operand:SI    3 "const_0_operand")] UNSPECV_WH_SFPLZ_INT))
    (unspec_volatile [(match_operand:SI    4 "immediate_operand")] UNSPECV_WH_SFPPUSHC)
