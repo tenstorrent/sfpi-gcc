@@ -283,6 +283,9 @@ rvtt_init_builtins()
   sfpu_rtl_insn_ptrs.resize(NUM_INSN_CODES);
   for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
     sfpu_rtl_insn_ptrs[i] = init_rtx_insnd (i, arch);
+
+  // Make synth_opcode a const fn, it's the only one.
+  TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
 }
 
 const char *
