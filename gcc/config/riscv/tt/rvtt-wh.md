@@ -1,7 +1,6 @@
 ;; Machine description for Tenstorrent SFPU Wormhole Intrinsics.
-;; Copyright (C) 2011-2020 Free Software Foundation, Inc.
-;; Contributed by Paul Keller (pkeller@tenstorrent.com)
-;; Based on RISC-V target for GNU compiler.
+;; Copyright (C) 2022-2025 Tenstorrent Inc.
+;; Originated by Paul Keller (pkeller@tenstorrent.com)
 
 ;; This file is part of GCC.
 
