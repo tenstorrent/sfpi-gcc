@@ -33,6 +33,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include <unordered_map>
 
+#include "gimple-pretty-print.h"
+
 // After duplicative optimizations like loop unrolling and
 // loop unswitching we can have
 // 0 uses with a now-constant argument
@@ -144,6 +146,11 @@ transform (function *fn)
 	  gcc_assert (TREE_CODE (arg) == SSA_NAME);
 
 	  auto *add = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (arg));
+	  if (!(add && gimple_assign_rhs_code (add) == PLUS_EXPR))
+	    {
+	      debug_gimple_stmt (use->call);
+	      debug_gimple_stmt (SSA_NAME_DEF_STMT (arg));
+	    }
 	  gcc_assert (add && gimple_assign_rhs_code (add) == PLUS_EXPR);
 
 	  // Update all the uses of the ssa-var (which will include
