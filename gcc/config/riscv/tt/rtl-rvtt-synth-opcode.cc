@@ -1,6 +1,7 @@
 /* Pass to complete handling of the SFPU synth insns
-   Copyright (C) 2022 Free Software Foundation, Inc.
-   Contributed by Paul Keller (pkeller@tenstorrent.com).
+   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
