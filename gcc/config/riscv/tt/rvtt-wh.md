@@ -256,7 +256,7 @@
 ;;; SFPLOADI and SFPLOADI_LV
 (define_expand "rvtt_wh_sfpxloadi"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec [(match_operand:SI 1 "address_operand"  "")
+        (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "immediate_operand" "")
                           (match_operand:SI 3 "nonmemory_operand" "")
                           (match_operand:SI 4 "register_operand"  "")
@@ -270,7 +270,7 @@
 
 (define_expand "rvtt_wh_sfpxloadi_lv"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec [(match_operand:SI    1 "address_operand"   "")
+        (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "immediate_operand" "")
                           (match_operand:SI    4 "nonmemory_operand" "")
