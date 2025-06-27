@@ -149,19 +149,14 @@ transform (function *fn)
 	  gimple *def_stmt = SSA_NAME_DEF_STMT (arg);
 	  gassign *add = dyn_cast <gassign *> (def_stmt);
 
-	  if (add)
-	    {
-	      gcc_assert (gimple_assign_rhs_code (add) == PLUS_EXPR);
-	    }
-	  else
+	  if (!add)
 	    {
 	      debug_gimple_stmt (use->call);
 	      debug_gimple_stmt (def_stmt);
-	      set_dump_file (stderr);
-	      dump_file_name = "stderr";
-	      gcc_unreachable ();
-	      auto *call = dyn_cast <gcall *> (def_stmt);
+	      gcc_assert (false);
+	      // auto *call = dyn_cast <gcall *> (def_stmt);
 	    }
+	  gcc_assert (gimple_assign_rhs_code (add) == PLUS_EXPR);
 
 	  // Find all the uses of the ssa-var (which will include
 	  // this one).
