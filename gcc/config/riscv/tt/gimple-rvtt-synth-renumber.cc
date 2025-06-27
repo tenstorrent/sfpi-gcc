@@ -131,8 +131,10 @@ transform (function *fn)
       for (auto *use = def_use.uses; use; use = use->next)
 	map.insert ({use->call, {nullptr, use->pos}});
 
-      // Process all the uses, each should meet an add, which in turn
-      // should meet a def.
+      // Process all the uses, nearly all should meet an add, which in turn
+      // should meet a def. (We won't meet an add is cprop has
+      // determined the addedn is zero, Huh? why is the nonimm not imm
+      // then?
       unsigned num_adds = 0;
       tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
       for (auto *use = def_use.uses; use; use = use->next)
@@ -144,16 +146,24 @@ transform (function *fn)
 
 	  tree arg = gimple_call_arg (use->call, use->pos + 1);
 	  gcc_assert (TREE_CODE (arg) == SSA_NAME);
+	  gimple *def_stmt = SSA_NAME_DEF_STMT (arg);
+	  gassign *add = dyn_cast <gassign *> (def_stmt);
 
-	  auto *add = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (arg));
-	  if (!(add && gimple_assign_rhs_code (add) == PLUS_EXPR))
+	  if (add)
+	    {
+	      gcc_assert (gimple_assign_rhs_code (add) == PLUS_EXPR);
+	    }
+	  else
 	    {
 	      debug_gimple_stmt (use->call);
-	      debug_gimple_stmt (SSA_NAME_DEF_STMT (arg));
+	      debug_gimple_stmt (def_stmt);
+	      set_dump_file (stderr);
+	      dump_file_name = "stderr";
+	      gcc_unreachable ();
+	      auto *call = dyn_cast <gcall *> (def_stmt);
 	    }
-	  gcc_assert (add && gimple_assign_rhs_code (add) == PLUS_EXPR);
 
-	  // Update all the uses of the ssa-var (which will include
+	  // Find all the uses of the ssa-var (which will include
 	  // this one).
 	  unsigned count = 0;
 	  {
@@ -220,8 +230,12 @@ transform (function *fn)
 	  if (gimple_call_fndecl (mapping.first) != synth_opcode_decl)
 	    continue;
 
+	  if (!mapping.second.second)
+	    // no uses
+	    continue;
+
 	  // We do not need to renumber the first use.
-	  if (mapping.second.second <= (first ? 1 : 0))
+	  if (first && mapping.second.second == 1)
 	    {
 	      first = false;
 	      continue;
