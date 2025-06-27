@@ -215,7 +215,7 @@
         (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "const_int_operand" "")
                           (match_operand:SI 3 "const_int_operand" "")
-                          (match_operand:SI 4 "nonmemory_operand" "")
+                          (match_operand:SI 4 "reg_or_const_int_operand" "")
                           (match_operand:SI 5 "register_operand" "")
                           (match_operand:SI 6 "const_int_operand" "")] UNSPECV_WH_SFPLOAD))]
   "TARGET_RVTT_WH"
@@ -258,7 +258,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "address_operand"  "")
                           (match_operand:SI 2 "const_int_operand" "")
-                          (match_operand:SI 3 "nonmemory_operand" "")
+                          (match_operand:SI 3 "reg_or_const_int_operand" "")
                           (match_operand:SI 4 "register_operand"  "")
                           (match_operand:SI 5 "const_int_operand" "")] UNSPECV_WH_SFPXLOADI))]
   "TARGET_RVTT_WH"
@@ -273,7 +273,7 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"   "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "const_int_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")
+                          (match_operand:SI    4 "reg_or_const_int_operand" "")
                           (match_operand:SI    5 "register_operand"  "")
                           (match_operand:SI    6 "const_int_operand" "")] UNSPECV_WH_SFPXLOADI_LV))]
   "TARGET_RVTT_WH"
@@ -370,7 +370,7 @@
 (define_expand "rvtt_wh_sfpdivp2"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
-                          (match_operand:SI    2 "nonmemory_operand" "")
+                          (match_operand:SI    2 "reg_or_const_int_operand" "")
                           (match_operand:SI    3 "register_operand"  "")
                           (match_operand:SI    4 "const_int_operand" "")
                           (match_operand:V64SF 5 "register_operand"  "")
@@ -386,7 +386,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
-                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    3 "reg_or_const_int_operand" "")
                           (match_operand:SI    4 "register_operand"  "")
                           (match_operand:SI    5 "const_int_operand" "")
                           (match_operand:V64SF 6 "register_operand"  "")
@@ -749,7 +749,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:SI    2 "const_int_operand" "")
-                          (match_operand:SI    3 "nonmemory_operand" "")
+                          (match_operand:SI    3 "reg_or_const_int_operand" "")
                           (match_operand:SI    4 "register_operand"  "")
                           (match_operand:SI    5 "const_int_operand" "")
                           (match_operand:V64SF 6 "register_operand"  "")
@@ -767,7 +767,7 @@
         (unspec_volatile [(match_operand:SI    1 "address_operand"  "")
                           (match_operand:V64SF 2 "register_operand"  "")
                           (match_operand:SI    3 "const_int_operand" "")
-                          (match_operand:SI    4 "nonmemory_operand" "")
+                          (match_operand:SI    4 "reg_or_const_int_operand" "")
                           (match_operand:SI    5 "register_operand"  "")
                           (match_operand:SI    6 "const_int_operand" "")
                           (match_operand:V64SF 7 "register_operand"  "")
@@ -908,7 +908,7 @@
 (define_expand "rvtt_wh_sfpsetman_i"
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
-                          (match_operand:SI    2 "nonmemory_operand")
+                          (match_operand:SI    2 "reg_or_const_int_operand")
                           (match_operand:SI    3 "register_operand")
                           (match_operand:SI    4 "const_int_operand")
                           (match_operand:V64SF 5 "register_operand")
@@ -924,7 +924,7 @@
   [(set (match_operand:V64SF 0 "register_operand")
         (unspec_volatile [(match_operand:SI    1 "address_operand")
                           (match_operand:V64SF 2 "register_operand")
-                          (match_operand:SI    3 "nonmemory_operand")
+                          (match_operand:SI    3 "reg_or_const_int_operand")
                           (match_operand:SI    4 "register_operand")
                           (match_operand:SI    5 "const_int_operand")
                           (match_operand:V64SF 6 "register_operand")
