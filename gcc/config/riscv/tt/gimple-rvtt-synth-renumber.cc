@@ -148,19 +148,22 @@ transform (function *fn)
 	  gcc_assert (TREE_CODE (arg) == SSA_NAME);
 	  gimple *def_stmt = SSA_NAME_DEF_STMT (arg);
 	  gassign *add = dyn_cast <gassign *> (def_stmt);
-
 	  if (!add)
 	    {
-	      debug_gimple_stmt (use->call);
-	      debug_gimple_stmt (def_stmt);
-	      gcc_assert (false);
-	      // auto *call = dyn_cast <gcall *> (def_stmt);
+	      // sfpxicmps and friends cause the add to be elided by
+	      // setting the mask to zero. Things get reconstituted in
+	      // the expand pass.
+	      // FIXME: That's hokey and we should fix it.
+	      gcc_assert (is_gimple_call (def_stmt)
+			  && gimple_call_fndecl (def_stmt) != synth_opcode_decl);
+	      complex = true;
+	      break;
 	    }
+
 	  gcc_assert (gimple_assign_rhs_code (add) == PLUS_EXPR);
 
 	  // Find all the uses of the ssa-var (which will include
 	  // this one).
-	  unsigned count = 0;
 	  {
 	    imm_use_iterator iter;
 	    gimple *stmt;
@@ -177,10 +180,7 @@ transform (function *fn)
 		    break;
 		  }
 		else
-		  {
-		    slot->second.first = add;
-		    count++;
-		  }
+		  slot->second.first = add;
 	      }
 	    if (complex)
 	      break;
