@@ -156,7 +156,7 @@ transform (function *fn)
 	      // FIXME: That's hokey as it prevents renumbering we're
 	      // trying to achieve here. We should fix it.
 	      gcc_assert (is_gimple_call (def_stmt)
-			  && gimple_call_fndecl (def_stmt) != synth_opcode_decl);
+			  && gimple_call_fndecl (def_stmt) == synth_opcode_decl);
 	      complex = true;
 	      break;
 	    }
