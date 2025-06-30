@@ -153,7 +153,8 @@ transform (function *fn)
 	      // sfpxicmps and friends cause the add to be elided by
 	      // setting the mask to zero. Things get reconstituted in
 	      // the expand pass.
-	      // FIXME: That's hokey and we should fix it.
+	      // FIXME: That's hokey as it prevents renumbering we're
+	      // trying to achieve here. We should fix it.
 	      gcc_assert (is_gimple_call (def_stmt)
 			  && gimple_call_fndecl (def_stmt) != synth_opcode_decl);
 	      complex = true;
@@ -190,12 +191,21 @@ transform (function *fn)
 	  // that
 	  bool op2 = false;
 	  tree opcode = gimple_assign_rhs1 (add);
-	  auto *synth = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (opcode));
+	  gcall *synth = nullptr;
+	  if (TREE_CODE (opcode) == SSA_NAME)
+	    synth = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (opcode));
 	  if (!synth || gimple_call_fndecl (synth) != synth_opcode_decl)
 	    {
 	      op2 = true;
 	      opcode = gimple_assign_rhs2 (add);
-	      synth = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (opcode));
+	      if (TREE_CODE (opcode) == SSA_NAME)
+		synth = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (opcode));
+	      else
+		{
+		  debug_gimple_stmt (use->call);
+		  debug_gimple_stmt (add);
+		  gcc_assert (false);
+		}
 	    }
 	  auto synth_slot = map.find (synth);
 	  gcc_assert (synth_slot != map.end ());
