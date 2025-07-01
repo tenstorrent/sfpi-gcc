@@ -116,16 +116,17 @@ transform (function *fn)
   // nonimm_use -> add, nonimm-pos
   struct use_info
   {
-    gimple *opcode_stmt = nullptr;
-    gimple *add_stmt = nullptr;
+    gcall *opcode_stmt = nullptr;
+    gassign *add_stmt = nullptr;
     unsigned count = 0; // opcode_stmt: count of adds then new id
+                        // add: new-id
                         // use stmt: nonimm pos
     bool flag = false;  // add:rhs2
 
     use_info () = default;
     use_info (unsigned pos) : count (pos) {}
-    use_info (gimple *op, gimple *def, bool f)
-      : opcode_stmt (op), add_stmt (def != op ? def : nullptr), flag (f) {}
+    use_info (gcall *op, gassign *add, bool f)
+      : opcode_stmt (op), add_stmt (add), flag (f) {}
   };
   std::unordered_map<gimple *, use_info> map;
   for (auto &def_use : synths)
@@ -156,9 +157,8 @@ transform (function *fn)
       unsigned num_adds = 0;
       unsigned total_adds = 0;
       tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
-      auto build_graph = [&] (auto &self, gimple *opcode_stmt, gimple *def_stmt, bool is_indirect)
+      auto build_graph = [&] (auto &self, gcall *opcode_stmt, tree ssa_var, gassign *def_stmt = nullptr)
       {
-	tree ssa_var = gimple_get_lhs (def_stmt);
 	imm_use_iterator iter;
 	gimple *use_stmt;
 
@@ -175,7 +175,7 @@ transform (function *fn)
 		    debug_gimple_stmt (def_stmt);
 		    gcc_assert (false);
 		  }
-		if (opcode_stmt == def_stmt)
+		if (!def_stmt)
 		  // sfpxicmps and friends cause the add to be elided by
 		  // setting the mask to zero. Things get reconstituted in
 		  // the expand pass.
@@ -193,20 +193,15 @@ transform (function *fn)
 		gcc_assert (gimple_assign_rhs_code (add_stmt) == PLUS_EXPR);
 		tree opcode_arg = gimple_assign_rhs1 (add_stmt);
 		bool is_op2 = opcode_arg != ssa_var;
-		gcc_assert (!is_op2 || gimple_assign_rhs2 (add_stmt) == ssa_var);
-		if (opcode_stmt != def_stmt)
-		  {
-		    // If this is an add of an add, that's the ivopt chain
-		    gcc_assert (!is_op2
-				&& TREE_CODE (gimple_assign_rhs2 (add_stmt)) == INTEGER_CST);
-		    // Treat as complex for now
-		    return true;
-		  }
+		gcc_assert (!is_op2
+			    || (gimple_assign_rhs2 (add_stmt) == ssa_var
+				&& !def_stmt));
+
 		auto [iter, inserted] = map.insert ({add_stmt, use_info (opcode_stmt, def_stmt, is_op2)});
 		gcc_assert (inserted);
 		num_adds++;
 
-		if (self (self, opcode_stmt, add_stmt, opcode_stmt != def_stmt))
+		if (self (self, opcode_stmt, gimple_get_lhs (add_stmt), add_stmt))
 		  return true;
 	      }
 	    else if (gimple_code (use_stmt) != GIMPLE_DEBUG)
@@ -222,10 +217,10 @@ transform (function *fn)
 
       for (auto *def = def_use.defs; def; def = def->next)
 	{
-	  gimple *opcode_stmt = def->call;
+	  gcall *opcode_stmt = def->call;
 
 	  num_adds = 0;
-	  if (build_graph (build_graph, opcode_stmt, opcode_stmt, false))
+	  if (build_graph (build_graph, opcode_stmt, gimple_call_lhs (opcode_stmt)))
 	    {
 	      complex = true;
 	      break;
@@ -260,7 +255,7 @@ transform (function *fn)
 	    continue;
 
 	  if (!mapping.second.count)
-	    // no adds uses this -- can we get that?
+	    // nothin uses this -- can we get that?
 	    continue;
 
 	  // We do not need to renumber the first use.
@@ -271,14 +266,10 @@ transform (function *fn)
 	    }
 
 	  // A synth opcode used by more than one add.  Split it.
-	  auto gsi = gsi_for_stmt (mapping.first);
 	  for (auto &add : map)
 	    {
 	      if (!is_gimple_assign (add.first))
 		continue;
-	      if (add.second.add_stmt)
-		gcc_unreachable (); // for the moment
-
 	      if (first)
 		{
 		  first = false;
@@ -286,25 +277,52 @@ transform (function *fn)
 		}
 
 	      unique_id += 2;
-	      tree new_op = make_temp_ssa_name (unsigned_type_node, NULL, "li");
-	      gcall *new_stmt = gimple_build_call (synth_opcode_decl, 2);
-	      gimple_call_set_arg (new_stmt, 0, integer_zero_node);
-	      gimple_call_set_arg (new_stmt, 1, build_int_cst (unsigned_type_node, unique_id));
-	      gimple_call_set_lhs (new_stmt, new_op);
-	      gimple_set_location (new_stmt, gimple_location (mapping.first));
-	      update_stmt (new_stmt);
-	      gsi_insert_after (&gsi, new_stmt, GSI_NEW_STMT);
-
-	      if (add.second.flag)
-		gimple_assign_set_rhs2 (add.first, new_op);
-	      else
-		gimple_assign_set_rhs1 (add.first, new_op);
-	      update_stmt (add.first);
-
 	      add.second.count = unique_id;
+
+	      for (auto *slot = &add;;)
+		{
+		  gimple *orig_stmt = slot->second.add_stmt;
+		  tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL,
+						     orig_stmt ? "sum" : "li");
+		  gimple *new_stmt = nullptr;
+		  if (slot->second.add_stmt)
+		    new_stmt = gimple_build_assign
+		      (ssa_var, PLUS_EXPR,
+		       gimple_assign_rhs1 (slot->second.add_stmt),
+		       gimple_assign_rhs2 (slot->second.add_stmt));
+		  else
+		    {
+		      orig_stmt = slot->second.opcode_stmt;
+		      gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
+		      gimple_call_set_arg (new_call, 0, integer_zero_node);
+		      gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
+		      gimple_call_set_lhs (new_call, ssa_var);
+		      update_stmt (new_call);
+		      new_stmt = new_call;
+		    }
+
+		  gimple_set_location (new_stmt, gimple_location (orig_stmt));
+		  auto add_gsi = gsi_for_stmt (orig_stmt);
+		  gsi_insert_after (&add_gsi, new_stmt, GSI_NEW_STMT);
+
+		  if (slot->second.flag)
+		    gimple_assign_set_rhs2 (slot->first, ssa_var);
+		  else
+		    gimple_assign_set_rhs1 (slot->first, ssa_var);
+		  update_stmt (slot->first);
+
+		  if (!slot->second.add_stmt)
+		    break;
+
+		  auto src = map.find (orig_stmt);
+		  gcc_assert (src != map.end ());
+		  slot = &*src;
+		}
+
 	      renumbered = true;
 	    }
 	}
+
       if (renumbered)
 	{
 	  // Update all the uses of the renumbered adds
