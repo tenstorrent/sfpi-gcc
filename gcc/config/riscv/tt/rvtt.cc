@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "diagnostic-core.h"
 #include <unordered_map>
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
@@ -452,6 +453,15 @@ bool rvtt_permutable_operands(const rvtt_insn_data *insnd, gcall *stmt)
        (get_int_arg (stmt, 2) & SFPXIADD_MOD1_IS_SUB) == 0);
 }
 
+void rvtt_mov_error (const rtx_insn *insn, bool is_load)
+{
+  if (INSN_HAS_LOCATION (insn))
+    input_location = INSN_LOCATION (insn);
+  debug_rtx (insn);
+  internal_error ("cannot %s sfpu register (register %s)",
+		  is_load ? "load" : "store",
+		  is_load ? "fill" : "spill");
+}
 
 rtx rvtt_clamp_signed(rtx v, unsigned int mask)
 {

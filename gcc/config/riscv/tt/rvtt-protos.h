@@ -33,6 +33,9 @@ extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
 extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
 extern rtx rvtt_gen_const0_vector();
 
+extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
+
+// Instruction synthesis
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
 
 rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
