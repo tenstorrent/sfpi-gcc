@@ -1833,8 +1833,15 @@ emergency_dump_function ()
   fnotice (stderr, "during %s pass: %s\n",
 	   pt == GIMPLE_PASS ? "GIMPLE" : pt == RTL_PASS ? "RTL" : "IPA",
 	   current_pass->name);
-  if (!dump_file || !cfun)
+  if (!cfun)
     return;
+
+  if (!dump_file)
+    {
+      dump_file_name = "stderr";
+      set_dump_file (stderr);
+    }
+
   fnotice (stderr, "dump file: %s\n", dump_file_name);
   fprintf (dump_file, "\n\n\nEMERGENCY DUMP:\n\n");
   execute_function_dump (cfun, current_pass);
