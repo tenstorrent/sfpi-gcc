@@ -141,37 +141,12 @@
    (   register_operand (operands[0], V64SFmode)
     || reg_or_0_operand (operands[1], V64SFmode))"
   {
-    switch (which_alternative) {
-    case 0:
-      // Note: must re-enable all elements until we know if we are in a predicated state
+    if (which_alternative == 0)
       return "SFPMOV\t%0, %1, 2";
-      break;
 
-    case 1:
-      if (INSN_HAS_LOCATION (insn)) {
-        error_at(INSN_LOCATION(insn), "cannot load sfpu register");
-      } else {
-        error("cannot load sfpu register");
-      }
-      gcc_assert(0);
-      return "SFPILLEGAL";
-
-    case 2:
-      if (INSN_HAS_LOCATION (insn)) {
-        fatal_error(INSN_LOCATION(insn), "cannot store sfpu register (register spill)");
-      } else {
-        error("cannot store sfpu register (register spill)");
-      }
-      return "SFPILLEGAL";
-
-    default:
-      gcc_unreachable();
-      break;
-    }
-  }
-  [(set_attr "move_type" "fmove,fpload,fpstore")
-   (set_attr "length" "32,4,4")
-   (set_attr "mode" "V64SF")])
+    rvtt_mov_error (insn, which_alternative == 1);
+    gcc_unreachable ();
+  })
 
 (define_insn "rvtt_wh_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
