@@ -101,7 +101,7 @@ transform (function *fn)
 	  gcc_assert (!synth.ops);
 	  continue;
 	}
-      if (!synth_ops)
+      if (!synth.ops)
 	{
 	  debug_rtx (synth.uses->insn ());
 	  fprintf (stderr, "id = %d\n", ix);
