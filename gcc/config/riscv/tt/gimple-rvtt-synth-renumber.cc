@@ -179,7 +179,7 @@ transform (function *fn)
 		  // sfpxicmps and friends cause the add to be elided by
 		  // setting the mask to zero. Things get reconstituted in
 		  // the expand pass.
-		  // FIXME: That's hokey as it prevents renumbering we're
+		  // FIXME: That's hokey as it prevents the renumbering we're
 		  // trying to achieve here. We should do better.
 		  return true;
 
@@ -194,8 +194,7 @@ transform (function *fn)
 		tree opcode_arg = gimple_assign_rhs1 (add_stmt);
 		bool is_op2 = opcode_arg != ssa_var;
 		gcc_assert (!is_op2
-			    || (gimple_assign_rhs2 (add_stmt) == ssa_var
-				&& !def_stmt));
+			    || gimple_assign_rhs2 (add_stmt) == ssa_var);
 
 		auto [iter, inserted] = map.insert ({add_stmt, use_info (opcode_stmt, def_stmt, is_op2)});
 		gcc_assert (inserted);
@@ -266,9 +265,9 @@ transform (function *fn)
 	    }
 
 	  // A synth opcode used by more than one add.  Split it.
-	  for (auto &add : map)
+	  for (auto add = map.begin (); add != map.end(); ++add)
 	    {
-	      if (!is_gimple_assign (add.first))
+	      if (!is_gimple_assign (add->first))
 		continue;
 	      if (first)
 		{
@@ -277,22 +276,23 @@ transform (function *fn)
 		}
 
 	      unique_id += 2;
-	      add.second.count = unique_id;
+	      add->second.count = unique_id;
 
-	      for (auto *slot = &add;;)
+	      // clone the input chain to add back to the synth_opcode stmt.
+	      for (auto chain = add;;)
 		{
-		  gimple *orig_stmt = slot->second.add_stmt;
+		  gimple *orig_stmt = chain->second.add_stmt;
 		  tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL,
 						     orig_stmt ? "sum" : "li");
 		  gimple *new_stmt = nullptr;
-		  if (slot->second.add_stmt)
+		  if (orig_stmt)
 		    new_stmt = gimple_build_assign
 		      (ssa_var, PLUS_EXPR,
-		       gimple_assign_rhs1 (slot->second.add_stmt),
-		       gimple_assign_rhs2 (slot->second.add_stmt));
+		       gimple_assign_rhs1 (chain->second.add_stmt),
+		       gimple_assign_rhs2 (chain->second.add_stmt));
 		  else
 		    {
-		      orig_stmt = slot->second.opcode_stmt;
+		      orig_stmt = chain->second.opcode_stmt;
 		      gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
 		      gimple_call_set_arg (new_call, 0, integer_zero_node);
 		      gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
@@ -305,21 +305,21 @@ transform (function *fn)
 		  auto add_gsi = gsi_for_stmt (orig_stmt);
 		  gsi_insert_after (&add_gsi, new_stmt, GSI_NEW_STMT);
 
-		  if (slot->second.flag)
-		    gimple_assign_set_rhs2 (slot->first, ssa_var);
+		  if (chain->second.flag)
+		    gimple_assign_set_rhs2 (chain->first, ssa_var);
 		  else
-		    gimple_assign_set_rhs1 (slot->first, ssa_var);
-		  update_stmt (slot->first);
+		    gimple_assign_set_rhs1 (chain->first, ssa_var);
+		  update_stmt (chain->first);
 
-		  if (!slot->second.add_stmt)
+		  if (!chain->second.add_stmt)
 		    break;
 
-		  auto src = map.find (orig_stmt);
-		  gcc_assert (src != map.end ());
-		  slot = &*src;
+		  chain = map.find (orig_stmt);
+		  gcc_assert (chain != map.end ());
 		}
 
 	      renumbered = true;
+	      updated = true;
 	    }
 	}
 
