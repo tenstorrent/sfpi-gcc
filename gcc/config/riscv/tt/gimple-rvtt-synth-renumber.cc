@@ -202,6 +202,10 @@ transform (function *fn)
 		gcc_assert (inserted);
 		num_adds++;
 
+		if (def_stmt)
+		  // Add of add, too complex for now
+		  return true;
+
 		if (self (self, opcode_stmt, gimple_get_lhs (add_stmt), add_stmt))
 		  return true;
 	      }

@@ -93,14 +93,20 @@ transform (function *fn)
 
   // For each id in use, find the mode opcode value and use that
   std::unordered_map<unsigned, unsigned> map;
-  for (auto synth : synths)
+  for (unsigned ix = 0; ix != synths.size (); ix++)// auto &synth : synths)
     {
+      auto synth = synths[ix];
       if (!synth.uses)
 	{
 	  gcc_assert (!synth.ops);
 	  continue;
 	}
-      gcc_assert (synth.ops);
+      if (!synth_ops)
+	{
+	  debug_rtx (synth.uses->insn ());
+	  fprintf (stderr, "id = %d\n", ix);
+	  gcc_unreachable ();
+	}
 
       // Count the use patterns
       for (auto *use = synth.uses; use; use = use->next ())
