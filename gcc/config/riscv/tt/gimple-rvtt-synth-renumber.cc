@@ -51,7 +51,7 @@ along with GCC; see the file COPYING3.  If not see
 // DEF/USE lists. If we encounter something odd (like a PHI), we
 // abandon renumbering that ID.
 
-static bool
+static unsigned
 transform (function *fn)
 {
   struct synth {
@@ -72,7 +72,7 @@ transform (function *fn)
   std::vector<def_use> synths;
 
   basic_block bb;
-  bool updated = false;
+  int updated = false; // true/false/file-not-found :)
 
   // Find all the defs & uses
   FOR_EACH_BB_FN (bb, fn)
@@ -241,7 +241,6 @@ transform (function *fn)
 	continue;
 
       // Multiple adds, (maybe) renumber
-      unsigned renumbered = false;
       unsigned unique_id = synths.size ();
       bool first = true;
       for (auto &mapping : map)
@@ -318,12 +317,11 @@ transform (function *fn)
 		  gcc_assert (chain != map.end ());
 		}
 
-	      renumbered = true;
-	      updated = true;
+	      updated = -1;
 	    }
 	}
 
-      if (renumbered)
+      if (updated < 0)
 	{
 	  // Update all the uses of the renumbered adds
 	  for (auto &mapping : map)
@@ -346,7 +344,7 @@ transform (function *fn)
 	}
     }
 
-  return updated;
+  return updated ? TODO_update_ssa : 0;
 }
 
 namespace {
@@ -378,7 +376,7 @@ public:
 
   virtual unsigned execute (function *fn) override
   {
-    return transform (fn) ? TODO_update_ssa : 0;
+    return transform (fn);
   }
 };
 
