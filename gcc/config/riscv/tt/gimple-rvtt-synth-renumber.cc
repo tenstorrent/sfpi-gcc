@@ -90,8 +90,10 @@ transform (function *fn)
 	  continue;
 	else if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST)
 	  {
-	    // It's now a constant, zap the synth arg.
+	    // It's now a constant, zap the synth arg and pointer
+	    gimple_call_set_arg (stmt, 0, null_pointer_node);
 	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
+	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
 	    update_stmt (stmt);
 	    updated = true;
 	    continue;
