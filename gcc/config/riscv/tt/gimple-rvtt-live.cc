@@ -657,7 +657,7 @@ const pass_data pass_data_rvtt_live =
   "rvtt_live", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  0, /* properties_required */
+  PROP_ssa, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
@@ -671,20 +671,19 @@ public:
     : gimple_opt_pass (pass_data_rvtt_live, ctxt)
   {}
 
-  virtual unsigned int execute (function *);
+  virtual bool gate (function *) override
+  {
+    return TARGET_RVTT;
+  }
+
+  virtual unsigned execute (function *fn) override
+  {
+    transform (fn);
+    return 0;
+  }
 }; // class pass_rvtt_live
 
 } // anon namespace
-
-/* Entry point to rvtt_live pass.	*/
-unsigned int
-pass_rvtt_live::execute (function *fun)
-{
-  if (TARGET_RVTT)
-    transform (fun);
-
-  return 0;
-}
 
 gimple_opt_pass *
 make_pass_rvtt_live (gcc::context *ctxt)

@@ -533,14 +533,14 @@ public:
   }
 
   /* opt_pass methods: */
-  virtual bool gate (function *) { return (optimize > 0); }
+  virtual bool gate (function *) override
+  {
+    return optimize > 0 && flag_rvtt_rmext;
+  }
 
-  virtual unsigned int execute (function *cfn)
+  virtual unsigned execute (function *cfn) override
     {
-      if (flag_rvtt_rmext)
-	{
-	  transform (cfn);
-	}
+      transform (cfn);
       return 0;
     }
 }; // class pass_rvtt_rmext
