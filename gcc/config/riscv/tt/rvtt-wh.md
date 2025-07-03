@@ -130,7 +130,6 @@
   UNSPECV_WH_SFPTRANSP
   UNSPECV_WH_SFPSHFT2_G
   UNSPECV_WH_SFPSHFT2_GE
-  UNSPECV_WH_SFPNOP
 ])
 
 (define_insn "rvtt_wh_sfpgccmov_cc"
@@ -1109,10 +1108,5 @@
                      (match_operand:V64SF 4 "register_operand"   "+Q3")] UNSPECV_WH_SFPSHFT2_GE)]
   "TARGET_RVTT_WH"
   "SFPSHFT2\t0, %0, L0, %1, %2, %3, %4, 2")
-
-(define_insn "rvtt_wh_sfpnop"
-  [(unspec_volatile [(const_int 0)] UNSPECV_WH_SFPNOP)]
-  "TARGET_RVTT_WH"
-  "SFPNOP")
 
 (include "tt/rvtt-peephole-wh.md")
