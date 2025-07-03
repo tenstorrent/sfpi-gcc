@@ -21,71 +21,29 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
-#include "cfghooks.h"
 #include "tree-pass.h"
 #include "ssa.h"
-#include "cgraph.h"
-#include "gimple-pretty-print.h"
-#include "diagnostic-core.h"
-#include "fold-const.h"
-#include "trans-mem.h"
-#include "stor-layout.h"
-#include "print-tree.h"
-#include "cfganal.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
 #include "gimple-iterator.h"
-#include "gimplify-me.h"
-#include "gimple-walk.h"
-#include "tree-cfg.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
 #include "tree-into-ssa.h"
-#include "tree-dfa.h"
-#include "tree-ssa.h"
-#include "except.h"
-#include "cfgloop.h"
-#include "tree-ssa-propagate.h"
-#include "value-prof.h"
-#include "tree-inline.h"
-#include "tree-ssa-live.h"
-#include "omp-general.h"
-#include "omp-expand.h"
-#include "tree-cfgcleanup.h"
-#include "gimplify.h"
-#include "attribs.h"
-#include "selftest.h"
-#include "opts.h"
-#include "asan.h"
-#include "profile.h"
-#include <unordered_map>
 #include "rvtt.h"
+#include <unordered_map>
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
-
-using namespace std;
 
 static void process_tree(gcall *stmt, gcall *parent);
 static void process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
 			      bool *negated, gcall *stmt, gcall *parent, bool negate);
 
-static unordered_map<gcall *, bool> vif_stmts;
-static unordered_map<gcall *, bool> phi_stmts;
+static std::unordered_map<gcall *, bool> vif_stmts;
+static std::unordered_map<gcall *, bool> phi_stmts;
 
-static long int
-get_int_arg(gcall *stmt, unsigned int arg)
+static unsigned
+get_int_arg (gcall *stmt, unsigned int arg)
 {
-  tree decl = gimple_call_arg(stmt, arg);
-  if (decl)
-    {
-      gcc_assert(TREE_CODE(decl) == INTEGER_CST);
-      return *(decl->int_cst.val);
-    }
-  return -1;
+  return TREE_INT_CST_LOW (gimple_call_arg (stmt, arg));
 }
 
 static void
@@ -136,9 +94,11 @@ cmp_issues_compc(int mod)
 
 static int get_bool_type(int op, bool negate)
 {
-  if (op == SFPXBOOL_MOD1_OR) return negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR;
-  if (op == SFPXBOOL_MOD1_AND) return negate ? SFPXBOOL_MOD1_OR : SFPXBOOL_MOD1_AND;
-  gcc_assert(0);
+  if (op == SFPXBOOL_MOD1_OR)
+    return negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR;
+  if (op == SFPXBOOL_MOD1_AND)
+    return negate ? SFPXBOOL_MOD1_OR : SFPXBOOL_MOD1_AND;
+  gcc_unreachable ();
 }
 
 static int
@@ -206,7 +166,8 @@ emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPUSHCC_MOD1_PUSH));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1,
+				       build_int_cst (unsigned_type_node, SFPPUSHCC_MOD1_PUSH));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
@@ -215,7 +176,8 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1, size_int(SFPPOPCC_MOD1_POP));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 1,
+				       build_int_cst (unsigned_type_node, SFPPOPCC_MOD1_POP));
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
@@ -233,8 +195,10 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpxloadi);
-  tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 5, nullp, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 5, null_pointer_node,
+				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT),
+				       build_int_cst (unsigned_type_node, val),
+				       integer_zero_node, integer_zero_node);
 
   tree tmp = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
   gimple_call_set_lhs (new_stmt, tmp);
@@ -249,12 +213,11 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpxloadi_lv);
-  tree nullp = build_int_cst (build_pointer_type (void_type_node), 0);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 6, nullp, in, size_int(SFPLOADI_MOD0_SHORT), size_int(val), size_int(0), size_int(0));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 6, null_pointer_node, in,
+				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT),
+				       integer_zero_node, integer_zero_node, integer_zero_node);
   if (lhs == NULL_TREE)
-    {
-      lhs = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
-    }
+    lhs = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
   gimple_call_set_lhs (new_stmt, lhs);
 
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
@@ -267,7 +230,8 @@ emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpsetcc_v);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, in, size_int(SFPSETCC_MOD1_LREG_EQ0));
+  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, in,
+				       build_int_cst (unsigned_type_node, SFPSETCC_MOD1_LREG_EQ0));
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
@@ -318,7 +282,7 @@ mark_vif_stmts(gimple_stmt_iterator top,
 	{
 	  if (vif_stmts.find(stmt) == vif_stmts.end())
 	    {
-	      vif_stmts.insert(pair<gcall*, bool>(stmt, true));
+	      vif_stmts.insert({stmt, true});
 	    }
 	  else
 	    {
@@ -500,7 +464,7 @@ process_tree_phi(gcall *stmt, gimple *child)
     {
       return;
     }
-  phi_stmts.insert(pair<gcall*, bool>(stmt, true));
+  phi_stmts.insert({stmt, true});
 
   // The source of this icmps comes from multiple BBs, traverse them
   for (unsigned int i = 0; i < gimple_phi_num_args (child); i++)
@@ -624,7 +588,7 @@ process_tree(gcall *stmt, gcall *parent)
 // by an sfpxcondb.  All dependent operations are chained to this by their
 // return values.  This pass traverses the tree, more or less deletes it and
 // replaces it with one that works w/ the HW.
-static void
+static unsigned
 transform (function *fun)
 {
   DUMP("Expand pass on: %s\n", function_name(fun));
@@ -696,7 +660,7 @@ transform (function *fun)
 	}
     }
 
-  update_ssa (TODO_update_ssa);
+  return TODO_update_ssa;
 }
 
 namespace {
@@ -707,7 +671,7 @@ const pass_data pass_data_rvtt_expand =
   "rvtt_expand", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  0, /* properties_required */
+  PROP_ssa, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
@@ -721,20 +685,18 @@ public:
     : gimple_opt_pass (pass_data_rvtt_expand, ctxt)
   {}
 
-  virtual unsigned int execute (function *);
+  virtual bool gate (function *) override
+  {
+    return TARGET_RVTT;
+  }
+
+  virtual unsigned int execute (function *fn) override
+  {
+    return transform (fn);
+  }
 }; // class pass_rvtt_expand
 
 } // anon namespace
-
-/* Entry point to rvtt_expand pass.	*/
-unsigned int
-pass_rvtt_expand::execute (function *fun)
-{
-  if (TARGET_RVTT)
-    transform (fun);
-
-  return 0;
-}
 
 gimple_opt_pass *
 make_pass_rvtt_expand (gcc::context *ctxt)
