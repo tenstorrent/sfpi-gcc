@@ -1757,8 +1757,13 @@ public:
   {
   }
 
+  virtual bool gate (function *) override
+  {
+    return TARGET_RVTT;
+  }
+  
   /* opt_pass methods: */
-  virtual unsigned int execute (function *cfn)
+  virtual unsigned execute (function *cfn) override
     {
       if (optimize > 0)
 	{

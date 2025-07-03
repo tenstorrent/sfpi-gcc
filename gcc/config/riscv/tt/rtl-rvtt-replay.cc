@@ -788,7 +788,7 @@ public:
     insn_list.reserve(200);
   }
 
-  virtual bool gate (function *cfn)
+  virtual bool gate (function *cfn) override
   {
     if (!flag_rvtt_replay)
       return false;
@@ -814,7 +814,7 @@ public:
   } 
 
   /* opt_pass methods: */
-  virtual unsigned int execute (function *cfn)
+  virtual unsigned execute (function *cfn) override
   {
     replay_max_insns = rvtt_replay_buffer_size;
     transform (cfn);
