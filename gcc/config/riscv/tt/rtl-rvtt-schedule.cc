@@ -242,20 +242,19 @@ public:
     : rtl_opt_pass (pass_data_rvtt_schedule, ctxt)
   {}
 
-  virtual unsigned int execute (function *);
+  virtual bool gate (function *) override
+  {
+    return TARGET_RVTT;
+  }
+
+  virtual unsigned execute (function *) override
+  {
+    transform ();
+    return 0;
+  }
 }; // class pass_rvtt_schedule
 
 } // anon namespace
-
-/* Entry point to rvtt_schedule pass.	*/
-unsigned int
-pass_rvtt_schedule::execute (function *)
-{
-  if (TARGET_RVTT)
-    transform ();
-
-  return 0;
-}
 
 rtl_opt_pass *
 make_pass_rvtt_schedule (gcc::context *ctxt)
