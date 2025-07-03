@@ -30,7 +30,6 @@
 
 (define_c_enum "unspec" [
   UNSPEC_SYNTH_OPCODE
-  UNSPEC_NONE
 ])
 
 (define_c_enum "unspecv" [
@@ -44,7 +43,9 @@
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
 
-  UNSPECV_TTINCRWC
+  UNSPECV_SFPNOP
+
+UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
 
@@ -162,7 +163,7 @@
                  (match_operand:SI    3 "reg_or_const_int_operand" "")
                  (match_operand:SI    4 "reg_or_0_operand" "")
                  (match_operand:SI    5 "const_int_operand" "")
-                 (match_operand:SI    6 "const_int_operand" "")] UNSPEC_NONE))]
+                 (match_operand:SI    6 "const_int_operand" "")] 0))]
   "TARGET_RVTT"
 {
   DONE;
@@ -172,7 +173,7 @@
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec [(match_operand:V64SF 1 "register_operand"  "")
                  (match_operand:V64SF 2 "register_operand"  "")
-                 (match_operand:SI    3 "const_int_operand" "")] UNSPEC_NONE))]
+                 (match_operand:SI    3 "const_int_operand" "")] 0))]
   "TARGET_RVTT"
 {
   DONE;
@@ -180,7 +181,7 @@
 
 (define_expand "rvtt_sfpxvif"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec [(const_int 0)] UNSPEC_NONE))]
+        (unspec [(const_int 0)] 0))]
   "TARGET_RVTT"
 {
   DONE;
@@ -188,7 +189,7 @@
 
 (define_expand "rvtt_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
-        (unspec [(match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE))]
+        (unspec [(match_operand:SI 1 "register_operand"  "")] 0))]
   "TARGET_RVTT"
 {
   DONE;
@@ -196,7 +197,7 @@
 
 (define_expand "rvtt_sfpxcondb"
   [(unspec [(match_operand:SI 0 "register_operand"  "")
-            (match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE)]
+            (match_operand:SI 1 "register_operand"  "")] 0)]
   "TARGET_RVTT"
 {
   DONE;
@@ -204,11 +205,16 @@
 
 (define_expand "rvtt_sfpxcondi"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec [(match_operand:SI 1 "register_operand"  "")] UNSPEC_NONE))]
+        (unspec [(match_operand:SI 1 "register_operand"  "")] 0))]
   "TARGET_RVTT"
 {
   DONE;
 })
+
+(define_insn "rvtt_sfpnop"
+  [(unspec_volatile [(const_int 0)] UNSPECV_SFPNOP)]
+  "TARGET_RVTT"
+  "SFPNOP")
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")

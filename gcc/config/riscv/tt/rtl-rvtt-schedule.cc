@@ -17,46 +17,16 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
 #include "rtl.h"
 #include "tree.h"
-#include "cfghooks.h"
-#include "df.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "insn-config.h"
-#include "regs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "cgraph.h"
-#include "tree-pretty-print.h" /* for dump_function_header */
-#include "varasm.h"
-#include "insn-attr.h"
-#include "conditions.h"
-#include "flags.h"
-#include "output.h"
-#include "except.h"
-#include "rtl-error.h"
-#include "toplev.h" /* exact_log2, floor_log2 */
-#include "reload.h"
-#include "intl.h"
-#include "cfgrtl.h"
-#include "debug.h"
 #include "tree-pass.h"
-#include "tree-ssa.h"
-#include "cfgloop.h"
-#include "stringpool.h"
-#include "attribs.h"
-#include "asan.h"
-#include "rtl-iter.h"
-#include "print-rtl.h"
-#include "function-abi.h"
 #include "rvtt.h"
-#include "rvtt-protos.h"
 
 #if 0
 // FIXME: should dump to the dump file.
@@ -68,20 +38,6 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 
 using namespace std;
-
-static void
-insert_nop_after (rtx_insn *insn)
-{
-  rtx nop = NULL_RTX;
-
-  if (TARGET_RVTT_WH)
-    nop = gen_rvtt_wh_sfpnop();
-  else if (TARGET_RVTT_BH)
-    nop = gen_rvtt_bh_sfpnop();
-  else
-    gcc_unreachable ();
-  emit_insn_after (nop, insn);
-}
 
 static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
 {
@@ -158,7 +114,8 @@ dynamic_schedule_wh_bh (basic_block bb, rtx_insn *orig_insn,
 
   if (walk_blocks (rvtt_get_insn_dst_regno (orig_insn) - SFPU_REG_FIRST,
 		   bb, orig_insn, false, visited)) {
-    insert_nop_after (orig_insn);
+    emit_insn_after (gen_rvtt_sfpnop (), orig_insn);
+
     DUMP ("Inserting nop after %s\n", orig_insn->name);
   }
 
@@ -208,12 +165,11 @@ static void transform ()
 		  visited.reserve (n_basic_blocks_for_fn (cfun));
 		  dynamic_schedule_wh_bh (bb, insn, visited);
 		}
-	      else if (TARGET_RVTT_WH || TARGET_RVTT_BH)
+	      else
 		{
 		  DUMP ("  static scheduling %s\n", insnd->name);
-		  int count = insnd->schedule_static_nops (insn);
-		  for (int i = 0; i < count; i++)
-		    insert_nop_after(insn);
+		  for (unsigned ix = insnd->schedule_static_nops (insn); ix--; )
+		    emit_insn_after (gen_rvtt_sfpnop (), insn);
 		}
 	    }
        }
