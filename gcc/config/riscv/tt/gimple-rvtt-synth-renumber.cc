@@ -344,8 +344,11 @@ transform (function *fn)
 	      auto add = map.find (mapping.second.add_stmt);
 	      gcc_assert (add != map.end ());
 	      if (unsigned id = add->second.count)
-		gimple_call_set_arg (mapping.first, mapping.second.count + 2, 
-				     build_int_cst (unsigned_type_node, id));
+		{
+		  gimple_call_set_arg (mapping.first, mapping.second.count + 2, 
+				       build_int_cst (unsigned_type_node, id));
+		  update_stmt (mapping.first);
+		}
 	    }
 	}
     }

@@ -304,11 +304,13 @@ transform (function *fn)
 	}
     }
 
-  return updated ? TODO_update_ssa : 0;
 #if 0
+  return updated ? TODO_update_ssa : 0;
+#else
   if (updated)
     {
       update_ssa (TODO_update_ssa);
+      // FIXME: Why is this necessary? Seems hokey
 
       // Cleanup: remove unused insns created by the nonimm mess...
       // Find load_immediates which will be in 1 of 3 states:
@@ -320,6 +322,7 @@ transform (function *fn)
       load_imm_map.resize (0);
       update_ssa (TODO_update_ssa);
     }
+  return 0;
 #endif
 }
 
@@ -331,7 +334,7 @@ const pass_data pass_data_rvtt_synth_expand =
   "rvtt_synth_expand", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  0, /* properties_required */
+  PROP_ssa, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
