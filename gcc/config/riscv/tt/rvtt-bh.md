@@ -91,7 +91,6 @@
   UNSPECV_BH_SFPTRANSP
   UNSPECV_BH_SFPSHFT2_G
   UNSPECV_BH_SFPSHFT2_GE
-  UNSPECV_BH_SFPNOP
   UNSPECV_BH_SFPMUL24
   UNSPECV_BH_SFPARECIP
   UNSPECV_BH_SFPGT
@@ -983,11 +982,6 @@
                      (match_operand:V64SF 4 "register_operand"   "+Q3")] UNSPECV_BH_SFPSHFT2_GE)]
   "TARGET_RVTT_BH"
   "SFPSHFT2\t0, %0, L0, %1, %2, %3, %4, 2")
-
-(define_insn "rvtt_bh_sfpnop"
-  [(unspec_volatile [(const_int 0)] UNSPECV_BH_SFPNOP)]
-  "TARGET_RVTT_BH"
-  "SFPNOP")
 
 (define_insn "rvtt_bh_sfpmul24"
   [(set (match_operand:V64SF 0 "register_operand" "=x")
