@@ -278,8 +278,11 @@ transform (function *fn)
 	      unique_id += 2;
 	      add->second.count = unique_id;
 
-	      // clone the input chain to add back to the synth_opcode stmt.
-	      for (auto chain = add;;)
+	      // clone the input chain to add back to the synth_opcode
+	      // stmt.
+	      auto chain = add;
+	      auto add_stmt = add->first;
+	      for (;;)
 		{
 		  gimple *orig_stmt = chain->second.add_stmt;
 		  tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL,
@@ -302,18 +305,19 @@ transform (function *fn)
 		    }
 
 		  gimple_set_location (new_stmt, gimple_location (orig_stmt));
-		  auto add_gsi = gsi_for_stmt (orig_stmt);
-		  gsi_insert_after (&add_gsi, new_stmt, GSI_NEW_STMT);
+		  auto orig_gsi = gsi_for_stmt (orig_stmt);
+		  gsi_insert_after (&orig_gsi, new_stmt, GSI_NEW_STMT);
 
 		  if (chain->second.flag)
-		    gimple_assign_set_rhs2 (chain->first, ssa_var);
+		    gimple_assign_set_rhs2 (add_stmt, ssa_var);
 		  else
-		    gimple_assign_set_rhs1 (chain->first, ssa_var);
-		  update_stmt (chain->first);
+		    gimple_assign_set_rhs1 (add_stmt, ssa_var);
+		  update_stmt (add_stmt);
 
 		  if (!chain->second.add_stmt)
 		    break;
 
+		  add_stmt = new_stmt;
 		  chain = map.find (orig_stmt);
 		  gcc_assert (chain != map.end ());
 		}
