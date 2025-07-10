@@ -167,7 +167,8 @@ transform (function *fn)
 	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, add_ix, is_op2, addend));
 
 	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), first_add_ix, addend);
-	    graph[this_add_ix].used = used;
+	    if (first_add_ix)
+	      graph[this_add_ix].used = used;
 	    count += used;
 	  }
 	else if (gimple_code (use_stmt) != GIMPLE_DEBUG)
