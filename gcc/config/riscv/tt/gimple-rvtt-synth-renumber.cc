@@ -58,24 +58,24 @@ transform (function *fn)
   {
     gimple *stmt;
     unsigned opcode_ix;
-    unsigned id;
     unsigned add_ix;
     bool rhs2 : 1;
     bool used : 1;
-    unsigned count : 30; // opcode count of uses
-                        // use stmt: nonimm pos
+    unsigned id : 30;
+    unsigned addend; // opcode count of uses
+                     // use stmt: nonimm pos
 
     static node_t opcode (gimple *stmt, unsigned ix, unsigned id)
     {
-      return {stmt, ix, id, 0, false, false, 0};
+      return {stmt, ix, 0, false, false, id, 0};
     }
-    static node_t add (gimple *stmt, unsigned op_ix, unsigned ix, bool rhs2)
+    static node_t add (gimple *stmt, unsigned op_ix, unsigned ix, bool rhs2, unsigned addend)
     {
-      return {stmt, op_ix, 0, ix, rhs2, false, 0};
+      return {stmt, op_ix, ix, rhs2, false, 0, addend};
     }
     static node_t use (gimple *stmt, unsigned op_ix, unsigned add_ix, unsigned nonimm)
     {
-      return {stmt, op_ix, 0, add_ix, false, false, nonimm};
+      return {stmt, op_ix, add_ix, false, false, 0, nonimm};
     }
   };
   std::vector<gcall *> opcode_stmts;
@@ -117,7 +117,7 @@ transform (function *fn)
   if (opcode_stmts.empty ())
     return updated ? TODO_update_ssa : 0;
 
-  auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var, unsigned add_ix = 0)
+  auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var, unsigned add_ix = 0, unsigned addend = 0)
     -> unsigned
   {
     imm_use_iterator iter;
@@ -154,9 +154,17 @@ transform (function *fn)
 			|| gimple_assign_rhs2 (add_stmt) == ssa_var);
 
 	    unsigned this_add_ix = graph.size ();
-	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, add_ix, is_op2));
+	    unsigned first_add_ix = this_add_ix;
+	    if (add_ix)
+	      {
+		tree offset = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
+		gcc_assert (TREE_CODE (offset) == INTEGER_CST);
+		addend += TREE_INT_CST_LOW (offset);
+		first_add_ix = add_ix;
+	      }
+	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, add_ix, is_op2, addend));
 
-	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), this_add_ix);
+	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), first_add_ix, addend);
 	    graph[this_add_ix].used = used;
 	    count += used;
 	  }
@@ -182,7 +190,7 @@ transform (function *fn)
       unsigned opcode_ix = graph.size ();
       graph.emplace_back (node_t::opcode (opcode_stmt, opcode_ix, id));
       unsigned count = build_graph (build_graph, opcode_ix, gimple_call_lhs (opcode_stmt));
-      graph[opcode_ix].count = count;
+      graph[opcode_ix].addend = count;
     }
 
   unsigned unique_id = opcode_counts.size () - 1;
@@ -197,7 +205,7 @@ transform (function *fn)
       if (!node.add_ix)
 	{
 	  auto &opcode_slot = graph[node.opcode_ix];
-	  if (!--opcode_slot.count)
+	  if (!--opcode_slot.addend)
 	    {
 	      auto &count_slot = opcode_counts[opcode_slot.id];
 	      if (!--count_slot)
@@ -205,12 +213,46 @@ transform (function *fn)
 	    }
 	}
 
-      // Sharing a synth_opcode, clone the addition chain parents
-      // and synth_opcode.
-      // A synth opcode used by more than one add.  Split it.
+      // A synth opcode used by more than one add. Insert a renumbered
+      // synth opcode.
       unique_id += 2;
       node.id = unique_id;
 
+      tree addend = integer_zero_node;
+      if (node.add_ix)
+	{
+	  // Propagate the iv_var
+	  auto &add_slot = graph[node.add_ix];
+	  auto iv_var = add_slot.rhs2
+	    ? gimple_assign_rhs1 (add_slot.stmt)
+	    : gimple_assign_rhs1 (add_slot.stmt);
+	  if (node.rhs2)
+	    gimple_assign_set_rhs1 (node.stmt, iv_var);
+	  else
+	    gimple_assign_set_rhs2 (node.stmt, iv_var);
+	  addend = build_int_cst (unsigned_type_node, node.addend);
+	  
+	}
+
+      // Create a new synth opcode
+      tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
+      gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
+      gimple_call_set_arg (new_call, 0, addend);
+      gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
+      gimple_call_set_lhs (new_call, ssa_var);
+      update_stmt (new_call);
+
+      // Insert it just before the add, and update the add's operand
+      gimple_set_location (new_call, gimple_location (graph[node.opcode_ix].stmt));
+      auto gsi = gsi_for_stmt (node.stmt);
+      gsi_insert_before (&gsi, new_call, GSI_NEW_STMT);
+      if (node.rhs2)
+	gimple_assign_set_rhs2 (node.stmt, ssa_var);
+      else
+	gimple_assign_set_rhs1 (node.stmt, ssa_var);
+      update_stmt (node.stmt);
+
+#if 0
       auto *chain = &node;
       auto add_stmt = node.stmt;
       for (;;)
@@ -255,7 +297,7 @@ transform (function *fn)
 	  add_stmt = new_stmt;
 	  chain = &graph[parent_ix];
 	}
-
+#endif
       updated = -1;
     }
 
@@ -271,7 +313,7 @@ transform (function *fn)
 	// A use, see if it needs renumbering
 	if (unsigned id = graph[slot.add_ix].id)
 	  {
-	    gimple_call_set_arg (slot.stmt, slot.count + 2, 
+	    gimple_call_set_arg (slot.stmt, slot.addend + 2, 
 				 build_int_cst (unsigned_type_node, id));
 	    update_stmt (slot.stmt);
 	  }
