@@ -155,20 +155,15 @@ transform (function *fn)
 
 	    unsigned this_add_ix = graph.size ();
 	    unsigned first_add_ix = this_add_ix;
-	    if (add_ix)
+	    unsigned this_addend = addend;
+	    tree other = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
+	    if (TREE_CODE (other) == INTEGER_CST)
 	      {
-		tree offset = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
-		if (TREE_CODE (offset) != INTEGER_CST)
-		  {
-		    debug_tree (offset);
-		    debug_gimple_stmt (graph[opcode_ix].stmt);
-		    debug_gimple_stmt (graph[add_ix].stmt);
-		    debug_gimple_stmt (use_stmt);
-		    gcc_assert (TREE_CODE (offset) == INTEGER_CST);
-		  }
-		addend += TREE_INT_CST_LOW (offset);
+		this_addend += TREE_INT_CST_LOW (other);
 		first_add_ix = add_ix;
 	      }
+	    else
+	      gcc_assert (!add_ix);
 	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, add_ix, is_op2, addend));
 
 	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), first_add_ix, addend);
