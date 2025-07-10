@@ -160,6 +160,7 @@ transform (function *fn)
 		tree offset = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
 		if (TREE_CODE (offset) != INTEGER_CST)
 		  {
+		    debug_tree (offset);
 		    debug_gimple_stmt (graph[opcode_ix].stmt);
 		    debug_gimple_stmt (graph[add_ix].stmt);
 		    debug_gimple_stmt (use_stmt);
