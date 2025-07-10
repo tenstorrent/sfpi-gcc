@@ -158,7 +158,13 @@ transform (function *fn)
 	    if (add_ix)
 	      {
 		tree offset = is_op2 ? opcode_arg : gimple_assign_rhs2 (add_stmt);
-		gcc_assert (TREE_CODE (offset) == INTEGER_CST);
+		if (TREE_CODE (offset) != INTEGER_CST)
+		  {
+		    debug_gimple_stmt (graph[opcode_ix].stmt);
+		    debug_gimple_stmt (graph[add_ix].stmt);
+		    debug_gimple_stmt (use_stmt);
+		    gcc_assert (TREE_CODE (offset) == INTEGER_CST);
+		  }
 		addend += TREE_INT_CST_LOW (offset);
 		first_add_ix = add_ix;
 	      }
