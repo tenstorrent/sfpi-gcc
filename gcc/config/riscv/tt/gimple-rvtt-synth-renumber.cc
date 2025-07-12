@@ -117,7 +117,8 @@ transform (function *fn)
   if (opcode_stmts.empty ())
     return updated ? TODO_update_ssa : 0;
 
-  auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var, unsigned add_ix = 0, unsigned addend = 0)
+  auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var,
+			  unsigned first_ix = 0, unsigned last_ix = 0, unsigned addend = 0)
     -> unsigned
   {
     imm_use_iterator iter;
@@ -140,7 +141,7 @@ transform (function *fn)
 		!= integer_zero_node)
 	      {
 		graph.emplace_back (node_t::use (use_stmt, opcode_ix,
-						 add_ix, insnd->nonimm_pos));
+						 last_ix, insnd->nonimm_pos));
 		any = true;
 	      }
 	  }
@@ -160,22 +161,23 @@ transform (function *fn)
 	    if (TREE_CODE (other) == INTEGER_CST)
 	      {
 		this_addend += TREE_INT_CST_LOW (other);
-		first_add_ix = add_ix;
+		first_add_ix = first_ix;
 	      }
 	    else
-	      gcc_assert (!add_ix);
-	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, add_ix, is_op2, addend));
+	      gcc_assert (!first_ix);
+	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, first_ix, is_op2, this_addend));
 
-	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), first_add_ix, addend);
-	    if (first_add_ix)
-	      graph[this_add_ix].used = used;
+	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), first_add_ix, this_add_ix, this_addend);
+	    graph[this_add_ix].used = used;
 	    count += used;
 	  }
 	else if (gimple_code (use_stmt) != GIMPLE_DEBUG)
 	  {
 	    debug_gimple_stmt (graph[opcode_ix].stmt);
-	    if (add_ix)
-	      debug_gimple_stmt (graph[add_ix].stmt);
+	    if (first_ix)
+	      debug_gimple_stmt (graph[first_ix].stmt);
+	    if (last_ix)
+	      debug_gimple_stmt (graph[last_ix].stmt);
 	    debug_gimple_stmt (use_stmt);
 	    gcc_assert (false);
 	  }
@@ -228,13 +230,12 @@ transform (function *fn)
 	  auto &add_slot = graph[node.add_ix];
 	  auto iv_var = add_slot.rhs2
 	    ? gimple_assign_rhs1 (add_slot.stmt)
-	    : gimple_assign_rhs1 (add_slot.stmt);
+	    : gimple_assign_rhs2 (add_slot.stmt);
 	  if (node.rhs2)
 	    gimple_assign_set_rhs1 (node.stmt, iv_var);
 	  else
 	    gimple_assign_set_rhs2 (node.stmt, iv_var);
 	  addend = build_int_cst (unsigned_type_node, node.addend);
-	  
 	}
 
       // Create a new synth opcode
@@ -255,52 +256,6 @@ transform (function *fn)
 	gimple_assign_set_rhs1 (node.stmt, ssa_var);
       update_stmt (node.stmt);
 
-#if 0
-      auto *chain = &node;
-      auto add_stmt = node.stmt;
-      for (;;)
-	{
-	  unsigned parent_ix = chain->add_ix;
-	  tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL,
-					     parent_ix ? "sum" : "li");
-	  gimple *new_stmt = nullptr;
-	  gimple *parent_stmt;
-	  if (parent_ix)
-	    {
-	      parent_stmt = graph[parent_ix].stmt;
-	      new_stmt = gimple_build_assign
-		(ssa_var, PLUS_EXPR,
-		 gimple_assign_rhs1 (parent_stmt),
-		 gimple_assign_rhs2 (parent_stmt));
-	    }
-	  else
-	    {
-	      parent_stmt = graph[chain->opcode_ix].stmt;
-	      gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
-	      gimple_call_set_arg (new_call, 0, integer_zero_node);
-	      gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
-	      gimple_call_set_lhs (new_call, ssa_var);
-	      update_stmt (new_call);
-	      new_stmt = new_call;
-	    }
-
-	  gimple_set_location (new_stmt, gimple_location (parent_stmt));
-	  auto parent_gsi = gsi_for_stmt (parent_stmt);
-	  gsi_insert_after (&parent_gsi, new_stmt, GSI_NEW_STMT);
-
-	  if (chain->rhs2)
-	    gimple_assign_set_rhs2 (add_stmt, ssa_var);
-	  else
-	    gimple_assign_set_rhs1 (add_stmt, ssa_var);
-	  update_stmt (add_stmt);
-
-	  if (!parent_ix)
-	    break;
-
-	  add_stmt = new_stmt;
-	  chain = &graph[parent_ix];
-	}
-#endif
       updated = -1;
     }
 
