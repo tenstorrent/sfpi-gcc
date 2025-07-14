@@ -59,10 +59,11 @@ transform (function *fn)
     gimple *stmt;
     unsigned opcode_ix;
     unsigned add_ix;
-    bool rhs2 : 1;
+    bool rhs2 : 1; // add: incoming edge is rhs2
+                   // use: is immediate
     bool used : 1;
     unsigned id : 30;
-    unsigned addend; // opcode count of uses
+    unsigned addend; // opcode: count of uses
                      // use stmt: nonimm pos
 
     static node_t opcode (gimple *stmt, unsigned ix, unsigned id)
@@ -77,12 +78,14 @@ transform (function *fn)
     {
       return {stmt, op_ix, add_ix, false, false, 0, nonimm};
     }
+    static node_t immediate (gimple *stmt, unsigned nonimm)
+    {
+      return {stmt, 0, 0, true, false, 0, nonimm};
+    }
   };
   std::vector<gcall *> opcode_stmts;
   std::vector<unsigned> opcode_counts;
   std::vector<node_t> graph;
-
-  int updated = false; // true/false/file-not-found :)
 
   // Find all the synth_opcodes and nonimm uses
   basic_block bb;
@@ -100,6 +103,7 @@ transform (function *fn)
 	    continue;
 	  }
 
+#if 0
 	if (insnd->nonimm_pos < 0)
 	  continue;
 	if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST)
@@ -112,10 +116,8 @@ transform (function *fn)
 	    updated = true;
 	    continue;
 	  }
+#endif
       }
-
-  if (opcode_stmts.empty ())
-    return updated ? TODO_update_ssa : 0;
 
   auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var,
 			  unsigned first_add_ix = 0, unsigned last_add_ix = 0, unsigned addend = 0)
@@ -123,7 +125,7 @@ transform (function *fn)
   {
     imm_use_iterator iter;
     gimple *use_stmt;
-    bool any = false;
+    bool any_nonimm = false;
     unsigned count = 0;
 
     // FIXME: Can we use quick iterator here?
@@ -137,12 +139,13 @@ transform (function *fn)
 
 	    bool is_rvtt = rvtt_p (&insnd, &stmt, use_stmt);
 	    gcc_assert (is_rvtt && insnd->nonimm_pos >= 0);
-	    if (gimple_call_arg (stmt, insnd->nonimm_pos + 1)
-		!= integer_zero_node)
+	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) == INTEGER_CST)
+	      graph.emplace_back (node_t::immediate (use_stmt, insnd->nonimm_pos));
+	    else
 	      {
 		graph.emplace_back (node_t::use (use_stmt, opcode_ix,
 						 last_add_ix, insnd->nonimm_pos));
-		any = true;
+		any_nonimm = true;
 	      }
 	  }
 	else if (auto *add_stmt = dyn_cast <gassign *> (use_stmt))
@@ -178,18 +181,10 @@ transform (function *fn)
 	      graph[this_add_ix].used = used;
 	    count += used;
 	  }
-	else if (gimple_code (use_stmt) != GIMPLE_DEBUG)
-	  {
-	    debug_gimple_stmt (graph[opcode_ix].stmt);
-	    if (first_add_ix)
-	      debug_gimple_stmt (graph[first_add_ix].stmt);
-	    if (last_add_ix)
-	      debug_gimple_stmt (graph[last_add_ix].stmt);
-	    debug_gimple_stmt (use_stmt);
-	    gcc_assert (false);
-	  }
+	else
+	  gcc_assert (gimple_code (use_stmt) == GIMPLE_DEBUG);
       }
-    return count + unsigned (any);
+    return count + unsigned (any_nonimm);
   };
 
   tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
@@ -205,11 +200,25 @@ transform (function *fn)
       graph[opcode_ix].addend = count;
     }
 
+  int updated = 0; // true/false/file-not-found :)
+
   unsigned unique_id = opcode_counts.size () - 1;
   for (auto &node : graph)
     {
       if (!is_gimple_assign (node.stmt))
-	continue;
+	{
+	  if (node.rhs2)
+	    {
+	      // It's now a constant, zap the synth arg and pointer
+	      gimple_call_set_arg (node.stmt, 0, null_pointer_node);
+	      gimple_call_set_arg (node.stmt, node.addend + 1, integer_zero_node);
+	      gimple_call_set_arg (node.stmt, node.addend + 2, integer_zero_node);
+	      update_stmt (node.stmt);
+	      if (!updated)
+		updated = true;
+	    }
+	  continue;
+	}
 
       if (!node.used)
 	continue;

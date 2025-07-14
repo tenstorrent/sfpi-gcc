@@ -290,15 +290,7 @@ transform (function *fn)
 	      if (TREE_CODE (immarg) == SSA_NAME)
 		expand_complex (stmt, insnd, &gsi);
 	      else
-		{
-		  gcc_assert (gimple_call_arg (stmt, insnd->nonimm_pos + 1) == integer_zero_node);
-#if 0
-		  // We have an immediate value, remove the unnecessary
-		  // synth arg (other uses of it might remain)
-		  gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
-		  update_stmt (stmt);
-#endif
-		}
+		gcc_assert (!TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->nonimm_pos + 1)));
 	      updated = true;
 	    }
 	}
