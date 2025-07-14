@@ -83,41 +83,7 @@ transform (function *fn)
       return {stmt, 0, 0, true, false, 0, nonimm};
     }
   };
-  std::vector<gcall *> opcode_stmts;
-  std::vector<unsigned> opcode_counts;
   std::vector<node_t> graph;
-
-  // Find all the synth_opcodes and nonimm uses
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
-    for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gcall *stmt;
-	const rvtt_insn_data *insnd;
-
-	if (!rvtt_p (&insnd, &stmt, gsi))
-	  continue;
-	if (insnd->id == rvtt_insn_data::synth_opcode)
-	  {
-	    opcode_stmts.push_back (stmt);
-	    continue;
-	  }
-
-#if 0
-	if (insnd->nonimm_pos < 0)
-	  continue;
-	if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST)
-	  {
-	    // It's now a constant, zap the synth arg and pointer
-	    gimple_call_set_arg (stmt, 0, null_pointer_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
-	    update_stmt (stmt);
-	    updated = true;
-	    continue;
-	  }
-#endif
-      }
 
   auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var,
 			  unsigned first_add_ix = 0, unsigned last_add_ix = 0, unsigned addend = 0)
@@ -187,36 +153,42 @@ transform (function *fn)
     return count + unsigned (any_nonimm);
   };
 
+  // Build the opcode-use graph
   tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
-  for (gimple *opcode_stmt : opcode_stmts)
-    {
-      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (opcode_stmt, 1));;
-      if (opcode_counts.size() < id + 1)
-	opcode_counts.resize (id + 1);
-      opcode_counts[id]++;
-      unsigned opcode_ix = graph.size ();
-      graph.emplace_back (node_t::opcode (opcode_stmt, opcode_ix, id));
-      unsigned count = build_graph (build_graph, opcode_ix, gimple_call_lhs (opcode_stmt));
-      graph[opcode_ix].addend = count;
-    }
+  std::vector<unsigned> opcode_counts;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+      if (auto *call_stmt = dyn_cast <gcall *> (gsi_stmt (gsi)))
+	if (gimple_call_fndecl (call_stmt) == synth_opcode_decl)
+	  {
+	    unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
+	    if (opcode_counts.size() < id + 1)
+	      opcode_counts.resize (id + 1);
+	    opcode_counts[id]++;
+	    unsigned opcode_ix = graph.size ();
+	    graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
+	    unsigned count = build_graph (build_graph, opcode_ix, gimple_call_lhs (call_stmt));
+	    graph[opcode_ix].addend = count;
+	  }
 
-  int updated = 0; // true/false/file-not-found :)
+  bool immediates = false;
+  bool renumbered = false;
 
   unsigned unique_id = opcode_counts.size () - 1;
   for (auto &node : graph)
     {
       if (!is_gimple_assign (node.stmt))
 	{
-	  if (node.rhs2)
-	    {
-	      // It's now a constant, zap the synth arg and pointer
-	      gimple_call_set_arg (node.stmt, 0, null_pointer_node);
-	      gimple_call_set_arg (node.stmt, node.addend + 1, integer_zero_node);
-	      gimple_call_set_arg (node.stmt, node.addend + 2, integer_zero_node);
-	      update_stmt (node.stmt);
-	      if (!updated)
-		updated = true;
-	    }
+	  if (!node.rhs2)
+	    continue;
+
+	  // A use that is now a constant, zap the synth arg and pointer
+	  gimple_call_set_arg (node.stmt, 0, null_pointer_node);
+	  gimple_call_set_arg (node.stmt, node.addend + 1, integer_zero_node);
+	  gimple_call_set_arg (node.stmt, node.addend + 2, integer_zero_node);
+	  update_stmt (node.stmt);
+	  immediates = true;
 	  continue;
 	}
 
@@ -273,10 +245,10 @@ transform (function *fn)
 	gimple_assign_set_rhs1 (node.stmt, ssa_var);
       update_stmt (node.stmt);
 
-      updated = -1;
+      renumbered = true;
     }
 
-  if (updated < 0)
+  if (renumbered)
     // Update all the uses of the renumbered adds
     for (auto &slot : graph)
       {
@@ -294,7 +266,7 @@ transform (function *fn)
 	  }
       }
 
-  return updated ? TODO_update_ssa : 0;
+  return renumbered || immediates ? TODO_update_ssa : 0;
 }
 
 namespace {
