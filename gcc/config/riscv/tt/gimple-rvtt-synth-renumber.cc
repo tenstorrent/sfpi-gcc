@@ -83,20 +83,19 @@ transform (function *fn)
       return {stmt, 0, 0, true, false, 0, nonimm};
     }
   };
-  std::vector<node_t> graph;
 
-  auto build_graph = [&] (auto &self, unsigned opcode_ix, tree ssa_var,
+  auto build_graph = [] (auto &self, std::vector<node_t> &graph, unsigned opcode_ix, tree ssa_var,
 			  unsigned first_add_ix = 0, unsigned last_add_ix = 0, unsigned addend = 0)
     -> unsigned
   {
-    imm_use_iterator iter;
-    gimple *use_stmt;
     bool any_nonimm = false;
-    unsigned count = 0;
+    unsigned add_count = 0;
 
-    // FIXME: Can we use quick iterator here?
-    FOR_EACH_IMM_USE_STMT (use_stmt, iter, ssa_var)
+    imm_use_iterator iter;
+    use_operand_p use_p;
+    FOR_EACH_IMM_USE_FAST (use_p, iter, ssa_var)
       {
+	gimple *use_stmt = USE_STMT (use_p);
 	if (is_gimple_call (use_stmt))
 	  {
 	    // a final use
@@ -140,22 +139,26 @@ transform (function *fn)
 		if (this_addend)
 		  self_add_ix = this_add_ix;
 	      }
-	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, self_add_ix, is_op2, this_addend));
+	    graph.emplace_back (node_t::add (add_stmt, opcode_ix, self_add_ix,
+					     is_op2, this_addend));
 
-	    bool used = self (self, opcode_ix, gimple_get_lhs (add_stmt), this_first_add_ix, this_add_ix, this_addend);
+	    bool is_used = self (self, graph, opcode_ix, gimple_get_lhs (add_stmt),
+				 this_first_add_ix, this_add_ix, this_addend);
 	    if (this_first_add_ix)
-	      graph[this_add_ix].used = used;
-	    count += used;
+	      graph[this_add_ix].used = is_used;
+	    add_count += is_used;
 	  }
 	else
 	  gcc_assert (gimple_code (use_stmt) == GIMPLE_DEBUG);
       }
-    return count + unsigned (any_nonimm);
+    return add_count + unsigned (any_nonimm);
   };
 
   // Build the opcode-use graph
   tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
+  std::vector<node_t> graph;
   std::vector<unsigned> opcode_counts;
+
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
@@ -168,7 +171,7 @@ transform (function *fn)
 	    opcode_counts[id]++;
 	    unsigned opcode_ix = graph.size ();
 	    graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
-	    unsigned count = build_graph (build_graph, opcode_ix, gimple_call_lhs (call_stmt));
+	    unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
 	    graph[opcode_ix].addend = count;
 	  }
 
