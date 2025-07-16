@@ -27,6 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "rvtt.h"
+#include "target.h" // for insn codes
 
 #if 0
 // FIXME: should dump to the dump file.
