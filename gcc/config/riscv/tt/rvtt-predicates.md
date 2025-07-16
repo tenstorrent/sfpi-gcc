@@ -30,18 +30,8 @@
 
 (define_predicate "reg_or_const_int_operand"
   (ior (match_operand 0 "register_operand")
-       (match_code "const_int")))
+       (match_operand 0 "const_int_operand")))
 
 (define_predicate "reg_or_vec0_operand"
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "vec0_operand")))
-
-(define_predicate "const_iadd_v_nosetcc"
-  (match_code "const_int,const_wide_int")
-{
-  return (GET_CODE(op) == CONST_INT) && (INTVAL(op) == 4 || INTVAL(op) == 6);
-})
-
-(define_predicate "reg_or_const_int_operand"
-  (ior (match_operand 0 "register_operand")
-       (match_operand 0 "const_int_operand")))

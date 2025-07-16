@@ -88,15 +88,15 @@ along with GCC; see the file COPYING3.  If not see
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
 // This can be ensured by using the RVTT_PAD_XX define
 
-// Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
+// Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
+RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
 RVTT_RTL_ONLY (ttinsn_cst,        0x98, -1, -1)
 RVTT_RTL_ONLY (ttinsn_reg,        0x98, -1, -1)
 RVTT_RTL_ONLY (sfpinsn_cst,       0x88, -1, -1)
 RVTT_RTL_ONLY (sfpinsn_reg,       0x88, -1, -1)
 
-RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1)
-RVTT_RTL_ONLY (sfpsynth_insn,         3, 1)
+RVTT_RTL_ONLY (sfpsynth_insn_dst, 0x08,  3,  1)
+RVTT_RTL_ONLY (sfpsynth_insn,     0x08,  3,  1)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise

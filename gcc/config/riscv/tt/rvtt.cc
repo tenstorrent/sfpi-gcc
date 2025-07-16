@@ -294,7 +294,7 @@ rvtt_init_builtins()
   rtx sf0 = rtx_alloc (CONST_DOUBLE);
   PUT_MODE (sf0, SFmode);
   real_from_integer (&sf0->u.rv, SFmode, 0, SIGNED);
-  rvtt_vec0_rtx = rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
+  rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
 }
 
 const char *
