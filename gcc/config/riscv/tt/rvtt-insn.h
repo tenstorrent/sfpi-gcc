@@ -26,7 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 // PAD ensures that each arch has the same # insns (PAD aren't instanced)
 
 #ifndef RVTT_RTL_ONLY
-#define RVTT_RTL_ONLY(a, b, c)
+#define RVTT_RTL_ONLY(a, b, c, d)
 #endif
 
 #ifndef RVTT_BUILTIN
@@ -90,6 +90,10 @@ along with GCC; see the file COPYING3.  If not see
 
 // Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos)
 RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
+RVTT_RTL_ONLY (ttinsn_cst,        0x98, -1, -1)
+RVTT_RTL_ONLY (ttinsn_reg,        0x98, -1, -1)
+RVTT_RTL_ONLY (sfpinsn_cst,       0x88, -1, -1)
+RVTT_RTL_ONLY (sfpinsn_reg,       0x88, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1)
 RVTT_RTL_ONLY (sfpsynth_insn,         3, 1)
@@ -116,6 +120,7 @@ RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                  
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttinsn,         RISCV_VOID_FTYPE_POINTER_USI,                               0x10, -1, -1, 0x00, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (sfpinsn,        RISCV_VOID_FTYPE_POINTER_USI,                               0x00, -1, -1, 0x00, -1,      0, 0)
 
 // Wormhole internal (rtl only) insns
 RVTT_WH_RTL_ONLY(sfpload_int,             0x08, 0x00)

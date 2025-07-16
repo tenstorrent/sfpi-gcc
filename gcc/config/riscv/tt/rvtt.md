@@ -48,6 +48,7 @@
 UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
   UNSPECV_TTINSN
+  UNSPECV_SFPINSN
 ])
 
 (define_expand "movv64sf"
@@ -233,32 +234,35 @@ UNSPECV_TTINCRWC
   "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")
 
-(define_insn "rvtt_ttinsn_cst"
-  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "n")] UNSPECV_TTINSN)]
+(define_int_iterator ttinsn_op [UNSPECV_TTINSN UNSPECV_SFPINSN])
+(define_int_attr ttinsn_name [(UNSPECV_TTINSN "ttinsn") (UNSPECV_SFPINSN "sfpinsn")])
+
+(define_insn "rvtt_<ttinsn_name>_cst"
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "n")] ttinsn_op)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
   ".ttinsn\t%0")
 
-(define_insn "rvtt_ttinsn_reg"
+(define_insn "rvtt_<ttinsn_name>_reg"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,X")
-                     (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] UNSPECV_TTINSN)]
+                     (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] ttinsn_op)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
   "@
    sw\t%1,%0
    .ttinsn\t%1")
 
-(define_expand "rvtt_ttinsn"
+(define_expand "rvtt_<ttinsn_name>"
   [(unspec_volatile [(mem:SI (match_operand:SI    0 "address_operand"    ""))
-                     (match_operand:SI    1 "reg_or_const_int_operand" "")] UNSPECV_TTINSN)]
+                     (match_operand:SI    1 "reg_or_const_int_operand" "")] ttinsn_op)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
 {
   if (GET_CODE (operands[1]) == CONST_INT)
     {
-      emit_insn (gen_rvtt_ttinsn_cst (operands[1]));
+      emit_insn (gen_rvtt_<ttinsn_name>_cst (operands[1]));
       DONE;
     }
 })
 
 (define_peephole2
-  [(unspec_volatile [(match_operand:SI 0) (match_operand:SI 1 "const_int_operand")] UNSPECV_TTINSN)]
+  [(unspec_volatile [(match_operand:SI 0) (match_operand:SI 1 "const_int_operand")] ttinsn_op)]
   "TARGET_RVTT_WH || TARGET_RVTT_BH"
-  [(unspec_volatile [(match_operand:SI 1)] UNSPECV_TTINSN)])
+  [(unspec_volatile [(match_operand:SI 1)] ttinsn_op)])

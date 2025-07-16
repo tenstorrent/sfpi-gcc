@@ -148,7 +148,7 @@ constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no buil
 constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an sfpu insn (eg, incrwc)
 constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
-
+constexpr unsigned int INSN_FLAGS_NON_REPLAY         = 0x80;  // true if non-replayable
 constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
 constexpr unsigned int SFPU_LREG_COUNT_BH = 8;
 extern unsigned int rvtt_sfpu_lreg_count_global;
@@ -174,6 +174,7 @@ struct GTY(()) rvtt_insn_data {
   inline bool odd_bird_p() const { return flags & (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY); }
   inline bool non_tt_p() const { return flags & INSN_FLAGS_NON_TT; }
   inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
+  inline bool non_replay_p() const { return flags & INSN_FLAGS_NON_REPLAY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
   inline bool schedule_p() const { return schedule != -1; }
   inline bool schedule_in_arg_p() const { return generic_pos != -1; }
@@ -190,7 +191,7 @@ struct GTY(()) rvtt_insn_data {
 
 enum rvtt_insn_data::insn_id : unsigned {
   // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_RTL_ONLY(id, nip, gp) id,
+#define RVTT_RTL_ONLY(id, fl, nip, gp) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_WH_RTL_ONLY(id, fl, sched) id,
