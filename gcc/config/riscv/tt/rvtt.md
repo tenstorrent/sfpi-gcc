@@ -239,13 +239,13 @@ UNSPECV_TTINCRWC
 
 (define_insn "rvtt_<ttinsn_name>_cst"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "n")] ttinsn_op)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
   ".ttinsn\t%0")
 
 (define_insn "rvtt_<ttinsn_name>_reg"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,X")
                      (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] ttinsn_op)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
   "@
    sw\t%1,%0
    .ttinsn\t%1")

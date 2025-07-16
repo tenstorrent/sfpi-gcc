@@ -156,27 +156,39 @@ transform (function *fn)
 
   // Build the opcode-use graph
   tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
+  tree ttinsn_decl = rvtt_get_insn_data (rvtt_insn_data::ttinsn)->decl;
+  tree sfpinsn_decl = rvtt_get_insn_data (rvtt_insn_data::sfpinsn)->decl;
   std::vector<node_t> graph;
   std::vector<unsigned> opcode_counts;
+  bool immediates = false;
+  bool renumbered = false;
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
       if (auto *call_stmt = dyn_cast <gcall *> (gsi_stmt (gsi)))
-	if (gimple_call_fndecl (call_stmt) == synth_opcode_decl)
-	  {
-	    unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
-	    if (opcode_counts.size() < id + 1)
-	      opcode_counts.resize (id + 1);
-	    opcode_counts[id]++;
-	    unsigned opcode_ix = graph.size ();
-	    graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
-	    unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
-	    graph[opcode_ix].addend = count;
-	  }
-
-  bool immediates = false;
-  bool renumbered = false;
+	{
+	  tree fndecl = gimple_call_fndecl (call_stmt);
+	  if (fndecl == synth_opcode_decl)
+	    {
+	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
+	      if (opcode_counts.size() < id + 1)
+		opcode_counts.resize (id + 1);
+	      opcode_counts[id]++;
+	      unsigned opcode_ix = graph.size ();
+	      graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
+	      unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
+	      graph[opcode_ix].addend = count;
+	    }
+	  else if ((fndecl == ttinsn_decl || fndecl == sfpinsn_decl)
+		   && gimple_call_arg (call_stmt, 0) != null_pointer_node
+		   && TREE_CODE (gimple_call_arg (call_stmt, 1)) == INTEGER_CST)
+	    {
+	      gimple_call_set_arg (call_stmt, 0, null_pointer_node);
+	      update_stmt (call_stmt);
+	      immediates = true;
+	    }
+	}
 
   unsigned unique_id = opcode_counts.size () - 1;
   for (auto &node : graph)
