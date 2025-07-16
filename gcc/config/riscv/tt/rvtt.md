@@ -237,12 +237,7 @@ UNSPECV_TTINCRWC
 (define_int_iterator ttinsn_op [UNSPECV_TTINSN UNSPECV_SFPINSN])
 (define_int_attr ttinsn_name [(UNSPECV_TTINSN "ttinsn") (UNSPECV_SFPINSN "sfpinsn")])
 
-(define_insn "rvtt_<ttinsn_name>_cst"
-  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "n")] ttinsn_op)]
-  "TARGET_RVTT"
-  ".ttinsn\t%0")
-
-(define_insn "rvtt_<ttinsn_name>_reg"
+(define_insn "rvtt_<ttinsn_name>_int"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,X")
                      (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] ttinsn_op)]
   "TARGET_RVTT"
@@ -253,16 +248,9 @@ UNSPECV_TTINCRWC
 (define_expand "rvtt_<ttinsn_name>"
   [(unspec_volatile [(mem:SI (match_operand:SI    0 "address_operand"    ""))
                      (match_operand:SI    1 "reg_or_const_int_operand" "")] ttinsn_op)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
+  "TARGET_RVTT"
 {
-  if (GET_CODE (operands[1]) == CONST_INT)
-    {
-      emit_insn (gen_rvtt_<ttinsn_name>_cst (operands[1]));
-      DONE;
-    }
+  emit_insn (gen_rvtt_<ttinsn_name>_int (gen_rtx_MEM (SImode, operands[0]),
+                                         operands[1]));
+  DONE;
 })
-
-(define_peephole2
-  [(unspec_volatile [(match_operand:SI 0) (match_operand:SI 1 "const_int_operand")] ttinsn_op)]
-  "TARGET_RVTT_WH || TARGET_RVTT_BH"
-  [(unspec_volatile [(match_operand:SI 1)] ttinsn_op)])

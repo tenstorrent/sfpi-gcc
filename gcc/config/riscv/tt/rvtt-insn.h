@@ -90,10 +90,8 @@ along with GCC; see the file COPYING3.  If not see
 
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
 RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
-RVTT_RTL_ONLY (ttinsn_cst,        0x98, -1, -1)
-RVTT_RTL_ONLY (ttinsn_reg,        0x98, -1, -1)
-RVTT_RTL_ONLY (sfpinsn_cst,       0x88, -1, -1)
-RVTT_RTL_ONLY (sfpinsn_reg,       0x88, -1, -1)
+RVTT_RTL_ONLY (ttinsn_int,        0x98, -1, -1)
+RVTT_RTL_ONLY (sfpinsn_int,       0x88, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst, 0x08,  3,  1)
 RVTT_RTL_ONLY (sfpsynth_insn,     0x08,  3,  1)
