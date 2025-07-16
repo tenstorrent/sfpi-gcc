@@ -27,7 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 
 constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
 constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic scheduling flag
-constexpr unsigned int INSN_SCHED_DYN_DEP  = 0x40;  // has a dependency on a prior insn type
 
 extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
 extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
