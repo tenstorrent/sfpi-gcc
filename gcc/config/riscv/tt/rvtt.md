@@ -52,15 +52,6 @@
   UNSPECV_TTREPLAY
 ])
 
-(define_expand "movv64sf"
-  [(set (match_operand:V64SF 0 "")
-        (match_operand:V64SF 1 ""))]
-  ""
-{
-  if (riscv_legitimize_move (V64SFmode, operands[0], operands[1]))
-    DONE;
-})
-
 ;; rvtt_synth_opcode and rvtt_sfpsynth_insn{,_dst} are used to
 ;; synthesize sfp/tt instructions that are injected into the
 ;; instruction stream.  rvtt_synth_opcode is tied to 1 or more

@@ -1,6 +1,6 @@
 /* An SH specific RTL pass that tries to combine comparisons and redundant
    condition code register stores across multiple basic blocks.
-   Copyright (C) 2013-2022 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -37,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgrtl.h"
 #include "tree-pass.h"
 #include "expr.h"
+#include "tm-preds.h"
 
 /*
 This pass tries to optimize for example this:
@@ -426,10 +427,6 @@ is_conditional_insn (rtx_insn* i)
   return GET_CODE (p) == SET && GET_CODE (XEXP (p, 1)) == IF_THEN_ELSE;
 }
 
-// FIXME: Remove dependency on SH predicate function somehow.
-extern int t_reg_operand (rtx, machine_mode);
-extern int negt_reg_operand (rtx, machine_mode);
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // RTL pass class
 
@@ -637,7 +634,7 @@ sh_treg_combine::sh_treg_combine (gcc::context* ctx, bool split_insns,
   m_split_insns (split_insns),
   m_ccreg (NULL_RTX)
 {
-  // Overwrite default name in pass_data base class. 
+  // Overwrite default name in pass_data base class.
   this->name = name;
 }
 

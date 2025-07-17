@@ -1,5 +1,5 @@
 /* Subroutines used for expanding RISC-V builtins.
-   Copyright (C) 2011-2022 Free Software Foundation, Inc.
+   Copyright (C) 2011-2025 Free Software Foundation, Inc.
    Contributed by Andrew Waterman (andrew@sifive.com).
 
 This file is part of GCC.
@@ -34,8 +34,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "diagnostic-core.h"
 #include "stor-layout.h"
+#include "stringpool.h"
 #include "expr.h"
 #include "langhooks.h"
+#include "tm_p.h"
+#include "backend.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
 #include <map>
 #include "tt/rvtt.h"
 
@@ -44,11 +49,16 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME1(A, B) RISCV_##A##_FTYPE_##B
 #define RISCV_FTYPE_NAME2(A, B, C) RISCV_##A##_FTYPE_##B##_##C
 #define RISCV_FTYPE_NAME3(A, B, C, D) RISCV_##A##_FTYPE_##B##_##C##_##D
-#define RISCV_FTYPE_NAME4(A, B, C, D, E) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
-#define RISCV_FTYPE_NAME5(A, B, C, D, E, F) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
-#define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
-#define RISCV_FTYPE_NAME7(A, B, C, D, E, F, G, H) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
-#define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
+#define RISCV_FTYPE_NAME4(A, B, C, D, E) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
+#define RISCV_FTYPE_NAME5(A, B, C, D, E, F) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
+#define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
+#define RISCV_FTYPE_NAME7(A, B, C, D, E, F, G, H) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
+#define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -94,10 +104,51 @@ struct riscv_builtin_description {
   unsigned int (*avail) (void);
 };
 
-AVAIL (hard_float, TARGET_HARD_FLOAT)
+AVAIL (hard_float, TARGET_HARD_FLOAT || TARGET_ZFINX)
+AVAIL (clean32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (clean64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (flush32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (flush64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (inval32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (inval64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (zero32,  TARGET_ZICBOZ && !TARGET_64BIT)
+AVAIL (zero64,  TARGET_ZICBOZ && TARGET_64BIT)
+AVAIL (prefetchi32, TARGET_ZICBOP && !TARGET_64BIT)
+AVAIL (prefetchi64, TARGET_ZICBOP && TARGET_64BIT)
+AVAIL (crypto_zbkb, TARGET_ZBKB)
+AVAIL (crypto_zbkb32, TARGET_ZBKB && !TARGET_64BIT)
+AVAIL (crypto_zbkb64, TARGET_ZBKB && TARGET_64BIT)
+AVAIL (crypto_zbkx32, TARGET_ZBKX && !TARGET_64BIT)
+AVAIL (crypto_zbkx64, TARGET_ZBKX && TARGET_64BIT)
+AVAIL (crypto_zknd32, TARGET_ZKND && !TARGET_64BIT)
+AVAIL (crypto_zknd64, TARGET_ZKND && TARGET_64BIT)
+AVAIL (crypto_zkne32, TARGET_ZKNE && !TARGET_64BIT)
+AVAIL (crypto_zkne64, TARGET_ZKNE && TARGET_64BIT)
+AVAIL (crypto_zkne_or_zknd, (TARGET_ZKNE || TARGET_ZKND) && TARGET_64BIT)
+AVAIL (crypto_zknh, TARGET_ZKNH)
+AVAIL (crypto_zknh32, TARGET_ZKNH && !TARGET_64BIT)
+AVAIL (crypto_zknh64, TARGET_ZKNH && TARGET_64BIT)
+AVAIL (crypto_zksh, TARGET_ZKSH)
+AVAIL (crypto_zksed, TARGET_ZKSED)
+AVAIL (clmul_zbkc_or_zbc, (TARGET_ZBKC || TARGET_ZBC))
+AVAIL (clmul_zbkc32_or_zbc32, (TARGET_ZBKC || TARGET_ZBC) && !TARGET_64BIT)
+AVAIL (clmul_zbkc64_or_zbc64, (TARGET_ZBKC || TARGET_ZBC) && TARGET_64BIT)
+AVAIL (clmulr_zbc32, TARGET_ZBC && !TARGET_64BIT)
+AVAIL (clmulr_zbc64, TARGET_ZBC && TARGET_64BIT)
+AVAIL (zbb, TARGET_ZBB)
+AVAIL (zbb64, TARGET_ZBB && TARGET_64BIT)
+AVAIL (zbb64_or_zbkb64, (TARGET_ZBKB || TARGET_ZBB) && TARGET_64BIT)
+AVAIL (zbb_or_zbkb, (TARGET_ZBKB || TARGET_ZBB))
+AVAIL (hint_pause, (!0))
+
+// CORE-V AVAIL
+AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
+AVAIL (cvalu, TARGET_XCVALU && !TARGET_64BIT)
+AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
+AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 AVAIL (wormhole, TARGET_RVTT_WH)
 AVAIL (blackhole, TARGET_RVTT_BH)
-AVAIL (sfpu, (TARGET_RVTT_WH || TARGET_RVTT_BH))
+AVAIL (sfpu, TARGET_RVTT)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -113,6 +164,22 @@ AVAIL (sfpu, (TARGET_RVTT_WH || TARGET_RVTT_BH))
    riscv_builtin_avail_.  */
 #define RISCV_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
   { CODE_FOR_riscv_ ## INSN, "__builtin_riscv_" NAME,			\
+    BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
+
+/* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
+
+   INSN is the name of the associated instruction pattern, without the
+   leading CODE_FOR_.
+
+   NAME is the name of the function itself, without the leading
+   "__builtin_riscv_".
+
+   BUILTIN_TYPE and FUNCTION_TYPE are riscv_builtin_description fields.
+
+   AVAIL is the name of the availability predicate, without the leading
+   riscv_builtin_avail_.  */
+#define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
+  { CODE_FOR_ ## INSN, "__builtin_riscv_" NAME,			\
     BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
 
 /* Define __builtin_riscv_<INSN>, which is a RISCV_BUILTIN_DIRECT function
@@ -142,14 +209,16 @@ tree instrn_ptr_type_node;
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
-#define RISCV_ATYPE_SI intSI_type_node
-#define RISCV_ATYPE_HI intHI_type_node
-#define RISCV_ATYPE_QI intQI_type_node
-#define RISCV_ATYPE_USI unsigned_intSI_type_node
-#define RISCV_ATYPE_UHI unsigned_intHI_type_node
 #define RISCV_ATYPE_UQI unsigned_intQI_type_node
+#define RISCV_ATYPE_UHI unsigned_intHI_type_node
+#define RISCV_ATYPE_USI unsigned_intSI_type_node
+#define RISCV_ATYPE_UDI unsigned_intDI_type_node
+#define RISCV_ATYPE_QI intQI_type_node
+#define RISCV_ATYPE_HI intHI_type_node
+#define RISCV_ATYPE_SI intSI_type_node
+#define RISCV_ATYPE_VOID_PTR ptr_type_node
+#define RISCV_ATYPE_INT_PTR integer_ptr_type_node
 #define RISCV_ATYPE_V64SF v64SF_type_node
-#define RISCV_ATYPE_POINTER ptr_type_node
 #define RISCV_ATYPE_IPTR instrn_ptr_type_node
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
@@ -163,21 +232,32 @@ tree instrn_ptr_type_node;
 #define RISCV_FTYPE_ATYPES3(A, B, C, D) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D
 #define RISCV_FTYPE_ATYPES4(A, B, C, D, E) \
-  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E
 #define RISCV_FTYPE_ATYPES5(A, B, C, D, E, F) \
-  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F
 #define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
-  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
 #define RISCV_FTYPE_ATYPES7(A, B, C, D, E, F, G, H) \
-  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H
 #define RISCV_FTYPE_ATYPES8(A, B, C, D, E, F, G, H, I) \
-  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, RISCV_ATYPE_##I
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
+  RISCV_ATYPE_##I
 
-static const int first_sfpu_builtin = 2;
+static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + 3;
 
 static const struct riscv_builtin_description riscv_builtins[] = {
+  #include "riscv-cmo.def"
+  #include "riscv-scalar-crypto.def"
+  #include "corev.def"
+
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
+  RISCV_BUILTIN (pause, "pause", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, hint_pause),
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
@@ -200,6 +280,9 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 
 #define GET_BUILTIN_DECL(CODE) \
   riscv_builtin_decls[riscv_builtin_decl_index[(CODE)]]
+
+tree riscv_float16_type_node = NULL_TREE;
+tree riscv_bfloat16_type_node = NULL_TREE;
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -226,11 +309,38 @@ riscv_build_function_type (enum riscv_function_type type)
   return types[(int) type];
 }
 
-/* Implement TARGET_INIT_BUILTINS.  */
-
-void
-riscv_init_builtins (void)
+static void
+riscv_init_builtin_types (void)
 {
+  /* Provide the _Float16 type and float16_type_node if needed.  */
+  if (!float16_type_node)
+    {
+      riscv_float16_type_node = make_node (REAL_TYPE);
+      TYPE_PRECISION (riscv_float16_type_node) = 16;
+      SET_TYPE_MODE (riscv_float16_type_node, HFmode);
+      layout_type (riscv_float16_type_node);
+    }
+  else
+    riscv_float16_type_node = float16_type_node;
+
+  if (!maybe_get_identifier ("_Float16"))
+    lang_hooks.types.register_builtin_type (riscv_float16_type_node,
+					    "_Float16");
+
+  /* Provide the __bf16 type and bfloat16_type_node if needed.  */
+  if (!bfloat16_type_node)
+    {
+      riscv_bfloat16_type_node = make_node (REAL_TYPE);
+      TYPE_PRECISION (riscv_bfloat16_type_node) = 16;
+      SET_TYPE_MODE (riscv_bfloat16_type_node, BFmode);
+      layout_type (riscv_bfloat16_type_node);
+    }
+  else
+    riscv_bfloat16_type_node = bfloat16_type_node;
+
+  if (!maybe_get_identifier ("__bf16"))
+    lang_hooks.types.register_builtin_type (riscv_bfloat16_type_node,
+					    "__bf16");
   v64SF_type_node = build_vector_type_for_mode (float_type_node, V64SFmode);
   // Ideally we'd use unsigned_intSI_type_mode here, but that's
   // 'unsigned', which doesn't match uint32_t's underlying type
@@ -238,6 +348,15 @@ riscv_init_builtins (void)
   // void it is.  Bleah!
   instrn_ptr_type_node = build_pointer_type
     (build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
+}
+
+/* Implement TARGET_INIT_BUILTINS.  */
+
+void
+riscv_init_builtins (void)
+{
+  riscv_init_builtin_types ();
+  riscv_vector::init_builtins ();
 
   for (size_t i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
     {
@@ -246,12 +365,13 @@ riscv_init_builtins (void)
 	{
 	  tree type = riscv_build_function_type (d->prototype);
 	  riscv_builtin_decls[i]
-	    = add_builtin_function (d->name, type, i, BUILT_IN_MD, NULL, NULL);
+	    = add_builtin_function (d->name, type,
+				    (i << RISCV_BUILTIN_SHIFT)
+				      + RISCV_BUILTIN_GENERAL,
+				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
 	  if (i >= first_sfpu_builtin)
-	    {
-	      rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
-	    }
+	    rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
 	}
     }
 
@@ -263,9 +383,18 @@ riscv_init_builtins (void)
 tree
 riscv_builtin_decl (unsigned int code, bool initialize_p ATTRIBUTE_UNUSED)
 {
-  if (code >= ARRAY_SIZE (riscv_builtins))
-    return error_mark_node;
-  return riscv_builtin_decls[code];
+  unsigned int subcode = code >> RISCV_BUILTIN_SHIFT;
+  switch (code & RISCV_BUILTIN_CLASS)
+    {
+    case RISCV_BUILTIN_GENERAL:
+      if (subcode >= ARRAY_SIZE (riscv_builtins))
+	return error_mark_node;
+      return riscv_builtin_decls[subcode];
+
+    case RISCV_BUILTIN_VECTOR:
+      return riscv_vector::builtin_decl (subcode, initialize_p);
+    }
+  return error_mark_node;
 }
 
 /* Take argument ARGNO from EXP's argument list and convert it into
@@ -323,6 +452,34 @@ riscv_expand_builtin_direct (enum insn_code icode, rtx target, tree exp,
   return riscv_expand_builtin_insn (icode, opno, ops, has_target_p);
 }
 
+/* Implement TARGET_GIMPLE_FOLD_BUILTIN.  */
+
+bool
+riscv_gimple_fold_builtin (gimple_stmt_iterator *gsi)
+{
+  gcall *stmt = as_a<gcall *> (gsi_stmt (*gsi));
+  tree fndecl = gimple_call_fndecl (stmt);
+  unsigned int code = DECL_MD_FUNCTION_CODE (fndecl);
+  unsigned int subcode = code >> RISCV_BUILTIN_SHIFT;
+  gimple *new_stmt = NULL;
+  switch (code & RISCV_BUILTIN_CLASS)
+    {
+    case RISCV_BUILTIN_GENERAL:
+      new_stmt = NULL;
+      break;
+
+    case RISCV_BUILTIN_VECTOR:
+      new_stmt = riscv_vector::gimple_fold_builtin (subcode, gsi, stmt);
+      break;
+    }
+
+  if (!new_stmt)
+    return false;
+
+  gsi_replace (gsi, new_stmt, false);
+  return true;
+}
+
 /* Implement TARGET_EXPAND_BUILTIN.  */
 
 rtx
@@ -332,15 +489,23 @@ riscv_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
   unsigned int fcode = DECL_MD_FUNCTION_CODE (fndecl);
-  const struct riscv_builtin_description *d = &riscv_builtins[fcode];
-
-  switch (d->builtin_type)
+  unsigned int subcode = fcode >> RISCV_BUILTIN_SHIFT;
+  switch (fcode & RISCV_BUILTIN_CLASS)
     {
-    case RISCV_BUILTIN_DIRECT:
-      return riscv_expand_builtin_direct (d->icode, target, exp, true);
+      case RISCV_BUILTIN_VECTOR:
+	return riscv_vector::expand_builtin (subcode, exp, target);
+      case RISCV_BUILTIN_GENERAL: {
+	const struct riscv_builtin_description *d = &riscv_builtins[subcode];
 
-    case RISCV_BUILTIN_DIRECT_NO_TARGET:
-      return riscv_expand_builtin_direct (d->icode, target, exp, false);
+	switch (d->builtin_type)
+	  {
+	  case RISCV_BUILTIN_DIRECT:
+	    return riscv_expand_builtin_direct (d->icode, target, exp, true);
+
+	  case RISCV_BUILTIN_DIRECT_NO_TARGET:
+	    return riscv_expand_builtin_direct (d->icode, target, exp, false);
+	  }
+      }
     }
 
   gcc_unreachable ();
@@ -351,7 +516,7 @@ riscv_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 void
 riscv_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
 {
-  if (!TARGET_HARD_FLOAT)
+  if (!(TARGET_HARD_FLOAT || TARGET_ZFINX))
     return;
 
   tree frflags = GET_BUILTIN_DECL (CODE_FOR_riscv_frflags);
