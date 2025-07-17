@@ -1,6 +1,6 @@
 /* PR c/114493 */
 /* { dg-do compile { target lto } } */
-/* { dg-options "-O2 -flto -std=c2x" } */
+/* { dg-options "-O2 -flto -std=c23" } */
 
 void foo (void);
 struct S;

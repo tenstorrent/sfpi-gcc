@@ -9,9 +9,7 @@ double f2;
 float16_t f3;
 float32_t f4;
 __fp16 f5;
-#ifndef __cplusplus
 _Float16 f6;
-#endif
 
 float16x8_t floatvec;
 
@@ -30,11 +28,9 @@ test_scalars (void)
     floatvec = vmulq(floatvec, f3);
     floatvec = vmulq(floatvec, f4);
     floatvec = vmulq(floatvec, f5);
-#ifndef __cplusplus
     floatvec = vmulq(floatvec, f6);
     floatvec = vmulq(floatvec, 0.15f16);
     floatvec = vmulq(floatvec, (_Float16) 0.15);
-#endif
 }
 
 /* Next, test a number of valid pointer overloads.  */
