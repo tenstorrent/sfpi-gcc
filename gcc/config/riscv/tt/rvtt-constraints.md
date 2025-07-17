@@ -20,9 +20,10 @@
 
 ;; Register constraints
 
-(define_register_constraint "x" "SFPU_REGS"
-  "Any of the SFPU Registers L0 - L3 (L0 - L7 for Wormhole)")
+(define_register_constraint "xr" "SFPU_REGS"
+  "Any of the SFPU Registers")
 
+;; these should be renamed 'x[digit]'
 (define_register_constraint "Q0" "SFPU_REGS_L0"
   "SFPU Register L0")
 
@@ -48,67 +49,68 @@
   "SFPU Register L7")
 
 ;; General constraints
-;; used for unused register inputs
-(define_constraint "z"
+;; used for unused vector inputs
+(define_constraint "xn"
   "Constant vector"
   (match_code "const_vector"))
 
-(define_constraint "M01U"
+;; These should be removed and the logic placed in checking the builtins themselves -- better diagnostics.
+(define_constraint "N01U"
   "A 1-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 1)")))
 
-(define_constraint "M02U"
+(define_constraint "N02U"
   "A 2-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 3)")))
 
-(define_constraint "M03U"
+(define_constraint "N03U"
   "A 3-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 7)")))
 
-(define_constraint "M04U"
+(define_constraint "N04U"
   "A 4-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 15)")))
 
-(define_constraint "M05U"
+(define_constraint "N05U"
   "A 5-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 31)")))
 
-(define_constraint "MP5U"
+(define_constraint "NP5U"
   "A 5-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 1, 32)")))
 
-(define_constraint "M12S"
+(define_constraint "N12S"
   "A 12-bit signed immediate for SFPU."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -2048, 2047)")))
 
-(define_constraint "M12U"
+(define_constraint "N12U"
   "A 12-bit unsigned immediate for SFPU."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 4095)")))
 
-(define_constraint "M13U"
+(define_constraint "N13U"
   "A 13-bit unsigned immediate for SFPU."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 8191)")))
 
-(define_constraint "M14U"
+(define_constraint "N14U"
   "A 14-bit unsigned immediate for SFPU."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 16383)")))
 
-(define_constraint "M16U"
+(define_constraint "N16U"
   "A 16-bit unsigned immediate for SFPU load/store instruction offsets."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 65535)")))
 
-(define_constraint "M16S"
+(define_constraint "N16S"
   "A 16-bit signed immediate for SFPU load/store instruction offsets."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -32768, 32767)")))
