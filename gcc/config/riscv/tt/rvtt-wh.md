@@ -124,8 +124,8 @@
 ])
 
 (define_insn "rvtt_wh_sfpgccmov_cc"
-  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=x,x,m")
-        (match_operand:V64SF 1 "nonimmediate_operand" " x,m,x"))]
+  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xr,xr,m")
+        (match_operand:V64SF 1 "nonimmediate_operand" " xr,m,xr"))]
   "TARGET_RVTT_WH  &&
    (   register_operand (operands[0], V64SFmode)
     || register_operand (operands[1], V64SFmode))"
@@ -138,9 +138,9 @@
   })
 
 (define_insn "rvtt_wh_sfpassign_lv"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPASSIGN_LV))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_WH_SFPASSIGN_LV))]
   "TARGET_RVTT_WH"
   "SFPMOV\t%0, %2, 0"
 )
@@ -177,11 +177,11 @@
 })
 
 (define_insn "rvtt_wh_sfpload_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M04U, M04U")
-                          (match_operand:SI    3 "const_int_operand" "M02U, M02U")
-                          (match_operand:SI    4 "const_int_operand" "M14U, M14U")] UNSPECV_WH_SFPLOAD_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn, 0")
+                          (match_operand:SI    2 "const_int_operand" "N04U,N04U")
+                          (match_operand:SI    3 "const_int_operand" "N02U,N02U")
+                          (match_operand:SI    4 "const_int_operand" "N14U,N14U")] UNSPECV_WH_SFPLOAD_INT))]
   "TARGET_RVTT_WH"
   "@
    SFPLOAD\t%0, %4, %2, %3
@@ -218,10 +218,10 @@
 })
 
 (define_insn "rvtt_wh_sfploadi_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x,x,x,x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z,z,0,0")
-                          (match_operand:SI    2 "const_int_operand" "M04U,M04U,M04U,M04U")
-                          (match_operand:SI    3 "const_int_operand" "M16S,M16U,M16S,M16U")] UNSPECV_WH_SFPLOADI_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr,xr,xr,xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,xn,0,0")
+                          (match_operand:SI    2 "const_int_operand" "N04U,N04U,N04U,N04U")
+                          (match_operand:SI    3 "const_int_operand" "N16S,N16U,N16S,N16U")] UNSPECV_WH_SFPLOADI_INT))]
   "TARGET_RVTT_WH"
   "@
   SFPLOADI\t%0, %s3, %2
@@ -254,10 +254,10 @@
 })
 
 (define_insn "rvtt_wh_sfpstore_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
-                     (match_operand:SI    1 "const_int_operand" "M04U")
-                     (match_operand:SI    2 "const_int_operand" "M02U")
-                     (match_operand:SI    3 "const_int_operand" "M14U")] UNSPECV_WH_SFPSTORE_INT)]
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xr")
+                     (match_operand:SI    1 "const_int_operand" "N04U")
+                     (match_operand:SI    2 "const_int_operand" "N02U")
+                     (match_operand:SI    3 "const_int_operand" "N14U")] UNSPECV_WH_SFPSTORE_INT)]
   "TARGET_RVTT_WH"
   "SFPSTORE\t%3, %0, %1, %2")
 
@@ -292,10 +292,10 @@
 (define_int_attr wormhole_muliaddi_int_name [(UNSPECV_WH_SFPMULI_INT "muli") (UNSPECV_WH_SFPADDI_INT "addi")])
 (define_int_attr wormhole_muliaddi_int_call [(UNSPECV_WH_SFPMULI_INT "MULI") (UNSPECV_WH_SFPADDI_INT "ADDI")])
 (define_insn "rvtt_wh_sfp<wormhole_muliaddi_int_name>_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "const_int_operand" "M16U")
-                          (match_operand:SI    3 "const_int_operand" "M04U")] wormhole_muliaddi_int))]
+                          (match_operand:SI    2 "const_int_operand" "N16U")
+                          (match_operand:SI    3 "const_int_operand" "N04U")] wormhole_muliaddi_int))]
   "TARGET_RVTT_WH"
   "SFP<wormhole_muliaddi_int_call>\t%0, %2, %3"
 )
@@ -332,11 +332,11 @@
 })
 
 (define_insn "rvtt_wh_sfpdivp2_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M12S, M12S")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPDIVP2_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn, 0")
+                          (match_operand:SI    2 "const_int_operand" "N12S,N12S")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")
+                          (match_operand:SI    4 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPDIVP2_INT))]
   "TARGET_RVTT_WH"
   "SFPDIVP2\t%0, %3, %2, %4"
 )
@@ -413,10 +413,10 @@
 })
 
 (define_insn "rvtt_wh_sfp<wormhole_simple_op_name_int>_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "const_int_operand" "M04U, M04U")] wormhole_simple_op_int))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
+                          (match_operand:SI    3 "const_int_operand" "N04U,N04U")] wormhole_simple_op_int))]
   "TARGET_RVTT_WH"
   "SFP<wormhole_simple_op_call_int>\t%0, %2, %3"
 )
@@ -454,39 +454,39 @@
 (define_int_attr wormhole_muladd_name_int [(UNSPECV_WH_SFPMUL_INT "mul") (UNSPECV_WH_SFPADD_INT "add")])
 (define_int_attr wormhole_muladd_call_int [(UNSPECV_WH_SFPMUL_INT "MUL\t%0, %2, %3, L9") (UNSPECV_WH_SFPADD_INT "ADD\t%0, L10, %2, %3")])
 (define_insn "rvtt_wh_sfp<wormhole_muladd_name_int>_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:SI    4 "const_int_operand" "M04U, M04U")] wormhole_muladd_int))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")
+                          (match_operand:SI    4 "const_int_operand" "N04U,N04U")] wormhole_muladd_int))]
   "TARGET_RVTT_WH"
   "SFP<wormhole_muladd_call_int>, %4"
 )
 
 (define_insn "rvtt_wh_sfpiadd_v_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "const_int_operand" "M04U")] UNSPECV_WH_SFPIADD_V_INT))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")
+                          (match_operand:SI    3 "const_int_operand" "N04U")] UNSPECV_WH_SFPIADD_V_INT))]
   "TARGET_RVTT_WH"
   "SFPIADD\t%0, %2, 0, %3"
 )
 
 (define_insn "rvtt_wh_sfpiadd_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
                           (match_operand:SI    3 "const_int_operand" "n, n")
-                          (match_operand:SI    4 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPIADD_I_INT))]
+                          (match_operand:SI    4 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPIADD_I_INT))]
   "TARGET_RVTT_WH"
   "SFPIADD\t%0, %2, %3, %4"
 )
 
 (define_expand "rvtt_wh_sfpxiadd_v"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")
-                          (match_operand:SI    3 "const_int_operand" "M04U")] UNSPECV_WH_SFPXIADD_V))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")
+                          (match_operand:SI    3 "const_int_operand" "N04U")] UNSPECV_WH_SFPXIADD_V))]
   "TARGET_RVTT_WH"
 {
   rvtt_wh_emit_sfpxiadd_v(operands[0], operands[1], operands[2], operands[3]);
@@ -526,9 +526,9 @@
 })
 
 (define_insn "rvtt_wh_sfpshft_v"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPSHFT_V))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_WH_SFPSHFT_V))]
   "TARGET_RVTT_WH"
   "SFPSHFT\t%0, %2, 0, 0"
 )
@@ -556,33 +556,33 @@
 })
 
 (define_insn "rvtt_wh_sfpshft_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:SI    2 "const_int_operand" "M12S")] UNSPECV_WH_SFPSHFT_I_INT))]
+                          (match_operand:SI    2 "const_int_operand" "N12S")] UNSPECV_WH_SFPSHFT_I_INT))]
   "TARGET_RVTT_WH"
   "SFPSHFT\t%0, L0, %2, 1"
 )
 
 (define_insn "rvtt_wh_sfpand"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPAND))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_WH_SFPAND))]
   "TARGET_RVTT_WH"
   "SFPAND\t%0, %2"
 )
 
 (define_insn "rvtt_wh_sfpor"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPOR))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_WH_SFPOR))]
   "TARGET_RVTT_WH"
   "SFPOR\t%0, %2"
 )
 
 (define_insn "rvtt_wh_sfpxor"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] UNSPECV_WH_SFPXOR))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_WH_SFPXOR))]
   "TARGET_RVTT_WH"
   "SFPXOR\t%0, %2"
 )
@@ -609,9 +609,9 @@
 })
 
 (define_insn "rvtt_wh_sfpnot_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")] UNSPECV_WH_SFPNOT_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")] UNSPECV_WH_SFPNOT_INT))]
   "TARGET_RVTT_WH"
   "SFPNOT\t%0, %2"
 )
@@ -640,10 +640,10 @@
 })
 
 (define_insn "rvtt_wh_sfpcast_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPCAST_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
+                          (match_operand:SI    3 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPCAST_INT))]
   "TARGET_RVTT_WH"
   "SFPCAST %0, %2, %3")
 
@@ -671,10 +671,10 @@
 })
 
 (define_insn "rvtt_wh_sfpshft2_e_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:SI    3 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPSHFT2_E_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
+                          (match_operand:SI    3 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPSHFT2_E_INT))]
   "TARGET_RVTT_WH"
   "SFPSHFT2\t%0, %2, 0, %3")
 
@@ -714,12 +714,12 @@
 })
 
 (define_insn "rvtt_wh_sfpstochrnd_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M01U, M01U")
-                          (match_operand:SI    3 "const_int_operand" "M05U, M05U")
-                          (match_operand:V64SF 4 "register_operand"  "x, x")
-                          (match_operand:SI    5 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPSTOCHRND_I_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:SI    2 "const_int_operand" "N01U,N01U")
+                          (match_operand:SI    3 "const_int_operand" "N05U,N05U")
+                          (match_operand:V64SF 4 "register_operand"  "xr, xr")
+                          (match_operand:SI    5 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPSTOCHRND_I_INT))]
   "TARGET_RVTT_WH"
   "SFPSTOCHRND\t%0, L0, %4, %5, %2, %3");
 
@@ -751,12 +751,12 @@
 })
 
 (define_insn "rvtt_wh_sfpstochrnd_v_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M01U, M01U")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:V64SF 4 "register_operand"  "x, x")
-                          (match_operand:SI    5 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPSTOCHRND_V_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:SI    2 "const_int_operand" "N01U,N01U")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")
+                          (match_operand:V64SF 4 "register_operand"  "xr, xr")
+                          (match_operand:SI    5 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPSTOCHRND_V_INT))]
   "TARGET_RVTT_WH"
   "SFPSTOCHRND\t%0, %3, %4, %5, %2, 0")
 
@@ -764,9 +764,9 @@
 (define_int_attr wormhole_set_float_name_v [(UNSPECV_WH_SFPSETEXP_V "exp") (UNSPECV_WH_SFPSETMAN_V "man") (UNSPECV_WH_SFPSETSGN_V "sgn")])
 (define_int_attr wormhole_set_float_call_v [(UNSPECV_WH_SFPSETEXP_V "EXP") (UNSPECV_WH_SFPSETMAN_V "MAN") (UNSPECV_WH_SFPSETSGN_V "SGN")])
 (define_insn "rvtt_wh_sfpset<wormhole_set_float_name_v>_v"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
-                          (match_operand:V64SF 2 "register_operand"  "x")] wormhole_set_float_op_v))]
+                          (match_operand:V64SF 2 "register_operand"  "xr")] wormhole_set_float_op_v))]
   "TARGET_RVTT_WH"
   "SFPSET<wormhole_set_float_call_v>\t%0, %2, 0, 0"
 )
@@ -830,10 +830,10 @@
 (define_int_attr wormhole_set_float_name_i_int [(UNSPECV_WH_SFPSETEXP_I_INT "exp") (UNSPECV_WH_SFPSETSGN_I_INT "sgn")])
 (define_int_attr wormhole_set_float_call_i_int [(UNSPECV_WH_SFPSETEXP_I_INT "EXP") (UNSPECV_WH_SFPSETSGN_I_INT "SGN")])
 (define_insn "rvtt_wh_sfpset<wormhole_set_float_name_i_int>_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M12U, M12U")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")] wormhole_set_float_op_i_int))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:SI    2 "const_int_operand" "N12U,N12U")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")] wormhole_set_float_op_i_int))]
   "TARGET_RVTT_WH"
   "SFPSET<wormhole_set_float_call_i_int>\t%0, %3, %2, 1"
 )
@@ -870,10 +870,10 @@
 })
 
 (define_insn "rvtt_wh_sfpsetman_i_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:SI    2 "const_int_operand" "M12U, M12U")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")] UNSPECV_WH_SFPSETMAN_I_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:SI    2 "const_int_operand" "N12U,N12U")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")] UNSPECV_WH_SFPSETMAN_I_INT))]
   "TARGET_RVTT_WH"
   "SFPSETMAN\t%0, %3, %2, 1"
 )
@@ -906,26 +906,26 @@
 })
 
 (define_insn "rvtt_wh_sfpmad_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x, x")
-        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "z, 0")
-                          (match_operand:V64SF 2 "register_operand"  "x, x")
-                          (match_operand:V64SF 3 "register_operand"  "x, x")
-                          (match_operand:V64SF 4 "register_operand"  "x, x")
-                          (match_operand:SI    5 "const_int_operand" "M04U, M04U")] UNSPECV_WH_SFPMAD_INT))]
+  [(set (match_operand:V64SF 0 "register_operand" "=xr, xr")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "xn,0")
+                          (match_operand:V64SF 2 "register_operand"  "xr, xr")
+                          (match_operand:V64SF 3 "register_operand"  "xr, xr")
+                          (match_operand:V64SF 4 "register_operand"  "xr, xr")
+                          (match_operand:SI    5 "const_int_operand" "N04U,N04U")] UNSPECV_WH_SFPMAD_INT))]
   "TARGET_RVTT_WH"
   "SFPMAD\t%0, %2, %3, %4, %5"
 )
 
 (define_insn "rvtt_wh_sfpsetcc_i"
-  [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "M01U")
-                     (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_WH_SFPSETCC_I)]
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "N01U")
+                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_WH_SFPSETCC_I)]
   "TARGET_RVTT_WH"
   "SFPSETCC\tL0, %0, %1"
 )
 
 (define_insn "rvtt_wh_sfpsetcc_v"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "x")
-                     (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_WH_SFPSETCC_V)]
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xr")
+                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_WH_SFPSETCC_V)]
   "TARGET_RVTT_WH"
   "SFPSETCC\t%0, 0, %1"
 )
@@ -956,8 +956,8 @@
 })
 
 (define_insn "rvtt_wh_sfpencc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "M02U")
-                     (match_operand:SI 1 "const_int_operand" "M04U")] UNSPECV_WH_SFPENCC)]
+  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N02U")
+                     (match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_WH_SFPENCC)]
   "TARGET_RVTT_WH"
   "SFPENCC\t%0, %1"
 )
@@ -969,12 +969,12 @@
 )
 
 (define_insn "rvtt_wh_sfppushc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "M04U")] UNSPECV_WH_SFPPUSHC)]
+  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_WH_SFPPUSHC)]
   "TARGET_RVTT_WH"
   "SFPPUSHC\t%0")
 
 (define_insn "rvtt_wh_sfppopc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "M04U")] UNSPECV_WH_SFPPOPC)]
+  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_WH_SFPPOPC)]
   "TARGET_RVTT_WH"
   "SFPPOPC\t%0"
 )
@@ -985,18 +985,18 @@
                           (match_operand:V64SF 2 "register_operand"  "Q1")
                           (match_operand:V64SF 3 "register_operand"  "Q2")
                           (match_operand:V64SF 4 "register_operand"  "0")
-                          (match_operand:SI    5 "const_int_operand" "M04U")] UNSPECV_WH_SFPLUT))]
+                          (match_operand:SI    5 "const_int_operand" "N04U")] UNSPECV_WH_SFPLUT))]
   "TARGET_RVTT_WH"
   "SFPLUT\t%0, %5"
 )
 
 (define_insn "rvtt_wh_sfplutfp32_3r"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "Q0")
                           (match_operand:V64SF 2 "register_operand"  "Q1")
                           (match_operand:V64SF 3 "register_operand"  "Q2")
                           (match_operand:V64SF 4 "register_operand"  "Q3")
-                          (match_operand:SI    5 "const_int_operand" "M04U")] UNSPECV_WH_SFPLUTFP32_3R))
+                          (match_operand:SI    5 "const_int_operand" "N04U")] UNSPECV_WH_SFPLUTFP32_3R))
         (clobber (match_scratch:V64SF 6 "=Q7"))
         (match_scratch:SI 7)]
   "TARGET_RVTT_WH"
@@ -1010,7 +1010,7 @@
 })
 
 (define_insn "rvtt_wh_sfplutfp32_6r"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "Q0")
                           (match_operand:V64SF 2 "register_operand"  "Q1")
                           (match_operand:V64SF 3 "register_operand"  "Q2")
@@ -1018,13 +1018,13 @@
                           (match_operand:V64SF 5 "register_operand"  "Q5")
                           (match_operand:V64SF 6 "register_operand"  "Q6")
                           (match_operand:V64SF 7 "register_operand"  "Q3")
-                          (match_operand:SI    8 "const_int_operand" "M04U")] UNSPECV_WH_SFPLUTFP32_6R))]
+                          (match_operand:SI    8 "const_int_operand" "N04U")] UNSPECV_WH_SFPLUTFP32_6R))]
   "TARGET_RVTT_WH"
   "SFPLUTFP32\t%0, %8")
 
 (define_insn "rvtt_wh_sfpconfig_v"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "Q0")
-                     (match_operand:SI    1 "const_int_operand"  "M04U")] UNSPECV_WH_SFPCONFIG_V)]
+                     (match_operand:SI    1 "const_int_operand"  "N04U")] UNSPECV_WH_SFPCONFIG_V)]
   "TARGET_RVTT_WH"
   "SFPCONFIG\t%1, 0, 0")
 
@@ -1039,9 +1039,9 @@
 })
 
 (define_insn "rvtt_wh_sfpswap_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+x")
-                     (match_operand:V64SF 1 "register_operand"   "+x")
-                     (match_operand:SI    2 "const_int_operand"  "M04U")] UNSPECV_WH_SFPSWAP_INT)]
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "+xr")
+                     (match_operand:V64SF 1 "register_operand"   "+xr")
+                     (match_operand:SI    2 "const_int_operand"  "N04U")] UNSPECV_WH_SFPSWAP_INT)]
   "TARGET_RVTT_WH"
   "SFPSWAP\t%0, %1, %2")
 
@@ -1058,12 +1058,12 @@
                      (match_operand:V64SF 1 "register_operand"   "+Q1")
                      (match_operand:V64SF 2 "register_operand"   "+Q2")
                      (match_operand:V64SF 3 "register_operand"   "+Q3")
-                     (match_operand:SI    4 "const_int_operand"  "M04U")] UNSPECV_WH_SFPSHFT2_G)]
+                     (match_operand:SI    4 "const_int_operand"  "N04U")] UNSPECV_WH_SFPSHFT2_G)]
   "TARGET_RVTT_WH"
   "SFPSHFT2\t0, L0, L0, %0, %1, %2, %3, %4")
 
 (define_insn "rvtt_wh_sfpshft2_ge"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "x")
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"   "xr")
                      (match_operand:V64SF 1 "register_operand"   "+Q0")
                      (match_operand:V64SF 2 "register_operand"   "+Q1")
                      (match_operand:V64SF 3 "register_operand"   "+Q2")
