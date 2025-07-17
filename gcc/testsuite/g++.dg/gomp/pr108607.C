@@ -9,9 +9,9 @@ bar (int x)
 }
 
 constexpr int
-foo (int x)			// { dg-message "declared here" "" { target c++20_down } }
+foo (int x)
 {
-  #pragma omp scope		// { dg-error "is not a constant expression" }
+  #pragma omp scope		// { dg-error "OpenMP directives may not appear in 'constexpr' functions" }
   x = bar (x);
   return x;
 }
@@ -24,15 +24,15 @@ baz (int x)
     case 42:
       return 0;
     case 2:
-      #pragma omp scope		// { dg-error "statement is not a constant expression" }
+      #pragma omp scope		// { dg-error "OpenMP directives may not appear in 'constexpr' functions" }
       x = bar (x);
       return x;
     case 3:
-      #pragma omp parallel	// { dg-error "statement is not a constant expression" }
+      #pragma omp parallel	// { dg-error "OpenMP directives may not appear in 'constexpr' functions" }
       x = bar (x);
       return x;
     case 4:
-      #pragma omp task		// { dg-error "statement is not a constant expression" }
+      #pragma omp task		// { dg-error "OpenMP directives may not appear in 'constexpr' functions" }
       x = bar (x);
       return x;
     default:
@@ -40,7 +40,7 @@ baz (int x)
     }
 }
 
-constexpr int a = foo (1);	// { dg-error "called in a constant expression" }
+constexpr int a = foo (1);
 constexpr int b = baz (42);
 constexpr int c = baz (2);
 constexpr int d = baz (3);

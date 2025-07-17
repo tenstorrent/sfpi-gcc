@@ -1,5 +1,6 @@
 // { dg-do compile }
 // { dg-add-options using-deprecated }
+// { dg-require-effective-target hosted }
 
 // std::random_shuffle was deprecated in C++17 and removed in C++17.
 
@@ -11,8 +12,8 @@ void
 test_depr(int* first, int* last)
 {
   std::random_shuffle(first, last);
-  // { dg-warning "deprecated" "" { target c++14 } 13 }
+  // { dg-warning "deprecated" "" { target c++14 } 14 }
 
   std::random_shuffle(first, last, rando);
-  // { dg-warning "deprecated" "" { target c++14 } 16 }
+  // { dg-warning "deprecated" "" { target c++14 } 17 }
 }
