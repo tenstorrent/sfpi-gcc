@@ -41,6 +41,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "backend.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
+#include <map>
+#include "tt/rvtt.h"
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -49,6 +51,14 @@ along with GCC; see the file COPYING3.  If not see
 #define RISCV_FTYPE_NAME3(A, B, C, D) RISCV_##A##_FTYPE_##B##_##C##_##D
 #define RISCV_FTYPE_NAME4(A, B, C, D, E) \
   RISCV_##A##_FTYPE_##B##_##C##_##D##_##E
+#define RISCV_FTYPE_NAME5(A, B, C, D, E, F) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F
+#define RISCV_FTYPE_NAME6(A, B, C, D, E, F, G) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G
+#define RISCV_FTYPE_NAME7(A, B, C, D, E, F, G, H) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H
+#define RISCV_FTYPE_NAME8(A, B, C, D, E, F, G, H, I) \
+  RISCV_##A##_FTYPE_##B##_##C##_##D##_##E##_##F##_##G##_##H##_##I
 
 /* Classifies the prototype of a built-in function.  */
 enum riscv_function_type {
@@ -136,6 +146,9 @@ AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
 AVAIL (cvalu, TARGET_XCVALU && !TARGET_64BIT)
 AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
 AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
+AVAIL (wormhole, TARGET_RVTT_WH)
+AVAIL (blackhole, TARGET_RVTT_BH)
+AVAIL (sfpu, TARGET_RVTT)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -182,6 +195,17 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
   RISCV_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
 		FUNCTION_TYPE, AVAIL)
 
+#define _RVTT_BUILTIN(INSN, NAME, BUILTIN_TYPE,	FUNCTION_TYPE, AVAIL)	\
+  { CODE_FOR_rvtt_ ## INSN, "__builtin_rvtt_" NAME,			\
+    BUILTIN_TYPE, FUNCTION_TYPE, riscv_builtin_avail_ ## AVAIL }
+#define DIRECT_RVTT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
+  _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT, FUNCTION_TYPE, AVAIL)
+#define DIRECT_RVTT_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)	\
+  _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
+ 		FUNCTION_TYPE, AVAIL)
+
+tree v64SF_type_node;
+
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
 #define RISCV_ATYPE_UQI unsigned_intQI_type_node
@@ -193,6 +217,7 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 #define RISCV_ATYPE_SI intSI_type_node
 #define RISCV_ATYPE_VOID_PTR ptr_type_node
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
+#define RISCV_ATYPE_V64SF v64SF_type_node
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -207,6 +232,21 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 #define RISCV_FTYPE_ATYPES4(A, B, C, D, E) \
   RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
   RISCV_ATYPE_##E
+#define RISCV_FTYPE_ATYPES5(A, B, C, D, E, F) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F
+#define RISCV_FTYPE_ATYPES6(A, B, C, D, E, F, G) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G
+#define RISCV_FTYPE_ATYPES7(A, B, C, D, E, F, G, H) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H
+#define RISCV_FTYPE_ATYPES8(A, B, C, D, E, F, G, H, I) \
+  RISCV_ATYPE_##A, RISCV_ATYPE_##B, RISCV_ATYPE_##C, RISCV_ATYPE_##D, \
+  RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
+  RISCV_ATYPE_##I
+
+static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/33 + /*corev*/187 + 3;
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
@@ -216,6 +256,16 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
   RISCV_BUILTIN (pause, "pause", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, hint_pause),
+  // If you add builtins here, update the start of the sfpu builtins above
+
+  /* Tenstorrent SFPU builtins */
+#define RVTT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
+#define RVTT_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define RVTT_WH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_BH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
+#define RVTT_BH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
+#include "tt/rvtt-insn.h"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
@@ -289,6 +339,8 @@ riscv_init_builtin_types (void)
   if (!maybe_get_identifier ("__bf16"))
     lang_hooks.types.register_builtin_type (riscv_bfloat16_type_node,
 					    "__bf16");
+  v64SF_type_node = build_vector_type_for_mode (float_type_node, V64SFmode);
+
 }
 
 /* Implement TARGET_INIT_BUILTINS.  */
@@ -311,8 +363,14 @@ riscv_init_builtins (void)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
+	  if (i >= first_sfpu_builtin)
+	    {
+	      rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
+	    }
 	}
     }
+
+  rvtt_init_builtins();
 }
 
 /* Implement TARGET_BUILTIN_DECL.  */

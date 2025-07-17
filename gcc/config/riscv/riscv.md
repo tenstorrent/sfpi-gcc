@@ -669,7 +669,7 @@
 ;; Microarchitectures we know how to tune for.
 ;; Keep this in sync with enum riscv_microarchitecture.
 (define_attr "tune"
-  "generic,sifive_7,sifive_p400,sifive_p600,xiangshan,generic_ooo"
+  "generic,sifive_7,sifive_p400,sifive_p600,xiangshan,generic_ooo,rvtt_b1"
   (const (symbol_ref "((enum attr_tune) riscv_microarchitecture)")))
 
 ;; Describe a user's asm statement.
@@ -3746,7 +3746,8 @@
 
 (define_expand "tablejump"
   [(set (pc) (match_operand 0 "register_operand" ""))
-	      (use (label_ref (match_operand 1 "" "")))]
+	      (use (label_ref (match_operand 1 "" "")))
+	      (use (label_ref (match_operand 2 "" "")))]
   ""
 {
   if (CASE_VECTOR_PC_RELATIVE)
@@ -3767,16 +3768,17 @@
   else
     {
       if (CASE_VECTOR_PC_RELATIVE && Pmode == DImode)
-	emit_jump_insn (gen_tablejumpdi (operands[0], operands[1]));
+	emit_jump_insn (gen_tablejumpdi (operands[0], operands[1], operands[2]));
       else
-	emit_jump_insn (gen_tablejumpsi (operands[0], operands[1]));
+	emit_jump_insn (gen_tablejumpsi (operands[0], operands[1], operands[2]));
     }
   DONE;
 })
 
 (define_insn "tablejump<mode>"
   [(set (pc) (match_operand:GPR 0 "register_operand" "l"))
-   (use (label_ref (match_operand 1 "" "")))]
+   (use (label_ref (match_operand 1 "" "")))
+   (use (label_ref (match_operand 2 "" "")))]
   "!is_zicfilp_p ()"
   "jr\t%0"
   [(set_attr "type" "jalr")
@@ -4828,3 +4830,7 @@
 (include "zc.md")
 (include "corev.md")
 (include "xiangshan.md")
+
+(include "tt/rvtt.md")
+(include "tt/rvtt-wh.md")
+(include "tt/rvtt-bh.md")

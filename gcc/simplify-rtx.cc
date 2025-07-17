@@ -8082,6 +8082,11 @@ simplify_context::simplify_subreg (machine_mode outermode, rtx op,
 	  final_offset = 0;
 	}
 
+      // FIXME: Suspicious difference
+      if (innermostmode == VOIDmode)
+	{
+	  return NULL_RTX;
+	}
       /* Recurse for further possible simplifications.  */
       newx = simplify_subreg (outermode, SUBREG_REG (op), innermostmode,
 			      final_offset);

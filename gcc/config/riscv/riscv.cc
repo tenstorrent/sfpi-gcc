@@ -341,7 +341,7 @@ poly_uint16 riscv_vector_chunks;
 unsigned riscv_bytes_per_vector_chunk;
 
 /* Index R is the smallest register class that contains register R.  */
-const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
+/*const*/ enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   GR_REGS,	GR_REGS,	GR_REGS,	GR_REGS,
   GR_REGS,	GR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
   JALR_REGS,	JALR_REGS,	SIBCALL_REGS,	SIBCALL_REGS,
@@ -362,10 +362,12 @@ const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
   NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
-  NO_REGS,	NO_REGS,	NO_REGS,	NO_REGS,
+
+  SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
+  SFPU_REGS_L4, SFPU_REGS_L5, SFPU_REGS_L6, SFPU_REGS_L7,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+
   VM_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
@@ -642,6 +644,28 @@ static const struct riscv_tune_param optimize_size_tune_info = {
   NULL,						/* loop_align */
 };
 
+/* Costs to use when optimizing for rvtt_b1.  */
+static const struct riscv_tune_param rvtt_b1_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (4), COSTS_N_INSNS (4)},	/* int_mul */
+  {COSTS_N_INSNS (6), COSTS_N_INSNS (6)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
 static bool riscv_avoid_shrink_wrapping_separate ();
 static tree riscv_handle_fndecl_attribute (tree *, tree, tree, int, bool *);
 static tree riscv_handle_type_attribute (tree *, tree, tree, int, bool *);
@@ -684,6 +708,10 @@ static const attribute_spec riscv_gnu_attributes[] =
     standard vector calling convention variant. Syntax:
     __attribute__((norelax)). */
   {"norelax", 0, 0, true, false, false, false, NULL, NULL},
+
+  { "rvtt_l1_ptr", 0, 0, false, true, false, true, NULL, NULL },
+  
+  { "rvtt_reg_ptr", 0, 0, false, true, false, true, NULL, NULL },
 };
 
 static const scoped_attribute_specs riscv_gnu_attribute_table  =
@@ -4820,6 +4848,20 @@ riscv_output_return ()
   return "ret";
 }
 
+static int
+riscv_comp_type_attributes (const_tree type1, const_tree type2)
+{
+  if (bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  if (bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  return 1;
+}
+
 
 /* Return true if CMP1 is a suitable second operand for integer ordering
    test CODE.  See also the *sCC patterns in riscv.md.  */
@@ -7174,6 +7216,21 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	asm_fprintf (file, "%u", (regno - offset));
 	break;
       }
+
+    case 's':
+      if (code == CONST_INT)
+	fprintf (file, "%ld", INTVAL(op));
+      else
+	gcc_unreachable();
+      break;
+
+    case 'u':
+      if (code == CONST_INT)
+	fprintf (file, "%u", ((unsigned)(INTVAL(op) & 0xFFFF)));
+      else
+	gcc_unreachable();
+      break;
+
     default:
       switch (code)
 	{
@@ -9730,6 +9787,9 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
   if (FP_REG_P (regno))
     return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_FP_REG - 1) / UNITS_PER_FP_REG;
 
+  if (SFPU_REG_P (regno)  &&  mode == V64SFmode)
+    return 1;
+
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 }
@@ -9779,6 +9839,13 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
       int regno_alignment = riscv_get_v_regno_alignment (mode);
       if (regno_alignment != 1)
 	return ((regno % regno_alignment) == 0);
+    }
+  else if (SFPU_REG_P (regno))
+    {
+      if (mode != V64SFmode)
+        return false;
+      if (!SFPU_REG_P (regno + nregs - 1))
+	return false;
     }
   else if (VTYPE_REG_P (regno) || VL_REG_P (regno) || VXRM_REG_P (regno)
 	   || FRM_REG_P (regno))
@@ -9833,6 +9900,9 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
 
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
+
+  if (reg_class_subset_p (SFPU_REGS, rclass))
+    return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;
 }
@@ -10851,6 +10921,9 @@ riscv_option_override (void)
      while processing functions with potential target attributes.  */
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
+
+  if (int (TARGET_RVTT_WH) + int (TARGET_RVTT_BH) > 1)
+    error ("only one ttwh or ttbh extension can be specified");
 }
 
 /* Restore or save the TREE_TARGET_GLOBALS from or to NEW_TREE.
@@ -11718,6 +11791,9 @@ riscv_vector_mode_supported_p (machine_mode mode)
 {
   if (TARGET_VECTOR)
     return riscv_v_ext_mode_p (mode);
+
+  if (TARGET_RVTT && mode == V64SFmode)
+    return true;
 
   return false;
 }
@@ -14429,6 +14505,9 @@ bool need_shadow_stack_push_pop_p ()
 
 #undef TARGET_DOCUMENTATION_NAME
 #define TARGET_DOCUMENTATION_NAME "RISC-V"
+
+#undef TARGET_COMP_TYPE_ATTRIBUTES
+#define TARGET_COMP_TYPE_ATTRIBUTES riscv_comp_type_attributes
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

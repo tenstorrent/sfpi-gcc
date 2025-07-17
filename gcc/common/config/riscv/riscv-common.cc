@@ -442,6 +442,9 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"xsfvqmaccdod",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"xsfvfnrclipxfqf", ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"xttwh", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"xttbh", ISA_SPEC_CLASS_NONE, 1, 0},
+
   /* Terminate the list.  */
   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
 };
@@ -1777,6 +1780,9 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("xsfvqmaccqoq",    x_riscv_sifive_subext, MASK_XSFVQMACCQOQ),
   RISCV_EXT_FLAG_ENTRY ("xsfvqmaccdod",    x_riscv_sifive_subext, MASK_XSFVQMACCDOD),
   RISCV_EXT_FLAG_ENTRY ("xsfvfnrclipxfqf", x_riscv_sifive_subext, MASK_XSFVFNRCLIPXFQF),
+
+  RISCV_EXT_FLAG_ENTRY ("xttwh", x_riscv_tt_flags, MASK_TT_WH),
+  RISCV_EXT_FLAG_ENTRY ("xttbh", x_riscv_tt_flags, MASK_TT_BH),
 
   {NULL, NULL, NULL, 0}
 };

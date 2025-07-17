@@ -44,6 +44,7 @@ RISCV_TUNE("thead-c906", generic, thead_c906_tune_info)
 RISCV_TUNE("xiangshan-nanhu", xiangshan, xiangshan_nanhu_tune_info)
 RISCV_TUNE("generic-ooo", generic_ooo, generic_ooo_tune_info)
 RISCV_TUNE("size", generic, optimize_size_tune_info)
+RISCV_TUNE("rvtt-b1", rvtt_b1, rvtt_b1_tune_info)
 
 #undef RISCV_TUNE
 
@@ -104,4 +105,8 @@ RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
 			      "zbkb_zbkc_zbkx_zknd_zkne_zknh_zksed_zksh_"
 			      "svinval_zicbom_zicboz",
 			      "xiangshan-nanhu")
+
+RISCV_CORE("tt-wh",           "rv32im_xttwh",    "rvtt-b1")
+RISCV_CORE("tt-bh",           "rv32im_xttbh",    "rvtt-b1")
+
 #undef RISCV_CORE

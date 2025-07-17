@@ -311,3 +311,6 @@
   "Shifting immediate for SIMD shufflei3."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -64, -1)")))
+
+;; TT has additional constraints
+(include "tt/rvtt-constraints.md")
