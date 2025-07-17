@@ -1,4 +1,4 @@
-
+/* PR tree-optimization/108688 */
 
 union U { signed int d : 7; signed int e : 2; } u;
 int a, b;
@@ -12,4 +12,3 @@ foo (void)
       u.e ^= b;
     }
 }
-

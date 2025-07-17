@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,8 +30,9 @@
 ------------------------------------------------------------------------------
 
 --  This package defines the set of restriction identifiers. It is a generic
---  package that is instantiated by the compiler/binder in package Rident, and
---  is instantiated in package System.Restrictions for use at run-time.
+--  package that is instantiated by the compiler/binder in package ``Rident``,
+--  and is instantiated in package ``System.Restrictions`` for use at
+--  run-time.
 
 --  The reason that we make this a generic package is so that in the case of
 --  the instantiation in Rident for use at compile time and bind time, we can
@@ -81,7 +82,8 @@ package System.Rident is
 
    --  To add a new restriction identifier, add an entry with the name to be
    --  used in the pragma, and add calls to the Restrict.Check_Restriction
-   --  routine as appropriate.
+   --  routine as appropriate. If the new restriction is GNAT specific, also
+   --  add an entry in Restrict.Implementation_Restriction (restrict.ads).
 
    type Restriction_Id is
 
@@ -90,7 +92,7 @@ package System.Rident is
       --  does not violate the restriction.
 
      (Simple_Barriers,                           -- Ada 2012 (D.7 (10.9/3))
-      Pure_Barriers,                             -- GNAT
+      Pure_Barriers,                             -- Ada 2022 (D.7(10.11/5))
       No_Abort_Statements,                       -- (RM D.7(5), H.4(3))
       No_Access_Parameter_Allocators,            -- Ada 2012 (RM H.4 (8.3/3))
       No_Access_Subprograms,                     -- (RM H.4(17))
@@ -126,6 +128,7 @@ package System.Rident is
       No_Implicit_Task_Allocations,              -- GNAT
       No_Implicit_Protected_Object_Allocations,  -- GNAT
       No_Initialize_Scalars,                     -- GNAT
+      No_Local_Tagged_Types,                     -- GNAT
       No_Local_Allocators,                       -- (RM H.4(8))
       No_Local_Timing_Events,                    -- (RM D.7(10.2/2))
       No_Local_Protected_Objects,                -- Ada 2012 (D.7(10/1.3))
@@ -447,7 +450,6 @@ package System.Rident is
                            No_Asynchronous_Control         => True,
                            No_Dynamic_Attachment           => True,
                            No_Dynamic_CPU_Assignment       => True,
-                           No_Dynamic_Priorities           => True,
                            No_Local_Protected_Objects      => True,
                            No_Protected_Type_Allocators    => True,
                            No_Requeue_Statements           => True,

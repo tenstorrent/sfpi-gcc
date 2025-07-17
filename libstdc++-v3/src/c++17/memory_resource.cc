@@ -1,6 +1,6 @@
 // <memory_resource> implementation -*- C++ -*-
 
-// Copyright (C) 2018-2022 Free Software Foundation, Inc.
+// Copyright (C) 2018-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,9 +27,9 @@
 #include <atomic>
 #include <bit>				// has_single_bit, bit_ceil, bit_width
 #include <new>
+#include <bits/move.h>			// std::__exchange
 #if ATOMIC_POINTER_LOCK_FREE != 2
 # include <bits/std_mutex.h>	// std::mutex, std::lock_guard
-# include <bits/move.h>		// std::__exchange
 #endif
 
 #if __has_cpp_attribute(clang::require_constant_initialization)
@@ -82,7 +82,6 @@ namespace pmr
       struct constant_init
       {
 	union {
-	  unsigned char unused;
 	  T obj;
 	};
 	constexpr constant_init() : obj() { }
@@ -95,10 +94,31 @@ namespace pmr
 
     __constinit constant_init<newdel_res_t> newdel_res{};
     __constinit constant_init<null_res_t> null_res{};
-#if ATOMIC_POINTER_LOCK_FREE == 2
+
+#ifndef _GLIBCXX_HAS_GTHREADS
+# define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
+    // Single-threaded, no need for synchronization
+    struct atomic_mem_res
+    {
+      constexpr
+      atomic_mem_res(memory_resource* r) : val(r) { }
+
+      memory_resource* val;
+
+      memory_resource* load(std::memory_order) const
+      {
+	return val;
+      }
+
+      memory_resource* exchange(memory_resource* r, std::memory_order)
+      {
+	return std::__exchange(val, r);
+      }
+    };
+#elif ATOMIC_POINTER_LOCK_FREE == 2
     using atomic_mem_res = atomic<memory_resource*>;
 # define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
-#elif defined(_GLIBCXX_HAS_GTHREADS)
+#else
     // Can't use pointer-width atomics, define a type using a mutex instead:
     struct atomic_mem_res
     {
@@ -112,44 +132,27 @@ namespace pmr
       mutex mx;
       memory_resource* val;
 
-      memory_resource* load()
+      memory_resource* load(std::memory_order)
       {
 	lock_guard<mutex> lock(mx);
 	return val;
       }
 
-      memory_resource* exchange(memory_resource* r)
+      memory_resource* exchange(memory_resource* r, std::memory_order)
       {
 	lock_guard<mutex> lock(mx);
 	return std::__exchange(val, r);
       }
     };
-#else
-# define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
-    // Single-threaded, no need for synchronization
-    struct atomic_mem_res
-    {
-      constexpr
-      atomic_mem_res(memory_resource* r) : val(r) { }
-
-      memory_resource* val;
-
-      memory_resource* load() const
-      {
-	return val;
-      }
-
-      memory_resource* exchange(memory_resource* r)
-      {
-	return std::__exchange(val, r);
-      }
-    };
-#endif // ATOMIC_POINTER_LOCK_FREE == 2
+#endif
 
 #ifdef _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
     __constinit constant_init<atomic_mem_res> default_res{&newdel_res.obj};
 #else
-# include "default_resource.h"
+# pragma GCC diagnostic ignored "-Wprio-ctor-dtor"
+    struct {
+      atomic_mem_res obj = &newdel_res.obj;
+    } default_res __attribute__ ((init_priority (100)));
 #endif
   } // namespace
 
@@ -166,12 +169,12 @@ namespace pmr
   {
     if (r == nullptr)
       r = new_delete_resource();
-    return default_res.obj.exchange(r);
+    return default_res.obj.exchange(r, std::memory_order_acq_rel);
   }
 
   memory_resource*
   get_default_resource() noexcept
-  { return default_res.obj.load(); }
+  { return default_res.obj.load(std::memory_order_acquire); }
 
   // Member functions for std::pmr::monotonic_buffer_resource
 
@@ -588,7 +591,8 @@ namespace pmr
     // The minimum size of a big block.
     // All big_block allocations will be a multiple of this value.
     // Use bit_ceil to get a power of two even for e.g. 20-bit size_t.
-    static constexpr size_t min = __bit_ceil(numeric_limits<size_t>::digits);
+    static constexpr size_t min
+      = __bit_ceil((unsigned)numeric_limits<size_t>::digits);
 
     constexpr
     big_block(size_t bytes, size_t alignment)

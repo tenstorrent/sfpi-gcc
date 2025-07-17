@@ -1,7 +1,6 @@
-// { dg-options "-std=gnu++2a" }
-// { dg-do compile { target c++2a } }
+// { dg-do compile { target c++20 } }
 
-// Copyright (C) 2020-2022 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -96,6 +95,24 @@ default_construction()
   static_assert(s4.to_duration() == s4.to_duration().zero());
   constexpr hh_mm_ss<duration<double>> s5;
   static_assert(s5.to_duration() == s5.to_duration().zero());
+}
+
+constexpr void
+size()
+{
+  using namespace std::chrono;
+
+  struct S0 { long long h; char m; char s; bool neg; struct { } empty; };
+  static_assert(sizeof(hh_mm_ss<seconds>) == sizeof(S0));
+  struct S1 { long long h; char m; char s; bool neg; char ss; };
+  static_assert(sizeof(hh_mm_ss<duration<int, std::centi>>) == sizeof(S1));
+  struct S2 { long long h; char m, s; bool neg; int ss; };
+  static_assert(sizeof(hh_mm_ss<duration<int, std::milli>>) == sizeof(S2));
+  struct S3 { long long h; char m, s; bool neg; long long ss; };
+  static_assert(sizeof(hh_mm_ss<duration<int, std::pico>>) == sizeof(S3));
+  static_assert(sizeof(hh_mm_ss<duration<long long, std::pico>>) == sizeof(S3));
+  struct S4 { long long h; char m, s; bool neg; double ss; };
+  static_assert(sizeof(hh_mm_ss<duration<double, std::micro>>) == sizeof(S4));
 }
 
 constexpr void

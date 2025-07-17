@@ -1,5 +1,5 @@
 /* PR c++/107358 */
-/* { dg-do compile { target c } } */
+/* { dg-do compile } */
 /* { dg-options "-O2 -fexcess-precision=standard" } */
 
 typedef float __attribute__((vector_size (4 * sizeof (float)))) A;

@@ -16,4 +16,4 @@ void frob (int i) {
   sfpi::vFloat tmp = sfpi::vConstFloatPrgm0;
   sfpi::dst_reg[i] = tmp;
 }
-// { dg-final { scan-assembler {\n_Z4frobi:\n\tli	a4,8192\n\tslli	a5,a0,1\n\taddi	a4,a4,-1\n\tand	a5,a5,a4\n\tli	a4, 1912659968	# 2:7200e000\n\tadd	a5,a5,a4\n\tSFPMOV	L0, L12, 2\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tsw	a5, %lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)	# 2:7200e000 L0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z4frobi:\n\tli	a5,8192\n\taddi	a5,a5,-1\n\tslli	a0,a0,1\n\tand	a0,a0,a5\n\tli	a5, 1912659968	# 2:7200e000\n\tadd	a0,a0,a5\n\tSFPMOV	L0, L12, 2\n\tlui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tsw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:7200e000 L0\n\tret\n} } }

@@ -3,7 +3,7 @@
 // { dg-do run }
 // { dg-options "-g -O0 -std=gnu++98" }
 
-// Copyright (C) 2011-2022 Free Software Foundation, Inc.
+// Copyright (C) 2011-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,6 +27,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <vector>
 #include <ext/slist>
 
@@ -152,9 +153,6 @@ main()
   std::vector<bool>::reference br5 = *vbIt5;
 // { dg-final { note-test br5 {true} } }
 
- std::vector<bool>::reference br0;
-// { dg-final { note-test br0 {invalid std::vector<bool>::reference} } }
-
   __gnu_cxx::slist<int> sll;
   sll.push_front(23);
   sll.push_front(47);
@@ -165,6 +163,20 @@ main()
 
   __gnu_cxx::slist<int>::iterator slliter0;
 // { dg-final { note-test slliter0 {non-dereferenceable iterator for __gnu_cxx::slist} } }
+
+  std::stringstream sstream;
+  sstream << "abc";
+// { dg-final { note-test sstream "\"abc\"" } }
+  std::stringstream ssin("input", std::ios::in);
+// { dg-final { note-test ssin "\"input\"" } }
+  std::istringstream ssin2("input");
+// { dg-final { note-test ssin2 "\"input\"" } }
+  std::ostringstream ssout;
+  ssout << "out";
+// { dg-final { note-test ssout "\"out\"" } }
+  std::stringstream redirected("xxx");
+  static_cast<std::basic_ios<std::stringstream::char_type>&>(redirected).rdbuf(sstream.rdbuf());
+// { dg-final { regexp-test redirected {std::.*stringstream redirected to .*} } }
 
   std::cout << "\n";
   return 0;			// Mark SPOT
