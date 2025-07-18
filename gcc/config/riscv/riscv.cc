@@ -9738,6 +9738,9 @@ riscv_register_move_cost (machine_mode mode,
 static unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
+  if (SFPU_REG_P (regno) && mode == V64SFmode)
+    return 1;
+
   if (riscv_v_ext_vector_mode_p (mode))
     {
       /* Handle fractional LMUL, it only occupy part of vector register but
@@ -9786,9 +9789,6 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 
   if (FP_REG_P (regno))
     return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_FP_REG - 1) / UNITS_PER_FP_REG;
-
-  if (SFPU_REG_P (regno)  &&  mode == V64SFmode)
-    return 1;
 
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
@@ -9844,8 +9844,6 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
     {
       if (mode != V64SFmode)
         return false;
-      if (!SFPU_REG_P (regno + nregs - 1))
-	return false;
     }
   else if (VTYPE_REG_P (regno) || VL_REG_P (regno) || VXRM_REG_P (regno)
 	   || FRM_REG_P (regno))
@@ -9939,6 +9937,10 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
      effectively end a cycle.  */
   if (get_attr_type (insn) == TYPE_GHOST)
     return 0;
+
+  // FIXME: Implement.
+  if (TARGET_RVTT)
+    return more;
 
   /* If we ever encounter an insn with an unknown type, trip
      an assert so we can find and fix this problem.  */
@@ -10999,6 +11001,10 @@ riscv_conditional_register_usage (void)
       fixed_regs[VXRM_REGNUM] = call_used_regs[VXRM_REGNUM] = 1;
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
+
+  if (!TARGET_RVTT)
+    for (int regno = SFPU_REG_FIRST; regno <= SFPU_REG_LAST; regno++)
+      fixed_regs[regno] = call_used_regs[regno] = 1;
 }
 
 /* Return a register priority for hard reg REGNO.  */
@@ -11789,11 +11795,11 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
-  if (TARGET_VECTOR)
-    return riscv_v_ext_mode_p (mode);
-
   if (TARGET_RVTT && mode == V64SFmode)
     return true;
+
+  if (TARGET_VECTOR)
+    return riscv_v_ext_mode_p (mode);
 
   return false;
 }

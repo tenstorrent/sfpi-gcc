@@ -1146,7 +1146,7 @@
 (define_expand "mov<mode>"
   [(set (match_operand:V 0 "reg_or_mem_operand")
 	(match_operand:V 1 "general_operand"))]
-  "TARGET_VECTOR"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
 {
   /* For whole register move, we transform the pattern into the format
      that excludes the clobber of scratch register.
@@ -1177,6 +1177,12 @@
        - We can not leave it to TARGET_SECONDARY_RELOAD since it happens
 	 before spilling. The clobber scratch is used by spilling fractional
 	 registers in IRA/LRA so it's too early.  */
+
+  if (<MODE>mode == V64SFmode && TARGET_RVTT) {
+    if (riscv_legitimize_move (<MODE>mode, operands[0], operands[1]))
+      DONE;
+  }
+  if (TARGET_VECTOR) {
   if (TARGET_XTHEADVECTOR && reg_or_mem_operand (operands[1], <MODE>mode))
     {
       emit_insn (gen_pred_th_whole_mov (<MODE>mode, operands[0], operands[1],
@@ -1186,6 +1192,7 @@
 
   if (riscv_vector::legitimize_move (operands[0], &operands[1]))
     DONE;
+  }
 })
 
 ;; This pattern is used for code-gen for whole register load/stores.
@@ -1275,7 +1282,7 @@
 (define_expand "mov<mode>"
   [(set (match_operand:VB 0 "reg_or_mem_operand")
 	(match_operand:VB 1 "general_operand"))]
-  "TARGET_VECTOR"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
 {
   if (TARGET_XTHEADVECTOR && reg_or_mem_operand (operands[1], <MODE>mode))
     {
@@ -1456,11 +1463,16 @@
 (define_expand "mov<mode>"
   [(set (match_operand:VLS_AVL_REG 0 "reg_or_mem_operand")
 	(match_operand:VLS_AVL_REG 1 "general_operand"))]
-  "TARGET_VECTOR"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
 {
-  bool ok_p = riscv_vector::legitimize_move (operands[0], &operands[1]);
-  gcc_assert (ok_p);
-  DONE;
+  if (TARGET_VECTOR)
+    {
+      bool ok_p = riscv_vector::legitimize_move (operands[0], &operands[1]);
+      gcc_assert (ok_p);
+      DONE;
+    }
+  if (riscv_legitimize_move (<MODE>mode, operands[0], operands[1]))
+    DONE;
 })
 
 (define_expand "@mov<VLS_AVL_REG:mode><P:mode>_lra"

@@ -246,7 +246,7 @@ tree v64SF_type_node;
   RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
   RISCV_ATYPE_##I
 
-static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/33 + /*corev*/187 + 3;
+static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + 3;
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
@@ -364,9 +364,7 @@ riscv_init_builtins (void)
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
 	  if (i >= first_sfpu_builtin)
-	    {
-	      rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
-	    }
+	    rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
 	}
     }
 
