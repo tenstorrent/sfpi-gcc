@@ -1770,6 +1770,10 @@ calculate_saved_nregs (int hard_regno, machine_mode mode)
   int nregs = 0;
 
   ira_assert (hard_regno >= 0);
+  // FIXME: Really need a hook here, SFPU regs are not spillable, so never
+  // saved/restored in the prolog/epilog.
+  if (SFPU_REG_P (hard_regno))
+    return 0;
   for (i = hard_regno_nregs (hard_regno, mode) - 1; i >= 0; i--)
     if (!allocated_hardreg_p[hard_regno + i]
 	&& ira_hard_regno_nrefs[hard_regno + i] == 0
