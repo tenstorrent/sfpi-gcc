@@ -124,31 +124,25 @@ static inline hash_type hashit(hash_type x)
 
 hash_type find_writer(int regno, const rtx_insn *insn)
 {
-  basic_block bb = BLOCK_FOR_INSN(insn);
+  basic_block bb = BLOCK_FOR_INSN (insn);
 
-  const rtx_insn *tmp = insn;
-  while (tmp != PREV_INSN(BB_HEAD(bb)))
+  for (const rtx_insn *probe = insn, *limit = BB_HEAD (bb); probe != limit;)
     {
-      if (NONDEBUG_INSN_P(tmp) &&
-	  regno == rvtt_get_insn_dst_regno(tmp))
-	{
-	  if (strcmp(insn_data[INSN_CODE(tmp)].name, "*movsi_internal") == 0)
-	    {
-	      // Chase back through a mov.  Doing this because the first
-	      // test I wrote hit this case
-	      rtx pat = PATTERN(tmp);
-	      gcc_assert(GET_CODE (pat) == SET);
-	      rtx reg = XEXP(pat, 1);
-	      gcc_assert(GET_CODE(reg) == REG);
-	      regno = REGNO(reg);
-	    }
-	  else
-	    {
-	      return reinterpret_cast<hash_type>(tmp);
-	    }
-	}
+      probe = PREV_INSN (probe);
 
-      tmp = PREV_INSN(tmp);
+      if (!NONJUMP_INSN_P (probe))
+	continue;
+
+      if (regno != rvtt_get_insn_dst_regno (probe))
+	continue;
+
+      rtx pat = PATTERN (probe);
+      if (GET_CODE (pat) != SET || !REG_P (SET_SRC (pat)))
+	return reinterpret_cast<hash_type> (probe);
+
+      // Chase back through a mov.  Doing this because the first test
+      // I wrote hit this case
+      regno = REGNO (SET_SRC (pat));
     }
 
   return -1;
@@ -184,12 +178,6 @@ static hash_type compute_insn_hash(const rvtt_insn_data *insnd,
 	  gcc_assert(GET_CODE(op) == REG);
 	  hash_type writer_id = find_writer(REGNO(op), insn);
 	  insn_hash = hashit(insn_hash ^ (writer_id | wrid_hash_salt));
-
-	  // And handle the fallback flag (ignore if no fallback)
-	  if ((INTVAL(rvtt_get_insn_operand(count - 1, insn)) & 0xFF000000) == 0)
-	    {
-	      count--;
-	    }
 	  continue;
 	}
 
