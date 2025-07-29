@@ -62,25 +62,26 @@ transform (function *fn)
     bool rhs2 : 1; // add: incoming edge is rhs2
 		   // use: is immediate
     bool used : 1;
+    bool phi_use : 1;
     unsigned id : 30;
     unsigned addend; // opcode: count of uses
 		     // use stmt: nonimm pos
 
     static node_t opcode (gimple *stmt, unsigned ix, unsigned id)
     {
-      return {stmt, ix, 0, false, false, id, 0};
+      return {stmt, ix, 0, false, false, false, id, 0};
     }
     static node_t add (gimple *stmt, unsigned op_ix, unsigned ix, bool rhs2, unsigned addend)
     {
-      return {stmt, op_ix, ix, rhs2, false, 0, addend};
+      return {stmt, op_ix, ix, rhs2, false, false, 0, addend};
     }
     static node_t use (gimple *stmt, unsigned op_ix, unsigned add_ix, unsigned nonimm)
     {
-      return {stmt, op_ix, add_ix, false, false, 0, nonimm};
+      return {stmt, op_ix, add_ix, false, false, false, 0, nonimm};
     }
     static node_t immediate (gimple *stmt, unsigned nonimm)
     {
-      return {stmt, 0, 0, true, false, 0, nonimm};
+      return {stmt, 0, 0, true, false, false, 0, nonimm};
     }
   };
 
@@ -148,6 +149,17 @@ transform (function *fn)
 	      graph[this_add_ix].used = is_used;
 	    add_count += is_used;
 	  }
+	else if (auto *phi_stmt = dyn_cast <gphi *> (use_stmt))
+	  {
+	    // We can encounter this when code duplication has cloned
+	    // synth_opcode insns in various blocks. We should be able
+	    // to CSE these cases into a dominator. Unfortunately
+	    // there doesn't appear to be a (reusable) gimple CSE
+	    // pass. For now mark this id as not to be touched :(
+	    gcc_assert (first_add_ix && first_add_ix == last_add_ix);
+	    graph[first_add_ix].phi_use = true;
+	    add_count++;
+	  }
 	else
 	  gcc_assert (gimple_code (use_stmt) == GIMPLE_DEBUG);
       }
@@ -200,6 +212,10 @@ transform (function *fn)
 
       if (!node.add_ix && !node.addend)
 	{
+	  if (node.phi_use)
+	    // Has a phi_use, do not alter this add
+	    continue;
+
 	  auto &opcode_slot = graph[node.opcode_ix];
 	  if (!--opcode_slot.addend)
 	    {
