@@ -190,7 +190,7 @@ struct GTY(()) rvtt_insn_data {
 
 enum rvtt_insn_data::insn_id : unsigned {
   // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_RTL_ONLY(id, nip, gp) id,
+#define RVTT_RTL_ONLY(id, nip, gp, fl) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_WH_RTL_ONLY(id, fl, sched) id,

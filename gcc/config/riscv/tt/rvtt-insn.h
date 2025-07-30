@@ -26,7 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 // PAD ensures that each arch has the same # insns (PAD aren't instanced)
 
 #ifndef RVTT_RTL_ONLY
-#define RVTT_RTL_ONLY(a, b, c)
+#define RVTT_RTL_ONLY(a, b, c, d)
 #endif
 
 #ifndef RVTT_BUILTIN
@@ -88,11 +88,20 @@ along with GCC; see the file COPYING3.  If not see
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
 // This can be ensured by using the RVTT_PAD_XX define
 
-// Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1)
+// Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos, flags)
+RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1, 0x08)
 
-RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1)
-RVTT_RTL_ONLY (sfpsynth_insn,         3, 1)
+RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1, 0x08)
+RVTT_RTL_ONLY (sfpsynth_insn,         3, 1, 0x08)
+
+RVTT_RTL_ONLY(sfppreservelreg0,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg1,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg2,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg3,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg4,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg5,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg6,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg7,    -1, -1, 0x48)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
@@ -111,6 +120,7 @@ RVTT_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                     
 RVTT_BUILTIN (sfpxcondi,       RISCV_V64SF_FTYPE_USI,                                            0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                                  0x00, -1, -1, 0x00, -1,      0, 0)
 
+RVTT_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x10, -1, -1, 0x00, -1,      0, 0)
@@ -142,14 +152,6 @@ RVTT_WH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexexp_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexman_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg0_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg1_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg2_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg3_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg4_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg5_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg6_int,    0x48, 0x00)
-RVTT_WH_RTL_ONLY(sfppreservelreg7_int,    0x48, 0x00)
 RVTT_WH_RTL_ONLY(sfpcast_int,             0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
@@ -224,7 +226,6 @@ RVTT_WH_PAD_BUILTIN (sfpmov_config)
 RVTT_WH_PAD_BUILTIN (sfpmov_config_lv)
 
 RVTT_WH_PAD_NO_TGT_BUILTIN (l1_load_war)
-RVTT_WH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpsetcc_i,     RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpsetcc_v,     RISCV_VOID_FTYPE_V64SF_USI,                                 0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpencc,        RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
@@ -264,14 +265,6 @@ RVTT_BH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpexexp_int)
 RVTT_BH_PAD_RTL_ONLY(sfpexman_int)
 RVTT_BH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg0_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg1_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg2_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg3_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg4_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg5_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg6_int,    0x48, 0x00)
-RVTT_BH_RTL_ONLY(sfppreservelreg7_int,    0x48, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpcast_int)
 RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
@@ -346,7 +339,6 @@ RVTT_BH_BUILTIN (sfpmov_config,       RISCV_V64SF_FTYPE_USI,                    
 RVTT_BH_BUILTIN (sfpmov_config_lv,    RISCV_V64SF_FTYPE_V64SF_USI,                                  0x02, -1,  -1, 0x00, -1,      0, 0)
 
 RVTT_BH_PAD_NO_TGT_BUILTIN (l1_load_war)
-RVTT_BH_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpsetcc_i,     RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpsetcc_v,     RISCV_VOID_FTYPE_V64SF_USI,                                 0x01, -1,  1, 0x00, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpencc,        RISCV_VOID_FTYPE_USI_USI,                                   0x01, -1,  1, 0x00, -1,      0, 0)

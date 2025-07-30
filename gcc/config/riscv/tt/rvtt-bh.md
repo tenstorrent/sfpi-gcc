@@ -23,15 +23,6 @@
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
   UNSPECV_BH_SFPASSIGN
-  UNSPECV_BH_SFPPRESERVELREG
-  UNSPECV_BH_SFPPRESERVELREG0_INT
-  UNSPECV_BH_SFPPRESERVELREG1_INT
-  UNSPECV_BH_SFPPRESERVELREG2_INT
-  UNSPECV_BH_SFPPRESERVELREG3_INT
-  UNSPECV_BH_SFPPRESERVELREG4_INT
-  UNSPECV_BH_SFPPRESERVELREG5_INT
-  UNSPECV_BH_SFPPRESERVELREG6_INT
-  UNSPECV_BH_SFPPRESERVELREG7_INT
   UNSPECV_BH_SFPLOAD
   UNSPECV_BH_SFPXLOADI
   UNSPECV_BH_SFPSTORE
@@ -119,34 +110,6 @@
   "TARGET_RVTT_BH"
   "SFPMOV\t%0, %2, 0"
 )
-
-(define_expand "rvtt_bh_sfppreservelreg"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "const_int_operand" "")] UNSPECV_BH_SFPPRESERVELREG)]
-  "TARGET_RVTT_BH"
-{
-  static rtx (*fn_ptr[8])(rtx) = {gen_rvtt_bh_sfppreservelreg0_int, gen_rvtt_bh_sfppreservelreg1_int,
-                                  gen_rvtt_bh_sfppreservelreg2_int, gen_rvtt_bh_sfppreservelreg3_int,
-                                  gen_rvtt_bh_sfppreservelreg4_int, gen_rvtt_bh_sfppreservelreg5_int,
-                                  gen_rvtt_bh_sfppreservelreg6_int, gen_rvtt_bh_sfppreservelreg7_int};
-  emit_insn(fn_ptr[INTVAL(operands[1])](operands[0]));
-  DONE;
-})
-
-(define_int_iterator blackhole_preservelreg_int
- [UNSPECV_BH_SFPPRESERVELREG0_INT UNSPECV_BH_SFPPRESERVELREG1_INT
-  UNSPECV_BH_SFPPRESERVELREG2_INT UNSPECV_BH_SFPPRESERVELREG3_INT
-  UNSPECV_BH_SFPPRESERVELREG4_INT UNSPECV_BH_SFPPRESERVELREG5_INT
-  UNSPECV_BH_SFPPRESERVELREG6_INT UNSPECV_BH_SFPPRESERVELREG7_INT])
-(define_int_attr blackhole_preservelreg_int_name
- [(UNSPECV_BH_SFPPRESERVELREG0_INT "0") (UNSPECV_BH_SFPPRESERVELREG1_INT "1")
-  (UNSPECV_BH_SFPPRESERVELREG2_INT "2") (UNSPECV_BH_SFPPRESERVELREG3_INT "3")
-  (UNSPECV_BH_SFPPRESERVELREG4_INT "4") (UNSPECV_BH_SFPPRESERVELREG5_INT "5")
-  (UNSPECV_BH_SFPPRESERVELREG6_INT "6") (UNSPECV_BH_SFPPRESERVELREG7_INT "7")])
-(define_insn "rvtt_bh_sfppreservelreg<blackhole_preservelreg_int_name>_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "Q<blackhole_preservelreg_int_name>")] blackhole_preservelreg_int)]
-  "TARGET_RVTT_BH"
-  "")
 
 (define_expand "rvtt_bh_sfpload"
   [(set (match_operand:V64SF 0 "register_operand" "")

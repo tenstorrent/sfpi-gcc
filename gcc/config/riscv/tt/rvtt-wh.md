@@ -25,15 +25,6 @@
   ;; INT for internal
   ;; LV for keep dst reg alive as input for predicated liveness
   UNSPECV_WH_SFPASSIGN_LV
-  UNSPECV_WH_SFPPRESERVELREG
-  UNSPECV_WH_SFPPRESERVELREG0_INT
-  UNSPECV_WH_SFPPRESERVELREG1_INT
-  UNSPECV_WH_SFPPRESERVELREG2_INT
-  UNSPECV_WH_SFPPRESERVELREG3_INT
-  UNSPECV_WH_SFPPRESERVELREG4_INT
-  UNSPECV_WH_SFPPRESERVELREG5_INT
-  UNSPECV_WH_SFPPRESERVELREG6_INT
-  UNSPECV_WH_SFPPRESERVELREG7_INT
   UNSPECV_WH_SFPLOAD
   UNSPECV_WH_SFPLOAD_LV
   UNSPECV_WH_SFPLOAD_INT
@@ -153,35 +144,6 @@
   "TARGET_RVTT_WH"
   "SFPMOV\t%0, %2, 0"
 )
-
-(define_expand "rvtt_wh_sfppreservelreg"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_WH_SFPPRESERVELREG)]
-
-  "TARGET_RVTT_WH"
-{
-  static rtx (*fn_ptr[8])(rtx) = {gen_rvtt_wh_sfppreservelreg0_int, gen_rvtt_wh_sfppreservelreg1_int,
-                                  gen_rvtt_wh_sfppreservelreg2_int, gen_rvtt_wh_sfppreservelreg3_int,
-                                  gen_rvtt_wh_sfppreservelreg4_int, gen_rvtt_wh_sfppreservelreg5_int,
-                                  gen_rvtt_wh_sfppreservelreg6_int, gen_rvtt_wh_sfppreservelreg7_int};
-  emit_insn(fn_ptr[INTVAL(operands[1])](operands[0]));
-  DONE;
-})
-
-(define_int_iterator wormhole_preservelreg_int
- [UNSPECV_WH_SFPPRESERVELREG0_INT UNSPECV_WH_SFPPRESERVELREG1_INT
-  UNSPECV_WH_SFPPRESERVELREG2_INT UNSPECV_WH_SFPPRESERVELREG3_INT
-  UNSPECV_WH_SFPPRESERVELREG4_INT UNSPECV_WH_SFPPRESERVELREG5_INT
-  UNSPECV_WH_SFPPRESERVELREG6_INT UNSPECV_WH_SFPPRESERVELREG7_INT])
-(define_int_attr wormhole_preservelreg_int_name
- [(UNSPECV_WH_SFPPRESERVELREG0_INT "0") (UNSPECV_WH_SFPPRESERVELREG1_INT "1")
-  (UNSPECV_WH_SFPPRESERVELREG2_INT "2") (UNSPECV_WH_SFPPRESERVELREG3_INT "3")
-  (UNSPECV_WH_SFPPRESERVELREG4_INT "4") (UNSPECV_WH_SFPPRESERVELREG5_INT "5")
-  (UNSPECV_WH_SFPPRESERVELREG6_INT "6") (UNSPECV_WH_SFPPRESERVELREG7_INT "7")])
-(define_insn "rvtt_wh_sfppreservelreg<wormhole_preservelreg_int_name>_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "Q<wormhole_preservelreg_int_name>")] wormhole_preservelreg_int)]
-  "TARGET_RVTT_WH"
-  "")
 
 (define_expand "rvtt_wh_sfpload"
   [(set (match_operand:V64SF 0 "register_operand" "")
