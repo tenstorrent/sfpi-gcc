@@ -294,7 +294,7 @@ rvtt_init_builtins()
   rtx sf0 = rtx_alloc (CONST_DOUBLE);
   PUT_MODE (sf0, SFmode);
   real_from_integer (&sf0->u.rv, SFmode, 0, SIGNED);
-  rvtt_vec0_rtx = rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
+  rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
 }
 
 const char *
@@ -570,7 +570,7 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
       operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
       gcc_assert (SYNTH_opcode == 3 && SYNTH_synthed == 2);
       pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		       "li\t%d,%%3\n\txor\t%d,%d,%%2\n\t", clobber_op, clobber_op, clobber_op);
+		       "li\t%%%d,%%3\n\txor\t%%%d,%%%d,%%2\n\t", clobber_op, clobber_op, clobber_op);
       synth_opno = clobber_op;
     }
 
