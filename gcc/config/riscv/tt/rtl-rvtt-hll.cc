@@ -63,7 +63,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
-const int stack_ptr_regno = 2;
+const int stack_ptr_regno = STACK_POINTER_REGNUM;
 
 using namespace std;
 
@@ -71,7 +71,6 @@ static int top_of_bb_n_moved = 0;
 static const int l1_load_shadow = 6;
 static const int reg_load_shadow = 4;
 static const int local_load_shadow = 1;
-static int n_gs_hll_wars = 0;
 
 // A BB can resolve its parents' HLL loads by:
 //  1) reading the incoming war reg
@@ -221,26 +220,6 @@ volatile_load_p(rtx pat)
   return load_mem_p(pat) && MEM_VOLATILE_P(SET_SRC(pat));
 }
 
-static void
-set_hll_war_reg(vector<int>& hll_war_regs, int reg)
-{
-  hll_war_regs.clear();
-  hll_war_regs.push_back(reg);
-}
-
-static bool refers_to_any_regno_p(vector<int>& regs, rtx_insn *insn)
-{
-  for (auto reg : regs)
-    {
-      if (refers_to_regno_p(reg, PATTERN(insn)))
-	{
-	  return true;
-	}
-    }
-
-  return false;
-}
-
 static bool
 get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
 {
@@ -278,126 +257,31 @@ get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
   return true;
 }
 
-// Process each BB, count the number of local loads that occur before any load
-// is resolved by a use.  Set ll_before_resolve_all to that value (that use
-// will resolve any incoming hll load after ll_before_resolve_all local
-// loads).
-static void pre_populate_bbd(bb_data &bbd, function *fn)
-{
-  basic_block bb;
-
-  FOR_EACH_BB_FN (bb, fn)
-    {
-      bb_entry& bbe = bbd[bb->index];
-      vector<int>hll_war_regs = bbe.hll_war_reg_incoming;
-      rtx_insn *insn;
-      int ll_count = 0;
-      FOR_BB_INSNS(bb, insn)
-	{
-	  if (NONDEBUG_INSN_P(insn))
-	    {
-	      int code = recog_memoized(insn);
-	      rtx insn_pat = PATTERN(insn);
-	      const rvtt_insn_data *insnd;
-	      rvtt_p (&insnd, insn);
-	      int classify = my_classify_insn(insn_pat);
-
-	      if (rvtt_hll_p(insn_pat))
-		{
-		  hll_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
-		}
-	      else if (code != -1 &&
-		       (classify == INSN || classify == JUMP_INSN) &&
-		       refers_to_any_regno_p(hll_war_regs, insn))
-		{
-		  bbe.ll_before_resolve_all = ll_count;
-		  break;
-		}
-	      else if (insnd->id == rvtt_insn_data::l1_load_war)
-		{
-		  int reg = REGNO(rvtt_get_insn_operand(0, insn));
-		  bool found = false;
-		  for (auto warreg : hll_war_regs)
-		    {
-		      if (reg == warreg)
-			{
-			  bbe.ll_before_resolve_all = ll_count;
-			  found = true;
-			  break;
-			}
-		    }
-		  if (found) break;
-		}
-	      else if (classify != INSN && classify != JUMP_INSN)
-		{
-		  bbe.ll_before_resolve_all = 5;
-		  break;
-		}
-	      else if (load_mem_p(insn_pat))
-		{
-		  ll_count++;
-		  if (ll_count == 5)
-		    {
-		      bbe.ll_before_resolve_all = 5;
-		      break;
-		    }
-		  else
-		    {
-		      hll_war_regs.push_back(rvtt_get_insn_dst_regno(insn));
-		    }
-		}
-	      else if (GET_CODE(insn_pat) == PARALLEL)
-		{
-		  bool done = false;
-		  for (int i = XVECLEN (insn_pat, 0) - 1; i >= 0; i--)
-		    {
-		      rtx sub = XVECEXP(insn_pat, 0, i);
-
-		      if (load_mem_p(sub))
-			{
-			  ll_count++;
-			  if (ll_count == 5)
-			    {
-			      bbe.ll_before_resolve_all = 5;
-			      done = true;
-			      break;
-			    }
-			  else
-			    {
-			      hll_war_regs.push_back(REGNO(SET_DEST(sub)));
-			    }
-			}
-		    }
-		  if (done) break;
-		}
-	    }
-	}
-
-      DUMP("  done preprocess bb[%d]: resolve_all: %d\n", bb->index, bbe.ll_before_resolve_all);
-      bbe.hll_war_reg_incoming.resize(0);
-    }
-}
-
 static void
-emit_raw_war(rtx_insn *insn, bool before, int war_regno, rtx war_pat)
+emit_load (rtx_insn *insn, bool before, rtx mem)
 {
-  rtx reg = gen_rtx_REG(SImode, war_regno);
-  rtx extend = gen_rtx_ZERO_EXTEND(SImode, war_pat);
-  rtx new_insn = gen_rtx_SET(reg, extend);
+  mem = copy_rtx (mem);
+  MEM_VOLATILE_P (mem) = true;
+  rtx new_insn = gen_rtx_SET (gen_rtx_REG (SImode, 0), gen_rtx_ZERO_EXTEND (SImode, mem));
   if (before)
-    {
-      emit_insn_before(new_insn, insn);
-    }
+    emit_insn_before (new_insn, insn);
   else
-    {
-      emit_insn_after(new_insn, insn);
-    }
+    emit_insn_after (new_insn, insn);
 }
 
-// WH has a read after write hazard bug where loading a word after a
-// byte or half store issues the load before the store
-// Fix that by issuing a load to the same address to force a pipe stall
-// Can't issue word/byte loads to register space, so skip the war there
+// WH has a read after write hazard bug where loading a word after a byte or
+// half store issues the load before the store.  The bug is in the address
+// comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
+// be detected. So if the shorter store is word-aligned, we have no hazard. (we
+// do not take advantage of that) Mem logic is prioritizing loads over stores
+// and even though there’s no reorder buffer, 2 loads could get issued before a
+// store actually gets out. If there is an intervening store, it is not clear
+// whether the hazard is resolved.  As the bug is very sensitive, we anull it
+// in all cases by placing a short load as late as possible after the short
+// store. That's when we encounter the first control-flow change, write to
+// store's ptr register, a load of any size, or the end of the block. (It is
+// desirable to sink the load as late as possible.)
+
 static void
 workaround_wh_raw (function *cfn)
 {
@@ -408,53 +292,58 @@ workaround_wh_raw (function *cfn)
     {
       DUMP("Processing BB %d\n", bb->index);
       rtx_insn *insn;
-      bool war_pending = false;
-      int war_regno = 0;
-      int war_ptr_regno = 0;
-      rtx war_pat;
+      bool have_store = false;
+      int store_ptr_regno = 0;
+      rtx store_mem = nullptr;
       FOR_BB_INSNS (bb, insn)
 	{
-	  if (NONDEBUG_INSN_P(insn))
+	  if (!NONDEBUG_INSN_P(insn))
+	    continue;
+
+	  rtx insn_pat = PATTERN (insn);
+	  int classify = classify_insn (insn_pat);
+	  bool new_store = false;
+
+	  if (GET_CODE (insn_pat) == SET
+	      && GET_CODE (SET_DEST (insn_pat)) == MEM)
 	    {
-	      rtx insn_pat = PATTERN(insn);
-	      int classify = my_classify_insn(insn_pat);
-	      if (store_mem_p(insn_pat))
-		{
-		  machine_mode mode = GET_MODE(SET_SRC(insn_pat));
-		  if (mode == HImode || mode == QImode)
-		    {
-		      // Found a potential RAW issue store
-		      if (!rvtt_reg_store_p(insn_pat))
-			{
-			  // Use the same register as used in the insn if we need th hll war
-			  war_regno = 0;
-			  int dummy_offset;
-			  get_mem_reg_and_offset(SET_DEST(insn_pat), &war_ptr_regno, &dummy_offset);
-			  war_pat = SET_DEST(insn_pat);
-			  war_pending = true;
-			  DUMP("raw war pending for [%d]->%d\n", war_ptr_regno, war_regno);
-			}
-		    }
-		}
-	      else if (war_pending &&
-		       (classify != INSN ||
-			(load_mem_p(insn_pat) ||
-			 (GET_CODE(insn_pat) == SET &&
-			  (refers_to_regno_p(war_ptr_regno, SET_DEST(insn_pat)) ||
-			   refers_to_regno_p(war_regno, SET_DEST(insn_pat)))))))
-		{
-		  // Emit the war when we hit a load or if either reg gets modified
-		  DUMP("emitting raw war before load\n", war_ptr_regno, war_regno);
-		  emit_raw_war(insn, true, war_regno, war_pat);
-		  war_pending = false;
-		}
+	      machine_mode mode = GET_MODE (SET_SRC (insn_pat));
+	      if ((mode == HImode || mode == QImode)
+		  && !rvtt_reg_store_p (insn_pat))
+		new_store = true;
+	    }
+
+	  if (have_store
+	      && (new_store
+		  || classify != INSN
+		  || load_mem_p (insn_pat)
+		  || (GET_CODE (insn_pat) == SET
+		      && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat)))))
+	    {
+	      // Emit the war when we hit a load or if the base reg gets modified
+	      DUMP("emitting raw war before load\n");
+	      emit_load (insn, true, store_mem);
+	      have_store = false;
+	    }
+
+	  if (new_store)
+	    {
+	      // Found a potential RAW issue store
+	      // Use the same register as used in the insn if we need th hll war
+	      int dummy_offset;
+	      get_mem_reg_and_offset(SET_DEST(insn_pat), &store_ptr_regno, &dummy_offset);
+	      store_mem = SET_DEST (insn_pat);
+	      have_store = true;
+	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
 	    }
 	}
-      if (war_pending)
+
+      if (have_store)
 	{
+	  gcc_assert (!control_flow_insn_p (BB_END (bb)));
 	  DUMP("emitting raw war at end of bb\n");
-	  emit_raw_war(BB_END(bb), control_flow_insn_p(BB_END(bb)), war_regno, war_pat);
-	  war_pending = false;
+	  emit_load (BB_END (bb), false, store_mem);
+	  have_store = false;
 	}
     }
   DUMP("out raw pass\n");
@@ -878,42 +767,6 @@ adjust_insn_count(rtx_insn *insn, int amt)
     {
       ic->second.insn_count += amt;
     }
-}
-
-static int
-move_up(rtx_insn *def_insn, int how_far)
-{
-  // Move insn up
-  if (def_insn == nullptr) return 0;
-
-  rtx_insn *insn = PREV_INSN(def_insn);
-  rtx_insn *anchor = nullptr;
-
-  basic_block bb = BLOCK_FOR_INSN(def_insn);
-  int move_count = 0;
-  while (insn && insn != PREV_INSN(BB_HEAD(bb)) && move_count < how_far)
-    {
-      if (NONDEBUG_INSN_P(insn))
-	{
-	  if (!can_move_past(def_insn, insn))
-	    {
-	      break;
-	    }
-	  anchor = insn;
-	  move_count++;
-	}
-      insn = PREV_INSN(insn);
-    }
-
-  DUMP("  moving def up %d (wanted %d)\n", move_count, how_far);
-  if (anchor)
-    {
-      adjust_insn_count(def_insn, move_count);
-      adjust_insn_count(anchor, -move_count);
-      move_insn(def_insn, anchor, false);
-    }
-
-  return move_count;
 }
 
 static int
