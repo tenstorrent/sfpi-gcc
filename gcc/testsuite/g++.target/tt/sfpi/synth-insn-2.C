@@ -29,4 +29,4 @@ void loop_common (int i) {
 
   l_reg[LRegs::LReg3] = a;
 }
-// { dg -final { scan-assembler {\n_Z11loop_commoni:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tli	a4, 2046820405	# 2:7a000035\n\tadd	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\taddi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)\n\tli	10,48\n\txor	10,10,a5\n\tsw	a3, 0\(a4\)	# 2:7a000005 L0 := L0\n\tsw	a5, 0\(a4\)	# 2:7a000035 L3 := L0\n\tli	10,816\n\txor	10,10,a5\n\tsw	a3, 0\(a4\)	# 2:7a000305 L0 := L3\n\tsw	a5, 0\(a4\)	# 2:7a000035 L3 := L0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z11loop_commoni:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tli	a4, 2046820405	# 2:7a000035\n\tadd	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\taddi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3,48\n\txor	a3,a3,a5\n\tsw	a3, 0\(a4\)	# 2:7a000005 L0 := L0\n\tsw	a5, 0\(a4\)	# 2:7a000035 L3 := L0\n\tli	a3,816\n\txor	a3,a3,a5\n\tsw	a3, 0\(a4\)	# 2:7a000305 L0 := L3\n\tsw	a5, 0\(a4\)	# 2:7a000035 L3 := L0\n\tret\n} } }

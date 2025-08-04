@@ -4431,3 +4431,7 @@ DEPFILES = \
   $(foreach obj,$(ALL_HOST_OBJS),\
     $(dir $(obj))$(DEPDIR)/$(patsubst %.o,%.Po,$(notdir $(obj))))
 -include $(DEPFILES)
+
+ifneq ($(target),riscv32-tt-elf)
+$(error This source tree only builds riscv32-tt-elf, use the sfpi scripts/build.sh script)
+endif
