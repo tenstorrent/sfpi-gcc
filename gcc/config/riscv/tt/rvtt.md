@@ -156,7 +156,7 @@ UNSPECV_TTINCRWC
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_SFPPRESERVELREG)]
+                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPPRESERVELREG)]
   "TARGET_RVTT_WH")
 
 (define_int_iterator rvtt_preservelreg [0 1 2 3 4 5 6 7])

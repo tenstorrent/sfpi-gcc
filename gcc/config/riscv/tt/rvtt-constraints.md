@@ -23,6 +23,7 @@
 (define_register_constraint "xr" "SFPU_REGS"
   "Any of the SFPU Registers")
 
+;; these should be renamed 'x[digit]'
 (define_register_constraint "Q0" "SFPU_REGS_L0"
   "SFPU Register L0")
 
@@ -53,6 +54,7 @@
   "Constant vector"
   (match_code "const_vector"))
 
+;; These should be removed and the logic placed in checking the builtins themselves -- better diagnostics.
 (define_constraint "N01U"
   "A 1-bit unsigned immediate for SFPU instruction modifiers."
   (and (match_code "const_int")
