@@ -13,7 +13,7 @@ void one(int s) {
   vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_ARITHMETIC);
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3onei:\n\tslli	a5,a0,12\n\tli	a4,16773120\n\tand	a5,a5,a4\n\tli	a4, 2046820407	# 2:7a000037\n\tadd	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tsw	a5, %lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)	# 2:7a000037 L3 := L0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z3onei:\n\tli	a4,16773120\n\tslli	a5,a0,12\n\tand	a5,a5,a4\n\tli	a4, 2046820407	# 2:7a000037\n\tadd	a5,a5,a4\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tsw	a5, %lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)	# 2:7a000037 L3 := L0\n\tret\n} } }
 
 // GCC's RTL doesnt DTRT in this case, needs a lo_sum pass
 void two(int s) {

@@ -85,7 +85,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 132;
+static const int NUMBER_OF_INTRINSICS = 132 + 7;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -727,13 +727,6 @@ bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
     }
 
   return false;
-}
-
-void rvtt_emit_sfpassignlreg(rtx dst, rtx lr)
-{
-  int lregnum = INTVAL(lr);
-  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
-  emit_insn(gen_rvtt_sfpassignlreg_int(dst));
 }
 
 static void
