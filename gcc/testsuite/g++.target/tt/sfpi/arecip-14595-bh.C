@@ -31,7 +31,7 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5recip3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 0\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_ZN5recip3barEv:\n\tSFPMOV	L3, L2, 2\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L3, L0, 0\n\tSFPENCC	3, 10\n\tret\n} } }
 }
 
 namespace negrecip {
@@ -58,7 +58,7 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN8negrecip3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 1\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_ZN8negrecip3barEv:\n\tSFPMOV	L3, L2, 2\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L3, L0, 1\n\tSFPENCC	3, 10\n\tret\n} } }
 }
 
 namespace expon {
@@ -85,5 +85,5 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5expon3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 2\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_ZN5expon3barEv:\n\tSFPMOV	L3, L2, 2\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L3, L0, 2\n\tSFPENCC	3, 10\n\tret\n} } }
 }

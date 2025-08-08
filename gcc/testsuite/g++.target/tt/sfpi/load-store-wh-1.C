@@ -39,4 +39,4 @@ void store_var (unsigned addr) {
     vFloat r = l_reg[LRegs::LReg3];
     __builtin_rvtt_sfpstore (r.get (), 7, 3, addr);
 }
-// { dg-final { scan-assembler {\n_Z9store_varj:\n\tslli	a5,a0,18\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tli	a3, 1916256256	# 2:7237c000\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tsrli	a5,a5,18\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# 2:7237c000 L3\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z9store_varj:\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tslli	a5,a0,18\n\tli	a3, 1916256256	# 2:7237c000\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tsrli	a5,a5,18\n\tadd	a5,a5,a3\n\tsw	a5, 0\(a4\)	# 2:7237c000 L3\n\tret\n} } }
