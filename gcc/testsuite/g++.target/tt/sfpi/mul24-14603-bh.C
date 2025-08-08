@@ -37,5 +37,5 @@ void bar () {
   l_reg[LRegs::LReg2] = r_lo;
   l_reg[LRegs::LReg3] = r_hi;
 }
-// { dg-final { scan-assembler {\n_Z3barv:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPCOMPC\n\tSFPMOV	L2, L4, 2\n\tSFPMUL24	L2, L0, L1, 0\n\tSFPMOV	L3, L5, 2\n\tSFPMUL24	L3, L0, L1, 1\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z3barv:\n\tSFPMOV	L3, L5, 2\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPCOMPC\n\tSFPMUL24	L4, L0, L1, 0\n\tSFPMUL24	L3, L0, L1, 1\n\tSFPENCC	3, 10\n\tSFPMOV	L2, L4, 2\n\tret\n} } }
 
