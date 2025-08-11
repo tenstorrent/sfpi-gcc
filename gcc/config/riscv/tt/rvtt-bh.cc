@@ -323,27 +323,27 @@ void rvtt_bh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
   if (fval != 0 &&
       ((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000) ||
-       (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000))) {
-    need_sub = true;
-    if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000) ||
-	(fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80)) {
-      rvtt_emit_sfpassignlreg(ref_val, GEN_INT(CREG_IDX_1));
-    } else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
-	       (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80)) {
-      rvtt_emit_sfpassignlreg(ref_val, GEN_INT(CREG_IDX_NEG_1));
-    } else {
-      rvtt_bh_emit_sfpxloadi(ref_val, rvtt_vec0_rtx, addr,
-			     GEN_INT(rvtt_scmp2loadi_mod(fmt)), f,
-			     GEN_INT(0), GEN_INT(0));
+       (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000)))
+    {
+      need_sub = true;
+      if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000)
+	  || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80))
+	SET_REGNO (ref_val, SFPU_REG_FIRST + CREG_IDX_1);
+      else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000) ||
+		 (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
+	SET_REGNO (ref_val, SFPU_REG_FIRST + CREG_IDX_NEG_1);
+      else
+	rvtt_bh_emit_sfpxloadi(ref_val, rvtt_vec0_rtx, addr,
+			       GEN_INT(rvtt_scmp2loadi_mod(fmt)), f,
+			       GEN_INT(0), GEN_INT(0));
     }
-  }
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   rtx setcc_mod = GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp]);
   if (need_sub) {
-    rtx neg_one = gen_reg_rtx(V64SFmode);
     rtx tmp = gen_reg_rtx(V64SFmode);
-    rvtt_emit_sfpassignlreg(neg_one, GEN_INT(CREG_IDX_NEG_1));
+    rtx neg_one = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
+
     emit_insn(gen_rvtt_bh_sfpmad(tmp, ref_val, neg_one, v, GEN_INT(0)));
     v = tmp;
   }
@@ -363,9 +363,8 @@ void rvtt_bh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
 void rvtt_bh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 {
   rtx tmp = gen_reg_rtx(V64SFmode);
-  rtx neg1 = gen_reg_rtx(V64SFmode);
+  rtx neg1 = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
 
-  rvtt_emit_sfpassignlreg(neg1, GEN_INT(CREG_IDX_NEG_1));
   emit_insn(gen_rvtt_bh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
