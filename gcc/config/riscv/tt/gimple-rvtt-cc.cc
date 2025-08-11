@@ -103,118 +103,134 @@ process_block_stmts(basic_block bb,
       const rvtt_insn_data *insnd;
       if (rvtt_p(&insnd, &stmt, gsi))
 	{
-	  if (insnd->id == rvtt_insn_data::sfppushc)
+	  switch (insnd->id)
 	    {
-	      bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
+	    case rvtt_insn_data::sfppushc:
+	      {
+		bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
 
-	      prior_removable = false;
-	      DUMP("PUSHC(%s): stack size %d\n", is_replace ? "replace" : "push", stack.size());
+		prior_removable = false;
+		DUMP("PUSHC(%s): stack size %d\n", is_replace ? "replace" : "push", stack.size());
 
-	      if (stack.size() == 0)
-		{
-		  if (is_replace) {
-		    error("malformed program, pushc replace at outer level\n");
-		  }
-
-		  DUMP("  removing outermost pushc\n");
-
-		  // Remove outermost pushc
-		  gimple *g = gsi_stmt (gsi);
-		  unlink_stmt_vdef(g);
-		  gsi_remove(&gsi, true);
-		  release_defs(g);
-
-		  stack.push_back(make_tuple(false, false, gsi));
-		  // Avoid the gsi_next at the end since we removed the inst
-		  continue;
-		}
-	      else
-		{
-		  if (is_replace)
-		    {
-		      stack.pop_back();
+		if (stack.size() == 0)
+		  {
+		    if (is_replace) {
+		      error("malformed program, pushc replace at outer level\n");
 		    }
-		  prior_is_replace = is_replace;
-		  stack.push_back(make_tuple(false, is_replace, gsi));
-		}
-	    }
-	  else if (insnd->id == rvtt_insn_data::sfpcompc)
-	    {
-	      // Set compc to true for current pushc
-	      if (stack.size() == 0) {
-		error("malformed program, sfpcompc outside of pushc/popc - exiting!");
+
+		    DUMP("  removing outermost pushc\n");
+
+		    // Remove outermost pushc
+		    gimple *g = gsi_stmt (gsi);
+		    unlink_stmt_vdef(g);
+		    gsi_remove(&gsi, true);
+		    release_defs(g);
+
+		    stack.push_back(make_tuple(false, false, gsi));
+		    // Avoid the gsi_next at the end since we removed the inst
+		    continue;
+		  }
+		else
+		  {
+		    if (is_replace)
+		      {
+			stack.pop_back();
+		      }
+		    prior_is_replace = is_replace;
+		    stack.push_back(make_tuple(false, is_replace, gsi));
+		  }
+		break;
 	      }
+
+	    case rvtt_insn_data::sfpxfcmps:
+	    case rvtt_insn_data::sfpxfcmpv:
+	      {
+		int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_pos));
+		if ((mod & SFPXCMP_MOD1_CC_MASK) != SFPXCMP_MOD1_CC_LTE)
+		  goto default_;
+		// A compc will be inserted during rtl expansion,
+		// sigh.  We should be doing that earlier.
+	      }
+	      [[fallthrough]];
+
+	    case rvtt_insn_data::sfpcompc:
+	      // Set compc to true for current pushc
+	      if (stack.size() == 0)
+		error("malformed program, sfpcompc outside of pushc/popc - exiting!");
 
 	      prior_removable = false;
 	      stack.back() = make_tuple(true, get<tuple_prior_replace>(stack.back()), get<tuple_gsi>(stack.back()));
-	    }
-	  else if (insnd->id == rvtt_insn_data::sfppopc)
-	    {
-	      DUMP("POPC: stack size %d\n", stack.size());
+	      break;
 
-	      if (stack.size() == 0) {
-		error("malformed program, popc without matching pushc - exiting!");
-	      }
+	    case rvtt_insn_data::sfppopc:
+	      {
+		DUMP("POPC: stack size %d\n", stack.size());
 
-	      // Only remove inner PUSHC/POPC if they fall within a bb
-	      // since different paths may differ in intervening instructions
-	      if (prior_removable &&
-		  prior_pushc.bb == prior_popc.bb &&
-		  prior_popc.bb == gsi.bb)
-		{
+		if (stack.size() == 0)
+		  error("malformed program, popc without matching pushc - exiting!");
 
-		  DUMP("  removing inner PUSHC\n");
-		  gimple *g = gsi_stmt (prior_pushc);
-		  unlink_stmt_vdef(g);
-		  gsi_remove(&prior_pushc, true);
-		  release_defs(g);
+		// Only remove inner PUSHC/POPC if they fall within a bb
+		// since different paths may differ in intervening instructions
+		if (prior_removable &&
+		    prior_pushc.bb == prior_popc.bb &&
+		    prior_popc.bb == gsi.bb)
+		  {
 
-		  if (!prior_is_replace)
-		    {
-		      DUMP("  removing inner POPC\n");
-		      gimple *g = gsi_stmt (prior_popc);
-		      unlink_stmt_vdef(g);
-		      gsi_remove(&prior_popc, true);
-		      release_defs(g);
-		    }
-	      }
+		    DUMP("  removing inner PUSHC\n");
+		    gimple *g = gsi_stmt (prior_pushc);
+		    unlink_stmt_vdef(g);
+		    gsi_remove(&prior_pushc, true);
+		    release_defs(g);
 
-	      // Not removable if we saw a compc
-	      prior_removable = !get<tuple_prior_removable>(stack.back()); 
-	      prior_is_replace = get<tuple_prior_replace>(stack.back());
-	      prior_pushc = get<tuple_gsi>(stack.back());
-	      prior_popc = gsi;
-
-	      stack.pop_back();
-	      if (stack.size() == 0)
-		{
-		  DUMP("  replacing outermost popc with encc\n");
-
-		  // Replace outermost popc with encc
-		  const rvtt_insn_data *new_insnd =
-		    rvtt_get_insn_data(rvtt_insn_data::sfpencc);
-		  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, size_int(3), size_int(10));
-		  if (new_stmt == nullptr) {
-		    gcc_unreachable();
+		    if (!prior_is_replace)
+		      {
+			DUMP("  removing inner POPC\n");
+			gimple *g = gsi_stmt (prior_popc);
+			unlink_stmt_vdef(g);
+			gsi_remove(&prior_popc, true);
+			release_defs(g);
+		      }
 		  }
 
-		  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
-		  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
-		  gimple_set_location (new_stmt, gimple_location (stmt));
-		  unlink_stmt_vdef (stmt);
-		  gsi_remove (&gsi, true);
-		  release_defs (stmt);
-		  gsi_insert_before (&gsi, new_stmt, GSI_NEW_STMT);
-		  prior_removable = false;
-		}
-	    }
-	  else
-	    {
-	      DUMP("Intervening %s\n", insnd->name);
-	      // Could be smarter about the non-__builtin_riscv_sfp
-	      // calls, but bail if anything else comes in to be safe
-	      // "Other" instructions
-	      prior_removable = false;
+		// Not removable if we saw a compc
+		prior_removable = !get<tuple_prior_removable>(stack.back()); 
+		prior_is_replace = get<tuple_prior_replace>(stack.back());
+		prior_pushc = get<tuple_gsi>(stack.back());
+		prior_popc = gsi;
+
+		stack.pop_back();
+		if (stack.size() == 0)
+		  {
+		    DUMP("  replacing outermost popc with encc\n");
+
+		    // Replace outermost popc with encc
+		    const rvtt_insn_data *new_insnd =
+		      rvtt_get_insn_data(rvtt_insn_data::sfpencc);
+		    gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, size_int(3), size_int(10));
+		    if (new_stmt == nullptr) {
+		      gcc_unreachable();
+		    }
+
+		    gimple_set_vuse (new_stmt, gimple_vuse (stmt));
+		    gimple_set_vdef (new_stmt, gimple_vdef (stmt));
+		    gimple_set_location (new_stmt, gimple_location (stmt));
+		    unlink_stmt_vdef (stmt);
+		    gsi_remove (&gsi, true);
+		    release_defs (stmt);
+		    gsi_insert_before (&gsi, new_stmt, GSI_NEW_STMT);
+		    prior_removable = false;
+		  }
+	      }
+	      break;
+
+	    default:
+	    default_:
+		DUMP("Intervening %s\n", insnd->name);
+		// Could be smarter about the non-__builtin_riscv_sfp
+		// calls, but bail if anything else comes in to be safe
+		// "Other" instructions
+		prior_removable = false;
+		break;
 	    }
 	}
       else if (gsi_stmt(gsi)->code == GIMPLE_CALL)
