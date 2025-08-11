@@ -341,7 +341,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=x")
         (unspec_volatile [(match_operand:SI 1 "const_int_operand" "M04U")] UNSPECV_BH_SFPMOV_CONFIG))]
   "TARGET_RVTT_BH"
-  "SFPMOV\t%0,L%1,8"
+  "SFPMOV\t%0, L%1, 8"
 )
 
 (define_insn "rvtt_bh_sfpmov_config_lv"
@@ -349,7 +349,7 @@
         (unspec_volatile [(match_operand:V64SF 1 "register_operand" "0")
 			  (match_operand:SI 2 "const_int_operand" "M04U")] UNSPECV_BH_SFPMOV_CONFIG))]
   "TARGET_RVTT_BH"
-  "SFPMOV\t%0,L%2,8"
+  "SFPMOV\t%0, L%2, 8"
 )
 
 (define_int_iterator blackhole_muladd_op [UNSPECV_BH_SFPMUL UNSPECV_BH_SFPADD])

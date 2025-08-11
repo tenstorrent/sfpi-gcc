@@ -274,10 +274,10 @@ enum riscv_microarchitecture_type riscv_microarchitecture;
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FP_REGS,	FP_REGS,	FP_REGS,	FP_REGS,
   FRAME_REGS,	FRAME_REGS,
-	SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
-	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
-	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
-	SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+  SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
+  SFPU_REGS_L4, SFPU_REGS_L5, SFPU_REGS_L6, SFPU_REGS_L7,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
 };
 
 /* Costs to use when optimizing for rocket.  */
@@ -5222,25 +5222,9 @@ riscv_conditional_register_usage (void)
 	call_used_regs[regno] = 1;
     }
 
-  if (TARGET_RVTT_WH || TARGET_RVTT_BH)
-    {
-      // FIXME: This seems suspicous
-      reg_class_contents[SFPU_REGS_L4].elts[1] = 0x00000040;
-      reg_class_contents[SFPU_REGS_L5].elts[1] = 0x00000080;
-      reg_class_contents[SFPU_REGS_L6].elts[1] = 0x00000100;
-      reg_class_contents[SFPU_REGS_L7].elts[1] = 0x00000200;
-
-      riscv_regno_to_class[SFPU_REG_FIRST + 4] = SFPU_REGS_L4;
-      riscv_regno_to_class[SFPU_REG_FIRST + 5] = SFPU_REGS_L5;
-      riscv_regno_to_class[SFPU_REG_FIRST + 6] = SFPU_REGS_L6;
-      riscv_regno_to_class[SFPU_REG_FIRST + 7] = SFPU_REGS_L7;
-
-      for (int i = 4; i < 8; i++)
-        {
-	  fixed_regs[SFPU_REG_FIRST + i] = 0;
-	  call_used_regs[SFPU_REG_FIRST + i] = 0;
-	}
-    }
+  if (!TARGET_RVTT)
+    for (int regno = SFPU_REG_FIRST; regno != SFPU_REG_LAST; regno++)
+      fixed_regs[regno] = call_used_regs[regno] = 1;
 }
 
 /* Return a register priority for hard reg REGNO.  */
