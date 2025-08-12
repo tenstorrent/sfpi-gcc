@@ -139,34 +139,37 @@
 
 (define_int_attr rvtt_lreg_class
   [(0 "0") (1 "1")  (2 "2")  (3 "3")  (4 "4")  (5 "5")  (6 "6")  (7 "7")])
-(define_int_iterator rvtt_write_lreg [0 1 2 3 4 5 6 7])
+(define_int_iterator rvtt_user_lregs [0 1 2 3 4 5 6 7])
 
 (define_expand "rvtt_sfpassignlreg"
   [(set	(match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "const_int_operand" "")] UNSPECV_SFPREAD_LREG))]
   "TARGET_RVTT"
   {
-    rtx hard_reg = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + INTVAL (operands[1]));
-    emit_insn (gen_rvtt_sfpread_lreg_int (hard_reg));
-    emit_insn (gen_movv64sf (operands[0], hard_reg));
-    DONE;
+    if (INTVAL (operands[1]) >= 8)
+      {
+        // fixed regs can (and must) just be copied directly.
+        rtx hard_reg = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + INTVAL (operands[1]));
+        emit_insn (gen_movv64sf (operands[0], hard_reg));
+        DONE;
+      }
   })
+
+(define_insn "rvtt_sfpread_lreg<rvtt_lreg_class>"
+  [(set (match_operand:V64SF 0 "register_operand" "=Q<rvtt_lreg_class>")
+        (unspec_volatile [(const_int rvtt_user_lregs)] UNSPECV_SFPREAD_LREG))]
+  "TARGET_RVTT"
+  ""; read %0"
+  [(set_attr "type" "ghost")])
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
                      (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_SFPWRITE_LREG)]
   "TARGET_RVTT")
 
-(define_insn "rvtt_sfpread_lreg_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
-        (unspec_volatile [(const_int 0)] UNSPECV_SFPREAD_LREG))]
-  "TARGET_RVTT"
-  "" ; read %0"
-  [(set_attr "type" "ghost")])
-
 (define_insn "rvtt_sfpwrite_lreg<rvtt_lreg_class>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "Q<rvtt_lreg_class>")
-                     (const_int rvtt_write_lreg)] UNSPECV_SFPWRITE_LREG)]
+                     (const_int rvtt_user_lregs)] UNSPECV_SFPWRITE_LREG)]
   "TARGET_RVTT"
   ""; write %0"
   [(set_attr "type" "ghost")])

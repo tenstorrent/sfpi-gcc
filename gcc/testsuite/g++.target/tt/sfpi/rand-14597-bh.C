@@ -29,7 +29,7 @@ void bar () {
   
   l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z3barv:\n\tSFPMOV	L3, L0, 2\n\tSFPMOV	L0, L2, 2\n\tSFPMAD	L1, L1, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPMOV	L0, L9, 8\n\tSFPENCC	3, 10\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z3barv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L9, 8\n\tSFPENCC	3, 10\n\tret\n} } }
 
 void baz () {
   // Do not CSE

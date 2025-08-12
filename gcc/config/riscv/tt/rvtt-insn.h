@@ -111,14 +111,6 @@ RVTT_RTL_ONLY(sfpread_lreg4,      -1, -1, 0x48)
 RVTT_RTL_ONLY(sfpread_lreg5,      -1, -1, 0x48)
 RVTT_RTL_ONLY(sfpread_lreg6,      -1, -1, 0x48)
 RVTT_RTL_ONLY(sfpread_lreg7,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lreg8,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lreg9,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregA,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregB,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregC,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregD,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregE,      -1, -1, 0x48)
-RVTT_RTL_ONLY(sfpread_lregF,      -1, -1, 0x48)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
