@@ -29,7 +29,7 @@ void f3(int s) {
   vUInt r = __builtin_rvtt_sfpshft_i (a.get(), s, SFPSHFT_MOD1_LOGICAL);
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f3i:\n\tli	a5,16773120\n\tslli	a0,a0,12\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a0,a0,a5\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tli	a5, 2046820405	# 2:7a000035\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\\)	# 2:7a000035 L3 := L0\n\tret\n} } }
+// { dg-final { scan-assembler {\n_Z2f3i:\n\tli	a5,16773120\n\tslli	a0,a0,12\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a0,a0,a5\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tli	a5, 2046820405	# 2:7a000035\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\)	# 2:7a000035 L3 := L0\n\tret\n} } }
 
 void f4(int s) {
   vInt a = l_reg[LRegs::LReg0];
