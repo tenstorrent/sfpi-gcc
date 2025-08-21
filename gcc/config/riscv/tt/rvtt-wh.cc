@@ -186,94 +186,109 @@ void rvtt_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod
 // is either <= n or > n and we care about the result.  The code below doesn't
 // handle it and if it did, the result would be inefficient.
 //
-void rvtt_wh_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod)
+void
+rvtt_wh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used)
 {
-  unsigned int modi = INTVAL(mod);
+  unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXCMP_MOD1_CC_MASK;
 
   // Decompose aggregate comparisons, recurse
-  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    rvtt_wh_emit_sfpxiadd_i(dst, lv, addr, src, imm, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
-    rvtt_wh_emit_sfpxiadd_i(dst, lv, addr, dst, GEN_INT(0), GEN_INT(base_mod | SFPXCMP_MOD1_CC_NE));
-    if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_rvtt_wh_sfpcompc());
+  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
+    {
+      rtx tmp = gen_reg_rtx (V64SFmode);
+      rvtt_wh_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GTE), true);
+      rvtt_wh_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx, GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
+      if (cmp == SFPXCMP_MOD1_CC_LTE)
+	emit_insn (gen_rvtt_wh_sfpcompc ());
+      return;
     }
-    return;
-  }
 
   bool need_loadi = true;
-  bool is_signed = ((modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED);
+  bool is_signed = (modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED;
   bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
-  bool is_const_int = GET_CODE(imm) == CONST_INT;
-  bool is_sub = ((modi & SFPXIADD_MOD1_IS_SUB) != 0);
-  bool dst_unused = ((modi & SFPXIADD_MOD1_DST_UNUSED) != 0);
-  int iv = is_const_int ? INTVAL(imm) : 0xffffffff;
+  bool is_const_int = GET_CODE (imm) == CONST_INT;
+  bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
+  int iv = is_const_int ? INTVAL (imm) : 0xffffffff;
 
   // Figure out if we need to do a loadi (>12 bits signed)
-  if (is_const_int) {
-    iv = is_sub ? -iv : iv;
-    if (!(iv >= 2048 || iv < -2048)) {
-      need_loadi = false;
-      imm = GEN_INT(iv);
+  if (is_const_int)
+    {
+      iv = is_sub ? -iv : iv;
+      if (!(iv >= 2048 || iv < -2048))
+	{
+	  need_loadi = false;
+	  imm = GEN_INT (iv);
+	}
     }
-  } else if (is_12bits) {
+  else if (is_12bits)
     // Future work
     //need_loadi = false;
-    gcc_assert(0);
-  }
+    gcc_unreachable ();
 
   rtx set_cc_arg = src;
 
-  bool need_setcc = ((cmp & SFPXCMP_MOD1_CC_MASK) != 0);
-  if (need_loadi) {
-    // Load imm into dst
-    int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-    rvtt_wh_emit_sfpxloadi(dst, rvtt_vec0_rtx, addr, GEN_INT(loadi_mod), imm, GEN_INT(0), GEN_INT(0));
-
-    unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
-    if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
-      // Perform op w/ compare
-      mod1 |= (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-      emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, dst, src, GEN_INT(mod1)));
-      need_setcc = false;
-    } else {
-      // Perform op w/o compare, compare with SETCC
-      mod1 |= SFPIADD_MOD1_CC_NONE;
-      emit_insn(gen_rvtt_wh_sfpiadd_v_int(dst, dst, src, GEN_INT(mod1)));
-      set_cc_arg = dst;
+  bool need_setcc = bool (cmp & SFPXCMP_MOD1_CC_MASK);
+  if (need_loadi)
+    {
+      // Load imm into dst
+      int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
+      rvtt_wh_emit_sfpxloadi (dst, rvtt_vec0_rtx, addr, GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
+      
+      unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
+      if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
+	{
+	  // Perform op w/ compare
+	  mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+	  emit_insn (gen_rvtt_wh_sfpiadd_v_int (dst, dst, src, GEN_INT (mod1)));
+	  need_setcc = false;
+	}
+      else
+	{
+	  // Perform op w/o compare, compare with SETCC
+	  mod1 |= SFPIADD_MOD1_CC_NONE;
+	  emit_insn (gen_rvtt_wh_sfpiadd_v_int (dst, dst, src, GEN_INT (mod1)));
+	  set_cc_arg = dst;
+	}
     }
-  } else if (is_const_int) {
-    if (iv != 0) {
-      if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE) {
-	// Perform op w/ compare
-	unsigned int mod1 = (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
-	need_setcc = false;
-      } else {
-	// Perform op w/o compare
-	emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm,
-					  GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
-	set_cc_arg = dst;
-      }
-    } else if (!dst_unused) {
-      // An add or subtract against 0 isn't particularly interesting, but
-      // we need to keep the register usage correct since dst is now src
-      emit_insn(gen_rvtt_wh_sfpiadd_i_int(dst, lv, src, imm,
-                                        GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
+  else if (is_const_int)
+    {
+      if (iv != 0)
+	{
+	  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
+	    {
+	      // Perform op w/ compare
+	      unsigned int mod1 = (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+	      emit_insn (gen_rvtt_wh_sfpiadd_i_int (dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
+	      need_setcc = false;
+	    }
+	  else
+	    {
+	      // Perform op w/o compare
+	      emit_insn(gen_rvtt_wh_sfpiadd_i_int (dst, lv, src, imm,
+						   GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
+	      set_cc_arg = dst;
+	    }
+	}
+      else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
+	{
+	  rtx insn = REG_P (lv) ? gen_rvtt_wh_sfpmov_lv (dst, lv, src, GEN_INT (SFPMOV_MOD1_NONE))
+	    : gen_movv64sf (dst, src);
+	  emit_insn (insn);
+	}
     }
-  } else {
-    // This code path could handle the case where the operand isn't a CONST_INT (so
-    // the value isn't known at compile time) but some (future) mechanism
-    // (wrapper API or pragma) ensures that the resulting value fits in 12
-    // bits and so an IADDI can be used.
-    gcc_assert(is_12bits);
-    gcc_assert(false);
-  }
+  else
+    {
+      // This code path could handle the case where the operand isn't a CONST_INT (so
+      // the value isn't known at compile time) but some (future) mechanism
+      // (wrapper API or pragma) ensures that the resulting value fits in 12
+      // bits and so an IADDI can be used.
+      gcc_assert (is_12bits);
+      gcc_unreachable ();
+    }
 
-  if (need_setcc) {
-    emit_insn(gen_rvtt_wh_sfpsetcc_v(set_cc_arg, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
-  }
+  if (need_setcc)
+    emit_insn (gen_rvtt_wh_sfpsetcc_v (set_cc_arg, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
 }
 
 // See comment block above sfpiadd_i_ex
