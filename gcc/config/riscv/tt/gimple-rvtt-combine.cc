@@ -730,7 +730,8 @@ try_combine_negated_operands (probe_t &probe)
 	  gimple_call_set_return_slot_opt (lreg_call, true);
 	  gimple_set_location (lreg_call, gimple_location (probe.call));
 	  gimple_call_set_arg (lreg_call, 0, build_int_cst (integer_type_node, CREG_IDX_NEG_1));
-	  tree ssa = make_ssa_name (TREE_TYPE (gimple_call_lhs (probe.call)), lreg_call);
+	  tree type = TREE_TYPE (TREE_TYPE (probe.insnd->decl));
+	  tree ssa = make_ssa_name (type, lreg_call);
 	  gimple_call_set_lhs (lreg_call, ssa);
 	  gsi_insert_before (&probe.gsi, lreg_call, GSI_SAME_STMT);
 
@@ -846,7 +847,8 @@ try_combine_negated_add_operand (probe_t &probe)
       gimple_call_set_return_slot_opt (lreg_call, true);
       gimple_set_location (lreg_call, gimple_location (probe.call));
       gimple_call_set_arg (lreg_call, 0, build_int_cst (integer_type_node, CREG_IDX_NEG_1));
-      tree ssa = make_ssa_name (TREE_TYPE (gimple_call_lhs (probe.call)), lreg_call);
+      tree type = TREE_TYPE (TREE_TYPE (probe.insnd->decl));
+      tree ssa = make_ssa_name (type, lreg_call);
       gimple_call_set_lhs (lreg_call, ssa);
       gsi_insert_before (&probe.gsi, lreg_call, GSI_SAME_STMT);
 
