@@ -23,29 +23,29 @@
 (define_register_constraint "xr" "SFPU_REGS"
   "Any of the SFPU Registers")
 
-;; these should be renamed 'x[digit]'
-(define_register_constraint "Q0" "SFPU_REGS_L0"
+;; specific allocatable registers
+(define_register_constraint "x0" "SFPU_REGS_L0"
   "SFPU Register L0")
 
-(define_register_constraint "Q1" "SFPU_REGS_L1"
+(define_register_constraint "x1" "SFPU_REGS_L1"
   "SFPU Register L1")
 
-(define_register_constraint "Q2" "SFPU_REGS_L2"
+(define_register_constraint "x2" "SFPU_REGS_L2"
   "SFPU Register L2")
 
-(define_register_constraint "Q3" "SFPU_REGS_L3"
+(define_register_constraint "x3" "SFPU_REGS_L3"
   "SFPU Register L3")
 
-(define_register_constraint "Q4" "SFPU_REGS_L4"
+(define_register_constraint "x4" "SFPU_REGS_L4"
   "SFPU Register L4")
 
-(define_register_constraint "Q5" "SFPU_REGS_L5"
+(define_register_constraint "x5" "SFPU_REGS_L5"
   "SFPU Register L5")
 
-(define_register_constraint "Q6" "SFPU_REGS_L6"
+(define_register_constraint "x6" "SFPU_REGS_L6"
   "SFPU Register L6")
 
-(define_register_constraint "Q7" "SFPU_REGS_L7"
+(define_register_constraint "x7" "SFPU_REGS_L7"
   "SFPU Register L7")
 
 ;; General constraints

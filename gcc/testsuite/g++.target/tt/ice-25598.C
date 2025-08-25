@@ -1,4 +1,4 @@
-// { dg-options "-fpreprocesed -mcpu=tt-wh -O2 -fno-exceptions -fno-rtti" }
+// { dg-options "-fpreprocessed -mcpu=tt-wh -O2 -fno-exceptions -fno-rtti" }
 
 
 
