@@ -60,7 +60,6 @@ UNSPECV_TTINCRWC
     DONE;
 })
 
-
 ;; rvtt_synth_opcode and rvtt_sfpsynth_insn{,_dst} are used to
 ;; synthesize sfp/tt instructions that are injected into the
 ;; instruction stream.  rvtt_synth_opcode is tied to 1 or more
@@ -108,16 +107,16 @@ UNSPECV_TTINCRWC
   SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
-  [(set (match_operand:V64SF 7 "register_operand" "=x") ; result
+  [(set (match_operand:V64SF 7 "register_operand" "=xr") ; result
         (unspec_volatile [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
                           (match_operand:SI    1 "const_int_operand" "n") ; flags
                           (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
                           (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
                           (match_operand:SI    4 "const_int_operand" "n") ; id
-			  (match_operand:V64SF 5 "reg_or_vec0_operand" "xz") ; src
+			  (match_operand:V64SF 5 "reg_or_vec0_operand" "xrxn") ; src
                           (match_operand:SI    6 "const_int_operand" "n") ; src shift
                           (match_operand:SI    8 "const_int_operand" "n") ; dst shift
-			  (match_operand:V64SF 9 "reg_or_vec0_operand" "7z") ; lv
+			  (match_operand:V64SF 9 "reg_or_vec0_operand" "7xn") ; lv
                           ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 10 "=&r"))]
   "TARGET_RVTT"
@@ -131,7 +130,7 @@ UNSPECV_TTINCRWC
                      (match_operand:SI    2 "register_operand"  "r,r") ; synth'd insn
                      (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
-	             (match_operand:V64SF 5 "reg_or_vec0_operand" "x,z") ; src
+	             (match_operand:V64SF 5 "reg_or_vec0_operand" "xr,xn") ; src
                      (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
                      ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 7 "=&r, X"))]
@@ -142,7 +141,7 @@ UNSPECV_TTINCRWC
 
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "const_int_operand" "M04U")] UNSPECV_SFPASSIGNLREG))]
+        (unspec_volatile [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
   "TARGET_RVTT"
 {
   rvtt_emit_sfpassignlreg(operands[0], operands[1]);
@@ -150,15 +149,15 @@ UNSPECV_TTINCRWC
 })
 
 (define_insn "rvtt_sfpassignlreg_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=x")
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_RVTT"
   "")
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "const_int_operand" "M04U")] UNSPECV_SFPPRESERVELREG)]
-  "TARGET_RVTT_WH")
+                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPPRESERVELREG)]
+  "TARGET_RVTT")
 
 (define_int_iterator rvtt_preservelreg [0 1 2 3 4 5 6 7])
 ;; We have to map the number to a string.
@@ -243,9 +242,9 @@ UNSPECV_TTINCRWC
   "TTINCRWC\t%0, %1, %2, %3")
 
 (define_insn "rvtt_ttreplay"
-  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "M05U")
-                     (match_operand:SI    1 "const_int_operand"  "MP5U")
-                     (match_operand:SI    2 "const_int_operand"  "M01U")
-                     (match_operand:SI    3 "const_int_operand"  "M01U")] UNSPECV_TTREPLAY)]
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "N05U")
+                     (match_operand:SI    1 "const_int_operand"  "NP5U")
+                     (match_operand:SI    2 "const_int_operand"  "N01U")
+                     (match_operand:SI    3 "const_int_operand"  "N01U")] UNSPECV_TTREPLAY)]
   "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")
