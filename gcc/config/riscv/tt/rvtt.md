@@ -164,7 +164,7 @@ UNSPECV_TTINCRWC
 (define_int_attr rvtt_preservelreg_value
   [(0 "0") (1 "1") (2 "2") (3 "3") (4 "4") (5 "5") (6 "6") (7 "7")])
 (define_insn "rvtt_sfppreservelreg<rvtt_preservelreg_value>"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "Q<rvtt_preservelreg_value>")
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
   "TARGET_RVTT"
   "" ;"; preserve %0"
