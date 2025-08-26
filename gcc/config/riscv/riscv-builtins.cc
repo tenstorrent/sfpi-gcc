@@ -138,6 +138,7 @@ AVAIL (sfpu, (TARGET_RVTT_WH || TARGET_RVTT_BH))
  		FUNCTION_TYPE, AVAIL)
 
 tree v64SF_type_node;
+tree instrn_ptr_type_node;
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
@@ -149,6 +150,7 @@ tree v64SF_type_node;
 #define RISCV_ATYPE_UQI unsigned_intQI_type_node
 #define RISCV_ATYPE_V64SF v64SF_type_node
 #define RISCV_ATYPE_POINTER ptr_type_node
+#define RISCV_ATYPE_IPTR instrn_ptr_type_node
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -230,6 +232,12 @@ void
 riscv_init_builtins (void)
 {
   v64SF_type_node = build_vector_type_for_mode (float_type_node, V64SFmode);
+  // Ideally we'd use unsigned_intSI_type_mode here, but that's
+  // 'unsigned', which doesn't match uint32_t's underlying type
+  // (unsigned long), and that type's not easily accessible here.  So
+  // void it is.  Bleah!
+  instrn_ptr_type_node = build_pointer_type
+    (build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
 
   for (size_t i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
     {
