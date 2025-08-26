@@ -320,33 +320,39 @@
    (UNSPECV_BH_SFPMOV "MOV")
    (UNSPECV_BH_SFPLZ "LZ")])
 
-(define_insn "rvtt_bh_sfp<blackhole_src_mod_name>"
+(define_expand "rvtt_bh_sfp<blackhole_src_mod_name>"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "xr")
                           (match_operand:SI    2 "const_int_operand" "N04U")] blackhole_src_mod_op))]
   "TARGET_RVTT_BH"
-  "SFP<blackhole_src_mod_insn>\t%0, %1, %2"
-)
+  {
+    emit_insn (gen_rvtt_bh_sfp<blackhole_src_mod_name>_lv
+                 (operands[0], rvtt_vec0_rtx, operands[1], operands[2]));
+    DONE;
+  })
 
 (define_insn "rvtt_bh_sfp<blackhole_src_mod_name>_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand"  "0xn")
                           (match_operand:V64SF 2 "register_operand"  "xr")
                           (match_operand:SI    3 "const_int_operand" "N04U")] blackhole_src_mod_op))]
   "TARGET_RVTT_BH"
   "SFP<blackhole_src_mod_insn>\t%0, %2, %3"
 )
 
-(define_insn "rvtt_bh_sfpmov_config"
+(define_expand "rvtt_bh_sfpmov_config"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_BH_SFPMOV_CONFIG))]
   "TARGET_RVTT_BH"
-  "SFPMOV\t%0, L%1, 8"
-)
+  {
+    emit_insn (gen_rvtt_bh_sfpmov_config_lv
+                 (operands[0], rvtt_vec0_rtx, operands[1]));
+    DONE;
+  })
 
 (define_insn "rvtt_bh_sfpmov_config_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand" "0")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand" "0xn")
 			  (match_operand:SI 2 "const_int_operand" "N04U")] UNSPECV_BH_SFPMOV_CONFIG))]
   "TARGET_RVTT_BH"
   "SFPMOV\t%0, L%2, 8"
@@ -501,32 +507,36 @@
   "SFPXOR\t%0, %2"
 )
 
-(define_insn "rvtt_bh_sfpnot"
+(define_expand "rvtt_bh_sfpnot"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "xr")] UNSPECV_BH_SFPNOT))]
   "TARGET_RVTT_BH"
-  "SFPNOT\t%0,%1"
-)
+  {
+    emit_insn (gen_rvtt_bh_sfpnot_lv (operands[0], rvtt_vec0_rtx, operands[1]));
+    DONE;
+  })
 
 (define_insn "rvtt_bh_sfpnot_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand"  "0xn")
                           (match_operand:V64SF 2 "register_operand"  "xr")] UNSPECV_BH_SFPNOT))]
   "TARGET_RVTT_BH"
   "SFPNOT\t%0, %2"
 )
 
-(define_insn "rvtt_bh_sfpcast"
+(define_expand "rvtt_bh_sfpcast"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "xr")
                           (match_operand:SI    2 "const_int_operand" "N04U")] UNSPECV_BH_SFPCAST))]
   "TARGET_RVTT_BH"
-  "SFPCAST\t%0, %1, %2"
-  )
+  {
+    emit_insn (gen_rvtt_bh_sfpcast_lv (operands[0], rvtt_vec0_rtx, operands[1], operands[2]));
+    DONE;
+  })
 
 (define_insn "rvtt_bh_sfpcast_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile [(match_operand:V64SF 1 "register_operand"  "0")
+        (unspec_volatile [(match_operand:V64SF 1 "reg_or_vec0_operand"  "0xn")
                           (match_operand:V64SF 2 "register_operand"  "xr")
                           (match_operand:SI    3 "const_int_operand" "N04U")] UNSPECV_BH_SFPCAST))]
   "TARGET_RVTT_BH"
@@ -539,8 +549,7 @@
                           (match_operand:SI    2 "const_int_operand" "")] UNSPECV_BH_SFPSHFT2_E))]
   "TARGET_RVTT_BH"
 {
-  rtx live = rvtt_vec0_rtx;
-  rvtt_bh_emit_sfpshft2_e(operands[0], live, operands[1], operands[2]);
+  rvtt_bh_emit_sfpshft2_e(operands[0], rvtt_vec0_rtx, operands[1], operands[2]);
   DONE;
 })
 
@@ -551,8 +560,7 @@
                           (match_operand:SI    3 "const_int_operand" "")] UNSPECV_BH_SFPSHFT2_E_LV))]
   "TARGET_RVTT_BH"
 {
-  rtx live = operands[1];
-  rvtt_bh_emit_sfpshft2_e(operands[0], live, operands[2], operands[3]);
+  rvtt_bh_emit_sfpshft2_e(operands[0], operands[1], operands[2], operands[3]);
   DONE;
 })
 
