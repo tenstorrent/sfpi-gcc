@@ -18,13 +18,6 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-;; this should be deleted and logic moved into the insn pattern
-(define_predicate "const_setcc_z_or_nez"
-  (match_code "const_int")
-{
-  return INTVAL (op) == 2 || INTVAL (op) == 6;
-})
-
 (define_predicate "vec0_operand"
   ;; close enough
   (match_code "const_vector"))
