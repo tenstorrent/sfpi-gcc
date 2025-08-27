@@ -47,7 +47,7 @@
 
   UNSPECV_SFPNOP
 
-UNSPECV_TTINCRWC
+  UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
 
@@ -76,8 +76,8 @@ UNSPECV_TTINCRWC
 
 (define_insn "rvtt_synth_opcode"
   [(set (match_operand:SI 0 "register_operand" "=r")
-         (unspec [(match_operand:SI   1 "const_int_operand" "n")
-	          (match_operand:SI   2 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
+         (unspec:SI [(match_operand:SI   1 "const_int_operand" "n")
+	             (match_operand:SI   2 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
   "TARGET_RVTT"
 {
   static char pattern[32];
@@ -108,16 +108,16 @@ UNSPECV_TTINCRWC
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
   [(set (match_operand:V64SF 7 "register_operand" "=xr") ; result
-        (unspec_volatile [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
-                          (match_operand:SI    1 "const_int_operand" "n") ; flags
-                          (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
-                          (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
-                          (match_operand:SI    4 "const_int_operand" "n") ; id
-			  (match_operand:V64SF 5 "reg_or_vec0_operand" "xrxn") ; src
-                          (match_operand:SI    6 "const_int_operand" "n") ; src shift
-                          (match_operand:SI    8 "const_int_operand" "n") ; dst shift
-			  (match_operand:V64SF 9 "reg_or_vec0_operand" "7xn") ; lv
-                          ] UNSPECV_SFPSYNTH_INSN))
+        (unspec_volatile:V64SF [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
+                                (match_operand:SI    1 "const_int_operand" "n") ; flags
+                                (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
+                                (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
+                                (match_operand:SI    4 "const_int_operand" "n") ; id
+                                (match_operand:V64SF 5 "reg_or_vec0_operand" "xrxn") ; src
+                                (match_operand:SI    6 "const_int_operand" "n") ; src shift
+                                (match_operand:SI    8 "const_int_operand" "n") ; dst shift
+                                (match_operand:V64SF 9 "reg_or_vec0_operand" "7xn") ; lv
+                               ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 10 "=&r"))]
   "TARGET_RVTT"
 {
@@ -132,7 +132,7 @@ UNSPECV_TTINCRWC
                      (match_operand:SI    4 "const_int_operand" "n,n") ; id
 	             (match_operand:V64SF 5 "reg_or_vec0_operand" "xr,xn") ; src
                      (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
-                     ] UNSPECV_SFPSYNTH_INSN)
+                    ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 7 "=&r, X"))]
   "TARGET_RVTT"
 {
@@ -150,7 +150,7 @@ UNSPECV_TTINCRWC
 
 (define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
+        (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_RVTT"
   "")
 
