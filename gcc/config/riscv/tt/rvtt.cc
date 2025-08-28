@@ -259,17 +259,14 @@ rvtt_init_builtins()
   // Fill in the non-builtin internal insns, sanity check the table
   for (int i = 0; i < NUMBER_OF_INTRINSICS; i++)
     {
-      const int all_types_flag = (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY);
+      const int all_types_flag = (INSN_FLAGS_RISCV | INSN_FLAGS_EMPTY);
       const int type_flag = sfpu_insn_data[i].flags & all_types_flag;
-      gcc_assert(type_flag == 0 ||
-		 type_flag == INSN_FLAGS_NON_SFPU ||
-		 type_flag == INSN_FLAGS_NON_TT ||
-		 type_flag == INSN_FLAGS_EMPTY);
+      // At most one bit can be set.
+      gcc_assert(type_flag == (type_flag & -type_flag));
 
-      if (sfpu_insn_data[i].rtl_only_p()) {
-	insn_map.insert(std::pair<const char*, rvtt_insn_data&>(sfpu_insn_data[i].name,
-								sfpu_insn_data[i]));
-      }
+      if (sfpu_insn_data[i].rtl_only_p ())
+	insn_map.insert (std::pair<const char*, rvtt_insn_data&> (sfpu_insn_data[i].name,
+								  sfpu_insn_data[i]));
     }
 
   // If these asserts fire, the rvtt-insn.h instruction tables are out of sync
@@ -674,59 +671,6 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
   }
 
   return representable;
-}
-
-bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
-			gcall **stmt,
-			gimple_stmt_iterator gsi,
-			bool test_initial,
-			int allow_flags)
-{
-  gimple_stmt_iterator next_gsi = gsi;
-  if (!test_initial)
-    {
-      gsi_next_nondebug(&next_gsi);
-    }
-
-  while (!gsi_end_p(next_gsi))
-    {
-      if (rvtt_p(insnd, stmt, next_gsi) &&
-	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
-        {
-	  return true;
-        }
-      gsi_next_nondebug(&next_gsi);
-    }
-
-  return false;
-}
-
-bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
-			rtx_insn **next_insn,
-			rtx_insn *insn,
-			bool test_initial,
-			int allow_flags)
-{
-  basic_block bb = BLOCK_FOR_INSN(insn);
-
-  if (!test_initial)
-    {
-      insn = NEXT_INSN(insn);
-    }
-
-  while (insn != NEXT_INSN(BB_END(bb)))
-    {
-      if (NONDEBUG_INSN_P(insn) &&
-	  rvtt_p(insnd, insn) &&
-	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
-	{
-	  *next_insn = insn;
-	  return true;
-	}
-      insn = NEXT_INSN(insn);
-    }
-
-  return false;
 }
 
 void rvtt_emit_sfpassignlreg(rtx dst, rtx lr)

@@ -144,9 +144,8 @@ constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01; // builtin property
 constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
 // no longer needed 0x04;
 constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
-// Next 3 are exclusive
-constexpr unsigned int INSN_FLAGS_NON_SFPU           = 0x10;  // true if not an sfpu insn (eg, incrwc)
-constexpr unsigned int INSN_FLAGS_NON_TT             = 0x20;  // true if not a tt insn (eg, load_immediate)
+// Next 2 are exclusive
+constexpr unsigned int INSN_FLAGS_RISCV              = 0x20;  // true a regular riscv insn
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
 
 constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
@@ -171,8 +170,7 @@ struct GTY(()) rvtt_insn_data {
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
   inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
-  inline bool odd_bird_p() const { return flags & (INSN_FLAGS_NON_SFPU | INSN_FLAGS_NON_TT | INSN_FLAGS_EMPTY); }
-  inline bool non_tt_p() const { return flags & INSN_FLAGS_NON_TT; }
+  inline bool riscv_p() const { return flags & INSN_FLAGS_RISCV; }
   inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
   inline bool schedule_p() const { return schedule != -1; }
@@ -241,16 +239,6 @@ extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd
 extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
 extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
 extern uint32_t rvtt_scmp2loadi_mod(int mod);
-extern bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
-			       gcall **stmt,
-			       gimple_stmt_iterator gsi,
-			       bool test_initial = false,
-			       int allow_flags = 0);
-extern bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
-			       rtx_insn **next_insn,
-			       rtx_insn *insn,
-			       bool test_initial = false,
-			       int allow_flags = 0);
 extern int rvtt_get_insn_dst_regno(const rtx_insn *insn);
 
 inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const

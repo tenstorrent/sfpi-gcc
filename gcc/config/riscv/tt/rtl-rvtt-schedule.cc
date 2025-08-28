@@ -63,34 +63,45 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
    with the BB's we marked.  */
 
 static bool
-walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
-	    std::vector<basic_block> &visited)
+walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
+	     std::vector<basic_block> &visited)
 {
+  if (bb->flags & BB_VISITED)
+    return false;
+
   if (check_probe)
     {
       // Each block, other than the starting block, should only be
       // walked once -- don't get trapped in a loop of non-SPU
       // insns. The starting block should be walked exactly twice, if
       // reachable.
-      if (bb->flags & BB_VISITED)
-	return false;
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
     }
 
-  const rvtt_insn_data *insn_data;
-  if (probe_insn
-      && rvtt_get_next_insn (&insn_data, &probe_insn, probe_insn, check_probe))
-    {
-      // We've met an SPU insn. If it is dependent, we'll need to
-      // insert a nop.  If it is non-dependent, it's filling the
-      // original insn's shadow, so any following dependent insn will
-      // be fine. Either way, we're done searching this BB.
-      bool is_dependent = reg_referenced_p (regno, probe_insn);
-      DUMP ("Found %sdependent insn at %s\n",
-	    is_dependent ? "" : "non-", probe_insn->name);
-      return is_dependent;
-    }
+  if (probe_insn)
+    for (;; check_probe = true, probe_insn = NEXT_INSN (probe_insn))
+      {
+	const rvtt_insn_data *insn_data;
+	if (check_probe
+	    && NONDEBUG_INSN_P (probe_insn)
+	    && rvtt_p (&insn_data, probe_insn)
+	    && !insn_data->empty_p ()
+	    && !insn_data->riscv_p ())
+	  {
+	    // We've met an SPU insn. If it is dependent, we'll need to
+	    // insert a nop.  If it is non-dependent, it's filling the
+	    // original insn's shadow, so any following dependent insn will
+	    // be fine. Either way, we're done searching this BB.
+	    bool is_dependent = reg_referenced_p (regno, probe_insn);
+	    DUMP ("Found %sdependent insn at %s\n",
+		  is_dependent ? "" : "non-", probe_insn->name);
+	    return is_dependent;
+	}
+
+	if (probe_insn == BB_END (bb))
+	  break;
+      }
 
   // Walk all the successors
   edge_iterator ei;

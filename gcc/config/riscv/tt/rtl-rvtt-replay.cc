@@ -254,7 +254,7 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
       if (NONDEBUG_INSN_P(insn))
 	{
 	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, insn) && !insnd->non_tt_p ())
+	  if (rvtt_p (&insnd, insn) && !insnd->riscv_p ())
 	    {
 	      if (insnd->empty_p ())
 		// Ugly side effect
@@ -652,7 +652,7 @@ update_insns (basic_block bb, int which, int length)
     {
       const rvtt_insn_data *insnd;
       if (NONDEBUG_INSN_P (insn) && rvtt_p (&insnd, insn)
-	  && !insnd->non_tt_p ())
+	  && !insnd->riscv_p ())
 	{
 	  hash_type insn_hash = insn_list[i].hash;
 	  hash_type new_hash = compute_seq_hash (insn_hash, seq_hash);
