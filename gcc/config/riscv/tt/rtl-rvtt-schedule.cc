@@ -58,41 +58,13 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   return false;
 }
 
-static bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
-			rtx_insn **next_insn,
-			rtx_insn *insn,
-			bool test_initial,
-			int allow_flags = 0)
-{
-  basic_block bb = BLOCK_FOR_INSN(insn);
-
-  if (!test_initial)
-    {
-      insn = NEXT_INSN(insn);
-    }
-
-  while (insn != NEXT_INSN(BB_END(bb)))
-    {
-      if (NONDEBUG_INSN_P(insn) &&
-	  rvtt_p(insnd, insn) &&
-	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
-	{
-	  *next_insn = insn;
-	  return true;
-	}
-      insn = NEXT_INSN(insn);
-    }
-
-  return false;
-}
-
 /* Walk the BB graph from BB:probe_insn until we meet an SPU
    insn. Return true if the SPU insn is dependent.  Populate VISITED
    with the BB's we marked.  */
 
 static bool
-walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
-	    std::vector<basic_block> &visited)
+walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
+	     std::vector<basic_block> &visited)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -106,24 +78,30 @@ walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
     }
-#if 0
-  else if (probe_insn)
-    probe_insn = NEXT_INSN (probe_insn);
-#endif
 
-  const rvtt_insn_data *insn_data;
-  if (probe_insn
-      && rvtt_get_next_insn (&insn_data, &probe_insn, probe_insn, check_probe))
-    {
-      // We've met an SPU insn. If it is dependent, we'll need to
-      // insert a nop.  If it is non-dependent, it's filling the
-      // original insn's shadow, so any following dependent insn will
-      // be fine. Either way, we're done searching this BB.
-      bool is_dependent = reg_referenced_p (regno, probe_insn);
-      DUMP ("Found %sdependent insn at %s\n",
-	    is_dependent ? "" : "non-", probe_insn->name);
-      return is_dependent;
-    }
+  if (probe_insn)
+    for (;; check_probe = true, probe_insn = NEXT_INSN (probe_insn))
+      {
+	const rvtt_insn_data *insn_data;
+	if (check_probe
+	    && NONDEBUG_INSN_P (probe_insn)
+	    && rvtt_p (&insn_data, probe_insn)
+	    && !insn_data->empty_p ()
+	    && !insn_data->riscv_p ())
+	  {
+	    // We've met an SPU insn. If it is dependent, we'll need to
+	    // insert a nop.  If it is non-dependent, it's filling the
+	    // original insn's shadow, so any following dependent insn will
+	    // be fine. Either way, we're done searching this BB.
+	    bool is_dependent = reg_referenced_p (regno, probe_insn);
+	    DUMP ("Found %sdependent insn at %s\n",
+		  is_dependent ? "" : "non-", probe_insn->name);
+	    return is_dependent;
+	}
+	
+	if (probe_insn == BB_END (bb))
+	  break;
+      }
 
   // Walk all the successors
   edge_iterator ei;

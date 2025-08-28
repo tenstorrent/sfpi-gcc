@@ -170,7 +170,6 @@ struct GTY(()) rvtt_insn_data {
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
   inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
-  inline bool odd_bird_p() const { return flags & (INSN_FLAGS_RISCV | INSN_FLAGS_EMPTY); }
   inline bool riscv_p() const { return flags & INSN_FLAGS_RISCV; }
   inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
