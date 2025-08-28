@@ -205,7 +205,7 @@ is_sfpu_def(tree def, unordered_set<tree>& visited)
       gcall *stmt;
       const rvtt_insn_data *insnd;
 
-      return rvtt_p (&insnd, &stmt, def_stmt) && !insnd->non_tt_p();
+      return rvtt_p (&insnd, &stmt, def_stmt) && !insnd->riscv_p();
     }
 }
 

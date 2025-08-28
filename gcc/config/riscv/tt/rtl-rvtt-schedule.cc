@@ -58,6 +58,34 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
   return false;
 }
 
+static bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
+			rtx_insn **next_insn,
+			rtx_insn *insn,
+			bool test_initial,
+			int allow_flags = 0)
+{
+  basic_block bb = BLOCK_FOR_INSN(insn);
+
+  if (!test_initial)
+    {
+      insn = NEXT_INSN(insn);
+    }
+
+  while (insn != NEXT_INSN(BB_END(bb)))
+    {
+      if (NONDEBUG_INSN_P(insn) &&
+	  rvtt_p(insnd, insn) &&
+	  (!(*insnd)->odd_bird_p() || ((*insnd)->flags & allow_flags)))
+	{
+	  *next_insn = insn;
+	  return true;
+	}
+      insn = NEXT_INSN(insn);
+    }
+
+  return false;
+}
+
 /* Walk the BB graph from BB:probe_insn until we meet an SPU
    insn. Return true if the SPU insn is dependent.  Populate VISITED
    with the BB's we marked.  */
@@ -66,17 +94,22 @@ static bool
 walk_blocks(int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
 	    std::vector<basic_block> &visited)
 {
+  if (bb->flags & BB_VISITED)
+    return false;
+
   if (check_probe)
     {
       // Each block, other than the starting block, should only be
       // walked once -- don't get trapped in a loop of non-SPU
       // insns. The starting block should be walked exactly twice, if
       // reachable.
-      if (bb->flags & BB_VISITED)
-	return false;
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
     }
+#if 0
+  else if (probe_insn)
+    probe_insn = NEXT_INSN (probe_insn);
+#endif
 
   const rvtt_insn_data *insn_data;
   if (probe_insn
