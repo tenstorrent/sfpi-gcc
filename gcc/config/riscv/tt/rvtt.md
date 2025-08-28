@@ -41,6 +41,7 @@
   UNSPECV_SFPSYNTH_INSN
   UNSPECV_SFPREAD_LREG
   UNSPECV_SFPWRITE_LREG
+  UNSPECV_SFPASSIGN_LREG
 
   UNSPECV_SFPNOP
 
@@ -136,36 +137,29 @@
   return rvtt_synth_insn_pattern (operands, 7);
 })
 
-(define_int_attr rvtt_lreg_class
-  [(0 "0") (1 "1")  (2 "2")  (3 "3")  (4 "4")  (5 "5")  (6 "6")  (7 "7")])
-(define_int_iterator rvtt_user_lregs [0 1 2 3 4 5 6 7])
-
 (define_expand "rvtt_sfpassignlreg"
-  [(set	(match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "")] UNSPECV_SFPREAD_LREG))]
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGN_LREG))]
   "TARGET_RVTT"
-  {
-    // This is ick, I found it this way. Copying the hard reg to operand[0]
-    // causes test fails.
-    // The underlying problem is we're trying to glue TT_foo (regnum)
-    // stuff into the compiler's data flow analysis. and unfortunately chose
-    // this mechanism to get at the fixed regs.
-    SET_REGNO (operands[0], SFPU_REG_FIRST + INTVAL (operands[1]));
-    emit_insn (gen_rvtt_sfpread_lreg (operands[0], operands[1]));
-    DONE;
-  })
+{
+  rvtt_emit_sfpassignlreg(operands[0], operands[1]);
+  DONE;
+})
 
-(define_insn "rvtt_sfpread_lreg"
-  [(set (match_operand:V64SF 0 "register_operand" "+xr")
-        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPREAD_LREG))]
+(define_insn "rvtt_sfpassignlreg_int"
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
+        (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGN_LREG))]
   "TARGET_RVTT"
-  ""; read %0"
-  [(set_attr "type" "ghost")])
+  "")
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
                      (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPWRITE_LREG)]
   "TARGET_RVTT")
+
+(define_int_attr rvtt_lreg_class
+  [(0 "0") (1 "1")  (2 "2")  (3 "3")  (4 "4")  (5 "5")  (6 "6")  (7 "7")])
+(define_int_iterator rvtt_user_lregs [0 1 2 3 4 5 6 7])
 
 (define_insn "rvtt_sfpwrite_lreg<rvtt_lreg_class>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_lreg_class>")

@@ -729,6 +729,13 @@ bool rvtt_get_next_insn(const rvtt_insn_data **insnd,
   return false;
 }
 
+void rvtt_emit_sfpassignlreg(rtx dst, rtx lr)
+{
+  int lregnum = INTVAL(lr);
+  SET_REGNO(dst, SFPU_REG_FIRST + lregnum);
+  emit_insn(gen_rvtt_sfpassignlreg_int(dst));
+}
+
 static void
 finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gimple *stmt)
 {

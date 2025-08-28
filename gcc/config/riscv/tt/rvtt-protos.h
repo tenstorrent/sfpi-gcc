@@ -54,6 +54,8 @@ inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opc
   return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
 }
 
+extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
+
 extern void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
