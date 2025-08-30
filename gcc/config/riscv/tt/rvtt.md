@@ -141,16 +141,23 @@
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
   "TARGET_RVTT"
-{
-  rvtt_emit_sfpassignlreg(operands[0], operands[1]);
-  DONE;
-})
+  {
+    // This is ick, I found it this way. Copying the hard reg to operand[0]
+    // causes test fails.
+    // The underlying problem is we're trying to glue TT_foo (regnum)
+    // stuff into the compiler's data flow analysis. and unfortunately chose
+    // this mechanism to get at the fixed regs.
+    SET_REGNO (operands[0], SFPU_REG_FIRST + INTVAL (operands[1]));
+    emit_insn (gen_rvtt_sfpassignlreg_int (operands[0], operands[1]));
+    DONE;
+  })
 
 (define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
+        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand")] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_RVTT"
-  "")
+  ""
+  [(set_attr "length" "0")])
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
@@ -167,6 +174,7 @@
   "TARGET_RVTT"
   ""; write %0"
   [(set_attr "length" "0")])
+
 
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
