@@ -131,15 +131,9 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
 
   int arch;
   if (TARGET_RVTT_WH)
-    {
-      arch = 0;
-      rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_WH;
-    }
+    arch = 0;
   else if (TARGET_RVTT_BH)
-    {
-      arch = 1;
-      rvtt_sfpu_lreg_count_global = SFPU_LREG_COUNT_BH;
-    }
+    arch = 1;
   else
     return;
 
