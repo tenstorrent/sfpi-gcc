@@ -148,10 +148,6 @@ constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no buil
 constexpr unsigned int INSN_FLAGS_RISCV              = 0x20;  // true a regular riscv insn
 constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
 
-constexpr unsigned int SFPU_LREG_COUNT_WH = 8;
-constexpr unsigned int SFPU_LREG_COUNT_BH = 8;
-extern unsigned int rvtt_sfpu_lreg_count_global;
-
 struct GTY(()) rvtt_insn_data {
   enum insn_id : unsigned;
 

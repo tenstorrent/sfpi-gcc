@@ -339,6 +339,7 @@ ASM_MISA_SPEC
 #define SFPU_REG_FIRST 66
 #define SFPU_REG_LAST  81
 #define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
+#define SFPU_USER_REG_NUM 8
 
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
