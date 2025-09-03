@@ -32,7 +32,6 @@
   UNSPECV_WH_SFPXLOADI_LV
   UNSPECV_WH_SFPLOADI_INT
   UNSPECV_WH_SFPSTORE
-  UNSPECV_WH_SFPSTORE_INT
   UNSPECV_WH_SFPMULI
   UNSPECV_WH_SFPMULI_INT
   UNSPECV_WH_SFPADDI
@@ -246,18 +245,19 @@
   else
     {
       unsigned op = TT_OP_WH_SFPSTORE(0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_insn (operands[0], 0, operands[5], op, operands[6],
-				  operands[1], 20);
+      insn = rvtt_sfpsynth_store_insn (operands[0], 0, operands[5], op, operands[6],
+				       operands[1], 20);
     }
   emit_insn (insn);
   DONE;
 })
 
+;; stores cannot write from L12..L15 due to load macro side loading possibility
 (define_insn "rvtt_wh_sfpstore_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xr")
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xs")
                      (match_operand:SI    1 "const_int_operand" "N04U")
                      (match_operand:SI    2 "const_int_operand" "N02U")
-                     (match_operand:SI    3 "const_int_operand" "N14U")] UNSPECV_WH_SFPSTORE_INT)]
+                     (match_operand:SI    3 "const_int_operand" "N14U")] UNSPECV_WH_SFPSTORE)]
   "TARGET_RVTT_WH"
   "SFPSTORE\t%3, %0, %1, %2")
 

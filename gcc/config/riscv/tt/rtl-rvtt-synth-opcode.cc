@@ -70,7 +70,9 @@ transform (function *fn)
 	  else
 	    {
 	      has_dst = INSN_CODE (insn) == CODE_FOR_rvtt_sfpsynth_insn_dst;
-	      if (!has_dst && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_insn)
+	      if (!has_dst
+		  && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_insn
+		  && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_store_insn)
 		// Nothing here.
 		continue;
 

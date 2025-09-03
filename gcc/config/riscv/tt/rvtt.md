@@ -39,6 +39,7 @@
   ;; LV for keep dst reg alive as input for predicated liveness
 
   UNSPECV_SFPSYNTH_INSN
+  UNSPECV_SFPSYNTH_STORE_INSN
 
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
@@ -134,6 +135,21 @@
                      (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
                     ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 7 "=&r, X"))]
+  "TARGET_RVTT"
+{
+  return rvtt_synth_insn_pattern (operands, 7);
+})
+
+(define_insn "rvtt_sfpsynth_store_insn"
+  [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m") ; instrn_buffer
+                     (match_operand:SI    1 "const_int_operand" "n") ; flags
+                     (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
+                     (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
+                     (match_operand:SI    4 "const_int_operand" "n") ; id
+	             (match_operand:V64SF 5 "register_operand" "xs") ; src
+                     (match_operand:SI    6 "const_int_operand" "n") ; src shift
+                    ] UNSPECV_SFPSYNTH_STORE_INSN)
+   (clobber (match_scratch:SI 7 "=&r"))]
   "TARGET_RVTT"
 {
   return rvtt_synth_insn_pattern (operands, 7);

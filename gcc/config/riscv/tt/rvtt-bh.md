@@ -211,14 +211,16 @@
   else
     {
       unsigned op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_insn (operands[0], 0, operands[5], op, operands[6], operands[1], 20);
+      insn = rvtt_sfpsynth_store_insn (operands[0], 0, operands[5], op, operands[6],
+                                       operands[1], 20);
     }
   emit_insn (insn);
   DONE;
 })
 
+;; stores cannot write from L12..L15 due to load macro side loading possibility
 (define_insn "rvtt_bh_sfpstore_int"
-  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xr")
+  [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "xs")
                      (match_operand:SI    1 "const_int_operand" "N04U")
                      (match_operand:SI    2 "const_int_operand" "N03U")
                      (match_operand:SI    3 "const_int_operand" "N13U")] UNSPECV_BH_SFPSTORE)]

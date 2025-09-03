@@ -93,6 +93,7 @@ RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1, 0x08)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1, 0x08)
 RVTT_RTL_ONLY (sfpsynth_insn,         3, 1, 0x08)
+RVTT_RTL_ONLY (sfpsynth_store_insn,   3, 1, 0x08)
 
 RVTT_RTL_ONLY(sfppreservelreg0,    -1, -1, 0x48)
 RVTT_RTL_ONLY(sfppreservelreg1,    -1, -1, 0x48)
