@@ -445,6 +445,9 @@ enum reg_class
   SFPU_REGS_L5,                 /* SFPU register L5 for Tenstorrent */
   SFPU_REGS_L6,                 /* SFPU register L6 for Tenstorrent */
   SFPU_REGS_L7,                 /* SFPU register L7 for Tenstorrent */
+  // SFPSTORE cannot write L12..L15 directly when LOADMACRO loading is
+  // in effect, and we have no clue as to whether that's the case.
+  SFPU_STORE_REGS,              /* SFPU registers for sfpstore Tenstorrent */
   SFPU_REGS,                    /* SFPU registers for Tenstorrent */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
@@ -474,6 +477,7 @@ enum reg_class
   "SFPU_REGS_L5",							\
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
+  "SFPU_STORE_REGS",							\
   "SFPU_REGS",								\
   "ALL_REGS"								\
 }
@@ -505,6 +509,7 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000080 },	/* SFPU_REGS_L5 */ 	\
   { 0x00000000, 0x00000000, 0x00000100 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00000200 },	/* SFPU_REGS_L7 */ 	\
+  { 0x00000000, 0x00000000, 0x00003ffc },	/* SFPU_STORE_REGS */ 	\
   { 0x00000000, 0x00000000, 0x0003fffc },	/* SFPU_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0x0003ffff }	/* ALL_REGS */		\
 }

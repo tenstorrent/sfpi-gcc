@@ -53,6 +53,8 @@ inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opc
 {
   return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
 }
+rtx rvtt_sfpsynth_store_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+			      rtx src, unsigned src_shift);
 
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
 

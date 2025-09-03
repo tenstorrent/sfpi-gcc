@@ -23,6 +23,10 @@
 (define_register_constraint "xr" "SFPU_REGS"
   "Any of the SFPU Registers")
 
+
+(define_register_constraint "xs" "SFPU_STORE_REGS"
+  "SFPU store Register")
+
 ;; specific allocatable registers
 (define_register_constraint "x0" "SFPU_REGS_L0"
   "SFPU Register L0")

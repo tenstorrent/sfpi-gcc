@@ -85,7 +85,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 132;
+static const int NUMBER_OF_INTRINSICS = 133;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -570,11 +570,14 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
 		   "sw\t%%%u, %%0\t# %d:%x",
 		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
   gcc_assert (SYNTH_src == 5 && SYNTH_dst == 7);
+  bool has_lv = false;
   if (has_dst)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
-  bool has_lv = REG_P (operands[SYNTH_lv]);
-  if (has_lv)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
+    {
+      pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
+      has_lv = REG_P (operands[SYNTH_lv]);
+      if (has_lv)
+	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
+    }
   if (REG_P (src_reg))
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %5"[!has_lv]);
 
@@ -765,6 +768,15 @@ rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id
 		    rtx src, unsigned src_shift)
 {
   return gen_rvtt_sfpsynth_insn
+    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+     src, GEN_INT (src_shift));
+}
+
+rtx
+rvtt_sfpsynth_store_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+		          rtx src, unsigned src_shift)
+{
+  return gen_rvtt_sfpsynth_store_insn
     (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
      src, GEN_INT (src_shift));
 }
