@@ -107,18 +107,18 @@
   SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
-  [(set (match_operand:V64SF 7 "register_operand" "=xr") ; result
-        (unspec_volatile:V64SF [(match_operand:SI    0 "memory_operand"   "m") ; instrn_buffer
-                                (match_operand:SI    1 "const_int_operand" "n") ; flags
-                                (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
-                                (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
-                                (match_operand:SI    4 "const_int_operand" "n") ; id
-                                (match_operand:V64SF 5 "reg_or_vec0_operand" "xrxn") ; src
-                                (match_operand:SI    6 "const_int_operand" "n") ; src shift
-                                (match_operand:SI    8 "const_int_operand" "n") ; dst shift
-                                (match_operand:V64SF 9 "reg_or_vec0_operand" "7xn") ; lv
+  [(set (match_operand:V64SF 7 "register_operand" "=xr,xr,xr,xr") ; result
+        (unspec_volatile:V64SF [(match_operand:SI    0 "memory_operand"   "m,m,m,m") ; instrn_buffer
+                                (match_operand:SI    1 "const_int_operand" "n,n,n,n") ; flags
+                                (match_operand:SI    2 "register_operand"  "r,r,r,r") ; synth'd insn
+                                (match_operand:SI    3 "const_int_operand" "n,n,n,n") ; cst opcode
+                                (match_operand:SI    4 "const_int_operand" "n,n,n,n") ; id
+                                (match_operand:V64SF 5 "reg_or_vec0_operand" "xr,xn,xr,xn") ; src
+                                (match_operand:SI    6 "const_int_operand" "n,n,n,n") ; src shift
+                                (match_operand:SI    8 "const_int_operand" "n,n,n,n") ; dst shift
+                                (match_operand:V64SF 9 "reg_or_vec0_operand" "7,7,xn,xn") ; lv
                                ] UNSPECV_SFPSYNTH_INSN))
-   (clobber (match_scratch:SI 10 "=&r"))]
+   (clobber (match_scratch:SI 10 "=&r,&r,&r,&r"))]
   "TARGET_RVTT"
 {
   return rvtt_synth_insn_pattern (operands, 10);

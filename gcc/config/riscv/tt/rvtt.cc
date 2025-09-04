@@ -570,11 +570,14 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
 		   "sw\t%%%u, %%0\t# %d:%x",
 		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
   gcc_assert (SYNTH_src == 5 && SYNTH_dst == 7);
+  bool has_lv = false;
   if (has_dst)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
-  bool has_lv = REG_P (operands[SYNTH_lv]);
-  if (has_lv)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
+    {
+      pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
+      has_lv = REG_P (operands[SYNTH_lv]);
+      if (has_lv)
+	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
+    }
   if (REG_P (src_reg))
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %5"[!has_lv]);
 
