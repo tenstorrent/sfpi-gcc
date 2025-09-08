@@ -240,7 +240,7 @@ static inline hash_type compute_seq_hash(hash_type insn_hash, hash_type seq_hash
 //     kernel's insn and not in the first half, well...crap, revisit (maybe
 //     check each 1/nth independently)
 //
-// Cretees the insn_list
+// Creates the insn_list
 static void devise_strategy (int *count, int *strategy, basic_block bb)
 {
   rtx_insn *insn;
@@ -251,42 +251,14 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
   int insn_count = 0;
   FOR_BB_INSNS (bb, insn)
     {
-      if (NONDEBUG_INSN_P(insn))
+      if (!NONDEBUG_INSN_P(insn))
+	// NONDEBUG_INSN_P != !DEBUG_INSN_P, because, of course
+	continue;
+
+      const rvtt_insn_data *insnd;
+      if (!rvtt_p (&insnd, insn) || insnd->riscv_p ())
 	{
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, insn) && !insnd->riscv_p ())
-	    {
-	      if (insnd->empty_p ())
-		// Ugly side effect
-		// Empty insns have served their purpose, delete now
-		// This simplifies the update routine somewhat
-		set_insn_deleted (insn);
-	      else
-		{
-		  int startable = strategy_every_insn;
-		  if (insn_count == 0)
-		    startable |= strategy_first_insn;
-		  if (insnd->id == rvtt_insn_data::sfpload_int)
-		    {
-		      if (first_load == -1)
-			first_load = insn_count;
-		      loads++;
-		      startable |= strategy_load;
-		    }
-		  else if (insnd->id == rvtt_insn_data::sfploadi_int)
-		    {
-		      loadis++;
-		      startable |= strategy_loadi;
-		    }
-
-		  hash_type insn_hash = compute_insn_hash(insnd, insn);
-
-		  insn_info insni(INSN_CODE(insn), startable, insn_hash);
-		  insn_list.push_back(insni);
-		  insn_count++;
-		}
-	    }
-	  else if (insn_list.size () > 0)
+	  if (insn_list.size () > 0)
 	    {
 	      // The nonimm processing should ensure that riscv insns don't
 	      // interact with sfpu insns.  However, bail on __asm insns
@@ -294,7 +266,37 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
 		// These are __asm and maybe other?
 		insn_list.back ().halt = true;
 	    }
+	  continue;
 	}
+      if (insnd->empty_p ())
+	{
+	  // Ugly side effect
+	  // Empty insns have served their purpose, delete now
+	  // This simplifies the update routine somewhat
+	  set_insn_deleted (insn);
+	  continue;
+	}
+
+      int startable = strategy_every_insn;
+      if (insn_count == 0)
+	startable |= strategy_first_insn;
+      if (insnd->id == rvtt_insn_data::sfpload_int)
+	{
+	  if (first_load == -1)
+	    first_load = insn_count;
+	  loads++;
+	  startable |= strategy_load;
+	}
+      else if (insnd->id == rvtt_insn_data::sfploadi_int)
+	{
+	  loadis++;
+	  startable |= strategy_loadi;
+	}
+
+      hash_type insn_hash = compute_insn_hash(insnd, insn);
+      insn_info insni(INSN_CODE(insn), startable, insn_hash);
+      insn_list.push_back(insni);
+      insn_count++;
     }
   gcc_assert (insn_count < 65536);
 

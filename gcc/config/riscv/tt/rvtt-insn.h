@@ -88,21 +88,21 @@ along with GCC; see the file COPYING3.  If not see
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
 // This can be ensured by using the RVTT_PAD_XX define
 
-// Common internal (rtl only) insns.  args are (id, nonimm_pos, generic_pos, flags)
-RVTT_RTL_ONLY (sfpgccmov_cc,     -1, -1, 0x08)
+// Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
+RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
 
-RVTT_RTL_ONLY (sfpsynth_insn_dst,     3, 1, 0x08)
-RVTT_RTL_ONLY (sfpsynth_insn,         3, 1, 0x08)
-RVTT_RTL_ONLY (sfpsynth_store_insn,   3, 1, 0x08)
+RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, 3, 1)
+RVTT_RTL_ONLY (sfpsynth_insn,         0x08, 3, 1)
+RVTT_RTL_ONLY (sfpsynth_store_insn,   0x08, 3, 1)
 
-RVTT_RTL_ONLY(sfppreservelreg0,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg1,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg2,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg3,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg4,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg5,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg6,    -1, -1, 0x48)
-RVTT_RTL_ONLY(sfppreservelreg7,    -1, -1, 0x48)
+RVTT_RTL_ONLY(sfppreservelreg0,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg1,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg2,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg3,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg4,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg5,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg6,   0x48, -1, -1)
+RVTT_RTL_ONLY(sfppreservelreg7,   0x48, -1, -1)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
