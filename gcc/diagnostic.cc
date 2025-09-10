@@ -944,13 +944,14 @@ diagnostic_context::action_after_output (diagnostic_t diag_kind)
     case DK_ICE:
     case DK_ICE_NOBT:
       {
+	static char **saved_argv = nullptr;
 	/* Attempt to ensure that any outputs are flushed e.g. that .sarif
 	   files are written out.
 	   Only do it once.  */
-	static bool finishing_due_to_ice = false;
-	if (!finishing_due_to_ice)
+	if (!saved_argv)
 	  {
-	    finishing_due_to_ice = true;
+	    saved_argv = m_original_argv;
+	    m_original_argv = nullptr;
 	    finish ();
 	  }
 
@@ -966,6 +967,11 @@ diagnostic_context::action_after_output (diagnostic_t diag_kind)
 	  real_abort ();
 
 	fnotice (stderr, "gcc %s%s\n", pkgversion_string, version_string);
+	bool space = false;
+	for (auto *argv = saved_argv; *argv; argv++, space = true)
+	  fnotice (stderr, &" %s"[1 - space], *argv++);
+	fnotice (stderr, "\n");
+	freeargv (saved_argv);
 
 	if (m_report_bug)
 	  fnotice (stderr, "Please submit a full bug report, "
