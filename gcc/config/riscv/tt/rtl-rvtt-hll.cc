@@ -17,49 +17,17 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
 #include "rtl.h"
-#include "tree.h"
-#include "cfghooks.h"
 #include "df.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "insn-config.h"
-#include "regs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "cgraph.h"
-#include "tree-pretty-print.h" /* for dump_function_header */
-#include "varasm.h"
-#include "insn-attr.h"
-#include "conditions.h"
-#include "flags.h"
-#include "output.h"
-#include "except.h"
-#include "rtl-error.h"
-#include "toplev.h" /* exact_log2, floor_log2 */
-#include "reload.h"
-#include "intl.h"
-#include "cfgrtl.h"
-#include "debug.h"
 #include "tree-pass.h"
-#include "tree-ssa.h"
-#include "cfgloop.h"
-#include "stringpool.h"
-#include "attribs.h"
-#include "asan.h"
-#include "rtl-iter.h"
-#include "print-rtl.h"
-#include "function-abi.h"
-#include "domwalk.h"
 #include "cfgbuild.h"
-#include <vector>
-#include <unordered_map>
 #include "rvtt.h"
+#include <unordered_map>
 
 #define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
@@ -297,11 +265,10 @@ workaround_wh_raw (function *cfn)
       rtx store_mem = nullptr;
       FOR_BB_INSNS (bb, insn)
 	{
-	  if (!NONDEBUG_INSN_P(insn))
+	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 
 	  rtx insn_pat = PATTERN (insn);
-	  int classify = classify_insn (insn_pat);
 	  bool new_store = false;
 
 	  if (GET_CODE (insn_pat) == SET
@@ -313,25 +280,28 @@ workaround_wh_raw (function *cfn)
 		new_store = true;
 	    }
 
-	  if (have_store
-	      && (new_store
-		  || classify != INSN
-		  || load_mem_p (insn_pat)
-		  || (GET_CODE (insn_pat) == SET
-		      && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat)))))
+	  if (!have_store)
+	    ;
+	  else if (new_store
+		   || GET_CODE (insn) == CALL_INSN
+		   || load_mem_p (insn_pat)
+		   || (GET_CODE (insn_pat) == SET
+		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
 	    {
 	      // Emit the war when we hit a load or if the base reg gets modified
 	      DUMP("emitting raw war before load\n");
 	      emit_load (insn, true, store_mem);
 	      have_store = false;
 	    }
+	  else
+	    gcc_assert (insn == BB_END (bb)
+			|| !control_flow_insn_p (insn));
 
 	  if (new_store)
 	    {
 	      // Found a potential RAW issue store
-	      // Use the same register as used in the insn if we need th hll war
 	      int dummy_offset;
-	      get_mem_reg_and_offset(SET_DEST(insn_pat), &store_ptr_regno, &dummy_offset);
+	      get_mem_reg_and_offset (SET_DEST (insn_pat), &store_ptr_regno, &dummy_offset);
 	      store_mem = SET_DEST (insn_pat);
 	      have_store = true;
 	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
@@ -340,9 +310,8 @@ workaround_wh_raw (function *cfn)
 
       if (have_store)
 	{
-	  gcc_assert (!control_flow_insn_p (BB_END (bb)));
 	  DUMP("emitting raw war at end of bb\n");
-	  emit_load (BB_END (bb), false, store_mem);
+	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store_mem);
 	  have_store = false;
 	}
     }
