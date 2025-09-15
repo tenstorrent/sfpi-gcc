@@ -911,7 +911,7 @@ extern void fancy_abort (const char *, int, const char *)
 #undef calloc
 #undef strdup
 #undef strndup
- #pragma GCC poison calloc strdup strndup
+ #pragma GCC poison strdup strndup
 
 #if !defined(FLEX_SCANNER) && !defined(YYBISON)
 #undef malloc

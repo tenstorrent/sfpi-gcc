@@ -1636,6 +1636,7 @@ gcc_AC_CHECK_DECLS(mallinfo mallinfo2, , ,[
 #include "system.h"
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#include <mallinfo2_compat.h>
 #endif
 ])
 
