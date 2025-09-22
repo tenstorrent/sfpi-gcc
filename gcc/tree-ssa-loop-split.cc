@@ -1843,7 +1843,9 @@ public:
   {}
 
   /* opt_pass methods: */
-  bool gate (function *) final override { return flag_split_loops != 0; }
+  // This pass can cause kernels to double in size and overflow their size
+  // limitations. It'd be nice if we had some kind of size heuristic.
+  bool gate (function *) final override { return !TARGET_RVTT && flag_split_loops != 0; }
   unsigned int execute (function *) final override;
 
 }; // class pass_loop_split
