@@ -107,6 +107,6 @@ RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
 			      "xiangshan-nanhu")
 
 RISCV_CORE("tt-wh",           "rv32im_xttwh",    "rvtt-b1")
-RISCV_CORE("tt-bh",           "rv32im_xttbh_zaamo",    "rvtt-b1")
+RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb_xttbh",    "rvtt-b1")
 
 #undef RISCV_CORE
