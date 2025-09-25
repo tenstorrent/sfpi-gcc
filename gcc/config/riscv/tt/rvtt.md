@@ -267,9 +267,10 @@
 
 (define_expand "rvtt_ttinsn"
   [(unspec_volatile [(mem:SI (match_operand:SI    0 "address_operand"  ""))
-                     (match_operand:SI    1 "reg_or_const_int_operand" "")] UNSPECV_TTINSN)]
+                     (match_operand:SI    1 "const_int_operand" "")
+                     (match_operand:SI    2 "reg_or_const_int_operand" "")] UNSPECV_TTINSN)]
   "TARGET_RVTT"
 {
-  emit_insn (gen_rvtt_ttinsn_int (gen_rtx_MEM (SImode, operands[0]), operands[1]));
+  emit_insn (gen_rvtt_ttinsn_int (gen_rtx_MEM (SImode, operands[0]), operands[2]));
   DONE;
 })

@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
+#include "diagnostic-core.h"
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
@@ -192,12 +193,17 @@ transform (function *fn)
 	      graph[opcode_ix].addend = count;
 	    }
 	  else if (fndecl == ttinsn_decl
-		   && gimple_call_arg (call_stmt, 0) != null_pointer_node
-		   && TREE_CODE (gimple_call_arg (call_stmt, 1)) == INTEGER_CST)
+		   && gimple_call_arg (call_stmt, 0) != null_pointer_node)
 	    {
-	      gimple_call_set_arg (call_stmt, 0, null_pointer_node);
-	      update_stmt (call_stmt);
-	      immediates = true;
+	      if (TREE_CODE (gimple_call_arg (call_stmt, 2)) == INTEGER_CST)
+		{
+		  gimple_call_set_arg (call_stmt, 0, null_pointer_node);
+		  update_stmt (call_stmt);
+		  immediates = true;
+		}
+	      else if (integer_nonzerop (gimple_call_arg (call_stmt, 1)))
+		// User required it to be statically known.
+		warning_at (gimple_location (call_stmt), 0, "ttinsn is not statically known");
 	    }
 	}
 

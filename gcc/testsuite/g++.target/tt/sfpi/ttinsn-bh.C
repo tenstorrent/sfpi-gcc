@@ -10,5 +10,8 @@ void foo (uint32_t v) {
   lltt::insn(0x12345678);
   lltt::insn(v);
 }
-
 // { dg-final { scan-assembler {\n_Z3foom:\n\t.ttinsn	305419896\n\tlui	a5,%hi\(__instrn_buffer\)\n\tsw	a0,%lo\(__instrn_buffer\)\(a5\)\n\tret\n} } }
+
+void baz (uint32_t v) {
+  __builtin_rvtt_ttinsn(&__instrn_buffer[0], true, v); // { dg-warning "ttinsn is not statically known" }
+}
