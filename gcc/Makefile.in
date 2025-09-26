@@ -4831,6 +4831,6 @@ DEPFILES = \
     $(dir $(obj))$(DEPDIR)/$(patsubst %.o,%.Po,$(notdir $(obj))))
 -include $(DEPFILES)
 
-ifneq ($(target),riscv32-tt-elf)
-$(error This source tree only builds riscv32-tt-elf, use the sfpi scripts/build.sh script)
+ifneq ($(target),riscv-tt-elf)
+$(error This source tree only builds riscv-tt-elf, use the sfpi scripts/build.sh script)
 endif
