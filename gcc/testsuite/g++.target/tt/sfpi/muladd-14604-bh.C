@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -17,7 +18,11 @@ void muladd() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z6muladdv:\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z6muladdv:
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void mulsub() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -29,7 +34,11 @@ void mulsub() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z6mulsubv:\n\tSFPMAD	L3, L1, L2, L0, 2\n\tret\n} } }
+/*
+**_Z6mulsubv:
+**	SFPMAD	L3, L1, L2, L0, 2
+**	ret
+*/
 
 void negmuladd() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -41,7 +50,11 @@ void negmuladd() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z9negmuladdv:\n\tSFPMAD	L3, L1, L2, L0, 1\n\tret\n} } }
+/*
+**_Z9negmuladdv:
+**	SFPMAD	L3, L1, L2, L0, 1
+**	ret
+*/
 
 void negmulsub() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -53,7 +66,11 @@ void negmulsub() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z9negmulsubv:\n\tSFPMAD	L3, L1, L2, L0, 3\n\tret\n} } }
+/*
+**_Z9negmulsubv:
+**	SFPMAD	L3, L1, L2, L0, 3
+**	ret
+*/
 
 void negmuladd2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -65,7 +82,11 @@ void negmuladd2() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z10negmuladd2v:\n\tSFPMAD	L3, L1, L2, L0, 1\n\tret\n} } }
+/*
+**_Z10negmuladd2v:
+**	SFPMAD	L3, L1, L2, L0, 1
+**	ret
+*/
 
 void negmulsub2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -77,4 +98,8 @@ void negmulsub2() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z10negmulsub2v:\n\tSFPMAD	L3, L1, L2, L0, 3\n\tret\n} } }
+/*
+**_Z10negmulsub2v:
+**	SFPMAD	L3, L1, L2, L0, 3
+**	ret
+*/

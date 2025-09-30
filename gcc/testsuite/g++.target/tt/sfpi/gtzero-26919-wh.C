@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-wh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
 extern unsigned *instrn_buffer;
@@ -13,4 +14,10 @@ void bad()
   v_if (i > 0) {
   } v_endif;
 }
-// { dg-final { scan-assembler {\n_Z3badv:\n\tSFPSETCC	L0, 0, 4\n\tSFPSETCC	L0, 0, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z3badv:
+**	SFPSETCC	L0, 0, 4
+**	SFPSETCC	L0, 0, 2
+**	SFPENCC	3, 10
+**	ret
+*/

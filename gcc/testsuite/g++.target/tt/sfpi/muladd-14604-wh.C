@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-wh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -17,7 +18,11 @@ void muladd() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z6muladdv:\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z6muladdv:
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void mulsub() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -29,7 +34,12 @@ void mulsub() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z6mulsubv:\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z6mulsubv:
+**	SFPMOV	L0, L0, 1
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void negmuladd() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -41,7 +51,12 @@ void negmuladd() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z9negmuladdv:\n\tSFPMOV	L2, L2, 1\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z9negmuladdv:
+**	SFPMOV	L2, L2, 1
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void negmulsub() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -53,7 +68,13 @@ void negmulsub() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z9negmulsubv:\n\tSFPMOV	L2, L2, 1\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z9negmulsubv:
+**	SFPMOV	L2, L2, 1
+**	SFPMOV	L0, L0, 1
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void negmuladd2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -65,7 +86,12 @@ void negmuladd2() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z10negmuladd2v:\n\tSFPMOV	L1, L1, 1\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z10negmuladd2v:
+**	SFPMOV	L1, L1, 1
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/
 
 void negmulsub2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -77,4 +103,10 @@ void negmulsub2() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z10negmulsub2v:\n\tSFPMOV	L1, L1, 1\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L3, L1, L2, L0, 0\n\tret\n} } }
+/*
+**_Z10negmulsub2v:
+**	SFPMOV	L1, L1, 1
+**	SFPMOV	L0, L0, 1
+**	SFPMAD	L3, L1, L2, L0, 0
+**	ret
+*/

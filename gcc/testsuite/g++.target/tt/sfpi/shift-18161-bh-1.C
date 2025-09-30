@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -14,7 +15,12 @@ void f5() {
   vUInt r = a << b;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f5v:\n\tSFPSHFT	L0, L1, 0, 0\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
+/*
+**_Z2f5v:
+**	SFPSHFT	L0, L1, 0, 0
+**	SFPMOV	L3, L0, 2
+**	ret
+*/
 
 void f5r() {
   vUInt a = l_reg[LRegs::LReg0];
@@ -23,7 +29,14 @@ void f5r() {
   vUInt r = a >> b;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f5rv:\n\tSFPLOADI	L2, 0, 4\n\tSFPIADD	L1, L2, 0, 6\n\tSFPSHFT	L0, L1, 0, 0\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
+/*
+**_Z3f5rv:
+**	SFPLOADI	L2, 0, 4
+**	SFPIADD	L1, L2, 0, 6
+**	SFPSHFT	L0, L1, 0, 0
+**	SFPMOV	L3, L0, 2
+**	ret
+*/
 
 void f6() {
   vInt a = l_reg[LRegs::LReg0];
@@ -32,7 +45,12 @@ void f6() {
   vInt r = a << b;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f6v:\n\tSFPSHFT	L0, L1, 0, 2\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
+/*
+**_Z2f6v:
+**	SFPSHFT	L0, L1, 0, 2
+**	SFPMOV	L3, L0, 2
+**	ret
+*/
 
 void f6r() {
   vInt a = l_reg[LRegs::LReg0];
@@ -41,4 +59,11 @@ void f6r() {
   vInt r = a >> b;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f6rv:\n\tSFPLOADI	L2, 0, 4\n\tSFPIADD	L1, L2, 0, 6\n\tSFPSHFT	L0, L1, 0, 2\n\tSFPMOV	L3, L0, 2\n\tret\n} } }
+/*
+**_Z3f6rv:
+**	SFPLOADI	L2, 0, 4
+**	SFPIADD	L1, L2, 0, 6
+**	SFPSHFT	L0, L1, 0, 2
+**	SFPMOV	L3, L0, 2
+**	ret
+*/

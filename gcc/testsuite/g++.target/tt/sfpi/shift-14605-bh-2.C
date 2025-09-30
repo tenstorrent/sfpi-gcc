@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -13,7 +14,11 @@ void f1() {
   vUInt r = a << 2;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f1v:\n\tSFPSHFT	L3, L0, 2, 0 \| 5\n\tret\n} } }
+/*
+**_Z2f1v:
+**	SFPSHFT	L3, L0, 2, 0 \| 5
+**	ret
+*/
 
 void f1r() {
   vUInt a = l_reg[LRegs::LReg0];
@@ -21,7 +26,11 @@ void f1r() {
   vUInt r = a >> 2;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f1rv:\n\tSFPSHFT	L3, L0, -2, 0 \| 5\n\tret\n} } }
+/*
+**_Z3f1rv:
+**	SFPSHFT	L3, L0, -2, 0 \| 5
+**	ret
+*/
 
 void f2() {
   vInt a = l_reg[LRegs::LReg0];
@@ -29,7 +38,11 @@ void f2() {
   vInt r = a << 2;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f2v:\n\tSFPSHFT	L3, L0, 2, 2 \| 5\n\tret\n} } }
+/*
+**_Z2f2v:
+**	SFPSHFT	L3, L0, 2, 2 \| 5
+**	ret
+*/
 
 void f2r() {
   vInt a = l_reg[LRegs::LReg0];
@@ -37,7 +50,11 @@ void f2r() {
   vInt r = a >> 2;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f2rv:\n\tSFPSHFT	L3, L0, -2, 2 \| 5\n\tret\n} } }
+/*
+**_Z3f2rv:
+**	SFPSHFT	L3, L0, -2, 2 \| 5
+**	ret
+*/
 
 void f3(int s) {
   vUInt a = l_reg[LRegs::LReg0];
@@ -45,7 +62,18 @@ void f3(int s) {
   vUInt r = a << s;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f3i:\n\tli	a5,16773120\n\tslli	a0,a0,12\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a0,a0,a5\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tli	a5, 2046820405	# 2:7a000035\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\)	# 2:7a000035 L3 := L0\n\tret\n} } }
+/*
+**_Z2f3i:
+**	li	a5,16773120
+**	slli	a0,a0,12
+**	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	and	a0,a0,a5
+**	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
+**	li	a5, 2046820405	# 2:7a000035
+**	add	a0,a0,a5
+**	sw	a0, 0\(a4\)	# 2:7a000035 L3 := L0
+**	ret
+*/
 
 void f3r(int s) {
   vUInt a = l_reg[LRegs::LReg0];
@@ -53,7 +81,19 @@ void f3r(int s) {
   vUInt r = a >> s;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f3ri:\n\tneg	a5,a0\n\tli	a4,16773120\n\tslli	a5,a5,12\n\tlui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a5,a5,a4\n\tlw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)\n\tli	a4, 2046820405	# 2:7a000035\n\tadd	a5,a5,a4\n\tsw	a5, 0\(a3\)	# 2:7a000035 L3 := L0\n\tret\n} } }
+/*
+**_Z3f3ri:
+**	neg	a5,a0
+**	li	a4,16773120
+**	slli	a5,a5,12
+**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	and	a5,a5,a4
+**	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
+**	li	a4, 2046820405	# 2:7a000035
+**	add	a5,a5,a4
+**	sw	a5, 0\(a3\)	# 2:7a000035 L3 := L0
+**	ret
+*/
 
 void f4(int s) {
   vInt a = l_reg[LRegs::LReg0];
@@ -61,7 +101,18 @@ void f4(int s) {
   vInt r = a << s;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z2f4i:\n\tli	a5,16773120\n\tslli	a0,a0,12\n\tlui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a0,a0,a5\n\tlw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)\n\tli	a5, 2046820407	# 2:7a000037\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a4\)	# 2:7a000037 L3 := L0\n\tret\n} } }
+/*
+**_Z2f4i:
+**	li	a5,16773120
+**	slli	a0,a0,12
+**	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	and	a0,a0,a5
+**	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
+**	li	a5, 2046820407	# 2:7a000037
+**	add	a0,a0,a5
+**	sw	a0, 0\(a4\)	# 2:7a000037 L3 := L0
+**	ret
+*/
 
 void f4r(int s) {
   vInt a = l_reg[LRegs::LReg0];
@@ -69,5 +120,16 @@ void f4r(int s) {
   vInt r = a >> s;
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z3f4ri:\n\tneg	a5,a0\n\tli	a4,16773120\n\tslli	a5,a5,12\n\tlui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tand	a5,a5,a4\n\tlw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)\n\tli	a4, 2046820407	# 2:7a000037\n\tadd	a5,a5,a4\n\tsw	a5, 0\(a3\)	# 2:7a000037 L3 := L0\n\tret\n} } }
-
+/*
+**_Z3f4ri:
+**	neg	a5,a0
+**	li	a4,16773120
+**	slli	a5,a5,12
+**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	and	a5,a5,a4
+**	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
+**	li	a4, 2046820407	# 2:7a000037
+**	add	a5,a5,a4
+**	sw	a5, 0\(a3\)	# 2:7a000037 L3 := L0
+**	ret
+*/

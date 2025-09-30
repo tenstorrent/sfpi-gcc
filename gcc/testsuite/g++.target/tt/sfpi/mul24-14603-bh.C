@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -16,7 +17,12 @@ void foo () {
   l_reg[LRegs::LReg2] = r_lo;
   l_reg[LRegs::LReg3] = r_hi;
 }
-// { dg-final { scan-assembler {\n_Z3foov:\n\tSFPMUL24	L2, L0, L1, 0\n\tSFPMUL24	L3, L0, L1, 1\n\tret\n} } }
+/*
+**_Z3foov:
+**	SFPMUL24	L2, L0, L1, 0
+**	SFPMUL24	L3, L0, L1, 1
+**	ret
+*/
 
 void bar () {
   // Live value test
@@ -37,5 +43,16 @@ void bar () {
   l_reg[LRegs::LReg2] = r_lo;
   l_reg[LRegs::LReg3] = r_hi;
 }
-// { dg-final { scan-assembler {\n_Z3barv:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPCOMPC\n\tSFPMOV	L2, L4, 2\n\tSFPMUL24	L2, L0, L1, 0\n\tSFPMOV	L3, L5, 2\n\tSFPMUL24	L3, L0, L1, 1\n\tSFPENCC	3, 10\n\tret\n} } }
-
+/*
+**_Z3barv:
+**	SFPMAD	L2, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L2, 0, 0
+**	SFPCOMPC
+**	SFPMOV	L2, L4, 2
+**	SFPMUL24	L2, L0, L1, 0
+**	SFPMOV	L3, L5, 2
+**	SFPMUL24	L3, L0, L1, 1
+**	SFPENCC	3, 10
+**	ret
+*/
