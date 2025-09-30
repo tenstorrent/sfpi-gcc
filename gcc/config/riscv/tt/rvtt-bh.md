@@ -205,13 +205,14 @@
   "TARGET_RVTT_BH"
 {
   rtx insn = nullptr;
-  if (GET_CODE(operands[4]) == CONST_INT)
+  if (CONST_INT_P (operands[4]))
     insn = gen_rvtt_bh_sfpstore_int (operands[1], operands[2], operands[3],
     	                             rvtt_clamp_unsigned (operands[4], 0x1FFF));
   else
     {
       unsigned op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_store_insn (operands[0], 0, operands[5], op, operands[6],
+      insn = rvtt_sfpsynth_store_insn (operands[0], CODE_FOR_rvtt_bh_sfpstore_int,
+                                       0, operands[5], op, operands[6],
                                        operands[1], 20);
     }
   emit_insn (insn);
@@ -242,13 +243,14 @@
   "TARGET_RVTT_BH"
 {
   rtx insn = nullptr;
-  if (GET_CODE (operands[3]) == CONST_INT)
+  if (CONST_INT_P (operands[3]))
     insn = gen_rvtt_bh_sfp<blackhole_muliaddi_name>_int (operands[0], operands[2],
                rvtt_clamp_unsigned (operands[3], 0xFFFF), operands[6]);
   else
     {
       unsigned op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
-      insn = rvtt_sfpsynth_insn_dst (operands[1], INSN_SCHED_DYN, operands[4], op, operands[5],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfp<blackhole_muliaddi_name>_int,
+                                     INSN_SCHED_DYN, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
   }
   emit_insn (insn);
@@ -467,11 +469,12 @@
   "TARGET_RVTT_BH"
 {
   rtx insn;
-  if (GET_CODE (operands[3]) == CONST_INT)
+  if (CONST_INT_P (operands[3]))
     insn = gen_rvtt_bh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF), operands[6]);
   else {
     unsigned op = TT_OP_BH_SFPSHFT(0, 0, 0, INTVAL (operands[6]) | 5);
-    insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+    insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfpshft_i_int,
+                                   0, operands[4], op, operands[5],
     	   			   operands[2], 8, operands[0], 4, nullptr);
   }
   emit_insn (insn);
@@ -681,13 +684,14 @@
   "TARGET_RVTT_BH"
 {
   rtx insn;
-  if (GET_CODE (operands[2]) == CONST_INT)
+  if (CONST_INT_P (operands[2]))
     insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_int
       (operands[0], rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
   else
     {
       unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[3], op, operands[4],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfpset<blackhole_set_float_name>_i_int,
+                                     0, operands[3], op, operands[4],
 				     operands[5], 4, operands[0], 8, nullptr);
     }
   emit_insn (insn);
@@ -705,13 +709,14 @@
   "TARGET_RVTT_BH"
 {
   rtx insn;
-  if (GET_CODE(operands[3]) == CONST_INT)
-    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int(operands[0], operands[2],
-                                   rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
+  if (CONST_INT_P (operands[3]))
+    insn = gen_rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int
+      (operands[0], operands[2], rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
   else
     {
       unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfpset<blackhole_set_float_name>_i_lv_int,
+      	     			     0, operands[4], op, operands[5],
 				     operands[6], 4, operands[0], 8, operands[2]);
     }
    emit_insn (insn);

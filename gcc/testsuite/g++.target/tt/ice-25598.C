@@ -22669,11 +22669,11 @@ enum ExecBool : bool {NoExec, Exec};
 template<ExecBool E = NoExec>
 [[gnu::always_inline]] inline void
 record(unsigned start, unsigned length) {
-  __builtin_rvtt_ttreplay(start, length, bool(E), true);
+  __builtin_rvtt_ttreplay(nullptr, length, 0, 0, start, bool(E), true);
 }
 
 [[gnu::always_inline]] inline void replay(unsigned start, unsigned length) {
-  __builtin_rvtt_ttreplay(start, length, false, false);
+  __builtin_rvtt_ttreplay(nullptr, length, 0, 0, start, false, false);
 }
 
 [[gnu::always_inline]] constexpr std::uint32_t

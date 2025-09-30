@@ -8,6 +8,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-move.o \
 	gimple-rvtt-synth-expand.o \
+	gimple-rvtt-synth-nullify.o \
 	gimple-rvtt-synth-renumber.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-warn.o \

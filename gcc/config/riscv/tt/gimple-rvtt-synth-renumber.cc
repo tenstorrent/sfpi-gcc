@@ -60,7 +60,6 @@ transform (function *fn)
     unsigned opcode_ix;
     unsigned add_ix;
     bool rhs2 : 1; // add: incoming edge is rhs2
-		   // use: is immediate
     bool used : 1;
     bool phi_use : 1;
     unsigned id : 30;
@@ -78,10 +77,6 @@ transform (function *fn)
     static node_t use (gimple *stmt, unsigned op_ix, unsigned add_ix, unsigned nonimm)
     {
       return {stmt, op_ix, add_ix, false, false, false, 0, nonimm};
-    }
-    static node_t immediate (gimple *stmt, unsigned nonimm)
-    {
-      return {stmt, 0, 0, true, false, false, 0, nonimm};
     }
   };
 
@@ -105,9 +100,8 @@ transform (function *fn)
 
 	    bool is_rvtt = rvtt_p (&insnd, &stmt, use_stmt);
 	    gcc_assert (is_rvtt && insnd->nonimm_pos >= 0);
-	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) == INTEGER_CST)
-	      graph.emplace_back (node_t::immediate (use_stmt, insnd->nonimm_pos));
-	    else
+	    gcc_assert (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST);
+	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST)
 	      {
 		graph.emplace_back (node_t::use (use_stmt, opcode_ix,
 						 last_add_ix, insnd->nonimm_pos));
@@ -145,9 +139,10 @@ transform (function *fn)
 
 	    bool is_used = self (self, graph, opcode_ix, gimple_get_lhs (add_stmt),
 				 this_first_add_ix, this_add_ix, this_addend);
+	    gcc_assert (is_used);
 	    if (this_first_add_ix)
-	      graph[this_add_ix].used = is_used;
-	    add_count += is_used;
+	      graph[this_add_ix].used = 1;
+	    add_count += 1;
 	  }
 	else if (auto *phi_stmt = dyn_cast <gphi *> (use_stmt))
 	  {
@@ -156,9 +151,18 @@ transform (function *fn)
 	    // to CSE these cases into a dominator. Unfortunately
 	    // there doesn't appear to be a (reusable) gimple CSE
 	    // pass. For now mark this id as not to be touched :(
-	    gcc_assert (first_add_ix && first_add_ix == last_add_ix);
-	    graph[first_add_ix].phi_use = true;
-	    add_count++;
+	    if (first_add_ix)
+	      {
+		// The PHI is merging adds of synth_opcode values
+		gcc_assert (first_add_ix == last_add_ix);
+		graph[first_add_ix].phi_use = true;
+		add_count++;
+	      }
+	    else
+	      {
+		// The PHI is merging synth_opcode values themselves. Stop
+		// following, and then we'll not touch qnything here.
+	      }
 	  }
 	else
 	  gcc_assert (gimple_code (use_stmt) == GIMPLE_DEBUG);
@@ -167,7 +171,6 @@ transform (function *fn)
   };
 
   // Build the opcode-use graph
-  tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
   std::vector<node_t> graph;
   std::vector<unsigned> opcode_counts;
 
@@ -175,41 +178,33 @@ transform (function *fn)
   FOR_EACH_BB_FN (bb, fn)
     for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
       if (auto *call_stmt = dyn_cast <gcall *> (gsi_stmt (gsi)))
-	if (gimple_call_fndecl (call_stmt) == synth_opcode_decl)
-	  {
-	    unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
-	    if (opcode_counts.size() < id + 1)
-	      opcode_counts.resize (id + 1);
-	    opcode_counts[id]++;
-	    unsigned opcode_ix = graph.size ();
-	    graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
-	    unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
-	    graph[opcode_ix].addend = count;
-	  }
+	{
+	  gcall *stmt;
+	  const rvtt_insn_data *insnd;
 
-  bool immediates = false;
+	  if (!rvtt_p (&insnd, &stmt, call_stmt))
+	    continue;
+	  if (insnd->id == rvtt_insn_data::synth_opcode)
+	    {
+	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
+	      if (opcode_counts.size() < id + 1)
+		opcode_counts.resize (id + 1);
+	      opcode_counts[id]++;
+	      unsigned opcode_ix = graph.size ();
+	      graph.emplace_back (node_t::opcode (call_stmt, opcode_ix, id));
+	      unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
+	      graph[opcode_ix].addend = count;
+	    }
+	}
+
   bool renumbered = false;
-
   unsigned unique_id = opcode_counts.size () - 1;
   for (auto &node : graph)
     {
       if (!is_gimple_assign (node.stmt))
-	{
-	  if (!node.rhs2)
-	    continue;
-
-	  // A use that is now a constant, zap the synth arg and pointer
-	  gimple_call_set_arg (node.stmt, 0, null_pointer_node);
-	  gimple_call_set_arg (node.stmt, node.addend + 1, integer_zero_node);
-	  gimple_call_set_arg (node.stmt, node.addend + 2, integer_zero_node);
-	  update_stmt (node.stmt);
-	  immediates = true;
-	  continue;
-	}
-
-      if (!node.used)
 	continue;
 
+      gcc_assert (node.used);
       if (!node.add_ix && !node.addend)
 	{
 	  if (node.phi_use)
@@ -248,6 +243,7 @@ transform (function *fn)
 
       // Create a new synth opcode
       tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
+      tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
       gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
       gimple_call_set_arg (new_call, 0, addend);
       gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
@@ -285,7 +281,7 @@ transform (function *fn)
 	  }
       }
 
-  return renumbered || immediates ? TODO_update_ssa : 0;
+  return renumbered ? TODO_update_ssa : 0;
 }
 
 namespace {

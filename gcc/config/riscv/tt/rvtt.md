@@ -88,6 +88,7 @@
 
 (define_c_enum "synth_ops" [
   SYNTH_mem
+  SYNTH_icode
   SYNTH_flags
   SYNTH_synthed
   SYNTH_opcode
@@ -99,51 +100,57 @@
   SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
-  [(set (match_operand:V64SF 7 "register_operand" "=xr,xr,xr,xr") ; result
+  [(set (match_operand:V64SF 8 "register_operand" "=xr,xr,xr,xr") ; result
         (unspec_volatile:V64SF [(match_operand:SI    0 "memory_operand"   "m,m,m,m") ; instrn_buffer
-                                (match_operand:SI    1 "const_int_operand" "n,n,n,n") ; flags
-                                (match_operand:SI    2 "register_operand"  "r,r,r,r") ; synth'd insn
-                                (match_operand:SI    3 "const_int_operand" "n,n,n,n") ; cst opcode
-                                (match_operand:SI    4 "const_int_operand" "n,n,n,n") ; id
-                                (match_operand:V64SF 5 "reg_or_vec0_operand" "xr,xn,xr,xn") ; src
-                                (match_operand:SI    6 "const_int_operand" "n,n,n,n") ; src shift
-                                (match_operand:SI    8 "const_int_operand" "n,n,n,n") ; dst shift
-                                (match_operand:V64SF 9 "reg_or_vec0_operand" "7,7,xn,xn") ; lv
+                                (match_operand:SI    1 "const_int_operand" "n,n,n,n") ; CODE_FOR_
+                                (match_operand:SI    2 "const_int_operand" "n,n,n,n") ; flags
+                                (match_operand:SI    3 "register_operand"  "r,r,r,r") ; synth'd insn
+                                (match_operand:SI    4 "const_int_operand" "n,n,n,n") ; cst opcode
+                                (match_operand:SI    5 "const_int_operand" "n,n,n,n") ; id
+                                (match_operand:V64SF 6 "reg_or_vec0_operand" "xr,xn,xr,xn") ; src
+                                (match_operand:SI    7 "const_int_operand" "n,n,n,n") ; src shift
+                                (match_operand:SI    9 "const_int_operand" "n,n,n,n") ; dst shift
+                                (match_operand:V64SF 10 "reg_or_vec0_operand" "8,8,xn,xn") ; lv
                                ] UNSPECV_SFPSYNTH_INSN))
-   (clobber (match_scratch:SI 10 "=&r,&r,&r,&r"))]
+   (clobber (match_scratch:SI 11 "=&r,&r,&r,&r"))]
   "TARGET_RVTT"
 {
-  return rvtt_synth_insn_pattern (operands, 10);
+  gcc_assert (SYNTH_lv + 1 == 11);
+  return rvtt_synth_insn_pattern (operands, 11);
 })
 
 (define_insn "rvtt_sfpsynth_insn"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,m") ; instrn_buffer
-                     (match_operand:SI    1 "const_int_operand" "n,n") ; flags
-                     (match_operand:SI    2 "register_operand"  "r,r") ; synth'd insn
-                     (match_operand:SI    3 "const_int_operand" "n,n") ; cst opcode
-                     (match_operand:SI    4 "const_int_operand" "n,n") ; id
-	             (match_operand:V64SF 5 "reg_or_vec0_operand" "xr,xn") ; src
-                     (match_operand:SI    6 "const_int_operand" "n,n") ; src shift
+                     (match_operand:SI    1 "const_int_operand" "n,n") ; CODE_FOR_
+                     (match_operand:SI    2 "const_int_operand" "n,n") ; flags
+                     (match_operand:SI    3 "register_operand"  "r,r") ; synth'd insn
+                     (match_operand:SI    4 "const_int_operand" "n,n") ; cst opcode
+                     (match_operand:SI    5 "const_int_operand" "n,n") ; id
+	             (match_operand:V64SF 6 "reg_or_vec0_operand" "xr,xn") ; src
+                     (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
                     ] UNSPECV_SFPSYNTH_INSN)
-   (clobber (match_scratch:SI 7 "=&r, X"))]
+   (clobber (match_scratch:SI 8 "=&r, X"))]
   "TARGET_RVTT"
 {
-  return rvtt_synth_insn_pattern (operands, 7);
+  gcc_assert (SYNTH_dst == 8);
+  return rvtt_synth_insn_pattern (operands, 8);
 })
 
 (define_insn "rvtt_sfpsynth_store_insn"
   [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m") ; instrn_buffer
-                     (match_operand:SI    1 "const_int_operand" "n") ; flags
-                     (match_operand:SI    2 "register_operand"  "r") ; synth'd insn
-                     (match_operand:SI    3 "const_int_operand" "n") ; cst opcode
-                     (match_operand:SI    4 "const_int_operand" "n") ; id
-	             (match_operand:V64SF 5 "register_operand" "xs") ; src
-                     (match_operand:SI    6 "const_int_operand" "n") ; src shift
+                     (match_operand:SI    1 "const_int_operand" "n") ; CODE_FOR_
+                     (match_operand:SI    2 "const_int_operand" "n") ; flags
+                     (match_operand:SI    3 "register_operand"  "r") ; synth'd insn
+                     (match_operand:SI    4 "const_int_operand" "n") ; cst opcode
+                     (match_operand:SI    5 "const_int_operand" "n") ; id
+	             (match_operand:V64SF 6 "register_operand" "xs") ; src
+                     (match_operand:SI    7 "const_int_operand" "n") ; src shift
                     ] UNSPECV_SFPSYNTH_STORE_INSN)
-   (clobber (match_scratch:SI 7 "=&r"))]
+   (clobber (match_scratch:SI 8 "=&r"))]
   "TARGET_RVTT"
 {
-  return rvtt_synth_insn_pattern (operands, 7);
+  gcc_assert (SYNTH_dst == 8);
+  return rvtt_synth_insn_pattern (operands, 8);
 })
 
 (define_expand "rvtt_sfpassignlreg"
@@ -248,7 +255,35 @@
   "TARGET_RVTT"
   "TTINCRWC\t%0, %1, %2, %3")
 
-(define_insn "rvtt_ttreplay"
+(define_expand "rvtt_ttreplay"
+  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
+                     (match_operand:SI    1 "reg_or_const_int_operand"  "")
+                     (match_operand:SI    2 "reg_or_0_operand"  "")
+                     (match_operand:SI    3 "const_int_operand"  "")
+                     (match_operand:SI    4 "const_int_operand"  "")
+                     (match_operand:SI    5 "const_int_operand"  "")
+                     (match_operand:SI    6 "const_int_operand"  "")] UNSPECV_TTREPLAY)]
+  "TARGET_RVTT"
+{
+  rtx insn = nullptr;
+  if (CONST_INT_P (operands[1]))
+    insn = gen_rvtt_ttreplay_int (operands[4], operands[1], operands[5], operands[6]);
+  else
+    {
+      unsigned op
+          = TARGET_RVTT_WH ? TT_OP_WH_REPLAY (INTVAL (operands[4]), 0,
+	    		     		      INTVAL (operands[5]), INTVAL (operands[6]))
+          : TARGET_RVTT_BH ? TT_OP_BH_REPLAY (INTVAL (operands[4]), 0,
+	    		     		      INTVAL (operands[5]), INTVAL (operands[6]))
+	  : (gcc_unreachable (), 0);
+      insn = rvtt_sfpsynth_insn (operands[0], CODE_FOR_rvtt_ttreplay_int,
+      	     			 0, operands[2], op, operands[3]);
+    }
+  emit_insn (insn);
+  DONE;
+})
+
+(define_insn "rvtt_ttreplay_int"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand"  "N05U")
                      (match_operand:SI    1 "const_int_operand"  "NP5U")
                      (match_operand:SI    2 "const_int_operand"  "N01U")
