@@ -85,7 +85,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 133;
+static const int NUMBER_OF_INTRINSICS = 134;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -559,27 +559,27 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
       // pattern.
       opcode ^= reg_change;
       operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
-      gcc_assert (SYNTH_opcode == 3 && SYNTH_synthed == 2);
       pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		       "li\t%%%d,%%3\n\txor\t%%%d,%%%d,%%2\n\t", clobber_op, clobber_op, clobber_op);
+		       "li\t%%%d,%%%d\n\txor\t%%%d,%%%d,%%%d\n\t",
+		       clobber_op, SYNTH_opcode,
+		       clobber_op, clobber_op, SYNTH_synthed);
       synth_opno = clobber_op;
     }
 
-  gcc_assert (SYNTH_mem == 0);
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "sw\t%%%u, %%0\t# %d:%x",
-		   synth_opno, unsigned (INTVAL (operands[SYNTH_id])), opcode);
-  gcc_assert (SYNTH_src == 5 && SYNTH_dst == 7);
+		   "sw\t%%%u, %%%d\t# %d:%x",
+		   synth_opno, SYNTH_mem,
+		   unsigned (INTVAL (operands[SYNTH_id])), opcode);
   bool has_lv = false;
   if (has_dst)
     {
-      pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%7 :=");
+      pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%%d :=", SYNTH_dst);
       has_lv = REG_P (operands[SYNTH_lv]);
       if (has_lv)
 	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
     }
   if (REG_P (src_reg))
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, "%s", &", %5"[!has_lv]);
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, &", %%%d"[!has_lv], SYNTH_src);
 
   // NOPS was a grayskull feature
   unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
@@ -755,29 +755,29 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
 }
 
 rtx
-rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
 {
   return gen_rvtt_sfpsynth_insn_dst
-    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
      src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_vec0_rtx);
 }
 
 rtx
-rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 		    rtx src, unsigned src_shift)
 {
   return gen_rvtt_sfpsynth_insn
-    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
      src, GEN_INT (src_shift));
 }
 
 rtx
-rvtt_sfpsynth_store_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 		          rtx src, unsigned src_shift)
 {
   return gen_rvtt_sfpsynth_store_insn
-    (gen_rtx_MEM (SImode, addr), GEN_INT (flags), synth, GEN_INT (opcode), id,
+    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
      src, GEN_INT (src_shift));
 }
 

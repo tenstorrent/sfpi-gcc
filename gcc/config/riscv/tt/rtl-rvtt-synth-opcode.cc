@@ -78,7 +78,7 @@ transform (function *fn)
 
 	      rtx pat = XVECEXP (PATTERN (insn), 0, 0);
 	      rtx ops = has_dst ? SET_SRC (pat) : pat;
-	      id = INTVAL (XVECEXP (ops, 0, 4));
+	      id = INTVAL (XVECEXP (ops, 0, SYNTH_id));
 	    }
 	  if (synths.size () <= id)
 	    synths.resize (id + 1);
@@ -114,12 +114,13 @@ transform (function *fn)
 	    {
 	      rtx dst = SET_DEST (pat);
 	      pat = SET_SRC (pat);
-	      opcode |= rvtt_sfpu_regno (dst) << INTVAL (XVECEXP (pat, 0, 7));
+	      // The dst reg isn't in the unspec operand list
+	      opcode |= rvtt_sfpu_regno (dst) << INTVAL (XVECEXP (pat, 0, SYNTH_dst_shift - 1));
 	    }
-	  rtx src = XVECEXP (pat, 0, 5);
+	  rtx src = XVECEXP (pat, 0, SYNTH_src);
 	  if (REG_P (src))
-	    opcode |= rvtt_sfpu_regno (src) << INTVAL (XVECEXP (pat, 0, 6));
-	  opcode |= INTVAL (XVECEXP (pat, 0, 3));
+	    opcode |= rvtt_sfpu_regno (src) << INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
+	  opcode |= INTVAL (XVECEXP (pat, 0, SYNTH_opcode));
 
 	  map[opcode]++;
 	}
@@ -164,7 +165,7 @@ transform (function *fn)
 	  rtx ops = XVECEXP (PATTERN (insn), 0, 0);
 	  if (GET_CODE (ops) == SET)
 	    ops = SET_SRC (ops);
-	  XVECEXP (ops, 0, 3) = op_rtx;
+	  XVECEXP (ops, 0, SYNTH_opcode) = op_rtx;
 	}
     }
 }

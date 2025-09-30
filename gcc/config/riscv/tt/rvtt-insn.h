@@ -91,9 +91,9 @@ along with GCC; see the file COPYING3.  If not see
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
 RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
 
-RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, 3, 1)
-RVTT_RTL_ONLY (sfpsynth_insn,         0x08, 3, 1)
-RVTT_RTL_ONLY (sfpsynth_store_insn,   0x08, 3, 1)
+RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode, SYNTH_flags)
+RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode, SYNTH_flags)
+RVTT_RTL_ONLY (sfpsynth_store_insn,   0x08, SYNTH_opcode, SYNTH_flags)
 
 RVTT_RTL_ONLY(sfppreservelreg0,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg1,   0x48, -1, -1)
@@ -103,6 +103,8 @@ RVTT_RTL_ONLY(sfppreservelreg4,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg5,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg6,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg7,   0x48, -1, -1)
+
+RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
@@ -125,7 +127,8 @@ RVTT_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                
 RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
-RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
+// The length operand is [1,32], which is awkward
+RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_IPTR_USI_USI_USI_USI_USI_USI,              0x00, -1, -1, 0x00, 1,      (unsigned)-1, 4)
 
 // Wormhole internal (rtl only) insns
 RVTT_WH_RTL_ONLY(sfpload_int,             0x08, 0x00)

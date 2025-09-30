@@ -239,13 +239,14 @@
   "TARGET_RVTT_WH"
 {
   rtx insn = nullptr;
-  if (GET_CODE(operands[4]) == CONST_INT)
+  if (CONST_INT_P (operands[4]))
     insn = gen_rvtt_wh_sfpstore_int (operands[1], operands[2],operands[3],
 				      rvtt_clamp_unsigned (operands[4], 0x3FFF));
   else
     {
       unsigned op = TT_OP_WH_SFPSTORE(0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_store_insn (operands[0], 0, operands[5], op, operands[6],
+      insn = rvtt_sfpsynth_store_insn (operands[0], CODE_FOR_rvtt_wh_sfpstore_int,
+      	     			       0, operands[5], op, operands[6],
 				       operands[1], 20);
     }
   emit_insn (insn);
@@ -275,13 +276,14 @@
   "TARGET_RVTT_WH"
 {
   rtx insn = nullptr;
-  if (GET_CODE(operands[3]) == CONST_INT)
+  if (CONST_INT_P (operands[3]))
     insn = gen_rvtt_wh_sfp<wormhole_muliaddi_name>_int
       (operands[0], operands[2], rvtt_clamp_unsigned (operands[3], 0xFFFF), operands[6]);
   else
     {
       unsigned op = TT_OP_WH_SFP<wormhole_muliaddi_call>(0, 0, INTVAL(operands[6]));
-      insn = rvtt_sfpsynth_insn_dst (operands[1], INSN_SCHED_DYN, operands[4], op, operands[5],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_wh_sfp<wormhole_muliaddi_name>_int,
+      	     			     INSN_SCHED_DYN, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
     }
   emit_insn (insn);
@@ -543,12 +545,13 @@
   "TARGET_RVTT_WH"
 {
   rtx insn = nullptr;
-  if (GET_CODE(operands[3]) == CONST_INT)
-    insn = gen_rvtt_wh_sfpshft_i_int(operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF));
+  if (CONST_INT_P (operands[3]))
+    insn = gen_rvtt_wh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed(operands[3], 0x7FF));
   else
     {
       unsigned op = TT_OP_WH_SFPSHFT(0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_wh_sfpshft_i_int,
+				     0, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
     }
   emit_insn (insn);
@@ -785,13 +788,14 @@
 {
   rtx live = rvtt_vec0_rtx;
   rtx insn = nullptr;
-  if (GET_CODE(operands[2]) == CONST_INT)
+  if (CONST_INT_P (operands[2]))
     insn = gen_rvtt_wh_sfpset<wormhole_set_float_name_i>_i_int
-      (operands[0], live, rvtt_clamp_unsigned(operands[2], 0xFFF), operands[5]);
+      (operands[0], live, rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
   else
     {
       unsigned op = TT_OP_WH_SFPSET<wormhole_set_float_call_i>(0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[3], op, operands[4],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_wh_sfpset<wormhole_set_float_name_i>_i_int,
+      	     			     0, operands[3], op, operands[4],
 				     operands[5], 4, operands[0], 8, live);
     }
   emit_insn (insn);
@@ -813,13 +817,14 @@
 {
   rtx live = operands[2];
   rtx insn = nullptr;
-  if (GET_CODE(operands[3]) == CONST_INT)
+  if (CONST_INT_P (operands[3]))
     insn = gen_rvtt_wh_sfpset<wormhole_set_float_name_i_lv>_i_int
-      (operands[0], live, rvtt_clamp_unsigned(operands[3], 0xFFF), operands[6]);
+      (operands[0], live, rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
   else
     {
       unsigned op = TT_OP_WH_SFPSET<wormhole_set_float_call_i_lv>(0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], 0, operands[4], op, operands[5],
+      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_wh_sfpset<wormhole_set_float_name_i_lv>_i_int,
+      	     			     0, operands[4], op, operands[5],
 				     operands[6], 4, operands[0], 8, live);
     }
   emit_insn (insn);
