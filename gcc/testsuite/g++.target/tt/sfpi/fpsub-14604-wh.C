@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-wh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 // Verify we notice a - b is a + -1.0 * b
 
@@ -18,7 +19,11 @@ void sub1() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub1v:\n\tSFPMAD	L3, L11, L1, L0, 0\n\tret\n} } }
+/*
+**_Z4sub1v:
+**	SFPMAD	L3, L11, L1, L0, 0
+**	ret
+*/
 
 void sub2() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -28,7 +33,11 @@ void sub2() {
   
   l_reg[LRegs::LReg3] = b;
 }
-// { dg-final { scan-assembler {\n_Z4sub2v:\n\tSFPMAD	L3, L11, L0, L1, 0\n\tret\n} } }
+/*
+**_Z4sub2v:
+**	SFPMAD	L3, L11, L0, L1, 0
+**	ret
+*/
 
 void sub3() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -39,7 +48,12 @@ void sub3() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub3v:\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L3, L11, L1, L0, 0\n\tret\n} } }
+/*
+**_Z4sub3v:
+**	SFPMOV	L0, L0, 1
+**	SFPMAD	L3, L11, L1, L0, 0
+**	ret
+*/
 
 void sub4() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -54,7 +68,17 @@ void sub4() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_Z4sub4v:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPMAD	L3, L11, L1, L0, 0\n\tSFPCOMPC\n\tSFPMAD	L3, L11, L0, L1, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z4sub4v:
+**	SFPMAD	L2, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L2, 0, 0
+**	SFPMAD	L3, L11, L1, L0, 0
+**	SFPCOMPC
+**	SFPMAD	L3, L11, L0, L1, 0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void sub5() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -68,7 +92,20 @@ void sub5() {
   
   l_reg[LRegs::LReg3] = b;
 }
-// { dg-final { scan-assembler {\n_Z4sub5v:\n\tSFPMAD	L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L2, 0, 0\n\tSFPMAD	L1, L11, L0, L1, 0\n\tSFPCOMPC\n\tSFPMOV	L0, L0, 1\n\tSFPMAD	L1, L11, L0, L1, 0\n\tSFPNOP\n\tSFPMOV	L3, L1, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z4sub5v:
+**	SFPMAD	L2, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L2, 0, 0
+**	SFPMAD	L1, L11, L0, L1, 0
+**	SFPCOMPC
+**	SFPMOV	L0, L0, 1
+**	SFPMAD	L1, L11, L0, L1, 0
+**	SFPNOP
+**	SFPMOV	L3, L1, 2
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void sub6() {
   vFloat a = l_reg[LRegs::LReg0];
@@ -83,4 +120,15 @@ void sub6() {
   
   l_reg[LRegs::LReg3] = r;
 }
-// { dg- final { scan-assembler {\n_Z4sub6v:\n\tSFPMAD  L2, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC        L2, 0, 0\n\tSFPMOV      L2, L0, 1\n\tSFPMAD     L3, L11, L1, L2, 0\n\tSFPCOMPC\n\tSFPMAD        L3, L11, L1, L0, 0\n\tSFPENCC   3, 10\n\tret\n} } }
+/*
+**_Z4sub6v:
+**	SFPMAD	L2, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L2, 0, 0
+**	SFPMOV	L3, L0, 1
+**	SFPMAD	L3, L11, L1, L3, 0
+**	SFPCOMPC
+**	SFPMAD	L3, L11, L1, L0, 0
+**	SFPENCC	3, 10
+**	ret
+*/

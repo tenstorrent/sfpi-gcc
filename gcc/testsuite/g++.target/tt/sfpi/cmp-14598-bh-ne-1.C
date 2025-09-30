@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -22,7 +23,16 @@ void fnuvv () {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z5fnuvvv:\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 2\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z5fnuvvv:
+**	SFPIADD	L1, L0, 0, 6
+**	SFPSETCC	L1, 0, 2
+**	SFPCOMPC
+**	SFPMOV	L0, L2, 2
+**	SFPMOV	L0, L3, 0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void fnuvi (int i) {
     vUInt a = l_reg[LRegs::LReg0];
@@ -39,7 +49,26 @@ void fnuvi (int i) {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z5fnuvii:\n\tlui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)\n\tzext.h	a4,a0\n\tli	a5, 1897529344	# 2:711a0000\n\tlw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)\n\tadd	a4,a4,a5\n\tli	a5, 1897398272	# 3:71180000\n\tsw	a4, 0\(a3\)	# 2:711a0000 L1 :=\n\tsrli	a0,a0,16\n\tadd	a0,a0,a5\n\tsw	a0, 0\(a3\)	# 3:71180000 L1 := LV\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 2\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z5fnuvii:
+**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	zext.h	a4,a0
+**	li	a5, 1897529344	# 2:711a0000
+**	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
+**	add	a4,a4,a5
+**	li	a5, 1897398272	# 3:71180000
+**	sw	a4, 0\(a3\)	# 2:711a0000 L1 :=
+**	srli	a0,a0,16
+**	add	a0,a0,a5
+**	sw	a0, 0\(a3\)	# 3:71180000 L1 := LV
+**	SFPIADD	L1, L0, 0, 6
+**	SFPSETCC	L1, 0, 2
+**	SFPCOMPC
+**	SFPMOV	L0, L2, 2
+**	SFPMOV	L0, L3, 0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void fnuvc () {
     vUInt a = l_reg[LRegs::LReg0];
@@ -56,7 +85,16 @@ void fnuvc () {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z5fnuvcv:\n\tSFPIADD	L0, L0, -5, 5\n\tSFPSETCC	L0, 0, 2\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z5fnuvcv:
+**	SFPIADD	L0, L0, -5, 5
+**	SFPSETCC	L0, 0, 2
+**	SFPCOMPC
+**	SFPMOV	L0, L2, 2
+**	SFPMOV	L0, L3, 0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void fns () {
     vInt a = l_reg[LRegs::LReg0];
@@ -73,5 +111,14 @@ void fns () {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z3fnsv:\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 2\n\tSFPCOMPC\n\tSFPMOV	L0, L2, 2\n\tSFPMOV	L0, L3, 0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z3fnsv:
+**	SFPIADD	L1, L0, 0, 6
+**	SFPSETCC	L1, 0, 2
+**	SFPCOMPC
+**	SFPMOV	L0, L2, 2
+**	SFPMOV	L0, L3, 0
+**	SFPENCC	3, 10
+**	ret
+*/
 

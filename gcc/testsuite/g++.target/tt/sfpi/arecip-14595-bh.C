@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
     unsigned *instrn_buffer;
@@ -14,7 +15,11 @@ void foo () {
   vFloat r = approx_recip (a);
   l_reg[LRegs::LReg1] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5recip3fooEv:\n\tSFPARECIP	L1, L0, 0\n\tret\n} } }
+/*
+**_ZN5recip3fooEv:
+**	SFPARECIP	L1, L0, 0
+**	ret
+*/
 
 void bar () {
   // Live value test
@@ -31,7 +36,17 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5recip3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 0\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_ZN5recip3barEv:
+**	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPCOMPC
+**	SFPARECIP	L2, L0, 0
+**	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
+**	ret
+*/
 }
 
 namespace negrecip {
@@ -41,7 +56,11 @@ void foo () {
   vFloat r = approx_recip<false> (a);
   l_reg[LRegs::LReg1] = r;
 }
-// { dg-final { scan-assembler {\n_ZN8negrecip3fooEv:\n\tSFPARECIP	L1, L0, 1\n\tret\n} } }
+/*
+**_ZN8negrecip3fooEv:
+**	SFPARECIP	L1, L0, 1
+**	ret
+*/
 
 void bar () {
   // Live value test
@@ -58,7 +77,17 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN8negrecip3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 1\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_ZN8negrecip3barEv:
+**	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPCOMPC
+**	SFPARECIP	L2, L0, 1
+**	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
+**	ret
+*/
 }
 
 namespace expon {
@@ -68,7 +97,11 @@ void foo () {
   vFloat r = approx_exp (a);
   l_reg[LRegs::LReg1] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5expon3fooEv:\n\tSFPARECIP	L1, L0, 2\n\tret\n} } }
+/*
+**_ZN5expon3fooEv:
+**	SFPARECIP	L1, L0, 2
+**	ret
+*/
 
 void bar () {
   // Live value test
@@ -85,5 +118,15 @@ void bar () {
 
   l_reg[LRegs::LReg3] = r;
 }
-// { dg-final { scan-assembler {\n_ZN5expon3barEv:\n\tSFPMAD	L1, L1, L11, L0, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPCOMPC\n\tSFPARECIP	L2, L0, 2\n\tSFPMOV	L3, L2, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_ZN5expon3barEv:
+**	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPCOMPC
+**	SFPARECIP	L2, L0, 2
+**	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
+**	ret
+*/
 }

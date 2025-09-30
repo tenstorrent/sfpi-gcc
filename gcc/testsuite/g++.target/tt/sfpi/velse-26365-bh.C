@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
   extern volatile unsigned instrn_buffer[];
@@ -21,7 +22,26 @@ void bug1() {
 
   l_reg[LRegs::LReg3] = result;
 }
-// { dg-final { scan-assembler {\n_Z4bug1v:\n\tSFPLOADI	L0, 0, 0\n\tSFPMAD	L1, L10, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPLOADI	L0, 16256, 0\n\tSFPCOMPC\n\tSFPPUSHC	0\n\tSFPLOADI	L1, 16384, 0\n\tSFPMAD	L3, L1, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 4\n\tSFPSETCC	L3, 0, 2\n\tSFPCOMPC\n\tSFPLOADI	L0, 16384, 0\n\tSFPMOV	L3, L0, 2\n\tSFPPOPC	0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z4bug1v:
+**	SFPLOADI	L0, 0, 0
+**	SFPMAD	L1, L10, L11, L3, 0
+**	SFPNOP\n\tSFPSETCC	L1, 0, 0
+**	SFPLOADI	L0, 16256, 0
+**	SFPCOMPC
+**	SFPPUSHC	0
+**	SFPLOADI	L1, 16384, 0
+**	SFPMAD	L3, L1, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L3, 0, 4
+**	SFPSETCC	L3, 0, 2
+**	SFPCOMPC
+**	SFPLOADI	L0, 16384, 0
+**	SFPMOV	L3, L0, 2
+**	SFPPOPC	0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void bug2() {
   vFloat val = l_reg[LRegs::LReg3];
@@ -37,7 +57,27 @@ void bug2() {
 
   l_reg[LRegs::LReg3] = result;
 }
-// { dg-final { scan-assembler {\n_Z4bug2v:\n\tSFPLOADI	L0, 0, 0\n\tSFPMAD	L1, L10, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPLOADI	L0, 16256, 0\n\tSFPCOMPC\n\tSFPPUSHC	0\n\tSFPLOADI	L1, 16384, 0\n\tSFPMAD	L3, L1, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 4\n\tSFPSETCC	L3, 0, 2\n\tSFPCOMPC\n\tSFPLOADI	L0, 16384, 0\n\tSFPMOV	L3, L0, 2\n\tSFPPOPC	0\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z4bug2v:
+**	SFPLOADI	L0, 0, 0
+**	SFPMAD	L1, L10, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPLOADI	L0, 16256, 0
+**	SFPCOMPC
+**	SFPPUSHC	0
+**	SFPLOADI	L1, 16384, 0
+**	SFPMAD	L3, L1, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L3, 0, 4
+**	SFPSETCC	L3, 0, 2
+**	SFPCOMPC
+**	SFPLOADI	L0, 16384, 0
+**	SFPMOV	L3, L0, 2
+**	SFPPOPC	0
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void good1() {
   vFloat val = l_reg[LRegs::LReg3];
@@ -53,7 +93,23 @@ void good1() {
 
   l_reg[LRegs::LReg3] = result;
 }
-// { dg-final { scan-assembler {\n_Z5good1v:\n\tSFPLOADI	L0, 0, 0\n\tSFPMAD	L1, L10, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPLOADI	L0, 16256, 0\n\tSFPCOMPC\n\tSFPLOADI	L1, 16384, 0\n\tSFPMAD	L3, L1, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPLOADI	L0, 16384, 0\n\tSFPMOV	L3, L0, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z5good1v:
+**	SFPLOADI	L0, 0, 0
+**	SFPMAD	L1, L10, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPLOADI	L0, 16256, 0
+**	SFPCOMPC
+**	SFPLOADI	L1, 16384, 0
+**	SFPMAD	L3, L1, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L3, 0, 0
+**	SFPLOADI	L0, 16384, 0
+**	SFPMOV	L3, L0, 2
+**	SFPENCC	3, 10
+**	ret
+*/
 
 void good2() {
   vFloat val = l_reg[LRegs::LReg3];
@@ -69,4 +125,20 @@ void good2() {
 
   l_reg[LRegs::LReg3] = result;
 }
-// { dg-final { scan-assembler {\n_Z5good2v:\n\tSFPLOADI	L0, 0, 0\n\tSFPMAD	L1, L10, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L1, 0, 0\n\tSFPLOADI	L0, 16256, 0\n\tSFPCOMPC\n\tSFPLOADI	L1, 16384, 0\n\tSFPMAD	L3, L1, L11, L3, 0\n\tSFPNOP\n\tSFPSETCC	L3, 0, 0\n\tSFPLOADI	L0, 16384, 0\n\tSFPMOV	L3, L0, 2\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z5good2v:
+**	SFPLOADI	L0, 0, 0
+**	SFPMAD	L1, L10, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
+**	SFPLOADI	L0, 16256, 0
+**	SFPCOMPC
+**	SFPLOADI	L1, 16384, 0
+**	SFPMAD	L3, L1, L11, L3, 0
+**	SFPNOP
+**	SFPSETCC	L3, 0, 0
+**	SFPLOADI	L0, 16384, 0
+**	SFPMOV	L3, L0, 2
+**	SFPENCC	3, 10
+**	ret
+*/

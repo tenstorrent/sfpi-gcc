@@ -1,4 +1,5 @@
 // { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
   extern unsigned *instrn_buffer;
@@ -12,28 +13,44 @@ void i2f_rne () {
   vFloat b = int32_to_float (a, false);
   l_reg[LRegs::LReg1] = b;
 }
-// { dg-final { scan-assembler {\n_Z7i2f_rnev:\n\tSFPCAST	L1, L0, 0\n\tret\n} } }
+/*
+**_Z7i2f_rnev:
+**	SFPCAST	L1, L0, 0
+**	ret
+*/
 
 void i2f_rns () {
   vInt a = l_reg[LRegs::LReg0];
   vFloat b = int32_to_float (a, true);
   l_reg[LRegs::LReg1] = b;
 }
-// { dg-final { scan-assembler {\n_Z7i2f_rnsv:\n\tSFPCAST	L1, L0, 1\n\tret\n} } }
+/*
+**_Z7i2f_rnsv:
+**	SFPCAST	L1, L0, 1
+**	ret
+*/
 
 void sm2i () {
   vInt a = l_reg[LRegs::LReg0];
   vInt b = __builtin_rvtt_sfpcast(a.get(), SFPCAST_MOD1_SM32_TO_INT32);
   l_reg[LRegs::LReg1] = b;
 }
-// { dg-final { scan-assembler {\n_Z4sm2iv:\n\tSFPCAST	L1, L0, 2\n\tret\n} } }
+/*
+**_Z4sm2iv:
+**	SFPCAST	L1, L0, 2
+**	ret
+*/
 
 void i2sm () {
   vInt a = l_reg[LRegs::LReg0];
   vInt b = __builtin_rvtt_sfpcast(a.get(), SFPCAST_MOD1_INT32_TO_SM32);
   l_reg[LRegs::LReg1] = b;
 }
-// { dg-final { scan-assembler {\n_Z4i2smv:\n\tSFPCAST	L1, L0, 3\n\tret\n} } }
+/*
+**_Z4i2smv:
+**	SFPCAST	L1, L0, 3
+**	ret
+*/
 
 void cond () {
     vUInt a = l_reg[LRegs::LReg0];
@@ -49,4 +66,13 @@ void cond () {
 
     l_reg[LRegs::LReg0] = r;
 }
-// { dg-final { scan-assembler {\n_Z4condv:\n\tSFPIADD	L1, L0, 0, 6\n\tSFPSETCC	L1, 0, 6\n\tSFPCAST	L0, L2, 0\n\tSFPCOMPC\n\tSFPCAST	L0, L2, 1\n\tSFPENCC	3, 10\n\tret\n} } }
+/*
+**_Z4condv:
+**	SFPIADD	L1, L0, 0, 6
+**	SFPSETCC	L1, 0, 6
+**	SFPCAST	L0, L2, 0
+**	SFPCOMPC
+**	SFPCAST	L0, L2, 1
+**	SFPENCC	3, 10
+**	ret
+*/
