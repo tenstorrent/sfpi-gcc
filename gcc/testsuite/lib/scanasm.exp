@@ -901,7 +901,7 @@ proc configure_check-function-bodies { config } {
 	# ('.align', '.cfi_startproc', '.quad [...]', '.text', etc.), '//' or
 	# '@' comments ('-fverbose-asm' or ARM-style, for example), or empty
 	# lines.
-	set up_config(fluff) {^\s*(?:\.|//|@|$)}
+	set up_config(fluff) {^\s*(?:\.(?!ttinsn\s|insn\s)|//|@|$)}
     }
 
     # Regexp for expected output lines prefix.

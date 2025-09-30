@@ -268,6 +268,15 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
 	    }
 	  continue;
 	}
+      if (insnd->non_replay_p ())
+	{
+	  // FIXME: This needs thinking about further. The ttinsn_cst
+	  // pattern is replayable, but historically was an asm.  Keep
+	  // the old behaviour for now.
+	  if (insn_list.size () > 0)
+	    insn_list.back ().halt = true;
+	  continue;
+	}
       if (insnd->empty_p ())
 	{
 	  // Ugly side effect

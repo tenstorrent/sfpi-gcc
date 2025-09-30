@@ -90,6 +90,7 @@ along with GCC; see the file COPYING3.  If not see
 
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
 RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
+RVTT_RTL_ONLY (ttinsn_int,        0x88, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode, SYNTH_flags)
 RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode, SYNTH_flags)
@@ -129,6 +130,7 @@ RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                  
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, 0x00, -1,      0, 0)
 // The length operand is [1,32], which is awkward
 RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_IPTR_USI_USI_USI_USI_USI_USI,              0x00, -1, -1, 0x00, 1,      (unsigned)-1, 4)
+RVTT_NO_TGT_BUILTIN (ttinsn,         RISCV_VOID_FTYPE_IPTR_USI_USI,                              0x80, -1, -1, 0x00, -1,      0, 0)
 
 // Wormhole internal (rtl only) insns
 RVTT_WH_RTL_ONLY(sfpload_int,             0x08, 0x00)

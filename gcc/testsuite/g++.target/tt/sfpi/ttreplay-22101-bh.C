@@ -1,5 +1,9 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 // { dg-final { check-function-bodies "**" "" } }
+
+#define TT_OP(opcode, params) ((opcode << 24) + params)
+#define TT_OP_REPLAY(start_idx, len, execute_while_loading, load_mode) \
+    TT_OP(0x04, (((start_idx) << 14) + ((len) << 4) + ((execute_while_loading) << 1) + ((load_mode) << 0)))
 
 #include <lltt.h>
 

@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
+#include "diagnostic-core.h"
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
@@ -45,16 +46,40 @@ transform (function *fn)
 	gcall *stmt;
 	const rvtt_insn_data *insnd;
 
-	if (rvtt_p (&insnd, &stmt, gsi)
-	    && insnd->nonimm_pos != -1
-	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST
-	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos + 1)) != INTEGER_CST)
+	if (!rvtt_p (&insnd, &stmt, gsi))
+	  continue;
+
+	if (insnd->nonimm_pos != -1)
 	  {
-	    gimple_call_set_arg (stmt, 0, null_pointer_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
-	    update_stmt (stmt);
-	    updated = true;
+	    if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST
+		&& TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos + 1)) != INTEGER_CST)
+	      {
+		// It turned out to be a constant.
+		gimple_call_set_arg (stmt, 0, null_pointer_node);
+		gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
+		gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
+		update_stmt (stmt);
+		updated = true;
+	      }
+	    continue;
+	  }
+
+	if (insnd->id == rvtt_insn_data::ttinsn)
+	  {
+	    if (gimple_call_arg (stmt, 0) != null_pointer_node)
+	      {
+		if (TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST)
+		  {
+		    // It too turned out to be known now.
+		    gimple_call_set_arg (stmt, 0, null_pointer_node);
+		    update_stmt (stmt);
+		    updated = true;
+		  }
+		else if (integer_nonzerop (gimple_call_arg (stmt, 1)))
+		  // User required it to be statically known.
+		  warning_at (gimple_location (stmt), 0, "ttinsn is not statically known");
+	      }
+	    continue;
 	  }
       }
 
