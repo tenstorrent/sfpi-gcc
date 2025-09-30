@@ -452,14 +452,14 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_warn_function_noreturn);
 
   NEXT_PASS (pass_rvtt_warn);
+  NEXT_PASS (pass_rvtt_synth_nullify);
+  NEXT_PASS (pass_dce);
   NEXT_PASS (pass_rvtt_synth_renumber);
   NEXT_PASS (pass_rvtt_synth_expand);
   NEXT_PASS (pass_rvtt_expand);
   NEXT_PASS (pass_rvtt_live);
   NEXT_PASS (pass_rvtt_cc);
   NEXT_PASS (pass_rvtt_combine);
-  // Remove synth_opcode stuff we disconnected
-  NEXT_PASS (pass_dce);
   NEXT_PASS (pass_rvtt_move);
   NEXT_PASS (pass_rvtt_attrib);
 

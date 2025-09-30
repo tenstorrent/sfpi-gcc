@@ -606,8 +606,8 @@ do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
 	{
 	  DUMP ("    inserting replay capture at %d\n", i - count);
 	  first = false;
-	  rtx replay = gen_rvtt_ttreplay (GEN_INT (0), GEN_INT (count),
-					  GEN_INT (1), GEN_INT (1));
+	  rtx replay = gen_rvtt_ttreplay_int (GEN_INT (0), GEN_INT (count),
+					      GEN_INT (1), GEN_INT (1));
 	  emit_insn_before (replay, start_insn);
 	}
     }
@@ -625,8 +625,8 @@ do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
 	    }
 	  start_insn = NEXT_INSN (start_insn);
 	}
-      rtx replay = gen_rvtt_ttreplay (GEN_INT (0), GEN_INT (count),
-				      GEN_INT (0), GEN_INT (0));
+      rtx replay = gen_rvtt_ttreplay_int (GEN_INT (0), GEN_INT (count),
+				          GEN_INT (0), GEN_INT (0));
       emit_insn_before (replay, insn);
     }
 
@@ -797,8 +797,18 @@ public:
       {
 	rtx_insn *insn;
 	FOR_BB_INSNS (bb, insn)
-	  if (INSN_CODE (insn) == CODE_FOR_rvtt_ttreplay)
-	    return false;
+	  {
+	    int icode = INSN_CODE (insn);
+	    if (icode == CODE_FOR_rvtt_sfpsynth_insn)
+	      {
+		auto ops = XVECEXP (PATTERN (insn), 0, 0);
+		auto code = XVECEXP (ops, 0, SYNTH_icode);
+
+		icode = INTVAL (code);
+	      }
+	    if (icode == CODE_FOR_rvtt_ttreplay_int)
+	      return false;
+	  }
       }
     return true;
   } 

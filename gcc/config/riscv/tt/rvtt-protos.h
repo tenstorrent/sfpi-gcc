@@ -39,21 +39,21 @@ extern GTY(()) rtx rvtt_vec0_rtx;
 
 // Instruction synthesis
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
-rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rtx rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv);
-inline rtx rvtt_sfpsynth_insn_dst (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+inline rtx rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 				   rtx dst, unsigned dst_shift, rtx lv)
 {
-  return rvtt_sfpsynth_insn_dst (addr, flags, synth, opcode, id,
+  return rvtt_sfpsynth_insn_dst (addr, icode, flags, synth, opcode, id,
 				 rvtt_vec0_rtx, 0, dst, dst_shift, lv);
 }
-rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			rtx src, unsigned src_shift);
-inline rtx rvtt_sfpsynth_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id)
+inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id)
 {
-  return rvtt_sfpsynth_insn (addr, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
+  return rvtt_sfpsynth_insn (addr, icode, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
 }
-rtx rvtt_sfpsynth_store_insn (rtx addr, unsigned flags, rtx synth, unsigned opcode, rtx id,
+rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			      rtx src, unsigned src_shift);
 
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);

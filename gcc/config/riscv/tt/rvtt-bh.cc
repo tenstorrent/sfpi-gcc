@@ -65,12 +65,13 @@ along with GCC; see the file COPYING3.  If not see
 void rvtt_bh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
 {
   rtx insn = nullptr; 
-  if (GET_CODE (imm) == CONST_INT)
-    insn = gen_rvtt_bh_sfpload_int(dst, lv, mod, mode, rvtt_clamp_unsigned (imm, 0x3FFF));
+  if (CONST_INT_P (imm))
+    insn = gen_rvtt_bh_sfpload_int (dst, lv, mod, mode, rvtt_clamp_unsigned (imm, 0x3FFF));
   else
     {
       unsigned op = TT_OP_BH_SFPLOAD (0, INTVAL (mod), INTVAL (mode), 0);
-      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, dst, 20, lv);
+      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_bh_sfpload_int,
+				     0, nonimm, op, id, dst, 20, lv);
     }
   emit_insn (insn);
 }
@@ -81,7 +82,7 @@ void rvtt_bh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx non
 
   if (int_mod & SFPXLOADI_MOD0_32BIT_MASK) {
     // Early nonimm pass assures this
-    gcc_assert(GET_CODE(imm) == CONST_INT);
+    gcc_assert(CONST_INT_P (imm));
 
     unsigned int int_imm = INTVAL(imm);
     bool load_32bit = true;
@@ -140,12 +141,13 @@ void rvtt_bh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx non
     }
   } else {
     rtx insn = nullptr;
-    if (GET_CODE(imm) == CONST_INT)
-      insn = gen_rvtt_bh_sfploadi_int(dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF));
+    if (CONST_INT_P (imm))
+      insn = gen_rvtt_bh_sfploadi_int (dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF));
     else
       {
 	unsigned long int op = TT_OP_BH_SFPLOADI(0, int_mod, 0);
-	insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, dst, 20, lv);
+	insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_bh_sfploadi_int,
+				       0, nonimm, op, id, dst, 20, lv);
       }
     emit_insn (insn);
   }
@@ -154,12 +156,13 @@ void rvtt_bh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx non
 void rvtt_bh_emit_sfpiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id)
 {
   rtx insn = nullptr;
-  if (GET_CODE (imm) == CONST_INT)
+  if (CONST_INT_P (imm))
     insn = gen_rvtt_bh_sfpiadd_i_int (dst, lv, src, rvtt_clamp_signed (imm, 0x7FF), mod);
   else
     {
       unsigned op = TT_OP_BH_SFPIADD(0, 0, 0, UINTVAL (mod));
-      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_bh_sfpiadd_i_int,
+				     0, nonimm, op, id, src, 4, dst, 8, lv);
     }
   emit_insn (insn);
 }
@@ -207,7 +210,7 @@ rvtt_bh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
   bool need_loadi = true;
   bool is_signed = (modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED;
   bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
-  bool is_const_int = GET_CODE(imm) == CONST_INT;
+  bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   int iv = is_const_int ? INTVAL (imm) : 0xffffffff;
 
@@ -332,7 +335,7 @@ void rvtt_bh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   rtx ref_val = gen_reg_rtx(V64SFmode);
   int int_mod = INTVAL(mod);
 
-  gcc_assert(GET_CODE(f) == CONST_INT);
+  gcc_assert(CONST_INT_P (f));
   unsigned int fval = INTVAL(f);
   // Wrapper will convert 0 to -0
   unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
@@ -397,12 +400,13 @@ void rvtt_bh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 void rvtt_bh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   rtx insn = nullptr;
-  if (GET_CODE(imm) == CONST_INT)
+  if (CONST_INT_P (imm))
     insn = gen_rvtt_bh_sfpdivp2_int (dst, lv, rvtt_clamp_signed (imm, 0x7FF), src, mod);
   else
     {
       unsigned op = TT_OP_BH_SFPDIVP2 (0, 0, 0, INTVAL (mod));
-      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_bh_sfpdivp2_int,
+				     0, nonimm, op, id, src, 4, dst, 8, lv);
     }
   emit_insn (insn);
 }
@@ -410,30 +414,31 @@ void rvtt_bh_emit_sfpdivp2(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod,
 void rvtt_bh_emit_sfpstochrnd_i(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
 {
   rtx insn = nullptr;
-  if (GET_CODE(imm) == CONST_INT)
-    insn = gen_rvtt_bh_sfpstochrnd_i_int(dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod);
+  if (CONST_INT_P (imm))
+    insn = gen_rvtt_bh_sfpstochrnd_i_int (dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod);
   else
     {
       unsigned op = TT_OP_BH_SFP_STOCH_RND (INTVAL (mode), 0, 0, 0, 0, INTVAL (mod));
-      insn = rvtt_sfpsynth_insn_dst (addr, 0, nonimm, op, id, src, 4, dst, 8, lv);
+      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_bh_sfpstochrnd_i_int,
+				     0, nonimm, op, id, src, 4, dst, 8, lv);
     }
   emit_insn (insn);
 }
 
 void rvtt_bh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src)
 {
-  if (GET_CODE(imm) == CONST_INT) {
-    unsigned int iv = INTVAL(imm);
-    if (iv > 4095) {
-      rvtt_bh_emit_sfpxloadi(dst, lv, addr,
-				   GEN_INT(SFPXLOADI_MOD0_UINT32), imm, GEN_INT(0), GEN_INT(0));
-      emit_insn(gen_rvtt_bh_sfpsetman_v(dst, dst, src));
-    } else {
-      emit_insn (gen_rvtt_bh_sfpsetman_i_int(dst, lv, imm, src));
+  if (CONST_INT_P (imm))
+    {
+      unsigned int iv = INTVAL(imm);
+      if (iv > 4095) {
+	rvtt_bh_emit_sfpxloadi(dst, lv, addr,
+			       GEN_INT(SFPXLOADI_MOD0_UINT32), imm, GEN_INT(0), GEN_INT(0));
+	emit_insn(gen_rvtt_bh_sfpsetman_v(dst, dst, src));
+      } else
+	emit_insn (gen_rvtt_bh_sfpsetman_i_int(dst, lv, imm, src));
     }
-  } else {
-    gcc_assert(0);
-  }
+  else
+    gcc_unreachable ();
 }
 
 void rvtt_bh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
