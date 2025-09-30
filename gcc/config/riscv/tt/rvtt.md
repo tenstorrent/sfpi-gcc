@@ -248,3 +248,13 @@ UNSPECV_TTINCRWC
                      (match_operand:SI    3 "const_int_operand"  "N01U")] UNSPECV_TTREPLAY)]
   "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")
+
+(define_insn "rvtt_rocc_noc_fence"
+  [(unspec_volatile [(const_int 0)] 0)]
+  "TARGET_RVTT"
+  "ttrocc.noc_fence")
+
+(define_insn "rvtt_rocc_dbg_postcode"
+  [(match_operand:SI 0 "const_int_operand" "")]
+  "TARGET_RVTT"
+  "ttrocc.dbg_postcode %0")

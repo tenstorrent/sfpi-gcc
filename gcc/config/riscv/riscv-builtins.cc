@@ -142,9 +142,11 @@ tree v64SF_type_node;
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
 #define RISCV_ATYPE_SI intSI_type_node
+#define RISCV_ATYPE_DI intDI_type_node
 #define RISCV_ATYPE_HI intHI_type_node
 #define RISCV_ATYPE_QI intQI_type_node
 #define RISCV_ATYPE_USI unsigned_intSI_type_node
+#define RISCV_ATYPE_UDI unsigned_intDI_type_node
 #define RISCV_ATYPE_UHI unsigned_intHI_type_node
 #define RISCV_ATYPE_UQI unsigned_intQI_type_node
 #define RISCV_ATYPE_V64SF v64SF_type_node
@@ -181,11 +183,14 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   /* Tenstorrent SFPU builtins */
 #define RVTT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
 #define RVTT_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define RVTT_BUILTIN_NONSFPU(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu), /* FIXME: Use ttroc here instead of sfpu */
+#define RVTT_NO_TGT_BUILTIN_NONSFPU(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu), /* FIXME: Use ttroc here instead of sfpu */
 #define RVTT_WH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_BH_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
 #define RVTT_BH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, sched, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
 #include "tt/rvtt-insn.h"
+
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the

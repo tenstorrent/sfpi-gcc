@@ -193,6 +193,11 @@ enum rvtt_insn_data::insn_id : unsigned {
 #define RVTT_RTL_ONLY(id, nip, gp, fl) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+
+// We don't emit any variants for the non-sfpu builtins as we don't need special handling
+#define RVTT_BUILTIN_NONSFPU(id, fmt, fl, dap, mp, sched, nip, nim, nis)
+#define RVTT_NO_TGT_BUILTIN_NONSFPU(id, fmt, fl, dap, mp, sched, nip, nim, nis)
+
 #define RVTT_WH_RTL_ONLY(id, fl, sched) id,
 #define RVTT_WH_PAD_RTL_ONLY(id) id,
 #define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
