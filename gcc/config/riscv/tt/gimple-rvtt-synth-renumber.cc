@@ -60,7 +60,6 @@ transform (function *fn)
     unsigned opcode_ix;
     unsigned add_ix;
     bool rhs2 : 1; // add: incoming edge is rhs2
-		   // use: is immediate
     bool used : 1;
     bool phi_use : 1;
     unsigned id : 30;
@@ -78,10 +77,6 @@ transform (function *fn)
     static node_t use (gimple *stmt, unsigned op_ix, unsigned add_ix, unsigned nonimm)
     {
       return {stmt, op_ix, add_ix, false, false, false, 0, nonimm};
-    }
-    static node_t immediate (gimple *stmt, unsigned nonimm)
-    {
-      return {stmt, 0, 0, true, false, false, 0, nonimm};
     }
   };
 
@@ -105,6 +100,7 @@ transform (function *fn)
 
 	    bool is_rvtt = rvtt_p (&insnd, &stmt, use_stmt);
 	    gcc_assert (is_rvtt && insnd->nonimm_pos >= 0);
+	    gcc_assert (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST);
 	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST)
 	      {
 		graph.emplace_back (node_t::use (use_stmt, opcode_ix,
@@ -143,6 +139,7 @@ transform (function *fn)
 
 	    bool is_used = self (self, graph, opcode_ix, gimple_get_lhs (add_stmt),
 				 this_first_add_ix, this_add_ix, this_addend);
+	    gcc_assert (is_used);
 	    if (this_first_add_ix)
 	      graph[this_add_ix].used = is_used;
 	    add_count += is_used;
@@ -200,7 +197,7 @@ transform (function *fn)
 	    }
 	  else if (insnd->nonimm_pos >= 0
 		   && TREE_CODE (gimple_call_arg (call_stmt, insnd->nonimm_pos)) == INTEGER_CST)
-	    graph.emplace_back (node_t::immediate (call_stmt, insnd->nonimm_pos));
+	    gcc_assert (integer_zerop (gimple_call_arg (call_stmt, insnd->nonimm_pos + 1)));
 	}
   bool immediates = false;
   bool renumbered = false;
@@ -210,6 +207,7 @@ transform (function *fn)
     {
       if (!is_gimple_assign (node.stmt))
 	{
+	  gcc_assert (!node.rhs2);
 	  if (!node.rhs2)
 	    continue;
 
@@ -222,6 +220,7 @@ transform (function *fn)
 	  continue;
 	}
 
+      gcc_assert (node.used);
       if (!node.used)
 	continue;
 
