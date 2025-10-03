@@ -26,7 +26,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "gimple.h"
-#include "diagnostic-core.h"
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
@@ -174,8 +173,6 @@ transform (function *fn)
   // Build the opcode-use graph
   std::vector<node_t> graph;
   std::vector<unsigned> opcode_counts;
-  bool immediates = false;
-  bool renumbered = false;
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -198,7 +195,32 @@ transform (function *fn)
 	      unsigned count = build_graph (build_graph, graph, opcode_ix, gimple_call_lhs (call_stmt));
 	      graph[opcode_ix].addend = count;
 	    }
+<<<<<<< HEAD
+||||||| parent of c4bf8315c66 (adjust ttinsn detection)
+	  else if (insnd->id == rvtt_insn_data::ttinsn
+		   && gimple_call_arg (call_stmt, 0) != null_pointer_node)
+	    {
+	      if (TREE_CODE (gimple_call_arg (call_stmt, 2)) == INTEGER_CST)
+		{
+		  gimple_call_set_arg (call_stmt, 0, null_pointer_node);
+		  update_stmt (call_stmt);
+		  immediates = true;
+		}
+	      else if (integer_nonzerop (gimple_call_arg (call_stmt, 1)))
+		// User required it to be statically known.
+		warning_at (gimple_location (call_stmt), 0, "ttinsn is not statically known");
+	    }
+	  else if (insnd->nonimm_pos >= 0
+		   && TREE_CODE (gimple_call_arg (call_stmt, insnd->nonimm_pos)) == INTEGER_CST)
+	    gcc_assert (integer_zerop (gimple_call_arg (call_stmt, insnd->nonimm_pos + 1)));
+=======
+	  else if (insnd->nonimm_pos >= 0
+		   && TREE_CODE (gimple_call_arg (call_stmt, insnd->nonimm_pos)) == INTEGER_CST)
+	    gcc_assert (integer_zerop (gimple_call_arg (call_stmt, insnd->nonimm_pos + 1)));
+>>>>>>> c4bf8315c66 (adjust ttinsn detection)
 	}
+  bool immediates = false;
+  bool renumbered = false;
 
   bool renumbered = false;
   unsigned unique_id = opcode_counts.size () - 1;
