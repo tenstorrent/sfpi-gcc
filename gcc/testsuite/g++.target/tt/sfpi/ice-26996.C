@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-wh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 
 namespace ckernel{
 extern unsigned *instrn_buffer;

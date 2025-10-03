@@ -1146,7 +1146,7 @@
 (define_expand "mov<mode>"
   [(set (match_operand:V 0 "reg_or_mem_operand")
 	(match_operand:V 1 "general_operand"))]
-  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_XTT_TENSIX)"
 {
   /* For whole register move, we transform the pattern into the format
      that excludes the clobber of scratch register.
@@ -1178,7 +1178,7 @@
 	 before spilling. The clobber scratch is used by spilling fractional
 	 registers in IRA/LRA so it's too early.  */
 
-  if (<MODE>mode == V64SFmode && TARGET_RVTT) {
+  if (<MODE>mode == V64SFmode && TARGET_XTT_TENSIX) {
     if (riscv_legitimize_move (<MODE>mode, operands[0], operands[1]))
       DONE;
   }
@@ -1282,7 +1282,7 @@
 (define_expand "mov<mode>"
   [(set (match_operand:VB 0 "reg_or_mem_operand")
 	(match_operand:VB 1 "general_operand"))]
-  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_XTT_TENSIX)"
 {
   if (TARGET_XTHEADVECTOR && reg_or_mem_operand (operands[1], <MODE>mode))
     {
@@ -1463,7 +1463,7 @@
 (define_expand "mov<mode>"
   [(set (match_operand:VLS_AVL_REG 0 "reg_or_mem_operand")
 	(match_operand:VLS_AVL_REG 1 "general_operand"))]
-  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_RVTT)"
+  "TARGET_VECTOR || (<MODE>mode == V64SFmode && TARGET_XTT_TENSIX)"
 {
   if (TARGET_VECTOR)
     {

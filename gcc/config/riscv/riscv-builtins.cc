@@ -146,9 +146,9 @@ AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
 AVAIL (cvalu, TARGET_XCVALU && !TARGET_64BIT)
 AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
 AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
-AVAIL (wormhole, TARGET_RVTT_WH)
-AVAIL (blackhole, TARGET_RVTT_BH)
-AVAIL (sfpu, TARGET_RVTT)
+AVAIL (wormhole, TARGET_XTT_TENSIX_WH)
+AVAIL (blackhole, TARGET_XTT_TENSIX_BH)
+AVAIL (sfpu, TARGET_XTT_TENSIX)
 
 /* Construct a riscv_builtin_description from the given arguments.
 

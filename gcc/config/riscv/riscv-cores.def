@@ -106,7 +106,9 @@ RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
 			      "svinval_zicbom_zicboz",
 			      "xiangshan-nanhu")
 
-RISCV_CORE("tt-wh",           "rv32im_xttwh",    "rvtt-b1")
-RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb_xttbh",    "rvtt-b1")
+RISCV_CORE("tt-wh",           "rv32im", "rvtt-b1")
+RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "rvtt-b1")
+RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "rvtt-b1")
+RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "rvtt-b1")
 
 #undef RISCV_CORE

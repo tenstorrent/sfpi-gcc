@@ -539,6 +539,17 @@ Mask(XSFVQMACCDOD) Var(riscv_sifive_subext)
 Mask(XSFVFNRCLIPXFQF) Var(riscv_sifive_subext)
 
 TargetVariable
+int riscv_tt_subext
+
+Mask(XTT_TENSIX_BH) Var(riscv_tt_subext)
+
+Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
+
+mfix-whraw
+Target Mask(TT_FIX_WHRAW)
+Emit code to address Wormhole RAW hazard
+
+TargetVariable
 int riscv_fmv_priority = 0
 
 Enum

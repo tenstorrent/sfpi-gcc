@@ -320,6 +320,9 @@ bool riscv_user_wants_strict_align;
 /* Stack alignment to assume/maintain.  */
 unsigned riscv_stack_boundary;
 
+// FIXME: Marker for tt odfities
+static bool tt_core;
+
 /* Whether in riscv_output_mi_thunk. */
 static bool riscv_in_thunk_func = false;
 
@@ -9938,8 +9941,8 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
   if (get_attr_type (insn) == TYPE_GHOST)
     return 0;
 
-  // FIXME: Implement.
-  if (TARGET_RVTT)
+  // FIXME: Implement for TT cores
+  if (tt_core)
     return more;
 
   /* If we ever encounter an insn with an unknown type, trip
@@ -10629,6 +10632,20 @@ riscv_convert_vector_chunks (struct gcc_options *opts)
 void
 riscv_override_options_internal (struct gcc_options *opts)
 {
+  if (auto cpu = opts->x_riscv_cpu_string)
+    {
+      // TT cpu implications
+      auto is_cpu_kind = [&] (char const *name)
+      {
+	auto len = strlen (name);
+	return 0 == strncmp (cpu, name, len)
+	  && (!cpu[len] || cpu[len] == '-');
+      };
+      if (!(target_flags_explicit & MASK_TT_FIX_WHRAW)
+	  && is_cpu_kind ("tt-wh"))
+	opts->x_target_flags |= MASK_TT_FIX_WHRAW;
+    }
+
   const struct riscv_tune_info *cpu;
 
   /* The presence of the M extension implies that division instructions
@@ -10729,6 +10746,9 @@ riscv_override_options_internal (struct gcc_options *opts)
       opts->x_flag_cf_protection
       = (cf_protection_level) (opts->x_flag_cf_protection | CF_SET);
     }
+
+  const char *cpu_str = opts->x_riscv_cpu_string;
+  tt_core = cpu_str && !strncmp (cpu_str, "tt-", 3);
 }
 
 /* Implement TARGET_OPTION_OVERRIDE.  */
@@ -10924,7 +10944,7 @@ riscv_option_override (void)
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
 
-  if (int (TARGET_RVTT_WH) + int (TARGET_RVTT_BH) > 1)
+  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) > 1)
     error ("only one ttwh or ttbh extension can be specified");
 }
 
@@ -11002,7 +11022,7 @@ riscv_conditional_register_usage (void)
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
 
-  if (!TARGET_RVTT)
+  if (!TARGET_XTT_TENSIX)
     for (int regno = SFPU_REG_FIRST; regno <= SFPU_REG_LAST; regno++)
       fixed_regs[regno] = call_used_regs[regno] = 1;
 }
@@ -11795,7 +11815,7 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
-  if (TARGET_RVTT && mode == V64SFmode)
+  if (TARGET_XTT_TENSIX && mode == V64SFmode)
     return true;
 
   if (TARGET_VECTOR)

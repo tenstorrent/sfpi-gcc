@@ -33,8 +33,6 @@ along with GCC; see the file COPYING3.  If not see
 
 const int stack_ptr_regno = STACK_POINTER_REGNUM;
 
-using namespace std;
-
 static int top_of_bb_n_moved = 0;
 static const int l1_load_shadow = 6;
 static const int reg_load_shadow = 4;
@@ -53,11 +51,11 @@ static const int local_load_shadow = 1;
 struct bb_entry {
   bool inited;                      // true once populated w/ incoming data
   int ll_incoming;                  // #ll for first parent BB to get to this BB
-  vector<int> hll_war_reg_incoming; // regs passed in that can resolve the parent
+  std::vector<int> hll_war_reg_incoming; // regs passed in that can resolve the parent
   int ll_before_resolve_all;        // #ll before all WARs are resolved (-1 if NA)
 };
 
-typedef vector<bb_entry> bb_data;
+typedef std::vector<bb_entry> bb_data;
 
 // Copied (and modified) from rtl.c.  This is potentially subject to rot.
 //
@@ -225,99 +223,6 @@ get_mem_reg_and_offset(rtx pat, int *reg, int *offset)
   return true;
 }
 
-static void
-emit_load (rtx_insn *insn, bool before, rtx mem)
-{
-  mem = copy_rtx (mem);
-  MEM_VOLATILE_P (mem) = true;
-  rtx new_insn = gen_rtx_SET (gen_rtx_REG (SImode, 0), gen_rtx_ZERO_EXTEND (SImode, mem));
-  if (before)
-    emit_insn_before (new_insn, insn);
-  else
-    emit_insn_after (new_insn, insn);
-}
-
-// WH has a read after write hazard bug where loading a word after a byte or
-// half store issues the load before the store.  The bug is in the address
-// comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
-// be detected. So if the shorter store is word-aligned, we have no hazard. (we
-// do not take advantage of that) Mem logic is prioritizing loads over stores
-// and even though there’s no reorder buffer, 2 loads could get issued before a
-// store actually gets out. If there is an intervening store, it is not clear
-// whether the hazard is resolved.  As the bug is very sensitive, we anull it
-// in all cases by placing a short load as late as possible after the short
-// store. That's when we encounter the first control-flow change, write to
-// store's ptr register, a load of any size, or the end of the block. (It is
-// desirable to sink the load as late as possible.)
-
-static void
-workaround_wh_raw (function *cfn)
-{
-  DUMP("RAW pass on: %s\n", function_name(cfn));
-
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, cfn)
-    {
-      DUMP("Processing BB %d\n", bb->index);
-      rtx_insn *insn;
-      bool have_store = false;
-      int store_ptr_regno = 0;
-      rtx store_mem = nullptr;
-      FOR_BB_INSNS (bb, insn)
-	{
-	  if (!NONDEBUG_INSN_P (insn))
-	    continue;
-
-	  rtx insn_pat = PATTERN (insn);
-	  bool new_store = false;
-
-	  if (GET_CODE (insn_pat) == SET
-	      && GET_CODE (SET_DEST (insn_pat)) == MEM)
-	    {
-	      machine_mode mode = GET_MODE (SET_SRC (insn_pat));
-	      if ((mode == HImode || mode == QImode)
-		  && !rvtt_reg_store_p (insn_pat))
-		new_store = true;
-	    }
-
-	  if (!have_store)
-	    ;
-	  else if (new_store
-		   || GET_CODE (insn) == CALL_INSN
-		   || load_mem_p (insn_pat)
-		   || (GET_CODE (insn_pat) == SET
-		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
-	    {
-	      // Emit the war when we hit a load or if the base reg gets modified
-	      DUMP("emitting raw war before load\n");
-	      emit_load (insn, true, store_mem);
-	      have_store = false;
-	    }
-	  else
-	    gcc_assert (insn == BB_END (bb)
-			|| !control_flow_insn_p (insn));
-
-	  if (new_store)
-	    {
-	      // Found a potential RAW issue store
-	      int dummy_offset;
-	      get_mem_reg_and_offset (SET_DEST (insn_pat), &store_ptr_regno, &dummy_offset);
-	      store_mem = SET_DEST (insn_pat);
-	      have_store = true;
-	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
-	    }
-	}
-
-      if (have_store)
-	{
-	  DUMP("emitting raw war at end of bb\n");
-	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store_mem);
-	  have_store = false;
-	}
-    }
-  DUMP("out raw pass\n");
-}
-
 class load_type {
  private:
   int lt;
@@ -371,10 +276,10 @@ struct load_dep {
 struct load_def {
   struct load_base base;
   basic_block bb;             // bb for insn
-  vector<load_dep> uses;      // each of the uses of this reg
+  std::vector<load_dep> uses;      // each of the uses of this reg
 };
 
-typedef vector<struct load_dep> load_deps;
+typedef std::vector<struct load_dep> load_deps;
 
 struct sched_insn_data {
   load_type type;
@@ -382,7 +287,7 @@ struct sched_insn_data {
   load_def *def;             // only used for use
 };
 
-static unordered_map<rtx_insn *, sched_insn_data> insn_count_map;
+static std::unordered_map<rtx_insn *, sched_insn_data> insn_count_map;
 
 // Build up a vector of load_defs such that:
 //  - there is one entry per load in reverse order
@@ -392,14 +297,14 @@ static unordered_map<rtx_insn *, sched_insn_data> insn_count_map;
 // the end of the bb
 static void
 create_load_data (function *fn,
-		  vector<load_def>& load_defs,
-		  vector<vector<load_def *>>& bb_reg_open_defs)
+		  std::vector<load_def>& load_defs,
+		  std::vector<std::vector<load_def *>>& bb_reg_open_defs)
 {
   basic_block bb;
   rtx_insn *insn;
   df_ref use;
 
-  vector<load_deps> all_uses;
+  std::vector<load_deps> all_uses;
   all_uses.resize(FIRST_PSEUDO_REGISTER);
   insn_count_map.clear();
 
@@ -473,7 +378,7 @@ create_load_data (function *fn,
   for (auto& ld : load_defs)
     {
       sched_insn_data lsid;
-      auto result = insn_count_map.insert(pair<rtx_insn *, sched_insn_data>(ld.base.insn, lsid));
+      auto result = insn_count_map.insert(std::pair<rtx_insn *, sched_insn_data>(ld.base.insn, lsid));
       ld.base.id = &result.first->second;
       result.first->second.insn_count = ld.base.init_insn_count;
       result.first->second.type.add_flavor(ld.base.init_type);
@@ -492,7 +397,7 @@ create_load_data (function *fn,
 	{
 	  use.def = &ld;
 	  sched_insn_data usid;
-	  auto result = insn_count_map.insert(pair<rtx_insn *, sched_insn_data>(use.base.insn, usid));
+	  auto result = insn_count_map.insert(std::pair<rtx_insn *, sched_insn_data>(use.base.insn, usid));
 	  use.base.id = &result.first->second;
 	  result.first->second.insn_count = use.base.init_insn_count;
 	  result.first->second.type.add_flavor(use.base.init_type);
@@ -505,7 +410,8 @@ create_load_data (function *fn,
 
 // Find the instruction count (ic) when load in ld is resolved (-1 if not resolved)
 static int
-get_ic_of_resolution(vector<load_def>& load_defs, int which, load_def& ld, bool go_to_the_end = false, load_dep **resolving_use = nullptr)
+get_ic_of_resolution(std::vector<load_def>& load_defs, int which, load_def& ld,
+		     bool go_to_the_end = false, load_dep **resolving_use = nullptr)
 {
   // insn counts are numbered high to low
   int max = -1;
@@ -963,7 +869,7 @@ push_use_down(rtx_insn *insn, int in_how_far, int max_set_size)
 // because the use insn can change depending on how this loop executes (ie, we
 // need an absolute not relative position)
 static void
-push_gating_use_down(vector<load_def>& defs, int which, load_def& ld, int push_to)
+push_gating_use_down(std::vector<load_def>& defs, int which, load_def& ld, int push_to)
 {
   // Find gating insn
   load_dep *target_use = nullptr;
@@ -1006,10 +912,10 @@ schedule_hll(function *fn)
 {
   DUMP("TT riscv GS rtl hll schedule pass on: %s\n", function_name(fn));
 
-  vector<load_def> load_defs;
+  std::vector<load_def> load_defs;
 
   // Registers defined in hlls not used within the BB
-  vector<vector<load_def *>> bb_reg_open_defs;
+  std::vector<std::vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
 
   create_load_data(fn, load_defs, bb_reg_open_defs);
@@ -1046,7 +952,7 @@ schedule_hll(function *fn)
 	}
 
       push_load_up(ld.base.insn, dist_to_gate - 1, 3, false);
-      push_gating_use_down(load_defs, i, ld, min(ld.base.id->insn_count - shadow, 0));
+      push_gating_use_down(load_defs, i, ld, std::min(ld.base.id->insn_count - shadow, 0));
 
       prev_hll = &ld;
     }
@@ -1093,7 +999,7 @@ schedule_hll(function *fn)
 }
 
 static load_dep *
-get_closest_use(vector<load_dep>& uses)
+get_closest_use(std::vector<load_dep>& uses)
 {
   int max = -1;
   load_dep *closest_use = nullptr;
@@ -1118,10 +1024,10 @@ schedule_shadows(function *fn)
 {
   DUMP("TT riscv GS rtl shadow cleanup schedule pass on: %s\n", function_name(fn));
 
-  vector<load_def> load_defs;
+  std::vector<load_def> load_defs;
 
   // Registers defined in hlls not used within the BB
-  vector<vector<load_def *>> bb_reg_open_defs;
+  std::vector<std::vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
 
   create_load_data(fn, load_defs, bb_reg_open_defs);
@@ -1177,8 +1083,8 @@ schedule_shadows(function *fn)
 }
 
 static void
-print_uses(const vector<load_def>& load_defs,
-	   const vector<load_dep *>& deps,
+print_uses(const std::vector<load_def>& load_defs,
+	   const std::vector<load_dep *>& deps,
 	   int index, int init_ic, bool print_ic = false)
 {
   int end_ic = (index == 0) ? 0 : load_defs[index - 1].base.id->insn_count;
@@ -1248,9 +1154,9 @@ get_max_ic(basic_block bb, int base)
 static void
 print_hll_schedule(function *fn)
 {
-  vector<load_def> load_defs;
+  std::vector<load_def> load_defs;
 
-  vector<vector<load_def *>> bb_reg_open_defs;
+  std::vector<std::vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
   create_load_data(fn, load_defs, bb_reg_open_defs);
 
@@ -1258,7 +1164,7 @@ print_hll_schedule(function *fn)
   fprintf(stderr, "HLL schedule dump for: %s\n", function_name(fn));
   if (index < 0) return;
 
-  vector<load_dep *>deps;
+  std::vector<load_dep *>deps;
   deps.reserve(1000);
 
   // Early out if this fn has 0 hlls
@@ -1344,8 +1250,8 @@ class analysis {
   int n_stack_lds;
   int n_stack_sts;
 
-  vector<int>l1_hist;
-  vector<int>reg_hist;
+  std::vector<int>l1_hist;
+  std::vector<int>reg_hist;
 
  public:
   analysis() : n_l1s(0), n_regs(0), cycle_count(0), n_bbs(0), n_insns(0), n_sfpu(0), n_stack_lds(0), n_stack_sts(0) {}
@@ -1353,14 +1259,14 @@ class analysis {
   void analyze(function *fn);
   void print();
   void bump_hist(load_type& which, int ic);
-  void print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high);
+  void print_hist(std::vector<int>& hist, int n_hlls, int ic_low, int ic_high);
 };
 
 analysis analg;
 
 void analysis::bump_hist(load_type& which_type, int ic)
 {
-  vector<int>& hist = (which_type.l1_load_p()) ? l1_hist : reg_hist;
+  std::vector<int>& hist = (which_type.l1_load_p()) ? l1_hist : reg_hist;
   if (ic >= (int)hist.size())
     {
       hist.resize(ic + 1);
@@ -1370,9 +1276,9 @@ void analysis::bump_hist(load_type& which_type, int ic)
 
 void analysis::analyze(function *fn)
 {
-  vector<load_def> load_defs;
+  std::vector<load_def> load_defs;
 
-  vector<vector<load_def *>> bb_reg_open_defs;
+  std::vector<std::vector<load_def *>> bb_reg_open_defs;
   bb_reg_open_defs.resize(n_basic_blocks_for_fn(fn));
   create_load_data(fn, load_defs, bb_reg_open_defs);
 
@@ -1408,7 +1314,7 @@ void analysis::analyze(function *fn)
     }
 
   // The cycle count for each insn, initially all 1s
-  vector<int> cycles;
+  std::vector<int> cycles;
 
   // Generate cycle counts, add to total
   // This is a better metric than the histogram
@@ -1486,7 +1392,7 @@ void analysis::analyze(function *fn)
     }
 }
 
-void analysis::print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high)
+void analysis::print_hist(std::vector<int>& hist, int n_hlls, int ic_low, int ic_high)
 {
   int total = 0;
   int ic = 0;
@@ -1581,7 +1487,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_RVTT;
+    return TARGET_XTT_TENSIX;
   }
   
   /* opt_pass methods: */
@@ -1593,24 +1499,17 @@ public:
 	  // Leave it in (found after disabling hll pass)
 	  df_set_flags (DF_LR_RUN_DCE);
 	  df_note_add_problem ();
-	  df_analyze();
+	  df_analyze ();
 
 	  if (flag_rvtt_hll) {
-	    schedule_shadows(cfn);
-	    schedule_hll(cfn);
+	    schedule_shadows (cfn);
+	    schedule_hll (cfn);
 	    //print_hll_schedule(cfn);
 	  }
 	}
 
       if (flag_rvtt_dump_stats)
-	{
-	  analg.analyze(cfn);
-	}
-
-      // This must come before the hll pass as it introduces loads
-      if (TARGET_RVTT_WH)
-	workaround_wh_raw(cfn);
-
+	analg.analyze (cfn);
       return 0;
     }
 }; // class pass_rvtt_hll

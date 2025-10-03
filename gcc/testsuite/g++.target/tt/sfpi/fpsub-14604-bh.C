@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 // { dg-final { check-function-bodies "**" "" } }
 
 // Verify we notice a - b is a + -1.0 * b
