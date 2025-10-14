@@ -1,0 +1,2 @@
+RISCV_BUILTIN (ttrocc_dbg_postcode, "ttrocc_dbg_postcode", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_noc_fence, "ttrocc_noc_fence", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, rocc),

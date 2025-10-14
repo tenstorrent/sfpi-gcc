@@ -4809,6 +4809,7 @@
 (include "zc.md")
 (include "corev.md")
 (include "xiangshan.md")
+(include "ttrocc.md")
 
 (include "tt/rvtt.md")
 (include "tt/rvtt-wh.md")
