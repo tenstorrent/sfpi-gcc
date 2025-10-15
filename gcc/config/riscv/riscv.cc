@@ -10641,9 +10641,25 @@ riscv_override_options_internal (struct gcc_options *opts)
 	return 0 == strncmp (cpu, name, len)
 	  && (!cpu[len] || cpu[len] == '-');
       };
+
       if (!(target_flags_explicit & MASK_TT_FIX_WHRAW)
 	  && is_cpu_kind ("tt-wh"))
 	opts->x_target_flags |= MASK_TT_FIX_WHRAW;
+
+      if (is_cpu_kind ("tt-qsr32"))
+	{
+	  if (!(target_flags_explicit & MASK_FDIV))
+	    {
+	      opts->x_target_flags &= ~MASK_FDIV;
+	      // Say this is explicit so below doesn't turn it back on.
+	      target_flags_explicit |= MASK_FDIV;
+	    }
+	  // The rmext optimization ICES on quasar for reasons to be determined.
+	  flag_rvtt_rmext = 0;
+	}
+      else if (is_cpu_kind ("tt-qsr64"))
+	// The rmext optimization ICES on quasar for reasons to be determined.
+	flag_rvtt_rmext = 0;
     }
 
   const struct riscv_tune_info *cpu;

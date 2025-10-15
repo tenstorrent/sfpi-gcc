@@ -968,7 +968,7 @@ diagnostic_context::action_after_output (diagnostic_t diag_kind)
 
 	fnotice (stderr, "gcc %s%s\n", pkgversion_string, version_string);
 	bool space = false;
-	for (auto *argv = saved_argv; *argv; argv++, space = true)
+	for (auto *argv = saved_argv; *argv; space = true)
 	  fnotice (stderr, &" %s"[1 - space], *argv++);
 	fnotice (stderr, "\n");
 	freeargv (saved_argv);

@@ -111,4 +111,17 @@ RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "rvtt-b1")
 RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "rvtt-b1")
 RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "rvtt-b1")
 
+// I am suspicious of the following architecture extensions
+// 1) qsr32 doesn't have zba, zbb (which BH has)
+// 2) both have 'a' extension, not zaamo, and the former includes
+// load-locked, store-conditional, which I don't think our cache
+// architecture can support.
+// TODO update tune parameter
+RISCV_CORE("tt-qsr64", "rv64imac_zicsr_zba_zbb_zbs_zifencei", "rvtt-b1")
+RISCV_CORE("tt-qsr32", "rv32imafv", "rvtt-b1")
+
+// To be enabled when appropriate
+// RISCV_CORE("tt-qsr64-rocc",        "rv64imac_zicsr_zba_zbb_zbs_zifencei_xttrocc", "rvtt-b1")
+// Use tensixqsr when ready
+RISCV_CORE("tt-qsr32-tensix",        "rv32imafv_xtttensixbh", "rvtt-b1")
 #undef RISCV_CORE
