@@ -10644,6 +10644,13 @@ riscv_override_options_internal (struct gcc_options *opts)
       if (!(target_flags_explicit & MASK_TT_FIX_WHRAW)
 	  && is_cpu_kind ("tt-wh"))
 	opts->x_target_flags |= MASK_TT_FIX_WHRAW;
+
+      if (!(target_flags_explicit & MASK_FDIV)
+	  && is_cpu_kind ("tt-qsr32"))
+	{
+	  opts->x_target_flags &= ~MASK_FDIV;
+	  target_flags_explicit |= MASK_FDIV;
+	}
     }
 
   const struct riscv_tune_info *cpu;

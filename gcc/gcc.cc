@@ -10247,6 +10247,10 @@ print_multilib_info (void)
 	    skip = 0;
 	}
 
+      // Elide the default multilib, we don't want it mentioned
+      if (last_path[0] == '.' && p == &last_path[1])
+	skip = 1;
+
       if (! skip)
 	{
 	  const char *p1;

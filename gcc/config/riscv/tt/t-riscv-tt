@@ -1,3 +1,31 @@
+# -*- makefile -*- tt makefile fragment
+
+MULTILIB_OPTIONS := \
+mcpu=tt-wh/mcpu=tt-bh/mcpu=tt-qsr32/mcpu=tt-qsr64 \
+mabi=ilp32/mabi=ilp32f/mabi=lp64 \
+
+MULTILIB_MATCHES := \
+mcpu?tt-wh=mcpu?tt-wh-tensix \
+mcpu?tt-bh=mcpu?tt-bh-tensix \
+mcpu?tt-qsr32=mcpu?tt-qsr32-tensix \
+mcpu?tt-qsr64=mcpu?tt-qsr64-rocc \
+
+MULTILIB_REQUIRED := \
+mcpu=tt-wh/mabi=ilp32 \
+mcpu=tt-bh/mabi=ilp32 \
+mcpu=tt-qsr32/mabi=ilp32f \
+mcpu=tt-qsr64/mabi=lp64 \
+
+MULTILIB_OSDIRNAMES := \
+mcpu.tt-wh/mabi.ilp32=!wh-ilp32 \
+mcpu.tt-bh/mabi.ilp32=!bh-ilp32 \
+mcpu.tt-qsr32/mabi.ilp32f=!qsr32-ilp32f \
+mcpu.tt-qsr64/mabi.lp64=!qsr64-lp64 \
+
+MULTILIB_REUSE :=
+MULTILIB_DIRNAMES :=
+MULTILIB_EXCEPTIONS :=
+MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
 	rvtt-wh.o rvtt-bh.o \

@@ -535,7 +535,9 @@ public:
   /* opt_pass methods: */
   virtual bool gate (function *) override
   {
-    return optimize > 0 && flag_rvtt_rmext;
+    // FIXME: Optimization appears to be broken, making assumptions about ISA
+    // extensions?
+    return false;
   }
 
   virtual unsigned execute (function *cfn) override

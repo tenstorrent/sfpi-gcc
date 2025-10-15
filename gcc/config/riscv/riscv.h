@@ -98,6 +98,7 @@ extern const char *riscv_arch_help (int argc, const char **argv);
 #define MULTILIB_DEFAULTS \
   {"march=" STRINGIZING (TARGET_RISCV_DEFAULT_ARCH), \
    "mabi=" STRINGIZING (TARGET_RISCV_DEFAULT_ABI) }
+   //   "mcpu=tt-wh",
 
 #undef ASM_SPEC
 #define ASM_SPEC "\
