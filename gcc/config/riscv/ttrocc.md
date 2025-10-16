@@ -29,6 +29,23 @@
   UNSPECV_LLK_INTF_READ  
   UNSPECV_FDS_INTF_WRITE  
   UNSPECV_FDS_INTF_READ  
+  UNSPECV_ADDRGEN_WR_REG
+  UNSPECV_ADDRGEN_RD_REG
+  UNSPECV_ADDRGEN_RESET
+  UNSPECV_ADDRGEN_RESET_COUNTER
+  UNSPECV_ADDRGEN_PEEK_SRC
+  UNSPECV_ADDRGEN_POP_SRC
+  UNSPECV_ADDRGEN_POP_X_SRC
+  UNSPECV_ADDRGEN_PEEK_DEST
+  UNSPECV_ADDRGEN_POP_DEST
+  UNSPECV_ADDRGEN_POP_X_DEST
+  UNSPECV_ADDRGEN_POP_BOTH
+  UNSPECV_ADDRGEN_PUSH_SRC
+  UNSPECV_ADDRGEN_PUSH_SRC_POP_X
+  UNSPECV_ADDRGEN_PUSH_DEST
+  UNSPECV_ADDRGEN_PUSH_DEST_POP_X
+  UNSPECV_ADDRGEN_PUSH_BOTH
+  UNSPECV_ADDRGEN_PUSH_BOTH_POP_X
   UNSPECV_CMDBUF_WR_REG  
   UNSPECV_CMDBUF_RD_REG  
   UNSPECV_CMDBUF_GET_VC_SPACE  
@@ -84,6 +101,113 @@
                      (match_operand:DI 1 "const_int_operand")] UNSPECV_FDS_INTF_READ)]
   ""
   "tt.rocc.fds_intf_read\t%1")
+
+(define_insn "riscv_ttrocc_addrgen_wr_reg"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     (match_operand:DI 2 "register_operand")] UNSPECV_ADDRGEN_WR_REG)]
+  ""
+  ;; We hardcode two extra unused registers per the HW engineers' request
+  "tt.rocc.addrgen_wr_reg\tx0,%0,%1,%2,x0")
+
+(define_insn "riscv_ttrocc_addrgen_rd_reg"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     (match_operand:DI 2 "const_int_operand")] UNSPECV_ADDRGEN_RD_REG)]
+  ""
+  ;; We hardcode three extra unused registers per the HW engineers' request
+  "tt.rocc.addrgen_rd_reg\tx0,%1,%2,x0,x0")
+
+(define_insn "riscv_ttrocc_addrgen_reset"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")] UNSPECV_ADDRGEN_RESET)]
+  ""
+  "tt.rocc.addrgen_reset\t%0")
+
+(define_insn "riscv_ttrocc_addrgen_reset_counter"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")] UNSPECV_ADDRGEN_RESET_COUNTER)]
+  ""
+  ;; We use an extra register here per the spec, but hardcode it to zero
+  "tt.rocc.addrgen_reset_counter\t%0,x0")
+
+(define_insn "riscv_ttrocc_addrgen_peek_src"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")] UNSPECV_ADDRGEN_PEEK_SRC)]
+  ""
+  "tt.rocc.addrgen_peek_src\t%1")
+
+(define_insn "riscv_ttrocc_addrgen_pop_src"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")] UNSPECV_ADDRGEN_POP_SRC)]
+  ""
+  "tt.rocc.addrgen_pop_src\t%1")
+
+(define_insn "riscv_ttrocc_addrgen_pop_x_src"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     (match_operand:DI 2 "register_operand")] UNSPECV_ADDRGEN_POP_X_SRC)]
+  ""
+  "tt.rocc.addrgen_pop_x_src\t%1,%2")
+
+(define_insn "riscv_ttrocc_addrgen_peek_dest"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")] UNSPECV_ADDRGEN_PEEK_DEST)]
+  ""
+  "tt.rocc.addrgen_peek_dest\t%1")
+
+(define_insn "riscv_ttrocc_addrgen_pop_dest"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")] UNSPECV_ADDRGEN_POP_DEST)]
+  ""
+  "tt.rocc.addrgen_pop_dest\t%1")
+
+(define_insn "riscv_ttrocc_addrgen_pop_x_dest"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     (match_operand:DI 2 "register_operand")] UNSPECV_ADDRGEN_POP_X_DEST)]
+  ""
+  "tt.rocc.addrgen_pop_x_dest\t%1,%2")
+
+(define_insn "riscv_ttrocc_addrgen_pop_both"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     (match_operand:DI 2 "register_operand")
+                     (match_operand:DI 3 "register_operand")] UNSPECV_ADDRGEN_POP_BOTH)]
+  ""
+  "tt.rocc.addrgen_pop_both\t%1,%2,%3")
+
+(define_insn "riscv_ttrocc_addrgen_push_src"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")] UNSPECV_ADDRGEN_PUSH_SRC)]
+  ""
+  "tt.rocc.addrgen_push_src\t%0")
+
+(define_insn "riscv_ttrocc_addrgen_push_src_pop_x"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
+                     (match_operand:DI 1 "register_operand")] UNSPECV_ADDRGEN_PUSH_SRC_POP_X)]
+  ""
+  "tt.rocc.addrgen_push_src_pop_x\t%0,%1")
+
+(define_insn "riscv_ttrocc_addrgen_push_dest"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")] UNSPECV_ADDRGEN_PUSH_DEST)]
+  ""
+  "tt.rocc.addrgen_push_dest\t%0")
+
+(define_insn "riscv_ttrocc_addrgen_push_dest_pop_x"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
+                     (match_operand:DI 1 "register_operand")] UNSPECV_ADDRGEN_PUSH_DEST_POP_X)]
+  ""
+  "tt.rocc.addrgen_push_dest_pop_x\t%0,%1")
+
+(define_insn "riscv_ttrocc_addrgen_push_both"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")] UNSPECV_ADDRGEN_PUSH_BOTH)]
+  ""
+  "tt.rocc.addrgen_push_both\t%0")
+
+(define_insn "riscv_ttrocc_addrgen_push_both_pop_x"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
+                     (match_operand:DI 1 "register_operand")
+                     (match_operand:DI 2 "register_operand")] UNSPECV_ADDRGEN_PUSH_BOTH_POP_X)]
+  ""
+  "tt.rocc.addrgen_push_both_pop_x\t%0,%1,%2")
 
 (define_insn "riscv_ttrocc_cmdbuf_wr_reg"
   [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
