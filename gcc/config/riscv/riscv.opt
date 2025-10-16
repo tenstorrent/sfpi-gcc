@@ -549,6 +549,10 @@ mfix-whraw
 Target Mask(TT_FIX_WHRAW)
 Emit code to address Wormhole RAW hazard
 
+mrvtt-hll-mitigation
+Target Var(flag_rvtt_hll_mitigation) Init(-1)
+Mitigate high latency load performance
+
 TargetVariable
 int riscv_fmv_priority = 0
 
