@@ -28,7 +28,11 @@
   UNSPECV_LLK_INTF_WRITE  
   UNSPECV_LLK_INTF_READ  
   UNSPECV_FDS_INTF_WRITE  
-  UNSPECV_FDS_INTF_READ  
+  UNSPECV_FDS_INTF_READ
+  UNSPECV_CS_ALLOC
+  UNSPECV_CS_DEALLOC
+  UNSPECV_CS_SAVE
+  UNSPECV_CS_RESTORE
   UNSPECV_ADDRGEN_WR_REG
   UNSPECV_ADDRGEN_RD_REG
   UNSPECV_ADDRGEN_RESET
@@ -117,6 +121,26 @@
                      (match_operand:DI 1 "const_int_operand")] UNSPECV_FDS_INTF_READ)]
   ""
   "tt.rocc.fds_intf_read\t%1")
+
+(define_insn "riscv_ttrocc_cs_alloc"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")] UNSPECV_CS_ALLOC)]
+  ""
+  "tt.rocc.cs_alloc")
+
+(define_insn "riscv_ttrocc_cs_dealloc"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")] UNSPECV_CS_DEALLOC)]
+  ""
+  "tt.rocc.cs_dealloc\t%0")
+
+(define_insn "riscv_ttrocc_cs_save"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")] UNSPECV_CS_SAVE)]
+  ""
+  "tt.rocc.cs_save\t%0")
+
+(define_insn "riscv_ttrocc_cs_restore"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")] UNSPECV_CS_RESTORE)]
+  ""
+  "tt.rocc.cs_restore\t%0")
 
 (define_insn "riscv_ttrocc_addrgen_wr_reg"
   [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
