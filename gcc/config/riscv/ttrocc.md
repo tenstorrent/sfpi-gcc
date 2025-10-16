@@ -66,6 +66,22 @@
   UNSPECV_CMDBUF_ISSUE_READ2_TRANS  
   UNSPECV_CMDBUF_ISSUE_WRITE1_TRANS  
   UNSPECV_CMDBUF_ISSUE_WRITE2_TRANS  
+  UNSPECV_SCMDBUF_WR_REG  
+  UNSPECV_SCMDBUF_RD_REG  
+  UNSPECV_SCMDBUF_GET_VC_SPACE  
+  UNSPECV_SCMDBUF_GET_VC_SPACE_VC  
+  UNSPECV_SCMDBUF_WR_SENT  
+  UNSPECV_SCMDBUF_WR_SENT_TRID  
+  UNSPECV_SCMDBUF_TR_ACK  
+  UNSPECV_SCMDBUF_TR_ACK_TRID  
+  UNSPECV_SCMDBUF_RESET  
+  UNSPECV_SCMDBUF_ISSUE_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_INLINE_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_INLINE_ADDR_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_READ1_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_READ2_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_WRITE1_TRANS  
+  UNSPECV_SCMDBUF_ISSUE_WRITE2_TRANS  
 ])
 
 (define_insn "riscv_ttrocc_noc_fence"
@@ -360,3 +376,108 @@
                      ] UNSPECV_CMDBUF_ISSUE_WRITE2_TRANS)]
   ""
   "tt.rocc.cmdbuf_issue_write2_trans\t%0,%1,%2")
+
+(define_insn "riscv_ttrocc_scmdbuf_wr_reg"
+  [(unspec_volatile [(match_operand:DI 0 "const_int_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_WR_REG)]
+  ""
+  ;; We hardcode three extra unused registers per the HW engineers' request
+  "tt.rocc.scmdbuf_wr_reg\tx0,x0,%0,%1,x0")
+    
+(define_insn "riscv_ttrocc_scmdbuf_rd_reg"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "const_int_operand")
+                     ] UNSPECV_SCMDBUF_RD_REG)
+   (return)]
+  ""
+  ;; We hardcode four extra unused registers per the HW engineers' request
+  "tt.rocc.scmdbuf_rd_reg\tx0,x0,%1,x0,x0")
+
+(define_insn "riscv_ttrocc_scmdbuf_get_vc_space"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_GET_VC_SPACE)]
+  ""
+  "tt.rocc.scmdbuf_get_vc_space")
+   
+(define_insn "riscv_ttrocc_scmdbuf_get_vc_space_vc"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_GET_VC_SPACE_VC)]
+  ""
+  "tt.rocc.scmdbuf_get_vc_space_vc\t%1")
+   
+(define_insn "riscv_ttrocc_scmdbuf_wr_sent"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_WR_SENT)]
+  ""
+  "tt.rocc.scmdbuf_wr_sent")
+   
+(define_insn "riscv_ttrocc_scmdbuf_wr_sent_trid"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_WR_SENT_TRID)]
+  ""
+  "tt.rocc.scmdbuf_wr_sent_trid\t%1")
+   
+(define_insn "riscv_ttrocc_scmdbuf_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_TR_ACK)]
+  ""
+  "tt.rocc.scmdbuf_tr_ack")
+   
+(define_insn "riscv_ttrocc_scmdbuf_tr_ack_trid"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_TR_ACK_TRID)]
+  ""
+  "tt.rocc.scmdbuf_tr_ack_trid\t%1")
+
+(define_insn "riscv_ttrocc_scmdbuf_reset"
+  [(unspec_volatile [(const_int 0)] UNSPECV_SCMDBUF_RESET)]
+  ""
+  "tt.rocc.scmdbuf_reset")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_trans"
+  [(unspec_volatile [(const_int 0)] UNSPECV_SCMDBUF_ISSUE_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_trans")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_inline_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_INLINE_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_inline_trans\t%0")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_inline_addr_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_INLINE_ADDR_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_inline_addr_trans\t%0,%1")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_read1_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_READ1_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_read1_trans\t%0")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_read2_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_READ2_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_read2_trans\t%0,%1")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_write1_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_WRITE1_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_write1_trans\t%0")
+
+(define_insn "riscv_ttrocc_scmdbuf_issue_write2_trans"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand")
+                     (match_operand:DI 1 "register_operand")
+                     ] UNSPECV_SCMDBUF_ISSUE_WRITE2_TRANS)]
+  ""
+  "tt.rocc.scmdbuf_issue_write2_trans\t%0,%1")
