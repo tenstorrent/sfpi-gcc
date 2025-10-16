@@ -98,7 +98,7 @@ walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
 	    DUMP ("Found %sdependent insn at %s\n",
 		  is_dependent ? "" : "non-", probe_insn->name);
 	    bool is_setcc = GET_CODE (probe_insn) == CODE_FOR_rvtt_bh_sfpsetcc_v;
-	    return is_dependent && (!is_muladd || is_setcc);
+	    return is_dependent;// && (!is_muladd || is_setcc);
 	  }
 
 	if (probe_insn == BB_END (bb))
