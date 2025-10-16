@@ -1487,7 +1487,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return flag_rvtt_hll_mitigation;
+    return TARGET_TT_HLL_MITIGATION;
   }
   
   /* opt_pass methods: */
