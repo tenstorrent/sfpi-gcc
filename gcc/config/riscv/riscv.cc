@@ -10642,11 +10642,20 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  && (!cpu[len] || cpu[len] == '-');
       };
 
-      if (!(target_flags_explicit & MASK_TT_FIX_WHRAW)
-	  && is_cpu_kind ("tt-wh"))
-	opts->x_target_flags |= MASK_TT_FIX_WHRAW;
 
-      if (is_cpu_kind ("tt-qsr32"))
+      if (is_cpu_kind ("tt-wh"))
+	{
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_FIX_WHRAW))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_FIX_WHRAW;
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
+	}
+      else if (is_cpu_kind ("tt-bh"))
+	{
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
+	}
+      else if (is_cpu_kind ("tt-qsr32"))
 	{
 	  if (!(target_flags_explicit & MASK_FDIV))
 	    {
@@ -10654,8 +10663,8 @@ riscv_override_options_internal (struct gcc_options *opts)
 	      // Say this is explicit so below doesn't turn it back on.
 	      target_flags_explicit |= MASK_FDIV;
 	    }
-	  // The rmext optimization ICES on quasar for reasons to be determined.
-	  flag_rvtt_rmext = 0;
+	// The rmext optimization ICES on quasar for reasons to be determined.
+	flag_rvtt_rmext = 0;
 	}
       else if (is_cpu_kind ("tt-qsr64"))
 	// The rmext optimization ICES on quasar for reasons to be determined.

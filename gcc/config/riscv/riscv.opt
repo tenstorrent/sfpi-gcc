@@ -208,9 +208,6 @@ mstack-protector-guard=
 Target RejectNegative Joined Enum(stack_protector_guard) Var(riscv_stack_protector_guard) Init(SSP_GLOBAL)
 Use given stack-protector guard.
 
-TargetVariable
-int riscv_tt_flags
-
 Enum
 Name(stack_protector_guard) Type(enum stack_protector_guard)
 Valid arguments to -mstack-protector-guard=:
@@ -545,9 +542,16 @@ Mask(XTT_TENSIX_BH) Var(riscv_tt_subext)
 
 Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 
+TargetVariable
+int riscv_tt_flags
+
 mfix-whraw
-Target Mask(TT_FIX_WHRAW)
+Target Mask(TT_FIX_WHRAW) Var(riscv_tt_flags)
 Emit code to address Wormhole RAW hazard
+
+mrvtt-hll-mitigation
+Target Mask(TT_HLL_MITIGATION) Var(riscv_tt_flags)
+Mitigate high latency load performance
 
 TargetVariable
 int riscv_fmv_priority = 0
