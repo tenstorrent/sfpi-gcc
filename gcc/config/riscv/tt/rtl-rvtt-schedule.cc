@@ -27,7 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "rvtt.h"
-#include "target.h" // for insn codes
 
 #if 0
 // FIXME: should dump to the dump file.
@@ -65,7 +64,7 @@ static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
 
 static bool
 walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
-	     std::vector<basic_block> &visited, bool is_muladd)
+	     std::vector<basic_block> &visited)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -97,8 +96,7 @@ walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
 	    bool is_dependent = reg_referenced_p (regno, probe_insn);
 	    DUMP ("Found %sdependent insn at %s\n",
 		  is_dependent ? "" : "non-", probe_insn->name);
-	    bool is_setcc = GET_CODE (probe_insn) == CODE_FOR_rvtt_bh_sfpsetcc_v;
-	    return is_dependent;// && (!is_muladd || is_setcc);
+	    return is_dependent;
 	  }
 
 	if (probe_insn == BB_END (bb))
@@ -109,7 +107,7 @@ walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (walk_blocks (regno, e->dest, BB_HEAD (e->dest), true, visited, is_muladd))
+    if (walk_blocks (regno, e->dest, BB_HEAD (e->dest), true, visited))
       return true;
 
   // We didn't find anything
@@ -125,9 +123,8 @@ dynamic_schedule_wh_bh (basic_block bb, rtx_insn *orig_insn,
 {
   gcc_assert (visited.empty ());
 
-  bool is_muladd = GET_CODE(orig_insn) == CODE_FOR_rvtt_bh_sfpmad_int;
   if (walk_blocks (rvtt_get_insn_dst_regno (orig_insn) - SFPU_REG_FIRST,
-		   bb, orig_insn, false, visited, is_muladd)) {
+		   bb, orig_insn, false, visited)) {
     emit_insn_after (gen_rvtt_sfpnop (), orig_insn);
 
     DUMP ("Inserting nop after %s\n", orig_insn->name);
@@ -198,7 +195,7 @@ const pass_data pass_data_rvtt_schedule =
   "rvtt_schedule", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  PROP_ssa, /* properties_required */
+  0, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
