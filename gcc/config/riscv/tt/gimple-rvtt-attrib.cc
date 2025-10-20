@@ -17,56 +17,20 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-#include <unordered_map>
 
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
-#include "rtl.h"
+#include "basic-block.h"
 #include "tree.h"
 #include "gimple.h"
-#include "cfghooks.h"
 #include "tree-pass.h"
-#include "ssa.h"
-#include "cgraph.h"
-#include "gimple-pretty-print.h"
-#include "diagnostic-core.h"
-#include "fold-const.h"
-#include "trans-mem.h"
-#include "stor-layout.h"
-#include "print-tree.h"
-#include "cfganal.h"
-#include "tree-eh.h"
+#include "stringpool.h"
 #include "gimple-iterator.h"
-#include "gimple-fold.h"
-#include "gimplify-me.h"
-#include "gimple-walk.h"
-#include "tree-cfg.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
-#include "tree-into-ssa.h"
-#include "tree-dfa.h"
-#include "tree-ssa.h"
-#include "except.h"
-#include "cfgloop.h"
-#include "tree-ssa-propagate.h"
-#include "value-prof.h"
-#include "tree-inline.h"
-#include "tree-ssa-live.h"
-#include "omp-general.h"
-#include "omp-expand.h"
-#include "tree-cfgcleanup.h"
-#include "gimplify.h"
 #include "attribs.h"
-#include "selftest.h"
-#include "opts.h"
-#include "asan.h"
-#include "profile.h"
-#include <vector>
-#include <tuple>
-#include "rvtt.h"
+#include <unordered_map>
 
 #if 0
 #define DUMP(...) (void)fprintf (stderr, __VA_ARGS__)
@@ -233,20 +197,19 @@ public:
     : gimple_opt_pass (pass_data_rvtt_attrib, ctxt)
   {}
 
-  virtual unsigned int execute (function *);
+  virtual bool gate (function *) override
+  {
+    return TARGET_TT_HLL_MITIGATION;
+  }
+  virtual unsigned int execute (function *fun) override
+  {
+    transform (fun);
+
+    return 0;
+  }
 }; // class pass_rvtt_attrib
 
 } // anon namespace
-
-/* Entry point to rvtt_attrib pass.	*/
-unsigned int
-pass_rvtt_attrib::execute (function *fun)
-{
-  if (TARGET_XTT_TENSIX_WH)
-    transform (fun);
-
-  return 0;
-}
 
 gimple_opt_pass *
 make_pass_rvtt_attrib (gcc::context *ctxt)
