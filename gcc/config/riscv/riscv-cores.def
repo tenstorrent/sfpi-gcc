@@ -122,6 +122,6 @@ RISCV_CORE("tt-qsr32", "rv32imafv", "rvtt-b1")
 
 // To be enabled when appropriate
 // RISCV_CORE("tt-qsr64-rocc",        "rv64imac_zicsr_zba_zbb_zbs_zifencei_xttrocc", "rvtt-b1")
-// Use tensixqsr when ready
-RISCV_CORE("tt-qsr32-tensix",        "rv32imafv_xtttensixbh", "rvtt-b1")
+// Add -tensix using tensixqsr when ready
+RISCV_CORE("tt-qsr32-tensixbh",       "rv32imafv_xtttensixbh", "rvtt-b1")
 #undef RISCV_CORE
