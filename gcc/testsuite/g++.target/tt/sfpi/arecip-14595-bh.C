@@ -39,6 +39,7 @@ void bar () {
 /*
 **_ZN5recip3barEv:
 **	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 0
@@ -79,6 +80,7 @@ void bar () {
 /*
 **_ZN8negrecip3barEv:
 **	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 1
@@ -119,6 +121,7 @@ void bar () {
 /*
 **_ZN5expon3barEv:
 **	SFPMAD	L1, L1, L11, L0, 0
+**	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 2
