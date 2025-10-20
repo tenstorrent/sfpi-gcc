@@ -685,3 +685,15 @@
   (and (match_operand 0 "register_operand")
        (match_test "REGNO (op) == RETURN_ADDR_REGNUM
 		    || REGNO (op) == T0_REGNUM")))
+
+;; Predicates for the TT ROCC extension
+
+;; Only accept 0 or 1 for the command buffer arguments
+(define_predicate "ttrocc_cmdbuf"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 1)")))
+
+;; Only accept values 0 to 63 for the register arguments
+(define_predicate "ttrocc_register"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 63)")))
