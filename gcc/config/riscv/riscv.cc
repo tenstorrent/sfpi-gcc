@@ -10641,9 +10641,19 @@ riscv_override_options_internal (struct gcc_options *opts)
 	return 0 == strncmp (cpu, name, len)
 	  && (!cpu[len] || cpu[len] == '-');
       };
-      if (!(target_flags_explicit & MASK_TT_FIX_WHRAW)
-	  && is_cpu_kind ("tt-wh"))
-	opts->x_target_flags |= MASK_TT_FIX_WHRAW;
+
+      if (is_cpu_kind ("tt-wh"))
+	{
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_FIX_WHRAW))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_FIX_WHRAW;
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
+	}
+      else if (is_cpu_kind ("tt-bh"))
+	{
+	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
+	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
+	}
     }
 
   const struct riscv_tune_info *cpu;
