@@ -8,6 +8,7 @@ MULTILIB_MATCHES := \
 mcpu?tt-wh=mcpu?tt-wh-tensix \
 mcpu?tt-bh=mcpu?tt-bh-tensix \
 mcpu?tt-qsr32=mcpu?tt-qsr32-tensix \
+mcpu?tt-qsr32=mcpu?tt-qsr32-tensixbh \
 mcpu?tt-qsr64=mcpu?tt-qsr64-rocc \
 
 MULTILIB_REQUIRED := \
