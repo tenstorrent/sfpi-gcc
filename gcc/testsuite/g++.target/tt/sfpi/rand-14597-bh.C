@@ -37,7 +37,6 @@ void bar () {
 /*
 **_Z3barv:
 **	SFPMAD	L0, L1, L11, L0, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 0
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2

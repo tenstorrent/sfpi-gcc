@@ -70,7 +70,6 @@ void sub4() {
 /*
 **_Z4sub4v:
 **	SFPMAD	L2, L1, L11, L0, 0
-**	SFPNOP
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L3, L10, L0, L1, 2
 **	SFPCOMPC
@@ -94,7 +93,6 @@ void sub5() {
 /*
 **_Z4sub5v:
 **	SFPMAD	L2, L1, L11, L0, 0
-**	SFPNOP
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L1, L10, L1, L0, 2
 **	SFPCOMPC
@@ -122,7 +120,6 @@ void sub6() {
 /*
 **_Z4sub6v:
 **	SFPMAD	L2, L1, L11, L0, 0
-**	SFPNOP
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L3, L10, L0, L1, 3
 **	SFPCOMPC
