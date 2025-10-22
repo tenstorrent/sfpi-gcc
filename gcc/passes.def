@@ -575,7 +575,6 @@ along with GCC; see the file COPYING3.  If not see
           // And, free_cfg pass calls free_bb_for_insn resulting in problems
           // w/ df_analyze, so call before that
 	  NEXT_PASS (pass_rvtt_hll);
-	  NEXT_PASS (pass_rvtt_fix_wh);
 
 	  NEXT_PASS (pass_free_cfg);
 	  NEXT_PASS (pass_machine_reorg);

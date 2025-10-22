@@ -320,7 +320,7 @@ bool riscv_user_wants_strict_align;
 /* Stack alignment to assume/maintain.  */
 unsigned riscv_stack_boundary;
 
-// FIXME: Marker for tt odfities
+// FIXME: Marker for tt oddities
 static bool tt_core;
 
 /* Whether in riscv_output_mi_thunk. */
@@ -9945,6 +9945,10 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
   if (tt_core)
     return more;
 
+  // FIXME: Implement.
+  if (TARGET_RVTT)
+    return more;
+
   /* If we ever encounter an insn with an unknown type, trip
      an assert so we can find and fix this problem.  */
   gcc_assert (get_attr_type (insn) != TYPE_UNKNOWN);
@@ -10642,20 +10646,7 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  && (!cpu[len] || cpu[len] == '-');
       };
 
-
-      if (is_cpu_kind ("tt-wh"))
-	{
-	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_FIX_WHRAW))
-	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_FIX_WHRAW;
-	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
-	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
-	}
-      else if (is_cpu_kind ("tt-bh"))
-	{
-	  if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_TT_HLL_MITIGATION))
-	    opts->x_riscv_tt_flags |= OPTION_MASK_TT_HLL_MITIGATION;
-	}
-      else if (is_cpu_kind ("tt-qsr32"))
+      if (is_cpu_kind ("tt-qsr32"))
 	{
 	  if (!(target_flags_explicit & MASK_FDIV))
 	    {
@@ -10663,12 +10654,14 @@ riscv_override_options_internal (struct gcc_options *opts)
 	      // Say this is explicit so below doesn't turn it back on.
 	      target_flags_explicit |= MASK_FDIV;
 	    }
-	// The rmext optimization ICES on quasar for reasons to be determined.
-	flag_rvtt_rmext = 0;
+	  // The rmext optimization ICES on quasar for reasons to be determined.
+	  flag_rvtt_rmext = 0;
 	}
       else if (is_cpu_kind ("tt-qsr64"))
 	// The rmext optimization ICES on quasar for reasons to be determined.
 	flag_rvtt_rmext = 0;
+
+      tt_core = is_cpu_kind("tt");
     }
 
   const struct riscv_tune_info *cpu;
@@ -10771,9 +10764,6 @@ riscv_override_options_internal (struct gcc_options *opts)
       opts->x_flag_cf_protection
       = (cf_protection_level) (opts->x_flag_cf_protection | CF_SET);
     }
-
-  const char *cpu_str = opts->x_riscv_cpu_string;
-  tt_core = cpu_str && !strncmp (cpu_str, "tt-", 3);
 }
 
 /* Implement TARGET_OPTION_OVERRIDE.  */
@@ -10969,7 +10959,7 @@ riscv_option_override (void)
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
 
-  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) > 1)
+  if (int (TARGET_RVTT_WH) + int (TARGET_RVTT_BH) > 1)
     error ("only one ttwh or ttbh extension can be specified");
 }
 
@@ -11047,7 +11037,7 @@ riscv_conditional_register_usage (void)
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
 
-  if (!TARGET_XTT_TENSIX)
+  if (!TARGET_RVTT)
     for (int regno = SFPU_REG_FIRST; regno <= SFPU_REG_LAST; regno++)
       fixed_regs[regno] = call_used_regs[regno] = 1;
 }
@@ -11840,7 +11830,7 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
-  if (TARGET_XTT_TENSIX && mode == V64SFmode)
+  if (TARGET_RVTT && mode == V64SFmode)
     return true;
 
   if (TARGET_VECTOR)

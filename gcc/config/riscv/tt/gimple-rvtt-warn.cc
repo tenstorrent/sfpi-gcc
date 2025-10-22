@@ -375,7 +375,7 @@ public:
 unsigned int
 pass_rvtt_warn::execute (function *fun)
 {
-  bool sfpu_warn = flag_rvtt_warn && TARGET_XTT_TENSIX;
+  bool sfpu_warn = flag_rvtt_warn && TARGET_RVTT;
   if (sfpu_warn || flag_rvtt_error_multdiv)
     process (fun, sfpu_warn, flag_rvtt_error_multdiv);
 

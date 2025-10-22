@@ -682,7 +682,7 @@ is_negation (probe_t &probe)
 static bool
 try_combine_negated_operands (probe_t &probe)
 {
-  gcc_assert (TARGET_XTT_TENSIX_BH);
+  gcc_assert (TARGET_RVTT_BH);
   
   bool is_add = probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv;
   bool is_mul = probe.insnd->id == rvtt_insn_data::sfpmul || probe.insnd->id == rvtt_insn_data::sfpmul_lv;
@@ -711,7 +711,7 @@ try_combine_negated_operands (probe_t &probe)
 
       gcc_assert (!is_lv || gimple_call_arg (probe.call, 0) != gimple_call_lhs (input.call));
 
-      if (TARGET_XTT_TENSIX_BH)
+      if (TARGET_RVTT_BH)
 	{
 	  // Elide the negation, and invert the appropriate mod1 bit
 	  gimple_call_set_arg (probe.call, op + is_lv, gimple_call_arg (input.call, input.insnd->live_p ()));
@@ -760,7 +760,7 @@ try_combine_negated_operands (probe_t &probe)
       release_defs (input.call);
 
       result = true;
-      if (!TARGET_XTT_TENSIX_BH)
+      if (!TARGET_RVTT_BH)
 	break;
     }
   return result;
@@ -771,7 +771,7 @@ try_combine_negated_operands (probe_t &probe)
 static bool
 try_combine_negated_result (probe_t &probe)
 {
-  gcc_assert (TARGET_XTT_TENSIX_BH);
+  gcc_assert (TARGET_RVTT_BH);
 
   if (!is_negation (probe))
     return false;
@@ -815,7 +815,7 @@ try_combine_negated_result (probe_t &probe)
 static bool
 try_combine_negated_add_operand (probe_t &probe)
 {
-  gcc_assert (!TARGET_XTT_TENSIX_BH);
+  gcc_assert (!TARGET_RVTT_BH);
 
   bool is_add = probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv;
   if (!is_add)
@@ -936,7 +936,7 @@ transform (function *fun)
 	    continue;
 
 	  // FIXME: Look for paired negations
-	  if (TARGET_XTT_TENSIX_BH)
+	  if (TARGET_RVTT_BH)
 	    {
 	      if (try_combine_negated_operands (probe))
 		update = true;
@@ -946,7 +946,7 @@ transform (function *fun)
 
 	  if (try_combine_mul_add (probe))
 	    update = true;
-	  else if (!TARGET_XTT_TENSIX_BH &&
+	  else if (!TARGET_RVTT_BH &&
 		   try_combine_negated_add_operand (probe))
 	    update = true;
 	}
@@ -982,7 +982,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX && flag_rvtt_combine;
+    return TARGET_RVTT && flag_rvtt_combine;
   }
 
   virtual unsigned execute (function *fn) override
