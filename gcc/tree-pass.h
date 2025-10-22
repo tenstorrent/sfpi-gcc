@@ -512,7 +512,6 @@ extern gimple_opt_pass *make_pass_modref (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_coroutine_lower_builtins (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_coroutine_early_expand_ifns (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_adjust_alignment (gcc::context *ctxt);
-
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
@@ -672,6 +671,11 @@ extern rtl_opt_pass *make_pass_set_nothrow_function_flags (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_dwarf2_frame (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_final (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rtl_seqabstr (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_release_ssa_names (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_early_inline (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_local_fn_summary (gcc::context *ctxt);
@@ -684,13 +688,6 @@ extern gimple_opt_pass *make_pass_harden_conditional_branches (gcc::context
 							       *ctxt);
 extern gimple_opt_pass *make_pass_harden_control_flow_redundancy (gcc::context
 								  *ctxt);
-
-extern rtl_opt_pass *make_pass_rvtt_fix_wh (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
 
 /* Current optimization pass.  */
 extern opt_pass *current_pass;

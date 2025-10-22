@@ -70,7 +70,7 @@
   [(set (match_operand:SI 0 "register_operand" "=r")
          (unspec:SI [(match_operand:SI   1 "const_int_operand" "n")
 	             (match_operand:SI   2 "const_int_operand" "n")] UNSPEC_SYNTH_OPCODE))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   static char pattern[32];
   unsigned pos = 0;
@@ -113,7 +113,7 @@
                                 (match_operand:V64SF 10 "reg_or_vec0_operand" "8,8,xn,xn") ; lv
                                ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 11 "=&r,&r,&r,&r"))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   gcc_assert (SYNTH_lv + 1 == 11);
   return rvtt_synth_insn_pattern (operands, 11);
@@ -130,7 +130,7 @@
                      (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
                     ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 8 "=&r, X"))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
@@ -147,7 +147,7 @@
                      (match_operand:SI    7 "const_int_operand" "n") ; src shift
                     ] UNSPECV_SFPSYNTH_STORE_INSN)
    (clobber (match_scratch:SI 8 "=&r"))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
@@ -156,7 +156,7 @@
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   rvtt_emit_sfpassignlreg(operands[0], operands[1]);
   DONE;
@@ -165,13 +165,13 @@
 (define_insn "rvtt_sfpassignlreg_int"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
   "")
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
                      (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPPRESERVELREG)]
-  "TARGET_XTT_TENSIX")
+  "TARGET_RVTT")
 
 (define_int_iterator rvtt_preservelreg [0 1 2 3 4 5 6 7])
 ;; We have to map the number to a string.
@@ -180,7 +180,7 @@
 (define_insn "rvtt_sfppreservelreg<rvtt_preservelreg_value>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
   "" ;"; preserve %0"
   [(set_attr "length" "0")])
 
@@ -195,7 +195,7 @@
                  (match_operand:SI    4 "reg_or_0_operand" "")
                  (match_operand:SI    5 "const_int_operand" "")
                  (match_operand:SI    6 "const_int_operand" "")] 0))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
@@ -205,7 +205,7 @@
         (unspec [(match_operand:V64SF 1 "register_operand"  "")
                  (match_operand:V64SF 2 "register_operand"  "")
                  (match_operand:SI    3 "const_int_operand" "")] 0))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
@@ -213,7 +213,7 @@
 (define_expand "rvtt_sfpxvif"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec [(const_int 0)] 0))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
@@ -221,7 +221,7 @@
 (define_expand "rvtt_sfpxbool"
   [(set (match_operand:SI 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "register_operand"  "")] 0))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
@@ -229,7 +229,7 @@
 (define_expand "rvtt_sfpxcondb"
   [(unspec [(match_operand:SI 0 "register_operand"  "")
             (match_operand:SI 1 "register_operand"  "")] 0)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
@@ -237,14 +237,14 @@
 (define_expand "rvtt_sfpxcondi"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec [(match_operand:SI 1 "register_operand"  "")] 0))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   DONE;
 })
 
 (define_insn "rvtt_sfpnop"
   [(unspec_volatile [(const_int 0)] UNSPECV_SFPNOP)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
   "SFPNOP")
 
 (define_insn "rvtt_ttincrwc"
@@ -252,7 +252,7 @@
                      (match_operand:SI    1 "const_int_operand" "n")
                      (match_operand:SI    2 "const_int_operand" "n")
                      (match_operand:SI    3 "const_int_operand" "n")] UNSPECV_TTINCRWC)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
   "TTINCRWC\t%0, %1, %2, %3")
 
 (define_expand "rvtt_ttreplay"
@@ -263,7 +263,7 @@
                      (match_operand:SI    4 "const_int_operand"  "")
                      (match_operand:SI    5 "const_int_operand"  "")
                      (match_operand:SI    6 "const_int_operand"  "")] UNSPECV_TTREPLAY)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
 {
   rtx insn = nullptr;
   if (CONST_INT_P (operands[1]))
@@ -271,12 +271,10 @@
   else
     {
       unsigned op
-          = TARGET_XTT_TENSIX_WH
-	  ? TT_OP_WH_REPLAY (INTVAL (operands[4]), 0,
-	    		     INTVAL (operands[5]), INTVAL (operands[6]))
-          : TARGET_XTT_TENSIX_BH
-	  ? TT_OP_BH_REPLAY (INTVAL (operands[4]), 0,
-			     INTVAL (operands[5]), INTVAL (operands[6]))
+          = TARGET_RVTT_WH ? TT_OP_WH_REPLAY (INTVAL (operands[4]), 0,
+	    		     		      INTVAL (operands[5]), INTVAL (operands[6]))
+          : TARGET_RVTT_BH ? TT_OP_BH_REPLAY (INTVAL (operands[4]), 0,
+	    		     		      INTVAL (operands[5]), INTVAL (operands[6]))
 	  : (gcc_unreachable (), 0);
       insn = rvtt_sfpsynth_insn (operands[0], CODE_FOR_rvtt_ttreplay_int,
       	     			 0, operands[2], op, operands[3]);
@@ -290,5 +288,5 @@
                      (match_operand:SI    1 "const_int_operand"  "NP5U")
                      (match_operand:SI    2 "const_int_operand"  "N01U")
                      (match_operand:SI    3 "const_int_operand"  "N01U")] UNSPECV_TTREPLAY)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_RVTT"
   "TTREPLAY\t%0, %1, %2, %3")

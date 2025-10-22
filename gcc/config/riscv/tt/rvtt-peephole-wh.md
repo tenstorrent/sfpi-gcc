@@ -27,7 +27,7 @@
                                 (match_operand:SI    3 "const_0_operand")] UNSPECV_WH_SFPLZ_INT))
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    4 "const_int_operand")] UNSPECV_WH_SFPSETCC_V)]
-  "TARGET_XTT_TENSIX_WH && (INTVAL (operands[4]) == 2 || INTVAL (operands[4]) == 6)"
+  "TARGET_RVTT_WH && (INTVAL (operands[4]) == 2 || INTVAL (operands[4]) == 6)"
   [(const_int 0)]
 {
   rtx mod = GEN_INT (INTVAL (operands[4]) == 2 ? 2 : 10);
@@ -43,7 +43,7 @@
    (unspec_volatile [(match_operand:SI    4 "immediate_operand")] UNSPECV_WH_SFPPUSHC)
    (unspec_volatile [(match_dup:V64SF     2)
                      (match_operand:SI    5 "const_int_operand")] UNSPECV_WH_SFPSETCC_V)]
-  "TARGET_XTT_TENSIX_WH && (INTVAL (operands[5]) == 2 || INTVAL (operands[5]) == 6)"
+  "TARGET_RVTT_WH && (INTVAL (operands[5]) == 2 || INTVAL (operands[5]) == 6)"
   [(const_int 0)]
 {
   rtx mod = GEN_INT (INTVAL (operands[5]) == 2 ? 2 : 10);

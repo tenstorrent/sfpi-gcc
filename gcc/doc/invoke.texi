@@ -31518,8 +31518,8 @@ Permissible values for this option are: @samp{sifive-e20}, @samp{sifive-e21},
 @samp{sifive-x670}, @samp{thead-c906}, @samp{tt-ascalon-d8},
 @samp{xiangshan-nanhu},
 @samp{tt-wh}, @samp{tt-wh-tensix}, @samp{tt-bh}, @samp{tt-bh-tensix}
-@samp{tt-qsr32}, @samp{tt-qsr32-tensix}@footnote{currently using
-BlackHole Tensix extension.} and @samp{tt-qsr64}.
+@samp{tt-qsr32}, @samp{tt-qsr32-tensixbh}@footnote{Will change to
+using qsr Tensix extension when available.} and @samp{tt-qsr64}.
 
 Note that @option{-mcpu} does not override @option{-march} or @option{-mtune}.
 

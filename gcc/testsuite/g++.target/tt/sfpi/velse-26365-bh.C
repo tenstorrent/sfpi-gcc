@@ -26,7 +26,8 @@ void bug1() {
 **_Z4bug1v:
 **	SFPLOADI	L0, 0, 0
 **	SFPMAD	L1, L10, L11, L3, 0
-**	SFPNOP\n\tSFPSETCC	L1, 0, 0
+**	SFPNOP
+**	SFPSETCC	L1, 0, 0
 **	SFPLOADI	L0, 16256, 0
 **	SFPCOMPC
 **	SFPPUSHC	0
