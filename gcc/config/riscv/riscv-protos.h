@@ -217,6 +217,9 @@ struct riscv_cpu_info {
   /* Default arch for this CPU, could be NULL if no default arch.  */
   const char *arch;
 
+  /* Default ABI for this CPU, can be nullptr if no default abi.  */
+  const char *abi;
+
   /* Which automaton to use for tuning.  */
   const char *tune;
 };

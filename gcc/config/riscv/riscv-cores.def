@@ -61,55 +61,55 @@ RISCV_TUNE("rvtt-b1", rvtt_b1, rvtt_b1_tune_info)
    will be made, represented as an identifier.  */
 
 #ifndef RISCV_CORE
-#define RISCV_CORE(CORE_NAME, ARCH, MICRO_ARCH)
+#define RISCV_CORE(CORE_NAME, ARCH, ABI, MICRO_ARCH)
 #endif
 
-RISCV_CORE("sifive-e20",      "rv32imc",    "rocket")
-RISCV_CORE("sifive-e21",      "rv32imac",   "rocket")
-RISCV_CORE("sifive-e24",      "rv32imafc",  "rocket")
-RISCV_CORE("sifive-e31",      "rv32imac",   "sifive-3-series")
-RISCV_CORE("sifive-e34",      "rv32imafc",  "sifive-3-series")
-RISCV_CORE("sifive-e76",      "rv32imafc",  "sifive-7-series")
+RISCV_CORE("sifive-e20",      "rv32imc",    nullptr, "rocket")
+RISCV_CORE("sifive-e21",      "rv32imac",   nullptr, "rocket")
+RISCV_CORE("sifive-e24",      "rv32imafc",  nullptr, "rocket")
+RISCV_CORE("sifive-e31",      "rv32imac",   nullptr, "sifive-3-series")
+RISCV_CORE("sifive-e34",      "rv32imafc",  nullptr, "sifive-3-series")
+RISCV_CORE("sifive-e76",      "rv32imafc",  nullptr, "sifive-7-series")
 
-RISCV_CORE("sifive-s21",      "rv64imac",   "rocket")
-RISCV_CORE("sifive-s51",      "rv64imac",   "sifive-5-series")
-RISCV_CORE("sifive-s54",      "rv64imafdc", "sifive-5-series")
-RISCV_CORE("sifive-s76",      "rv64imafdc", "sifive-7-series")
+RISCV_CORE("sifive-s21",      "rv64imac",   nullptr, "rocket")
+RISCV_CORE("sifive-s51",      "rv64imac",   nullptr, "sifive-5-series")
+RISCV_CORE("sifive-s54",      "rv64imafdc", nullptr, "sifive-5-series")
+RISCV_CORE("sifive-s76",      "rv64imafdc", nullptr, "sifive-7-series")
 
-RISCV_CORE("sifive-u54",      "rv64imafdc", "sifive-5-series")
-RISCV_CORE("sifive-u74",      "rv64imafdc", "sifive-7-series")
-RISCV_CORE("sifive-x280",     "rv64imafdcv_zfh_zba_zbb_zvfh_zvl512b", "sifive-7-series")
+RISCV_CORE("sifive-u54",      "rv64imafdc", nullptr, "sifive-5-series")
+RISCV_CORE("sifive-u74",      "rv64imafdc", nullptr, "sifive-7-series")
+RISCV_CORE("sifive-x280",     "rv64imafdcv_zfh_zba_zbb_zvfh_zvl512b", nullptr, "sifive-7-series")
 RISCV_CORE("sifive-p450",     "rv64imafdc_za64rs_zic64b_zicbom_zicbop_zicboz_"
 			      "ziccamoa_ziccif_zicclsm_ziccrse_zicsr_zifencei_"
 			      "zihintntl_zihintpause_zihpm_zfhmin_zba_zbb_zbs",
-			      "sifive-p400-series")
+			      nullptr, "sifive-p400-series")
 RISCV_CORE("sifive-p670",     "rv64imafdcv_za64rs_zic64b_zicbom_zicbop_zicboz_"
 			      "ziccamoa_ziccif_zicclsm_ziccrse_zicsr_zifencei_"
 			      "zihintntl_zihintpause_zihpm_zfhmin_zba_zbb_zbs_"
 			      "zvl128b_zvbb_zvknc_zvkng_zvksc_zvksg",
-			      "sifive-p600-series")
+			      nullptr, "sifive-p600-series")
 
 RISCV_CORE("thead-c906",      "rv64imafdc_xtheadba_xtheadbb_xtheadbs_xtheadcmo_"
 			      "xtheadcondmov_xtheadfmemidx_xtheadmac_"
 			      "xtheadmemidx_xtheadmempair_xtheadsync",
-			      "thead-c906")
+			      nullptr, "thead-c906")
 
 RISCV_CORE("tt-ascalon-d8",   "rv64imafdcv_zic64b_zicbom_zicbop_zicboz_"
 			      "ziccamoa_ziccif_zicclsm_ziccrse_zicond_zicsr_"
 			      "zifencei_zihintntl_zihintpause_zimop_za64rs_"
 			      "zawrs_zfa_zfbfmin_zfh_zcb_zcmop_zba_zbb_zbs_"
 			      "zvbb_zvbc_zvfbfwma_zvfh_zvkng_zvl256b",
-			      "tt-ascalon-d8")
+			      nullptr, "tt-ascalon-d8")
 
 RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
 			      "zbkb_zbkc_zbkx_zknd_zkne_zknh_zksed_zksh_"
 			      "svinval_zicbom_zicboz",
-			      "xiangshan-nanhu")
+			      nullptr, "xiangshan-nanhu")
 
-RISCV_CORE("tt-wh",           "rv32im", "rvtt-b1")
-RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "rvtt-b1")
-RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "rvtt-b1")
-RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "rvtt-b1")
+RISCV_CORE("tt-wh",           "rv32im", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
 
 // I am suspicious of the following architecture extensions
 // 1) qsr32 doesn't have zba, zbb (which BH has)
@@ -117,11 +117,11 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "rvtt-b1")
 // load-locked, store-conditional, which I don't think our cache
 // architecture can support.
 // TODO update tune parameter
-RISCV_CORE("tt-qsr64", "rv64imac_zicsr_zba_zbb_zbs_zifencei", "rvtt-b1")
-RISCV_CORE("tt-qsr32", "rv32imafv", "rvtt-b1")
+RISCV_CORE("tt-qsr64", "rv64imac_zicsr_zba_zbb_zbs_zifencei", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr32", "rv32imafv","ilp32f", "rvtt-b1")
 
 // To be enabled when appropriate
-// RISCV_CORE("tt-qsr64-rocc",        "rv64imac_zicsr_zba_zbb_zbs_zifencei_xttrocc", "rvtt-b1")
+// RISCV_CORE("tt-qsr64-rocc",        "rv64imac_zicsr_zba_zbb_zbs_zifencei_xttrocc", "lp64", "rvtt-b1")
 // Add -tensix using tensixqsr when ready
-RISCV_CORE("tt-qsr32-tensixbh",       "rv32imafv_xtttensixbh", "rvtt-b1")
+RISCV_CORE("tt-qsr32-tensixbh",       "rv32imafv_xtttensixbh", "ilp32f", "rvtt-b1")
 #undef RISCV_CORE

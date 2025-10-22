@@ -48,11 +48,13 @@ along with GCC; see the file COPYING3.  If not see
 
 extern const char *riscv_expand_arch (int argc, const char **argv);
 extern const char *riscv_expand_arch_from_cpu (int argc, const char **argv);
+extern const char *riscv_expand_abi_from_cpu (int argc, const char **argv);
 extern const char *riscv_default_mtune (int argc, const char **argv);
 extern const char *riscv_multi_lib_check (int argc, const char **argv);
 extern const char *riscv_arch_help (int argc, const char **argv);
 
 # define EXTRA_SPEC_FUNCTIONS						\
+  { "riscv_expand_abi_from_cpu", riscv_expand_abi_from_cpu },		\
   { "riscv_expand_arch", riscv_expand_arch },				\
   { "riscv_expand_arch_from_cpu", riscv_expand_arch_from_cpu },		\
   { "riscv_default_mtune", riscv_default_mtune },			\
@@ -74,7 +76,9 @@ extern const char *riscv_arch_help (int argc, const char **argv);
   {"arch", "%{!march=*:"						\
 	   "  %{!mcpu=*:-march=%(VALUE)}"				\
 	   "  %{mcpu=*:%:riscv_expand_arch_from_cpu(%* %(VALUE))}}" },	\
-  {"abi", "%{!mabi=*:-mabi=%(VALUE)}" },				\
+  {"abi", "%{!mabi=*:"							\
+	   "  %{!mcpu=*:-mabi=%(VALUE)}"				\
+	   "  %{mcpu=*:%:riscv_expand_abi_from_cpu(%* %(VALUE))}}" },	\
   {"isa_spec", "%{!misa-spec=*:-misa-spec=%(VALUE)}" },			\
   {"tls", "%{!mtls-dialect=*:-mtls-dialect=%(VALUE)}"},         	\
 
@@ -98,7 +102,6 @@ extern const char *riscv_arch_help (int argc, const char **argv);
 #define MULTILIB_DEFAULTS \
   {"march=" STRINGIZING (TARGET_RISCV_DEFAULT_ARCH), \
    "mabi=" STRINGIZING (TARGET_RISCV_DEFAULT_ABI) }
-   //   "mcpu=tt-wh",
 
 #undef ASM_SPEC
 #define ASM_SPEC "\
@@ -118,7 +121,8 @@ ASM_MISA_SPEC
 "%{print-supported-extensions:%:riscv_arch_help()} "		\
 "%{-print-supported-extensions:%:riscv_arch_help()} "		\
 "%{march=*:%:riscv_expand_arch(%*)} "				\
-"%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "
+"%{!march=*:%{mcpu=*:%:riscv_expand_arch_from_cpu(%*)}} "	\
+"%{!mabi=*:%{mcpu=*:%:riscv_expand_abi_from_cpu(%*)}} "
 
 #define LOCAL_LABEL_PREFIX	"."
 #define USER_LABEL_PREFIX	""
