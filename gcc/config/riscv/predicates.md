@@ -693,7 +693,12 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 1)")))
 
-;; Only accept values 0 to 63 for the register arguments
-(define_predicate "ttrocc_register"
+;; Only accept values 0 to 23 for the cmdbuf register arguments
+(define_predicate "ttrocc_cmdbuf_register"
   (and (match_code "const_int")
-       (match_test "IN_RANGE (INTVAL (op), 0, 63)")))
+       (match_test "IN_RANGE (INTVAL (op), 0, 23)")))
+
+;; Only accept values 0 to 47 for the addrgen register arguments
+(define_predicate "ttrocc_addrgen_register"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 47)")))

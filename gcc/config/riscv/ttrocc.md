@@ -151,7 +151,7 @@
 
 (define_insn "riscv_ttrocc_addrgen_wr_reg"
   [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf")
-                     (match_operand:DI 1 "ttrocc_register")
+                     (match_operand:DI 1 "ttrocc_addrgen_register")
                      (match_operand:DI 2 "register_operand" "r")] UNSPECV_ADDRGEN_WR_REG)]
   "TARGET_XTT_ROCC"
   ;; We hardcode two extra unused registers per the HW engineers' request
@@ -161,7 +161,7 @@
 (define_insn "riscv_ttrocc_addrgen_rd_reg"
   [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
                      (match_operand:DI 1 "ttrocc_cmdbuf")
-                     (match_operand:DI 2 "ttrocc_register")] UNSPECV_ADDRGEN_RD_REG)]
+                     (match_operand:DI 2 "ttrocc_addrgen_register")] UNSPECV_ADDRGEN_RD_REG)]
   "TARGET_XTT_ROCC"
   ;; We hardcode two extra unused registers per the HW engineers' request
   "tt.rocc.addrgen_rd_reg\t%0,%1,%2,x0,x0"
@@ -275,7 +275,7 @@
 
 (define_insn "riscv_ttrocc_cmdbuf_wr_reg"
   [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf")
-                     (match_operand:DI 1 "ttrocc_register")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
                      (match_operand:DI 2 "register_operand" "r")
                      ] UNSPECV_CMDBUF_WR_REG)]
   "TARGET_XTT_ROCC"
@@ -286,7 +286,7 @@
 (define_insn "riscv_ttrocc_cmdbuf_rd_reg"
   [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
                      (match_operand:DI 1 "ttrocc_cmdbuf")
-                     (match_operand:DI 2 "ttrocc_register")
+                     (match_operand:DI 2 "ttrocc_cmdbuf_register")
                      ] UNSPECV_CMDBUF_RD_REG)
    (return)]
   "TARGET_XTT_ROCC"
@@ -445,7 +445,7 @@
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_scmdbuf_wr_reg"
-  [(unspec_volatile [(match_operand:DI 0 "ttrocc_register")
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
                      (match_operand:DI 1 "register_operand" "r")
                      ] UNSPECV_SCMDBUF_WR_REG)]
   "TARGET_XTT_ROCC"
@@ -455,7 +455,7 @@
     
 (define_insn "riscv_ttrocc_scmdbuf_rd_reg"
   [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
-                     (match_operand:DI 1 "ttrocc_register")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
                      ] UNSPECV_SCMDBUF_RD_REG)
    (return)]
   "TARGET_XTT_ROCC"

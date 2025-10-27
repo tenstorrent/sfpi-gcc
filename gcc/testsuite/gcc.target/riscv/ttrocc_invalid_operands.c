@@ -9,7 +9,8 @@ int main(void) {
   // Out of range register
   __builtin_riscv_ttrocc_cmdbuf_wr_reg(0, 74, 15); // { dg-error "invalid argument to built-in function" }
 
-  // Valid limits for both
+  // Valid limits
   __builtin_riscv_ttrocc_cmdbuf_wr_reg(0, 0, 15);
-  __builtin_riscv_ttrocc_cmdbuf_wr_reg(1, 63, 15);
+  __builtin_riscv_ttrocc_cmdbuf_wr_reg(1, 23, 15);
+  __builtin_riscv_ttrocc_addrgen_wr_reg(1, 47, 15);
 }
