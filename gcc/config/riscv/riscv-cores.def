@@ -117,7 +117,8 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt
 // load-locked, store-conditional, which I don't think our cache
 // architecture can support.
 // TODO update tune parameter
-RISCV_CORE("tt-qsr64", "rv64imac_zicsr_zba_zbb_zbs_zifencei", "lp64", "rvtt-b1")
+// #31429 disable compressed insns ('c' is removed)
+RISCV_CORE("tt-qsr64", "rv64ima_zicsr_zba_zbb_zbs_zifencei", "lp64", "rvtt-b1")
 RISCV_CORE("tt-qsr32", "rv32imafv","ilp32f", "rvtt-b1")
 
 // To be enabled when appropriate
