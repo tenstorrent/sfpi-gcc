@@ -149,6 +149,7 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 AVAIL (wormhole, TARGET_RVTT_WH)
 AVAIL (blackhole, TARGET_RVTT_BH)
 AVAIL (sfpu, TARGET_RVTT)
+AVAIL (rocc, TARGET_XTT_ROCC)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -248,12 +249,13 @@ tree instrn_ptr_type_node;
   RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
   RISCV_ATYPE_##I
 
-static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + 3;
+static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + /*rocc*/63 + 3;
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
   #include "riscv-scalar-crypto.def"
   #include "corev.def"
+  #include "ttrocc.def"
 
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
@@ -280,7 +282,6 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 
 #define GET_BUILTIN_DECL(CODE) \
   riscv_builtin_decls[riscv_builtin_decl_index[(CODE)]]
-
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 

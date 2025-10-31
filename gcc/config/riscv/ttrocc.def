@@ -1,0 +1,91 @@
+RISCV_BUILTIN (ttrocc_dbg_postcode, "ttrocc_dbg_postcode", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_noc_fence, "ttrocc_noc_fence", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, rocc),
+
+RISCV_BUILTIN (ttrocc_llk_intf_write, "ttrocc_llk_intf_write", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_llk_intf_read, "ttrocc_llk_intf_read", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_fds_intf_write, "ttrocc_fds_intf_write", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_fds_intf_read, "ttrocc_fds_intf_read", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cs_alloc, "ttrocc_cs_alloc", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_cs_dealloc, "ttrocc_cs_dealloc", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cs_save, "ttrocc_cs_save", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cs_restore, "ttrocc_cs_restore", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_wr_reg, "ttrocc_addrgen_wr_reg", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_rd_reg, "ttrocc_addrgen_rd_reg", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_reset, "ttrocc_addrgen_reset", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_reset_counter, "ttrocc_addrgen_reset_counter", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_peek_src, "ttrocc_addrgen_peek_src", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_pop_src, "ttrocc_addrgen_pop_src", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_pop_x_src, "ttrocc_addrgen_pop_x_src", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_peek_dest, "ttrocc_addrgen_peek_dest", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_pop_dest, "ttrocc_addrgen_pop_dest", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_pop_x_dest, "ttrocc_addrgen_pop_x_dest", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_pop_both, "ttrocc_addrgen_pop_both", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_push_src, "ttrocc_addrgen_push_src", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_push_src_pop_x, "ttrocc_addrgen_push_src_pop_x", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_push_dest, "ttrocc_addrgen_push_dest", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_push_dest_pop_x, "ttrocc_addrgen_push_dest_pop_x", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_addrgen_push_both, "ttrocc_addrgen_push_both", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_addrgen_push_both_pop_x, "ttrocc_addrgen_push_both_pop_x", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_wr_reg, "ttrocc_cmdbuf_wr_reg", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_rd_reg, "ttrocc_cmdbuf_rd_reg", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+ 
+RISCV_BUILTIN (ttrocc_cmdbuf_get_vc_space, "ttrocc_cmdbuf_get_vc_space", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_get_vc_space_vc, "ttrocc_cmdbuf_get_vc_space_vc", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_wr_sent, "ttrocc_cmdbuf_wr_sent", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_wr_sent_trid, "ttrocc_cmdbuf_wr_sent_trid", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_tr_ack, "ttrocc_cmdbuf_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_tr_ack_trid, "ttrocc_cmdbuf_tr_ack_trid", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_reset, "ttrocc_cmdbuf_reset", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_idma_get_vc_space, "ttrocc_cmdbuf_idma_get_vc_space", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_idma_get_vc_space_vc, "ttrocc_cmdbuf_idma_get_vc_space_vc", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_idma_tr_ack, "ttrocc_cmdbuf_idma_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_idma_tr_ack_trid, "ttrocc_cmdbuf_idma_tr_ack_trid", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_trans, "ttrocc_cmdbuf_issue_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_inline_trans, "ttrocc_cmdbuf_issue_inline_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_inline_addr_trans, "ttrocc_cmdbuf_issue_inline_addr_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_read1_trans, "ttrocc_cmdbuf_issue_read1_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_read2_trans, "ttrocc_cmdbuf_issue_read2_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_write1_trans, "ttrocc_cmdbuf_issue_write1_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_cmdbuf_issue_write2_trans, "ttrocc_cmdbuf_issue_write2_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_wr_reg, "ttrocc_scmdbuf_wr_reg", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_rd_reg, "ttrocc_scmdbuf_rd_reg", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_get_vc_space, "ttrocc_scmdbuf_get_vc_space", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_get_vc_space_vc, "ttrocc_scmdbuf_get_vc_space_vc", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_wr_sent, "ttrocc_scmdbuf_wr_sent", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_wr_sent_trid, "ttrocc_scmdbuf_wr_sent_trid", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_tr_ack, "ttrocc_scmdbuf_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_tr_ack_trid, "ttrocc_scmdbuf_tr_ack_trid", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_reset, "ttrocc_scmdbuf_reset", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_trans, "ttrocc_scmdbuf_issue_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_inline_trans, "ttrocc_scmdbuf_issue_inline_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_inline_addr_trans, "ttrocc_scmdbuf_issue_inline_addr_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_read1_trans, "ttrocc_scmdbuf_issue_read1_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_read2_trans, "ttrocc_scmdbuf_issue_read2_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_write1_trans, "ttrocc_scmdbuf_issue_write1_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_issue_write2_trans, "ttrocc_scmdbuf_issue_write2_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
