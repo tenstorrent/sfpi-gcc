@@ -1581,7 +1581,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_RVTT;
+    return TARGET_XTT_TENSIX;
   }
   
   /* opt_pass methods: */
@@ -1608,7 +1608,7 @@ public:
 	}
 
       // This must come before the hll pass as it introduces loads
-      if (TARGET_RVTT_WH)
+      if (TARGET_XTT_TENSIX_WH)
 	workaround_wh_raw(cfn);
 
       return 0;

@@ -687,7 +687,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_RVTT;
+    return TARGET_XTT_TENSIX;
   }
 
   virtual unsigned int execute (function *fn) override

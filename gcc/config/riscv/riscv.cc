@@ -9945,10 +9945,6 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
   if (tt_core)
     return more;
 
-  // FIXME: Implement.
-  if (TARGET_RVTT)
-    return more;
-
   /* If we ever encounter an insn with an unknown type, trip
      an assert so we can find and fix this problem.  */
   gcc_assert (get_attr_type (insn) != TYPE_UNKNOWN);
@@ -10959,7 +10955,7 @@ riscv_option_override (void)
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
 
-  if (int (TARGET_RVTT_WH) + int (TARGET_RVTT_BH) > 1)
+  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) > 1)
     error ("only one ttwh or ttbh extension can be specified");
 }
 
@@ -11037,7 +11033,7 @@ riscv_conditional_register_usage (void)
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
 
-  if (!TARGET_RVTT)
+  if (!TARGET_XTT_TENSIX)
     for (int regno = SFPU_REG_FIRST; regno <= SFPU_REG_LAST; regno++)
       fixed_regs[regno] = call_used_regs[regno] = 1;
 }
@@ -11830,7 +11826,7 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
-  if (TARGET_RVTT && mode == V64SFmode)
+  if (TARGET_XTT_TENSIX && mode == V64SFmode)
     return true;
 
   if (TARGET_VECTOR)

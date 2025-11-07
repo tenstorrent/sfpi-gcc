@@ -163,14 +163,6 @@ enum riscv_tls_type {
 #define TARGET_VECTOR_AUTOVEC_SEGMENT					       \
   (TARGET_VECTOR && riscv_mautovec_segment)
 
-
-// At-most one bit can be set (attributes are usually independent, hence bits,
-// but that's not how this behaves)
-#define MASK_TT_WH (1 << 1)
-#define MASK_TT_BH (1 << 2)
-
-#define TARGET_RVTT_WH ((riscv_tt_flags & MASK_TT_WH) != 0)
-#define TARGET_RVTT_BH ((riscv_tt_flags & MASK_TT_BH) != 0)
-#define TARGET_RVTT (riscv_tt_flags != 0)
+#define TARGET_XTT_TENSIX (TARGET_XTT_TENSIX_WH | TARGET_XTT_TENSIX_BH)
 
 #endif /* ! GCC_RISCV_OPTS_H */

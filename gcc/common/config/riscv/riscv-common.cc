@@ -442,10 +442,9 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"xsfvqmaccdod",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"xsfvfnrclipxfqf", ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"xttrocc", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtttensixwh", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtttensixbh", ISA_SPEC_CLASS_NONE, 1, 0},
-
-  {"xttrocc", ISA_SPEC_CLASS_NONE, 1, 0},
 
   /* Terminate the list.  */
   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
@@ -1783,9 +1782,9 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("xsfvqmaccdod",    x_riscv_sifive_subext, MASK_XSFVQMACCDOD),
   RISCV_EXT_FLAG_ENTRY ("xsfvfnrclipxfqf", x_riscv_sifive_subext, MASK_XSFVFNRCLIPXFQF),
 
-  RISCV_EXT_FLAG_ENTRY ("xtttensixwh", x_riscv_tt_flags, MASK_TT_WH),
-  RISCV_EXT_FLAG_ENTRY ("xtttensixbh", x_riscv_tt_flags, MASK_TT_BH),
-  RISCV_EXT_FLAG_ENTRY ("xttrocc", x_riscv_tt_rocc, MASK_XTT_ROCC),
+  RISCV_EXT_FLAG_ENTRY ("xttrocc", x_riscv_tt_subext, MASK_XTT_ROCC),
+  RISCV_EXT_FLAG_ENTRY ("xtttensixwh", x_riscv_tt_subext, MASK_XTT_TENSIX_WH),
+  RISCV_EXT_FLAG_ENTRY ("xtttensixbh", x_riscv_tt_subext, MASK_XTT_TENSIX_BH),
 
   {NULL, NULL, NULL, 0}
 };

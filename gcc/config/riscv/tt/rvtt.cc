@@ -130,9 +130,9 @@ rvtt_insert_insn(int idx, const char* name, tree decl)
   static int start = 0;
 
   int arch;
-  if (TARGET_RVTT_WH)
+  if (TARGET_XTT_TENSIX_WH)
     arch = 0;
-  else if (TARGET_RVTT_BH)
+  else if (TARGET_XTT_TENSIX_BH)
     arch = 1;
   else
     return;
@@ -239,10 +239,10 @@ rvtt_init_builtins()
   }
 #endif
   int arch;
-  if (TARGET_RVTT_WH) {
+  if (TARGET_XTT_TENSIX_WH) {
     arch = 0;
     rvtt_builtin_name_stub = "__builtin_rvtt_wh";
-  } else if (TARGET_RVTT_BH) {
+  } else if (TARGET_XTT_TENSIX_BH) {
     arch = 1;
     rvtt_builtin_name_stub = "__builtin_rvtt_bh";
   } else {

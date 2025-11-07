@@ -783,7 +783,7 @@ public:
     if (!flag_rvtt_replay)
       return false;
 
-    if (!(TARGET_RVTT_WH || TARGET_RVTT_BH))
+    if (!(TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH))
       return false;
 
     // If there are any replay insns, bail here.  Ideally we'd

@@ -242,7 +242,7 @@ public:
 unsigned int
 pass_rvtt_attrib::execute (function *fun)
 {
-  if (TARGET_RVTT_WH)
+  if (TARGET_XTT_TENSIX_WH)
     transform (fun);
 
   return 0;

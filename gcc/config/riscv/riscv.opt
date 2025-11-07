@@ -208,9 +208,6 @@ mstack-protector-guard=
 Target RejectNegative Joined Enum(stack_protector_guard) Var(riscv_stack_protector_guard) Init(SSP_GLOBAL)
 Use given stack-protector guard.
 
-TargetVariable
-int riscv_tt_flags
-
 Enum
 Name(stack_protector_guard) Type(enum stack_protector_guard)
 Valid arguments to -mstack-protector-guard=:
@@ -539,9 +536,13 @@ Mask(XSFVQMACCDOD) Var(riscv_sifive_subext)
 Mask(XSFVFNRCLIPXFQF) Var(riscv_sifive_subext)
 
 TargetVariable
-int riscv_tt_rocc
+int riscv_tt_subext
 
-Mask(XTT_ROCC) Var(riscv_tt_rocc)
+Mask(XTT_TENSIX_BH) Var(riscv_tt_subext)
+
+Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
+
+Mask(XTT_ROCC) Var(riscv_tt_subext)
 
 TargetVariable
 int riscv_fmv_priority = 0
