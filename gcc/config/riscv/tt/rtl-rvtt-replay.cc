@@ -780,10 +780,7 @@ public:
 
   virtual bool gate (function *cfn) override
   {
-    if (!flag_rvtt_replay)
-      return false;
-
-    if (!(TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH))
+    if (!TARGET_XTT_TENSIX_OPT_REPLAY)
       return false;
 
     // If there are any replay insns, bail here.  Ideally we'd
@@ -816,7 +813,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned execute (function *cfn) override
   {
-    replay_max_insns = rvtt_replay_buffer_size;
+    replay_max_insns = riscv_tt_replay_size;
     transform (cfn);
     return 0;
   }

@@ -234,41 +234,6 @@ handle_write(gimple *g)
     }
 }
 
-static void
-check_for_mult_div_ops (gimple *g)
-{
-  if (g->code == GIMPLE_ASSIGN &&
-      gimple_assign_rhs_class(g) == GIMPLE_BINARY_RHS)
-    {
-      tree_code op = gimple_assign_rhs_code (g);
-      if (op == MULT_EXPR ||
-	  op == TRUNC_DIV_EXPR ||
-	  op == CEIL_DIV_EXPR ||
-	  op == FLOOR_DIV_EXPR ||
-	  op == ROUND_DIV_EXPR ||
-	  op == TRUNC_MOD_EXPR ||
-	  op == CEIL_MOD_EXPR ||
-	  op == FLOOR_MOD_EXPR ||
-	  op == ROUND_MOD_EXPR)
-	{
-	  tree rhs1 = gimple_assign_rhs1(g);
-	  tree rhs2 = gimple_assign_rhs2(g);
-	  if (TREE_CODE(rhs1) != INTEGER_CST &&
-	      TREE_CODE(rhs2) != INTEGER_CST)
-	    {
-	      if (op == MULT_EXPR)
-		{
-		  error_at (gimple_nonartificial_location (g), "detected multiply operation");
-		}
-	      else
-		{
-		  error_at (gimple_nonartificial_location (g), "detected divide operation");
-		}
-	    }
-	}
-    }
-}
-
 void check_sfpu(function *fun, gimple_stmt_iterator gsi, gimple *g, bool bad_fun_decl)
 {
   gcall *stmt;
@@ -323,7 +288,7 @@ void check_sfpu(function *fun, gimple_stmt_iterator gsi, gimple *g, bool bad_fun
 // see how to find the namespace from the type name...)
 
 static void
-process (function *fun, bool sfpu_warn, bool multdiv_err)
+process (function *fun)
 {
   basic_block bb;
 
@@ -338,8 +303,7 @@ process (function *fun, bool sfpu_warn, bool multdiv_err)
 	{
 	  gimple *g = gsi_stmt (gsi);
 
-	  if (multdiv_err) check_for_mult_div_ops(g);
-	  if (sfpu_warn) check_sfpu(fun, gsi, g, bad_fun_decl);
+	  check_sfpu(fun, gsi, g, bad_fun_decl);
 
 	  gsi_next (&gsi);
 	}
@@ -366,21 +330,18 @@ public:
     : gimple_opt_pass (pass_data_rvtt_warn, ctxt)
   {}
 
-  virtual unsigned int execute (function *);
+  virtual bool gate (function *) override
+  {
+    return TARGET_XTT_TENSIX_WARN;
+  }
+  virtual unsigned int execute (function *fn) override
+  {
+    process (fn);
+    return 0;
+  }
 }; // class pass_rvtt_warn
 
 } // anon namespace
-
-/* Entry point to rvtt_warn pass.	*/
-unsigned int
-pass_rvtt_warn::execute (function *fun)
-{
-  bool sfpu_warn = flag_rvtt_warn && TARGET_XTT_TENSIX;
-  if (sfpu_warn || flag_rvtt_error_multdiv)
-    process (fun, sfpu_warn, flag_rvtt_error_multdiv);
-
-  return 0;
-}
 
 gimple_opt_pass *
 make_pass_rvtt_warn (gcc::context *ctxt)

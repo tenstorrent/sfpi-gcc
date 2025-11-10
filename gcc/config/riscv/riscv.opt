@@ -545,6 +545,41 @@ Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 Mask(XTT_ROCC) Var(riscv_tt_subext)
 
 TargetVariable
+int riscv_tt_flags
+
+mtt-tensix-optimize-cc
+Target Mask(XTT_TENSIX_OPT_CC) Var(riscv_tt_flags)
+Optimize Tensix CC usage.
+
+mtt-tensix-optimize-combine
+Target Mask(XTT_TENSIX_OPT_COMBINE) Var(riscv_tt_flags)
+Combine Tensix instructions.
+
+mtt-tensix-warn
+Target Mask(XTT_TENSIX_WARN) Var(riscv_tt_flags)
+Generate warnings for erroneous Tensix operations.
+
+mtt-tensix-optimize-replay
+Target Mask(XTT_TENSIX_OPT_REPLAY) Var(riscv_tt_flags)
+Generate Tensix replay instruction.
+
+mtt-tensix-replay-buffer-size=
+Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
+Length of replay buffer for replay optimization use.
+
+mtt-optimize-extend
+Target Mask(XTT_OPT_EXTEND) Var(riscv_tt_flags)
+TT-specific removal of extraneous zero/sign extension operations.
+
+mtt-optimize-hll
+Target Mask(XTT_OPT_HLL) Var(riscv_tt_flags)
+TT-specific scheduling of high latency loads.
+
+mtt-dump-stats
+Target Mask(XTT_DUMP_STATS) Var(riscv_tt_flags)
+TT-specific internal dumps.
+
+TargetVariable
 int riscv_fmv_priority = 0
 
 Enum

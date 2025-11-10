@@ -1529,7 +1529,8 @@ void analysis::print_hist(vector<int>& hist, int n_hlls, int ic_low, int ic_high
 
 void analysis::print()
 {
-  if (!flag_rvtt_dump_stats) return;
+  if (!TARGET_XTT_DUMP_STATS)
+    return;
 
   if (l1_hist.size() != 0)
     {
@@ -1595,17 +1596,15 @@ public:
 	  df_note_add_problem ();
 	  df_analyze();
 
-	  if (flag_rvtt_hll) {
+	  if (TARGET_XTT_OPT_HLL) {
 	    schedule_shadows(cfn);
 	    schedule_hll(cfn);
 	    //print_hll_schedule(cfn);
 	  }
 	}
 
-      if (flag_rvtt_dump_stats)
-	{
-	  analg.analyze(cfn);
-	}
+      if (TARGET_XTT_DUMP_STATS)
+	analg.analyze(cfn);
 
       // This must come before the hll pass as it introduces loads
       if (TARGET_XTT_TENSIX_WH)

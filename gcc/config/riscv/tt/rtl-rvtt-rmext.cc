@@ -535,7 +535,7 @@ public:
   /* opt_pass methods: */
   virtual bool gate (function *) override
   {
-    return optimize > 0 && flag_rvtt_rmext;
+    return TARGET_XTT_OPT_EXTEND;
   }
 
   virtual unsigned execute (function *cfn) override

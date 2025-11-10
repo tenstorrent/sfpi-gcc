@@ -10642,6 +10642,24 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  && (!cpu[len] || cpu[len] == '-');
       };
 
+      if (TARGET_XTT_TENSIX) {
+	// Default tensix-specific optimizations
+	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_CC))
+	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_CC;
+	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_COMBINE))
+	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_COMBINE;
+	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_WARN))
+	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_WARN;
+	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_REPLAY))
+	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_REPLAY;
+      }
+
+      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_OPT_EXTEND)
+	  && (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))
+	  && optimize > 0)
+	// The rmext optimization ICES on quasar for reasons to be determined.
+	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_OPT_EXTEND;
+
       if (is_cpu_kind ("tt-qsr32"))
 	{
 	  if (!(target_flags_explicit & MASK_FDIV))
@@ -10650,13 +10668,9 @@ riscv_override_options_internal (struct gcc_options *opts)
 	      // Say this is explicit so below doesn't turn it back on.
 	      target_flags_explicit |= MASK_FDIV;
 	    }
-	  // The rmext optimization ICES on quasar for reasons to be determined.
-	  flag_rvtt_rmext = 0;
 	}
-      else if (is_cpu_kind ("tt-qsr64"))
-	// The rmext optimization ICES on quasar for reasons to be determined.
-	flag_rvtt_rmext = 0;
 
+      // FIXME: Add tune model for our cores.
       tt_core = is_cpu_kind("tt");
     }
 

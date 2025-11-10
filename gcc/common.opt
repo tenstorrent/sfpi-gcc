@@ -3985,44 +3985,4 @@ fext-dce
 Common Var(flag_ext_dce, 1) Optimization Init(0)
 Perform dead code elimination on zero and sign extensions with special dataflow analysis.
 
-frvtt-sfpu-cc
-Common Var(flag_rvtt_cc) Init(1)
-Optimize sfpu CC usage.
-
-frvtt-sfpu-combine
-Common Var(flag_rvtt_combine) Init(1)
-Combine instructions for sfpu.
-
-frvtt-sfpu-warn
-Common Var(flag_rvtt_warn) Init(1)
-Generate warnings for sfpu operations.
-
-frvtt-sfpu-replay
-Common Var(flag_rvtt_replay) Init(1)
-Generate sfpu replay instruction.
-
-frvtt-sfpu-replay-buffer-size=
-Common Joined RejectNegative Var(rvtt_replay_buffer_size) UInteger Init(32) IntegerRange(1,32)
-Generate sfpu replay instruction.
-
-frvtt-rmext
-Common Var(flag_rvtt_rmext) Init(1)
-TT specific removal of extraneous zero/sign extension ops.
-
-frvtt-hll
-Common Var(flag_rvtt_hll) Init(0)
-TT specific scheduling of high latency loads.
-
-frvtt-gsl1war
-Common Var(flag_rvtt_gshllwar) Init(1)
-TT specific workaround for the GS L1 arbiter bug, note disabling may result in hangs.
-
-frvtt-dump-stats
-Common Var(flag_rvtt_dump_stats) Init(0)
-Dump riscv code stats, eg, hll histogram, insn count, stack load count, etc.
-
-frvtt-error-multdiv
-Common Var(flag_rvtt_error_multdiv) Init(0)
-TT error out when a multiply or divide operation is encountered.
-
 ; This comment is to ensure we retain the blank line above.
