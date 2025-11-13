@@ -41,11 +41,12 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-synth-renumber.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-warn.o \
+	rtl-rvtt-fix-wh.o \
 	rtl-rvtt-hll.o \
-	rtl-rvtt-synth-opcode.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
-	rtl-rvtt-schedule.o
+	rtl-rvtt-schedule.o \
+	rtl-rvtt-synth-opcode.o
 
 OBJS += $(RVTT_OBJS)
 
