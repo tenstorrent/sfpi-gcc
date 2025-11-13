@@ -547,6 +547,22 @@ Mask(XTT_ROCC) Var(riscv_tt_subext)
 TargetVariable
 int riscv_tt_flags
 
+mtt-dump-stats
+Target Mask(XTT_DUMP_STATS) Var(riscv_tt_flags)
+TT-specific internal dumps.
+
+mtt-fix-whraw
+Target Mask(XTT_FIX_WHRAW) Var(riscv_tt_flags)
+Emit code to address Wormhole RAW hazard
+
+mtt-optimize-extend
+Target Mask(XTT_OPT_EXTEND) Var(riscv_tt_flags)
+TT-specific removal of extraneous zero/sign extension operations.
+
+mtt-optimize-hll
+Target Mask(XTT_OPT_HLL) Var(riscv_tt_flags)
+TT-specific scheduling of high latency loads.
+
 mtt-tensix-optimize-cc
 Target Mask(XTT_TENSIX_OPT_CC) Var(riscv_tt_flags)
 Optimize Tensix CC usage.
@@ -566,18 +582,6 @@ Generate Tensix replay instruction.
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
 Length of replay buffer for replay optimization use.
-
-mtt-optimize-extend
-Target Mask(XTT_OPT_EXTEND) Var(riscv_tt_flags)
-TT-specific removal of extraneous zero/sign extension operations.
-
-mtt-optimize-hll
-Target Mask(XTT_OPT_HLL) Var(riscv_tt_flags)
-TT-specific scheduling of high latency loads.
-
-mtt-dump-stats
-Target Mask(XTT_DUMP_STATS) Var(riscv_tt_flags)
-TT-specific internal dumps.
 
 TargetVariable
 int riscv_fmv_priority = 0

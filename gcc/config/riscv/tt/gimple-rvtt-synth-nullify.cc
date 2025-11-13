@@ -69,7 +69,7 @@ const pass_data pass_data_rvtt_synth_nullify =
   "rvtt_synth_nullify", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
-  PROP_ssa, /* properties_required */
+  0, /* properties_required */
   0, /* properties_provided */
   0, /* properties_destroyed */
   0, /* todo_flags_start */
