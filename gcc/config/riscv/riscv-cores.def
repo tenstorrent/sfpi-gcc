@@ -106,9 +106,9 @@ RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
 			      "svinval_zicbom_zicboz",
 			      nullptr, "xiangshan-nanhu")
 
-RISCV_CORE("tt-wh",           "rv32im_xtttensixwh", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-wh",           "rv32im", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "ilp32", "rvtt-b1")
-RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
 
 // I am suspicious of the following architecture extensions
