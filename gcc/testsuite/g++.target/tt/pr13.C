@@ -3,7 +3,7 @@
 // testcase, this is probably fragile
 
 // { dg-do compile }
-// { dg-additional-options "-mcpu=tt-wh -mabi=ilp32 -O3" }
+// { dg-additional-options "-mcpu=tt-wh-tensix -mabi=ilp32 -O3" }
 
 using vec_t = float __attribute__((vector_size(64 * sizeof(float))));
 
