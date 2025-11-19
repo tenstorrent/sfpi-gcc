@@ -249,7 +249,7 @@ tree instrn_ptr_type_node;
   RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
   RISCV_ATYPE_##I
 
-static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + /*rocc*/63 + 3;
+static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + /*rocc*/69 + 3;
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"

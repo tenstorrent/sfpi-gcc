@@ -26,6 +26,12 @@
   UNSPECV_LLK_INTF_READ  
   UNSPECV_FDS_INTF_WRITE  
   UNSPECV_FDS_INTF_READ
+  UNSPECV_WR_TILES_TO_PROCESS_THRES_TR_ACK
+  UNSPECV_WR_TILES_TO_PROCESS_THRES_WR_SENT
+  UNSPECV_WR_TILES_TO_PROCESS_THRES_IDMA_TR_ACK
+  UNSPECV_RD_TILES_TO_PROCESS_THRES_TR_ACK
+  UNSPECV_RD_TILES_TO_PROCESS_THRES_WR_SENT
+  UNSPECV_RD_TILES_TO_PROCESS_THRES_IDMA_TR_ACK
   UNSPECV_CS_ALLOC
   UNSPECV_CS_DEALLOC
   UNSPECV_CS_SAVE
@@ -123,6 +129,48 @@
                      (match_operand:DI 1 "register_operand" "r")] UNSPECV_FDS_INTF_READ)]
   "TARGET_XTT_ROCC"
   "tt.rocc.fds_intf_read\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_wr_tiles_to_process_thres_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_WR_TILES_TO_PROCESS_THRES_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.wr_tiles_to_process_thres_tr_ack\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_wr_tiles_to_process_thres_wr_sent"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_WR_TILES_TO_PROCESS_THRES_WR_SENT)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.wr_tiles_to_process_thres_wr_sent\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_wr_tiles_to_process_thres_idma_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_WR_TILES_TO_PROCESS_THRES_IDMA_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.wr_tiles_to_process_thres_idma_tr_ack\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_rd_tiles_to_process_thres_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_RD_TILES_TO_PROCESS_THRES_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.rd_tiles_to_process_thres_tr_ack\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_rd_tiles_to_process_thres_wr_sent"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_RD_TILES_TO_PROCESS_THRES_WR_SENT)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.rd_tiles_to_process_thres_wr_sent\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_rd_tiles_to_process_thres_idma_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_RD_TILES_TO_PROCESS_THRES_IDMA_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.rd_tiles_to_process_thres_idma_tr_ack\t%0,%1"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_cs_alloc"

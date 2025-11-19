@@ -7,6 +7,14 @@ RISCV_BUILTIN (ttrocc_llk_intf_read, "ttrocc_llk_intf_read", RISCV_BUILTIN_DIREC
 RISCV_BUILTIN (ttrocc_fds_intf_write, "ttrocc_fds_intf_write", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
 RISCV_BUILTIN (ttrocc_fds_intf_read, "ttrocc_fds_intf_read", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
 
+RISCV_BUILTIN (ttrocc_wr_tiles_to_process_thres_tr_ack, "ttrocc_wr_tiles_to_process_thres_tr_ack", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_wr_tiles_to_process_thres_wr_sent, "ttrocc_wr_tiles_to_process_thres_wr_sent", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+RISCV_BUILTIN (ttrocc_wr_tiles_to_process_thres_idma_tr_ack, "ttrocc_wr_tiles_to_process_thres_idma_tr_ack", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_rd_tiles_to_process_thres_tr_ack, "ttrocc_rd_tiles_to_process_thres_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_rd_tiles_to_process_thres_wr_sent, "ttrocc_rd_tiles_to_process_thres_wr_sent", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_rd_tiles_to_process_thres_idma_tr_ack, "ttrocc_rd_tiles_to_process_thres_idma_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+
 RISCV_BUILTIN (ttrocc_cs_alloc, "ttrocc_cs_alloc", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
 RISCV_BUILTIN (ttrocc_cs_dealloc, "ttrocc_cs_dealloc", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
 RISCV_BUILTIN (ttrocc_cs_save, "ttrocc_cs_save", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
