@@ -99,7 +99,7 @@
 
 (define_insn "riscv_ttrocc_llk_intf_write"
   [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
-                     (match_operand:DI 1 "const_int_operand")] UNSPECV_LLK_INTF_WRITE)]
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_LLK_INTF_WRITE)]
   "TARGET_XTT_ROCC"
   "tt.rocc.llk_intf_write\t%0,%1"
   [(set_attr "type" "ttrocc")])
@@ -120,7 +120,7 @@
 
 (define_insn "riscv_ttrocc_fds_intf_read"
   [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
-                     (match_operand:DI 1 "const_int_operand")] UNSPECV_FDS_INTF_READ)]
+                     (match_operand:DI 1 "register_operand" "r")] UNSPECV_FDS_INTF_READ)]
   "TARGET_XTT_ROCC"
   "tt.rocc.fds_intf_read\t%0,%1"
   [(set_attr "type" "ttrocc")])
