@@ -73,6 +73,15 @@
   UNSPECV_CMDBUF_ISSUE_READ2_TRANS  
   UNSPECV_CMDBUF_ISSUE_WRITE1_TRANS  
   UNSPECV_CMDBUF_ISSUE_WRITE2_TRANS  
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_WR_SENT
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_WR_SENT_TR_ID
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_IDMA_TR_ACK
+  UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_IDMA_TR_ACK_TR_ID
+  UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_TR_ACK
+  UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_WR_SENT
+  UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_IDMA_TR_ACK
   UNSPECV_SCMDBUF_WR_REG  
   UNSPECV_SCMDBUF_RD_REG  
   UNSPECV_SCMDBUF_GET_VC_SPACE  
@@ -490,6 +499,81 @@
                      ] UNSPECV_CMDBUF_ISSUE_WRITE2_TRANS)]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_issue_write2_trans\t%0,%1,%2"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_tr_ack_tr_id\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_tr_ack_tr_id"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 2 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_tr_ack\t%0,%1,%2"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_wr_sent"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_WR_SENT)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_wr_sent\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_wr_sent_tr_id"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 2 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_WR_SENT_TR_ID)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_wr_sent_tr_id\t%0,%1,%2"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_idma_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_IDMA_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_idma_tr_ack\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_idma_tr_ack_tr_id"
+  [(unspec_volatile [(match_operand:DI 0 "register_operand" "=r")
+                     (match_operand:DI 1 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 2 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_IDMA_TR_ACK_TR_ID)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_read_tiles_to_process_idma_tr_ack_tr_id\t%0,%1,%2"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_clear_tiles_to_process_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 1 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_clear_tiles_to_process_tr_ack\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_clear_tiles_to_process_wr_sent"
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 1 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_WR_SENT)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_clear_tiles_to_process_wr_sent\t%0,%1"
+  [(set_attr "type" "ttrocc")])
+
+(define_insn "riscv_ttrocc_cmdbuf_clear_tiles_to_process_idma_tr_ack"
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
+                     (match_operand:DI 1 "register_operand" "r")
+                     ] UNSPECV_CMDBUF_CLEAR_TILES_TO_PROCESS_IDMA_TR_ACK)]
+  "TARGET_XTT_ROCC"
+  "tt.rocc.cmdbuf_clear_tiles_to_process_idma_tr_ack\t%0,%1"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_scmdbuf_wr_reg"
