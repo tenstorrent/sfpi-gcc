@@ -107,3 +107,13 @@ RISCV_BUILTIN (ttrocc_scmdbuf_issue_read2_trans, "ttrocc_scmdbuf_issue_read2_tra
 
 RISCV_BUILTIN (ttrocc_scmdbuf_issue_write1_trans, "ttrocc_scmdbuf_issue_write1_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
 RISCV_BUILTIN (ttrocc_scmdbuf_issue_write2_trans, "ttrocc_scmdbuf_issue_write2_trans", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI_UDI, rocc),
+
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_tr_ack, "ttrocc_scmdbuf_read_tiles_to_process_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_tr_ack_tr_id, "ttrocc_scmdbuf_read_tiles_to_process_tr_ack_tr_id", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_wr_sent, "ttrocc_scmdbuf_read_tiles_to_process_wr_sent", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_wr_sent_tr_id, "ttrocc_scmdbuf_read_tiles_to_process_wr_sent_tr_id", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack, "ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack_tr_id, "ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack_tr_id", RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_clear_tiles_to_process_tr_ack, "ttrocc_scmdbuf_clear_tiles_to_process_tr_ack", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_clear_tiles_to_process_wr_sent, "ttrocc_scmdbuf_clear_tiles_to_process_wr_sent", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
+RISCV_BUILTIN (ttrocc_scmdbuf_clear_tiles_to_process_idma_tr_ack, "ttrocc_scmdbuf_clear_tiles_to_process_idma_tr_ack", RISCV_BUILTIN_DIRECT_NO_TARGET, RISCV_VOID_FTYPE_UDI, rocc),
