@@ -89,7 +89,7 @@ transform (function *fn)
 	  }
 	else if (insnd->id == rvtt_insn_data::ttinsn
 		 && TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST
-		 && integer_nonzerop (gimple_call_arg (stmt, 1))) // not dynamic
+		 && integer_zerop (gimple_call_arg (stmt, 1))) // not dynamic
 	  gimple_call_set_arg (stmt, 0, null_pointer_node);
 	else
 	  continue;

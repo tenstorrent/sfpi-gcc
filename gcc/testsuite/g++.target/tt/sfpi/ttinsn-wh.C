@@ -9,8 +9,8 @@ namespace ckernel {
 #include <sfpi.h>
 
 void foo (uint32_t v) {
-  lltt::insn(0x12345678);
-  lltt::insn(v);
+  lltt::insn<false&&true>(0x12345678);
+  lltt::insn<true>(v);
 }
 /*
 **_Z3foom:
@@ -48,6 +48,7 @@ void bar () {
 /*
 **_Z3barv:
 **	SFPADD	L2, L10, L2, L2, 0
+**	SFPNOP
 **	.ttinsn	305419896
 **	SFPADD	L0, L10, L2, L2, 0
 **	ret
@@ -56,7 +57,7 @@ void bar () {
 void baz (uint32_t v) {
   vFloat c = l_reg[LRegs::LReg2];
   vFloat d = c + c;
-  lltt::insn(v);
+  lltt::insn<true>(v);
   // no need for NOP
   vFloat e = d + d;
   l_reg[LRegs::LReg0] = e;
@@ -64,6 +65,7 @@ void baz (uint32_t v) {
 /*
 **_Z3bazm:
 **	SFPADD	L2, L10, L2, L2, 0
+**	SFPNOP
 **	lui	a5,%hi\(__instrn_buffer\)
 **	sw	a0,%lo\(__instrn_buffer\)\(a5\)
 **	SFPADD	L0, L10, L2, L2, 0

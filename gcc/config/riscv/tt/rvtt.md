@@ -311,7 +311,7 @@
 {
   rtx insn = nullptr;
   if (CONST_INT_P (operands[2])
-      && !rtx_equal_p (const0_rtx, operands[1])) /* not dynamic */
+      && rtx_equal_p (const0_rtx, operands[1])) /* not dynamic */
     insn = gen_rvtt_ttinsn_static (operands[2]);
   else
     {

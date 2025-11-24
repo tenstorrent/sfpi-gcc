@@ -69,14 +69,14 @@ transform (function *fn)
 	    if (gimple_call_arg (stmt, 0) != null_pointer_node)
 	      {
 		if (TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST
-		    && integer_nonzerop (gimple_call_arg (stmt, 1))) // not dynamic
+		    && integer_zerop (gimple_call_arg (stmt, 1))) // not dynamic
 		  {
 		    // It too turned out to be known now.
 		    gimple_call_set_arg (stmt, 0, null_pointer_node);
 		    update_stmt (stmt);
 		    updated = true;
 		  }
-		else if (integer_nonzerop (gimple_call_arg (stmt, 1)))
+		else if (integer_zerop (gimple_call_arg (stmt, 1)))
 		  // User required it to be statically known.
 		  warning_at (gimple_location (stmt), 0, "ttinsn is not statically known");
 	      }

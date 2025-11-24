@@ -4,8 +4,8 @@
 #include <lltt.h>
 
 void foo (uint32_t v) {
-  lltt::insn(0x12345678);
-  lltt::insn(v);
+  lltt::insn<false&&true>(0x12345678);
+  lltt::insn<true>(v);
 }
 /*
 **_Z3foom:
@@ -16,5 +16,5 @@ void foo (uint32_t v) {
 */
 
 void baz (uint32_t v) {
-  (__builtin_rvtt_ttinsn)(lltt::__instrn_buffer, true, v); // { dg-warning "ttinsn is not statically known" }
+  (__builtin_rvtt_ttinsn)(lltt::__instrn_buffer, false, v); // { dg-warning "ttinsn is not statically known" }
 }
