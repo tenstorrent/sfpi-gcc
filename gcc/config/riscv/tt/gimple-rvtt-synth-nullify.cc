@@ -68,7 +68,8 @@ transform (function *fn)
 	  {
 	    if (gimple_call_arg (stmt, 0) != null_pointer_node)
 	      {
-		if (TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST)
+		if (TREE_CODE (gimple_call_arg (stmt, 2)) == INTEGER_CST
+		    && integer_nonzerop (gimple_call_arg (stmt, 1))) // not dynamic
 		  {
 		    // It too turned out to be known now.
 		    gimple_call_set_arg (stmt, 0, null_pointer_node);

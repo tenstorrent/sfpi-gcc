@@ -292,13 +292,16 @@
   "TARGET_XTT_TENSIX"
   "TTREPLAY\t%0, %1, %2, %3")
 
-(define_insn "rvtt_ttinsn_int"
-  [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m,X")
-                     (match_operand:SI    1 "reg_or_const_int_operand" "r,n")] UNSPECV_TTINSN)]
+(define_insn "rvtt_ttinsn_static"
+  [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")] UNSPECV_TTINSN)]
   "TARGET_XTT_TENSIX"
-  "@
-   sw\t%1,%0
-   .ttinsn\t%1")
+  ".ttinsn\t%0")
+
+(define_insn "rvtt_ttinsn_dynamic"
+  [(unspec_volatile [(match_operand:SI    0 "memory_operand"    "m")
+                     (match_operand:SI    1 "register_operand"  "r")] UNSPECV_TTINSN)]
+  "TARGET_XTT_TENSIX"
+  "sw\t%1,%0")
 
 (define_expand "rvtt_ttinsn"
   [(unspec_volatile [(mem:SI (match_operand:SI    0 "address_operand"  ""))
@@ -306,6 +309,15 @@
                      (match_operand:SI    2 "reg_or_const_int_operand" "")] UNSPECV_TTINSN)]
   "TARGET_XTT_TENSIX"
 {
-  emit_insn (gen_rvtt_ttinsn_int (gen_rtx_MEM (SImode, operands[0]), operands[2]));
+  rtx insn = nullptr;
+  if (CONST_INT_P (operands[2])
+      && !rtx_equal_p (const0_rtx, operands[1])) /* not dynamic */
+    insn = gen_rvtt_ttinsn_static (operands[2]);
+  else
+    {
+      operands[2] = force_reg (SImode, operands[2]);
+      insn = gen_rvtt_ttinsn_dynamic (gen_rtx_MEM (SImode, operands[0]), operands[2]);
+    }
+  emit_insn (insn);
   DONE;
 })
