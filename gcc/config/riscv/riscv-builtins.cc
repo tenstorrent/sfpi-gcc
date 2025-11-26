@@ -205,8 +205,8 @@ AVAIL (rocc, TARGET_XTT_ROCC)
   _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
  		FUNCTION_TYPE, AVAIL)
 
-tree v64SF_type_node;
-tree instrn_ptr_type_node;
+static GTY(()) tree v64SF_type_node;
+static GTY(()) tree instrn_ptr_type_node;
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
@@ -529,3 +529,5 @@ riscv_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
   *clear = build_call_expr (fsflags, 1, old_flags);
   *update = NULL_TREE;
 }
+
+#include "gt-riscv-builtins.h"
