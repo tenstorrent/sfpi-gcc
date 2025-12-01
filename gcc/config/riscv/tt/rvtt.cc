@@ -121,6 +121,8 @@ static std::vector<const rvtt_insn_data *> sfpu_rtl_insn_ptrs;
 static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* rvtt_builtin_name_stub;
 
+// We have to put this decl here so gengtype emits the root here.
+extern GTY(()) rtx rvtt_vec0_rtx;
 rtx rvtt_vec0_rtx;
 
 void

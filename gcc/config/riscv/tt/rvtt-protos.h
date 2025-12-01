@@ -35,7 +35,7 @@ extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
 
 // We use this value to indicate 'not a register'
-extern GTY(()) rtx rvtt_vec0_rtx;
+extern rtx rvtt_vec0_rtx;
 
 // Instruction synthesis
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
