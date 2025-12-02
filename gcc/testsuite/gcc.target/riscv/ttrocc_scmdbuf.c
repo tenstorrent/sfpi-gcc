@@ -19,5 +19,15 @@ int main(void) {
   unsigned long rd6 = __builtin_riscv_ttrocc_scmdbuf_tr_ack_trid(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_tr_ack_trid"} }
   
   __builtin_riscv_ttrocc_scmdbuf_reset(); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_reset"} }
- 
+
+  unsigned long rd11 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_tr_ack(); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_tr_ack" } }
+  unsigned long rd12 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_tr_ack_tr_id(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_tr_ack_tr_id" } }
+  unsigned long rd13 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_wr_sent(); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_wr_sent" } }
+  unsigned long rd14 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_wr_sent_tr_id(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_wr_sent_tr_id" } }
+  unsigned long rd15 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack(); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_idma_tr_ack" } }
+  unsigned long rd16 = __builtin_riscv_ttrocc_scmdbuf_read_tiles_to_process_idma_tr_ack_tr_id(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_read_tiles_to_process_idma_tr_ack_tr_id" } }
+
+  __builtin_riscv_ttrocc_scmdbuf_clear_tiles_to_process_tr_ack(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_clear_tiles_to_process_tr_ack" } }
+  __builtin_riscv_ttrocc_scmdbuf_clear_tiles_to_process_wr_sent(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_clear_tiles_to_process_wr_sent" } }
+  __builtin_riscv_ttrocc_scmdbuf_clear_tiles_to_process_idma_tr_ack(15); // { dg-final { "scan-assembler" "tt\.rocc\.scmdbuf_clear_tiles_to_process_idma_tr_ack" } }
 }
