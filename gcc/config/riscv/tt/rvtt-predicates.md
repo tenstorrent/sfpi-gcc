@@ -29,3 +29,14 @@
 (define_predicate "reg_or_vec0_operand"
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "vec0_operand")))
+
+(define_predicate "reg_or_readlreg_operand"
+  (ior (match_operand 0 "register_operand")
+    (and (match_code "unspec")
+         (match_test "XINT (op, 1) == UNSPEC_SFPREADLREG"))))
+
+(define_predicate "reg_or_mem_or_readlreg_operand"
+  (ior (match_operand 0 "register_operand")
+    (match_operand 0 "memory_operand")
+    (and (match_code "unspec")
+         (match_test "XINT (op, 1) == UNSPEC_SFPREADLREG"))))

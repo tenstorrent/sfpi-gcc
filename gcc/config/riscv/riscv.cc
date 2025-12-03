@@ -4382,6 +4382,11 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	  *total = 1;
 	  return true;
 	}
+      if (XINT (x, 1) == UNSPEC_SFPREADLREG)
+	{
+	  *total = 0;
+	  return true;
+	}
       return false;
 
     default:
@@ -4418,6 +4423,11 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
 {
   rtx x = PATTERN (insn);
   int cost = pattern_cost (x, speed);
+  if (!cost && GET_CODE (x) == UNSPEC_VOLATILE)
+    {
+      cost = COSTS_N_INSNS (1);
+      cost = set_src_cost (x, V64SFmode, speed);
+    }
 
   if (JUMP_P (insn))
     {
@@ -7233,6 +7243,16 @@ riscv_print_operand (FILE *file, rtx op, int letter)
       else
 	gcc_unreachable();
       break;
+
+    case 'x':
+      if (code == UNSPEC && XINT (op, 1) == UNSPEC_SFPREADLREG)
+	{
+	  rtx cst = XVECEXP (op, 0, 0);
+	  fprintf(file, "%s", reg_names[SFPU_REG_FIRST + INTVAL (cst)]);
+	  break;
+	}
+      letter = 0;
+      //FALLTHROUGH
 
     default:
       switch (code)

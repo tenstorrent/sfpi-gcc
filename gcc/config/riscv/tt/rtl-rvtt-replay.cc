@@ -188,6 +188,9 @@ static hash_type compute_insn_hash(const rvtt_insn_data *insnd,
 	  gcc_unreachable();
 	  break;
 
+	  case UNSPEC:
+	    gcc_assert (XINT (op, 1) == UNSPEC_SFPREADLREG);
+	    val = INTVAL (XVECEXP (op, 0, 0));
 	  case MEM:
 	    // FIXME: Find rtl hasher.
 	    break;
