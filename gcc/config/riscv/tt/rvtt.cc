@@ -85,7 +85,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 134;
+static const int NUMBER_OF_INTRINSICS = 143;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -281,6 +281,7 @@ rvtt_init_builtins()
 
   // Make synth_opcode a const fn, it's the only one.
   TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
+  //  TREE_READONLY (sfpu_insn_data[rvtt_insn_data::sfpreadlreg].decl) = true;
 
   // The real value cache is not available yet. :(
   // Perhaps there's a better place for this?
@@ -532,12 +533,21 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
 {
   uint32_t reg_mask = 0;
   uint32_t reg_ops = 0;
-  rtx src_reg = operands[SYNTH_src];
-  if (REG_P (src_reg))
+  rtx src_op = operands[SYNTH_src];
+  if (GET_CODE (src_op) != CONST_VECTOR)
     {
       unsigned src_shift = unsigned (INTVAL (operands[SYNTH_src_shift]));
       reg_mask |= 0xf << src_shift;
-      reg_ops |= rvtt_sfpu_regno (src_reg) << src_shift;
+      unsigned regno;
+      if (REG_P (src_op))
+	regno = REGNO (src_op) - SFPU_REG_FIRST;
+      else
+	{
+	  gcc_assert (GET_CODE (src_op) == UNSPEC
+		      && XINT (src_op, 1) == UNSPEC_SFPCSTLREG);
+	  regno = INTVAL (XVECEXP (src_op, 0, 0));
+	}
+	reg_ops |= regno << src_shift;
     }
   bool has_dst = clobber_op > SYNTH_dst;
   if (has_dst)
@@ -546,7 +556,7 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
       gcc_assert (REG_P (dst_reg));
       unsigned dst_shift = unsigned (INTVAL (operands[SYNTH_dst_shift]));
       reg_mask |= 0xf << dst_shift;
-      reg_ops |= rvtt_sfpu_regno (dst_reg) << dst_shift;
+      reg_ops |= (REGNO (dst_reg) - SFPU_REG_FIRST) << dst_shift;
     }
   gcc_assert (!reg_mask == !REG_P (operands[clobber_op]));
 
@@ -580,8 +590,8 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
       if (has_lv)
 	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
     }
-  if (REG_P (src_reg))
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, &", %%%d"[!has_lv], SYNTH_src);
+  if (GET_CODE (src_op) != CONST_VECTOR)
+    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, &", %%x%d"[!has_lv], SYNTH_src);
 
   // NOPS was a grayskull feature
   unsigned nops = unsigned (INTVAL (operands[SYNTH_flags])) & INSN_SCHED_NOP_MASK;
@@ -670,6 +680,12 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
   }
 
   return representable;
+}
+
+rtx
+rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
+{
+  return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
 }
 
 void rvtt_emit_sfpassignlreg(rtx dst, rtx lr)
@@ -856,7 +872,8 @@ int rvtt_get_insn_operand_count(const rtx_insn *insn)
   switch (code) {
   case SET:
     operands = XEXP(pat, 1);
-    if (GET_CODE(operands) == UNSPEC_VOLATILE) {
+    if (GET_CODE(operands) == UNSPEC_VOLATILE
+	|| GET_CODE(operands) == UNSPEC) {
       count = XVECLEN(operands, 0);
     } else if (GET_CODE(operands) == REG) {
       count = 1;
@@ -898,7 +915,8 @@ rtx rvtt_get_insn_operand(int which, const rtx_insn *insn)
   switch (code) {
   case SET:
     operands = XEXP(pat, 1);
-    if (GET_CODE(operands) == UNSPEC_VOLATILE) {
+    if (GET_CODE(operands) == UNSPEC_VOLATILE
+	|| GET_CODE(operands) == UNSPEC) {
       op = XVECEXP(operands, 0, which);
     } else {
       gcc_assert(GET_CODE(operands) == REG);

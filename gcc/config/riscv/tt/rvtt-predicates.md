@@ -26,6 +26,18 @@
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "const_int_operand")))
 
-(define_predicate "reg_or_vec0_operand"
+(define_predicate "reg_cstlreg_or_vec0_operand"
   (ior (match_operand 0 "register_operand")
+       (and (match_code "unspec")
+            (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))
        (match_operand 0 "vec0_operand")))
+
+(define_predicate "reg_or_cstlreg_operand"
+  (ior (match_operand 0 "register_operand")
+    (and (match_code "unspec")
+         (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))))
+
+(define_predicate "nonimmediate_or_cstlreg_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+    (and (match_code "unspec")
+         (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))))
