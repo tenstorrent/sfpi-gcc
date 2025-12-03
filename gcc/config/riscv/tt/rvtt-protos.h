@@ -56,6 +56,7 @@ inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, u
 rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			      rtx src, unsigned src_shift);
 
+extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern void rvtt_emit_sfpassignlreg(rtx dst, rtx lr);
 
 extern void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);

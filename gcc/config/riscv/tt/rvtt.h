@@ -127,12 +127,8 @@ constexpr unsigned int SFPSHFT_MOD1_LOGICAL = 0;
 constexpr unsigned int SFPSHFT_MOD1_ARITHMETIC = 2;
 constexpr unsigned int SFPSHFT_MOD1_SRC_LREG_C = 4;
 
-constexpr unsigned int CREG_IDX_0 = 4;
-constexpr unsigned int CREG_IDX_0P692871094 = 5;
-constexpr unsigned int CREG_IDX_NEG_1P00683594 = 6;
-constexpr unsigned int CREG_IDX_1P442382813 = 7;
-constexpr unsigned int CREG_IDX_0P836914063 = 8;
-constexpr unsigned int CREG_IDX_NEG_0P5 = 9;
+constexpr unsigned int CREG_IDX_0P837300003 = 8;
+constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
 constexpr unsigned int CREG_IDX_NEG_1 = 11;
 constexpr unsigned int CREG_IDX_0P001953125 = 12;
