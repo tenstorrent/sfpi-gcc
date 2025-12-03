@@ -49,10 +49,10 @@ void bar () {
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
 **	SFPCOMPC
-**	SFPMOV	L2, L4, 2
-**	SFPMUL24	L2, L0, L1, 0
+**	SFPMUL24	L4, L0, L1, 0
 **	SFPMOV	L3, L5, 2
 **	SFPMUL24	L3, L0, L1, 1
 **	SFPENCC	3, 10
+**	SFPMOV	L2, L4, 2
 **	ret
 */
