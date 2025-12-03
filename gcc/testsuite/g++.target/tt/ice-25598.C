@@ -19552,7 +19552,7 @@ public:
     vInt() = default;
     __attribute__((always_inline)) inline vInt(const __vDReg dreg);
     __attribute__((always_inline)) inline vInt(const __rvtt_vec_t& in) { assign(in); }
-    __attribute__((always_inline)) inline vInt(const __vConstIntBase creg) { v = __builtin_rvtt_sfpassignlreg(creg.get()); initialized = true; }
+    __attribute__((always_inline)) inline vInt(const __vConstIntBase creg) { v = __builtin_rvtt_sfpreadlreg(creg.get()); initialized = true; }
     __attribute__((always_inline)) inline vInt(const __vIntBase in) { assign(in.get()); };
     __attribute__((always_inline)) inline vInt(short val) { loadss(val); }
     __attribute__((always_inline)) inline vInt(int val) { loadsi(val); }
@@ -19636,7 +19636,7 @@ public:
     vUInt() = default;
     __attribute__((always_inline)) inline vUInt(const __vDReg dreg);
     __attribute__((always_inline)) inline vUInt(const __rvtt_vec_t& in) { assign(in); }
-    __attribute__((always_inline)) inline vUInt(const __vConstIntBase creg) { v = __builtin_rvtt_sfpassignlreg(creg.get()); initialized = true; }
+    __attribute__((always_inline)) inline vUInt(const __vConstIntBase creg) { v = __builtin_rvtt_sfpreadlreg(creg.get()); initialized = true; }
     __attribute__((always_inline)) inline vUInt(const __vIntBase in) { assign(in.get()); }
     __attribute__((always_inline)) inline vUInt(short val) { loadss(val); }
     __attribute__((always_inline)) inline vUInt(int val) { loadsi(val); }
@@ -19869,7 +19869,7 @@ __attribute__((always_inline)) inline void __vBase::assign(const __rvtt_vec_t in
 
 __attribute__((always_inline)) inline void __vBase::operator=(__vLReg lr)
 {
-    v = __builtin_rvtt_sfpassignlreg(lr.get());
+    v = __builtin_rvtt_sfpreadlreg(lr.get());
     initialized = true;
 }
 
@@ -19978,7 +19978,7 @@ __attribute__((always_inline)) inline vType __vIntBase::operator+(const __vIntBa
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator+(const __vConstIntBase val) const
 {
-    __rvtt_vec_t c = __builtin_rvtt_sfpassignlreg(val.get());
+    __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
     return __builtin_rvtt_wh_sfpxiadd_v(c, v, 0);
 }
 
@@ -19997,7 +19997,7 @@ __attribute__((always_inline)) inline vType __vIntBase::operator-(const __vIntBa
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator-(const __vConstIntBase val) const
 {
-    __rvtt_vec_t c = __builtin_rvtt_sfpassignlreg(val.get());
+    __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
     return __builtin_rvtt_wh_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB);
 }
 
@@ -20017,7 +20017,7 @@ __attribute__((always_inline)) inline vType __vIntBase::operator+=(const __vIntB
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator+=(const __vConstIntBase val)
 {
-    __rvtt_vec_t c = __builtin_rvtt_sfpassignlreg(val.get());
+    __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
     assign(__builtin_rvtt_wh_sfpxiadd_v(c, v, 0));
     return v;
 }
@@ -20038,7 +20038,7 @@ __attribute__((always_inline)) inline vType __vIntBase::operator-=(const __vIntB
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator-=(const __vConstIntBase val)
 {
-    __rvtt_vec_t c = __builtin_rvtt_sfpassignlreg(val.get());
+    __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
     assign(__builtin_rvtt_wh_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB));
     return v;
 }
@@ -20146,13 +20146,13 @@ vUInt vUInt::operator>>(vInt amt) const {
 
 __attribute__((always_inline)) inline vFloat::vFloat(const __vConstFloat creg)
 {
-    v = __builtin_rvtt_sfpassignlreg(creg.get());
+    v = __builtin_rvtt_sfpreadlreg(creg.get());
     initialized = true;
 }
 
 __attribute__((always_inline)) inline __vIntBase::__vIntBase(const __vConstIntBase creg)
 {
-    v = __builtin_rvtt_sfpassignlreg(creg.get());
+    v = __builtin_rvtt_sfpreadlreg(creg.get());
     initialized = true;
 }
 
@@ -20328,7 +20328,7 @@ __attribute__((always_inline)) inline void __vDReg::operator=(const __vDReg dreg
 
 __attribute__((always_inline)) inline vFloat __vDReg::operator=(const __vConstFloat creg) const
 {
-    __rvtt_vec_t lr = __builtin_rvtt_sfpassignlreg(creg.get());
+    __rvtt_vec_t lr = __builtin_rvtt_sfpreadlreg(creg.get());
     __builtin_rvtt_wh_sfpstore(ckernel::instrn_buffer, lr, SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
     return vFloat(lr);
 }
@@ -20343,7 +20343,7 @@ __attribute__((always_inline)) inline __vCond vFloat::operator>=(const float x) 
 
 __attribute__((always_inline)) inline vFloat vFloat::operator-=(const vFloat a)
 {
-    __rvtt_vec_t neg1 = __builtin_rvtt_sfpassignlreg(vConstNeg1.get());
+    __rvtt_vec_t neg1 = __builtin_rvtt_sfpreadlreg(vConstNeg1.get());
     assign(__builtin_rvtt_wh_sfpmad(neg1, a.get(), v, SFPMAD_MOD1_OFFSET_NONE));
     return v;
 }

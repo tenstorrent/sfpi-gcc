@@ -23,7 +23,7 @@
 (define_peephole2
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_vec0_operand")
+	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand")
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:SI    3 "const_0_operand")
 	  ] UNSPECV_WH_SFPLZ_INT))
@@ -42,7 +42,7 @@
 (define_peephole2
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_vec0_operand")
+	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand")
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:SI    3 "const_0_operand")
 	  ] UNSPECV_WH_SFPLZ_INT))
