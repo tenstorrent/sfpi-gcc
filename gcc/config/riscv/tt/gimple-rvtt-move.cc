@@ -175,9 +175,9 @@ is_const_reg(tree arg)
 
   return
     TREE_CODE(arg) == SSA_NAME &&
-    match_prior_assignment(rvtt_insn_data::sfpassignlreg,
+    match_prior_assignment(rvtt_insn_data::sfpreadlreg,
 			   &assign_insnd, &assign_stmt, &assign_gsi, arg) &&
-    (get_int_arg(assign_stmt, 0) >= SFPU_USER_REG_NUM);
+    (get_int_arg(assign_stmt, 0) >= SFPU_CREG_IDX_LWM);
 }
 
 static inline void

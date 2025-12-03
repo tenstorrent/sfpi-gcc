@@ -368,8 +368,8 @@ unsigned riscv_bytes_per_vector_chunk;
 
   SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
   SFPU_REGS_L4, SFPU_REGS_L5, SFPU_REGS_L6, SFPU_REGS_L7,
-  SFPU_STORE_REGS, SFPU_STORE_REGS, SFPU_STORE_REGS, SFPU_STORE_REGS,
-  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+  SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS,
+  SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS,
 
   VM_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
@@ -4386,6 +4386,11 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	  *total = 1;
 	  return true;
 	}
+      if (XINT (x, 1) == UNSPEC_SFPCSTLREG)
+	{
+	  *total = 0;
+	  return true;
+	}
       return false;
 
     default:
@@ -7245,6 +7250,16 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	gcc_unreachable();
       break;
 
+    case 'x':
+      if (code == UNSPEC && XINT (op, 1) == UNSPEC_SFPCSTLREG)
+	{
+	  rtx cst = XVECEXP (op, 0, 0);
+	  fprintf(file, "L%d", int(INTVAL (cst)));
+	  break;
+	}
+      letter = 0;
+      //FALLTHROUGH
+
     default:
       switch (code)
 	{
@@ -9913,7 +9928,7 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
 
-  if (reg_class_subset_p (SFPU_REGS, rclass))
+  if (reg_class_subset_p (SFPU_ALL_REGS, rclass))
     return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;

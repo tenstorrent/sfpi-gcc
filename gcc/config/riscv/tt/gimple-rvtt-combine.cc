@@ -650,7 +650,7 @@ static bool
 is_neg_1 (tree operand)
 {
   probe_t assign;
-  if (!match_prior_assignment (rvtt_insn_data::sfpassignlreg,
+  if (!match_prior_assignment (rvtt_insn_data::sfpreadlreg,
 			       &assign.insnd, &assign.call, &assign.gsi, operand))
     return false;
 
@@ -725,7 +725,7 @@ try_combine_negated_operands (probe_t &probe)
 	{
 	  // Replace the add with a muladd multiplying the appropriate
 	  // operand by -1.
-	  const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpassignlreg);
+	  const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
 	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, 1);
 	  gimple_call_set_return_slot_opt (lreg_call, true);
 	  gimple_set_location (lreg_call, gimple_location (probe.call));
@@ -842,7 +842,7 @@ try_combine_negated_add_operand (probe_t &probe)
 
       // Replace the add with a muladd multiplying the appropriate
       // operand by -1.
-      const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpassignlreg);
+      const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
       gcall *lreg_call = gimple_build_call (lreg_insnd->decl, 1);
       gimple_call_set_return_slot_opt (lreg_call, true);
       gimple_set_location (lreg_call, gimple_location (probe.call));

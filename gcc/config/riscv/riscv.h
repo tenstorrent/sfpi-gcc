@@ -385,7 +385,7 @@ ASM_MISA_SPEC
 #define SFPU_REG_FIRST 80
 #define SFPU_REG_LAST  95
 #define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
-#define SFPU_USER_REG_NUM 8
+#define SFPU_CREG_IDX_LWM 8
 
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
@@ -413,7 +413,6 @@ ASM_MISA_SPEC
   TEST_HARD_REG_BIT (reg_class_contents[SIBCALL_REGS], REGNO)
 
 #define FP_REG_RTX_P(X) (REG_P (X) && FP_REG_P (REGNO (X)))
-#define SFPU_REG_RTX_P(X) (REG_P (X) && SFPU_REG_P (REGNO (X)))
 
 /* Use s0 as the frame pointer if it is so requested.  */
 #define HARD_FRAME_POINTER_REGNUM 8
@@ -538,7 +537,7 @@ enum reg_class
   VM_REGS,			/* v0.t registers */
   VD_REGS,			/* vector registers except v0.t */
   V_REGS,			/* vector registers */
-  // Tenstorrent begin
+  /* Tenstorrent begin */
   SFPU_REGS_L0,                 /* SFPU register L0 */
   SFPU_REGS_L1,                 /* SFPU register L1 */
   SFPU_REGS_L2,                 /* SFPU register L2 */
@@ -547,12 +546,9 @@ enum reg_class
   SFPU_REGS_L5,                 /* SFPU register L5 */
   SFPU_REGS_L6,                 /* SFPU register L6 */
   SFPU_REGS_L7,                 /* SFPU register L7 */
-  SFPU_RESULT_REGS,             /* SFPU registers to which results can be written */
-  // SFPSTORE cannot write L12..L15 directly when LOADMACRO loading is
-  // in effect, and we have no clue as to whether that's the case.
-  SFPU_STORE_REGS,              /* SFPU registers for sfpstore */
-  SFPU_REGS,                    /* SFPU registers */
-  // Tenstorrent end
+  SFPU_VAR_REGS,                /* SFPU variable registers */
+  SFPU_ALL_REGS,                /* SFPU registers */
+  /* Tenstorrent end */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -578,6 +574,7 @@ enum reg_class
   "VM_REGS",								\
   "VD_REGS",								\
   "V_REGS",								\
+  /* Tenstorrent begin */ \
   "SFPU_REGS_L0",							\
   "SFPU_REGS_L1",							\
   "SFPU_REGS_L2",							\
@@ -586,9 +583,9 @@ enum reg_class
   "SFPU_REGS_L5",							\
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
-  "SFPU_RESULT_REGS",							\
-  "SFPU_STORE_REGS",							\
-  "SFPU_REGS",								\
+  "SFPU_VAR_REGS",							\
+  "SFPU_ALL_REGS",							\
+  /* Tenstorrent end */ \
   "ALL_REGS"								\
 }
 
@@ -616,6 +613,7 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000000, 0x00000001 },	/* V0_REGS */		\
   { 0x00000000, 0x00000000, 0x00000000, 0xfffffffe },	/* VNoV0_REGS */	\
   { 0x00000000, 0x00000000, 0x00000000, 0xffffffff },	/* V_REGS */		\
+    /* Tenstorrent begin */ \
   { 0x00000000, 0x00000000, 0x00010000, 0x00000000 },	/* SFPU_REGS_L0 */ 	\
   { 0x00000000, 0x00000000, 0x00020000, 0x00000000 },	/* SFPU_REGS_L1 */ 	\
   { 0x00000000, 0x00000000, 0x00040000, 0x00000000 },	/* SFPU_REGS_L2 */ 	\
@@ -624,9 +622,9 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00200000, 0x00000000 },	/* SFPU_REGS_L5 */ 	\
   { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
-  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_RESULT_REGS */ 	\
-  { 0x00000000, 0x00000000, 0x0fff0000, 0x00000000 },	/* SFPU_STORE_REGS */ 	\
-  { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_REGS */ 	\
+  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_VAR_REGS */ 	\
+  { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_ALL_REGS */ 	\
+    /* Tenstorrent end */ \
   { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
 }
 
@@ -1051,7 +1049,7 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "arg", "frame", "vl", "vtype", "vxrm", "frm", "vxsat", "N/A", \
   "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
   "L0",  "L1",  "L2",  "L3",  "L4",  "L5",  "L6",  "L7",	\
-  "L8",  "L9",  "L10", "L11", "L12", "L13", "L14", "L15",	\
+  "*L8", "*L9", "*L10", "*L11", "*L12", "*L13", "*L14", "*L15",	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",	\
