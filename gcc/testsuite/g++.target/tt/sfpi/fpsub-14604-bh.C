@@ -100,9 +100,8 @@ void sub5() {
 **	SFPCOMPC
 **	SFPMOV	L0, L0, 1
 **	SFPADD	L1, L10, L1, L0, 2
-**	SFPNOP
-**	SFPMOV	L3, L1, 2
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L1, 2
 **	ret
 */
 

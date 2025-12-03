@@ -38,9 +38,9 @@ void bug1() {
 **	SFPSETCC	L3, 0, 2
 **	SFPCOMPC
 **	SFPLOADI	L0, 16384, 0
-**	SFPMOV	L3, L0, 2
 **	SFPPOPC	0
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L0, 2
 **	ret
 */
 
@@ -74,9 +74,9 @@ void bug2() {
 **	SFPSETCC	L3, 0, 2
 **	SFPCOMPC
 **	SFPLOADI	L0, 16384, 0
-**	SFPMOV	L3, L0, 2
 **	SFPPOPC	0
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L0, 2
 **	ret
 */
 
@@ -107,8 +107,8 @@ void good1() {
 **	SFPNOP
 **	SFPSETCC	L3, 0, 0
 **	SFPLOADI	L0, 16384, 0
-**	SFPMOV	L3, L0, 2
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L0, 2
 **	ret
 */
 
@@ -139,7 +139,7 @@ void good2() {
 **	SFPNOP
 **	SFPSETCC	L3, 0, 0
 **	SFPLOADI	L0, 16384, 0
-**	SFPMOV	L3, L0, 2
 **	SFPENCC	3, 10
+**	SFPMOV	L3, L0, 2
 **	ret
 */
