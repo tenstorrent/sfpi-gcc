@@ -155,7 +155,7 @@
 
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
+        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
   "TARGET_XTT_TENSIX"
 {
   rvtt_emit_sfpassignlreg(operands[0], operands[1]);
@@ -168,6 +168,16 @@
   "TARGET_XTT_TENSIX"
   ""
   [(set_attr "length" "0")])
+
+(define_expand "rvtt_sfpreadlreg"
+  [(set (match_operand:V64SF 0 "register_operand" "")
+        (unspec:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  rtx src = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + INTVAL (operands[1]));
+  emit_insn (gen_movv64sf (operands[0], src));
+  DONE;
+})
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
