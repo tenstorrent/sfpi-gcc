@@ -115,11 +115,22 @@ transform (function *fn)
 	      rtx dst = SET_DEST (pat);
 	      pat = SET_SRC (pat);
 	      // The dst reg isn't in the unspec operand list
-	      opcode |= rvtt_sfpu_regno (dst) << INTVAL (XVECEXP (pat, 0, SYNTH_dst_shift - 1));
+	      opcode |= (REGNO (dst) - SFPU_REG_FIRST) << INTVAL (XVECEXP (pat, 0, SYNTH_dst_shift - 1));
 	    }
 	  rtx src = XVECEXP (pat, 0, SYNTH_src);
-	  if (REG_P (src))
-	    opcode |= rvtt_sfpu_regno (src) << INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
+	  if (GET_CODE (src) != CONST_VECTOR)
+	    {
+	      unsigned regno;
+	      if (REG_P (src))
+		regno = REGNO (src) - SFPU_REG_FIRST;
+	      else
+		{
+		  gcc_assert (GET_CODE (src) == UNSPEC
+			      && XINT (src, 1) == UNSPEC_SFPREADLREG);
+		  regno = INTVAL (XVECEXP (src, 0, 0));
+		}
+	      opcode |= regno << INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
+	    }
 	  opcode |= INTVAL (XVECEXP (pat, 0, SYNTH_opcode));
 
 	  map[opcode]++;

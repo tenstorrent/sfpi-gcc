@@ -21,7 +21,7 @@
 ;; Register constraints
 
 (define_register_constraint "xr" "SFPU_REGS"
-  "Any of the SFPU Registers")
+  "Any of the readable SFPU Registers")
 
 (define_register_constraint "xw" "SFPU_RESULT_REGS"
   "Any of the writable SFPU Registers")
@@ -55,6 +55,17 @@
   "SFPU Register L7")
 
 ;; General constraints
+(define_constraint "xc"
+  "XXX"
+  (and (match_code "unspec")
+      (match_test "XINT (op, 1) == UNSPEC_SFPREADLREG")))
+
+(define_constraint "xd"
+  "XXX"
+  (and (match_code "unspec")
+      (match_test "XINT (op, 1) == UNSPEC_SFPREADLREG
+                   && INTVAL(XVECEXP (op, 0, 0)) < 12")))
+
 ;; used for unused vector inputs
 (define_constraint "xn"
   "Constant vector"
