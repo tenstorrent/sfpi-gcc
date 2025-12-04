@@ -85,7 +85,7 @@ static const char* arch_name_abbrev_list[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 134;
+static const int NUMBER_OF_INTRINSICS = 136;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -279,8 +279,9 @@ rvtt_init_builtins()
   for (unsigned int i = 0; i < NUM_INSN_CODES; i++)
     sfpu_rtl_insn_ptrs[i] = init_rtx_insnd (i, arch);
 
-  // Make synth_opcode a const fn, it's the only one.
+  // Make synth_opcode and sfpnovalue const fns
   TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
+  TREE_READONLY (sfpu_insn_data[rvtt_insn_data::sfpnovalue].decl) = true;
 
   // The real value cache is not available yet. :(
   // Perhaps there's a better place for this?

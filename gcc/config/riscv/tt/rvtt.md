@@ -48,9 +48,21 @@
 
   UNSPECV_SFPNOP
 
+  UNSPECV_TESTLV
+
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
+
+(define_insn "rvtt_testlv"
+  [(set (match_operand:V64SF 0 "register_operand" "=xr,xr")
+        (unspec_volatile:V64SF
+	  [(match_operand:V64SF 1 "register_operand" "0,xx")
+	   (match_operand:V64SF 2 "register_operand" "xr,xr")] UNSPECV_TESTLV))]
+  "TARGET_XTT_TENSIX"
+  "@
+   sfpmov %0,%2,0 ; LV
+   sfpmov %0,%2,2 ; NLV")
 
 ;; rvtt_synth_opcode and rvtt_sfpsynth_insn{,_dst} are used to
 ;; synthesize sfp/tt instructions that are injected into the
@@ -262,6 +274,13 @@
     gcc_unreachable ();
   }
   [(set_attr "length" "4")])
+
+(define_insn "rvtt_sfpnovalue"
+  [(set (match_operand:V64SF 0 "register_operand" "=xr")
+        (reg:V64SF 79))]
+  "TARGET_XTT_TENSIX"
+  ""
+  [(set_attr "length" "0")])
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")
