@@ -89,7 +89,7 @@ along with GCC; see the file COPYING3.  If not see
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
+RVTT_RTL_ONLY (sfpmovwhole,      0x08, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode, SYNTH_flags)
 RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode, SYNTH_flags)
