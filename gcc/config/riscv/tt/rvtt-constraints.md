@@ -27,6 +27,11 @@
 (define_register_constraint "xs" "SFPU_STORE_REGS"
   "SFPU store Register")
 
+(define_constraint "xx"
+  "SFPU NoValue Register"
+  (and (match_code "reg")
+       (match_test "SFPU_LNV_REG_P(REGNO(op))")))
+
 ;; specific allocatable registers
 (define_register_constraint "x0" "SFPU_REGS_L0"
   "SFPU Register L0")

@@ -122,20 +122,6 @@
   UNSPECV_WH_SFPSHFT2_GE
 ])
 
-(define_insn "rvtt_wh_sfpgccmov_cc"
-  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xr,xr,m")
-        (match_operand:V64SF 1 "nonimmediate_operand" " xr,m,xr"))]
-  "TARGET_XTT_TENSIX_WH  &&
-   (   register_operand (operands[0], V64SFmode)
-    || register_operand (operands[1], V64SFmode))"
-  {
-    if (which_alternative == 0)
-      return "SFPMOV\t%0, %1, 2";
-
-    rvtt_mov_error (insn, which_alternative == 1);
-    gcc_unreachable ();
-  })
-
 (define_insn "rvtt_wh_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile:V64SF [(match_operand:V64SF 1 "register_operand"  "0")

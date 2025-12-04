@@ -9741,7 +9741,7 @@ riscv_register_move_cost (machine_mode mode,
 static unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
-  if (SFPU_REG_P (regno) && mode == V64SFmode)
+  if (mode == V64SFmode && (SFPU_REG_P (regno) || SFPU_LNV_REG_P (regno)))
     return 1;
 
   if (riscv_v_ext_vector_mode_p (mode))
@@ -9843,7 +9843,7 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
       if (regno_alignment != 1)
 	return ((regno % regno_alignment) == 0);
     }
-  else if (SFPU_REG_P (regno))
+  else if (SFPU_REG_P (regno) || SFPU_LNV_REG_P (regno))
     {
       if (mode != V64SFmode)
         return false;

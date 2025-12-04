@@ -89,7 +89,7 @@ along with GCC; see the file COPYING3.  If not see
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
+RVTT_RTL_ONLY (sfpmovwhole,      0x08, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode, SYNTH_flags)
 RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode, SYNTH_flags)
@@ -116,6 +116,9 @@ RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, schedule, nonimm_pos, nonimm_mask, nonimm_shft)
 RVTT_BUILTIN (synth_opcode,    RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, 0x00, -1,      0, 0)
+// flag 0x20 isn't really correct, this should be 0x48 but we currently delete
+// empty insns which shouldn't happen here.  might break?
+RVTT_BUILTIN (sfpnovalue,      RISCV_V64SF_FTYPE,                                                0x20, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpassignlreg,   RISCV_V64SF_FTYPE_USI,                                            0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_IPTR_V64SF_USI_USI_USI_USI,                       0x01, -1,  5, 0x00,  2,      0, 0)
 RVTT_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                                  0x01, -1,  2, 0x00, -1,      0, 0)
@@ -123,6 +126,7 @@ RVTT_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                     
 RVTT_BUILTIN (sfpxcondi,       RISCV_V64SF_FTYPE_USI,                                            0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                                  0x00, -1, -1, 0x00, -1,      0, 0)
 
+RVTT_BUILTIN (testlv,RISCV_V64SF_FTYPE_V64SF_V64SF, 0x00, -1, -1, 0, 01, 0, 0)
 RVTT_NO_TGT_BUILTIN (sfppreservelreg,RISCV_VOID_FTYPE_V64SF_USI,                                 0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, 0x00, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, 0x00, -1,      0, 0)

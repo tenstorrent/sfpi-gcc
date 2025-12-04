@@ -382,6 +382,7 @@ ASM_MISA_SPEC
 #define V_REG_LAST  127
 #define V_REG_NUM   (V_REG_LAST - V_REG_FIRST + 1)
 
+#define SFPU_LNV_REGNUM   79
 #define SFPU_REG_FIRST 80
 #define SFPU_REG_LAST  95
 #define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
@@ -407,6 +408,7 @@ ASM_MISA_SPEC
 #define FRM_REG_P(REGNO) ((REGNO) == FRM_REGNUM)
 #define SFPU_REG_P(REGNO)  \
   ((unsigned (REGNO) - SFPU_REG_FIRST) < SFPU_REG_NUM)
+#define SFPU_LNV_REG_P(REGNO) (REGNO == SFPU_LNV_REGNUM)
 
 /* True when REGNO is in SIBCALL_REGS set.  */
 #define SIBCALL_REG_P(REGNO)	\
@@ -1044,7 +1046,7 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",	\
   "fs8", "fs9", "fs10","fs11","ft8", "ft9", "ft10","ft11",	\
   "arg", "frame", "vl", "vtype", "vxrm", "frm", "vxsat", "N/A", \
-  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
+  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "LNoVal",	\
   "L0",  "L1",  "L2",  "L3",  "L4",  "L5",  "L6",  "L7",	\
   "L8",  "L9",  "L10", "L11", "L12", "L13", "L14", "L15",	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
