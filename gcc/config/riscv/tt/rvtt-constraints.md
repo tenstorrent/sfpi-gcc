@@ -23,6 +23,8 @@
 (define_register_constraint "xr" "SFPU_REGS"
   "Any of the SFPU Registers")
 
+(define_register_constraint "xw" "SFPU_RESULT_REGS"
+  "Any of the writable SFPU Registers")
 
 (define_register_constraint "xs" "SFPU_STORE_REGS"
   "SFPU store Register")
