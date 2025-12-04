@@ -43,8 +43,8 @@ void bar () {
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 0
-**	SFPENCC	3, 10
 **	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
 **	ret
 */
 }
@@ -84,8 +84,8 @@ void bar () {
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 1
-**	SFPENCC	3, 10
 **	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
 **	ret
 */
 }
@@ -125,8 +125,8 @@ void bar () {
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 2
-**	SFPENCC	3, 10
 **	SFPMOV	L3, L2, 2
+**	SFPENCC	3, 10
 **	ret
 */
 }

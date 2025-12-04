@@ -40,12 +40,12 @@ void two(int s) {
 **	slli	a0,a0,12
 **	and	a0,a0,a5
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a5, 2046820407	# 2:7a000037
+**	li	a5, 2046820359	# 2:7a000007
 **	add	a5,a0,a5
 **	addi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a5, 0\(a4\)	# 2:7a000037 L3 := L0
-**	li	a5, 2046821175	# 4:7a000337
+**	sw	a5, 0\(a4\)	# 2:7a000007 L0 := L0
+**	li	a5, 2046820407	# 4:7a000037
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 4:7a000337 L3 := L3
+**	sw	a0, 0\(a4\)	# 4:7a000037 L3 := L0
 **	ret
 */
