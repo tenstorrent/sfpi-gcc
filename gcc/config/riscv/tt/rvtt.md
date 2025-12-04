@@ -100,7 +100,7 @@
   SYNTH_lv
   ])
 (define_insn "rvtt_sfpsynth_insn_dst"
-  [(set (match_operand:V64SF 8 "register_operand" "=xr,xr,xr,xr") ; result
+  [(set (match_operand:V64SF 8 "register_operand" "=xw,xw,xw,xw") ; result
         (unspec_volatile:V64SF [(match_operand:SI    0 "memory_operand"   "m,m,m,m") ; instrn_buffer
                                 (match_operand:SI    1 "const_int_operand" "n,n,n,n") ; CODE_FOR_
                                 (match_operand:SI    2 "const_int_operand" "n,n,n,n") ; flags
@@ -249,7 +249,7 @@
   "SFPNOP")
 
 (define_insn "rvtt_sfpmovwhole"
-  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xr,xr,m")
+  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xw,xw,m")
         (match_operand:V64SF 1 "nonimmediate_operand" " xr,m,xr"))]
   "TARGET_XTT_TENSIX
    && (register_operand (operands[0], V64SFmode)
