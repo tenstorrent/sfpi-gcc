@@ -166,7 +166,8 @@
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_XTT_TENSIX"
-  "")
+  ""
+  [(set_attr "length" "0")])
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
@@ -181,7 +182,7 @@
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
   "TARGET_XTT_TENSIX"
-  "" ;"; preserve %0"
+  ""
   [(set_attr "length" "0")])
 
 ;; These builtins are converted by gimple passes, but the insns are still
@@ -246,6 +247,21 @@
   [(unspec_volatile [(const_int 0)] UNSPECV_SFPNOP)]
   "TARGET_XTT_TENSIX"
   "SFPNOP")
+
+(define_insn "rvtt_sfpmovwhole"
+  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xr,xr,m")
+        (match_operand:V64SF 1 "nonimmediate_operand" " xr,m,xr"))]
+  "TARGET_XTT_TENSIX
+   && (register_operand (operands[0], V64SFmode)
+       || register_operand (operands[0], V64SFmode))"
+  {
+    if (!which_alternative)
+      return "SFPMOV\t%0, %1, 2";
+
+    rvtt_mov_error (insn, which_alternative == 1);
+    gcc_unreachable ();
+  }
+  [(set_attr "length" "4")])
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")

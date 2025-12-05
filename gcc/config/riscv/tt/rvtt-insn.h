@@ -89,7 +89,7 @@ along with GCC; see the file COPYING3.  If not see
 // This can be ensured by using the RVTT_PAD_XX define
 
 // Common internal (rtl only) insns.  args are (id, flags, nonimm_pos, generic_pos)
-RVTT_RTL_ONLY (sfpgccmov_cc,      0x08, -1, -1)
+RVTT_RTL_ONLY (sfpmovwhole,      0x08, -1, -1)
 
 RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode, SYNTH_flags)
 RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode, SYNTH_flags)
@@ -103,6 +103,8 @@ RVTT_RTL_ONLY(sfppreservelreg4,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg5,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg6,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg7,   0x48, -1, -1)
+
+RVTT_RTL_ONLY(sfpassignlreg_int,  0x48, -1, -1)
 
 RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
@@ -155,7 +157,6 @@ RVTT_WH_RTL_ONLY(sfpmov_int,              0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexexp_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexman_int,            0x08, 0x00)
-RVTT_WH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
 RVTT_WH_RTL_ONLY(sfpcast_int,             0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
@@ -268,7 +269,6 @@ RVTT_BH_RTL_ONLY(sfpmov_int,              0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpexexp_int)
 RVTT_BH_PAD_RTL_ONLY(sfpexman_int)
-RVTT_BH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpcast_int)
 RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
