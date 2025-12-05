@@ -166,7 +166,8 @@
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_XTT_TENSIX"
-  "")
+  ""
+  [(set_attr "length" "0")])
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
@@ -181,7 +182,7 @@
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
   "TARGET_XTT_TENSIX"
-  "" ;"; preserve %0"
+  ""
   [(set_attr "length" "0")])
 
 ;; These builtins are converted by gimple passes, but the insns are still
