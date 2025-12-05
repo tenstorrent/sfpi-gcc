@@ -538,18 +538,21 @@ enum reg_class
   VM_REGS,			/* v0.t registers */
   VD_REGS,			/* vector registers except v0.t */
   V_REGS,			/* vector registers */
-  SFPU_REGS_L0,                 /* SFPU register L0 for Tenstorrent */
-  SFPU_REGS_L1,                 /* SFPU register L1 for Tenstorrent */
-  SFPU_REGS_L2,                 /* SFPU register L2 for Tenstorrent */
-  SFPU_REGS_L3,                 /* SFPU register L3 for Tenstorrent */
-  SFPU_REGS_L4,                 /* SFPU register L4 for Tenstorrent */
-  SFPU_REGS_L5,                 /* SFPU register L5 for Tenstorrent */
-  SFPU_REGS_L6,                 /* SFPU register L6 for Tenstorrent */
-  SFPU_REGS_L7,                 /* SFPU register L7 for Tenstorrent */
+  // Tenstorrent begin
+  SFPU_REGS_L0,                 /* SFPU register L0 */
+  SFPU_REGS_L1,                 /* SFPU register L1 */
+  SFPU_REGS_L2,                 /* SFPU register L2 */
+  SFPU_REGS_L3,                 /* SFPU register L3 */
+  SFPU_REGS_L4,                 /* SFPU register L4 */
+  SFPU_REGS_L5,                 /* SFPU register L5 */
+  SFPU_REGS_L6,                 /* SFPU register L6 */
+  SFPU_REGS_L7,                 /* SFPU register L7 */
+  SFPU_RESULT_REGS,             /* SFPU registers to which results can be written */
   // SFPSTORE cannot write L12..L15 directly when LOADMACRO loading is
   // in effect, and we have no clue as to whether that's the case.
-  SFPU_STORE_REGS,              /* SFPU registers for sfpstore Tenstorrent */
-  SFPU_REGS,                    /* SFPU registers for Tenstorrent */
+  SFPU_STORE_REGS,              /* SFPU registers for sfpstore */
+  SFPU_REGS,                    /* SFPU registers */
+  // Tenstorrent end
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -583,6 +586,7 @@ enum reg_class
   "SFPU_REGS_L5",							\
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
+  "SFPU_RESULT_REGS",							\
   "SFPU_STORE_REGS",							\
   "SFPU_REGS",								\
   "ALL_REGS"								\
@@ -620,6 +624,7 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00200000, 0x00000000 },	/* SFPU_REGS_L5 */ 	\
   { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
+  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_RESULT_REGS */ 	\
   { 0x00000000, 0x00000000, 0x0fff0000, 0x00000000 },	/* SFPU_STORE_REGS */ 	\
   { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
