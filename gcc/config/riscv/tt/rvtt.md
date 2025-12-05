@@ -178,7 +178,7 @@
   [(set (match_operand:V64SF 0 "register_operand" "=xr")
         (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_XTT_TENSIX"
-  "; assign %0"
+  "#APP\n; assign %0\n#NO_APP"
   [(set_attr "length" "0")])
 
 (define_expand "rvtt_sfppreservelreg"
