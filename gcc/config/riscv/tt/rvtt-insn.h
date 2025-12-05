@@ -104,6 +104,8 @@ RVTT_RTL_ONLY(sfppreservelreg5,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg6,   0x48, -1, -1)
 RVTT_RTL_ONLY(sfppreservelreg7,   0x48, -1, -1)
 
+RVTT_RTL_ONLY(sfpassignlreg_int,  0x48, -1, -1)
+
 RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // flags: see INSN_FLAGS in rvtt.h
@@ -116,7 +118,7 @@ RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, schedule, nonimm_pos, nonimm_mask, nonimm_shft)
 RVTT_BUILTIN (synth_opcode,    RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, 0x00, -1,      0, 0)
-// flag 0x20 isn't really correct, this should be 0x48 but we currently delete
+// flag 0x20 isn't really correct, this should be 0x40 but we currently delete
 // empty insns which shouldn't happen here.  might break?
 RVTT_BUILTIN (sfpnovalue,      RISCV_V64SF_FTYPE,                                                0x20, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpassignlreg,   RISCV_V64SF_FTYPE_USI,                                            0x40, -1, -1, 0x00, -1,      0, 0)
@@ -159,7 +161,6 @@ RVTT_WH_RTL_ONLY(sfpmov_int,              0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexexp_int,            0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpexman_int,            0x08, 0x00)
-RVTT_WH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
 RVTT_WH_RTL_ONLY(sfpcast_int,             0x08, 0x00)
 RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)
@@ -272,7 +273,6 @@ RVTT_BH_RTL_ONLY(sfpmov_int,              0x08, 0x00)
 RVTT_BH_RTL_ONLY(sfpdivp2_int,            0x08, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpexexp_int)
 RVTT_BH_PAD_RTL_ONLY(sfpexman_int)
-RVTT_BH_RTL_ONLY(sfpassignlreg_int,       0x48, 0x00)
 RVTT_BH_PAD_RTL_ONLY(sfpcast_int)
 RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08, 0x01)
 RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08, 0x00)

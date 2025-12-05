@@ -12,7 +12,7 @@ void foo () {
 }
 /*
 **_Z3foov:
-**	;no value L1
+**	;@@ no value L1
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
@@ -35,7 +35,7 @@ void bar (bool opt) {
 }
 /*
 **_Z3barb:
-**	;no value L0
+**	;@@ no value L0
 **	beq	a0,zero,.L4
 **	SFPLOAD	L1, 0, 1, 0
 **	SFPMUL	L1, L1, L1, L9, 0
