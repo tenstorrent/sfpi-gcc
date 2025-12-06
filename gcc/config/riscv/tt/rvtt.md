@@ -248,6 +248,21 @@
   "TARGET_XTT_TENSIX"
   "SFPNOP")
 
+(define_insn "rvtt_sfpmovwhole"
+  [(set (match_operand:V64SF 0 "nonimmediate_operand" "=xr,xr,m")
+        (match_operand:V64SF 1 "nonimmediate_operand" " xr,m,xr"))]
+  "TARGET_XTT_TENSIX
+   && (register_operand (operands[0], V64SFmode)
+       || register_operand (operands[0], V64SFmode))"
+  {
+    if (!which_alternative)
+      return "SFPMOV\t%0, %1, 2";
+
+    rvtt_mov_error (insn, which_alternative == 1);
+    gcc_unreachable ();
+  }
+  [(set_attr "length" "4")])
+
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "n")
                      (match_operand:SI    1 "const_int_operand" "n")
