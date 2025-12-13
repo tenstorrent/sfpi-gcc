@@ -212,7 +212,7 @@
                      (match_operand:SI    2 "const_int_operand" "N03U")
                      (match_operand:SI    3 "const_int_operand" "N13U")] UNSPECV_BH_SFPSTORE)]
   "TARGET_XTT_TENSIX_BH"
-  "SFPSTORE\t%x3, %0, %1, %2")
+  "SFPSTORE\t%3, %x0, %1, %2")
 
 
 (define_int_iterator blackhole_muliaddi_op [UNSPECV_BH_SFPMULI UNSPECV_BH_SFPADDI])
