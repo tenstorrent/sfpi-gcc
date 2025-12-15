@@ -44,6 +44,7 @@
 
   UNSPECV_SFPASSIGNLREG
   UNSPECV_SFPASSIGNLREG_INT
+  UNSPECV_SFPREADLREG
 
   UNSPECV_SFPPRESERVELREG
 
@@ -173,7 +174,15 @@
 (define_expand "rvtt_sfpreadlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPEC_SFPREADLREG))]
-  "TARGET_XTT_TENSIX")
+  "TARGET_XTT_TENSIX"
+  {
+    bool not_const = INTVAL (operands[1]) < 8;
+    rtx src_op = gen_rtx_fmt_Ei (not_const ? UNSPEC_VOLATILE : UNSPEC,
+                                 GET_MODE (operands[0]), gen_rtvec (1, operands[1]),
+                                 not_const ? unsigned (UNSPECV_SFPREADLREG) : unsigned (UNSPEC_SFPREADLREG));
+    emit_insn (gen_rtx_SET (operands[0], src_op));
+    DONE;
+  })
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand"  "")
@@ -187,6 +196,13 @@
 (define_insn "rvtt_sfppreservelreg<rvtt_preservelreg_value>"
   [(unspec_volatile [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
+  "TARGET_XTT_TENSIX"
+  ""
+  [(set_attr "length" "0")])
+
+(define_insn "rvtt_sfpreadlreg<rvtt_preservelreg_value>"
+  [(set (match_operand:V64SF 0 "register_operand" "=x<rvtt_preservelreg_value>")
+        (unspec_volatile:V64SF [(const_int rvtt_preservelreg)] UNSPECV_SFPREADLREG))]
   "TARGET_XTT_TENSIX"
   ""
   [(set_attr "length" "0")])
