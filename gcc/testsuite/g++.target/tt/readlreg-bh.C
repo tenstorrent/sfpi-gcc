@@ -96,3 +96,39 @@ void bar (int i) {
 **	ret
 */
 }
+
+namespace lv {
+void foo () {
+  auto x =  __builtin_rvtt_sfpreadlreg(9);
+  auto f = __builtin_rvtt_bh_sfpload_lv (nullptr, x, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+}
+/*
+**_ZN2lv3fooEv:
+**	SFPMOV	L0, L9, 2
+**	SFPLOAD	L0, 0, 0, 0
+**	SFPMUL	L0, L0, L9, L9, 0
+**	ret
+*/
+
+void bar (int i) {
+  auto x =  __builtin_rvtt_sfpreadlreg(9);
+  if (i) {
+    auto g = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+    __builtin_rvtt_bh_sfpmul_lv (x, g, g, 0);
+  }
+  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_bh_sfpmul_lv (x, f, x, 0);
+}
+/*
+**_ZN2lv3barEi:
+**	beq	a0,zero,.L[0-9]+
+**	SFPLOAD	L0, 0, 0, 0
+**	SFPMOV	L1, L9, 2
+**	SFPMUL	L1, L0, L0, L9, 0
+**	SFPLOAD	L0, 0, 0, 0
+**	SFPMOV	L1, L9, 2
+**	SFPMUL	L1, L0, L1, L9, 0
+**	ret
+*/
+}
