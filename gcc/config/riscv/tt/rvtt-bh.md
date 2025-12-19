@@ -91,7 +91,7 @@
 
 (define_insn "rvtt_bh_sfpassign_lv"
   [(set (match_operand:V64SF 0 "register_operand" "=xw")
-        (unspec_volatile:V64SF [(match_operand:V64SF 1 "register_operand"  "0")
+        (unspec_volatile:V64SF [(match_operand:V64SF 1 "reg_or_readlreg_operand"  "0")
                                 (match_operand:V64SF 2 "reg_or_readlreg_operand"  "xrxc")] UNSPECV_BH_SFPASSIGN))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMOV\t%0, %x2, 0"
