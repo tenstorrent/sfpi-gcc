@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "stor-layout.h"
 #include "stringpool.h"
+#include "attribs.h"
 #include "expr.h"
 #include "langhooks.h"
 #include "tm_p.h"
@@ -205,9 +206,6 @@ AVAIL (rocc, TARGET_XTT_ROCC)
   _RVTT_BUILTIN (INSN, #INSN, RISCV_BUILTIN_DIRECT_NO_TARGET,		\
  		FUNCTION_TYPE, AVAIL)
 
-static GTY(()) tree v64SF_type_node;
-static GTY(()) tree instrn_ptr_type_node;
-
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
 #define RISCV_ATYPE_UQI unsigned_intQI_type_node
@@ -219,8 +217,8 @@ static GTY(()) tree instrn_ptr_type_node;
 #define RISCV_ATYPE_SI intSI_type_node
 #define RISCV_ATYPE_VOID_PTR ptr_type_node
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
-#define RISCV_ATYPE_V64SF v64SF_type_node
-#define RISCV_ATYPE_IPTR instrn_ptr_type_node
+#define RISCV_ATYPE_XTT_VEC xtt_vec_type_node
+#define RISCV_ATYPE_XTT_IPTR xtt_iptr_type_node
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -285,6 +283,9 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 
+static tree GTY(()) xtt_iptr_type_node;
+static tree GTY(()) xtt_vec_type_node;
+
 /* Return the function type associated with function prototype TYPE.  */
 
 static tree
@@ -342,13 +343,24 @@ riscv_init_builtin_types (void)
   if (!maybe_get_identifier ("__bf16"))
     lang_hooks.types.register_builtin_type (riscv_bfloat16_type_node,
 					    "__bf16");
-  v64SF_type_node = build_vector_type_for_mode (float_type_node, V64SFmode);
-  // Ideally we'd use unsigned_intSI_type_mode here, but that's
-  // 'unsigned', which doesn't match uint32_t's underlying type
-  // (unsigned long), and that type's not easily accessible here.  So
-  // void it is.  Bleah!
-  instrn_ptr_type_node = build_pointer_type
-    (build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
+  if (TARGET_XTT_TENSIX)
+    {
+      // Ideally we'd use unsigned_intSI_type_mode here, but that's 'unsigned',
+      // which doesn't match the library's uint32_t's underlying type (unsigned
+      // long), and that type's not easily accessible here.  So void it is.
+      // Bleah!
+      xtt_iptr_type_node = build_pointer_type
+	(build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
+
+      tree vec = build_vector_type_for_mode (unsigned_type_node, XTT32SImode);
+      // We need to add an attribute, so that the lang FE's know this is a
+      // distinct type
+      tree attrib = get_identifier ("__xtt_vector");
+      vec = build_type_attribute_variant (vec, tree_cons (attrib, NULL_TREE,
+							  TYPE_ATTRIBUTES (vec)));
+      xtt_vec_type_node = vec;
+      lang_hooks.types.register_builtin_type (vec, "__xtt_vector");
+    }
 }
 
 /* Implement TARGET_INIT_BUILTINS.  */
