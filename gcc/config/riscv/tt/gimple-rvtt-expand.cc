@@ -199,8 +199,7 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT),
 				       build_int_cst (unsigned_type_node, val),
 				       integer_zero_node, integer_zero_node);
-
-  tree tmp = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
+  tree tmp = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl)), new_stmt);
   gimple_call_set_lhs (new_stmt, tmp);
 
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
@@ -217,7 +216,7 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
 				       build_int_cst (unsigned_type_node, SFPLOADI_MOD0_SHORT),
 				       integer_zero_node, integer_zero_node, integer_zero_node);
   if (lhs == NULL_TREE)
-    lhs = make_ssa_name (build_vector_type(float_type_node, 64), new_stmt);
+    lhs = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl)), new_stmt);
   gimple_call_set_lhs (new_stmt, lhs);
 
   finish_new_insn(gsip, emit_before, new_stmt, stmt);

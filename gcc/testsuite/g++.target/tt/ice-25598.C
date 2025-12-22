@@ -18920,7 +18920,7 @@ inline ckernel_unpack_template ckernel_unpack_template::loopx2instr(uint instr0,
 
 namespace sfpi {
 
-typedef float __rvtt_vec_t __attribute__((vector_size(64*4)));
+typedef __xtt_vector __rvtt_vec_t;
 constexpr unsigned int SFP_LREG_COUNT = 8;
 
 

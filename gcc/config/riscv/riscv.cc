@@ -712,9 +712,13 @@ static const attribute_spec riscv_gnu_attributes[] =
     __attribute__((norelax)). */
   {"norelax", 0, 0, true, false, false, false, NULL, NULL},
 
+  // Tenstorrent: pointers that point into l1 memory or a hw mapped register.
   { "rvtt_l1_ptr", 0, 0, false, true, false, true, NULL, NULL },
   
   { "rvtt_reg_ptr", 0, 0, false, true, false, true, NULL, NULL },
+
+  // Annotated internally
+  { "__xtt_vector", 0, 0, false, true, false, true, NULL, NULL },
 };
 
 static const scoped_attribute_specs riscv_gnu_attribute_table  =
@@ -4860,6 +4864,10 @@ riscv_comp_type_attributes (const_tree type1, const_tree type2)
 
   if (bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type1)))
       != bool (lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type2))))
+    return 0;
+
+  if (bool (lookup_attribute ("__xtt_vector", TYPE_ATTRIBUTES (type1)))
+      != bool (lookup_attribute ("__xtt_vector", TYPE_ATTRIBUTES (type2))))
     return 0;
 
   return 1;
@@ -9741,7 +9749,7 @@ riscv_register_move_cost (machine_mode mode,
 static unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
-  if (SFPU_REG_P (regno) && mode == V64SFmode)
+  if (SFPU_REG_P (regno) && mode == XTT32SImode)
     return 1;
 
   if (riscv_v_ext_vector_mode_p (mode))
@@ -9845,7 +9853,7 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
     }
   else if (SFPU_REG_P (regno))
     {
-      if (mode != V64SFmode)
+      if (mode != XTT32SImode)
         return false;
     }
   else if (VTYPE_REG_P (regno) || VL_REG_P (regno) || VXRM_REG_P (regno)
@@ -11844,7 +11852,7 @@ riscv_reinit (void)
 static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
-  if (TARGET_XTT_TENSIX && mode == V64SFmode)
+  if (TARGET_XTT_TENSIX && mode == XTT32SImode)
     return true;
 
   if (TARGET_VECTOR)

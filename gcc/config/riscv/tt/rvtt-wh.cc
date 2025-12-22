@@ -199,7 +199,7 @@ rvtt_wh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
     {
-      rtx tmp = gen_reg_rtx (V64SFmode);
+      rtx tmp = gen_reg_rtx (XTT32SImode);
       rvtt_wh_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GTE), true);
       rvtt_wh_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx, GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
       if (cmp == SFPXCMP_MOD1_CC_LTE)
@@ -276,7 +276,7 @@ rvtt_wh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
       else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
 	{
 	  rtx insn = REG_P (lv) ? gen_rvtt_wh_sfpmov_lv (dst, lv, src, GEN_INT (SFPMOV_MOD1_NONE))
-	    : gen_movv64sf (dst, src);
+	    : gen_movrvxtt32si (dst, src);
 	  emit_insn (insn);
 	}
     }
@@ -332,7 +332,7 @@ void rvtt_wh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
 void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
-  rtx ref_val = gen_reg_rtx(V64SFmode);
+  rtx ref_val = gen_reg_rtx(XTT32SImode);
   int int_mod = INTVAL(mod);
 
   gcc_assert (CONST_INT_P (f));
@@ -359,8 +359,8 @@ void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   rtx setcc_mod = GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp]);
   if (need_sub) {
-    rtx tmp = gen_reg_rtx(V64SFmode);
-    rtx neg_one = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
+    rtx tmp = gen_reg_rtx(XTT32SImode);
+    rtx neg_one = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
 
     emit_insn (gen_rvtt_wh_sfpmad (tmp, ref_val, neg_one, v, GEN_INT(0)));
     v = tmp;
@@ -380,8 +380,8 @@ void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
 // Compare two vectors by subtracting v2 from v1 and doing a setcc
 void rvtt_wh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 {
-  rtx tmp = gen_reg_rtx(V64SFmode);
-  rtx neg1 = gen_rtx_REG (V64SFmode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
+  rtx tmp = gen_reg_rtx(XTT32SImode);
+  rtx neg1 = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + CREG_IDX_NEG_1);
 
   emit_insn (gen_rvtt_wh_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
 
@@ -455,7 +455,7 @@ void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
     // Optimization potential to not do this if the previous insn was a shftr
 
     rtx live_const = rvtt_vec0_rtx;
-    rtx lreg9 = gen_reg_rtx(V64SFmode);
+    rtx lreg9 = gen_reg_rtx(XTT32SImode);
     SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
     emit_insn (gen_rvtt_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
   }
