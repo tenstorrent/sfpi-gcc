@@ -5,7 +5,7 @@
 // { dg-do compile }
 // { dg-additional-options "-mcpu=tt-wh-tensix -mabi=ilp32 -O3" }
 
-using vec_t = float __attribute__((vector_size(64 * sizeof(float))));
+using vec_t = __xtt_vector;
 
 inline void calculate_power_iterative(unsigned exponent) {
 #pragma GCC unroll 8

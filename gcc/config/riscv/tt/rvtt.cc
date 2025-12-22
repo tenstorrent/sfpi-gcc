@@ -282,12 +282,7 @@ rvtt_init_builtins()
   // Make synth_opcode a const fn, it's the only one.
   TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
 
-  // The real value cache is not available yet. :(
-  // Perhaps there's a better place for this?
-  rtx sf0 = rtx_alloc (CONST_DOUBLE);
-  PUT_MODE (sf0, SFmode);
-  real_from_integer (&sf0->u.rv, SFmode, 0, SIGNED);
-  rvtt_vec0_rtx = gen_const_vec_duplicate (V64SFmode, sf0);
+  rvtt_vec0_rtx = gen_const_vec_duplicate (XTT32SImode, GEN_INT(0));
 }
 
 const char *

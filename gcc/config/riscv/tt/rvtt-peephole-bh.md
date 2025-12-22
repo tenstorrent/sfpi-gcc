@@ -21,11 +21,11 @@
 
 ;; LZ
 (define_peephole2
-  [(set (match_operand:V64SF 0 "register_operand")
-        (unspec_volatile:V64SF [(match_operand:V64SF 1 "reg_or_vec0_operand")
-                                (match_operand:V64SF 2 "register_operand")
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [(match_operand:XTT32SI 1 "reg_or_vec0_operand")
+                                (match_operand:XTT32SI 2 "register_operand")
                                 (match_operand:SI    3 "const_0_operand")] UNSPECV_BH_SFPLZ))
-   (unspec_volatile [(match_dup:V64SF     2)
+   (unspec_volatile [(match_dup:XTT32SI     2)
                      (match_operand:SI    4 "const_int_operand")] UNSPECV_BH_SFPSETCC_V)]
   "TARGET_XTT_TENSIX_BH && (INTVAL (operands[4]) == 2 || INTVAL (operands[4]) == 6)"
   [(const_int 0)]
@@ -36,12 +36,12 @@
 })
 
 (define_peephole2
-  [(set (match_operand:V64SF 0 "register_operand")
-        (unspec_volatile:V64SF [(match_operand:V64SF 1 "reg_or_vec0_operand")
-                                (match_operand:V64SF 2 "register_operand")
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [(match_operand:XTT32SI 1 "reg_or_vec0_operand")
+                                (match_operand:XTT32SI 2 "register_operand")
                                 (match_operand:SI    3 "const_0_operand")] UNSPECV_BH_SFPLZ))
    (unspec_volatile [(match_operand:SI    4 "const_int_operand")] UNSPECV_BH_SFPPUSHC)
-   (unspec_volatile [(match_dup:V64SF     2)
+   (unspec_volatile [(match_dup:XTT32SI     2)
                      (match_operand:SI    5 "const_int_operand")] UNSPECV_BH_SFPSETCC_V)]
 
   "TARGET_XTT_TENSIX_BH && (INTVAL (operands[5]) == 2 || INTVAL (operands[5]) == 6)"
