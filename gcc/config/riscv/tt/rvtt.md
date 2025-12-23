@@ -44,8 +44,6 @@
 
   UNSPECV_SFPVARLREG
 
-  UNSPECV_SFPPRESERVELREG
-
   UNSPECV_SFPNOP
 
   UNSPECV_TTINCRWC
@@ -167,9 +165,9 @@
       }
   })
 
-(define_expand "rvtt_sfppreservelreg"
+(define_expand "rvtt_sfpwritelreg"
   [(unspec_volatile:V64SF [(match_operand:V64SF 0 "register_operand"  "")
-                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPPRESERVELREG)]
+                     (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPVARLREG)]
   "TARGET_XTT_TENSIX")
 
 (define_int_iterator rvtt_lregs [0 1 2 3 4 5 6 7])
@@ -177,9 +175,9 @@
 (define_int_attr rvtt_lregs_number
   [(0 "0") (1 "1") (2 "2") (3 "3") (4 "4") (5 "5") (6 "6") (7 "7")])
 
-(define_insn "rvtt_sfppreservelreg<rvtt_lregs_number>"
+(define_insn "rvtt_sfpwritelreg<rvtt_lregs_number>"
   [(unspec_volatile:V64SF [(match_operand:V64SF 0 "register_operand" "x<rvtt_lregs_number>")
-                     (const_int rvtt_lregs)] UNSPECV_SFPPRESERVELREG)]
+                     (const_int rvtt_lregs)] UNSPECV_SFPVARLREG)]
   "TARGET_XTT_TENSIX"
   ""
   [(set_attr "length" "0")])
