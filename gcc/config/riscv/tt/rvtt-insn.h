@@ -113,8 +113,6 @@ RVTT_RTL_ONLY(sfpreadlreg5,       0x48, -1, -1)
 RVTT_RTL_ONLY(sfpreadlreg6,       0x48, -1, -1)
 RVTT_RTL_ONLY(sfpreadlreg7,       0x48, -1, -1)
 
-RVTT_RTL_ONLY(sfpassignlreg_int,  0x48, -1, -1)
-
 RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // flags: see INSN_FLAGS in rvtt.h
@@ -127,7 +125,6 @@ RVTT_RTL_ONLY(ttreplay_int,       0x00, -1, -1)
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, schedule, nonimm_pos, nonimm_mask, nonimm_shft)
 RVTT_BUILTIN (synth_opcode,    RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, 0x00, -1,      0, 0)
-RVTT_BUILTIN (sfpassignlreg,   RISCV_V64SF_FTYPE_USI,                                            0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpreadlreg,     RISCV_V64SF_FTYPE_USI,                                            0x40, -1, -1, 0x00, -1,      0, 0)
 RVTT_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_IPTR_V64SF_USI_USI_USI_USI,                       0x01, -1,  5, 0x00,  2,      0, 0)
 RVTT_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_V64SF_V64SF_USI,                                  0x01, -1,  2, 0x00, -1,      0, 0)

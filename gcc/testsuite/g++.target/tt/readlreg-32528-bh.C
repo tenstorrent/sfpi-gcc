@@ -46,8 +46,8 @@ void baz () {
 **	ret
 */
 void sub5() {
-  auto a = __builtin_rvtt_sfpassignlreg(0);
-  auto b = __builtin_rvtt_sfpassignlreg(1);
+  auto a = __builtin_rvtt_sfpreadlreg(0);
+  auto b = __builtin_rvtt_sfpreadlreg(1);
 
   auto neg1 = __builtin_rvtt_sfpreadlreg (11);
   b = __builtin_rvtt_bh_sfpassign_lv (b, __builtin_rvtt_bh_sfpmad (neg1, a, b, 0));

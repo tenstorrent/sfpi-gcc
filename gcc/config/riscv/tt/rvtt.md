@@ -42,8 +42,6 @@
   UNSPECV_SFPSYNTH_INSN
   UNSPECV_SFPSYNTH_STORE_INSN
 
-  UNSPECV_SFPASSIGNLREG
-  UNSPECV_SFPASSIGNLREG_INT
   UNSPECV_SFPVARLREG
 
   UNSPECV_SFPPRESERVELREG
@@ -155,22 +153,6 @@
   return rvtt_synth_insn_pattern (operands, 8);
 })
 
-(define_expand "rvtt_sfpassignlreg"
-  [(set (match_operand:V64SF 0 "register_operand" "")
-        (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPASSIGNLREG))]
-  "TARGET_XTT_TENSIX"
-{
-  rvtt_emit_sfpassignlreg(operands[0], operands[1]);
-  DONE;
-})
-
-(define_insn "rvtt_sfpassignlreg_int"
-  [(set (match_operand:V64SF 0 "register_operand" "=xr")
-        (unspec_volatile:V64SF [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
-  "TARGET_XTT_TENSIX"
-  ""
-  [(set_attr "length" "0")])
-
 (define_expand "rvtt_sfpreadlreg"
   [(set (match_operand:V64SF 0 "register_operand" "")
         (unspec_volatile:V64SF [(match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_SFPVARLREG))]
@@ -190,20 +172,21 @@
                      (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_SFPPRESERVELREG)]
   "TARGET_XTT_TENSIX")
 
-(define_int_iterator rvtt_preservelreg [0 1 2 3 4 5 6 7])
+(define_int_iterator rvtt_lregs [0 1 2 3 4 5 6 7])
 ;; We have to map the number to a string.
-(define_int_attr rvtt_preservelreg_value
+(define_int_attr rvtt_lregs_number
   [(0 "0") (1 "1") (2 "2") (3 "3") (4 "4") (5 "5") (6 "6") (7 "7")])
-(define_insn "rvtt_sfppreservelreg<rvtt_preservelreg_value>"
-  [(unspec_volatile:V64SF [(match_operand:V64SF 0 "register_operand" "x<rvtt_preservelreg_value>")
-                     (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
+
+(define_insn "rvtt_sfppreservelreg<rvtt_lregs_number>"
+  [(unspec_volatile:V64SF [(match_operand:V64SF 0 "register_operand" "x<rvtt_lregs_number>")
+                     (const_int rvtt_lregs)] UNSPECV_SFPPRESERVELREG)]
   "TARGET_XTT_TENSIX"
   ""
   [(set_attr "length" "0")])
 
-(define_insn "rvtt_sfpreadlreg<rvtt_preservelreg_value>"
-  [(set (match_operand:V64SF 0 "register_operand" "=x<rvtt_preservelreg_value>")
-        (unspec_volatile:V64SF [(const_int rvtt_preservelreg)] UNSPECV_SFPVARLREG))]
+(define_insn "rvtt_sfpreadlreg<rvtt_lregs_number>"
+  [(set (match_operand:V64SF 0 "register_operand" "=x<rvtt_lregs_number>")
+        (unspec_volatile:V64SF [(const_int rvtt_lregs)] UNSPECV_SFPVARLREG))]
   "TARGET_XTT_TENSIX"
   ""
   [(set_attr "length" "0")])

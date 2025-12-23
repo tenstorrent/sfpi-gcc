@@ -142,7 +142,7 @@ constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
 constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
 // Next 2 are exclusive
 constexpr unsigned int INSN_FLAGS_RISCV              = 0x20;  // true a regular riscv insn
-constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, assignlreg)
+constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, readlreg)
 
 struct GTY(()) rvtt_insn_data {
   enum insn_id : unsigned;
