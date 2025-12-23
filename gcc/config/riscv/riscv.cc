@@ -9919,7 +9919,8 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
 
-  if (reg_class_subset_p (SFPU_RESULT_REGS, rclass))
+  // We need ALL_REGS here otherwise tests fail.  Weird.
+  if (reg_class_subset_p (SFPU_ALL_REGS, rclass))
     return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;
