@@ -248,12 +248,12 @@
   "TARGET_XTT_TENSIX"
   "SFPNOP")
 
-(define_expand "movrvxtt32si"
+(define_expand "movxtt32si"
   [(set (match_operand:XTT32SI 0 "")
 	(match_operand:XTT32SI 1 ""))]
   "TARGET_XTT_TENSIX"
 {
-  if (riscv_legitimize_move (XTT32SImode, operands[0], operands[1]))
+  if (riscv_legitimize_move (GET_MODE (operands[0]), operands[0], operands[1]))
     DONE;
 })
 

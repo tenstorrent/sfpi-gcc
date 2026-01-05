@@ -275,9 +275,10 @@ rvtt_bh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
 	}
       else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
 	{
-	  rtx insn = REG_P (lv) ? gen_rvtt_bh_sfpmov_lv (dst, lv, src, GEN_INT (SFPMOV_MOD1_NONE))
-	    : gen_movrvxtt32si (dst, src);
-	  emit_insn (insn);
+	  if (REG_P (lv))
+	    emit_insn (gen_rvtt_bh_sfpmov_lv (dst, lv, src, GEN_INT (SFPMOV_MOD1_NONE)));
+	  else
+	    emit_move_insn (dst, src);
 	}
     }
   else

@@ -284,7 +284,7 @@ tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 
 static tree GTY(()) xtt_iptr_type_node;
-static tree GTY(()) xtt_vec_type_node = NULL_TREE;
+static tree GTY(()) xtt_vec_type_node;
 
 /* Return the function type associated with function prototype TYPE.  */
 
