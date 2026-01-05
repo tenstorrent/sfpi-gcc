@@ -20,7 +20,7 @@
 
 ;; Register constraints
 
-(define_register_constraint "xr" "SFPU_REGS"
+(define_register_constraint "xr" "SFPU_RESULT_REGS"
   "Any of the SFPU registers")
 
 ;; specific allocatable registers

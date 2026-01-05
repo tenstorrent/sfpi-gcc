@@ -53,7 +53,7 @@ void sub5() {
   b = __builtin_rvtt_wh_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
   b = __builtin_rvtt_wh_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
 
-  __builtin_rvtt_sfpwritelreg (b, 3);
+  __builtin_rvtt_sfppreservelreg (b, 3);
 }
 /*
 **_ZN3cst4sub5Ev:

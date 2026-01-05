@@ -546,10 +546,11 @@ enum reg_class
   SFPU_REGS_L5,                 /* SFPU register L5 */
   SFPU_REGS_L6,                 /* SFPU register L6 */
   SFPU_REGS_L7,                 /* SFPU register L7 */
-  SFPU_REGS,                    /* SFPU registers */
-  // We need this group, even though it is only used in riscv_class_max_nregs.
-  // Otherwise tests fail for unknown reasons (register patterns change).  I
-  // suspect the replay optimization.
+  SFPU_RESULT_REGS,             /* SFPU registers to which results can be
+				   written */
+  // We need this group, even though it is never used.  Otherwise tests fail
+  // for unknown reasons (register patterns change).  I suspect the replay
+  // optimization.
   SFPU_ALL_REGS,                /* SFPU ALL registers */
   // Tenstorrent end
   ALL_REGS,			/* all registers */
@@ -585,7 +586,7 @@ enum reg_class
   "SFPU_REGS_L5",							\
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
-  "SFPU_REGS",								\
+  "SFPU_RESULT_REGS",							\
   "SFPU_ALL_REGS",							\
   "ALL_REGS"								\
 }
@@ -622,7 +623,7 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00200000, 0x00000000 },	/* SFPU_REGS_L5 */ 	\
   { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
-  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_REGS */ 	\
+  { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_RESULT_REGS */ 	\
   { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_ALL_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
 }
@@ -1048,7 +1049,7 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "arg", "frame", "vl", "vtype", "vxrm", "frm", "vxsat", "N/A", \
   "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
   "L0",  "L1",  "L2",  "L3",  "L4",  "L5",  "L6",  "L7",	\
-  "*L8*","*L9*","*L10*","*L11","*L12*","*L13*","*L14*","*L15*",	\
+  "L8",  "L9",  "L10", "L11", "L12", "L13", "L14", "L15",	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",	\

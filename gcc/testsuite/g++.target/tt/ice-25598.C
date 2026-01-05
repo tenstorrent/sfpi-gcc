@@ -19875,7 +19875,7 @@ __attribute__((always_inline)) inline void __vBase::operator=(__vLReg lr)
 
 __attribute__((always_inline)) inline __rvtt_vec_t __vLReg::operator=(__vBase& v) const
 {
-    __builtin_rvtt_sfpwritelreg(v.get(), reg);
+    __builtin_rvtt_sfppreservelreg(v.get(), reg);
     return v.get();
 }
 
