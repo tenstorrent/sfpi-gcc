@@ -368,8 +368,8 @@ unsigned riscv_bytes_per_vector_chunk;
 
   SFPU_REGS_L0, SFPU_REGS_L1, SFPU_REGS_L2, SFPU_REGS_L3,
   SFPU_REGS_L4, SFPU_REGS_L5, SFPU_REGS_L6, SFPU_REGS_L7,
-  SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS,
-  SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS, SFPU_ALL_REGS,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
+  SFPU_REGS, SFPU_REGS, SFPU_REGS, SFPU_REGS,
 
   VM_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
@@ -9919,7 +9919,7 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
 
-  if (reg_class_subset_p (SFPU_RESULT_REGS, rclass))
+  if (reg_class_subset_p (SFPU_REGS, rclass))
     return riscv_hard_regno_nregs (SFPU_REG_FIRST, mode);
 
   return 0;

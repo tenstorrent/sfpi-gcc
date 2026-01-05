@@ -413,6 +413,7 @@ ASM_MISA_SPEC
   TEST_HARD_REG_BIT (reg_class_contents[SIBCALL_REGS], REGNO)
 
 #define FP_REG_RTX_P(X) (REG_P (X) && FP_REG_P (REGNO (X)))
+#define SFPU_REG_RTX_P(X) (REG_P (X) && SFPU_REG_P (REGNO (X)))
 
 /* Use s0 as the frame pointer if it is so requested.  */
 #define HARD_FRAME_POINTER_REGNUM 8
@@ -546,12 +547,8 @@ enum reg_class
   SFPU_REGS_L5,                 /* SFPU register L5 */
   SFPU_REGS_L6,                 /* SFPU register L6 */
   SFPU_REGS_L7,                 /* SFPU register L7 */
-  SFPU_RESULT_REGS,             /* SFPU registers to which results can be
-				   written */
-  // We need this group, even though it is never used.  Otherwise tests fail
-  // for unknown reasons (register patterns change).  I suspect the replay
-  // optimization.
-  SFPU_ALL_REGS,                /* SFPU ALL registers */
+  SFPU_RESULT_REGS,             /* SFPU registers to which results can be written */
+  SFPU_REGS,                    /* SFPU registers */
   // Tenstorrent end
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
@@ -587,7 +584,7 @@ enum reg_class
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
   "SFPU_RESULT_REGS",							\
-  "SFPU_ALL_REGS",							\
+  "SFPU_REGS",								\
   "ALL_REGS"								\
 }
 
@@ -624,7 +621,7 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
   { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_RESULT_REGS */ 	\
-  { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_ALL_REGS */ 	\
+  { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_REGS */ 	\
   { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
 }
 
