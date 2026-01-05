@@ -4423,6 +4423,9 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
   rtx x = PATTERN (insn);
   int cost = pattern_cost (x, speed);
 
+  if (!cost && GET_CODE (x) == UNSPEC_VOLATILE)
+    cost = set_src_cost (x, GET_MODE (x), speed);
+
   if (JUMP_P (insn))
     {
       if (GET_CODE (x) == PARALLEL)

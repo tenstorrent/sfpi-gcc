@@ -181,7 +181,7 @@
   SFPLOADI\t%0, %u3, %2")
 
 (define_expand "rvtt_bh_sfpstore"
-  [(unspec_volatile [(match_operand:SI    0 "address_operand"   "")
+  [(unspec_volatile:XTT32SI [(match_operand:SI    0 "address_operand"   "")
                      (match_operand:XTT32SI 1 "register_operand"  "")
                      (match_operand:SI    2 "const_int_operand" "")
                      (match_operand:SI    3 "const_int_operand" "")
@@ -207,7 +207,7 @@
 
 ;; stores cannot write from L12..L15 due to load macro side loading possibility
 (define_insn "rvtt_bh_sfpstore_int"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"  "xs")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"  "xs")
                      (match_operand:SI    1 "const_int_operand" "N04U")
                      (match_operand:SI    2 "const_int_operand" "N03U")
                      (match_operand:SI    3 "const_int_operand" "N13U")] UNSPECV_BH_SFPSTORE)]
@@ -805,14 +805,14 @@
 )
 
 (define_insn "rvtt_bh_sfpsetcc_i"
-  [(unspec_volatile [(match_operand:SI    0 "const_int_operand" "N01U")
+  [(unspec_volatile:XTT32SI [(match_operand:SI    0 "const_int_operand" "N01U")
                      (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_BH_SFPSETCC_I)]
   "TARGET_XTT_TENSIX_BH"
   "SFPSETCC\tL0, %0, %1"
 )
 
 (define_insn "rvtt_bh_sfpsetcc_v"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"  "xr")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"  "xr")
                      (match_operand:SI    1 "const_int_operand" "N04U")] UNSPECV_BH_SFPSETCC_V)]
   "TARGET_XTT_TENSIX_BH"
   "SFPSETCC\t%0, 0, %1"
@@ -844,25 +844,25 @@
 })
 
 (define_insn "rvtt_bh_sfpencc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N02U")
+  [(unspec_volatile:XTT32SI [(match_operand:SI 0 "const_int_operand" "N02U")
                      (match_operand:SI 1 "const_int_operand" "N04U")] UNSPECV_BH_SFPENCC)]
   "TARGET_XTT_TENSIX_BH"
   "SFPENCC\t%0, %1"
 )
 
 (define_insn "rvtt_bh_sfpcompc"
-  [(unspec_volatile [(const_int 0)] UNSPECV_BH_SFPCOMPC)]
+  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_BH_SFPCOMPC)]
   "TARGET_XTT_TENSIX_BH"
   "SFPCOMPC"
 )
 
 (define_insn "rvtt_bh_sfppushc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_BH_SFPPUSHC)]
+  [(unspec_volatile:XTT32SI [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_BH_SFPPUSHC)]
   "TARGET_XTT_TENSIX_BH"
   "SFPPUSHC\t%0")
 
 (define_insn "rvtt_bh_sfppopc"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_BH_SFPPOPC)]
+  [(unspec_volatile:XTT32SI [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_BH_SFPPOPC)]
   "TARGET_XTT_TENSIX_BH"
   "SFPPOPC\t%0"
 )
@@ -911,20 +911,20 @@
   "SFPLUTFP32\t%0, %8")
 
 (define_insn "rvtt_bh_sfpconfig_v"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"   "x0")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"   "x0")
                      (match_operand:SI    1 "const_int_operand"  "N04U")] UNSPECV_BH_SFPCONFIG_V)]
   "TARGET_XTT_TENSIX_BH"
   "SFPCONFIG\t%1, 0, 0")
 
 (define_insn "rvtt_bh_sfpswap"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"   "+xr")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"   "+xr")
                      (match_operand:XTT32SI 1 "register_operand"   "+xr")
                      (match_operand:SI    2 "const_int_operand"  "N04U")] UNSPECV_BH_SFPSWAP)]
   "TARGET_XTT_TENSIX_BH"
   "SFPSWAP\t%0, %1, %2")
 
 (define_insn "rvtt_bh_sfptransp"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"   "+x0")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"   "+x0")
                      (match_operand:XTT32SI 1 "register_operand"   "+x1")
                      (match_operand:XTT32SI 2 "register_operand"   "+x2")
                      (match_operand:XTT32SI 3 "register_operand"   "+x3")] UNSPECV_BH_SFPTRANSP)]
@@ -932,7 +932,7 @@
   "SFPTRANSP")
 
 (define_insn "rvtt_bh_sfpshft2_g"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"   "+x0")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"   "+x0")
                      (match_operand:XTT32SI 1 "register_operand"   "+x1")
                      (match_operand:XTT32SI 2 "register_operand"   "+x2")
                      (match_operand:XTT32SI 3 "register_operand"   "+x3")
@@ -941,7 +941,7 @@
   "SFPSHFT2\t0, L0, L0, %0, %1, %2, %3, %4")
 
 (define_insn "rvtt_bh_sfpshft2_ge"
-  [(unspec_volatile [(match_operand:XTT32SI 0 "register_operand"   "xr")
+  [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"   "xr")
                      (match_operand:XTT32SI 1 "register_operand"   "+x0")
                      (match_operand:XTT32SI 2 "register_operand"   "+x1")
                      (match_operand:XTT32SI 3 "register_operand"   "+x2")
