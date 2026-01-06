@@ -26,14 +26,14 @@
 (define_insn_reservation "rvtt_l1_load_ptr" 12
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload")
-       (match_test "rvtt_l1_load_p(PATTERN(insn))"))
+       (match_test "rvtt_l1_load_p (PATTERN (insn))"))
   "alu")
 
 ;; Theory says 4, empirically determined that 4 works well
 (define_insn_reservation "rvtt_reg_load_ptr" 4
   (and (eq_attr "tune" "rvtt_b1")
        (eq_attr "type" "load,fpload")
-       (match_test "rvtt_reg_load_p(PATTERN(insn))"))
+       (match_test "rvtt_reg_load_p (PATTERN (insn))"))
   "alu")
 
 (define_insn_reservation "rvtt_alu" 1
