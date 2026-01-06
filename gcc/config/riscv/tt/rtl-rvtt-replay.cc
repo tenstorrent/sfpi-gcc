@@ -64,13 +64,13 @@ using namespace std;
 typedef unsigned long long int hash_type;
 
 struct insn_info {
-  const short code;                 // insn code
+  rtx insn;                 // insn code
   const unsigned short startable;   // set by strategy, can this insn can start a sequence?
   const hash_type hash;             // cache the hash
   bool halt;                        // this insn is followed by a non-sfpu insn
 
-  insn_info() : code(0), startable(0), hash(0), halt(false) {}
-  insn_info(short c, unsigned short s, hash_type h) : code(c), startable(s), hash(h), halt(false) {}
+  insn_info() : insn(NULL_RTX), startable(0), hash(0), halt(false) {}
+  insn_info(rtx insn, unsigned short s, hash_type h) : insn(insn), startable(s), hash(h), halt(false) {}
 };
 
 struct seq_entry {
@@ -286,8 +286,7 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
 	}
 
       hash_type insn_hash = compute_insn_hash(insnd, insn);
-      insn_info insni(INSN_CODE(insn), startable, insn_hash);
-      insn_list.push_back(insni);
+      insn_list.push_back(insn_info (insn, startable, insn_hash));
       insn_count++;
     }
   gcc_assert (insn_count < 65536);
@@ -347,7 +346,10 @@ generate_sequences (int count, int strategy)
     {
       hash_type insn_hash = insn_list[i].hash;
       if (dump_file)
-	fprintf (dump_file, "   #%3d: processing insn (h%llx)\t%s\n", i, insn_hash, insn_data[insn_list[i].code].name);
+	{
+	  fprintf (dump_file, "   #%3d: processing insn (h%llx)\n", i, insn_hash);
+	  print_rtl (dump_file, insn_list[i].insn);
+	}
 
       vector<seq_entry> dummy;
       sequences.push_back (dummy);
