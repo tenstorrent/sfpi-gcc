@@ -81,7 +81,8 @@
   gcc_assert (pos < sizeof (pattern));
 
   return pattern;
-})
+}
+  [(set_attr "type" "const")])
 
 ;; Name the operands, there are too many(!), sadly we can't use them
 ;; everywhere (so there are asserts as needed).
@@ -117,7 +118,8 @@
 {
   gcc_assert (SYNTH_lv + 1 == 11);
   return rvtt_synth_insn_pattern (operands, 11);
-})
+}
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpsynth_insn"
   [(unspec_volatile:XTT32SI [(match_operand:SI    0 "memory_operand"    "m,m") ; instrn_buffer
@@ -134,7 +136,8 @@
 {
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
-})
+}
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpsynth_store_insn"
   [(unspec_volatile:XTT32SI [(match_operand:SI    0 "memory_operand"    "m") ; instrn_buffer
@@ -151,7 +154,8 @@
 {
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
-})
+}
+  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpassignlreg"
   [(set (match_operand:XTT32SI 0 "register_operand" "")
@@ -167,7 +171,8 @@
         (unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_SFPASSIGNLREG_INT))]
   "TARGET_XTT_TENSIX"
   ""
-  [(set_attr "length" "0")])
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
 
 (define_expand "rvtt_sfppreservelreg"
   [(unspec_volatile:XTT32SI [(match_operand:XTT32SI 0 "register_operand"  "")
@@ -183,7 +188,8 @@
                      (const_int rvtt_preservelreg)] UNSPECV_SFPPRESERVELREG)]
   "TARGET_XTT_TENSIX"
   ""
-  [(set_attr "length" "0")])
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
 
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
@@ -246,7 +252,8 @@
 (define_insn "rvtt_sfpnop"
   [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_SFPNOP)]
   "TARGET_XTT_TENSIX"
-  "SFPNOP")
+  "SFPNOP"
+  [(set_attr "type" "tensix")])
 
 (define_expand "movxtt32si"
   [(set (match_operand:XTT32SI 0 "")
@@ -270,7 +277,7 @@
     rvtt_mov_error (insn, which_alternative == 1);
     gcc_unreachable ();
   }
-  [(set_attr "length" "4")])
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [(match_operand:SI    0 "const_int_operand" "n")
@@ -278,7 +285,8 @@
                      (match_operand:SI    2 "const_int_operand" "n")
                      (match_operand:SI    3 "const_int_operand" "n")] UNSPECV_TTINCRWC)]
   "TARGET_XTT_TENSIX"
-  "TTINCRWC\t%0, %1, %2, %3")
+  "TTINCRWC\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_ttreplay"
   [(unspec_volatile:XTT32SI [(match_operand:SI    0 "address_operand"   "")
@@ -314,4 +322,5 @@
                      (match_operand:SI    2 "const_int_operand"  "N01U")
                      (match_operand:SI    3 "const_int_operand"  "N01U")] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX"
-  "TTREPLAY\t%0, %1, %2, %3")
+  "TTREPLAY\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")])

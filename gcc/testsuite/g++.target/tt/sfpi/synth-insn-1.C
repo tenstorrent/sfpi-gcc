@@ -16,8 +16,8 @@ void one(int s) {
 }
 /*
 **_Z3onei:
-**	li	a5,16773120
 **	slli	a0,a0,12
+**	li	a5,16773120
 **	and	a0,a0,a5
 **	li	a5, 2046820407	# 2:7a000037
 **	add	a0,a0,a5
@@ -36,8 +36,8 @@ void two(int s) {
 }
 /*
 **_Z3twoi:
-**	li	a5,16773120
 **	slli	a0,a0,12
+**	li	a5,16773120
 **	and	a0,a0,a5
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 2046820359	# 2:7a000007
