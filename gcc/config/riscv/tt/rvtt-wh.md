@@ -976,7 +976,7 @@
   [(unspec_volatile:XTT32SI [(match_operand:SI 0 "const_int_operand" "N04U")] UNSPECV_WH_SFPPOPC)]
   "TARGET_XTT_TENSIX_WH"
   "SFPPOPC\t%0"
-)
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_wh_sfplut"
   [(set (match_operand:XTT32SI 0 "register_operand" "=x3")
