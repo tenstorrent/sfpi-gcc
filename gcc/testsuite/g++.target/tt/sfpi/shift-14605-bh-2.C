@@ -64,8 +64,8 @@ void f3(int s) {
 }
 /*
 **_Z2f3i:
-**	li	a5,16773120
 **	slli	a0,a0,12
+**	li	a5,16773120
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	and	a0,a0,a5
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
@@ -103,8 +103,8 @@ void f4(int s) {
 }
 /*
 **_Z2f4i:
-**	li	a5,16773120
 **	slli	a0,a0,12
+**	li	a5,16773120
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	and	a0,a0,a5
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)

@@ -51,8 +51,8 @@ void fnuvi (int i) {
 }
 /*
 **_Z5fnuvii:
-**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	zext.h	a4,a0
+**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 1897529344	# 2:711a0000
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	add	a4,a4,a5

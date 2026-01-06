@@ -9952,13 +9952,13 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
   if (get_attr_type (insn) == TYPE_GHOST)
     return 0;
 
-  // FIXME: Implement for TT cores
-  if (tt_core)
-    return more;
-
   /* If we ever encounter an insn with an unknown type, trip
      an assert so we can find and fix this problem.  */
   gcc_assert (get_attr_type (insn) != TYPE_UNKNOWN);
+
+  // FIXME: Implement for TT cores
+  if (tt_core)
+    return more;
 
   /* If we ever encounter an insn without an insn reservation, trip
      an assert so we can find and fix this problem.  */
