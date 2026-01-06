@@ -59,6 +59,14 @@ along with GCC; see the file COPYING3.  If not see
 #include <unordered_map>
 #include "rvtt.h"
 
+//#define ENABLE_DUMP
+
+#ifdef ENABLE_DUMP
+#define DUMP(...) ((void)fprintf(stderr, __VA_ARGS__))
+#else
+#define DUMP(...) ((void)0)
+#endif
+
 using namespace std;
 
 typedef unsigned long long int hash_type;
@@ -140,7 +148,7 @@ hash_type find_writer(int regno, const rtx_insn *insn)
   return -1;
 }
 
-// Compute a unique hash for this insn signature by hashing the:
+// Compute a unqiue hash for this insn signature by hashing the:
 //  - insn code
 //  - return register
 //  - all the operands
@@ -319,9 +327,25 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
     }
 #endif
 
-  if (dump_file)
-    fprintf (dump_file, " strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
-	     *strategy, insn_count, *count, loads, loadis);
+  DUMP (" strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
+	*strategy, insn_count, *count, loads, loadis);
+}
+
+static inline void
+dump_sequences ()
+{
+#ifdef ENABLE_DUMP
+  int k = 0;
+  for (auto iteri : sequences)
+    {
+      DUMP ("  %d: ", k);
+      for (auto iters : iteri)
+	DUMP ("(s%2d: l%2d h%llx) ",
+	      iters.start, iters.length, iters.hash);
+      k++;
+      DUMP ("\n");
+  }
+#endif
 }
 
 // This fn scans the count insns and generates sequences, up to count insns
@@ -339,15 +363,13 @@ static void devise_strategy (int *count, int *strategy, basic_block bb)
 static void
 generate_sequences (int count, int strategy)
 {
-  if (dump_file)
-    fprintf (dump_file, "  generating sequences, scanning %d insns\n", count);
+  DUMP ("  generating sequences, scanning %d insns\n", count);
 
   bool halt = false;
   for (int i = 0; i < count; i++)
     {
       hash_type insn_hash = insn_list[i].hash;
-      if (dump_file)
-	fprintf (dump_file, "   #%3d: processing insn (h%llx)\t%s\n", i, insn_hash, insn_data[insn_list[i].code].name);
+      DUMP ("   #%3d: processing insn (h%llx)\t%s\n", i, insn_hash, insn_data[insn_list[i].code].name);
 
       vector<seq_entry> dummy;
       sequences.push_back (dummy);
@@ -355,8 +377,7 @@ generate_sequences (int count, int strategy)
       // Start a new sequence or track an old sequence
       if ((insn_list[i].startable & strategy) != 0)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "      add new sequence %d\n", i);
+	  DUMP ("      add new sequence %d\n", i);
 	  hash_type seq_hash = compute_seq_hash (insn_hash, 0);
 	  seq_entry new_seq (i, 1, seq_hash);
 	  sequences.back ().push_back (new_seq);
@@ -364,25 +385,18 @@ generate_sequences (int count, int strategy)
 
       // Try to extend existing sequences
       if (halt)
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "      halting sequences at insn %d\n", i);
-	}
+	DUMP ("      halting sequences at insn %d\n", i);
       else if (i != 0)
 	{
 	  for (auto const& cur_seq : sequences[i - 1])
 	    {
 	      if (cur_seq.length == replay_max_insns)
-		{
-		  if (dump_file)
-		    fprintf (dump_file, "      sequence s:%d l%d reached insn limit %d\n",
-			     cur_seq.start, cur_seq.length, replay_max_insns);
-		}
+		DUMP ("      sequence s:%d l%d reached insn limit %d\n",
+		     cur_seq.start, cur_seq.length, replay_max_insns);
 	      else
 		{
 		  // Extend the sequence's hash
-		  if (dump_file)
-		    fprintf (dump_file, "      extend sequence s:%d l%d\n", cur_seq.start, cur_seq.length);
+		  DUMP ("      extend sequence s:%d l%d\n", cur_seq.start, cur_seq.length);
 		  hash_type seq_hash = compute_seq_hash (insn_hash, cur_seq.hash);
 		  seq_entry new_seq (cur_seq.start, cur_seq.length + 1, seq_hash);
 		  sequences.back ().push_back (new_seq);
@@ -393,19 +407,18 @@ generate_sequences (int count, int strategy)
       halt = insn_list[i].halt;
     }
 
-  if (dump_file)
-    {
-      int k = 0;
-      for (auto iteri : sequences)
-	{
-	  fprintf (dump_file, "  %d: ", k);
-	  for (auto iters : iteri)
-	    fprintf (dump_file, "(s%2d: l%2d h%llx) ",
-		     iters.start, iters.length, iters.hash);
-	  k++;
-	  fprintf (dump_file, "\n");
-	}
-    }
+  dump_sequences ();
+}
+
+static void
+dump_unique_sequences ()
+{
+#ifdef ENABLE_DUMP
+  DUMP ("    ");
+  for (auto iter : sequence_map)
+    DUMP ("(s%2d: l%2d) ", iter.second->start, iter.second->length);
+  DUMP ("\n");
+#endif
 }
 
 // This fn stores unique sequences into a map keyed on the sequence hash.
@@ -419,8 +432,7 @@ generate_sequences (int count, int strategy)
 static void
 map_unique_sequences ()
 {
-  if (dump_file)
-    fprintf (dump_file, "  mapping unique sequences\n");
+  DUMP ("  mapping unique sequences\n");
 
   for (auto& insn_iter : sequences)
     for (auto& seq_iter : insn_iter)
@@ -429,20 +441,23 @@ map_unique_sequences ()
 
 	if (entry == sequence_map.end ())
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "    mapping unique s:%2d l%2d h%llx\n",
-		       seq_iter.start, seq_iter.length, seq_iter.hash);
+	    DUMP("    mapping unique s:%2d l%2d h%llx\n",
+		 seq_iter.start, seq_iter.length, seq_iter.hash);
 	    sequence_map.insert (pair<hash_type, seq_entry *> (seq_iter.hash, &seq_iter));
 	  }
       }
 
-  if (dump_file)
-    {
-      fprintf (dump_file, "    ");
-      for (auto iter : sequence_map)
-	fprintf (dump_file, "(s%2d: l%2d) ", iter.second->start, iter.second->length);
-      fprintf (dump_file, "\n");
-    }
+  dump_unique_sequences ();
+}
+
+static inline void
+dump_voted_sequences ()
+{
+#ifdef ENABLE_DUMP
+  DUMP ("  all sequence votes:\n");
+  for (auto iter : sequence_map)
+    DUMP("    s%2d: l%2d v%d\n", iter.second->start, iter.second->length, iter.second->votes);
+#endif
 }
 
 // This fn goes through all of the insns again and looks up the unique
@@ -470,8 +485,7 @@ map_unique_sequences ()
 static void
 vote_for_sequences ()
 {
-  if (dump_file)
-    fprintf (dump_file, "  voting for sequences, %zu insns\n", insn_list.size ());
+  DUMP ("  voting for sequences, %zu insns\n", insn_list.size ());
 
   for (unsigned int i = 0; i < insn_list.size(); i++)
     {
@@ -485,8 +499,7 @@ vote_for_sequences ()
       auto entry = sequence_map.find (seq0_hash);
       if (entry != sequence_map.end ())
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "    begin new s:%2d l%2d\n", entry->second->start, entry->second->length);
+	  DUMP ("    begin new s:%2d l%2d\n", entry->second->start, entry->second->length);
 	  // This insn starts a new sequence
 	  insn_sequences.back ().push_back (entry->second);
 	}
@@ -501,8 +514,7 @@ vote_for_sequences ()
 	  auto entry = sequence_map.find (seq_hash);
 	  if (entry == sequence_map.end ())
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "    no match, ending sequence\n");
+	      DUMP ("    no match, ending sequence\n");
 	      continue;
 	    }
 
@@ -513,27 +525,18 @@ vote_for_sequences ()
 	  // sequence cannot contain itself)
 	  if (i > entry->second->insn_available)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "    vote for  s%2d: l%2d\n", entry->second->start, entry->second->length);
+	      DUMP ("    vote for  s%2d: l%2d\n", entry->second->start, entry->second->length);
 	      entry->second->votes++;
 	      entry->second->insn_available = i + length - 1;
 	      insn_sequences.back ().push_back (entry->second);
 	    }
 	  else
-	    {
-	      if (dump_file)
-		fprintf (dump_file, "   skip overlapped s%2d: l%2d\n",
-			 entry->second->start, entry->second->length);
-	    }
+	    DUMP ("   skip overlapped s%2d: l%2d\n",
+		  entry->second->start, entry->second->length);
 	}
     }
 
-  if (dump_file)
-    {
-      fprintf (dump_file, "  all sequence votes:\n");
-      for (auto iter : sequence_map)
-	fprintf (dump_file, "    s%2d: l%2d v%d\n", iter.second->start, iter.second->length, iter.second->votes);
-    }
+  dump_voted_sequences ();
 }
 
 // Pick the sequence that saves the most insns.
@@ -552,9 +555,8 @@ pick_sequence (int *start, int *length)
   for (auto const& iter : sequence_map)
     {
       int saved = iter.second->length * (iter.second->votes - 1) - iter.second->votes;
-      if (dump_file)
-	fprintf (dump_file, "    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length,
-		 iter.second->votes, saved);
+      DUMP ("    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length,
+	    iter.second->votes, saved);
       if (saved > most_saved
 	  || (saved != 0 && saved == most_saved && iter.second->start < earliest))
 	{
@@ -564,8 +566,7 @@ pick_sequence (int *start, int *length)
 	  *length = iter.second->length;
 	}
     }
-  if (dump_file)
-    fprintf (dump_file, "  picked s%d: l%d saved %d\n", *start, *length, most_saved);
+  DUMP ("  picked s%d: l%d saved %d\n", *start, *length, most_saved);
 }
 
 // Per the comment above generate_sequence, the final "sequence" may be
@@ -584,8 +585,7 @@ collapse_sequence (int start, int length)
       if (iter.start == start)
 	{
 	  gcc_assert (iter.length == i + 1);
-	  if (dump_file)
-	    fprintf (dump_file, "    final sequence element s%2d: l%3d\n", iter.start, iter.length);
+	  DUMP ("    final sequence element s%2d: l%3d\n", iter.start, iter.length);
 	  final_sequence_map.insert (pair<hash_type, const seq_entry *> (iter.hash, &iter));
 	}
 }
@@ -604,8 +604,7 @@ do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
       // First sequence must be full length
       if (count == length)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "    inserting replay capture at %d\n", i - count);
+	  DUMP ("    inserting replay capture at %d\n", i - count);
 	  first = false;
 	  rtx replay = gen_rvtt_ttreplay_int (GEN_INT (0), GEN_INT (count),
 					      GEN_INT (1), GEN_INT (1));
@@ -614,8 +613,7 @@ do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
     }
   else if (count > 1)
     {
-      if (dump_file)
-	fprintf (dump_file, "    deleting %d insns starting at %d\n", count, i - count);
+      DUMP("    deleting %d insns starting at %d\n", count, i - count);
 
       for (int j = 0; j < count;)
 	{
@@ -640,8 +638,7 @@ static void
 update_insns (basic_block bb, int which, int length)
 {
   which = which + 0; // suppress warning, which only used in debug
-  if (dump_file)
-    fprintf (dump_file, "  updating insn sequence with s:%d l:%d\n", which, length);
+  DUMP("  updating insn sequence with s:%d l:%d\n", which, length);
   rtx_insn *insn;
 
   insn = BB_HEAD(bb);
@@ -676,8 +673,7 @@ update_insns (basic_block bb, int which, int length)
 	      // Don't restart if we haven't finished the last sequence
 	      if (count == 0)
 		{
-		  if (dump_file)
-		    fprintf (dump_file, "    starting seq at %d\n", i);
+		  DUMP("    starting seq at %d\n", i);
 		  start_insn = insn;
 		}
 	      count++;
@@ -736,10 +732,7 @@ find_sequence (basic_block bb)
       insn_list.resize(0);
     }
   else
-    {
-      if (dump_file)
-	fprintf (dump_file, "  no sfpu insns, exiting\n");
-    }
+    DUMP("  no sfpu insns, exiting\n");
 }
 
 // The replay pass looks for sequences of instructions that repeat and replaces
@@ -750,15 +743,13 @@ find_sequence (basic_block bb)
 static void
 transform (function *cfn)
 {
-  if (dump_file)
-    fprintf (dump_file, "Replay pass on: %s\n", function_name (cfn));
+  DUMP ("Replay pass on: %s\n", function_name (cfn));
 
   basic_block bb;
 
   FOR_EACH_BB_FN (bb, cfn)
     {
-      if (dump_file)
-	fprintf (dump_file, " begin BB\n");
+      DUMP (" begin BB\n");
       find_sequence (bb);
     }
 }
