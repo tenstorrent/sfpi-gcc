@@ -24,10 +24,10 @@ void frob (int i) {
 }
 /*
 **_Z4frobi:
-**	slli	a0,a0,1
-**	SFPMOV	L0, L12, 2
 **	li	a5,8192
+**	SFPMOV	L0, L12, 2
 **	addi	a5,a5,-1
+**	slli	a0,a0,1
 **	and	a0,a0,a5
 **	li	a5, 1912659968	# 2:7200e000
 **	add	a0,a0,a5

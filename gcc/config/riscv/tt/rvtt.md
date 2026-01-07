@@ -222,7 +222,8 @@
 	  ] UNSPECV_SFPVARLREG))]
   "TARGET_XTT_TENSIX"
   ""
-  [(set_attr "length" "0")])
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
 
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
