@@ -64,13 +64,14 @@ using namespace std;
 typedef unsigned long long int hash_type;
 
 struct insn_info {
-  rtx insn;                 // insn code
+  rtx_insn *insn;                   // insn
   const unsigned short startable;   // set by strategy, can this insn can start a sequence?
   const hash_type hash;             // cache the hash
   bool halt;                        // this insn is followed by a non-sfpu insn
 
-  insn_info() : insn(NULL_RTX), startable(0), hash(0), halt(false) {}
-  insn_info(rtx insn, unsigned short s, hash_type h) : insn(insn), startable(s), hash(h), halt(false) {}
+  insn_info() : insn (nullptr), startable (0), hash (0), halt (false) {}
+  insn_info(rtx_insn *insn, unsigned short s, hash_type h)
+    : insn(insn), startable(s), hash(h), halt(false) {}
 };
 
 struct seq_entry {
@@ -351,7 +352,7 @@ generate_sequences (int count, int strategy)
       if (dump_file)
 	{
 	  fprintf (dump_file, "   #%3d: processing insn (h%llx)\n", i, insn_hash);
-	  print_rtl (dump_file, insn_list[i].insn);
+	  dump_insn_slim (dump_file, insn_list[i].insn);
 	}
 
       vector<seq_entry> dummy;
