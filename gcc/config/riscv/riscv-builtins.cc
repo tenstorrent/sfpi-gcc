@@ -219,6 +219,7 @@ AVAIL (rocc, TARGET_XTT_ROCC)
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
 #define RISCV_ATYPE_XTT_IPTR xtt_type_nodes[0]
 #define RISCV_ATYPE_XTT_VEC xtt_type_nodes[1]
+#define RISCV_ATYPE_XTT_VEC2 xtt_type_nodes[2]
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -283,7 +284,7 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 
-static tree GTY(()) xtt_type_nodes[2];
+static tree GTY(()) xtt_type_nodes[3];
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -358,12 +359,15 @@ riscv_init_builtin_types (void)
       char *pos = name + strlen (name);
       pos[1] = 0;
 
-      for (unsigned ix = 0; ix != 1; ix++)
+      for (unsigned ix = 0; ix != 2; ix++)
 	{
-	  static const struct {
+	  static const struct
+	  {
 	    machine_mode mode;
 	    char suffix;
-	  } modes[] = {{XTT32SImode, 0}};
+	  } modes[]
+	    = {{XTT32SImode, 0},
+	       {XTT64SImode, '2'}};
 
 	  pos[0] = modes[ix].suffix;
 	  tree vec = build_vector_type_for_mode (unsigned_type_node, modes[ix].mode);

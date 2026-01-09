@@ -76,22 +76,26 @@ along with GCC; see the file COPYING3.  If not see
 // nonimm_shft: shift to right justify the nonimm value
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, nonimm_pos, nonimm_mask, nonimm_shft)
-RVTT_BUILTIN (synth_opcode,    RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (synth_opcode,       RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, -1,      0, 0)
 
-RVTT_BUILTIN (sfpxicmps,       RISCV_USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
-RVTT_BUILTIN (sfpxicmpv,       RISCV_USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
-RVTT_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, -1,      0, 0)
-RVTT_BUILTIN (sfpxcondi,       RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
-RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpxicmps,          RISCV_USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
+RVTT_BUILTIN (sfpxicmpv,          RISCV_USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
+RVTT_BUILTIN (sfpxbool,           RISCV_USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpxcondi,          RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpxvif,            RISCV_USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (sfpxcondb,   RISCV_VOID_FTYPE_USI_USI,                                         0x00, -1, -1, -1,      0, 0)
 
-RVTT_BUILTIN (sfpreadlreg,     RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
-RVTT_NO_TGT_BUILTIN (sfpwritelreg,   RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpreadlreg,        RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (sfpwritelreg,RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
-RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, -1,      0, 0)
-RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, -1,      0, 0)
-RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpselect2,         RISCV_XTT_VEC_FTYPE_XTT_VEC2_USI,                                 0x00, -1, -1, -1,      0, 0)
+
+RVTT_NO_TGT_BUILTIN (sfpnop,      RISCV_VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpswap,            RISCV_XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                         0x00, -1, -1, -1,      0, 0)
+
+RVTT_NO_TGT_BUILTIN (ttincrwc,    RISCV_VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
 // The length operand is [1,32], which is awkward
-RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,          0x00, -1, -1, 1,      (unsigned)-1, 4)
+RVTT_NO_TGT_BUILTIN (ttreplay,    RISCV_VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
 
 // Wormhole builtin intrinsics
 RVTT_WH_BUILTIN (sfpassign_lv,    RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x02, -1, -1, -1,      0, 0)
@@ -168,7 +172,6 @@ RVTT_WH_NO_TGT_BUILTIN (sfppushc,       RISCV_VOID_FTYPE_USI,                   
 RVTT_WH_NO_TGT_BUILTIN (sfppopc,        RISCV_VOID_FTYPE_USI,                                       0x01, -1,  0, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,      0x00, -1,  3,  4, 0x3FFF, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
-RVTT_WH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_USI,                       0x00, -1,  2, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,           0x00, -1, -1, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)
@@ -248,7 +251,6 @@ RVTT_BH_NO_TGT_BUILTIN (sfppushc,       RISCV_VOID_FTYPE_USI,                   
 RVTT_BH_NO_TGT_BUILTIN (sfppopc,        RISCV_VOID_FTYPE_USI,                                       0x01, -1,  0, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,      0x00, -1,  3,  4, 0x1FFF, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
-RVTT_BH_NO_TGT_BUILTIN (sfpswap,        RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_USI,                       0x00, -1,  2, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,           0x00, -1, -1, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)

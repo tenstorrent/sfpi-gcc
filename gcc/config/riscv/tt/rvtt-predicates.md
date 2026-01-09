@@ -41,3 +41,7 @@
   (ior (match_operand 0 "nonimmediate_operand")
     (and (match_code "unspec")
          (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))))
+
+(define_predicate "cstlreg_operand"
+  (and (match_code "unspec")
+       (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG")))

@@ -667,7 +667,7 @@
 
 (define_insn "riscv_ttrocc_scmdbuf_read_tiles_to_process_tr_ack"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec_volatile [(const_int 0)] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
+        (unspec_volatile:DI [(const_int 0)] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
   "TARGET_XTT_ROCC"
   "tt.rocc.scmdbuf_read_tiles_to_process_tr_ack\t%0"
   [(set_attr "type" "ttrocc")])

@@ -26,6 +26,7 @@
 (define_c_enum "unspec" [
   UNSPEC_SYNTH_OPCODE
   UNSPEC_SFPCSTLREG
+  UNSPEC_SFPCLEAVE ; cleave together and cleave apart, yay auto-antonyms!
 ])
 
 (define_c_enum "unspecv" [
@@ -40,6 +41,7 @@
   UNSPECV_SFPVARLREG
 
   UNSPECV_SFPNOP
+  UNSPECV_SFPSWAP
 
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
@@ -288,6 +290,26 @@
   DONE;
 })
 
+(define_insn "rvtt_sfpconcat2"
+  [(set (match_operand:XTT64SI 0 "register_operand" "=xr")
+     (unspec:XTT64SI [
+       (match_operand:XTT32SI 1 "register_operand" "xr")
+       (match_operand:XTT32SI 2 "register_operand" "xr")
+       ] UNSPEC_SFPCLEAVE))]
+  "TARGET_XTT_TENSIX"
+  "CONCAT %0, %1, %2"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpselect2"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+     (unspec:XTT32SI [
+       (match_operand:XTT64SI 1 "register_operand" "xr")
+       (match_operand:SI 2 "const_int_operand" "n")
+       ] UNSPEC_SFPCLEAVE))]
+  "TARGET_XTT_TENSIX"
+  "SELECT %0, %1, %2"
+  [(set_attr "type" "tensix")])
+
 (define_insn "rvtt_sfpnop"
   [(unspec_volatile:XTT32SI [
      (const_int 0)
@@ -319,6 +341,161 @@
     gcc_unreachable ();
   }
   [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpswap_cst0"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "0")
+	  (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "1")
+          (match_operand:SI    4 "const_int_operand"  "N04U")
+	  ] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 1 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  ] UNSPECV_SFPSWAP))]
+  "TARGET_XTT_TENSIX"
+  "SFPSWAP\t%x2, %x3, %4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "static")
+   (set_attr "xtt_delay_bh" "static")])
+
+(define_insn "rvtt_sfpswap_cst1"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
+	  (match_operand:XTT32SI 2 "cstlreg_operand" "xc")
+          (match_operand:SI    3 "const_int_operand"  "N04U")
+	  (const_int 1)
+	  ] UNSPECV_SFPSWAP))]
+  "TARGET_XTT_TENSIX"
+  "SFPSWAP\t%x1, %x2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "static")
+   (set_attr "xtt_delay_bh" "static")])
+
+(define_split
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+	  (match_operand:XTT32SI 3 "cstlreg_operand")
+          (match_operand:SI    4 "const_int_operand")
+	  ] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 1 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  ] UNSPECV_SFPSWAP))]
+  "bool (find_reg_note (insn, REG_UNUSED, operands[1]))
+   && !(cstlreg_operand (operands[2], XTT32SImode)
+        && find_reg_note (insn, REG_UNUSED, operands[0]))"
+  [(set (match_dup 0)
+        (unspec_volatile:XTT32SI [
+ 	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  (const_int 1)
+	  ] UNSPECV_SFPSWAP))])
+
+(define_insn "rvtt_sfpswap_cst2"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "cstlreg_operand" "xc")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "0")
+          (match_operand:SI    3 "const_int_operand"  "N04U")
+	  (const_int 2)
+	  ] UNSPECV_SFPSWAP))]
+  "TARGET_XTT_TENSIX"
+  "SFPSWAP\t%x1, %x2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "static")
+   (set_attr "xtt_delay_bh" "static")])
+
+(define_split
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 2 "cstlreg_operand")
+	  (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
+          (match_operand:SI    4 "const_int_operand")
+	  ] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 1 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  ] UNSPECV_SFPSWAP))]
+  "find_reg_note (insn, REG_UNUSED, operands[0])
+   && !(cstlreg_operand (operands[3], XTT32SImode)
+        && find_reg_note (insn, REG_UNUSED, operands[1]))"
+  [(set (match_dup 1)
+        (unspec_volatile:XTT32SI [
+ 	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  (const_int 2)
+	  ] UNSPECV_SFPSWAP))])
+
+(define_insn "rvtt_sfpswap_cst3"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "cstlreg_operand" "xc")
+     (match_operand:XTT32SI 1 "cstlreg_operand" "xc")
+     (match_operand:SI    2 "const_int_operand"  "N04U")
+     (const_int 3)
+  ] UNSPECV_SFPSWAP)]
+  "TARGET_XTT_TENSIX"
+  "SFPSWAP\t%x0, %x1, %2"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "static")
+   (set_attr "xtt_delay_bh" "static")])
+
+(define_split
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 2 "cstlreg_operand")
+	  (match_operand:XTT32SI 3 "cstlreg_operand")
+          (match_operand:SI    4 "const_int_operand")
+	  ] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 1 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_dup 2)
+	  (match_dup 3)
+          (match_dup 4)
+	  ] UNSPECV_SFPSWAP))]
+  "bool (find_reg_note (insn, REG_UNUSED, operands[0]))
+   && bool (find_reg_note (insn, REG_UNUSED, operands[1]))"
+  [(unspec_volatile:XTT32SI [
+     (match_dup 2)
+     (match_dup 3)
+     (match_dup 4)
+     (const_int 3)
+     ] UNSPECV_SFPSWAP)])
+
+(define_expand "rvtt_sfpswap"
+  [(parallel [
+    (set (match_dup 4)
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI 3 "const_int_operand")
+	  ] UNSPECV_SFPSWAP))
+    (set (match_dup 5)
+        (unspec_volatile:XTT32SI [
+	  (match_dup 1)
+	  (match_dup 2)
+          (match_dup 3)
+	  ] UNSPECV_SFPSWAP))])
+  (set (match_operand:XTT64SI 0 "register_operand" "=xr")
+     (unspec:XTT64SI [
+       (match_dup 4)
+       (match_dup 5)
+       ] UNSPEC_SFPCLEAVE))]
+  "TARGET_XTT_TENSIX"
+{
+  operands[4] = gen_reg_rtx (XTT32SImode);
+  operands[5] = gen_reg_rtx (XTT32SImode);
+})
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [

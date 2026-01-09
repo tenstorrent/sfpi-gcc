@@ -115,8 +115,6 @@
   UNSPECV_WH_SFPLUTFP32_3R
   UNSPECV_WH_SFPLUTFP32_6R
   UNSPECV_WH_SFPCONFIG_V
-  UNSPECV_WH_SFPSWAP
-  UNSPECV_WH_SFPSWAP_INT
   UNSPECV_WH_SFPTRANSP
   UNSPECV_WH_SFPSHFT2_G
   UNSPECV_WH_SFPSHFT2_GE
@@ -1192,29 +1190,6 @@
   "TARGET_XTT_TENSIX_WH"
   "SFPCONFIG\t%1, 0, 0"
   [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_wh_sfpswap"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand")
-     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
-     (match_operand:SI    2 "const_int_operand")
-     ] UNSPECV_WH_SFPSWAP)]
-  "TARGET_XTT_TENSIX_WH"
-{
-  emit_insn (gen_rvtt_wh_sfpswap_int (operands[0], operands[1], operands[2]));
-  DONE;
-})
-
-(define_insn "rvtt_wh_sfpswap_int"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"   "+xrxc")
-     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"   "+xrxc")
-     (match_operand:SI    2 "const_int_operand"  "N04U")
-     ] UNSPECV_WH_SFPSWAP_INT)]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPSWAP\t%x0, %x1, %2"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_wh" "static")])
 
 (define_insn "rvtt_wh_sfptransp"
   [(unspec_volatile:XTT32SI [

@@ -51,6 +51,13 @@ along with GCC; see the file COPYING3.  If not see
 // them. (As described in the related gimple pass, we can't rely on combine,
 // late-combine, ira or other passes to do this in all cases.)
 
+// A combine-like pass that
+// 1 copies cstlreg unspecs into the insns that use
+// them.  (As described in the related gimple pass, we can't rely on combine,
+// late-combine, ira or other passes to do this in all cases.)
+// 2. copies cleave-together inputs to cleave-apart outputs, thereby handling
+// multi-register builtin results.
+
 static void
 transform (function *fn)
 {
@@ -94,6 +101,39 @@ transform (function *fn)
 	    {
 	    default:
 	      break;
+
+	    case UNSPEC_SFPCLEAVE:
+	      {
+		rtx slot = XVECEXP (src, 0, 1);
+		if (GET_CODE (slot) == CONST_INT)
+		  {
+		    // select
+		    unsigned ix = INTVAL (slot);
+		    unsigned regno = REGNO (XVECEXP (src, 0, 0));
+
+		    char const *msg = nullptr;
+		    if (reg_vals[regno].bb != bb)
+		      msg = "Failed to replace select";
+		    else
+		      {
+			rtx sel = XVECEXP (reg_vals[regno].val, 0, ix);
+
+			bool ok = validate_change (insn, &SET_SRC (pattern), sel, false);
+			gcc_assert (ok);
+			msg = "Replaced select";
+		      }
+
+		    if (dump_file)
+		      {
+			fprintf (dump_file, "%s %u\n", msg, regno);
+			dump_insn_slim (dump_file, insn);
+			fprintf (dump_file, "\n");
+		      }
+		    reg_vals[REGNO (SET_DEST (pattern))].bb = nullptr;
+		    continue;
+		  }
+	      }
+	      // FALLTHROUGH
 
 	    case UNSPEC_SFPCSTLREG:
 	      {

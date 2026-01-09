@@ -65,15 +65,18 @@ void sub5() {
 void swap () {
   auto x = __builtin_rvtt_sfpreadlreg(9);
   auto y = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpswap (x, y, 0);
+  auto r = __builtin_rvtt_sfpswap (x, y, 0);
+  x = __builtin_rvtt_sfpselect2 (r, 0);
+  y = __builtin_rvtt_sfpselect2 (r, 1);
   auto z = __builtin_rvtt_wh_sfpmul (x, y, 0);
 }
 /*
 **_ZN3cst4swapEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPSWAP	L9, L0, 0
+**	SFPMOV	L1, L9, 2
+**	SFPSWAP	L1, L0, 0
 **	SFPNOP
-**	SFPMUL	L0, L9, L0, L9, 0
+**	SFPMUL	L1, L1, L0, L9, 0
 **	ret
 */
 }

@@ -78,7 +78,6 @@
   UNSPECV_BH_SFPLUTFP32_3R
   UNSPECV_BH_SFPLUTFP32_6R
   UNSPECV_BH_SFPCONFIG_V
-  UNSPECV_BH_SFPSWAP
   UNSPECV_BH_SFPTRANSP
   UNSPECV_BH_SFPSHFT2_G
   UNSPECV_BH_SFPSHFT2_GE
@@ -1077,17 +1076,6 @@
   "TARGET_XTT_TENSIX_BH"
   "SFPCONFIG\t%1, 0, 0"
   [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_bh_sfpswap"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"   "+xrxc")
-     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"   "+xrxc")
-     (match_operand:SI    2 "const_int_operand"  "N04U")
-     ] UNSPECV_BH_SFPSWAP)]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSWAP\t%x0, %x1, %2"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "static")])
 
 (define_insn "rvtt_bh_sfptransp"
   [(unspec_volatile:XTT32SI [

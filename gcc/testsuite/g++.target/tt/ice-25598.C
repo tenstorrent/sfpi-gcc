@@ -20706,16 +20706,6 @@ __attribute__((always_inline)) inline __rvtt_vec_t subvec_shflshr1(const __vBase
     return __builtin_rvtt_wh_sfpshft2_e(src.get(), SFPSHFT2_MOD1_SUBVEC_SHFLSHR1);
 }
 
-__attribute__((always_inline)) inline void vec_swap(__vBase& dst, __vBase& src)
-{
-    __builtin_rvtt_wh_sfpswap(dst.get(), src.get(), SFPSWAP_MOD1_SWAP);
-}
-
-__attribute__((always_inline)) inline void vec_min_max(__vBase& dst, __vBase& src)
-{
-    __builtin_rvtt_wh_sfpswap(dst.get(), src.get(), SFPSWAP_MOD1_VEC_MIN_MAX);
-}
-
 }
 
 

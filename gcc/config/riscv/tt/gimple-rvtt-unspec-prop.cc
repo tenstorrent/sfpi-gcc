@@ -54,11 +54,19 @@ along with GCC; see the file COPYING3.  If not see
 // block into the bb that it is used. (RTL DCE will fix up the detritus we
 // leave behind.)
 
+// Multiple builtin return values are handled as a multi-width vector (because
+// builtins are almost-but-not-quite functions, the regular ABI is not in play
+// here).  But the underlying instructions will be parallel sets.  At the
+// gimple level we have an sfpselectN to pick one of the results.  Using
+// VEC_CONCAT and friends didn't work out. Move each sfpselectN into the same
+// BB as its def.
+
 static unsigned
 transform (function *fn)
 {
   bool changed = false;
   tree cstlreg_decl = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg)->decl;
+  tree select2_decl = rvtt_get_insn_data (rvtt_insn_data::sfpselect2)->decl;
   std::set<gcall *> clones;
 
   basic_block bb;
@@ -116,6 +124,54 @@ transform (function *fn)
 		}
 
 	      continue;
+	    }
+
+	  if (decl == select2_decl)
+	    {
+	      if (clones.find (call) != clones.end ())
+		continue;
+
+	      tree res = gimple_call_lhs (call);
+	      if (!res)
+		continue;
+
+	      auto arg = gimple_call_arg (call, 0);
+	      gcc_assert (TREE_CODE (arg) == SSA_NAME);
+	      auto *def = SSA_NAME_DEF_STMT (arg);
+
+	      // If it's not a builtin call, then we'll need to chase
+	      // further, which will get progressively more complex.
+	      gcc_assert (is_a <gcall *> (def));
+
+	      if (gimple_bb (def) == bb)
+		continue;
+
+	      // copy the select2 to just after the def stmt
+	      gcall *clone = gimple_build_call (select2_decl, 2);
+	      tree ssa_var = make_ssa_name_fn (fn, TREE_TYPE (res), clone);
+	      SET_SSA_NAME_VAR_OR_IDENTIFIER (ssa_var, DECL_NAME (decl));
+
+	      gimple_call_set_lhs (clone, ssa_var);
+	      gimple_call_set_arg (clone, 0, arg);
+	      gimple_call_set_arg (clone, 1, gimple_call_arg (call, 1));
+	      gimple_set_location (clone, gimple_location (call));
+	      auto def_gsi = gsi_for_stmt (def);
+	      gsi_insert_after (&def_gsi, clone, GSI_SAME_STMT);
+
+	      gimple *use;
+	      imm_use_iterator use_iter;
+
+	      // replace select uses
+	      FOR_EACH_IMM_USE_STMT (use, use_iter, res)
+		{
+		  use_operand_p use_p;
+
+		  FOR_EACH_IMM_USE_ON_STMT (use_p, use_iter)
+		    SET_USE (use_p, ssa_var);
+		  update_stmt (use);
+		}
+	      clones.insert (clone);
+	      changed = true;
 	    }
 	}
 
