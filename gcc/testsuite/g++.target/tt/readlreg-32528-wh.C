@@ -2,8 +2,6 @@
 // { dg-final { check-function-bodies "**" "" } }
 
 
-using __v64sf_t [[gnu::vector_size(64 * sizeof(float))]] = float;
-
 namespace cst {
 void foo () {
   auto x =  __builtin_rvtt_sfpreadlreg(9);

@@ -461,6 +461,7 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_rvtt_cc);
   NEXT_PASS (pass_rvtt_combine);
   NEXT_PASS (pass_rvtt_move);
+  NEXT_PASS (pass_rvtt_unspec_prop_ssa);
   NEXT_PASS (pass_rvtt_attrib);
 
   NEXT_PASS (pass_expand);
@@ -470,6 +471,7 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_instantiate_virtual_regs);
       NEXT_PASS (pass_into_cfg_layout_mode);
       NEXT_PASS (pass_jump);
+      NEXT_PASS (pass_rvtt_unspec_prop_rtl);
       NEXT_PASS (pass_lower_subreg);
       NEXT_PASS (pass_df_initialize_opt);
       NEXT_PASS (pass_cse);

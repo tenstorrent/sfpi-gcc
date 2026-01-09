@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
+// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-shrink-wrap" }
 // { dg-final { check-function-bodies "**" "" } }
 
 
@@ -147,3 +147,38 @@ void bar (int i) {
 **	ret
 */
 }
+
+int frob ();
+
+void loop (int i) {
+  auto x = __builtin_rvtt_sfpreadlreg (9);
+
+#pragma GCC unroll(0)
+  while (i--) {
+    if (frob ())
+      {
+	auto r = __builtin_rvtt_sfpreadlreg (10);
+	__builtin_rvtt_bh_sfpmul (r, r, 0);
+      }
+  
+    __builtin_rvtt_bh_sfpmul (x, x, 0);
+  }
+}
+/*
+**_Z4loopi:
+** 	addi	sp,sp,-16
+**	sw	ra,12\(sp\)
+**	sw	s0,8\(sp\)
+**	beq	a0,zero,.L[0-9]+
+**	mv	s0,a0
+**	call	_Z4frobv
+**	beq	a0,zero,.L[0-9]+
+**	SFPMUL	L0, L10, L10, L9, 0
+**	SFPMUL	L0, L9, L9, L9, 0
+**	addi	s0,s0,-1
+**	bne	s0,zero,.L[0-9]+
+**	lw	ra,12\(sp\)
+**	lw	s0,8\(sp\)
+**	addi	sp,sp,16
+**	jr	ra
+*/

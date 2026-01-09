@@ -516,6 +516,7 @@ extern gimple_opt_pass *make_pass_adjust_alignment (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
@@ -691,6 +692,7 @@ extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 
 /* Current optimization pass.  */
 extern opt_pass *current_pass;
