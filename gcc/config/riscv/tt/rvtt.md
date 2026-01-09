@@ -108,10 +108,10 @@
           (match_operand:SI    3 "register_operand"  "r,r,r,r") ; synth'd insn
           (match_operand:SI    4 "const_int_operand" "n,n,n,n") ; cst opcode
           (match_operand:SI    5 "const_int_operand" "n,n,n,n") ; id
-          (match_operand:XTT32SI 6 "reg_cstlreg_or_vec0_operand" "xrxc,xn,xrxc,xn") ; src
+          (match_operand:XTT32SI 6 "reg_or_cstlreg_or_vec0_operand" "xrxc,xn,xrxc,xn") ; src
           (match_operand:SI    7 "const_int_operand" "n,n,n,n") ; src shift
           (match_operand:SI    9 "const_int_operand" "n,n,n,n") ; dst shift
-          (match_operand:XTT32SI 10 "reg_cstlreg_or_vec0_operand" "8,8,xn,xn") ; lv
+          (match_operand:XTT32SI 10 "reg_or_cstlreg_or_vec0_operand" "8,8,xn,xn") ; lv
           ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 11 "=&r,&r,&r,&r"))]
   "TARGET_XTT_TENSIX"
@@ -129,7 +129,7 @@
      (match_operand:SI    3 "register_operand"  "r,r") ; synth'd insn
      (match_operand:SI    4 "const_int_operand" "n,n") ; cst opcode
      (match_operand:SI    5 "const_int_operand" "n,n") ; id
-     (match_operand:XTT32SI 6 "reg_cstlreg_or_vec0_operand" "xrxc,xn") ; src
+     (match_operand:XTT32SI 6 "reg_or_cstlreg_or_vec0_operand" "xrxc,xn") ; src
      (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
      ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 8 "=&r, X"))]

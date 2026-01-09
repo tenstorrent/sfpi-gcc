@@ -138,7 +138,7 @@
 (define_insn "rvtt_bh_sfpload_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI    2 "const_int_operand" "N04U,N04U")
           (match_operand:SI    3 "const_int_operand" "N03U,N03U")
           (match_operand:SI    4 "const_int_operand" "N13U,N13U")
@@ -185,7 +185,7 @@
 (define_insn "rvtt_bh_sfploadi_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn,0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn,0,xn")
           (match_operand:SI    2 "const_int_operand" "N04U,N04U,N04U,N04U")
           (match_operand:SI    3 "const_int_operand" "N16S,N16S,N16U,N16U")
 	  ] UNSPECV_BH_SFPXLOADI))]
@@ -316,7 +316,7 @@
 (define_insn "rvtt_bh_sfpdivp2_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI    2 "const_int_operand" "N12S,N12S")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    4 "const_int_operand" "N04U,N04U")
@@ -360,7 +360,7 @@
 (define_insn "rvtt_bh_sfp<blackhole_src_mod_name>_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand"  "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand"  "0,xn")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "N04U,N04U")
 	  ] blackhole_src_mod_op))]
@@ -383,7 +383,7 @@
 (define_insn "rvtt_bh_sfpmov_config_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI 2 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_BH_SFPMOV_CONFIG))]
   "TARGET_XTT_TENSIX_BH"
@@ -409,7 +409,7 @@
 (define_insn "rvtt_bh_sfp<blackhole_muladd_name>_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    4 "const_int_operand" "N04U")
@@ -432,7 +432,7 @@
 (define_insn "rvtt_bh_sfpiadd_i_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "n,n")
           (match_operand:SI    4 "const_int_operand" "N04U,N04U")
@@ -581,7 +581,7 @@
 (define_insn "rvtt_bh_sfpnot_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand"  "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand"  "0,xn")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
 	  ] UNSPECV_BH_SFPNOT))]
   "TARGET_XTT_TENSIX_BH"
@@ -603,7 +603,7 @@
 (define_insn "rvtt_bh_sfpcast_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand"  "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand"  "0,xn")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_BH_SFPCAST))]
@@ -639,7 +639,7 @@
 (define_insn "rvtt_bh_sfpshft2_e_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_BH_SFPSHFT2_E_INT))]
@@ -689,7 +689,7 @@
 (define_insn "rvtt_bh_sfpstochrnd_i_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI    2 "const_int_operand" "N01U,N01U")
           (match_operand:SI    3 "const_int_operand" "N05U,N05U")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc,xrxc")
@@ -733,7 +733,7 @@
 (define_insn "rvtt_bh_sfpstochrnd_v_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI    2 "const_int_operand" "N01U,N01U")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc,xrxc")
@@ -877,7 +877,7 @@
 (define_insn "rvtt_bh_sfpsetman_i_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "0,xn")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "0,xn")
           (match_operand:SI    2 "const_int_operand" "N12U,N12U")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
 	  ] UNSPECV_BH_SFPSETMAN))]
@@ -919,7 +919,7 @@
 (define_insn "rvtt_bh_sfpmad_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr, xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_cstlreg_or_vec0_operand" "xn, 0")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_vec0_operand" "xn, 0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc, xrxc")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc, xrxc")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc, xrxc")
