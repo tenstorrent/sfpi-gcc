@@ -51,14 +51,13 @@ transform (function *fn)
 {
   bool changed = false;
   tree cstlreg_decl = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg)->decl;
-
   std::set<gcall *> clones;
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	 !gsi_end_p (gsi); gsi_next (&gsi))
-      if (auto *call = dyn_cast<gcall *> (*gsi))
+      if (auto *call = dyn_cast <gcall *> (*gsi))
 	{
 	  if (gimple_call_fndecl (call) != cstlreg_decl)
 	    continue;
@@ -83,33 +82,28 @@ transform (function *fn)
 	      if (gimple_bb (use) == bb)
 		continue;
 
-	      if (auto *phi = dyn_cast<gphi *> (use))
-		{
-		  // FIXME, insert at the end of the incoming edge's bb
-		  abort();
-		}
-	      else
-		{
-		  tree ssa_var = make_temp_ssa_name (TREE_TYPE (lhs), NULL, "creg");
-		  gcall *clone = gimple_build_call (cstlreg_decl, 1);
+	      // If this triggers, we'll need to handle it.
+	      gcc_assert (!is_a <gphi *> (use));
 
-		  gimple_call_set_arg (clone, 0, arg);
-		  gimple_call_set_lhs (clone, ssa_var);
-		  gimple_set_location (clone, gimple_location (call));
-		  auto use_gsi = gsi_for_stmt (use);
-		  gsi_insert_before (&use_gsi, clone, GSI_SAME_STMT);
+	      tree ssa_var = make_temp_ssa_name (TREE_TYPE (lhs), NULL, "creg");
+	      gcall *clone = gimple_build_call (cstlreg_decl, 1);
 
-		  // replace use
-		  use_operand_p op;
-		  ssa_op_iter op_iter;
-		  FOR_EACH_SSA_USE_OPERAND (op, use, op_iter, SSA_OP_USE)
-		    if (USE_FROM_PTR (op) == lhs)
-		      propagate_value (op, ssa_var);
-		  update_stmt (use);
+	      gimple_call_set_arg (clone, 0, arg);
+	      gimple_call_set_lhs (clone, ssa_var);
+	      gimple_set_location (clone, gimple_location (call));
+	      auto use_gsi = gsi_for_stmt (use);
+	      gsi_insert_before (&use_gsi, clone, GSI_SAME_STMT);
 
-		  clones.insert (clone);
-		  changed = true;
-		}
+	      // replace use
+	      use_operand_p op;
+	      ssa_op_iter op_iter;
+	      FOR_EACH_SSA_USE_OPERAND (op, use, op_iter, SSA_OP_USE)
+		if (USE_FROM_PTR (op) == lhs)
+		  propagate_value (op, ssa_var);
+	      update_stmt (use);
+
+	      clones.insert (clone);
+	      changed = true;
 	    }
 	}
 

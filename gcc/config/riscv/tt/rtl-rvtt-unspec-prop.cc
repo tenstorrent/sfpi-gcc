@@ -20,6 +20,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
@@ -58,11 +59,12 @@ transform (function *fn)
   defs_t *reg_vals = XCNEWVEC (defs_t, max_reg_num ());
   basic_block bb;
   rtx_insn *insn;
+  std::vector<unsigned> invalidate;
 
   FOR_EACH_BB_FN (bb, fn)
     FOR_BB_INSNS (bb, insn)
     {
-      if (!NONDEBUG_INSN_P (insn))
+      if (GET_CODE (insn) != INSN)
 	continue;
       rtx pattern = PATTERN (insn);
 
@@ -86,7 +88,7 @@ transform (function *fn)
 	}
 
       auto propagate_unspecs
-	= [bb, reg_vals, insn](auto &self, rtx *slot) -> void
+	= [&invalidate, bb, reg_vals, insn](auto &self, rtx *slot) -> void
       {
 	switch (GET_CODE (*slot))
 	  {
@@ -106,7 +108,12 @@ transform (function *fn)
 	    break;
 
 	  case SET:
-	    self (self, &SET_SRC (*slot));
+	    {
+	      self (self, &SET_SRC (*slot));
+	      auto dst = SET_DEST (*slot);
+	      if (REG_P (dst))
+		invalidate.push_back (REGNO (dst));
+	    }
 	    break;
 
 	  case REG:
@@ -125,8 +132,9 @@ transform (function *fn)
 
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "\n%s %u\n", msg, regno);
+		  fprintf (dump_file, "%s %u\n", msg, regno);
  		  dump_insn_slim (dump_file, insn);
+		  fprintf (dump_file, "\n");
 		}
 	    }
 	    break;
@@ -138,9 +146,33 @@ transform (function *fn)
 	  }
       };
 
-      // iterate over each input operand and try and replace every reg
-      // initialized in this block.
-      propagate_unspecs (propagate_unspecs, &pattern);
+      if (GET_CODE (pattern) == SET)
+	{
+	  rtx dst = SET_DEST (pattern);
+	  if (REG_P (dst))
+	    {
+	      unsigned regno = REGNO (dst);
+	      rtx src = SET_SRC (pattern);
+	      if (GET_CODE (src) == UNSPEC
+		  && XINT (src, 1) == UNSPEC_SFPCSTLREG)
+		{
+		  // Set reg to cstlreg, remember it
+		  reg_vals[regno].val = src;
+		  reg_vals[regno].bb = bb;
+		}
+	      else
+		reg_vals[regno].bb = nullptr;
+	    }
+
+	  propagate_unspecs (propagate_unspecs, &SET_SRC (pattern));
+	}
+      else
+	{
+	  propagate_unspecs (propagate_unspecs, &pattern);
+	  for (auto reg : invalidate)
+	    reg_vals[reg].bb = nullptr;
+	  invalidate.clear ();
+	}
     }
   XDELETEVEC (reg_vals);
 }
@@ -150,7 +182,7 @@ namespace {
 const pass_data pass_data_rvtt_unspec_prop_rtl =
 {
   RTL_PASS, /* type */
-  "rvtt_unspec_prop_rtl", /* name */
+  "rvtt_unspec_prop", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
