@@ -120,8 +120,9 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt
 // #31429 disable compressed insns ('c' is removed), it interfers with our post-processing.
 RISCV_CORE("tt-qsr64", "rv64ima_zicsr_zba_zbb_zbs_zifencei", "lp64", "rvtt-b1")
 RISCV_CORE("tt-qsr64-rocc",        "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttrocc", "lp64", "rvtt-b1")
-RISCV_CORE("tt-qsr32", "rv32imafv","ilp32f", "rvtt-b1")
+// disable vector insns ('v' is removed), tt-sim doesn't grok them
+RISCV_CORE("tt-qsr32", "rv32imaf","ilp32f", "rvtt-b1")
 
 // Add -tensix using tensixqsr when ready
-RISCV_CORE("tt-qsr32-tensixbh",       "rv32imafv_xtttensixbh", "ilp32f", "rvtt-b1")
+RISCV_CORE("tt-qsr32-tensixbh",       "rv32imaf_xtttensixbh", "ilp32f", "rvtt-b1")
 #undef RISCV_CORE
