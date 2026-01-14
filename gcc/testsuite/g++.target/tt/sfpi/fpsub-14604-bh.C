@@ -22,6 +22,7 @@ void sub1() {
 /*
 **_Z4sub1v:
 **	SFPADD	L3, L10, L0, L1, 2
+**	SFPNOP
 **	ret
 */
 
@@ -36,6 +37,7 @@ void sub2() {
 /*
 **_Z4sub2v:
 **	SFPADD	L3, L10, L1, L0, 2
+**	SFPNOP
 **	ret
 */
 
@@ -51,6 +53,7 @@ void sub3() {
 /*
 **_Z4sub3v:
 **	SFPADD	L3, L10, L0, L1, 3
+**	SFPNOP
 **	ret
 */
 

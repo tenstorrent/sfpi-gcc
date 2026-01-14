@@ -21,6 +21,7 @@ void muladd() {
 /*
 **_Z6muladdv:
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -38,6 +39,7 @@ void mulsub() {
 **_Z6mulsubv:
 **	SFPMOV	L0, L0, 1
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -55,6 +57,7 @@ void negmuladd() {
 **_Z9negmuladdv:
 **	SFPMOV	L2, L2, 1
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -73,6 +76,7 @@ void negmulsub() {
 **	SFPMOV	L2, L2, 1
 **	SFPMOV	L0, L0, 1
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -90,6 +94,7 @@ void negmuladd2() {
 **_Z10negmuladd2v:
 **	SFPMOV	L1, L1, 1
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -108,5 +113,6 @@ void negmulsub2() {
 **	SFPMOV	L1, L1, 1
 **	SFPMOV	L0, L0, 1
 **	SFPMAD	L3, L1, L2, L0, 0
+**	SFPNOP
 **	ret
 */

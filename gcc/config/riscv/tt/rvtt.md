@@ -45,6 +45,17 @@
   UNSPECV_TTREPLAY
 ])
 
+(define_enum "xtt_delay" [
+  none
+  static
+  dynamic
+  operand
+])
+(define_enum_attr "xtt_delay_wh" "xtt_delay"
+  (const_string "none"))
+(define_enum_attr "xtt_delay_bh" "xtt_delay"
+  (const_string "none"))
+
 ;; rvtt_synth_opcode and rvtt_sfpsynth_insn{,_dst} are used to
 ;; synthesize sfp/tt instructions that are injected into the
 ;; instruction stream.  rvtt_synth_opcode is tied to 1 or more
@@ -115,7 +126,9 @@
   gcc_assert (SYNTH_lv + 1 == 11);
   return rvtt_synth_insn_pattern (operands, 11);
 }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "operand")
+   (set_attr "xtt_delay_bh" "operand")])
 
 (define_insn "rvtt_sfpsynth_insn"
   [(unspec_volatile:XTT32SI [
@@ -134,7 +147,9 @@
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
 }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "operand")
+   (set_attr "xtt_delay_bh" "operand")])
 
 (define_insn "rvtt_sfpsynth_store_insn"
   [(unspec_volatile:XTT32SI [
@@ -153,7 +168,9 @@
   gcc_assert (SYNTH_dst == 8);
   return rvtt_synth_insn_pattern (operands, 8);
 }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_wh" "operand")
+   (set_attr "xtt_delay_bh" "operand")])
 
 (define_expand "rvtt_sfpreadlreg"
   [(set (match_operand:XTT32SI 0 "register_operand")

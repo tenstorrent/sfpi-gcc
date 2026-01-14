@@ -153,9 +153,7 @@ struct GTY(()) rvtt_insn_data {
   const unsigned short flags;  // see flags above
   const short dst_arg_pos;
   const short mod_pos;
-  const short schedule;    // see INSN_SCHEDULE_* flags in rvtt-protos.h
   const short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
-  const short generic_pos ; // arg pos of arg w/ schedule info or -1 if na
   const unsigned int nonimm_mask;
   const short nonimm_shft;
 
@@ -165,13 +163,6 @@ struct GTY(()) rvtt_insn_data {
   inline bool riscv_p() const { return flags & INSN_FLAGS_RISCV; }
   inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
-  inline bool schedule_p() const { return schedule != -1; }
-  inline bool schedule_in_arg_p() const { return generic_pos != -1; }
-  inline int schedule_arg_pos() const { return generic_pos; }
-  inline bool schedule_from_arg_p(rtx_insn *insn) const;
-  inline bool schedule_dynamic_p(rtx_insn *insn) const;
-  inline int schedule_static_nops(rtx_insn *insn) const;
-  inline bool schedule_has_dynamic_dependency_p(rtx_insn *insn) const;
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
   inline int nonimm_op_arg_pos() const { return nonimm_pos; }
@@ -180,13 +171,13 @@ struct GTY(()) rvtt_insn_data {
 
 enum rvtt_insn_data::insn_id : unsigned {
   // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_RTL_ONLY(id, fl, nip, gp) id,
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_WH_RTL_ONLY(id, fl, sched) id,
+#define RVTT_RTL_ONLY(id, fl, nip) id,
+#define RVTT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
+#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
+#define RVTT_WH_RTL_ONLY(id, fl) id,
 #define RVTT_WH_PAD_RTL_ONLY(id) id,
-#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
-#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) id,
+#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
+#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_WH_PAD_BUILTIN(id) id,
 #define RVTT_WH_PAD_NO_TGT_BUILTIN(id) id,
 #include "rvtt-insn.h"
@@ -232,31 +223,6 @@ extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
 extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
 extern uint32_t rvtt_scmp2loadi_mod(int mod);
 extern int rvtt_get_insn_dst_regno(const rtx_insn *insn);
-
-inline bool rvtt_insn_data::schedule_from_arg_p(rtx_insn *insn) const
-{
-  return INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & (INSN_SCHED_NOP_MASK | INSN_SCHED_DYN);
-}
-
-inline bool rvtt_insn_data::schedule_dynamic_p(rtx_insn *insn) const
-{
-  return schedule_in_arg_p() ?
-    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_DYN) :
-    (schedule & INSN_SCHED_DYN);
-}
-
-inline bool rvtt_insn_data::schedule_has_dynamic_dependency_p(rtx_insn *insn) const
-{
-  return schedule_in_arg_p() ?
-    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_DYN_DEP) :
-    (schedule & INSN_SCHED_DYN_DEP);
-}
-inline int rvtt_insn_data::schedule_static_nops(rtx_insn *insn) const
-{
-  return schedule_in_arg_p() ?
-    (INTVAL(rvtt_get_insn_operand(schedule_arg_pos(), insn)) & INSN_SCHED_NOP_MASK) :
-    (schedule & INSN_SCHED_NOP_MASK);
-}
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
 extern bool rvtt_reg_store_p(const rtx pat);

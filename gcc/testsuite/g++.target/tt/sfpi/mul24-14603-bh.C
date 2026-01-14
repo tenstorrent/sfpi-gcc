@@ -21,6 +21,7 @@ void foo () {
 **_Z3foov:
 **	SFPMUL24	L2, L0, L1, 0
 **	SFPMUL24	L3, L0, L1, 1
+**	SFPNOP
 **	ret
 */
 

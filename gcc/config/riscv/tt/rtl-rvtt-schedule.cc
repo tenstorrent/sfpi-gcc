@@ -26,45 +26,23 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
+#include "print-rtl.h"
+#include "insn-config.h"
+#include "insn-attr.h"
+#include "insn-codes.h"
 #include "rvtt.h"
 
-#if 0
-// FIXME: should dump to the dump file.
-#define DUMP(...) fprintf (stderr, __VA_ARGS__)
-#else
-// Sadly deploying sizeof here results in a bunch of LHS or comma has
-// no effect warnings.
-#define DUMP(...) (void)0
-#endif
-
-using namespace std;
-
-static bool reg_referenced_p(unsigned int regno, rtx_insn *insn)
-{
-  int noperands = rvtt_get_insn_operand_count(insn);
-
-  for (int i = 0; i < noperands; i++) {
-    // FIXME: we're looking at all operands, not just input ops.
-    // That's probably harmlessly more work. Divergent control flow
-    // could cause us to overwrite the output register and not need a
-    // NOP though.
-    rtx operand = rvtt_get_insn_operand(i, insn);
-    if (GET_CODE(operand) == REG &&
-	regno == rvtt_sfpu_regno(operand)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/* Walk the BB graph from BB:probe_insn until we meet an SPU
-   insn. Return true if the SPU insn is dependent.  Populate VISITED
-   with the BB's we marked.  */
+/* Walk the BB graph from PROBE_INSN until we meet a TENSIX insn. Return true
+   if REGNO != 0 and the TENSIX insn is dependent.  Return true if REGNO == 0
+   and the TENSIX insn is not a NOP. Return false in all other cases. If we
+   meet the end of a block, recurse into successor blocks and return the first
+   true we get.  Populate VISITED with the BB's we marked. Takes advantage of
+   no multi-register values, no return values and no clobbers of TENSIX
+   registers. */
 
 static bool
-walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
-	     std::vector<basic_block> &visited)
+find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
+		rtx_insn *probe_insn, bool check_probe = false)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -72,116 +50,216 @@ walk_blocks (int regno, basic_block bb, rtx_insn *probe_insn, bool check_probe,
   if (check_probe)
     {
       // Each block, other than the starting block, should only be
-      // walked once -- don't get trapped in a loop of non-SPU
+      // walked once -- don't get trapped in a loop of non-TENSIX
       // insns. The starting block should be walked exactly twice, if
-      // reachable.
+      // reachable from itself.
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
     }
 
   if (probe_insn)
-    for (;; check_probe = true, probe_insn = NEXT_INSN (probe_insn))
+    for (; probe_insn != NEXT_INSN (BB_END (bb));
+	 check_probe = true, probe_insn = NEXT_INSN (probe_insn))
       {
-	const rvtt_insn_data *insn_data;
-	if (check_probe
-	    && NONDEBUG_INSN_P (probe_insn)
-	    && rvtt_p (&insn_data, probe_insn)
-	    && !insn_data->empty_p ()
-	    && !insn_data->riscv_p ())
-	  {
-	    // We've met an SPU insn. If it is dependent, we'll need to
-	    // insert a nop.  If it is non-dependent, it's filling the
-	    // original insn's shadow, so any following dependent insn will
-	    // be fine. Either way, we're done searching this BB.
-	    bool is_dependent = reg_referenced_p (regno, probe_insn);
-	    DUMP ("Found %sdependent insn at %s\n",
-		  is_dependent ? "" : "non-", probe_insn->name);
-	    return is_dependent;
-	}
+	if (!check_probe)
+	  continue;
 
-	if (probe_insn == BB_END (bb))
-	  break;
+	if (GET_CODE (probe_insn) != INSN)
+	  continue;
+	rtx pattern = PATTERN (probe_insn);
+
+	if (GET_CODE (pattern) == USE)
+	  // The case where this would be a dependency does not arise.
+	  continue;
+	if (GET_CODE (pattern) == CLOBBER)
+	  continue;
+
+	if (get_attr_type (probe_insn) != TYPE_TENSIX)
+	  continue;
+
+	if (!regno)
+	  {
+	    bool is_nop = INSN_CODE (probe_insn) == CODE_FOR_rvtt_sfpnop;
+	    if (dump_file)
+	      {
+		fprintf (dump_file, "Found %snop insn ", is_nop ? "" : "non-");
+		dump_insn_slim (dump_file, probe_insn);
+	      }
+	    return !is_nop;
+	  }
+
+	auto reg_used_p = [] (auto self, unsigned regno, rtx rtl) -> bool
+	{
+	  switch (GET_CODE (rtl))
+	    {
+	    default:
+	      // Unknown tensix insn component
+	      gcc_unreachable ();
+
+	    case PARALLEL:
+	    case UNSPEC:
+	    case UNSPEC_VOLATILE:
+	      {
+		// All 3 have the vector at position 0
+		auto &vec = XVEC (rtl, 0);
+		for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+		  if (self (self, regno, RTVEC_ELT (vec, ix)))
+		    return true;
+	      }
+	      break;
+
+	    case SET:
+	      if (self (self, regno, SET_SRC (rtl)))
+		return true;
+	      break;
+
+	    case REG:
+	      if (regno == REGNO (rtl))
+		return true;
+	      break;
+
+	    CASE_CONST_ANY:
+	    case MEM:
+	    case CLOBBER:
+	    case USE:
+	      break;
+	    }
+	  return false;
+	};
+
+	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
+	if (!is_dependent && !get_attr_length (probe_insn))
+	  continue;
+
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "Found %sdependent insn ", is_dependent ? "" : "non-");
+	    dump_insn_slim (dump_file, probe_insn);
+	  }
+	return is_dependent;
       }
 
   // Walk all the successors
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (walk_blocks (regno, e->dest, BB_HEAD (e->dest), true, visited))
+    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true))
       return true;
 
-  // We didn't find anything
   return false;
 }
 
-/* Insert a nop after ORIG_INSN, if there is a depednent SPU insn in
-   its latency shadow.  */
+// Perform instruction scheduling. We conditionally insert a nop after
+// instructions.
 
 static void
-dynamic_schedule_wh_bh (basic_block bb, rtx_insn *orig_insn,
-			std::vector<basic_block> &visited)
+transform (function *fn)
 {
-  gcc_assert (visited.empty ());
-
-  if (walk_blocks (rvtt_get_insn_dst_regno (orig_insn) - SFPU_REG_FIRST,
-		   bb, orig_insn, false, visited)) {
-    emit_insn_after (gen_rvtt_sfpnop (), orig_insn);
-
-    DUMP ("Inserting nop after %s\n", orig_insn->name);
-  }
-
-  for (auto *bb : visited)
-    bb->flags &= ~BB_VISITED;
-  visited.clear ();
-}
-
-// Perform instruction scheduling
-//
-// For wormhole/blackhole there is dynamic and static schedule.
-// Dynamic scheduling requires adding a NOP into the single
-// instruction shadow of any instruction that uses the MAD unit, which
-// are: MAD, LUT, LUT32, MUL(I), ADD(I). An alternative to
-// NOP-insertion is to move a non-dependent instruction into that
-// slot, but we do not implement that.
-//
-// SWAP/SHFT2 are statically scheduled and always require a NOP.
-//
-// On GS, we just have to look for loads followed by stores and insert a NOP
-// if found.  Have to check across BBs and for non-imm loads/stores.  This is
-// "dynamic" since it depends on the instructions
-static void transform ()
-{
-  DUMP ("Schedule pass on: %s\n", function_name(cfun));
-
   std::vector<basic_block> visited;
 
   basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB_FN (bb, fn)
     {
       rtx_insn *insn;
 
       FOR_BB_INSNS (bb, insn)
 	{
-	  const rvtt_insn_data *insnd;
+	  if (GET_CODE (insn) != INSN)
+	    continue;
+	  rtx pattern = PATTERN (insn);
 
-	  if (NONDEBUG_INSN_P (insn) && rvtt_p (&insnd, insn)
-	      && insnd->schedule_p ()
-	      && (!insnd->schedule_in_arg_p ()
-		  || insnd->schedule_from_arg_p (insn)))
+	  if (GET_CODE (pattern) == USE)
+	    continue;
+	  if (GET_CODE (pattern) == CLOBBER)
+	    continue;
+
+	  if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
+
+	  enum xtt_delay delay =
+	    TARGET_XTT_TENSIX_WH ? get_attr_xtt_delay_wh (insn)
+	    : TARGET_XTT_TENSIX_BH ? get_attr_xtt_delay_bh (insn)
+	    : (gcc_unreachable (), XTT_DELAY_NONE);
+	  if (delay == XTT_DELAY_OPERAND)
 	    {
-	      if (insnd->schedule_dynamic_p (insn))
-		{
-		  DUMP ("  dynamic scheduling %s\n", insnd->name);
-		  // Reserve space now we know we need it
-		  visited.reserve (n_basic_blocks_for_fn (cfun));
-		  dynamic_schedule_wh_bh (bb, insn, visited);
-		}
-	      else
-		{
-		  DUMP ("  static scheduling %s\n", insnd->name);
-		  for (unsigned ix = insnd->schedule_static_nops (insn); ix--; )
-		    emit_insn_after (gen_rvtt_sfpnop (), insn);
-		}
+	      rtx probe = pattern;
+	      if (GET_CODE (probe) == PARALLEL)
+		probe = XVECEXP (probe, 0, 0);
+	      if (GET_CODE (probe) == SET)
+		probe = SET_SRC (probe);
+	      gcc_assert (GET_CODE (probe) == UNSPEC_VOLATILE);
+	      probe = XVECEXP (probe, 0, SYNTH_flags);
+	      delay = xtt_delay (INTVAL (probe));
+	    }
+
+	  if (delay == XTT_DELAY_NONE)
+	    continue;
+
+	  visited.reserve (n_basic_blocks_for_fn (fn));
+	  bool insert = false;
+	  if (delay == XTT_DELAY_STATIC)
+	    {
+	      insert = find_next_insn (visited, bb, 0, insn);
+	      for (auto *bb : visited)
+		bb->flags &= ~BB_VISITED;
+	      visited.clear ();
+	    }
+	  else
+	    {
+	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
+	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
+				   rtx_insn *insn, rtx rtl) -> bool
+	      {
+		switch (GET_CODE (rtl))
+		  {
+		  default:
+		    gcc_unreachable ();
+
+		  case SET:
+		    if (REG_P (SET_DEST (rtl)))
+		      {
+			unsigned regno = REGNO (SET_DEST (rtl));
+			if (SFPU_REG_P (regno))
+			  {
+			    bool insert = find_next_insn (visited, bb, regno, insn);
+
+			    for (auto *bb : visited)
+			      bb->flags &= ~BB_VISITED;
+			    visited.clear ();
+
+			    return insert;
+			  }
+		      }
+		    break;
+
+		  case PARALLEL:
+		    {
+		      auto &vec = XVEC (rtl, 0);
+		      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+			if (self (self, visited, bb, insn, RTVEC_ELT (vec, ix)))
+			  return true;
+		    }
+		    break;
+
+		  case CLOBBER:
+		    break;
+		  }
+
+		return false;
+	      };
+		  
+	      insert = find_next (find_next, visited, bb, insn, pattern);
+	    }
+
+	  if (insert)
+	    emit_insn_after (gen_rvtt_sfpnop (), insn);
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "%snserting %s nop after ",
+		       insert ? "I" : "Not i",
+		       delay == XTT_DELAY_STATIC ? "static" : "dynamic");
+	      dump_insn_slim (dump_file, insn);
+	      fprintf (dump_file, "\n");
 	    }
        }
     }
@@ -214,9 +292,9 @@ public:
     return TARGET_XTT_TENSIX;
   }
 
-  virtual unsigned execute (function *) override
+  virtual unsigned execute (function *fn) override
   {
-    transform ();
+    transform (fn);
     return 0;
   }
 }; // class pass_rvtt_schedule

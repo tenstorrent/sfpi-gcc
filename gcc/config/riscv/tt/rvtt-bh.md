@@ -260,7 +260,7 @@
     {
       unsigned op = TT_OP_BH_SFP<blackhole_muliaddi_insn> (0, 0, INTVAL (operands[6]));
       insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_bh_sfp<blackhole_muliaddi_name>_int,
-                                     INSN_SCHED_DYN, operands[4], op, operands[5],
+                                     XTT_DELAY_DYNAMIC, operands[4], op, operands[5],
 				     operands[0], 4, operands[2]);
   }
   emit_insn (insn);
@@ -276,7 +276,8 @@
 	  ] blackhole_muliaddi_op))]
   "TARGET_XTT_TENSIX_BH"
   "SFP<blackhole_muliaddi_insn>\t%0, %2, %3"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_expand "rvtt_bh_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -404,7 +405,8 @@
 	  ] blackhole_muladd_op))]
   "TARGET_XTT_TENSIX_BH"
   "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops>, %3"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfp<blackhole_muladd_name>_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -416,7 +418,8 @@
 	  ] blackhole_muladd_op))]
   "TARGET_XTT_TENSIX_BH"
   "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops_lv>, %4"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfpiadd_v_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -645,7 +648,8 @@
 	  ] UNSPECV_BH_SFPSHFT2_E_INT))]
   "TARGET_XTT_TENSIX_BH"
   "SFPSHFT2\t%0, %x2, 0, %3"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "static")])
 
 (define_expand "rvtt_bh_sfpstochrnd_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -927,7 +931,8 @@
 	  ] UNSPECV_BH_SFPMAD_INT))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMAD\t%0, %x2, %x3, %x4, %5"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfpsetcc_i"
   [(unspec_volatile:XTT32SI [
@@ -1020,7 +1025,8 @@
 	  ] UNSPECV_BH_SFPLUT))]
   "TARGET_XTT_TENSIX_BH"
   "SFPLUT\t%0, %5"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfplutfp32_3r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1043,7 +1049,8 @@
   output_asm_insn ("SFPLOADI\t%6, %7, 2", operands);
   return "SFPLUTFP32\t%0, %5";
 }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfplutfp32_6r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1059,7 +1066,8 @@
 	  ] UNSPECV_BH_SFPLUTFP32_6R))]
   "TARGET_XTT_TENSIX_BH"
   "SFPLUTFP32\t%0, %8"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfpconfig_v"
   [(unspec_volatile:XTT32SI [
@@ -1078,7 +1086,8 @@
      ] UNSPECV_BH_SFPSWAP)]
   "TARGET_XTT_TENSIX_BH"
   "SFPSWAP\t%x0, %x1, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "static")])
 
 (define_insn "rvtt_bh_sfptransp"
   [(unspec_volatile:XTT32SI [
@@ -1124,7 +1133,8 @@
 	  ] UNSPECV_BH_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMUL24\t%0, %x1, %x2, %3"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfpmul24_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1136,7 +1146,8 @@
 	  ] UNSPECV_BH_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMUL24\t%0, %x2, %x3, %4"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfparecip"
   [(set (match_operand:XTT32SI 0 "register_operand")

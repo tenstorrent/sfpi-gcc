@@ -22,6 +22,7 @@ void sub1() {
 /*
 **_Z4sub1v:
 **	SFPMAD	L3, L11, L1, L0, 0
+**	SFPNOP
 **	ret
 */
 
@@ -36,6 +37,7 @@ void sub2() {
 /*
 **_Z4sub2v:
 **	SFPMAD	L3, L11, L0, L1, 0
+**	SFPNOP
 **	ret
 */
 
@@ -52,6 +54,7 @@ void sub3() {
 **_Z4sub3v:
 **	SFPMOV	L0, L0, 1
 **	SFPMAD	L3, L11, L1, L0, 0
+**	SFPNOP
 **	ret
 */
 

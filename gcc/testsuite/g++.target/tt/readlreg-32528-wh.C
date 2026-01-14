@@ -58,6 +58,7 @@ void sub5() {
 **	SFPMAD	L1, L11, L0, L1, 0
 **	SFPNOP
 **	SFPMAD	L3, L11, L0, L1, 0
+**	SFPNOP
 **	ret
 */
 
