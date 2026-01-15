@@ -319,7 +319,8 @@ ASM_MISA_SPEC
    - 1 frm register
    - 1 vxsat register
    - 9 unused registers for future expansion
-   - 16 SFPU registers
+   - 8 SFPU registers
+   - 8 unused registers for future expansion
    - 32 vector registers */
 
 #define FIRST_PSEUDO_REGISTER 128
@@ -336,7 +337,9 @@ ASM_MISA_SPEC
   /* Others.  */							\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* SFPU registers.  */						\
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  0, 0, 0, 0, 0, 0, 0, 0,						\
+  /* Others.  */							\
+  1, 1, 1, 1, 1, 1, 1, 1,						\
   /* Vector registers.  */						\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
@@ -355,7 +358,9 @@ ASM_MISA_SPEC
   /* Others.  */							\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* SFPU registers.  */						\
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  0, 0, 0, 0, 0, 0, 0, 0,						\
+  /* Others.  */							\
+  1, 1, 1, 1, 1, 1, 1, 1,						\
   /* Vector registers.  */						\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1			\
@@ -383,7 +388,7 @@ ASM_MISA_SPEC
 #define V_REG_NUM   (V_REG_LAST - V_REG_FIRST + 1)
 
 #define SFPU_REG_FIRST 80
-#define SFPU_REG_LAST  95
+#define SFPU_REG_LAST  87
 #define SFPU_REG_NUM   (SFPU_REG_LAST - SFPU_REG_FIRST + 1)
 #define SFPU_CREG_IDX_LWM 8
 
@@ -547,7 +552,6 @@ enum reg_class
   SFPU_REGS_L6,                 /* SFPU register L6 */
   SFPU_REGS_L7,                 /* SFPU register L7 */
   SFPU_VAR_REGS,                /* SFPU variable registers */
-  SFPU_ALL_REGS,                /* SFPU registers */
   /* Tenstorrent end */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
@@ -584,7 +588,6 @@ enum reg_class
   "SFPU_REGS_L6",							\
   "SFPU_REGS_L7",							\
   "SFPU_VAR_REGS",							\
-  "SFPU_ALL_REGS",							\
   /* Tenstorrent end */ \
   "ALL_REGS"								\
 }
@@ -623,7 +626,6 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00400000, 0x00000000 },	/* SFPU_REGS_L6 */ 	\
   { 0x00000000, 0x00000000, 0x00800000, 0x00000000 },	/* SFPU_REGS_L7 */ 	\
   { 0x00000000, 0x00000000, 0x00ff0000, 0x00000000 },	/* SFPU_VAR_REGS */ 	\
-  { 0x00000000, 0x00000000, 0xffff0000, 0x00000000 },	/* SFPU_ALL_REGS */ 	\
     /* Tenstorrent end */ \
   { 0xffffffff, 0xffffffff, 0xffff0003, 0xffffffff }	/* ALL_REGS */	\
 }
@@ -1049,7 +1051,7 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "arg", "frame", "vl", "vtype", "vxrm", "frm", "vxsat", "N/A", \
   "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
   "L0",  "L1",  "L2",  "L3",  "L4",  "L5",  "L6",  "L7",	\
-  "*L8", "*L9", "*L10", "*L11", "*L12", "*L13", "*L14", "*L15",	\
+  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",	\
