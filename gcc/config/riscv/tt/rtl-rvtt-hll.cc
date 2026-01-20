@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "df.h"
 #include "tree-pass.h"
 #include "cfgbuild.h"
+#include "insn-attr.h"
 #include "rvtt.h"
 #include <unordered_map>
 
@@ -1327,29 +1328,26 @@ void analysis::analyze(function *fn)
       int max_ic = 0;
       FOR_BB_INSNS (bb, insn)
 	{
-	  if (NONDEBUG_INSN_P(insn))
+	  if (!NONDEBUG_INSN_P(insn))
+	    continue;
+
+	  n_insns++;
+	  max_ic++;
+	  if (GET_CODE (PATTERN (insn)) == USE)
+	    continue;
+	  if (GET_CODE (PATTERN (insn)) == CLOBBER)
+	    continue;
+	  if (get_attr_type (insn) == TYPE_TENSIX)
+	    n_sfpu++;
+	  else
 	    {
-	      max_ic++;
+	      n_stack_lds += stack_load_mem_p (PATTERN(insn));
+	      n_stack_sts += stack_store_p (PATTERN(insn));
 	    }
 	}
       cycles.resize(max_ic);
+
       int ic = 0;
-      FOR_BB_INSNS (bb, insn)
-	{
-	  if (NONDEBUG_INSN_P(insn))
-	    {
-	      cycles[ic++] = (GET_CODE(PATTERN(insn)) == USE) ? 0 : 1;
-
-	      n_insns++;
-	      n_stack_lds += stack_load_mem_p(PATTERN(insn));
-	      n_stack_sts += stack_store_p(PATTERN(insn));
-
-	      const rvtt_insn_data *insnd;
-	      n_sfpu += rvtt_p(&insnd, insn);
-	    }
-	}
-
-      ic = 0;
       FOR_BB_INSNS (bb, insn)
 	{
 	  if (ld_idx < 0) break;
