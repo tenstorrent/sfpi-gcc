@@ -1,6 +1,7 @@
-/* Pass to generate the WH replay insn
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to generate the tensix replay insn
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -17,755 +18,568 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+#define INCLUDE_VECTOR
+#define INCLUDE_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
 #include "rtl.h"
 #include "tree.h"
-#include "cfghooks.h"
-#include "df.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "insn-config.h"
-#include "regs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "cgraph.h"
-#include "tree-pretty-print.h" /* for dump_function_header */
-#include "varasm.h"
-#include "insn-attr.h"
-#include "conditions.h"
-#include "flags.h"
-#include "output.h"
-#include "except.h"
-#include "rtl-error.h"
-#include "toplev.h" /* exact_log2, floor_log2 */
-#include "reload.h"
-#include "intl.h"
-#include "cfgrtl.h"
-#include "debug.h"
 #include "tree-pass.h"
-#include "tree-ssa.h"
-#include "cfgloop.h"
-#include "stringpool.h"
-#include "attribs.h"
-#include "asan.h"
-#include "rtl-iter.h"
 #include "print-rtl.h"
-#include "function-abi.h"
-#include <vector>
-#include <unordered_map>
-#include "rvtt.h"
+#include "insn-config.h"
+#include "insn-attr.h"
+#include "insn-codes.h"
 
-using namespace std;
+// Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
+// them.  Finding the sequences is O(N^2), and allocating them to the replay
+// buffer is the knapsack problem.  We aim for 'good enough'
 
-typedef unsigned long long int hash_type;
+// 1) Only consider single BBs.  This works well for unrolled loops anyway.
+//    Looking accross BBs would require considering the dominator graph, and
+//    better live value computation for synthesized insns
+// 2) If sequence A's occurrences are all before sequence B's, B could reuse
+//    the replay buffer locations.  We do not consider this.
+// 3) If the user has explicitly used replay, we do not apply the optimization.
 
-struct insn_info {
-  rtx_insn *insn;                   // insn
-  const unsigned short startable;   // set by strategy, can this insn can start a sequence?
-  const hash_type hash;             // cache the hash
-  bool halt;                        // this insn is followed by a non-sfpu insn
+// FIXME: PR 22617 For #3, determine which pieces of the replay buffer are
+// used, and allocate sequences in the unused parts.  The user might be clever
+// and use across BBs, so this is a whole prescan of the function.
 
-  insn_info() : insn (nullptr), startable (0), hash (0), halt (false) {}
-  insn_info(rtx_insn *insn, unsigned short s, hash_type h)
-    : insn(insn), startable(s), hash(h), halt(false) {}
-};
+// FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn. This isn't
+// always necessary.  The non-Tensix insn could be hoisted upwards, provided it
+// doesn't affect the generation of any insn hoisted past. This may improve
+// synthesized insns where opcode or address computation is in the middle of a sequence.
 
-struct seq_entry {
-  const unsigned short start;    // start insn # of this seq (also unique id)
-  const unsigned short length;   // # of insns in this seq
-  unsigned short votes;          // votes for this seq
-  unsigned short insn_available; // prevent a seq from starting again while it is growing
-  const hash_type hash;          // hash value for this seq
+// Minimum acceptable sequence length
+// FIXME: We should experiment, 3 might also work. 2 is unlikely to be a win
+constexpr unsigned MIN_SEQUENCE = 4;
 
-  seq_entry() :
-      start(0), length(1), votes(0), insn_available(0), hash(0) {}
-  seq_entry(unsigned short s, unsigned short l, hash_type h) :
-      start(s), length(l), votes(0), insn_available(0), hash(h) {}
-};
-
-static vector<insn_info> insn_list;
-static vector<vector<seq_entry>> sequences;               // All sequences this insn belongs to
-static unordered_map<hash_type, seq_entry*> sequence_map; // Unique sequences
-static vector<vector<seq_entry *>> insn_sequences;        // Unique sequences for each insn
-static unordered_map<hash_type, const seq_entry*>
-  final_sequence_map;                                     // Expanded single final sequence
-
-constexpr unsigned int strategy_load        = 0x1;
-constexpr unsigned int strategy_loadi       = 0x2;
-constexpr unsigned int strategy_first_insn  = 0x4;
-constexpr unsigned int strategy_every_insn  = 0x8;
-
-static int replay_max_insns = 32;
-
-constexpr hash_type dst_hash_salt = 0x100000000;
-constexpr hash_type reg_hash_salt = 0x200000000;
-constexpr hash_type int_hash_salt = 0x400000000;
-constexpr hash_type vec_hash_salt = 0x800000000;
-constexpr hash_type wrid_hash_salt = 0x1000000000;
-
-static inline hash_type hashit(hash_type x)
-{
-  x = (x ^ (x >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
-  x = (x ^ (x >> 27)) * UINT64_C(0x94d049bb133111eb);
-  x = x ^ (x >> 31);
-  return x;
-}
-
-hash_type find_writer(int regno, const rtx_insn *insn)
-{
-  basic_block bb = BLOCK_FOR_INSN (insn);
-
-  for (const rtx_insn *probe = insn, *limit = BB_HEAD (bb); probe != limit;)
-    {
-      probe = PREV_INSN (probe);
-
-      if (!NONJUMP_INSN_P (probe))
-	continue;
-
-      if (regno != rvtt_get_insn_dst_regno (probe))
-	continue;
-
-      rtx pat = PATTERN (probe);
-      if (GET_CODE (pat) != SET || !REG_P (SET_SRC (pat)))
-	return reinterpret_cast<hash_type> (probe);
-
-      // Chase back through a mov.  Doing this because the first test
-      // I wrote hit this case
-      regno = REGNO (SET_SRC (pat));
-    }
-
-  return -1;
-}
-
-// Compute a unique hash for this insn signature by hashing the:
-//  - insn code
-//  - return register
-//  - all the operands
-//
-// For nonimm insns, we need to find the insn that wrote the value to written
-// to the insn queue.  That insn ptr is added to the hash like an operand, ie,
-// if the same insn is used then we know it is the same value.  If the insn
-// that the value is outside of the BB, then, since this is processed within a
-// BB, we know it was the same value and can ignore it
-static hash_type compute_insn_hash(const rvtt_insn_data *insnd,
-				   const rtx_insn *insn)
-{
-  int code = INSN_CODE(insn);
-  hash_type insn_hash = hashit(code);
-  hash_type dst = rvtt_get_insn_dst_regno(insn) - SFPU_REG_FIRST;
-  insn_hash = hashit(insn_hash ^ (dst | dst_hash_salt));
-
-  int count = rvtt_get_insn_operand_count(insn);
-  for (int i = 0; i < count; i++)
-    {
-      hash_type val;
-
-      if (i == insnd->nonimm_val_arg_pos())
-	{
-	  // Nonimm insns, find the writer of the operation
-	  rtx op = rvtt_get_insn_operand(insnd->nonimm_pos - 1, insn);
-	  gcc_assert(GET_CODE(op) == REG);
-	  hash_type writer_id = find_writer(REGNO(op), insn);
-	  insn_hash = hashit(insn_hash ^ (writer_id | wrid_hash_salt));
-	  continue;
-	}
-
-      rtx op = rvtt_get_insn_operand(i, insn);
-      switch GET_CODE(op)
-	{
-	default:
-	  gcc_unreachable();
-	  break;
-
-	  case UNSPEC:
-	    gcc_assert (XINT (op, 1) == UNSPEC_SFPCSTLREG);
-	    val = INTVAL (XVECEXP (op, 0, 0));
-	  case MEM:
-	    // FIXME: Find rtl hasher.
-	    break;
-	    
-	  case REG:
-	  val = REGNO(op) | reg_hash_salt;
-	  break;
-
-	case CONST_INT:
-	  val = INTVAL(op) | int_hash_salt;
-	  break;
-
-	  case CONST_VECTOR: // FIXME: Remove
-	  // The only expected vector constant has a value of all 0s
-	  val = vec_hash_salt;
-	  break;
-	}
-
-      insn_hash = hashit(insn_hash ^ (val << i));
-    }
-
-  return insn_hash;
-}
-
-static inline hash_type compute_seq_hash(hash_type insn_hash, hash_type seq_hash)
-{
-  return hashit(insn_hash ^ (seq_hash << 1));
-}
-
-// devise_strategy
-//
-// This code is over-designed.  I was concerned w/ the O(n^2) nature of the
-// algorithm and so wanted to reduce the number of insns that could start a
-// sequence by, e.g, only starting when a load/loadi was found.  Turns out
-// this is actually pretty fast and the 32 insn limit caps the O(n^2)ness.
-//
-// I'm leaving the code in place for now, despite the fact that is is
-// disabled.
-//
-// Reduce complexity by reducing how many insns get processed:
-//   - load/loadi demark possible sequence starts
-//   - we expect loops to be unrolled by 8 bracketed by load
-//   - if there are lots of insns, only use load to start blocks
-//   - only search for and generate sequences for 1/4 of the insns (then check
-//     all insns against those sequences).  in theory, this could be 1/8, but
-//     there may be setup code as well.  Clearly we only need 1/2 since no
-//     sequence can duplicate itself that takes more than half of the total
-//     insns (assuming, of course, that this BB is structured)
-//   - if we find kernels w/ interesting sequences in the 2nd half of the
-//     kernel's insn and not in the first half, well...crap, revisit (maybe
-//     check each 1/nth independently)
-//
-// Creates the insn_list
-static void devise_strategy (int *count, int *strategy, basic_block bb)
+// Information about a tensix insn wrt replayability.  For an insn to be
+// replayable it must be the same as the original and same generation.
+// Sequences must not stradle a must_end insn.  Empty insns are ignored.
+struct replay_info
 {
   rtx_insn *insn;
+  unsigned hash;       // hash for insn, used in extending sequences
+  unsigned generation; // Oldest SI value used (in synth insns)
+  bool must_end = true; // Cannot be extended (followed by asm, non-Tensix)
+  bool empty = false; // Is an empty tensix insn -- doesn't increase length
 
-  int first_load = -1;
-  int loads = 0;
-  int loadis = 0;
-  int insn_count = 0;
+  replay_info (rtx_insn *insn, unsigned gen, unsigned hash, bool empty)
+    : insn (insn),  hash (hash), generation (gen), empty (empty) {}
+};
+
+// The replay info about all instructions in a BB
+using replay_block = std::vector<replay_info>;
+
+// A half-open interval
+struct replay_span
+{
+  unsigned begin;
+  unsigned end;
+
+  replay_span (unsigned b, unsigned e)
+    : begin (b), end (e)
+  {}
+};
+
+// A sequence of insns, and all the clones of that instance.
+// Each instance is its own clone.
+struct replay_sequence
+{
+  unsigned parent; // The 1-shorter sequence from whence this grew
+  unsigned hash;
+  unsigned length; // number of insns (does not include empty insns)
+
+  // Instances of this sequence. By construction these are in increasing
+  // starting insn. During construction these might overlap.  We deal with that
+  // before use.
+  std::vector<replay_span> clones;
+
+  replay_sequence ()
+    : parent (0), hash (0), length (0)
+  {}
+  replay_sequence (int parent, unsigned hash, unsigned length)
+    : parent (parent), hash (hash), length (length)
+  {}
+};
+
+// Set of sequences, by contstruction these are in incressing length first and
+// within each length by starting insn position.
+using replay_list = std::vector<replay_sequence>;
+
+// Map from hash to set of sequences, used to find matches during construction
+using replay_map = std::map<unsigned, std::vector<unsigned>>;
+
+// It is cheaper to remove/copy pointers than sequence info itself.
+using replay_active = std::vector<replay_sequence *>;
+
+// Scan insns o block computing hashes and must_end.
+
+static bool
+scan_insns (std::vector<replay_info> &info, basic_block bb)
+{
+  constexpr unsigned GR_REG_HWM = FP_REG_FIRST;
+  unsigned reg_ages[GR_REG_HWM];
+  rtx_insn *insn;
+  bool may_continue = false;
+
+  memset (reg_ages, 0, sizeof (reg_ages));
   FOR_BB_INSNS (bb, insn)
     {
-      if (!NONDEBUG_INSN_P(insn))
-	// NONDEBUG_INSN_P != !DEBUG_INSN_P, because, of course
+      if (!NONDEBUG_INSN_P (insn))
 	continue;
 
-      const rvtt_insn_data *insnd;
-      if (!rvtt_p (&insnd, insn) || insnd->riscv_p ())
+      rtx set = nullptr;
+      
+      if (GET_CODE (insn) != INSN)
 	{
-	  if (insn_list.size () > 0)
+	not_tensix:
+	  set = single_set (insn);
+	  if (set)
 	    {
-	      // The nonimm processing should ensure that riscv insns don't
-	      // interact with sfpu insns.  However, bail on __asm insns
-	      if (INSN_CODE (insn) == -1)
-		// These are __asm and maybe other?
-		insn_list.back ().halt = true;
+	    clobber:
+	      rtx dst = SET_DEST (set);
+	      if (REG_P (dst) && REGNO (dst) < GR_REG_HWM)
+		reg_ages[REGNO (dst)]++;
 	    }
-	  continue;
-	}
-      if (insnd->empty_p ())
-	{
-	  // Ugly side effect
-	  // Empty insns have served their purpose, delete now
-	  // This simplifies the update routine somewhat
-	  set_insn_deleted (insn);
+
+	  may_continue = false;
 	  continue;
 	}
 
-      int startable = strategy_every_insn;
-      if (insn_count == 0)
-	startable |= strategy_first_insn;
-      if (insnd->id == rvtt_insn_data::sfpload_int)
-	{
-	  if (first_load == -1)
-	    first_load = insn_count;
-	  loads++;
-	  startable |= strategy_load;
-	}
-      else if (insnd->id == rvtt_insn_data::sfploadi_int)
-	{
-	  loadis++;
-	  startable |= strategy_loadi;
-	}
+	rtx pattern = PATTERN (insn);
 
-      hash_type insn_hash = compute_insn_hash(insnd, insn);
-      insn_list.push_back(insn_info (insn, startable, insn_hash));
-      insn_count++;
-    }
-  gcc_assert (insn_count < 65536);
-
-  *strategy = strategy_every_insn;
-  *count = insn_count;
-
-#if 0  // Determine which insns can start a sequence
-  // Typically, there will be 8 loads in a kernel, but these may not be in one
-  // BB, if the loop is unrolled (or we have multiple BBs), in which case we
-  // should look for more ways to start a sequence
-  if (loads >= 8)
-    {
-      // Assume unrolled loop, only need to process a fraction of it
-      *strategy = strategy_load;
-      *count = (insn_count - first_load) / 4 + first_load;
-    }
-  else if (loadis <= 16)
-    {
-      *strategy = strategy_loadi;
-      *count = insn_count;
-      if (loadis < 8)
-	*strategy |= strategy_first_insn;
-    }
-  else
-    {
-      *strategy = strategy_first_insn;
-      *count = insn_count;
-    }
-#endif
-
-  if (dump_file)
-    fprintf (dump_file, " strategy: %d insn_total: %d insns_to_scan: %d (loads: %d, loadis: %d)\n",
-	     *strategy, insn_count, *count, loads, loadis);
-}
-
-// This fn scans the count insns and generates sequences, up to count insns
-// in length
-//
-// A sequence starting insn is an insn that matches the flags in strategy.
-// Each sequence starting insn starts a sequence, even if it matches a prior
-// sequence - since the sequence may later diverge (identical sequences are
-// pruned in a later pass).
-//
-// Note that only count insns (as determined by the strategy) are processed
-// (not the full insn list).
-//
-// Creates the sequences structure
-static void
-generate_sequences (int count, int strategy)
-{
-  if (dump_file)
-    fprintf (dump_file, "  generating sequences, scanning %d insns\n", count);
-
-  bool halt = false;
-  for (int i = 0; i < count; i++)
-    {
-      hash_type insn_hash = insn_list[i].hash;
-      if (dump_file)
-	{
-	  fprintf (dump_file, "   #%3d: processing insn (h%llx)\n", i, insn_hash);
-	  dump_insn_slim (dump_file, insn_list[i].insn);
-	}
-
-      vector<seq_entry> dummy;
-      sequences.push_back (dummy);
-
-      // Start a new sequence or track an old sequence
-      if ((insn_list[i].startable & strategy) != 0)
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "      add new sequence %d\n", i);
-	  hash_type seq_hash = compute_seq_hash (insn_hash, 0);
-	  seq_entry new_seq (i, 1, seq_hash);
-	  sequences.back ().push_back (new_seq);
-	}
-
-      // Try to extend existing sequences
-      if (halt)
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "      halting sequences at insn %d\n", i);
-	}
-      else if (i != 0)
-	{
-	  for (auto const& cur_seq : sequences[i - 1])
-	    {
-	      if (cur_seq.length == replay_max_insns)
-		{
-		  if (dump_file)
-		    fprintf (dump_file, "      sequence s:%d l%d reached insn limit %d\n",
-			     cur_seq.start, cur_seq.length, replay_max_insns);
-		}
-	      else
-		{
-		  // Extend the sequence's hash
-		  if (dump_file)
-		    fprintf (dump_file, "      extend sequence s:%d l%d\n", cur_seq.start, cur_seq.length);
-		  hash_type seq_hash = compute_seq_hash (insn_hash, cur_seq.hash);
-		  seq_entry new_seq (cur_seq.start, cur_seq.length + 1, seq_hash);
-		  sequences.back ().push_back (new_seq);
-		}
-	    }
-	}
-
-      halt = insn_list[i].halt;
-    }
-
-  if (dump_file)
-    {
-      int k = 0;
-      for (auto iteri : sequences)
-	{
-	  fprintf (dump_file, "  %d: ", k);
-	  for (auto iters : iteri)
-	    fprintf (dump_file, "(s%2d: l%2d h%llx) ",
-		     iters.start, iters.length, iters.hash);
-	  k++;
-	  fprintf (dump_file, "\n");
-	}
-    }
-}
-
-// This fn stores unique sequences into a map keyed on the sequence hash.
-// Duplicate sequences are discarded.
-//
-// When this is done, note that a long sequence may build on a different short
-// sequence.  e.g., one sequence could be load+add while another is
-// load+mul+inc but both use the "load" as the base then diverage from there.
-//
-// Creates the sequence_map
-static void
-map_unique_sequences ()
-{
-  if (dump_file)
-    fprintf (dump_file, "  mapping unique sequences\n");
-
-  for (auto& insn_iter : sequences)
-    for (auto& seq_iter : insn_iter)
-      {
-	auto entry = sequence_map.find (seq_iter.hash);
-
-	if (entry == sequence_map.end ())
+	if (GET_CODE (pattern) == USE)
+	  continue;
+	if (GET_CODE (pattern) == CLOBBER)
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "    mapping unique s:%2d l%2d h%llx\n",
-		       seq_iter.start, seq_iter.length, seq_iter.hash);
-	    sequence_map.insert (pair<hash_type, seq_entry *> (seq_iter.hash, &seq_iter));
+	    set = pattern;
+	    goto clobber;
 	  }
-      }
 
+	if (get_attr_type (insn) != TYPE_TENSIX)
+	  goto not_tensix;
+
+	if (may_continue)
+	  info.back ().must_end = false;
+
+	// Just use crc32, it's right there
+	unsigned age = 0;
+	auto hasher = [&reg_ages, &age] (auto &self, unsigned hash, rtx rtl) -> unsigned
+	{
+	  hash = crc32_unsigned (hash, GET_CODE (rtl) + (GET_MODE (rtl) << 16));
+	  switch (GET_CODE (rtl))
+	    {
+	    default:
+	      gcc_unreachable ();
+
+	    case UNSPEC:
+	    case UNSPEC_VOLATILE:
+	      hash = crc32_unsigned (hash, XINT (rtl, 1));
+	      // FALLTHROUGH
+
+	    case PARALLEL:
+	      {
+		// All 3 have the vector at position 0
+		auto &vec = XVEC (rtl, 0);
+		for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+		  hash = self (self, hash, RTVEC_ELT (vec, ix));
+	      }
+	      break;
+
+	    case SET:
+	      hash = self (self, hash, SET_SRC (rtl));
+	      hash = self (self, hash, SET_DEST (rtl));
+	      break;
+
+	    case REG:
+	      hash = crc32_unsigned (hash, REGNO (rtl));
+	      if (REGNO (rtl) < GR_REG_HWM)
+		age += reg_ages[REGNO (rtl)];
+	      break;
+
+	    case CONST_INT:
+	      hash = crc32_unsigned (hash, unsigned (INTVAL (rtl)));
+	      break;
+
+	    case CONST_VECTOR:
+	      // FIXME: this will go away when lv is fixed properly
+	      break;
+
+	    case MEM:
+	      // MEMs are to store a synthesized insn.  All are equivalent
+	      gcc_assert (GET_MODE (rtl) == SImode);
+	      break;
+
+	    case CLOBBER:
+	      {
+		rtx dst = SET_DEST (rtl);
+		if (REG_P (dst) && REGNO (dst) < GR_REG_HWM)
+		  reg_ages[REGNO (dst)]++;
+	      }
+	      break;
+
+	    case USE:
+	      break;
+	    }
+
+	  return hash;
+	};
+
+	unsigned hash = hasher (hasher, INSN_CODE (insn), pattern);
+	info.emplace_back (insn, age, hash, !get_attr_length (insn));
+
+	may_continue = true;
+    }
+  return !info.empty ();
+}
+
+static void
+extend_sequence (replay_map &map, replay_list &list, replay_block &block,
+		 unsigned parent, unsigned length, unsigned begin, unsigned end)
+{
+  auto &insn = block[end - 1];
+
+  unsigned hash = parent ? crc32_unsigned (list[parent].hash, insn.hash) : insn.hash;
+  auto slot = map.emplace (hash, std::vector<unsigned> ());
+  for (auto ix : slot.first->second)
+    {
+      auto &seq = list[ix];
+      gcc_assert (length == seq.length);
+      if (parent != seq.parent)
+	continue;
+      auto &seq_insn = block[seq.clones.front ().end - 1];
+      if (seq_insn.generation != insn.generation)
+	continue;
+      auto ignore_clobber = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb) {
+	if (GET_CODE (*a) != GET_CODE (*b))
+	  return false;
+
+	if (GET_CODE (*a) != CLOBBER
+	    && GET_CODE (*a) != MEM)
+	  return false;
+
+	gcc_assert (GET_MODE (*a) == GET_MODE (*b));
+
+	// Mems and clobbers are equivalent here.
+	*na = *nb = nullptr;
+	return true;
+      };
+      if (!rtx_equal_p (PATTERN (seq_insn.insn), PATTERN (insn.insn),
+			ignore_clobber))
+	continue;
+
+      // Clones must be in ascending order (the invalidation presumes that)
+      gcc_assert (begin > seq.clones.back ().begin);
+
+      // This might create overlapping clones, but we still need this as a
+      // later extension could only apply to one of these.
+      seq.clones.emplace_back (begin, end);
+      return;
+    }
+
+  slot.first->second.emplace_back (unsigned (list.size ()));
+
+  // New sequence
+  list.emplace_back (parent, hash, length);
+  // It is its own clone
+  list.back ().clones.emplace_back (begin, end);  
+}
+
+// Build sequences of insns and their copies.  This is fundamentally O(N^2).
+// Return number index of first sequence >= MIN_SEQUENCE.
+
+static unsigned
+build_sequences (replay_map &map, replay_list &list, replay_block &block, unsigned max_length)
+{
+  list.push_back (replay_sequence ()); // null sequence
+  map.clear ();
+
+  // Initialize sequences of length 1.  These are the seeds from whence
+  // sequences grow. Historically we started sequences at load insns (those
+  // being the first of a loop), to further reduce N.
+  for (unsigned ix = 0, end_ix = block.size (); ix != end_ix; ++ix)
+    {
+      if (block[ix].empty)
+	continue;
+
+      extend_sequence (map, list, block, 0, 1, ix, ix + 1);
+    }
+  unsigned lwm = unsigned (list.size ());
+
+  // Grow each sequence by 1, until we can grow no more, or we get too long
+  unsigned from = 1, length = 1;
+  while (++length < max_length)
+    {
+      map.clear ();
+
+      unsigned seq_end = list.size ();
+      for (unsigned seq_ix = from; seq_ix != seq_end; seq_ix++)
+	{
+	  if (list[seq_ix].clones.size () == 1)
+	    // There is only one instance, no point extending this.
+	    continue;
+
+	  // Warning, list is extended inside this loop. Beware iterator
+	  // invalidation
+	  for (unsigned clone_ix = 0, clone_end = list[seq_ix].clones.size ();
+	       clone_ix != clone_end; ++clone_ix)
+	    {
+	      auto &seq = list[seq_ix];
+	      replay_span span = seq.clones[clone_ix];
+
+	    skip_empty:
+	      if (block[span.end - 1].must_end)
+		continue;
+	      if (span.end == block.size ())
+		continue;
+	      if (block[span.end].empty)
+		{
+		  span.end++;
+		  goto skip_empty;
+		}
+
+	      extend_sequence (map, list, block, seq_ix, length, span.begin, span.end + 1);
+	    }
+	}
+
+      if (length < MIN_SEQUENCE)
+	lwm = list.size ();
+      from = seq_end;
+    }
+
+  return lwm;
+}
+
+// LIST has been computed, but sequences might contain overlapping runs.
+// Remove overlaps, and push a pointer to valid ones into the ACTIVE array.
+
+static void
+active_triage (replay_active &active, replay_list &list, unsigned from, unsigned longest)
+{
+  for (; from != list.size (); from++)
+    {
+      auto &seq = list[from];
+      if (seq.length > longest)
+	break;
+
+      auto end = seq.clones.end (), write = seq.clones.begin ();
+      unsigned bound = 0;
+      for (auto pos = write; pos != end; ++pos)
+	{
+	  if (bound > pos->begin)
+	    continue;
+
+	  bound = pos->end;
+	  *write = *pos;
+	  ++write;
+	}
+      seq.clones.erase (write, end);
+
+      // Remember this if it has more than one instance.
+      if (seq.clones.size () > 1)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
+		     seq.clones.front ().begin,
+		     seq.clones.front ().end,
+		     seq.length, unsigned (seq.clones.size ()));
+	  active.push_back (&seq);
+	}
+    }
+  if (dump_file)
+    fprintf (dump_file, "%u candidates\n\n", unsigned (active.size ()));
+}
+
+static replay_sequence &
+pick_replay (replay_active &active)
+{
+  replay_sequence *result = active.front ();
+  unsigned best = 0;
+
+  for (auto *seq : active)
+    {
+      gcc_assert (seq->clones.size () > 1);
+      unsigned saving = (seq->clones.size () - 1) * (seq->length - 1) - 1;
+      if (best < saving || (best == saving && result->length < seq->length))
+	{
+	  best = saving;
+	  result = seq;
+	}
+    }
+
+  return *result;
+}
+
+static unsigned
+replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_start)
+{
+  unsigned length = seq.length;
   if (dump_file)
     {
-      fprintf (dump_file, "    ");
-      for (auto iter : sequence_map)
-	fprintf (dump_file, "(s%2d: l%2d) ", iter.second->start, iter.second->length);
+      unsigned saving = (seq.length - 1) * (unsigned (seq.clones.size ()) - 1) - 1;
+      fprintf (dump_file, "Capturing sequence [%u,%u) %u instanecs to [%u,+%u) saving=%u\n",
+	       seq.clones.front ().begin, seq.clones.front ().end,
+	       unsigned (seq.clones.size ()),
+	       replay_start, length, saving);
+      unsigned ix = replay_start;
+      for (auto pos = &block[seq.clones.front ().begin],
+	     end = &block[seq.clones.front ().end];
+	   pos != end; pos++)
+	{
+	  if (pos->empty)
+	    fprintf (dump_file, "-: ");
+	  else
+	    fprintf (dump_file, "%u: ", ix++);
+	  dump_insn_slim (dump_file, pos->insn);
+	}
       fprintf (dump_file, "\n");
     }
-}
+  
+  rtx capture = gen_rvtt_ttreplay_int (GEN_INT (replay_start), GEN_INT (length),
+					      GEN_INT (1), GEN_INT (1));
+  emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
-// This fn goes through all of the insns again and looks up the unique
-// sequence(s) to which the insn sequence belongs and bumps their vote count.
-// Since only a fraction of the insns were used to generate the possible
-// sequences, some sequences may be missed, however, all insns vote.
-//
-// This works by:
-//  - keep a vector 0..n_insns of sequence entries
-//  - a sequence is added for the insn if it is found in the sequence map
-//  - each insn traverses the prior insn's sequences and tries to extend them
-//  - if extended, they are added to this insn's list of sequences
-//  - each time there is a match, the sequence's vote is bumped
-//
-// Note that this routine does not handle all cases:
-//  - a fn w/ non-overlapping sequences could use replay multiple times,
-//    this is not handled
-//  - this only votes for full sequences.  if a subset of a sequence can
-//    be used somewhere, that should add to the benefit of the sequence,
-//    however, that is not tracked.  This would be easier to handle if, e.g,
-//    the sequence (s2: l2) mapped to the same tally as (s2: l4).  It is
-//    unclear to me if this would have much real world benefit
-//
-// Creates insn_sequences (need a better name)
-static void
-vote_for_sequences ()
-{
-  if (dump_file)
-    fprintf (dump_file, "  voting for sequences, %zu insns\n", insn_list.size ());
+  // Make sure we've not deleted anything in this instance already
+  for (auto pos = &block[seq.clones.front ().begin],
+	 end = &block[seq.clones.front ().end];
+       pos != end; pos++)
+    gcc_assert (GET_CODE (pos->insn) == INSN);
 
-  for (unsigned int i = 0; i < insn_list.size(); i++)
+  for (auto clone = seq.clones.begin () + 1; clone != seq.clones.end (); ++clone)
     {
-      hash_type insn_hash = insn_list[i].hash;
-      hash_type seq0_hash = compute_seq_hash (insn_hash, 0);
-
-      vector<seq_entry *> dummy;
-      insn_sequences.push_back (dummy);
-      insn_sequences.back ().reserve (sequences.back ().size ());
-
-      auto entry = sequence_map.find (seq0_hash);
-      if (entry != sequence_map.end ())
+      rtx replay = gen_rvtt_ttreplay_int (GEN_INT (replay_start), GEN_INT (length),
+					  GEN_INT (0), GEN_INT (0));
+      auto *insn = emit_insn_before (replay, block[clone->begin].insn);
+      if (dump_file)
+	{
+	  fprintf (dump_file, "Replaying ");
+	  dump_insn_slim (dump_file, insn);
+	}
+      unsigned ix = replay_start;
+      for (auto pos = &block[clone->begin], end = &block[clone->end];
+	   pos != end; pos++)
 	{
 	  if (dump_file)
-	    fprintf (dump_file, "    begin new s:%2d l%2d\n", entry->second->start, entry->second->length);
-	  // This insn starts a new sequence
-	  insn_sequences.back ().push_back (entry->second);
+	    {
+	      if (pos->empty)
+		fprintf (dump_file, "Deleting -: ");
+	      else
+		fprintf (dump_file, "Deleting %u: ", ix++);
+	      dump_insn_slim (dump_file, pos->insn);
+	    }
+	  gcc_assert (GET_CODE (pos->insn) == INSN);
+	  SET_INSN_DELETED (pos->insn);
 	}
+      if (dump_file)
+	fprintf (dump_file, "\n");
+    }
 
-      if (i == 0)
+  return length;
+}
+
+// Remove or adjust those sequences that are invalidated by having used SEQ.
+// (SEQ itself auto-invalidates).
+
+static bool
+active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_length)
+{
+  auto write = active.begin ();
+  auto end = active.end ();
+  for (auto pos = write; pos != end; ++pos)
+    {
+      auto ptr = *pos;
+
+      if (ptr->length > max_length)
+	break;
+
+      if (ptr == seq)
 	continue;
 
-      // Try to extend existing sequences
-      for (auto const& cur_seq : insn_sequences[i - 1])
+      auto clone_write = ptr->clones.begin ();
+      auto clone_end = ptr->clones.end ();
+      auto seq_pos = seq->clones.begin ();
+      auto seq_end = seq->clones.end ();
+
+      for (auto clone_pos = clone_write; clone_pos != clone_end; ++clone_pos)
 	{
-	  hash_type seq_hash = compute_seq_hash (insn_hash, cur_seq->hash);
-	  auto entry = sequence_map.find (seq_hash);
-	  if (entry == sequence_map.end ())
-	    {
-	      if (dump_file)
-		fprintf (dump_file, "    no match, ending sequence\n");
-	      continue;
-	    }
+	  while (seq_pos != seq_end
+		 && seq_pos->end <= clone_pos->begin)
+	    ++seq_pos;
 
-	  int length = cur_seq->length + 1;
+	  if (seq_pos != seq_end && seq_pos->begin < clone_pos->end)
+	    continue;
 
-	  // When a sequence is being tracked, it cannot be started
-	  // again until its full length has been traversed (ie, a
-	  // sequence cannot contain itself)
-	  if (i > entry->second->insn_available)
-	    {
-	      if (dump_file)
-		fprintf (dump_file, "    vote for  s%2d: l%2d\n", entry->second->start, entry->second->length);
-	      entry->second->votes++;
-	      entry->second->insn_available = i + length - 1;
-	      insn_sequences.back ().push_back (entry->second);
-	    }
-	  else
-	    {
-	      if (dump_file)
-		fprintf (dump_file, "   skip overlapped s%2d: l%2d\n",
-			 entry->second->start, entry->second->length);
-	    }
+	  *clone_write = *clone_pos;
+	  ++clone_write;
 	}
+      ptr->clones.erase (clone_write, clone_end);
+      if (ptr->clones.size () < 2)
+	continue;
+
+      // Keep this one
+      *write = *pos;
+      ++write;
+
+      if (dump_file)
+	fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
+		 ptr->clones.front ().begin,
+		 ptr->clones.front ().end,
+		 ptr->length, unsigned (ptr->clones.size ()));
     }
+
+  active.erase (write, end);
 
   if (dump_file)
-    {
-      fprintf (dump_file, "  all sequence votes:\n");
-      for (auto iter : sequence_map)
-	fprintf (dump_file, "    s%2d: l%2d v%d\n", iter.second->start, iter.second->length, iter.second->votes);
-    }
-}
+    fprintf (dump_file, "%u candidates\n\n", unsigned (active.size ()));
 
-// Pick the sequence that saves the most insns.
-// For now, we only get 1 sequence per fn
-// In the case of a tie, pick the one that starts earliest.  This helps
-// stabilize assembly tests where the result can flip back and forth for
-// unknown reasons as well as starting earlier may lead to extra bonus insns
-// saved when a partial sequence can be used (since we don't vote for partial
-// sequences yet)
-static void
-pick_sequence (int *start, int *length)
-{
-  int most_saved = 0;
-  int earliest = 0xFFFF;
-
-  for (auto const& iter : sequence_map)
-    {
-      int saved = iter.second->length * (iter.second->votes - 1) - iter.second->votes;
-      if (dump_file)
-	fprintf (dump_file, "    s%2d: l%3d v%2d saved %d\n", iter.second->start, iter.second->length,
-		 iter.second->votes, saved);
-      if (saved > most_saved
-	  || (saved != 0 && saved == most_saved && iter.second->start < earliest))
-	{
-	  most_saved = saved;
-	  earliest = iter.second->start;
-	  *start = iter.second->start;
-	  *length = iter.second->length;
-	}
-    }
-  if (dump_file)
-    fprintf (dump_file, "  picked s%d: l%d saved %d\n", *start, *length, most_saved);
-}
-
-// Per the comment above generate_sequence, the final "sequence" may be
-// comprised of multiple sub-sequences (ie, different "start" insns).  To be
-// sure we only update the insns of actual matches, populate the
-// final_sequence_map w/ just the sequence we care about
-//
-// This regenerates a lot of info calculated before since uniquify squashed it
-//
-// Create final_sequence_map
-static void
-collapse_sequence (int start, int length)
-{
-  for (int i = 0; i < length; i++)
-    for (auto const& iter : sequences[start + i])
-      if (iter.start == start)
-	{
-	  gcc_assert (iter.length == i + 1);
-	  if (dump_file)
-	    fprintf (dump_file, "    final sequence element s%2d: l%3d\n", iter.start, iter.length);
-	  final_sequence_map.insert (pair<hash_type, const seq_entry *> (iter.hash, &iter));
-	}
-}
-
-// Helper fn for update_insns, inserts/deletes insns for a replay
-// IMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANT
-//   See tensix issue #3303 if this code gets updated to issue a TTREPLAY
-//   in load only mode
-// IMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANTIMPORTANT
-static bool
-do_update (bool first, int i ATTRIBUTE_UNUSED, int count, int length,
-	   rtx_insn *start_insn, rtx_insn *insn)
-{
-  if (first)
-    {
-      // First sequence must be full length
-      if (count == length)
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "    inserting replay capture at %d\n", i - count);
-	  first = false;
-	  rtx replay = gen_rvtt_ttreplay_int (GEN_INT (0), GEN_INT (count),
-					      GEN_INT (1), GEN_INT (1));
-	  emit_insn_before (replay, start_insn);
-	}
-    }
-  else if (count > 1)
-    {
-      if (dump_file)
-	fprintf (dump_file, "    deleting %d insns starting at %d\n", count, i - count);
-
-      for (int j = 0; j < count;)
-	{
-	  // Replay sequences preclude non-sfpu insns
-	  if (NONDEBUG_INSN_P (start_insn))
-	    {
-	      set_insn_deleted (start_insn);
-	      j++;
-	    }
-	  start_insn = NEXT_INSN (start_insn);
-	}
-      rtx replay = gen_rvtt_ttreplay_int (GEN_INT (0), GEN_INT (count),
-				          GEN_INT (0), GEN_INT (0));
-      emit_insn_before (replay, insn);
-    }
-
-  return first;
-}
-
-// Remove the duplicated insns and emit the REPLAYs
-static void
-update_insns (basic_block bb, int which, int length)
-{
-  which = which + 0; // suppress warning, which only used in debug
-  if (dump_file)
-    fprintf (dump_file, "  updating insn sequence with s:%d l:%d\n", which, length);
-  rtx_insn *insn;
-
-  insn = BB_HEAD(bb);
-  int i = 0;
-  int count = 0;
-  bool first = true;
-  bool halt = false;
-  hash_type seq_hash = 0;
-  rtx_insn *start_insn = nullptr;
-  rtx_insn *last_rvtt_insn = nullptr;
-
-  FOR_BB_INSNS (bb, insn)
-    {
-      const rvtt_insn_data *insnd;
-      if (NONDEBUG_INSN_P (insn) && rvtt_p (&insnd, insn)
-	  && !insnd->riscv_p ())
-	{
-	  hash_type insn_hash = insn_list[i].hash;
-	  hash_type new_hash = compute_seq_hash (insn_hash, seq_hash);
-	  auto entry = final_sequence_map.find (new_hash);
-	  if (count != 0 && (entry == final_sequence_map.end () || halt))
-	    {
-	      first = do_update (first, i, count, length, start_insn, last_rvtt_insn);
-
-	      count = 0;
-	      seq_hash = 0;
-	      new_hash = compute_seq_hash (insn_hash, seq_hash);
-	      entry = final_sequence_map.find (new_hash);
-	    }
-	  if (entry != final_sequence_map.end() && !halt)
-	    {
-	      // Don't restart if we haven't finished the last sequence
-	      if (count == 0)
-		{
-		  if (dump_file)
-		    fprintf (dump_file, "    starting seq at %d\n", i);
-		  start_insn = insn;
-		}
-	      count++;
-	      seq_hash = new_hash;
-	    }
-
-	  halt = insn_list[i].halt;
-	  i++;
-	  last_rvtt_insn = insn;
-	}
-    }
-
-  if (count != 0)
-    do_update (first, i, count, length, start_insn, last_rvtt_insn);
-}
-
-// Finding repeats of generic patterns can be costly in either compute or memory
-// (or both).  Fundamentally, the algorithm used is O(n^2).  The "strategy"
-// routine limits this by selecting only certain instruction types as eligible
-// to start a sequence, making this O(n*m) where m is the number of insns that
-// can start a sequence.
-//
-// Each sequence contains a hash which (uniquely?) identifies it by hashing
-// all of its parameters and all the instructions that come before it in the
-// sequence.  A new instruction inherits all the sequences from the previous
-// instruction and extends them if the new hash is unique.  Many sequences get
-// duplicated (we are, after all, looking for duplicate sequences).  The
-// duplicate sequences are removed by using a map.  Finally, the insns are
-// traversed again and each insn votes for the sequences it belongs to, the
-// sequences with the greatest savings (# insns and repeat count) wins.
-static void
-find_sequence (basic_block bb)
-{
-  int count, strategy;
-  int start = -1;
-  int length = -1;
-
-  devise_strategy (&count, &strategy, bb);
-  if (count != 0)
-    {
-      sequences.reserve (count);
-      generate_sequences (count, strategy);
-
-      // Break the chain of sequences by inserting a dumming insn
-      map_unique_sequences ();
-      vote_for_sequences ();
-      pick_sequence (&start, &length);
-      collapse_sequence (start, length);
-      if (start != -1)
-	update_insns (bb, start, length);
-
-      sequence_map.clear ();
-      final_sequence_map.clear ();
-      sequences.resize(0);
-      insn_sequences.resize(0);
-      insn_list.resize(0);
-    }
-  else
-    {
-      if (dump_file)
-	fprintf (dump_file, "  no sfpu insns, exiting\n");
-    }
+  return !active.empty ();
 }
 
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
-//
-// Note that this implementation looks for sequences within a BB which is much
-// easier (I think) than finding loops and replacing them with REPLAY.  TBD.
-static void
-transform (function *cfn)
-{
-  if (dump_file)
-    fprintf (dump_file, "Replay pass on: %s\n", function_name (cfn));
 
+static void
+transform (function *cfn, unsigned max_length)
+{
+  replay_block info; // insn info
+  replay_list list; // list of sequences
+  replay_map map; // map of sequences
+  replay_active active; // pointers to active (under-consideration) sequences
   basic_block bb;
 
   FOR_EACH_BB_FN (bb, cfn)
     {
-      if (dump_file)
-	fprintf (dump_file, " begin BB\n");
-      find_sequence (bb);
+      info.clear ();
+      list.clear ();
+      active.clear ();
+
+      if (!scan_insns (info, bb))
+	continue;
+
+      // This is N^2
+      unsigned lwm = build_sequences (map, list, info, max_length);
+      active_triage (active, list, lwm, max_length);
+
+      // This is the knapsack problem :(
+      unsigned replay_start = 0;
+      while (!active.empty ())
+	{
+	  auto &seq = pick_replay (active);
+	  gcc_assert (replay_start + seq.length <= max_length);
+	  replay_start += replace_sequence (seq, info, replay_start);
+
+	  unsigned space = max_length - replay_start;
+	  if (space < MIN_SEQUENCE)
+	    break;
+
+	  // Remove unuseable sequences
+	  active_invalidate (active, &seq, space);
+	}
     }
 }
 
@@ -790,7 +604,6 @@ public:
   pass_rvtt_replay (gcc::context *ctxt)
     : rtl_opt_pass (pass_data_rvtt_replay, ctxt)
   {
-    insn_list.reserve(200);
   }
 
   virtual bool gate (function *cfn) override
@@ -828,8 +641,7 @@ public:
   /* opt_pass methods: */
   virtual unsigned execute (function *cfn) override
   {
-    replay_max_insns = riscv_tt_replay_size;
-    transform (cfn);
+    transform (cfn, riscv_tt_replay_size);
     return 0;
   }
 }; // class pass_rvtt_replay

@@ -199,8 +199,6 @@ extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      tree old_add,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt);
-extern int rvtt_get_insn_operand_count(const rtx_insn *insn);
-extern rtx rvtt_get_insn_operand(int which, const rtx_insn *insn);
 
 extern const rvtt_insn_data * rvtt_get_insn_data(const char *name);
 extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
@@ -222,7 +220,6 @@ extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd
 extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
 extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
 extern uint32_t rvtt_scmp2loadi_mod(int mod);
-extern int rvtt_get_insn_dst_regno(const rtx_insn *insn);
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
 extern bool rvtt_reg_store_p(const rtx pat);

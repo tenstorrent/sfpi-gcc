@@ -1,6 +1,7 @@
-/* Pass to schedule SFPU insns (insert nops)
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to schedule tensix insns (insert nops)
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
