@@ -19,8 +19,9 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
+#define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
+#include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
@@ -53,7 +54,8 @@ along with GCC; see the file COPYING3.  If not see
 static void
 transform (function *fn)
 {
-  struct defs_t {
+  struct defs_t
+  {
     rtx val;
     basic_block bb;
   };
@@ -61,6 +63,12 @@ transform (function *fn)
   basic_block bb;
   rtx_insn *insn;
   std::vector<unsigned> invalidate;
+  struct operand
+  {
+    rtx *loc;
+    unsigned regno;
+  };
+  std::vector<operand> operands;
 
   FOR_EACH_BB_FN (bb, fn)
     FOR_BB_INSNS (bb, insn)
@@ -97,8 +105,8 @@ transform (function *fn)
 	    }
 	}
 
-      auto propagate_cstlreg
-	= [&invalidate, bb, reg_vals, insn](auto &self, rtx *slot) -> void
+      auto find_operands
+	= [&operands, &invalidate, bb, reg_vals, insn](auto &self, rtx *slot) -> void
       {
 	switch (GET_CODE (*slot))
 	  {
@@ -129,51 +137,57 @@ transform (function *fn)
 	  case REG:
 	    {
 	      unsigned regno = REGNO (*slot);
-	      if (!reg_vals[regno].bb)
+	      if (reg_vals[regno].bb != bb)
 		break;
 	      if (XINT (reg_vals[regno].val, 1) != UNSPEC_SFPCSTLREG)
 		break;
 
-	      char const *msg = nullptr;
-	      if (reg_vals[regno].bb != bb)
-		msg = "Const register not initialized in this block";
-	      else if (validate_change (insn, slot, reg_vals[regno].val, false))
-		msg = "Replaced const register";
-	      else
-		msg = "Failed to replace const register";
-
-	      if (dump_file)
-		{
-		  fprintf (dump_file, "%s %u\n", msg, regno);
- 		  dump_insn_slim (dump_file, insn);
-		  fprintf (dump_file, "\n");
-		}
+	      operands.push_back ({slot, regno});
 	    }
 	    break;
 
 	  CASE_CONST_ANY:
 	  case MEM:
-	  case CLOBBER:
+	  case CLOBBER: // We don't clobber Tensix regs.
 	  case USE:
 	    break;
 	  }
       };
 
-      if (GET_CODE (pattern) == SET)
+      find_operands (find_operands, &pattern);
+
+      if (!operands.empty ())
 	{
-	  // single set, avoid push/pop of invalidate
-	  propagate_cstlreg (propagate_cstlreg, &SET_SRC (pattern));
-	  rtx dst = SET_DEST (pattern);
-	  if (REG_P (dst))
-	    reg_vals[REGNO (dst)].bb = nullptr;
+	  // We have to deal with match_dups, where multiple operands must be
+	  // changed simultaneously.  In general we could try every combination
+	  // of operands reading the same input register, but it is sufficient
+	  // just to try changing all such operands simultaneously.
+	  std::sort (operands.begin (), operands.end (),
+		     [] (auto const &a, auto const &b) { return a.regno < b.regno; });
+
+	  for (auto pos = operands.begin (); pos != operands.end ();)
+	    {
+	      unsigned regno = pos->regno;
+	      rtx val = reg_vals[regno].val;
+
+	      for (; pos != operands.end () && pos->regno == regno; ++pos)
+		validate_change (insn, pos->loc, val, true);
+
+	      bool applied = apply_change_group ();
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "%s const register %u with ",
+			   applied ? "Replaced" : "Failed to replace", regno);
+		  dump_value_slim (dump_file, val, false);
+		  fprintf (dump_file, "\n");
+		  dump_insn_slim (dump_file, insn);
+		  fprintf (dump_file, "\n");
+		}
+	    }
 	}
-      else
-	{
-	  propagate_cstlreg (propagate_cstlreg, &pattern);
-	  for (auto reg : invalidate)
-	    reg_vals[reg].bb = nullptr;
-	  invalidate.clear ();
-	}
+      for (auto reg : invalidate)
+	reg_vals[reg].bb = nullptr;
+      invalidate.clear ();
     }
   XDELETEVEC (reg_vals);
 }
