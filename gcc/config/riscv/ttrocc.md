@@ -39,7 +39,7 @@
   UNSPECV_ADDRGEN_WR_REG
   UNSPECV_ADDRGEN_RD_REG
   UNSPECV_ADDRGEN_RESET
-  UNSPECV_ADDRGEN_RESET_COUNTER
+  UNSPECV_ADDRGEN_RESET_COUNTERS
   UNSPECV_ADDRGEN_PEEK_SRC
   UNSPECV_ADDRGEN_POP_SRC
   UNSPECV_ADDRGEN_POP_X_SRC
@@ -240,11 +240,11 @@
   "tt.rocc.addrgen_reset\t%0"
   [(set_attr "type" "ttrocc")])
 
-(define_insn "riscv_ttrocc_addrgen_reset_counter"
-  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf")] UNSPECV_ADDRGEN_RESET_COUNTER)]
+(define_insn "riscv_ttrocc_addrgen_reset_counters"
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf")] UNSPECV_ADDRGEN_RESET_COUNTERS)]
   "TARGET_XTT_ROCC"
   ;; We use an extra register here per the spec, but hardcode it to zero
-  "tt.rocc.addrgen_reset_counter\t%0,x0"
+  "tt.rocc.addrgen_reset_counters\t%0,x0"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_addrgen_peek_src"

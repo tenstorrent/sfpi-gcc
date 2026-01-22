@@ -12,7 +12,7 @@ main (void)
   unsigned long rd0 = __builtin_riscv_ttrocc_addrgen_rd_reg (0, 4); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_rd_reg" } }
 
   __builtin_riscv_ttrocc_addrgen_reset (1); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_reset" } }
-  __builtin_riscv_ttrocc_addrgen_reset_counter (1); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_reset_counter" } }
+  __builtin_riscv_ttrocc_addrgen_reset_counters (1); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_reset_counter" } }
 
   unsigned long r0 = __builtin_riscv_ttrocc_addrgen_peek_src (1); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_peek_src" } }
   unsigned long r1 = __builtin_riscv_ttrocc_addrgen_pop_src (1); // { dg-final { "scan-assembler" "tt\.rocc\.addrgen_pop_src" } }
