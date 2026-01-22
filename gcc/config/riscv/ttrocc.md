@@ -560,16 +560,16 @@
   [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
                      (match_operand:DI 1 "register_operand" "r")] UNSPECV_SCMDBUF_WR_REG)]
   "TARGET_XTT_ROCC"
-  ;; We hardcode three extra unused registers per the HW engineers' request
-  "tt.rocc.scmdbuf_wr_reg\tx0,x0,%0,%1,x0"
+  ;; We hardcode two extra unused registers per the HW engineers' request
+  "tt.rocc.scmdbuf_wr_reg\tx0,%0,%1,x0"
   [(set_attr "type" "ttrocc")])
     
 (define_insn "riscv_ttrocc_scmdbuf_rd_reg"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf_register")] UNSPECV_SCMDBUF_RD_REG))]
   "TARGET_XTT_ROCC"
-  ;; We hardcode three extra unused registers per the HW engineers' request
-  "tt.rocc.scmdbuf_rd_reg\t%0,x0,%1,x0,x0"
+  ;; We hardcode two extra unused registers per the HW engineers' request
+  "tt.rocc.scmdbuf_rd_reg\t%0,%1,x0,x0"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_scmdbuf_get_vc_space"
