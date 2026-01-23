@@ -410,31 +410,31 @@
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_cmdbuf_idma_get_vc_space"
-  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
-                     (match_operand:DI 1 "ttrocc_cmdbuf")] UNSPECV_CMDBUF_IDMA_GET_VC_SPACE)]
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf")] UNSPECV_CMDBUF_IDMA_GET_VC_SPACE))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_idma_get_vc_space\t%0,%1"
   [(set_attr "type" "ttrocc")])
    
 (define_insn "riscv_ttrocc_cmdbuf_idma_get_vc_space_vc"
-  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
-                     (match_operand:DI 1 "ttrocc_cmdbuf")
-                     (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_IDMA_GET_VC_SPACE_VC)]
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf")
+                             (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_IDMA_GET_VC_SPACE_VC))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_idma_get_vc_space_vc\t%0,%1,%2"
   [(set_attr "type" "ttrocc")])
    
 (define_insn "riscv_ttrocc_cmdbuf_idma_tr_ack"
-  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
-                     (match_operand:DI 1 "ttrocc_cmdbuf")] UNSPECV_CMDBUF_IDMA_TR_ACK)]
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf")] UNSPECV_CMDBUF_IDMA_TR_ACK))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_idma_tr_ack\t%0,%1"
   [(set_attr "type" "ttrocc")])
    
 (define_insn "riscv_ttrocc_cmdbuf_idma_tr_ack_trid"
-  [(unspec_volatile [(match_operand:DI 0 "register_operand" "r")
-                     (match_operand:DI 1 "ttrocc_cmdbuf")
-                     (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_IDMA_TR_ACK_TRID)]
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf")
+                             (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_IDMA_TR_ACK_TRID))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_idma_tr_ack_trid\t%0,%1,%2"
   [(set_attr "type" "ttrocc")])
@@ -492,7 +492,7 @@
 
 (define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_tr_ack"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf_register")] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID))]
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf_register")] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_read_tiles_to_process_tr_ack\t%0,%1"
   [(set_attr "type" "ttrocc")])
@@ -500,7 +500,7 @@
 (define_insn "riscv_ttrocc_cmdbuf_read_tiles_to_process_tr_ack_tr_id"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf_register")
-                             (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
+                             (match_operand:DI 2 "register_operand" "r")] UNSPECV_CMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID))]
   "TARGET_XTT_ROCC"
   "tt.rocc.cmdbuf_read_tiles_to_process_tr_ack_tr_id\t%0,%1,%2"
   [(set_attr "type" "ttrocc")])
@@ -667,14 +667,14 @@
 
 (define_insn "riscv_ttrocc_scmdbuf_read_tiles_to_process_tr_ack"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec_volatile [(const_int 0)] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID))]
+        (unspec_volatile [(const_int 0)] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
   "TARGET_XTT_ROCC"
   "tt.rocc.scmdbuf_read_tiles_to_process_tr_ack\t%0"
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_scmdbuf_read_tiles_to_process_tr_ack_tr_id"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec_volatile:DI [(match_operand:DI 1 "register_operand" "r")] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK))]
+        (unspec_volatile:DI [(match_operand:DI 1 "register_operand" "r")] UNSPECV_SCMDBUF_READ_TILES_TO_PROCESS_TR_ACK_TR_ID))]
   "TARGET_XTT_ROCC"
   "tt.rocc.scmdbuf_read_tiles_to_process_tr_ack_tr_id\t%0,%1"
   [(set_attr "type" "ttrocc")])
