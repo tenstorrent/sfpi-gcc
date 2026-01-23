@@ -9767,8 +9767,11 @@ riscv_register_move_cost (machine_mode mode,
 static unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
-  if (SFPU_REG_P (regno) && mode == XTT32SImode)
-    return 1;
+  if (SFPU_REG_P (regno))
+    {
+      constexpr unsigned reg_size = 4 * 32;
+      return (GET_MODE_SIZE (mode).to_constant () + reg_size - 1) / reg_size;
+    }
 
   if (riscv_v_ext_vector_mode_p (mode))
     {
@@ -9828,8 +9831,13 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 static bool
 riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 {
-  unsigned int nregs = riscv_hard_regno_nregs (regno, mode);
+  bool is_sfpu = SFPU_REG_P (regno);
+  if (mode == XTT32SImode)
+    return is_sfpu;
+  if (is_sfpu)
+    return false;
 
+  unsigned int nregs = riscv_hard_regno_nregs (regno, mode);
   if (GP_REG_P (regno))
     {
       if (riscv_v_ext_mode_p (mode))
@@ -9868,11 +9876,6 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
       int regno_alignment = riscv_get_v_regno_alignment (mode);
       if (regno_alignment != 1)
 	return ((regno % regno_alignment) == 0);
-    }
-  else if (SFPU_REG_P (regno))
-    {
-      if (mode != XTT32SImode)
-        return false;
     }
   else if (VTYPE_REG_P (regno) || VL_REG_P (regno) || VXRM_REG_P (regno)
 	   || FRM_REG_P (regno))

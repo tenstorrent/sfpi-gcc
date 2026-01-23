@@ -217,8 +217,8 @@ AVAIL (rocc, TARGET_XTT_ROCC)
 #define RISCV_ATYPE_SI intSI_type_node
 #define RISCV_ATYPE_VOID_PTR ptr_type_node
 #define RISCV_ATYPE_INT_PTR integer_ptr_type_node
-#define RISCV_ATYPE_XTT_VEC xtt_vec_type_node
-#define RISCV_ATYPE_XTT_IPTR xtt_iptr_type_node
+#define RISCV_ATYPE_XTT_IPTR xtt_type_nodes[0]
+#define RISCV_ATYPE_XTT_VEC xtt_type_nodes[1]
 
 /* RISCV_FTYPE_ATYPESN takes N RISCV_FTYPES-like type codes and lists
    their associated RISCV_ATYPEs.  */
@@ -283,8 +283,7 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 
-static tree GTY(()) xtt_iptr_type_node;
-static tree GTY(()) xtt_vec_type_node;
+static tree GTY(()) xtt_type_nodes[2];
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -349,17 +348,33 @@ riscv_init_builtin_types (void)
       // which doesn't match the library's uint32_t's underlying type (unsigned
       // long), and that type's not easily accessible here.  So void it is.
       // Bleah!
-      xtt_iptr_type_node = build_pointer_type
+      RISCV_ATYPE_XTT_IPTR = build_pointer_type
 	(build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
 
-      tree vec = build_vector_type_for_mode (unsigned_type_node, XTT32SImode);
-      // We need to add an attribute, so that the lang FE's know this is a
-      // distinct type
       tree attrib = get_identifier ("__xtt_vector");
-      vec = build_type_attribute_variant (vec, tree_cons (attrib, NULL_TREE,
-							  TYPE_ATTRIBUTES (vec)));
-      xtt_vec_type_node = vec;
-      lang_hooks.types.register_builtin_type (vec, "__xtt_vector");
+      char name[16];
+      strcpy (name, "__xtt_vector");
+
+      char *pos = name + strlen (name);
+      pos[1] = 0;
+
+      for (unsigned ix = 0; ix != 1; ix++)
+	{
+	  static const struct {
+	    machine_mode mode;
+	    char suffix;
+	  } modes[] = {{XTT32SImode, 0}};
+
+	  pos[0] = modes[ix].suffix;
+	  tree vec = build_vector_type_for_mode (unsigned_type_node, modes[ix].mode);
+
+	  // We need to add an attribute, so that the lang FE's know this is a
+	  // distinct type
+	  vec = build_type_attribute_variant (vec, tree_cons (attrib, NULL_TREE,
+							      TYPE_ATTRIBUTES (vec)));
+	  (&RISCV_ATYPE_XTT_VEC)[ix] = vec;
+	  lang_hooks.types.register_builtin_type (vec, name);
+	}
     }
 }
 

@@ -437,5 +437,5 @@ VLS_MODES (4096); /* V4096QI V2048HI V1024SI V512DI V2048HF V1024SF V512DF */
    minus one.  */
 #define NUM_POLY_INT_COEFFS 2
 
-// Tenstorrent.  We want a vector mode unique to tensix
+// Tenstorrent.  We want some vector modes unique to tensix
 VECTOR_MODE_WITH_PREFIX (XTT, INT, SI, 32, 4)
