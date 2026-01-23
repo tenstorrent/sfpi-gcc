@@ -557,7 +557,7 @@
   [(set_attr "type" "ttrocc")])
 
 (define_insn "riscv_ttrocc_scmdbuf_wr_reg"
-  [(unspec_volatile [(match_operand:DI 0 "ttrocc_cmdbuf_register")
+  [(unspec_volatile [(match_operand:DI 0 "ttrocc_scmdbuf_register")
                      (match_operand:DI 1 "register_operand" "r")] UNSPECV_SCMDBUF_WR_REG)]
   "TARGET_XTT_ROCC"
   ;; We hardcode two extra unused registers per the HW engineers' request
@@ -566,7 +566,7 @@
     
 (define_insn "riscv_ttrocc_scmdbuf_rd_reg"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_cmdbuf_register")] UNSPECV_SCMDBUF_RD_REG))]
+        (unspec_volatile:DI [(match_operand:DI 1 "ttrocc_scmdbuf_register")] UNSPECV_SCMDBUF_RD_REG))]
   "TARGET_XTT_ROCC"
   ;; We hardcode two extra unused registers per the HW engineers' request
   "tt.rocc.scmdbuf_rd_reg\t%0,%1,x0,x0"
