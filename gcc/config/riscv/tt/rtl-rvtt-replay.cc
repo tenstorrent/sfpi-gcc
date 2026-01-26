@@ -1,5 +1,5 @@
 /* Pass to generate the tensix replay insn
-   Copyright (C) 2022-2026 Tenstorrent Inc.
+  Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -19,8 +19,9 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define INCLUDE_VECTOR
+#define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -42,11 +43,10 @@ along with GCC; see the file COPYING3.  If not see
 //    better live value computation for synthesized insns
 // 2) If sequence A's occurrences are all before sequence B's, B could reuse
 //    the replay buffer locations.  We do not consider this.
-// 3) If the user has explicitly used replay, we do not apply the optimization.
-
-// FIXME: PR 22617 For #3, determine which pieces of the replay buffer are
-// used, and allocate sequences in the unused parts.  The user might be clever
-// and use across BBs, so this is a whole prescan of the function.
+// 3) If the user has explicitly used replay, we use the parts of the replay
+//    buffer that have not used (anywhere in the function).
+// 4) We use all of a discovered sequence (or none of it).  We could of course
+//    use the first N insns, if that is profitable and no room for the whole sequence.
 
 // FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn. This isn't
 // always necessary.  The non-Tensix insn could be hoisted upwards, provided it
@@ -81,6 +81,7 @@ struct replay_span
   unsigned begin;
   unsigned end;
 
+  replay_span () {}
   replay_span (unsigned b, unsigned e)
     : begin (b), end (e)
   {}
@@ -117,6 +118,43 @@ using replay_map = std::map<unsigned, std::vector<unsigned>>;
 // It is cheaper to remove/copy pointers than sequence info itself.
 using replay_active = std::vector<replay_sequence *>;
 
+enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_variable_capture};
+
+static REPLAY_TYPE
+is_replay_insn (replay_span &span, rtx_insn const *insn)
+{
+  int icode = INSN_CODE (insn);
+  auto pattern = PATTERN (insn);
+
+  if (icode == CODE_FOR_rvtt_ttreplay_int)
+    {
+      gcc_assert (GET_CODE (pattern) == UNSPEC_VOLATILE);
+      span.begin = INTVAL (XVECEXP (pattern, 0, 0));
+      span.end = INTVAL (XVECEXP (pattern, 0, 1));
+      return INTVAL (XVECEXP (pattern, 0, 3)) ? REPLAY_fixed_capture : REPLAY_playback;
+    }
+
+  if (icode == CODE_FOR_rvtt_sfpsynth_insn)
+    {
+      auto ops = XVECEXP (PATTERN (insn), 0, 0);
+      gcc_assert (GET_CODE (ops) == UNSPEC_VOLATILE);
+      if (INTVAL (XVECEXP (ops, 0, SYNTH_icode)) != CODE_FOR_rvtt_ttreplay_int)
+	return REPLAY_none;
+
+      unsigned opcode = INTVAL (XVECEXP (ops, 0, SYNTH_opcode));
+      // Ugh, another reason for PR 35993
+      span.begin = (opcode >> (TARGET_XTT_TENSIX_WH ? 14
+			       : TARGET_XTT_TENSIX_BH ? 14
+			       : (gcc_unreachable (), 0))) & 0x1f;
+      span.end = 0;
+      return (opcode >> (TARGET_XTT_TENSIX_WH ? 0
+			 : TARGET_XTT_TENSIX_BH ? 0
+			 : (gcc_unreachable (), 0))) & 0x1 ? REPLAY_variable_capture : REPLAY_playback;
+    }
+
+  return REPLAY_none;
+}
+
 // Scan insns o block computing hashes and must_end.
 
 static bool
@@ -126,7 +164,9 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
   unsigned reg_ages[GR_REG_HWM];
   rtx_insn *insn;
   bool may_continue = false;
+  unsigned shadow = 0;
 
+  info.clear ();
   memset (reg_ages, 0, sizeof (reg_ages));
   FOR_BB_INSNS (bb, insn)
     {
@@ -163,6 +203,28 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 
 	if (get_attr_type (insn) != TYPE_TENSIX)
 	  goto not_tensix;
+
+	replay_span span;
+	if (auto type = is_replay_insn (span, insn))
+	  {
+	    if (type == REPLAY_variable_capture)
+	      // We don't know where this ends, so have to stop scanning the
+	      // BB.
+	      break;
+
+	    if (type == REPLAY_fixed_capture)
+	      shadow = span.end;
+	    continue;
+	  }
+
+	bool is_empty = !get_attr_length (insn);
+	if (shadow)
+	  {
+	    // We're in the shadow of a replay capture
+	    if (!is_empty)
+	      shadow--;
+	    continue;
+	  }
 
 	if (may_continue)
 	  info.back ().must_end = false;
@@ -231,7 +293,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	};
 
 	unsigned hash = hasher (hasher, INSN_CODE (insn), pattern);
-	info.emplace_back (insn, age, hash, !get_attr_length (insn));
+	info.emplace_back (insn, age, hash, is_empty);
 
 	may_continue = true;
     }
@@ -296,6 +358,7 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
 static unsigned
 build_sequences (replay_map &map, replay_list &list, replay_block &block, unsigned max_length)
 {
+  list.clear ();
   list.push_back (replay_sequence ()); // null sequence
   map.clear ();
 
@@ -359,14 +422,12 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
 // Remove overlaps, and push a pointer to valid ones into the ACTIVE array.
 
 static void
-active_triage (replay_active &active, replay_list &list, unsigned from, unsigned longest)
+active_triage (replay_active &active, replay_list &list, unsigned from)
 {
+  active.clear ();
   for (; from != list.size (); from++)
     {
       auto &seq = list[from];
-      if (seq.length > longest)
-	break;
-
       auto end = seq.clones.end (), write = seq.clones.begin ();
       unsigned bound = 0;
       for (auto pos = write; pos != end; ++pos)
@@ -395,24 +456,26 @@ active_triage (replay_active &active, replay_list &list, unsigned from, unsigned
     fprintf (dump_file, "%u candidates\n\n", unsigned (active.size ()));
 }
 
-static replay_sequence &
-pick_replay (replay_active &active)
+static replay_sequence *
+pick_replay (replay_active &active, unsigned limit)
 {
-  replay_sequence *result = active.front ();
+  replay_sequence *result = nullptr;
   unsigned best = 0;
 
   for (auto *seq : active)
     {
       gcc_assert (seq->clones.size () > 1);
+      if (seq->length > limit)
+	break;
       unsigned saving = (seq->clones.size () - 1) * (seq->length - 1) - 1;
-      if (best < saving || (best == saving && result->length < seq->length))
+      if (best < saving || (best == saving && result && result->length < seq->length))
 	{
 	  best = saving;
 	  result = seq;
 	}
     }
 
-  return *result;
+  return result;
 }
 
 static unsigned
@@ -544,41 +607,166 @@ active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_len
 // the repeated portions w/ a REPLAY instruction
 
 static void
-transform (function *cfn, unsigned max_length)
+transform (function *cfn, unsigned buffer_size)
 {
+  basic_block bb;
+  std::vector<replay_span> replay_spans;
+
+  // Determine replay_spans ranges
+  replay_spans.emplace_back (0, buffer_size);
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      rtx_insn *insn;
+      unsigned shadow = 0;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (GET_CODE (insn) != INSN)
+	    continue;
+	  rtx pattern = PATTERN (insn);
+
+	  if (GET_CODE (pattern) == USE)
+	    continue;
+	  if (GET_CODE (pattern) == CLOBBER)
+	    continue;
+
+	  if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
+
+	  replay_span span;
+	  auto type = is_replay_insn (span, insn);
+	  if (type == REPLAY_none)
+	    {
+	      if (shadow && get_attr_length (insn))
+		shadow--;
+	      continue;
+	    }
+	  if (shadow)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "User capturing or replaying during capture\n");
+	      return;
+	    }
+
+	  if (type == REPLAY_variable_capture)
+	    // Using remainder of the buffer.
+	    span.end = buffer_size;
+	  else
+	    {
+	      if (type == REPLAY_fixed_capture)
+		shadow = span.end;
+
+	      span.end += span.begin;
+	    }
+
+	  // Cut out [from,to) from replay_spans.
+	  for (auto pos = replay_spans.begin (), end = replay_spans.end (); pos != end;)
+	    if (pos->end <= span.begin)
+	      ++pos; // not reached, continue
+	    else if (pos->begin >= span.end)
+	      break; // gone past, we're done
+	    else if (pos->begin >= span.begin && pos->end <= span.end)
+	      replay_spans.erase (pos), --end; // entirely consumed
+	    else if (pos->begin >= span.begin)
+	      {
+		pos->begin = span.end; // snip front
+		break;
+	      }
+	    else if (pos->end <= span.end)
+	      pos->end = span.begin, ++pos; // snip back
+	    else
+	      {
+		// punch hole, and we're done
+		unsigned e = pos->end;
+		pos->end = span.begin;
+		replay_spans.emplace (pos, span.end, e);
+		break;
+	      }
+	}
+      if (shadow)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "User capturing across basic block\n");
+	  return;
+	}
+    }
+
+  // Convert replay_spans to be [start, +length)
+  for (auto &slot : replay_spans)
+    slot.end -= slot.begin;
+  // Sort in decreasing length
+  std::sort (replay_spans.begin (), replay_spans.end (),
+	     [] (replay_span const a, replay_span const b)
+	     {
+	       return a.end > b.end
+		 || (a.end == b.end && a.begin < b.begin);
+	     });
+  // Remove spans that are too short
+  while (!replay_spans.empty ()
+	 && replay_spans.back ().end < MIN_SEQUENCE)
+    replay_spans.pop_back ();
+  if (replay_spans.empty ())
+    {
+      if (dump_file)
+	fprintf (dump_file, "No replay buffer slots replay_spans\n");
+      return;
+    }
+  
+  if (dump_file)
+    {
+      for (auto const &slot : replay_spans)
+	fprintf (dump_file, "Slots [%u,+%u) \n",
+		 slot.begin, slot.end);
+      fprintf (dump_file, "\n");
+    }
+
   replay_block info; // insn info
   replay_list list; // list of sequences
   replay_map map; // map of sequences
   replay_active active; // pointers to active (under-consideration) sequences
-  basic_block bb;
-
   FOR_EACH_BB_FN (bb, cfn)
     {
-      info.clear ();
-      list.clear ();
-      active.clear ();
-
       if (!scan_insns (info, bb))
 	continue;
 
       // This is N^2
-      unsigned lwm = build_sequences (map, list, info, max_length);
-      active_triage (active, list, lwm, max_length);
+      unsigned lwm = build_sequences (map, list, info, replay_spans.front ().end);
+
+      active_triage (active, list, lwm);
 
       // This is the knapsack problem :(
-      unsigned replay_start = 0;
+      auto spans = replay_spans;
+
       while (!active.empty ())
 	{
-	  auto &seq = pick_replay (active);
-	  gcc_assert (replay_start + seq.length <= max_length);
-	  replay_start += replace_sequence (seq, info, replay_start);
+	  auto *seq = pick_replay (active, spans.front ().end);
+	  if (!seq)
+	    break;
 
-	  unsigned space = max_length - replay_start;
-	  if (space < MIN_SEQUENCE)
+	  auto slot = spans.begin ();
+	  // Is there a better fit?
+	  // FIXME: should we only accept exact fit?
+	  for (auto probe = slot;
+	       ++probe != spans.end () && probe->end >= seq->length;)
+	    slot = probe;
+
+	  unsigned len = replace_sequence (*seq, info, slot->begin);
+	  slot->begin += len;
+	  slot->end -= len;
+
+	  if (slot->end < MIN_SEQUENCE)
+	    spans.erase (slot);
+	  else
+	    for (auto pos = slot;
+		 ++pos != spans.end ()
+		   && slot->end < pos->end;
+		 ++slot)
+	      std::swap (slot, pos);
+
+	  if (spans.empty ())
 	    break;
 
 	  // Remove unuseable sequences
-	  active_invalidate (active, &seq, space);
+	  active_invalidate (active, seq, spans.front ().end);
 	}
     }
 }
@@ -606,42 +794,15 @@ public:
   {
   }
 
-  virtual bool gate (function *cfn) override
+  virtual bool gate (function *) override
   {
-    if (!TARGET_XTT_TENSIX_OPT_REPLAY)
-      return false;
-
-    // If there are any replay insns, bail here.  Ideally we'd
-    // continue if there are gaps in the replay allocations. But
-    // that's for another day. Also, perhaps it's cheap or rare enough
-    // to check this condition during building the sequence data
-    // structure.
-    basic_block bb;
-
-    FOR_EACH_BB_FN (bb, cfn)
-      {
-	rtx_insn *insn;
-	FOR_BB_INSNS (bb, insn)
-	  {
-	    int icode = INSN_CODE (insn);
-	    if (icode == CODE_FOR_rvtt_sfpsynth_insn)
-	      {
-		auto ops = XVECEXP (PATTERN (insn), 0, 0);
-		auto code = XVECEXP (ops, 0, SYNTH_icode);
-
-		icode = INTVAL (code);
-	      }
-	    if (icode == CODE_FOR_rvtt_ttreplay_int)
-	      return false;
-	  }
-      }
-    return true;
+    return TARGET_XTT_TENSIX_OPT_REPLAY;
   } 
 
   /* opt_pass methods: */
-  virtual unsigned execute (function *cfn) override
+  virtual unsigned execute (function *fn) override
   {
-    transform (cfn, riscv_tt_replay_size);
+    transform (fn, riscv_tt_replay_size);
     return 0;
   }
 }; // class pass_rvtt_replay
