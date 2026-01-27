@@ -139,10 +139,9 @@ constexpr unsigned int CREG_IDX_TILEID = 15;
 constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01; // builtin property
 constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
 // no longer needed 0x04;
-constexpr unsigned int INSN_FLAGS_RTL_ONLY           = 0x08;  // true if no builtin
-// Next 2 are exclusive
+// no longer needed 0x08;
 constexpr unsigned int INSN_FLAGS_RISCV              = 0x20;  // true a regular riscv insn
-constexpr unsigned int INSN_FLAGS_EMPTY              = 0x40;  // true if doesn't emit asm (eg, readlreg)
+// no longer needed 0x40;
 
 struct GTY(()) rvtt_insn_data {
   enum insn_id : unsigned;
@@ -159,9 +158,7 @@ struct GTY(()) rvtt_insn_data {
 
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
-  inline bool rtl_only_p() const { return flags & INSN_FLAGS_RTL_ONLY; }
   inline bool riscv_p() const { return flags & INSN_FLAGS_RISCV; }
-  inline bool empty_p() const { return flags & INSN_FLAGS_EMPTY; }
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
@@ -171,11 +168,8 @@ struct GTY(()) rvtt_insn_data {
 
 enum rvtt_insn_data::insn_id : unsigned {
   // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_RTL_ONLY(id, fl, nip) id,
 #define RVTT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_RTL_ONLY(id, fl) id,
-#define RVTT_WH_PAD_RTL_ONLY(id) id,
 #define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_WH_PAD_BUILTIN(id) id,
@@ -206,7 +200,6 @@ extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
 
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-extern bool rvtt_p(const rvtt_insn_data **insnd, const rtx_insn *insn);
 
 extern const rvtt_insn_data * rvtt_get_live_version(const rvtt_insn_data *insnd);
 extern const rvtt_insn_data * rvtt_get_notlive_version(const rvtt_insn_data *insnd);

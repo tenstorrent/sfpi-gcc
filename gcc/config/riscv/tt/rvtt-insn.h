@@ -21,13 +21,8 @@ along with GCC; see the file COPYING3.  If not see
 
 // The _lv instructions MUST follow the non-live versions of the same instruction
 
-// RTL ONLY doesn't create a builtin intrinsic
 // NO_TGT doesn't return a value
 // PAD ensures that each arch has the same # insns (PAD aren't instanced)
-
-#ifndef RVTT_RTL_ONLY
-#define RVTT_RTL_ONLY(a, b, c)
-#endif
 
 #ifndef RVTT_BUILTIN
 #define RVTT_BUILTIN(a, b, c, d, e, f, g, h)
@@ -43,14 +38,6 @@ along with GCC; see the file COPYING3.  If not see
 
 #ifndef RVTT_WH_PAD_NO_TGT_BUILTIN
 #define RVTT_WH_PAD_NO_TGT_BUILTIN(a)
-#endif
-
-#ifndef RVTT_WH_PAD_RTL_ONLY
-#define RVTT_WH_PAD_RTL_ONLY(a)
-#endif
-
-#ifndef RVTT_WH_RTL_ONLY
-#define RVTT_WH_RTL_ONLY(a, b)
 #endif
 
 #ifndef RVTT_WH_BUILTIN
@@ -69,14 +56,6 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_BH_PAD_NO_TGT_BUILTIN(a)
 #endif
 
-#ifndef RVTT_BH_PAD_RTL_ONLY
-#define RVTT_BH_PAD_RTL_ONLY(a)
-#endif
-
-#ifndef RVTT_BH_RTL_ONLY
-#define RVTT_BH_RTL_ONLY(a, b)
-#endif
-
 #ifndef RVTT_BH_BUILTIN
 #define RVTT_BH_BUILTIN(a, b, c, d, e, f, g, h)
 #endif
@@ -87,33 +66,6 @@ along with GCC; see the file COPYING3.  If not see
 
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
 // This can be ensured by using the RVTT_PAD_XX define
-
-// Common internal (rtl only) insns.  args are (id, flags, nonimm_pos)
-RVTT_RTL_ONLY (sfpmovwhole,      0x08, -1)
-
-RVTT_RTL_ONLY (sfpsynth_insn_dst,     0x08, SYNTH_opcode)
-RVTT_RTL_ONLY (sfpsynth_insn,         0x08, SYNTH_opcode)
-RVTT_RTL_ONLY (sfpsynth_store_insn,   0x08, SYNTH_opcode)
-
-RVTT_RTL_ONLY(sfpreadlreg0,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg1,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg2,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg3,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg4,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg5,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg6,       0x48, -1)
-RVTT_RTL_ONLY(sfpreadlreg7,       0x48, -1)
-
-RVTT_RTL_ONLY(sfpwritelreg0,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg1,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg2,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg3,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg4,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg5,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg6,   0x48, -1)
-RVTT_RTL_ONLY(sfpwritelreg7,   0x48, -1)
-
-RVTT_RTL_ONLY(ttreplay_int,       0x08,-1)
 
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
@@ -132,45 +84,14 @@ RVTT_BUILTIN (sfpxbool,        RISCV_USI_FTYPE_USI_USI_USI,                     
 RVTT_BUILTIN (sfpxcondi,       RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_BUILTIN (sfpxvif,         RISCV_USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
 
-RVTT_BUILTIN (sfpreadlreg,     RISCV_XTT_VEC_FTYPE_USI,                                          0x40, -1, -1, -1,      0, 0)
-RVTT_NO_TGT_BUILTIN (sfpwritelreg,   RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x40, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpreadlreg,     RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
+RVTT_NO_TGT_BUILTIN (sfpwritelreg,   RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
 
 RVTT_NO_TGT_BUILTIN (sfpnop,         RISCV_VOID_FTYPE,                                           0x00, -1, -1, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpxcondb,      RISCV_VOID_FTYPE_USI_USI,                                   0x00, -1, -1, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (ttincrwc,       RISCV_VOID_FTYPE_USI_USI_USI_USI,                           0x00, -1, -1, -1,      0, 0)
 // The length operand is [1,32], which is awkward
 RVTT_NO_TGT_BUILTIN (ttreplay,       RISCV_VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,          0x00, -1, -1, 1,      (unsigned)-1, 4)
-
-// Wormhole internal (rtl only) insns
-RVTT_WH_RTL_ONLY(sfpload_int,             0x08)
-RVTT_WH_RTL_ONLY(sfploadi_int,            0x08)
-RVTT_WH_RTL_ONLY(sfpstore_int,            0x08)
-RVTT_WH_RTL_ONLY(sfpmuli_int,             0x08)
-RVTT_WH_RTL_ONLY(sfpaddi_int,             0x08)
-RVTT_WH_RTL_ONLY(sfpmul_int,              0x08)
-RVTT_WH_RTL_ONLY(sfpadd_int,              0x08)
-RVTT_WH_RTL_ONLY(sfpiadd_v_int,           0x08)
-RVTT_WH_RTL_ONLY(sfpiadd_i_int,           0x08)
-RVTT_WH_RTL_ONLY(sfpshft_i_int,           0x08)
-RVTT_WH_RTL_ONLY(sfpabs_int,              0x08)
-RVTT_WH_RTL_ONLY(sfpnot_int,              0x08)
-RVTT_WH_RTL_ONLY(sfplz_int,               0x08)
-RVTT_WH_RTL_ONLY(sfpsetman_i_int,         0x08)
-RVTT_WH_RTL_ONLY(sfpsetexp_i_int,         0x08)
-RVTT_WH_RTL_ONLY(sfpsetsgn_i_int,         0x08)
-RVTT_WH_RTL_ONLY(sfpsetman_i_lv_int,      0x08)
-RVTT_WH_RTL_ONLY(sfpsetexp_i_lv_int,      0x08)
-RVTT_WH_RTL_ONLY(sfpsetsgn_i_lv_int,      0x08)
-RVTT_WH_RTL_ONLY(sfpmad_int,              0x08)
-RVTT_WH_RTL_ONLY(sfpmov_int,              0x08)
-RVTT_WH_RTL_ONLY(sfpdivp2_int,            0x08)
-RVTT_WH_RTL_ONLY(sfpexexp_int,            0x08)
-RVTT_WH_RTL_ONLY(sfpexman_int,            0x08)
-RVTT_WH_RTL_ONLY(sfpcast_int,             0x08)
-RVTT_WH_RTL_ONLY(sfpshft2_e_int,          0x08)
-RVTT_WH_RTL_ONLY(sfpstochrnd_i_int,       0x08)
-RVTT_WH_RTL_ONLY(sfpstochrnd_v_int,       0x08)
-RVTT_WH_RTL_ONLY(sfpswap_int,             0x08)
 
 // Wormhole builtin intrinsics
 RVTT_WH_BUILTIN (sfpassign_lv,    RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x02, -1, -1, -1,      0, 0)
@@ -252,37 +173,6 @@ RVTT_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)
 
-// Blackhole internal (rtl only) insns
-RVTT_BH_RTL_ONLY(sfpload_int,             0x08)
-RVTT_BH_RTL_ONLY(sfploadi_int,            0x08)
-RVTT_BH_RTL_ONLY(sfpstore_int,            0x08)
-RVTT_BH_RTL_ONLY(sfpmuli_int,             0x08)
-RVTT_BH_RTL_ONLY(sfpaddi_int,             0x08)
-RVTT_BH_PAD_RTL_ONLY(sfpmul_int)
-RVTT_BH_PAD_RTL_ONLY(sfpadd_int)
-RVTT_BH_RTL_ONLY(sfpiadd_v_int,           0x08)
-RVTT_BH_RTL_ONLY(sfpiadd_i_int,           0x08)
-RVTT_BH_RTL_ONLY(sfpshft_i_int,           0x08)
-RVTT_BH_PAD_RTL_ONLY(sfpabs_int)
-RVTT_BH_PAD_RTL_ONLY(sfpnot_int)
-RVTT_BH_PAD_RTL_ONLY(sfplz_int)
-RVTT_BH_RTL_ONLY(sfpsetman_i_int,         0x08)
-RVTT_BH_RTL_ONLY(sfpsetexp_i_int,         0x08)
-RVTT_BH_RTL_ONLY(sfpsetsgn_i_int,         0x08)
-RVTT_BH_RTL_ONLY(sfpsetman_i_lv_int,      0x08)
-RVTT_BH_RTL_ONLY(sfpsetexp_i_lv_int,      0x08)
-RVTT_BH_RTL_ONLY(sfpsetsgn_i_lv_int,      0x08)
-RVTT_BH_RTL_ONLY(sfpmad_int,              0x08)
-RVTT_BH_RTL_ONLY(sfpmov_int,              0x08)
-RVTT_BH_RTL_ONLY(sfpdivp2_int,            0x08)
-RVTT_BH_PAD_RTL_ONLY(sfpexexp_int)
-RVTT_BH_PAD_RTL_ONLY(sfpexman_int)
-RVTT_BH_PAD_RTL_ONLY(sfpcast_int)
-RVTT_BH_RTL_ONLY(sfpshft2_e_int,          0x08)
-RVTT_BH_RTL_ONLY(sfpstochrnd_i_int,       0x08)
-RVTT_BH_RTL_ONLY(sfpstochrnd_v_int,       0x08)
-RVTT_BH_PAD_RTL_ONLY(sfpswap_int)
-
 // Blackhole builtin intrinsics
 RVTT_BH_BUILTIN (sfpassign_lv,    RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x02, -1, -1, -1,      0, 0)
 RVTT_BH_BUILTIN (sfpload,         RISCV_XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  2,  3, 0x1FFF, 0)
@@ -363,18 +253,13 @@ RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)
 
-#undef RVTT_RTL_ONLY
 #undef RVTT_BUILTIN
 #undef RVTT_NO_TGT_BUILTIN
 #undef RVTT_WH_PAD_BUILTIN
 #undef RVTT_WH_PAD_NO_TGT_BUILTIN
-#undef RVTT_WH_PAD_RTL_ONLY
-#undef RVTT_WH_RTL_ONLY
 #undef RVTT_WH_BUILTIN
 #undef RVTT_WH_NO_TGT_BUILTIN
 #undef RVTT_BH_PAD_BUILTIN
 #undef RVTT_BH_PAD_NO_TGT_BUILTIN
-#undef RVTT_BH_PAD_RTL_ONLY
-#undef RVTT_BH_RTL_ONLY
 #undef RVTT_BH_BUILTIN
 #undef RVTT_BH_NO_TGT_BUILTIN
