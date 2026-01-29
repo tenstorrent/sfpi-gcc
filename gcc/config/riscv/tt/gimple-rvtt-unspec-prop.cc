@@ -68,6 +68,7 @@ transform (function *fn)
   tree cstlreg_decl = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg)->decl;
   tree novalue_decl = rvtt_get_insn_data (rvtt_insn_data::sfpnovalue)->decl;
   tree select2_decl = rvtt_get_insn_data (rvtt_insn_data::sfpselect2)->decl;
+  tree select4_decl = rvtt_get_insn_data (rvtt_insn_data::sfpselect4)->decl;
   std::set<gcall *> clones;
 
   basic_block bb;
@@ -134,7 +135,7 @@ transform (function *fn)
 	      continue;
 	    }
 
-	  if (decl == select2_decl)
+	  if (decl == select2_decl || decl == select4_decl)
 	    {
 	      if (clones.find (call) != clones.end ())
 		continue;
@@ -154,8 +155,8 @@ transform (function *fn)
 	      if (gimple_bb (def) == bb)
 		continue;
 
-	      // copy the select2 to just after the def stmt
-	      gcall *clone = gimple_build_call (select2_decl, 2);
+	      // copy the selectN to just after the def stmt
+	      gcall *clone = gimple_build_call (decl, 2);
 	      tree ssa_var = make_ssa_name_fn (fn, TREE_TYPE (res), clone);
 	      SET_SSA_NAME_VAR_OR_IDENTIFIER (ssa_var, DECL_NAME (decl));
 

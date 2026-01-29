@@ -20689,11 +20689,6 @@ __attribute__((always_inline)) inline vUInt float_to_int16(vFloat in, int round_
                                                                        ;
 }
 
-__attribute__((always_inline)) inline void subvec_transp(__vBase& l0, __vBase& l1, __vBase& l2, __vBase& l3)
-{
-    __builtin_rvtt_wh_sfptransp(l0.get(), l1.get(), l2.get(), l3.get());
-}
-
 __attribute__((always_inline)) inline __rvtt_vec_t subvec_shflror1(const __vBase& src)
 
 {

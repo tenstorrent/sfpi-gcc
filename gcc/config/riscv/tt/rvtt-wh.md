@@ -115,7 +115,6 @@
   UNSPECV_WH_SFPLUTFP32_3R
   UNSPECV_WH_SFPLUTFP32_6R
   UNSPECV_WH_SFPCONFIG_V
-  UNSPECV_WH_SFPTRANSP
   UNSPECV_WH_SFPSHFT2_G
   UNSPECV_WH_SFPSHFT2_GE
 ])
@@ -1189,17 +1188,6 @@
      ] UNSPECV_WH_SFPCONFIG_V)]
   "TARGET_XTT_TENSIX_WH"
   "SFPCONFIG\t%1, 0, 0"
-  [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_wh_sfptransp"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "register_operand"   "+x0")
-     (match_operand:XTT32SI 1 "register_operand"   "+x1")
-     (match_operand:XTT32SI 2 "register_operand"   "+x2")
-     (match_operand:XTT32SI 3 "register_operand"   "+x3")
-     ] UNSPECV_WH_SFPTRANSP)]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPTRANSP"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_wh_sfpshft2_g"

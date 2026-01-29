@@ -9836,6 +9836,8 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
     return is_sfpu;
   if (mode == XTT64SImode)
     return is_sfpu;
+  if (mode == XTT128SImode)
+    return is_sfpu;
   if (is_sfpu)
     return false;
 
@@ -11876,7 +11878,7 @@ static bool
 riscv_vector_mode_supported_p (machine_mode mode)
 {
   if (TARGET_XTT_TENSIX
-      && (mode == XTT32SImode || mode == XTT64SImode))
+      && (mode == XTT32SImode || mode == XTT64SImode || mode == XTT128SImode))
     return true;
 
   if (TARGET_VECTOR)

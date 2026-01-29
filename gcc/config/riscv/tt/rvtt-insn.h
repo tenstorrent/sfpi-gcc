@@ -90,9 +90,11 @@ RVTT_NO_TGT_BUILTIN (sfpwritelreg,RISCV_VOID_FTYPE_XTT_VEC_USI,                 
 
 RVTT_BUILTIN (sfpnovalue,         RISCV_XTT_VEC_FTYPE,                                              0x00, -1, -1, -1,      0, 0)
 RVTT_BUILTIN (sfpselect2,         RISCV_XTT_VEC_FTYPE_XTT_VEC2_USI,                                 0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfpselect4,         RISCV_XTT_VEC_FTYPE_XTT_VEC4_USI,                                 0x00, -1, -1, -1,      0, 0)
 
 RVTT_NO_TGT_BUILTIN (sfpnop,      RISCV_VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
 RVTT_BUILTIN (sfpswap,            RISCV_XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                         0x00, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (sfptransp,          RISCV_XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,             0x00, -1, -1, -1,      0, 0)
 
 RVTT_NO_TGT_BUILTIN (ttincrwc,    RISCV_VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
 // The length operand is [1,32], which is awkward
@@ -173,7 +175,6 @@ RVTT_WH_NO_TGT_BUILTIN (sfppushc,       RISCV_VOID_FTYPE_USI,                   
 RVTT_WH_NO_TGT_BUILTIN (sfppopc,        RISCV_VOID_FTYPE_USI,                                       0x01, -1,  0, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,      0x00, -1,  3,  4, 0x3FFF, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
-RVTT_WH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,           0x00, -1, -1, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_WH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)
 
@@ -252,7 +253,6 @@ RVTT_BH_NO_TGT_BUILTIN (sfppushc,       RISCV_VOID_FTYPE_USI,                   
 RVTT_BH_NO_TGT_BUILTIN (sfppopc,        RISCV_VOID_FTYPE_USI,                                       0x01, -1,  0, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpstore,       RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,      0x00, -1,  3,  4, 0x1FFF, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpconfig_v,    RISCV_VOID_FTYPE_XTT_VEC_USI,                               0x00, -1, -1, -1,      0, 0)
-RVTT_BH_NO_TGT_BUILTIN (sfptransp,      RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,           0x00, -1, -1, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_g,     RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,       0x00, -1,  4, -1,      0, 0)
 RVTT_BH_NO_TGT_BUILTIN (sfpshft2_ge,    RISCV_VOID_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,   0x00, -1, -1, -1,      0, 0)
 
