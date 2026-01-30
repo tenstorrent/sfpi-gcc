@@ -118,19 +118,24 @@ transform (function *fn)
 	      opcode |= (REGNO (dst) - SFPU_REG_FIRST) << INTVAL (XVECEXP (pat, 0, SYNTH_dst_shift - 1));
 	    }
 	  rtx src = XVECEXP (pat, 0, SYNTH_src);
-	  if (GET_CODE (src) != CONST_VECTOR)
+	  bool is_reg = true;
+	  unsigned regno = 0;
+	  if (REG_P (src))
+	    regno = REGNO (src) - SFPU_REG_FIRST;
+	  else
 	    {
-	      unsigned regno;
-	      if (REG_P (src))
-		regno = REGNO (src) - SFPU_REG_FIRST;
+	      gcc_assert (GET_CODE (src) == UNSPEC);
+	      if (XINT (src, 1) == UNSPEC_SFPCSTLREG)
+		regno = INTVAL (XVECEXP (src, 0, 0));
 	      else
-		{
-		  gcc_assert (GET_CODE (src) == UNSPEC
-			      && XINT (src, 1) == UNSPEC_SFPCSTLREG);
-		  regno = INTVAL (XVECEXP (src, 0, 0));
-		}
-	      opcode |= regno << INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
+		is_reg = false;
 	    }
+	  if (is_reg)
+	    {
+	      unsigned shift = INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
+	      opcode |= regno << shift;
+	    }
+
 	  opcode |= INTVAL (XVECEXP (pat, 0, SYNTH_opcode));
 
 	  map[opcode]++;

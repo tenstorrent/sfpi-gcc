@@ -66,6 +66,7 @@ transform (function *fn)
 {
   bool changed = false;
   tree cstlreg_decl = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg)->decl;
+  tree novalue_decl = rvtt_get_insn_data (rvtt_insn_data::sfpnovalue)->decl;
   tree select2_decl = rvtt_get_insn_data (rvtt_insn_data::sfpselect2)->decl;
   std::set<gcall *> clones;
 
@@ -77,15 +78,21 @@ transform (function *fn)
 	{
 	  tree decl = gimple_call_fndecl (call);
 	  
-	  if (decl == cstlreg_decl)
+	  bool is_cstlreg = decl == cstlreg_decl;
+	  if (is_cstlreg || decl == novalue_decl)
 	    {
 	      if (clones.find (call) != clones.end ())
 		continue;
 
-	      auto arg = gimple_call_arg (call, 0);
-	      if (TREE_CODE (arg) != INTEGER_CST
-		  || TREE_INT_CST_LOW (arg) < 8)
-		continue;
+	      tree arg = nullptr;
+
+	      if (is_cstlreg)
+		{
+		  arg = gimple_call_arg (call, 0);
+		  if (TREE_CODE (arg) != INTEGER_CST
+		      || TREE_INT_CST_LOW (arg) < 8)
+		    continue;
+		}
 
 	      tree lhs = gimple_call_lhs (call);
 	      if (!lhs)
@@ -103,12 +110,13 @@ transform (function *fn)
 		  // If this triggers, we'll need to handle it.
 		  gcc_assert (!is_a <gphi *> (use));
 
-		  gcall *clone = gimple_build_call (cstlreg_decl, 1);
+		  gcall *clone = gimple_build_call (decl, is_cstlreg ? 1 : 0);
 		  tree ssa_var = make_ssa_name_fn (fn, TREE_TYPE (lhs), clone);
 		  SET_SSA_NAME_VAR_OR_IDENTIFIER (ssa_var, DECL_NAME (decl));
 
 		  gimple_call_set_lhs (clone, ssa_var);
-		  gimple_call_set_arg (clone, 0, arg);
+		  if (is_cstlreg)
+		    gimple_call_set_arg (clone, 0, arg);
 		  gimple_set_location (clone, gimple_location (call));
 		  auto use_gsi = gsi_for_stmt (use);
 		  gsi_insert_before (&use_gsi, clone, GSI_SAME_STMT);

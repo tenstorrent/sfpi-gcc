@@ -33,8 +33,8 @@ extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
 
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
 
-// We use this value to indicate 'not a register'
-extern rtx rvtt_vec0_rtx;
+extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
+extern rtx rvtt_gen_rtx_noval (machine_mode);
 
 // Instruction synthesis
 char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
@@ -44,18 +44,16 @@ inline rtx rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synt
 				   rtx dst, unsigned dst_shift, rtx lv)
 {
   return rvtt_sfpsynth_insn_dst (addr, icode, flags, synth, opcode, id,
-				 rvtt_vec0_rtx, 0, dst, dst_shift, lv);
+				 rvtt_gen_rtx_noval (XTT32SImode), 0, dst, dst_shift, lv);
 }
 rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			rtx src, unsigned src_shift);
 inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id)
 {
-  return rvtt_sfpsynth_insn (addr, icode, flags, synth, opcode, id, rvtt_vec0_rtx, 0);
+  return rvtt_sfpsynth_insn (addr, icode, flags, synth, opcode, id, rvtt_gen_rtx_noval (XTT32SImode), 0);
 }
 rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			      rtx src, unsigned src_shift);
-
-extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 
 extern void rvtt_wh_emit_sfpload(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_wh_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);

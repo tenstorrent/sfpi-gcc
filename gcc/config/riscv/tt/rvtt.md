@@ -26,6 +26,7 @@
 (define_c_enum "unspec" [
   UNSPEC_SYNTH_OPCODE
   UNSPEC_SFPCSTLREG
+  UNSPEC_SFPNOVAL
   UNSPEC_SFPCLEAVE ; cleave together and cleave apart, yay auto-antonyms!
 ])
 
@@ -117,10 +118,10 @@
           (match_operand:SI    3 "register_operand"  "r,r,r,r") ; synth'd insn
           (match_operand:SI    4 "const_int_operand" "n,n,n,n") ; cst opcode
           (match_operand:SI    5 "const_int_operand" "n,n,n,n") ; id
-          (match_operand:XTT32SI 6 "reg_or_cstlreg_or_vec0_operand" "xrxc,xn,xrxc,xn") ; src
+          (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xrxc,xn,xrxc,xn") ; src
           (match_operand:SI    7 "const_int_operand" "n,n,n,n") ; src shift
           (match_operand:SI    9 "const_int_operand" "n,n,n,n") ; dst shift
-          (match_operand:XTT32SI 10 "reg_or_cstlreg_or_vec0_operand" "8,8,xn,xn") ; lv
+          (match_operand:XTT32SI 10 "reg_or_cstlreg_or_noval_operand" "8,8,xn,xn") ; lv
           ] UNSPECV_SFPSYNTH_INSN))
    (clobber (match_scratch:SI 11 "=&r,&r,&r,&r"))]
   "TARGET_XTT_TENSIX"
@@ -140,7 +141,7 @@
      (match_operand:SI    3 "register_operand"  "r,r") ; synth'd insn
      (match_operand:SI    4 "const_int_operand" "n,n") ; cst opcode
      (match_operand:SI    5 "const_int_operand" "n,n") ; id
-     (match_operand:XTT32SI 6 "reg_or_cstlreg_or_vec0_operand" "xrxc,xn") ; src
+     (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xrxc,xn") ; src
      (match_operand:SI    7 "const_int_operand" "n,n") ; src shift
      ] UNSPECV_SFPSYNTH_INSN)
    (clobber (match_scratch:SI 8 "=&r, X"))]
@@ -219,6 +220,11 @@
   ""
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
+
+(define_expand "rvtt_sfpnovalue"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec:XTT32SI [(const_int 0)] UNSPEC_SFPNOVAL))]
+  "TARGET_XTT_TENSIX")
 
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.

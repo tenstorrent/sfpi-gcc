@@ -78,7 +78,7 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 91;
+static const int NUMBER_OF_INTRINSICS = 92;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
@@ -105,10 +105,6 @@ static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_
 
 static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
 static const char* rvtt_builtin_name_stub;
-
-// We have to put this decl here so gengtype emits the root here.
-extern GTY(()) rtx rvtt_vec0_rtx;
-rtx rvtt_vec0_rtx;
 
 void
 rvtt_insert_insn(int idx, const char* name, tree decl)
@@ -195,8 +191,6 @@ rvtt_init_builtins()
 
   // Make synth_opcode a const fn, it's the only one.
   TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
-
-  rvtt_vec0_rtx = gen_const_vec_duplicate (XTT32SImode, GEN_INT(0));
 }
 
 const char *
@@ -434,21 +428,26 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
   uint32_t reg_mask = 0;
   uint32_t reg_ops = 0;
   rtx src_op = operands[SYNTH_src];
-  if (GET_CODE (src_op) != CONST_VECTOR)
+
+  unsigned regno;
+  bool is_reg = true;
+  if (REG_P (src_op))
+    regno = REGNO (src_op) - SFPU_REG_FIRST;
+  else
+    {
+      gcc_assert (GET_CODE (src_op) == UNSPEC);
+      if (XINT (src_op, 1) == UNSPEC_SFPCSTLREG)
+	regno = INTVAL (XVECEXP (src_op, 0, 0));
+      else
+	is_reg = false;
+    }
+  if (is_reg)
     {
       unsigned src_shift = unsigned (INTVAL (operands[SYNTH_src_shift]));
       reg_mask |= 0xf << src_shift;
-      unsigned regno;
-      if (REG_P (src_op))
-	regno = REGNO (src_op) - SFPU_REG_FIRST;
-      else
-	{
-	  gcc_assert (GET_CODE (src_op) == UNSPEC
-		      && XINT (src_op, 1) == UNSPEC_SFPCSTLREG);
-	  regno = INTVAL (XVECEXP (src_op, 0, 0));
-	}
-	reg_ops |= regno << src_shift;
+      reg_ops |= regno << src_shift;
     }
+
   bool has_dst = clobber_op > SYNTH_dst;
   if (has_dst)
     {
@@ -490,7 +489,7 @@ rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
       if (has_lv)
 	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
     }
-  if (GET_CODE (src_op) != CONST_VECTOR)
+  if (is_reg)
     pos += snprintf (&pattern[pos], sizeof (pattern) - pos, &", %%x%d"[!has_lv], SYNTH_src);
 
   gcc_assert (pos < sizeof (pattern));
@@ -584,6 +583,12 @@ rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
   return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
 }
 
+rtx
+rvtt_gen_rtx_noval (machine_mode mode)
+{
+  return gen_rtx_UNSPEC (mode, gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
+}
+
 static void
 finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gimple *stmt)
 {
@@ -667,7 +672,7 @@ rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned
 {
   return gen_rvtt_sfpsynth_insn_dst
     (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
-     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_vec0_rtx);
+     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_rtx_noval (GET_MODE (dst)));
 }
 
 rtx

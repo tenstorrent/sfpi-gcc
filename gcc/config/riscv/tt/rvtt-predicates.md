@@ -18,30 +18,32 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-(define_predicate "vec0_operand"
-  ;; close enough
-  (match_code "const_vector"))
+(define_predicate "cstlreg_operand"
+  (and (match_code "unspec")
+       (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG")))
+
+(define_predicate "noval_operand"
+  (and (match_code "unspec")
+       (match_test "XINT (op, 1) == UNSPEC_SFPNOVAL")))
 
 (define_predicate "reg_or_const_int_operand"
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "const_int_operand")))
 
-(define_predicate "reg_or_cstlreg_or_vec0_operand"
-  (ior (match_operand 0 "register_operand")
-       (and (match_code "unspec")
-            (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))
-       (match_operand 0 "vec0_operand")))
-
 (define_predicate "reg_or_cstlreg_operand"
   (ior (match_operand 0 "register_operand")
-    (and (match_code "unspec")
-         (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))))
+    (match_operand 0 "cstlreg_operand")))
 
 (define_predicate "nonimmediate_or_cstlreg_operand"
   (ior (match_operand 0 "nonimmediate_operand")
-    (and (match_code "unspec")
-         (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG"))))
+    (match_operand 0 "cstlreg_operand")))
 
-(define_predicate "cstlreg_operand"
-  (and (match_code "unspec")
-       (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG")))
+(define_predicate "nonimmediate_or_cstlreg_or_noval_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+    (match_operand 0 "cstlreg_operand")
+    (match_operand 0 "noval_operand")))
+
+(define_predicate "reg_or_cstlreg_or_noval_operand"
+  (ior (match_operand 0 "register_operand")
+       (match_operand 0 "cstlreg_operand")
+       (match_operand 0 "noval_operand")))

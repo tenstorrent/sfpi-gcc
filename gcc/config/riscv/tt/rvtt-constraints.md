@@ -51,19 +51,17 @@
 ;; General constraints
 (define_constraint "xc"
   "Any of the constant SFPU registers"
-  (and (match_code "unspec")
-      (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG")))
+  (match_operand 0 "cstlreg_operand"))
 
 (define_constraint "xs"
   "Any of the storable constant SFPU registers"
-  (and (match_code "unspec")
-      (match_test "XINT (op, 1) == UNSPEC_SFPCSTLREG
-                   && INTVAL(XVECEXP (op, 0, 0)) < 12")))
+  (and (match_operand 0 "cstlreg_operand")
+       (match_test "INTVAL (XVECEXP (op, 0, 0)) < 12")))
 
 ;; used for unused vector inputs
 (define_constraint "xn"
-  "Constant vector"
-  (match_code "const_vector"))
+  "No value"
+  (match_operand 0 "noval_operand"))
 
 ;; These should be removed and the logic placed in checking the builtins themselves -- better diagnostics.
 (define_constraint "N01U"

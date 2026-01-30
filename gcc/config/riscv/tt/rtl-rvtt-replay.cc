@@ -268,10 +268,6 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	      hash = crc32_unsigned (hash, unsigned (INTVAL (rtl)));
 	      break;
 
-	    case CONST_VECTOR:
-	      // FIXME: this will go away when lv is fixed properly
-	      break;
-
 	    case MEM:
 	      // MEMs are to store a synthesized insn.  All are equivalent
 	      gcc_assert (GET_MODE (rtl) == SImode);

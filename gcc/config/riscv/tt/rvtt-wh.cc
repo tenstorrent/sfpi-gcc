@@ -236,7 +236,8 @@ rvtt_wh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
     {
       // Load imm into dst
       int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-      rvtt_wh_emit_sfpxloadi (dst, rvtt_vec0_rtx, addr, GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
+      rvtt_wh_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), addr,
+			      GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
       
       unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
       if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
@@ -352,7 +353,7 @@ void rvtt_wh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
 	       || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
-	rvtt_wh_emit_sfpxloadi(ref_val, rvtt_vec0_rtx, addr,
+	rvtt_wh_emit_sfpxloadi(ref_val, rvtt_gen_rtx_noval (XTT32SImode), addr,
 			       GEN_INT(rvtt_scmp2loadi_mod(fmt)), f,
 			       GEN_INT(0), GEN_INT(0));
     }
@@ -455,9 +456,9 @@ void rvtt_wh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
     // from a ror) Here we clear that value to 0 by rotating in the 0 register
     // Optimization potential to not do this if the previous insn was a shftr
 
-    rtx live_const = rvtt_vec0_rtx;
-    rtx lreg9 = gen_reg_rtx(XTT32SImode);
-    SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
+    rtx live_const = rvtt_gen_rtx_noval (XTT32SImode);
+    rtx lreg9 = gen_reg_rtx (XTT32SImode);
+    SET_REGNO (lreg9, SFPU_REG_FIRST + 9);
     emit_insn (gen_rvtt_wh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
   }
 

@@ -135,6 +135,7 @@ transform (function *fn)
 	      }
 	      // FALLTHROUGH
 
+	    case UNSPEC_SFPNOVAL:
 	    case UNSPEC_SFPCSTLREG:
 	      {
 		auto regno = REGNO (SET_DEST (pattern));
@@ -177,16 +178,13 @@ transform (function *fn)
 	  case REG:
 	    {
 	      unsigned regno = REGNO (*slot);
-	      if (reg_vals[regno].bb != bb)
-		break;
-	      if (XINT (reg_vals[regno].val, 1) != UNSPEC_SFPCSTLREG)
-		break;
-
-	      operands.push_back ({slot, regno});
+	      if (reg_vals[regno].bb == bb
+		  && XINT (reg_vals[regno].val, 1) != UNSPEC_SFPCLEAVE)
+		operands.push_back ({slot, regno});
 	    }
 	    break;
 
-	  CASE_CONST_ANY:
+	  case CONST_INT:
 	  case MEM:
 	  case CLOBBER: // We don't clobber Tensix regs.
 	  case USE:

@@ -88,6 +88,7 @@ RVTT_NO_TGT_BUILTIN (sfpxcondb,   RISCV_VOID_FTYPE_USI_USI,                     
 RVTT_BUILTIN (sfpreadlreg,        RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_NO_TGT_BUILTIN (sfpwritelreg,RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
+RVTT_BUILTIN (sfpnovalue,         RISCV_XTT_VEC_FTYPE,                                              0x00, -1, -1, -1,      0, 0)
 RVTT_BUILTIN (sfpselect2,         RISCV_XTT_VEC_FTYPE_XTT_VEC2_USI,                                 0x00, -1, -1, -1,      0, 0)
 
 RVTT_NO_TGT_BUILTIN (sfpnop,      RISCV_VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
