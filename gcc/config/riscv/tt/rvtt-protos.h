@@ -25,9 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 
 #define rvtt_sfpu_regno(operand) (REGNO (operand) - SFPU_REG_FIRST)
 
-constexpr unsigned int INSN_SCHED_NOP_MASK = 0x0F;  // overloaded low bits contain # nops
-constexpr unsigned int INSN_SCHED_DYN      = 0x20;  // dynamic scheduling flag
-
 extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
 extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
 
@@ -83,5 +80,30 @@ extern const char * rvtt_emit_testcode(rtx operands[]);
 extern bool rvtt_hll_p(const rtx pat);
 extern bool rvtt_l1_load_p(const rtx pat);
 extern bool rvtt_reg_load_p(const rtx pat);
+
+// Gimple passes
+class gimple_opt_pass;
+extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_nullify (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
+
+// RTL passes
+class rtl_opt_pass;
+extern rtl_opt_pass *make_pass_rvtt_fix_wh (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 
 #endif /* ! GCC_RVTT_PROTOS_H */

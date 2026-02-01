@@ -513,19 +513,6 @@ extern gimple_opt_pass *make_pass_coroutine_lower_builtins (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_coroutine_early_expand_ifns (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_adjust_alignment (gcc::context *ctxt);
 
-extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_nullify (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
-
 /* IPA Passes */
 extern simple_ipa_opt_pass *make_pass_ipa_lower_emutls (gcc::context *ctxt);
 extern simple_ipa_opt_pass *make_pass_ipa_function_and_variable_visibility (gcc::context *ctxt);
@@ -685,14 +672,6 @@ extern gimple_opt_pass *make_pass_harden_conditional_branches (gcc::context
 							       *ctxt);
 extern gimple_opt_pass *make_pass_harden_control_flow_redundancy (gcc::context
 								  *ctxt);
-
-extern rtl_opt_pass *make_pass_rvtt_fix_wh (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 
 /* Current optimization pass.  */
 extern opt_pass *current_pass;

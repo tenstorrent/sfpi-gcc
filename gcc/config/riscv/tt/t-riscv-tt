@@ -55,3 +55,5 @@ OBJS += $(RVTT_OBJS)
 $(RVTT_OBJS): %.o: $(srcdir)/config/riscv/tt/%.cc
 	$(COMPILE) $<
 	$(POSTCOMPILE)
+
+PASSES_EXTRA += $(srcdir)/config/riscv/tt/rvtt-passes.def

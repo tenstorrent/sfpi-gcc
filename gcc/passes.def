@@ -187,7 +187,6 @@ along with GCC; see the file COPYING3.  If not see
      output to the assembler file.  */
   INSERT_PASSES_AFTER (all_passes)
   NEXT_PASS (pass_fixup_cfg);
-  NEXT_PASS (pass_rvtt_synth_split);
   NEXT_PASS (pass_lower_eh_dispatch);
   NEXT_PASS (pass_oacc_loop_designation);
   NEXT_PASS (pass_omp_oacc_neuter_broadcast);
@@ -451,19 +450,6 @@ along with GCC; see the file COPYING3.  If not see
   NEXT_PASS (pass_cleanup_cfg_post_optimizing);
   NEXT_PASS (pass_warn_function_noreturn);
 
-  NEXT_PASS (pass_rvtt_warn);
-  NEXT_PASS (pass_rvtt_synth_nullify);
-  NEXT_PASS (pass_dce);
-  NEXT_PASS (pass_rvtt_synth_renumber);
-  NEXT_PASS (pass_rvtt_synth_expand);
-  NEXT_PASS (pass_rvtt_expand);
-  NEXT_PASS (pass_rvtt_live);
-  NEXT_PASS (pass_rvtt_cc);
-  NEXT_PASS (pass_rvtt_combine);
-  NEXT_PASS (pass_rvtt_move);
-  NEXT_PASS (pass_rvtt_unspec_prop_ssa);
-  NEXT_PASS (pass_rvtt_attrib);
-
   NEXT_PASS (pass_expand);
 
   NEXT_PASS (pass_rest_of_compilation);
@@ -471,7 +457,6 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_instantiate_virtual_regs);
       NEXT_PASS (pass_into_cfg_layout_mode);
       NEXT_PASS (pass_jump);
-      NEXT_PASS (pass_rvtt_unspec_prop_rtl);
       NEXT_PASS (pass_lower_subreg);
       NEXT_PASS (pass_df_initialize_opt);
       NEXT_PASS (pass_cse);
@@ -510,7 +495,6 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_late_combine);
       NEXT_PASS (pass_if_after_combine);
       NEXT_PASS (pass_jump_after_combine);
-      NEXT_PASS (pass_rvtt_rmext);
       NEXT_PASS (pass_partition_blocks);
       NEXT_PASS (pass_outof_cfg_layout_mode);
       NEXT_PASS (pass_split_all_insns);
@@ -526,8 +510,6 @@ along with GCC; see the file COPYING3.  If not see
       NEXT_PASS (pass_early_remat);
       NEXT_PASS (pass_ira);
       NEXT_PASS (pass_reload);
-      NEXT_PASS (pass_rvtt_synth_opcode);
-      NEXT_PASS (pass_rvtt_schedule);
       /* In the following, some passes are tied to 'pass_postreload' and others
 	 to 'pass_late_compilation'.  The difference is that the latter also
 	 run for 'targetm.no_register_allocation' targets.  */
@@ -561,7 +543,6 @@ along with GCC; see the file COPYING3.  If not see
 	      NEXT_PASS (pass_stack_regs_run);
 	  POP_INSERT_PASSES ()
       POP_INSERT_PASSES ()
-      NEXT_PASS (pass_rvtt_replay);
       NEXT_PASS (pass_late_thread_prologue_and_epilogue);
       /* No target-independent code motion is allowed beyond this point,
          excepting the legacy delayed-branch pass.  */
@@ -570,15 +551,6 @@ along with GCC; see the file COPYING3.  If not see
 	  NEXT_PASS (pass_zero_call_used_regs);
 	  NEXT_PASS (pass_compute_alignments);
 	  NEXT_PASS (pass_variable_tracking);
-
-          // Note: this pass should run as late as possible, ideally just before
-          // final.  However, the machine reorg pass, when using -msave-restore,
-          // injects an insn that causes df_analyze to crash, so run before that
-          // And, free_cfg pass calls free_bb_for_insn resulting in problems
-          // w/ df_analyze, so call before that
-	  NEXT_PASS (pass_rvtt_hll);
-	  NEXT_PASS (pass_rvtt_fix_wh);
-
 	  NEXT_PASS (pass_free_cfg);
 	  NEXT_PASS (pass_machine_reorg);
 	  NEXT_PASS (pass_cleanup_barriers);
