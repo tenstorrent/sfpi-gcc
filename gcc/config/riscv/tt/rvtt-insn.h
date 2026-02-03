@@ -76,7 +76,7 @@ along with GCC; see the file COPYING3.  If not see
 // nonimm_shft: shift to right justify the nonimm value
 
 // Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, nonimm_pos, nonimm_mask, nonimm_shft)
-RVTT_BUILTIN (synth_opcode,       RISCV_USI_FTYPE_USI_USI,                                          0x20, -1, -1, -1,      0, 0)
+RVTT_BUILTIN (synth_opcode,       RISCV_USI_FTYPE_USI_USI,                                          0x00, -1, -1, -1,      0, 0)
 
 RVTT_BUILTIN (sfpxicmps,          RISCV_USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
 RVTT_BUILTIN (sfpxicmpv,          RISCV_USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)

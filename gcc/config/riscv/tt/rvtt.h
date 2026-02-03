@@ -140,7 +140,7 @@ constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01; // builtin property
 constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
 // no longer needed 0x04;
 // no longer needed 0x08;
-constexpr unsigned int INSN_FLAGS_RISCV              = 0x20;  // true a regular riscv insn
+// no longer needed 0x20;
 // no longer needed 0x40;
 
 struct GTY(()) rvtt_insn_data {
@@ -152,13 +152,14 @@ struct GTY(()) rvtt_insn_data {
   const unsigned short flags;  // see flags above
   const short dst_arg_pos;
   const short mod_pos;
+
   const short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
   const unsigned int nonimm_mask;
   const short nonimm_shft;
 
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
-  inline bool riscv_p() const { return flags & INSN_FLAGS_RISCV; }
+
   inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
 
   inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }

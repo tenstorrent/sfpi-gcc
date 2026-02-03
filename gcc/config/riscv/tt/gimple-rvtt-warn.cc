@@ -171,6 +171,7 @@ handle_uninit(function *fun, bool bad_fun_decl, gimple *g, gimple_stmt_iterator 
 
 // Recurse through phi nodes, return true if any definition of def is from an
 // sfpu statement
+
 static bool
 is_sfpu_def(tree def, unordered_set<tree>& visited)
 {
@@ -205,7 +206,8 @@ is_sfpu_def(tree def, unordered_set<tree>& visited)
       gcall *stmt;
       const rvtt_insn_data *insnd;
 
-      return rvtt_p (&insnd, &stmt, def_stmt) && !insnd->riscv_p();
+      // The only non-sfpu builtin is the pure function sfpsynt_opcode.
+      return rvtt_p (&insnd, &stmt, def_stmt) && !TREE_READONLY (insnd->decl);
     }
 }
 
