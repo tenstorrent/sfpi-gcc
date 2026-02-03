@@ -95,13 +95,13 @@ void three () {
 namespace stat {
 void one () {
   auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpshft2_e (f, 3);
+  auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
   __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN4stat3oneEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPSHFT2	L1, L0, 0, 3
+**	SFPSHFT2	L8, L0, 0, 3
 **	SFPNOP
 **	SFPSTORE	0, L0, 0, 0
 **	ret
@@ -112,14 +112,14 @@ void one () {
 namespace nop {
 void one () {
   auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpshft2_e (f, 3);
+  auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
   __builtin_rvtt_sfpnop ();
   __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3nop3oneEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPSHFT2	L1, L0, 0, 3
+**	SFPSHFT2	L8, L0, 0, 3
 **	SFPNOP
 **	SFPSTORE	0, L0, 0, 0
 **	ret
@@ -127,14 +127,14 @@ void one () {
 
 void three () {
   auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpshft2_e (f, 3);
+  auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
   __builtin_rvtt_sfpnop ();
   __builtin_rvtt_sfpwritelreg (f, 3);
 }
 /*
 **_ZN3nop5threeEv:
 **	SFPLOAD	L3, 0, 0, 0
-**	SFPSHFT2	L0, L3, 0, 3
+**	SFPSHFT2	L8, L3, 0, 3
 **	SFPNOP
 **	ret
 */

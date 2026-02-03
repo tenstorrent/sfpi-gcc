@@ -78,7 +78,7 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 
 static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
 static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 93;
+static const int NUMBER_OF_INTRINSICS = 94;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {

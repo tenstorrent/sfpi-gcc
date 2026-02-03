@@ -442,25 +442,3 @@ void rvtt_bh_emit_sfpsetman(rtx dst, rtx lv, rtx addr, rtx imm, rtx src)
   else
     gcc_unreachable ();
 }
-
-void rvtt_bh_emit_sfpshft2_e(rtx dst, rtx live, rtx src, rtx mod)
-{
-  int modi = INTVAL(mod);
-
-  // This routine handles a subset of mod values that all require a NOP
-  gcc_assert(modi == 3 || modi == 4);
-
-  if (modi == 4) {
-    // BH_B0 HW bug (issue #3240): the shftr version of the insn doesn't set the
-    // value shifted into place to 0 but instead uses the previous value (eg,
-    // from a ror) Here we clear that value to 0 by rotating in the 0 register
-    // Optimization potential to not do this if the previous insn was a shftr
-
-    rtx live_const = rvtt_gen_rtx_noval (XTT32SImode);
-    rtx lreg9 = gen_reg_rtx(XTT32SImode);
-    SET_REGNO(lreg9, SFPU_REG_FIRST + 9);
-    emit_insn (gen_rvtt_bh_sfpshft2_e_int(lreg9, live_const, lreg9, GEN_INT(3)));
-  }
-
-  emit_insn (gen_rvtt_bh_sfpshft2_e_int(dst, live, src, mod));
-}

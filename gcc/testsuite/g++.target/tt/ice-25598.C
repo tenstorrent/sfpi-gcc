@@ -20689,17 +20689,6 @@ __attribute__((always_inline)) inline vUInt float_to_int16(vFloat in, int round_
                                                                        ;
 }
 
-__attribute__((always_inline)) inline __rvtt_vec_t subvec_shflror1(const __vBase& src)
-
-{
-    return __builtin_rvtt_wh_sfpshft2_e(src.get(), SFPSHFT2_MOD1_SUBVEC_SHFLROR1);
-}
-
-__attribute__((always_inline)) inline __rvtt_vec_t subvec_shflshr1(const __vBase& src)
-
-{
-    return __builtin_rvtt_wh_sfpshft2_e(src.get(), SFPSHFT2_MOD1_SUBVEC_SHFLSHR1);
-}
 
 }
 
