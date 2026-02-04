@@ -82,22 +82,16 @@ static const int NUMBER_OF_INTRINSICS = 93;
 
 static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
   {
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip,nim, nis },
-#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_WH_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, -1, 0, 0 },
-#define RVTT_WH_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, -1, 0, 0 },
+#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
+#define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN (id, fmt, fl, dap, mp, nip, nim, nis)
+#define RVTT_WH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
 #include "rvtt-insn.h"
     { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
   },
   {
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_BH_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_BH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_BH_PAD_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, -1, 0, 0 },
-#define RVTT_BH_PAD_NO_TGT_BUILTIN(id) { rvtt_insn_data::id, #id, nullptr, 0x00, 0, 0, -1, 0, 0 },
+#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
+#define RVTT_BH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis)
+#define RVTT_BH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
 #include "rvtt-insn.h"
     { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
   }
@@ -147,18 +141,14 @@ rvtt_init_builtins()
 #if CHECKING_P
   {
     static const char *const wh_ids[] = {
-#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_WH_PAD_BUILTIN(id) #id,
-#define RVTT_WH_PAD_NO_TGT_BUILTIN(id) #id,
+#define RVTT_WH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_WH_PFN(id) #id,
 #include "rvtt-insn.h"
     };
 
     static const char *const bh_ids[] = {
-#define RVTT_BH_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_BH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_BH_PAD_BUILTIN(id) #id,
-#define RVTT_BH_PAD_NO_TGT_BUILTIN(id) #id,
+#define RVTT_BH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
+#define RVTT_BH_PFN(id) #id,
 #include "rvtt-insn.h"
     };
 

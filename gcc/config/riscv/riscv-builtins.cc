@@ -263,12 +263,12 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent SFPU builtins */
-#define RVTT_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
-#define RVTT_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
-#define RVTT_WH_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
-#define RVTT_WH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
-#define RVTT_BH_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
-#define RVTT_BH_NO_TGT_BUILTIN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
+#define RVTT_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
+#define RVTT_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(op, fmt, sfpu),
+#define RVTT_WH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_WH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
+#define RVTT_BH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
+#define RVTT_BH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
 #include "tt/rvtt-insn.h"
 };
 

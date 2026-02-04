@@ -169,12 +169,9 @@ struct GTY(()) rvtt_insn_data {
 
 enum rvtt_insn_data::insn_id : unsigned {
   // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_NO_TGT_BUILTIN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_PAD_BUILTIN(id) id,
-#define RVTT_WH_PAD_NO_TGT_BUILTIN(id) id,
+#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
+#define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
+#define RVTT_WH_PFN(id) id,
 #include "rvtt-insn.h"
 
   nonsfpu,
