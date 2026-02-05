@@ -63,7 +63,7 @@ enum rvtt_insn_data::insn_id : unsigned {
 #define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
 #define RVTT_WH_PFN(id) id,
-#include "rvtt-insn.h"
+#include "rvtt-insn.def"
 
   nonsfpu,
     };

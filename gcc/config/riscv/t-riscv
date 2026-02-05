@@ -14,7 +14,7 @@ riscv-builtins.o: $(srcdir)/config/riscv/riscv-builtins.cc $(CONFIG_H) \
   $(srcdir)/config/riscv/riscv-modes.def \
   $(srcdir)/config/riscv/riscv-cmo.def \
   $(srcdir)/config/riscv/riscv-scalar-crypto.def \
-  $(srcdir)/config/riscv/tt/rvtt.h $(srcdir)/config/riscv/tt/rvtt-insn.h
+  $(srcdir)/config/riscv/tt/rvtt.h $(srcdir)/config/riscv/tt/rvtt-insn.def
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/riscv-builtins.cc
 

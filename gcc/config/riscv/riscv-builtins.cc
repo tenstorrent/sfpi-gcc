@@ -269,7 +269,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
 #define RVTT_WH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(wh_##op, fmt, wormhole),
 #define RVTT_BH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
 #define RVTT_BH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_NO_TARGET_BUILTIN(bh_##op, fmt, blackhole),
-#include "tt/rvtt-insn.h"
+#include "tt/rvtt-insn.def"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the

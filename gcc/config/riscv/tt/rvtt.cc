@@ -85,14 +85,14 @@ static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_
 #define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
 #define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN (id, fmt, fl, dap, mp, nip, nim, nis)
 #define RVTT_WH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
-#include "rvtt-insn.h"
+#include "rvtt-insn.def"
     { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
   },
   {
 #define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
 #define RVTT_BH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis)
 #define RVTT_BH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
-#include "rvtt-insn.h"
+#include "rvtt-insn.def"
     { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
   }
 };
@@ -143,13 +143,13 @@ rvtt_init_builtins()
     static const char *const wh_ids[] = {
 #define RVTT_WH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
 #define RVTT_WH_PFN(id) #id,
-#include "rvtt-insn.h"
+#include "rvtt-insn.def"
     };
 
     static const char *const bh_ids[] = {
 #define RVTT_BH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
 #define RVTT_BH_PFN(id) #id,
-#include "rvtt-insn.h"
+#include "rvtt-insn.def"
     };
 
     gcc_assert (sizeof (wh_ids) == sizeof (bh_ids));
@@ -169,7 +169,7 @@ rvtt_init_builtins()
   }
   sfpu_insn_data = sfpu_insn_data_target[arch];
 
-  // If these asserts fire, the rvtt-insn.h instruction tables are out of sync
+  // If these asserts fire, the rvtt-insn.def instruction tables are out of sync
   // across architectures
   for (int i = 1; i < NUMBER_OF_ARCHES; i++)
     {
