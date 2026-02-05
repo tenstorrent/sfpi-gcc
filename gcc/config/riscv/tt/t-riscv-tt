@@ -39,7 +39,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-synth-renumber.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-unspec-prop.o \
-	gimple-rvtt-warn.o \
+	gimple-rvtt-validate.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \

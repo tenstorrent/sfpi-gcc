@@ -54,7 +54,8 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 };
 
 static rvtt_insn_data sfpu_insn_data[] = {
-#define RVTT_FN(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
+#define RVTT_FN(id, av, sfx, fmt, fl, ops) \
+  { rvtt_insn_data::id, #id, fl, rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
 };
 
@@ -70,32 +71,99 @@ rvtt_init_builtins ()
 
   static const auto tensixbh = []() { return TARGET_XTT_TENSIX_BH; };
   static const struct {
-    rvtt_insn_data::insn_id index;
-    unsigned short flags;
-    short dst_arg_pos;
-    short mod_pos;
-    short nonimm_pos;
-    unsigned nonimm_mask;
-    short nonimm_shft;
     bool (*avail) ();
+    rvtt_insn_data::insn_id index;
+    rvtt_insn_data::flags_t flags;
+    rvtt_insn_data::ops_t ops;
   } overrides[] = {
-#define RVTT_OVR(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis)		\
-    { rvtt_insn_data::id, fl, dap, mp, nip, nim, nis, tensix##av },
+#define RVTT_OVR(id, av, sfx, fmt, fl, ops)		\
+    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
 
   // Process overrides
   for (auto const &ovr : overrides)
     if (ovr.avail ())
-      {
-	auto *slot = &sfpu_insn_data[ovr.index];
-	slot->flags = ovr.flags;
-	slot->dst_arg_pos = ovr.dst_arg_pos;
-	slot->mod_pos = ovr.mod_pos;
-	slot->nonimm_pos = ovr.nonimm_pos;
-	slot->nonimm_mask = ovr.nonimm_mask;
-	slot->nonimm_shft = ovr.nonimm_shft;
-      }
+      sfpu_insn_data[ovr.index].override (ovr.flags, ovr.ops);
+
+  for (auto &insn : sfpu_insn_data)
+    if (insn.decl)
+      insn.init ();
+}
+
+void
+rvtt_insn_data::init ()
+{
+  // Compute derived fields;
+  int argno = 0, ix = 0;
+  tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl));
+
+  if (POINTER_TYPE_P (TREE_VALUE (arg_types)))
+    {
+      // The instrn ptr operand
+      gcc_assert (!argno
+		  && VOID_TYPE_P (TREE_TYPE (TREE_VALUE (arg_types))));
+      flags = flags_t (flags | HAS_VAR);
+      arg_types = TREE_CHAIN (arg_types);
+      argno++;
+    }
+
+  if (is_live ())
+    {
+      // Skip live vector
+      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE);
+      arg_types = TREE_CHAIN (arg_types);
+      argno++;
+    }
+
+  if (num_src_clobbers ())
+    clobber_pos = argno + int ((flags >> CLOBBER_SHIFT) & CLOBBER_MASK);
+
+  // Skip src vectors
+  for (; TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE;
+       arg_types = TREE_CHAIN (arg_types)) 
+    argno++;
+  if (num_src_clobbers ())
+    gcc_assert (clobber_pos + num_src_clobbers () <= argno);
+
+  if (has_var ())
+    {
+      // imm, var & id operands
+      ops.set_argno (ix, argno);
+      arg_types = TREE_CHAIN (arg_types);
+
+      argno++;
+      ix++;
+
+      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      arg_types = TREE_CHAIN (arg_types);
+      argno++;
+
+      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      arg_types = TREE_CHAIN (arg_types);
+      argno++;
+    }
+
+  // Remaining arguments must be integers
+  while (ops[ix])
+    {
+      auto kind = ops[ix].kind ();
+      if (kind == op_t::MOD || kind == op_t::XMOD)
+	{
+	  gcc_assert (!has_mod ());
+	  if (kind == op_t::MOD)
+	    gcc_assert (ops[ix].mod () != 0);
+	  flags = flags_t (flags | HAS_MOD);
+	  mod_pos = argno;
+	}
+      gcc_assert (TREE_CODE (TREE_VALUE (arg_types)) == INTEGER_TYPE);
+      ops.set_argno (ix, argno);
+
+      arg_types = TREE_CHAIN (arg_types);
+      argno++;
+      ix++;
+    }
+  gcc_assert (VOID_TYPE_P (TREE_VALUE (arg_types)));
 }
 
 bool
@@ -203,46 +271,18 @@ get_int_arg(gcall *stmt, unsigned int arg)
 }
 
 bool
-rvtt_sets_cc(const rvtt_insn_data *insnd, gcall *stmt)
+rvtt_sets_cc (const rvtt_insn_data *insnd, gcall *stmt)
 {
-  bool sets_cc = false;
-
-  if (insnd->can_set_cc_p())
+  if (auto mask = insnd->sets_cc_mask ())
     {
-      long int arg = insnd->has_mod () ? TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())) : 0;
-      if (insnd->id == rvtt_insn_data::sfpxiadd_i)
-	{
-	  if (arg & SFPXCMP_MOD1_CC_MASK)
-	    sets_cc = true;
-	}
-      else if (insnd->id == rvtt_insn_data::sfpxiadd_v)
-	{
-	  if (arg & SFPXCMP_MOD1_CC_MASK)
-	    sets_cc = true;
-	}
-      else if (insnd->id == rvtt_insn_data::sfpexexp)
-	{
-	  if (arg == 2 || arg == 3 || arg == 8 || arg == 9 || arg == 10 || arg == 11)
-	    sets_cc = true;
-	}
-      else if (insnd->id == rvtt_insn_data::sfplz)
-	{
-	  if (arg == 2 || arg == 8 || arg == 10)
-	    sets_cc = true;
-	}
-      else if (insnd->id == rvtt_insn_data::sfpgt
-	       || insnd->id == rvtt_insn_data::sfple)
-	{
-	  if (arg & 3)
-	    sets_cc = true;
-	}
-      else
-	{
-	  sets_cc = true;
-	}
-    }
+      if (!insnd->has_mod ())
+	return true;
 
-  return sets_cc;
+      unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
+      if ((1 << (mod & 0xf)) & mask)
+	return true;
+    }
+  return false;
 }
 
 bool rvtt_permutable_operands(const rvtt_insn_data *insnd, gcall *stmt)
@@ -585,8 +625,11 @@ rvtt_emit_nonimm_prologue(unsigned int unique_id,
 
   // Insert insns to generate:
   //   sum = unique_id + ((raw & nonimm_mask) << nonimm_shft)
-  tree mask = emit_mask(immarg, insnd->nonimm_mask, &gsi, stmt);
-  tree shft = emit_shift(mask, insnd->nonimm_shft, &gsi, stmt);
+  int iupper = insnd->imm_is_upper () ? 16 : 0;
+  uint32_t imask = ((1u << insnd->imm_bits ()) - 1) << iupper;
+  tree mask = emit_mask(immarg, imask, &gsi, stmt);
+  int ishift = int (insnd->imm_encode ()) - iupper;
+  tree shft = emit_shift(mask, ishift, &gsi, stmt);
   tree li = emit_load_imm(unique_id, &gsi, stmt);
   tree sum = emit_add(shft, li, &gsi, stmt);
 

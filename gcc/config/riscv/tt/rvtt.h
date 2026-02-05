@@ -27,46 +27,214 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
 
-constexpr unsigned int INSN_FLAGS_CAN_SET_CC         = 0x01; // builtin property
-constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
-// no longer needed 0x04;
-// no longer needed 0x08;
-// no longer needed 0x20;
-// no longer needed 0x40;
+// order of operands:
+// XTT_IPTR:CST0/SSA:iptr
+// XTT_VEC:SSA:LVs[]
+// XTT_VEC:SSA:src ops[]
+// UINT:CST/SSA:immediate
+// UINT:CST0/SSA:imm var
+// UINT:CST:imm id
+// UINT:CST:mod & int-ops
 
 // This doesn't need to be GTY as the decls are also held in a riscv_builtin
 // GTY array.
 struct rvtt_insn_data {
-  enum insn_id {
-#define RVTT_FN(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis) id,
+  enum insn_id : uint8_t {
+#define RVTT_FN(id, av, sfx, fmt, fl, ops) id,
 #include "rvtt-insn.def"
   hwm
     };
+public:
+  enum flags_t {
+    MOD_SHIFT,
+    VAR_SHIFT,
+    COMMUTE_SHIFT,
+    LV_SHIFT,
+    NUM_CLOBBERS_SHIFT,
+    NUM_CLOBBERS_BITS = 2,
+    CLOBBER_SHIFT = NUM_CLOBBERS_SHIFT + NUM_CLOBBERS_BITS,
+    CLOBBER_BITS = 3,
+    CC_MASK_SHIFT = CLOBBER_SHIFT + CLOBBER_BITS,
+    CC_MASK_BITS = 16,
+    HWM = CC_MASK_SHIFT + CC_MASK_BITS,
 
-  enum insn_id id;
-  const char *name;
+    HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
+    HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
+    HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
+    COMMUTES = 1 << COMMUTE_SHIFT, // First 2 srcs commute
+
+    NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
+    CLOBBER_MASK = (1 << CLOBBER_BITS) - 1,
+    CC_MASK = (1 << CC_MASK_BITS) - 1,
+  };
+  static_assert (HWM <= 32);
+
+public:
+  class op_t
+  {
+  public:
+    enum kind_t {
+      NONE, // No arg
+      SIGNED, // Signed integer
+      UNSIGNED, // Unsigned integer
+      EITHER, // Either signed or unsigned
+      MOD, // Mod operand
+      XMOD, // XMod operand (one of the x pseudo builtins)
+      RUNTIME, // Runtime value
+
+      CHECKED = 1 << 7
+    };
+
+  private:
+    unsigned enc;
+
+    enum {
+      // MOD overlays BITS, ENCODE & BIAS
+      MOD_shift = 0,
+      MOD_bits = 16,
+      BITS_shift = 0,
+      BITS_bits = 5,
+      ENCODE_shift = BITS_shift + BITS_bits,
+      ENCODE_bits = 5,
+      BIAS_shift = ENCODE_shift + ENCODE_bits,
+      BIAS_bits = 5,
+      // Special case sfpxloadi_lv shift right of 16 (ugh)
+      UPPER_shift = BIAS_shift + BIAS_bits,
+
+      KIND_shift = MOD_shift + MOD_bits,
+      KIND_bits = 8,
+
+      ARGNO_shift = KIND_shift + KIND_bits,
+      ARGNO_bits = 8,
+      HWM_shift = ARGNO_shift + ARGNO_bits,
+    };
+    static_assert (UPPER_shift <= MOD_shift + MOD_bits);
+    static_assert (HWM_shift <= 32);
+
+  public:
+    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0, unsigned bias = 0, bool upper = false)
+      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift | int(upper) << UPPER_shift)
+    {}
+
+    static kind_t checked (kind_t kind) { return kind_t (kind | CHECKED); }
+    operator bool () const { return enc != 0; }
+    bool is_checked () const { return bool ((enc >> KIND_shift) & CHECKED); }
+    kind_t kind () const { return kind_t ((enc >> KIND_shift) & (((1u << KIND_bits) - 1u) ^ CHECKED)); }
+    bool is_mod () const { return kind () == MOD; }
+    bool is_xmod () const { return kind () == XMOD; }
+    bool is_runtime () const { return kind () == RUNTIME; }
+
+    unsigned mod () const { return (enc >> MOD_shift) & ((1u << MOD_bits) - 1u); }
+    unsigned bits () const { return (enc >> BITS_shift) & ((1u << BITS_bits) - 1u); }
+    unsigned encode () const { return (enc >> ENCODE_shift) & ((1u << ENCODE_bits) - 1u); }
+    unsigned bias () const { return (enc >> BIAS_shift) & ((1u << BIAS_bits) - 1u); }
+    bool is_upper () const { return (enc >> UPPER_shift) & 1; }
+
+    int argno () const { return (enc >> ARGNO_shift) & ((1u << ARGNO_bits) - 1u); }
+
+    void argno (unsigned n) { enc |= n << ARGNO_shift; }
+  };
+
+public:
+  // If (when?) we had variadic macros, this interstital class would not be
+  // needed. It exists to allow us to wrap operand info in () inside the
+  // defining macros, and then use that as an argument to a ctor.
+  class ops_t
+  {
+    op_t ops[6];
+
+  public:
+    // This is so we can use parens in the builtin definitions We deliberately
+    // have fewer args here, so that we can just use the operand's bool operator
+    // for find the end and don't care about length specifically.
+    constexpr ops_t (op_t a = op_t (),
+		     op_t b = op_t (),
+		     op_t c = op_t (),
+		     op_t d = op_t (),
+		     op_t e = op_t ())
+    {
+      ops[0] = a;
+      ops[1] = b;
+      ops[2] = c;
+      ops[3] = d;
+      ops[4] = e;
+    }
+    ops_t (const ops_t &) = default;
+
+    constexpr op_t const &operator[] (unsigned ix) const
+    { return ops[ix]; };
+    void set_argno (unsigned ix, unsigned argno) {
+      ops[ix].argno (argno);
+    }
+  };
+
+public:
+  constexpr rvtt_insn_data (insn_id id_, const char *name_, unsigned flags_, ops_t ops_)
+    : decl (nullptr), name (name_), flags (flags_t (flags_)), id (id_), ops (ops_) {}
+
+public:
+  void init ();
+  void override (flags_t flags_, const ops_t &ops_) {
+    flags = flags_;
+    ops = ops_;
+  }
+
+public:
   tree decl;
-  unsigned short flags;  // see flags above
-  short dst_arg_pos;
-  short mod_pos;
+  const char *name;
 
-  short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
-  unsigned int nonimm_mask;
-  short nonimm_shft;
+private:
+  flags_t flags;
 
-  bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
-  bool is_live () const { return flags & INSN_FLAGS_LIVE; }
+public:
+  insn_id id;
 
-  bool has_mod () const { return mod_pos >= 0; }
-  unsigned mod_arg () const { return mod_pos; }
+private:
+  uint8_t clobber_pos = 0;
+  uint8_t mod_pos = 0;
 
-  bool has_var () const { return nonimm_pos >= 0; }
-  unsigned imm_arg () const { return nonimm_pos; }
-  unsigned var_arg () const { return nonimm_pos + 1; }
-  unsigned id_arg () const { return nonimm_pos + 2; }
+public:
+  ops_t ops;
 
-  bool clobbers_src () const { return dst_arg_pos != -1; }
-  unsigned clobber_arg () const { return dst_arg_pos; }
+public:
+  unsigned sets_cc_mask () const {
+    return (flags >> CC_MASK_SHIFT) & ((1u << CC_MASK_BITS) - 1);
+  }
+  bool is_live () const {
+    return flags & HAS_LV;
+  }
+
+  bool has_mod () const {
+    return flags & HAS_MOD;
+  }
+  int mod_arg () const {
+    return mod_pos;
+  }
+
+  bool has_var () const {
+    return flags & HAS_VAR;
+  }
+  int imm_arg () const { return ops[0].argno (); }
+  int var_arg () const { return imm_arg () + 1; }
+  int id_arg () const { return imm_arg () + 2; }
+
+  unsigned imm_bits () const {
+    return ops[0].bits () + bool (ops[0].bias ());
+  }
+  unsigned imm_encode () const {
+    return ops[0].encode ();
+  }
+  bool imm_is_upper () const {
+    return ops[0].is_upper ();
+  }
+
+  int num_src_clobbers () const {
+    return (flags >> NUM_CLOBBERS_SHIFT) & NUM_CLOBBERS_MASK;
+  }
+  int first_clobber_arg () const { return clobber_pos; }
+  bool commutes () const {
+    return flags & COMMUTES;
+  }
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];

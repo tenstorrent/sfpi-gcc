@@ -223,7 +223,7 @@ static struct riscv_builtin_description riscv_builtins[] = {
   RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause),
 
   /* Tenstorrent Tensix builtins */
-#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) \
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) \
   { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_##INSN##SFX, RISCV_##FUNCTION_TYPE, false, riscv_builtin_avail_tensix##AVAIL},
 #include "tt/rvtt-insn.def"
 };
@@ -369,7 +369,7 @@ riscv_init_builtins (void)
 	    {
 	      // Apply Tensix overrides
 	      enum indices {
-#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) IX_##INSN,
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) IX_##INSN,
 #include "tt/rvtt-insn.def"
 		IX_hwm
 	      };
@@ -379,7 +379,7 @@ riscv_init_builtins (void)
 		riscv_function_type prototype : 16;
 		unsigned (*avail) ();
 	      } overrides[] = {
-#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) \
+#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, ops) \
 		{CODE_FOR_rvtt_ ## INSN ## SFX, IX_##INSN, RISCV_##FUNCTION_TYPE, riscv_builtin_avail_tensix ## AVAIL},
 #include "tt/rvtt-insn.def"
 	      };

@@ -116,7 +116,7 @@ extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_nullify (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_validate (gcc::context *ctxt);
 
 // RTL passes
 class rtl_opt_pass;

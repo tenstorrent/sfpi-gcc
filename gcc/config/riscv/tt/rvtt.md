@@ -1215,6 +1215,7 @@
    (clobber (match_scratch:SI  8 "=X,&r"))]
   "TARGET_XTT_TENSIX_BH"
   {
+    operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSHFT_MOD1_SHFT_IMM | SFPSHFT_MOD1_SRC_LREG_C);
     return rvtt_synth::pattern (which_alternative,
       "SFPSHFT\t%x0, %x5, %4, %7",
       operands, true, 8);
@@ -1235,6 +1236,7 @@
    (clobber (match_scratch:SI  8 "=X,&r"))]
   "TARGET_XTT_TENSIX_WH"
   {
+    operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSHFT_MOD1_SHFT_IMM);
     return rvtt_synth::pattern (which_alternative,
       "SFPSHFT\t%x0, L0, %4, %7",
       operands, true, 8);
@@ -1391,9 +1393,9 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]))
+	? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]))
+	? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
         : 0;
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
@@ -1423,6 +1425,7 @@
    (clobber (match_scratch:SI 9 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
+    operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
       ? "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4\t# LV:%x6"
