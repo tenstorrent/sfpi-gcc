@@ -159,11 +159,7 @@ nonstack_store_p(rtx pat)
   if (!store_mem_p (pat))
     return false;
   
-#if !RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS
   return !refers_to_regno_p (stack_ptr_regno, pat);
-#else
-  return true;
-#endif
 }
 
 static bool

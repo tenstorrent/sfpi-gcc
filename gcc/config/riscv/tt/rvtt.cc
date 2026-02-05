@@ -792,17 +792,11 @@ static bool rvtt_has_attrib_p(const char *attrib, rtx pat)
 		 TREE_CODE(exp) == PARM_DECL ||
 		 TREE_CODE(exp) == VAR_DECL);
 
-#if !RVTT_DEBUG_MAKE_ALL_LOADS_L1_LOADS
       tree decl = (TREE_CODE(exp) == PARM_DECL ||
 		   TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
       if (decl != NULL_TREE &&
 	  lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
-	{
-	  return true;
-	}
-#else
-      return true;
-#endif
+	return true;
     }
 
   return false;
