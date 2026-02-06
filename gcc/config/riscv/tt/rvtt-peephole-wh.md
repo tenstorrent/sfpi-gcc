@@ -26,7 +26,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:SI    3 "const_0_operand")
-	  ] UNSPECV_WH_SFPLZ_INT))
+	  ] UNSPECV_SFPLZ))
    (unspec_volatile:XTT32SI [
      (match_dup:XTT32SI     2)
      (match_operand:SI    4 "const_int_operand")
@@ -36,7 +36,7 @@
 {
   rtx mod = GEN_INT (INTVAL (operands[4]) == 2 ? 2 : 10);
 
-  emit_insn (gen_rvtt_wh_sfplz_int (operands[0], operands[1], operands[2], mod));
+  emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
 })
 
 (define_peephole2
@@ -45,7 +45,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:SI    3 "const_0_operand")
-	  ] UNSPECV_WH_SFPLZ_INT))
+	  ] UNSPECV_SFPLZ))
    (unspec_volatile:XTT32SI [
      (match_operand:SI    4 "immediate_operand")
      ] UNSPECV_WH_SFPPUSHC)
@@ -59,5 +59,5 @@
   rtx mod = GEN_INT (INTVAL (operands[5]) == 2 ? 2 : 10);
 
   emit_insn (gen_rvtt_wh_sfppushc (operands[4]));
-  emit_insn (gen_rvtt_wh_sfplz_int (operands[0], operands[1], operands[2], mod));
+  emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
 })

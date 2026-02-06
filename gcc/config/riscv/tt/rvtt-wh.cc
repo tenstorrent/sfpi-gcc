@@ -277,7 +277,7 @@ rvtt_wh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
       else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
 	{
 	  if (REG_P (lv))
-	    emit_insn (gen_rvtt_wh_sfpmov_lv (dst, lv, src, GEN_INT (SFPMOV_MOD1_NONE)));
+	    emit_insn (gen_rvtt_sfpassign_lv (dst, lv, src));
 	  else
 	    emit_move_insn (dst, src);
 	}

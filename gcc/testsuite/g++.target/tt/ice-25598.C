@@ -19857,13 +19857,13 @@ __attribute__((always_inline)) inline __vCond __vDReg::operator>=(const vFloat x
 __attribute__((always_inline)) inline vFloat __vDReg::operator-() const
 {
     vFloat tmp = *this;
-    return __builtin_rvtt_wh_sfpmov(tmp.get(), SFPMOV_MOD1_COMPSIGN);
+    return __builtin_rvtt_sfpmov(tmp.get(), SFPMOV_MOD1_COMPSIGN);
 }
 
 
 __attribute__((always_inline)) inline void __vBase::assign(const __rvtt_vec_t in)
 {
-    v = (initialized) ? __builtin_rvtt_wh_sfpassign_lv(v, in) : in;
+    v = (initialized) ? __builtin_rvtt_sfpassign_lv(v, in) : in;
     initialized = true;
 }
 
@@ -19912,7 +19912,7 @@ __attribute__((always_inline)) inline vFloat vFloat::operator+=(const vFloat a)
 
 __attribute__((always_inline)) inline vFloat vFloat::operator-() const
 {
-    return __builtin_rvtt_wh_sfpmov(v, SFPMOV_MOD1_COMPSIGN);
+    return __builtin_rvtt_sfpmov(v, SFPMOV_MOD1_COMPSIGN);
     return v;
 }
 
@@ -20495,22 +20495,22 @@ __attribute__((always_inline)) inline vFloat lut2_sign(const vFloat v,
 
 __attribute__((always_inline)) inline vInt exexp(const vFloat v)
 {
-    return __builtin_rvtt_wh_sfpexexp(v.get(), SFPEXEXP_MOD1_DEBIAS);
+    return __builtin_rvtt_sfpexexp(v.get(), SFPEXEXP_MOD1_DEBIAS);
 }
 
 __attribute__((always_inline)) inline vInt exexp_nodebias(const vFloat v)
 {
-    return __builtin_rvtt_wh_sfpexexp(v.get(), SFPEXEXP_MOD1_NODEBIAS);
+    return __builtin_rvtt_sfpexexp(v.get(), SFPEXEXP_MOD1_NODEBIAS);
 }
 
 __attribute__((always_inline)) inline vInt exman8(const vFloat v)
 {
-    return __builtin_rvtt_wh_sfpexman(v.get(), SFPEXMAN_MOD1_PAD8);
+    return __builtin_rvtt_sfpexman(v.get(), SFPEXMAN_MOD1_PAD8);
 }
 
 __attribute__((always_inline)) inline vInt exman9(const vFloat v)
 {
-    return __builtin_rvtt_wh_sfpexman(v.get(), SFPEXMAN_MOD1_PAD9);
+    return __builtin_rvtt_sfpexman(v.get(), SFPEXMAN_MOD1_PAD9);
 }
 
 __attribute__((always_inline)) inline vFloat setexp(const vFloat v, const uint32_t exp)
@@ -20569,23 +20569,23 @@ __attribute__((always_inline)) inline vType setsgn(const vType v, const vInt sgn
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>
 __attribute__((always_inline)) inline vInt lz(const vType v)
 {
-    return vInt(__builtin_rvtt_wh_sfplz(v.get(), SFPLZ_MOD1_CC_NONE));
+    return vInt(__builtin_rvtt_sfplz(v.get(), SFPLZ_MOD1_CC_NONE));
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>
 __attribute__((always_inline)) inline vInt lz_nosgn(const vType v)
 {
-    return vInt(__builtin_rvtt_wh_sfplz(v.get(), SFPLZ_MOD1_NOSGN_CC_NONE));
+    return vInt(__builtin_rvtt_sfplz(v.get(), SFPLZ_MOD1_NOSGN_CC_NONE));
 }
 
 __attribute__((always_inline)) inline vFloat abs(const vFloat v)
 {
-    return __builtin_rvtt_wh_sfpabs(v.get(), SFPABS_MOD1_FLOAT);
+    return __builtin_rvtt_sfpabs(v.get(), SFPABS_MOD1_FLOAT);
 }
 
 __attribute__((always_inline)) inline vInt abs(const vInt v)
 {
-    return __builtin_rvtt_wh_sfpabs(v.get(), SFPABS_MOD1_INT);
+    return __builtin_rvtt_sfpabs(v.get(), SFPABS_MOD1_INT);
 }
 
 __attribute__((always_inline)) inline vUInt shft(const vUInt v, const vInt amt)

@@ -48,8 +48,8 @@ void sub5() {
   auto b = __builtin_rvtt_sfpreadlreg(1);
 
   auto neg1 = __builtin_rvtt_sfpreadlreg (11);
-  b = __builtin_rvtt_wh_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
-  b = __builtin_rvtt_wh_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
+  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
+  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_wh_sfpmad (neg1, a, b, 0));
 
   __builtin_rvtt_sfpwritelreg (b, 3);
 }

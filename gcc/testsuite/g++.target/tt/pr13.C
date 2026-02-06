@@ -13,7 +13,7 @@ inline void calculate_power_iterative(unsigned exponent) {
     vec_t in = __builtin_rvtt_wh_sfpload(nullptr, 0, 3, 0, 0, 0);
     vec_t acc = __builtin_rvtt_wh_sfpxloadi(nullptr, 18, 0x3f800000, 0, 0);
     for (unsigned i = 0; i < exponent; i++)
-      acc = __builtin_rvtt_wh_sfpassign_lv(
+      acc = __builtin_rvtt_sfpassign_lv(
 	      acc, __builtin_rvtt_wh_sfpmul(acc, in, 0));
 
     __builtin_rvtt_wh_sfpstore(nullptr, acc, 12, 3, 0, 0, 0);

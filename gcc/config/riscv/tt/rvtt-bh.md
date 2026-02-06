@@ -1,6 +1,7 @@
 ;; Machine description for Tenstorrent SFPU Blackhole Intrinsics.
-;; Copyright (C) 2022-2025 Tenstorrent Inc.
+;; Copyright (C) 2022-2026 Tenstorrent Inc.
 ;; Originated by Paul Keller (pkeller@tenstorrent.com)
+;; Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 ;; This file is part of GCC.
 
@@ -22,7 +23,6 @@
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
-  UNSPECV_BH_SFPASSIGN
   UNSPECV_BH_SFPLOAD
   UNSPECV_BH_SFPXLOADI
   UNSPECV_BH_SFPSTORE
@@ -38,24 +38,17 @@
   UNSPECV_BH_SFPXIADD_I_LV
   UNSPECV_BH_SFPIADD_I_INT
   UNSPECV_BH_SFPSHFT
-  UNSPECV_BH_SFPABS
   UNSPECV_BH_SFPAND
   UNSPECV_BH_SFPOR
   UNSPECV_BH_SFPXOR
   UNSPECV_BH_SFPNOT
-  UNSPECV_BH_SFPLZ
-  UNSPECV_BH_SFPLZ_LV
-  UNSPECV_BH_SFPLZ_INT
   UNSPECV_BH_SFPSETMAN
   UNSPECV_BH_SFPSETEXP
   UNSPECV_BH_SFPSETSGN
   UNSPECV_BH_SFPMAD
   UNSPECV_BH_SFPMAD_LV
   UNSPECV_BH_SFPMAD_INT
-  UNSPECV_BH_SFPMOV
   UNSPECV_BH_SFPDIVP2
-  UNSPECV_BH_SFPEXEXP
-  UNSPECV_BH_SFPEXMAN
   UNSPECV_BH_SFPSETCC_I
   UNSPECV_BH_SFPSETCC_V
   UNSPECV_BH_SFPXFCMPS
@@ -78,16 +71,6 @@
   UNSPECV_BH_SFPLE
   UNSPECV_BH_SFPMOV_CONFIG
 ])
-
-(define_insn "rvtt_bh_sfpassign_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-	  ] UNSPECV_BH_SFPASSIGN))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPMOV\t%0, %x2, 0"
-  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_bh_sfpload"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -314,49 +297,6 @@
 	  ] UNSPECV_BH_SFPDIVP2))]
   "TARGET_XTT_TENSIX_BH"
   "SFPDIVP2\t%0, %x3, %2, %4"
-  [(set_attr "type" "tensix")])
-
-(define_int_iterator blackhole_src_mod_op
-  [UNSPECV_BH_SFPEXEXP
-   UNSPECV_BH_SFPEXMAN
-   UNSPECV_BH_SFPABS
-   UNSPECV_BH_SFPMOV
-   UNSPECV_BH_SFPLZ])
-(define_int_attr blackhole_src_mod_name
-  [(UNSPECV_BH_SFPEXEXP "exexp")
-   (UNSPECV_BH_SFPEXMAN "exman")
-   (UNSPECV_BH_SFPABS "abs")
-   (UNSPECV_BH_SFPMOV "mov")
-   (UNSPECV_BH_SFPLZ "lz")])
-(define_int_attr blackhole_src_mod_insn
-  [(UNSPECV_BH_SFPEXEXP "EXEXP")
-   (UNSPECV_BH_SFPEXMAN "EXMAN")
-   (UNSPECV_BH_SFPABS "ABS")
-   (UNSPECV_BH_SFPMOV "MOV")
-   (UNSPECV_BH_SFPLZ "LZ")])
-
-(define_expand "rvtt_bh_sfp<blackhole_src_mod_name>"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    2 "const_int_operand" "N04U")
-	  ] blackhole_src_mod_op))]
-  "TARGET_XTT_TENSIX_BH"
-  {
-    emit_insn (gen_rvtt_bh_sfp<blackhole_src_mod_name>_lv
-                 (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1], operands[2]));
-    DONE;
-  })
-
-(define_insn "rvtt_bh_sfp<blackhole_src_mod_name>_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand"  "0,xn")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:SI    3 "const_int_operand" "N04U,N04U")
-	  ] blackhole_src_mod_op))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFP<blackhole_src_mod_insn>\t%0, %x2, %3"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_bh_sfpmov_config"

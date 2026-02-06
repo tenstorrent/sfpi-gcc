@@ -1,5 +1,5 @@
 ;; Machine description for Tenstorrent SFPU Intrinsics.
-;; Copyright (C) 2022-2025 Tenstorrent Inc.
+;; Copyright (C) 2022-2026 Tenstorrent Inc.
 ;; Originated by Paul Keller (pkeller@tenstorrent.com)
 ;; Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -43,6 +43,12 @@
   UNSPECV_SFPVARLREG
 
   UNSPECV_SFPNOP
+  UNSPECV_SFPASSIGN
+  UNSPECV_SFPMOV
+  UNSPECV_SFPEXEXP
+  UNSPECV_SFPEXMAN
+  UNSPECV_SFPABS
+  UNSPECV_SFPLZ
 
   UNSPECV_SFPLUT
   UNSPECV_SFPLUTFP32_3R
@@ -379,6 +385,62 @@
     rvtt_mov_error (insn, which_alternative == 1);
     gcc_unreachable ();
   }
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpassign_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+	  ] UNSPECV_SFPASSIGN))]
+  "TARGET_XTT_TENSIX"
+  "SFPMOV\t%0, %x2, 0"
+  [(set_attr "type" "tensix")])
+
+(define_int_iterator rvtt_unary_op [
+  UNSPECV_SFPMOV
+  UNSPECV_SFPEXEXP
+  UNSPECV_SFPEXMAN
+  UNSPECV_SFPABS
+  UNSPECV_SFPLZ
+  ])
+(define_int_attr rvtt_unary_name [
+  (UNSPECV_SFPMOV "mov")
+  (UNSPECV_SFPEXEXP "exexp")
+  (UNSPECV_SFPEXMAN "exman")
+  (UNSPECV_SFPABS "abs")
+  (UNSPECV_SFPLZ "lz")
+  ])
+(define_int_attr rvtt_unary_insn [
+  (UNSPECV_SFPMOV "MOV")
+  (UNSPECV_SFPEXEXP "EXEXP")
+  (UNSPECV_SFPEXMAN "EXMAN")
+  (UNSPECV_SFPABS "ABS")
+  (UNSPECV_SFPLZ "LZ")
+  ])
+
+(define_expand "rvtt_sfp<rvtt_unary_name>"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "register_operand")
+          (match_operand:SI    2 "const_int_operand")
+	  ] rvtt_unary_op))]
+  "TARGET_XTT_TENSIX"
+{
+  emit_insn (gen_rvtt_sfp<rvtt_unary_name>_lv (
+      operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "rvtt_sfp<rvtt_unary_name>_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc,xrxc")
+          (match_operand:SI    3 "const_int_operand" "N04U,N04U")
+	  ] rvtt_unary_op))]
+  "TARGET_XTT_TENSIX"
+  "SFP<rvtt_unary_insn>\t%0, %x2, %3"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfplut"

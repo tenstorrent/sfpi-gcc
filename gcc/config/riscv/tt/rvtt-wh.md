@@ -1,6 +1,7 @@
 ;; Machine description for Tenstorrent SFPU Wormhole Intrinsics.
-;; Copyright (C) 2022-2025 Tenstorrent Inc.
+;; Copyright (C) 2022-2026 Tenstorrent Inc.
 ;; Originated by Paul Keller (pkeller@tenstorrent.com)
+;; Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 ;; This file is part of GCC.
 
@@ -24,7 +25,6 @@
   ;; Tenstorrent SFPU unspecs.
   ;; INT for internal
   ;; LV for keep dst reg alive as input for predicated liveness
-  UNSPECV_WH_SFPASSIGN_LV
   UNSPECV_WH_SFPLOAD
   UNSPECV_WH_SFPLOAD_LV
   UNSPECV_WH_SFPLOAD_INT
@@ -52,18 +52,12 @@
   UNSPECV_WH_SFPSHFT_V
   UNSPECV_WH_SFPSHFT_I
   UNSPECV_WH_SFPSHFT_I_INT
-  UNSPECV_WH_SFPABS
-  UNSPECV_WH_SFPABS_LV
-  UNSPECV_WH_SFPABS_INT
   UNSPECV_WH_SFPAND
   UNSPECV_WH_SFPOR
   UNSPECV_WH_SFPXOR
   UNSPECV_WH_SFPNOT
   UNSPECV_WH_SFPNOT_LV
   UNSPECV_WH_SFPNOT_INT
-  UNSPECV_WH_SFPLZ
-  UNSPECV_WH_SFPLZ_LV
-  UNSPECV_WH_SFPLZ_INT
   UNSPECV_WH_SFPSETMAN_V
   UNSPECV_WH_SFPSETMAN_I
   UNSPECV_WH_SFPSETMAN_I_LV
@@ -85,12 +79,6 @@
   UNSPECV_WH_SFPDIVP2
   UNSPECV_WH_SFPDIVP2_LV
   UNSPECV_WH_SFPDIVP2_INT
-  UNSPECV_WH_SFPEXEXP
-  UNSPECV_WH_SFPEXEXP_LV
-  UNSPECV_WH_SFPEXEXP_INT
-  UNSPECV_WH_SFPEXMAN
-  UNSPECV_WH_SFPEXMAN_LV
-  UNSPECV_WH_SFPEXMAN_INT
   UNSPECV_WH_SFPSETCC_I
   UNSPECV_WH_SFPSETCC_V
   UNSPECV_WH_SFPXFCMPS
@@ -110,16 +98,6 @@
   UNSPECV_WH_SFPSTOCHRND_V_INT
   UNSPECV_WH_SFPCONFIG_V
 ])
-
-(define_insn "rvtt_wh_sfpassign_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-	  ] UNSPECV_WH_SFPASSIGN_LV))]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPMOV\t%0, %x2, 0"
-  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_wh_sfpload"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -354,92 +332,6 @@
 	  ] UNSPECV_WH_SFPDIVP2_INT))]
   "TARGET_XTT_TENSIX_WH"
   "SFPDIVP2\t%0, %x3, %2, %4"
-  [(set_attr "type" "tensix")])
-
-(define_int_iterator wormhole_simple_op
-  [UNSPECV_WH_SFPEXEXP
-   UNSPECV_WH_SFPEXMAN
-   UNSPECV_WH_SFPABS
-   UNSPECV_WH_SFPMOV
-   UNSPECV_WH_SFPLZ])
-(define_int_attr wormhole_simple_op_name
-  [(UNSPECV_WH_SFPEXEXP "exexp")
-   (UNSPECV_WH_SFPEXMAN "exman")
-   (UNSPECV_WH_SFPABS "abs")
-   (UNSPECV_WH_SFPMOV "mov")
-   (UNSPECV_WH_SFPLZ "lz")])
-(define_int_iterator wormhole_simple_op_lv
-  [UNSPECV_WH_SFPEXEXP_LV
-   UNSPECV_WH_SFPEXMAN_LV
-   UNSPECV_WH_SFPABS_LV
-   UNSPECV_WH_SFPMOV_LV
-   UNSPECV_WH_SFPLZ_LV])
-(define_int_attr wormhole_simple_op_name_lv
-  [(UNSPECV_WH_SFPEXEXP_LV "exexp")
-   (UNSPECV_WH_SFPEXMAN_LV "exman")
-   (UNSPECV_WH_SFPABS_LV "abs")
-   (UNSPECV_WH_SFPMOV_LV "mov")
-   (UNSPECV_WH_SFPLZ_LV "lz")])
-(define_int_iterator wormhole_simple_op_int
-  [UNSPECV_WH_SFPEXEXP_INT
-   UNSPECV_WH_SFPEXMAN_INT
-   UNSPECV_WH_SFPABS_INT
-   UNSPECV_WH_SFPMOV_INT
-   UNSPECV_WH_SFPLZ_INT])
-(define_int_attr wormhole_simple_op_name_int
-  [(UNSPECV_WH_SFPEXEXP_INT "exexp")
-   (UNSPECV_WH_SFPEXMAN_INT "exman")
-   (UNSPECV_WH_SFPABS_INT "abs")
-   (UNSPECV_WH_SFPMOV_INT "mov")
-   (UNSPECV_WH_SFPLZ_INT "lz")])
-(define_int_attr wormhole_simple_op_call_int
-  [(UNSPECV_WH_SFPEXEXP_INT "EXEXP")
-   (UNSPECV_WH_SFPEXMAN_INT "EXMAN")
-   (UNSPECV_WH_SFPABS_INT "ABS")
-   (UNSPECV_WH_SFPMOV_INT "MOV")
-   (UNSPECV_WH_SFPLZ_INT "LZ")])
-(define_int_attr wormhole_simple_op_id_int
-  [(UNSPECV_WH_SFPEXEXP_INT "UNSPECV_WH_SFPEXEXP_INT")
-   (UNSPECV_WH_SFPEXMAN_INT "UNSPECV_WH_SFPEXMAN_INT")
-   (UNSPECV_WH_SFPABS_INT "UNSPECV_WH_SFPABS_INT")
-   (UNSPECV_WH_SFPMOV_INT "UNSPECV_WH_SFPMOV_INT")
-   (UNSPECV_WH_SFPLZ_INT "UNSPECV_WH_SFPLZ_INT")])
-
-(define_expand "rvtt_wh_sfp<wormhole_simple_op_name>"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand")
-          (match_operand:SI    2 "const_int_operand")
-	  ] wormhole_simple_op))]
-  "TARGET_XTT_TENSIX_WH"
-{
-  rtx live = rvtt_gen_rtx_noval (XTT32SImode);
-  emit_insn (gen_rvtt_wh_sfp<wormhole_simple_op_name>_int (operands[0], live, operands[1], operands[2]));
-  DONE;
-})
-
-(define_expand "rvtt_wh_sfp<wormhole_simple_op_name_lv>_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "const_int_operand")
-	  ] wormhole_simple_op_lv))]
-  "TARGET_XTT_TENSIX_WH"
-{
-  emit_insn (gen_rvtt_wh_sfp<wormhole_simple_op_name_lv>_int (operands[0], operands[1], operands[2], operands[3]));
-  DONE;
-})
-
-(define_insn "rvtt_wh_sfp<wormhole_simple_op_name_int>_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr, xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc, xrxc")
-          (match_operand:SI    3 "const_int_operand" "N04U,N04U")
-	  ] wormhole_simple_op_int))]
-  "TARGET_XTT_TENSIX_WH"
-  "SFP<wormhole_simple_op_call_int>\t%0, %x2, %3"
   [(set_attr "type" "tensix")])
 
 (define_int_iterator wormhole_muladd [UNSPECV_WH_SFPMUL UNSPECV_WH_SFPADD])
