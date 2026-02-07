@@ -20435,23 +20435,23 @@ namespace sfpi {
 
 __attribute__((always_inline)) inline vFloat lut(const vFloat v, const vUInt l0, const vUInt l1, const vUInt l2)
 {
-    return __builtin_rvtt_wh_sfplut(l0.get(), l1.get(), l2.get(), v.get(), SFPLUT_MOD0_SGN_RETAIN);
+    return __builtin_rvtt_sfplut(l0.get(), l1.get(), l2.get(), v.get(), SFPLUT_MOD0_SGN_RETAIN);
 }
 
 __attribute__((always_inline)) inline vFloat lut_sign(const vFloat v, const vUInt l0, const vUInt l1, const vUInt l2)
 {
-    return __builtin_rvtt_wh_sfplut(l0.get(), l1.get(), l2.get(), v.get(), SFPLUT_MOD0_SGN_UPDATE);
+    return __builtin_rvtt_sfplut(l0.get(), l1.get(), l2.get(), v.get(), SFPLUT_MOD0_SGN_UPDATE);
 }
 
 __attribute__((always_inline)) inline vFloat lut2(const vFloat v, const vUInt l0, const vUInt l1, const vUInt l2)
 {
-    return __builtin_rvtt_wh_sfplutfp32_3r(l0.get(), l1.get(), l2.get(), v.get(), SFPLUTFP32_MOD0_FP16_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_RETAIN)
+    return __builtin_rvtt_sfplutfp32_3r(l0.get(), l1.get(), l2.get(), v.get(), SFPLUTFP32_MOD0_FP16_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_RETAIN)
                                                                                                                 ;
 }
 
 __attribute__((always_inline)) inline vFloat lut2_sign(const vFloat v, const vUInt l0, const vUInt l1, const vUInt l2)
 {
-    return __builtin_rvtt_wh_sfplutfp32_3r(l0.get(), l1.get(), l2.get(), v.get(), SFPLUTFP32_MOD0_FP16_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_UPDATE)
+    return __builtin_rvtt_sfplutfp32_3r(l0.get(), l1.get(), l2.get(), v.get(), SFPLUTFP32_MOD0_FP16_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_UPDATE)
                                                                                                                 ;
 }
 
@@ -20459,7 +20459,7 @@ __attribute__((always_inline)) inline vFloat lut2(const vFloat v,
                         const vFloat a0, const vFloat a1, const vFloat a2,
                         const vFloat b0, const vFloat b1, const vFloat b2)
 {
-    return __builtin_rvtt_wh_sfplutfp32_6r(a0.get(), a1.get(), a2.get(), b0.get(), b1.get(), b2.get(), v.get(), SFPLUTFP32_MOD0_FP32_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_RETAIN)
+    return __builtin_rvtt_sfplutfp32_6r(a0.get(), a1.get(), a2.get(), b0.get(), b1.get(), b2.get(), v.get(), SFPLUTFP32_MOD0_FP32_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_RETAIN)
 
                                                                                                                 ;
 }
@@ -20468,7 +20468,7 @@ __attribute__((always_inline)) inline vFloat lut2_sign(const vFloat v,
                              const vFloat a0, const vFloat a1, const vFloat a2,
                              const vFloat b0, const vFloat b1, const vFloat b2)
 {
-    return __builtin_rvtt_wh_sfplutfp32_6r(a0.get(), a1.get(), a2.get(), b0.get(), b1.get(), b2.get(), v.get(), SFPLUTFP32_MOD0_FP32_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_UPDATE)
+    return __builtin_rvtt_sfplutfp32_6r(a0.get(), a1.get(), a2.get(), b0.get(), b1.get(), b2.get(), v.get(), SFPLUTFP32_MOD0_FP32_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_UPDATE)
 
                                                                                                                 ;
 }
@@ -20478,7 +20478,7 @@ __attribute__((always_inline)) inline vFloat lut2(const vFloat v,
                         const vUInt b01, const vUInt b23, const vUInt b45, const int mode = 1)
 {
     unsigned int mod = (mode == 1) ? SFPLUTFP32_MOD0_FP16_6ENTRY_TABLE1 : SFPLUTFP32_MOD0_FP16_6ENTRY_TABLE2;
-    return __builtin_rvtt_wh_sfplutfp32_6r(a01.get(), a23.get(), a45.get(), b01.get(), b23.get(), b45.get(), v.get(), mod | SFPLUTFP32_MOD0_SGN_RETAIN)
+    return __builtin_rvtt_sfplutfp32_6r(a01.get(), a23.get(), a45.get(), b01.get(), b23.get(), b45.get(), v.get(), mod | SFPLUTFP32_MOD0_SGN_RETAIN)
 
                                                                                   ;
 }
@@ -20488,7 +20488,7 @@ __attribute__((always_inline)) inline vFloat lut2_sign(const vFloat v,
                              const vUInt b01, const vUInt b23, const vUInt b45, const int mode = 1)
 {
     unsigned int mod = (mode == 1) ? SFPLUTFP32_MOD0_FP16_6ENTRY_TABLE1 : SFPLUTFP32_MOD0_FP16_6ENTRY_TABLE2;
-    return __builtin_rvtt_wh_sfplutfp32_6r(a01.get(), a23.get(), a45.get(), b01.get(), b23.get(), b45.get(), v.get(), mod | SFPLUTFP32_MOD0_SGN_UPDATE)
+    return __builtin_rvtt_sfplutfp32_6r(a01.get(), a23.get(), a45.get(), b01.get(), b23.get(), b45.get(), v.get(), mod | SFPLUTFP32_MOD0_SGN_UPDATE)
 
                                                                                   ;
 }

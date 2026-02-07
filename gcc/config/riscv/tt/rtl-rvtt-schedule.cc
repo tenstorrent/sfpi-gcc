@@ -243,6 +243,7 @@ transform (function *fn)
 		    break;
 
 		  case CLOBBER:
+		  case SCRATCH:
 		    break;
 		  }
 

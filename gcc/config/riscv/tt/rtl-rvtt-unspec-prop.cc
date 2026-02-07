@@ -186,7 +186,8 @@ transform (function *fn)
 
 	  case CONST_INT:
 	  case MEM:
-	  case CLOBBER: // We don't clobber Tensix regs.
+	  case CLOBBER:
+	  case SCRATCH: 
 	  case USE:
 	    break;
 	  }

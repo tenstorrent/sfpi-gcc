@@ -71,9 +71,6 @@
   UNSPECV_BH_SFPSTOCHRND_V
   UNSPECV_BH_SFPSTOCHRND_V_LV
   UNSPECV_BH_SFPSTOCHRND_V_INT
-  UNSPECV_BH_SFPLUT
-  UNSPECV_BH_SFPLUTFP32_3R
-  UNSPECV_BH_SFPLUTFP32_6R
   UNSPECV_BH_SFPCONFIG_V
   UNSPECV_BH_SFPMUL24
   UNSPECV_BH_SFPARECIP
@@ -969,61 +966,6 @@
   "TARGET_XTT_TENSIX_BH"
   "SFPPOPC\t%0"
   [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_bh_sfplut"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=x3")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "x0")
-          (match_operand:XTT32SI 2 "register_operand"  "x1")
-          (match_operand:XTT32SI 3 "register_operand"  "x2")
-          (match_operand:XTT32SI 4 "register_operand"  "0")
-          (match_operand:SI    5 "const_int_operand" "N04U")
-	  ] UNSPECV_BH_SFPLUT))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPLUT\t%0, %5"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
-
-(define_insn "rvtt_bh_sfplutfp32_3r"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "x0")
-          (match_operand:XTT32SI 2 "register_operand"  "x1")
-          (match_operand:XTT32SI 3 "register_operand"  "x2")
-          (match_operand:XTT32SI 4 "register_operand"  "x3")
-          (match_operand:SI    5 "const_int_operand" "N04U")
-	  ] UNSPECV_BH_SFPLUTFP32_3R))
-        (clobber (match_scratch:XTT32SI 6 "=x7"))
-        (match_scratch:SI 7)]
-  "TARGET_XTT_TENSIX_BH"
-{
-  // Note: this insn must emit 2 insns, ie, this can't be done in an expand as
-  // the hard regno is only known at reload time, not at expand time
-  // This mean, e.g., the REPLAY pass must know this insn is really 2 insns
-  // FIXME: This seems bogus logic
-  operands[7] = GEN_INT (rvtt_sfpu_regno (operands[0]));
-  output_asm_insn ("SFPLOADI\t%6, %7, 2", operands);
-  return "SFPLUTFP32\t%0, %5";
-}
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
-
-(define_insn "rvtt_bh_sfplutfp32_6r"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "x0")
-          (match_operand:XTT32SI 2 "register_operand"  "x1")
-          (match_operand:XTT32SI 3 "register_operand"  "x2")
-          (match_operand:XTT32SI 4 "register_operand"  "x4")
-          (match_operand:XTT32SI 5 "register_operand"  "x5")
-          (match_operand:XTT32SI 6 "register_operand"  "x6")
-          (match_operand:XTT32SI 7 "register_operand"  "x3")
-          (match_operand:SI    8 "const_int_operand" "N04U")
-	  ] UNSPECV_BH_SFPLUTFP32_6R))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPLUTFP32\t%0, %8"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_bh_sfpconfig_v"
   [(unspec_volatile:XTT32SI [

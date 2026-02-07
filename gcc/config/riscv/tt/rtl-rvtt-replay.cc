@@ -282,6 +282,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	      break;
 
 	    case USE:
+	    case SCRATCH:
 	      break;
 	    }
 
@@ -313,22 +314,22 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
       auto &seq_insn = block[seq.clones.front ().end - 1];
       if (seq_insn.generation != insn.generation)
 	continue;
-      auto ignore_clobber = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb) {
+      auto ignore = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb) {
 	if (GET_CODE (*a) != GET_CODE (*b))
 	  return false;
 
 	if (GET_CODE (*a) != CLOBBER
-	    && GET_CODE (*a) != MEM)
+	    && GET_CODE (*a) != MEM
+	    && GET_CODE (*a) != SCRATCH)
 	  return false;
 
-	gcc_assert (GET_MODE (*a) == GET_MODE (*b));
+	gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
 
-	// Mems and clobbers are equivalent here.
 	*na = *nb = nullptr;
 	return true;
       };
       if (!rtx_equal_p (PATTERN (seq_insn.insn), PATTERN (insn.insn),
-			ignore_clobber))
+			ignore))
 	continue;
 
       // Clones must be in ascending order (the invalidation presumes that)
@@ -414,11 +415,27 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
   return lwm;
 }
 
+static void
+dump_sequence (FILE *stream, replay_block const &block, replay_span span,
+	       unsigned base, bool ignore_empty = true)
+{
+  for (auto pos = &block[span.begin], end = &block[span.end];
+       pos != end; pos++)
+    {
+      if (ignore_empty && pos->empty)
+	fprintf (stream, "-: ");
+      else
+	fprintf (stream, "%u%c ", base++, pos->empty ? '-' : ':');
+      dump_insn_slim (stream, pos->insn);
+    }
+}
+
+
 // LIST has been computed, but sequences might contain overlapping runs.
 // Remove overlaps, and push a pointer to valid ones into the ACTIVE array.
 
 static void
-active_triage (replay_active &active, replay_list &list, unsigned from)
+active_triage (replay_block const &block, replay_active &active, replay_list &list, unsigned from)
 {
   active.clear ();
   for (; from != list.size (); from++)
@@ -441,10 +458,15 @@ active_triage (replay_active &active, replay_list &list, unsigned from)
       if (seq.clones.size () > 1)
 	{
 	  if (dump_file)
-	    fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
-		     seq.clones.front ().begin,
-		     seq.clones.front ().end,
-		     seq.length, unsigned (seq.clones.size ()));
+	    {
+	      fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
+		       seq.clones.front ().begin,
+		       seq.clones.front ().end,
+		       seq.length, unsigned (seq.clones.size ()));
+	      dump_sequence (dump_file, block, seq.clones.front (),
+			     seq.clones.front ().begin, false);
+	      fprintf (dump_file, "\n");
+	    }
 	  active.push_back (&seq);
 	}
     }
@@ -485,17 +507,7 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
 	       seq.clones.front ().begin, seq.clones.front ().end,
 	       unsigned (seq.clones.size ()),
 	       replay_start, length, saving);
-      unsigned ix = replay_start;
-      for (auto pos = &block[seq.clones.front ().begin],
-	     end = &block[seq.clones.front ().end];
-	   pos != end; pos++)
-	{
-	  if (pos->empty)
-	    fprintf (dump_file, "-: ");
-	  else
-	    fprintf (dump_file, "%u: ", ix++);
-	  dump_insn_slim (dump_file, pos->insn);
-	}
+      dump_sequence (dump_file, block, seq.clones.front (), replay_start);
       fprintf (dump_file, "\n");
     }
   
@@ -585,10 +597,12 @@ active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_len
       ++write;
 
       if (dump_file)
-	fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
-		 ptr->clones.front ().begin,
-		 ptr->clones.front ().end,
-		 ptr->length, unsigned (ptr->clones.size ()));
+	{
+	  fprintf (dump_file, "Sequence [%u,%u) length %u, %u instances\n",
+		   ptr->clones.front ().begin,
+		   ptr->clones.front ().end,
+		   ptr->length, unsigned (ptr->clones.size ()));
+	}
     }
 
   active.erase (write, end);
@@ -727,7 +741,7 @@ transform (function *cfn, unsigned buffer_size)
       // This is N^2
       unsigned lwm = build_sequences (map, list, info, replay_spans.front ().end);
 
-      active_triage (active, list, lwm);
+      active_triage (info, active, list, lwm);
 
       // This is the knapsack problem :(
       auto spans = replay_spans;
