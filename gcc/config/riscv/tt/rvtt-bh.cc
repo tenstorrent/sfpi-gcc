@@ -203,7 +203,7 @@ rvtt_bh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
       rvtt_bh_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GTE), true);
       rvtt_bh_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx, GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
       if (cmp == SFPXCMP_MOD1_CC_LTE)
-	emit_insn (gen_rvtt_bh_sfpcompc ());
+	emit_insn (gen_rvtt_sfpcompc ());
       return;
     }
 
@@ -293,7 +293,7 @@ rvtt_bh_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, b
     }
 
   if (need_setcc)
-    emit_insn (gen_rvtt_bh_sfpsetcc_v (set_cc_arg, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    emit_insn (gen_rvtt_sfpsetcc_v (set_cc_arg, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
 }
 
 // See comment block above sfpiadd_i_ex
@@ -306,10 +306,9 @@ void rvtt_bh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
     rvtt_bh_emit_sfpxiadd_v(dst, srcb, srca, GEN_INT(base_mod | SFPXCMP_MOD1_CC_GTE));
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(dst, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
-    if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_rvtt_bh_sfpcompc());
-    }
+    emit_insn(gen_rvtt_sfpsetcc_v(dst, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    if (cmp == SFPXCMP_MOD1_CC_LTE)
+      emit_insn(gen_rvtt_sfpcompc());
     return;
   }
 
@@ -324,10 +323,9 @@ void rvtt_bh_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod)
     // Perform op w/o compare
     mod1 |= SFPIADD_MOD1_CC_NONE;
     emit_insn(gen_rvtt_bh_sfpiadd_v_int(dst, srcb, srca, GEN_INT(mod1)));
-    if (cmp != 0) {
+    if (cmp != 0)
       // Must be EQ0 or NE0, compare with SETCC
-      emit_insn(gen_rvtt_bh_sfpsetcc_v(dst, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
-    }
+      emit_insn(gen_rvtt_sfpsetcc_v(dst, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
   }
 }
 
@@ -369,13 +367,12 @@ void rvtt_bh_emit_sfpxfcmps(rtx addr, rtx v, rtx f, rtx mod)
   }
 
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
-    if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_rvtt_bh_sfpcompc());
-    }
+    emit_insn(gen_rvtt_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
+    emit_insn(gen_rvtt_sfpsetcc_v(v, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    if (cmp == SFPXCMP_MOD1_CC_LTE)
+      emit_insn(gen_rvtt_sfpcompc());
   } else {
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(v, setcc_mod));
+    emit_insn(gen_rvtt_sfpsetcc_v(v, setcc_mod));
   }
 }
 
@@ -389,13 +386,12 @@ void rvtt_bh_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod)
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
-    if (cmp == SFPXCMP_MOD1_CC_LTE) {
-      emit_insn(gen_rvtt_bh_sfpcompc());
-    }
+    emit_insn(gen_rvtt_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_GTE0)));
+    emit_insn(gen_rvtt_sfpsetcc_v(tmp, GEN_INT(SFPSETCC_MOD1_LREG_NE0)));
+    if (cmp == SFPXCMP_MOD1_CC_LTE)
+      emit_insn(gen_rvtt_sfpcompc());
   } else {
-    emit_insn(gen_rvtt_bh_sfpsetcc_v(tmp, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
+    emit_insn(gen_rvtt_sfpsetcc_v(tmp, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
   }
 }
 

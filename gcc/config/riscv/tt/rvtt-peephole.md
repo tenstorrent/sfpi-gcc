@@ -30,11 +30,13 @@
    (unspec_volatile:XTT32SI [
      (match_dup:XTT32SI     2)
      (match_operand:SI    4 "const_int_operand")
-     ] UNSPECV_BH_SFPSETCC_V)]
-  "TARGET_XTT_TENSIX_BH && (INTVAL (operands[4]) == 2 || INTVAL (operands[4]) == 6)"
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX && (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                                 || INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_EQ0)"
   [(const_int 0)]
 {
-  rtx mod = GEN_INT (INTVAL (operands[4]) == 2 ? 2 : 10);
+  rtx mod = GEN_INT (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                     ? SFPLZ_MOD1_CC_NE0 : SFPLZ_MOD1_CC_EQ0);
 
   emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
 })
@@ -48,17 +50,19 @@
 	  ] UNSPECV_SFPLZ))
    (unspec_volatile:XTT32SI [
      (match_operand:SI    4 "const_int_operand")
-     ] UNSPECV_BH_SFPPUSHC)
+     ] UNSPECV_SFPPUSHC)
    (unspec_volatile:XTT32SI [
      (match_dup:XTT32SI     2)
      (match_operand:SI    5 "const_int_operand")
-     ] UNSPECV_BH_SFPSETCC_V)]
-  "TARGET_XTT_TENSIX_BH && (INTVAL (operands[5]) == 2 || INTVAL (operands[5]) == 6)"
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX && (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                                 || INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_EQ0)"
   [(const_int 0)]
 {
-  rtx mod = GEN_INT (INTVAL (operands[5]) == 2 ? 2 : 10);
+  rtx mod = GEN_INT (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                     ? SFPLZ_MOD1_CC_NE0 : SFPLZ_MOD1_CC_EQ0);
 
-  emit_insn (gen_rvtt_bh_sfppushc (operands[4]));
+  emit_insn (gen_rvtt_sfppushc (operands[4]));
   emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
 })
 

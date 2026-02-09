@@ -146,6 +146,16 @@ constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
+constexpr unsigned int SFPLZ_MOD1_CC_NONE = 0;
+constexpr unsigned int SFPLZ_MOD1_CC_NE0 = 2;
+constexpr unsigned int SFPLZ_MOD1_CC_COMP = 8;
+constexpr unsigned int SFPLZ_MOD1_CC_EQ0 = 10;
+constexpr unsigned int SFPLZ_MOD1_NOSGN_MASK = 4;
+constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_NONE = 4;
+constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_NE0 = 6;
+constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_COMP = 12;
+constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_EQ0 = 14;
+
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNE = 0;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNS = 1;
 // Added in BlackHole:

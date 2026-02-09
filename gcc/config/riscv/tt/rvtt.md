@@ -44,11 +44,22 @@
 
   UNSPECV_SFPNOP
   UNSPECV_SFPASSIGN
+
+  UNSPECV_SFPSETCC
+  UNSPECV_SFPENCC
+  UNSPECV_SFPCOMPC
+  UNSPECV_SFPPUSHC
+  UNSPECV_SFPPOPC
+
   UNSPECV_SFPMOV
   UNSPECV_SFPEXEXP
   UNSPECV_SFPEXMAN
   UNSPECV_SFPABS
   UNSPECV_SFPLZ
+  UNSPECV_SFPAND
+  UNSPECV_SFPOR
+  UNSPECV_SFPXOR
+  UNSPECV_SFPNOT
   UNSPECV_SFPSHFT
 
   UNSPECV_SFPLUT
@@ -398,6 +409,57 @@
   "SFPMOV\t%0, %x2, 0"
   [(set_attr "type" "tensix")])
 
+(define_insn "rvtt_sfpsetcc_i"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "const_int_operand" "N01U")
+     (match_operand:SI    1 "const_int_operand" "N04U")
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX"
+  "SFPSETCC\tL0, %0, %1"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpsetcc_v"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
+     (match_operand:SI    1 "const_int_operand" "N04U")
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX"
+  "SFPSETCC\t%x0, 0, %1"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpencc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "N02U")
+     (match_operand:SI 1 "const_int_operand" "N04U")
+     ] UNSPECV_SFPENCC)]
+  "TARGET_XTT_TENSIX"
+  "SFPENCC\t%0, %1"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpcompc"
+  [(unspec_volatile:XTT32SI [
+     (const_int 0)
+     ] UNSPECV_SFPCOMPC)]
+  "TARGET_XTT_TENSIX"
+  "SFPCOMPC"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfppushc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "N04U")
+     ] UNSPECV_SFPPUSHC)]
+  "TARGET_XTT_TENSIX"
+  "SFPPUSHC\t%0"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfppopc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "N04U")
+     ] UNSPECV_SFPPOPC)]
+  "TARGET_XTT_TENSIX"
+  "SFPPOPC\t%0"
+  [(set_attr "type" "tensix")])
+
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
   UNSPECV_SFPEXEXP
@@ -442,6 +504,55 @@
 	  ] rvtt_unary_op))]
   "TARGET_XTT_TENSIX"
   "SFP<rvtt_unary_insn>\t%0, %x2, %3"
+  [(set_attr "type" "tensix")])
+
+(define_int_iterator rvtt_logical_op [
+  UNSPECV_SFPAND
+  UNSPECV_SFPOR
+  UNSPECV_SFPXOR
+  ])
+(define_int_attr rvtt_logical_name [
+  (UNSPECV_SFPAND "and")
+  (UNSPECV_SFPOR "or")
+  (UNSPECV_SFPXOR "xor")
+  ])
+(define_int_attr rvtt_logical_insn [
+  (UNSPECV_SFPAND "AND")
+  (UNSPECV_SFPOR "OR")
+  (UNSPECV_SFPXOR "XOR")
+  ])
+
+;; the inputs are not commutative, because op1 could be a live vqlue
+;; that needs the (non-enabled) components propagating to the output.
+(define_insn "rvtt_sfp<rvtt_logical_name>"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+	  ] rvtt_logical_op))]
+  "TARGET_XTT_TENSIX"
+  "SFP<rvtt_logical_insn>\t%0, %x2"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpnot"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
+	  ] UNSPECV_SFPNOT))]
+  "TARGET_XTT_TENSIX"
+  {
+    emit_insn (gen_rvtt_sfpnot_lv (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1]));
+    DONE;
+  })
+
+(define_insn "rvtt_sfpnot_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand"  "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+	  ] UNSPECV_SFPNOT))]
+  "TARGET_XTT_TENSIX"
+  "SFPNOT\t%0, %x2"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpshft_v"
@@ -1069,3 +1180,5 @@
   "TARGET_XTT_TENSIX"
   "TTREPLAY\t%0, %1, %2, %3"
   [(set_attr "type" "tensix")])
+
+(include "tt/rvtt-peephole.md")

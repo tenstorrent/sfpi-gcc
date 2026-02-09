@@ -19935,32 +19935,32 @@ __attribute__((always_inline)) inline void __vIntBase::loadus(uint16_t val)
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator&(const vType b) const
 {
-    return __builtin_rvtt_wh_sfpand(v, b.get());
+  return __builtin_rvtt_sfpand(v, b.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline void __vIntBase::operator&=(const vType b)
 {
-    v = __builtin_rvtt_wh_sfpand(v, b.get());
+    v = __builtin_rvtt_sfpand(v, b.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator|(const vType b) const
 {
-    return __builtin_rvtt_wh_sfpor(v, b.get());
+    return __builtin_rvtt_sfpor(v, b.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator|=(const vType b)
 {
-    v = __builtin_rvtt_wh_sfpor(v, b.get());
+    v = __builtin_rvtt_sfpor(v, b.get());
     return v;
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator~() const
 {
-    return __builtin_rvtt_wh_sfpnot(v);
+    return __builtin_rvtt_sfpnot(v);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
@@ -20225,7 +20225,7 @@ __attribute__((always_inline)) inline void __vCCCtrl::cc_elseif(const __vIntBase
 
 __attribute__((always_inline)) inline void __vCCCtrl::cc_else() const
 {
-    __builtin_rvtt_wh_sfpcompc();
+    __builtin_rvtt_sfpcompc();
 }
 
 __attribute__((always_inline)) inline __vCCCtrl::~__vCCCtrl()
@@ -20243,18 +20243,18 @@ __attribute__((always_inline)) inline void __vCCCtrl::mark_top()
 __attribute__((always_inline)) inline void __vCCCtrl::push()
 {
     push_count++;
-    __builtin_rvtt_wh_sfppushc(0);
+    __builtin_rvtt_sfppushc(0);
 }
 
 __attribute__((always_inline)) inline void __vCCCtrl::pop()
 {
     push_count--;
-    __builtin_rvtt_wh_sfppopc(0);
+    __builtin_rvtt_sfppopc(0);
 }
 
 __attribute__((always_inline)) inline void __vCCCtrl::enable_cc()
 {
-    __builtin_rvtt_wh_sfpencc(SFPENCC_IMM12_BOTH, SFPENCC_MOD1_EI_RI);
+    __builtin_rvtt_sfpencc(SFPENCC_IMM12_BOTH, SFPENCC_MOD1_EI_RI);
 }
 
 
@@ -20385,13 +20385,13 @@ __attribute__((always_inline)) inline vUInt::vUInt(const __vDReg dreg)
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator^(const vType b) const
 {
-    return __builtin_rvtt_wh_sfpxor(v, b.get());
+    return __builtin_rvtt_sfpxor(v, b.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator^=(const vType b)
 {
-    v = __builtin_rvtt_wh_sfpxor(v, b.get());
+    v = __builtin_rvtt_sfpxor(v, b.get());
     return v;
 }
 
