@@ -186,7 +186,7 @@ void six (unsigned bits)
     {
       auto x = __builtin_rvtt_wh_sfpload (0, 0, 0, 0, 0, 0);
       x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-      x = __builtin_rvtt_wh_sfpshft_i (ibuf, x, bits, 0, 0);
+      x = __builtin_rvtt_sfpshft_i (ibuf, x, bits, 0, 0, 0);
       x = __builtin_rvtt_wh_sfpadd (x, x, 0);
       __builtin_rvtt_wh_sfpstore (0, x, 0, 0, 0, 0, 0);
     }
@@ -205,7 +205,7 @@ void six (unsigned bits)
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
-**	sw	a5, 0\(a3\)	# 2:7a000001 L0 := LV
+**	sw	a5, 0\(a3\)	# 2:7a000001 L0 := L0
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
 **	SFPSTORE	0, L0, 0, 0

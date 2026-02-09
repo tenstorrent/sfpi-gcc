@@ -20124,22 +20124,22 @@ __attribute__((always_inline)) inline __vCond __vConstIntBase::operator>=(const 
 
 
 vInt vInt::operator<<(unsigned amt) const {
-  return __builtin_rvtt_wh_sfpshft_i(ckernel::instrn_buffer, get(), amt, 0, 0);
+  return __builtin_rvtt_sfpshft_i(ckernel::instrn_buffer, get(), amt, 0, 0, 0);
 }
 vInt vInt::operator<<(vInt amt) const {
-  return __builtin_rvtt_wh_sfpshft_v(get(), amt.get());
+  return __builtin_rvtt_sfpshft_v(get(), amt.get(), 0);
 }
 vUInt vUInt::operator<<(unsigned amt) const {
-  return __builtin_rvtt_wh_sfpshft_i(ckernel::instrn_buffer, get(), amt, 0, 0);
+  return __builtin_rvtt_sfpshft_i(ckernel::instrn_buffer, get(), amt, 0, 0, 0);
 }
 vUInt vUInt::operator<<(vInt amt) const {
-  return __builtin_rvtt_wh_sfpshft_v(get(), amt.get());
+  return __builtin_rvtt_sfpshft_v(get(), amt.get(), 0);
 }
 vUInt vUInt::operator>>(unsigned amt) const {
-  return __builtin_rvtt_wh_sfpshft_i(ckernel::instrn_buffer, get(), -amt, 0, 0);
+  return __builtin_rvtt_sfpshft_i(ckernel::instrn_buffer, get(), -amt, 0, 0, 0);
 }
 vUInt vUInt::operator>>(vInt amt) const {
-  return __builtin_rvtt_wh_sfpshft_v(get(), (-amt).get());
+  return __builtin_rvtt_sfpshft_v(get(), (-amt).get(), 0);
 }
 
 
@@ -20590,12 +20590,12 @@ __attribute__((always_inline)) inline vInt abs(const vInt v)
 
 __attribute__((always_inline)) inline vUInt shft(const vUInt v, const vInt amt)
 {
-    return __builtin_rvtt_wh_sfpshft_v(v.get(), amt.get());
+  return __builtin_rvtt_sfpshft_v(v.get(), amt.get(), 0);
 }
 
 __attribute__((always_inline)) inline vUInt shft(const vUInt v, int amt)
 {
-  return __builtin_rvtt_wh_sfpshft_i(ckernel::instrn_buffer, v.get(), amt, 0, 0);
+  return __builtin_rvtt_sfpshft_i(ckernel::instrn_buffer, v.get(), amt, 0, 0, 0);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>

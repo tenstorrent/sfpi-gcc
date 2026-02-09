@@ -99,6 +99,10 @@ RVTT_FN (sfpabs_lv,          RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,           
 RVTT_FN (sfplz,              RISCV_XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x01, -1,  1, -1,      0, 0)
 RVTT_FN (sfplz_lv,           RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x03, -1,  2, -1,      0, 0)
 
+RVTT_FN (sfpshft_v,          RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x00,  0,  2, -1,      0, 0)
+// BH could have an _lv variant and need not mark dst_as_src
+RVTT_FN (sfpshft_i,          RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x00,  1,  5,  2,  0xFFF, 12)
+
 RVTT_FN (sfplut,             RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0x00,  3,  4, -1,      0, 0)
 RVTT_FN (sfplutfp32_3r,      RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0x00, -1,  4, -1,      0, 0)
 RVTT_FN (sfplutfp32_6r,      RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0x00, -1,  7,  -1,      0, 0)
@@ -129,8 +133,6 @@ RVTT_WH_FN (sfpaddi,         RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_US
 RVTT_WH_FN (sfpxiadd_v,      RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
 RVTT_WH_FN (sfpxiadd_i,      RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x01, -1,  5,  2,      0, 0)
 RVTT_WH_FN (sfpxiadd_i_lv,   RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x03, -1,  6,  3,      0, 0)
-RVTT_WH_FN (sfpshft_v,       RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  0, -1, -1,      0, 0)
-RVTT_WH_FN (sfpshft_i,       RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI,                 0x00,  1, -1,  2,  0xFFF, 12)
 RVTT_WH_FN (sfpand,          RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  0, -1, -1,      0, 0)
 RVTT_WH_FN (sfpor,           RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  0, -1, -1,      0, 0)
 RVTT_WH_FN (sfpnot,          RISCV_XTT_VEC_FTYPE_XTT_VEC,                                      0x00, -1, -1, -1,      0, 0)
@@ -189,8 +191,6 @@ RVTT_BH_FN (sfpaddi,         RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_US
 RVTT_BH_FN (sfpxiadd_v,      RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
 RVTT_BH_FN (sfpxiadd_i,      RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x01, -1,  5,  2,      0, 0)
 RVTT_BH_FN (sfpxiadd_i_lv,   RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x03, -1,  6,  3,      0, 0)
-RVTT_BH_FN (sfpshft_v,       RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x00,  0,  2, -1,      0, 0)
-RVTT_BH_FN (sfpshft_i,       RISCV_XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x00,  1,  5,  2,  0xFFF, 12)
 RVTT_BH_FN (sfpand,          RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  0, -1, -1,      0, 0)
 RVTT_BH_FN (sfpor,           RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  0, -1, -1,      0, 0)
 RVTT_BH_FN (sfpnot,          RISCV_XTT_VEC_FTYPE_XTT_VEC,                                      0x00, -1, -1, -1,      0, 0)

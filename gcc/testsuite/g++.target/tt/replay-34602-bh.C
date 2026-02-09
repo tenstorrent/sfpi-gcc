@@ -186,7 +186,7 @@ void six (unsigned bits)
     {
       auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
       x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-      x = __builtin_rvtt_bh_sfpshft_i (ibuf, x, bits, 0, 0, 0);
+      x = __builtin_rvtt_sfpshft_i (ibuf, x, bits, 0, 0, 0);
       x = __builtin_rvtt_bh_sfpadd (x, x, 0);
       __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
     }

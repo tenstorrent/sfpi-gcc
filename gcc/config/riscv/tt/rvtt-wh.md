@@ -49,9 +49,6 @@
   UNSPECV_WH_SFPXIADD_I
   UNSPECV_WH_SFPXIADD_I_LV
   UNSPECV_WH_SFPIADD_I_INT
-  UNSPECV_WH_SFPSHFT_V
-  UNSPECV_WH_SFPSHFT_I
-  UNSPECV_WH_SFPSHFT_I_INT
   UNSPECV_WH_SFPAND
   UNSPECV_WH_SFPOR
   UNSPECV_WH_SFPXOR
@@ -459,51 +456,6 @@
   rvtt_wh_emit_sfpxiadd_i (operands[0], live, operands[1], operands[3], operands[4], operands[7]);
   DONE;
 })
-
-(define_insn "rvtt_wh_sfpshft_v"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-	  ] UNSPECV_WH_SFPSHFT_V))]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPSHFT\t%0, %x2, 0, 0"
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_wh_sfpshft_i"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "reg_or_0_operand")
-          (match_operand:SI    5 "const_int_operand")
-	  ] UNSPECV_WH_SFPSHFT_I))]
-  "TARGET_XTT_TENSIX_WH"
-{
-  rtx insn = nullptr;
-  if (CONST_INT_P (operands[3]))
-    insn = gen_rvtt_wh_sfpshft_i_int (operands[0], operands[2], rvtt_clamp_signed (operands[3], 0x7FF));
-  else
-    {
-      unsigned op = TT_OP_WH_SFPSHFT(0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_wh_sfpshft_i_int,
-				     0, operands[4], op, operands[5],
-				     operands[0], 4, operands[2]);
-    }
-  emit_insn (insn);
-  DONE;
-})
-
-(define_insn "rvtt_wh_sfpshft_i_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:SI    2 "const_int_operand" "N12S")
-	  ] UNSPECV_WH_SFPSHFT_I_INT))]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPSHFT\t%0, L0, %2, 1"
-  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_wh_sfpand"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
