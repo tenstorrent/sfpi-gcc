@@ -47,7 +47,7 @@ void f6() {
 }
 /*
 **_Z2f6v:
-**	SFPSHFT	L0, L1, 0, 2
+**	SFPSHFT	L0, L1, 0, 0
 **	SFPMOV	L3, L0, 2
 **	ret
 */
