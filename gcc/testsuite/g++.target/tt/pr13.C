@@ -10,13 +10,13 @@ using vec_t = __xtt_vector;
 inline void calculate_power_iterative(unsigned exponent) {
 #pragma GCC unroll 8
   for (int d = 0; d < 8; d++) {
-    vec_t in = __builtin_rvtt_wh_sfpload(nullptr, 0, 3, 0, 0, 0);
-    vec_t acc = __builtin_rvtt_wh_sfpxloadi(nullptr, 18, 0x3f800000, 0, 0);
+    vec_t in = __builtin_rvtt_sfpload(nullptr, 0, 3, 0, 0, 0);
+    vec_t acc = __builtin_rvtt_sfpxloadi(nullptr, 18, 0x3f800000, 0, 0);
     for (unsigned i = 0; i < exponent; i++)
       acc = __builtin_rvtt_sfpassign_lv(
-	      acc, __builtin_rvtt_wh_sfpmul(acc, in, 0));
+	      acc, __builtin_rvtt_sfpmul(acc, in, 0));
 
-    __builtin_rvtt_wh_sfpstore(nullptr, acc, 12, 3, 0, 0, 0);
+    __builtin_rvtt_sfpstore(nullptr, acc, 12, 3, 0, 0, 0);
     __builtin_rvtt_ttincrwc(0, 2, 0, 0);
   }
 }

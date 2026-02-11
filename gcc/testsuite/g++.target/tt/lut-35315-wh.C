@@ -3,12 +3,12 @@
 
 void one ()
 {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v2 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v3 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto r = __builtin_rvtt_sfplut (v0, v1, v2, v3, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3onev:
@@ -24,15 +24,15 @@ void one ()
 
 void two ()
 {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v2 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v3 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v4 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v5 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v6 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v4 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v5 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v6 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto r = __builtin_rvtt_sfplutfp32_6r (v0, v1, v2, v3, v4, v5, v6, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3twov:
@@ -51,12 +51,12 @@ void two ()
 
 void three ()
 {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v2 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v3 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto r = __builtin_rvtt_sfplutfp32_3r (v0, v1, v2, v3, 10);
-  __builtin_rvtt_wh_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
 }
 /*
 **_Z5threev:
@@ -76,12 +76,12 @@ void four ()
 #pragma GCC unroll 4
   for (unsigned ix = 0; ix != 4; ix++)
     {
-      auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-      auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-      auto v2 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-      auto v3 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+      auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+      auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+      auto v2 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+      auto v3 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
       auto r = __builtin_rvtt_sfplutfp32_3r (v0, v1, v2, v3, 10);
-      __builtin_rvtt_wh_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
+      __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
     }
 }
 /*

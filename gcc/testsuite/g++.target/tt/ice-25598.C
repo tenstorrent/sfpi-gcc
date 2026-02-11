@@ -19746,13 +19746,13 @@ class __vCond {
 
 
     __attribute__((always_inline)) inline __vCond(const __vCondOpType t, const vFloat a, const float b)
-    { result = __builtin_rvtt_wh_sfpxfcmps(ckernel::instrn_buffer, a.get(), __f32asui(b), 0, 0, t | SFPXSCMP_MOD1_FMT_FLOAT); }
+    { result = __builtin_rvtt_sfpxfcmps(ckernel::instrn_buffer, a.get(), __f32asui(b), 0, 0, t | SFPXSCMP_MOD1_FMT_FLOAT); }
 
     __attribute__((always_inline)) inline __vCond(const __vCondOpType t, const vFloat a, const s2vFloat16 b)
-    { result = __builtin_rvtt_wh_sfpxfcmps(ckernel::instrn_buffer, a.get(), b.get(), 0, 0, t | ((b.get_format() == SFPLOADI_MOD0_FLOATA) ? SFPXSCMP_MOD1_FMT_A : SFPXSCMP_MOD1_FMT_B)); }
+    { result = __builtin_rvtt_sfpxfcmps(ckernel::instrn_buffer, a.get(), b.get(), 0, 0, t | ((b.get_format() == SFPLOADI_MOD0_FLOATA) ? SFPXSCMP_MOD1_FMT_A : SFPXSCMP_MOD1_FMT_B)); }
 
     __attribute__((always_inline)) inline __vCond(const __vCondOpType t, const vFloat a, const vFloat b)
-    { result = __builtin_rvtt_wh_sfpxfcmpv(a.get(), b.get(), t); }
+    { result = __builtin_rvtt_sfpxfcmpv(a.get(), b.get(), t); }
 
 
     __attribute__((always_inline)) inline __vCond(const __vCondOpType t, const __vIntBase a, int32_t b, uint32_t mod)
@@ -19803,12 +19803,12 @@ namespace sfpi_int {
 
 __attribute__((always_inline)) inline vFloat fp_add(const vFloat a, const vFloat b)
 {
-    return __builtin_rvtt_wh_sfpadd(a.get(), b.get(), 0);
+    return __builtin_rvtt_sfpadd(a.get(), b.get(), 0);
 }
 
 __attribute__((always_inline)) inline vFloat fp_mul(const vFloat a, const vFloat b)
 {
-    return __builtin_rvtt_wh_sfpmul(a.get(), b.get(), 0);
+    return __builtin_rvtt_sfpmul(a.get(), b.get(), 0);
 }
 
 __attribute__((always_inline)) inline vFloat fp_sub(const vFloat a, const vFloat b)
@@ -19900,13 +19900,13 @@ __attribute__((always_inline)) inline __vCond vFloat::operator>=(const vFloat x)
 
 __attribute__((always_inline)) inline vFloat vFloat::operator*=(const vFloat m)
 {
-    assign(__builtin_rvtt_wh_sfpmul(v, m.get(), SFPMAD_MOD1_OFFSET_NONE));
+    assign(__builtin_rvtt_sfpmul(v, m.get(), SFPMAD_MOD1_OFFSET_NONE));
     return v;
 }
 
 __attribute__((always_inline)) inline vFloat vFloat::operator+=(const vFloat a)
 {
-    assign(__builtin_rvtt_wh_sfpadd(v, a.get(), SFPMAD_MOD1_OFFSET_NONE));
+    assign(__builtin_rvtt_sfpadd(v, a.get(), SFPMAD_MOD1_OFFSET_NONE));
     return v;
 }
 
@@ -19918,18 +19918,18 @@ __attribute__((always_inline)) inline vFloat vFloat::operator-() const
 
 __attribute__((always_inline)) inline void vFloat::loadf16(const s2vFloat16 val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, val.get_format(), val.get(), 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, val.get_format(), val.get(), 0, 0));
 }
 
 
 __attribute__((always_inline)) inline void __vIntBase::loadss(int16_t val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, SFPLOADI_MOD0_SHORT, val, 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, SFPLOADI_MOD0_SHORT, val, 0, 0));
 }
 
 __attribute__((always_inline)) inline void __vIntBase::loadus(uint16_t val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, SFPLOADI_MOD0_USHORT, val, 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, SFPLOADI_MOD0_USHORT, val, 0, 0));
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
@@ -19966,51 +19966,51 @@ __attribute__((always_inline)) inline vType __vIntBase::operator~() const
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::add(int32_t val, unsigned int mod_base) const
 {
-    return __builtin_rvtt_wh_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base);
+    return __builtin_rvtt_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator+(const __vIntBase val) const
 {
-    return __builtin_rvtt_wh_sfpxiadd_v(val.get(), v, 0);
+    return __builtin_rvtt_sfpxiadd_v(val.get(), v, 0);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator+(const __vConstIntBase val) const
 {
     __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
-    return __builtin_rvtt_wh_sfpxiadd_v(c, v, 0);
+    return __builtin_rvtt_sfpxiadd_v(c, v, 0);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::sub(int32_t val, unsigned int mod_base) const
 {
-    return __builtin_rvtt_wh_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base | SFPXIADD_MOD1_IS_SUB);
+    return __builtin_rvtt_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base | SFPXIADD_MOD1_IS_SUB);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator-(const __vIntBase val) const
 {
-    return __builtin_rvtt_wh_sfpxiadd_v(val.get(), v, SFPXIADD_MOD1_IS_SUB);
+    return __builtin_rvtt_sfpxiadd_v(val.get(), v, SFPXIADD_MOD1_IS_SUB);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator-(const __vConstIntBase val) const
 {
     __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
-    return __builtin_rvtt_wh_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB);
+    return __builtin_rvtt_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline void __vIntBase::add_eq(int32_t val, unsigned int mod_base)
 {
-    assign(__builtin_rvtt_wh_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base));
+    assign(__builtin_rvtt_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base));
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator+=(const __vIntBase val)
 {
-    assign(__builtin_rvtt_wh_sfpxiadd_v(v, val.get(), 0));
+    assign(__builtin_rvtt_sfpxiadd_v(v, val.get(), 0));
     return v;
 }
 
@@ -20018,20 +20018,20 @@ template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, 
 __attribute__((always_inline)) inline vType __vIntBase::operator+=(const __vConstIntBase val)
 {
     __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
-    assign(__builtin_rvtt_wh_sfpxiadd_v(c, v, 0));
+    assign(__builtin_rvtt_sfpxiadd_v(c, v, 0));
     return v;
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline void __vIntBase::sub_eq(int32_t val, unsigned int mod_base)
 {
-    assign(__builtin_rvtt_wh_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base | SFPXIADD_MOD1_IS_SUB));
+    assign(__builtin_rvtt_sfpxiadd_i(ckernel::instrn_buffer, v, val, 0, 0, mod_base | SFPXIADD_MOD1_IS_SUB));
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, vType>::value>*>
 __attribute__((always_inline)) inline vType __vIntBase::operator-=(const __vIntBase val)
 {
-    assign(__builtin_rvtt_wh_sfpxiadd_v(val.get(), v, SFPXIADD_MOD1_IS_SUB));
+    assign(__builtin_rvtt_sfpxiadd_v(val.get(), v, SFPXIADD_MOD1_IS_SUB));
     return v;
 }
 
@@ -20039,7 +20039,7 @@ template <typename vType, typename std::enable_if_t<std::is_base_of<__vIntBase, 
 __attribute__((always_inline)) inline vType __vIntBase::operator-=(const __vConstIntBase val)
 {
     __rvtt_vec_t c = __builtin_rvtt_sfpreadlreg(val.get());
-    assign(__builtin_rvtt_wh_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB));
+    assign(__builtin_rvtt_sfpxiadd_v(c, v, SFPXIADD_MOD1_IS_SUB));
     return v;
 }
 
@@ -20288,7 +20288,7 @@ __attribute__((always_inline)) inline __vCond __vDReg::operator>=(const float x)
 template <>
 __attribute__((always_inline)) inline vFloat __vDReg::operator=(const vFloat vec) const
 {
-    __builtin_rvtt_wh_sfpstore(ckernel::instrn_buffer, vec.get(), SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
+    __builtin_rvtt_sfpstore(ckernel::instrn_buffer, vec.get(), SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
     return vec;
 }
 
@@ -20316,20 +20316,20 @@ __attribute__((always_inline)) inline vFloat __vDReg::operator=(const float f) c
 template <typename vecType, typename std::enable_if_t<std::is_base_of<__vBase, vecType>::value>*>
 __attribute__((always_inline)) inline vecType __vDReg::operator=(const vecType vec) const
 {
-    __builtin_rvtt_wh_sfpstore(ckernel::instrn_buffer, vec.get(), SFPSTORE_MOD0_FMT_INT32_TO_SM, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
+    __builtin_rvtt_sfpstore(ckernel::instrn_buffer, vec.get(), SFPSTORE_MOD0_FMT_INT32_TO_SM, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
     return vec;
 }
 
 __attribute__((always_inline)) inline void __vDReg::operator=(const __vDReg dreg) const
 {
     vFloat tmp = dreg;
-    __builtin_rvtt_wh_sfpstore(ckernel::instrn_buffer, tmp.get(), SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
+    __builtin_rvtt_sfpstore(ckernel::instrn_buffer, tmp.get(), SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
 }
 
 __attribute__((always_inline)) inline vFloat __vDReg::operator=(const __vConstFloat creg) const
 {
     __rvtt_vec_t lr = __builtin_rvtt_sfpreadlreg(creg.get());
-    __builtin_rvtt_wh_sfpstore(ckernel::instrn_buffer, lr, SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
+    __builtin_rvtt_sfpstore(ckernel::instrn_buffer, lr, SFPSTORE_MOD0_FMT_SRCB, SFPSTORE_ADDR_MODE_NOINC, reg, 0, 0);
     return vFloat(lr);
 }
 
@@ -20344,41 +20344,41 @@ __attribute__((always_inline)) inline __vCond vFloat::operator>=(const float x) 
 __attribute__((always_inline)) inline vFloat vFloat::operator-=(const vFloat a)
 {
     __rvtt_vec_t neg1 = __builtin_rvtt_sfpreadlreg(vConstNeg1.get());
-    assign(__builtin_rvtt_wh_sfpmad(neg1, a.get(), v, SFPMAD_MOD1_OFFSET_NONE));
+    assign(__builtin_rvtt_sfpmad(neg1, a.get(), v, SFPMAD_MOD1_OFFSET_NONE));
     return v;
 }
 
 __attribute__((always_inline)) inline vFloat::vFloat(const __vDReg dreg)
 {
-    v = __builtin_rvtt_wh_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_SRCB, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
+    v = __builtin_rvtt_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_SRCB, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
     initialized = true;
 }
 
 __attribute__((always_inline)) inline void vFloat::loadf(const float val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_FLOAT, __f32asui(val), 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_FLOAT, __f32asui(val), 0, 0));
 }
 
 
 __attribute__((always_inline)) inline void __vIntBase::loadsi(int32_t val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_INT32, val, 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_INT32, val, 0, 0));
 }
 
 __attribute__((always_inline)) inline void __vIntBase::loadui(uint32_t val)
 {
-    assign(__builtin_rvtt_wh_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_UINT32, val, 0, 0));
+    assign(__builtin_rvtt_sfpxloadi(ckernel::instrn_buffer, SFPXLOADI_MOD0_UINT32, val, 0, 0));
 }
 
 __attribute__((always_inline)) inline vInt::vInt(const __vDReg dreg)
 {
-    v = __builtin_rvtt_wh_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_INT32_TO_SM, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
+    v = __builtin_rvtt_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_INT32_TO_SM, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
     initialized = true;
 }
 
 __attribute__((always_inline)) inline vUInt::vUInt(const __vDReg dreg)
 {
-    v = __builtin_rvtt_wh_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_INT32_TO_SM, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
+    v = __builtin_rvtt_sfpload(ckernel::instrn_buffer, SFPLOAD_MOD0_FMT_INT32_TO_SM, SFPLOAD_ADDR_MODE_NOINC, dreg.get(), 0, 0);
     initialized = true;
 }
 
@@ -20398,19 +20398,19 @@ __attribute__((always_inline)) inline vType __vIntBase::operator^=(const vType b
 __attribute__((always_inline)) inline void __vConstFloat::operator=(const float in) const
 {
     vFloat tmp = in;
-    __builtin_rvtt_wh_sfpconfig_v(tmp.get(), get());
+    __builtin_rvtt_sfpconfig_v(tmp.get(), get());
 }
 
 __attribute__((always_inline)) inline void __vConstFloat::operator=(const s2vFloat16 in) const
 {
     vFloat tmp = in;
-    __builtin_rvtt_wh_sfpconfig_v(tmp.get(), get());
+    __builtin_rvtt_sfpconfig_v(tmp.get(), get());
 }
 
 __attribute__((always_inline)) inline void __vConstIntBase::operator=(const int in) const
 {
     vInt tmp = in;
-    __builtin_rvtt_wh_sfpconfig_v(tmp.get(), get());
+    __builtin_rvtt_sfpconfig_v(tmp.get(), get());
 }
 
 enum class LRegs {
@@ -20515,37 +20515,37 @@ __attribute__((always_inline)) inline vInt exman9(const vFloat v)
 
 __attribute__((always_inline)) inline vFloat setexp(const vFloat v, const uint32_t exp)
 {
-    return __builtin_rvtt_wh_sfpsetexp_i(ckernel::instrn_buffer, exp, 0, 0, v.get());
+    return __builtin_rvtt_sfpsetexp_i(ckernel::instrn_buffer, exp, 0, 0, v.get());
 }
 
 __attribute__((always_inline)) inline vFloat setexp(const vFloat v, const __vIntBase exp)
 {
 
 
-    return __builtin_rvtt_wh_sfpsetexp_v(exp.get(), v.get());
+    return __builtin_rvtt_sfpsetexp_v(exp.get(), v.get());
 }
 
 __attribute__((always_inline)) inline vFloat setman(const vFloat v, const uint32_t man)
 {
-    return __builtin_rvtt_wh_sfpsetman_i(ckernel::instrn_buffer, man, 0, 0, v.get(), 0);
+    return __builtin_rvtt_sfpsetman_i(ckernel::instrn_buffer, man, 0, 0, v.get(), 0);
 }
 
 __attribute__((always_inline)) inline vFloat setman(const vFloat v, const __vIntBase man)
 {
 
 
-    return __builtin_rvtt_wh_sfpsetman_v(man.get(), v.get());
+    return __builtin_rvtt_sfpsetman_v(man.get(), v.get());
 }
 
 __attribute__((always_inline)) inline vFloat addexp(const vFloat in, const int32_t exp)
 {
-    return __builtin_rvtt_wh_sfpdivp2(ckernel::instrn_buffer, exp, 0, 0, in.get(), SFPSDIVP2_MOD1_ADD);
+    return __builtin_rvtt_sfpdivp2(ckernel::instrn_buffer, exp, 0, 0, in.get(), SFPSDIVP2_MOD1_ADD);
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>
 __attribute__((always_inline)) inline vType setsgn(const vType v, const int32_t sgn)
 {
-    return __builtin_rvtt_wh_sfpsetsgn_i(ckernel::instrn_buffer, sgn, 0, 0, v.get());
+    return __builtin_rvtt_sfpsetsgn_i(ckernel::instrn_buffer, sgn, 0, 0, v.get());
 }
 
 template <typename vTypeA, typename vTypeB,
@@ -20555,7 +20555,7 @@ __attribute__((always_inline)) inline vTypeA setsgn(const vTypeA v, const vTypeB
 {
 
 
-    return __builtin_rvtt_wh_sfpsetsgn_v(sgn.get(), v.get());
+    return __builtin_rvtt_sfpsetsgn_v(sgn.get(), v.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>
@@ -20563,7 +20563,7 @@ __attribute__((always_inline)) inline vType setsgn(const vType v, const vInt sgn
 {
 
 
-    return __builtin_rvtt_wh_sfpsetsgn_v(sgn.get(), v.get());
+    return __builtin_rvtt_sfpsetsgn_v(sgn.get(), v.get());
 }
 
 template <typename vType, typename std::enable_if_t<std::is_base_of<__vBase, vType>::value>* = nullptr>
@@ -20606,12 +20606,12 @@ __attribute__((always_inline)) inline vType reinterpret(const __vBase v)
 
 __attribute__((always_inline)) inline vFloat int32_to_float(vInt in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpcast(in.get(), round_mode ? SFPCAST_MOD1_INT32_TO_FP32_RNS : SFPCAST_MOD1_INT32_TO_FP32_RNE);
+    return __builtin_rvtt_sfpcast(in.get(), round_mode ? SFPCAST_MOD1_INT32_TO_FP32_RNS : SFPCAST_MOD1_INT32_TO_FP32_RNE);
 }
 
 __attribute__((always_inline)) inline vUInt float_to_fp16a(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_FP16A)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_FP16A)
 
 
                                                                        ;
@@ -20619,7 +20619,7 @@ __attribute__((always_inline)) inline vUInt float_to_fp16a(vFloat in, int round_
 
 __attribute__((always_inline)) inline vUInt float_to_fp16b(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_FP16B)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_FP16B)
 
 
                                                                        ;
@@ -20627,7 +20627,7 @@ __attribute__((always_inline)) inline vUInt float_to_fp16b(vFloat in, int round_
 
 __attribute__((always_inline)) inline vUInt float_to_uint8(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_UINT8)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_UINT8)
 
 
                                                                        ;
@@ -20635,7 +20635,7 @@ __attribute__((always_inline)) inline vUInt float_to_uint8(vFloat in, int round_
 
 __attribute__((always_inline)) inline vUInt float_to_int8(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_INT8)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_INT8)
 
 
                                                                       ;
@@ -20643,7 +20643,7 @@ __attribute__((always_inline)) inline vUInt float_to_int8(vFloat in, int round_m
 
 __attribute__((always_inline)) inline vUInt int32_to_uint8(vInt in, vUInt descale, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_v(round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale.get(), in.get(), SFPSTOCHRND_MOD1_INT32_TO_UINT8)
+    return __builtin_rvtt_sfpstochrnd_v(round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale.get(), in.get(), SFPSTOCHRND_MOD1_INT32_TO_UINT8)
 
 
                                                                         ;
@@ -20651,7 +20651,7 @@ __attribute__((always_inline)) inline vUInt int32_to_uint8(vInt in, vUInt descal
 
 __attribute__((always_inline)) inline vUInt int32_to_uint8(vInt in, unsigned int descale, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale, 0, 0, in.get(), SFPSTOCHRND_MOD1_INT32_TO_UINT8 | SFPSTOCHRND_MOD1_IMM8)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale, 0, 0, in.get(), SFPSTOCHRND_MOD1_INT32_TO_UINT8 | SFPSTOCHRND_MOD1_IMM8)
 
 
                                                                                                 ;
@@ -20659,7 +20659,7 @@ __attribute__((always_inline)) inline vUInt int32_to_uint8(vInt in, unsigned int
 
 __attribute__((always_inline)) inline vUInt int32_to_int8(vInt in, vUInt descale, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_v(round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale.get(), in.get(), SFPSTOCHRND_MOD1_INT32_TO_INT8)
+    return __builtin_rvtt_sfpstochrnd_v(round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale.get(), in.get(), SFPSTOCHRND_MOD1_INT32_TO_INT8)
 
 
                                                                        ;
@@ -20667,7 +20667,7 @@ __attribute__((always_inline)) inline vUInt int32_to_int8(vInt in, vUInt descale
 
 __attribute__((always_inline)) inline vUInt int32_to_int8(vInt in, unsigned int descale, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale, 0, 0, in.get(), SFPSTOCHRND_MOD1_INT32_TO_INT8 | SFPSTOCHRND_MOD1_IMM8)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, descale, 0, 0, in.get(), SFPSTOCHRND_MOD1_INT32_TO_INT8 | SFPSTOCHRND_MOD1_IMM8)
 
 
                                                                                                ;
@@ -20675,7 +20675,7 @@ __attribute__((always_inline)) inline vUInt int32_to_int8(vInt in, unsigned int 
 
 __attribute__((always_inline)) inline vUInt float_to_uint16(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_UINT16)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_UINT16)
 
 
                                                                         ;
@@ -20683,7 +20683,7 @@ __attribute__((always_inline)) inline vUInt float_to_uint16(vFloat in, int round
 
 __attribute__((always_inline)) inline vUInt float_to_int16(vFloat in, int round_mode = 1)
 {
-    return __builtin_rvtt_wh_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_INT16)
+    return __builtin_rvtt_sfpstochrnd_i(ckernel::instrn_buffer, round_mode ? SFPSTOCHRND_RND_STOCH : SFPSTOCHRND_RND_EVEN, 0, 0, 0, in.get(), SFPSTOCHRND_MOD1_FP32_TO_INT16)
 
 
                                                                        ;

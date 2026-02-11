@@ -653,7 +653,7 @@
   // so we need to emit a loadi to L7 first.
   emit_insn (
     // Although ugly, this should be going away.
-    (TARGET_XTT_TENSIX_WH ? gen_rvtt_wh_sfploadi_int : gen_rvtt_bh_sfploadi_int)
+    (TARGET_XTT_TENSIX_WH ? gen_rvtt_sfploadi_int_wh : gen_rvtt_sfploadi_int_bh)
     (operands[6], rvtt_gen_rtx_noval (XTT32SImode),
      GEN_INT (SFPLOADI_MOD0_USHORT),
      GEN_INT (REGNO (operands[0]) - SFPU_REG_FIRST)));

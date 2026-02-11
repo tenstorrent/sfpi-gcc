@@ -4,15 +4,15 @@
 // tos -- how we originally behaved (preserve these cases)
 namespace tos {
 void dep () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
   // NOP
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tos3depEv:
@@ -26,16 +26,16 @@ void dep () {
 */
 
 void nondep () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
   // NOP
-  __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tos6nondepEv:
@@ -55,16 +55,16 @@ void nondep () {
 namespace tng {
 
 void dep () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);  
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng3depEv:
@@ -78,17 +78,17 @@ void dep () {
 */
 
 void nondep () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
-  __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);  
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng6nondepEv:
@@ -103,18 +103,18 @@ void nondep () {
 */
 
 void live () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
   // NOP
   auto r0 = __builtin_rvtt_sfpselect2 (r, 0);
   auto r1 = __builtin_rvtt_sfpselect2 (r, 1);  
 
-  __builtin_rvtt_wh_sfpstore (nullptr, r0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, r1, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, r0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, r1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng4liveEv:
@@ -132,14 +132,14 @@ void live () {
 */
 
 void dead1 () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng5dead1Ev:
@@ -152,14 +152,14 @@ void dead1 () {
 */
 
 void dead0 () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng5dead0Ev:
@@ -172,14 +172,14 @@ void dead0 () {
 */
 
 void cstdead1 () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto v1 = __builtin_rvtt_sfpreadlreg (8);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng8cstdead1Ev:
@@ -191,7 +191,7 @@ void cstdead1 () {
 */
 
 void cstdead1a () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto v1 = __builtin_rvtt_sfpreadlreg (8);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
@@ -199,7 +199,7 @@ void cstdead1a () {
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   auto dead = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng9cstdead1aEv:
@@ -212,13 +212,13 @@ void cstdead1a () {
 
 void cstdead0 () {
   auto v0 = __builtin_rvtt_sfpreadlreg (8);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng8cstdead0Ev:
@@ -231,14 +231,14 @@ void cstdead0 () {
 
 void cstdead0a () {
   auto v0 = __builtin_rvtt_sfpreadlreg (8);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   auto dead = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng9cstdead0aEv:
@@ -251,7 +251,7 @@ void cstdead0a () {
 
 void cstdead01 () {
   auto v0 = __builtin_rvtt_sfpreadlreg (8);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 }
@@ -264,7 +264,7 @@ void cstdead01 () {
 
 void cstdead01a () {
   auto v0 = __builtin_rvtt_sfpreadlreg (8);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
   auto dead0 = __builtin_rvtt_sfpselect2 (r, 0);
@@ -278,7 +278,7 @@ void cstdead01a () {
 */
 
 void cst1 () {
-  auto v0 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto v1 = __builtin_rvtt_sfpreadlreg (8);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
@@ -286,8 +286,8 @@ void cst1 () {
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng4cst1Ev:
@@ -302,15 +302,15 @@ void cst1 () {
 
 void cst0 () {
   auto v0 = __builtin_rvtt_sfpreadlreg (8);
-  auto v1 = __builtin_rvtt_wh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto v1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
 
   auto r = __builtin_rvtt_sfpswap (v0, v1, 0);
 
   v0 = __builtin_rvtt_sfpselect2 (r, 0);
   v1 = __builtin_rvtt_sfpselect2 (r, 1);
 
-  __builtin_rvtt_wh_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
-  __builtin_rvtt_wh_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v0, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, v1, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3tng4cst0Ev:

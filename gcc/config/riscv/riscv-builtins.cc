@@ -138,9 +138,9 @@ AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
 AVAIL (cvalu, TARGET_XCVALU && !TARGET_64BIT)
 AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
 AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
-AVAIL (wormhole, TARGET_XTT_TENSIX_WH)
-AVAIL (blackhole, TARGET_XTT_TENSIX_BH)
-AVAIL (sfpu, TARGET_XTT_TENSIX)
+AVAIL (tensix, TARGET_XTT_TENSIX)
+AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
+AVAIL (tensixwh, TARGET_XTT_TENSIX_WH)
 AVAIL (rocc, TARGET_XTT_ROCC)
 
 /* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
@@ -169,9 +169,6 @@ AVAIL (rocc, TARGET_XTT_ROCC)
    RISCV_BUILTIN.  */
 #define DIRECT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
   RISCV_BUILTIN (INSN, #INSN, FUNCTION_TYPE, AVAIL)
-
-#define DIRECT_RVTT_BUILTIN(INSN, FUNCTION_TYPE, AVAIL)			\
-  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_ ## INSN, FUNCTION_TYPE, false, riscv_builtin_avail_ ## AVAIL}
 
 /* Argument types.  */
 #define RISCV_ATYPE_VOID void_type_node
@@ -229,13 +226,12 @@ static struct riscv_builtin_description riscv_builtins[] = {
   RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause),
   // If you add builtins here, update the start of the sfpu builtins above
 
-  /* Tenstorrent SFPU builtins */
-#define RVTT_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
-#define RVTT_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, fmt, sfpu),
-#define RVTT_WH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
-#define RVTT_WH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(wh_##op, fmt, wormhole),
-#define RVTT_BH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
-#define RVTT_BH_VFN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(bh_##op, fmt, blackhole),
+  /* Tenstorrent Tensix builtins */
+#define DIRECT_RVTT_BUILTIN(INSN, SFX, FUNCTION_TYPE, AVAIL)		\
+  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_ ## INSN ## SFX, FUNCTION_TYPE, false, riscv_builtin_avail_tensix ## AVAIL}
+#define RVTT_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, ,fmt, ),
+#define RVTT_WH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, _wh, fmt, wh),
+#define RVTT_BH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, _bh, fmt, bh),
 #include "tt/rvtt-insn.def"
 };
 

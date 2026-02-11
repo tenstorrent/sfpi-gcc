@@ -5,9 +5,9 @@ extern volatile unsigned iptr[];
 
 namespace dyn {
 void one () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmuli (iptr, f, 0, 0, 0, 0);
-  __builtin_rvtt_bh_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3oneEv:
@@ -19,9 +19,9 @@ void one () {
 */
 
 void two () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmuli (iptr, f, 0, 0, 0, 0);
-  __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3twoEv:
@@ -33,9 +33,9 @@ void two () {
 */
 
 void one (unsigned i) {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmuli (iptr, f, i, 0, 0, 0);
-  __builtin_rvtt_bh_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3oneEj:
@@ -54,9 +54,9 @@ void one (unsigned i) {
 */
 
 void two (unsigned i) {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmuli (iptr, f, i, 0, 0, 0);
-  __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3twoEj:
@@ -75,10 +75,10 @@ void two (unsigned i) {
 */
 
 void three () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmuli (iptr, f, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
   __builtin_rvtt_sfpwritelreg (y, 3);
-  __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn5threeEv:
@@ -94,9 +94,9 @@ void three () {
 
 namespace stat {
 void one () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
-  __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN4stat3oneEv:
@@ -111,10 +111,10 @@ void one () {
 
 namespace nop {
 void one () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
   __builtin_rvtt_sfpnop ();
-  __builtin_rvtt_bh_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3nop3oneEv:
@@ -126,7 +126,7 @@ void one () {
 */
 
 void three () {
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto y = __builtin_rvtt_sfpshft2_subvec_shfl1 (f, 3);
   __builtin_rvtt_sfpnop ();
   __builtin_rvtt_sfpwritelreg (f, 3);

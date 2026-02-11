@@ -23,15 +23,10 @@ along with GCC; see the file COPYING3.  If not see
 // The _lv instructions MUST follow the non-live versions of the same instruction
 
 // FN returns a value (target)
-// VFN doesn't return a value (void)
 // PFN ensures that each arch has the same # insns (PAD aren't instanced)
 
 #ifndef RVTT_FN
 #define RVTT_FN(a, b, c, d, e, f, g, h)
-#endif
-
-#ifndef RVTT_VFN
-#define RVTT_VFN(a, b, c, d, e, f, g, h) RVTT_FN (a, b, c, d, e, f, g, h)
 #endif
 
 #ifndef RVTT_WH_PFN
@@ -42,20 +37,12 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_WH_FN(a, b, c, d, e, f, g, h)
 #endif
 
-#ifndef RVTT_WH_VFN
-#define RVTT_WH_VFN(a, b, c, d, e, f, g, h) RVTT_WH_FN (a, b, c, d, e, f, g, h)
-#endif
-
 #ifndef RVTT_BH_PFN
 #define RVTT_BH_PFN(a)
 #endif
 
 #ifndef RVTT_BH_FN
 #define RVTT_BH_FN(a, b, c, d, e, f, g, h)
-#endif
-
-#ifndef RVTT_BH_VFN
-#define RVTT_BH_VFN(a, b, c, d, e, f, g, h) RVTT_BH_FN (a, b, c, d, e, f, g, h)
 #endif
 
 // Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
@@ -77,23 +64,23 @@ RVTT_FN (sfpxicmpv,          RISCV_USI_FTYPE_XTT_VEC_XTT_VEC_USI,               
 RVTT_FN (sfpxbool,           RISCV_USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpxcondi,          RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpxvif,            RISCV_USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
-RVTT_VFN(sfpxcondb,          RISCV_VOID_FTYPE_USI_USI,                                         0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpxcondb,          RISCV_VOID_FTYPE_USI_USI,                                         0x00, -1, -1, -1,      0, 0)
 
 RVTT_FN (sfpreadlreg,        RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
-RVTT_VFN(sfpwritelreg,       RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpwritelreg,       RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
 RVTT_FN (sfpnovalue,         RISCV_XTT_VEC_FTYPE,                                              0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpselect2,         RISCV_XTT_VEC_FTYPE_XTT_VEC2_USI,                                 0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpselect4,         RISCV_XTT_VEC_FTYPE_XTT_VEC4_USI,                                 0x00, -1, -1, -1,      0, 0)
 
-RVTT_VFN(sfpsetcc_i,         RISCV_VOID_FTYPE_USI_USI,                                         0x01, -1,  1, -1,      0, 0)
-RVTT_VFN(sfpsetcc_v,         RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x01, -1,  1, -1,      0, 0)
-RVTT_VFN(sfpencc,            RISCV_VOID_FTYPE_USI_USI,                                         0x01, -1,  1, -1,      0, 0)
-RVTT_VFN(sfpcompc,           RISCV_VOID_FTYPE,                                                 0x01, -1, -1, -1,      0, 0)
-RVTT_VFN(sfppushc,           RISCV_VOID_FTYPE_USI,                                             0x00, -1,  0, -1,      0, 0)
-RVTT_VFN(sfppopc,            RISCV_VOID_FTYPE_USI,                                             0x01, -1,  0, -1,      0, 0)
+RVTT_FN (sfpsetcc_i,         RISCV_VOID_FTYPE_USI_USI,                                         0x01, -1,  1, -1,      0, 0)
+RVTT_FN (sfpsetcc_v,         RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x01, -1,  1, -1,      0, 0)
+RVTT_FN (sfpencc,            RISCV_VOID_FTYPE_USI_USI,                                         0x01, -1,  1, -1,      0, 0)
+RVTT_FN (sfpcompc,           RISCV_VOID_FTYPE,                                                 0x01, -1, -1, -1,      0, 0)
+RVTT_FN (sfppushc,           RISCV_VOID_FTYPE_USI,                                             0x00, -1,  0, -1,      0, 0)
+RVTT_FN (sfppopc,            RISCV_VOID_FTYPE_USI,                                             0x01, -1,  0, -1,      0, 0)
 
-RVTT_VFN(sfpnop,             RISCV_VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpnop,             RISCV_VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpassign_lv,       RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x02, -1, -1, -1,      0, 0)
 RVTT_FN (sfpmov,             RISCV_XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfpmov_lv,          RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
@@ -128,9 +115,9 @@ RVTT_FN (sfpshft2_subvec_shfl1_copy4, RISCV_XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_V
 RVTT_FN (sfpshft2_subvec_shfl1, RISCV_XTT_VEC_FTYPE_XTT_VEC_USI,                               0x00, -1, 1, -1,       0, 0)
 RVTT_FN (sfpshft2_subvec_shfl1_lv, RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                    0x02, -1, 2, -1,       0, 0)
 
-RVTT_VFN(ttincrwc,           RISCV_VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
+RVTT_FN (ttincrwc,           RISCV_VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
 // The length operand is [1,32], which is awkward
-RVTT_VFN(ttreplay,           RISCV_VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
+RVTT_FN (ttreplay,           RISCV_VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
 
 // Wormhole builtin intrinsics
 RVTT_WH_FN (sfpload,         RISCV_XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  2,  3, 0x3FFF, 0)
@@ -176,8 +163,8 @@ RVTT_WH_PFN(sfparecip_lv)
 RVTT_WH_PFN(sfpmov_config)
 RVTT_WH_PFN(sfpmov_config_lv)
 
-RVTT_WH_VFN(sfpstore,        RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  3,  4, 0x3FFF, 0)
-RVTT_WH_VFN(sfpconfig_v,     RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
+RVTT_WH_FN (sfpstore,        RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  3,  4, 0x3FFF, 0)
+RVTT_WH_FN (sfpconfig_v,     RISCV_VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
 // Blackhole builtin intrinsics
 RVTT_BH_FN (sfpload,         RISCV_XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  2,  3, 0x1FFF, 0)
@@ -223,14 +210,11 @@ RVTT_BH_FN (sfparecip_lv,    RISCV_XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,           
 RVTT_BH_FN (sfpmov_config,   RISCV_XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_BH_FN (sfpmov_config_lv,RISCV_XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
 
-RVTT_BH_VFN(sfpstore,        RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,             0x00, -1,  3,  4, 0x1FFF, 0)
-RVTT_BH_VFN(sfpconfig_v,     RISCV_VOID_FTYPE_XTT_VEC_USI,                                      0x00, -1, -1, -1,      0, 0)
+RVTT_BH_FN (sfpstore,        RISCV_VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,             0x00, -1,  3,  4, 0x1FFF, 0)
+RVTT_BH_FN (sfpconfig_v,     RISCV_VOID_FTYPE_XTT_VEC_USI,                                      0x00, -1, -1, -1,      0, 0)
 
 #undef RVTT_FN
-#undef RVTT_VFN
 #undef RVTT_WH_PFN
 #undef RVTT_WH_FN
-#undef RVTT_WH_VFN
 #undef RVTT_BH_PFN
 #undef RVTT_BH_FN
-#undef RVTT_BH_VFN

@@ -7,8 +7,8 @@ using __v64sf_t [[gnu::vector_size(64 * sizeof(float))]] = float;
 namespace cst {
 void foo () {
   auto x =  __builtin_rvtt_sfpreadlreg(9);
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul (f, x, 0);
 }
 /*
 **_ZN3cst3fooEv:
@@ -20,11 +20,11 @@ void foo () {
 void bar (int i) {
   auto x =  __builtin_rvtt_sfpreadlreg(9);
   if (i) {
-    auto g = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-    __builtin_rvtt_bh_sfpmul (g, g, 0);
+    auto g = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+    __builtin_rvtt_sfpmul (g, g, 0);
   }
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul (f, x, 0);
 }
 /*
 **_ZN3cst3barEi:
@@ -38,7 +38,7 @@ void bar (int i) {
 
 void baz () {
   auto x =  __builtin_rvtt_sfpreadlreg(9);
-  __builtin_rvtt_bh_sfpstore (nullptr, x, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpstore (nullptr, x, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3cst3bazEv:
@@ -50,8 +50,8 @@ void sub5() {
   auto b = __builtin_rvtt_sfpreadlreg(1);
 
   auto neg1 = __builtin_rvtt_sfpreadlreg (11);
-  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_bh_sfpmad (neg1, a, b, 0));
-  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_bh_sfpmad (neg1, a, b, 0));
+  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_sfpmad (neg1, a, b, 0));
+  b = __builtin_rvtt_sfpassign_lv (b, __builtin_rvtt_sfpmad (neg1, a, b, 0));
 
   __builtin_rvtt_sfpwritelreg (b, 3);
 }
@@ -66,11 +66,11 @@ void sub5() {
 
 void swap () {
   auto x = __builtin_rvtt_sfpreadlreg(9);
-  auto y = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto r = __builtin_rvtt_sfpswap (x, y, 0);
   x = __builtin_rvtt_sfpselect2 (r, 0);
   y = __builtin_rvtt_sfpselect2 (r, 1);
-  auto z = __builtin_rvtt_bh_sfpmul (x, y, 0);
+  auto z = __builtin_rvtt_sfpmul (x, y, 0);
 }
 /*
 **_ZN3cst4swapEv:
@@ -86,8 +86,8 @@ void swap () {
 namespace vol {
 void foo () {
   auto x =  __builtin_rvtt_sfpreadlreg(1);
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul (f, x, 0);
 }
 /*
 **_ZN3vol3fooEv:
@@ -99,11 +99,11 @@ void foo () {
 void bar (int i) {
   auto x =  __builtin_rvtt_sfpreadlreg(1);
   if (i) {
-    auto g = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-    __builtin_rvtt_bh_sfpmul (g, g, 0);
+    auto g = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+    __builtin_rvtt_sfpmul (g, g, 0);
   }
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul (f, x, 0);
 }
 /*
 **_ZN3vol3barEi:
@@ -119,8 +119,8 @@ void bar (int i) {
 namespace lv {
 void foo () {
   auto x =  __builtin_rvtt_sfpreadlreg(9);
-  auto f = __builtin_rvtt_bh_sfpload_lv (nullptr, x, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul (f, x, 0);
+  auto f = __builtin_rvtt_sfpload_lv (nullptr, x, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul (f, x, 0);
 }
 /*
 **_ZN2lv3fooEv:
@@ -133,11 +133,11 @@ void foo () {
 void bar (int i) {
   auto x =  __builtin_rvtt_sfpreadlreg(9);
   if (i) {
-    auto g = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-    __builtin_rvtt_bh_sfpmul_lv (x, g, g, 0);
+    auto g = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+    __builtin_rvtt_sfpmul_lv (x, g, g, 0);
   }
-  auto f = __builtin_rvtt_bh_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_bh_sfpmul_lv (x, f, x, 0);
+  auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmul_lv (x, f, x, 0);
 }
 /*
 **_ZN2lv3barEi:
@@ -162,10 +162,10 @@ void loop (int i) {
     if (frob ())
       {
 	auto r = __builtin_rvtt_sfpreadlreg (10);
-	__builtin_rvtt_bh_sfpmul (r, r, 0);
+	__builtin_rvtt_sfpmul (r, r, 0);
       }
   
-    __builtin_rvtt_bh_sfpmul (x, x, 0);
+    __builtin_rvtt_sfpmul (x, x, 0);
   }
 }
 /*

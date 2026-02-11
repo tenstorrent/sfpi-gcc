@@ -4,14 +4,14 @@
 void one ()
 {
   __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 1, 1);
-  auto x = __builtin_rvtt_wh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  __builtin_rvtt_wh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3onev:
@@ -40,15 +40,15 @@ void two (volatile unsigned *ptr)
       __builtin_rvtt_sfpnop ();
     }
 
-  auto x = __builtin_rvtt_wh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
   (*ptr)++;
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  __builtin_rvtt_wh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3twoPVj:
@@ -81,14 +81,14 @@ void three (volatile unsigned *ptr)
       __builtin_rvtt_sfpnop ();
     }
 
-  auto x = __builtin_rvtt_wh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_wh_sfpmul (x, x, 0);
-  __builtin_rvtt_wh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z5threePVj:

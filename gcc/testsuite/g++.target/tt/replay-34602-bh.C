@@ -3,14 +3,14 @@
 
 void one ()
 {
-  auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3onev:
@@ -28,15 +28,15 @@ void one ()
 
 void two (volatile unsigned *ptr)
 {
-  auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
   (*ptr)++;
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z3twoPVj:
@@ -59,25 +59,25 @@ void two (volatile unsigned *ptr)
 void three ()
 {
   {
-    auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-    __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+    auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    x = __builtin_rvtt_sfpmul (x, x, 0);
+    __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
   }
 
   {
-    auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-    __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+    auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    x = __builtin_rvtt_sfpadd (x, x, 0);
+    __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
   }
 }
 /*
@@ -105,17 +105,17 @@ void three ()
 
 void four (volatile unsigned *ptr)
 {
-  auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
+  auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
   (*ptr)++;
-  x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-  x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-  x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-  x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-  __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+  x = __builtin_rvtt_sfpadd (x, x, 0);
+  x = __builtin_rvtt_sfpadd (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpmul (x, x, 0);
+  x = __builtin_rvtt_sfpadd (x, x, 0);
+  x = __builtin_rvtt_sfpadd (x, x, 0);
+  __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
 }
 /*
 **_Z4fourPVj:
@@ -145,12 +145,12 @@ void five ()
 #pragma GCC unroll 8
   for (unsigned ix = 0; ix != 8; ix++)
     {
-      auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-      x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-      x = __builtin_rvtt_bh_sfpmul (x, x, 0);
-      x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-      x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-      __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+      auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+      x = __builtin_rvtt_sfpmul (x, x, 0);
+      x = __builtin_rvtt_sfpmul (x, x, 0);
+      x = __builtin_rvtt_sfpadd (x, x, 0);
+      x = __builtin_rvtt_sfpadd (x, x, 0);
+      __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
       __builtin_rvtt_ttincrwc (0, 0, 0, 0);
     }
 }
@@ -184,11 +184,11 @@ void six (unsigned bits)
 #pragma GCC unroll 2
   for (unsigned ix = 0; ix != 8; ix++)
     {
-      auto x = __builtin_rvtt_bh_sfpload (0, 0, 0, 0, 0, 0);
-      x = __builtin_rvtt_bh_sfpmul (x, x, 0);
+      auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
+      x = __builtin_rvtt_sfpmul (x, x, 0);
       x = __builtin_rvtt_sfpshft_i (ibuf, x, bits, 0, 0, 0);
-      x = __builtin_rvtt_bh_sfpadd (x, x, 0);
-      __builtin_rvtt_bh_sfpstore (0, x, 0, 0, 0, 0, 0);
+      x = __builtin_rvtt_sfpadd (x, x, 0);
+      __builtin_rvtt_sfpstore (0, x, 0, 0, 0, 0, 0);
     }
 }
 /*
