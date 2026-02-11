@@ -17,7 +17,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-#define INCLUDE_STRING
+
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -40,33 +40,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
-#include <unordered_map>
+#include "../riscv-protos.h"
 
 DEBUG_FUNCTION void debug_tree (tree node);
-
-unsigned int rvtt_sfpu_lreg_count_global;
-
-const int rvtt_name_stub_no_arch_len = 15;
-const int rvtt_name_stub_len = 18;
-
-struct str_cmp
-{
-  bool operator()(const char *a, const char *b) const
-  {
-     return std::strcmp(a, b) == 0;
-  }
-};
-
-struct str_hash
-{
-  std::size_t operator()(const char *cstr) const
-  {
-    std::size_t hash = 5381;
-    for (; *cstr != '\0' ; ++cstr)
-      hash = (hash * 33) + *cstr;
-    return hash;
-  }
-};
 
 unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
   0,
@@ -76,117 +52,80 @@ unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
   SFPSETCC_MOD1_LREG_NE0,
 };
 
-static std::unordered_map<const char*, rvtt_insn_data&, str_hash, str_cmp> insn_map;
-static const int NUMBER_OF_ARCHES = 2;
-static const int NUMBER_OF_INTRINSICS = 94;
-
-static GTY(()) rvtt_insn_data sfpu_insn_data_target[NUMBER_OF_ARCHES][NUMBER_OF_INTRINSICS] = {
-  {
-#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN (id, fmt, fl, dap, mp, nip, nim, nis)
-#define RVTT_WH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
+static rvtt_insn_data sfpu_insn_data[] = {
+#define RVTT_FN(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
 #include "rvtt-insn.def"
-    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
-  },
-  {
-#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) { rvtt_insn_data::id, #id, nullptr, fl, dap, mp, nip, nim, nis },
-#define RVTT_BH_FN(id, fmt, fl, dap, mp, nip, nim, nis) RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis)
-#define RVTT_BH_PFN(id) RVTT_FN (id, nullptr, 0x00, 0, 0, -1, 0, 0)
-#include "rvtt-insn.def"
-    { rvtt_insn_data::nonsfpu, "nonsfpu", nullptr, 0x00, 0, 0, -1, 0, 0 }
-  }
 };
 
-static rvtt_insn_data *sfpu_insn_data = sfpu_insn_data_target[0];
-static const char* rvtt_builtin_name_stub;
+static unsigned riscv_builtin_rvtt_first;
 
 void
-rvtt_insert_insn(int idx, const char* name, tree decl)
+rvtt_init_builtins ()
 {
-  // Search the table starting from where we left off last time
-  static int start = 0;
-
-  int arch;
-  if (TARGET_XTT_TENSIX_WH)
-    arch = 0;
-  else if (TARGET_XTT_TENSIX_BH)
-    arch = 1;
-  else
+  if (!TARGET_XTT_TENSIX)
     return;
 
-  int offset = start;
-  while (offset < NUMBER_OF_INTRINSICS)
-    {
-      // string is __rvtt_builtin_XX_<name>
-      if ((strcmp(sfpu_insn_data_target[arch][offset].name, name) == 0) ||
-	  (strcmp(sfpu_insn_data_target[arch][offset].name, &name[rvtt_name_stub_len]) == 0) ||
-	  (strcmp(sfpu_insn_data_target[arch][offset].name, &name[rvtt_name_stub_no_arch_len]) == 0))
-	{
-	  sfpu_insn_data_target[arch][offset].decl = decl;
-	  insn_map.insert(std::pair<const char*, rvtt_insn_data&>(name, sfpu_insn_data_target[arch][offset]));
-	  start = offset + 1;
-	  return;
-	}
-      offset++;
-    }
+  gcc_assert (sfpu_insn_data[0].decl);
 
-  fprintf(stderr, "Failed to match insn %d named %s to builtin for arch index %d starting at builtin %d\n",
-	  idx, name, arch, offset);
-  gcc_assert(0);
+  static const auto tensixbh = []() { return TARGET_XTT_TENSIX_BH; };
+  static const struct {
+    rvtt_insn_data::insn_id index;
+    unsigned short flags;
+    short dst_arg_pos;
+    short mod_pos;
+    short nonimm_pos;
+    unsigned nonimm_mask;
+    short nonimm_shft;
+    bool (*avail) ();
+  } overrides[] = {
+#define RVTT_OVR(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis)		\
+    { rvtt_insn_data::id, fl, dap, mp, nip, nim, nis, tensix##av },
+#include "rvtt-insn.def"
+  };
+
+  // Process overrides
+  for (auto const &ovr : overrides)
+    if (ovr.avail ())
+      {
+	auto *slot = &sfpu_insn_data[ovr.index];
+	slot->flags = ovr.flags;
+	slot->dst_arg_pos = ovr.dst_arg_pos;
+	slot->mod_pos = ovr.mod_pos;
+	slot->nonimm_pos = ovr.nonimm_pos;
+	slot->nonimm_mask = ovr.nonimm_mask;
+	slot->nonimm_shft = ovr.nonimm_shft;
+      }
 }
 
-void
-rvtt_init_builtins()
+bool
+rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 {
-#if CHECKING_P
-  {
-    static const char *const wh_ids[] = {
-#define RVTT_WH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_WH_PFN(id) #id,
-#include "rvtt-insn.def"
-    };
+  if (!TARGET_XTT_TENSIX)
+    return false;
 
-    static const char *const bh_ids[] = {
-#define RVTT_BH_FN(id, fmt, fl, dap, mp, sched, nip, nim, nis) #id,
-#define RVTT_BH_PFN(id) #id,
-#include "rvtt-insn.def"
-    };
+  if (ix < 300)
+    // Save a bunch of strcmps on the grounds there are at least this many others.
+    return false;
 
-    gcc_assert (sizeof (wh_ids) == sizeof (bh_ids));
-    for (unsigned ix = 0; ix != sizeof (wh_ids) / sizeof (wh_ids[0]); ix++)
-      gcc_assert (!strcmp (wh_ids[ix], bh_ids[ix]));
-  }
-#endif
-  int arch;
-  if (TARGET_XTT_TENSIX_WH) {
-    arch = 0;
-    rvtt_builtin_name_stub = "__builtin_rvtt_wh";
-  } else if (TARGET_XTT_TENSIX_BH) {
-    arch = 1;
-    rvtt_builtin_name_stub = "__builtin_rvtt_bh";
-  } else {
-    return;
-  }
-  sfpu_insn_data = sfpu_insn_data_target[arch];
-
-  // If these asserts fire, the rvtt-insn.def instruction tables are out of sync
-  // across architectures
-  for (int i = 1; i < NUMBER_OF_ARCHES; i++)
+  if (!riscv_builtin_rvtt_first)
     {
-      for (int j = 0; j < NUMBER_OF_INTRINSICS; j++)
-	gcc_assert (sfpu_insn_data_target[0][j].id == sfpu_insn_data_target[i][j].id);
+      if (strncmp (name, "__builtin_rvtt_", 15) != 0)
+	return false;
 
-      gcc_assert(sfpu_insn_data_target[i][NUMBER_OF_INTRINSICS - 1].id == rvtt_insn_data::nonsfpu);
+      riscv_builtin_rvtt_first = ix;
+
+      // Make synth_opcode a const fn, it's the only one.
+      TREE_READONLY (decl) = true;
     }
 
-  // Make synth_opcode a const fn, it's the only one.
-  TREE_READONLY (sfpu_insn_data[rvtt_insn_data::synth_opcode].decl) = true;
-}
+  ix -= riscv_builtin_rvtt_first;
 
-const char *
-rvtt_get_builtin_name_stub ()
-{
-  return rvtt_builtin_name_stub;
+  if (ix >= rvtt_insn_data::hwm)
+    return false;
+
+  sfpu_insn_data[ix].decl = decl;
+
+  return !ix;
 }
 
 const rvtt_insn_data *
@@ -197,88 +136,57 @@ rvtt_get_insn_data (const rvtt_insn_data::insn_id id)
   return res;
 }
 
-const rvtt_insn_data*
-rvtt_get_insn_data(const char *name)
-{
-  auto match = insn_map.find(name);
-  auto *res = match == insn_map.end () ? &sfpu_insn_data[rvtt_insn_data::nonsfpu] : &match->second;
-  gcc_assert (!res->decl || TREE_CODE (res->decl) == FUNCTION_DECL);
-  return res;
-}
-
 const rvtt_insn_data *
 rvtt_get_insn_data (const gcall *stmt)
 {
-  tree fn_ptr = gimple_call_fn (stmt);
+  tree decl = gimple_call_fndecl (stmt);
+  if (!decl)
+    return nullptr;
+  if (!fndecl_built_in_p (decl, BUILT_IN_MD))
+    return nullptr;
 
-  return fn_ptr ? rvtt_get_insn_data (IDENTIFIER_POINTER (DECL_NAME (TREE_OPERAND (fn_ptr, 0)))) : nullptr;
+  auto code = DECL_MD_FUNCTION_CODE (decl);
+  if ((code & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_GENERAL)
+    return nullptr;
+
+  unsigned ix = (code >> RISCV_BUILTIN_SHIFT) - riscv_builtin_rvtt_first;
+  if (ix >= rvtt_insn_data::hwm)
+    return nullptr;
+
+  return &sfpu_insn_data[ix];
 }
 
 bool
 rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *g)
 {
-  bool found = false;
-
-  if (g == nullptr || g->code != GIMPLE_CALL) return false;
-
   *stmt = dyn_cast<gcall *> (g);
-  tree fn_ptr = gimple_call_fn (*stmt);
-
-  if (fn_ptr && TREE_CODE (fn_ptr) == ADDR_EXPR)
-    {
-      tree fn_decl = TREE_OPERAND (fn_ptr, 0);
-      if (TREE_CODE(fn_decl) == FUNCTION_DECL)
-	{
-	  *insnd = rvtt_get_insn_data(IDENTIFIER_POINTER (DECL_NAME (fn_decl)));
-	  found = (*insnd != nullptr && (*insnd)->id != rvtt_insn_data::nonsfpu);
-	}
-    }
-
-  return found;
+  if (!*stmt)
+    return false;
+  *insnd = rvtt_get_insn_data (*stmt);
+  return *insnd;
 }
 
 bool
 rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
 {
-  bool found = false;
-  gimple *g = gsi_stmt (gsi);
-
-  if (g != nullptr && g->code == GIMPLE_CALL)
-    {
-      found = rvtt_p(insnd, stmt, g);
-    }
-
-  return found;
+  return rvtt_p (insnd, stmt, gsi_stmt (gsi));
 }
 
 // Relies on live instructions being next in sequence in the insn table
 const rvtt_insn_data *
 rvtt_get_live_version(const rvtt_insn_data *insnd)
 {
-  const rvtt_insn_data *out = nullptr;
+  if (insnd->id < rvtt_insn_data::hwm - 1
+      && sfpu_insn_data[insnd->id + 1].live_p())
+    return &sfpu_insn_data[insnd->id + 1];
 
-  if (insnd->id < rvtt_insn_data::nonsfpu)
-    {
-      if (sfpu_insn_data[insnd->id + 1].live_p())
-	{
-	  out = &sfpu_insn_data[insnd->id + 1];
-	}
-    }
-
-  return out;
+  return nullptr;
 }
 
 const rvtt_insn_data *
 rvtt_get_notlive_version(const rvtt_insn_data *insnd)
 {
-  const rvtt_insn_data *out = insnd;
-
-  if (insnd->live_p())
-    {
-      out = &sfpu_insn_data[insnd->id - 1];
-    }
-
-  return out;
+  return &insnd[-int(insnd->live_p ())];
 }
 
 static long int
@@ -901,5 +809,3 @@ bool rvtt_reg_store_p(const rtx pat)
 
   return false;
 }
-
-#include "gt-rvtt.h"

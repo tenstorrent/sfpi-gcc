@@ -34,19 +34,25 @@ constexpr unsigned int INSN_FLAGS_LIVE               = 0x02; // builtin property
 // no longer needed 0x20;
 // no longer needed 0x40;
 
-struct GTY(()) rvtt_insn_data {
-  enum insn_id : unsigned;
+// This doesn't need to be GTY as the decls are also held in a riscv_builtin
+// GTY array.
+struct rvtt_insn_data {
+  enum insn_id {
+#define RVTT_FN(id, av, sfx, fmt, fl, dap, mp, nip, nim, nis) id,
+#include "rvtt-insn.def"
+  hwm
+    };
 
-  const enum insn_id id;
+  enum insn_id id;
   const char *name;
   tree decl;
-  const unsigned short flags;  // see flags above
-  const short dst_arg_pos;
-  const short mod_pos;
+  unsigned short flags;  // see flags above
+  short dst_arg_pos;
+  short mod_pos;
 
-  const short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
-  const unsigned int nonimm_mask;
-  const short nonimm_shft;
+  short nonimm_pos;  // pos of nonimm insn args, -1 val to store, +0 op, +1 loadimm id/fallback flag
+  unsigned int nonimm_mask;
+  short nonimm_shft;
 
   inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
   inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
@@ -58,21 +64,10 @@ struct GTY(()) rvtt_insn_data {
   inline int nonimm_idflag_arg_pos() const { return nonimm_pos + 1; }
 };
 
-enum rvtt_insn_data::insn_id : unsigned {
-  // Note: this only pulls the "id" from the macros so WH/BH/etc are equivalent
-#define RVTT_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_FN(id, fmt, fl, dap, mp, nip, nim, nis) id,
-#define RVTT_WH_PFN(id) id,
-#include "rvtt-insn.def"
-
-  nonsfpu,
-    };
-
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 
-extern void rvtt_insert_insn(int idx, const char*name, tree decl);
-extern void rvtt_init_builtins();
-extern const char * rvtt_get_builtin_name_stub();
+extern void rvtt_init_builtins ();
+extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 extern tree rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt,
@@ -83,7 +78,6 @@ extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt);
 
-extern const rvtt_insn_data * rvtt_get_insn_data(const char *name);
 extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
 extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
 

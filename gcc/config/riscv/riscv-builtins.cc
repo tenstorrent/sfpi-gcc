@@ -213,8 +213,6 @@ AVAIL (rocc, TARGET_XTT_ROCC)
   RISCV_ATYPE_##E, RISCV_ATYPE_##F, RISCV_ATYPE_##G, RISCV_ATYPE_##H, \
   RISCV_ATYPE_##I
 
-static const int first_sfpu_builtin = /*cmo*/16 + /*scalar-crypto*/50 + /*corev*/187 + /*rocc*/87 + 3;
-
 static struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
   #include "riscv-scalar-crypto.def"
@@ -224,14 +222,10 @@ static struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
   RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause),
-  // If you add builtins here, update the start of the sfpu builtins above
 
   /* Tenstorrent Tensix builtins */
-#define DIRECT_RVTT_BUILTIN(INSN, SFX, FUNCTION_TYPE, AVAIL)		\
-  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_ ## INSN ## SFX, FUNCTION_TYPE, false, riscv_builtin_avail_tensix ## AVAIL}
-#define RVTT_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, ,fmt, ),
-#define RVTT_WH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, _wh, fmt, wh),
-#define RVTT_BH_FN(op, fmt, fl, dap, mp, nip, nim, nis) DIRECT_RVTT_BUILTIN(op, _bh, fmt, bh),
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) \
+  { "__builtin_rvtt_" #INSN, CODE_FOR_rvtt_##INSN##SFX, RISCV_##FUNCTION_TYPE, false, riscv_builtin_avail_tensix##AVAIL},
 #include "tt/rvtt-insn.def"
 };
 
@@ -248,7 +242,8 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 tree riscv_float16_type_node = NULL_TREE;
 tree riscv_bfloat16_type_node = NULL_TREE;
 
-static tree GTY(()) xtt_type_nodes[4];
+// Do not need to be GTY, as only needed during initiazlization
+static tree xtt_type_nodes[4];
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -369,12 +364,36 @@ riscv_init_builtins (void)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
-	  if (i >= first_sfpu_builtin)
-	    rvtt_insert_insn(i - first_sfpu_builtin, d->name, riscv_builtin_decls[i]);
+	  if (rvtt_record_builtin (i, d->name, riscv_builtin_decls[i]))
+	    {
+	      // Apply Tensix overrides
+	      enum indices {
+#define RVTT_FN(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) IX_##INSN,
+#include "tt/rvtt-insn.def"
+		IX_hwm
+	      };
+	      static const struct {
+		insn_code icode;
+		indices ix : 16;
+		riscv_function_type prototype : 16;
+		unsigned (*avail) ();
+	      } overrides[] = {
+#define RVTT_OVR(INSN, AVAIL, SFX, FUNCTION_TYPE, fl, dap, mp, nip, nim, nis) \
+		{CODE_FOR_rvtt_ ## INSN ## SFX, IX_##INSN, RISCV_##FUNCTION_TYPE, riscv_builtin_avail_tensix ## AVAIL},
+#include "tt/rvtt-insn.def"
+	      };
+	      for (auto const &ovr : overrides)
+		if (ovr.avail ())
+		  {
+		    d[ovr.ix].icode = ovr.icode;
+		    d[ovr.ix].prototype = ovr.prototype;
+		    d[ovr.ix].avail = ovr.avail;
+		  }
+	    }
 	}
     }
 
-  rvtt_init_builtins();
+  rvtt_init_builtins ();
 }
 
 /* Implement TARGET_BUILTIN_DECL.  */

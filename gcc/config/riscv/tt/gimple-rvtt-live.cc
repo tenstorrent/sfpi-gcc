@@ -130,71 +130,63 @@ process_block_stmts(basic_block bb,
 		    vector<liveness_data> &stack,
 		    call_liveness &liveness)
 {
-  gimple_stmt_iterator gsi;
   bool found_sfpu = false;
 
   DUMP("    process_block_stmts CC %d gen %d depth %zu\n",
 	 current->level, current->generation, stack.size());
 
-  gsi = gsi_start_bb (bb);
-  while (!gsi_end_p (gsi))
+  for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
       gcall *stmt;
       const rvtt_insn_data *insnd;
-      if (rvtt_p(&insnd, &stmt, gsi))
+
+      if (!rvtt_p(&insnd, &stmt, gsi))
+	continue;
+
+      found_sfpu = true;
+      if (insnd->id == rvtt_insn_data::sfppushc)
 	{
-	  if (insnd->id != rvtt_insn_data::nonsfpu)
+	  bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
+
+	  if (is_replace)
+	    stack.pop_back();
+
+	  stack.push_back(*current);
+	  if (!*cascading)
 	    {
-	      found_sfpu = true;
-	      if (insnd->id == rvtt_insn_data::sfppushc)
+	      (*gen_count)++;
+	      *cascading = true;
+	    }
+	  current->generation = *gen_count;
+	  DUMP("      pushed to (l=%d, g=%d)\n", current->level, current->generation);
+	}
+      else if (insnd->id == rvtt_insn_data::sfppopc)
+	{
+	  if (stack.size() == 0)
+	    {
+	      location_t location = gimple_nonartificial_location(stmt);
+	      error_at(location, "malformed program, popc without matching pushc");
+	    }
+	  *current = stack.back();
+	  DUMP("      popped to (l=%d, g=%d)\n", current->level, current->generation);
+	  *cascading = false;
+	  stack.pop_back();
+	}
+      else
+	{
+	  gcc_assert(liveness.find(stmt) == liveness.end());
+	  liveness.insert(pair<gcall *, liveness_data>(stmt, *current));
+	  if (rvtt_sets_cc(insnd, stmt) &&
+	      insnd->id != rvtt_insn_data::sfpencc)
+	    {
+	      if (stack.size() == 0)
 		{
-		  bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
-
-		  if (is_replace)
-		    {
-		      stack.pop_back();
-		    }
-
-		  stack.push_back(*current);
-		  if (!*cascading)
-		    {
-		      (*gen_count)++;
-		      *cascading = true;
-		    }
-		  current->generation = *gen_count;
-		  DUMP("      pushed to (l=%d, g=%d)\n", current->level, current->generation);
+		  location_t location = gimple_nonartificial_location(stmt);
+		  error_at(location, "malformed program, %s outside of pushc/popc", insnd->name);
 		}
-	      else if (insnd->id == rvtt_insn_data::sfppopc)
-		{
-		  if (stack.size() == 0)
-		    {
-		      location_t location = gimple_nonartificial_location(stmt);
-		      error_at(location, "malformed program, popc without matching pushc");
-		    }
-		  *current = stack.back();
-		  DUMP("      popped to (l=%d, g=%d)\n", current->level, current->generation);
-		  *cascading = false;
-		  stack.pop_back();
-		}
-	      else
-		{
-		  gcc_assert(liveness.find(stmt) == liveness.end());
-		  liveness.insert(pair<gcall *, liveness_data>(stmt, *current));
-		  if (rvtt_sets_cc(insnd, stmt) &&
-		      insnd->id != rvtt_insn_data::sfpencc)
-		    {
-		      if (stack.size() == 0)
-			{
-			  location_t location = gimple_nonartificial_location(stmt);
-			  error_at(location, "malformed program, %s outside of pushc/popc", insnd->name);
-			}
-		      current->level++;
-		    }
-		}
+	      current->level++;
 	    }
 	}
-
-      gsi_next (&gsi);
     }
 
   return found_sfpu;
@@ -345,7 +337,7 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
       else
 	{
 	  const rvtt_insn_data * insnd = rvtt_get_insn_data(stmt);
-	  if (insnd && insnd->id != rvtt_insn_data::nonsfpu)
+	  if (insnd)
 	    {
 	      if (insnd->live_p())
 		{
@@ -431,7 +423,7 @@ break_liveness(function *fn, call_liveness& liveness)
       gcall *stmt = it->first;
       const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
 
-      if (insnd->id != rvtt_insn_data::nonsfpu && insnd->live_p())
+      if (insnd && insnd->live_p())
 	{
 	  // Get the defining statement and it's cc_count for this SSA
 	  liveness_data cur_stmt_liveness = it->second;
@@ -548,7 +540,6 @@ fold_live_assign (function *fn)
 	    const rvtt_insn_data *prev_insnd;
 
 	    if (rvtt_p (&prev_insnd, &prev_stmt, prev_gsi) &&
-		prev_insnd->id != rvtt_insn_data::nonsfpu &&
 		dyn_cast<gcall *>(SSA_NAME_DEF_STMT (assgn_arg)) == prev_stmt)
 	      {
 		DUMP("    folding %s\n", prev_insnd->name);

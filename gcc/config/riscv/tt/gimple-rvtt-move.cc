@@ -230,7 +230,6 @@ static void transform (function *fun)
 	  const rvtt_insn_data *candidate_insnd;
 
 	  if (rvtt_p(&candidate_insnd, &candidate_stmt, candidate_gsi) &&
-	      candidate_insnd->id != rvtt_insn_data::nonsfpu &&
 	      candidate_insnd->dst_as_src_p())
 	    {
 	      DUMP("Processing %s\n", candidate_insnd->name);
