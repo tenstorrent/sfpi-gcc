@@ -1,0 +1,69 @@
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-final { check-function-bodies "**" "" } }
+
+namespace ckernel{
+    unsigned *instrn_buffer;
+}
+#include <sfpi.h>
+
+using namespace sfpi;
+
+void foo () {
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat r = setman(a, 4095);
+  l_reg[LRegs::LReg0] = r;
+}
+/*
+**_Z3foov:
+**	SFPSETMAN	L0, L0, 4095, 1
+**	ret
+*/
+
+void bar (unsigned man) {
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat r = setman(a, man);
+  l_reg[LRegs::LReg0] = r;
+}
+/*
+**_Z3barj:
+**	zext.h	a4,a0
+**	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
+**	li	a5, 1897529344	# 2:711a0000
+**	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
+**	add	a4,a4,a5
+**	li	a5, 1897398272	# 3:71180000
+**	sw	a4, 0\(a3\)	# 2:711a0000 L1 :=
+**	srli	a0,a0,16
+**	add	a0,a0,a5
+**	sw	a0, 0\(a3\)	# 3:71180000 L1 := LV
+**	SFPSETMAN	L1, L0, 0, 0
+**	SFPMOV	L0, L1, 2
+**	ret
+*/
+
+void baz () {
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat r = setman(a, 4096);
+  l_reg[LRegs::LReg0] = r;
+}
+/*
+**_Z3bazv:
+**	SFPLOADI	L1, 4096, 2
+**	SFPSETMAN	L1, L0, 0, 0
+**	SFPMOV	L0, L1, 2
+**	ret
+*/
+
+void toto () {
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat r = setman(a, 0x123456);
+  l_reg[LRegs::LReg0] = r;
+}
+/*
+**_Z4totov:
+**	SFPLOADI	L1, 18, 8
+**	SFPLOADI	L1, 13398, 10
+**	SFPSETMAN	L1, L0, 0, 0
+**	SFPMOV	L0, L1, 2
+**	ret
+*/

@@ -23,42 +23,39 @@
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
-  UNSPECVSFPLOAD_BH
-  UNSPECVSFPXLOADI_BH
-  UNSPECVSFPSTORE_BH
-  UNSPECVSFPMULI_BH
-  UNSPECVSFPADDI_BH
-  UNSPECVSFPMUL_BH
-  UNSPECVSFPADD_BH
-  UNSPECVSFPIADD_V_INT_BH
-  UNSPECVSFPXIADD_V_BH
-  UNSPECVSFPIADD_I_BH
-  UNSPECVSFPIADD_I_LV_BH
-  UNSPECVSFPXIADD_I_BH
-  UNSPECVSFPXIADD_I_LV_BH
-  UNSPECVSFPIADD_I_INT_BH
-  UNSPECVSFPSETMAN_BH
-  UNSPECVSFPSETEXP_BH
-  UNSPECVSFPSETSGN_BH
-  UNSPECVSFPMAD_BH
-  UNSPECVSFPMAD_LV_BH
-  UNSPECVSFPMAD_INT_BH
-  UNSPECVSFPDIVP2_BH
-  UNSPECVSFPXFCMPS_BH
-  UNSPECVSFPXFCMPV_BH
-  UNSPECVSFPCAST_BH
-  UNSPECVSFPSTOCHRND_I_BH
-  UNSPECVSFPSTOCHRND_I_LV_BH
-  UNSPECVSFPSTOCHRND_I_INT_BH
-  UNSPECVSFPSTOCHRND_V_BH
-  UNSPECVSFPSTOCHRND_V_LV_BH
-  UNSPECVSFPSTOCHRND_V_INT_BH
-  UNSPECVSFPCONFIG_V_BH
-  UNSPECVSFPMUL24_BH
-  UNSPECVSFPARECIP_BH
-  UNSPECVSFPGT_BH
-  UNSPECVSFPLE_BH
-  UNSPECVSFPMOV_CONFIG_BH
+  UNSPECV_SFPLOAD_BH
+  UNSPECV_SFPXLOADI_BH
+  UNSPECV_SFPSTORE_BH
+  UNSPECV_SFPMULI_BH
+  UNSPECV_SFPADDI_BH
+  UNSPECV_SFPIADD_V_INT_BH
+  UNSPECV_SFPXIADD_V_BH
+  UNSPECV_SFPIADD_I_BH
+  UNSPECV_SFPIADD_I_LV_BH
+  UNSPECV_SFPXIADD_I_BH
+  UNSPECV_SFPXIADD_I_LV_BH
+  UNSPECV_SFPIADD_I_INT_BH
+  UNSPECV_SFPSETMAN_BH
+  UNSPECV_SFPSETEXP_BH
+  UNSPECV_SFPSETSGN_BH
+  UNSPECV_SFPMAD_BH
+  UNSPECV_SFPMAD_LV_BH
+  UNSPECV_SFPMAD_INT_BH
+  UNSPECV_SFPDIVP2_BH
+  UNSPECV_SFPXFCMPS_BH
+  UNSPECV_SFPXFCMPV_BH
+  UNSPECV_SFPSTOCHRND_I_BH
+  UNSPECV_SFPSTOCHRND_I_LV_BH
+  UNSPECV_SFPSTOCHRND_I_INT_BH
+  UNSPECV_SFPSTOCHRND_V_BH
+  UNSPECV_SFPSTOCHRND_V_LV_BH
+  UNSPECV_SFPSTOCHRND_V_INT_BH
+  UNSPECV_SFPCONFIG_V_BH
+  UNSPECV_SFPMUL24_BH
+  UNSPECV_SFPARECIP_BH
+  UNSPECV_SFPGT_BH
+  UNSPECV_SFPLE_BH
+  UNSPECV_SFPMOV_CONFIG_BH
 ])
 
 (define_expand "rvtt_sfpload_bh"
@@ -70,7 +67,7 @@
           (match_operand:SI 4 "reg_or_const_int_operand")
           (match_operand:SI 5 "reg_or_0_operand")
           (match_operand:SI 6 "const_int_operand")
-	  ] UNSPECVSFPLOAD_BH))]
+	  ] UNSPECV_SFPLOAD_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpload_bh (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
@@ -89,7 +86,7 @@
           (match_operand:SI    5 "reg_or_const_int_operand")
           (match_operand:SI    6 "reg_or_0_operand")
           (match_operand:SI    7 "const_int_operand")
-	  ] UNSPECVSFPLOAD_BH))]
+	  ] UNSPECV_SFPLOAD_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpload_bh (operands[0], operands[2],
@@ -104,7 +101,7 @@
           (match_operand:SI    2 "const_int_operand" "N04U,N04U")
           (match_operand:SI    3 "const_int_operand" "N03U,N03U")
           (match_operand:SI    4 "const_int_operand" "N13U,N13U")
-	  ] UNSPECVSFPLOAD_BH))]
+	  ] UNSPECV_SFPLOAD_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPLOAD\t%0, %4, %2, %3"
   [(set_attr "type" "tensix")])
@@ -119,7 +116,7 @@
           (match_operand:SI 3 "reg_or_const_int_operand")
           (match_operand:SI 4 "reg_or_0_operand")
           (match_operand:SI 5 "const_int_operand")
-	  ] UNSPECVSFPXLOADI_BH))]
+	  ] UNSPECV_SFPXLOADI_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpxloadi_bh (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
@@ -136,7 +133,7 @@
           (match_operand:SI    4 "reg_or_const_int_operand")
           (match_operand:SI    5 "reg_or_0_operand")
           (match_operand:SI    6 "const_int_operand")
-	  ] UNSPECVSFPXLOADI_BH))]
+	  ] UNSPECV_SFPXLOADI_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpxloadi_bh (operands[0], operands[2],
@@ -150,7 +147,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn,0,xn")
           (match_operand:SI    2 "const_int_operand" "N04U,N04U,N04U,N04U")
           (match_operand:SI    3 "const_int_operand" "N16S,N16S,N16U,N16U")
-	  ] UNSPECVSFPXLOADI_BH))]
+	  ] UNSPECV_SFPXLOADI_BH))]
   "TARGET_XTT_TENSIX_BH"
   "@
   SFPLOADI\t%0, %s3, %2
@@ -168,7 +165,7 @@
      (match_operand:SI    4 "reg_or_const_int_operand")
      (match_operand:SI    5 "reg_or_0_operand")
      (match_operand:SI    6 "const_int_operand")
-     ] UNSPECVSFPSTORE_BH)]
+     ] UNSPECV_SFPSTORE_BH)]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx insn = nullptr;
@@ -193,15 +190,15 @@
      (match_operand:SI    1 "const_int_operand" "N04U")
      (match_operand:SI    2 "const_int_operand" "N03U")
      (match_operand:SI    3 "const_int_operand" "N13U")
-     ] UNSPECVSFPSTORE_BH)]
+     ] UNSPECV_SFPSTORE_BH)]
   "TARGET_XTT_TENSIX_BH"
   "SFPSTORE\t%3, %x0, %1, %2"
   [(set_attr "type" "tensix")])
 
 
-(define_int_iterator blackhole_muliaddi_op [UNSPECVSFPMULI_BH UNSPECVSFPADDI_BH])
-(define_int_attr blackhole_muliaddi_name [(UNSPECVSFPMULI_BH "muli") (UNSPECVSFPADDI_BH "addi")])
-(define_int_attr blackhole_muliaddi_insn [(UNSPECVSFPMULI_BH "MULI") (UNSPECVSFPADDI_BH "ADDI")])
+(define_int_iterator blackhole_muliaddi_op [UNSPECV_SFPMULI_BH UNSPECV_SFPADDI_BH])
+(define_int_attr blackhole_muliaddi_name [(UNSPECV_SFPMULI_BH "muli") (UNSPECV_SFPADDI_BH "addi")])
+(define_int_attr blackhole_muliaddi_insn [(UNSPECV_SFPMULI_BH "MULI") (UNSPECV_SFPADDI_BH "ADDI")])
 (define_expand "rvtt_sfp<blackhole_muliaddi_name>_bh"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -250,7 +247,7 @@
           (match_operand:SI    4 "const_int_operand")
           (match_operand:XTT32SI 5 "reg_or_cstlreg_operand")
           (match_operand:SI    6 "const_int_operand")
-	  ] UNSPECVSFPDIVP2_BH))]
+	  ] UNSPECV_SFPDIVP2_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpdivp2_bh (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
@@ -268,7 +265,7 @@
           (match_operand:SI    5 "const_int_operand")
           (match_operand:XTT32SI 6 "reg_or_cstlreg_operand")
           (match_operand:SI    7 "const_int_operand")
-	  ] UNSPECVSFPDIVP2_BH))]
+	  ] UNSPECV_SFPDIVP2_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpdivp2_bh (operands[0], operands[2],
@@ -283,7 +280,7 @@
           (match_operand:SI    2 "const_int_operand" "N12S,N12S")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    4 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPDIVP2_BH))]
+	  ] UNSPECV_SFPDIVP2_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPDIVP2\t%0, %x3, %2, %4"
   [(set_attr "type" "tensix")])
@@ -292,7 +289,7 @@
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI 1 "const_int_operand" "N04U")
-	  ] UNSPECVSFPMOV_CONFIG_BH))]
+	  ] UNSPECV_SFPMOV_CONFIG_BH))]
   "TARGET_XTT_TENSIX_BH"
   {
     emit_insn (gen_rvtt_sfpmov_config_lv_bh
@@ -305,40 +302,10 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn")
           (match_operand:SI 2 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPMOV_CONFIG_BH))]
+	  ] UNSPECV_SFPMOV_CONFIG_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMOV\t%0, L%2, 8"
   [(set_attr "type" "tensix")])
-
-(define_int_iterator blackhole_muladd_op [UNSPECVSFPMUL_BH UNSPECVSFPADD_BH])
-(define_int_attr blackhole_muladd_name [(UNSPECVSFPMUL_BH "mul") (UNSPECVSFPADD_BH "add")])
-(define_int_attr blackhole_muladd_insn [(UNSPECVSFPMUL_BH "MUL") (UNSPECVSFPADD_BH "ADD")])
-(define_int_attr blackhole_muladd_ops [(UNSPECVSFPMUL_BH "%x1, %x2, L9") (UNSPECVSFPADD_BH "L10, %x1, %x2")])
-(define_int_attr blackhole_muladd_ops_lv [(UNSPECVSFPMUL_BH "%x2, %x3, L9") (UNSPECVSFPADD_BH "L10, %x2, %x3")])
-(define_insn "rvtt_sfp<blackhole_muladd_name>_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    3 "const_int_operand" "N04U")
-	  ] blackhole_muladd_op))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops>, %3"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
-
-(define_insn "rvtt_sfp<blackhole_muladd_name>_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    4 "const_int_operand" "N04U")
-	  ] blackhole_muladd_op))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFP<blackhole_muladd_insn>\t%0, <blackhole_muladd_ops_lv>, %4"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
 
 (define_insn "rvtt_sfpiadd_v_int_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -346,7 +313,7 @@
 	  (match_operand:XTT32SI 1 "register_operand"  "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xr")
           (match_operand:SI    3 "const_int_operand" "N04U")
-	  ] UNSPECVSFPIADD_V_INT_BH))]
+	  ] UNSPECV_SFPIADD_V_INT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPIADD\t%0, %x2, 0, %3"
   [(set_attr "type" "tensix")])
@@ -358,7 +325,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "n,n")
           (match_operand:SI    4 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPIADD_I_INT_BH))]
+	  ] UNSPECV_SFPIADD_I_INT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPIADD\t%0, %x2, %3, %4"
   [(set_attr "type" "tensix")])
@@ -369,7 +336,7 @@
 	  (match_operand:XTT32SI 1 "register_operand"  "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    3 "const_int_operand" "N04U")
-	  ] UNSPECVSFPXIADD_V_BH))]
+	  ] UNSPECV_SFPXIADD_V_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpxiadd_v_bh (operands[0], operands[1], operands[2], operands[3]);
@@ -385,7 +352,7 @@
           (match_operand:SI    4 "const_int_operand")
           (match_operand:SI    5 "reg_or_const_int_operand")
           (match_operand:SI    6 "const_int_operand")
-	  ] UNSPECVSFPXIADD_I_BH))]
+	  ] UNSPECV_SFPXIADD_I_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = rvtt_gen_rtx_noval (XTT32SImode);
@@ -403,36 +370,13 @@
           (match_operand:SI    5 "const_int_operand")
           (match_operand:SI    6 "reg_or_const_int_operand")
           (match_operand:SI    7 "const_int_operand")
-	  ] UNSPECVSFPXIADD_I_LV_BH))]
+	  ] UNSPECV_SFPXIADD_I_LV_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = operands[2];
   rvtt_emit_sfpxiadd_i_bh (operands[0], live, operands[1], operands[3], operands[4], operands[7]);
   DONE;
 })
-
-(define_expand "rvtt_sfpcast_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    2 "const_int_operand" "N04U")
-	  ] UNSPECVSFPCAST_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  {
-    emit_insn (gen_rvtt_sfpcast_lv_bh (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1], operands[2]));
-    DONE;
-  })
-
-(define_insn "rvtt_sfpcast_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand"  "0,xn")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:SI    3 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPCAST_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPCAST\t%0, %x2, %3"
-  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstochrnd_i_bh"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -444,7 +388,7 @@
           (match_operand:SI    5 "const_int_operand")
           (match_operand:XTT32SI 6 "reg_or_cstlreg_operand")
           (match_operand:SI    7 "const_int_operand")
-	  ] UNSPECVSFPSTOCHRND_I_BH))]
+	  ] UNSPECV_SFPSTOCHRND_I_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = rvtt_gen_rtx_noval (XTT32SImode);
@@ -464,7 +408,7 @@
           (match_operand:SI    6 "const_int_operand")
           (match_operand:XTT32SI 7 "reg_or_cstlreg_operand")
           (match_operand:SI    8 "const_int_operand")
-	  ] UNSPECVSFPSTOCHRND_I_LV_BH))]
+	  ] UNSPECV_SFPSTOCHRND_I_LV_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = operands[2];
@@ -481,7 +425,7 @@
           (match_operand:SI    3 "const_int_operand" "N05U,N05U")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    5 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPSTOCHRND_I_INT_BH))]
+	  ] UNSPECV_SFPSTOCHRND_I_INT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPSTOCHRND\t%0, L0, %x4, %5, %2, %3"
   [(set_attr "type" "tensix")])
@@ -493,7 +437,7 @@
           (match_operand:XTT32SI 2 "register_operand")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
           (match_operand:SI    4 "const_int_operand")
-	  ] UNSPECVSFPSTOCHRND_V_BH))]
+	  ] UNSPECV_SFPSTOCHRND_V_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = rvtt_gen_rtx_noval (XTT32SImode);
@@ -509,7 +453,7 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand")
           (match_operand:SI    5 "const_int_operand")
-	  ] UNSPECVSFPSTOCHRND_V_LV_BH))]
+	  ] UNSPECV_SFPSTOCHRND_V_LV_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = operands[1];
@@ -525,151 +469,9 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    5 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPSTOCHRND_V_INT_BH))]
+	  ] UNSPECV_SFPSTOCHRND_V_INT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPSTOCHRND\t%0, %x3, %x4, %5, %2, 0"
-  [(set_attr "type" "tensix")])
-
-(define_int_iterator blackhole_set_float_op_v [UNSPECVSFPSETEXP_BH UNSPECVSFPSETMAN_BH UNSPECVSFPSETSGN_BH])
-(define_int_iterator blackhole_set_float_op_i [UNSPECVSFPSETEXP_BH UNSPECVSFPSETSGN_BH])
-(define_int_attr blackhole_set_float_name [
-  (UNSPECVSFPSETEXP_BH "exp")
-  (UNSPECVSFPSETMAN_BH "man")
-  (UNSPECVSFPSETSGN_BH "sgn")
-  ])
-(define_int_attr blackhole_set_float_insn [
-  (UNSPECVSFPSETEXP_BH "EXP")
-  (UNSPECVSFPSETMAN_BH "MAN")
-  (UNSPECVSFPSETSGN_BH "SGN")
-  ])
-
-(define_insn "rvtt_sfpset<blackhole_set_float_name>_v_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-	  ] blackhole_set_float_op_v))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSET<blackhole_set_float_insn>\t%0, %x2, 0, 0"
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_sfpset<blackhole_set_float_name>_i_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:SI    2 "reg_or_const_int_operand")
-          (match_operand:SI    3 "reg_or_0_operand")
-          (match_operand:SI    4 "const_int_operand")
-          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand")
-	  ] blackhole_set_float_op_i))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rtx insn;
-  if (CONST_INT_P (operands[2]))
-    insn = gen_rvtt_sfpset<blackhole_set_float_name>_i_int_bh
-      (operands[0], rvtt_clamp_unsigned (operands[2], 0xFFF), operands[5]);
-  else
-    {
-      unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_sfpset<blackhole_set_float_name>_i_int_bh,
-                                     0, operands[3], op, operands[4],
-				     operands[5], 4, operands[0], 8, nullptr);
-    }
-  emit_insn (insn);
-  DONE;
-})
-
-(define_expand "rvtt_sfpset<blackhole_set_float_name>_i_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "reg_or_0_operand")
-          (match_operand:SI    5 "const_int_operand")
-          (match_operand:XTT32SI 6 "reg_or_cstlreg_operand")
-	  ] blackhole_set_float_op_i))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rtx insn;
-  if (CONST_INT_P (operands[3]))
-    insn = gen_rvtt_sfpset<blackhole_set_float_name>_i_lv_int_bh
-      (operands[0], operands[2], rvtt_clamp_unsigned (operands[3], 0xFFF), operands[6]);
-  else
-    {
-      unsigned op = TT_OP_BH_SFPSET<blackhole_set_float_insn> (0, 0, 0, 1);
-      insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_sfpset<blackhole_set_float_name>_i_lv_int_bh,
-      	     			     0, operands[4], op, operands[5],
-				     operands[6], 4, operands[0], 8, operands[2]);
-    }
-   emit_insn (insn);
-  DONE;
-})
-
-(define_insn "rvtt_sfpset<blackhole_set_float_name>_i_int_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "const_int_operand" "N12U")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-	  ] blackhole_set_float_op_i))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSET<blackhole_set_float_insn>\t%0, %x2, %1, 1"
-  [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_sfpset<blackhole_set_float_name>_i_lv_int_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand" "0")
-          (match_operand:SI    2 "const_int_operand" "N12U")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
-	  ] blackhole_set_float_op_i))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSET<blackhole_set_float_insn>\t%0, %x3, %2, 1"
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_sfpsetman_i_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:SI    2 "reg_or_const_int_operand")
-          (match_operand:SI    3 "reg_or_0_operand")
-          (match_operand:SI    4 "const_int_operand")
-          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand")
-          (match_operand:SI    6 "const_int_operand")
-	  ] UNSPECVSFPSETMAN_BH))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rtx live = rvtt_gen_rtx_noval (XTT32SImode);
-  rvtt_emit_sfpsetman_bh (operands[0], live, operands[1], operands[2], operands[5]);
-  DONE;
-})
-
-(define_expand "rvtt_sfpsetman_i_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "reg_or_0_operand")
-          (match_operand:SI    5 "const_int_operand")
-          (match_operand:XTT32SI 6 "reg_or_cstlreg_operand")
-          (match_operand:SI    7 "const_int_operand")] UNSPECVSFPSETMAN_BH))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rtx live = operands[2];
-  rvtt_emit_sfpsetman_bh (operands[0], live, operands[1], operands[3], operands[6]);
-  DONE;
-})
-
-(define_insn "rvtt_sfpsetman_i_int_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn")
-          (match_operand:SI    2 "const_int_operand" "N12U,N12U")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-	  ] UNSPECVSFPSETMAN_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSETMAN\t%0, %x3, %2, 1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpmad_bh"
@@ -679,7 +481,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
           (match_operand:SI    4 "const_int_operand")
-	  ] UNSPECVSFPMAD_BH))]
+	  ] UNSPECV_SFPMAD_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = rvtt_gen_rtx_noval (XTT32SImode);
@@ -695,7 +497,7 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand")
           (match_operand:SI    5 "const_int_operand")
-	  ] UNSPECVSFPMAD_LV_BH))]
+	  ] UNSPECV_SFPMAD_LV_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rtx live = operands[1];
@@ -711,7 +513,7 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc, xrxc")
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc, xrxc")
           (match_operand:SI    5 "const_int_operand" "N04U,N04U")
-	  ] UNSPECVSFPMAD_INT_BH))]
+	  ] UNSPECV_SFPMAD_INT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMAD\t%0, %x2, %x3, %x4, %5"
   [(set_attr "type" "tensix")
@@ -726,7 +528,7 @@
           (match_operand:SI    4 "reg_or_const_int_operand")
           (match_operand:SI    5 "const_int_operand")
           (match_operand:SI    6 "const_int_operand")
-	  ] UNSPECVSFPXFCMPS_BH))]
+	  ] UNSPECV_SFPXFCMPS_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpxfcmps_bh (operands[1], operands[2], operands[3], operands[6]);
@@ -739,7 +541,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
           (match_operand:SI    3 "const_int_operand")
-	  ] UNSPECVSFPXFCMPV_BH))]
+	  ] UNSPECV_SFPXFCMPV_BH))]
   "TARGET_XTT_TENSIX_BH"
 {
   rvtt_emit_sfpxfcmpv_bh (operands[1], operands[2], operands[3]);
@@ -750,7 +552,7 @@
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "register_operand"   "x0")
      (match_operand:SI    1 "const_int_operand"  "N04U")
-     ] UNSPECVSFPCONFIG_V_BH)]
+     ] UNSPECV_SFPCONFIG_V_BH)]
   "TARGET_XTT_TENSIX_BH"
   "SFPCONFIG\t%1, 0, 0"
   [(set_attr "type" "tensix")])
@@ -761,7 +563,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    3 "const_int_operand" "N04U")
-	  ] UNSPECVSFPMUL24_BH))]
+	  ] UNSPECV_SFPMUL24_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMUL24\t%0, %x1, %x2, %3"
   [(set_attr "type" "tensix")
@@ -774,7 +576,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    4 "const_int_operand" "N04U")
-	  ] UNSPECVSFPMUL24_BH))]
+	  ] UNSPECV_SFPMUL24_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPMUL24\t%0, %x2, %x3, %4"
   [(set_attr "type" "tensix")
@@ -785,7 +587,7 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
           (match_operand:SI    2 "const_int_operand")
-	  ] UNSPECVSFPARECIP_BH))]
+	  ] UNSPECV_SFPARECIP_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPARECIP\t%0, %x1, %2"
   [(set_attr "type" "tensix")])
@@ -796,7 +598,7 @@
 	  (match_operand:XTT32SI 1 "register_operand"  "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xr")
           (match_operand:SI    3 "const_int_operand" "N04U")
-	  ] UNSPECVSFPARECIP_BH))]
+	  ] UNSPECV_SFPARECIP_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPARECIP\t%0, %x2, %3"
   [(set_attr "type" "tensix")])
@@ -806,7 +608,7 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    2 "const_int_operand" "N04U")
-	  ] UNSPECVSFPGT_BH))]
+	  ] UNSPECV_SFPGT_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPGT\t%0, %x1, 0, %2"
   [(set_attr "type" "tensix")])
@@ -816,7 +618,7 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    2 "const_int_operand" "N04U")
-	  ] UNSPECVSFPLE_BH))]
+	  ] UNSPECV_SFPLE_BH))]
   "TARGET_XTT_TENSIX_BH"
   "SFPLE\t%0, %x1, 0, %2"
   [(set_attr "type" "tensix")])

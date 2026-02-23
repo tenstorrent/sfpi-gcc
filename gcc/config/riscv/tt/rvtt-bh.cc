@@ -422,19 +422,3 @@ void rvtt_emit_sfpstochrnd_i_bh(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rt
     }
   emit_insn (insn);
 }
-
-void rvtt_emit_sfpsetman_bh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src)
-{
-  if (CONST_INT_P (imm))
-    {
-      unsigned int iv = INTVAL(imm);
-      if (iv > 4095) {
-	rvtt_emit_sfpxloadi_bh(dst, lv, addr,
-			       GEN_INT(SFPXLOADI_MOD0_UINT32), imm, GEN_INT(0), GEN_INT(0));
-	emit_insn(gen_rvtt_sfpsetman_v_bh(dst, dst, src));
-      } else
-	emit_insn (gen_rvtt_sfpsetman_i_int_bh(dst, lv, imm, src));
-    }
-  else
-    gcc_unreachable ();
-}
