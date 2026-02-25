@@ -55,7 +55,7 @@ void f6() {
 **_Z2f6v:
 **	# READ L0
 **	# READ L1
-**	SFPSHFT	L0, L1, 0, 0
+**	SFPSHFT	L0, L1, 0, 2
 **	SFPMOV	L3, L0, 2
 **	# WRITE L3
 **	ret

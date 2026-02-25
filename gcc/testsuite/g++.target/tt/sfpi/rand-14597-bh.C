@@ -58,8 +58,8 @@ void baz () {
 }
 /*
 **_Z3bazv:
-**	SFPMOV	L1, L9, 8	# CFG:9
 **	SFPMOV	L0, L9, 8	# CFG:9
+**	SFPMOV	L1, L9, 8	# CFG:9
 **	SFPIADD	L0, L1, 0, 4
 **	# WRITE L0
 **	ret
