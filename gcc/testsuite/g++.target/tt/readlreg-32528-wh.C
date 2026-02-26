@@ -40,7 +40,7 @@ void baz () {
 }
 /*
 **_ZN3cst3bazEv:
-**	SFPSTORE	0, L9, 0, 0
+**	SFPSTORE	L9, 0, 0, 0
 **	ret
 */
 void sub5() {

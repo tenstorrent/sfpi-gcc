@@ -201,7 +201,7 @@
      (match_operand:SI    3 "const_int_operand" "N14U")
      ] UNSPECV_SFPSTORE_WH)]
   "TARGET_XTT_TENSIX_WH"
-  "SFPSTORE\t%3, %x0, %1, %2"
+  "SFPSTORE\t%x0, %3, %1, %2"
   [(set_attr "type" "tensix")])
 
 (define_int_iterator wormhole_muliaddi [UNSPECV_SFPMULI_WH UNSPECV_SFPADDI_WH])

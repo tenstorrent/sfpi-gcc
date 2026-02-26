@@ -14,7 +14,7 @@ void frob () {
 /*
 **_Z4frobv:
 **	SFPMOV	L0, L12, 2
-**	SFPSTORE	0, L0, 0, 7
+**	SFPSTORE	L0, 0, 0, 7
 **	ret
 */
 

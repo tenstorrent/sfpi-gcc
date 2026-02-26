@@ -27,7 +27,7 @@ void one ()
 **	SFPMUL	L0, L0, L0, L9, 0
 **	TTREPLAY	4, 4, 0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -69,7 +69,7 @@ void two (volatile unsigned *ptr)
 **	addi	a5,a5,1
 **	sw	a5,0\(a0\)
 **	TTREPLAY	4, 6, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -109,6 +109,6 @@ void three (volatile unsigned *ptr)
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

@@ -24,10 +24,10 @@ void copy ()
 **	SFPLOAD	L2, 0, 0, 0
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPSHFT2	L0, L0, 0, 0
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 
@@ -56,10 +56,10 @@ void subvec_copy ()
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSHFT2	L0 L0, 0, 1
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 
@@ -89,10 +89,10 @@ void subvec_shfl_copy ()
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSHFT2	L0, L0, 0, 2
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 
@@ -109,7 +109,7 @@ void subvec_shfl_rot ()
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSHFT2	L0, L0, 0, 3
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -129,7 +129,7 @@ void subvec_shfl_shift ()
 **	SFPNOP
 **	SFPSHFT2	L0, L0, 0, 4
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 

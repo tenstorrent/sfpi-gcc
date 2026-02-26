@@ -51,14 +51,14 @@ void store_imm () {
 template void store_imm<0> ();
 /*
 **_Z9store_immILj0EEvv:
-**	SFPSTORE	0, L3, 3, 7
+**	SFPSTORE	L3, 0, 3, 7
 **	ret
 */
 
 template void store_imm<0x1fff> ();
 /*
 **_Z9store_immILj8191EEvv:
-**	SFPSTORE	8191, L3, 3, 7
+**	SFPSTORE	L3, 8191, 3, 7
 **	ret
 */
 

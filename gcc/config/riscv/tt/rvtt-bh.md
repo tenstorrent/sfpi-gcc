@@ -192,7 +192,7 @@
      (match_operand:SI    3 "const_int_operand" "N13U")
      ] UNSPECV_SFPSTORE_BH)]
   "TARGET_XTT_TENSIX_BH"
-  "SFPSTORE\t%3, %x0, %1, %2"
+  "SFPSTORE\t%x0, %3, %1, %2"
   [(set_attr "type" "tensix")])
 
 

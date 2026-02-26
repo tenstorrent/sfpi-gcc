@@ -20,8 +20,8 @@ void dep () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -44,8 +44,8 @@ void nondep () {
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
 **	SFPLOAD	L2, 0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -72,8 +72,8 @@ void dep () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -97,8 +97,8 @@ void nondep () {
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
 **	SFPLOAD	L2, 0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -124,10 +124,10 @@ void live () {
 **	SFPMOV	L2, L0, 2
 **	SFPSWAP	L3, L2, 0
 **	SFPNOP
-**	SFPSTORE	0, L3, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -147,7 +147,7 @@ void dead1 () {
 **	SFPLOAD	L1, 0, 0, 0
 **	SFPSWAP	L0, L1, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -167,7 +167,7 @@ void dead0 () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -186,7 +186,7 @@ void cstdead1 () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L0, L8, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -206,7 +206,7 @@ void cstdead1a () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L0, L8, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -225,7 +225,7 @@ void cstdead0 () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L8, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -245,7 +245,7 @@ void cstdead0a () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSWAP	L8, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -295,8 +295,8 @@ void cst1 () {
 **	SFPMOV	L1, L8, 2
 **	SFPSWAP	L0, L1, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
 **	ret
 */
 
@@ -318,8 +318,8 @@ void cst0 () {
 **	SFPMOV	L1, L8, 2
 **	SFPSWAP	L1, L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 }

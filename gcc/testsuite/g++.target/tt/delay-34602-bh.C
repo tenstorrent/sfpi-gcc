@@ -14,7 +14,7 @@ void one () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMULI	L0, 0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -28,7 +28,7 @@ void two () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMOV	L1, L0, 0
 **	SFPMULI	L1, 0, 0
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -49,7 +49,7 @@ void one (unsigned i) {
 **	lui	a5,%hi\(iptr\)
 **	sw	a0, %lo\(iptr\)\(a5\)	# 2:74000000 L0 := LV
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -70,7 +70,7 @@ void two (unsigned i) {
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
 **	sw	a0, %lo\(iptr\)\(a5\)	# 2:74000010 L1 := LV
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -86,7 +86,7 @@ void three () {
 **	SFPMOV	L3, L0, 0
 **	SFPMULI	L3, 0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -103,7 +103,7 @@ void one () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSHFT2	L8, L0, 0, 3
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -121,7 +121,7 @@ void one () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPSHFT2	L8, L0, 0, 3
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 

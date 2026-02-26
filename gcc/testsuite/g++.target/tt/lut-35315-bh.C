@@ -18,7 +18,7 @@ void one ()
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPLUT	L3, 0
 **	SFPNOP
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 
@@ -45,7 +45,7 @@ void two ()
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPLUTFP32	L0, 0
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -67,7 +67,7 @@ void three ()
 **	SFPLOADI	L7, 0, 2
 **	SFPLUTFP32	L0, 10
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
@@ -94,7 +94,7 @@ void four ()
 **	SFPLOADI	L7, 0, 2
 **	SFPLUTFP32	L0, 10
 **	SFPNOP
-**	SFPSTORE	0, L0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
 **	TTREPLAY	0, 8, 0, 0
 **	TTREPLAY	0, 8, 0, 0
 **	TTREPLAY	0, 8, 0, 0

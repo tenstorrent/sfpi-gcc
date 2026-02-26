@@ -27,10 +27,10 @@ void one ()
 **	SFPLOAD	L2, 0, 0, 0
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPTRANSP
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 
@@ -59,10 +59,10 @@ void two ()
 **	SFPMOV	L2, L4, 2
 **	SFPMOV	L3, L5, 2
 **	SFPTRANSP
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L4, 0, 0
-**	SFPSTORE	0, L5, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L4, 0, 0, 0
+**	SFPSTORE	L5, 0, 0, 0
 **	ret
 */
 
@@ -91,10 +91,10 @@ void three ()
 **	SFPMOV	L0, L8, 2
 **	SFPMOV	L2, L0, 2
 **	SFPTRANSP
-**	SFPSTORE	0, L0, 0, 0
-**	SFPSTORE	0, L1, 0, 0
-**	SFPSTORE	0, L2, 0, 0
-**	SFPSTORE	0, L3, 0, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L1, 0, 0, 0
+**	SFPSTORE	L2, 0, 0, 0
+**	SFPSTORE	L3, 0, 0, 0
 **	ret
 */
 }
