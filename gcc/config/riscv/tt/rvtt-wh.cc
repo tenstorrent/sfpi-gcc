@@ -396,31 +396,3 @@ void rvtt_emit_sfpxfcmpv_wh(rtx v1, rtx v2, rtx mod)
     emit_insn(gen_rvtt_sfpsetcc_v(tmp, GEN_INT(rvtt_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
   }
 }
-
-void rvtt_emit_sfpdivp2_wh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
-{
-  rtx insn = nullptr;
-  if (CONST_INT_P (imm))
-    insn = gen_rvtt_sfpdivp2_int_wh (dst, lv, rvtt_clamp_signed (imm, 0x7FF), src, mod);
-  else
-    {
-      unsigned op = TT_OP_WH_SFPDIVP2 (0, 0, 0, INTVAL (mod));
-      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_sfpdivp2_int_wh,
-				     0, nonimm, op, id, src, 4, dst, 8, lv);
-    }
-  emit_insn (insn);
-}
-
-void rvtt_emit_sfpstochrnd_i_wh(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id)
-{
-  rtx insn = nullptr;
-  if (CONST_INT_P (imm))
-    insn = gen_rvtt_sfpstochrnd_i_int_wh(dst, lv, mode, rvtt_clamp_unsigned(imm, 0x1F), src, mod);
-  else
-    {
-      unsigned op = TT_OP_WH_SFP_STOCH_RND (INTVAL (mode), 0, 0, 0, 0, INTVAL (mod));
-      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_sfpstochrnd_i_int_wh,
-				     0, nonimm, op, id, src, 4, dst, 8, lv);
-    }
-  emit_insn (insn);
-}
