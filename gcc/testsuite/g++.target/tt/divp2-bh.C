@@ -3,7 +3,7 @@
 
 void foo () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
-    auto r = __builtin_rvtt_sfpdivp2 (nullptr, 4, 0, 0, a, 0);
+    auto r = __builtin_rvtt_sfpdivp2 (nullptr, a, 4, 0, 0, 0);
     __builtin_rvtt_sfpwritelreg (r, 0);
 }
 /*

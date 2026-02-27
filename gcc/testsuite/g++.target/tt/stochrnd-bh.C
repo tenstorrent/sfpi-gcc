@@ -3,22 +3,22 @@
 
 void foo () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
-    auto r = __builtin_rvtt_sfpstochrnd_i (nullptr, 0, 4, 0, 0, a, 0);
+    auto r = __builtin_rvtt_sfpstochrnd_i (nullptr, a, 0x1f, 0, 0, 1, 3);
     __builtin_rvtt_sfpwritelreg (r, 0);
 }
 /*
 **_Z3foov:
-**	SFPSTOCHRND	L0, L0, L0, 0, 0, 4
+**	SFPSTOCHRND	L0, L0, L0, 3, 1, 31
 **	ret
 */
 void bar () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
     auto b = __builtin_rvtt_sfpreadlreg (1);
-    auto r = __builtin_rvtt_sfpstochrnd_v (0, a, b, 0);
+    auto r = __builtin_rvtt_sfpstochrnd_v (b, a, 1, 3);
     __builtin_rvtt_sfpwritelreg (r, 0);
 }
 /*
 **_Z3barv:
-**	SFPSTOCHRND	L0, L0, L1, 0, 0, 0
+**	SFPSTOCHRND	L0, L0, L1, 3, 1, 0
 **	ret
 */

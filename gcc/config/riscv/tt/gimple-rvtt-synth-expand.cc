@@ -126,8 +126,8 @@ emit_sfpsetman_v (tree val, gimple *stmt, gimple_stmt_iterator *gsip)
   auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetman_v);
 
   gimple *new_stmt = gimple_build_call (new_insnd->decl, 2);
-  gimple_call_set_arg (new_stmt, 0, val);
-  gimple_call_set_arg (new_stmt, 1, gimple_call_arg (stmt, 4));
+  gimple_call_set_arg (new_stmt, 0, gimple_call_arg (stmt, 1));
+  gimple_call_set_arg (new_stmt, 1, val);
   gimple_call_set_lhs (new_stmt, gimple_call_lhs (stmt));
   finish_new_insn (gsip, true, new_stmt, stmt);
 }
