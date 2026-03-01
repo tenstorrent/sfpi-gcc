@@ -39,12 +39,6 @@
   UNSPECV_SFPXIADD_I_WH
   UNSPECV_SFPXIADD_I_LV_WH
   UNSPECV_SFPIADD_I_INT_WH
-  UNSPECV_SFPMAD_WH
-  UNSPECV_SFPMAD_LV_WH
-  UNSPECV_SFPMAD_INT_WH
-  UNSPECV_SFPMOV_WH
-  UNSPECV_SFPMOV_LV_WH
-  UNSPECV_SFPMOV_INT_WH
   UNSPECV_SFPXFCMPS_WH
   UNSPECV_SFPXFCMPV_WH
   UNSPECV_SFPCONFIG_V_WH
@@ -261,51 +255,6 @@
   rvtt_emit_sfpxiadd_i_wh (operands[0], live, operands[1], operands[3], operands[4], operands[7]);
   DONE;
 })
-
-(define_expand "rvtt_sfpmad_wh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
-          (match_operand:SI    4 "const_int_operand")
-	  ] UNSPECV_SFPMAD_WH))]
-  "TARGET_XTT_TENSIX_WH"
-{
-  rtx live = rvtt_gen_rtx_noval (XTT32SImode);
-  emit_insn (gen_rvtt_sfpmad_int_wh (operands[0], live, operands[1], operands[2], operands[3], operands[4]));
-  DONE;
-})
-
-(define_expand "rvtt_sfpmad_lv_wh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
-          (match_operand:XTT32SI 4 "reg_or_cstlreg_operand")
-          (match_operand:SI    5 "const_int_operand")
-	  ] UNSPECV_SFPMAD_LV_WH))]
-  "TARGET_XTT_TENSIX_WH"
-{
-  rtx live = operands[1];
-  emit_insn (gen_rvtt_sfpmad_int_wh (operands[0], live, operands[2], operands[3], operands[4], operands[5]));
-  DONE;
-})
-
-(define_insn "rvtt_sfpmad_int_wh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr, xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc, xrxc")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc, xrxc")
-          (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxc, xrxc")
-          (match_operand:SI    5 "const_int_operand" "N04U,N04U")
-	  ] UNSPECV_SFPMAD_INT_WH))]
-  "TARGET_XTT_TENSIX_WH"
-  "SFPMAD\t%0, %x2, %x3, %x4, %5"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_wh" "dynamic")])
 
 (define_expand "rvtt_sfpxfcmps_wh"
   [(set (match_operand:SI 0 "register_operand")

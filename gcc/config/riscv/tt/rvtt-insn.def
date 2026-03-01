@@ -142,10 +142,8 @@ RVTT_FN (sfpsetsgn_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                 
 RVTT_FN (sfpsetsgn_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_XTT_VEC,                 0x00, -1, -1,  1,  0xFFF, 12)
 RVTT_FN (sfpsetsgn_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_XTT_VEC,         0x02, -1, -1,  2,  0xFFF, 12)
 
-RVTT_FN (sfpmad,          wh,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x00, -1,  3, -1,      0, 0)
-RVTT_OVR(sfpmad,          bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x00, -1,  3, -1,      0, 0)
-RVTT_FN (sfpmad_lv,       wh,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0x02, -1,  4, -1,      0, 0)
-RVTT_OVR(sfpmad_lv,       bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0x02, -1,  4, -1,      0, 0)
+RVTT_FN (sfpmad,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x00, -1,  3, -1,      0, 0)
+RVTT_FN (sfpmad_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0x02, -1,  4, -1,      0, 0)
 
 RVTT_FN (sfpdivp2,             ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_XTT_VEC_USI,             0x00, -1,  5,  1,  0xFFF, 12)
 RVTT_FN (sfpdivp2_lv,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_XTT_VEC_USI,     0x02, -1,  6,  2,  0xFFF, 12)

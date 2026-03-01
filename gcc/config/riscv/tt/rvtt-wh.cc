@@ -363,7 +363,7 @@ void rvtt_emit_sfpxfcmps_wh(rtx addr, rtx v, rtx f, rtx mod)
     rtx tmp = gen_reg_rtx(XTT32SImode);
     rtx neg_one = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
 
-    emit_insn (gen_rvtt_sfpmad_wh (tmp, ref_val, neg_one, v, GEN_INT(0)));
+    emit_insn (gen_rvtt_sfpmad (tmp, ref_val, neg_one, v, GEN_INT(0)));
     v = tmp;
   }
 
@@ -383,7 +383,7 @@ void rvtt_emit_sfpxfcmpv_wh(rtx v1, rtx v2, rtx mod)
   rtx tmp = gen_reg_rtx(XTT32SImode);
   rtx neg1 = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
 
-  emit_insn (gen_rvtt_sfpmad_wh(tmp, v2, neg1, v1, GEN_INT(0)));
+  emit_insn (gen_rvtt_sfpmad(tmp, v2, neg1, v1, GEN_INT(0)));
 
   unsigned int cmp = INTVAL(mod) & SFPXCMP_MOD1_CC_MASK;
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT) {
