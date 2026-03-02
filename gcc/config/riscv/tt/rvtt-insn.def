@@ -47,14 +47,21 @@ along with GCC; see the file COPYING3.  If not see
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                          0x00, -1, -1, -1,      0, 0)
 
-RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
-
+RVTT_FN (sfpxvif,            ,,USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpxbool,           ,,USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpxcondb,          ,,VOID_FTYPE_USI_USI,                                         0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpxcondi,          ,,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpxicmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
 RVTT_FN (sfpxicmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
-RVTT_FN (sfpxbool,           ,,USI_FTYPE_USI_USI_USI,                                      0x00, -1, -1, -1,      0, 0)
-RVTT_FN (sfpxcondi,          ,,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
-RVTT_FN (sfpxvif,            ,,USI_FTYPE,                                                  0x00, -1, -1, -1,      0, 0)
-RVTT_FN (sfpxcondb,          ,,VOID_FTYPE_USI_USI,                                         0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
+RVTT_FN (sfpxfcmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
+RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  1,  2, 0xFFFF, 0)
+RVTT_FN (sfpxloadi_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x02, -1,  2,  3, 0xFFFF0000, -16)
+RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
+RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x01, -1,  5,  2,      0, 0)
+RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x03, -1,  6,  3,      0, 0)
+
+RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                 0x00, -1, -1, -1,      0, 0)
 
 RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
@@ -112,10 +119,8 @@ RVTT_FN (sfpload,            wh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,    
 RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  4,  1, 0x1FFF, 0)
 RVTT_FN (sfpload_lv,         wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  5,  2, 0x3FFF, 0)
 RVTT_OVR(sfpload_lv,         bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  5,  2, 0x1FFF, 0)
-RVTT_FN (sfpxloadi,       wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  1,  2, 0xFFFF, 0)
-RVTT_OVR(sfpxloadi,       bh,_bh,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  1,  2, 0xFFFF, 0)
-RVTT_FN (sfpxloadi_lv,    wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x02, -1,  2,  3, 0xFFFF0000, -16)
-RVTT_OVR(sfpxloadi_lv,    bh,_bh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x02, -1,  2,  3, 0xFFFF0000, -16)
+RVTT_FN (sfpstore,           wh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x3FFF, 0)
+RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x1FFF, 0)
 
 // gimple-rvtt-combine requires this ordering
 RVTT_FN (sfpmul,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x00, -1,  2, -1,      0, 0)
@@ -124,13 +129,6 @@ RVTT_FN (sfpmuli,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,
 RVTT_FN (sfpadd,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x00, -1,  2, -1,      0, 0)
 RVTT_FN (sfpadd_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x02, -1,  3, -1,      0, 0)
 RVTT_FN (sfpaddi,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x00,  1,  5,  2, 0xFFFF, 8)
-
-RVTT_FN (sfpxiadd_v,      wh,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
-RVTT_OVR(sfpxiadd_v,      bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
-RVTT_FN (sfpxiadd_i,      wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x01, -1,  5,  2,      0, 0)
-RVTT_OVR(sfpxiadd_i,      bh,_bh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x01, -1,  5,  2,      0, 0)
-RVTT_FN (sfpxiadd_i_lv,   wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x03, -1,  6,  3,      0, 0)
-RVTT_OVR(sfpxiadd_i_lv,   bh,_bh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x03, -1,  6,  3,      0, 0)
 
 RVTT_FN (sfpsetexp_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x00,  1, -1, -1,      0, 0)
 RVTT_FN (sfpsetexp_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI,                 0x00, -1, -1,  2,  0xFFF, 12)
@@ -147,10 +145,6 @@ RVTT_FN (sfpmad_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_U
 
 RVTT_FN (sfpdivp2,             ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x00, -1,  5,  2,  0xFFF, 12)
 RVTT_FN (sfpdivp2_lv,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     0x02, -1,  6,  3,  0xFFF, 12)
-RVTT_FN (sfpxfcmps,       wh,_wh,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
-RVTT_OVR(sfpxfcmps,       bh,_bh,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                 0x01, -1,  5,  2,      0, 0)
-RVTT_FN (sfpxfcmpv,       wh,_wh,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
-RVTT_OVR(sfpxfcmpv,       bh,_bh,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                              0x01, -1,  2, -1,      0, 0)
 RVTT_FN (sfpcast,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfpcast_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
 RVTT_FN (sfpstochrnd_i,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x00, -1,  6,  2,   0xFF, 8)
@@ -167,8 +161,6 @@ RVTT_FN (sfparecip_lv,    bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_FN (sfpmov_config,   bh,_bh,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpmov_config_lv,bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
 
-RVTT_FN (sfpstore,           wh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x3FFF, 0)
-RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x1FFF, 0)
 RVTT_FN (sfpconfig_v,     wh,_wh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 RVTT_OVR(sfpconfig_v,     bh,_bh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 

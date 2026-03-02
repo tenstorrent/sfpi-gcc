@@ -52,19 +52,11 @@ inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, u
 rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			      rtx src, unsigned src_shift);
 
-extern void rvtt_emit_sfpxloadi_wh(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpiadd_i_wh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpxiadd_i_wh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
-extern void rvtt_emit_sfpxiadd_v_wh(rtx dst, rtx srcb, rtx srca, rtx mod);
-extern void rvtt_emit_sfpxfcmps_wh(rtx addr, rtx v1, rtx f, rtx mod);
-extern void rvtt_emit_sfpxfcmpv_wh(rtx v1, rtx v2, rtx mod);
-
-extern void rvtt_emit_sfpxloadi_bh(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpiadd_i_bh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpxiadd_i_bh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
-extern void rvtt_emit_sfpxiadd_v_bh(rtx dst, rtx srcb, rtx srca, rtx mod);
-extern void rvtt_emit_sfpxfcmps_bh(rtx addr, rtx v1, rtx f, rtx mod);
-extern void rvtt_emit_sfpxfcmpv_bh(rtx v1, rtx v2, rtx mod);
+extern void rvtt_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
+extern void rvtt_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
+extern void rvtt_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
+extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
+extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
 
 extern const char * rvtt_emit_testcode(rtx operands[]);
 extern bool rvtt_hll_p(const rtx pat);
@@ -114,6 +106,7 @@ constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
 constexpr unsigned int SFPLOADI_MOD0_SHORT = 4;
 constexpr unsigned int SFPLOADI_MOD0_UPPER = 8;
 constexpr unsigned int SFPLOADI_MOD0_LOWER = 10;
+
 constexpr unsigned int SFPXLOADI_MOD0_32BIT_MASK = 16;
 constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
 constexpr unsigned int SFPXLOADI_MOD0_UINT32 = 17;

@@ -45,6 +45,7 @@
   UNSPECV_SFPNOP
   UNSPECV_SFPASSIGN
 
+  UNSPECV_SFPLOADI
   UNSPECV_SFPLOAD
   UNSPECV_SFPSTORE
 
@@ -59,6 +60,7 @@
   UNSPECV_SFPADD
   UNSPECV_SFPADDI
   UNSPECV_SFPMAD
+  UNSPECV_SFPIADD
 
   UNSPECV_SFPMOV
   UNSPECV_SFPEXEXP
@@ -275,6 +277,38 @@
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
 
+(define_expand "rvtt_sfpxvif"
+  [(set (match_operand:SI 0 "register_operand")
+        (unspec:SI [
+	  (const_int 0)
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+  "FAIL;")
+
+(define_expand "rvtt_sfpxbool"
+  [(set (match_operand:SI 0 "register_operand")
+        (unspec:SI [
+	(match_operand:SI 1 "register_operand")
+	] 0))]
+  "TARGET_XTT_TENSIX"
+  "FAIL;")
+
+(define_expand "rvtt_sfpxcondb"
+  [(unspec:SI [
+     (match_operand:SI 0 "register_operand")
+     (match_operand:SI 1 "register_operand")
+     ] 0)]
+  "TARGET_XTT_TENSIX"
+  "FAIL;")
+
+(define_expand "rvtt_sfpxcondi"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec:SI [
+	  (match_operand:SI 1 "register_operand")
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+  "FAIL;")
+
 (define_expand "rvtt_sfpxicmps"
   [(set (match_operand:SI 0 "register_operand")
         (unspec:SI [
@@ -286,9 +320,7 @@
           (match_operand:SI    6 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
-{
-  DONE;
-})
+  "FAIL;")
 
 (define_expand "rvtt_sfpxicmpv"
   [(set (match_operand:SI 0 "register_operand")
@@ -298,47 +330,117 @@
           (match_operand:SI    3 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
-{
-  DONE;
-})
+  "FAIL;")
 
-(define_expand "rvtt_sfpxvif"
+(define_expand "rvtt_sfpxfcmps"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [
-	  (const_int 0)
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI    1 "address_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "reg_or_const_int_operand")
+          (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
+  rvtt_emit_sfpxfcmps (operands[1], operands[2], operands[3], operands[6]);
   DONE;
 })
 
-(define_expand "rvtt_sfpxbool"
+(define_expand "rvtt_sfpxfcmpv"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [
-	(match_operand:SI 1 "register_operand")
-	] 0))]
+        (unspec_volatile:SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI    3 "const_int_operand")
+	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
+  rvtt_emit_sfpxfcmpv (operands[1], operands[2], operands[3]);
   DONE;
 })
 
-(define_expand "rvtt_sfpxcondb"
-  [(unspec:SI [
-     (match_operand:SI 0 "register_operand")
-     (match_operand:SI 1 "register_operand")
-     ] 0)]
-  "TARGET_XTT_TENSIX"
-{
-  DONE;
-})
-
-(define_expand "rvtt_sfpxcondi"
+(define_expand "rvtt_sfpxloadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec:SI [
-	  (match_operand:SI 1 "register_operand")
+        (unspec:XTT32SI [
+	  (match_operand:SI 1 "address_operand")
+          (match_operand:SI 2 "const_int_operand")
+          (match_operand:SI 3 "reg_or_const_int_operand")
+          (match_operand:SI 4 "reg_or_0_operand")
+          (match_operand:SI 5 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
+  emit_insn (gen_rvtt_sfpxloadi_lv
+    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[3], operands[4], operands[5]));
+  DONE;
+})
+
+(define_expand "rvtt_sfpxloadi_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec:XTT32SI [
+	  (match_operand:SI    1 "address_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:SI    3 "const_int_operand")
+          (match_operand:SI    4 "reg_or_const_int_operand")
+          (match_operand:SI    5 "reg_or_0_operand")
+          (match_operand:SI    6 "const_int_operand")
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  rvtt_emit_sfpxloadi
+    (operands[0], operands[2],
+     operands[1], operands[3], operands[4], operands[5], operands[6]);
+  DONE;
+})
+
+(define_expand "rvtt_sfpxiadd_v"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "register_operand"  "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:SI    3 "const_int_operand" "N04U")
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  rvtt_emit_sfpxiadd_v (operands[0], operands[1], operands[2], operands[3]);
+  DONE;
+})
+
+(define_expand "rvtt_sfpxiadd_i"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI    1 "address_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "const_int_operand")
+          (match_operand:SI    5 "reg_or_const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  emit_insn (gen_rvtt_sfpxiadd_i_lv
+    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[3], operands[4], operands[5], operands[6]));
+  DONE;
+})
+
+(define_expand "rvtt_sfpxiadd_i_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI    1 "address_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
+          (match_operand:SI    4 "reg_or_const_int_operand")
+          (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "reg_or_const_int_operand")
+          (match_operand:SI    7 "const_int_operand")
+	  ] 0))]
+  "TARGET_XTT_TENSIX"
+{
+  rvtt_emit_sfpxiadd_i (operands[0], operands[2], operands[1], operands[3], operands[4], operands[7]);
   DONE;
 })
 
@@ -424,6 +526,21 @@
 	  ] UNSPECV_SFPASSIGN))]
   "TARGET_XTT_TENSIX"
   "SFPMOV\t%0, %x2, 0"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfploadi_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0,xn,0")
+          (match_operand:SI    2 "const_int_operand" "N04U,N04U,N04U,N04U")
+          (match_operand:SI    3 "const_int_operand" "N16S,N16S,N16U,N16U")
+	  ] UNSPECV_SFPLOADI))]
+  "TARGET_XTT_TENSIX"
+  "@
+  SFPLOADI\t%0, %s3, %2
+  SFPLOADI\t%0, %s3, %2
+  SFPLOADI\t%0, %u3, %2
+  SFPLOADI\t%0, %u3, %2"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpload"
@@ -721,6 +838,29 @@
    (set_attr "xtt_delay_wh" "dynamic")
    (set_attr "xtt_delay_bh" "dynamic")])
 
+(define_insn "rvtt_sfpiadd_v_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	(match_operand:XTT32SI 1 "register_operand"  "0")
+        (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+        (match_operand:SI    3 "const_int_operand" "N04U")
+	] UNSPECV_SFPIADD))]
+  "TARGET_XTT_TENSIX"
+  "SFPIADD\t%0, %x2, 0, %3"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpiadd_i_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr, xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc, xrxc")
+          (match_operand:SI    3 "const_int_operand" "n, n")
+          (match_operand:SI    4 "const_int_operand" "N04U,N04U")
+	  ] UNSPECV_SFPIADD))]
+  "TARGET_XTT_TENSIX"
+  "SFPIADD\t%0, %x2, %3, %4"
+  [(set_attr "type" "tensix")])
+
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
   UNSPECV_SFPEXEXP
@@ -832,9 +972,8 @@
       else
         {
           rtx tmp = gen_reg_rtx (XTT32SImode);
-          (TARGET_XTT_TENSIX_WH ? rvtt_emit_sfpxloadi_wh
-          : TARGET_XTT_TENSIX_BH ? rvtt_emit_sfpxloadi_bh
-          : nullptr) (tmp, operands[2], operands[1],
+          rvtt_emit_sfpxloadi
+            (tmp, operands[2], operands[1],
                       GEN_INT (SFPXLOADI_MOD0_UINT32),
                        operands[4], const0_rtx, const0_rtx);
           insn = gen_rvtt_sfpset<rvtt_set_name>_v (operands[0], operands[3], tmp);
@@ -1193,9 +1332,7 @@
 {
   // The dst register is determined by the value in L7,
   // so we need to emit a loadi to L7 first.
-  emit_insn (
-    // Although ugly, this should be going away.
-    (TARGET_XTT_TENSIX_WH ? gen_rvtt_sfploadi_int_wh : gen_rvtt_sfploadi_int_bh)
+  emit_insn (gen_rvtt_sfploadi_int
     (operands[6], rvtt_gen_rtx_noval (XTT32SImode),
      GEN_INT (SFPLOADI_MOD0_USHORT),
      GEN_INT (REGNO (operands[0]) - SFPU_REG_FIRST)));
