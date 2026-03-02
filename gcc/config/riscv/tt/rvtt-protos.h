@@ -52,27 +52,19 @@ inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, u
 rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
 			      rtx src, unsigned src_shift);
 
-extern void rvtt_emit_sfpload_wh(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpxloadi_wh(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpiadd_i_wh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpxiadd_i_wh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v_wh(rtx dst, rtx srcb, rtx srca, rtx mod);
 extern void rvtt_emit_sfpxfcmps_wh(rtx addr, rtx v1, rtx f, rtx mod);
 extern void rvtt_emit_sfpxfcmpv_wh(rtx v1, rtx v2, rtx mod);
-extern void rvtt_emit_sfpdivp2_wh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpstochrnd_i_wh(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpsetman_wh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
 
-extern void rvtt_emit_sfpload_bh(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpxloadi_bh(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpiadd_i_bh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpxiadd_i_bh(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v_bh(rtx dst, rtx srcb, rtx srca, rtx mod);
 extern void rvtt_emit_sfpxfcmps_bh(rtx addr, rtx v1, rtx f, rtx mod);
 extern void rvtt_emit_sfpxfcmpv_bh(rtx v1, rtx v2, rtx mod);
-extern void rvtt_emit_sfpdivp2_bh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpstochrnd_i_bh(rtx dst, rtx lv, rtx addr, rtx mode, rtx imm, rtx src, rtx mod, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpsetman_bh(rtx dst, rtx lv, rtx addr, rtx imm, rtx src);
 
 extern const char * rvtt_emit_testcode(rtx operands[]);
 extern bool rvtt_hll_p(const rtx pat);

@@ -23,9 +23,7 @@
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
-  UNSPECV_SFPLOAD_BH
   UNSPECV_SFPXLOADI_BH
-  UNSPECV_SFPSTORE_BH
   UNSPECV_SFPIADD_V_INT_BH
   UNSPECV_SFPXIADD_V_BH
   UNSPECV_SFPIADD_I_BH
@@ -45,55 +43,6 @@
   UNSPECV_SFPLE_BH
   UNSPECV_SFPMOV_CONFIG_BH
 ])
-
-(define_expand "rvtt_sfpload_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI 1 "address_operand")
-          (match_operand:SI 2 "const_int_operand")
-          (match_operand:SI 3 "const_int_operand")
-          (match_operand:SI 4 "reg_or_const_int_operand")
-          (match_operand:SI 5 "reg_or_0_operand")
-          (match_operand:SI 6 "const_int_operand")
-	  ] UNSPECV_SFPLOAD_BH))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rvtt_emit_sfpload_bh (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
-  		        operands[1], operands[2], operands[3], operands[4], operands[5], operands[6]);
-  DONE;
-}
-  [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_sfpload_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "const_int_operand")
-          (match_operand:SI    4 "const_int_operand")
-          (match_operand:SI    5 "reg_or_const_int_operand")
-          (match_operand:SI    6 "reg_or_0_operand")
-          (match_operand:SI    7 "const_int_operand")
-	  ] UNSPECV_SFPLOAD_BH))]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rvtt_emit_sfpload_bh (operands[0], operands[2],
-  		        operands[1], operands[3], operands[4], operands[5], operands[6], operands[7]);
-  DONE;
-})
-
-(define_insn "rvtt_sfpload_int_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn")
-          (match_operand:SI    2 "const_int_operand" "N04U,N04U")
-          (match_operand:SI    3 "const_int_operand" "N03U,N03U")
-          (match_operand:SI    4 "const_int_operand" "N13U,N13U")
-	  ] UNSPECV_SFPLOAD_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPLOAD\t%0, %4, %2, %3"
-  [(set_attr "type" "tensix")])
-
 
 ;;; SFPLOADI and SFPLOADI_LV
 (define_expand "rvtt_sfpxloadi_bh"
@@ -143,46 +92,6 @@
   SFPLOADI\t%0, %u3, %2
   SFPLOADI\t%0, %u3, %2"
   [(set_attr "type" "tensix")])
-
-(define_expand "rvtt_sfpstore_bh"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:SI    0 "address_operand")
-     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
-     (match_operand:SI    2 "const_int_operand")
-     (match_operand:SI    3 "const_int_operand")
-     (match_operand:SI    4 "reg_or_const_int_operand")
-     (match_operand:SI    5 "reg_or_0_operand")
-     (match_operand:SI    6 "const_int_operand")
-     ] UNSPECV_SFPSTORE_BH)]
-  "TARGET_XTT_TENSIX_BH"
-{
-  rtx insn = nullptr;
-  if (CONST_INT_P (operands[4]))
-    insn = gen_rvtt_sfpstore_int_bh (operands[1], operands[2], operands[3],
-    	                             rvtt_clamp_unsigned (operands[4], 0x1FFF));
-  else
-    {
-      unsigned op = TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0);
-      insn = rvtt_sfpsynth_store_insn (operands[0], CODE_FOR_rvtt_sfpstore_int_bh,
-                                       0, operands[5], op, operands[6],
-                                       operands[1], 20);
-    }
-  emit_insn (insn);
-  DONE;
-})
-
-;; stores cannot write from L12..L15 due to load macro side loading possibility
-(define_insn "rvtt_sfpstore_int_bh"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxs")
-     (match_operand:SI    1 "const_int_operand" "N04U")
-     (match_operand:SI    2 "const_int_operand" "N03U")
-     (match_operand:SI    3 "const_int_operand" "N13U")
-     ] UNSPECV_SFPSTORE_BH)]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPSTORE\t%x0, %3, %1, %2"
-  [(set_attr "type" "tensix")])
-
 
 (define_expand "rvtt_sfpmov_config_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")

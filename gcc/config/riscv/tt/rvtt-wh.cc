@@ -62,20 +62,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 
-void rvtt_emit_sfpload_wh(rtx dst, rtx lv, rtx addr, rtx mod, rtx mode, rtx imm, rtx nonimm, rtx id)
-{
-  rtx insn = nullptr; 
-  if (CONST_INT_P (imm))
-    insn = gen_rvtt_sfpload_int_wh (dst, lv, mod, mode, rvtt_clamp_unsigned (imm, 0x3FFF));
-  else
-    {
-      unsigned op = TT_OP_WH_SFPLOAD (0, INTVAL (mod), INTVAL (mode), 0);
-      insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_sfpload_int_wh,
-				     0, nonimm, op, id, dst, 20, lv);
-    }
-  emit_insn (insn);
-}
-
 void rvtt_emit_sfpxloadi_wh(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
 {
   int int_mod = INTVAL(mod);
