@@ -430,10 +430,10 @@
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI 1 "address_operand")
-          (match_operand:SI 2 "const_int_operand")
-          (match_operand:SI 3 "const_int_operand")
-          (match_operand:SI 4 "reg_or_const_int_operand")
-          (match_operand:SI 5 "reg_or_0_operand")
+          (match_operand:SI 2 "reg_or_const_int_operand")
+          (match_operand:SI 3 "reg_or_0_operand")
+          (match_operand:SI 4 "const_int_operand")
+          (match_operand:SI 5 "const_int_operand")
           (match_operand:SI 6 "const_int_operand")
 	  ] UNSPECV_SFPLOAD))]
   "TARGET_XTT_TENSIX"
@@ -449,29 +449,30 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI    1 "address_operand")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:SI    3 "const_int_operand")
-          (match_operand:SI    4 "const_int_operand")
-          (match_operand:SI    5 "reg_or_const_int_operand")
-          (match_operand:SI    6 "reg_or_0_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "reg_or_0_operand")
+          (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
           (match_operand:SI    7 "const_int_operand")
 	  ] UNSPECV_SFPLOAD))]
   "TARGET_XTT_TENSIX"
 {
   rtx insn = nullptr;
-  if (CONST_INT_P (operands[5]))
+  if (CONST_INT_P (operands[3]))
     insn = gen_rvtt_sfpload_int
-       (operands[0], operands[2], operands[3], operands[4],
-        rvtt_clamp_unsigned (operands[5], (TARGET_XTT_TENSIX_WH ? 0x3fff
+       (operands[0], operands[2],
+        rvtt_clamp_unsigned (operands[3], (TARGET_XTT_TENSIX_WH ? 0x3fff
 	                                   : TARGET_XTT_TENSIX_BH ? 0x1fff
-					   : 0)));
+					   : 0)),
+        operands[6], operands[7]);
   else
     {
       unsigned op
-        = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOAD (0, INTVAL (operands[3]), INTVAL (operands[4]), 0)
-	: TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOAD (0, INTVAL (operands[3]), INTVAL (operands[4]), 0)
+        = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
+	: TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
 	: 0;
       insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_sfpload_int,
-				     0, operands[6], op, operands[7], operands[0], 20, operands[2]);
+				     0, operands[4], op, operands[5], operands[0], 20, operands[2]);
     }
   emit_insn (insn);
   DONE;
@@ -481,40 +482,41 @@
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
-          (match_operand:SI    2 "const_int_operand" "N04U,N04U")
-          (match_operand:SI    3 "const_int_operand" "N03U,N03U") ;; largest constraint (bh)
-          (match_operand:SI    4 "const_int_operand" "N14U,N14U") ;; largest constaint (wh)
+          (match_operand:SI    2 "const_int_operand" "N14U,N14U") ;; largest constaint (wh)
+          (match_operand:SI    3 "const_int_operand" "N04U,N04U")
+          (match_operand:SI    4 "const_int_operand" "N03U,N03U") ;; largest constraint (bh)
 	  ] UNSPECV_SFPLOAD))]
   "TARGET_XTT_TENSIX"
-  "SFPLOAD\t%0, %4, %2, %3"
+  "SFPLOAD\t%0, %2, %3, %4"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstore"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI    0 "address_operand")
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
-     (match_operand:SI    2 "const_int_operand")
-     (match_operand:SI    3 "const_int_operand")
-     (match_operand:SI    4 "reg_or_const_int_operand")
-     (match_operand:SI    5 "reg_or_0_operand")
+     (match_operand:SI    2 "reg_or_const_int_operand")
+     (match_operand:SI    3 "reg_or_0_operand")
+     (match_operand:SI    4 "const_int_operand")
+     (match_operand:SI    5 "const_int_operand")
      (match_operand:SI    6 "const_int_operand")
      ] UNSPECV_SFPSTORE)]
   "TARGET_XTT_TENSIX"
 {
   rtx insn = nullptr;
-  if (CONST_INT_P (operands[4]))
+  if (CONST_INT_P (operands[2]))
     insn = gen_rvtt_sfpstore_int
-      (operands[1], operands[2], operands[3],
-       rvtt_clamp_unsigned (operands[4], (TARGET_XTT_TENSIX_WH ? 0x3fff
+      (operands[1], 
+       rvtt_clamp_unsigned (operands[2], (TARGET_XTT_TENSIX_WH ? 0x3fff
 	                                  : TARGET_XTT_TENSIX_BH ? 0x1fff
-					  : 0)));
+					  : 0)),
+       operands[5], operands[6]);
   else
     {
-      unsigned op = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0)
-                  : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPSTORE (0, INTVAL (operands[2]), INTVAL (operands[3]), 0)
+      unsigned op = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
+                  : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
                   : 0;
       insn = rvtt_sfpsynth_store_insn (operands[0], CODE_FOR_rvtt_sfpstore_int,
-                                       0, operands[5], op, operands[6],
+                                       0, operands[3], op, operands[4],
                                        operands[1], 20);
     }
   emit_insn (insn);
@@ -525,12 +527,12 @@
 (define_insn "rvtt_sfpstore_int"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxs")
-     (match_operand:SI    1 "const_int_operand" "N04U")
-     (match_operand:SI    2 "const_int_operand" "N03U") ;; largest constraint (bh)
-     (match_operand:SI    3 "const_int_operand" "N14U") ;; largest constraint (wh)
+     (match_operand:SI    1 "const_int_operand" "N14U") ;; largest constraint (wh)
+     (match_operand:SI    2 "const_int_operand" "N04U")
+     (match_operand:SI    3 "const_int_operand" "N03U") ;; largest constraint (bh)
      ] UNSPECV_SFPSTORE)]
   "TARGET_XTT_TENSIX"
-  "SFPSTORE\t%x0, %3, %1, %2"
+  "SFPSTORE\t%x0, %1, %2, %3"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpsetcc_i"

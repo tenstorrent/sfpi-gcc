@@ -159,7 +159,7 @@ void one (int i) {
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
-**	SFPSTORE	L0, 0, 2, 0
+**	SFPSTORE	L0, 2, 0, 0
 **	ret
 */
 
@@ -218,7 +218,7 @@ void four (int i) {
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
-**	SFPSTORE	L0, 0, 2, 0
+**	SFPSTORE	L0, 2, 0, 0
 **	ret
 */
 
@@ -241,7 +241,7 @@ void five (int i) {
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
-**	SFPSTORE	L0, 0, 2, 0
+**	SFPSTORE	L0, 2, 0, 0
 **	ret
 */
 
@@ -268,7 +268,7 @@ int six (int i) {
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 **	SFPNOP
-**	SFPSTORE	L0, 0, 2, 0
+**	SFPSTORE	L0, 2, 0, 0
 **	li	a0,1
 **	ret
 */

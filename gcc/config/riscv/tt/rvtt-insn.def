@@ -108,10 +108,10 @@ RVTT_FN (ttincrwc,           ,,VOID_FTYPE_USI_USI_USI_USI,                      
 // The length operand is [1,32], which is awkward
 RVTT_FN (ttreplay,           ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
 
-RVTT_FN (sfpload,            wh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  2,  3, 0x3FFF, 0)
-RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  2,  3, 0x1FFF, 0)
-RVTT_FN (sfpload_lv,         wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  3,  4, 0x3FFF, 0)
-RVTT_OVR(sfpload_lv,         bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  3,  4, 0x1FFF, 0)
+RVTT_FN (sfpload,            wh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  4,  1, 0x3FFF, 0)
+RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  4,  1, 0x1FFF, 0)
+RVTT_FN (sfpload_lv,         wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  5,  2, 0x3FFF, 0)
+RVTT_OVR(sfpload_lv,         bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  5,  2, 0x1FFF, 0)
 RVTT_FN (sfpxloadi,       wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  1,  2, 0xFFFF, 0)
 RVTT_OVR(sfpxloadi,       bh,_bh,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  1,  2, 0xFFFF, 0)
 RVTT_FN (sfpxloadi_lv,    wh,_wh,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x02, -1,  2,  3, 0xFFFF0000, -16)
@@ -167,8 +167,8 @@ RVTT_FN (sfparecip_lv,    bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_FN (sfpmov_config,   bh,_bh,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
 RVTT_FN (sfpmov_config_lv,bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
 
-RVTT_FN (sfpstore,           wh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  3,  4, 0x3FFF, 0)
-RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  3,  4, 0x1FFF, 0)
+RVTT_FN (sfpstore,           wh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x3FFF, 0)
+RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0x00, -1,  5,  2, 0x1FFF, 0)
 RVTT_FN (sfpconfig_v,     wh,_wh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 RVTT_OVR(sfpconfig_v,     bh,_bh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
