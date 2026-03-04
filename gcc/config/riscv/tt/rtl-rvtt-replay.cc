@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
+#include "recog.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -121,9 +122,9 @@ using replay_active = std::vector<replay_sequence *>;
 enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_variable_capture};
 
 static REPLAY_TYPE
-is_replay_insn (replay_span &span, rtx_insn const *insn)
+is_replay_insn (replay_span &span, rtx_insn *insn)
 {
-  int icode = INSN_CODE (insn);
+  int icode = recog_memoized (insn);
   auto pattern = PATTERN (insn);
 
   if (icode == CODE_FOR_rvtt_ttreplay_int)
@@ -289,7 +290,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	  return hash;
 	};
 
-	unsigned hash = hasher (hasher, INSN_CODE (insn), pattern);
+	unsigned hash = hasher (hasher, recog_memoized (insn), pattern);
 	info.emplace_back (insn, age, hash, is_empty);
 
 	may_continue = true;

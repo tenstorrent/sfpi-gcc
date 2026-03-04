@@ -28,6 +28,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
+#include "insn-config.h"
+#include "recog.h"
 #include "rvtt.h"
 #include <unordered_map>
 
@@ -63,16 +65,17 @@ transform (function *fn)
 	    continue;
 
 	  unsigned id = 0;
-	  bool is_opcode = INSN_CODE (insn) == CODE_FOR_rvtt_synth_opcode;
+	  unsigned icode = recog_memoized (insn);
+	  bool is_opcode = icode == CODE_FOR_rvtt_synth_opcode;
 	  bool has_dst = false;
 	  if (is_opcode)
 	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 1));
 	  else
 	    {
-	      has_dst = INSN_CODE (insn) == CODE_FOR_rvtt_sfpsynth_insn_dst;
+	      has_dst = icode == CODE_FOR_rvtt_sfpsynth_insn_dst;
 	      if (!has_dst
-		  && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_insn
-		  && INSN_CODE (insn) != CODE_FOR_rvtt_sfpsynth_store_insn)
+		  && icode != CODE_FOR_rvtt_sfpsynth_insn
+		  && icode != CODE_FOR_rvtt_sfpsynth_store_insn)
 		// Nothing here.
 		continue;
 

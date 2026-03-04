@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
+#include "recog.h"
 #include "rvtt.h"
 
 /* Walk the BB graph from PROBE_INSN until we meet a TENSIX insn. Return true
@@ -80,7 +81,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 
 	if (!regno)
 	  {
-	    bool is_nop = INSN_CODE (probe_insn) == CODE_FOR_rvtt_sfpnop;
+	    bool is_nop = recog_memoized (probe_insn) == CODE_FOR_rvtt_sfpnop;
 	    if (dump_file)
 	      {
 		fprintf (dump_file, "Found %snop insn ", is_nop ? "" : "non-");
