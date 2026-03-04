@@ -10687,9 +10687,13 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_REPLAY;
       }
 
-      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_FIX_WHRAW)
+      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_FIX_WH_RAW)
 	  && is_cpu_kind ("tt-wh"))
-	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_FIX_WHRAW;
+	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_FIX_WH_RAW;
+
+      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_FIX_WHBH_EBREAK)
+	  && (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh")))
+	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_FIX_WHBH_EBREAK;
 
       if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_OPT_EXTEND)
 	  && (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))

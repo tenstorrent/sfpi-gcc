@@ -41,7 +41,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-unspec-prop.o \
 	gimple-rvtt-warn.o \
-	rtl-rvtt-fix-wh.o \
+	rtl-rvtt-fix-ebreak.o \
+	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \

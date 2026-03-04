@@ -551,8 +551,12 @@ mtt-dump-stats
 Target Mask(XTT_DUMP_STATS) Var(riscv_tt_flags)
 TT-specific internal dumps.
 
+mtt-fix-whbhebreak
+Target Mask(XTT_FIX_WHBH_EBREAK) Var(riscv_tt_flags)
+Emit code to address Wormhole/Blackhole ebreak erratum
+
 mtt-fix-whraw
-Target Mask(XTT_FIX_WHRAW) Var(riscv_tt_flags)
+Target Mask(XTT_FIX_WH_RAW) Var(riscv_tt_flags)
 Emit code to address Wormhole RAW hazard
 
 mtt-optimize-extend

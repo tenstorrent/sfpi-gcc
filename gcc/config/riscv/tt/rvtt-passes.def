@@ -36,6 +36,7 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
+INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);
 INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
@@ -46,4 +47,4 @@ INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 // that causes df_analyze to crash, so run before that And, free_cfg pass calls
 // free_bb_for_insn resulting in problems w/ df_analyze, so call before that
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_hll);
-INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_wh);
+INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_raw);

@@ -1,6 +1,7 @@
 /* Pass to work around GS' memory aribtration bug
    Copyright (C) 2022-2025 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -104,7 +105,7 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
 // desirable to sink the load as late as possible.)
 
 static void
-workaround_wh_raw (function *cfn)
+workaround_raw (function *cfn)
 {
   DUMP("RAW pass on: %s\n", function_name(cfn));
 
@@ -173,10 +174,10 @@ workaround_wh_raw (function *cfn)
 
 namespace {
 
-const pass_data pass_data_rvtt_fix_wh =
+const pass_data pass_data_rvtt_fix_raw =
 {
   RTL_PASS, /* type */
-  "rvtt_fix_wh", /* name */
+  "rvtt_fix_raw", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
@@ -186,25 +187,25 @@ const pass_data pass_data_rvtt_fix_wh =
   0, /* todo_flags_finish */
 };
 
-class pass_rvtt_fix_wh : public rtl_opt_pass
+class pass_rvtt_fix_raw : public rtl_opt_pass
 {
 private:
 
 public:
-  pass_rvtt_fix_wh (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rvtt_fix_wh, ctxt)
+  pass_rvtt_fix_raw (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_rvtt_fix_raw, ctxt)
   {
   }
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_FIX_WHRAW;
+    return TARGET_XTT_FIX_WH_RAW;
   }
   
   /* opt_pass methods: */
   virtual unsigned execute (function *cfn) override
     {
-      workaround_wh_raw (cfn);
+      workaround_raw (cfn);
 
       return 0;
     }
@@ -213,7 +214,7 @@ public:
 } // anon namespace
 
 rtl_opt_pass *
-make_pass_rvtt_fix_wh (gcc::context *ctxt)
+make_pass_rvtt_fix_raw (gcc::context *ctxt)
 {
-  return new pass_rvtt_fix_wh (ctxt);
+  return new pass_rvtt_fix_raw (ctxt);
 }

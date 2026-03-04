@@ -80,7 +80,8 @@ extern gimple_opt_pass *make_pass_rvtt_warn (gcc::context *ctxt);
 
 // RTL passes
 class rtl_opt_pass;
-extern rtl_opt_pass *make_pass_rvtt_fix_wh (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
