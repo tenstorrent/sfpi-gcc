@@ -270,8 +270,8 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	      break;
 
 	    case MEM:
-	      // MEMs are to store a synthesized insn.  All are equivalent
-	      gcc_assert (GET_MODE (rtl) == SImode);
+	      // MEMs are to store a synthesized insn.  All are equivalent.
+	      // In broken code, we could meet simple sets moving to/from MEM.
 	      break;
 
 	    case CLOBBER:
@@ -319,9 +319,15 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
 	if (GET_CODE (*a) != GET_CODE (*b))
 	  return false;
 
-	if (GET_CODE (*a) != CLOBBER
-	    && GET_CODE (*a) != MEM
-	    && GET_CODE (*a) != SCRATCH)
+	if (GET_CODE (*a) == MEM)
+	  {
+	    if (GET_MODE (*a) != SImode)
+	      // This is (probably) broken code attempting to spill/fill an
+	      // LReg
+	      return false;
+	  }
+	else if (GET_CODE (*a) != CLOBBER
+		 && GET_CODE (*a) != SCRATCH)
 	  return false;
 
 	gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
