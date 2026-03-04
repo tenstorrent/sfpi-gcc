@@ -4813,5 +4813,4 @@
 (include "ttrocc.md")
 
 (include "tt/rvtt.md")
-(include "tt/rvtt-wh.md")
 (include "tt/rvtt-bh.md")

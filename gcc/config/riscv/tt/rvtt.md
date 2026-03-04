@@ -81,6 +81,8 @@
   UNSPECV_SFPDIVP2
   UNSPECV_SFPSTOCHRND
 
+  UNSPECV_SFPCONFIG
+
   UNSPECV_SFPLUT
   UNSPECV_SFPLUTFP32_3R
   UNSPECV_SFPLUTFP32_6R
@@ -1298,6 +1300,37 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
   "SFPSTOCHRND\t%0, %x3, %x2, %5, %4, 0"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpreadconfig"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI 1 "const_int_operand" "N04U")
+	  ] UNSPECV_SFPCONFIG))]
+  "TARGET_XTT_TENSIX_BH"
+  {
+    emit_insn (gen_rvtt_sfpreadconfig_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1]));
+    DONE;
+  })
+
+(define_insn "rvtt_sfpreadconfig_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn")
+          (match_operand:SI 2 "const_int_operand" "N04U,N04U")
+	  ] UNSPECV_SFPCONFIG))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFPMOV\t%0, L%2, 8"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpwriteconfig_v"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "register_operand"   "x0")
+     (match_operand:SI    1 "const_int_operand"  "N04U")
+     ] UNSPECV_SFPCONFIG)]
+  "TARGET_XTT_TENSIX"
+  "SFPCONFIG\t%1, 0, 0"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfplut"

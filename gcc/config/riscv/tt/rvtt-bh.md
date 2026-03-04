@@ -23,45 +23,11 @@
 
 (define_c_enum "unspecv" [
   ;; Tenstorrent SFPU unspecs.
-  UNSPECV_SFPLOADI_BH
-  UNSPECV_SFPCONFIG_V_BH
   UNSPECV_SFPMUL24_BH
   UNSPECV_SFPARECIP_BH
   UNSPECV_SFPGT_BH
   UNSPECV_SFPLE_BH
-  UNSPECV_SFPMOV_CONFIG_BH
 ])
-
-(define_expand "rvtt_sfpmov_config_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI 1 "const_int_operand" "N04U")
-	  ] UNSPECV_SFPMOV_CONFIG_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  {
-    emit_insn (gen_rvtt_sfpmov_config_lv_bh
-                 (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1]));
-    DONE;
-  })
-
-(define_insn "rvtt_sfpmov_config_lv_bh"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0,xn")
-          (match_operand:SI 2 "const_int_operand" "N04U,N04U")
-	  ] UNSPECV_SFPMOV_CONFIG_BH))]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPMOV\t%0, L%2, 8"
-  [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_sfpconfig_v_bh"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "register_operand"   "x0")
-     (match_operand:SI    1 "const_int_operand"  "N04U")
-     ] UNSPECV_SFPCONFIG_V_BH)]
-  "TARGET_XTT_TENSIX_BH"
-  "SFPCONFIG\t%1, 0, 0"
-  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpmul24_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")

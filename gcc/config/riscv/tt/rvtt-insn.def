@@ -152,17 +152,16 @@ RVTT_FN (sfpstochrnd_i_lv,     ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_
 RVTT_FN (sfpstochrnd_v,        ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0x00, -1,  3, -1,      0, 0)
 RVTT_FN (sfpstochrnd_v_lv,     ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              0x02, -1,  4, -1,      0, 0)
 
+RVTT_FN (sfpreadconfig,      bh,,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
+RVTT_FN (sfpreadconfig_lv,   bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
+RVTT_FN (sfpwriteconfig_v,     ,,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
+
 RVTT_FN (sfpmul24,        bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x00, -1,  2, -1,      0, 0)
 RVTT_FN (sfpmul24_lv,     bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x02, -1,  3, -1,      0, 0)
 RVTT_FN (sfpgt,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x01, -1,  1, -1,      0, 0)
 RVTT_FN (sfple,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x01, -1,  1, -1,      0, 0)
 RVTT_FN (sfparecip,       bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfparecip_lv,    bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
-RVTT_FN (sfpmov_config,   bh,_bh,XTT_VEC_FTYPE_USI,                                          0x00, -1, -1, -1,      0, 0)
-RVTT_FN (sfpmov_config_lv,bh,_bh,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
-
-RVTT_FN (sfpconfig_v,     wh,_wh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
-RVTT_OVR(sfpconfig_v,     bh,_bh,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
 #undef RVTT_FN
 #undef RVTT_OVR
