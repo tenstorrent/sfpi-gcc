@@ -94,6 +94,12 @@
   UNSPECV_SFPSHFT2_SUBVEC_SHFL1_COPY4
   UNSPECV_SFPSHFT2_SUBVEC_SHFL1
 
+  UNSPECV_SFPGT
+  UNSPECV_SFPLE
+
+  UNSPECV_SFPMUL24
+  UNSPECV_SFPARECIP
+
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
@@ -1840,6 +1846,74 @@
      operands[3]));
   DONE;
 })
+
+(define_int_iterator rvtt_gtle_op [
+  UNSPECV_SFPGT
+  UNSPECV_SFPLE
+  ])
+(define_int_attr rvtt_gtle_name [
+  (UNSPECV_SFPGT "gt")
+  (UNSPECV_SFPLE "le")
+  ])
+(define_int_attr rvtt_gtle_insn [
+  (UNSPECV_SFPGT "GT")
+  (UNSPECV_SFPLE "LE")
+  ])
+(define_insn "rvtt_sfp<rvtt_gtle_name>"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:SI    2 "const_int_operand" "N04U")
+	  ] rvtt_gtle_op))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFP<rctt_gtle_insn>\t%0, %x1, 0, %2"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpmul24"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:SI    3 "const_int_operand" "N04U")
+	  ] UNSPECV_SFPMUL24))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFPMUL24\t%0, %x1, %x2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
+
+(define_insn "rvtt_sfpmul24_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "register_operand" "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:SI    4 "const_int_operand" "N04U")
+	  ] UNSPECV_SFPMUL24))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFPMUL24\t%0, %x2, %x3, %4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay_bh" "dynamic")])
+
+(define_insn "rvtt_sfparecip"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:SI    2 "const_int_operand")
+	  ] UNSPECV_SFPARECIP))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFPARECIP\t%0, %x1, %2"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfparecip_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "register_operand"  "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xr")
+          (match_operand:SI    3 "const_int_operand" "N04U")
+	  ] UNSPECV_SFPARECIP))]
+  "TARGET_XTT_TENSIX_BH"
+  "SFPARECIP\t%0, %x2, %3"
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [
