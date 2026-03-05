@@ -118,8 +118,8 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt
 // architecture can support.
 // TODO update tune parameter
 // #31429 disable compressed insns ('c' is removed), it interfers with our post-processing.
-RISCV_CORE("tt-qsr64", "rv64ima_zicsr_zba_zbb_zbs_zifencei", "lp64", "rvtt-b1")
-RISCV_CORE("tt-qsr64-rocc",        "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttroccqsr", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64", "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttcache", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64-rocc",        "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttcache_xttroccqsr", "lp64", "rvtt-b1")
 // disable vector insns ('v' is removed), tt-sim doesn't grok them
 RISCV_CORE("tt-qsr32", "rv32imaf","ilp32f", "rvtt-b1")
 
