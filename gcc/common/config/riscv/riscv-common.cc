@@ -442,7 +442,7 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"xsfvqmaccdod",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"xsfvfnrclipxfqf", ISA_SPEC_CLASS_NONE, 1, 0},
 
-  {"xttrocc", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"xttroccqsr", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtttensixwh", ISA_SPEC_CLASS_NONE, 1, 0},
   {"xtttensixbh", ISA_SPEC_CLASS_NONE, 1, 0},
 
