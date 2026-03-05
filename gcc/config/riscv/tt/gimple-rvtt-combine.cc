@@ -313,7 +313,7 @@ try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
 
   // Check for candidate iadd_i that sets the CC and compares to 0
   if (candidate_insnd->id == rvtt_insn_data::sfpxiadd_i &&
-      is_int_arg(candidate_stmt, SFPXIADD_IMM_ARG_POS) && (get_int_arg(candidate_stmt, SFPXIADD_IMM_ARG_POS) == 0) &&
+      is_int_arg(candidate_stmt, candidate_insnd->nonimm_pos) && (get_int_arg(candidate_stmt, candidate_insnd->nonimm_pos) == 0) &&
       ((get_int_arg(candidate_stmt, candidate_insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) != 0) &&
       gimple_call_lhs(candidate_stmt) == nullptr)
     {

@@ -1,6 +1,7 @@
 /* TT helper routines
    Copyright (C) 2022-2025 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -441,7 +442,7 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
 {
   int mod0 = get_int_arg(stmt, insnd->mod_pos);
   bool representable = false;
-  tree arg = gimple_call_arg(stmt, SFPXLOADI_IMM_POS);
+  tree arg = gimple_call_arg(stmt, insnd->nonimm_pos);
 
   switch (mod0) {
   case SFPLOADI_MOD0_FLOATB:
@@ -892,7 +893,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
       // Load imm into dst
       int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
       rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), addr,
-			      GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
+			   GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
       
       unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
       if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)

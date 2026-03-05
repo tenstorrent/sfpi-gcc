@@ -373,9 +373,9 @@
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:XTT32SI [
 	  (match_operand:SI 1 "address_operand")
-          (match_operand:SI 2 "const_int_operand")
-          (match_operand:SI 3 "reg_or_const_int_operand")
-          (match_operand:SI 4 "reg_or_0_operand")
+          (match_operand:SI 2 "reg_or_const_int_operand")
+          (match_operand:SI 3 "reg_or_0_operand")
+          (match_operand:SI 4 "const_int_operand")
           (match_operand:SI 5 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
@@ -391,16 +391,16 @@
         (unspec:XTT32SI [
 	  (match_operand:SI    1 "address_operand")
           (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:SI    3 "const_int_operand")
-          (match_operand:SI    4 "reg_or_const_int_operand")
-          (match_operand:SI    5 "reg_or_0_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "reg_or_0_operand")
+          (match_operand:SI    5 "const_int_operand")
           (match_operand:SI    6 "const_int_operand")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
   rvtt_emit_sfpxloadi
     (operands[0], operands[2],
-     operands[1], operands[3], operands[4], operands[5], operands[6]);
+     operands[1], operands[6], operands[3], operands[4], operands[5]);
   DONE;
 })
 

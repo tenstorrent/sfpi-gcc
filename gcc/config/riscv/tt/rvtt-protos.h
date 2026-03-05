@@ -99,8 +99,6 @@ constexpr unsigned int SFPMOV_MOD1_COMPL = 1; // negate
 constexpr unsigned int SFPMOV_MOD1_ALL = 2; // copy all lanes
 constexpr unsigned int SFPMOV_MOD1_CFG = 8; // read cfg register
 
-constexpr unsigned int SFPLOADI_IMM_ARG_POS = 2;
-constexpr unsigned int SFPLOADI_LV_IMM_ARG_POS = 3;
 constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
 constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
@@ -112,7 +110,6 @@ constexpr unsigned int SFPXLOADI_MOD0_32BIT_MASK = 16;
 constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
 constexpr unsigned int SFPXLOADI_MOD0_UINT32 = 17;
 constexpr unsigned int SFPXLOADI_MOD0_FLOAT = 18;
-constexpr unsigned int SFPXLOADI_IMM_POS = 2;
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
@@ -161,7 +158,6 @@ constexpr unsigned int SFPXIADD_MOD1_12BIT = 32;
 constexpr unsigned int SFPXIADD_MOD1_16BIT = 64;
 constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128;
 constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;
-constexpr unsigned int SFPXIADD_IMM_ARG_POS = 2;
 
 constexpr unsigned int SFPXCMP_MOD1_CC_NONE = 0;
 constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
