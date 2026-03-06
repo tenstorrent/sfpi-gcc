@@ -935,7 +935,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	  if (REG_P (lv))
 	    insn = gen_rvtt_sfpassign_lv (dst, lv, src);
 	  else
-	    insn = gen_rvtt_sfpmovwhole (dst, src);
+	    insn = gen_rvtt_sfpassign (dst, src);
 	  emit_insn (insn);
 	}
     }

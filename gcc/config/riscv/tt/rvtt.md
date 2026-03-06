@@ -511,19 +511,31 @@
     DONE;
 })
 
-(define_insn "rvtt_sfpmovwhole"
-  [(set (match_operand:XTT32SI 0 "nonimmediate_operand" "=xr,xr,m")
-        (match_operand:XTT32SI 1 "nonimmediate_or_cstlreg_operand" " xrxc,m,xrxc"))]
-  "TARGET_XTT_TENSIX
-   && (register_operand (operands[0], XTT32SImode)
-       || reg_or_cstlreg_operand (operands[1], XTT32SImode))"
+(define_insn "*rvtt_store"
+  [(set (match_operand:XTT32SI 0 "memory_operand" "=m")
+        (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "xrxc"))]
+  "TARGET_XTT_TENSIX"
   {
-    if (!which_alternative)
-      return "SFPMOV\t%0, %x1, 2";
-
-    rvtt_mov_error (insn, which_alternative == 1);
-    gcc_unreachable ();
+    rvtt_mov_error (insn, false);
+    return "BADSTORE %x1,%0";
   }
+  [(set_attr "type" "tensix")])
+
+(define_insn "*rvtt_load"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (match_operand:XTT32SI 1 "memory_operand" "m"))]
+  "TARGET_XTT_TENSIX"
+  {
+    rvtt_mov_error (insn, true);
+    return "BADLOAD %x1,%0";
+  }
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpassign"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "xrxc"))]
+  "TARGET_XTT_TENSIX"
+  "SFPMOV\t%0, %x1, 2"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpassign_lv"
