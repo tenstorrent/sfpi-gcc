@@ -206,11 +206,11 @@ process_block_stmts(basic_block bb,
 		    // Replace outermost popc with encc
 		    const rvtt_insn_data *new_insnd =
 		      rvtt_get_insn_data(rvtt_insn_data::sfpencc);
-		    gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, size_int(3), size_int(10));
-		    if (new_stmt == nullptr) {
-		      gcc_unreachable();
-		    }
-
+		    gimple *new_stmt = gimple_build_call
+		      (new_insnd->decl, 2,
+		       build_int_cst (unsigned_type_node, SFPENCC_MOD1_EI_RI),
+		       build_int_cst (unsigned_type_node, SFPENCC_IMM12_BOTH));
+		    
 		    gimple_set_vuse (new_stmt, gimple_vuse (stmt));
 		    gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		    gimple_set_location (new_stmt, gimple_location (stmt));

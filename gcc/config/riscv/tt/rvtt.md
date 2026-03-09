@@ -674,11 +674,11 @@
 
 (define_insn "rvtt_sfpsetcc_i"
   [(unspec_volatile:XTT32SI [
-     (match_operand:SI    0 "const_int_operand" "N01U")
-     (match_operand:SI    1 "const_int_operand" "N04U")
+     (match_operand:SI    0 "const_int_operand" "N04U")
+     (match_operand:SI    1 "const_int_operand" "N01U")
      ] UNSPECV_SFPSETCC)]
   "TARGET_XTT_TENSIX"
-  "SFPSETCC\tL0, %0, %1"
+  "SFPSETCC\tL0, %1, %0"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpsetcc_v"
@@ -692,11 +692,11 @@
 
 (define_insn "rvtt_sfpencc"
   [(unspec_volatile:XTT32SI [
-     (match_operand:SI 0 "const_int_operand" "N02U")
-     (match_operand:SI 1 "const_int_operand" "N04U")
+     (match_operand:SI 0 "const_int_operand" "N04U")
+     (match_operand:SI 1 "const_int_operand" "N02U")
      ] UNSPECV_SFPENCC)]
   "TARGET_XTT_TENSIX"
-  "SFPENCC\t%0, %1"
+  "SFPENCC\t%1, %0"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpcompc"
@@ -1268,8 +1268,8 @@
   else
     {
       unsigned op
-      = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[7]), 0, 0, 0, 0, INTVAL (operands[8]))
-      : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[7]), 0, 0, 0, 0, INTVAL (operands[8]))
+      = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]))
+      : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]))
       : 0;
       insn = rvtt_sfpsynth_insn_dst (operands[1], CODE_FOR_rvtt_sfpstochrnd_i_int,
 				     0, operands[5], op, operands[6], operands[3], 4, operands[0], 8, operands[2]);
@@ -1284,11 +1284,11 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:SI    3 "const_int_operand" "N05U,N05U")
-          (match_operand:SI    4 "const_int_operand" "N01U,N01U")
-          (match_operand:SI    5 "const_int_operand" "N04U,N04U")
+          (match_operand:SI    4 "const_int_operand" "N04U,N04U")
+          (match_operand:SI    5 "const_int_operand" "N01U,N01U")
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
-  "SFPSTOCHRND\t%0, L0, %x2, %5, %4, %3"
+  "SFPSTOCHRND\t%0, L0, %x2, %4, %5, %3"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpstochrnd_v"
@@ -1313,11 +1313,11 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:SI    4 "const_int_operand" "N01U,N01U")
-          (match_operand:SI    5 "const_int_operand" "N04U,N04U")
+          (match_operand:SI    4 "const_int_operand" "N04U,N04U")
+          (match_operand:SI    5 "const_int_operand" "N01U,N01U")
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
-  "SFPSTOCHRND\t%0, %x3, %x2, %5, %4, 0"
+  "SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpreadconfig"
