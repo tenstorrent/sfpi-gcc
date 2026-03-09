@@ -327,75 +327,76 @@ void rvtt_prep_stmt_for_deletion(gimple *stmt)
 
 // Generate the assembly for an sfpsynt_insn{,_dst} insn.
 
-char const *
-rvtt_synth_insn_pattern (rtx *operands, unsigned clobber_op)
+const char *
+rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
+		     rtx operands[], bool is_set, int tmp_ix)
 {
+  if (!is_synthed)
+    return tmpl;
+
+  operands += is_set; // Whee!
+
+  auto enc = rvtt_synth (INTVAL (operands[rvtt_synth::IX_encode]));
   uint32_t reg_mask = 0;
   uint32_t reg_ops = 0;
-  rtx src_op = operands[SYNTH_src];
 
-  unsigned regno;
-  bool is_reg = true;
-  if (REG_P (src_op))
-    regno = REGNO (src_op) - SFPU_REG_FIRST;
-  else
-    {
-      gcc_assert (GET_CODE (src_op) == UNSPEC);
-      if (XINT (src_op, 1) == UNSPEC_SFPCSTLREG)
-	regno = INTVAL (XVECEXP (src_op, 0, 0));
-      else
-	is_reg = false;
-    }
-  if (is_reg)
-    {
-      unsigned src_shift = unsigned (INTVAL (operands[SYNTH_src_shift]));
-      reg_mask |= 0xf << src_shift;
-      reg_ops |= regno << src_shift;
-    }
+  bool has_src = true;
+  {
+    auto src_op = operands[rvtt_synth::IX_src];
+    unsigned src_regno;
+    if (REG_P (src_op))
+      src_regno = REGNO (src_op) - SFPU_REG_FIRST;
+    else
+      {
+	gcc_assert (GET_CODE (src_op) == UNSPEC);
+	if (XINT (src_op, 1) == UNSPEC_SFPCSTLREG)
+	  src_regno = INTVAL (XVECEXP (src_op, 0, 0));
+	else
+	  has_src = false;
+      }
 
-  bool has_dst = clobber_op > SYNTH_dst;
-  if (has_dst)
+    if (has_src)
+      {
+	unsigned src_shift = enc.src_shift ();
+	reg_mask |= 0xf << src_shift;
+	reg_ops |= src_regno << src_shift;
+      }
+  }
+
+  if (is_set)
     {
-      rtx dst_reg = operands[SYNTH_dst];
+      rtx dst_reg = operands[-1];
       gcc_assert (REG_P (dst_reg));
-      unsigned dst_shift = unsigned (INTVAL (operands[SYNTH_dst_shift]));
+      unsigned dst_shift = enc.dst_shift ();
       reg_mask |= 0xf << dst_shift;
       reg_ops |= (REGNO (dst_reg) - SFPU_REG_FIRST) << dst_shift;
     }
-  gcc_assert (!reg_mask == !REG_P (operands[clobber_op]));
+  gcc_assert (!reg_mask == (tmp_ix < 0));
 
-  uint32_t opcode = INTVAL (operands[SYNTH_opcode]);
+  uint32_t opcode = INTVAL (operands[rvtt_synth::IX_opcode]);
   static char pattern[100];
   unsigned pos = 0;
-  unsigned synth_opno = SYNTH_synthed;
   if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
     {
       // The register assignments here are different from those of the
       // first synth encountered.  We must adjust the incomming
       // pattern.
+      // Swap, so the templ prints the temp reg
+      std::swap (operands[rvtt_synth::IX_insn], operands[tmp_ix - is_set]);
       opcode ^= reg_change;
-      operands[SYNTH_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
+      operands[rvtt_synth::IX_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
       pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
 		       "li\t%%%d,%%%d\n\txor\t%%%d,%%%d,%%%d\n\t",
-		       clobber_op, SYNTH_opcode,
-		       clobber_op, clobber_op, SYNTH_synthed);
-      synth_opno = clobber_op;
+		       is_set + rvtt_synth::IX_insn,
+		       is_set + rvtt_synth::IX_opcode,
+		       is_set + rvtt_synth::IX_insn,
+		       is_set + rvtt_synth::IX_insn, tmp_ix);
     }
 
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "sw\t%%%u, %%%d\t# %d:%x",
-		   synth_opno, SYNTH_mem,
-		   unsigned (INTVAL (operands[SYNTH_id])), opcode);
-  bool has_lv = false;
-  if (has_dst)
-    {
-      pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " %%%d :=", SYNTH_dst);
-      has_lv = REG_P (operands[SYNTH_lv]);
-      if (has_lv)
-	pos += snprintf (&pattern[pos], sizeof (pattern) - pos, " LV");
-    }
-  if (is_reg)
-    pos += snprintf (&pattern[pos], sizeof (pattern) - pos, &", %%x%d"[!has_lv], SYNTH_src);
+		   "sw\t%%%u, %%%d\t# %d:%s",
+		   is_set + rvtt_synth::IX_insn, is_set + rvtt_synth::IX_mem,
+		   enc.id (), tmpl);
 
   gcc_assert (pos < sizeof (pattern));
 
@@ -571,33 +572,6 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
   return tmp;
 }
 
-rtx
-rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-			rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv)
-{
-  return gen_rvtt_sfpsynth_insn_dst
-    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
-     src, GEN_INT (src_shift), dst, GEN_INT (dst_shift), lv ? lv : rvtt_gen_rtx_noval (GET_MODE (dst)));
-}
-
-rtx
-rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-		    rtx src, unsigned src_shift)
-{
-  return gen_rvtt_sfpsynth_insn
-    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
-     src, GEN_INT (src_shift));
-}
-
-rtx
-rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-		          rtx src, unsigned src_shift)
-{
-  return gen_rvtt_sfpsynth_store_insn
-    (gen_rtx_MEM (SImode, addr), GEN_INT (icode), GEN_INT (flags), synth, GEN_INT (opcode), id,
-     src, GEN_INT (src_shift));
-}
-
 tree
 rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				const rvtt_insn_data *insnd,
@@ -664,19 +638,27 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
 
   if (!(int_mod & SFPXLOADI_MOD0_32BIT_MASK))
     {
-      rtx insn = nullptr;
-      if (CONST_INT_P (imm))
-	insn = gen_rvtt_sfploadi_int (dst, lv, GEN_INT(int_mod), rvtt_clamp_signed(imm, 0x7FFF));
-      else
+      auto mem = const0_rtx;
+      auto opc = const0_rtx;
+      auto enc = const0_rtx;
+      if (!CONST_INT_P (imm))
 	{
-	  unsigned op
+	  mem = gen_rtx_MEM (SImode, addr);
+	  int op
 	    = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOADI (0, int_mod, 0)
 	    : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOADI (0, int_mod, 0)
 	    : 0;
-	  insn = rvtt_sfpsynth_insn_dst (addr, CODE_FOR_rvtt_sfploadi_int,
-					 0, nonimm, op, id, dst, 20, lv);
+	  opc = GEN_INT (op);
+	  enc = GEN_INT (rvtt_synth (UINTVAL (id)).src_shift (0).dst_shift (20));
+	  imm = nonimm;
 	}
-      emit_insn (insn);
+      else
+	imm = rvtt_clamp_unsigned (imm, 0xffff);
+
+      emit_insn (gen_rvtt_sfploadi_int
+		 (dst, mem, opc, enc, imm,
+		  rvtt_gen_rtx_noval (XTT32SImode),
+		  lv, mod));
       return;
     }
 
@@ -747,11 +729,20 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
   if (load_32bit)
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
-      emit_insn (gen_rvtt_sfploadi_int (tmp, lv, GEN_INT (SFPLOADI_MOD0_UPPER), GEN_INT (int_imm >> 16)));
-      emit_insn (gen_rvtt_sfploadi_int (dst, tmp, GEN_INT (SFPLOADI_MOD0_LOWER), GEN_INT (int_imm & 0xFFFF)));
+      emit_insn (gen_rvtt_sfploadi_int (tmp, const0_rtx, const0_rtx, const0_rtx,
+					GEN_INT (int_imm >> 16),
+					rvtt_gen_rtx_noval (XTT32SImode),
+					lv, GEN_INT (SFPLOADI_MOD0_UPPER)));
+      emit_insn (gen_rvtt_sfploadi_int (dst, const0_rtx, const0_rtx, const0_rtx,
+					GEN_INT (int_imm & 0xFFFF),
+					rvtt_gen_rtx_noval (XTT32SImode),
+					tmp, GEN_INT (SFPLOADI_MOD0_LOWER)));
     }
   else
-    emit_insn (gen_rvtt_sfploadi_int (dst, lv, GEN_INT (new_mod), imm));
+    emit_insn (gen_rvtt_sfploadi_int (dst, const0_rtx, const0_rtx, const0_rtx,
+				      imm,
+				      rvtt_gen_rtx_noval (XTT32SImode),
+				      lv, GEN_INT (new_mod)));
 }
 
 void

@@ -71,7 +71,7 @@ void f3(int s) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	li	a5, 2046820405	# 2:7a000035
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 2:7a000035 L3 := L0
+**	sw	a0, 0\(a4\)	# 2:SFPSHFT	L3, L0, a0, 0 \| 5
 **	ret
 */
 
@@ -91,7 +91,7 @@ void f3r(int s) {
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	li	a4, 2046820405	# 2:7a000035
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 2:7a000035 L3 := L0
+**	sw	a5, 0\(a3\)	# 2:SFPSHFT	L3, L0, a5, 0 \| 5
 **	ret
 */
 
@@ -110,7 +110,7 @@ void f4(int s) {
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	li	a5, 2046820405	# 2:7a000035
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 2:7a000035 L3 := L0
+**	sw	a0, 0\(a4\)	# 2:SFPSHFT	L3, L0, a0, 0 \| 5
 **	ret
 */
 
@@ -130,6 +130,6 @@ void f4r(int s) {
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	li	a4, 2046820407	# 2:7a000037
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 2:7a000037 L3 := L0
+**	sw	a5, 0\(a3\)	# 2:SFPSHFT	L3, L0, a5, 2 \| 5
 **	ret
 */

@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-attr.h"
 #include "insn-codes.h"
 #include "recog.h"
+#include "rvtt-protos.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -124,36 +125,21 @@ enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_var
 static REPLAY_TYPE
 is_replay_insn (replay_span &span, rtx_insn *insn)
 {
-  int icode = recog_memoized (insn);
+  if (recog_memoized (insn) != CODE_FOR_rvtt_ttreplay_int)
+    return REPLAY_none;
+
   auto pattern = PATTERN (insn);
-
-  if (icode == CODE_FOR_rvtt_ttreplay_int)
-    {
-      gcc_assert (GET_CODE (pattern) == UNSPEC_VOLATILE);
-      span.begin = INTVAL (XVECEXP (pattern, 0, 0));
-      span.end = INTVAL (XVECEXP (pattern, 0, 1));
-      return INTVAL (XVECEXP (pattern, 0, 3)) ? REPLAY_fixed_capture : REPLAY_playback;
-    }
-
-  if (icode == CODE_FOR_rvtt_sfpsynth_insn)
-    {
-      auto ops = XVECEXP (PATTERN (insn), 0, 0);
-      gcc_assert (GET_CODE (ops) == UNSPEC_VOLATILE);
-      if (INTVAL (XVECEXP (ops, 0, SYNTH_icode)) != CODE_FOR_rvtt_ttreplay_int)
-	return REPLAY_none;
-
-      unsigned opcode = INTVAL (XVECEXP (ops, 0, SYNTH_opcode));
-      // Ugh, another reason for PR 35993
-      span.begin = (opcode >> (TARGET_XTT_TENSIX_WH ? 14
-			       : TARGET_XTT_TENSIX_BH ? 14
-			       : (gcc_unreachable (), 0))) & 0x1f;
-      span.end = 0;
-      return (opcode >> (TARGET_XTT_TENSIX_WH ? 0
-			 : TARGET_XTT_TENSIX_BH ? 0
-			 : (gcc_unreachable (), 0))) & 0x1 ? REPLAY_variable_capture : REPLAY_playback;
-    }
-
-  return REPLAY_none;
+  span.begin = INTVAL (XVECEXP (pattern, 0, 5));
+  span.end = 0;
+  auto len = XVECEXP (pattern, 0, 3);
+  auto type = REPLAY_fixed_capture;
+  if (CONST_INT_P (len))
+    span.end = INTVAL (len);
+  else
+    type = REPLAY_variable_capture;
+  if (!INTVAL (XVECEXP (pattern, 0, 7)))
+    type = REPLAY_playback;
+  return type;
 }
 
 // Scan insns o block computing hashes and must_end.
@@ -518,8 +504,10 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
       fprintf (dump_file, "\n");
     }
   
-  rtx capture = gen_rvtt_ttreplay_int (GEN_INT (replay_start), GEN_INT (length),
-					      GEN_INT (1), GEN_INT (1));
+  rtx capture = gen_rvtt_ttreplay_int
+    (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+     rvtt_gen_rtx_noval (XTT32SImode),
+     GEN_INT (replay_start), GEN_INT (1), GEN_INT (1));
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
   // Make sure we've not deleted anything in this instance already
@@ -530,8 +518,10 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
 
   for (auto clone = seq.clones.begin () + 1; clone != seq.clones.end (); ++clone)
     {
-      rtx replay = gen_rvtt_ttreplay_int (GEN_INT (replay_start), GEN_INT (length),
-					  GEN_INT (0), GEN_INT (0));
+      rtx replay = gen_rvtt_ttreplay_int
+	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+	 rvtt_gen_rtx_noval (XTT32SImode),
+	 GEN_INT (replay_start), const0_rtx, const0_rtx);
       auto *insn = emit_insn_before (replay, block[clone->begin].insn);
       if (dump_file)
 	{

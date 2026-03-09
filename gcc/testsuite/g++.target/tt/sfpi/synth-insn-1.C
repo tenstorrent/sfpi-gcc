@@ -22,7 +22,7 @@ void one(int s) {
 **	li	a5, 2046820407	# 2:7a000037
 **	add	a0,a0,a5
 **	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:7a000037 L3 := L0
+**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:SFPSHFT	L3, L0, a0, 2 \| 5
 **	ret
 */
 
@@ -43,9 +43,9 @@ void two(int s) {
 **	li	a5, 2046820407	# 2:7a000037
 **	add	a5,a0,a5
 **	addi	a4,a4,%lo\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a5, 0\(a4\)	# 2:7a000037 L3 := L0
+**	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L0, a5, 2 \| 5
 **	li	a5, 2046821175	# 4:7a000337
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 4:7a000337 L3 := L3
+**	sw	a0, 0\(a4\)	# 4:SFPSHFT	L3, L3, a0, 2 \| 5
 **	ret
 */

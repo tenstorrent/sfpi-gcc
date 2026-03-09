@@ -34,23 +34,63 @@ extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 
 // Instruction synthesis
-char const *rvtt_synth_insn_pattern (rtx operands[], unsigned);
-rtx rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-			    rtx src, unsigned src_shift, rtx dst, unsigned dst_shift, rtx lv);
-inline rtx rvtt_sfpsynth_insn_dst (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-				   rtx dst, unsigned dst_shift, rtx lv)
+class rvtt_synth
 {
-  return rvtt_sfpsynth_insn_dst (addr, icode, flags, synth, opcode, id,
-				 rvtt_gen_rtx_noval (XTT32SImode), 0, dst, dst_shift, lv);
-}
-rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-			rtx src, unsigned src_shift);
-inline rtx rvtt_sfpsynth_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id)
-{
-  return rvtt_sfpsynth_insn (addr, icode, flags, synth, opcode, id, rvtt_gen_rtx_noval (XTT32SImode), 0);
-}
-rtx rvtt_sfpsynth_store_insn (rtx addr, int icode, unsigned flags, rtx synth, unsigned opcode, rtx id,
-			      rtx src, unsigned src_shift);
+ private:
+  constexpr static unsigned REG_SHIFT_BITS = 5;
+  constexpr static unsigned ID_BITS = 32 - REG_SHIFT_BITS * 2;
+
+  unsigned encode = 0;
+
+ public:
+  enum RVTT_SYNTH_OFFSETS {
+    IX_mem,     // Memory operand (or zero)
+    IX_opcode,  // Opcode (or zero)
+    IX_encode,  // Encoded ID & src/dst shifts (or zero)
+    IX_insn,    // Instruction or immediate
+    IX_src,     // Src value (or noval)
+    IX_lv,      // Live value (if inside SET)
+  };
+
+ public:
+  rvtt_synth (unsigned HOST_WIDE_INT val)
+    : encode (unsigned (val)) {}
+
+  // Extract encode
+  operator int () const { return encode; }
+
+  // Generate pattern
+  static const char *pattern (unsigned is_synthed, const char *tmpl,
+			      rtx operands[], bool is_set, int IX_tmp = -1);
+
+  // accessors
+  unsigned id () const
+  {
+    return encode & ((1u << ID_BITS) - 1u);
+  }
+  unsigned dst_shift () const
+  {
+    return (encode >> ID_BITS)
+      & ((1u << REG_SHIFT_BITS) - 1u);
+  }
+  unsigned src_shift () const
+  {
+    return (encode >> (ID_BITS + REG_SHIFT_BITS))
+      & ((1u << REG_SHIFT_BITS) - 1u);
+  }
+
+  // setters
+  auto &dst_shift (unsigned shift)
+  {
+    encode |= shift << ID_BITS;
+    return *this;
+  }
+  auto &src_shift (unsigned shift)
+  {
+    encode |= shift << (ID_BITS + REG_SHIFT_BITS);
+    return *this;
+  }
+};
 
 extern void rvtt_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
 extern void rvtt_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
