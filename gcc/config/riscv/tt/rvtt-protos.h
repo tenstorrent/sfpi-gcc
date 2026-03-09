@@ -124,6 +124,18 @@ constexpr unsigned int SFPSETCC_MOD1_LREG_GTE0 = 4;
 constexpr unsigned int SFPSETCC_MOD1_LREG_EQ0 = 6;
 constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
 
+// EU: enable unmodified, EC: complement, EI: immediate
+// R1: result set, RI: immediate
+constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   // Imm value to clear both enable/result
+constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      // Imm value to set both enable/result
+
+constexpr unsigned int SFPENCC_MOD1_EU_R1 = 0;
+constexpr unsigned int SFPENCC_MOD1_EC_R1 = 1;
+constexpr unsigned int SFPENCC_MOD1_EI_R1 = 2;
+constexpr unsigned int SFPENCC_MOD1_EU_RI = 8;
+constexpr unsigned int SFPENCC_MOD1_EC_RI = 9;
+constexpr unsigned int SFPENCC_MOD1_EI_RI = 10;
+
 constexpr unsigned int SFPPUSHCC_MOD1_PUSH = 0;
 constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
