@@ -34,15 +34,6 @@
   (ior (match_operand 0 "register_operand")
     (match_operand 0 "cstlreg_operand")))
 
-(define_predicate "nonimmediate_or_cstlreg_operand"
-  (ior (match_operand 0 "nonimmediate_operand")
-    (match_operand 0 "cstlreg_operand")))
-
-(define_predicate "nonimmediate_or_cstlreg_or_noval_operand"
-  (ior (match_operand 0 "nonimmediate_operand")
-    (match_operand 0 "cstlreg_operand")
-    (match_operand 0 "noval_operand")))
-
 (define_predicate "reg_or_cstlreg_or_noval_operand"
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "cstlreg_operand")
