@@ -10,10 +10,10 @@
 **	lui	a4,%hi\(__instrn_buffer\)
 **	add	a5,a0,a5
 **	addi	a4,a4,%lo\(__instrn_buffer\)
-**	sw	a5, 0\(a4\)	# 2:4040001
+**	sw	a5, 0\(a4\)	# 2:TTREPLAY	16, a5, 0, 1
 **	li	a5, 67436547	# 4:4050003
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 4:4050003
+**	sw	a0, 0\(a4\)	# 4:TTREPLAY	20, a0, 1, 1
 **	ret
 */
 void record (unsigned length) {
@@ -27,7 +27,7 @@ void record (unsigned length) {
 **	li	a5, 67371008	# 2:4040000
 **	add	a5,a0,a5
 **	lui	a4,%hi\(__instrn_buffer\)
-**	sw	a5, %lo\(__instrn_buffer\)\(a4\)	# 2:4040000
+**	sw	a5, %lo\(__instrn_buffer\)\(a4\)	# 2:TTREPLAY	16, a5, 0, 0
 **	li	a5,67436544
 **	or	a0,a0,a5
 **	ret

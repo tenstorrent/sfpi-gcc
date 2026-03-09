@@ -168,11 +168,8 @@ transform (function *fn)
 	{
 	  if (GET_CODE (insn) != INSN)
 	    continue;
-	  rtx pattern = PATTERN (insn);
 
-	  if (GET_CODE (pattern) == USE)
-	    continue;
-	  if (GET_CODE (pattern) == CLOBBER)
+	  if (recog_memoized (insn) < 0)
 	    continue;
 
 	  if (get_attr_type (insn) != TYPE_TENSIX)
@@ -182,17 +179,6 @@ transform (function *fn)
 	    TARGET_XTT_TENSIX_WH ? get_attr_xtt_delay_wh (insn)
 	    : TARGET_XTT_TENSIX_BH ? get_attr_xtt_delay_bh (insn)
 	    : (gcc_unreachable (), XTT_DELAY_NONE);
-	  if (delay == XTT_DELAY_OPERAND)
-	    {
-	      rtx probe = pattern;
-	      if (GET_CODE (probe) == PARALLEL)
-		probe = XVECEXP (probe, 0, 0);
-	      if (GET_CODE (probe) == SET)
-		probe = SET_SRC (probe);
-	      gcc_assert (GET_CODE (probe) == UNSPEC_VOLATILE);
-	      probe = XVECEXP (probe, 0, SYNTH_flags);
-	      delay = xtt_delay (INTVAL (probe));
-	    }
 
 	  if (delay == XTT_DELAY_NONE)
 	    continue;
@@ -250,8 +236,8 @@ transform (function *fn)
 
 		return false;
 	      };
-		  
-	      insert = find_next (find_next, visited, bb, insn, pattern);
+
+	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn));
 	    }
 
 	  if (insert)

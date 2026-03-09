@@ -29,6 +29,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "insn-config.h"
+#include "insn-attr.h"
+#include "insn-codes.h"
 #include "recog.h"
 #include "rvtt.h"
 #include <unordered_map>
@@ -47,8 +49,8 @@ transform (function *fn)
 {
   struct synth
   {
-    rtx_insn_list *ops = nullptr; // synth_opcode's
-    rtx_insn_list *uses = nullptr; // synth_insn's
+    rtx_insn_list *ops = nullptr; // synth_opcodes
+    rtx_insn_list *uses = nullptr; // synthed insns
   };
   std::vector<synth> synths;
 
@@ -65,23 +67,27 @@ transform (function *fn)
 	    continue;
 
 	  unsigned id = 0;
-	  unsigned icode = recog_memoized (insn);
+	  int icode = recog_memoized (insn);
+	  if (icode < 0)
+	    continue;
 	  bool is_opcode = icode == CODE_FOR_rvtt_synth_opcode;
-	  bool has_dst = false;
 	  if (is_opcode)
 	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 1));
+	  else if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
 	  else
 	    {
-	      has_dst = icode == CODE_FOR_rvtt_sfpsynth_insn_dst;
-	      if (!has_dst
-		  && icode != CODE_FOR_rvtt_sfpsynth_insn
-		  && icode != CODE_FOR_rvtt_sfpsynth_store_insn)
-		// Nothing here.
+	      rtx pat = PATTERN (insn);
+	      if (GET_CODE (pat) == PARALLEL)
+		pat = XVECEXP (pat, 0, 0);
+	      if (GET_CODE (pat) == SET)
+		pat = SET_SRC (pat);
+	      if (GET_CODE (pat) != UNSPEC_VOLATILE)
+		// Simple set
 		continue;
-
-	      rtx pat = XVECEXP (PATTERN (insn), 0, 0);
-	      rtx ops = has_dst ? SET_SRC (pat) : pat;
-	      id = INTVAL (XVECEXP (ops, 0, SYNTH_id));
+	      if (!MEM_P (XVECEXP (pat, 0, 0)))
+		continue;
+	      id = rvtt_synth (INTVAL (XVECEXP (pat, 0, rvtt_synth::IX_encode))).id ();
 	    }
 	  if (synths.size () <= id)
 	    synths.resize (id + 1);
@@ -96,7 +102,7 @@ transform (function *fn)
     // Nothing to do.
     return;
 
-  // For each id in use, find the mode opcode value and use that
+  // For each id in use, find the modal opcode value and use that
   std::unordered_map<unsigned, unsigned> map;
   for (auto &synth : synths)
     {
@@ -112,16 +118,24 @@ transform (function *fn)
 	{
 	  rtx_insn *insn = use->insn ();
 	  unsigned opcode = 0;
-	  rtx pat = XVECEXP (PATTERN (insn), 0, 0);
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == PARALLEL)
+	    pat = XVECEXP (pat, 0, 0);
+	  rtx dst = nullptr;
 	  if (GET_CODE (pat) == SET)
 	    {
-	      rtx dst = SET_DEST (pat);
+	      dst = SET_DEST (pat);
 	      pat = SET_SRC (pat);
-	      // The dst reg isn't in the unspec operand list
-	      opcode |= (REGNO (dst) - SFPU_REG_FIRST) << INTVAL (XVECEXP (pat, 0, SYNTH_dst_shift - 1));
+	      gcc_assert (GET_MODE (dst) == XTT32SImode);
 	    }
-	  rtx src = XVECEXP (pat, 0, SYNTH_src);
-	  bool is_reg = true;
+
+	  auto enc = rvtt_synth (INTVAL (XVECEXP (pat, 0, rvtt_synth::IX_encode)));
+
+	  if (dst)
+	    opcode |= (REGNO (dst) - SFPU_REG_FIRST) << enc.dst_shift ();
+
+	  rtx src = XVECEXP (pat, 0, rvtt_synth::IX_src);
+	  gcc_assert (GET_MODE (src) == XTT32SImode);
 	  unsigned regno = 0;
 	  if (REG_P (src))
 	    regno = REGNO (src) - SFPU_REG_FIRST;
@@ -131,15 +145,12 @@ transform (function *fn)
 	      if (XINT (src, 1) == UNSPEC_SFPCSTLREG)
 		regno = INTVAL (XVECEXP (src, 0, 0));
 	      else
-		is_reg = false;
+		src = nullptr;
 	    }
-	  if (is_reg)
-	    {
-	      unsigned shift = INTVAL (XVECEXP (pat, 0, SYNTH_src_shift));
-	      opcode |= regno << shift;
-	    }
+	  if (src)
+	    opcode |= regno << enc.src_shift ();
 
-	  opcode |= INTVAL (XVECEXP (pat, 0, SYNTH_opcode));
+	  opcode |= INTVAL (XVECEXP (pat, 0, rvtt_synth::IX_opcode));
 
 	  map[opcode]++;
 	}
@@ -148,7 +159,8 @@ transform (function *fn)
       unsigned count = 0;
       unsigned opcode = 0;
       for (auto &slot : map)
-	if (slot.second > count)
+	if (slot.second > count
+	    || (slot.second == count && slot.first < opcode))
 	  {
 	    count = slot.second;
 	    opcode = slot.first;
@@ -181,10 +193,12 @@ transform (function *fn)
 	  free_INSN_LIST_node (use);
 	  use = next;
 
-	  rtx ops = XVECEXP (PATTERN (insn), 0, 0);
-	  if (GET_CODE (ops) == SET)
-	    ops = SET_SRC (ops);
-	  XVECEXP (ops, 0, SYNTH_opcode) = op_rtx;
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == PARALLEL)
+	    pat = XVECEXP (pat, 0, 0);
+	  if (GET_CODE (pat) == SET)
+	    pat = SET_SRC (pat);
+	  XVECEXP (pat, 0, rvtt_synth::IX_opcode) = op_rtx;
 	}
     }
 }

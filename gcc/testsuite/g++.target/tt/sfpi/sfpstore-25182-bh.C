@@ -32,6 +32,6 @@ void frob (int i) {
 **	li	a5, 1912659968	# 2:7200e000
 **	add	a0,a0,a5
 **	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:7200e000 L0
+**	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:SFPSTORE	L0, a0, 0, 7
 **	ret
 */
