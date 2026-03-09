@@ -1,5 +1,5 @@
 // { dg-do-compile }
-// { dg-additional-options "-std=c11 -march=rv64i_xttrocc -mabi=lp64" }
+// { dg-additional-options "-mcpu=tt-qsr64-rocc" }
 
 int main(void) {
   __builtin_riscv_ttrocc_cmdbuf_wr_reg(0, 4, 15); // { dg-final { "scan-assembler" "tt\.rocc\.cmdbuf_wr_reg" } }

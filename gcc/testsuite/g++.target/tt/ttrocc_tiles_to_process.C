@@ -1,5 +1,5 @@
 // { dg-do-compile }
-// { dg-additional-options "-std=c11 -march=rv64i_xttrocc -mabi=lp64" }
+// { dg-additional-options "-mcpu=tt-qsr64-rocc" }
 
 int main (void) {
   __builtin_riscv_ttrocc_wr_tiles_to_process_thres_tr_ack(0, 15); // { dg-final { "scan-assembler" "tt\.rocc\.wr_tiles_to_process_thres_tr_ack" } }

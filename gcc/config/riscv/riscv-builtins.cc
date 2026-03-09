@@ -141,7 +141,7 @@ AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 AVAIL (tensix, TARGET_XTT_TENSIX)
 AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
 AVAIL (tensixwh, TARGET_XTT_TENSIX_WH)
-AVAIL (rocc, TARGET_XTT_ROCC)
+AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 
 /* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
 

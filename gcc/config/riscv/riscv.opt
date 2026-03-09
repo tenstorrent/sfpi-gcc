@@ -542,7 +542,7 @@ Mask(XTT_TENSIX_BH) Var(riscv_tt_subext)
 
 Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 
-Mask(XTT_ROCC) Var(riscv_tt_subext)
+Mask(XTT_ROCC_QSR) Var(riscv_tt_subext)
 
 TargetVariable
 int riscv_tt_flags

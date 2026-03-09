@@ -2,7 +2,7 @@
 
 MULTILIB_OPTIONS := \
 mcpu=tt-wh/mcpu=tt-bh/mcpu=tt-qsr32/mcpu=tt-qsr64 \
-mabi=ilp32/mabi=ilp32/mabi=lp64 \
+mabi=ilp32/mabi=lp64 \
 
 MULTILIB_MATCHES := \
 mcpu?tt-wh=mcpu?tt-wh-tensix \

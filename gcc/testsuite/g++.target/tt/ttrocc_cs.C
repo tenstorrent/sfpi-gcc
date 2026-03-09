@@ -1,5 +1,5 @@
 // { dg-do-compile }
-// { dg-additional-options "-std=c11 -march=rv64i_xttrocc -mabi=lp64" }
+// { dg-additional-options "-mcpu=tt-qsr64-rocc" }
 
 int main(void) {
   unsigned long slot = __builtin_riscv_ttrocc_cs_alloc (); // { dg-final { "scan-assembler" "tt\.rocc\.cs_alloc"} }

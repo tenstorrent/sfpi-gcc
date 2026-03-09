@@ -115,7 +115,7 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt
 //
 // 1) claims qsr32 doesn't have zba, zbb (which BH has)
 //
-// 2) claiums qsr64 & qsr32 have 'a' extension, not zaamo (which BH has).  The former includes
+// 2) claims qsr64 & qsr32 have 'a' extension, not zaamo (which BH has).  The former includes
 // load-locked, store-conditional, which I have been informed requires a redesign of our cache architecture.
 
 // TODO update tune parameter

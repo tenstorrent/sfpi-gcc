@@ -1783,7 +1783,7 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("xsfvqmaccdod",    x_riscv_sifive_subext, MASK_XSFVQMACCDOD),
   RISCV_EXT_FLAG_ENTRY ("xsfvfnrclipxfqf", x_riscv_sifive_subext, MASK_XSFVFNRCLIPXFQF),
 
-  RISCV_EXT_FLAG_ENTRY ("xttrocc", x_riscv_tt_subext, MASK_XTT_ROCC),
+  RISCV_EXT_FLAG_ENTRY ("xttroccqsr", x_riscv_tt_subext, MASK_XTT_ROCC_QSR),
   RISCV_EXT_FLAG_ENTRY ("xtttensixwh", x_riscv_tt_subext, MASK_XTT_TENSIX_WH),
   RISCV_EXT_FLAG_ENTRY ("xtttensixbh", x_riscv_tt_subext, MASK_XTT_TENSIX_BH),
 
