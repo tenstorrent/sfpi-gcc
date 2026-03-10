@@ -34,7 +34,6 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-expand.o \
 	gimple-rvtt-live.o \
-	gimple-rvtt-move.o \
 	gimple-rvtt-synth-expand.o \
 	gimple-rvtt-synth-nullify.o \
 	gimple-rvtt-synth-renumber.o \
