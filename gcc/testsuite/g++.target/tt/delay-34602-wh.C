@@ -26,7 +26,7 @@ void two () {
 /*
 **_ZN3dyn3twoEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMOV	L1, L0, 0
+**	SFPMOV	L1, L0, 2
 **	SFPMULI	L1, 0, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
@@ -61,12 +61,12 @@ void two (unsigned i) {
 /*
 **_ZN3dyn3twoEj:
 **	SFPLOAD	L0, 0, 0, 0
-**	li	a5, 1946157072	# 2:74000010
-**	SFPMOV	L1, L0, 0
 **	slli	a0,a0,8
-**	li	a4,16777216
-**	addi	a4,a4,-256
-**	and	a0,a0,a4
+**	SFPMOV	L1, L0, 2
+**	li	a5,16777216
+**	addi	a5,a5,-256
+**	and	a0,a0,a5
+**	li	a5, 1946157072	# 2:74000010
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
 **	sw	a0, %lo\(iptr\)\(a5\)	# 2:74000010 L1 := LV
@@ -83,7 +83,7 @@ void three () {
 /*
 **_ZN3dyn5threeEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMOV	L3, L0, 0
+**	SFPMOV	L3, L0, 2
 **	SFPMULI	L3, 0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
