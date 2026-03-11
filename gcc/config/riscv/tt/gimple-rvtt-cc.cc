@@ -210,7 +210,7 @@ process_block_stmts(basic_block bb,
 		      (new_insnd->decl, 2,
 		       build_int_cst (unsigned_type_node, SFPENCC_MOD1_EI_RI),
 		       build_int_cst (unsigned_type_node, SFPENCC_IMM12_BOTH));
-		    
+
 		    gimple_set_vuse (new_stmt, gimple_vuse (stmt));
 		    gimple_set_vdef (new_stmt, gimple_vdef (stmt));
 		    gimple_set_location (new_stmt, gimple_location (stmt));

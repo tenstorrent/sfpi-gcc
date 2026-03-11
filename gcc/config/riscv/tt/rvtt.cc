@@ -230,6 +230,12 @@ rvtt_sets_cc(const rvtt_insn_data *insnd, gcall *stmt)
 	  if (arg == 2 || arg == 8 || arg == 10)
 	    sets_cc = true;
 	}
+      else if (insnd->id == rvtt_insn_data::sfpgt
+	       || insnd->id == rvtt_insn_data::sfple)
+	{
+	  if (arg & 3)
+	    sets_cc = true;
+	}
       else
 	{
 	  sets_cc = true;

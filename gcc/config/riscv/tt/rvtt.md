@@ -1917,14 +1917,54 @@
   (UNSPECV_SFPGT "GT")
   (UNSPECV_SFPLE "LE")
   ])
-(define_insn "rvtt_sfp<rvtt_gtle_name>"
+
+(define_expand "rvtt_sfp<rvtt_gtle_name>"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI    3 "const_int_operand")
+          ] rvtt_gtle_op))]
+  "TARGET_XTT_TENSIX_BH"
+  {
+    if (!(INTVAL (operands[3]) & SFPGTLE_MOD1_SET_DEST))
+      {
+        emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_nv
+          (operands[1], operands[2], operands[3]));
+        emit_insn (gen_rvtt_sfpassign (operands[0], operands[1]));
+        DONE;
+      }
+  })
+
+(define_insn_and_split "rvtt_sfp<rvtt_gtle_name>_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    2 "const_int_operand" "N04U")
-	  ] rvtt_gtle_op))]
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+          (match_operand:SI    3 "const_int_operand" "N04U")
+          ] rvtt_gtle_op))]
   "TARGET_XTT_TENSIX_BH"
-  "SFP<rctt_gtle_insn>\t%0, %x1, 0, %2"
+  "SFP<rvtt_gtle_insn>\t%x0, %x2, 0, %3"
+  "&& bool (find_reg_note (insn, REG_UNUSED, operands[0]))"
+  [(unspec_volatile:XTT32SI [
+     (match_dup 1)
+     (match_dup 2)
+     (match_dup 3)
+     ] rvtt_gtle_op)]
+  {
+    operands[3] = GEN_INT
+      (INTVAL (operands[3]) & (0xf ^ SFPGTLE_MOD1_SET_DEST));
+  }
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
+     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
+     (match_operand:SI    2 "const_int_operand" "N04U")
+     ] rvtt_gtle_op)]
+  "TARGET_XTT_TENSIX_BH"
+  "SFP<rvtt_gtle_insn>\t%x0, %x1, 0, %2"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpmul24"

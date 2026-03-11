@@ -212,6 +212,12 @@ constexpr unsigned int SFPSHFT2_MOD1_SUBVEC_SHFLSHR1 = 4;
 constexpr unsigned int SFPSHFT2_MOD1_SHFT_LREG = 5;
 constexpr unsigned int SFPSHFT2_MOD1_SHFT_IMM = 6;
 
+constexpr unsigned SFPGTLE_MOD1_SET_CC = 1;
+constexpr unsigned SFPGTLE_MOD1_SET_TOS = 2;
+constexpr unsigned SFPGTLE_MOD1_OR_TOS = 0;
+constexpr unsigned SFPGTLE_MOD1_AND_TOS = 4;
+constexpr unsigned SFPGTLE_MOD1_SET_DEST = 8;
+
 constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
