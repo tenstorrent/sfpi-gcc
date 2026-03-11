@@ -927,6 +927,52 @@
   "SFP<rvtt_unary_insn>\t%0, %x2, %3"
   [(set_attr "type" "tensix")])
 
+(define_peephole2
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:SI    3 "const_0_operand")
+	  ] UNSPECV_SFPLZ))
+   (unspec_volatile:XTT32SI [
+     (match_dup:XTT32SI     2)
+     (match_operand:SI    4 "const_int_operand")
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX && (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                                 || INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_EQ0)"
+  [(const_int 0)]
+{
+  rtx mod = GEN_INT (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                     ? SFPLZ_MOD1_CC_NE0 : SFPLZ_MOD1_CC_EQ0);
+
+  emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
+})
+
+(define_peephole2
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:SI    3 "const_0_operand")
+	  ] UNSPECV_SFPLZ))
+   (unspec_volatile:XTT32SI [
+     (match_operand:SI    4 "const_int_operand")
+     ] UNSPECV_SFPPUSHC)
+   (unspec_volatile:XTT32SI [
+     (match_dup:XTT32SI     2)
+     (match_operand:SI    5 "const_int_operand")
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX && (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                                 || INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_EQ0)"
+  [(const_int 0)]
+{
+  rtx mod = GEN_INT (INTVAL (operands[4]) == SFPSETCC_MOD1_LREG_NE0
+                     ? SFPLZ_MOD1_CC_NE0 : SFPLZ_MOD1_CC_EQ0);
+
+  emit_insn (gen_rvtt_sfppushc (operands[4]));
+  emit_insn (gen_rvtt_sfplz_lv (operands[0], operands[1], operands[2], mod));
+})
+
 (define_int_iterator rvtt_set_op [
   UNSPECV_SFPSETEXP
   UNSPECV_SFPSETMAN
@@ -1978,5 +2024,3 @@
   "TARGET_XTT_TENSIX"
   "TTREPLAY\t%0, %1, %2, %3"
   [(set_attr "type" "tensix")])
-
-(include "tt/rvtt-peephole.md")
