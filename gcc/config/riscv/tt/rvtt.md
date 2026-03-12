@@ -2047,7 +2047,7 @@
   }
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
+(define_insn_and_split "rvtt_sfp<rvtt_gtle_name>_nv"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
@@ -2055,6 +2055,9 @@
      ] rvtt_gtle_op)]
   "TARGET_XTT_TENSIX_BH"
   "SFP<rvtt_gtle_insn>\t%x0, %x1, 0, %2"
+  "&& !(INTVAL (operands[2]) & 0xb)"
+  [(const_int 0)]
+  {}
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpmul24"
