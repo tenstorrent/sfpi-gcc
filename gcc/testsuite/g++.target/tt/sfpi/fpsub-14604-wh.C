@@ -78,7 +78,7 @@ void sub4() {
 **	SFPSETCC	L2, 0, 0
 **	SFPMAD	L3, L11, L1, L0, 0
 **	SFPCOMPC
-**	SFPMAD	L3, L11, L0, L1, 0
+**	SFPMAD	L3, L11, L0, L1, 0	# LV:L3
 **	SFPENCC	3, 10
 **	ret
 */
@@ -100,10 +100,10 @@ void sub5() {
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
-**	SFPMAD	L1, L11, L0, L1, 0
+**	SFPMAD	L1, L11, L0, L1, 0	# LV:L1
 **	SFPCOMPC
 **	SFPMOV	L0, L0, 1
-**	SFPMAD	L1, L11, L0, L1, 0
+**	SFPMAD	L1, L11, L0, L1, 0	# LV:L1
 **	SFPENCC	3, 10
 **	SFPMOV	L3, L1, 2
 **	ret
@@ -130,8 +130,7 @@ void sub6() {
 **	SFPMOV	L3, L0, 1
 **	SFPMAD	L3, L11, L1, L3, 0
 **	SFPCOMPC
-**	SFPMAD	L3, L11, L1, L0, 0
+**	SFPMAD	L3, L11, L1, L0, 0	# LV:L3
 **	SFPENCC	3, 10
 **	ret
 */
-

@@ -35,7 +35,7 @@ void bar (unsigned man) {
 **	sw	a4, 0\(a3\)	# 2:SFPLOADI	L1, a4, 10
 **	srli	a0,a0,16
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8
+**	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
 **	ret
@@ -62,7 +62,7 @@ void toto () {
 /*
 **_Z4totov:
 **	SFPLOADI	L1, 18, 8
-**	SFPLOADI	L1, 13398, 10
+**	SFPLOADI	L1, 13398, 10	# LV:L1
 **	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
 **	ret
