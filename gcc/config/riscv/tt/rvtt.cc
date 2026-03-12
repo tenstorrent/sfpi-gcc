@@ -637,30 +637,7 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
   int int_mod = INTVAL (mod);
 
   if (!(int_mod & SFPXLOADI_MOD0_32BIT_MASK))
-    {
-      auto mem = const0_rtx;
-      auto opc = const0_rtx;
-      auto enc = const0_rtx;
-      if (!CONST_INT_P (imm))
-	{
-	  mem = gen_rtx_MEM (SImode, addr);
-	  int op
-	    = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOADI (0, int_mod, 0)
-	    : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOADI (0, int_mod, 0)
-	    : 0;
-	  opc = GEN_INT (op);
-	  enc = GEN_INT (rvtt_synth (UINTVAL (id)).src_shift (0).dst_shift (20));
-	  imm = nonimm;
-	}
-      else
-	imm = rvtt_clamp_unsigned (imm, 0xffff);
-
-      emit_insn (gen_rvtt_sfploadi_int
-		 (dst, mem, opc, enc, imm,
-		  rvtt_gen_rtx_noval (XTT32SImode),
-		  lv, mod));
-      return;
-    }
+    gcc_unreachable ();
 
   // Early nonimm pass assures this
   gcc_assert (CONST_INT_P (imm));
@@ -771,9 +748,15 @@ rvtt_emit_sfpxfcmps (rtx addr, rtx v, rtx f, rtx mod)
 	       || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
-	rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), addr,
-			     GEN_INT (rvtt_scmp2loadi_mod (fmt)), f,
-			     const0_rtx, const0_rtx);
+	{
+	  int mod = rvtt_scmp2loadi_mod (fmt);
+	  if (mod & SFPXLOADI_MOD0_32BIT_MASK)
+	    rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), addr,
+				 GEN_INT (mod), f, const0_rtx, const0_rtx);
+	  else
+	    emit_insn (gen_rvtt_sfploadi
+		       (ref_val, const0_rtx, f, const0_rtx, const0_rtx, GEN_INT (mod)));
+	}
     }
 
   // FIXME: a lot of the below is sfpxfcmpv

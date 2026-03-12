@@ -462,6 +462,60 @@
   "SFPMOV\t%0, %x2, 0\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
+(define_expand "rvtt_sfploadi"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec:XTT32SI [
+	  (match_operand:SI 1 "address_operand")
+          (match_operand:SI 2 "reg_or_const_int_operand")
+          (match_operand:SI 3 "reg_or_0_operand")
+          (match_operand:SI 4 "const_int_operand")
+          (match_operand:SI 5 "const_int_operand")
+	  ] UNSPECV_SFPLOADI))]
+  "TARGET_XTT_TENSIX"
+{
+  emit_insn (gen_rvtt_sfploadi_lv
+    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[3], operands[4], operands[5]));
+  DONE;
+})
+
+(define_expand "rvtt_sfploadi_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec:XTT32SI [
+	  (match_operand:SI    1 "address_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "reg_or_0_operand")
+          (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
+	  ] UNSPECV_SFPLOADI))]
+  "TARGET_XTT_TENSIX"
+{
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[3];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[1]);
+      int op
+        = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOADI (0, INTVAL (operands[6]), 0)
+        : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOADI (0, INTVAL (operands[6]), 0)
+        : 0;
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (0).dst_shift (20));
+      imm = operands[4];
+    }
+  else
+    imm = rvtt_clamp_unsigned (imm, 0xffff);
+
+  emit_insn (gen_rvtt_sfploadi_int
+    (operands[0], mem, opc, enc, imm,
+     rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[6]));
+  DONE;
+})
+
 (define_insn "rvtt_sfploadi_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [

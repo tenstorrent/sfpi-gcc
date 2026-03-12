@@ -75,6 +75,10 @@ RVTT_FN (sfppushc,           ,,VOID_FTYPE_USI,                                  
 RVTT_FN (sfppopc,            ,,VOID_FTYPE_USI,                                             0x01, -1,  0, -1,      0, 0)
 
 RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                              0x02, -1, -1, -1,      0, 0)
+
+RVTT_FN (sfploadi,           ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                     0x00, -1,  4,  1, 0xFFFF, 0)
+RVTT_FN (sfploadi_lv,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0x02, -1,  5,  2, 0xFFFF, 0)
+
 RVTT_FN (sfpmov,             ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfpmov_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
 RVTT_FN (sfpexexp,           ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x01, -1,  1, -1,      0, 0)
