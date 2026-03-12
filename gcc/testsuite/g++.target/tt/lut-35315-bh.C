@@ -31,7 +31,7 @@ void two ()
   auto v4 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto v5 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto v6 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto r = __builtin_rvtt_sfplutfp32_6r (v0, v1, v2, v3, v4, v5, v6, 0);
+  auto r = __builtin_rvtt_sfplutfp32_6r (v0, v1, v2, v3, v4, v5, v6, 2);
   __builtin_rvtt_sfpstore (nullptr, r, 0, 0, 0, 0, 0);
 }
 /*
@@ -43,7 +43,7 @@ void two ()
 **	SFPLOAD	L5, 0, 0, 0
 **	SFPLOAD	L6, 0, 0, 0
 **	SFPLOAD	L3, 0, 0, 0
-**	SFPLUTFP32	L0, 0
+**	SFPLUTFP32	L0, 2
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret

@@ -6,13 +6,13 @@ extern volatile unsigned iptr[];
 namespace dyn {
 void one () {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3oneEv:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMULI	L0, 0, 0
+**	SFPMULI	L0, 0, 8
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
@@ -20,21 +20,21 @@ void one () {
 
 void two () {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
 **_ZN3dyn3twoEv:
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMOV	L1, L0, 2
-**	SFPMULI	L1, 0, 0
+**	SFPMULI	L1, 0, 8
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
 void one (unsigned i) {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, y, 0, 0, 0, 0, 0);
 }
 /*
@@ -44,10 +44,10 @@ void one (unsigned i) {
 **	li	a5,16777216
 **	addi	a5,a5,-256
 **	and	a0,a0,a5
-**	li	a5, 1946157056	# 2:74000000
+**	li	a5, 1946157064	# 2:74000008
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L0, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L0, a0, 8
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
@@ -55,7 +55,7 @@ void one (unsigned i) {
 
 void two (unsigned i) {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
 /*
@@ -66,17 +66,17 @@ void two (unsigned i) {
 **	li	a5,16777216
 **	addi	a5,a5,-256
 **	and	a0,a0,a5
-**	li	a5, 1946157072	# 2:74000010
+**	li	a5, 1946157080	# 2:74000018
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
-**	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L1, a0, 0
+**	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L1, a0, 8
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
 
 void three () {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
-  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 0);
+  auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 8);
   __builtin_rvtt_sfpwritelreg (y, 3);
   __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
 }
@@ -84,7 +84,7 @@ void three () {
 **_ZN3dyn5threeEv:
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMOV	L3, L0, 2
-**	SFPMULI	L3, 0, 0
+**	SFPMULI	L3, 0, 8
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
