@@ -1,5 +1,5 @@
 /* Pass to complete handling of the SFPU synth insns
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 

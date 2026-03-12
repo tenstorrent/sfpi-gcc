@@ -1,6 +1,7 @@
 ;; Machine description for Tenstorrent SFPU Intrinsics.
-;; Copyright (C) 2022-2025 Tenstorrent Inc.
+;; Copyright (C) 2022-2026 Tenstorrent Inc.
 ;; Originated by Ayonam Ray (ayonam@helprack.com)
+;; Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 ;; This file is part of GCC.
 

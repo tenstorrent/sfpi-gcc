@@ -1,5 +1,5 @@
-/* Pass to work around GS' memory aribtration bug
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to work around WH/BH ebreak bug.
+   Copyright (C) 2026 Tenstorrent Inc.
    Written by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.

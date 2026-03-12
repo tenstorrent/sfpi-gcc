@@ -1,5 +1,6 @@
 /* Declaration of target-specific passes for Tensix. -*- C++ -*-
-   Copyright (C) 2026 Free Software Foundation, Inc.
+   Copyright (C) 2026 Tenstorrent Inc.
+   Written by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
    This file is part of GCC.
 

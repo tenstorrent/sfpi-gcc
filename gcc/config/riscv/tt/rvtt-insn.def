@@ -1,5 +1,5 @@
 /* TT builtin instruction specs
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -32,18 +32,15 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_OVR(a, b, c, d, e, f, g, h, i, j)
 #endif
 
-// Note: each architecture MUST have the SAME NUMBER of entries in the SAME ORDER!
-// This can be ensured by using the RVTT_PAD_XX define
-
 // flags: see INSN_FLAGS in rvtt.h
 // dst_arg_pos: which argument number contains the destination for src-as-dst insns, -1 otherwise
 // mod_pos: which argument number contains the mod value
-// schedule: non-zero if this instruction needs scheduling (nop pads), see INSN_SCHED_* in rvtt-protos.h
 // nonimm_pos: argument position of the nonimm argument (runtime supplied immediate), -1 otherwise
 // nonimm_mask: bit mask to get to the nonimm value (eg, 0xFFFF for 16 bit nonimm)
 // nonimm_shft: shift to right justify the nonimm value
 
-// Common builtin intrinsics.  args are (id, fmt, flags, dst_arg_pos, mod_pos, nonimm_pos, nonimm_mask, nonimm_shft)
+// Args are (NAME, ISA, _SFX, TYPE, flags, dst_arg_pos, mod_pos, nonimm_pos, nonimm_mask, nonimm_shft)
+
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                          0x00, -1, -1, -1,      0, 0)
 
@@ -111,10 +108,6 @@ RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_X
 RVTT_FN (sfpshft2_subvec_shfl1, ,,XTT_VEC_FTYPE_XTT_VEC_USI,                               0x00, -1, 1, -1,       0, 0)
 RVTT_FN (sfpshft2_subvec_shfl1_lv, ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                    0x02, -1, 2, -1,       0, 0)
 
-RVTT_FN (ttincrwc,           ,,VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
-// The length operand is [1,32], which is awkward
-RVTT_FN (ttreplay,           ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
-
 RVTT_FN (sfpload,            wh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  4,  1, 0x3FFF, 0)
 RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0x00, -1,  4,  1, 0x1FFF, 0)
 RVTT_FN (sfpload_lv,         wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0x02, -1,  5,  2, 0x3FFF, 0)
@@ -156,7 +149,6 @@ RVTT_FN (sfpreadconfig,      bh,,XTT_VEC_FTYPE_USI,                             
 RVTT_FN (sfpreadconfig_lv,   bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x02, -1, -1, -1,      0, 0)
 RVTT_FN (sfpwriteconfig_v,     ,,VOID_FTYPE_XTT_VEC_USI,                                     0x00, -1, -1, -1,      0, 0)
 
-// FIXME: These do not describe the data flow
 RVTT_FN (sfpgt,              bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
 RVTT_FN (sfple,              bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x01,  0,  2, -1,      0, 0)
 
@@ -164,6 +156,10 @@ RVTT_FN (sfpmul24,           bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 RVTT_FN (sfpmul24_lv,        bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0x02, -1,  3, -1,      0, 0)
 RVTT_FN (sfparecip,          bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfparecip_lv,       bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
+
+RVTT_FN (ttincrwc,           ,,VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
+// The length operand is [1,32], which is awkward
+RVTT_FN (ttreplay,           ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
 
 #undef RVTT_FN
 #undef RVTT_OVR
