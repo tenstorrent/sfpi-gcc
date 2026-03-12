@@ -459,7 +459,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
 	  ] UNSPECV_SFPASSIGN))]
   "TARGET_XTT_TENSIX"
-  "SFPMOV\t%0, %x2, 0"
+  "SFPMOV\t%0, %x2, 0\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfploadi_int"
@@ -477,7 +477,9 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
-      "SFPLOADI\t%x0, %4, %7",
+       which_alternative & 1
+       ? "SFPLOADI\t%x0, %4, %7\t# LV:%x6"
+       : "SFPLOADI\t%x0, %4, %7",
       operands, true, 8);
   }
   [(set_attr "type" "tensix")])
@@ -558,7 +560,9 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
-      "SFPLOAD\t%0, %4, %7, %8",
+      which_alternative & 1
+      ? "SFPLOAD\t%0, %4, %7, %8\t# LV:%x6"
+      : "SFPLOAD\t%0, %4, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -695,7 +699,7 @@
   (UNSPECV_SFPADD "L10, %x2, %x3")
   ])
 
-(define_insn "rvtt_sfp<rvtt_muladd_name>"
+(define_expand "rvtt_sfp<rvtt_muladd_name>"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
@@ -703,21 +707,25 @@
           (match_operand:SI    3 "const_int_operand" "N04U")
 	  ] rvtt_muladd_op))]
   "TARGET_XTT_TENSIX"
-  "SFP<rvtt_muladd_insn>\t%0, <rvtt_muladd_ops>, %3"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+  {
+    emit_insn (gen_rvtt_sfp<rvtt_muladd_name>_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+       operands[1], operands[2], operands[3]));
+    DONE;
+  })
 
 (define_insn "rvtt_sfp<rvtt_muladd_name>_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    4 "const_int_operand" "N04U")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    4 "const_int_operand" "N04U,N04U")
 	  ] rvtt_muladd_op))]
   "TARGET_XTT_TENSIX"
-  "SFP<rvtt_muladd_insn>\t%0, <rvtt_muladd_ops_lv>, %4"
+  "@
+   SFP<rvtt_muladd_insn>\t%0, <rvtt_muladd_ops_lv>, %4
+   SFP<rvtt_muladd_insn>\t%0, <rvtt_muladd_ops_lv>, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
    (set_attr "xtt_delay_bh" "dynamic")])
@@ -748,7 +756,9 @@
           (match_operand:SI    5 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_SFPMAD))]
   "TARGET_XTT_TENSIX"
-  "SFPMAD\t%0, %x2, %x3, %x4, %5"
+  "@
+   SFPMAD\t%0, %x2, %x3, %x4, %5
+   SFPMAD\t%0, %x2, %x3, %x4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
    (set_attr "xtt_delay_bh" "dynamic")])
@@ -846,7 +856,9 @@
           (match_operand:SI    4 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_SFPIADD))]
   "TARGET_XTT_TENSIX"
-  "SFPIADD\t%0, %x2, %3, %4"
+  "@
+   SFPIADD\t%0, %x2, %3, %4
+   SFPIADD\t%0, %x2, %3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_int_iterator rvtt_unary_op [
@@ -892,7 +904,9 @@
           (match_operand:SI    3 "const_int_operand" "N04U,N04U")
 	  ] rvtt_unary_op))]
   "TARGET_XTT_TENSIX"
-  "SFP<rvtt_unary_insn>\t%0, %x2, %3"
+  "@
+   SFP<rvtt_unary_insn>\t%0, %x2, %3
+   SFP<rvtt_unary_insn>\t%0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_peephole2
@@ -1052,7 +1066,9 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
-      "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, 1",
+      which_alternative & 1
+      ? "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, 1\t# LV:%x6"
+      : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, 1",
       operands, true, 7);
   }
   [(set_attr "type" "tensix")])
@@ -1103,7 +1119,9 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
 	  ] UNSPECV_SFPNOT))]
   "TARGET_XTT_TENSIX"
-  "SFPNOT\t%0, %x2"
+  "@
+   SFPNOT\t%0, %x2
+   SFPNOT\t%0, %x2\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpshft_v"
@@ -1234,7 +1252,9 @@
           (match_operand:SI    3 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_SFPCAST))]
   "TARGET_XTT_TENSIX"
-  "SFPCAST\t%0, %x2, %3"
+  "@
+   SFPCAST\t%0, %x2, %3
+   SFPCAST\t%0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpdivp2"
@@ -1309,7 +1329,9 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
-      "SFPDIVP2\t%x0, %x5, %4, %7",
+      which_alternative & 1
+      ? "SFPDIVP2\t%x0, %x5, %4, %7\t# LV:%x6"
+      : "SFPDIVP2\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
   [(set_attr "type" "tensix")])
@@ -1390,7 +1412,9 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
-      "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4",
+      which_alternative & 1
+      ? "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4\t# LV:%x6"
+      : "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -1421,7 +1445,9 @@
           (match_operand:SI    5 "const_int_operand" "N01U,N01U")
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
-  "SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0"
+  "@
+   SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0
+   SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpreadconfig"
@@ -1443,7 +1469,9 @@
           (match_operand:SI 2 "const_int_operand" "N04U,N04U")
 	  ] UNSPECV_SFPCONFIG))]
   "TARGET_XTT_TENSIX_BH"
-  "SFPMOV\t%0, L%2, 8"
+  "@
+   SFPMOV\t%0, L%2, 8
+   SFPMOV\t%0, L%2, 8\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpwriteconfig_v"
@@ -1906,7 +1934,9 @@
      (match_operand:SI 2 "const_int_operand" "n,n")
      ] UNSPECV_SFPSHFT2_SUBVEC_SHFL1)]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\tL8, %x1, 0, %2"
+  "@
+   SFPSHFT2\tL8, %x1, 0, %2
+   SFPSHFT2\tL8, %x1, 0, %2\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
    (set_attr "xtt_delay_bh" "static")])

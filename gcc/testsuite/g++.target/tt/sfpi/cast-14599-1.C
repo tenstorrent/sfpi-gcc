@@ -72,7 +72,7 @@ void cond () {
 **	SFPSETCC	L1, 0, 6
 **	SFPCAST	L0, L2, 0
 **	SFPCOMPC
-**	SFPCAST	L0, L2, 1
+**	SFPCAST	L0, L2, 1	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */

@@ -41,7 +41,7 @@ void bar () {
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L9, 8
+**	SFPMOV	L0, L9, 8	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */

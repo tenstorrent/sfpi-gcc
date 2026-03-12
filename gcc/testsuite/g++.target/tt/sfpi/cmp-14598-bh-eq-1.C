@@ -29,7 +29,7 @@ void fnuvv () {
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L3, 0
+**	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */
@@ -60,12 +60,12 @@ void fnuvi (int i) {
 **	sw	a4, 0\(a3\)	# 2:SFPLOADI	L1, a4, 10
 **	srli	a0,a0,16
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8
+**	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPIADD	L1, L0, 0, 6
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L3, 0
+**	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */
@@ -91,7 +91,7 @@ void fnuvc () {
 **	SFPSETCC	L0, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L3, 0
+**	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */
@@ -117,7 +117,7 @@ void fns () {
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L3, 0
+**	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
 **	ret
 */
