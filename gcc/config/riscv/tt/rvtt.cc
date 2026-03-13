@@ -576,13 +576,16 @@ tree
 rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				const rvtt_insn_data *insnd,
 				gcall *stmt,
-				gimple_stmt_iterator gsi)
+			  gimple_stmt_iterator gsi,
+			  unsigned initial_shift)
 {
   // nonimm_pos contains the raw value
   // nonimm_pos+1 contains the shifted/masked value + load_immediate
   // nonimm_pos+2 (will) contain the unique_id
   tree immarg = gimple_call_arg(stmt, insnd->nonimm_pos);
 
+  if (initial_shift)
+    immarg = emit_shift(immarg, -int(initial_shift), &gsi, stmt);
   // Insert insns to generate:
   //   sum = unique_id + ((raw & nonimm_mask) << nonimm_shft)
   tree mask = emit_mask(immarg, insnd->nonimm_mask, &gsi, stmt);
@@ -600,7 +603,8 @@ rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				unsigned int unique_id,
 				tree old_add,
 				const rvtt_insn_data *insnd,
-				gcall *stmt)
+			  gcall *stmt,
+			  unsigned initial_shift)
 {
   gimple *add_stmt = SSA_NAME_DEF_STMT(old_add);
 
@@ -612,11 +616,12 @@ rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
   tree sum;
   if (load_imm_map[unique_id] == nullptr)
     {
-      sum = rvtt_emit_nonimm_prologue(unique_id, insnd, stmt, gsi_for_stmt(add_stmt));
+      sum = rvtt_emit_nonimm_prologue(unique_id, insnd, stmt, gsi_for_stmt(add_stmt), initial_shift);
       load_imm_map[unique_id] = sum;
     }
   else
     {
+      gcc_assert (!initial_shift);
       sum = load_imm_map[unique_id];
     }
 

@@ -71,12 +71,14 @@ extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 extern tree rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt,
-				      gimple_stmt_iterator gsi);
+				      gimple_stmt_iterator gsi,
+				      unsigned initial_shift = 0);
 extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      unsigned int unique_id,
 				      tree old_add,
 				      const rvtt_insn_data *insnd,
-				      gcall *stmt);
+				      gcall *stmt,
+				      unsigned initial_shift = 0);
 
 extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
 extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
