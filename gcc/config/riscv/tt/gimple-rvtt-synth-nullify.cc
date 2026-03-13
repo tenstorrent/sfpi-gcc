@@ -50,6 +50,7 @@ transform (function *fn)
 	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST
 	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos + 1)) != INTEGER_CST)
 	  {
+	    gcc_unreachable ();
 	    gimple_call_set_arg (stmt, 0, null_pointer_node);
 	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
 	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
