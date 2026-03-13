@@ -76,10 +76,11 @@ emit_sfpxloadi (int mod, const rvtt_insn_data *insnd,
   gimple_call_set_lhs (new_stmt, lhs);
   finish_new_insn (gsip, true, new_stmt, stmt);
 
+#if 0
   rvtt_link_nonimm_prologue (load_imm_map, unique_id,
 			     gimple_call_arg (stmt, insnd->nonimm_pos + 1),
 			     new_insnd, new_stmt);
-
+#endif
   return lhs;
 }
 
@@ -103,10 +104,11 @@ emit_sfpxloadi_lv (tree lhs, tree lower, unsigned int unique_id,
   gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 1, integer_zero_node); // sum
   gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 2, integer_zero_node); // id
   gimple_call_set_lhs (new_stmt, lhs);
-
+#if 0
   rvtt_link_nonimm_prologue (load_imm_map, unique_id,
 			     gimple_call_arg (stmt, insnd->nonimm_pos + 1),
 			     new_insnd, new_stmt);
+#endif
   finish_new_insn (gsip, before, new_stmt, stmt);
 }
 
