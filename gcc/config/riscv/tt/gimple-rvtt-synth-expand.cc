@@ -294,7 +294,13 @@ transform (function *fn)
 	      updated = true;
 	    }
 	  else
-	    gcc_assert (!TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->nonimm_pos + 1)));
+	    {
+	      // If these trigger, it means something became const since we did
+	      // the synth split.
+	      gcc_assert (integer_zerop (gimple_call_arg (stmt, 0)));
+	      gcc_assert (integer_zerop (gimple_call_arg (stmt, insnd->nonimm_pos + 1)));
+	      gcc_assert (integer_zerop (gimple_call_arg (stmt, insnd->nonimm_pos + 2)));
+	    }
 	}
     }
 
