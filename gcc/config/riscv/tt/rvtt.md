@@ -1147,6 +1147,10 @@
 	  ] UNSPECV_SFPSHFT))]
   "TARGET_XTT_TENSIX"
 {
+  unsigned mod = SFPSHFT_MOD1_SHFT_IMM
+      | (TARGET_XTT_TENSIX_BH ? SFPSHFT_MOD1_SRC_LREG_C : 0);
+  operands[6] = GEN_INT (INTVAL (operands[6]) | mod);
+
   auto mem = const0_rtx;
   auto opc = const0_rtx;
   auto enc = const0_rtx;
@@ -1156,9 +1160,9 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPSHFT (0, 0, 0, INTVAL (operands[6]) | 1)
+	? TT_OP_WH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
         : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPSHFT (0, 0, 0, INTVAL (operands[6]) | 5)
+	? TT_OP_BH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
         : 0;
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5]))
@@ -1206,7 +1210,7 @@
   "TARGET_XTT_TENSIX_BH"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPSHFT\t%x0, %x5, %4, %7 | 5",
+      "SFPSHFT\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
   [(set_attr "type" "tensix")])
@@ -1226,7 +1230,7 @@
   "TARGET_XTT_TENSIX_WH"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPSHFT\t%x0, L0, %4, %7 | 1",
+      "SFPSHFT\t%x0, L0, %4, %7",
       operands, true, 8);
   }
   [(set_attr "type" "tensix")])
@@ -1370,6 +1374,8 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
 {
+  operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
+
   auto mem = const0_rtx;
   auto opc = const0_rtx;
   auto enc = const0_rtx;
