@@ -976,9 +976,10 @@
         (unspec_volatile:XTT32SI [
           (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
 	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "0")
+          (match_operand:SI    3 "const_int_operand" "N04U")
 	  ] rvtt_set_op))]
   "TARGET_XTT_TENSIX"
-  "SFPSET<rvtt_set_insn>\t%0, %x1, 0, 0"
+  "SFPSET<rvtt_set_insn>\t%0, %x1, 0, %3"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpset<rvtt_set_name>_i"
@@ -989,12 +990,13 @@
           (match_operand:SI    3 "reg_or_const_int_operand")
           (match_operand:SI    4 "reg_or_0_operand")
           (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
 	  ] rvtt_set_op))]
   "TARGET_XTT_TENSIX"
 {
   emit_insn (gen_rvtt_sfpset<rvtt_set_name>_i_lv
     (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
-     operands[2], operands[3], operands[4], operands[5]));
+     operands[2], operands[3], operands[4], operands[5], operands[6]));
   DONE;
 })
 
@@ -1007,9 +1009,11 @@
           (match_operand:SI    4 "reg_or_const_int_operand")
           (match_operand:SI    5 "reg_or_0_operand")
           (match_operand:SI    6 "const_int_operand")
+          (match_operand:SI    7 "const_int_operand")
 	  ] rvtt_set_op))]
   "TARGET_XTT_TENSIX"
 {
+  operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSET<rvtt_set_insn>_MOD1_IMM);
   auto mem = const0_rtx;
   auto opc = const0_rtx;
   auto enc = const0_rtx;
@@ -1022,9 +1026,9 @@
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
         = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPSET<rvtt_set_insn> (0, 0, 0, 1)
+	? TT_OP_WH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
         : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPSET<rvtt_set_insn> (0, 0, 0, 1)
+	? TT_OP_BH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
         : 0;
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
@@ -1040,7 +1044,8 @@
             (tmp, operands[2], operands[1],
              GEN_INT (SFPXLOADI_MOD0_UINT32),
              operands[4], const0_rtx, const0_rtx);
-          emit_insn (gen_rvtt_sfpset<rvtt_set_name>_v (operands[0], operands[3], tmp));
+          emit_insn (gen_rvtt_sfpset<rvtt_set_name>_v (operands[0], operands[3],
+	    tmp, GEN_INT (SFPSETMAN_MOD1_LREG)));
 	  DONE;
         }
       imm = rvtt_clamp_unsigned (imm, 0xfff);
@@ -1048,7 +1053,7 @@
 
   emit_insn (gen_rvtt_sfpset<rvtt_set_name>_i_int
     (operands[0], mem, opc, enc, imm,
-     operands[3], operands[2]));
+     operands[3], operands[2], operands[7]));
   DONE;
 })
 
@@ -1061,15 +1066,16 @@
           (match_operand:SI    4 "reg_or_const_int_operand" "N12U,N12U,r,r") ;; imm or insn
           (match_operand:XTT32SI 5 "reg_or_cstlreg_operand" "xrxc,xrxc,xrxc,xrxc") ;; src
           (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xn,0,xn,0") ;; lv
+          (match_operand:SI    7 "const_int_operand"  "N04U,N04U,N04U,N04U")
           ] rvtt_set_op))
-   (clobber (match_scratch:SI  7 "=X,X,&r,&r"))]
+   (clobber (match_scratch:SI  8 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, 1\t# LV:%x6"
-      : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, 1",
-      operands, true, 7);
+      ? "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7\t# LV:%x6"
+      : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7",
+      operands, true, 8);
   }
   [(set_attr "type" "tensix")])
 

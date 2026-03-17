@@ -121,13 +121,14 @@ emit_32bit_sfpxloads (const rvtt_insn_data *insnd, gcall *stmt,
 }
 
 static void
-emit_sfpsetman_v (tree val, gimple *stmt, gimple_stmt_iterator *gsip)
+emit_sfpsetman_v (tree val, tree mod, gimple *stmt, gimple_stmt_iterator *gsip)
 {
   auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetman_v);
 
-  gimple *new_stmt = gimple_build_call (new_insnd->decl, 2);
+  gimple *new_stmt = gimple_build_call (new_insnd->decl, 3);
   gimple_call_set_arg (new_stmt, 0, gimple_call_arg (stmt, 1));
   gimple_call_set_arg (new_stmt, 1, val);
+  gimple_call_set_arg (new_stmt, 2, mod);
   gimple_call_set_lhs (new_stmt, gimple_call_lhs (stmt));
   finish_new_insn (gsip, true, new_stmt, stmt);
 }
@@ -198,7 +199,7 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
       {
 	DUMP ("  expanding %s to sfpxloadi+sfpsetman_v\n", insnd->name);
 	tree tmp = emit_32bit_sfpxloads (insnd, stmt, gsip);
-	emit_sfpsetman_v (tmp, stmt, gsip);
+	emit_sfpsetman_v (tmp, gimple_call_arg (stmt, insnd->mod_pos), stmt, gsip);
 	gsi_remove (gsip, true);
 	gsi_prev (gsip);
       }
