@@ -157,6 +157,14 @@ constexpr unsigned int SFPEXEXP_MOD1_SET_CC_SGN_EXP = 2;
 constexpr unsigned int SFPEXEXP_MOD1_SET_CC_COMP_EXP = 8;
 constexpr unsigned int SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP = 10;
 
+constexpr unsigned int SFPSETMAN_MOD1_LREG = 0;
+constexpr unsigned int SFPSETMAN_MOD1_IMM = 1;
+constexpr unsigned int SFPSETEXP_MOD1_LREG = 0;
+constexpr unsigned int SFPSETEXP_MOD1_IMM = 1;
+constexpr unsigned int SFPSETEXP_MOD1_LREG_CPY = 2;
+constexpr unsigned int SFPSETSGN_MOD1_LREG = 0;
+constexpr unsigned int SFPSETSGN_MOD1_IMM = 1;
+
 constexpr unsigned int SFPSETCC_MOD1_LREG_LT0 = 0;
 constexpr unsigned int SFPSETCC_MOD1_IMM_BIT0 = 1;
 constexpr unsigned int SFPSETCC_MOD1_LREG_NE0 = 2;
