@@ -132,17 +132,17 @@ can_combine_sfpxiadd_i(const rvtt_insn_data *insnd,
 {
   return
     (insnd->id == rvtt_insn_data::sfpxiadd_i &&
-     (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
     (insnd->id == rvtt_insn_data::sfpxiadd_i_lv &&
-     (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
     (insnd->id == rvtt_insn_data::sfpxiadd_v &&
-     (get_int_arg(stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
+     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
 
-    (insnd->id == rvtt_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc) ||
+    (insnd->id == rvtt_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_arg ()) == 0 && is_sign_bit_cc) ||
 
-    (insnd->id == rvtt_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_pos) == 0 && is_sign_bit_cc);
+    (insnd->id == rvtt_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_arg ()) == 0 && is_sign_bit_cc);
 }
 
 // Combine candidate_stmt (an sfpxiadd_i) with stmt by updating mod1/imm of
@@ -151,13 +151,13 @@ static void
 combine_sfpxiadd_i(const rvtt_insn_data *insnd, gcall *stmt,
 		   const rvtt_insn_data *candidate_insnd, gcall *candidate_stmt)
 {
-  int candidate_mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
+  int candidate_mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_arg ());
 
   switch (insnd->id) {
   case rvtt_insn_data::sfpxiadd_i:
     {
-      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_pos,
+      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_arg (),
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~(SFPXIADD_MOD1_IS_SUB | SFPXIADD_MOD1_DST_UNUSED)) |
 					old_sub));
@@ -165,16 +165,16 @@ combine_sfpxiadd_i(const rvtt_insn_data *insnd, gcall *stmt,
     break;
   case rvtt_insn_data::sfpxiadd_i_lv:
     {
-      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_pos,
+      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_arg (),
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
     }
     break;
   case rvtt_insn_data::sfpxiadd_v:
     {
-      int old_sub = get_int_arg(stmt, insnd->mod_pos) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_pos,
+      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
+      gimple_call_set_arg(stmt, insnd->mod_arg (),
 			  build_int_cst(integer_type_node,
 					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
     }
@@ -183,14 +183,14 @@ combine_sfpxiadd_i(const rvtt_insn_data *insnd, gcall *stmt,
     {
       int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod1));
+      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod1));
       break;
     }
   case rvtt_insn_data::sfpexexp_lv:
     {
       int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
 	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod1));
+      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod1));
       break;
     }
   default:
@@ -313,14 +313,14 @@ try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
 
   // Check for candidate iadd_i that sets the CC and compares to 0
   if (candidate_insnd->id == rvtt_insn_data::sfpxiadd_i &&
-      is_int_arg(candidate_stmt, candidate_insnd->nonimm_pos) && (get_int_arg(candidate_stmt, candidate_insnd->nonimm_pos) == 0) &&
-      ((get_int_arg(candidate_stmt, candidate_insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK) != 0) &&
+      is_int_arg(candidate_stmt, candidate_insnd->imm_arg ()) && (get_int_arg(candidate_stmt, candidate_insnd->imm_arg ()) == 0) &&
+      ((get_int_arg(candidate_stmt, candidate_insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) != 0) &&
       gimple_call_lhs(candidate_stmt) == nullptr)
     {
       DUMP("Trying to combine %s\n", candidate_insnd->name);
 
       // Got a candidate
-      int mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_pos);
+      int mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_arg ());
       bool is_sign_bit_cc =
 	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ||
 	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_GTE);
@@ -440,7 +440,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       DUMP("Trying to combine %s into %si\n", candidate_insnd->name,
 	   rvtt_get_notlive_version(candidate_insnd)->name);
 
-      int live = candidate_insnd->live_p();
+      int live = candidate_insnd->is_live ();
       gimple_stmt_iterator assign_gsi;
       gcall *assign_stmt;
       const rvtt_insn_data *assign_insnd;
@@ -484,7 +484,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 	  gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
 	  gimple_call_set_arg(opi_stmt, 2, value);
 	  gimple_call_set_arg(opi_stmt, 5, build_int_cst(integer_type_node,
-							 get_int_arg(candidate_stmt, candidate_insnd->mod_pos)));
+							 get_int_arg(candidate_stmt, candidate_insnd->mod_arg ())));
 
 	  if (TREE_CODE(value) == SSA_NAME)
 	    {
@@ -493,8 +493,8 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 	      //  - the loadi shft/mask is different from the addi/muli shft/mask
 	      //  - loop unrolling may create multiple related uses
 	      // Issue new nonimm-prologue for the addi, track to see if it can be re-used
-	      tree old_add = gimple_call_arg(assign_stmt, assign_insnd->nonimm_pos + 1);
-	      int unique_id = get_int_arg(assign_stmt, assign_insnd->nonimm_pos + 2);
+	      tree old_add = gimple_call_arg(assign_stmt, assign_insnd->var_arg ());
+	      int unique_id = get_int_arg(assign_stmt, assign_insnd->id_arg ());
 	      gcc_assert((unique_id & 1) == 0);
 	      rvtt_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
 	    }
@@ -581,8 +581,8 @@ try_combine_mul_add (probe_t &probe)
   if (!(probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv))
     return false;
 
-  bool is_lv = probe.insnd->live_p ();
-  int add_mod = get_int_arg (probe.call, probe.insnd->mod_pos);
+  bool is_lv = probe.insnd->is_live ();
+  int add_mod = get_int_arg (probe.call, probe.insnd->mod_arg ());
 
   probe_t mul;
   int mul_op_no = -1;
@@ -613,7 +613,7 @@ try_combine_mul_add (probe_t &probe)
   if (mul_op_no < 0)
     return false;
 
-  int mul_mod = get_int_arg (mul.call, mul.insnd->mod_pos);
+  int mul_mod = get_int_arg (mul.call, mul.insnd->mod_arg ());
 
   int muladd_mod = add_mod ^ mul_mod;
 
@@ -625,7 +625,7 @@ try_combine_mul_add (probe_t &probe)
   gimple_call_set_arg (muladd_call, is_lv + 0, gimple_call_arg (mul.call, 0));
   gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (mul.call, 1));
   gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - mul_op_no) + is_lv));
-  gimple_call_set_arg (muladd_call, muladd_insnd->mod_pos, build_int_cst (integer_type_node, muladd_mod));
+  gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, muladd_mod));
   gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
   gimple_set_location (muladd_call, gimple_location (probe.call));
 
@@ -665,13 +665,13 @@ is_negation (probe_t &probe)
 {
   if (probe.insnd->id == rvtt_insn_data::sfpmul || probe.insnd->id == rvtt_insn_data::sfpmul_lv)
     {
-      bool is_lv = probe.insnd->live_p ();
+      bool is_lv = probe.insnd->is_live ();
       tree operand = gimple_call_arg (probe.call, 1 + is_lv);
       return is_neg_1 (operand);
     }
 
   if (probe.insnd->id == rvtt_insn_data::sfpmov || probe.insnd->id == rvtt_insn_data::sfpmov_lv)
-    return get_int_arg (probe.call, probe.insnd->mod_pos) == SFPMOV_MOD1_COMPL;
+    return get_int_arg (probe.call, probe.insnd->mod_arg ()) == SFPMOV_MOD1_COMPL;
 
   return false;
 }
@@ -691,7 +691,7 @@ try_combine_negated_operands (probe_t &probe)
   if (!(is_add || is_mul || is_mad))
     return false;
 
-  bool is_lv = probe.insnd->live_p ();
+  bool is_lv = probe.insnd->is_live ();
   bool result = false;
   for (unsigned op = 2 + is_mad; op--;)
     {
@@ -714,10 +714,10 @@ try_combine_negated_operands (probe_t &probe)
       if (TARGET_XTT_TENSIX_BH)
 	{
 	  // Elide the negation, and invert the appropriate mod1 bit
-	  gimple_call_set_arg (probe.call, op + is_lv, gimple_call_arg (input.call, input.insnd->live_p ()));
-	  int mod = get_int_arg (probe.call, probe.insnd->mod_pos);
+	  gimple_call_set_arg (probe.call, op + is_lv, gimple_call_arg (input.call, input.insnd->is_live ()));
+	  int mod = get_int_arg (probe.call, probe.insnd->mod_arg ());
 	  mod ^= !op || is_mul || (is_mad && op == 1) ? SFPMAD_MOD1_BH_COMPL_A : SFPMAD_MOD1_BH_COMPL_C;
-	  gimple_call_set_arg (probe.call, probe.insnd->mod_pos, build_int_cst (integer_type_node, mod));
+	  gimple_call_set_arg (probe.call, probe.insnd->mod_arg (), build_int_cst (integer_type_node, mod));
 
 	  update_stmt (probe.call);
 	}
@@ -742,9 +742,9 @@ try_combine_negated_operands (probe_t &probe)
 	  if (is_lv)
 	    gimple_call_set_arg (muladd_call, 0, gimple_call_arg (probe.call, 0));
 	  gimple_call_set_arg (muladd_call, is_lv + 0, ssa);
-	  gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->live_p ()));
+	  gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->is_live ()));
 	  gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - op) + is_lv));
-	  gimple_call_set_arg (muladd_call, muladd_insnd->mod_pos, build_int_cst (integer_type_node, 0));
+	  gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, 0));
 	  gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
 	  gimple_set_location (muladd_call, gimple_location (probe.call));
 
@@ -776,7 +776,7 @@ try_combine_negated_result (probe_t &probe)
   if (!is_negation (probe))
     return false;
 
-  bool is_lv = probe.insnd->live_p ();
+  bool is_lv = probe.insnd->is_live ();
   tree operand = gimple_call_arg (probe.call, is_lv);
   if (!has_single_use (operand))
     return false;
@@ -799,9 +799,9 @@ try_combine_negated_result (probe_t &probe)
   gcc_assert (!is_lv || gimple_call_arg (probe.call, 0) == gimple_call_lhs (input.call));
 
   // Invert the appropriate mod1 bits
-  int mod = get_int_arg (input.call, input.insnd->mod_pos);
+  int mod = get_int_arg (input.call, input.insnd->mod_arg ());
   mod ^= SFPMAD_MOD1_BH_COMPL_A | (is_mul ? 0 : SFPMAD_MOD1_BH_COMPL_C);
-  gimple_call_set_arg (input.call, input.insnd->mod_pos, build_int_cst (integer_type_node, mod));
+  gimple_call_set_arg (input.call, input.insnd->mod_arg (), build_int_cst (integer_type_node, mod));
   release_ssa_name (gimple_call_lhs (input.call));
   gimple_call_set_lhs (input.call, gimple_call_lhs (probe.call));
 
@@ -821,7 +821,7 @@ try_combine_negated_add_operand (probe_t &probe)
   if (!is_add)
     return false;
 
-  bool is_lv = probe.insnd->live_p ();
+  bool is_lv = probe.insnd->is_live ();
   for (unsigned op = 2; op--;)
     {
       tree operand = gimple_call_arg (probe.call, op + is_lv);
@@ -859,9 +859,9 @@ try_combine_negated_add_operand (probe_t &probe)
       if (is_lv)
 	gimple_call_set_arg (muladd_call, 0, gimple_call_arg (probe.call, 0));
       gimple_call_set_arg (muladd_call, is_lv + 0, ssa);
-      gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->live_p ()));
+      gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->is_live ()));
       gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - op) + is_lv));
-      gimple_call_set_arg (muladd_call, muladd_insnd->mod_pos, build_int_cst (integer_type_node, 0));
+      gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, 0));
       gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
       gimple_set_location (muladd_call, gimple_location (probe.call));
 

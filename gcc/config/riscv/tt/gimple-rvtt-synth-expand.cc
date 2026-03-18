@@ -63,21 +63,21 @@ emit_sfpxloadi (int mod, const rvtt_insn_data *insnd,
   auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
 
   tree addr = gimple_call_arg (stmt, 0);
-  tree val = gimple_call_arg (stmt, insnd->nonimm_pos);
-  unsigned int unique_id = get_int_arg (stmt, insnd->nonimm_pos + 2);
+  tree val = gimple_call_arg (stmt, insnd->imm_arg ());
+  unsigned int unique_id = get_int_arg (stmt, insnd->id_arg ());
 
   gcall *new_stmt = gimple_build_call (new_insnd->decl, 5);
   gimple_call_set_arg (new_stmt, 0, addr);
-  gimple_call_set_arg (new_stmt, new_insnd->mod_pos, build_int_cst (integer_type_node, mod));
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos, val);
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 1, integer_zero_node);
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 2, integer_zero_node);
+  gimple_call_set_arg (new_stmt, new_insnd->mod_arg (), build_int_cst (integer_type_node, mod));
+  gimple_call_set_arg (new_stmt, new_insnd->imm_arg (), val);
+  gimple_call_set_arg (new_stmt, new_insnd->var_arg (), integer_zero_node);
+  gimple_call_set_arg (new_stmt, new_insnd->id_arg (), integer_zero_node);
   tree lhs = make_ssa_name (TREE_TYPE (TREE_TYPE (new_insnd->decl)), new_stmt);
   gimple_call_set_lhs (new_stmt, lhs);
   finish_new_insn (gsip, true, new_stmt, stmt);
 
   rvtt_link_nonimm_prologue (load_imm_map, unique_id,
-			     gimple_call_arg (stmt, insnd->nonimm_pos + 1),
+			     gimple_call_arg (stmt, insnd->var_arg ()),
 			     new_insnd, new_stmt);
 
   return lhs;
@@ -98,14 +98,14 @@ emit_sfpxloadi_lv (tree lhs, tree lower, unsigned int unique_id,
   gcall *new_stmt = gimple_build_call (new_insnd->decl, 6);
   gimple_call_set_arg (new_stmt, 0, gimple_call_arg (stmt, 0));  // pointer
   gimple_call_set_arg (new_stmt, 1, lower);                     // live
-  gimple_call_set_arg (new_stmt, new_insnd->mod_pos, build_int_cst (integer_type_node, SFPLOADI_MOD0_UPPER)); // mod
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos, gimple_call_arg (stmt, insnd->nonimm_pos));  // nonimm orig
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 1, integer_zero_node); // sum
-  gimple_call_set_arg (new_stmt, new_insnd->nonimm_pos + 2, integer_zero_node); // id
+  gimple_call_set_arg (new_stmt, new_insnd->mod_arg (), build_int_cst (integer_type_node, SFPLOADI_MOD0_UPPER)); // mod
+  gimple_call_set_arg (new_stmt, new_insnd->imm_arg (), gimple_call_arg (stmt, insnd->imm_arg ()));  // nonimm orig
+  gimple_call_set_arg (new_stmt, new_insnd->var_arg (), integer_zero_node); // sum
+  gimple_call_set_arg (new_stmt, new_insnd->id_arg (), integer_zero_node); // id
   gimple_call_set_lhs (new_stmt, lhs);
 
   rvtt_link_nonimm_prologue (load_imm_map, unique_id,
-			     gimple_call_arg (stmt, insnd->nonimm_pos + 1),
+			     gimple_call_arg (stmt, insnd->var_arg ()),
 			     new_insnd, new_stmt);
   finish_new_insn (gsip, before, new_stmt, stmt);
 }
@@ -116,7 +116,7 @@ emit_32bit_sfpxloads (const rvtt_insn_data *insnd, gcall *stmt,
 {
   tree tmp1 = emit_sfpxloadi (SFPLOADI_MOD0_LOWER, insnd, stmt, gsip);
   tree tmp2 = make_ssa_name (TREE_TYPE (tmp1), stmt);
-  emit_sfpxloadi_lv (tmp2, tmp1, get_int_arg (stmt, insnd->nonimm_pos + 2) + 1, insnd, stmt, gsip, true);
+  emit_sfpxloadi_lv (tmp2, tmp1, get_int_arg (stmt, insnd->id_arg ()) + 1, insnd, stmt, gsip, true);
   return tmp2;
 }
 
@@ -140,7 +140,7 @@ emit_sfpxfcmpv (tree val, const rvtt_insn_data *insnd,
   auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxfcmpv);
 
   gimple *new_stmt = gimple_build_call (new_insnd->decl, 3);
-  int mod = get_int_arg (stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK;
+  int mod = get_int_arg (stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK;
   gimple_call_set_arg (new_stmt, 0, gimple_call_arg (stmt, 1));
   gimple_call_set_arg (new_stmt, 1, val);
   gimple_call_set_arg (new_stmt, 2, build_int_cst (integer_type_node, mod));
@@ -155,7 +155,7 @@ emit_sfpxicmpv (tree val, const rvtt_insn_data *insnd,
   auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxicmpv);
 
   gimple *new_stmt = gimple_build_call (new_insnd->decl, 3);
-  int mod = get_int_arg (stmt, insnd->mod_pos) & SFPXCMP_MOD1_CC_MASK;
+  int mod = get_int_arg (stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK;
   gimple_call_set_arg (new_stmt, 0, val);
   gimple_call_set_arg (new_stmt, 1, gimple_call_arg (stmt, 1));
   gimple_call_set_arg (new_stmt, 2, build_int_cst (integer_type_node, mod));
@@ -183,15 +183,15 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpxloadi:
-      if ((get_int_arg (stmt, insnd->mod_pos) & SFPXLOADI_MOD0_32BIT_MASK) != 0)
+      if ((get_int_arg (stmt, insnd->mod_arg ()) & SFPXLOADI_MOD0_32BIT_MASK) != 0)
 	{
 	  DUMP ("  expanding 32 bit %s, replace mod and emit %s\n", insnd->name, (insnd + 1)->name);
 
-	  gimple_call_set_arg (stmt, insnd->mod_pos, build_int_cst (integer_type_node, SFPLOADI_MOD0_LOWER));
+	  gimple_call_set_arg (stmt, insnd->mod_arg (), build_int_cst (integer_type_node, SFPLOADI_MOD0_LOWER));
 	  tree lhs = gimple_call_lhs (stmt);
 	  tree tmp = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)), stmt);
 	  gimple_call_set_lhs (stmt, tmp);
-	  emit_sfpxloadi_lv (lhs, tmp, get_int_arg (stmt, insnd->nonimm_pos + 2) + 1, insnd, stmt, gsip, false);
+	  emit_sfpxloadi_lv (lhs, tmp, get_int_arg (stmt, insnd->id_arg ()) + 1, insnd, stmt, gsip, false);
 	}
       break;
 
@@ -199,7 +199,7 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
       {
 	DUMP ("  expanding %s to sfpxloadi+sfpsetman_v\n", insnd->name);
 	tree tmp = emit_32bit_sfpxloads (insnd, stmt, gsip);
-	emit_sfpsetman_v (tmp, gimple_call_arg (stmt, insnd->mod_pos), stmt, gsip);
+	emit_sfpsetman_v (tmp, gimple_call_arg (stmt, insnd->mod_arg ()), stmt, gsip);
 	gsi_remove (gsip, true);
 	gsi_prev (gsip);
       }
@@ -208,7 +208,7 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
     case rvtt_insn_data::sfpxicmps:
       {
 	DUMP ("  expanding %s to sfpxloadi+sfpxicmpv\n", insnd->name);
-	int mod = get_int_arg (stmt, insnd->mod_pos);
+	int mod = get_int_arg (stmt, insnd->mod_arg ());
 	tree tmp = mod & SFPXIADD_MOD1_16BIT
 	  ? emit_sfpxloadi ((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
 			   insnd, stmt, gsip)
@@ -222,7 +222,7 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
     case rvtt_insn_data::sfpxfcmps:
       {
 	DUMP ("  expanding %s to sfpxloadi+sfpxfcmpv\n", insnd->name);
-	int fmt = get_int_arg (stmt, insnd->mod_pos) & SFPXSCMP_MOD1_FMT_MASK;
+	int fmt = get_int_arg (stmt, insnd->mod_arg ()) & SFPXSCMP_MOD1_FMT_MASK;
 	tree tmp = (fmt == SFPXSCMP_MOD1_FMT_A || fmt == SFPXSCMP_MOD1_FMT_B)
 	  ? emit_sfpxloadi ((fmt == SFPXSCMP_MOD1_FMT_A) ? SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB,
 			    insnd, stmt, gsip)
@@ -237,7 +237,7 @@ expand_complex (gcall *stmt, const rvtt_insn_data *insnd, gimple_stmt_iterator *
     case rvtt_insn_data::sfpxiadd_i:
       {
 	DUMP ("  expanding %s to sfpxloadi+sfpxiadd_v\n", insnd->name);
-	int mod = get_int_arg (stmt, insnd->mod_pos);
+	int mod = get_int_arg (stmt, insnd->mod_arg ());
 	// Only supports 32 bit non-imm loads for wh so far...
 	tree tmp = mod & SFPXIADD_MOD1_16BIT
 	  ? emit_sfpxloadi ((mod & SFPXIADD_MOD1_SIGNED) ? SFPLOADI_MOD0_SHORT : SFPLOADI_MOD0_USHORT,
@@ -286,16 +286,16 @@ transform (function *fn)
 	  if (!rvtt_p (&insnd, &stmt, gsi))
 	    continue;
 
-	  if (insnd->nonimm_pos < 0)
+	  if (!insnd->has_var ())
 	    continue;
 
-	  if (TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == SSA_NAME)
+	  if (TREE_CODE (gimple_call_arg (stmt, insnd->imm_arg ())) == SSA_NAME)
 	    {
 	      expand_complex (stmt, insnd, &gsi);
 	      updated = true;
 	    }
 	  else
-	    gcc_assert (!TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->nonimm_pos + 1)));
+	    gcc_assert (!TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->var_arg ())));
 	}
     }
 

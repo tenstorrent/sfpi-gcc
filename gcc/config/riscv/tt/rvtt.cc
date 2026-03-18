@@ -178,7 +178,7 @@ const rvtt_insn_data *
 rvtt_get_live_version(const rvtt_insn_data *insnd)
 {
   if (insnd->id < rvtt_insn_data::hwm - 1
-      && sfpu_insn_data[insnd->id + 1].live_p())
+      && sfpu_insn_data[insnd->id + 1].is_live ())
     return &sfpu_insn_data[insnd->id + 1];
 
   return nullptr;
@@ -187,7 +187,7 @@ rvtt_get_live_version(const rvtt_insn_data *insnd)
 const rvtt_insn_data *
 rvtt_get_notlive_version(const rvtt_insn_data *insnd)
 {
-  return &insnd[-int(insnd->live_p ())];
+  return &insnd[-int(insnd->is_live ())];
 }
 
 static long int
@@ -209,7 +209,7 @@ rvtt_sets_cc(const rvtt_insn_data *insnd, gcall *stmt)
 
   if (insnd->can_set_cc_p())
     {
-      long int arg = (insnd->mod_pos != -1) ? get_int_arg (stmt, insnd->mod_pos) : 0;
+      long int arg = insnd->has_mod () ? TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())) : 0;
       if (insnd->id == rvtt_insn_data::sfpxiadd_i)
 	{
 	  if (arg & SFPXCMP_MOD1_CC_MASK)
@@ -447,9 +447,9 @@ uint32_t rvtt_scmp2loadi_mod(int mod)
 
 bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
 {
-  int mod0 = get_int_arg(stmt, insnd->mod_pos);
+  int mod0 = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
   bool representable = false;
-  tree arg = gimple_call_arg(stmt, insnd->nonimm_pos);
+  tree arg = gimple_call_arg(stmt, insnd->imm_arg ());
 
   switch (mod0) {
   case SFPLOADI_MOD0_FLOATB:
@@ -581,7 +581,7 @@ rvtt_emit_nonimm_prologue(unsigned int unique_id,
   // nonimm_pos contains the raw value
   // nonimm_pos+1 contains the shifted/masked value + load_immediate
   // nonimm_pos+2 (will) contain the unique_id
-  tree immarg = gimple_call_arg(stmt, insnd->nonimm_pos);
+  tree immarg = gimple_call_arg(stmt, insnd->imm_arg ());
 
   // Insert insns to generate:
   //   sum = unique_id + ((raw & nonimm_mask) << nonimm_shft)
@@ -621,9 +621,9 @@ rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
     }
 
   // Update insn to make insnd->nonimm_pos+1 contain the sum
-  gimple_call_set_arg(stmt, insnd->nonimm_pos + 1, sum);
+  gimple_call_set_arg(stmt, insnd->var_arg (), sum);
   // Save unique_id in insn's id field
-  gimple_call_set_arg(stmt, insnd->nonimm_pos + 2,
+  gimple_call_set_arg(stmt, insnd->id_arg (),
 		      build_int_cst(integer_type_node, unique_id));
   update_stmt (stmt);
 }

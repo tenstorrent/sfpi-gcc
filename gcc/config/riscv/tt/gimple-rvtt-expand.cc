@@ -104,12 +104,12 @@ static int get_bool_type(int op, bool negate)
 static int
 flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
 {
-  int mod = get_int_arg(stmt, insnd->mod_pos);
+  int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
   if (negate)
     {
       // Flip the operation
       mod = negate_cmp_mod(mod);
-      gimple_call_set_arg(stmt, insnd->mod_pos, build_int_cst(integer_type_node, mod));
+      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod));
     }
 
   return mod;
@@ -135,12 +135,12 @@ copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
 
   // Make the iadd do a subtract for the compare
   // Make sure other code knows this is a compare
-  int mod = get_int_arg(new_stmt, new_insnd->mod_pos) | SFPXIADD_MOD1_IS_SUB;
+  int mod = TREE_INT_CST_LOW (gimple_call_arg (new_stmt, new_insnd->mod_arg ())) | SFPXIADD_MOD1_IS_SUB;
   if (id == rvtt_insn_data::sfpxiadd_i)
     {
       mod |= SFPXIADD_MOD1_DST_UNUSED;
     }
-  gimple_call_set_arg(new_stmt, new_insnd->mod_pos, build_int_cst(integer_type_node, mod));
+  gimple_call_set_arg(new_stmt, new_insnd->mod_arg (), build_int_cst(integer_type_node, mod));
 
   return new_stmt;
 }

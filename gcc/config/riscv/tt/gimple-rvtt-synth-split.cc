@@ -68,9 +68,9 @@ transform (function *fn)
 	const rvtt_insn_data *insnd;
 
 	if (rvtt_p (&insnd, &stmt, gsi)
-	    && insnd->nonimm_pos != -1)
+	    && insnd->has_var ())
 	  {
-	    tree immarg = gimple_call_arg (stmt, insnd->nonimm_pos);
+	    tree immarg = gimple_call_arg (stmt, insnd->imm_arg ());
 	    if (TREE_CODE (immarg) == INTEGER_CST)
 	      gimple_call_set_arg (stmt, 0, null_pointer_node);
 	    else
@@ -79,9 +79,9 @@ transform (function *fn)
 		tree sum = rvtt_emit_nonimm_prologue (synth_id, insnd, stmt, gsi);
 
 		// Update insn to make insnd->nonimm_pos+1 contain the sum
-		gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, sum);
+		gimple_call_set_arg (stmt, insnd->var_arg (), sum);
 		// Save unique_id in insn's id field
-		gimple_call_set_arg (stmt, insnd->nonimm_pos + 2,
+		gimple_call_set_arg (stmt, insnd->id_arg (),
 				     build_int_cst (integer_type_node, synth_id));
 	      }
 	    update_stmt (stmt);

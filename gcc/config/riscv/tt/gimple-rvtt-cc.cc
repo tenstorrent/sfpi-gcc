@@ -107,7 +107,7 @@ process_block_stmts(basic_block bb,
 	    {
 	    case rvtt_insn_data::sfppushc:
 	      {
-		bool is_replace = (get_int_arg(stmt, insnd->mod_pos) == SFPPUSHCC_MOD1_REPLACE);
+		bool is_replace = (get_int_arg(stmt, insnd->mod_arg ()) == SFPPUSHCC_MOD1_REPLACE);
 
 		prior_removable = false;
 		DUMP("PUSHC(%s): stack size %d\n", is_replace ? "replace" : "push", stack.size());
@@ -145,7 +145,7 @@ process_block_stmts(basic_block bb,
 	    case rvtt_insn_data::sfpxfcmps:
 	    case rvtt_insn_data::sfpxfcmpv:
 	      {
-		int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_pos));
+		int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
 		if ((mod & SFPXCMP_MOD1_CC_MASK) != SFPXCMP_MOD1_CC_LTE)
 		  goto default_;
 		// A compc will be inserted during rtl expansion,

@@ -54,14 +54,19 @@ struct rvtt_insn_data {
   unsigned int nonimm_mask;
   short nonimm_shft;
 
-  inline bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
-  inline bool live_p() const { return flags & INSN_FLAGS_LIVE; }
+  bool can_set_cc_p() const { return flags & INSN_FLAGS_CAN_SET_CC; }
+  bool is_live () const { return flags & INSN_FLAGS_LIVE; }
 
-  inline bool dst_as_src_p() const { return dst_arg_pos != -1; }
+  bool has_mod () const { return mod_pos >= 0; }
+  unsigned mod_arg () const { return mod_pos; }
 
-  inline int nonimm_val_arg_pos() const { return nonimm_pos - 1; }
-  inline int nonimm_op_arg_pos() const { return nonimm_pos; }
-  inline int nonimm_idflag_arg_pos() const { return nonimm_pos + 1; }
+  bool has_var () const { return nonimm_pos >= 0; }
+  unsigned imm_arg () const { return nonimm_pos; }
+  unsigned var_arg () const { return nonimm_pos + 1; }
+  unsigned id_arg () const { return nonimm_pos + 2; }
+
+  bool clobbers_src () const { return dst_arg_pos != -1; }
+  unsigned clobber_arg () const { return dst_arg_pos; }
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];

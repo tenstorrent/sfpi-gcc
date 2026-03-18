@@ -99,12 +99,12 @@ transform (function *fn)
 	    const rvtt_insn_data *insnd;
 
 	    bool is_rvtt = rvtt_p (&insnd, &stmt, use_stmt);
-	    gcc_assert (is_rvtt && insnd->nonimm_pos >= 0);
-	    gcc_assert (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST);
-	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->nonimm_pos)) != INTEGER_CST)
+	    gcc_assert (is_rvtt && insnd->has_var ());
+	    gcc_assert (TREE_CODE (gimple_call_arg (use_stmt, insnd->imm_arg ())) != INTEGER_CST);
+	    if (TREE_CODE (gimple_call_arg (use_stmt, insnd->imm_arg ())) != INTEGER_CST)
 	      {
 		graph.emplace_back (node_t::use (use_stmt, opcode_ix,
-						 last_add_ix, insnd->nonimm_pos));
+						 last_add_ix, insnd->imm_arg ()));
 		any_nonimm = true;
 	      }
 	  }

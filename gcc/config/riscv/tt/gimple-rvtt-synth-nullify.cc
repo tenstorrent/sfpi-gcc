@@ -46,13 +46,13 @@ transform (function *fn)
 	const rvtt_insn_data *insnd;
 
 	if (rvtt_p (&insnd, &stmt, gsi)
-	    && insnd->nonimm_pos != -1
-	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos)) == INTEGER_CST
-	    && TREE_CODE (gimple_call_arg (stmt, insnd->nonimm_pos + 1)) != INTEGER_CST)
+	    && insnd->has_var ()
+	    && TREE_CODE (gimple_call_arg (stmt, insnd->imm_arg ())) == INTEGER_CST
+	    && TREE_CODE (gimple_call_arg (stmt, insnd->var_arg ())) != INTEGER_CST)
 	  {
 	    gimple_call_set_arg (stmt, 0, null_pointer_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 1, integer_zero_node);
-	    gimple_call_set_arg (stmt, insnd->nonimm_pos + 2, integer_zero_node);
+	    gimple_call_set_arg (stmt, insnd->var_arg (), integer_zero_node);
+	    gimple_call_set_arg (stmt, insnd->id_arg (), integer_zero_node);
 	    update_stmt (stmt);
 	    updated = true;
 	  }
