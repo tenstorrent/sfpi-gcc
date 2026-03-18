@@ -43,7 +43,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "gimple-iterator.h"
 #include <map>
-#include "tt/rvtt.h"
 
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
@@ -364,6 +363,8 @@ riscv_init_builtins (void)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
+
+	  extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 	  if (rvtt_record_builtin (i, d->name, riscv_builtin_decls[i]))
 	    {
 	      // Apply Tensix overrides
@@ -393,6 +394,7 @@ riscv_init_builtins (void)
 	}
     }
 
+  extern void rvtt_init_builtins ();
   rvtt_init_builtins ();
 }
 
