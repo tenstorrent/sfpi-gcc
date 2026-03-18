@@ -157,9 +157,9 @@ RVTT_FN (sfpmul24_lv,        bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,     
 RVTT_FN (sfparecip,          bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0x00, -1,  1, -1,      0, 0)
 RVTT_FN (sfparecip_lv,       bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0x02, -1,  2, -1,      0, 0)
 
-RVTT_FN (ttincrwc,           ,,VOID_FTYPE_USI_USI_USI_USI,                                 0x00, -1, -1, -1,      0, 0)
+RVTT_FN (ttincrwc,           ,,VOID_FTYPE_SI_SI_SI_SI,                                       0x00, -1, -1, -1,      0, 0)
 // The length operand is [1,32], which is awkward
-RVTT_FN (ttreplay,           ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                0x00, -1, -1,  1, (unsigned)-1, 4)
+RVTT_FN (ttreplay,           ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                  0x00, -1, -1,  1, (unsigned)-1, 4)
 
 #undef RVTT_FN
 #undef RVTT_OVR
