@@ -164,10 +164,14 @@ RVTT_OVR(sfpcast,            bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                     
 RVTT_FN (sfpcast_lv,         wh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x3}))
 RVTT_OVR(sfpcast_lv,         bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0xf}))
 // The RTL ors in SFPSTOCHRND_MOD1_IMM8 appropriatel
-RVTT_FN (sfpstochrnd_i,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0, ({CU, 5, 16}, {M, 0xff}, {U, 1}))
-RVTT_FN (sfpstochrnd_i_lv,     ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI_USI, LV, ({CU, 5, 16}, {M, 0xff}, {U, 1}))
-RVTT_FN (sfpstochrnd_v,        ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0xff}, {U, 1}))
-RVTT_FN (sfpstochrnd_v_lv,     ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV, ({M, 0xff}, {U, 1}))
+RVTT_FN (sfpstochrnd_i,      wh ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0, ({CU, 5, 16}, {M, 0xff}, {CU, 1}))
+RVTT_OVR(sfpstochrnd_i,      bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         0, ({CU, 5, 16}, {M, 0xff}, {CU, 2}))
+RVTT_FN (sfpstochrnd_i_lv,   wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI_USI, LV, ({CU, 5, 16}, {M, 0xff}, {CU, 1}))
+RVTT_OVR(sfpstochrnd_i_lv,   bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI_USI, LV, ({CU, 5, 16}, {M, 0xff}, {CU, 2}))
+RVTT_FN (sfpstochrnd_v,      wh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x30}, {CU, 1}))
+RVTT_OVR(sfpstochrnd_v,      bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x30}, {CU, 2}))
+RVTT_FN (sfpstochrnd_v_lv,   wh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV, ({M, 0x30}, {CU, 1}))
+RVTT_OVR(sfpstochrnd_v_lv,   bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV, ({M, 0x30}, {CU, 2}))
 
 RVTT_FN (sfpreadconfig,      bh,,XTT_VEC_FTYPE_USI,                                          0, ({CU, 4}))
 RVTT_FN (sfpreadconfig_lv,   bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  LV, ({CU, 4}))
