@@ -1382,7 +1382,10 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
 {
-  operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
+  unsigned mod1 = INTVAL (operands[7]);
+  if (mod1 == SFPSTOCHRND_MOD1_INT32_TO_UINT8
+      || mod1 == SFPSTOCHRND_MOD1_INT32_TO_INT8)
+    operands[7] = GEN_INT (mod1 | SFPSTOCHRND_MOD1_IMM8);
 
   auto mem = const0_rtx;
   auto opc = const0_rtx;
@@ -1425,11 +1428,10 @@
    (clobber (match_scratch:SI 9 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
-    operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8);
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4\t# LV:%x6"
-      : "SFPSTOCHRND\t%x0, L0, %x5, %7, %8, %4",
+      ? "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8\t# LV:%x6"
+      : "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8",
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -1461,8 +1463,8 @@
 	  ] UNSPECV_SFPSTOCHRND))]
   "TARGET_XTT_TENSIX"
   "@
-   SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0
-   SFPSTOCHRND\t%0, %x3, %x2, %4, %5, 0\t# LV:%x1"
+   SFPSTOCHRND\t%0, %x3, %x2, 0, %4, %5
+   SFPSTOCHRND\t%0, %x3, %x2, 0, %4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpreadconfig"
