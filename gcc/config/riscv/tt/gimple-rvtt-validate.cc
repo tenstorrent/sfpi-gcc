@@ -81,8 +81,6 @@ validate_integral_args (const rvtt_insn_data *insnd, gcall *call)
     {
       if (info.is_runtime ())
 	continue;
-      if (info.is_xmod ())
-	continue;
 
       HOST_WIDE_INT val = 0;
       tree op = gimple_call_arg (call, info.argno ());
@@ -107,6 +105,9 @@ validate_integral_args (const rvtt_insn_data *insnd, gcall *call)
 	  changed = true;
 	  continue;
 	}
+
+      if (info.is_xmod ())
+	continue;
 
       HOST_WIDE_INT upper = 0;
       HOST_WIDE_INT lower = 0;
