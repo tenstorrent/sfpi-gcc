@@ -272,8 +272,11 @@ validate (function *fn)
 	      }
 	  }
 	else if (auto *call = dyn_cast<gcall *> (*gsi))
-	  changed |= validate_function_type (gimple_nonartificial_location (call),
-					     gimple_call_fntype (call), true);
+	  {
+	    if (tree type = gimple_call_fntype (call))
+	      changed |= validate_function_type (gimple_nonartificial_location (call),
+						 type, true);
+	  }
 	else if (auto *a = dyn_cast<gassign *> (*gsi))
 	  changed |= validate_assign (a);
       }
