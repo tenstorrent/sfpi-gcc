@@ -245,8 +245,10 @@ rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
 const rvtt_insn_data *
 rvtt_get_live_version(const rvtt_insn_data *insnd)
 {
-  if (insnd->id < rvtt_insn_data::hwm - 1
-      && sfpu_insn_data[insnd->id + 1].is_live ())
+  // We don't have to check id, as we'll never ask for the live version of the
+  // last defn.
+  if (sfpu_insn_data[insnd->id + 1].is_live ()
+      && sfpu_insn_data[insnd->id + 1].decl)
     return &sfpu_insn_data[insnd->id + 1];
 
   return nullptr;
@@ -255,6 +257,7 @@ rvtt_get_live_version(const rvtt_insn_data *insnd)
 const rvtt_insn_data *
 rvtt_get_notlive_version(const rvtt_insn_data *insnd)
 {
+  // Never ask for the notlive version of sfpassign_lv
   return &insnd[-int(insnd->is_live ())];
 }
 
@@ -698,7 +701,7 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
       else
 	imm = rvtt_clamp_unsigned (imm, 0xffff);
 
-      emit_insn (gen_rvtt_sfploadi_int
+      emit_insn (gen_rvtt_sfploadi_lv_int
 		 (dst, mem, opc, enc, imm,
 		  rvtt_gen_rtx_noval (XTT32SImode),
 		  lv, mod));
@@ -772,20 +775,20 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
   if (load_32bit)
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
-      emit_insn (gen_rvtt_sfploadi_int (tmp, const0_rtx, const0_rtx, const0_rtx,
-					GEN_INT (int_imm >> 16),
-					rvtt_gen_rtx_noval (XTT32SImode),
-					lv, GEN_INT (SFPLOADI_MOD0_UPPER)));
-      emit_insn (gen_rvtt_sfploadi_int (dst, const0_rtx, const0_rtx, const0_rtx,
-					GEN_INT (int_imm & 0xFFFF),
-					rvtt_gen_rtx_noval (XTT32SImode),
-					tmp, GEN_INT (SFPLOADI_MOD0_LOWER)));
+      emit_insn (gen_rvtt_sfploadi_lv_int (tmp, const0_rtx, const0_rtx, const0_rtx,
+					   GEN_INT (int_imm >> 16),
+					   rvtt_gen_rtx_noval (XTT32SImode),
+					   lv, GEN_INT (SFPLOADI_MOD0_UPPER)));
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+					   GEN_INT (int_imm & 0xFFFF),
+					   rvtt_gen_rtx_noval (XTT32SImode),
+					   tmp, GEN_INT (SFPLOADI_MOD0_LOWER)));
     }
   else
-    emit_insn (gen_rvtt_sfploadi_int (dst, const0_rtx, const0_rtx, const0_rtx,
-				      imm,
-				      rvtt_gen_rtx_noval (XTT32SImode),
-				      lv, GEN_INT (new_mod)));
+    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+					 imm,
+					 rvtt_gen_rtx_noval (XTT32SImode),
+					 lv, GEN_INT (new_mod)));
 }
 
 void
@@ -958,15 +961,16 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
 	    {
 	      // Perform op w/ compare
-	      unsigned int mod1 = (cmp == SFPXCMP_MOD1_CC_LT) ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	      emit_insn (gen_rvtt_sfpiadd_i_int (dst, lv, src, imm, GEN_INT(mod1 | SFPIADD_MOD1_ARG_IMM)));
+	      unsigned mod1 = cmp == SFPXCMP_MOD1_CC_LT
+		? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+	      emit_insn (gen_rvtt_sfpiadd_i_lv_int (dst, lv, src, imm, GEN_INT (mod1 | SFPIADD_MOD1_ARG_IMM)));
 	      need_setcc = false;
 	    }
 	  else
 	    {
 	      // Perform op w/o compare
-	      emit_insn(gen_rvtt_sfpiadd_i_int (dst, lv, src, imm,
-						GEN_INT(SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
+	      emit_insn (gen_rvtt_sfpiadd_i_lv_int (dst, lv, src, imm,
+						    GEN_INT (SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
 	      set_cc_arg = dst;
 	    }
 	}

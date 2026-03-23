@@ -189,6 +189,12 @@ constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
+constexpr unsigned int SFPAND_MOD1_USE_VB = 1;
+
+constexpr unsigned int SFPOR_MOD1_USE_VB = 1;
+
+// sfpxor does not have USE_VB option
+
 constexpr unsigned int SFPLZ_MOD1_CC_NONE = 0;
 constexpr unsigned int SFPLZ_MOD1_CC_NE0 = 2;
 constexpr unsigned int SFPLZ_MOD1_CC_COMP = 8;
