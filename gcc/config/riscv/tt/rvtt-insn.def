@@ -103,9 +103,13 @@ RVTT_FN (sfpabs_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,               
 RVTT_FN (sfplz,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    CC(0x54),      ({M, 0x5555}))
 RVTT_FN (sfplz_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV|CC(0x54), ({M, 0x5555}))
 
-RVTT_FN (sfpand,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
-RVTT_FN (sfpor,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
-RVTT_FN (sfpxor,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
+RVTT_FN (sfpand,        wh,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
+RVTT_OVR(sfpand,           bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0,  ())
+RVTT_FN (sfpand_lv,        bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV,  ())
+RVTT_FN (sfpor,         wh,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
+RVTT_OVR(sfpor,            bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0,  ())
+RVTT_FN (sfpor_lv,         bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV,  ())
+RVTT_FN (sfpxor,          ,_wh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM,  ())
 RVTT_FN (sfpnot,             ,,XTT_VEC_FTYPE_XTT_VEC,                                        0,           ())
 RVTT_FN (sfpnot_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV,      ())
 

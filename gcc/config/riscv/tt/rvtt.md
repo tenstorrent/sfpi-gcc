@@ -1095,16 +1095,67 @@
   (UNSPECV_SFPXOR "XOR")
   ])
 
-;; the inputs are not commutative, because op1 could be a live vqlue
-;; that needs the (non-enabled) components propagating to the output.
-(define_insn "rvtt_sfp<rvtt_logical_name>"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_expand "rvtt_sfp<rvtt_logical_name>"
+  [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
 	  ] rvtt_logical_op))]
   "TARGET_XTT_TENSIX"
-  "SFP<rvtt_logical_insn>\t%0, %x2"
+  {
+    rtx insn = nullptr;
+    if (TARGET_XTT_TENSIX_WH
+        || (<rvtt_logical_op> == UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH))
+      insn = gen_rvtt_sfp<rvtt_logical_name>_wh
+        (operands[0], operands[1], operands[2]);
+    else
+      insn = gen_rvtt_sfp<rvtt_logical_name>_lv
+        (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+	 operands[1], operands[2]);
+    emit_insn (insn);
+    DONE;
+  })
+
+(define_expand "rvtt_sfp<rvtt_logical_name>_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
+	  ] rvtt_logical_op))]
+  "TARGET_XTT_TENSIX_BH && <rvtt_logical_op> != UNSPECV_SFPXOR"
+  {
+   emit_insn (gen_rvtt_sfp<rvtt_logical_name>_lv_int
+     (operands[0], operands[1], operands[2], operands[3],
+      GEN_INT (SFP<rvtt_logical_insn>_MOD1_USE_VB)));
+    DONE;
+  })
+
+;; the inputs are not commutative, because op1 could be a live vqlue
+;; that needs the (non-enabled) components propagating to the output.
+(define_insn "rvtt_sfp<rvtt_logical_name>_wh"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc")
+	  ] rvtt_logical_op))]
+  "TARGET_XTT_TENSIX_WH
+   || (TARGET_XTT_TENSIX_BH && <rvtt_logical_op> == UNSPECV_SFPXOR)"
+  "SFP<rvtt_logical_insn>\t%x0, %x2"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfp<rvtt_logical_name>_lv_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc,xrxc")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "xrxc,xrxc")
+          (match_operand:SI      4 "const_int_operand"  "n,n")
+	  ] rvtt_logical_op))]
+  "TARGET_XTT_TENSIX_BH && <rvtt_logical_op> != UNSPECV_SFPXOR"
+  "@
+   SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
+   SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpnot"
