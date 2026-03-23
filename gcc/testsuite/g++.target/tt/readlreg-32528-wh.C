@@ -55,10 +55,13 @@ void sub5() {
 }
 /*
 **_ZN3cst4sub5Ev:
+**	# READ L0
+**	# READ L1
 **	SFPMAD	L1, L11, L0, L1, 0
 **	SFPNOP
 **	SFPMAD	L3, L11, L0, L1, 0
 **	SFPNOP
+**	# WRITE L3
 **	ret
 */
 
@@ -89,6 +92,7 @@ void foo () {
 }
 /*
 **_ZN3vol3fooEv:
+**	# READ L1
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L1, L9, 0
 **	ret
@@ -105,6 +109,7 @@ void bar (int i) {
 }
 /*
 **_ZN3vol3barEi:
+**	# READ L1
 **	beq	a0,zero,.L[0-9]+
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0

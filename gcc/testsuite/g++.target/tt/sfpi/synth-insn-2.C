@@ -20,6 +20,7 @@ void loop_diff (int i) {
 }
 /*
 **_Z9loop_diffi:
+**	# READ L0
 **	slli	a5,a0,12
 **	li	a3,16773120
 **	and	a5,a5,a3
@@ -46,6 +47,7 @@ void loop_diff (int i) {
 **	li	a3, 2046821173	# 6:7a000335
 **	add	a5,a5,a3
 **	sw	a5, 0\(a4\)	# 6:SFPSHFT	L3, L3, a5, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -61,6 +63,7 @@ void loop_common (int i) {
 }
 /*
 **_Z11loop_commoni:
+**	# READ L0
 **	slli	a5,a0,12
 **	li	a4,16773120
 **	and	a5,a5,a4
@@ -74,5 +77,6 @@ void loop_common (int i) {
 **	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L3, a5, 5
 **	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L3, a5, 5
 **	sw	a5, 0\(a4\)	# 2:SFPSHFT	L3, L3, a5, 5
+**	# WRITE L3
 **	ret
 */

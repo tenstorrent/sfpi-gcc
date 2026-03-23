@@ -17,8 +17,11 @@ void f5() {
 }
 /*
 **_Z2f5v:
+**	# READ L0
+**	# READ L1
 **	SFPSHFT	L0, L1, 0, 0
 **	SFPMOV	L3, L0, 2
+**	# WRITE L3
 **	ret
 */
 
@@ -31,10 +34,13 @@ void f5r() {
 }
 /*
 **_Z3f5rv:
+**	# READ L0
+**	# READ L1
 **	SFPLOADI	L2, 0, 4
 **	SFPIADD	L1, L2, 0, 6
 **	SFPSHFT	L0, L1, 0, 0
 **	SFPMOV	L3, L0, 2
+**	# WRITE L3
 **	ret
 */
 
@@ -47,8 +53,11 @@ void f6() {
 }
 /*
 **_Z2f6v:
+**	# READ L0
+**	# READ L1
 **	SFPSHFT	L0, L1, 0, 0
 **	SFPMOV	L3, L0, 2
+**	# WRITE L3
 **	ret
 */
 
@@ -61,9 +70,12 @@ void f6r() {
 }
 /*
 **_Z3f6rv:
+**	# READ L0
+**	# READ L1
 **	SFPLOADI	L2, 0, 4
 **	SFPIADD	L1, L2, 0, 6
 **	SFPSHFT	L0, L1, 0, 2
 **	SFPMOV	L3, L0, 2
+**	# WRITE L3
 **	ret
 */

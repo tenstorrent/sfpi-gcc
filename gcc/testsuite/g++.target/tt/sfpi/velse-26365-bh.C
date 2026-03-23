@@ -24,6 +24,7 @@ void bug1() {
 }
 /*
 **_Z4bug1v:
+**	# READ L3
 **	SFPLOADI	L0, 0, 0
 **	SFPMAD	L1, L10, L11, L3, 0
 **	SFPNOP
@@ -41,6 +42,7 @@ void bug1() {
 **	SFPMOV	L3, L0, 2
 **	SFPPOPC	0
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 
@@ -60,6 +62,7 @@ void bug2() {
 }
 /*
 **_Z4bug2v:
+**	# READ L3
 **	SFPLOADI	L0, 0, 0
 **	SFPMAD	L1, L10, L11, L3, 0
 **	SFPNOP
@@ -77,6 +80,7 @@ void bug2() {
 **	SFPMOV	L3, L0, 2
 **	SFPPOPC	0
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 
@@ -96,6 +100,7 @@ void good1() {
 }
 /*
 **_Z5good1v:
+**	# READ L3
 **	SFPLOADI	L0, 0, 0
 **	SFPMAD	L1, L10, L11, L3, 0
 **	SFPNOP
@@ -109,6 +114,7 @@ void good1() {
 **	SFPLOADI	L0, 16384, 0	# LV:L0
 **	SFPMOV	L3, L0, 2
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 
@@ -128,6 +134,7 @@ void good2() {
 }
 /*
 **_Z5good2v:
+**	# READ L3
 **	SFPLOADI	L0, 0, 0
 **	SFPMAD	L1, L10, L11, L3, 0
 **	SFPNOP
@@ -141,5 +148,6 @@ void good2() {
 **	SFPLOADI	L0, 16384, 0	# LV:L0
 **	SFPMOV	L3, L0, 2
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */

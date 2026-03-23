@@ -15,7 +15,8 @@ void foo () {
 }
 /*
 **_Z3foov:
-**	SFPMOV	L0, L9, 8
+**	SFPMOV	L0, L9, 8	# CFG:9
+**	# WRITE L0
 **	ret
 */
 
@@ -36,13 +37,17 @@ void bar () {
 }
 /*
 **_Z3barv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
 **	SFPMAD	L1, L1, L11, L0, 0
 **	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
-**	SFPMOV	L0, L9, 8	# LV:L0
+**	SFPMOV	L0, L9, 8	# LV:L0 CFG:9
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */
 
@@ -53,8 +58,9 @@ void baz () {
 }
 /*
 **_Z3bazv:
-**	SFPMOV	L1, L9, 8
-**	SFPMOV	L0, L9, 8
+**	SFPMOV	L1, L9, 8	# CFG:9
+**	SFPMOV	L0, L9, 8	# CFG:9
 **	SFPIADD	L0, L1, 0, 4
+**	# WRITE L0
 **	ret
 */

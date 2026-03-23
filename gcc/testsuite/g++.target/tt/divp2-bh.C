@@ -8,6 +8,8 @@ void foo () {
 }
 /*
 **_Z3foov:
+**	# READ L0
 **	SFPDIVP2	L0, L0, 4, 0
+**	# WRITE L0
 **	ret
 */

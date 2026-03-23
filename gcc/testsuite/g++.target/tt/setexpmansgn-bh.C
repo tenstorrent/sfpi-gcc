@@ -10,8 +10,11 @@ namespace setexp {
   }
 /*
 **_ZN6setexp5set_vEv:
+**	# READ L0
+**	# READ L1
 ** 	SFPSETEXP	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -23,8 +26,11 @@ namespace setexp {
   }
 /*
 **_ZN6setexp5cpy_vEv:
+**	# READ L0
+**	# READ L1
 ** 	SFPSETEXP	L1, L0, 0, 2
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -35,7 +41,9 @@ namespace setexp {
   }
 /*
 **_ZN6setexp5set_iEv:
+**	# READ L0
 **	SFPSETEXP	L0, L0, 12, 1
+**	# WRITE L0
 **	ret
 */
 }
@@ -49,8 +57,11 @@ namespace setman {
   }
 /*
 **_ZN6setman5set_vEv:
+**	# READ L0
+**	# READ L1
 ** 	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -61,7 +72,9 @@ namespace setman {
   }
 /*
 **_ZN6setman5set_iEv:
+**	# READ L0
 **	SFPSETMAN	L0, L0, 12, 1
+**	# WRITE L0
 **	ret
 */
 }
@@ -75,8 +88,11 @@ namespace setsgn {
   }
 /*
 **_ZN6setsgn5set_vEv:
+**	# READ L0
+**	# READ L1
 ** 	SFPSETSGN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -87,7 +103,9 @@ namespace setsgn {
   }
 /*
 **_ZN6setsgn5set_iEv:
+**	# READ L0
 **	SFPSETSGN	L0, L0, 12, 1
+**	# WRITE L0
 **	ret
 */
 }
