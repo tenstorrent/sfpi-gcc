@@ -16,6 +16,7 @@ void one(int s) {
 }
 /*
 **_Z3onei:
+**	# READ L0
 **	slli	a0,a0,12
 **	li	a5,16773120
 **	and	a0,a0,a5
@@ -23,6 +24,7 @@ void one(int s) {
 **	add	a0,a0,a5
 **	lui	a5,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	sw	a0, %lo\(_ZN7ckernel13instrn_bufferE\)\(a5\)	# 2:SFPSHFT	L3, L0, a0, 7
+**	# WRITE L3
 **	ret
 */
 
@@ -36,6 +38,7 @@ void two(int s) {
 }
 /*
 **_Z3twoi:
+**	# READ L0
 **	slli	a0,a0,12
 **	li	a5,16773120
 **	and	a0,a0,a5
@@ -47,5 +50,6 @@ void two(int s) {
 **	li	a5, 2046821175	# 4:7a000337
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 4:SFPSHFT	L3, L3, a0, 7
+**	# WRITE L3
 **	ret
 */

@@ -86,6 +86,7 @@ void three () {
 **	SFPMOV	L3, L0, 2
 **	SFPMULI	L3, 0, 8
 **	SFPNOP
+**	# WRITE L3
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -136,6 +137,7 @@ void three () {
 **	SFPLOAD	L3, 0, 0, 0
 **	SFPSHFT2	L8, L3, 0, 3
 **	SFPNOP
+**	# WRITE L3
 **	ret
 */
 

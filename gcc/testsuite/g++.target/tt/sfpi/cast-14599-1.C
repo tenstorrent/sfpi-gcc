@@ -15,7 +15,9 @@ void i2f_rne () {
 }
 /*
 **_Z7i2f_rnev:
+**	# READ L0
 **	SFPCAST	L1, L0, 0
+**	# WRITE L1
 **	ret
 */
 
@@ -26,7 +28,9 @@ void i2f_rns () {
 }
 /*
 **_Z7i2f_rnsv:
+**	# READ L0
 **	SFPCAST	L1, L0, 1
+**	# WRITE L1
 **	ret
 */
 
@@ -37,7 +41,9 @@ void sm2i () {
 }
 /*
 **_Z4sm2iv:
+**	# READ L0
 **	SFPCAST	L1, L0, 2
+**	# WRITE L1
 **	ret
 */
 
@@ -48,7 +54,9 @@ void i2sm () {
 }
 /*
 **_Z4i2smv:
+**	# READ L0
 **	SFPCAST	L1, L0, 3
+**	# WRITE L1
 **	ret
 */
 
@@ -68,11 +76,15 @@ void cond () {
 }
 /*
 **_Z4condv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
 **	SFPIADD	L1, L0, 0, 6
 **	SFPSETCC	L1, 0, 6
 **	SFPCAST	L0, L2, 0
 **	SFPCOMPC
 **	SFPCAST	L0, L2, 1	# LV:L0
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */

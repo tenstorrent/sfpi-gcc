@@ -17,6 +17,7 @@ template void load_imm<0> ();
 /*
 **_Z8load_immILj0EEvv:
 **	SFPLOAD	L3, 0, 3, 7
+**	# WRITE L3
 **	ret
 */
 
@@ -24,6 +25,7 @@ template void load_imm<0x1fff> ();
 /*
 **_Z8load_immILj8191EEvv:
 **	SFPLOAD	L3, 8191, 3, 7
+**	# WRITE L3
 **	ret
 */
 
@@ -40,6 +42,7 @@ void load_var (unsigned addr) {
 **	srli	a0,a0,19
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 2:SFPLOAD	L3, a0, 3, 7
+**	# WRITE L3
 **	ret
 */
 
@@ -51,6 +54,7 @@ void store_imm () {
 template void store_imm<0> ();
 /*
 **_Z9store_immILj0EEvv:
+**	# READ L3
 **	SFPSTORE	L3, 0, 3, 7
 **	ret
 */
@@ -58,6 +62,7 @@ template void store_imm<0> ();
 template void store_imm<0x1fff> ();
 /*
 **_Z9store_immILj8191EEvv:
+**	# READ L3
 **	SFPSTORE	L3, 8191, 3, 7
 **	ret
 */
@@ -68,6 +73,7 @@ void store_var (unsigned addr) {
 }
 /*
 **_Z9store_varj:
+**	# READ L3
 **	slli	a0,a0,19
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 1916002304	# 2:7233e000

@@ -15,6 +15,7 @@ void foo ()
 **_ZN2gt3fooEv:
 **	SFPMOV	L3, L8, 2
 **	SFPGT	L3, L9, 0, 8
+**	# WRITE L3
 **	ret
 */
 
@@ -33,6 +34,7 @@ void bar ()
 **	SFPMOV	L3, L8, 2
 **	SFPGT	L8, L9, 0, 1
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 
@@ -67,6 +69,7 @@ void foo ()
 **_ZN2le3fooEv:
 **	SFPMOV	L3, L8, 2
 **	SFPLE	L3, L9, 0, 8
+**	# WRITE L3
 **	ret
 */
 
@@ -85,6 +88,7 @@ void bar ()
 **	SFPLE	L8, L9, 0, 1
 **	SFPMOV	L3, L8, 2
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 

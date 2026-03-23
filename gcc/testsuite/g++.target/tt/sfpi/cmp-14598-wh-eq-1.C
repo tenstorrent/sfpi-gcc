@@ -25,12 +25,17 @@ void fnuvv () {
 }
 /*
 **_Z5fnuvvv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	# READ L3
 **	SFPIADD	L1, L0, 0, 6
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */
 
@@ -51,6 +56,10 @@ void fnuvi (int i) {
 }
 /*
 **_Z5fnuvii:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	# READ L3
 **	slli	a4,a0,16
 **	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 1897529344	# 2:711a0000
@@ -68,6 +77,7 @@ void fnuvi (int i) {
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */
 
@@ -88,12 +98,17 @@ void fnuvc () {
 }
 /*
 **_Z5fnuvcv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	# READ L3
 **	SFPIADD	L0, L0, -5, 5
 **	SFPSETCC	L0, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */
 
@@ -114,11 +129,16 @@ void fns () {
 }
 /*
 **_Z3fnsv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	# READ L3
 **	SFPIADD	L1, L0, 0, 6
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
+**	# WRITE L0
 **	ret
 */

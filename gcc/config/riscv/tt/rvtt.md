@@ -175,7 +175,7 @@
      (const_int rvtt_lregs)
      ] UNSPECV_SFPVARLREG)]
   "TARGET_XTT_TENSIX"
-  ""
+  "# WRITE %x0"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
@@ -185,7 +185,7 @@
 	  (const_int rvtt_lregs)
 	  ] UNSPECV_SFPVARLREG))]
   "TARGET_XTT_TENSIX"
-  ""
+  "# READ %x0"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 

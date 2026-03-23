@@ -16,7 +16,9 @@ void f1() {
 }
 /*
 **_Z2f1v:
+**	# READ L0
 **	SFPSHFT	L3, L0, 2, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -28,7 +30,9 @@ void f1r() {
 }
 /*
 **_Z3f1rv:
+**	# READ L0
 **	SFPSHFT	L3, L0, -2, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -40,7 +44,9 @@ void f2() {
 }
 /*
 **_Z2f2v:
+**	# READ L0
 **	SFPSHFT	L3, L0, 2, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -52,7 +58,9 @@ void f2r() {
 }
 /*
 **_Z3f2rv:
+**	# READ L0
 **	SFPSHFT	L3, L0, -2, 7
+**	# WRITE L3
 **	ret
 */
 
@@ -64,6 +72,7 @@ void f3(int s) {
 }
 /*
 **_Z2f3i:
+**	# READ L0
 **	slli	a0,a0,12
 **	li	a5,16773120
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
@@ -72,6 +81,7 @@ void f3(int s) {
 **	li	a5, 2046820405	# 2:7a000035
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 2:SFPSHFT	L3, L0, a0, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -83,6 +93,7 @@ void f3r(int s) {
 }
 /*
 **_Z3f3ri:
+**	# READ L0
 **	neg	a5,a0
 **	li	a4,16773120
 **	slli	a5,a5,12
@@ -92,6 +103,7 @@ void f3r(int s) {
 **	li	a4, 2046820405	# 2:7a000035
 **	add	a5,a5,a4
 **	sw	a5, 0\(a3\)	# 2:SFPSHFT	L3, L0, a5, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -103,6 +115,7 @@ void f4(int s) {
 }
 /*
 **_Z2f4i:
+**	# READ L0
 **	slli	a0,a0,12
 **	li	a5,16773120
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
@@ -111,6 +124,7 @@ void f4(int s) {
 **	li	a5, 2046820405	# 2:7a000035
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 2:SFPSHFT	L3, L0, a0, 5
+**	# WRITE L3
 **	ret
 */
 
@@ -122,6 +136,7 @@ void f4r(int s) {
 }
 /*
 **_Z3f4ri:
+**	# READ L0
 **	neg	a5,a0
 **	li	a4,16773120
 **	slli	a5,a5,12
@@ -131,5 +146,6 @@ void f4r(int s) {
 **	li	a4, 2046820407	# 2:7a000037
 **	add	a5,a5,a4
 **	sw	a5, 0\(a3\)	# 2:SFPSHFT	L3, L0, a5, 7
+**	# WRITE L3
 **	ret
 */

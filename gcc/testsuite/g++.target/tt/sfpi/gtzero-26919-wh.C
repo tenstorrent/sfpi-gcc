@@ -16,6 +16,7 @@ void bad()
 }
 /*
 **_Z3badv:
+**	# READ L0
 **	SFPSETCC	L0, 0, 4
 **	SFPSETCC	L0, 0, 2
 **	SFPENCC	3, 10

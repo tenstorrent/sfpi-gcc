@@ -21,8 +21,11 @@ void sub1() {
 }
 /*
 **_Z4sub1v:
+**	# READ L0
+**	# READ L1
 **	SFPADD	L3, L10, L0, L1, 2
 **	SFPNOP
+**	# WRITE L3
 **	ret
 */
 
@@ -36,8 +39,11 @@ void sub2() {
 }
 /*
 **_Z4sub2v:
+**	# READ L0
+**	# READ L1
 **	SFPADD	L3, L10, L1, L0, 2
 **	SFPNOP
+**	# WRITE L3
 **	ret
 */
 
@@ -52,8 +58,11 @@ void sub3() {
 }
 /*
 **_Z4sub3v:
+**	# READ L0
+**	# READ L1
 **	SFPADD	L3, L10, L0, L1, 3
 **	SFPNOP
+**	# WRITE L3
 **	ret
 */
 
@@ -72,6 +81,8 @@ void sub4() {
 }
 /*
 **_Z4sub4v:
+**	# READ L0
+**	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
@@ -79,6 +90,7 @@ void sub4() {
 **	SFPCOMPC
 **	SFPADD	L3, L10, L1, L0, 2	# LV:L3
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */
 
@@ -96,6 +108,8 @@ void sub5() {
 }
 /*
 **_Z4sub5v:
+**	# READ L0
+**	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
@@ -105,6 +119,7 @@ void sub5() {
 **	SFPADD	L1, L10, L1, L0, 2	# LV:L1
 **	SFPENCC	3, 10
 **	SFPMOV	L3, L1, 2
+**	# WRITE L3
 **	ret
 */
 
@@ -123,6 +138,8 @@ void sub6() {
 }
 /*
 **_Z4sub6v:
+**	# READ L0
+**	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPNOP
 **	SFPSETCC	L2, 0, 0
@@ -130,5 +147,6 @@ void sub6() {
 **	SFPCOMPC
 **	SFPADD	L3, L10, L0, L1, 2	# LV:L3
 **	SFPENCC	3, 10
+**	# WRITE L3
 **	ret
 */

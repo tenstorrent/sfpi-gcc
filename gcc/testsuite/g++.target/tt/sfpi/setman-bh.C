@@ -15,7 +15,9 @@ void foo () {
 }
 /*
 **_Z3foov:
+**	# READ L0
 **	SFPSETMAN	L0, L0, 4095, 1
+**	# WRITE L0
 **	ret
 */
 
@@ -26,6 +28,7 @@ void bar (unsigned man) {
 }
 /*
 **_Z3barj:
+**	# READ L0
 **	zext.h	a4,a0
 **	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
 **	li	a5, 1897529344	# 2:711a0000
@@ -38,6 +41,7 @@ void bar (unsigned man) {
 **	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -48,9 +52,11 @@ void baz () {
 }
 /*
 **_Z3bazv:
+**	# READ L0
 **	SFPLOADI	L1, 4096, 2
 **	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
 
@@ -61,9 +67,11 @@ void toto () {
 }
 /*
 **_Z4totov:
+**	# READ L0
 **	SFPLOADI	L1, 18, 8
 **	SFPLOADI	L1, 13398, 10	# LV:L1
 **	SFPSETMAN	L1, L0, 0, 0
 **	SFPMOV	L0, L1, 2
+**	# WRITE L0
 **	ret
 */
