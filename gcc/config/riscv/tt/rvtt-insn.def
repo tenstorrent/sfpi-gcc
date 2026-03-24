@@ -33,7 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 
 #define LV rvtt_insn_data::HAS_LV
-#define CC(N) (((N+0) ? (N + 0) : 0xffff) << rvtt_insn_data::CC_MASK_SHIFT)
+#define CC(N) (uint32_t((N+0) ? (N+0) : 0xffff) << rvtt_insn_data::CC_MASK_SHIFT)
 #define CLB(N) (((N+0) << rvtt_insn_data::CLOBBER_SHIFT) | (1 << rvtt_insn_data::NUM_CLOBBERS_SHIFT))
 #define CLB2(N) (CLB(N) + (1 << rvtt_insn_data::NUM_CLOBBERS_SHIFT))
 #define COM rvtt_insn_data::COMMUTES
@@ -65,7 +65,8 @@ RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,      
 RVTT_FN (sfpxfcmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                       0, ({E, 16}, {XM}))
 RVTT_FN (sfpxloadi_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               LV, ({E, 16, 0, 0, true}, {XM}))
-RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|CC(0x7e7e),  ({XM, 0x7f}, {}))
+// Not all mod values are commutative -- might be a subtract
+RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|COM|CC(0x7e7e),  ({XM, 0x7f}, {}))
 RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               CC(0x7e7e), ({E, 0}, {XM}))
 RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x7e7e), ({E, 0}, {XM}))
 

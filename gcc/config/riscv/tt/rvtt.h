@@ -45,18 +45,20 @@ struct rvtt_insn_data {
   hwm
     };
 public:
-  enum flags_t {
+  enum flags_t : uint16_t {
     MOD_SHIFT,
     VAR_SHIFT,
-    COMMUTE_SHIFT,
     LV_SHIFT,
+    COMMUTE_SHIFT,
     NUM_CLOBBERS_SHIFT,
     NUM_CLOBBERS_BITS = 2,
     CLOBBER_SHIFT = NUM_CLOBBERS_SHIFT + NUM_CLOBBERS_BITS,
     CLOBBER_BITS = 3,
-    CC_MASK_SHIFT = CLOBBER_SHIFT + CLOBBER_BITS,
-    CC_MASK_BITS = 16,
-    HWM = CC_MASK_SHIFT + CC_MASK_BITS,
+
+    HWM = CLOBBER_SHIFT + CLOBBER_BITS,
+
+    // Initialized via int operand, but not stored with this type.
+    CC_MASK_SHIFT = 16,
 
     HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
     HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
@@ -65,9 +67,8 @@ public:
 
     NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
     CLOBBER_MASK = (1 << CLOBBER_BITS) - 1,
-    CC_MASK = (1 << CC_MASK_BITS) - 1,
   };
-  static_assert (HWM <= 32);
+  static_assert (HWM <= 16);
 
 public:
   class op_t
@@ -169,8 +170,10 @@ public:
   };
 
 public:
-  constexpr rvtt_insn_data (insn_id id_, const char *name_, unsigned flags_, ops_t ops_)
-    : decl (nullptr), name (name_), flags (flags_t (flags_)), id (id_), ops (ops_) {}
+  constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
+    : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
+      cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
+      id (id_), ops (ops_) {}
 
 public:
   void init ();
@@ -185,6 +188,7 @@ public:
 
 private:
   flags_t flags;
+  uint16_t cc_mask;
 
 public:
   insn_id id;
@@ -192,49 +196,52 @@ public:
 private:
   uint8_t clobber_pos = 0;
   uint8_t mod_pos = 0;
+  int8_t src_pos = -1;
 
 public:
   ops_t ops;
 
 public:
-  unsigned sets_cc_mask () const {
-    return (flags >> CC_MASK_SHIFT) & ((1u << CC_MASK_BITS) - 1);
+  bool is_live () const { return flags & HAS_LV; }
+
+  // We know these objects are in an array.
+  // We never ask for the live version of the last entry.
+  const rvtt_insn_data *get_live () const {
+    if (this[1].is_live () && this[1].decl)
+      return this + 1;
+    return nullptr;
   }
-  bool is_live () const {
-    return flags & HAS_LV;
+  const rvtt_insn_data *get_not_live () const {
+    // Never ask for the notlive version of sfpassign_lv
+    return this - int (is_live ());
   }
 
-  bool has_mod () const {
-    return flags & HAS_MOD;
-  }
-  int mod_arg () const {
-    return mod_pos;
-  }
+public:
+  bool has_mod () const { return flags & HAS_MOD; }
+  int mod_arg () const { return mod_pos; }
 
-  bool has_var () const {
-    return flags & HAS_VAR;
-  }
+  bool has_var () const { return flags & HAS_VAR; }
   int imm_arg () const { return ops[0].argno (); }
   int var_arg () const { return imm_arg () + 1; }
   int id_arg () const { return imm_arg () + 2; }
 
+  bool has_src () const { return src_pos >= 0; }
+  int src_arg () const { return src_pos; }
+
   unsigned imm_bits () const {
     return ops[0].bits () + bool (ops[0].bias ());
   }
-  unsigned imm_encode () const {
-    return ops[0].encode ();
-  }
-  bool imm_is_upper () const {
-    return ops[0].is_upper ();
-  }
+  unsigned imm_encode () const { return ops[0].encode (); }
+  bool imm_is_upper () const { return ops[0].is_upper (); }
 
   int num_src_clobbers () const {
     return (flags >> NUM_CLOBBERS_SHIFT) & NUM_CLOBBERS_MASK;
   }
   int first_clobber_arg () const { return clobber_pos; }
-  bool commutes () const {
-    return flags & COMMUTES;
-  }
+
+public:
+  bool sets_cc (gcall *stmt) const;
+  bool srcs_commute (gcall *stmt) const;
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
@@ -256,12 +263,6 @@ extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
 
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-
-extern const rvtt_insn_data * rvtt_get_live_version(const rvtt_insn_data *insnd);
-extern const rvtt_insn_data * rvtt_get_notlive_version(const rvtt_insn_data *insnd);
-
-extern bool rvtt_sets_cc(const rvtt_insn_data *insnd, gcall *stmt);
-extern bool rvtt_permutable_operands(const rvtt_insn_data *insnd, gcall *stmt);
 
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd);
