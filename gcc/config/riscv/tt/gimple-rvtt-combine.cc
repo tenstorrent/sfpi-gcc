@@ -208,10 +208,8 @@ intervening_cc_stmt(gimple_stmt_iterator gsi, gimple_stmt_iterator last)
   {
     gcall *stmt;
     const rvtt_insn_data *insnd;
-    if (rvtt_p (&insnd ,&stmt, gsi) && rvtt_sets_cc(insnd, stmt))
-     {
-       return true;
-     }
+    if (rvtt_p (&insnd ,&stmt, gsi) && insnd->sets_cc (stmt))
+      return true;
 
     gsi_next (&gsi);
   }
@@ -438,7 +436,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       candidate_insnd->id == rvtt_insn_data::sfpadd_lv)
     {
       DUMP("Trying to combine %s into %si\n", candidate_insnd->name,
-	   rvtt_get_notlive_version(candidate_insnd)->name);
+	   candidate_insnd->get_not_live ()->name);
 
       int live = candidate_insnd->is_live ();
       gimple_stmt_iterator assign_gsi;
@@ -474,7 +472,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 	{
 	  DUMP("  found a matching %s...\n", assign_insnd->name);
 
-	  const rvtt_insn_data *opi_insnd = rvtt_get_notlive_version(candidate_insnd) + 2;
+	  const rvtt_insn_data *opi_insnd = candidate_insnd->get_not_live () + 2;
 	  DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
 
 	  // Create <add,mul>i

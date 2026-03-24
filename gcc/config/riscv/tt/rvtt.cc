@@ -241,64 +241,33 @@ rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
   return rvtt_p (insnd, stmt, gsi_stmt (gsi));
 }
 
-// Relies on live instructions being next in sequence in the insn table
-const rvtt_insn_data *
-rvtt_get_live_version(const rvtt_insn_data *insnd)
-{
-  // We don't have to check id, as we'll never ask for the live version of the
-  // last defn.
-  if (sfpu_insn_data[insnd->id + 1].is_live ()
-      && sfpu_insn_data[insnd->id + 1].decl)
-    return &sfpu_insn_data[insnd->id + 1];
-
-  return nullptr;
-}
-
-const rvtt_insn_data *
-rvtt_get_notlive_version(const rvtt_insn_data *insnd)
-{
-  // Never ask for the notlive version of sfpassign_lv
-  return &insnd[-int(insnd->is_live ())];
-}
-
-static long int
-get_int_arg(gcall *stmt, unsigned int arg)
-{
-  tree decl = gimple_call_arg(stmt, arg);
-  if (decl)
-  {
-    gcc_assert(TREE_CODE(decl) == INTEGER_CST);
-    return *(decl->int_cst.val);
-  }
-  return -1;
-}
-
 bool
-rvtt_sets_cc (const rvtt_insn_data *insnd, gcall *stmt)
+rvtt_insn_data::sets_cc (gcall *stmt) const
 {
-  if (auto mask = insnd->sets_cc_mask ())
+  if (auto mask = cc_mask)
     {
-      if (!insnd->has_mod ())
+      if (!has_mod ())
 	return true;
 
-      unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
+      unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, mod_arg ()));
       if ((1 << (mod & 0xf)) & mask)
 	return true;
     }
   return false;
 }
 
-bool rvtt_permutable_operands(const rvtt_insn_data *insnd, gcall *stmt)
+bool rvtt_insn_data::srcs_commute (gcall *stmt) const
 {
-  return
-      insnd->id == rvtt_insn_data::sfpand ||
+  if (!(flags & COMMUTES))
+    return false;
 
-      insnd->id == rvtt_insn_data::sfpor ||
+  if (id == sfpxiadd_v)
+    {
+      auto mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, mod_arg ()));
+      return !(mod & SFPXIADD_MOD1_IS_SUB);
+    }
 
-      insnd->id == rvtt_insn_data::sfpxor ||
-
-      (insnd->id == rvtt_insn_data::sfpxiadd_v &&
-       (get_int_arg (stmt, 2) & SFPXIADD_MOD1_IS_SUB) == 0);
+  return true;
 }
 
 void rvtt_mov_error (const rtx_insn *insn, bool is_load)

@@ -176,7 +176,7 @@ process_block_stmts(basic_block bb,
 	{
 	  gcc_assert(liveness.find(stmt) == liveness.end());
 	  liveness.insert(pair<gcall *, liveness_data>(stmt, *current));
-	  if (rvtt_sets_cc(insnd, stmt) &&
+	  if (insnd->sets_cc(stmt) &&
 	      insnd->id != rvtt_insn_data::sfpencc)
 	    {
 	      if (stack.size() == 0)
@@ -558,7 +558,7 @@ fold_live_assign (function *fn)
 		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfpxloadi);
 		  }
 
-		const rvtt_insn_data *new_insnd = rvtt_get_live_version(prev_insnd);
+		const rvtt_insn_data *new_insnd = prev_insnd->get_live ();
 		if (new_insnd != nullptr)
 		  {
 		    // Create _lv version of prev, delete assign stmt, delete prev_stmt
