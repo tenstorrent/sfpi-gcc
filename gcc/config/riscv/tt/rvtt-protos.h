@@ -108,15 +108,15 @@ class gimple_opt_pass;
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_move (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_nullify (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_validate (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 
 // RTL passes
 class rtl_opt_pass;

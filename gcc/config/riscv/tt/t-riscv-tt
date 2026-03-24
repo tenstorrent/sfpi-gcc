@@ -31,6 +31,7 @@ MULTILIB_EXTRA_OPTS :=
 RVTT_OBJS := rvtt.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
+	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-expand.o \
 	gimple-rvtt-live.o \
@@ -39,7 +40,6 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-synth-renumber.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-unspec-prop.o \
-	gimple-rvtt-validate.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
