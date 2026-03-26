@@ -285,3 +285,95 @@ void mixed () {
 **	# WRITE L5
 **	ret
 */
+
+void logic0 ()
+{
+  sfpi::vInt v = __builtin_rvtt_sfpreadlreg (0);
+  sfpi::vUInt u = __builtin_rvtt_sfpreadlreg (7);
+
+  __builtin_rvtt_sfpwritelreg ((v & 1).get (), 1);
+  __builtin_rvtt_sfpwritelreg ((v | 2).get (), 2);
+  __builtin_rvtt_sfpwritelreg ((v ^ 3).get (), 3);
+
+  __builtin_rvtt_sfpwritelreg ((u & 1).get (), 4);
+  __builtin_rvtt_sfpwritelreg ((u | 2).get (), 5);
+  __builtin_rvtt_sfpwritelreg ((u ^ 3).get (), 6);
+}
+/*
+**_Z6logic0v:
+**	# READ L0
+**	# READ L7
+**	SFPLOADI	L1, 1, 4
+**	SFPAND	L1, L0, L1, 1
+**	# WRITE L1
+**	SFPLOADI	L2, 2, 4
+**	SFPOR	L2, L0, L2, 1
+**	# WRITE L2
+**	SFPLOADI	L1, 3, 4
+**	SFPXOR	L0, L1
+**	SFPMOV	L3, L0, 2
+**	# WRITE L3
+**	SFPLOADI	L4, 1, 2
+**	SFPAND	L4, L7, L4, 1
+**	# WRITE L4
+**	SFPLOADI	L5, 2, 2
+**	SFPOR	L5, L7, L5, 1
+**	# WRITE L5
+**	SFPLOADI	L0, 3, 2
+**	SFPMOV	L6, L7, 2
+**	SFPXOR	L6, L0
+**	# WRITE L6
+**	ret
+*/
+
+void logic1 ()
+{
+  sfpi::vInt v = __builtin_rvtt_sfpreadlreg (0);
+  sfpi::vUInt u = __builtin_rvtt_sfpreadlreg (7);
+
+  __builtin_rvtt_sfpwritelreg ((v & u).get (), 1);
+  __builtin_rvtt_sfpwritelreg ((v | u).get (), 2);
+  __builtin_rvtt_sfpwritelreg ((v ^ u).get (), 3);
+
+  __builtin_rvtt_sfpwritelreg ((u & v).get (), 4);
+  __builtin_rvtt_sfpwritelreg ((u | v).get (), 5);
+  __builtin_rvtt_sfpwritelreg ((u ^ v).get (), 6);
+}
+/*
+**_Z6logic1v:
+**	# READ L0
+**	# READ L7
+**	SFPAND	L1, L0, L7, 1
+**	# WRITE L1
+**	SFPOR	L2, L0, L7, 1
+**	# WRITE L2
+**	SFPMOV	L3, L0, 2
+**	SFPXOR	L3, L7
+**	# WRITE L3
+**	SFPAND	L4, L7, L0, 1
+**	# WRITE L4
+**	SFPOR	L5, L7, L0, 1
+**	# WRITE L5
+**	SFPMOV	L6, L7, 2
+**	SFPXOR	L6, L0
+**	# WRITE L6
+**	ret
+*/
+
+void logic2 ()
+{
+  sfpi::vInt v = __builtin_rvtt_sfpreadlreg (0);
+  sfpi::vUInt u = __builtin_rvtt_sfpreadlreg (7);
+
+  __builtin_rvtt_sfpwritelreg ((v & 1u).get (), 1);
+  __builtin_rvtt_sfpwritelreg ((v | 2u).get (), 2);
+  __builtin_rvtt_sfpwritelreg ((v ^ 3u).get (), 3);
+  __builtin_rvtt_sfpwritelreg ((u & 1u).get (), 4);
+  __builtin_rvtt_sfpwritelreg ((u | 2u).get (), 5);
+  __builtin_rvtt_sfpwritelreg ((u ^ 3u).get (), 6);
+
+}
+/*
+**_Z6logic2v:
+**	tail	_Z6logic0v
+*/
