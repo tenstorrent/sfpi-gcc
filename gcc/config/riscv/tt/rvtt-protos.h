@@ -92,9 +92,8 @@ class rvtt_synth
   }
 };
 
-extern void rvtt_emit_sfpxloadi(rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id);
-extern void rvtt_emit_sfpxfcmps(rtx addr, rtx v1, rtx f, rtx mod);
-extern void rvtt_emit_sfpxfcmpv(rtx v1, rtx v2, rtx mod);
+extern void rvtt_emit_sfpxfcmps (rtx v1, rtx f, rtx mod);
+extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
 extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
 
@@ -111,11 +110,11 @@ extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_expand (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_immload_shorten (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_immvar_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
-extern gimple_opt_pass *make_pass_rvtt_synth_nullify (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 
 // RTL passes
@@ -145,11 +144,6 @@ constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
 constexpr unsigned int SFPLOADI_MOD0_SHORT = 4;
 constexpr unsigned int SFPLOADI_MOD0_UPPER = 8;
 constexpr unsigned int SFPLOADI_MOD0_LOWER = 10;
-
-constexpr unsigned int SFPXLOADI_MOD0_32BIT_MASK = 16;
-constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
-constexpr unsigned int SFPXLOADI_MOD0_UINT32 = 17;
-constexpr unsigned int SFPXLOADI_MOD0_FLOAT = 18;
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
@@ -290,11 +284,6 @@ constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
 constexpr unsigned int CREG_IDX_NEG_1 = 11;
-#if 0
-constexpr unsigned int CREG_IDX_0P001953125 = 12;
-constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
-constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
-#endif
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
 #endif /* ! GCC_RVTT_PROTOS_H */
