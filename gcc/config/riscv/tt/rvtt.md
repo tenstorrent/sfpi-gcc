@@ -1106,7 +1106,7 @@
     rtx insn = nullptr;
     if (TARGET_XTT_TENSIX_WH
         || (<rvtt_logical_op> == UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH))
-      insn = gen_rvtt_sfp<rvtt_logical_name>_wh
+      insn = gen_rvtt_sfp<rvtt_logical_name>_2op
         (operands[0], operands[1], operands[2]);
     else
       insn = gen_rvtt_sfp<rvtt_logical_name>_lv
@@ -1133,7 +1133,7 @@
 
 ;; the inputs are not commutative, because op1 could be a live vqlue
 ;; that needs the (non-enabled) components propagating to the output.
-(define_insn "rvtt_sfp<rvtt_logical_name>_wh"
+(define_insn "rvtt_sfp<rvtt_logical_name>_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
