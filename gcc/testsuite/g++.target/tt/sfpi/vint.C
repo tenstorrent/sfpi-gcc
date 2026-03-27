@@ -303,13 +303,13 @@ void logic0 ()
 **_Z6logic0v:
 **	# READ L0
 **	# READ L7
-**	SFPLOADI	L1, 1, 2
+**	SFPLOADI	L1, 1, 4
 **	SFPAND	L1, L0, L1, 1
 **	# WRITE L1
-**	SFPLOADI	L2, 2, 2
+**	SFPLOADI	L2, 2, 4
 **	SFPOR	L2, L0, L2, 1
 **	# WRITE L2
-**	SFPLOADI	L1, 3, 2
+**	SFPLOADI	L1, 3, 4
 **	SFPXOR	L0, L1
 **	SFPMOV	L3, L0, 2
 **	# WRITE L3
