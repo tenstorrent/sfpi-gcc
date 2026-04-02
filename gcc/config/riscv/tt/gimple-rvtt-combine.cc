@@ -390,13 +390,6 @@ match_prior_assignment(rvtt_insn_data::insn_id id,
   return (*prior_insnd)->id == id;
 }
 
-static inline void
-validate_assumptions()
-{
-  gcc_assert(rvtt_insn_data::sfpmul + 2 == rvtt_insn_data::sfpmuli);
-  gcc_assert(rvtt_insn_data::sfpadd + 2 == rvtt_insn_data::sfpaddi);
-}
-
 // Combine mul/add w/ loadi to make muli/addi
 //
 // We can aggessively generate mulis and addis since there is little downside
@@ -428,7 +421,8 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
 {
   bool combined = false;
 
-  validate_assumptions();
+  static_assert (rvtt_insn_data::sfpmul + 2 == rvtt_insn_data::sfpmuli);
+  static_assert (rvtt_insn_data::sfpadd + 2 == rvtt_insn_data::sfpaddi);
 
   if (candidate_insnd->id == rvtt_insn_data::sfpmul ||
       candidate_insnd->id == rvtt_insn_data::sfpmul_lv ||

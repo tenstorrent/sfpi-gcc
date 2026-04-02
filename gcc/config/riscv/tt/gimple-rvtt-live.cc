@@ -266,27 +266,6 @@ process_block(function *fn,
   return found_sfpu;
 }
 
-static unsigned int
-find_live_arg(gcall *stmt)
-{
-  // First arg is the insn_buffer pointer, if it is present
-  // Next arg (so first or second) is the live arg
-  unsigned int live_arg;
-  unsigned num_of_ops = gimple_call_num_args (stmt);
-  gcc_assert(num_of_ops >= 1);
-  if (POINTER_TYPE_P (TREE_TYPE (gimple_call_arg(stmt, 0))))
-    {
-      gcc_assert(num_of_ops >= 2);
-      live_arg = 1;
-    }
-  else
-    {
-      live_arg = 0;
-    }
-
-  return live_arg;
-}
-
 // Pointer chase back to the root if needed
 //
 // PHI nodes occur where multiple BB come together
@@ -343,9 +322,8 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 		{
 		  DUMP("      chase assignment\n");
 		  // If the defining statement is another _lv insn, chase it through
-		  unsigned int live_arg = find_live_arg (stmt);
 		  data = get_def_stmt_liveness_1(fn, visited, data,
-						 SSA_NAME_DEF_STMT(gimple_call_arg(stmt, live_arg)), liveness);
+						 SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->live_arg ())), liveness);
 		}
 	      else
 		{
@@ -376,7 +354,7 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 
 // Find the single root of the assignment chain, across BBs
 static liveness_data
-get_def_stmt_liveness(function *fn, gcall *stmt, const call_liveness& liveness)
+get_def_stmt_liveness(function *fn, gcall *stmt, const rvtt_insn_data *insnd, const call_liveness& liveness)
 {
   liveness_data data(0, 0, false);
   vector<bool> visited;
@@ -385,8 +363,7 @@ get_def_stmt_liveness(function *fn, gcall *stmt, const call_liveness& liveness)
 
   visited[gimple_bb(stmt)->index] = true;
 
-  unsigned int live_arg = find_live_arg (stmt);
-  gimple *def_g = SSA_NAME_DEF_STMT (gimple_call_arg(stmt, live_arg));
+  gimple *def_g = SSA_NAME_DEF_STMT (gimple_call_arg(stmt, insnd->live_arg ()));
 
   return get_def_stmt_liveness_1(fn, visited, data, def_g, liveness);
 }
@@ -427,7 +404,7 @@ break_liveness(function *fn, call_liveness& liveness)
 	{
 	  // Get the defining statement and it's cc_count for this SSA
 	  liveness_data cur_stmt_liveness = it->second;
-	  liveness_data def_stmt_liveness = get_def_stmt_liveness(fn, stmt, liveness);
+	  liveness_data def_stmt_liveness = get_def_stmt_liveness(fn, stmt, insnd, liveness);
 
 	  DUMP("    liveness: cur %d def %d curgen %d defgen %d force %d\n",
 	       cur_stmt_liveness.level, def_stmt_liveness.level,
@@ -566,12 +543,10 @@ fold_live_assign (function *fn)
 		    gimple *new_stmt = gimple_build_call (new_insnd->decl,
 							  gimple_call_num_args (prev_stmt) + 1);
 
-		    // Find which position the "live" arg is in
-		    unsigned int live_arg_num = find_live_arg (prev_stmt);
-		    copy_args_to_live_insn (new_stmt, live_arg_num, prev_stmt);
+		    copy_args_to_live_insn (new_stmt, new_insnd->live_arg (), prev_stmt);
 
 		    // Copy the live arg
-		    gimple_call_set_arg (new_stmt, live_arg_num, live_arg);
+		    gimple_call_set_arg (new_stmt, new_insnd->live_arg (), live_arg);
 
 		    gimple_set_location (new_stmt, gimple_location (prev_stmt));
 		    gsi_insert_before(&prev_gsi, new_stmt, GSI_SAME_STMT);

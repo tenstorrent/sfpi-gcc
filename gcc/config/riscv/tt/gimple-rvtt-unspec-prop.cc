@@ -29,6 +29,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "tree-pass.h"
 #include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #include "gimple-ssa.h"
 #include "tree-phinodes.h"
 #include "ssa-iterators.h"
@@ -90,14 +91,19 @@ transform (function *fn)
 	      if (is_cstlreg)
 		{
 		  arg = gimple_call_arg (call, 0);
-		  if (TREE_CODE (arg) != INTEGER_CST
-		      || TREE_INT_CST_LOW (arg) < 8)
+		  if (TREE_INT_CST_LOW (arg) < 8)
 		    continue;
 		}
 
 	      tree lhs = gimple_call_lhs (call);
 	      if (!lhs)
 		continue;
+
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "\nSinking reg read\n");
+		  print_gimple_stmt (dump_file, call, 0);
+		}
 
 	      // Clone the call to each use location, if they are different BBs
 	      gimple *use;
@@ -106,10 +112,25 @@ transform (function *fn)
 	      FOR_EACH_IMM_USE_STMT (use, use_iter, lhs)
 		{
 		  if (gimple_bb (use) == bb)
-		    continue;
+		    {
+		      if (dump_file)
+			{
+			  fprintf (dump_file, "Use is in same BB\n");
+			  print_gimple_stmt (dump_file, use, 2);
+			}
+		      continue;
+		    }
 
-		  // If this triggers, we'll need to handle it.
-		  gcc_assert (!is_a <gphi *> (use));
+		  if (is_a <gphi *> (use))
+		    {
+		      // FIXME: We should sink it to the incoming edge's src bb?
+		      if (dump_file)
+			{
+			  fprintf (dump_file, "Use is a PHI\n");
+			  print_gimple_stmt (dump_file, use, 2);
+			}
+		      continue;
+		    }
 
 		  gcall *clone = gimple_build_call (decl, is_cstlreg ? 1 : 0);
 		  tree ssa_var = make_ssa_name_fn (fn, TREE_TYPE (lhs), clone);
@@ -122,10 +143,23 @@ transform (function *fn)
 		  auto use_gsi = gsi_for_stmt (use);
 		  gsi_insert_before (&use_gsi, clone, GSI_SAME_STMT);
 
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "Inserted\n");
+		      print_gimple_stmt (dump_file, clone, 2);
+		      fprintf (dump_file, "before\n");
+		      print_gimple_stmt (dump_file, use, 2);
+		    }
+
 		  // replace use
 		  use_operand_p use_p;
 		  FOR_EACH_IMM_USE_ON_STMT (use_p, use_iter)
 		    propagate_value (use_p, ssa_var);
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "Updated\n");
+		      print_gimple_stmt (dump_file, use, 2);
+		    }
 		  update_stmt (use);
 
 		  clones.insert (clone);
@@ -144,6 +178,12 @@ transform (function *fn)
 	      if (!res)
 		continue;
 
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "\nHoisting\n");
+		  print_gimple_stmt (dump_file, call, 0);
+		}
+
 	      auto arg = gimple_call_arg (call, 0);
 	      gcc_assert (TREE_CODE (arg) == SSA_NAME);
 	      auto *def = SSA_NAME_DEF_STMT (arg);
@@ -153,7 +193,14 @@ transform (function *fn)
 	      gcc_assert (is_a <gcall *> (def));
 
 	      if (gimple_bb (def) == bb)
-		continue;
+		{
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "\nDefinition is in same BB\n");
+		      print_gimple_stmt (dump_file, def, 0);
+		    }
+		  continue;
+		}
 
 	      // copy the selectN to just after the def stmt
 	      gcall *clone = gimple_build_call (decl, 2);
@@ -167,6 +214,14 @@ transform (function *fn)
 	      auto def_gsi = gsi_for_stmt (def);
 	      gsi_insert_after (&def_gsi, clone, GSI_SAME_STMT);
 
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Inserted\n");
+		  print_gimple_stmt (dump_file, clone, 2);
+		  fprintf (dump_file, "after\n");
+		  print_gimple_stmt (dump_file, def, 2);
+		}
+
 	      gimple *use;
 	      imm_use_iterator use_iter;
 
@@ -177,6 +232,11 @@ transform (function *fn)
 
 		  FOR_EACH_IMM_USE_ON_STMT (use_p, use_iter)
 		    SET_USE (use_p, ssa_var);
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "Updated\n");
+		      print_gimple_stmt (dump_file, use, 2);
+		    }
 		  update_stmt (use);
 		}
 	      clones.insert (clone);

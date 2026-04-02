@@ -83,7 +83,8 @@ public:
       XMOD, // XMod operand (one of the x pseudo builtins)
       RUNTIME, // Runtime value
 
-      CHECKED = 1 << 7
+      EARLY = 1 << 6,
+      CHECKED = 1 << 7,
     };
 
   private:
@@ -117,10 +118,12 @@ public:
       : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift | int(upper) << UPPER_shift)
     {}
 
+    static kind_t early (kind_t kind) { return kind_t (kind | EARLY | CHECKED); }
     static kind_t checked (kind_t kind) { return kind_t (kind | CHECKED); }
     operator bool () const { return enc != 0; }
     bool is_checked () const { return bool ((enc >> KIND_shift) & CHECKED); }
-    kind_t kind () const { return kind_t ((enc >> KIND_shift) & (((1u << KIND_bits) - 1u) ^ CHECKED)); }
+    bool is_early () const { return bool ((enc >> KIND_shift) & EARLY); }
+    kind_t kind () const { return kind_t ((enc >> KIND_shift) & (((1u << KIND_bits) - 1u) ^ (CHECKED | EARLY))); }
     bool is_mod () const { return kind () == MOD; }
     bool is_xmod () const { return kind () == XMOD; }
     bool is_runtime () const { return kind () == RUNTIME; }
@@ -173,7 +176,7 @@ public:
   constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
     : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
       cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
-      id (id_), ops (ops_) {}
+      id (id_), clobber_pos (0), src_pos (-1), arg_num (0), ops (ops_) {}
 
 public:
   void init ();
@@ -194,15 +197,17 @@ public:
   insn_id id;
 
 private:
-  uint8_t clobber_pos = 0;
   uint8_t mod_pos = 0;
-  int8_t src_pos = -1;
+  uint8_t clobber_pos : 4;
+  int8_t src_pos : 4;
+  uint8_t arg_num : 4;
 
 public:
   ops_t ops;
 
 public:
   bool is_live () const { return flags & HAS_LV; }
+  int live_arg () const { return has_var (); }
 
   // We know these objects are in an array.
   // We never ask for the live version of the last entry.
@@ -217,6 +222,8 @@ public:
   }
 
 public:
+  int num_args () const { return arg_num; };
+
   bool has_mod () const { return flags & HAS_MOD; }
   int mod_arg () const { return mod_pos; }
 
