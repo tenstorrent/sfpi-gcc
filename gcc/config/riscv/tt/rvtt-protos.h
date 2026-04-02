@@ -22,6 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "sfpu-ops-wh.h"
 #include "sfpu-ops-bh.h"
+#include "sfpu-ops-qsr.h"
 
 #define rvtt_sfpu_regno(operand) (REGNO (operand) - SFPU_REG_FIRST)
 

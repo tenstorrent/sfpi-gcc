@@ -110,6 +110,8 @@
   (const_string "none"))
 (define_enum_attr "xtt_delay_bh" "xtt_delay"
   (const_string "none"))
+(define_enum_attr "xtt_delay_qsr" "xtt_delay"
+  (const_string "none"))
 
 ;; rvtt_synth_opcode is used to synthesize sfp/tt instructions that
 ;; are injected into the instruction stream.  rvtt_synth_opcode is
@@ -478,9 +480,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOADI (0, INTVAL (operands[6]), 0)
-        : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOADI (0, INTVAL (operands[6]), 0)
-        : 0;
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFPLOADI (0, INTVAL (operands[6]), 0)
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFPLOADI (0, INTVAL (operands[6]), 0)
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPLOADI (0, INTVAL (operands[6]), 0)
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (0).dst_shift (20));
       imm = operands[4];
@@ -556,11 +559,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
-	: TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
-	: 0;
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
+	: TARGET_XTT_TENSIX_BH 	? TT_OP_BH_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0)
+	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0, 0)
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).dst_shift (20));
       imm = operands[4];
@@ -568,6 +570,7 @@
   else
     imm = rvtt_clamp_unsigned (imm, (TARGET_XTT_TENSIX_WH ? 0x3fff
                                    : TARGET_XTT_TENSIX_BH ? 0x1fff
+                                   : TARGET_XTT_TENSIX_QSR ? 0x3ff
                                    : 0));
 
   emit_insn (gen_rvtt_sfpload_lv_int
@@ -594,8 +597,10 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPLOAD\t%x0, %4, %7, %8\t# LV:%x6"
-      : "SFPLOAD\t%x0, %4, %7, %8",
+      ? (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%x0, %4, %7, %8, 0, 0\t# LV:%x6"
+         : "SFPLOAD\t%x0, %4, %7, %8\t# LV:%x6")
+      : (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%x0, %4, %7, %8, 0, 0"
+         : "SFPLOAD\t%x0, %4, %7, %8"),
       operands, true, 9);
   }
   [(set_attr "type" "tensix")])
@@ -620,11 +625,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[0]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
-        : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
-        : 0;
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0)
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 0, 0)
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[4])).src_shift (20));
       imm = operands[3];
@@ -632,6 +636,7 @@
   else
     imm = rvtt_clamp_unsigned (imm, (TARGET_XTT_TENSIX_WH ? 0x3fff
                                    : TARGET_XTT_TENSIX_BH ? 0x1fff
+                                   : TARGET_XTT_TENSIX_QSR ? 0x3ff
                                    : 0));
 
   emit_insn (gen_rvtt_sfpstore_int
@@ -655,7 +660,8 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPSTORE\t%x4, %3, %5, %6",
+      TARGET_XTT_TENSIX_QSR ? "SFPSTORE\t%x4, %3, %5, %6, 0, 0"
+      : "SFPSTORE\t%x4, %3, %5, %6",
       operands, false, 7);
   }
   [(set_attr "type" "tensix")])
@@ -761,7 +767,8 @@
    SFP<rvtt_muladd_insn>\t%x0, <rvtt_muladd_ops_lv>, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_expand "rvtt_sfpmad"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -794,7 +801,8 @@
    SFPMAD\t%x0, %x2, %x3, %x4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_int_iterator rvtt_muliaddi_op [
   UNSPECV_SFPMULI
@@ -829,11 +837,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
-	: TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
-	: 0;
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
+	: TARGET_XTT_TENSIX_BH 	? TT_OP_BH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
+	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (4).dst_shift (4));
       imm = operands[4];
@@ -867,7 +874,8 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpiadd_v_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1058,11 +1066,10 @@
 
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
-        : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
-        : 0;
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPSET<rvtt_set_insn> (0, 0, 0, INTVAL (operands[7]))
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
@@ -1127,7 +1134,7 @@
   "TARGET_XTT_TENSIX"
   {
     rtx insn = nullptr;
-    if (TARGET_XTT_TENSIX_WH
+    if (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR
         || (<rvtt_logical_op> == UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH))
       insn = gen_rvtt_sfp<rvtt_logical_name>_2op
         (operands[0], operands[1], operands[2]);
@@ -1162,7 +1169,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc")
 	  ] rvtt_logical_op))]
-  "TARGET_XTT_TENSIX_WH
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR
    || (TARGET_XTT_TENSIX_BH && <rvtt_logical_op> == UNSPECV_SFPXOR)"
   "SFP<rvtt_logical_insn>\t%x0, %x2"
   [(set_attr "type" "tensix")])
@@ -1228,7 +1235,7 @@
   "TARGET_XTT_TENSIX"
 {
   unsigned mod = SFPSHFT_MOD1_SHFT_IMM
-      | (TARGET_XTT_TENSIX_BH ? SFPSHFT_MOD1_SRC_LREG_C : 0);
+      | (TARGET_XTT_TENSIX_BH_QSR ? SFPSHFT_MOD1_SRC_LREG_C : 0);
   operands[6] = GEN_INT (INTVAL (operands[6]) | mod);
 
   auto mem = const0_rtx;
@@ -1239,14 +1246,13 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
-        : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
-        : 0;
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPSHFT (0, 0, 0, INTVAL (operands[6]))
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5]))
-                    .src_shift (TARGET_XTT_TENSIX_WH ? 4 : TARGET_XTT_TENSIX_BH ? 8 : 0)
+                    .src_shift (TARGET_XTT_TENSIX_WH ? 4 : TARGET_XTT_TENSIX_BH_QSR ? 8 : 0)
 		    .dst_shift (4));
       imm = operands[4];
     }
@@ -1287,7 +1293,7 @@
           (match_operand:SI    7 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPSHFT))
    (clobber (match_scratch:SI  8 "=X,&r"))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   {
     operands[7] = GEN_INT (INTVAL (operands[7]) | SFPSHFT_MOD1_SHFT_IMM | SFPSHFT_MOD1_SRC_LREG_C);
     return rvtt_synth::pattern (which_alternative,
@@ -1382,11 +1388,10 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_BH_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
-        : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
-        : 0;
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_BH_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPDIVP2 (0, 0, 0, INTVAL (operands[7]))
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
@@ -1469,11 +1474,13 @@
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH
-	? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
-        : TARGET_XTT_TENSIX_BH
-	? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]), 0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
-        : 0;
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_SFP_STOCH_RND (INTVAL (operands[8]),
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_SFP_STOCH_RND (INTVAL (operands[8]),
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFP_STOCH_RND (INTVAL (operands[8]),
+	             0, 0, 0, 0, INTVAL (operands[7]) | SFPSTOCHRND_MOD1_IMM8)
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
@@ -1546,7 +1553,7 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI    1 "const_int_operand" "n")
 	  ] UNSPECV_SFPCONFIG))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   {
     emit_insn (gen_rvtt_sfpreadconfig_lv
       (operands[0], rvtt_gen_rtx_noval (XTT32SImode), operands[1]));
@@ -1559,7 +1566,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
           (match_operand:SI 2 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPCONFIG))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "@
    SFPMOV\t%x0, L%2, 8\t# CFG:%2
    SFPMOV\t%x0, L%2, 8\t# LV:%x1 CFG:%2"
@@ -1587,7 +1594,8 @@
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn_and_split "rvtt_sfplutfp32_3r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1619,7 +1627,8 @@
 }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_3r_split"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1635,7 +1644,8 @@
   "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_6r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1653,7 +1663,8 @@
   "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpswap_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1672,7 +1683,8 @@
   "SFPSWAP\t%x2, %x3, %4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_insn "*rvtt_sfpswap_cst1"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1686,7 +1698,8 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_split
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1724,7 +1737,8 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_split
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1761,7 +1775,8 @@
   "SFPSWAP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_split
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1979,7 +1994,8 @@
   "SFPSHFT2\t%x0, %x7, 0, %8"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_expand "rvtt_sfpshft2_subvec_shfl1_copy4"
   [(set (match_operand:XTT128SI 0 "register_operand")
@@ -2016,7 +2032,8 @@
   "SFPSHFT2\t%x0, %x2, 0, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_insn "rvtt_sfpshft2_subvec_shfl1_dead"
   [(unspec_volatile:XTT32SI [
@@ -2030,7 +2047,8 @@
    SFPSHFT2\tL8, %x1, 0, %2\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "static")
-   (set_attr "xtt_delay_bh" "static")])
+   (set_attr "xtt_delay_bh" "static")
+   (set_attr "xtt_delay_qsr" "static")])
 
 (define_split
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2106,7 +2124,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
           (match_operand:SI    3 "const_int_operand")
           ] rvtt_gtle_op))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   {
     if (!(INTVAL (operands[3]) & SFPGTLE_MOD1_SET_DEST))
       {
@@ -2124,7 +2142,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    3 "const_int_operand" "n")
           ] rvtt_gtle_op))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFP<rvtt_gtle_insn>\t%x0, %x2, 0, %3"
   "&& bool (find_reg_note (insn, REG_UNUSED, operands[0]))"
   [(unspec_volatile:XTT32SI [
@@ -2144,7 +2162,7 @@
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
      (match_operand:SI    2 "const_int_operand" "n")
      ] rvtt_gtle_op)]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFP<rvtt_gtle_insn>\t%x0, %x1, 0, %2"
   "&& !(INTVAL (operands[2]) & 0xb)"
   [(const_int 0)]
@@ -2158,10 +2176,11 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    3 "const_int_operand" "n")
 	  ] UNSPECV_SFPMUL24))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFPMUL24\t%x0, %x1, %x2, %3"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpmul24_lv"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -2171,10 +2190,11 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
           (match_operand:SI    4 "const_int_operand" "n")
 	  ] UNSPECV_SFPMUL24))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFPMUL24\t%x0, %x2, %x3, %4"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")])
+   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfparecip"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2182,7 +2202,7 @@
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
           (match_operand:SI    2 "const_int_operand")
 	  ] UNSPECV_SFPARECIP))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFPARECIP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")])
 
@@ -2193,7 +2213,7 @@
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xr")
           (match_operand:SI    3 "const_int_operand" "n")
 	  ] UNSPECV_SFPARECIP))]
-  "TARGET_XTT_TENSIX_BH"
+  "TARGET_XTT_TENSIX_BH_QSR"
   "SFPARECIP\t%x0, %x2, %3"
   [(set_attr "type" "tensix")])
 
@@ -2228,13 +2248,13 @@
     {
       mem = gen_rtx_MEM (SImode, operands[0]);
       int op
-        = TARGET_XTT_TENSIX_WH
-        ? TT_OP_WH_REPLAY (INTVAL (operands[4]), 0,
-    	                   INTVAL (operands[5]), INTVAL (operands[6]))
-        : TARGET_XTT_TENSIX_BH
-        ? TT_OP_BH_REPLAY (INTVAL (operands[4]), 0,
-                           INTVAL (operands[5]), INTVAL (operands[6]))
-        : 0;
+        = TARGET_XTT_TENSIX_WH  ? TT_OP_WH_REPLAY (INTVAL (operands[4]),
+	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        : TARGET_XTT_TENSIX_BH  ? TT_OP_BH_REPLAY (INTVAL (operands[4]),
+	                 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_REPLAY (INTVAL (operands[4]),
+	                 0, 0, 0, INTVAL (operands[5]), INTVAL (operands[6]))
+        : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
       imm = operands[2];

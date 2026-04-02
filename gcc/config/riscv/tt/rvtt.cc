@@ -70,6 +70,8 @@ rvtt_init_builtins ()
   gcc_assert (sfpu_insn_data[0].decl);
 
   static const auto tensixbh = []() { return TARGET_XTT_TENSIX_BH; };
+  static const auto tensixqsr = []() { return TARGET_XTT_TENSIX_QSR; };
+  static const auto tensixbh_qsr = []() { return TARGET_XTT_TENSIX_BH_QSR; };
   static const struct {
     bool (*avail) ();
     rvtt_insn_data::insn_id index;

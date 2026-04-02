@@ -538,11 +538,13 @@ Mask(XSFVFNRCLIPXFQF) Var(riscv_sifive_subext)
 TargetVariable
 int riscv_tt_subext
 
+Mask(XTT_ROCC_QSR) Var(riscv_tt_subext)
+
 Mask(XTT_TENSIX_BH) Var(riscv_tt_subext)
 
-Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
+Mask(XTT_TENSIX_QSR) Var(riscv_tt_subext)
 
-Mask(XTT_ROCC_QSR) Var(riscv_tt_subext)
+Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 
 TargetVariable
 int riscv_tt_flags
@@ -574,10 +576,6 @@ Optimize Tensix CC usage.
 mtt-tensix-optimize-combine
 Target Mask(XTT_TENSIX_OPT_COMBINE) Var(riscv_tt_flags)
 Combine Tensix instructions.
-
-mtt-tensix-warn
-Target Mask(XTT_TENSIX_WARN) Var(riscv_tt_flags)
-Generate warnings for erroneous Tensix operations.
 
 mtt-tensix-optimize-replay
 Target Mask(XTT_TENSIX_OPT_REPLAY) Var(riscv_tt_flags)
