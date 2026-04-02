@@ -69,27 +69,29 @@ check_function_type (location_t loc, tree type, bool inline_p)
   return bad;
 }
 
-// Check mod argument passed to CALL
+
+// Check integral arguments passed to CALL, an INSND are within range.
 
 static bool
-check_mod_arg (const rvtt_insn_data *insnd, gcall *call)
+check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 {
   bool changed = false;
 
-  if (!insnd->has_mod ())
-    return false;
-
   for (unsigned ix = 0; auto info = insnd->ops[ix]; ix++)
     {
-      if (info.argno () != insnd->mod_arg ())
+      if (info.is_runtime ())
+	continue;
+      if (is_early != info.is_early ())
 	continue;
 
       HOST_WIDE_INT val = 0;
       tree op = gimple_call_arg (call, info.argno ());
       if (TREE_CODE (op) != INTEGER_CST)
 	{
+	  if (!ix && insnd->has_var ())
+	    continue;
 	  error_at (gimple_nonartificial_location (call),
-		    "mod argument %d is not a constant", info.argno () + 1);
+		    "argument %d is not a constant", info.argno () + 1);
 	zap:
 	  // If we don't make this correction, we'll likely crash, fail
 	  // at RTL expansion or the assembler will barf
@@ -111,93 +113,56 @@ check_mod_arg (const rvtt_insn_data *insnd, gcall *call)
 
       val = TREE_INT_CST_LOW (op);
 
-      if (val < 0 || val > 15)
+      HOST_WIDE_INT upper = 0xf;
+      HOST_WIDE_INT lower = 0;
+      unsigned bias = 0;
+      if (!info.is_mod ())
 	{
-	  error_at (gimple_location (call),
-		    "mod argument %d %qE is out of range [0, 15]", info.argno () + 1, op);
-	  goto zap;
+	  unsigned bits = info.bits ();
+	  if (!bits)
+	    bits = 32;
+	  upper = (1u << (info.bits () - 1)) - 1;
+	  if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
+	    lower = ~upper;
+	  if (info.kind () != rvtt_insn_data::op_t::SIGNED)
+	    upper = (upper << 1) | 1;
+	  bias = info.bias ();
 	}
 
-      if (!((1 << val) & info.mod ()))
+      if (val > upper + bias || val < lower + bias)
+	{
+	  if (info.is_checked ())
+	    error_at (gimple_location (call),
+		      "argument %d %qE is out of range [%ld, %ld]",
+		      info.argno () + 1, op, (long long)lower, (long long)upper);
+
+	  if (info.is_mod ())
+	    goto zap;
+
+	  // FIXME: Always clip?
+	  if (info.is_checked () || !insnd->has_var () || info.argno () != insnd->imm_arg ())
+	    {
+	      // Clip imm operands.  Keep nonnimm operands for for the moment,
+	      // until we fix sfpxloadi
+	      val -= bias;
+	      HOST_WIDE_INT sign_bits
+		= info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
+		? ~upper : 0;
+	      val = (val & upper) | sign_bits;
+	      val += bias;
+	      goto zap;
+	    }
+	}
+      if (info.is_mod ())
 	{
 	  unsigned mask = info.mod ();
-	  error_at (gimple_location (call),
-		    "argument %d %qE is invalid mod1 value (mask is 0x%x)",
-		    info.argno () + 1, op, mask);
-	  goto zap;
-	}
-    }
-
-  return changed;
-}
-
-// Check integral arguments passed to CALL, an INSND are within range.
-
-static bool
-check_int_args (const rvtt_insn_data *insnd, gcall *call)
-{
-  bool changed = false;
-
-  for (unsigned ix = 0; auto info = insnd->ops[ix]; ix++)
-    {
-      if (info.is_runtime ())
-	continue;
-      if (info.is_mod () || info.is_xmod ())
-	continue;
-
-      HOST_WIDE_INT val = 0;
-      tree op = gimple_call_arg (call, info.argno ());
-      if (TREE_CODE (op) != INTEGER_CST)
-	{
-	  if (!ix && insnd->has_var ())
-	    continue;
-	  error_at (gimple_nonartificial_location (call),
-		    "argument %d is not a constant", info.argno () + 1);
-	zap:
-	  // If we don't make this correction, we'll likely crash, fail
-	  // at RTL expansion or the assembler will barf
-	  tree zap = build_int_cst (TREE_TYPE (op), val);
-	  gimple_call_set_arg (call, info.argno (), zap);
-	  update_stmt (call);
-	  changed = true;
-	  continue;
-	}
-
-      val = TREE_INT_CST_LOW (op);
-
-      unsigned bits = info.bits ();
-      if (!bits)
-	bits = 32;
-      HOST_WIDE_INT upper = (1u << (info.bits () - 1)) - 1;
-      HOST_WIDE_INT lower = 0;
-      if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
-	lower = ~upper;
-      if (info.kind () != rvtt_insn_data::op_t::SIGNED)
-	upper = (upper << 1) | 1;
-      unsigned bias = info.bias ();
-      if (info.is_upper ())
-	{
-	  // sfpxloadi hack. Bleah!
-	  upper <<= 16;
-	  lower <<= 16;
-	}
-
-      if (val <= upper + bias && val >= lower + bias)
-	continue;
-      
-      if (info.is_checked ())
-	error_at (gimple_location (call),
-		  "argument %d %qE is out of range [%ld, %ld]",
-		  info.argno () + 1, op, (long long)lower, (long long)upper);
-
-      if (info.is_checked () || !insnd->has_var () || info.argno () != insnd->imm_arg ())
-	{
-	  // Clip imm operands.  Keep nonnimm operands for for the moment,
-	  // until we fix sfpxloadi
-	  if (info.kind () == rvtt_insn_data::op_t::SIGNED)
-	    upper = (upper << 1) | 1;
-	  val = ((val - bias) & upper) + bias;
-	  goto zap;
+	  if (!((1 << val) & info.mod ()))
+	    {
+	      error_at (gimple_location (call),
+			"argument %d %qE is invalid mod1 value (mask is 0x%x)",
+			info.argno () + 1, op, mask);
+	      goto zap;
+	    }
 	}
     }
 
@@ -237,20 +202,32 @@ const_zero_reg (gimple_stmt_iterator &gsi, tree arg)
 }
 
 static bool
-check_early_assign (gimple_stmt_iterator &gsi, gassign *assign)
+check_assign (gimple_stmt_iterator &gsi, bool is_early, gassign *assign)
 {
   bool changed = false;
 
   auto *ops = gimple_ops (assign);
   unsigned limit = gimple_num_ops (assign);
-  for (unsigned opno = 1; opno != limit; opno++)
+  for (unsigned opno = 0; opno != limit; opno++)
     if (auto op = ops[opno])
       {
-	if (is_undef_sfpu (op))
+	if (!opno)
+	  {
+	    if (!is_early && is_memory (op))
+	      {
+		error_at (gimple_nonartificial_location (assign),
+			  "cannot write SFPU object to memory");
+		ops[opno] = nullptr;
+		update_stmt (assign);
+		changed = true;
+	      }
+	  }
+	else if (is_early ? is_undef_sfpu (op) : is_memory (op))
 	  {
 	    error_at (gimple_nonartificial_location (assign),
-		      "rhs operand %d is uninitialized",
-		      opno);
+		      "rhs operand %d %s", opno,
+		      is_early ? "is uninitialized"
+		      : "cannot read SFPU object from memory");
 	    ops[opno] = const_zero_reg (gsi, ops[opno]);
 	    update_stmt (assign);
 	    changed = true;
@@ -261,7 +238,7 @@ check_early_assign (gimple_stmt_iterator &gsi, gassign *assign)
 }
 
 static unsigned
-check_early (function *fn)
+check (function *fn, bool is_early)
 {
   bool changed = false;
   basic_block bb;
@@ -273,7 +250,10 @@ check_early (function *fn)
 	const rvtt_insn_data *insnd;
 	if (rvtt_p (&insnd, &call, gsi))
 	  {
-	    changed |= check_mod_arg (insnd, call);
+	    changed |= check_int_args (is_early, insnd, call);
+
+	    if (!is_early)
+	      continue;
 
 	    for (unsigned argno = 0, limit = gimple_call_num_args (call);
 		 argno != limit; argno++)
@@ -291,6 +271,10 @@ check_early (function *fn)
 		  }
 	      }
 	  }
+	else if (auto *a = dyn_cast<gassign *> (*gsi))
+	  changed |= check_assign (gsi, is_early, a);
+	else if (!is_early)
+	  continue;
 	else if (auto *call = dyn_cast<gcall *> (*gsi))
 	  {
 	    if (tree type = gimple_call_fntype (call))
@@ -300,64 +284,7 @@ check_early (function *fn)
 		  // Delete call, set lhs to something
 		}
 	  }
-	else if (auto *a = dyn_cast<gassign *> (*gsi))
-	  changed |= check_early_assign (gsi, a);
       }
-  return changed ? TODO_update_ssa : 0;
-}
-
-static bool
-check_late_assign (gimple_stmt_iterator &gsi, gassign *assign)
-{
-  bool changed = false;
-
-  auto *ops = gimple_ops (assign);
-  unsigned limit = gimple_num_ops (assign);
-  for (unsigned opno = 0; opno != limit; opno++)
-    if (auto op = ops[opno])
-      {
-	if (!opno)
-	  {
-	    if (is_memory (op))
-	      {
-		error_at (gimple_nonartificial_location (assign),
-			  "cannot write SFPU object to memory");
-		ops[opno] = nullptr;
-		update_stmt (assign);
-		changed = true;
-	      }
-	  }
-	else if (is_memory (op))
-	  {
-	    error_at (gimple_nonartificial_location (assign),
-		      "rhs operand %d cannot read SFPU object from memory",
-		      opno);
-	    ops[opno] = const_zero_reg (gsi, ops[opno]);
-	    update_stmt (assign);
-	    changed = true;
-	  }
-      }
-
-  return changed;
-}
-
-static unsigned
-check_late (function *fn)
-{
-  bool changed = false;
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
-    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-	 !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gcall *call;
-	const rvtt_insn_data *insnd;
-	if (rvtt_p (&insnd, &call, gsi))
-	  changed |= check_int_args (insnd, call);
-	else if (auto *a = dyn_cast<gassign *> (*gsi))
-	  changed |= check_late_assign (gsi, a);
-      }
-
   return changed ? TODO_update_ssa : 0;
 }
 
@@ -390,7 +317,7 @@ public:
   virtual unsigned execute (function *fn) override
   {
     check_function_type (DECL_SOURCE_LOCATION (fn->decl), TREE_TYPE (fn->decl), false);
-    return check_early (fn);
+    return check (fn, true);
   }
 };
 
@@ -430,7 +357,7 @@ public:
   }
   virtual unsigned execute (function *fn) override
   {
-    return check_late (fn);
+    return check (fn, false);
   }
 };
 

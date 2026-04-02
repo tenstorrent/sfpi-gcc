@@ -290,9 +290,11 @@ constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
 constexpr unsigned int CREG_IDX_NEG_1 = 11;
+#if 0
 constexpr unsigned int CREG_IDX_0P001953125 = 12;
 constexpr unsigned int CREG_IDX_NEG_0P67480469 = 13;
 constexpr unsigned int CREG_IDX_NEG_0P34472656 = 14;
+#endif
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
 #endif /* ! GCC_RVTT_PROTOS_H */

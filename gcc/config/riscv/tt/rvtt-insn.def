@@ -40,8 +40,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define N rvtt_insn_data::op_t::NONE
 #define R rvtt_insn_data::op_t::RUNTIME
-#define M rvtt_insn_data::op_t::checked (rvtt_insn_data::op_t::MOD)
-#define XM rvtt_insn_data::op_t::XMOD
+#define M rvtt_insn_data::op_t::early (rvtt_insn_data::op_t::MOD)
+#define XM rvtt_insn_data::op_t::early (rvtt_insn_data::op_t::XMOD)
 
 #define U rvtt_insn_data::op_t::UNSIGNED
 #define S rvtt_insn_data::op_t::SIGNED
@@ -49,6 +49,8 @@ along with GCC; see the file COPYING3.  If not see
 #define CU rvtt_insn_data::op_t::checked (U)
 #define CS rvtt_insn_data::op_t::checked (S)
 #define CE rvtt_insn_data::op_t::checked (E)
+#define EU rvtt_insn_data::op_t::early (U)
+#define ES rvtt_insn_data::op_t::early (S)
 
 // Args are (NAME, ISA, _SFX, TYPE, FLAGS, OPS)
 
@@ -148,7 +150,6 @@ RVTT_FN (sfpadd_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,     
 RVTT_FN (sfpaddi,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             CLB(0), ({U, 16, 8}, {M, 0x100}))
 
 RVTT_FN (sfpsetexp_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CLB(1), ({M, 0x5}, {}))
-// FIXME: Should be {U, 8, 12}
 RVTT_FN (sfpsetexp_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0, ({U, 8, 12}, {M, 0x1}))
 RVTT_FN (sfpsetexp_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV, ({U, 8, 12}, {M, 0x1}))
 RVTT_FN (sfpsetman_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CLB(1), ({M, 0x1}, {}))
@@ -214,6 +215,8 @@ RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,   
 #undef CU
 #undef CS
 #undef CE
+#undef EU
+#undef ES
 
 #undef RVTT_FN
 #undef RVTT_OVR
