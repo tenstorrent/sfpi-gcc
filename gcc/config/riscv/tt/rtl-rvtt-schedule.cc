@@ -175,9 +175,10 @@ transform (function *fn)
 	  if (get_attr_type (insn) != TYPE_TENSIX)
 	    continue;
 
-	  enum xtt_delay delay =
-	    TARGET_XTT_TENSIX_WH ? get_attr_xtt_delay_wh (insn)
-	    : TARGET_XTT_TENSIX_BH ? get_attr_xtt_delay_bh (insn)
+	  enum xtt_delay delay
+	    = TARGET_XTT_TENSIX_WH  ? get_attr_xtt_delay_wh (insn)
+	    : TARGET_XTT_TENSIX_BH  ? get_attr_xtt_delay_bh (insn)
+	    : TARGET_XTT_TENSIX_QSR ? get_attr_xtt_delay_qsr (insn)
 	    : (gcc_unreachable (), XTT_DELAY_NONE);
 
 	  if (delay == XTT_DELAY_NONE)

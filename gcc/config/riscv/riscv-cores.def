@@ -122,13 +122,14 @@ RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt
 
 // #39314 disable ll/sc 'a' extension -> replace with 'zaamo'
 // #31429 disable compressed 'c' extension, it interfers with our post-processing.
-RISCV_CORE("tt-qsr64", "rv64im_zaamo_zba_zbb_zbs_zicsr_zifencei_xttcache", "lp64", "rvtt-b1")
-RISCV_CORE("tt-qsr64-rocc",        "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttcache_xttroccqsr", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64",        "rv64im_zaamo_zba_zbb_zbs_zicsr_zifencei_xttcache", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64-rocc",   "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttcache_xttroccqsr", "lp64", "rvtt-b1")
 // #39314 disable ll/sc 'a' extension -> replace with 'zaamo'
 // #39314 disable float 'f' extension, tt-sim doesn't grok them
 // #35991 disable vector 'v' extension, tt-sim doesn't grok them, it's not on all compute cores anyway
-RISCV_CORE("tt-qsr32", "rv32im_zaamo","ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32",        "rv32im_zaamo","ilp32", "rvtt-b1")
 
 // Add -tensix using tensixqsr when ready
-RISCV_CORE("tt-qsr32-tensixbh",       "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32-tensix", "rv32im_zaamo_xtttensixqsr", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32-tensixbh", "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-b1")
 #undef RISCV_CORE

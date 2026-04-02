@@ -139,6 +139,8 @@ AVAIL (cvelw, TARGET_XCVELW && !TARGET_64BIT)
 AVAIL (cvsimd, TARGET_XCVSIMD && !TARGET_64BIT)
 AVAIL (tensix, TARGET_XTT_TENSIX)
 AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
+AVAIL (tensixbh_qsr, TARGET_XTT_TENSIX_BH_QSR)
+AVAIL (tensixqsr, TARGET_XTT_TENSIX_QSR)
 AVAIL (tensixwh, TARGET_XTT_TENSIX_WH)
 AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 
@@ -251,6 +253,8 @@ riscv_build_function_type (enum riscv_function_type type)
 {
   static tree types[(int) RISCV_MAX_FTYPE_MAX];
 
+  if (type >= RISCV_MAX_FTYPE_MAX)
+    return nullptr;
   if (types[(int) type] == NULL_TREE)
     switch (type)
       {
@@ -355,6 +359,8 @@ riscv_init_builtins (void)
       if (d->avail ())
 	{
 	  tree type = riscv_build_function_type (d->prototype);
+	  if (!type)
+	    continue;
 	  if (VOID_TYPE_P (TREE_TYPE (type)))
 	    d->no_target = true;
 	  riscv_builtin_decls[i]

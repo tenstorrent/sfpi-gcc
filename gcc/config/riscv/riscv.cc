@@ -10681,8 +10681,6 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_CC;
 	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_COMBINE))
 	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_COMBINE;
-	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_WARN))
-	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_WARN;
 	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_REPLAY))
 	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_REPLAY;
       }
@@ -11010,7 +11008,7 @@ riscv_option_override (void)
   target_option_default_node = target_option_current_node
     = build_target_option_node (&global_options, &global_options_set);
 
-  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) > 1)
+  if (int (TARGET_XTT_TENSIX_WH) + int (TARGET_XTT_TENSIX_BH) + int (TARGET_XTT_TENSIX_QSR) > 1)
     error ("only one ttwh or ttbh extension can be specified");
 }
 
