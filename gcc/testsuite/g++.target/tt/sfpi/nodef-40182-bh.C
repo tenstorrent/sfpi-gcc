@@ -3,6 +3,7 @@
 namespace ckernel{
     extern unsigned instrn_buffer[];
 }
+#include <lltt.h>
 #include <sfpi.h>
 
 // Nothing defined

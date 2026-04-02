@@ -132,11 +132,11 @@ RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_X
 RVTT_FN (sfpshft2_subvec_shfl1, ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 0, ({M, 0x18}))
 RVTT_FN (sfpshft2_subvec_shfl1_lv, ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                      LV, ({M, 0x18}))
 
-RVTT_FN (sfpload,            wh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
+RVTT_FN (sfpload,              ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
 RVTT_OVR(sfpload,            bh,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                 0, ({CE, 13}, {M, 0xf7cf}, {CU, 3}))
-RVTT_FN (sfpload_lv,         wh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         LV, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
+RVTT_FN (sfpload_lv,           ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         LV, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
 RVTT_OVR(sfpload_lv,         bh,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,         LV, ({CE, 13}, {M, 0xf7cf}, {CU, 3}))
-RVTT_FN (sfpstore,           wh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
+RVTT_FN (sfpstore,             ,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0, ({CE, 14}, {M, 0xf7ff}, {CU, 2}))
 RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0, ({CE, 13}, {M, 0xc7ff}, {CU, 3}))
 
 // gimple-rvtt-combine requires this ordering
