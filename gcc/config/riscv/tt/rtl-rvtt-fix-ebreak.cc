@@ -125,7 +125,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_FIX_WHBH_EBREAK;
+    return riscv_tt_fix_whbh_ebreak > 0;
   }
   
   /* opt_pass methods: */

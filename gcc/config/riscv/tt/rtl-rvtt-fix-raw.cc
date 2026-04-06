@@ -199,7 +199,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_FIX_WH_RAW;
+    return riscv_tt_fix_wh_raw > 0;
   }
   
   /* opt_pass methods: */
