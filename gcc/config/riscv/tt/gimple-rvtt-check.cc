@@ -139,19 +139,15 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	  if (info.is_mod ())
 	    goto zap;
 
-	  // FIXME: Always clip?
-	  if (info.is_checked () || !insnd->has_var () || info.argno () != insnd->imm_arg ())
-	    {
-	      // Clip imm operands.  Keep nonnimm operands for for the moment,
-	      // until we fix sfpxloadi
-	      val -= bias;
-	      HOST_WIDE_INT sign_bits
-		= info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
-		? ~upper : 0;
-	      val = (val & upper) | sign_bits;
-	      val += bias;
-	      goto zap;
-	    }
+	  // Clip imm operands.  Keep nonnimm operands for for the moment,
+	  // until we fix sfpxloadi
+	  val -= bias;
+	  HOST_WIDE_INT sign_bits
+	    = info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
+	    ? ~upper : 0;
+	  val = (val & upper) | sign_bits;
+	  val += bias;
+	  goto zap;
 	}
       if (info.is_mod ())
 	{
