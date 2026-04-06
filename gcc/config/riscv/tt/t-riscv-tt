@@ -33,9 +33,10 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
-	gimple-rvtt-immvar.o \
 	gimple-rvtt-expand.o \
 	gimple-rvtt-live.o \
+	gimple-rvtt-synth-expand.o \
+	gimple-rvtt-synth-nullify.o \
 	gimple-rvtt-synth-renumber.o \
 	gimple-rvtt-synth-split.o \
 	gimple-rvtt-unspec-prop.o \

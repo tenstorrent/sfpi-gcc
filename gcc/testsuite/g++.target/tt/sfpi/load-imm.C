@@ -20,15 +20,15 @@ void one (float f) {
 **_Z3onef:
 **	slli	a5,a0,16
 **	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a4, 1895956480	# 2:71020000
+**	li	a4, 1896480768	# 2:710a0000
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	srli	a5,a5,16
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 2:SFPLOADI	L0, a5, 2
+**	li	a4, 1896349696	# 3:71080000
+**	sw	a5, 0\(a3\)	# 2:SFPLOADI	L0, a5, 10
 **	srli	a0,a0,16
-**	li	a5, 1896349696	# 4:71080000
-**	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 4:SFPLOADI	L0, a0, 8	# LV:L0
+**	add	a0,a0,a4
+**	sw	a0, 0\(a3\)	# 3:SFPLOADI	L0, a0, 8	# LV:L0
 **	# WRITE L0
 **	SFPLOADI	L1, 16256, 0
 **	# WRITE L1
@@ -40,8 +40,8 @@ void one (float f) {
 **	# WRITE L4
 **	SFPLOADI	L5, 19264, 0
 **	# WRITE L5
-**	SFPLOADI	L6, 59128, 2
-**	SFPLOADI	L6, 16341, 8	# LV:L6
+**	SFPLOADI	L6, 16341, 8
+**	SFPLOADI	L6, 59128, 10	# LV:L6
 **	# WRITE L6
 **	ret
 */

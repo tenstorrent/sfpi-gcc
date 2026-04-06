@@ -100,7 +100,8 @@ public:
       ENCODE_bits = 5,
       BIAS_shift = ENCODE_shift + ENCODE_bits,
       BIAS_bits = 5,
-      ENC_shift = BIAS_shift + BIAS_bits,
+      // Special case sfpxloadi_lv shift right of 16 (ugh)
+      UPPER_shift = BIAS_shift + BIAS_bits,
 
       KIND_shift = MOD_shift + MOD_bits,
       KIND_bits = 8,
@@ -109,12 +110,12 @@ public:
       ARGNO_bits = 8,
       HWM_shift = ARGNO_shift + ARGNO_bits,
     };
-    static_assert (ENC_shift <= MOD_shift + MOD_bits);
+    static_assert (UPPER_shift <= MOD_shift + MOD_bits);
     static_assert (HWM_shift <= 32);
 
   public:
-    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0, unsigned bias = 0)
-      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift)
+    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0, unsigned bias = 0, bool upper = false)
+      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift | int(upper) << UPPER_shift)
     {}
 
     static kind_t early (kind_t kind) { return kind_t (kind | EARLY | CHECKED); }
@@ -131,6 +132,7 @@ public:
     unsigned bits () const { return (enc >> BITS_shift) & ((1u << BITS_bits) - 1u); }
     unsigned encode () const { return (enc >> ENCODE_shift) & ((1u << ENCODE_bits) - 1u); }
     unsigned bias () const { return (enc >> BIAS_shift) & ((1u << BIAS_bits) - 1u); }
+    bool is_upper () const { return (enc >> UPPER_shift) & 1; }
 
     int argno () const { return (enc >> ARGNO_shift) & ((1u << ARGNO_bits) - 1u); }
 
@@ -237,6 +239,7 @@ public:
     return ops[0].bits () + bool (ops[0].bias ());
   }
   unsigned imm_encode () const { return ops[0].encode (); }
+  bool imm_is_upper () const { return ops[0].is_upper (); }
 
   int num_src_clobbers () const {
     return (flags >> NUM_CLOBBERS_SHIFT) & NUM_CLOBBERS_MASK;
@@ -270,6 +273,10 @@ extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_itera
 
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd);
+
+extern uint32_t rvtt_fp32_to_fp16a(const uint32_t val);
+extern uint32_t rvtt_fp32_to_fp16b(const uint32_t val);
+extern uint32_t rvtt_scmp2loadi_mod(int mod);
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
 extern bool rvtt_reg_store_p(const rtx pat);

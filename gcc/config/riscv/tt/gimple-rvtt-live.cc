@@ -525,14 +525,14 @@ fold_live_assign (function *fn)
 		if (prev_insnd->is_live ())
 		  {
 		    // The only _lv insns at this point are from the non-imm
-		    // path injecting sfploadi_lv for a 32 bit load
+		    // path injecting sfpxloadi_lv for a 32 bit load
 		    // Back up one insn and propogate liveness there
 		    DUMP("    handling nonimm %s\n", prev_insnd->name);
-		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfploadi_lv);
+		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfpxloadi_lv);
 		    prev2_stmt = prev_stmt;
 		    gsi_prev_nondebug (&prev_gsi);
 		    rvtt_p (&prev_insnd, &prev_stmt, prev_gsi);
-		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfploadi);
+		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfpxloadi);
 		  }
 
 		const rvtt_insn_data *new_insnd = prev_insnd->get_live ();

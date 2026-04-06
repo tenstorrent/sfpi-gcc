@@ -440,7 +440,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       tree value;
 
       // Only combine live if we are writing to the same arg as the dst arg
-      bool found_one = (match_prior_assignment(rvtt_insn_data::sfploadi,
+      bool found_one = (match_prior_assignment(rvtt_insn_data::sfpxloadi,
 					       &assign_insnd, &assign_stmt, &assign_gsi,
 					       gimple_call_arg(candidate_stmt, which_arg + live)) &&
 			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -452,7 +452,7 @@ try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
       if (!found_one)
 	{
 	  which_arg = 1;
-	  found_one = (match_prior_assignment(rvtt_insn_data::sfploadi,
+	  found_one = (match_prior_assignment(rvtt_insn_data::sfpxloadi,
 					      &assign_insnd, &assign_stmt, &assign_gsi,
 					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
 		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
@@ -528,7 +528,7 @@ remove_unused_loadis(basic_block bb)
       if (rvtt_p(&insnd, &stmt, gsi))
 	{
 	  tree lhs = gimple_call_lhs(stmt);
-	  if (insnd->id == rvtt_insn_data::sfploadi &&
+	  if (insnd->id == rvtt_insn_data::sfpxloadi &&
 	      (lhs == nullptr || has_zero_uses(lhs)))
 	    {
 	      DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
