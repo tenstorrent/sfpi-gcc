@@ -393,7 +393,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 
   unsigned first_mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
   tree val = gimple_call_arg (call, insnd->imm_arg ());
-  uint32_t ival = TREE_INT_CST_LOW (val) & 0xffff; // FIXME: not needed when clipping
+  uint32_t ival = TREE_INT_CST_LOW (val);
 
   tree res = gimple_call_lhs (call);
   if (!res)

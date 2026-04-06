@@ -490,8 +490,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (0).dst_shift (20));
       imm = operands[4];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, 0xffff);
 
   emit_insn (gen_rvtt_sfploadi_lv_int
     (operands[0], mem, opc, enc, imm,
@@ -588,11 +586,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).dst_shift (20));
       imm = operands[4];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, (TARGET_XTT_TENSIX_WH ? 0x3fff
-                                   : TARGET_XTT_TENSIX_BH ? 0x1fff
-                                   : TARGET_XTT_TENSIX_QSR ? 0x3ff
-                                   : 0));
 
   emit_insn (gen_rvtt_sfpload_lv_int
     (operands[0], mem, opc, enc, imm,
@@ -627,8 +620,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).dst_shift (20));
       imm = operands[4];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, 0x3ff);
 
   emit_insn (gen_rvtt_sfploadsrcs_lv_int
     (operands[0], mem, opc, enc, imm,
@@ -714,11 +705,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[4])).src_shift (20));
       imm = operands[3];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, (TARGET_XTT_TENSIX_WH ? 0x3fff
-                                   : TARGET_XTT_TENSIX_BH ? 0x1fff
-                                   : TARGET_XTT_TENSIX_QSR ? 0x3ff
-                                   : 0));
 
   emit_insn (gen_rvtt_sfpstore_int
     (mem, opc, enc, imm,
@@ -773,8 +759,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[4])).src_shift (20));
       imm = operands[3];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, 0x3ff);
 
   emit_insn (gen_rvtt_sfpstoresrcs_int
     (mem, opc, enc, imm,
@@ -981,8 +965,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (4).dst_shift (4));
       imm = operands[4];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, 0xffff);
 
   emit_insn (gen_rvtt_sfp<rvtt_muliaddi_name>_int
     (operands[0], mem, opc, enc, imm,
@@ -1211,11 +1193,7 @@
       imm = operands[5];
     }
   else
-    {
-      gcc_assert (<rvtt_set_op> != UNSPECV_SFPSETMAN
-                  || INTVAL (imm) < 1 << 12);
-      imm = rvtt_clamp_unsigned (imm, 0xfff);
-    }
+    gcc_assert (<rvtt_set_op> != UNSPECV_SFPSETMAN || INTVAL (imm) < 1 << 12);
 
   emit_insn (gen_rvtt_sfpset<rvtt_set_name>_i_lv_int
     (operands[0], mem, opc, enc, imm,
@@ -1392,8 +1370,6 @@
 		    .dst_shift (4));
       imm = operands[4];
     }
-  else
-    imm = rvtt_clamp_signed (imm, 0x7ff);
 
   emit_insn (gen_rvtt_sfpshft_i_int
     (operands[0], mem, opc, enc, imm,
@@ -1532,8 +1508,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
     }
-  else
-    imm = rvtt_clamp_signed (imm, 0x7ff);
 
   emit_insn (gen_rvtt_sfpdivp2_lv_int
     (operands[0], mem, opc, enc, imm,
@@ -1621,8 +1595,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
     }
-  else
-    imm = rvtt_clamp_unsigned (imm, 0x1f);
 
   emit_insn (gen_rvtt_sfpstochrnd_i_lv_int
     (operands[0], mem, opc, enc, imm,

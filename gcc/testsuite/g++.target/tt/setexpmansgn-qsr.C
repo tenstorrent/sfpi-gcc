@@ -98,13 +98,13 @@ namespace setsgn {
 
   void set_i () {
     auto a = __builtin_rvtt_sfpreadlreg (0);
-    auto r = __builtin_rvtt_sfpsetsgn_i (nullptr, a, 12, 0, 0, 0);
+    auto r = __builtin_rvtt_sfpsetsgn_i (nullptr, a, 13, 0, 0, 0);
     __builtin_rvtt_sfpwritelreg (r, 0);
   }
 /*
 **_ZN6setsgn5set_iEv:
 **	# READ L0
-**	SFPSETSGN	L0, L0, 12, 1
+**	SFPSETSGN	L0, L0, 1, 1
 **	# WRITE L0
 **	ret
 */
