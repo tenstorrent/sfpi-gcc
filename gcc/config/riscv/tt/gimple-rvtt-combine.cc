@@ -974,7 +974,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX_OPT_COMBINE;
+    return TARGET_XTT_TENSIX && riscv_tt_opt_combine;
   }
 
   virtual unsigned execute (function *fn) override

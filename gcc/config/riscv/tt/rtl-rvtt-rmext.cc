@@ -535,7 +535,7 @@ public:
   /* opt_pass methods: */
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_OPT_EXTEND;
+    return riscv_tt_opt_extend > 0;
   }
 
   virtual unsigned execute (function *cfn) override

@@ -10675,29 +10675,23 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  && (!cpu[len] || cpu[len] == '-');
       };
 
-      if (TARGET_XTT_TENSIX) {
-	// Default tensix-specific optimizations
-	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_CC))
-	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_CC;
-	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_COMBINE))
-	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_COMBINE;
-	if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_TENSIX_OPT_REPLAY))
-	  opts->x_riscv_tt_flags |= OPTION_MASK_XTT_TENSIX_OPT_REPLAY;
-      }
+      if (is_cpu_kind ("tt-wh"))
+	if (riscv_tt_fix_wh_raw < 0)
+	  riscv_tt_fix_wh_raw = 1;
 
-      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_FIX_WH_RAW)
-	  && is_cpu_kind ("tt-wh"))
-	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_FIX_WH_RAW;
+      if (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))
+	{
+	  if (riscv_tt_fix_whbh_ebreak < 0)
+	    riscv_tt_fix_whbh_ebreak = 1;
 
-      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_FIX_WHBH_EBREAK)
-	  && (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh")))
-	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_FIX_WHBH_EBREAK;
+	  if (riscv_tt_opt_hll < 0)
+	    riscv_tt_opt_hll = 1;
 
-      if (!(global_options_set.x_riscv_tt_flags & OPTION_MASK_XTT_OPT_EXTEND)
-	  && (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))
-	  && optimize > 0)
-	// The rmext optimization ICES on quasar for reasons to be determined.
-	opts->x_riscv_tt_flags |= OPTION_MASK_XTT_OPT_EXTEND;
+	  if (riscv_tt_opt_extend < 0
+	      && optimize > 0)
+	    // The rmext optimization ICES on quasar for reasons to be determined.
+	    riscv_tt_opt_extend = 1;
+	}
 
       if (is_cpu_kind ("tt-qsr32"))
 	{
