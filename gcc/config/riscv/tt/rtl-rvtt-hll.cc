@@ -1263,7 +1263,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return riscv_tt_opt_hll;
+    return riscv_tt_opt_hll > 0;
   }
 
   /* opt_pass methods: */

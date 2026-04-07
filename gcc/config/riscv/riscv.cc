@@ -10684,8 +10684,12 @@ riscv_override_options_internal (struct gcc_options *opts)
 	  if (riscv_tt_fix_whbh_ebreak < 0)
 	    riscv_tt_fix_whbh_ebreak = 1;
 
+
+#if 0 // This was previously disabled, don't reenable as a side-effect of
+      // fixing unrelated bug
 	  if (riscv_tt_opt_hll < 0)
 	    riscv_tt_opt_hll = 1;
+#endif
 
 	  if (riscv_tt_opt_extend < 0
 	      && optimize > 0)

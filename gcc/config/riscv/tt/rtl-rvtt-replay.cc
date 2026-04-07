@@ -803,7 +803,7 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_replay;
+    return TARGET_XTT_TENSIX && riscv_tt_opt_replay > 0;
   } 
 
   /* opt_pass methods: */
