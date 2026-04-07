@@ -13,8 +13,7 @@ void i () {
 }
 /*
 **_Z1iv:
-**	SFPLOADI	L0, 65505, 2
-**	SFPLOADI	L0, 65535, 8	# LV:L0
+**	SFPLOADI	L0, 65505, 4
 **	SFPCONFIG	12, 0, 0	# R:L0 CFG:12
 **	ret
 */

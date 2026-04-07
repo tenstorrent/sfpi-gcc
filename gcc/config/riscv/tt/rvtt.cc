@@ -423,7 +423,7 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   return pattern;
 }
 
-uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
+static uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
 {
     // https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion
     // Handles denorms.  May be costly w/ non-immediate values
@@ -446,24 +446,15 @@ uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
     return result;
 }
 
-uint32_t rvtt_fp32_to_fp16b(const uint32_t val)
+static uint32_t rvtt_fp32_to_fp16b(const uint32_t val)
 {
     return val >> 16;
 }
 
-uint32_t rvtt_scmp2loadi_mod(int mod)
-{
-  int fmt = mod & SFPXSCMP_MOD1_FMT_MASK;
-
-  if (fmt == SFPXSCMP_MOD1_FMT_A) {
-    return SFPLOADI_MOD0_FLOATA;
-  }
-  if (fmt == SFPXSCMP_MOD1_FMT_B) {
-    return SFPLOADI_MOD0_FLOATB;
-  }
-
-  return SFPXLOADI_MOD0_FLOAT;
-}
+// FIXME: Remnants of old sfpxloadi scheme,
+constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
+constexpr unsigned int SFPXLOADI_MOD0_UINT32 = 17;
+constexpr unsigned int SFPXLOADI_MOD0_FLOAT = 18;
 
 bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
 {
@@ -482,6 +473,8 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
     // XXXXX ignore for now
     break;
 
+  case SFPXLOADI_MOD0_INT32:
+  case SFPXLOADI_MOD0_UINT32:
   case SFPXLOADI_MOD0_FLOAT:
     if (TREE_CODE(arg) == INTEGER_CST) {
       unsigned int inval = *(arg->int_cst.val);
@@ -605,10 +598,9 @@ rvtt_emit_nonimm_prologue(unsigned int unique_id,
 
   // Insert insns to generate:
   //   sum = unique_id + ((raw & nonimm_mask) << nonimm_shft)
-  int iupper = insnd->imm_is_upper () ? 16 : 0;
-  uint32_t imask = ((1u << insnd->imm_bits ()) - 1) << iupper;
+  uint32_t imask = ((1u << insnd->imm_bits ()) - 1);
   tree mask = emit_mask(immarg, imask, &gsi, stmt);
-  int ishift = int (insnd->imm_encode ()) - iupper;
+  int ishift = int (insnd->imm_encode ());
   tree shft = emit_shift(mask, ishift, &gsi, stmt);
   tree li = emit_load_imm(unique_id, &gsi, stmt);
   tree sum = emit_add(shft, li, &gsi, stmt);
@@ -618,6 +610,7 @@ rvtt_emit_nonimm_prologue(unsigned int unique_id,
 
 // Determine if a prologue has been emitted for the current instruction based
 // on the unique id.  If so, re-use it, if not emit and track it
+// FIXME: this incorrectly relies on non-duplication of unique_id users.
 void
 rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				unsigned int unique_id,
@@ -651,41 +644,11 @@ rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
   update_stmt (stmt);
 }
 
-// FIXME: break out regular sfploadi builtin. Teach sfpxloadi to just look at
-// bit patterns and about constant regs.
+// FIXME: Move functionality in to immvar passes
 
-void
-rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rtx id)
+static void
+rvtt_emit_sfpxloadi (rtx dst, rtx lv, unsigned int_mod, rtx imm)
 {
-  int int_mod = INTVAL (mod);
-
-  if (!(int_mod & SFPXLOADI_MOD0_32BIT_MASK))
-    {
-      auto mem = const0_rtx;
-      auto opc = const0_rtx;
-      auto enc = const0_rtx;
-      if (!CONST_INT_P (imm))
-	{
-	  mem = gen_rtx_MEM (SImode, addr);
-	  int op
-	    = TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPLOADI (0, int_mod, 0)
-	    : TARGET_XTT_TENSIX_BH ? TT_OP_BH_SFPLOADI (0, int_mod, 0)
-	    : TARGET_XTT_TENSIX_QSR ? TT_OP_QSR_SFPLOADI (0, int_mod, 0)
-	    : (gcc_unreachable (), 0);
-	  opc = GEN_INT (op);
-	  enc = GEN_INT (rvtt_synth (UINTVAL (id)).src_shift (0).dst_shift (20));
-	  imm = nonimm;
-	}
-      else
-	imm = rvtt_clamp_unsigned (imm, 0xffff);
-
-      emit_insn (gen_rvtt_sfploadi_lv_int
-		 (dst, mem, opc, enc, imm,
-		  rvtt_gen_rtx_noval (XTT32SImode),
-		  lv, mod));
-      return;
-    }
-
   // Early nonimm pass assures this
   gcc_assert (CONST_INT_P (imm));
 
@@ -770,7 +733,7 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
 }
 
 void
-rvtt_emit_sfpxfcmps (rtx addr, rtx v, rtx f, rtx mod)
+rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
   rtx ref_val = gen_reg_rtx (XTT32SImode);
@@ -787,7 +750,7 @@ rvtt_emit_sfpxfcmps (rtx addr, rtx v, rtx f, rtx mod)
        || (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000)))
     {
       need_sub = true;
-      // FIXME: Just teach sfpxloadi about this.
+      // FIXME: Just teach sfpxloadi about this. (add in one of the immvar opt pass)
       if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000)
 	  || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80))
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_1);
@@ -795,9 +758,19 @@ rvtt_emit_sfpxfcmps (rtx addr, rtx v, rtx f, rtx mod)
 	       || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
-	rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), addr,
-			     GEN_INT (rvtt_scmp2loadi_mod (fmt)), f,
-			     const0_rtx, const0_rtx);
+	{
+	  int mod = SFPXLOADI_MOD0_FLOAT;
+	  if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_A)
+	    mod = SFPLOADI_MOD0_FLOATA;
+	  else if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_B)
+	    mod = SFPLOADI_MOD0_FLOATB;
+
+	  if (mod == SFPXLOADI_MOD0_FLOAT)
+	    rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), mod, f);
+	  else
+	    emit_insn (gen_rvtt_sfploadi
+		       (ref_val, const0_rtx, f, const0_rtx, const0_rtx, GEN_INT (mod)));
+	}
     }
 
   // FIXME: a lot of the below is sfpxfcmpv
@@ -913,8 +886,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
     {
       // Load imm into dst
       int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-      rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), addr,
-			   GEN_INT (loadi_mod), imm, const0_rtx, const0_rtx);
+      rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), loadi_mod, imm);
       
       unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
       if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
