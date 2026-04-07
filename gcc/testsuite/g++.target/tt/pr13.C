@@ -11,7 +11,7 @@ inline void calculate_power_iterative(unsigned exponent) {
 #pragma GCC unroll 8
   for (int d = 0; d < 8; d++) {
     vec_t in = __builtin_rvtt_sfpload(nullptr, 0, 0, 0, 0, 3);
-    vec_t acc = __builtin_rvtt_sfpxloadi(nullptr, 0x3f800000, 0, 0, 18);
+    vec_t acc = __builtin_rvtt_sfpxloadi(nullptr, 0x3f800000, 0, 0, -32);
     for (unsigned i = 0; i < exponent; i++)
       acc = __builtin_rvtt_sfpassign_lv(
 	      acc, __builtin_rvtt_sfpmul(acc, in, 0));
