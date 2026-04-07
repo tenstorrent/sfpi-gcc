@@ -754,13 +754,13 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx addr, rtx mod, rtx imm, rtx nonimm, rt
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
       emit_insn (gen_rvtt_sfploadi_lv_int (tmp, const0_rtx, const0_rtx, const0_rtx,
-					   GEN_INT (int_imm >> 16),
-					   rvtt_gen_rtx_noval (XTT32SImode),
-					   lv, GEN_INT (SFPLOADI_MOD0_UPPER)));
-      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
 					   GEN_INT (int_imm & 0xFFFF),
 					   rvtt_gen_rtx_noval (XTT32SImode),
-					   tmp, GEN_INT (SFPLOADI_MOD0_LOWER)));
+					   lv, GEN_INT (SFPLOADI_MOD0_USHORT)));
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+					   GEN_INT (int_imm >> 16),
+					   rvtt_gen_rtx_noval (XTT32SImode),
+					   tmp, GEN_INT (SFPLOADI_MOD0_UPPER)));
     }
   else
     emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
