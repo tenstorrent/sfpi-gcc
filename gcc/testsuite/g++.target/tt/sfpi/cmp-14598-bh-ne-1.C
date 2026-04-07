@@ -62,11 +62,11 @@ void fnuvi (int i) {
 **	# READ L3
 **	zext.h	a4,a0
 **	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a5, 1897529344	# 2:711a0000
+**	li	a5, 1897005056	# 2:71120000
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	add	a4,a4,a5
 **	li	a5, 1897398272	# 3:71180000
-**	sw	a4, 0\(a3\)	# 2:SFPLOADI	L1, a4, 10
+**	sw	a4, 0\(a3\)	# 2:SFPLOADI	L1, a4, 2
 **	srli	a0,a0,16
 **	add	a0,a0,a5
 **	sw	a0, 0\(a3\)	# 3:SFPLOADI	L1, a0, 8	# LV:L1
