@@ -47,11 +47,11 @@ void one (float f) {
 */
 
 void two (unsigned b) {
-  l_reg[LRegs::LReg0] = vFloat (s2vFloat16b (b));
-  l_reg[LRegs::LReg1] = vFloat (s2vFloat16b (1.0f));
-  l_reg[LRegs::LReg2] = vFloat (s2vFloat16b (0x4000));
-  l_reg[LRegs::LReg3] = vFloat (s2vFloat16b (0x4800));
-  l_reg[LRegs::LReg4] = vFloat (s2vFloat16b (0x4b40));
+  l_reg[LRegs::LReg0] = vFloat (sFloat16b (b));
+  l_reg[LRegs::LReg1] = vFloat (sFloat16b (1.0f));
+  l_reg[LRegs::LReg2] = vFloat (sFloat16b (0x4000));
+  l_reg[LRegs::LReg3] = vFloat (sFloat16b (0x4800));
+  l_reg[LRegs::LReg4] = vFloat (sFloat16b (0x4b40));
 }
 /*
 **_Z3twoj:
