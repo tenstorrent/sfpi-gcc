@@ -45,6 +45,7 @@
   UNSPECV_SFPLOADI
   UNSPECV_SFPLOAD
   UNSPECV_SFPSTORE
+  UNSPECV_SFPSTORESRCS
 
   UNSPECV_SFPSETCC
   UNSPECV_SFPENCC
@@ -629,6 +630,62 @@
       TARGET_XTT_TENSIX_QSR ? "SFPSTORE\t%x4, %3, %5, %6, 0, 0"
       : "SFPSTORE\t%x4, %3, %5, %6",
       operands, false, 7);
+  }
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpstoresrcs"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "reg_or_0_operand")
+     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+     (match_operand:SI    2 "reg_or_const_int_operand")
+     (match_operand:SI    3 "reg_or_0_operand")
+     (match_operand:SI    4 "const_int_operand")
+     (match_operand:SI    5 "const_int_operand")
+     (match_operand:SI    6 "const_int_operand")
+     (match_operand:SI    7 "const_int_operand")
+     ] UNSPECV_SFPSTORESRCS)]
+  "TARGET_XTT_TENSIX_QSR"
+{
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[2];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[0]);
+      int op
+        = TT_OP_QSR_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 
+                              1, INTVAL (operands[7]));
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[4])).src_shift (20));
+      imm = operands[3];
+    }
+  else
+    imm = rvtt_clamp_unsigned (imm, 0x3ff);
+
+  emit_insn (gen_rvtt_sfpstoresrcs_int
+    (mem, opc, enc, imm,
+     operands[1], operands[5], operands[6], operands[7]));
+  DONE;
+})
+
+(define_insn "rvtt_sfpstoresrcs_int"
+  [(unspec_volatile:XTT32SI [
+    (match_operand:SI    0 "mem_or_0_operand" "J,m")
+    (match_operand:SI    1 "const_int_operand" "J,n") ;; opcode
+    (match_operand:SI    2 "const_int_operand" "J,n") ;; id, src & dst shifts
+    (match_operand:SI    3 "reg_or_const_int_operand" "n,r") ;; imm or insn
+    (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "xrxs,xrxs") ;; src
+    (match_operand:SI    5 "const_int_operand" "n,n")
+    (match_operand:SI    6 "const_int_operand" "n,n")
+    (match_operand:SI    7 "const_int_operand" "n,n")
+    ] UNSPECV_SFPSTORESRCS)
+   (clobber (match_scratch:SI  8 "=X,&r"))]
+  "TARGET_XTT_TENSIX_QSR"
+  {
+    return rvtt_synth::pattern (which_alternative,
+      "SFPSTORE\t%x4, %3, %5, %6, 1, %7",
+      operands, false, 8);
   }
   [(set_attr "type" "tensix")])
 

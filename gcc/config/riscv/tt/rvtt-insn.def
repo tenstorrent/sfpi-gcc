@@ -144,6 +144,7 @@ RVTT_FN (sfpstore,             ,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI
 RVTT_OVR(sfpstore,           bh,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0, ({CE, 13}, {M, 0xc7ff}, {CU, 3}))
 RVTT_OVR(sfpstore,          qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,            0, ({CE, 10}, {M, 0xc7ff}, {CU, 3}))
 // FIXME: Add qsr SrcS load and store builtins -- these have an extra arg
+RVTT_FN (sfpstoresrcs,      qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI_USI,        0, ({CE, 10}, {M, 0xc7ff}, {CU, 2}, {CU, 1}))
 
 // gimple-rvtt-combine requires this ordering
 RVTT_FN (sfpmul,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1}))
