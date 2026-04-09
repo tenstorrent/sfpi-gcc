@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
+// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -mno-tt-tensix-optimize-dce" }
 // { dg-final { check-function-bodies "**" "" } }
 
 void copy ()

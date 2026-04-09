@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
+// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -mno-tt-tensix-optimize-dce" }
 // { dg-final { check-function-bodies "**" "" } }
 
 extern volatile unsigned iptr[];
@@ -22,6 +22,7 @@ void two () {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto y = __builtin_rvtt_sfpmuli (iptr, f, 0, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpwritelreg (y, 1);
 }
 /*
 **_ZN3dyn3twoEv:
@@ -29,6 +30,7 @@ void two () {
 **	SFPMOV	L1, L0, 2
 **	SFPMULI	L1, 0, 8
 **	SFPSTORE	L0, 0, 0, 0
+**	# WRITE L1
 **	ret
 */
 
@@ -57,6 +59,7 @@ void two (unsigned i) {
   auto f = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);
   auto y = __builtin_rvtt_sfpmuli (iptr, f, i, 0, 0, 8);
   __builtin_rvtt_sfpstore (nullptr, f, 0, 0, 0, 0, 0);
+  __builtin_rvtt_sfpwritelreg (y, 1);
 }
 /*
 **_ZN3dyn3twoEj:
@@ -71,6 +74,7 @@ void two (unsigned i) {
 **	lui	a5,%hi\(iptr\)
 **	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L1, a0, 8
 **	SFPSTORE	L0, 0, 0, 0
+**	# WRITE L1
 **	ret
 */
 

@@ -50,6 +50,7 @@ public:
     VAR_SHIFT,
     LV_SHIFT,
     COMMUTE_SHIFT,
+    VOLATILE_SHIFT,
     NUM_CLOBBERS_SHIFT,
     NUM_CLOBBERS_BITS = 2,
     CLOBBER_SHIFT = NUM_CLOBBERS_SHIFT + NUM_CLOBBERS_BITS,
@@ -63,6 +64,7 @@ public:
     HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
     HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
+    VOLATILE = 1 << VOLATILE_SHIFT, // has unrepresented side-effects
     COMMUTES = 1 << COMMUTE_SHIFT, // First 2 srcs commute
 
     NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
@@ -204,6 +206,7 @@ public:
   ops_t ops;
 
 public:
+  bool is_volatile () const { return flags & VOLATILE; }
   bool is_live () const { return flags & HAS_LV; }
   int live_arg () const { return has_var (); }
 
@@ -246,6 +249,13 @@ public:
 public:
   bool sets_cc (gcall *stmt) const;
   bool srcs_commute (gcall *stmt) const;
+  bool has_side_effects (gcall *stmt) const {
+    if (is_volatile ())
+      return true;
+    if (cc_mask && sets_cc (stmt))
+      return true;
+    return false;
+  }
 };
 
 extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];

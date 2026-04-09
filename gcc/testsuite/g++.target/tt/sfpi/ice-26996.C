@@ -14,4 +14,7 @@ void bad()
 
   b = -b;
   (void) (a + b);
+
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
 }
