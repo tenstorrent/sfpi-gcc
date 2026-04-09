@@ -2,11 +2,11 @@
 
 void fn (int i)
 {
-  __builtin_rvtt_sfpreadlreg (i); // { dg-error "is not a constant" }
+  __builtin_rvtt_sfpwritelreg (__builtin_rvtt_sfpreadlreg (i), 0); // { dg-error "is not a constant" }
 
-  __builtin_rvtt_sfpreadlreg (0);
+  __builtin_rvtt_sfpwritelreg (__builtin_rvtt_sfpreadlreg (0), 0);
   __builtin_rvtt_sfpreadlreg (15);
-  __builtin_rvtt_sfpreadlreg (16); // { dg-error "is out of range" }
+  __builtin_rvtt_sfpwritelreg (__builtin_rvtt_sfpreadlreg (16), 0); // { dg-error "is out of range" }
 
   auto cst = __builtin_rvtt_sfpreadlreg (8);
   __builtin_rvtt_sfpwritelreg (cst, 0);

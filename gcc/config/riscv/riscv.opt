@@ -570,6 +570,10 @@ mtt-tensix-optimize-combine
 Target Var(riscv_tt_opt_combine) Init(1)
 Combine Tensix instructions.
 
+mtt-tensix-optimize-dce
+Target Var(riscv_tt_opt_dce) Init(1)
+Remove dead tensix instructions
+
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instruction.

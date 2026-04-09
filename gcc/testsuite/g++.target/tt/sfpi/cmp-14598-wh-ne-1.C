@@ -41,7 +41,6 @@ void fnuvv () {
 
 void fnuvi (int i) {
     vUInt a = l_reg[LRegs::LReg0];
-    vUInt b = l_reg[LRegs::LReg1];
     vFloat c = l_reg[LRegs::LReg2];
     vFloat d = l_reg[LRegs::LReg3];
     vFloat r;
@@ -57,7 +56,6 @@ void fnuvi (int i) {
 /*
 **_Z5fnuvii:
 **	# READ L0
-**	# READ L1
 **	# READ L2
 **	# READ L3
 **	slli	a5,a0,16
@@ -83,7 +81,6 @@ void fnuvi (int i) {
 
 void fnuvc () {
     vUInt a = l_reg[LRegs::LReg0];
-    vUInt b = l_reg[LRegs::LReg1];
     vFloat c = l_reg[LRegs::LReg2];
     vFloat d = l_reg[LRegs::LReg3];
     vFloat r;
@@ -99,7 +96,6 @@ void fnuvc () {
 /*
 **_Z5fnuvcv:
 **	# READ L0
-**	# READ L1
 **	# READ L2
 **	# READ L3
 **	SFPIADD	L0, L0, -5, 5
