@@ -44,6 +44,7 @@
 
   UNSPECV_SFPLOADI
   UNSPECV_SFPLOAD
+  UNSPECV_SFPLOADSRCS
   UNSPECV_SFPSTORE
   UNSPECV_SFPSTORESRCS
 
@@ -505,6 +506,25 @@
   DONE;
 })
 
+(define_expand "rvtt_sfploadsrcs"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "reg_or_0_operand")
+          (match_operand:SI 2 "reg_or_const_int_operand")
+          (match_operand:SI 3 "reg_or_0_operand")
+          (match_operand:SI 4 "const_int_operand")
+          (match_operand:SI 5 "const_int_operand")
+          (match_operand:SI 6 "const_int_operand")
+          (match_operand:SI 7 "const_int_operand")
+          ] UNSPECV_SFPLOADSRCS))]
+  "TARGET_XTT_TENSIX_QSR"
+{
+  emit_insn (gen_rvtt_sfploadsrcs_lv
+    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode), operands[2],
+     operands[3], operands[4], operands[5], operands[6], operands[7]));
+  DONE;
+})
+
 (define_expand "rvtt_sfpload_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -547,6 +567,42 @@
   DONE;
 })
 
+(define_expand "rvtt_sfploadsrcs_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI    1 "reg_or_0_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:SI    3 "reg_or_const_int_operand")
+          (match_operand:SI    4 "reg_or_0_operand")
+          (match_operand:SI    5 "const_int_operand")
+          (match_operand:SI    6 "const_int_operand")
+          (match_operand:SI    7 "const_int_operand")
+          (match_operand:SI    8 "const_int_operand")
+	  ] UNSPECV_SFPLOADSRCS))]
+  "TARGET_XTT_TENSIX_QSR"
+{
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[3];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[1]);
+      int op = TT_OP_QSR_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0, 0);
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).dst_shift (20));
+      imm = operands[4];
+    }
+  else
+    imm = rvtt_clamp_unsigned (imm, 0x3ff);
+
+  emit_insn (gen_rvtt_sfploadsrcs_lv_int
+    (operands[0], mem, opc, enc, imm,
+     rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[6], operands[7], operands[8]));
+  DONE;
+})
+
 (define_insn "rvtt_sfpload_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
@@ -569,6 +625,30 @@
       : (TARGET_XTT_TENSIX_QSR ? "SFPLOAD\t%x0, %4, %7, %8, 0, 0"
          : "SFPLOAD\t%x0, %4, %7, %8"),
       operands, true, 9);
+  }
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfploadsrcs_lv_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI    1 "mem_or_0_operand" "J,J,m,m")
+          (match_operand:SI    2 "const_int_operand" "J,J,n,n") ;; opcode
+          (match_operand:SI    3 "const_int_operand" "J,J,n,n") ;; id, src & dst shifts
+          (match_operand:SI    4 "reg_or_const_int_operand" "n,n,r,r") ;; imm or insn
+          (match_operand:XTT32SI 5 "noval_operand" "xn,xn,xn,xn") ;; src (none)
+          (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xn,0,xn,0") ;; lv
+          (match_operand:SI    7 "const_int_operand" "n,n,n,n")
+          (match_operand:SI    8 "const_int_operand" "n,n,n,n")
+          (match_operand:SI    9 "const_int_operand" "n,n,n,n")
+          ] UNSPECV_SFPLOADSRCS))
+   (clobber (match_scratch:SI  10 "=X,X,&r,&r"))]
+  "TARGET_XTT_TENSIX_QSR"
+  {
+    return rvtt_synth::pattern (which_alternative >> 1,
+      which_alternative & 1
+      ? "SFPLOAD\t%x0, %4, %7, %9, 1, 0\t# LV:%x6"
+      : "SFPLOAD\t%x0, %4, %7, %9, 1, 0",
+      operands, true, 10);
   }
   [(set_attr "type" "tensix")])
 
