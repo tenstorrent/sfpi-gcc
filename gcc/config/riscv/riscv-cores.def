@@ -111,25 +111,16 @@ RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
 
-// I am suspicious of the architecture extension documents
-//
-// 1) claims qsr32 doesn't have zba, zbb (which BH has)
-//
-// 2) claims qsr64 & qsr32 have 'a' extension, not zaamo (which BH has).  The former includes
-// load-locked, store-conditional, which I have been informed requires a redesign of our cache architecture.
-
 // TODO update tune parameter
 
-// #39314 disable ll/sc 'a' extension -> replace with 'zaamo'
 // #31429 disable compressed 'c' extension, it interfers with our post-processing.
-RISCV_CORE("tt-qsr64",        "rv64im_zaamo_zba_zbb_zbs_zicsr_zifencei_xttcache", "lp64", "rvtt-b1")
-RISCV_CORE("tt-qsr64-rocc",   "rv64ima_zicsr_zba_zbb_zbs_zifencei_xttcache_xttroccqsr", "lp64", "rvtt-b1")
-// #39314 disable ll/sc 'a' extension -> replace with 'zaamo'
+RISCV_CORE("tt-qsr64",        "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache_xttroccqsr", "lp64", "rvtt-b1")
+
 // #39314 disable float 'f' extension, tt-sim doesn't grok them
 // #35991 disable vector 'v' extension, tt-sim doesn't grok them, it's not on all compute cores anyway
-RISCV_CORE("tt-qsr32",        "rv32im_zaamo","ilp32", "rvtt-b1")
-
-// Add -tensix using tensixqsr when ready
-RISCV_CORE("tt-qsr32-tensix", "rv32im_zaamo_xtttensixqsr", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32",          "rv32im_zaamo","ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32-tensix",   "rv32im_zaamo_xtttensixqsr", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-qsr32-tensixbh", "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-b1")
+
 #undef RISCV_CORE
