@@ -528,7 +528,7 @@
 (define_expand "rvtt_sfpload_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	        (match_operand:SI    1 "reg_or_0_operand")
+          (match_operand:SI    1 "reg_or_0_operand")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_or_noval_operand")
           (match_operand:SI    3 "reg_or_const_int_operand")
           (match_operand:SI    4 "reg_or_0_operand")
@@ -570,7 +570,7 @@
 (define_expand "rvtt_sfploadsrcs_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	        (match_operand:SI    1 "reg_or_0_operand")
+          (match_operand:SI    1 "reg_or_0_operand")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_or_noval_operand")
           (match_operand:SI    3 "reg_or_const_int_operand")
           (match_operand:SI    4 "reg_or_0_operand")
