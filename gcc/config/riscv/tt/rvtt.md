@@ -588,7 +588,7 @@
   if (!CONST_INT_P (imm))
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
-      int op = TT_OP_QSR_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 0, 0);
+      int op = TT_OP_QSR_SFPLOAD (0, INTVAL (operands[6]), INTVAL (operands[7]), 1, INTVAL (operands[8]));
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).dst_shift (20));
       imm = operands[4];
@@ -734,8 +734,7 @@
     {
       mem = gen_rtx_MEM (SImode, operands[0]);
       int op
-        = TT_OP_QSR_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 
-                              1, INTVAL (operands[7]));
+        = TT_OP_QSR_SFPSTORE (0, INTVAL (operands[5]), INTVAL (operands[6]), 1, INTVAL (operands[7]));
       opc = GEN_INT (op);
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[4])).src_shift (20));
       imm = operands[3];
