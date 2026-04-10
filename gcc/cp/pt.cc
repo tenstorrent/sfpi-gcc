@@ -28446,7 +28446,8 @@ invalid_nontype_parm_type_p (tree type, tsubst_flags_t complain)
     /* Fall through.  */;
   else if (VOID_TYPE_P (type))
     /* Fall through.  */;
-  else if (cxx_dialect >= cxx20)
+  else if (cxx_dialect >= cxx20
+	   || flag_tt_nttp)
     {
       if (dependent_type_p (type))
 	return false;

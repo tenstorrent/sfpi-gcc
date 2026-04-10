@@ -1023,14 +1023,16 @@ c_cpp_builtins (cpp_reader *pfile)
 	  cpp_define (pfile, "__cpp_enumerator_attributes=201411L");
 	  cpp_define (pfile, "__cpp_nested_namespace_definitions=201411L");
 	  cpp_define (pfile, "__cpp_fold_expressions=201603L");
-	  if (cxx_dialect <= cxx17)
+	  if (cxx_dialect <= cxx17
+	      && !flag_tt_nttp)
 	    cpp_define (pfile, "__cpp_nontype_template_args=201411L");
 	  if (!flag_range_for_ext_temps)
 	    cpp_define (pfile, "__cpp_range_based_for=201603L");
           else
 	    /* This is the C++23 or -std=c++17 -frange-for-ext-temps value.  */
 	    cpp_define (pfile, "__cpp_range_based_for=202211L");
-	  if (cxx_dialect <= cxx17)
+	  if (cxx_dialect <= cxx17
+	      && !flag_tt_consteval)
 	    cpp_define (pfile, "__cpp_constexpr=201603L");
 	  cpp_define (pfile, "__cpp_if_constexpr=201606L");
 	  cpp_define (pfile, "__cpp_capture_star_this=201603L");
@@ -1047,6 +1049,23 @@ c_cpp_builtins (cpp_reader *pfile)
 	  cpp_define (pfile, "__cpp_variadic_using=201611L");
 	  cpp_define (pfile, "__cpp_guaranteed_copy_elision=201606L");
 	  cpp_define (pfile, "__cpp_nontype_template_parameter_auto=201606L");
+
+	  // Tenstorrent
+	  if (cxx_dialect <= cxx17)
+	    {
+	      if (flag_tt_nttp)
+		{
+		  cpp_define (pfile, "__cpp_nontype_template_args=201911L");
+		  cpp_define (pfile, "__cpp_nontype_template_parameter_class=201806L");
+		}
+	      if (flag_tt_consteval)
+		{
+		  cpp_define (pfile, "__cpp_constexpr=202002L");
+		  cpp_define (pfile, "__cpp_consteval=202211L");
+		}
+	      if (flag_tt_constinit)
+		cpp_define (pfile, "__cpp_constinit=201907L");
+	    }
 	}
       if (cxx_dialect > cxx17)
 	{
