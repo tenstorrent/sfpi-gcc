@@ -2815,4 +2815,16 @@ w
 C ObjC C++ ObjC++
 ; Documented in common.opt
 
+ftt-nttp
+C++ ObjC++ Var(flag_tt_nttp)
+Enable support for NTTP
+
+ftt-consteval
+C++ ObjC++ Var(flag_tt_consteval)
+Enable support for consteval functions
+
+ftt-constinit
+C++ ObjC++ Var(flag_tt_constinit)
+Enable support for constinit functions
+
 ; This comment is to ensure we retain the blank line above.

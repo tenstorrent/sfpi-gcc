@@ -273,6 +273,23 @@ init_reswords (void)
 	set_identifier_kind (id, cik_keyword);
     }
 
+  // Tenstorrent local
+  if (cxx_dialect < cxx20)
+    {
+      if (flag_tt_constinit)
+	{
+	  auto id = get_identifier ("constinit");
+	  C_SET_RID_CODE (id, RID_CONSTINIT);
+	  set_identifier_kind (id, cik_keyword);
+	}
+      if (flag_tt_consteval)
+	{
+	  auto id = get_identifier ("consteval");
+	  C_SET_RID_CODE (id, RID_CONSTEVAL);
+	  set_identifier_kind (id, cik_keyword);
+	}
+    }
+
   for (i = 0; i < NUM_INT_N_ENTS; i++)
     {
       char name[50];
