@@ -646,8 +646,8 @@
   {
     return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
-      ? "SFPLOAD\t%x0, %4, %7, %9, 1, 0\t# LV:%x6"
-      : "SFPLOAD\t%x0, %4, %7, %9, 1, 0",
+      ? "SFPLOAD\t%x0, %4, %7, %8, 1, %9\t# LV:%x6"
+      : "SFPLOAD\t%x0, %4, %7, %8, 1, %9",
       operands, true, 10);
   }
   [(set_attr "type" "tensix")])

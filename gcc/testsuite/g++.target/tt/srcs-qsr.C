@@ -25,7 +25,7 @@ void loadsrcs() {
 /*
 **_Z8loadsrcsv:
 **  SFPLOAD	L0, 0, 0, 0, 1, 0
-**  SFPLOAD	L1, 0, 0, 1, 1, 0
+**  SFPLOAD	L1, 0, 0, 0, 1, 1
 **  # WRITE L0
 **  SFPMOV	L0, L1, 2
 **  # WRITE L0
@@ -45,7 +45,7 @@ void loadsrcs_lv() {
 **  SFPMOV	L0, L9, 2
 **  SFPLOAD	L0, 0, 0, 0, 1, 0	# LV:L0
 **  SFPMOV	L1, L9, 2
-**  SFPLOAD	L1, 0, 0, 1, 1, 0	# LV:L1
+**  SFPLOAD	L1, 0, 0, 0, 1, 1	# LV:L1
 **  # WRITE L0
 **  SFPMOV	L0, L1, 2
 **  # WRITE L0
