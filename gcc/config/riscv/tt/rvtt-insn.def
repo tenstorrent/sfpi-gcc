@@ -72,6 +72,7 @@ RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,  
 RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x7e7e), ({E, 0}, {XM}))
 
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   0, ())
+RVTT_FN (sfpbankdone,       qsr,,VOID_FTYPE_USI_USI_USI,                                     0, ({CU, 1}, {CU, 1}, {CU, 1}))
 
 RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                            0, ({CU, 4}))
 RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                       0, ({CU, 3}))
