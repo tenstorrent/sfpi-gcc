@@ -40,6 +40,7 @@
   UNSPECV_SFPVARLREG
 
   UNSPECV_SFPNOP
+  UNSPECV_SFPBANKDONE
   UNSPECV_SFPASSIGN
 
   UNSPECV_SFPLOADI
@@ -397,6 +398,16 @@
      ] UNSPECV_SFPNOP)]
   "TARGET_XTT_TENSIX"
   "SFPNOP"
+  [(set_attr "type" "tensix")])
+
+(define_insn "rvtt_sfpbankdone"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI   0 "const_int_operand" "n")
+     (match_operand:SI   1 "const_int_operand" "n")
+     (match_operand:SI   2 "const_int_operand" "n")
+     ] UNSPECV_SFPBANKDONE)]
+  "TARGET_XTT_TENSIX_QSR"
+  "SFPNOP\t%0, %1, %2"
   [(set_attr "type" "tensix")])
 
 (define_expand "movxtt32si"
