@@ -1006,7 +1006,8 @@
 #undef __glibcxx_want_integer_comparison_functions
 
 #if !defined(__cpp_lib_is_constant_evaluated)
-# if (__cplusplus >= 202002L) && (defined(_GLIBCXX_HAVE_IS_CONSTANT_EVALUATED))
+// -ftt-consteval enables consteval in c++17
+# if (__cplusplus >= 202002L || __cpp_consteval >= 202211L) && (defined(_GLIBCXX_HAVE_IS_CONSTANT_EVALUATED))
 #  define __glibcxx_is_constant_evaluated 201811L
 #  if defined(__glibcxx_want_all) || defined(__glibcxx_want_is_constant_evaluated)
 #   define __cpp_lib_is_constant_evaluated 201811L
