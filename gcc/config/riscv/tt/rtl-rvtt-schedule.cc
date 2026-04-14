@@ -286,7 +286,7 @@ transform (function *fn)
 	      };
 
 	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn),
-				  check_mad_pipeline_only);
+				              check_mad_pipeline_only);
 	    }
 
 	  if (insert)
