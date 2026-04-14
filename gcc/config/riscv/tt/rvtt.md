@@ -107,6 +107,7 @@
   none
   static
   dynamic
+  mad_pipeline
 ])
 (define_enum_attr "xtt_delay_wh" "xtt_delay"
   (const_string "none"))
@@ -887,7 +888,7 @@
    SFP<rvtt_muladd_insn>\t%x0, <rvtt_muladd_ops_lv>, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_expand "rvtt_sfpmad"
@@ -921,7 +922,7 @@
    SFPMAD\t%x0, %x2, %x3, %x4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_int_iterator rvtt_muliaddi_op [
@@ -992,7 +993,7 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpiadd_v_int"
@@ -1702,7 +1703,7 @@
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn_and_split "rvtt_sfplutfp32_3r"
@@ -1735,7 +1736,7 @@
 }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_3r_split"
@@ -1752,7 +1753,7 @@
   "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_6r"
@@ -1771,7 +1772,7 @@
   "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_wh" "dynamic")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpswap_int"
@@ -2287,7 +2288,7 @@
   "TARGET_XTT_TENSIX_BH_QSR"
   "SFPMUL24\t%x0, %x1, %x2, %3"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfpmul24_lv"
@@ -2301,7 +2302,7 @@
   "TARGET_XTT_TENSIX_BH_QSR"
   "SFPMUL24\t%x0, %x2, %x3, %4"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")
+   (set_attr "xtt_delay_bh" "mad_pipeline")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
 (define_insn "rvtt_sfparecip"

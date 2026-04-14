@@ -34,17 +34,55 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 
+/* BH errata: the scoreboarding stall logic is broken for these consumer
+   instructions.  A NOP is still needed between a MAD pipeline producer and
+   one of these consumers when the producer writes a register that the
+   consumer reads.  */
+
+static bool
+is_mad_pipeline_consumer (rtx_insn *insn)
+{
+  switch (recog_memoized (insn))
+    {
+    case CODE_FOR_rvtt_sfpand_2op:
+    case CODE_FOR_rvtt_sfpand_lv_int:
+    case CODE_FOR_rvtt_sfpor_2op:
+    case CODE_FOR_rvtt_sfpor_lv_int:
+    case CODE_FOR_rvtt_sfpiadd_v_int:
+    case CODE_FOR_rvtt_sfpiadd_i_lv_int:
+    case CODE_FOR_rvtt_sfpshft_v:
+    case CODE_FOR_rvtt_sfpshft_i:
+    case CODE_FOR_rvtt_sfpshft_i_int:
+    case CODE_FOR_rvtt_sfpwriteconfig_v:
+    case CODE_FOR_rvtt_sfpswap_int:
+    case CODE_FOR_rvtt_sfpshft2_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_dead:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Walk the BB graph from PROBE_INSN until we meet a TENSIX insn. Return true
    if REGNO != 0 and the TENSIX insn is dependent.  Return true if REGNO == 0
    and the TENSIX insn is not a NOP. Return false in all other cases. If we
    meet the end of a block, recurse into successor blocks and return the first
    true we get.  Populate VISITED with the BB's we marked. Takes advantage of
    no multi-register values, no return values and no clobbers of TENSIX
-   registers. */
+   registers.
+
+   When check_mad_pipeline_only is true, a dependent consumer only
+   triggers a NOP if it is one of the mad-pipeline instructions.  Non-mad-pipeline
+   consumers have working scoreboarding, and any non-zero-length TENSIX insn
+   provides the required 1-cycle gap.  */
 
 static bool
 find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
-		rtx_insn *probe_insn, bool check_probe = false)
+		rtx_insn *probe_insn, bool check_probe = false,
+		bool check_mad_pipeline_only = false)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -130,6 +168,11 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	};
 
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
+
+	if (is_dependent && check_mad_pipeline_only
+	    && !is_mad_pipeline_consumer (probe_insn))
+	  is_dependent = false;
+
 	if (!is_dependent && !get_attr_length (probe_insn))
 	  continue;
 
@@ -145,7 +188,8 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true))
+    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
+		        check_mad_pipeline_only))
       return true;
 
   return false;
@@ -195,9 +239,12 @@ transform (function *fn)
 	    }
 	  else
 	    {
-	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
+	      gcc_assert (delay == XTT_DELAY_DYNAMIC
+			       || delay == XTT_DELAY_MAD_PIPELINE);
+	      bool check_mad_pipeline_only = delay == XTT_DELAY_MAD_PIPELINE;
 	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
-				   rtx_insn *insn, rtx rtl) -> bool
+				   rtx_insn *insn, rtx rtl,
+				   bool check_mad_pipeline_only) -> bool
 	      {
 		switch (GET_CODE (rtl))
 		  {
@@ -210,7 +257,8 @@ transform (function *fn)
 			unsigned regno = REGNO (SET_DEST (rtl));
 			if (SFPU_REG_P (regno))
 			  {
-			    bool insert = find_next_insn (visited, bb, regno, insn);
+			    bool insert = find_next_insn (visited, bb, regno, insn,
+						                      false, check_mad_pipeline_only);
 
 			    for (auto *bb : visited)
 			      bb->flags &= ~BB_VISITED;
@@ -225,7 +273,8 @@ transform (function *fn)
 		    {
 		      auto &vec = XVEC (rtl, 0);
 		      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
-			if (self (self, visited, bb, insn, RTVEC_ELT (vec, ix)))
+			if (self (self, visited, bb, insn,
+				      RTVEC_ELT (vec, ix), check_mad_pipeline_only))
 			  return true;
 		    }
 		    break;
@@ -238,16 +287,20 @@ transform (function *fn)
 		return false;
 	      };
 
-	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn));
+	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn),
+				  check_mad_pipeline_only);
 	    }
 
 	  if (insert)
 	    emit_insn_after (gen_rvtt_sfpnop (), insn);
 	  if (dump_file)
 	    {
+	      const char *kind
+		= delay == XTT_DELAY_STATIC ? "static"
+		: delay == XTT_DELAY_DYNAMIC ? "dynamic"
+		: "mad_pipeline";
 	      fprintf (dump_file, "%snserting %s nop after ",
-		       insert ? "I" : "Not i",
-		       delay == XTT_DELAY_STATIC ? "static" : "dynamic");
+		       insert ? "I" : "Not i", kind);
 	      dump_insn_slim (dump_file, insn);
 	      fprintf (dump_file, "\n");
 	    }
