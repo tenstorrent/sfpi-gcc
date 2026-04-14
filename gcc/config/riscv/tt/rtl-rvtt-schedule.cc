@@ -34,10 +34,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 
-/* BH errata: the scoreboarding stall logic is broken for these consumer
-   instructions.  A NOP is still needed between a MAD pipeline producer and
-   one of these consumers when the producer writes a register that the
-   consumer reads.  */
+/* The scoreboarding stall logic is broken for these consumer
+   instructions of a SFPMAD pipeline.  A NOP is still needed between a MAD
+   pipeline producer and one of these consumers when the producer writes a
+   register that the consumer reads.  */
 
 static bool
 is_mad_pipeline_consumer (rtx_insn *insn)
@@ -75,14 +75,12 @@ is_mad_pipeline_consumer (rtx_insn *insn)
    registers.
 
    When check_mad_pipeline_only is true, a dependent consumer only
-   triggers a NOP if it is one of the mad-pipeline instructions.  Non-mad-pipeline
-   consumers have working scoreboarding, and any non-zero-length TENSIX insn
-   provides the required 1-cycle gap.  */
+   triggers a NOP if it is one of the mad-pipeline instructions. */
 
 static bool
 find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
-		rtx_insn *probe_insn, bool check_probe = false,
-		bool check_mad_pipeline_only = false)
+                rtx_insn *probe_insn, bool check_probe = false,
+                bool check_mad_pipeline_only = false)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -170,10 +168,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
 
 	if (is_dependent && check_mad_pipeline_only
-	    && !is_mad_pipeline_consumer (probe_insn))
+		&& !is_mad_pipeline_consumer (probe_insn))
 	  is_dependent = false;
 
-	if (!is_dependent && !get_attr_length (probe_insn))
+        if (!is_dependent && !get_attr_length (probe_insn))
 	  continue;
 
 	if (dump_file)
@@ -188,9 +186,9 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
-		        check_mad_pipeline_only))
-      return true;
+  if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
+                      check_mad_pipeline_only))
+    return true;
 
   return false;
 }
