@@ -24,7 +24,6 @@ void muladd() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 0
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
@@ -45,7 +44,6 @@ void mulsub() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 2
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
@@ -66,7 +64,6 @@ void negmuladd() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 1
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
@@ -87,7 +84,6 @@ void negmulsub() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 3
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
@@ -108,7 +104,6 @@ void negmuladd2() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 1
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
@@ -129,7 +124,6 @@ void negmulsub2() {
 **	# READ L1
 **	# READ L2
 **	SFPMAD	L3, L1, L2, L0, 3
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */
