@@ -208,13 +208,14 @@ void six (unsigned bits)
 **	add	a3,a3,a0
 **	addi	a4,a4,%lo\(ibuf\)
 **	li	a5,8
-**	TTREPLAY	0, 5, 1, 1
+**	TTREPLAY	0, 6, 1, 1
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
+**	SFPNOP
 **	sw	a3, 0\(a4\)	# 2:SFPSHFT	L0, L0, a3, 5
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPSTORE	L0, 0, 0, 0
-**	TTREPLAY	0, 5, 0, 0
+**	TTREPLAY	0, 6, 0, 0
 **	addi	a5,a5,-2
 **	bne	a5,zero,.L[0-9]+
 **	ret

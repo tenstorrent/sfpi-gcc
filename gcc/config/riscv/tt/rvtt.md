@@ -1394,7 +1394,7 @@
        (clobber (match_scratch:SI  8))])]
   "TARGET_XTT_TENSIX")
 
-(define_insn "*rvtt_sfpshft_i_bh"
+(define_insn "rvtt_sfpshft_i_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,m")
@@ -1415,7 +1415,7 @@
   }
   [(set_attr "type" "tensix")])
 
-(define_insn "*rvtt_sfpshft_i_wh"
+(define_insn "rvtt_sfpshft_i_wh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,m")
