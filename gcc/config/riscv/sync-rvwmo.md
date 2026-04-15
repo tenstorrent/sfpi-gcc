@@ -25,7 +25,7 @@
   [(set (match_operand:BLK 0 "" "")
 	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMORY_BARRIER))
    (match_operand:SI 1 "const_int_operand" "")]  ;; model
-  "!TARGET_ZTSO"
+  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[1]);
     model = memmodel_base (model);
@@ -52,7 +52,7 @@
 	    [(match_operand:ANYI 1 "memory_operand" "A")
 	     (match_operand:SI 2 "const_int_operand")]  ;; model
 	 UNSPECV_ATOMIC_LOAD))]
-  "!TARGET_ZTSO"
+  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[2]);
     model = memmodel_base (model);
@@ -81,7 +81,7 @@
 	    [(match_operand:ANYI 1 "reg_or_0_operand" "rJ")
 	     (match_operand:SI 2 "const_int_operand")]  ;; model
 	 UNSPECV_ATOMIC_STORE))]
-  "!TARGET_ZTSO"
+  "!TARGET_ZTSO && !(riscv_tt_fix_wh_fence > 0)"
   {
     enum memmodel model = (enum memmodel) INTVAL (operands[2]);
     model = memmodel_base (model);

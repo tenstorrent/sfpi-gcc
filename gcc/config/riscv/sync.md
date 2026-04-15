@@ -51,18 +51,33 @@
       {
 	rtx mem = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
 	MEM_VOLATILE_P (mem) = 1;
-	emit_insn (gen_mem_thread_fence_rvwmo (mem, operands[0]));
+	if (riscv_tt_fix_wh_fence > 0)
+	  emit_insn (gen_mem_thread_fence_wh (mem, operands[0]));
+	else
+	  emit_insn (gen_mem_thread_fence_rvwmo (mem, operands[0]));
       }
     DONE;
   })
 
+;; write barrier is 3 writes, read barrier is 7 insns, l
+(define_insn "mem_thread_fence_wh"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMORY_BARRIER))
+   (match_operand:SI 1 "const_int_operand" "")  ;; model
+   (clobber (match_scratch:SI 2 "=r"))]
+  "riscv_tt_fix_wh_fence > 0"
+  "lui %2,%%hi(0xFFB11014); addi %2,%2,%%lo(0xFFB11014)  # RISCV_TDMA_REG_STATUS
+\tsw zero,0(%2); sw zero,0(%2); sw zero,0(%2)
+\tnop; nop"
+  [(set_attr "type" "multi")
+   (set_attr "length" "28")])
 ;; Atomic memory operations.
 
 (define_expand "atomic_load<mode>"
   [(match_operand:ANYI 0 "register_operand")
    (match_operand:ANYI 1 "memory_operand")
    (match_operand:SI 2 "const_int_operand")] ;; model
-  ""
+  "!(riscv_tt_fix_wh_fence > 0)"
   {
     if (TARGET_ZTSO)
       emit_insn (gen_atomic_load_ztso<mode> (operands[0], operands[1],
@@ -77,7 +92,7 @@
   [(match_operand:ANYI 0 "memory_operand")
    (match_operand:ANYI 1 "reg_or_0_operand")
    (match_operand:SI 2 "const_int_operand")] ;; model
-  ""
+  "!(riscv_tt_fix_wh_fence > 0)"
   {
     if (TARGET_ZTSO)
       emit_insn (gen_atomic_store_ztso<mode> (operands[0], operands[1],

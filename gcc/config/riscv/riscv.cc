@@ -10730,8 +10730,12 @@ riscv_override_options_internal (struct gcc_options *opts)
       };
 
       if (is_cpu_kind ("tt-wh"))
-	if (riscv_tt_fix_wh_raw < 0)
-	  riscv_tt_fix_wh_raw = 1;
+	{
+	  if (riscv_tt_fix_wh_raw < 0)
+	    riscv_tt_fix_wh_raw = 1;
+	  if (riscv_tt_fix_wh_fence < 0)
+	    riscv_tt_fix_wh_fence = 1;
+	}
 
       if (is_cpu_kind ("tt-wh") || is_cpu_kind ("tt-bh"))
 	{
