@@ -239,9 +239,8 @@ transform (function *fn)
 	    }
 	  else
 	    {
-	      gcc_assert (delay == XTT_DELAY_DYNAMIC
-			       || delay == XTT_DELAY_MAD_PIPELINE);
-	      bool check_mad_pipeline_only = delay == XTT_DELAY_MAD_PIPELINE;
+	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
+	      bool check_mad_pipeline_only = TARGET_XTT_TENSIX_BH;
 	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
 				   rtx_insn *insn, rtx rtl,
 				   bool check_mad_pipeline_only) -> bool
@@ -295,12 +294,9 @@ transform (function *fn)
 	    emit_insn_after (gen_rvtt_sfpnop (), insn);
 	  if (dump_file)
 	    {
-	      const char *kind
-		= delay == XTT_DELAY_STATIC ? "static"
-		: delay == XTT_DELAY_DYNAMIC ? "dynamic"
-		: "mad_pipeline";
-	      fprintf (dump_file, "%snserting %s nop after ",
-		       insert ? "I" : "Not i", kind);
+			fprintf (dump_file, "%snserting %s nop after ",
+				insert ? "I" : "Not i",
+				delay == XTT_DELAY_STATIC ? "static" : "dynamic");
 	      dump_insn_slim (dump_file, insn);
 	      fprintf (dump_file, "\n");
 	    }
