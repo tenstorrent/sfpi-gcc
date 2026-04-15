@@ -54,6 +54,9 @@ is_mad_pipeline_consumer (rtx_insn *insn)
     case CODE_FOR_rvtt_sfpshft_i_bh:
     case CODE_FOR_rvtt_sfpwriteconfig_v:
     case CODE_FOR_rvtt_sfpswap_int:
+    case CODE_FOR_rvtt_sfpswap_cst1:
+    case CODE_FOR_rvtt_sfpswap_cst2:
+    case CODE_FOR_rvtt_sfpswap_cst3:
     case CODE_FOR_rvtt_sfpshft2_copy4_int:
     case CODE_FOR_rvtt_sfpshft2_subvec_copy4_int:
     case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_copy4_int:
