@@ -3,10 +3,10 @@
 
 extern volatile unsigned iptr[];
 
-// Positive tests: SFPMAD followed by an errata consumer with register
+// Positive tests: SFPMAD followed by an MAD-pipeline consumer with register
 // dependency.  BH scoreboarding is broken for these consumers, so a
 // NOP must be inserted between the MAD pipeline producer and the
-// errata consumer.
+// MAD-pipeline consumer.
 
 namespace nop {
 
@@ -143,6 +143,50 @@ void mad_swap () {
 **	ret
 */
 
+void mad_swap_cst1 () {
+  auto a = __builtin_rvtt_sfpreadlreg(0);
+  auto b = __builtin_rvtt_sfpreadlreg(1);
+  auto neg1 = __builtin_rvtt_sfpreadlreg(11);
+  auto c10 = __builtin_rvtt_sfpreadlreg(10);
+  auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
+  auto s = __builtin_rvtt_sfpswap(r, c10, 0);
+  auto s0 = __builtin_rvtt_sfpselect2(s, 0);
+  __builtin_rvtt_sfpstore(nullptr, s0, 0, 0, 0, 0, 0);
+}
+/*
+**_ZN3nop13mad_swap_cst1Ev:
+** 	# READ L0
+**	# READ L1
+**	SFPMAD	L0, L11, L0, L1, 0
+**	SFPNOP
+**	SFPSWAP	L0, L10, 0
+**	SFPNOP
+**	SFPSTORE	L0, 0, 0, 0
+**	ret
+*/
+
+void mad_swap_cst2 () {
+  auto a = __builtin_rvtt_sfpreadlreg(0);
+  auto b = __builtin_rvtt_sfpreadlreg(1);
+  auto neg1 = __builtin_rvtt_sfpreadlreg(11);
+  auto c10 = __builtin_rvtt_sfpreadlreg(10);
+  auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
+  auto s = __builtin_rvtt_sfpswap(c10, r, 0);
+  auto s1 = __builtin_rvtt_sfpselect2(s, 1);
+  __builtin_rvtt_sfpstore(nullptr, s1, 0, 0, 0, 0, 0);
+}
+/*
+**_ZN3nop13mad_swap_cst2Ev:
+** 	# READ L0
+**	# READ L1
+**	SFPMAD	L0, L11, L0, L1, 0
+**	SFPNOP
+**	SFPSWAP	L10, L0, 0
+**	SFPNOP
+**	SFPSTORE	L0, 0, 0, 0
+**	ret
+*/
+
 void mad_shft2 () {
   auto a = __builtin_rvtt_sfpreadlreg(0);
   auto b = __builtin_rvtt_sfpreadlreg(1);
@@ -165,9 +209,10 @@ void mad_shft2 () {
 
 }
 
-// Negative test: SFPMAD followed by a non-errata consumer with
-// register dependency.  BH scoreboarding works correctly for SFPMUL,
-// so no NOP should be inserted.
+// Negative tests: SFPMAD followed by a non-MAD-pipeline consumer with
+// register dependency (mad_mul), or an MAD-pipeline consumer with no
+// register dependency (mad_swap_cst3).  No NOP should be inserted
+// for the mad_pipeline delay.
 
 namespace nonop {
 
@@ -185,6 +230,26 @@ void mad_mul () {
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPMUL	L0, L0, L1, L9, 0
+**	SFPSTORE	L0, 0, 0, 0
+**	ret
+*/
+
+void mad_swap_cst3 () {
+  auto a = __builtin_rvtt_sfpreadlreg(0);
+  auto b = __builtin_rvtt_sfpreadlreg(1);
+  auto neg1 = __builtin_rvtt_sfpreadlreg(11);
+  auto c10 = __builtin_rvtt_sfpreadlreg(10);
+  auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
+  auto s = __builtin_rvtt_sfpswap(c10, neg1, 0);
+  __builtin_rvtt_sfpstore(nullptr, r, 0, 0, 0, 0, 0);
+}
+/*
+**_ZN5nonop13mad_swap_cst3Ev:
+** 	# READ L0
+**	# READ L1
+**	SFPMAD	L0, L11, L0, L1, 0
+**	SFPSWAP	L10, L11, 0
+**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
