@@ -28,8 +28,8 @@ void one () {
 **_Z3onev:
 **	SFPLOAD	L1, 0, 4, 7
 **	SFPLOAD	L2, 2, 4, 7
-**	SFPMOV	L0, L2, 2
-**	SFPIADD	L0, L1, 0, 6
+**	SFPMOV	L0, L1, 2
+**	SFPIADD	L0, L2, 0, 6
 **	SFPSETCC	L0, 0, 6
 **	SFPMOV	L0, L9, 2
 **	SFPLOADI	L0, 1, 2	# LV:L0
@@ -69,8 +69,8 @@ void two () {
 **_Z3twov:
 **	SFPLOAD	L1, 0, 4, 7
 **	SFPLOAD	L2, 2, 4, 7
-**	SFPMOV	L0, L2, 2
-**	SFPIADD	L0, L1, 0, 6
+**	SFPMOV	L0, L1, 2
+**	SFPIADD	L0, L2, 0, 6
 **	SFPSETCC	L0, 0, 2
 **	SFPMOV	L0, L9, 2
 **	SFPLOADI	L0, 1, 2	# LV:L0

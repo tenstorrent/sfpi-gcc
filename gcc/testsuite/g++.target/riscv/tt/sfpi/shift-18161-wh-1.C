@@ -10,7 +10,7 @@ using namespace sfpi;
 
 void f5() {
   vUInt a = l_reg[LRegs::LReg0];
-  vInt b = l_reg[LRegs::LReg1];
+  vUInt b = l_reg[LRegs::LReg1];
 
   vUInt r = a << b;
   l_reg[LRegs::LReg3] = r;
@@ -27,7 +27,7 @@ void f5() {
 
 void f5r() {
   vUInt a = l_reg[LRegs::LReg0];
-  vInt b = l_reg[LRegs::LReg1];
+  vUInt b = l_reg[LRegs::LReg1];
 
   vUInt r = a >> b;
   l_reg[LRegs::LReg3] = r;
@@ -45,7 +45,7 @@ void f5r() {
 
 void f6() {
   vInt a = l_reg[LRegs::LReg0];
-  vInt b = l_reg[LRegs::LReg1];
+  vUInt b = l_reg[LRegs::LReg1];
 
   vInt r = a << b;
   l_reg[LRegs::LReg3] = r;
