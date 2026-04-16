@@ -34,6 +34,42 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 
+/* The scoreboarding stall logic is broken for these consumer
+   instructions of a SFPMAD pipeline.  A NOP is still needed between a MAD
+   pipeline producer and one of these consumers when the producer writes a
+   register that the consumer reads.
+
+   Note that sfpreadlreg is not a bad consumer. If it reads a MAD-produced 
+	 register, the actual consuming insn is in assembly and it's on the 
+	 assembly writer to insert a NOP if needed. */
+
+static bool
+is_bad_mad_consumer_BH (rtx_insn *insn)
+{
+  switch (recog_memoized (insn))
+    {
+    case CODE_FOR_rvtt_sfpand_lv_int:
+    case CODE_FOR_rvtt_sfpor_lv_int:
+    case CODE_FOR_rvtt_sfpiadd_v_int:
+    case CODE_FOR_rvtt_sfpiadd_i_lv_int:
+    case CODE_FOR_rvtt_sfpshft_v:
+    case CODE_FOR_rvtt_sfpshft_i_bh:
+    case CODE_FOR_rvtt_sfpwriteconfig_v:
+    case CODE_FOR_rvtt_sfpswap_int:
+    case CODE_FOR_rvtt_sfpswap_cst1:
+    case CODE_FOR_rvtt_sfpswap_cst2:
+    case CODE_FOR_rvtt_sfpswap_cst3:
+    case CODE_FOR_rvtt_sfpshft2_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_copy4_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_int:
+    case CODE_FOR_rvtt_sfpshft2_subvec_shfl1_dead:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Walk the BB graph from PROBE_INSN until we meet a TENSIX insn. Return true
    if REGNO != 0 and the TENSIX insn is dependent.  Return true if REGNO == 0
    and the TENSIX insn is not a NOP. Return false in all other cases. If we
@@ -130,6 +166,12 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	};
 
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
+
+	// On BH, only bad MAD consumers need a NOP. 
+	if (is_dependent && TARGET_XTT_TENSIX_BH
+	    && !is_bad_mad_consumer_BH (probe_insn))
+	  is_dependent = false;
+
 	if (!is_dependent && !get_attr_length (probe_insn))
 	  continue;
 

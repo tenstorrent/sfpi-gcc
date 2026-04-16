@@ -69,9 +69,7 @@ void sub5() {
 **	# READ L0
 **	# READ L1
 **	SFPMAD	L1, L11, L0, L1, 0
-**	SFPNOP
 **	SFPMAD	L3, L11, L0, L1, 0
-**	SFPNOP
 **	# WRITE L3
 **	ret
 */

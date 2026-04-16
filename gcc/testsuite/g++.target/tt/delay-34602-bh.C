@@ -13,7 +13,6 @@ void one () {
 **_ZN3dyn3oneEv:
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMULI	L0, 0, 8
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -50,7 +49,6 @@ void one (unsigned i) {
 **	add	a0,a0,a5
 **	lui	a5,%hi\(iptr\)
 **	sw	a0, %lo\(iptr\)\(a5\)	# 2:SFPMULI	L0, a0, 8
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -89,7 +87,6 @@ void three () {
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMOV	L3, L0, 2
 **	SFPMULI	L3, 0, 8
-**	SFPNOP
 **	# WRITE L3
 **	SFPSTORE	L0, 0, 0, 0
 **	ret

@@ -1404,7 +1404,7 @@
        (clobber (match_scratch:SI  8))])]
   "TARGET_XTT_TENSIX")
 
-(define_insn "*rvtt_sfpshft_i_bh"
+(define_insn "rvtt_sfpshft_i_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,m")
@@ -1425,7 +1425,7 @@
   }
   [(set_attr "type" "tensix")])
 
-(define_insn "*rvtt_sfpshft_i_wh"
+(define_insn "rvtt_sfpshft_i_wh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,m")
@@ -1805,7 +1805,7 @@
    (set_attr "xtt_delay_bh" "static")
    (set_attr "xtt_delay_qsr" "static")])
 
-(define_insn "*rvtt_sfpswap_cst1"
+(define_insn "rvtt_sfpswap_cst1"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
@@ -1844,7 +1844,7 @@
 	  (const_int 1)
 	  ] UNSPECV_SFPSWAP))])
 
-(define_insn "*rvtt_sfpswap_cst2"
+(define_insn "rvtt_sfpswap_cst2"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "cstlreg_operand" "xc")
@@ -1883,7 +1883,7 @@
 	  (const_int 2)
 	  ] UNSPECV_SFPSWAP))])
 
-(define_insn "*rvtt_sfpswap_cst3"
+(define_insn "rvtt_sfpswap_cst3"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "cstlreg_operand" "xc")
      (match_operand:XTT32SI 1 "cstlreg_operand" "xc")

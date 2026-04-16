@@ -16,7 +16,6 @@ void foo ()
 **	SFPLOADI	L1, 13398, 2
 **	SFPLOADI	L1, 18, 8	# LV:L1
 **	SFPMUL	L0, L0, L1, L9, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -32,7 +31,6 @@ void bar ()
 **_Z3barv:
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMULI	L0, 18432, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -48,7 +46,6 @@ void baz ()
 **_Z3bazv:
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMULI	L0, 18432, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
@@ -70,7 +67,6 @@ void toto (unsigned j)
 **	srli	a0,a0,8
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 3:SFPMULI	L0, a0, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
