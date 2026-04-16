@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-qsr32-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 // { dg-final { check-function-bodies "**" "" } }
 
 namespace ckernel{
@@ -17,10 +17,10 @@ void one () {
 }
 /*
 **_Z3onev:
-**	SFPLOAD	L1, 0, 0, 7
-**	SFPLOAD	L0, 4, 3, 2
-**	SFPSTORE	L1, 8, 0, 7
-**	SFPSTORE	L0, 10, 2, 7
+**	SFPLOAD	L1, 0, 0, 7, 0, 0
+**	SFPLOAD	L0, 4, 3, 2, 0, 0
+**	SFPSTORE	L1, 8, 0, 7, 0, 0
+**	SFPSTORE	L0, 10, 2, 7, 0, 0
 **	ret
 */
 
@@ -33,9 +33,9 @@ void two () {
 }
 /*
 **_Z3twov:
-**	SFPLOAD	L1, 0, 4, 7
-**	SFPLOAD	L0, 2, 4, 7
-**	SFPSTORE	L1, 4, 4, 7
-**	SFPSTORE	L0, 6, 4, 7
+**	SFPLOAD	L1, 0, 4, 7, 0, 0
+**	SFPLOAD	L0, 2, 4, 7, 0, 0
+**	SFPSTORE	L1, 4, 4, 7, 0, 0
+**	SFPSTORE	L0, 6, 4, 7, 0, 0
 **	ret
 */
