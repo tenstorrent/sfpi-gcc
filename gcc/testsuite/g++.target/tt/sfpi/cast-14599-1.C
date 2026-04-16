@@ -10,7 +10,7 @@ using namespace sfpi;
 
 void i2f_rne () {
   vInt a = l_reg[LRegs::LReg0];
-  vFloat b = int32_to_float (a, false);
+  vFloat b = int32_to_float (a, Rounding::Even);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -23,7 +23,7 @@ void i2f_rne () {
 
 void i2f_rns () {
   vInt a = l_reg[LRegs::LReg0];
-  vFloat b = int32_to_float (a, true);
+  vFloat b = int32_to_float (a, Rounding::Stochastic);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -67,9 +67,9 @@ void cond () {
     vFloat r;
     
     v_if(a == b) {
-      r = int32_to_float (c, false);
+      r = int32_to_float (c, Rounding::Even);
     } v_else {
-      r = int32_to_float (c, true);
+      r = int32_to_float (c, Rounding::Stochastic);
     } v_endif;
 
     l_reg[LRegs::LReg0] = r;
