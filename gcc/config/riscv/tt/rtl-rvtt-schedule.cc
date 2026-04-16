@@ -170,10 +170,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
 
 	if (is_dependent && check_mad_pipeline_only
-		&& !is_mad_pipeline_consumer (probe_insn))
+	    && !is_mad_pipeline_consumer (probe_insn))
 	  is_dependent = false;
 
-        if (!is_dependent && !get_attr_length (probe_insn))
+	if (!is_dependent && !get_attr_length (probe_insn))
 	  continue;
 
 	if (dump_file)
@@ -188,9 +188,9 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-  if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
-                      check_mad_pipeline_only))
-    return true;
+    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
+                        check_mad_pipeline_only))
+      return true;
 
   return false;
 }
@@ -240,10 +240,12 @@ transform (function *fn)
 	  else
 	    {
 	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
+	      /* On BH, only insert a NOP if the next dependent instruction is a mad_pipeline
+	         consumer with broken stall detection on hardware.  */
 	      bool check_mad_pipeline_only = TARGET_XTT_TENSIX_BH;
 	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
-				   rtx_insn *insn, rtx rtl,
-				   bool check_mad_pipeline_only) -> bool
+	                           rtx_insn *insn, rtx rtl,
+	                           bool check_mad_pipeline_only) -> bool
 	      {
 		switch (GET_CODE (rtl))
 		  {
@@ -257,7 +259,7 @@ transform (function *fn)
 			if (SFPU_REG_P (regno))
 			  {
 			    bool insert = find_next_insn (visited, bb, regno, insn,
-						                      false, check_mad_pipeline_only);
+			                                  false, check_mad_pipeline_only);
 
 			    for (auto *bb : visited)
 			      bb->flags &= ~BB_VISITED;
@@ -273,7 +275,7 @@ transform (function *fn)
 		      auto &vec = XVEC (rtl, 0);
 		      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
 			if (self (self, visited, bb, insn,
-				      RTVEC_ELT (vec, ix), check_mad_pipeline_only))
+			          RTVEC_ELT (vec, ix), check_mad_pipeline_only))
 			  return true;
 		    }
 		    break;
@@ -287,16 +289,16 @@ transform (function *fn)
 	      };
 
 	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn),
-				              check_mad_pipeline_only);
+	                          check_mad_pipeline_only);
 	    }
 
 	  if (insert)
 	    emit_insn_after (gen_rvtt_sfpnop (), insn);
 	  if (dump_file)
 	    {
-			fprintf (dump_file, "%snserting %s nop after ",
-				insert ? "I" : "Not i",
-				delay == XTT_DELAY_STATIC ? "static" : "dynamic");
+	      fprintf (dump_file, "%snserting %s nop after ",
+		       insert ? "I" : "Not i",
+		       delay == XTT_DELAY_STATIC ? "static" : "dynamic");
 	      dump_insn_slim (dump_file, insn);
 	      fprintf (dump_file, "\n");
 	    }
