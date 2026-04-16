@@ -37,16 +37,18 @@ along with GCC; see the file COPYING3.  If not see
 /* The scoreboarding stall logic is broken for these consumer
    instructions of a SFPMAD pipeline.  A NOP is still needed between a MAD
    pipeline producer and one of these consumers when the producer writes a
-   register that the consumer reads.  */
+   register that the consumer reads.
+
+   Note that sfpreadlreg is not a bad consumer. If it reads a MAD-produced 
+	 register, the actual consuming insn is in assembly and it's on the 
+	 assembly writer to insert a NOP if needed. */
 
 static bool
-is_mad_pipeline_consumer (rtx_insn *insn)
+is_bad_mad_consumer_BH (rtx_insn *insn)
 {
   switch (recog_memoized (insn))
     {
-    case CODE_FOR_rvtt_sfpand_2op:
     case CODE_FOR_rvtt_sfpand_lv_int:
-    case CODE_FOR_rvtt_sfpor_2op:
     case CODE_FOR_rvtt_sfpor_lv_int:
     case CODE_FOR_rvtt_sfpiadd_v_int:
     case CODE_FOR_rvtt_sfpiadd_i_lv_int:
@@ -74,15 +76,11 @@ is_mad_pipeline_consumer (rtx_insn *insn)
    meet the end of a block, recurse into successor blocks and return the first
    true we get.  Populate VISITED with the BB's we marked. Takes advantage of
    no multi-register values, no return values and no clobbers of TENSIX
-   registers.
-
-   When check_mad_pipeline_only is true, a dependent consumer only
-   triggers a NOP if it is one of the mad-pipeline instructions. */
+   registers. */
 
 static bool
 find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
-                rtx_insn *probe_insn, bool check_probe = false,
-                bool check_mad_pipeline_only = false)
+		rtx_insn *probe_insn, bool check_probe = false)
 {
   if (bb->flags & BB_VISITED)
     return false;
@@ -169,8 +167,9 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
 
-	if (is_dependent && check_mad_pipeline_only
-	    && !is_mad_pipeline_consumer (probe_insn))
+	// On BH, only bad MAD consumers need a NOP. 
+	if (is_dependent && TARGET_XTT_TENSIX_BH
+	    && !is_bad_mad_consumer_BH (probe_insn))
 	  is_dependent = false;
 
 	if (!is_dependent && !get_attr_length (probe_insn))
@@ -188,8 +187,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true,
-                        check_mad_pipeline_only))
+    if (find_next_insn (visited, e->dest, regno, BB_HEAD (e->dest), true))
       return true;
 
   return false;
@@ -240,12 +238,8 @@ transform (function *fn)
 	  else
 	    {
 	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
-	      /* On BH, only insert a NOP if the next dependent instruction is a mad_pipeline
-	         consumer with broken stall detection on hardware.  */
-	      bool check_mad_pipeline_only = TARGET_XTT_TENSIX_BH;
 	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
-	                           rtx_insn *insn, rtx rtl,
-	                           bool check_mad_pipeline_only) -> bool
+				   rtx_insn *insn, rtx rtl) -> bool
 	      {
 		switch (GET_CODE (rtl))
 		  {
@@ -258,8 +252,7 @@ transform (function *fn)
 			unsigned regno = REGNO (SET_DEST (rtl));
 			if (SFPU_REG_P (regno))
 			  {
-			    bool insert = find_next_insn (visited, bb, regno, insn,
-			                                  false, check_mad_pipeline_only);
+			    bool insert = find_next_insn (visited, bb, regno, insn);
 
 			    for (auto *bb : visited)
 			      bb->flags &= ~BB_VISITED;
@@ -274,8 +267,7 @@ transform (function *fn)
 		    {
 		      auto &vec = XVEC (rtl, 0);
 		      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
-			if (self (self, visited, bb, insn,
-			          RTVEC_ELT (vec, ix), check_mad_pipeline_only))
+			if (self (self, visited, bb, insn, RTVEC_ELT (vec, ix)))
 			  return true;
 		    }
 		    break;
@@ -288,8 +280,7 @@ transform (function *fn)
 		return false;
 	      };
 
-	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn),
-	                          check_mad_pipeline_only);
+	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn));
 	    }
 
 	  if (insert)
