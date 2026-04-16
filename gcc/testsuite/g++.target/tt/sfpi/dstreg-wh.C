@@ -32,10 +32,10 @@ void two () {
   dst_reg[3] = b;
 }
 /*
-**_Z3onev:
-**	SFPLOAD	L1, 0, 0, 3
-**	SFPLOAD	L0, 4, 3, 2
-**	SFPSTORE	L1, 8, 0, 3
-**	SFPSTORE	L0, 10, 2, 3
+**_Z3twov:
+**	SFPLOAD	L1, 0, 12, 3
+**	SFPLOAD	L0, 2, 4, 3
+**	SFPSTORE	L1, 4, 12, 3
+**	SFPSTORE	L0, 6, 4, 3
 **	ret
 */
