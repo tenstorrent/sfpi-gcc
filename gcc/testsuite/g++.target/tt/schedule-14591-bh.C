@@ -248,8 +248,6 @@ void mad_swap_cst3 () {
 ** 	# READ L0
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
-**	SFPSWAP	L10, L11, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

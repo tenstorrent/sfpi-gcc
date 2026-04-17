@@ -21,7 +21,6 @@ void loop (unsigned ix) {
 **	addi	a0,a0,-1
 **	li	a5,-1
 **	SFPMUL	L0, L0, L0, L9, 0
-**	SFPNOP
 **	addi	a0,a0,-1
 **	bne	a0,a5,.L3
 **	# WRITE L0

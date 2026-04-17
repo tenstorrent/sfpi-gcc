@@ -1,0 +1,60 @@
+diff --git i/gcc/testsuite/g++.target/tt/dce.C w/gcc/testsuite/g++.target/tt/dce.C
+index 853f9c4b8..d9606a92f 100644
+--- i/gcc/testsuite/g++.target/tt/dce.C
++++ w/gcc/testsuite/g++.target/tt/dce.C
+@@ -21,7 +21,6 @@ void loop (unsigned ix) {
+ **	addi	a0,a0,-1
+ **	li	a5,-1
+ **	SFPMUL	L0, L0, L0, L9, 0
+-**	SFPNOP
+ **	addi	a0,a0,-1
+ **	bne	a0,a5,.L3
+ **	# WRITE L0
+diff --git i/gcc/testsuite/g++.target/tt/readlreg-32528-bh.C w/gcc/testsuite/g++.target/tt/readlreg-32528-bh.C
+index c498fff0a..10d4a62d8 100644
+--- i/gcc/testsuite/g++.target/tt/readlreg-32528-bh.C
++++ w/gcc/testsuite/g++.target/tt/readlreg-32528-bh.C
+@@ -15,7 +15,6 @@ void foo () {
+ **_ZN3cst3fooEv:
+ **	SFPLOAD	L0, 0, 0, 0
+ **	SFPMUL	L0, L0, L9, L9, 0
+-**	SFPNOP
+ **	# WRITE L0
+ **	ret
+ */
+@@ -40,7 +39,6 @@ void bar (int i) {
+ **	# WRITE L0
+ **	SFPLOAD	L0, 0, 0, 0
+ **	SFPMUL	L0, L0, L9, L9, 0
+-**	SFPNOP
+ **	# WRITE L0
+ **	ret
+ */
+@@ -92,7 +90,6 @@ void swap () {
+ **	SFPSWAP	L0, L1, 0
+ **	SFPNOP
+ **	SFPMUL	L1, L0, L1, L9, 0
+-**	SFPNOP
+ **	# WRITE L1
+ **	ret
+ */
+@@ -110,7 +107,6 @@ void foo () {
+ **	# READ L1
+ **	SFPLOAD	L0, 0, 0, 0
+ **	SFPMUL	L0, L0, L1, L9, 0
+-**	SFPNOP
+ **	# WRITE L0
+ **	ret
+ */
+@@ -132,11 +128,9 @@ void bar (int i) {
+ **	beq	a0,zero,.L[0-9]+
+ **	SFPLOAD	L0, 0, 0, 0
+ **	SFPMUL	L0, L0, L0, L9, 0
+-**	SFPNOP
+ **	# WRITE L0
+ **	SFPLOAD	L0, 0, 0, 0
+ **	SFPMUL	L0, L0, L1, L9, 0
+-**	SFPNOP
+ **	# WRITE L0
+ **	ret
+ */
