@@ -156,7 +156,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 		return true;
 	      break;
 
-	    CASE_CONST_ANY:
+	    case CONST_INT:
 	    case MEM:
 	    case CLOBBER:
 	    case USE:
@@ -252,7 +252,9 @@ transform (function *fn)
 			unsigned regno = REGNO (SET_DEST (rtl));
 			if (SFPU_REG_P (regno))
 			  {
-			    bool insert = find_next_insn (visited, bb, regno, insn);
+			    // Writing to a constant reg falls on the floor
+			    bool insert = regno < SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
+			      && find_next_insn (visited, bb, regno, insn);
 
 			    for (auto *bb : visited)
 			      bb->flags &= ~BB_VISITED;
