@@ -86,7 +86,7 @@ void four ()
 }
 /*
 **_Z4fourv:
-**	TTREPLAY	0, 8, 1, 1
+**	TTREPLAY	0, 8, 0, 0, 1, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPLOAD	L1, 0, 0, 0, 0, 0
 **	SFPLOAD	L2, 0, 0, 0, 0, 0
@@ -95,8 +95,8 @@ void four ()
 **	SFPLUTFP32	L0, 10	# R:L0,L1,L2,L3,L7
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	0, 8, 0, 0
-**	TTREPLAY	0, 8, 0, 0
-**	TTREPLAY	0, 8, 0, 0
+**	TTREPLAY	0, 8, 0, 0, 0, 0
+**	TTREPLAY	0, 8, 0, 0, 0, 0
+**	TTREPLAY	0, 8, 0, 0, 0, 0
 **	ret
 */
