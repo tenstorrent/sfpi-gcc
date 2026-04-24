@@ -44,7 +44,11 @@ RISCV_TUNE("thead-c906", generic, thead_c906_tune_info)
 RISCV_TUNE("xiangshan-nanhu", xiangshan, xiangshan_nanhu_tune_info)
 RISCV_TUNE("generic-ooo", generic_ooo, generic_ooo_tune_info)
 RISCV_TUNE("size", generic, optimize_size_tune_info)
+
+// TODO: Update instruction scheduling tuning
 RISCV_TUNE("rvtt-b1", rvtt_b1, rvtt_b1_tune_info)
+RISCV_TUNE("rvtt-qsr32", rvtt_b1, rvtt_qsr32_tune_info)
+RISCV_TUNE("rvtt-qsr64", rvtt_b1, rvtt_qsr64_tune_info)
 
 #undef RISCV_TUNE
 
@@ -111,16 +115,14 @@ RISCV_CORE("tt-wh-tensix",    "rv32im_xtttensixwh", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
 
-// TODO update tune parameter
-
 // #31429 disable compressed 'c' extension, it interfers with our post-processing.
-RISCV_CORE("tt-qsr64",        "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache", "lp64", "rvtt-b1")
-RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache_xttroccqsr", "lp64", "rvtt-b1")
+RISCV_CORE("tt-qsr64",        "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache", "lp64", "rvtt-qsr64")
+RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache_xttroccqsr", "lp64", "rvtt-qsr64")
 
 // #39314 disable float 'f' extension, tt-sim doesn't grok them
 // #35991 disable vector 'v' extension, tt-sim doesn't grok them, it's not on all compute cores anyway
-RISCV_CORE("tt-qsr32",          "rv32im_zaamo","ilp32", "rvtt-b1")
-RISCV_CORE("tt-qsr32-tensix",   "rv32im_zaamo_xtttensixqsr", "ilp32", "rvtt-b1")
-RISCV_CORE("tt-qsr32-tensixbh", "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-b1")
+RISCV_CORE("tt-qsr32",          "rv32im_zaamo","ilp32", "rvtt-qsr32")
+RISCV_CORE("tt-qsr32-tensix",   "rv32im_zaamo_xtttensixqsr", "ilp32", "rvtt-qsr32")
+RISCV_CORE("tt-qsr32-tensixbh", "rv32im_zaamo_xtttensixbh", "ilp32", "rvtt-qsr32")
 
 #undef RISCV_CORE

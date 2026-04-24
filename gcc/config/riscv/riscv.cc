@@ -647,12 +647,66 @@ static const struct riscv_tune_param optimize_size_tune_info = {
   NULL,						/* loop_align */
 };
 
-/* Costs to use when optimizing for rvtt_b1.  */
+/* The int_mul/int_div values below are not raw latencies; they are
+costs that are used to compare alternative code sequences.
+In particular, GCC decides whether to replace division-by-constant with a
+multiply+shift chain by comparing the total cost of that chain against a 
+single int_div. */
+
+/* Costs to use when optimizing for rvtt_b1 (wormhole / blackhole).
+   HW latencies: multiply 2 cycles, divide variable 6-33 cycles. */
 static const struct riscv_tune_param rvtt_b1_tune_info = {
   {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
   {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
   {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
-  {COSTS_N_INSNS (4), COSTS_N_INSNS (4)},	/* int_mul */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
+  {COSTS_N_INSNS (20), COSTS_N_INSNS (20)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
+/* Costs to use when optimizing for qsr32.
+   HW latencies: multiply 2 cycles, divide 3 cycles (fixed).  */
+static const struct riscv_tune_param rvtt_qsr32_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
+  {COSTS_N_INSNS (3), COSTS_N_INSNS (3)},	/* int_div */
+  1,						/* issue_rate */
+  5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
+  5,						/* memory_cost */
+  8,						/* fmv_cost */
+  true,						/* slow_unaligned_access */
+  false,					/* vector_unaligned_access */
+  false,					/* use_divmod_expansion */
+  false,					/* overlap_op_by_pieces */
+  RISCV_FUSE_NOTHING,                           /* fusible_ops */
+  NULL,						/* vector cost */
+  NULL,						/* function_align */
+  NULL,						/* jump_align */
+  NULL,						/* loop_align */
+};
+
+/* Costs to use when optimizing for qsr64.
+   HW latencies: multiply 2 cycles, divide variable 3-33 cycles 
+   (typically 3-8 for common 10-bit operands). */
+static const struct riscv_tune_param rvtt_qsr64_tune_info = {
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_add NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
+  {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
+  {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
   {COSTS_N_INSNS (6), COSTS_N_INSNS (6)},	/* int_div */
   1,						/* issue_rate */
   5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
