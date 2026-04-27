@@ -81,7 +81,7 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
   else if (bits < -16)
     needs_both = true;
 
- tree lower = val;
+  tree lower = val;
   if (!needs_both)
     ;
   else if (SSA_VAR_P (lower))
@@ -93,15 +93,38 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
       gsi_insert_before (&gsi, lower_stmt, GSI_SAME_STMT);
     }
   else
-    lower = build_int_cst (TREE_TYPE (lower), uint32_t (TREE_INT_CST_LOW (lower)) & 0xffff);
+    {
+      uint32_t ival = TREE_INT_CST_LOW (lower);
+      // We want to optimize the simple cases here, so we can detect when one's
+      // trying to init the const regs in the immvar simplify pass
+      if (!(ival & 0xffff))
+	{
+	  ival >>= 16;
+	  mod = SFPLOADI_MOD0_FLOATB;
+	  needs_both = false;
+	}
+      else if (!(ival >> 16))
+	{
+	  mod = SFPLOADI_MOD0_USHORT;
+	  needs_both = false;
+	}
+      else if ((ival >> 15) == 0x1ffff)
+	{
+	  mod = SFPLOADI_MOD0_SHORT;
+	  needs_both = false;
+	}
+      else
+	val = build_int_cst (TREE_TYPE (val), ival >> 16);
+      lower = build_int_cst (TREE_TYPE (lower), ival & 0xffff);
+    }
 
   tree tmp = emit_sfploadi (gsi, loc, mod, nullptr, addr, lower,
 			    needs_both ? nullptr : res);
 
   if (needs_both)
     {
-      tree shift = nullptr;
-      if (SSA_VAR_P (val))
+      tree shift = val;
+      if (SSA_VAR_P (shift))
 	{
 	  shift = make_ssa_name (TREE_TYPE (val));
 	  auto *shift_stmt = gimple_build_assign
@@ -109,8 +132,6 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
 	  gimple_set_location (shift_stmt, loc);
 	  gsi_insert_before (&gsi, shift_stmt, GSI_SAME_STMT);
 	}
-      else
-	shift = build_int_cst (TREE_TYPE (val), uint32_t (TREE_INT_CST_LOW (val)) >> 16);
 
       res = emit_sfploadi (gsi, loc, SFPLOADI_MOD0_UPPER, tmp, addr, shift, res);
     }
@@ -347,24 +368,23 @@ immvar_gather (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd,
 }
 
 static void
-replace_loadi (gcall *call, gcall *earlier, int creg, int mod, tree val)
+replace_loadi (gcall *call, gcall *earlier, int op, tree val)
 {
   const auto *new_insnd = rvtt_get_insn_data
-    (creg >= 0 ? rvtt_insn_data::sfpreadlreg : rvtt_insn_data::sfploadi);
+    (val ? rvtt_insn_data::sfploadi : rvtt_insn_data::sfpreadlreg);
 
   gimple *new_stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
   gimple_set_location (new_stmt, gimple_location (call));
   gimple_call_set_lhs (new_stmt, gimple_call_lhs (call));
-  if (creg >= 0)
-    gimple_call_set_arg (new_stmt, 0, build_int_cst (unsigned_type_node, creg));
-  else
+  if (val)
     {
       gimple_call_set_arg (new_stmt, 0, null_pointer_node);
       gimple_call_set_arg (new_stmt, new_insnd->imm_arg (), val);
       gimple_call_set_arg (new_stmt, new_insnd->var_arg (), integer_zero_node);
       gimple_call_set_arg (new_stmt, new_insnd->id_arg (), integer_zero_node);
-      gimple_call_set_arg (new_stmt, new_insnd->mod_arg (), build_int_cst (unsigned_type_node, mod));
     }
+  gimple_call_set_arg (new_stmt, val ? new_insnd->mod_arg () : 0,
+		       build_int_cst (unsigned_type_node, op));
 
   if (dump_file)
     {
@@ -399,8 +419,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
   if (!res)
     return false;
 
-  bool other_use = false;
-  bool sfp_use = false;
+  int sfp_use = 0;
   use_operand_p use_p;
   imm_use_iterator iter;
 
@@ -413,29 +432,25 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       const rvtt_insn_data *use_insnd;
       gcall *use_call;
       if (!rvtt_p (&use_insnd, &use_call, use_stmt))
-	other_use = true;
-      else if (first_mod == SFPLOADI_MOD0_USHORT
-	       && use_insnd->id == rvtt_insn_data::sfploadi_lv
-	       && integer_zerop (gimple_call_arg (use_call, 0))
-	       && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg ()))
-		   == SFPLOADI_MOD0_UPPER))
+	continue;
+
+      if (first_mod == SFPLOADI_MOD0_USHORT
+	  && use_insnd->id == rvtt_insn_data::sfploadi_lv
+	  && integer_zerop (gimple_call_arg (use_call, 0))
+	  && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg ()))
+	      == SFPLOADI_MOD0_UPPER))
 	uppers.push_back (use_call);
       else
 	{
-	  sfp_use = true;
-#if 0 // FIXME: enable when we do register subst
+	  sfp_use |= 1;
 	  if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v)
 	    {
 	      int reg = TREE_INT_CST_LOW (gimple_call_arg (use_call, 1));
 	      if (reg == CREG_IDX_0 || reg == CREG_IDX_1 || reg == CREG_IDX_NEG_1)
-		{
-		  warning_at (gimple_location (use_call), 0,
-			      "Initializing constant lreg %d from regular sfploadi, use sfploadi (val, X)",
-			      reg);
-		  gcc_unreachable ();
-		}
+		// We must not simplify this to a load of the constant register
+		// that we're intializing!
+		sfp_use |= 2;
 	    }
-#endif
 	}
     }
 
@@ -444,30 +459,31 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
     {
       tree upper_val = gimple_call_arg (upper, insnd[1].imm_arg ());
       uint32_t upper_ival = TREE_INT_CST_LOW (upper_val);
-      int creg = -1;
-      int new_mod = -1;
+      int op = -1;
 
       if (!ival)
 	{
-#if 0 // FIXME: Disable register subst for the moment
 	  if (upper_ival == 0x0000)
-	    creg = CREG_IDX_0;
-	  else if (upper_ival == 0x3f80)
-	    creg = CREG_IDX_1;
-	  else if (upper_ival == 0xbf80)
-	    creg = CREG_IDX_NEG_1;
+	    {
+	      op = CREG_IDX_0;
+	      upper_val = nullptr;
+	    }
+	  else if ((upper_ival & 0x7fff) == 0x3f80)
+	    {
+	      op = upper_ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	      upper_val = nullptr;
+	    }
 	  else
-#endif
-	    new_mod = SFPLOADI_MOD0_FLOATB;
+	    op = SFPLOADI_MOD0_FLOATB;
 	}
       else if (upper_ival == 0)
 	{
-	  new_mod = SFPLOADI_MOD0_USHORT;
+	  op = SFPLOADI_MOD0_USHORT;
 	  upper_val = val;
 	}
       else if (upper_ival == 0xffff && (ival >> 15) != 0)
 	{
-	  new_mod = SFPLOADI_MOD0_SHORT;
+	  op = SFPLOADI_MOD0_SHORT;
 	  upper_val = val;
 	}
       else
@@ -475,61 +491,51 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	  // Better as a float16a?
 	  // FLOATA=SGN:1,EXP:5,MAN:10, bias 15
 	  // FP32=SGN:1,EXP:8,MAN:23, bias 127
+	  // Stay away from denorms & nans/infs
 	  uint32_t full_value = ival | upper_ival << 16;
 	  unsigned exp = (full_value >> 23) & 0xff;
 	  if ((full_value & 0x00001fff) == 0
-	      && exp >= (127 - 15) && exp <= (127 - 15) + 31)
+	      && exp > (127 - 15) && exp < (127 - 15) + 31)
 	    {
 	      uint32_t man = full_value & 0x7fffff;
 	      uint32_t floata
 		= (man >> 13)
 		| ((exp - (127 - 15)) << 10)
 		| ((full_value >> 31) << 15);
-	      new_mod = SFPLOADI_MOD0_FLOATA;
+	      op = SFPLOADI_MOD0_FLOATA;
 	      upper_val = build_int_cst (unsigned_type_node, floata);
 	    }
 	}
 
-      if (creg >= 0 || new_mod >= 0)
+      if (op >= 0)
 	{
-	  replace_loadi (upper, call, creg, new_mod, upper_val);
+	  replace_loadi (upper, call, op, upper_val);
 	  changed = true;
 	}
       else
-	sfp_use = true;
+	sfp_use |= 1;
     }
 
-  if (sfp_use)
+  if (sfp_use == 1)
     {
       // this has other uses, can we simplify it?
-      int creg = -1;
+      int op = -1;
 
-#if 0 // FIXME: disable register subst for now
       if (!ival)
-	creg = CREG_IDX_0;
+	op = CREG_IDX_0;
       else if ((ival & 0x7fff)
-	       == (first_mod == SFPLOADI_MOD0_FLOATB ? 0x3f80 : SFPLOADI_MOD0_FLOATA ? 0x3c00 : -1))
-	creg = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
-#endif
-      if (creg >= 0)
+	       == (first_mod == SFPLOADI_MOD0_FLOATB ? 0x3f80
+		   : first_mod == SFPLOADI_MOD0_FLOATA ? 0x3c00
+		   : -1))
+	op = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+
+      if (op >= 0)
 	{
-	  replace_loadi (call, nullptr, creg, -1, nullptr);
+	  replace_loadi (call, nullptr, op, nullptr);
 	  changed = true;
 	}
     }
-  else if (!other_use)
-    {
-      // FIXME: Not needed when we have an SFP DCE pass
-      if (dump_file)
-	{
-	  fprintf (dump_file, "\nDeleting unneeded\n");
-	  print_gimple_stmt (dump_file, call, 0);
-	}
 
-      auto gsi = gsi_for_stmt (call);
-      gsi_remove (&gsi, true);
-      changed = true;
-    }
   return changed;
 }
 

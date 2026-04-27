@@ -22,9 +22,8 @@ void negate () {
 /*
 **_Z6negatev:
 **	SFPLOADI	L2, 1, 2
-**	SFPLOADI	L0, 0, 0
 **	SFPMOV	L1, L2, 2
-**	SFPIADD	L1, L0, 0, 6
+**	SFPIADD	L1, L9, 0, 6
 **	# WRITE L1
 **	SFPNOT	L2, L2
 **	SFPIADD	L2, L2, 1, 5
