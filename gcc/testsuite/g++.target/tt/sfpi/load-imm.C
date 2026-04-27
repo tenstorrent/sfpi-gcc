@@ -31,9 +31,9 @@ void one (float f) {
 **	add	a0,a0,a5
 **	sw	a0, 0\(a3\)	# 4:SFPLOADI	L0, a0, 8	# LV:L0
 **	# WRITE L0
-**	SFPLOADI	L1, 16256, 0
+**	SFPMOV	L1, L10, 2
 **	# WRITE L1
-**	SFPLOADI	L2, 0, 0
+**	SFPMOV	L2, L9, 2
 **	# WRITE L2
 **	SFPLOADI	L3, 16128, 0
 **	# WRITE L3
@@ -64,7 +64,7 @@ void two (unsigned b) {
 **	add	a0,a0,a5
 **	sw	a0, 0\(a4\)	# 2:SFPLOADI	L0, a0, 0
 **	# WRITE L0
-**	SFPLOADI	L1, 16256, 0
+**	SFPMOV	L1, L10, 2
 **	# WRITE L1
 **	SFPLOADI	L2, 16384, 0
 **	# WRITE L2
@@ -125,7 +125,7 @@ void four ()
 **	SFPLOADI	L1, 32767, 8	# LV:L1
 **	TTREPLAY	0, 4, 1, 1
 **	SFPIADD	L1, L0, 0, 2
-**	SFPLOADI	L0, 0, 0	# LV:L0
+**	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPMOV	L1, L0, 2
 **	SFPENCC	3, 10
 **	# WRITE L1
@@ -133,5 +133,56 @@ void four ()
 **	SFPLOADI	L1, 32768, 0
 **	TTREPLAY	0, 4, 0, 0
 **	# WRITE L1
+**	ret
+*/
+
+void loop ()
+{
+  static const float vals[] = {
+    0.0f, 1.0f, -1.0f,
+    0x1.5ap1f, // e representable f16b
+    0x1.924p1f,  // nearly pi representable as f16a
+    0x1.9e3779bp0f // golden ration as f32
+  };
+
+  vFloat val = l_reg[LRegs::LReg0];
+#pragma GCC unroll 64
+  for (unsigned ix = 0; ix != sizeof (vals) / sizeof (vals[0]); ix++)
+      val *= vals[ix];
+  l_reg[LRegs::LReg1] = val;
+}
+/*
+**_Z4loopv:
+**	# READ L0
+**	SFPMUL	L1, L0, L9, L9, 0
+**	SFPNOP
+**	SFPMUL	L1, L1, L10, L9, 0
+**	SFPNOP
+**	SFPMUL	L1, L1, L11, L9, 0
+**	SFPNOP
+**	SFPMULI	L1, 16429, 0
+**	SFPLOADI	L0, 16969, 1
+**	SFPMUL	L1, L1, L0, L9, 0
+**	SFPLOADI	L0, 7101, 2
+**	SFPLOADI	L0, 16335, 8	# LV:L0
+**	SFPMUL	L1, L1, L0, L9, 0
+**	SFPNOP
+**	# WRITE L1
+**	ret
+*/
+
+void cfg () {
+  vConst0 = 0;
+  vConst1 = 1;
+  vConstNeg1 = -1;
+}
+/*
+**_Z3cfgv:
+**	SFPLOADI	L0, 0, 0
+**	SFPCONFIG	9, 0, 0	# R:L0 CFG:9
+**	SFPLOADI	L0, 16256, 0
+**	SFPCONFIG	10, 0, 0	# R:L0 CFG:10
+**	SFPLOADI	L0, 49024, 0
+**	SFPCONFIG	11, 0, 0	# R:L0 CFG:11
 **	ret
 */

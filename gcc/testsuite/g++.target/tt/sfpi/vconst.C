@@ -30,8 +30,7 @@ void fp () {
 **_Z2fpv:
 **	SFPLOADI	L0, 16416, 0
 **	SFPCONFIG	12, 0, 0	# R:L0 CFG:12
-**	SFPLOADI	L3, 0, 0
-**	SFPADD	L3, L10, L10, L3, 2
+**	SFPADD	L3, L10, L10, L9, 2
 **	SFPSTORE	L10, 0, 0, 7
 **	# WRITE L3
 **	ret

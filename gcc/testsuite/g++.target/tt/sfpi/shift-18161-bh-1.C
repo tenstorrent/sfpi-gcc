@@ -36,8 +36,7 @@ void f5r() {
 **_Z3f5rv:
 **	# READ L0
 **	# READ L1
-**	SFPLOADI	L2, 0, 0
-**	SFPIADD	L1, L2, 0, 6
+**	SFPIADD	L1, L9, 0, 6
 **	SFPSHFT	L0, L1, 0, 0
 **	SFPMOV	L3, L0, 2
 **	# WRITE L3
@@ -72,8 +71,7 @@ void f6r() {
 **_Z3f6rv:
 **	# READ L0
 **	# READ L1
-**	SFPLOADI	L2, 0, 0
-**	SFPIADD	L1, L2, 0, 6
+**	SFPIADD	L1, L9, 0, 6
 **	SFPSHFT	L0, L1, 0, 2
 **	SFPMOV	L3, L0, 2
 **	# WRITE L3
