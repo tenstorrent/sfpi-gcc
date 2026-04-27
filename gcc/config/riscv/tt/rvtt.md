@@ -2400,7 +2400,8 @@
   "TARGET_XTT_TENSIX"
   {
     return rvtt_synth::pattern (which_alternative,
-      "TTREPLAY\t%5, %3, %6, %7",
+      TARGET_XTT_TENSIX_QSR ? "TTREPLAY\t%5, %3, 0, 0, %6, %7"
+      : "TTREPLAY\t%5, %3, %6, %7",
       operands, false, -1);
   }
   [(set_attr "type" "tensix")])

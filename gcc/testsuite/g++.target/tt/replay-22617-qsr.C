@@ -15,17 +15,17 @@ void one ()
 }
 /*
 **_Z3onev:
-**	TTREPLAY	0, 4, 1, 1
+**	TTREPLAY	0, 4, 0, 0, 1, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
-**	TTREPLAY	4, 4, 1, 1
+**	TTREPLAY	4, 4, 0, 0, 1, 1
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
-**	TTREPLAY	4, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0, 0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
@@ -54,11 +54,11 @@ void two (volatile unsigned *ptr)
 **_Z3twoPVj:
 **	lw	a5,0\(a0\)
 **	beq	a5,zero,.L[0-9]+
-**	TTREPLAY	2, 2, 1, 1
+**	TTREPLAY	2, 2, 0, 0, 1, 1
 **	SFPNOP
 **	SFPNOP
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	4, 6, 1, 1
+**	TTREPLAY	4, 6, 0, 0, 1, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
@@ -68,7 +68,7 @@ void two (volatile unsigned *ptr)
 **	lw	a5,0\(a0\)
 **	addi	a5,a5,1
 **	sw	a5,0\(a0\)
-**	TTREPLAY	4, 6, 0, 0
+**	TTREPLAY	4, 6, 0, 0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -94,7 +94,7 @@ void three (volatile unsigned *ptr)
 **_Z5threePVj:
 **	lw	a5,0\(a0\)
 **	beq	a5,zero,.L9
-**	TTREPLAY	2, 4, 1, 1
+**	TTREPLAY	2, 4, 0, 0, 1, 1
 **	SFPNOP
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
