@@ -2344,11 +2344,7 @@
      (match_operand:SI    3 "const_int_operand" "n")
      ] UNSPECV_TTINCRWC)]
   "TARGET_XTT_TENSIX"
-  {
-    return TARGET_XTT_TENSIX_QSR
-      ? "TTINCRWC\t%0, %3, %2, %1"
-      : "TTINCRWC\t%0, %1, %2, %3";
-  }
+  "TTINCRWC\t%0, %1, %2, %3"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_ttreplay"
