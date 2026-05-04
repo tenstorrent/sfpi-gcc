@@ -21,13 +21,8 @@
 # FIXME: Ideally we'd've stamped these as riscv*-tt-*, but alas
 # not. In lieu of that test the compiler for the tt variants.
 
-if ![istarget riscv*-*-*] then {
+if ![istarget riscv-tt-elf] then {
   return
-}
-
-# check SFPI variable is set -- headers at $SFPI/include
-if ![info exists env(SFPI)] then {
-    return
 }
 
 # Load support procs.
@@ -35,11 +30,6 @@ load_lib g++-dg.exp
 
 # Initialize `dg'.
 dg-init
-
-proc SFPI {} {
-    global env
-    return $env(SFPI)
-}
 
 # Main loop.
 dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/*.C]] "" ""
