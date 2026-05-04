@@ -2432,8 +2432,8 @@
      (match_operand:SI    3 "reg_or_const_int_operand" "n,r") ;; imm or insn
      (match_operand:XTT32SI 4 "noval_operand" "xn,xn") ;; src (none)
      (match_operand:SI    5 "const_int_operand"  "n,n")
-     (match_operand:SI    6 "const_int_operand"  "n,n")
-     (match_operand:SI    7 "const_int_operand"  "n,n")
+     (match_operand:SI    6 "const_int_operand"  "n,n") ;; exec-while-load
+     (match_operand:SI    7 "const_int_operand"  "n,n") ;; load
      ] UNSPECV_TTREPLAY)]
   "TARGET_XTT_TENSIX"
   {

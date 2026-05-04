@@ -15,11 +15,12 @@ void one ()
 /*
 **_Z3onev:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 1, 1
+**	TTREPLAY	0, 4, 0, 0, 0, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
+**	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
@@ -41,13 +42,14 @@ void two (volatile unsigned *ptr)
 /*
 **_Z3twoPVj:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	0, 6, 0, 0, 1, 1
+**	TTREPLAY	0, 6, 0, 0, 0, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
+**	TTREPLAY	0, 6, 0, 0, 0, 0
 **	lw	a5,0\(a0\)
 **	addi	a5,a5,1
 **	sw	a5,0\(a0\)
@@ -83,20 +85,22 @@ void three ()
 /*
 **_Z5threev:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 1, 1
+**	TTREPLAY	0, 4, 0, 0, 0, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
+**	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	4, 4, 0, 0, 1, 1
+**	TTREPLAY	4, 4, 0, 0, 0, 1
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
+**	TTREPLAY	4, 4, 0, 0, 0, 0
 **	TTREPLAY	4, 4, 0, 0, 0, 0
 **	TTREPLAY	4, 4, 0, 0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
@@ -120,19 +124,21 @@ void four (volatile unsigned *ptr)
 /*
 **_Z4fourPVj:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 1, 1
+**	TTREPLAY	0, 4, 0, 0, 0, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
+**	TTREPLAY	0, 4, 0, 0, 0, 0
 **	lw	a5,0\(a0\)
 **	addi	a5,a5,1
 **	sw	a5,0\(a0\)
-**	TTREPLAY	4, 4, 0, 0, 1, 1
+**	TTREPLAY	4, 4, 0, 0, 0, 1
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
+**	TTREPLAY	4, 4, 0, 0, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTREPLAY	4, 4, 0, 0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
@@ -156,7 +162,7 @@ void five ()
 }
 /*
 **_Z4fivev:
-**	TTREPLAY	0, 11, 0, 0, 1, 1
+**	TTREPLAY	0, 11, 0, 0, 0, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
@@ -168,6 +174,7 @@ void five ()
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 11, 0, 0, 0, 0
 **	TTREPLAY	0, 11, 0, 0, 0, 0
 **	TTREPLAY	0, 11, 0, 0, 0, 0
 **	TTREPLAY	0, 11, 0, 0, 0, 0
@@ -201,7 +208,7 @@ void six (unsigned bits)
 **	add	a3,a3,a0
 **	addi	a4,a4,%lo\(ibuf\)
 **	li	a5,8
-**	TTREPLAY	0, 7, 0, 0, 1, 1
+**	TTREPLAY	0, 7, 0, 0, 0, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
@@ -209,6 +216,7 @@ void six (unsigned bits)
 **	SFPADD	L0, L10, L0, L0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
+**	TTREPLAY	0, 7, 0, 0, 0, 0
 **	TTREPLAY	0, 7, 0, 0, 0, 0
 **	addi	a5,a5,-2
 **	bne	a5,zero,.L[0-9]+

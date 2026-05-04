@@ -3,7 +3,7 @@
 
 void one ()
 {
-  __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 1, 1);
+  __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 0, 1);
   auto x = __builtin_rvtt_sfpload (0, 0, 0, 0, 0, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
   x = __builtin_rvtt_sfpmul (x, x, 0);
@@ -15,16 +15,17 @@ void one ()
 }
 /*
 **_Z3onev:
-**	TTREPLAY	0, 4, 0, 0, 1, 1
+**	TTREPLAY	0, 4, 0, 0, 0, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
-**	TTREPLAY	4, 4, 0, 0, 1, 1
+**	TTREPLAY	4, 4, 0, 0, 0, 1
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
+**	TTREPLAY	4, 4, 0, 0, 0, 0
 **	TTREPLAY	4, 4, 0, 0, 0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
@@ -35,7 +36,7 @@ void two (volatile unsigned *ptr)
 {
   if (*ptr)
     {
-      __builtin_rvtt_ttreplay (nullptr, 2, 0, 0, 2, 1, 1);
+      __builtin_rvtt_ttreplay (nullptr, 2, 0, 0, 2, 0, 1);
       __builtin_rvtt_sfpnop ();
       __builtin_rvtt_sfpnop ();
     }
@@ -54,17 +55,18 @@ void two (volatile unsigned *ptr)
 **_Z3twoPVj:
 **	lw	a5,0\(a0\)
 **	beq	a5,zero,.L[0-9]+
-**	TTREPLAY	2, 2, 0, 0, 1, 1
+**	TTREPLAY	2, 2, 0, 0, 0, 1
 **	SFPNOP
 **	SFPNOP
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	TTREPLAY	4, 6, 0, 0, 1, 1
+**	TTREPLAY	4, 6, 0, 0, 0, 1
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
 **	SFPMUL	L0, L0, L0, L9, 0
 **	SFPNOP
+**	TTREPLAY	4, 6, 0, 0, 0, 0
 **	lw	a5,0\(a0\)
 **	addi	a5,a5,1
 **	sw	a5,0\(a0\)
@@ -77,7 +79,7 @@ void three (volatile unsigned *ptr)
 {
   if (*ptr)
     {
-      __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 2, 1, 1);
+      __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 2, 0, 1);
       __builtin_rvtt_sfpnop ();
     }
 
@@ -94,7 +96,7 @@ void three (volatile unsigned *ptr)
 **_Z5threePVj:
 **	lw	a5,0\(a0\)
 **	beq	a5,zero,.L9
-**	TTREPLAY	2, 4, 0, 0, 1, 1
+**	TTREPLAY	2, 4, 0, 0, 0, 1
 **	SFPNOP
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, L9, 0
