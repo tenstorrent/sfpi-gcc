@@ -1,5 +1,5 @@
 /* Pass to generate the tensix replay insn
-  Copyright (C) 2022-2026 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -478,7 +478,9 @@ pick_replay (replay_active &active, unsigned limit)
       gcc_assert (seq->clones.size () > 1);
       if (seq->length > limit)
 	break;
-      unsigned saving = (seq->clones.size () - 1) * (seq->length - 1) - 1;
+      // Quasar exec-while-load doesn't work, so we need an extra replay
+      unsigned saving = (seq->clones.size () - 1) * (seq->length - 1)
+	- !(riscv_tt_fix_qsr_replay > 0);
       if (best < saving || (best == saving && result && result->length < seq->length))
 	{
 	  best = saving;
@@ -493,21 +495,25 @@ static unsigned
 replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_start)
 {
   unsigned length = seq.length;
+  bool not_quasar_fix = !(riscv_tt_fix_qsr_replay > 0);
   if (dump_file)
     {
-      unsigned saving = (seq.length - 1) * (unsigned (seq.clones.size ()) - 1) - 1;
-      fprintf (dump_file, "Capturing sequence [%u,%u) %u instanecs to [%u,+%u) saving=%u\n",
+      unsigned saving = (seq.length - 1) * (unsigned (seq.clones.size ()) - 1)
+      - not_quasar_fix;
+      fprintf (dump_file, "Capturing %ssequence [%u,%u) %u instances to [%u,+%u) saving=%u\n",
+	       not_quasar_fix ? "and executing " : "",
 	       seq.clones.front ().begin, seq.clones.front ().end,
 	       unsigned (seq.clones.size ()),
 	       replay_start, length, saving);
       dump_sequence (dump_file, block, seq.clones.front (), replay_start);
       fprintf (dump_file, "\n");
     }
-  
+
+  // Cannot exec while capturing on quasar
   rtx capture = gen_rvtt_ttreplay_int
     (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
      rvtt_gen_rtx_noval (XTT32SImode),
-     GEN_INT (replay_start), GEN_INT (1), GEN_INT (1));
+     GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1));
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
   // Make sure we've not deleted anything in this instance already
@@ -516,33 +522,38 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
        pos != end; pos++)
     gcc_assert (GET_CODE (pos->insn) == INSN);
 
-  for (auto clone = seq.clones.begin () + 1; clone != seq.clones.end (); ++clone)
+  for (auto clone = seq.clones.begin () + not_quasar_fix; clone != seq.clones.end (); ++clone)
     {
       rtx replay = gen_rvtt_ttreplay_int
 	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
 	 rvtt_gen_rtx_noval (XTT32SImode),
 	 GEN_INT (replay_start), const0_rtx, const0_rtx);
-      auto *insn = emit_insn_before (replay, block[clone->begin].insn);
+      auto *insn = emit_insn_after (replay, block[clone->end - 1].insn);
       if (dump_file)
 	{
-	  fprintf (dump_file, "Replaying ");
+	  fprintf (dump_file, not_quasar_fix ? "Replaying " : "Replaying original ");
 	  dump_insn_slim (dump_file, insn);
 	}
-      unsigned ix = replay_start;
-      for (auto pos = &block[clone->begin], end = &block[clone->end];
-	   pos != end; pos++)
+      if (not_quasar_fix)
 	{
-	  if (dump_file)
+	  unsigned ix = replay_start;
+	  for (auto pos = &block[clone->begin], end = &block[clone->end];
+	       pos != end; pos++)
 	    {
-	      if (pos->empty)
-		fprintf (dump_file, "Deleting -: ");
-	      else
-		fprintf (dump_file, "Deleting %u: ", ix++);
-	      dump_insn_slim (dump_file, pos->insn);
+	      if (dump_file)
+		{
+		  if (pos->empty)
+		    fprintf (dump_file, "Deleting -: ");
+		  else
+		    fprintf (dump_file, "Deleting %u: ", ix++);
+		  dump_insn_slim (dump_file, pos->insn);
+		}
+	      gcc_assert (GET_CODE (pos->insn) == INSN);
+	      SET_INSN_DELETED (pos->insn);
 	    }
-	  gcc_assert (GET_CODE (pos->insn) == INSN);
-	  SET_INSN_DELETED (pos->insn);
 	}
+      else
+	not_quasar_fix = true;
       if (dump_file)
 	fprintf (dump_file, "\n");
     }

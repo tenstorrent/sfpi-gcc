@@ -251,6 +251,15 @@ check (function *fn, bool is_early)
 	    if (!is_early)
 	      continue;
 
+	    if (riscv_tt_fix_qsr_replay > 0 && insnd->id == rvtt_insn_data::ttreplay)
+	      {
+		// Quasar erratum, cannot exec-while-loading
+		tree op = gimple_call_arg (call, insnd->imm_arg () + 4);
+		if (!integer_zerop (op))
+		  error_at (gimple_nonartificial_location (call),
+			    "Quasar replay instruction cannot exec-while-load, "
+			    "your program will behave erratically");
+	      }
 	    for (unsigned argno = 0, limit = gimple_call_num_args (call);
 		 argno != limit; argno++)
 	      {
