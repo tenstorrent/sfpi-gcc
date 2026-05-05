@@ -99,6 +99,7 @@
 
   UNSPECV_SFPMUL24
   UNSPECV_SFPARECIP
+  UNSPECV_SFPNONLINEAR
 
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
@@ -2288,26 +2289,28 @@
   {}
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfpmul24"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_expand "rvtt_sfpmul24"
+  [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    3 "const_int_operand" "n")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI    3 "const_int_operand")
 	  ] UNSPECV_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH_QSR"
-  "SFPMUL24\t%x0, %x1, %x2, %3"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_delay_bh" "dynamic")
-   (set_attr "xtt_delay_qsr" "dynamic")])
+{
+  emit_insn (gen_rvtt_sfpmul24_lv
+    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[1], operands[2], operands[3]));
+  DONE;
+})
 
 (define_insn "rvtt_sfpmul24_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand" "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    4 "const_int_operand" "n")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    4 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH_QSR"
   "SFPMUL24\t%x0, %x2, %x3, %4"
@@ -2315,25 +2318,54 @@
    (set_attr "xtt_delay_bh" "dynamic")
    (set_attr "xtt_delay_qsr" "dynamic")])
 
-(define_insn "rvtt_sfparecip"
+(define_expand "rvtt_sfparecip"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
           (match_operand:SI    2 "const_int_operand")
 	  ] UNSPECV_SFPARECIP))]
-  "TARGET_XTT_TENSIX_BH_QSR"
-  "SFPARECIP\t%x0, %x1, %2"
-  [(set_attr "type" "tensix")])
+  "TARGET_XTT_TENSIX_BH"
+{
+  emit_insn (gen_rvtt_sfparecip_lv
+    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[1], operands[2]));
+  DONE;
+})
 
 (define_insn "rvtt_sfparecip_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xr")
-          (match_operand:SI    3 "const_int_operand" "n")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand"  "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPARECIP))]
-  "TARGET_XTT_TENSIX_BH_QSR"
+  "TARGET_XTT_TENSIX_BH"
   "SFPARECIP\t%x0, %x2, %3"
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_sfpnonlinear"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+          (match_operand:SI    2 "const_int_operand")
+	  ] UNSPECV_SFPNONLINEAR))]
+  "TARGET_XTT_TENSIX_QSR"
+{
+  emit_insn (gen_rvtt_sfpnonlinear_lv
+    (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "rvtt_sfpnonlinear_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand"  "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
+          (match_operand:SI    3 "const_int_operand" "n,n")
+	  ] UNSPECV_SFPNONLINEAR))]
+  "TARGET_XTT_TENSIX_QSR"
+  "SFPNONLINEAR\t%x0, %x2, %3"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_ttincrwc"
