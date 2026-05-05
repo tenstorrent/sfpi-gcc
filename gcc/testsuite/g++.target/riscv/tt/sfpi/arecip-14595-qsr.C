@@ -18,7 +18,7 @@ void foo () {
 /*
 **_ZN5recip3fooEv:
 **	# READ L0
-**	SFPARECIP	L1, L0, 0
+**	SFPNONLINEAR	L1, L0, 0
 **	# WRITE L1
 **	ret
 */
@@ -47,7 +47,7 @@ void bar () {
 **	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 0
+**	SFPNONLINEAR	L2, L0, 0
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
@@ -65,7 +65,7 @@ void foo () {
 /*
 **_ZN8negrecip3fooEv:
 **	# READ L0
-**	SFPARECIP	L1, L0, 1
+**	SFPNONLINEAR	L1, L0, 1
 **	# WRITE L1
 **	ret
 */
@@ -94,7 +94,7 @@ void bar () {
 **	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 1
+**	SFPNONLINEAR	L2, L0, 1
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
@@ -112,7 +112,7 @@ void foo () {
 /*
 **_ZN5expon3fooEv:
 **	# READ L0
-**	SFPARECIP	L1, L0, 2
+**	SFPNONLINEAR	L1, L0, 4
 **	# WRITE L1
 **	ret
 */
@@ -140,7 +140,7 @@ void bar () {
 **	SFPNOP
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 2
+**	SFPNONLINEAR	L2, L0, 4
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
