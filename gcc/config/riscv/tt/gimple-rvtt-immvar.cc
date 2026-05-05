@@ -523,10 +523,10 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 
       if (!ival)
 	op = CREG_IDX_0;
-      else if ((ival & 0x7fff)
+      else if (int (ival & 0x7fff)
 	       == (first_mod == SFPLOADI_MOD0_FLOATB ? 0x3f80
 		   : first_mod == SFPLOADI_MOD0_FLOATA ? 0x3c00
-		   : -1))
+		   : ~0))
 	op = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
 
       if (op >= 0)

@@ -58,10 +58,10 @@ along with GCC; see the file COPYING3.  If not see
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U, 0}, {U, 0}))
 
-RVTT_FN (sfpxvif,            ,,USI_FTYPE,                                                    0, ())
-RVTT_FN (sfpxbool,           ,,USI_FTYPE_USI_USI_USI,                                        0, ({U, 2}, {R}, {R}))
-RVTT_FN (sfpxcondb,          ,,VOID_FTYPE_USI_USI,                                           0, ({R}, {R}))
-RVTT_FN (sfpxcondi,          ,,XTT_VEC_FTYPE_USI,                                            0, ({R}, {}))
+RVTT_FN (sfpxvif,            ,,USI_FTYPE,                                                    VOL, ())
+RVTT_FN (sfpxbool,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({U, 2}, {R}, {R}))
+RVTT_FN (sfpxcondb,          ,,VOID_FTYPE_USI_USI,                                           VOL, ({R}, {R}))
+RVTT_FN (sfpxcondi,          ,,XTT_VEC_FTYPE_USI,                                            VOL, ({R}, {}))
 RVTT_FN (sfpxicmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({E, 0}, {XM}))
 RVTT_FN (sfpxicmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM}, {}))
 RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({U, 0}, {XM}))

@@ -26,14 +26,13 @@ INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_synth_split);
 // Insert the bulk of these just before rtl expansion
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_check_late);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_shorten);
-
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_renumber);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_cc);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_combine);
-INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 
