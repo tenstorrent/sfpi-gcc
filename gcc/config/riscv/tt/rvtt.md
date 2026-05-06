@@ -2313,7 +2313,9 @@
           (match_operand:SI    4 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPMUL24))]
   "TARGET_XTT_TENSIX_BH_QSR"
-  "SFPMUL24\t%x0, %x2, %x3, %4"
+  "@
+   SFPMUL24\t%x0, %x2, %x3, %4
+   SFPMUL24\t%x0, %x2, %x3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay_bh" "dynamic")
    (set_attr "xtt_delay_qsr" "dynamic")])
@@ -2340,7 +2342,9 @@
           (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPARECIP))]
   "TARGET_XTT_TENSIX_BH"
-  "SFPARECIP\t%x0, %x2, %3"
+  "@
+   SFPARECIP\t%x0, %x2, %3
+   SFPARECIP\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpnonlinear"
@@ -2365,7 +2369,9 @@
           (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPNONLINEAR))]
   "TARGET_XTT_TENSIX_QSR"
-  "SFPNONLINEAR\t%x0, %x2, %3"
+  "@
+   SFPNONLINEAR\t%x0, %x2, %3
+   SFPNONLINEAR\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_ttincrwc"
