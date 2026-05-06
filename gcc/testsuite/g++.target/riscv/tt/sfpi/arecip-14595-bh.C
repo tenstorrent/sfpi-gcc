@@ -46,7 +46,7 @@ void bar () {
 **	SFPMAD	L1, L1, L11, L0, 0
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 0
+**	SFPARECIP	L2, L0, 0	# LV:L2
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
@@ -92,7 +92,7 @@ void bar () {
 **	SFPMAD	L1, L1, L11, L0, 0
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 1
+**	SFPARECIP	L2, L0, 1	# LV:L2
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
@@ -137,7 +137,7 @@ void bar () {
 **	SFPMAD	L1, L1, L11, L0, 0
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
-**	SFPARECIP	L2, L0, 2
+**	SFPARECIP	L2, L0, 2	# LV:L2
 **	SFPMOV	L3, L2, 2
 **	SFPENCC	3, 10
 **	# WRITE L3
