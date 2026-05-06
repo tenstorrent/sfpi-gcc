@@ -202,8 +202,8 @@ RVTT_FN (sfple,          bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 
 RVTT_FN (sfpmul24,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x3}))
 RVTT_FN (sfpmul24_lv,    bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M, 0x3}))
-RVTT_FN (sfparecip,      bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x7}))
-RVTT_FN (sfparecip_lv,   bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x7}))
+RVTT_FN (sfparecip,          bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x7}))
+RVTT_FN (sfparecip_lv,       bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x7}))
 RVTT_FN (sfpnonlinear,      qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x3f}))
 RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x3f}))
 
