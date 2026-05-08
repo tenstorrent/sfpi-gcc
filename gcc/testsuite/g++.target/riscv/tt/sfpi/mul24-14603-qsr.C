@@ -23,7 +23,6 @@ void foo () {
 **	# READ L1
 **	SFPMUL24	L2, L0, L1, 0
 **	SFPMUL24	L3, L0, L1, 1
-**	SFPNOP
 **	# WRITE L2
 **	# WRITE L3
 **	ret
@@ -55,7 +54,6 @@ void bar () {
 **	# READ L4
 **	# READ L5
 **	SFPMAD	L2, L1, L11, L0, 0
-**	SFPNOP
 **	SFPSETCC	L2, 0, 0
 **	SFPCOMPC
 **	SFPMOV	L2, L4, 2

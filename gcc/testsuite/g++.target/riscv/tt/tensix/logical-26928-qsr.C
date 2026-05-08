@@ -38,7 +38,6 @@ void bar () {
 **	# READ L2
 **	# READ L4
 **	SFPMAD	L0, L2, L11, L1, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 6
 **	SFPAND	L1, L2
 **	SFPMOV	L3, L4, 2
@@ -86,7 +85,6 @@ void bar () {
 **	# READ L2
 **	# READ L4
 **	SFPMAD	L0, L2, L11, L1, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 6
 **	SFPOR	L1, L2
 **	SFPMOV	L3, L4, 2
@@ -134,7 +132,6 @@ void bar () {
 **	# READ L2
 **	# READ L4
 **	SFPMAD	L0, L2, L11, L1, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 6
 **	SFPXOR	L1, L2
 **	SFPMOV	L3, L4, 2

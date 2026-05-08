@@ -26,7 +26,6 @@ void bug1() {
 **_Z4bug1v:
 **	# READ L3
 **	SFPMAD	L0, L10, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 0
 **	SFPMOV	L1, L9, 2
 **	SFPMOV	L1, L10, 0	# LV:L1
@@ -34,7 +33,6 @@ void bug1() {
 **	SFPPUSHC	0
 **	SFPLOADI	L0, 16384, 0
 **	SFPMAD	L0, L0, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 4
 **	SFPSETCC	L0, 0, 2
 **	SFPCOMPC
@@ -64,7 +62,6 @@ void bug2() {
 **_Z4bug2v:
 **	# READ L3
 **	SFPMAD	L0, L10, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 0
 **	SFPMOV	L1, L9, 2
 **	SFPMOV	L1, L10, 0	# LV:L1
@@ -72,7 +69,6 @@ void bug2() {
 **	SFPPUSHC	0
 **	SFPLOADI	L0, 16384, 0
 **	SFPMAD	L0, L0, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 4
 **	SFPSETCC	L0, 0, 2
 **	SFPCOMPC
@@ -102,14 +98,12 @@ void good1() {
 **_Z5good1v:
 **	# READ L3
 **	SFPMAD	L0, L10, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 0
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
 **	SFPLOADI	L1, 16384, 0
 **	SFPMAD	L3, L1, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L3, 0, 0
 **	SFPLOADI	L0, 16384, 0	# LV:L0
 **	SFPMOV	L3, L0, 2
@@ -136,14 +130,12 @@ void good2() {
 **_Z5good2v:
 **	# READ L3
 **	SFPMAD	L0, L10, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L0, 0, 0
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
 **	SFPLOADI	L1, 16384, 0
 **	SFPMAD	L3, L1, L11, L3, 0
-**	SFPNOP
 **	SFPSETCC	L3, 0, 0
 **	SFPLOADI	L0, 16384, 0	# LV:L0
 **	SFPMOV	L3, L0, 2
