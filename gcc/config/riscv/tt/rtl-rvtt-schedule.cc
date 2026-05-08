@@ -131,13 +131,14 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 
 	bool is_dependent = reg_used_p (reg_used_p, regno, pattern);
 
-	// On BH, only bad MAD consumers need a NOP. 
-	if (is_dependent && TARGET_XTT_TENSIX_BH)
-	  {
-	    bool bad = XTT_DYNAMIC_BUG_BH & get_attr_xtt_dynamic_bug (probe_insn);
-	    if (!bad)
+	if (is_dependent)
+	  if (unsigned mask =
+	      TARGET_XTT_TENSIX_BH ? XTT_DYNAMIC_BUG_BH :
+	      TARGET_XTT_TENSIX_QSR ? XTT_DYNAMIC_BUG_QSR :
+	      0)
+	    // BH & QSR has scoreboarding, but with bugs
+	    if (!(mask & get_attr_xtt_dynamic_bug (probe_insn)))
 	      is_dependent = false;
-	  }
 
 	if (!is_dependent && !get_attr_length (probe_insn))
 	  continue;

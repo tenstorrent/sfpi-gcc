@@ -1028,8 +1028,7 @@
   "@
    SFPIADD\t%x0, %x2, %3, %4
    SFPIADD\t%x0, %x2, %3, %4\t# LV:%x1"
-  [(set_attr "type" "tensix")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+  [(set_attr "type" "tensix")])
 
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
