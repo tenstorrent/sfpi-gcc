@@ -1,6 +1,7 @@
 /* TT helper routines
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -51,6 +52,7 @@ public:
     LV_SHIFT,
     COMMUTE_SHIFT,
     VOLATILE_SHIFT,
+    EXPANDED_SHIFT,
     NUM_CLOBBERS_SHIFT,
     NUM_CLOBBERS_BITS = 2,
     CLOBBER_SHIFT = NUM_CLOBBERS_SHIFT + NUM_CLOBBERS_BITS,
@@ -65,6 +67,7 @@ public:
     HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
     VOLATILE = 1 << VOLATILE_SHIFT, // has unrepresented side-effects
+    EXPANDED = 1 << EXPANDED_SHIFT, // immediate is expanded
     COMMUTES = 1 << COMMUTE_SHIFT, // First 2 srcs commute
 
     NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
@@ -208,6 +211,7 @@ public:
 public:
   bool is_volatile () const { return flags & VOLATILE; }
   bool is_live () const { return flags & HAS_LV; }
+  bool is_expanded () const { return flags & EXPANDED; }
   int live_arg () const { return has_var (); }
 
   // We know these objects are in an array.
@@ -221,12 +225,19 @@ public:
     // Never ask for the notlive version of sfpassign_lv
     return this - int (is_live ());
   }
+  const rvtt_insn_data *get_scalar () const {
+    // No EXPANDED non-VAR insn has a live version, so we don't have to handle that.
+    if (is_expanded () && !has_var ())
+      return this + 1;
+    return nullptr;
+  }
 
 public:
   int num_args () const { return arg_num; };
 
   bool has_mod () const { return flags & HAS_MOD; }
   int mod_arg () const { return mod_pos; }
+  auto &mod_info () const { return ops[has_var ()]; }
 
   bool has_var () const { return flags & HAS_VAR; }
   int imm_arg () const { return ops[0].argno (); }
@@ -247,6 +258,9 @@ public:
   int first_clobber_arg () const { return clobber_pos; }
 
 public:
+  bool sets_cc (unsigned mod) const {
+    return (1u << mod) & cc_mask;
+  }
   bool sets_cc (gcall *stmt) const;
   bool srcs_commute (gcall *stmt) const;
   bool has_side_effects (gcall *stmt) const {

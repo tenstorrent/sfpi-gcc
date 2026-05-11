@@ -900,14 +900,14 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	{
 	  // Perform op w/ compare
 	  mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	  emit_insn (gen_rvtt_sfpiadd_v_int (dst, dst, src, GEN_INT (mod1)));
+	  emit_insn (gen_rvtt_sfpiadd_v_int_old (dst, dst, src, GEN_INT (mod1)));
 	  need_setcc = false;
 	}
       else
 	{
 	  // Perform op w/o compare, compare with SETCC
 	  mod1 |= SFPIADD_MOD1_CC_NONE;
-	  emit_insn (gen_rvtt_sfpiadd_v_int (dst, dst, src, GEN_INT (mod1)));
+	  emit_insn (gen_rvtt_sfpiadd_v_int_old (dst, dst, src, GEN_INT (mod1)));
 	  set_cc_arg = dst;
 	}
     }
@@ -920,13 +920,13 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	      // Perform op w/ compare
 	      unsigned mod1 = cmp == SFPXCMP_MOD1_CC_LT
 		? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	      emit_insn (gen_rvtt_sfpiadd_i_lv_int (dst, lv, src, imm, GEN_INT (mod1 | SFPIADD_MOD1_ARG_IMM)));
+	      emit_insn (gen_rvtt_sfpiadd_i_lv_int_old (dst, lv, src, imm, GEN_INT (mod1 | SFPIADD_MOD1_ARG_IMM)));
 	      need_setcc = false;
 	    }
 	  else
 	    {
 	      // Perform op w/o compare
-	      emit_insn (gen_rvtt_sfpiadd_i_lv_int (dst, lv, src, imm,
+	      emit_insn (gen_rvtt_sfpiadd_i_lv_int_old (dst, lv, src, imm,
 						    GEN_INT (SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
 	      set_cc_arg = dst;
 	    }
@@ -980,13 +980,13 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
     {
       // Perform op w/ compare
       mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-      emit_insn (gen_rvtt_sfpiadd_v_int (dst, srcb, srca, GEN_INT (mod1)));
+      emit_insn (gen_rvtt_sfpiadd_v_int_old (dst, srcb, srca, GEN_INT (mod1)));
     }
   else
     {
     // Perform op w/o compare
     mod1 |= SFPIADD_MOD1_CC_NONE;
-    emit_insn (gen_rvtt_sfpiadd_v_int (dst, srcb, srca, GEN_INT (mod1)));
+    emit_insn (gen_rvtt_sfpiadd_v_int_old (dst, srcb, srca, GEN_INT (mod1)));
     if (cmp != 0)
       // Must be EQ0 or NE0, compare with SETCC
       emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
