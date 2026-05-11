@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
+#include "print-rtl.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
@@ -95,6 +96,12 @@ transform (function *fn)
 	  auto &elt = synths[id];
 	  auto &slot = is_opcode ? elt.ops : elt.uses;
 	  slot = alloc_INSN_LIST (insn, slot);
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "[%u] collecting %s ",
+		       id, is_opcode ? "synth" : "use");
+	      dump_insn_slim (dump_file, insn);
+	    }
 	}
     }
 
@@ -104,8 +111,10 @@ transform (function *fn)
 
   // For each id in use, find the modal opcode value and use that
   std::unordered_map<unsigned, unsigned> map;
+  unsigned id = -1;
   for (auto &synth : synths)
     {
+      id++;
       if (!synth.uses)
 	{
 	  gcc_assert (!synth.ops);
@@ -152,6 +161,8 @@ transform (function *fn)
 
 	  opcode |= INTVAL (XVECEXP (pat, 0, rvtt_synth::IX_opcode));
 
+	  if (dump_file)
+	    fprintf (dump_file, "[%u] opcode %08x\n", id, opcode);
 	  map[opcode]++;
 	}
 
@@ -166,6 +177,10 @@ transform (function *fn)
 	    opcode = slot.first;
 	  }
       map.clear ();
+
+      if (dump_file)
+	fprintf (dump_file, "[%u] selecting opcode %08x (%u uses)\n",
+		 id, opcode, count);
 
       // Update all the insns
       for (auto *op = synth.ops; op;)
@@ -184,6 +199,11 @@ transform (function *fn)
 	      gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
 	      XEXP (note, 0) = unspec;
 	    }
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "[%u] updating synth ", id);
+	      dump_insn_slim (dump_file, insn);
+	    }
 	}
       rtx op_rtx = gen_rtx_CONST_INT (SImode, opcode);
       for (auto *use = synth.uses; use;)
@@ -199,6 +219,11 @@ transform (function *fn)
 	  if (GET_CODE (pat) == SET)
 	    pat = SET_SRC (pat);
 	  XVECEXP (pat, 0, rvtt_synth::IX_opcode) = op_rtx;
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "[%u] updating use ", id);
+	      dump_insn_slim (dump_file, insn);
+	    }
 	}
     }
 }
