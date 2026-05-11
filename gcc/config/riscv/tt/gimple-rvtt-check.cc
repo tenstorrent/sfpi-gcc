@@ -121,7 +121,7 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	  unsigned bits = info.bits ();
 	  if (!bits)
 	    bits = 32;
-	  upper = (1u << (info.bits () - 1)) - 1;
+	  upper = (1u << (bits - 1)) - 1;
 	  if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
 	    lower = ~upper;
 	  if (info.kind () != rvtt_insn_data::op_t::SIGNED)
