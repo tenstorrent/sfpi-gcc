@@ -191,17 +191,6 @@ immvar_split (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *cal
 
 	  return emit_replacement (gsi, insnd, call,
 				   rvtt_insn_data::sfpxicmpv, true, tmp, mod);
-
-	  auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxicmpv);
-	  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
-	  gimple_set_location (stmt, gimple_location (call));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg (), tmp);
-	  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1,
-			       gimple_call_arg (call, insnd->src_arg ()));
-	  gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
-	  gimple_call_set_lhs (stmt, gimple_call_lhs (call));
-	  gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
-	  return true;
 	}
       break;
 
@@ -222,17 +211,6 @@ immvar_split (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *cal
 
 	  return emit_replacement (gsi, insnd, call,
 				   rvtt_insn_data::sfpxfcmpv, false, tmp, mod);
-
-	  auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxfcmpv);
-	  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
-	  gimple_set_location (stmt, gimple_location (call));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg (),
-			       gimple_call_arg (call, insnd->src_arg ()));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1, tmp);
-	  gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
-	  gimple_call_set_lhs (stmt, gimple_call_lhs (call));
-	  gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
-	  return true;
 	}
       break;
 
@@ -249,17 +227,6 @@ immvar_split (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *cal
 
 	  return emit_replacement (gsi, insnd, call,
 				   rvtt_insn_data::sfpxiadd_v, true, tmp, mod);
-
-	  auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpxiadd_v);
-	  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
-	  gimple_set_location (stmt, gimple_location (call));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg (), tmp);
-	  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1,
-			       gimple_call_arg (call, insnd->src_arg ()));
-	  gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
-	  gimple_call_set_lhs (stmt, gimple_call_lhs (call));
-	  gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
-	  return true;
 	}
       break;
 
@@ -271,17 +238,6 @@ immvar_split (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *cal
 
 	  return emit_replacement (gsi, insnd, call,
 				   rvtt_insn_data::sfpsetman_v, false, tmp, mod);
-
-	  auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetman_v);
-	  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
-	  gimple_set_location (stmt, gimple_location (call));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg (),
-			       gimple_call_arg (call, insnd->src_arg ()));
-	  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1, tmp);
-	  gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
-	  gimple_call_set_lhs (stmt, gimple_call_lhs (call));
-	  gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
-	  return true;
 	}
       break;
     }

@@ -116,6 +116,7 @@ extern gimple_opt_pass *make_pass_rvtt_immload_shorten (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immvar_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
