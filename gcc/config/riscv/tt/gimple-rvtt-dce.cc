@@ -77,9 +77,8 @@ gather_var_defs (std::unordered_set<gcall *> &insns, std::vector<gcall *> &workl
   auto *stmt = SSA_NAME_DEF_STMT (var);
   if (auto *phi = dyn_cast <gphi *> (stmt))
     {
-      if (phis.find (phi) != phis.end ())
+      if (!phis.insert (phi).second)
 	return;
-      phis.insert (phi);
 
       if (dump_file)
 	print_gimple_stmt (dump_file, phi, 0);

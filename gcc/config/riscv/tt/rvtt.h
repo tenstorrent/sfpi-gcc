@@ -262,18 +262,16 @@ extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
-extern tree rvtt_emit_nonimm_prologue(unsigned int unique_id,
-				      const rvtt_insn_data *insnd,
-				      gcall *stmt,
-				      gimple_stmt_iterator gsi);
+
 extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
 				      unsigned int unique_id,
 				      tree old_add,
 				      const rvtt_insn_data *insnd,
 				      gcall *stmt);
 
-extern const rvtt_insn_data * rvtt_get_insn_data(const rvtt_insn_data::insn_id id);
-extern const rvtt_insn_data * rvtt_get_insn_data(const gcall *stmt);
+extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id);
+extern const rvtt_insn_data *rvtt_get_insn_data (gimple *stmt);
+extern const rvtt_insn_data *rvtt_get_insn_data (gcall *stmt);
 
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
 extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);

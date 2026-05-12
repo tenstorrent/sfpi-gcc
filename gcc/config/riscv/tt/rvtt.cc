@@ -206,19 +206,18 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 }
 
 const rvtt_insn_data *
-rvtt_get_insn_data (const rvtt_insn_data::insn_id id)
+rvtt_get_insn_data (rvtt_insn_data::insn_id id)
 {
-  auto *res = &sfpu_insn_data[id];
-  gcc_assert (!res->decl || TREE_CODE (res->decl) == FUNCTION_DECL);
-  return res;
+  return &sfpu_insn_data[id];
 }
 
 const rvtt_insn_data *
-rvtt_get_insn_data (const gcall *stmt)
+rvtt_get_insn_data (gcall *call)
 {
-  tree decl = gimple_call_fndecl (stmt);
+  tree decl = gimple_call_fndecl (call);
   if (!decl)
     return nullptr;
+
   if (!fndecl_built_in_p (decl, BUILT_IN_MD))
     return nullptr;
 
@@ -231,6 +230,14 @@ rvtt_get_insn_data (const gcall *stmt)
     return nullptr;
 
   return &sfpu_insn_data[ix];
+}
+
+const rvtt_insn_data *
+rvtt_get_insn_data (gimple *stmt)
+{
+  if (!is_a <gcall *> (stmt))
+    return nullptr;
+  return rvtt_get_insn_data (as_a <gcall *> (stmt));
 }
 
 bool
@@ -585,7 +592,7 @@ emit_add(tree lop, tree rop, gimple_stmt_iterator *gsip, gimple *stmt)
   return tmp;
 }
 
-tree
+static tree
 rvtt_emit_nonimm_prologue(unsigned int unique_id,
 				const rvtt_insn_data *insnd,
 				gcall *stmt,
