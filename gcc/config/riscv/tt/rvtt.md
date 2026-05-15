@@ -1099,20 +1099,20 @@
 })
 
 (define_insn "rvtt_sfpiadd_i_lv_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
-          (match_operand:SI    1 "mem_or_0_operand" "J,m")
-          (match_operand:SI    2 "const_int_operand" "J,n") ;; opcode
-          (match_operand:SI    3 "const_int_operand" "J,n") ;; id, src & dst shifts
-          (match_operand:SI    4 "reg_or_const_int_operand" "n,r") ;; imm or insn
-          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand"  "xrxc,xrxc") ;; src
-	  (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xn,0") ;; lv
-          (match_operand:SI    7 "const_int_operand" "n,n")
+          (match_operand:SI    1 "mem_or_0_operand" "J,J,m,m")
+          (match_operand:SI    2 "const_int_operand" "J,J,n,n") ;; opcode
+          (match_operand:SI    3 "const_int_operand" "J,J,n,n") ;; id, src & dst shifts
+          (match_operand:SI    4 "reg_or_const_int_operand" "n,n,r,r") ;; imm or insn
+          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand"  "xrxc,xrxc,xrxc,xrxc") ;; src
+	  (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xn,0,xn,0") ;; lv
+          (match_operand:SI    7 "const_int_operand" "n,n,n,n")
 	  ] UNSPECV_SFPIADD))
-   (clobber (match_scratch:SI  8 "=X,&r"))]
+   (clobber (match_scratch:SI  8 "=X,X,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
-    return rvtt_synth::pattern (which_alternative,
+    return rvtt_synth::pattern (which_alternative >> 1,
       which_alternative & 1
       ? "SFPIADD\t%x0, %x5, %4, %7\t# LV:%x6"
       : "SFPIADD\t%x0, %x5, %4, %7",
