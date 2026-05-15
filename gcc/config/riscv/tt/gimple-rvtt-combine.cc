@@ -797,8 +797,8 @@ try_combine_negated_result (probe_t &probe)
   release_ssa_name (gimple_call_lhs (input.call));
   gimple_call_set_lhs (input.call, gimple_call_lhs (probe.call));
 
-  gsi_remove (&probe.gsi, true);
   unlink_stmt_vdef (probe.call);
+  gsi_remove (&probe.gsi, true);
   gsi_prev (&probe.gsi);
 
   return true;
