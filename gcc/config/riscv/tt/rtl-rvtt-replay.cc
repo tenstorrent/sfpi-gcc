@@ -412,7 +412,7 @@ static void
 dump_sequence (FILE *stream, replay_block const &block, replay_span span,
 	       unsigned base, bool ignore_empty = true)
 {
-  for (auto pos = &block[span.begin], end = &block[span.end];
+  for (auto pos = block.data () + span.begin, end = block.data () + span.end;
        pos != end; pos++)
     {
       if (ignore_empty && pos->empty)
@@ -517,8 +517,8 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
   // Make sure we've not deleted anything in this instance already
-  for (auto pos = &block[seq.clones.front ().begin],
-	 end = &block[seq.clones.front ().end];
+  for (auto pos = block.data () + seq.clones.front ().begin,
+	 end = block.data () + seq.clones.front ().end;
        pos != end; pos++)
     gcc_assert (GET_CODE (pos->insn) == INSN);
 
@@ -537,7 +537,7 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
       if (not_quasar_fix)
 	{
 	  unsigned ix = replay_start;
-	  for (auto pos = &block[clone->begin], end = &block[clone->end];
+	  for (auto pos = block.data () + clone->begin, end = block.data () + clone->end;
 	       pos != end; pos++)
 	    {
 	      if (dump_file)
