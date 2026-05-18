@@ -282,25 +282,33 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
   gimple *stmt = SSA_NAME_DEF_STMT (var);
   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
   gimple_stmt_iterator phi_gsi;
-  tree opc_var = nullptr;
+  gimple *opc_stmt = nullptr;
+
+  // Synth a new synth_opcode
   if (counts.first == 1)
     {
+      // We'll keep the add, add the synth just before it
       auto *assign = as_a <gassign *> (stmt);
-      opc_var = gimple_assign_rhs1 (assign);
+      tree opc_var = gimple_assign_rhs1 (assign);
       if (opc_var == addend)
 	opc_var = gimple_assign_rhs2 (assign);
       phi_gsi = gsi_for_stmt (SSA_NAME_DEF_STMT (opc_var));
       gsi = gsi_for_stmt (stmt);
+      opc_stmt = make_synth (gimple_location (stmt), id, opc_var);
+      gsi_insert_before (&gsi, opc_stmt, GSI_SAME_STMT);
     }
   else
     {
+      // We'll create a new add, insert just after addend's def
       phi_gsi = gsi;
-      gsi = gsi_after_labels (gimple_bb (stmt));
+      auto *addend_def = SSA_NAME_DEF_STMT (addend);
+      gsi = is_a <gphi *> (addend_def)
+	? gsi_after_labels (gimple_bb (addend_def))
+	: gsi_for_stmt (addend_def);
+      opc_stmt = make_synth (gimple_location (stmt), id, nullptr);
+      gsi_insert_after (&gsi, opc_stmt, GSI_NEW_STMT);
     }
 
-  // Synth a new synth_opcode
-  auto *opc_stmt = make_synth (gimple_location (stmt), id, opc_var);
-  gsi_insert_before (&gsi, opc_stmt, GSI_SAME_STMT);
   if (dump_file)
     {
       fprintf (dump_file, "Replacing %u synths with single ", counts.second);
@@ -309,10 +317,11 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
 
   if (counts.first > 1)
     {
+      // Synth new add
       tree sum_var = gimple_phi_result (as_a <gphi *> (stmt));
-      opc_var = gimple_call_lhs (opc_stmt);
+      tree opc_var = gimple_call_lhs (opc_stmt);
       auto *sum_stmt = gimple_build_assign (sum_var, PLUS_EXPR, opc_var, addend);
-      gsi_insert_before (&gsi, sum_stmt, GSI_SAME_STMT);
+      gsi_insert_after (&gsi, sum_stmt, GSI_SAME_STMT);
 
       if (dump_file)
 	{
