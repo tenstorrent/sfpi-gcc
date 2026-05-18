@@ -2815,10 +2815,6 @@ w
 C ObjC C++ ObjC++
 ; Documented in common.opt
 
-ftt-nttp
-C++ ObjC++ Var(flag_tt_nttp)
-Enable support for NTTP
-
 ftt-consteval
 C++ ObjC++ Var(flag_tt_consteval)
 Enable support for consteval functions
@@ -2826,5 +2822,13 @@ Enable support for consteval functions
 ftt-constinit
 C++ ObjC++ Var(flag_tt_constinit)
 Enable support for constinit functions
+
+ftt-no-dyninit
+C++ ObjC++ Var(flag_tt_no_dyninit)
+Disable dynamic construction of static-storage objects
+
+ftt-nttp
+C++ ObjC++ Var(flag_tt_nttp)
+Enable support for NTTP
 
 ; This comment is to ensure we retain the blank line above.
