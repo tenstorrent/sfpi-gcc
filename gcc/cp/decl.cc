@@ -10612,6 +10612,13 @@ expand_static_init (tree decl, tree init)
       return;
     }
 
+  if (flag_tt_no_dyninit)
+    {
+      error_at (DECL_SOURCE_LOCATION (decl), "dynamic initialization or destruction of "
+		"static-storage %qD is disallowed in this environment", decl);
+      return;
+    }
+
   if (DECL_FUNCTION_SCOPE_P (decl))
     {
       /* Emit code to perform this initialization but once.  */
