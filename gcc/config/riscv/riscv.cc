@@ -707,7 +707,7 @@ static const struct riscv_tune_param rvtt_qsr64_tune_info = {
   {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_mul NA */
   {COSTS_N_INSNS (0), COSTS_N_INSNS (0)},	/* fp_div NA */
   {COSTS_N_INSNS (2), COSTS_N_INSNS (2)},	/* int_mul */
-  {COSTS_N_INSNS (6), COSTS_N_INSNS (6)},	/* int_div */
+  {COSTS_N_INSNS (8), COSTS_N_INSNS (8)},	/* int_div */
   1,						/* issue_rate */
   5,						/* branch_cost - theory says 4, 5 performs better 12/12/22 */
   5,						/* memory_cost */
