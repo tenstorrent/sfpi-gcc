@@ -16,8 +16,15 @@ unsigned udiv3(unsigned n)  { return n / 3; }
 unsigned udiv7(unsigned n)  { return n / 7; }
 /*
 **_Z5udiv7j:
-**	li	a5,7
-**	divuw	a0,a0,a5
+**	li	a5,613568512
+**	addi	a4,a5,-1755
+**	zext.w	a5,a0
+**	mul	a5,a5,a4
+**	srli	a5,a5,32
+**	subw	a0,a0,a5
+**	srliw	a0,a0,1
+**	addw	a0,a0,a5
+**	srliw	a0,a0,2
 **	ret
 */
 
@@ -59,17 +66,32 @@ int sdiv3(int n)  { return n / 3; }
 int sdiv7(int n)  { return n / 7; }
 /*
 **_Z5sdiv7i:
-**	li	a5,7
-**	divw	a0,a0,a5
+**	li	a5,-1840701440
+**	addi	a5,a5,1171
+**	mul	a5,a0,a5
+**	sraiw	a4,a0,31
+**	srli	a5,a5,32
+**	addw	a0,a0,a5
+**	sraiw	a0,a0,2
+**	subw	a0,a0,a4
 **	ret
 */
 
 unsigned umod7(unsigned n) { return n % 7; }
 /*
 **_Z5umod7j:
-**	li	a5,7
-**	remuw	a0,a0,a5
-**	andi	a0,a0,7
+**	li	a5,613568512
+**	zext.w	a4,a0
+**	addi	a5,a5,-1755
+**	mul	a4,a4,a5
+**	srli	a4,a4,32
+**	subw	a5,a0,a4
+**	srliw	a5,a5,1
+**	addw	a5,a5,a4
+**	srliw	a5,a5,2
+**	slliw	a4,a5,3
+**	subw	a5,a4,a5
+**	subw	a0,a0,a5
 **	ret
 */
 
