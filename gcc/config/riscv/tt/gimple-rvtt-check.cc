@@ -50,20 +50,24 @@ static bool
 check_function_type (location_t loc, tree type, bool inline_p)
 {
   bool bad = false;
-
+  auto error = [](location_t loc, bool ret, bool inline_p) {
+    error_at (loc, inline_p
+	      ? "cannot %s sfpu type (missing %<sfpi_inline%>?)"
+	      : "cannot %s sfpu type",
+	      ret ? "return" : "pass");
+  };
+  
   if (is_sfpu_type (TREE_TYPE (type)))
     {
       bad = true;
-      error_at (loc, "cannot return sfpu type%s",
-  		inline_p ? " (missing <%sfpi_inline%>?)" : "");
+      error (loc, true, inline_p);
     }
 
   for (tree args = TYPE_ARG_TYPES (type); args; args = TREE_CHAIN (args))
     if (is_sfpu_type (TREE_VALUE (args)))
       {
 	bad = true;
-	error_at (loc, "cannot pass sfpu type%s",
-		  inline_p ? " (missing <%sfpi_inline%>?)" : "");
+	error (loc, false, inline_p);
 	break;
       }
   return bad;
