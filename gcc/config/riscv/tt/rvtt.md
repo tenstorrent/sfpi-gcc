@@ -1293,8 +1293,6 @@
       enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (8));
       imm = operands[5];
     }
-  else
-    gcc_assert (<rvtt_set_op> != UNSPECV_SFPSETMAN || INTVAL (imm) < 1 << 12);
 
   emit_insn (gen_rvtt_sfpset<rvtt_set_name>_i_lv_int
     (operands[0], mem, opc, enc, imm,
