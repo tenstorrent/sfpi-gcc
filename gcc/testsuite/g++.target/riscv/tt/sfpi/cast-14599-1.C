@@ -34,19 +34,20 @@ void i2f_rns () {
 **	ret
 */
 
+#if 0
 void sm2i () {
   vInt a = l_reg[LRegs::LReg0];
   vInt b = __builtin_rvtt_sfpcast(a.get(), SFPCAST_MOD1_SM32_TO_INT32);
   l_reg[LRegs::LReg1] = b;
 }
 /*
-**_Z4sm2iv:
-**	# READ L0
-**	SFPCAST	L1, L0, 2
-**	# WRITE L1
-**	ret
+* *_Z4sm2iv:
+* *	# READ L0
+* *	SFPCAST	L1, L0, 2
+* *	# WRITE L1
+* *	ret
 */
-
+#endif
 void i2sm () {
   vInt a = l_reg[LRegs::LReg0];
   vInt b = __builtin_rvtt_sfpcast(a.get(), SFPCAST_MOD1_INT32_TO_SM32);

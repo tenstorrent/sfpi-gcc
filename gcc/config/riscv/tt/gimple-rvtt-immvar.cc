@@ -176,7 +176,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
       if (!insnd->is_expanded ())
 	break;
       {
-	bool expand = SSA_VAR_P (imm);	
+	bool expand = SSA_VAR_P (imm);
 	auto info = insnd->ops[0];
 	bool is_signed = info.kind () == rvtt_insn_data::op_t::SIGNED;
 	if (!expand)
@@ -262,18 +262,6 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 				   rvtt_insn_data::sfpxiadd_v, true, tmp, mod);
 	}
       break;
-#if 0
-    case rvtt_insn_data::sfpsetman_i:
-      // setman only has a 12-bit immediate field
-      if (SSA_VAR_P (imm))
-	{
-	  tree tmp = emit_loadimm (gsi, gimple_location (call), -24, addr, imm, nullptr);
-
-	  return emit_replacement (gsi, insnd, call,
-				   rvtt_insn_data::sfpsetman_v, false, tmp, mod);
-	}
-      break;
-#endif
     }
   return false;
 }
@@ -334,26 +322,9 @@ immvar_gather (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd,
       changed = true;
     }
 
-  switch (insnd->id)
-    {
-    default:
-      break;
-
-#if 0
-    case rvtt_insn_data::sfpsetman_i:
-      if (maybe_split_setman (gsi, insnd, call))
-	{
-	  gsi_remove (&gsi, true);
-	  gsi_prev (&gsi);
-	  changed = true;
-	}
-      break;
-#endif
-    case rvtt_insn_data::sfploadi:
-      // We've not done LV optimizing yet, so we don't have to capture sfploadi_lv
-      loads.push_back (call);
-      break;
-    }
+  if (insnd->id == rvtt_insn_data::sfploadi)
+    // We've not done LV optimizing yet, so we don't have to capture sfploadi_lv
+    loads.push_back (call);
 
   return changed;
 }
@@ -643,7 +614,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	fprintf (dump_file, "\n");
       return true;
     }
-  
+
   // Replace the CALL with one of SCALAR
   gimple *new_call = gimple_build_call (scalar_insnd->decl, scalar_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));

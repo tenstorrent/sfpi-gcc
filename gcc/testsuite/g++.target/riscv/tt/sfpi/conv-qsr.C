@@ -38,7 +38,7 @@ void two () {
 /*
 **_Z3twov:
 **	SFPLOAD	L0, 0, 4, 7, 0, 0
-**	SFPCAST	L0, L0, 2
+**	SFPCAST	L0, L0, 3
 **	SFPSTORE	L0, 6, 4, 7, 0, 0
 **	ret
 */
@@ -52,7 +52,7 @@ void three () {
 /*
 **_Z5threev:
 **	SFPLOAD	L0, 0, 4, 7, 0, 0
-**	SFPCAST	L1, L0, 3
+**	SFPCAST	L1, L0, 2
 **	SFPSTORE	L1, 6, 4, 7, 0, 0
 **	SFPCAST	L0, L0, 1
 **	SFPSTORE	L0, 8, 0, 7, 0, 0
