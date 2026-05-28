@@ -116,8 +116,8 @@ RISCV_CORE("tt-bh",           "rv32im_zaamo_zba_zbb", "ilp32", "rvtt-b1")
 RISCV_CORE("tt-bh-tensix",    "rv32im_zaamo_zba_zbb_xtttensixbh", "ilp32", "rvtt-b1")
 
 // #31429 disable compressed 'c' extension, it interfers with our post-processing.
-RISCV_CORE("tt-qsr64",        "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache", "lp64", "rvtt-qsr64")
-RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zicond_zicsr_zifencei_zihpm_xttcache_xttroccqsr", "lp64", "rvtt-qsr64")
+RISCV_CORE("tt-qsr64",        "rv64imab_zbc_zicsr_zifencei_zihpm_xttcache", "lp64", "rvtt-qsr64")
+RISCV_CORE("tt-qsr64-rocc",   "rv64imab_zbc_zicsr_zifencei_zihpm_xttcache_xttroccqsr", "lp64", "rvtt-qsr64")
 
 // #39314 disable float 'f' extension, tt-sim doesn't grok them
 // #35991 disable vector 'v' extension, tt-sim doesn't grok them, it's not on all compute cores anyway
