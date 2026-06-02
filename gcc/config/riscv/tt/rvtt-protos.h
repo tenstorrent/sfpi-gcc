@@ -24,13 +24,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-bh.h"
 #include "sfpu-ops-qsr.h"
 
-#define rvtt_sfpu_regno(operand) (REGNO (operand) - SFPU_REG_FIRST)
-
-extern rtx rvtt_clamp_signed(rtx v, unsigned int mask);
-extern rtx rvtt_clamp_unsigned(rtx v, unsigned int mask);
-
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
-
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 

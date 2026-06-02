@@ -266,38 +266,8 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
   return false;
 }
 
-// FIXME: This would be better served by always splitting and having a more
-// general combine imm pass later.
-
 static bool
-maybe_split_setman (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call)
-{
-  tree imm = gimple_call_arg (call, insnd->imm_arg ());
-  HOST_WIDE_INT val = TREE_INT_CST_LOW (imm);
-  if (val < 1 << 12)
-    return false;
-
-  tree mod = gimple_call_arg (call, insnd->mod_arg ());
-  int bits = -24;
-  if (val < 1 << 16)
-    bits = -16;
-  tree tmp = emit_loadimm (gsi, gimple_location (call), bits,
-			   gimple_call_arg (call, 0),
-			   imm, nullptr);
-  auto *new_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetman_v);
-
-  gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
-  gimple_set_location (stmt, gimple_location (call));
-  gimple_call_set_arg (stmt, 0, gimple_call_arg (call, insnd->src_arg ()));
-  gimple_call_set_arg (stmt, 1, tmp);
-  gimple_call_set_arg (stmt, 2, mod);
-  gimple_call_set_lhs (stmt, gimple_call_lhs (call));
-  gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
-  return true;
-}
-
-static bool
-immvar_gather (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd,
+immvar_gather (const rvtt_insn_data *insnd,
 	       gcall *call, std::vector<gcall *> &loads)
 {
   if (!insnd->has_var ())
@@ -746,7 +716,7 @@ public:
 	  gcall *call;
 	  const rvtt_insn_data *insnd;
 	  if (rvtt_p (&insnd, &call, gsi)
-	      && immvar_gather  (gsi, insnd, call, loads))
+	      && immvar_gather  (insnd, call, loads))
 	    changed = true;
 	}
 

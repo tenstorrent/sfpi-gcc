@@ -295,26 +295,6 @@ void rvtt_mov_error (const rtx_insn *insn, bool is_load)
 		  is_load ? "fill" : "spill");
 }
 
-rtx rvtt_clamp_signed(rtx v, unsigned int mask)
-{
-  int i = INTVAL(v);
-  int out = i & mask;
-
-  if (i & (mask + 1)) {
-    out |= ~mask;
-  }
-
-  return GEN_INT(out);
-}
-
-rtx rvtt_clamp_unsigned(rtx v, unsigned int mask)
-{
-  int i = INTVAL(v);
-  int out = i & mask;
-
-  return GEN_INT(out);
-}
-
 // If a stmt's single use args aren't tracked back to their
 // defs and deleted prior to deleting the stmt, errors occur w/
 // flag_checking=1
