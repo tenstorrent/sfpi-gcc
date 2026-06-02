@@ -162,23 +162,6 @@ public:
       fprintf (dump_file, "\nDeleting unreachable\n");
     for (auto *call : insns)
       {
-	const rvtt_insn_data *insnd = rvtt_get_insn_data (call);;
-	if (insnd->id == rvtt_insn_data::sfpreadlreg)
-	  {
-	    int reg = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-	    if (reg < SFPU_CREG_IDX_LWM)
-	      {
-		static unsigned warned = 0;
-		if (warning_at (gimple_location (call), 0,
-				"not deleting unused explicit register %<L%d%> read to prevent using register",
-				reg)
-		    && !warned++)
-		  inform (gimple_location (call),
-			  "assign it to itself to silence this warning");
-		continue;
-	      }
-	  }
-
 	if (dump_file)
 	  print_gimple_stmt (dump_file, call, 0);
 	auto gsi = gsi_for_stmt (call);

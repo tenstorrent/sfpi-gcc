@@ -100,6 +100,7 @@ void baz ()
   __builtin_rvtt_sfppushc (0);
   auto c = __builtin_rvtt_sfple (a, b, 8 + 1);
   __builtin_rvtt_sfppopc (0);
+  auto d = __builtin_rvtt_sfpiadd_v (c, c, 4);
 }
 /*
 **_ZN2le3bazEv:
