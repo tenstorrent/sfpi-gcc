@@ -26,6 +26,7 @@
   UNSPEC_SYNTH_OPCODE
   UNSPEC_SFPCSTLREG
   UNSPEC_SFPNOVAL
+  UNSPEC_SFPOMIT
   UNSPEC_SFPCLEAVE ; cleave together and cleave apart, yay auto-antonyms!
 ])
 
@@ -199,12 +200,15 @@
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
-(define_expand "rvtt_sfpnovalue"
+(define_insn "rvtt_sfpnovalue"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:XTT32SI [
 	  (const_int 0)
 	  ] UNSPEC_SFPNOVAL))]
-  "TARGET_XTT_TENSIX")
+  "TARGET_XTT_TENSIX"
+  "# NOVALUE %x0"
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
 
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
@@ -312,7 +316,7 @@
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "register_operand"  "0")
           (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    3 "const_int_operand" "n")
+          (match_operand:SI      3 "const_int_operand" "n")
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
@@ -451,14 +455,34 @@
   "SFPMOV\t%x0, %x1, 2"
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfpassign_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_expand "rvtt_sfpassign_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
 	  ] UNSPECV_SFPASSIGN))]
   "TARGET_XTT_TENSIX"
-  "SFPMOV\t%x0, %x2, 0\t# LV:%x1"
+  {
+  })
+
+(define_insn_and_split "*rvtt_sfpassign_lv_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc,xrxc")
+	  ] UNSPECV_SFPASSIGN))]
+  "TARGET_XTT_TENSIX"
+  "@
+   #
+   SFPMOV\t%x0, %x2, 0\t# LV:%x1"
+  "&& (noval_operand (operands[1], GET_MODE (operands[1]))
+       || rtx_equal_p (operands[1], operands[2])
+       || find_reg_note (insn, REG_UNUSED, operands[0]))"
+  [(set (match_dup 0) (match_dup 2))]
+  {
+    // Setting it to a normal mov will leave DCE to deal with
+    // the REG_UNUSED case, that's simpler than redetecting here.
+  }
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfploadi"
@@ -1010,7 +1034,7 @@
         (unspec_volatile:XTT32SI [
 	(match_operand:XTT32SI 1 "register_operand"  "0")
         (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-        (match_operand:SI    3 "const_int_operand" "n")
+        (match_operand:SI      3 "const_int_operand" "n")
 	] UNSPECV_SFPIADD_OLD))]
   "TARGET_XTT_TENSIX"
   "SFPIADD\t%x0, %x2, 0, %3"
@@ -1031,15 +1055,39 @@
    SFPIADD\t%x0, %x2, %3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfpiadd_v"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_expand "rvtt_sfpiadd_v"
+  [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-	(match_operand:XTT32SI 1 "register_operand"  "0")
-        (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-        (match_operand:SI    3 "const_int_operand" "n")
+	(match_operand:XTT32SI 1 "register_operand")
+        (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+        (match_operand:SI      3 "const_int_operand")
 	] UNSPECV_SFPIADD))]
   "TARGET_XTT_TENSIX"
-  "SFPIADD\t%x0, %x2, 0, %3"
+  {
+    rtx insn = gen_rvtt_sfpiadd_v_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+       operands[1], operands[2], operands[3]);
+    emit_insn (insn);
+    DONE;
+  })
+
+(define_insn_and_rewrite "rvtt_sfpiadd_v_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr")
+        (unspec_volatile:XTT32SI [
+	(match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_or_omit_operand" "xn,xo,xrxc")
+	(match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "0,0,0")
+        (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "xrxc,xrxc,xrxc")
+        (match_operand:SI      4 "const_int_operand" "n,n,n")
+	] UNSPECV_SFPIADD))]
+  "TARGET_XTT_TENSIX"
+  "@
+   SFPIADD\t%x0, %x3, 0, %4
+   SFPIADD\t%x0, %x3, 0, %4\t# LV:%x2
+   #"
+  "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
+  {
+    rvtt_merge_lv_src (&operands[1], &operands[2]);
+  }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -1231,15 +1279,39 @@
   (UNSPECV_SFPSETSGN "SGN")
   ])
 
-(define_insn "rvtt_sfpset<rvtt_set_name>_v"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_expand "rvtt_sfpset<rvtt_set_name>_v"
+  [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
-	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "0")
-          (match_operand:SI    3 "const_int_operand" "n")
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:SI      3 "const_int_operand")
 	  ] rvtt_set_op))]
   "TARGET_XTT_TENSIX"
-  "SFPSET<rvtt_set_insn>\t%x0, %x1, 0, %3"
+  {
+    rtx insn = gen_rvtt_sfpset<rvtt_set_name>_v_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+       operands[1], operands[2], operands[3]);
+    emit_insn (insn);
+    DONE;
+  })
+
+(define_insn_and_rewrite "rvtt_sfpset<rvtt_set_name>_v_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_or_omit_operand" "xn,xo,xrxc")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc,xrxc,xrxc")
+	  (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "0,0,0")
+          (match_operand:SI      4 "const_int_operand" "n,n,n")
+	  ] rvtt_set_op))]
+  "TARGET_XTT_TENSIX"
+  "@
+   SFPSET<rvtt_set_insn>\t%x0, %x2, 0, %4
+   SFPSET<rvtt_set_insn>\t%x0, %x2, 0, %4\t# LV:%x3
+   #"
+  "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
+  {
+    rvtt_merge_lv_src (&operands[1], &operands[3]);
+  }
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpset<rvtt_set_name>_i"
@@ -1346,15 +1418,9 @@
 	  ] rvtt_logical_op))]
   "TARGET_XTT_TENSIX"
   {
-    rtx insn = nullptr;
-    if (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR
-        || (<rvtt_logical_op> == UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH))
-      insn = gen_rvtt_sfp<rvtt_logical_name>_2op
-        (operands[0], operands[1], operands[2]);
-    else
-      insn = gen_rvtt_sfp<rvtt_logical_name>_lv
-        (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
-	 operands[1], operands[2]);
+    rtx insn = gen_rvtt_sfp<rvtt_logical_name>_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+       operands[1], operands[2]);
     emit_insn (insn);
     DONE;
   })
@@ -1362,32 +1428,49 @@
 (define_expand "rvtt_sfp<rvtt_logical_name>_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
-          (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
 	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
 	  ] rvtt_logical_op))]
-  "TARGET_XTT_TENSIX_BH && <rvtt_logical_op> != UNSPECV_SFPXOR"
+  "TARGET_XTT_TENSIX"
   {
-   emit_insn (gen_rvtt_sfp<rvtt_logical_name>_lv_int
-     (operands[0], operands[1], operands[2], operands[3],
-      GEN_INT (SFP<rvtt_logical_insn>_MOD1_USE_VB)));
+    rtx insn = nullptr;
+    if (<rvtt_logical_op> == UNSPECV_SFPXOR
+        || TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR)
+      insn = gen_rvtt_sfp<rvtt_logical_name>_lv_2op
+        (operands[0], operands[1], operands[2], operands[3]);
+    else
+      {
+        // There is no XOR use of VB, but this needs to be compilable
+        contexpr unsigned SFPXOR_MOD1_USE_VB __attribute__((unused)) = ~0u;
+        insn = gen_rvtt_sfp<rvtt_logical_name>_lv_bh
+          (operands[0], operands[1], operands[2], operands[3],
+           GEN_INT (SFP<rvtt_logical_insn>_MOD1_USE_VB));
+      }	   
+    emit_insn (insn);
     DONE;
   })
 
-;; the inputs are not commutative, because op1 could be a live vqlue
-;; that needs the (non-enabled) components propagating to the output.
-(define_insn "rvtt_sfp<rvtt_logical_name>_2op"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_insn_and_rewrite "rvtt_sfp<rvtt_logical_name>_lv_2op"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "xrxc")
+	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_or_omit_operand" "xn,xo,xrxc")
+	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "0,0,0")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "xrxc,xrxc,xrxc")
 	  ] rvtt_logical_op))]
-  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR
-   || (TARGET_XTT_TENSIX_BH && <rvtt_logical_op> == UNSPECV_SFPXOR)"
-  "SFP<rvtt_logical_insn>\t%x0, %x2"
+  "<rvtt_logical_op> == UNSPECV_SFPXOR
+   || TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_QSR"
+  "@
+   SFP<rvtt_logical_insn>\t%x0, %x3
+   SFP<rvtt_logical_insn>\t%x0, %x3\t# LV:%x2
+   #"
+  "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
+  {
+    rvtt_merge_lv_src (&operands[1], &operands[2]);
+  }
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfp<rvtt_logical_name>_lv_int"
+(define_insn "rvtt_sfp<rvtt_logical_name>_lv_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
         (unspec_volatile:XTT32SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
@@ -1395,7 +1478,7 @@
           (match_operand:XTT32SI 3 "reg_or_cstlreg_operand" "xrxc,xrxc")
           (match_operand:SI      4 "const_int_operand"  "n,n")
 	  ] rvtt_logical_op))]
-  "TARGET_XTT_TENSIX_BH && <rvtt_logical_op> != UNSPECV_SFPXOR"
+  "<rvtt_logical_op> != UNSPECV_SFPXOR && TARGET_XTT_TENSIX_BH"
   "@
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
@@ -2324,37 +2407,62 @@
           ] rvtt_gtle_op))]
   "TARGET_XTT_TENSIX_BH_QSR"
   {
-    if (!(INTVAL (operands[3]) & SFPGTLE_MOD1_SET_DEST))
+    rtx insn = gen_rvtt_sfp<rvtt_gtle_name>_lv
+      (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+       operands[1], operands[2], operands[3]);
+    emit_insn (insn);
+    DONE;
+  })
+
+(define_expand "rvtt_sfp<rvtt_gtle_name>_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
+          (match_operand:SI    4 "const_int_operand")
+          ] rvtt_gtle_op))]
+  "TARGET_XTT_TENSIX_BH_QSR"
+  {
+    // #46063: We should clear this flag after gimple-dce.
+    if (!(INTVAL (operands[4]) & SFPGTLE_MOD1_SET_DEST))
       {
         emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_nv
-          (operands[1], operands[2], operands[3]));
-        emit_insn (gen_rvtt_sfpassign (operands[0], operands[1]));
+          (operands[2], operands[3], operands[4]));
+        emit_insn (gen_rvtt_sfpassign_lv (operands[0], operands[1], operands[2]));
         DONE;
       }
   })
 
-(define_insn_and_split "rvtt_sfp<rvtt_gtle_name>_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+(define_insn_and_rewrite "*rvtt_sfp<rvtt_gtle_name>_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr")
         (unspec_volatile:XTT32SI [
-          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI    3 "const_int_operand" "n")
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_or_omit_operand"  "xn,xo,xrxc")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "0,0,0")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand"  "xrxc,xrxc,xrxc")
+          (match_operand:SI    4 "const_int_operand" "n,n,n")
           ] rvtt_gtle_op))]
   "TARGET_XTT_TENSIX_BH_QSR"
-  "SFP<rvtt_gtle_insn>\t%x0, %x2, 0, %3"
-  "&& bool (find_reg_note (insn, REG_UNUSED, operands[0]))"
-  [(unspec_volatile:XTT32SI [
-     (match_dup 1)
-     (match_dup 2)
-     (match_dup 3)
-     ] rvtt_gtle_op)]
+  "@
+   SFP<rvtt_gtle_insn>\t%x0, %x3, 0, %4
+   SFP<rvtt_gtle_insn>\t%x0, %x3, 0, %4\t# LV:%x2
+   #"
+  "&& (!noval_or_omit_operand (operands[1], GET_MODE (operands[1]))
+       || find_reg_note (insn, REG_UNUSED, operands[0]))"
   {
-    operands[3] = GEN_INT
-      (INTVAL (operands[3]) & (0xf ^ SFPGTLE_MOD1_SET_DEST));
+    // #46063: this bit's crying out for a more general solution
+    if (find_reg_note (curr_insn, REG_UNUSED, operands[0]))
+      {
+        emit_insn (gen_rvtt_sfp<rvtt_gtle_name>_nv
+	  (operands[2], operands[3],
+	   GEN_INT (INTVAL (operands[4]) & ~SFPGTLE_MOD1_SET_DEST)));
+        DONE;
+      }
+    rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
   [(set_attr "type" "tensix")])
 
-(define_insn_and_split "rvtt_sfp<rvtt_gtle_name>_nv"
+(define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
@@ -2362,9 +2470,6 @@
      ] rvtt_gtle_op)]
   "TARGET_XTT_TENSIX_BH_QSR"
   "SFP<rvtt_gtle_insn>\t%x0, %x1, 0, %2"
-  "&& !(INTVAL (operands[2]) & 0xb)"
-  [(const_int 0)]
-  {}
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpmul24"

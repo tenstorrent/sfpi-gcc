@@ -27,6 +27,14 @@
   (and (match_code "unspec")
        (match_test "XINT (op, 1) == UNSPEC_SFPNOVAL")))
 
+(define_predicate "omit_operand"
+  (and (match_code "unspec")
+       (match_test "XINT (op, 1) == UNSPEC_SFPOMIT")))
+
+(define_predicate "noval_or_omit_operand"
+  (ior (match_operand 0 "noval_operand")
+       (match_operand 0 "omit_operand")))
+
 (define_predicate "reg_or_const_int_operand"
   (ior (match_operand 0 "const_int_operand")
        (match_operand 0 "register_operand")))
@@ -37,6 +45,11 @@
 
 (define_predicate "reg_or_cstlreg_or_noval_operand"
   (ior (match_operand 0 "noval_operand")
+       (match_operand 0 "reg_or_cstlreg_operand")))
+
+(define_predicate "reg_or_cstlreg_or_noval_or_omit_operand"
+  (ior (match_operand 0 "noval_operand")
+       (match_operand 0 "omit_operand")
        (match_operand 0 "reg_or_cstlreg_operand")))
 
 (define_predicate "mem_or_0_operand"

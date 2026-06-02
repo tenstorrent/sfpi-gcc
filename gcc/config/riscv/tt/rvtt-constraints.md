@@ -63,3 +63,7 @@
 (define_constraint "xn"
   "No value"
   (match_operand 0 "noval_operand"))
+
+(define_constraint "xo"
+  "Omitted value"
+  (match_operand 0 "omit_operand"))
