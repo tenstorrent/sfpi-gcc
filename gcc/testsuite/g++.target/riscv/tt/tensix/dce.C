@@ -3,7 +3,7 @@
 
 void loop (unsigned ix) {
   auto a = __builtin_rvtt_sfpreadlreg (0);
-  auto b = __builtin_rvtt_sfpreadlreg (1); // { dg-warning "not deleting" }
+  auto b = __builtin_rvtt_sfpreadlreg (1);
 
   while (ix--)
     {
@@ -16,7 +16,6 @@ void loop (unsigned ix) {
 /*
 **_Z4loopj:
 **	# READ L0
-**	# READ L1
 **	beq	a0,zero,.L2
 **	addi	a0,a0,-1
 **	li	a5,-1
