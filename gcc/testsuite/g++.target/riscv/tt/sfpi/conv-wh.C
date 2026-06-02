@@ -40,9 +40,7 @@ void two () {
 **	SFPLOAD	L0, 0, 12, 3
 **	SFPSETCC	L0, 0, 0
 **	SFPSETSGN	L0, L0, 0, 1	# LV:L0
-**	SFPMOV	L1, L0, 2
-**	SFPIADD	L1, L9, 0, 6
-**	SFPMOV	L0, L1, 0	# LV:L0
+**	SFPIADD	L0, L9, 0, 6	# LV:L0
 **	SFPENCC	3, 10
 **	SFPSTORE	L0, 6, 4, 3
 **	ret
@@ -60,9 +58,7 @@ void three () {
 **	SFPSETCC	L0, 0, 0
 **	SFPMOV	L1, L0, 2
 **	SFPSETSGN	L1, L0, 0, 1	# LV:L1
-**	SFPMOV	L2, L1, 2
-**	SFPIADD	L2, L9, 0, 6
-**	SFPMOV	L1, L2, 0	# LV:L1
+**	SFPIADD	L1, L9, 0, 6	# LV:L1
 **	SFPENCC	3, 10
 **	SFPSTORE	L1, 6, 4, 3
 **	SFPCAST	L0, L0, 1

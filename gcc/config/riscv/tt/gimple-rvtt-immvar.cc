@@ -143,10 +143,9 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
 }
 
 static bool
-emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data  *insnd, gcall *call,
-		  rvtt_insn_data::insn_id id, bool imm_first, tree imm, tree mod)
+emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call,
+		  const rvtt_insn_data *new_insnd, bool imm_first, tree imm, tree mod)
 {
-  auto *new_insnd = rvtt_get_insn_data (id);
   gcc_assert (new_insnd->mod_info ().is_xmod ()
 	      || (1u << TREE_INT_CST_LOW (mod)) & new_insnd->mod_info ().mod ());
   gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
@@ -198,7 +197,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	  {
 	    tree tmp = emit_loadimm (gsi, gimple_location (call), is_signed ? -32 : 32, addr, imm, nullptr);
 	    return emit_replacement (gsi, insnd, call,
-				     rvtt_insn_data::insn_id (insnd->id - 1), false, tmp, mod);
+				     insnd->get_vector (), false, tmp, mod);
 	  }
       }
       break;
@@ -223,7 +222,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	  mod = build_int_cst (unsigned_type_node, TREE_INT_CST_LOW (mod) & SFPXCMP_MOD1_CC_MASK);
 
 	  return emit_replacement (gsi, insnd, call,
-				   rvtt_insn_data::sfpxicmpv, true, tmp, mod);
+				   rvtt_get_insn_data (rvtt_insn_data::sfpxicmpv), true, tmp, mod);
 	}
       break;
 
@@ -243,7 +242,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	  mod = build_int_cst (unsigned_type_node, imod & SFPXCMP_MOD1_CC_MASK);
 
 	  return emit_replacement (gsi, insnd, call,
-				   rvtt_insn_data::sfpxfcmpv, false, tmp, mod);
+				   rvtt_get_insn_data (rvtt_insn_data::sfpxfcmpv), false, tmp, mod);
 	}
       break;
 
@@ -259,7 +258,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	  mod = build_int_cst (unsigned_type_node, imod & SFPXIADD_MOD1_IS_SUB);
 
 	  return emit_replacement (gsi, insnd, call,
-				   rvtt_insn_data::sfpxiadd_v, true, tmp, mod);
+				   rvtt_get_insn_data (rvtt_insn_data::sfpxiadd_v), true, tmp, mod);
 	}
       break;
     }
@@ -478,10 +477,11 @@ static bool
 immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 		 gcall *call, const rvtt_insn_data *scalar_insnd)
 {
-  gcc_assert (!call_insnd->is_live () && !scalar_insnd->is_live ());
+  gcc_assert (call_insnd->is_live () == scalar_insnd->is_live ());
 
+  auto nlv_call_insnd = call_insnd->get_not_live ();
   int mod = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
-  bool maybe_flip_sign = (call_insnd->id == rvtt_insn_data::sfpiadd_v
+  bool maybe_flip_sign = (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v
 			  && mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST);
   if (maybe_flip_sign)
     mod ^= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
@@ -489,7 +489,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
     // Mod is incompatible
     return false;
 
-  tree imm_op = gimple_call_arg (call, maybe_flip_sign ? 0 : 1);
+  tree imm_op = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 0 : 1));
   gimple *def = SSA_NAME_DEF_STMT (imm_op);
 
   auto *def_insnd = rvtt_get_insn_data (def);
@@ -555,53 +555,69 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
       print_gimple_stmt (dump_file, call, 2);
     }
 
-  if (call_insnd->id == rvtt_insn_data::sfpiadd_v && !imm
-      && !call_insnd->sets_cc (mod))
+  tree input = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 1 : 0));
+  bool eliding = false;
+  if (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v
+      && !imm && !call_insnd->sets_cc (mod))
     {
       // We can elide call entirely
-      if (dump_file)
-	fprintf (dump_file, "to nothing\n");
-
-      tree input = gimple_call_arg (call, maybe_flip_sign ? 1 : 0);
-      if (tree output = gimple_call_lhs (call))
+      if (call_insnd->is_live ())
+	eliding = true;
+      else
 	{
-	  gimple *stmt;
-	  imm_use_iterator ssa_iter;
-	  FOR_EACH_IMM_USE_STMT (stmt, ssa_iter, output)
+	  if (dump_file)
+	    fprintf (dump_file, "to nothing\n");
+
+	  if (tree output = gimple_call_lhs (call))
 	    {
-	      use_operand_p use_p;
-	      FOR_EACH_IMM_USE_ON_STMT (use_p, ssa_iter)
-		propagate_value (use_p, input);
-	      update_stmt (stmt);
-	      if (dump_file)
+	      gimple *stmt;
+	      imm_use_iterator ssa_iter;
+	      FOR_EACH_IMM_USE_STMT (stmt, ssa_iter, output)
 		{
-		  fprintf (dump_file, "Updated ");
-		  print_gimple_stmt (dump_file, stmt, 2);
+		  use_operand_p use_p;
+		  FOR_EACH_IMM_USE_ON_STMT (use_p, ssa_iter)
+		    propagate_value (use_p, input);
+		  update_stmt (stmt);
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "Updated ");
+		      print_gimple_stmt (dump_file, stmt, 2);
+		    }
 		}
 	    }
+	  if (dump_file)
+	    fprintf (dump_file, "\n");
+	  return true;
 	}
-      if (dump_file)
-	fprintf (dump_file, "\n");
-      return true;
     }
 
   // Replace the CALL with one of SCALAR
+  if (eliding)
+    scalar_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpassign_lv);
+    
   gimple *new_call = gimple_build_call (scalar_insnd->decl, scalar_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call, gimple_call_lhs (call));
-  gimple_call_set_arg (new_call, 0, null_pointer_node);
-  gimple_call_set_arg (new_call, 1, gimple_call_arg (call, maybe_flip_sign ? 1 : 0));
+  unsigned argno = 0;
+  if (!eliding)
+    gimple_call_set_arg (new_call, argno++, null_pointer_node);
+  if (scalar_insnd->is_live ())
+    gimple_call_set_arg (new_call, argno++, gimple_call_arg (call, 0));
 
-  gcc_assert (scalar_insnd->imm_arg () == 2 && scalar_insnd->mod_arg () == 5);
-  gimple_call_set_arg (new_call, 2, build_int_cst (integer_type_node, imm));
-  gimple_call_set_arg (new_call, 3, integer_zero_node);
-  gimple_call_set_arg (new_call, 4, integer_zero_node);
+  gimple_call_set_arg (new_call, argno++, input);
 
-  gimple_call_set_arg (new_call, 5, build_int_cst (unsigned_type_node, mod));
+  if (!eliding)
+    {
+      gimple_call_set_arg (new_call, argno++, build_int_cst (integer_type_node, imm));
+      gimple_call_set_arg (new_call, argno++, integer_zero_node);
+      gimple_call_set_arg (new_call, argno++, integer_zero_node);
 
-  // Copy remaining args
-  for (unsigned ix = scalar_insnd->num_args (); --ix != 5;)
-    gimple_call_set_arg (new_call, ix, gimple_call_arg (call, ix - 3));
+      gimple_call_set_arg (new_call, argno++, build_int_cst (unsigned_type_node, mod));
+
+      // Copy remaining args
+      for (unsigned limit = scalar_insnd->num_args (); argno != limit; argno++)
+	gimple_call_set_arg (new_call, argno, gimple_call_arg (call, argno - 3));
+    }
 
   gsi_insert_before (&gsi, new_call, GSI_SAME_STMT);
 

@@ -41,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
+#include "tm_p.h"
 #include "../riscv-protos.h"
 
 DEBUG_FUNCTION void debug_tree (tree node);
@@ -486,13 +487,28 @@ bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd)
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
-  return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
+  return gen_rtx_UNSPEC (mode,
+			 gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
 }
 
 rtx
 rvtt_gen_rtx_noval (machine_mode mode)
 {
-  return gen_rtx_UNSPEC (mode, gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
+  return gen_rtx_UNSPEC (mode,
+			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
+}
+
+void
+rvtt_merge_lv_src (rtx *lv, rtx *src)
+{
+  if (noval_operand (*lv, GET_MODE (*lv)))
+    return;
+
+  rtx tmp = gen_reg_rtx (XTT32SImode);
+  emit_insn (gen_rvtt_sfpassign_lv (tmp, *lv, *src));
+  *src = tmp;
+  *lv = gen_rtx_UNSPEC (XTT32SImode,
+			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
 }
 
 static void

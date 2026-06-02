@@ -214,6 +214,7 @@ public:
   bool is_expanded () const { return flags & EXPANDED; }
   int live_arg () const { return has_var (); }
 
+public:
   // We know these objects are in an array.
   // We never ask for the live version of the last entry.
   const rvtt_insn_data *get_live () const {
@@ -223,12 +224,29 @@ public:
   }
   const rvtt_insn_data *get_not_live () const {
     // Never ask for the notlive version of sfpassign_lv
-    return this - int (is_live ());
+    auto res = this;
+    if (is_live ())
+      res -= 1;
+    return res;
+  }
+
+public:
+  const rvtt_insn_data *get_vector () const {
+    auto res = this - 1;
+    if (is_live () || res->is_live ())
+      res -= 1;
+    return res;
   }
   const rvtt_insn_data *get_scalar () const {
-    // No EXPANDED non-VAR insn has a live version, so we don't have to handle that.
     if (is_expanded () && !has_var ())
-      return this + 1;
+      {
+	auto res = this + 1;
+	if (res->is_live ())
+	  res += 1;
+	if (is_live ())
+	  res += 1;
+	return res->decl ? res : nullptr;
+      }
     return nullptr;
   }
 

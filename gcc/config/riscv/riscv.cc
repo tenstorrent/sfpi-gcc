@@ -4440,7 +4440,9 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	  *total = 1;
 	  return true;
 	}
-      if (XINT (x, 1) == UNSPEC_SFPCSTLREG)
+      if (XINT (x, 1) == UNSPEC_SFPCSTLREG
+	  || XINT (x, 1) == UNSPEC_SFPNOVAL
+	  || XINT (x, 1) == UNSPEC_SFPOMIT)
 	{
 	  *total = 0;
 	  return true;
