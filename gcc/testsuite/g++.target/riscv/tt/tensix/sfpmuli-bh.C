@@ -15,7 +15,7 @@ void foo ()
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPLOADI	L1, 13398, 2
 **	SFPLOADI	L1, 18, 8	# LV:L1
-**	SFPMUL	L0, L0, L1, L9, 0
+**	SFPMUL	L0, L0, L1, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

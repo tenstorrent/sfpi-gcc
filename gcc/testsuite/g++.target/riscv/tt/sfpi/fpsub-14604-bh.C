@@ -23,7 +23,7 @@ void sub1() {
 **_Z4sub1v:
 **	# READ L0
 **	# READ L1
-**	SFPADD	L3, L10, L0, L1, 2
+**	SFPADD	L3, L0, L1, 2
 **	# WRITE L3
 **	ret
 */
@@ -40,7 +40,7 @@ void sub2() {
 **_Z4sub2v:
 **	# READ L0
 **	# READ L1
-**	SFPADD	L3, L10, L1, L0, 2
+**	SFPADD	L3, L1, L0, 2
 **	# WRITE L3
 **	ret
 */
@@ -58,7 +58,7 @@ void sub3() {
 **_Z4sub3v:
 **	# READ L0
 **	# READ L1
-**	SFPADD	L3, L10, L0, L1, 3
+**	SFPADD	L3, L0, L1, 3
 **	# WRITE L3
 **	ret
 */
@@ -82,9 +82,9 @@ void sub4() {
 **	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPSETCC	L2, 0, 0
-**	SFPADD	L3, L10, L0, L1, 2
+**	SFPADD	L3, L0, L1, 2
 **	SFPCOMPC
-**	SFPADD	L3, L10, L1, L0, 2	# LV:L3
+**	SFPADD	L3, L1, L0, 2	# LV:L3
 **	SFPENCC	3, 10
 **	# WRITE L3
 **	ret
@@ -108,10 +108,10 @@ void sub5() {
 **	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPSETCC	L2, 0, 0
-**	SFPADD	L1, L10, L1, L0, 2	# LV:L1
+**	SFPADD	L1, L1, L0, 2	# LV:L1
 **	SFPCOMPC
 **	SFPMOV	L0, L0, 1
-**	SFPADD	L1, L10, L1, L0, 2	# LV:L1
+**	SFPADD	L1, L1, L0, 2	# LV:L1
 **	SFPENCC	3, 10
 **	SFPMOV	L3, L1, 2
 **	# WRITE L3
@@ -137,9 +137,9 @@ void sub6() {
 **	# READ L1
 **	SFPMAD	L2, L1, L11, L0, 0
 **	SFPSETCC	L2, 0, 0
-**	SFPADD	L3, L10, L0, L1, 3
+**	SFPADD	L3, L0, L1, 3
 **	SFPCOMPC
-**	SFPADD	L3, L10, L0, L1, 2	# LV:L3
+**	SFPADD	L3, L0, L1, 2	# LV:L3
 **	SFPENCC	3, 10
 **	# WRITE L3
 **	ret
