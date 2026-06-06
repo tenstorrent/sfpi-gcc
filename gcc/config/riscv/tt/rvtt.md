@@ -889,15 +889,6 @@
   (UNSPECV_SFPMUL "MUL")
   (UNSPECV_SFPADD "ADD")
   ])
-(define_int_attr rvtt_muladd_ops [
-  (UNSPECV_SFPMUL "%x1, %x2, L9")
-  (UNSPECV_SFPADD "L10, %x1, %x2")
-  ])
-(define_int_attr rvtt_muladd_ops_lv [
-  (UNSPECV_SFPMUL "%x2, %x3, L9")
-  (UNSPECV_SFPADD "L10, %x2, %x3")
-  ])
-
 (define_expand "rvtt_sfp<rvtt_muladd_name>"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
@@ -923,8 +914,8 @@
 	  ] rvtt_muladd_op))]
   "TARGET_XTT_TENSIX"
   "@
-   SFP<rvtt_muladd_insn>\t%x0, <rvtt_muladd_ops_lv>, %4
-   SFP<rvtt_muladd_insn>\t%x0, <rvtt_muladd_ops_lv>, %4\t# LV:%x1"
+   SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4
+   SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 

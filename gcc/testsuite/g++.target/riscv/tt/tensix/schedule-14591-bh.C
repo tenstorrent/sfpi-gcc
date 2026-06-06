@@ -229,7 +229,7 @@ void mad_mul () {
 ** 	# READ L0
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
-**	SFPMUL	L0, L0, L1, L9, 0
+**	SFPMUL	L0, L0, L1, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */

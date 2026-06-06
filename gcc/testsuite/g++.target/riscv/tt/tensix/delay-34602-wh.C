@@ -156,7 +156,7 @@ void one (int i) {
 /*
 **_ZN5block3oneEi:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMUL	L0, L0, L0, L9, 0
+**	SFPMUL	L0, L0, L0, 0
 **	SFPNOP
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L0, 0, 0, 0
@@ -176,7 +176,7 @@ void two (int i) {
 /*
 **_ZN5block3twoEi:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMUL	L1, L0, L0, L9, 0
+**	SFPMUL	L1, L0, L0, 0
 **	SFPNOP
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L1, 0, 0, 0
@@ -196,7 +196,7 @@ void three (int i) {
 /*
 **_ZN5block5threeEi:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMUL	L1, L0, L0, L9, 0
+**	SFPMUL	L1, L0, L0, 0
 **	SFPNOP
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L0, 0, 0, 0
@@ -216,7 +216,7 @@ void four (int i) {
 /*
 **_ZN5block4fourEi:
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMUL	L1, L0, L0, L9, 0
+**	SFPMUL	L1, L0, L0, 0
 **	beq	a0,zero,.L[0-9]+
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
