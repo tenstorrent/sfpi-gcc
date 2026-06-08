@@ -9,8 +9,8 @@ namespace ckernel{
 using namespace sfpi;
 
 void i2f_rne () {
-  vInt a = l_reg[LRegs::LReg0];
-  vFloat b = int32_to_float (a, RoundMode::Even);
+  vSMag a = l_reg[LRegs::LReg0];
+  vFloat b = convert<vFloat> (a, RoundMode::Even);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -22,8 +22,8 @@ void i2f_rne () {
 */
 
 void i2f_rns () {
-  vInt a = l_reg[LRegs::LReg0];
-  vFloat b = int32_to_float (a, RoundMode::Stochastic);
+  vSMag a = l_reg[LRegs::LReg0];
+  vFloat b = convert<vFloat> (a, RoundMode::Stochastic);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -64,13 +64,13 @@ void i2sm () {
 void cond () {
     vUInt a = l_reg[LRegs::LReg0];
     vUInt b = l_reg[LRegs::LReg1];
-    vInt c = l_reg[LRegs::LReg2];
+    vSMag c = l_reg[LRegs::LReg2];
     vFloat r;
     
     v_if(a == b) {
-      r = int32_to_float (c, RoundMode::Even);
+      r = convert<vFloat> (c, RoundMode::Even);
     } v_else {
-      r = int32_to_float (c, RoundMode::Stochastic);
+      r = convert<vFloat> (c, RoundMode::Stochastic);
     } v_endif;
 
     l_reg[LRegs::LReg0] = r;
