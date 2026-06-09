@@ -78,3 +78,8 @@ void fn (int i)
   // FIXME: when passes better
   //  __builtin_rvtt_sfpxloadi (nullptr, 0, 0, 0, i); // { dg- error "not a constant" }
 }
+
+void test_ttreplay_below_bias ()
+{
+  __builtin_rvtt_ttreplay (nullptr, 0, 0, 0, 0, 0, 0); // { dg-error "argument 2 .*is out of range \\\[1, 32\\\]" }
+}

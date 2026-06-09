@@ -139,7 +139,7 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	    error_at (gimple_location (call),
 		      "argument %d %qE is out of range [%ld, %ld]",
 		      info.argno () + 1, op,
-		      (long long)(lower + bias), (long long)(upper + bias));
+		      long (lower + bias), long (upper + bias));
 
 	  if (info.is_mod ())
 	    goto zap;
