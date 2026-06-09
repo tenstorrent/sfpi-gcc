@@ -11,12 +11,12 @@ using namespace sfpi;
 void one () {
   ComputeSrcS src_reg;
   vFloat a = src_reg[0];
-  vFloat b = src_reg[2].mode<SFPLOAD_MOD0_FMT_FP32> (2);
+  vFloat b = src_reg[2].mode<DataLayout::F32> (2);
 
   src_reg++;
 
   src_reg[4] = a;
-  src_reg[5].mode<SFPLOAD_MOD0_FMT_FP16B> () = b;
+  src_reg[5].mode<DataLayout::F16b> () = b;
 }
 /*
 **_Z3onev:

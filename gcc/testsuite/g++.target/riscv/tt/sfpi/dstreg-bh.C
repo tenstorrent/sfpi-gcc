@@ -10,10 +10,10 @@ using namespace sfpi;
 
 void one () {
   vFloat a = dst_reg[0];
-  vFloat b = dst_reg[2].mode<SFPLOAD_MOD0_FMT_FP32> (2);
+  vFloat b = dst_reg[2].mode<DataLayout::F32> (2);
 
   dst_reg[4] = a;
-  dst_reg[5].mode<SFPLOAD_MOD0_FMT_FP16B> () = b;
+  dst_reg[5].mode<DataLayout::F16b> () = b;
 }
 /*
 **_Z3onev:
