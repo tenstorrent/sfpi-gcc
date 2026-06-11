@@ -51,8 +51,8 @@ void three () {
 **_Z5threev:
 **	SFPLOAD	L1, 0, 1, 7
 **	SFPLOAD	L0, 2, 2, 7
-**	SFPSTORE	L1, 0, 0, 7
-**	SFPSTORE	L0, 2, 0, 7
+**	SFPSTORE	L1, 0, 1, 7
+**	SFPSTORE	L0, 2, 2, 7
 **	ret
 */
 

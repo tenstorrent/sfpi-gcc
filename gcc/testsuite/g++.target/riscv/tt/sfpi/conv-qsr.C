@@ -20,9 +20,9 @@ void one () {
 **_Z3onev:
 **	SFPLOAD	L0, 0, 0, 7, 0, 0
 **	SFPSTOCHRND	L1, L0, L0, 0, 0, 1
-**	SFPSTORE	L1, 2, 0, 7, 0, 0
+**	SFPSTORE	L1, 2, 1, 7, 0, 0
 **	SFPSTOCHRND	L1, L0, L0, 0, 1, 1
-**	SFPSTORE	L1, 4, 0, 7, 0, 0
+**	SFPSTORE	L1, 4, 2, 7, 0, 0
 **	SFPSTOCHRND	L1, L0, L0, 0, 7, 1
 **	SFPSTORE	L1, 6, 8, 7, 0, 0
 **	SFPSTOCHRND	L0, L0, L0, 0, 6, 1
