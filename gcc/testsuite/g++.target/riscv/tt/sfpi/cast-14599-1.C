@@ -10,7 +10,7 @@ using namespace sfpi;
 
 void i2f_rne () {
   vSMag a = l_reg[LRegs::LReg0];
-  vFloat b = convert<vFloat> (a, RoundMode::Even);
+  vFloat b = convert<vFloat> (a, RoundMode::NearestAway);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -23,7 +23,7 @@ void i2f_rne () {
 
 void i2f_rns () {
   vSMag a = l_reg[LRegs::LReg0];
-  vFloat b = convert<vFloat> (a, RoundMode::Stochastic);
+  vFloat b = convert<vFloat> (a, RoundMode::NearestStochastic);
   l_reg[LRegs::LReg1] = b;
 }
 /*
@@ -68,9 +68,9 @@ void cond () {
     vFloat r;
     
     v_if(a == b) {
-      r = convert<vFloat> (c, RoundMode::Even);
+      r = convert<vFloat> (c, RoundMode::NearestAway);
     } v_else {
-      r = convert<vFloat> (c, RoundMode::Stochastic);
+      r = convert<vFloat> (c, RoundMode::NearestStochastic);
     } v_endif;
 
     l_reg[LRegs::LReg0] = r;
