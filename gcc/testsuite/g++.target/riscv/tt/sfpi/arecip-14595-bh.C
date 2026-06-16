@@ -58,7 +58,7 @@ namespace negrecip {
 void foo () {
   // Basic test
   vFloat a = l_reg[LRegs::LReg0];
-  vFloat r = approx_recip<false> (a);
+  vFloat r = approx_recip (a, RecipMode::IfNegative);
   l_reg[LRegs::LReg1] = r;
 }
 /*
@@ -79,7 +79,7 @@ void bar () {
   v_if (a < b) {
     r = c;
   } v_else {
-    r = approx_recip<false> (a);
+    r = approx_recip (a, RecipMode::IfNegative);
   } v_endif;
 
   l_reg[LRegs::LReg3] = r;
