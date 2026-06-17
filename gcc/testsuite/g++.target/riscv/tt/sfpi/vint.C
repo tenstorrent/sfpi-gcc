@@ -120,23 +120,23 @@ void ulength () {
   sfpi::vUInt u = __builtin_rvtt_sfpreadlreg (7);
 
   // Mixed compares
-  v_if (v == 0x10u) {
+  v_if (v == 0x10) {
     v = __builtin_rvtt_sfpreadlreg (1);
   } v_endif;
 
-  v_if (v < 0x10u) {
+  v_if (v < 0x10) {
     v = __builtin_rvtt_sfpreadlreg (2);
   } v_endif;
 
-  v_if (v > 0x10u) {
+  v_if (v > 0x10) {
     v = __builtin_rvtt_sfpreadlreg (3);
   } v_endif;
 
-  v_if (v >= 0x10u) {
+  v_if (v >= 0x10) {
     v = __builtin_rvtt_sfpreadlreg (4);
   } v_endif;
 
-  v_if (u == 0x10u) {
+  v_if (u == 0x10) {
     u = __builtin_rvtt_sfpreadlreg (1);
   } v_endif;
 
@@ -201,47 +201,8 @@ void ulength () {
 */
 
 void mixed () {
-  // These comparisons mix signed/unsigned
-  // we should deprecate and remove the functionality
-  constexpr uint32_t ZERO = 0;
   sfpi::vInt v = __builtin_rvtt_sfpreadlreg (0);
   sfpi::vUInt u = __builtin_rvtt_sfpreadlreg (7);
-
-  // Mixed compares
-  v_if (v == ZERO) {
-    v = __builtin_rvtt_sfpreadlreg (1);
-  } v_endif;
-
-  v_if (v < ZERO) {
-    v = __builtin_rvtt_sfpreadlreg (2);
-  } v_endif;
-
-  v_if (v > ZERO) {
-    v = __builtin_rvtt_sfpreadlreg (3);
-  } v_endif;
-
-  v_if (v >= ZERO) {
-    v = __builtin_rvtt_sfpreadlreg (4);
-  } v_endif;
-
-  v_if (v == u) {
-    u = __builtin_rvtt_sfpreadlreg (1);
-  } v_endif;
-
-  v_if (v < u) {
-    u = __builtin_rvtt_sfpreadlreg (2);
-  } v_endif;
-
-  v_if (v > u) {
-    u = __builtin_rvtt_sfpreadlreg (3);
-  } v_endif;
-
-  v_if (v >= u) {
-    u = __builtin_rvtt_sfpreadlreg (4);
-  } v_endif;
-
-  __builtin_rvtt_sfpwritelreg (v.get (), 0);
-  __builtin_rvtt_sfpwritelreg (u.get (), 7);
 
   // Mixed math
   auto r = u - v;
@@ -252,47 +213,6 @@ void mixed () {
 **_Z5mixedv:
 **	# READ L0
 **	# READ L7
-**	SFPSETCC	L0, 0, 6
-**	# READ L1
-**	SFPMOV	L0, L1, 0	# LV:L0
-**	SFPENCC	3, 10
-**	SFPSETCC	L0, 0, 0
-**	# READ L2
-**	SFPMOV	L0, L2, 0	# LV:L0
-**	SFPENCC	3, 10
-**	SFPSETCC	L0, 0, 4
-**	SFPSETCC	L0, 0, 2
-**	# READ L3
-**	SFPMOV	L0, L3, 0	# LV:L0
-**	SFPENCC	3, 10
-**	SFPSETCC	L0, 0, 4
-**	# READ L4
-**	SFPMOV	L0, L4, 0	# LV:L0
-**	SFPENCC	3, 10
-**	SFPMOV	L1, L7, 2
-**	SFPIADD	L1, L0, 0, 6
-**	SFPSETCC	L1, 0, 6
-**	# READ L1
-**	SFPMOV	L7, L1, 0	# LV:L7
-**	SFPENCC	3, 10
-**	SFPMOV	L1, L7, 2
-**	SFPIADD	L1, L0, 0, 2
-**	# READ L2
-**	SFPMOV	L7, L2, 0	# LV:L7
-**	SFPENCC	3, 10
-**	SFPMOV	L1, L7, 2
-**	SFPIADD	L1, L0, 0, 10
-**	SFPSETCC	L1, 0, 2
-**	# READ L3
-**	SFPMOV	L7, L3, 0	# LV:L7
-**	SFPENCC	3, 10
-**	SFPMOV	L1, L7, 2
-**	SFPIADD	L1, L0, 0, 10
-**	# READ L4
-**	SFPMOV	L7, L4, 0	# LV:L7
-**	SFPENCC	3, 10
-**	# WRITE L0
-**	# WRITE L7
 **	SFPIADD	L0, L7, 0, 6
 **	SFPMOV	L5, L0, 2
 **	# WRITE L5
