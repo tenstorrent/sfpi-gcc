@@ -125,11 +125,12 @@ RVTT_FN (sfpnot_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                   
 
 RVTT_FN (sfpshft_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB(), ({M, 0x1}))
 RVTT_OVR(sfpshft_v,    bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            0, ({M, 0x5}))
+RVTT_FN (sfpshft_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                    LV|CLB(), ({M, 0x1}))
+RVTT_OVR(sfpshft_v_lv, bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                    LV, ({M, 0x5}))
 RVTT_FN (sfpshft_i,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_SI_USI_USI_USI,                CLB(), ({S, 12, 12}, {M, 0x1}))
 RVTT_OVR(sfpshft_i,    bh_qsr,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_SI_USI_USI_USI,                0, ({S, 12, 12}, {M, 0x5}))
-#if 0 // Not ready yet
-RVTT_FN (sfpshft_i_lv,  bh,bh_,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_SI_USI_USI_USI,        LV, ({S, 12, 12}, {M, 0x5}))
-#endif
+RVTT_FN (sfpshft_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_SI_USI_USI_USI,        LV|CLB(), ({S, 12, 12}, {M, 0x1}))
+RVTT_OVR(sfpshft_i_lv, bh_qsr,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_SI_USI_USI_USI,        LV, ({S, 12, 12}, {M, 0x5}))
 
 RVTT_FN (sfplut,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            CLB(3), ({M, 0x0011}))
 RVTT_FN (sfplutfp32_3r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4411}))
