@@ -339,7 +339,7 @@ const char *
 rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
 		     rtx operands[], bool is_set, int tmp_ix)
 {
-  if (!is_synthed)
+  if (!is_synthed || tmpl[0] == '#')
     return tmpl;
 
   operands += is_set; // Whee!
