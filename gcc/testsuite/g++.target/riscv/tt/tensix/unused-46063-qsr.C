@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti" }
+// { dg-options "-mcpu=tt-qsr32-tensix -O2 -fno-exceptions -fno-rtti" }
 // { dg-final { check-function-bodies "**" "" } }
 
 void addv () {
@@ -16,12 +16,11 @@ void addv () {
 }
 /*
 **_Z4addvv:
-**	SFPLOAD	L0, 0, 0, 0
-**	SFPMOV	L1, L10, 2
-**	SFPIADD	L1, L0, 0, 2
+**	SFPLOAD	L0, 0, 0, 0, 0, 0
+**	SFPIADD	L10, L0, 0, 2
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
 
@@ -40,11 +39,11 @@ void addi () {
 }
 /*
 **_Z4addiv:
-**	SFPLOAD	L0, 0, 0, 0
-**	SFPIADD	L1, L0, 10, 1
+**	SFPLOAD	L0, 0, 0, 0, 0, 0
+**	SFPIADD	L15, L0, 10, 1
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
 
@@ -64,9 +63,10 @@ void addi (unsigned val) {
 
 /*
 **_Z4addij:
-**	SFPLOAD	L0, 0, 0, 0
-**	zext.h	a5,a0
+**	SFPLOAD	L0, 0, 0, 0, 0, 0
+**	slli	a5,a0,16
 **	li	a4, 1897005056	# 2:71120000
+**	srli	a5,a5,16
 **	add	a5,a5,a4
 **	sw	a5, 0\(zero\)	# 2:SFPLOADI	L1, a5, 2
 **	srli	a0,a0,16
@@ -77,7 +77,7 @@ void addi (unsigned val) {
 **	SFPIADD	L2, L1, 0, 0
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
 
@@ -96,11 +96,11 @@ void exexp () {
 }
 /*
 **_Z5exexpv:
-**	SFPLOAD	L0, 0, 0, 0
+**	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPEXEXP	L1, L0, 2
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
 
@@ -119,10 +119,10 @@ void lz () {
 }
 /*
 **_Z2lzv:
-**	SFPLOAD	L0, 0, 0, 0
-**	SFPLZ	L1, L0, 2
+**	SFPLOAD	L0, 0, 0, 0, 0, 0
+**	SFPLZ	L15, L0, 2
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSTORE	L0, 0, 0, 0
+**	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
