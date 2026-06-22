@@ -1076,7 +1076,8 @@
    #"
   "&& true"
   {
-    if (find_reg_note (curr_insn, REG_UNUSED, operands[0])
+    if (TARGET_XTT_TENSIX_QSR
+        && find_reg_note (curr_insn, REG_UNUSED, operands[0])
         && cstlreg_operand (operands[2], GET_MODE (operands[2])))
       {
         emit_insn (gen_rvtt_sfpiadd_v_nv
@@ -1098,7 +1099,7 @@
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "xrxc")
      (match_operand:SI      2 "const_int_operand" "n")
      ] UNSPECV_SFPIADD)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_XTT_TENSIX_QSR"
   "SFPIADD\t%x0, %x1, 0, %2"
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -1178,7 +1179,8 @@
       : "SFPIADD\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  "&& find_reg_note (insn, REG_UNUSED, operands[0])"
+  "&& TARGET_XTT_TENSIX_QSR
+   && find_reg_note (insn, REG_UNUSED, operands[0])"
   [(const_int 0)]
   {
     rtx opcode = operands[2];
@@ -1206,7 +1208,7 @@
      (match_operand:SI    5 "const_int_operand" "n,n")
      ] UNSPECV_SFPIADD)
    (clobber (match_scratch:SI  6 "=X,&r"))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_XTT_TENSIX_QSR"
   {
     return rvtt_synth::pattern (which_alternative,
       "SFPIADD\tL15, %x4, %3, %5",
@@ -1261,7 +1263,9 @@
   "@
    SFP<rvtt_unary_insn>\t%x0, %x2, %3
    SFP<rvtt_unary_insn>\t%x0, %x2, %3\t# LV:%x1"
-  "&& find_reg_note (insn, REG_UNUSED, operands[0])"
+  "&& TARGET_XTT_TENSIX_QSR
+   && <rvtt_unary_op> == UNSPECV_SFPLZ
+   && find_reg_note (insn, REG_UNUSED, operands[0])"
   [(const_int 0)]
   {
     emit_insn (gen_rvtt_sfp<rvtt_unary_name>_nv
@@ -1275,7 +1279,7 @@
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand" "xrxc")
      (match_operand:SI    1 "const_int_operand" "n")
      ] rvtt_unary_op)]
-  "TARGET_XTT_TENSIX"
+  "TARGET_XTT_TENSIX_QSR && <rvtt_unary_op> == UNSPECV_SFPLZ"
   "SFP<rvtt_unary_insn>\tL15, %x0, %1"
   [(set_attr "type" "tensix")])
 
@@ -2139,7 +2143,7 @@
 (define_insn "*rvtt_sfpswap_cst2"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "cstlreg_operand" "xc")
+	  (match_operand:XTT32SI 1 "cstlreg_operand" "xs")
 	  (match_operand:XTT32SI 2 "reg_or_cstlreg_operand" "0")
           (match_operand:SI    3 "const_int_operand"  "n")
 	  (const_int 2)
@@ -2176,7 +2180,7 @@
 
 (define_insn "*rvtt_sfpswap_cst3"
   [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "cstlreg_operand" "xc")
+     (match_operand:XTT32SI 0 "cstlreg_operand" "xs")
      (match_operand:XTT32SI 1 "cstlreg_operand" "xc")
      (match_operand:SI    2 "const_int_operand"  "n")
      (const_int 3)
