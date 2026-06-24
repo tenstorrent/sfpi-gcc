@@ -63,7 +63,7 @@ void negmuladd() {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L3, L1, L2, L0, 1
+**	SFPMAD	L3, L2, L1, L0, 1
 **	# WRITE L3
 **	ret
 */
@@ -83,7 +83,7 @@ void negmulsub() {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L3, L1, L2, L0, 3
+**	SFPMAD	L3, L2, L1, L0, 3
 **	# WRITE L3
 **	ret
 */

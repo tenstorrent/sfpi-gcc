@@ -1,0 +1,280 @@
+/* Gimple combine patterns -*- mode: c++ -*-
+   Copyright (C) 2026 Tenstorrent Inc.
+   Originated Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+// Remember, these are tried in source order.
+
+namespace {
+  bool all_uses_are (tree cst, gcall *res_call, rvtt_insn_data::insn_id id)
+  {
+    // It's expensive to synthesize, so only allow other uses if they're
+    // all for sfpmul's, they'll share a synthesis.
+    use_operand_p use_p;
+    imm_use_iterator iter;
+    FOR_EACH_IMM_USE_FAST (use_p, iter, cst)
+      {
+	gimple *g = USE_STMT (use_p);
+	if (is_gimple_debug (g))
+	  continue;
+	if (g == res_call)
+	  continue;
+	
+	auto insnd = rvtt_get_insn_data (g);
+	if (!insnd || insnd->get_not_live ()->id != id)
+	  return false;
+      }
+
+    return true;
+  }
+}
+
+// Do these in preference to mul,add->mad, as the register pressure is
+// immediately reduced.
+// a * fp16b(scalar)
+combine () {
+  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpmul_lv (lv, %a, cst, 0);
+  {
+    if (TREE_INT_CST_LOW (id)
+	&& ! all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
+      return false;
+  }
+  res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
+  {
+    if (auto iid = TREE_INT_CST_LOW (id))
+      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+  }
+}
+// It is expensive to synthesize, so only do this when there are no other uses
+// of the loadi
+combine (false) {
+  cst|SA = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpmul_lv (lv, %a, cst, 0);
+  {}
+  res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
+  {
+    addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), TREE_INT_CST_LOW (id));
+  }
+}
+
+// a + fp16b(scalar)
+combine () {
+  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpadd_lv (lv, %a, cst, 0);
+  {
+    if (TREE_INT_CST_LOW (id)
+	&& ! all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
+      return false;
+  }
+  res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
+  {
+    if (auto iid = TREE_INT_CST_LOW (id))
+      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+  }
+}
+combine (false) {
+  cst|SA = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpadd_lv (lv, %a, cst, 0);
+  {}
+  res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
+  {
+    if (auto iid = TREE_INT_CST_LOW (id))
+      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+  }
+}
+
+// a * b + c
+combine () {
+  p = sfpmul_lv (lv1, a, b, mul_mod);
+  r = sfpadd_lv (lv2, %p, c, add_mod);
+  {}
+  {
+    // For WH mul_mod and add_mod will be zero
+    unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
+    if (p_commuted && iadd_mod)
+      iadd_mod = (iadd_mod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (iadd_mod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+
+    mod = build_int_cst (TREE_TYPE (add_mod),
+			 iadd_mod ^ TREE_INT_CST_LOW (mul_mod));
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
+}
+
+// -a + b
+combine (WH) {
+  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpadd_lv (lv2, %p, b, 0);
+  {}
+  {}
+  n1 = sfpreadlreg (CREG_IDX_NEG_1);
+  r = sfpmad_lv (lv2, a, n1, b, 0);
+  {}
+}
+combine (BH_QSR) {
+  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpadd_lv (lv2, %p, b, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    if (p_commuted && imod)
+      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  r = sfpadd_lv (lv2, a, b, mod);
+}
+
+// -a * b
+combine (BH_QSR) {
+  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpmul_lv (lv2, %p, b, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    if (p_commuted && imod)
+      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  r = sfpmul_lv (lv2, a, b, mod);
+}
+
+// a * b + -c
+combine (BH_QSR) {
+  nc = sfpmov_lv (lv1, c, SFPMOV_MOD1_COMPL);
+  r = sfpmad_lv (lv2, a, b, nc, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_C);
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
+}
+
+// -a * b + c
+combine (BH_QSR) {
+  na = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpmad_lv (lv2, %na, b, c, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
+}
+
+// -(a * b)
+combine (BH_QSR) {
+  p = sfpmul_lv (lv1, a, b, mod);
+  r = sfpmov_lv (lv2, p, SFPMOV_MOD1_COMPL);
+  {}
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  r = sfpmul_lv (lv2, a, b, mod);
+}
+// -(a + b)
+combine (BH_QSR) {
+  p = sfpadd_lv (lv1, a, b, mod);
+  r = sfpmov_lv (lv2, p, SFPMOV_MOD1_COMPL);
+  {}
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPMAD_MOD1_BH_COMPL_A | SFPMAD_MOD1_BH_COMPL_C));
+  }
+  r = sfpadd_lv (lv2, a, b, mod);
+}
+// -(a * b + c)
+combine (BH_QSR) {
+  p = sfpmad_lv (lv1, a, b, c, mod);
+  r = sfpmov_lv (lv2, p, SFPMOV_MOD1_COMPL);
+  {}
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPMAD_MOD1_BH_COMPL_A | SFPMAD_MOD1_BH_COMPL_C));
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
+}
+
+// Xiadd_i, Xiadd_i -> Xiadd_i
+
+// Overly tricky until we cleanup compares
+combine () {
+  sum|OU|SR = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
+  res|MU = sfpxiadd_i_lv (0, lv2, sum, 0, 0, 0, res_mod);
+  {
+    // res should be unused -- we could cope with it being set if needed
+    if (res)
+      return false;
+
+    // use isnd->sets_cc ()
+    // SUM_MOD can't set CC
+    if (TREE_INT_CST_LOW (sum_mod) & SFPXCMP_MOD1_CC_MASK)
+      return false;
+
+    // RES must set CC
+    if (!(TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK))
+      return false;
+  }
+  {
+    mod = build_int_cst (TREE_TYPE (sum_mod),
+			 (TREE_INT_CST_LOW (res_mod) & ~SFPXIADD_MOD1_IS_SUB)
+			 | (TREE_INT_CST_LOW (sum_mod) & SFPXIADD_MOD1_IS_SUB));
+  }
+  sum = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
+}
+
+// exexp, Xiadd_i -> exexp
+combine () {
+  exp|OU|SR = sfpexexp_lv (lv1, a, ex_mod);
+  res|MU = sfpxiadd_i_lv (0, lv2, exp, 0, 0, 0, res_mod);
+  {
+    // res should be unused -- we could cope with it being set if needed,
+    // need to teach the combiner about assignments then
+    if (res)
+      return false;
+
+    // EX_MOD can't set cc
+    if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))
+      return false;
+
+    // check res_mod is cc-setting on sign bit
+    auto imod = TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK;
+    if (imod != SFPXCMP_MOD1_CC_LT
+	&& imod != SFPXCMP_MOD1_CC_GTE)
+      return false;
+    
+  }
+  {
+    mod = build_int_cst (TREE_TYPE (ex_mod),
+			 TREE_INT_CST_LOW (ex_mod)
+			 | SFPEXEXP_MOD1_SET_CC_SGN_EXP
+			 | ((TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK)
+			    == SFPXCMP_MOD1_CC_GTE
+			    ? SFPEXEXP_MOD1_SET_CC_COMP_EXP : 0));
+  }
+  exp = sfpexexp_lv (lv1, a, mod);
+}
+

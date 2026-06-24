@@ -43,8 +43,8 @@ struct rvtt_insn_data {
   enum insn_id : uint8_t {
 #define RVTT_FN(id, av, sfx, fmt, fl, ops) id,
 #include "rvtt-insn.def"
-  hwm
-    };
+    hwm
+  };
 public:
   enum flags_t : uint16_t {
     MOD_SHIFT,
@@ -295,18 +295,11 @@ extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 
-extern void rvtt_link_nonimm_prologue(std::vector<tree> &load_imm_map,
-				      unsigned int unique_id,
-				      tree old_add,
-				      const rvtt_insn_data *insnd,
-				      gcall *stmt);
-
 extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id);
 extern const rvtt_insn_data *rvtt_get_insn_data (gimple *stmt);
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall *stmt);
 
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
-extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd);
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
 extern bool rvtt_reg_store_p(const rtx pat);
