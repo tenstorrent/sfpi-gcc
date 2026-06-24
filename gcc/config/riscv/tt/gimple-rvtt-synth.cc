@@ -74,7 +74,7 @@ static tree
 build_var_synth (gimple_stmt_iterator gsi, const rvtt_insn_data *insnd,
 		 location_t loc, tree val, tree id)
 {
-  uint32_t mask =  (uint32_t(1) << insnd->imm_bits ()) - 1;
+  uint32_t mask = (uint32_t (1) << insnd->imm_bits ()) - 1;
   tree var_mask = make_temp_ssa_name (unsigned_type_node, nullptr, "mask");
   gimple *stmt_mask = gimple_build_assign (var_mask, BIT_AND_EXPR, val,
 					   build_int_cst (unsigned_type_node, mask));

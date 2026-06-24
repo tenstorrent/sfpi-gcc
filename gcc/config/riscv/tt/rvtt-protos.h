@@ -17,6 +17,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
 #ifndef GCC_RISCV_SFPU_PROTOS_H
 #define GCC_RISCV_SFPU_PROTOS_H
 
@@ -60,29 +61,24 @@ class rvtt_synth
 			      rtx operands[], bool is_set, int IX_tmp = -1);
 
   // accessors
-  unsigned id () const
-  {
+  unsigned id () const {
     return encode & ((1u << ID_BITS) - 1u);
   }
-  unsigned dst_shift () const
-  {
+  unsigned dst_shift () const {
     return (encode >> ID_BITS)
       & ((1u << REG_SHIFT_BITS) - 1u);
   }
-  unsigned src_shift () const
-  {
+  unsigned src_shift () const {
     return (encode >> (ID_BITS + REG_SHIFT_BITS))
       & ((1u << REG_SHIFT_BITS) - 1u);
   }
 
   // setters
-  auto &dst_shift (unsigned shift)
-  {
+  auto &dst_shift (unsigned shift) {
     encode |= shift << ID_BITS;
     return *this;
   }
-  auto &src_shift (unsigned shift)
-  {
+  auto &src_shift (unsigned shift) {
     encode |= shift << (ID_BITS + REG_SHIFT_BITS);
     return *this;
   }

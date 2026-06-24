@@ -62,12 +62,11 @@ void toto (unsigned j)
 **	SFPLOAD	L0, 0, 0, 0
 **	slli	a0,a0,16
 **	lui	a4,%hi\(ptr\)
-**	li	a5, 1946157056	# 3:74000000
+**	li	a5, 1946157056	# 2:74000000
 **	lw	a4,%lo\(ptr\)\(a4\)
 **	srli	a0,a0,8
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 3:SFPMULI	L0, a0, 0
+**	sw	a0, 0\(a4\)	# 2:SFPMULI	L0, a0, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
-

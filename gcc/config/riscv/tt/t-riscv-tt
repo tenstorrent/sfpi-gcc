@@ -55,4 +55,13 @@ $(RVTT_OBJS): %.o: $(srcdir)/config/riscv/tt/%.cc
 	$(COMPILE) $<
 	$(POSTCOMPILE)
 
+gimple-rvtt-combine.o: rvtt-combine.inc
+
 PASSES_EXTRA += $(srcdir)/config/riscv/tt/rvtt-passes.def
+
+genprog += rvtt-combine
+
+build/genrvtt-combine.o: $(srcdir)/config/riscv/tt/genrvtt-combine.cc
+
+rvtt-combine.inc: build/genrvtt-combine$(build_exeext) $(srcdir)/config/riscv/tt/rvtt.gc
+	$(RUN_GEN) $^ $@

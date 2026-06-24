@@ -1,6 +1,7 @@
-/* Pass to combine SFPU insns
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to issue diagnostics for SFPU operations
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -17,953 +18,899 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+#define INCLUDE_ALGORITHM
+#define INCLUDE_MAP
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
-#include "target.h"
 #include "rtl.h"
 #include "tree.h"
+#include "stringpool.h"
 #include "gimple.h"
-#include "cfghooks.h"
 #include "tree-pass.h"
 #include "ssa.h"
-#include "cgraph.h"
-#include "gimple-pretty-print.h"
-#include "diagnostic-core.h"
-#include "fold-const.h"
-#include "trans-mem.h"
-#include "stor-layout.h"
-#include "print-tree.h"
-#include "cfganal.h"
-#include "tree-eh.h"
-#include "gimple-iterator.h"
-#include "gimple-fold.h"
-#include "gimplify-me.h"
-#include "gimple-walk.h"
-#include "tree-cfg.h"
-#include "tree-ssa-loop-manip.h"
-#include "tree-ssa-loop-niter.h"
-#include "tree-into-ssa.h"
-#include "tree-dfa.h"
-#include "tree-ssa.h"
-#include "except.h"
-#include "cfgloop.h"
 #include "tree-ssa-propagate.h"
-#include "value-prof.h"
-#include "tree-inline.h"
-#include "tree-ssa-live.h"
-#include "omp-general.h"
-#include "omp-expand.h"
-#include "tree-cfgcleanup.h"
-#include "gimplify.h"
-#include "attribs.h"
-#include "selftest.h"
-#include "opts.h"
-#include "asan.h"
-#include "profile.h"
-#include <vector>
+#include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
+#include "tree-ssa.h"
+#include "tree-into-ssa.h"
+#include "diagnostic-core.h"
 #include "rvtt.h"
+#include <unordered_map>
+#include <unordered_set>
 
-using namespace std;
+// A pattern-driven combiner.  We iterate until no changes happen -- this
+// allows combine patterns to enable other patterns, or overlap and be executed
+// in some order. The patterns are described in a GimpleCombine (.gc) file,
+// processed by genrvtt-combine whose output is #included above. Each combiner
+// is a list of patterns to match, a list of replacements to substitute, a set of
+// bespoke predicates, init & fini functions and a few extraneous flags.
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
+// The matcher is pretty simplistic -- it doesn't try and minimize searches
+// beyond recording possible starting points.  We do order the checks to do the
+// simplest ones first and only do the complicated ones when those all
+// pass. The starting point for a match is the last pattern in a sequence, and
+// once found we search backwards to calls producing inputs to that pattern.
 
-static std::vector<tree> load_imm_map;
+// A single pass finds all the combines that match, and then throws out matches
+// that overlap the end(s) of other combines (the intention is that the
+// later-matching combination iwll match (part-of) the output on the next pass. If two combines
+// overlap differently, the longer combine is selected.
 
-static bool
-rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *g)
-{
-  *stmt = dyn_cast<gcall *> (g);
-  if (!*stmt)
-    return false;
-  *insnd = rvtt_get_insn_data (*stmt);
-  return *insnd;
+// We (currently) have a simplistic model of CC-regions -- every CC-setting
+// builtin separates two regions. Regions are also separated by basic
+// blocks. All non-SetAnywhere patterns are treated as SameRegion. It would be
+// nicer to have better information, but that's a task for another day.
+
+namespace {
+  constexpr unsigned args_hwm = 10;
+
+  // pattern possibilities
+  enum class Flags : uint8_t {
+    OtherUses = 1 << 0, // Other uses are permissable (do not delete)
+    MaybeUnused = 1 << 1, // There might be no uses of this (it could be null)
+    SetAnywhere = 1 << 2, // It may be set anywhere, (not in the same live region)
+    SameRegion = 1 << 3, // It must be in the same CC region
+  };
+
+  // builtin call pattern to match or template to generate
+  // Shapes (usually) specify the _lv variant.  The machinery can deduce how
+  // to handle the non lv variant from that.
+  struct Shape {
+    struct Arg {
+      bool is_var : 1; // It's an SSA var, not a constant
+      bool commutes : 1; // It commutes with the next argument
+      unsigned val : 30; // Either combine var slot, or constant
+    };
+    rvtt_insn_data::insn_id id; // The rvtt id
+    uint8_t lhs;  // slot for Lhs var
+    uint8_t flags; // flags for lhs var
+    uint8_t num_args; // number of args to fn
+    uint8_t used_by_mask; // which patterns use lhs
+    Arg args[args_hwm];  // Argument information
+
+  public:
+    bool is_match (const rvtt_insn_data *) const;
+  };
+
+  // Combiner -- a set of patterns to match and a set of templates to replace
+  // those with.  The templates are placed at the last pattern's
+  // location. Patterns other than OtherUses are deleted
+  struct Combiner {
+    Shape const *shapes;
+    uint8_t pats_hwm;
+    uint8_t reps_hwm;
+
+    uint8_t rep_lhs_hwm;
+    uint8_t pat_var_hwm;
+    uint8_t rep_var_hwm;
+
+    uint8_t replace_mask; // patterns whos output is a replacement output
+    unsigned id;
+
+    bool (*enable_hook) (); // target-specific enablement
+    bool (*pred_hook) (gcall *[], tree [], unsigned); // pattern-specific checks
+    void (*init_hook) (gcall *[], tree [], unsigned); // template-specific initialization
+    void (*fini_hook) (gcall *[], tree []); // template-specific finalization
+
+  public:
+    struct matched_data;
+    bool match (gcall *call, const rvtt_insn_data *insnd, matched_data &) const;
+    void replace (gimple_stmt_iterator *, matched_data &, gcall **replace) const;
+
+  private:
+    struct match_masks {
+      unsigned calls = 0; // Which calls we matched
+      unsigned vars = 0;  // Which vars we defined
+      unsigned commuted = 0; // Which commute vars commuted
+      unsigned live = 0;  // Which calls were live values
+
+    public:
+      operator bool () const { return calls != 0; }
+      match_masks &operator |= (match_masks const &other) {
+	calls |= other.calls;
+	vars |= other.vars;
+	commuted |= other.commuted;
+	live |= other.live;
+	return *this;
+      }
+      void clear () {
+	calls = vars = commuted = live = 0;
+      }
+    };
+    bool match_one (basic_block bb, unsigned ix, gcall *, const rvtt_insn_data *,
+			  unsigned outer_vars, matched_data &, match_masks &) const;
+  };
 }
 
-static bool
-rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
-{
-  return rvtt_p (insnd, stmt, gsi_stmt (gsi));
-}
+// sfp{add,mul}i insns that need dynamic imm reconstitution
+struct imminfo {
+  gcall *call;
+  rvtt_insn_data const *insnd;
+  unsigned id;
 
-static bool
-is_int_arg(gcall *stmt, unsigned int arg)
-{
-  tree decl = gimple_call_arg(stmt, arg);
+  imminfo (gcall *call, rvtt_insn_data const *insnd, unsigned id)
+    : call (call), insnd (insnd), id (id) {}
 
-  return decl != nullptr && TREE_CODE(decl) == INTEGER_CST;
-}
-
-static long int
-get_int_arg(gcall *stmt, unsigned int arg)
-{
-  tree decl = gimple_call_arg(stmt, arg);
-
-  if (decl)
-  {
-    gcc_assert(TREE_CODE(decl) == INTEGER_CST);
-    return *(decl->int_cst.val);
+  bool operator< (imminfo const &other) const {
+    return id < other.id;
   }
-  return -1;
-}
-
-static bool
-subsequent_use(tree var, gimple_stmt_iterator gsi)
-{
-  use_operand_p use_p;
-  imm_use_iterator iter;
-
-  if (!has_zero_uses(var))
-    {
-      gsi_next (&gsi);
-      while (!gsi_end_p (gsi))
-	{
-	  gimple *g = gsi_stmt (gsi);
-
-	  if (g->code != GIMPLE_DEBUG)
-	    {
-	      FOR_EACH_IMM_USE_FAST (use_p, iter, var)
-		{
-		  if (g == USE_STMT(use_p))
-		    {
-		      DUMP("  found a subsequent use\n");
-		      return true;
-		    }
-		}
-	    }
-
-	  gsi_next (&gsi);
-	}
-    }
-
-  return false;
-}
-
-// Return whether the call/stmt can be combined with an iadd_i
-static bool
-can_combine_sfpxiadd_i(const rvtt_insn_data *insnd,
-		       gcall *stmt,
-		       bool is_sign_bit_cc)
-{
-  return
-    (insnd->id == rvtt_insn_data::sfpxiadd_i &&
-     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
-
-    (insnd->id == rvtt_insn_data::sfpxiadd_i_lv &&
-     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
-
-    (insnd->id == rvtt_insn_data::sfpxiadd_v &&
-     (get_int_arg(stmt, insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_NONE) ||
-
-    (insnd->id == rvtt_insn_data::sfpexexp && get_int_arg(stmt, insnd->mod_arg ()) == 0 && is_sign_bit_cc) ||
-
-    (insnd->id == rvtt_insn_data::sfpexexp_lv && get_int_arg(stmt, insnd->mod_arg ()) == 0 && is_sign_bit_cc);
-}
-
-// Combine candidate_stmt (an sfpxiadd_i) with stmt by updating mod1/imm of
-// stmt
-static void
-combine_sfpxiadd_i(const rvtt_insn_data *insnd, gcall *stmt,
-		   const rvtt_insn_data *candidate_insnd, gcall *candidate_stmt)
-{
-  int candidate_mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_arg ());
-
-  switch (insnd->id) {
-  case rvtt_insn_data::sfpxiadd_i:
-    {
-      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_arg (),
-			  build_int_cst(integer_type_node,
-					(candidate_mod1 & ~(SFPXIADD_MOD1_IS_SUB | SFPXIADD_MOD1_DST_UNUSED)) |
-					old_sub));
-    }
-    break;
-  case rvtt_insn_data::sfpxiadd_i_lv:
-    {
-      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_arg (),
-			  build_int_cst(integer_type_node,
-					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
-    }
-    break;
-  case rvtt_insn_data::sfpxiadd_v:
-    {
-      int old_sub = get_int_arg(stmt, insnd->mod_arg ()) & SFPXIADD_MOD1_IS_SUB;
-      gimple_call_set_arg(stmt, insnd->mod_arg (),
-			  build_int_cst(integer_type_node,
-					(candidate_mod1 & ~SFPXIADD_MOD1_IS_SUB) | old_sub));
-    }
-    break;
-  case rvtt_insn_data::sfpexexp:
-    {
-      int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
-	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod1));
-      break;
-    }
-  case rvtt_insn_data::sfpexexp_lv:
-    {
-      int mod1 = ((candidate_mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ?
-	SFPEXEXP_MOD1_SET_CC_SGN_EXP : SFPEXEXP_MOD1_SET_CC_SGN_COMP_EXP;
-      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod1));
-      break;
-    }
-  default:
-    gcc_unreachable();
-  }
-}
-
-// Returns true iff a stmt between gsi and last is a CC setting stmt
-static bool
-intervening_cc_stmt(gimple_stmt_iterator gsi, gimple_stmt_iterator last)
-{
-  gsi_next (&gsi);
-
-  while (gsi.ptr != last.ptr)
-  {
-    gcall *stmt;
-    const rvtt_insn_data *insnd;
-    if (rvtt_p (&insnd ,&stmt, gsi) && insnd->sets_cc (stmt))
-      return true;
-
-    gsi_next (&gsi);
-  }
-
-  return false;
-}
-
-// Return true iff at least one of the uses of var is between start and end
-static bool
-intervening_use(tree var, gimple_stmt_iterator start, gimple_stmt_iterator end)
-{
-  use_operand_p use_p;
-  imm_use_iterator iter;
-
-  FOR_EACH_IMM_USE_FAST (use_p, iter, var)
-    {
-      gimple *g = USE_STMT(use_p);
-
-      if (g->code != GIMPLE_DEBUG)
-	{
-	  gimple_stmt_iterator gsi = start;
-	  while (gsi.ptr != end.ptr)
-	    {
-	      if (g == gsi_stmt (gsi))
-		{
-		  return true;
-		}
-	      gsi_next (&gsi);
-	    }
-	}
-    }
-
-  return false;
-}
-
-static void
-fixup_vuse_vdef(gimple_stmt_iterator keep_gsi, gimple_stmt_iterator old_gsi)
-{
-  gimple *keep_g = gsi_stmt(keep_gsi);
-  gimple *old_g = gsi_stmt(old_gsi);
-
-  gimple_set_vuse(keep_g, gimple_vuse(old_g));
-  gimple_set_vdef(keep_g, gimple_vdef(old_g));
-  gimple_set_modified(keep_g, true);
-}
-
-static bool
-get_single_use(tree var, gimple **gout)
-{
-  bool single = false;
-
-  use_operand_p use_p;
-  imm_use_iterator iter;
-
-  if (var != nullptr)
-    {
-      FOR_EACH_IMM_USE_FAST (use_p, iter, var)
-	{
-	  gimple *g = USE_STMT(use_p);
-
-	  if (g->code != GIMPLE_DEBUG)
-	    {
-	      if (single)
-		{
-		  return false;
-		}
-
-	      single = true;
-	      *gout = g;
-	    }
-	}
-    }
-
-  return single;
-}
-
-// Combine sfpxiadd_i
-//  - xiadd_i when used to set the CC but w/ no LHS combines with other CC
-//    stmts which don't set the CC, e.g., iadd_i, iadd_v, exexp
-//  - setcc/lz are not optimized here.	the usage pattern of that combination
-//    is unlikely to show up much in real life and some cases are presently
-//    handled by a peephole optimization.  Move it here if ever worthwhile
-//
-// Works by:
-//  - find candidate add_i which sets the CC and compares against 0
-//  - only combine if there are no subsequent uses of the LHS (null LHS)
-//  - find the assignment of the variable used as src in the add_i
-//  - ensure there are no CC stmts in between assignment and use
-//  - ensure there are no other uses between assignment and use
-//  - update assignment mod1 value to set the CC/imm as relevant 
-//  - move the assignment stmt to the location of the candidate stmt
-//  - delete the candidate iadd_i
-static bool
-try_combine_sfpxiadd_i(const rvtt_insn_data *candidate_insnd,
-		       gcall *candidate_stmt,
-		       gimple_stmt_iterator candidate_gsi)
-{
-  bool combined = false;
-
-  // Check for candidate iadd_i that sets the CC and compares to 0
-  if (candidate_insnd->id == rvtt_insn_data::sfpxiadd_i &&
-      is_int_arg(candidate_stmt, candidate_insnd->imm_arg ()) && (get_int_arg(candidate_stmt, candidate_insnd->imm_arg ()) == 0) &&
-      ((get_int_arg(candidate_stmt, candidate_insnd->mod_arg ()) & SFPXCMP_MOD1_CC_MASK) != 0) &&
-      gimple_call_lhs(candidate_stmt) == nullptr)
-    {
-      DUMP("Trying to combine %s\n", candidate_insnd->name);
-
-      // Got a candidate
-      int mod1 = get_int_arg(candidate_stmt, candidate_insnd->mod_arg ());
-      bool is_sign_bit_cc =
-	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LT) ||
-	((mod1 & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_GTE);
-
-      // Find when this variable was assigned
-      gimple *assign_g = SSA_NAME_DEF_STMT(gimple_call_arg(candidate_stmt, SFPXIADD_SRC_ARG_POS));
-      gcall *assign_stmt;
-      const rvtt_insn_data *assign_insnd;
-
-      if (rvtt_p(&assign_insnd, &assign_stmt, assign_g))
-	{
-	  gimple_stmt_iterator assign_gsi = gsi_for_stmt(assign_g);
-
-	  if (gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
-	      !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-	      !intervening_use(gimple_call_lhs(assign_stmt), assign_gsi, candidate_gsi))
-	    {
-	      // Check to see if the assignment is one of the targeted optimizations
-	      if (can_combine_sfpxiadd_i(assign_insnd, assign_stmt, is_sign_bit_cc))
-		{
-		  DUMP("	combining with %s\n", assign_insnd->name);
-
-		  // Found a replaceable iadd_i
-		  combine_sfpxiadd_i(assign_insnd, assign_stmt, candidate_insnd, candidate_stmt);
-
-		  fixup_vuse_vdef(assign_gsi, candidate_gsi);
-
-		  // Move target
-		  gsi_move_before(&assign_gsi, &candidate_gsi);
-
-		  // Remove candidate
-		  rvtt_prep_stmt_for_deletion(candidate_stmt);
-
-		  unlink_stmt_vdef(candidate_stmt);
-		  gsi_remove(&candidate_gsi, true);
-		  release_defs(candidate_stmt);
-
-		  tree lhs = gimple_call_lhs(assign_stmt);
-		  if (lhs != NULL_TREE && has_zero_uses(lhs))
-		    {
-		      DUMP("  lhs has zero uses, removing\n");
-		      unlink_stmt_vdef(assign_stmt);
-		      release_defs(assign_stmt);
-		      gimple_call_set_lhs(assign_stmt, NULL_TREE);
-		    }
-
-		  update_stmt(assign_stmt);
-
-		  combined = true;
-		}
-	    }
-	}
-    }
-
-  return combined;
-}
-
-static inline bool
-match_prior_assignment(rvtt_insn_data::insn_id id,
-		       const rvtt_insn_data **prior_insnd,
-		       gcall **prior_stmt,
-		       gimple_stmt_iterator *prior_gsi,
-		       tree src)
-{
-  *prior_gsi = gsi_for_stmt (SSA_NAME_DEF_STMT (src));
-  if (!rvtt_p (prior_insnd, prior_stmt, *prior_gsi))
-    return false;
-
-  return (*prior_insnd)->id == id;
-}
-
-// Combine mul/add w/ loadi to make muli/addi
-//
-// We can aggessively generate mulis and addis since there is little downside
-// since these instructions do not burn a register and may end up saving one.
-// (The non-immediate path hasn't been optimized as of writing this code which
-// could be one downside).
-//
-// We never combine with a "live" loadi since that register may not have the
-// same value in every vector slot.  We could be intelligent here by looking
-// to see if the CC state at the time of the loadi_lv is the same as the
-// current CC state, but I suspect that case is uninteresting anyway.
-//
-// Scoping rules let us just go to town, ie, we'll never see a loadi at a
-// narrower CC state than the candidate (it would be out of scope) and if it
-// is at a wider state, we're good.  BBs don't matter either.
-//
-// However, we do need to be careful of moves since muli/addi may generate a
-// move if the source is re-used latter which would be a addi+mov as more
-// expensive than a load+add.
-//
-// Note: this doesn't optimally handle the case where both operands to
-// muli/addi are from loadi and one loadi is used later while the other is not
-// (in theory the code could pick the right one).  This is uninteresting as
-// operating on two immediates should be done outside of SFPU anyway...
-static bool
-try_gen_muli_or_addi(const rvtt_insn_data *candidate_insnd,
-		     gcall *candidate_stmt,
-		     gimple_stmt_iterator candidate_gsi)
-{
-  bool combined = false;
-
-  static_assert (rvtt_insn_data::sfpmul + 2 == rvtt_insn_data::sfpmuli);
-  static_assert (rvtt_insn_data::sfpadd + 2 == rvtt_insn_data::sfpaddi);
-
-  if (candidate_insnd->id == rvtt_insn_data::sfpmul ||
-      candidate_insnd->id == rvtt_insn_data::sfpmul_lv ||
-      candidate_insnd->id == rvtt_insn_data::sfpadd ||
-      candidate_insnd->id == rvtt_insn_data::sfpadd_lv)
-    {
-      DUMP("Trying to combine %s into %si\n", candidate_insnd->name,
-	   candidate_insnd->get_not_live ()->name);
-
-      int live = candidate_insnd->is_live ();
-      gimple_stmt_iterator assign_gsi;
-      gcall *assign_stmt;
-      const rvtt_insn_data *assign_insnd;
-      int which_arg = 0;
-      tree value;
-
-      // Only combine live if we are writing to the same arg as the dst arg
-      bool found_one = (match_prior_assignment(rvtt_insn_data::sfploadi,
-					       &assign_insnd, &assign_stmt, &assign_gsi,
-					       gimple_call_arg(candidate_stmt, which_arg + live)) &&
-			!subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
-			gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
-			!intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-			(!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)) &&
-			rvtt_get_fp16b(&value, assign_stmt, assign_insnd));
-
-      if (!found_one)
-	{
-	  which_arg = 1;
-	  found_one = (match_prior_assignment(rvtt_insn_data::sfploadi,
-					      &assign_insnd, &assign_stmt, &assign_gsi,
-					      gimple_call_arg(candidate_stmt, which_arg + live)) &&
-		       !subsequent_use(gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live), candidate_gsi) &&
-		       gsi_bb(assign_gsi) == gsi_bb(candidate_gsi) &&
-		       !intervening_cc_stmt(assign_gsi, candidate_gsi) &&
-		       (!live || gimple_call_arg(candidate_stmt, 0) == gimple_call_arg(candidate_stmt, (which_arg ^ 1) + live)) &&
-		       rvtt_get_fp16b(&value, assign_stmt, assign_insnd));
-	}
-
-      if (found_one)
-	{
-	  DUMP("  found a matching %s...\n", assign_insnd->name);
-
-	  const rvtt_insn_data *opi_insnd = candidate_insnd->get_not_live () + 2;
-	  DUMP("  combining %s arg %d w/ loadi into %s\n", candidate_insnd->name, which_arg, opi_insnd->name);
-
-	  // Create <add,mul>i
-	  // addi/muli are "implicitly live" (dst_as_src), no explicit live versions
-	  gcall* opi_stmt = gimple_build_call(opi_insnd->decl, 6);
-	  gimple_call_set_arg(opi_stmt, 0, gimple_call_arg(assign_stmt, 0));
-	  gimple_call_set_arg(opi_stmt, 1, gimple_call_arg(candidate_stmt, live + (which_arg ^ 1)));
-	  gimple_call_set_arg(opi_stmt, 2, value);
-	  gimple_call_set_arg(opi_stmt, 5, build_int_cst(integer_type_node,
-							 get_int_arg(candidate_stmt, candidate_insnd->mod_arg ())));
-
-	  if (TREE_CODE(value) == SSA_NAME)
-	    {
-	      // Have an fp16b as an non-immediate value
-	      // 2 issues to worry about:
-	      //  - the loadi shft/mask is different from the addi/muli shft/mask
-	      //  - loop unrolling may create multiple related uses
-	      // Issue new nonimm-prologue for the addi, track to see if it can be re-used
-	      tree old_add = gimple_call_arg(assign_stmt, assign_insnd->var_arg ());
-	      int unique_id = get_int_arg(assign_stmt, assign_insnd->id_arg ());
-	      gcc_assert((unique_id & 1) == 0);
-	      rvtt_link_nonimm_prologue(load_imm_map, unique_id + 1, old_add, opi_insnd, opi_stmt);
-	    }
-	  else
-	    {
-	      gimple_call_set_arg(opi_stmt, 3, build_int_cst(integer_type_node, 0));
-	      gimple_call_set_arg(opi_stmt, 4, build_int_cst(integer_type_node, 0));
-	    }
-
-	  gimple_call_set_lhs(opi_stmt, gimple_call_lhs(candidate_stmt));
-	  gimple_set_location(opi_stmt, gimple_location (candidate_stmt));
-	  update_stmt(opi_stmt);
-	  gsi_insert_before(&candidate_gsi, opi_stmt, GSI_SAME_STMT);
-
-	  // Delete op
-	  unlink_stmt_vdef(candidate_stmt);
-	  gsi_remove(&candidate_gsi, true);
-
-	  combined = true;
-	}
-    }
-
-  return combined;
-}
-
-static bool
-remove_unused_loadis(basic_block bb)
-{
-  DUMP("Checking for unused loadi(s)\n");
-
-  bool removed = false;
-  gimple_stmt_iterator gsi;
-
-  gsi = gsi_start_bb(bb);
-  while (!gsi_end_p(gsi))
-    {
-      gcall *stmt;
-      const rvtt_insn_data *insnd;
-      if (rvtt_p(&insnd, &stmt, gsi))
-	{
-	  tree lhs = gimple_call_lhs(stmt);
-	  if (insnd->id == rvtt_insn_data::sfploadi &&
-	      (lhs == nullptr || has_zero_uses(lhs)))
-	    {
-	      DUMP("  removing %s %p %p\n", insnd->name, stmt, lhs);
-
-	      // Remove candidate
-	      rvtt_prep_stmt_for_deletion(stmt);
-
-	      unlink_stmt_vdef(stmt);
-	      gsi_remove(&gsi, true);
-	      release_defs(stmt);
-
-	      removed = true;
-	    }
-	}
-      if (!gsi_end_p(gsi))
-	gsi_next (&gsi);
-    }
-
-  return removed;
-}
-
-struct probe_t {
-  gimple_stmt_iterator gsi;
-  const rvtt_insn_data *insnd = nullptr;
-  gcall *call = nullptr;
-
-  probe_t () = default;
-  probe_t (gimple_stmt_iterator it) : gsi (it), insnd (nullptr), call (nullptr) {}
-
-  operator bool () const
-  {
-    return bool (call);
+  bool operator< (unsigned id_) const {
+    return id < id_;
   }
 };
+static std::vector<imminfo> addimuli;
+static std::vector<imminfo> synths;
 
-/* Look for add (mul (a, b), c) and turn it into mad (a, b, c).
-   We have already handled negated inputs on BlackHole.  */
+static bool ATTRIBUTE_UNUSED combiner_enable_false () { return false; }
+static bool combiner_enable_WH () { return TARGET_XTT_TENSIX_WH; }
+static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 
-static bool
-try_combine_mul_add (probe_t &probe)
+#define OU unsigned (Flags::OtherUses)
+#define MU unsigned (Flags::MaybeUnused)
+#define SA unsigned (Flags::SetAnywhere)
+#define SR unsigned (Flags::SameRegion)
+#include "rvtt-combine.inc"
+#undef SR
+#undef SA
+#undef MU
+#undef OU
+
+struct Combiner::matched_data {
+  gcall *calls[combiner_pats_hwm];
+  tree vars[combiner_vars_hwm];
+  unsigned commuted = 0;
+  unsigned deleted = 0;
+};
+
+bool
+Shape::is_match (const rvtt_insn_data *insnd) const
 {
-  if (!(probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv))
+  if (insnd->id == id)
+    return true;
+
+  if (insnd->is_live ())
     return false;
 
-  bool is_lv = probe.insnd->is_live ();
-  int add_mod = get_int_arg (probe.call, probe.insnd->mod_arg ());
-
-  probe_t mul;
-  int mul_op_no = -1;
-  for (int op_no = 2; op_no--;)
-    {
-      tree operand = gimple_call_arg (probe.call, op_no + is_lv);
-      if (!has_single_use (operand))
-	continue;
-
-      mul = gsi_for_stmt (SSA_NAME_DEF_STMT (operand));
-      if (!rvtt_p (&mul.insnd, &mul.call, mul.gsi))
-	continue;
-
-      // We can't handle sfpmul_lv here, because that won't propagate
-      // through the sfpmuladd_lv we generate -- that takes the live
-      // value from the sfpadd_lv.
-      bool is_mul = mul.insnd->id == rvtt_insn_data::sfpmul;
-      if (!is_mul)
-	continue;
-
-      if (intervening_cc_stmt (mul.gsi, probe.gsi))
-	continue;
-
-      mul_op_no = op_no;
-      break;
-    }
-
-  if (mul_op_no < 0)
-    return false;
-
-  int mul_mod = get_int_arg (mul.call, mul.insnd->mod_arg ());
-
-  int muladd_mod = add_mod ^ mul_mod;
-
-  const rvtt_insn_data *muladd_insnd
-    = rvtt_get_insn_data (is_lv ? rvtt_insn_data::sfpmad_lv : rvtt_insn_data::sfpmad);
-  gcall *muladd_call = gimple_build_call (muladd_insnd->decl, 4 + is_lv);
-  if (is_lv)
-    gimple_call_set_arg (muladd_call, 0, gimple_call_arg (probe.call, 0));
-  gimple_call_set_arg (muladd_call, is_lv + 0, gimple_call_arg (mul.call, 0));
-  gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (mul.call, 1));
-  gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - mul_op_no) + is_lv));
-  gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, muladd_mod));
-  gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
-  gimple_set_location (muladd_call, gimple_location (probe.call));
-
-  update_stmt (muladd_call);
-  gsi_insert_after (&probe.gsi, muladd_call, GSI_SAME_STMT);
-
-  // Remove the add
-  gsi_remove (&probe.gsi, true);
-
-  // Remove the mul
-  unlink_stmt_vdef (mul.call);
-  gsi_remove (&mul.gsi, true);
-  release_defs (mul.call);
-
-  return true;
-}
-
-/* Returns true if this multiply is actually a negation (a multiply by
-   -1)  */
-
-static bool
-is_neg_1 (tree operand)
-{
-  probe_t assign;
-  if (!match_prior_assignment (rvtt_insn_data::sfpreadlreg,
-			       &assign.insnd, &assign.call, &assign.gsi, operand))
-    return false;
-
-  return get_int_arg (assign.call, 0) == CREG_IDX_NEG_1;
-}
-
-/* Returns true if this multiply is actually a negation (a multiply by
-   -1)  */
-
-static bool
-is_negation (probe_t &probe)
-{
-  if (probe.insnd->id == rvtt_insn_data::sfpmul || probe.insnd->id == rvtt_insn_data::sfpmul_lv)
-    {
-      bool is_lv = probe.insnd->is_live ();
-      tree operand = gimple_call_arg (probe.call, 1 + is_lv);
-      return is_neg_1 (operand);
-    }
-
-  if (probe.insnd->id == rvtt_insn_data::sfpmov || probe.insnd->id == rvtt_insn_data::sfpmov_lv)
-    return get_int_arg (probe.call, probe.insnd->mod_arg ()) == SFPMOV_MOD1_COMPL;
+  if (auto *live_insnd = insnd->get_live ())
+    if (live_insnd->id == id)
+      return true;
 
   return false;
 }
 
-/* Look for adds and muls with negated inputs, and merge the negation
-   into the add or mul's mod1 operand.  */
+static bool
+has_cc_insn_between (gcall *first, gcall *last)
+{
+  for (auto gsi = gsi_for_stmt (first); *gsi != last; gsi_next (&gsi))
+    if (auto *insnd = rvtt_get_insn_data (*gsi))
+      if (insnd->sets_cc (as_a <gcall *> (*gsi)))
+	return true;
+
+  return false;
+}
 
 static bool
-try_combine_negated_operands (probe_t &probe)
+has_other_use (tree var, gcall *allowed[], unsigned num_allowed)
 {
-  gcc_assert (TARGET_XTT_TENSIX_BH_QSR);
-  
-  bool is_add = probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv;
-  bool is_mul = probe.insnd->id == rvtt_insn_data::sfpmul || probe.insnd->id == rvtt_insn_data::sfpmul_lv;
-  bool is_mad = probe.insnd->id == rvtt_insn_data::sfpmad || probe.insnd->id == rvtt_insn_data::sfpmad_lv;
+  use_operand_p use_p;
+  imm_use_iterator iter;
+  FOR_EACH_IMM_USE_FAST (use_p, iter, var)
+    {
+      gimple *g = USE_STMT (use_p);
+      if (is_gimple_debug (g))
+	continue;
 
-  if (!(is_add || is_mul || is_mad))
+      for (unsigned jx = num_allowed; jx--;)
+	if (allowed[jx] == g)
+	  goto next_use;
+      // This is a different use
+      return true;
+    next_use:;
+    }
+  return false;
+}
+
+static bool
+has_use_between (tree var, gcall *begin, gcall *end,
+		 gcall *allowed[], unsigned num_allowed)
+{
+  // We expect the range to be small, so just iterate over it looking for a
+  // non-allowed reference.
+  for (auto gsi = gsi_for_stmt (begin);;)
+    {
+      gsi_next (&gsi);
+      gimple *stmt = *gsi;
+      if (stmt == end)
+	break;
+
+      // Only uses will be in our own calls!
+      if (auto *call = dyn_cast <gcall *> (stmt))
+	{
+	  for (unsigned ix = num_allowed; ix--;)
+	    if (allowed[ix] == call)
+	      goto ok;
+
+	  for (unsigned argno = gimple_call_num_args (call); argno--;)
+	    if (gimple_call_arg (call, argno) == var)
+	      return true;
+
+	ok:;
+	}
+    }
+  return false;
+}
+
+bool
+Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_data *insnd,
+		     unsigned outer_vars, matched_data &matched, match_masks &masks) const
+{
+  auto &pat = shapes[ix];
+
+  gcc_assert (!((1 << pat.lhs) & outer_vars));
+  tree lhs = gimple_call_lhs (call);
+  if (!lhs && !(pat.flags & unsigned (Flags::MaybeUnused)))
     return false;
 
-  bool is_lv = probe.insnd->is_live ();
-  bool result = false;
-  for (unsigned op = 2 + is_mad; op--;)
+  matched.calls[ix] = call;
+  masks.calls |= 1 << ix;
+
+  matched.vars[pat.lhs] = lhs;
+  masks.vars |= 1u << pat.lhs;
+
+  int lv_arg = insnd->id != pat.id ? insnd->live_arg (): -1;
+  int lv_delta = 0;
+
+  match_masks commute_masks;
+  int commute_delta = 0;
+  int commute_arg = -1;
+  for (int argno = 0; argno != pat.num_args; argno++)
     {
-      tree operand = gimple_call_arg (probe.call, op + is_lv);
-      if (!has_single_use (operand))
-	continue;
-
-      probe_t input = gsi_for_stmt (SSA_NAME_DEF_STMT (operand));
-      if (!rvtt_p (&input.insnd, &input.call, input.gsi))
-	continue;
-
-      if (!is_negation (input))
-	continue;
-
-      if (intervening_cc_stmt (input.gsi, probe.gsi))
-	continue;
-
-      gcc_assert (!is_lv || gimple_call_arg (probe.call, 0) != gimple_call_lhs (input.call));
-
-      if (TARGET_XTT_TENSIX_BH_QSR)
+      if (argno == lv_arg)
 	{
-	  // Elide the negation, and invert the appropriate mod1 bit
-	  gimple_call_set_arg (probe.call, op + is_lv, gimple_call_arg (input.call, input.insnd->is_live ()));
-	  int mod = get_int_arg (probe.call, probe.insnd->mod_arg ());
-	  mod ^= !op || is_mul || (is_mad && op == 1) ? SFPMAD_MOD1_BH_COMPL_A : SFPMAD_MOD1_BH_COMPL_C;
-	  gimple_call_set_arg (probe.call, probe.insnd->mod_arg (), build_int_cst (integer_type_node, mod));
+	  matched.vars[pat.args[argno].val] = nullptr;
+	  masks.vars |= 1u << pat.args[argno].val;
+	  lv_delta = 1;
+	  continue;
+	}
 
-	  update_stmt (probe.call);
+    try_commute:
+      auto &arg_info = pat.args[argno];
+      if (arg_info.commutes)
+	commute_arg = argno;
+      auto arg = gimple_call_arg (call, argno + commute_delta - lv_delta);
+
+      if (!arg_info.is_var)
+	{
+	  if (TREE_CODE (arg) != INTEGER_CST
+	      || TREE_INT_CST_LOW (arg) != arg_info.val)
+	    {
+	    commute_or_fail:
+	      if (!commute_delta && commute_arg >= 0)
+		{
+		  argno = commute_arg;
+		  commute_delta = +1;
+		  commute_masks.clear ();
+		  goto try_commute;
+		}
+	      return false;
+	    }
+	}
+      else if ((1 << arg_info.val) & (commute_masks.vars | masks.vars | outer_vars))
+	{
+	  if (matched.vars[arg_info.val] != arg)
+	    goto commute_or_fail;
+	}
+      else if (arg_info.val >= pats_hwm)
+	{
+	  commute_masks.vars |= 1u << arg_info.val;
+	  matched.vars[arg_info.val] = arg;
 	}
       else
 	{
-	  // Replace the add with a muladd multiplying the appropriate
-	  // operand by -1.
-	  const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
-	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, 1);
-	  gimple_call_set_return_slot_opt (lreg_call, true);
-	  gimple_set_location (lreg_call, gimple_location (probe.call));
-	  gimple_call_set_arg (lreg_call, 0, build_int_cst (integer_type_node, CREG_IDX_NEG_1));
-	  tree type = TREE_TYPE (TREE_TYPE (probe.insnd->decl));
-	  tree ssa = make_ssa_name (type, lreg_call);
-	  gimple_call_set_lhs (lreg_call, ssa);
-	  gsi_insert_before (&probe.gsi, lreg_call, GSI_SAME_STMT);
+	  auto &next_pat = shapes[arg_info.val];
+	  auto *stmt = SSA_NAME_DEF_STMT (arg);
+	  auto *inner_insnd = rvtt_get_insn_data (stmt);
+	  if (!inner_insnd || !next_pat.is_match (inner_insnd))
+	    goto commute_or_fail;
 
-	  // sfpmad (maybe-live, a, b, c, mod)
-	  const rvtt_insn_data *muladd_insnd
-	    = rvtt_get_insn_data (is_lv ? rvtt_insn_data::sfpmad_lv : rvtt_insn_data::sfpmad);
-	  gcall *muladd_call = gimple_build_call (muladd_insnd->decl, 4 + is_lv);
-	  if (is_lv)
-	    gimple_call_set_arg (muladd_call, 0, gimple_call_arg (probe.call, 0));
-	  gimple_call_set_arg (muladd_call, is_lv + 0, ssa);
-	  gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->is_live ()));
-	  gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - op) + is_lv));
-	  gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, 0));
-	  gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
-	  gimple_set_location (muladd_call, gimple_location (probe.call));
+	  // We only combine within a single BB -- it'd be nice to do better,
+	  // but then CC checking becomes much harder
+	  if (!(next_pat.flags & unsigned (Flags::SetAnywhere))
+	      && bb != gimple_bb (stmt))
+	    goto commute_or_fail;
 
-	  update_stmt (muladd_call);
-	  gsi_insert_after (&probe.gsi, muladd_call, GSI_SAME_STMT);
-	  gsi_remove (&probe.gsi, true); // GSI will now be at the
-					 // added MAD
-	  // Inform our caller that the insn changed.
-	  probe.insnd = muladd_insnd;
+	  match_masks inner_masks;
+	  if (!match_one (bb, arg_info.val, as_a <gcall *> (stmt), inner_insnd,
+			  commute_masks.vars | masks.vars | outer_vars,
+			  matched, inner_masks))
+	    goto commute_or_fail;
+	  commute_masks |= inner_masks;
 	}
-      unlink_stmt_vdef (input.call);
-      gsi_remove (&input.gsi, true);
-      release_defs (input.call);
 
-      result = true;
-      if (!TARGET_XTT_TENSIX_BH_QSR)
-	break;
+      commute_delta = -commute_delta;
+      if (!arg_info.commutes)
+	{
+	  if (commute_delta)
+	    commute_masks.commuted |= (1 << pat.args[commute_arg].val);
+	  masks |= commute_masks;
+	  commute_masks.clear ();
+	  commute_delta = 0;
+	  commute_arg = -1;
+	}
     }
-  return result;
-}
 
-/* Look for negations of adds, muls, muladds or negations.  */
+  gcc_assert (pat.num_args == gimple_call_num_args (call) + lv_delta);
 
-static bool
-try_combine_negated_result (probe_t &probe)
-{
-  gcc_assert (TARGET_XTT_TENSIX_BH_QSR);
-
-  if (!is_negation (probe))
-    return false;
-
-  bool is_lv = probe.insnd->is_live ();
-  tree operand = gimple_call_arg (probe.call, is_lv);
-  if (!has_single_use (operand))
-    return false;
-
-  gimple *assign = SSA_NAME_DEF_STMT (operand);
-  probe_t input = gsi_for_stmt (assign);
-  if (!rvtt_p (&input.insnd, &input.call, input.gsi))
-    return false;
-
-  if (intervening_cc_stmt (input.gsi, probe.gsi))
-    return false;
-
-  bool is_add = input.insnd->id == rvtt_insn_data::sfpadd || input.insnd->id == rvtt_insn_data::sfpadd_lv;
-  bool is_mul = input.insnd->id == rvtt_insn_data::sfpmul || input.insnd->id == rvtt_insn_data::sfpmul_lv;
-  bool is_muladd = input.insnd->id == rvtt_insn_data::sfpmad || input.insnd->id == rvtt_insn_data::sfpmad_lv;
-
-  if (!(is_add || is_mul || is_muladd))
-    return false;
-
-  gcc_assert (!is_lv || gimple_call_arg (probe.call, 0) == gimple_call_lhs (input.call));
-
-  // Invert the appropriate mod1 bits
-  int mod = get_int_arg (input.call, input.insnd->mod_arg ());
-  mod ^= SFPMAD_MOD1_BH_COMPL_A | (is_mul ? 0 : SFPMAD_MOD1_BH_COMPL_C);
-  gimple_call_set_arg (input.call, input.insnd->mod_arg (), build_int_cst (integer_type_node, mod));
-  release_ssa_name (gimple_call_lhs (input.call));
-  gimple_call_set_lhs (input.call, gimple_call_lhs (probe.call));
-
-  unlink_stmt_vdef (probe.call);
-  gsi_remove (&probe.gsi, true);
-  gsi_prev (&probe.gsi);
+  if (insnd->is_live ())
+    masks.live |= 1 << pat.args[insnd->live_arg ()].val;
 
   return true;
 }
 
-static bool
-try_combine_negated_add_operand (probe_t &probe)
+bool
+Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
-  gcc_assert (!TARGET_XTT_TENSIX_BH_QSR);
+  match_masks masks;
+  if (!match_one (gimple_bb (call), pats_hwm - 1, call, insnd, 0, matched, masks))
+    return false;
+  matched.commuted = masks.commuted;
 
-  bool is_add = probe.insnd->id == rvtt_insn_data::sfpadd || probe.insnd->id == rvtt_insn_data::sfpadd_lv;
-  if (!is_add)
+  gcc_assert (masks.calls == ((1u << pats_hwm) - 1)
+	      && masks.vars == (((1u << pats_hwm) - 1)
+				| (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
+
+  if (pred_hook && !pred_hook (matched.calls, matched.vars, matched.commuted))
     return false;
 
-  bool is_lv = probe.insnd->is_live ();
-  for (unsigned op = 2; op--;)
+  // Expensive checks now
+  matched.deleted = replace_mask;
+  for (int ix = 0; ix != pats_hwm; ix++)
     {
-      tree operand = gimple_call_arg (probe.call, op + is_lv);
-      if (!has_single_use (operand))
-	continue;
+      auto const &pat = shapes[ix];
+      if (replace_mask & (1 << ix))
+	{
+	  // This is a replaced insn. Check that it has no uses (other than us)
+	  // between its current location and the last insn -- because we'll be
+	  // moving it.
+	  if (pats_hwm - (ix + 1)
+	      && has_use_between (matched.vars[ix],
+				  matched.calls[ix], matched.calls[pats_hwm - 1],
+				  &matched.calls[ix + 1],
+				  pats_hwm - (ix + 1) - 1))
+	    return false;
+	}
+      else
+	{
+	  // This a non-replaced insn. Check its other uses and figure if this
+	  // is ok and/or we should delete this insn.
+	  if (tree lhs = gimple_call_lhs (matched.calls[ix]))
+	    {
+	      if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
+		{
+		  if (!(pat.flags & unsigned (Flags::OtherUses)))
+		    // Not allowed other uses
+		    return false;
+		}
+	      else
+		matched.deleted |= 1 << ix;
+	    }
+	  else
+	    matched.deleted |= 1 << ix;
+	}
 
-      probe_t input = gsi_for_stmt (SSA_NAME_DEF_STMT (operand));
-      if (!rvtt_p (&input.insnd, &input.call, input.gsi))
-	continue;
-
-      if (!is_negation (input))
-	continue;
-
-      if (intervening_cc_stmt (input.gsi, probe.gsi))
-	continue;
-
-      gcc_assert (!is_lv || gimple_call_arg (probe.call, 0) != gimple_call_lhs (input.call));
-
-      // Replace the add with a muladd multiplying the appropriate
-      // operand by -1.
-      const rvtt_insn_data *lreg_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
-      gcall *lreg_call = gimple_build_call (lreg_insnd->decl, 1);
-      gimple_call_set_return_slot_opt (lreg_call, true);
-      gimple_set_location (lreg_call, gimple_location (probe.call));
-      gimple_call_set_arg (lreg_call, 0, build_int_cst (integer_type_node, CREG_IDX_NEG_1));
-      tree type = TREE_TYPE (TREE_TYPE (probe.insnd->decl));
-      tree ssa = make_ssa_name (type, lreg_call);
-      gimple_call_set_lhs (lreg_call, ssa);
-      gsi_insert_before (&probe.gsi, lreg_call, GSI_SAME_STMT);
-
-      // sfpmad (maybe-live, a, b, c, mod)
-      const rvtt_insn_data *muladd_insnd
-	= rvtt_get_insn_data (is_lv ? rvtt_insn_data::sfpmad_lv : rvtt_insn_data::sfpmad);
-      gcall *muladd_call = gimple_build_call (muladd_insnd->decl, 4 + is_lv);
-      if (is_lv)
-	gimple_call_set_arg (muladd_call, 0, gimple_call_arg (probe.call, 0));
-      gimple_call_set_arg (muladd_call, is_lv + 0, ssa);
-      gimple_call_set_arg (muladd_call, is_lv + 1, gimple_call_arg (input.call, input.insnd->is_live ()));
-      gimple_call_set_arg (muladd_call, is_lv + 2, gimple_call_arg (probe.call, (1 - op) + is_lv));
-      gimple_call_set_arg (muladd_call, muladd_insnd->mod_arg (), build_int_cst (integer_type_node, 0));
-      gimple_call_set_lhs (muladd_call, gimple_call_lhs (probe.call));
-      gimple_set_location (muladd_call, gimple_location (probe.call));
-
-      update_stmt (muladd_call);
-      gsi_insert_after (&probe.gsi, muladd_call, GSI_SAME_STMT);
-      gsi_remove (&probe.gsi, true); // GSI will now be at the added MAD
-
-      unlink_stmt_vdef (input.call);
-      gsi_remove (&input.gsi, true);
-      release_defs (input.call);
-
-      return true;
+      if (!(pat.flags & unsigned (Flags::SetAnywhere))
+	  && pat.used_by_mask)
+	{
+	  // No cc insns between any non-setanywhere input and its last use
+	  unsigned last_use = HOST_BITS_PER_WIDE_INT - 1 - clz_hwi (pat.used_by_mask);
+	  if (has_cc_insn_between (matched.calls[ix], matched.calls[last_use]))
+	    return false;
+	}
     }
 
-  return false;
+  // If any lhs vars are the same, we're not a match
+  for (unsigned ix = pats_hwm; ix--; )
+    if (auto v = matched.vars[ix])
+      for (unsigned jx = ix; jx--; )
+	if (v == matched.vars[jx])
+	  return false;
+
+  // If any non-lhs non-live var is the same as an lhs, we're not a match
+  for (unsigned ix = rep_lhs_hwm; ix != pat_var_hwm; ix++)
+    if (auto v = matched.vars[ix])
+      for (unsigned jx = pats_hwm; jx--; )
+	if (v == matched.vars[jx])
+	  {
+	    // This non-lhs var matches an lhs var
+	    if (!((1 << ix) & masks.live))
+	      return false;  // Not a live, not a match
+
+	    if (!((1 << jx) & (matched.deleted & ~replace_mask)))
+	      continue; // Not a non-replaced deleted output
+
+	    // Chase live to deleted insn's live input
+	    auto insnd = rvtt_get_insn_data (matched.calls[jx]);
+	    if (!insnd->is_live ())
+	      return false;
+	    v = gimple_call_arg (matched.calls[jx], insnd->live_arg ());
+	    matched.vars[ix] = v;
+	    // We'll continue checking this in the next iteration
+	  }
+
+  // It's ok for any non-lhs vars to be the same
+  for (unsigned ix = pats_hwm; ix != rep_lhs_hwm; ix++)
+    matched.vars[ix] = nullptr;
+  for (unsigned ix = pat_var_hwm; ix != rep_var_hwm; ix++)
+    matched.vars[ix] = nullptr;
+
+  return true;
 }
 
-// Optimize stmt sequence by combining builtins.  Handles:
-//   - add/mul w/ one operand a loadi of .5, use mod to handle .5
-//   - sfpxiadd_i w/ sfpxiadd_i, exexp
-//   - add w/ mul to form mad
-//   - mul or add w/ loadi to make muli/addi
-// The order of the half/mad/addi+muli matter, the progression of this
-// ordering eliminates the need, for example, of turning a mad w/ the add of
-// .5 into a mul then trying to recombine into a mad w/ a subsequent add
-static void
-transform (function *fun)
+void
+Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **replace) const
 {
-  basic_block bb;
-  load_imm_map.reserve (20);
+  if (init_hook)
+    init_hook (matched.calls, matched.vars, matched.commuted);
 
-  // Pass one: combine iadd
-  FOR_EACH_BB_FN (bb, fun)
+  for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
     {
-      bool update = false;
-
-      for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
-	   !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
+      auto &rep = shapes[ix];
+      auto const *insnd = rvtt_get_insn_data (rep.id);
+      int lv_arg = -1;
+      int lv_delta = 0;
+      if (insnd->is_live ())
 	{
-	  gcall *candidate_stmt;
-	  const rvtt_insn_data *candidate_insnd;
-
-	  if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
+	  lv_arg = insnd->live_arg ();
+	  auto live_slot = rep.args[lv_arg].val;
+	  if (!matched.vars[live_slot])
 	    {
-	      update |= try_combine_sfpxiadd_i (candidate_insnd, candidate_stmt, candidate_gsi);
+	      // We might need to add non-lv assign and then handle it specially?
+	      gcc_assert (rep.id != rvtt_insn_data::sfpassign_lv);
+	      insnd = insnd->get_not_live ();
+	      lv_delta = 1;
 	    }
 	}
+      gcc_assert (insnd->num_args () + lv_delta == rep.num_args
+		  && insnd->decl);
+      auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
+      replace[rep.lhs] = call;
 
-      if (update)
-	update_ssa(TODO_update_ssa);
+      gimple_set_location (call, gimple_location (matched.calls[rep.lhs]));
+      if (rep.lhs >= pats_hwm)
+	matched.vars[rep.lhs]
+	  = make_temp_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)), nullptr, "cmb");
 
-      update = false;
-      for (gimple_stmt_iterator candidate_gsi = gsi_start_bb (bb);
-	   !gsi_end_p (candidate_gsi); gsi_next (&candidate_gsi))
+      gimple_set_lhs (call, matched.vars[rep.lhs]);
+
+      tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (insnd->decl));
+      for (int argno = 0; argno != rep.num_args; argno++)
 	{
-	  gcall *candidate_stmt;
-	  const rvtt_insn_data *candidate_insnd;
-
-	  if (rvtt_p (&candidate_insnd, &candidate_stmt, candidate_gsi))
-	    update |= try_gen_muli_or_addi(candidate_insnd, candidate_stmt, candidate_gsi);
-	}
-
-      update |= remove_unused_loadis (bb);
-      if (update)
-	update_ssa(TODO_update_ssa);
-
-      update = false;
-      for (probe_t probe (gsi_start_bb (bb));
-	   !gsi_end_p (probe.gsi); gsi_next (&probe.gsi))
-	{
-	  if (!rvtt_p (&probe.insnd, &probe.call, probe.gsi))
-	    continue;
-
-	  // FIXME: Look for paired negations
-	  if (TARGET_XTT_TENSIX_BH_QSR)
+	  if (argno == lv_arg && lv_delta)
 	    {
-	      if (try_combine_negated_operands (probe))
-		update = true;
-	      else if (try_combine_negated_result (probe))
-		update = true;
+	      argno += lv_delta - 1;
+	      continue;
 	    }
 
-	  if (try_combine_mul_add (probe))
-	    update = true;
-	  else if (!TARGET_XTT_TENSIX_BH_QSR &&
-		   try_combine_negated_add_operand (probe))
-	    update = true;
+	  auto &arg_info = rep.args[argno];
+	  tree val = nullptr;
+	  if (arg_info.is_var)
+	    val = matched.vars[arg_info.val];
+	  else
+	    val = build_int_cst (TREE_VALUE (arg_types), arg_info.val);
+	  gimple_call_set_arg (call, argno - (argno >= lv_arg ? lv_delta : 0), val);
+	  arg_types = TREE_CHAIN (arg_types);
 	}
 
-      if (update)
-	update_ssa(TODO_update_ssa);
+      gsi_insert_before (gsi, call, GSI_SAME_STMT);
     }
 
-  load_imm_map.clear ();
+  for (int ix = pats_hwm - 1; ix--;)
+    if ((1 << ix) & matched.deleted)
+      {
+	auto gsi = gsi_for_stmt (matched.calls[ix]);
+	gsi_remove (&gsi, true);
+      }
+
+  gsi_remove (gsi, true);
+  *gsi = gsi_for_stmt (replace[shapes[reps_hwm - 1].lhs]);
+
+  if (fini_hook)
+    fini_hook (replace, matched.vars);
+}
+
+// This array is sorted by builtin-id of the last pattern insn of a combiner,
+// patterns for the same ID are sorted by priority (order in the GC file).
+static std::vector<const Combiner *> combiner_map;
+// This maps builtin ids to points in the combiner_map array.
+static std::map<rvtt_insn_data::insn_id, std::vector<const Combiner *>::iterator> starting_ids;
+
+static void
+init ()
+{
+  // We assume there will be at least one combiner
+  if (!starting_ids.empty ())
+    return;
+
+  auto id2key = [](rvtt_insn_data::insn_id id, unsigned priority = 0) {
+    return priority | unsigned (id) << 20;
+  };
+  std::map<unsigned, const Combiner *> tmp;
+
+  for (auto &combiner : combiners)
+    if (!combiner.enable_hook || combiner.enable_hook ())
+      {
+	auto id = combiner.shapes[combiner.pats_hwm - 1].id;
+	tmp.emplace (id2key (id, combiner.id), &combiner);
+	auto not_live_id = rvtt_get_insn_data (id)->get_not_live ()->id;
+	if (not_live_id != id)
+	  tmp.emplace (id2key (not_live_id, combiner.id), &combiner);
+      }
+
+  // Reserve space so iterators we put into starting_ids are not invalidated as we
+  // append to combiner_map
+  combiner_map.reserve (tmp.size () + 1);
+  auto prev_id = rvtt_insn_data::hwm;
+  for (auto I = tmp.begin (), E = tmp.end (); I != E; ++I)
+    {
+      auto new_id = rvtt_insn_data::insn_id (I->first >> 20);
+      if (new_id != prev_id)
+	{
+	  starting_ids.emplace (new_id, combiner_map.end ());
+	  prev_id = new_id;
+	}
+      combiner_map.push_back (I->second);
+    }
+  starting_ids.emplace (rvtt_insn_data::hwm, combiner_map.end ());
+}
+
+// There is at least one dynamic muli transform.  For each synth_id of such
+// transforms, if all of them are used by the new muli/addi we can reuse.
+// Otherwise we need to add new synth opcodes.
+
+static void
+addimuli_resynthing ()
+{
+  // Sort by id
+  std::sort (addimuli.begin (), addimuli.end ());
+  std::sort (synths.begin (), synths.end ());
+
+  struct synth_add {
+    gcall *synth;
+    gassign *add;
+    const rvtt_insn_data *use_insnd;
+    tree use_imm;
+  };
+  std::unordered_map<gassign *, synth_add> add_map;
+  std::unordered_set<gcall *> use_set;
+
+  unsigned id_hwm = synths.back ().id;
+
+  auto SI = synths.begin (), SE = synths.end (), SN = SI;
+  for (auto I = addimuli.begin (), E = addimuli.end (), N = I;
+       I != E; I = N, SI = SN)
+    {
+      add_map.clear ();
+      use_set.clear ();
+
+      unsigned kinds = 0;
+      unsigned id = I->id;
+      N = I;
+      do
+	{
+	  tree var = gimple_call_arg (N->call, N->insnd->var_arg ());
+	  tree imm = gimple_call_arg (N->call, N->insnd->imm_arg ());
+	  auto *def = as_a <gassign *> (SSA_NAME_DEF_STMT (var));
+	  add_map.emplace (def, synth_add {nullptr, def, N->insnd, imm});
+
+	  use_set.insert (N->call);
+	  kinds |= 1 << (N->insnd->get_not_live ()->id
+			 == rvtt_insn_data::sfpmuli);
+	}
+      while (++N != E && N->id == id);
+      // [I, N) are new insns with the same id.
+
+      // We can't get muli and addi conversions for the same ID, as that
+      // implies faulty ID generation. It'd be very bizzarre set
+      // of circumstances though.
+      if (kinds == 3)
+	internal_error ("sfpmuli & sfpaddi combines share an id");
+
+      SI = lower_bound (SI, SE, id);
+      // We expect there to be few synths of the same ID, so just search
+      // forwards
+      for (SN = SI; ++SN != SE && SN->id == id;)
+	continue;
+      // [SI, SN) are synths for the same id
+
+      // Trace every synth to see if we get to only new insns.
+      // Each use of synth's result needs to be an add whose result is used in
+      // a new insn.  Anything else is too complicated
+      bool matching = true;
+      for (auto probe = SI; probe != SN; ++probe)
+	{
+	  use_operand_p synth_use;
+	  imm_use_iterator synth_iter;
+	  FOR_EACH_IMM_USE_FAST (synth_use, synth_iter, gimple_call_lhs (probe->call))
+	    {
+	      gimple *use = USE_STMT (synth_use);
+	      if (is_gimple_debug (use))
+		continue;
+
+	      auto *assign = dyn_cast <gassign *> (use);
+	      if (!assign
+		  || gimple_assign_rhs_code (assign) != PLUS_EXPR)
+		{
+		  matching = false;
+		  continue;
+		}
+
+	      auto AMI = add_map.find (assign);
+	      if (AMI == add_map.end ())
+		{
+		  matching = false;
+		  continue;
+		}
+
+	      // Record the synth insn
+	      // This is why we keep iterating
+	      AMI->second.synth = probe->call;
+
+	      if (matching)
+		{
+		  use_operand_p add_use;
+		  imm_use_iterator add_iter;
+		  FOR_EACH_IMM_USE_FAST (add_use, add_iter, gimple_get_lhs (assign))
+		    {
+		      gimple *stmt = USE_STMT (add_use);
+		      if (is_gimple_debug (stmt))
+			continue;
+
+		      auto *call = dyn_cast <gcall *> (stmt);
+		      if (!call || use_set.find (call) == use_set.end ())
+			{
+			  matching = false;
+			  break;
+			}
+		    }
+		}
+	    }
+	}
+
+      int loadi_shift = rvtt_get_insn_data (rvtt_insn_data::sfploadi)->imm_encode ();
+      if (matching)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "All uses of synth_id %u replaced by new insns\n", id);
+
+	  // Everything is new, reuse synths
+	  for (auto AI = add_map.begin (), EI = add_map.end ();
+	       AI != EI; ++AI)
+	    {
+	      gassign *add = AI->second.add;
+
+	      tree op = gimple_assign_rhs1 (add);
+	      tree second = gimple_assign_rhs2 (add);
+	      bool is_first = second == gimple_call_lhs (AI->second.synth);
+	      if (!is_first)
+		{
+		  gcc_assert (op == gimple_call_lhs (AI->second.synth));
+		  op = second;
+		}
+
+	      // OP is the adjusted immediate, insert an additional shift of
+	      // SHIFT_DELTA
+	      int shift_delta = int (AI->second.use_insnd->imm_encode ()) - loadi_shift;
+	      gcc_assert (shift_delta > 0);
+	      tree var = make_temp_ssa_name (TREE_TYPE (op), nullptr, "xtra");
+	      gimple *shift_stmt = gimple_build_assign (var, LSHIFT_EXPR, op,
+							build_int_cst (unsigned_type_node, shift_delta));
+	      gimple_set_location (shift_stmt, gimple_location (add));
+	      auto add_gsi = gsi_for_stmt (add);
+	      gsi_insert_before (&add_gsi, shift_stmt, GSI_SAME_STMT);
+	      if (is_first)
+		gimple_assign_set_rhs1 (add, var);
+	      else
+		gimple_assign_set_rhs2 (add, var);
+	      update_stmt (add);
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Inserted ");
+		  print_gimple_stmt (dump_file, shift_stmt, 0);
+		  fprintf (dump_file, "before modified ");
+		  print_gimple_stmt (dump_file, add, 0);
+		}
+	    }
+	}
+      else
+	{
+	  // Something is still old, add new synths
+	  if (dump_file)
+	    fprintf (dump_file, "Not all uses of synth_id %u replaced by new insns\n", id);
+	  // For every add in the add_map, insert a new sequence just after
+	  // it.  If its synth insn is known, add the synth with the old one.
+	  // We can still use the masked var operand, if we can find it.
+	  tree new_id = build_int_cst (unsigned_type_node, ++id_hwm);
+
+	  // Create the new synths & adds
+	  for (auto AI = add_map.begin (), EI = add_map.end ();
+	       AI != EI; ++AI)
+	    {
+	      auto add_gsi = gsi_for_stmt (AI->first);
+
+	      // Create the new synth_opcode
+	      auto synth_insnd = rvtt_get_insn_data (rvtt_insn_data::synth_opcode);
+	      auto synth_call = gimple_build_call (synth_insnd->decl, synth_insnd->num_args ());
+	      gimple_call_set_arg (synth_call, 0, integer_zero_node);
+	      gimple_call_set_arg (synth_call, 1, new_id);
+	      auto synth_ssa = make_temp_ssa_name (unsigned_type_node, nullptr, "id");
+	      gimple_call_set_lhs (synth_call, synth_ssa);
+	      tree mask_ssa = nullptr;
+	      int shift_delta = 0;
+	      gimple *mask_stmt = nullptr;
+	      if (AI->second.synth)
+		{
+		  gimple_set_location (synth_call, gimple_location (AI->second.synth));
+		  auto synth_gsi = gsi_for_stmt (AI->second.synth);
+		  gsi_insert_before (&synth_gsi, synth_call, GSI_SAME_STMT);
+
+		  // Find the other add input, which is masked & shifted
+		  mask_ssa = gimple_assign_rhs1 (AI->first);
+		  tree second = gimple_assign_rhs2 (AI->first);
+		  if (second != gimple_call_lhs (AI->second.synth))
+		    {
+		      gcc_assert (mask_ssa == gimple_call_lhs (AI->second.synth));
+		      mask_ssa = second;
+		    }
+		  shift_delta = loadi_shift;
+		}
+	      else
+		{
+		  gimple_set_location (synth_call, gimple_location (AI->first));
+		  gsi_insert_before (&add_gsi, synth_call, GSI_SAME_STMT);
+
+		  tree imm = AI->second.use_imm;
+		  uint32_t mask = (uint32_t (1) << AI->second.use_insnd->imm_bits ()) - 1;
+		  mask_ssa = make_temp_ssa_name (unsigned_type_node, nullptr, "mask");
+		  mask_stmt = gimple_build_assign (mask_ssa,
+							   BIT_AND_EXPR, imm,
+							   build_int_cst (unsigned_type_node, mask));
+		  gimple_set_location (mask_stmt, gimple_location (AI->first));
+		  gsi_insert_before (&add_gsi, mask_stmt, GSI_SAME_STMT);
+		}
+
+	      // Create new shift
+	      shift_delta = int (AI->second.use_insnd->imm_encode ()) - shift_delta;
+	      gcc_assert (shift_delta > 0);
+	      tree var = make_temp_ssa_name (TREE_TYPE (mask_ssa), nullptr, "xtra");
+	      gimple *shift_stmt = gimple_build_assign (var, LSHIFT_EXPR, mask_ssa,
+							build_int_cst (unsigned_type_node, shift_delta));
+	      gimple_set_location (shift_stmt, gimple_location (AI->first));
+	      gsi_insert_before (&add_gsi, shift_stmt, GSI_SAME_STMT);
+
+	      // Create the new add
+	      tree add_ssa = make_temp_ssa_name (unsigned_type_node, nullptr, "sum");
+	      auto *add_stmt = gimple_build_assign (add_ssa, PLUS_EXPR, synth_ssa, var);
+	      gsi_insert_before (&add_gsi, add_stmt, GSI_SAME_STMT);
+
+	      AI->second.add = add_stmt;
+
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Creating synth sequence:\n");
+		  print_gimple_stmt (dump_file, synth_call, 2);
+		  if (mask_stmt)
+		    print_gimple_stmt (dump_file, mask_stmt, 2);
+		  print_gimple_stmt (dump_file, shift_stmt, 2);
+		  print_gimple_stmt (dump_file, add_stmt, 2);
+		}
+	    }
+
+	  // Update the new insns
+	  for (auto UI = I; UI != N; ++UI)
+	    {
+	      gimple_call_set_arg (UI->call, UI->insnd->id_arg (), new_id);
+	      tree var = gimple_call_arg (UI->call, UI->insnd->var_arg ());
+	      auto new_add = add_map.find (as_a <gassign *> (SSA_NAME_DEF_STMT (var)));
+	      gimple_call_set_arg (UI->call, UI->insnd->var_arg (), gimple_get_lhs (new_add->second.add));
+	      update_stmt (UI->call);
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Updating use ");
+		  print_gimple_stmt (dump_file, UI->call, 0);
+		}
+	    }
+	}
+    }
+}
+
+static bool
+combine_block (basic_block bb)
+{
+  bool changed = false;
+
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+       !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+    again:
+      auto *insnd = rvtt_get_insn_data (*gsi);
+      if (!insnd)
+	continue;
+
+      // Record synth_opcodes to deal with dynamic muli/addi combinations.
+      if (insnd->id == rvtt_insn_data::synth_opcode)
+	synths.emplace_back (as_a <gcall *> (*gsi), insnd,
+	    TREE_INT_CST_LOW (gimple_call_arg (as_a <gcall *> (*gsi), 1)));
+
+      auto start = starting_ids.lower_bound (insnd->id);
+      // Because we've added insn_id::hwm, start will never be
+      // starting_ids.end ()
+      if (start->first != insnd->id)
+	continue;
+      for (auto I = start->second, E = (++start)->second; I != E; ++I)
+	{
+	  auto *combiner = *I;
+	  Combiner::matched_data matched;
+	  if (!combiner->match (as_a <gcall *> (*gsi), insnd, matched))
+	    continue;
+
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Found pattern %u:\n", combiner->id);
+	      for (unsigned ix = 0; ix != combiner->pats_hwm; ix++)
+		{
+		  char c = 'K';
+		  if ((1 << ix) & combiner->replace_mask)
+		    c = 'R';
+		  else if ((1 << ix) & matched.deleted)
+		    c = 'D';
+
+		  fprintf (dump_file, "%c ", c);
+		  print_gimple_stmt (dump_file, matched.calls[ix], 2);
+		}
+	    }
+
+	  gcall *replace[combiner_reps_hwm];
+	  combiner->replace (&gsi, matched, replace);
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Replaced with:\n");
+	      for (unsigned ix = combiner->pats_hwm; ix != combiner->reps_hwm; ix++)
+		{
+		  auto *rep = replace[combiner->shapes[ix].lhs];
+		  print_gimple_stmt (dump_file, rep, 2);
+		}
+	      fprintf (dump_file, "\n");
+	    }
+	  changed = true;
+	  goto again;
+	}
+    }
+
+  return changed;
 }
 
 namespace {
@@ -990,15 +937,28 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_combine > 0;
+    return TARGET_XTT_TENSIX;
   }
-
   virtual unsigned execute (function *fn) override
   {
-    transform (fn);
-    return 0;
+    init ();
+
+    addimuli.clear ();
+    synths.clear ();
+
+    bool changed = false;
+    basic_block bb;
+
+    FOR_EACH_BB_FN (bb, fn)
+      if (combine_block (bb))
+	changed = true;
+
+    if (!addimuli.empty ())
+      addimuli_resynthing ();
+
+    return changed ? TODO_update_ssa : 0;
   }
-}; // class pass_rvtt_combine
+};
 
 } // anon namespace
 
