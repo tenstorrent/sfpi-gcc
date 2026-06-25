@@ -49,7 +49,7 @@ void two () {
 void three () {
   vSMag a = dst_reg[0];
 
-  dst_reg[3] = reinterpret<vUInt> (convert<vInt> (a));
+  dst_reg[3] = as<vUInt> (convert<vInt> (a));
   dst_reg[4] = convert<vFloat> (a);
 }
 /*

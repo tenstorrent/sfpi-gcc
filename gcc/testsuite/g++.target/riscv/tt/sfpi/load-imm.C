@@ -111,7 +111,7 @@ void four ()
 {
 #pragma GCC unroll 2
   for (unsigned ix = 0; ix != 2; ix++) {
-    vInt a = l_reg[LRegs::LReg0];
+    vUInt a = l_reg[LRegs::LReg0];
     v_if (a < 0x7fffffff + ix) {
       a = 0;
     } v_endif;
