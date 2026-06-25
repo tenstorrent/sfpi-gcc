@@ -193,9 +193,11 @@ RVTT_OVR(sfpmad_lv,      bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_U
 RVTT_FN (sfpdivp2,             ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             0, ({S, 12, 12}, {M, 0x3}))
 RVTT_FN (sfpdivp2_lv,          ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV, ({S, 12, 12}, {M, 0x3}))
 RVTT_FN (sfpcast,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x3}))
-RVTT_OVR(sfpcast,        bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0xf}))
+RVTT_OVR(sfpcast,            bh,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0xf}))
+RVTT_OVR(sfpcast,           qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                  0, ({M, 0x3f}))
 RVTT_FN (sfpcast_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x3}))
-RVTT_OVR(sfpcast_lv,     bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0xf}))
+RVTT_OVR(sfpcast_lv,         bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0xf}))
+RVTT_OVR(sfpcast_lv,        qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          LV, ({M, 0x3f}))
 
 // The RTL ors in SFPSTOCHRND_MOD1_IMM8 appropriatel
 RVTT_FN (sfpstochrnd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI,        0, ({CU, 5, 16}, {M, 0xff}, {CU, 1}))
