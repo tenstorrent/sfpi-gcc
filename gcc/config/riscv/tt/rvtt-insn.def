@@ -167,10 +167,12 @@ RVTT_FN (sfpiadd_i_lv,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_
 // gimple-rvtt-combine requires this ordering
 RVTT_FN (sfpmul,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1}))
 RVTT_FN (sfpmul_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M, 0x1}))
-RVTT_FN (sfpmuli,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             CLB(0), ({U, 16, 8}, {M, 0x100}))
+RVTT_FN (sfpmuli,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             CLB(0), ({U, 16, 8}, {M, 0x1}))
+RVTT_FN (sfpmuli_lv,           ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV|CLB(0), ({U, 16, 8}, {M, 0x1}))
 RVTT_FN (sfpadd,               ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1}))
 RVTT_FN (sfpadd_lv,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M, 0x1}))
-RVTT_FN (sfpaddi,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             CLB(0), ({U, 16, 8}, {M, 0x100}))
+RVTT_FN (sfpaddi,              ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             CLB(0), ({U, 16, 8}, {M, 0x1}))
+RVTT_FN (sfpaddi_lv,           ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     LV|CLB(0), ({U, 16, 8}, {M, 0x1}))
 
 RVTT_FN (sfpsetexp_v,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CLB(1), ({M, 0x5}, {}))
 RVTT_FN (sfpsetexp_v_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CLB(1), ({M, 0x5}, {}))
