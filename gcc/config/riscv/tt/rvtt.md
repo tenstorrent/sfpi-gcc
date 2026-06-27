@@ -976,46 +976,75 @@
 	  ] rvtt_muliaddi_op))]
   "TARGET_XTT_TENSIX"
 {
+  emit_insn (gen_rvtt_sfp<rvtt_muliaddi_name>_lv
+    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
+     operands[2], operands[3], operands[4], operands[5], operands[6]));
+  DONE;
+})
+
+(define_expand "rvtt_sfp<rvtt_muliaddi_name>_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand")
+        (unspec_volatile:XTT32SI [
+	  (match_operand:SI    1 "reg_or_0_operand")
+          (match_operand:XTT32SI 2 "reg_or_cstlreg_or_noval_operand")
+          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
+          (match_operand:SI    4 "reg_or_const_int_operand")
+          (match_operand:SI    5 "reg_or_0_operand")
+          (match_operand:SI    6 "const_int_operand")
+          (match_operand:SI    7 "const_int_operand")
+	  ] rvtt_muliaddi_op))]
+  "TARGET_XTT_TENSIX"
+{
   auto mem = const0_rtx;
   auto opc = const0_rtx;
   auto enc = const0_rtx;
-  auto imm = operands[3];
+  auto imm = operands[4];
   if (!CONST_INT_P (imm))
     {
       mem = gen_rtx_MEM (SImode, operands[1]);
       int op
-        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
-	: TARGET_XTT_TENSIX_BH 	? TT_OP_BH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
-	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[6]))
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[7]))
+	: TARGET_XTT_TENSIX_BH 	? TT_OP_BH_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[7]))
+	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFP<rvtt_muliaddi_insn> (0, 0, INTVAL (operands[7]))
         : (gcc_unreachable (), 0);
       opc = GEN_INT (op);
-      enc = GEN_INT (rvtt_synth (UINTVAL (operands[5])).src_shift (4).dst_shift (4));
-      imm = operands[4];
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[6])).src_shift (4).dst_shift (4));
+      imm = operands[5];
     }
 
-  emit_insn (gen_rvtt_sfp<rvtt_muliaddi_name>_int
+  emit_insn (gen_rvtt_sfp<rvtt_muliaddi_name>_int_lv
     (operands[0], mem, opc, enc, imm,
-     operands[2], rvtt_gen_rtx_noval (XTT32SImode), operands[6]));
+     operands[3], operands[2], operands[7]));
   DONE;
 })
 
-(define_insn "rvtt_sfp<rvtt_muliaddi_name>_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
+(define_insn_and_rewrite "rvtt_sfp<rvtt_muliaddi_name>_int_lv"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
-          (match_operand:SI    1 "mem_or_0_operand" "J,m")
-          (match_operand:SI    2 "const_int_operand" "J,n") ;; opcode
-          (match_operand:SI    3 "const_int_operand" "J,n") ;; id, src & dst shifts
-          (match_operand:SI    4 "reg_or_const_int_operand" "n,r") ;; imm or insn
-          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand" "0,0") ;; src
-          (match_operand:XTT32SI 6 "noval_operand" "xn,xn") ;; lv
-          (match_operand:SI    7 "const_int_operand" "n,n")
+          (match_operand:SI    1 "mem_or_0_operand" "J,J,J,m,m,m")
+          (match_operand:SI    2 "const_int_operand" "J,J,J,n,n,n") ;; opcode
+          (match_operand:SI    3 "const_int_operand" "J,J,J,n,n,n") ;; id, src & dst shifts
+          (match_operand:SI    4 "reg_or_const_int_operand" "n,n,n,r,r,r") ;; imm or insn
+          (match_operand:XTT32SI 5 "reg_or_cstlreg_operand" "0,0,0,0,0,0") ;; src
+          (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_or_omit_operand" "xn,xo,xrxc,xn,xo,xrxc") ;; lv
+          (match_operand:SI    7 "const_int_operand" "n,n,n,n,n,n")
           ] rvtt_muliaddi_op))
-   (clobber (match_scratch:SI  8 "=X,&r"))]
+   (clobber (match_scratch:SI  8 "=X,X,X,&r,&r,&r"))]
   "TARGET_XTT_TENSIX"
   {
-    return rvtt_synth::pattern (which_alternative,
-      "SFP<rvtt_muliaddi_insn>\t%x0, %4, %7",
-      operands, true, 8);
+    int which = which_alternative;
+    bool dyn = which >= 3;
+    if (dyn)
+      which -= 3;
+    return rvtt_synth::pattern (dyn,
+    which == 0 ? "SFP<rvtt_muliaddi_insn>\t%x0, %4, %7" :
+    which == 1 ? "SFP<rvtt_muliaddi_insn>\t%x0, %4, %7\t# LV:%x5" :
+    "#",
+    operands, true, 8);
+  }
+  "&& !noval_or_omit_operand (operands[6], GET_MODE (operands[6]))"
+  {
+    rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
