@@ -299,26 +299,27 @@ immvar_gather (const rvtt_insn_data *insnd,
 }
 
 static void
-replace_loadi (gcall *call, gcall *earlier, int op, tree val, gcall *add_call = nullptr)
+replace_loadi (gcall *call, gcall *earlier, int op, tree val,
+	       gcall *extra_call = nullptr, const rvtt_insn_data *extra_insnd = nullptr)
 {
-  const auto *reg_insnd = !val || add_call ? rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg) : nullptr;
-  const auto *other_insnd = val ? rvtt_get_insn_data
-    (add_call ? rvtt_insn_data::sfpiadd_i : rvtt_insn_data::sfploadi) : nullptr;
+  const auto *reg_insnd = !val || extra_call ? rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg) : nullptr;
+  const auto *other_insnd = !val ? nullptr :
+    extra_insnd ? extra_insnd : rvtt_get_insn_data (rvtt_insn_data::sfploadi);
   const auto *new_insnd = reg_insnd ? reg_insnd : other_insnd;
 
   gimple *new_call = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call,
-		       add_call ? gimple_call_arg (add_call, 1) : gimple_call_lhs (call));
+		       extra_call ? gimple_call_arg (extra_call, 1) : gimple_call_lhs (call));
   if (val)
     {
-      auto *imm_call = add_call ? add_call : new_call;
+      auto *imm_call = extra_call ? extra_call : new_call;
       gimple_call_set_arg (imm_call, 0, null_pointer_node);
       gimple_call_set_arg (imm_call, other_insnd->imm_arg (), val);
       gimple_call_set_arg (imm_call, other_insnd->var_arg (), integer_zero_node);
       gimple_call_set_arg (imm_call, other_insnd->id_arg (), integer_zero_node);
     }
-  gimple_call_set_arg (new_call, val && !add_call ? new_insnd->mod_arg () : 0,
+  gimple_call_set_arg (new_call, val && !extra_call ? new_insnd->mod_arg () : 0,
 		       build_int_cst (unsigned_type_node, op));
 
   if (dump_file)
@@ -329,14 +330,14 @@ replace_loadi (gcall *call, gcall *earlier, int op, tree val, gcall *add_call = 
       print_gimple_stmt (dump_file, call, 2);
       fprintf (dump_file, "with\n");
       print_gimple_stmt (dump_file, new_call, 2);
-      if (add_call)
-	print_gimple_stmt (dump_file, add_call, 2);
+      if (extra_call)
+	print_gimple_stmt (dump_file, extra_call, 2);
     }
 
   auto gsi = gsi_for_stmt (call);
   gsi_insert_before (&gsi, new_call, GSI_SAME_STMT);
-  if (add_call)
-    gsi_insert_before (&gsi, add_call, GSI_SAME_STMT);
+  if (extra_call)
+    gsi_insert_before (&gsi, extra_call, GSI_SAME_STMT);
   gsi_remove (&gsi, true);
 }
 
@@ -399,7 +400,8 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       tree upper_val = gimple_call_arg (upper, insnd[1].imm_arg ());
       uint32_t upper_ival = TREE_INT_CST_LOW (upper_val);
       int op = -1;
-      gcall *add_call = nullptr;
+      gcall *extra_call = nullptr;
+      const rvtt_insn_data *extra_insnd = nullptr;
 
       if (!ival)
 	{
@@ -475,28 +477,62 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	constexpr unsigned sfpiadd_i_bits = 12;
 
 	uint32_t full_ival = ival | upper_ival << 16;
+	bool neg = full_ival >> 31;
+	unsigned top_zeroes = 0, bot_zeroes = 0;
+	if (TARGET_XTT_TENSIX_BH_QSR)
+	  {
+	    top_zeroes = clz_hwi (neg ? ~full_ival : full_ival);
+	    bot_zeroes = ctz_hwi (full_ival);
+	  }
+
 	for (auto const &cst : csts) {
 	  uint32_t delta = full_ival - cst.val;
+	  unsigned imod = 0;
 	  if (delta + (1u << (sfpiadd_i_bits - 1)) < (1u << sfpiadd_i_bits))
 	    {
 	      // known constant + delta
+	      upper_val = build_int_cst (unsigned_type_node, delta);
+	      extra_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_i);
+	      imod = SFPIADD_MOD1_CC_NONE;
+
+	    replace_pair:
 	      op = cst.reg;
-	      upper_val = nullptr;
-	      if (delta)
+	      if (!delta)
+		upper_val = nullptr;
+	      else
 		{
-		  auto const *add_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_i);
-		  add_call = gimple_build_call (add_insnd->decl, add_insnd->num_args ());
+		  extra_call = gimple_build_call (extra_insnd->decl, extra_insnd->num_args ());
 
-		  gimple_set_location (add_call, gimple_location (upper));
-		  gimple_call_set_arg (add_call, 1,
+		  gimple_set_location (extra_call, gimple_location (upper));
+		  gimple_call_set_arg (extra_call, 1,
 				       make_ssa_name (TREE_TYPE (gimple_call_lhs (call))));
-		  upper_val = build_int_cst (unsigned_type_node, delta);
-
-		  gimple_call_set_lhs (add_call, gimple_call_lhs (upper));
-		  gimple_call_set_arg (add_call, add_insnd->mod_arg (),
-				       build_int_cst (unsigned_type_node, SFPIADD_MOD1_CC_NONE));
+		  gimple_call_set_lhs (extra_call, gimple_call_lhs (upper));
+		  gimple_call_set_arg (extra_call, extra_insnd->mod_arg (),
+				       build_int_cst (unsigned_type_node, imod));
 		}
 	      goto replace;
+	    }
+	  if (TARGET_XTT_TENSIX_BH_QSR)
+	    {
+	      // We could look for shift opportunities sfpshft_i
+	      unsigned cst_zeroes = clz_hwi (neg ? ~cst.val : cst.val);
+	      int shift = top_zeroes - cst_zeroes;
+	      if (shift > 0 && (neg ? int32_t (cst.val) >> shift : cst.val >> shift) == full_ival)
+		{
+		  shift = -shift;
+		  if (neg)
+		    imod |= SFPSHFT_MOD1_ARITHMETIC;
+		  // sfpshft_i
+		replace_shft:
+		  upper_val = build_int_cst (integer_type_node, shift);
+		  extra_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpshft_i);
+		  goto replace_pair;
+		}
+
+	      cst_zeroes = ctz_hwi (cst.val);
+	      shift = bot_zeroes - cst_zeroes;
+	      if (shift > 0 && cst.val << shift == full_ival)
+		goto replace_shft;
 	    }
 	}
       }
@@ -506,7 +542,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       continue;
 
     replace:
-      replace_loadi (upper, call, op, upper_val, add_call);
+      replace_loadi (upper, call, op, upper_val, extra_call, extra_insnd);
       changed = true;
     }
 

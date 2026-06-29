@@ -95,3 +95,39 @@ void nearp8373 ()
 **	ret
 */
 
+// I learnt this trick from LLK.  Make sure I get it right!
+void llk ()
+{
+  vFloat a = 0.999963462f;
+  vFloat b = as<vFloat>(as<vInt>(vFloat(1.0f)) - 613);
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
+}
+/*
+**_Z3llkv:
+**	SFPIADD	L0, L10, -613, 5
+**	SFPIADD	L1, L10, -613, 5
+**	# WRITE L0
+**	# WRITE L1
+**	ret
+*/
+
+void shft ()
+{
+  vInt a = 0x003f8000;
+  vInt b = 0xffbf8000;
+  vInt c = 0x56594b00;
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
+  l_reg[LRegs::LReg2] = c;
+}
+/*
+**_Z4shftv:
+**	SFPSHFT	L0, L10, -8, 5
+**	SFPSHFT	L1, L11, -8, 7
+**	SFPSHFT	L2, L8, 8, 5
+**	# WRITE L0
+**	# WRITE L1
+**	# WRITE L2
+**	ret
+*/
