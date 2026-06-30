@@ -72,6 +72,22 @@ using namespace std;
 static std::vector<tree> load_imm_map;
 
 static bool
+rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *g)
+{
+  *stmt = dyn_cast<gcall *> (g);
+  if (!*stmt)
+    return false;
+  *insnd = rvtt_get_insn_data (*stmt);
+  return *insnd;
+}
+
+static bool
+rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
+{
+  return rvtt_p (insnd, stmt, gsi_stmt (gsi));
+}
+
+static bool
 is_int_arg(gcall *stmt, unsigned int arg)
 {
   tree decl = gimple_call_arg(stmt, arg);

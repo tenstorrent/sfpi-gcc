@@ -242,22 +242,6 @@ rvtt_get_insn_data (gimple *stmt)
 }
 
 bool
-rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *g)
-{
-  *stmt = dyn_cast<gcall *> (g);
-  if (!*stmt)
-    return false;
-  *insnd = rvtt_get_insn_data (*stmt);
-  return *insnd;
-}
-
-bool
-rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi)
-{
-  return rvtt_p (insnd, stmt, gsi_stmt (gsi));
-}
-
-bool
 rvtt_insn_data::sets_cc (gcall *stmt) const
 {
   if (auto mask = cc_mask)

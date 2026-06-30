@@ -247,10 +247,9 @@ check (function *fn, bool is_early)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	 !gsi_end_p (gsi); gsi_next (&gsi))
       {
-	gcall *call;
-	const rvtt_insn_data *insnd;
-	if (rvtt_p (&insnd, &call, gsi))
+	if (auto *insnd = rvtt_get_insn_data (*gsi))
 	  {
+	    auto *call = as_a <gcall *> (*gsi);
 	    changed |= check_int_args (is_early, insnd, call);
 
 	    if (!is_early)

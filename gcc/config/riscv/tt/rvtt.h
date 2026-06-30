@@ -305,9 +305,6 @@ extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id);
 extern const rvtt_insn_data *rvtt_get_insn_data (gimple *stmt);
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall *stmt);
 
-extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple *gimp);
-extern bool rvtt_p(const rvtt_insn_data **insnd, gcall **stmt, gimple_stmt_iterator gsi);
-
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 extern bool rvtt_get_fp16b(tree *value, gcall *stmt, const rvtt_insn_data *insnd);
 

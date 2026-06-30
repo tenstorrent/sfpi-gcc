@@ -43,14 +43,11 @@ along with GCC; see the file COPYING3.  If not see
 static bool
 lv_is_noval (tree var)
 {
-  gcall *call;
-  const rvtt_insn_data *insnd;
-
   // Should we look through PHIs?
-  if (!rvtt_p (&insnd, &call, SSA_NAME_DEF_STMT (var)))
-    return false;
+  if (auto *insnd = rvtt_get_insn_data (SSA_NAME_DEF_STMT (var)))
+    return insnd->id == rvtt_insn_data::sfpnovalue;
 
-  return insnd->id == rvtt_insn_data::sfpnovalue;
+  return false;
 }
 
 static void
@@ -116,13 +113,14 @@ public:
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gcall *call;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, &call, gsi)
-	      && insnd->id == rvtt_insn_data::sfpassign_lv
-	      && gimple_call_lhs (call)
-	      && lv_is_noval (gimple_call_arg (call, 0)))
-	    assigns.push_back (call);
+	  if (auto *insnd = rvtt_get_insn_data (*gsi))
+	    {
+	      auto *call = as_a <gcall *> (*gsi);
+	      if (insnd->id == rvtt_insn_data::sfpassign_lv
+		  && gimple_call_lhs (call)
+		  && lv_is_noval (gimple_call_arg (call, 0)))
+		assigns.push_back (call);
+	    }
 	}
 
     for (auto *assign : assigns)
