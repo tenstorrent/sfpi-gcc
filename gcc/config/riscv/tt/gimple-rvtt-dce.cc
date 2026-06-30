@@ -52,10 +52,9 @@ gather_insns (function *fn, std::unordered_set<gcall *> &insns, std::vector<gcal
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	 !gsi_end_p (gsi); gsi_next (&gsi))
       {
-	gcall *call;
-	const rvtt_insn_data *insnd;
-	if (rvtt_p (&insnd, &call, gsi))
+	if (auto *insnd = rvtt_get_insn_data (*gsi))
 	  {
+	    auto *call = as_a <gcall *> (*gsi);
 	    if (insnd->id == rvtt_insn_data::synth_opcode)
 	      ; // Usual DCE works for this, (and this pass does not)
 	    else if (insnd->has_side_effects (call))

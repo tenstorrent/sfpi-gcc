@@ -369,10 +369,10 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       gimple *use_stmt = USE_STMT (use_p);
       if (is_gimple_debug (use_stmt))
 	continue;
-      const rvtt_insn_data *use_insnd;
-      gcall *use_call;
-      if (!rvtt_p (&use_insnd, &use_call, use_stmt))
+      auto *use_insnd = rvtt_get_insn_data (use_stmt);
+      if (!use_insnd)
 	continue;
+      auto *use_call = as_a <gcall *> (use_stmt);
 
       if (first_mod == SFPLOADI_MOD0_USHORT
 	  && use_insnd->id == rvtt_insn_data::sfploadi_lv
@@ -763,15 +763,13 @@ public:
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi);)
 	{
-	  gcall *call;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, &call, gsi)
-	      && immvar_expand (gsi, insnd, call))
-	    {
-	      gsi_remove (&gsi, true);
-	      changed = true;
-	      continue;
-	    }
+	  if (auto *insnd = rvtt_get_insn_data (*gsi))
+	    if (immvar_expand (gsi, insnd, as_a <gcall *> (*gsi)))
+	      {
+		gsi_remove (&gsi, true);
+		changed = true;
+		continue;
+	      }
 
 	  gsi_next (&gsi);
 	}
@@ -827,13 +825,9 @@ public:
     FOR_EACH_BB_FN (bb, fn)
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi); gsi_next (&gsi))
-	{
-	  gcall *call;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, &call, gsi)
-	      && immvar_gather  (insnd, call, loads))
+	if (auto *insnd = rvtt_get_insn_data (*gsi))
+	  if (immvar_gather  (insnd, as_a <gcall *> (*gsi), loads))
 	    changed = true;
-	}
 
     for (auto *call : loads)
       if (immvar_simplify (call, uppers))
@@ -887,11 +881,9 @@ public:
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi);)
 	{
-	  gcall *call;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p (&insnd, &call, gsi))
+	  if (auto *insnd = rvtt_get_insn_data (*gsi))
 	    if (auto *scalar = insnd->get_scalar ())
-	      if (immload_combine (gsi, insnd, call, scalar))
+	      if (immload_combine (gsi, insnd, as_a <gcall *> (*gsi), scalar))
 		{
 		  gsi_remove (&gsi, true);
 		  changed = true;

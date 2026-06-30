@@ -137,11 +137,10 @@ process_block_stmts(basic_block bb,
 
   for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
-      gcall *stmt;
-      const rvtt_insn_data *insnd;
-
-      if (!rvtt_p(&insnd, &stmt, gsi))
+      auto *insnd = rvtt_get_insn_data (*gsi);
+      if (!insnd)
 	continue;
+      auto *stmt = as_a <gcall *> (*gsi);
 
       found_sfpu = true;
       if (insnd->id == rvtt_insn_data::sfppushc)
@@ -225,22 +224,14 @@ process_block(function *fn,
 	  // without as live
 	  get<BD_Live>(bd[bb->index]) = true;
 
-	  gimple_stmt_iterator gsi;
-	  gsi = gsi_start_bb (bb);
-	  while (!gsi_end_p (gsi))
-	    {
-	      gcall *stmt;
-	      const rvtt_insn_data *insnd;
-	      if (rvtt_p(&insnd, &stmt, gsi))
-		{
-		  auto loc = liveness.find(stmt);
-		  if (loc != liveness.end())
-		    {
-		      loc->second.force = true;
-		    }
-		}
-	      gsi_next (&gsi);
-	    }
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    if (rvtt_get_insn_data (*gsi))
+	      {
+		auto loc = liveness.find(as_a <gcall *> (*gsi));
+		if (loc != liveness.end())
+		  loc->second.force = true;
+	      }
 	}
 
       return false;
@@ -502,26 +493,24 @@ fold_live_assign (function *fn)
     gsi = gsi_start_bb (bb);
     while (!gsi_end_p (gsi))
       {
-	gcall *stmt;
-	const rvtt_insn_data *insnd;
-	if (rvtt_p (&insnd, &stmt, gsi) &&
-	    insnd->id == rvtt_insn_data::sfpassign_lv)
+	auto *insnd = rvtt_get_insn_data (*gsi);
+	if (insnd && insnd->id == rvtt_insn_data::sfpassign_lv)
 	  {
+	    auto *stmt = as_a <gcall *> (*gsi);
 	    tree lhs = gimple_call_lhs (stmt);
 	    tree live_arg = gimple_call_arg (stmt, 0);
 	    tree assgn_arg = gimple_call_arg (stmt, 1);
 
 	    gimple_stmt_iterator prev_gsi = gsi;
 	    gsi_prev_nondebug (&prev_gsi);
-	    gcall *prev_stmt;
-	    const rvtt_insn_data *prev_insnd;
+	    auto *prev_insnd = !gsi_end_p (prev_gsi)
+	      ? rvtt_get_insn_data (*prev_gsi) : nullptr;
 
-	    if (!gsi_end_p (prev_gsi)
-		  && rvtt_p (&prev_insnd, &prev_stmt, prev_gsi) &&
-		dyn_cast<gcall *>(SSA_NAME_DEF_STMT (assgn_arg)) == prev_stmt)
+	    if (prev_insnd && SSA_NAME_DEF_STMT (assgn_arg) == *prev_gsi)
 	      {
 		DUMP("    folding %s\n", prev_insnd->name);
 
+		auto *prev_stmt = as_a <gcall *> (*prev_gsi);
 		gcall *prev2_stmt = nullptr;
 		if (prev_insnd->is_live ())
 		  {
@@ -532,8 +521,7 @@ fold_live_assign (function *fn)
 		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfploadi_lv);
 		    prev2_stmt = prev_stmt;
 		    gsi_prev_nondebug (&prev_gsi);
-		    rvtt_p (&prev_insnd, &prev_stmt, prev_gsi);
-		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfploadi);
+		    gcc_assert(rvtt_get_insn_data (*prev_gsi)->id == rvtt_insn_data::sfploadi);
 		  }
 
 		const rvtt_insn_data *new_insnd = prev_insnd->get_live ();

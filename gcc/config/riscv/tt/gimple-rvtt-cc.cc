@@ -99,10 +99,9 @@ process_block_stmts(basic_block bb,
   gsi = gsi_start_bb (bb);
   while (!gsi_end_p (gsi))
     {
-      gcall *stmt;
-      const rvtt_insn_data *insnd;
-      if (rvtt_p(&insnd, &stmt, gsi))
+      if (auto *insnd = rvtt_get_insn_data (*gsi))
 	{
+	  auto *stmt = as_a <gcall *> (*gsi);
 	  switch (insnd->id)
 	    {
 	    case rvtt_insn_data::sfppushc:
@@ -233,7 +232,7 @@ process_block_stmts(basic_block bb,
 		break;
 	    }
 	}
-      else if (gsi_stmt(gsi)->code == GIMPLE_CALL)
+      else if (is_a<gcall *> (*gsi))
 	{
 	  DUMP("Intervening fn call\n");
 	  prior_removable = false;

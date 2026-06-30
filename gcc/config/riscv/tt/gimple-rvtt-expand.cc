@@ -276,13 +276,11 @@ mark_vif_stmts(gimple_stmt_iterator top,
   while (top.ptr != bot.ptr &&
 	 !gsi_end_p(top))
     {
-      gcall* stmt;
-      const rvtt_insn_data *insnd;
-      if (rvtt_p(&insnd, &stmt, top))
+      if (rvtt_get_insn_data (*top))
 	{
-	  if (vif_stmts.find(stmt) == vif_stmts.end())
+	  if (vif_stmts.find(as_a <gcall *> (*top)) == vif_stmts.end())
 	    {
-	      vif_stmts.insert({stmt, true});
+	      vif_stmts.insert({as_a <gcall *> (*top), true});
 	    }
 	  else
 	    {
@@ -609,11 +607,10 @@ transform (function *fun)
 	  gimple_stmt_iterator next_gsi = gsi;
 	  gsi_next(&next_gsi);
 
-	  gcall *stmt;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p(&insnd, &stmt, gsi) &&
-	      insnd->id == rvtt_insn_data::sfpxcondb)
+	  auto *insnd = rvtt_get_insn_data (*gsi);
+	  if (insnd && insnd->id == rvtt_insn_data::sfpxcondb)
 	    {
+	      auto *stmt = as_a <gcall *> (*gsi);
 	      DUMP("  process xcondb\n");
 	      // This will be the sfpxvif stmt
 	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_TREE_ARG_POS)));
@@ -642,12 +639,11 @@ transform (function *fun)
 	  gimple_stmt_iterator next_gsi = gsi;
 	  gsi_next(&next_gsi);
 
-	  gcall *stmt;
-	  const rvtt_insn_data *insnd;
-	  if (rvtt_p(&insnd, &stmt, gsi))
+	  if (auto *insnd = rvtt_get_insn_data (*gsi))
 	    {
 	      if (insnd->id == rvtt_insn_data::sfpxcondi)
 		{
+		  auto *stmt = as_a <gcall *> (*gsi);
 		  DUMP("  process xcondi tree\n");
 		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
 		  expand_xcondi(stmt);

@@ -141,7 +141,6 @@ AVAIL (tensix, TARGET_XTT_TENSIX)
 AVAIL (tensixbh, TARGET_XTT_TENSIX_BH)
 AVAIL (tensixbh_qsr, TARGET_XTT_TENSIX_BH_QSR)
 AVAIL (tensixqsr, TARGET_XTT_TENSIX_QSR)
-AVAIL (tensixwh, TARGET_XTT_TENSIX_WH)
 AVAIL (roccqsr, TARGET_XTT_ROCC_QSR)
 
 /* Construct a riscv_builtin_description from the given arguments like RISCV_BUILTIN.
