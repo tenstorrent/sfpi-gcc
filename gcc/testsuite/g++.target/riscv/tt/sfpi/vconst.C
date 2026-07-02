@@ -22,8 +22,8 @@ void fp () {
   vConstFloatPrgm0 = 2.5f;
 
   vFloat inp = 0;
-  vFloat den = vConst1 - inp;
-  dst_reg[0] = vConst1;
+  vFloat den = 1.0f - inp;
+  dst_reg[0] = vFloat (1.0f);
   __builtin_rvtt_sfpwritelreg (den.get (), 3);
 }
 /*

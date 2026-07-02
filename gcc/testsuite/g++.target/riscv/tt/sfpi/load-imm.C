@@ -172,16 +172,11 @@ void loop ()
 */
 
 void cfg () {
-  vConst0 = 0;
-  vConst1 = 1;
-  vConstNeg1 = -1;
+  constexpr impl_::LRegFile::vCReg<vFloat> neg1 (CREG_IDX_NEG_1);
+  neg1 = -1.0f;
 }
 /*
 **_Z3cfgv:
-**	SFPLOADI	L0, 0, 0
-**	SFPCONFIG	9, 0, 0	# R:L0 CFG:9
-**	SFPLOADI	L0, 16256, 0
-**	SFPCONFIG	10, 0, 0	# R:L0 CFG:10
 **	SFPLOADI	L0, 49024, 0
 **	SFPCONFIG	11, 0, 0	# R:L0 CFG:11
 **	ret
