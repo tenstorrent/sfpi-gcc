@@ -60,7 +60,6 @@
   UNSPECV_SFPADDI
   UNSPECV_SFPMAD
   UNSPECV_SFPIADD
-  UNSPECV_SFPIADD_OLD
 
   UNSPECV_SFPMOV
   UNSPECV_SFPEXEXP
@@ -1048,32 +1047,6 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
-
-(define_insn "rvtt_sfpiadd_v_int_old"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	(match_operand:XTT32SI 1 "register_operand"  "0")
-        (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-        (match_operand:SI      3 "const_int_operand" "n")
-	] UNSPECV_SFPIADD_OLD))]
-  "TARGET_XTT_TENSIX"
-  "SFPIADD\t%x0, %x2, 0, %3"
-  [(set_attr "type" "tensix")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
-
-(define_insn "rvtt_sfpiadd_i_lv_int_old"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_or_noval_operand" "xn,0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc,xrxc")
-          (match_operand:SI    3 "const_int_operand" "n,n")
-          (match_operand:SI    4 "const_int_operand" "n,n")
-	  ] UNSPECV_SFPIADD_OLD))]
-  "TARGET_XTT_TENSIX"
-  "@
-   SFPIADD\t%x0, %x2, %3, %4
-   SFPIADD\t%x0, %x2, %3, %4\t# LV:%x1"
-  [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpiadd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
