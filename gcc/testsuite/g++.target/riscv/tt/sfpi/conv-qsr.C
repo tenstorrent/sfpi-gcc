@@ -58,3 +58,31 @@ void three () {
 **	SFPSTORE	L0, 8, 0, 7, 0, 0
 **	ret
 */
+
+void twostep1 () {
+  vInt a = l_reg[LRegs::LReg0];
+
+  l_reg[LRegs::LReg0] = convert<vFloat> (a);
+}
+/*
+**_Z8twostep1v:
+**	# READ L0
+**	SFPCAST	L0, L0, 3
+**	SFPCAST	L0, L0, 1
+**	# WRITE L0
+**	ret
+*/
+
+void twostep2 () {
+  vFloat a = l_reg[LRegs::LReg0];
+
+  l_reg[LRegs::LReg0] = convert<vInt> (a);
+}
+/*
+**_Z8twostep2v:
+**	# READ L0
+**	SFPCAST	L0, L0, 5
+**	SFPCAST	L0, L0, 2
+**	# WRITE L0
+**	ret
+*/
