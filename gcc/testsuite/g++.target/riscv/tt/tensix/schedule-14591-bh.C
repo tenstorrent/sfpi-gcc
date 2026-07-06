@@ -67,25 +67,6 @@ void mad_shftv () {
 **	ret
 */
 
-void mad_shfti () {
-  auto a = __builtin_rvtt_sfpreadlreg(0);
-  auto b = __builtin_rvtt_sfpreadlreg(1);
-  auto neg1 = __builtin_rvtt_sfpreadlreg(11);
-  auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpshft_i(iptr, r, 2, 0, 0, 0);
-  __builtin_rvtt_sfpwritelreg(s, 3);
-}
-/*
-**_ZN3nop9mad_shftiEv:
-** 	# READ L0
-**	# READ L1
-**	SFPMAD	L0, L11, L0, L1, 0
-**	SFPNOP
-**	SFPSHFT	L3, L0, 2, 5
-**	# WRITE L3
-**	ret
-*/
-
 void mad_iadd () {
   auto a = __builtin_rvtt_sfpreadlreg(0);
   auto b = __builtin_rvtt_sfpreadlreg(1);
@@ -215,6 +196,24 @@ void mad_shft2 () {
 // for the mad_pipeline delay.
 
 namespace nonop {
+
+void mad_shfti () {
+  auto a = __builtin_rvtt_sfpreadlreg(0);
+  auto b = __builtin_rvtt_sfpreadlreg(1);
+  auto neg1 = __builtin_rvtt_sfpreadlreg(11);
+  auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
+  auto s = __builtin_rvtt_sfpshft_i(iptr, r, 2, 0, 0, 0);
+  __builtin_rvtt_sfpwritelreg(s, 3);
+}
+/*
+**_ZN5nonop9mad_shftiEv:
+** 	# READ L0
+**	# READ L1
+**	SFPMAD	L0, L11, L0, L1, 0
+**	SFPSHFT	L3, L0, 2, 5
+**	# WRITE L3
+**	ret
+*/
 
 void mad_mul () {
   auto a = __builtin_rvtt_sfpreadlreg(0);

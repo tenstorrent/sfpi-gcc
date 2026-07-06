@@ -1224,8 +1224,7 @@
        operands[5], operands[7]));
     DONE;
   }
-  [(set_attr "type" "tensix")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+  [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpiadd_i_nv"
   [(unspec_volatile:XTT32SI [
@@ -1243,8 +1242,7 @@
       "SFPIADD\tL15, %x4, %3, %5",
       operands, false, 6);
   }
-  [(set_attr "type" "tensix")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+  [(set_attr "type" "tensix")])
 
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
@@ -1701,8 +1699,7 @@
       : "SFPSHFT\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  [(set_attr "type" "tensix")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+  [(set_attr "type" "tensix")])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
