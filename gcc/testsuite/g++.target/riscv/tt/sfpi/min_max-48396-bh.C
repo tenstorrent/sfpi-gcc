@@ -241,3 +241,73 @@ void ice ()
 **	# WRITE L2
 **	ret
 */
+
+void minl ()
+{
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat b = l_reg[LRegs::LReg1];
+
+  a = min (a, b);
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
+}
+/*
+**_Z4minlv:
+**	# READ L0
+**	# READ L1
+**	SFPMOV	L2, L1, 2
+**	SFPSWAP	L0, L2, 1
+**	SFPNOP
+**	# WRITE L0
+**	# WRITE L1
+**	ret
+*/
+
+void maxl ()
+{
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat b = l_reg[LRegs::LReg1];
+
+  a = max (a, b);
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
+}
+/*
+**_Z4maxlv:
+**	# READ L0
+**	# READ L1
+**	SFPMOV	L2, L1, 2
+**	SFPSWAP	L2, L0, 1
+**	SFPNOP
+**	# WRITE L0
+**	# WRITE L1
+**	ret
+*/
+
+void clampl ()
+{
+  vFloat a = l_reg[LRegs::LReg0];
+  vFloat b = l_reg[LRegs::LReg1];
+  vFloat c = l_reg[LRegs::LReg2];
+
+  a = clamp (a, b, c);
+  l_reg[LRegs::LReg0] = a;
+  l_reg[LRegs::LReg1] = b;
+  l_reg[LRegs::LReg2] = c;
+}
+/*
+**_Z6clamplv:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPMOV	L3, L1, 2
+**	SFPSWAP	L3, L0, 1
+**	SFPNOP
+**	SFPMOV	L3, L2, 2
+**	SFPSWAP	L0, L3, 1
+**	SFPNOP
+**	# WRITE L0
+**	# WRITE L1
+**	# WRITE L2
+**	ret
+*/
