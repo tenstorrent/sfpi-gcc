@@ -229,7 +229,6 @@ void minl ()
 **	# READ L1
 **	SFPMOV	L2, L1, 2
 **	SFPSWAP	L0, L2, 1
-**	SFPNOP
 **	# WRITE L0
 **	# WRITE L1
 **	ret
@@ -250,7 +249,6 @@ void maxl ()
 **	# READ L1
 **	SFPMOV	L2, L1, 2
 **	SFPSWAP	L2, L0, 1
-**	SFPNOP
 **	# WRITE L0
 **	# WRITE L1
 **	ret
@@ -274,10 +272,8 @@ void clampl ()
 **	# READ L2
 **	SFPMOV	L3, L1, 2
 **	SFPSWAP	L3, L0, 1
-**	SFPNOP
 **	SFPMOV	L3, L2, 2
 **	SFPSWAP	L0, L3, 1
-**	SFPNOP
 **	# WRITE L0
 **	# WRITE L1
 **	# WRITE L2
