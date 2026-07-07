@@ -81,7 +81,6 @@ void mad_swap () {
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
 **	SFPSWAP	L0, L1, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -103,7 +102,6 @@ void mad_swap_cst1 () {
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
 **	SFPSWAP	L0, L10, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -125,7 +123,6 @@ void mad_swap_cst2 () {
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
 **	SFPSWAP	L10, L0, 0
-**	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */

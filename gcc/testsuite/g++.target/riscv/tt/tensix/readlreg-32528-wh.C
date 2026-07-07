@@ -88,7 +88,6 @@ void swap () {
 **	SFPLOAD	L1, 0, 0, 0
 **	SFPMOV	L0, L9, 2
 **	SFPSWAP	L0, L1, 0
-**	SFPNOP
 **	SFPMUL	L1, L0, L1, 0
 **	SFPNOP
 **	# WRITE L1

@@ -36,39 +36,22 @@ void min_max_1 () {
 **	# READ L0
 **	# READ L1
 **	SFPSWAP	L0, L1, 1
-**	SFPNOP
 **	SFPSWAP	L0, L1, 1
-**	SFPNOP
 **	SFPSWAP	L1, L0, 5
-**	SFPNOP
 **	SFPSWAP	L1, L0, 6
-**	SFPNOP
 **	SFPSWAP	L1, L0, 2
-**	SFPNOP
 **	SFPSWAP	L1, L0, 7
-**	SFPNOP
 **	SFPSWAP	L1, L0, 3
-**	SFPNOP
 **	SFPSWAP	L0, L1, 4
-**	SFPNOP
 **	SFPSWAP	L0, L1, 8
-**	SFPNOP
 **	SFPSWAP	L1, L0, 8
-**	SFPNOP
 **	SFPSWAP	L1, L0, 4
-**	SFPNOP
 **	SFPSWAP	L0, L1, 3
-**	SFPNOP
 **	SFPSWAP	L0, L1, 7
-**	SFPNOP
 **	SFPSWAP	L0, L1, 2
-**	SFPNOP
 **	SFPSWAP	L0, L1, 6
-**	SFPNOP
 **	SFPSWAP	L0, L1, 5
-**	SFPNOP
 **	SFPSWAP	L1, L0, 1
-**	SFPNOP
 **	# WRITE L0
 **	# WRITE L1
 **	ret
@@ -112,7 +95,6 @@ void min () {
 **	# READ L0
 **	# READ L1
 **	SFPSWAP	L0, L1, 1
-**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -127,7 +109,6 @@ void max () {
 **	# READ L0
 **	# READ L1
 **	SFPSWAP	L1, L0, 1
-**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -144,9 +125,7 @@ void clamp () {
 **	# READ L1
 **	# READ L2
 **	SFPSWAP	L1, L0, 1
-**	SFPNOP
 **	SFPSWAP	L0, L2, 1
-**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -159,9 +138,7 @@ void clamp2 () {
 **_Z6clamp2v:
 **	# READ L0
 **	SFPSWAP	L9, L0, 1
-**	SFPNOP
 **	SFPSWAP	L0, L10, 1
-**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -175,7 +152,6 @@ void clamp3 () {
 **	# READ L0
 **	SFPABS	L1, L0, 1
 **	SFPSWAP	L1, L10, 1
-**	SFPNOP
 **	SFPSETSGN	L0, L1, 0, 0
 **	# WRITE L0
 **	ret
@@ -191,9 +167,7 @@ void clamp4a () {
 **	SFPLOADI	L2, 49440, 0
 **	SFPLOADI	L1, 16672, 0
 **	SFPSWAP	L2, L0, 1
-**	SFPNOP
 **	SFPSWAP	L0, L1, 1
-**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -208,7 +182,6 @@ void clamp4b () {
 **	SFPABS	L1, L0, 1
 **	SFPLOADI	L2, 16672, 0
 **	SFPSWAP	L1, L2, 1
-**	SFPNOP
 **	SFPSETSGN	L0, L1, 0, 0
 **	# WRITE L0
 **	ret
@@ -234,7 +207,6 @@ void ice ()
 **	SFPSETCC	L1, 0, 2
 **	SFPMOV	L1, L0, 2
 **	SFPSWAP	L9, L1, 1
-**	SFPNOP
 **	SFPMOV	L0, L1, 0	# LV:L0
 **	SFPMOV	L2, L0, 2
 **	SFPENCC	3, 10

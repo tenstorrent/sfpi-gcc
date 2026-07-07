@@ -2052,7 +2052,6 @@
   "TARGET_XTT_TENSIX"
   "SFPSWAP\t%x2, %x3, %4"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "*rvtt_sfpswap_cst1"
@@ -2066,7 +2065,6 @@
   "TARGET_XTT_TENSIX"
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2104,7 +2102,6 @@
   "TARGET_XTT_TENSIX"
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2141,7 +2138,6 @@
   "TARGET_XTT_TENSIX"
   "SFPSWAP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
