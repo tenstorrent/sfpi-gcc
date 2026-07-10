@@ -427,31 +427,21 @@
     DONE;
 })
 
-(define_insn "*rvtt_store"
-  [(set (match_operand:XTT32SI 0 "memory_operand" "=m")
-        (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "xrxc"))]
-  "TARGET_XTT_TENSIX"
-  {
-    rvtt_mov_error (insn, false);
-    return "BADSTORE %x1,%0";
-  }
-  [(set_attr "type" "tensix")])
-
-(define_insn "*rvtt_load"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (match_operand:XTT32SI 1 "memory_operand" "m"))]
-  "TARGET_XTT_TENSIX"
-  {
-    rvtt_mov_error (insn, true);
-    return "BADLOAD %x1,%0";
-  }
-  [(set_attr "type" "tensix")])
+;; the simple set must accept reg-movs, loads and stores. You can't
+;; break this apart otherwise reload blows up when trying to spill/fill
 
 (define_insn "rvtt_sfpassign"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (match_operand:XTT32SI 1 "reg_or_cstlreg_operand" "xrxc"))]
-  "TARGET_XTT_TENSIX"
-  "SFPMOV\t%x0, %x1, 2"
+  [(set (match_operand:XTT32SI 0 "nonimmediate_operand" "=xr,xr,m")
+        (match_operand:XTT32SI 1 "nonimmediate_or_cstlreg_operand" "xrxc,m,xrxc"))]
+  "TARGET_XTT_TENSIX
+   && (register_operand (operands[0], XTT32SImode)
+       || reg_or_cstlreg_operand (operands[1], XTT32SImode))"
+  {
+    if (!which_alternative)
+      return "SFPMOV\t%0, %x1, 2";
+     rvtt_mov_error (insn, which_alternative == 1);
+     return which_alternative == 1 ? "BADLOAD\t%x0, %1" :"BADSTORE\t%x1, %0";
+  }
   [(set_attr "type" "tensix")])
 
 (define_expand "rvtt_sfpassign_lv"
@@ -1656,8 +1646,8 @@
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,J,m,m")
-          (match_operand:SI    2 "const_int_operand" "n,n,n,n") ;; opcode
-          (match_operand:SI    3 "const_int_operand" "n,n,n,n") ;; id, src & dst shifts
+          (match_operand:SI    2 "const_int_operand" "J,J,n,n") ;; opcode
+          (match_operand:SI    3 "const_int_operand" "J,J,n,n") ;; id, src & dst shifts
           (match_operand:SI    4 "reg_or_const_int_operand" "n,n,r,r") ;; imm or insn
           (match_operand:XTT32SI 5 "reg_or_cstlreg_operand" "xrxc,xrxc,xrxc,xrxc") ;; src
           (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_operand" "xn,0,xn,0") ;; lv
@@ -1678,8 +1668,8 @@
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
           (match_operand:SI    1 "mem_or_0_operand" "J,J,J,m,m,m")
-          (match_operand:SI    2 "const_int_operand" "n,n,n,n,n,n") ;; opcode
-          (match_operand:SI    3 "const_int_operand" "n,n,n,n,n,n") ;; id, src & dst shifts
+          (match_operand:SI    2 "const_int_operand" "J,J,J,n,n,n") ;; opcode
+          (match_operand:SI    3 "const_int_operand" "J,J,J,n,n,n") ;; id, src & dst shifts
           (match_operand:SI    4 "reg_or_const_int_operand" "n,n,n,r,r,r") ;; imm or insn
           (match_operand:XTT32SI 5 "reg_or_cstlreg_operand" "0,0,0,0,0,0") ;; src
           (match_operand:XTT32SI 6 "reg_or_cstlreg_or_noval_or_omit_operand" "xn,xo,xrxc,xn,xo,xrxc") ;; lv

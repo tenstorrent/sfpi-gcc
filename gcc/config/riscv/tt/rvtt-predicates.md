@@ -55,3 +55,7 @@
 (define_predicate "mem_or_0_operand"
   (ior (match_operand 0 "const_0_operand")
        (match_operand 0 "memory_operand")))
+
+(define_predicate "nonimmediate_or_cstlreg_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+       (match_operand 0 "cstlreg_operand")))
