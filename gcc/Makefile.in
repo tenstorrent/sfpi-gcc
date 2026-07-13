@@ -2678,10 +2678,10 @@ CFLAGS-tree-diagnostic-client-data-hooks.o += -DTARGET_NAME=\"$(target_noncanoni
 CFLAGS-optinfo-emit-json.o += -DTARGET_NAME=\"$(target_noncanonical)\" $(ZLIBINC)
 CFLAGS-analyzer/engine.o += $(ZLIBINC)
 
-pass-instances.def: $(srcdir)/passes.def $(PASSES_EXTRA) \
-		    $(srcdir)/gen-pass-instances.awk
-	$(AWK) -f $(srcdir)/gen-pass-instances.awk \
-	  $(srcdir)/passes.def $(PASSES_EXTRA) > pass-instances.def
+pass-instances.def: $(srcdir)/gen-pass-instances.awk \
+		$(srcdir)/passes.def $(PASSES_EXTRA)
+	$(CC_FOR_BUILD) -E -x c $(wordlist 2,99,$^) | grep -v '^#' | \
+	$(AWK) -f $< >$@
 
 $(out_object_file): $(out_file)
 	$(COMPILE) $<
