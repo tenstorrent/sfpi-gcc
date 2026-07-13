@@ -505,7 +505,11 @@ rtx_writer::print_rtx_operand_code_i (const_rtx in_rtx, int idx)
 #if !defined(GENERATOR_FILE) && NUM_UNSPEC_VALUES > 0
   else if (idx == 1
 	   && (GET_CODE (in_rtx) == UNSPEC
-	       || GET_CODE (in_rtx) == UNSPEC_VOLATILE)
+#if !(NUM_UNSPECV_VALUES > 0)
+	       // Only accept unspec_volatiles, if there's no unspecv enum.
+	       || GET_CODE (in_rtx) == UNSPEC_VOLATILE
+#endif
+	       || false)
 	   && XINT (in_rtx, 1) >= 0
 	   && XINT (in_rtx, 1) < NUM_UNSPEC_VALUES)
     fprintf (m_outfile, " %s", unspec_strings[XINT (in_rtx, 1)]);
@@ -1607,8 +1611,36 @@ print_exp (pretty_printer *pp, const_rtx x, int verbose)
 	      pp_comma (pp);
 	    print_pattern (pp, XVECEXP (x, 0, i), verbose);
 	  }
-	pp_string (pp, "] ");
-	pp_decimal_int (pp, XINT (x, 1));
+	pp_string (pp, "]");
+	const char *str = nullptr;
+	auto unspec = XINT (x, 1);
+#if !defined(GENERATOR_FILE)
+	if (unspec < 0)
+	  ;
+#if NUM_UNSPECV_VALUES > 0
+	else if (GET_CODE (x) == UNSPEC_VOLATILE
+		 && unspec < NUM_UNSPECV_VALUES)
+	  str = unspecv_strings[unspec];
+#endif
+#if NUM_UNSPEC_VALUES > 0
+	else if (true
+#if NUM_UNSPECV_VALUES > 0
+		 // Only accept unspec_volatiles, if there's no unspecv enum.
+		 && GET_CODE (x) == UNSPEC
+#endif
+		 && unspec < NUM_UNSPEC_VALUES)
+	  str = unspec_strings[unspec];
+#endif
+#endif
+	if (str)
+	  {
+	    // Strip leading UNSPEC[_] leaving FOO or V_FOO by convention.
+	    if (0 == strncmp (str, "UNSPEC", 6))
+	      str += 6 + (str[6] == '_');
+	    pp_string (pp, str);
+	  }
+	else
+	  pp_decimal_int (pp, unspec);
       }
       break;
     default:
