@@ -44,6 +44,20 @@ namespace {
   }
 }
 
+combine () {
+  tmp|OU = sfpnot_lv (lv1, val);
+  res = sfpnot_lv (lv2, tmp);
+  {}
+  res = sfpassign_lv (lv2, val);
+}
+
+combine () {
+  tmp|OU = sfpmov_lv (lv1, val, SFPMOV_MOD1_COMPL);
+  res = sfpmov_lv (lv2, tmp, SFPMOV_MOD1_COMPL);
+  {}
+  res = sfpassign_lv (lv2, val);
+}
+
 // Do these in preference to mul,add->mad, as the register pressure is
 // immediately reduced.
 // a * fp16b(scalar)
@@ -248,33 +262,28 @@ combine () {
 
 // exexp, Xiadd_i -> exexp
 combine () {
-  exp|OU|SR = sfpexexp_lv (lv1, a, ex_mod);
-  res|MU = sfpxiadd_i_lv (0, lv2, exp, 0, 0, 0, res_mod);
+  exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);
+  res|MU = sfpxiadd_i_lv (0, add_lv, exp, 0, 0, 0, add_mod);
   {
-    // res should be unused -- we could cope with it being set if needed,
-    // need to teach the combiner about assignments then
-    if (res)
-      return false;
-
     // EX_MOD can't set cc
     if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))
       return false;
 
     // check res_mod is cc-setting on sign bit
-    auto imod = TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK;
+    auto imod = TREE_INT_CST_LOW (add_mod) & SFPXCMP_MOD1_CC_MASK;
     if (imod != SFPXCMP_MOD1_CC_LT
 	&& imod != SFPXCMP_MOD1_CC_GTE)
       return false;
     
   }
   {
-    mod = build_int_cst (TREE_TYPE (ex_mod),
-			 TREE_INT_CST_LOW (ex_mod)
-			 | SFPEXEXP_MOD1_SET_CC_SGN_EXP
-			 | ((TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK)
-			    == SFPXCMP_MOD1_CC_GTE
-			    ? SFPEXEXP_MOD1_SET_CC_COMP_EXP : 0));
+    exp_mod = build_int_cst (TREE_TYPE (exp_mod),
+			     TREE_INT_CST_LOW (exp_mod)
+			     | SFPEXEXP_MOD1_SET_CC_SGN_EXP
+			     | ((TREE_INT_CST_LOW (add_mod) & SFPXCMP_MOD1_CC_MASK)
+				== SFPXCMP_MOD1_CC_GTE
+				? SFPEXEXP_MOD1_SET_CC_COMP_EXP : 0));
   }
-  exp = sfpexexp_lv (lv1, a, mod);
+  exp = sfpexexp_lv (exp_lv, a, exp_mod);
+  res = sfpassign_lv (add_lv, exp);
 }
-

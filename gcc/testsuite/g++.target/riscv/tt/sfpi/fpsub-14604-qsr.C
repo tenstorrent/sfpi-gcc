@@ -110,7 +110,7 @@ void sub5() {
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L1, L0, L1, 1	# LV:L1
 **	SFPCOMPC
-**	SFPADD	L1, L0, L1, 0	# LV:L1
+**	SFPADD	L1, L1, L0, 0	# LV:L1
 **	SFPENCC	3, 10
 **	SFPMOV	L3, L1, 2
 **	# WRITE L3

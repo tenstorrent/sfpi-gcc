@@ -223,7 +223,6 @@ public:
     return nullptr;
   }
   const rvtt_insn_data *get_not_live () const {
-    // Never ask for the notlive version of sfpassign_lv
     auto res = this;
     if (is_live ())
       res -= 1;

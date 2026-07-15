@@ -467,6 +467,22 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
   for (unsigned ix = pat_var_hwm; ix != rep_var_hwm; ix++)
     matched.vars[ix] = nullptr;
 
+  if (dump_file)
+    {
+      fprintf (dump_file, "Found pattern %u:\n", id);
+      for (unsigned ix = 0; ix != pats_hwm; ix++)
+	{
+	  char c = 'K';
+	  if ((1 << ix) & replace_mask)
+	    c = 'R';
+	  else if ((1 << ix) & matched.deleted)
+	    c = 'D';
+
+	  fprintf (dump_file, "%c ", c);
+	  print_gimple_stmt (dump_file, matched.calls[ix], 2);
+	}
+    }
+
   return true;
 }
 
@@ -476,6 +492,7 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
   if (init_hook)
     init_hook (matched.calls, matched.vars, matched.commuted);
 
+  unsigned assign_mask = 0, assign_lv_mask = 0;;
   for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
     {
       auto &rep = shapes[ix];
@@ -488,11 +505,13 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 	  auto live_slot = rep.args[lv_arg].val;
 	  if (!matched.vars[live_slot])
 	    {
-	      // We might need to add non-lv assign and then handle it specially?
-	      gcc_assert (rep.id != rvtt_insn_data::sfpassign_lv);
 	      insnd = insnd->get_not_live ();
 	      lv_delta = 1;
+	      if (insnd->id == rvtt_insn_data::sfpassign)
+		assign_mask = 1 << rep.lhs;
 	    }
+	  else if (insnd->id == rvtt_insn_data::sfpassign_lv)
+	    assign_lv_mask = 1 << rep.lhs;
 	}
       gcc_assert (insnd->num_args () + lv_delta == rep.num_args
 		  && insnd->decl);
@@ -540,6 +559,46 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 
   if (fini_hook)
     fini_hook (replace, matched.vars);
+
+  if (dump_file)
+    {
+      fprintf (dump_file, "Replaced with:\n");
+      for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
+	print_gimple_stmt (dump_file, replace[shapes[ix].lhs], 2);
+      fprintf (dump_file, "\n");
+    }
+
+  assign_mask |= assign_lv_mask;
+  if (assign_mask)
+    {
+      // Replace sfpassign with nothing.
+      for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
+	{
+	  auto const &shape = shapes[ix];
+	  if ((1 << shape.lhs) & assign_mask)
+	    {
+	      auto *rep = replace[shape.lhs];
+	      auto lhs = gimple_call_lhs (rep);
+	      if (lhs && ((1 << shape.lhs) & assign_lv_mask)
+		  && gimple_call_arg (rep, 0) != gimple_call_arg (rep, 1))
+		continue;
+
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Eliding ");
+		  print_gimple_stmt (dump_file, rep, 0);
+		}
+	      rvtt_substitute_value (lhs, gimple_call_arg (rep, 0));
+	      if (**gsi == rep)
+		gsi_remove (gsi, true);
+	      else
+		{
+		  auto gsi = gsi_for_stmt (rep);
+		  gsi_remove (&gsi, true);
+		}
+	    }
+	}
+    }
 }
 
 // This array is sorted by builtin-id of the last pattern insn of a combiner,
@@ -852,62 +911,39 @@ combine_block (basic_block bb)
 {
   bool changed = false;
 
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-       !gsi_end_p (gsi); gsi_next (&gsi))
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
     {
-    again:
-      auto *insnd = rvtt_get_insn_data (*gsi);
-      if (!insnd)
-	continue;
-
-      // Record synth_opcodes to deal with dynamic muli/addi combinations.
-      if (insnd->id == rvtt_insn_data::synth_opcode)
-	synths.emplace_back (as_a <gcall *> (*gsi), insnd,
-	    TREE_INT_CST_LOW (gimple_call_arg (as_a <gcall *> (*gsi), 1)));
-
-      auto start = starting_ids.lower_bound (insnd->id);
-      // Because we've added insn_id::hwm, start will never be
-      // starting_ids.end ()
-      if (start->first != insnd->id)
-	continue;
-      for (auto I = start->second, E = (++start)->second; I != E; ++I)
+      if (auto *insnd = rvtt_get_insn_data (*gsi))
 	{
-	  auto *combiner = *I;
-	  Combiner::matched_data matched;
-	  if (!combiner->match (as_a <gcall *> (*gsi), insnd, matched))
-	    continue;
+	  // Record synth_opcodes to deal with dynamic muli/addi combinations.
+	  if (insnd->id == rvtt_insn_data::synth_opcode)
+	    synths.emplace_back (as_a <gcall *> (*gsi), insnd,
+				 TREE_INT_CST_LOW (gimple_call_arg (as_a <gcall *> (*gsi), 1)));
 
-	  if (dump_file)
+	  auto start = starting_ids.lower_bound (insnd->id);
+	  // Because we've added insn_id::hwm, start will never be
+	  // starting_ids.end ()
+	  if (start->first == insnd->id)
 	    {
-	      fprintf (dump_file, "Found pattern %u:\n", combiner->id);
-	      for (unsigned ix = 0; ix != combiner->pats_hwm; ix++)
+	      bool matched = false;
+	      for (auto I = start->second, E = (++start)->second; I != E; ++I)
 		{
-		  char c = 'K';
-		  if ((1 << ix) & combiner->replace_mask)
-		    c = 'R';
-		  else if ((1 << ix) & matched.deleted)
-		    c = 'D';
-
-		  fprintf (dump_file, "%c ", c);
-		  print_gimple_stmt (dump_file, matched.calls[ix], 2);
+		  auto *combiner = *I;
+		  Combiner::matched_data matched_data;
+		  if (combiner->match (as_a <gcall *> (*gsi), insnd, matched_data))
+		    {
+		      gcall *replace[combiner_reps_hwm];
+		      combiner->replace (&gsi, matched_data, replace);
+		      changed = true;
+		      matched = true;
+		      break;
+		    }
 		}
+	      if (matched)
+		continue;
 	    }
-
-	  gcall *replace[combiner_reps_hwm];
-	  combiner->replace (&gsi, matched, replace);
-	  if (dump_file)
-	    {
-	      fprintf (dump_file, "Replaced with:\n");
-	      for (unsigned ix = combiner->pats_hwm; ix != combiner->reps_hwm; ix++)
-		{
-		  auto *rep = replace[combiner->shapes[ix].lhs];
-		  print_gimple_stmt (dump_file, rep, 2);
-		}
-	      fprintf (dump_file, "\n");
-	    }
-	  changed = true;
-	  goto again;
 	}
+      gsi_next (&gsi);
     }
 
   return changed;

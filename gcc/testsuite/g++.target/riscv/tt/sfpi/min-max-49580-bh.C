@@ -69,9 +69,7 @@ void clamp1 () {
 **	SFPNOT	L0, L0
 **	SFPNOT	L1, L9
 **	SFPSWAP	L1, L0, 1
-**	SFPNOT	L0, L0
 **	SFPLOADI	L1, 10, 2
-**	SFPNOT	L0, L0
 **	SFPNOT	L1, L1
 **	SFPSWAP	L0, L1, 1
 **	SFPNOT	L0, L0
