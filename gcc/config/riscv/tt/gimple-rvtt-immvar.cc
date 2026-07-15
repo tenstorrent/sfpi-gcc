@@ -668,22 +668,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	    fprintf (dump_file, "to nothing\n");
 
 	  if (tree output = gimple_call_lhs (call))
-	    {
-	      gimple *stmt;
-	      imm_use_iterator ssa_iter;
-	      FOR_EACH_IMM_USE_STMT (stmt, ssa_iter, output)
-		{
-		  use_operand_p use_p;
-		  FOR_EACH_IMM_USE_ON_STMT (use_p, ssa_iter)
-		    propagate_value (use_p, input);
-		  update_stmt (stmt);
-		  if (dump_file)
-		    {
-		      fprintf (dump_file, "Updated ");
-		      print_gimple_stmt (dump_file, stmt, 2);
-		    }
-		}
-	    }
+	    rvtt_substitute_value (output, input);
 	  if (dump_file)
 	    fprintf (dump_file, "\n");
 	  return true;

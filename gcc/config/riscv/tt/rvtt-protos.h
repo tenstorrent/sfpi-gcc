@@ -30,6 +30,8 @@ extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern void rvtt_merge_lv_src (rtx *lv, rtx *src);
 
+extern void rvtt_substitute_value (tree orig, tree replacement);
+
 // Instruction synthesis
 class rvtt_synth
 {

@@ -91,8 +91,9 @@ RVTT_FN (sfpcompc,           ,,VOID_FTYPE,                                      
 RVTT_FN (sfppushc,           ,,VOID_FTYPE_USI,                                               VOL|CC(0x2000), ({M, 0xffff}))
 RVTT_FN (sfppopc,            ,,VOID_FTYPE_USI,                                               VOL|CC(), ({M, 0xffff}))
 
-// Make sure prior defn never needs to ask for live version, and make
-// sure we never ask for the non-live version of this one.
+// sfpassign is a placeholder to allow describing some combines
+// simply -- that pass then elides any actual uses.
+RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                                        0,())
 RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV,())
 
 RVTT_FN (sfploadi,           ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                       0, ({E, 16, 0}, {M, 0x17}))

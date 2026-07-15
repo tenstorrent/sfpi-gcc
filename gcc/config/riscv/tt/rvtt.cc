@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "recog.h"
@@ -37,6 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "df.h"
 #include "ssa.h"
+#include "tree-ssa-propagate.h"
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
@@ -448,6 +450,28 @@ rvtt_merge_lv_src (rtx *lv, rtx *src)
   *src = tmp;
   *lv = gen_rtx_UNSPEC (XTT32SImode,
 			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
+}
+
+void
+rvtt_substitute_value (tree orig, tree replacement)
+{
+  if (!orig)
+    return;
+
+  gimple *stmt;
+  imm_use_iterator orig_iter;
+  FOR_EACH_IMM_USE_STMT (stmt, orig_iter, orig)
+    {
+      use_operand_p orig_use;
+      FOR_EACH_IMM_USE_ON_STMT (orig_use, orig_iter)
+	propagate_value (orig_use, replacement);
+      update_stmt (stmt);
+      if (dump_file)
+	{
+	  fprintf (dump_file, "Updated ");
+	  print_gimple_stmt (dump_file, stmt, 2);
+	}
+    }
 }
 
 // FIXME: Remnants of old sfpxloadi scheme,

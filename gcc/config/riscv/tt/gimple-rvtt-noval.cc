@@ -59,21 +59,8 @@ elide_assign_lv (gcall *assign_lv)
       print_gimple_stmt (dump_file, assign_lv, 2);
     }
 
-  tree input = gimple_call_arg (assign_lv, 1);
-  gimple *stmt;
-  imm_use_iterator ssa_iter;
-  FOR_EACH_IMM_USE_STMT (stmt, ssa_iter, gimple_call_lhs (assign_lv))
-    {
-      use_operand_p use_p;
-      FOR_EACH_IMM_USE_ON_STMT (use_p, ssa_iter)
-	propagate_value (use_p, input);
-      update_stmt (stmt);
-      if (dump_file)
-	{
-	  fprintf (dump_file, "Updated ");
-	  print_gimple_stmt (dump_file, stmt, 2);
-	}
-    }
+  rvtt_substitute_value (gimple_call_lhs (assign_lv),
+			 gimple_call_arg (assign_lv, 1));
   auto gsi = gsi_for_stmt (assign_lv);
   gsi_remove (&gsi, true);
 }
