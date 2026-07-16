@@ -109,12 +109,14 @@ namespace {
     uint8_t rep_var_hwm;
 
     uint8_t replace_mask; // patterns whos output is a replacement output
-    unsigned id;
+    uint8_t rep_use_mask; // patterns whos output is used in a replacement
+    unsigned lineno; // line in rvtt.gc file
 
-    bool (*enable_hook) (); // target-specific enablement
-    bool (*pred_hook) (gcall *[], tree [], unsigned); // pattern-specific checks
-    void (*init_hook) (gcall *[], tree [], unsigned); // template-specific initialization
-    void (*fini_hook) (gcall *[], tree []); // template-specific finalization
+    bool (*target_hook) (); // target-specific enablement
+    bool (*enable_hook) (); // combiner-specific emablement
+    bool (*pred_hook) (gcall *[], tree [], unsigned); // combiner-specific checks
+    void (*init_hook) (gcall *[], tree [], unsigned); // combiner-specific initialization
+    void (*fini_hook) (gcall *[], tree []); // combiner-specific finalization
 
   public:
     struct matched_data;
@@ -122,25 +124,7 @@ namespace {
     void replace (gimple_stmt_iterator *, matched_data &, gcall **replace) const;
 
   private:
-    struct match_masks {
-      unsigned calls = 0; // Which calls we matched
-      unsigned vars = 0;  // Which vars we defined
-      unsigned commuted = 0; // Which commute vars commuted
-      unsigned live = 0;  // Which calls were live values
-
-    public:
-      operator bool () const { return calls != 0; }
-      match_masks &operator |= (match_masks const &other) {
-	calls |= other.calls;
-	vars |= other.vars;
-	commuted |= other.commuted;
-	live |= other.live;
-	return *this;
-      }
-      void clear () {
-	calls = vars = commuted = live = 0;
-      }
-    };
+    struct match_masks;
     bool match_one (basic_block bb, unsigned ix, gcall *, const rvtt_insn_data *,
 			  unsigned outer_vars, matched_data &, match_masks &) const;
   };
@@ -178,13 +162,6 @@ static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 #undef SA
 #undef MU
 #undef OU
-
-struct Combiner::matched_data {
-  gcall *calls[combiner_pats_hwm];
-  tree vars[combiner_vars_hwm];
-  unsigned commuted = 0;
-  unsigned deleted = 0;
-};
 
 bool
 Shape::is_match (const rvtt_insn_data *insnd) const
@@ -263,6 +240,33 @@ has_use_between (tree var, gcall *begin, gcall *end,
     }
   return false;
 }
+
+struct Combiner::matched_data {
+  gcall *calls[combiner_pats_hwm];
+  tree vars[combiner_vars_hwm];
+  unsigned commuted = 0;
+  unsigned deleted = 0;
+};
+
+struct Combiner::match_masks {
+  unsigned calls = 0; // Which calls we matched
+  unsigned vars = 0;  // Which vars we defined
+  unsigned commuted = 0; // Which commute vars commuted
+  unsigned live = 0;  // Which calls were live values
+
+public:
+  operator bool () const { return calls != 0; }
+  match_masks &operator |= (match_masks const &other) {
+    calls |= other.calls;
+    vars |= other.vars;
+    commuted |= other.commuted;
+    live |= other.live;
+    return *this;
+  }
+  void clear () {
+    calls = vars = commuted = live = 0;
+  }
+};
 
 bool
 Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_data *insnd,
@@ -374,6 +378,9 @@ Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_d
 bool
 Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
+  if (enable_hook && !enable_hook ())
+    return false;
+
   match_masks masks;
   if (!match_one (gimple_bb (call), pats_hwm - 1, call, insnd, 0, matched, masks))
     return false;
@@ -409,13 +416,16 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  // is ok and/or we should delete this insn.
 	  if (tree lhs = gimple_call_lhs (matched.calls[ix]))
 	    {
-	      if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
+	      if (pat.flags & unsigned (Flags::OtherUses)
+		  && rep_use_mask & (1 << ix))
+		;
+	      else if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
 		{
 		  if (!(pat.flags & unsigned (Flags::OtherUses)))
 		    // Not allowed other uses
 		    return false;
 		}
-	      else
+	      else if (!(rep_use_mask & (1 << ix)))
 		matched.deleted |= 1 << ix;
 	    }
 	  else
@@ -439,26 +449,27 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	if (v == matched.vars[jx])
 	  return false;
 
-  // If any non-lhs non-live var is the same as an lhs, we're not a match
+  // If any non-lhs non-live var is the same as a deleted lhs, we're not a match
   for (unsigned ix = rep_lhs_hwm; ix != pat_var_hwm; ix++)
     if (auto v = matched.vars[ix])
       for (unsigned jx = pats_hwm; jx--; )
-	if (v == matched.vars[jx])
+	if (v == matched.vars[jx]
+	    && ((1 << jx) & matched.deleted))
 	  {
-	    // This non-lhs var matches an lhs var
+	    // This non-lhs var matches an deleted (or replaced) lhs var
 	    if (!((1 << ix) & masks.live))
 	      return false;  // Not a live, not a match
 
-	    if (!((1 << jx) & (matched.deleted & ~replace_mask)))
-	      continue; // Not a non-replaced deleted output
-
-	    // Chase live to deleted insn's live input
-	    auto insnd = rvtt_get_insn_data (matched.calls[jx]);
-	    if (!insnd->is_live ())
-	      return false;
-	    v = gimple_call_arg (matched.calls[jx], insnd->live_arg ());
-	    matched.vars[ix] = v;
-	    // We'll continue checking this in the next iteration
+	    if (!((1 << jx) & replace_mask))
+	      {
+		// Chase live to deleted insn's live input
+		auto insnd = rvtt_get_insn_data (matched.calls[jx]);
+		if (!insnd->is_live ())
+		  return false;
+		v = gimple_call_arg (matched.calls[jx], insnd->live_arg ());
+		matched.vars[ix] = v;
+		// We'll continue checking this in the next iteration
+	      }
 	  }
 
   // It's ok for any non-lhs vars to be the same
@@ -469,7 +480,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 
   if (dump_file)
     {
-      fprintf (dump_file, "Found pattern %u:\n", id);
+      fprintf (dump_file, "Found pattern %u:\n", lineno);
       for (unsigned ix = 0; ix != pats_hwm; ix++)
 	{
 	  char c = 'K';
@@ -565,7 +576,6 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
       fprintf (dump_file, "Replaced with:\n");
       for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
 	print_gimple_stmt (dump_file, replace[shapes[ix].lhs], 2);
-      fprintf (dump_file, "\n");
     }
 
   assign_mask |= assign_lv_mask;
@@ -599,6 +609,8 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 	    }
 	}
     }
+  if (dump_file)
+    fprintf (dump_file, "\n");
 }
 
 // This array is sorted by builtin-id of the last pattern insn of a combiner,
@@ -620,13 +632,18 @@ init ()
   std::map<unsigned, const Combiner *> tmp;
 
   for (auto &combiner : combiners)
-    if (!combiner.enable_hook || combiner.enable_hook ())
+    if (!combiner.target_hook || combiner.target_hook ())
       {
+	// Check all patterns and replacements have correct number of arguments
+	for (unsigned ix = combiner.reps_hwm; ix--;)
+	  gcc_assert (rvtt_get_insn_data (combiner.shapes[ix].id)->num_args ()
+		      == combiner.shapes[ix].num_args);
+
 	auto id = combiner.shapes[combiner.pats_hwm - 1].id;
-	tmp.emplace (id2key (id, combiner.id), &combiner);
+	tmp.emplace (id2key (id, combiner.lineno), &combiner);
 	auto not_live_id = rvtt_get_insn_data (id)->get_not_live ()->id;
 	if (not_live_id != id)
-	  tmp.emplace (id2key (not_live_id, combiner.id), &combiner);
+	  tmp.emplace (id2key (not_live_id, combiner.lineno), &combiner);
       }
 
   // Reserve space so iterators we put into starting_ids are not invalidated as we

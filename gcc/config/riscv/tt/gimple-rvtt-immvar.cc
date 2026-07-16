@@ -800,8 +800,7 @@ public:
   virtual unsigned execute (function *fn) override
   {
     // (a) remove var and id from now-constant immvals
-    // (b) deal with setman immediate length
-    // (c) optimize sfploadi{,_lv} sequences
+    // (b) optimize sfploadi{,_lv} sequences
     bool changed = false;
     basic_block bb;
     std::vector<gcall *> loads;
@@ -811,7 +810,7 @@ public:
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	   !gsi_end_p (gsi); gsi_next (&gsi))
 	if (auto *insnd = rvtt_get_insn_data (*gsi))
-	  if (immvar_gather  (insnd, as_a <gcall *> (*gsi), loads))
+	  if (immvar_gather (insnd, as_a <gcall *> (*gsi), loads))
 	    changed = true;
 
     for (auto *call : loads)

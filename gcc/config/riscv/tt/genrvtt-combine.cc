@@ -37,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
    C/C++ comments (both line and block forms)
 
   combine (TARGET) {
+    { enable } [opt]
     var = bltin (args, ...);
     ...
     { pred }
@@ -56,7 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 
   expr : [A-Z0-9(] paren-balanced-chars until ) or ,
 
-  combine : 'combine' '(' ident ')' '{'
+  combine : 'combine' '(' ident ')' '{' enable?
 	shape+ pred setup? shape+ finalize? '}'
 
   shape: var modifiers? '=' ident '(' args ')' ';'
@@ -454,6 +455,7 @@ namespace {
 struct Combine {
   enum Hooks
     {
+      H_Enable,
       H_Pred,
       H_Init,
       H_Fini,
@@ -474,6 +476,7 @@ public:
   unsigned pat_var_hwm = 0;
 
   unsigned replace_mask = 0;
+  unsigned rep_use_mask = 0;
   unsigned commute_mask = 0;
 
 public:
@@ -672,6 +675,7 @@ Combine::parse (Lexer &lexer)
   if (!lexer.consume ('{'))
     return false;
 
+  lexer.consume_code (hooks[H_Enable], true);
   if (!parse_patterns (lexer, true))
     return false;
 
@@ -726,15 +730,22 @@ Combine::parse (Lexer &lexer)
       pats[ix].used_by_mask = use;
     }
 
-  // Compute replace mask
-  unsigned replaced = 0;
+  // Compute replace & rep_use masks;
   for (unsigned ix = reps.size (); ix--;)
     {
-      auto var = remap[reps[ix].lhs.slot];
+      auto &rep = reps[ix];
+      auto var = remap[rep.lhs.slot];
       if (var < pats.size ())
-	replaced |= 1 << var;
+	replace_mask |= 1 << var;
+
+      for (auto &arg : rep.args)
+	if (arg.is_var ())
+	  {
+	    auto use = remap[arg.var.slot];
+	    if (use < pats.size ())
+	      rep_use_mask |= 1 << use;
+	  }
     }
-  replace_mask = replaced;
 
   return true;
 }
@@ -807,7 +818,7 @@ Combine::emit_hook_name (Stream &out, Hooks hook) const
     out.print ("nullptr");
   else
     {
-      static char const *const tags[H_HWM] = {"_pred", "_init", "_fini"};
+      static char const *const tags[H_HWM] = {"_enable", "_pred", "_init", "_fini"};
       out.print ("combiner_", lineno, tags[hook]);
     }
 }
@@ -818,45 +829,53 @@ Combine::emit_hook (Stream &out, Hooks hook) const
   if (!hooks[hook])
     return;
   
-  out.print ("static ", hook == H_Pred ? "bool" : "void", " ");
+  out.print ("static ", hook == H_Pred || hook == H_Enable ? "bool" : "void", " ");
   emit_hook_name (out, hook);
-  out.print (" (gcall *calls[], tree vars[]",
-	     hook != H_Fini ? ", unsigned mask ATTRIBUTE_UNUSED" : "",
-	     ")\n{\n");
-
-  auto const &slot = hook == H_Fini ? reps : pats;
-  for (unsigned call = 0; call != slot.size (); call++)
+  out.print (" (");
+  if (hook != H_Enable)
     {
-      auto ix = remap[slot[call].lhs.slot];
-      out.print ("  auto &", vars[ix].name, "_call"
-		 " ATTRIBUTE_UNUSED = calls[", ix, "];\n");
+      out.print ("gcall *calls[], tree vars[]");
+      if (hook != H_Fini)
+	out.print (", unsigned mask ATTRIBUTE_UNUSED");
     }
-  out.print ("\n");
+  out.print (")\n{\n");
 
-  for (unsigned op = 0; op != vars.size (); op++)
-    if (hook != H_Fini && op >= pats.size () && op < rep_lhs_hwm)
-      continue;
-    else if (hook == H_Pred && op >= pat_var_hwm)
-      continue;
-    else
-      out.print ("  auto &", vars[op].name, " ATTRIBUTE_UNUSED = vars[", op, "];\n");
-  out.print ("\n");
-
-  if (hook != H_Fini && commute_mask)
+  if (hook != H_Enable)
     {
-      for (unsigned mask = commute_mask, bit; mask; mask ^= 1 << bit)
+      auto const &slot = hook == H_Fini ? reps : pats;
+      for (unsigned call = 0; call != slot.size (); call++)
 	{
-	  bit = __builtin_ctz (mask);
-	  out.print ("  auto ", vars[bit].name, "_commuted ATTRIBUTE_UNUSED = mask & (1 << ", bit, ");\n");
+	  auto ix = remap[slot[call].lhs.slot];
+	  out.print ("  auto &", vars[ix].name, "_call"
+		     " ATTRIBUTE_UNUSED = calls[", ix, "];\n");
 	}
       out.print ("\n");
+
+      for (unsigned op = 0; op != vars.size (); op++)
+	if (hook != H_Fini && op >= pats.size () && op < rep_lhs_hwm)
+	  continue;
+	else if (hook == H_Pred && op >= pat_var_hwm)
+	  continue;
+	else
+	  out.print ("  auto &", vars[op].name, " ATTRIBUTE_UNUSED = vars[", op, "];\n");
+      out.print ("\n");
+
+      if (hook != H_Fini && commute_mask)
+	{
+	  for (unsigned mask = commute_mask, bit; mask; mask ^= 1 << bit)
+	    {
+	      bit = __builtin_ctz (mask);
+	      out.print ("  auto ", vars[bit].name, "_commuted ATTRIBUTE_UNUSED = mask & (1 << ", bit, ");\n");
+	    }
+	  out.print ("\n");
+	}
     }
 
   out.push (hooks[hook].lineno);
   out.print (hooks[hook].code, "\n");
   out.pop ();
 
-  if (hook == H_Pred)
+  if (hook == H_Pred || hook == H_Enable)
     out.print ("  return true;\n");
   out.print ("}\n\n");
 }
@@ -903,9 +922,8 @@ main (int argc, const char **argv)
       if (max_reps < combine.rep_lhs_hwm)
 	max_reps = combine.rep_lhs_hwm;
 
-      combine.emit_hook (out, Combine::H_Pred);
-      combine.emit_hook (out, Combine::H_Init);
-      combine.emit_hook (out, Combine::H_Fini);
+      for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
+	combine.emit_hook (out, Combine::Hooks (ix));
     }
 
   out.print ("\n");
@@ -944,18 +962,18 @@ main (int argc, const char **argv)
 		 ", ", combine.pat_var_hwm,
 		 ", ", combine.vars.size (),
 		 ", ", combine.replace_mask,
+		 ", ", combine.rep_use_mask,
 		 ", ", combine.lineno,
 		 ", ");
       if (combine.target.empty ())
 	out.print ("nullptr");
       else
 	out.print ("combiner_enable_", combine.target);
-      out.print (", ");
-      combine.emit_hook_name (out, Combine::H_Pred);
-      out.print (", ");
-      combine.emit_hook_name (out, Combine::H_Init);
-      out.print (", ");
-      combine.emit_hook_name (out, Combine::H_Fini);
+      for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
+	{
+	  out.print (", ");
+	  combine.emit_hook_name (out, Combine::Hooks (ix));
+	}
       out.print ("},\n");
 
       shape_off += combine.pats.size () + combine.reps.size ();
