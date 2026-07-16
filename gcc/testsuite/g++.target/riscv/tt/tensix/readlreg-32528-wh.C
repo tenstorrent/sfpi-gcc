@@ -10,8 +10,9 @@ void foo () {
 }
 /*
 **_ZN3cst3fooEv:
-**	SFPMOV	L0, L9, 2
-**	SFPLOAD	L1, 0, 0, 0
+**	SFPLOAD	L0, 0, 0, 0
+**	SFPMUL	L0, L0, L9, 0
+**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -35,7 +36,8 @@ void bar (int i) {
 **	SFPNOP
 **	# WRITE L0
 **	SFPLOAD	L0, 0, 0, 0
-**	SFPMOV	L0, L9, 2
+**	SFPMUL	L0, L0, L9, 0
+**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -146,8 +148,9 @@ void foo () {
 /*
 **_ZN2lv3fooEv:
 **	SFPMOV	L0, L9, 2
-**	SFPMOV	L1, L0, 2
-**	SFPLOAD	L1, 0, 0, 0	# LV:L1
+**	SFPLOAD	L0, 0, 0, 0	# LV:L0
+**	SFPMUL	L0, L0, L9, 0
+**	SFPNOP
 **	# WRITE L0
 **	ret
 */
@@ -173,6 +176,8 @@ void bar (int i) {
 **	# WRITE L1
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMOV	L1, L9, 2
+**	SFPMUL	L1, L0, L1, 0	# LV:L1
+**	SFPNOP
 **	# WRITE L1
 **	ret
 */

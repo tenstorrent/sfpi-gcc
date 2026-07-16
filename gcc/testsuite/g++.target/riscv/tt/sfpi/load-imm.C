@@ -154,11 +154,16 @@ void loop ()
 /*
 **_Z4loopv:
 **	# READ L0
-**	SFPMOV	L1, L9, 2
-**	SFPLOADI	L0, 16429, 0
+**	SFPMUL	L1, L0, L9, 0
+**	SFPNOP
+**	SFPMOV	L1, L1, 1
+**	SFPMULI	L1, 16429, 0
 **	SFPLOADI	L0, 16969, 1
+**	SFPMUL	L1, L1, L0, 0
 **	SFPLOADI	L0, 7101, 2
 **	SFPLOADI	L0, 16335, 8	# LV:L0
+**	SFPMUL	L1, L1, L0, 0
+**	SFPNOP
 **	# WRITE L1
 **	ret
 */

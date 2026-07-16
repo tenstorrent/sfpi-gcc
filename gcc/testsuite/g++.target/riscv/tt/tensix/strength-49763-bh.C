@@ -40,7 +40,7 @@ void mul0 ()
 /*
 **_Z4mul0v:
 **	# READ L0
-**	SFPMOV	L0, L9, 2
+**	SFPMUL	L0, L0, L9, 0
 **	# WRITE L0
 **	ret
 */
