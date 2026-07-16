@@ -44,6 +44,7 @@ namespace {
   }
 }
 
+// ~ ~a -> a
 combine () {
   tmp|OU = sfpnot_lv (lv1, val);
   res = sfpnot_lv (lv2, tmp);
@@ -51,6 +52,7 @@ combine () {
   res = sfpassign_lv (lv2, val);
 }
 
+// - -a -> a
 combine () {
   tmp|OU = sfpmov_lv (lv1, val, SFPMOV_MOD1_COMPL);
   res = sfpmov_lv (lv2, tmp, SFPMOV_MOD1_COMPL);
@@ -75,17 +77,6 @@ combine () {
       addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
   }
 }
-// It is expensive to synthesize, so only do this when there are no other uses
-// of the loadi
-combine (false) {
-  cst|SA = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
-  res = sfpmul_lv (lv, %a, cst, 0);
-  {}
-  res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
-  {
-    addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), TREE_INT_CST_LOW (id));
-  }
-}
 
 // a + fp16b(scalar)
 combine () {
@@ -102,15 +93,37 @@ combine () {
       addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
   }
 }
-combine (false) {
-  cst|SA = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
-  res = sfpadd_lv (lv, %a, cst, 0);
+
+// -a * b
+combine (BH_QSR) {
+  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpmul_lv (lv2, %p, b, mod);
   {}
-  res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
   {
-    if (auto iid = TREE_INT_CST_LOW (id))
-      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    if (p_commuted && imod)
+      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
   }
+  r = sfpmul_lv (lv2, a, b, mod);
+}
+
+// -a + b
+combine (BH_QSR) {
+  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
+  r = sfpadd_lv (lv2, %p, b, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    if (p_commuted && imod)
+      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  r = sfpadd_lv (lv2, a, b, mod);
 }
 
 // a * b + c
@@ -131,7 +144,7 @@ combine () {
   r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
-// -a + b
+// -a + b (WH)
 combine (WH) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpadd_lv (lv2, %p, b, 0);
@@ -140,62 +153,6 @@ combine (WH) {
   n1 = sfpreadlreg (CREG_IDX_NEG_1);
   r = sfpmad_lv (lv2, a, n1, b, 0);
   {}
-}
-combine (BH_QSR) {
-  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
-  r = sfpadd_lv (lv2, %p, b, mod);
-  {}
-  {
-    unsigned imod = TREE_INT_CST_LOW (mod);
-    if (p_commuted && imod)
-      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
-	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
-    mod = build_int_cst (TREE_TYPE (mod),
-			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
-  }
-  r = sfpadd_lv (lv2, a, b, mod);
-}
-
-// -a * b
-combine (BH_QSR) {
-  p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
-  r = sfpmul_lv (lv2, %p, b, mod);
-  {}
-  {
-    unsigned imod = TREE_INT_CST_LOW (mod);
-    if (p_commuted && imod)
-      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
-	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
-    mod = build_int_cst (TREE_TYPE (mod),
-			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
-  }
-  r = sfpmul_lv (lv2, a, b, mod);
-}
-
-// a * b + -c
-combine (BH_QSR) {
-  nc = sfpmov_lv (lv1, c, SFPMOV_MOD1_COMPL);
-  r = sfpmad_lv (lv2, a, b, nc, mod);
-  {}
-  {
-    unsigned imod = TREE_INT_CST_LOW (mod);
-    mod = build_int_cst (TREE_TYPE (mod),
-			 imod ^ SFPMAD_MOD1_BH_COMPL_C);
-  }
-  r = sfpmad_lv (lv2, a, b, c, mod);
-}
-
-// -a * b + c
-combine (BH_QSR) {
-  na = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
-  r = sfpmad_lv (lv2, %na, b, c, mod);
-  {}
-  {
-    unsigned imod = TREE_INT_CST_LOW (mod);
-    mod = build_int_cst (TREE_TYPE (mod),
-			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
-  }
-  r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
 // -(a * b)
