@@ -60,6 +60,71 @@ combine () {
   res = sfpassign_lv (lv2, val);
 }
 
+// - [0,1,-1] -> [0,-1,1]
+combine () {
+  cst|OU|SA = sfpreadlreg (regno);
+  res = sfpmov_lv (lv2, cst, SFPMOV_MOD1_COMPL);
+  {
+    auto ireg = TREE_INT_CST_LOW (regno);
+    if (ireg != CREG_IDX_NEG_1
+	&& ireg != CREG_IDX_0
+	&& ireg != CREG_IDX_1)
+      return false;
+  }
+  {
+    auto ireg = TREE_INT_CST_LOW (regno);
+    ireg = ireg == CREG_IDX_NEG_1 ? CREG_IDX_1
+      : ireg == CREG_IDX_1 ? CREG_IDX_NEG_1
+      : ireg;
+    neg_regno = build_int_cst (TREE_TYPE (regno), ireg);
+  }
+  neg_cst = sfpreadlreg (neg_regno);
+  res = sfpassign_lv (lv2, neg_cst);
+}
+
+// a * 1 -> a
+combine () {
+  one|OU|SA = sfpreadlreg (CREG_IDX_1);
+  res = sfpmul_lv (lv, %a, one, 0);
+  {}
+  res = sfpassign_lv (lv, a);
+}
+
+// a * -1 -> -a
+combine () {
+  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
+  res = sfpmul_lv (lv, %a, neg, 0);
+  {}
+  res = sfpmov_lv (lv, a, SFPMOV_MOD1_COMPL);
+}
+combine () {
+  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
+  res = sfpmul_lv (lv, neg, neg, 0);
+  {}
+  pos = sfpreadlreg (CREG_IDX_1);
+  res = sfpassign_lv (lv, pos);
+}
+
+// a * 0 -> 0
+// It'd be nice to do this earlier, before the DCE pass, but I suspect a is
+// mostly gonna still be live anyway.
+combine (false) {
+  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
+  res = sfpmul_lv (lv, %a, zero, 0);
+  {}
+  res = sfpassign_lv (lv, zero);
+}
+
+// a + 0 -> a
+// It'd be nice to do this earlier, before the DCE pass, but I suspect a is
+// mostly gonna still be live anyway.
+combine () {
+  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
+  res = sfpadd_lv (lv, %a, zero, 0);
+  {}
+  res = sfpassign_lv (lv, a);
+}
+
 // Do these in preference to mul,add->mad, as the register pressure is
 // immediately reduced.
 // a * fp16b(scalar)
