@@ -36,7 +36,7 @@ namespace {
 	  continue;
 	
 	auto insnd = rvtt_get_insn_data (g);
-	if (!insnd || insnd->get_not_live ()->id != id)
+	if (!insnd || insnd->get_non_live ()->id != id)
 	  return false;
       }
 
@@ -60,6 +60,69 @@ combine () {
   res = sfpassign_lv (lv2, val);
 }
 
+// - [0,1,-1] -> [0,-1,1]
+combine () {
+  cst|OU|SA = sfpreadlreg (regno);
+  res = sfpmov_lv (lv2, cst, SFPMOV_MOD1_COMPL);
+  {
+    auto ireg = TREE_INT_CST_LOW (regno);
+    if (!(ireg == CREG_IDX_NEG_1
+	  || ireg == CREG_IDX_1
+	  || (ireg == CREG_IDX_0 && !flag_signed_zeros)))
+      return false;
+  }
+  {
+    auto ireg = TREE_INT_CST_LOW (regno);
+    ireg = ireg == CREG_IDX_NEG_1 ? CREG_IDX_1
+      : ireg == CREG_IDX_1 ? CREG_IDX_NEG_1
+      : ireg;
+    neg_regno = build_int_cst (TREE_TYPE (regno), ireg);
+  }
+  neg_cst = sfpreadlreg (neg_regno);
+  res = sfpassign_lv (lv2, neg_cst);
+}
+
+// a * 1 -> a
+combine () {
+  one|OU|SA = sfpreadlreg (CREG_IDX_1);
+  res = sfpmul_lv (lv, %a, one, 0);
+  {}
+  res = sfpassign_lv (lv, a);
+}
+
+// a * -1 -> -a
+combine () {
+  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
+  res = sfpmul_lv (lv, %a, neg, 0);
+  {}
+  res = sfpmov_lv (lv, a, SFPMOV_MOD1_COMPL);
+}
+combine () {
+  neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
+  res = sfpmul_lv (lv, neg, neg, 0);
+  {}
+  pos = sfpreadlreg (CREG_IDX_1);
+  res = sfpassign_lv (lv, pos);
+}
+
+// a * 0 -> 0
+combine () {
+  { return flag_finite_math_only; }
+  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
+  res = sfpmul_lv (lv, %a, zero, 0);
+  {}
+  res = sfpassign_lv (lv, zero);
+}
+
+// a + 0 -> a
+combine () {
+  { return !flag_signed_zeros; }
+  zero|OU|SA = sfpreadlreg (CREG_IDX_0);
+  res = sfpadd_lv (lv, %a, zero, 0);
+  {}
+  res = sfpassign_lv (lv, a);
+}
+
 // Do these in preference to mul,add->mad, as the register pressure is
 // immediately reduced.
 // a * fp16b(scalar)
@@ -68,7 +131,7 @@ combine () {
   res = sfpmul_lv (lv, %a, cst, 0);
   {
     if (TREE_INT_CST_LOW (id)
-	&& ! all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
+	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
       return false;
   }
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
@@ -84,7 +147,7 @@ combine () {
   res = sfpadd_lv (lv, %a, cst, 0);
   {
     if (TREE_INT_CST_LOW (id)
-	&& ! all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
+	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
       return false;
   }
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
