@@ -481,8 +481,12 @@ public:
 
 public:
   bool parse (Lexer &);
+  bool has_hook (Hooks ix) const { return hooks[ix]; }
   void emit_hook (Stream &, Hooks) const;
   void emit_hook_name (Stream &, Hooks) const;
+
+  bool has_enable () const {return !target.empty (); }
+  void emit_enable_name (Stream &) const;
 
 private:
   bool parse_patterns (Lexer &, bool is_pattern = false);
@@ -812,6 +816,11 @@ Stream::pop ()
 }
 
 void
+Combine::emit_enable_name (Stream &out) const
+{
+  out.print ("combiner_enable_", target);
+}
+void
 Combine::emit_hook_name (Stream &out, Hooks hook) const
 {
   static char const *const tags[H_HWM] = {"_enable", "_pred", "_init", "_fini"};
@@ -862,9 +871,13 @@ Combine::emit_hook (Stream &out, Hooks hook) const
 	  out.print ("\n");
 	}
     }
-  else if (!target.empty ())
-    out.print ("  if (!combiner_enable_", target, " ())\n",
-	       "    return false;\n");
+  else if (has_enable ())
+    {
+      out.print ("  if (!");
+      emit_enable_name (out);
+      out.print (" ())\n",
+		 "    return false;\n");
+    }
 
   out.push (hooks[hook].lineno);
   out.print (hooks[hook].code, "\n");
@@ -918,7 +931,7 @@ main (int argc, const char **argv)
 	max_reps = combine.rep_lhs_hwm;
 
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
-	if (combine.hooks[ix])
+	if (combine.has_hook (Combine::Hooks (ix)))
 	  combine.emit_hook (out, Combine::Hooks (ix));
     }
 
@@ -963,10 +976,10 @@ main (int argc, const char **argv)
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
 	  out.print (", ");
-	  if (combine.hooks[ix])
+	  if (combine.has_hook (Combine::Hooks (ix)))
 	    combine.emit_hook_name (out, Combine::Hooks (ix));
-	  else if (ix == Combine::H_Enable && !combine.target.empty ())
-	    out.print ("combiner_enable_", combine.target);
+	  else if (ix == Combine::H_Enable && combine.has_enable ())
+	    combine.emit_enable_name (out);
 	  else
 	    out.print ("nullptr");
 	}
