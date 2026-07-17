@@ -55,6 +55,7 @@ void add0 ()
 /*
 **_Z4add0v:
 **	# READ L0
+**	SFPADD	L0, L0, L9, 0
 **	# WRITE L0
 **	ret
 */

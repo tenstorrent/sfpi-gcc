@@ -117,7 +117,7 @@ combine (false) {
 }
 
 // a + 0 -> a
-combine () {
+combine (false) { // only safe with -fno-signed-zero
   zero|OU|SA = sfpreadlreg (CREG_IDX_0);
   res = sfpadd_lv (lv, %a, zero, 0);
   {}
