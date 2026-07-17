@@ -73,7 +73,7 @@ void negate1 ()
 **_Z7negate1v:
 **	SFPMOV	L0, L11, 2
 **	# WRITE L0
-**	SFPMOV	L1, L9, 2
+**	SFPMOV	L1, L9, 1
 **	# WRITE L1
 **	SFPMOV	L2, L10, 2
 **	# WRITE L2
@@ -94,7 +94,7 @@ void negate2 ()
 **_Z7negate2v:
 **	SFPMOV	L0, L11, 2
 **	# WRITE L0
-**	SFPMOV	L1, L9, 2
+**	SFPMOV	L1, L9, 1
 **	# WRITE L1
 **	SFPMOV	L2, L10, 2
 **	# WRITE L2

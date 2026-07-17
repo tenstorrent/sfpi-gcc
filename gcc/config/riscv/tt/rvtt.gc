@@ -67,7 +67,7 @@ combine () {
   {
     auto ireg = TREE_INT_CST_LOW (regno);
     if (ireg != CREG_IDX_NEG_1
-	&& ireg != CREG_IDX_0
+	//	&& ireg != CREG_IDX_0 // only safe with -fno-signed-zeroes
 	&& ireg != CREG_IDX_1)
       return false;
   }
@@ -108,6 +108,7 @@ combine () {
 // a * 0 -> 0
 // It'd be nice to do this earlier, before the DCE pass, but I suspect a is
 // mostly gonna still be live anyway.
+// Only safe with -ffinite-math-only
 combine (false) {
   zero|OU|SA = sfpreadlreg (CREG_IDX_0);
   res = sfpmul_lv (lv, %a, zero, 0);
@@ -116,8 +117,6 @@ combine (false) {
 }
 
 // a + 0 -> a
-// It'd be nice to do this earlier, before the DCE pass, but I suspect a is
-// mostly gonna still be live anyway.
 combine () {
   zero|OU|SA = sfpreadlreg (CREG_IDX_0);
   res = sfpadd_lv (lv, %a, zero, 0);
