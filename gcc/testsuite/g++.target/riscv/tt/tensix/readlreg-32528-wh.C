@@ -1,7 +1,6 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2" }
 // { dg-final { check-function-bodies "**" "" } }
 
-
 namespace cst {
 void foo () {
   auto x =  __builtin_rvtt_sfpreadlreg (9);
