@@ -112,7 +112,6 @@ namespace {
     uint8_t rep_use_mask; // patterns whos output is used in a replacement
     unsigned lineno; // line in rvtt.gc file
 
-    bool (*target_hook) (); // target-specific enablement
     bool (*enable_hook) (); // combiner-specific emablement
     bool (*pred_hook) (gcall *[], tree [], unsigned); // combiner-specific checks
     void (*init_hook) (gcall *[], tree [], unsigned); // combiner-specific initialization
@@ -378,9 +377,6 @@ Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_d
 bool
 Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
-  if (enable_hook && !enable_hook ())
-    return false;
-
   match_masks masks;
   if (!match_one (gimple_bb (call), pats_hwm - 1, call, insnd, 0, matched, masks))
     return false;
@@ -516,7 +512,7 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 	  auto live_slot = rep.args[lv_arg].val;
 	  if (!matched.vars[live_slot])
 	    {
-	      insnd = insnd->get_not_live ();
+	      insnd = insnd->get_non_live ();
 	      lv_delta = 1;
 	      if (insnd->id == rvtt_insn_data::sfpassign)
 		assign_mask = 1 << rep.lhs;
@@ -622,7 +618,7 @@ static std::map<rvtt_insn_data::insn_id, std::vector<const Combiner *>::iterator
 static void
 init ()
 {
-  // We assume there will be at least one combiner
+  // We always push rvtt_insnd_date::hwm
   if (!starting_ids.empty ())
     return;
 
@@ -632,18 +628,20 @@ init ()
   std::map<unsigned, const Combiner *> tmp;
 
   for (auto &combiner : combiners)
-    if (!combiner.target_hook || combiner.target_hook ())
+    if (!combiner.enable_hook || combiner.enable_hook ())
       {
-	// Check all patterns and replacements have correct number of arguments
-	for (unsigned ix = combiner.reps_hwm; ix--;)
-	  gcc_assert (rvtt_get_insn_data (combiner.shapes[ix].id)->num_args ()
-		      == combiner.shapes[ix].num_args);
+	// Check all patterns and replacements have decls and correct number of arguments
+	for (unsigned ix = combiner.reps_hwm; ix--;) {
+	  auto const *insnd = rvtt_get_insn_data (combiner.shapes[ix].id);
+	  gcc_assert (insnd->decl && insnd->get_non_live ()->decl);
+	  gcc_assert (insnd->num_args () == combiner.shapes[ix].num_args);
+	}
 
 	auto id = combiner.shapes[combiner.pats_hwm - 1].id;
 	tmp.emplace (id2key (id, combiner.lineno), &combiner);
-	auto not_live_id = rvtt_get_insn_data (id)->get_not_live ()->id;
-	if (not_live_id != id)
-	  tmp.emplace (id2key (not_live_id, combiner.lineno), &combiner);
+	auto nlv_id = rvtt_get_insn_data (id)->get_non_live ()->id;
+	if (nlv_id != id)
+	  tmp.emplace (id2key (nlv_id, combiner.lineno), &combiner);
       }
 
   // Reserve space so iterators we put into starting_ids are not invalidated as we
@@ -703,7 +701,7 @@ addimuli_resynthing ()
 	  add_map.emplace (def, synth_add {nullptr, def, N->insnd, imm});
 
 	  use_set.insert (N->call);
-	  kinds |= 1 << (N->insnd->get_not_live ()->id
+	  kinds |= 1 << (N->insnd->get_non_live ()->id
 			 == rvtt_insn_data::sfpmuli);
 	}
       while (++N != E && N->id == id);

@@ -215,7 +215,7 @@ rvtt_get_insn_data (rvtt_insn_data::insn_id id)
 }
 
 const rvtt_insn_data *
-rvtt_get_insn_data (gcall *call)
+rvtt_get_insn_data (gcall const *call)
 {
   tree decl = gimple_call_fndecl (call);
   if (!decl)
@@ -236,11 +236,11 @@ rvtt_get_insn_data (gcall *call)
 }
 
 const rvtt_insn_data *
-rvtt_get_insn_data (gimple *stmt)
+rvtt_get_insn_data (gimple const *stmt)
 {
-  if (!is_a <gcall *> (stmt))
+  if (!is_a <gcall const *> (stmt))
     return nullptr;
-  return rvtt_get_insn_data (as_a <gcall *> (stmt));
+  return rvtt_get_insn_data (as_a <gcall const *> (stmt));
 }
 
 bool

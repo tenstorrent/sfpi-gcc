@@ -578,7 +578,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 {
   gcc_assert (call_insnd->is_live () == scalar_insnd->is_live ());
 
-  auto nlv_call_insnd = call_insnd->get_not_live ();
+  auto nlv_call_insnd = call_insnd->get_non_live ();
   int mod = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
   bool maybe_flip_sign = (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v
 			  && mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST);

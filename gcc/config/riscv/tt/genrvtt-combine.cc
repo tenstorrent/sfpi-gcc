@@ -814,21 +814,13 @@ Stream::pop ()
 void
 Combine::emit_hook_name (Stream &out, Hooks hook) const
 {
-  if (!hooks[hook])
-    out.print ("nullptr");
-  else
-    {
-      static char const *const tags[H_HWM] = {"_enable", "_pred", "_init", "_fini"};
-      out.print ("combiner_", lineno, tags[hook]);
-    }
+  static char const *const tags[H_HWM] = {"_enable", "_pred", "_init", "_fini"};
+  out.print ("combiner_", lineno, tags[hook]);
 }
 
 void
 Combine::emit_hook (Stream &out, Hooks hook) const
 {
-  if (!hooks[hook])
-    return;
-  
   out.print ("static ", hook == H_Pred || hook == H_Enable ? "bool" : "void", " ");
   emit_hook_name (out, hook);
   out.print (" (");
@@ -870,6 +862,9 @@ Combine::emit_hook (Stream &out, Hooks hook) const
 	  out.print ("\n");
 	}
     }
+  else if (!target.empty ())
+    out.print ("  if (!combiner_enable_", target, " ())\n",
+	       "    return false;\n");
 
   out.push (hooks[hook].lineno);
   out.print (hooks[hook].code, "\n");
@@ -923,7 +918,8 @@ main (int argc, const char **argv)
 	max_reps = combine.rep_lhs_hwm;
 
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
-	combine.emit_hook (out, Combine::Hooks (ix));
+	if (combine.hooks[ix])
+	  combine.emit_hook (out, Combine::Hooks (ix));
     }
 
   out.print ("\n");
@@ -963,16 +959,16 @@ main (int argc, const char **argv)
 		 ", ", combine.vars.size (),
 		 ", ", combine.replace_mask,
 		 ", ", combine.rep_use_mask,
-		 ", ", combine.lineno,
-		 ", ");
-      if (combine.target.empty ())
-	out.print ("nullptr");
-      else
-	out.print ("combiner_enable_", combine.target);
+		 ", ", combine.lineno);
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
 	  out.print (", ");
-	  combine.emit_hook_name (out, Combine::Hooks (ix));
+	  if (combine.hooks[ix])
+	    combine.emit_hook_name (out, Combine::Hooks (ix));
+	  else if (ix == Combine::H_Enable && !combine.target.empty ())
+	    out.print ("combiner_enable_", combine.target);
+	  else
+	    out.print ("nullptr");
 	}
       out.print ("},\n");
 

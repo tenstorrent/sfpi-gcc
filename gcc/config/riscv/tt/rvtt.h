@@ -222,7 +222,7 @@ public:
       return this + 1;
     return nullptr;
   }
-  const rvtt_insn_data *get_not_live () const {
+  const rvtt_insn_data *get_non_live () const {
     auto res = this;
     if (is_live ())
       res -= 1;
@@ -294,9 +294,9 @@ extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 
-extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id);
-extern const rvtt_insn_data *rvtt_get_insn_data (gimple *stmt);
-extern const rvtt_insn_data *rvtt_get_insn_data (gcall *stmt);
+extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
+extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
+extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
 
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 
