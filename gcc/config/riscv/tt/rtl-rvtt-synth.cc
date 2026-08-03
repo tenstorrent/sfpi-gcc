@@ -197,7 +197,8 @@ transform (function *fn)
 	  if (rtx note = find_reg_equal_equiv_note (insn))
 	    {
 	      gcc_checking_assert (GET_CODE (XEXP (note, 0)) == UNSPEC);
-	      XEXP (note, 0) = unspec;
+	      XEXP (note, 0) = gen_rtx_UNSPEC (GET_MODE (unspec), XVEC (unspec, 0),
+					       XINT (unspec, 1));
 	    }
 	  if (dump_file)
 	    {

@@ -585,9 +585,11 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
     if ((1 << ix) & matched.deleted)
       {
 	auto gsi = gsi_for_stmt (matched.calls[ix]);
+	unlink_stmt_vdef (matched.calls[ix]);
 	gsi_remove (&gsi, true);
       }
 
+  unlink_stmt_vdef (**gsi);
   gsi_remove (gsi, true);
   *gsi = gsi_for_stmt (replace[shapes[reps_hwm - 1].lhs]);
 
@@ -622,6 +624,7 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 		  print_gimple_stmt (dump_file, rep, 0);
 		}
 	      rvtt_substitute_value (lhs, gimple_call_arg (rep, 0));
+	      unlink_stmt_vdef (rep);
 	      if (**gsi == rep)
 		gsi_remove (gsi, true);
 	      else

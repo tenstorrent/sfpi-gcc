@@ -100,6 +100,23 @@ gather_var_defs (std::unordered_set<gcall *> &insns, std::vector<gcall *> &workl
       }
 }
 
+static void
+remove_phi_uses (tree var)
+{
+  gimple *stmt;
+  imm_use_iterator iter;
+  FOR_EACH_IMM_USE_STMT (stmt, iter, var)
+    if (auto *phi = dyn_cast <gphi *> (stmt))
+      {
+	if (dump_file)
+	  print_gimple_stmt (dump_file, phi, 0);
+	tree res = gimple_phi_result (phi);
+	auto gsi = gsi_for_stmt (phi);
+	remove_phi_node (&gsi, true);
+	remove_phi_uses (res);
+      }
+}
+
 namespace {
 
 const pass_data pass_data_rvtt_dce =
@@ -161,9 +178,13 @@ public:
       fprintf (dump_file, "\nDeleting unreachable\n");
     for (auto *call : insns)
       {
+	if (tree var = gimple_call_lhs (call))
+	  remove_phi_uses (var);
+
 	if (dump_file)
 	  print_gimple_stmt (dump_file, call, 0);
 	auto gsi = gsi_for_stmt (call);
+	unlink_stmt_vdef (call);
 	gsi_remove (&gsi, true);
       }
     if (dump_file)

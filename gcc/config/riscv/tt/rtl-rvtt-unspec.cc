@@ -210,7 +210,14 @@ transform (function *fn)
 	      rtx val = reg_vals[regno].val;
 
 	      for (; pos != operands.end () && pos->regno == regno; ++pos)
-		validate_change (insn, pos->loc, val, true);
+		{
+		  if (GET_CODE (val) == UNSPEC)
+		    // Do not share unspec RTL
+		    val = gen_rtx_UNSPEC (GET_MODE (val), XVEC (val, 0),
+					  XINT (val, 1));
+
+		  validate_change (insn, pos->loc, val, true);
+		}
 
 	      bool applied = apply_change_group ();
 	      if (dump_file)

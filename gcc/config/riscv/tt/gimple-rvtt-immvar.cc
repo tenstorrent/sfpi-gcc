@@ -338,6 +338,7 @@ replace_loadi (gcall *call, gcall *earlier, int op, tree val,
   gsi_insert_before (&gsi, new_call, GSI_SAME_STMT);
   if (extra_call)
     gsi_insert_before (&gsi, extra_call, GSI_SAME_STMT);
+  unlink_stmt_vdef (call);
   gsi_remove (&gsi, true);
 }
 
@@ -751,6 +752,7 @@ public:
 	  if (auto *insnd = rvtt_get_insn_data (*gsi))
 	    if (immvar_expand (gsi, insnd, as_a <gcall *> (*gsi)))
 	      {
+		unlink_stmt_vdef (*gsi);
 		gsi_remove (&gsi, true);
 		changed = true;
 		continue;
@@ -869,6 +871,7 @@ public:
 	    if (auto *scalar = insnd->get_scalar ())
 	      if (immload_combine (gsi, insnd, as_a <gcall *> (*gsi), scalar))
 		{
+		  unlink_stmt_vdef (*gsi);
 		  gsi_remove (&gsi, true);
 		  changed = true;
 		  continue;

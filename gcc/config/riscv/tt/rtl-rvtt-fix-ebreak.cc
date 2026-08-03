@@ -84,16 +84,18 @@ workaround_ebreak (function *cfn)
 	      dump_insn_slim (dump_file, insn);
 	    }
 
-	  body = gen_rtx_ASM_INPUT_loc (VOIDmode, ggc_strdup ("nop"), loc);
-	  MEM_VOLATILE_P (body) = true;
-	  rtx nop = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (2));
-	  XVECEXP (nop, 0, 0) = body;
-	  rtx clobber = gen_rtx_SCRATCH (VOIDmode);
-	  clobber = gen_rtx_MEM (BLKmode, clobber);
-	  clobber = gen_rtx_CLOBBER (VOIDmode, clobber);
-	  XVECEXP (nop, 0, 1) = clobber;
 	  for (unsigned ix = NUM_NOPS; ix--;)
-	    emit_insn_after (nop, insn);
+	    {
+	      body = gen_rtx_ASM_INPUT_loc (VOIDmode, ggc_strdup ("nop"), loc);
+	      MEM_VOLATILE_P (body) = true;
+	      rtx nop = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (2));
+	      XVECEXP (nop, 0, 0) = body;
+	      rtx clobber = gen_rtx_SCRATCH (VOIDmode);
+	      clobber = gen_rtx_MEM (BLKmode, clobber);
+	      clobber = gen_rtx_CLOBBER (VOIDmode, clobber);
+	      XVECEXP (nop, 0, 1) = clobber;
+	      emit_insn_after (nop, insn);
+	    }
 	}
     }
 }
