@@ -20,6 +20,13 @@ along with GCC; see the file COPYING3.  If not see
 
 // Remember, these are tried in source order.
 
+// integer a + 0 -> a
+combine () {
+  res|MU = sfpiadd_i_lv (0, lv, val, 0, 0, 0, SFPIADD_MOD1_CC_NONE);
+  {}
+  res = sfpassign_lv (lv, val);
+}
+
 namespace {
   bool all_uses_are (tree cst, gcall *res_call, rvtt_insn_data::insn_id id)
   {

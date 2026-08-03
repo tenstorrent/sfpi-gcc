@@ -572,7 +572,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 // CALL has a SCALAR variant, if its second op is from a LOADI and the value
 // being loaded fits in the immediate slot, make it so.
 
-static bool
+static gcall *
 immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 		 gcall *call, const rvtt_insn_data *scalar_insnd)
 {
@@ -586,33 +586,33 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
     mod ^= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
   if (!(scalar_insnd->mod_info ().mod () & (1u << mod)))
     // Mod is incompatible
-    return false;
+    return nullptr;
 
   tree imm_op = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 0 : 1));
   gimple *def = SSA_NAME_DEF_STMT (imm_op);
 
   auto *def_insnd = rvtt_get_insn_data (def);
   if (!def_insnd)
-    return false;
+    return nullptr;
 
   auto *def_call = as_a <gcall *> (def);
   int32_t imm = 0;
   switch (def_insnd->id)
     {
     default:
-      return false;
+      return nullptr;
 
     case rvtt_insn_data::sfploadi:
       {
 	tree imm_op = gimple_call_arg (def_call, def_insnd->imm_arg ());
 	if (SSA_VAR_P (imm_op))
-	  return false;
+	  return nullptr;
 	imm = TREE_INT_CST_LOW (imm_op);
 	tree mod_op = gimple_call_arg (def_call, def_insnd->mod_arg ());
 	switch (TREE_INT_CST_LOW (mod_op))
 	  {
 	  default:
-	    return false;
+	    return nullptr;
 
 	  case SFPLOADI_MOD0_USHORT:
 	    break;
@@ -631,17 +631,17 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	  {
 	    bound >>= 1;
 	    if (imm < ~bound)
-	      return false;
+	      return nullptr;
 	  }
 
 	if (imm > bound)
-	  return false;
+	  return nullptr;
       }
       break;
 
     case rvtt_insn_data::sfpreadlreg:
       if (TREE_INT_CST_LOW (gimple_call_arg (def_call, 0)) != CREG_IDX_0)
-	return false;
+	return nullptr;
 
       // imm is zero,
       break;
@@ -654,54 +654,27 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
       print_gimple_stmt (dump_file, call, 2);
     }
 
-  tree input = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 1 : 0));
-  bool eliding = false;
-  if (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v
-      && !imm && !call_insnd->sets_cc (mod))
-    {
-      // We can elide call entirely
-      if (call_insnd->is_live ())
-	eliding = true;
-      else
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "to nothing\n");
-
-	  if (tree output = gimple_call_lhs (call))
-	    rvtt_substitute_value (output, input);
-	  if (dump_file)
-	    fprintf (dump_file, "\n");
-	  return true;
-	}
-    }
-
   // Replace the CALL with one of SCALAR
-  if (eliding)
-    scalar_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpassign_lv);
-    
+  tree input = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 1 : 0));
   gimple *new_call = gimple_build_call (scalar_insnd->decl, scalar_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call, gimple_call_lhs (call));
   unsigned argno = 0;
-  if (!eliding)
-    gimple_call_set_arg (new_call, argno++, null_pointer_node);
+  gimple_call_set_arg (new_call, argno++, null_pointer_node);
   if (scalar_insnd->is_live ())
     gimple_call_set_arg (new_call, argno++, gimple_call_arg (call, 0));
 
   gimple_call_set_arg (new_call, argno++, input);
 
-  if (!eliding)
-    {
-      gimple_call_set_arg (new_call, argno++, build_int_cst (integer_type_node, imm));
-      gimple_call_set_arg (new_call, argno++, integer_zero_node);
-      gimple_call_set_arg (new_call, argno++, integer_zero_node);
+  gimple_call_set_arg (new_call, argno++, build_int_cst (integer_type_node, imm));
+  gimple_call_set_arg (new_call, argno++, integer_zero_node);
+  gimple_call_set_arg (new_call, argno++, integer_zero_node);
 
-      gimple_call_set_arg (new_call, argno++, build_int_cst (unsigned_type_node, mod));
+  gimple_call_set_arg (new_call, argno++, build_int_cst (unsigned_type_node, mod));
 
-      // Copy remaining args
-      for (unsigned limit = scalar_insnd->num_args (); argno != limit; argno++)
-	gimple_call_set_arg (new_call, argno, gimple_call_arg (call, argno - 3));
-    }
+  // Copy remaining args
+  for (unsigned limit = scalar_insnd->num_args (); argno != limit; argno++)
+    gimple_call_set_arg (new_call, argno, gimple_call_arg (call, argno - 3));
 
   gsi_insert_before (&gsi, new_call, GSI_SAME_STMT);
 
@@ -709,9 +682,9 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
     {
       fprintf (dump_file, "to:\n");
       print_gimple_stmt (dump_file, new_call, 2);
-      fprintf (dump_file, "\n");
     }
-  return true;
+
+  return def_call;
 }
 
 namespace {
@@ -867,9 +840,24 @@ public:
 	{
 	  if (auto *insnd = rvtt_get_insn_data (*gsi))
 	    if (auto *scalar = insnd->get_scalar ())
-	      if (immload_combine (gsi, insnd, as_a <gcall *> (*gsi), scalar))
+	      if (auto *def_call
+		  = immload_combine (gsi, insnd, as_a <gcall *> (*gsi), scalar))
 		{
 		  gsi_remove (&gsi, true);
+		  // We run independet of DCE, so remove the defining insn if
+		  // it has no other uses.
+		  if (has_zero_uses (gimple_call_lhs (def_call)))
+		    {
+		      if (dump_file)
+			{
+			  fprintf (dump_file, "deleting:\n");
+			  print_gimple_stmt (dump_file, def_call, 2);
+			}
+		      auto gsi = gsi_for_stmt (def_call);
+		      gsi_remove (&gsi, true);
+		    }
+		  if (dump_file)
+		    fprintf (dump_file, "\n");
 		  changed = true;
 		  continue;
 		}
