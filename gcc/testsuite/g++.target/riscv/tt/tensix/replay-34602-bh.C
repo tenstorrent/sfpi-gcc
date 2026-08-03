@@ -200,22 +200,22 @@ void six (unsigned bits)
 }
 /*
 **_Z3sixj:
-**	li	a5,16773120
-**	slli	a0,a0,12
-**	and	a0,a0,a5
-**	li	a3, 2046820357	# 2:7a000005
-**	lui	a4,%hi\(ibuf\)
-**	add	a3,a3,a0
-**	addi	a4,a4,%lo\(ibuf\)
-**	li	a5,8
+**	li	a4,16773120
+**	slli	a5,a0,12
+**	and	a5,a5,a4
+**	lui	a3,%hi\(ibuf\)
+**	li	a4, 2046820357	# 2:7a000005
+**	add	a5,a5,a4
+**	addi	a3,a3,%lo\(ibuf\)
+**	li	a4,8
 **	TTREPLAY	0, 5, 1, 1
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, 0
-**	sw	a3, 0\(a4\)	# 2:SFPSHFT	L0, L0, a3, 5
+**	sw	a5, 0\(a3\)	# 2:SFPSHFT	L0, L0, a5, 5
 **	SFPADD	L0, L0, L0, 0
 **	SFPSTORE	L0, 0, 0, 0
 **	TTREPLAY	0, 5, 0, 0
-**	addi	a5,a5,-2
-**	bne	a5,zero,.L[0-9]+
+**	addi	a4,a4,-2
+**	bne	a4,zero,.L[0-9]+
 **	ret
 */

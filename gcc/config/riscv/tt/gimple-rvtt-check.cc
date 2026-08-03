@@ -174,8 +174,8 @@ static bool
 is_undef_sfpu (tree val)
 {
   return SSA_VAR_P (val)
-    && ssa_name_maybe_undef_p (val)
-    && is_sfpu_type (TREE_TYPE (val));
+    && is_sfpu_type (TREE_TYPE (val))
+    && ssa_undefined_value_p (val, false);
 }
 
 static bool
@@ -187,73 +187,69 @@ is_memory (tree arg)
 }
 
 static tree
-const_zero_reg (gimple_stmt_iterator &gsi, tree arg)
+const_zero_reg (gimple_stmt_iterator *gsi, tree res = nullptr)
 {
   auto *insnd = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
   gcall *new_stmt = gimple_build_call (insnd->decl, 1);
-  tree reg = make_ssa_name (TREE_TYPE (arg), new_stmt);
 
-  gimple_call_set_arg (new_stmt, 0, build_int_cst (unsigned_type_node, 8));
-  gimple_set_location (new_stmt, gimple_location (*gsi));
-  gimple_call_set_lhs (new_stmt, reg);
+  if (!res)
+    res = make_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)));
 
-  gsi_insert_before (&gsi, new_stmt, GSI_SAME_STMT);
+  gimple_call_set_arg (new_stmt, 0, build_int_cst (unsigned_type_node, CREG_IDX_0));
+  gimple_set_location (new_stmt, gimple_location (**gsi));
+  gimple_call_set_lhs (new_stmt, res);
 
-  return reg;
+  gsi_insert_before (gsi, new_stmt, GSI_SAME_STMT);
+
+  return res;
 }
 
 static bool
-check_assign (gimple_stmt_iterator &gsi, bool is_early, gassign *assign)
+check_assign (gimple_stmt_iterator *gsi, bool is_early, gassign *assign)
 {
-  bool changed = false;
+  if (!is_early)
+    if (auto *lhs = gimple_get_lhs (assign))
+      if (is_memory (lhs))
+	{
+	  error_at (gimple_nonartificial_location (assign),
+		    "cannot write SFPU object to memory");
+	  goto remove;
+	}
 
-  auto *ops = gimple_ops (assign);
-  unsigned limit = gimple_num_ops (assign);
-  for (unsigned opno = 0; opno != limit; opno++)
-    if (auto op = ops[opno])
+  {
+    auto *rhs = gimple_assign_rhs1 (assign);
+    if (is_early ? is_undef_sfpu (rhs) : is_memory (rhs))
       {
-	if (!opno)
-	  {
-	    if (!is_early && is_memory (op))
-	      {
-		error_at (gimple_nonartificial_location (assign),
-			  "cannot write SFPU object to memory");
-		ops[opno] = nullptr;
-		update_stmt (assign);
-		changed = true;
-	      }
-	  }
-	else if (is_early ? is_undef_sfpu (op) : is_memory (op))
-	  {
-	    error_at (gimple_nonartificial_location (assign),
-		      "rhs operand %d %s", opno,
-		      is_early ? "is uninitialized"
-		      : "cannot read SFPU object from memory");
-	    ops[opno] = const_zero_reg (gsi, ops[opno]);
-	    update_stmt (assign);
-	    changed = true;
-	  }
+	error_at (gimple_nonartificial_location (assign),
+		  is_early ? "reading uninitialized"
+		  : "cannot read SFPU object from memory");
+	if (auto *lhs = gimple_get_lhs (assign))
+	  const_zero_reg (gsi, lhs);
+	goto remove;
       }
+  }
 
-  return changed;
+  return false;
+
+ remove:;
+  unlink_stmt_vdef (assign);
+  gsi_remove (gsi, true);
+  return true;
 }
 
 static unsigned
-check (function *fn, bool is_early)
+check_early (function *fn)
 {
   bool changed = false;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-	 !gsi_end_p (gsi); gsi_next (&gsi))
+	 !gsi_end_p (gsi);)
       {
 	if (auto *insnd = rvtt_get_insn_data (*gsi))
 	  {
 	    auto *call = as_a <gcall *> (*gsi);
-	    changed |= check_int_args (is_early, insnd, call);
-
-	    if (!is_early)
-	      continue;
+	    changed |= check_int_args (true, insnd, call);
 
 	    if (riscv_tt_fix_qsr_replay > 0 && insnd->id == rvtt_insn_data::ttreplay)
 	      {
@@ -264,6 +260,7 @@ check (function *fn, bool is_early)
 			    "Quasar replay instruction cannot exec-while-load, "
 			    "your program will behave erratically");
 	      }
+
 	    for (unsigned argno = 0, limit = gimple_call_num_args (call);
 		 argno != limit; argno++)
 	      {
@@ -274,16 +271,20 @@ check (function *fn, bool is_early)
 			      "argument %d of %qE is not initialized", argno + 1,
 			      gimple_call_fndecl (call));
 		    gimple_call_set_arg (call, argno,
-					 const_zero_reg (gsi, arg));
+					 const_zero_reg (&gsi));
 		    update_stmt (call);
 		    changed = true;
 		  }
 	      }
 	  }
 	else if (auto *a = dyn_cast<gassign *> (*gsi))
-	  changed |= check_assign (gsi, is_early, a);
-	else if (!is_early)
-	  continue;
+	  {
+	    if (check_assign (&gsi, true, a))
+	      {
+		changed = true;
+		continue;
+	      }
+	  }
 	else if (auto *call = dyn_cast<gcall *> (*gsi))
 	  {
 	    if (tree type = gimple_call_fntype (call))
@@ -293,6 +294,34 @@ check (function *fn, bool is_early)
 		  // Delete call, set lhs to something
 		}
 	  }
+	gsi_next (&gsi);
+   }
+  return changed ? TODO_update_ssa : 0;
+}
+
+static unsigned
+check_late (function *fn)
+{
+  bool changed = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	 !gsi_end_p (gsi);)
+      {
+	if (auto *insnd = rvtt_get_insn_data (*gsi))
+	  {
+	    auto *call = as_a <gcall *> (*gsi);
+	    changed |= check_int_args (false, insnd, call);
+	  }
+	else if (auto *a = dyn_cast<gassign *> (*gsi))
+	  {
+	    if (check_assign (&gsi, false, a))
+	      {
+		changed = true;
+		continue;
+	      }
+	  }
+	gsi_next (&gsi);
       }
   return changed ? TODO_update_ssa : 0;
 }
@@ -326,7 +355,7 @@ public:
   virtual unsigned execute (function *fn) override
   {
     check_function_type (DECL_SOURCE_LOCATION (fn->decl), TREE_TYPE (fn->decl), false);
-    return check (fn, true);
+    return check_early (fn);
   }
 };
 
@@ -366,7 +395,7 @@ public:
   }
   virtual unsigned execute (function *fn) override
   {
-    return check (fn, false);
+    return check_late (fn);
   }
 };
 

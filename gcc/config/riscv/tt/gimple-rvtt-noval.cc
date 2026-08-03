@@ -62,6 +62,7 @@ elide_assign_lv (gcall *assign_lv)
   rvtt_substitute_value (gimple_call_lhs (assign_lv),
 			 gimple_call_arg (assign_lv, 1));
   auto gsi = gsi_for_stmt (assign_lv);
+  unlink_stmt_vdef (assign_lv);
   gsi_remove (&gsi, true);
 }
 

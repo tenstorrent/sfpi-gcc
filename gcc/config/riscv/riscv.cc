@@ -9823,12 +9823,6 @@ riscv_register_move_cost (machine_mode mode,
 static unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
-  if (SFPU_REG_P (regno))
-    {
-      constexpr unsigned reg_size = 4 * 32;
-      return (GET_MODE_SIZE (mode).to_constant () + reg_size - 1) / reg_size;
-    }
-
   if (riscv_v_ext_vector_mode_p (mode))
     {
       /* Handle fractional LMUL, it only occupy part of vector register but
@@ -9877,6 +9871,9 @@ riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 
   if (FP_REG_P (regno))
     return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_FP_REG - 1) / UNITS_PER_FP_REG;
+
+  if (SFPU_REG_P (regno))
+    return (GET_MODE_SIZE (mode).to_constant () + 4 * 32 - 1) / (4 * 32);
 
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
