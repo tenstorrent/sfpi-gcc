@@ -82,8 +82,7 @@ namespace {
   struct Shape {
     struct Arg {
       bool is_var : 1; // It's an SSA var, not a constant
-      bool commutes : 1; // It commutes with the next argument
-      unsigned val : 30; // Either combine var slot, or constant
+      unsigned val : 31; // Either combine var slot, or constant
     };
     rvtt_insn_data::insn_id id; // The rvtt id
     uint8_t lhs;  // slot for Lhs var
@@ -110,11 +109,13 @@ namespace {
 
     uint8_t replace_mask; // patterns whos output is a replacement output
     uint8_t rep_use_mask; // patterns whos output is used in a replacement
+    int8_t commute_arg; // final pattern commutable arg, if non-negative
+
     unsigned lineno; // line in rvtt.gc file
 
     bool (*enable_hook) (); // combiner-specific emablement
-    bool (*pred_hook) (gcall *[], tree [], unsigned); // combiner-specific checks
-    void (*init_hook) (gcall *[], tree [], unsigned); // combiner-specific initialization
+    bool (*pred_hook) (gcall *[], tree [], bool); // combiner-specific checks
+    void (*init_hook) (gcall *[], tree [], bool); // combiner-specific initialization
     void (*fini_hook) (gcall *[], tree []); // combiner-specific finalization
 
   public:
@@ -124,8 +125,12 @@ namespace {
 
   private:
     struct match_masks;
-    bool match_one (basic_block bb, unsigned ix, gcall *, const rvtt_insn_data *,
-			  unsigned outer_vars, matched_data &, match_masks &) const;
+    bool match_init (unsigned ix, const Shape &, gcall *call, matched_data &matched, match_masks &masks) const;
+    bool match_fini (const Shape &, const rvtt_insn_data *insnd, match_masks &masks) const;
+    bool match_arg (const Shape &, int argno, basic_block bb, int commute_delta,
+		    gcall *call, const rvtt_insn_data *insnd, matched_data &matched, match_masks &masks) const;
+    bool match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn_data *insnd,
+		      matched_data &matched, match_masks &masks) const;
   };
 }
 
@@ -243,14 +248,13 @@ has_use_between (tree var, gcall *begin, gcall *end,
 struct Combiner::matched_data {
   gcall *calls[combiner_pats_hwm];
   tree vars[combiner_vars_hwm];
-  unsigned commuted = 0;
+  bool commuted = false;
   unsigned deleted = 0;
 };
 
 struct Combiner::match_masks {
   unsigned calls = 0; // Which calls we matched
   unsigned vars = 0;  // Which vars we defined
-  unsigned commuted = 0; // Which commute vars commuted
   unsigned live = 0;  // Which calls were live values
 
 public:
@@ -258,22 +262,15 @@ public:
   match_masks &operator |= (match_masks const &other) {
     calls |= other.calls;
     vars |= other.vars;
-    commuted |= other.commuted;
     live |= other.live;
     return *this;
-  }
-  void clear () {
-    calls = vars = commuted = live = 0;
   }
 };
 
 bool
-Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_data *insnd,
-		     unsigned outer_vars, matched_data &matched, match_masks &masks) const
+Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &matched, match_masks &masks) const
 {
-  auto &pat = shapes[ix];
-
-  gcc_assert (!((1 << pat.lhs) & outer_vars));
+  gcc_assert (!((1 << pat.lhs) & masks.vars));
   tree lhs = gimple_call_lhs (call);
   if (!lhs && !(pat.flags & unsigned (Flags::MaybeUnused)))
     return false;
@@ -284,90 +281,13 @@ Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_d
   matched.vars[pat.lhs] = lhs;
   masks.vars |= 1u << pat.lhs;
 
-  int lv_arg = insnd->id != pat.id ? insnd->live_arg (): -1;
-  int lv_delta = 0;
+  return true;
+}
 
-  match_masks commute_masks;
-  int commute_delta = 0;
-  int commute_arg = -1;
-  for (int argno = 0; argno != pat.num_args; argno++)
-    {
-      if (argno == lv_arg)
-	{
-	  matched.vars[pat.args[argno].val] = nullptr;
-	  masks.vars |= 1u << pat.args[argno].val;
-	  lv_delta = 1;
-	  continue;
-	}
 
-    try_commute:
-      auto &arg_info = pat.args[argno];
-      if (arg_info.commutes)
-	commute_arg = argno;
-      auto arg = gimple_call_arg (call, argno + commute_delta - lv_delta);
-
-      if (!arg_info.is_var)
-	{
-	  if (TREE_CODE (arg) != INTEGER_CST
-	      || TREE_INT_CST_LOW (arg) != arg_info.val)
-	    {
-	    commute_or_fail:
-	      if (!commute_delta && commute_arg >= 0)
-		{
-		  argno = commute_arg;
-		  commute_delta = +1;
-		  commute_masks.clear ();
-		  goto try_commute;
-		}
-	      return false;
-	    }
-	}
-      else if ((1 << arg_info.val) & (commute_masks.vars | masks.vars | outer_vars))
-	{
-	  if (matched.vars[arg_info.val] != arg)
-	    goto commute_or_fail;
-	}
-      else if (arg_info.val >= pats_hwm)
-	{
-	  commute_masks.vars |= 1u << arg_info.val;
-	  matched.vars[arg_info.val] = arg;
-	}
-      else
-	{
-	  auto &next_pat = shapes[arg_info.val];
-	  auto *stmt = SSA_NAME_DEF_STMT (arg);
-	  auto *inner_insnd = rvtt_get_insn_data (stmt);
-	  if (!inner_insnd || !next_pat.is_match (inner_insnd))
-	    goto commute_or_fail;
-
-	  // We only combine within a single BB -- it'd be nice to do better,
-	  // but then CC checking becomes much harder
-	  if (!(next_pat.flags & unsigned (Flags::SetAnywhere))
-	      && bb != gimple_bb (stmt))
-	    goto commute_or_fail;
-
-	  match_masks inner_masks;
-	  if (!match_one (bb, arg_info.val, as_a <gcall *> (stmt), inner_insnd,
-			  commute_masks.vars | masks.vars | outer_vars,
-			  matched, inner_masks))
-	    goto commute_or_fail;
-	  commute_masks |= inner_masks;
-	}
-
-      commute_delta = -commute_delta;
-      if (!arg_info.commutes)
-	{
-	  if (commute_delta)
-	    commute_masks.commuted |= (1 << pat.args[commute_arg].val);
-	  masks |= commute_masks;
-	  commute_masks.clear ();
-	  commute_delta = 0;
-	  commute_arg = -1;
-	}
-    }
-
-  gcc_assert (pat.num_args == gimple_call_num_args (call) + lv_delta);
-
+bool
+Combiner::match_fini (const Shape &pat, const rvtt_insn_data *insnd, match_masks &masks) const
+{
   if (insnd->is_live ())
     masks.live |= 1 << pat.args[insnd->live_arg ()].val;
 
@@ -375,21 +295,126 @@ Combiner::match_one (basic_block bb, unsigned ix, gcall *call, const rvtt_insn_d
 }
 
 bool
+Combiner::match_arg (const Shape &pat, int argno, basic_block bb, int commute_delta,
+		     gcall *call, const rvtt_insn_data *insnd,
+		     matched_data &matched, match_masks &masks) const
+{
+  unsigned lv_delta = 0;
+  if (insnd->id == pat.id)
+    ;
+  else if (argno == insnd->live_arg ())
+    {
+      matched.vars[pat.args[argno].val] = nullptr;
+      masks.vars |= 1u << pat.args[argno].val;
+      return true;
+    }
+  else if (argno)
+    lv_delta = 1;
+
+  auto &arg_info = pat.args[argno];
+  auto arg = gimple_call_arg (call, argno + commute_delta - lv_delta);
+
+  if (!arg_info.is_var)
+    // A constant, must match
+    return TREE_CODE (arg) == INTEGER_CST
+      && TREE_INT_CST_LOW (arg) == arg_info.val;
+
+  if ((1 << arg_info.val) & masks.vars)
+    // An already-seen var, must match
+    return matched.vars[arg_info.val] == arg;
+  
+  if (arg_info.val >= pats_hwm)
+    {
+      // A new free var, record it
+      masks.vars |= 1u << arg_info.val;
+      matched.vars[arg_info.val] = arg;
+      return true;
+    }
+
+  // A new var supplied by an earlier insn, match that insn
+  auto &next_pat = shapes[arg_info.val];
+  auto *stmt = SSA_NAME_DEF_STMT (arg);
+  auto *inner_insnd = rvtt_get_insn_data (stmt);
+  if (!inner_insnd || !next_pat.is_match (inner_insnd))
+    return false;
+
+  // We only combine within a single BB -- it'd be nice to do better,
+  // but then CC checking becomes much harder
+  if (!(next_pat.flags & unsigned (Flags::SetAnywhere))
+      && bb != gimple_bb (stmt))
+    return false;
+
+  return match_shape (arg_info.val, bb, as_a <gcall *> (stmt), inner_insnd,
+		      matched, masks);
+}
+
+bool
+Combiner::match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn_data *insnd,
+		       matched_data &matched, match_masks &masks) const
+{
+  auto &pat = shapes[ix];
+  if (!match_init (ix, pat, call, matched, masks))
+    return false;
+  for (int argno = 0; argno != pat.num_args; argno++)
+    if (!match_arg (pat, argno, bb, 0, call, insnd, matched, masks))
+      return false;
+
+  return match_fini (pat, insnd, masks);
+}
+
+bool
 Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
 {
+  auto &pat = shapes[pats_hwm - 1];
+  match_masks commute_save;
   match_masks masks;
-  if (!match_one (gimple_bb (call), pats_hwm - 1, call, insnd, 0, matched, masks))
+  int commute_delta = 0;
+
+  if (!match_init (pats_hwm - 1, pat, call, matched, masks))
     return false;
-  matched.commuted = masks.commuted;
+
+  int argno = 0;
+  if (false)
+    {
+    commute_or_fail:;
+      if (commute_arg < 0 || matched.commuted)
+	// Already tried commuting, or can't
+	return false;
+
+      commute_delta = +1;
+      matched.commuted = true;
+      argno = commute_arg;
+      masks = commute_save;
+      // fall into loop ...
+    }
+
+  for (; argno != pat.num_args; argno++)
+    {
+      if (argno == commute_arg && !matched.commuted)
+	// We might have to rewind to here, so remember these masks
+	commute_save = masks;
+
+      if (!match_arg (pat, argno, gimple_bb (call), commute_delta, call, insnd, matched, masks))
+	goto commute_or_fail;
+
+      if (commute_delta)
+	commute_delta = commute_delta < 0 ? 0 : -1;
+    }
+
+  if (!match_fini (pat, insnd, masks))
+    goto commute_or_fail;
 
   gcc_assert (masks.calls == ((1u << pats_hwm) - 1)
 	      && masks.vars == (((1u << pats_hwm) - 1)
 				| (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
 
   if (pred_hook && !pred_hook (matched.calls, matched.vars, matched.commuted))
-    return false;
+    goto commute_or_fail;
 
-  // Expensive checks now
+  // Expensive checks now.  If these fail, we have to try commuting, because
+  // the commuted args might match.  Consider an add whose *two* inputs are
+  // muls.  For instance, it might be that only the second mul can be combined
+  // into a muladd due to other uses of the first mul's result.
   matched.deleted = replace_mask;
   for (int ix = 0; ix != pats_hwm; ix++)
     {
@@ -404,7 +429,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 				  matched.calls[ix], matched.calls[pats_hwm - 1],
 				  &matched.calls[ix + 1],
 				  pats_hwm - (ix + 1) - 1))
-	    return false;
+	    goto commute_or_fail;
 	}
       else
 	{
@@ -419,7 +444,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 		{
 		  if (!(pat.flags & unsigned (Flags::OtherUses)))
 		    // Not allowed other uses
-		    return false;
+		    goto commute_or_fail;
 		}
 	      else if (!(rep_use_mask & (1 << ix)))
 		matched.deleted |= 1 << ix;
@@ -434,7 +459,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  // No cc insns between any non-setanywhere input and its last use
 	  unsigned last_use = HOST_BITS_PER_WIDE_INT - 1 - clz_hwi (pat.used_by_mask);
 	  if (has_cc_insn_between (matched.calls[ix], matched.calls[last_use]))
-	    return false;
+	    goto commute_or_fail;
 	}
     }
 
@@ -443,7 +468,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
     if (auto v = matched.vars[ix])
       for (unsigned jx = ix; jx--; )
 	if (v == matched.vars[jx])
-	  return false;
+	  goto commute_or_fail;
 
   // If any non-lhs non-live var is the same as a deleted lhs, we're not a match
   for (unsigned ix = rep_lhs_hwm; ix != pat_var_hwm; ix++)
@@ -454,19 +479,21 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  {
 	    // This non-lhs var matches an deleted (or replaced) lhs var
 	    if (!((1 << ix) & masks.live))
-	      return false;  // Not a live, not a match
+	      goto commute_or_fail;  // Not a live, not a match
 
 	    if (!((1 << jx) & replace_mask))
 	      {
 		// Chase live to deleted insn's live input
 		auto insnd = rvtt_get_insn_data (matched.calls[jx]);
 		if (!insnd->is_live ())
-		  return false;
+		  goto commute_or_fail;
 		v = gimple_call_arg (matched.calls[jx], insnd->live_arg ());
 		matched.vars[ix] = v;
 		// We'll continue checking this in the next iteration
 	      }
 	  }
+
+  // We have a match.
 
   // It's ok for any non-lhs vars to be the same
   for (unsigned ix = pats_hwm; ix != rep_lhs_hwm; ix++)

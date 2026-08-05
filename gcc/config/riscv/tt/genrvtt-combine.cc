@@ -103,11 +103,10 @@ public:
 struct Arg {
   Ref var;
   std::string_view expr;
-  bool commutes = false;
 
 public:
   bool is_var () const { return expr.empty (); }
-  bool parse (Lexer &, Vars &, bool, bool);
+  bool parse (Lexer &, Vars &, bool);
 };
 
 class Shape {
@@ -119,11 +118,11 @@ public:
   std::vector<Arg> args;
 
 public:
-  bool parse (Lexer &, Vars &, std::string_view var, unsigned &, unsigned &, bool);
+  bool parse (Lexer &, Vars &, std::string_view var, int &, unsigned &, bool);
   void emit (Stream &, std::vector<unsigned> const &) const;
 
 private:
-  bool parse_args (Lexer &, Vars &, unsigned &, bool);
+  bool parse_args (Lexer &, Vars &, int &, bool);
 };
 using Shapes = std::vector<Shape>;
 
@@ -213,29 +212,15 @@ Stream::print (std::string_view str)
 }
 
 template<>
-void
-Stream::print (char const *str)
-{
-  print (std::string_view (str));
-}
-
+void Stream::print (char const *str) { print (std::string_view (str)); }
 template<>
-void
-Stream::print (bool n) {
-  fprintf (fd, "%s", n ? "true" : "false");
-}
-
+void Stream::print (bool n) { fprintf (fd, "%s", n ? "true" : "false"); }
 template<>
-void
-Stream::print (unsigned n) {
-  fprintf (fd, "%d", n);
-}
-
+void Stream::print (unsigned n) { fprintf (fd, "%u", n); }
 template<>
-void
-Stream::print (std::size_t n) {
-  fprintf (fd, "%zu", n);
-}
+void Stream::print (int n) { fprintf (fd, "%d", n); }
+template<>
+void Stream::print (std::size_t n) { fprintf (fd, "%zu", n); }
 
 void __attribute__((format (printf, 2, 3)))
 Lexer::error (char const *fmt, ...)
@@ -477,7 +462,8 @@ public:
 
   unsigned replace_mask = 0;
   unsigned rep_use_mask = 0;
-  unsigned commute_mask = 0;
+
+  int commute_arg = -1;
 
 public:
   bool parse (Lexer &);
@@ -522,10 +508,10 @@ Ref::lookup (Lexer &lexer, Vars &vars,
 }
 
 bool
-Arg::parse (Lexer &lexer, Vars &vars, bool need_var, bool is_pattern)
+Arg::parse (Lexer &lexer, Vars &vars, bool is_pattern)
 {
   lexer.next ();
-  if (!need_var && lexer.consume_expr (expr, true))
+  if (lexer.consume_expr (expr, true))
     return true;
 
   std::string_view ident;
@@ -539,27 +525,24 @@ Arg::parse (Lexer &lexer, Vars &vars, bool need_var, bool is_pattern)
 }
 
 bool
-Shape::parse_args (Lexer &lexer, Vars &vars, unsigned &commute_mask, bool is_pattern)
+Shape::parse_args (Lexer &lexer, Vars &vars, int &commute_arg, bool is_pattern)
 {
   for (unsigned argno = 0; ; argno++)
     {
       args.emplace_back (Arg ());
 
-      bool commutes = is_pattern && lexer.consume ('%', true);
-      auto &arg = args.back ();
-      if (!arg.parse (lexer, vars, commutes, is_pattern))
-	return false;
-      if (commutes)
+      if (is_pattern && lexer.consume ('%', true))
 	{
-	  if (commute_mask & (1 << arg.var.slot))
+	  if (commute_arg >= 0)
 	    {
-	      lexer.error ("Var already used as commutable arg");
+	      lexer.error ("Shape already has commuting arg");
 	      return false;
 	    }
-	  commute_mask |= 1 << arg.var.slot;
-	  arg.commutes = true;
+	  commute_arg = argno;
 	}
-
+      auto &arg = args.back ();
+      if (!arg.parse (lexer, vars, is_pattern))
+	return false;
       if (!lexer.consume (',', true))
 	break;
     }
@@ -568,7 +551,7 @@ Shape::parse_args (Lexer &lexer, Vars &vars, unsigned &commute_mask, bool is_pat
 
 bool
 Shape::parse (Lexer &lexer, Vars &vars,
-		std::string_view name, unsigned &commute_mask, unsigned &max_args, bool is_pattern)
+		std::string_view name, int &commute_arg, unsigned &max_args, bool is_pattern)
 {
   char const *start = nullptr;
   char const *end = nullptr;
@@ -593,7 +576,7 @@ Shape::parse (Lexer &lexer, Vars &vars,
   if (!lexer.consume ('('))
     return false;
 
-  parse_args (lexer, vars, commute_mask, is_pattern);
+  parse_args (lexer, vars, commute_arg, is_pattern);
   if (args.size () > max_args)
     max_args = args.size ();
 
@@ -626,7 +609,6 @@ Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
 
       out.print ("{");
       out.print (arg.is_var ());
-      out.print (", ", arg.commutes);
       if (arg.is_var ())
 	out.print (", ", remap[arg.var.slot]);
       else
@@ -647,8 +629,13 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
       if (!lexer.consume_ident (name, true))
 	break;
 
+      if (is_pattern && commute_arg >= 0)
+	{
+	  lexer.error ("Only last pattern may commute");
+	  return false;
+	}
       slot.emplace_back (Shape ());
-      if (!slot.back ().parse (lexer, vars, name, commute_mask, max_args, is_pattern))
+      if (!slot.back ().parse (lexer, vars, name, commute_arg, max_args, is_pattern))
 	return false;
     }
 
@@ -710,14 +697,6 @@ Combine::parse (Lexer &lexer)
   remap.insert (remap.begin (), vars.size (), 0);
   for (unsigned ix = vars.size (); --ix;)
       remap[vars[ix].remap] = ix;
-
-  if (unsigned commute = commute_mask)
-    {
-      commute_mask = 0;
-      for (unsigned ix = vars.size (); --ix;)
-	if (commute & (1 << ix))
-	  commute_mask |= 1 << remap[ix];
-    }
 
   // Compute the patterns' used_by masks
   for (unsigned ix = pats.size (); ix--;)
@@ -837,7 +816,7 @@ Combine::emit_hook (Stream &out, Hooks hook) const
     {
       out.print ("gcall *calls[], tree vars[]");
       if (hook != H_Fini)
-	out.print (", unsigned mask ATTRIBUTE_UNUSED");
+	out.print (", bool commuted ATTRIBUTE_UNUSED");
     }
   out.print (")\n{\n");
 
@@ -860,16 +839,6 @@ Combine::emit_hook (Stream &out, Hooks hook) const
 	else
 	  out.print ("  auto &", vars[op].name, " ATTRIBUTE_UNUSED = vars[", op, "];\n");
       out.print ("\n");
-
-      if (hook != H_Fini && commute_mask)
-	{
-	  for (unsigned mask = commute_mask, bit; mask; mask ^= 1 << bit)
-	    {
-	      bit = __builtin_ctz (mask);
-	      out.print ("  auto ", vars[bit].name, "_commuted ATTRIBUTE_UNUSED = mask & (1 << ", bit, ");\n");
-	    }
-	  out.print ("\n");
-	}
     }
   else if (has_enable ())
     {
@@ -970,8 +939,11 @@ main (int argc, const char **argv)
 		 ", ", combine.rep_lhs_hwm,
 		 ", ", combine.pat_var_hwm,
 		 ", ", combine.vars.size (),
+
 		 ", ", combine.replace_mask,
 		 ", ", combine.rep_use_mask,
+		 ", ", combine.commute_arg,
+
 		 ", ", combine.lineno);
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{

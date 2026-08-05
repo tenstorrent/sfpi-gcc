@@ -101,3 +101,55 @@ void negate2 ()
 **	# WRITE L2
 **	ret
 */
+
+// Only one mul input works, and it might be the second one
+void commute1 ()
+{
+  auto a = __builtin_rvtt_sfpreadlreg (0);
+  auto b = __builtin_rvtt_sfpreadlreg (1);
+  auto c = __builtin_rvtt_sfpreadlreg (2);
+
+  auto p1 = __builtin_rvtt_sfpmul (a, b, 0);
+  auto p2 = __builtin_rvtt_sfpmul (c, p1, 0);
+
+  auto neg_p1 = __builtin_rvtt_sfpmov (p1, 1);
+  auto sum = __builtin_rvtt_sfpadd (p2, neg_p1, 0);
+
+  __builtin_rvtt_sfpwritelreg (sum, 3);
+}
+/*
+**_Z8commute1v:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPMUL	L3, L0, L1, 0
+**	SFPMAD	L3, L2, L3, L3, 2
+**	# WRITE L3
+**	ret
+*/
+
+// Only one mul input works, and it might be the second one
+void commute2 ()
+{
+  auto a = __builtin_rvtt_sfpreadlreg (0);
+  auto b = __builtin_rvtt_sfpreadlreg (1);
+  auto c = __builtin_rvtt_sfpreadlreg (2);
+
+  auto p1 = __builtin_rvtt_sfpmul (a, b, 0);
+  auto p2 = __builtin_rvtt_sfpmul (c, p1, 0);
+
+  auto neg_p1 = __builtin_rvtt_sfpmov (p1, 1);
+  auto sum = __builtin_rvtt_sfpadd (neg_p1, p2, 0);
+
+  __builtin_rvtt_sfpwritelreg (sum, 3);
+}
+/*
+**_Z8commute2v:
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPMUL	L3, L0, L1, 0
+**	SFPMAD	L3, L2, L3, L3, 2
+**	# WRITE L3
+**	ret
+*/

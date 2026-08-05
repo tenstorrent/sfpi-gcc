@@ -164,7 +164,7 @@ combine (BH_QSR) {
   {}
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
-    if (p_commuted && imod)
+    if (commuted && imod)
       imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
     mod = build_int_cst (TREE_TYPE (mod),
@@ -180,7 +180,7 @@ combine (BH_QSR) {
   {}
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
-    if (p_commuted && imod)
+    if (commuted && imod)
       imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
     mod = build_int_cst (TREE_TYPE (mod),
@@ -197,7 +197,7 @@ combine () {
   {
     // For WH mul_mod and add_mod will be zero
     unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
-    if (p_commuted && iadd_mod)
+    if (commuted && iadd_mod)
       iadd_mod = (iadd_mod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (iadd_mod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
 
