@@ -366,7 +366,7 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
 
   // Grow each sequence by 1, until we can grow no more, or we get too long
   unsigned from = 1, length = 1;
-  while (++length < max_length)
+  while (length++ < max_length)
     {
       map.clear ();
 
