@@ -8,7 +8,7 @@ void zero ()
 {
   unsigned i = frob ();
   // no renumbering
-  auto id = __builtin_rvtt_synth_opcode (0, 2);
+  auto id = __builtin_rvtt_synth_opcode (2, 0);
 
   auto val1 = __builtin_rvtt_sfpload (iptr, i, id + i, 2, 0, 0);
   auto val2 = __builtin_rvtt_sfpload (iptr, i, id + i, 2, 0, 0);
@@ -41,7 +41,7 @@ void one ()
   unsigned i = frob ();
   unsigned j = frob ();
   // renumbering
-  auto id = __builtin_rvtt_synth_opcode (0, 2);
+  auto id = __builtin_rvtt_synth_opcode (2, 0);
 
   auto val1 = __builtin_rvtt_sfpload (iptr, i, id + i, 2, 0, 0);
   auto val2 = __builtin_rvtt_sfpload (iptr, j, id + j, 2, 0, 0);
@@ -78,9 +78,9 @@ void two ()
   unsigned i = frob ();
   unsigned j = frob ();
   // renumbering
-  auto id1 = __builtin_rvtt_synth_opcode (0, 2);
+  auto id1 = __builtin_rvtt_synth_opcode (2, 0);
   auto val1 = __builtin_rvtt_sfpload (iptr, i, id1 + i, 2, 0, 0);
-  auto id2 = __builtin_rvtt_synth_opcode (1, 2);
+  auto id2 = __builtin_rvtt_synth_opcode (2, 1);
   auto val2 = __builtin_rvtt_sfpload (iptr, j, id2 + j, 2, 0, 0);
 
   __builtin_rvtt_sfpwritelreg (val1, 0);
@@ -117,12 +117,12 @@ void three ()
   unsigned arg;
   if (i & 1)
     {
-      auto id = __builtin_rvtt_synth_opcode (0, 2);
+      auto id = __builtin_rvtt_synth_opcode (2, 0);
       arg = id + i;
     }
   else
     {
-      auto id = __builtin_rvtt_synth_opcode (1, 2);
+      auto id = __builtin_rvtt_synth_opcode (2, 1);
       arg = id + i;
     }
   auto val1 = __builtin_rvtt_sfpload (iptr, i, arg, 2, 0, 0);
@@ -149,9 +149,9 @@ void four ()
   unsigned i = frob ();
   unsigned id;
   if (i & 1)
-    id = __builtin_rvtt_synth_opcode (0, 2);
+    id = __builtin_rvtt_synth_opcode (2, 0);
   else
-    id = __builtin_rvtt_synth_opcode (1, 2);
+    id = __builtin_rvtt_synth_opcode (2, 1);
   auto val1 = __builtin_rvtt_sfpload (iptr, i, id + i, 2, 0, 0);
   __builtin_rvtt_sfpwritelreg (val1, 0);
 }

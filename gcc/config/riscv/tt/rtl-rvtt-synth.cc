@@ -73,7 +73,7 @@ transform (function *fn)
 	    continue;
 	  bool is_opcode = icode == CODE_FOR_rvtt_synth_opcode;
 	  if (is_opcode)
-	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 1));
+	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 0));
 	  else if (get_attr_type (insn) != TYPE_TENSIX)
 	    continue;
 	  else
@@ -191,7 +191,7 @@ transform (function *fn)
 	  op = next;
 
 	  rtx unspec = SET_SRC (PATTERN (insn));
-	  rtx &op_slot = XVECEXP (unspec, 0, 0);
+	  rtx &op_slot = XVECEXP (unspec, 0, 1);
 	  rtx op_rtx = gen_rtx_CONST_INT (SImode, INTVAL (op_slot) + opcode);
 	  op_slot = op_rtx;
 	  if (rtx note = find_reg_equal_equiv_note (insn))

@@ -323,7 +323,7 @@ void loadimul1b (unsigned v) {
 */
 
 void loadimul2 (unsigned v) {
-  auto id = __builtin_rvtt_synth_opcode (0, 2);
+  auto id = __builtin_rvtt_synth_opcode (2, 0);
   
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto c = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 2, 0);
