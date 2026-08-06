@@ -267,10 +267,10 @@ void loadimul1 (unsigned v) {
 **_Z9loadimul1j:
 **	# READ L0
 **	slli	a0,a0,16
-**	li	a5, 1946157056	# 2:74000000
+**	li	a5, 1946157056	# 1:74000000
 **	srli	a0,a0,8
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 2:SFPMULI	L0, a0, 0
+**	sw	a0, 0\(zero\)	# 1:SFPMULI	L0, a0, 0
 **	SFPMOV	L1, L0, 2
 **	# WRITE L1
 **	ret
@@ -287,9 +287,9 @@ void loadimul1a (unsigned v) {
 **_Z10loadimul1aj:
 **	# READ L0
 **	zext.h	a0,a0
-**	li	a5, 1897922560	# 2:71200000
+**	li	a5, 1897922560	# 1:71200000
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 2:SFPLOADI	L2, a0, 0
+**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L2, a0, 0
 **	SFPMUL	L1, L0, L2, 0
 **	# WRITE L1
 **	# WRITE L2
@@ -310,42 +310,42 @@ void loadimul1b (unsigned v) {
 **	# READ L0
 **	# READ L1
 **	slli	a0,a0,16
-**	li	a5, 1946157056	# 2:74000000
+**	li	a5, 1946157056	# 1:74000000
 **	srli	a0,a0,8
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 2:SFPMULI	L0, a0, 0
+**	sw	a0, 0\(zero\)	# 1:SFPMULI	L0, a0, 0
 **	li	a5,16
 **	xor	a5,a5,a0
-**	sw	a5, 0\(zero\)	# 2:SFPMULI	L1, a5, 0
+**	sw	a5, 0\(zero\)	# 1:SFPMULI	L1, a5, 0
 **	# WRITE L0
 **	# WRITE L1
 **	ret
 */
 
 void loadimul2 (unsigned v) {
-  auto id = __builtin_rvtt_synth_opcode (2, 0);
+  auto id = __builtin_rvtt_synth_opcode (1, 0);
   
   auto a = __builtin_rvtt_sfpreadlreg (0);
-  auto c = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 2, 0);
+  auto c = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 1, 0);
   auto r = __builtin_rvtt_sfpmul (a, c, 0);
   __builtin_rvtt_sfpwritelreg (r, 1);
 
-  auto d = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 2, 0);
+  auto d = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 1, 0);
   __builtin_rvtt_sfpwritelreg (d, 2);
 }
 /*
 **_Z9loadimul2j:
-**	li	a3, 1946157056	# 3:74000000
-**	li	a5, 1897922560	# 2:71200000
+**	li	a3, 1946157056	# 2:74000000
+**	li	a5, 1897922560	# 1:71200000
 **	# READ L0
 **	zext.h	a0,a0
 **	slli	a4,a0,8
 **	add	a4,a4,a3
-**	sw	a4, 0\(zero\)	# 3:SFPMULI	L0, a4, 0
+**	sw	a4, 0\(zero\)	# 2:SFPMULI	L0, a4, 0
 **	SFPMOV	L1, L0, 2
 **	# WRITE L1
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 2:SFPLOADI	L2, a0, 0
+**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L2, a0, 0
 **	# WRITE L2
 **	ret
 */

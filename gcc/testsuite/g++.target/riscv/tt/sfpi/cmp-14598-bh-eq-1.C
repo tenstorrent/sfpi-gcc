@@ -60,14 +60,14 @@ void fnuvi (int i) {
 **	# READ L3
 **	zext.h	a5,a0
 **	lui	a3,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a4, 1897005056	# 2:71120000
+**	li	a4, 1897005056	# 1:71120000
 **	lw	a3,%lo\(_ZN7ckernel13instrn_bufferE\)\(a3\)
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 2:SFPLOADI	L1, a5, 2
+**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L1, a5, 2
 **	srli	a0,a0,16
-**	li	a5, 1897398272	# 4:71180000
+**	li	a5, 1897398272	# 2:71180000
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 4:SFPLOADI	L1, a0, 8	# LV:L1
+**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L1, a0, 8	# LV:L1
 **	SFPIADD	L1, L0, 0, 6
 **	SFPSETCC	L1, 0, 6
 **	SFPCOMPC

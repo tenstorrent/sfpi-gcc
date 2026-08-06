@@ -197,7 +197,7 @@ void six (unsigned bits)
 **	slli	a5,a0,12
 **	and	a5,a5,a4
 **	lui	a3,%hi\(ibuf\)
-**	li	a4, 2046820353	# 2:7a000001
+**	li	a4, 2046820353	# 1:7a000001
 **	add	a5,a5,a4
 **	addi	a3,a3,%lo\(ibuf\)
 **	li	a4,8
@@ -205,7 +205,7 @@ void six (unsigned bits)
 **	SFPLOAD	L0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, 0
 **	SFPNOP
-**	sw	a5, 0\(a3\)	# 2:SFPSHFT	L0, L0, a5, 1
+**	sw	a5, 0\(a3\)	# 1:SFPSHFT	L0, L0, a5, 1
 **	SFPADD	L0, L0, L0, 0
 **	SFPNOP
 **	SFPSTORE	L0, 0, 0, 0

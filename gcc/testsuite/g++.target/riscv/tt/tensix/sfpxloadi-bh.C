@@ -25,14 +25,14 @@ void var (int x)
 **_Z3vari:
 **	lui	a3,%hi\(buf\)
 **	zext.h	a5,a0
-**	li	a4, 1895956480	# 2:71020000
+**	li	a4, 1895956480	# 1:71020000
 **	lw	a3,%lo\(buf\)\(a3\)
 **	add	a5,a5,a4
-**	sw	a5, 0\(a3\)	# 2:SFPLOADI	L0, a5, 2
+**	sw	a5, 0\(a3\)	# 1:SFPLOADI	L0, a5, 2
 **	srli	a0,a0,16
-**	li	a5, 1896349696	# 4:71080000
+**	li	a5, 1896349696	# 2:71080000
 **	add	a0,a0,a5
-**	sw	a0, 0\(a3\)	# 4:SFPLOADI	L0, a0, 8	# LV:L0
+**	sw	a0, 0\(a3\)	# 2:SFPLOADI	L0, a0, 8	# LV:L0
 **	SFPSTORE	L0, 0, 0, 0
 **	ret
 */
