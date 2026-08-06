@@ -62,8 +62,8 @@ make_synth (location_t loc, tree id, tree var = nullptr)
   if (!var)
     var = make_temp_ssa_name (unsigned_type_node, nullptr, "li");
   gcall *stmt = gimple_build_call (opcode_insnd->decl, opcode_insnd->num_args ());
-  gimple_call_set_arg (stmt, 0, integer_zero_node);
-  gimple_call_set_arg (stmt, 1, id);
+  gimple_call_set_arg (stmt, 0, id);
+  gimple_call_set_arg (stmt, 1, integer_zero_node);
   gimple_call_set_lhs (stmt, var);
   gimple_set_location (stmt, loc);
 
@@ -199,7 +199,7 @@ check_synth (std::unordered_set<gphi *> &phis, tree var, tree &id)
     return 0;
 
   auto *call = as_a <gcall *> (stmt);
-  tree id_arg = gimple_call_arg (call, 1);
+  tree id_arg = gimple_call_arg (call, 0);
   if (!id)
     id = id_arg;
   else if (!tree_int_cst_equal (id, id_arg))
@@ -530,7 +530,7 @@ renumber (function *fn)
 	    continue;
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
 	    {
-	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 1));;
+	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 0));;
 	      if (opcode_counts.size() < id + 1)
 		opcode_counts.resize (id + 1);
 	      opcode_counts[id]++;
@@ -592,8 +592,8 @@ renumber (function *fn)
       tree ssa_var = make_temp_ssa_name (unsigned_type_node, NULL, "li");
       tree synth_opcode_decl = rvtt_get_insn_data (rvtt_insn_data::synth_opcode)->decl;
       gcall *new_call = gimple_build_call (synth_opcode_decl, 2);
-      gimple_call_set_arg (new_call, 0, addend);
-      gimple_call_set_arg (new_call, 1, build_int_cst (unsigned_type_node, unique_id));
+      gimple_call_set_arg (new_call, 0, build_int_cst (unsigned_type_node, node.id));
+      gimple_call_set_arg (new_call, 1, addend);
       gimple_call_set_lhs (new_call, ssa_var);
 
       // Insert it just before the add, and update the add's operand

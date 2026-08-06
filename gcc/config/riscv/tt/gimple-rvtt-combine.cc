@@ -868,8 +868,8 @@ addimuli_resynthing ()
 	      // Create the new synth_opcode
 	      auto synth_insnd = rvtt_get_insn_data (rvtt_insn_data::synth_opcode);
 	      auto synth_call = gimple_build_call (synth_insnd->decl, synth_insnd->num_args ());
-	      gimple_call_set_arg (synth_call, 0, integer_zero_node);
-	      gimple_call_set_arg (synth_call, 1, new_id);
+	      gimple_call_set_arg (synth_call, 0, new_id);
+	      gimple_call_set_arg (synth_call, 1, integer_zero_node);
 	      auto synth_ssa = make_temp_ssa_name (unsigned_type_node, nullptr, "id");
 	      gimple_call_set_lhs (synth_call, synth_ssa);
 	      tree mask_ssa = nullptr;
@@ -939,7 +939,8 @@ addimuli_resynthing ()
 	      gimple_call_set_arg (UI->call, UI->insnd->id_arg (), new_id);
 	      tree var = gimple_call_arg (UI->call, UI->insnd->var_arg ());
 	      auto new_add = add_map.find (as_a <gassign *> (SSA_NAME_DEF_STMT (var)));
-	      gimple_call_set_arg (UI->call, UI->insnd->var_arg (), gimple_get_lhs (new_add->second.add));
+	      gimple_call_set_arg (UI->call, UI->insnd->var_arg (),
+				   gimple_get_lhs (new_add->second.add));
 	      update_stmt (UI->call);
 	      if (dump_file)
 		{
@@ -962,8 +963,11 @@ combine_block (basic_block bb)
 	{
 	  // Record synth_opcodes to deal with dynamic muli/addi combinations.
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
-	    synths.emplace_back (as_a <gcall *> (*gsi), insnd,
-				 TREE_INT_CST_LOW (gimple_call_arg (as_a <gcall *> (*gsi), 1)));
+	    {
+	      auto *synth = as_a <gcall *> (*gsi);
+	      synths.emplace_back (synth, insnd,
+				   TREE_INT_CST_LOW (gimple_call_arg (synth, 0)));
+	    }
 
 	  auto start = starting_ids.lower_bound (insnd->id);
 	  // Because we've added insn_id::hwm, start will never be

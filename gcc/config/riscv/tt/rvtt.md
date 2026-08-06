@@ -142,8 +142,8 @@
   unsigned pos = 0;
 
   pos += snprintf (&pattern[pos], sizeof (pattern) - pos,
-		   "li\t%%0, %%1\t# %d:%x", unsigned (INTVAL (operands[2])),
-		   unsigned (INTVAL (operands[1])));
+		   "li\t%%0, %%2\t# %d:%x", unsigned (UINTVAL (operands[1])),
+		   unsigned (UINTVAL (operands[2])));
   gcc_assert (pos < sizeof (pattern));
 
   return pattern;
