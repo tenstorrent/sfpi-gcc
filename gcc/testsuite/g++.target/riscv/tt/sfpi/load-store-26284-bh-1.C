@@ -37,11 +37,11 @@ void load_var (unsigned addr) {
 **_Z8load_varj:
 **	slli	a0,a0,19
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a5, 1882447872	# 2:7033e000
+**	li	a5, 1882447872	# 1:7033e000
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	srli	a0,a0,19
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 2:SFPLOAD	L3, a0, 3, 7
+**	sw	a0, 0\(a4\)	# 1:SFPLOAD	L3, a0, 3, 7
 **	# WRITE L3
 **	ret
 */
@@ -76,10 +76,10 @@ void store_var (unsigned addr) {
 **	# READ L3
 **	slli	a0,a0,19
 **	lui	a4,%hi\(_ZN7ckernel13instrn_bufferE\)
-**	li	a5, 1916002304	# 2:7233e000
+**	li	a5, 1916002304	# 1:7233e000
 **	lw	a4,%lo\(_ZN7ckernel13instrn_bufferE\)\(a4\)
 **	srli	a0,a0,19
 **	add	a0,a0,a5
-**	sw	a0, 0\(a4\)	# 2:SFPSTORE	L3, a0, 3, 7
+**	sw	a0, 0\(a4\)	# 1:SFPSTORE	L3, a0, 3, 7
 **	ret
 */

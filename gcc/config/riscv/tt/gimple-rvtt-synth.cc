@@ -108,7 +108,7 @@ split (function *fn)
   basic_block bb;
 
   bool updated = false;
-  unsigned int synth_id = 0;
+  unsigned int synth_id = 1;
   FOR_EACH_BB_FN (bb, fn)
     for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	 !gsi_end_p (gsi); gsi_next (&gsi))
@@ -132,8 +132,7 @@ split (function *fn)
 	  msg = "User set";
 	else
 	  {
-	    synth_id += 2; // We may need to insert another one later
-	    tree synth_val = build_int_cst (unsigned_type_node, synth_id);
+	    tree synth_val = build_int_cst (unsigned_type_node, synth_id++);
 	    tree sum = build_var_synth (gsi, insnd, gimple_location (call),
 					immarg, synth_val);
 
@@ -545,7 +544,7 @@ renumber (function *fn)
     fprintf (dump_file, "\nProcessing graph\n");
 
   bool renumbered = false;
-  unsigned unique_id = opcode_counts.size () - 1;
+  unsigned synth_id = opcode_counts.size ();
   for (auto &node : graph)
     {
       if (!is_gimple_assign (node.stmt))
@@ -569,8 +568,7 @@ renumber (function *fn)
 
       // A synth opcode used by more than one add. Insert a renumbered
       // synth opcode.
-      unique_id += 2;
-      node.id = unique_id;
+      node.id = synth_id++;
 
       tree addend = integer_zero_node;
       if (node.addend)
