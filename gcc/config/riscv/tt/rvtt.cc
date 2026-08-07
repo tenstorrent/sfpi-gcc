@@ -454,12 +454,12 @@ rvtt_substitute_value (tree orig, tree replacement)
 
 static int rvtt_cmp_ex_to_setcc_mod1_map[] = {
   -1,
-  SFPSETCC_MOD1_LREG_LT0,
-  SFPSETCC_MOD1_LREG_EQ0,
-  SFPSETCC_MOD1_LREG_GTE0,
   SFPSETCC_MOD1_LREG_NE0,
+  SFPSETCC_MOD1_LREG_LT0,
+  SFPSETCC_MOD1_LREG_GTE0,
   -1,
   -1,
+  SFPSETCC_MOD1_LREG_EQ0,
   -1,
 };
 
@@ -797,9 +797,9 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
     // Perform op w/o compare
     mod1 |= SFPIADD_MOD1_CC_NONE;
     emit_insn (gen_rvtt_sfpiadd_v (dst, srcb, srca, GEN_INT (mod1)));
-    if (cmp != 0)
-      // Must be EQ0 or NE0, compare with SETCC
-      emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    // Must be EQ0 or NE0, compare with SETCC
+    gcc_assert (cmp == SFPXIADD_MOD1_CC_EQ || cmp == SFPXIADD_MOD1_CC_NE);
+    emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
   }
 }
 

@@ -48,6 +48,7 @@ void sm2i () {
 * *	ret
 */
 #endif
+
 void i2sm () {
   vInt a = l_reg[LRegs::LReg0];
   vInt b = __builtin_rvtt_sfpcast(a.get(), SFPCAST_MOD1_INT32_TO_SM32);
