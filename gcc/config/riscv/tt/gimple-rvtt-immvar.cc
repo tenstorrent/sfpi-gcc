@@ -230,16 +230,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
       if (SSA_VAR_P (imm))
 	{
 	  unsigned imod = TREE_INT_CST_LOW (mod);
-	  int fmt = imod & SFPXSCMP_MOD1_FMT_MASK;
-	  tree tmp = nullptr;
-
-	  gcc_assert (fmt == SFPXSCMP_MOD1_FMT_FLOAT);
-	  if (fmt == SFPXSCMP_MOD1_FMT_A || fmt == SFPXSCMP_MOD1_FMT_B)
-	    tmp = emit_sfploadi (gsi, gimple_location (call),
-				 fmt == SFPXSCMP_MOD1_FMT_A ? SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB,
-				 nullptr, addr, imm, nullptr);
-	  else
-	    tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
+	  tree tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
 	  mod = build_int_cst (unsigned_type_node, imod & SFPXCMP_MOD1_CC_MASK);
 
 	  return emit_replacement (gsi, insnd, call,

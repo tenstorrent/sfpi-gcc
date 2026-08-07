@@ -240,10 +240,6 @@ constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
 constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
 constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
 
-constexpr unsigned int SFPXSCMP_MOD1_FMT_A = 8;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_B = 16;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_FLOAT = 32;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_MASK = 0x38;
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
 constexpr unsigned int SFPXBOOL_MOD1_AND = 0;

@@ -572,45 +572,30 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
   rtx ref_val = gen_reg_rtx (XTT32SImode);
-  int int_mod = INTVAL (mod);
 
   // gimple synth expand guarantees this
   gcc_assert (CONST_INT_P (f));
   unsigned int fval = INTVAL (f);
 
   // Wrapper will convert 0 to -0
-  unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
-  gcc_assert (fmt == SFPXSCMP_MOD1_FMT_FLOAT);
-  if (fval != 0 &&
-      ((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000)
-       || (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000)))
+  if (fval != 0 && fval != 0x8000)
     {
       need_sub = true;
       // FIXME: Just teach sfpxloadi about this. (add in one of the immvar opt pass)
-      if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000)
-	  || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80))
+      if (fval == 0x3f800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_1);
-      else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000)
-	       || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
+      else if (fval == 0xbf800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
 	{
 	  int mod = SFPXLOADI_MOD0_FLOAT;
-	  if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_A)
-	    mod = SFPLOADI_MOD0_FLOATA;
-	  else if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_B)
-	    mod = SFPLOADI_MOD0_FLOATB;
-
-	  if (mod == SFPXLOADI_MOD0_FLOAT)
-	    rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), mod, f);
-	  else
-	    emit_insn (gen_rvtt_sfploadi
-		       (ref_val, const0_rtx, f, const0_rtx, const0_rtx, GEN_INT (mod)));
+	  rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), mod, f);
 	}
     }
 
   // FIXME: a lot of the below is sfpxfcmpv
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
+  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE);
   rtx setcc_mod = GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp]);
   if (need_sub)
     {
@@ -642,6 +627,7 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
   emit_insn (gen_rvtt_sfpmad (tmp, v2, neg1, v1, const0_rtx));
 
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
+  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE);
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
@@ -681,6 +667,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXCMP_MOD1_CC_MASK;
+  //  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE && !base_mod);
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
@@ -718,6 +705,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   rtx set_cc_arg = src;
 
   bool need_setcc = bool (cmp & SFPXCMP_MOD1_CC_MASK);
+  //  gcc_assert (need_setcc);
   if (need_loadi)
     {
       // Load imm into dst
@@ -794,6 +782,7 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXCMP_MOD1_CC_MASK;
+  //  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE && !base_mod);
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
