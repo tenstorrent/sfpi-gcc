@@ -261,28 +261,27 @@ combine (BH_QSR) {
 
 // Xiadd_i, Xiadd_i -> Xiadd_i
 
-// Overly tricky until we cleanup compares
+// FIXME Overly tricky until we cleanup compares
 combine () {
-  sum|OU|SR = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
+  sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
   res|MU = sfpxiadd_i_lv (0, lv2, sum, 0, 0, 0, res_mod);
   {
     // res should be unused -- we could cope with it being set if needed
     if (res)
       return false;
 
-    // use isnd->sets_cc ()
     // SUM_MOD can't set CC
-    if (TREE_INT_CST_LOW (sum_mod) & SFPXCMP_MOD1_CC_MASK)
+    if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
       return false;
 
     // RES must set CC
-    if (!(TREE_INT_CST_LOW (res_mod) & SFPXCMP_MOD1_CC_MASK))
+    if ((TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_CC_MASK) == SFPXIADD_MOD1_CC_NONE)
       return false;
   }
   {
     mod = build_int_cst (TREE_TYPE (sum_mod),
 			 (TREE_INT_CST_LOW (res_mod) & ~SFPXIADD_MOD1_IS_SUB)
-			 | (TREE_INT_CST_LOW (sum_mod) & SFPXIADD_MOD1_IS_SUB));
+			 | (TREE_INT_CST_LOW (sum_mod) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST ? SFPXIADD_MOD1_IS_SUB : 0));
   }
   sum = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
 }

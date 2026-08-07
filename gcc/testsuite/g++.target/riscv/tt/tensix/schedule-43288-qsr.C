@@ -34,7 +34,7 @@ void mad_iadd () {
   auto b = __builtin_rvtt_sfpreadlreg(1);
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpxiadd_v(r, b, 0);
+  auto s = __builtin_rvtt_sfpiadd_v(r, b, 4);
   __builtin_rvtt_sfpstore(nullptr, s, 0, 0, 0, 0, 0);
 }
 /*
@@ -233,7 +233,7 @@ void mad_iadd () {
   auto b = __builtin_rvtt_sfpreadlreg(1);
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpxiadd_i(nullptr, r, 5, 0, 0, 0);
+  auto s = __builtin_rvtt_sfpiadd_i(nullptr, r, 5, 0, 0, 4);
   __builtin_rvtt_sfpstore(nullptr, s, 0, 0, 0, 0, 0);
 }
 /*

@@ -239,6 +239,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
       break;
 
     case rvtt_insn_data::sfpxiadd_i:
+      gcc_assert (false);
       if (SSA_VAR_P (imm))
 	{
 	  unsigned imod = TREE_INT_CST_LOW (mod);
