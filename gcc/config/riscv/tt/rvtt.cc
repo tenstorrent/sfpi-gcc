@@ -581,7 +581,6 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 
   // FIXME: a lot of the below is sfpxfcmpv
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
-  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE);
   rtx setcc_mod = GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp]);
   if (need_sub)
     {
@@ -613,7 +612,6 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
   emit_insn (gen_rvtt_sfpmad (tmp, v2, neg1, v1, const0_rtx));
 
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
-  gcc_assert (cmp != SFPXCMP_MOD1_CC_NONE);
   if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
@@ -654,6 +652,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   unsigned int cmp = modi & SFPXIADD_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXIADD_MOD1_CC_MASK;
   gcc_assert (cmp != SFPXIADD_MOD1_CC_NONE);
+  gcc_assert (modi & SFPXIADD_MOD1_DST_UNUSED);
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXIADD_MOD1_CC_LTE || cmp == SFPXIADD_MOD1_CC_GT)
@@ -669,6 +668,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   bool need_loadi = true;
   bool is_signed = (modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED;
   bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
+  gcc_assert (!is_12bits);
   bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   int iv = is_const_int ? INTVAL (imm) : 0xffffffff;

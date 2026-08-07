@@ -217,7 +217,6 @@ constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_INT16 = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_CONV_MASK = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
 
-constexpr unsigned int SFPXCMP_MOD1_CC_NONE = 0;
 constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 2;
 constexpr unsigned int SFPXCMP_MOD1_CC_NE = 4;
 constexpr unsigned int SFPXCMP_MOD1_CC_GT = 6;
@@ -246,9 +245,9 @@ constexpr unsigned int SFPXIADD_MOD1_CC_MASK = 7;
 
 constexpr unsigned int SFPXIADD_MOD1_SIGNED = 8;
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
-constexpr unsigned int SFPXIADD_MOD1_12BIT = 32;
-constexpr unsigned int SFPXIADD_MOD1_16BIT = 64;
-constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128;
+constexpr unsigned int SFPXIADD_MOD1_12BIT = 32; // never set
+constexpr unsigned int SFPXIADD_MOD1_16BIT = 64; // never set
+constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128; // always set
 
 constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;
 

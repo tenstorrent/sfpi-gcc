@@ -214,6 +214,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	{
 	  // This should totally be handled at the souce level.
 	  unsigned imod = TREE_INT_CST_LOW (mod);
+	  gcc_assert (!(imod & SFPXIADD_MOD1_16BIT));
 	  tree tmp = emit_loadimm (gsi,
 				   gimple_location (call),
 				   !(imod & SFPXIADD_MOD1_16BIT)
@@ -243,6 +244,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
       if (SSA_VAR_P (imm))
 	{
 	  unsigned imod = TREE_INT_CST_LOW (mod);
+	  gcc_assert (!(imod & SFPXIADD_MOD1_16BIT));
 	  tree tmp = emit_loadimm (gsi,
 				   gimple_location (call),
 				   !(imod & SFPXIADD_MOD1_16BIT)

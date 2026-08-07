@@ -267,6 +267,8 @@ combine () {
   res|MU = sfpxiadd_i_lv (0, lv2, sum, 0, 0, 0, res_mod);
   {
     // res should be unused -- we could cope with it being set if needed
+    gcc_assert (!res
+		&& TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_DST_UNUSED);
     if (res)
       return false;
 
@@ -279,7 +281,8 @@ combine () {
 
     // RES must set CC
     if ((TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_CC_MASK) == SFPXIADD_MOD1_CC_NONE)
-      return false;
+      {gcc_unreachable ();
+	  return false;}
   }
   {
     mod = build_int_cst (TREE_TYPE (sum_mod),
