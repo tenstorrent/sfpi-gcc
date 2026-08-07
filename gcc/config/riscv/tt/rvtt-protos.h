@@ -244,8 +244,8 @@ constexpr unsigned int SFPXIADD_MOD1_CC_MASK = SFPXCMP_MOD1_CC_MASK;
 
 constexpr unsigned int SFPXIADD_MOD1_SIGNED = 8;
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
-constexpr unsigned int SFPXIADD_MOD1_12BIT = 32; // never set
-constexpr unsigned int SFPXIADD_MOD1_16BIT = 64; // never set
+//constexpr unsigned int SFPXIADD_MOD1_12BIT = 32; // never set
+//constexpr unsigned int SFPXIADD_MOD1_16BIT = 64; // never set
 constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128; // always set
 
 constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;

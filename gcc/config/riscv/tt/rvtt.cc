@@ -669,7 +669,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 
   bool need_loadi = true;
   bool is_signed = (modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED;
-  bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
+  bool is_12bits = false;
   gcc_assert (!is_12bits);
   bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
