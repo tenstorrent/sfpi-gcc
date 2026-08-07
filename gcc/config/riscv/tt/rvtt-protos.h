@@ -91,10 +91,9 @@ extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
 extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
 
-extern const char * rvtt_emit_testcode(rtx operands[]);
-extern bool rvtt_hll_p(const rtx pat);
-extern bool rvtt_l1_load_p(const rtx pat);
-extern bool rvtt_reg_load_p(const rtx pat);
+extern bool rvtt_hll_p (rtx pat);
+extern bool rvtt_l1_load_p (rtx pat);
+extern bool rvtt_reg_load_p (rtx pat);
 
 // Gimple passes
 class gimple_opt_pass;
@@ -217,6 +216,16 @@ constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_INT16 = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_CONV_MASK = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
 
+constexpr unsigned int SFPXCMP_MOD1_CC_LT = 0;
+constexpr unsigned int SFPXCMP_MOD1_CC_GE = 1;
+constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 2;
+constexpr unsigned int SFPXCMP_MOD1_CC_NE = 3;
+constexpr unsigned int SFPXCMP_MOD1_CC_GT = 4;
+constexpr unsigned int SFPXCMP_MOD1_CC_LE = 5;
+constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
+
+constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
+
 constexpr unsigned int SFPIADD_MOD1_ARG_LREG_DST = 0;
 constexpr unsigned int SFPIADD_MOD1_ARG_IMM = 1;
 constexpr unsigned int SFPIADD_MOD1_ARG_2SCOMP_LREG_DST = 2;
@@ -224,27 +233,7 @@ constexpr unsigned int SFPIADD_MOD1_CC_LT0 = 0;
 constexpr unsigned int SFPIADD_MOD1_CC_NONE = 4;
 constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
 
-constexpr unsigned int SFPXIADD_MOD1_SIGNED = 8;
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
-constexpr unsigned int SFPXIADD_MOD1_12BIT = 32;
-constexpr unsigned int SFPXIADD_MOD1_16BIT = 64;
-constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128;
-constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;
-
-constexpr unsigned int SFPXCMP_MOD1_CC_NONE = 0;
-constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 2;
-constexpr unsigned int SFPXCMP_MOD1_CC_NE = 4;
-constexpr unsigned int SFPXCMP_MOD1_CC_GT = 6;
-constexpr unsigned int SFPXCMP_MOD1_CC_LTE = 5;
-constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
-constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
-constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
-
-constexpr unsigned int SFPXSCMP_MOD1_FMT_A = 8;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_B = 16;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_FLOAT = 32;
-constexpr unsigned int SFPXSCMP_MOD1_FMT_MASK = 0x38;
-constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
 constexpr unsigned int SFPXBOOL_MOD1_AND = 0;
 constexpr unsigned int SFPXBOOL_MOD1_OR = 1;

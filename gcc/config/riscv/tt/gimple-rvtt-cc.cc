@@ -145,7 +145,7 @@ process_block_stmts(basic_block bb,
 	    case rvtt_insn_data::sfpxfcmpv:
 	      {
 		int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
-		if ((mod & SFPXCMP_MOD1_CC_MASK) != SFPXCMP_MOD1_CC_LTE)
+		if ((mod & SFPXCMP_MOD1_CC_MASK) != SFPXCMP_MOD1_CC_LE)
 		  goto default_;
 		// A compc will be inserted during rtl expansion,
 		// sigh.  We should be doing that earlier.

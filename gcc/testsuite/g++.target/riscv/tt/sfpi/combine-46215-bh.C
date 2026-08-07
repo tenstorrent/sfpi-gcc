@@ -11,7 +11,7 @@ using namespace sfpi;
 void xiaddxiadd () {
   vInt a = l_reg[LRegs::LReg0];
 
-  auto b = vInt ((__builtin_rvtt_sfpxiadd_i) (0, a.get (), 5, 0, 0, SFPXIADD_MOD1_IS_SUB));
+  auto b = a - 5;
   v_if (b < 0) {
     b = 0;
   } v_endif;

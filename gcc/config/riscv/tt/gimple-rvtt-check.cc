@@ -112,52 +112,53 @@ check_int_args (bool is_early, const rvtt_insn_data *insnd, gcall *call)
 	  continue;
 	}
 
-      if (info.is_xmod ())
-	continue;
-
       val = TREE_INT_CST_LOW (op);
 
-      HOST_WIDE_INT upper = 0xf;
-      HOST_WIDE_INT lower = 0;
-      unsigned bias = 0;
-      if (!info.is_mod ())
+      if (!info.is_xmod ())
 	{
-	  unsigned bits = info.bits ();
-	  if (!bits)
-	    bits = 32;
-	  upper = (1u << (bits - 1)) - 1;
-	  if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
-	    lower = ~upper;
-	  if (info.kind () != rvtt_insn_data::op_t::SIGNED)
-	    upper = (upper << 1) | 1;
-	  bias = info.bias ();
+	  HOST_WIDE_INT upper = 0xf;
+	  HOST_WIDE_INT lower = 0;
+	  unsigned bias = 0;
+	  if (!info.is_mod ())
+	    {
+	      unsigned bits = info.bits ();
+	      if (!bits)
+		bits = 32;
+	      upper = (1u << (bits - 1)) - 1;
+	      if (info.kind () != rvtt_insn_data::op_t::UNSIGNED)
+		lower = ~upper;
+	      if (info.kind () != rvtt_insn_data::op_t::SIGNED)
+		upper = (upper << 1) | 1;
+	      bias = info.bias ();
+	    }
+
+	  if (val > upper + bias || val < lower + bias)
+	    {
+	      if (info.is_checked ())
+		error_at (gimple_location (call),
+			  "argument %d %qE is out of range [%ld, %ld]",
+			  info.argno () + 1, op,
+			  long (lower + bias), long (upper + bias));
+
+	      if (info.is_mod ())
+		goto zap;
+
+	      // Clip imm operands.  Keep nonnimm operands for for the moment,
+	      // until we fix sfpxloadi
+	      val -= bias;
+	      HOST_WIDE_INT sign_bits
+		= info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
+		? ~upper : 0;
+	      val = (val & upper) | sign_bits;
+	      val += bias;
+	      goto zap;
+	    }
 	}
 
-      if (val > upper + bias || val < lower + bias)
-	{
-	  if (info.is_checked ())
-	    error_at (gimple_location (call),
-		      "argument %d %qE is out of range [%ld, %ld]",
-		      info.argno () + 1, op,
-		      long (lower + bias), long (upper + bias));
-
-	  if (info.is_mod ())
-	    goto zap;
-
-	  // Clip imm operands.  Keep nonnimm operands for for the moment,
-	  // until we fix sfpxloadi
-	  val -= bias;
-	  HOST_WIDE_INT sign_bits
-	    = info.kind () == rvtt_insn_data::op_t::SIGNED && (val & lower)
-	    ? ~upper : 0;
-	  val = (val & upper) | sign_bits;
-	  val += bias;
-	  goto zap;
-	}
-      if (info.is_mod ())
+      if (info.is_mod () || info.is_xmod ())
 	{
 	  unsigned mask = info.mod ();
-	  if (!((1 << val) & info.mod ()))
+	  if (!((1 << (val & 0xf)) & info.mod ()))
 	    {
 	      error_at (gimple_location (call),
 			"argument %d %qE is invalid mod1 value (mask is 0x%x)",

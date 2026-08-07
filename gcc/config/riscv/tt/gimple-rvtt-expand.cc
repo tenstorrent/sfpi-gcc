@@ -64,22 +64,22 @@ negate_cmp_mod(int mod)
 
     switch (op) {
     case SFPXCMP_MOD1_CC_LT:
-	new_op = SFPXCMP_MOD1_CC_GTE;
+	new_op = SFPXCMP_MOD1_CC_GE;
 	break;
     case SFPXCMP_MOD1_CC_NE:
 	new_op = SFPXCMP_MOD1_CC_EQ;
 	break;
-    case SFPXCMP_MOD1_CC_GTE:
+    case SFPXCMP_MOD1_CC_GE:
 	new_op = SFPXCMP_MOD1_CC_LT;
 	break;
     case SFPXCMP_MOD1_CC_EQ:
 	new_op = SFPXCMP_MOD1_CC_NE;
 	break;
-    case SFPXCMP_MOD1_CC_LTE:
+    case SFPXCMP_MOD1_CC_LE:
 	new_op = SFPXCMP_MOD1_CC_GT;
 	break;
     case SFPXCMP_MOD1_CC_GT:
-	new_op = SFPXCMP_MOD1_CC_LTE;
+	new_op = SFPXCMP_MOD1_CC_LE;
 	break;
     }
 
@@ -89,7 +89,7 @@ negate_cmp_mod(int mod)
 static bool
 cmp_issues_compc(int mod)
 {
-  return (mod & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LTE;
+  return (mod & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LE;
 }
 
 static int get_bool_type(int op, bool negate)
@@ -136,10 +136,6 @@ copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
   // Make the iadd do a subtract for the compare
   // Make sure other code knows this is a compare
   int mod = TREE_INT_CST_LOW (gimple_call_arg (new_stmt, new_insnd->mod_arg ())) | SFPXIADD_MOD1_IS_SUB;
-  if (id == rvtt_insn_data::sfpxiadd_i)
-    {
-      mod |= SFPXIADD_MOD1_DST_UNUSED;
-    }
   gimple_call_set_arg(new_stmt, new_insnd->mod_arg (), build_int_cst(integer_type_node, mod));
 
   return new_stmt;
@@ -509,7 +505,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
     case rvtt_insn_data::sfpxicmps:
       {
 	// Note: negation happens at the use of these trees below the fall thru
-	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXSCMP_SRC_ARG_POS));
+	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->src_arg ()));
 	if (child->code == GIMPLE_PHI)
 	  {
 	    process_tree_phi(stmt, child);

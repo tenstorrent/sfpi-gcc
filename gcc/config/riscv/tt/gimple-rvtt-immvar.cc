@@ -209,15 +209,13 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 		      bits, addr, imm, gimple_call_lhs (call));
 	return true;
       }
+
     case rvtt_insn_data::sfpxicmps:
       if (SSA_VAR_P (imm))
 	{
-	  // This should totally be handled at the souce level.
-	  unsigned imod = TREE_INT_CST_LOW (mod);
+	  // This should totally be handled at the source level.
 	  tree tmp = emit_loadimm (gsi,
-				   gimple_location (call),
-				   !(imod & SFPXIADD_MOD1_16BIT)
-				   ? -32 : imod & SFPXIADD_MOD1_SIGNED ? 15 : -16,
+				   gimple_location (call), -32,
 				   addr, imm, nullptr);
 	  mod = build_int_cst (unsigned_type_node, TREE_INT_CST_LOW (mod) & SFPXCMP_MOD1_CC_MASK);
 
@@ -230,35 +228,11 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
       if (SSA_VAR_P (imm))
 	{
 	  unsigned imod = TREE_INT_CST_LOW (mod);
-	  int fmt = imod & SFPXSCMP_MOD1_FMT_MASK;
-	  tree tmp = nullptr;
-
-	  if (fmt == SFPXSCMP_MOD1_FMT_A || fmt == SFPXSCMP_MOD1_FMT_B)
-	    tmp = emit_sfploadi (gsi, gimple_location (call),
-				 fmt == SFPXSCMP_MOD1_FMT_A ? SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB,
-				 nullptr, addr, imm, nullptr);
-	  else
-	    tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
+	  tree tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
 	  mod = build_int_cst (unsigned_type_node, imod & SFPXCMP_MOD1_CC_MASK);
 
 	  return emit_replacement (gsi, insnd, call,
 				   rvtt_get_insn_data (rvtt_insn_data::sfpxfcmpv), false, tmp, mod);
-	}
-      break;
-
-    case rvtt_insn_data::sfpxiadd_i:
-      if (SSA_VAR_P (imm))
-	{
-	  unsigned imod = TREE_INT_CST_LOW (mod);
-	  tree tmp = emit_loadimm (gsi,
-				   gimple_location (call),
-				   !(imod & SFPXIADD_MOD1_16BIT)
-				   ? -32 : imod & SFPXIADD_MOD1_SIGNED ? 15 : -16,
-				   addr, imm, nullptr);
-	  mod = build_int_cst (unsigned_type_node, imod & SFPXIADD_MOD1_IS_SUB);
-
-	  return emit_replacement (gsi, insnd, call,
-				   rvtt_get_insn_data (rvtt_insn_data::sfpxiadd_v), true, tmp, mod);
 	}
       break;
     }

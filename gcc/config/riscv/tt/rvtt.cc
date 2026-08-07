@@ -48,14 +48,6 @@ along with GCC; see the file COPYING3.  If not see
 
 DEBUG_FUNCTION void debug_tree (tree node);
 
-unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
-  0,
-  SFPSETCC_MOD1_LREG_LT0,
-  SFPSETCC_MOD1_LREG_EQ0,
-  SFPSETCC_MOD1_LREG_GTE0,
-  SFPSETCC_MOD1_LREG_NE0,
-};
-
 static rvtt_insn_data sfpu_insn_data[] = {
 #define RVTT_FN(id, av, sfx, fmt, fl, ops) \
   { rvtt_insn_data::id, #id, fl, rvtt_insn_data::ops_t ops },
@@ -379,34 +371,6 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   return pattern;
 }
 
-static uint32_t rvtt_fp32_to_fp16a(const uint32_t val)
-{
-    // https://stackoverflow.com/questions/1659440/32-bit-to-16-bit-floating-point-conversion
-    // Handles denorms.  May be costly w/ non-immediate values
-    const unsigned int b = val + 0x00001000;
-    const unsigned int e = (b & 0x7F800000) >> 23;
-    const unsigned int m = b & 0x007FFFFF;
-    const unsigned int result =
-       (b & 0x80000000) >> 16 |
-       (e > 112) * ((((e - 112) << 10) &0x7C00) | m >> 13) |
-       ((e < 113) & (e > 101)) * ((((0x007FF000 + m) >> (125 -e )) + 1) >> 1) |
-       (e > 143) * 0x7FFF;
-#if 0
-    // Simple/faster but less complete
-    const unsigned int result =
-       ((val >> 16) & 0x8000) |
-       ((((val & 0x7F800000) - 0x38000000) >> 13) & 0x7c00) |
-       ((val >> 13) & 0x03FF);
-#endif
-
-    return result;
-}
-
-static uint32_t rvtt_fp32_to_fp16b(const uint32_t val)
-{
-    return val >> 16;
-}
-
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
@@ -456,81 +420,60 @@ rvtt_substitute_value (tree orig, tree replacement)
     }
 }
 
-// FIXME: Remnants of old sfpxloadi scheme,
-constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
-constexpr unsigned int SFPXLOADI_MOD0_UINT32 = 17;
-constexpr unsigned int SFPXLOADI_MOD0_FLOAT = 18;
+static int rvtt_cmp_ex_to_setcc_mod1_map[] = {
+  SFPSETCC_MOD1_LREG_LT0,
+  SFPSETCC_MOD1_LREG_GTE0,
+  SFPSETCC_MOD1_LREG_EQ0,
+  SFPSETCC_MOD1_LREG_NE0,
+  -1,
+  -1,
+  -1,
+  -1,
+};
 
+// FIXME: Remnants of old sfpxloadi scheme,
 // FIXME: Move functionality in to immvar passes
 
 static void
-rvtt_emit_sfpxloadi (rtx dst, rtx lv, unsigned int_mod, rtx imm)
+rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
 {
   // Early nonimm pass assures this
   gcc_assert (CONST_INT_P (imm));
 
   // FIXME: we're just moving bits around here, the type of the input value
   // doesnt matter.
-  unsigned int_imm = INTVAL (imm);
-  bool load_32bit = true;
-  unsigned int new_mod;
+  uint32_t int_imm = INTVAL (imm);
+  int new_mod = -1;
 
-  switch (int_mod)
+  if (int_imm <= 0x7fff || int_imm >= 0xffff8000)
+    new_mod = SFPLOADI_MOD0_SHORT;
+  else if (int_imm <= 0xffff)
+    new_mod = SFPLOADI_MOD0_USHORT;
+  else if (!(int_imm & 0xffff))
     {
-    case SFPXLOADI_MOD0_INT32:
-      // This gets interesting since we can do a signed load of a 16 bit
-      // positive integer by using an unsigned load to fill the upper bits
-      // with 0s
-      if (int_imm <= 0x7fff && int(int_imm) >= -0x8000)
-	{
-	  new_mod = SFPLOADI_MOD0_SHORT;
-	  load_32bit = false;
-	}
-      else if (int(int_imm) >= 0 && int_imm <= 0xffff)
-	{
-	  new_mod = SFPLOADI_MOD0_USHORT;
-	  load_32bit = false;
-	}
-      break;
+      imm = GEN_INT (int_imm >> 16);
+      new_mod = SFPLOADI_MOD0_FLOATB;
+    }
+  else if (!(int_imm & 0x1FFF))
+    {
+      int exp = (int_imm >> 23) & 0xFF;
 
-    case SFPXLOADI_MOD0_UINT32:
-      if (int_imm <= 0xffff)
-	{
-	  new_mod = SFPLOADI_MOD0_USHORT;
-	  load_32bit = false;
-	}
-      break;
-
-    case SFPXLOADI_MOD0_FLOAT:
-      {
-	unsigned man = int_imm & 0x007FFFFF;
-	int exp = ((int_imm >> 23) & 0xFF) - 127;
-
-	if ((man & 0xFFFF) == 0)
-	  {
-	    // Fits in fp16b
-	    load_32bit = false;
-	    new_mod = SFPLOADI_MOD0_FLOATB;
-	    int_imm = rvtt_fp32_to_fp16b (int_imm);
-	  }
-	else if ((man & 0x1FFF) == 0 && exp < 16 && exp >= -14)
+      if (exp < 127 + 16 && exp >= 127 - 14)
 	  {
 	    // Fits in fp16a
-	    load_32bit = false;
+	    imm = GEN_INT (((int_imm >> 13) & 0x3ff)
+			   | ((int_imm >> 16) & 0x8000)
+			   | ((exp - 0x70) << 10));
 	    new_mod = SFPLOADI_MOD0_FLOATA;
-	    int_imm = rvtt_fp32_to_fp16a (int_imm);
 	  }
-
-	if (!load_32bit)
-	  imm = GEN_INT (int_imm);
-      }
-      break;
-
-    default:
-      gcc_unreachable ();
     }
 
-  if (load_32bit)
+  if (new_mod >= 0)
+    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+					 imm,
+					 rvtt_gen_rtx_noval (XTT32SImode),
+					 lv, GEN_INT (new_mod)));
+  else
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
       emit_insn (gen_rvtt_sfploadi_lv_int (tmp, const0_rtx, const0_rtx, const0_rtx,
@@ -542,11 +485,6 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, unsigned int_mod, rtx imm)
 					   rvtt_gen_rtx_noval (XTT32SImode),
 					   tmp, GEN_INT (SFPLOADI_MOD0_UPPER)));
     }
-  else
-    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
-					 imm,
-					 rvtt_gen_rtx_noval (XTT32SImode),
-					 lv, GEN_INT (new_mod)));
 }
 
 void
@@ -554,39 +492,23 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 {
   bool need_sub = false;
   rtx ref_val = gen_reg_rtx (XTT32SImode);
-  int int_mod = INTVAL (mod);
 
   // gimple synth expand guarantees this
   gcc_assert (CONST_INT_P (f));
   unsigned int fval = INTVAL (f);
 
   // Wrapper will convert 0 to -0
-  unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
-  if (fval != 0 &&
-      ((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000)
-       || (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000)))
+  if (fval != 0 && fval != 0x8000)
     {
       need_sub = true;
       // FIXME: Just teach sfpxloadi about this. (add in one of the immvar opt pass)
-      if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f800000)
-	  || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0x3f80))
+      if (fval == 0x3f800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_1);
-      else if ((fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf800000)
-	       || (fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval == 0xbf80))
+      else if (fval == 0xbf800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
 	{
-	  int mod = SFPXLOADI_MOD0_FLOAT;
-	  if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_A)
-	    mod = SFPLOADI_MOD0_FLOATA;
-	  else if ((fmt & SFPXSCMP_MOD1_FMT_MASK) == SFPXSCMP_MOD1_FMT_B)
-	    mod = SFPLOADI_MOD0_FLOATB;
-
-	  if (mod == SFPXLOADI_MOD0_FLOAT)
-	    rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), mod, f);
-	  else
-	    emit_insn (gen_rvtt_sfploadi
-		       (ref_val, const0_rtx, f, const0_rtx, const0_rtx, GEN_INT (mod)));
+	  rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), f);
 	}
     }
 
@@ -602,11 +524,11 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
       v = tmp;
     }
 
-  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
+  if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
       emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
-      if (cmp == SFPXCMP_MOD1_CC_LTE)
+      if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
     }
   else
@@ -623,11 +545,11 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
   emit_insn (gen_rvtt_sfpmad (tmp, v2, neg1, v1, const0_rtx));
 
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
-  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
+  if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
       emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
-      if (cmp == SFPXCMP_MOD1_CC_LTE)
+      if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
     }
   else
@@ -664,22 +586,21 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   unsigned int base_mod = modi & ~SFPXCMP_MOD1_CC_MASK;
 
   // Decompose aggregate comparisons, recurse
-  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
+  if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
-      rvtt_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GTE), true);
+      rvtt_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE), true);
       rvtt_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx, GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
-      if (cmp == SFPXCMP_MOD1_CC_LTE)
+      if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
       return;
     }
 
   bool need_loadi = true;
-  bool is_signed = (modi & SFPXIADD_MOD1_SIGNED) == SFPXIADD_MOD1_SIGNED;
-  bool is_12bits = modi & SFPXIADD_MOD1_12BIT;
   bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   int iv = is_const_int ? INTVAL (imm) : 0xffffffff;
+  // gcc_assert (is_sub); sub may not be set due to combine optimization we have
 
   // Figure out if we need to do a loadi (>12 bits signed)
   if (is_const_int)
@@ -691,22 +612,16 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	  imm = GEN_INT (iv);
 	}
     }
-  else if (is_12bits)
-    // Future work
-    //need_loadi = false;
-    gcc_unreachable ();
 
   rtx set_cc_arg = src;
-
-  bool need_setcc = bool (cmp & SFPXCMP_MOD1_CC_MASK);
+  bool need_setcc = true;
   if (need_loadi)
     {
       // Load imm into dst
-      int loadi_mod = is_signed ? SFPXLOADI_MOD0_INT32 : SFPXLOADI_MOD0_UINT32;
-      rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), loadi_mod, imm);
+      rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), imm);
       
       unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
-      if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
+      if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GE)
 	{
 	  // Perform op w/ compare
 	  mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
@@ -721,11 +636,12 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	  set_cc_arg = dst;
 	}
     }
-  else if (is_const_int)
+  else
     {
+      gcc_assert (is_const_int);
       if (iv != 0)
 	{
-	  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
+	  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GE)
 	    {
 	      // Perform op w/ compare
 	      unsigned mod1 = cmp == SFPXCMP_MOD1_CC_LT
@@ -744,24 +660,15 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	      set_cc_arg = dst;
 	    }
 	}
-      else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
+      else if (dst_used)
 	{
 	  rtx insn;
-	  if (REG_P (lv))
+	  if (true || REG_P (lv))
 	    insn = gen_rvtt_sfpassign_lv (dst, lv, src);
 	  else
 	    insn = gen_rvtt_sfpassign (dst, src);
 	  emit_insn (insn);
 	}
-    }
-  else
-    {
-      // This code path could handle the case where the operand isn't a CONST_INT (so
-      // the value isn't known at compile time) but some (future) mechanism
-      // (wrapper API or pragma) ensures that the resulting value fits in 12
-      // bits and so an IADDI can be used.
-      gcc_assert (is_12bits);
-      gcc_unreachable ();
     }
 
   if (need_setcc)
@@ -777,19 +684,20 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
   unsigned int base_mod = modi & ~SFPXCMP_MOD1_CC_MASK;
 
   // Decompose aggregate comparisons, recurse
-  if (cmp == SFPXCMP_MOD1_CC_LTE || cmp == SFPXCMP_MOD1_CC_GT)
+  if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
-      rvtt_emit_sfpxiadd_v (dst, srcb, srca, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GTE));
+      rvtt_emit_sfpxiadd_v (dst, srcb, srca, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE));
       emit_insn(gen_rvtt_sfpsetcc_v (dst, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
-      if (cmp == SFPXCMP_MOD1_CC_LTE)
+      if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
       return;
     }
 
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
+  gcc_assert (is_sub);
   unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
 
-  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GTE)
+  if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GE)
     {
       // Perform op w/ compare
       mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
@@ -800,9 +708,9 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
     // Perform op w/o compare
     mod1 |= SFPIADD_MOD1_CC_NONE;
     emit_insn (gen_rvtt_sfpiadd_v (dst, srcb, srca, GEN_INT (mod1)));
-    if (cmp != 0)
-      // Must be EQ0 or NE0, compare with SETCC
-      emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    // Must be EQ0 or NE0, compare with SETCC
+    gcc_assert (cmp == SFPXCMP_MOD1_CC_EQ || cmp == SFPXCMP_MOD1_CC_NE);
+    emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
   }
 }
 
