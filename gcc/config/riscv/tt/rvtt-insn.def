@@ -67,9 +67,9 @@ RVTT_FN (sfpxicmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                   
 RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({U, 0}, {XM}))
 RVTT_FN (sfpxfcmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
-RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|CC(0x7e7e), ({XM, 0x7f}, {}))
-RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               CC(0x7e7e), ({E, 0}, {XM}))
-RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x7e7e), ({E, 0}, {XM}))
+RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|CC(0x3f3f), ({XM, 0x7f}, {}))
+RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               CC(0x3f3f), ({E, 0}, {XM}))
+RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x3f3f), ({E, 0}, {XM}))
 
 // If you're putting in nops, you want them preserved, so say it's volatile
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   VOL, ())

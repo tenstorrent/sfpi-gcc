@@ -453,13 +453,13 @@ rvtt_substitute_value (tree orig, tree replacement)
 }
 
 static int rvtt_cmp_ex_to_setcc_mod1_map[] = {
-  -1,
+  SFPSETCC_MOD1_LREG_EQ0,
   SFPSETCC_MOD1_LREG_NE0,
   SFPSETCC_MOD1_LREG_LT0,
   SFPSETCC_MOD1_LREG_GTE0,
   -1,
   -1,
-  SFPSETCC_MOD1_LREG_EQ0,
+  -1,
   -1,
 };
 

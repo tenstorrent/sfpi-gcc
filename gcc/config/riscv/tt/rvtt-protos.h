@@ -217,7 +217,7 @@ constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_INT16 = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_CONV_MASK = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
 
-constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 06;
+constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 0;
 constexpr unsigned int SFPXCMP_MOD1_CC_NE = 1;
 constexpr unsigned int SFPXCMP_MOD1_CC_LT = 2;
 constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
