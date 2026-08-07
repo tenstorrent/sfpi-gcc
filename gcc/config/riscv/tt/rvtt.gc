@@ -274,14 +274,16 @@ combine () {
     if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
       return false;
 
+    if (TREE_INT_CST_LOW (sum_mod) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST)
+      return false;
+
     // RES must set CC
     if ((TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_CC_MASK) == SFPXIADD_MOD1_CC_NONE)
       return false;
   }
   {
     mod = build_int_cst (TREE_TYPE (sum_mod),
-			 (TREE_INT_CST_LOW (res_mod) & ~SFPXIADD_MOD1_IS_SUB)
-			 | (TREE_INT_CST_LOW (sum_mod) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST ? SFPXIADD_MOD1_IS_SUB : 0));
+			 TREE_INT_CST_LOW (res_mod) & ~SFPXIADD_MOD1_IS_SUB);
   }
   sum = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
 }
@@ -297,8 +299,8 @@ combine () {
 
     // check res_mod is cc-setting on sign bit
     auto imod = TREE_INT_CST_LOW (add_mod) & SFPXCMP_MOD1_CC_MASK;
-    if (imod != SFPXCMP_MOD1_CC_LT
-	&& imod != SFPXCMP_MOD1_CC_GTE)
+    if (imod != SFPXIADD_MOD1_CC_LT
+	&& imod != SFPXIADD_MOD1_CC_GTE)
       return false;
     
   }
@@ -306,8 +308,8 @@ combine () {
     exp_mod = build_int_cst (TREE_TYPE (exp_mod),
 			     TREE_INT_CST_LOW (exp_mod)
 			     | SFPEXEXP_MOD1_SET_CC_SGN_EXP
-			     | ((TREE_INT_CST_LOW (add_mod) & SFPXCMP_MOD1_CC_MASK)
-				== SFPXCMP_MOD1_CC_GTE
+			     | ((TREE_INT_CST_LOW (add_mod) & SFPXIADD_MOD1_CC_MASK)
+				== SFPXIADD_MOD1_CC_GTE
 				? SFPEXEXP_MOD1_SET_CC_COMP_EXP : 0));
   }
   exp = sfpexexp_lv (exp_lv, a, exp_mod);

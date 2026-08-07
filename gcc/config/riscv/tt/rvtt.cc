@@ -672,7 +672,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   int iv = is_const_int ? INTVAL (imm) : 0xffffffff;
-  //  gcc_assert (!is_sub);
+  // gcc_assert (is_sub); sub may not be set due to combine optimization we have
 
   // Figure out if we need to do a loadi (>12 bits signed)
   if (is_const_int)
@@ -782,7 +782,7 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
     }
 
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
-  //  gcc_assert (!is_sub);
+  gcc_assert (is_sub);
   unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
 
   if (cmp == SFPXIADD_MOD1_CC_LT || cmp == SFPXIADD_MOD1_CC_GTE)
