@@ -232,12 +232,12 @@ constexpr unsigned int SFPXIADD_MOD1_DST_UNUSED = 128;
 constexpr unsigned int SFPXIADD_SRC_ARG_POS = 1;
 
 constexpr unsigned int SFPXCMP_MOD1_CC_NONE = 0;
-constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
 constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 2;
-constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
 constexpr unsigned int SFPXCMP_MOD1_CC_NE = 4;
-constexpr unsigned int SFPXCMP_MOD1_CC_LTE = 5;
 constexpr unsigned int SFPXCMP_MOD1_CC_GT = 6;
+constexpr unsigned int SFPXCMP_MOD1_CC_LTE = 5;
+constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
+constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
 constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
 
 constexpr unsigned int SFPXSCMP_MOD1_FMT_A = 8;
@@ -246,9 +246,10 @@ constexpr unsigned int SFPXSCMP_MOD1_FMT_FLOAT = 32;
 constexpr unsigned int SFPXSCMP_MOD1_FMT_MASK = 0x38;
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
 
+constexpr unsigned int SFPXBOOL_MOD1_AND = 0;
 constexpr unsigned int SFPXBOOL_MOD1_OR = 1;
-constexpr unsigned int SFPXBOOL_MOD1_AND = 2;
-constexpr unsigned int SFPXBOOL_MOD1_NOT = 3;
+constexpr unsigned int SFPXBOOL_MOD1_NOT = 2;
+
 constexpr unsigned int SFPXBOOL_LEFT_TREE_ARG_POS = 1;
 constexpr unsigned int SFPXBOOL_RIGHT_TREE_ARG_POS = 2;
 
