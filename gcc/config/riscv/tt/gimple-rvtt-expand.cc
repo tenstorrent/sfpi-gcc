@@ -136,10 +136,6 @@ copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
   // Make the iadd do a subtract for the compare
   // Make sure other code knows this is a compare
   int mod = TREE_INT_CST_LOW (gimple_call_arg (new_stmt, new_insnd->mod_arg ())) | SFPXIADD_MOD1_IS_SUB;
-  if (id == rvtt_insn_data::sfpxiadd_i)
-    {
-      mod |= SFPXIADD_MOD1_DST_UNUSED;
-    }
   gimple_call_set_arg(new_stmt, new_insnd->mod_arg (), build_int_cst(integer_type_node, mod));
 
   return new_stmt;

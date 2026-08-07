@@ -266,11 +266,7 @@ combine () {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
   res|MU = sfpxiadd_i_lv (0, lv2, sum, 0, 0, 0, res_mod);
   {
-    // res should be unused -- we could cope with it being set if needed
-    gcc_assert (!res
-		&& TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_DST_UNUSED);
-    if (res)
-      return false;
+    gcc_assert (!res);
 
     // SUM_MOD can't set CC
     if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))

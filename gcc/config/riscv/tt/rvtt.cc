@@ -654,7 +654,6 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXIADD_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXIADD_MOD1_CC_MASK;
-  gcc_assert (modi & SFPXIADD_MOD1_DST_UNUSED);
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXIADD_MOD1_CC_LTE || cmp == SFPXIADD_MOD1_CC_GT)
@@ -740,7 +739,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	      set_cc_arg = dst;
 	    }
 	}
-      else if (dst_used || !(modi & SFPXIADD_MOD1_DST_UNUSED))
+      else if (dst_used)
 	{
 	  rtx insn;
 	  if (REG_P (lv))
