@@ -286,8 +286,6 @@ public:
   }
 };
 
-extern unsigned int rvtt_cmp_ex_to_setcc_mod1_map[];
-
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 

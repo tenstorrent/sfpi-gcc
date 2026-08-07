@@ -48,14 +48,6 @@ along with GCC; see the file COPYING3.  If not see
 
 DEBUG_FUNCTION void debug_tree (tree node);
 
-unsigned int rvtt_cmp_ex_to_setcc_mod1_map[] = {
-  0,
-  SFPSETCC_MOD1_LREG_LT0,
-  SFPSETCC_MOD1_LREG_EQ0,
-  SFPSETCC_MOD1_LREG_GTE0,
-  SFPSETCC_MOD1_LREG_NE0,
-};
-
 static rvtt_insn_data sfpu_insn_data[] = {
 #define RVTT_FN(id, av, sfx, fmt, fl, ops) \
   { rvtt_insn_data::id, #id, fl, rvtt_insn_data::ops_t ops },
@@ -459,6 +451,17 @@ rvtt_substitute_value (tree orig, tree replacement)
 	}
     }
 }
+
+static int rvtt_cmp_ex_to_setcc_mod1_map[] = {
+  -1,
+  SFPSETCC_MOD1_LREG_LT0,
+  SFPSETCC_MOD1_LREG_EQ0,
+  SFPSETCC_MOD1_LREG_GTE0,
+  SFPSETCC_MOD1_LREG_NE0,
+  -1,
+  -1,
+  -1,
+};
 
 // FIXME: Remnants of old sfpxloadi scheme,
 constexpr unsigned int SFPXLOADI_MOD0_INT32 = 16;
