@@ -278,11 +278,6 @@ combine () {
 
     if (TREE_INT_CST_LOW (sum_mod) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST)
       return false;
-
-    // RES must set CC
-    if ((TREE_INT_CST_LOW (res_mod) & SFPXIADD_MOD1_CC_MASK) == SFPXIADD_MOD1_CC_NONE)
-      {gcc_unreachable ();
-	  return false;}
   }
   {
     mod = build_int_cst (TREE_TYPE (sum_mod),

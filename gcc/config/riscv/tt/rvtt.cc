@@ -654,7 +654,6 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXIADD_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXIADD_MOD1_CC_MASK;
-  gcc_assert (cmp != SFPXIADD_MOD1_CC_NONE);
   gcc_assert (modi & SFPXIADD_MOD1_DST_UNUSED);
 
   // Decompose aggregate comparisons, recurse
@@ -694,7 +693,7 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 
   rtx set_cc_arg = src;
 
-  bool need_setcc = bool ((cmp & SFPXIADD_MOD1_CC_MASK) != SFPXIADD_MOD1_CC_NONE);
+  bool need_setcc = true;
   gcc_assert (need_setcc);
   if (need_loadi)
     {
@@ -772,7 +771,6 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXIADD_MOD1_CC_MASK;
   unsigned int base_mod = modi & ~SFPXIADD_MOD1_CC_MASK;
-  gcc_assert (cmp != SFPXIADD_MOD1_CC_NONE);
 
   // Decompose aggregate comparisons, recurse
   if (cmp == SFPXIADD_MOD1_CC_LTE || cmp == SFPXIADD_MOD1_CC_GT)

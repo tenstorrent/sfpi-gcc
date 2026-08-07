@@ -219,10 +219,10 @@ constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
 
 constexpr unsigned int SFPXCMP_MOD1_CC_EQ = 2;
 constexpr unsigned int SFPXCMP_MOD1_CC_NE = 4;
-constexpr unsigned int SFPXCMP_MOD1_CC_GT = 6;
-constexpr unsigned int SFPXCMP_MOD1_CC_LTE = 5;
 constexpr unsigned int SFPXCMP_MOD1_CC_LT = 1;
 constexpr unsigned int SFPXCMP_MOD1_CC_GTE = 3;
+constexpr unsigned int SFPXCMP_MOD1_CC_GT = 6;
+constexpr unsigned int SFPXCMP_MOD1_CC_LTE = 5;
 constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
 
 constexpr unsigned int SFPXSCMP_SRC_ARG_POS = 1;
@@ -236,12 +236,11 @@ constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
 
 constexpr unsigned int SFPXIADD_MOD1_CC_EQ = SFPXCMP_MOD1_CC_EQ;
 constexpr unsigned int SFPXIADD_MOD1_CC_NE = SFPXCMP_MOD1_CC_NE;
-constexpr unsigned int SFPXIADD_MOD1_CC_GT = SFPXCMP_MOD1_CC_GT;
-constexpr unsigned int SFPXIADD_MOD1_CC_LTE = SFPXCMP_MOD1_CC_LTE;
 constexpr unsigned int SFPXIADD_MOD1_CC_LT = SFPXCMP_MOD1_CC_LT;
 constexpr unsigned int SFPXIADD_MOD1_CC_GTE = SFPXCMP_MOD1_CC_GTE;
-constexpr unsigned int SFPXIADD_MOD1_CC_NONE = 0;
-constexpr unsigned int SFPXIADD_MOD1_CC_MASK = 7;
+constexpr unsigned int SFPXIADD_MOD1_CC_GT = SFPXCMP_MOD1_CC_GT;
+constexpr unsigned int SFPXIADD_MOD1_CC_LTE = SFPXCMP_MOD1_CC_LTE;
+constexpr unsigned int SFPXIADD_MOD1_CC_MASK = SFPXCMP_MOD1_CC_MASK;
 
 constexpr unsigned int SFPXIADD_MOD1_SIGNED = 8;
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
