@@ -233,6 +233,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	  int fmt = imod & SFPXSCMP_MOD1_FMT_MASK;
 	  tree tmp = nullptr;
 
+	  gcc_assert (fmt == SFPXSCMP_MOD1_FMT_FLOAT);
 	  if (fmt == SFPXSCMP_MOD1_FMT_A || fmt == SFPXSCMP_MOD1_FMT_B)
 	    tmp = emit_sfploadi (gsi, gimple_location (call),
 				 fmt == SFPXSCMP_MOD1_FMT_A ? SFPLOADI_MOD0_FLOATA : SFPLOADI_MOD0_FLOATB,

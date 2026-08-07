@@ -580,6 +580,7 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 
   // Wrapper will convert 0 to -0
   unsigned int fmt = int_mod & SFPXSCMP_MOD1_FMT_MASK;
+  gcc_assert (fmt == SFPXSCMP_MOD1_FMT_FLOAT);
   if (fval != 0 &&
       ((fmt != SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x80000000)
        || (fmt == SFPXSCMP_MOD1_FMT_FLOAT && fval != 0x8000)))
