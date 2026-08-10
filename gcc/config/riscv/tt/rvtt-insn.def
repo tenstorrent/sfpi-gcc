@@ -36,7 +36,6 @@ along with GCC; see the file COPYING3.  If not see
 #define CC(N) (uint32_t((N+0) ? (N+0) : 0xffff) << rvtt_insn_data::CC_MASK_SHIFT)
 #define CLB(N) (((N+0) << rvtt_insn_data::CLOBBER_SHIFT) | (1 << rvtt_insn_data::NUM_CLOBBERS_SHIFT))
 #define CLBN(P,N) (CLB(N) + ((P - 1) << rvtt_insn_data::NUM_CLOBBERS_SHIFT))
-#define COM rvtt_insn_data::COMMUTES
 #define VOL rvtt_insn_data::VOLATILE
 #define EXP rvtt_insn_data::EXPANDED
 
@@ -69,7 +68,7 @@ RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,      
 RVTT_FN (sfpxfcmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
 // Not all mod values are commutative -- might be a subtract
-RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|COM|CC(0x7e7e), ({XM, 0x7f}, {}))
+RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CLB()|CC(0x7e7e), ({XM, 0x7f}, {}))
 RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               CC(0x7e7e), ({E, 0}, {XM}))
 RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x7e7e), ({E, 0}, {XM}))
 
@@ -111,16 +110,16 @@ RVTT_FN (sfpabs_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,               
 RVTT_FN (sfplz,              ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    CC(0x54), ({M, 0x5555}))
 RVTT_FN (sfplz_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            LV|CC(0x54), ({M, 0x5555}))
 
-RVTT_FN (sfpand,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM, ())
+RVTT_FN (sfpand,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB(), ())
 RVTT_OVR(sfpand,           bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0, ())
-RVTT_FN (sfpand_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB()|COM, ())
+RVTT_FN (sfpand_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB(), ())
 RVTT_OVR(sfpand_lv,        bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV, ())
-RVTT_FN (sfpor,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM, ())
+RVTT_FN (sfpor,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB(), ())
 RVTT_OVR(sfpor,            bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                0, ())
-RVTT_FN (sfpor_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB()|COM, ())
+RVTT_FN (sfpor_lv,           ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB(), ())
 RVTT_OVR(sfpor_lv,         bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV, ())
-RVTT_FN (sfpxor,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB()|COM, ())
-RVTT_FN (sfpxor_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB()|COM, ())
+RVTT_FN (sfpxor,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                CLB(), ())
+RVTT_FN (sfpxor_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC,                        LV|CLB(), ())
 RVTT_FN (sfpnot,             ,,XTT_VEC_FTYPE_XTT_VEC,                                        0, ())
 RVTT_FN (sfpnot_lv,          ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV, ())
 
@@ -160,8 +159,8 @@ RVTT_OVR(sfpstore,          qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI
 RVTT_FN (sfpstoresrcs,      qsr,,VOID_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI_USI_USI,        VOL, ({CE, 10}, {M, 0xcfff}, {CU, 3}, {CU, 1}))
 
 // Not all mod values are commutative -- might be a subtract
-RVTT_FN (sfpiadd_v,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP|CLB()|COM|CC(0x505), ({M, 0x555}, {}))
-RVTT_FN (sfpiadd_v_lv,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV|CLB()|COM|CC(0x505), ({M, 0x555}, {}))
+RVTT_FN (sfpiadd_v,            ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          EXP|CLB()|CC(0x505), ({M, 0x555}, {}))
+RVTT_FN (sfpiadd_v_lv,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  EXP|LV|CLB()|CC(0x505), ({M, 0x555}, {}))
 RVTT_FN (sfpiadd_i,            ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,             EXP|CC(0x101), ({S, 12, 12}, {M, 0x111}))
 RVTT_FN (sfpiadd_i_lv,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,     EXP|LV|CC(0x101), ({S, 12, 12}, {M, 0x111}))
 
@@ -241,7 +240,6 @@ RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,   
 #undef CC
 #undef CLB
 #undef CLBN
-#undef COM
 #undef VOL
 
 #undef N
