@@ -121,9 +121,6 @@ rvtt_insn_data::init ()
       argno++;
     }
 
-  if (num_src_clobbers ())
-    clobber_pos = argno + int ((flags >> CLOBBER_SHIFT) & CLOBBER_MASK);
-
   // Skip src vectors
   int num_srcs = 0;
   for (; TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE;
@@ -134,7 +131,6 @@ rvtt_insn_data::init ()
     }
   if (num_srcs)
     src_pos = argno - num_srcs;
-  gcc_assert (num_srcs >= num_src_clobbers ());
 
   if (has_var ())
     {
