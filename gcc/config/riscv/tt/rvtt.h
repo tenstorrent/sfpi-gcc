@@ -52,12 +52,8 @@ public:
     LV_SHIFT,
     VOLATILE_SHIFT,
     EXPANDED_SHIFT,
-    NUM_CLOBBERS_SHIFT,
-    NUM_CLOBBERS_BITS = 2,
-    CLOBBER_SHIFT = NUM_CLOBBERS_SHIFT + NUM_CLOBBERS_BITS,
-    CLOBBER_BITS = 3,
 
-    HWM = CLOBBER_SHIFT + CLOBBER_BITS,
+    HWM,
 
     // Initialized via int operand, but not stored with this type.
     CC_MASK_SHIFT = 16,
@@ -67,9 +63,6 @@ public:
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
     VOLATILE = 1 << VOLATILE_SHIFT, // has unrepresented side-effects
     EXPANDED = 1 << EXPANDED_SHIFT, // immediate is expanded
-
-    NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
-    CLOBBER_MASK = (1 << CLOBBER_BITS) - 1,
   };
   static_assert (HWM <= 16);
 
@@ -166,8 +159,9 @@ public:
     }
     ops_t (const ops_t &) = default;
 
-    constexpr op_t const &operator[] (unsigned ix) const
-    { return ops[ix]; };
+    constexpr op_t const &operator[] (unsigned ix) const {
+      return ops[ix];
+    };
     void set_argno (unsigned ix, unsigned argno) {
       ops[ix].argno (argno);
     }
@@ -177,7 +171,7 @@ public:
   constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
     : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
       cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
-      id (id_), clobber_pos (0), src_pos (-1), arg_num (0), ops (ops_) {}
+      id (id_), src_pos (-1), arg_num (0), ops (ops_) {}
 
 public:
   void init ();
@@ -199,7 +193,6 @@ public:
 
 private:
   uint8_t mod_pos = 0;
-  uint8_t clobber_pos : 4;
   int8_t src_pos : 4;
   uint8_t arg_num : 4;
 
@@ -266,11 +259,6 @@ public:
     return ops[0].bits () + bool (ops[0].bias ());
   }
   unsigned imm_encode () const { return ops[0].encode (); }
-
-  int num_src_clobbers () const {
-    return (flags >> NUM_CLOBBERS_SHIFT) & NUM_CLOBBERS_MASK;
-  }
-  int first_clobber_arg () const { return clobber_pos; }
 
 public:
   bool sets_cc (unsigned mod) const {
