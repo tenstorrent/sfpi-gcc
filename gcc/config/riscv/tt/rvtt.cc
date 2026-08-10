@@ -258,20 +258,6 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
-bool rvtt_insn_data::srcs_commute (gcall *stmt) const
-{
-  if (!(flags & COMMUTES))
-    return false;
-
-  if (id == sfpxiadd_v)
-    {
-      auto mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, mod_arg ()));
-      return !(mod & SFPXIADD_MOD1_IS_SUB);
-    }
-
-  return true;
-}
-
 void rvtt_mov_error (const rtx_insn *insn, bool is_load)
 {
   if (INSN_HAS_LOCATION (insn))

@@ -50,7 +50,6 @@ public:
     MOD_SHIFT,
     VAR_SHIFT,
     LV_SHIFT,
-    COMMUTE_SHIFT,
     VOLATILE_SHIFT,
     EXPANDED_SHIFT,
     NUM_CLOBBERS_SHIFT,
@@ -68,7 +67,6 @@ public:
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
     VOLATILE = 1 << VOLATILE_SHIFT, // has unrepresented side-effects
     EXPANDED = 1 << EXPANDED_SHIFT, // immediate is expanded
-    COMMUTES = 1 << COMMUTE_SHIFT, // First 2 srcs commute
 
     NUM_CLOBBERS_MASK = (1 << NUM_CLOBBERS_BITS) - 1,
     CLOBBER_MASK = (1 << CLOBBER_BITS) - 1,
@@ -279,7 +277,6 @@ public:
     return (1u << mod) & cc_mask;
   }
   bool sets_cc (gcall *stmt) const;
-  bool srcs_commute (gcall *stmt) const;
   bool has_side_effects (gcall *stmt) const {
     if (is_volatile ())
       return true;
