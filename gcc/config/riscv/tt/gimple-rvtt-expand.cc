@@ -316,6 +316,7 @@ mark_vif_stmts(gimple_stmt_iterator top,
 static void
 expand_xcondi(gcall *stmt)
 {
+  gcc_unreachable ();
   gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
   gcall *top = find_top_of_cond_tree(child);
 
@@ -403,6 +404,7 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 static bool
 process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
 {
+  gcc_unreachable ();
   // Process the child as a new tree
   gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
 
@@ -508,6 +510,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->src_arg ()));
 	if (child->code == GIMPLE_PHI)
 	  {
+	    gcc_unreachable ();
 	    process_tree_phi(stmt, child);
 	  }
 	else if (child->code == GIMPLE_CALL) // could be inline asm...
@@ -516,6 +519,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data(child_call);
 	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
 	      {
+		gcc_unreachable ();
 		DUMP("  descending to process xcondi before xicmps\n");
 		// Process child before fixing up this insn
 		if (process_xcondi(child_call, stmt, true))
@@ -556,6 +560,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       break;
 
     case rvtt_insn_data::sfpxcondi:
+      gcc_unreachable ();
       process_xcondi(stmt, parent, false);
       break;
 
