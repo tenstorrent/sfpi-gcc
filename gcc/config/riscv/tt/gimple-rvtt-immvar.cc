@@ -144,15 +144,15 @@ emit_loadimm (gimple_stmt_iterator &gsi, location_t loc, int bits,
 
 static bool
 emit_replacement (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *call,
-		  const rvtt_insn_data *new_insnd, bool imm_first, tree imm, tree mod)
+		  const rvtt_insn_data *new_insnd, tree imm, tree mod)
 {
   gcc_assert (new_insnd->mod_info ().is_xmod ()
 	      || (1u << TREE_INT_CST_LOW (mod)) & new_insnd->mod_info ().mod ());
   gimple *stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
   gimple_set_location (stmt, gimple_location (call));
-  gimple_call_set_arg (stmt, new_insnd->src_arg () + !imm_first, imm);
-  gimple_call_set_arg (stmt, new_insnd->src_arg () + imm_first,
+  gimple_call_set_arg (stmt, new_insnd->src_arg (),
 		       gimple_call_arg (call, insnd->src_arg ()));
+  gimple_call_set_arg (stmt, new_insnd->src_arg () + 1, imm);
   gimple_call_set_arg (stmt, new_insnd->mod_arg (), mod);
   gimple_call_set_lhs (stmt, gimple_call_lhs (call));
   gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
@@ -196,8 +196,7 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	if (expand)
 	  {
 	    tree tmp = emit_loadimm (gsi, gimple_location (call), is_signed ? -32 : 32, addr, imm, nullptr);
-	    return emit_replacement (gsi, insnd, call,
-				     insnd->get_vector (), false, tmp, mod);
+	    return emit_replacement (gsi, insnd, call, insnd->get_vector (), tmp, mod);
 	  }
       }
       break;
@@ -210,29 +209,13 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 	return true;
       }
 
-    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxcmps:
       if (SSA_VAR_P (imm))
 	{
 	  // This should totally be handled at the source level.
-	  tree tmp = emit_loadimm (gsi,
-				   gimple_location (call), -32,
-				   addr, imm, nullptr);
-	  mod = build_int_cst (unsigned_type_node, TREE_INT_CST_LOW (mod) & SFPXCMP_MOD1_CC_MASK);
-
-	  return emit_replacement (gsi, insnd, call,
-				   rvtt_get_insn_data (rvtt_insn_data::sfpxicmpv), true, tmp, mod);
-	}
-      break;
-
-    case rvtt_insn_data::sfpxfcmps:
-      if (SSA_VAR_P (imm))
-	{
-	  unsigned imod = TREE_INT_CST_LOW (mod);
 	  tree tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
-	  mod = build_int_cst (unsigned_type_node, imod & SFPXCMP_MOD1_CC_MASK);
-
 	  return emit_replacement (gsi, insnd, call,
-				   rvtt_get_insn_data (rvtt_insn_data::sfpxfcmpv), false, tmp, mod);
+				   rvtt_get_insn_data (rvtt_insn_data::sfpxcmpv), tmp, mod);
 	}
       break;
     }

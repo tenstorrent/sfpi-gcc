@@ -86,6 +86,27 @@ debug_gimple_stmt (gimple *gs)
   print_gimple_stmt (stderr, gs, 0, TDF_VOPS|TDF_MEMSYMS);
 }
 
+void
+print_ssa_def_use (FILE *stream, tree var)
+{
+  if (!SSA_VAR_P (var))
+    return;
+
+  auto def = SSA_NAME_DEF_STMT (var);
+  print_gimple_stmt (stream, def, 0);
+
+  use_operand_p use_p;
+  imm_use_iterator iter;
+
+  FOR_EACH_IMM_USE_FAST (use_p, iter, var)
+    print_gimple_stmt (stream, USE_STMT (use_p), 0);
+}
+
+DEBUG_FUNCTION void
+debug_ssa_def_use (tree var)
+{
+  print_ssa_def_use (stderr, var);
+}
 
 /* Return formatted string of a VALUE probability
    (biased by REG_BR_PROB_BASE).  Returned string is allocated

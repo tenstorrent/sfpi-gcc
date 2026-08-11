@@ -69,13 +69,11 @@ void available () {
   //l_reg[LRegs::LReg0] = convert<vFloat> (vUInt (0));
   l_reg[LRegs::LReg0] = convert<vFloat> (vSMag (0));
   l_reg[LRegs::LReg0] = convert<vFloat> (vMag (0));
-
   //l_reg[LRegs::LReg0] = convert<vInt> (vFloat (0.0f));
   l_reg[LRegs::LReg0] = convert<vInt> (vInt (0));
   //l_reg[LRegs::LReg0] = convert<vInt> (vUInt (0));
   l_reg[LRegs::LReg0] = convert<vInt> (vSMag (0));
   l_reg[LRegs::LReg0] = convert<vInt> (vMag (0));
-
   //l_reg[LRegs::LReg0] = convert<vUInt> (vFloat (0.0f));
   //l_reg[LRegs::LReg0] = convert<vUInt> (vInt (0));
   //l_reg[LRegs::LReg0] = convert<vUInt> (vUInt (0));

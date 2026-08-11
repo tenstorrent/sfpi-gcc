@@ -108,6 +108,8 @@ transform (function *fn)
 	      // Clone the call to each use location, if they are different BBs
 	      gimple *use;
 	      imm_use_iterator use_iter;
+	      if (dump_file)
+		print_ssa_def_use (dump_file, lhs);
 
 	      FOR_EACH_IMM_USE_STMT (use, use_iter, lhs)
 		{

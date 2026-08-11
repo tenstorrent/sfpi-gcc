@@ -25,7 +25,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxfcmpv (a, b, 2);
+  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpand (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
@@ -72,7 +72,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxfcmpv (a, b, 2);
+  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
@@ -119,7 +119,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxfcmpv (a, b, 2);
+  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpxor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
