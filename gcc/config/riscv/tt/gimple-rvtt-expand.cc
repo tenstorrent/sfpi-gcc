@@ -27,148 +27,50 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #include "tree-into-ssa.h"
 #include "rvtt.h"
 #include <unordered_map>
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
-
-static void process_tree(gcall *stmt, gcall *parent);
-static void process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
-			      bool *negated, gcall *stmt, gcall *parent, bool negate);
+static void process_tree (gcall *stmt, gcall *parent);
+static bool simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+			   gcall *parent, bool negate);
 
 static std::unordered_map<gcall *, bool> vif_stmts;
 static std::unordered_map<gcall *, bool> phi_stmts;
 
-static unsigned
-get_int_arg (gcall *stmt, unsigned int arg)
-{
-  return TREE_INT_CST_LOW (gimple_call_arg (stmt, arg));
-}
-
 static void
 remove_stmt(gimple *g)
 {
-  rvtt_prep_stmt_for_deletion(g);
+  //  rvtt_prep_stmt_for_deletion(g);
   unlink_stmt_vdef(g);
   gimple_stmt_iterator gsi = gsi_for_stmt(g);
   gsi_remove(&gsi, true);
-  release_defs(g);
-}
-
-static int
-negate_cmp_mod(int mod)
-{
-    int op = mod & SFPXCMP_MOD1_CC_MASK;
-    int new_op = 0;
-
-    switch (op) {
-    case SFPXCMP_MOD1_CC_LT:
-	new_op = SFPXCMP_MOD1_CC_GE;
-	break;
-    case SFPXCMP_MOD1_CC_NE:
-	new_op = SFPXCMP_MOD1_CC_EQ;
-	break;
-    case SFPXCMP_MOD1_CC_GE:
-	new_op = SFPXCMP_MOD1_CC_LT;
-	break;
-    case SFPXCMP_MOD1_CC_EQ:
-	new_op = SFPXCMP_MOD1_CC_NE;
-	break;
-    case SFPXCMP_MOD1_CC_LE:
-	new_op = SFPXCMP_MOD1_CC_GT;
-	break;
-    case SFPXCMP_MOD1_CC_GT:
-	new_op = SFPXCMP_MOD1_CC_LE;
-	break;
-    }
-
-    return (mod & ~SFPXCMP_MOD1_CC_MASK) | new_op;
-}
-
-static bool
-cmp_issues_compc(int mod)
-{
-  return (mod & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LE;
-}
-
-static int get_bool_type(int op, bool negate)
-{
-  if (op == SFPXBOOL_MOD1_OR)
-    return negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR;
-  if (op == SFPXBOOL_MOD1_AND)
-    return negate ? SFPXBOOL_MOD1_OR : SFPXBOOL_MOD1_AND;
-  gcc_unreachable ();
-}
-
-static int
-flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
-{
-  int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
-  if (negate)
-    {
-      // Flip the operation
-      mod = negate_cmp_mod(mod);
-      gimple_call_set_arg(stmt, insnd->mod_arg (), build_int_cst(integer_type_node, mod));
-    }
-
-  return mod;
-}
-
-static gcall*
-copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
-{
-  const rvtt_insn_data *new_insnd = rvtt_get_insn_data(id);
-  int nargs = gimple_call_num_args(stmt);
-  gcall * new_stmt = gimple_build_call(new_insnd->decl, nargs);
-  for (int i = 0; i < nargs; i++)
-    {
-      gimple_call_set_arg(new_stmt, i, gimple_call_arg(stmt, i));
-    }
-  gimple_set_location(new_stmt, gimple_location(stmt));
-  // The icmp returns an int used in the boolean tree, the iadd return nothing
-  gimple_call_set_lhs(new_stmt, NULL_TREE);
-  gimple_set_vuse(new_stmt, gimple_vuse(stmt));
-  gimple_stmt_iterator gsi = gsi_for_stmt(stmt);
-  gsi_insert_before(&gsi, new_stmt, GSI_SAME_STMT);
-  remove_stmt(stmt);
-
-  // Make the iadd do a subtract for the compare
-  // Make sure other code knows this is a compare
-  int mod = (TREE_INT_CST_LOW (gimple_call_arg (new_stmt, new_insnd->mod_arg ())) & SFPXCMP_MOD1_CC_MASK) | SFPXIADD_MOD1_IS_SUB;
-  gimple_call_set_arg(new_stmt, new_insnd->mod_arg (), build_int_cst(integer_type_node, mod));
-
-  return new_stmt;
+  //  release_defs(g);
 }
 
 static void
-finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
+finish_new_insn (gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
 {
-  gcc_assert(new_stmt != nullptr);
   gimple_set_location (new_stmt, gimple_location (stmt));
-  update_stmt (new_stmt);
   if (insert_before)
-    {
-      gsi_insert_before(gsip, new_stmt, GSI_NEW_STMT);
-    }
+    gsi_insert_before (gsip, new_stmt, GSI_NEW_STMT);
   else
-    {
-      gsi_insert_after(gsip, new_stmt, GSI_NEW_STMT);
-    }
+    gsi_insert_after (gsip, new_stmt, GSI_NEW_STMT);
 }
 
 static void
-emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
+emit_pushc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
   gimple *new_stmt = gimple_build_call(new_insnd->decl, 1,
 				       build_int_cst (unsigned_type_node, SFPPUSHCC_MOD1_PUSH));
-  finish_new_insn(gsip, insert_before, new_stmt, stmt);
+  finish_new_insn (gsip, insert_before, new_stmt, stmt);
 }
 
 static void
-emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
+emit_popc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
@@ -178,7 +80,7 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 }
 
 static void
-emit_compc(gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
+emit_compc (gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpcompc);
@@ -231,6 +133,245 @@ emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
+// This is temporary code, and somewhet yucky ...
+static void
+emit_sfploadi (gimple_stmt_iterator *gsi, tree dst, uint32_t int_imm)
+{
+  // FIXME: we're just moving bits around here, the type of the input value
+  // doesnt matter.
+  int new_mod = -1;
+
+  if (int_imm <= 0x7fff || int_imm >= 0xffff8000)
+    new_mod = SFPLOADI_MOD0_SHORT;
+  else if (int_imm <= 0xffff)
+    new_mod = SFPLOADI_MOD0_USHORT;
+  else if (!(int_imm & 0xffff))
+    {
+      new_mod = SFPLOADI_MOD0_FLOATB;
+      int_imm >>= 16;
+    }
+  else if (!(int_imm & 0x1FFF))
+    {
+      int exp = (int_imm >> 23) & 0xFF;
+
+      if (exp < 127 + 16 && exp >= 127 - 14)
+	  {
+	    // Fits in fp16a
+	    int_imm = ((int_imm >> 13) & 0x3ff)
+	      | ((int_imm >> 16) & 0x8000)
+	      | ((exp - 0x70) << 10);
+	    new_mod = SFPLOADI_MOD0_FLOATA;
+	  }
+    }
+
+  auto *loadi_insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
+  auto *loadi = gimple_build_call (loadi_insnd->decl, loadi_insnd->num_args ());
+  gimple_set_lhs (loadi, new_mod < 0 ? make_ssa_name (TREE_TYPE (dst)) : dst);
+  gimple_call_set_arg (loadi, 0, null_pointer_node);
+  gimple_call_set_arg (loadi, loadi_insnd->imm_arg (),
+		       build_int_cst (unsigned_type_node, int_imm & 0xffff));
+  gimple_call_set_arg (loadi, loadi_insnd->var_arg (), integer_zero_node);
+  gimple_call_set_arg (loadi, loadi_insnd->id_arg (), integer_zero_node);
+  gimple_call_set_arg (loadi, loadi_insnd->mod_arg (),
+		       build_int_cst (unsigned_type_node, new_mod < 0 ? SFPLOADI_MOD0_USHORT : new_mod));
+  gsi_insert_after (gsi, loadi, GSI_NEW_STMT);
+
+  if (new_mod < 0)
+    {
+      auto *loadi_lv_insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi_lv);
+      auto *loadi_lv = gimple_build_call (loadi_lv_insnd->decl, loadi_lv_insnd->num_args ());
+      gimple_set_lhs (loadi_lv, dst);
+      gimple_call_set_arg (loadi_lv, 0, null_pointer_node);
+      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->live_arg (), gimple_get_lhs (loadi));
+      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->imm_arg (),
+			   build_int_cst (unsigned_type_node, (int_imm >> 16) & 0xffff));
+      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->var_arg (), integer_zero_node);
+      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->id_arg (), integer_zero_node);
+      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, SFPLOADI_MOD0_UPPER));
+      gsi_insert_after (gsi, loadi_lv, GSI_NEW_STMT);
+    }
+}
+
+static bool
+expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
+	    gcall *cmp, const rvtt_insn_data *insnd, bool negate)
+{
+  *left = *right = gsi_for_stmt (cmp);
+
+  unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (cmp, insnd->mod_arg ()));
+  unsigned type = (mod >> SFPXCMP_MOD1_TYPE_SHIFT) & SFPXCMP_MOD1_TYPE_MASK;
+  unsigned op = mod & SFPXCMP_MOD1_CC_MASK;
+
+  if (negate)
+    op ^= SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE;
+
+  struct arg_info
+  {
+    tree arg;
+    gcall *def = nullptr; // loadi def
+    tree cst = nullptr; // scalar const
+    uint32_t imm = 0; // scalar const
+
+    arg_info (tree arg)
+      : arg (arg)
+    {
+      if (!SSA_VAR_P (arg))
+	{
+	  cst = arg;
+	  imm = TREE_INT_CST_LOW (cst);
+	  return;
+	}
+    }
+  };
+  bool is_scalar = insnd->has_var ();
+  arg_info args[2] =
+    {{gimple_call_arg (cmp, insnd->src_arg ())},
+     {gimple_call_arg (cmp, is_scalar ? insnd->imm_arg () : insnd->src_arg () + 1)}};
+
+  // direct reimplementation of existing scheme
+  static const int map[] = {
+    SFPSETCC_MOD1_LREG_LT0,
+    SFPSETCC_MOD1_LREG_GTE0,
+    SFPSETCC_MOD1_LREG_EQ0,
+    SFPSETCC_MOD1_LREG_NE0,
+    SFPSETCC_MOD1_LREG_GTE0,
+    SFPSETCC_MOD1_LREG_GTE0
+  };
+  auto *setcc_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetcc_v);
+  bool integral = type != SFPXCMP_MOD1_TYPE_FLOAT;
+  bool needs_sub = true;
+  if (args[1].cst)
+    {
+      if (!args[1].imm || (!integral && args[1].imm == 0x80000000))
+	needs_sub = false;
+      else if ((args[1].imm & 0x7fffffff) == 0x3f800000)
+	{
+	  args[1].arg = make_ssa_name (TREE_TYPE (args[0].arg));
+	  args[1].cst = nullptr;
+	  const rvtt_insn_data *new_insnd =
+	    rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
+	  unsigned cst = args[1].imm >> 31 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	  gcall *read_lreg = gimple_build_call (new_insnd->decl, 1,
+						build_int_cst (unsigned_type_node, cst));
+	  gimple_call_set_lhs (read_lreg, args[1].arg);
+	  gsi_insert_after (right, read_lreg, GSI_NEW_STMT);
+	}
+      else if (args[1].imm <= 0x800 || args[1].imm > 0xfffff800)
+	args[1].cst = build_int_cst (unsigned_type_node, -args[1].imm);
+      else
+	{
+	  args[1].cst = nullptr;
+	  args[1].arg = make_ssa_name (TREE_TYPE (args[0].arg));
+	  emit_sfploadi (right, args[1].arg, args[1].imm);
+	}
+    }
+  gcall *sub = nullptr;
+  int late_cc_op = -1;
+  if (op == SFPXCMP_MOD1_CC_GT || op == SFPXCMP_MOD1_CC_LE)
+    // GT -> GE && NE0 LE -> !(GT && NE0)
+    // We can do better on consts that fit directly, or we only have one
+    // use of the loadi
+    late_cc_op = SFPXCMP_MOD1_CC_NE;
+
+  if (!needs_sub)
+    ;
+  else if (!integral)
+    {
+      auto neg1 = make_ssa_name (TREE_TYPE (args[0].arg));
+      const rvtt_insn_data *new_insnd =
+	rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
+      gcall *read_lreg = gimple_build_call (new_insnd->decl, 1,
+					    build_int_cst (unsigned_type_node, CREG_IDX_NEG_1));
+      gimple_call_set_lhs (read_lreg, neg1);
+      gsi_insert_after (right, read_lreg, GSI_NEW_STMT);
+
+      const rvtt_insn_data *mad_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmad);
+      sub = gimple_build_call (mad_insnd->decl, mad_insnd->num_args (),
+			       args[1].arg, neg1, args[0].arg, integer_zero_node);
+    }
+  else
+    {
+      static const unsigned iadd_map[] = {
+	SFPIADD_MOD1_CC_LT0,
+	SFPIADD_MOD1_CC_GTE0,
+	SFPIADD_MOD1_CC_NONE,
+	SFPIADD_MOD1_CC_NONE,
+	SFPIADD_MOD1_CC_GTE0,
+	SFPIADD_MOD1_CC_GTE0,
+      };
+
+      unsigned mod = iadd_map[op];
+      if (args[1].cst)
+	{
+	  auto *iadd_i_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_i);
+	  sub = gimple_build_call (iadd_i_insnd->decl, iadd_i_insnd->num_args ());
+	  gimple_call_set_arg (sub, 0, null_pointer_node);
+	  gimple_call_set_arg (sub, iadd_i_insnd->src_arg (), args[0].arg);
+	  gimple_call_set_arg (sub, iadd_i_insnd->imm_arg (), args[1].cst);
+	  gimple_call_set_arg (sub, iadd_i_insnd->var_arg (), integer_zero_node);
+	  gimple_call_set_arg (sub, iadd_i_insnd->id_arg (), integer_zero_node);
+	  gimple_call_set_arg (sub, iadd_i_insnd->mod_arg (),
+			       build_int_cst (unsigned_type_node, mod));
+	}
+      else
+	{
+	  auto *iadd_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
+	  sub = gimple_build_call (iadd_v_insnd->decl, iadd_v_insnd->num_args ());
+	  gimple_call_set_arg (sub, iadd_v_insnd->src_arg (), args[1].arg);
+	  gimple_call_set_arg (sub, iadd_v_insnd->src_arg () + 1, args[0].arg);
+	  gimple_call_set_arg (sub, iadd_v_insnd->mod_arg (),
+			       build_int_cst (unsigned_type_node,
+					      mod | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST));
+	}
+      if (mod == SFPIADD_MOD1_CC_NONE)
+	late_cc_op = op;
+    }
+
+  if (sub)
+    {
+      if (late_cc_op >= 0 || !integral)
+	{
+	  args[0].arg = make_ssa_name (TREE_TYPE (args[0].arg));
+	  gimple_set_lhs (sub, args[0].arg);
+	}
+      gsi_insert_after (right, sub, GSI_NEW_STMT);
+    }
+
+  if (!integral || !needs_sub)
+    {
+      auto setcc = gimple_build_call (setcc_v_insnd->decl, setcc_v_insnd->num_args ());
+      gimple_call_set_arg (setcc, setcc_v_insnd->src_arg (), args[0].arg);
+      gimple_call_set_arg (setcc, setcc_v_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, map[op]));
+      gimple_set_location (setcc, gimple_location (cmp));
+      gsi_insert_after (right, setcc, GSI_NEW_STMT);
+    }
+
+  if (late_cc_op >= 0)
+    {
+      auto setcc = gimple_build_call (setcc_v_insnd->decl, setcc_v_insnd->num_args ());
+      gimple_call_set_arg (setcc, setcc_v_insnd->src_arg (), args[0].arg);
+      gimple_call_set_arg (setcc, setcc_v_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, map[late_cc_op]));
+      gimple_set_location (setcc, gimple_location (cmp));
+      gsi_insert_after (right, setcc, GSI_NEW_STMT);
+    }
+
+  if (dump_file)
+    {
+      fprintf (dump_file, "Deleting compare ");
+      print_gimple_stmt (dump_file, cmp, 0);
+    }
+  unlink_stmt_vdef (cmp);
+  gsi_remove (left, true);
+
+  if (dump_file)
+    print_ssa_def_use (dump_file, args[0].arg);
+
+  return op == SFPXCMP_MOD1_CC_LE;
+}
+
 static gcall *
 find_top_of_cond_tree(gcall *stmt)
 {
@@ -238,17 +379,15 @@ find_top_of_cond_tree(gcall *stmt)
 
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxcmps:
+    case rvtt_insn_data::sfpxcmpv:
       break;
 
     case rvtt_insn_data::sfpxbool:
       {
 	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
 	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
-	return find_top_of_cond_tree(child);
+	return find_top_of_cond_tree (child);
       }
       break;
 
@@ -275,12 +414,11 @@ mark_vif_stmts(gimple_stmt_iterator top,
       if (rvtt_get_insn_data (*top))
 	{
 	  if (vif_stmts.find(as_a <gcall *> (*top)) == vif_stmts.end())
-	    {
-	      vif_stmts.insert({as_a <gcall *> (*top), true});
-	    }
+	    vif_stmts.insert({as_a <gcall *> (*top), true});
 	  else
 	    {
-	      DUMP("  already processed these stmts, bailing out\n");
+	      if (dump_file)
+		fprintf (dump_file, "  already processed these stmts, bailing out\n");
 	      return;
 	    }
 	}
@@ -289,21 +427,9 @@ mark_vif_stmts(gimple_stmt_iterator top,
     }
 
   if (gsi_end_p(top))
-    {
-      // Optimizing CCs split across BBs opens up a lot of cases, bail for now
-      DUMP("  didn't find xvif in same bb as xcondb, bailing out of optimization\n");
-#if 0
-      DUMP("  didn't find xvif in same bb as xcondb, processing BBs\n");
-      basic_block bb = gsi_bb(top);
-      edge_iterator ei;
-      edge e;
-      FOR_EACH_EDGE(e, ei, bb->succs)
-	{
-	  gimple_stmt_iterator next_gsi = gsi_start_bb (e->dest);
-	  mark_vif_stmts(vif_stmts, next_gsi, bot);
-	}
-#endif
-    }
+    // Optimizing CCs split across BBs opens up a lot of cases, bail for now
+    if (dump_file)
+      fprintf (dump_file, "  didn't find xvif in same bb as xcondb, bailing out of optimization\n");
 }
 
 // Expand xcondi into:
@@ -314,7 +440,7 @@ mark_vif_stmts(gimple_stmt_iterator top,
 // Returns results of loadi back to the same SSA as the xcondi for testing, up
 //  to the caller to adjust the test as needed (compare against 0)
 static void
-expand_xcondi(gcall *stmt)
+expand_xcondi (gcall *stmt)
 {
   gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
   gcall *top = find_top_of_cond_tree(child);
@@ -344,60 +470,62 @@ expand_xcondi(gcall *stmt)
 // the LHS w/o a new fence, hence the PUSHC prior to the RHS.  The POPC would
 // destroy the results of the RHS and so those results are saved/restored with
 // saved_enables.
-static void
-process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
-		  bool *negated, gcall *stmt, int op, bool negate)
+static bool
+simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost, unsigned op, bool negate)
 {
-  DUMP("    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
+  tree lhs = gimple_call_arg (call, 1);
+  if (op == SFPXBOOL_MOD1_NOT)
+    return simplify_node (lhs, leftmost, rightmost, call, !negate);
 
-  bool negate_node = false;
-  if (get_bool_type(op, negate) == SFPXBOOL_MOD1_OR)
-    {
-      negate_node = true;
-      negate = !negate;
-    }
+  if (dump_file)
+    fprintf (dump_file, "    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
+
+  bool negated = op == (negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR);
+  negate ^= negated;
 
   // Emit LEFT
-  gimple_stmt_iterator left_post_gsi;
-  bool left_negated = false;
-  DUMP("    left\n");
-  process_tree_node(pre_gsip, &left_post_gsi, &left_negated,
-		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_LEFT_TREE_ARG_POS))),
-		    stmt, negate);
+  gimple_stmt_iterator lhs_rightmost;
+  if (dump_file)
+    fprintf (dump_file, "    left\n");
+  bool left_negated = simplify_node (lhs, leftmost, &lhs_rightmost, call, negate);
 
   // Emit RIGHT
-  gimple_stmt_iterator right_pre_gsi;
-  bool right_negated = false;
-  DUMP("    right\n");
-  process_tree_node(&right_pre_gsi, post_gsip, &right_negated,
-		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_RIGHT_TREE_ARG_POS))),
-		    stmt, negate);
+  gimple_stmt_iterator rhs_leftmost;
+  if (dump_file)
+    fprintf (dump_file, "    right\n");
+  bool right_negated = simplify_node (gimple_call_arg(call, 2),
+				      &rhs_leftmost, rightmost, call, negate);
 
   if (right_negated)
     {
-      DUMP("	right negated, emitting pre/post\n");
-      emit_pushc(&right_pre_gsi, stmt, true);
-      tree saved_enables = emit_loadi(&right_pre_gsi, stmt, 1, true);
-      saved_enables = emit_loadi_lv(post_gsip, stmt, NULL_TREE, saved_enables, 0, false);
-      emit_popc(post_gsip, stmt, false);
-      emit_setcc_v(post_gsip, stmt, saved_enables, false);
+      if (dump_file)
+	fprintf (dump_file, "	right negated, emitting pre/post\n");
+
+      emit_pushc(&rhs_leftmost, call, true);
+      tree saved_enables = emit_loadi(&rhs_leftmost, call, 1, true);
+
+      saved_enables = emit_loadi_lv(rightmost, call, NULL_TREE, saved_enables, 0, false);
+      emit_popc(rightmost, call, false);
+      emit_setcc_v(rightmost, call, saved_enables, false);
     }
 
-  if (negate_node)
+  if (negated)
     {
-      DUMP("	node negated, emitting compc\n");
-      *negated = true;
-      emit_compc(post_gsip, stmt, false);
+      if (dump_file)
+	fprintf (dump_file, "	node negated, emitting compc\n");
+      
+      emit_compc (rightmost, call, false);
     }
 
   if (left_negated)
-    {
-      // Parent needs a fence for this node's left and side (if the parent
-      // isn't the root)
-      *negated = true;
-    }
+    // Parent needs a fence for this node's left and side (if the parent
+    // isn't the root)
+    negated = true;
 
-  DUMP("    exiting bool %d %d\n", op, negate);
+  if (dump_file)
+    fprintf (dump_file, "    exiting bool %d %d\n", op, negate);
+
+  return negated;
 }
 
 static bool
@@ -414,7 +542,8 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
       has_single_use(cmp_lhs) &&
       vif_stmts.find(stmt) != vif_stmts.end())
     {
-      DUMP("  optimizing away xcondi\n");
+      if (dump_file)
+	fprintf (dump_file, "  optimizing away xcondi\n");
 
       // Parent is an xicmps, the single vuse is an xcondb, move the
       // conditional into the xcondb and optimize away the xcondi and the
@@ -436,7 +565,8 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
     }
   else
     {
-      DUMP("  expanding xcondi\n");
+      if (dump_file)
+	fprintf (dump_file, "  expanding xcondi\n");
 
       // The integer conditional comparison falls outside a v_if, can't optimize
       // Instead, save the result in an int to be used later
@@ -451,13 +581,12 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
 static void
 process_tree_phi(gcall *stmt, gimple *child)
 {
-  DUMP("  process tree node phi\n");
+  if (dump_file)
+    fprintf (dump_file, "  process tree node phi\n");
 
   // Don't recurse infinitely on phi nodes
   if (phi_stmts.find(stmt) != phi_stmts.end())
-    {
-      return;
-    }
+    return;
   phi_stmts.insert({stmt, true});
 
   // The source of this icmps comes from multiple BBs, traverse them
@@ -465,93 +594,66 @@ process_tree_phi(gcall *stmt, gimple *child)
     {
       gimple *origin = SSA_NAME_DEF_STMT(gimple_phi_arg_def(child, i));
       if (origin->code == GIMPLE_PHI)
-	{
-	  process_tree_phi(stmt, origin);
-	}
+	process_tree_phi(stmt, origin);
       else if (origin->code == GIMPLE_CALL)
 	{
 	  gcall *origin_stmt = dyn_cast<gcall *>(origin);
 	  const rvtt_insn_data *origin_insnd;
 	  origin_insnd = rvtt_get_insn_data(origin_stmt);
 	  if (origin_insnd->id == rvtt_insn_data::sfpxcondi)
-	    {
-	      process_tree(origin_stmt, stmt);
-	    }
+	    process_tree(origin_stmt, stmt);
 	}
     }
 }
 
-static void
-process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
-		  bool *negated,
-		  gcall *stmt, gcall *parent,
-		  bool negate)
+static bool
+simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+	       gcall *parent, bool negate)
 {
+  gcall *stmt = as_a <gcall *> (SSA_NAME_DEF_STMT (node));
+  bool negated = false;
   const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
-  DUMP("  process %s n:%d\n", insnd->name, negate);
+  if (dump_file)
+    fprintf (dump_file, "  process %s n:%d\n", insnd->name, negate);
 
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-      {
-	int mod = flip_negated_cmp(stmt, insnd, negate);
-	if (cmp_issues_compc(mod)) *negated = true;
-	gimple_call_set_lhs (stmt, NULL_TREE);
-	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
-      }
-      break;
-
-    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxcmps:
       {
 	// Note: negation happens at the use of these trees below the fall thru
 	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->src_arg ()));
 	if (child->code == GIMPLE_PHI)
-	  {
-	    process_tree_phi(stmt, child);
-	  }
+	  process_tree_phi(stmt, child);
 	else if (child->code == GIMPLE_CALL) // could be inline asm...
 	  {
 	    gcall *child_call = dyn_cast<gcall *>(child);
 	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data(child_call);
 	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
 	      {
-		DUMP("  descending to process xcondi before xicmps\n");
+		if (dump_file)
+		  fprintf (dump_file, "  descending to process xcondi before xicmps\n");
 		// Process child before fixing up this insn
 		if (process_xcondi(child_call, stmt, true))
-		  {
-		    // Optimized this node away...
-		    break;
-		  }
+		  // Optimized this node away...
+		  break;
 	      }
 	  }
       }
       // Fall thru
 
-    case rvtt_insn_data::sfpxicmpv:
-      {
-	// iadd insns return a vector while icmp insns return an int, remap
-	int mod = flip_negated_cmp(stmt, insnd, negate);
-	if (cmp_issues_compc(mod)) *negated = true;
-	stmt = copy_and_replace_icmp(stmt, (insnd->id == rvtt_insn_data::sfpxicmps) ?
-				     rvtt_insn_data::sfpxiadd_i : rvtt_insn_data::sfpxiadd_v);
-	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
-      }
+    case rvtt_insn_data::sfpxcmpv:
+      if (expand_cmp (leftmost, rightmost, stmt, insnd, negate))
+	{
+	  emit_compc (rightmost, stmt, false);
+	  negated = true;
+	}
       break;
 
     case rvtt_insn_data::sfpxbool:
       {
-	  int op = get_int_arg(stmt, 0);
-	  if (op == SFPXBOOL_MOD1_NOT)
-	    {
-	      process_tree_node(pre_gsip, post_gsip, negated,
-				dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, 1))), stmt, !negate);
-	    }
-	  else
-	    {
-	      process_bool_tree(pre_gsip, post_gsip, negated, stmt, op, negate);
-	    }
-	  remove_stmt(stmt);
+	negated = simplify_logical (stmt, leftmost, rightmost,
+				    TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())), negate);
+	remove_stmt(stmt);
       }
       break;
 
@@ -563,15 +665,16 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
       gcc_assert(0);
     }
+
+  return negated;
 }
 
 static void
 process_tree(gcall *stmt, gcall *parent)
 {
-  bool negated = false;
-  gimple_stmt_iterator pre_gsi, post_gsi;
+  gimple_stmt_iterator leftmost, rightmost;
 
-  process_tree_node(&pre_gsi, &post_gsi, &negated, stmt, parent, false);
+  simplify_node (gimple_call_lhs (stmt), &leftmost, &rightmost, parent, false);
 }
 
 // Expand boolean trees
@@ -585,7 +688,8 @@ process_tree(gcall *stmt, gcall *parent)
 static unsigned
 transform (function *fun)
 {
-  DUMP("Expand pass on: %s\n", function_name(fun));
+  if (dump_file)
+    fprintf (dump_file, "Expand pass on: %s\n", function_name(fun));
 
   phi_stmts.reserve(20);
   vif_stmts.reserve(20);
@@ -596,7 +700,8 @@ transform (function *fun)
   // in a BB other than the one containing the associated xcondb
   FOR_EACH_BB_FN (bb, fun)
     {
-      DUMP("  bb process vif loop\n");
+      if (dump_file)
+	fprintf (dump_file, "  bb process vif loop\n");
       gsi = gsi_start_bb (bb);
       while (!gsi_end_p (gsi))
 	{
@@ -607,7 +712,8 @@ transform (function *fun)
 	  if (insnd && insnd->id == rvtt_insn_data::sfpxcondb)
 	    {
 	      auto *stmt = as_a <gcall *> (*gsi);
-	      DUMP("  process xcondb\n");
+	      if (dump_file)
+		fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
 	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_TREE_ARG_POS)));
 	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_START_ARG_POS)));
@@ -628,7 +734,8 @@ transform (function *fun)
   // Now process any xcondis that aren't associated w/ a xcondbs
   FOR_EACH_BB_FN (bb, fun)
     {
-      DUMP("  bb process outside vif loop\n");
+      if (dump_file)
+	fprintf (dump_file, "  bb process outside vif loop\n");
       gsi = gsi_start_bb (bb);
       while (!gsi_end_p (gsi))
 	{
@@ -640,7 +747,8 @@ transform (function *fun)
 	      if (insnd->id == rvtt_insn_data::sfpxcondi)
 		{
 		  auto *stmt = as_a <gcall *> (*gsi);
-		  DUMP("  process xcondi tree\n");
+		  if (dump_file)
+		    fprintf (dump_file, "  process xcondi tree\n");
 		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
 		  expand_xcondi(stmt);
 		  process_tree(child, stmt);

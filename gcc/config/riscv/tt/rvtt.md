@@ -249,30 +249,7 @@
   "TARGET_XTT_TENSIX"
   "FAIL;")
 
-(define_expand "rvtt_sfpxicmps"
-  [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [
-	  (match_operand:SI    1 "reg_or_0_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "reg_or_0_operand")
-          (match_operand:SI    5 "const_int_operand")
-          (match_operand:SI    6 "const_int_operand")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-  "FAIL;")
-
-(define_expand "rvtt_sfpxicmpv"
-  [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [
-	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:SI    3 "const_int_operand")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-  "FAIL;")
-
-(define_expand "rvtt_sfpxfcmps"
+(define_expand "rvtt_sfpxcmps"
   [(set (match_operand:SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
 	  (match_operand:SI    1 "reg_or_0_operand")
@@ -284,11 +261,10 @@
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
-  rvtt_emit_sfpxfcmps (operands[2], operands[3], operands[6]);
-  DONE;
+  FAIL;
 })
 
-(define_expand "rvtt_sfpxfcmpv"
+(define_expand "rvtt_sfpxcmpv"
   [(set (match_operand:SI 0 "register_operand")
         (unspec_volatile:SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
@@ -297,8 +273,7 @@
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
-  rvtt_emit_sfpxfcmpv (operands[1], operands[2], operands[3]);
-  DONE;
+  FAIL;
 })
 
 (define_expand "rvtt_sfpxloadi"
@@ -313,54 +288,6 @@
   "TARGET_XTT_TENSIX"
 {
   FAIL;
-})
-
-(define_expand "rvtt_sfpxiadd_v"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:XTT32SI 1 "register_operand"  "0")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand"  "xrxc")
-          (match_operand:SI      3 "const_int_operand" "n")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-{
-  rvtt_emit_sfpxiadd_v (operands[0], operands[1], operands[2], operands[3]);
-  DONE;
-})
-
-(define_expand "rvtt_sfpxiadd_i"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "const_int_operand")
-          (match_operand:SI    5 "reg_or_const_int_operand")
-          (match_operand:SI    6 "const_int_operand")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-{
-  emit_insn (gen_rvtt_sfpxiadd_i_lv
-    (operands[0], operands[1], rvtt_gen_rtx_noval (XTT32SImode),
-     operands[2], operands[3], operands[4], operands[5], operands[6]));
-  DONE;
-})
-
-(define_expand "rvtt_sfpxiadd_i_lv"
-  [(set (match_operand:XTT32SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "address_operand")
-          (match_operand:XTT32SI 2 "register_operand")
-          (match_operand:XTT32SI 3 "reg_or_cstlreg_operand")
-          (match_operand:SI    4 "reg_or_const_int_operand")
-          (match_operand:SI    5 "const_int_operand")
-          (match_operand:SI    6 "reg_or_const_int_operand")
-          (match_operand:SI    7 "const_int_operand")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-{
-  rvtt_emit_sfpxiadd_i (operands[0], operands[2], operands[1], operands[3], operands[4], operands[7]);
-  DONE;
 })
 
 (define_insn "rvtt_sfpconcat2"

@@ -60,14 +60,9 @@ RVTT_FN (sfpxvif,            ,,USI_FTYPE,                                       
 RVTT_FN (sfpxbool,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x7}, {R}, {R}))
 RVTT_FN (sfpxcondb,          ,,VOID_FTYPE_USI_USI,                                           VOL, ({R}, {R}))
 RVTT_FN (sfpxcondi,          ,,XTT_VEC_FTYPE_USI,                                            VOL, ({R}, {}))
-RVTT_FN (sfpxicmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({E, 0}, {XM, 0x3f}))
-RVTT_FN (sfpxicmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
-RVTT_FN (sfpxfcmps,          ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({U, 0}, {XM, 0x3f}))
-RVTT_FN (sfpxfcmpv,          ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
+RVTT_FN (sfpxcmps,           ,,USI_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,                   CC(), ({E, 0}, {XM, 0x3f}))
+RVTT_FN (sfpxcmpv,           ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
-RVTT_FN (sfpxiadd_v,         ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                            CC(0x3f3f), ({XM, 0x3f}, {}))
-RVTT_FN (sfpxiadd_i,         ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               CC(0x3f3f), ({E, 0}, {XM, 0x3f}))
-RVTT_FN (sfpxiadd_i_lv,      ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV|CC(0x3f3f), ({E, 0}, {XM, 0x3f}))
 
 // If you're putting in nops, you want them preserved, so say it's volatile
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   VOL, ())

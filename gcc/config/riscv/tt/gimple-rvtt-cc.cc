@@ -141,18 +141,9 @@ process_block_stmts(basic_block bb,
 		break;
 	      }
 
-	    case rvtt_insn_data::sfpxiadd_i:
-	    case rvtt_insn_data::sfpxiadd_v:
-	    case rvtt_insn_data::sfpxfcmps:
-	    case rvtt_insn_data::sfpxfcmpv:
-	      {
-		int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
-		if ((mod & SFPXCMP_MOD1_CC_MASK) != SFPXCMP_MOD1_CC_LE)
-		  goto default_;
-		// A compc will be inserted during rtl expansion,
-		// sigh.  We should be doing that earlier.
-	      }
-	      [[fallthrough]];
+	    case rvtt_insn_data::sfpxcmps:
+	    case rvtt_insn_data::sfpxcmpv:
+	      gcc_unreachable ();
 
 	    case rvtt_insn_data::sfpcompc:
 	      // Set compc to true for current pushc
