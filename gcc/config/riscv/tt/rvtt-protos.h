@@ -224,10 +224,10 @@ constexpr unsigned int SFPXCMP_MOD1_CC_GT = 4;
 constexpr unsigned int SFPXCMP_MOD1_CC_LE = 5;
 constexpr unsigned int SFPXCMP_MOD1_CC_MASK = 7;
 
-constexpr unsigned int SFPXCMP_MOD1_TYPE_FLOAT = 0;
-constexpr unsigned int SFPXCMP_MOD1_TYPE_SMAG = 1;
-constexpr unsigned int SFPXCMP_MOD1_TYPE_INT = 2;
-constexpr unsigned int SFPXCMP_MOD1_TYPE_UINT = 3;
+constexpr unsigned int SFPXCMP_MOD1_TYPE_UINT = 0;
+constexpr unsigned int SFPXCMP_MOD1_TYPE_INT = 1;
+constexpr unsigned int SFPXCMP_MOD1_TYPE_SMAG = 2;
+constexpr unsigned int SFPXCMP_MOD1_TYPE_FLOAT = 3;
 constexpr unsigned int SFPXCMP_MOD1_TYPE_SHIFT = 4;
 constexpr unsigned int SFPXCMP_MOD1_TYPE_MASK = 3;
 
@@ -240,7 +240,7 @@ constexpr unsigned int SFPIADD_MOD1_CC_LT0 = 0;
 constexpr unsigned int SFPIADD_MOD1_CC_NONE = 4;
 constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
 
-constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 16;
+constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 8;
 
 constexpr unsigned int SFPXBOOL_MOD1_AND = 0;
 constexpr unsigned int SFPXBOOL_MOD1_OR = 1;

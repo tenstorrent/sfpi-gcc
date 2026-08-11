@@ -507,9 +507,7 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
       else if (fval == 0xbf800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_NEG_1);
       else
-	{
-	  rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), f);
-	}
+	rvtt_emit_sfpxloadi (ref_val, rvtt_gen_rtx_noval (XTT32SImode), f);
     }
 
   // FIXME: a lot of the below is sfpxfcmpv
@@ -553,7 +551,7 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
 	emit_insn (gen_rvtt_sfpcompc ());
     }
   else
-    emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[INTVAL(mod)])));
+    emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
 }
 
 // Extended (or external?) iadd_i

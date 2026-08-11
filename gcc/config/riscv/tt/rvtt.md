@@ -19,6 +19,11 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+;; WH  - ISA 2.0
+;; BH  - ISA 3.0
+;; QSR - ISA 4.0 (NEO)
+;; TRI - ISA 4.1 (Not Yet Supported)
+
 (include "tt/rvtt-predicates.md")
 (include "tt/rvtt-tune.md")
 
