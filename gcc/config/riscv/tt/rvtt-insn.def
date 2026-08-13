@@ -124,9 +124,11 @@ RVTT_OVR(sfpshft_i,    bh_qsr,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,  
 RVTT_FN (sfpshft_i_lv,       ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV, ({S, 12, 12}, {M, 0x1}))
 RVTT_OVR(sfpshft_i_lv, bh_qsr,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_XTT_VEC_USI_USI_USI_USI,       LV, ({S, 12, 12}, {M, 0x5}))
 
-RVTT_FN (sfplut,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x0011}))
-RVTT_FN (sfplutfp32_3r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4411}))
-RVTT_FN (sfplutfp32_6r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0, ({M, 0xc}))
+RVTT_FN (sfplut,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x0011}))
+RVTT_OVR(sfplut,       qsr,_qsr,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x0011}))
+RVTT_FN (sfplutfp32,       qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x44dd}))
+RVTT_FN (sfplutfp32_3r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4400}))
+RVTT_FN (sfplutfp32_6r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0, ({M, 0x00dd}))
 
 RVTT_FN (sfpswap,          ,_wh,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
 RVTT_OVR(sfpswap,          qsr,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x1ff}, {U, 1}))
