@@ -88,8 +88,7 @@
   UNSPECV_SFPCONFIG
 
   UNSPECV_SFPLUT
-  UNSPECV_SFPLUTFP32_3R
-  UNSPECV_SFPLUTFP32_6R
+  UNSPECV_SFPLUTFP32
 
   UNSPECV_SFPSWAP
   UNSPECV_SFPTRANSP
@@ -1959,8 +1958,30 @@
           (match_operand:XTT32SI 4 "reg_or_cstlreg_operand"  "0")
           (match_operand:SI    5 "const_int_operand" "n")
 	  ] UNSPECV_SFPLUT))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_XTT_TENSIX_WH_BH"
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay" "dynamic")])
+
+(define_insn "rvtt_sfplut_qsr"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "x3")
+          (match_operand:SI    2 "const_int_operand" "n")
+	  ] UNSPECV_SFPLUT))]
+  "TARGET_XTT_TENSIX_QSR"
+  "SFPLUT\t%x0, %2\t# R:%x1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_delay" "dynamic")])
+
+(define_insn "rvtt_sfplutfp32"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 1 "register_operand"  "x3")
+          (match_operand:SI    2 "const_int_operand" "n")
+	  ] UNSPECV_SFPLUTFP32))]
+  "TARGET_XTT_TENSIX_QSR"
+  "SFPLUTFP32\t%x0, %2\t# R:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -1972,9 +1993,9 @@
           (match_operand:XTT32SI 3 "register_operand"  "x2")
           (match_operand:XTT32SI 4 "register_operand"  "x3")
           (match_operand:SI    5 "const_int_operand" "n")
-	  ] UNSPECV_SFPLUTFP32_3R))
+	  ] UNSPECV_SFPLUTFP32))
         (clobber (match_scratch:XTT32SI 6 "=x7"))]
-  "TARGET_XTT_TENSIX"
+  "TARGET_XTT_TENSIX_WH_BH"
   "#"
   "&& reload_completed"
   [(const_int 0)]
@@ -2004,8 +2025,8 @@
           (match_operand:XTT32SI 4 "register_operand"  "x3")
           (match_operand:SI    5 "const_int_operand" "n")
           (match_operand:XTT32SI 6 "register_operand"  "x7")
-	  ] UNSPECV_SFPLUTFP32_3R))]
-  "TARGET_XTT_TENSIX && reload_completed"
+	  ] UNSPECV_SFPLUTFP32))]
+  "TARGET_XTT_TENSIX_WH_BH && reload_completed"
   "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])
@@ -2021,8 +2042,8 @@
           (match_operand:XTT32SI 6 "reg_or_cstlreg_operand"  "x6")
           (match_operand:XTT32SI 7 "reg_or_cstlreg_operand"  "x3")
           (match_operand:SI    8 "const_int_operand" "n")
-	  ] UNSPECV_SFPLUTFP32_6R))]
-  "TARGET_XTT_TENSIX"
+	  ] UNSPECV_SFPLUTFP32))]
+  "TARGET_XTT_TENSIX_WH_BH"
   "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_delay" "dynamic")])

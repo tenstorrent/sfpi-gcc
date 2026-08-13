@@ -1,4 +1,4 @@
-/* Pass to issue diagnostics for SFPU operations
+/* Passes to deal with immediate operand generation and optimization
    Copyright (C) 2026 Tenstorrent Inc.
    Originated Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
