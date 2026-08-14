@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "tree-into-ssa.h"
 #include "tree-ssa-operands.h"
+#include "tree-ssanames.h"
 #include "attribs.h"
 #include "rvtt.h"
 
@@ -124,7 +125,7 @@ free_constant_p (tree value)
 using value_map = std::unordered_map<tree, value_info>;
 
 static value_map
-build_values (const std::vector<gcall *> &ops)
+build_values (basic_block bb, const std::vector<gcall *> &ops)
 {
   value_map values;
   std::unordered_set<gimple *> region_stmts;
@@ -158,7 +159,53 @@ build_values (const std::vector<gcall *> &ops)
 	  {
 	    entry.second.live_out = true;
 	    break;
+	}
+    }
+
+  /* Account for vector SSA values that are untouched by the region but live
+     across it.  They still occupy LREGs.  This is especially important when
+     a hard barrier splits a basic block into multiple scheduling regions.  */
+  std::unordered_map<gimple *, unsigned> positions;
+  unsigned position = 0;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+       !gsi_end_p (gsi); gsi_next (&gsi))
+    if (!is_gimple_debug (*gsi))
+      positions[*gsi] = position++;
+
+  const unsigned first = positions[ops.front ()];
+  const unsigned last = positions[ops.back ()];
+  unsigned version;
+  tree name;
+  FOR_EACH_SSA_NAME (version, name, cfun)
+    {
+      if (!sfpu_vector_p (TREE_TYPE (name)) || free_constant_p (name)
+	  || values.count (name))
+	continue;
+
+      gimple *def = SSA_NAME_DEF_STMT (name);
+      if (def && gimple_bb (def) == bb)
+	{
+	  auto def_pos = positions.find (def);
+	  if (def_pos == positions.end () || def_pos->second >= first)
+	    continue;
+	}
+
+      bool used_after = false;
+      gimple *use;
+      imm_use_iterator iter;
+      FOR_EACH_IMM_USE_STMT (use, iter, name)
+	if (gimple_bb (use) == bb)
+	  {
+	    auto use_pos = positions.find (use);
+	    if (use_pos != positions.end () && use_pos->second > last)
+	      {
+		used_after = true;
+		break;
+	      }
 	  }
+
+      if (used_after)
+	values[name].live_out = true;
     }
 
   return values;
@@ -373,7 +420,7 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
   if (ops.size () < 2)
     return false;
 
-  value_map values = build_values (ops);
+  value_map values = build_values (bb, ops);
   const unsigned old_peak = pressure_for_order (ops, values);
 
   std::vector<gcall *> schedule;
