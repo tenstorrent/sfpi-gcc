@@ -38,6 +38,7 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_cc);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
 
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
