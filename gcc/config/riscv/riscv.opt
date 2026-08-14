@@ -582,6 +582,10 @@ mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
 Remove dead tensix instructions
 
+mtt-tensix-optimize-lp-schedule
+Target Var(riscv_tt_opt_lp_schedule) Init(0)
+Schedule allowlisted straight-line SFPU regions to reduce register pressure
+
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instruction.
