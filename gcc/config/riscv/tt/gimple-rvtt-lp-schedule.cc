@@ -112,6 +112,16 @@ unconditional_bb_p (basic_block bb)
   return true;
 }
 
+/* The first implementation has no CFG liveness proof.  Restrict it to the
+   sole real basic block of a straight-line function.  */
+static bool
+straight_line_bb_p (basic_block bb)
+{
+  return gimple_seq_empty_p (phi_nodes (bb))
+    && single_pred_p (bb) && single_pred (bb)->index == ENTRY_BLOCK
+    && single_succ_p (bb) && single_succ (bb)->index == EXIT_BLOCK;
+}
+
 static bool
 free_constant_p (tree value)
 {
@@ -473,6 +483,14 @@ analyze_function (function *fn)
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
+      if (!straight_line_bb_p (bb))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "\nSFPU pressure region: bb=%d rejected=cfg\n",
+		     bb->index);
+	  continue;
+	}
       if (!unconditional_bb_p (bb))
 	{
 	  if (dump_file)

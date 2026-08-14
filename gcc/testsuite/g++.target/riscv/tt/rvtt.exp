@@ -34,5 +34,20 @@ dg-init
 # Main loop.
 dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/*.C]] "" ""
 
+# Pressure-scheduler tests use the SFPI headers but must still be reached by
+# check-gcc-tt, whose RUNTESTFLAGS selects this driver explicitly.  Do not glob
+# the whole legacy sfpi directory here; keep this opt-in suite focused.
+if [info exists env(SFPI)] {
+  proc SFPI {} {
+    global env
+    return $env(SFPI)
+  }
+
+  set pressure_tests [concat \
+    [glob -nocomplain $srcdir/$subdir/sfpi/lp-schedule-*.C] \
+    [glob -nocomplain $srcdir/$subdir/sfpi/welford-pressure-*.C]]
+  dg-runtest [lsort $pressure_tests] "" ""
+}
+
 # All done.
 dg-finish
