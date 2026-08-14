@@ -44,6 +44,10 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
 INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);
 INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
+/* Observe final SFPU pseudo pressure after sched1 and early rematerialization,
+   immediately before IRA.  This pass is dump-only until coloring enforcement
+   has an independently validated grouped-change implementation.  */
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);

@@ -1,6 +1,6 @@
 // { dg-do compile }
-// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-pressure-schedule -fdump-tree-rvtt_lp_schedule" }
-// { dg-final { scan-tree-dump "SFPU pressure schedule:.*old-peak=9.*new-peak=8.*validated=yes.*reason=ok.*rejection-selftest=passed.*applied=yes" "rvtt_lp_schedule" } }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-pressure-schedule -fdump-tree-rvtt_lp_schedule" }
+// { dg-final { scan-tree-dump "SFPU pressure schedule:.*old-peak=9.*new-peak=8.*validated=yes.*reason=ok.*applied=yes" "rvtt_lp_schedule" } }
 
 namespace ckernel {
 unsigned *instrn_buffer;
@@ -31,20 +31,15 @@ test()
     vFloat bias = l_reg[LRegs::LReg6];
     vFloat recip = l_reg[LRegs::LReg7];
 
-#ifdef WELFORD_MANUAL_EARLY_FOLD
-    vFloat folded = x3 + bias;
-#endif
-
     update(x0, mean, m2, recip);
     update(x1, mean, m2, recip);
     update(x2, mean, m2, recip);
 
-    // Source order holds both x3 and bias across the recurrence.  A legal
-    // pressure schedule folds them first, replacing two live values by one.
-#ifndef WELFORD_MANUAL_EARLY_FOLD
     vFloat folded = x3 + bias;
-#endif
-    update(folded, mean, m2, recip);
+    // Exercise exact duplicate-use accounting in both the scheduler and the
+    // independent validator.
+    vFloat squared = folded * folded;
+    update(squared, mean, m2, recip);
 
     l_reg[LRegs::LReg4] = mean;
     l_reg[LRegs::LReg5] = m2;

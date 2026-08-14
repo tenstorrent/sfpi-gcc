@@ -44,17 +44,21 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
+	rtl-rvtt-lp-alloc.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
 	rtl-rvtt-synth.o \
 	rtl-rvtt-unspec.o \
+	rvtt-lpsolve.o \
 
 OBJS += $(RVTT_OBJS)
 
 $(RVTT_OBJS): %.o: $(srcdir)/config/riscv/tt/%.cc
 	$(COMPILE) $<
 	$(POSTCOMPILE)
+
+rvtt-lpsolve.o: CXXFLAGS += $(LPSOLVE_CPPFLAGS)
 
 gimple-rvtt-combine.o: rvtt-combine.inc
 

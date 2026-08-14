@@ -45,6 +45,7 @@ if [info exists env(SFPI)] {
 
   set pressure_tests [concat \
     [glob -nocomplain $srcdir/$subdir/sfpi/lp-schedule-*.C] \
+    [glob -nocomplain $srcdir/$subdir/sfpi/pressure-schedule-*.C] \
     [glob -nocomplain $srcdir/$subdir/sfpi/welford-pressure-*.C]]
   dg-runtest [lsort $pressure_tests] "" ""
 }
