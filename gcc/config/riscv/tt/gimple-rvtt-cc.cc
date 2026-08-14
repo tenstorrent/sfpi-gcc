@@ -141,6 +141,8 @@ process_block_stmts(basic_block bb,
 		break;
 	      }
 
+	    case rvtt_insn_data::sfpxiadd_i:
+	    case rvtt_insn_data::sfpxiadd_v:
 	    case rvtt_insn_data::sfpxfcmps:
 	    case rvtt_insn_data::sfpxfcmpv:
 	      {
