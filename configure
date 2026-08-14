@@ -805,6 +805,7 @@ enable_option_checking
 with_build_libsubdir
 with_system_zlib
 with_zstd
+with_lp_solve
 enable_as_accelerator_for
 enable_offload_targets
 enable_offload_defaulted
@@ -1607,6 +1608,9 @@ Optional Packages:
   --with-system-zlib      use installed libz
   --with-zstd             Support zstd compressed debug sections
                           (default=auto)
+  --with-lp-solve[=no|auto|yes|PATH]
+                          build the optional Tensix scheduler lp_solve adapter
+                          (default=no)
   --with-mpc=PATH         specify prefix directory for installed MPC package.
                           Equivalent to --with-mpc-include=PATH/include plus
                           --with-mpc-lib=PATH/lib
@@ -2986,6 +2990,19 @@ fi
 # Check whether --with-zstd was given.
 if test "${with_zstd+set}" = set; then :
   withval=$with_zstd;
+fi
+
+
+# Optional host-side MILP solver used by the explicitly enabled Tensix
+# pressure scheduler.  The GCC subconfigure performs the actual header and
+# link checks; declaring the option here avoids an unrecognized top-level
+# configure argument and ensures it is forwarded to host tools.
+
+# Check whether --with-lp-solve was given.
+if test "${with_lp_solve+set}" = set; then :
+  withval=$with_lp_solve;
+else
+  with_lp_solve=no
 fi
 
 
@@ -21347,4 +21364,3 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-

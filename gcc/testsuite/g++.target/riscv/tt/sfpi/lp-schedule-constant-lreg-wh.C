@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-pressure-schedule -fdump-tree-rvtt_lp_schedule" }
-// { dg-final { scan-tree-dump "SFPU pressure region:.*ops=16.*live-in=7.*peak=8" "rvtt_lp_schedule" } }
+// { dg-final { scan-tree-dump "SFPU pressure schedule:.*old-peak=9.*new-peak=8.*validated=yes.*reason=ok.*applied=yes" "rvtt_lp_schedule" } }
 
 namespace ckernel {
 unsigned *instrn_buffer;
@@ -11,7 +11,7 @@ unsigned *instrn_buffer;
 using namespace sfpi;
 
 sfpi_inline void
-welford_update (vFloat x, vFloat recip, vFloat &mean, vFloat &m2)
+update (vFloat x, vFloat &mean, vFloat &m2, vFloat recip)
 {
   vFloat delta = x - mean;
   mean += delta * recip;
@@ -20,7 +20,7 @@ welford_update (vFloat x, vFloat recip, vFloat &mean, vFloat &m2)
 }
 
 void
-welford4 ()
+test ()
 {
   vFloat x0 = l_reg[LRegs::LReg0];
   vFloat x1 = l_reg[LRegs::LReg1];
@@ -28,12 +28,19 @@ welford4 ()
   vFloat x3 = l_reg[LRegs::LReg3];
   vFloat mean = l_reg[LRegs::LReg4];
   vFloat m2 = l_reg[LRegs::LReg5];
+  vFloat bias = l_reg[LRegs::LReg6];
   vFloat recip = l_reg[LRegs::LReg7];
+  vFloat scale = vConstFloatPrgm0;
 
-  welford_update (x0, recip, mean, m2);
-  welford_update (x1, recip, mean, m2);
-  welford_update (x2, recip, mean, m2);
-  welford_update (x3, recip, mean, m2);
+  update (x0, mean, m2, recip);
+  update (x1, mean, m2, recip);
+  update (x2, mean, m2, recip);
+
+  /* The pressure schedule moves both operations before the recurrence.  The
+     constant-LREG read is not a pressure value, but its SSA definition must
+     remain before the moved multiply.  */
+  vFloat folded = (x3 + bias) * scale;
+  update (folded, mean, m2, recip);
 
   l_reg[LRegs::LReg4] = mean;
   l_reg[LRegs::LReg5] = m2;

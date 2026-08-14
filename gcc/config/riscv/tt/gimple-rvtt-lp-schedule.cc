@@ -1,4 +1,4 @@
-/* Pressure analysis for future SFPU LP scheduling.
+/* Opt-in pressure scheduling for straight-line SFPU arithmetic regions.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -34,7 +34,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssanames.h"
 #include "attribs.h"
 #include "rvtt.h"
+#include "rvtt-schedule.h"
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -46,6 +48,12 @@ struct value_info
   int def = -1;
   unsigned uses = 0;
   bool live_out = false;
+};
+
+struct schedule_solution
+{
+  std::vector<gcall *> order;
+  unsigned claimed_peak = 0;
 };
 
 static bool
@@ -78,6 +86,21 @@ schedulable_p (gcall *call)
     return false;
   if (!gimple_call_nothrow_p (call))
     return false;
+
+  tree lhs = gimple_call_lhs (call);
+  if (!lhs || !sfpu_vector_p (TREE_TYPE (lhs)))
+    return false;
+  for (unsigned argno = 0; argno != gimple_call_num_args (call); ++argno)
+    {
+      tree arg = gimple_call_arg (call, argno);
+      if (VECTOR_TYPE_P (TREE_TYPE (arg)))
+	{
+	  if (!sfpu_vector_p (TREE_TYPE (arg)))
+	    return false;
+	}
+      else if (TREE_CODE (arg) != INTEGER_CST)
+	return false;
+    }
 
   switch (insnd->id)
     {
@@ -221,6 +244,70 @@ build_values (basic_block bb, const std::vector<gcall *> &ops)
   return values;
 }
 
+/* Convert the GIMPLE region into stable solver-independent integer IDs.  The
+   unordered pressure map must not leak its iteration order into the MILP.  */
+static rvtt_sched_problem
+build_solver_problem (const std::vector<gcall *> &ops,
+		      const value_map &values,
+		      const std::vector<gcall *> &preferred_order,
+		      bool preferred_feasible)
+{
+  rvtt_sched_problem problem;
+  problem.operation_count = ops.size ();
+  problem.preferred_feasible = preferred_feasible;
+  problem.preferred_slot.assign (ops.size (), 0);
+
+  std::unordered_map<tree, unsigned> def_op;
+  std::unordered_map<gcall *, unsigned> op_id;
+  for (unsigned i = 0; i != ops.size (); ++i)
+    {
+      op_id[ops[i]] = i;
+      tree lhs = gimple_call_lhs (ops[i]);
+      if (lhs && sfpu_vector_p (TREE_TYPE (lhs)))
+	def_op[lhs] = i;
+    }
+  for (unsigned slot = 0; slot != preferred_order.size (); ++slot)
+    problem.preferred_slot[op_id.at (preferred_order[slot])] = slot;
+
+  for (unsigned i = 0; i != ops.size (); ++i)
+    {
+      std::unordered_set<unsigned> seen;
+      for (unsigned argno = 0; argno != gimple_call_num_args (ops[i]);
+	   ++argno)
+	{
+	  auto found = def_op.find (gimple_call_arg (ops[i], argno));
+	  if (found != def_op.end () && seen.insert (found->second).second)
+	    problem.dependencies.emplace_back (found->second, i);
+	}
+    }
+
+  std::vector<tree> stable_values;
+  stable_values.reserve (values.size ());
+  for (const auto &entry : values)
+    stable_values.push_back (entry.first);
+  std::sort (stable_values.begin (), stable_values.end (),
+	     [] (tree lhs, tree rhs)
+	     { return SSA_NAME_VERSION (lhs) < SSA_NAME_VERSION (rhs); });
+
+  for (tree name : stable_values)
+    {
+      const value_info &info = values.find (name)->second;
+      rvtt_sched_value value;
+      value.def = info.def;
+      value.live_out = info.live_out;
+      for (unsigned i = 0; i != ops.size (); ++i)
+	for (unsigned argno = 0; argno != gimple_call_num_args (ops[i]);
+	     ++argno)
+	  if (gimple_call_arg (ops[i], argno) == name)
+	    {
+	      value.uses.push_back (i);
+	      break;
+	    }
+      problem.values.push_back (std::move (value));
+    }
+  return problem;
+}
+
 /* Model a destructive result as becoming live after all operands have been
    read in an issue slot.  Thus an output may legally reuse an operand whose
    final use is that same operation.  */
@@ -257,6 +344,304 @@ pressure_for_order (const std::vector<gcall *> &order,
 	peak = live;
     }
   return peak;
+}
+
+/* Independently rebuild the vector liveness model and validate a proposed
+   order before mutating GIMPLE.  This deliberately does not consume the
+   scheduler's predecessor, remaining-use, or peak bookkeeping.  */
+static bool
+validate_schedule (basic_block bb, const std::vector<gcall *> &ops,
+		   const schedule_solution &solution, unsigned expected_old_peak,
+		   unsigned &verified_peak, const char *&reason)
+{
+  reason = "unknown";
+  verified_peak = expected_old_peak;
+
+  if (solution.order.size () != ops.size ())
+    {
+      reason = "size";
+      return false;
+    }
+
+  std::unordered_set<gcall *> original;
+  original.reserve (ops.size ());
+  for (gcall *call : ops)
+    if (!original.insert (call).second)
+      {
+	reason = "duplicate-original";
+	return false;
+      }
+
+  std::unordered_map<gimple *, unsigned> scheduled_position;
+  scheduled_position.reserve (solution.order.size ());
+  for (unsigned i = 0; i != solution.order.size (); ++i)
+    {
+      gcall *call = solution.order[i];
+      if (!original.count (call))
+	{
+	  reason = "foreign-op";
+	  return false;
+	}
+      if (!scheduled_position.emplace (call, i).second)
+	{
+	  reason = "duplicate-op";
+	  return false;
+	}
+      if (gimple_bb (call) != bb || !schedulable_p (call))
+	{
+	  reason = "eligibility";
+	  return false;
+	}
+    }
+
+  /* Region collection treats every non-schedulable statement except a pure
+     constant-LREG read as a boundary.  Check scalar as well as vector source
+     availability against the actual insertion point used by apply_schedule.  */
+  std::unordered_map<gimple *, unsigned> bb_position;
+  unsigned position = 0;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+       !gsi_end_p (gsi); gsi_next (&gsi))
+    bb_position[*gsi] = position++;
+
+  const unsigned region_first = bb_position[ops.front ()];
+  const unsigned region_last = bb_position[ops.back ()];
+  for (unsigned i = 0; i != solution.order.size (); ++i)
+    {
+      gcall *call = solution.order[i];
+      for (unsigned argno = 0; argno != gimple_call_num_args (call); ++argno)
+	{
+	  tree arg = gimple_call_arg (call, argno);
+	  if (TREE_CODE (arg) != SSA_NAME)
+	    continue;
+
+	  gimple *def = SSA_NAME_DEF_STMT (arg);
+	  auto internal = scheduled_position.find (def);
+	  if (internal != scheduled_position.end ())
+	    {
+	      if (internal->second >= i)
+		{
+		  reason = "def-use";
+		  return false;
+		}
+	      continue;
+	    }
+
+	  if (def && gimple_bb (def) == bb)
+	    {
+	      auto found = bb_position.find (def);
+	      /* apply_schedule places every operation immediately after the last
+		 original operation.  A skipped constant-LREG read inside the span
+		 therefore still precedes every scheduled consumer.  */
+	      if (found == bb_position.end () || found->second > region_last)
+		{
+		  reason = "source-availability";
+		  return false;
+		}
+	    }
+	}
+    }
+
+  /* Reconstruct pressure from scratch, including untouched values that are
+     physically live through the region.  */
+  value_map checked_values;
+  for (unsigned i = 0; i != ops.size (); ++i)
+    {
+      gcall *call = ops[i];
+      tree lhs = gimple_call_lhs (call);
+      if (lhs && sfpu_vector_p (TREE_TYPE (lhs)))
+	{
+	  value_info &value = checked_values[lhs];
+	  if (value.def >= 0)
+	    {
+	      reason = "duplicate-def";
+	      return false;
+	    }
+	  value.def = i;
+	}
+
+      for (unsigned argno = 0; argno != gimple_call_num_args (call); ++argno)
+	{
+	  tree arg = gimple_call_arg (call, argno);
+	  if (TREE_CODE (arg) == SSA_NAME
+	      && sfpu_vector_p (TREE_TYPE (arg)) && !free_constant_p (arg))
+	    ++checked_values[arg].uses;
+	}
+    }
+
+  for (auto &entry : checked_values)
+    {
+      gimple *use;
+      imm_use_iterator iter;
+      FOR_EACH_IMM_USE_STMT (use, iter, entry.first)
+	if (!is_gimple_debug (use)
+	    && !original.count (dyn_cast <gcall *> (use)))
+	  {
+	    entry.second.live_out = true;
+	    break;
+	  }
+    }
+
+  unsigned version;
+  tree name;
+  FOR_EACH_SSA_NAME (version, name, cfun)
+    {
+      if (!sfpu_vector_p (TREE_TYPE (name)) || free_constant_p (name)
+	  || checked_values.count (name))
+	continue;
+
+      gimple *def = SSA_NAME_DEF_STMT (name);
+      if (def && gimple_bb (def) == bb)
+	{
+	  auto def_pos = bb_position.find (def);
+	  if (def_pos == bb_position.end () || def_pos->second >= region_first)
+	    continue;
+	}
+
+      gimple *use;
+      imm_use_iterator iter;
+      FOR_EACH_IMM_USE_STMT (use, iter, name)
+	if (!is_gimple_debug (use) && gimple_bb (use) == bb)
+	  {
+	    auto use_pos = bb_position.find (use);
+	    if (use_pos != bb_position.end () && use_pos->second > region_last)
+	      {
+		checked_values[name].live_out = true;
+		break;
+	      }
+	  }
+    }
+
+  auto checked_pressure = [&checked_values] (const std::vector<gcall *> &order,
+					      unsigned &peak) -> bool
+    {
+      std::unordered_map<tree, unsigned> remaining;
+      unsigned live = 0;
+      for (const auto &entry : checked_values)
+	{
+	  remaining[entry.first]
+	    = entry.second.uses + (entry.second.live_out ? 1 : 0);
+	  if (entry.second.def < 0)
+	    ++live;
+	}
+
+      peak = live;
+      for (gcall *call : order)
+	{
+	  for (unsigned argno = 0; argno != gimple_call_num_args (call);
+	       ++argno)
+	    {
+	      tree arg = gimple_call_arg (call, argno);
+	      auto found = remaining.find (arg);
+	      if (found == remaining.end ())
+		continue;
+	      if (found->second == 0)
+		return false;
+	      if (--found->second == 0)
+		--live;
+	    }
+
+	  tree lhs = gimple_call_lhs (call);
+	  auto found = remaining.find (lhs);
+	  if (found != remaining.end () && found->second != 0)
+	    ++live;
+	  if (live > peak)
+	    peak = live;
+	}
+      return true;
+    };
+
+  unsigned verified_old_peak;
+  if (!checked_pressure (ops, verified_old_peak)
+      || verified_old_peak != expected_old_peak)
+    {
+      reason = "old-peak";
+      return false;
+    }
+  if (!checked_pressure (solution.order, verified_peak))
+    {
+      reason = "liveness";
+      return false;
+    }
+  if (verified_peak != solution.claimed_peak)
+    {
+      reason = "claimed-peak";
+      return false;
+    }
+  if (verified_old_peak <= 8 || verified_peak >= verified_old_peak
+	|| verified_peak > 8)
+    {
+      reason = "profitability";
+      return false;
+    }
+
+  reason = "ok";
+  return true;
+}
+
+/* Exercise the rejection path with deliberately malformed certificates
+   derived from every accepted real schedule.  This is kept separate from
+   scheduler construction: a bug in ready-list or MILP bookkeeping cannot
+   make these malformed permutations valid.  */
+static bool
+validator_rejection_selftest (basic_block bb,
+			      const std::vector<gcall *> &ops,
+			      const schedule_solution &valid,
+			      unsigned old_peak)
+{
+  if (valid.order.size () < 2)
+    return false;
+
+  unsigned ignored_peak;
+  const char *reason;
+
+  schedule_solution duplicate = valid;
+  duplicate.order[1] = duplicate.order[0];
+  bool rejected_duplicate
+    = !validate_schedule (bb, ops, duplicate, old_peak, ignored_peak, reason)
+      && !strcmp (reason, "duplicate-op");
+
+  schedule_solution false_peak = valid;
+  ++false_peak.claimed_peak;
+  bool rejected_peak
+    = !validate_schedule (bb, ops, false_peak, old_peak, ignored_peak, reason)
+      && !strcmp (reason, "claimed-peak");
+
+  std::unordered_map<gimple *, unsigned> position;
+  for (unsigned i = 0; i != valid.order.size (); ++i)
+    position[valid.order[i]] = i;
+
+  schedule_solution use_before_def = valid;
+  bool made_bad_edge = false;
+  for (unsigned use_position = 0;
+       use_position != valid.order.size () && !made_bad_edge; ++use_position)
+    for (unsigned argno = 0;
+	 argno != gimple_call_num_args (valid.order[use_position]); ++argno)
+      {
+	tree arg = gimple_call_arg (valid.order[use_position], argno);
+	if (TREE_CODE (arg) != SSA_NAME)
+	  continue;
+	auto found = position.find (SSA_NAME_DEF_STMT (arg));
+	if (found == position.end () || found->second >= use_position)
+	  continue;
+
+	gcall *consumer = use_before_def.order[use_position];
+	use_before_def.order.erase (use_before_def.order.begin () + use_position);
+	use_before_def.order.insert (use_before_def.order.begin () + found->second,
+				     consumer);
+	made_bad_edge = true;
+	break;
+      }
+
+  /* A region containing only independent operations has no internal edge to
+     corrupt; duplicate/permutation and false-peak rejection still apply.  */
+  bool rejected_edge
+    = !made_bad_edge
+      || (!validate_schedule (bb, ops, use_before_def, old_peak, ignored_peak,
+			      reason)
+	  && !strcmp (reason, "def-use"));
+
+  gcc_checking_assert (rejected_duplicate && rejected_peak && rejected_edge);
+  return rejected_duplicate && rejected_peak && rejected_edge;
 }
 
 /* A deterministic pressure-first list scheduler.  This is deliberately the
@@ -437,10 +822,64 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
   unsigned new_peak = old_peak;
   bool scheduled
     = old_peak > 8 && make_pressure_schedule (ops, values, schedule, new_peak);
-  if (scheduled && pressure_for_order (schedule, values) != new_peak)
-    scheduled = false;
-  const bool profitable = scheduled && new_peak < old_peak && new_peak <= 8;
-  const bool applied = profitable && apply_schedule (ops, schedule);
+  const bool list_scheduled = scheduled;
+  rvtt_solver_solution solver_solution;
+  bool solver_selected = false;
+
+  if (old_peak > 8 && riscv_tt_pressure_schedule_use_milp
+      && rvtt_lpsolve_available ())
+    {
+      solver_solution
+	= rvtt_lpsolve_schedule (build_solver_problem (ops, values, schedule,
+					      new_peak <= 8));
+      if (solver_solution.status == rvtt_solver_status::optimal)
+	{
+	  std::vector<gcall *> solver_order;
+	  solver_order.reserve (ops.size ());
+	  bool valid_ids = solver_solution.order.size () == ops.size ();
+	  for (unsigned id : solver_solution.order)
+	    if (id >= ops.size ())
+	      {
+		valid_ids = false;
+		break;
+	      }
+	    else
+	      solver_order.push_back (ops[id]);
+
+	  /* A malformed OPTIMAL certificate is never allowed to fall through to
+	     mutation.  The independent validator below remains authoritative.  */
+	  if (valid_ids)
+	    {
+	      schedule = std::move (solver_order);
+	      new_peak = pressure_for_order (schedule, values);
+	      scheduled = true;
+	      solver_selected = true;
+	    }
+	  else
+	    {
+	      schedule.clear ();
+	      new_peak = old_peak;
+	      scheduled = false;
+	      solver_solution.status = rvtt_solver_status::internal_error;
+	      solver_solution.diagnostic = "gimple-ids";
+	    }
+	}
+      else
+	/* Solver absence/caps/failure preserve the already validated list
+	   scheduler behavior.  */
+	scheduled = list_scheduled;
+    }
+  schedule_solution solution { schedule, new_peak };
+  unsigned verified_peak = old_peak;
+  const char *validation_reason = scheduled ? "unknown" : "not-run";
+  const bool validated
+    = scheduled && validate_schedule (bb, ops, solution, old_peak,
+				      verified_peak, validation_reason);
+  const bool rejection_selftest
+    = validated
+      && validator_rejection_selftest (bb, ops, solution, old_peak);
+  const bool applied
+    = validated && rejection_selftest && apply_schedule (ops, solution.order);
 
   unsigned live_in = 0;
   for (const auto &entry : values)
@@ -453,10 +892,22 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
 	       "\nSFPU pressure region: bb=%d ops=%zu live-in=%u peak=%u\n",
 	       bb->index, ops.size (), live_in, old_peak);
       fprintf (dump_file,
-	       "SFPU pressure schedule: old-peak=%u new-peak=%u applied=%s\n",
-	       old_peak, new_peak, applied ? "yes" : "no");
+	       "SFPU pressure schedule: old-peak=%u new-peak=%u "
+	       "validated=%s reason=%s rejection-selftest=%s applied=%s\n",
+	       old_peak, verified_peak, validated ? "yes" : "no",
+	       validation_reason, rejection_selftest ? "passed" : "not-run",
+	       applied ? "yes" : "no");
+      fprintf (dump_file,
+	       "SFPU MILP: requested=%s available=%s status=%s detail=%s nodes=%u "
+	       "selected=%s\n",
+	       riscv_tt_pressure_schedule_use_milp ? "yes" : "no",
+	       rvtt_lpsolve_available () ? "yes" : "no",
+	       rvtt_solver_status_name (solver_solution.status),
+	       solver_solution.diagnostic,
+	       solver_solution.solver_nodes, solver_selected ? "yes" : "no");
 
-      const std::vector<gcall *> &shown = scheduled ? schedule : ops;
+      const std::vector<gcall *> &shown
+	= scheduled ? solution.order : ops;
       for (unsigned i = 0; i != shown.size (); ++i)
 	{
 	  const rvtt_insn_data *insnd = rvtt_get_insn_data (shown[i]);
@@ -506,7 +957,10 @@ analyze_function (function *fn)
 	{
 	  gimple *stmt = *gsi;
 	  if (is_gimple_debug (stmt))
-	    continue;
+	    {
+	      changed |= flush_region (bb, ops);
+	      continue;
+	    }
 
 	  if (gcall *call = dyn_cast <gcall *> (stmt))
 	    {
@@ -548,7 +1002,9 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_lp_schedule;
+    return optimize > 0 && debug_info_level == DINFO_LEVEL_NONE
+      && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
+      && riscv_tt_opt_pressure_schedule;
   }
 
   unsigned execute (function *fn) final override
@@ -556,7 +1012,7 @@ public:
     if (!analyze_function (fn))
       return 0;
     mark_virtual_operands_for_renaming (fn);
-    return TODO_update_ssa_only_virtuals;
+    return TODO_update_ssa_only_virtuals | TODO_verify_all;
   }
 };
 
