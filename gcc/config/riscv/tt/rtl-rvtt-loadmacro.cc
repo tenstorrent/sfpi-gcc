@@ -51,6 +51,14 @@ enum class reject_reason
   simulator_event_model_missing
 };
 
+enum class descriptor_status
+{
+  no_match,
+  described,
+  dynamic_encoding,
+  unclosed_dependency
+};
+
 static const char *
 reject_reason_name (reject_reason reason)
 {
@@ -140,6 +148,99 @@ struct macro_candidate
   bool unsupported_bulk = false;
 };
 
+struct macro_descriptor
+{
+  unsigned load0_reg = INVALID_REGNUM;
+  unsigned load1_reg = INVALID_REGNUM;
+  unsigned store_reg = INVALID_REGNUM;
+  HOST_WIDE_INT swap_mod = 0;
+};
+
+static bool
+hard_lreg_p (rtx x)
+{
+  return REG_P (x) && HARD_REGISTER_P (x);
+}
+
+static bool
+same_reg_p (rtx a, rtx b)
+{
+  return hard_lreg_p (a) && hard_lreg_p (b) && REGNO (a) == REGNO (b);
+}
+
+/* Recognize a load-load-swap-store resource shape without relying on a source
+   function or operation name.  This is descriptor construction only: emission
+   remains blocked by the calendar and simulator proofs.  */
+static descriptor_status
+describe_load_load_swap_store (const macro_candidate &candidate,
+				 macro_descriptor *descriptor)
+{
+  if (candidate.words != 4 || candidate.loads != 2
+      || candidate.stores != 1)
+    return descriptor_status::no_match;
+
+  rtx_insn *insns[4];
+  unsigned count = 0;
+  for (rtx_insn *insn = candidate.first; insn;
+       insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  if (count == ARRAY_SIZE (insns))
+	    return descriptor_status::no_match;
+	  insns[count++] = insn;
+	}
+      if (insn == candidate.last)
+	break;
+    }
+  if (count != ARRAY_SIZE (insns)
+      || !load_p (insns[0]) || !load_p (insns[1])
+      || recog_memoized (insns[2]) != CODE_FOR_rvtt_sfpswap_int
+      || !store_p (insns[3]))
+    return descriptor_status::no_match;
+
+  extract_insn (insns[0]);
+  rtx load0 = recog_data.operand[0];
+  bool load0_constant = CONST_INT_P (recog_data.operand[4])
+    && CONST_INT_P (recog_data.operand[7])
+    && CONST_INT_P (recog_data.operand[8]);
+  extract_insn (insns[1]);
+  rtx load1 = recog_data.operand[0];
+  bool load1_constant = CONST_INT_P (recog_data.operand[4])
+    && CONST_INT_P (recog_data.operand[7])
+    && CONST_INT_P (recog_data.operand[8]);
+
+  extract_insn (insns[2]);
+  rtx swap_out0 = recog_data.operand[0];
+  rtx swap_out1 = recog_data.operand[1];
+  rtx swap_in0 = recog_data.operand[2];
+  rtx swap_in1 = recog_data.operand[3];
+  rtx swap_mod = recog_data.operand[4];
+
+  extract_insn (insns[3]);
+  rtx store_src = recog_data.operand[4];
+  bool store_constant = CONST_INT_P (recog_data.operand[3])
+    && CONST_INT_P (recog_data.operand[5])
+    && CONST_INT_P (recog_data.operand[6]);
+
+  bool inputs_closed = (same_reg_p (swap_in0, load0)
+			&& same_reg_p (swap_in1, load1))
+    || (same_reg_p (swap_in0, load1) && same_reg_p (swap_in1, load0));
+  bool output_closed = same_reg_p (store_src, swap_out0)
+    || same_reg_p (store_src, swap_out1);
+  if (!load0_constant || !load1_constant || !store_constant
+      || !CONST_INT_P (swap_mod))
+    return descriptor_status::dynamic_encoding;
+  if (!inputs_closed || !output_closed)
+    return descriptor_status::unclosed_dependency;
+
+  descriptor->load0_reg = REGNO (load0);
+  descriptor->load1_reg = REGNO (load1);
+  descriptor->store_reg = REGNO (store_src);
+  descriptor->swap_mod = INTVAL (swap_mod);
+  return descriptor_status::described;
+}
+
 static void
 dump_candidate (basic_block bb, const macro_candidate &candidate,
 		bool complete)
@@ -153,6 +254,25 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
 	   bb->index, INSN_UID (candidate.first),
 	   candidate.last ? INSN_UID (candidate.last) : -1,
 	   candidate.words, candidate.loads, candidate.stores);
+
+  macro_descriptor descriptor;
+  descriptor_status status = complete
+    ? describe_load_load_swap_store (candidate, &descriptor)
+    : descriptor_status::no_match;
+  if (status == descriptor_status::described)
+    fprintf (dump_file,
+	     "  descriptor=periodic-load-load-swap-store "
+	     "lregs=%u,%u->%u swap_mod=" HOST_WIDE_INT_PRINT_DEC " "
+	     "encoding=constant deps=closed cc=none "
+	     "rwc=outside-candidate emit=no\n",
+	     descriptor.load0_reg, descriptor.load1_reg, descriptor.store_reg,
+	     descriptor.swap_mod);
+  else if (status == descriptor_status::dynamic_encoding)
+    fprintf (dump_file,
+	     "  descriptor-reject=dynamic-encoding emit=no\n");
+  else if (status == descriptor_status::unclosed_dependency)
+    fprintf (dump_file,
+	     "  descriptor-reject=unclosed-dependency emit=no\n");
 
   if (!complete)
     fprintf (dump_file, "  reject=%s\n",
