@@ -26,6 +26,7 @@
 
 (include "tt/rvtt-predicates.md")
 (include "tt/rvtt-tune.md")
+(include "tt/rvtt-cost.md")
 
 (define_c_enum "unspec" [
   UNSPEC_SYNTH_OPCODE
@@ -2718,4 +2719,7 @@
       : "TTREPLAY\t%5, %3, %6, %7",
       operands, false, -1);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   ;; REPLAY is frontend work (opcode 0x04), which craq-sim classifies as
+   ;; Tdma rather than as the SFPU work it may later expand into.
+   (set_attr "xtt_issue" "tdma")])
