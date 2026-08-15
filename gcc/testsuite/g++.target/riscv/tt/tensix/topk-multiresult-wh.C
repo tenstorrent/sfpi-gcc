@@ -4,3 +4,5 @@
 // { dg-final { scan-assembler "SFPSWAP\\tL0, L2, 8\\t# INDEXED R:L4,L6" } }
 // { dg-final { scan-assembler "SFPSWAP\\tL1, L0, 8\\t# INDEXED R:L5,L4" } }
 // { dg-final { scan-assembler-times "SFPTRANSP\\t# R:L0,L1,L2,L3,L4,L5,L6,L7" 1 } }
+// Four RTL SETs describe one indexed architectural operation, not four moves.
+// { dg-final { scan-assembler-not "SFPMOV" } }
