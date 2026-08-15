@@ -153,6 +153,30 @@ all_uses_in_loop_p (tree value, class loop *loop)
   return true;
 }
 
+/* The public SFPI wrappers pass the address of the architectural instruction
+   buffer to sfpxloadi.  Direct builtin tests historically used a null pointer
+   because the operand is not otherwise part of the SFPLOADI semantics.  Admit
+   both canonical forms, but not an arbitrary buffer whose memory ownership
+   has not been established by the target ABI.  */
+static bool
+canonical_insn_buffer_p (tree addr)
+{
+  if (integer_zerop (addr))
+    return true;
+
+  STRIP_NOPS (addr);
+  if (TREE_CODE (addr) != ADDR_EXPR)
+    return false;
+
+  tree decl = TREE_OPERAND (addr, 0);
+  return VAR_P (decl)
+    && DECL_EXTERNAL (decl)
+    && TREE_PUBLIC (decl)
+    && DECL_ASSEMBLER_NAME (decl)
+    && !strcmp (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)),
+		"__instrn_buffer");
+}
+
 static bool
 constant_load_p (gcall *call, class loop *loop)
 {
@@ -162,7 +186,7 @@ constant_load_p (gcall *call, class loop *loop)
 
   tree lhs = gimple_call_lhs (call);
   if (!lhs || TREE_CODE (lhs) != SSA_NAME
-      || !integer_zerop (gimple_call_arg (call, 0))
+      || !canonical_insn_buffer_p (gimple_call_arg (call, 0))
       || !all_uses_in_loop_p (lhs, loop))
     return false;
 
