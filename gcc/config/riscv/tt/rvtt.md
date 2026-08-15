@@ -129,6 +129,17 @@
   (if_then_else (eq_attr "xtt_delay" "static,dynamic")
                 (const_int 1)
                 (const_int 0)))
+
+;; Instructions marked safe here have no hidden CC, Dst, RWC, template, or
+;; replay ownership effects.  The post-RA latency scheduler still proves all
+;; physical-register dependencies before moving one.  Defaulting to barrier
+;; keeps new patterns ineligible until their effects are audited.
+(define_enum "xtt_latency_reorder" [
+  barrier
+  safe
+])
+(define_enum_attr "xtt_latency_reorder" "xtt_latency_reorder"
+  (const_string "barrier"))
 ;; BH & QSR eratta covers problems with detecting dependent insns in dynamic delay slots
 ;; this is a bit mask BH:bit0, QSR:bit1
 (define_enum "xtt_dynamic_bug" [
@@ -1015,6 +1026,7 @@
    SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -1048,6 +1060,7 @@
    SFPMAD\t%x0, %x2, %x3, %x4, %5
    SFPMAD\t%x0, %x2, %x3, %x4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -1147,6 +1160,7 @@
     rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 

@@ -27,12 +27,130 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
+#include "df.h"
 #include "print-rtl.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
 #include "recog.h"
 #include "rvtt.h"
+
+namespace {
+
+struct insn_regs
+{
+  HARD_REG_SET uses;
+  HARD_REG_SET defs;
+};
+
+static bool
+collect_sfpu_regs (rtx_insn *insn, insn_regs *regs)
+{
+  CLEAR_HARD_REG_SET (regs->uses);
+  CLEAR_HARD_REG_SET (regs->defs);
+
+  for (df_ref ref = DF_INSN_USES (insn); ref;
+       ref = DF_REF_NEXT_LOC (ref))
+    {
+      unsigned regno = DF_REF_REGNO (ref);
+      if (regno >= FIRST_PSEUDO_REGISTER || !SFPU_REG_P (regno))
+	return false;
+      SET_HARD_REG_BIT (regs->uses, regno);
+    }
+  for (df_ref ref = DF_INSN_DEFS (insn); ref;
+       ref = DF_REF_NEXT_LOC (ref))
+    {
+      unsigned regno = DF_REF_REGNO (ref);
+      if (regno >= FIRST_PSEUDO_REGISTER || !SFPU_REG_P (regno))
+	return false;
+      SET_HARD_REG_BIT (regs->defs, regno);
+    }
+
+  return !hard_reg_set_empty_p (regs->defs);
+}
+
+static bool
+latency_reorderable_p (rtx_insn *insn, insn_regs *regs)
+{
+  return NONDEBUG_INSN_P (insn)
+    && recog_memoized (insn) >= 0
+    && get_attr_type (insn) == TYPE_TENSIX
+    && get_attr_xtt_latency_reorder (insn) == XTT_LATENCY_REORDER_SAFE
+    && !contains_mem_rtx_p (PATTERN (insn))
+    && collect_sfpu_regs (insn, regs);
+}
+
+static rtx_insn *
+next_issued_insn (basic_block bb, rtx_insn *insn)
+{
+  for (insn = NEXT_INSN (insn); insn != NEXT_INSN (BB_END (bb));
+       insn = NEXT_INSN (insn))
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (recog_memoized (insn) < 0 || get_attr_type (insn) != TYPE_TENSIX
+	  || !get_attr_length (insn))
+	return nullptr;
+      return insn;
+    }
+  return nullptr;
+}
+
+static bool
+intersect_p (const HARD_REG_SET &a, const HARD_REG_SET &b)
+{
+  return hard_reg_set_intersect_p (a, b);
+}
+
+/* Move one independent ready instruction into a single exposed result-latency
+   slot.  The existing delay pass runs afterward and remains the authority for
+   target scoreboarding and WH/BH/QSR errata.  */
+static void
+fill_latency_bubbles (function *fn)
+{
+  df_analyze ();
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    for (rtx_insn *producer = BB_HEAD (bb); producer;)
+      {
+	rtx_insn *consumer = next_issued_insn (bb, producer);
+	rtx_insn *filler = consumer ? next_issued_insn (bb, consumer) : nullptr;
+	insn_regs producer_regs, consumer_regs, filler_regs;
+	bool moved = (consumer && filler
+		      && latency_reorderable_p (producer, &producer_regs)
+		      && latency_reorderable_p (consumer, &consumer_regs)
+		      && latency_reorderable_p (filler, &filler_regs)
+		      && get_attr_xtt_delay_bubbles (producer) == 1
+		      && intersect_p (producer_regs.defs, consumer_regs.uses)
+		      && !intersect_p (producer_regs.defs, filler_regs.uses)
+		      && !intersect_p (producer_regs.defs, filler_regs.defs)
+		      && !intersect_p (consumer_regs.defs, filler_regs.uses)
+		      && !intersect_p (consumer_regs.uses, filler_regs.defs)
+		      && !intersect_p (consumer_regs.defs, filler_regs.defs));
+
+	if (moved)
+	  {
+	    int filler_uid = INSN_UID (filler);
+	    int producer_uid = INSN_UID (producer);
+	    reorder_insns (filler, filler, producer);
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "Latency-fill moved uid=%d after producer uid=%d "
+		       "target=%s\n", filler_uid, producer_uid,
+		       TARGET_XTT_TENSIX_WH ? "wh" :
+		       TARGET_XTT_TENSIX_BH ? "bh" : "qsr");
+	    producer = consumer;
+	  }
+	else
+	  producer = NEXT_INSN (producer);
+
+	if (!producer || producer == NEXT_INSN (BB_END (bb)))
+	  break;
+      }
+}
+
+} // anonymous namespace
 
 /* The generated target cost hook deliberately returns one for the existing
    STATIC/DYNAMIC contracts.  Do not generalize this to instruction distance:
@@ -303,6 +421,8 @@ public:
 
   virtual unsigned execute (function *fn) override
   {
+    if (riscv_tt_opt_latency_schedule)
+      fill_latency_bubbles (fn);
     transform (fn);
     return 0;
   }

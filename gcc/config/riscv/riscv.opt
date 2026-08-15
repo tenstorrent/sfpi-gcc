@@ -586,6 +586,10 @@ mtt-tensix-optimize-pressure-schedule
 Target Var(riscv_tt_opt_pressure_schedule) Init(0)
 Schedule allowlisted straight-line SFPU regions to reduce register pressure
 
+mtt-tensix-optimize-latency-schedule
+Target Var(riscv_tt_opt_latency_schedule) Init(0)
+Fill Tensix result-latency bubbles with independent ready SFPU instructions
+
 mtt-tensix-optimize-lp-schedule
 Target Undocumented Alias(mtt-tensix-optimize-pressure-schedule)
 
