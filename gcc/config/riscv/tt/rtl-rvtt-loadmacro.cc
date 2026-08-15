@@ -220,6 +220,23 @@ struct configured_descriptor
   rtx address_mode = nullptr;
 };
 
+/* One explicit load/cast/round/store row in a homogeneous macro pipeline.
+   A profitable region contains consecutive rows and alternates two physical
+   value registers, allowing a new launch every issue slot while the prior
+   row retires through Simple, Round, and Store.  */
+struct cast_round_descriptor
+{
+  rtx_insn *insns[4] {};
+  rtx_insn *increment_insn = nullptr;
+  rtx load_mem = nullptr;
+  rtx store_mem = nullptr;
+  rtx address = nullptr;
+  rtx mode = nullptr;
+  rtx address_mode = nullptr;
+};
+
+static rtx_insn *exact_dst_increment_after (rtx_insn *);
+
 static rtx_insn *
 all_lanes_enable_before (rtx_insn *first)
 {
@@ -446,6 +463,121 @@ describe_configured_region (const macro_candidate &candidate,
   return true;
 }
 
+/* Match a typed unsigned-16 Dst load, signless integer-to-FP32 cast,
+   FP32-to-BF16 round, and Dst store.  The matcher is deliberately expressed
+   only in final opcodes, operands, effects, and target encodings; it has no
+   source operation or function-name hook.  A later group proof supplies the
+   two-register modulo schedule and the single dominating configuration.  */
+static bool
+describe_cast_round_row (const macro_candidate &candidate,
+			 cast_round_descriptor *out)
+{
+  if (candidate.words != 4 || candidate.loads != 1
+      || candidate.stores != 1 || candidate.crossed_non_sfpu
+      || candidate.unsupported_bulk)
+    return false;
+
+  unsigned count = 0;
+  for (rtx_insn *insn = candidate.first; insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  if (count == ARRAY_SIZE (out->insns))
+	    return false;
+	  out->insns[count++] = insn;
+	}
+      if (insn == candidate.last)
+	break;
+    }
+  if (count != ARRAY_SIZE (out->insns)
+      || recog_memoized (out->insns[0]) != CODE_FOR_rvtt_sfpload_lv_int
+      || recog_memoized (out->insns[1]) != CODE_FOR_rvtt_sfpcast_lv
+      || (recog_memoized (out->insns[2])
+	  != CODE_FOR_rvtt_sfpstochrnd_i_lv_int)
+      || recog_memoized (out->insns[3]) != CODE_FOR_rvtt_sfpstore_int)
+    return false;
+
+  extract_insn (out->insns[0]);
+  rtx load_reg = recog_data.operand[0];
+  rtx load_mem = recog_data.operand[1];
+  rtx load_opcode = recog_data.operand[2];
+  rtx load_encoding = recog_data.operand[3];
+  rtx load_address = recog_data.operand[4];
+  rtx load_live_value = recog_data.operand[6];
+  rtx load_mode = recog_data.operand[7];
+  rtx load_address_mode = recog_data.operand[8];
+
+  extract_insn (out->insns[1]);
+  rtx cast_reg = recog_data.operand[0];
+  rtx cast_live_value = recog_data.operand[1];
+  rtx cast_src = recog_data.operand[2];
+  rtx cast_mode = recog_data.operand[3];
+
+  extract_insn (out->insns[2]);
+  rtx round_reg = recog_data.operand[0];
+  rtx round_mem = recog_data.operand[1];
+  rtx round_opcode = recog_data.operand[2];
+  rtx round_encoding = recog_data.operand[3];
+  rtx round_imm = recog_data.operand[4];
+  rtx round_src = recog_data.operand[5];
+  rtx round_live_value = recog_data.operand[6];
+  rtx round_mode = recog_data.operand[7];
+  rtx round_imm_mode = recog_data.operand[8];
+
+  extract_insn (out->insns[3]);
+  rtx store_mem = recog_data.operand[0];
+  rtx store_opcode = recog_data.operand[1];
+  rtx store_encoding = recog_data.operand[2];
+  rtx store_address = recog_data.operand[3];
+  rtx store_src = recog_data.operand[4];
+  rtx store_mode = recog_data.operand[5];
+  rtx store_address_mode = recog_data.operand[6];
+
+  rtx_insn *increment = exact_dst_increment_after (out->insns[3]);
+  HOST_WIDE_INT expected_address_mode = TARGET_XTT_TENSIX_BH ? 7 : 3;
+  if (!increment
+      || !same_reg_p (load_reg, cast_reg)
+      || !same_reg_p (load_reg, cast_src)
+      || !same_reg_p (load_reg, round_reg)
+      || !same_reg_p (load_reg, round_src)
+      || !same_reg_p (load_reg, store_src)
+      || REGNO (load_reg) != SFPU_REG_FIRST
+      || !CONST_INT_P (load_opcode) || INTVAL (load_opcode) != 0
+      || !CONST_INT_P (load_encoding) || INTVAL (load_encoding) != 0
+      || !noval_operand (load_live_value, GET_MODE (load_live_value))
+      || !CONST_INT_P (load_address) || !CONST_INT_P (load_mode)
+      || INTVAL (load_address) < 0 || INTVAL (load_address) > 0x3ff
+      || (INTVAL (load_address) & 1) != 0
+      || INTVAL (load_mode) != 6
+      || !CONST_INT_P (load_address_mode)
+      || INTVAL (load_address_mode) != expected_address_mode
+      || !noval_operand (cast_live_value, GET_MODE (cast_live_value))
+      || !CONST_INT_P (cast_mode) || INTVAL (cast_mode) != 0
+      || round_mem != const0_rtx
+      || !CONST_INT_P (round_opcode) || INTVAL (round_opcode) != 0
+      || !CONST_INT_P (round_encoding) || INTVAL (round_encoding) != 0
+      || !CONST_INT_P (round_imm) || INTVAL (round_imm) != 0
+      || !noval_operand (round_live_value, GET_MODE (round_live_value))
+      || !CONST_INT_P (round_mode) || INTVAL (round_mode) != 1
+      || !CONST_INT_P (round_imm_mode) || INTVAL (round_imm_mode) != 0
+      || !CONST_INT_P (store_opcode) || INTVAL (store_opcode) != 0
+      || !CONST_INT_P (store_encoding) || INTVAL (store_encoding) != 0
+      || !CONST_INT_P (store_address)
+      || INTVAL (store_address) != INTVAL (load_address)
+      || !CONST_INT_P (store_mode) || INTVAL (store_mode) != 2
+      || !CONST_INT_P (store_address_mode)
+      || INTVAL (store_address_mode) != expected_address_mode)
+    return false;
+
+  out->increment_insn = increment;
+  out->load_mem = load_mem;
+  out->store_mem = store_mem;
+  out->address = load_address;
+  out->mode = load_mode;
+  out->address_mode = GEN_INT (TARGET_XTT_TENSIX_BH ? 6 : 2);
+  return true;
+}
+
 static void
 emit_config_word (rtx lreg0, uint32_t value, unsigned config_dest)
 {
@@ -462,6 +594,103 @@ emit_descriptor_config ()
   emit_config_word (config_lreg, 0x900000d0u, 1);
   emit_config_word (config_lreg, 0x5384004du, 4);
   emit_config_word (config_lreg, 0x00000110u, 8);
+}
+
+static void
+emit_cast_round_config ()
+{
+  rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  /* Template 0: cast VD into the macro transient LReg16 slot.  */
+  emit_config_word (config_lreg, 0x900000c0u, 0);
+  /* Template 1: FP32-to-BF16 round from the transient slot.  */
+  emit_config_word (config_lreg, 0x8e0000d1u, 1);
+  /* Simple d0, Round d1, Store d2.  */
+  emit_config_word (config_lreg, 0x534d0004u, 4);
+  /* Fixed FP16B store mode and instruction-count delay semantics.  */
+  emit_config_word (config_lreg, 0x00000100u, 8);
+}
+
+static void
+emit_cast_round_launch (const cast_round_descriptor &descriptor,
+			unsigned value_index)
+{
+  unsigned launch_word = 0x93000000u | ((value_index & 3) << 20)
+    | (UINTVAL (descriptor.mode) << 16)
+    | (UINTVAL (descriptor.address_mode)
+	<< (TARGET_XTT_TENSIX_BH ? 13 : 14))
+    | UINTVAL (descriptor.address);
+  rtx macro_lreg
+    = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + value_index);
+  emit_insn (gen_rvtt_sfploadmacro_int (
+    macro_lreg, descriptor.load_mem, descriptor.store_mem,
+    descriptor.address, descriptor.mode, descriptor.address_mode,
+    GEN_INT (launch_word)));
+}
+
+/* Prove that ROWS are one straight-line modulo-scheduling region.  Every
+   absorbed increment must be followed by the next row's load, and no other
+   hard LREG may escape the original serial implementation.  */
+static bool
+cast_round_group_p (auto_vec<cast_round_descriptor, 8> &rows)
+{
+  if (rows.length () < 2 || df_regs_ever_live_p (SFPU_REG_FIRST + 1)
+      || !all_lanes_enabled_immediately_before_p (rows[0].insns[0]))
+    return false;
+  basic_block bb = BLOCK_FOR_INSN (rows[0].insns[0]);
+  for (unsigned i = 0; i < rows.length (); ++i)
+    {
+      if (BLOCK_FOR_INSN (rows[i].insns[0]) != bb)
+	return false;
+      if (i + 1 < rows.length ()
+	  && next_nonnote_nondebug_insn (rows[i].increment_insn)
+	       != rows[i + 1].insns[0])
+	return false;
+    }
+
+  rtx serial_reg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  for (rtx_insn *insn = NEXT_INSN (rows.last ().increment_insn);
+       insn && BLOCK_FOR_INSN (insn) == bb; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn)
+	  && reg_referenced_p (serial_reg, PATTERN (insn)))
+	return false;
+      if (NONDEBUG_INSN_P (insn) && reg_set_p (serial_reg, insn))
+	break;
+    }
+  return true;
+}
+
+static void
+emit_cast_round_group (auto_vec<cast_round_descriptor, 8> &rows)
+{
+  rtx_insn *enable = all_lanes_enable_before (rows[0].insns[0]);
+  start_sequence ();
+  emit_insn (copy_rtx (PATTERN (enable)));
+  emit_cast_round_config ();
+  rtx_insn *config = get_insns ();
+  end_sequence ();
+
+  start_sequence ();
+  for (unsigned i = 0; i < rows.length (); ++i)
+    emit_cast_round_launch (rows[i], i & 1);
+  /* The final row's Store retires two issue slots after its launch.  Three
+     explicit slots match the architectural production drain convention and
+     keep every successor outside the delayed-event region.  */
+  emit_insn (gen_rvtt_sfpnop ());
+  emit_insn (gen_rvtt_sfpnop ());
+  emit_insn (gen_rvtt_sfpnop ());
+  rtx_insn *replacement = get_insns ();
+  end_sequence ();
+
+  emit_insn_before (config, enable);
+  emit_insn_before (replacement, rows[0].insns[0]);
+  delete_insn (enable);
+  for (cast_round_descriptor &row : rows)
+    {
+      for (rtx_insn *insn : row.insns)
+	delete_insn (insn);
+      delete_insn (row.increment_insn);
+    }
 }
 
 static void
@@ -1176,6 +1405,7 @@ discover (function *fn)
   bool changed = false;
   bool config_available = !source_config_access_p (fn);
   auto_vec<configured_descriptor, 2> configured_regions;
+  auto_vec<cast_round_descriptor, 8> cast_round_rows;
   auto_vec<predicated_select_descriptor, 2> select_regions;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -1229,6 +1459,11 @@ discover (function *fn)
 		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
 		  && describe_configured_region (candidate, &configured))
 		configured_regions.safe_push (configured);
+	      cast_round_descriptor cast_round;
+	      if (riscv_tt_emit_loadmacro && config_available
+		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
+		  && describe_cast_round_row (candidate, &cast_round))
+		cast_round_rows.safe_push (cast_round);
 	      predicated_select_descriptor descriptor;
 	      if (riscv_tt_emit_loadmacro && config_available
 		  && describe_predicated_three_load_select_store (candidate,
@@ -1250,8 +1485,18 @@ discover (function *fn)
      deliberately left byte-identical.
      A canonical one-block loop gets its enable and configuration in the
      structural preheader; a straight-line site retains local setup.  */
-  if (configured_regions.length () + select_regions.length () != 1)
+  bool cast_round_group = configured_regions.is_empty ()
+    && select_regions.is_empty () && cast_round_group_p (cast_round_rows);
+  if (!cast_round_group
+      && (configured_regions.length () + select_regions.length () != 1
+	  || !cast_round_rows.is_empty ()))
     return changed;
+
+  if (cast_round_group)
+    {
+      emit_cast_round_group (cast_round_rows);
+      return true;
+    }
 
   if (configured_regions.length () == 1)
     {
