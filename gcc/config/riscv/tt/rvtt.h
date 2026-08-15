@@ -139,7 +139,7 @@ public:
   // defining macros, and then use that as an argument to a ctor.
   class ops_t
   {
-    op_t ops[6];
+    op_t ops[7];
 
   public:
     // This is so we can use parens in the builtin definitions We deliberately
@@ -149,13 +149,15 @@ public:
 		     op_t b = op_t (),
 		     op_t c = op_t (),
 		     op_t d = op_t (),
-		     op_t e = op_t ())
+		     op_t e = op_t (),
+		     op_t f = op_t ())
     {
       ops[0] = a;
       ops[1] = b;
       ops[2] = c;
       ops[3] = d;
       ops[4] = e;
+      ops[5] = f;
     }
     ops_t (const ops_t &) = default;
 

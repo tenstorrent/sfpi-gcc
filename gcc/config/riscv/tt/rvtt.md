@@ -110,6 +110,7 @@
   UNSPECV_SFPARECIP
   UNSPECV_SFPNONLINEAR
 
+  UNSPECV_TTSETRWC
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
@@ -3010,6 +3011,72 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
+
+(define_expand "rvtt_ttsetrwc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     (match_operand:SI 5 "const_int_operand")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      /* QSR has one RWC value field rather than separate D/B/A fields, and it
+         does not implement WH/BH's C-to-CR mode (CR bit 3).  D can therefore
+         map to QSR's unified value only when the mask selects D and/or
+         fidelity clear, CR is either disabled or D-only, and CR_D is paired
+         with a D update.  Conservatively refuse every other form.  */
+      HOST_WIDE_INT cr = INTVAL (operands[1]);
+      HOST_WIDE_INT mask = INTVAL (operands[5]);
+      if ((mask & ~HOST_WIDE_INT (0xc)) != 0
+          || (cr != 0 && cr != 4)
+          || ((cr & 4) != 0 && (mask & 4) == 0))
+        {
+          error ("QSR TTSETRWC cannot represent this CR/mask combination");
+          DONE;
+        }
+      emit_insn (gen_rvtt_ttsetrwc_qsr (operands[0], operands[1],
+                                        operands[2], operands[5]));
+    }
+  else
+    emit_insn (gen_rvtt_ttsetrwc_wh_bh (operands[0], operands[1],
+                                        operands[2], operands[3],
+                                        operands[4], operands[5]));
+  DONE;
+})
+
+/* These volatile patterns are the compiler-visible architectural RWC/Dst
+   state boundary.  They must remain replay barriers and may not be treated as
+   ordinary arithmetic or decoded later from opaque instruction words.  */
+(define_insn "rvtt_ttsetrwc_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     (match_operand:SI 2 "const_int_operand" "n")
+     (match_operand:SI 3 "const_int_operand" "n")
+     (match_operand:SI 4 "const_int_operand" "n")
+     (match_operand:SI 5 "const_int_operand" "n")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTSETRWC\t%0, %1, %2, %3, %4, %5"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_insn "rvtt_ttsetrwc_qsr"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     (match_operand:SI 2 "const_int_operand" "n")
+     (match_operand:SI 3 "const_int_operand" "n")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX_QSR"
+  "TTSETRWC\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
 
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [
