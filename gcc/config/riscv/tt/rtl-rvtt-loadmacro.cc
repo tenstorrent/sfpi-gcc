@@ -143,9 +143,18 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
-/* Opt-in formation owns every programmed load-macro field in the function.
-   Calls, opaque asm, and source-visible config access have architectural
-   effects this late RTL cannot order relative to that ownership.  */
+static bool
+owned_loadmacro_config_dest_p (HOST_WIDE_INT dest)
+{
+  return dest == 0 || dest == 1 || dest == 4 || dest == 5 || dest == 6
+    || dest == 8;
+}
+
+/* Opt-in formation owns the programmed load-macro fields in the function.
+   Calls and opaque asm have effects this late RTL cannot order relative to
+   that ownership.  Typed accesses to disjoint configuration destinations are
+   safe; rejecting them made unrelated SFPCONFIG state (for example destination
+   15 in the LLK prelude) suppress an otherwise exact selector.  */
 static bool
 source_config_access_p (function *fn)
 {
@@ -159,9 +168,22 @@ source_config_access_p (function *fn)
 	    if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
 	      return true;
 	    int code = recog_memoized (insn);
-	    if (code == CODE_FOR_rvtt_sfpreadconfig_lv
-		|| code == CODE_FOR_rvtt_sfpwriteconfig_v)
-	      return true;
+	    if (code == CODE_FOR_rvtt_sfpreadconfig_lv)
+	      {
+		extract_insn (insn);
+		if (!CONST_INT_P (recog_data.operand[2])
+		    || owned_loadmacro_config_dest_p (
+			 INTVAL (recog_data.operand[2])))
+		  return true;
+	      }
+	    else if (code == CODE_FOR_rvtt_sfpwriteconfig_v)
+	      {
+		extract_insn (insn);
+		if (!CONST_INT_P (recog_data.operand[1])
+		    || owned_loadmacro_config_dest_p (
+			 INTVAL (recog_data.operand[1])))
+		  return true;
+	      }
 	  }
     }
   return false;
