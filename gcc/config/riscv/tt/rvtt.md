@@ -138,6 +138,18 @@
 ])
 (define_enum_attr "xtt_dynamic_bug" "xtt_dynamic_bug" (const_string "none"))
 
+;; Resource vocabulary consumed by the dump-only SFPLOADMACRO descriptor.
+;; This does not make an instruction macro-eligible: the verifier must still
+;; prove dependencies, per-target timing, write-port use, and event semantics.
+(define_enum "xtt_macro_resource" [
+  none
+  load
+  simple_mad_write
+  store
+])
+(define_enum_attr "xtt_macro_resource" "xtt_macro_resource"
+  (const_string "none"))
+
 ;; rvtt_synth_opcode is used to synthesize sfp/tt instructions that
 ;; are injected into the instruction stream.  rvtt_synth_opcode is
 ;; tied to 1 or more insns (unrolling can do that). The ID does that
@@ -764,6 +776,7 @@
       operands, true, 9);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
    (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfploadsrcs_lv_int"
@@ -789,6 +802,7 @@
       operands, true, 10);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
    (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstore"
@@ -846,6 +860,7 @@
       operands, false, 7);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "store")
    (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstoresrcs"
@@ -900,6 +915,7 @@
       operands, false, 8);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "store")
    (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpsetcc_i"
@@ -2162,6 +2178,7 @@
   "TARGET_XTT_TENSIX"
   "SFPSWAP\t%x2, %x3, %4"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "simple_mad_write")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
