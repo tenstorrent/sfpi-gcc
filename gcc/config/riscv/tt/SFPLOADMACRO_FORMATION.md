@@ -110,6 +110,59 @@ but cannot validate a novel compiler schedule.  The bring-up order is:
 Static instruction count is diagnostic only.  Device kernel cycles are the
 performance acceptance authority.
 
+## Corpus-derived design delta
+
+Fresh semantic-C++ A/Bs add three Blackhole signals beyond MulInt32.  All
+variants pass their operation's existing correctness gate.
+
+| Body | Handwritten cycles/tile | Typed C++ cycles/tile | Typed lowering |
+| --- | ---: | ---: | --- |
+| binary max | 140.9296875 | 198.7578125 | four-word load/load/swap/store replay |
+| binary min | 140.9296875 | 198.7578125 | four-word load/load/swap/store replay |
+| addcmul | 292.921875 | 357.03125 | seven-word, one-row replay |
+
+Binary max/min lose 41.03% because the compiler captures ordinary loads,
+`SFPSWAP`, and store instead of synthesizing the production three-cycle
+SFPLOADMACRO pipeline.  Addcmul loses 21.89% even though replay forms on both
+sides: production interleaves two independent rows in one 14-word capture,
+whereas typed C++ repeats a seven-word single-row capture and advances RWC
+after every row.  TTNNWhere and MulInt32 add CC/bit-preserving selection and a
+long mixed explicit/macro schedule respectively.
+
+These are not four peepholes.  They require one periodic-region pipeline:
+
+1. **Region recovery before replay.** Recover the repeated Dst-row operation,
+   its RWC step, physical LREG effects, CC effects, and exact numerical order.
+   A region may span multiple source iterations.  Do not stop candidate
+   discovery at the first store: Addcmul proves that the profitable schedule
+   is a two-iteration region.
+2. **Dependency/resource graph.** Build true/anti/output dependencies for
+   LREGs, LREG16, CC, Dst memory, and RWC.  Annotate nodes with Simple, MAD,
+   Round, Load, and Store occupancy and target latency.  Predication is an
+   effect edge, not an operation-name exclusion.
+3. **Bounded modulo scheduling.** Search initiation intervals and unroll
+   factors subject to the legality proof above.  A scheduled node may remain
+   explicit or occupy a Simple/MAD/Round/Store template plus delay.  This one
+   search covers Addcmul's cross-row interleaving and max/min/Where/MulInt's
+   macro launches; a separate kernel-name recognizer would miss that shared
+   structure.
+4. **Descriptor verification and profitability.** Re-simulate the chosen
+   calendar, prove all live-in/live-out and drain conditions, then compare the
+   scheduled issue length (including init, tail, and RWC instructions) with
+   the ordinary explicit/replay schedule.  Reject rather than weaken a proof.
+5. **Emission, then replay formation.** Emit template/sequence/misc setup in a
+   dominating preheader, the launch/explicit stream and computed drain, and
+   explicit clobbers for all architectural effects.  Only then let the replay
+   pass capture repeated launch streams.  Replay must never hide a region from
+   macro analysis.
+
+The first implementation slice should accept binary max/min and reject the
+other three with exact missing-proof reasons.  The second adds multi-iteration
+scheduling (Addcmul), the third adds represented CC and bit-preserving Dst
+effects (Where), and the fourth admits longer mixed schedules (MulInt32).
+Every slice is selected by the graph and target calendar, never by a function,
+operation, source-file, or kernel name.
+
 ## Dump-only discovery scaffold
 
 `-mtt-tensix-analyze-loadmacro -fdump-rtl-rvtt_loadmacro-details`
