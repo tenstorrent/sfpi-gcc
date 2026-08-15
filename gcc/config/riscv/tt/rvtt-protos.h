@@ -88,6 +88,7 @@ class rvtt_synth
 
 extern void rvtt_emit_sfpxfcmps (rtx v1, rtx f, rtx mod);
 extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
+extern void rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm);
 extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
 

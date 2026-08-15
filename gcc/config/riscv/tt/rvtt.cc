@@ -434,7 +434,7 @@ static int rvtt_cmp_ex_to_setcc_mod1_map[] = {
 // FIXME: Remnants of old sfpxloadi scheme,
 // FIXME: Move functionality in to immvar passes
 
-static void
+void
 rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
 {
   // Early nonimm pass assures this
@@ -475,15 +475,18 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
 					 lv, GEN_INT (new_mod)));
   else
     {
-      rtx tmp = gen_reg_rtx (XTT32SImode);
-      emit_insn (gen_rvtt_sfploadi_lv_int (tmp, const0_rtx, const0_rtx, const0_rtx,
+      // A full literal is assembled in place.  The UPPER form reads the
+      // preceding low half from LV, and the MD pattern ties LV to its result;
+      // using DST for both avoids materializing a distinct temporary (and the
+      // SFPMOV reload needed solely to satisfy that tie).
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
 					   GEN_INT (int_imm & 0xFFFF),
 					   rvtt_gen_rtx_noval (XTT32SImode),
 					   lv, GEN_INT (SFPLOADI_MOD0_USHORT)));
       emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
 					   GEN_INT (int_imm >> 16),
 					   rvtt_gen_rtx_noval (XTT32SImode),
-					   tmp, GEN_INT (SFPLOADI_MOD0_UPPER)));
+					   dst, GEN_INT (SFPLOADI_MOD0_UPPER)));
     }
 }
 

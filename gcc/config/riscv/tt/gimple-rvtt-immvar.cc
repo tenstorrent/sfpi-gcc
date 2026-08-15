@@ -205,6 +205,12 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
     case rvtt_insn_data::sfpxloadi:
       {
 	int bits = TREE_INT_CST_LOW (gimple_call_arg (call, 4));
+	// Keep full-width literal loads as a single builtin until RTL expansion.
+	// RTL can legally define the one result pseudo for both low and upper
+	// halves; splitting here would require two SSA definitions and makes LRA
+	// introduce a temporary-to-result SFPMOV for the destructive UPPER form.
+	if (TREE_CODE (imm) == INTEGER_CST && (bits >= 16 || bits < -16))
+	  return false;
 	emit_loadimm (gsi, gimple_location (call),
 		      bits, addr, imm, gimple_call_lhs (call));
 	return true;

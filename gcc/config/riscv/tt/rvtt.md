@@ -326,7 +326,9 @@
 	  ] 0))]
   "TARGET_XTT_TENSIX"
 {
-  FAIL;
+  rvtt_emit_sfpxloadi (operands[0], rvtt_gen_rtx_noval (XTT32SImode),
+			       operands[2]);
+  DONE;
 })
 
 (define_expand "rvtt_sfpxiadd_v"
