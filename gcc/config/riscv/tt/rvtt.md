@@ -213,6 +213,7 @@
   "TARGET_XTT_TENSIX"
   "# WRITE %x0"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])
 
 (define_insn "rvtt_sfpreadlreg<rvtt_lregs_value>"
@@ -224,6 +225,7 @@
   "# READ %x0"
 ;; not a xtt_dynamic_bug consumer, it is for the user to get this right.
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])
 
 ;; This is a compiler-only raw-LLK ownership marker placed after the opaque
@@ -239,6 +241,7 @@
   "TARGET_XTT_TENSIX"
   "# RAWLREG %0, %1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])
 
 (define_insn "rvtt_sfpnovalue"
@@ -249,6 +252,7 @@
   "TARGET_XTT_TENSIX"
   "# NOVALUE %x0"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])
 
 ;; We need the predicate markers until here.  Turn them into something DCE will remove.
@@ -332,7 +336,8 @@
        ] UNSPEC_SFPCLEAVE))]
   "TARGET_XTT_TENSIX"
   "CONCAT %0, %1, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpselect2"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -342,7 +347,8 @@
        ] UNSPEC_SFPCLEAVE))]
   "TARGET_XTT_TENSIX"
   "SELECT %0, %1, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpconcat4"
   [(set (match_operand:XTT128SI 0 "register_operand" "=xr")
@@ -354,7 +360,8 @@
        ] UNSPEC_SFPCLEAVE))]
   "TARGET_XTT_TENSIX"
   "CONCAT %0, %1, %2, %3, %4"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpselect4"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -364,7 +371,8 @@
        ] UNSPEC_SFPCLEAVE))]
   "TARGET_XTT_TENSIX"
   "SELECT %0, %1, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpnop"
   [(unspec_volatile:XTT32SI [
@@ -372,7 +380,8 @@
      ] UNSPECV_SFPNOP)]
   "TARGET_XTT_TENSIX"
   "SFPNOP"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpbankdone"
   [(unspec_volatile:XTT32SI [
@@ -382,7 +391,8 @@
      ] UNSPECV_SFPBANKDONE)]
   "TARGET_XTT_TENSIX_QSR"
   "SFPBANKDONE\t%0, %1, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "movxtt32si"
   [(set (match_operand:XTT32SI 0 "")
@@ -412,7 +422,8 @@
       rvtt_mov_error (insn);
     return assembly[which_alternative];
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpassign_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -442,7 +453,8 @@
     // Setting it to a normal mov will leave DCE to deal with
     // the REG_UNUSED case, that's simpler than redetecting here.
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfploadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -517,7 +529,8 @@
        : "SFPLOADI\t%x0, %4, %7",
       operands, true, 8);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpload"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -650,7 +663,8 @@
          : "SFPLOAD\t%x0, %4, %7, %8"),
       operands, true, 9);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfploadsrcs_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
@@ -674,7 +688,8 @@
       : "SFPLOAD\t%x0, %4, %7, %8, 1, %9",
       operands, true, 10);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstore"
   [(unspec_volatile:XTT32SI [
@@ -730,7 +745,8 @@
       : "SFPSTORE\t%x4, %3, %5, %6",
       operands, false, 7);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstoresrcs"
   [(unspec_volatile:XTT32SI [
@@ -783,7 +799,8 @@
       "SFPSTORE\t%x4, %3, %5, %6, 1, %7",
       operands, false, 8);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpsetcc_wh"
   [(unspec_volatile:XTT32SI [
@@ -805,7 +822,8 @@
      ] UNSPECV_SFPSETCC)]
   "TARGET_XTT_TENSIX"
   {
-    operands[2] = GEN_INT (INTVAL (operands[2]) << 11);
+    operands[2] = GEN_INT (INTVAL (operands[2
+   (set_attr "xtt_replay" "safe")]) << 11);
   })
 
 (define_insn "*rvtt_sfpsetcc"
@@ -816,7 +834,8 @@
      ] UNSPECV_SFPSETCC)]
   "TARGET_XTT_TENSIX"
   "SFPSETCC\t%x0, %2, %1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpencc"
   [(unspec_volatile:XTT32SI [
@@ -825,7 +844,8 @@
      ] UNSPECV_SFPENCC)]
   "TARGET_XTT_TENSIX"
   "SFPENCC\t%1, %0"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpcompc"
   [(unspec_volatile:XTT32SI [
@@ -833,7 +853,8 @@
      ] UNSPECV_SFPCOMPC)]
   "TARGET_XTT_TENSIX"
   "SFPCOMPC"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfppushc"
   [(unspec_volatile:XTT32SI [
@@ -841,7 +862,8 @@
      ] UNSPECV_SFPPUSHC)]
   "TARGET_XTT_TENSIX"
   "SFPPUSHC\t%0"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfppopc"
   [(unspec_volatile:XTT32SI [
@@ -849,7 +871,8 @@
      ] UNSPECV_SFPPOPC)]
   "TARGET_XTT_TENSIX"
   "SFPPOPC\t%0"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_int_iterator rvtt_muladd_op [
   UNSPECV_SFPMUL
@@ -891,6 +914,7 @@
    SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_muladd_insn>\t%x0, %x2, %x3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_expand "rvtt_sfpmad"
@@ -923,6 +947,7 @@
    SFPMAD\t%x0, %x2, %x3, %x4, %5
    SFPMAD\t%x0, %x2, %x3, %x4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_int_iterator rvtt_muliaddi_op [
@@ -1021,6 +1046,7 @@
     rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_expand "rvtt_sfpiadd_v"
@@ -1070,6 +1096,7 @@
 	? nullptr : &operands[3]);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "rvtt_sfpiadd_v_nv"
@@ -1081,6 +1108,7 @@
   "TARGET_XTT_TENSIX_QSR"
   "SFPIADD\t%x0, %x1, 0, %2"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpiadd_i"
@@ -1174,7 +1202,8 @@
        operands[5], operands[7]));
     DONE;
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpiadd_i_nv"
   [(unspec_volatile:XTT32SI [
@@ -1192,7 +1221,8 @@
       "SFPIADD\tL8, %x4, %3, %5",
       operands, false, 6);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
@@ -1249,7 +1279,8 @@
       (operands[2], operands[3]));
     DONE;
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfp<rvtt_unary_name>_nv"
   [(unspec_volatile:XTT32SI [
@@ -1258,7 +1289,8 @@
      ] rvtt_unary_op)]
   "TARGET_XTT_TENSIX_QSR && <rvtt_unary_op> == UNSPECV_SFPLZ"
   "SFP<rvtt_unary_insn>\tL8, %x0, %1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_int_iterator rvtt_set_op [
   UNSPECV_SFPSETEXP
@@ -1308,7 +1340,8 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[3]);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpset<rvtt_set_name>_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1388,7 +1421,8 @@
       : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_int_iterator rvtt_logical_op [
   UNSPECV_SFPAND
@@ -1463,7 +1497,8 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[2], &operands[3]);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfp<rvtt_logical_name>_lv_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
@@ -1478,6 +1513,7 @@
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))])
 
 (define_expand "rvtt_sfpnot"
@@ -1501,7 +1537,8 @@
   "@
    SFPNOT\t%x0, %x2
    SFPNOT\t%x0, %x2\t# LV:%x1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpshft_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1551,6 +1588,7 @@
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpshft_i"
@@ -1649,7 +1687,8 @@
       : "SFPSHFT\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
@@ -1679,7 +1718,8 @@
   {
     rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpcast"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1705,7 +1745,8 @@
   "@
    SFPCAST\t%x0, %x2, %3
    SFPCAST\t%x0, %x2, %3\t# LV:%x1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1781,7 +1822,8 @@
       : "SFPDIVP2\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstochrnd_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1869,7 +1911,8 @@
       : "SFPSTOCHRND\t%x0, L0, %x5, %4, %7, %8",
       operands, true, 9);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpstochrnd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1900,7 +1943,8 @@
   "@
    SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5
    SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5\t# LV:%x1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpreadconfig"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1924,7 +1968,8 @@
   "@
    SFPMOV\t%x0, L%2, 8\t# CFG:%2
    SFPMOV\t%x0, L%2, 8\t# LV:%x1 CFG:%2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpwriteconfig_v"
   [(unspec_volatile:XTT32SI [
@@ -1989,6 +2034,7 @@
       "SFPCONFIG\t%6, %3, %5\t# CFG:%6", operands, false, -1);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "rvtt_sfplut"
@@ -2003,6 +2049,7 @@
   "TARGET_XTT_TENSIX_WH_BH"
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_insn "rvtt_sfplut_qsr"
@@ -2056,6 +2103,7 @@
   DONE;
 }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_3r_split"
@@ -2071,6 +2119,7 @@
   "TARGET_XTT_TENSIX_WH_BH && reload_completed"
   "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_insn "rvtt_sfplutfp32_6r"
@@ -2088,6 +2137,7 @@
   "TARGET_XTT_TENSIX_WH_BH"
   "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_insn "rvtt_sfpswap_int"
@@ -2112,6 +2162,7 @@
       : "SFPSWAP\t%x2, %x3, %5, %4";
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "*rvtt_sfpswap_cst1"
@@ -2130,6 +2181,7 @@
       : "SFPSWAP\t%x1, %x2, %4, %3";
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2175,6 +2227,7 @@
       : "SFPSWAP\t%x1, %x2, %4, %3";
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2219,6 +2272,7 @@
       : "SFPSWAP\t%x0, %x1, %3, %2";
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2310,7 +2364,8 @@
 	  ] UNSPECV_SFPTRANSP))]
   "TARGET_XTT_TENSIX"
   "SFPTRANSP"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfptransp"
   [(set (match_operand:XTT128SI 0 "register_operand")
@@ -2357,6 +2412,7 @@
   "TARGET_XTT_TENSIX"
   "SFPSHFT2\t%x0, %x0, 0, %7"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpshft2_copy4"
@@ -2406,6 +2462,7 @@
   "TARGET_XTT_TENSIX"
   "SFPSHFT2\t%x0 %x0, 0, %8"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpshft2_subvec_copy4"
@@ -2456,6 +2513,7 @@
   "TARGET_XTT_TENSIX"
   "SFPSHFT2\t%x0, %x7, 0, %8"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2493,6 +2551,7 @@
   "TARGET_XTT_TENSIX"
   "SFPSHFT2\t%x0, %x2, 0, %3"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2507,6 +2566,7 @@
    SFPSHFT2\tL8, %x1, 0, %2
    SFPSHFT2\tL8, %x1, 0, %2\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "static")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2674,7 +2734,8 @@
 
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
   [(unspec_volatile:XTT32SI [
@@ -2685,7 +2746,8 @@
      ] rvtt_gtle_op)]
   "TARGET_XTT_TENSIX_BH_QSR"
   "SFP<rvtt_gtle_insn>\t%x0, %x1, %3, %2"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpmul24"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2715,6 +2777,7 @@
    SFPMUL24\t%x0, %x2, %x3, %4
    SFPMUL24\t%x0, %x2, %x3, %4\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
 (define_expand "rvtt_sfparecip"
@@ -2742,7 +2805,8 @@
   "@
    SFPARECIP\t%x0, %x2, %3
    SFPARECIP\t%x0, %x2, %3\t# LV:%x1"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfpnonlinear"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2770,6 +2834,7 @@
    SFPNONLINEAR\t%x0, %x2, %3
    SFPNONLINEAR\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "rvtt_ttincrwc"
@@ -2781,7 +2846,8 @@
      ] UNSPECV_TTINCRWC)]
   "TARGET_XTT_TENSIX"
   "TTINCRWC\t%0, %1, %2, %3"
-  [(set_attr "type" "tensix")])
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
 
 (define_expand "rvtt_ttreplay"
   [(unspec_volatile:XTT32SI [
@@ -2841,6 +2907,7 @@
       operands, false, -1);
   }
   [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "owner")
    ;; REPLAY is frontend work (opcode 0x04), which craq-sim classifies as
    ;; Tdma rather than as the SFPU work it may later expand into.
    (set_attr "xtt_issue" "tdma")])

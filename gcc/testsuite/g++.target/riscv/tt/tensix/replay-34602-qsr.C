@@ -176,22 +176,29 @@ void five ()
 }
 /*
 **_Z4fivev:
-**	TTREPLAY	0, 7, 0, 0, 0, 1
+**	TTREPLAY	0, 6, 0, 0, 0, 1
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
 **	SFPMUL	L0, L0, L0, 0
 **	SFPMUL	L0, L0, L0, 0
 **	SFPADD	L0, L0, L0, 0
 **	SFPADD	L0, L0, L0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
 **	TTINCRWC	0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
-**	TTREPLAY	0, 7, 0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
+**	TTREPLAY	0, 6, 0, 0, 0, 0
+**	TTINCRWC	0, 0, 0, 0
 **	ret
 */
 
