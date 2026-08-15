@@ -59,12 +59,14 @@ INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lreg_livein);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
+/* Formation inserts config materialization and launches which must still pass
+   through the Tensix hazard scheduler.  IRA has already assigned LREGs.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_loadmacro);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 /* Load-macro discovery must see final LREG allocation and the uncompressed
    instruction stream.  It is dump-only and deliberately runs before replay
    formation.  */
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
-INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_loadmacro);
 
 // This pass should run as late as possible, ideally just before final.
 // However, the machine reorg pass, when using -msave-restore, injects an insn

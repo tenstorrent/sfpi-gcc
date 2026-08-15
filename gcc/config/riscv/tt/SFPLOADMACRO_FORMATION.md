@@ -95,10 +95,11 @@ others.
 
 ## Validation gate
 
-Compiler emission remains default-off until craq-sim executes arbitrary
-template/sequence combinations with real per-sub-unit delayed-event queues.
-Its current known-signature shortcuts are useful for checking existing LLKs,
-but cannot validate a novel compiler schedule.  The bring-up order is:
+Compiler emission remains default-off while each admitted shape is proved in
+craq-sim's persistent transactional per-sub-unit delayed-event queues.  The
+generic event model now executes the first clean Round-to-LReg16, Cast, and
+Store chain bit-exact against the legacy signature oracle; unsupported and
+dual-write shapes still fall back.  The bring-up order is:
 
 1. general CRAQ event model and differential tests against the ISA model;
 2. post-RA candidate discovery and a dump-only descriptor/verifier;
@@ -190,3 +191,48 @@ The bulk-operation rejection currently covers `SFPTRANSP` and every
 post-reload `SFPSHFT2` form.  This is intentionally conservative: no delayed
 event semantics are inferred from an instruction name, and the scaffold does
 not expose a public macro builtin.
+
+## First opt-in executable slice
+
+`-mtt-tensix-emit-loadmacro` additionally grants the compiler ownership of
+the programmed WH/BH macro template, sequence-zero, and misc fields for a
+formed function.  The option is
+default-off and does not globally reserve an LREG: functions without an
+eligible region remain byte-identical.  QSR remains discovery-only because
+its sequence selector, split VD, and `done` encoding have not been proven
+equivalent to WH/BH.
+
+The initial emitter accepts only one structurally described four-instruction
+region: one typed Dst load, logical shift right by 31, sign-magnitude cast to
+the macro LReg16, and a typed Dst store.  It programs the complete template,
+sequence, and misc state immediately before the launch; it never emits a
+launch that depends on pre-existing state.  Three explicit SFPNOP issue slots
+after the launch drain this admitted calendar's delayed store before any
+following Dst access or return.  The matcher additionally proves:
+
+- all four explicit instructions use physical L0, whose incoming value the
+  load kills.  The macro launch uses L1 because the canonical SHFT2 immediate
+  aliases its source selector to L1; L1 is conservatively required unused
+  until multi-VD scheduling is modeled.  The dependency is closed by post-RA
+  DF live-out plus a scan after the store;
+- an immediately preceding `SFPENCC 3, 10` makes lane zero available while
+  full-width configuration words are materialized through L0;
+- load and store use the same even constant row and format with the target's
+  canonical no-increment address mode (WH 3, BH 7), followed immediately by
+  exact `TTINCRWC(0, 2, 0, 0)`.  Formation consumes that increment and uses
+  the macro's auto-increment-by-two address modifier (WH 2, BH 6); odd rows
+  alias the macro VD-high encoding bit, and rows above 1023 exceed the
+  WH/BH macro's ten-bit address field;
+- opcode synthesis is absent, the cast and shift modes are exact for the CPU,
+  and the stored value is not live after the region;
+- the function contains no source-visible SFPU configuration read or write,
+  call, or inline assembly.  Raw instruction words have no typed LREG, CC,
+  Dst, or configuration effects in RTL, so even constant `.ttinsn` forms are
+  rejected until they carry an equivalent architectural metadata contract.
+
+The generated launch keeps both original Dst memory operands in its volatile
+RTL effect and configuration writes remain volatile barriers.  Source code
+which needs to preserve or interoperate with macro slot zero must not use the
+opt-in option.  Wider shapes, dual writes, counter updates other than the
+proved exact absorbed increment, unknown CC state, and source-owned
+configuration all retain the explicit instruction fallback.

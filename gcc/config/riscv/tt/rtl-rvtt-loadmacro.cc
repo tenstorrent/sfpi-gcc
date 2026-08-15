@@ -1,4 +1,4 @@
-/* Discover and verify Tensix SFPLOADMACRO candidate regions.
+/* Discover, verify, and optionally form Tensix SFPLOADMACRO regions.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -29,6 +29,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "insn-attr.h"
 #include "recog.h"
+#include "memmodel.h"
+#include "emit-rtl.h"
+#include "cfgrtl.h"
+#include "df.h"
+#include "tm_p.h"
 #include "rvtt-protos.h"
 
 namespace {
@@ -138,6 +143,32 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
+/* The programmed template, sequence-zero, and misc fields are explicitly
+   opt-in compiler-owned resources.  Do not mix the formed representation
+   with source-visible configuration accesses in the same function: their
+   relative slot semantics cannot be recovered after the explicit body is
+   deleted.  */
+static bool
+source_config_access_p (function *fn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	if (NONDEBUG_INSN_P (insn))
+	  {
+	    if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+	      return true;
+	    int code = recog_memoized (insn);
+	    if (code == CODE_FOR_rvtt_sfpreadconfig_lv
+		|| code == CODE_FOR_rvtt_sfpwriteconfig_v)
+	      return true;
+	  }
+    }
+  return false;
+}
+
 struct macro_candidate
 {
   rtx_insn *first = nullptr;
@@ -157,6 +188,18 @@ struct macro_descriptor
   HOST_WIDE_INT swap_mod = 0;
 };
 
+struct configured_descriptor
+{
+  rtx_insn *insns[4] {};
+  rtx_insn *increment_insn = nullptr;
+  rtx macro_lreg = nullptr;
+  rtx load_mem = nullptr;
+  rtx store_mem = nullptr;
+  rtx address = nullptr;
+  rtx mode = nullptr;
+  rtx address_mode = nullptr;
+};
+
 static bool
 hard_lreg_p (rtx x)
 {
@@ -167,6 +210,230 @@ static bool
 same_reg_p (rtx a, rtx b)
 {
   return hard_lreg_p (a) && hard_lreg_p (b) && REGNO (a) == REGNO (b);
+}
+
+static bool
+unspec_p (rtx_insn *insn, int code)
+{
+  rtx set = single_set (insn);
+  if (!set)
+    return false;
+  rtx src = SET_SRC (set);
+  return GET_CODE (src) == UNSPEC_VOLATILE && XINT (src, 1) == code;
+}
+
+/* Loading a configuration word through L0 is lane-predicated, while
+   SFPCONFIG consumes lane zero.  Configuration materialization is therefore
+   sound only when an immediately preceding architectural CC operation proves
+   every lane enabled.  Keeping this proof local prevents it from being
+   widened across an unmodelled CC effect.  */
+static bool
+all_lanes_enabled_immediately_before_p (rtx_insn *first)
+{
+  rtx_insn *insn = prev_nonnote_nondebug_insn (first);
+  if (!insn || BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (first)
+      || recog_memoized (insn) != CODE_FOR_rvtt_sfpencc)
+    return false;
+
+  extract_insn (insn);
+  return CONST_INT_P (recog_data.operand[0])
+    && INTVAL (recog_data.operand[0]) == SFPENCC_MOD1_EI_RI
+    && CONST_INT_P (recog_data.operand[1])
+    && INTVAL (recog_data.operand[1]) == SFPENCC_IMM12_BOTH;
+}
+
+/* Match the one calendar already executable by the transactional simulator:
+   load; logical shift right by 31; sign-magnitude cast; store.  All values
+   occupy L0 in the explicit form.  The macro VD must be L1 because the
+   canonical SHFT2 immediate aliases its source selector to L1.  Prove L1 is
+   otherwise unused until multi-VD scheduling is modeled.
+   Requiring the store source to have no later reference prevents the launch's
+   shifted VD value from escaping in place of the explicit cast result.  */
+static bool
+describe_configured_region (const macro_candidate &candidate,
+			    configured_descriptor *out)
+{
+  if (candidate.words != 4 || candidate.loads != 1
+      || candidate.stores != 1 || candidate.crossed_non_sfpu
+      || candidate.unsupported_bulk
+      || !all_lanes_enabled_immediately_before_p (candidate.first))
+    return false;
+
+  unsigned count = 0;
+  for (rtx_insn *insn = candidate.first; insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  if (count == ARRAY_SIZE (out->insns))
+	    return false;
+	  out->insns[count++] = insn;
+	}
+      if (insn == candidate.last)
+	break;
+    }
+  if (count != ARRAY_SIZE (out->insns)
+      || recog_memoized (out->insns[0]) != CODE_FOR_rvtt_sfpload_lv_int
+      || !unspec_p (out->insns[1], UNSPECV_SFPSHFT)
+      || recog_memoized (out->insns[2]) != CODE_FOR_rvtt_sfpcast_lv
+      || recog_memoized (out->insns[3]) != CODE_FOR_rvtt_sfpstore_int)
+    return false;
+
+  extract_insn (out->insns[0]);
+  rtx load_reg = recog_data.operand[0];
+  rtx load_mem = recog_data.operand[1];
+  rtx load_opcode = recog_data.operand[2];
+  rtx load_encoding = recog_data.operand[3];
+  rtx load_address = recog_data.operand[4];
+  rtx load_live_value = recog_data.operand[6];
+  rtx load_mode = recog_data.operand[7];
+  rtx load_address_mode = recog_data.operand[8];
+
+  extract_insn (out->insns[1]);
+  rtx shift_reg = recog_data.operand[0];
+  rtx shift_mem = recog_data.operand[1];
+  rtx shift_opcode = recog_data.operand[2];
+  rtx shift_encoding = recog_data.operand[3];
+  rtx shift_amount = recog_data.operand[4];
+  rtx shift_src = recog_data.operand[5];
+  rtx shift_live_value = recog_data.operand[6];
+  rtx shift_mode = recog_data.operand[7];
+
+  extract_insn (out->insns[2]);
+  rtx cast_reg = recog_data.operand[0];
+  rtx cast_live_value = recog_data.operand[1];
+  rtx cast_src = recog_data.operand[2];
+  rtx cast_mode = recog_data.operand[3];
+
+  extract_insn (out->insns[3]);
+  rtx store_mem = recog_data.operand[0];
+  rtx store_opcode = recog_data.operand[1];
+  rtx store_encoding = recog_data.operand[2];
+  rtx store_address = recog_data.operand[3];
+  rtx store_src = recog_data.operand[4];
+  rtx store_mode = recog_data.operand[5];
+  rtx store_address_mode = recog_data.operand[6];
+
+  rtx_insn *increment = next_nonnote_nondebug_insn (out->insns[3]);
+  if (!increment || BLOCK_FOR_INSN (increment) != BLOCK_FOR_INSN (out->insns[3])
+      || recog_memoized (increment) != CODE_FOR_rvtt_ttincrwc)
+    return false;
+  extract_insn (increment);
+  if (!CONST_INT_P (recog_data.operand[0])
+      || INTVAL (recog_data.operand[0]) != 0
+      || !CONST_INT_P (recog_data.operand[1])
+      || INTVAL (recog_data.operand[1]) != 2
+      || !CONST_INT_P (recog_data.operand[2])
+      || INTVAL (recog_data.operand[2]) != 0
+      || !CONST_INT_P (recog_data.operand[3])
+      || INTVAL (recog_data.operand[3]) != 0)
+    return false;
+
+  HOST_WIDE_INT expected_shift_mode = TARGET_XTT_TENSIX_BH ? 5 : 1;
+  HOST_WIDE_INT expected_address_mode = TARGET_XTT_TENSIX_BH ? 7 : 3;
+  if (!same_reg_p (load_reg, shift_reg)
+      || !same_reg_p (load_reg, shift_src)
+      || !same_reg_p (load_reg, cast_reg)
+      || !same_reg_p (load_reg, cast_src)
+      || !same_reg_p (load_reg, store_src)
+      || REGNO (load_reg) != SFPU_REG_FIRST
+      || df_regs_ever_live_p (SFPU_REG_FIRST + 1)
+      || !CONST_INT_P (load_opcode) || INTVAL (load_opcode) != 0
+      || !CONST_INT_P (load_encoding) || INTVAL (load_encoding) != 0
+      || !noval_operand (load_live_value, GET_MODE (load_live_value))
+      || !CONST_INT_P (store_opcode) || INTVAL (store_opcode) != 0
+      || !CONST_INT_P (store_encoding) || INTVAL (store_encoding) != 0
+      || !CONST_INT_P (load_address) || !CONST_INT_P (store_address)
+      || INTVAL (load_address) != INTVAL (store_address)
+      || INTVAL (load_address) < 0 || INTVAL (load_address) > 0x3ff
+      || (INTVAL (load_address) & 1) != 0
+      || !CONST_INT_P (load_mode) || !CONST_INT_P (store_mode)
+      || INTVAL (load_mode) != INTVAL (store_mode)
+      || INTVAL (load_mode) < 0 || INTVAL (load_mode) > 0xf
+      || !CONST_INT_P (load_address_mode)
+      || !CONST_INT_P (store_address_mode)
+      || INTVAL (load_address_mode) != INTVAL (store_address_mode)
+      || INTVAL (load_address_mode) != expected_address_mode
+      || shift_mem != const0_rtx
+      || !CONST_INT_P (shift_opcode) || INTVAL (shift_opcode) != 0
+      || !CONST_INT_P (shift_encoding) || INTVAL (shift_encoding) != 0
+      || !CONST_INT_P (shift_amount) || INTVAL (shift_amount) != -31
+      || !noval_operand (shift_live_value, GET_MODE (shift_live_value))
+      || !CONST_INT_P (shift_mode)
+      || INTVAL (shift_mode) != expected_shift_mode
+      || !noval_operand (cast_live_value, GET_MODE (cast_live_value))
+      || !CONST_INT_P (cast_mode) || INTVAL (cast_mode) != 0
+      || bitmap_bit_p (df_get_live_out (BLOCK_FOR_INSN (out->insns[3])),
+		       REGNO (store_src)))
+    return false;
+
+  basic_block bb = BLOCK_FOR_INSN (candidate.last);
+  for (rtx_insn *insn = NEXT_INSN (candidate.last);
+       insn && BLOCK_FOR_INSN (insn) == bb; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn)
+	  && reg_referenced_p (store_src, PATTERN (insn)))
+	return false;
+      /* A later all-lane definition ends the old cast value's lifetime.  In
+	 particular, permit an immediate same-row load only after the macro's
+	 explicit drain; uses of that new value do not make the replaced cast
+	 result live.  Check references first for read/modify/write instructions.  */
+      if (NONDEBUG_INSN_P (insn) && reg_set_p (store_src, insn))
+	break;
+    }
+
+  out->macro_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + 1);
+  out->load_mem = load_mem;
+  out->store_mem = store_mem;
+  out->address = load_address;
+  /* The explicit typed form uses the target no-increment address modifier
+     and advances Dst with a following TTINCRWC.  The macro Store event must
+     instead use the target auto-increment modifier and consume that
+     increment.  Its data-format modifier is DEFAULT (zero).  */
+  out->mode = const0_rtx;
+  out->address_mode = GEN_INT (TARGET_XTT_TENSIX_BH ? 6 : 2);
+  out->increment_insn = increment;
+  return true;
+}
+
+static void
+emit_config_word (rtx lreg0, uint32_t value, unsigned config_dest)
+{
+  rvtt_emit_sfpxloadi (lreg0, rvtt_gen_rtx_noval (XTT32SImode),
+		       GEN_INT (value));
+  emit_insn (gen_rvtt_sfpwriteconfig_v (lreg0, GEN_INT (config_dest)));
+}
+
+static void
+emit_configured_region (const configured_descriptor &descriptor)
+{
+  rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  start_sequence ();
+  emit_config_word (config_lreg, 0x94fe10c6u, 0);
+  emit_config_word (config_lreg, 0x900000d0u, 1);
+  emit_config_word (config_lreg, 0x5384004du, 4);
+  emit_config_word (config_lreg, 0x00000110u, 8);
+  unsigned launch_word
+    = 0x93100000u
+      | (UINTVAL (descriptor.mode) << 16)
+      | (UINTVAL (descriptor.address_mode)
+	 << (TARGET_XTT_TENSIX_BH ? 13 : 14))
+      | UINTVAL (descriptor.address);
+  emit_insn (gen_rvtt_sfploadmacro_int (
+      descriptor.macro_lreg, descriptor.load_mem, descriptor.store_mem,
+      descriptor.address, descriptor.mode, descriptor.address_mode,
+      GEN_INT (launch_word)));
+  /* The admitted 0x5384004d calendar retires its final delayed store three
+     issue slots after launch.  Keep the drain explicit until a generic
+     calendar-aware scheduler can prove and fill these slots.  */
+  emit_insn (gen_rvtt_sfpnop ());
+  emit_insn (gen_rvtt_sfpnop ());
+  emit_insn (gen_rvtt_sfpnop ());
+  rtx_insn *replacement = get_insns ();
+  end_sequence ();
+  emit_insn_before (replacement, descriptor.insns[0]);
+  for (rtx_insn *insn : descriptor.insns)
+    delete_insn (insn);
+  delete_insn (descriptor.increment_insn);
 }
 
 static const char *
@@ -338,28 +605,36 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
     fprintf (dump_file, "  reject=%s\n", reject_reason_name (reason));
 }
 
-/* Discover maximal load...store stretches in each basic block.  No RTL is
-   created, removed, reordered, or annotated here.  In particular, this pass
-   must remain byte-identical whether its gate is enabled or disabled.  */
-static void
+/* Discover maximal load...store stretches in each basic block.  Analysis mode
+   remains byte-identical; emission mode replaces only a fully configured and
+   proven region.  */
+static bool
 discover (function *fn)
 {
+  bool changed = false;
+  bool config_available = !source_config_access_p (fn);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
       macro_candidate candidate;
       rtx_insn *insn;
-      FOR_BB_INSNS (bb, insn)
+
+      for (insn = BB_HEAD (bb); insn; )
 	{
+	  rtx_insn *next = insn == BB_END (bb) ? nullptr : NEXT_INSN (insn);
 	  if (!candidate.first)
 	    {
 	      if (!load_p (insn))
-		continue;
+		{
+		  insn = next;
+		  continue;
+		}
 	      candidate.first = insn;
 	      candidate.last = insn;
 	      candidate.words = 1;
 	      candidate.loads = 1;
 	      candidate.unsupported_bulk = unsupported_bulk_p (insn);
+	      insn = next;
 	      continue;
 	    }
 
@@ -367,10 +642,14 @@ discover (function *fn)
 	    {
 	      /* Notes and labels do not issue and do not split the stream.  */
 	      if (!NONDEBUG_INSN_P (insn))
-		continue;
+		{
+		  insn = next;
+		  continue;
+		}
 	      candidate.crossed_non_sfpu = true;
 	      dump_candidate (bb, candidate, false);
 	      candidate = macro_candidate {};
+	      insn = next;
 	      continue;
 	    }
 
@@ -382,13 +661,23 @@ discover (function *fn)
 	    {
 	      ++candidate.stores;
 	      dump_candidate (bb, candidate, true);
+	      configured_descriptor configured;
+	      if (riscv_tt_emit_loadmacro && config_available
+		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
+		  && describe_configured_region (candidate, &configured))
+		{
+		  emit_configured_region (configured);
+		  changed = true;
+		}
 	      candidate = macro_candidate {};
 	    }
+	  insn = next;
 	}
 
       if (candidate.first)
 	dump_candidate (bb, candidate, false);
     }
+  return changed;
 }
 
 const pass_data pass_data_rvtt_loadmacro =
@@ -413,13 +702,13 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_analyze_loadmacro;
+    return TARGET_XTT_TENSIX
+      && (riscv_tt_analyze_loadmacro || riscv_tt_emit_loadmacro);
   }
 
   unsigned execute (function *fn) final override
   {
-    discover (fn);
-    return 0;
+    return discover (fn) ? TODO_df_finish : 0;
   }
 };
 

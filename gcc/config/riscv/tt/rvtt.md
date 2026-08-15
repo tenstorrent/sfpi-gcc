@@ -51,6 +51,7 @@
 
   UNSPECV_SFPLOADI
   UNSPECV_SFPLOAD
+  UNSPECV_SFPLOADMACRO
   UNSPECV_SFPLOADDISCARD
   UNSPECV_SFPLOADSRCS
   UNSPECV_SFPSTORE
@@ -789,6 +790,29 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
    (set_attr "xtt_replay" "safe")])
+
+;; A complete WH/BH macro launch.  The formation pass may emit this only after
+;; it has materialized and owns the referenced sequence/template/misc slot.
+;; Both logical Dst accesses remain operands so ordinary memory dependencies
+;; survive replacement of the explicit load/transform/store region.
+(define_insn "rvtt_sfploadmacro_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
+          (match_operand:SI 2 "mem_or_0_operand" "X") ;; store Dst effect
+          (match_operand:SI 3 "const_int_operand" "n") ;; address
+          (match_operand:SI 4 "const_int_operand" "n") ;; load/store mode
+          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
+          ;; Keep the raw 32-bit instruction in DImode: WH/BH macro opcodes
+          ;; have bit 31 set, so their unsigned spelling is not a canonical
+          ;; SImode CONST_INT even though the assembler accepts that spelling.
+          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
+          ] UNSPECV_SFPLOADMACRO))]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%6"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
+   (set_attr "xtt_replay" "barrier")])
 
 (define_insn "rvtt_sfploadsrcs_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
