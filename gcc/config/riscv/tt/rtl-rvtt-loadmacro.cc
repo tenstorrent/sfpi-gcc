@@ -200,6 +200,22 @@ struct configured_descriptor
   rtx address_mode = nullptr;
 };
 
+static rtx_insn *
+all_lanes_enable_before (rtx_insn *first)
+{
+  rtx_insn *insn = prev_nonnote_nondebug_insn (first);
+  if (!insn || BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (first)
+      || recog_memoized (insn) != CODE_FOR_rvtt_sfpencc)
+    return nullptr;
+
+  extract_insn (insn);
+  return (CONST_INT_P (recog_data.operand[0])
+	  && INTVAL (recog_data.operand[0]) == SFPENCC_MOD1_EI_RI
+	  && CONST_INT_P (recog_data.operand[1])
+	  && INTVAL (recog_data.operand[1]) == SFPENCC_IMM12_BOTH)
+    ? insn : nullptr;
+}
+
 static bool
 hard_lreg_p (rtx x)
 {
@@ -230,16 +246,7 @@ unspec_p (rtx_insn *insn, int code)
 static bool
 all_lanes_enabled_immediately_before_p (rtx_insn *first)
 {
-  rtx_insn *insn = prev_nonnote_nondebug_insn (first);
-  if (!insn || BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (first)
-      || recog_memoized (insn) != CODE_FOR_rvtt_sfpencc)
-    return false;
-
-  extract_insn (insn);
-  return CONST_INT_P (recog_data.operand[0])
-    && INTVAL (recog_data.operand[0]) == SFPENCC_MOD1_EI_RI
-    && CONST_INT_P (recog_data.operand[1])
-    && INTVAL (recog_data.operand[1]) == SFPENCC_IMM12_BOTH;
+  return all_lanes_enable_before (first) != nullptr;
 }
 
 /* Match the one calendar already executable by the transactional simulator:
@@ -404,14 +411,18 @@ emit_config_word (rtx lreg0, uint32_t value, unsigned config_dest)
 }
 
 static void
-emit_configured_region (const configured_descriptor &descriptor)
+emit_descriptor_config ()
 {
   rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
-  start_sequence ();
   emit_config_word (config_lreg, 0x94fe10c6u, 0);
   emit_config_word (config_lreg, 0x900000d0u, 1);
   emit_config_word (config_lreg, 0x5384004du, 4);
   emit_config_word (config_lreg, 0x00000110u, 8);
+}
+
+static void
+emit_macro_launch (const configured_descriptor &descriptor)
+{
   unsigned launch_word
     = 0x93100000u
       | (UINTVAL (descriptor.mode) << 16)
@@ -428,8 +439,99 @@ emit_configured_region (const configured_descriptor &descriptor)
   emit_insn (gen_rvtt_sfpnop ());
   emit_insn (gen_rvtt_sfpnop ());
   emit_insn (gen_rvtt_sfpnop ());
+}
+
+/* Return the unique external predecessor of a canonical one-block loop.
+   Requiring the loop header to have exactly its backedge and one incoming
+   edge, and the incoming block to have no other successor, makes that block
+   a structural preheader without depending on loop metadata this late in
+   the RTL pipeline.  */
+static basic_block
+single_block_loop_preheader (const configured_descriptor &descriptor)
+{
+  basic_block body = BLOCK_FOR_INSN (descriptor.insns[0]);
+  edge edge_to_body = nullptr;
+  unsigned self_edges = 0;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, body->preds)
+    if (e->src == body)
+      ++self_edges;
+    else if (edge_to_body)
+      return nullptr;
+    else
+      edge_to_body = e;
+  if (self_edges != 1 || !edge_to_body
+      || EDGE_COUNT (edge_to_body->src->succs) != 1)
+    return nullptr;
+
+  /* The enable and described region must be the only Tensix issue in the
+     loop body.  This proves that moving the idempotent all-lanes enable out
+     of the loop crosses no CC user/owner and that descriptor state cannot be
+     changed between the preheader materialization and any launch.  */
+  rtx_insn *enable = all_lanes_enable_before (descriptor.insns[0]);
+  if (!enable)
+    return nullptr;
+  for (rtx_insn *insn = BB_HEAD (body); insn; insn = NEXT_INSN (insn))
+    {
+      if (tensix_p (insn))
+	{
+	  bool described = insn == enable || insn == descriptor.increment_insn;
+	  for (rtx_insn *member : descriptor.insns)
+	    described |= insn == member;
+	  if (!described)
+	    return nullptr;
+	}
+      if (insn == BB_END (body))
+	break;
+    }
+  return edge_to_body->src;
+}
+
+static bool
+self_loop_p (const configured_descriptor &descriptor)
+{
+  basic_block body = BLOCK_FOR_INSN (descriptor.insns[0]);
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, body->preds)
+    if (e->src == body)
+      return true;
+  return false;
+}
+
+static void
+emit_configured_region (const configured_descriptor &descriptor,
+			basic_block preheader)
+{
+  start_sequence ();
+  if (preheader)
+    {
+      rtx_insn *enable = all_lanes_enable_before (descriptor.insns[0]);
+      emit_insn (copy_rtx (PATTERN (enable)));
+      emit_descriptor_config ();
+    }
+  else
+    emit_descriptor_config ();
+  rtx_insn *prefix = get_insns ();
+  end_sequence ();
+
+  start_sequence ();
+  emit_macro_launch (descriptor);
   rtx_insn *replacement = get_insns ();
   end_sequence ();
+
+  if (preheader)
+    {
+      rtx_insn *anchor = BB_END (preheader);
+      if (JUMP_P (anchor))
+	emit_insn_before (prefix, anchor);
+      else
+	emit_insn_after (prefix, anchor);
+      delete_insn (all_lanes_enable_before (descriptor.insns[0]));
+    }
+  else
+    emit_insn_before (prefix, descriptor.insns[0]);
   emit_insn_before (replacement, descriptor.insns[0]);
   for (rtx_insn *insn : descriptor.insns)
     delete_insn (insn);
@@ -613,6 +715,7 @@ discover (function *fn)
 {
   bool changed = false;
   bool config_available = !source_config_access_p (fn);
+  auto_vec<configured_descriptor, 2> configured_regions;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -665,10 +768,7 @@ discover (function *fn)
 	      if (riscv_tt_emit_loadmacro && config_available
 		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
 		  && describe_configured_region (candidate, &configured))
-		{
-		  emit_configured_region (configured);
-		  changed = true;
-		}
+		configured_regions.safe_push (configured);
 	      candidate = macro_candidate {};
 	    }
 	  insn = next;
@@ -676,6 +776,24 @@ discover (function *fn)
 
       if (candidate.first)
 	dump_candidate (bb, candidate, false);
+    }
+  /* A function-owned descriptor is materialized once only when the complete
+     function has exactly one static launch site.  Multiple sites need path-
+     sensitive descriptor ownership and are deliberately left byte-identical.
+     A canonical one-block loop gets its enable and configuration in the
+     structural preheader; a straight-line site retains local setup.  */
+  if (configured_regions.length () == 1)
+    {
+      basic_block preheader
+	= single_block_loop_preheader (configured_regions[0]);
+      /* Never fall back to local materialization for a loop.  If the
+	 structural preheader or whole-loop ownership proof fails, retaining
+	 the explicit body is both the safe and the performance-honest result.  */
+      if (preheader || !self_loop_p (configured_regions[0]))
+	{
+	  emit_configured_region (configured_regions[0], preheader);
+	  changed = true;
+	}
     }
   return changed;
 }
