@@ -597,6 +597,10 @@ mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
 Generate Tensix replay instruction.
 
+mtt-tensix-optimize-replay-hoist
+Target Var(riscv_tt_opt_replay_hoist) Init(0)
+Hoist fixed-encoding Tensix replay capture out of profitable loops.
+
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
 Length of replay buffer for replay optimization use.

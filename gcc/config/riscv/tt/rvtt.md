@@ -51,6 +51,7 @@
 
   UNSPECV_SFPLOADI
   UNSPECV_SFPLOAD
+  UNSPECV_SFPLOADDISCARD
   UNSPECV_SFPLOADSRCS
   UNSPECV_SFPSTORE
   UNSPECV_SFPSTORESRCS
@@ -613,6 +614,41 @@
      operands[3], operands[4], operands[5], operands[6]));
   DONE;
 })
+
+;; Load into the architectural discard destination L8.  Unlike an ordinary
+;; sfpload this has no allocatable SFPU result, which keeps the fixed encoding
+;; visible to late RTL passes without manufacturing a dead L0--L7 value.
+(define_expand "rvtt_sfploaddiscard"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     ] UNSPECV_SFPLOADDISCARD)]
+  "TARGET_XTT_TENSIX"
+{
+  int op
+    = TARGET_XTT_TENSIX_WH
+      ? TT_OP_WH_SFPLOAD (8, INTVAL (operands[1]), INTVAL (operands[2]),
+			  INTVAL (operands[0]))
+    : TARGET_XTT_TENSIX_BH
+      ? TT_OP_BH_SFPLOAD (8, INTVAL (operands[1]), INTVAL (operands[2]),
+			  INTVAL (operands[0]))
+    : TARGET_XTT_TENSIX_QSR
+      ? TT_OP_QSR_SFPLOAD (8, INTVAL (operands[1]), INTVAL (operands[2]), 0,
+			   INTVAL (operands[0]))
+    : (gcc_unreachable (), 0);
+  emit_insn (gen_rvtt_sfploaddiscard_int (GEN_INT (op)));
+  DONE;
+})
+
+(define_insn "rvtt_sfploaddiscard_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     ] UNSPECV_SFPLOADDISCARD)]
+  "TARGET_XTT_TENSIX"
+  ".ttinsn\t%0"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
 
 (define_expand "rvtt_sfploadsrcs"
   [(set (match_operand:XTT32SI 0 "register_operand")
