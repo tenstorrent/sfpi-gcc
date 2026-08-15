@@ -79,7 +79,7 @@ write_lregno (rtx_insn *insn)
 }
 
 static bool
-raw_access_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
+raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
 {
   if (recog_memoized (insn) != CODE_FOR_rvtt_sfprawlreg_access)
     return false;
@@ -87,7 +87,7 @@ raw_access_p (rtx_insn *insn, unsigned *read_mask, unsigned *write_mask)
   rtx pat = PATTERN (insn);
   gcc_assert (GET_CODE (pat) == UNSPEC_VOLATILE
               && XINT (pat, 1) == UNSPECV_SFPRAWLREG_ACCESS);
-  *read_mask = UINTVAL (XVECEXP (pat, 0, 0)) & 0xff;
+  *release_mask = UINTVAL (XVECEXP (pat, 0, 0)) & 0xff;
   *write_mask = UINTVAL (XVECEXP (pat, 0, 1)) & 0xff;
   return true;
 }
@@ -128,6 +128,24 @@ end_sentinel (rtx value, rtx_insn *before)
     emit_insn_before (gen_rtx_USE (VOIDmode, value), before);
 }
 
+/* Keep VALUE live through the final instruction in BB.  A USE before a
+   non-jump BB_END leaves that final instruction free to reuse VALUE's hard
+   LREG, so append the USE and let emit_insn_after extend BB_END.  A jump may
+   not be followed by an instruction in its block, but it cannot define an
+   allocatable SFPU value, so a USE immediately before it is sufficient.  */
+static void
+end_sentinel_at_block_end (rtx value, basic_block bb)
+{
+  if (!value)
+    return;
+
+  rtx_insn *last = BB_END (bb);
+  if (JUMP_P (last))
+    end_sentinel (value, last);
+  else
+    emit_insn_after (gen_rtx_USE (VOIDmode, value), last);
+}
+
 static unsigned
 transfer_block (basic_block bb, unsigned live)
 {
@@ -136,9 +154,9 @@ transfer_block (basic_block bb, unsigned live)
     {
       if (!NONDEBUG_INSN_P (insn))
         continue;
-      unsigned reads, writes;
-      if (raw_access_p (insn, &reads, &writes))
-        live = (live & ~reads) | writes;
+      unsigned releases, writes;
+      if (raw_access_p (insn, &releases, &writes))
+	live = (live & ~releases) | writes;
       else
         {
           int regno = read_lregno (insn);
@@ -187,9 +205,17 @@ make_raw_lregs_live (function *fn)
     {
       rtx live[8] = {};
       rtx_insn *producer[8] = {};
-      rtx_insn *first = BB_HEAD (bb);
-      while (first && !NONDEBUG_INSN_P (first))
-        first = NEXT_INSN (first);
+      rtx_insn *first = NULL;
+      for (rtx_insn *insn = BB_HEAD (bb);; insn = NEXT_INSN (insn))
+	{
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      first = insn;
+	      break;
+	    }
+	  if (insn == BB_END (bb))
+	    break;
+	}
       if (!first)
         continue;
 
@@ -208,11 +234,11 @@ make_raw_lregs_live (function *fn)
           if (!NONDEBUG_INSN_P (insn))
             continue;
 
-          unsigned reads, writes;
-          if (raw_access_p (insn, &reads, &writes))
+	  unsigned releases, writes;
+	  if (raw_access_p (insn, &releases, &writes))
             {
               for (unsigned regno = 0; regno != 8; ++regno)
-                if (reads & (1u << regno))
+		if (releases & (1u << regno))
                   {
                     end_sentinel (live[regno], insn);
                     live[regno] = NULL_RTX;
@@ -245,10 +271,9 @@ make_raw_lregs_live (function *fn)
       /* A successor gets its own entry token.  This endpoint keeps the local
          interval alive through all instructions in the current block without
          inventing a cross-CFG pseudo or phi.  */
-      rtx_insn *last = BB_END (bb);
       for (unsigned regno = 0; regno != 8; ++regno)
         if (live[regno])
-          end_sentinel (live[regno], last);
+	  end_sentinel_at_block_end (live[regno], bb);
     }
 }
 

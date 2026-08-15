@@ -205,9 +205,11 @@
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
-;; This is a compiler-only raw-LLK access marker.  It must remain volatile
-;; until the pre-IRA lreg-livein pass has made the indicated hard LREG values
-;; visible to IRA, but it emits no Tensix instruction itself.
+;; This is a compiler-only raw-LLK ownership marker placed after the opaque
+;; instruction region it describes.  Operand 0 releases values after their
+;; last raw use; operand 1 starts newly written values.  It must remain
+;; volatile until the pre-IRA lreg-livein pass has made the indicated hard
+;; LREG values visible to IRA, but it emits no Tensix instruction itself.
 (define_insn "rvtt_sfprawlreg_access"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI 0 "const_int_operand" "n")
