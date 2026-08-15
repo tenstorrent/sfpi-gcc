@@ -90,6 +90,7 @@
   UNSPECV_SFPSTOCHRND
 
   UNSPECV_SFPCONFIG
+  UNSPECV_OWNED_SETC16
 
   UNSPECV_SFPLUT
   UNSPECV_SFPLUTFP32_3R
@@ -674,6 +675,21 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
+;; A compiler-owned SETC16 configuration write.  Late formation uses this
+;; only for configuration state that it subsequently consumes itself.  Keep
+;; the architectural register and value as operands even though the emitted
+;; word is pre-encoded, so ownership remains explicit in RTL dumps.
+(define_insn "rvtt_owned_setc16_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; config register
+     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
+     (match_operand:DI 2 "const_int_operand" "n") ;; encoded word
+     ] UNSPECV_OWNED_SETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%2"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
 (define_expand "rvtt_sfploadsrcs"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -828,6 +844,31 @@
           ;; SImode CONST_INT even though the assembler accepts that spelling.
           (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
           ] UNSPECV_SFPLOADMACRO))]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%6"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
+   (set_attr "xtt_replay" "barrier")])
+
+;; A macro launch whose delayed Simple template is SFPSWAP.  In addition to
+;; the launch VD, the template writes the fixed comparison operand (L2).  Keep
+;; that hidden architectural write explicit in RTL; formation only selects
+;; this pattern after proving L2 is private to the complete periodic region.
+(define_insn "rvtt_sfploadmacro_swap_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
+          (match_operand:SI 2 "mem_or_0_operand" "X") ;; store Dst effect
+          (match_operand:SI 3 "const_int_operand" "n") ;; address
+          (match_operand:SI 4 "const_int_operand" "n") ;; load/store mode
+          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
+          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
+          ] UNSPECV_SFPLOADMACRO))
+   ;; This pattern is created by a post-reload pass, so a match_scratch could
+   ;; not subsequently be allocated to the required architectural register.
+   ;; L0 starts at hard register 80; make the delayed template's fixed L2
+   ;; write explicit without introducing a post-RA pseudo.
+   (clobber (reg:XTT32SI 82))]
   "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
