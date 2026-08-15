@@ -142,6 +142,11 @@ RVTT_FN (sfplutfp32_6r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT
 
 RVTT_FN (sfpswap,             ,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
 RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,              0, ())
+// Architecturally complete index-tracking forms.  These are distinct from the
+// ordinary operations because IndexEn makes SFPSWAP update the L4--L7
+// companions and SFPTRANSP always transforms both four-register banks.
+RVTT_FN (sfpswap_indexed,     ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0, ({M, 0x1ff}))
+RVTT_FN (sfptransp8,          ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 0, ())
 RVTT_FN (sfpshft2_copy4,      ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0, ({M, 0x1}))
 RVTT_FN (sfpshft2_subvec_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,        0, ({M, 0x2}))
 RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,  0, ({M, 0x4}))

@@ -2350,6 +2350,139 @@
   DONE;
 })
 
+;; IndexEn couples value registers L0--L3 to companion index registers
+;; L4--L7.  Model the four results in one PARALLEL and constrain allocation to
+;; the twelve legal ordered value pairs.  The matching operands make every
+;; result read/write, while the exact register alternatives encode
+;; index_reg == value_reg + 4 rather than relying on a post-RA assertion.
+(define_insn "rvtt_sfpswap_indexed_int"
+  [(set (match_operand:XTT32SI 0 "register_operand"
+          "=x0,x0,x0,x1,x1,x1,x2,x2,x2,x3,x3,x3")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 4 "register_operand"
+           "0,0,0,0,0,0,0,0,0,0,0,0")
+          (match_operand:XTT32SI 5 "register_operand"
+           "1,1,1,1,1,1,1,1,1,1,1,1")
+          (match_operand:XTT32SI 6 "register_operand"
+           "2,2,2,2,2,2,2,2,2,2,2,2")
+          (match_operand:XTT32SI 7 "register_operand"
+           "3,3,3,3,3,3,3,3,3,3,3,3")
+          (match_operand:SI 8 "const_int_operand"
+           "n,n,n,n,n,n,n,n,n,n,n,n")
+        ] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 1 "register_operand"
+          "=x1,x2,x3,x0,x2,x3,x0,x1,x3,x0,x1,x2")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5)
+                                  (match_dup 6) (match_dup 7)
+                                  (match_dup 8)] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 2 "register_operand"
+          "=x4,x4,x4,x5,x5,x5,x6,x6,x6,x7,x7,x7")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5)
+                                  (match_dup 6) (match_dup 7)
+                                  (match_dup 8)] UNSPECV_SFPSWAP))
+   (set (match_operand:XTT32SI 3 "register_operand"
+          "=x5,x6,x7,x4,x6,x7,x4,x5,x7,x4,x5,x6")
+        (unspec_volatile:XTT32SI [(match_dup 4) (match_dup 5)
+                                  (match_dup 6) (match_dup 7)
+                                  (match_dup 8)] UNSPECV_SFPSWAP))]
+  "TARGET_XTT_TENSIX"
+  "SFPSWAP\t%x4, %x5, %8\t# INDEXED R:%x6,%x7"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+
+(define_expand "rvtt_sfpswap_indexed"
+  [(set (match_operand:XTT128SI 0 "register_operand")
+        (unspec_volatile:XTT128SI [
+          (match_operand:XTT32SI 1 "register_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:XTT32SI 3 "register_operand")
+          (match_operand:XTT32SI 4 "register_operand")
+          (match_operand:SI 5 "const_int_operand")
+        ] UNSPECV_SFPSWAP))]
+  "TARGET_XTT_TENSIX"
+{
+  rtx value_a = gen_reg_rtx (XTT32SImode);
+  rtx value_b = gen_reg_rtx (XTT32SImode);
+  rtx index_a = gen_reg_rtx (XTT32SImode);
+  rtx index_b = gen_reg_rtx (XTT32SImode);
+  emit_insn (gen_rvtt_sfpswap_indexed_int
+    (value_a, value_b, index_a, index_b, operands[1], operands[2],
+     operands[3], operands[4], operands[5]));
+  emit_insn (gen_rvtt_sfpconcat4
+    (operands[0], value_a, value_b, index_a, index_b));
+  DONE;
+})
+
+;; SFPTRANSP transforms both architectural banks.  The public tuple carries
+;; L0--L3, as before; the second bank remains explicit SETs in the same RTL
+;; instruction, so DF/IRA see the L4--L7 uses and definitions even when the C
+;; caller observes those results through later fixed-LREG reads.
+(define_insn "rvtt_sfptransp8_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=x0")
+        (unspec_volatile:XTT32SI [
+          (match_operand:XTT32SI 8 "register_operand" "0")
+          (match_operand:XTT32SI 9 "register_operand" "1")
+          (match_operand:XTT32SI 10 "register_operand" "2")
+          (match_operand:XTT32SI 11 "register_operand" "3")
+          (match_operand:XTT32SI 12 "register_operand" "4")
+          (match_operand:XTT32SI 13 "register_operand" "5")
+          (match_operand:XTT32SI 14 "register_operand" "6")
+          (match_operand:XTT32SI 15 "register_operand" "7")
+        ] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 1 "register_operand" "=x1")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 2 "register_operand" "=x2")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 3 "register_operand" "=x3")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 4 "register_operand" "=x4")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 5 "register_operand" "=x5")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 6 "register_operand" "=x6")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))
+   (set (match_operand:XTT32SI 7 "register_operand" "=x7")
+        (unspec_volatile:XTT32SI [(match_dup 8) (match_dup 9) (match_dup 10) (match_dup 11)
+                                  (match_dup 12) (match_dup 13) (match_dup 14) (match_dup 15)] UNSPECV_SFPTRANSP))]
+  "TARGET_XTT_TENSIX"
+  "SFPTRANSP\t# R:%x8,%x9,%x10,%x11,%x12,%x13,%x14,%x15"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")])
+
+(define_expand "rvtt_sfptransp8"
+  [(set (match_operand:XTT128SI 0 "register_operand")
+        (unspec_volatile:XTT128SI [
+          (match_operand:XTT32SI 1 "register_operand")
+          (match_operand:XTT32SI 2 "register_operand")
+          (match_operand:XTT32SI 3 "register_operand")
+          (match_operand:XTT32SI 4 "register_operand")
+          (match_operand:XTT32SI 5 "register_operand")
+          (match_operand:XTT32SI 6 "register_operand")
+          (match_operand:XTT32SI 7 "register_operand")
+          (match_operand:XTT32SI 8 "register_operand")
+        ] UNSPECV_SFPTRANSP))]
+  "TARGET_XTT_TENSIX"
+{
+  rtx result[8];
+  for (unsigned i = 0; i != 8; ++i)
+    result[i] = gen_reg_rtx (XTT32SImode);
+  emit_insn (gen_rvtt_sfptransp8_int
+    (result[0], result[1], result[2], result[3],
+     result[4], result[5], result[6], result[7],
+     operands[1], operands[2], operands[3], operands[4],
+     operands[5], operands[6], operands[7], operands[8]));
+  emit_insn (gen_rvtt_sfpconcat4
+    (operands[0], result[0], result[1], result[2], result[3]));
+  DONE;
+})
+
 (define_insn "rvtt_sfpshft2_copy4_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=x0")
         (unspec_volatile:XTT32SI [
