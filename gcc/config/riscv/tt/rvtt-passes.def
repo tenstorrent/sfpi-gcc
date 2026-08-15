@@ -41,6 +41,9 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_cc);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
+/* Interleave phase-2 fused Dst groups after RVTT lowering has exposed final
+   opcode dependencies, but before RTL expansion and LREG allocation.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_interleave);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
 
 // RTL passes

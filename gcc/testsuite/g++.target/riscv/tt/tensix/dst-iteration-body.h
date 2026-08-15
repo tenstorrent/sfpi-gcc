@@ -32,6 +32,117 @@ eligible_pair ()
 }
 #endif
 
+#ifdef DST_DYNAMIC
+__attribute__ ((noinline)) void
+dynamic_pair (unsigned input)
+{
+  unsigned base = (input & 31) * 64;
+  vec_t a0 = load_dst (base);
+  vec_t b0 = load_dst (base + 256);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), base + 512);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (base);
+  vec_t b1 = load_dst (base + 256);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), base + 512);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+__attribute__ ((noinline)) void
+dynamic_overflow (unsigned input)
+{
+  unsigned base = (input & 1) + DST_LIMIT - 1;
+  vec_t a0 = load_dst (base);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (base);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+#endif
+
+#ifdef DST_LATE_NEGATIVES
+// These groups already have the phase-2 RWC=4 shape.  They exercise the
+// late interleaver's own legality checks rather than the fusion recognizer.
+__attribute__ ((noinline)) void
+late_cross_half_dependency ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  vec_t p0 = __builtin_rvtt_sfpmul (a0, b0, 0);
+  store_dst (p0, 128);
+  vec_t a1 = load_dst (2);
+  vec_t b1 = load_dst (66);
+  // A value from the first half must not be treated as an iteration-local
+  // counterpart of b1.
+  vec_t p1 = __builtin_rvtt_sfpmul (a1, p0, 0);
+  store_dst (p1, 130);
+  __builtin_rvtt_ttincrwc (0, 4, 0, 0);
+}
+
+__attribute__ ((noinline)) void
+late_external_vector ()
+{
+  vec_t external = __builtin_rvtt_sfpreadlreg (3);
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, external, 0), 128);
+  vec_t a1 = load_dst (2);
+  vec_t b1 = load_dst (66);
+  // Equal SSA names are not a row-local bijection.
+  store_dst (__builtin_rvtt_sfpmul (a1, external, 0), 130);
+  __builtin_rvtt_ttincrwc (0, 4, 0, 0);
+}
+
+__attribute__ ((noinline)) void
+late_cc_state ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  __builtin_rvtt_sfppushc (0);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_sfppopc (0);
+  vec_t a1 = load_dst (2);
+  vec_t b1 = load_dst (66);
+  __builtin_rvtt_sfppushc (0);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 130);
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_ttincrwc (0, 4, 0, 0);
+}
+
+__attribute__ ((noinline)) void
+late_address_alias ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  // The second row aliases the first instead of proving the exact +2 map.
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 4, 0, 0);
+}
+
+// Phase 2 can form this group, but row A's store at 2 aliases row B's first
+// load after its +2 rewrite.  The late interleaver must leave it serial.
+__attribute__ ((noinline)) void
+late_store_load_alias ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 2);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 2);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+#endif
+
 // The row bodies differ.
 __attribute__ ((noinline)) void
 shape_mismatch ()
