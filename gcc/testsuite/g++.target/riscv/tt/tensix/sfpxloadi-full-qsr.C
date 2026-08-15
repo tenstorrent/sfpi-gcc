@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-qsr32-tensix -fno-exceptions -fno-rtti -O2" }
-// { dg-final { scan-assembler-not "SFPLOADI[^\\n]*\\n[^\\n]*SFPMOV[^\\n]*\\n[^\\n]*SFPLOADI" } }
+// { dg-final { scan-assembler-not "SFPLOADI.*\\n.*SFPMOV.*\\n.*SFPLOADI" } }
 
 // main changed the builtin's pointer type from void* to
 // volatile unsigned long*; take it through a cast so the test states

@@ -24,7 +24,7 @@ raw_lreg_future_input ()
 }
 
 // { dg-final { scan-assembler "# RAWLREG 0, 15" } }
-// { dg-final { scan-assembler "SFPMAD\\tL[6-7], L0, L0, L4, 0" } }
+// { dg-final { scan-assembler "SFPMAD\\t(L6|L7), L0, L0, L4, 0" } }
 // { dg-final { scan-assembler-not "SFPMAD\\tL1, L0, L0, L4, 0" } }
 // { dg-final { scan-assembler-not "SFPMAD\\tL2, L0, L0, L4, 0" } }
 // { dg-final { scan-assembler-not "SFPMAD\\tL3, L0, L0, L4, 0" } }

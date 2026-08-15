@@ -87,5 +87,5 @@ raw_lreg_live_across_multi_pred (int outer, int inner)
 
 // { dg-final { scan-assembler "# RAWLREG 0, 2" } }
 // { dg-final { scan-assembler "# RAWLREG 2, 128" } }
-// { dg-final { scan-assembler-times "SFPLOAD\\tL[0234567]," 4 } }
+// { dg-final { scan-assembler-times "SFPLOAD\\t(L0|L2|L3|L4|L5|L6|L7)," 4 } }
 // { dg-final { scan-assembler-not "SFPLOAD\\tL1," } }

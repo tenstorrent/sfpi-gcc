@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
-// { dg-final { scan-assembler-not "SFPLOADI[^\\n]*\\n[^\\n]*SFPMOV[^\\n]*\\n[^\\n]*SFPLOADI" } }
+// { dg-final { scan-assembler-not "SFPLOADI.*\\n.*SFPMOV.*\\n.*SFPLOADI" } }
 
 // Full-width bit patterns must be materialized directly in their result LREG:
 // no temporary-to-result SFPMOV between the two halves of a 32-bit load.
