@@ -841,6 +841,92 @@ available_replay_spans (std::vector<replay_span> const &base,
   return result;
 }
 
+/* A counted-loop capture must be one fixed, uninterrupted SFPU run.  Scalar
+   loop-control instructions may surround it, but ordinary memory, calls,
+   opaque asm, configuration/counter operations, dynamic instruction words,
+   and explicit replay ownership make the whole loop ineligible.  */
+static bool
+counted_loop_payload (class loop *loop, replay_block &info,
+		      replay_sequence &seq)
+{
+  if (loop->num_nodes != 1 || loop->header != loop->latch
+      || !loop_preserves_replay_p (loop))
+    return false;
+
+  rtx_insn *insn;
+  FOR_BB_INSNS (loop->header, insn)
+    if (NONDEBUG_INSN_P (insn))
+      {
+	if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0
+	    || contains_mem_rtx_p (PATTERN (insn)))
+	  return false;
+	if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0
+	    && get_attr_type (insn) == TYPE_TENSIX
+	    && (get_attr_xtt_replay (insn) != XTT_REPLAY_SAFE
+		|| !fixed_replay_rtx_p (PATTERN (insn))))
+	  return false;
+      }
+
+  if (!scan_insns (info, loop->header))
+    return false;
+
+  unsigned length = 0;
+  for (unsigned ix = 0; ix != info.size (); ++ix)
+    {
+      if (ix + 1 != info.size () && info[ix].must_end)
+	return false;
+      if (!info[ix].empty)
+	++length;
+    }
+  if (length < MIN_SEQUENCE)
+    return false;
+
+  gcov_type iterations = expected_loop_iterations_unbounded (loop) + 1;
+  if (iterations < 2
+      || iterations * (length - 1) <= length + 1)
+    return false;
+
+  seq = replay_sequence (0, 0, length);
+  seq.clones.emplace_back (0, info.size ());
+  return true;
+}
+
+static void
+hoist_counted_loops (function *cfn,
+		     std::vector<replay_span> const &replay_spans,
+		     std::vector<bool> &persistent_slots)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      class loop *loop = bb->loop_father;
+      if (!loop || loop->num == 0 || loop->header != bb)
+	continue;
+
+      replay_block info;
+      replay_sequence seq;
+      if (!counted_loop_payload (loop, info, seq))
+	continue;
+
+      basic_block preheader = dedicated_loop_preheader (loop);
+      auto spans = available_replay_spans (replay_spans, persistent_slots);
+      auto slot = std::find_if (spans.begin (), spans.end (),
+				[&seq] (replay_span span)
+				{ return span.end >= seq.length; });
+      if (!preheader || slot == spans.end ())
+	continue;
+
+      unsigned length
+	= replace_hoisted_sequence (seq, info, slot->begin, preheader);
+      std::fill (persistent_slots.begin () + slot->begin,
+		 persistent_slots.begin () + slot->begin + length, true);
+      if (dump_file)
+	fprintf (dump_file,
+		 "Counted-loop replay payload bb %d length %u captured at %u\n",
+		 bb->index, length, slot->begin);
+    }
+}
+
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
 
@@ -957,11 +1043,14 @@ transform (function *cfn, unsigned buffer_size)
       fprintf (dump_file, "\n");
     }
 
+  std::vector<bool> persistent_slots (buffer_size, false);
+  if (riscv_tt_opt_replay_hoist > 0)
+    hoist_counted_loops (cfn, replay_spans, persistent_slots);
+
   replay_block info; // insn info
   replay_list list; // list of sequences
   replay_map map; // map of sequences
   replay_active active; // pointers to active (under-consideration) sequences
-  std::vector<bool> persistent_slots (buffer_size, false);
   FOR_EACH_BB_FN (bb, cfn)
     {
       if (!scan_insns (info, bb))
