@@ -37,6 +37,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-dst-iteration.o \
 	gimple-rvtt-expand.o \
 	gimple-rvtt-immvar.o \
+	gimple-rvtt-invariant.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-lp-schedule.o \
 	gimple-rvtt-noval.o \

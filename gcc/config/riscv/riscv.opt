@@ -609,6 +609,10 @@ mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
+mtt-tensix-optimize-invariant-loadi
+Target Var(riscv_tt_opt_invariant_loadi) Init(0)
+Hoist loop-invariant Tensix immediate-vector materialization before register allocation.
+
 mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
 Discover and verify SFPLOADMACRO candidate regions without changing code.
