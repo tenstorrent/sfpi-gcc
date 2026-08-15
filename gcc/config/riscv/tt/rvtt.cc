@@ -262,6 +262,11 @@ void rvtt_mov_error (const rtx_insn *insn, bool is_load)
 // There has to be an internal version of this...
 void rvtt_prep_stmt_for_deletion(gimple *stmt)
 {
+  // Any SSA definition removed by an RVTT lowering may still be named by
+  // GIMPLE_DEBUG_BIND statements when compiling with -g.  Debug uses are not
+  // semantic uses and must not keep an otherwise-deleted definition alive.
+  reset_debug_uses (stmt);
+
   for (unsigned int i = 0; i < gimple_call_num_args (stmt); i++)
     {
       tree arg = gimple_call_arg(stmt, i);

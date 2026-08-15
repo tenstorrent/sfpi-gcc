@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa.h"
 #include "gimple-iterator.h"
 #include "tree-into-ssa.h"
+#include "tree-ssa.h"
 #include "rvtt.h"
 #include <unordered_map>
 
@@ -54,6 +55,21 @@ remove_stmt(gimple *g)
   gimple_stmt_iterator gsi = gsi_for_stmt(g);
   gsi_remove(&gsi, true);
   release_defs(g);
+}
+
+// This pass lowers boolean-tree SSA values into condition-code side effects.
+// A comparison's scalar result consequently stops having a definition.  With
+// debug information enabled, however, inlining can leave DEBUG_BIND uses of
+// that scalar behind.  Reset them before detaching the lhs; update_ssa cannot
+// repair a use whose defining statement no longer defines the name.
+static void
+clear_call_lhs (gcall *stmt)
+{
+  if (gimple_call_lhs (stmt) != NULL_TREE)
+    {
+      reset_debug_uses (stmt);
+      gimple_call_set_lhs (stmt, NULL_TREE);
+    }
 }
 
 static int
@@ -127,7 +143,7 @@ copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
     }
   gimple_set_location(new_stmt, gimple_location(stmt));
   // The icmp returns an int used in the boolean tree, the iadd return nothing
-  gimple_call_set_lhs(new_stmt, NULL_TREE);
+  clear_call_lhs (new_stmt);
   gimple_set_vuse(new_stmt, gimple_vuse(stmt));
   gimple_stmt_iterator gsi = gsi_for_stmt(stmt);
   gsi_insert_before(&gsi, new_stmt, GSI_SAME_STMT);
@@ -497,7 +513,7 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       {
 	int mod = flip_negated_cmp(stmt, insnd, negate);
 	if (cmp_issues_compc(mod)) *negated = true;
-	gimple_call_set_lhs (stmt, NULL_TREE);
+	clear_call_lhs (stmt);
 	*pre_gsip = *post_gsip = gsi_for_stmt(stmt);
       }
       break;
