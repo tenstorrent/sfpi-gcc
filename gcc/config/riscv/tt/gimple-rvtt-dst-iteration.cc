@@ -1,4 +1,4 @@
-/* Dump-only legality discovery for adjacent Dst-register iterations.
+/* Fuse legal adjacent Dst-register iterations.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -13,6 +13,7 @@ version.  */
 #include "coretypes.h"
 #include "backend.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "gimple.h"
 #include "tree-pass.h"
 #include "ssa.h"
@@ -61,13 +62,30 @@ body_call_p (gcall *call, const rvtt_insn_data *insnd)
     return true;
   if (insnd->id == rvtt_insn_data::synth_opcode)
     return false;
-  return !insnd->has_side_effects (call) && !insnd->is_live ()
+  /* SFPASSIGN_LV is the pure lane-merge used to materialize a value after a
+     conversion.  Its explicit live operands are checked for iteration-local
+     provenance in same_body_p.  Other live variants remain ineligible.  */
+  bool legal_live = !insnd->is_live ()
+    || insnd->id == rvtt_insn_data::sfpassign_lv;
+  return legal_live && !insnd->has_side_effects (call)
     && !insnd->sets_cc (call);
 }
 
+static unsigned
+dst_address_bits (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpload:
+    case rvtt_insn_data::sfpstore:
+      return TARGET_XTT_TENSIX_WH ? 14 : TARGET_XTT_TENSIX_BH ? 13 : 10;
+    default:
+      gcc_unreachable ();
+    }
+}
+
 static bool
-dst_access_legal_p (gcall *call, HOST_WIDE_INT increment,
-		    unsigned address_bits)
+dst_access_legal_p (gcall *call, HOST_WIDE_INT increment)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
   unsigned addr_arg = insnd->id == rvtt_insn_data::sfpload ? 1 : 2;
@@ -82,6 +100,7 @@ dst_access_legal_p (gcall *call, HOST_WIDE_INT increment,
       || wi::to_wide (mode) != no_increment_mode)
     return false;
   unsigned HOST_WIDE_INT address = tree_to_uhwi (addr);
+  unsigned address_bits = dst_address_bits (insnd);
   unsigned HOST_WIDE_INT limit = (HOST_WIDE_INT_1U << address_bits) - 1;
   return address <= limit - increment;
 }
@@ -100,12 +119,36 @@ increment_p (gcall *call, HOST_WIDE_INT *amount)
   if (TREE_CODE (dst) != INTEGER_CST)
     return false;
   *amount = tree_to_shwi (dst);
-  return *amount > 0 && *amount <= 3; // doubled value must fit signed CS4
+  return *amount == 2;
+}
+
+static void
+fuse_iterations (dst_iteration &first, dst_iteration &second,
+		 HOST_WIDE_INT increment)
+{
+  for (gcall *call : second.calls)
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (!typed_dst_access_p (insnd))
+	continue;
+      unsigned addr_arg = insnd->id == rvtt_insn_data::sfpload ? 1 : 2;
+      tree old_address = gimple_call_arg (call, addr_arg);
+      tree new_address = build_int_cst (TREE_TYPE (old_address),
+					 tree_to_uhwi (old_address) + increment);
+      gimple_call_set_arg (call, addr_arg, new_address);
+    }
+
+  tree old_increment = gimple_call_arg (second.increment, 1);
+  gimple_call_set_arg (second.increment, 1,
+		       build_int_cst (TREE_TYPE (old_increment), increment * 2));
+
+  gimple_stmt_iterator gsi = gsi_for_stmt (first.increment);
+  gsi_remove (&gsi, true);
 }
 
 static bool
 same_body_p (const dst_iteration &a, const dst_iteration &b,
-	     HOST_WIDE_INT increment, unsigned address_bits)
+	     HOST_WIDE_INT increment)
 {
   if (a.rejected || b.rejected || a.calls.size () != b.calls.size ()
       || a.calls.empty ())
@@ -122,21 +165,32 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
       const rvtt_insn_data *ib = rvtt_get_insn_data (cb);
       if (ia->id != ib->id
 	  || gimple_call_num_args (ca) != gimple_call_num_args (cb))
-	return false;
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, "Dst-body mismatch: call=%u opcode/arity\n", i);
+	  return false;
+	}
 
       bool access = typed_dst_access_p (ia);
       if (access)
 	{
-	  if (!dst_access_legal_p (ca, increment, address_bits)
-	      || !dst_access_legal_p (cb, increment, address_bits))
-	    return false;
+	  if (!dst_access_legal_p (ca, increment)
+	      || !dst_access_legal_p (cb, increment))
+	    {
+	      if (dump_file && (dump_flags & TDF_DETAILS))
+		fprintf (dump_file, "Dst-body mismatch: call=%u access-legality\n", i);
+	      return false;
+	    }
 	  ia->id == rvtt_insn_data::sfpload ? ++loads : ++stores;
 	}
 
       unsigned addr_arg = ia->id == rvtt_insn_data::sfpload ? 1
 	: ia->id == rvtt_insn_data::sfpstore ? 2 : ~0u;
-      unsigned var_arg = access ? ia->var_arg () : ~0u;
-      unsigned id_arg = access ? ia->id_arg () : ~0u;
+      /* Synthesized encoding operands identify the compile-time instruction
+	 buffer slot, not the operation's semantics, and legitimately differ
+	 between otherwise identical unrolled iterations.  */
+      unsigned var_arg = ia->has_var () ? ia->var_arg () : ~0u;
+      unsigned id_arg = ia->has_var () ? ia->id_arg () : ~0u;
       for (unsigned argno = 0; argno != gimple_call_num_args (ca); ++argno)
 	{
 	  if (argno == var_arg || argno == id_arg)
@@ -146,24 +200,46 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	  if (argno == addr_arg)
 	    {
 	      if (!integer_cst_eq (va, vb))
-		return false;
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u address\n", i, argno);
+		  return false;
+		}
 	      continue;
 	    }
 	  if (vector_value_p (va))
 	    {
 	      auto it = values.find (va);
+	      if (ia->is_live () && it == values.end ())
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u live-in\n", i, argno);
+		  return false;
+		}
 	      if ((it == values.end () && va != vb)
 		  || (it != values.end () && it->second != vb))
-		return false;
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u vector\n", i, argno);
+		  return false;
+		}
 	    }
-	  else if (va != vb && !integer_cst_eq (va, vb))
-	    return false;
+	  else if (!operand_equal_p (va, vb, 0))
+	    {
+	      if (dump_file && (dump_flags & TDF_DETAILS))
+		fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u scalar\n", i, argno);
+	      return false;
+	    }
 	}
 
       tree la = gimple_call_lhs (ca);
       tree lb = gimple_call_lhs (cb);
       if (!!la != !!lb)
-	return false;
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, "Dst-body mismatch: call=%u lhs\n", i);
+	  return false;
+	}
       if (vector_value_p (la))
 	values.emplace (la, lb);
     }
@@ -185,7 +261,7 @@ defs_closed_p (const dst_iteration &iteration)
 	  imm_use_iterator iter;
 	  gimple *use;
 	  FOR_EACH_IMM_USE_STMT (use, iter, lhs)
-	    if (!members.count (use))
+	    if (!is_gimple_debug (use) && !members.count (use))
 	      return false;
 	}
   return true;
@@ -194,8 +270,6 @@ defs_closed_p (const dst_iteration &iteration)
 static unsigned
 discover (function *fn)
 {
-  const unsigned address_bits = TARGET_XTT_TENSIX_WH ? 14
-    : TARGET_XTT_TENSIX_BH ? 13 : 10;
   unsigned candidates = 0;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -216,21 +290,36 @@ discover (function *fn)
 	      if (started && previous.increment)
 		{
 		  HOST_WIDE_INT prior;
-		  bool legal = increment_p (previous.increment, &prior)
-		    && prior == increment
-		    && same_body_p (previous, current, increment, address_bits)
-		    && defs_closed_p (previous) && defs_closed_p (current);
+		  bool increment_legal = increment_p (previous.increment, &prior)
+		    && prior == increment;
+		  bool same_body = increment_legal
+		    && same_body_p (previous, current, increment);
+		  bool first_closed = same_body && defs_closed_p (previous);
+		  bool second_closed = first_closed && defs_closed_p (current);
+		  bool legal = second_closed;
+		  if (!legal && dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file,
+			     "Dst-iteration rejected: bb=%d first-ops=%zu "
+			     "second-ops=%zu rejected=%d/%d increment=%d "
+			     "same-body=%d closed=%d/%d\n",
+			     bb->index, previous.calls.size (), current.calls.size (),
+			     previous.rejected, current.rejected, increment_legal,
+			     same_body, first_closed, second_closed);
 		  if (legal)
 		    {
 		      ++candidates;
+		      bool emit = !TARGET_XTT_TENSIX_QSR;
+		      if (emit)
+			fuse_iterations (previous, current, increment);
 		      if (dump_file)
 			fprintf (dump_file,
 				 "Dst-iteration candidate: bb=%d ops=%zu "
-				 "addr-delta=%ld final-rwc=%ld target=%s emit=no\n",
+				 "addr-delta=%ld final-rwc=%ld target=%s emit=%s\n",
 				 bb->index, current.calls.size (), (long) increment,
 				 (long) (increment * 2),
 				 TARGET_XTT_TENSIX_WH ? "wh" :
-				 TARGET_XTT_TENSIX_BH ? "bh" : "qsr");
+				 TARGET_XTT_TENSIX_BH ? "bh" : "qsr",
+				 emit ? "yes" : "no");
 		      previous = dst_iteration ();
 		      current = dst_iteration ();
 		      started = false;
@@ -285,7 +374,7 @@ public:
   unsigned execute (function *fn) final override
   {
     discover (fn);
-    return 0;
+    return TODO_update_ssa;
   }
 };
 
