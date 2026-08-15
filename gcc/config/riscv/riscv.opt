@@ -590,6 +590,10 @@ mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
 Fill Tensix result-latency bubbles with independent ready SFPU instructions
 
+mtt-tensix-optimize-dst-iteration-fusion
+Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
+Recognize legal adjacent Tensix Dst-register iterations
+
 mtt-tensix-optimize-lp-schedule
 Target Undocumented Alias(mtt-tensix-optimize-pressure-schedule)
 
