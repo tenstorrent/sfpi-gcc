@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2" }
-// { dg-final { scan-assembler-not "SFPLOADI[^\\n]*\\n[^\\n]*SFPMOV[^\\n]*\\n[^\\n]*SFPLOADI" } }
+// { dg-final { scan-assembler-not "SFPLOADI.*\\n.*SFPMOV.*\\n.*SFPLOADI" } }
 
 void *buf;
 
