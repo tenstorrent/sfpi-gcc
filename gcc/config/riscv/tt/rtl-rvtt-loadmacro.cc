@@ -55,6 +55,7 @@ enum class descriptor_status
 {
   no_match,
   described,
+  resource_mismatch,
   dynamic_encoding,
   unclosed_dependency
 };
@@ -168,6 +169,28 @@ same_reg_p (rtx a, rtx b)
   return hard_lreg_p (a) && hard_lreg_p (b) && REGNO (a) == REGNO (b);
 }
 
+static const char *
+macro_target_name ()
+{
+  if (TARGET_XTT_TENSIX_WH)
+    return "wh-v2";
+  if (TARGET_XTT_TENSIX_BH)
+    return "bh-v3";
+  if (TARGET_XTT_TENSIX_QSR)
+    return "qsr-v4";
+  gcc_unreachable ();
+}
+
+static const char *
+macro_target_encoding_name ()
+{
+  if (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
+    return "lregind-address";
+  if (TARGET_XTT_TENSIX_QSR)
+    return "seqid-split-vd-done";
+  gcc_unreachable ();
+}
+
 /* Recognize a load-load-swap-store resource shape without relying on a source
    function or operation name.  This is descriptor construction only: emission
    remains blocked by the calendar and simulator proofs.  */
@@ -198,6 +221,13 @@ describe_load_load_swap_store (const macro_candidate &candidate,
       || recog_memoized (insns[2]) != CODE_FOR_rvtt_sfpswap_int
       || !store_p (insns[3]))
     return descriptor_status::no_match;
+
+  if (get_attr_xtt_macro_resource (insns[0]) != XTT_MACRO_RESOURCE_LOAD
+      || get_attr_xtt_macro_resource (insns[1]) != XTT_MACRO_RESOURCE_LOAD
+      || (get_attr_xtt_macro_resource (insns[2])
+	  != XTT_MACRO_RESOURCE_SIMPLE_MAD_WRITE)
+      || get_attr_xtt_macro_resource (insns[3]) != XTT_MACRO_RESOURCE_STORE)
+    return descriptor_status::resource_mismatch;
 
   extract_insn (insns[0]);
   rtx load0 = recog_data.operand[0];
@@ -264,9 +294,15 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
 	     "  descriptor=periodic-load-load-swap-store "
 	     "lregs=%u,%u->%u swap_mod=" HOST_WIDE_INT_PRINT_DEC " "
 	     "encoding=constant deps=closed cc=none "
-	     "rwc=outside-candidate emit=no\n",
+	     "rwc=outside-candidate "
+	     "resources=load,load,simple+mad-write,store "
+	     "target=%s target-encoding=%s calendar=missing emit=no\n",
 	     descriptor.load0_reg, descriptor.load1_reg, descriptor.store_reg,
-	     descriptor.swap_mod);
+	     descriptor.swap_mod, macro_target_name (),
+	     macro_target_encoding_name ());
+  else if (status == descriptor_status::resource_mismatch)
+    fprintf (dump_file,
+	     "  descriptor-reject=resource-attribute-mismatch emit=no\n");
   else if (status == descriptor_status::dynamic_encoding)
     fprintf (dump_file,
 	     "  descriptor-reject=dynamic-encoding emit=no\n");
