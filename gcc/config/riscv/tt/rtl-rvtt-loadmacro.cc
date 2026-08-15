@@ -143,11 +143,9 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
-/* The programmed template, sequence-zero, and misc fields are explicitly
-   opt-in compiler-owned resources.  Do not mix the formed representation
-   with source-visible configuration accesses in the same function: their
-   relative slot semantics cannot be recovered after the explicit body is
-   deleted.  */
+/* Opt-in formation owns every programmed load-macro field in the function.
+   Calls, opaque asm, and source-visible config access have architectural
+   effects this late RTL cannot order relative to that ownership.  */
 static bool
 source_config_access_p (function *fn)
 {
@@ -218,6 +216,12 @@ all_lanes_enable_before (rtx_insn *first)
 
 struct predicated_select_descriptor
 {
+  rtx_insn *insns[7] {};
+  rtx_insn *increment_insn = nullptr;
+  rtx_insn *all_lanes_enable = nullptr;
+  rtx load_mem[3] {};
+  rtx store_mem = nullptr;
+  rtx macro_lreg = nullptr;
   unsigned condition_reg = INVALID_REGNUM;
   unsigned true_reg = INVALID_REGNUM;
   unsigned false_reg = INVALID_REGNUM;
@@ -679,7 +683,8 @@ assign_with_live_value_p (rtx_insn *insn, rtx *dest, rtx *live,
 }
 
 static bool
-constant_typed_load (rtx_insn *insn, rtx *reg, HOST_WIDE_INT *address,
+constant_typed_load (rtx_insn *insn, rtx *reg, rtx *mem,
+		     HOST_WIDE_INT *address,
 		     HOST_WIDE_INT *mode, HOST_WIDE_INT *address_mode)
 {
   if (!load_p (insn))
@@ -694,10 +699,30 @@ constant_typed_load (rtx_insn *insn, rtx *reg, HOST_WIDE_INT *address,
       || !CONST_INT_P (recog_data.operand[8]))
     return false;
   *reg = recog_data.operand[0];
+  *mem = recog_data.operand[1];
   *address = INTVAL (recog_data.operand[4]);
   *mode = INTVAL (recog_data.operand[7]);
   *address_mode = INTVAL (recog_data.operand[8]);
   return hard_lreg_p (*reg);
+}
+
+static rtx_insn *
+exact_dst_increment_after (rtx_insn *last)
+{
+  rtx_insn *insn = next_nonnote_nondebug_insn (last);
+  if (!insn || BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (last)
+      || recog_memoized (insn) != CODE_FOR_rvtt_ttincrwc)
+    return nullptr;
+  extract_insn (insn);
+  return (CONST_INT_P (recog_data.operand[0])
+	  && INTVAL (recog_data.operand[0]) == 0
+	  && CONST_INT_P (recog_data.operand[1])
+	  && INTVAL (recog_data.operand[1]) == 2
+	  && CONST_INT_P (recog_data.operand[2])
+	  && INTVAL (recog_data.operand[2]) == 0
+	  && CONST_INT_P (recog_data.operand[3])
+	  && INTVAL (recog_data.operand[3]) == 0)
+    ? insn : nullptr;
 }
 
 /* Describe the outermost predicated three-load select which can be evaluated
@@ -713,49 +738,55 @@ describe_predicated_three_load_select_store (
       || candidate.stores != 1 || TARGET_XTT_TENSIX_QSR)
     return descriptor_status::no_match;
 
-  rtx_insn *insns[7];
   unsigned count = 0;
   for (rtx_insn *insn = candidate.first; insn; insn = NEXT_INSN (insn))
     {
       if (NONDEBUG_INSN_P (insn))
 	{
-	  if (count == ARRAY_SIZE (insns))
+	  if (count == ARRAY_SIZE (descriptor->insns))
 	    return descriptor_status::no_match;
-	  insns[count++] = insn;
+	  descriptor->insns[count++] = insn;
 	}
       if (insn == candidate.last)
 	break;
     }
-  if (count != ARRAY_SIZE (insns)
-      || !load_p (insns[0]) || !load_p (insns[1]) || !load_p (insns[2])
-      || recog_memoized (insns[3]) != CODE_FOR_rvtt_sfpsetcc_v
-      || recog_memoized (insns[5]) != CODE_FOR_rvtt_sfpencc
-      || !store_p (insns[6]))
+  if (count != ARRAY_SIZE (descriptor->insns)
+      || !load_p (descriptor->insns[0])
+      || !load_p (descriptor->insns[1])
+      || !load_p (descriptor->insns[2])
+      || recog_memoized (descriptor->insns[3]) != CODE_FOR_rvtt_sfpsetcc_v
+      || recog_memoized (descriptor->insns[5]) != CODE_FOR_rvtt_sfpencc
+      || !store_p (descriptor->insns[6]))
     return descriptor_status::no_match;
 
   rtx condition, on_true, on_false;
   HOST_WIDE_INT condition_address, true_address, false_address;
   HOST_WIDE_INT condition_mode, true_mode, false_mode;
   HOST_WIDE_INT condition_addr_mode, true_addr_mode, false_addr_mode;
-  if (!constant_typed_load (insns[0], &condition, &condition_address,
+
+  if (!constant_typed_load (descriptor->insns[0], &condition,
+			    &descriptor->load_mem[0], &condition_address,
 			    &condition_mode, &condition_addr_mode)
-      || !constant_typed_load (insns[1], &on_true, &true_address,
+      || !constant_typed_load (descriptor->insns[1], &on_true,
+			       &descriptor->load_mem[1], &true_address,
 			       &true_mode, &true_addr_mode)
-      || !constant_typed_load (insns[2], &on_false, &false_address,
+      || !constant_typed_load (descriptor->insns[2], &on_false,
+			       &descriptor->load_mem[2], &false_address,
 			       &false_mode, &false_addr_mode))
     return descriptor_status::dynamic_encoding;
 
-  extract_insn (insns[3]);
+  extract_insn (descriptor->insns[3]);
   rtx predicate_reg = recog_data.operand[0];
   rtx predicate_mod = recog_data.operand[1];
   rtx result, live_value, selected_value;
-  if (!assign_with_live_value_p (insns[4], &result, &live_value,
+  if (!assign_with_live_value_p (descriptor->insns[4], &result, &live_value,
 				 &selected_value))
     return descriptor_status::no_match;
-  extract_insn (insns[5]);
+  extract_insn (descriptor->insns[5]);
   rtx encc_imm = recog_data.operand[0];
   rtx encc_mod = recog_data.operand[1];
-  extract_insn (insns[6]);
+  extract_insn (descriptor->insns[6]);
+  descriptor->store_mem = recog_data.operand[0];
   rtx store_opcode = recog_data.operand[1];
   rtx store_encoding = recog_data.operand[2];
   rtx store_address = recog_data.operand[3];
@@ -784,9 +815,9 @@ describe_predicated_three_load_select_store (
     && INTVAL (store_addr_mode) == expected_addr_mode
     && condition_address == INTVAL (store_address)
     && true_mode == false_mode && false_mode == INTVAL (store_mode)
-    && condition_address >= 0 && condition_address <= 0x3fff
-    && true_address >= 0 && true_address <= 0x3fff
-    && false_address >= 0 && false_address <= 0x3fff
+    && condition_address >= 0 && condition_address <= 0xff
+    && true_address >= 0 && true_address <= 0xff
+    && false_address >= 0 && false_address <= 0xff
     && !(condition_address & 1) && !(true_address & 1)
     && !(false_address & 1)
     && condition_mode >= 0 && condition_mode <= 0xf
@@ -805,7 +836,14 @@ describe_predicated_three_load_select_store (
      first descriptor and prove concrete post-region references locally.  A
      later transforming slice must replace this with explicit cross-BB effect
      edges before admitting internal CFG regions.  */
-  if (!single_succ_p (bb) || single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))
+  bool direct_exit = single_succ_p (bb)
+    && single_succ (bb) == EXIT_BLOCK_PTR_FOR_FN (cfun);
+  bool self_loop = false;
+  edge edge;
+  edge_iterator ei;
+  FOR_EACH_EDGE (edge, ei, bb->succs)
+    self_loop |= edge->dest == bb;
+  if (!direct_exit && !self_loop)
     return descriptor_status::unclosed_dependency;
   for (unsigned regno : regs)
     {
@@ -840,7 +878,168 @@ describe_predicated_three_load_select_store (
   descriptor->sequence0 = 0x13000004u; /* SETCC d0, store d2.  */
   descriptor->sequence2 = 0x00000005u; /* ENCC d0.  */
   descriptor->misc = 0x700u | unsigned (true_mode); /* Fixed store Mod0.  */
+  descriptor->macro_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  descriptor->increment_insn
+    = exact_dst_increment_after (descriptor->insns[6]);
+  descriptor->all_lanes_enable
+    = all_lanes_enable_before (descriptor->insns[0]);
   return descriptor_status::described;
+}
+
+static bool
+select_emission_exact_p (const predicated_select_descriptor &descriptor)
+{
+  return (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
+    && descriptor.condition_mode == 2
+    && descriptor.payload_mode == 6
+    && descriptor.misc == 0x706u
+    && descriptor.template0 == 0x7b0000c6u
+    && descriptor.template1 == 0x8a0000d0u
+    && descriptor.sequence0 == 0x13000004u
+    && descriptor.sequence2 == 0x00000005u
+    && descriptor.all_lanes_enable
+    && descriptor.increment_insn;
+}
+
+static void
+emit_select_config ()
+{
+  rtx lreg0 = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  emit_config_word (lreg0, 0x7b0000c6u, 0); /* template 0: SETCC EQ0.  */
+  emit_config_word (lreg0, 0x8a0000d0u, 1); /* template 1: ENCC.  */
+  emit_config_word (lreg0, 0x13000004u, 4); /* sequence index 0.  */
+  emit_config_word (lreg0, 0x00000000u, 5); /* sequence index 1: idle.  */
+  emit_config_word (lreg0, 0x00000005u, 6); /* sequence index 2.  */
+  emit_config_word (lreg0, 0x00000706u, 8); /* fixed U16 store mode.  */
+}
+
+static unsigned
+select_launch_word (unsigned macro_index, HOST_WIDE_INT mode,
+		    HOST_WIDE_INT address_mode, HOST_WIDE_INT address)
+{
+  return 0x93000000u | (macro_index << 22) | (unsigned (mode) << 16)
+    | (unsigned (address_mode) << 14) | unsigned (address);
+}
+
+static void
+emit_select_launch (const predicated_select_descriptor &descriptor,
+		    unsigned index)
+{
+  /* The accepted WH/BH selector protocol uses the macro instruction's raw
+     Dst-row addressing mode (zero).  The explicit loads' target-specific
+     address-mode values were proved above but are not copied into the macro
+     field: on BH, doing so would overlap InstrMod0 and silently turn the
+     opening F16b mode 2 load into mode 3.  */
+  const HOST_WIDE_INT macro_address_mode = 0;
+  const HOST_WIDE_INT addresses[] = {
+    descriptor.condition_address,
+    descriptor.true_address,
+    descriptor.false_address
+  };
+  HOST_WIDE_INT mode = index == 0 ? descriptor.condition_mode
+				   : descriptor.payload_mode;
+  rtx store_effect = index == 0 ? descriptor.store_mem : const0_rtx;
+  emit_insn (gen_rvtt_sfploadmacro_select_int (
+    descriptor.macro_lreg, descriptor.load_mem[index], store_effect,
+    GEN_INT (addresses[index]), GEN_INT (mode),
+    GEN_INT (macro_address_mode),
+    GEN_INT (select_launch_word (index, mode, macro_address_mode,
+				 addresses[index]))));
+}
+
+/* Return the unique unconditional external predecessor of a canonical
+   one-block loop.  The single-successor requirement proves at least one
+   iteration on this edge, so hoisting the all-lanes enable is not a zero-trip
+   CC change.  No other Tensix issue may own config, CC, LREG, or calendar
+   state between the materialization and a launch.  */
+static basic_block
+select_loop_preheader (const predicated_select_descriptor &descriptor)
+{
+  basic_block body = BLOCK_FOR_INSN (descriptor.insns[0]);
+  edge incoming = nullptr;
+  unsigned self_edges = 0;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, body->preds)
+    if (e->src == body)
+      ++self_edges;
+    else if (incoming)
+      return nullptr;
+    else
+      incoming = e;
+  if (self_edges != 1 || !incoming
+      || EDGE_COUNT (incoming->src->succs) != 1)
+    return nullptr;
+
+  for (rtx_insn *insn = BB_HEAD (body); insn; insn = NEXT_INSN (insn))
+    {
+      if (tensix_p (insn))
+	{
+	  bool owned = insn == descriptor.all_lanes_enable
+	    || insn == descriptor.increment_insn;
+	  for (rtx_insn *member : descriptor.insns)
+	    owned |= insn == member;
+	  if (!owned)
+	    return nullptr;
+	}
+      if (insn == BB_END (body))
+	break;
+    }
+  return incoming->src;
+}
+
+static bool
+select_self_loop_p (const predicated_select_descriptor &descriptor)
+{
+  basic_block body = BLOCK_FOR_INSN (descriptor.insns[0]);
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, body->succs)
+    if (e->dest == body)
+      return true;
+  return false;
+}
+
+static void
+emit_predicated_select (const predicated_select_descriptor &descriptor,
+			basic_block preheader)
+{
+  start_sequence ();
+  if (preheader)
+    emit_insn (copy_rtx (PATTERN (descriptor.all_lanes_enable)));
+  emit_select_config ();
+  rtx_insn *config = get_insns ();
+  end_sequence ();
+
+  start_sequence ();
+  emit_select_launch (descriptor, 0);
+  emit_select_launch (descriptor, 1);
+  emit_select_launch (descriptor, 2);
+  rtx_insn *launches = get_insns ();
+  end_sequence ();
+
+  if (preheader)
+    {
+      if (preheader == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	emit_insn_at_entry (config);
+      else
+	{
+	  rtx_insn *anchor = BB_END (preheader);
+	  if (JUMP_P (anchor))
+	    emit_insn_before (config, anchor);
+	  else
+	    emit_insn_after (config, anchor);
+	}
+      delete_insn (descriptor.all_lanes_enable);
+    }
+  else
+    emit_insn_before (config, descriptor.insns[0]);
+  emit_insn_before (launches, descriptor.insns[0]);
+  for (rtx_insn *insn : descriptor.insns)
+    delete_insn (insn);
+  /* The exact typed TTINCRWC remains in cycle N+3.  It is both the original
+     Dst-counter effect and the non-SFPU drain slot in which ENCC and the
+     delayed Store retire.  */
 }
 
 static void
@@ -887,6 +1086,8 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
     ? describe_predicated_three_load_select_store (candidate,
 						    &select_descriptor)
     : descriptor_status::no_match;
+  bool select_exact = select_status == descriptor_status::described
+    && select_emission_exact_p (select_descriptor);
   if (select_status == descriptor_status::described)
     fprintf (dump_file,
 	     "  descriptor=predicated-three-load-select-store "
@@ -896,7 +1097,7 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
 	     "address-mode=" HOST_WIDE_INT_PRINT_DEC " cc=closed "
 	     "calendar=load0:setcc-d0,store-d2;load1;load2:encc-d0 "
 	     "templates=%08x,%08x sequences=%08x,%08x misc=%03x "
-	     "simulator=cc-event-model-proven emit=no\n",
+	     "simulator=cc-event-model-proven emit=%s\n",
 	     select_descriptor.condition_reg, select_descriptor.true_reg,
 	     select_descriptor.false_reg, select_descriptor.result_reg,
 	     select_descriptor.condition_address, select_descriptor.true_address,
@@ -904,7 +1105,8 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
 	     select_descriptor.payload_mode, select_descriptor.address_mode,
 	     select_descriptor.template0, select_descriptor.template1,
 	     select_descriptor.sequence0, select_descriptor.sequence2,
-	     select_descriptor.misc);
+	     select_descriptor.misc,
+	     riscv_tt_emit_loadmacro && select_exact ? "locally-eligible" : "no");
   else if (select_status == descriptor_status::dynamic_encoding)
     fprintf (dump_file,
 	     "  predicated-select-reject=encoding-or-format emit=no\n");
@@ -922,10 +1124,11 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
     fprintf (dump_file, "  reject=%s\n",
 	     reject_reason_name (reject_reason::unsupported_bulk_operation));
 
-  /* D4 deliberately stops before emission.  These are not generic caveats:
-     they are the concrete proofs absent from the current RTL.  Listing each
-     one makes the dump a stable checklist for the event-model and descriptor
-     patches which follow.  */
+  /* Keep the original analysis checklist for shapes which do not discharge
+     the exact selector contract.  An exact opt-in selector has concrete
+     encoding, effect, calendar, and simulator proofs and must not be dumped
+     as though those proofs were still missing.  Function-level config
+     ownership and unique-site admission are checked after discovery.  */
   const reject_reason pending[] = {
     reject_reason::unsafe_replay_member,
     reject_reason::dynamic_encoding_unproved,
@@ -936,25 +1139,27 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
     reject_reason::subunit_calendar_missing,
     reject_reason::simulator_event_model_missing
   };
-  for (reject_reason reason : pending)
-    fprintf (dump_file, "  reject=%s\n", reject_reason_name (reason));
+  if (!(riscv_tt_emit_loadmacro && select_exact))
+    for (reject_reason reason : pending)
+      fprintf (dump_file, "  reject=%s\n", reject_reason_name (reason));
 }
 
-/* Discover maximal load...store stretches in each basic block.  Analysis mode
-   remains byte-identical; emission mode replaces only a fully configured and
-   proven region.  */
+/* Discover maximal load...store stretches in each basic block.  Analysis is
+   byte-identical.  Opt-in formation is deferred until the complete function
+   proves exactly one owned static descriptor site across both executable
+   calendars.  */
 static bool
 discover (function *fn)
 {
   bool changed = false;
   bool config_available = !source_config_access_p (fn);
   auto_vec<configured_descriptor, 2> configured_regions;
+  auto_vec<predicated_select_descriptor, 2> select_regions;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
       macro_candidate candidate;
       rtx_insn *insn;
-
       for (insn = BB_HEAD (bb); insn; )
 	{
 	  rtx_insn *next = insn == BB_END (bb) ? nullptr : NEXT_INSN (insn);
@@ -1002,6 +1207,13 @@ discover (function *fn)
 		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
 		  && describe_configured_region (candidate, &configured))
 		configured_regions.safe_push (configured);
+	      predicated_select_descriptor descriptor;
+	      if (riscv_tt_emit_loadmacro && config_available
+		  && describe_predicated_three_load_select_store (candidate,
+							       &descriptor)
+		       == descriptor_status::described
+		  && select_emission_exact_p (descriptor))
+		select_regions.safe_push (descriptor);
 	      candidate = macro_candidate {};
 	    }
 	  insn = next;
@@ -1011,10 +1223,14 @@ discover (function *fn)
 	dump_candidate (bb, candidate, false);
     }
   /* A function-owned descriptor is materialized once only when the complete
-     function has exactly one static launch site.  Multiple sites need path-
-     sensitive descriptor ownership and are deliberately left byte-identical.
+     function has exactly one static launch site across all admitted calendars.
+     Multiple sites need path-sensitive descriptor ownership and are
+     deliberately left byte-identical.
      A canonical one-block loop gets its enable and configuration in the
      structural preheader; a straight-line site retains local setup.  */
+  if (configured_regions.length () + select_regions.length () != 1)
+    return changed;
+
   if (configured_regions.length () == 1)
     {
       basic_block preheader
@@ -1025,6 +1241,15 @@ discover (function *fn)
       if (preheader || !self_loop_p (configured_regions[0]))
 	{
 	  emit_configured_region (configured_regions[0], preheader);
+	  changed = true;
+	}
+    }
+  else
+    {
+      basic_block preheader = select_loop_preheader (select_regions[0]);
+      if (preheader || !select_self_loop_p (select_regions[0]))
+	{
+	  emit_predicated_select (select_regions[0], preheader);
 	  changed = true;
 	}
     }
