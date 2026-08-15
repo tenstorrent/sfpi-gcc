@@ -236,3 +236,28 @@ which needs to preserve or interoperate with macro slot zero must not use the
 opt-in option.  Wider shapes, dual writes, counter updates other than the
 proved exact absorbed increment, unknown CC state, and source-owned
 configuration all retain the explicit instruction fallback.
+
+## Exact three-slot selector emitter
+
+`-mtt-tensix-emit-loadmacro` is a separate default-off formation gate for the
+one calendar whose full delayed-event contract is now modeled and
+differentially tested.  It accepts a structural three-load predicated select,
+not an operation or kernel name.  The accepted region has:
+
+- condition format 2 and payload/store format 6;
+- typed all-lanes CC materialization immediately before the region;
+- templates `0x7b0000c6` (Simple SETCC EQ0) and `0x8a0000d0` (Simple ENCC);
+- sequences `0x13000004` and `0x00000005`, plus misc `0x706`;
+- exactly three same-VD launches, encoded with raw macro address mode zero;
+- an exact typed `TTINCRWC(0, 2, 0, 0)` in cycle N+3 as both the original Dst
+  effect and the delayed SETCC/ENCC/Store drain.
+
+The compiler materializes the six owned config words (including the idle
+middle sequence) once immediately before
+a straight-line region or once on the unique at-least-once loop-entry edge.
+Calls, inline asm, source config access, multiple eligible sites, zero-trip or
+non-canonical loops, wrong/missing drains, Quasar, and any encoding mismatch
+retain byte-identical explicit code.  Wormhole and Blackhole emit the same
+accepted launch words; target-specific ordinary-load address modes are proved
+but never copied into the macro field, where the Blackhole value would overlap
+`InstrMod0`.

@@ -4,6 +4,8 @@ using namespace sfpi;
 
 void predicated_select_in_place ()
 {
+  __builtin_rvtt_sfppushc (0);
+  __builtin_rvtt_sfppopc (0);
   vFloat condition = dst_reg[0].mode<DataLayout::F16b> ();
   vUInt on_true = dst_reg[32].mode<DataLayout::U16> ();
   vUInt on_false = dst_reg[64].mode<DataLayout::U16> ();
@@ -14,6 +16,7 @@ void predicated_select_in_place ()
     }
   v_endif;
   dst_reg[0].mode<DataLayout::U16> () = result;
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 }
 
 void predicated_select_distinct_output ()

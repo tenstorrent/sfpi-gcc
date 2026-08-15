@@ -764,6 +764,26 @@
   DONE;
 })
 
+;; One launch in a compiler-owned WH/BH three-slot select calendar.  The
+;; opening launch carries the delayed Store's Dst effect; middle/closing
+;; launches pass const0_rtx for operand 2.  Keeping every launch as its own
+;; volatile RTL instruction preserves the required consecutive issue slots.
+(define_insn "rvtt_sfploadmacro_select_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
+          (match_operand:SI 2 "mem_or_0_operand" "X") ;; delayed store effect
+          (match_operand:SI 3 "const_int_operand" "n") ;; address
+          (match_operand:SI 4 "const_int_operand" "n") ;; load format
+          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
+          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch
+          ] UNSPECV_SFPLOADMACRO))]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%6"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
+   (set_attr "xtt_replay" "barrier")])
+
 (define_insn "rvtt_sfpload_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
         (unspec_volatile:XTT32SI [
