@@ -188,12 +188,12 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	    goto clobber;
 	  }
 
-	if (get_attr_type (insn) != TYPE_TENSIX)
-	  goto not_tensix;
-
-	replay_span span;
-	if (auto type = is_replay_insn (span, insn))
+	auto replay_class = get_attr_xtt_replay (insn);
+	if (replay_class == XTT_REPLAY_OWNER)
 	  {
+	    replay_span span;
+	    auto type = is_replay_insn (span, insn);
+	    gcc_assert (type != REPLAY_none);
 	    if (type == REPLAY_variable_capture)
 	      // We don't know where this ends, so have to stop scanning the
 	      // BB.
@@ -203,6 +203,15 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	      shadow = span.end;
 	    continue;
 	  }
+
+	// Only machine-described replay-safe instructions may enter a payload.
+	// Explicit replay owners are handled above so their reserved slots remain
+	// visible to the allocator.  In particular, an opaque asm remains a
+	// boundary even if it happens to print a constant `.ttinsn' word in the
+	// final assembly.
+	if (get_attr_type (insn) != TYPE_TENSIX
+	    || replay_class != XTT_REPLAY_SAFE)
+	  goto not_tensix;
 
 	bool is_empty = !get_attr_length (insn);
 	if (shadow)

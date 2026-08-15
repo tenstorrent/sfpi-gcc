@@ -31,6 +31,22 @@
          (eq_attr "type" "tensix") (const_string "sfpu")]
         (const_string "none")))
 
+;; Replay formation is intentionally stricter than Tensix membership.  A
+;; `safe' instruction may be copied into an automatically generated replay
+;; recording.  A barrier remains at its source position and terminates any
+;; candidate payload.  An owner reserves or plays an explicitly managed replay
+;; range.  Opaque asm has no `safe' classification and therefore remains a hard
+;; boundary.
+(define_enum "xtt_replay" [
+  none
+  safe
+  barrier
+  owner
+])
+
+(define_enum_attr "xtt_replay" "xtt_replay"
+  (const_string "barrier"))
+
 (define_automaton "rvtt_tensix")
 (define_cpu_unit "rvtt_math,rvtt_sfpu,rvtt_tdma,rvtt_cfg,rvtt_sync"
   "rvtt_tensix")
