@@ -617,6 +617,10 @@ mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
 Discover and verify SFPLOADMACRO candidate regions without changing code.
 
+mtt-tensix-emit-loadmacro
+Target Var(riscv_tt_emit_loadmacro) Init(0)
+Own the programmed macro configuration fields and emit fully configured SFPLOADMACRO regions after proving architectural effects.
+
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
 Length of replay buffer for replay optimization use.
