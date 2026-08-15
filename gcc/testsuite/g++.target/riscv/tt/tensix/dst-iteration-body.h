@@ -12,19 +12,25 @@ store_dst (vec_t value, unsigned address)
   __builtin_rvtt_sfpstore (nullptr, value, address, 0, 0, 0, DST_MODE);
 }
 
+#ifndef DST_INELIGIBLE_ONLY
+// The synthesized instruction-buffer var/id operands differ after unrolling,
+// but every semantic scalar and the internally paired live values agree.
 __attribute__ ((noinline)) void
 eligible_pair ()
 {
   vec_t a0 = load_dst (0);
   vec_t b0 = load_dst (64);
-  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  vec_t p0 = __builtin_rvtt_sfpmul (a0, b0, 0);
+  store_dst (__builtin_rvtt_sfpassign_lv (p0, p0), 128);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 
   vec_t a1 = load_dst (0);
   vec_t b1 = load_dst (64);
-  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  vec_t p1 = __builtin_rvtt_sfpmul (a1, b1, 0);
+  store_dst (__builtin_rvtt_sfpassign_lv (p1, p1), 128);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 }
+#endif
 
 // The row bodies differ.
 __attribute__ ((noinline)) void
@@ -90,3 +96,139 @@ rwc_mismatch ()
   store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 }
+
+// The +2 rewrite must remain representable in the access's own address field.
+__attribute__ ((noinline)) void
+address_overflow ()
+{
+  vec_t a0 = load_dst (DST_LIMIT);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (DST_LIMIT);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+// Typed Dst accesses must use zero modifier and the target's no-increment mode.
+__attribute__ ((noinline)) void
+access_mode_mismatch ()
+{
+  vec_t a0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 1, DST_MODE);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 1, DST_MODE);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+__attribute__ ((noinline)) void
+address_mode_mismatch ()
+{
+  vec_t a0 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, DST_BAD_MODE);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, DST_BAD_MODE);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+// CC state cannot cross or participate in a fused region.
+__attribute__ ((noinline)) void
+cc_state ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  __builtin_rvtt_sfppushc (0);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  __builtin_rvtt_sfppushc (0);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+// Matching opcodes are insufficient when a scalar encoding differs.
+__attribute__ ((noinline)) void
+scalar_mismatch ()
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  vec_t k0 = __builtin_rvtt_sfpxloadi (nullptr, 1, 0, 0, -32);
+  store_dst (__builtin_rvtt_sfpmul (
+	       __builtin_rvtt_sfpmul (a0, b0, 0), k0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  vec_t k1 = __builtin_rvtt_sfpxloadi (nullptr, 2, 0, 0, -32);
+  store_dst (__builtin_rvtt_sfpmul (
+	       __builtin_rvtt_sfpmul (a1, b1, 0), k1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+// Live-variant instructions carry an explicit prior destination and are not
+// movable as part of an otherwise shape-identical region.
+__attribute__ ((noinline)) void
+live_rvtt ()
+{
+  vec_t external = __builtin_rvtt_sfpreadlreg (3);
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  vec_t p0 = __builtin_rvtt_sfpmul (a0, b0, 0);
+  store_dst (__builtin_rvtt_sfpassign_lv (external, p0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  vec_t p1 = __builtin_rvtt_sfpmul (a1, b1, 0);
+  store_dst (__builtin_rvtt_sfpassign_lv (external, p1), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+// Candidate iterations must be in one basic block.
+__attribute__ ((noinline)) void
+cross_basic_block (bool condition)
+{
+  vec_t a0 = load_dst (0);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  if (condition)
+    asm volatile ("" ::: "memory");
+
+  vec_t a1 = load_dst (0);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+
+#ifdef DST_QSR
+// QSR Src-selector accesses need their own selector/address proof and are
+// recognition-only until that model is implemented.
+__attribute__ ((noinline)) void
+qsr_selector ()
+{
+  vec_t a0 = __builtin_rvtt_sfploadsrcs (nullptr, 0, 0, 0, 0, 7, 1);
+  vec_t b0 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a0, b0, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+  vec_t a1 = __builtin_rvtt_sfploadsrcs (nullptr, 0, 0, 0, 0, 7, 1);
+  vec_t b1 = load_dst (64);
+  store_dst (__builtin_rvtt_sfpmul (a1, b1, 0), 128);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+}
+#endif
