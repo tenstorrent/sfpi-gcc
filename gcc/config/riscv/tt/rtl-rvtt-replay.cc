@@ -842,9 +842,12 @@ available_replay_spans (std::vector<replay_span> const &base,
 }
 
 /* A counted-loop capture must be one fixed, uninterrupted SFPU run.  Scalar
-   loop-control instructions may surround it, but ordinary memory, calls,
-   opaque asm, configuration/counter operations, dynamic instruction words,
-   and explicit replay ownership make the whole loop ineligible.  */
+   loop-control instructions may surround it.  A single typed TTINCRWC may
+   follow the run: it remains explicit after the playback and therefore
+   preserves the per-iteration Dst boundary used by semantic SFPI loops.
+   Counter operations before or inside the run, ordinary memory, calls, opaque
+   asm, configuration operations, dynamic instruction words, and explicit
+   replay ownership make the whole loop ineligible.  */
 static bool
 counted_loop_payload (class loop *loop, replay_block &info,
 		      replay_sequence &seq)
@@ -853,6 +856,8 @@ counted_loop_payload (class loop *loop, replay_block &info,
       || !loop_preserves_replay_p (loop))
     return false;
 
+  bool saw_safe = false;
+  bool saw_trailing_increment = false;
   rtx_insn *insn;
   FOR_BB_INSNS (loop->header, insn)
     if (NONDEBUG_INSN_P (insn))
@@ -861,10 +866,21 @@ counted_loop_payload (class loop *loop, replay_block &info,
 	    || contains_mem_rtx_p (PATTERN (insn)))
 	  return false;
 	if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0
-	    && get_attr_type (insn) == TYPE_TENSIX
-	    && (get_attr_xtt_replay (insn) != XTT_REPLAY_SAFE
-		|| !fixed_replay_rtx_p (PATTERN (insn))))
-	  return false;
+	    && get_attr_type (insn) == TYPE_TENSIX)
+	  {
+	    if (get_attr_xtt_replay (insn) == XTT_REPLAY_SAFE
+		&& fixed_replay_rtx_p (PATTERN (insn)))
+	      {
+		if (saw_trailing_increment)
+		  return false;
+		saw_safe = true;
+	      }
+	    else if (recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc
+		     && saw_safe && !saw_trailing_increment)
+	      saw_trailing_increment = true;
+	    else
+	      return false;
+	  }
       }
 
   if (!scan_insns (info, loop->header))
