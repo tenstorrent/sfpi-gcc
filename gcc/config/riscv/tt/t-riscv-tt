@@ -44,6 +44,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
+	rtl-rvtt-lreg-livein.o \
 	rtl-rvtt-lp-alloc.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \

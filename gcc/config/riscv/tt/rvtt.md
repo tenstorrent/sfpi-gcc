@@ -42,6 +42,7 @@
   ;; LV for keep dst reg alive as input for predicated liveness
 
   UNSPECV_SFPVARLREG
+  UNSPECV_SFPRAWLREG_ACCESS
 
   UNSPECV_SFPNOP
   UNSPECV_SFPBANKDONE
@@ -201,6 +202,19 @@
   "TARGET_XTT_TENSIX"
   "# READ %x0"
 ;; not a xtt_dynamic_bug consumer, it is for the user to get this right.
+  [(set_attr "type" "tensix")
+   (set_attr "length" "0")])
+
+;; This is a compiler-only raw-LLK access marker.  It must remain volatile
+;; until the pre-IRA lreg-livein pass has made the indicated hard LREG values
+;; visible to IRA, but it emits no Tensix instruction itself.
+(define_insn "rvtt_sfprawlreg_access"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     ] UNSPECV_SFPRAWLREG_ACCESS)]
+  "TARGET_XTT_TENSIX"
+  "# RAWLREG %0, %1"
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
