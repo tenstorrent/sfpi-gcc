@@ -216,6 +216,24 @@ all_lanes_enable_before (rtx_insn *first)
     ? insn : nullptr;
 }
 
+struct predicated_select_descriptor
+{
+  unsigned condition_reg = INVALID_REGNUM;
+  unsigned true_reg = INVALID_REGNUM;
+  unsigned false_reg = INVALID_REGNUM;
+  unsigned result_reg = INVALID_REGNUM;
+  HOST_WIDE_INT condition_address = 0;
+  HOST_WIDE_INT true_address = 0;
+  HOST_WIDE_INT false_address = 0;
+  HOST_WIDE_INT condition_mode = 0;
+  HOST_WIDE_INT payload_mode = 0;
+  HOST_WIDE_INT address_mode = 0;
+  unsigned template0 = 0;
+  unsigned template1 = 0;
+  unsigned sequence0 = 0;
+  unsigned sequence2 = 0;
+  unsigned misc = 0;
+};
 static bool
 hard_lreg_p (rtx x)
 {
@@ -640,6 +658,191 @@ describe_load_load_swap_store (const macro_candidate &candidate,
   return descriptor_status::described;
 }
 
+static bool
+assign_with_live_value_p (rtx_insn *insn, rtx *dest, rtx *live,
+			  rtx *source)
+{
+  if (!NONDEBUG_INSN_P (insn))
+    return false;
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) != SET)
+    return false;
+  rtx rhs = SET_SRC (pat);
+  if (GET_CODE (rhs) != UNSPEC_VOLATILE
+      || XINT (rhs, 1) != UNSPECV_SFPASSIGN
+      || XVECLEN (rhs, 0) != 2)
+    return false;
+  *dest = SET_DEST (pat);
+  *live = XVECEXP (rhs, 0, 0);
+  *source = XVECEXP (rhs, 0, 1);
+  return true;
+}
+
+static bool
+constant_typed_load (rtx_insn *insn, rtx *reg, HOST_WIDE_INT *address,
+		     HOST_WIDE_INT *mode, HOST_WIDE_INT *address_mode)
+{
+  if (!load_p (insn))
+    return false;
+  extract_insn (insn);
+  if (!CONST_INT_P (recog_data.operand[2])
+      || INTVAL (recog_data.operand[2]) != 0
+      || !CONST_INT_P (recog_data.operand[3])
+      || INTVAL (recog_data.operand[3]) != 0
+      || !CONST_INT_P (recog_data.operand[4])
+      || !CONST_INT_P (recog_data.operand[7])
+      || !CONST_INT_P (recog_data.operand[8]))
+    return false;
+  *reg = recog_data.operand[0];
+  *address = INTVAL (recog_data.operand[4]);
+  *mode = INTVAL (recog_data.operand[7]);
+  *address_mode = INTVAL (recog_data.operand[8]);
+  return hard_lreg_p (*reg);
+}
+
+/* Describe the outermost predicated three-load select which can be evaluated
+   as two delayed Simple templates plus one delayed store.  This is a semantic
+   resource shape, not a source-operation recognizer.  The payload format may
+   differ from the condition format: Misc.StoreMod0 carries the fixed payload
+   store mode instead of inheriting the first launch's load mode.  */
+static descriptor_status
+describe_predicated_three_load_select_store (
+  const macro_candidate &candidate, predicated_select_descriptor *descriptor)
+{
+  if (candidate.words != 7 || candidate.loads != 3
+      || candidate.stores != 1 || TARGET_XTT_TENSIX_QSR)
+    return descriptor_status::no_match;
+
+  rtx_insn *insns[7];
+  unsigned count = 0;
+  for (rtx_insn *insn = candidate.first; insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  if (count == ARRAY_SIZE (insns))
+	    return descriptor_status::no_match;
+	  insns[count++] = insn;
+	}
+      if (insn == candidate.last)
+	break;
+    }
+  if (count != ARRAY_SIZE (insns)
+      || !load_p (insns[0]) || !load_p (insns[1]) || !load_p (insns[2])
+      || recog_memoized (insns[3]) != CODE_FOR_rvtt_sfpsetcc_v
+      || recog_memoized (insns[5]) != CODE_FOR_rvtt_sfpencc
+      || !store_p (insns[6]))
+    return descriptor_status::no_match;
+
+  rtx condition, on_true, on_false;
+  HOST_WIDE_INT condition_address, true_address, false_address;
+  HOST_WIDE_INT condition_mode, true_mode, false_mode;
+  HOST_WIDE_INT condition_addr_mode, true_addr_mode, false_addr_mode;
+  if (!constant_typed_load (insns[0], &condition, &condition_address,
+			    &condition_mode, &condition_addr_mode)
+      || !constant_typed_load (insns[1], &on_true, &true_address,
+			       &true_mode, &true_addr_mode)
+      || !constant_typed_load (insns[2], &on_false, &false_address,
+			       &false_mode, &false_addr_mode))
+    return descriptor_status::dynamic_encoding;
+
+  extract_insn (insns[3]);
+  rtx predicate_reg = recog_data.operand[0];
+  rtx predicate_mod = recog_data.operand[1];
+  rtx result, live_value, selected_value;
+  if (!assign_with_live_value_p (insns[4], &result, &live_value,
+				 &selected_value))
+    return descriptor_status::no_match;
+  extract_insn (insns[5]);
+  rtx encc_imm = recog_data.operand[0];
+  rtx encc_mod = recog_data.operand[1];
+  extract_insn (insns[6]);
+  rtx store_opcode = recog_data.operand[1];
+  rtx store_encoding = recog_data.operand[2];
+  rtx store_address = recog_data.operand[3];
+  rtx store_source = recog_data.operand[4];
+  rtx store_mode = recog_data.operand[5];
+  rtx store_addr_mode = recog_data.operand[6];
+
+  HOST_WIDE_INT expected_addr_mode = TARGET_XTT_TENSIX_BH ? 7 : 3;
+  if (!CONST_INT_P (predicate_mod) || INTVAL (predicate_mod) != 2
+      || !CONST_INT_P (encc_imm) || INTVAL (encc_imm) != 10
+      || !CONST_INT_P (encc_mod) || INTVAL (encc_mod) != 3
+      || !CONST_INT_P (store_opcode) || INTVAL (store_opcode) != 0
+      || !CONST_INT_P (store_encoding) || INTVAL (store_encoding) != 0
+      || !CONST_INT_P (store_address) || !CONST_INT_P (store_mode)
+      || !CONST_INT_P (store_addr_mode))
+    return descriptor_status::dynamic_encoding;
+
+  bool deps_closed = same_reg_p (condition, predicate_reg)
+    && same_reg_p (on_false, result)
+    && same_reg_p (on_false, live_value)
+    && same_reg_p (on_true, selected_value)
+    && same_reg_p (result, store_source);
+  bool encodings_closed = condition_addr_mode == expected_addr_mode
+    && true_addr_mode == expected_addr_mode
+    && false_addr_mode == expected_addr_mode
+    && INTVAL (store_addr_mode) == expected_addr_mode
+    && condition_address == INTVAL (store_address)
+    && true_mode == false_mode && false_mode == INTVAL (store_mode)
+    && condition_address >= 0 && condition_address <= 0x3fff
+    && true_address >= 0 && true_address <= 0x3fff
+    && false_address >= 0 && false_address <= 0x3fff
+    && !(condition_address & 1) && !(true_address & 1)
+    && !(false_address & 1)
+    && condition_mode >= 0 && condition_mode <= 0xf
+    && true_mode >= 0 && true_mode <= 0xf;
+  if (!deps_closed)
+    return descriptor_status::unclosed_dependency;
+  if (!encodings_closed)
+    return descriptor_status::dynamic_encoding;
+
+  /* All three explicit values are contracted into RESULT by the evaluated
+     macro schedule.  None may be observable after the candidate.  */
+  unsigned regs[] = { REGNO (condition), REGNO (on_true), REGNO (on_false) };
+  basic_block bb = BLOCK_FOR_INSN (candidate.last);
+  /* Hard SFPU registers are conservatively present in DF live-out sets even
+     at a direct function exit.  Admit only that direct-exit shape for this
+     first descriptor and prove concrete post-region references locally.  A
+     later transforming slice must replace this with explicit cross-BB effect
+     edges before admitting internal CFG regions.  */
+  if (!single_succ_p (bb) || single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))
+    return descriptor_status::unclosed_dependency;
+  for (unsigned regno : regs)
+    {
+      rtx reg = gen_rtx_REG (XTT32SImode, regno);
+      for (rtx_insn *insn = NEXT_INSN (candidate.last);
+	   insn; insn = NEXT_INSN (insn))
+	{
+	  if (BARRIER_P (insn))
+	    break;
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      if (BLOCK_FOR_INSN (insn) != bb)
+		break;
+	      if (reg_referenced_p (reg, PATTERN (insn)))
+		return descriptor_status::unclosed_dependency;
+	    }
+	}
+    }
+
+  descriptor->condition_reg = REGNO (condition);
+  descriptor->true_reg = REGNO (on_true);
+  descriptor->false_reg = REGNO (on_false);
+  descriptor->result_reg = REGNO (result);
+  descriptor->condition_address = condition_address;
+  descriptor->true_address = true_address;
+  descriptor->false_address = false_address;
+  descriptor->condition_mode = condition_mode;
+  descriptor->payload_mode = true_mode;
+  descriptor->address_mode = expected_addr_mode;
+  descriptor->template0 = 0x7b0000c6u; /* SETCC loaded value == zero.  */
+  descriptor->template1 = 0x8a0000d0u; /* Restore all lanes.  */
+  descriptor->sequence0 = 0x13000004u; /* SETCC d0, store d2.  */
+  descriptor->sequence2 = 0x00000005u; /* ENCC d0.  */
+  descriptor->misc = 0x700u | unsigned (true_mode); /* Fixed store Mod0.  */
+  return descriptor_status::described;
+}
+
 static void
 dump_candidate (basic_block bb, const macro_candidate &candidate,
 		bool complete)
@@ -678,6 +881,36 @@ dump_candidate (basic_block bb, const macro_candidate &candidate,
   else if (status == descriptor_status::unclosed_dependency)
     fprintf (dump_file,
 	     "  descriptor-reject=unclosed-dependency emit=no\n");
+
+  predicated_select_descriptor select_descriptor;
+  descriptor_status select_status = complete
+    ? describe_predicated_three_load_select_store (candidate,
+						    &select_descriptor)
+    : descriptor_status::no_match;
+  if (select_status == descriptor_status::described)
+    fprintf (dump_file,
+	     "  descriptor=predicated-three-load-select-store "
+	     "lregs=%u,%u,%u->%u addresses=" HOST_WIDE_INT_PRINT_DEC
+	     "," HOST_WIDE_INT_PRINT_DEC "," HOST_WIDE_INT_PRINT_DEC " "
+	     "modes=" HOST_WIDE_INT_PRINT_DEC "," HOST_WIDE_INT_PRINT_DEC " "
+	     "address-mode=" HOST_WIDE_INT_PRINT_DEC " cc=closed "
+	     "calendar=load0:setcc-d0,store-d2;load1;load2:encc-d0 "
+	     "templates=%08x,%08x sequences=%08x,%08x misc=%03x "
+	     "simulator=cc-event-model-proven emit=no\n",
+	     select_descriptor.condition_reg, select_descriptor.true_reg,
+	     select_descriptor.false_reg, select_descriptor.result_reg,
+	     select_descriptor.condition_address, select_descriptor.true_address,
+	     select_descriptor.false_address, select_descriptor.condition_mode,
+	     select_descriptor.payload_mode, select_descriptor.address_mode,
+	     select_descriptor.template0, select_descriptor.template1,
+	     select_descriptor.sequence0, select_descriptor.sequence2,
+	     select_descriptor.misc);
+  else if (select_status == descriptor_status::dynamic_encoding)
+    fprintf (dump_file,
+	     "  predicated-select-reject=encoding-or-format emit=no\n");
+  else if (select_status == descriptor_status::unclosed_dependency)
+    fprintf (dump_file,
+	     "  predicated-select-reject=unclosed-dependency emit=no\n");
 
   if (!complete)
     fprintf (dump_file, "  reject=%s\n",
