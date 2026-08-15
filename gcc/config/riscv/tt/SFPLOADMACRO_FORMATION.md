@@ -109,3 +109,31 @@ but cannot validate a novel compiler schedule.  The bring-up order is:
 
 Static instruction count is diagnostic only.  Device kernel cycles are the
 performance acceptance authority.
+
+## Dump-only discovery scaffold
+
+`-mtt-tensix-analyze-loadmacro -fdump-rtl-rvtt_loadmacro-details`
+enables a post-RA, pre-replay observer.  It discovers maximal typed
+load-to-store SFPU stretches, reports their physical instruction count, and
+always prints `emit=no`.  The pass returns without changing RTL; the option is
+default-off.
+
+The rejection vocabulary is deliberately stable so corpus automation can
+group blockers without parsing prose:
+
+- `incomplete-region`
+- `non-sfpu-boundary`
+- `unsafe-replay-member`
+- `unsupported-bulk-operation`
+- `dynamic-encoding-unproved`
+- `external-lreg-livein-unproved`
+- `lreg-liveout-unproved`
+- `cc-effect-unproved`
+- `dst-rwc-effect-unproved`
+- `subunit-calendar-missing`
+- `simulator-event-model-missing`
+
+The bulk-operation rejection currently covers `SFPTRANSP` and every
+post-reload `SFPSHFT2` form.  This is intentionally conservative: no delayed
+event semantics are inferred from an instruction name, and the scaffold does
+not expose a public macro builtin.

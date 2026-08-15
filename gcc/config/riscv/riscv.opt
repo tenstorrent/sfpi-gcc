@@ -601,6 +601,10 @@ mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
+mtt-tensix-analyze-loadmacro
+Target Var(riscv_tt_analyze_loadmacro) Init(0)
+Discover and verify SFPLOADMACRO candidate regions without changing code.
+
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
 Length of replay buffer for replay optimization use.
