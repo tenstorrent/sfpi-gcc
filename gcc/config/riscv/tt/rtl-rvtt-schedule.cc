@@ -34,6 +34,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 
+/* The generated target cost hook deliberately returns one for the existing
+   STATIC/DYNAMIC contracts.  Do not generalize this to instruction distance:
+   that needs a separate walk over emitted Tensix insns.  */
+static unsigned
+rvtt_delay_bubbles (rtx_insn *insn)
+{
+  unsigned nops = get_attr_xtt_delay_bubbles (insn);
+  gcc_assert (nops <= 1);
+  return nops;
+}
+
 /* Walk the BB graph from PROBE_INSN until we meet a TENSIX insn. Return true
    if REGNO != 0 and the TENSIX insn is dependent.  Return true if REGNO == 0
    and the TENSIX insn is not a NOP. Return false in all other cases. If we
@@ -249,7 +260,8 @@ transform (function *fn)
 	    }
 
 	  if (insert)
-	    emit_insn_after (gen_rvtt_sfpnop (), insn);
+	    for (unsigned nops = rvtt_delay_bubbles (insn); nops; --nops)
+	      emit_insn_after (gen_rvtt_sfpnop (), insn);
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "%snserting %s nop after ",

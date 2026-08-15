@@ -118,6 +118,16 @@
 ])
 (define_enum_attr "xtt_delay" "xtt_delay"
   (const_string "none"))
+;; F1.2 bubble cost hook.  It deliberately depends only on the established
+;; delay contract, never on issue class.  The scheduler still decides whether
+;; a STATIC/DYNAMIC delay applies using its existing probe and erratum logic;
+;; this generated target attribute only supplies the (currently fixed) count.
+;; Values above one require an emitted-Tensix distance walker and are deferred
+;; to F1.3.
+(define_attr "xtt_delay_bubbles" ""
+  (if_then_else (eq_attr "xtt_delay" "static,dynamic")
+                (const_int 1)
+                (const_int 0)))
 ;; BH & QSR eratta covers problems with detecting dependent insns in dynamic delay slots
 ;; this is a bit mask BH:bit0, QSR:bit1
 (define_enum "xtt_dynamic_bug" [
