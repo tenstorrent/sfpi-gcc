@@ -46,6 +46,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-hll.o \
 	rtl-rvtt-lreg-livein.o \
 	rtl-rvtt-lp-alloc.o \
+	rtl-rvtt-loadmacro.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \

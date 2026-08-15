@@ -123,6 +123,7 @@ extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_loadmacro (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
