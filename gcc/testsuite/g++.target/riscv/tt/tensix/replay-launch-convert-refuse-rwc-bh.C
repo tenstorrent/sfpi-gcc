@@ -1,5 +1,5 @@
 // { dg-do compile }
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -fdump-rtl-rvtt_replay-details" }
 // Uncovered RWC: the trailing row is isomorphic but its Dst advance differs
 // from the uniform advance of the payload's other execution sites.  The
 // later Dst auto-increment ownership pass must see equivalent rows at every
