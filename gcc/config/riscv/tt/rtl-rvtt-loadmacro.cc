@@ -17,6 +17,19 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* QUARANTINED REGRESSION REFERENCE -- scheduled for deletion (WP8).
+
+   The binary Min/Max calendar was deleted at WP7 after the generic
+   macro planner (rtl-rvtt-macro-planner.cc) reproduced its emission
+   byte for byte.  The remaining shapes (signbit describe_configured_
+   region, cast-round, select/Where, and the analysis dump) stay behind
+   the default-off mtt-tensix-analyze-loadmacro/mtt-tensix-emit-
+   loadmacro flags, receive NO behavioral extensions, and are deleted at
+   WP8 once the planner covers single-row and loop-preheader regions
+   (signbit staged/staged-loop parity), typecast cross-region sharing,
+   and the Where positives are converted to cc-template-unsupported
+   refusals.  See DESIGN.md sections 8 (WP8) and 10.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
