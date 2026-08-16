@@ -1939,7 +1939,18 @@
       operands, true, 8);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md:
+   ;; the shift is a Simple-unit event by analogy with the documented
+   ;; cast-round Simple assignments; flagged for the architectural
+   ;; reference.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
@@ -1970,7 +1981,15 @@
     rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Same 9(h)-class Simple-unit inference as the BH/QSR form above.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpcast"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1997,7 +2016,18 @@
    SFPCAST\t%x0, %x2, %3
    SFPCAST\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md
+   ;; ("the signbit SFPCAST is recorded Simple by analogy with the
+   ;; cast-round shape's documented Simple cast"); flagged for the
+   ;; architectural reference.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "7")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")

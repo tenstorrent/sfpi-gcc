@@ -75,4 +75,10 @@ extern const char *macro_region_refusal_name (macro_region_refusal);
    Analysis only: never mutates the function.  */
 extern void rvtt_macro_region_analyze (function *fn, FILE *dump);
 
+/* Same discovery, additionally collecting the clean regions into OUT
+   (caller releases each with rvtt_macro_region_release).  */
+extern void rvtt_macro_regions_discover (function *fn, FILE *dump,
+					 vec<macro_region> *out);
+extern void rvtt_macro_region_release (macro_region *region);
+
 #endif /* GCC_RVTT_MACRO_REGION_H */

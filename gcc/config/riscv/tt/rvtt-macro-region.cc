@@ -135,7 +135,8 @@ self_loop_bb_p (basic_block bb)
 class region_scanner
 {
 public:
-  region_scanner (FILE *dump) : dump_ (dump) {}
+  region_scanner (FILE *dump, vec<macro_region> *out)
+    : dump_ (dump), out_ (out) {}
   void scan_bb (basic_block bb);
 
 private:
@@ -164,6 +165,7 @@ private:
   }
 
   FILE *dump_;
+  vec<macro_region> *out_;
   auto_vec<rtx_insn *> span_;
   auto_vec<xtt_effect_set> span_effects_;
   auto_vec<macro_row> rows_;
@@ -361,11 +363,12 @@ region_scanner::finalize_region (basic_block bb)
 	    break;
 	}
 
+      bool clean = stride_uniform && !live_through;
       if (!stride_uniform)
 	refuse (macro_region_refusal::row_stride_mismatch);
       else if (live_through)
 	refuse (macro_region_refusal::row_live_through);
-      else if (dump_)
+      if (clean && dump_)
 	{
 	  fprintf (dump_,
 		   "Macro-planner region: rows=%u row-len=%u runs=%u"
@@ -384,6 +387,18 @@ region_scanner::finalize_region (basic_block bb)
 	    }
 	  fprintf (dump_, "\nMacro-planner region-lregs: 0x%x\n",
 		   region.internal_lregs);
+	}
+      if (clean && out_)
+	{
+	  /* Transfer row ownership to the collected region.  */
+	  region.rows = vNULL;
+	  region.run_separators = vNULL;
+	  for (macro_row &row : rows_)
+	    region.rows.safe_push (row);
+	  for (rtx_insn *sep : run_separators_)
+	    region.run_separators.safe_push (sep);
+	  rows_.truncate (0);	/* handles moved; do not release */
+	  out_->safe_push (region);
 	}
     }
   reset_region ();
@@ -477,10 +492,29 @@ region_scanner::scan_bb (basic_block bb)
 } // anonymous namespace
 
 void
-rvtt_macro_region_analyze (function *fn, FILE *dump)
+rvtt_macro_regions_discover (function *fn, FILE *dump,
+			     vec<macro_region> *out)
 {
-  region_scanner scanner (dump);
+  region_scanner scanner (dump, out);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     scanner.scan_bb (bb);
+}
+
+void
+rvtt_macro_region_release (macro_region *region)
+{
+  for (macro_row &row : region->rows)
+    {
+      row.insns.release ();
+      row.vmap.release ();
+    }
+  region->rows.release ();
+  region->run_separators.release ();
+}
+
+void
+rvtt_macro_region_analyze (function *fn, FILE *dump)
+{
+  rvtt_macro_regions_discover (fn, dump, nullptr);
 }
