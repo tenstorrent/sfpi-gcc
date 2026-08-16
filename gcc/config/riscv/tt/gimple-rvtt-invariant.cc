@@ -77,7 +77,8 @@ allowed_dst_effect_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpload
     || insnd->id == rvtt_insn_data::sfpload_lv
     || insnd->id == rvtt_insn_data::sfpstore
-    || insnd->id == rvtt_insn_data::ttincrwc;
+    || insnd->id == rvtt_insn_data::ttincrwc
+    || insnd->id == rvtt_insn_data::ttdstface;
 }
 
 /* Reject unrepresented calls, ordinary memory, CC changes, configuration,
@@ -296,7 +297,7 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
 	}
     }
 
-  basic_block *body = get_loop_body (loop);
+  basic_block *body = get_loop_body_in_dom_order (loop);
   for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
     {
       basic_block bb = body[ix];
@@ -337,30 +338,37 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
 	}
     }
 
+  /* Walk every body block in dominance order (SSA definitions are walked
+     before their non-PHI uses), releasing values at their last counted use
+     and admitting locally defined vectors, tracking the peak.  PHI-argument
+     uses are counted but never released here, so loop-carried values remain
+     live through the walk — conservative in the refusing direction.  For a
+     multi-block body this measures pressure across the whole region,
+     including any inner loops.  */
   size_t peak = live.size ();
-  basic_block latch = loop->latch;
-  for (gimple_stmt_iterator gsi = gsi_start_bb (latch);
-       !gsi_end_p (gsi); gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      ssa_op_iter iter;
-      tree use;
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	  {
-	    auto found = remaining.find (use);
-	    gcc_assert (found != remaining.end () && found->second);
-	    if (!--found->second && !pinned.count (use))
-	      live.erase (use);
-	  }
+  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	ssa_op_iter iter;
+	tree use;
+	FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
+	  if (VECTOR_TYPE_P (TREE_TYPE (use)))
+	    {
+	      auto found = remaining.find (use);
+	      gcc_assert (found != remaining.end () && found->second);
+	      if (!--found->second && !pinned.count (use))
+		live.erase (use);
+	    }
 
-      tree lhs = gimple_get_lhs (stmt);
-      if (lhs && TREE_CODE (lhs) == SSA_NAME
-	  && VECTOR_TYPE_P (TREE_TYPE (lhs))
-	  && !candidates.count (lhs))
-	live.insert (lhs);
-      peak = MAX (peak, live.size ());
-    }
+	tree lhs = gimple_get_lhs (stmt);
+	if (lhs && TREE_CODE (lhs) == SSA_NAME
+	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
+	    && !candidates.count (lhs))
+	  live.insert (lhs);
+	peak = MAX (peak, live.size ());
+      }
   free (body);
 
   if (peak <= LREG_COUNT)
@@ -575,7 +583,7 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
   return short_loop;
 }
 
-/* Prove that the loop's first header test enters its sole body block.  This
+/* Prove that the loop's first header test enters the loop body.  This
    avoids speculating an architectural LREG write out of a zero-trip loop,
    without requesting loop normalization (which could perturb an ineligible
    function).  */
@@ -608,20 +616,56 @@ first_iteration_executes_p (class loop *loop, edge entry)
   edge true_edge, false_edge;
   extract_true_false_edges_from_block (loop->header, &true_edge, &false_edge);
   edge taken = integer_zerop (value) ? false_edge : true_edge;
-  return taken && taken->dest == loop->latch;
+  return taken && taken->dest != loop->header
+    && flow_bb_inside_loop_p (loop, taken->dest);
+}
+
+/* A hoisted load must not be speculated: its block must provably execute
+   on every iteration that enters the loop body.  BB must dominate the
+   latch, and every loop exit must leave either from the header test
+   (before any body work of that iteration) or from a block BB dominates
+   (after the load has executed).  Pure CFG dominance structure; no
+   statement content is examined.  */
+static bool
+executes_every_entered_iteration_p (class loop *loop, basic_block bb)
+{
+  if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
+    return false;
+
+  basic_block *body = get_loop_body (loop);
+  bool ok = true;
+  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
+    {
+      basic_block src = body[ix];
+      if (src == loop->header || dominated_by_p (CDI_DOMINATORS, src, bb))
+	continue;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, src->succs)
+	if (!flow_bb_inside_loop_p (loop, e->dest))
+	  {
+	    ok = false;
+	    break;
+	  }
+    }
+  free (body);
+  return ok;
 }
 
 static bool
 transform (function *fn)
 {
   bool changed = false;
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
+  if (!dom_info_available_p (CDI_DOMINATORS))
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  /* Innermost first: a load hoists stepwise, out of its own loop into the
+     enclosing loop's body, where the enclosing loop's own proofs decide
+     whether it moves again.  Every proof below is per-loop and re-runs on
+     the CFG as already transformed.  */
+  for (class loop *loop : loops_list (fn, LI_FROM_INNERMOST))
     {
-      class loop *loop = bb->loop_father;
-      if (!loop || loop->num == 0 || loop->header != bb
-	  || loop->num_nodes != 2)
-	continue;
+      basic_block bb = loop->header;
 
       edge entry = loop_entry_edge (loop);
       if (!entry)
@@ -665,16 +709,29 @@ transform (function *fn)
       if (expected_loop_iterations_unbounded (loop) < 1)
 	continue;
 
+      /* Collect candidate loads from the loop's direct body blocks (a load
+	 still inside a subloop was already refused there and would only see
+	 more pressure here).  Each load's block must provably execute on
+	 every iteration that enters the body — never speculate the
+	 architectural LREG write.  */
       auto_vec<gcall *> loads;
-      basic_block body = loop->latch;
-      for (gimple_stmt_iterator gsi = gsi_start_bb (body);
-	   !gsi_end_p (gsi); gsi_next (&gsi))
-	if (is_a <gcall *> (gsi_stmt (gsi)))
-	  {
-	    gcall *call = as_a <gcall *> (gsi_stmt (gsi));
-	    if (constant_load_p (call, loop))
-	      loads.safe_push (call);
-	  }
+      basic_block *body_blocks = get_loop_body_in_dom_order (loop);
+      for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+	{
+	  basic_block body = body_blocks[ix];
+	  if (body->loop_father != loop
+	      || !executes_every_entered_iteration_p (loop, body))
+	    continue;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (body);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    if (is_a <gcall *> (gsi_stmt (gsi)))
+	      {
+		gcall *call = as_a <gcall *> (gsi_stmt (gsi));
+		if (constant_load_p (call, loop))
+		  loads.safe_push (call);
+	      }
+	}
+      free (body_blocks);
 
       if (loads.is_empty ())
 	continue;
@@ -708,10 +765,17 @@ transform (function *fn)
 
       for (gcall *call : selected)
 	{
+	  /* A load hoisted out of an inner loop earlier in this same pass
+	     execution carries re-scanned, not-yet-renamed virtual operands
+	     (bare .MEM); only a renamed SSA definition has uses to unlink
+	     or a name to release.  */
 	  if (tree vdef = gimple_vdef (call))
 	    {
-	      unlink_stmt_vdef (call);
-	      release_ssa_name (vdef);
+	      if (TREE_CODE (vdef) == SSA_NAME)
+		{
+		  unlink_stmt_vdef (call);
+		  release_ssa_name (vdef);
+		}
 	      gimple_set_vdef (call, NULL_TREE);
 	    }
 	  if (gimple_vuse (call))
