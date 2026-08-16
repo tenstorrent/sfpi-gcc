@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 // Six rows do not amortize the owned prefix and drain calendar on BH.

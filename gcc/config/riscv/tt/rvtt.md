@@ -892,33 +892,11 @@
 ;; the launch VD, the template writes the fixed comparison operand (L2).  Keep
 ;; that hidden architectural write explicit in RTL; formation only selects
 ;; this pattern after proving L2 is private to the complete periodic region.
-(define_insn "rvtt_sfploadmacro_swap_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
-          (match_operand:SI 2 "mem_or_0_operand" "X") ;; store Dst effect
-          (match_operand:SI 3 "const_int_operand" "n") ;; address
-          (match_operand:SI 4 "const_int_operand" "n") ;; load/store mode
-          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
-          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
-          ] UNSPECV_SFPLOADMACRO))
-   ;; This pattern is created by a post-reload pass, so a match_scratch could
-   ;; not subsequently be allocated to the required architectural register.
-   ;; L0 starts at hard register 80; make the delayed template's fixed L2
-   ;; write explicit without introducing a post-RA pseudo.
-   (clobber (reg:XTT32SI 82))]
-  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
-  ".ttinsn\t%6"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_macro_resource" "load")
-   (set_attr "xtt_replay" "barrier")])
-
 ;; Generic hidden-clobber launch (macro-planner design 4.3): the hidden
 ;; physical-LREG write of the launched template is a register operand the
 ;; planner fills from the capability tables'
 ;; template_hidden_lreg_writes(), never a pattern-frozen register.
-;; Supersedes the fixed-L2 rvtt_sfploadmacro_swap_int above, which is
-;; deleted with the quarantined pass (WP7).
+;; (Replaced the fixed-L2 rvtt_sfploadmacro_swap_int, deleted at WP7.)
 (define_insn "rvtt_sfploadmacro_hidden_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
@@ -2311,7 +2289,14 @@
   "@
    SFPMOV\t%x0, L%2, 8\t# CFG:%2
    SFPMOV\t%x0, L%2, 8\t# LV:%x1 CFG:%2"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "3")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "read")
+   (set_attr "xtt_config_dest_op" "3")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpwriteconfig_v"
@@ -2321,7 +2306,14 @@
      ] UNSPECV_SFPCONFIG)]
   "TARGET_XTT_TENSIX"
   "SFPCONFIG\t%1, 0, 0\t# R:%x0 CFG:%1"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "2")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "dest")
+   (set_attr "xtt_config_dest_op" "2")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 

@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Seven rows are the first strict BH issue-count improvement.
 // { dg-final { scan-assembler-times "SFPENCC" 1 } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 5 } }

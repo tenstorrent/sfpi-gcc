@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-qsr32-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-qsr32-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 // The refused explicit body remains eligible for ordinary TTREPLAY.

@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 // Seven rows do not amortize both physical WH address-modifier slots.

@@ -160,6 +160,9 @@ struct desc_program
   uint32_t misc_word;
   int fixed_vd;			/* -1: alternating pair {0,1}	       */
   unsigned store_only_vd;	/* VD of a store-only carrier	       */
+  /* CRAQ-validated envelope: the program was proven only with one
+     uniform data mode across every Dst access of the row.  */
+  bool uniform_mode_required;
 };
 
 #define OPB_WH(M) ((uint8_t) ((M) >> 24))
@@ -181,7 +184,7 @@ static const desc_program desc_programs[] = {
       { TR_WHOLE_WORD, 0x940000d6, 0, -1, -1, -1, 0 } },
     { 0x00dd008c, 0x53000000 },
     0x00000330,
-    -1, 3,
+    -1, 3, true,
   },
   /* Unary shift/cast (frozen signbit calendar, LM:847-856).  The SHFT2
      immediate template aliases its source selector to L1, forcing the
@@ -200,7 +203,7 @@ static const desc_program desc_programs[] = {
       { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 3 /* cast mod1 operand */, -1, 0 } },
     { 0x5384004d, 0 },
     0x00000110,
-    1, 0,
+    1, 0, true,
   },
   /* Unary cast/round (frozen U16->BF16 calendar, LM:858-871).  */
   {
@@ -216,7 +219,7 @@ static const desc_program desc_programs[] = {
       { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 8 /* stochrnd mod1 */, -1, 0 } },
     { 0x534d0004, 0 },
     0x00000100,
-    -1, 0,
+    -1, 0, false,
   },
 };
 
@@ -368,6 +371,29 @@ rvtt_macro_synthesize (const macro_region &region,
   const desc_program *program = nullptr;
   if (derive_structure (region, schedule, &derived))
     program = find_program (derived);
+  if (program && program->uniform_mode_required)
+    {
+      /* The proven envelope covers only a uniform data mode across the
+	 row's Dst accesses.  */
+      rtx first_mode = nullptr;
+      for (rtx_insn *insn : region.rows[0].insns)
+	{
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (!e.dst_mem_read && !e.dst_mem_write)
+	    continue;
+	  rtx address, mode, addr_mode;
+	  if (!rvtt_dst_access_operands (insn, e, &address, &mode,
+					 &addr_mode))
+	    continue;
+	  if (!first_mode)
+	    first_mode = mode;
+	  else if (!rtx_equal_p (first_mode, mode))
+	    {
+	      program = nullptr;
+	      break;
+	    }
+	}
+    }
   if (!program)
     {
       out->refusal = macro_desc_refusal_program_unproven;

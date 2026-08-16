@@ -131,6 +131,7 @@
   unknown
   none
   dest
+  read
 ])
 (define_enum_attr "xtt_config_effect" "xtt_config_effect"
   (const_string "unknown"))

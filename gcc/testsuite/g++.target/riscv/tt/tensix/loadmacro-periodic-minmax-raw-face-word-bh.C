@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // The raw `.ttinsn' face-advance word is opaque inline asm: its LREG, CC,
 // Dst, and config effects are not represented in RTL, so it poisons the
 // function's config-ownership proof and both otherwise-exact runs refuse
