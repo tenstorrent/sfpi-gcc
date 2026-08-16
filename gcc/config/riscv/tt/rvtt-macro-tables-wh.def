@@ -1,0 +1,143 @@
+/* Wormhole SFPLOADMACRO capability data (macro planner Layer 4).
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* X-macro data consumed by rvtt-macro-tables.cc.  Transcribed from the
+   frozen Min/Max pass (4e045d31d, rtl-rvtt-loadmacro.cc) and
+   sfpu-ops-wh.h; provenance per constant in NOTES-wp6-prep.md.
+   Descriptor-state words (templates, sequences, misc) are WH/BH-COMMON by
+   test evidence (loadmacro-periodic-minmax-wh.C asserts the identical
+   SFPCONFIG words as the BH test); the unit test asserts the two .def
+   files never diverge on them.  Only the launch-field layout and the
+   address-modifier plumbing are WH-specific.  */
+
+/* CPU scalars.
+   Launch layout: 0x93 << 24 | lreg_ind << 20 | instr_mod0 << 16
+     | addr_mode << 14 | dest_reg_addr    (lreg_ind = macro_index*4 + vd),
+   matching TT_OP_WH_SFPLOADMACRO (sfpu-ops-wh.h:256-257) and the frozen
+   pass (rtl-rvtt-loadmacro.cc:1001: WH shift 14; 2-bit field).
+   No-increment addr mode 3 (:442,579,717,1489); Dst += 2 auto-increment
+   addr mode 2 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
+   (:164-169) = 0x0173.  Drain 3 slots.  Break-even 8 rows (:1123) --
+   reference data for the WP7 cost-model regression only.  */
+XTT_MACRO_CAPS_SCALARS ("wh", /*n_templates*/4, /*n_sequence_slots*/4,
+			/*delay_bits*/3,
+			/*launch_opcode*/0x93, /*lreg_ind_shift*/20,
+			/*mod0_shift*/16, /*addr_mode_shift*/14,
+			/*addr_mode_bits*/2, /*address_bits*/10,
+			/*no_inc*/3, /*auto_inc_dst2*/2,
+			/*needs_bank_base_ownership*/true,
+			/*setc16_opcode*/0xb2, /*sfpconfig_opcode*/0x91,
+			/*owned_config_dests*/0x0173,
+			/*proven_drain_slots*/3,
+			/*reference_breakeven_rows*/8)
+
+/* WH's two-bit launch field selects physical slot 2 when the unencoded
+   incoming ADDR_MOD_SET_Base selector is 0 and physical slot 6 when it is
+   1; the compiler owns BOTH so caller Base state cannot redirect the
+   launch to stale configuration (rtl-rvtt-loadmacro.cc:834-843,
+   SFPLOADMACRO_FORMATION.md "Periodic floating-point selection slice").
+   Slot 2: SETC16 regs 11/25/50; slot 6: regs 19/29/54; values (0,2,0)
+   per slot = zero Src increment/clear, Dst increment two, zero fidelity
+   increment/bias.  Raw words asserted by loadmacro-periodic-minmax-wh.C.  */
+XTT_MACRO_ADDR_MOD_SLOT (/*phys*/2, /*src*/11, 0, /*dst*/25, 2,
+			 /*fid*/50, 0)
+XTT_MACRO_ADDR_MOD_SLOT (/*phys*/6, /*src*/19, 0, /*dst*/29, 2,
+			 /*fid*/54, 0)
+
+/* Full owned SETC16 program (reference expectation, order as emitted
+   at rtl-rvtt-loadmacro.cc:838-843).  */
+XTT_MACRO_REF_ADDR_MOD_SETC16 (11, 0)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (25, 2)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (50, 0)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (19, 0)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (29, 2)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (54, 0)
+
+/* ------------------------------------------------------------------ */
+/* WH/BH-common proven data: byte-for-byte the BH entries; see the     */
+/* provenance comments in rvtt-macro-tables-bh.def.		       */
+/* ------------------------------------------------------------------ */
+
+XTT_MACRO_SEQ_PROGRAM ("minmax-binary-m0", 0, 0x00dd008c, 1,
+		       SU_SIMPLE, 0, 255, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("minmax-binary-m1", 1, 0x53000000, 2,
+		       SU_SIMPLE, 1, 255, false,
+		       SU_STORE, -1, 255, true,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("signbit-m0", 0, 0x5384004d, 3,
+		       SU_SIMPLE, 0, 255, false,
+		       SU_SIMPLE, 1, 255, false,
+		       SU_STORE, -1, 3, true,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("cast-round-m0", 0, 0x534d0004, 3,
+		       SU_SIMPLE, 0, 0, false,
+		       SU_ROUND, 1, 1, false,
+		       SU_STORE, -1, 2, true,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("select-m0", 0, 0x13000004, 2,
+		       SU_SIMPLE, 0, 0, false,
+		       SU_STORE, -1, 2, true,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("select-m1-idle", 1, 0x00000000, 0,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+XTT_MACRO_SEQ_PROGRAM ("select-m2", 2, 0x00000005, 1,
+		       SU_SIMPLE, 1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+XTT_MACRO_MISC_WORD ("minmax-binary", 0x00000330, false, 0)
+XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)
+XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)
+XTT_MACRO_MISC_WORD ("select-u16",    0x00000706, true, 6)
+
+XTT_MACRO_HIDDEN_WRITE (0x920002c0, 0xfffffff0, /*L2*/ (1u << 2))
+
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 0, 0x920002c1)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 1, 0x940000d6)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 4, 0x00dd008c)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 5, 0x53000000)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 8, 0x00000330)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 0, 0x920002c9)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 1, 0x940000d6)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 4, 0x00dd008c)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 5, 0x53000000)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 8, 0x00000330)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 0, 0x94fe10c6)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 1, 0x900000d0)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 4, 0x5384004d)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 8, 0x00000110)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 0, 0x900000c0)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 1, 0x8e0000d1)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 4, 0x534d0004)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 8, 0x00000100)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 0, 0x7b0000c6)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 1, 0x8a0000d0)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 4, 0x13000004)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 5, 0x00000000)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 6, 0x00000005)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 8, 0x00000706)
