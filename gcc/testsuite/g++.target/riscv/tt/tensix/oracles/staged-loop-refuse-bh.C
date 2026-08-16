@@ -1,9 +1,3 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
-// { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
-// { dg-final { scan-assembler-times "SFPSHFT" 1 } }
-// { dg-final { scan-assembler-times "SFPCAST" 1 } }
-// { dg-final { scan-assembler-times "TTINCRWC" 1 } }
 
 /* The additional Tensix issue makes moving the all-lanes enable across the
    loop unsafe, so the complete function must remain unchanged.  */

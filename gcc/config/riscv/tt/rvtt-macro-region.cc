@@ -484,6 +484,35 @@ region_scanner::scan_bb (basic_block bb)
 	  continue;
 	}
 
+      /* Configuration writers and CC-writing value events refuse at the
+	 event itself (WP8) so shapes name their missing capability even
+	 when later slice members are opaque: a config write can never
+	 be a region member, and a CC writer would need a
+	 CC-manipulating instruction template no proven program
+	 provides.  */
+      if (e.config_dests_written || e.addr_mod_slot_write)
+	{
+	  refuse (macro_region_refusal::row_config_write);
+	  span_.truncate (0);
+	  span_effects_.truncate (0);
+	  /* A configuration write never changes lane state, so an
+	     ambient enable already seen still proves the next row's
+	     entry lanes (audited span members it absorbed only read
+	     CC).  */
+	  rtx_insn *enable = pending_enable_;
+	  finalize_region (bb);
+	  pending_enable_ = enable;
+	  continue;
+	}
+      if (e.cc_write)
+	{
+	  refuse (macro_region_refusal::row_cc_template_unsupported);
+	  span_.truncate (0);
+	  span_effects_.truncate (0);
+	  finalize_region (bb);
+	  continue;
+	}
+
       /* Ordinary audited value instruction: extend the row span.  */
       if (span_.is_empty () && runs_marker_)
 	{

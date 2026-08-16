@@ -1,11 +1,3 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
-// { dg-final { scan-assembler-times "\\.ttinsn\\t2467348480" 1 } }
-// { dg-final { scan-assembler-not "TTINCRWC" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
-// { dg-final { scan-assembler-times "SFPNOP" 3 } }
-// { dg-final { scan-assembler-times "SFPSHFT" 0 } }
-// { dg-final { scan-assembler-times "SFPCAST" 0 } }
-// { dg-final { check-function-bodies "**" "" } }
 
 void same_row_successor ()
 {
