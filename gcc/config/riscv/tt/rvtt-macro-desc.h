@@ -76,11 +76,12 @@ extern void rvtt_macro_descriptor_release (macro_descriptor *);
 
 /* Layer-7a in-tree verification of a synthesized descriptor against the
    region's explicit facts (rvtt-macro-verify.cc).  Runs under
-   -mtt-tensix-macro-planner-verify and always under checking.  */
-extern void rvtt_macro_verify_descriptor (const macro_region &region,
-					  const macro_schedule &schedule,
-					  const macro_descriptor &desc,
-					  FILE *dump);
+   -mtt-tensix-macro-planner-verify and always under checking.  Returns
+   null on success, else the failing component's stable tag; a non-null
+   return is a descriptor refusal and must prevent form_region.  */
+extern const char *rvtt_macro_verify_descriptor
+  (const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, FILE *dump);
 
 /* Build the verifier's expectations from the region's explicit facts
    (implemented beside synthesis; consumed by rvtt-macro-verify.cc).  */

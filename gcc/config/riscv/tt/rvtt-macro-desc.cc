@@ -624,7 +624,19 @@ rvtt_macro_synthesize (const macro_region &region,
 /* ------------------------------------------------------------------ */
 /* Verifier expectations: a second pass over the region's explicit
    facts, so the verifier compares the synthesized words against an
-   independently assembled expectation set.			       */
+   independently assembled expectation set.
+
+   LIMITATION (WP8 revisit): the template, sequence, and misc
+   expectations are assembled from the SAME desc_program table that
+   synthesis reads (derive_structure + find_program), so the verifier
+   catches packing/encoding divergence but cannot catch a wrong table
+   entry -- both sides would agree on the wrong words.  The cross-check
+   for table wrongness is the frozen-oracle byte-parity suite (the
+   periodic-minmax parities in manifest-loadmacro-family /
+   manifest-inplace-minmax), which compares the planner's emission
+   against independently recorded quarantined-pass words.  Launch words
+   and SETC16 slot programs, by contrast, are re-derived here
+   independently of synthesis's choices.  */
 /* ------------------------------------------------------------------ */
 
 #include "rvtt-macro-verify-core.h"
