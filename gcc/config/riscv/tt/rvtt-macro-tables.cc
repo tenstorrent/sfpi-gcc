@@ -583,13 +583,28 @@ template_hidden_lreg_writes (const caps *c, uint32_t word)
 /* Fixed architectural words.					      */
 /* ------------------------------------------------------------------ */
 
+bool
+sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word)
+{
+  /* TT_OP_{WH,BH}_SFPENCC (0x8a): imm12 << 12 | lreg_c << 8
+     | lreg_dest << 4 | mod1; the typed rvtt_sfpencc pattern has no
+     register operands, so both lreg fields encode as zero.
+     Out-of-range fields refuse rather than alias under masking.  */
+  if (imm12 > 0xfff || mod1 > 0xf)
+    return false;
+  *word = (0x8au << 24) | ((uint32_t) imm12 << 12) | (uint32_t) mod1;
+  return true;
+}
+
 uint32_t
 sfpencc_all_lanes_word ()
 {
-  /* TT_OP_{WH,BH}_SFPENCC (0x8a): imm12 << 12 | lreg_c << 8
-     | lreg_dest << 4 | mod1, with imm12 = SFPENCC_IMM12_BOTH (3) and
-     mod1 = SFPENCC_MOD1_EI_RI (10) (rvtt-protos.h:177,184).  */
-  return (0x8au << 24) | (3u << 12) | 10u;	/* 0x8a00300a */
+  /* imm12 = SFPENCC_IMM12_BOTH (3): set both lane-enable and result;
+     mod1 = SFPENCC_MOD1_EI_RI (10): take both from the immediate
+     (rvtt-protos.h SFPENCC_* constants).  */
+  uint32_t word = 0;
+  bool ok = sfpencc_encode (3, 10, &word);
+  return ok ? word : 0;		/* 0x8a00300a */
 }
 
 uint32_t

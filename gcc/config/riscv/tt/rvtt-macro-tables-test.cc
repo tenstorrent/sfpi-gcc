@@ -452,6 +452,24 @@ test_fixed_words ()
 {
   /* SFPENCC (3, 10) all-lanes enable.  */
   CHECK_EQ_HEX (sfpencc_all_lanes_word (), 0x8a00300au);
+  /* The one SFPENCC word derivation: the all-lanes constant is
+     encode (3, 10); no other proven (imm12, mod1) pair may alias it;
+     out-of-range fields refuse.  */
+  {
+    uint32_t w = 0;
+    CHECK (sfpencc_encode (3, 10, &w));
+    CHECK_EQ_HEX (w, sfpencc_all_lanes_word ());
+    CHECK (sfpencc_encode (0, 10, &w));		/* lanes off (EI, imm 0) */
+    CHECK (w != sfpencc_all_lanes_word ());
+    CHECK (sfpencc_encode (1, 10, &w));		/* enable only, no result */
+    CHECK (w != sfpencc_all_lanes_word ());
+    CHECK (sfpencc_encode (10, 3, &w));		/* swapped operand roles  */
+    CHECK (w != sfpencc_all_lanes_word ());
+    CHECK (sfpencc_encode (3, 0, &w));		/* EU_R1: enable untouched */
+    CHECK (w != sfpencc_all_lanes_word ());
+    CHECK (!sfpencc_encode (0x1003, 10, &w));	/* imm12 out of range      */
+    CHECK (!sfpencc_encode (3, 0x1a, &w));	/* mod1 out of range       */
+  }
   /* SETRWC (0, 4, 8, 0, 0, 4): CR-mode Dst += 8; two per face advance.
      Equals the frozen pass's deleted magic word (loadmacro.cc:161).  */
   CHECK_EQ_HEX (dst_step8_setrwc_word (), 0x37120004u);

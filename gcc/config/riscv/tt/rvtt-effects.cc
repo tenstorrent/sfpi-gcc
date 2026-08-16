@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
+#include "rvtt-macro-tables.h"
 
 /* Effect data lives once, in the generated attribute family of
    rvtt-cost.md; this file only resolves it against operands.  Every
@@ -138,6 +139,37 @@ rvtt_insn_effects (rtx_insn *insn)
 
   e.cc_read = (cc == XTT_CC_EFFECT_READ || cc == XTT_CC_EFFECT_READWRITE);
   e.cc_write = (cc == XTT_CC_EFFECT_WRITE || cc == XTT_CC_EFFECT_READWRITE);
+
+  /* Lane-state proof of a CC write (the macro planner's ambient-enable
+     obligation): provable only when the written value is word-exact
+     against the architectural all-lanes SFPENCC encoding, derived once
+     in the capability tables.  Reaching the admitted instruction's
+     operands by recognized code follows the XTT_RWC_EFFECT_INC
+     precedent below; every other CC writer keeps the refusing default
+     (lane-state-unproved).  Operand mapping mirrors the emission
+     pipeline verbatim: the rvtt_sfpencc template prints "%1, %0" and
+     the assembler reads "SFPENCC imm12, mod1", so operand 1 is the
+     encoded imm12 and operand 0 the encoded mod1 -- the identical
+     operand roles the deleted quarantined pass proved against
+     (SFPENCC_MOD1_EI_RI at operand 0, SFPENCC_IMM12_BOTH at
+     operand 1).  */
+  if (e.cc_write && !e.cc_read && code == CODE_FOR_rvtt_sfpencc)
+    {
+      extract_insn (insn);
+      if (recog_data.n_operands >= 2
+	  && CONST_INT_P (recog_data.operand[0])
+	  && CONST_INT_P (recog_data.operand[1])
+	  && INTVAL (recog_data.operand[0]) >= 0
+	  && INTVAL (recog_data.operand[1]) >= 0)
+	{
+	  uint32_t word;
+	  e.cc_write_all_lanes
+	    = (rvtt_macro::sfpencc_encode
+		 (UINTVAL (recog_data.operand[1]),
+		  UINTVAL (recog_data.operand[0]), &word)
+	       && word == rvtt_macro::sfpencc_all_lanes_word ());
+	}
+    }
 
   if (cfg == XTT_CONFIG_EFFECT_DEST || cfg == XTT_CONFIG_EFFECT_READ)
     {
@@ -320,10 +352,14 @@ rvtt_dump_insn_effects (FILE *file, rtx_insn *insn)
     }
 
   fprintf (file, "\t# xtt-effects: subunit=%s latency=%d lreg-read=0x%x"
-	   " lreg-write=0x%x port=%s cc=%s%s%s config=0x%x",
+	   " lreg-write=0x%x port=%s cc=%s%s%s%s config=0x%x",
 	   subunit_names[e.subunit], e.result_latency, e.lreg_read,
 	   e.lreg_write, port_names[get_attr_xtt_lreg_write_port (insn)],
 	   e.cc_read ? "r" : "", e.cc_write ? "w" : "",
+	   /* Lane-state proof of the CC write: only a word-exact
+	      all-lanes SFPENCC is proven; everything else dumps the
+	      bare (unproved) "w".  */
+	   e.cc_write_all_lanes ? ":all-lanes" : "",
 	   !e.cc_read && !e.cc_write ? "none" : "",
 	   e.config_dests_written);
 
