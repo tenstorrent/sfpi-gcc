@@ -18,6 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #define INCLUDE_VECTOR
+#define INCLUDE_ALGORITHM
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -203,7 +204,8 @@ constant_load_p (gcall *call, class loop *loop)
    conservative: refuse the whole loop before changing virtual operands or
    statement placement when the bound is exceeded.  */
 static bool
-pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
+pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
+		  bool report = true)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
@@ -324,11 +326,66 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
 
   if (peak <= LREG_COUNT)
     return true;
-  if (dump_file)
+  if (report && dump_file)
     fprintf (dump_file,
 	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
 	     peak, LREG_COUNT);
   return false;
+}
+
+/* Estimate the number of SFPLOADI issues needed to materialize CALL's
+   constant after the later immediate-shortening passes run.  Prefer keeping
+   two-issue constants live when pressure prevents hoisting every invariant;
+   one-issue values remain cheap to rematerialize in the loop.  This models
+   only the target's immediate encodings.  It deliberately does not recognize
+   particular values or source patterns.  */
+static unsigned
+materialization_cost (gcall *call)
+{
+  uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
+  unsigned upper = value >> 16;
+  unsigned lower = value & 0xffff;
+  if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
+    return 1;
+
+  /* A full value whose low thirteen bits are zero and whose exponent fits
+     binary16 can use the single-issue FLOATA encoding.  */
+  unsigned exponent = (value >> 23) & 0xff;
+  return !(value & 0x1fff)
+    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+}
+
+/* Select the most expensive invariant materializations which fit the
+   architectural LREG pressure bound.  The old all-or-nothing policy left
+   every constant in a counted loop when only one live range exceeded the
+   bound.  Greedy selection is safe because pressure_legal_p re-runs the full
+   conservative liveness proof after every addition; it is also deterministic
+   because equal-cost candidates retain source order.  */
+static auto_vec<gcall *>
+select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
+{
+  std::stable_sort (loads.begin (), loads.end (),
+		    [] (gcall *a, gcall *b)
+		    {
+		      return materialization_cost (a) > materialization_cost (b);
+		    });
+
+  auto_vec<gcall *> selected;
+  for (gcall *call : loads)
+    {
+      selected.safe_push (call);
+      if (!pressure_legal_p (loop, selected, false))
+	{
+	  selected.pop ();
+	  if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "Invariant SFPU immediate left in loop by LREG pressure: ");
+	      print_gimple_stmt (dump_file, call, 0);
+	    }
+	}
+    }
+  return selected;
 }
 
 /* Prove that the loop's first header test enters its sole body block.  This
@@ -411,10 +468,14 @@ transform (function *fn)
 	      loads.safe_push (call);
 	  }
 
-      if (loads.is_empty () || !pressure_legal_p (loop, loads))
+      if (loads.is_empty ())
 	continue;
 
-      for (gcall *call : loads)
+      auto_vec<gcall *> selected = select_pressure_legal_loads (loop, loads);
+      if (selected.is_empty ())
+	continue;
+
+      for (gcall *call : selected)
 	{
 	  if (tree vdef = gimple_vdef (call))
 	    {
