@@ -11,6 +11,9 @@
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=inc:d=2,cr=0 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=face:d=16 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=none latency=0 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=none dst=none encodable=no} 1 } }
+// The pushc/popc-synthesized SFPENCC is the proven all-lanes enable; a
+// direct lanes-off SFPENCC keeps the bare (lane-state-unproved) write.
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w:all-lanes config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: opaque} 2 } }
 
@@ -28,5 +31,6 @@ __attribute__((noinline)) void effects_probe ()
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
   __builtin_rvtt_ttdstface ();
   __builtin_rvtt_sfpnop ();
+  __builtin_rvtt_sfpencc (0, 10);	/* lanes-off: cc=w, no proof */
   asm volatile (".ttinsn %0" :: "n" (0x37120004));
 }

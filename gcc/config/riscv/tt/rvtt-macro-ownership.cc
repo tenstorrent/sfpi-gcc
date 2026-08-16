@@ -96,8 +96,12 @@ rvtt_ownership_state::transfer (const xtt_effect_set &effects)
   lregs_foreign_live |= effects.lreg_write;
 
   /* A typed CC write invalidates lane-state knowledge until a consumer
-     proves the specific all-lanes pattern; the proof itself is the
-     consumer's, this transfer is only ever pessimistic.  */
+     proves the specific all-lanes pattern.  The consumer-side proof is
+     cc_write_all_lanes (rvtt_insn_effects), word-exact against the
+     capability table's architectural SFPENCC encoding; region
+     discovery and macro-planner formation both consume it, refusing
+     cc-enable-unproved otherwise.  This transfer is only ever
+     pessimistic.  */
   if (effects.cc_write)
     cc = CC_UNKNOWN;
 
