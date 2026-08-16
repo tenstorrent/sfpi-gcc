@@ -54,8 +54,8 @@ macro_region_refusal_name (macro_region_refusal r)
       return "row-opaque-effect";
     case macro_region_refusal::row_not_closed:
       return "row-not-closed";
-    case macro_region_refusal::row_cc_write:
-      return "row-cc-write";
+    case macro_region_refusal::row_cc_template_unsupported:
+      return "cc-template-unsupported";
     case macro_region_refusal::row_config_write:
       return "row-config-write";
     case macro_region_refusal::row_not_isomorphic:
@@ -194,7 +194,7 @@ region_scanner::close_row (basic_block bb)
     {
       if (e.cc_write)
 	{
-	  refuse (macro_region_refusal::row_cc_write);
+	  refuse (macro_region_refusal::row_cc_template_unsupported);
 	  return false;
 	}
       if (e.config_dests_written || e.addr_mod_slot_write)
@@ -323,7 +323,12 @@ region_scanner::isomorphic_to_first (macro_row &row)
 void
 region_scanner::finalize_region (basic_block bb)
 {
-  if (rows_.length () >= 2)
+  /* Single-row regions are admitted (WP8): a lone row is a complete
+     dataflow-closed slice; whether one launch amortizes its
+     configuration is a Layer-6 profitability question (straight-line
+     single rows refuse there; loop bodies weigh the row by the trip
+     estimate), never a discovery question.  */
+  if (rows_.length () >= 1)
     {
       macro_region region;
       region.bb = bb;

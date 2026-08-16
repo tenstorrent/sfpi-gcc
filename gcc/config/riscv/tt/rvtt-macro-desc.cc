@@ -147,6 +147,14 @@ struct desc_template_rule
   int mod1_op;			/* source operand carrying mod1	       */
   int imm12_op;			/* source operand carrying imm12; -1   */
   uint8_t routing_mod_bit;	/* TR_.._ROUTING_MOD only	       */
+  /* Proven-envelope operand pin (WP8): the source operand PIN_OP must
+     equal the per-CPU pinned value or synthesis refuses
+     program-unproven.  Used where the explicit operand has no
+     established template field (it must be the proven constant) or
+     where the explicit-mode -> template-word mapping is a single proven
+     pair (NOTES-wp6-prep.md 9(e)/9(f)).  -1 = no pin.  */
+  int pin_op;
+  int pin_wh, pin_bh;
 };
 
 struct desc_program
@@ -180,8 +188,8 @@ static const desc_program desc_programs[] = {
       { 0, {}, true } },
     2,
     { { TR_FIELDS_FROM_SOURCE_ROUTING_MOD, 0, 2 /* planned RHS L2 */,
-	0, 4 /* swap mod1 operand */, -1, 8 },
-      { TR_WHOLE_WORD, 0x940000d6, 0, -1, -1, -1, 0 } },
+	0, 4 /* swap mod1 operand */, -1, 8, -1, 0, 0 },
+      { TR_WHOLE_WORD, 0x940000d6, 0, -1, -1, -1, 0, -1, 0, 0 } },
     { 0x00dd008c, 0x53000000 },
     0x00000330,
     -1, 3, true,
@@ -198,9 +206,13 @@ static const desc_program desc_programs[] = {
 	       OPB_WH (TT_OP_BH_SFPCAST (0, 0, 0)) } }, true },
       { 0, {}, false } },
     2,
+    /* The explicit-shift-mode -> template-word mapping is a single
+       proven pair (WH mode 1 / BH mode 5 -> template mod1 6, NOTES
+       9(e)); other shift modes are not the proven program.  */
     { { TR_WHOLE_WORD_IMM12_FROM_SOURCE, 0x940000c6, 0, 0, -1,
-	4 /* shift imm operand */, 0 },
-      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 3 /* cast mod1 operand */, -1, 0 } },
+	4 /* shift imm operand */, 0, 7 /* shift mode operand */, 1, 5 },
+      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 3 /* cast mod1 operand */, -1, 0,
+	-1, 0, 0 } },
     { 0x5384004d, 0 },
     0x00000110,
     1, 0, true,
@@ -215,8 +227,18 @@ static const desc_program desc_programs[] = {
 	       OPB_WH (TT_OP_BH_SFP_STOCH_RND (0, 0, 0, 0, 0, 0)) } }, true },
       { 0, {}, false } },
     2,
-    { { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 3 /* cast mod1 */, -1, 0 },
-      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 8 /* stochrnd mod1 */, -1, 0 } },
+    /* The round template's low nibble is the explicit instruction's
+       architectural instr_mod1 = operand 7 (the raw 0x8e word places
+       instr_mod1 at bits 3:0 and the assemblable explicit form carries
+       it in operand 7; corrected at WP8 from the untestable operand-8
+       reading).  Operand 8 has no field in the 0x8e template layout and
+       is pinned to the proven zero.  The imm8 operand routes through
+       the imm12 packer, whose 0x8e nonzero refusal keeps unproven
+       immediate forms out.  */
+    { { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 3 /* cast mod1 */, -1, 0,
+	-1, 0, 0 },
+      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 7 /* stochrnd instr_mod1 */,
+	4 /* imm8 */, 0, 8 /* no template field */, 0, 0 } },
     { 0x534d0004, 0 },
     0x00000100,
     -1, 0, false,
@@ -409,6 +431,20 @@ rvtt_macro_synthesize (const macro_region &region,
     {
       const desc_template_rule &rule = program->templates[t];
       uint32_t word = 0;
+      if (rule.pin_op >= 0 && rule.source_event >= 0)
+	{
+	  HOST_WIDE_INT pin = 0;
+	  if (!const_operand (derived.value_insns[rule.source_event],
+			      rule.pin_op, &pin)
+	      || pin != (TARGET_XTT_TENSIX_WH ? rule.pin_wh : rule.pin_bh))
+	    {
+	      out->refusal = macro_desc_refusal_program_unproven;
+	      if (dump)
+		fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+			 out->refusal);
+	      return true;
+	    }
+	}
       switch (rule.kind)
 	{
 	case TR_FIELDS_FROM_SOURCE:
@@ -443,7 +479,11 @@ rvtt_macro_synthesize (const macro_region &region,
 	  {
 	    rtx_insn *src = derived.value_insns[rule.source_event];
 	    HOST_WIDE_INT imm12 = 0;
-	    if (!const_operand (src, rule.imm12_op, &imm12))
+	    /* Encodability, both directions: any typed immediate the
+	       12-bit field represents packs; anything else refuses --
+	       never silently masks.  */
+	    if (!const_operand (src, rule.imm12_op, &imm12)
+		|| imm12 < -2048 || imm12 > 2047)
 	      out->refusal = macro_desc_refusal_encoding_failed;
 	    else
 	      word = rule.word | ((uint32_t) (imm12 & 0xfff) << 12);
@@ -667,6 +707,14 @@ rvtt_macro_build_expectations (const macro_region &region,
     {
       const desc_template_rule &rule = program->templates[t];
       rvtt_macro_verify::expect_template &e = out->templates[t];
+      if (rule.pin_op >= 0 && rule.source_event >= 0)
+	{
+	  HOST_WIDE_INT pin = 0;
+	  if (!const_operand (derived.value_insns[rule.source_event],
+			      rule.pin_op, &pin)
+	      || pin != (TARGET_XTT_TENSIX_WH ? rule.pin_wh : rule.pin_bh))
+	    return false;
+	}
       switch (rule.kind)
 	{
 	case TR_FIELDS_FROM_SOURCE:
@@ -696,7 +744,8 @@ rvtt_macro_build_expectations (const macro_region &region,
 	  {
 	    rtx_insn *src = derived.value_insns[rule.source_event];
 	    HOST_WIDE_INT imm12 = 0;
-	    if (!const_operand (src, rule.imm12_op, &imm12))
+	    if (!const_operand (src, rule.imm12_op, &imm12)
+		|| imm12 < -2048 || imm12 > 2047)
 	      return false;
 	    e.whole_word = true;
 	    e.word = rule.word | ((uint32_t) (imm12 & 0xfff) << 12);
