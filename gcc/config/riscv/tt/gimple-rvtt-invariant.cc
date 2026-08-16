@@ -629,6 +629,15 @@ first_iteration_executes_p (class loop *loop, edge entry)
 static bool
 executes_every_entered_iteration_p (class loop *loop, basic_block bb)
 {
+  /* This pass initializes loops with AVOID_CFG_MODIFICATIONS, which keeps
+     multi-latch loops as-is with loop->latch == NULL rather than
+     canonicalizing them.  Without a unique latch there is no single block
+     that ends every iteration, so the dominance proof below has no anchor
+     (and dominated_by_p on a NULL block is undefined); refuse, mirroring
+     the NULL-latch check in short_constant_replay_loop_p.  */
+  if (!loop->latch)
+    return false;
+
   if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
     return false;
 
