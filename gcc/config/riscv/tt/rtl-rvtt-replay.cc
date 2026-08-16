@@ -854,20 +854,50 @@ provable_constant_trips (class loop *loop, basic_block preheader,
      execute = length * XTT_REPLAY_COST_REPLAY_SLOT_X100
      before  = deliver                        ; per-trip in-loop recording,
                                               ; execution overlapped under
-                                              ; the dominant delivery cost
+                                              ; the dominant delivery cost,
+                                              ; UNLESS hidden (below)
      after   = max (RISC_PUSH_X100, execute)  ; per-trip launch + replay
                                               ; reissue of the payload
      benefit = trips * (before - after)       ; per-trip delivery saved
                - deliver                      ; added record-only preheader
                                               ; pass (delivers, no work)
 
+   Execution-saturation context term (the LAUNCH_RUN parameter).  The
+   `before = deliver' pricing assumes the loop body is delivery-bound, so
+   removing the record pass's delivered words shortens the trip.  That is
+   false when the body's sibling launches of the SAME capture buffer are
+   contiguous in the final instruction stream: a contiguous run of R
+   launches occupies the issue plane for R * execute centislots while
+   delivering only R * RISC_PUSH_X100, and the record pass's delivery
+   streams into that execution shadow instead of extending the trip.
+   When the run's execution surplus covers the record pass's delivery,
+
+     launch_run * (execute - RISC_PUSH_X100) >= deliver
+
+   the per-trip relief is ~zero: before = after, so benefit degenerates to
+   -deliver (the preheader pass is pure cost) and the hoist refuses.  A
+   single launch can never satisfy this (length * SLOT - PUSH <
+   (1 + length) * PUSH for every length), so counted-loop hoists -- whose
+   per-trip launch is always separated from the next trip's by the loop
+   control words -- and all single-instance shapes are unaffected and pass
+   LAUNCH_RUN = 1.  Silicon: the unary-max/min (trips 4, length 4, 8
+   contiguous sibling launches per trip) shape measured +2.06% when
+   hoisted under the delivery-only model (which priced it +245); the
+   Reduce-SDPA winner (trips 4, length 8, 8 sibling launches per trip,
+   each separated by a surviving typed Dst increment, +121) and the
+   SDPA-exp counted loop (8, 24, +2325) are delivery-bound and keep their
+   unchanged benefits.  Full derivation in rvtt-cost.md.
+
    Hoist only when benefit >= the minimum-benefit threshold
    (XTT_REPLAY_HOIST_MIN_BENEFIT, overridable in the same centislot units
-   through -mtt-tensix-replay-hoist-min-benefit=).  The calibration
+   through -mtt-tensix-replay-hoist-min-benefit=; the saturation term is
+   part of the modeled benefit, not of the threshold, so an override
+   cannot force a hoist whose record delivery is hidden).  The calibration
    derivation lives with the constants in rvtt-cost.md: the Blackhole
    same-source silicon A/Bs place every measured losing shape at negative
    modeled benefit (max -158: 4-trip captures of 17..31 slots, +1.8%..+2.3%
-   regressions) and every measured winning shape at positive benefit
+   regressions; -615: the execution-saturated 4-trip 4-slot 8-sibling
+   shape, +2.06%) and every measured winning shape at positive benefit
    (minimum +121: the 4-trip 8-slot preheader-capture pair worth 21.5
    cycles/body; +2325: the 8-trip 24-slot counted payload, -9.83%), so the
    default threshold 60 refuses the entire measured losing class while
@@ -876,11 +906,12 @@ provable_constant_trips (class loop *loop, basic_block preheader,
    TRIPS must be provable (see provable_constant_trips above).  An unknown
    or merely estimated trip count refuses the hoist, which keeps the
    emitted code byte-identical to the unhoisted form.  The decision inputs
-   are exactly the provable trip count, the capture length, and the
-   cost-table constants.  */
+   are exactly the provable trip count, the capture length, the longest
+   contiguous sibling-launch run, and the cost-table constants.  */
 
 static bool
-hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length)
+hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length,
+		    unsigned launch_run)
 {
   uint64_t niter;
   if (!provable_constant_trips (loop, preheader, &niter))
@@ -905,10 +936,21 @@ hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length)
 			   * XTT_REPLAY_COST_RISC_PUSH_X100);
   HOST_WIDE_INT execute = ((HOST_WIDE_INT) length
 			   * XTT_REPLAY_COST_REPLAY_SLOT_X100);
-  HOST_WIDE_INT before = deliver;
   HOST_WIDE_INT after = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
 			     execute);
+  // Execution-saturation context: when the body's contiguous run of
+  // sibling launches of this same buffer has enough execution surplus to
+  // hide the record pass's delivery, hoisting relieves nothing per trip.
+  HOST_WIDE_INT surplus = ((HOST_WIDE_INT) launch_run
+			   * (execute - XTT_REPLAY_COST_RISC_PUSH_X100));
+  bool hidden = surplus >= deliver;
+  HOST_WIDE_INT before = hidden ? after : deliver;
   HOST_WIDE_INT benefit = trips * (before - after) - deliver;
+  if (hidden && dump_file)
+    fprintf (dump_file,
+	     "Record delivery hidden: contiguous launch run %u x length %u"
+	     " exec surplus %ld >= record delivery %ld\n",
+	     launch_run, length, (long) surplus, (long) deliver);
   HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
 			       ? (HOST_WIDE_INT)
 				 riscv_tt_replay_hoist_min_benefit
@@ -930,6 +972,70 @@ hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length)
 	     " (trips %ld, length %u)\n",
 	     (long) benefit, (long) min_benefit, (long) trips, length);
   return true;
+}
+
+/* Longest run of consecutive clones of SEQ (in BLOCK) whose playback
+   launches will be contiguous in the FINAL instruction stream: no
+   code-emitting instruction remains between one clone's last payload insn
+   and the next clone's first.  Non-delivering separators are debug
+   insns/notes, USE/CLOBBER markers, and recognized zero-length ghosts.  A
+   typed Dst-counter increment (CODE_FOR_rvtt_ttincrwc, the class the
+   counted-loop scan above already types) is additionally discounted when
+   the Dst auto-increment pass is enabled: that pass runs after replay
+   formation and absorbs exactly these per-row separators around replay
+   launches into an owned address-modifier configuration (see the pass
+   ordering contract in rvtt-passes.def), leaving the launches contiguous.
+   When that pass later refuses the absorption this scan over-counts the
+   run and the hoist over-refuses -- a byte-identical refusal, never a
+   regression.  Every other insn is a delivered word and breaks the run.
+   Purely structural: no operation identity, opcode calendar, coefficient
+   value, or instruction-word fingerprint participates.  */
+
+static unsigned
+max_contiguous_launch_run (replay_sequence const &seq,
+			   replay_block const &block)
+{
+  unsigned max_run = 1, run = 1;
+  for (size_t ix = 1; ix < seq.clones.size (); ++ix)
+    {
+      rtx_insn *from = block[seq.clones[ix - 1].end - 1].insn;
+      rtx_insn *to = block[seq.clones[ix].begin].insn;
+      bool contiguous = true;
+      for (rtx_insn *insn = NEXT_INSN (from); insn != to;
+	   insn = NEXT_INSN (insn))
+	{
+	  if (!insn)
+	    {
+	      // Clones are within one block; a broken chain refuses the
+	      // discount conservatively toward "separated" (fires are
+	      // gated by the benefit model as before).
+	      contiguous = false;
+	      break;
+	    }
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  rtx pattern = PATTERN (insn);
+	  if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+	    continue;
+	  if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0)
+	    {
+	      if (!get_attr_length (insn))
+		// Zero-length ghost: no delivered word.
+		continue;
+	      if (recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc
+		  && riscv_tt_opt_dst_autoincr > 0)
+		// Typed per-row Dst increment the later auto-increment
+		// pass absorbs around replay launches.
+		continue;
+	    }
+	  contiguous = false;
+	  break;
+	}
+      run = contiguous ? run + 1 : 1;
+      if (run > max_run)
+	max_run = run;
+    }
+  return max_run;
 }
 
 static basic_block
@@ -1008,7 +1114,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block)
       return nullptr;
     }
 
-  if (!hoist_profitable_p (loop, preheader, seq.length))
+  if (!hoist_profitable_p (loop, preheader, seq.length,
+			   max_contiguous_launch_run (seq, block)))
     return nullptr;
 
   for (auto pos = block.data () + seq.clones.front ().begin,
@@ -1245,7 +1352,10 @@ hoist_counted_loops (function *cfn,
 		     "Not hoisting: loop has no dedicated preheader\n");
 	  continue;
 	}
-      if (!hoist_profitable_p (loop, preheader, seq.length))
+      // The counted-loop payload is its own single clone; across trips the
+      // launch is always separated from the next by the loop-control
+      // delivery, so the contiguous launch run is 1.
+      if (!hoist_profitable_p (loop, preheader, seq.length, 1))
 	continue;
 
       auto spans = available_replay_spans (replay_spans, persistent_slots);
