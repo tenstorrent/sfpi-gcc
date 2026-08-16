@@ -14656,6 +14656,22 @@ bool need_shadow_stack_push_pop_p ()
 #undef TARGET_COMP_TYPE_ATTRIBUTES
 #define TARGET_COMP_TYPE_ATTRIBUTES riscv_comp_type_attributes
 
+/* Emit the generated Tensix architectural effect set of each instruction
+   as an assembler comment under -mtt-tensix-dump-effects; DejaGnu golden
+   tests pin these annotations (macro-planner Layer-1 self-check).  */
+
+static void
+riscv_asm_final_postscan_insn (FILE *file, rtx_insn *insn,
+			       rtx *operands ATTRIBUTE_UNUSED,
+			       int noperands ATTRIBUTE_UNUSED)
+{
+  if (riscv_tt_dump_effects)
+    rvtt_dump_insn_effects (file, insn);
+}
+
+#undef TARGET_ASM_FINAL_POSTSCAN_INSN
+#define TARGET_ASM_FINAL_POSTSCAN_INSN riscv_asm_final_postscan_insn
+
 struct gcc_target targetm = TARGET_INITIALIZER;
 
 #include "gt-riscv.h"

@@ -47,6 +47,123 @@
 (define_enum_attr "xtt_replay" "xtt_replay"
   (const_string "barrier"))
 
+;; ---------------------------------------------------------------------
+;; Generated architectural-effect attribute family (macro-planner Layer 1).
+;;
+;; Every default is the REFUSING value, exactly like xtt_latency_reorder
+;; defaulting to barrier: a pattern carries no effect claim until it is
+;; audited and annotated.  Consumers reach these only through the
+;; rvtt-effects query API (rvtt-effects.h); an unaudited field makes the
+;; whole effect set opaque and the consumer must refuse byte-identically.
+;; ---------------------------------------------------------------------
+
+;; Execution subunit occupied by the instruction's event.  `none' is both
+;; the refusing default and the audited value for pure issue-slot fillers
+;; (SFPNOP); the distinction is carried by the other audited fields.
+(define_enum "xtt_subunit" [
+  none
+  simple
+  mad
+  round
+  load
+  store
+  cfg
+  sync
+])
+(define_enum_attr "xtt_subunit" "xtt_subunit"
+  (const_string "none"))
+
+;; Issue slots until the result is architecturally readable, stored with a
+;; +1 bias because generated attributes cannot be negative: 0 means
+;; unaudited (refusing), N+1 means latency N.  The mad family's stored 2
+;; (latency 1) restates the established one-cycle dynamic result-delay
+;; contract (xtt_delay `dynamic'); real per-CPU values are future work
+;; (F1.3).  Decoded only by rvtt_insn_effects.
+(define_attr "xtt_result_latency" ""
+  (const_int 0))
+
+;; LREG writeback-port occupancy.  Replaces the SFPSWAP-borrows-MAD and
+;; Simple/Round shared-port folklore previously embedded in pass code.
+(define_enum "xtt_lreg_write_port" [
+  none
+  own
+  shared_simple_round
+  borrows_mad
+])
+(define_enum_attr "xtt_lreg_write_port" "xtt_lreg_write_port"
+  (const_string "none"))
+
+;; Bitmask of operand positions that may read (resp. write) an LREG,
+;; stored with a +1 bias because generated attributes cannot be negative:
+;; 0 means unaudited (refusing), M+1 means position mask M.  Positions are
+;; resolved to hard-register masks post-RA by rvtt_insn_effects, which is
+;; the only decoder of the bias.
+(define_attr "xtt_lreg_read_ops" ""
+  (const_int 0))
+(define_attr "xtt_lreg_write_ops" ""
+  (const_int 0))
+
+;; Whether LREG16 (the macro side-load target) is a legal destination.
+(define_enum "xtt_lreg16_dest" [
+  no
+  yes
+])
+(define_enum_attr "xtt_lreg16_dest" "xtt_lreg16_dest"
+  (const_string "no"))
+
+;; Architectural CC (lane-state) effect.  `unknown' is the refusing
+;; default; `read' covers ordinary lane-predicated value operations.
+;; Mod-dependent CC writes are refined through the CC(mask) data in
+;; rvtt-insn.def, never widened here.
+(define_enum "xtt_cc_effect" [
+  unknown
+  none
+  read
+  write
+  readwrite
+])
+(define_enum_attr "xtt_cc_effect" "xtt_cc_effect"
+  (const_string "unknown"))
+
+;; SFPU configuration effect.  `dest' marks a config write whose
+;; destination register is the operand at xtt_config_dest_op.
+(define_enum "xtt_config_effect" [
+  unknown
+  none
+  dest
+  read
+])
+(define_enum_attr "xtt_config_effect" "xtt_config_effect"
+  (const_string "unknown"))
+;; Operand position of the config destination, +1 biased (0 = unset).
+(define_attr "xtt_config_dest_op" ""
+  (const_int 0))
+
+;; Dst/RWC counter effect class.  `inc'/`set'/`face' are typed counter
+;; operations whose deltas live in typed operands; `addr_mode' marks a
+;; load/store whose RWC effect is decided by its address-mode operand and
+;; is resolved per-operand by rvtt_insn_effects.  `unknown' refuses.
+(define_enum "xtt_rwc_effect" [
+  unknown
+  none
+  inc
+  set
+  face
+  addr_mode
+])
+(define_enum_attr "xtt_rwc_effect" "xtt_rwc_effect"
+  (const_string "unknown"))
+
+;; Fast gate: whether a macro template encoder exists for this insn's
+;; unspec.  The authoritative answer is the Layer-4 capability table; this
+;; attribute only lets region discovery skip hopeless candidates early.
+(define_enum "xtt_macro_encodable" [
+  no
+  yes
+])
+(define_enum_attr "xtt_macro_encodable" "xtt_macro_encodable"
+  (const_string "no"))
+
 (define_automaton "rvtt_tensix")
 (define_cpu_unit "rvtt_math,rvtt_sfpu,rvtt_tdma,rvtt_cfg,rvtt_sync"
   "rvtt_tensix")

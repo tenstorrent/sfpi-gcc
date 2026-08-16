@@ -90,6 +90,7 @@
   UNSPECV_SFPSTOCHRND
 
   UNSPECV_SFPCONFIG
+  UNSPECV_OWNED_SETC16
 
   UNSPECV_SFPLUT
   UNSPECV_SFPLUTFP32_3R
@@ -109,6 +110,8 @@
   UNSPECV_SFPARECIP
   UNSPECV_SFPNONLINEAR
 
+  UNSPECV_TTSETRWC
+  UNSPECV_TTDSTFACE
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
 ])
@@ -474,7 +477,13 @@
   "TARGET_XTT_TENSIX"
   "SFPNOP"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn "rvtt_sfpbankdone"
   [(unspec_volatile:XTT32SI [
@@ -674,6 +683,43 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
+;; A compiler-owned SETC16 configuration write.  Late formation uses this
+;; only for configuration state that it subsequently consumes itself.  Keep
+;; the architectural register and value as operands even though the emitted
+;; word is pre-encoded, so ownership remains explicit in RTL dumps.
+(define_insn "rvtt_owned_setc16_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; config register
+     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
+     (match_operand:DI 2 "const_int_operand" "n") ;; encoded word
+     ] UNSPECV_OWNED_SETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%2"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+;; Field-operand owned SETC16 (macro-planner design 4.3): the pass hands
+;; only the architectural fields; the emitted word is packed by the
+;; capability tables at output time.  Supersedes the pre-encoded-word
+;; form above, which is deleted with the quarantined pass (WP7).
+(define_insn "rvtt_owned_setc16"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; config register
+     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
+     ] UNSPECV_OWNED_SETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  {
+    return rvtt_output_owned_setc16 (operands);
+  }
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
+
 (define_expand "rvtt_sfploadsrcs"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -809,7 +855,15 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "load")
+   (set_attr "xtt_lreg_write_port" "own")
+   (set_attr "xtt_lreg_read_ops" "65")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "addr_mode")
+   (set_attr "xtt_macro_encodable" "yes")])
 
 ;; A complete WH/BH macro launch.  The formation pass may emit this only after
 ;; it has materialized and owns the referenced sequence/template/misc slot.
@@ -828,6 +882,35 @@
           ;; SImode CONST_INT even though the assembler accepts that spelling.
           (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
           ] UNSPECV_SFPLOADMACRO))]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%6"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
+   (set_attr "xtt_replay" "barrier")])
+
+;; A macro launch whose delayed Simple template is SFPSWAP.  In addition to
+;; the launch VD, the template writes the fixed comparison operand (L2).  Keep
+;; that hidden architectural write explicit in RTL; formation only selects
+;; this pattern after proving L2 is private to the complete periodic region.
+;; Generic hidden-clobber launch (macro-planner design 4.3): the hidden
+;; physical-LREG write of the launched template is a register operand the
+;; planner fills from the capability tables'
+;; template_hidden_lreg_writes(), never a pattern-frozen register.
+;; (Replaced the fixed-L2 rvtt_sfploadmacro_swap_int, deleted at WP7.)
+(define_insn "rvtt_sfploadmacro_hidden_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
+          (match_operand:SI 2 "mem_or_0_operand" "X") ;; store Dst effect
+          (match_operand:SI 3 "const_int_operand" "n") ;; address
+          (match_operand:SI 4 "const_int_operand" "n") ;; load/store mode
+          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
+          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
+          ] UNSPECV_SFPLOADMACRO))
+   ;; Created post-reload: the hidden write is a hard-register operand the
+   ;; planner fills from template_hidden_lreg_writes(), never a
+   ;; pattern-frozen register.
+   (clobber (match_operand:XTT32SI 7 "register_operand" "=xr"))]
   "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
@@ -916,7 +999,14 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "store")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "store")
+   (set_attr "xtt_lreg_read_ops" "17")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "addr_mode")
+   (set_attr "xtt_macro_encodable" "yes")])
 
 (define_expand "rvtt_sfpstoresrcs"
   [(unspec_volatile:XTT32SI [
@@ -1001,7 +1091,13 @@
   "TARGET_XTT_TENSIX"
   "SFPENCC\t%1, %0"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "write")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn "rvtt_sfpcompc"
   [(unspec_volatile:XTT32SI [
@@ -1072,7 +1168,15 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   (set_attr "xtt_subunit" "mad")
+   (set_attr "xtt_result_latency" "2")
+   (set_attr "xtt_lreg_write_port" "own")
+   (set_attr "xtt_lreg_read_ops" "15")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpmad"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1106,7 +1210,15 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   (set_attr "xtt_subunit" "mad")
+   (set_attr "xtt_result_latency" "2")
+   (set_attr "xtt_lreg_write_port" "own")
+   (set_attr "xtt_lreg_read_ops" "31")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_int_iterator rvtt_muliaddi_op [
   UNSPECV_SFPMULI
@@ -1206,7 +1318,15 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_latency_reorder" "safe")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   (set_attr "xtt_subunit" "mad")
+   (set_attr "xtt_result_latency" "2")
+   (set_attr "xtt_lreg_write_port" "own")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpiadd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1845,7 +1965,18 @@
       operands, true, 8);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md:
+   ;; the shift is a Simple-unit event by analogy with the documented
+   ;; cast-round Simple assignments; flagged for the architectural
+   ;; reference.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
@@ -1876,7 +2007,15 @@
     rvtt_merge_lv_src (&operands[6], &operands[5]);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Same 9(h)-class Simple-unit inference as the BH/QSR form above.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpcast"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -1903,7 +2042,18 @@
    SFPCAST\t%x0, %x2, %3
    SFPCAST\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md
+   ;; ("the signbit SFPCAST is recorded Simple by analogy with the
+   ;; cast-round shape's documented Simple cast"); flagged for the
+   ;; architectural reference.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "7")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2069,7 +2219,14 @@
       operands, true, 9);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "round")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "97")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpstochrnd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2101,7 +2258,14 @@
    SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5
    SFPSTOCHRND\t%x0, %x3, %x2, 0, %4, %5\t# LV:%x1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "round")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "15")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfpreadconfig"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -2125,7 +2289,14 @@
   "@
    SFPMOV\t%x0, L%2, 8\t# CFG:%2
    SFPMOV\t%x0, L%2, 8\t# LV:%x1 CFG:%2"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "3")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "read")
+   (set_attr "xtt_config_dest_op" "3")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
 (define_insn "rvtt_sfpwriteconfig_v"
@@ -2135,7 +2306,14 @@
      ] UNSPECV_SFPCONFIG)]
   "TARGET_XTT_TENSIX"
   "SFPCONFIG\t%1, 0, 0\t# R:%x0 CFG:%1"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "2")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "dest")
+   (set_attr "xtt_config_dest_op" "2")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
@@ -2238,6 +2416,14 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "simple_mad_write")
    (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "borrows_mad")
+   (set_attr "xtt_lreg_read_ops" "13")
+   (set_attr "xtt_lreg_write_ops" "4")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_macro_encodable" "yes")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "*rvtt_sfpswap_cst1"
@@ -2909,7 +3095,15 @@
   "@
    SFPMUL24\t%x0, %x2, %x3, %4
    SFPMUL24\t%x0, %x2, %x3, %4\t# LV:%x1"
-  [(set_attr "type" "tensix")
+  [(set_attr "xtt_subunit" "mad")
+   (set_attr "xtt_result_latency" "2")
+   (set_attr "xtt_lreg_write_port" "own")
+   (set_attr "xtt_lreg_read_ops" "15")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")])
 
@@ -2970,6 +3164,84 @@
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
 
+(define_expand "rvtt_ttsetrwc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     (match_operand:SI 5 "const_int_operand")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      /* QSR has one RWC value field rather than separate D/B/A fields, and it
+         does not implement WH/BH's C-to-CR mode (CR bit 3).  D can therefore
+         map to QSR's unified value only when the mask selects D and/or
+         fidelity clear, CR is either disabled or D-only, and CR_D is paired
+         with a D update.  Conservatively refuse every other form.  */
+      HOST_WIDE_INT cr = INTVAL (operands[1]);
+      HOST_WIDE_INT mask = INTVAL (operands[5]);
+      if ((mask & ~HOST_WIDE_INT (0xc)) != 0
+          || (cr != 0 && cr != 4)
+          || ((cr & 4) != 0 && (mask & 4) == 0))
+        {
+          error ("QSR TTSETRWC cannot represent this CR/mask combination");
+          DONE;
+        }
+      emit_insn (gen_rvtt_ttsetrwc_qsr (operands[0], operands[1],
+                                        operands[2], operands[5]));
+    }
+  else
+    emit_insn (gen_rvtt_ttsetrwc_wh_bh (operands[0], operands[1],
+                                        operands[2], operands[3],
+                                        operands[4], operands[5]));
+  DONE;
+})
+
+/* These volatile patterns are the compiler-visible architectural RWC/Dst
+   state boundary.  They must remain replay barriers and may not be treated as
+   ordinary arithmetic or decoded later from opaque instruction words.  */
+(define_insn "rvtt_ttsetrwc_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     (match_operand:SI 2 "const_int_operand" "n")
+     (match_operand:SI 3 "const_int_operand" "n")
+     (match_operand:SI 4 "const_int_operand" "n")
+     (match_operand:SI 5 "const_int_operand" "n")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTSETRWC\t%0, %1, %2, %3, %4, %5"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "sync")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "set")])
+
+(define_insn "rvtt_ttsetrwc_qsr"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     (match_operand:SI 2 "const_int_operand" "n")
+     (match_operand:SI 3 "const_int_operand" "n")
+     ] UNSPECV_TTSETRWC)]
+  "TARGET_XTT_TENSIX_QSR"
+  "TTSETRWC\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "sync")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "set")])
+
 (define_insn "rvtt_ttincrwc"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI    0 "const_int_operand" "n")
@@ -2980,7 +3252,53 @@
   "TARGET_XTT_TENSIX"
   "TTINCRWC\t%0, %1, %2, %3"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "barrier")])
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "sync")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "inc")])
+
+;; Typed architectural Dst/RWC face advance: one face is two architectural
+;; Dst += 8 counter steps with no LREG, CC, or configuration effect.  Late
+;; analyses recognize the run-separator effect by this typed identity; raw
+;; `.ttinsn' words are never decoded (they remain opaque and refuse).
+(define_expand "rvtt_ttdstface"
+  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTDSTFACE)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      /* QSR's unified-RWC model has no defined Dst face-step form; refuse
+         rather than approximate (mirror of the TTSETRWC QSR refusal).  */
+      error ("QSR cannot represent the Dst face advance");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttdstface_wh_bh ());
+  DONE;
+})
+
+;; Like the typed TTSETRWC above, this volatile pattern is the
+;; compiler-visible architectural RWC/Dst state boundary; it must remain a
+;; replay barrier.  The architectural mnemonic and its field values are
+;; emission data owned by this pattern and the assembler, never decision
+;; logic: the CR-mode Dst += 8 step (SETRWC CR=4, D=8, mask=4) is issued
+;; twice to advance exactly one face.
+(define_insn "rvtt_ttdstface_wh_bh"
+  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTDSTFACE)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTSETRWC\t0, 4, 8, 0, 0, 4\;TTSETRWC\t0, 4, 8, 0, 0, 4"
+  [(set_attr "type" "tensix")
+   (set_attr "length" "8")
+   (set_attr "xtt_issue" "sync")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "sync")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "face")])
 
 (define_expand "rvtt_ttreplay"
   [(unspec_volatile:XTT32SI [

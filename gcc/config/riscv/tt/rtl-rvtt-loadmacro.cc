@@ -17,6 +17,19 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* QUARANTINED REGRESSION REFERENCE -- scheduled for deletion (WP8).
+
+   The binary Min/Max calendar was deleted at WP7 after the generic
+   macro planner (rtl-rvtt-macro-planner.cc) reproduced its emission
+   byte for byte.  The remaining shapes (signbit describe_configured_
+   region, cast-round, select/Where, and the analysis dump) stay behind
+   the default-off mtt-tensix-analyze-loadmacro/mtt-tensix-emit-
+   loadmacro flags, receive NO behavioral extensions, and are deleted at
+   WP8 once the planner covers single-row and loop-preheader regions
+   (signbit staged/staged-loop parity), typecast cross-region sharing,
+   and the Where positives are converted to cc-template-unsupported
+   refusals.  See DESIGN.md sections 8 (WP8) and 10.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -35,6 +48,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "df.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
+#include "rvtt-effects.h"
 
 namespace {
 
@@ -165,7 +179,7 @@ source_config_access_p (function *fn)
       FOR_BB_INSNS (bb, insn)
 	if (NONDEBUG_INSN_P (insn))
 	  {
-	    if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+    if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
 	      return true;
 	    int code = recog_memoized (insn);
 	    if (code == CODE_FOR_rvtt_sfpreadconfig_lv)
@@ -235,6 +249,9 @@ struct cast_round_descriptor
   rtx address_mode = nullptr;
 };
 
+/* One explicit semantic load/load/SFPSWAP/store row after allocation.  A
+   profitable periodic formation owns several adjacent rows and maps them to
+   the target's alternating-VD three-slot calendar.  */
 static rtx_insn *exact_dst_increment_after (rtx_insn *);
 
 static rtx_insn *
@@ -586,10 +603,48 @@ emit_config_word (rtx lreg0, uint32_t value, unsigned config_dest)
   emit_insn (gen_rvtt_sfpwriteconfig_v (lreg0, GEN_INT (config_dest)));
 }
 
+/* Every configured calendar that replaces an explicit Dst += 2 TTINCRWC uses
+   the SFPLOADMACRO address modifier.  Under the default-off formation contract
+   these slots are call-clobbered, compiler-owned resources for the whole
+   function.  Program every consumed Src, Dst, fidelity, and bias field so
+   reset state and arbitrary incoming state are equivalent.  */
+static void
+emit_owned_setc16 (unsigned config_reg, unsigned value)
+{
+  unsigned word = 0xb2000000u | (config_reg << 16) | value;
+  emit_insn (gen_rvtt_owned_setc16_int
+	     (GEN_INT (config_reg), GEN_INT (value), GEN_INT (word)));
+}
+
+static void
+emit_owned_dst_increment_address_modifier ()
+{
+  if (TARGET_XTT_TENSIX_BH)
+    {
+      /* BH names physical address-modifier slot six directly.  */
+      emit_owned_setc16 (18, 0); /* Src increment and clear.  */
+      emit_owned_setc16 (34, 2); /* Dst increment.  */
+      emit_owned_setc16 (53, 0); /* Fidelity increment and bias.  */
+    }
+  else
+    {
+      /* WH's two-bit launch field selects physical slot two when Base=0 and
+	 physical slot six when Base=1.  Own both so caller Base state cannot
+	 redirect the launch to stale configuration.  */
+      emit_owned_setc16 (11, 0); /* Slot 2 Src increment and clear.  */
+      emit_owned_setc16 (25, 2); /* Slot 2 Dst increment.  */
+      emit_owned_setc16 (50, 0); /* Slot 2 fidelity increment and bias.  */
+      emit_owned_setc16 (19, 0); /* Slot 6 Src increment and clear.  */
+      emit_owned_setc16 (29, 2); /* Slot 6 Dst increment.  */
+      emit_owned_setc16 (54, 0); /* Slot 6 fidelity increment and bias.  */
+    }
+}
+
 static void
 emit_descriptor_config ()
 {
   rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  emit_owned_dst_increment_address_modifier ();
   emit_config_word (config_lreg, 0x94fe10c6u, 0);
   emit_config_word (config_lreg, 0x900000d0u, 1);
   emit_config_word (config_lreg, 0x5384004du, 4);
@@ -600,6 +655,7 @@ static void
 emit_cast_round_config ()
 {
   rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
+  emit_owned_dst_increment_address_modifier ();
   /* Template 0: cast VD into the macro transient LReg16 slot.  */
   emit_config_word (config_lreg, 0x900000c0u, 0);
   /* Template 1: FP32-to-BF16 round from the transient slot.  */
@@ -1066,6 +1122,13 @@ describe_predicated_three_load_select_store (
     && INTVAL (store_addr_mode) == expected_addr_mode
     && condition_address == INTVAL (store_address)
     && true_mode == false_mode && false_mode == INTVAL (store_mode)
+    /* The architectural launch Dst-address field is 10 bits (see
+       dst_address_encodable and rvtt-macro-tables-*.def address_bits; the
+       main loadmacro paths above bound it at 0x3ff).  The select protocol
+       was only ever proven at small addresses, so this tighter 8-bit
+       bound is kept deliberately: relaxing it would form shapes outside
+       the frozen-oracle parity set of this quarantined pass.  Revisit
+       when predicated select converts to the generic planner (WP8/5).  */
     && condition_address >= 0 && condition_address <= 0xff
     && true_address >= 0 && true_address <= 0xff
     && false_address >= 0 && false_address <= 0xff
@@ -1168,8 +1231,17 @@ static unsigned
 select_launch_word (unsigned macro_index, HOST_WIDE_INT mode,
 		    HOST_WIDE_INT address_mode, HOST_WIDE_INT address)
 {
+  /* The addr-mode field sits at bit 13 on BH (3 bits, 15:13) and bit 14
+     on WH (2 bits, 15:14), the same layout as the main launch paths above
+     and the capability tables (NOTES-wp6-prep.md 9(a) resolution: CRAQ
+     sim ISA decode, production tt_llk_blackhole ckernel_ops.h, and the
+     shipped minmax CRAQ oracle ELF launch words all agree).  This helper
+     historically hardcoded << 14; that was latent because every select
+     launch passes address_mode zero (see emit_select_launch), so the
+     correction cannot change any emitted byte.  */
   return 0x93000000u | (macro_index << 22) | (unsigned (mode) << 16)
-    | (unsigned (address_mode) << 14) | unsigned (address);
+    | (unsigned (address_mode) << (TARGET_XTT_TENSIX_BH ? 13 : 14))
+    | unsigned (address);
 }
 
 static void
@@ -1177,10 +1249,16 @@ emit_select_launch (const predicated_select_descriptor &descriptor,
 		    unsigned index)
 {
   /* The accepted WH/BH selector protocol uses the macro instruction's raw
-     Dst-row addressing mode (zero).  The explicit loads' target-specific
-     address-mode values were proved above but are not copied into the macro
-     field: on BH, doing so would overlap InstrMod0 and silently turn the
-     opening F16b mode 2 load into mode 3.  */
+     Dst-row addressing mode (zero); the explicit loads' target-specific
+     address-mode values were proved above but are deliberately not copied
+     into the macro field, preserving whole-word parity with the proven
+     select programs.  Historical note (NOTES-wp6-prep.md 9(a)): this
+     comment used to justify the zero with "on BH, copying the mode would
+     overlap InstrMod0 and silently turn the opening F16b mode 2 load into
+     mode 3" -- an artifact of select_launch_word's then-stale << 14.  At
+     the proven BH shift 13 a 3-bit mode fits bits 15:13 with no overlap;
+     zero remains correct here because it is the protocol value the parity
+     oracles pin, not because of an encoding hazard.  */
   const HOST_WIDE_INT macro_address_mode = 0;
   const HOST_WIDE_INT addresses[] = {
     descriptor.condition_address,
@@ -1486,7 +1564,8 @@ discover (function *fn)
      A canonical one-block loop gets its enable and configuration in the
      structural preheader; a straight-line site retains local setup.  */
   bool cast_round_group = configured_regions.is_empty ()
-    && select_regions.is_empty () && cast_round_group_p (cast_round_rows);
+    && select_regions.is_empty ()
+    && cast_round_group_p (cast_round_rows);
   if (!cast_round_group
       && (configured_regions.length () + select_regions.length () != 1
 	  || !cast_round_rows.is_empty ()))
@@ -1545,7 +1624,9 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX
+    /* The generic macro planner supersedes this quarantined pass; the
+       two never run together.  */
+    return TARGET_XTT_TENSIX && !riscv_tt_macro_planner
       && (riscv_tt_analyze_loadmacro || riscv_tt_emit_loadmacro);
   }
 

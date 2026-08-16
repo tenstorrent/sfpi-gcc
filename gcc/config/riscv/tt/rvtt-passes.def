@@ -59,6 +59,10 @@ INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lreg_livein);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
+/* The generic macro planner analyzes (and later forms) macro regions after
+   IRA has assigned LREGs, ahead of the quarantined exact-calendar pass it
+   replaces and of the hazard scheduler and replay formation.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
 /* Formation inserts owned config writes and timed launches after IRA has
    assigned LREGs, but before the hazard scheduler and replay formation inspect
    the final issue stream.  */

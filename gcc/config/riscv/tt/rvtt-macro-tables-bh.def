@@ -1,0 +1,216 @@
+/* Blackhole SFPLOADMACRO capability data (macro planner Layer 4).
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* X-macro data consumed by rvtt-macro-tables.cc.  Every raw word below is
+   transcribed from the frozen Min/Max pass (review SHA 4e045d31d,
+   worktree /localdev/nkapre/sfpi-gcc-minmax-macro, file
+   gcc/config/riscv/tt/rtl-rvtt-loadmacro.cc unless noted) or from the
+   TT_OP_* field tables (sfpu-ops-bh.h).  Provenance and architectural
+   meaning for each value: NOTES-wp6-prep.md.  Descriptor-state words
+   (templates, sequences, misc) are WH/BH-COMMON by test evidence
+   (loadmacro-periodic-minmax-wh.C asserts the identical SFPCONFIG words);
+   they appear in both .def files and the unit test asserts the two tables
+   never diverge.  */
+
+/* CPU scalars.
+   Launch layout: 0x93 << 24 | lreg_ind << 20 | instr_mod0 << 16
+     | addr_mode << 13 | dest_reg_addr    (lreg_ind = macro_index*4 + vd).
+   ADDR-MODE SHIFT 13 is the frozen pass's proven value
+   (rtl-rvtt-loadmacro.cc:1001, 896, 979: `<< (TARGET_XTT_TENSIX_BH ? 13
+   : 14)`), consistent with the BH SFPLOAD/SFPSTORE layouts
+   (sfpu-ops-bh.h: addr_mode << 13) and with the 3-bit BH
+   addr-mode values 6/7 fitting bits 15:13 below InstrMod0 at bit 16.
+   RESOLVED 2026-08-17 (was NOTES-wp6-prep.md 9(a) CONFLICT with the
+   then-stale TT_OP_BH_SFPLOADMACRO << 14, since corrected): three
+   independent references agree on << 13 with a 3-bit field --
+   (1) the CRAQ simulator's authoritative decode (craq-sim
+   data/bh/tensix_isa.json SFPLOADMACRO: sfpu_addr_mode "15:13",
+   dest_reg_addr "9:0"; wh: "15:14"), semantically consumed by
+   TENSIX_EXECUTE_SFPLOADMACRO's SFPLOAD re-dispatch, so the 8/8 CRAQ
+   validations genuinely discriminate the shift; (2) the production
+   TT-Metal LLK (tt_llk_blackhole common/inc/ckernel_ops.h
+   TT_OP_SFPLOADMACRO << 13, is_valid (sfpu_addr_mode, 3)); (3) the
+   shipped minmax-final-craq-v2 BH oracle ELF launch words 0x9300E000 /
+   0x9370C000 (addr modes 7 / 6 in bits 15:13; mode 7 is unrepresentable
+   at << 14 without overlapping InstrMod0 bit 16), independently decoded
+   the same way by riscv-tt-elf-objdump.  The 10-bit address_bits below
+   is likewise the simulator's dest_reg_addr "9:0" (the quarantined
+   select path's tighter 0xff bound is a deliberate protocol
+   restriction, not a field width -- see rtl-rvtt-loadmacro.cc).
+   No-increment addr mode 7 (:442,579,717,1489); Dst += 2 auto-increment
+   addr mode 6 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
+   (:164-169) = mask 0x0173.  Drain 3 slots (:988-990,1059-1062).
+   Break-even 7 rows (:1123) -- reference data for the WP7 cost-model
+   regression only, never a planner input.  */
+XTT_MACRO_CAPS_SCALARS ("bh", /*n_templates*/4, /*n_sequence_slots*/4,
+			/*delay_bits*/3,
+			/*launch_opcode*/0x93, /*lreg_ind_shift*/20,
+			/*mod0_shift*/16, /*addr_mode_shift*/13,
+			/*addr_mode_bits*/3, /*address_bits*/10,
+			/*no_inc*/7, /*auto_inc_dst2*/6,
+			/*needs_bank_base_ownership*/false,
+			/*setc16_opcode*/0xb2, /*sfpconfig_opcode*/0x91,
+			/*owned_config_dests*/0x0173,
+			/*proven_drain_slots*/3,
+			/*reference_breakeven_rows*/7)
+
+/* BH names physical address-modifier slot six directly in the launch's
+   3-bit field (rtl-rvtt-loadmacro.cc:826-831).  SETC16 regs 18/34/53 own
+   slot 6's Src increment+clear, Dst increment, fidelity increment+bias;
+   values (0, 2, 0) program the Dst += 2 auto-increment from any incoming
+   state.  Raw SETC16 words asserted by loadmacro-periodic-minmax-bh.C:
+   0xB2120000, 0xB2220002, 0xB2350000.  */
+XTT_MACRO_ADDR_MOD_SLOT (/*phys*/6, /*src*/18, 0, /*dst*/34, 2,
+			 /*fid*/53, 0)
+
+/* Full owned SETC16 program (reference expectation, order as emitted).  */
+XTT_MACRO_REF_ADDR_MOD_SETC16 (18, 0)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (34, 2)
+XTT_MACRO_REF_ADDR_MOD_SETC16 (53, 0)
+
+/* ------------------------------------------------------------------ */
+/* WH/BH-common proven sequence programs (SFPCONFIG dest = 4 + macro). */
+/* Bit-level word format UNESTABLISHED; whole words are the capability.*/
+/* Delays: documented values transcribed; DELAY_UNKNOWN (255) where the */
+/* frozen pass/docs do not state the per-event delay.		       */
+/* ------------------------------------------------------------------ */
+
+/* Min/Max macro 0: launches the SFPSWAP template (rtl-rvtt-loadmacro.cc:
+   884, word to dest 4).  Single templated event, no store.  */
+XTT_MACRO_SEQ_PROGRAM ("minmax-binary-m0", 0, 0x00dd008c, 1,
+		       SU_SIMPLE, 0, 255, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+/* Min/Max macro 1: SHFT2 copy into macro LReg16 plus the delayed store
+   absorbing the Dst increment (:885, word to dest 5).  Max elapsed delay
+   three slots (:1056-1058).  */
+XTT_MACRO_SEQ_PROGRAM ("minmax-binary-m1", 1, 0x53000000, 2,
+		       SU_SIMPLE, 1, 255, false,
+		       SU_STORE, -1, 255, true,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+/* Signbit macro 0: shift (template 0), cast (template 1), delayed store
+   (:854, dest 4).  "retires its final delayed store three issue slots
+   after launch" (:985-987) -> store delay 3.  Unit assignment of the
+   cast to Simple follows the cast-round shape's documented "Simple d0"
+   (inference; flagged).  */
+XTT_MACRO_SEQ_PROGRAM ("signbit-m0", 0, 0x5384004d, 3,
+		       SU_SIMPLE, 0, 255, false,
+		       SU_SIMPLE, 1, 255, false,
+		       SU_STORE, -1, 3, true,
+		       SU_NONE, -1, 0, false)
+
+/* Cast/round macro 0: "Simple d0, Round d1, Store d2" (:867-868,
+   dest 4).  The one shape with fully documented per-event delays.  */
+XTT_MACRO_SEQ_PROGRAM ("cast-round-m0", 0, 0x534d0004, 3,
+		       SU_SIMPLE, 0, 0, false,
+		       SU_ROUND, 1, 1, false,
+		       SU_STORE, -1, 2, true,
+		       SU_NONE, -1, 0, false)
+
+/* Select macro 0: "SETCC d0, store d2" (:1570, dest 4).  */
+XTT_MACRO_SEQ_PROGRAM ("select-m0", 0, 0x13000004, 2,
+		       SU_SIMPLE, 0, 0, false,
+		       SU_STORE, -1, 2, true,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+/* Select macro 1: idle middle sequence (:1603, dest 5).  */
+XTT_MACRO_SEQ_PROGRAM ("select-m1-idle", 1, 0x00000000, 0,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+/* Select macro 2: "ENCC d0" (:1571, dest 6).  */
+XTT_MACRO_SEQ_PROGRAM ("select-m2", 2, 0x00000005, 1,
+		       SU_SIMPLE, 1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
+/* ------------------------------------------------------------------ */
+/* Proven misc words (SFPCONFIG dest 8).			       */
+/* ------------------------------------------------------------------ */
+
+XTT_MACRO_MISC_WORD ("minmax-binary", 0x00000330, false, 0)  /* :886  */
+XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)  /* :855  */
+XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)  /* :870  */
+/* Select: 0x700 | StoreMod0 (:1572); proven instance StoreMod0 = 6.  */
+XTT_MACRO_MISC_WORD ("select-u16",    0x00000706, true, 6)
+
+/* ------------------------------------------------------------------ */
+/* Hidden template LREG writes.					       */
+/* ------------------------------------------------------------------ */
+
+/* The Min/Max SFPSWAP template (0x920002cX, any mod1) writes physical L2:
+   modeled in the frozen RTL as `(clobber (reg:XTT32SI 82))` on
+   rvtt_sfploadmacro_swap_int (rvtt.md; 82 = SFPU_REG_FIRST(80) + 2,
+   riscv.h:390).  */
+XTT_MACRO_HIDDEN_WRITE (0x920002c0, 0xfffffff0, /*L2*/ (1u << 2))
+
+/* ------------------------------------------------------------------ */
+/* Reference descriptor-word sets (WP7 audit expectations).	       */
+/* ------------------------------------------------------------------ */
+
+/* Min/Max (rtl-rvtt-loadmacro.cc:873-887).  dest0 = SFPSWAP template
+   0x920002c0|mod: SFPSWAP(imm12=0, VC=L2, VD=selector 0xC, mod1=mod);
+   mod 1 places min in VD, mod 9 places max (:781-786).  dest1 =
+   0x940000d6: SFPSHFT2(imm12=0, src 0, dest=selector 0xD, mod1=6),
+   "SHFT2 copy into macro LReg16".  */
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 0, 0x920002c1)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 1, 0x940000d6)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 4, 0x00dd008c)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 5, 0x53000000)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-min", 8, 0x00000330)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 0, 0x920002c9)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 1, 0x940000d6)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 4, 0x00dd008c)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 5, 0x53000000)
+XTT_MACRO_REF_DESCRIPTOR ("minmax-binary-max", 8, 0x00000330)
+
+/* Signbit (:847-856).  dest0 = 0x94fe10c6: SFPSHFT2(imm12=0xfe1 = -31,
+   src 0, dest=selector 0xC, mod1=6); dest1 = 0x900000d0: SFPCAST(src 0,
+   dest=selector 0xD, mod1=0).  */
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 0, 0x94fe10c6)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 1, 0x900000d0)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 4, 0x5384004d)
+XTT_MACRO_REF_DESCRIPTOR ("signbit", 8, 0x00000110)
+
+/* Cast/round (:858-871).  dest0 = 0x900000c0: SFPCAST(src 0,
+   dest=selector 0xC, mod1=0); dest1 = 0x8e0000d1: SFP_STOCH_RND(all
+   upper fields 0, src_c 0, dest=selector 0xD, mod1=1).  */
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 0, 0x900000c0)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 1, 0x8e0000d1)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 4, 0x534d0004)
+XTT_MACRO_REF_DESCRIPTOR ("cast-round", 8, 0x00000100)
+
+/* Predicated select (:1568-1572, 1596-1606).  dest0 = 0x7b0000c6:
+   SFPSETCC(imm12=0, src 0, dest=selector 0xC, mod1=6) "loaded value ==
+   zero"; dest1 = 0x8a0000d0: SFPENCC(imm12=0, src 0, dest=selector 0xD,
+   mod1=0) "restore all lanes".  */
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 0, 0x7b0000c6)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 1, 0x8a0000d0)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 4, 0x13000004)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 5, 0x00000000)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 6, 0x00000005)
+XTT_MACRO_REF_DESCRIPTOR ("select-u16", 8, 0x00000706)

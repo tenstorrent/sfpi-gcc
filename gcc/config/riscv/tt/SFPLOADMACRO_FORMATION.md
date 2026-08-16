@@ -195,8 +195,13 @@ not expose a public macro builtin.
 ## First opt-in executable slice
 
 `-mtt-tensix-emit-loadmacro` additionally grants the compiler ownership of
-the programmed WH/BH macro template, sequence-zero, and misc fields for a
-formed function.  The option is
+the programmed WH/BH macro template and sequence fields and the exact
+auto-increment address-modifier slots consumed by a formed function.  These
+resources are explicitly call-clobbered under the opt-in contract: any call
+refuses formation.  Blackhole physical slot 6 and both possible Wormhole
+physical slots 2 and 6 are fully programmed, including Src, Dst, fidelity,
+and bias fields, so neither reset state nor incoming Base state is observable.
+The option is
 default-off and does not globally reserve an LREG: functions without an
 eligible region remain byte-identical.  QSR remains discovery-only because
 its sequence selector, split VD, and `done` encoding have not been proven
@@ -225,10 +230,13 @@ following Dst access or return.  The matcher additionally proves:
   WH/BH macro's ten-bit address field;
 - opcode synthesis is absent, the cast and shift modes are exact for the CPU,
   and the stored value is not live after the region;
-- the function contains no source-visible SFPU configuration read or write,
-  call, or inline assembly.  Raw instruction words have no typed LREG, CC,
-  Dst, or configuration effects in RTL, so even constant `.ttinsn` forms are
-  rejected until they carry an equivalent architectural metadata contract.
+- the function contains no source-visible access to an owned SFPU
+  configuration destination and no call or opaque inline assembly.  Typed
+  accesses to disjoint config destinations remain legal.  Every raw `.ttinsn`
+  asm form is rejected because its LREG, CC, Dst, and config effects are not
+  represented in RTL; the architectural Dst face advance is represented by
+  the typed `rvtt_ttdstface` insn (builtin `__builtin_rvtt_ttdstface`),
+  which is a pure Dst/RWC counter effect and is admitted by typed identity.
 
 The generated launch keeps both original Dst memory operands in its volatile
 RTL effect and configuration writes remain volatile barriers.  Source code
@@ -261,3 +269,39 @@ retain byte-identical explicit code.  Wormhole and Blackhole emit the same
 accepted launch words; target-specific ordinary-load address modes are proved
 but never copied into the macro field, where the Blackhole value would overlap
 `InstrMod0`.
+
+## Periodic floating-point selection slice
+
+The same default-off option recognizes straight-line periodic regions of at
+least seven adjacent semantic rows on Blackhole or eight on Wormhole when each
+row has the exact effect graph `load A; load B; SFPSWAP; store one result;
+Dst += 2`.  These are the first strict issue-count improvements after the
+owned target-specific prefix and three drain slots.  This is structural, not
+a min/max operation-name hook.  Post-RA matching proves the two loads close
+over the swap inputs, exactly one swap output reaches the store, neither swap
+output escapes its row, all addresses are even ten-bit constants, and every
+mode and no-increment address encoding is target-exact.
+
+Formation owns alternating L0/L1 plus fixed L2/L3 only after proving that none
+of those four physical registers is observable after the complete region.  It
+emits an alternating-VD three-slot calendar per row: macro-zero loads the first
+operand and launches SFPSWAP, an explicit load supplies L2, and macro-one
+copies and stores the selected result while absorbing the exact
+`TTINCRWC(0, 2, 0, 0)`.  Descriptor bits select which architectural SFPSWAP
+result reaches the store; no source function or selector name participates.
+Three explicit tail slots drain the final delayed operations.
+
+Blackhole programs physical address-modifier slot 6.  Wormhole programs both
+physical slots 2 and 6 because the unencoded incoming Base selector can map
+the launch's two-bit index to either physical bank.  Each slot gets exact zero
+Src increment/clear, Dst increment two, and zero fidelity increment/bias.
+This gives a reset-state and arbitrary-caller-state invariant rather than
+depending on LLK initialization folklore.
+
+Multiple profitable runs in one basic block may share a descriptor only when
+their separators are exact typed RWC increments or the typed architectural
+face-advance insn (`rvtt_ttdstface`).  Every run independently meets its target's
+seven/eight-row profitability threshold and retains its three-slot drain.
+Calls, opaque asm, owned source configuration, multiple descriptor shapes or
+basic blocks, escaping fixed LREGs, short runs, and QSR retain the explicit
+fallback.

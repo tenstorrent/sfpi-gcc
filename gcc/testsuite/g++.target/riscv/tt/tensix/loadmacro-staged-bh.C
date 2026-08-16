@@ -1,5 +1,8 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro -fdump-rtl-rvtt_loadmacro-details" }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467348480" 1 } }
+// { dg-final { scan-assembler-times "\\.ttinsn\\t2987524096" 1 } }
+// { dg-final { scan-assembler-times "\\.ttinsn\\t2988572674" 1 } }
+// { dg-final { scan-assembler-times "\\.ttinsn\\t2989817856" 1 } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
 // { dg-final { scan-assembler-times "SFPNOP" 3 } }

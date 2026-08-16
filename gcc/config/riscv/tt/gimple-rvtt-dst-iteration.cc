@@ -24,6 +24,7 @@ version.  */
 #include "gimple-range.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -460,47 +461,27 @@ final_increment_p (gcall *call)
     && integer_zerop (gimple_call_arg (call, 3));
 }
 
-/* Keep this list synchronized with the target's one-cycle dynamic result
-   delay contract in rvtt.md.  These are opcode semantics, never source- or
-   kernel-name matches.  Unmodeled operations make the group ineligible.  */
+/* The one-cycle dynamic-result operations are exactly the MAD-subunit
+   instructions.  The subunit comes from the generated effect attribute
+   family in rvtt-cost.md through the effect query API; there is no
+   duplicated opcode list here, and unaudited operations return the
+   refusing default and make the group ineligible.  */
 static bool
 dynamic_result_p (const rvtt_insn_data *insnd)
 {
-  switch (insnd->id)
-    {
-    case rvtt_insn_data::sfpmul:
-    case rvtt_insn_data::sfpmul_lv:
-    case rvtt_insn_data::sfpadd:
-    case rvtt_insn_data::sfpadd_lv:
-    case rvtt_insn_data::sfpmuli:
-    case rvtt_insn_data::sfpmuli_lv:
-    case rvtt_insn_data::sfpaddi:
-    case rvtt_insn_data::sfpaddi_lv:
-    case rvtt_insn_data::sfpmad:
-    case rvtt_insn_data::sfpmad_lv:
-    case rvtt_insn_data::sfpmul24:
-    case rvtt_insn_data::sfpmul24_lv:
-      return true;
-    default:
-      return false;
-    }
+  return rvtt_builtin_subunit (insnd) == XTT_SU_MAD;
 }
 
 static bool
 drain_operation_p (const rvtt_insn_data *insnd)
 {
-  switch (insnd->id)
-    {
-    case rvtt_insn_data::sfpstochrnd_i:
-    case rvtt_insn_data::sfpstochrnd_i_lv:
-    case rvtt_insn_data::sfpstochrnd_v:
-    case rvtt_insn_data::sfpstochrnd_v_lv:
-    case rvtt_insn_data::sfpassign_lv:
-    case rvtt_insn_data::sfpstore:
-      return true;
-    default:
-      return false;
-    }
+  xtt_subunit_t subunit = rvtt_builtin_subunit (insnd);
+  if (subunit == XTT_SU_ROUND || subunit == XTT_SU_STORE)
+    return true;
+  /* sfpassign is a compiler value-move placeholder, not an architectural
+     operation; it has no late pattern carrying effect attributes, so its
+     admission stays structural.  */
+  return insnd->id == rvtt_insn_data::sfpassign_lv;
 }
 
 static bool
