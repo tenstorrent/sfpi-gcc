@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit 152 >= 64" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit 4295 >= 60" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Counted-loop replay payload" 1 "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit 19 < 64" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -834 < 60" "rvtt_replay" } }
 
 // Renamed-equivalent, constant-varied copies of the fire and refuse shapes:
 // different function names, different opcodes (add instead of mul), and a

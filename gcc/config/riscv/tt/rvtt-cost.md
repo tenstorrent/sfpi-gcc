@@ -166,56 +166,95 @@
 
 ;; Replay-hoist profitability constants.
 ;;
-;; Units: one Tensix instruction issue slot (the same unit as the
-;; issue reservations below; the SFPU issue reservation is 1).
+;; Units: hundredths of one Tensix instruction issue slot (centislots).
+;; The x100 scaling exists only to express the measured RISC-delivery
+;; premium as an integer; the issue reservations below stay in whole
+;; slots.
 ;;
-;; A replay recording pass -- with or without execution -- pushes every
-;; captured slot through the Tensix instruction FIFO exactly once, so both
-;; the per-slot re-record cost and the per-slot record-only issue cost are
-;; one slot.  A capture instruction itself costs its own issue slot plus one
-;; slot of replay-unit setup occupancy.  A playback launch is a single issue
-;; slot.
+;; Two per-slot rates describe replay delivery economics:
 ;;
-;; The profitability model in rtl-rvtt-replay.cc is
+;;   RISC_PUSH_X100 (123)   - one instruction word pushed by the RISC
+;;                            core through the Tensix instruction FIFO.
+;;                            The 1.23x premium over a replayed slot is
+;;                            the silicon-refit delivery-cost model
+;;                            (re-fit from measured actuals; the older
+;;                            2.2:1 ratio over-predicted
+;;                            launch-conversion gains ~7x).
+;;   REPLAY_SLOT_X100 (100) - one slot reissued by the Tensix replay
+;;                            expander with no RISC involvement.
 ;;
-;;   re_record   = CAPTURE + length * SLOT_RECORD   ; one in-loop recording
-;;   record_only = CAPTURE + length * SLOT_ISSUE    ; hoisted preheader pass
-;;   benefit     = (trips - 1) * re_record          ; recordings removed
-;;                 - record_only                    ; capture pass added
-;;                 - trips * LAUNCH                 ; launches added
-;;   hoist iff benefit >= MIN_BENEFIT               ; trips provably constant
+;; The profitability model in rtl-rvtt-replay.cc prices one loop entry:
 ;;
-;; MIN_BENEFIT calibration (2026-08-16 Blackhole same-source silicon A/Bs;
-;; each ran the identical source and inputs with only compiler flags
-;; differing; TILE_LOOP mean(MATH_ISOLATE) cycles/tile, three fresh
-;; processes per selector):
+;;   deliver = (1 + length) * RISC_PUSH_X100     ; capture word + payload
+;;   execute = length * REPLAY_SLOT_X100
+;;   before  = deliver                           ; in-loop record WITH
+;;                                               ; execution: the payload
+;;                                               ; does the loop's real
+;;                                               ; work while recording,
+;;                                               ; overlapped under the
+;;                                               ; dominant delivery cost
+;;                                               ; (RISC_PUSH >= REPLAY_SLOT)
+;;   after   = max (RISC_PUSH_X100, execute)     ; one launch push; the
+;;                                               ; replay unit reissues
+;;                                               ; the payload
+;;   benefit = trips * (before - after) - deliver ; minus the added
+;;                                               ; record-only preheader
+;;                                               ; pass: 1 + length words
+;;                                               ; delivered, nothing
+;;                                               ; executed
+;;   hoist iff benefit >= MIN_BENEFIT            ; trips provably constant
 ;;
-;;   shape                          trips length  modeled benefit  silicon
-;;   counted-loop payload             8     24         148         -9.83%
-;;   repeated-sequence (17 slots)     3     17          16         +1.81%
-;;   repeated-sequence (31 slots)     3     31          30         +2.30%
+;; The superseded model charged the removed in-loop recording at full
+;; payload length, as if recording were pure overhead.  It is not: a
+;; record-with-execution pass performs the loop's real work while it
+;; records, so hoisting it away saves only the RISC-delivery premium,
+;; while the hoisted record-only pass is bought at full delivery price
+;; with no work done.  That accounting rewarded LONG captures at LOW
+;; trip counts -- exactly the class silicon measures as regressing --
+;; and starved short-payload shapes.
 ;;
-;; Structurally identical CRAQ-green shapes with 28-slot and 32-slot
-;; captures at 3 trips model at 27 and 31 and belong to the same losing
-;; class.  The dynamic-pipeline costs Blackhole adds around a hoisted
-;; record-only capture are not itemized by this static model, so the
-;; threshold must sit strictly above every member of the measured losing
-;; class (max modeled benefit 31) and strictly below the measured winning
-;; shape (modeled benefit 148).  64 keeps a >= 2x margin over the losing
-;; class and >= 2x headroom under the winner; a marginal shape is refused
-;; because refusal is byte-identical code and costs nothing.  The
-;; -mtt-tensix-replay-hoist-min-benefit= option overrides this table value
-;; for experimentation.
+;; Calibration (Blackhole same-source silicon A/Bs, identical
+;; source/input/golden, only compiler flags differing, three fresh
+;; processes per selector; the 2026-08-16 p150-class re-measurement
+;; reproduced the archived p100a absolutes for the Reduce-class rows,
+;; 855.5 and 839.0 cycles/body exactly):
 ;;
-;; These constants describe replay-unit issue economics only.  They are
-;; deliberately independent of any operation identity, opcode calendar,
-;; coefficient value, or instruction-word fingerprint.
+;;   shape (trips, length)      old benefit  new benefit  silicon
+;;   counted loop (8, 24)           148         2325      -9.83%  WIN
+;;   preheader capture (4, 8) x2     16          121      855.5 -> 834
+;;                                                        cyc/body WIN
+;;   repeated-seq (4, 17)            34         -158      +1.81%  LOSS
+;;   repeated-seq (4, 31)            62         -592      +2.30%  LOSS
+;;
+;; (The two losing shapes modeled as 3 trips / benefits 16 and 30 on the
+;; measurement-era stack; both trip readings are negative under the new
+;; model, (3,17) = -672 and (3,31) = -1428, so the fit is insensitive to
+;; that ambiguity.)
+;;
+;; The superseded model ordered the (4,8) silicon WINNER (16) strictly
+;; below both silicon LOSERS (34, 62): no threshold could separate them,
+;; which is how the old default-64 gate refused the measured
+;; 21.5-cycle/body Reduce-class win.  The new model is sign-correct on
+;; all four measured points using only the pre-existing 1.23 delivery
+;; ratio -- no constant here is fitted to a shape identity.
+;;
+;; MIN_BENEFIT = 60 centislots (0.6 slot per loop entry): every measured
+;; losing shape models negative (max -158), so any non-negative
+;; threshold refuses the entire measured losing class with the whole
+;; band as buffer; 60 is approximately half the smallest measured
+;; winning benefit (121), keeping ~2x headroom under the nearest winner
+;; while refusing modeled-marginal shapes, because refusal is
+;; byte-identical code and costs nothing.  The
+;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
+;; overrides this table value for experimentation.
+;;
+;; These constants describe replay-unit delivery economics only.  They
+;; are deliberately independent of any operation identity, opcode
+;; calendar, coefficient value, or instruction-word fingerprint.
 (define_constants [
-  (XTT_REPLAY_COST_CAPTURE       2)
-  (XTT_REPLAY_COST_SLOT_ISSUE    1)
-  (XTT_REPLAY_COST_SLOT_RECORD   1)
-  (XTT_REPLAY_COST_LAUNCH        1)
-  (XTT_REPLAY_HOIST_MIN_BENEFIT 64)
+  (XTT_REPLAY_COST_RISC_PUSH_X100   123)
+  (XTT_REPLAY_COST_REPLAY_SLOT_X100 100)
+  (XTT_REPLAY_HOIST_MIN_BENEFIT      60)
 ])
 
 

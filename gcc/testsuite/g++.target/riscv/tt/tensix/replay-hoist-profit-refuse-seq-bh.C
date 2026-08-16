@@ -5,8 +5,8 @@
 
 // Repeated-sequence analog of the silicon-regressing scout shape: a
 // three-trip loop whose body re-records a repeated sequence every trip.
-// The hoist must refuse (modeled benefit far below the cost-table minimum
-// of 64) and the capture must stay in the loop as an ordinary
+// The hoist must refuse (modeled benefit negative, far below the
+// cost-table minimum of 60) and the capture must stay in the loop as an ordinary
 // record-with-execute, exactly as with the hoist disabled.
 void seq_refuse_3trip ()
 {

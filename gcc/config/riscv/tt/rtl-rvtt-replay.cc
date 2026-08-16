@@ -841,29 +841,37 @@ provable_constant_trips (class loop *loop, basic_block preheader,
 /* Generic replay-hoist profitability model.
 
    Hoisting converts one in-loop recording pass per trip (re-recording the
-   payload, with execution) into a single record-only capture pass in the
-   preheader plus one added playback launch per trip.  Model, in issue-slot
-   units, with every constant taken from the target cost table
-   (rvtt-cost.md):
+   payload, WITH execution) into a single record-only capture pass in the
+   preheader plus one playback launch per trip.  The in-loop recording is
+   not pure overhead: while being recorded the payload performs the loop's
+   real work, so removing it saves only the RISC-delivery premium over
+   replay reissue, while the added preheader record-only pass is bought at
+   full delivery price and executes nothing.  Model, in centislots
+   (hundredths of one issue slot), with every constant taken from the
+   target cost table (rvtt-cost.md):
 
-     re_record   = XTT_REPLAY_COST_CAPTURE
-		   + length * XTT_REPLAY_COST_SLOT_RECORD
-     record_only = XTT_REPLAY_COST_CAPTURE
-		   + length * XTT_REPLAY_COST_SLOT_ISSUE
-     benefit     = (trips - 1) * re_record   ; recordings no longer repeated
-		   - record_only             ; added preheader capture pass
-		   - trips * XTT_REPLAY_COST_LAUNCH  ; added launches
+     deliver = (1 + length) * XTT_REPLAY_COST_RISC_PUSH_X100
+     execute = length * XTT_REPLAY_COST_REPLAY_SLOT_X100
+     before  = deliver                        ; per-trip in-loop recording,
+                                              ; execution overlapped under
+                                              ; the dominant delivery cost
+     after   = max (RISC_PUSH_X100, execute)  ; per-trip launch + replay
+                                              ; reissue of the payload
+     benefit = trips * (before - after)       ; per-trip delivery saved
+               - deliver                      ; added record-only preheader
+                                              ; pass (delivers, no work)
 
    Hoist only when benefit >= the minimum-benefit threshold
-   (XTT_REPLAY_HOIST_MIN_BENEFIT, overridable through
-   -mtt-tensix-replay-hoist-min-benefit=).  The threshold calibration
-   derivation lives with the constants in rvtt-cost.md: the 2026-08-16
-   Blackhole same-source A/Bs bound the losing shape class at modeled
-   benefit <= 31 (3-trip capture hoists of 17..32 slots, +1.8%..+2.3%
-   silicon regressions) and the winning shape at modeled benefit 148
-   (8-trip 24-slot counted payload, -9.83%), so the default threshold 64
-   refuses the entire measured losing class with >= 2x margin while
-   accepting the measured winner with >= 2x headroom.
+   (XTT_REPLAY_HOIST_MIN_BENEFIT, overridable in the same centislot units
+   through -mtt-tensix-replay-hoist-min-benefit=).  The calibration
+   derivation lives with the constants in rvtt-cost.md: the Blackhole
+   same-source silicon A/Bs place every measured losing shape at negative
+   modeled benefit (max -158: 4-trip captures of 17..31 slots, +1.8%..+2.3%
+   regressions) and every measured winning shape at positive benefit
+   (minimum +121: the 4-trip 8-slot preheader-capture pair worth 21.5
+   cycles/body; +2325: the 8-trip 24-slot counted payload, -9.83%), so the
+   default threshold 60 refuses the entire measured losing class while
+   accepting the measured winners with ~2x headroom under the nearest one.
 
    TRIPS must be provable (see provable_constant_trips above).  An unknown
    or merely estimated trip count refuses the hoist, which keeps the
@@ -893,15 +901,14 @@ hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length)
       return false;
     }
 
-  HOST_WIDE_INT re_record = (XTT_REPLAY_COST_CAPTURE
-			     + (HOST_WIDE_INT) length
-			       * XTT_REPLAY_COST_SLOT_RECORD);
-  HOST_WIDE_INT record_only = (XTT_REPLAY_COST_CAPTURE
-			       + (HOST_WIDE_INT) length
-				 * XTT_REPLAY_COST_SLOT_ISSUE);
-  HOST_WIDE_INT benefit = ((trips - 1) * re_record
-			   - record_only
-			   - trips * XTT_REPLAY_COST_LAUNCH);
+  HOST_WIDE_INT deliver = ((1 + (HOST_WIDE_INT) length)
+			   * XTT_REPLAY_COST_RISC_PUSH_X100);
+  HOST_WIDE_INT execute = ((HOST_WIDE_INT) length
+			   * XTT_REPLAY_COST_REPLAY_SLOT_X100);
+  HOST_WIDE_INT before = deliver;
+  HOST_WIDE_INT after = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
+			     execute);
+  HOST_WIDE_INT benefit = trips * (before - after) - deliver;
   HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
 			       ? (HOST_WIDE_INT)
 				 riscv_tt_replay_hoist_min_benefit

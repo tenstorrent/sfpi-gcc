@@ -611,7 +611,7 @@ Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
-Minimum modeled issue-slot benefit required to hoist a replay capture; overrides the target cost-table default.
+Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
 
 mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)

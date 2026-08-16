@@ -1,10 +1,11 @@
-// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=200 -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit 152 < 200" "rvtt_replay" } }
+// { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=5000 -fdump-rtl-rvtt_replay-details" }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit 4295 < 5000" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Counted-loop replay payload" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 
 // Threshold override upward: the 16-trip 10-slot shape that hoists at the
-// cost-table default of 64 must refuse under an experiment threshold of 200.
+// cost-table default of 60 (modeled benefit 4295 centislots) must refuse
+// under an experiment threshold of 5000.
 void counted_fire_16trip ()
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
