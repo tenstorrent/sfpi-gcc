@@ -621,6 +621,10 @@ mtt-tensix-emit-loadmacro
 Target Var(riscv_tt_emit_loadmacro) Init(0)
 Default-off: own and materialize accepted WH/BH macro configurations and auto-increment address-modifier slots as call-clobbered resources, then emit only structurally proven SFPLOADMACRO calendars.
 
+mtt-tensix-macro-planner-analyze
+Target Var(riscv_tt_macro_planner_analyze) Init(0)
+Discover, prove, and report generic macro-planner regions and named refusals without changing code.
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).

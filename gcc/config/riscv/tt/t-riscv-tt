@@ -31,6 +31,7 @@ MULTILIB_EXTRA_OPTS :=
 RVTT_OBJS := rvtt.o \
 	rvtt-effects.o \
 	rvtt-macro-ownership.o \
+	rvtt-macro-region.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-check.o \
@@ -51,6 +52,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-lreg-livein.o \
 	rtl-rvtt-lp-alloc.o \
 	rtl-rvtt-loadmacro.o \
+	rtl-rvtt-macro-planner.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \

@@ -1065,7 +1065,13 @@
   "TARGET_XTT_TENSIX"
   "SFPENCC\t%1, %0"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "write")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn "rvtt_sfpcompc"
   [(unspec_volatile:XTT32SI [
