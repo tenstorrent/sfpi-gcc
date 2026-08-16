@@ -1,9 +1,3 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
-// { dg-final { scan-assembler-times "\\.ttinsn\\t2467349502" 1 } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
-// { dg-final { scan-assembler-times "SFPSHFT" 1 } }
-// { dg-final { scan-assembler-times "SFPCAST" 1 } }
-// { dg-final { scan-assembler-times "TTINCRWC" 1 } }
 
 template <unsigned ADDRESS>
 __attribute__((noinline)) void address_body ()

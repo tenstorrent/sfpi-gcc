@@ -8,4 +8,4 @@
 // { dg-final { scan-assembler-times "SFPSTOCH" 1 } }
 // { dg-final { scan-assembler-times "SFPSTORE" 1 } }
 
-#include "loadmacro-cast-round-emit.inc"
+#include "macro-planner-cast-round-emit.inc"

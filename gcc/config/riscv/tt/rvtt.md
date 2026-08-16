@@ -684,25 +684,10 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
-;; A compiler-owned SETC16 configuration write.  Late formation uses this
-;; only for configuration state that it subsequently consumes itself.  Keep
-;; the architectural register and value as operands even though the emitted
-;; word is pre-encoded, so ownership remains explicit in RTL dumps.
-(define_insn "rvtt_owned_setc16_int"
-  [(unspec_volatile:SI [
-     (match_operand:SI 0 "const_int_operand" "n") ;; config register
-     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
-     (match_operand:DI 2 "const_int_operand" "n") ;; encoded word
-     ] UNSPECV_OWNED_SETC16)]
-  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
-  ".ttinsn\t%2"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "barrier")])
-
 ;; Field-operand owned SETC16 (macro-planner design 4.3): the pass hands
 ;; only the architectural fields; the emitted word is packed by the
-;; capability tables at output time.  Supersedes the pre-encoded-word
-;; form above, which is deleted with the quarantined pass (WP7).
+;; capability tables at output time.  (The pre-encoded-word form
+;; rvtt_owned_setc16_int was deleted with the quarantined pass at WP8.)
 (define_insn "rvtt_owned_setc16"
   [(unspec_volatile:SI [
      (match_operand:SI 0 "const_int_operand" "n") ;; config register
@@ -810,26 +795,6 @@
      operands[2], operands[6], operands[7], operands[8]));
   DONE;
 })
-
-;; One launch in a compiler-owned WH/BH three-slot select calendar.  The
-;; opening launch carries the delayed Store's Dst effect; middle/closing
-;; launches pass const0_rtx for operand 2.  Keeping every launch as its own
-;; volatile RTL instruction preserves the required consecutive issue slots.
-(define_insn "rvtt_sfploadmacro_select_int"
-  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
-        (unspec_volatile:XTT32SI [
-          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
-          (match_operand:SI 2 "mem_or_0_operand" "X") ;; delayed store effect
-          (match_operand:SI 3 "const_int_operand" "n") ;; address
-          (match_operand:SI 4 "const_int_operand" "n") ;; load format
-          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
-          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch
-          ] UNSPECV_SFPLOADMACRO))]
-  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
-  ".ttinsn\t%6"
-  [(set_attr "type" "tensix")
-   (set_attr "xtt_macro_resource" "load")
-   (set_attr "xtt_replay" "barrier")])
 
 (define_insn "rvtt_sfpload_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
@@ -1072,8 +1037,16 @@
   "TARGET_XTT_TENSIX"
   "SFPSETCC\tL0, %1, %0"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
+;; Audited (WP8) so predicated shapes refuse cc-template-unsupported at
+;; the predicate write instead of dissolving into an opaque boundary.
 (define_insn "rvtt_sfpsetcc_v"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
@@ -1082,7 +1055,13 @@
   "TARGET_XTT_TENSIX"
   "SFPSETCC\t%x0, 0, %1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "2")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_insn "rvtt_sfpencc"
   [(unspec_volatile:XTT32SI [

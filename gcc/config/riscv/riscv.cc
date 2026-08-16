@@ -10718,6 +10718,15 @@ riscv_convert_vector_chunks (struct gcc_options *opts)
 void
 riscv_override_options_internal (struct gcc_options *opts)
 {
+  /* The quarantined exact-calendar SFPLOADMACRO pass was deleted at
+     WP8; its opt-in flags error rather than silently doing nothing.
+     The generic macro planner replaces it.  */
+  if (opts->x_riscv_tt_analyze_loadmacro || opts->x_riscv_tt_emit_loadmacro)
+    error ("%<-mtt-tensix-analyze-loadmacro%> and "
+	   "%<-mtt-tensix-emit-loadmacro%> were removed with the "
+	   "quarantined exact-calendar pass; use "
+	   "%<-mtt-tensix-macro-planner%>");
+
   if (auto cpu = opts->x_riscv_cpu_string)
     {
       // TT cpu implications

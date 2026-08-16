@@ -58,16 +58,17 @@ mint () # name src cpu
   printf '%-28s %-3s %s %s %s\n' "$name" "$cpu" "$off" "$emit" "$planner" >> "$manifest"
 }
 
-# Signbit family (in-tree quarantined-pass tests).
-mint staged            "$TESTDIR/loadmacro-staged-bh.C"            bh
-mint staged            "$TESTDIR/loadmacro-staged-wh.C"            wh
-mint staged-loop       "$TESTDIR/loadmacro-staged-loop-bh.C"       bh
-mint staged-loop       "$TESTDIR/loadmacro-staged-loop-wh.C"       wh
-mint staged-successor  "$TESTDIR/loadmacro-staged-successor-bh.C"  bh
-mint staged-boundary   "$TESTDIR/loadmacro-staged-address-boundary-bh.C" bh
-mint staged-fixed-asm  "$TESTDIR/loadmacro-staged-fixed-asm-bh.C"  bh
-mint staged-refuse     "$TESTDIR/loadmacro-staged-refuse-bh.C"     bh
-mint staged-loop-refuse "$TESTDIR/loadmacro-staged-loop-refuse-bh.C" bh
+# Signbit family (bodies preserved here verbatim from the deleted
+# quarantined-pass tests; dg directives stripped).
+mint staged            "$SRCDIR/staged-bh.C"            bh
+mint staged            "$SRCDIR/staged-wh.C"            wh
+mint staged-loop       "$SRCDIR/staged-loop-bh.C"       bh
+mint staged-loop       "$SRCDIR/staged-loop-wh.C"       wh
+mint staged-successor  "$SRCDIR/staged-successor-bh.C"  bh
+mint staged-boundary   "$SRCDIR/staged-address-boundary-bh.C" bh
+mint staged-fixed-asm  "$SRCDIR/staged-fixed-asm-bh.C"  bh
+mint staged-refuse     "$SRCDIR/staged-refuse-bh.C"     bh
+mint staged-loop-refuse "$SRCDIR/staged-loop-refuse-bh.C" bh
 
 # Cast-round family (oracle body in this directory; the quarantined
 # pass had no in-tree cast-round test, so the body reproduces its
