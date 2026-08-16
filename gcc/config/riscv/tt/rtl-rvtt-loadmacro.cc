@@ -143,22 +143,15 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
-/* The existing LLK face advance is two identical architectural Dst += 8
-   operations expressed by INSTRUCTION_WORD.  It is not a configuration
-   access, and preserving it between formed face runs is byte-for-byte the
-   required RWC effect.  Admit only this exact constant/no-output asm form.  */
+/* The architectural Dst face advance is the typed rvtt_ttdstface insn: a
+   pure Dst/RWC counter effect with no LREG, CC, or configuration effect.
+   Recognition is by typed identity only; raw `.ttinsn' asm words are opaque
+   and refuse (byte-identically) like any other unmodelled asm.  */
 static bool
-dst_face_advance_asm_p (rtx_insn *insn)
+typed_dst_face_advance_p (rtx_insn *insn)
 {
-  if (!NONDEBUG_INSN_P (insn))
-    return false;
-  rtx body = PATTERN (insn);
-  return GET_CODE (body) == ASM_OPERANDS
-    && strcmp (ASM_OPERANDS_TEMPLATE (body), ".ttinsn %0") == 0
-    && ASM_OPERANDS_INPUT_LENGTH (body) == 1
-    && strcmp (ASM_OPERANDS_INPUT_CONSTRAINT (body, 0), "n") == 0
-    && CONST_INT_P (ASM_OPERANDS_INPUT (body, 0))
-    && UINTVAL (ASM_OPERANDS_INPUT (body, 0)) == 0x37120004u;
+  return NONDEBUG_INSN_P (insn)
+    && recog_memoized (insn) == CODE_FOR_rvtt_ttdstface_wh_bh;
 }
 
 static bool
@@ -183,9 +176,7 @@ source_config_access_p (function *fn)
       FOR_BB_INSNS (bb, insn)
 	if (NONDEBUG_INSN_P (insn))
 	  {
-    if (CALL_P (insn)
-		|| (asm_noperands (PATTERN (insn)) >= 0
-		    && !dst_face_advance_asm_p (insn)))
+    if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
 	      return true;
 	    int code = recog_memoized (insn);
 	    if (code == CODE_FOR_rvtt_sfpreadconfig_lv)
@@ -1089,7 +1080,7 @@ binary_run_separator_p (const binary_configured_descriptor &a,
        insn = next_nonnote_nondebug_insn (insn))
     if (BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (a.increment_insn)
 	|| (recog_memoized (insn) != CODE_FOR_rvtt_ttincrwc
-	    && !dst_face_advance_asm_p (insn)))
+	    && !typed_dst_face_advance_p (insn)))
       return false;
   return insn == b.enable_insn;
 }

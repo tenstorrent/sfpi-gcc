@@ -232,10 +232,11 @@ following Dst access or return.  The matcher additionally proves:
   and the stored value is not live after the region;
 - the function contains no source-visible access to an owned SFPU
   configuration destination and no call or opaque inline assembly.  Typed
-  accesses to disjoint config destinations remain legal.  The sole admitted
-  raw instruction is the exact constant/no-output LLK `Dst += 8` face advance;
-  every other `.ttinsn` form is rejected because its LREG, CC, Dst, and config
-  effects are not represented in RTL.
+  accesses to disjoint config destinations remain legal.  Every raw `.ttinsn`
+  asm form is rejected because its LREG, CC, Dst, and config effects are not
+  represented in RTL; the architectural Dst face advance is represented by
+  the typed `rvtt_ttdstface` insn (builtin `__builtin_rvtt_ttdstface`),
+  which is a pure Dst/RWC counter effect and is admitted by typed identity.
 
 The generated launch keeps both original Dst memory operands in its volatile
 RTL effect and configuration writes remain volatile barriers.  Source code
@@ -298,8 +299,8 @@ This gives a reset-state and arbitrary-caller-state invariant rather than
 depending on LLK initialization folklore.
 
 Multiple profitable runs in one basic block may share a descriptor only when
-their separators are exact typed RWC increments or the exact constant LLK
-face-advance instruction.  Every run independently meets its target's
+their separators are exact typed RWC increments or the typed architectural
+face-advance insn (`rvtt_ttdstface`).  Every run independently meets its target's
 seven/eight-row profitability threshold and retains its three-slot drain.
 Calls, opaque asm, owned source configuration, multiple descriptor shapes or
 basic blocks, escaping fixed LREGs, short runs, and QSR retain the explicit
