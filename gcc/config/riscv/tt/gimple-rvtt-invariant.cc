@@ -683,7 +683,13 @@ transform (function *fn)
       if (selected.is_empty ())
 	continue;
 
+      /* Never overwrite an explicit user unroll request (loop->unroll is
+	 nonzero once "#pragma GCC unroll N" has been recorded during CFG
+	 construction); in particular "#pragma GCC unroll 1" must keep its
+	 scalar loop.  Only the unroll request defers to the pragma — the
+	 invariant hoist below is independent and still proceeds.  */
       if (riscv_tt_opt_replay_hoist > 0
+	  && !loop->unroll
 	  && short_constant_replay_loop_p (loop, entry))
 	{
 	  loop->unroll = USHRT_MAX;
