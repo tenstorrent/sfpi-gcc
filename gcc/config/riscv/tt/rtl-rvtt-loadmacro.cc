@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "df.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
+#include "rvtt-effects.h"
 
 namespace {
 
@@ -143,15 +144,23 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
-/* The architectural Dst face advance is the typed rvtt_ttdstface insn: a
-   pure Dst/RWC counter effect with no LREG, CC, or configuration effect.
-   Recognition is by typed identity only; raw `.ttinsn' asm words are opaque
-   and refuse (byte-identically) like any other unmodelled asm.  */
+/* The architectural Dst face advance is a pure Dst/RWC face effect with no
+   LREG, CC, configuration, or Dst-memory effect.  Recognition queries the
+   generated effect attributes through the effect API -- never an insn code
+   as identity; raw `.ttinsn' asm words are opaque and refuse
+   (byte-identically) like any other unmodelled asm.  */
 static bool
 typed_dst_face_advance_p (rtx_insn *insn)
 {
-  return NONDEBUG_INSN_P (insn)
-    && recog_memoized (insn) == CODE_FOR_rvtt_ttdstface_wh_bh;
+  if (!NONDEBUG_INSN_P (insn))
+    return false;
+  const xtt_effect_set effects = rvtt_insn_effects (insn);
+  return !effects.opaque
+    && effects.rwc.kind == xtt_rwc_effect_t::FACE
+    && !effects.lreg_read && !effects.lreg_write
+    && !effects.cc_read && !effects.cc_write
+    && !effects.config_dests_written && !effects.addr_mod_slot_write
+    && !effects.dst_mem_read && !effects.dst_mem_write;
 }
 
 static bool
