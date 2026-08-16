@@ -698,6 +698,28 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")])
 
+;; Field-operand owned SETC16 (macro-planner design 4.3): the pass hands
+;; only the architectural fields; the emitted word is packed by the
+;; capability tables at output time.  Supersedes the pre-encoded-word
+;; form above, which is deleted with the quarantined pass (WP7).
+(define_insn "rvtt_owned_setc16"
+  [(unspec_volatile:SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; config register
+     (match_operand:SI 1 "const_int_operand" "n") ;; 16-bit value
+     ] UNSPECV_OWNED_SETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  {
+    return rvtt_output_owned_setc16 (operands);
+  }
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "none")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
+
 (define_expand "rvtt_sfploadsrcs"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -885,6 +907,32 @@
    ;; L0 starts at hard register 80; make the delayed template's fixed L2
    ;; write explicit without introducing a post-RA pseudo.
    (clobber (reg:XTT32SI 82))]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  ".ttinsn\t%6"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_macro_resource" "load")
+   (set_attr "xtt_replay" "barrier")])
+
+;; Generic hidden-clobber launch (macro-planner design 4.3): the hidden
+;; physical-LREG write of the launched template is a register operand the
+;; planner fills from the capability tables'
+;; template_hidden_lreg_writes(), never a pattern-frozen register.
+;; Supersedes the fixed-L2 rvtt_sfploadmacro_swap_int above, which is
+;; deleted with the quarantined pass (WP7).
+(define_insn "rvtt_sfploadmacro_hidden_int"
+  [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
+        (unspec_volatile:XTT32SI [
+          (match_operand:SI 1 "mem_or_0_operand" "X") ;; load Dst effect
+          (match_operand:SI 2 "mem_or_0_operand" "X") ;; store Dst effect
+          (match_operand:SI 3 "const_int_operand" "n") ;; address
+          (match_operand:SI 4 "const_int_operand" "n") ;; load/store mode
+          (match_operand:SI 5 "const_int_operand" "n") ;; address mode
+          (match_operand:DI 6 "const_int_operand" "n") ;; encoded launch word
+          ] UNSPECV_SFPLOADMACRO))
+   ;; Created post-reload: the hidden write is a hard-register operand the
+   ;; planner fills from template_hidden_lreg_writes(), never a
+   ;; pattern-frozen register.
+   (clobber (match_operand:XTT32SI 7 "register_operand" "=xr"))]
   "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")

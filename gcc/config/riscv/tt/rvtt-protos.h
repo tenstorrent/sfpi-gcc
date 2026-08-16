@@ -27,6 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
+extern const char *rvtt_output_owned_setc16 (rtx *operands);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern void rvtt_merge_lv_src (rtx *lv, rtx *src);

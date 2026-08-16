@@ -368,6 +368,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       ev.macro_index = item.carrier >= 0 ? carrier_macro[item.carrier] : 0;
       ev.is_store = item.effects.dst_mem_write;
       ev.issues_word = false;
+      ev.is_carrier = false;
       ev.programmed_delay = -1;
 
       if (item.launched || (item.effects.dst_mem_write && item.carrier >= 0
@@ -421,6 +422,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	  {
 	    seen[item.carrier] = true;
 	    out->events[ix].issues_word = true;
+	    out->events[ix].is_carrier = true;
 	  }
       }
   }
