@@ -1,5 +1,5 @@
 // { dg-do compile }
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Counted-loop shape: replay hoisting leaves a launch plus a typed TTINCRWC
 // in the loop body.  The pass proves whole-body ownership, places the owned
 // configuration in the dedicated preheader, and absorbs the per-iteration

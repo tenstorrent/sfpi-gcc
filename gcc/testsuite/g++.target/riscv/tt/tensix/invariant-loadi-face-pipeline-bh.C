@@ -6,7 +6,7 @@
 // the store's implicit advance and places the owned three-word SETC16
 // program once in the face-loop preheader (dominating placement over the
 // typed face-advance body).  No scalar row backedge remains.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-dst-autoincr -fdump-tree-rvtt_invariant-details -fdump-rtl-rvtt_dst_autoincr-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-dst-autoincr -fdump-tree-rvtt_invariant-details -fdump-rtl-rvtt_dst_autoincr-details" }
 // { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-times "Requested complete unroll for constant replay loop" 1 "rvtt_invariant" } }
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
