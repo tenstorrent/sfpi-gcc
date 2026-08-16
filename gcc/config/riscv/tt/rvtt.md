@@ -111,6 +111,7 @@
 
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
+  UNSPECV_TTSETC16
 ])
 
 (define_enum "xtt_delay" [
@@ -2959,6 +2960,21 @@
      ] UNSPECV_TTINCRWC)]
   "TARGET_XTT_TENSIX"
   "TTINCRWC\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+;; Compiler-owned address-modifier programming.  Operand 0 is a SETC16
+;; configuration register index taken from a per-target capability table,
+;; operand 1 the 16-bit value.  Only compiler passes that have proven
+;; ownership of the addressed slot emit this (see rtl-rvtt-dst-autoincr.cc);
+;; the assembler owns the encoding.
+(define_insn "rvtt_ttsetc16_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI    0 "const_int_operand" "n")
+     (match_operand:SI    1 "const_int_operand" "n")
+     ] UNSPECV_TTSETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTSETC16\t%0, %1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")])
 
