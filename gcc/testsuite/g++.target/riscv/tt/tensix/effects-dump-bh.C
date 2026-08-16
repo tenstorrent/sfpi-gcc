@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-dump-effects" }
 // Golden self-check for the generated Layer-1 effect sets (macro-planner).
 // Each audited instruction's full effect line is pinned; unaudited
-// instructions (SFPENCC, SFPMOV) and raw asm must report opaque.
+// instructions (SFPMOV) and raw asm must report opaque.
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=-1 lreg-read=0x0 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=-1 lreg-read=0x0 lreg-write=0x2 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=mad latency=1 lreg-read=0x3 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
@@ -11,7 +11,8 @@
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=inc:d=2,cr=0 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=face:d=16 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=none latency=0 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=none dst=none encodable=no} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: opaque} 3 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: opaque} 2 } }
 
 __attribute__((noinline)) void effects_probe ()
 {
