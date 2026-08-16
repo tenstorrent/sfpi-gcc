@@ -461,10 +461,15 @@ public:
 	    if (rvtt_macro_synthesize (region, schedule, &descriptor,
 				       dump_file))
 	      {
+		/* A Layer-7 verification mismatch is a descriptor
+		   refusal: the candidate is unproven and must never
+		   reach form_region.  */
+		const char *verify_fail = nullptr;
 		if (riscv_tt_macro_planner_verify || flag_checking)
-		  rvtt_macro_verify_descriptor (region, schedule,
-						descriptor, dump_file);
-		proven = !descriptor.refusal;
+		  verify_fail
+		    = rvtt_macro_verify_descriptor (region, schedule,
+						    descriptor, dump_file);
+		proven = !descriptor.refusal && !verify_fail;
 		if (proven && riscv_tt_macro_planner)
 		  changed |= form_region (fn, region, schedule,
 					  descriptor, dump_file);

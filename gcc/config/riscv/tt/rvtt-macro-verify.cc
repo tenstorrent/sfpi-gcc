@@ -46,21 +46,26 @@ along with GCC; see the file COPYING3.  If not see
    facts.  A mismatch refuses with descriptor-verification-failed and the
    failing component's stable tag -- the descriptor is never "fixed up".
    Enabled by -mtt-tensix-macro-planner-verify and always under
-   checking.  */
+   checking.
 
-void
+   Returns null when verification passes (or nothing was synthesized);
+   otherwise the failing component's stable tag.  The caller MUST treat
+   a non-null return as a descriptor refusal: the region is not proven
+   and must never reach form_region.  */
+
+const char *
 rvtt_macro_verify_descriptor (const macro_region &region,
 			      const macro_schedule &schedule,
 			      const macro_descriptor &desc, FILE *dump)
 {
   if (desc.refusal)
-    return;			/* nothing was synthesized */
+    return nullptr;		/* nothing was synthesized */
 
   rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
     : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
   const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu (cpu);
   if (!c)
-    return;
+    return nullptr;
 
   rvtt_macro_verify::expectations expect;
   if (!rvtt_macro_build_expectations (region, schedule, &expect))
@@ -68,7 +73,7 @@ rvtt_macro_verify_descriptor (const macro_region &region,
       if (dump)
 	fprintf (dump, "Macro-planner refusal: %s (expectations)\n",
 		 macro_desc_refusal_verification_failed);
-      return;
+      return "expectations";
     }
 
   rvtt_macro_verify::descriptor_words words;
@@ -87,6 +92,14 @@ rvtt_macro_verify_descriptor (const macro_region &region,
   for (unsigned l = 0; l != desc.launches.length (); ++l)
     words.launch_words[l] = desc.launches[l].word;
 
+  /* Testing-only fault injection: corrupt the LOCAL word copy (never
+     the descriptor itself) exactly as the standalone adversarial suite
+     does, so a DejaGnu test can pin that a verification mismatch is a
+     formation refusal.  The real descriptor stays intact; only the
+     caller's gating decides whether it can still form.  */
+  if (riscv_tt_macro_planner_verify_corrupt_template && words.n_templates)
+    words.templ[0] ^= 8;	/* the adversarial suite's routing-mod flip */
+
   const char *component = rvtt_macro_verify::verify (c, words, expect);
   if (dump)
     {
@@ -96,4 +109,5 @@ rvtt_macro_verify_descriptor (const macro_region &region,
       else
 	fprintf (dump, "Macro-planner verify: ok\n");
     }
+  return component;
 }
