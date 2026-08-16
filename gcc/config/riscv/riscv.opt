@@ -621,6 +621,10 @@ mtt-tensix-optimize-dst-autoincr
 Target Var(riscv_tt_opt_dst_autoincr) Init(0)
 Replace constant-stride per-row Dst RWC increments with owned address-modifier auto-increment.
 
+mtt-tensix-optimize-dst-ownership
+Target Var(riscv_tt_opt_dst_ownership) Init(0)
+Default-off: fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
+
 mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
 Removed with the quarantined exact-calendar SFPLOADMACRO pass (WP8); errors on use.
