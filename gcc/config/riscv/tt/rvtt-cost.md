@@ -187,22 +187,53 @@
 ;;
 ;;   deliver = (1 + length) * RISC_PUSH_X100     ; capture word + payload
 ;;   execute = length * REPLAY_SLOT_X100
-;;   before  = deliver                           ; in-loop record WITH
+;;   after   = max (RISC_PUSH_X100, execute)     ; one launch push; the
+;;                                               ; replay unit reissues
+;;                                               ; the payload
+;;   surplus = launch_run * (execute - RISC_PUSH_X100)
+;;                                               ; execution surplus of the
+;;                                               ; body's longest run of
+;;                                               ; final-stream-contiguous
+;;                                               ; sibling launches of the
+;;                                               ; same buffer
+;;   hidden  = surplus >= deliver                ; the record pass's
+;;                                               ; delivery streams into
+;;                                               ; that execution shadow
+;;   before  = hidden ? after : deliver          ; in-loop record WITH
 ;;                                               ; execution: the payload
 ;;                                               ; does the loop's real
 ;;                                               ; work while recording,
 ;;                                               ; overlapped under the
 ;;                                               ; dominant delivery cost
 ;;                                               ; (RISC_PUSH >= REPLAY_SLOT)
-;;   after   = max (RISC_PUSH_X100, execute)     ; one launch push; the
-;;                                               ; replay unit reissues
-;;                                               ; the payload
+;;                                               ; -- unless hidden, when
+;;                                               ; removing it relieves
+;;                                               ; nothing per trip
 ;;   benefit = trips * (before - after) - deliver ; minus the added
 ;;                                               ; record-only preheader
 ;;                                               ; pass: 1 + length words
 ;;                                               ; delivered, nothing
 ;;                                               ; executed
 ;;   hoist iff benefit >= MIN_BENEFIT            ; trips provably constant
+;;
+;; The context term (launch_run) is computed from the candidate's own
+;; statically known structure: the number of sibling occurrences of the
+;; capture in the loop body and the delivered words between them, where a
+;; typed per-row Dst-counter increment separator is discounted when the
+;; Dst auto-increment pass -- which runs after replay formation and
+;; absorbs exactly those separators around replay launches -- is enabled.
+;; A contiguous run of R launches occupies the issue plane for R * execute
+;; centislots while delivering only R * RISC_PUSH_X100 words; once its
+;; surplus covers the record pass's delivery, that delivery is hidden
+;; under execution and the hoist's true benefit degenerates to -deliver
+;; (the preheader record-only pass is pure cost).  A single launch can
+;; never hide a record pass (length*100 - 123 < (1+length)*123 for every
+;; length), so counted-loop hoists -- one clone per trip, launches always
+;; separated across trips by the loop-control delivery -- and every other
+;; single-instance shape are arithmetically unaffected, with byte-identical
+;; decisions and dump numbers.  The saturation term is part of the modeled
+;; benefit, not of the threshold: -mtt-tensix-replay-hoist-min-benefit=
+;; cannot force a hoist whose record delivery is hidden.
 ;;
 ;; The superseded model charged the removed in-loop recording at full
 ;; payload length, as if recording were pure overhead.  It is not: a
@@ -217,7 +248,9 @@
 ;; source/input/golden, only compiler flags differing, three fresh
 ;; processes per selector; the 2026-08-16 p150-class re-measurement
 ;; reproduced the archived p100a absolutes for the Reduce-class rows,
-;; 855.5 and 839.0 cycles/body exactly):
+;; 855.5 and 839.0 cycles/body exactly; the unary-max/min point is the
+;; 2026-08-16 nightly flip root-cause, MATH_ISOLATE TILE_LOOP,
+;; deterministic on both eras):
 ;;
 ;;   shape (trips, length)      old benefit  new benefit  silicon
 ;;   counted loop (8, 24)           148         2325      -9.83%  WIN
@@ -225,6 +258,9 @@
 ;;                                                        cyc/body WIN
 ;;   repeated-seq (4, 17)            34         -158      +1.81%  LOSS
 ;;   repeated-seq (4, 31)            62         -592      +2.30%  LOSS
+;;   exec-saturated (4, 4) x8 sib     8         -615      +2.06%  LOSS
+;;                                               (245 without the
+;;                                                context term)
 ;;
 ;; (The two losing shapes modeled as 3 trips / benefits 16 and 30 on the
 ;; measurement-era stack; both trip readings are negative under the new
@@ -237,6 +273,58 @@
 ;; 21.5-cycle/body Reduce-class win.  The new model is sign-correct on
 ;; all four measured points using only the pre-existing 1.23 delivery
 ;; ratio -- no constant here is fitted to a shape identity.
+;;
+;; Execution-saturation context term, derivation from the measured
+;; points.  The unary-max/min flip (root-caused 2026-08-16) showed the
+;; delivery-only `before = deliver' is FALSE for a loop body whose
+;; sibling launches of the same buffer are contiguous in the final
+;; stream: (trips 4, length 4, 8 siblings/trip) modeled +245 and
+;; measured +2.06% LOSS (+3.93 cyc/tile against a modeled -2.45), while
+;; the measured +121 Reduce-SDPA winner (trips 4, length 8, 8
+;; siblings/trip) has every launch separated by a surviving typed Dst
+;; increment and realizes most of its modeled delivery relief.  No
+;; MIN_BENEFIT can order 245 (loss) above 121 (win): the model needed a
+;; context term, not a threshold move.  Aggregate plane occupancy cannot
+;; be that term -- BOTH bodies are execution-heavy in total (32 exec
+;; slots vs <= 12 delivered words/trip; 64 vs ~27) -- the measured
+;; discriminator is CONTIGUITY of the launch run.  Arithmetic on all
+;; five calibration shapes (PUSH = 123, SLOT = 100 centislots):
+;;
+;;   shape                 deliver  execute  after  run  surplus   hidden  benefit           decision
+;;   SDPA-exp (8,24) n=1     3075     2400    2400   1  1x2277=2277 <3075  8*(3075-2400)-3075 = +2325  FIRE  (unchanged)
+;;   ReduceSDPA (4,8) n=8    1107      800     800   1  1x 677= 677 <1107  4*(1107- 800)-1107 =  +121  FIRE  (unchanged)
+;;   Log (4,17) n=8          2214     1700    1700   1* 1x1577=1577 <2214  4*(2214-1700)-2214 =  -158  refuse (unchanged)
+;;   Log1p (4,31) n=8        3936     3100    3100   1* 1x2977=2977 <3936  4*(3936-3100)-3936 =  -592  refuse (unchanged)
+;;   unarymaxmin (4,4) n=8    615      400     400   8  8x 277=2216 >=615  4*(   0     )- 615 =  -615  refuse (NEW)
+;;
+;;   (* Log/Log1p at their measurement flags: the Dst auto-increment
+;;   pass is disabled there, so their typed increment separators
+;;   survive and run = 1; they refuse on the delivery benefit exactly
+;;   as before, message and number byte-identical.  Under a flag set
+;;   that enables the auto-increment absorption their runs become 8 and
+;;   the printed benefit is -deliver instead -- still a refusal, still
+;;   byte-identical object code.)
+;;
+;;   unarymaxmin at its measurement flags (full ON set): the Dst
+;;   auto-increment pass absorbs the per-row typed increment between
+;;   the 8 sibling launches (rvtt-passes.def ordering contract), the
+;;   final-stream run is 8, surplus 8*(400-123) = 2216 >= deliver 615,
+;;   the record delivery is hidden, before = after, benefit = -615 <
+;;   60: refuse, byte-identical to the pre-recalibration refusal (the
+;;   silicon-measured winning form).  ReduceSDPA at its measurement
+;;   flags disables the auto-increment pass, its increments survive,
+;;   run = 1, surplus 677 < 1107: not hidden, benefit +121 exactly as
+;;   before.  Counted-loop shapes pass run = 1 by construction (one
+;;   clone; trips separated by loop-control delivery), and run = 1 can
+;;   never hide any record pass (length*100 - 123 < (1+length)*123 for
+;;   all lengths), so SDPA-exp and the whole n=1 class are
+;;   arithmetically untouched.
+;;
+;; Predicted-band consistency: the unarymaxmin root-cause bracketed the
+;; measured +3.93 cyc/tile loss by [zero residual saving = +6.15 ...
+;; model = -2.45]; the context term prices exactly the zero-residual
+;; end (before = after), the conservative bound of the measured band,
+;; using only the two pre-existing rates -- no newly fitted constant.
 ;;
 ;; MIN_BENEFIT = 60 centislots (0.6 slot per loop entry): every measured
 ;; losing shape models negative (max -158), so any non-negative
