@@ -614,6 +614,317 @@ fixed_replay_rtx_p (const_rtx x)
     }
 }
 
+/* Provable constant trip counts.
+
+   The RTL loop-iv/SCEV helpers (get_simple_loop_desc and friends) assert
+   LOOPS_HAVE_PREHEADERS, which this pass deliberately never establishes:
+   refusal paths must not mutate the CFG, so loops are initialized with
+   AVOID_CFG_MODIFICATIONS only.  Following the accepted replay-unroll
+   discipline, the trip count is instead proven by a bounded constant-chain
+   evaluation keyed to the pass's own dedicated-preheader proof:
+
+   - the loop is a single basic block ending in a two-way conditional jump;
+   - exactly one comparison operand is a counter register with exactly one
+     in-loop modification, a reg = reg + const step;
+   - the other comparison operand is a constant, either immediate or a
+     register with no in-loop modification whose last definition on the
+     unique dedicated-preheader path is a constant load;
+   - the counter's own last definition on that path is a constant load;
+   - iteration is then evaluated directly, wrapping at the register mode's
+     precision, until the continue condition first fails.
+
+   Anything else -- including a merely estimated profile count -- is an
+   unknown trip count and refuses.  This is pure structural RTL/dataflow
+   matching; no operation identity, opcode calendar, coefficient pattern,
+   or instruction-word fingerprint participates.  */
+
+// Walk backwards from the end of PREHEADER through the unique-predecessor
+// chain looking for the last definition of REG.  Return true and set *VALUE
+// if that definition is a simple constant load; refuse on any other
+// definition, on a call (potential clobber), or when no definition is found
+// within a small bound.
+static bool
+constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
+{
+  basic_block bb = preheader;
+  for (unsigned depth = 0; depth != 4; ++depth)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (CALL_P (insn))
+	    return false;
+	  if (!reg_set_p (reg, insn))
+	    continue;
+	  rtx set = single_set (insn);
+	  if (!set || !REG_P (SET_DEST (set))
+	      || REGNO (SET_DEST (set)) != REGNO (reg)
+	      || !CONST_INT_P (SET_SRC (set)))
+	    return false;
+	  *value = UINTVAL (SET_SRC (set));
+	  return true;
+	}
+      if (!single_pred_p (bb))
+	return false;
+      bb = single_pred (bb);
+    }
+  return false;
+}
+
+// Evaluate an integer condition CODE on VAL0, VAL1, both already reduced to
+// PREC-bit values.  Signed comparisons sign-extend from PREC.
+static bool
+eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
+		    unsigned prec)
+{
+  int64_t s0 = val0, s1 = val1;
+  if (prec < 64)
+    {
+      uint64_t sign = uint64_t (1) << (prec - 1);
+      s0 = int64_t ((val0 ^ sign) - sign);
+      s1 = int64_t ((val1 ^ sign) - sign);
+    }
+  switch (code)
+    {
+    case EQ: return val0 == val1;
+    case NE: return val0 != val1;
+    case LT: return s0 < s1;
+    case LE: return s0 <= s1;
+    case GT: return s0 > s1;
+    case GE: return s0 >= s1;
+    case LTU: return val0 < val1;
+    case LEU: return val0 <= val1;
+    case GTU: return val0 > val1;
+    case GEU: return val0 >= val1;
+    default: return false;
+    }
+}
+
+// Prove the constant trip count of single-block LOOP whose dedicated
+// preheader is PREHEADER.  Return true and set *TRIPS (number of times the
+// loop body executes) on success; any structural mismatch refuses.
+static bool
+provable_constant_trips (class loop *loop, basic_block preheader,
+			 uint64_t *trips)
+{
+  basic_block header = loop->header;
+  rtx_insn *jump = BB_END (header);
+  if (!JUMP_P (jump) || !any_condjump_p (jump) || !onlyjump_p (jump)
+      || EDGE_COUNT (header->succs) != 2)
+    return false;
+
+  edge e_branch = BRANCH_EDGE (header);
+  edge e_fall = FALLTHRU_EDGE (header);
+  bool taken_continues;
+  if (e_branch->dest == header && e_fall->dest != header)
+    taken_continues = true;
+  else if (e_fall->dest == header && e_branch->dest != header)
+    taken_continues = false;
+  else
+    return false;
+
+  rtx set = pc_set (jump);
+  if (!set)
+    return false;
+  rtx src = SET_SRC (set);
+  if (GET_CODE (src) != IF_THEN_ELSE)
+    return false;
+  rtx cond = XEXP (src, 0);
+  if (!COMPARISON_P (cond))
+    return false;
+  // Branch taken when the condition holds, unless the label is in the
+  // else arm.
+  bool taken_when_true = GET_CODE (XEXP (src, 1)) != PC;
+
+  rtx op0 = XEXP (cond, 0);
+  rtx op1 = XEXP (cond, 1);
+
+  // Identify the counter operand: a hard register with exactly one in-loop
+  // modification of the form reg = reg + const.
+  rtx counter = nullptr, bound = nullptr;
+  rtx_insn *step_insn = nullptr;
+  for (int side = 0; side != 2; ++side)
+    {
+      rtx cand = side ? op1 : op0;
+      if (!REG_P (cand))
+	continue;
+      rtx_insn *insn;
+      rtx_insn *found = nullptr;
+      bool bad = false;
+      FOR_BB_INSNS (header, insn)
+	if (NONDEBUG_INSN_P (insn) && insn != jump
+	    && reg_set_p (cand, insn))
+	  {
+	    if (found)
+	      bad = true;
+	    found = insn;
+	  }
+      if (bad)
+	return false;
+      if (found)
+	{
+	  if (counter)
+	    // Both operands are modified in the loop.
+	    return false;
+	  counter = cand;
+	  bound = side ? op0 : op1;
+	  step_insn = found;
+	}
+    }
+  if (!counter)
+    return false;
+
+  rtx step_set = single_set (step_insn);
+  if (!step_set || !REG_P (SET_DEST (step_set))
+      || REGNO (SET_DEST (step_set)) != REGNO (counter)
+      || GET_CODE (SET_SRC (step_set)) != PLUS
+      || !REG_P (XEXP (SET_SRC (step_set), 0))
+      || REGNO (XEXP (SET_SRC (step_set), 0)) != REGNO (counter)
+      || !CONST_INT_P (XEXP (SET_SRC (step_set), 1)))
+    return false;
+  uint64_t step = UINTVAL (XEXP (SET_SRC (step_set), 1));
+
+  scalar_int_mode mode;
+  if (!is_a<scalar_int_mode> (GET_MODE (counter), &mode)
+      || GET_MODE_PRECISION (mode) > 64)
+    return false;
+  unsigned prec = GET_MODE_PRECISION (mode);
+  uint64_t mask = prec == 64 ? ~uint64_t (0)
+    : (uint64_t (1) << prec) - 1;
+
+  uint64_t init;
+  if (!constant_reaching_value (preheader, counter, &init))
+    return false;
+
+  uint64_t bound_val;
+  if (CONST_INT_P (bound))
+    bound_val = UINTVAL (bound);
+  else if (REG_P (bound))
+    {
+      // The bound must be loop-invariant with a provable constant value.
+      rtx_insn *insn;
+      FOR_BB_INSNS (header, insn)
+	if (NONDEBUG_INSN_P (insn) && insn != jump
+	    && reg_set_p (bound, insn))
+	  return false;
+      if (!constant_reaching_value (preheader, bound, &bound_val))
+	return false;
+    }
+  else
+    return false;
+  bound_val &= mask;
+
+  // Directly evaluate the counter chain, wrapping at the mode precision,
+  // until the continue condition first fails.
+  bool counter_is_op0 = rtx_equal_p (counter, op0);
+  uint64_t c = init & mask;
+  constexpr uint64_t TRIP_BOUND = uint64_t (1) << 16;
+  for (uint64_t t = 1; t <= TRIP_BOUND; ++t)
+    {
+      c = (c + step) & mask;
+      uint64_t v0 = counter_is_op0 ? c : bound_val;
+      uint64_t v1 = counter_is_op0 ? bound_val : c;
+      bool cond_holds = eval_int_condition (GET_CODE (cond), v0, v1, prec);
+      bool taken = cond_holds == taken_when_true;
+      bool continues = taken == taken_continues;
+      if (!continues)
+	{
+	  *trips = t;
+	  return true;
+	}
+    }
+  return false;
+}
+
+/* Generic replay-hoist profitability model.
+
+   Hoisting converts one in-loop recording pass per trip (re-recording the
+   payload, with execution) into a single record-only capture pass in the
+   preheader plus one added playback launch per trip.  Model, in issue-slot
+   units, with every constant taken from the target cost table
+   (rvtt-cost.md):
+
+     re_record   = XTT_REPLAY_COST_CAPTURE
+		   + length * XTT_REPLAY_COST_SLOT_RECORD
+     record_only = XTT_REPLAY_COST_CAPTURE
+		   + length * XTT_REPLAY_COST_SLOT_ISSUE
+     benefit     = (trips - 1) * re_record   ; recordings no longer repeated
+		   - record_only             ; added preheader capture pass
+		   - trips * XTT_REPLAY_COST_LAUNCH  ; added launches
+
+   Hoist only when benefit >= the minimum-benefit threshold
+   (XTT_REPLAY_HOIST_MIN_BENEFIT, overridable through
+   -mtt-tensix-replay-hoist-min-benefit=).  The threshold calibration
+   derivation lives with the constants in rvtt-cost.md: the 2026-08-16
+   Blackhole same-source A/Bs bound the losing shape class at modeled
+   benefit <= 31 (3-trip capture hoists of 17..32 slots, +1.8%..+2.3%
+   silicon regressions) and the winning shape at modeled benefit 148
+   (8-trip 24-slot counted payload, -9.83%), so the default threshold 64
+   refuses the entire measured losing class with >= 2x margin while
+   accepting the measured winner with >= 2x headroom.
+
+   TRIPS must be provable (see provable_constant_trips above).  An unknown
+   or merely estimated trip count refuses the hoist, which keeps the
+   emitted code byte-identical to the unhoisted form.  The decision inputs
+   are exactly the provable trip count, the capture length, and the
+   cost-table constants.  */
+
+static bool
+hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length)
+{
+  uint64_t niter;
+  if (!provable_constant_trips (loop, preheader, &niter))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Not hoisting: loop %d trip count is not provably"
+		 " constant\n", loop->num);
+      return false;
+    }
+
+  HOST_WIDE_INT trips = (HOST_WIDE_INT) niter;
+  if (trips < 2)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Not hoisting: loop %d runs %ld time(s)\n",
+		 loop->num, (long) trips);
+      return false;
+    }
+
+  HOST_WIDE_INT re_record = (XTT_REPLAY_COST_CAPTURE
+			     + (HOST_WIDE_INT) length
+			       * XTT_REPLAY_COST_SLOT_RECORD);
+  HOST_WIDE_INT record_only = (XTT_REPLAY_COST_CAPTURE
+			       + (HOST_WIDE_INT) length
+				 * XTT_REPLAY_COST_SLOT_ISSUE);
+  HOST_WIDE_INT benefit = ((trips - 1) * re_record
+			   - record_only
+			   - trips * XTT_REPLAY_COST_LAUNCH);
+  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
+			       ? (HOST_WIDE_INT)
+				 riscv_tt_replay_hoist_min_benefit
+			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
+
+  if (benefit < min_benefit)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Not hoisting: modeled benefit %ld < %ld"
+		 " (trips %ld, length %u)\n",
+		 (long) benefit, (long) min_benefit, (long) trips, length);
+      return false;
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "Hoist profitable: modeled benefit %ld >= %ld"
+	     " (trips %ld, length %u)\n",
+	     (long) benefit, (long) min_benefit, (long) trips, length);
+  return true;
+}
+
 static basic_block
 dedicated_loop_preheader (class loop *loop)
 {
@@ -682,15 +993,16 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block)
     return nullptr;
     }
 
-  gcov_type backedges = expected_loop_iterations_unbounded (loop);
-  if (backedges < 1
-      || backedges * (seq.length + 1) <= backedges + 1)
+  basic_block preheader = dedicated_loop_preheader (loop);
+  if (!preheader)
     {
       if (dump_file)
-	fprintf (dump_file, "Not hoisting: loop backedge estimate is %ld\n",
-		 (long) backedges);
+	fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
       return nullptr;
     }
+
+  if (!hoist_profitable_p (loop, preheader, seq.length))
+    return nullptr;
 
   for (auto pos = block.data () + seq.clones.front ().begin,
 	end = block.data () + seq.clones.front ().end;
@@ -703,9 +1015,6 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block)
 	return nullptr;
       }
 
-  basic_block preheader = dedicated_loop_preheader (loop);
-  if (!preheader && dump_file)
-    fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
   return preheader;
 }
 
@@ -899,11 +1208,6 @@ counted_loop_payload (class loop *loop, replay_block &info,
   if (length < MIN_SEQUENCE)
     return false;
 
-  gcov_type iterations = expected_loop_iterations_unbounded (loop) + 1;
-  if (iterations < 2
-      || iterations * (length - 1) <= length + 1)
-    return false;
-
   seq = replay_sequence (0, 0, length);
   seq.clones.emplace_back (0, info.size ());
   return true;
@@ -927,11 +1231,21 @@ hoist_counted_loops (function *cfn,
 	continue;
 
       basic_block preheader = dedicated_loop_preheader (loop);
+      if (!preheader)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Not hoisting: loop has no dedicated preheader\n");
+	  continue;
+	}
+      if (!hoist_profitable_p (loop, preheader, seq.length))
+	continue;
+
       auto spans = available_replay_spans (replay_spans, persistent_slots);
       auto slot = std::find_if (spans.begin (), spans.end (),
 				[&seq] (replay_span span)
 				{ return span.end >= seq.length; });
-      if (!preheader || slot == spans.end ())
+      if (slot == spans.end ())
 	continue;
 
       unsigned length
