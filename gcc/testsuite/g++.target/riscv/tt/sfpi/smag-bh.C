@@ -21,10 +21,7 @@ void one () {
 **	SFPSTORE	L0, 2, 4, 7
 **	SFPLOAD	L0, 4, 4, 7
 **	SFPCAST	L0, L0, 3
-**	SFPSETCC	L0, 0, 0
-**	SFPSETSGN	L0, L0, 0, 1	# LV:L0
-**	SFPIADD	L0, L9, 0, 6	# LV:L0
-**	SFPENCC	3, 10
+**	SFPCAST	L0, L0, 3
 **	SFPSTORE	L0, 6, 4, 7
 **	ret
 */
@@ -46,10 +43,7 @@ void two () {
 **	SFPLOAD	L0, 0, 4, 7
 **	SFPSTORE	L0, 2, 4, 7
 **	SFPLOAD	L0, 4, 4, 7
-**	SFPSETCC	L0, 0, 0
-**	SFPSETSGN	L0, L0, 0, 1	# LV:L0
-**	SFPIADD	L0, L9, 0, 6	# LV:L0
-**	SFPENCC	3, 10
+**	SFPCAST	L0, L0, 3
 **	SFPCAST	L0, L0, 3
 **	SFPSTORE	L0, 6, 4, 7
 **	SFPLOAD	L0, 8, 4, 7

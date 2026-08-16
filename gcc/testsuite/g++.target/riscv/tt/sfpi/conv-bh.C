@@ -52,11 +52,7 @@ void three () {
 /*
 **_Z5threev:
 **	SFPLOAD	L0, 0, 4, 7
-**	SFPSETCC	L0, 0, 0
-**	SFPMOV	L1, L0, 2
-**	SFPSETSGN	L1, L0, 0, 1	# LV:L1
-**	SFPIADD	L1, L9, 0, 6	# LV:L1
-**	SFPENCC	3, 10
+**	SFPCAST	L1, L0, 3
 **	SFPSTORE	L1, 6, 4, 7
 **	SFPCAST	L0, L0, 1
 **	SFPSTORE	L0, 8, 0, 7
