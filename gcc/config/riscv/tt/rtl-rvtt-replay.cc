@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
+#define INCLUDE_SET
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -35,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "cfgrtl.h"
 #include "dominance.h"
+#include "df.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
@@ -943,6 +945,601 @@ hoist_counted_loops (function *cfn,
     }
 }
 
+// ---- Launch conversion of isomorphic instruction runs ----
+//
+// After formation, a payload recorded in the replay buffer may have further
+// executions that were not textually identical to the recorded sequence --
+// typically the final copy of a completely unrolled counted loop, whose
+// separate register allocation chose different temporaries (and may clobber
+// registers the recorded rows preserve).  When such a run is
+// effect-isomorphic to a payload under a register value map, executing it as
+// one more launch is equivalent provided every register whose final contents
+// differ between the two worlds is dead after the run.
+//
+// Matching is purely structural: identical instruction codes and
+// non-register operands in lockstep, with register operands related by an
+// evolving value map (a use of a run-local definition must correspond to the
+// matched definition; a live-in use must be the identical hard register).
+// No operation names, opcode calendars, immediate fingerprints, or raw
+// encodings participate in any decision.
+//
+// Refusals, all leaving the function byte-identical:
+//   - any lockstep mismatch (code, immediate, structure, or value map);
+//   - a register of a differing definition pair live after the run;
+//   - a run whose trailing Dst-advance context differs from the uniform
+//     trailing context of the payload's other execution sites: the typed Dst
+//     auto-increment ownership pass runs later and must see every execution
+//     site with equivalent RWC coverage, so a conversion may not create the
+//     only uncovered site;
+//   - payloads whose recorded contents, buffer span, or execution sites are
+//     ambiguous, and runs not dominated by their recording.
+
+struct conv_capture
+{
+  rtx_insn *insn = nullptr;
+  basic_block bb = nullptr;
+  unsigned begin = 0;
+  unsigned len = 0;
+  bool exec = false;
+  bool valid = true;
+  std::vector<rtx_insn *> members; // slot-occupying payload insns, in order
+  rtx_insn *shadow_end = nullptr;  // last member
+  unsigned sites = 0;
+  int trailing = -2;               // uniform site context; -2 unset, -1 none
+};
+
+struct conv_launch
+{
+  rtx_insn *insn;
+  unsigned begin;
+  unsigned len;
+  conv_capture *payload = nullptr;
+};
+
+// A typed TTINCRWC advancing only Dst by a constant stride, mirroring the
+// Dst auto-increment pass's row separator test.
+
+static bool
+conv_pure_dst_increment_p (rtx_insn *insn, HOST_WIDE_INT *stride)
+{
+  if (GET_CODE (insn) != INSN
+      || recog_memoized (insn) != CODE_FOR_rvtt_ttincrwc)
+    return false;
+  rtx pattern = PATTERN (insn);
+  rtx cr = XVECEXP (pattern, 0, 0);
+  rtx d = XVECEXP (pattern, 0, 1);
+  rtx b = XVECEXP (pattern, 0, 2);
+  rtx a = XVECEXP (pattern, 0, 3);
+  if (!CONST_INT_P (cr) || !CONST_INT_P (d) || !CONST_INT_P (b)
+      || !CONST_INT_P (a))
+    return false;
+  if (INTVAL (cr) != 0 || INTVAL (b) != 0 || INTVAL (a) != 0)
+    return false;
+  *stride = INTVAL (d);
+  return *stride > 0 && *stride <= 15;
+}
+
+// The trailing Dst-advance context of an execution site whose last issued
+// instruction is LAST: the stride of an immediately following pure typed Dst
+// TTINCRWC, or -1.
+
+static int
+conv_trailing_context (rtx_insn *last)
+{
+  basic_block bb = BLOCK_FOR_INSN (last);
+  rtx_insn *end = NEXT_INSN (BB_END (bb));
+  for (rtx_insn *cur = NEXT_INSN (last); cur && cur != end;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      HOST_WIDE_INT stride;
+      if (conv_pure_dst_increment_p (cur, &stride))
+	return (int) stride;
+      return -1;
+    }
+  return -1;
+}
+
+// An insn eligible to appear in a matched run: replay-safe, slot-occupying,
+// fixed-encoding Tensix work.
+
+static bool
+conv_run_insn_p (rtx_insn *insn)
+{
+  if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
+    return false;
+  rtx pattern = PATTERN (insn);
+  if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+    return false;
+  if (get_attr_type (insn) != TYPE_TENSIX
+      || get_attr_xtt_replay (insn) != XTT_REPLAY_SAFE
+      || !get_attr_length (insn))
+    return false;
+  return fixed_replay_rtx_p (PATTERN (insn));
+}
+
+// Is hard register REGNO consumed by a real instruction on any path from
+// after FROM (in BB) before being fully redefined?  Mirrors the load-macro
+// pass's lifetime test (reg_referenced_p before reg_set_p, a later full
+// definition ends the old value's lifetime).  The exit block is not a
+// consumer: SFPU register state is not an implicit cross-function
+// interface in this programming model -- an explicit hand-off is an
+// ordinary instruction definition or use (sfpwritelreg/sfpreadlreg), the
+// ABI's blanket call-saved marking otherwise has no residual-contents
+// contract (kernels clobber the file without saving; accepted-risk
+// precedent from the region-scoped ownership review), and calls are
+// conservatively treated as consumers.  Declared asm register operands
+// appear as pattern references and are honored; undeclared asm dependence
+// on residual register contents has no contract.
+
+/* Architectural LREG interface markers (the typed variable-LREG read and
+   write patterns) observe or pin a specific physical register out of band:
+   a read is modeled as a fresh definition whose value is architecturally
+   the register's current contents.  Any such marker is conservatively a
+   consumer.  */
+
+static bool
+conv_mentions_varlreg_p (const_rtx x)
+{
+  if (GET_CODE (x) == UNSPEC_VOLATILE && XINT (x, 1) == UNSPECV_SFPVARLREG)
+    return true;
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+    if (fmt[i] == 'e')
+      {
+	if (conv_mentions_varlreg_p (XEXP (x, i)))
+	  return true;
+      }
+    else if (fmt[i] == 'E')
+      for (int j = XVECLEN (x, i); j--;)
+	if (conv_mentions_varlreg_p (XVECEXP (x, i, j)))
+	  return true;
+  return false;
+}
+
+static bool
+conv_reg_consumed_after_p (unsigned regno, rtx_insn *from, basic_block bb)
+{
+  rtx reg = regno_reg_rtx[regno];
+  rtx_insn *stop = NEXT_INSN (BB_END (bb));
+  for (rtx_insn *cur = NEXT_INSN (from); cur && cur != stop;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      if (CALL_P (cur) || conv_mentions_varlreg_p (PATTERN (cur))
+	  || reg_referenced_p (reg, PATTERN (cur)))
+	return true;
+      if (reg_set_p (reg, cur))
+	return false;
+    }
+
+  auto_bitmap visited;
+  std::vector<basic_block> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    work.push_back (e->dest);
+  while (!work.empty ())
+    {
+      basic_block cur_bb = work.back ();
+      work.pop_back ();
+      if (cur_bb == EXIT_BLOCK_PTR_FOR_FN (cfun)
+	  || !bitmap_set_bit (visited, cur_bb->index))
+	continue;
+      bool killed = false;
+      rtx_insn *insn;
+      FOR_BB_INSNS (cur_bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (CALL_P (insn) || conv_mentions_varlreg_p (PATTERN (insn))
+	      || reg_referenced_p (reg, PATTERN (insn)))
+	    return true;
+	  if (reg_set_p (reg, insn))
+	    {
+	      killed = true;
+	      break;
+	    }
+	}
+      if (!killed)
+	FOR_EACH_EDGE (e, ei, cur_bb->succs)
+	  work.push_back (e->dest);
+    }
+  return false;
+}
+
+// Structural isomorphism of one payload/run instruction pair under the
+// evolving value map.  DEFINED_P/DEFINED_R track registers defined so far in
+// the payload and run; P2R/R2P is the current correspondence; PAIRS collects
+// every definition pair for the liveness proof.
+
+struct conv_map
+{
+  std::map<unsigned, unsigned> p2r, r2p;
+  std::vector<std::pair<unsigned, unsigned>> pairs;
+  std::map<unsigned, bool> defined_p, defined_r;
+};
+
+static bool
+conv_match_rtx (rtx a, rtx b, bool in_def, conv_map &map,
+		std::vector<std::pair<unsigned, unsigned>> &pending_defs)
+{
+  if (GET_CODE (a) != GET_CODE (b) || GET_MODE (a) != GET_MODE (b))
+    return false;
+  switch (GET_CODE (a))
+    {
+    case REG:
+      {
+	if (REG_NREGS (a) != 1 || REG_NREGS (b) != 1)
+	  return false;
+	unsigned pa = REGNO (a), rb = REGNO (b);
+	if (!SFPU_REG_P (pa) || !SFPU_REG_P (rb))
+	  return false;
+	if (in_def)
+	  {
+	    pending_defs.emplace_back (pa, rb);
+	    return true;
+	  }
+	if (map.defined_p.count (pa))
+	  return map.p2r.count (pa) && map.p2r[pa] == rb
+		 && map.r2p.count (rb) && map.r2p[rb] == pa;
+	// Live-in use: the identical register, not shadowed by a run-local
+	// definition.
+	return pa == rb && !map.defined_r.count (rb);
+      }
+
+    case CONST_INT:
+      return INTVAL (a) == INTVAL (b);
+
+    case SCRATCH:
+      return true;
+
+    case SET:
+      return conv_match_rtx (SET_SRC (a), SET_SRC (b), false, map,
+			     pending_defs)
+	     && conv_match_rtx (SET_DEST (a), SET_DEST (b), true, map,
+				pending_defs);
+
+    case CLOBBER:
+      return conv_match_rtx (XEXP (a, 0), XEXP (b, 0), true, map,
+			     pending_defs);
+
+    case USE:
+      return conv_match_rtx (XEXP (a, 0), XEXP (b, 0), false, map,
+			     pending_defs);
+
+    case UNSPEC:
+    case UNSPEC_VOLATILE:
+      if (XINT (a, 1) != XINT (b, 1))
+	return false;
+      // FALLTHROUGH
+    case PARALLEL:
+      {
+	if (XVECLEN (a, 0) != XVECLEN (b, 0))
+	  return false;
+	for (int ix = 0; ix != XVECLEN (a, 0); ++ix)
+	  if (!conv_match_rtx (XVECEXP (a, 0, ix), XVECEXP (b, 0, ix),
+			       in_def, map, pending_defs))
+	    return false;
+	return true;
+      }
+
+    default:
+      return false;
+    }
+}
+
+static bool
+conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
+{
+  if (recog_memoized (p) != recog_memoized (r))
+    return false;
+  std::vector<std::pair<unsigned, unsigned>> pending_defs;
+  if (!conv_match_rtx (PATTERN (p), PATTERN (r), false, map, pending_defs))
+    return false;
+  // Definitions take effect after all of the instruction's uses.
+  for (auto const &def : pending_defs)
+    {
+      map.p2r[def.first] = def.second;
+      map.r2p[def.second] = def.first;
+      map.defined_p[def.first] = true;
+      map.defined_r[def.second] = true;
+      map.pairs.push_back (def);
+    }
+  return true;
+}
+
+static void
+convert_isomorphic_runs (function *cfn)
+{
+  // Rediscover captures and launches structurally.
+  std::vector<conv_capture *> captures;
+  std::vector<conv_launch> launches;
+  std::set<rtx_insn *> shadow;
+  bool bail = false;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (bail)
+	    break;
+	  if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN)
+	    continue;
+	  if (recog_memoized (insn) != CODE_FOR_rvtt_ttreplay_int)
+	    continue;
+	  rtx pattern = PATTERN (insn);
+	  rtx len = XVECEXP (pattern, 0, 3);
+	  rtx begin = XVECEXP (pattern, 0, 5);
+	  rtx exec = XVECEXP (pattern, 0, 6);
+	  rtx load = XVECEXP (pattern, 0, 7);
+	  if (!CONST_INT_P (len) || !CONST_INT_P (begin)
+	      || !CONST_INT_P (exec) || !CONST_INT_P (load))
+	    {
+	      bail = true; // variable replay: buffer contents unprovable
+	      break;
+	    }
+	  if (INTVAL (load) == 0)
+	    {
+	      launches.push_back ({ insn, (unsigned) UINTVAL (begin),
+				    (unsigned) UINTVAL (len), nullptr });
+	      continue;
+	    }
+	  conv_capture *cap = new conv_capture;
+	  cap->insn = insn;
+	  cap->bb = bb;
+	  cap->begin = UINTVAL (begin);
+	  cap->len = UINTVAL (len);
+	  cap->exec = INTVAL (exec) != 0;
+	  unsigned remaining = cap->len;
+	  rtx_insn *cur = insn;
+	  rtx_insn *bb_end = NEXT_INSN (BB_END (bb));
+	  while (remaining)
+	    {
+	      cur = NEXT_INSN (cur);
+	      if (!cur || cur == bb_end)
+		{
+		  cap->valid = false;
+		  break;
+		}
+	      if (!NONDEBUG_INSN_P (cur))
+		continue;
+	      shadow.insert (cur);
+	      // Anything in the shadow that does not occupy a slot (or that
+	      // this conversion could not itself have matched) makes the
+	      // recorded contents unsuitable.
+	      if (!conv_run_insn_p (cur))
+		{
+		  cap->valid = false;
+		  continue;
+		}
+	      cap->members.push_back (cur);
+	      cap->shadow_end = cur;
+	      --remaining;
+	    }
+	  if (cap->valid && cap->members.size () != cap->len)
+	    cap->valid = false;
+	  captures.push_back (cap);
+	  insn = (cur && cur != bb_end) ? cur : BB_END (bb);
+	}
+      if (bail)
+	break;
+    }
+
+  if (!bail)
+    {
+      // Buffer-span ambiguity: overlapping spans invalidate all parties;
+      // each launch must resolve to exactly one capture.
+      auto overlap = [] (unsigned b0, unsigned l0, unsigned b1, unsigned l1)
+      { return b0 < b1 + l1 && b1 < b0 + l0; };
+      for (conv_capture *cap : captures)
+	for (conv_capture *other : captures)
+	  if (other != cap
+	      && overlap (cap->begin, cap->len, other->begin, other->len))
+	    cap->valid = false;
+      for (conv_launch &launch : launches)
+	{
+	  for (conv_capture *cap : captures)
+	    if (cap->begin == launch.begin && cap->len == launch.len)
+	      launch.payload = launch.payload ? nullptr : cap;
+	  for (conv_capture *cap : captures)
+	    if (overlap (cap->begin, cap->len, launch.begin, launch.len)
+		&& !(cap->begin == launch.begin && cap->len == launch.len))
+	      cap->valid = false;
+	}
+
+      // Uniform trailing Dst-advance context across every execution site.
+      for (conv_capture *cap : captures)
+	if (cap->valid)
+	  {
+	    if (cap->exec)
+	      {
+		cap->trailing = conv_trailing_context (cap->shadow_end);
+		++cap->sites;
+	      }
+	    for (conv_launch &launch : launches)
+	      if (launch.payload == cap)
+		{
+		  int ctx = conv_trailing_context (launch.insn);
+		  if (cap->trailing == -2)
+		    cap->trailing = ctx;
+		  else if (cap->trailing != ctx)
+		    cap->valid = false;
+		  ++cap->sites;
+		}
+	    if (cap->sites == 0)
+	      cap->valid = false;
+	  }
+    }
+
+  bool any_valid = false;
+  for (conv_capture *cap : captures)
+    any_valid |= cap->valid;
+
+  if (!bail && any_valid)
+    {
+      calculate_dominance_info (CDI_DOMINATORS);
+
+      FOR_EACH_BB_FN (bb, cfn)
+	{
+	  rtx_insn *stop = NEXT_INSN (BB_END (bb));
+	  rtx_insn *insn = BB_HEAD (bb);
+	  while (insn && insn != stop)
+	    {
+	      rtx_insn *next = NEXT_INSN (insn);
+	      if (!NONDEBUG_INSN_P (insn) || shadow.count (insn)
+		  || !conv_run_insn_p (insn))
+		{
+		  insn = next;
+		  continue;
+		}
+
+	      conv_capture *matched = nullptr;
+	      conv_map map;
+	      rtx_insn *run_last = nullptr;
+	      for (conv_capture *cap : captures)
+		{
+		  if (!cap->valid)
+		    continue;
+		  // The recording must reach this run on every path.
+		  if (cap->bb == bb)
+		    {
+		      // Same block: the shadow must precede the run.
+		      bool before = false;
+		      for (rtx_insn *probe = cap->shadow_end; probe;
+			   probe = NEXT_INSN (probe))
+			{
+			  if (probe == insn)
+			    {
+			      before = true;
+			      break;
+			    }
+			  if (probe == BB_END (bb))
+			    break;
+			}
+		      if (!before)
+			continue;
+		    }
+		  else if (!dominated_by_p (CDI_DOMINATORS, bb, cap->bb))
+		    continue;
+
+		  conv_map trial;
+		  rtx_insn *cur = insn;
+		  rtx_insn *bb_end = NEXT_INSN (BB_END (bb));
+		  unsigned matched_len = 0;
+		  while (matched_len != cap->len)
+		    {
+		      if (!cur || cur == bb_end)
+			break;
+		      if (!NONDEBUG_INSN_P (cur))
+			{
+			  cur = NEXT_INSN (cur);
+			  continue;
+			}
+		      if (shadow.count (cur) || !conv_run_insn_p (cur)
+			  || !conv_match_insn (cap->members[matched_len],
+					       cur, trial))
+			break;
+		      ++matched_len;
+		      if (matched_len == cap->len)
+			{
+			  run_last = cur;
+			  break;
+			}
+		      cur = NEXT_INSN (cur);
+		    }
+		  if (matched_len == cap->len)
+		    {
+		      matched = cap;
+		      map = trial;
+		      break;
+		    }
+		}
+
+	      if (!matched)
+		{
+		  insn = next;
+		  continue;
+		}
+
+	      // Trailing Dst-advance context parity with the other sites.
+	      if (conv_trailing_context (run_last) != matched->trailing)
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Not converting isomorphic run at "
+			     "insn %d: trailing Dst-advance context differs "
+			     "from the payload's other execution sites\n",
+			     INSN_UID (insn));
+		  insn = next;
+		  continue;
+		}
+
+	      // Every register of a differing definition pair must be dead
+	      // after the run: the launch clobbers the payload's registers
+	      // and no longer writes the run's.
+	      bool live_conflict = false;
+	      for (auto const &pair : map.pairs)
+		if (pair.first != pair.second
+		    && (conv_reg_consumed_after_p (pair.first, run_last, bb)
+			|| conv_reg_consumed_after_p (pair.second, run_last,
+						      bb)))
+		  live_conflict = true;
+	      if (live_conflict)
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Not converting isomorphic run at "
+			     "insn %d: renamed register consumed after the "
+			     "run\n", INSN_UID (insn));
+		  insn = next;
+		  continue;
+		}
+
+	      // Convert: one launch replaces the whole run.
+	      rtx replay = gen_rvtt_ttreplay_int
+		(const0_rtx, const0_rtx, const0_rtx, GEN_INT (matched->len),
+		 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (matched->begin),
+		 const0_rtx, const0_rtx);
+	      emit_insn_before (replay, insn);
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Converted isomorphic run of %u insns "
+			   "(bb %d) to launch [%u,+%u); renamed pairs:",
+			   matched->len, bb->index, matched->begin,
+			   matched->len);
+		  bool any = false;
+		  for (auto const &pair : map.pairs)
+		    if (pair.first != pair.second)
+		      {
+			fprintf (dump_file, " %u->%u", pair.first,
+				 pair.second);
+			any = true;
+		      }
+		  fprintf (dump_file, any ? "\n" : " none\n");
+		}
+	      rtx_insn *cur = insn;
+	      next = NEXT_INSN (run_last);
+	      while (cur != run_last)
+		{
+		  rtx_insn *after = NEXT_INSN (cur);
+		  if (NONDEBUG_INSN_P (cur))
+		    SET_INSN_DELETED (cur);
+		  cur = after;
+		}
+	      SET_INSN_DELETED (run_last);
+	      insn = next;
+	    }
+	}
+      free_dominance_info (CDI_DOMINATORS);
+    }
+
+  for (conv_capture *cap : captures)
+    delete cap;
+}
+
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
 
@@ -1122,6 +1719,13 @@ transform (function *cfn, unsigned buffer_size)
 	  active_invalidate (active, seq, spans.front ().end);
 	}
     }
+
+  // Launch conversion of isomorphic runs is part of the replay-hoist
+  // mechanism family: the runs it targets are produced by the replay-aware
+  // complete unroll, and the flag keeps the default configuration
+  // byte-identical.
+  if (riscv_tt_opt_replay_hoist > 0)
+    convert_isomorphic_runs (cfn);
 }
 
 namespace {
