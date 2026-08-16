@@ -34,11 +34,25 @@ along with GCC; see the file COPYING3.  If not see
    ADDR-MODE SHIFT 13 is the frozen pass's proven value
    (rtl-rvtt-loadmacro.cc:1001, 896, 979: `<< (TARGET_XTT_TENSIX_BH ? 13
    : 14)`), consistent with the BH SFPLOAD/SFPSTORE layouts
-   (sfpu-ops-bh.h:266,327: addr_mode << 13) and with the 3-bit BH
+   (sfpu-ops-bh.h: addr_mode << 13) and with the 3-bit BH
    addr-mode values 6/7 fitting bits 15:13 below InstrMod0 at bit 16.
-   CONFLICT: TT_OP_BH_SFPLOADMACRO (sfpu-ops-bh.h:269-270) uses << 14;
-   flagged in NOTES-wp6-prep.md as needing the independent architectural
-   reference.  The CRAQ-validated pass value is adopted here.
+   RESOLVED 2026-08-17 (was NOTES-wp6-prep.md 9(a) CONFLICT with the
+   then-stale TT_OP_BH_SFPLOADMACRO << 14, since corrected): three
+   independent references agree on << 13 with a 3-bit field --
+   (1) the CRAQ simulator's authoritative decode (craq-sim
+   data/bh/tensix_isa.json SFPLOADMACRO: sfpu_addr_mode "15:13",
+   dest_reg_addr "9:0"; wh: "15:14"), semantically consumed by
+   TENSIX_EXECUTE_SFPLOADMACRO's SFPLOAD re-dispatch, so the 8/8 CRAQ
+   validations genuinely discriminate the shift; (2) the production
+   TT-Metal LLK (tt_llk_blackhole common/inc/ckernel_ops.h
+   TT_OP_SFPLOADMACRO << 13, is_valid (sfpu_addr_mode, 3)); (3) the
+   shipped minmax-final-craq-v2 BH oracle ELF launch words 0x9300E000 /
+   0x9370C000 (addr modes 7 / 6 in bits 15:13; mode 7 is unrepresentable
+   at << 14 without overlapping InstrMod0 bit 16), independently decoded
+   the same way by riscv-tt-elf-objdump.  The 10-bit address_bits below
+   is likewise the simulator's dest_reg_addr "9:0" (the quarantined
+   select path's tighter 0xff bound is a deliberate protocol
+   restriction, not a field width -- see rtl-rvtt-loadmacro.cc).
    No-increment addr mode 7 (:442,579,717,1489); Dst += 2 auto-increment
    addr mode 6 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
    (:164-169) = mask 0x0173.  Drain 3 slots (:988-990,1059-1062).
