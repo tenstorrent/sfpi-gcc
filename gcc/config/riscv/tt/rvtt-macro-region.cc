@@ -161,6 +161,8 @@ private:
     run_separators_.truncate (0);
     runs_ = 1;
     runs_marker_ = false;
+    new_run_pending_ = false;
+    pending_enable_ = nullptr;
     stride_ok_ = true;
   }
 
@@ -172,6 +174,8 @@ private:
   auto_vec<rtx_insn *> run_separators_;
   unsigned runs_ = 1;
   bool runs_marker_ = false;
+  bool new_run_pending_ = false;
+  rtx_insn *pending_enable_ = nullptr;
   bool stride_ok_ = true;
 };
 
@@ -236,6 +240,9 @@ region_scanner::close_row (basic_block bb)
     row.insns.safe_push (insn);
   row.separator = nullptr;
   row.dst_delta = 0;
+  row.enable = pending_enable_;
+  pending_enable_ = nullptr;
+  row.starts_run = false;
 
   if (!rows_.is_empty () && !isomorphic_to_first (row))
     {
@@ -248,6 +255,11 @@ region_scanner::close_row (basic_block bb)
       return false;
     }
 
+  if (rows_.is_empty ())
+    row.starts_run = true;
+  else if (new_run_pending_)
+    row.starts_run = true;
+  new_run_pending_ = false;
   rows_.safe_push (row);
   return true;
 }
@@ -431,9 +443,12 @@ region_scanner::scan_bb (basic_block bb)
 	}
 
       if (span_.is_empty () && pure_cc_write_p (e))
-	/* Ambient lane-enable between rows; a Layer-5 obligation, not a
-	   region member.  */
-	continue;
+	{
+	  /* Ambient lane-enable between rows; a Layer-5 obligation, not
+	     a region member.  */
+	  pending_enable_ = insn;
+	  continue;
+	}
 
       if (pure_rwc_p (e))
 	{
@@ -469,6 +484,7 @@ region_scanner::scan_bb (basic_block bb)
 	{
 	  ++runs_;
 	  runs_marker_ = false;
+	  new_run_pending_ = true;
 	}
       span_.safe_push (insn);
       span_effects_.safe_push (e);

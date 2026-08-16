@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
 // { dg-final { scan-assembler-times "\\.ttinsn" 22 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2987065344" 1 } }

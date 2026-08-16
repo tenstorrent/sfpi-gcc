@@ -129,6 +129,7 @@ rvtt_insn_effects (rtx_insn *insn)
       || cfg == XTT_CONFIG_EFFECT_DEST
       || rwc == XTT_RWC_EFFECT_INC
       || rwc == XTT_RWC_EFFECT_SET
+      || cfg == XTT_CONFIG_EFFECT_READ
       || rwc == XTT_RWC_EFFECT_ADDR_MODE)
     extract_insn (insn);
 
@@ -138,15 +139,21 @@ rvtt_insn_effects (rtx_insn *insn)
   e.cc_read = (cc == XTT_CC_EFFECT_READ || cc == XTT_CC_EFFECT_READWRITE);
   e.cc_write = (cc == XTT_CC_EFFECT_WRITE || cc == XTT_CC_EFFECT_READWRITE);
 
-  if (cfg == XTT_CONFIG_EFFECT_DEST)
+  if (cfg == XTT_CONFIG_EFFECT_DEST || cfg == XTT_CONFIG_EFFECT_READ)
     {
+      /* A non-constant destination is a typed access to a statically
+	 unknown register: every destination is possibly touched.  */
       int pos = get_attr_xtt_config_dest_op (insn) - 1;
-      if (pos < 0 || pos >= recog_data.n_operands
-	  || !CONST_INT_P (recog_data.operand[pos])
-	  || INTVAL (recog_data.operand[pos]) < 0
-	  || INTVAL (recog_data.operand[pos]) > 15)
-	return e;		/* Non-constant config dest: refuse.  */
-      e.config_dests_written = 1u << INTVAL (recog_data.operand[pos]);
+      uint32_t dests = ~0u;
+      if (pos >= 0 && pos < recog_data.n_operands
+	  && CONST_INT_P (recog_data.operand[pos])
+	  && INTVAL (recog_data.operand[pos]) >= 0
+	  && INTVAL (recog_data.operand[pos]) <= 15)
+	dests = 1u << INTVAL (recog_data.operand[pos]);
+      if (cfg == XTT_CONFIG_EFFECT_DEST)
+	e.config_dests_written = dests;
+      else
+	e.config_dests_read = dests;
     }
 
   switch (rwc)

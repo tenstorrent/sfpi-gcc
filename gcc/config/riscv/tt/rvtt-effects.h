@@ -41,6 +41,7 @@ struct xtt_effect_set {
   uint32_t lreg_read, lreg_write; /* hard-reg mask over L0..L15/LREG16	       */
   bool	   cc_read, cc_write;
   uint32_t config_dests_written;  /* bitmask over SFPCONFIG dests 0..15	       */
+  uint32_t config_dests_read;	  /* bitmask over SFPCONFIG dests 0..15	       */
   bool	   addr_mod_slot_write;	  /* SETC16 into an address-mod slot reg       */
   xtt_rwc_effect_t rwc;
   bool	   dst_mem_read, dst_mem_write;	  /* from MEM operands (existing)      */

@@ -144,25 +144,6 @@ tensix_p (rtx_insn *insn)
     && get_attr_type (insn) == TYPE_TENSIX;
 }
 
-/* The architectural Dst face advance is a pure Dst/RWC face effect with no
-   LREG, CC, configuration, or Dst-memory effect.  Recognition queries the
-   generated effect attributes through the effect API -- never an insn code
-   as identity; raw `.ttinsn' asm words are opaque and refuse
-   (byte-identically) like any other unmodelled asm.  */
-static bool
-typed_dst_face_advance_p (rtx_insn *insn)
-{
-  if (!NONDEBUG_INSN_P (insn))
-    return false;
-  const xtt_effect_set effects = rvtt_insn_effects (insn);
-  return !effects.opaque
-    && effects.rwc.kind == xtt_rwc_effect_t::FACE
-    && !effects.lreg_read && !effects.lreg_write
-    && !effects.cc_read && !effects.cc_write
-    && !effects.config_dests_written && !effects.addr_mod_slot_write
-    && !effects.dst_mem_read && !effects.dst_mem_write;
-}
-
 static bool
 owned_loadmacro_config_dest_p (HOST_WIDE_INT dest)
 {
@@ -258,25 +239,6 @@ struct cast_round_descriptor
 /* One explicit semantic load/load/SFPSWAP/store row after allocation.  A
    profitable periodic formation owns several adjacent rows and maps them to
    the target's alternating-VD three-slot calendar.  */
-struct binary_configured_descriptor
-{
-  rtx_insn *insns[4] {};
-  rtx_insn *enable_insn = nullptr;
-  rtx_insn *increment_insn = nullptr;
-  rtx load0_mem = nullptr;
-  rtx load1_mem = nullptr;
-  rtx store_mem = nullptr;
-  rtx load1_opcode = nullptr;
-  rtx load1_encoding = nullptr;
-  rtx load1_live_value = nullptr;
-  rtx load0_address = nullptr;
-  rtx load1_address = nullptr;
-  rtx store_address = nullptr;
-  rtx mode = nullptr;
-  rtx no_increment_address_mode = nullptr;
-  HOST_WIDE_INT result_template_mod = 0;
-};
-
 static rtx_insn *exact_dst_increment_after (rtx_insn *);
 
 static rtx_insn *
@@ -620,185 +582,6 @@ describe_cast_round_row (const macro_candidate &candidate,
   return true;
 }
 
-/* Prove that VALUE has no use after START before an all-lane definition kills
-   it.  The periodic matcher uses this for both SFPSWAP results: the macro
-   calendar deliberately changes their physical placement, so neither
-   explicit result may escape its row.  */
-static bool
-value_dead_after_p (rtx value, rtx_insn *start)
-{
-  basic_block bb = BLOCK_FOR_INSN (start);
-  for (rtx_insn *insn = NEXT_INSN (start);
-       insn && BLOCK_FOR_INSN (insn) == bb; insn = NEXT_INSN (insn))
-    if (NONDEBUG_INSN_P (insn))
-      {
-	if (reg_referenced_p (value, PATTERN (insn)))
-	  return false;
-	if (reg_set_p (value, insn))
-	  return true;
-      }
-  return !bitmap_bit_p (df_get_live_out (bb), REGNO (value));
-}
-
-/* Match one semantic floating-point min/max row.  This describes effects,
-   never a source operation name: two typed Dst loads feed an ordinary vector
-   min/max SFPSWAP, exactly one result is stored, and the only counter effect
-   is the following Dst += 2.  */
-static bool
-describe_binary_configured_region (const macro_candidate &candidate,
-				    binary_configured_descriptor *out)
-{
-  if (candidate.words != 4 || candidate.loads != 2
-      || candidate.stores != 1 || candidate.crossed_non_sfpu
-      || candidate.unsupported_bulk)
-    return false;
-
-  unsigned count = 0;
-  for (rtx_insn *insn = candidate.first; insn; insn = NEXT_INSN (insn))
-    {
-      if (NONDEBUG_INSN_P (insn))
-	{
-	  if (count == ARRAY_SIZE (out->insns))
-	    return false;
-	  out->insns[count++] = insn;
-	}
-      if (insn == candidate.last)
-	break;
-    }
-  if (count != ARRAY_SIZE (out->insns)
-      || recog_memoized (out->insns[0]) != CODE_FOR_rvtt_sfpload_lv_int
-      || recog_memoized (out->insns[1]) != CODE_FOR_rvtt_sfpload_lv_int
-      || recog_memoized (out->insns[2]) != CODE_FOR_rvtt_sfpswap_int
-      || recog_memoized (out->insns[3]) != CODE_FOR_rvtt_sfpstore_int)
-    {
-      if (dump_file)
-	fprintf (dump_file, "  configured-binary-reject=shape count=%u\n",
-		 count);
-      return false;
-    }
-
-  extract_insn (out->insns[0]);
-  rtx load0_reg = recog_data.operand[0];
-  out->load0_mem = recog_data.operand[1];
-  rtx load0_opcode = recog_data.operand[2];
-  rtx load0_encoding = recog_data.operand[3];
-  out->load0_address = recog_data.operand[4];
-  rtx load0_live_value = recog_data.operand[6];
-  rtx load0_mode = recog_data.operand[7];
-  rtx load0_address_mode = recog_data.operand[8];
-
-  extract_insn (out->insns[1]);
-  rtx load1_reg = recog_data.operand[0];
-  out->load1_mem = recog_data.operand[1];
-  out->load1_opcode = recog_data.operand[2];
-  out->load1_encoding = recog_data.operand[3];
-  out->load1_address = recog_data.operand[4];
-  out->load1_live_value = recog_data.operand[6];
-  rtx load1_mode = recog_data.operand[7];
-  rtx load1_address_mode = recog_data.operand[8];
-
-  extract_insn (out->insns[2]);
-  rtx swap_out0 = recog_data.operand[0];
-  rtx swap_out1 = recog_data.operand[1];
-  rtx swap_in0 = recog_data.operand[2];
-  rtx swap_in1 = recog_data.operand[3];
-  rtx swap_mod = recog_data.operand[4];
-
-  extract_insn (out->insns[3]);
-  out->store_mem = recog_data.operand[0];
-  rtx store_opcode = recog_data.operand[1];
-  rtx store_encoding = recog_data.operand[2];
-  out->store_address = recog_data.operand[3];
-  rtx store_src = recog_data.operand[4];
-  rtx store_mode = recog_data.operand[5];
-  rtx store_address_mode = recog_data.operand[6];
-
-  rtx_insn *increment = exact_dst_increment_after (out->insns[3]);
-  HOST_WIDE_INT expected_address_mode = TARGET_XTT_TENSIX_BH ? 7 : 3;
-  bool inputs_closed =
-    (same_reg_p (swap_in0, load0_reg) && same_reg_p (swap_in1, load1_reg))
-    || (same_reg_p (swap_in0, load1_reg)
-	&& same_reg_p (swap_in1, load0_reg));
-  bool stores_out0 = same_reg_p (store_src, swap_out0);
-  bool stores_out1 = same_reg_p (store_src, swap_out1);
-  if (!increment
-      || !hard_lreg_p (load0_reg) || !hard_lreg_p (load1_reg)
-      || same_reg_p (load0_reg, load1_reg) || !inputs_closed
-      || stores_out0 == stores_out1
-      || !CONST_INT_P (swap_mod) || INTVAL (swap_mod) != 1
-      || !CONST_INT_P (load0_opcode) || INTVAL (load0_opcode) != 0
-      || !CONST_INT_P (load0_encoding) || INTVAL (load0_encoding) != 0
-      || !noval_operand (load0_live_value, GET_MODE (load0_live_value))
-      || !CONST_INT_P (out->load1_opcode)
-      || INTVAL (out->load1_opcode) != 0
-      || !CONST_INT_P (out->load1_encoding)
-      || INTVAL (out->load1_encoding) != 0
-      || !noval_operand (out->load1_live_value,
-			  GET_MODE (out->load1_live_value))
-      || !CONST_INT_P (store_opcode) || INTVAL (store_opcode) != 0
-      || !CONST_INT_P (store_encoding) || INTVAL (store_encoding) != 0
-      || !CONST_INT_P (out->load0_address)
-      || !CONST_INT_P (out->load1_address)
-      || !CONST_INT_P (out->store_address)
-      || INTVAL (out->load0_address) < 0
-      || INTVAL (out->load0_address) > 0x3ff
-      || INTVAL (out->load1_address) < 0
-      || INTVAL (out->load1_address) > 0x3ff
-      || INTVAL (out->store_address) < 0
-      || INTVAL (out->store_address) > 0x3ff
-      || (INTVAL (out->load0_address) & 1)
-      || (INTVAL (out->load1_address) & 1)
-      || (INTVAL (out->store_address) & 1)
-      || !CONST_INT_P (load0_mode) || !CONST_INT_P (load1_mode)
-      || !CONST_INT_P (store_mode)
-      || INTVAL (load0_mode) != INTVAL (load1_mode)
-      || INTVAL (load0_mode) != INTVAL (store_mode)
-      || INTVAL (load0_mode) < 0 || INTVAL (load0_mode) > 0xf
-      || !CONST_INT_P (load0_address_mode)
-      || !CONST_INT_P (load1_address_mode)
-      || !CONST_INT_P (store_address_mode)
-      || INTVAL (load0_address_mode) != expected_address_mode
-      || INTVAL (load1_address_mode) != expected_address_mode
-      || INTVAL (store_address_mode) != expected_address_mode
-      || !value_dead_after_p (swap_out0, out->insns[3])
-      || !value_dead_after_p (swap_out1, out->insns[3]))
-    {
-      if (dump_file)
-	fprintf (dump_file, "  configured-binary-reject=effect-proof\n");
-      return false;
-    }
-
-  out->enable_insn = all_lanes_enable_before (out->insns[0]);
-  if (!out->enable_insn)
-    {
-      if (dump_file)
-	fprintf (dump_file, "  configured-binary-reject=all-lanes\n");
-      return false;
-    }
-  out->increment_insn = increment;
-  out->mode = load0_mode;
-  out->no_increment_address_mode = load0_address_mode;
-  /* The RTL pattern numbers the SFPSWAP SETs opposite the instruction's
-     architectural VD/VC naming: operand zero is VC and operand one is VD.
-     Macro Mod1=9 places max in VD; Mod1=1 places min there.  Select the form
-     that moves the explicitly stored SET into the launch VD copied to L16.  */
-  out->result_template_mod = stores_out0 ? 1 : 9;
-  return true;
-}
-
-static bool
-same_binary_descriptor_p (const binary_configured_descriptor &a,
-			  const binary_configured_descriptor &b)
-{
-  return INTVAL (a.load0_address) == INTVAL (b.load0_address)
-    && INTVAL (a.load1_address) == INTVAL (b.load1_address)
-    && INTVAL (a.store_address) == INTVAL (b.store_address)
-    && INTVAL (a.mode) == INTVAL (b.mode)
-    && INTVAL (a.no_increment_address_mode)
-       == INTVAL (b.no_increment_address_mode)
-    && a.result_template_mod == b.result_template_mod;
-}
-
 static void
 emit_config_word (rtx lreg0, uint32_t value, unsigned config_dest)
 {
@@ -868,22 +651,6 @@ emit_cast_round_config ()
   emit_config_word (config_lreg, 0x534d0004u, 4);
   /* Fixed FP16B store mode and instruction-count delay semantics.  */
   emit_config_word (config_lreg, 0x00000100u, 8);
-}
-
-static void
-emit_binary_descriptor_config (HOST_WIDE_INT result_template_mod)
-{
-  rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
-  emit_owned_dst_increment_address_modifier ();
-  /* Template zero is SFPSWAP(VC=L2, VD=macro-VD); template one is the
-     SHFT2 copy into macro LReg16.  The descriptor, not a kernel identity,
-     selects whether VD receives the first or second explicit result.  */
-  emit_config_word (config_lreg,
-		    0x920002c0u | unsigned (result_template_mod), 0);
-  emit_config_word (config_lreg, 0x940000d6u, 1);
-  emit_config_word (config_lreg, 0x00dd008cu, 4);
-  emit_config_word (config_lreg, 0x53000000u, 5);
-  emit_config_word (config_lreg, 0x00000330u, 8);
 }
 
 static void
@@ -988,171 +755,6 @@ emit_macro_launch (const configured_descriptor &descriptor)
   emit_insn (gen_rvtt_sfpnop ());
   emit_insn (gen_rvtt_sfpnop ());
   emit_insn (gen_rvtt_sfpnop ());
-}
-
-static unsigned
-encoded_binary_launch (unsigned macro_index, unsigned vd, rtx mode,
-		       rtx address_mode, rtx address)
-{
-  unsigned lreg_ind = (macro_index << 2) | (vd & 3);
-  return 0x93000000u
-    | (lreg_ind << 20)
-    | (UINTVAL (mode) << 16)
-    | (UINTVAL (address_mode) << (TARGET_XTT_TENSIX_BH ? 13 : 14))
-    | UINTVAL (address);
-}
-
-static void
-emit_binary_configured_run
-  (auto_vec<binary_configured_descriptor, 8> &regions, unsigned begin,
-   unsigned end, bool emit_config)
-{
-  const binary_configured_descriptor &first = regions[begin];
-  if (emit_config)
-    {
-      start_sequence ();
-      emit_insn (copy_rtx (PATTERN (first.enable_insn)));
-      emit_binary_descriptor_config (first.result_template_mod);
-      rtx_insn *prefix = get_insns ();
-      end_sequence ();
-      emit_insn_before (prefix, first.enable_insn);
-    }
-
-  start_sequence ();
-  rtx rhs_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + 2);
-  rtx store_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + 3);
-  rtx auto_increment_address_mode
-    = GEN_INT (TARGET_XTT_TENSIX_BH ? 6 : 2);
-  for (unsigned row = begin; row < end; ++row)
-    {
-      const binary_configured_descriptor &descriptor = regions[row];
-      rtx lhs_lreg
-	= gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + ((row - begin) & 1));
-      unsigned lhs_word
-	= encoded_binary_launch (0, (row - begin) & 1, descriptor.mode,
-				 descriptor.no_increment_address_mode,
-				 descriptor.load0_address);
-      emit_insn (gen_rvtt_sfploadmacro_swap_int
-		 (lhs_lreg, descriptor.load0_mem, const0_rtx,
-		  descriptor.load0_address, descriptor.mode,
-		  descriptor.no_increment_address_mode, GEN_INT (lhs_word)));
-
-      emit_insn (gen_rvtt_sfpload_lv_int
-		 (rhs_lreg, descriptor.load1_mem, descriptor.load1_opcode,
-		  descriptor.load1_encoding, descriptor.load1_address,
-		  rvtt_gen_rtx_noval (XTT32SImode),
-		  descriptor.load1_live_value, descriptor.mode,
-		  descriptor.no_increment_address_mode));
-
-      unsigned store_word
-	= encoded_binary_launch (1, 3, descriptor.mode,
-				 auto_increment_address_mode,
-				 descriptor.store_address);
-      emit_insn (gen_rvtt_sfploadmacro_int
-		 (store_lreg, descriptor.store_mem, descriptor.store_mem,
-		  descriptor.store_address, descriptor.mode,
-		  auto_increment_address_mode, GEN_INT (store_word)));
-    }
-  /* The last macro-zero Round and macro-one Store events remain in flight
-     after the final launch.  Their maximum elapsed-instruction delay is
-     three slots, exactly as in the target's handwritten calendar.  */
-  emit_insn (gen_rvtt_sfpnop ());
-  emit_insn (gen_rvtt_sfpnop ());
-  emit_insn (gen_rvtt_sfpnop ());
-  rtx_insn *replacement = get_insns ();
-  end_sequence ();
-
-  emit_insn_before (replacement, first.enable_insn);
-  for (unsigned row = begin; row < end; ++row)
-    {
-      binary_configured_descriptor &descriptor = regions[row];
-      delete_insn (descriptor.enable_insn);
-      for (rtx_insn *insn : descriptor.insns)
-	delete_insn (insn);
-      delete_insn (descriptor.increment_insn);
-    }
-}
-
-static bool
-binary_rows_adjacent_p (const binary_configured_descriptor &a,
-			const binary_configured_descriptor &b)
-{
-  return next_nonnote_nondebug_insn (a.increment_insn) == b.enable_insn;
-}
-
-static bool
-binary_run_separator_p (const binary_configured_descriptor &a,
-			const binary_configured_descriptor &b)
-{
-  rtx_insn *insn = next_nonnote_nondebug_insn (a.increment_insn);
-  for (; insn && insn != b.enable_insn;
-       insn = next_nonnote_nondebug_insn (insn))
-    if (BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (a.increment_insn)
-	|| (recog_memoized (insn) != CODE_FOR_rvtt_ttincrwc
-	    && !typed_dst_face_advance_p (insn)))
-      return false;
-  return insn == b.enable_insn;
-}
-
-static void
-emit_binary_configured_regions
-  (auto_vec<binary_configured_descriptor, 8> &regions)
-{
-  bool emit_config = true;
-  for (unsigned begin = 0; begin < regions.length (); )
-    {
-      unsigned end = begin + 1;
-      while (end < regions.length ()
-	     && binary_rows_adjacent_p (regions[end - 1], regions[end]))
-	++end;
-      emit_binary_configured_run (regions, begin, end, emit_config);
-      emit_config = false;
-      begin = end;
-    }
-}
-
-static bool
-binary_regions_formable_p
-  (auto_vec<binary_configured_descriptor, 8> &regions)
-{
-  /* The prefix owns all address-modifier fields and materializes five
-     descriptor words; every run also needs three drain slots.  Account for
-     that fixed work conservatively per run.  Seven BH rows and eight WH rows
-     are the first strict issue-count improvements over the ordinary replayed
-     load/load/swap/store plus RWC calendar.  */
-  unsigned minimum_run_length = TARGET_XTT_TENSIX_BH ? 7 : 8;
-  if (regions.length () < minimum_run_length)
-    return false;
-
-  basic_block bb = BLOCK_FOR_INSN (regions[0].insns[0]);
-  unsigned run_length = 0;
-  for (unsigned i = 0; i < regions.length (); ++i)
-    {
-      if (BLOCK_FOR_INSN (regions[i].insns[0]) != bb
-	  || !same_binary_descriptor_p (regions[0], regions[i]))
-	return false;
-      ++run_length;
-      if (i + 1 == regions.length ()
-	  || !binary_rows_adjacent_p (regions[i], regions[i + 1]))
-	{
-	  if (run_length < minimum_run_length)
-	    return false;
-	  if (i + 1 != regions.length ()
-	      && !binary_run_separator_p (regions[i], regions[i + 1]))
-	    return false;
-	  run_length = 0;
-	}
-    }
-  /* The alternating launch uses L0/L1 and the fixed RHS/store calendar uses
-     L2/L3.  A value allocated to any of those registers can be live across
-     the explicit region even when each row's own results are closed.  Prove
-     all four fixed resources unobservable after the complete region.  */
-  for (unsigned i = 0; i != 4; ++i)
-    if (!value_dead_after_p
-	  (gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + i),
-	   regions.last ().increment_insn))
-      return false;
-  return true;
 }
 
 /* Return the unique external predecessor of a canonical one-block loop.
@@ -1848,7 +1450,6 @@ discover (function *fn)
   auto_vec<configured_descriptor, 2> configured_regions;
   auto_vec<cast_round_descriptor, 8> cast_round_rows;
   auto_vec<predicated_select_descriptor, 2> select_regions;
-  auto_vec<binary_configured_descriptor, 8> binary_regions;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -1913,12 +1514,6 @@ discover (function *fn)
 		       == descriptor_status::described
 		  && select_emission_exact_p (descriptor))
 		select_regions.safe_push (descriptor);
-	      binary_configured_descriptor binary_configured;
-	      if (riscv_tt_emit_loadmacro && config_available
-		  && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
-		  && describe_binary_configured_region
-		       (candidate, &binary_configured))
-		binary_regions.safe_push (binary_configured);
 	      candidate = macro_candidate {};
 	    }
 	  insn = next;
@@ -1934,25 +1529,16 @@ discover (function *fn)
      A canonical one-block loop gets its enable and configuration in the
      structural preheader; a straight-line site retains local setup.  */
   bool cast_round_group = configured_regions.is_empty ()
-    && select_regions.is_empty () && binary_regions.is_empty ()
+    && select_regions.is_empty ()
     && cast_round_group_p (cast_round_rows);
-  bool binary_group = configured_regions.is_empty ()
-    && select_regions.is_empty () && cast_round_rows.is_empty ()
-    && binary_regions_formable_p (binary_regions);
-  if (!cast_round_group && !binary_group
+  if (!cast_round_group
       && (configured_regions.length () + select_regions.length () != 1
-	  || !cast_round_rows.is_empty () || !binary_regions.is_empty ()))
+	  || !cast_round_rows.is_empty ()))
     return changed;
 
   if (cast_round_group)
     {
       emit_cast_round_group (cast_round_rows);
-      return true;
-    }
-
-  if (binary_group)
-    {
-      emit_binary_configured_regions (binary_regions);
       return true;
     }
 
@@ -2003,7 +1589,9 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX
+    /* The generic macro planner supersedes this quarantined pass; the
+       two never run together.  */
+    return TARGET_XTT_TENSIX && !riscv_tt_macro_planner
       && (riscv_tt_analyze_loadmacro || riscv_tt_emit_loadmacro);
   }
 

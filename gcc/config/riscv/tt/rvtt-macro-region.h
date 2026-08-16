@@ -38,6 +38,10 @@ struct macro_row
   vec<rtx_insn *> insns;
   /* Typed pure-RWC insn terminating the row, or NULL.  */
   rtx_insn *separator;
+  /* Ambient pure-CC-write lane enable preceding the row, or NULL.  */
+  rtx_insn *enable;
+  /* First row of a new run within the region.  */
+  bool starts_run;
   /* Typed Dst stride established by the separator (0 when absent).  */
   int dst_delta;
   /* Value map proving isomorphism to rows[0]: (rows[0] reg, this reg)

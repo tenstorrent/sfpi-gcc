@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Two eight-row runs separated only by typed TTINCRWC counter effects share
 // one materialized descriptor: one SFPENCC prefix, five SFPCONFIG words,
 // three SETC16 words, and per-run drain; the separators are preserved.

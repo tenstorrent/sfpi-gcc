@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Mod1 9 is a descriptor-only SFPSWAP routing (max into VD).  It is derived
 // by emission from which SET reaches the store; the source form is pinned as
 // a refusal so no pipeline can be handed the descriptor routing directly.

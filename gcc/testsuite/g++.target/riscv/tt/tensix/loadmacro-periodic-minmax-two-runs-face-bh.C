@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-emit-loadmacro" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // Two eight-row runs separated only by the typed architectural face advance
 // share one materialized descriptor; the separator is recognized by typed
 // identity (a pure Dst/RWC effect), preserved between the runs, and never
