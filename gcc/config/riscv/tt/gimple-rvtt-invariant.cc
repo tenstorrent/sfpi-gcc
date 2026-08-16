@@ -18,6 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #define INCLUDE_VECTOR
+#define INCLUDE_ALGORITHM
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -55,7 +56,8 @@ allowed_dst_effect_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpload
     || insnd->id == rvtt_insn_data::sfpload_lv
     || insnd->id == rvtt_insn_data::sfpstore
-    || insnd->id == rvtt_insn_data::ttincrwc;
+    || insnd->id == rvtt_insn_data::ttincrwc
+    || insnd->id == rvtt_insn_data::ttdstface;
 }
 
 /* Reject unrepresented calls, ordinary memory, CC changes, configuration,
@@ -163,7 +165,8 @@ constant_load_p (gcall *call, class loop *loop)
    conservative: refuse the whole loop before changing virtual operands or
    statement placement when the bound is exceeded.  */
 static bool
-pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
+pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
+		  bool report = true)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
@@ -215,7 +218,7 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
 	}
     }
 
-  basic_block *body = get_loop_body (loop);
+  basic_block *body = get_loop_body_in_dom_order (loop);
   for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
     {
       basic_block bb = body[ix];
@@ -256,42 +259,252 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
 	}
     }
 
+  /* Walk every body block in dominance order (SSA definitions are walked
+     before their non-PHI uses), releasing values at their last counted use
+     and admitting locally defined vectors, tracking the peak.  PHI-argument
+     uses are counted but never released here, so loop-carried values remain
+     live through the walk — conservative in the refusing direction.  For a
+     multi-block body this measures pressure across the whole region,
+     including any inner loops.  */
   size_t peak = live.size ();
-  basic_block latch = loop->latch;
-  for (gimple_stmt_iterator gsi = gsi_start_bb (latch);
-       !gsi_end_p (gsi); gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      ssa_op_iter iter;
-      tree use;
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	  {
-	    auto found = remaining.find (use);
-	    gcc_assert (found != remaining.end () && found->second);
-	    if (!--found->second && !pinned.count (use))
-	      live.erase (use);
-	  }
+  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	ssa_op_iter iter;
+	tree use;
+	FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
+	  if (VECTOR_TYPE_P (TREE_TYPE (use)))
+	    {
+	      auto found = remaining.find (use);
+	      gcc_assert (found != remaining.end () && found->second);
+	      if (!--found->second && !pinned.count (use))
+		live.erase (use);
+	    }
 
-      tree lhs = gimple_get_lhs (stmt);
-      if (lhs && TREE_CODE (lhs) == SSA_NAME
-	  && VECTOR_TYPE_P (TREE_TYPE (lhs))
-	  && !candidates.count (lhs))
-	live.insert (lhs);
-      peak = MAX (peak, live.size ());
-    }
+	tree lhs = gimple_get_lhs (stmt);
+	if (lhs && TREE_CODE (lhs) == SSA_NAME
+	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
+	    && !candidates.count (lhs))
+	  live.insert (lhs);
+	peak = MAX (peak, live.size ());
+      }
   free (body);
 
   if (peak <= LREG_COUNT)
     return true;
-  if (dump_file)
+  if (report && dump_file)
     fprintf (dump_file,
 	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
 	     peak, LREG_COUNT);
   return false;
 }
 
-/* Prove that the loop's first header test enters its sole body block.  This
+/* Estimate the number of SFPLOADI issues needed to materialize CALL's
+   constant after the later immediate-shortening passes run.  Prefer keeping
+   two-issue constants live when pressure prevents hoisting every invariant;
+   one-issue values remain cheap to rematerialize in the loop.  This models
+   only the target's immediate encodings.  It deliberately does not recognize
+   particular values or source patterns.  */
+static unsigned
+materialization_cost (gcall *call)
+{
+  uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
+  unsigned upper = value >> 16;
+  unsigned lower = value & 0xffff;
+  if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
+    return 1;
+
+  /* A full value whose low thirteen bits are zero and whose exponent fits
+     binary16 can use the single-issue FLOATA encoding.  */
+  unsigned exponent = (value >> 23) & 0xff;
+  return !(value & 0x1fff)
+    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+}
+
+/* Select the most expensive invariant materializations which fit the
+   architectural LREG pressure bound.  The old all-or-nothing policy left
+   every constant in a counted loop when only one live range exceeded the
+   bound.  Greedy selection is safe because pressure_legal_p re-runs the full
+   conservative liveness proof after every addition; it is also deterministic
+   because equal-cost candidates retain source order.  */
+static auto_vec<gcall *>
+select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
+{
+  std::stable_sort (loads.begin (), loads.end (),
+		    [] (gcall *a, gcall *b)
+		    {
+		      return materialization_cost (a) > materialization_cost (b);
+		    });
+
+  auto_vec<gcall *> selected;
+  for (gcall *call : loads)
+    {
+      selected.safe_push (call);
+      if (!pressure_legal_p (loop, selected, false))
+	{
+	  selected.pop ();
+	  if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "Invariant SFPU immediate left in loop by LREG pressure: ");
+	      print_gimple_stmt (dump_file, call, 0);
+	    }
+	}
+    }
+  return selected;
+}
+
+/* Return the header phi of LOOP from which X is derived by a chain of
+   non-memory assignments whose other operands are all constants, or null.
+   This mirrors the niter brute-force chain discovery without requiring
+   canonical preheaders, which this pass never establishes.  */
+static gphi *
+constant_chain_phi (class loop *loop, tree x)
+{
+  while (TREE_CODE (x) == SSA_NAME)
+    {
+      gimple *stmt = SSA_NAME_DEF_STMT (x);
+      basic_block bb = gimple_bb (stmt);
+      if (!bb || !flow_bb_inside_loop_p (loop, bb))
+	return nullptr;
+      if (gphi *phi = dyn_cast <gphi *> (stmt))
+	return bb == loop->header ? phi : nullptr;
+      if (!is_gimple_assign (stmt)
+	  || gimple_assign_rhs_class (stmt) == GIMPLE_TERNARY_RHS
+	  || gimple_references_memory_p (stmt))
+	return nullptr;
+      tree use = SINGLE_SSA_TREE_OPERAND (stmt, SSA_OP_USE);
+      if (!use)
+	return nullptr;
+      x = use;
+    }
+  return nullptr;
+}
+
+/* Value of X in a header evaluation of the loop whose chain phi (as found by
+   constant_chain_phi) carries the constant BASE.  A null X denotes the phi
+   itself.  Returns NULL_TREE whenever the value does not fold to a constant,
+   so callers refuse instead of speculating.  */
+static tree
+constant_chain_value (tree x, tree base)
+{
+  if (!x)
+    return base;
+  if (is_gimple_min_invariant (x))
+    return x;
+
+  gimple *stmt = SSA_NAME_DEF_STMT (x);
+  if (gimple_code (stmt) == GIMPLE_PHI)
+    return base;
+
+  tree_code code = gimple_assign_rhs_code (stmt);
+  tree type = TREE_TYPE (gimple_assign_lhs (stmt));
+  tree value = NULL_TREE;
+  if (gimple_assign_ssa_name_copy_p (stmt))
+    value = constant_chain_value (gimple_assign_rhs1 (stmt), base);
+  else if (gimple_assign_rhs_class (stmt) == GIMPLE_UNARY_RHS
+	   && TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME)
+    {
+      tree rhs = constant_chain_value (gimple_assign_rhs1 (stmt), base);
+      value = rhs ? fold_unary (code, type, rhs) : NULL_TREE;
+    }
+  else if (gimple_assign_rhs_class (stmt) == GIMPLE_BINARY_RHS)
+    {
+      tree rhs1 = gimple_assign_rhs1 (stmt);
+      tree rhs2 = gimple_assign_rhs2 (stmt);
+      if (TREE_CODE (rhs1) == SSA_NAME)
+	rhs1 = constant_chain_value (rhs1, base);
+      else if (TREE_CODE (rhs2) == SSA_NAME)
+	rhs2 = constant_chain_value (rhs2, base);
+      value = rhs1 && rhs2 ? fold_binary (code, type, rhs1, rhs2) : NULL_TREE;
+    }
+  return value && is_gimple_min_invariant (value) ? value : NULL_TREE;
+}
+
+/* Ask the generic complete-unroller to expose a short, exactly counted loop
+   when replay formation is also requested.  The replay pass can then compress
+   identical copies into launches without retaining scalar induction control.
+   The trip count is proved by bounded constant evaluation of the header test
+   reached through the unique ENTRY edge; scalar-evolution niter analysis is
+   not usable here because this pass must not reshape an ineligible CFG and so
+   never guarantees canonical preheaders.  Refuse whenever any step fails to
+   fold.  Keep a hard structural size bound because final replay-buffer
+   eligibility is intentionally decided later, after lowering and
+   allocation.  */
+static bool
+short_constant_replay_loop_p (class loop *loop, edge entry)
+{
+  constexpr unsigned MAX_REPLAY_UNROLL_ITERATIONS = 16;
+
+  gimple_stmt_iterator last = gsi_last_bb (loop->header);
+  gcond *cond = gsi_end_p (last)
+    ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
+  edge latch = loop->latch ? find_edge (loop->latch, loop->header) : nullptr;
+  if (!cond || !entry || !latch)
+    return false;
+
+  edge true_edge, false_edge;
+  extract_true_false_edges_from_block (loop->header, &true_edge, &false_edge);
+  if (!true_edge || !false_edge)
+    return false;
+
+  tree op[2] = { gimple_cond_lhs (cond), gimple_cond_rhs (cond) };
+  tree value[2], next[2];
+  for (unsigned j = 0; j < 2; j++)
+    {
+      if (is_gimple_min_invariant (op[j]))
+	{
+	  value[j] = op[j];
+	  next[j] = NULL_TREE;
+	  op[j] = NULL_TREE;
+	  continue;
+	}
+      gphi *phi = constant_chain_phi (loop, op[j]);
+      if (!phi)
+	return false;
+      value[j] = PHI_ARG_DEF_FROM_EDGE (phi, entry);
+      next[j] = PHI_ARG_DEF_FROM_EDGE (phi, latch);
+      if (!is_gimple_min_invariant (value[j]))
+	return false;
+      if (TREE_CODE (next[j]) == SSA_NAME
+	  && constant_chain_phi (loop, next[j]) != phi)
+	return false;
+    }
+
+  /* Evaluate the header test iteration by iteration; the number of times it
+     branches back into the body is the exact backedge count.  */
+  bool short_loop = false;
+  fold_defer_overflow_warnings ();
+  for (unsigned backedges = 0;
+       backedges < MAX_REPLAY_UNROLL_ITERATIONS; backedges++)
+    {
+      tree lhs = constant_chain_value (op[0], value[0]);
+      tree rhs = constant_chain_value (op[1], value[1]);
+      tree test = lhs && rhs
+	? fold_binary (gimple_cond_code (cond), boolean_type_node, lhs, rhs)
+	: NULL_TREE;
+      if (!test || TREE_CODE (test) != INTEGER_CST)
+	break;
+
+      edge taken = integer_zerop (test) ? false_edge : true_edge;
+      if (taken->dest != loop->latch)
+	{
+	  short_loop = backedges >= 1;
+	  break;
+	}
+
+      value[0] = constant_chain_value (next[0], value[0]);
+      value[1] = constant_chain_value (next[1], value[1]);
+      if (!value[0] || !value[1])
+	break;
+    }
+  fold_undefer_and_ignore_overflow_warnings ();
+  return short_loop;
+}
+
+/* Prove that the loop's first header test enters the loop body.  This
    avoids speculating an architectural LREG write out of a zero-trip loop,
    without requesting loop normalization (which could perturb an ineligible
    function).  */
@@ -324,20 +537,65 @@ first_iteration_executes_p (class loop *loop, edge entry)
   edge true_edge, false_edge;
   extract_true_false_edges_from_block (loop->header, &true_edge, &false_edge);
   edge taken = integer_zerop (value) ? false_edge : true_edge;
-  return taken && taken->dest == loop->latch;
+  return taken && taken->dest != loop->header
+    && flow_bb_inside_loop_p (loop, taken->dest);
+}
+
+/* A hoisted load must not be speculated: its block must provably execute
+   on every iteration that enters the loop body.  BB must dominate the
+   latch, and every loop exit must leave either from the header test
+   (before any body work of that iteration) or from a block BB dominates
+   (after the load has executed).  Pure CFG dominance structure; no
+   statement content is examined.  */
+static bool
+executes_every_entered_iteration_p (class loop *loop, basic_block bb)
+{
+  /* This pass initializes loops with AVOID_CFG_MODIFICATIONS, which keeps
+     multi-latch loops as-is with loop->latch == NULL rather than
+     canonicalizing them.  Without a unique latch there is no single block
+     that ends every iteration, so the dominance proof below has no anchor
+     (and dominated_by_p on a NULL block is undefined); refuse, mirroring
+     the NULL-latch check in short_constant_replay_loop_p.  */
+  if (!loop->latch)
+    return false;
+
+  if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
+    return false;
+
+  basic_block *body = get_loop_body (loop);
+  bool ok = true;
+  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
+    {
+      basic_block src = body[ix];
+      if (src == loop->header || dominated_by_p (CDI_DOMINATORS, src, bb))
+	continue;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, src->succs)
+	if (!flow_bb_inside_loop_p (loop, e->dest))
+	  {
+	    ok = false;
+	    break;
+	  }
+    }
+  free (body);
+  return ok;
 }
 
 static bool
 transform (function *fn)
 {
   bool changed = false;
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
+  if (!dom_info_available_p (CDI_DOMINATORS))
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  /* Innermost first: a load hoists stepwise, out of its own loop into the
+     enclosing loop's body, where the enclosing loop's own proofs decide
+     whether it moves again.  Every proof below is per-loop and re-runs on
+     the CFG as already transformed.  */
+  for (class loop *loop : loops_list (fn, LI_FROM_INNERMOST))
     {
-      class loop *loop = bb->loop_father;
-      if (!loop || loop->num == 0 || loop->header != bb
-	  || loop->num_nodes != 2)
-	continue;
+      basic_block bb = loop->header;
 
       edge entry = rvtt_loop_entry_edge (loop);
       if (!entry)
@@ -356,9 +614,11 @@ transform (function *fn)
 	  continue;
 	}
 
-      /* A dedicated preheader ending in a non-opaque block terminator
-	 cannot receive an insertion after that terminator; refuse
-	 structurally.  */
+      /* A dedicated preheader receives the loads at its end; any other
+	 entry block keeps its own statements and a fresh block is split
+	 from the entry edge at commit time.  A dedicated preheader
+	 ending in a non-opaque block terminator cannot receive an
+	 insertion after that terminator; refuse structurally.  */
       if (rvtt_preheader_insertion_blocked_p (entry))
 	continue;
 
@@ -373,31 +633,71 @@ transform (function *fn)
       if (expected_loop_iterations_unbounded (loop) < 1)
 	continue;
 
+      /* Collect candidate loads from the loop's direct body blocks (a load
+	 still inside a subloop was already refused there and would only see
+	 more pressure here).  Each load's block must provably execute on
+	 every iteration that enters the body — never speculate the
+	 architectural LREG write.  */
       auto_vec<gcall *> loads;
-      basic_block body = loop->latch;
-      for (gimple_stmt_iterator gsi = gsi_start_bb (body);
-	   !gsi_end_p (gsi); gsi_next (&gsi))
-	if (is_a <gcall *> (gsi_stmt (gsi)))
-	  {
-	    gcall *call = as_a <gcall *> (gsi_stmt (gsi));
-	    if (constant_load_p (call, loop))
-	      loads.safe_push (call);
-	  }
+      basic_block *body_blocks = get_loop_body_in_dom_order (loop);
+      for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+	{
+	  basic_block body = body_blocks[ix];
+	  if (body->loop_father != loop
+	      || !executes_every_entered_iteration_p (loop, body))
+	    continue;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (body);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    if (is_a <gcall *> (gsi_stmt (gsi)))
+	      {
+		gcall *call = as_a <gcall *> (gsi_stmt (gsi));
+		if (constant_load_p (call, loop))
+		  loads.safe_push (call);
+	      }
+	}
+      free (body_blocks);
 
-      if (loads.is_empty () || !pressure_legal_p (loop, loads))
+      if (loads.is_empty ())
 	continue;
+
+      auto_vec<gcall *> selected = select_pressure_legal_loads (loop, loads);
+      if (selected.is_empty ())
+	continue;
+
+      /* Never overwrite an explicit user unroll request (loop->unroll is
+	 nonzero once "#pragma GCC unroll N" has been recorded during CFG
+	 construction); in particular "#pragma GCC unroll 1" must keep its
+	 scalar loop.  Only the unroll request defers to the pragma — the
+	 invariant hoist below is independent and still proceeds.  */
+      if (riscv_tt_opt_replay_hoist > 0
+	  && !loop->unroll
+	  && short_constant_replay_loop_p (loop, entry))
+	{
+	  loop->unroll = USHRT_MAX;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Requested complete unroll for constant replay loop bb %d\n",
+		     bb->index);
+	}
 
       /* Commit: all proofs hold and at least one load will move.  A
 	 shared entry edge is split only now, so every refusal above
 	 remains byte-identical to the flag-off compilation.  */
       basic_block preheader = rvtt_commit_hoist_preheader (entry);
 
-      for (gcall *call : loads)
+      for (gcall *call : selected)
 	{
+	  /* A load hoisted out of an inner loop earlier in this same pass
+	     execution carries re-scanned, not-yet-renamed virtual operands
+	     (bare .MEM); only a renamed SSA definition has uses to unlink
+	     or a name to release.  */
 	  if (tree vdef = gimple_vdef (call))
 	    {
-	      unlink_stmt_vdef (call);
-	      release_ssa_name (vdef);
+	      if (TREE_CODE (vdef) == SSA_NAME)
+		{
+		  unlink_stmt_vdef (call);
+		  release_ssa_name (vdef);
+		}
 	      gimple_set_vdef (call, NULL_TREE);
 	    }
 	  if (gimple_vuse (call))

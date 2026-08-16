@@ -68,6 +68,13 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
    the final issue stream.  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_loadmacro);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
+/* Dst auto-increment ownership must see the final replay structure: it
+   absorbs the per-row typed TTINCRWC separators into an owned address
+   modifier configuration, both around explicit rows and around replay
+   launches.  Each later INSERT_PASS_AFTER on the same anchor lands closer to
+   the anchor, so this line precedes the replay insertion below and therefore
+   RUNS AFTER pass_rvtt_replay.  */
+INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_dst_autoincr);
 /* Replay formation consumes the final explicit or macro issue stream.  */
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 
