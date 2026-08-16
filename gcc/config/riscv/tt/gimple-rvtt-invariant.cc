@@ -35,39 +35,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-operands.h"
 #include "tree-ssanames.h"
 #include "tree-ssa-loop-niter.h"
+#include "cfghooks.h"
 #include "cfgloop.h"
 #include "cfganal.h"
 #include "tree-cfg.h"
 #include "dominance.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-macro-ownership.h"
 
 #include <unordered_map>
 #include <unordered_set>
 
 namespace {
-
-/* Return the already-existing dedicated preheader.  Merely enabling this
-   default-off pass must not reshape an ineligible CFG.  */
-static basic_block
-dedicated_preheader (class loop *loop)
-{
-  basic_block preheader = nullptr;
-  edge entry = nullptr;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, loop->header->preds)
-    if (!flow_bb_inside_loop_p (loop, e->src))
-      {
-	if (preheader)
-	  return nullptr;
-	preheader = e->src;
-	entry = e;
-      }
-
-  return preheader && !(entry->flags & EDGE_ABNORMAL)
-    && single_succ_p (preheader) ? preheader : nullptr;
-}
 
 static bool
 allowed_dst_effect_p (const rvtt_insn_data *insnd)
@@ -115,26 +95,6 @@ loop_has_barrier_p (class loop *loop)
       }
   free (body);
   return barrier;
-}
-
-/* Opaque assembly or an unrepresented call anywhere in the function can own
-   an architectural LREG across an otherwise eligible loop without creating a
-   vector SSA value.  There is no sound pressure bound in that case.  Known
-   RVTT calls expose their vector values and effects to the analyses below.  */
-static bool
-function_has_opaque_state_p (function *fn)
-{
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
-    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-	 !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gimple *stmt = gsi_stmt (gsi);
-	if (gimple_code (stmt) == GIMPLE_ASM
-	    || (is_gimple_call (stmt) && !rvtt_get_insn_data (stmt)))
-	  return true;
-      }
-  return false;
 }
 
 static bool
@@ -336,12 +296,11 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads)
    without requesting loop normalization (which could perturb an ineligible
    function).  */
 static bool
-first_iteration_executes_p (class loop *loop, basic_block preheader)
+first_iteration_executes_p (class loop *loop, edge entry)
 {
   gimple_stmt_iterator last = gsi_last_bb (loop->header);
   gcond *cond = gsi_end_p (last)
     ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
-  edge entry = find_edge (preheader, loop->header);
   if (!cond || !entry)
     return false;
 
@@ -371,14 +330,6 @@ first_iteration_executes_p (class loop *loop, basic_block preheader)
 static bool
 transform (function *fn)
 {
-  if (function_has_opaque_state_p (fn))
-    {
-      if (dump_file)
-	fprintf (dump_file,
-		 "Invariant SFPU immediate hoist refused: function has opaque LREG state\n");
-      return false;
-    }
-
   bool changed = false;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -388,8 +339,30 @@ transform (function *fn)
 	  || loop->num_nodes != 2)
 	continue;
 
-      basic_block preheader = dedicated_preheader (loop);
-      if (!preheader || !first_iteration_executes_p (loop, preheader)
+      edge entry = rvtt_loop_entry_edge (loop);
+      if (!entry)
+	continue;
+
+      /* Refuse whenever opaque state exists inside the hoist region
+	 ({preheader tail at/after the insertion point} union {loop
+	 body}; see rvtt_loop_hoist_region_opaque_p).  Opacity elsewhere
+	 in the function cannot interleave with the hoisted live ranges
+	 and is no reason to refuse an otherwise proven loop.  */
+      if (rvtt_loop_hoist_region_opaque_p (loop, entry))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Invariant SFPU immediate hoist refused: function has opaque LREG state\n");
+	  continue;
+	}
+
+      /* A dedicated preheader ending in a non-opaque block terminator
+	 cannot receive an insertion after that terminator; refuse
+	 structurally.  */
+      if (rvtt_preheader_insertion_blocked_p (entry))
+	continue;
+
+      if (!first_iteration_executes_p (loop, entry)
 	  || loop_has_barrier_p (loop))
 	continue;
 
@@ -413,6 +386,11 @@ transform (function *fn)
 
       if (loads.is_empty () || !pressure_legal_p (loop, loads))
 	continue;
+
+      /* Commit: all proofs hold and at least one load will move.  A
+	 shared entry edge is split only now, so every refusal above
+	 remains byte-identical to the flag-off compilation.  */
+      basic_block preheader = rvtt_commit_hoist_preheader (entry);
 
       for (gcall *call : loads)
 	{
