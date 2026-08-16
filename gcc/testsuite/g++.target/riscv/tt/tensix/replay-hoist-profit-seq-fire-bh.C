@@ -4,7 +4,7 @@
 
 // Repeated-sequence hoist at the DEFAULT threshold: forty trips re-record
 // the repeated body sequence every trip, so the modeled benefit is far
-// above the cost-table minimum of 64 and the capture must move to the
+// above the cost-table minimum of 60 and the capture must move to the
 // preheader as a record-only pass.
 void seq_fire_40trip ()
 {

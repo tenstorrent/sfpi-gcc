@@ -6,7 +6,7 @@
 
 // Sixteen-trip loop around the 10-instruction payload (Wormhole may add
 // SFPNOP slots, growing the capture): the modeled benefit at 16 trips is
-// far above the cost-table minimum of 64 for any length in that range, so
+// far above the cost-table minimum of 60 for any length in that range, so
 // this high-trip shape class must hoist.
 void counted_fire_16trip ()
 {
