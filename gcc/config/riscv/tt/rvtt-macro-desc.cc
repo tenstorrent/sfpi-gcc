@@ -116,13 +116,19 @@ enum templ_rule_kind
      source's SECOND result set reaches the store, mod1 gains the
      routing bit (frozen provenance rtl-rvtt-loadmacro.cc:781-786).  */
   TR_FIELDS_FROM_SOURCE_ROUTING_MOD,
-  /* Proven whole word (internal event; field semantics 9(d)/9(e)
-     partial).  */
-  TR_WHOLE_WORD,
-  /* Proven whole word whose imm12 field is packed from the source's
-     typed immediate operand (established: the field carries exactly the
-     explicit shift amount; frozen :469, :852).  */
-  TR_WHOLE_WORD_IMM12_FROM_SOURCE,
+  /* Pack the template entirely from table data (WP8: replaces the
+     former proven-whole-word payloads, so no raw template words live
+     outside the capability/encoding tables): the per-CPU opcode byte
+     from the retained TT_OP encoding tables, a fixed proven mod1 field,
+     a fixed src field, the positional dest selector, and -- when
+     imm12_op >= 0 -- the imm12 field packed from the source's typed
+     immediate operand (established: the field carries exactly the
+     explicit shift amount; frozen :469, :852).  Covers templates whose
+     event is internal to the macro program (no derivable source
+     instruction) or whose opcode differs from the source instruction's
+     (the SHFT2 immediate variant realizing an explicit SFPSHFT,
+     NOTES-wp6-prep.md 9(e)).  */
+  TR_TABLE_FIELDS,
 };
 
 struct desc_event_key
@@ -141,7 +147,8 @@ struct desc_macro_key
 struct desc_template_rule
 {
   templ_rule_kind kind;
-  uint32_t word;		/* whole-word payloads (imm12 zeroed)  */
+  uint8_t opcode_wh, opcode_bh;	/* TR_TABLE_FIELDS: TT_OP opcode byte  */
+  uint8_t fixed_mod1;		/* TR_TABLE_FIELDS: proven mod1 field  */
   uint8_t src_c_plan;		/* planned physical src field	       */
   int source_event;		/* flat value-event index; -1 internal */
   int mod1_op;			/* source operand carrying mod1	       */
@@ -164,8 +171,13 @@ struct desc_program
   desc_macro_key macros[2];
   unsigned n_templates;
   desc_template_rule templates[2];
-  uint32_t seq_words[2];
-  uint32_t misc_word;
+  /* Provenance labels of the proven per-macro sequence programs and the
+     proven misc word, resolved against the capability tables (the raw
+     words' only home).  Selection is purely structural (the macro keys
+     above); these labels act as opaque indices into proven table rows,
+     never as recognizers.  */
+  const char *seq_names[2];
+  const char *misc_name;
   int fixed_vd;			/* -1: alternating pair {0,1}	       */
   unsigned store_only_vd;	/* VD of a store-only carrier	       */
   /* CRAQ-validated envelope: the program was proven only with one
@@ -187,11 +199,15 @@ static const desc_program desc_programs[] = {
 	       OPB_WH (TT_OP_BH_SFPSWAP (0, 0, 0, 0)) } }, false },
       { 0, {}, true } },
     2,
-    { { TR_FIELDS_FROM_SOURCE_ROUTING_MOD, 0, 2 /* planned RHS L2 */,
+    /* Template 1 is the macro-internal SHFT2 copy into the transient
+       LReg16 slot: opcode from the TT_OP tables, proven mod1 6.  */
+    { { TR_FIELDS_FROM_SOURCE_ROUTING_MOD, 0, 0, 0, 2 /* planned RHS L2 */,
 	0, 4 /* swap mod1 operand */, -1, 8, -1, 0, 0 },
-      { TR_WHOLE_WORD, 0x940000d6, 0, -1, -1, -1, 0, -1, 0, 0 } },
-    { 0x00dd008c, 0x53000000 },
-    0x00000330,
+      { TR_TABLE_FIELDS, OPB_WH (TT_OP_WH_SFPSHFT2 (0, 0, 0, 0)),
+	OPB_WH (TT_OP_BH_SFPSHFT2 (0, 0, 0, 0)), 6, 0, -1, -1, -1, 0,
+	-1, 0, 0 } },
+    { "minmax-binary-m0", "minmax-binary-m1" },
+    "minmax-binary",
     -1, 3, true,
   },
   /* Unary shift/cast (frozen signbit calendar, LM:847-856).  The SHFT2
@@ -209,12 +225,13 @@ static const desc_program desc_programs[] = {
     /* The explicit-shift-mode -> template-word mapping is a single
        proven pair (WH mode 1 / BH mode 5 -> template mod1 6, NOTES
        9(e)); other shift modes are not the proven program.  */
-    { { TR_WHOLE_WORD_IMM12_FROM_SOURCE, 0x940000c6, 0, 0, -1,
+    { { TR_TABLE_FIELDS, OPB_WH (TT_OP_WH_SFPSHFT2 (0, 0, 0, 0)),
+	OPB_WH (TT_OP_BH_SFPSHFT2 (0, 0, 0, 0)), 6, 0, 0, -1,
 	4 /* shift imm operand */, 0, 7 /* shift mode operand */, 1, 5 },
-      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 3 /* cast mod1 operand */, -1, 0,
-	-1, 0, 0 } },
-    { 0x5384004d, 0 },
-    0x00000110,
+      { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 0, 1, 3 /* cast mod1 operand */,
+	-1, 0, -1, 0, 0 } },
+    { "signbit-m0", nullptr },
+    "signbit",
     1, 0, true,
   },
   /* Unary cast/round (frozen U16->BF16 calendar, LM:858-871).  */
@@ -235,12 +252,12 @@ static const desc_program desc_programs[] = {
        is pinned to the proven zero.  The imm8 operand routes through
        the imm12 packer, whose 0x8e nonzero refusal keeps unproven
        immediate forms out.  */
-    { { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 3 /* cast mod1 */, -1, 0,
+    { { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 0, 0, 3 /* cast mod1 */, -1, 0,
 	-1, 0, 0 },
-      { TR_FIELDS_FROM_SOURCE, 0, 0, 1, 7 /* stochrnd instr_mod1 */,
+      { TR_FIELDS_FROM_SOURCE, 0, 0, 0, 0, 1, 7 /* stochrnd instr_mod1 */,
 	4 /* imm8 */, 0, 8 /* no template field */, 0, 0 } },
-    { 0x534d0004, 0 },
-    0x00000100,
+    { "cast-round-m0", nullptr },
+    "cast-round",
     -1, 0, false,
   },
 };
@@ -316,6 +333,33 @@ macro_key_matches (const desc_macro_key &key, const desc_macro_key &derived,
 	return false;
     }
   return true;
+}
+
+/* Resolve a proven sequence program / misc word by its provenance
+   label in the capability tables -- the raw words' only home.  */
+
+static bool
+find_seq_word (const caps *c, const char *name, uint32_t *word)
+{
+  for (unsigned i = 0; i != c->n_seq_programs; ++i)
+    if (!strcmp (c->seq_programs[i].name, name))
+      {
+	*word = c->seq_programs[i].word;
+	return true;
+      }
+  return false;
+}
+
+static bool
+find_misc_word (const caps *c, const char *name, uint32_t *word)
+{
+  for (unsigned i = 0; i != c->n_misc_words; ++i)
+    if (!strcmp (c->misc_words[i].name, name))
+      {
+	*word = c->misc_words[i].word;
+	return true;
+      }
+  return false;
 }
 
 static const desc_program *
@@ -472,21 +516,29 @@ rvtt_macro_synthesize (const macro_region &region,
 	      out->refusal = macro_desc_refusal_encoding_failed;
 	  }
 	  break;
-	case TR_WHOLE_WORD:
-	  word = rule.word;
-	  break;
-	case TR_WHOLE_WORD_IMM12_FROM_SOURCE:
+	case TR_TABLE_FIELDS:
 	  {
-	    rtx_insn *src = derived.value_insns[rule.source_event];
 	    HOST_WIDE_INT imm12 = 0;
 	    /* Encodability, both directions: any typed immediate the
 	       12-bit field represents packs; anything else refuses --
 	       never silently masks.  */
-	    if (!const_operand (src, rule.imm12_op, &imm12)
-		|| imm12 < -2048 || imm12 > 2047)
+	    if (rule.imm12_op >= 0
+		&& (!const_operand (derived.value_insns[rule.source_event],
+				    rule.imm12_op, &imm12)
+		    || imm12 < -2048 || imm12 > 2047))
+	      {
+		out->refusal = macro_desc_refusal_encoding_failed;
+		break;
+	      }
+	    template_spec spec;
+	    spec.opcode = TARGET_XTT_TENSIX_WH ? rule.opcode_wh
+	      : rule.opcode_bh;
+	    spec.imm12 = (uint16_t) (imm12 & 0xfff);
+	    spec.src_c = rule.src_c_plan;
+	    spec.dest_sel = 0xc + t;	/* positional routing selector */
+	    spec.mod1 = rule.fixed_mod1;
+	    if (!encode_template (c, spec, &word))
 	      out->refusal = macro_desc_refusal_encoding_failed;
-	    else
-	      word = rule.word | ((uint32_t) (imm12 & 0xfff) << 12);
 	  }
 	  break;
 	}
@@ -500,11 +552,27 @@ rvtt_macro_synthesize (const macro_region &region,
       out->templ[t] = word;
     }
 
-  /* Sequences and misc: proven whole words of the matched program.  */
+  /* Sequences and misc: proven whole words resolved from the matched
+     program's provenance labels in the capability tables.  */
   out->n_seq = program->n_macros;
   for (unsigned m = 0; m != program->n_macros; ++m)
-    out->seq[m] = program->seq_words[m];
-  out->misc = program->misc_word;
+    if (!program->seq_names[m]
+	|| !find_seq_word (c, program->seq_names[m], &out->seq[m]))
+      {
+	out->refusal = macro_desc_refusal_program_unproven;
+	if (dump)
+	  fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+		   out->refusal);
+	return true;
+      }
+  if (!find_misc_word (c, program->misc_name, &out->misc))
+    {
+      out->refusal = macro_desc_refusal_program_unproven;
+      if (dump)
+	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+		 out->refusal);
+      return true;
+    }
   out->has_misc = true;
 
   /* Address-modifier SETC16 programs for the absorbed stride.  */
@@ -736,29 +804,33 @@ rvtt_macro_build_expectations (const macro_region &region,
 	    e.mod1 = (uint8_t) mod1;
 	  }
 	  break;
-	case TR_WHOLE_WORD:
-	  e.whole_word = true;
-	  e.word = rule.word;
-	  break;
-	case TR_WHOLE_WORD_IMM12_FROM_SOURCE:
+	case TR_TABLE_FIELDS:
 	  {
-	    rtx_insn *src = derived.value_insns[rule.source_event];
 	    HOST_WIDE_INT imm12 = 0;
-	    if (!const_operand (src, rule.imm12_op, &imm12)
-		|| imm12 < -2048 || imm12 > 2047)
+	    if (rule.imm12_op >= 0
+		&& (!const_operand (derived.value_insns[rule.source_event],
+				    rule.imm12_op, &imm12)
+		    || imm12 < -2048 || imm12 > 2047))
 	      return false;
-	    e.whole_word = true;
-	    e.word = rule.word | ((uint32_t) (imm12 & 0xfff) << 12);
+	    e.whole_word = false;
+	    e.opcode = TARGET_XTT_TENSIX_WH ? rule.opcode_wh
+	      : rule.opcode_bh;
+	    e.imm12 = (uint16_t) (imm12 & 0xfff);
+	    e.dest_sel = 0xc + t;
+	    e.mod1 = rule.fixed_mod1;
 	  }
 	  break;
 	}
     }
 
-  /* Sequence/misc expectations from the matched program.  */
+  /* Sequence/misc expectations resolved from the capability tables.  */
   out->n_seq = program->n_macros;
   for (unsigned m = 0; m != program->n_macros; ++m)
-    out->seq_words[m] = program->seq_words[m];
-  out->misc = program->misc_word;
+    if (!program->seq_names[m]
+	|| !find_seq_word (c, program->seq_names[m], &out->seq_words[m]))
+      return false;
+  if (!find_misc_word (c, program->misc_name, &out->misc))
+    return false;
   out->check_misc = true;
   out->stride = schedule.absorbed_stride;
 
