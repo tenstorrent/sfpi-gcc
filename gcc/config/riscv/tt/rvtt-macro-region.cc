@@ -64,17 +64,20 @@ macro_region_refusal_name (macro_region_refusal r)
       return "row-stride-mismatch";
     case macro_region_refusal::row_live_through:
       return "row-live-through";
+    case macro_region_refusal::row_cc_enable_unproved:
+      return "cc-enable-unproved";
     }
   gcc_unreachable ();
 }
 
 namespace {
 
-/* A pure ambient CC write (all-lanes enable shape): only a CC write, no
-   other architectural effect.  Such instructions may appear between rows
-   without splitting a run; whether the lane state is actually the
-   all-lanes pattern is a Layer-5 ownership obligation, not a region
-   question.  */
+/* A pure ambient CC write (lane-enable shape): only a CC write, no
+   other architectural effect.  Whether such a write may serve as an
+   ambient all-lanes enable is decided by its lane-state proof
+   (cc_write_all_lanes) at the acceptance site below: proven writes
+   become pending enables, unproved ones are named refusals and hard
+   region boundaries.  */
 static bool
 pure_cc_write_p (const xtt_effect_set &e)
 {
@@ -449,9 +452,23 @@ region_scanner::scan_bb (basic_block bb)
 
       if (span_.is_empty () && pure_cc_write_p (e))
 	{
-	  /* Ambient lane-enable between rows; a Layer-5 obligation, not
-	     a region member.  */
-	  pending_enable_ = insn;
+	  /* Ambient lane-enable between rows; not a region member.  It
+	     may stand as the ambient all-lanes enable ONLY when the
+	     written value is provably the all-lanes pattern
+	     (cc_write_all_lanes, word-exact against the capability
+	     table's architectural SFPENCC encoding).  An unproved pure
+	     CC write -- partial lanes, complement, register-driven --
+	     is outside the proven store/misc envelope: it can never be
+	     an enable and invalidates any earlier one, so it refuses by
+	     name and closes the region (rows already collected keep
+	     their own proof and may still form).  */
+	  if (e.cc_write_all_lanes)
+	    {
+	      pending_enable_ = insn;
+	      continue;
+	    }
+	  refuse (macro_region_refusal::row_cc_enable_unproved);
+	  finalize_region (bb);
 	  continue;
 	}
 

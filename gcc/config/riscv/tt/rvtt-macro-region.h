@@ -75,6 +75,12 @@ enum class macro_region_refusal
   row_not_isomorphic,
   row_stride_mismatch,
   row_live_through,
+  /* A pure CC write whose written lane state is not provably the
+     all-lanes enable (rvtt_insn_effects's cc_write_all_lanes, derived
+     word-exact from the capability table's architectural SFPENCC
+     encoding).  Such a write can never serve as an ambient enable and
+     invalidates any earlier one, so it is a hard region boundary.  */
+  row_cc_enable_unproved,
 };
 
 extern const char *macro_region_refusal_name (macro_region_refusal);

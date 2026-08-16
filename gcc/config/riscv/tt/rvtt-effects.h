@@ -40,6 +40,12 @@ struct xtt_rwc_effect_t {
 struct xtt_effect_set {
   uint32_t lreg_read, lreg_write; /* hard-reg mask over L0..L15/LREG16	       */
   bool	   cc_read, cc_write;
+  bool	   cc_write_all_lanes;	  /* cc_write provably writes the all-lanes
+				     enabled state (word-exact against the
+				     capability table's architectural
+				     all-lanes SFPENCC encoding); refusing
+				     default false -- any other CC write is
+				     lane-state-unproved		       */
   uint32_t config_dests_written;  /* bitmask over SFPCONFIG dests 0..15	       */
   uint32_t config_dests_read;	  /* bitmask over SFPCONFIG dests 0..15	       */
   bool	   addr_mod_slot_write;	  /* SETC16 into an address-mod slot reg       */

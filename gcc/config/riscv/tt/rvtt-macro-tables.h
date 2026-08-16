@@ -330,6 +330,16 @@ extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 /* Fixed architectural words (WH/BH-common).			      */
 /* ------------------------------------------------------------------ */
 
+/* SFPENCC instruction-word encoding: TT_OP_{WH,BH}_SFPENCC (0x8a),
+   imm12 << 12 | lreg_c << 8 | lreg_dest << 4 | mod1; the typed
+   rvtt_sfpencc pattern carries no register operands, so both lreg
+   fields encode as zero.  Returns false (refusing) for out-of-range
+   fields.  This is the ONE derivation of SFPENCC words: the all-lanes
+   constant below and every consumer-side lane-state proof
+   (rvtt_insn_effects's cc_write_all_lanes) go through it, so the
+   proof can never drift from the encoding.  */
+extern bool sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word);
+
 /* SFPENCC all-lanes enable: imm12 = SFPENCC_IMM12_BOTH (3),
    mod1 = SFPENCC_MOD1_EI_RI (10) -> 0x8a00300a.  */
 extern uint32_t sfpencc_all_lanes_word ();

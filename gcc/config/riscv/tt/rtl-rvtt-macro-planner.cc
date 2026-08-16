@@ -213,8 +213,12 @@ loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
   return macro_cost < (uint64_t) per_trip_explicit * body_count;
 }
 
-/* An ambient all-lanes enable shape: only a CC write, no other
-   architectural effect (the region scanner's pure-CC-write class).  */
+/* An ambient lane-enable shape: only a CC write, no other
+   architectural effect (the region scanner's pure-CC-write class).
+   This classifies the SHAPE only; whether the written value provably
+   enables all lanes is the separate cc_write_all_lanes proof, checked
+   at every consumption site (an unproved value is a named
+   cc-enable-unproved refusal, never an ambient enable).  */
 
 static bool
 pure_cc_write_insn_p (rtx_insn *insn)
@@ -229,12 +233,27 @@ pure_cc_write_insn_p (rtx_insn *insn)
     && e.rwc.kind == xtt_rwc_effect_t::NONE;
 }
 
+/* The consumer-side all-lanes proof of an ambient enable: the written
+   value must be word-exact against the capability table's
+   architectural all-lanes SFPENCC encoding (rvtt_insn_effects derives
+   the bit through the one shared derivation, so this proof can never
+   drift from the encoding the hardware sees).  */
+
+static bool
+cc_enable_all_lanes_proved_p (rtx_insn *insn)
+{
+  return rvtt_insn_effects (insn).cc_write_all_lanes;
+}
+
 /* The trailing ambient enable of a proven loop preheader: the LAST
    Tensix issue in PREHEADER when it is a pure CC write.  With
-   whole-body ownership (no CC writer inside the loop) this proves the
-   lane state at every trip's region entry, replacing the first row's
-   local enable for regions whose enable was written once outside the
-   loop.  */
+   whole-body ownership (no CC writer inside the loop) this locates the
+   instruction that decides the lane state at every trip's region
+   entry, replacing the first row's local enable for regions whose
+   enable was written once outside the loop.  This finds the SHAPE
+   only; the caller must still prove the written value is the
+   all-lanes pattern (cc_enable_all_lanes_proved_p) before consuming
+   it.  */
 
 static rtx_insn *
 preheader_trailing_enable (basic_block preheader)
@@ -352,10 +371,12 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 
   if (emit_config)
     {
-      /* The all-lanes proof is the first row of the region (relaxed at
-	 WP8 from every-row: no region member may write CC, so the lane
-	 state proven at entry holds across every row), or the loop
-	 preheader's own trailing enable (already in place; no copy).  */
+      /* The all-lanes proof is the first row's local enable -- proven
+	 all-lanes by formation (cc_enable_all_lanes_proved_p), so this
+	 copy re-establishes exactly the proven state; the WP8
+	 relaxation from every-row holds because no region member may
+	 write CC -- or the loop preheader's own trailing enable
+	 (proven all-lanes; already in place; no copy).  */
       start_sequence ();
       if (emit_enable_copy)
 	emit_insn (copy_rtx (PATTERN (region.rows[0].enable)));
@@ -602,6 +623,23 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* Every ambient enable the formation consumes -- each row's local
+     enable (all are deleted and one is re-emitted in the prefix) and
+     the loop preheader's trailing enable -- must provably write the
+     all-lanes state: the proven store/misc envelope covers no partial
+     lane mask, and the deleted quarantined pass refused exactly here.
+     Region discovery only admits proven enables; this re-check keeps
+     the formation contract locally auditable and guards every future
+     discovery widening.  */
+  for (const macro_row &row : region.rows)
+    if (row.enable && !cc_enable_all_lanes_proved_p (row.enable))
+      {
+	if (dump)
+	  fprintf (dump, "Macro-planner formation-refusal:"
+		   " cc-enable-unproved\n");
+	return false;
+      }
+
   /* A lane-predicated calendar needs the ambient all-lanes proof: the
      region's first row's local enable (WP8 relaxation from every-row:
      region members cannot write CC -- such rows refuse
@@ -612,11 +650,23 @@ form_region (function *fn, macro_region &region,
   bool emit_enable_copy = true;
   if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
     {
-      if (!config_preheader || !preheader_trailing_enable (config_preheader))
+      rtx_insn *trailing = config_preheader
+	? preheader_trailing_enable (config_preheader) : nullptr;
+      if (!trailing)
 	{
 	  if (dump)
 	    fprintf (dump, "Macro-planner formation-refusal:"
 		     " all-lanes-proof-missing\n");
+	  return false;
+	}
+      if (!cc_enable_all_lanes_proved_p (trailing))
+	{
+	  /* A trailing pure CC write exists but its written lane state
+	     is not provably the all-lanes pattern (lanes-off, partial
+	     mask, complement, ...): name the unproved enable.  */
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " cc-enable-unproved\n");
 	  return false;
 	}
       emit_enable_copy = false;
