@@ -61,4 +61,12 @@ extern xtt_subunit_t rvtt_builtin_subunit (const rvtt_insn_data *);
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 
+/* Post-admission operand access for a Dst load/store (EFFECTS must have
+   dst_mem_read or dst_mem_write): the typed address, data-mode, and
+   address-mode operands.  Returns false for insns whose Dst operand
+   layout is not on record.  */
+extern bool rvtt_dst_access_operands (rtx_insn *, const xtt_effect_set &,
+				      rtx *address, rtx *mode,
+				      rtx *addr_mode);
+
 #endif /* GCC_RVTT_EFFECTS_H */

@@ -208,6 +208,31 @@ rvtt_insn_effects (rtx_insn *insn)
   return e;
 }
 
+/* Post-admission operand access: the effect class (subunit load/store)
+   has already admitted the instruction; reaching its typed operands by
+   recognized code is the permitted use of code comparisons.  */
+
+bool
+rvtt_dst_access_operands (rtx_insn *insn, const xtt_effect_set &effects,
+			  rtx *address, rtx *mode, rtx *addr_mode)
+{
+  if (effects.opaque || (!effects.dst_mem_read && !effects.dst_mem_write))
+    return false;
+  int code = recog_memoized (insn);
+  int addr_pos, mode_pos, am_pos;
+  if (code == CODE_FOR_rvtt_sfpload_lv_int)
+    addr_pos = 4, mode_pos = 7, am_pos = 8;
+  else if (code == CODE_FOR_rvtt_sfpstore_int)
+    addr_pos = 3, mode_pos = 5, am_pos = 6;
+  else
+    return false;
+  extract_insn (insn);
+  *address = recog_data.operand[addr_pos];
+  *mode = recog_data.operand[mode_pos];
+  *addr_mode = recog_data.operand[am_pos];
+  return true;
+}
+
 /* Gimple-level subunit query.  The table below is identity plumbing only:
    it names the late RTL pattern each audited builtin resolves to.  The
    effect data itself lives solely in the rvtt-cost.md attributes; the
