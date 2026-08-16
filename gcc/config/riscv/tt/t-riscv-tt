@@ -32,6 +32,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-effects.o \
 	rvtt-macro-ownership.o \
 	rvtt-macro-region.o \
+	rvtt-macro-tables.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-check.o \
