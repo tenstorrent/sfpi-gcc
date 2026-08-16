@@ -419,21 +419,20 @@ constant_chain_value (tree x, tree base)
    when replay formation is also requested.  The replay pass can then compress
    identical copies into launches without retaining scalar induction control.
    The trip count is proved by bounded constant evaluation of the header test
-   reached through the dedicated PREHEADER; scalar-evolution niter analysis is
+   reached through the unique ENTRY edge; scalar-evolution niter analysis is
    not usable here because this pass must not reshape an ineligible CFG and so
    never guarantees canonical preheaders.  Refuse whenever any step fails to
    fold.  Keep a hard structural size bound because final replay-buffer
    eligibility is intentionally decided later, after lowering and
    allocation.  */
 static bool
-short_constant_replay_loop_p (class loop *loop, basic_block preheader)
+short_constant_replay_loop_p (class loop *loop, edge entry)
 {
   constexpr unsigned MAX_REPLAY_UNROLL_ITERATIONS = 16;
 
   gimple_stmt_iterator last = gsi_last_bb (loop->header);
   gcond *cond = gsi_end_p (last)
     ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
-  edge entry = find_edge (preheader, loop->header);
   edge latch = loop->latch ? find_edge (loop->latch, loop->header) : nullptr;
   if (!cond || !entry || !latch)
     return false;
@@ -603,7 +602,7 @@ transform (function *fn)
       basic_block preheader = rvtt_commit_hoist_preheader (entry);
 
       if (riscv_tt_opt_replay_hoist > 0
-	  && short_constant_replay_loop_p (loop, preheader))
+	  && short_constant_replay_loop_p (loop, entry))
 	{
 	  loop->unroll = USHRT_MAX;
 	  if (dump_file)
@@ -611,6 +610,13 @@ transform (function *fn)
 		     "Requested complete unroll for constant replay loop bb %d\n",
 		     bb->index);
 	}
+
+      /* Commit: all proofs hold and at least one load will move.  Split
+	 a shared entry edge now (and only now) so refusals above remain
+	 byte-identical to the flag-off compilation.  split_edge keeps
+	 loop membership and any dominance info consistent, and moves the
+	 header PHI arguments onto the new edge.  */
+      basic_block preheader = dedicated ? src : split_edge (entry);
 
       for (gcall *call : selected)
 	{
