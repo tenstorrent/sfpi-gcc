@@ -128,6 +128,25 @@ struct autoincr_caps
   unsigned noinc_mode;   /* SFPI no-increment modifier value.  */
   unsigned scratch_mode; /* compiler-owned modifier value to retarget to.  */
   unsigned nslots;       /* physical slots behind scratch_mode.  */
+  /* SETC16-to-consume distance guard: the minimum number of slot-occupying
+     Tensix instruction words that must issue strictly between the final
+     word of the slot program and the first access consuming the scratch
+     modifier.  A scratch-mode access applies every field of the modifier
+     slot, so the guard is measured from the last configuration word, not
+     from the field a particular access appears to need.
+
+     Architectural basis: SETC16 retires through the configuration issue
+     class, which the target issue model (rvtt-cost.md, rvtt_issue_cfg)
+     and craq-sim's tensix_rtl_issue_class_for_inst both model as a
+     two-cycle resource, one cycle longer than the single-cycle math/SFPU
+     classes.  Two intervening issued words therefore guarantee the
+     configuration write has retired before the consumer issues in that
+     model.  Replay-shaped rows satisfy this structurally (the launch word
+     plus the payload prefix precede the terminator access); tight
+     explicit-row shapes must either prove the distance by anchoring the
+     program earlier or refuse (independent-review carry-forward for
+     promoting explicit-row shapes).  */
+  unsigned min_config_distance;
   autoincr_slot slots[2];
 };
 
@@ -135,10 +154,10 @@ static autoincr_caps
 target_autoincr_caps ()
 {
   if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, { { 18, 34, 53 }, { 0, 0, 0 } } };
+    return { true, 7, 6, 1, 2, { { 18, 34, 53 }, { 0, 0, 0 } } };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 2, { { 11, 25, 50 }, { 19, 29, 54 } } };
-  return { false, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
+    return { true, 3, 2, 2, 2, { { 11, 25, 50 }, { 19, 29, 54 } } };
+  return { false, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -319,6 +338,11 @@ struct candidate
   rtx_insn *terminator;    /* access insn carrying the implicit advance */
   access_info terminator_acc;
   capture_rec *payload;    /* non-null for ROW_LAUNCH / ROW_CAPTURE_EXEC */
+  /* Slot-occupying Tensix words issued strictly between the row's lead
+     position and the terminator access, for the distance guard: 0 for an
+     explicit row, the launch word plus the payload prefix for replay
+     rows.  */
+  unsigned consume_prefix = 0;
   bool dropped = false;
 };
 
@@ -350,6 +374,24 @@ occupies_replay_slot_p (rtx_insn *insn)
   if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
     return false;
   return get_attr_type (insn) == TYPE_TENSIX && get_attr_length (insn) != 0;
+}
+
+/* Slot-occupying Tensix words issued strictly between a replay row's lead
+   position (the launch or executing capture) and the execution of the
+   payload terminator: the launch word itself plus the payload prefix.  */
+
+static unsigned
+payload_consume_prefix (const capture_rec *cap)
+{
+  unsigned words = 1;
+  for (unsigned ix = 0; ix != cap->members.size (); ++ix)
+    {
+      if (cap->members[ix] == cap->terminator)
+	break;
+      if (occupies_replay_slot_p (cap->members[ix]))
+	++words;
+    }
+  return words;
 }
 
 /* Vet a capture's payload for carrying the implicit advance: every member
@@ -587,6 +629,7 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
 	  cand.payload = cap;
 	  cand.terminator = cap->terminator;
 	  cand.terminator_acc = cap->terminator_acc;
+	  cand.consume_prefix = payload_consume_prefix (cap);
 	}
       else if (lead.cls == AIC_REPLAY && lead.cap)
 	{
@@ -603,6 +646,7 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
 	  cand.payload = cap;
 	  cand.terminator = cap->terminator;
 	  cand.terminator_acc = cap->terminator_acc;
+	  cand.consume_prefix = payload_consume_prefix (cap);
 	}
       else
 	{
@@ -636,6 +680,75 @@ gap_item_ok (const bb_item &item, const autoincr_caps &caps)
     }
 }
 
+/* Configuration-window legality: may ITEM sit between an already-programmed
+   slot configuration and a later consuming row without invalidating the
+   program?  This is weaker than gap legality: the item only needs to be
+   provably unable to write the scratch slot's configuration registers or
+   consume the scratch modifier.  A typed TTINCRWC advances RWC counters,
+   not address-modifier configuration; replay recordings and launches are
+   legal when their payload contents are known and themselves legal.  Any
+   call, opaque asm, or unclassified Tensix effect (including any foreign
+   TTSETC16) keeps the refusing default.  */
+
+static bool
+capture_members_config_ok (const capture_rec *cap, const autoincr_caps &caps)
+{
+  if (!cap->valid)
+    return false;
+  for (unsigned ix = 0; ix != cap->members.size (); ++ix)
+    switch (cap->member_cls[ix])
+      {
+      case AIC_NEUTRAL:
+      case AIC_INCRWC:
+	break;
+      case AIC_ACCESS:
+	if (cap->member_acc[ix].mode == caps.scratch_mode)
+	  return false;
+	break;
+      default:
+	return false;
+      }
+  return true;
+}
+
+static bool
+config_window_item_ok (const bb_item &item, const autoincr_caps &caps)
+{
+  switch (item.cls)
+    {
+    case AIC_NEUTRAL:
+    case AIC_INCRWC:
+      return true;
+    case AIC_ACCESS:
+      return item.acc.mode != caps.scratch_mode;
+    case AIC_REPLAY:
+      if (item.cap)
+	/* A recording only executes its members when it is an executing
+	   capture.  */
+	return !item.cap->exec || capture_members_config_ok (item.cap, caps);
+      if (item.launch)
+	return item.launch->payload
+	       && capture_members_config_ok (item.launch->payload, caps);
+      return false;
+    default:
+      return false;
+    }
+}
+
+/* Slot-occupying Tensix words issued by ITEM (recordings issue their
+   members; a launch conservatively counts only its own word).  */
+
+static unsigned
+item_issue_words (const bb_item &item)
+{
+  unsigned words = occupies_replay_slot_p (item.insn) ? 1 : 0;
+  if (item.cap)
+    for (rtx_insn *member : item.cap->members)
+      if (occupies_replay_slot_p (member))
+	++words;
+  return words;
+}
+
 struct group
 {
   bb_scan *scan;
@@ -644,6 +757,18 @@ struct group
   bool use_preheader = false;
   basic_block preheader = nullptr;
   HOST_WIDE_INT dynamic_rows = 0; /* estimated removed increments */
+  /* Straight-line placement: item index the slot program is emitted
+     before.  Defaults to the first row's lead and may be anchored earlier
+     to satisfy the distance guard.  */
+  unsigned anchor_item = 0;
+  /* False when a dominating same-program group's configuration reaches
+     this group on every path, so this group emits nothing.  */
+  bool emit_config = true;
+  /* Straight-line shared-placement set this group belongs to, or -1.
+     Profitability is evaluated per set: one program serves all rows.  */
+  int shared_set = -1;
+  /* Set when no placement satisfying the distance guard exists.  */
+  bool guard_refused = false;
 };
 
 /* Mirror of the replay pass's dedicated preheader discovery.  */
@@ -669,55 +794,299 @@ dedicated_loop_preheader (class loop *loop)
     ? preheader : nullptr;
 }
 
-/* Try to prove the loop-shaped placement for GRP: single-block loop body,
-   dedicated preheader, and a wholly-owned body (every iteration is a path
-   from the preheader configuration to a row terminator).  */
+/* Locate the linearized scan of BB.  */
+
+static bb_scan *
+find_scan (function_scan &fn, basic_block bb)
+{
+  for (bb_scan &scan : fn.blocks)
+    if (scan.bb == bb)
+      return &scan;
+  return nullptr;
+}
+
+/* Ownership of a dominating placement over LOOP for MEMBERS: every
+   instruction of every block of the loop must be a member group's row or
+   increment, or configuration-window legal.  Every iteration is a path
+   from the preheader program to a row terminator, so the whole body
+   participates in the ownership window; any call, opaque asm, or possible
+   configuration writer on any path refuses.  */
+
+static bool
+loop_config_owned_p (class loop *loop, function_scan &fn,
+		     const std::vector<group *> &members,
+		     const autoincr_caps &caps)
+{
+  basic_block *bbs = get_loop_body (loop);
+  bool ok = true;
+  for (unsigned ix = 0; ok && ix != loop->num_nodes; ++ix)
+    {
+      bb_scan *scan = find_scan (fn, bbs[ix]);
+      if (!scan)
+	{
+	  ok = false;
+	  break;
+	}
+      std::vector<bool> owned (scan->items.size (), false);
+      for (group *grp : members)
+	if (grp->scan == scan)
+	  for (unsigned cx : grp->cand_ix)
+	    {
+	      owned[scan->candidates[cx].lead_item] = true;
+	      owned[scan->candidates[cx].incr_item] = true;
+	    }
+      for (unsigned jx = 0; ok && jx != scan->items.size (); ++jx)
+	if (!owned[jx] && !config_window_item_ok (scan->items[jx], caps))
+	  ok = false;
+    }
+  free (bbs);
+  return ok;
+}
+
+/* Distance from a program placed at the head of GRP's block (or in its
+   loop preheader) to the group's first consumer, in slot-occupying words
+   within the block.  Paths through preceding blocks only add words, so
+   this is a sound minimum.  */
+
+static unsigned
+block_prefix_distance (const group &grp)
+{
+  const candidate &first = grp.scan->candidates[grp.cand_ix.front ()];
+  unsigned words = first.consume_prefix;
+  for (unsigned ix = 0; ix != first.lead_item; ++ix)
+    words += item_issue_words (grp.scan->items[ix]);
+  return words;
+}
+
+/* Enforce the SETC16-to-consume distance guard on GRP's straight-line
+   placement: starting from the first row's lead, anchor the program
+   earlier over configuration-window-legal items (never before FLOOR, which
+   bounds a preceding group's rows) until the guard is met.  Sets
+   guard_refused when no legal anchor exists.  */
 
 static void
-try_loop_placement (group &grp, const autoincr_caps &caps)
+adjust_anchor_for_guard (group &grp, unsigned floor,
+			 const autoincr_caps &caps)
 {
-  basic_block bb = grp.scan->bb;
-  class loop *loop = bb->loop_father;
-  if (!loop || loop->num == 0 || loop->header != bb || loop->latch != bb
-      || loop->num_nodes != 1)
-    return;
-  basic_block preheader = dedicated_loop_preheader (loop);
-  if (!preheader)
-    return;
-
-  /* Every item of the body must be owned: group rows, their increments,
-     and gap-legal instructions.  */
-  std::vector<bool> is_group_item (grp.scan->items.size (), false);
-  for (unsigned cx : grp.cand_ix)
+  bb_scan &scan = *grp.scan;
+  const candidate &first = scan.candidates[grp.cand_ix.front ()];
+  unsigned anchor = first.lead_item;
+  unsigned dist = first.consume_prefix;
+  while (dist < caps.min_config_distance && anchor > floor
+	 && config_window_item_ok (scan.items[anchor - 1], caps))
     {
-      const candidate &cand = grp.scan->candidates[cx];
-      is_group_item[cand.lead_item] = true;
-      is_group_item[cand.incr_item] = true;
+      --anchor;
+      dist += item_issue_words (scan.items[anchor]);
     }
-  for (unsigned ix = 0; ix != grp.scan->items.size (); ++ix)
-    if (!is_group_item[ix] && !gap_item_ok (grp.scan->items[ix], caps))
-      return;
-
-  /* Payload captures must not sit in an unowned location: the recording may
-     be anywhere outside the loop (it does not execute the payload unless it
-     is itself a row), but a capture inside the body is only owned if it is
-     a group row.  */
-  for (unsigned ix = 0; ix != grp.scan->items.size (); ++ix)
-    if (grp.scan->items[ix].cap && !is_group_item[ix])
-      return;
-
-  gcov_type iterations = expected_loop_iterations_unbounded (loop) + 1;
-  if (iterations < 2)
+  grp.anchor_item = anchor;
+  if (dist < caps.min_config_distance)
     {
+      grp.guard_refused = true;
       if (dump_file)
-	fprintf (dump_file, "Dst-autoincr refusal: unknown trip count for "
-		 "loop group (bb %d)\n", bb->index);
-      return;
+	fprintf (dump_file, "Dst-autoincr refusal: configuration-to-consume "
+		 "distance %u below guard %u (bb %d)\n", dist,
+		 caps.min_config_distance, scan.bb->index);
+    }
+}
+
+/* Decide configuration placement for the surviving GROUPS.
+
+   The scratch modifier slot is global machine state, so a program placed
+   at a dominating point is only valid when no different program can be
+   alive on any path through it: dominating placements are attempted only
+   when every surviving group in the function requires the identical slot
+   program (single stride; the capability table fixes the other fields).
+
+   Placements, in decreasing preference:
+
+     - Loop-dominating: all groups inside one loop with a dedicated
+       preheader and a wholly-owned body: the program is emitted once in
+       the preheader.  This mirrors the handwritten practice of programming
+       an invariant address modifier once at an enclosing scope.
+
+     - Straight-line shared: several groups in one block whose intervening
+       items are configuration-window legal share the earliest group's
+       program, which dominates the rest of the block.
+
+     - Per-group: the program is emitted immediately before each group's
+       first row (anchored earlier only to satisfy the distance guard).
+
+   Failed proofs fall back to the next placement, never to unsoundness; the
+   distance guard applies to every placement and refuses the group when it
+   cannot be met.  */
+
+static void
+place_groups (function_scan &fn, std::vector<group> &groups,
+	      const autoincr_caps &caps)
+{
+  if (groups.empty ())
+    return;
+
+  bool single_program = true;
+  for (const group &grp : groups)
+    if (grp.stride != groups.front ().stride)
+      single_program = false;
+
+  for (group &grp : groups)
+    {
+      grp.use_preheader = false;
+      grp.preheader = nullptr;
+      grp.emit_config = true;
+      grp.shared_set = -1;
+      grp.guard_refused = false;
+      grp.dynamic_rows = grp.cand_ix.size ();
+      grp.anchor_item
+	= grp.scan->candidates[grp.cand_ix.front ()].lead_item;
     }
 
-  grp.use_preheader = true;
-  grp.preheader = preheader;
-  grp.dynamic_rows = (HOST_WIDE_INT) iterations * grp.cand_ix.size ();
+  if (single_program)
+    {
+      /* Loop-dominating placement, per innermost loop hosting groups.
+	 Because every surviving group requires the identical program, a
+	 member group's own program emitted inside another placement's
+	 window rewrites the same values and is harmless; ownership only
+	 has to exclude foreign writers.  */
+      int next_set = 0;
+      std::vector<class loop *> loops;
+      for (const group &grp : groups)
+	{
+	  class loop *loop = grp.scan->bb->loop_father;
+	  if (loop && loop->num != 0
+	      && std::find (loops.begin (), loops.end (), loop)
+		 == loops.end ())
+	    loops.push_back (loop);
+	}
+      for (class loop *loop : loops)
+	{
+	  std::vector<group *> members;
+	  for (group &grp : groups)
+	    if (grp.scan->bb->loop_father == loop && !grp.use_preheader)
+	      members.push_back (&grp);
+	  if (members.empty ())
+	    continue;
+	  basic_block preheader = dedicated_loop_preheader (loop);
+	  if (preheader && !loop_config_owned_p (loop, fn, members, caps))
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Dst-autoincr: dominating placement "
+			 "refused: foreign effect on a path (loop %d)\n",
+			 loop->num);
+	      preheader = nullptr;
+	    }
+	  if (!preheader)
+	    continue;
+	  gcov_type iterations
+	    = expected_loop_iterations_unbounded (loop) + 1;
+	  if (iterations < 2)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Dst-autoincr refusal: unknown trip "
+			 "count for loop group (bb %d)\n",
+			 members.front ()->scan->bb->index);
+	      continue;
+	    }
+	  unsigned dist = ~0u;
+	  for (const group *grp : members)
+	    dist = std::min (dist, block_prefix_distance (*grp));
+	  if (dist < caps.min_config_distance)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Dst-autoincr: dominating placement "
+			 "refused: configuration-to-consume distance %u "
+			 "below guard %u (loop %d)\n", dist,
+			 caps.min_config_distance, loop->num);
+	      continue;
+	    }
+	  bool first = true;
+	  for (group *grp : members)
+	    {
+	      grp->use_preheader = true;
+	      grp->preheader = preheader;
+	      grp->emit_config = first;
+	      grp->shared_set = next_set;
+	      grp->dynamic_rows
+		= (HOST_WIDE_INT) iterations * grp->cand_ix.size ();
+	      first = false;
+	    }
+	  ++next_set;
+	}
+
+      /* Straight-line shared placement for the remaining groups when they
+	 all sit in one block.  */
+      std::vector<group *> rest;
+      for (group &grp : groups)
+	if (!grp.use_preheader)
+	  rest.push_back (&grp);
+      bool same_block = rest.size () > 1;
+      for (const group *grp : rest)
+	if (grp->scan != rest.front ()->scan)
+	  same_block = false;
+      if (same_block)
+	{
+	  bb_scan &scan = *rest.front ()->scan;
+	  std::vector<bool> owned (scan.items.size (), false);
+	  unsigned first_lead = ~0u, last_incr = 0;
+	  for (const group *grp : rest)
+	    for (unsigned cx : grp->cand_ix)
+	      {
+		const candidate &cand = scan.candidates[cx];
+		owned[cand.lead_item] = true;
+		owned[cand.incr_item] = true;
+		first_lead = std::min (first_lead, cand.lead_item);
+		last_incr = std::max (last_incr, cand.incr_item);
+	      }
+	  bool ok = true;
+	  for (unsigned ix = first_lead; ok && ix <= last_incr; ++ix)
+	    if (!owned[ix] && !config_window_item_ok (scan.items[ix], caps))
+	      ok = false;
+	  if (ok)
+	    {
+	      /* The earliest group carries the program for all.  */
+	      group *lead = rest.front ();
+	      for (group *grp : rest)
+		if (grp->cand_ix.front () < lead->cand_ix.front ())
+		  lead = grp;
+	      adjust_anchor_for_guard (*lead, 0, caps);
+	      if (!lead->guard_refused)
+		{
+		  for (group *grp : rest)
+		    {
+		      grp->shared_set = next_set;
+		      grp->emit_config = grp == lead;
+		    }
+		  return;
+		}
+	      lead->guard_refused = false;
+	      if (dump_file)
+		fprintf (dump_file, "Dst-autoincr: shared placement refused "
+			 "by the distance guard (bb %d)\n", scan.bb->index);
+	    }
+	  else if (dump_file)
+	    fprintf (dump_file, "Dst-autoincr: shared placement refused: "
+		     "foreign effect between groups (bb %d)\n",
+		     scan.bb->index);
+	}
+    }
+
+  /* Per-group placement with the distance guard for everything not yet
+     placed.  The anchor may move earlier only over
+     configuration-window-legal items and never across a preceding group's
+     rows: a different program must not enter a window that is still
+     consuming.  */
+  for (group &grp : groups)
+    {
+      if (grp.use_preheader || grp.shared_set >= 0)
+	continue;
+      unsigned floor = 0;
+      for (const group &other : groups)
+	if (other.scan == grp.scan && &other != &grp
+	    && grp.scan->candidates[other.cand_ix.back ()].incr_item
+	       < grp.scan->candidates[grp.cand_ix.front ()].lead_item)
+	  floor = std::max (floor,
+			    grp.scan->candidates[other.cand_ix.back ()]
+			      .incr_item + 1);
+      adjust_anchor_for_guard (grp, floor, caps);
+    }
 }
 
 /* Emit the owned scratch-slot programming: every consumed field of every
@@ -752,20 +1121,21 @@ transform_group (const group &grp, const autoincr_caps &caps)
 {
   bb_scan &scan = *grp.scan;
 
-  /* Configuration placement.  */
-  if (grp.use_preheader)
+  /* Configuration placement.  A group whose slot program is provided by a
+     dominating same-program group emits nothing.  */
+  if (grp.emit_config)
     {
-      rtx_insn *end = BB_END (grp.preheader);
-      if (end && JUMP_P (end))
-	emit_owned_config (caps, grp.stride, end, nullptr);
+      if (grp.use_preheader)
+	{
+	  rtx_insn *end = BB_END (grp.preheader);
+	  if (end && JUMP_P (end))
+	    emit_owned_config (caps, grp.stride, end, nullptr);
+	  else
+	    emit_owned_config (caps, grp.stride, nullptr, end);
+	}
       else
-	emit_owned_config (caps, grp.stride, nullptr, end);
-    }
-  else
-    {
-      const candidate &first = scan.candidates[grp.cand_ix.front ()];
-      emit_owned_config (caps, grp.stride, scan.items[first.lead_item].insn,
-			 nullptr);
+	emit_owned_config (caps, grp.stride,
+			   scan.items[grp.anchor_item].insn, nullptr);
     }
 
   /* Retarget each terminator once and delete the explicit increments.  */
@@ -784,12 +1154,21 @@ transform_group (const group &grp, const autoincr_caps &caps)
     }
 
   if (dump_file)
-    fprintf (dump_file,
-	     "Dst-autoincr group: bb %d rows %u stride "
-	     HOST_WIDE_INT_PRINT_DEC " config %u words%s\n",
-	     scan.bb->index, unsigned (grp.cand_ix.size ()),
-	     grp.stride, caps.nslots * 3,
-	     grp.use_preheader ? " (preheader)" : "");
+    {
+      if (grp.emit_config)
+	fprintf (dump_file,
+		 "Dst-autoincr group: bb %d rows %u stride "
+		 HOST_WIDE_INT_PRINT_DEC " config %u words%s\n",
+		 scan.bb->index, unsigned (grp.cand_ix.size ()),
+		 grp.stride, caps.nslots * 3,
+		 grp.use_preheader ? " (preheader)" : "");
+      else
+	fprintf (dump_file,
+		 "Dst-autoincr group: bb %d rows %u stride "
+		 HOST_WIDE_INT_PRINT_DEC " shared config%s\n",
+		 scan.bb->index, unsigned (grp.cand_ix.size ()),
+		 grp.stride, grp.use_preheader ? " (preheader)" : "");
+    }
 }
 
 static void
@@ -900,16 +1279,41 @@ transform (function *cfn)
 	      close_group ();
 	    }
 
-	  /* Profitability: configuration cost against dynamically removed
-	     increments.  */
+	  /* Placement: dominating/shared first, then per-group, all under
+	     the distance guard.  */
+	  place_groups (fn, groups, caps);
+
+	  /* Distance-guard refusals leave the group untransformed.  */
 	  for (auto it = groups.begin (); it != groups.end ();)
 	    {
 	      group &grp = *it;
-	      grp.use_preheader = false;
-	      grp.dynamic_rows = grp.cand_ix.size ();
-	      try_loop_placement (grp, caps);
+	      if (grp.guard_refused)
+		{
+		  for (unsigned cx : grp.cand_ix)
+		    grp.scan->candidates[cx].dropped = true;
+		  changed = true;
+		  it = groups.erase (it);
+		}
+	      else
+		++it;
+	    }
+	  if (changed)
+	    continue;
+
+	  /* Profitability: configuration cost against dynamically removed
+	     increments.  A shared program's cost is paid once for every
+	     group it serves.  */
+	  std::map<int, HOST_WIDE_INT> shared_rows;
+	  for (const group &grp : groups)
+	    if (grp.shared_set >= 0)
+	      shared_rows[grp.shared_set] += grp.dynamic_rows;
+	  for (auto it = groups.begin (); it != groups.end ();)
+	    {
+	      group &grp = *it;
 	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
-	      if (grp.dynamic_rows <= cost)
+	      HOST_WIDE_INT removed = grp.shared_set >= 0
+		? shared_rows[grp.shared_set] : grp.dynamic_rows;
+	      if (removed <= cost)
 		{
 		  if (dump_file)
 		    fprintf (dump_file,
@@ -917,7 +1321,7 @@ transform (function *cfn)
 			     "(config " HOST_WIDE_INT_PRINT_DEC
 			     " >= removed " HOST_WIDE_INT_PRINT_DEC
 			     ", bb %d)\n",
-			     cost, grp.dynamic_rows,
+			     cost, removed,
 			     grp.scan->bb->index);
 		  for (unsigned cx : grp.cand_ix)
 		    grp.scan->candidates[cx].dropped = true;
