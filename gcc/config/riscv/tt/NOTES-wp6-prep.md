@@ -45,7 +45,7 @@ check test and table against the frozen pass independently.
 | `lreg_ind` shift | 20 | LM:997-999 (`lreg_ind = (macro_index << 2) \| (vd & 3)`, `<< 20`); BH:269, WH:256 | macro index (2b) and launch VD (2b) packed into LRegInd | ESTABLISHED |
 | `instr_mod0` shift | 16 | LM:1000, 894; BH:269, WH:256 | data-format modifier of the launch's load | ESTABLISHED |
 | addr-mode shift, WH | 14 | LM:1001 (`TARGET_XTT_TENSIX_BH ? 13 : 14`); WH:256 | 2-bit address-modifier selector | ESTABLISHED |
-| addr-mode shift, BH | **13** | LM:1001, 896, 979; consistent with BH SFPLOAD/SFPSTORE `<< 13` (BH:263, 326) and with 3-bit BH values 6/7 fitting bits 15:13 under InstrMod0 at 16 | 3-bit address-modifier selector | **CONFLICT — see §9(a)** |
+| addr-mode shift, BH | **13** | LM:1001, 896, 979; consistent with BH SFPLOAD/SFPSTORE `<< 13` (BH:263, 326) and with 3-bit BH values 6/7 fitting bits 15:13 under InstrMod0 at 16; PROVEN by CRAQ sim decode `15:13`, production tt_llk_blackhole `<< 13`/3-bit, and the shipped oracle launch words `0x9300E000`/`0x9370C000` | 3-bit address-modifier selector | **RESOLVED — see §9(a) resolution** |
 | address field | bits 9:0, even | LM:743-751 (range/parity proofs); FM "odd rows alias the macro VD-high encoding bit, and rows above 1023 exceed the ... ten-bit address field" | Dst row address | ESTABLISHED |
 | select launch form | `macro << 22`, addr-mode field 0 | LM:1608-1614, 1620-1631 | identical to the general form with VD = 0; macro raw Dst-row mode 0 deliberately not copied from the typed loads (BH overlap with InstrMod0) | ESTABLISHED |
 
@@ -160,14 +160,53 @@ equivalence proof.
 These need the independent architectural reference DESIGN.md §11 calls
 for.  The tables treat them exactly as stated:
 
-* **(a) BH launch addr-mode shift conflict.**  The frozen pass emits BH
-  launch words with `addr_mode << 13` (LM:1001, 896, 979) and is
-  CRAQ-validated 8/8; `TT_OP_BH_SFPLOADMACRO` (BH:269-270) says
-  `<< 14`.  Shift 13 is architecturally coherent (BH SFPLOAD/SFPSTORE
-  use 13; the 3-bit BH values 6/7 at shift 14 would overlap InstrMod0
-  at bit 16) and is adopted; the TT_OP macro is suspected stale for BH.
-  Resolve against the ISA reference before any BH launch encoding is
-  emitted through a path not covered by the frozen-pass parity gate.
+* **(a) BH launch addr-mode shift conflict — RESOLVED 2026-08-17:
+  `<< 13` with a 3-bit field (bits 15:13) is PROVEN; the vendored
+  `TT_OP_BH_SFPLOADMACRO` `<< 14` was stale and has been corrected.**
+  Original finding: the frozen pass emits BH launch words with
+  `addr_mode << 13` (LM:1001, 896, 979) and is CRAQ-validated 8/8;
+  `TT_OP_BH_SFPLOADMACRO` (sfpu-ops-bh.h) said `<< 14`.
+  Evidence chain (three independent sources, all agreeing):
+  1. **CRAQ simulator authoritative decode** — `data/bh/tensix_isa.json`
+     in every sim worktree (`craq-sim`, `craq-sim-minmax-macro`,
+     `craq-sim-sfploadmacro-model`, `craq-sim-ttnnwhere-events`):
+     `SFPLOADMACRO { dest_reg_addr: "9:0", sfpu_addr_mode: "15:13",
+     instr_mod0: "19:16", lreg_ind: "23:20" }`; WH: `sfpu_addr_mode
+     "15:14"`.  The field is semantically consumed:
+     `TENSIX_EXECUTE_SFPLOADMACRO` (tensix.cpp) re-dispatches the
+     embedded SFPLOAD with the mode re-packed at `<< 13` on BH
+     (`<< 14` on WH), driving the ADDR_MOD RWC counters — so the 8/8
+     CRAQ passes genuinely discriminate the shift.
+  2. **Production TT-Metal LLK** —
+     `tt_metal/tt-llk/tt_llk_blackhole/common/inc/ckernel_ops.h`:
+     `TT_OP_SFPLOADMACRO ... (sfpu_addr_mode) << 13` with
+     `is_valid (sfpu_addr_mode, 3)`; the WH header uses `<< 14` with a
+     2-bit validity.  The production header was never stale — only the
+     GCC-vendored copy was (a WH-layout copy; 3-bit values at `<< 14`
+     would overlap InstrMod0 at bit 16, internally inconsistent).
+  3. **Shipped ground-truth binaries** — the 8/8-CRAQ-passing
+     `minmax-final-craq-v2` BH ON oracle ELFs contain launch words
+     `0x9300E000` / `0x9370C000` (RISC-V stream embeddings
+     `0x4C038002` / `0x4DC30002`; tensix word = `ror32 (embedded, 2)`),
+     i.e. addr modes **7** and **6** in bits 15:13 with InstrMod0 zero.
+     Mode 7 is unrepresentable at `<< 14` without setting bit 16.
+     `riscv-tt-elf-objdump` independently decodes them as
+     `sfploadmacro 0,L0,0,0,7` / `sfploadmacro 1,L3,0,0,6`.
+  Field widths settled: BH addr mode **3 bits at 15:13**; WH **2 bits
+  at 15:14**; launch `dest_reg_addr` **10 bits (9:0)** on both (the
+  quarantined select path's `<= 0xff` bound is a deliberate protocol
+  restriction kept for oracle parity, now documented in LM; the main
+  paths' `<= 0x3ff` matches the field).  Actions taken (all
+  byte-identical no-ops, verified by corpus A/B + 156-entry oracle
+  three-way): `TT_OP_BH_SFPLOADMACRO` corrected to `<< 13` (the macro
+  has no in-tree consumers); `select_launch_word` now shifts
+  `TARGET_XTT_TENSIX_BH ? 13 : 14` (previously a latent `<< 14`, dead
+  because the select protocol passes mode 0); its InstrMod0-overlap
+  rationale comment rewritten (the overlap claim was an artifact of the
+  stale shift — mode zero remains the proven protocol value); capability
+  tables unchanged (already the proven values) with provenance upgraded
+  from CONFLICT to RESOLVED; ground-truth decode pins added to
+  rvtt-macro-tables-test.cc.  TT-Metal requires no change.
 * **(b) Sequence-word bit format.**  Only seven whole words are proven
   (§5).  Suggestive but UNVERIFIED observations, recorded so the
   eventual decode can be cross-checked: leading byte `0x53` appears in

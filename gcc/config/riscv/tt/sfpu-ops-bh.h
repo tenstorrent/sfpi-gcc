@@ -266,8 +266,26 @@
 #define TT_OP_BH_SFPLOADI(lreg_ind, instr_mod0, imm16) \
   TT_OP_BH(0x71, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((imm16) << 0)))
 
+/* BH sfpu_addr_mode is a 3-bit field at bits 15:13, exactly as in
+   TT_OP_BH_SFPLOAD/TT_OP_BH_SFPSTORE above.  This macro historically said
+   << 14 (a stale copy of the 2-bit Wormhole layout) and was flagged as
+   NOTES-wp6-prep.md 9(a).  Resolved 2026-08-17 against three independent
+   references, all agreeing on << 13: (1) the CRAQ simulator ISA decode
+   (craq-sim data/bh/tensix_isa.json: SFPLOADMACRO sfpu_addr_mode "15:13",
+   dest_reg_addr "9:0"; wh: "15:14"), which semantically consumes the field
+   (tensix.cpp TENSIX_EXECUTE_SFPLOADMACRO re-dispatches the embedded
+   SFPLOAD with the mode re-packed at 13 on BH, driving ADDR_MOD counters);
+   (2) the production TT-Metal LLK header (tt_llk_blackhole
+   common/inc/ckernel_ops.h TT_OP_SFPLOADMACRO: << 13,
+   is_valid (sfpu_addr_mode, 3)); (3) the shipped 8/8-CRAQ-passing
+   minmax-final-craq-v2 BH oracle ELFs, whose launch words 0x9300E000 /
+   0x9370C000 carry addr modes 7 / 6 in bits 15:13 -- mode 7 is not even
+   representable at << 14 without overlapping InstrMod0 at bit 16.
+   This macro has no in-tree consumers; the live encodings are the
+   capability tables (rvtt-macro-tables-bh.def) and the quarantined pass,
+   both already at << 13.  */
 #define TT_OP_BH_SFPLOADMACRO(lreg_ind, instr_mod0, sfpu_addr_mode, dest_reg_addr) \
-  TT_OP_BH(0x93, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((sfpu_addr_mode) << 14) + ((dest_reg_addr) << 0)))
+  TT_OP_BH(0x93, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((sfpu_addr_mode) << 13) + ((dest_reg_addr) << 0)))
 
 #define TT_OP_BH_SFPLUT(lreg_ind, instr_mod0, dest_reg_addr) \
   TT_OP_BH(0x73, (((lreg_ind) << 20) + ((instr_mod0) << 16) + ((dest_reg_addr) << 0)))

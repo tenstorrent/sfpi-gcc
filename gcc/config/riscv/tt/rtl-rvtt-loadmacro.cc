@@ -1122,6 +1122,13 @@ describe_predicated_three_load_select_store (
     && INTVAL (store_addr_mode) == expected_addr_mode
     && condition_address == INTVAL (store_address)
     && true_mode == false_mode && false_mode == INTVAL (store_mode)
+    /* The architectural launch Dst-address field is 10 bits (see
+       dst_address_encodable and rvtt-macro-tables-*.def address_bits; the
+       main loadmacro paths above bound it at 0x3ff).  The select protocol
+       was only ever proven at small addresses, so this tighter 8-bit
+       bound is kept deliberately: relaxing it would form shapes outside
+       the frozen-oracle parity set of this quarantined pass.  Revisit
+       when predicated select converts to the generic planner (WP8/5).  */
     && condition_address >= 0 && condition_address <= 0xff
     && true_address >= 0 && true_address <= 0xff
     && false_address >= 0 && false_address <= 0xff
@@ -1224,8 +1231,17 @@ static unsigned
 select_launch_word (unsigned macro_index, HOST_WIDE_INT mode,
 		    HOST_WIDE_INT address_mode, HOST_WIDE_INT address)
 {
+  /* The addr-mode field sits at bit 13 on BH (3 bits, 15:13) and bit 14
+     on WH (2 bits, 15:14), the same layout as the main launch paths above
+     and the capability tables (NOTES-wp6-prep.md 9(a) resolution: CRAQ
+     sim ISA decode, production tt_llk_blackhole ckernel_ops.h, and the
+     shipped minmax CRAQ oracle ELF launch words all agree).  This helper
+     historically hardcoded << 14; that was latent because every select
+     launch passes address_mode zero (see emit_select_launch), so the
+     correction cannot change any emitted byte.  */
   return 0x93000000u | (macro_index << 22) | (unsigned (mode) << 16)
-    | (unsigned (address_mode) << 14) | unsigned (address);
+    | (unsigned (address_mode) << (TARGET_XTT_TENSIX_BH ? 13 : 14))
+    | unsigned (address);
 }
 
 static void
@@ -1233,10 +1249,16 @@ emit_select_launch (const predicated_select_descriptor &descriptor,
 		    unsigned index)
 {
   /* The accepted WH/BH selector protocol uses the macro instruction's raw
-     Dst-row addressing mode (zero).  The explicit loads' target-specific
-     address-mode values were proved above but are not copied into the macro
-     field: on BH, doing so would overlap InstrMod0 and silently turn the
-     opening F16b mode 2 load into mode 3.  */
+     Dst-row addressing mode (zero); the explicit loads' target-specific
+     address-mode values were proved above but are deliberately not copied
+     into the macro field, preserving whole-word parity with the proven
+     select programs.  Historical note (NOTES-wp6-prep.md 9(a)): this
+     comment used to justify the zero with "on BH, copying the mode would
+     overlap InstrMod0 and silently turn the opening F16b mode 2 load into
+     mode 3" -- an artifact of select_launch_word's then-stale << 14.  At
+     the proven BH shift 13 a 3-bit mode fits bits 15:13 with no overlap;
+     zero remains correct here because it is the protocol value the parity
+     oracles pin, not because of an encoding hazard.  */
   const HOST_WIDE_INT macro_address_mode = 0;
   const HOST_WIDE_INT addresses[] = {
     descriptor.condition_address,

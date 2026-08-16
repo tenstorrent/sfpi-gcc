@@ -110,6 +110,21 @@ test_launch_bh (const caps *bh)
   CHECK (decode_launch (bh, 0x9370c080u, &m, &vd, &mode, &am, &addr));
   CHECK (m == 1 && vd == 3 && mode == 0 && am == 6 && addr == 128);
 
+  /* 9(a) resolution ground truth (2026-08-17): the shipped 8/8-CRAQ
+     minmax-final-craq-v2 BH oracle ELFs contain exactly the launch words
+     0x9300E000 and 0x9370C000 (RISC-V-embedded as 0x4C038002/0x4DC30002,
+     tensix = ror32 (embedded, 2)); riscv-tt-elf-objdump decodes them as
+     `sfploadmacro 0,L0,0,0,7` / `sfploadmacro 1,L3,0,0,6`.  Pin that the
+     3-bit addr modes 7/6 sit in bits 15:13 with InstrMod0 (19:16) zero:
+     at the stale << 14 mode 7 would need bit 16 and could never decode
+     with a zero mode nibble.  */
+  CHECK (decode_launch (bh, 0x9300e000u, &m, &vd, &mode, &am, &addr));
+  CHECK (m == 0 && vd == 0 && mode == 0 && am == 7 && addr == 0);
+  CHECK (decode_launch (bh, 0x9370c000u, &m, &vd, &mode, &am, &addr));
+  CHECK (m == 1 && vd == 3 && mode == 0 && am == 6 && addr == 0);
+  CHECK (encode_launch (bh, 0, 0, 0, 7, 0, &w)
+	 && (w & (0xfu << 16)) == 0 && ((w >> 13) & 7u) == 7u);
+
   /* Boundary refusals: odd address (aliases VD-high bit), 11-bit
      address, oversized fields.  */
   CHECK (!encode_launch (bh, 0, 0, 0, 7, 65, &w));
