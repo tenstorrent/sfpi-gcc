@@ -2,7 +2,10 @@
 // and constants under unrelated names must make identical decisions.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_invariant-details" }
 // { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
-// { dg-final { scan-tree-dump-not "function has opaque LREG state" "rvtt_invariant" } }
+// The multi-block extension also examines the OUTER loop as a hoist
+// candidate; its latch asm is inside that region, so it refuses --
+// exactly once, without disturbing the inner hoists.
+// { dg-final { scan-tree-dump-times "function has opaque LREG state" 1 "rvtt_invariant" } }
 
 void completely_unrelated_pipeline_step ()
 {
