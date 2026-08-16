@@ -244,7 +244,13 @@
 ;; band as buffer; 60 is approximately half the smallest measured
 ;; winning benefit (121), keeping ~2x headroom under the nearest winner
 ;; while refusing modeled-marginal shapes, because refusal is
-;; byte-identical code and costs nothing.  The
+;; byte-identical code and costs nothing.  The dynamic-pipeline costs
+;; Blackhole adds around a hoisted record-only capture are not itemized
+;; by this static model; the threshold margin is the only buffer
+;; standing in for them.  No-silicon band: the acceptance region
+;; [60, 121) of modeled benefit -- including the test-pinned (4,9)=90
+;; fire -- has zero silicon points; a silicon A/B remains the promotion
+;; backstop for any shape class landing there.  The
 ;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
 ;; overrides this table value for experimentation.
 ;;
