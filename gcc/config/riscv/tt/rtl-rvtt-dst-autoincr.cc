@@ -168,6 +168,9 @@ enum autoincr_class
   AIC_NEUTRAL,  /* provably no Dst-RWC or modifier-slot effect */
   AIC_ACCESS,   /* typed Dst access through an address modifier */
   AIC_INCRWC,   /* typed TTINCRWC */
+  AIC_RWC_STEP, /* typed pure RWC counter step (Dst face advance): no
+		   modifier-slot or LREG effect, but RWC state changes, so
+		   it separates rows and never absorbs an increment */
   AIC_REPLAY,   /* typed TTREPLAY capture or launch */
   AIC_FOREIGN,  /* call, opaque asm, or unclassified effect: refuses */
 };
@@ -243,6 +246,11 @@ classify_insn (rtx_insn *insn, access_info *acc)
 
   if (code == CODE_FOR_rvtt_ttincrwc)
     return AIC_INCRWC;
+  if (code == CODE_FOR_rvtt_ttdstface_wh_bh)
+    /* Typed Dst/RWC face advance: advances RWC counters only; the
+       address-modifier configuration slots are untouched by identity of
+       the typed pattern (no raw word is ever decoded).  */
+    return AIC_RWC_STEP;
   if (code == CODE_FOR_rvtt_ttreplay_int)
     return AIC_REPLAY;
   if (classify_access (insn, code, acc))
@@ -718,6 +726,10 @@ config_window_item_ok (const bb_item &item, const autoincr_caps &caps)
     {
     case AIC_NEUTRAL:
     case AIC_INCRWC:
+    case AIC_RWC_STEP:
+      /* RWC counter steps (per-row increments, the typed face advance)
+	 cannot write address-modifier configuration.  They do change RWC
+	 state, so they are only window-legal, never gap-legal.  */
       return true;
     case AIC_ACCESS:
       return item.acc.mode != caps.scratch_mode;
