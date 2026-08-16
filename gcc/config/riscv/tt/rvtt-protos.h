@@ -26,6 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-qsr.h"
 
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
+extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
 extern rtx rvtt_gen_rtx_noval (machine_mode);
 extern void rvtt_merge_lv_src (rtx *lv, rtx *src);
