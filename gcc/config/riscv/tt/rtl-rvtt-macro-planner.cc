@@ -213,6 +213,58 @@ loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
   return macro_cost < (uint64_t) per_trip_explicit * body_count;
 }
 
+/* An ambient all-lanes enable shape: only a CC write, no other
+   architectural effect (the region scanner's pure-CC-write class).  */
+
+static bool
+pure_cc_write_insn_p (rtx_insn *insn)
+{
+  if (!NONDEBUG_INSN_P (insn))
+    return false;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  return !e.opaque && e.cc_write && !e.cc_read
+    && !e.lreg_read && !e.lreg_write
+    && !e.config_dests_written && !e.addr_mod_slot_write
+    && !e.dst_mem_read && !e.dst_mem_write
+    && e.rwc.kind == xtt_rwc_effect_t::NONE;
+}
+
+/* The trailing ambient enable of a proven loop preheader: the LAST
+   Tensix issue in PREHEADER when it is a pure CC write.  With
+   whole-body ownership (no CC writer inside the loop) this proves the
+   lane state at every trip's region entry, replacing the first row's
+   local enable for regions whose enable was written once outside the
+   loop.  */
+
+static rtx_insn *
+preheader_trailing_enable (basic_block preheader)
+{
+  /* Walk the unique-predecessor chain from the preheader upward until a
+     Tensix issue is found: only scalar code may sit between the enable
+     and the loop entry, so the dominating chain's LAST Tensix issue
+     decides the proof.  */
+  basic_block bb = preheader;
+  for (unsigned depth = 0; depth != 16; ++depth)
+    {
+      rtx_insn *last_tensix = nullptr;
+      for (rtx_insn *insn = BB_HEAD (bb); insn; insn = NEXT_INSN (insn))
+	{
+	  if (NONDEBUG_INSN_P (insn) && recog_memoized (insn) >= 0
+	      && get_attr_type (insn) == TYPE_TENSIX)
+	    last_tensix = insn;
+	  if (insn == BB_END (bb))
+	    break;
+	}
+      if (last_tensix)
+	return pure_cc_write_insn_p (last_tensix) ? last_tensix : nullptr;
+      if (!single_pred_p (bb)
+	  || single_pred (bb) == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	return nullptr;
+      bb = single_pred (bb);
+    }
+  return nullptr;
+}
+
 /* Structural preheader of a loop-body region, with the zero-trip and
    whole-body ownership obligations (WP8).  The loop header must have
    exactly its backedge plus one external incoming edge; the incoming
@@ -293,7 +345,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc,
 		  const rvtt_macro::caps *c,
 		  unsigned begin, unsigned end, bool emit_config,
-		  basic_block config_preheader)
+		  basic_block config_preheader, bool emit_enable_copy)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
@@ -302,10 +354,11 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
     {
       /* The all-lanes proof is the first row of the region (relaxed at
 	 WP8 from every-row: no region member may write CC, so the lane
-	 state proven at entry holds across every row).  */
-      const macro_row &proof = region.rows[0];
+	 state proven at entry holds across every row), or the loop
+	 preheader's own trailing enable (already in place; no copy).  */
       start_sequence ();
-      emit_insn (copy_rtx (PATTERN (proof.enable)));
+      if (emit_enable_copy)
+	emit_insn (copy_rtx (PATTERN (region.rows[0].enable)));
       for (unsigned s = 0; s != desc.n_setc16; ++s)
 	emit_insn (gen_rvtt_owned_setc16
 		   (GEN_INT (desc.setc16[s].config_reg),
@@ -502,18 +555,6 @@ form_region (function *fn, macro_region &region,
       || desc.launches.is_empty ())
     return false;
 
-  /* A lane-predicated calendar needs the ambient all-lanes proof at the
-     region's first row (WP8 relaxation from every-row: region members
-     cannot write CC -- such rows refuse cc-template-unsupported at
-     discovery -- so the entry lane state holds across every row).  */
-  if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
-    {
-      if (dump)
-	fprintf (dump, "Macro-planner formation-refusal:"
-		 " all-lanes-proof-missing\n");
-      return false;
-    }
-
   if (!planner_config_ownership_ok (fn, c))
     {
       if (dump)
@@ -559,6 +600,26 @@ form_region (function *fn, macro_region &region,
 	  /* No usable trip estimate: conservatively a single trip.  */
 	  body_count = preheader_count = 1;
 	}
+    }
+
+  /* A lane-predicated calendar needs the ambient all-lanes proof: the
+     region's first row's local enable (WP8 relaxation from every-row:
+     region members cannot write CC -- such rows refuse
+     cc-template-unsupported at discovery -- so the entry lane state
+     holds across every row), or, for a loop-body region whose enable
+     was written once outside the loop, the proven preheader's trailing
+     enable (whole-body ownership keeps it live across every trip).  */
+  bool emit_enable_copy = true;
+  if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
+    {
+      if (!config_preheader || !preheader_trailing_enable (config_preheader))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " all-lanes-proof-missing\n");
+	  return false;
+	}
+      emit_enable_copy = false;
     }
 
   /* Profitability.  Straight-line: every run independently amortizes
@@ -609,7 +670,7 @@ form_region (function *fn, macro_region &region,
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
-			config_preheader);
+			config_preheader, emit_enable_copy);
     }
   if (dump)
     fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s\n",
