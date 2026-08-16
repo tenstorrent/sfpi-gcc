@@ -48,6 +48,15 @@ along with GCC; see the file COPYING3.  If not see
      accesses with equal typed (address, data-mode) operands share one
      carrier (launch), everything else issues separately.  The initiation
      interval is the number of issued words.
+   - Carrier grouping is a deterministic two-candidate search, driven by
+     the caller in ascending candidate order: candidate 0 shares
+     carriers maximally as above; candidate 1 demotes every Dst store to
+     its own single-access carrier (the delayed-store slot), and exists
+     only when candidate 0 actually merged a store with another access.
+     The caller accepts the first candidate whose descriptor proves and
+     refuses when none does.  The demotion rule is keyed to the access
+     kind alone -- no address value, operation, or calendar identity
+     participates.
    - Launched sequence events are non-Dst value operations whose subunit
      class the tables can host; a carrier that hosts no events is demoted
      to an ordinary explicit issue (macros are a scarce resource).
@@ -138,7 +147,7 @@ rvtt_macro_schedule_release (macro_schedule *sched)
 
 bool
 rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
-			    FILE *dump)
+			    FILE *dump, unsigned candidate)
 {
   memset (out, 0, sizeof (*out));
   out->events = vNULL;
@@ -175,31 +184,71 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      share one issued launch word (at most one load per carrier -- the
      launch word loads one value; a same-address store rides the carrier
      as a delayed store whose data mode lives in the misc word, not the
-     launch).  */
+     launch).
+
+     The grouping is a deterministic two-candidate search (see the file
+     comment): candidate 0 shares maximally; candidate 1 demotes every
+     Dst store to its own single-access carrier and exists only when
+     candidate 0 merged a store with another access.  DEMOTE_STORES
+     selects the rule; the return value reports whether any merge
+     involved a store.  */
   auto_vec<int> carrier_first;	/* item index of each carrier's first access */
   auto_vec<bool> carrier_has_load;
-  for (row_item &item : items)
-    if (item.address)
-      {
-	for (unsigned cix = 0; cix != carrier_first.length (); ++cix)
-	  {
-	    const row_item &head = items[carrier_first[cix]];
-	    if (rtx_equal_p (head.address, item.address)
-		&& !(item.effects.dst_mem_read && carrier_has_load[cix]))
+  auto_vec<bool> carrier_has_store;
+  auto group_carriers = [&] (bool demote_stores) -> bool
+    {
+      bool store_merged = false;
+      carrier_first.truncate (0);
+      carrier_has_load.truncate (0);
+      carrier_has_store.truncate (0);
+      for (row_item &item : items)
+	{
+	  item.carrier = -1;
+	  if (!item.address)
+	    continue;
+	  bool is_store = item.effects.dst_mem_write;
+	  if (!(demote_stores && is_store))
+	    for (unsigned cix = 0; cix != carrier_first.length (); ++cix)
 	      {
-		item.carrier = cix;
-		carrier_has_load[cix] = carrier_has_load[cix]
-		  || item.effects.dst_mem_read;
-		break;
+		const row_item &head = items[carrier_first[cix]];
+		if (rtx_equal_p (head.address, item.address)
+		    && !(item.effects.dst_mem_read && carrier_has_load[cix])
+		    && !(demote_stores && carrier_has_store[cix]))
+		  {
+		    item.carrier = cix;
+		    store_merged |= is_store || carrier_has_store[cix];
+		    carrier_has_load[cix] = carrier_has_load[cix]
+		      || item.effects.dst_mem_read;
+		    carrier_has_store[cix] = carrier_has_store[cix]
+		      || is_store;
+		    break;
+		  }
 	      }
-	  }
-	if (item.carrier < 0)
-	  {
-	    item.carrier = carrier_first.length ();
-	    carrier_first.safe_push (&item - items.begin ());
-	    carrier_has_load.safe_push (item.effects.dst_mem_read);
-	  }
-      }
+	  if (item.carrier < 0)
+	    {
+	      item.carrier = carrier_first.length ();
+	      carrier_first.safe_push (&item - items.begin ());
+	      carrier_has_load.safe_push (item.effects.dst_mem_read);
+	      carrier_has_store.safe_push (is_store);
+	    }
+	}
+      return store_merged;
+    };
+
+  if (candidate == 0)
+    group_carriers (false);
+  else if (candidate == 1)
+    {
+      /* Candidate 1 is distinct only when maximal sharing merged a
+	 store; otherwise the search is exhausted.  */
+      if (!group_carriers (false))
+	return false;
+      group_carriers (true);
+      if (dump)
+	fprintf (dump, "Macro-planner schedule-candidate: stores-demoted\n");
+    }
+  else
+    return false;		/* deterministic search exhausted */
 
   /* Launched-event hosting: a non-Dst value event is hosted on the
      carrier of its earliest LREG producer that is a Dst load; a store

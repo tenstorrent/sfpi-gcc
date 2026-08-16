@@ -446,9 +446,17 @@ public:
     rvtt_macro_regions_discover (fn, dump_file, &regions);
     for (macro_region &region : regions)
       {
-	macro_schedule schedule;
-	if (rvtt_macro_schedule_region (region, &schedule, dump_file))
+	/* Deterministic carrier-grouping search: candidates ascend from
+	   maximal sharing; the first whose descriptor synthesis proves
+	   is committed.  When every candidate refuses, the region
+	   refuses byte-identically.  */
+	for (unsigned candidate = 0; ; ++candidate)
 	  {
+	    macro_schedule schedule;
+	    if (!rvtt_macro_schedule_region (region, &schedule, dump_file,
+					     candidate))
+	      break;		/* search exhausted (or no table)  */
+	    bool proven = false;
 	    macro_descriptor descriptor;
 	    if (rvtt_macro_synthesize (region, schedule, &descriptor,
 				       dump_file))
@@ -456,12 +464,15 @@ public:
 		if (riscv_tt_macro_planner_verify || flag_checking)
 		  rvtt_macro_verify_descriptor (region, schedule,
 						descriptor, dump_file);
-		if (riscv_tt_macro_planner)
+		proven = !descriptor.refusal;
+		if (proven && riscv_tt_macro_planner)
 		  changed |= form_region (fn, region, schedule,
 					  descriptor, dump_file);
 		rvtt_macro_descriptor_release (&descriptor);
 	      }
 	    rvtt_macro_schedule_release (&schedule);
+	    if (proven)
+	      break;
 	  }
 	rvtt_macro_region_release (&region);
       }

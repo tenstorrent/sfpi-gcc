@@ -68,12 +68,22 @@ extern const char *macro_sched_refusal_template_capacity_exceeded;
 extern const char *macro_sched_refusal_port_conflict;
 extern const char *macro_sched_refusal_latency_violation;
 
-/* Derive and dump the schedule of REGION's canonical row.  Returns true
-   when a schedule structure was derived (its refusal field still names
-   any commitment blocker); false when scheduling could not begin (no
-   capability table).  Never mutates the function.  */
+/* Derive and dump the schedule of REGION's canonical row for carrier
+   grouping CANDIDATE.  The grouping search is deterministic and
+   ascending: candidate 0 shares a carrier between Dst accesses with
+   equal typed address operands (maximal sharing); candidate 1 demotes
+   every Dst store to its own single-access carrier (the delayed-store
+   slot) and exists only when candidate 0 merged a store with another
+   access.  The caller iterates candidates in order and accepts the
+   first whose descriptor synthesis proves; when the search is
+   exhausted the region refuses byte-identically.  Returns true when a
+   schedule structure was derived (its refusal field still names any
+   commitment blocker); false when scheduling could not begin (no
+   capability table) or CANDIDATE names no distinct grouping.  Never
+   mutates the function.  */
 extern bool rvtt_macro_schedule_region (const macro_region &region,
-					macro_schedule *out, FILE *dump);
+					macro_schedule *out, FILE *dump,
+					unsigned candidate = 0);
 extern void rvtt_macro_schedule_release (macro_schedule *);
 
 #endif /* GCC_RVTT_MACRO_SCHED_H */
