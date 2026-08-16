@@ -141,6 +141,7 @@ extern gimple_opt_pass *make_pass_rvtt_vif (gcc::context *ctxt);
 
 // RTL passes
 class rtl_opt_pass;
+extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
