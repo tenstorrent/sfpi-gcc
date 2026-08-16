@@ -12,11 +12,11 @@
     {                                                                          \
       __builtin_rvtt_sfppushc (0);                                            \
       __builtin_rvtt_sfppopc (0);                                             \
-      auto loaded = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);          \
+      auto loaded = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6, 7);          \
       auto cast = __builtin_rvtt_sfpcast (loaded, 0);                         \
       auto rounded                                                            \
-	= __builtin_rvtt_sfpstochrnd_i (nullptr, cast, 0x1f, 0, 0, 6, 1);     \
-      __builtin_rvtt_sfpstore (nullptr, rounded, 0, 0, 0, 6, 7);              \
+	= __builtin_rvtt_sfpstochrnd_i (nullptr, cast, 0, 0, 0, 1, 0);        \
+      __builtin_rvtt_sfpstore (nullptr, rounded, 0, 0, 0, 2, 7);              \
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
     }                                                                          \
   while (0)

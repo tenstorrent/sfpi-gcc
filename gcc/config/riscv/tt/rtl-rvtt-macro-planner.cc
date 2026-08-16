@@ -122,6 +122,33 @@ config_word_loadi_issues (uint32_t w)
   return 2;
 }
 
+/* Issue cost of the full configuration prefix (all-lanes enable, owned
+   SETC16 program, and every descriptor word's materialization).  */
+
+static unsigned
+config_prefix_cost (const macro_descriptor &desc)
+{
+  unsigned config_cost = 1;	/* all-lanes enable */
+  config_cost += desc.n_setc16;
+  for (unsigned t = 0; t != desc.n_templates; ++t)
+    config_cost += config_word_loadi_issues (desc.templ[t]) + 1;
+  for (unsigned m = 0; m != desc.n_seq; ++m)
+    config_cost += config_word_loadi_issues (desc.seq[m]) + 1;
+  if (desc.has_misc)
+    config_cost += config_word_loadi_issues (desc.misc) + 1;
+  return config_cost;
+}
+
+/* Issue cost of one explicit (unformed) row.  */
+
+static unsigned
+explicit_row_cost (const macro_region &region)
+{
+  const macro_row &row = region.rows[0];
+  return row.insns.length ()
+    + (row.enable ? 1 : 0) + (row.separator ? 1 : 0);
+}
+
 /* Layer-6 profitability, derived from configuration and drain costs --
    no row thresholds anywhere.  Every run must independently amortize
    the full configuration prefix (the frozen conservative-per-run
@@ -131,41 +158,154 @@ static bool
 run_profitable_p (const macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc, unsigned run_rows)
 {
-  const macro_row &row = region.rows[0];
-  unsigned explicit_row = row.insns.length ()
-    + (row.enable ? 1 : 0) + (row.separator ? 1 : 0);
-
-  unsigned config_cost = 1;	/* all-lanes enable */
-  config_cost += desc.n_setc16;
-  for (unsigned t = 0; t != desc.n_templates; ++t)
-    config_cost += config_word_loadi_issues (desc.templ[t]) + 1;
-  for (unsigned m = 0; m != desc.n_seq; ++m)
-    config_cost += config_word_loadi_issues (desc.seq[m]) + 1;
-  if (desc.has_misc)
-    config_cost += config_word_loadi_issues (desc.misc) + 1;
-
-  unsigned macro_cost = config_cost + run_rows * schedule.ii
+  unsigned macro_cost = config_prefix_cost (desc) + run_rows * schedule.ii
     + desc.drain_slots;
-  return macro_cost < run_rows * explicit_row;
+  return macro_cost < run_rows * explicit_row_cost (region);
 }
 
-/* Emit one run: the configuration prefix (first run only), the per-row
-   issue calendar from the descriptor, and the drain; then delete the
-   explicit rows.  Everything emitted is descriptor data.  */
+/* Loop trip weight (WP8): the profile-estimated body/preheader
+   execution-count ratio of a loop-body region.  Purely a profitability
+   weight -- never a correctness input -- exact where the profile is
+   (constant-bound loops), the static estimate elsewhere.  The two
+   outputs report the ratio as an unreduced fraction so profitability
+   can weigh it without rounding.  Returns false when the profile gives
+   no usable estimate.  */
+
+static bool
+loop_trip_weight (basic_block body, basic_block preheader,
+		  gcov_type *body_count, gcov_type *preheader_count)
+{
+  profile_count bc = body->count, pc = preheader->count;
+  if (!bc.initialized_p () || !pc.initialized_p () || !pc.nonzero_p ())
+    return false;
+  gcov_type b = bc.to_gcov_type (), p = pc.to_gcov_type ();
+  if (p <= 0 || b < p)
+    return false;
+  /* Keep the products of profitability inside 64 bits.  */
+  while (b > (gcov_type) 1 << 48)
+    {
+      b >>= 8;
+      p = p >> 8 ? p >> 8 : 1;
+    }
+  *body_count = b;
+  *preheader_count = p;
+  return true;
+}
+
+/* Loop-body profitability: the configuration prefix sits in the
+   preheader and is paid once per loop entry, while every trip pays each
+   run's launch calendar and drain against the explicit rows it
+   replaces.  Weighted by the profile ratio without rounding:
+   config * preheader_count + per_trip_macro * body_count
+     < per_trip_explicit * body_count.  */
+
+static bool
+loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
+		   const macro_descriptor &desc, gcov_type body_count,
+		   gcov_type preheader_count, unsigned n_runs)
+{
+  unsigned total_rows = region.rows.length ();
+  unsigned per_trip_macro = total_rows * schedule.ii
+    + n_runs * desc.drain_slots;
+  unsigned per_trip_explicit = total_rows * explicit_row_cost (region);
+  uint64_t macro_cost = (uint64_t) config_prefix_cost (desc) * preheader_count
+    + (uint64_t) per_trip_macro * body_count;
+  return macro_cost < (uint64_t) per_trip_explicit * body_count;
+}
+
+/* Structural preheader of a loop-body region, with the zero-trip and
+   whole-body ownership obligations (WP8).  The loop header must have
+   exactly its backedge plus one external incoming edge; the incoming
+   block must have no other successor, which proves at least one trip on
+   this edge, so hoisting the all-lanes enable is not a zero-trip CC
+   change; and every Tensix issue in the body must belong to the region,
+   so no foreign issue can mutate configuration, CC, or counter state
+   between the preheader materialization and any launch.  Refusal paths
+   return null after dumping a stable name.  */
+
+static basic_block
+loop_region_preheader (function *fn, const macro_region &region, FILE *dump)
+{
+  basic_block body = region.bb;
+  edge incoming = nullptr;
+  unsigned self_edges = 0, external_edges = 0;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, body->preds)
+    if (e->src == body)
+      ++self_edges;
+    else
+      {
+	++external_edges;
+	incoming = e;
+      }
+  if (self_edges != 1 || external_edges != 1
+      || incoming->src == ENTRY_BLOCK_PTR_FOR_FN (fn))
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner formation-refusal:"
+		 " loop-preheader-unproven\n");
+      return nullptr;
+    }
+  if (EDGE_COUNT (incoming->src->succs) != 1)
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner formation-refusal:"
+		 " zero-trip-preheader-unproven\n");
+      return nullptr;
+    }
+
+  for (rtx_insn *insn = BB_HEAD (body); insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn) && recog_memoized (insn) >= 0
+	  && get_attr_type (insn) == TYPE_TENSIX)
+	{
+	  bool owned = false;
+	  for (const macro_row &row : region.rows)
+	    {
+	      owned |= insn == row.enable || insn == row.separator;
+	      for (rtx_insn *member : row.insns)
+		owned |= insn == member;
+	    }
+	  for (rtx_insn *sep : region.run_separators)
+	    owned |= insn == sep;
+	  if (!owned)
+	    {
+	      if (dump)
+		fprintf (dump, "Macro-planner formation-refusal:"
+			 " loop-body-not-owned\n");
+	      return nullptr;
+	    }
+	}
+      if (insn == BB_END (body))
+	break;
+    }
+  return incoming->src;
+}
+
+/* Emit one run: the configuration prefix (first run only; hoisted to
+   CONFIG_PREHEADER for a proven loop-body region), the per-row issue
+   calendar from the descriptor, and the drain; then delete the explicit
+   rows.  Everything emitted is descriptor data.  */
 
 static void
 emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc,
 		  const rvtt_macro::caps *c,
-		  unsigned begin, unsigned end, bool emit_config)
+		  unsigned begin, unsigned end, bool emit_config,
+		  basic_block config_preheader)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
 
   if (emit_config)
     {
+      /* The all-lanes proof is the first row of the region (relaxed at
+	 WP8 from every-row: no region member may write CC, so the lane
+	 state proven at entry holds across every row).  */
+      const macro_row &proof = region.rows[0];
       start_sequence ();
-      emit_insn (copy_rtx (PATTERN (first.enable)));
+      emit_insn (copy_rtx (PATTERN (proof.enable)));
       for (unsigned s = 0; s != desc.n_setc16; ++s)
 	emit_insn (gen_rvtt_owned_setc16
 		   (GEN_INT (desc.setc16[s].config_reg),
@@ -186,7 +326,19 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	config_word (desc.misc, 8);
       rtx_insn *prefix = get_insns ();
       end_sequence ();
-      emit_insn_before (prefix, anchor);
+      if (config_preheader)
+	{
+	  /* Loop-body region: the prefix executes once, in the proven
+	     structural preheader (>= one trip; see
+	     loop_region_preheader).  */
+	  rtx_insn *tail = BB_END (config_preheader);
+	  if (tail && JUMP_P (tail))
+	    emit_insn_before (prefix, tail);
+	  else
+	    emit_insn_after (prefix, tail);
+	}
+      else
+	emit_insn_before (prefix, anchor);
     }
 
   /* Per-macro carried memory operands and hidden template writes.  */
@@ -350,12 +502,17 @@ form_region (function *fn, macro_region &region,
       || desc.launches.is_empty ())
     return false;
 
-  /* Every row needs its ambient all-lanes enable when the calendar is
-     lane-predicated, and the launch VDs must be encodable.  */
-  if (desc.needs_all_lanes_prefix)
-    for (const macro_row &row : region.rows)
-      if (!row.enable)
-	return false;
+  /* A lane-predicated calendar needs the ambient all-lanes proof at the
+     region's first row (WP8 relaxation from every-row: region members
+     cannot write CC -- such rows refuse cc-template-unsupported at
+     discovery -- so the entry lane state holds across every row).  */
+  if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner formation-refusal:"
+		 " all-lanes-proof-missing\n");
+      return false;
+    }
 
   if (!planner_config_ownership_ok (fn, c))
     {
@@ -379,37 +536,85 @@ form_region (function *fn, macro_region &region,
 	  return false;
 	}
 
-  /* Per-run profitability (conservative full-config accounting).  */
   auto_vec<unsigned> run_begins;
   for (unsigned r = 0; r != region.rows.length (); ++r)
     if (region.rows[r].starts_run)
       run_begins.safe_push (r);
   if (run_begins.is_empty ())
     run_begins.safe_push (0);
-  for (unsigned b = 0; b != run_begins.length (); ++b)
+
+  /* A loop-body region hoists its configuration to the structural
+     preheader; that placement carries the zero-trip and whole-body
+     ownership obligations.  */
+  basic_block config_preheader = nullptr;
+  gcov_type body_count = 1, preheader_count = 1;
+  if (region.loop_body)
     {
-      unsigned begin = run_begins[b];
-      unsigned end = b + 1 == run_begins.length ()
-	? region.rows.length () : run_begins[b + 1];
-      if (!run_profitable_p (region, schedule, desc, end - begin))
+      config_preheader = loop_region_preheader (fn, region, dump);
+      if (!config_preheader)
+	return false;
+      if (!loop_trip_weight (region.bb, config_preheader, &body_count,
+			     &preheader_count))
+	{
+	  /* No usable trip estimate: conservatively a single trip.  */
+	  body_count = preheader_count = 1;
+	}
+    }
+
+  /* Profitability.  Straight-line: every run independently amortizes
+     the full configuration prefix (the frozen conservative-per-run
+     discipline).  Loop body: the prefix is paid once in the preheader
+     and weighted against the profile trip estimate.  */
+  if (region.loop_body)
+    {
+      if (!loop_profitable_p (region, schedule, desc, body_count,
+			      preheader_count, run_begins.length ()))
 	{
 	  if (dump)
 	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " unprofitable\n");
+		     " unprofitable (trip-weight=%ld/%ld)\n",
+		     (long) body_count, (long) preheader_count);
 	  return false;
 	}
     }
+  else
+    for (unsigned b = 0; b != run_begins.length (); ++b)
+      {
+	unsigned begin = run_begins[b];
+	unsigned end = b + 1 == run_begins.length ()
+	  ? region.rows.length () : run_begins[b + 1];
+	if (!run_profitable_p (region, schedule, desc, end - begin))
+	  {
+	    if (dump)
+	      fprintf (dump, "Macro-planner formation-refusal:"
+		       " unprofitable\n");
+	    return false;
+	  }
+      }
+
+  /* Emission deletes each row's typed Dst separator; that is only
+     sound when the launch calendar absorbed the stride.  */
+  for (const macro_row &row : region.rows)
+    if (row.separator && !schedule.absorbed_stride)
+      {
+	if (dump)
+	  fprintf (dump, "Macro-planner formation-refusal:"
+		   " stride-not-absorbed\n");
+	return false;
+      }
 
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
-      emit_planner_run (region, schedule, desc, c, begin, end, b == 0);
+      emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
+			config_preheader);
     }
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u\n",
-	     region.rows.length (), run_begins.length ());
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s\n",
+	     region.rows.length (), run_begins.length (),
+	     config_preheader ? " config=preheader" : "");
   return true;
 }
 

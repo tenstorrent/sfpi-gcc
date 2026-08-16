@@ -66,7 +66,11 @@ enum class macro_region_refusal
 {
   row_opaque_effect,
   row_not_closed,
-  row_cc_write,
+  /* A CC-writing value event inside the row slice would need a
+     CC-manipulating instruction template; no such template program is
+     proven, so the row refuses by that missing capability.  (Emitted
+     name supersedes the pre-WP8 "row-cc-write".)  */
+  row_cc_template_unsupported,
   row_config_write,
   row_not_isomorphic,
   row_stride_mismatch,
