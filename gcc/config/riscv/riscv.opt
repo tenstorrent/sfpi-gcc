@@ -625,6 +625,10 @@ mtt-tensix-macro-planner-analyze
 Target Var(riscv_tt_macro_planner_analyze) Init(0)
 Discover, prove, and report generic macro-planner regions and named refusals without changing code.
 
+mtt-tensix-macro-planner-verify
+Target Var(riscv_tt_macro_planner_verify) Init(0)
+Differentially verify synthesized macro-planner descriptors against the region's explicit facts (also forced on under internal checking).
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).

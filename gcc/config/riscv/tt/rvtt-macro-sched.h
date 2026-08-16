@@ -42,6 +42,7 @@ struct macro_event
   unsigned macro_index;		/* carrier macro (LAUNCHED / carriers) */
   bool is_store;
   bool issues_word;		/* carrier launch or explicit issue    */
+  bool is_carrier;		/* the Dst access carried by a launch  */
 };
 
 struct macro_schedule

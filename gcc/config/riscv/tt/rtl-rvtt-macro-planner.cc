@@ -40,6 +40,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
+#include "rvtt-macro-desc.h"
 
 /* The macro planner replaces every exact-calendar SFPLOADMACRO
    recognizer with regions, schedules, and descriptors derived from typed
@@ -85,7 +86,18 @@ public:
       {
 	macro_schedule schedule;
 	if (rvtt_macro_schedule_region (region, &schedule, dump_file))
-	  rvtt_macro_schedule_release (&schedule);
+	  {
+	    macro_descriptor descriptor;
+	    if (rvtt_macro_synthesize (region, schedule, &descriptor,
+				       dump_file))
+	      {
+		if (riscv_tt_macro_planner_verify || flag_checking)
+		  rvtt_macro_verify_descriptor (region, schedule,
+						descriptor, dump_file);
+		rvtt_macro_descriptor_release (&descriptor);
+	      }
+	    rvtt_macro_schedule_release (&schedule);
+	  }
 	rvtt_macro_region_release (&region);
       }
     return 0;
