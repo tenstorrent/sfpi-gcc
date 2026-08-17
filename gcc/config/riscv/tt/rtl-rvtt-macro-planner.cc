@@ -86,6 +86,64 @@ planner_config_ownership_ok (function *fn, const rvtt_macro::caps *c)
   return true;
 }
 
+/* Region-scoped configuration ownership for a loop-body region: the
+   fallback when the function-global proof fails because the enclosing
+   function carries foreign Tensix code (the real-kernel shape of the
+   typecast blocker -- the four architectural faces sit in a loop inside
+   a function full of opaque init/dataflow instructions, so the
+   function-global scan can never prove ownership there).
+
+   The configuration window is the proven structural preheader's TAIL
+   (the compiler-owned insertion point after the last reachable foreign
+   call, asm, or configuration access) plus the loop body.  Placement at
+   the tail dominates every trip's launches, and the window proof shows
+   no path from the materialization point to the final drain contains
+   another owner: the preheader's unique successor is the body (proven
+   by loop_region_preheader), the body's only edges are its self-loop
+   and its exit, and this scan proves every body instruction is either a
+   region-owned issue or provably inert scalar code -- no call, no asm,
+   no Tensix issue, and no volatile memory reference (the shape of every
+   raw MMIO instruction push or configuration access the typed effect
+   vocabulary cannot see).  Foreign owners BEFORE the insertion point
+   are simply overwritten by the prefix.  Code after the loop exit runs
+   after the drain and is beyond the descriptor's lifetime, exactly as
+   when the planner forms inside an out-of-line callee invoked from an
+   opaque caller (the shipped straight-line contract).  */
+
+static bool
+planner_config_window_ok (const macro_region &region)
+{
+  basic_block body = region.bb;
+  for (rtx_insn *insn = BB_HEAD (body); insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn))
+	{
+	  bool owned = false;
+	  for (const macro_row &row : region.rows)
+	    {
+	      owned |= insn == row.enable || insn == row.separator;
+	      for (rtx_insn *member : row.insns)
+		owned |= insn == member;
+	    }
+	  for (rtx_insn *sep : region.run_separators)
+	    owned |= insn == sep;
+	  if (!owned)
+	    {
+	      if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+		return false;
+	      if (recog_memoized (insn) >= 0
+		  && get_attr_type (insn) == TYPE_TENSIX)
+		return false;
+	      if (volatile_refs_p (PATTERN (insn)))
+		return false;
+	    }
+	}
+      if (insn == BB_END (body))
+	break;
+    }
+  return true;
+}
+
 /* Prove that hard register VALUE has no use after START before an
    all-lane definition kills it (the frozen pass's proof idiom).  */
 
@@ -576,12 +634,31 @@ form_region (function *fn, macro_region &region,
       || desc.launches.is_empty ())
     return false;
 
+  /* Configuration ownership: the function-global proof, or, for a
+     loop-body region, the region-scoped preheader+body window (the
+     preheader is computed quietly here; when the scoped proof also
+     fails the refusal keeps its established name, and when only the
+     scoped path can prove -- the real-kernel loop shape -- the window
+     dump line names the sharing).  */
+  basic_block scoped_preheader = nullptr;
   if (!planner_config_ownership_ok (fn, c))
     {
+      if (region.loop_body)
+	{
+	  scoped_preheader = loop_region_preheader (fn, region, nullptr);
+	  if (scoped_preheader && !planner_config_window_ok (region))
+	    scoped_preheader = nullptr;
+	}
+      if (!scoped_preheader)
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " config-ownership-unproven\n");
+	  return false;
+	}
       if (dump)
-	fprintf (dump, "Macro-planner formation-refusal:"
-		 " config-ownership-unproven\n");
-      return false;
+	fprintf (dump, "Macro-planner config-ownership: loop-scoped"
+		 " window (preheader tail dominates every launch)\n");
     }
 
   /* Every planner-owned physical LREG must be dead after the region.  */
@@ -612,7 +689,8 @@ form_region (function *fn, macro_region &region,
   gcov_type body_count = 1, preheader_count = 1;
   if (region.loop_body)
     {
-      config_preheader = loop_region_preheader (fn, region, dump);
+      config_preheader = scoped_preheader
+	? scoped_preheader : loop_region_preheader (fn, region, dump);
       if (!config_preheader)
 	return false;
       if (!loop_trip_weight (region.bb, config_preheader, &body_count,
