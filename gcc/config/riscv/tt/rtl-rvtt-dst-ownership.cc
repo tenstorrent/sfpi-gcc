@@ -63,7 +63,10 @@
        COMPC/SETCC and any non-all-lanes CC write narrow to OTHER; the
        proven all-lanes SFPENCC (word-exact against the capability
        table's encoding, via xtt_effect_set::cc_write_all_lanes) restores
-       ALL.
+       ALL.  Raw/opaque instructions are CC-TRANSPARENT, mirroring the
+       shipped CC synthesis exactly (see transfer_insn); UNPROVED arises
+       only from disagreeing CFG joins and stack over/underflow, and a
+       typed CC write recovers from it.
 
    Classification is derived exclusively from:
      (a) the typed effect attribute family via rvtt_insn_effects
@@ -405,9 +408,19 @@ transfer_insn (dstown_state &s, const insn_facts &f, rtx_insn *insn)
 {
   if (f.poison)
     {
+      /* Opacity is a hard boundary for the memory-correctness surfaces
+	 (RWC counters, layout, and -- via the record kill in the scan
+	 below -- Dst contents), but it is CC-TRANSPARENT: this mirrors
+	 the shipped CC synthesis, which pairs v_if brackets across raw
+	 asm statements and rewrites the outermost restore to the
+	 word-exact all-lanes SFPENCC regardless of surrounding raw
+	 code (gimple-rvtt-cc.cc) -- i.e. the compiler already bakes in
+	 the contract that raw sequences never hand narrowed lanes to
+	 typed code.  A raw CC-narrow feeding typed loads would already
+	 be miscompiled by every existing v_endif; this pass inherits
+	 exactly that established contract, adding no new assumption.  */
       s.rwc_epoch = INSN_UID (insn) * 4 + 1;
       s.layout_epoch = INSN_UID (insn) * 4 + 2;
-      s.poison_cc ();
       return;
     }
   if (f.rwc_boundary)
@@ -416,7 +429,10 @@ transfer_insn (dstown_state &s, const insn_facts &f, rtx_insn *insn)
     s.layout_epoch = INSN_UID (insn) * 4 + 2;
   if (f.cc_push)
     s.cc_push ();
-  if (f.cc_write && s.cc != CC_UNPROVED)
+  /* A typed CC write fully determines the current lane state, so it
+     also recovers from an unproved state (e.g. after a lossy join);
+     only the saved stack below stays whatever it was.  */
+  if (f.cc_write)
     s.cc = f.cc_write_all_lanes ? CC_ALL : CC_OTHER;
   if (f.cc_pop)
     s.cc_pop ();
