@@ -86,6 +86,83 @@ planner_config_ownership_ok (function *fn, const rvtt_macro::caps *c)
   return true;
 }
 
+/* Region-scoped configuration ownership (WP9; the refinement the
+   function-global proof documents).  Used ONLY for proven CC-template
+   programs; every other shape keeps the conservative function-global
+   gate above, so their formation and refusal behavior is unchanged.
+
+   Soundness bounds, matching the deleted quarantined pass's select
+   contract ("no other Tensix issue may own config, CC, LREG, or
+   calendar state between the materialization and a launch"):
+
+   - The planner's configuration prefix rewrites EVERY owned destination
+     the calendar consumes (templates, sequence words, misc; the CC
+     programs absorb no stride, so no address-modifier slot is read), so
+     foreign configuration writes BEFORE the prefix are dead.
+
+   - Between the prefix placement point and the region end -- the
+     preheader tail plus the loop body for a loop-body region, or the
+     region span itself for a straight-line one -- there must be no
+     call, no inline assembly, and no typed access to an owned
+     configuration destination.  For a loop-body region the scope also
+     covers the chain from the consumed trailing enable, so no opaque
+     issue can sit between the lane-state proof and the loop.
+
+   - Foreign code AFTER the region is tolerated: the LLK ownership
+     convention (carried from the frozen pass and its silicon-proven
+     integrations) is that every SFPLOADMACRO consumer programs its own
+     descriptors before launching.  This is a documented accepted risk,
+     mirrored in docs/MACRO_PLANNER.md.  */
+
+static bool
+planner_scope_insn_clean_p (rtx_insn *insn, const rvtt_macro::caps *c)
+{
+  if (!NONDEBUG_INSN_P (insn))
+    return true;
+  if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+    return false;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (!e.opaque
+      && ((e.config_dests_written | e.config_dests_read)
+	  & c->owned_config_dests))
+    return false;
+  return true;
+}
+
+static bool
+planner_region_config_ownership_ok (const macro_region &region,
+				    basic_block config_preheader,
+				    rtx_insn *scope_begin,
+				    const rvtt_macro::caps *c)
+{
+  /* The region's own basic block from the scope begin (the prefix
+     anchor for straight-line regions; the block head for loop bodies,
+     whose every trip re-executes under the preheader-materialized
+     configuration).  */
+  basic_block bb = region.bb;
+  rtx_insn *from = config_preheader ? BB_HEAD (bb) : scope_begin;
+  for (rtx_insn *insn = from; insn; insn = NEXT_INSN (insn))
+    {
+      if (!planner_scope_insn_clean_p (insn, c))
+	return false;
+      if (insn == BB_END (bb) || insn == region.last)
+	break;
+      if (!config_preheader && insn == region.last)
+	break;
+    }
+  /* For a loop-body region: the preheader from the prefix insertion
+     point to the loop entry.  The prefix is placed at the block end
+     (before a trailing jump), so only the jump can follow it --
+     verified here rather than assumed.  */
+  if (config_preheader)
+    {
+      rtx_insn *tail = BB_END (config_preheader);
+      if (tail && !JUMP_P (tail) && !planner_scope_insn_clean_p (tail, c))
+	return false;
+    }
+  return true;
+}
+
 /* Prove that hard register VALUE has no use after START before an
    all-lane definition kills it (the frozen pass's proof idiom).  */
 
@@ -202,9 +279,12 @@ loop_trip_weight (basic_block body, basic_block preheader,
 static bool
 loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
 		   const macro_descriptor &desc, gcov_type body_count,
-		   gcov_type preheader_count, unsigned n_runs)
+		   gcov_type preheader_count, unsigned n_runs,
+		   unsigned peel_rows)
 {
-  unsigned total_rows = region.rows.length ();
+  /* A peeled first row (the WP9 lane-proof peel) stays explicit on both
+     sides of the comparison and cancels out.  */
+  unsigned total_rows = region.rows.length () - peel_rows;
   unsigned per_trip_macro = total_rows * schedule.ii
     + n_runs * desc.drain_slots;
   unsigned per_trip_explicit = total_rows * explicit_row_cost (region);
@@ -445,8 +525,11 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
     }
 
   /* Planned destination of each explicit reload: the src field of the
-     template consuming its value (decoded from the descriptor).  */
+     template consuming its value (decoded from the descriptor), or --
+     for a load feeding the coalesced lane-merge (WP9) -- the shared
+     launch VD the predicated-overwrite dataflow flows through.  */
   unsigned explicit_planned[8] = {};
+  bool explicit_planned_valid[8] = {};
   for (unsigned ix = 0; ix != row0.insns.length (); ++ix)
     {
       const macro_event &ev = schedule.events[ix];
@@ -458,6 +541,17 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
       for (unsigned jx = 0; jx != row0.insns.length (); ++jx)
 	{
 	  const macro_event &cons = schedule.events[jx];
+	  if (cons.realization == macro_event::CC_COALESCED)
+	    {
+	      xtt_effect_set ce = rvtt_insn_effects (row0.insns[jx]);
+	      if ((ce.lreg_read & e.lreg_write)
+		  && !desc.launches.is_empty ())
+		{
+		  explicit_planned[ix] = desc.launches[0].vd;
+		  explicit_planned_valid[ix] = true;
+		}
+	      continue;
+	    }
 	  if (cons.realization != macro_event::LAUNCHED_TEMPLATE_SLOT
 	      || cons.is_store || cons.template_id >= desc.n_templates)
 	    continue;
@@ -468,7 +562,10 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	  if (rvtt_macro::decode_template (desc.templ[cons.template_id],
 					   &spec)
 	      && spec.src_c)
-	    explicit_planned[ix] = spec.src_c;
+	    {
+	      explicit_planned[ix] = spec.src_c;
+	      explicit_planned_valid[ix] = true;
+	    }
 	}
     }
 
@@ -530,7 +627,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	      {
 		/* Explicit reload retargeted to its planned register.  */
 		rtx pat = copy_rtx (PATTERN (region.rows[r].insns[ix]));
-		if (ix < 8 && explicit_planned[ix])
+		if (ix < 8 && explicit_planned_valid[ix])
 		  {
 		    rtx set = GET_CODE (pat) == PARALLEL
 		      ? XVECEXP (pat, 0, 0) : pat;
@@ -542,6 +639,12 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		emit_insn (pat);
 	      }
 	  }
+      /* WP9: the proven CC-template program keeps the row's typed
+	 separator in place -- its issue slot is the restore's
+	 visibility slot (macro_cc_model), so the next row's launch
+	 latches the restored all-lanes mask.  Re-emitted verbatim.  */
+      if (desc.keep_separator && row.separator)
+	emit_insn (copy_rtx (PATTERN (row.separator)));
     }
   for (int d = 0; d != desc.drain_slots; ++d)
     emit_insn (gen_rvtt_sfpnop ());
@@ -578,10 +681,29 @@ form_region (function *fn, macro_region &region,
 
   if (!planner_config_ownership_ok (fn, c))
     {
-      if (dump)
-	fprintf (dump, "Macro-planner formation-refusal:"
-		 " config-ownership-unproven\n");
-      return false;
+      /* WP9: proven CC-template programs fall back to the region-scoped
+	 ownership proof (see planner_region_config_ownership_ok); every
+	 other shape keeps the conservative function-global gate.  */
+      bool scoped_ok = false;
+      if (desc.cc.active)
+	{
+	  basic_block scoped_preheader = region.loop_body
+	    ? loop_region_preheader (fn, region, nullptr) : nullptr;
+	  if (!region.loop_body || scoped_preheader)
+	    {
+	      rtx_insn *anchor = region.rows[0].enable
+		? region.rows[0].enable : region.rows[0].insns[0];
+	      scoped_ok = planner_region_config_ownership_ok
+		(region, scoped_preheader, anchor, c);
+	    }
+	}
+      if (!scoped_ok)
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " config-ownership-unproven\n");
+	  return false;
+	}
     }
 
   /* Every planner-owned physical LREG must be dead after the region.  */
@@ -648,28 +770,68 @@ form_region (function *fn, macro_region &region,
      was written once outside the loop, the proven preheader's trailing
      enable (whole-body ownership keeps it live across every trip).  */
   bool emit_enable_copy = true;
+  unsigned peel_rows = 0;
   if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
     {
       rtx_insn *trailing = config_preheader
 	? preheader_trailing_enable (config_preheader) : nullptr;
-      if (!trailing)
+      if (trailing)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " all-lanes-proof-missing\n");
-	  return false;
+	  if (!cc_enable_all_lanes_proved_p (trailing))
+	    {
+	      /* A trailing pure CC write exists but its written lane
+		 state is not provably the all-lanes pattern (lanes-off,
+		 partial mask, complement, ...): name the unproved
+		 enable.  */
+	      if (dump)
+		fprintf (dump, "Macro-planner formation-refusal:"
+			 " cc-enable-unproved\n");
+	      return false;
+	    }
+	  emit_enable_copy = false;
 	}
-      if (!cc_enable_all_lanes_proved_p (trailing))
+      else
 	{
-	  /* A trailing pure CC write exists but its written lane state
-	     is not provably the all-lanes pattern (lanes-off, partial
-	     mask, complement, ...): name the unproved enable.  */
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " cc-enable-unproved\n");
-	  return false;
+	  /* First-row peel (WP9): when no typed ambient enable exists
+	     -- the real LLK kernels establish the lane state through
+	     opaque init the typed IR cannot see -- a CC-template row's
+	     OWN all-lanes restore is the proof source: the first row
+	     stays byte-original in place, its typed restore (proven
+	     all-lanes through the P0 sfpencc derivation, executing
+	     before the row's store, after which no member writes CC)
+	     establishes the entry lane state for the formed remainder.
+	     Later rows hold inductively: the launched restore template
+	     re-writes the all-lanes mask and nothing in a row clears
+	     the enable state the peeled restore set.  Rows without an
+	     in-row proven restore keep the named refusal.  */
+	  rtx_insn *peel_restore = nullptr;
+	  if (desc.cc.active && region.rows.length () > 1)
+	    for (rtx_insn *member : region.rows[0].insns)
+	      {
+		xtt_effect_set e = rvtt_insn_effects (member);
+		if (e.cc_write && !e.cc_read && !e.lreg_read
+		    && !e.lreg_write && e.cc_write_all_lanes)
+		  peel_restore = member;
+	      }
+	  if (!peel_restore)
+	    {
+	      if (dump)
+		fprintf (dump, "Macro-planner formation-refusal:"
+			 " all-lanes-proof-missing\n");
+	      return false;
+	    }
+	  peel_rows = 1;
+	  emit_enable_copy = false;
 	}
-      emit_enable_copy = false;
+    }
+
+  /* The peeled first row stays explicit; the formed region begins at
+     the next row.  A run consisting only of the peeled row drops out.  */
+  if (peel_rows)
+    {
+      run_begins[0] += peel_rows;
+      if (run_begins.length () > 1 && run_begins[0] >= run_begins[1])
+	run_begins.ordered_remove (0);
     }
 
   /* Profitability.  Straight-line: every run independently amortizes
@@ -679,7 +841,8 @@ form_region (function *fn, macro_region &region,
   if (region.loop_body)
     {
       if (!loop_profitable_p (region, schedule, desc, body_count,
-			      preheader_count, run_begins.length ()))
+			      preheader_count, run_begins.length (),
+			      peel_rows))
 	{
 	  if (dump)
 	    fprintf (dump, "Macro-planner formation-refusal:"
@@ -704,9 +867,11 @@ form_region (function *fn, macro_region &region,
       }
 
   /* Emission deletes each row's typed Dst separator; that is only
-     sound when the launch calendar absorbed the stride.  */
+     sound when the launch calendar absorbed the stride, or when the
+     proven program keeps the separator in place (WP9: the CC-template
+     programs re-emit it verbatim as the restore-visibility slot).  */
   for (const macro_row &row : region.rows)
-    if (row.separator && !schedule.absorbed_stride)
+    if (row.separator && !schedule.absorbed_stride && !desc.keep_separator)
       {
 	if (dump)
 	  fprintf (dump, "Macro-planner formation-refusal:"
@@ -723,9 +888,10 @@ form_region (function *fn, macro_region &region,
 			config_preheader, emit_enable_copy);
     }
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s\n",
-	     region.rows.length (), run_begins.length (),
-	     config_preheader ? " config=preheader" : "");
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s\n",
+	     region.rows.length () - peel_rows, run_begins.length (),
+	     config_preheader ? " config=preheader" : "",
+	     peel_rows ? " lane-proof=peeled-first-row" : "");
   return true;
 }
 
