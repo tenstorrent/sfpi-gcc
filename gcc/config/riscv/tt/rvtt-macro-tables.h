@@ -449,6 +449,20 @@ extern void decode_misc_fields (uint32_t word, unsigned *store_mod0,
 				unsigned *uses_load_mod0_mask,
 				unsigned *delay_kind_mask);
 
+/* Whether a DERIVED calendar may absorb the row's Dst stride into a
+   launch's auto-increment address mode on this CPU.  BH is proven end
+   to end (the derived unary max/min calendar is CRAQ bit-exact through
+   the generic simulator path).  WH is NOT: the WH-sim execution of a
+   derived absorbed-stride calendar returns position-shuffled tiles
+   after the first (laneR1 evidence 2026-08-17, wh-onma trace: launch
+   rows and store rows correct, data displaced from the second tile
+   on), the same open WH Dst-advance frontier as
+   FINDING-wh-dst-autoincr-fresh-maxmin.md and WP8 §6b(4)'s dual-slot
+   bank-base proof.  WH select (which keeps its separator and absorbs
+   nothing) passes the same path, so the boundary is absorption
+   itself.  Refusal name: derived-stride-absorption-unproven.  */
+extern bool derived_stride_absorption_proven (const caps *);
+
 /* ------------------------------------------------------------------ */
 /* Fixed architectural words (WH/BH-common).			      */
 /* ------------------------------------------------------------------ */

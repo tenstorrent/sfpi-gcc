@@ -1055,6 +1055,16 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
       ds->refusal = ds->cal.refusal;
       return false;
     }
+  /* Stride absorption in a DERIVED calendar is a per-CPU proven
+     envelope (rvtt-macro-tables.cc derived_stride_absorption_proven):
+     the WH launch auto-increment/dual-slot machinery is the open WH
+     Dst-advance frontier and refuses by name.  */
+  if (schedule.absorbed_stride
+      && !rvtt_macro::derived_stride_absorption_proven (c))
+    {
+      ds->refusal = "derived-stride-absorption-unproven";
+      return false;
+    }
   if (ds->cal.has_staging_copy)
     {
       rvtt_macro::staging_copy_facts copy;

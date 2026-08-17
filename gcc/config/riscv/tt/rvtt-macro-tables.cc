@@ -862,4 +862,19 @@ decode_misc_fields (uint32_t word, unsigned *store_mod0,
   *delay_kind_mask = (word >> 8) & 0xfu;
 }
 
+bool
+derived_stride_absorption_proven (const caps *c)
+{
+  /* BH: the derived unary max/min calendar (absorbed stride through
+     the owned single-slot SETC16 program, launch auto-increment mode)
+     is CRAQ bit-exact through the generic simulator path.  WH: the
+     same derived calendar returns position-shuffled tiles after the
+     first on the WH simulator while every launch's latched Dst row is
+     correct (laneR1 wh-onma trace, 2026-08-17) -- the open WH
+     Dst-advance/dual-slot frontier (FINDING-wh-dst-autoincr-fresh-
+     maxmin.md; WP8 §6b(4)).  Proven WH derived calendars must keep
+     their separators until that frontier closes.  */
+  return c && c->cpu == CPU_BH;
+}
+
 }  /* namespace rvtt_macro */
