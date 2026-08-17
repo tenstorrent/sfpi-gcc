@@ -33,7 +33,15 @@ struct macro_event
 {
   rtx_insn *origin;		/* region insn this event realizes     */
   xtt_subunit_t subunit;
-  enum realization_t { LAUNCHED_TEMPLATE_SLOT, EXPLICIT_INSN } realization;
+  /* CC_COALESCED (WP9): a lane-merge value event (a CC-predicated
+     operation that reads its own destination) realized by the
+     calendar's predicated-overwrite dataflow -- the shared launch VD
+     receives every payload load and the post-visibility load is the
+     lane-predicated write -- so the event issues no word and occupies
+     no template slot.  The dataflow and timing proof obligations live
+     in descriptor synthesis and the Layer-7 verifier.  */
+  enum realization_t { LAUNCHED_TEMPLATE_SLOT, EXPLICIT_INSN,
+		       CC_COALESCED } realization;
   int  slot;			/* issue slot of the carrying word     */
   int  programmed_delay;	/* slots after the carrier; -1 unknown */
   unsigned lreg_dest;		/* write-port accounting	       */
@@ -67,6 +75,10 @@ extern const char *macro_sched_refusal_sequence_encoding_unproven;
 extern const char *macro_sched_refusal_template_capacity_exceeded;
 extern const char *macro_sched_refusal_port_conflict;
 extern const char *macro_sched_refusal_latency_violation;
+/* A CC-dependent value event in a predicate-writing row whose
+   realization (template hosting or coalescing) cannot be proven; shared
+   spelling with the descriptor layer's CC refusal.  */
+extern const char *macro_sched_refusal_cc_template_unproved;
 
 /* Derive and dump the schedule of REGION's canonical row for carrier
    grouping CANDIDATE.  The grouping search is deterministic and

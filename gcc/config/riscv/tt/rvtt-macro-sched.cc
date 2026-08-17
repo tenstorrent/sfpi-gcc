@@ -82,6 +82,8 @@ const char *macro_sched_refusal_template_capacity_exceeded
   = "template-capacity-exceeded";
 const char *macro_sched_refusal_port_conflict = "port-conflict";
 const char *macro_sched_refusal_latency_violation = "latency-violation";
+const char *macro_sched_refusal_cc_template_unproved
+  = "cc-template-unproved";
 
 namespace {
 
@@ -112,6 +114,7 @@ struct row_item
   rtx address, mode, addr_mode;	/* Dst accesses only */
   int carrier;			/* carrier group index, or -1	*/
   bool launched;		/* launched sequence event	*/
+  bool coalesced;		/* WP9 lane-merge, no issued word */
 };
 
 /* Find the proven sequence program matching MACRO_INDEX and the derived
@@ -173,6 +176,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       item.address = item.mode = item.addr_mode = nullptr;
       item.carrier = -1;
       item.launched = false;
+      item.coalesced = false;
       if (item.effects.dst_mem_read || item.effects.dst_mem_write)
 	if (!rvtt_dst_access_operands (insn, item.effects, &item.address,
 				       &item.mode, &item.addr_mode))
@@ -250,9 +254,23 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   else
     return false;		/* deterministic search exhausted */
 
+  /* WP9 CC-template rows: a row whose slice carries a predicate
+     definition (a CC-writing value event reading an LREG).  Region
+     discovery only admits CC writers in the definition and proven
+     all-lanes-restore roles; here they select the CC hosting and
+     coalescing rules below.  */
+  bool row_has_cc_def = false;
+  for (row_item &item : items)
+    row_has_cc_def |= !item.address && item.effects.cc_write
+      && item.effects.lreg_read != 0;
+
   /* Launched-event hosting: a non-Dst value event is hosted on the
      carrier of its earliest LREG producer that is a Dst load; a store
-     rides its own carrier as a delayed store event.  */
+     rides its own carrier as a delayed store event.  In a
+     predicate-writing row, CC-READING value events are never template
+     events -- their lane predication depends on the in-row definition,
+     whose deferred visibility a template realization cannot honor --
+     they are realized by coalescing below or refuse by name.  */
   unsigned launched_events = 0, template_events = 0;
   for (unsigned ix = 0; ix != items.length (); ++ix)
     {
@@ -262,6 +280,8 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       if (item.effects.subunit != XTT_SU_SIMPLE
 	  && item.effects.subunit != XTT_SU_ROUND)
 	continue;		/* stays an explicit issue (e.g. mad)  */
+      if (row_has_cc_def && item.effects.cc_read && !item.effects.cc_write)
+	continue;		/* lane-merge candidate (see below)    */
       uint32_t needed = item.effects.lreg_read;
       for (unsigned p = 0; p != ix && item.carrier < 0; ++p)
 	if (items[p].address && items[p].effects.dst_mem_read
@@ -274,6 +294,70 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	  ++template_events;
 	}
     }
+
+  /* The row's pure all-lanes CC restore (admitted by discovery only
+     after a definition) rides the LAST-issued load carrier -- the
+     latest launch available to a CC event -- so its execution follows
+     every predicated event of the row.  The visibility obligations are
+     proven by descriptor synthesis against the matched program's
+     delays.  */
+  if (row_has_cc_def)
+    {
+      int last_load_carrier = -1;
+      for (row_item &item : items)
+	if (item.address && item.effects.dst_mem_read)
+	  last_load_carrier = item.carrier;
+      if (last_load_carrier >= 0)
+	for (row_item &item : items)
+	  if (!item.address && !item.launched
+	      && item.effects.cc_write && !item.effects.lreg_read
+	      && !item.effects.lreg_write)
+	    {
+	      item.carrier = last_load_carrier;
+	      item.launched = true;
+	      ++launched_events;
+	      ++template_events;
+	    }
+    }
+
+  /* Lane-merge coalescing (WP9).  In a predicate-writing row every
+     unhosted CC-reading value event must be the lane-merge shape --
+     it reads its own destination (the live value), takes exactly one
+     other LREG input, both produced by this row's Dst loads, and its
+     result is consumed by the row's store -- realized by the
+     calendar's predicated-overwrite dataflow with no issued word.
+     Anything else has no proven CC realization and refuses by name.  */
+  const char *cc_refusal = nullptr;
+  if (row_has_cc_def)
+    for (unsigned ix = 0; ix != items.length () && !cc_refusal; ++ix)
+      {
+	row_item &item = items[ix];
+	if (item.address || item.launched
+	    || !item.effects.cc_read || item.effects.cc_write)
+	  continue;
+	uint32_t dest = item.effects.lreg_write;
+	uint32_t live = item.effects.lreg_read & dest;
+	uint32_t other = item.effects.lreg_read & ~dest;
+	bool merge_shape = dest && live == dest && other
+	  && (other & (other - 1)) == 0;
+	bool live_from_load = false, other_from_load = false;
+	for (unsigned p = 0; p != ix; ++p)
+	  if (items[p].address && items[p].effects.dst_mem_read)
+	    {
+	      live_from_load |= (items[p].effects.lreg_write & live) != 0;
+	      other_from_load |= (items[p].effects.lreg_write & other) != 0;
+	    }
+	bool store_consumes = false;
+	for (unsigned s = ix + 1; s != items.length (); ++s)
+	  if (items[s].effects.dst_mem_write)
+	    store_consumes |= (items[s].effects.lreg_read & dest) != 0;
+	if (merge_shape && live_from_load && other_from_load
+	    && store_consumes)
+	  item.coalesced = true;
+	else
+	  cc_refusal = macro_sched_refusal_cc_template_unproved;
+      }
+
   for (row_item &item : items)
     if (item.effects.dst_mem_write && item.carrier >= 0)
       ++launched_events;	/* the delayed store event	       */
@@ -298,7 +382,13 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      into the carrier of the last Dst access.  */
   int absorbed_stride = 0;
   int absorb_carrier = -1;
-  if (row.separator && row.dst_delta)
+  /* A predicate-writing row never absorbs its separator: the explicit
+     counter word occupies the issue slot in which the row-end restore's
+     CC result becomes visible (cc_visibility_lag), so the NEXT row's
+     store-carrying launch latches the restored all-lanes mask.
+     Absorbing the stride would compress the interval and latch a stale
+     predicate.  */
+  if (row.separator && row.dst_delta && !row_has_cc_def)
     {
       rvtt_macro::setc16_program programs[8];
       unsigned n_programs = 0;
@@ -341,7 +431,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	      ++launches;
 	    }
 	}
-      else if (!item.launched)
+      else if (!item.launched && !item.coalesced)
 	{
 	  ++explicit_issues;
 	  ++slot;
@@ -351,8 +441,9 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 
   /* Sequence lookup per carrier: derived events in program order;
      template ids in derivation order.  Delays come exclusively from the
-     matched proven program.  */
-  const char *refusal = nullptr;
+     matched proven program.  A CC-realization refusal from the
+     coalescing rule above takes precedence.  */
+  const char *refusal = cc_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());
@@ -438,6 +529,14 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	  if (ev.programmed_delay < 0)
 	    all_delays_known = false;
 	}
+      else if (item.coalesced)
+	{
+	  /* Realized by the predicated-overwrite dataflow: no issued
+	     word, no template slot, no execution resource.  */
+	  ev.realization = macro_event::CC_COALESCED;
+	  ev.slot = -1;
+	  ev.issues_word = false;
+	}
       else
 	{
 	  ev.realization = macro_event::EXPLICIT_INSN;
@@ -449,13 +548,25 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       out->events.safe_push (ev);
 
       rvtt_macro_sched::core_event core;
-      core.subunit = (int) item.effects.subunit;
-      core.port = item.effects.lreg_write
-	? (int) get_attr_xtt_lreg_write_port (item.insn)
-	: rvtt_macro_sched::CP_NONE;
-      core.carrier_slot = ev.slot;
-      core.delay = ev.realization == macro_event::LAUNCHED_TEMPLATE_SLOT
-	? ev.programmed_delay : 0;
+      if (item.coalesced)
+	{
+	  /* No physical event: excluded from occupancy/port/latency
+	     checking (the descriptor layer proves its realization).  */
+	  core.subunit = rvtt_macro_sched::CSU_NONE;
+	  core.port = rvtt_macro_sched::CP_NONE;
+	  core.carrier_slot = 0;
+	  core.delay = 0;
+	}
+      else
+	{
+	  core.subunit = (int) item.effects.subunit;
+	  core.port = item.effects.lreg_write
+	    ? (int) get_attr_xtt_lreg_write_port (item.insn)
+	    : rvtt_macro_sched::CP_NONE;
+	  core.carrier_slot = ev.slot;
+	  core.delay = ev.realization == macro_event::LAUNCHED_TEMPLATE_SLOT
+	    ? ev.programmed_delay : 0;
+	}
       core_events.safe_push (core);
     }
 
@@ -499,10 +610,14 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	  || !core_check_write_ports (core_events.address (),
 				      core_events.length (), 3))
 	refusal = macro_sched_refusal_port_conflict;
-      /* Latency along LREG def->use edges.  */
+      /* Latency along LREG def->use edges.  Edges into or out of a
+	 coalesced lane-merge have no physical event on either end --
+	 its realization (and the timing proof) is the descriptor
+	 layer's obligation.  */
       for (unsigned i = 0; i != items.length () && !refusal; ++i)
 	for (unsigned j = i + 1; j != items.length () && !refusal; ++j)
-	  if (items[i].effects.lreg_write & items[j].effects.lreg_read)
+	  if ((items[i].effects.lreg_write & items[j].effects.lreg_read)
+	      && !items[i].coalesced && !items[j].coalesced)
 	    {
 	      int ready = core_writeback_slot (core_events[i]);
 	      int exec = core_writeback_slot (core_events[j]);
