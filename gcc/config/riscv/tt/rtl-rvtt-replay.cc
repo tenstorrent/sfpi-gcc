@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "recog.h"
 #include "rvtt-protos.h"
+#include "rvtt-effects.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -104,6 +105,7 @@ struct replay_sequence
   unsigned parent; // The 1-shorter sequence from whence this grew
   unsigned hash;
   unsigned length; // number of insns (does not include empty insns)
+  int companion_ok = -1; // cached span_companion_sound_p verdict (-1 unset)
 
   // Instances of this sequence. By construction these are in increasing
   // starting insn. During construction these might overlap.  We deal with that
@@ -484,8 +486,115 @@ active_triage (replay_block const &block, replay_active &active, replay_list &li
     fprintf (dump_file, "%u candidates\n\n", unsigned (active.size ()));
 }
 
+/* Companion-group soundness of a candidate capture span (TOP3-2 layer 2,
+   the value+companion pairing contract).
+
+   STICKY is the function's shadow-coupling possibility
+   (rvtt_shadow_coupling_possible): index tracking couples every
+   value-bank move to the companion bank, so under a possibly-enabled
+   coupling a capture may only contain instructions whose companion
+   behaviour is typed.  Refusals, each by name, leaving code
+   byte-identical:
+
+   - shadow-state-unproved: an effect-opaque member under possibly-enabled
+     index tracking (its value-bank behaviour is unprovable);
+   - multiresult-companion-split: a member writes the value bank without
+     typed companion results, or the span boundary separates a
+     multi-result member from its adjacent zero-length companion
+     markers (deleting a clone must never orphan the markers that carry
+     the group's fixed-LREG dataflow).  */
+
+static bool
+span_companion_sound_p (replay_block const &block, replay_span span,
+			bool sticky)
+{
+  int first_real = -1;
+  for (unsigned ix = span.begin; ix != span.end; ++ix)
+    {
+      if (block[ix].empty)
+	continue;
+      if (first_real < 0)
+	first_real = ix;
+
+      rtx_insn *insn = block[ix].insn;
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      xtt_multiresult_group group;
+      bool multi = rvtt_multiresult_group (insn, e, &group);
+      if (sticky)
+	{
+	  if (e.opaque)
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "Refusing capture: shadow-state-unproved:"
+			 " insn %d is effect-opaque under possibly-enabled"
+			 " index tracking\n", INSN_UID (insn));
+	      return false;
+	    }
+	  if (!multi && (e.lreg_write & 0xF))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "Refusing capture: multiresult-companion-split:"
+			 " insn %d writes the value bank without typed"
+			 " companion results under possibly-enabled"
+			 " index tracking\n", INSN_UID (insn));
+	      return false;
+	    }
+	}
+
+      if (multi && (ix == unsigned (first_real) || ix + 1 >= span.end))
+	{
+	  uint32_t group_mask
+	    = group.value_write_mask | group.companion_write_mask;
+	  // Boundary integrity: adjacent zero-length companion markers
+	  // outside the span must not be split from their instruction.
+	  if (ix + 1 >= span.end)
+	    for (unsigned probe = span.end; probe != block.size (); ++probe)
+	      {
+		if (!block[probe].empty)
+		  break;
+		uint32_t mask;
+		if (rvtt_lreg_marker (block[probe].insn, &mask)
+		    && (mask & group_mask))
+		  {
+		    if (dump_file)
+		      fprintf (dump_file,
+			       "Refusing capture:"
+			       " multiresult-companion-split: boundary"
+			       " separates insn %d from companion marker"
+			       " insn %d\n", INSN_UID (insn),
+			       INSN_UID (block[probe].insn));
+		    return false;
+		  }
+	      }
+	  if (ix == unsigned (first_real))
+	    for (unsigned probe = span.begin; probe-- != 0;)
+	      {
+		if (!block[probe].empty)
+		  break;
+		uint32_t mask;
+		if (rvtt_lreg_marker (block[probe].insn, &mask)
+		    && (mask & group_mask))
+		  {
+		    if (dump_file)
+		      fprintf (dump_file,
+			       "Refusing capture:"
+			       " multiresult-companion-split: boundary"
+			       " separates insn %d from companion marker"
+			       " insn %d\n", INSN_UID (insn),
+			       INSN_UID (block[probe].insn));
+		    return false;
+		  }
+	      }
+	}
+    }
+  return true;
+}
+
 static replay_sequence *
-pick_replay (replay_active &active, unsigned limit)
+pick_replay (replay_active &active, unsigned limit, replay_block const &block,
+	     bool sticky)
 {
   replay_sequence *result = nullptr;
   unsigned best = 0;
@@ -495,6 +604,11 @@ pick_replay (replay_active &active, unsigned limit)
       gcc_assert (seq->clones.size () > 1);
       if (seq->length > limit)
 	break;
+      if (seq->companion_ok < 0)
+	seq->companion_ok
+	  = span_companion_sound_p (block, seq->clones.front (), sticky);
+      if (!seq->companion_ok)
+	continue;
       // Quasar exec-while-load doesn't work, so we need an extra replay
       unsigned saving = (seq->clones.size () - 1) * (seq->length - 1)
 	- !(riscv_tt_fix_qsr_replay > 0);
@@ -1095,7 +1209,8 @@ loop_preserves_replay_p (class loop *loop)
 }
 
 static basic_block
-hoist_preheader (replay_sequence const &seq, replay_block const &block)
+hoist_preheader (replay_sequence const &seq, replay_block const &block,
+		 bitmap dirty_bbs)
 {
   basic_block bb = BLOCK_FOR_INSN (block[seq.clones.front ().begin].insn);
   class loop *loop = bb->loop_father;
@@ -1121,6 +1236,14 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block)
     {
       if (dump_file)
 	fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
+      return nullptr;
+    }
+  if (bitmap_bit_p (dirty_bbs, preheader->index))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Not hoisting: preheader bb %d may hold open recording"
+		 " state\n", preheader->index);
       return nullptr;
     }
 
@@ -1340,7 +1463,8 @@ counted_loop_payload (class loop *loop, replay_block &info,
 static void
 hoist_counted_loops (function *cfn,
 		     std::vector<replay_span> const &replay_spans,
-		     std::vector<bool> &persistent_slots)
+		     std::vector<bool> &persistent_slots,
+		     bitmap dirty_bbs, bool sticky)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
@@ -1348,10 +1472,15 @@ hoist_counted_loops (function *cfn,
       class loop *loop = bb->loop_father;
       if (!loop || loop->num == 0 || loop->header != bb)
 	continue;
+      if (bitmap_bit_p (dirty_bbs, bb->index))
+	// Recording state may be open here (unprovable user epoch).
+	continue;
 
       replay_block info;
       replay_sequence seq;
       if (!counted_loop_payload (loop, info, seq))
+	continue;
+      if (!span_companion_sound_p (info, seq.clones.front (), sticky))
 	continue;
 
       basic_block preheader = dedicated_loop_preheader (loop);
@@ -1360,6 +1489,14 @@ hoist_counted_loops (function *cfn,
 	  if (dump_file)
 	    fprintf (dump_file,
 		     "Not hoisting: loop has no dedicated preheader\n");
+	  continue;
+	}
+      if (bitmap_bit_p (dirty_bbs, preheader->index))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Not hoisting: preheader bb %d may hold open recording"
+		     " state\n", preheader->index);
 	  continue;
 	}
       // The counted-loop payload is its own single clone; across trips the
@@ -1430,10 +1567,13 @@ hoist_counted_loops (function *cfn,
 // context for it (see rvtt-cost.md).
 
 static bool
-unroll_launch_loop (class loop *loop)
+unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 {
   basic_block header = loop->header;
   if (loop->num_nodes != 1 || loop->header != loop->latch)
+    return false;
+  if (bitmap_bit_p (dirty_bbs, header->index))
+    // Recording state may be open here (unprovable user epoch).
     return false;
 
   // Pragma scope.  "#pragma GCC unroll" governs payload duplication: the
@@ -1608,7 +1748,7 @@ unroll_launch_loop (class loop *loop)
 }
 
 static void
-unroll_launch_loops (function *cfn)
+unroll_launch_loops (function *cfn, bitmap dirty_bbs)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
@@ -1616,7 +1756,7 @@ unroll_launch_loops (function *cfn)
       class loop *loop = bb->loop_father;
       if (!loop || loop->num == 0 || loop->header != bb)
 	continue;
-      unroll_launch_loop (loop);
+      unroll_launch_loop (loop, dirty_bbs);
     }
 }
 
@@ -1927,7 +2067,7 @@ conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
 }
 
 static void
-convert_isomorphic_runs (function *cfn)
+convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 {
   // Rediscover captures and launches structurally.
   std::vector<conv_capture *> captures;
@@ -1967,6 +2107,9 @@ convert_isomorphic_runs (function *cfn)
 	  conv_capture *cap = new conv_capture;
 	  cap->insn = insn;
 	  cap->bb = bb;
+	  if (bitmap_bit_p (dirty_bbs, bb->index))
+	    // Recording state may already be open around this capture.
+	    cap->valid = false;
 	  cap->begin = UINTVAL (begin);
 	  cap->len = UINTVAL (len);
 	  cap->exec = INTVAL (exec) != 0;
@@ -2061,6 +2204,9 @@ convert_isomorphic_runs (function *cfn)
 
       FOR_EACH_BB_FN (bb, cfn)
 	{
+	  if (bitmap_bit_p (dirty_bbs, bb->index))
+	    // Recording state may be open here (unprovable user epoch).
+	    continue;
 	  rtx_insn *stop = NEXT_INSN (BB_END (bb));
 	  rtx_insn *insn = BB_HEAD (bb);
 	  while (insn && insn != stop)
@@ -2224,12 +2370,42 @@ transform (function *cfn, unsigned buffer_size)
   basic_block bb;
   std::vector<replay_span> replay_spans;
 
+  /* Recording-epoch scoping (ownership-epoch model, TOP3-2 layer 2).
+
+     A user fixed capture opens a recording epoch over the replay
+     buffer's recording state.  When the typed instruction stream proves
+     the epoch closed (rvtt_replay_epoch_close: the payload's typed
+     lengths account for exactly the declared words), formation may
+     proceed around it -- in particular a payload of typed multi-result
+     instructions (indexed SFPSWAP, eight-definition SFPTRANSP) is
+     retained in the capture model rather than refusing the whole
+     function.  When the epoch is unprovable (opaque asm payload, or the
+     payload crosses the block), only the region where recording state
+     may still be open is refused: from the capture up to the next
+     explicit replay-owner instruction on each path.  An explicit typed
+     owner operation is an epoch boundary by the owner's contract -- a
+     TTREPLAY word issued while recording were still active would be
+     swallowed by the recording rather than executed, so a well-formed
+     owner protocol proves all prior recording closed.  Blocks whose
+     possibly-recording region contains any slot-occupying word (or
+     opaque asm) are excluded from formation and from the launch-family
+     rewrites below.
+
+     This scoping is gated on the replay-hoist optimization: in the
+     default configuration the legacy whole-function refusal is preserved
+     byte-identically.  */
+  bool scoped = riscv_tt_opt_replay_hoist > 0;
+  auto_bitmap dirty_bbs;      // excluded from formation/rewrites
+  auto_bitmap open_exit_bbs;  // recording state possibly open at exit
+
   // Determine replay_spans ranges
   replay_spans.emplace_back (0, buffer_size);
   FOR_EACH_BB_FN (bb, cfn)
     {
       rtx_insn *insn;
       unsigned shadow = 0;
+      bool open_unprovable = false;
+      rtx_insn *skip_until = nullptr;
       FOR_BB_INSNS (bb, insn)
 	{
 	  if (GET_CODE (insn) != INSN)
@@ -2241,6 +2417,14 @@ transform (function *cfn, unsigned buffer_size)
 	  if (GET_CODE (pattern) == CLOBBER)
 	    continue;
 
+	  if (skip_until)
+	    {
+	      // Inside a typed-closed user capture payload.
+	      if (insn == skip_until)
+		skip_until = nullptr;
+	      continue;
+	    }
+
 	  if (get_attr_type (insn) != TYPE_TENSIX)
 	    continue;
 
@@ -2248,11 +2432,22 @@ transform (function *cfn, unsigned buffer_size)
 	  auto type = is_replay_insn (span, insn);
 	  if (type == REPLAY_none)
 	    {
-	      if (shadow && get_attr_length (insn))
+	      if (scoped)
+		{
+		  if (open_unprovable && get_attr_length (insn))
+		    // A slot-occupying word in a possibly-recording
+		    // region.
+		    bitmap_set_bit (dirty_bbs, bb->index);
+		}
+	      else if (shadow && get_attr_length (insn))
 		shadow--;
 	      continue;
 	    }
-	  if (shadow)
+	  if (scoped)
+	    // Owner epoch boundary: possibly-open recording state is
+	    // proven closed at an explicit owner operation.
+	    open_unprovable = false;
+	  else if (shadow)
 	    {
 	      if (dump_file)
 		fprintf (dump_file, "User capturing or replaying during capture\n");
@@ -2265,7 +2460,58 @@ transform (function *cfn, unsigned buffer_size)
 	  else
 	    {
 	      if (type == REPLAY_fixed_capture)
-		shadow = span.end;
+		{
+		  if (!scoped)
+		    shadow = span.end;
+		  else
+		    {
+		      xtt_replay_epoch epoch
+			= rvtt_replay_epoch_close (insn, span.end);
+		      switch (epoch.status)
+			{
+			case xtt_replay_epoch::CLOSED:
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "User capture [%u,+%u): typed epoch"
+				     " closed at insn %d; payload retains"
+				     " %u multi-result insn(s)\n",
+				     span.begin, span.end,
+				     INSN_UID (epoch.close_at),
+				     epoch.multiresult_members);
+			  if (epoch.close_at != insn)
+			    skip_until = epoch.close_at;
+			  break;
+
+			case xtt_replay_epoch::OWNER_DURING_CAPTURE:
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "User capturing or replaying during capture\n");
+			  return;
+
+			case xtt_replay_epoch::OPAQUE_PAYLOAD:
+			case xtt_replay_epoch::CROSSES_BLOCK:
+			  if (dump_file)
+			    {
+			      fprintf (dump_file,
+				       "User capture [%u,+%u): recording epoch"
+				       " unprovable (%s",
+				       span.begin, span.end,
+				       epoch.status
+				       == xtt_replay_epoch::OPAQUE_PAYLOAD
+				       ? "opaque payload"
+				       : "payload crosses the block");
+			      if (epoch.blocker)
+				fprintf (dump_file, " at insn %d",
+					 INSN_UID (epoch.blocker));
+			      fprintf (dump_file, "); refusing formation"
+				       " until the next replay owner\n");
+			    }
+			  open_unprovable = true;
+			  bitmap_set_bit (dirty_bbs, bb->index);
+			  break;
+			}
+		    }
+		}
 
 	      span.end += span.begin;
 	    }
@@ -2294,11 +2540,71 @@ transform (function *cfn, unsigned buffer_size)
 		break;
 	      }
 	}
-      if (shadow)
+      if (scoped)
+	{
+	  if (open_unprovable)
+	    bitmap_set_bit (open_exit_bbs, bb->index);
+	}
+      else if (shadow)
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "User capturing across basic block\n");
 	  return;
+	}
+    }
+
+  /* Propagate possibly-open recording state over the CFG until each path
+     reaches an explicit replay-owner instruction (the epoch-boundary
+     axiom above).  Blocks whose possibly-recording prefix contains any
+     slot-occupying word or opaque asm are excluded from formation.  */
+  if (scoped && !bitmap_empty_p (open_exit_bbs))
+    {
+      std::vector<basic_block> work;
+      auto_bitmap visited;
+      unsigned ix;
+      bitmap_iterator bi;
+      edge e;
+      edge_iterator ei;
+      EXECUTE_IF_SET_IN_BITMAP (open_exit_bbs, 0, ix, bi)
+	FOR_EACH_EDGE (e, ei, BASIC_BLOCK_FOR_FN (cfn, ix)->succs)
+	  work.push_back (e->dest);
+      while (!work.empty ())
+	{
+	  basic_block cur = work.back ();
+	  work.pop_back ();
+	  if (cur == EXIT_BLOCK_PTR_FOR_FN (cfn)
+	      || !bitmap_set_bit (visited, cur->index))
+	    continue;
+	  bool closed = false;
+	  bool dirty = false;
+	  rtx_insn *insn;
+	  FOR_BB_INSNS (cur, insn)
+	    {
+	      if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN)
+		continue;
+	      rtx pattern = PATTERN (insn);
+	      if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+		continue;
+	      if (asm_noperands (pattern) >= 0 || recog_memoized (insn) < 0)
+		{
+		  dirty = true;
+		  continue;
+		}
+	      if (get_attr_type (insn) != TYPE_TENSIX)
+		continue;
+	      if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+		{
+		  closed = true;
+		  break;
+		}
+	      if (get_attr_length (insn))
+		dirty = true;
+	    }
+	  if (dirty)
+	    bitmap_set_bit (dirty_bbs, cur->index);
+	  if (!closed)
+	    FOR_EACH_EDGE (e, ei, cur->succs)
+	      work.push_back (e->dest);
 	}
     }
 
@@ -2331,9 +2637,14 @@ transform (function *cfn, unsigned buffer_size)
       fprintf (dump_file, "\n");
     }
 
+  // Shadow-coupling possibility gates the companion-pairing refusals in
+  // span_companion_sound_p; computed once per function.
+  bool sticky = rvtt_shadow_coupling_possible (cfn);
+
   std::vector<bool> persistent_slots (buffer_size, false);
   if (riscv_tt_opt_replay_hoist > 0)
-    hoist_counted_loops (cfn, replay_spans, persistent_slots);
+    hoist_counted_loops (cfn, replay_spans, persistent_slots, dirty_bbs,
+			 sticky);
 
   replay_block info; // insn info
   replay_list list; // list of sequences
@@ -2341,6 +2652,9 @@ transform (function *cfn, unsigned buffer_size)
   replay_active active; // pointers to active (under-consideration) sequences
   FOR_EACH_BB_FN (bb, cfn)
     {
+      if (bitmap_bit_p (dirty_bbs, bb->index))
+	// Recording state may be open here (unprovable user epoch).
+	continue;
       if (!scan_insns (info, bb))
 	continue;
 
@@ -2356,7 +2670,7 @@ transform (function *cfn, unsigned buffer_size)
 
       while (!active.empty ())
 	{
-	  auto *seq = pick_replay (active, spans.front ().end);
+	  auto *seq = pick_replay (active, spans.front ().end, info, sticky);
 	  if (!seq)
 	    break;
 
@@ -2368,7 +2682,7 @@ transform (function *cfn, unsigned buffer_size)
 	    slot = probe;
 
 	  basic_block preheader = riscv_tt_opt_replay_hoist > 0
-	    ? hoist_preheader (*seq, info) : nullptr;
+	    ? hoist_preheader (*seq, info, dirty_bbs) : nullptr;
 	  unsigned len = preheader
 	    ? replace_hoisted_sequence (*seq, info, slot->begin, preheader)
 	    : replace_sequence (*seq, info, slot->begin);
@@ -2401,8 +2715,8 @@ transform (function *cfn, unsigned buffer_size)
   // and the flag keeps the default configuration byte-identical.
   if (riscv_tt_opt_replay_hoist > 0)
     {
-      unroll_launch_loops (cfn);
-      convert_isomorphic_runs (cfn);
+      unroll_launch_loops (cfn, dirty_bbs);
+      convert_isomorphic_runs (cfn, dirty_bbs);
     }
 }
 
