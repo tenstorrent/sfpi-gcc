@@ -2,7 +2,8 @@
 // { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit 4295 >= 60" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Counted-loop replay payload" 1 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
-// { dg-final { scan-assembler-times "TTREPLAY" 2 } }
+// { dg-final { scan-assembler-times "TTREPLAY" 17 } }
+// { dg-final { scan-assembler-not "\\tbne\\t" } }
 
 // Sixteen-trip loop around a 10-slot payload: the profitability model gives
 // 16*(123 + 23*10) - 123*11 = 4295 centislots, far above the cost-table

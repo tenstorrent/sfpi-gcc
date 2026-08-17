@@ -1,14 +1,15 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Counted-loop shape: replay hoisting leaves a launch plus a typed TTINCRWC
-// in the loop body.  The pass proves whole-body ownership, places the owned
-// configuration in the dedicated preheader, and absorbs the per-iteration
-// increment into the payload store.
-// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 1 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
+// per trip, and the launch-loop unroll then replicates that delivery back
+// to back.  The pass proves whole-group ownership over the straight-line
+// eight-row run and absorbs every per-row increment into the payload store.
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t34, 2" 1 } }
 // { dg-final { scan-assembler-times "SFPSTORE\tL., 0, 0, 6" 1 } }
-// { dg-final { scan-assembler-times "TTREPLAY" 2 } }
+// { dg-final { scan-assembler-times "TTREPLAY" 9 } }
+// { dg-final { scan-assembler-not "\\tbne\\t" } }
 
 using vec_t = __xtt_vector;
 
