@@ -107,11 +107,30 @@ namespace {
    platform reserves slot 6 as the compiler-owned auto-increment scratch slot
    (the same slot the macro formation contract owns).
 
-   Wormhole: the modifier field is two bits wide and the active bank base
-   selects physical slot m or m+4.  Base ownership is not provable here, so
-   both physical slots of the scratch modifier are programmed (the dual-slot
-   rule as data): SrcA/B 7+2k, Dst 23+k, bias 48+k for k in {2, 6}.  The SFPI
-   no-op modifier is 3.
+   Wormhole: the modifier field is two bits wide and the bank base bit
+   (ADDR_MOD_SET_Base, thread configuration address 2) selects physical slot
+   m or m+4.  The SFPU platform contract pins the base to 1 while compiled
+   SFPI code executes: every LLK SFPU entry sequence sets the base before
+   the kernel body and clears it after (tt-llk wormhole_b0 cmath_common.h
+   set_addr_mod_base/clear_addr_mod_base, invoked from
+   _llk_math_eltwise_sfpu_start_/_done_ and peers), and the LLK states the
+   aliasing invariant outright ("with addr_mod_base=1, insn ADDR_MOD_3 ->
+   phys ADDR_MOD_7 (SFPU invariant, incr=0)", ckernel_sfpu_topk.h).  The
+   pass's own premise already stands on that contract: modifier 3 is only
+   an architectural no-op through the base-1 alias to physical slot 7 --
+   under base 0 it would name physical slot 3, which LLK FPU code programs
+   with live increments (llk_math_matmul.h Dst+8/bias+1).  So exactly one
+   physical slot is compiler-owned: scratch modifier 2 under base 1 =
+   physical slot 6, SrcA/B 19, Dst 29, bias 54.
+
+   The base-0 bank must never be written: physical slot 2 (SrcA/B 11,
+   Dst 25, bias 50) is LLK's ADDR_MOD_2, consumed with live strides by the
+   base-0 FPU/datacopy path (llk_math_eltwise_unary_datacopy.h MOV_8_ROWS,
+   Dst+8).  A historical dual-slot emission that also programmed slot 2
+   clobbered that state and corrupted every tile after the first on the
+   WH simulator (FINDING-wh-dst-autoincr-fresh-maxmin.md); the failure was
+   adjudicated as this miscompile, not a simulator gap.  The SFPI no-op
+   modifier is 3.
 
    QSR has no capability entry and therefore refuses.  */
 
@@ -156,7 +175,7 @@ target_autoincr_caps ()
   if (TARGET_XTT_TENSIX_BH)
     return { true, 7, 6, 1, 2, { { 18, 34, 53 }, { 0, 0, 0 } } };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 2, 2, { { 11, 25, 50 }, { 19, 29, 54 } } };
+    return { true, 3, 2, 1, 2, { { 19, 29, 54 }, { 0, 0, 0 } } };
   return { false, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
 }
 
