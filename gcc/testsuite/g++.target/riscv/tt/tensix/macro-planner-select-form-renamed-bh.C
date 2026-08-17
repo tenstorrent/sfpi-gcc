@@ -6,7 +6,13 @@
 // cc-restore-store-race, keyed on the derived slots and proven delays
 // alone (restore exec == store exec == 3) -- no name, misc word, or
 // data format participates.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
+// Default-ON promotion of -mtt-tensix-optimize-dst-ownership: the (now
+// default-on) ownership fold removes this raw body's provable-identity
+// Dst reload before the planner runs, and the folded shape refuses
+// earlier (cc-template-unproved) without ever reaching the pinned
+// race refusal.  Pin the -mno- spelling: the test's subject is the
+// adjudicated refusal on the unfolded shape.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mno-tt-tensix-optimize-dst-ownership -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
