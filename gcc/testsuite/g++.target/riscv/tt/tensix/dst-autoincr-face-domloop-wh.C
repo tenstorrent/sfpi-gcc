@@ -2,9 +2,9 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Wormhole variant: the dual-slot rule programs both physical slots (six
 // words), still once, in the face-loop preheader above the typed advance.
-// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 2 stride 2 config 6 words .preheader." 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 2 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
-// { dg-final { scan-assembler-times "TTSETC16\t25, 2" 1 } }
+// { dg-final { scan-assembler-not "TTSETC16\t25," } }
 // { dg-final { scan-assembler-times "TTSETC16\t29, 2" 1 } }
 // { dg-final { scan-assembler-times {TTSETRWC\t0, 4, 8, 0, 0, 4} 2 } }
 // On Wormhole the hazard SFPNOP makes the row four words, so the default

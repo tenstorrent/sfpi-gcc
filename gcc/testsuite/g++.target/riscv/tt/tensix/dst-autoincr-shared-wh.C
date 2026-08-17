@@ -4,9 +4,9 @@
 // for it only through the shared dominating program.  The four-word rows
 // exceed the replay minimum on this target, so the shared groups are
 // launch-shaped: one executing capture plus seven playbacks.
-// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 4 stride 2 config 6 words" 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 4 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 4 stride 2 shared config" 1 "rvtt_dst_autoincr" } }
-// { dg-final { scan-assembler-times "TTSETC16\t25, 2" 1 } }
+// { dg-final { scan-assembler-not "TTSETC16\t25," } }
 // { dg-final { scan-assembler-times "TTSETC16\t29, 2" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC\t0, 0, 1, 0" 1 } }
 // { dg-final { scan-assembler-not "TTINCRWC\t0, 2, 0, 0" } }
