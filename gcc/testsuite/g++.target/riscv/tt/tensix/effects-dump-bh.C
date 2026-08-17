@@ -1,12 +1,13 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-dump-effects" }
 // Golden self-check for the generated Layer-1 effect sets (macro-planner).
-// Each audited instruction's full effect line is pinned; unaudited
-// instructions (SFPMOV) and raw asm must report opaque.
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=-1 lreg-read=0x0 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=-1 lreg-read=0x0 lreg-write=0x2 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
+// Each audited instruction's full effect line is pinned; raw asm must
+// report opaque.  The D3 latency audit gave the load/round classes and
+// the bare all-lanes copy (SFPMOV mod 2, formerly opaque) their entries.
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=0 lreg-read=0x0 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=load latency=0 lreg-read=0x0 lreg-write=0x2 port=own cc=r config=0x0 rwc=none dst=r encodable=yes} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=mad latency=1 lreg-read=0x3 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x6 lreg-write=0x6 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=yes} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=round latency=-1 lreg-read=0x5 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=round latency=0 lreg-read=0x5 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=store latency=-1 lreg-read=0x1 lreg-write=0x0 port=none cc=r config=0x0 rwc=none dst=w encodable=yes} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=inc:d=2,cr=0 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=face:d=16 dst=none encodable=no} 1 } }
@@ -15,7 +16,9 @@
 // direct lanes-off SFPENCC keeps the bare (lane-state-unproved) write.
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w:all-lanes config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w config=0x0 rwc=none dst=none encodable=no} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: opaque} 2 } }
+// The audited bare copy (no CC access, no write-port claim).
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x4 port=none cc=none config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: opaque} 1 } }
 
 __attribute__((noinline)) void effects_probe ()
 {

@@ -44,6 +44,7 @@
 
   UNSPECV_SFPVARLREG
   UNSPECV_SFPRAWLREG_ACCESS
+  UNSPECV_TTREGION
 
   UNSPECV_SFPNOP
   UNSPECV_SFPBANKDONE
@@ -261,6 +262,30 @@
      ] UNSPECV_SFPRAWLREG_ACCESS)]
   "TARGET_XTT_TENSIX"
   "# RAWLREG %0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set_attr "length" "0")])
+
+;; Typed effects declaration markers for a raw instruction region (D2
+;; compiler half; consumed at gimple by the prgm-const freedom proof).
+;; Zero-length ghosts: they emit no Tensix instruction word.
+(define_insn "rvtt_ttregion_begin"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     ] UNSPECV_TTREGION)]
+  "TARGET_XTT_TENSIX"
+  "# TTREGION %0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set_attr "length" "0")])
+
+(define_insn "rvtt_ttregion_end"
+  [(unspec_volatile:XTT32SI [
+     (const_int 0)
+     ] UNSPECV_TTREGION)]
+  "TARGET_XTT_TENSIX"
+  "# TTREGION END"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])
@@ -523,8 +548,43 @@
      rvtt_mov_error (insn, which_alternative == 1);
      return which_alternative == 1 ? "BADLOAD\t%x0, %1" :"BADSTORE\t%x1, %0";
   }
+  ;; Effect audit (D3 latency audit, WH/BH): the surviving alternative
+  ;; is the all-lanes SFPMOV mod-2 copy (craq-sim TENSIX_EXECUTE_SFPMOV
+  ;; mod 2 forces the full lane mask): reads operand 1, writes every
+  ;; lane of operand 0, no CC access, configuration, or counter effect.
+  ;; S1 Simple; result latency 0 (Simple chains step one slot; the
+  ;; frozen calendars and hand kernels consume Simple results
+  ;; back-to-back).  The BADLOAD/BADSTORE alternatives are error paths.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 3) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpassign_lv"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -568,7 +628,14 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
+   ;; result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfploadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -643,8 +710,60 @@
        : "SFPLOADI\t%x0, %4, %7",
       operands, true, 8);
   }
+  ;; Effect audit (D3 latency audit, WH/BH): craq-sim
+  ;; TENSIX_EXECUTE_SFPLOADI writes the destination's enabled lanes for
+  ;; mod0 0-8 and 10 (8/10 are the half-word merges, reading the tied
+  ;; live value), touches no CC bit, no configuration word and no
+  ;; counter; SFPLOADI.md carries no next-cycle constraint, and the
+  ;; silicon-proven hand exp kernel (ckernel_sfpu_exp.h) consumes its
+  ;; in-body SFPLOADI one slot later (SFPSWAP reads LREG1 back-to-back):
+  ;; result latency 0.  Mod0 9 and >10 are UndefinedBehavior in the
+  ;; simulator and keep the refusing defaults.  Sub-unit placement is
+  ;; not in the S1 legality table and stays unclaimed (none).
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_int 98) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[7])
+				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
+				       || INTVAL (operands[7]) == 10)")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpload"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -844,6 +963,14 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "addr_mode")
+   ;; D3 latency audit: SFPLOAD.md's three-instruction rule is the
+   ;; cross-unit Dst race, not an SFPU result delay; the silicon-proven
+   ;; hand exp kernel consumes SFPLOAD's LREG result in the next slot
+   ;; (SFPLOAD->SFPMAD back-to-back): result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))
    (set_attr "xtt_macro_encodable" "yes")])
 
 ;; A complete WH/BH macro launch.  The formation pass may emit this only after
@@ -1445,6 +1572,15 @@
 				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
 				   && (INTVAL (operands[4]) & 1) == 0")
 		      (const_string "none") (const_string "unknown")))
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot and SFPIADD.md has no next-cycle constraint: result
+   ;; latency 0 (audited mods only).
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
+				   && (INTVAL (operands[4]) & 1) == 0")
+		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "rvtt_sfpiadd_v_nv"
@@ -1627,8 +1763,130 @@
       (operands[2], operands[3]));
     DONE;
   }
+  ;; Effect audit (D3 latency audit, WH/BH), per mod1 (operand 3) against
+  ;; the craq-sim executors (TENSIX_EXECUTE_SFPMOV/SFPEXEXP/SFPEXMAN/
+  ;; SFPABS/SFPLZ): each reads operand 2 and lane-writes operand 0 (tied
+  ;; live value read for disabled lanes); no configuration or counter
+  ;; effect.  CC: SFPMOV mod 0/1 and every other audited mod are
+  ;; lane-predicated reads; SFPMOV mod 2 is the all-lanes copy (no CC
+  ;; access); SFPEXEXP mod 2/10 and SFPLZ mod 2 additionally set the
+  ;; lane flag from the result (readwrite).  Unproven mods (SFPMOV 8 =
+  ;; PRNG state advance; anything the simulator refuses) keep the
+  ;; refusing defaults.  Sub-unit: all five opcodes sit in the S1 Simple
+  ;; column; every proven Simple dependence chain steps one slot
+  ;; (frozen signbit calendar shift->cast->store; hand exp kernel
+  ;; exexp->exman->shft->exman->cast back-to-back on silicon): result
+  ;; latency 0.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_int 8) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(cond [(match_test "!((TARGET_XTT_TENSIX_BH
+			       || TARGET_XTT_TENSIX_WH)
+			      && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				  ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				  : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				  ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+				     || INTVAL (operands[3]) == 10)
+				  : <rvtt_unary_op> == UNSPECV_SFPLZ
+				  ? (INTVAL (operands[3]) == 0
+				     || INTVAL (operands[3]) == 2
+				     || INTVAL (operands[3]) == 4)
+				  : IN_RANGE (INTVAL (operands[3]), 0, 1)))")
+		 (const_string "unknown")
+	       (match_test "(<rvtt_unary_op> == UNSPECV_SFPEXEXP
+			     && (INTVAL (operands[3]) == 2
+				 || INTVAL (operands[3]) == 10))
+			    || (<rvtt_unary_op> == UNSPECV_SFPLZ
+				&& INTVAL (operands[3]) == 2)")
+		 (const_string "readwrite")
+	       (match_test "<rvtt_unary_op> == UNSPECV_SFPMOV
+			    && INTVAL (operands[3]) == 2")
+		 (const_string "none")]
+	      (const_string "read")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (<rvtt_unary_op> == UNSPECV_SFPMOV
+				       ? IN_RANGE (INTVAL (operands[3]), 0, 2)
+				       : <rvtt_unary_op> == UNSPECV_SFPEXEXP
+				       ? (IN_RANGE (INTVAL (operands[3]), 0, 2)
+					  || INTVAL (operands[3]) == 10)
+				       : <rvtt_unary_op> == UNSPECV_SFPLZ
+				       ? (INTVAL (operands[3]) == 0
+					  || INTVAL (operands[3]) == 2
+					  || INTVAL (operands[3]) == 4)
+				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn "rvtt_sfp<rvtt_unary_name>_nv"
   [(unspec_volatile:XTT32SI [
@@ -1688,8 +1946,67 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[3]);
   }
+  ;; Effect audit (D3 latency audit, WH/BH), per mod1 (operand 4)
+  ;; against craq-sim TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN:
+  ;; the register forms (SETEXP mod 0/2, SETMAN mod 0, SETSGN mod 0)
+  ;; read the source (operand 2) and the tied destination, lane-write
+  ;; the destination, touch no CC bit, configuration word, or counter
+  ;; (mod 1 is the immediate form carried by the _i patterns; higher
+  ;; mods are simulator-refused and keep the refusing defaults).
+  ;; Sub-unit: S1 Simple column; Simple dependence chains step one slot
+  ;; (silicon-proven hand exp kernel runs SFPAND->SFPSETEXP and
+  ;; SFPSETEXP->SFPSTOCHRND back-to-back): result latency 0.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_int 16) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && (INTVAL (operands[4]) == 0
+				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
+					   && INTVAL (operands[4]) == 2))")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpset<rvtt_set_name>_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1845,8 +2162,42 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
+  ;; Effect audit (D3 latency audit, WH/BH): craq-sim
+  ;; TENSIX_EXECUTE_SFPAND/SFPOR/SFPXOR (tensix_execute_sfpu_int32)
+  ;; read the tied destination and operand 3 and lane-write the
+  ;; destination; no CC write, configuration, or counter effect.
+  ;; Sub-unit: S1 Simple; the silicon-proven hand exp kernel runs
+  ;; SFPAND->SFPSETEXP back-to-back: result latency 0.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 16) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn "rvtt_sfp<rvtt_logical_name>_lv_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
@@ -1860,8 +2211,35 @@
   "@
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
+  ;; Effect audit (D3 latency audit, BH): craq-sim mod1<=1 branch of
+  ;; TENSIX_EXECUTE_SFPAND/SFPOR — reads operands 2 and 3 (and the tied
+  ;; live value), lane-writes the destination; no CC write,
+  ;; configuration, or counter effect.  Higher mods are simulator-
+  ;; refused and keep the refusing defaults.  S1 Simple; result latency
+  ;; 0 (hand exp kernel SFPAND->SFPSETEXP back-to-back on silicon).
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_int 16) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
+		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))])
 
 (define_expand "rvtt_sfpnot"
@@ -1935,8 +2313,65 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
+  ;; Effect audit (D3 latency audit), per mod1 (operand 4) against
+  ;; craq-sim TENSIX_EXECUTE_SFPSHFT: the variable-shift forms (mod 0
+  ;; logical on both, mod 2 arithmetic-right on BH only) read the shift
+  ;; amount (operand 3) and the tied destination, lane-write the
+  ;; destination, touch no CC bit, configuration word, or counter.
+  ;; Sub-unit: S1 Simple; the silicon-proven hand exp kernel runs
+  ;; SFPSHFT->SFPEXMAN back-to-back and SFPSHFT.md has no next-cycle
+  ;; constraint: result latency 0.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_int 16) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "INTVAL (operands[4]) == 0
+				   ? (TARGET_XTT_TENSIX_BH
+				      || TARGET_XTT_TENSIX_WH)
+				   : (TARGET_XTT_TENSIX_BH
+				      && INTVAL (operands[4]) == 2)")
+		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpshft_i"
@@ -2047,7 +2482,14 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
+   ;; result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
@@ -2086,7 +2528,14 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
+   ;; result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpcast"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -2159,7 +2608,17 @@
 	(if_then_else (match_test "INTVAL (operands[3]) == 0
 				   || (TARGET_XTT_TENSIX_BH
 				       && INTVAL (operands[3]) == 3)")
-		      (const_string "none") (const_string "unknown")))])
+		      (const_string "none") (const_string "unknown")))
+   ;; D3 latency audit: S1 Simple; the frozen cast-round calendar
+   ;; steps cast->rnd one slot and the hand exp kernel runs
+   ;; SFPCAST->SFPMAD back-to-back on silicon: result latency 0
+   ;; (audited mods only; unaudited mods stay opaque via the fields
+   ;; above).
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2332,7 +2791,15 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; D3 latency audit: Round sub-unit; the frozen cast-round calendar
+   ;; places the dependent store one slot after SFPSTOCHRND, and the
+   ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
+   ;; silicon: result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpstochrnd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2371,7 +2838,15 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; D3 latency audit: Round sub-unit; the frozen cast-round calendar
+   ;; places the dependent store one slot after SFPSTOCHRND, and the
+   ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
+   ;; silicon: result latency 0.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpreadconfig"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")

@@ -590,6 +590,14 @@ mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
 Fill Tensix result-latency bubbles with independent ready SFPU instructions
 
+mtt-tensix-optimize-interlock-schedule
+Target Var(riscv_tt_opt_interlock_schedule) Init(0)
+Fill audited transparent hardware-interlock stalls with independent SFPU instructions
+
+mtt-tensix-optimize-prgm-const
+Target Var(riscv_tt_opt_prgm_const) Init(0)
+Allocate programmable constant registers to loop-invariant SFPU immediates
+
 mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
 Recognize legal adjacent Tensix Dst-register iterations

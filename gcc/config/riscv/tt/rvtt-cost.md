@@ -79,6 +79,76 @@
 ;; (latency 1) restates the established one-cycle dynamic result-delay
 ;; contract (xtt_delay `dynamic'); real per-CPU values are future work
 ;; (F1.3).  Decoded only by rvtt_insn_effects.
+;;
+;; D3 latency audit (2026-08-17, WH/BH; QSR carries no entries and the
+;; interlock scheduler refuses the target).  Every entry is a table fact
+;; with provenance; anything not listed keeps the refusing default 0.
+;; Sources:
+;;   [ISA]   the per-instruction architectural references (SFP*.md):
+;;           the required-NOP contracts ("software must ensure that on
+;;           the next cycle ... does not read what this wrote") name
+;;           exactly the mad family; the audited latency-0 pages carry
+;;           no next-cycle constraint.
+;;   [SIM]   craq-sim TENSIX_EXECUTE_* executors (state read/written,
+;;           lane predication, CC effects; TT_VERSION <= 1 = WH/BH).
+;;   [HAND]  the silicon-proven hand exp kernel
+;;           (ckernel_sfpu_exp.h _sfpu_exp_21f_bf16_tti_): its
+;;           back-to-back dependent adjacencies are latency-0 witness
+;;           points, and its one deliberate filler placement ("slots
+;;           into the SFPMAD's 2-cycle latency window") restates the
+;;           mad fact.
+;;   [CAL]   the frozen, silicon-passing macro calendars (R1 derivation
+;;           facts, rvtt-macro-tables.cc subunit_result_latency):
+;;           Simple/Round chains step one slot per dependence, the MAD
+;;           store distance is two slots.
+;;
+;;   class (patterns)                 latency  provenance
+;;   mad family (mul/add/mad/muli/
+;;     addi/mul24)                       1     [ISA] next-cycle rule;
+;;                                             [CAL] MulInt32 store
+;;                                             delay 2; pre-existing
+;;                                             entry, unchanged
+;;   load (sfpload_lv_int)               0     [HAND] SFPLOAD->SFPMAD
+;;                                             back-to-back; [ISA]
+;;                                             SFPLOAD.md's 3-insn rule
+;;                                             is the cross-unit Dst
+;;                                             race, not a result delay
+;;   loadi (sfploadi_lv_int,
+;;     mod0 0-8,10)                       0     [HAND] SFPLOADI->SFPSWAP
+;;                                             back-to-back; [SIM] lane
+;;                                             write only; [ISA] no
+;;                                             next-cycle rule
+;;   simple unit (mov/exexp/exman/
+;;     abs/lz, setexp/setman/setsgn
+;;     register forms, shft variable
+;;     mod 0/2 and immediate forms,
+;;     and/or/xor, iadd_v audited
+;;     mods, cast audited mods, the
+;;     bare and lane-predicated
+;;     copies)                           0     [HAND] exexp->exman->
+;;                                             shft->exman->cast->mad
+;;                                             and and->setexp->rnd
+;;                                             back-to-back; [CAL]
+;;                                             signbit shift->cast->
+;;                                             store steps one slot;
+;;                                             [SIM] per-mod effect
+;;                                             audits in rvtt.md
+;;   round unit (stochrnd i/v)           0     [CAL] cast-round rnd->
+;;                                             store one slot; [HAND]
+;;                                             SFPSTOCHRND->SFPSTORE
+;;                                             back-to-back
+;;   SFPNOP                              0     pure issue-slot filler
+;;                                             (pre-existing entry)
+;;
+;; Deliberately UNAUDITED (refusing): SFPSWAP -- its hazard is the
+;; structural next-slot rule (only SFPNOP is accepted in the following
+;; cycle, SFPSWAP.md), not a consumable result latency, so it must
+;; never become a fill target; SFPSHFT2 -- mod-dependent next-cycle
+;; register constraints (SFPSHFT2.md) outside the single-latency
+;; vocabulary; SFPGT/SFPLE -- no proven sub-unit placement (absent from
+;; the S1 legality table); LUT/LUTFP32 -- mad-unit but no per-mod
+;; effect audit yet; everything QSR (simulator returns
+;; MissingSpecification for these opcode semantics).
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
