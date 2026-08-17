@@ -1,10 +1,14 @@
-// WP8: the predicated-select (TTNN Where) shape in raw typed builtins:
-// three loads, a predicate write, a lane-predicated move, a store.  The
-// predicate write inside the slice would need a CC-manipulating
-// instruction template; no proven CC-template program exists, so the
-// region refuses cc-template-unsupported and the bytes stay explicit.
+// WP9: the predicated-select (TTNN Where) shape in raw typed builtins:
+// three loads, a predicate write, a lane-predicated merge, the in-row
+// all-lanes restore, a store.  The CC-template descriptor derives and
+// proves the full CC model, but this single row carries no typed
+// ambient enable and cannot peel (a one-row region has no remainder),
+// so formation refuses the missing lane proof and the bytes stay
+// explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "cc-template-unsupported" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "formation-refusal: all-lanes-proof-missing" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }

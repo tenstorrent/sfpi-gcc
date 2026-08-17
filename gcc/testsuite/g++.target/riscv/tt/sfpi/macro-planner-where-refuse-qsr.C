@@ -1,10 +1,10 @@
-// WP8: the quarantined pass's predicated-select (TTNN Where) positive,
-// converted to the generic macro planner's named refusal.  The
-// predicate write inside the slice would need a CC-manipulating
-// instruction template; no proven CC-template program exists, so the
-// region refuses cc-template-unsupported and every byte stays explicit.
+// WP9: on QSR the predicated-select shape is admitted by discovery (the
+// CC-template row structure is target-independent) and refuses at
+// schedule time by the capability tables' stable name -- no macro
+// encoding is proven for QSR.  Every byte stays explicit.
 // { dg-options "-mcpu=tt-qsr32-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "cc-template-unsupported" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "target-macro-encoding-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }

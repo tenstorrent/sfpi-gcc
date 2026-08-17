@@ -1,10 +1,15 @@
-// WP8: the quarantined pass's predicated-select (TTNN Where) positive,
-// converted to the generic macro planner's named refusal.  The
-// predicate write inside the slice would need a CC-manipulating
-// instruction template; no proven CC-template program exists, so the
-// region refuses cc-template-unsupported and every byte stays explicit.
+// WP9: the predicated-select (TTNN Where) shape is now a PROVEN
+// CC-template program -- the descriptor derives and verifies the full
+// CC model -- but a straight-line SINGLE row cannot amortize the
+// configuration prefix, so the derived Layer-6 profitability refuses
+// and every byte stays explicit.  (Before WP9 this refused
+// cc-template-unsupported at discovery; the multi-row formation twins
+// are macro-planner-select-form-* in ../tensix and
+// macro-planner-where-form-bh.C here.)
 // { dg-options "-mcpu=tt-wh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "cc-template-unsupported" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "formation-refusal: unprofitable" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
