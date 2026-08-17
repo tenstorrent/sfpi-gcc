@@ -282,6 +282,21 @@ combine () {
   sum = sfpxiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
 }
 
+// setexp (man, exexp (z, Biased)) -> setexp-copy (man, z)
+// SFPEXEXP NODEBIAS yields z's raw exponent field ((z >> 23) & 255) and sets
+// no CC; SFPSETEXP mod1=LREG consumes exp & 0xFF while mod1=LREG_CPY consumes
+// (exp >> 23) & 0xFF of the float encoding -- a bit-identical composition for
+// every input, so consume z directly and let a single-use exexp die.  The
+// combiner's same-BB/same-CC-region discipline keeps the lane masks of both
+// instructions identical, which the equivalence requires.
+// Gated: -mtt-tensix-optimize-setexp-fold (default off).
+combine (SETEXP_FOLD) {
+  exp|OU = sfpexexp_lv (exp_lv, z, SFPEXEXP_MOD1_NODEBIAS);
+  res = sfpsetexp_v_lv (lv, man, exp, SFPSETEXP_MOD1_LREG);
+  {}
+  res = sfpsetexp_v_lv (lv, man, z, SFPSETEXP_MOD1_LREG_CPY);
+}
+
 // exexp, Xiadd_i -> exexp
 combine () {
   exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);

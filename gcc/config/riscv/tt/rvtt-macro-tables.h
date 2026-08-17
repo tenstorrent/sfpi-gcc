@@ -357,6 +357,113 @@ extern bool sfpsetcc_complement_mod1 (uint64_t mod1, unsigned *out);
 extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 
 /* ------------------------------------------------------------------ */
+/* Derived-calendar architectural facts (WH/BH-common).		      */
+/*								      */
+/* The sequence-word bit format and the per-event delay semantics are  */
+/* ESTABLISHED by three independent sources (see			      */
+/* docs/TIMING_CALENDAR_DERIVATION.md §1-2): the ISA functional	      */
+/* specification SFPLOADMACRO.md (SequenceBits, the per-sub-unit      */
+/* opcode legality table, the Simple/Round VD16 rule, the SFPSWAP     */
+/* adjacency rule, the Misc field layout), the CRAQ generic executor  */
+/* (craq-sim f80a8d64 sfploadmacro_events.h: absolute ready =	      */
+/* issue+1+delay, retire-before-issue, transactional same-cycle	      */
+/* groups), and the handwritten MulInt32 init (tt_llk_blackhole	      */
+/* ckernel_sfpu_mul_int.h, author-annotated fields).  This resolves   */
+/* NOTES-wp6-prep.md §9(b)/(c)/(g).  Every fact below carries that    */
+/* provenance; whole-word proven programs above remain the capability */
+/* for the frozen shapes (byte parity), while these facts let the     */
+/* planner DERIVE calendars for new shapes.			      */
+/* ------------------------------------------------------------------ */
+
+/* Sequence byte cases (SequenceBits bits 2:0).  Case 1 is
+   architecturally undefined and never encoded.  */
+const unsigned SEQ_CASE_SKIP = 0;
+const unsigned SEQ_CASE_NOP = 2;
+const unsigned SEQ_CASE_STORE = 3;
+const unsigned SEQ_CASE_TEMPLATE0 = 4;	/* 4 + template index (0..3)  */
+
+/* Delay field (bits 5:3): the event executes at issue + 1 + delay.  */
+const unsigned SEQ_MAX_DELAY = 7;
+
+/* Pack one sequence byte: case | delay << 3 | VD16 << 6 | route << 7.
+   Refuses case 1, out-of-range delay, and template indices > 3.  */
+extern bool encode_sequence_bits (unsigned case_kind, unsigned delay,
+				  bool vd16, bool route_vb, uint8_t *out);
+
+/* Byte i of the word programs sub-unit i (Simple, MAD, Round, Store).  */
+extern uint32_t compose_sequence_word (const uint8_t bytes[4]);
+extern void decompose_sequence_word (uint32_t word, uint8_t bytes[4]);
+
+/* Per-sub-unit opcode legality (the normative ISA table): bitmask with
+   bit N = sub-unit N (0 Simple, 1 MAD, 2 Round, 3 Store) over the
+   subunit-byte indices, NOT over rvtt_macro::subunit_t.  0 = no entry
+   on record (the refusing default): an opcode scheduled on a sub-unit
+   that cannot execute it silently becomes SFPNOP on hardware, so
+   placement is a hard architectural fact.  */
+const unsigned SEQ_UNIT_SIMPLE = 0;
+const unsigned SEQ_UNIT_MAD = 1;
+const unsigned SEQ_UNIT_ROUND = 2;
+const unsigned SEQ_UNIT_STORE = 3;
+extern unsigned subunit_legal_mask (const caps *, uint8_t opcode);
+
+/* Result latency of a value event by executing sub-unit: the earliest
+   a consumer may execute after its producer.  Simple/Round = 1 (every
+   proven chain steps by one slot); MAD = 2 (the handwritten MulInt32
+   store delays: exec+2 in both calendar variants).  */
+extern unsigned subunit_result_latency (unsigned seq_unit);
+
+/* Operand-routing class of a template opcode (ISA field-override
+   rules; mirrored by the CRAQ build_dispatch).  */
+enum route_class { RC_NONE, RC_VC, RC_VB_VC, RC_SHFT2 };
+extern route_class opcode_route_class (const caps *, uint8_t opcode);
+
+/* Does the opcode READ its VD operand (SFPSWAP)?  Such an event cannot
+   target LReg16 and must keep route=1 so a planned VC survives.  */
+extern bool opcode_reads_vd (const caps *, uint8_t opcode);
+
+/* The SFPSWAP scheduling rule (ISA (‡)): MAD hosts nothing in the
+   SWAP's execution cycle, and Simple and Round host nothing in the
+   cycle after it.  */
+extern bool opcode_needs_swap_adjacency (const caps *, uint8_t opcode);
+
+/* The one PROVEN staging-copy realization (the frozen minmax
+   transient copy): SFPSHFT2 immediate-0 on the Round sub-unit,
+   route=1 (the SHFT_IMM VB<-VD override reads the launch VD), VD16.  */
+struct staging_copy_facts
+{
+  uint8_t opcode;	/* SFPSHFT2			   */
+  uint8_t mod1;		/* SHFT_IMM			   */
+  unsigned seq_unit;	/* SEQ_UNIT_ROUND		   */
+};
+extern bool staging_copy_realization (const caps *, staging_copy_facts *);
+
+/* Misc word field layout (ISA Misc struct; MulInt32 author comment):
+   UnitDelayKind[3:0] << 8 | UsesLoadMod0ForStore[3:0] << 4
+   | StoreMod0[3:0].  UnitDelayKind bit i = sub-unit i counts issued
+   SFPU instructions instead of cycles (required exactly when an event
+   consumes a value issued after its own launch).  */
+extern uint32_t encode_misc_fields (unsigned store_mod0,
+				    unsigned uses_load_mod0_mask,
+				    unsigned delay_kind_mask);
+extern void decode_misc_fields (uint32_t word, unsigned *store_mod0,
+				unsigned *uses_load_mod0_mask,
+				unsigned *delay_kind_mask);
+
+/* Whether a DERIVED calendar may absorb the row's Dst stride into a
+   launch's auto-increment address mode on this CPU.  BH is proven end
+   to end (the derived unary max/min calendar is CRAQ bit-exact through
+   the generic simulator path).  WH is NOT: the WH-sim execution of a
+   derived absorbed-stride calendar returns position-shuffled tiles
+   after the first (laneR1 evidence 2026-08-17, wh-onma trace: launch
+   rows and store rows correct, data displaced from the second tile
+   on), the same open WH Dst-advance frontier as
+   FINDING-wh-dst-autoincr-fresh-maxmin.md and WP8 §6b(4)'s dual-slot
+   bank-base proof.  WH select (which keeps its separator and absorbs
+   nothing) passes the same path, so the boundary is absorption
+   itself.  Refusal name: derived-stride-absorption-unproven.  */
+extern bool derived_stride_absorption_proven (const caps *);
+
+/* ------------------------------------------------------------------ */
 /* Fixed architectural words (WH/BH-common).			      */
 /* ------------------------------------------------------------------ */
 
