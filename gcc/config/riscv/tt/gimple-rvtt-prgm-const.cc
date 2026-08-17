@@ -143,6 +143,30 @@ audited_raw_word_p (uint32_t word, unsigned *claimed, const char **why)
       unsigned dest = (word >> 4) & 0xf;
       if (dest == 15)
 	{
+	  /* LaneConfig default-reset class: dest 15, mod1 bit0
+	     (MOD1_IMM16_IS_VALUE) set, imm16 == 0 -- the SFPU init's
+	     TTI_SFPCONFIG (0, 0xF, 1), word 0x910000F1.
+
+	     Audited by the architectural spec (SFPCONFIG.md functional
+	     model) and the corrected simulator (craq tensix.cpp
+	     TENSIX_EXECUTE_SFPCONFIG, craq 9f324140): the VD == 15 arm
+	     assigns LaneConfig only; LReg[11..14] writes exist solely in
+	     the VD 11..14 arm, so the programmable constant registers
+	     SURVIVE this word.  Within the admitted class every mod1
+	     completion is still LaneConfig-confined: set/AND with value
+	     0 is the hardware default-reset (reserved high bits
+	     restored per spec), OR/XOR with 0 is a no-op, and
+	     IMM16_IS_LANE_MASK with imm16 == 0 masks every lane off.
+	     The resulting LaneConfig is always {unchanged, default}, and
+	     default (0) is exactly the all-lanes, no-ROW_MASK state the
+	     allocator's own SFPCONFIG programming write assumes.  No
+	     destination is claimed: the word touches no PRGM register.
+
+	     Near misses stay refused by class: imm16 != 0 can set
+	     ROW_MASK/behavior bits (unproven lane model); mod1 bit0 == 0
+	     takes the value from LReg[0] (unauditable from the word).  */
+	  if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
+	    return true;
 	  *why = "raw SFPCONFIG writes LaneConfig";
 	  return false;
 	}
