@@ -3,11 +3,13 @@
 // function names, a different constant register (L10 = vConst1), a
 // different swap mod (2: SUBVEC_MIN01_MAX23), and different addresses.
 // Same typed classification -- closed region, named downstream refusal,
-// no formation.
+// no formation: the SUBVEC swap mod is outside the derived template
+// class's proven envelope (full-vector min/max only), so the shape
+// matches no proven program and no derivation admits it.
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=4 row-len=3" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "descriptor-encoding-failed" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 
