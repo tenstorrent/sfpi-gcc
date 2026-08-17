@@ -110,6 +110,16 @@ XTT_MACRO_SEQ_PROGRAM ("select-m2", 2, 0x00000005, 1,
 		       SU_NONE, -1, 0, false,
 		       SU_NONE, -1, 0, false)
 
+/* Select restore on macro ONE (dest 5): the derived select calendar's
+   last-launch ENCC event -- see the provenance note in the BH file
+   (the two tables never diverge on descriptor-state words; the unit
+   test asserts it).  */
+XTT_MACRO_SEQ_PROGRAM ("select-m1-encc", 1, 0x00000005, 1,
+		       SU_SIMPLE, 1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
 XTT_MACRO_MISC_WORD ("minmax-binary", 0x00000330, false, 0)
 XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)
 XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)

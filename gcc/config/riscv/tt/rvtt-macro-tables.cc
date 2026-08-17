@@ -568,6 +568,44 @@ encode_misc_select (const caps *c, unsigned store_mod0, uint32_t *word)
   return true;
 }
 
+unsigned
+cc_visibility_lag ()
+{
+  /* CRAQ tensix_retire_load_macro_events: "CC results computed by a
+     retiring event become architecturally visible to instructions
+     issued in the cycle after the event executed, matching the
+     hardware's flag-forwarding latency."  The frozen select calendar
+     relied on exactly this lag (the payload load issued one slot after
+     the SETCC launch still reads the ambient all-lanes state).  */
+  return 1;
+}
+
+bool
+store_lane_mask_latched_at_launch ()
+{
+  /* ISA/CRAQ EventContext: "The store side of a macro is
+     architecturally latched at the launch: Dst row, store format, lane
+     predicate, and Dst layout are captured here, not at store
+     execution time."  */
+  return true;
+}
+
+bool
+sfpsetcc_complement_mod1 (uint64_t mod1, unsigned *out)
+{
+  /* SFPSETCC.md instr_mod1: bit 0 = immediate-operand form, bit 1 =
+     !=0 test (else sign test), bit 2 = complement of the register
+     test, bit 3 = force false.  The complement is defined only for the
+     plain register-test class {0, 2, 4, 6}; every other form refuses
+     (the proven select instance is 2 -> 6, LM:1568 "SETCC loaded value
+     == zero" realizing the source's !=0 predicate on the
+     complementary payload).  */
+  if (mod1 > 6 || (mod1 & 1))
+    return false;
+  *out = (unsigned) (mod1 ^ 4);
+  return true;
+}
+
 uint32_t
 template_hidden_lreg_writes (const caps *c, uint32_t word)
 {

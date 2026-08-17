@@ -623,6 +623,62 @@ test_ref_setc16_words (const caps *c, const uint32_t *expect, unsigned n)
     }
 }
 
+/* WP9 CC-template facts: the deferred-CC visibility lag, the
+   launch-latched store mask, the architecturally-defined SFPSETCC
+   complement class, and the select restore program on macro one (the
+   whole frozen "ENCC d0" word at the derived calendar's macro index;
+   both CPUs carry it identically -- asserted by test_wh_bh_identity's
+   whole-table sweep).  */
+
+static void
+test_cc_template_facts (const caps *bh, const caps *wh)
+{
+  CHECK (cc_visibility_lag () == 1);
+  CHECK (store_lane_mask_latched_at_launch ());
+
+  unsigned out = 0;
+  CHECK (sfpsetcc_complement_mod1 (0, &out) && out == 4);
+  CHECK (sfpsetcc_complement_mod1 (2, &out) && out == 6);
+  CHECK (sfpsetcc_complement_mod1 (4, &out) && out == 0);
+  CHECK (sfpsetcc_complement_mod1 (6, &out) && out == 2);
+  /* Immediate and force-false forms have no defined complement.  */
+  CHECK (!sfpsetcc_complement_mod1 (1, &out));
+  CHECK (!sfpsetcc_complement_mod1 (3, &out));
+  CHECK (!sfpsetcc_complement_mod1 (5, &out));
+  CHECK (!sfpsetcc_complement_mod1 (7, &out));
+  CHECK (!sfpsetcc_complement_mod1 (8, &out));
+  CHECK (!sfpsetcc_complement_mod1 (9, &out));
+
+  const caps *cpus[] = { bh, wh };
+  for (const caps *c : cpus)
+    {
+      uint32_t m1_encc = 0, m2_encc = 0;
+      bool have_m1 = false, have_m2 = false;
+      for (unsigned i = 0; i != c->n_seq_programs; ++i)
+	{
+	  if (!strcmp (c->seq_programs[i].name, "select-m1-encc"))
+	    {
+	      have_m1 = true;
+	      m1_encc = c->seq_programs[i].word;
+	      CHECK (c->seq_programs[i].macro_index == 1);
+	      CHECK (c->seq_programs[i].n_events == 1);
+	      CHECK (c->seq_programs[i].events[0].unit == SU_SIMPLE);
+	      CHECK (c->seq_programs[i].events[0].template_index == 1);
+	      CHECK (c->seq_programs[i].events[0].delay == 0);
+	    }
+	  if (!strcmp (c->seq_programs[i].name, "select-m2"))
+	    {
+	      have_m2 = true;
+	      m2_encc = c->seq_programs[i].word;
+	    }
+	}
+      CHECK (have_m1 && have_m2);
+      /* The whole word is the frozen "ENCC d0" program; the macro index
+	 only selects the SFPCONFIG destination.  */
+      CHECK_EQ_HEX (m1_encc, m2_encc);
+    }
+}
+
 int
 main ()
 {
@@ -649,6 +705,7 @@ main ()
   test_misc (bh);
   test_misc (wh);
   test_fixed_words ();
+  test_cc_template_facts (bh, wh);
   test_scalars (bh, wh);
   test_wh_bh_identity (bh, wh);
   test_ref_descriptors (bh);
