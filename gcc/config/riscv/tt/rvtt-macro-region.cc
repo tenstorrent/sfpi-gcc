@@ -192,13 +192,34 @@ region_scanner::close_row (basic_block bb)
 {
   gcc_assert (!span_.is_empty ());
 
-  /* Effect legality inside the row.  */
+  /* Effect legality inside the row.  A CC-writing member is admitted in
+     exactly two structural roles (WP9 CC-template extension); whether a
+     proven CC-template program realizes them is a descriptor question:
+       - a predicate DEFINITION: a value event that reads an LREG and
+	 writes CC (the typed SFPSETCC-on-register class);
+       - the row-end all-lanes RESTORE: a pure CC write whose written
+	 state is provably the all-lanes enable (cc_write_all_lanes,
+	 word-exact through the one shared SFPENCC derivation).
+     Anything else keeps the named refusal: a partial-lane or otherwise
+     unproved pure CC write refuses cc-enable-unproved; every other CC
+     writer still needs a CC-manipulating template no proven program
+     provides.  */
+  bool cc_def_seen = false;
   for (const xtt_effect_set &e : span_effects_)
     {
       if (e.cc_write)
 	{
-	  refuse (macro_region_refusal::row_cc_template_unsupported);
-	  return false;
+	  bool cc_def = e.lreg_read != 0 && !pure_cc_write_p (e);
+	  bool cc_restore = cc_def_seen && pure_cc_write_p (e)
+	    && e.cc_write_all_lanes;
+	  if (!cc_def && !cc_restore)
+	    {
+	      refuse (pure_cc_write_p (e)
+		      ? macro_region_refusal::row_cc_enable_unproved
+		      : macro_region_refusal::row_cc_template_unsupported);
+	      return false;
+	    }
+	  cc_def_seen |= cc_def;
 	}
       if (e.config_dests_written || e.addr_mod_slot_write)
 	{
@@ -207,20 +228,29 @@ region_scanner::close_row (basic_block bb)
 	}
     }
 
-  /* Backward slice from the store.  */
+  /* Backward slice from the store, over LREG and CC dataflow edges.  A
+     CC-reading member depends on the nearest preceding in-row CC write
+     (definition or restore); a CC-need surviving past the first span
+     instruction is the row's dependency on the AMBIENT lane state --
+     the sanctioned all-lanes-enable obligation every lane-predicated
+     row already carries, never a closure violation.  */
   unsigned n = span_.length ();
   auto_vec<bool> member (n);
   member.safe_grow_cleared (n);
   member[n - 1] = true;
   uint32_t needed = span_effects_[n - 1].lreg_read;
+  bool cc_needed = span_effects_[n - 1].cc_read;
   for (unsigned ix = n - 1; ix-- > 0;)
     {
       const xtt_effect_set &e = span_effects_[ix];
-      if (e.lreg_write & needed)
+      if ((e.lreg_write & needed) || (cc_needed && e.cc_write))
 	{
 	  member[ix] = true;
 	  needed &= ~e.lreg_write;
 	  needed |= e.lreg_read;
+	  if (e.cc_write)
+	    cc_needed = false;
+	  cc_needed |= e.cc_read;
 	}
     }
   /* Every span instruction must be a member and every input must be
@@ -523,7 +553,32 @@ region_scanner::scan_bb (basic_block bb)
 	}
       if (e.cc_write)
 	{
-	  refuse (macro_region_refusal::row_cc_template_unsupported);
+	  /* CC-writing value events extend the span in their two
+	     admitted structural roles (WP9; see close_row): a predicate
+	     definition (reads an LREG) or the in-row all-lanes restore
+	     (pure, proven, and only AFTER a definition -- a restore
+	     with nothing to restore is not the select structure and
+	     keeps the pre-WP9 refusal).  A mid-span pure CC write that
+	     is NOT the proven all-lanes pattern is a
+	     partial-lane/unproved enable (cc-enable-unproved); any
+	     other CC writer keeps the missing CC-template refusal.
+	     Both remain hard region boundaries.  */
+	  bool span_has_def = false;
+	  for (const xtt_effect_set &se : span_effects_)
+	    span_has_def |= se.cc_write && se.lreg_read != 0
+	      && !pure_cc_write_p (se);
+	  bool cc_def = e.lreg_read != 0 && !pure_cc_write_p (e);
+	  bool cc_restore = span_has_def && pure_cc_write_p (e)
+	    && e.cc_write_all_lanes;
+	  if (cc_def || cc_restore)
+	    {
+	      span_.safe_push (insn);
+	      span_effects_.safe_push (e);
+	      continue;
+	    }
+	  refuse (pure_cc_write_p (e)
+		  ? macro_region_refusal::row_cc_enable_unproved
+		  : macro_region_refusal::row_cc_template_unsupported);
 	  span_.truncate (0);
 	  span_effects_.truncate (0);
 	  finalize_region (bb);
