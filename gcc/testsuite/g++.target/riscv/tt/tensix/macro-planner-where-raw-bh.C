@@ -1,13 +1,16 @@
 // WP9: the predicated-select (TTNN Where) shape in raw typed builtins:
 // three loads, a predicate write, a lane-predicated merge, the in-row
-// all-lanes restore, a store.  The CC-template descriptor derives and
-// proves the full CC model, but this single row carries no typed
-// ambient enable and a one-row region does not materialize one (the
-// WP10 materialized proof keeps the WP9 multi-row scope), so formation
-// refuses the missing lane proof and the bytes stay explicit.
+// all-lanes restore, a store.  Before the 2026-08-17 Where silicon
+// adjudication this refused the missing lane proof AFTER the 4-slot
+// descriptor proved; the separator-kept schedule now refuses FIRST
+// (evidence root ~/sfpi-uplift/where-adjudication-20260817): the
+// mixed-mode compact candidate refuses its descriptor by name and the
+// established calendar keeps the typed separator, so no descriptor is
+// synthesized at all and the bytes stay explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "formation-refusal: all-lanes-proof-missing" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }

@@ -1,22 +1,21 @@
-// WP10 materialized lane proof (supersedes the WP9 first-row peel):
-// the same eight select rows WITHOUT any typed ambient enable (the
-// real LLK kernels establish the lane state through opaque init the
-// typed IR cannot see).  The first row's own proven all-lanes restore
-// is the proof source, MATERIALIZED once at the head of the
-// configuration prefix under the compiler's established
-// outermost-CC-depth contract (rvtt_cc's outermost POPC -> ENCC
-// transform), so all eight rows form -- no explicit row remains.
+// WP10 materialized lane proof shape (eight MIXED-mode select rows
+// WITHOUT any typed ambient enable), REFUSING since the 2026-08-17
+// Where silicon adjudication (evidence root
+// ~/sfpi-uplift/where-adjudication-20260817): the compact candidate
+// refuses by name (mixed modes cannot ride the launch-sourced store
+// mod0) and the established 4-slot calendar keeps its typed
+// separator, so the schedule refuses
+// cc-separator-kept-silicon-unproven and no formation (hence no
+// materialized enable) is attempted.  Every byte stays on the
+// explicit semantic (planner-OFF) lowering -- the silicon-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 lane-proof=materialized-enable" "rvtt_macro_planner" } }
-// The materialized enable is the single SFPENCC; every row contributes
-// two launches and one explicit payload load; no explicit predicate
-// write, merge, or store remains.
-// { dg-final { scan-assembler-times "\\.ttinsn" 16 } }
-// { dg-final { scan-assembler-not "SFPSETCC" } }
-// { dg-final { scan-assembler-times "SFPLOAD\\tL0, 32" 8 } }
-// { dg-final { scan-assembler-not "SFPSTORE" } }
-// { dg-final { scan-assembler-times "SFPENCC" 1 } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "\\.ttinsn" } }
+// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPSETCC" 1 } }
+// { dg-final { scan-assembler-times "SFPSTORE" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
 #define ROW()                                                                 \

@@ -284,11 +284,40 @@ CC-write template events representable end to end:
   a differently-typed condition (the fp16b TTNN Where selector loads
   the condition as F16b and stores U16), an uncovered stride delta, or
   a non-trailing payload -- refuse the compact candidate by name and
-  form the established 4-slot calendar unchanged.  Both sequence words
+  fall through to the established 4-slot calendar, WHICH NOW REFUSES
+  (see the silicon adjudication note below).  Both sequence words
   and the templates are the same proven table rows in both calendars.
   Since WP10 a schedule that names its own blocker never reaches
   descriptor synthesis; the ONE carve-out remains
   `event-delay-unproven` (Sec. 6).
+
+* **Silicon adjudication (2026-08-17): the separator-kept 4-slot
+  calendar refuses `cc-separator-kept-silicon-unproven`.**  The Where
+  silicon adjudication (Lane AD, tt-quietbox-0, BH p150; evidence root
+  `~/sfpi-uplift/where-adjudication-20260817`, verdicts/VERDICT.md)
+  proved on a reset-first, control-proven device that the formed
+  separator-KEPT calendar (misc 0x706 class; the fp16b and Float32
+  TTNN Where rows) MIS-SELECTS on silicon deterministically across two
+  independent resets -- the TRUE-branch (CC-visible) store slot
+  delivers wrong data (`all_zeros` PASS, `all_ones` FAIL) -- while the
+  byte-identical binaries pass CRAQ (bit-exact-NaN) in the generic
+  simulator; the separator-ABSORBED compact calendar (misc 0x770
+  class; the Int32 rows) is silicon-CORRECT in both delivery arms
+  (RISC-pushed and replay-wrapped) across the same resets.  Silicon is
+  the authority per the standing rule, so the scheduler now refuses
+  every predicate-writing row whose derived schedule keeps its typed
+  separator (the `absorb_into_explicit == false` CC branch) by the new
+  stable name `cc-separator-kept-silicon-unproven`, and the region
+  falls back byte-identically to the semantic (planner-OFF) lowering,
+  which is silicon-green.  The key is the STRUCTURAL property -- the
+  kept separator in the formed schedule -- never a misc word value or
+  a data format: the fp16b/Float32-vs-Int32 split observed on silicon
+  is a consequence of which shapes can absorb, not the classifier.
+  The compact separator-absorbed candidate keeps forming unchanged.
+  The refusal lifts when the simulator's RISC-pushed CC-visible store
+  delivery around the TTINCRWC barrier is proven against silicon
+  (VERDICT.md sim-owner item) or the fp16b condition-mode unification
+  moves those rows onto the proven compact path.
 
 * **Formation**: the ambient all-lanes proof composes with P0 -- the
   first row's local enable, the loop preheader's trailing enable, or
@@ -432,10 +461,13 @@ bh/wh/qsr32, all identical).
   -- restore on the second carrier, explicit-load auto-increment stride
   absorption, launch-sourced store mod0 through the proven whole misc
   word 0x770; the real Int32/UInt32 TTNN Where kernel forms it
-  end-to-end (the fp16b selector keeps the 4-slot calendar because its
-  condition and store modes differ; matching the handwritten kernel's
-  uniform-mode condition load is a one-line kernel-side change left to
-  review); (d) RESOLVED at WP10 behind the opt-in
+  end-to-end (the fp16b selector kept the 4-slot calendar because its
+  condition and store modes differ; since the 2026-08-17 silicon
+  adjudication that calendar refuses
+  `cc-separator-kept-silicon-unproven` -- see Sec. 2a -- and matching
+  the handwritten kernel's uniform-mode condition load is now the
+  remediation path for the fp16b rows, a one-line kernel-side change
+  left to review); (d) RESOLVED at WP10 behind the opt-in
   `-mtt-tensix-macro-planner-replay` flag: planner-formed SFPLOADMACRO
   launches are audited into the automatic replay model (a launch is a
   pure instruction word; recording captures the word, never state;
