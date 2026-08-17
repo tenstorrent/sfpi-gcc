@@ -1,6 +1,9 @@
-// setexp-fold is default-off: without -mtt-tensix-optimize-setexp-fold the
+// setexp-fold OFF path: with -mno-tt-tensix-optimize-setexp-fold the
 // idiom must be left exactly as written.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti" }
+// Default-ON promotion (silicon-validated: exp/sdpa capture shortening):
+// this test used to rely on the ambient default being off; it now pins
+// the -mno- spelling so the disabled path stays covered.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mno-tt-tensix-optimize-setexp-fold" }
 
 void no_fold_by_default () {
   auto z = __builtin_rvtt_sfpreadlreg (0);

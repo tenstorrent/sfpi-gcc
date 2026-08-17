@@ -5,7 +5,14 @@
 // ambient enable and a one-row region does not materialize one (the
 // WP10 materialized proof keeps the WP9 multi-row scope), so formation
 // refuses the missing lane proof and the bytes stay explicit.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
+// Default-ON promotion of -mtt-tensix-optimize-dst-ownership: the (now
+// default-on) ownership fold removes this row's provable-identity Dst
+// reload before the planner runs, so the CC template no longer derives
+// the pinned refusal trail (pre-existing interaction, reproduced on the
+// pre-promotion compiler with the explicit flag).  Pin the -mno-
+// spelling: the test's subject is the WP9 single-row refusal on the
+// unfolded shape.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mno-tt-tensix-optimize-dst-ownership -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "formation-refusal: all-lanes-proof-missing" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }

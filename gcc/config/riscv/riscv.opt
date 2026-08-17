@@ -622,16 +622,16 @@ Target Var(riscv_tt_opt_dst_autoincr) Init(0)
 Replace constant-stride per-row Dst RWC increments with owned address-modifier auto-increment.
 
 mtt-tensix-optimize-dst-ownership
-Target Var(riscv_tt_opt_dst_ownership) Init(0)
-Default-off: fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
+Target Var(riscv_tt_opt_dst_ownership) Init(1)
+Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-dst-ownership): fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
 
 mtt-tensix-optimize-lut-select
-Target Var(riscv_tt_opt_lut_select) Init(0)
-Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
+Target Var(riscv_tt_opt_lut_select) Init(1)
+Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-lut-select): select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
 mtt-tensix-optimize-setexp-fold
-Target Var(riscv_tt_opt_setexp_fold) Init(0)
-Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
+Target Var(riscv_tt_opt_setexp_fold) Init(1)
+Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-setexp-fold): fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
 mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
