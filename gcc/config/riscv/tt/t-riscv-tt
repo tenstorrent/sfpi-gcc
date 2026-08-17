@@ -46,6 +46,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-immvar.o \
 	gimple-rvtt-invariant.o \
 	gimple-rvtt-live.o \
+	gimple-rvtt-lut-select.o \
+	rvtt-lut-tables.o \
 	gimple-rvtt-lp-schedule.o \
 	gimple-rvtt-noval.o \
 	gimple-rvtt-synth.o \
