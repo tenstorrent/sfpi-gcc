@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "print-rtl.h"
+#include "cfghooks.h"
 #include "cfgloop.h"
 #include "cfgrtl.h"
 #include "dominance.h"
@@ -704,10 +705,15 @@ eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
 
 // Prove the constant trip count of single-block LOOP whose dedicated
 // preheader is PREHEADER.  Return true and set *TRIPS (number of times the
-// loop body executes) on success; any structural mismatch refuses.
+// loop body executes) on success; any structural mismatch refuses.  On
+// success the optional outputs receive the loop's single counter-step insn
+// (*STEP_OUT) and the counter's proven value at loop exit (*FINAL_OUT,
+// reduced to the counter mode's precision) -- the launch-loop unroll below
+// consumes them to replace the removed per-trip updates.
 static bool
 provable_constant_trips (class loop *loop, basic_block preheader,
-			 uint64_t *trips)
+			 uint64_t *trips, rtx_insn **step_out = nullptr,
+			 uint64_t *final_out = nullptr)
 {
   basic_block header = loop->header;
   rtx_insn *jump = BB_END (header);
@@ -832,6 +838,10 @@ provable_constant_trips (class loop *loop, basic_block preheader,
       if (!continues)
 	{
 	  *trips = t;
+	  if (step_out)
+	    *step_out = step_insn;
+	  if (final_out)
+	    *final_out = c;
 	  return true;
 	}
     }
@@ -1373,6 +1383,240 @@ hoist_counted_loops (function *cfn,
 	fprintf (dump_file,
 		 "Counted-loop replay payload bb %d length %u captured at %u\n",
 		 bb->index, length, slot->begin);
+    }
+}
+
+// ---- Complete unroll of proven-trip replay-launch loops ----
+//
+// After hoisting, a counted loop's body can be reduced to pure replay
+// delivery: playback launches of an already-recorded capture plus typed
+// Dst-counter steps, with only the induction-variable update and the
+// conditional branch as per-trip work.  Driving that loop control through
+// the RISC costs two delivered scalar words per trip and separates
+// consecutive launches in the final instruction stream.  When the trip
+// count is provable (the same provable_constant_trips discipline the hoist
+// itself uses -- estimated or profile counts refuse), the body replicates
+// textually: emit TRIPS copies of the per-trip delivery back to back,
+// materialize the counter's proven final value once (later passes delete it
+// when dead), and remove the loop control entirely.  This is the
+// no-source-pragma counterpart of the accepted replay-aware complete unroll:
+// the gimple-side unroll request needs the payload before recording, while
+// this shape only exists after replay formation has hoisted the capture.
+//
+// Admission is purely structural.  Every non-debug insn in the single-block
+// body must be one of:
+//   (a) a fixed-encoding TTREPLAY playback launch,
+//   (b) a typed TTINCRWC with constant operands (the per-trip Dst step the
+//       counted-loop capture leaves explicit; the Dst auto-increment pass
+//       runs later and sees every launch site with equivalent RWC coverage),
+//   (c) the loop's single counter-step insn, or
+//   (d) the final conditional jump.
+// Anything else -- another scalar insn, a recording, a non-playback replay
+// owner, an asm, a call, memory, USE/CLOBBER markers -- refuses and leaves
+// the loop byte-identical.  No operation identity, opcode calendar,
+// coefficient value, or instruction-word fingerprint participates.
+//
+// Cost: the per-trip benefit is the two removed loop-control words (positive
+// for every proven trips >= 2); the only cost is straight-line code size,
+// bounded by the cost-table constant XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS on
+// the total delivered words of the unrolled run.
+//
+// Interaction with the hoist's execution-saturation context term: the
+// contiguous launch run this unroll creates exists only in the hoisted
+// world, so it never re-prices the hoist decision.  The LAUNCH_RUN input of
+// hoist_profitable_p measures sibling launches present in the body
+// independently of the hoist under evaluation; a run manufactured by a
+// post-hoist delivery optimization is a consequence of the decision, not
+// context for it (see rvtt-cost.md).
+
+static bool
+unroll_launch_loop (class loop *loop)
+{
+  basic_block header = loop->header;
+  if (loop->num_nodes != 1 || loop->header != loop->latch)
+    return false;
+
+  // Pragma scope.  "#pragma GCC unroll" governs payload duplication: the
+  // gimple replay-unroll REQUEST defers to it and an annotated payload is
+  // never replicated.  This unroll is a delivery transformation on the
+  // residual launch loop the (equally pragma-blind, post-reload) hoist
+  // leaves behind: the capture stays recorded once and only delivered
+  // launch words replicate -- the same class of rewrite as the hoist
+  // itself, which has always fired on annotated loops.  Loop structures
+  // are rebuilt after reload, so loop->unroll is normally cleared here;
+  // honor it if it ever survives (a preserved "#pragma GCC unroll 1" must
+  // keep even its launch loop).
+  if (loop->unroll)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Launch-loop unroll refused: bb %d carries an explicit user"
+		 " unroll request\n", header->index);
+      return false;
+    }
+
+  basic_block preheader = dedicated_loop_preheader (loop);
+  if (!preheader)
+    return false;
+
+  rtx_insn *jump = BB_END (header);
+  if (!JUMP_P (jump) || !any_condjump_p (jump) || !onlyjump_p (jump)
+      || EDGE_COUNT (header->succs) != 2)
+    return false;
+
+  edge e_branch = BRANCH_EDGE (header);
+  edge e_fall = FALLTHRU_EDGE (header);
+  // A fallthrough cannot re-enter its own block, so the backedge must be
+  // the taken branch and the fallthrough the unique exit.
+  if (e_branch->dest != header || e_fall->dest == header
+      || (e_branch->flags & EDGE_ABNORMAL) || (e_fall->flags & EDGE_ABNORMAL))
+    return false;
+
+  // A loop without a playback launch is silently out of scope; refusal
+  // diagnostics below are only meaningful for launch-carrying bodies.
+  bool has_playback = false;
+  rtx_insn *insn;
+  FOR_BB_INSNS (header, insn)
+    if (NONDEBUG_INSN_P (insn) && GET_CODE (insn) == INSN
+	&& recog_memoized (insn) >= 0
+	&& get_attr_type (insn) == TYPE_TENSIX)
+      {
+	replay_span span;
+	if (is_replay_insn (span, insn) == REPLAY_playback)
+	  {
+	    has_playback = true;
+	    break;
+	  }
+      }
+  if (!has_playback)
+    return false;
+
+  // Classify the body.  DELIVERY collects the per-trip delivered words in
+  // program order; STEP is the single scalar counter update.
+  std::vector<rtx_insn *> delivery;
+  rtx_insn *step = nullptr;
+  unsigned launches = 0;
+  FOR_BB_INSNS (header, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn) || insn == jump)
+	continue;
+      if (CALL_P (insn) || GET_CODE (insn) != INSN)
+	return false;
+      rtx pattern = PATTERN (insn);
+      if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER
+	  || asm_noperands (pattern) >= 0)
+	return false;
+      if (recog_memoized (insn) >= 0 && get_attr_type (insn) == TYPE_TENSIX)
+	{
+	  replay_span span;
+	  if (is_replay_insn (span, insn) == REPLAY_playback
+	      && fixed_replay_rtx_p (pattern))
+	    {
+	      ++launches;
+	      delivery.push_back (insn);
+	      continue;
+	    }
+	  if (recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc
+	      && fixed_replay_rtx_p (pattern))
+	    {
+	      delivery.push_back (insn);
+	      continue;
+	    }
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Launch-loop unroll refused: bb %d body insn %d is not"
+		     " a playback launch or typed Dst step\n",
+		     header->index, INSN_UID (insn));
+	  return false;
+	}
+      if (step)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Launch-loop unroll refused: bb %d has a second scalar"
+		     " insn %d beyond the counter step\n",
+		     header->index, INSN_UID (insn));
+	  return false;
+	}
+      step = insn;
+    }
+  if (!launches || !step)
+    return false;
+
+  uint64_t trips, final_value;
+  rtx_insn *counter_step;
+  if (!provable_constant_trips (loop, preheader, &trips, &counter_step,
+				&final_value))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Launch-loop unroll refused: bb %d trip count is not"
+		 " provably constant\n", header->index);
+      return false;
+    }
+  // The one scalar insn must be exactly the proven counter step; any other
+  // scalar state would be silently frozen by removing the loop.
+  if (counter_step != step || trips < 2)
+    return false;
+
+  rtx step_set = single_set (step);
+  rtx counter = SET_DEST (step_set);
+  machine_mode counter_mode = GET_MODE (counter);
+  rtx final_rtx = gen_int_mode (final_value, counter_mode);
+  // The counter's proven exit value replaces the removed per-trip updates.
+  // Post-reload only single-insn constants may be materialized directly.
+  if (!SMALL_OPERAND (INTVAL (final_rtx)) && !LUI_OPERAND (INTVAL (final_rtx)))
+    return false;
+
+  unsigned trip_words = 0;
+  for (rtx_insn *d : delivery)
+    trip_words += get_attr_length (d) / 4;
+  if ((uint64_t) trip_words * trips > XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Launch-loop unroll refused: bb %d unrolled size %lu words"
+		 " exceeds %d\n", header->index,
+		 (unsigned long) ((uint64_t) trip_words * trips),
+		 XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS);
+      return false;
+    }
+
+  // Commit.  Replicate the per-trip delivery TRIPS-1 further times in body
+  // order (the scalar counter step commutes with every delivered word: it
+  // touches only the counter register), set the counter's proven final
+  // value, and remove the loop control.  The loop structure loses its
+  // backedge; record the pending fixup before mutating the CFG.
+  loops_state_set (LOOPS_NEED_FIXUP);
+
+  rtx_insn *anchor = delivery.back ();
+  for (uint64_t trip = 1; trip != trips; ++trip)
+    for (rtx_insn *d : delivery)
+      anchor = emit_insn_after (copy_insn (PATTERN (d)), anchor);
+  emit_insn_after (gen_rtx_SET (counter, final_rtx), anchor);
+
+  delete_insn (step);
+  remove_edge (e_branch);
+  delete_insn (jump);
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "Unrolled launch loop bb %d: %lu trips x %u delivered words,"
+	     " backedge removed\n", header->index, (unsigned long) trips,
+	     trip_words);
+  return true;
+}
+
+static void
+unroll_launch_loops (function *cfn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      class loop *loop = bb->loop_father;
+      if (!loop || loop->num == 0 || loop->header != bb)
+	continue;
+      unroll_launch_loop (loop);
     }
 }
 
@@ -2151,12 +2395,15 @@ transform (function *cfn, unsigned buffer_size)
 	}
     }
 
-  // Launch conversion of isomorphic runs is part of the replay-hoist
-  // mechanism family: the runs it targets are produced by the replay-aware
-  // complete unroll, and the flag keeps the default configuration
-  // byte-identical.
+  // The launch-loop unroll and the launch conversion of isomorphic runs
+  // are part of the replay-hoist mechanism family: the shapes they target
+  // are produced by the replay-aware complete unroll and the hoist above,
+  // and the flag keeps the default configuration byte-identical.
   if (riscv_tt_opt_replay_hoist > 0)
-    convert_isomorphic_runs (cfn);
+    {
+      unroll_launch_loops (cfn);
+      convert_isomorphic_runs (cfn);
+    }
 }
 
 namespace {

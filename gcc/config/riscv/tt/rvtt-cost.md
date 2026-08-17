@@ -342,6 +342,44 @@
 ;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
 ;; overrides this table value for experimentation.
 ;;
+;; Launch-loop unroll (the post-hoist delivery companion).  A counted
+;; loop whose body has been reduced to pure replay delivery -- playback
+;; launches plus typed Dst steps -- still pays two delivered scalar
+;; words per trip for its own control (counter step + branch) and
+;; separates consecutive launches by exactly those words.  With a
+;; provable trip count the loop replicates textually; the benefit,
+;; trips * 2 * RISC_PUSH_X100 delivered words removed, is positive for
+;; every trips >= 2, so the only gate besides the structural shape
+;; proof is straight-line code size:
+;;
+;;   XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS bounds the total delivered
+;;   words of the unrolled run (trips * per-trip delivered words).
+;;   128 words = 512 bytes of straight-line launches, twice the largest
+;;   currently measured winning shape (the 32-trip {launch, Dst-step}
+;;   row loop = 64 words); larger runs refuse byte-identically until a
+;;   silicon A/B promotes them.  A size guard, not a shape key: it
+;;   depends only on the proven trip count and delivered word count.
+;;
+;; ORDERING RULE for the execution-saturation context term.  The
+;; saturation term's LAUNCH_RUN input measures contiguous sibling
+;; launches present in the loop body INDEPENDENTLY of the hoist under
+;; evaluation -- context that exists in both the hoisted and unhoisted
+;; worlds.  A contiguous run manufactured AFTER the decision by a
+;; delivery optimization (this launch-loop unroll: counted-loop trips
+;; whose per-trip launch was priced as run = 1 become one back-to-back
+;; run) exists only in the hoisted world and must NOT re-price the
+;; hoist: in the unhoisted counterfactual the body still re-records per
+;; trip and contains no launch run at all, so there is no execution
+;; shadow there for the record delivery to hide in.  Re-evaluating the
+;; term against the post-unroll stream would misapply `hidden' physics:
+;; the preheader record-only pass runs BEFORE the run it feeds, not
+;; beside it, and on the issue plane the unrolled run's execution
+;; surplus (trips * length * SLOT vs trips * PUSH delivered) shadows
+;; the FOLLOWING iteration's preheader deliveries -- increasing the
+;; realized hoist benefit, never decreasing it.  Decision order is
+;; therefore: hoist (priced on the pre-unroll body), then unroll; the
+;; unroll never feeds back.
+;;
 ;; These constants describe replay-unit delivery economics only.  They
 ;; are deliberately independent of any operation identity, opcode
 ;; calendar, coefficient value, or instruction-word fingerprint.
@@ -349,6 +387,7 @@
   (XTT_REPLAY_COST_RISC_PUSH_X100   123)
   (XTT_REPLAY_COST_REPLAY_SLOT_X100 100)
   (XTT_REPLAY_HOIST_MIN_BENEFIT      60)
+  (XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS 128)
 ])
 
 
