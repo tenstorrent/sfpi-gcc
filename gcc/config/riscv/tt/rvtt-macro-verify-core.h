@@ -50,6 +50,23 @@ struct expect_template
   uint8_t mod1;
 };
 
+/* CC-template model facts (WP9), re-derived by the expectation builder
+   from the region's explicit facts and compared against the
+   synthesized descriptor's model; the timing inequalities are
+   re-checked here from the exchanged slots so a wrong model cannot
+   pass by agreeing with itself.  */
+struct expect_cc
+{
+  bool active;
+  bool complement;
+  int def_visible_slot;
+  int pre_load_slot;
+  int post_load_slot;
+  int store_launch_slot;
+  int restore_visible_slot;
+  int row_interval;
+};
+
 struct expectations
 {
   expect_access accesses[4];
@@ -62,6 +79,7 @@ struct expectations
   bool check_misc;
   int stride;			/* absorbed Dst stride; 0 = none       */
   uint32_t planned_lregs;
+  expect_cc cc;
 };
 
 struct descriptor_words
@@ -75,6 +93,7 @@ struct descriptor_words
   unsigned n_setc16;
   uint32_t launch_words[4];
   unsigned n_launches;
+  expect_cc cc;			/* the synthesized CC model	       */
 };
 
 /* Returns null on success or the stable component tag of the first
@@ -156,6 +175,29 @@ verify (const rvtt_macro::caps *c, const descriptor_words &desc,
 	= rvtt_macro::template_hidden_lreg_writes (c, desc.templ[t]);
       if (hidden & ~expect.planned_lregs)
 	return "hidden-write-unowned";
+    }
+
+  /* CC-template model (WP9): the synthesized model must equal the
+     re-derived expectation field for field, and the deferred-CC timing
+     obligations are re-checked here from the exchanged slots.  */
+  if (desc.cc.active != expect.cc.active)
+    return "cc-model";
+  if (expect.cc.active)
+    {
+      if (desc.cc.complement != expect.cc.complement
+	  || desc.cc.def_visible_slot != expect.cc.def_visible_slot
+	  || desc.cc.pre_load_slot != expect.cc.pre_load_slot
+	  || desc.cc.post_load_slot != expect.cc.post_load_slot
+	  || desc.cc.store_launch_slot != expect.cc.store_launch_slot
+	  || desc.cc.restore_visible_slot != expect.cc.restore_visible_slot
+	  || desc.cc.row_interval != expect.cc.row_interval)
+	return "cc-model";
+      if (expect.cc.pre_load_slot >= expect.cc.def_visible_slot
+	  || expect.cc.post_load_slot < expect.cc.def_visible_slot
+	  || expect.cc.store_launch_slot >= expect.cc.def_visible_slot
+	  || expect.cc.restore_visible_slot <= expect.cc.post_load_slot
+	  || expect.cc.restore_visible_slot > expect.cc.row_interval)
+	return "cc-timing";
     }
 
   return nullptr;

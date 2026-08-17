@@ -91,6 +91,14 @@ rvtt_macro_verify_descriptor (const macro_region &region,
   words.n_launches = desc.launches.length ();
   for (unsigned l = 0; l != desc.launches.length (); ++l)
     words.launch_words[l] = desc.launches[l].word;
+  words.cc.active = desc.cc.active;
+  words.cc.complement = desc.cc.complement;
+  words.cc.def_visible_slot = desc.cc.def_visible_slot;
+  words.cc.pre_load_slot = desc.cc.pre_load_slot;
+  words.cc.post_load_slot = desc.cc.post_load_slot;
+  words.cc.store_launch_slot = desc.cc.store_launch_slot;
+  words.cc.restore_visible_slot = desc.cc.restore_visible_slot;
+  words.cc.row_interval = desc.cc.row_interval;
 
   /* Testing-only fault injection: corrupt the LOCAL word copy (never
      the descriptor itself) exactly as the standalone adversarial suite
