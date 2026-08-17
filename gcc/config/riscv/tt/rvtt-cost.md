@@ -391,6 +391,89 @@
 ])
 
 
+;; ---------------------------------------------------------------------
+;; MOP loop-delivery formation (rvtt_mop_form).  Additive section; the
+;; replay-hoist model above is unchanged and its constants are reused.
+;;
+;; The MOP expander is a third delivery tier under the replay buffer:
+;;
+;;   RISC push      one delivered word per instruction  (PUSH = 123)
+;;   REPLAY launch  one delivered word per PAYLOAD      (payload slots
+;;                                                       reissued at
+;;                                                       SLOT = 100)
+;;   MOP loop       one delivered word per LOOP: the template's launch
+;;                  word is reissued loop_count+1 times by the frontend
+;;                  with no RISC involvement per iteration.
+;;
+;; Pricing follows the corrected concurrent-delivery accounting (the
+;; exp-parity re-basing, NOTES-exp-parity-laneR2.md): during replay
+;; playback, RISC delivery is CONCURRENT with execution -- per-row time
+;; is max(exec, 1.23 x delivered words), NOT their sum -- proven by the
+;; sigmoidappx pure-delivery control (64 delivered loop-control words
+;; removed, measured +0.006 units = noise) and the exp pre-Z -> Z
+;; increment (-33.0 RAW measured against -32 modeled from the execution
+;; side alone).  Under that accounting a replay-launch row prices
+;;
+;;   before_row = max ((len+k) * SLOT, d * PUSH) ; d delivered words/row:
+;;                                             ; 1+k for a straight-line
+;;                                             ; run of [launch, k typed
+;;                                             ; SETRWC step words], 3
+;;                                             ; for a counted launch
+;;                                             ; loop (launch + 2
+;;                                             ; control); k step words
+;;                                             ; ride in the template's
+;;                                             ; flags&2 slots and
+;;                                             ; execute either way
+;;   after_row  = (len+k) * SLOT               ; MOP delivers nothing
+;;
+;; so MOP formation relieves ONLY delivery-bound rows:
+;;
+;;   benefit = N * max (0, d * PUSH - (len+k) * SLOT) - config_words * PUSH
+;;
+;; where the configuration block is serial delivery bought at full
+;; price (it precedes the loop it feeds; there is no execution shadow
+;; for it to hide in -- same ordering physics as the hoist's
+;; record-only preheader pass):
+;;
+;;   config_words = mop_sync (lui+sw, the production reprogramming
+;;                  guard) + config-base lui + one MMIO store per
+;;                  programmed template register (flags, the launch
+;;                  word, and any flags&2 step/NOP slots; li 1..2 per
+;;                  distinct nonzero value, zero from x0) + MOP_CFG +
+;;                  MOP = 8..9 words for the bare launch class, up to
+;;                  ~16 with three step slots; computed exactly per
+;;                  candidate.
+;;
+;; Consequences the model asserts (falsifiable, no silicon yet for this
+;; tier):
+;;   - execution-bound rows (len >= 2 in a straight-line run) model
+;;     <= 0 and refuse byte-identically: their launch pushes were
+;;     already free under the corrected accounting.  This is exactly
+;;     the MOP-tier correction the TOP3-3 design doc names as the
+;;     falsification arm of its 1.23:1 additive prediction; a silicon
+;;     A/B on the minmax gate adjudicates between them (the testing-only
+;;     -mtt-tensix-mop-form-force flag exists to build that leg, since
+;;     no non-negative threshold admits a negative modeled benefit).
+;;   - the winning class is delivery-bound rows: single-slot payload
+;;     runs (len 1: 23 centislots/row, fires at N >= ~51) and counted
+;;     launch loops whose control words dominate the row (d = 3:
+;;     len 1 fires at N >= ~5, len 2 at N >= ~7, len 3 at N >= ~17).
+;;
+;; MIN_BENEFIT mirrors the replay-hoist threshold (60 centislots =
+;; 0.6 slot per formation): refusal is byte-identical code and costs
+;; nothing, and no silicon point yet anchors this tier's acceptance
+;; region.  -mtt-tensix-mop-form-min-benefit= (same centislot units)
+;; overrides it for experimentation and for building silicon A/B legs.
+;;
+;; These constants describe MOP delivery economics only.  They are
+;; deliberately independent of any operation identity, opcode calendar,
+;; coefficient value, or instruction-word fingerprint.  MOP capability
+;; facts (encodings, register file, S+L <= 32 replay co-ownership) live
+;; in rvtt-mop-tables.h with per-fact provenance.
+(define_constants [
+  (XTT_MOP_FORM_MIN_BENEFIT 60)
+])
+
 (define_automaton "rvtt_tensix")
 (define_cpu_unit "rvtt_math,rvtt_sfpu,rvtt_tdma,rvtt_cfg,rvtt_sync"
   "rvtt_tensix")
