@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
+#include "rvtt-macro-derive-core.h"
 
 /* Selection is keyed by the DERIVED event structure -- per-macro subunit
    lists, store placement, and the admitted source instructions' encoding
@@ -424,6 +425,44 @@ find_misc_word (const caps *c, const char *name, uint32_t *word)
   return false;
 }
 
+/* A program's template rules must be able to reach their source
+   operands: an admitted instruction VARIANT with a different operand
+   LAYOUT (e.g. the constant-register SFPSWAP forms, whose recog
+   operand list is shorter than the binary-periodic swap_int layout's)
+   is not the proven program and must not match it -- it falls through
+   to the derived-calendar path or refuses, instead of failing inside
+   the matched program's packer.  An operand that EXISTS but is not the
+   encodable constant stays this program's shape and keeps the
+   established encodability refusal (the WP8 dynamic-shift direction).  */
+
+static bool
+operand_exists (rtx_insn *insn, int pos)
+{
+  extract_insn (insn);
+  return pos >= 0 && pos < recog_data.n_operands;
+}
+
+static bool
+program_operands_reachable (const desc_program &p,
+			    const derived_structure &derived)
+{
+  for (unsigned t = 0; t != p.n_templates; ++t)
+    {
+      const desc_template_rule &rule = p.templates[t];
+      if (rule.source_event < 0
+	  || (unsigned) rule.source_event >= derived.n_value_insns)
+	continue;
+      rtx_insn *src = derived.value_insns[rule.source_event];
+      if (rule.mod1_op >= 0 && !operand_exists (src, rule.mod1_op))
+	return false;
+      if (rule.imm12_op >= 0 && !operand_exists (src, rule.imm12_op))
+	return false;
+      if (rule.pin_op >= 0 && !operand_exists (src, rule.pin_op))
+	return false;
+    }
+  return true;
+}
+
 static const desc_program *
 find_program (const derived_structure &derived)
 {
@@ -435,7 +474,7 @@ find_program (const derived_structure &derived)
       bool match = true;
       for (unsigned m = 0; m != p.n_macros && match; ++m)
 	match = macro_key_matches (p.macros[m], derived.macros[m], is_wh);
-      if (match)
+      if (match && program_operands_reachable (p, derived))
 	return &p;
     }
   return nullptr;
@@ -657,6 +696,382 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
   return true;
 }
 
+/* ------------------------------------------------------------------ */
+/* Timing-calendar derivation (Layer 4b): when no proven whole-word
+   program matches, derive the sequence words, delays, and misc fields
+   from the schedule and the established architectural facts
+   (docs/TIMING_CALENDAR_DERIVATION.md §4).  The admitted template
+   class grows one CRAQ-validated increment at a time; today it is the
+   constant-register SFPSWAP family (the unary max/min shape).  Rows
+   outside the admitted class keep the established
+   descriptor-program-unproven refusal byte-identically.	      */
+/* ------------------------------------------------------------------ */
+
+/* Architectural index of a hardware constant register operand, or -1.
+   Constant registers appear as (unspec [(const_int L)] SFPCSTLREG) --
+   the L index is printed as L%d by the assembler -- or, defensively,
+   as a hard SFPU register in the constant range L8..L15.  */
+
+static int
+cstlreg_index (rtx x)
+{
+  if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_SFPCSTLREG
+      && CONST_INT_P (XVECEXP (x, 0, 0)))
+    {
+      HOST_WIDE_INT idx = INTVAL (XVECEXP (x, 0, 0));
+      return idx >= SFPU_CREG_IDX_LWM && idx <= 15 ? (int) idx : -1;
+    }
+  if (REG_P (x) && REGNO (x) >= SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
+      && REGNO (x) <= SFPU_REG_FIRST + 15)
+    return (int) (REGNO (x) - SFPU_REG_FIRST);
+  return -1;
+}
+
+/* Analyze a constant-register SFPSWAP variant: the admitted derived
+   template class.  The single-result patterns carry a variant marker
+   as the unspec's last element (1 = constant in the VC position,
+   2 = constant in the VD position); the template realization always
+   places the launch value in the VD position and the constant in VC,
+   so the VD-position variant takes the architecturally complementary
+   result-routing mod (bit 8 -- the same routing bit the frozen minmax
+   selection used, LM:781-786).  The proven envelope is the
+   full-vector min/max class: post-mapping mod1 in {1, 9}; sub-vector
+   modes and the dual-constant variant refuse.  */
+
+static bool
+swap_cst_template_fields (rtx_insn *insn, uint8_t *src_c, uint8_t *mod1)
+{
+  if (insn_unspecv (insn) != UNSPECV_SFPSWAP)
+    return false;
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) != SET)
+    return false;		/* dual-result / dual-constant forms   */
+  rtx un = SET_SRC (pat);
+  if (GET_CODE (un) != UNSPEC_VOLATILE || XVECLEN (un, 0) != 4)
+    return false;
+  rtx a = XVECEXP (un, 0, 0);
+  rtx b = XVECEXP (un, 0, 1);
+  rtx mod = XVECEXP (un, 0, 2);
+  rtx marker = XVECEXP (un, 0, 3);
+  if (!CONST_INT_P (mod) || !CONST_INT_P (marker))
+    return false;
+  HOST_WIDE_INT m = INTVAL (mod);
+  int cst;
+  switch (INTVAL (marker))
+    {
+    case 1:			/* live VD position, constant VC       */
+      cst = cstlreg_index (b);
+      break;
+    case 2:			/* constant VD position, live VC:
+				   surviving result is the VC-position
+				   one; the template keeps the live
+				   value in VD, so the result routing
+				   flips.  */
+      cst = cstlreg_index (a);
+      m ^= 8;
+      break;
+    default:
+      return false;
+    }
+  if (cst < 0 || (m != 1 && m != 9))
+    return false;
+  *src_c = (uint8_t) cst;
+  *mod1 = (uint8_t) m;
+  return true;
+}
+
+/* Shared derived synthesis state: the row_spec fed to the derivation
+   core, the derived calendar, and the packed template fields.  */
+
+struct derived_synthesis
+{
+  rvtt_macro_derive::row_spec row;
+  rvtt_macro_derive::derived_calendar cal;
+  uint8_t template_opcode[4];
+  uint8_t template_src_c[4];
+  uint8_t template_mod1[4];
+  unsigned n_templates;
+  int store_macro;
+  unsigned store_mode;
+  bool store_uses_carrier_mode;
+  unsigned store_only_vd;
+  const char *refusal;
+};
+
+/* Build the derivation-core row description from the region's explicit
+   facts and the schedule, gated on the admitted template class.
+   Returns false with DS->refusal null when the row is simply outside
+   the admitted class (the caller keeps the established refusal).  */
+
+static bool
+derive_row (const macro_region &region, const macro_schedule &schedule,
+	    const rvtt_macro::caps *c, derived_synthesis *ds)
+{
+  using namespace rvtt_macro_derive;
+  memset (ds, 0, sizeof (*ds));
+  ds->store_macro = -1;
+  ds->row.store_producer = -1;
+  ds->row.store_input_last_slot = -1;
+  ds->row.store_vd_next_write = -1;
+  ds->row.store_event = -1;
+
+  const macro_row &row = region.rows[0];
+
+  /* Owned configuration destinations bound the derived resources.  */
+  unsigned max_templates = 0, max_macros = 0;
+  for (unsigned d = 0; d < 4; ++d)
+    if ((c->owned_config_dests >> d) & 1)
+      ++max_templates;
+  for (unsigned d = 4; d < 8; ++d)
+    if ((c->owned_config_dests >> d) & 1)
+      ++max_macros;
+  ds->row.max_templates = max_templates;
+  ds->row.max_macros = max_macros;
+
+  /* Per-register last writer while walking the row in program order:
+     -1 none, -2 a load (issued), else the value-event index.  */
+  int last_writer[16];
+  int last_writer_slot[16];
+  for (unsigned r = 0; r < 16; ++r)
+    {
+      last_writer[r] = -1;
+      last_writer_slot[r] = -1;
+    }
+  /* Carrier-load LREG mask per macro.  */
+  uint32_t carrier_load_regs[4] = {};
+  int n_macros = 0;
+  for (unsigned ix = 0; ix != row.insns.length (); ++ix)
+    {
+      const macro_event &ev = schedule.events[ix];
+      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+      if ((e.dst_mem_read || e.dst_mem_write) && ev.is_carrier
+	  && ev.macro_index < 4)
+	{
+	  if (e.dst_mem_read)
+	    carrier_load_regs[ev.macro_index] |= e.lreg_write;
+	  ds->row.macro_slot[ev.macro_index] = ev.slot;
+	  if ((int) ev.macro_index + 1 > n_macros)
+	    n_macros = ev.macro_index + 1;
+	}
+      if ((e.dst_mem_write || (ev.realization
+			       == macro_event::LAUNCHED_TEMPLATE_SLOT))
+	  && ev.macro_index < 4
+	  && (int) ev.macro_index + 1 > n_macros)
+	n_macros = ev.macro_index + 1;
+    }
+  ds->row.n_macros = (unsigned) n_macros;
+
+  unsigned n_ev = 0;
+  for (unsigned ix = 0; ix != row.insns.length (); ++ix)
+    {
+      const macro_event &ev = schedule.events[ix];
+      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+      bool is_load = e.dst_mem_read;
+      bool is_store = e.dst_mem_write;
+      bool launched_value = ev.realization
+	== macro_event::LAUNCHED_TEMPLATE_SLOT && !ev.is_store;
+      bool launched_store = is_store
+	&& ev.realization == macro_event::LAUNCHED_TEMPLATE_SLOT;
+
+      if (launched_value)
+	{
+	  /* Admitted derived template class: constant-register SFPSWAP.  */
+	  uint8_t src_c = 0, mod1 = 0;
+	  if (!swap_cst_template_fields (row.insns[ix], &src_c, &mod1))
+	    return false;	/* outside the admitted class	       */
+	  if (n_ev == MAX_EVENTS || ds->n_templates == 4)
+	    return false;
+	  event_spec &spec = ds->row.events[n_ev];
+	  spec.opcode = source_opcode_byte (row.insns[ix]);
+	  spec.is_store = false;
+	  spec.macro_index = ev.macro_index;
+	  spec.carrier_slot = ds->row.macro_slot[ev.macro_index];
+	  spec.dep_mask = 0;
+	  spec.latest_issued_input_slot = -1;
+	  spec.reads_carrier_vd_reg
+	    = (e.lreg_read & carrier_load_regs[ev.macro_index]) != 0;
+	  spec.planned_src_c = src_c;
+	  for (unsigned r = 0; r < 16; ++r)
+	    if ((e.lreg_read >> r) & 1)
+	      {
+		if (last_writer[r] >= 0)
+		  spec.dep_mask |= 1u << last_writer[r];
+		else if (last_writer[r] == -2
+			 && last_writer_slot[r]
+			    > spec.latest_issued_input_slot)
+		  spec.latest_issued_input_slot = last_writer_slot[r];
+	      }
+	  /* Constant-register sources are architectural constants, not
+	     dataflow inputs.  */
+	  ds->template_opcode[ds->n_templates] = spec.opcode;
+	  ds->template_src_c[ds->n_templates] = src_c;
+	  ds->template_mod1[ds->n_templates] = mod1;
+	  ++ds->n_templates;
+	  for (unsigned r = 0; r < 16; ++r)
+	    if ((e.lreg_write >> r) & 1)
+	      last_writer[r] = (int) n_ev;
+	  ++n_ev;
+	}
+      else if (launched_store)
+	{
+	  if (n_ev == MAX_EVENTS || ds->row.store_event >= 0)
+	    return false;
+	  event_spec &spec = ds->row.events[n_ev];
+	  spec.opcode = 0;
+	  spec.is_store = true;
+	  spec.macro_index = ev.macro_index;
+	  spec.carrier_slot = ds->row.macro_slot[ev.macro_index];
+	  spec.dep_mask = 0;
+	  spec.latest_issued_input_slot = -1;
+	  spec.reads_carrier_vd_reg = false;
+	  spec.planned_src_c = 0;
+	  for (unsigned r = 0; r < 16; ++r)
+	    if (((e.lreg_read >> r) & 1) && last_writer[r] >= 0)
+	      {
+		spec.dep_mask |= 1u << last_writer[r];
+		ds->row.store_producer = last_writer[r];
+	      }
+	  ds->row.store_event = (int) n_ev;
+	  ds->store_macro = ev.macro_index;
+	  rtx address, mode, addr_mode;
+	  if (!rvtt_dst_access_operands (row.insns[ix], e, &address, &mode,
+					 &addr_mode)
+	      || !CONST_INT_P (mode) || UINTVAL (mode) > 0xf)
+	    return false;
+	  ds->store_mode = (unsigned) UINTVAL (mode);
+	  ++n_ev;
+	}
+      else if (is_load)
+	{
+	  /* Carrier or explicit load: an issued write.  */
+	  for (unsigned r = 0; r < 16; ++r)
+	    if ((e.lreg_write >> r) & 1)
+	      {
+		last_writer[r] = -2;
+		last_writer_slot[r] = ev.slot;
+	      }
+	  if (!ev.is_carrier && ev.realization == macro_event::EXPLICIT_INSN
+	      && ds->row.n_explicits < 8)
+	    {
+	      ds->row.explicits[ds->row.n_explicits].slot = ev.slot;
+	      ds->row.explicits[ds->row.n_explicits].unit_mask = 0;
+	      ++ds->row.n_explicits;
+	    }
+	}
+      else if (ev.realization == macro_event::EXPLICIT_INSN)
+	{
+	  /* An explicit compute issue occupies its architectural
+	     sub-unit in its issue cycle (the ISA discard rule).  */
+	  unsigned mask = 0;
+	  switch (e.subunit)
+	    {
+	    case XTT_SU_SIMPLE:
+	      mask = 1u << rvtt_macro::SEQ_UNIT_SIMPLE;
+	      break;
+	    case XTT_SU_MAD:
+	      mask = 1u << rvtt_macro::SEQ_UNIT_MAD;
+	      break;
+	    case XTT_SU_ROUND:
+	      mask = 1u << rvtt_macro::SEQ_UNIT_ROUND;
+	      break;
+	    case XTT_SU_STORE:
+	      mask = 1u << rvtt_macro::SEQ_UNIT_STORE;
+	      break;
+	    default:
+	      mask = 0;
+	      break;
+	    }
+	  if (ds->row.n_explicits < 8)
+	    {
+	      ds->row.explicits[ds->row.n_explicits].slot = ev.slot;
+	      ds->row.explicits[ds->row.n_explicits].unit_mask = mask;
+	      ++ds->row.n_explicits;
+	    }
+	  for (unsigned r = 0; r < 16; ++r)
+	    if ((e.lreg_write >> r) & 1)
+	      {
+		last_writer[r] = -2;
+		last_writer_slot[r] = ev.slot;
+	      }
+	}
+      else
+	return false;		/* coalesced/CC rows are the proven
+				   select program's territory	       */
+    }
+  ds->row.n_events = n_ev;
+  if (ds->row.store_event < 0 || ds->row.store_producer < 0
+      || ds->n_templates == 0)
+    return false;
+
+  ds->row.ii = schedule.ii;
+  ds->row.last_issue_slot = schedule.ii - 1;
+  ds->row.vd_alternates = schedule.alternating_vd;
+  /* An unabsorbed separator occupies the last issue slot and is not an
+     SFPU-class instruction.  */
+  bool kept_separator = row.separator && !schedule.absorbed_stride;
+  ds->row.window_all_sfpu = !kept_separator;
+  if (kept_separator && ds->row.n_explicits < 8)
+    {
+      ds->row.explicits[ds->row.n_explicits].slot = schedule.ii - 1;
+      ds->row.explicits[ds->row.n_explicits].unit_mask = 0;
+      ++ds->row.n_explicits;
+    }
+
+  /* Store mod0 source: the store-carrying launch encodes the mode of
+     the access it carries, so a store-only carrier (or a merged
+     carrier whose load shares the store's mode) takes the launch's
+     Mod0; otherwise the misc StoreMod0 nibble carries it.  */
+  ds->store_uses_carrier_mode = true;
+  for (unsigned ix = 0; ix != row.insns.length (); ++ix)
+    {
+      const macro_event &ev = schedule.events[ix];
+      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+      if (e.dst_mem_read && ev.is_carrier
+	  && ev.macro_index == (unsigned) ds->store_macro)
+	{
+	  rtx address, mode, addr_mode;
+	  if (rvtt_dst_access_operands (row.insns[ix], e, &address, &mode,
+					&addr_mode)
+	      && CONST_INT_P (mode))
+	    ds->store_uses_carrier_mode
+	      = UINTVAL (mode) == ds->store_mode;
+	}
+    }
+
+  /* The store-only carrier's sacrificial VD: the lowest physical LREG
+     outside the alternating pair and the row's internal registers.  */
+  {
+    uint32_t used = region.internal_lregs | 0x3u;
+    unsigned vd = 2;
+    while (vd < 8 && ((used >> vd) & 1))
+      ++vd;
+    if (vd == 8)
+      return false;
+    ds->store_only_vd = vd;
+  }
+
+  if (!rvtt_macro_derive::derive_calendar (c, ds->row, &ds->cal))
+    {
+      ds->refusal = ds->cal.refusal;
+      return false;
+    }
+  if (ds->cal.has_staging_copy)
+    {
+      rvtt_macro::staging_copy_facts copy;
+      if (!rvtt_macro::staging_copy_realization (c, &copy)
+	  || ds->cal.staging_template_index != (int) ds->n_templates)
+	{
+	  ds->refusal = rvtt_macro_derive::refusal_store_source ();
+	  return false;
+	}
+      ds->template_opcode[ds->n_templates] = copy.opcode;
+      ds->template_src_c[ds->n_templates] = 0;
+      ds->template_mod1[ds->n_templates] = copy.mod1;
+      ++ds->n_templates;
+    }
+  return true;
+}
+
 } // anonymous namespace
 
 void
@@ -709,7 +1124,189 @@ rvtt_macro_synthesize (const macro_region &region,
     }
   if (!program)
     {
-      out->refusal = macro_desc_refusal_program_unproven;
+      /* Layer 4b: no proven whole-word program -- derive the calendar
+	 from the schedule and the established architectural facts.
+	 Rows outside the admitted derived template class (or failing
+	 any derivation obligation) refuse by name.  */
+      derived_synthesis ds;
+      if (derive_row (region, schedule, c, &ds))
+	{
+	  /* Templates: the admitted source events' packed fields plus
+	     the staging copy; positional dest selectors.  */
+	  out->n_templates = ds.n_templates;
+	  for (unsigned t = 0; t != ds.n_templates; ++t)
+	    {
+	      template_spec spec;
+	      spec.opcode = ds.template_opcode[t];
+	      spec.imm12 = 0;
+	      spec.src_c = ds.template_src_c[t];
+	      spec.dest_sel = 0xc + t;
+	      spec.mod1 = ds.template_mod1[t];
+	      if (!encode_template (c, spec, &out->templ[t]))
+		{
+		  out->refusal = macro_desc_refusal_encoding_failed;
+		  if (dump)
+		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+			     out->refusal);
+		  return true;
+		}
+	    }
+
+	  /* Derived sequence words and misc fields.  */
+	  out->n_seq = ds.row.n_macros;
+	  for (unsigned m = 0; m != ds.row.n_macros; ++m)
+	    out->seq[m] = ds.cal.seq_words[m];
+	  out->misc = rvtt_macro::encode_misc_fields
+	    (ds.store_uses_carrier_mode ? 0 : ds.store_mode,
+	     ds.store_uses_carrier_mode ? 1u << ds.store_macro : 0,
+	     ds.cal.delay_kind_mask);
+	  out->has_misc = true;
+
+	  if (schedule.absorbed_stride)
+	    {
+	      bool needs_bank_base = false;
+	      if (!addr_mod_program (c, schedule.absorbed_stride,
+				     out->setc16, &out->n_setc16,
+				     &needs_bank_base))
+		{
+		  out->refusal = macro_desc_refusal_encoding_failed;
+		  if (dump)
+		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+			     out->refusal);
+		  return true;
+		}
+	    }
+
+	  /* Launch tuples: value carriers alternate the {0,1} VD pair;
+	     store-only carriers take the derived sacrificial VD.  */
+	  const macro_row &drow = region.rows[0];
+	  for (unsigned m = 0; m != ds.row.n_macros; ++m)
+	    {
+	      macro_launch_spec launch;
+	      memset (&launch, 0, sizeof (launch));
+	      launch.macro_index = m;
+	      bool have = false, is_store_only = true;
+	      for (unsigned ix = 0; ix != drow.insns.length (); ++ix)
+		{
+		  const macro_event &ev = schedule.events[ix];
+		  xtt_effect_set e = rvtt_insn_effects (drow.insns[ix]);
+		  bool carried_load = e.dst_mem_read && ev.is_carrier
+		    && ev.macro_index == m;
+		  bool carried_store = e.dst_mem_write && ev.macro_index == m
+		    && ev.realization == macro_event::LAUNCHED_TEMPLATE_SLOT;
+		  if (!carried_load && !carried_store)
+		    continue;
+		  rtx address, mode, addr_mode;
+		  if (!rvtt_dst_access_operands (drow.insns[ix], e, &address,
+						 &mode, &addr_mode)
+		      || !CONST_INT_P (address) || !CONST_INT_P (mode))
+		    continue;
+		  if (carried_load)
+		    {
+		      is_store_only = false;
+		      launch.address = UINTVAL (address);
+		      launch.mode = UINTVAL (mode);
+		      have = true;
+		    }
+		  else if (!have)
+		    {
+		      launch.address = UINTVAL (address);
+		      launch.mode = UINTVAL (mode);
+		      have = true;
+		    }
+		}
+	      if (!have)
+		continue;
+	      bool absorbs = schedule.absorbed_stride
+		&& m == ds.row.n_macros - 1;
+	      launch.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
+		: c->no_increment_addr_mode;
+	      if (is_store_only)
+		{
+		  launch.vd = ds.store_only_vd;
+		  launch.vd_alternates = false;
+		}
+	      else
+		{
+		  launch.vd = 0;
+		  launch.vd_alternates = true;
+		}
+	      if (!encode_launch (c, m, launch.vd, launch.mode,
+				  launch.addr_mode, launch.address,
+				  &launch.word)
+		  || (launch.vd_alternates
+		      && !encode_launch (c, m, launch.vd ^ 1, launch.mode,
+					 launch.addr_mode, launch.address,
+					 &launch.word_alt)))
+		{
+		  out->refusal = macro_desc_refusal_encoding_failed;
+		  if (dump)
+		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
+			     out->refusal);
+		  return true;
+		}
+	      out->launches.safe_push (launch);
+	    }
+
+	  out->drain_slots = ds.cal.drain;
+	  out->needs_all_lanes_prefix = region.net.cc_read;
+	  out->keep_separator = false;
+
+	  out->planned_lregs = region.internal_lregs | 0x3u
+	    | (1u << ds.store_only_vd);
+	  for (unsigned t = 0; t != out->n_templates; ++t)
+	    out->planned_lregs |= template_hidden_lreg_writes (c,
+							       out->templ[t]);
+
+	  if (dump)
+	    {
+	      fprintf (dump,
+		       "Macro-planner descriptor: derived-calendar"
+		       " events=%u staging=%s drain=%d kind-mask=0x%x\n",
+		       ds.row.n_events,
+		       ds.cal.has_staging_copy ? "copy" : "none",
+		       ds.cal.drain, ds.cal.delay_kind_mask);
+	      fprintf (dump,
+		       "Macro-planner descriptor: templates=%u seq=%u"
+		       " misc=0x%08x setc16=%u launches=%u drain=%d"
+		       " planned-lregs=0x%x prefix=%s\n",
+		       out->n_templates, out->n_seq, out->misc,
+		       out->n_setc16, out->launches.length (),
+		       out->drain_slots, out->planned_lregs,
+		       out->needs_all_lanes_prefix ? "all-lanes" : "none");
+	      for (unsigned t = 0; t != out->n_templates; ++t)
+		fprintf (dump,
+			 "Macro-planner descriptor-word dest=%u: 0x%08x\n",
+			 t, out->templ[t]);
+	      for (unsigned m = 0; m != out->n_seq; ++m)
+		fprintf (dump,
+			 "Macro-planner descriptor-word dest=%u: 0x%08x\n",
+			 4 + m, out->seq[m]);
+	      fprintf (dump, "Macro-planner descriptor-word dest=8: 0x%08x\n",
+		       out->misc);
+	      for (unsigned s = 0; s != out->n_setc16; ++s)
+		{
+		  uint32_t word;
+		  if (rvtt_macro::encode_setc16 (c, out->setc16[s].config_reg,
+						 out->setc16[s].value, &word))
+		    fprintf (dump, "Macro-planner descriptor-setc16:"
+			     " 0x%08x\n", word);
+		}
+	      for (macro_launch_spec &launch : out->launches)
+		{
+		  fprintf (dump, "Macro-planner descriptor-launch: macro=%u"
+			   " vd=%u word=0x%08x", launch.macro_index,
+			   launch.vd, launch.word);
+		  if (launch.vd_alternates)
+		    fprintf (dump, " alt-vd=%u alt-word=0x%08x",
+			     launch.vd ^ 1, launch.word_alt);
+		  fprintf (dump, "\n");
+		}
+	    }
+	  return true;
+	}
+      out->refusal = ds.refusal ? ds.refusal
+	: macro_desc_refusal_program_unproven;
       if (dump)
 	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
 		 out->refusal);
@@ -1087,7 +1684,100 @@ rvtt_macro_build_expectations (const macro_region &region,
     return false;
   const desc_program *program = find_program (derived);
   if (!program)
-    return false;
+    {
+      /* Derived-calendar expectations (Layer 4b): re-run the shared
+	 derivation from the region's explicit facts.  The same-table
+	 limitation stated above applies; the independent cross-check
+	 for the derivation itself is the standalone reproduction suite
+	 rvtt-macro-derive-test.cc, which pins the algorithm against
+	 independently recorded frozen words.  */
+      derived_synthesis ds;
+      if (!derive_row (region, schedule, c, &ds))
+	return false;
+      out->n_templates = ds.n_templates;
+      for (unsigned t = 0; t != ds.n_templates; ++t)
+	{
+	  rvtt_macro_verify::expect_template &e = out->templates[t];
+	  e.whole_word = false;
+	  e.opcode = ds.template_opcode[t];
+	  e.imm12 = 0;
+	  e.dest_sel = 0xc + t;
+	  e.mod1 = ds.template_mod1[t];
+	}
+      out->n_seq = ds.row.n_macros;
+      for (unsigned m = 0; m != ds.row.n_macros; ++m)
+	out->seq_words[m] = ds.cal.seq_words[m];
+      out->misc = rvtt_macro::encode_misc_fields
+	(ds.store_uses_carrier_mode ? 0 : ds.store_mode,
+	 ds.store_uses_carrier_mode ? 1u << ds.store_macro : 0,
+	 ds.cal.delay_kind_mask);
+      out->check_misc = true;
+      out->stride = schedule.absorbed_stride;
+
+      const macro_row &row = region.rows[0];
+      for (unsigned m = 0; m != ds.row.n_macros; ++m)
+	{
+	  rvtt_macro_verify::expect_access &a
+	    = out->accesses[out->n_accesses];
+	  a.macro_index = m;
+	  bool have = false, is_store_only = true;
+	  for (unsigned ix = 0; ix != row.insns.length (); ++ix)
+	    {
+	      const macro_event &ev = schedule.events[ix];
+	      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+	      bool carried_load = e.dst_mem_read && ev.is_carrier
+		&& ev.macro_index == m;
+	      bool carried_store = e.dst_mem_write && ev.macro_index == m
+		&& ev.realization == macro_event::LAUNCHED_TEMPLATE_SLOT;
+	      if (!carried_load && !carried_store)
+		continue;
+	      rtx address, mode, addr_mode;
+	      if (!rvtt_dst_access_operands (row.insns[ix], e, &address,
+					     &mode, &addr_mode)
+		  || !CONST_INT_P (address) || !CONST_INT_P (mode))
+		continue;
+	      if (carried_load)
+		{
+		  is_store_only = false;
+		  a.address = UINTVAL (address);
+		  a.mode = UINTVAL (mode);
+		  have = true;
+		}
+	      else if (!have)
+		{
+		  a.address = UINTVAL (address);
+		  a.mode = UINTVAL (mode);
+		  have = true;
+		}
+	    }
+	  if (!have)
+	    continue;
+	  bool absorbs = schedule.absorbed_stride
+	    && m == ds.row.n_macros - 1;
+	  a.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
+	    : c->no_increment_addr_mode;
+	  a.vd = is_store_only ? ds.store_only_vd : 0;
+	  ++out->n_accesses;
+	}
+
+      out->planned_lregs = region.internal_lregs | 0x3u
+	| (1u << ds.store_only_vd);
+      /* Hidden template writes are covered through the synthesized
+	 words in verify(); mirror the ownership expectation here.  */
+      for (unsigned t = 0; t != ds.n_templates; ++t)
+	{
+	  template_spec spec;
+	  spec.opcode = ds.template_opcode[t];
+	  spec.imm12 = 0;
+	  spec.src_c = ds.template_src_c[t];
+	  spec.dest_sel = 0xc + t;
+	  spec.mod1 = ds.template_mod1[t];
+	  uint32_t word = 0;
+	  if (encode_template (c, spec, &word))
+	    out->planned_lregs |= template_hidden_lreg_writes (c, word);
+	}
+      return true;
+    }
 
   /* CC-template expectations (WP9), re-derived from the region's
      explicit facts.  */
