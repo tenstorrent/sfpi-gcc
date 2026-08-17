@@ -376,7 +376,9 @@ Formation: `config-ownership-unproven`, `planned-lreg-live`,
 (report-only), `-mtt-tensix-macro-planner-verify` (differential
 verifier; forced under internal checking),
 `-mtt-tensix-macro-planner-verify-corrupt-template` (verifier
-self-test).  All default off; default codegen is byte-identical to the
+self-test), `-mtt-tensix-macro-planner-replay` (WP10 delivery: admit
+planner-formed launches into automatic replay recording; see Sec. 6).
+All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
 
@@ -422,6 +424,23 @@ bh/wh/qsr32, all identical).
   end-to-end (the fp16b selector keeps the 4-slot calendar because its
   condition and store modes differ; matching the handwritten kernel's
   uniform-mode condition load is a one-line kernel-side change left to
-  review); (d) the formed body is
-  RISC-pushed, not replay-wrapped: delivery parity with the handwritten
-  replay path needs the replay pass to record the formed loop.
+  review); (d) RESOLVED at WP10 behind the opt-in
+  `-mtt-tensix-macro-planner-replay` flag: planner-formed SFPLOADMACRO
+  launches are audited into the automatic replay model (a launch is a
+  pure instruction word; recording captures the word, never state;
+  execution at a replay site reads the then-current descriptor
+  configuration -- the production handwritten Where kernel's own
+  recorded launches are the architectural precedent), so the compact
+  loop body's identical rows record once and replay: the real Int32
+  TTNN Where face drops to 13 issued words (record + two recorded rows
+  + three replays + drain), from 27 at WP10(c) and 39 at WP9.  The
+  flag defaults OFF so every other planner-formed calendar (minmax,
+  signbit, typecast -- whose repeated launch runs would also wrap)
+  stays byte-identical until each is CRAQ-proven wrapped and the flag
+  can default on; the 4-slot select rows keep their typed TTINCRWC
+  separator, which remains an unaudited replay barrier -- auditing it
+  is a follow-up with the same discipline.  A further increment would
+  have the planner emit a record-only preheader capture plus per-trip
+  replay launches itself (amortizing the record across trips and
+  removing the RISC-paced execute-while-record occurrence, which is
+  also the silicon-robustness concern for RISC-pushed CC calendars).

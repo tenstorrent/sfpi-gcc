@@ -865,7 +865,23 @@
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
-   (set_attr "xtt_replay" "barrier")])
+   ;; Replay-membership audit (WP10): a launch is a pure instruction
+   ;; WORD -- recording captures the word, never state; execution at a
+   ;; replay site reads the then-current descriptor configuration,
+   ;; identical to executing the original word there.  The formation
+   ;; pass emits launches only after materializing and owning the
+   ;; referenced descriptor slots, and the production handwritten Where
+   ;; kernel records TT_SFPLOADMACRO in its replay buffer
+   ;; (ckernel_sfpu_where.h load_replay_buf) -- the architectural
+   ;; precedent the simulator executes through the same path.
+   ;; Membership is the opt-in -mtt-tensix-macro-planner-replay
+   ;; delivery increment: off keeps every formed calendar
+   ;; byte-identical to the pre-flag output (the CRAQ-proven shapes are
+   ;; admitted per A/B, not wholesale).
+   (set (attr "xtt_replay")
+	(if_then_else (match_test "riscv_tt_macro_planner_replay")
+		      (const_string "safe")
+		      (const_string "barrier")))])
 
 ;; A macro launch whose delayed Simple template is SFPSWAP.  In addition to
 ;; the launch VD, the template writes the fixed comparison operand (L2).  Keep
@@ -894,7 +910,13 @@
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
-   (set_attr "xtt_replay" "barrier")])
+   ;; Replay-membership audit (WP10): as rvtt_sfploadmacro_int above;
+   ;; the hidden template write re-executes at every replay exactly as
+   ;; the original word would, and stays modeled by the clobber.
+   (set (attr "xtt_replay")
+	(if_then_else (match_test "riscv_tt_macro_planner_replay")
+		      (const_string "safe")
+		      (const_string "barrier")))])
 
 (define_insn "rvtt_sfploadsrcs_lv_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr")
