@@ -613,6 +613,18 @@ mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
 
+mtt-tensix-optimize-mop-form
+Target Var(riscv_tt_opt_mop_form) Init(0)
+Re-roll runs and counted loops of identical Tensix replay playback launches into a hardware MOP loop.
+
+mtt-tensix-mop-form-min-benefit=
+Target Joined RejectNegative UInteger Var(riscv_tt_mop_form_min_benefit) Init(-1)
+Minimum modeled benefit, in hundredths of an issue slot, required to form a MOP loop; overrides the target cost-table default.
+
+mtt-tensix-mop-form-force
+Target Var(riscv_tt_mop_form_force) Init(0)
+Testing and measurement only: bypass the MOP formation profitability refusal (every structural, ownership, and buffer proof still applies), to build silicon A/B legs for shapes the corrected delivery model prices as non-winning.
+
 mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
 Hoist loop-invariant Tensix immediate-vector materialization before register allocation.
