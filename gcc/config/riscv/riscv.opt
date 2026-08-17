@@ -657,6 +657,10 @@ mtt-tensix-macro-planner-verify-corrupt-template
 Target Var(riscv_tt_macro_planner_verify_corrupt_template) Init(0)
 Testing only: corrupt the verifier's local copy of the first synthesized template word before Layer-7 comparison, pinning that a verification mismatch refuses formation.  Never touches the descriptor itself.
 
+mtt-tensix-macro-planner-replay
+Target Var(riscv_tt_macro_planner_replay) Init(0)
+Default-off delivery increment: admit planner-formed SFPLOADMACRO launches into automatic replay recording (the launch is a pure instruction word; execution at a replay site reads the then-current descriptor configuration, matching the production handwritten Where kernel's own recorded launches).  Off keeps every planner-formed calendar byte-identical to the pre-flag output.
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).
