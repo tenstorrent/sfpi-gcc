@@ -625,6 +625,10 @@ mtt-tensix-optimize-dst-ownership
 Target Var(riscv_tt_opt_dst_ownership) Init(0)
 Default-off: fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
 
+mtt-tensix-optimize-lut-select
+Target Var(riscv_tt_opt_lut_select) Init(0)
+Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
+
 mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
 Removed with the quarantined exact-calendar SFPLOADMACRO pass (WP8); errors on use.

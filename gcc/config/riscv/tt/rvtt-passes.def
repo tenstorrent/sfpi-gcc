@@ -37,6 +37,10 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_cse);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_dce);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_renumber);
+/* Select LUT instructions from range-dispatch trees while the trees'
+   structured condition form (sfpxvif/sfpxcondb) is still explicit,
+   i.e. before pass_rvtt_expand lowers it to raw CC side effects.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lut_select);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
