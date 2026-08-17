@@ -517,7 +517,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
 	    return false;
 	  store_ix = ix;
 	}
-      else if (e.cc_write && e.lreg_read)
+      else if (e.cc_write && e.lreg_read && !e.lreg_write)
 	{
 	  if (def_ix >= 0)
 	    return false;	/* two conflicting predicates */
