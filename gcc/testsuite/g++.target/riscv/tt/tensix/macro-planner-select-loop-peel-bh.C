@@ -1,16 +1,19 @@
-// WP9, the real TTNN Where shape: the eight-row select body inside a
+// WP10, the real TTNN Where shape: the eight-row select body inside a
 // counted loop with no typed ambient enable anywhere.  The
-// configuration prefix hoists to the proven structural preheader, the
-// first body row is peeled as the lane proof (each trip re-executes it;
-// its typed restore covers the formed remainder and the backedge), and
-// the region-scoped configuration-ownership proof tolerates the opaque
-// pre-region init the function-global gate would refuse.
+// configuration prefix hoists to the proven structural preheader with
+// the MATERIALIZED all-lanes enable at its head (WP9 peeled the first
+// row instead; the materialized proof source is that row's own typed
+// restore, licensed by rvtt_cc's outermost-CC-depth contract), all
+// eight body rows form, and the region-scoped configuration-ownership
+// proof tolerates the opaque pre-region init the function-global gate
+// would refuse.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2 loop=yes" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner formed: rows=7 runs=1 config=preheader lane-proof=peeled-first-row" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-times "\\.ttinsn" 14 } }
-// { dg-final { scan-assembler-times "SFPSETCC" 1 } }
+// { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 config=preheader lane-proof=materialized-enable" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times "\\.ttinsn" 16 } }
+// { dg-final { scan-assembler-not "SFPSETCC" } }
+// { dg-final { scan-assembler-times "SFPENCC" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
 #define ROW()                                                                 \

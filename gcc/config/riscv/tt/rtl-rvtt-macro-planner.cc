@@ -341,12 +341,9 @@ loop_trip_weight (basic_block body, basic_block preheader,
 static bool
 loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
 		   const macro_descriptor &desc, gcov_type body_count,
-		   gcov_type preheader_count, unsigned n_runs,
-		   unsigned peel_rows)
+		   gcov_type preheader_count, unsigned n_runs)
 {
-  /* A peeled first row (the WP9 lane-proof peel) stays explicit on both
-     sides of the comparison and cancels out.  */
-  unsigned total_rows = region.rows.length () - peel_rows;
+  unsigned total_rows = region.rows.length ();
   unsigned per_trip_macro = total_rows * schedule.ii
     + n_runs * desc.drain_slots;
   unsigned per_trip_explicit = total_rows * explicit_row_cost (region);
@@ -506,22 +503,26 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc,
 		  const rvtt_macro::caps *c,
 		  unsigned begin, unsigned end, bool emit_config,
-		  basic_block config_preheader, bool emit_enable_copy)
+		  basic_block config_preheader, rtx_insn *enable_src)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
 
   if (emit_config)
     {
-      /* The all-lanes proof is the first row's local enable -- proven
-	 all-lanes by formation (cc_enable_all_lanes_proved_p), so this
-	 copy re-establishes exactly the proven state; the WP8
-	 relaxation from every-row holds because no region member may
-	 write CC -- or the loop preheader's own trailing enable
-	 (proven all-lanes; already in place; no copy).  */
+      /* The all-lanes proof source ENABLE_SRC is the first row's local
+	 enable, or (WP10) the first row's own proven all-lanes restore
+	 materialized in the prefix -- both proven word-exact all-lanes
+	 by formation (cc_enable_all_lanes_proved_p), so this copy
+	 re-establishes exactly the proven state; the WP8 relaxation
+	 from every-row holds because no region member may write CC
+	 outside the admitted CC-template roles, whose only lane-state
+	 net effect is the proven all-lanes restore.  A null ENABLE_SRC
+	 is the loop preheader's own trailing enable (proven all-lanes;
+	 already in place; no copy).  */
       start_sequence ();
-      if (emit_enable_copy)
-	emit_insn (copy_rtx (PATTERN (region.rows[0].enable)));
+      if (enable_src)
+	emit_insn (copy_rtx (PATTERN (enable_src)));
       for (unsigned s = 0; s != desc.n_setc16; ++s)
 	emit_insn (gen_rvtt_owned_setc16
 		   (GEN_INT (desc.setc16[s].config_reg),
@@ -853,8 +854,8 @@ form_region (function *fn, macro_region &region,
      holds across every row), or, for a loop-body region whose enable
      was written once outside the loop, the proven preheader's trailing
      enable (whole-body ownership keeps it live across every trip).  */
-  bool emit_enable_copy = true;
-  unsigned peel_rows = 0;
+  rtx_insn *enable_src = region.rows[0].enable;
+  bool materialized_enable = false;
   if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
     {
       rtx_insn *trailing = config_preheader
@@ -872,50 +873,50 @@ form_region (function *fn, macro_region &region,
 			 " cc-enable-unproved\n");
 	      return false;
 	    }
-	  emit_enable_copy = false;
+	  enable_src = nullptr;	/* already in place; no copy */
 	}
       else
 	{
-	  /* First-row peel (WP9): when no typed ambient enable exists
-	     -- the real LLK kernels establish the lane state through
-	     opaque init the typed IR cannot see -- a CC-template row's
-	     OWN all-lanes restore is the proof source: the first row
-	     stays byte-original in place, its typed restore (proven
-	     all-lanes through the P0 sfpencc derivation, executing
-	     before the row's store, after which no member writes CC)
-	     establishes the entry lane state for the formed remainder.
-	     Later rows hold inductively: the launched restore template
-	     re-writes the all-lanes mask and nothing in a row clears
-	     the enable state the peeled restore set.  Rows without an
-	     in-row proven restore keep the named refusal.  */
-	  rtx_insn *peel_restore = nullptr;
+	  /* Materialized enable (WP10, superseding the WP9 first-row
+	     peel): when no typed ambient enable exists -- the real LLK
+	     kernels establish the lane state through opaque init the
+	     typed IR cannot see -- a CC-template row's OWN all-lanes
+	     restore is the proof source, and the formation MATERIALIZES
+	     that proven word (a pattern copy, all-lanes word-exact
+	     through the P0 sfpencc derivation) at the head of the
+	     configuration prefix instead of executing the whole first
+	     row explicitly.  The license is the compiler's own
+	     established outermost-CC-depth contract: the row's
+	     SETCC/.../ENCC combine is produced by rvtt_cc's
+	     outermost-depth transform (gimple-rvtt-cc.cc), which
+	     already replaces the outermost POPC (restore the pushed
+	     state) with ENCC (enable all lanes) -- sound exactly
+	     because the architectural kernel convention pins the
+	     outermost lane state to all-lanes.  The materialized word
+	     re-writes the state that contract already guarantees, so
+	     the first row -- like every later row, inductively through
+	     the launched restore template -- executes under the
+	     all-lanes entry state.  Rows without an in-row proven
+	     restore keep the named refusal.  */
+	  rtx_insn *proof_restore = nullptr;
 	  if (desc.cc.active && region.rows.length () > 1)
 	    for (rtx_insn *member : region.rows[0].insns)
 	      {
 		xtt_effect_set e = rvtt_insn_effects (member);
 		if (e.cc_write && !e.cc_read && !e.lreg_read
 		    && !e.lreg_write && e.cc_write_all_lanes)
-		  peel_restore = member;
+		  proof_restore = member;
 	      }
-	  if (!peel_restore)
+	  if (!proof_restore)
 	    {
 	      if (dump)
 		fprintf (dump, "Macro-planner formation-refusal:"
 			 " all-lanes-proof-missing\n");
 	      return false;
 	    }
-	  peel_rows = 1;
-	  emit_enable_copy = false;
+	  enable_src = proof_restore;
+	  materialized_enable = true;
 	}
-    }
-
-  /* The peeled first row stays explicit; the formed region begins at
-     the next row.  A run consisting only of the peeled row drops out.  */
-  if (peel_rows)
-    {
-      run_begins[0] += peel_rows;
-      if (run_begins.length () > 1 && run_begins[0] >= run_begins[1])
-	run_begins.ordered_remove (0);
     }
 
   /* Profitability.  Straight-line: every run independently amortizes
@@ -925,8 +926,7 @@ form_region (function *fn, macro_region &region,
   if (region.loop_body)
     {
       if (!loop_profitable_p (region, schedule, desc, body_count,
-			      preheader_count, run_begins.length (),
-			      peel_rows))
+			      preheader_count, run_begins.length ()))
 	{
 	  if (dump)
 	    fprintf (dump, "Macro-planner formation-refusal:"
@@ -969,13 +969,13 @@ form_region (function *fn, macro_region &region,
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
-			config_preheader, emit_enable_copy);
+			config_preheader, enable_src);
     }
   if (dump)
     fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s\n",
-	     region.rows.length () - peel_rows, run_begins.length (),
+	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
-	     peel_rows ? " lane-proof=peeled-first-row" : "");
+	     materialized_enable ? " lane-proof=materialized-enable" : "");
   return true;
 }
 

@@ -2,9 +2,9 @@
 // three loads, a predicate write, a lane-predicated merge, the in-row
 // all-lanes restore, a store.  The CC-template descriptor derives and
 // proves the full CC model, but this single row carries no typed
-// ambient enable and cannot peel (a one-row region has no remainder),
-// so formation refuses the missing lane proof and the bytes stay
-// explicit.
+// ambient enable and a one-row region does not materialize one (the
+// WP10 materialized proof keeps the WP9 multi-row scope), so formation
+// refuses the missing lane proof and the bytes stay explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "formation-refusal: all-lanes-proof-missing" "rvtt_macro_planner" } }

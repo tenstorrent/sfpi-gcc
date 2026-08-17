@@ -265,11 +265,20 @@ CC-write template events representable end to end:
 
 * **Formation**: the ambient all-lanes proof composes with P0 -- the
   first row's local enable, the loop preheader's trailing enable, or
-  (the real-LLK case, where init is opaque TTI assembly) the
-  FIRST-ROW PEEL: the first row stays byte-original in place and its
-  own typed all-lanes restore proves entry for the formed remainder
-  (`lane-proof=peeled-first-row`; rows without an in-row proven restore
-  keep `all-lanes-proof-missing`).  Configuration ownership is the
+  (the real-LLK case, where init is opaque TTI assembly) the WP10
+  MATERIALIZED ENABLE, superseding the WP9 first-row peel: the first
+  row's own typed all-lanes restore (proven word-exact through the
+  shared P0 SFPENCC derivation) is pattern-copied to the head of the
+  configuration prefix, so every row -- the first included -- forms
+  (`lane-proof=materialized-enable`; rows without an in-row proven
+  restore keep `all-lanes-proof-missing`).  The license is the
+  compiler's own established outermost-CC-depth contract: the row's
+  SETCC/.../ENCC combine is produced by rvtt_cc's outermost-depth
+  transform, which already rewrites the outermost POPC (restore the
+  incoming state) into ENCC (enable all lanes) -- sound exactly because
+  the architectural kernel convention pins the outermost lane state to
+  all-lanes; the materialized word re-writes the state that contract
+  already guarantees.  Configuration ownership is the
   ordered union of the scoped proofs: when the function-global proof
   fails, any loop-body region first tries the loop-scoped WINDOW proof
   above; a proven CC-template program the window did not prove --
@@ -374,8 +383,11 @@ bh/wh/qsr32, all identical).
 * WP9 carry-forwards: (a) the region-scoped ownership proof tolerates
   foreign code AFTER the region (the LLK own-descriptors convention) --
   an accepted risk of the same class as the M1 exit-block exemption;
-  (b) the first-row peel pays one explicit row per loop trip; a proven
-  kernel-level enable source would remove it; (c) the handwritten
+  (b) RESOLVED at WP10: the first-row peel (one explicit row per loop
+  trip) is superseded by the materialized preheader enable -- the
+  peel's own proof source, emitted once under the rvtt_cc
+  outermost-CC-depth contract (see the Formation bullet in Sec. 2a);
+  (c) the handwritten
   3-slot select calendar (restore hosted on the MIDDLE carrier, stride
   absorbed by the explicit payload load's auto-increment address mode,
   launch-sourced store mod0 via misc bits 6:4) is architecturally
