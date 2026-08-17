@@ -629,6 +629,10 @@ mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(0)
 Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
+mtt-tensix-optimize-setexp-fold
+Target Var(riscv_tt_opt_setexp_fold) Init(0)
+Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
+
 mtt-tensix-analyze-loadmacro
 Target Var(riscv_tt_analyze_loadmacro) Init(0)
 Removed with the quarantined exact-calendar SFPLOADMACRO pass (WP8); errors on use.

@@ -152,6 +152,7 @@ static bool combiner_enable_WH_BH () { return TARGET_XTT_TENSIX_WH_BH; }
 static bool combiner_enable_BH () { return TARGET_XTT_TENSIX_BH; }
 static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 static bool combiner_enable_QSR () { return TARGET_XTT_TENSIX_QSR; }
+static bool combiner_enable_SETEXP_FOLD () { return riscv_tt_opt_setexp_fold; }
 
 #define OU unsigned (Flags::OtherUses)
 #define SA unsigned (Flags::SetAnywhere)
