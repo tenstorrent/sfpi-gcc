@@ -148,6 +148,24 @@ XTT_MACRO_SEQ_PROGRAM ("select-m2", 2, 0x00000005, 1,
 		       SU_NONE, -1, 0, false,
 		       SU_NONE, -1, 0, false)
 
+/* Select restore on macro ONE (dest 5): the planner's derived select
+   calendar demotes the hostless middle payload carrier to a plain
+   SFPLOAD (exactly the production handwritten Where protocol's shape:
+   two launches plus an explicit load), so the all-lanes-restore ENCC
+   event rides the LAST launch as macro 1, not the frozen pass's macro
+   2.  The whole word is the frozen "ENCC d0" program (:1571); the
+   macro index only selects the SFPCONFIG destination (4 + K), which
+   the word itself does not encode.  Validated by the generic
+   descriptor-driven CRAQ path (paired BH+WH bit-exact where nodes) and
+   the in-tree byte-pinned formation tests; the bit-level word format
+   remains unestablished and the word is carried whole per Sec. 3 of
+   docs/MACRO_PLANNER.md.  */
+XTT_MACRO_SEQ_PROGRAM ("select-m1-encc", 1, 0x00000005, 1,
+		       SU_SIMPLE, 1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false,
+		       SU_NONE, -1, 0, false)
+
 /* ------------------------------------------------------------------ */
 /* Proven misc words (SFPCONFIG dest 8).			       */
 /* ------------------------------------------------------------------ */

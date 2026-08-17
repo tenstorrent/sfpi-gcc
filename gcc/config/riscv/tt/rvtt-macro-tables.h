@@ -322,6 +322,36 @@ extern bool encode_sequence (const caps *, unsigned macro_index,
 extern bool encode_misc_select (const caps *, unsigned store_mod0,
 				uint32_t *word);
 
+/* ------------------------------------------------------------------ */
+/* CC (lane-state) template facts (WH/BH-common).		      */
+/* ------------------------------------------------------------------ */
+
+/* Deferred-CC visibility lag: a CC result computed by a retiring macro
+   event becomes architecturally visible to instructions issued in the
+   cycle AFTER the event executed (the hardware's flag-forwarding
+   latency; modeled identically by the CRAQ simulator's
+   load_macro_cc_update_pending latch).  An event launched in slot S
+   with programmed delay D executes in slot S + 1 + D; its CC write is
+   visible to words issued in slots >= S + 1 + D + this lag.  */
+extern unsigned cc_visibility_lag ();   /* 1 */
+
+/* The store side of a macro is architecturally latched at the launch:
+   Dst row, store format, LANE PREDICATE, and Dst layout are captured
+   when the store-carrying launch issues, not when the delayed store
+   executes (ISA SFPLOADMACRO store rule; CRAQ EventContext).  A
+   CC-writing calendar must therefore issue its store-carrying launch
+   while the ambient all-lanes enable is still visible.  */
+extern bool store_lane_mask_latched_at_launch ();   /* true */
+
+/* Architecturally-defined complement of an SFPSETCC instr_mod1
+   (WormholeB0/BlackholeA0 SFPSETCC.md; mirrored by the CRAQ executor):
+   bit 0 selects the immediate operand, bit 1 selects the !=0 test over
+   the sign test, bit 2 complements the register-test result, bit 3
+   forces false.  Only the plain register-test class {0, 2, 4, 6} has a
+   defined complement (toggle bit 2); immediate and force-false forms
+   refuse.  */
+extern bool sfpsetcc_complement_mod1 (uint64_t mod1, unsigned *out);
+
 /* Hidden physical-LREG writes of a proven template word (L0..L15 index
    bitmask; 0 when none is on record).  */
 extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
