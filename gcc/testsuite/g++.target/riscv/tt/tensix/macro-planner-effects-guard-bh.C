@@ -6,8 +6,13 @@
 //     the effect vocabulary);
 //   - SFPCAST mod 2 (the documented BH cast-as-ABS hardware bug).
 // Each row dissolves at the opaque member; a CC-writing SFPIADD
-// (CC_LT0) instead refuses at the CC write by name.
-// { dg-final { scan-rtl-dump-times "row-opaque-effect" 12 "rvtt_macro_planner" } }
+// (CC_LT0) instead refuses at the CC write by name.  The D3 latency
+// audit gave SFPABS mod 1 a Layer-1 effect set, so the abs rows now
+// pass effect discovery and refuse one gate later, at the Layer-4
+// capability tables (no delay/placement/descriptor program is proven
+// for ABS) -- still byte-identical refusals, never formation.
+// { dg-final { scan-rtl-dump-times "row-opaque-effect" 8 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "event-delay-unproven|descriptor-program-unproven|row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "cc-template-unsupported" 4 "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
