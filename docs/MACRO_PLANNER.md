@@ -297,6 +297,17 @@ CC-write template events representable end to end:
 
 ## 3. Why the proven-program tables carry whole sequence/misc words
 
+SUPERSEDED IN PART (timing-calendar derivation): the sequence-word bit
+format and the per-event delay semantics are now ESTABLISHED by three
+independent architectural sources, and calendars are DERIVED for
+shapes no proven whole-word program covers — see
+docs/TIMING_CALENDAR_DERIVATION.md.  The proven whole-word programs
+remain the capability for the frozen shapes (byte parity), and the
+minmax "macro-internal transient-copy event" below is resolved: it
+derives from the delayed store's source-reachability constraint, not
+from a source instruction.  The section below is kept as the WP8-era
+rationale.
+
 The bit-level format of the sequence words and of misc bits above 3:0
 is architecturally UNESTABLISHED (NOTES-wp6-prep.md §9(b)/(c)); the
 per-event delay fields of several proven programs are undocumented

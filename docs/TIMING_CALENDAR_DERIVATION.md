@@ -469,6 +469,66 @@ reproduction target for §6.
    dual-model obligations of 2.4 are the review surface before any
    silicon claim).
 
+## 6a. Implementation status (this branch)
+
+Landed (commits after the design):
+
+* Capability-table facts (§2) in `rvtt-macro-tables.{h,cc}` with
+  S1/S2/S3 provenance; the freestanding derivation core
+  `rvtt-macro-derive-core.h` implementing §4.3; the standalone
+  reproduction suite `rvtt-macro-derive-test.cc` = the executable form
+  of §3 (77 checks green on BH and WH: all frozen sequence words
+  bit-exact, the handwritten MulInt32 three-address words bit-exact
+  including the MAD result-latency-2 store delay, the one-slot
+  lifetime refusal, the add_int placement refusal, the derived unary
+  max/min calendar).
+* Descriptor synthesis (`rvtt-macro-desc.cc`) tries the derivation
+  when no proven whole-word program matches; proven-program matching
+  gained the operand-EXISTENCE probe (a layout variant is not the
+  proven program; a present-but-non-constant operand keeps the
+  established encodability refusal).  The verifier's expectation
+  builder re-runs the shared derivation.
+* The admitted derived template class starts at the constant-register
+  SFPSWAP family: the unary max/min LOOP shape forms on BH and WH
+  (both senses derived from the operand layout; byte-pinned +
+  renamed/varied tests), the straight-line runs refuse
+  `unprofitable`, the sub-vector mod near-miss refuses
+  `descriptor-program-unproven`, and the merged ii=1 candidate
+  refuses `sequence-derivation-hazard` ((‡)), driving the
+  deterministic candidate search to the formable demoted schedule.
+* rvtt.exp: 2278 passes; the FAIL set is the pre-existing
+  environmental 15 (zaamo-18789, delay-34602, sfpxloadi-bh,
+  unused-46063, 41863-consteval).
+
+**WH boundary (found by the CRAQ gate, 2026-08-17).**  The BH derived
+unary max/min formation is CRAQ bit-exact end to end (real kernel,
+generic simulator path, rc=0 all four BH cells).  The SAME calendar on
+the WH simulator returns position-shuffled tiles after the first,
+while the launch trace shows every latched Dst row, lane mask, and
+retirement cycle correct — and a control run with a refusing compiler
+passes, isolating the failure to the WH-formed calendar.  WH select
+(WP9), which absorbs nothing, passes this path; the discriminating
+ingredient is the ABSORBED-STRIDE launch auto-increment through the
+WH dual-slot address-modifier machinery — the already-open WH
+Dst-advance frontier (FINDING-wh-dst-autoincr-fresh-maxmin.md, WP8
+§6b(4)).  The derived path therefore carries a per-CPU envelope fact
+(`derived_stride_absorption_proven`: BH yes, WH no) and WH
+absorbed-stride derivations refuse `derived-stride-absorption-
+unproven` byte-identically (pinned by the WH twin test).  Note the
+frozen minmax/signbit calendars absorb strides on WH through the
+proven-program path and have never been executed on the WH simulator
+against a real kernel — the same latent frontier, pre-existing and
+now precisely named.
+
+Additional finding while validating §3: the handwritten MulInt32
+ONE-SLOT in-place variant (`dst_index_in0 == in1 == out`) fails the
+derived LReg16 lifetime proof — the next row's MUL24 rewrites LReg16
+strictly before this row's store executes under both counting models
+at a one-slot initiation interval.  The two- and three-slot variants
+sit exactly on (and inside) the snapshot boundary and are sound.
+Worth an upstream question to the kernel's author; the derivation
+refuses the one-slot shape.
+
 ## 7. Carried risks / open questions
 
 * Whether TTINCRWC (and other non-SFPU Tensix issues) decrement
