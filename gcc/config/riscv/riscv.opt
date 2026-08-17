@@ -594,6 +594,10 @@ mtt-tensix-optimize-interlock-schedule
 Target Var(riscv_tt_opt_interlock_schedule) Init(0)
 Fill audited transparent hardware-interlock stalls with independent SFPU instructions
 
+mtt-tensix-optimize-capture-rotation
+Target Var(riscv_tt_opt_capture_rotation) Init(0)
+Rotate replayed capture rows to fill audited interlock stalls across the row boundary
+
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates
