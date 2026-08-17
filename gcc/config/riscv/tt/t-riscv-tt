@@ -50,6 +50,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-lp-schedule.o \
 	gimple-rvtt-noval.o \
+	gimple-rvtt-prgm-const.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
 	rtl-rvtt-dst-autoincr.o \

@@ -82,6 +82,16 @@ RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                          
 // Operand 0 is a release/last-use mask, not a mask of ordinary non-final reads;
 // operand 1 is a write/new-live-value mask.
 RVTT_FN (sfprawlreg_access,  ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 8}, {CU, 8}))
+// Metadata only (D2 compiler half): raw LLK code brackets an opaque
+// instruction region with a TRUSTED typed effects declaration.  Operand 0
+// of the begin marker is the mask of SFPCONFIG destinations 0..15 the
+// region writes (bit 15 = LaneConfig may never be claimed); operand 1 is
+// reserved flag space (0).  The declared region additionally asserts it
+// neither reads nor writes any other PRGM register.  Both markers must sit
+// in the same basic block as the raw statements they cover; CRAQ is the
+// check (the sfprawlreg_access discipline).
+RVTT_FN (ttregion_begin,     ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 16}, {CU, 8}))
+RVTT_FN (ttregion_end,       ,,VOID_FTYPE,                                                   VOL, ())
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))

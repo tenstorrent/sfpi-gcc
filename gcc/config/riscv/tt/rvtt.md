@@ -44,6 +44,7 @@
 
   UNSPECV_SFPVARLREG
   UNSPECV_SFPRAWLREG_ACCESS
+  UNSPECV_TTREGION
 
   UNSPECV_SFPNOP
   UNSPECV_SFPBANKDONE
@@ -259,6 +260,30 @@
      ] UNSPECV_SFPRAWLREG_ACCESS)]
   "TARGET_XTT_TENSIX"
   "# RAWLREG %0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set_attr "length" "0")])
+
+;; Typed effects declaration markers for a raw instruction region (D2
+;; compiler half; consumed at gimple by the prgm-const freedom proof).
+;; Zero-length ghosts: they emit no Tensix instruction word.
+(define_insn "rvtt_ttregion_begin"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n")
+     (match_operand:SI 1 "const_int_operand" "n")
+     ] UNSPECV_TTREGION)]
+  "TARGET_XTT_TENSIX"
+  "# TTREGION %0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set_attr "length" "0")])
+
+(define_insn "rvtt_ttregion_end"
+  [(unspec_volatile:XTT32SI [
+     (const_int 0)
+     ] UNSPECV_TTREGION)]
+  "TARGET_XTT_TENSIX"
+  "# TTREGION END"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "length" "0")])

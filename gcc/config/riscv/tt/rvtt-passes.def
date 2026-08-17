@@ -45,6 +45,10 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_cc);
+/* Programmable-constant allocation runs after the CC analysis and
+   immediately before the combiner, so a rewritten immediate pair is
+   re-offered to the existing mul+add->mad rule in the same pipeline.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_prgm_const);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
