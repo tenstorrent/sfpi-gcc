@@ -54,7 +54,29 @@ along with GCC; see the file COPYING3.  If not see
      to the default pipeline;
    - lanes disabled by an enclosing condition context are untouched by
      both forms (the LUT executes under the same enclosing CC that
-     gated the tree's leaf writes).  */
+     gated the tree's leaf writes).
+
+   Second increment:
+
+   - Trailing sign-restore folding: when the selected value's single
+     consumer copies the LUT input's own sign back onto it (the vector
+     sign-copy instruction in its default mode), and the capability
+     table provides a sign-restore execution mode, the copy folds into
+     the LUT's mode word and the explicit instruction dissolves.  Any
+     other consumer, operand order, sign source, or mode keeps the
+     explicit instruction.
+
+   - Coefficient placement: with the dispatch tree's CC scaffolding
+     dissolved, the formed LUT's coefficient materializations are
+     ordinary loop-invariant immediates.  The early invariant-loadi
+     pass necessarily refused them (pre-formation the loop body
+     manipulates lane-enable CC state), so formation re-runs the same
+     shared preheader-hoist proofs, scoped to exactly the loops where a
+     LUT formed this execution.  The placement is transactional against
+     the architectural eight-LREG budget: either every in-loop
+     coefficient materialization moves to the preheader or none does,
+     so a refusal leaves the bytes exactly at the formation-only
+     shape.  */
 
 #include "config.h"
 #include "system.h"
@@ -70,8 +92,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-pretty-print.h"
 #include "tree-into-ssa.h"
 #include "tree-cfg.h"
+#include "cfghooks.h"
+#include "cfgloop.h"
+#include "dominance.h"
 #include "rvtt.h"
 #include "rvtt-lut-tables.h"
+#include "rvtt-macro-ownership.h"
 
 namespace {
 
@@ -482,10 +508,46 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 			 : "lut-leaf-value-escapes", stmt);
     }
 
+  /* Trailing sign-restore fold candidate: the selected value's single
+     non-debug consumer copies the LUT input's own sign onto it, with
+     the vector sign-copy instruction in its default mode.  Purely
+     structural -- the sign source must be exactly the LUT's input
+     SSA value; any other consumer, operand order, source, or mode is
+     not a fold candidate and keeps the explicit instruction.  */
+  gimple *sgn_use = nullptr;
+  {
+    gimple *use_stmt = nullptr;
+    unsigned n_uses = 0;
+    imm_use_iterator iter;
+    gimple *use;
+    FOR_EACH_IMM_USE_STMT (use, iter, g->result)
+      if (!is_gimple_debug (use))
+	{
+	  use_stmt = use;
+	  if (++n_uses > 1)
+	    break;
+	}
+    if (n_uses == 1)
+      if (gcall *sgn = is_rvtt_call (use_stmt, rvtt_insn_data::sfpsetsgn_v))
+	if (gimple_call_arg (sgn, 0) == g->result
+	    && gimple_call_arg (sgn, 1) == g->x
+	    && int_arg (sgn, 2) == 0
+	    && gimple_call_lhs (sgn))
+	  sgn_use = sgn;
+  }
+
   /* Shape proven.  Now the capability check: exactly this partition
      arity, with these boundary encodings, in ascending range order,
-     with no sign restore, must exist on this target.  */
-  const rvtt_lut_mode_desc *mode = rvtt_lut_lookup (3, false);
+     with the required sign behavior, must exist on this target.  A
+     fold candidate without a sign-restore capability falls back to the
+     sign-update mode with the explicit sign copy kept.  */
+  const rvtt_lut_mode_desc *mode = sgn_use ? rvtt_lut_lookup (3, true)
+    : nullptr;
+  if (!mode)
+    {
+      sgn_use = nullptr;
+      mode = rvtt_lut_lookup (3, false);
+    }
   if (!mode)
     return refuse ("lut-no-target-capability", g->pushc[0]);
   for (unsigned i = 0; i < mode->num_ranges - 1; i++)
@@ -530,6 +592,23 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
       release_defs (stmt);
     };
 
+  /* A folded sign restore dissolves: the LUT's mode word already
+     copies the input's sign, so the copy's consumers take the LUT
+     value directly.  */
+  if (sgn_use)
+    {
+      tree sgn_lhs = gimple_call_lhs (sgn_use);
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "lut-select: folded trailing sign restore into the LUT"
+		   " mode word: ");
+	  print_gimple_stmt (dump_file, sgn_use, 0);
+	}
+      replace_uses_by (sgn_lhs, g->result);
+      remove (sgn_use);
+    }
+
   remove (g->assign[0]);
   remove (g->condb[0]);
   remove (g->condb[1]);
@@ -559,8 +638,132 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
   return true;
 }
 
+static unsigned n_placed;
+
+/* Place the formed LUT's in-loop coefficient materializations in the
+   loop preheader.  The proofs are the invariant-loadi pass's shared
+   discipline (rvtt-macro-ownership.h); the LREG-budget decision is
+   transactional over the whole coefficient set, so a refusal keeps the
+   bytes exactly at the formation-only shape.  A refusal never edits
+   the program (rvtt_commit_hoist_preheader runs only after every proof
+   has passed).  */
+
+static void
+place_coefficients (gcall *lut)
+{
+  basic_block bb = gimple_bb (lut);
+  class loop *loop = bb->loop_father;
+  if (!loop || !loop_outer (loop))
+    return;	/* Not inside a loop: nothing to place.  */
+
+  auto keep = [] (const char *reason)
+    {
+      if (dump_file)
+	fprintf (dump_file, "lut-select: coefficients kept in loop (%s)\n",
+		 reason);
+    };
+
+  edge entry = rvtt_loop_entry_edge (loop);
+  if (!entry)
+    return keep ("lut-coefficient-loop-multi-entry");
+  if (rvtt_loop_hoist_region_opaque_p (loop, entry))
+    return keep ("lut-coefficient-region-opaque");
+  if (rvtt_preheader_insertion_blocked_p (entry))
+    return keep ("lut-coefficient-preheader-blocked");
+  if (rvtt_loop_has_sfpu_barrier_p (loop))
+    return keep ("lut-coefficient-loop-barrier");
+  if (expected_loop_iterations_unbounded (loop) < 1)
+    return keep ("lut-coefficient-loop-cold");
+  if (!rvtt_stmt_executes_every_entered_iteration_p (loop, bb))
+    return keep ("lut-coefficient-conditional-row");
+
+  /* An architectural LREG write must never be speculated out of a
+     possibly-zero-trip loop.  At this late stage counted loops are in
+     rotated (test-at-the-latch) form, so the early pass's foldable
+     header-test proof rarely applies; a load resident in the loop
+     header needs no value proof at all -- every statement of the
+     header except its terminating condition executes as soon as the
+     loop is entered.  Both arguments are structural; each candidate
+     must satisfy one.  */
+  bool first_iteration = rvtt_loop_first_iteration_executes_p (loop, entry);
+
+  /* The coefficient operands, deduplicated.  An operand already
+     defined outside the loop is invariantly placed and needs no move.
+     An in-loop definition qualifies for placement when it is an
+     invariant immediate materialization that provably executes on
+     each entered iteration; anything else (a constant-register read,
+     derived arithmetic, or an unproven placement) simply stays where
+     the program put it -- only the LREG budget below is transactional
+     over the qualified set.  */
+  auto_vec<gcall *> coeffs;
+  for (unsigned ix = 0; ix < 6; ix++)
+    {
+      tree op = gimple_call_arg (lut, ix);
+      if (TREE_CODE (op) != SSA_NAME)
+	continue;
+      gimple *def = SSA_NAME_DEF_STMT (op);
+      basic_block def_bb = gimple_bb (def);
+      if (!def_bb || !flow_bb_inside_loop_p (loop, def_bb))
+	continue;
+      gcall *call = dyn_cast <gcall *> (def);
+      if (!call
+	  || !rvtt_invariant_constant_load_p (call, loop,
+					      /*allow_shortened=*/true)
+	  || !rvtt_stmt_executes_every_entered_iteration_p (loop, def_bb)
+	  || (def_bb != loop->header && !first_iteration))
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "lut-select: coefficient stays in loop"
+		       " (lut-coefficient-unproven): ");
+	      print_gimple_stmt (dump_file, def, 0);
+	    }
+	  continue;
+	}
+      if (!coeffs.contains (call))
+	coeffs.safe_push (call);
+    }
+  if (coeffs.is_empty ())
+    return;
+
+  /* Architectural LREG budget, transactional: either every coefficient
+     stays live across the loop within the eight-LREG file or none
+     moves.  */
+  if (!rvtt_loop_lreg_pressure_legal_p (loop, coeffs, false))
+    return keep ("lut-coefficient-pressure");
+
+  basic_block preheader = rvtt_commit_hoist_preheader (entry);
+  for (gcall *call : coeffs)
+    {
+      if (tree vdef = gimple_vdef (call))
+	{
+	  if (TREE_CODE (vdef) == SSA_NAME)
+	    {
+	      unlink_stmt_vdef (call);
+	      release_ssa_name (vdef);
+	    }
+	  gimple_set_vdef (call, NULL_TREE);
+	}
+      if (gimple_vuse (call))
+	{
+	  gimple_set_vuse (call, NULL_TREE);
+	  update_stmt (call);
+	}
+      gimple_stmt_iterator from = gsi_for_stmt (call);
+      gsi_move_to_bb_end (&from, preheader);
+      n_placed++;
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "lut-select: placed coefficient materialization in loop"
+		   " preheader bb %d: ", preheader->index);
+	  print_gimple_stmt (dump_file, call, 0);
+	}
+    }
+}
+
 static bool
-transform (function *fun)
+transform (function *fun, auto_vec<gcall *> *formed)
 {
   bool changed = false;
   basic_block bb;
@@ -580,7 +783,9 @@ transform (function *fun)
 		  changed = true;
 		  /* The group's statements are gone; restart after the
 		     formed LUT.  */
-		  next = gsi_for_stmt (SSA_NAME_DEF_STMT (g.result));
+		  gimple *lut = SSA_NAME_DEF_STMT (g.result);
+		  formed->safe_push (as_a <gcall *> (lut));
+		  next = gsi_for_stmt (lut);
 		  gsi_next (&next);
 		}
 	    }
@@ -619,6 +824,7 @@ public:
   {
     n_formed = 0;
     n_refused = 0;
+    n_placed = 0;
     if (TARGET_XTT_TENSIX_QSR)
       {
 	if (dump_file)
@@ -626,10 +832,26 @@ public:
 		   " QSR has no validated LUT capability\n");
 	return 0;
       }
-    bool changed = transform (fun);
+    auto_vec<gcall *> formed;
+    bool changed = transform (fun, &formed);
+    if (!formed.is_empty ())
+      {
+	/* Coefficient placement, scoped to exactly the loops where a
+	   LUT formed this execution: everything else keeps its
+	   bytes.  */
+	loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+	if (!dom_info_available_p (CDI_DOMINATORS))
+	  calculate_dominance_info (CDI_DOMINATORS);
+	for (gcall *lut : formed)
+	  place_coefficients (lut);
+	loop_optimizer_finalize ();
+      }
     if (dump_file)
-      fprintf (dump_file, "lut-select: groups=%u refusals=%u\n",
-	       n_formed, n_refused);
+      {
+	fprintf (dump_file, "lut-select: groups=%u refusals=%u\n",
+		 n_formed, n_refused);
+	fprintf (dump_file, "lut-select: placements=%u\n", n_placed);
+      }
     return changed ? TODO_update_ssa_only_virtuals | TODO_verify_all : 0;
   }
 };

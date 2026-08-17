@@ -60,45 +60,6 @@ allowed_dst_effect_p (const rvtt_insn_data *insnd)
     || insnd->id == rvtt_insn_data::ttdstface;
 }
 
-/* Reject unrepresented calls, ordinary memory, CC changes, configuration,
-   replay ownership, and every other volatile target effect.  Typed Dst
-   load/store/counter operations are explicit architectural boundaries but do
-   not change an invariant SFPLOADI value or the incoming CC state.  */
-static bool
-loop_has_barrier_p (class loop *loop)
-{
-  basic_block *body = get_loop_body (loop);
-  bool barrier = false;
-  for (unsigned ix = 0; ix != loop->num_nodes && !barrier; ++ix)
-    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
-	 !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gimple *stmt = gsi_stmt (gsi);
-	if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
-	    || gimple_code (stmt) == GIMPLE_COND
-	    || gimple_code (stmt) == GIMPLE_GOTO)
-	  continue;
-
-	const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
-	if (insnd)
-	  {
-	    gcall *call = as_a <gcall *> (stmt);
-	    if (insnd->sets_cc (call)
-		|| (insnd->has_side_effects (call)
-		    && !allowed_dst_effect_p (insnd)))
-	      barrier = true;
-	    continue;
-	  }
-
-	if (gimple_code (stmt) == GIMPLE_ASM
-	    || is_gimple_call (stmt)
-	    || gimple_vuse (stmt) || gimple_vdef (stmt))
-	  barrier = true;
-      }
-  free (body);
-  return barrier;
-}
-
 static bool
 all_uses_in_loop_p (tree value, class loop *loop)
 {
@@ -139,11 +100,66 @@ canonical_insn_buffer_p (tree addr)
 		"__instrn_buffer");
 }
 
-static bool
-constant_load_p (gcall *call, class loop *loop)
+} // anonymous namespace
+
+/* Shared loop invariant-materialization proofs (declared in
+   rvtt-macro-ownership.h): the invariant-loadi pass below and the LUT
+   selection's coefficient placement consume the same discipline.  */
+
+/* Reject unrepresented calls, ordinary memory, CC changes, configuration,
+   replay ownership, and every other volatile target effect.  Typed Dst
+   load/store/counter operations are explicit architectural boundaries but do
+   not change an invariant SFPLOADI value or the incoming CC state.  */
+bool
+rvtt_loop_has_sfpu_barrier_p (class loop *loop)
 {
+  basic_block *body = get_loop_body (loop);
+  bool barrier = false;
+  for (unsigned ix = 0; ix != loop->num_nodes && !barrier; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	    || gimple_code (stmt) == GIMPLE_COND
+	    || gimple_code (stmt) == GIMPLE_GOTO)
+	  continue;
+
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	if (insnd)
+	  {
+	    gcall *call = as_a <gcall *> (stmt);
+	    if (insnd->sets_cc (call)
+		|| (insnd->has_side_effects (call)
+		    && !allowed_dst_effect_p (insnd)))
+	      barrier = true;
+	    continue;
+	  }
+
+	if (gimple_code (stmt) == GIMPLE_ASM
+	    || is_gimple_call (stmt)
+	    || gimple_vuse (stmt) || gimple_vdef (stmt))
+	  barrier = true;
+      }
+  free (body);
+  return barrier;
+}
+
+bool
+rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
+				bool allow_shortened)
+{
+  /* The early invariant pass runs before immediate shortening and sees
+     only the canonical sfpxloadi form; consumers running after
+     pass_rvtt_immload_shorten (LUT coefficient placement) opt in to
+     the single-issue shortened form, whose operand layout is
+     identical.  The early pass must not opt in: admitting direct
+     sfploadi builtin calls there would change its established
+     decisions.  */
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (!insnd || insnd->id != rvtt_insn_data::sfpxloadi)
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpxloadi
+	  && !(allow_shortened && insnd->id == rvtt_insn_data::sfploadi)))
     return false;
 
   tree lhs = gimple_call_lhs (call);
@@ -164,9 +180,10 @@ constant_load_p (gcall *call, class loop *loop)
    is consumed directly by a non-PHI statement in it.  This is intentionally
    conservative: refuse the whole loop before changing virtual operands or
    statement placement when the bound is exceeded.  */
-static bool
-pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
-		  bool report = true)
+bool
+rvtt_loop_lreg_pressure_legal_p (class loop *loop,
+				 const auto_vec<gcall *> &loads,
+				 bool report)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
@@ -301,6 +318,87 @@ pressure_legal_p (class loop *loop, const auto_vec<gcall *> &loads,
   return false;
 }
 
+/* Prove that the loop's first header test enters the loop body.  This
+   avoids speculating an architectural LREG write out of a zero-trip loop,
+   without requesting loop normalization (which could perturb an ineligible
+   function).  */
+bool
+rvtt_loop_first_iteration_executes_p (class loop *loop, edge entry)
+{
+  gimple_stmt_iterator last = gsi_last_bb (loop->header);
+  gcond *cond = gsi_end_p (last)
+    ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
+  if (!cond || !entry)
+    return false;
+
+  auto initial_value = [loop, entry] (tree value) -> tree
+    {
+      if (TREE_CODE (value) != SSA_NAME)
+	return value;
+      gphi *phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (value));
+      if (!phi || gimple_bb (phi) != loop->header)
+	return value;
+      return PHI_ARG_DEF_FROM_EDGE (phi, entry);
+    };
+
+  tree lhs = initial_value (gimple_cond_lhs (cond));
+  tree rhs = initial_value (gimple_cond_rhs (cond));
+  tree value = fold_binary (gimple_cond_code (cond), boolean_type_node,
+			    lhs, rhs);
+  if (!value || TREE_CODE (value) != INTEGER_CST)
+    return false;
+
+  edge true_edge, false_edge;
+  extract_true_false_edges_from_block (loop->header, &true_edge, &false_edge);
+  edge taken = integer_zerop (value) ? false_edge : true_edge;
+  return taken && taken->dest != loop->header
+    && flow_bb_inside_loop_p (loop, taken->dest);
+}
+
+/* A hoisted load must not be speculated: its block must provably execute
+   on every iteration that enters the loop body.  BB must dominate the
+   latch, and every loop exit must leave either from the header test
+   (before any body work of that iteration) or from a block BB dominates
+   (after the load has executed).  Pure CFG dominance structure; no
+   statement content is examined.  */
+bool
+rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
+					      basic_block bb)
+{
+  /* Callers initialize loops with AVOID_CFG_MODIFICATIONS, which keeps
+     multi-latch loops as-is with loop->latch == NULL rather than
+     canonicalizing them.  Without a unique latch there is no single block
+     that ends every iteration, so the dominance proof below has no anchor
+     (and dominated_by_p on a NULL block is undefined); refuse, mirroring
+     the NULL-latch check in short_constant_replay_loop_p.  */
+  if (!loop->latch)
+    return false;
+
+  if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
+    return false;
+
+  basic_block *body = get_loop_body (loop);
+  bool ok = true;
+  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
+    {
+      basic_block src = body[ix];
+      if (src == loop->header || dominated_by_p (CDI_DOMINATORS, src, bb))
+	continue;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, src->succs)
+	if (!flow_bb_inside_loop_p (loop, e->dest))
+	  {
+	    ok = false;
+	    break;
+	  }
+    }
+  free (body);
+  return ok;
+}
+
+namespace {
+
 /* Estimate the number of SFPLOADI issues needed to materialize CALL's
    constant after the later immediate-shortening passes run.  Prefer keeping
    two-issue constants live when pressure prevents hoisting every invariant;
@@ -326,7 +424,7 @@ materialization_cost (gcall *call)
 /* Select the most expensive invariant materializations which fit the
    architectural LREG pressure bound.  The old all-or-nothing policy left
    every constant in a counted loop when only one live range exceeded the
-   bound.  Greedy selection is safe because pressure_legal_p re-runs the full
+   bound.  Greedy selection is safe because the pressure proof re-runs the full
    conservative liveness proof after every addition; it is also deterministic
    because equal-cost candidates retain source order.  */
 static auto_vec<gcall *>
@@ -342,7 +440,7 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
   for (gcall *call : loads)
     {
       selected.safe_push (call);
-      if (!pressure_legal_p (loop, selected, false))
+      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false))
 	{
 	  selected.pop ();
 	  if (dump_file)
@@ -504,84 +602,6 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
   return short_loop;
 }
 
-/* Prove that the loop's first header test enters the loop body.  This
-   avoids speculating an architectural LREG write out of a zero-trip loop,
-   without requesting loop normalization (which could perturb an ineligible
-   function).  */
-static bool
-first_iteration_executes_p (class loop *loop, edge entry)
-{
-  gimple_stmt_iterator last = gsi_last_bb (loop->header);
-  gcond *cond = gsi_end_p (last)
-    ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
-  if (!cond || !entry)
-    return false;
-
-  auto initial_value = [loop, entry] (tree value) -> tree
-    {
-      if (TREE_CODE (value) != SSA_NAME)
-	return value;
-      gphi *phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (value));
-      if (!phi || gimple_bb (phi) != loop->header)
-	return value;
-      return PHI_ARG_DEF_FROM_EDGE (phi, entry);
-    };
-
-  tree lhs = initial_value (gimple_cond_lhs (cond));
-  tree rhs = initial_value (gimple_cond_rhs (cond));
-  tree value = fold_binary (gimple_cond_code (cond), boolean_type_node,
-			    lhs, rhs);
-  if (!value || TREE_CODE (value) != INTEGER_CST)
-    return false;
-
-  edge true_edge, false_edge;
-  extract_true_false_edges_from_block (loop->header, &true_edge, &false_edge);
-  edge taken = integer_zerop (value) ? false_edge : true_edge;
-  return taken && taken->dest != loop->header
-    && flow_bb_inside_loop_p (loop, taken->dest);
-}
-
-/* A hoisted load must not be speculated: its block must provably execute
-   on every iteration that enters the loop body.  BB must dominate the
-   latch, and every loop exit must leave either from the header test
-   (before any body work of that iteration) or from a block BB dominates
-   (after the load has executed).  Pure CFG dominance structure; no
-   statement content is examined.  */
-static bool
-executes_every_entered_iteration_p (class loop *loop, basic_block bb)
-{
-  /* This pass initializes loops with AVOID_CFG_MODIFICATIONS, which keeps
-     multi-latch loops as-is with loop->latch == NULL rather than
-     canonicalizing them.  Without a unique latch there is no single block
-     that ends every iteration, so the dominance proof below has no anchor
-     (and dominated_by_p on a NULL block is undefined); refuse, mirroring
-     the NULL-latch check in short_constant_replay_loop_p.  */
-  if (!loop->latch)
-    return false;
-
-  if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
-    return false;
-
-  basic_block *body = get_loop_body (loop);
-  bool ok = true;
-  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
-    {
-      basic_block src = body[ix];
-      if (src == loop->header || dominated_by_p (CDI_DOMINATORS, src, bb))
-	continue;
-      edge e;
-      edge_iterator ei;
-      FOR_EACH_EDGE (e, ei, src->succs)
-	if (!flow_bb_inside_loop_p (loop, e->dest))
-	  {
-	    ok = false;
-	    break;
-	  }
-    }
-  free (body);
-  return ok;
-}
-
 static bool
 transform (function *fn)
 {
@@ -622,8 +642,8 @@ transform (function *fn)
       if (rvtt_preheader_insertion_blocked_p (entry))
 	continue;
 
-      if (!first_iteration_executes_p (loop, entry)
-	  || loop_has_barrier_p (loop))
+      if (!rvtt_loop_first_iteration_executes_p (loop, entry)
+	  || rvtt_loop_has_sfpu_barrier_p (loop))
 	continue;
 
       /* SFPLOADI writes an architectural LREG even though its SSA result is
@@ -644,14 +664,14 @@ transform (function *fn)
 	{
 	  basic_block body = body_blocks[ix];
 	  if (body->loop_father != loop
-	      || !executes_every_entered_iteration_p (loop, body))
+	      || !rvtt_stmt_executes_every_entered_iteration_p (loop, body))
 	    continue;
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (body);
 	       !gsi_end_p (gsi); gsi_next (&gsi))
 	    if (is_a <gcall *> (gsi_stmt (gsi)))
 	      {
 		gcall *call = as_a <gcall *> (gsi_stmt (gsi));
-		if (constant_load_p (call, loop))
+		if (rvtt_invariant_constant_load_p (call, loop))
 		  loads.safe_push (call);
 	      }
 	}

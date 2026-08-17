@@ -44,12 +44,13 @@ along with GCC; see the file COPYING3.  If not see
 #define RVTT_LUT_FP32_BITS_1P0 0x3f800000u
 #define RVTT_LUT_FP32_BITS_2P0 0x40000000u
 
-/* Modes available on Wormhole and Blackhole.  The first increment
-   carries only the simplest capability: the FP32 three-entry table
-   with SGN_UPDATE, whose coefficients need no packing or narrowing
-   (any FP32 value is encodable).  Quasar deliberately has no table:
-   its SFPLUT-family execution is unvalidated here, so the pass
-   refuses.  */
+/* Modes available on Wormhole and Blackhole: the FP32 three-entry
+   table, whose coefficients need no packing or narrowing (any FP32
+   value is encodable), with either sign behavior -- SGN_UPDATE keeps
+   the per-range MAD's sign, SGN_RETAIN copies the input operand's sign
+   onto the result (the second increment's fold of a trailing explicit
+   sign copy).  Quasar deliberately has no table: its SFPLUT-family
+   execution is unvalidated here, so the pass refuses.  */
 static const rvtt_lut_mode_desc wh_bh_lut_modes[] =
 {
   {
@@ -59,6 +60,14 @@ static const rvtt_lut_mode_desc wh_bh_lut_modes[] =
     3,
     { RVTT_LUT_FP32_BITS_1P0, RVTT_LUT_FP32_BITS_2P0, 0 },
     false,
+  },
+  {
+    "fp32-3entry-sgn-retain",
+    rvtt_insn_data::sfplutfp32_6r,
+    SFPLUTFP32_MOD0_FP32_3ENTRY_TABLE | SFPLUTFP32_MOD0_SGN_RETAIN,
+    3,
+    { RVTT_LUT_FP32_BITS_1P0, RVTT_LUT_FP32_BITS_2P0, 0 },
+    true,
   },
 };
 
