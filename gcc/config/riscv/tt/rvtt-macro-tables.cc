@@ -672,4 +672,194 @@ absorbed_dst_increment_word ()
   return (0x38u << 24) | (2u << 14);	/* 0x38008000 */
 }
 
+/* ------------------------------------------------------------------ */
+/* Derived-calendar architectural facts.			      */
+/* Provenance for everything in this section:			      */
+/*  (S1) ISA SFPLOADMACRO.md (BlackholeA0 documentation) -- the       */
+/*       SequenceBits format, the sub-unit legality table, the	      */
+/*       (†)/(‡) rules, the Misc field layout;			      */
+/*  (S2) craq-sim f80a8d64 src/sfploadmacro_events.h +		      */
+/*       TENSIX_EXECUTE_SFPLOADMACRO -- the executable model the CRAQ */
+/*       gates run against (ready = issue + 1 + delay,		      */
+/*       retire-before-issue, build_dispatch routing classes);	      */
+/*  (S3) tt_llk_blackhole ckernel_sfpu_mul_int.h _init_mul_int_ --    */
+/*       the production handwritten descriptor with author-annotated  */
+/*       field meanings.					      */
+/* See docs/TIMING_CALENDAR_DERIVATION.md §1-3 (including the	      */
+/* byte-exact re-derivation of every frozen calendar word above).     */
+/* ------------------------------------------------------------------ */
+
+bool
+encode_sequence_bits (unsigned case_kind, unsigned delay, bool vd16,
+		      bool route_vb, uint8_t *out)
+{
+  /* Case 1 is architecturally undefined; template indices stop at 3;
+     the delay field is three bits.  */
+  if (case_kind == 1 || case_kind > 7 || delay > SEQ_MAX_DELAY)
+    return false;
+  *out = (uint8_t) (case_kind | (delay << 3) | (vd16 ? 0x40u : 0)
+		    | (route_vb ? 0x80u : 0));
+  return true;
+}
+
+uint32_t
+compose_sequence_word (const uint8_t bytes[4])
+{
+  return (uint32_t) bytes[0] | ((uint32_t) bytes[1] << 8)
+    | ((uint32_t) bytes[2] << 16) | ((uint32_t) bytes[3] << 24);
+}
+
+void
+decompose_sequence_word (uint32_t word, uint8_t bytes[4])
+{
+  for (unsigned i = 0; i < 4; ++i)
+    bytes[i] = (uint8_t) (word >> (8 * i));
+}
+
+/* The normative per-sub-unit opcode legality table (S1), transcribed
+   for the WH/BH-common opcode bytes of sfpu-ops-{wh,bh}.h (the two
+   files assign identical bytes to every instruction below; SFPMUL24
+   is BH-only, S2/S3).  Raw opcode bytes are capability-table data by
+   design.  Omitted opcodes have no proven placement and refuse.  */
+
+struct subunit_legal_entry
+{
+  uint8_t opcode;
+  uint8_t mask;		/* bit N = executable on sub-unit byte N      */
+};
+
+static const subunit_legal_entry subunit_legality[] = {
+  /* Simple column (S1).  */
+  { 0x7d, 1u << SEQ_UNIT_SIMPLE },	/* SFPABS	*/
+  { 0x7e, 1u << SEQ_UNIT_SIMPLE },	/* SFPAND	*/
+  { 0x90, 1u << SEQ_UNIT_SIMPLE },	/* SFPCAST	*/
+  { 0x8b, 1u << SEQ_UNIT_SIMPLE },	/* SFPCOMPC	*/
+  { 0x91, 1u << SEQ_UNIT_SIMPLE },	/* SFPCONFIG	*/
+  { 0x76, 1u << SEQ_UNIT_SIMPLE },	/* SFPDIVP2	*/
+  { 0x8a, 1u << SEQ_UNIT_SIMPLE },	/* SFPENCC	*/
+  { 0x77, 1u << SEQ_UNIT_SIMPLE },	/* SFPEXEXP	*/
+  { 0x78, 1u << SEQ_UNIT_SIMPLE },	/* SFPEXMAN	*/
+  { 0x79, 1u << SEQ_UNIT_SIMPLE },	/* SFPIADD	*/
+  { 0x81, 1u << SEQ_UNIT_SIMPLE },	/* SFPLZ	*/
+  { 0x7c, 1u << SEQ_UNIT_SIMPLE },	/* SFPMOV	*/
+  { 0x80, 1u << SEQ_UNIT_SIMPLE },	/* SFPNOT	*/
+  { 0x7f, 1u << SEQ_UNIT_SIMPLE },	/* SFPOR	*/
+  { 0x7b, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETCC	*/
+  { 0x82, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETEXP	*/
+  { 0x83, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETMAN	*/
+  { 0x89, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETSGN	*/
+  { 0x7a, 1u << SEQ_UNIT_SIMPLE },	/* SFPSHFT	*/
+  { 0x92, 1u << SEQ_UNIT_SIMPLE },	/* SFPSWAP (‡)	*/
+  { 0x8c, 1u << SEQ_UNIT_SIMPLE },	/* SFPTRANSP	*/
+  { 0x8d, 1u << SEQ_UNIT_SIMPLE },	/* SFPXOR	*/
+  /* MAD column (S1; SFPMUL24 by S2/S3).  */
+  { 0x85, 1u << SEQ_UNIT_MAD },		/* SFPADD	*/
+  { 0x75, 1u << SEQ_UNIT_MAD },		/* SFPADDI	*/
+  { 0x73, 1u << SEQ_UNIT_MAD },		/* SFPLUT	*/
+  { 0x95, 1u << SEQ_UNIT_MAD },		/* SFPLUTFP32	*/
+  { 0x84, 1u << SEQ_UNIT_MAD },		/* SFPMAD	*/
+  { 0x86, 1u << SEQ_UNIT_MAD },		/* SFPMUL	*/
+  { 0x74, 1u << SEQ_UNIT_MAD },		/* SFPMULI	*/
+  { 0x98, 1u << SEQ_UNIT_MAD },		/* SFPMUL24 (BH) */
+  /* Round column (S1).  */
+  { 0x94, 1u << SEQ_UNIT_ROUND },	/* SFPSHFT2	*/
+  { 0x8e, 1u << SEQ_UNIT_ROUND },	/* SFPSTOCHRND	*/
+  /* SFPNOP may schedule on any compute sub-unit (S1).  */
+  { 0x8f, (1u << SEQ_UNIT_SIMPLE) | (1u << SEQ_UNIT_MAD)
+	  | (1u << SEQ_UNIT_ROUND) },
+  /* Store column (S1); realized as case 3, never as a template.  */
+  { 0x72, 1u << SEQ_UNIT_STORE },	/* SFPSTORE	*/
+};
+
+unsigned
+subunit_legal_mask (const caps *c, uint8_t opcode)
+{
+  if (!c)
+    return 0;
+  for (const subunit_legal_entry &e : subunit_legality)
+    if (e.opcode == opcode)
+      return e.mask;
+  return 0;
+}
+
+unsigned
+subunit_result_latency (unsigned seq_unit)
+{
+  /* Simple/Round: every proven chain steps one slot per dependence
+     (signbit shift->cast->store, cast-round cast->rnd->store).  MAD:
+     the handwritten MulInt32 places its store two slots after the
+     MUL24 in BOTH calendar variants (store delay = mad delay + 2),
+     the multiply pipeline's writeback distance (S3).  */
+  return seq_unit == SEQ_UNIT_MAD ? 2 : 1;
+}
+
+route_class
+opcode_route_class (const caps *c, uint8_t opcode)
+{
+  /* S1 field-override rules; S2 build_dispatch ranges.  */
+  if (!c)
+    return RC_NONE;
+  if (opcode == 0x94)
+    return RC_SHFT2;
+  if ((opcode >= 0x84 && opcode <= 0x86) || opcode == 0x8e
+      || opcode == 0x98)
+    return RC_VB_VC;
+  if ((opcode >= 0x79 && opcode <= 0x83) || opcode == 0x89
+      || opcode == 0x90 || opcode == 0x97 || opcode == 0x99)
+    return RC_VC;
+  return RC_NONE;
+}
+
+bool
+opcode_reads_vd (const caps *c, uint8_t opcode)
+{
+  /* SFPSWAP's VD operand is an INPUT (SFPSWAP.md; S2 executor): the
+     event cannot be redirected to LReg16 and route must stay 1 so a
+     planned VC survives.  */
+  return c && opcode == 0x92;
+}
+
+bool
+opcode_needs_swap_adjacency (const caps *c, uint8_t opcode)
+{
+  /* S1 (‡): SWAP on Simple needs MAD idle in its execution cycle and
+     Simple+Round idle (or NOP) in the next.  The frozen minmax copy
+     delay (3, not the dependence-minimal 2) is this rule in action.  */
+  return c && opcode == 0x92;
+}
+
+bool
+staging_copy_realization (const caps *c, staging_copy_facts *out)
+{
+  if (!c)
+    return false;
+  /* The frozen minmax transient copy (ref descriptor dest1 0x940000d6):
+     SFPSHFT2 immediate-shift-0 = a plain copy of the launch VD (the
+     SHFT_IMM VB<-VD override, S1), Round sub-unit (SFPSHFT2's only
+     legal placement), writing LReg16.  The one proven staging form;
+     SFPMOV-on-Simple would be plausible but is unproven and refuses.  */
+  out->opcode = 0x94;
+  out->mod1 = 6;		/* SHFT_IMM (sfpu-ops SFPSHFT2 mod1 6) */
+  out->seq_unit = SEQ_UNIT_ROUND;
+  return true;
+}
+
+uint32_t
+encode_misc_fields (unsigned store_mod0, unsigned uses_load_mod0_mask,
+		    unsigned delay_kind_mask)
+{
+  return (store_mod0 & 0xfu) | ((uses_load_mod0_mask & 0xfu) << 4)
+    | ((delay_kind_mask & 0xfu) << 8);
+}
+
+void
+decode_misc_fields (uint32_t word, unsigned *store_mod0,
+		    unsigned *uses_load_mod0_mask,
+		    unsigned *delay_kind_mask)
+{
+  *store_mod0 = word & 0xfu;
+  *uses_load_mod0_mask = (word >> 4) & 0xfu;
+  *delay_kind_mask = (word >> 8) & 0xfu;
+}
+
 }  /* namespace rvtt_macro */
