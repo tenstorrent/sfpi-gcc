@@ -1143,8 +1143,9 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
     }
   /* Stride absorption in a DERIVED calendar is a per-CPU proven
      envelope (rvtt-macro-tables.cc derived_stride_absorption_proven):
-     the WH launch auto-increment/dual-slot machinery is the open WH
-     Dst-advance frontier and refuses by name.  */
+     BH and WH are proven (WH via the corrected single-slot Base=1
+     program, sfpi-gcc 2a0ba1e6602 adjudication); an unproven CPU
+     refuses by name.  */
   if (schedule.absorbed_stride
       && !rvtt_macro::derived_stride_absorption_proven (c))
     {

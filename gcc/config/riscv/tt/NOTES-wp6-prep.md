@@ -70,6 +70,18 @@ Raw SETC16 words asserted by tests: BH `0xB2120000/0xB2220002/0xB2350000`
 (T bh, `.ttinsn` 2987524096/2988572674/2989817856); WH
 `0xB20B0000/0xB2190002/0xB2320000/0xB2130000/0xB21D0002/0xB2360000` (T wh).
 
+AMENDMENT 2026-08-17 (lane AP): the WH dual-slot rule transcribed above
+is a faithful record of the frozen pass but was adjudicated a
+MISCOMPILE at sfpi-gcc 2a0ba1e6602 (laneAJ-evidence-20260817): the
+phys-slot-2 words (SETC16 11/25/50) overwrite LLK's live base-0
+ADDR_MOD_2 and corrupt the next tile's datacopy; the SFPU platform
+contract pins ADDR_MOD_SET_Base=1 (LLK start/done bracket), so exactly
+one physical slot is reachable and owned.  The capability table now
+carries the single Base=1 slot {19,29,54}; the WH test words are
+`0xB2130000/0xB21D0002/0xB2360000` only, and the base-0 words are
+scan-not'ed.  `needs_bank_base_ownership` now records the Base=1
+contract obligation, not a dual-bank write rule.
+
 ## 3. SETC16 / SFPCONFIG / SFPENCC field layouts
 
 | Constant | Value | Provenance | Status |

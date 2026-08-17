@@ -210,7 +210,17 @@ struct caps
   /* Address-modifier machinery.  */
   unsigned no_increment_addr_mode;
   unsigned auto_increment_dst2_addr_mode;
-  bool needs_bank_base_ownership;   /* WH Base-selector ambiguity      */
+  /* The launch's addr-mode field names its physical slot THROUGH the
+     bank base bit (WH: ADDR_MOD_SET_Base maps modifier m to physical
+     slot m or m+4).  When set, the emitted single-slot program is
+     valid under the Base=1 SFPU platform contract -- proven by the
+     typed LLK start/done bracket (cmath_common.h
+     set/clear_addr_mod_base from _llk_math_eltwise_sfpu_start_/_done_)
+     and adjudicated at sfpi-gcc 2a0ba1e6602 (laneAJ-evidence-20260817:
+     programming the base-0 bank destroys the FPU's live ADDR_MOD_2 and
+     corrupts the next tile's datacopy, so dual-slot "defensive"
+     ownership is a miscompile, not a proof).  */
+  bool needs_bank_base_ownership;
   const addr_mod_slot *addr_mod_slots;
   unsigned n_addr_mod_slots;
 
@@ -294,8 +304,10 @@ extern uint32_t encode_sfpconfig (const caps *, unsigned imm16,
 /* The owned SETC16 program that establishes the Dst += DST_DELTA
    auto-increment address modifier from any incoming state.  Only
    dst_delta == +2 is proven; everything else refuses.  OUT must hold at
-   least 6 entries.  *NEEDS_BANK_BASE_OWNERSHIP reports the WH dual-slot
-   Base-ambiguity rule (the returned program already covers both slots).  */
+   least 6 entries.  *NEEDS_BANK_BASE_OWNERSHIP reports that the
+   program's slot naming stands on the Base=1 SFPU platform contract
+   (see the caps field comment; WH single slot 6 = scratch modifier 2
+   under Base=1, SETC16 19/29/54 -- never the base-0 bank).  */
 extern bool addr_mod_program (const caps *, int dst_delta,
 			      setc16_program *out, unsigned *n_out,
 			      bool *needs_bank_base_ownership);
@@ -467,15 +479,20 @@ extern void decode_misc_fields (uint32_t word, unsigned *store_mod0,
 /* Whether a DERIVED calendar may absorb the row's Dst stride into a
    launch's auto-increment address mode on this CPU.  BH is proven end
    to end (the derived unary max/min calendar is CRAQ bit-exact through
-   the generic simulator path).  WH is NOT: the WH-sim execution of a
-   derived absorbed-stride calendar returns position-shuffled tiles
-   after the first (laneR1 evidence 2026-08-17, wh-onma trace: launch
-   rows and store rows correct, data displaced from the second tile
-   on), the same open WH Dst-advance frontier as
-   FINDING-wh-dst-autoincr-fresh-maxmin.md and WP8 §6b(4)'s dual-slot
-   bank-base proof.  WH select (which keeps its separator and absorbs
-   nothing) passes the same path, so the boundary is absorption
-   itself.  Refusal name: derived-stride-absorption-unproven.  */
+   the generic simulator path).  WH is now proven too: the laneR1
+   position-shuffled-tiles failure that grounded the former WH refusal
+   (laneR1-evidence-20260817 wh-onma trace: every latched launch
+   dst_row/mask correct, data displaced from the second tile on) was
+   adjudicated at sfpi-gcc 2a0ba1e6602 (laneAJ-evidence-20260817) as
+   the DUAL-SLOT SETC16 program itself -- the emitted words clobbered
+   LLK's live base-0 ADDR_MOD_2 and corrupted the NEXT tile's datacopy;
+   the absorption machinery (launch auto-increment through the owned
+   slot) was wrong, not unproven.  With the corrected single-slot
+   Base=1 program (this table) the faithful WH sim (craq-sim wh
+   8f0079a9) executes the derived absorbed-stride calendar bit-exact
+   (laneAP WH CRAQ, derived unary max/min, multi-tile).  QSR has no
+   capability entry and refuses.  Refusal name (unproven CPUs):
+   derived-stride-absorption-unproven.  */
 extern bool derived_stride_absorption_proven (const caps *);
 
 /* ------------------------------------------------------------------ */

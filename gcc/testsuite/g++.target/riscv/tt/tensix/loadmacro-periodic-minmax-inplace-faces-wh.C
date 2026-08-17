@@ -1,9 +1,10 @@
 // Wormhole production shape: rows=32 runs=4 in-place face runs, one
-// shared descriptor, store-demotion fallback.  Frozen-pass byte-parity
-// re-verified offline on this same source.
+// shared descriptor, store-demotion fallback.  The config prefix is the
+// corrected single-slot Base=1 SETC16 program (three words, not the
+// frozen pass's six -- sfpi-gcc 2a0ba1e6602), so .ttinsn is 67.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPCONFIG" 5 } }
-// { dg-final { scan-assembler-times "\\.ttinsn" 70 } }
+// { dg-final { scan-assembler-times "\\.ttinsn" 67 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2466299904" 16 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467348480" 16 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2473623552" 32 } }

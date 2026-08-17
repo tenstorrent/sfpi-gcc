@@ -149,9 +149,13 @@ previous layers' vocabulary, never IR shape names.
   config, per-face drain, transitions preserved in place) and dynamic
   (the face loop's body with the prefix hoisted to the preheader — the
   one-configuration, 32-launch schedule the Typecast blocker demanded).
-  The WH bank-base obligation is discharged by the owned dual-slot
-  SETC16 program the tables carry (slots 2 and 6; the launch's two-bit
-  selector maps through unencoded incoming Base state).
+  The WH bank-base obligation is discharged by the Base=1 SFPU
+  platform contract (the LLK start/done bracket pins
+  ADDR_MOD_SET_Base=1), under which the tables' owned SINGLE-slot
+  SETC16 program (physical slot 6, regs 19/29/54) is the launch's
+  only reachable bank; the historical dual-slot program wrote the
+  base-0 bank -- LLK's live ADDR_MOD_2 -- and was adjudicated a
+  miscompile (sfpi-gcc 2a0ba1e6602; laneAJ-evidence-20260817).
 * **Where → named refusal.**  A CC-writing value event inside a row
   slice needs a CC-manipulating instruction template; at WP8 no proven
   CC-template program existed, so the predicated-select shape refused
@@ -197,7 +201,7 @@ previous layers' vocabulary, never IR shape names.
   ONE descriptor configuration per tile in the face-loop preheader and
   eight alternating-VD launches per face — the one-configuration,
   32-launch dynamic tile schedule the blocker demanded, on BH and (with
-  the dual-slot bank-base SETC16 program) on WH.  The straight-line
+  the single-slot Base=1 SETC16 program) on WH.  The straight-line
   contract, non-loop regions, and every previously-refusing shape are
   unchanged.
 

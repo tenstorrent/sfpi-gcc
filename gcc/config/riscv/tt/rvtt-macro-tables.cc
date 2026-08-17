@@ -874,13 +874,17 @@ derived_stride_absorption_proven (const caps *c)
   /* BH: the derived unary max/min calendar (absorbed stride through
      the owned single-slot SETC16 program, launch auto-increment mode)
      is CRAQ bit-exact through the generic simulator path.  WH: the
-     same derived calendar returns position-shuffled tiles after the
-     first on the WH simulator while every launch's latched Dst row is
-     correct (laneR1 wh-onma trace, 2026-08-17) -- the open WH
-     Dst-advance/dual-slot frontier (FINDING-wh-dst-autoincr-fresh-
-     maxmin.md; WP8 §6b(4)).  Proven WH derived calendars must keep
-     their separators until that frontier closes.  */
-  return c && c->cpu == CPU_BH;
+     former refusal's grounding failure (laneR1 wh-onma trace,
+     2026-08-17: position-shuffled tiles after the first, every
+     latched launch dst_row/mask correct) was adjudicated as the
+     dual-slot SETC16 program clobbering LLK's live base-0 ADDR_MOD_2
+     and corrupting the NEXT tile's datacopy (sfpi-gcc 2a0ba1e6602;
+     laneAJ-evidence-20260817) -- the machinery was wrong, not
+     unproven.  With this table's corrected single-slot Base=1 program
+     the derived absorbed-stride calendar is CRAQ bit-exact on the
+     faithful WH sim (wh 8f0079a9; laneAP evidence, derived unary
+     max/min multi-tile).  QSR has no capability entry and refuses.  */
+  return c && (c->cpu == CPU_BH || c->cpu == CPU_WH);
 }
 
 }  /* namespace rvtt_macro */
