@@ -236,18 +236,28 @@ CC-write template events representable end to end:
   matched program's proven delays and two architectural facts in the
   capability tables (`cc_visibility_lag` = 1: a macro event's CC result
   is visible to issues one slot after it executes;
-  `store_lane_mask_latched_at_launch`: the delayed store's lane
-  predicate is captured at its launch), the slots that make the
+  `store_lane_mask_live_at_execution`: the delayed store's lane
+  predicate is the LIVE CC state at the store's execution cycle -- the
+  ISA's launch-latched store overrides are exhaustively Addr, the Mod0
+  source, and the backdoor bit, and a CC write retiring in the store's
+  own cycle is not yet visible to it), the slots that make the
   coalescing sound: pre-visibility payload < definition-visible <=
-  post-visibility payload; store launch before visibility (all-lanes
-  latch, backed by the ambient-enable proof); restore visible after the
-  predicated payload and by the next row's first slot (the kept
-  separator provides it).  The template predicate SENSE is complemented
-  exactly when the post-visibility payload carries the merge's live
-  operand; the complement mapping (SFPSETCC mod1 bit 2, register-test
-  class only) is capability-table data.  Any failed obligation refuses
-  `cc-template-unproved`.  The Layer-7 verifier re-derives the whole
-  model and re-checks the inequalities.
+  post-visibility payload; restore visible after the predicated payload
+  and by the next row's first slot; and the **restore-store race
+  constraint** -- the all-lanes restore must retire STRICTLY BEFORE the
+  store executes (`restore_exec < store_exec`, i.e. restore-visible
+  slot <= store-exec slot with lag 1), and the store must retire before
+  the next row's predicate definition executes (`store_exec < def_exec
+  + ii`).  A schedule violating the race constraint refuses
+  `cc-restore-store-race` -- the architectural cause of the 2026-08-17
+  silicon adjudication's separator-kept mis-select, pinned by the
+  corrected CRAQ delivery model (craq-sim 9f324140).  The template
+  predicate SENSE is complemented exactly when the post-visibility
+  payload carries the merge's live operand; the complement mapping
+  (SFPSETCC mod1 bit 2, register-test class only) is capability-table
+  data.  Any other failed obligation refuses `cc-template-unproved`.
+  The Layer-7 verifier re-derives the whole model and re-checks every
+  inequality, the race constraint included, from the exchanged slots.
 
 * **The derived calendars.**  The ESTABLISHED (WP9) calendar is two
   launches plus one explicit payload load per row (the demoted hostless
@@ -284,40 +294,57 @@ CC-write template events representable end to end:
   a differently-typed condition (the fp16b TTNN Where selector loads
   the condition as F16b and stores U16), an uncovered stride delta, or
   a non-trailing payload -- refuse the compact candidate by name and
-  fall through to the established 4-slot calendar, WHICH NOW REFUSES
-  (see the silicon adjudication note below).  Both sequence words
-  and the templates are the same proven table rows in both calendars.
-  Since WP10 a schedule that names its own blocker never reaches
-  descriptor synthesis; the ONE carve-out remains
-  `event-delay-unproven` (Sec. 6).
+  fall through to the established 4-slot calendar, WHOSE DESCRIPTOR NOW
+  REFUSES `cc-restore-store-race` (see the silicon adjudication note
+  below).  Both sequence words and the templates are the same proven
+  table rows in both calendars.  Since WP10 a schedule that names its
+  own blocker never reaches descriptor synthesis; the ONE carve-out
+  remains `event-delay-unproven` (Sec. 6).
 
-* **Silicon adjudication (2026-08-17): the separator-kept 4-slot
-  calendar refuses `cc-separator-kept-silicon-unproven`.**  The Where
-  silicon adjudication (Lane AD, tt-quietbox-0, BH p150; evidence root
-  `~/sfpi-uplift/where-adjudication-20260817`, verdicts/VERDICT.md)
-  proved on a reset-first, control-proven device that the formed
-  separator-KEPT calendar (misc 0x706 class; the fp16b and Float32
-  TTNN Where rows) MIS-SELECTS on silicon deterministically across two
-  independent resets -- the TRUE-branch (CC-visible) store slot
-  delivers wrong data (`all_zeros` PASS, `all_ones` FAIL) -- while the
-  byte-identical binaries pass CRAQ (bit-exact-NaN) in the generic
-  simulator; the separator-ABSORBED compact calendar (misc 0x770
-  class; the Int32 rows) is silicon-CORRECT in both delivery arms
-  (RISC-pushed and replay-wrapped) across the same resets.  Silicon is
-  the authority per the standing rule, so the scheduler now refuses
-  every predicate-writing row whose derived schedule keeps its typed
-  separator (the `absorb_into_explicit == false` CC branch) by the new
-  stable name `cc-separator-kept-silicon-unproven`, and the region
-  falls back byte-identically to the semantic (planner-OFF) lowering,
-  which is silicon-green.  The key is the STRUCTURAL property -- the
-  kept separator in the formed schedule -- never a misc word value or
-  a data format: the fp16b/Float32-vs-Int32 split observed on silicon
-  is a consequence of which shapes can absorb, not the classifier.
-  The compact separator-absorbed candidate keeps forming unchanged.
-  The refusal lifts when the simulator's RISC-pushed CC-visible store
-  delivery around the TTINCRWC barrier is proven against silicon
-  (VERDICT.md sim-owner item) or the fp16b condition-mode unification
-  moves those rows onto the proven compact path.
+* **Silicon adjudication (2026-08-17), root-caused: the 4-slot select
+  calendar refuses the ARCHITECTURAL `cc-restore-store-race`.**  The
+  Where silicon adjudication (Lane AD, tt-quietbox-0, BH p150; evidence
+  root `~/sfpi-uplift/where-adjudication-20260817`,
+  verdicts/VERDICT.md) proved on a reset-first, control-proven device
+  that the formed separator-KEPT calendar (misc 0x706 class; the fp16b
+  and Float32 TTNN Where rows) MIS-SELECTS on silicon deterministically
+  across two independent resets -- the TRUE-branch (CC-visible) store
+  slot delivers wrong data (`all_zeros` PASS, `all_ones` FAIL) -- while
+  the byte-identical binaries passed the then-current generic
+  simulator; the separator-ABSORBED compact calendar (misc 0x770 class;
+  the Int32 rows) is silicon-CORRECT in both delivery arms (RISC-pushed
+  and replay-wrapped) across the same resets.  The corrected CRAQ
+  delivery model (craq-sim 9f324140, which reproduces the silicon
+  verdict byte-for-byte on the adjudication ELFs) pinned the cause: the
+  scheduled store's lane predicate is LIVE at execution
+  (`store_lane_mask_live_at_execution` -- SFPLOADMACRO.md's
+  launch-latched store overrides are exhaustively Addr/Mod0/backdoor),
+  and the 4-slot calendar retires its SFPENCC restore in the SAME cycle
+  as its Delay-2 store (restore exec = 2+1+0 = 3 = 0+1+2 = store exec),
+  so the store executes under the SFPSETCC complement mask and leaves
+  the true-branch lanes unwritten; the compact calendar retires the
+  restore one cycle earlier (2 < 3) and is correct.  The descriptor CC
+  model therefore refuses any schedule whose all-lanes restore does not
+  retire strictly before the store executes by the stable name
+  `cc-restore-store-race`, derived from the slots and proven delays
+  alone, and the region falls back byte-identically to the semantic
+  (planner-OFF) lowering.  This SUPERSEDES the interim structural
+  refusal `cc-separator-kept-silicon-unproven` (retired): the
+  architectural constraint provably subsumes it, because under the
+  derivation rules every kept-separator select schedule races -- the
+  established hosting rule pins the restore to the LAST of the row's
+  three load carriers (issue slot >= 2, so restore exec >= 3 with the
+  proven ENCC d0), the shared launch VD forces the condition load to
+  slot 0 (a payload issued before the definition executes would clobber
+  it, an existing model refusal), and the proven `select-m0` store
+  delay 2 fixes store exec = 3 -- while a hypothetical kept-separator
+  schedule satisfying the constraint would now FORM (slot-keyed, not
+  structure-keyed; exercised at the unit level in
+  rvtt-macro-verify-test.cc).  The fp16b/Float32-vs-Int32 split
+  observed on silicon remains a consequence of which shapes can absorb,
+  not a classifier.  The compact separator-absorbed candidate keeps
+  forming unchanged; the fp16b condition-mode unification moves those
+  rows onto the silicon-proven compact path.
 
 * **Formation**: the ambient all-lanes proof composes with P0 -- the
   first row's local enable, the loop preheader's trailing enable, or
@@ -463,11 +490,11 @@ bh/wh/qsr32, all identical).
   word 0x770; the real Int32/UInt32 TTNN Where kernel forms it
   end-to-end (the fp16b selector kept the 4-slot calendar because its
   condition and store modes differ; since the 2026-08-17 silicon
-  adjudication that calendar refuses
-  `cc-separator-kept-silicon-unproven` -- see Sec. 2a -- and matching
-  the handwritten kernel's uniform-mode condition load is now the
-  remediation path for the fp16b rows, a one-line kernel-side change
-  left to review); (d) RESOLVED at WP10 behind the opt-in
+  adjudication was root-caused that calendar refuses the architectural
+  `cc-restore-store-race` -- see Sec. 2a -- and matching the
+  handwritten kernel's uniform-mode condition load is the remediation
+  path for the fp16b rows, landed as the tt-metal condition-mode
+  unification); (d) RESOLVED at WP10 behind the opt-in
   `-mtt-tensix-macro-planner-replay` flag: planner-formed SFPLOADMACRO
   launches are audited into the automatic replay model (a launch is a
   pure instruction word; recording captures the word, never state;

@@ -1,14 +1,15 @@
 // Genericity: renamed-equivalent twin of macro-planner-select-form-bh.C
 // -- different function and value names, identical structure -- must
 // refuse IDENTICALLY (name independence): since the 2026-08-17 Where
-// silicon adjudication (evidence root
-// ~/sfpi-uplift/where-adjudication-20260817) the established 4-slot
-// select calendar, whose schedule keeps its typed separator, refuses
-// cc-separator-kept-silicon-unproven, keyed on the structural
-// property alone -- no name, misc word, or data format participates.
+// silicon adjudication was root-caused (craq-sim 9f324140, live store
+// lane mask) the established 4-slot select calendar refuses
+// cc-restore-store-race, keyed on the derived slots and proven delays
+// alone (restore exec == store exec == 3) -- no name, misc word, or
+// data format participates.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }

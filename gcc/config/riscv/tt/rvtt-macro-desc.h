@@ -50,13 +50,22 @@ struct macro_launch_spec
    after the architectural deferred-CC lag (capability tables,
    cc_visibility_lag); the payload load issued before that slot executes
    under the ambient all-lanes mask, the one issued at or after it under
-   the definition; the store-carrying launch latches its lane mask at
-   issue (store_lane_mask_latched_at_launch) and must issue before the
-   definition is visible; the row-end RESTORE template re-establishes
-   the all-lanes state, and its own visibility slot must not exceed the
-   row initiation interval so the next row's launch latches the restored
-   mask.  Every slot below is derived from the matched program's proven
-   delays -- synthesis refuses when any obligation fails.  */
+   the definition.  The scheduled store's lane predicate is the LIVE CC
+   state at the store's execution cycle
+   (store_lane_mask_live_at_execution; silicon adjudication 2026-08-17,
+   craq-sim 9f324140 -- the launch never latches it), so the row-end
+   all-lanes RESTORE must retire STRICTLY BEFORE the store executes: in
+   visible-slot form, restore_visible_slot <= store_exec_slot (the
+   restore's CC write, visible to issues from restore_exec + lag on, is
+   visible to an event executing at cycle E exactly when restore_exec <
+   E; with lag = 1 the two forms coincide).  A violating schedule
+   refuses cc-restore-store-race -- the 4-slot separator-kept select
+   calendar's silicon failure mode.  The store must also retire before
+   the NEXT row's predicate definition executes (same race, other
+   edge), and the restore's visibility slot must not exceed the row
+   initiation interval so the next row opens under the restored mask.
+   Every slot below is derived from the matched program's proven delays
+   -- synthesis refuses when any obligation fails.  */
 struct macro_cc_model
 {
   bool active;
@@ -67,7 +76,8 @@ struct macro_cc_model
   int def_visible_slot;		/* first issue slot seeing the def     */
   int pre_load_slot;		/* payload load under the ambient mask */
   int post_load_slot;		/* payload load under the definition   */
-  int store_launch_slot;	/* lane-mask latch slot (ambient)      */
+  int store_exec_slot;		/* store execution cycle (reads the
+				   LIVE lane mask at that cycle)       */
   int restore_visible_slot;	/* first slot seeing the restore       */
   int row_interval;		/* schedule ii the visibility must meet*/
 };
@@ -101,6 +111,16 @@ extern const char *macro_desc_refusal_verification_failed;
 /* A CC-writing row whose dataflow, sense mapping, or visibility timing
    the CC-template model cannot prove.  */
 extern const char *macro_desc_refusal_cc_template_unproved;
+/* A CC-writing row whose derived calendar races the all-lanes restore
+   against the scheduled store: the restore does not retire strictly
+   before the store executes (or the store retires at/after the next
+   row's predicate definition), so the store would execute under a
+   predicate mask via the live lane-enable evaluation
+   (store_lane_mask_live_at_execution).  The architectural constraint
+   behind the 2026-08-17 silicon adjudication's separator-kept 4-slot
+   failure; supersedes the structural stopgap
+   cc-separator-kept-silicon-unproven.  */
+extern const char *macro_desc_refusal_cc_restore_store_race;
 
 /* Synthesize REGION/SCHEDULE into OUT.  Returns false when synthesis
    could not begin (no capability table); OUT->refusal names any other

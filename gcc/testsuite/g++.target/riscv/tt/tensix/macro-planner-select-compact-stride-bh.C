@@ -1,17 +1,18 @@
 // WP10 near-miss: a uniform-mode select whose typed Dst stride is 4.
 // The tables' address-modifier machinery proves only the Dst += 2
 // program, so the compact candidate refuses by name; the established
-// 4-slot calendar it used to fall back to keeps the separator and,
-// since the 2026-08-17 Where silicon adjudication (evidence root
-// ~/sfpi-uplift/where-adjudication-20260817), refuses
-// cc-separator-kept-silicon-unproven -- the refusal keys on the KEPT
-// separator in the formed schedule, not on the stride value, the misc
-// word, or the (here uniform) data modes.  Every byte stays on the
-// semantic (planner-OFF) lowering.
+// 4-slot calendar it falls back to derives the same racing slots as
+// every kept-separator select (restore exec == store exec == 3) and,
+// since the 2026-08-17 Where silicon adjudication was root-caused
+// (craq-sim 9f324140, live store lane mask), its descriptor refuses
+// cc-restore-store-race -- the refusal keys on the derived slots and
+// proven delays, not on the stride value, the misc word, or the (here
+// uniform) data modes.  Every byte stays on the semantic (planner-OFF)
+// lowering.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-template-unproved" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:.*separator=kept" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }

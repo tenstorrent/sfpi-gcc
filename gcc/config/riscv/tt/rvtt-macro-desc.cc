@@ -59,6 +59,8 @@ const char *macro_desc_refusal_verification_failed
   = "descriptor-verification-failed";
 const char *macro_desc_refusal_cc_template_unproved
   = "cc-template-unproved";
+const char *macro_desc_refusal_cc_restore_store_race
+  = "cc-restore-store-race";
 
 namespace {
 
@@ -563,13 +565,16 @@ const_operand (rtx_insn *insn, int pos, HOST_WIDE_INT *value)
    and the architectural CC facts in the capability tables.  Fills OUT
    and *STORE_MODE (the shared payload/store data mode) on success;
    returns false when any obligation fails (the caller refuses
-   cc-template-unproved; refusal paths never mutate).		      */
+   cc-template-unproved, or the specific name left in *REFUSAL when
+   one obligation owns a sharper spelling; refusal paths never
+   mutate).							      */
 /* ------------------------------------------------------------------ */
 
 static bool
 derive_cc_model (const macro_region &region, const macro_schedule &schedule,
 		 const rvtt_macro::caps *c, bool launch_mod0,
-		 macro_cc_model *out, HOST_WIDE_INT *store_mode)
+		 macro_cc_model *out, HOST_WIDE_INT *store_mode,
+		 const char **refusal = nullptr)
 {
   memset (out, 0, sizeof (*out));
   const macro_row &row = region.rows[0];
@@ -686,14 +691,8 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
     return false;
   out->complement = last_slot == live_slot;
 
-  /* The store's lane mask is latched at its carrying launch
-     (store_lane_mask_latched_at_launch): it must issue under the
-     ambient all-lanes state, and the delayed store must execute after
-     both payload loads have written the shared VD.  */
-  if (!rvtt_macro::store_lane_mask_latched_at_launch ())
-    return false;
-  if (store_ev.slot >= def_visible)
-    return false;
+  /* The delayed store must execute after both payload loads have
+     written the shared VD.  */
   if (store_exec <= last_slot)
     return false;
 
@@ -704,6 +703,32 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
     return false;
   if (restore_visible > schedule.ii)
     return false;
+
+  /* ARCHITECTURAL CONSTRAINT (silicon adjudication 2026-08-17 ->
+     craq-sim 9f324140 -> this check): the store's lane predicate is
+     the LIVE CC state at its execution cycle
+     (store_lane_mask_live_at_execution) -- the launch never latches
+     it -- and a CC write retiring in the store's own cycle is not yet
+     visible to it.  The all-lanes restore must therefore retire
+     STRICTLY BEFORE the store executes: restore_exec < store_exec,
+     i.e. restore_visible (= restore_exec + lag, lag 1) <= store_exec.
+     The 4-slot separator-kept select calendar violates this
+     (restore_exec == store_exec == 3: the store retires under the
+     SFPSETCC complement mask and leaves the true-branch lanes
+     unwritten -- the deterministic BH silicon failure); the compact
+     3-slot calendar satisfies it (restore_exec 2 < store_exec 3) and
+     is silicon-correct.  Symmetrically the store must retire before
+     the NEXT row's predicate definition executes (def_exec + ii with
+     identical rows), or it would execute under that row's mask.  */
+  if (!rvtt_macro::store_lane_mask_live_at_execution ())
+    return false;
+  if (restore_exec >= store_exec
+      || store_exec >= def_exec + schedule.ii)
+    {
+      if (refusal)
+	*refusal = macro_desc_refusal_cc_restore_store_race;
+      return false;
+    }
 
   /* Proven envelope: one payload/store data mode (the definition
      carrier's own load mode is free).  */
@@ -750,7 +775,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
   out->def_visible_slot = def_visible;
   out->pre_load_slot = first_slot;
   out->post_load_slot = last_slot;
-  out->store_launch_slot = store_ev.slot;
+  out->store_exec_slot = store_exec;
   out->restore_visible_slot = restore_visible;
   out->row_interval = schedule.ii;
   *store_mode = st_mode;
@@ -1403,16 +1428,18 @@ rvtt_macro_synthesize (const macro_region &region,
 
   /* WP9: a CC-template program must prove the full CC model -- the
      definition/merge/restore dataflow, the deferred-visibility slots,
-     the launch-latched store mask, and the payload/store mode envelope
-     -- before any word is packed.  */
+     the live-mask restore-before-store-execution constraint, and the
+     payload/store mode envelope -- before any word is packed.  */
   macro_cc_model cc_model;
   memset (&cc_model, 0, sizeof (cc_model));
   HOST_WIDE_INT cc_store_mode = 0;
+  const char *cc_refusal = nullptr;
   if (program->cc_select
       && !derive_cc_model (region, schedule, c, program->misc_launch_mod0,
-			   &cc_model, &cc_store_mode))
+			   &cc_model, &cc_store_mode, &cc_refusal))
     {
-      out->refusal = macro_desc_refusal_cc_template_unproved;
+      out->refusal = cc_refusal ? cc_refusal
+	: macro_desc_refusal_cc_template_unproved;
       if (dump)
 	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
 		 out->refusal);
@@ -1699,11 +1726,11 @@ rvtt_macro_synthesize (const macro_region &region,
       if (out->cc.active)
 	fprintf (dump,
 		 "Macro-planner descriptor-cc: sense=%s def-visible=%d"
-		 " pre-load=%d post-load=%d store-latch=%d"
+		 " pre-load=%d post-load=%d store-exec=%d"
 		 " restore-visible=%d interval=%d separator=%s\n",
 		 out->cc.complement ? "complement" : "direct",
 		 out->cc.def_visible_slot, out->cc.pre_load_slot,
-		 out->cc.post_load_slot, out->cc.store_launch_slot,
+		 out->cc.post_load_slot, out->cc.store_exec_slot,
 		 out->cc.restore_visible_slot, out->cc.row_interval,
 		 out->keep_separator ? "kept" : "absorbed");
       for (unsigned t = 0; t != out->n_templates; ++t)
@@ -1884,7 +1911,7 @@ rvtt_macro_build_expectations (const macro_region &region,
       out->cc.def_visible_slot = cc_model.def_visible_slot;
       out->cc.pre_load_slot = cc_model.pre_load_slot;
       out->cc.post_load_slot = cc_model.post_load_slot;
-      out->cc.store_launch_slot = cc_model.store_launch_slot;
+      out->cc.store_exec_slot = cc_model.store_exec_slot;
       out->cc.restore_visible_slot = cc_model.restore_visible_slot;
       out->cc.row_interval = cc_model.row_interval;
     }
