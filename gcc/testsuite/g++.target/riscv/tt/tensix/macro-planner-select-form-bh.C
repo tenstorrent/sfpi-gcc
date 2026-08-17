@@ -9,8 +9,15 @@
 // stays as the restore-visibility slot.  Every descriptor word below is
 // re-derived from tables and admitted operands -- the frozen select
 // protocol reproduced without its calendar.
+// Since WP10 this MIXED-mode shape (condition mode 2, payload/store
+// mode 6) is also the compact near-miss: the compact 3-slot candidate
+// is tried first and its descriptor refuses by name -- launch-sourced
+// store mod0 obliges the definition carrier's mode to equal the store
+// mode -- so the established 4-slot calendar below forms unchanged.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner schedule: ii=4 issues=4 launches=2 explicit=2 launched-events=3" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement def-visible=2 pre-load=1 post-load=2 store-latch=0 restore-visible=4 interval=4 separator=kept" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x7b0000c6" "rvtt_macro_planner" } }

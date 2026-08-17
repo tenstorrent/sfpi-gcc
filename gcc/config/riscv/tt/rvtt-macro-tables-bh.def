@@ -175,6 +175,16 @@ XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)  /* :855  */
 XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)  /* :870  */
 /* Select: 0x700 | StoreMod0 (:1572); proven instance StoreMod0 = 6.  */
 XTT_MACRO_MISC_WORD ("select-u16",    0x00000706, true, 6)
+/* Select, launch-sourced store mod0 (WP10 compact 3-slot calendar):
+   the shipped handwritten Where protocol's own misc word
+   (tt-metal ckernel_sfpu_where.h _init_where_: TTI_SFPCONFIG(0x770, 8, 1),
+   "{UsesLoadMod0ForStore=1, WaitForElapsedInstructions=1} for all
+   macros"; simulator tensix.cpp: bit 4+macro selects the launch's own
+   instr_mod0 as the delayed store's format).  Carried as a proven
+   whole word per Sec. 3 of docs/MACRO_PLANNER.md -- the bit layout
+   above 3:0 remains architecturally unestablished; bits 3:0 are inert
+   under launch sourcing.  */
+XTT_MACRO_MISC_WORD ("select-launch-mod0", 0x00000770, false, 0)
 
 /* ------------------------------------------------------------------ */
 /* Hidden template LREG writes.					       */

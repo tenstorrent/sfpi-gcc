@@ -423,6 +423,7 @@ test_misc (const caps *c)
 
   /* Proven whole-word misc entries present.  */
   bool saw_binary = false, saw_signbit = false, saw_castround = false;
+  bool saw_launch_mod0 = false;
   for (unsigned i = 0; i < c->n_misc_words; ++i)
     {
       const misc_word_entry &m = c->misc_words[i];
@@ -441,8 +442,17 @@ test_misc (const caps *c)
 	  saw_castround = true;
 	  CHECK_EQ_HEX (m.word, 0x00000100u);
 	}
+      else if (strcmp (m.name, "select-launch-mod0") == 0)
+	{
+	  /* WP10 compact select: the shipped handwritten Where
+	     protocol's whole misc word (UsesLoadMod0ForStore +
+	     WaitForElapsedInstructions for all macros).  */
+	  saw_launch_mod0 = true;
+	  CHECK_EQ_HEX (m.word, 0x00000770u);
+	  CHECK (!m.store_mod0_in_bits_3_0);
+	}
     }
-  CHECK (saw_binary && saw_signbit && saw_castround);
+  CHECK (saw_binary && saw_signbit && saw_castround && saw_launch_mod0);
 }
 
 /* -------------------- fixed architectural words -------------------- */
