@@ -137,6 +137,43 @@ constexpr unsigned HOST_WIDE_INT XTT_MOP_CFG_MMIO_BASE = 0xFFB80000;
 constexpr unsigned XTT_MOP_CFG_FLAGS_INDEX = 1; /* unpack-template flags */
 constexpr unsigned XTT_MOP_CFG_A0_INDEX = 3;    /* unpack-template A0 */
 
+/* mop_type 1 (the ckernel_template double-loop class, the production
+   math datacopy dispatch TTI_MOP (1, 0, 0)) consumes MOP config words
+   0..8 -- outer/inner loop lengths from words 0/1 when the instruction
+   word's own length fields are zero, start/end/loop/last ops from
+   words 2..8 -- and NEVER the MOP_CFG zmask high half (the zmask is a
+   mop_type-0 fact only).  [SIM] mop_expander mop_type != 0 arm reads
+   mop_cfg[pipe][0..8] and no zmask state; [PROD]
+   ckernel_template::{program,run}.  Consequence for the outward
+   ownership proof: a caller's type-1 launch after a formed callee
+   returns is proven safe by a rewrite of the config words alone; any
+   other (type-0 or unclassifiable) launch additionally requires the
+   zmask high half rewritten.  */
+
+/* The MOP config registers are WRITE-ONLY from the RISC: the Tensix
+   tile MMIO read decoder has no TENSIX_MOP_CFG case (reads fault as
+   unimplemented).  [SIM] tile.cpp t_tile_mmio_rd32 (~3738): no
+   TENSIX_MOP_CFG_BASE arm (the write side, tensix_mop_cfg_wr32, is
+   ~3061/3895).  Consequence: a formed region can neither snapshot nor
+   restore a caller's template -- there is no save/restore epilogue
+   tier; the only sound discharge of a caller's live template is the
+   outward ownership refusal (rtl-rvtt-mop-form.cc file header) or the
+   caller's own re-programming protocol.  */
+
+/* Instruction-FIFO pushes (MMIO stores of raw instruction words) are
+   classified by the frontend opcode byte, bits 31:24 of the RAW word
+   (instruction-buffer and template-register words are unshifted;
+   only .text words carry the <<2 encoding).  [SIM] tensix_push_inst
+   `opcode = bits<31,24>(inst)' switch: 0x01 -> mop_expander, 0x03 ->
+   mop_cfg, everything else never reads MOP template state.  Runtime-
+   composed pushes (the TT_OP macro family: `(opcode << 24) + params')
+   are classified by the constant opcode base of their PLUS/BIT_IOR
+   composition under the tt-op-field-discipline axiom (runtime operands
+   stay inside their bit fields -- the discipline the macros themselves
+   encode; [PROD] ckernel_ops.h TT_OP).  A push with no constant base
+   is unclassifiable and the outward proof treats it as a MOP launch
+   consuming everything.  */
+
 /* Reprogramming the MOP config registers while a previously issued MOP
    is still streaming is a race (the expander reads them live).  The
    production guard is mop_sync(): a blocking store of 0 to PC_BUF word

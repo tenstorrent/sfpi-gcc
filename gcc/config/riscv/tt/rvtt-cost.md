@@ -535,6 +535,26 @@
 ;; region.  -mtt-tensix-mop-form-min-benefit= (same centislot units)
 ;; overrides it for experimentation and for building silicon A/B legs.
 ;;
+;; Outward ownership (2026-08-17 silicon adjudication follow-up): the
+;; formed template lives in thread-shared registers that survive the
+;; function's return, so formation additionally requires the outward
+;; ownership proof (rtl-rvtt-mop-form.cc; refusal
+;; mop-caller-template-live-unproven).  The measured consequence that
+;; forced this: the minmax perf harness -- caller programs a type-1
+;; template once, then per tile launches it and calls the formed
+;; callee -- hangs the Tensix deterministically (the caller's next
+;; launch expands the callee's template).  A save/restore epilogue is
+;; NOT a priceable alternative tier: the MOP config registers are
+;; write-only from the RISC (rvtt-mop-tables.h readback fact), so the
+;; snapshot cannot be constructed at any price.  Were the registers
+;; readable, the epilogue would add ~9 reads + ~11 delivered rewrite
+;; words of serial delivery per formed region -- more than the entire
+;; config block the model already charges -- which alone would erase
+;; every delivery-bound win currently priced above threshold; the
+;; refusal therefore costs the model nothing it was winning.  The
+;; profitability constants above are unchanged: ownership is a
+;; structural proof, not a priced term.
+;;
 ;; These constants describe MOP delivery economics only.  They are
 ;; deliberately independent of any operation identity, opcode calendar,
 ;; coefficient value, or instruction-word fingerprint.  MOP capability
