@@ -1,18 +1,21 @@
-// WP9 lane-proof peel: the same eight select rows WITHOUT any typed
-// ambient enable (the real LLK kernels establish the lane state through
-// opaque init the typed IR cannot see).  The first row stays explicit
-// in place -- its own typed all-lanes restore is the proven entry
-// enable for the formed remainder -- and seven rows form.
+// WP10 materialized lane proof (supersedes the WP9 first-row peel):
+// the same eight select rows WITHOUT any typed ambient enable (the
+// real LLK kernels establish the lane state through opaque init the
+// typed IR cannot see).  The first row's own proven all-lanes restore
+// is the proof source, MATERIALIZED once at the head of the
+// configuration prefix under the compiler's established
+// outermost-CC-depth contract (rvtt_cc's outermost POPC -> ENCC
+// transform), so all eight rows form -- no explicit row remains.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner formed: rows=7 runs=1 lane-proof=peeled-first-row" "rvtt_macro_planner" } }
-// The peeled first row keeps its explicit predicate write, merge,
-// restore, and store; the formed remainder contributes 14 launches and
-// 7 explicit payload loads.
-// { dg-final { scan-assembler-times "\\.ttinsn" 14 } }
-// { dg-final { scan-assembler-times "SFPSETCC" 1 } }
-// { dg-final { scan-assembler-times "SFPLOAD\\tL0, 32" 7 } }
-// { dg-final { scan-assembler-times "SFPSTORE" 1 } }
+// { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 lane-proof=materialized-enable" "rvtt_macro_planner" } }
+// The materialized enable is the single SFPENCC; every row contributes
+// two launches and one explicit payload load; no explicit predicate
+// write, merge, or store remains.
+// { dg-final { scan-assembler-times "\\.ttinsn" 16 } }
+// { dg-final { scan-assembler-not "SFPSETCC" } }
+// { dg-final { scan-assembler-times "SFPLOAD\\tL0, 32" 8 } }
+// { dg-final { scan-assembler-not "SFPSTORE" } }
 // { dg-final { scan-assembler-times "SFPENCC" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 

@@ -115,6 +115,7 @@ struct row_item
   int carrier;			/* carrier group index, or -1	*/
   bool launched;		/* launched sequence event	*/
   bool coalesced;		/* WP9 lane-merge, no issued word */
+  bool absorbs;			/* WP10 explicit auto-inc absorber */
 };
 
 /* Find the proven sequence program matching MACRO_INDEX and the derived
@@ -177,6 +178,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       item.carrier = -1;
       item.launched = false;
       item.coalesced = false;
+      item.absorbs = false;
       if (item.effects.dst_mem_read || item.effects.dst_mem_write)
 	if (!rvtt_dst_access_operands (insn, item.effects, &item.address,
 				       &item.mode, &item.addr_mode))
@@ -239,11 +241,42 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       return store_merged;
     };
 
-  if (candidate == 0)
-    group_carriers (false);
-  else if (candidate == 1)
+  /* WP9 CC-template rows: a row whose slice carries a predicate
+     definition (a CC-writing value event reading an LREG).  Region
+     discovery only admits CC writers in the definition and proven
+     all-lanes-restore roles; here they select the CC hosting and
+     coalescing rules below.  */
+  bool row_has_cc_def = false;
+  for (row_item &item : items)
+    row_has_cc_def |= !item.address && item.effects.cc_write
+      && item.effects.lreg_read != 0 && !item.effects.lreg_write;
+
+  /* WP10: predicate-writing rows gain one more deterministic candidate
+     AHEAD of the established two -- the COMPACT CC calendar (the
+     production handwritten select protocol's own 3-slot shape): the
+     all-lanes restore rides the second-issued load carrier, the
+     trailing payload load stays explicit and absorbs the row stride
+     through its own auto-increment address mode, and the store format
+     rides the launch (misc UsesLoadMod0ForStore).  Non-CC rows keep
+     the established candidate numbering unchanged.  */
+  bool cc_compact = false;
+  unsigned grouping_candidate = candidate;
+  if (row_has_cc_def)
     {
-      /* Candidate 1 is distinct only when maximal sharing merged a
+      if (candidate == 0)
+	{
+	  cc_compact = true;
+	  grouping_candidate = 0;
+	}
+      else
+	grouping_candidate = candidate - 1;
+    }
+
+  if (grouping_candidate == 0)
+    group_carriers (false);
+  else if (grouping_candidate == 1)
+    {
+      /* This grouping is distinct only when maximal sharing merged a
 	 store; otherwise the search is exhausted.  */
       if (!group_carriers (false))
 	return false;
@@ -254,15 +287,8 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   else
     return false;		/* deterministic search exhausted */
 
-  /* WP9 CC-template rows: a row whose slice carries a predicate
-     definition (a CC-writing value event reading an LREG).  Region
-     discovery only admits CC writers in the definition and proven
-     all-lanes-restore roles; here they select the CC hosting and
-     coalescing rules below.  */
-  bool row_has_cc_def = false;
-  for (row_item &item : items)
-    row_has_cc_def |= !item.address && item.effects.cc_write
-      && item.effects.lreg_read != 0 && !item.effects.lreg_write;
+  if (cc_compact && dump)
+    fprintf (dump, "Macro-planner schedule-candidate: cc-compact\n");
 
   /* Launched-event hosting: a non-Dst value event is hosted on the
      carrier of its earliest LREG producer that is a Dst load; a store
@@ -296,24 +322,46 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
     }
 
   /* The row's pure all-lanes CC restore (admitted by discovery only
-     after a definition) rides the LAST-issued load carrier -- the
-     latest launch available to a CC event -- so its execution follows
-     every predicated event of the row.  The visibility obligations are
-     proven by descriptor synthesis against the matched program's
-     delays.  */
+     after a definition) rides a load carrier; which one is the
+     candidate's CC hosting rule:
+
+     - established (WP9): the LAST-issued load carrier -- the latest
+       launch available to a CC event -- so its execution follows every
+       predicated event of the row;
+
+     - compact (WP10): the EARLIEST-issued load carrier that is not the
+       definition's -- the second launch of the handwritten select
+       protocol -- freeing the trailing payload load to stay explicit
+       (the deferred-CC visibility lag keeps the restore's write
+       invisible to that same-interval trailing issue; the timing
+       obligations are proven, as always, by the descriptor CC model).
+
+     The visibility obligations are proven by descriptor synthesis
+     against the matched program's delays.  */
   if (row_has_cc_def)
     {
-      int last_load_carrier = -1;
+      int def_carrier = -1;
+      for (row_item &item : items)
+	if (!item.address && item.launched && item.effects.cc_write
+	    && item.effects.lreg_read != 0 && !item.effects.lreg_write)
+	  def_carrier = item.carrier;
+      int host_carrier = -1;
       for (row_item &item : items)
 	if (item.address && item.effects.dst_mem_read)
-	  last_load_carrier = item.carrier;
-      if (last_load_carrier >= 0)
+	  {
+	    if (cc_compact && item.carrier == def_carrier)
+	      continue;
+	    host_carrier = item.carrier;
+	    if (cc_compact)
+	      break;		/* earliest non-definition load carrier */
+	  }
+      if (host_carrier >= 0)
 	for (row_item &item : items)
 	  if (!item.address && !item.launched
 	      && item.effects.cc_write && !item.effects.lreg_read
 	      && !item.effects.lreg_write)
 	    {
-	      item.carrier = last_load_carrier;
+	      item.carrier = host_carrier;
 	      item.launched = true;
 	      ++launched_events;
 	      ++template_events;
@@ -382,12 +430,14 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      into the carrier of the last Dst access.  */
   int absorbed_stride = 0;
   int absorb_carrier = -1;
-  /* A predicate-writing row never absorbs its separator: the explicit
-     counter word occupies the issue slot in which the row-end restore's
-     CC result becomes visible (cc_visibility_lag), so the NEXT row's
-     store-carrying launch latches the restored all-lanes mask.
-     Absorbing the stride would compress the interval and latch a stale
-     predicate.  */
+  bool absorb_into_explicit = false;
+  const char *cc_compact_refusal = nullptr;
+  /* A predicate-writing row's ESTABLISHED (WP9) calendar never absorbs
+     its separator: the explicit counter word occupies the issue slot in
+     which the row-end restore's CC result becomes visible
+     (cc_visibility_lag), so the NEXT row's store-carrying launch
+     latches the restored all-lanes mask.  Absorbing the stride would
+     compress the interval and latch a stale predicate.  */
   if (row.separator && row.dst_delta && !row_has_cc_def)
     {
       rvtt_macro::setc16_program programs[8];
@@ -407,6 +457,43 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	  else
 	    absorb_carrier = -1;
 	}
+    }
+  /* The compact CC calendar (WP10) MANDATES absorption -- into the
+     trailing EXPLICIT payload load's own auto-increment address mode
+     (the restore was re-hosted onto the middle carrier precisely so
+     the interval could compress: the restore becomes visible in the
+     next row's first slot, exactly when its store-carrying launch
+     latches the mask).  When the row's last Dst access is not a
+     demoted explicit load, or the tables' address-modifier machinery
+     does not cover the delta, this candidate is unprovable and the
+     search advances to the established calendar.  */
+  else if (cc_compact)
+    {
+      rvtt_macro::setc16_program programs[8];
+      unsigned n_programs = 0;
+      bool needs_bank_base = false;
+      int last_load = -1;
+      for (unsigned ix = items.length (); ix-- > 0;)
+	if (items[ix].address && items[ix].effects.dst_mem_read)
+	  {
+	    last_load = (int) ix;
+	    break;
+	  }
+      if (row.separator && row.dst_delta && last_load >= 0
+	  && !hosts[items[last_load].carrier]
+	  && rvtt_macro::addr_mod_program (c, row.dst_delta, programs,
+					   &n_programs, &needs_bank_base))
+	{
+	  absorbed_stride = row.dst_delta;
+	  absorb_into_explicit = true;
+	  items[last_load].absorbs = true;
+	  /* The absorber must be the row's LAST issued word: every
+	     other issue's typed address is consumed (launch-latched or
+	     dispatched) before the auto-increment executes.  Proven
+	     after slot assignment below.  */
+	}
+      else
+	cc_compact_refusal = macro_sched_refusal_cc_template_unproved;
     }
 
   /* Deterministic issue-slot assignment: carriers and explicit issues in
@@ -442,8 +529,8 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   /* Sequence lookup per carrier: derived events in program order;
      template ids in derivation order.  Delays come exclusively from the
      matched proven program.  A CC-realization refusal from the
-     coalescing rule above takes precedence.  */
-  const char *refusal = cc_refusal;
+     coalescing or compact-absorption rules above takes precedence.  */
+  const char *refusal = cc_refusal ? cc_refusal : cc_compact_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());
@@ -509,6 +596,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       ev.is_store = item.effects.dst_mem_write;
       ev.issues_word = false;
       ev.is_carrier = false;
+      ev.absorbs_stride = item.absorbs;
       ev.programmed_delay = -1;
 
       if (item.launched || (item.effects.dst_mem_write && item.carrier >= 0
@@ -603,6 +691,16 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       }
   }
 
+  /* The compact absorber must occupy the row's last issue slot: every
+     other issued word's typed address is consumed -- launch-latched or
+     dispatched at issue -- before the absorbing load's auto-increment
+     advances the counter.  */
+  if (absorb_into_explicit && !refusal)
+    for (unsigned ix = 0; ix != items.length (); ++ix)
+      if (out->events[ix].absorbs_stride
+	  && out->events[ix].slot != ii - 1)
+	refusal = macro_sched_refusal_cc_template_unproved;
+
   if (!refusal && all_delays_known)
     {
       if (!core_check_subunit_occupancy (core_events.address (),
@@ -645,6 +743,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      consecutive rows must alternate VDs.  */
   out->alternating_vd = launched_events != 0;
   out->absorbed_stride = absorbed_stride;
+  out->absorb_into_explicit = absorb_into_explicit;
   out->refusal = refusal;
 
   if (dump)
@@ -686,12 +785,13 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       for (unsigned ix = 0; ix != items.length (); ++ix)
 	if (out->events[ix].issues_word
 	    && (!items[ix].address || !hosts[items[ix].carrier]))
-	  fprintf (dump, "Macro-planner issue %d: explicit subunit=%s\n",
+	  fprintf (dump, "Macro-planner issue %d: explicit subunit=%s%s\n",
 		   out->events[ix].slot,
 		   items[ix].effects.subunit == XTT_SU_LOAD ? "load"
 		   : items[ix].effects.subunit == XTT_SU_STORE ? "store"
 		   : items[ix].effects.subunit == XTT_SU_MAD ? "mad"
-		   : "other");
+		   : "other",
+		   items[ix].absorbs ? " absorbs-stride" : "");
       if (refusal)
 	fprintf (dump, "Macro-planner schedule-refusal: %s\n", refusal);
     }

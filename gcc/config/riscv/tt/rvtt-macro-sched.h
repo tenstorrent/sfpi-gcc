@@ -51,6 +51,11 @@ struct macro_event
   bool is_store;
   bool issues_word;		/* carrier launch or explicit issue    */
   bool is_carrier;		/* the Dst access carried by a launch  */
+  /* WP10 compact CC calendar: this explicit trailing load absorbs the
+     row's typed Dst stride through its own auto-increment address mode
+     (the tables' owned address-modifier slot), replacing the deleted
+     separator.  */
+  bool absorbs_stride;
 };
 
 struct macro_schedule
@@ -64,6 +69,10 @@ struct macro_schedule
   uint32_t lreg_footprint;
   bool alternating_vd;		/* derived (conservatively), not assumed */
   int absorbed_stride;		/* Dst delta absorbed by auto-inc mode */
+  /* WP10: the absorber is the trailing EXPLICIT load (compact CC
+     calendar) rather than the last carrier; launches keep the
+     no-increment mode.  */
+  bool absorb_into_explicit;
   const char *refusal;		/* stable name; null = no refusal      */
 };
 

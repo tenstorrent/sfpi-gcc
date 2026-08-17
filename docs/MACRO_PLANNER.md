@@ -249,9 +249,9 @@ CC-write template events representable end to end:
   `cc-template-unproved`.  The Layer-7 verifier re-derives the whole
   model and re-checks the inequalities.
 
-* **The derived calendar** is two launches plus one explicit payload
-  load per row (the demoted hostless middle carrier -- the production
-  handwritten Where protocol's own shape): macro 0 carries the
+* **The derived calendars.**  The ESTABLISHED (WP9) calendar is two
+  launches plus one explicit payload load per row (the demoted hostless
+  middle carrier): macro 0 carries the
   condition load, the SETCC template (dest 0, packed from the admitted
   source with the derived sense), and the delayed store; macro 1
   carries the post-visibility payload and the ENCC restore template
@@ -263,13 +263,49 @@ CC-write template events representable end to end:
   (`encode_misc_select`), so varied payload modes re-derive.  VD is
   fixed at 0 (every payload flows through the shared launch VD).
 
+  The COMPACT calendar (WP10; the production handwritten Where
+  protocol's own 3-slot row, one issue slot per row cheaper) is a new
+  deterministic scheduling candidate tried AHEAD of the established
+  two for predicate-writing rows: the restore is hosted on the
+  EARLIEST non-definition load carrier (the second launch), the
+  trailing payload load stays EXPLICIT and absorbs the row stride
+  through its own auto-increment address mode (the owned SETC16
+  address-modifier program; the typed separator is deleted), and the
+  store's data mode rides its carrying launch's mod0 (the proven whole
+  misc word `select-launch-mod0`, 0x770 -- the shipped
+  ckernel_sfpu_where.h init's own word).  The interval compresses to 3
+  exactly because the earlier-hosted restore becomes visible in the
+  next row's first slot; the same macro_cc_model inequalities prove
+  it, with the additional launch-sourced-mod0 obligations: the
+  definition carrier's load mode must EQUAL the store mode, and the
+  absorbing explicit load must occupy the row's last issue slot (every
+  other issued word's typed address is launch-latched or dispatched
+  before the auto-increment executes).  Rows outside the envelope --
+  a differently-typed condition (the fp16b TTNN Where selector loads
+  the condition as F16b and stores U16), an uncovered stride delta, or
+  a non-trailing payload -- refuse the compact candidate by name and
+  form the established 4-slot calendar unchanged.  Both sequence words
+  and the templates are the same proven table rows in both calendars.
+  Since WP10 a schedule that names its own blocker never reaches
+  descriptor synthesis; the ONE carve-out remains
+  `event-delay-unproven` (Sec. 6).
+
 * **Formation**: the ambient all-lanes proof composes with P0 -- the
   first row's local enable, the loop preheader's trailing enable, or
-  (the real-LLK case, where init is opaque TTI assembly) the
-  FIRST-ROW PEEL: the first row stays byte-original in place and its
-  own typed all-lanes restore proves entry for the formed remainder
-  (`lane-proof=peeled-first-row`; rows without an in-row proven restore
-  keep `all-lanes-proof-missing`).  Configuration ownership is the
+  (the real-LLK case, where init is opaque TTI assembly) the WP10
+  MATERIALIZED ENABLE, superseding the WP9 first-row peel: the first
+  row's own typed all-lanes restore (proven word-exact through the
+  shared P0 SFPENCC derivation) is pattern-copied to the head of the
+  configuration prefix, so every row -- the first included -- forms
+  (`lane-proof=materialized-enable`; rows without an in-row proven
+  restore keep `all-lanes-proof-missing`).  The license is the
+  compiler's own established outermost-CC-depth contract: the row's
+  SETCC/.../ENCC combine is produced by rvtt_cc's outermost-depth
+  transform, which already rewrites the outermost POPC (restore the
+  incoming state) into ENCC (enable all lanes) -- sound exactly because
+  the architectural kernel convention pins the outermost lane state to
+  all-lanes; the materialized word re-writes the state that contract
+  already guarantees.  Configuration ownership is the
   ordered union of the scoped proofs: when the function-global proof
   fails, any loop-body region first tries the loop-scoped WINDOW proof
   above; a proven CC-template program the window did not prove --
@@ -351,7 +387,9 @@ Formation: `config-ownership-unproven`, `planned-lreg-live`,
 (report-only), `-mtt-tensix-macro-planner-verify` (differential
 verifier; forced under internal checking),
 `-mtt-tensix-macro-planner-verify-corrupt-template` (verifier
-self-test).  All default off; default codegen is byte-identical to the
+self-test), `-mtt-tensix-macro-planner-replay` (WP10 delivery: admit
+planner-formed launches into automatic replay recording; see Sec. 6).
+All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
 
@@ -385,12 +423,35 @@ bh/wh/qsr32, all identical).
 * WP9 carry-forwards: (a) the region-scoped ownership proof tolerates
   foreign code AFTER the region (the LLK own-descriptors convention) --
   an accepted risk of the same class as the M1 exit-block exemption;
-  (b) the first-row peel pays one explicit row per loop trip; a proven
-  kernel-level enable source would remove it; (c) the handwritten
-  3-slot select calendar (restore hosted on the MIDDLE carrier, stride
-  absorbed by the explicit payload load's auto-increment address mode,
-  launch-sourced store mod0 via misc bits 6:4) is architecturally
-  derivable and one slot per row cheaper than the derived 4-slot
-  calendar -- the next scheduling increment; (d) the formed body is
-  RISC-pushed, not replay-wrapped: delivery parity with the handwritten
-  replay path needs the replay pass to record the formed loop.
+  (b) RESOLVED at WP10: the first-row peel (one explicit row per loop
+  trip) is superseded by the materialized preheader enable -- the
+  peel's own proof source, emitted once under the rvtt_cc
+  outermost-CC-depth contract (see the Formation bullet in Sec. 2a);
+  (c) RESOLVED at WP10: the handwritten
+  3-slot select calendar is now the derived COMPACT candidate (Sec. 2a)
+  -- restore on the second carrier, explicit-load auto-increment stride
+  absorption, launch-sourced store mod0 through the proven whole misc
+  word 0x770; the real Int32/UInt32 TTNN Where kernel forms it
+  end-to-end (the fp16b selector keeps the 4-slot calendar because its
+  condition and store modes differ; matching the handwritten kernel's
+  uniform-mode condition load is a one-line kernel-side change left to
+  review); (d) RESOLVED at WP10 behind the opt-in
+  `-mtt-tensix-macro-planner-replay` flag: planner-formed SFPLOADMACRO
+  launches are audited into the automatic replay model (a launch is a
+  pure instruction word; recording captures the word, never state;
+  execution at a replay site reads the then-current descriptor
+  configuration -- the production handwritten Where kernel's own
+  recorded launches are the architectural precedent), so the compact
+  loop body's identical rows record once and replay: the real Int32
+  TTNN Where face drops to 13 issued words (record + two recorded rows
+  + three replays + drain), from 27 at WP10(c) and 39 at WP9.  The
+  flag defaults OFF so every other planner-formed calendar (minmax,
+  signbit, typecast -- whose repeated launch runs would also wrap)
+  stays byte-identical until each is CRAQ-proven wrapped and the flag
+  can default on; the 4-slot select rows keep their typed TTINCRWC
+  separator, which remains an unaudited replay barrier -- auditing it
+  is a follow-up with the same discipline.  A further increment would
+  have the planner emit a record-only preheader capture plus per-trip
+  replay launches itself (amortizing the record across trips and
+  removing the RISC-paced execute-while-record occurrence, which is
+  also the silicon-robustness concern for RISC-pushed CC calendars).
