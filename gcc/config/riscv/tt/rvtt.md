@@ -552,8 +552,21 @@
     // Setting it to a normal mov will leave DCE to deal with
     // the REG_UNUSED case, that's simpler than redetecting here.
   }
+  ;; Audited (WP9 CC-template extension): the surviving alternative is
+  ;; the lane-predicated SFPMOV merge (result tied to the live value,
+  ;; enabled lanes take the source).  Simple unit, reads CC, reads
+  ;; operands 1 (live, tied to 0) and 2, writes operand 0; no config or
+  ;; counter effect.  This is the lane-merge shape the macro planner
+  ;; coalesces into the predicated-overwrite select calendar.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   (set_attr "xtt_lreg_read_ops" "7")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfploadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1045,8 +1058,11 @@
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")])
 
-;; Audited (WP8) so predicated shapes refuse cc-template-unsupported at
-;; the predicate write instead of dissolving into an opaque boundary.
+;; Audited (WP8) so predicated shapes name their CC capability at the
+;; predicate write instead of dissolving into an opaque boundary; since
+;; the WP9 CC-template extension this is the select calendar's
+;; predicate-definition event (region discovery admits it as a row
+;; member; unproven CC forms still refuse by name).
 (define_insn "rvtt_sfpsetcc_v"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
