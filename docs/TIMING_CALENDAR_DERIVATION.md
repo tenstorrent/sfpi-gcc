@@ -37,8 +37,10 @@ cycle = issue + 1 + Delay; per-sub-unit one-event-per-cycle FIFOs with
 earliest-ready/oldest-first arbitration; retirement before same-cycle
 issue; same-cycle groups evaluated transactionally from one snapshot
 with disjoint-write merging; SWAP's extra MAD resource claim; the
-launch-latched store context (Dst row, format, lane mask, layout); the
-deferred-CC one-cycle visibility latch.
+launch-latched store context (Dst row, format, layout -- since
+craq-sim 9f324140 NOT the lane predicate, which is the LIVE CC at
+store execution, silicon-adjudicated 2026-08-17); the deferred-CC
+one-cycle visibility latch.
 
 **(S3) The production handwritten MulInt32 LLK**
 (tt-metal `tt_llk_blackhole/common/inc/sfpu/ckernel_sfpu_mul_int.h`,
@@ -191,9 +193,21 @@ parity is unaffected.
   E reads LReg state before any instruction ISSUED at E writes it.
 * Producer event -> consumer event needs exec(consumer) >=
   exec(producer) + 1 (same-cycle groups read one pre-write snapshot).
-* CC visibility lag = 1 and the launch-latched store context are
-  already table facts (`cc_visibility_lag`,
-  `store_lane_mask_latched_at_launch`) and are unchanged.
+* CC visibility lag = 1 is a table fact (`cc_visibility_lag`).  The
+  store's LANE PREDICATE is the LIVE CC at the store's execution cycle
+  (`store_lane_mask_live_at_execution`; a same-cycle CC retire is not
+  yet visible, an earlier-cycle one is): the ISA's launch-latched store
+  overrides are exhaustively Addr, the Mod0 source, and the backdoor
+  bit (SFPLOADMACRO.md StoreSubUnit extras).  Established by the
+  2026-08-17 BH silicon adjudication
+  (~/sfpi-uplift/where-adjudication-20260817) and the corrected CRAQ
+  executor (craq-sim 9f324140); it supersedes the earlier S2-only
+  launch-latched reading (`store_lane_mask_latched_at_launch`,
+  retired).  Consequence for CC calendars: the all-lanes restore must
+  retire STRICTLY BEFORE the scheduled store executes
+  (`cc-restore-store-race`); the 4-slot select calendar violates this
+  (restore exec 3 == store exec 3), the compact 3-slot calendar
+  satisfies it (2 < 3).
 * LReg[16] is a macro-only staging register: writable by compute
   events (VD16), readable ONLY by the delayed store (VD16).  Compute
   templates cannot read it (no encodable index).

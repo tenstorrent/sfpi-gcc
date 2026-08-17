@@ -743,8 +743,8 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	  }
       /* WP9: the proven CC-template program keeps the row's typed
 	 separator in place -- its issue slot is the restore's
-	 visibility slot (macro_cc_model), so the next row's launch
-	 latches the restored all-lanes mask.  Re-emitted verbatim.  */
+	 visibility slot (macro_cc_model), so the next row opens under
+	 the restored all-lanes mask.  Re-emitted verbatim.  */
       if (desc.keep_separator && row.separator)
 	emit_insn (copy_rtx (PATTERN (row.separator)));
     }

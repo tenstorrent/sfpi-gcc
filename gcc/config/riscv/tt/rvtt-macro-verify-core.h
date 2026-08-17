@@ -62,7 +62,7 @@ struct expect_cc
   int def_visible_slot;
   int pre_load_slot;
   int post_load_slot;
-  int store_launch_slot;
+  int store_exec_slot;
   int restore_visible_slot;
   int row_interval;
 };
@@ -188,15 +188,28 @@ verify (const rvtt_macro::caps *c, const descriptor_words &desc,
 	  || desc.cc.def_visible_slot != expect.cc.def_visible_slot
 	  || desc.cc.pre_load_slot != expect.cc.pre_load_slot
 	  || desc.cc.post_load_slot != expect.cc.post_load_slot
-	  || desc.cc.store_launch_slot != expect.cc.store_launch_slot
+	  || desc.cc.store_exec_slot != expect.cc.store_exec_slot
 	  || desc.cc.restore_visible_slot != expect.cc.restore_visible_slot
 	  || desc.cc.row_interval != expect.cc.row_interval)
 	return "cc-model";
+      /* Deferred-CC dataflow, plus the live-store-mask race constraint
+	 (store_lane_mask_live_at_execution; silicon adjudication
+	 2026-08-17, craq-sim 9f324140): the all-lanes restore must
+	 retire strictly before the store executes -- in the exchanged
+	 visible-slot form, restore_visible (= restore_exec + lag) <=
+	 store_exec with lag = 1 -- and the store must retire before
+	 the next row's predicate definition executes (def_exec + ii =
+	 def_visible - lag + ii).  */
+      int lag = (int) rvtt_macro::cc_visibility_lag ();
       if (expect.cc.pre_load_slot >= expect.cc.def_visible_slot
 	  || expect.cc.post_load_slot < expect.cc.def_visible_slot
-	  || expect.cc.store_launch_slot >= expect.cc.def_visible_slot
+	  || expect.cc.store_exec_slot <= expect.cc.post_load_slot
 	  || expect.cc.restore_visible_slot <= expect.cc.post_load_slot
-	  || expect.cc.restore_visible_slot > expect.cc.row_interval)
+	  || expect.cc.restore_visible_slot > expect.cc.row_interval
+	  || expect.cc.restore_visible_slot - lag
+	     >= expect.cc.store_exec_slot
+	  || expect.cc.store_exec_slot
+	     >= expect.cc.def_visible_slot - lag + expect.cc.row_interval)
 	return "cc-timing";
     }
 

@@ -84,8 +84,6 @@ const char *macro_sched_refusal_port_conflict = "port-conflict";
 const char *macro_sched_refusal_latency_violation = "latency-violation";
 const char *macro_sched_refusal_cc_template_unproved
   = "cc-template-unproved";
-const char *macro_sched_refusal_cc_separator_kept_silicon_unproven
-  = "cc-separator-kept-silicon-unproven";
 
 namespace {
 
@@ -434,13 +432,15 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   int absorb_carrier = -1;
   bool absorb_into_explicit = false;
   const char *cc_compact_refusal = nullptr;
-  const char *cc_separator_refusal = nullptr;
   /* A predicate-writing row's ESTABLISHED (WP9) calendar never absorbs
      its separator: the explicit counter word occupies the issue slot in
      which the row-end restore's CC result becomes visible
-     (cc_visibility_lag), so the NEXT row's store-carrying launch
-     latches the restored all-lanes mask.  Absorbing the stride would
-     compress the interval and latch a stale predicate.  */
+     (cc_visibility_lag), so the next row opens under the restored
+     all-lanes mask.  Absorbing the stride would compress the interval
+     below the restore's visibility.  Whether the calendar's delayed
+     store itself executes under the restored mask is the descriptor CC
+     model's live-mask race constraint (cc-restore-store-race) -- the
+     established 4-slot calendar fails it and refuses there.  */
   if (row.separator && row.dst_delta && !row_has_cc_def)
     {
       rvtt_macro::setc16_program programs[8];
@@ -465,8 +465,9 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      trailing EXPLICIT payload load's own auto-increment address mode
      (the restore was re-hosted onto the middle carrier precisely so
      the interval could compress: the restore becomes visible in the
-     next row's first slot, exactly when its store-carrying launch
-     latches the mask).  When the row's last Dst access is not a
+     next row's first slot, and -- the live-store-mask constraint the
+     silicon proved -- retires one cycle BEFORE the delayed store
+     executes).  When the row's last Dst access is not a
      demoted explicit load, or the tables' address-modifier machinery
      does not cover the delta, this candidate is unprovable and the
      search advances to the established calendar.  */
@@ -498,27 +499,15 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       else
 	cc_compact_refusal = macro_sched_refusal_cc_template_unproved;
     }
-  /* Silicon adjudication 2026-08-17 (tt-quietbox-0, BH p150; evidence
-     root ~/sfpi-uplift/where-adjudication-20260817): a predicate-writing
-     row whose derived schedule KEEPS its typed separator -- the
-     established 4-slot select calendar, the only CC schedule with
-     absorb_into_explicit == false -- MIS-SELECTS on silicon,
-     deterministically across two independent resets, while the
-     byte-identical binaries pass CRAQ (bit-exact-NaN) in the generic
-     sim: the TRUE-branch (CC-visible) store slot delivers wrong data
-     (all_zeros PASS, all_ones FAIL, on both failing formats).  The
-     separator-ABSORBED compact calendar is silicon-correct in both
-     delivery arms across the same resets.  The key is the STRUCTURAL
-     property (the kept separator), never a misc word value or a data
-     format: the fp16b/Float32-vs-Int32 split observed on silicon is a
-     consequence of which shapes can absorb.  Until the sim's
-     RISC-pushed delivery model around the TTINCRWC barrier is proven
-     against silicon (VERDICT.md item 4), every separator-kept CC
-     schedule refuses by name and the bytes stay explicit -- the
-     semantic (planner-OFF) lowering, which is silicon-green.  */
-  else if (row_has_cc_def && row.separator)
-    cc_separator_refusal
-      = macro_sched_refusal_cc_separator_kept_silicon_unproven;
+  /* A predicate-writing row that keeps its typed separator (the
+     established 4-slot select calendar) is no longer refused here
+     structurally: the 2026-08-17 silicon adjudication's mis-select was
+     root-caused (craq-sim 9f324140) to the ARCHITECTURAL live-store-
+     mask race -- that calendar retires its all-lanes restore in the
+     same cycle as its delayed store -- which the descriptor CC model
+     now derives from the slots and proven delays and refuses by name
+     (cc-restore-store-race), independent of the separator
+     structure.  */
 
   /* Deterministic issue-slot assignment: carriers and explicit issues in
      program order of their first instruction.  */
@@ -553,12 +542,9 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   /* Sequence lookup per carrier: derived events in program order;
      template ids in derivation order.  Delays come exclusively from the
      matched proven program.  A CC-realization refusal from the
-     coalescing or compact-absorption rules above takes precedence; the
-     separator-kept silicon refusal ranks below them so shapes already
-     refusing for a CC-realization reason keep their established
-     names.  */
-  const char *refusal = cc_refusal ? cc_refusal
-    : cc_compact_refusal ? cc_compact_refusal : cc_separator_refusal;
+     coalescing rule takes precedence over the compact-absorption
+     one.  */
+  const char *refusal = cc_refusal ? cc_refusal : cc_compact_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());

@@ -167,6 +167,96 @@ main ()
   check (tag && !strcmp (tag, "setc16-count"),
 	 "missing stride programming names setc16-count");
 
+  /* CC-model timing: the re-checked inequalities are keyed on the
+     exchanged SLOTS alone -- never on the separator structure, a misc
+     word, or a data format (the architectural constraint behind the
+     2026-08-17 silicon adjudication, root-caused by craq-sim
+     9f324140: the store's lane mask is live at execution, so the
+     all-lanes restore must retire strictly before the store executes,
+     restore_visible <= store_exec with lag 1).  */
+
+  auto set_cc = [] (expect_cc *cc, int def_visible, int pre, int post,
+		    int store_exec, int restore_visible, int interval) {
+    cc->active = true;
+    cc->complement = true;
+    cc->def_visible_slot = def_visible;
+    cc->pre_load_slot = pre;
+    cc->post_load_slot = post;
+    cc->store_exec_slot = store_exec;
+    cc->restore_visible_slot = restore_visible;
+    cc->row_interval = interval;
+  };
+
+  /* The compact 3-slot select model (separator absorbed): restore
+     retires at cycle 2, one cycle before the store executes at 3.  */
+  {
+    descriptor_words d; expectations e;
+    baseline (c, &d, &e);
+    set_cc (&d.cc, 2, 1, 2, 3, 3, 3);
+    set_cc (&e.cc, 2, 1, 2, 3, 3, 3);
+    check (verify (c, d, e) == nullptr,
+	   "compact CC model (restore exec 2 < store exec 3) verifies");
+  }
+
+  /* The 4-slot separator-kept select model exactly as derived from
+     the proven delays (SETCC d0 / store d2 on slot 0, ENCC d0 on slot
+     2): restore retires at cycle 3 == store exec 3 -- the silicon
+     failure -- names cc-timing.  */
+  {
+    descriptor_words d; expectations e;
+    baseline (c, &d, &e);
+    set_cc (&d.cc, 2, 1, 2, 3, 4, 4);
+    set_cc (&e.cc, 2, 1, 2, 3, 4, 4);
+    const char *t = verify (c, d, e);
+    check (t && !strcmp (t, "cc-timing"),
+	   "4-slot kept model (restore exec == store exec) names cc-timing");
+  }
+
+  /* SYNTHETIC kept-separator-LIKE model that SATISFIES
+     restore-before-store (interval 4, an issue slot left for an
+     explicit separator, restore retiring at cycle 2 < store exec 3):
+     verifies clean -- the constraint is architectural (slot-derived),
+     not structural.  The compiler's scheduler cannot construct this
+     schedule (the established hosting rule pins the restore to the
+     LAST of the row's three load carriers, slot >= 2, and the shared
+     launch VD forces the condition load first, so restore exec >= 3 ==
+     store exec always; see rvtt-macro-desc.cc derive_cc_model), which
+     is exactly why the refusal subsumes the retired structural
+     cc-separator-kept-silicon-unproven check.  */
+  {
+    descriptor_words d; expectations e;
+    baseline (c, &d, &e);
+    set_cc (&d.cc, 2, 1, 2, 3, 3, 4);
+    set_cc (&e.cc, 2, 1, 2, 3, 3, 4);
+    check (verify (c, d, e) == nullptr,
+	   "kept-separator-like model satisfying restore-before-store"
+	   " verifies");
+  }
+
+  /* A store retiring at/after the next row's predicate definition
+     (def exec + ii = 1 + 3 = 4 <= store exec 5) names cc-timing.  */
+  {
+    descriptor_words d; expectations e;
+    baseline (c, &d, &e);
+    set_cc (&d.cc, 2, 1, 2, 5, 3, 3);
+    set_cc (&e.cc, 2, 1, 2, 5, 3, 3);
+    const char *t = verify (c, d, e);
+    check (t && !strcmp (t, "cc-timing"),
+	   "store at/after next row's definition names cc-timing");
+  }
+
+  /* A synthesized model disagreeing with the re-derived expectation
+     names cc-model before any timing re-check.  */
+  {
+    descriptor_words d; expectations e;
+    baseline (c, &d, &e);
+    set_cc (&d.cc, 2, 1, 2, 4, 3, 3);	/* store exec 4 != expected 3 */
+    set_cc (&e.cc, 2, 1, 2, 3, 3, 3);
+    const char *t = verify (c, d, e);
+    check (t && !strcmp (t, "cc-model"),
+	   "store-exec slot disagreement names cc-model");
+  }
+
   std::printf ("%d checks, %d failures\n", checks, failures);
   return failures != 0;
 }

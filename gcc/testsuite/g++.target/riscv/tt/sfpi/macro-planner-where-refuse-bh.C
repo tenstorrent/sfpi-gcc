@@ -1,15 +1,17 @@
 // WP9: the predicated-select (TTNN Where) single-row shape.  Before
 // the 2026-08-17 Where silicon adjudication the 4-slot descriptor
-// proved and Layer-6 profitability refused; the separator-kept
-// schedule now refuses FIRST (evidence root
-// ~/sfpi-uplift/where-adjudication-20260817): the mixed-mode compact
-// candidate refuses its descriptor by name and the established
-// calendar keeps the typed separator, refusing
-// cc-separator-kept-silicon-unproven before any descriptor or
-// profitability derivation.  Every byte stays explicit, as before.
+// proved and Layer-6 profitability refused; the descriptor CC model
+// now refuses the calendar itself (root cause craq-sim 9f324140 --
+// the store's lane mask is live at execution, and this calendar
+// retires its all-lanes restore in the store's own cycle): the
+// mixed-mode compact candidate refuses its descriptor by name and the
+// established calendar's descriptor refuses cc-restore-store-race
+// before any profitability derivation.  Every byte stays explicit, as
+// before.
 // { dg-options "-mcpu=tt-bh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }

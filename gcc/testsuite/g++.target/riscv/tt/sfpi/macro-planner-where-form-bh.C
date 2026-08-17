@@ -1,20 +1,24 @@
 // The canonical SFPI where selector (the TTNN Where kernel's v_if
 // spelling, F16b condition / U16 payloads -- the fp16b class), eight
-// rows, REFUSING since the 2026-08-17 Where silicon adjudication
-// (tt-quietbox-0, BH p150; evidence root
+// rows, REFUSING by the architectural name since the 2026-08-17 Where
+// silicon adjudication (tt-quietbox-0, BH p150; evidence root
 // ~/sfpi-uplift/where-adjudication-20260817, verdicts/VERDICT.md):
 // this is the exact source class whose formed separator-kept 4-slot
 // calendar (misc 0x706) mis-selected on silicon deterministically
 // across two resets while the byte-identical binaries passed CRAQ in
-// the generic sim.  The mixed-mode compact candidate refuses its
-// descriptor by name, the established calendar keeps the typed
-// separator and refuses cc-separator-kept-silicon-unproven, and the
-// eight rows stay byte-identically on the semantic (planner-OFF)
-// lowering -- the silicon-green form.
+// the generic sim -- root-caused by craq-sim 9f324140 to the live
+// store lane mask: the calendar retires its all-lanes restore in the
+// Delay-2 store's own cycle, so the store executes under the SFPSETCC
+// complement mask.  The mixed-mode compact candidate refuses its
+// descriptor by name, the established calendar's descriptor derives
+// restore exec == store exec == 3 and refuses cc-restore-store-race,
+// and the eight rows stay byte-identically on the semantic
+// (planner-OFF) lowering -- the silicon-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }

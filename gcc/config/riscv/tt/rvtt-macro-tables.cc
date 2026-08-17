@@ -581,12 +581,18 @@ cc_visibility_lag ()
 }
 
 bool
-store_lane_mask_latched_at_launch ()
+store_lane_mask_live_at_execution ()
 {
-  /* ISA/CRAQ EventContext: "The store side of a macro is
-     architecturally latched at the launch: Dst row, store format, lane
-     predicate, and Dst layout are captured here, not at store
-     execution time."  */
+  /* SFPLOADMACRO.md StoreSubUnit extras latch only Addr, the Mod0
+     source, and the backdoor-load bit; the lane predicate keeps
+     SFPSTORE's live evaluation at execution (a same-cycle CC retire is
+     not yet visible; an earlier-cycle one is).  Proven on BH silicon
+     (Where adjudication 2026-08-17) and modeled by the corrected CRAQ
+     executor (craq-sim 9f324140 tensix_retire_load_macro_events: the
+     store event reads cc/cc_en from its retirement group's pre-write
+     snapshot).  The prior launch-latched reading
+     (store_lane_mask_latched_at_launch) was an S2-only model fact the
+     adjudication invalidated.  */
   return true;
 }
 
