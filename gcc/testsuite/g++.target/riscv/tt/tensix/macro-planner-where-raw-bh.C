@@ -2,14 +2,17 @@
 // three loads, a predicate write, a lane-predicated merge, the in-row
 // all-lanes restore, a store.  Before the 2026-08-17 Where silicon
 // adjudication this refused the missing lane proof AFTER the 4-slot
-// descriptor proved; the separator-kept schedule now refuses FIRST
-// (evidence root ~/sfpi-uplift/where-adjudication-20260817): the
-// mixed-mode compact candidate refuses its descriptor by name and the
-// established calendar keeps the typed separator, so no descriptor is
-// synthesized at all and the bytes stay explicit.
+// descriptor proved; the descriptor CC model now refuses the calendar
+// itself (root cause craq-sim 9f324140 -- the store's lane mask is
+// live at execution and this calendar retires its all-lanes restore
+// in the store's own cycle): the mixed-mode compact candidate refuses
+// its descriptor by name and the established calendar's descriptor
+// refuses cc-restore-store-race, so no descriptor is synthesized and
+// the bytes stay explicit.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "SFPLOADMACRO" } }

@@ -12,7 +12,7 @@
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner schedule: ii=3 issues=3 launches=2 explicit=1 launched-events=3" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner issue 2: explicit subunit=load absorbs-stride" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement def-visible=2 pre-load=1 post-load=2 store-latch=0 restore-visible=3 interval=3 separator=absorbed" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement def-visible=2 pre-load=1 post-load=2 store-exec=3 restore-visible=3 interval=3 separator=absorbed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x7b0000c6" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=1: 0x8a0000d0" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=4: 0x13000004" "rvtt_macro_planner" } }

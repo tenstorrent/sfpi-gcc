@@ -634,7 +634,8 @@ test_ref_setc16_words (const caps *c, const uint32_t *expect, unsigned n)
 }
 
 /* WP9 CC-template facts: the deferred-CC visibility lag, the
-   launch-latched store mask, the architecturally-defined SFPSETCC
+   live-at-execution store lane mask (silicon adjudication 2026-08-17;
+   craq-sim 9f324140), the architecturally-defined SFPSETCC
    complement class, and the select restore program on macro one (the
    whole frozen "ENCC d0" word at the derived calendar's macro index;
    both CPUs carry it identically -- asserted by test_wh_bh_identity's
@@ -644,7 +645,7 @@ static void
 test_cc_template_facts (const caps *bh, const caps *wh)
 {
   CHECK (cc_visibility_lag () == 1);
-  CHECK (store_lane_mask_latched_at_launch ());
+  CHECK (store_lane_mask_live_at_execution ());
 
   unsigned out = 0;
   CHECK (sfpsetcc_complement_mod1 (0, &out) && out == 4);

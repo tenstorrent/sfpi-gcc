@@ -335,13 +335,28 @@ extern bool encode_misc_select (const caps *, unsigned store_mod0,
    visible to words issued in slots >= S + 1 + D + this lag.  */
 extern unsigned cc_visibility_lag ();   /* 1 */
 
-/* The store side of a macro is architecturally latched at the launch:
-   Dst row, store format, LANE PREDICATE, and Dst layout are captured
-   when the store-carrying launch issues, not when the delayed store
-   executes (ISA SFPLOADMACRO store rule; CRAQ EventContext).  A
-   CC-writing calendar must therefore issue its store-carrying launch
-   while the ambient all-lanes enable is still visible.  */
-extern bool store_lane_mask_latched_at_launch ();   /* true */
+/* The scheduled store's LANE PREDICATE is the LIVE CC state at the
+   store's EXECUTION cycle, never a launch-latched copy.  The ISA's
+   launch-latched store overrides are exhaustive -- the Dst address,
+   the Mod0 source, and the backdoor-load bit (SFPLOADMACRO.md,
+   StoreSubUnit extra considerations) -- and do not include the lane
+   predicate, which therefore keeps SFPSTORE's ordinary live
+   lane-enable evaluation.  A CC write retiring in the SAME cycle as
+   the store is architecturally not yet visible to it (the retirement
+   group's pre-write snapshot); one retiring in any EARLIER cycle is.
+   Proven on BH silicon (Where adjudication 2026-08-17, tt-quietbox-0
+   p150, two resets, deterministic;
+   ~/sfpi-uplift/where-adjudication-20260817/verdicts/VERDICT.md) and
+   reproduced bit-exactly by the corrected CRAQ executor (craq-sim
+   9f324140): the 4-slot select calendar, whose all-lanes restore
+   retires in the Delay-2 store's own cycle, executes the store under
+   the SFPSETCC complement mask and leaves the true-branch lanes
+   unwritten; the compact 3-slot calendar, whose restore retires one
+   cycle earlier, writes all lanes and is silicon-correct.  A
+   CC-writing calendar must therefore retire its all-lanes restore
+   STRICTLY BEFORE the scheduled store executes (macro_cc_model;
+   refusal cc-restore-store-race).  */
+extern bool store_lane_mask_live_at_execution ();   /* true */
 
 /* Architecturally-defined complement of an SFPSETCC instr_mod1
    (WormholeB0/BlackholeA0 SFPSETCC.md; mirrored by the CRAQ executor):

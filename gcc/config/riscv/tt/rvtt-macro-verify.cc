@@ -96,7 +96,7 @@ rvtt_macro_verify_descriptor (const macro_region &region,
   words.cc.def_visible_slot = desc.cc.def_visible_slot;
   words.cc.pre_load_slot = desc.cc.pre_load_slot;
   words.cc.post_load_slot = desc.cc.post_load_slot;
-  words.cc.store_launch_slot = desc.cc.store_launch_slot;
+  words.cc.store_exec_slot = desc.cc.store_exec_slot;
   words.cc.restore_visible_slot = desc.cc.restore_visible_slot;
   words.cc.row_interval = desc.cc.row_interval;
 

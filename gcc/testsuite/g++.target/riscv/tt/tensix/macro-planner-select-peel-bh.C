@@ -1,16 +1,17 @@
 // WP10 materialized lane proof shape (eight MIXED-mode select rows
-// WITHOUT any typed ambient enable), REFUSING since the 2026-08-17
-// Where silicon adjudication (evidence root
-// ~/sfpi-uplift/where-adjudication-20260817): the compact candidate
+// WITHOUT any typed ambient enable), REFUSING by the architectural
+// name since the 2026-08-17 Where silicon adjudication was root-caused
+// (craq-sim 9f324140, live store lane mask): the compact candidate
 // refuses by name (mixed modes cannot ride the launch-sourced store
-// mod0) and the established 4-slot calendar keeps its typed
-// separator, so the schedule refuses
-// cc-separator-kept-silicon-unproven and no formation (hence no
-// materialized enable) is attempted.  Every byte stays on the
-// explicit semantic (planner-OFF) lowering -- the silicon-green form.
+// mod0) and the established 4-slot calendar derives restore exec ==
+// store exec == 3, so its descriptor refuses cc-restore-store-race and
+// no formation (hence no materialized enable) is attempted.  Every
+// byte stays on the explicit semantic (planner-OFF) lowering -- the
+// silicon-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-restore-store-race" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
