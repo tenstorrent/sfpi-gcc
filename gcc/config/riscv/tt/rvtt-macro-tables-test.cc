@@ -243,16 +243,19 @@ test_addr_mod (const caps *bh, const caps *wh)
   CHECK (prog[1].config_reg == 34 && prog[1].value == 2);
   CHECK (prog[2].config_reg == 53 && prog[2].value == 0);
 
-  /* WH: both physical slots 2 and 6 (Base-selector ambiguity)
-     (:834-843).  */
+  /* WH: exactly ONE physical slot -- scratch modifier 2 under the
+     pinned ADDR_MOD_SET_Base=1 = physical slot 6, regs (19,0)(29,2)
+     (54,0).  The base-0 bank (11/25/50 = LLK's live ADDR_MOD_2) must
+     never appear (sfpi-gcc 2a0ba1e6602 adjudication;
+     laneAJ-evidence-20260817).  */
   CHECK (addr_mod_program (wh, 2, prog, &n, &base));
-  CHECK (n == 6 && base);
-  CHECK (prog[0].config_reg == 11 && prog[0].value == 0);
-  CHECK (prog[1].config_reg == 25 && prog[1].value == 2);
-  CHECK (prog[2].config_reg == 50 && prog[2].value == 0);
-  CHECK (prog[3].config_reg == 19 && prog[3].value == 0);
-  CHECK (prog[4].config_reg == 29 && prog[4].value == 2);
-  CHECK (prog[5].config_reg == 54 && prog[5].value == 0);
+  CHECK (n == 3 && base);
+  CHECK (prog[0].config_reg == 19 && prog[0].value == 0);
+  CHECK (prog[1].config_reg == 29 && prog[1].value == 2);
+  CHECK (prog[2].config_reg == 54 && prog[2].value == 0);
+  for (unsigned i = 0; i < n; ++i)
+    CHECK (prog[i].config_reg != 11 && prog[i].config_reg != 25
+	   && prog[i].config_reg != 50);
 
   /* Only Dst += 2 is proven; every other delta refuses.  */
   CHECK (!addr_mod_program (bh, 0, prog, &n, &base));
@@ -724,11 +727,14 @@ main ()
 
   static const uint32_t bh_setc16[] =
     { 0xb2120000u, 0xb2220002u, 0xb2350000u };
+  /* WH: the single Base=1 slot (physical slot 6, regs 19/29/54);
+     0xb2 << 24 | reg << 16 | value.  The base-0 bank words
+     0xb20b0000/0xb2190002/0xb2320000 (regs 11/25/50 = LLK's live
+     ADDR_MOD_2) must never be emitted (sfpi-gcc 2a0ba1e6602).  */
   static const uint32_t wh_setc16[] =
-    { 0xb20b0000u, 0xb2190002u, 0xb2320000u,
-      0xb2130000u, 0xb21d0002u, 0xb2360000u };
+    { 0xb2130000u, 0xb21d0002u, 0xb2360000u };
   test_ref_setc16_words (bh, bh_setc16, 3);
-  test_ref_setc16_words (wh, wh_setc16, 6);
+  test_ref_setc16_words (wh, wh_setc16, 3);
 
   printf ("%d checks, %d failures\n", checks, failures);
   return failures != 0;

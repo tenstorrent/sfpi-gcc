@@ -1,5 +1,6 @@
-// WP8 step 4, dynamic form, Wormhole (dual-slot owned SETC16 program in
-// the preheader).
+// WP8 step 4, dynamic form, Wormhole (single-slot Base=1 owned SETC16
+// program in the preheader: physical slot 6, regs 19/29/54; the base-0
+// bank is never written -- sfpi-gcc 2a0ba1e6602).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1 config=preheader" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-times "SFPENCC" 1 } }

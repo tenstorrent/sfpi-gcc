@@ -21,8 +21,9 @@ committed manifest is the permanent record.
 
 | shape | verdict |
 |---|---|
-| staged-loop (BH, WH) | PARITY: planner == quarantined oracle byte for byte (preheader SFPENCC + owned SETC16 + 4 config words; 1 launch/row; drain 3) |
-| cast-round (BH, WH) | PARITY: planner == quarantined oracle byte for byte (single config; 8 alternating-VD launches; drain 3) |
+| staged-loop (BH) | PARITY: planner == quarantined oracle byte for byte (preheader SFPENCC + owned SETC16 + 4 config words; 1 launch/row; drain 3) |
+| cast-round (BH) | PARITY: planner == quarantined oracle byte for byte (single config; 8 alternating-VD launches; drain 3) |
+| staged-loop, cast-round (WH) | CORRECTED DIVERGENCE (2026-08-17): the quarantined oracle's WH prefix carried the DUAL-SLOT SETC16 program, whose base-0 bank words clobber LLK's live ADDR_MOD_2 and corrupt the next tile's datacopy (adjudicated compiler bug, sfpi-gcc 2a0ba1e6602; laneAJ-evidence-20260817).  The planner emits the corrected single-slot Base=1 program ({19,29,54}); the WH planner hashes were re-minted with the correction and now differ from the frozen emit-loadmacro column by exactly the three dropped base-0 words. |
 | staged, staged-successor, staged-boundary | DIVERGENCE BY DESIGN: the quarantined pass formed these single straight-line rows unconditionally; the planner's derived Layer-6 profitability refuses them (config prefix + drain can never amortize against one explicit row) and keeps the bytes identical to `off`.  The archived signbit silicon win (-7.48%) is the LOOP shape, which the planner reproduces exactly. |
 | staged-fixed-asm, staged-refuse, staged-loop-refuse | REFUSAL IDENTITY: all three columns byte-identical (refusals never mutate). |
 

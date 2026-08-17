@@ -1,14 +1,15 @@
 // WP8 step 4, unrolled form, Wormhole: the shared descriptor's owned
-// SETC16 program covers BOTH physical address-modifier banks (slots 2
-// and 6) because the launch's two-bit selector maps through the
-// unencoded incoming Base state -- the dual-slot bank-base ownership
-// proof is the emitted program itself.
+// SETC16 program is the SINGLE Base=1 slot (physical slot 6, regs
+// 19/29/54) -- the launch's two-bit selector reaches it through the
+// pinned ADDR_MOD_SET_Base=1 SFPU platform contract; the base-0 bank
+// (slot 2, regs 11/25/50 = LLK's live ADDR_MOD_2) is never written
+// (sfpi-gcc 2a0ba1e6602; laneAJ-evidence-20260817).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPENCC" 1 } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 4 } }
-// { dg-final { scan-assembler-times "\\.ttinsn\\t2987065344" 1 } }
-// { dg-final { scan-assembler-times "\\.ttinsn\\t2987982850" 1 } }
-// { dg-final { scan-assembler-times "\\.ttinsn\\t2989621248" 1 } }
+// { dg-final { scan-assembler-not "\\.ttinsn\\t2987065344" } }
+// { dg-final { scan-assembler-not "\\.ttinsn\\t2987982850" } }
+// { dg-final { scan-assembler-not "\\.ttinsn\\t2989621248" } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2987589632" 1 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2988244994" 1 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2989883392" 1 } }

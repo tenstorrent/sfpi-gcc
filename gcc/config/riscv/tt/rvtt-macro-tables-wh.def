@@ -34,7 +34,10 @@ along with GCC; see the file COPYING3.  If not see
    No-increment addr mode 3 (:442,579,717,1489); Dst += 2 auto-increment
    addr mode 2 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
    (:164-169) = 0x0173.  Drain 3 slots.  Break-even 8 rows (:1123) --
-   reference data for the WP7 cost-model regression only.  */
+   the FROZEN pass's dual-slot figure, reference data for the WP7
+   cost-model regression only and never a planner input; the corrected
+   single-slot program (below) makes the planner's derived break-even
+   7 rows, mirroring BH (loadmacro-periodic-minmax-seven-wh.C).  */
 XTT_MACRO_CAPS_SCALARS ("wh", /*n_templates*/4, /*n_sequence_slots*/4,
 			/*delay_bits*/3,
 			/*launch_opcode*/0x93, /*lreg_ind_shift*/20,
@@ -47,24 +50,37 @@ XTT_MACRO_CAPS_SCALARS ("wh", /*n_templates*/4, /*n_sequence_slots*/4,
 			/*proven_drain_slots*/3,
 			/*reference_breakeven_rows*/8)
 
-/* WH's two-bit launch field selects physical slot 2 when the unencoded
-   incoming ADDR_MOD_SET_Base selector is 0 and physical slot 6 when it is
-   1; the compiler owns BOTH so caller Base state cannot redirect the
-   launch to stale configuration (rtl-rvtt-loadmacro.cc:834-843,
-   SFPLOADMACRO_FORMATION.md "Periodic floating-point selection slice").
-   Slot 2: SETC16 regs 11/25/50; slot 6: regs 19/29/54; values (0,2,0)
-   per slot = zero Src increment/clear, Dst increment two, zero fidelity
-   increment/bias.  Raw words asserted by loadmacro-periodic-minmax-wh.C.  */
-XTT_MACRO_ADDR_MOD_SLOT (/*phys*/2, /*src*/11, 0, /*dst*/25, 2,
-			 /*fid*/50, 0)
+/* WH's two-bit launch field names the physical slot THROUGH the bank
+   base bit (ADDR_MOD_SET_Base, thread configuration address 2):
+   modifier m selects physical slot m under Base=0 and slot m+4 under
+   Base=1.  The SFPU platform contract pins Base=1 while compiled SFPI
+   code executes -- every LLK SFPU entry sequence brackets the kernel
+   body (tt-llk wormhole_b0 cmath_common.h set/clear_addr_mod_base,
+   invoked from _llk_math_eltwise_sfpu_start_/_done_ and peers), and the
+   LLK states the aliasing invariant outright ("with addr_mod_base=1,
+   insn ADDR_MOD_3 -> phys ADDR_MOD_7 (SFPU invariant)",
+   ckernel_sfpu_topk.h).  So the calendar owns exactly ONE physical
+   slot: scratch modifier 2 under Base=1 = physical slot 6, SETC16 regs
+   19/29/54; values (0,2,0) = zero Src increment/clear, Dst increment
+   two, zero fidelity increment/bias.
+
+   The base-0 bank must never be written: physical slot 2 (SETC16 regs
+   11/25/50) is LLK's ADDR_MOD_2, consumed with live strides by the
+   base-0 FPU/datacopy path of the loops that host transformed SFPI
+   kernels (llk_math_eltwise_unary_datacopy.h MOV_8_ROWS, Dst+8).  The
+   historical dual-slot program (transcribed from the frozen pass,
+   rtl-rvtt-loadmacro.cc:834-843) wrote both banks and corrupted every
+   tile after the first; the WH dst-autoincr adjudication convicted the
+   compiler and the corrected sim reproduced the corruption (sfpi-gcc
+   2a0ba1e6602; laneAJ-evidence-20260817).  Lane R1's WH
+   position-shuffled formed-calendar failure (laneR1-evidence-20260817
+   wh-onma trace) was this same mechanism.  Raw words asserted by
+   loadmacro-periodic-minmax-wh.C.  */
 XTT_MACRO_ADDR_MOD_SLOT (/*phys*/6, /*src*/19, 0, /*dst*/29, 2,
 			 /*fid*/54, 0)
 
-/* Full owned SETC16 program (reference expectation, order as emitted
-   at rtl-rvtt-loadmacro.cc:838-843).  */
-XTT_MACRO_REF_ADDR_MOD_SETC16 (11, 0)
-XTT_MACRO_REF_ADDR_MOD_SETC16 (25, 2)
-XTT_MACRO_REF_ADDR_MOD_SETC16 (50, 0)
+/* Full owned SETC16 program (reference expectation): the single
+   Base=1 slot, three words.  */
 XTT_MACRO_REF_ADDR_MOD_SETC16 (19, 0)
 XTT_MACRO_REF_ADDR_MOD_SETC16 (29, 2)
 XTT_MACRO_REF_ADDR_MOD_SETC16 (54, 0)

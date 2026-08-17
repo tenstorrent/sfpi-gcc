@@ -534,6 +534,22 @@ proven-program path and have never been executed on the WH simulator
 against a real kernel — the same latent frontier, pre-existing and
 now precisely named.
 
+**WH boundary DISCHARGED (2026-08-17, lane AP).**  The WH
+dst-autoincr adjudication (sfpi-gcc 2a0ba1e6602;
+laneAJ-evidence-20260817) convicted the compiler's DUAL-SLOT SETC16
+program, not the absorption machinery: the base-0 bank words (SETC16
+11/25/50) clobbered LLK's live ADDR_MOD_2, corrupting the NEXT tile's
+base-0 FPU datacopy — exactly the position-shuffled-tiles signature
+above (SFPU stores were always correct, which is why the launch trace
+was clean).  The capability tables now carry the corrected
+single-slot Base=1 program ({19,29,54}, physical slot 6 under the
+LLK-pinned ADDR_MOD_SET_Base=1), `derived_stride_absorption_proven`
+is BH+WH, and the WH derived unary max/min calendar forms and is
+CRAQ bit-exact multi-tile on the corrected WH simulator (wh
+8f0079a9; laneAP evidence).  The WH twin test now pins the FORMATION;
+the stride-4 near-miss pins the remaining +2-only envelope
+(`stride-not-absorbed`).
+
 Additional finding while validating §3: the handwritten MulInt32
 ONE-SLOT in-place variant (`dst_index_in0 == in1 == out`) fails the
 derived LReg16 lifetime proof — the next row's MUL24 rewrites LReg16
