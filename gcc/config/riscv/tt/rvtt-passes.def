@@ -73,6 +73,13 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
    deleted at WP8.)  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
+/* MOP loop-delivery formation re-rolls runs and counted loops of replay
+   playback launches into the hardware MOP expander.  It must see the
+   FINAL launch stream: after replay formation (hoist/unroll/conversion)
+   AND after Dst auto-increment ownership has absorbed the per-row typed
+   separators that would otherwise break launch runs.  Per the anchor
+   rule below, this line precedes both and therefore RUNS AFTER both.  */
+INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_mop_form);
 /* Dst auto-increment ownership must see the final replay structure: it
    absorbs the per-row typed TTINCRWC separators into an owned address
    modifier configuration, both around explicit rows and around replay

@@ -115,6 +115,8 @@
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
   UNSPECV_TTSETC16
+  UNSPECV_TTMOP
+  UNSPECV_TTMOPCFG
 ])
 
 (define_enum "xtt_delay" [
@@ -3467,6 +3469,35 @@
   "TTSETC16\t%0, %1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")])
+
+;; MOP loop delivery (formed only by the rvtt_mop_form pass; capability
+;; facts and provenance in rvtt-mop-tables.h).  MOP (opcode 0x01) fires
+;; the programmed template; the operands are the raw encoding fields
+;; (mop_type, loop_count, zmask low half).  MOP_CFG (opcode 0x03) sets
+;; the persistent zmask high half.  Both are frontend work like REPLAY,
+;; which craq-sim classifies as Tdma.  QSR's MOP encoding differs and is
+;; not provided.
+(define_insn "rvtt_ttmop_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI    0 "const_int_operand" "n") ;; mop_type
+     (match_operand:SI    1 "const_int_operand" "n") ;; loop_count
+     (match_operand:SI    2 "const_int_operand" "n") ;; zmask low half
+     ] UNSPECV_TTMOP)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOP\t%0, %1, %2"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_issue" "tdma")])
+
+(define_insn "rvtt_ttmopcfg_int"
+  [(unspec_volatile:SI [
+     (match_operand:SI    0 "const_int_operand" "n") ;; zmask high half
+     ] UNSPECV_TTMOPCFG)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOPCFG\t%0"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set_attr "xtt_issue" "tdma")])
 
 (define_expand "rvtt_ttreplay"
   [(unspec_volatile:XTT32SI [
