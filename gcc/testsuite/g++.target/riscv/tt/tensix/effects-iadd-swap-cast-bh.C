@@ -4,19 +4,23 @@
 // SFPIADD.md / SFPSWAP.md / SFPCAST.md functional models and craq-sim
 // TENSIX_EXECUTE_{SFPIADD,SFPSWAP,SFPCAST}.
 //
-// SFPIADD mod1=4 (CC_NONE): reads VC+VB, writes VD, lane-predicated only.
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x3 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
+// SFPIADD mod1=4 (CC_NONE): reads VC+VB, writes VD, lane-predicated only
+// (D3 latency audit: Simple, result latency 0).
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x3 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // SFPIADD mod1=0 (CC_LT0): same data effects plus a CC write.
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x3 lreg-write=0x1 port=shared_simple_round cc=rw config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x3 lreg-write=0x1 port=shared_simple_round cc=rw config=0x0 rwc=none dst=none encodable=no} 1 } }
 // BH SFPCAST mod1=3 (self-inverse sign-magnitude negate): audited.
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x1 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // Constant-LREG SFPSWAP (both cst1 with the constant in the VC position
 // and cst2 with it in the VD position): the write to the constant LREG
 // (>= L8) is architecturally dropped, leaving one allocatable write.
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x1 lreg-write=0x1 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=yes} 2 } }
+// SFPABS mod 1 is audited by the D3 latency audit (Simple, latency 0,
+// no write-port claim).
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x1 port=none cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // Unproven SFPCAST mods (1 = stochastic/PRNG, 2 = BH cast-as-ABS bug)
-// and the unaudited SFPABS neighbor keep the refusing default.
-// { dg-final { scan-assembler-times {# xtt-effects: opaque} 3 } }
+// keep the refusing default.
+// { dg-final { scan-assembler-times {# xtt-effects: opaque} 2 } }
 
 __attribute__((noinline)) void iadd_cc_none_effects ()
 {

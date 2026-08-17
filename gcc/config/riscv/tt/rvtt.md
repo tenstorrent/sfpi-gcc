@@ -569,7 +569,10 @@
    ;; D3 latency audit: S1 Simple; Simple dependence chains step one
    ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
    ;; result latency 0.
-   (set_attr "xtt_result_latency" "1")])
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfploadi"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -901,7 +904,10 @@
    ;; cross-unit Dst race, not an SFPU result delay; the silicon-proven
    ;; hand exp kernel consumes SFPLOAD's LREG result in the next slot
    ;; (SFPLOAD->SFPMAD back-to-back): result latency 0.
-   (set_attr "xtt_result_latency" "1")
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))
    (set_attr "xtt_macro_encodable" "yes")])
 
 ;; A complete WH/BH macro launch.  The formation pass may emit this only after
@@ -2427,7 +2433,10 @@
    ;; D3 latency audit: S1 Simple; Simple dependence chains step one
    ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
    ;; result latency 0.
-   (set_attr "xtt_result_latency" "1")])
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn_and_rewrite "*rvtt_sfpshft_i_lv_2op"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr,xr,xr,xr,xr")
@@ -2470,7 +2479,10 @@
    ;; D3 latency audit: S1 Simple; Simple dependence chains step one
    ;; slot (frozen signbit/cast-round calendars; hand exp kernel):
    ;; result latency 0.
-   (set_attr "xtt_result_latency" "1")])
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpcast"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -2731,7 +2743,10 @@
    ;; places the dependent store one slot after SFPSTOCHRND, and the
    ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
    ;; silicon: result latency 0.
-   (set_attr "xtt_result_latency" "1")])
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpstochrnd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2775,7 +2790,10 @@
    ;; places the dependent store one slot after SFPSTOCHRND, and the
    ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
    ;; silicon: result latency 0.
-   (set_attr "xtt_result_latency" "1")])
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpreadconfig"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
