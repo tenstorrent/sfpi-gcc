@@ -323,6 +323,233 @@ rvtt_builtin_subunit (const rvtt_insn_data *insnd)
   return XTT_SU_NONE;
 }
 
+/* ---- Multi-result / shadow-coupled effect structure (TOP3-2 layer 1/2).
+
+   Post-admission operand access, following the rvtt_dst_access_operands
+   precedent: the effect attributes have already admitted the
+   instruction; reaching its typed operands by recognized code is the
+   permitted use of code comparisons.  The companion pairing itself is
+   pattern data (the indexed SFPSWAP's register alternatives pin
+   companion == value + 4; the eight-definition SFPTRANSP defines both
+   banks), so the masks here are read off the extracted hard registers,
+   never recomputed from folklore.  */
+
+static uint32_t
+hard_lreg_bit (rtx op)
+{
+  if (REG_P (op) && HARD_REGISTER_P (op)
+      && REGNO (op) >= SFPU_REG_FIRST
+      && REGNO (op) - SFPU_REG_FIRST <= 16)
+    return 1u << (REGNO (op) - SFPU_REG_FIRST);
+  return 0;
+}
+
+bool
+rvtt_multiresult_group (rtx_insn *insn, const xtt_effect_set &effects,
+			xtt_multiresult_group *group)
+{
+  if (effects.opaque)
+    return false;
+  int code = recog_memoized (insn);
+  int value_ops, companion_ops;
+  if (code == CODE_FOR_rvtt_sfpswap_indexed_int)
+    value_ops = 2, companion_ops = 2;
+  else if (code == CODE_FOR_rvtt_sfptransp8_int)
+    value_ops = 4, companion_ops = 4;
+  else
+    return false;
+  extract_insn (insn);
+  group->value_write_mask = 0;
+  group->companion_write_mask = 0;
+  for (int i = 0; i != value_ops; ++i)
+    group->value_write_mask |= hard_lreg_bit (recog_data.operand[i]);
+  for (int i = 0; i != companion_ops; ++i)
+    group->companion_write_mask
+      |= hard_lreg_bit (recog_data.operand[value_ops + i]);
+  return true;
+}
+
+/* Zero-length architectural LREG interface marker: a recognized Tensix
+   pattern of no delivered words whose pattern mentions the variable-LREG
+   unspec.  *LREG_MASK collects every hard LREG the marker pins.  */
+
+static uint32_t
+varlreg_reg_mask (const_rtx x)
+{
+  uint32_t mask = hard_lreg_bit (const_cast<rtx> (x));
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+    if (fmt[i] == 'e')
+      mask |= varlreg_reg_mask (XEXP (x, i));
+    else if (fmt[i] == 'E')
+      for (int j = XVECLEN (x, i); j--;)
+	mask |= varlreg_reg_mask (XVECEXP (x, i, j));
+  return mask;
+}
+
+static bool
+mentions_varlreg_p (const_rtx x)
+{
+  if (GET_CODE (x) == UNSPEC_VOLATILE && XINT (x, 1) == UNSPECV_SFPVARLREG)
+    return true;
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+    if (fmt[i] == 'e')
+      {
+	if (mentions_varlreg_p (XEXP (x, i)))
+	  return true;
+      }
+    else if (fmt[i] == 'E')
+      for (int j = XVECLEN (x, i); j--;)
+	if (mentions_varlreg_p (XVECEXP (x, i, j)))
+	  return true;
+  return false;
+}
+
+bool
+rvtt_lreg_marker (rtx_insn *insn, uint32_t *lreg_mask)
+{
+  if (!insn || GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
+    return false;
+  if (get_attr_type (insn) != TYPE_TENSIX || get_attr_length (insn))
+    return false;
+  if (!mentions_varlreg_p (PATTERN (insn)))
+    return false;
+  *lreg_mask = varlreg_reg_mask (PATTERN (insn));
+  return true;
+}
+
+/* Recording-epoch closure proof.  See rvtt-effects.h for the contract.
+   Word accounting uses the machine description's typed instruction
+   lengths -- the delivered-word count of a recognized Tensix instruction
+   is a typed fact independent of its effect audit -- while anything
+   without a typed length (asm, calls, unrecognized insns) refuses by
+   name.  No operation identity, opcode calendar, coefficient value, or
+   instruction-word fingerprint participates.  */
+
+xtt_replay_epoch
+rvtt_replay_epoch_close (rtx_insn *capture, unsigned payload_words)
+{
+  xtt_replay_epoch epoch = { xtt_replay_epoch::CROSSES_BLOCK,
+			     nullptr, nullptr, 0 };
+  basic_block bb = BLOCK_FOR_INSN (capture);
+  rtx_insn *stop = NEXT_INSN (BB_END (bb));
+  unsigned remaining = payload_words;
+
+  if (!remaining)
+    {
+      /* A zero-length capture records nothing; trivially closed.  */
+      epoch.status = xtt_replay_epoch::CLOSED;
+      epoch.close_at = capture;
+      return epoch;
+    }
+
+  for (rtx_insn *cur = NEXT_INSN (capture); cur && cur != stop && remaining;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      if (CALL_P (cur))
+	{
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      if (GET_CODE (cur) != INSN)
+	/* A jump delivers no Tensix word; the block boundary itself is
+	   handled by the loop bound.  */
+	continue;
+      rtx pattern = PATTERN (cur);
+      if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+	continue;
+      if (asm_noperands (pattern) >= 0 || recog_memoized (cur) < 0)
+	{
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      if (get_attr_type (cur) != TYPE_TENSIX)
+	/* Scalar RISC work pushes no Tensix word.  */
+	continue;
+      if (get_attr_xtt_replay (cur) == XTT_REPLAY_OWNER)
+	{
+	  epoch.status = xtt_replay_epoch::OWNER_DURING_CAPTURE;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      unsigned words = get_attr_length (cur) / 4;
+      if (!words)
+	continue;
+      if (words > remaining)
+	{
+	  /* The declared capture length would split this instruction's
+	     words: broken user code; refuse.  */
+	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
+	  epoch.blocker = cur;
+	  return epoch;
+	}
+      xtt_effect_set e = rvtt_insn_effects (cur);
+      xtt_multiresult_group group;
+      if (rvtt_multiresult_group (cur, e, &group))
+	epoch.multiresult_members++;
+      remaining -= words;
+      epoch.close_at = cur;
+    }
+
+  if (remaining || !epoch.close_at)
+    {
+      epoch.status = xtt_replay_epoch::CROSSES_BLOCK;
+      return epoch;
+    }
+
+  /* Extend the closure across immediately following zero-length LREG
+     interface markers: they carry the payload's fixed-LREG protocol
+     (companion-group integrity) and deliver no word.  */
+  for (rtx_insn *cur = NEXT_INSN (epoch.close_at); cur && cur != stop;
+       cur = NEXT_INSN (cur))
+    {
+      if (!NONDEBUG_INSN_P (cur))
+	continue;
+      uint32_t mask;
+      if (!rvtt_lreg_marker (cur, &mask))
+	break;
+      epoch.close_at = cur;
+    }
+
+  epoch.status = xtt_replay_epoch::CLOSED;
+  return epoch;
+}
+
+/* Function-sticky shadow-coupling possibility.  See rvtt-effects.h.  */
+
+bool
+rvtt_shadow_coupling_possible (function *fn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN)
+	    continue;
+	  if (recog_memoized (insn) < 0)
+	    continue;
+	  if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (e.opaque)
+	    continue;
+	  xtt_multiresult_group group;
+	  if (rvtt_multiresult_group (insn, e, &group))
+	    return true;
+	  if (e.config_dests_written & (1u << 15))
+	    return true;
+	}
+    }
+  return false;
+}
+
 /* Debug/self-check annotation of the effect set, emitted as an assembler
    comment after each Tensix or asm instruction under
    -mtt-tensix-dump-effects.  DejaGnu golden tests pin these lines.  */

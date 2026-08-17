@@ -2742,7 +2742,15 @@
   "TARGET_XTT_TENSIX"
   "SFPTRANSP"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; DELIBERATELY UNAUDITED (refusing defaults kept).  Architectural
+   ;; SFPTRANSP always permutes BOTH banks (SFPTRANSP.md Transpose4(0)
+   ;; and Transpose4(4)); this legacy tuple models only the L0-L3 bank,
+   ;; so an effect claim here would under-state the write set (the L4-L7
+   ;; companion writes are not SETs of this PARALLEL).  Effect audits may
+   ;; never under-claim: the complete-write-set form is
+   ;; rvtt_sfptransp8_int below, which is the audited one.
+   ])
 
 (define_expand "rvtt_sfptransp"
   [(set (match_operand:XTT128SI 0 "register_operand")
@@ -2805,6 +2813,27 @@
   "SFPSWAP\t%x4, %x5, %8\t# INDEXED R:%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; Audited multi-result effect envelope (SFPSWAP.md functional model,
+   ;; ENABLE_DEST_INDEX leg; craq-sim TENSIX_EXECUTE_SFPSWAP agrees).  One
+   ;; SFPSWAP event on the Simple sub-unit, LREG writeback borrowing the
+   ;; MAD port exactly as the audited rvtt_sfpswap_int envelope.  Under
+   ;; LaneConfig.ENABLE_DEST_INDEX the single event conditionally swaps
+   ;; the value pair AND unconditionally swaps (on the same per-lane
+   ;; ShouldSwap) the companion pair LReg[4+(VC&3)]/LReg[4+(VD&3)]; the
+   ;; register alternatives above pin companion == value + 4, so the four
+   ;; SETs of this PARALLEL are the complete architectural write set.
+   ;; Reads: the four matched sources (operands 4-7).  Writes: the four
+   ;; results (operands 0-3).  Lane-predicated (LaneEnabled gates every
+   ;; write); never writes CC; no configuration or RWC effect.  No macro
+   ;; template capability proof exists for the indexed form -- the
+   ;; encodable default (no) stands until one does.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "borrows_mad")
+   (set_attr "xtt_lreg_read_ops" "241")
+   (set_attr "xtt_lreg_write_ops" "16")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_expand "rvtt_sfpswap_indexed"
@@ -2870,7 +2899,24 @@
   "TARGET_XTT_TENSIX"
   "SFPTRANSP\t# R:%x8,%x9,%x10,%x11,%x12,%x13,%x14,%x15"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Audited multi-result effect envelope (SFPTRANSP.md: "Backend
+   ;; execution unit: Vector Unit (SFPU), simple sub-unit"; craq-sim
+   ;; TENSIX_EXECUTE_SFPTRANSP agrees).  One event permutes BOTH
+   ;; four-register banks -- Transpose4(0) and Transpose4(4) -- so the
+   ;; eight SETs of this PARALLEL are the complete architectural write
+   ;; set: reads operands 8-15, writes operands 0-7.  Lane-predicated
+   ;; (each element write is gated by LaneEnabled); never writes CC; no
+   ;; configuration or RWC effect.  No writeback-port claim is on record
+   ;; for SFPTRANSP -- the port default (none, refusing) stands until the
+   ;; capability tables prove one.  No macro template capability proof
+   ;; exists -- the encodable default (no) stands.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "65281")
+   (set_attr "xtt_lreg_write_ops" "256")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
 
 (define_expand "rvtt_sfptransp8"
   [(set (match_operand:XTT128SI 0 "register_operand")
