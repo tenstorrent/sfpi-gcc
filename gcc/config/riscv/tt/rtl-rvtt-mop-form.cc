@@ -67,6 +67,54 @@ along with GCC; see the file COPYING3.  If not see
    and cost-table constants -- no operation identity, opcode calendar,
    coefficient value, or instruction-word fingerprint participates.
 
+   ---- Outward ownership (caller-side template liveness) ----
+
+   The MOP template registers are thread-shared mutable state that
+   SURVIVES this function's return, and they are write-only from the
+   RISC (rvtt-mop-tables.h, readback fact), so a formation can neither
+   snapshot nor restore a caller's template.  The inward proof
+   (mop-config-unowned below) only shows that nothing INSIDE the
+   function disturbs the formed template; it says nothing about a
+   caller that programmed its own template, calls this function inside
+   a loop, and launches that template again after we return.  Silicon
+   evidence (the 2026-08-17 minmax force-leg adjudication): a perf
+   harness that hoists a type-1 template program out of its tile loop
+   and issues MOP per tile around a call into the formed function hangs
+   the Tensix deterministically -- the caller's post-return launch
+   expands OUR template words.
+
+   So formation additionally requires an OUTWARD ownership proof:
+   either the function is provably the outermost Tensix owner, or every
+   caller provably re-arms the template between any call to this
+   function and its next MOP launch.  Concretely (refusing whenever any
+   step cannot be discharged):
+
+     - the kernel entry (`main') is outermost by the kernel link model:
+       its only caller is crt0, which delivers no Tensix work (AXIOM
+       crt0-benign; same startup model the raw-word census audits);
+     - otherwise the whole thread program is this TU plus crt0 (AXIOM
+       kernel-single-TU: one translation unit per TRISC image, the
+       harness build convention), so every call site is a cgraph edge.
+       The pass walks the transitive caller closure -- refusing on
+       address-taken members, recursion, or a caller body no longer in
+       gimple form -- and runs a must-dataflow over each caller root:
+       a call to the forming function clobbers the template-word set
+       the formation writes (flags, A0, the step slots, and the
+       MOP_CFG zmask high half); a subsequent MOP launch is a hazard
+       unless every word it consumes was rewritten on every path in
+       between (type-1 launches consume the nine config words but not
+       the zmask; rvtt-mop-tables.h).  Caller events are classified
+       from gimple: canonical `.ttinsn' words by their frontend opcode,
+       MMIO stores to the MOP config block by constant address (a
+       rewrite = re-arm credit), and computed instruction-FIFO pushes
+       by the constant opcode base of their composed word (AXIOM
+       tt-op-field-discipline: runtime operands of a TT_OP composition
+       stay inside their bit fields, the discipline the TT_OP macro
+       family itself encodes).  Anything unclassifiable -- opaque asm,
+       indirect calls, a computed delivery with no constant base --
+       counts as a potential MOP launch consuming everything, so the
+       proof fails closed.
+
    Refusal taxonomy (all refusals leave the function byte-identical):
      mop-replay-window-overflow  launch range start + len exceeds the
                                  replay buffer (S+L > 32 near-miss);
@@ -80,6 +128,13 @@ along with GCC; see the file COPYING3.  If not see
                                  the launch + counter step;
      mop-config-unowned          a call or opaque asm in the function
                                  could own or clobber MOP config state;
+     mop-caller-template-live-unproven
+                                 the function may be called while a
+                                 caller-programmed MOP template is
+                                 live, and no caller-side re-arm is
+                                 proven before the caller's next MOP
+                                 launch (the outward ownership proof
+                                 above could not be discharged);
      mop-config-epoch            a MOP was already formed in this
                                  function (single-epoch conservatism of
                                  this increment; ownership epochs are a
@@ -114,7 +169,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "hard-reg-set.h"
 #include "regs.h"
 #include "expr.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
+#include "ssa.h"
+#include "tree-dfa.h"
+#include "cgraph.h"
+#include "attribs.h"
+#include "langhooks.h"
 #include "rvtt-protos.h"
+#include "rvtt.h"
 #include "rvtt-mop-tables.h"
 
 namespace {
@@ -1023,6 +1086,896 @@ commit_candidate (mop_candidate &cand)
   return true;
 }
 
+/* ---- Outward ownership: caller-side MOP-template liveness ----
+
+   See the file header for the proof obligation and the axioms.  The
+   analysis runs over the GIMPLE bodies of the transitive caller
+   closure of the forming function (callers expand after their callees,
+   so those bodies are still gimple when this RTL pass runs; when they
+   are not, the proof fails closed).
+
+   Cover-state lattice: a 10-bit must-set -- bits 0..8 are the MOP
+   config words at TENSIX_MOP_CFG_BASE + 4*i, bit 9 the MOP_CFG zmask
+   high half -- of template state rewritten by the caller since the
+   last call into the forming function.  Two states are tracked in
+   parallel (entry assumed empty / entry assumed full) so a function's
+   effect summarizes as a per-bit gen/pass-through transfer plus the
+   entry bits its exposed launches require.  */
+
+constexpr unsigned MOP_STATE_ZMASK = 1u << 9;
+constexpr unsigned MOP_STATE_FULL = (1u << 10) - 1;
+
+/* Template state the formed class writes: flags (word 1), A0 (word 3),
+   the flags&2 step slots (words 4..6; written whenever any candidate
+   carries steps -- the proof conservatively assumes the maximal
+   class), and the MOP_CFG zmask high half (the emitted TTMOPCFG 0).  */
+constexpr unsigned MOP_CLOBBER_SET
+  = (1u << XTT_MOP_CFG_FLAGS_INDEX) | (1u << XTT_MOP_CFG_A0_INDEX)
+    | (1u << 4) | (1u << 5) | (1u << 6) | MOP_STATE_ZMASK;
+
+/* What a caller's launch consumes of the clobbered set.  A type-1 MOP
+   reads the nine config words and never the zmask; a type-0 (or
+   unclassifiable) launch additionally consumes the zmask high half
+   (rvtt-mop-tables.h, expander facts).  */
+constexpr unsigned MOP_REQ_TYPE1 = MOP_CLOBBER_SET & ~MOP_STATE_ZMASK;
+constexpr unsigned MOP_REQ_ANY = MOP_CLOBBER_SET;
+
+struct mop_caller_summary
+{
+  bool computed = false;
+  bool in_progress = false;
+  bool valid = false;
+  const char *invalid_why = nullptr;
+  /* Hazard regardless of entry state (an internal clobber reaches a
+     launch without full re-arm).  */
+  bool hazard = false;
+  /* First hazard's classified event and the function carrying it.  */
+  const char *hazard_what = nullptr;
+  tree hazard_fn = NULL_TREE;
+  /* First entry-exposed launch's classification (for the dump when a
+     caller turns the exposure into a hazard).  */
+  const char *exposed_what = nullptr;
+  tree exposed_fn = NULL_TREE;
+  /* Entry bits some reachable launch requires beyond internal cover.  */
+  unsigned exposed_need = 0;
+  /* Exit cover-state for entry == empty / entry == full (meet over
+     exit paths; per-bit transfer out(in) = out_empty | (in & (out_full
+     & ~out_empty))).  */
+  unsigned out_empty = MOP_STATE_FULL;
+  unsigned out_full = MOP_STATE_FULL;
+};
+
+struct mop_outward_ctx
+{
+  tree formee = NULL_TREE;
+  cgraph_node *formee_node = nullptr;
+  /* Node-stable storage: summaries are referenced across recursive
+     insertions.  */
+  std::map<tree, mop_caller_summary> summaries;
+};
+
+static mop_caller_summary &mop_analyze_fn (mop_outward_ctx &ctx, tree decl);
+
+/* Fold PTR (a pointer value) to a constant byte address, following a
+   short SSA chain of casts and constant pointer arithmetic.  */
+
+static bool
+mop_pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
+			      unsigned depth = 0)
+{
+  if (!ptr || depth > 8)
+    return false;
+  if (TREE_CODE (ptr) == INTEGER_CST)
+    {
+      if (!tree_fits_uhwi_p (ptr))
+	return false;
+      *addr = tree_to_uhwi (ptr) & 0xffffffff;
+      return true;
+    }
+  if (TREE_CODE (ptr) != SSA_NAME)
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (ptr);
+  if (!def || !is_gimple_assign (def))
+    return false;
+  tree_code code = gimple_assign_rhs_code (def);
+  if (CONVERT_EXPR_CODE_P (code) || code == INTEGER_CST
+      || code == SSA_NAME)
+    return mop_pointer_constant_address (gimple_assign_rhs1 (def), addr,
+					 depth + 1);
+  if (code == POINTER_PLUS_EXPR || code == PLUS_EXPR)
+    {
+      tree off = gimple_assign_rhs2 (def);
+      unsigned HOST_WIDE_INT base;
+      if (TREE_CODE (off) != INTEGER_CST || !tree_fits_shwi_p (off)
+	  || !mop_pointer_constant_address (gimple_assign_rhs1 (def),
+					    &base, depth + 1))
+	return false;
+      *addr = (base + (unsigned HOST_WIDE_INT) tree_to_shwi (off))
+	      & 0xffffffff;
+      return true;
+    }
+  return false;
+}
+
+/* Fold REF (a store lhs) to a constant byte address if possible.  */
+
+static bool
+mop_ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
+{
+  poly_int64 bitsize, bitpos;
+  tree offset;
+  machine_mode mode;
+  int unsignedp, reversep, volatilep = 0;
+  tree base = get_inner_reference (ref, &bitsize, &bitpos, &offset, &mode,
+				   &unsignedp, &reversep, &volatilep);
+  if (offset || !base || TREE_CODE (base) != MEM_REF)
+    return false;
+  tree moff = TREE_OPERAND (base, 1);
+  if (TREE_CODE (moff) != INTEGER_CST || !tree_fits_shwi_p (moff))
+    return false;
+  HOST_WIDE_INT pos;
+  if (!bitpos.is_constant (&pos) || (pos % BITS_PER_UNIT) != 0)
+    return false;
+  unsigned HOST_WIDE_INT a;
+  if (!mop_pointer_constant_address (TREE_OPERAND (base, 0), &a))
+    return false;
+  a += (unsigned HOST_WIDE_INT) tree_to_shwi (moff);
+  a += (unsigned HOST_WIDE_INT) (pos / BITS_PER_UNIT);
+  *addr = a & 0xffffffff;
+  return true;
+}
+
+/* Classify the 32-bit word VAL (a value stored toward a possible
+   instruction-FIFO push) by the constant opcode base of its PLUS /
+   BIT_IOR composition (AXIOM tt-op-field-discipline, file header).
+   Returns the frontend opcode byte, or -1 when no constant base
+   pins it.  *TYPE1 is set when bit 23 of the constant base is set.  */
+
+static int
+mop_pushed_word_base (tree val, bool *type1, unsigned depth = 0)
+{
+  if (depth > 12 || !val)
+    return -1;
+  if (TREE_CODE (val) == INTEGER_CST)
+    {
+      if (!tree_fits_uhwi_p (val) && !tree_fits_shwi_p (val))
+	return -1;
+      unsigned HOST_WIDE_INT w
+	= TREE_INT_CST_LOW (val) & 0xffffffff;
+      *type1 = (w >> 23) & 1;
+      return (int) (w >> 24);
+    }
+  if (TREE_CODE (val) == SSA_NAME)
+    {
+      gimple *def = SSA_NAME_DEF_STMT (val);
+      if (!def || !is_gimple_assign (def))
+	return -1;
+      tree_code code = gimple_assign_rhs_code (def);
+      if (code == PLUS_EXPR || code == BIT_IOR_EXPR)
+	{
+	  bool t1a = false, t1b = false;
+	  int a = mop_pushed_word_base (gimple_assign_rhs1 (def), &t1a,
+					depth + 1);
+	  int b = mop_pushed_word_base (gimple_assign_rhs2 (def), &t1b,
+					depth + 1);
+	  /* Exactly one side carries the opcode base; two competing
+	     bases (or none) leave the word unclassified.  */
+	  if (a > 0 && b <= 0)
+	    {
+	      *type1 = t1a;
+	      return a;
+	    }
+	  if (b > 0 && a <= 0)
+	    {
+	      *type1 = t1b;
+	      return b;
+	    }
+	  if (a == 0 && b == 0)
+	    {
+	      *type1 = t1a | t1b;
+	      return 0;
+	    }
+	  return -1;
+	}
+      if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME
+	  || code == NOP_EXPR)
+	return mop_pushed_word_base (gimple_assign_rhs1 (def), type1,
+				     depth + 1);
+      /* Shifted single fields below the opcode byte cannot construct
+	 an opcode by themselves under the discipline axiom.  */
+      if (code == LSHIFT_EXPR || code == BIT_AND_EXPR
+	  || code == RSHIFT_EXPR)
+	return 0;
+      return -1;
+    }
+  return -1;
+}
+
+/* One classified caller event.  */
+
+struct mop_event
+{
+  enum { BENIGN, LAUNCH, COVER, CLOBBER, COMPOSE } kind = BENIGN;
+  unsigned bits = 0;	 /* LAUNCH: required set; COVER: covered set */
+  tree callee = NULL_TREE; /* COMPOSE */
+  const char *what = nullptr; /* LAUNCH: classification for the dump */
+};
+
+/* Resolve one asm operand reference (`%N' digits or `%[name]') to the
+   tree whose VALUE reaches the instruction: for an input, its value;
+   for an output with a matching-digit input constraint (the `+r'
+   split), the matching input's value.  Returns NULL_TREE when the
+   value is unresolvable.  */
+
+static tree
+mop_asm_operand_value (const gasm *stmt, const char *ref, size_t len)
+{
+  unsigned nout = gimple_asm_noutputs (stmt);
+  unsigned nin = gimple_asm_ninputs (stmt);
+  int idx = -1;
+  if (len >= 3 && ref[0] == '[' && ref[len - 1] == ']')
+    {
+      for (unsigned i = 0; i != nout + nin && idx < 0; ++i)
+	{
+	  tree op = i < nout ? gimple_asm_output_op (stmt, i)
+			     : gimple_asm_input_op (stmt, i - nout);
+	  tree name = TREE_PURPOSE (TREE_PURPOSE (op));
+	  if (name && TREE_CODE (name) == IDENTIFIER_NODE
+	      && IDENTIFIER_LENGTH (name) == len - 2
+	      && strncmp (IDENTIFIER_POINTER (name), ref + 1, len - 2) == 0)
+	    idx = (int) i;
+	}
+    }
+  else
+    {
+      idx = 0;
+      for (size_t i = 0; i != len; ++i)
+	{
+	  if (!ISDIGIT (ref[i]))
+	    return NULL_TREE;
+	  idx = idx * 10 + (ref[i] - '0');
+	}
+    }
+  if (idx < 0)
+    return NULL_TREE;
+  if ((unsigned) idx < nout)
+    {
+      /* Output operand: its inbound value is the input with the
+	 matching numeric constraint, if any.  */
+      for (unsigned j = 0; j != nin; ++j)
+	{
+	  tree in = gimple_asm_input_op (stmt, j);
+	  tree cst = TREE_VALUE (TREE_PURPOSE (in));
+	  if (cst && TREE_CODE (cst) == STRING_CST
+	      && atoi (TREE_STRING_POINTER (cst)) == idx
+	      && ISDIGIT (TREE_STRING_POINTER (cst)[0]))
+	    return TREE_VALUE (in);
+	}
+      return NULL_TREE;
+    }
+  if ((unsigned) idx < nout + nin)
+    return TREE_VALUE (gimple_asm_input_op (stmt, idx - nout));
+  return NULL_TREE;
+}
+
+/* Classify the word VAL delivered (or potentially delivered) by an
+   asm; fills EV.  TTINSN_DIRECT marks a word directly issued by a
+   `.ttinsn' directive (creditable as a MOP_CFG zmask rewrite).  */
+
+static void
+mop_classify_delivered_word (tree word, bool ttinsn_direct, mop_event &ev)
+{
+  bool type1 = false;
+  int opc = mop_pushed_word_base (word, &type1);
+  if (opc == (int) XTT_MOP_OPCODE)
+    {
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = type1 ? MOP_REQ_TYPE1 : MOP_REQ_ANY;
+      ev.what = "a raw MOP word in assembly";
+    }
+  else if (opc == (int) XTT_MOP_CFG_OPCODE && ttinsn_direct)
+    {
+      /* A directly delivered MOP_CFG rewrites the zmask high half.
+	 (A computed 0x03-based word behind a store idiom is never
+	 credited: its destination is not provably the FIFO.)  */
+      ev.kind = mop_event::COVER;
+      ev.bits = MOP_STATE_ZMASK;
+    }
+  else if (opc < 0)
+    {
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = MOP_REQ_ANY;
+      ev.what = "an unclassifiable delivered word in assembly";
+    }
+}
+
+/* Classify a gimple asm.  The canonical raw delivery is a single
+   `.ttinsn %0' with one constant input (the TTI_ macro shape the raw
+   census audits); the audited scalar templates deliver nothing; and
+   base-ISA store/load/consume compositions (the blocking-store and
+   memcpy idioms) deliver exactly their stored operands, each
+   classified by value.  Everything else is opaque and counts as a
+   potential launch.  */
+
+static mop_event
+mop_classify_asm (const gasm *stmt)
+{
+  mop_event ev;
+  const char *s = gimple_asm_string (stmt);
+  while (*s == ' ' || *s == '\t')
+    ++s;
+  if (!*s)
+    return ev;			/* pure barrier */
+  if (!strcmp (s, "fence") || !strcmp (s, "ebreak")
+      || !strcmp (s, "la sp, %0")
+      || !strcmp (s, ".option push\n.option norelax\n"
+		     "la gp, __global_pointer$\n.option pop"))
+    return ev;
+  if (strncmp (s, ".ttinsn", 7) == 0)
+    {
+      s += 7;
+      while (*s == ' ' || *s == '\t')
+	++s;
+      if (strcmp (s, "%0") == 0 && gimple_asm_ninputs (stmt) == 1
+	  && gimple_asm_noutputs (stmt) == 0)
+	{
+	  mop_classify_delivered_word
+	    (TREE_VALUE (gimple_asm_input_op (stmt, 0)), true, ev);
+	  return ev;
+	}
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = MOP_REQ_ANY;
+      ev.what = "a non-canonical .ttinsn template";
+      return ev;
+    }
+
+  /* Base-ISA memory templates: every line must be a load, a consume,
+     or a store whose stored operand classifies benign.  */
+  while (*s)
+    {
+      while (*s == ' ' || *s == '\t' || *s == '\n')
+	++s;
+      if (!*s)
+	break;
+      const char *tok = s;
+      while (*s && *s != ' ' && *s != '\t' && *s != '\n')
+	++s;
+      size_t tlen = s - tok;
+      bool is_store = (tlen == 2
+		       && (strncmp (tok, "sw", 2) == 0
+			   || strncmp (tok, "sh", 2) == 0
+			   || strncmp (tok, "sb", 2) == 0));
+      bool is_benign_op
+	= ((tlen == 2 && strncmp (tok, "lw", 2) == 0)
+	   || (tlen == 2 && strncmp (tok, "lh", 2) == 0)
+	   || (tlen == 2 && strncmp (tok, "lb", 2) == 0)
+	   || (tlen == 3 && strncmp (tok, "and", 3) == 0)
+	   || (tlen == 3 && strncmp (tok, "lhu", 3) == 0)
+	   || (tlen == 3 && strncmp (tok, "lbu", 3) == 0)
+	   || (tlen == 5 && strncmp (tok, "fence", 5) == 0));
+      if (!is_store && !is_benign_op)
+	{
+	  ev.kind = mop_event::LAUNCH;
+	  ev.bits = MOP_REQ_ANY;
+	  ev.what = "opaque assembly";
+	  return ev;
+	}
+      if (is_store)
+	{
+	  /* First operand after the mnemonic is the stored value:
+	     an operand reference or a hard register (opaque).  */
+	  while (*s == ' ' || *s == '\t')
+	    ++s;
+	  if (*s != '%')
+	    {
+	      ev.kind = mop_event::LAUNCH;
+	      ev.bits = MOP_REQ_ANY;
+	      ev.what = "opaque assembly";
+	      return ev;
+	    }
+	  ++s;
+	  const char *ref = s;
+	  if (*s == '[')
+	    {
+	      while (*s && *s != ']')
+		++s;
+	      if (*s == ']')
+		++s;
+	    }
+	  else
+	    while (ISDIGIT (*s))
+	      ++s;
+	  tree word = mop_asm_operand_value (stmt, ref, s - ref);
+	  mop_event wev;
+	  mop_classify_delivered_word (word, false, wev);
+	  if (wev.kind == mop_event::LAUNCH)
+	    return wev;
+	}
+      /* Skip the rest of the line.  */
+      while (*s && *s != '\n')
+	++s;
+    }
+  return ev;
+}
+
+/* Classify a gimple store.  */
+
+static mop_event
+mop_classify_store (gimple *stmt)
+{
+  mop_event ev;
+  tree lhs = gimple_get_lhs (stmt);
+  if (!lhs || TREE_CODE (lhs) == SSA_NAME)
+    return ev;
+
+  unsigned HOST_WIDE_INT addr;
+  if (mop_ref_constant_address (lhs, &addr))
+    {
+      unsigned HOST_WIDE_INT base = XTT_MOP_CFG_MMIO_BASE & 0xffffffff;
+      if (addr >= base && addr < base + 4 * 9 && (addr - base) % 4 == 0)
+	{
+	  ev.kind = mop_event::COVER;
+	  ev.bits = 1u << ((addr - base) / 4);
+	  return ev;
+	}
+      /* Any other constant MMIO address: it can only deliver an
+	 instruction if it is an instruction-FIFO alias, so classify
+	 the stored word.  */
+    }
+  else
+    {
+      tree base = get_base_address (lhs);
+      /* A store into a known non-volatile object is memory, not MMIO
+	 (hardware registers are declared volatile).  */
+      if (!TREE_THIS_VOLATILE (lhs)
+	  && (!base || !DECL_P (base) || !TREE_THIS_VOLATILE (base)))
+	return ev;
+    }
+
+  tree val = gimple_assign_rhs1 (stmt);
+  bool type1 = false;
+  int opc = mop_pushed_word_base (val, &type1);
+  if (opc == (int) XTT_MOP_OPCODE)
+    {
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = type1 ? MOP_REQ_TYPE1 : MOP_REQ_ANY;
+      ev.what = "a computed MOP push";
+    }
+  else if (opc < 0)
+    {
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = MOP_REQ_ANY;
+      ev.what = "an unclassifiable volatile store";
+    }
+  /* opc == XTT_MOP_CFG_OPCODE: a zmask WRITE at worst -- never a
+     template consumer, and not creditable as cover (the destination
+     is not provably the FIFO).  Benign.  */
+  return ev;
+}
+
+/* Classify one gimple statement of a caller body.  */
+
+static mop_event
+mop_classify_stmt (mop_outward_ctx &ctx, gimple *stmt)
+{
+  mop_event ev;
+  if (is_gimple_debug (stmt))
+    return ev;
+  if (const gasm *a = dyn_cast<const gasm *> (stmt))
+    return mop_classify_asm (a);
+  if (is_gimple_call (stmt))
+    {
+      if (gimple_call_internal_p (stmt))
+	return ev;
+      tree fndecl = gimple_call_fndecl (stmt);
+      if (!fndecl)
+	{
+	  /* Indirect call: cannot reach the forming function (the
+	     closure refuses address-taken members), but its body is
+	     unknown -- a potential launch.  */
+	  ev.kind = mop_event::LAUNCH;
+	  ev.bits = MOP_REQ_ANY;
+	  ev.what = "an indirect call";
+	  return ev;
+	}
+      if (fndecl == ctx.formee)
+	{
+	  ev.kind = mop_event::CLOBBER;
+	  return ev;
+	}
+      /* A call through an alias or clone of the forming function is
+	 the same clobber.  */
+      if (ctx.formee_node)
+	if (cgraph_node *cn = cgraph_node::get (fndecl))
+	  if (cn->ultimate_alias_target () == ctx.formee_node)
+	    {
+	      ev.kind = mop_event::CLOBBER;
+	      return ev;
+	    }
+      if (const rvtt_insn_data *d = rvtt_get_insn_data (stmt))
+	{
+	  /* rvtt builtins deliver typed non-MOP words (REPLAY, SETRWC,
+	     SFPU, sync, region markers); no gimple-level builtin emits
+	     MOP or MOP_CFG today.  Guard the name anyway.  */
+	  if (strncmp (d->name, "ttmop", 5) == 0)
+	    {
+	      ev.kind = mop_event::LAUNCH;
+	      ev.bits = MOP_REQ_ANY;
+	      ev.what = "a ttmop builtin";
+	    }
+	  return ev;
+	}
+      if (fndecl_built_in_p (fndecl))
+	return ev;
+      if (cgraph_node *cn = cgraph_node::get (fndecl))
+	if (cn->definition || DECL_STRUCT_FUNCTION (fndecl))
+	  {
+	    ev.kind = mop_event::COMPOSE;
+	    ev.callee = fndecl;
+	    return ev;
+	  }
+      /* Extern with no body in the TU: crt0/libc scalar code under the
+	 kernel-single-TU axiom -- delivers no Tensix work.  */
+      return ev;
+    }
+  if (gimple_store_p (stmt) && is_gimple_assign (stmt))
+    return mop_classify_store (stmt);
+  return ev;
+}
+
+/* Apply EV to the parallel states (SE = cover assuming empty entry,
+   SF = assuming full entry).  When RECORD is non-null, accumulate
+   hazards and entry requirements into it (FNDECL names the function
+   being analyzed for the hazard detail).  Returns false when the
+   analysis becomes invalid (unanalyzable callee).  */
+
+static bool
+mop_apply_event (mop_outward_ctx &ctx, const mop_event &ev,
+		 unsigned *se, unsigned *sf,
+		 mop_caller_summary *record, tree fndecl)
+{
+  switch (ev.kind)
+    {
+    case mop_event::BENIGN:
+      return true;
+    case mop_event::LAUNCH:
+      if (record)
+	{
+	  if ((ev.bits & ~*sf) && !record->hazard)
+	    {
+	      record->hazard = true;
+	      record->hazard_what = ev.what;
+	      record->hazard_fn = fndecl;
+	    }
+	  if ((ev.bits & *sf & ~*se) && !record->exposed_what)
+	    {
+	      record->exposed_what = ev.what;
+	      record->exposed_fn = fndecl;
+	    }
+	  record->exposed_need |= ev.bits & *sf & ~*se;
+	}
+      return true;
+    case mop_event::COVER:
+      *se |= ev.bits;
+      *sf |= ev.bits;
+      return true;
+    case mop_event::CLOBBER:
+      *se = 0;
+      *sf = 0;
+      return true;
+    case mop_event::COMPOSE:
+      {
+	mop_caller_summary &sub = mop_analyze_fn (ctx, ev.callee);
+	if (!sub.valid)
+	  return false;
+	if (record)
+	  {
+	    if (sub.hazard && !record->hazard)
+	      {
+		record->hazard = true;
+		record->hazard_what = sub.hazard_what;
+		record->hazard_fn = sub.hazard_fn;
+	      }
+	    if ((sub.exposed_need & ~*sf) && !record->hazard)
+	      {
+		record->hazard = true;
+		record->hazard_what = sub.exposed_what
+		  ? sub.exposed_what : "an exposed launch in a callee";
+		record->hazard_fn = sub.exposed_fn
+		  ? sub.exposed_fn : ev.callee;
+	      }
+	    if ((sub.exposed_need & *sf & ~*se) && !record->exposed_what)
+	      {
+		record->exposed_what = sub.exposed_what;
+		record->exposed_fn = sub.exposed_fn;
+	      }
+	    record->exposed_need |= sub.exposed_need & *sf & ~*se;
+	  }
+	unsigned transp = sub.out_full & ~sub.out_empty;
+	*se = sub.out_empty | (*se & transp);
+	*sf = sub.out_empty | (*sf & transp);
+	return true;
+      }
+    }
+  return true;
+}
+
+/* Analyze DECL's gimple body: a forward must-dataflow over the pair
+   state, then a recording pass.  Memoized in CTX; recursion and
+   unavailable bodies invalidate.  */
+
+static mop_caller_summary &
+mop_analyze_fn (mop_outward_ctx &ctx, tree decl)
+{
+  mop_caller_summary &sum = ctx.summaries[decl];
+  if (sum.computed)
+    return sum;
+  if (sum.in_progress)
+    {
+      /* Recursive caller chain: no epoch discipline is provable.  */
+      sum.computed = true;
+      sum.valid = false;
+      sum.invalid_why = "recursive call chain";
+      return sum;
+    }
+  sum.in_progress = true;
+
+  function *fn = DECL_STRUCT_FUNCTION (decl);
+  if (!fn || !fn->cfg || (fn->curr_properties & PROP_rtl))
+    {
+      sum.in_progress = false;
+      sum.computed = true;
+      sum.valid = false;
+      sum.invalid_why = "body not analyzable at formation time";
+      return sum;
+    }
+
+  unsigned n = last_basic_block_for_fn (fn);
+  /* Per-BB IN states; TOP = all-ones on both tracks.  */
+  std::vector<unsigned> in_se (n, MOP_STATE_FULL);
+  std::vector<unsigned> in_sf (n, MOP_STATE_FULL);
+  basic_block entry_bb = ENTRY_BLOCK_PTR_FOR_FN (fn);
+
+  bool valid = true;
+  const char *invalid_why = nullptr;
+
+  /* Fixpoint (states only descend).  */
+  bool changed = true;
+  unsigned iter = 0;
+  while (changed && valid && iter++ < 64)
+    {
+      changed = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned se, sf;
+	  bool first = true;
+	  edge e;
+	  edge_iterator ei;
+	  se = sf = MOP_STATE_FULL;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    {
+	      unsigned pse, psf;
+	      if (e->src == entry_bb)
+		{
+		  pse = 0;
+		  psf = MOP_STATE_FULL;
+		}
+	      else
+		{
+		  /* Predecessor OUT: recompute cheaply by transfer of
+		     its stored IN (bodies are small; correctness over
+		     speed).  */
+		  pse = in_se[e->src->index];
+		  psf = in_sf[e->src->index];
+		  for (gimple_stmt_iterator gsi
+			 = gsi_start_bb (e->src);
+		       !gsi_end_p (gsi); gsi_next (&gsi))
+		    {
+		      mop_event ev
+			= mop_classify_stmt (ctx, gsi_stmt (gsi));
+		      if (!mop_apply_event (ctx, ev, &pse, &psf,
+					    nullptr, decl))
+			{
+			  valid = false;
+			  invalid_why = "unanalyzable callee";
+			}
+		    }
+		}
+	      if (first)
+		{
+		  se = pse;
+		  sf = psf;
+		  first = false;
+		}
+	      else
+		{
+		  se &= pse;
+		  sf &= psf;
+		}
+	    }
+	  if (first)
+	    {
+	      /* Unreachable block; keep TOP.  */
+	      continue;
+	    }
+	  if (se != in_se[bb->index] || sf != in_sf[bb->index])
+	    {
+	      /* Must-meet only descends.  */
+	      in_se[bb->index] &= se;
+	      in_sf[bb->index] &= sf;
+	      changed = true;
+	    }
+	}
+    }
+  if (changed && valid)
+    {
+      /* Should be unreachable (a 10-bit must-lattice descends in
+	 bounded steps); fail closed rather than trust an unconverged
+	 state.  */
+      valid = false;
+      invalid_why = "cover dataflow did not converge";
+    }
+
+  /* Recording pass: hazards, entry requirements, exit meets.  */
+  unsigned out_e = MOP_STATE_FULL, out_f = MOP_STATE_FULL;
+  bool have_exit = false;
+  if (valid)
+    {
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  unsigned se = in_se[bb->index];
+	  unsigned sf = in_sf[bb->index];
+	  edge e;
+	  edge_iterator ei;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    {
+	      mop_event ev = mop_classify_stmt (ctx, gsi_stmt (gsi));
+	      if (!mop_apply_event (ctx, ev, &se, &sf, &sum, decl))
+		{
+		  valid = false;
+		  invalid_why = "unanalyzable callee";
+		}
+	    }
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    if (e->dest == EXIT_BLOCK_PTR_FOR_FN (fn))
+	      {
+		out_e &= se;
+		out_f &= sf;
+		have_exit = true;
+	      }
+	}
+    }
+  if (!have_exit)
+    {
+      out_e = MOP_STATE_FULL;
+      out_f = MOP_STATE_FULL;
+    }
+
+  sum.in_progress = false;
+  sum.computed = true;
+  sum.valid = valid;
+  sum.invalid_why = invalid_why;
+  sum.out_empty = out_e;
+  sum.out_full = out_f;
+  return sum;
+}
+
+/* Discharge the outward ownership obligation for CFN.  On failure,
+   *WHY and *WHY_FN carry the refusal detail; on success *HOW names the
+   discharged form for the dump.  */
+
+static bool
+mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
+		     const char **how)
+{
+  tree decl = cfn->decl;
+  *why = nullptr;
+  *why_fn = nullptr;
+
+  if (DECL_NAME (decl) && MAIN_NAME_P (DECL_NAME (decl)))
+    {
+      /* The kernel entry: its only caller is crt0, which delivers no
+	 Tensix work (AXIOM crt0-benign).  */
+      *how = "kernel entry (crt0-benign axiom)";
+      return true;
+    }
+
+  cgraph_node *node = cgraph_node::get (decl);
+  if (!node)
+    {
+      *why = "no callgraph node for the function";
+      return false;
+    }
+
+  /* Transitive caller closure under the kernel-single-TU axiom.  */
+  auto_vec<cgraph_node *> closure;
+  hash_set<cgraph_node *> seen;
+  auto_vec<cgraph_node *> work;
+  work.safe_push (node);
+  seen.add (node);
+  while (!work.is_empty ())
+    {
+      cgraph_node *cur = work.pop ();
+      if (cur->address_taken)
+	{
+	  *why = "address-taken function on the caller chain";
+	  *why_fn = cur->dump_name ();
+	  return false;
+	}
+      for (cgraph_edge *e = cur->callers; e; e = e->next_caller)
+	{
+	  cgraph_node *c = e->caller;
+	  if (c->inlined_to)
+	    c = c->inlined_to;
+	  if (seen.add (c))
+	    continue;
+	  closure.safe_push (c);
+	  work.safe_push (c);
+	}
+    }
+
+  if (closure.is_empty ())
+    {
+      /* No caller inside the thread program: outermost by the
+	 kernel-single-TU + crt0-benign axioms.  */
+      *how = "outermost (no caller in the TU)";
+      return true;
+    }
+
+  mop_outward_ctx ctx;
+  ctx.formee = decl;
+  ctx.formee_node = node;
+
+  unsigned roots = 0;
+  for (cgraph_node *m : closure)
+    {
+      if (m->callers)
+	continue;		/* analyzed via its own callers */
+      ++roots;
+      mop_caller_summary &sum = mop_analyze_fn (ctx, m->decl);
+      if (!sum.valid)
+	{
+	  *why = sum.invalid_why ? sum.invalid_why
+				 : "caller not analyzable";
+	  *why_fn = m->dump_name ();
+	  return false;
+	}
+      if (sum.hazard)
+	{
+	  static char detail[256];
+	  const char *what = sum.hazard_what ? sum.hazard_what
+					     : "a MOP launch";
+	  const char *where
+	    = sum.hazard_fn ? lang_hooks.decl_printable_name (sum.hazard_fn, 2)
+			    : m->dump_name ();
+	  snprintf (detail, sizeof (detail),
+		    "%s in '%s' is reachable after a call to this"
+		    " function without a full template re-arm",
+		    what, where);
+	  *why = detail;
+	  *why_fn = m->dump_name ();
+	  return false;
+	}
+      /* Root entry: no caller-programmed template can be live (the
+	 axioms above), so exposed_need at a root is pre-existing
+	 caller-owned state, not our clobber.  */
+    }
+
+  if (roots == 0)
+    {
+      /* Every closure member has callers: a cycle with no entry.  */
+      *why = "recursive caller chain";
+      return false;
+    }
+
+  *how = "every caller root re-arms the template before its next"
+	 " post-return MOP launch";
+  return true;
+}
+
 /* ---- Driver ---- */
 
 static void
@@ -1063,6 +2016,33 @@ transform (function *cfn)
 		 unsigned (candidates.size ()));
       return;
     }
+
+  // The formed template survives this function's return in
+  // thread-shared, RISC-write-only registers: prove no caller can
+  // launch a live template of its own after we return without fully
+  // re-arming it first (file header, outward ownership).
+  {
+    const char *why = nullptr, *why_fn = nullptr, *how = nullptr;
+    if (!mop_outward_owned_p (cfn, &why, &why_fn, &how))
+      {
+	if (dump_file)
+	  {
+	    if (why_fn)
+	      fprintf (dump_file,
+		       "MOP-form refused (mop-caller-template-live-"
+		       "unproven): %s (%s); %u candidate(s) dropped\n",
+		       why, why_fn, unsigned (candidates.size ()));
+	    else
+	      fprintf (dump_file,
+		       "MOP-form refused (mop-caller-template-live-"
+		       "unproven): %s; %u candidate(s) dropped\n",
+		       why, unsigned (candidates.size ()));
+	  }
+	return;
+      }
+    if (dump_file)
+      fprintf (dump_file, "MOP outward ownership proven: %s\n", how);
+  }
 
   unsigned buffer_size = riscv_tt_replay_size;
   mop_candidate *best = nullptr;
