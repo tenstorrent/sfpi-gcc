@@ -32,8 +32,19 @@ void hoist ()
 **	TTINCRWC	0, 4, 0, 0
 **	TTREPLAY	0, 4, 0, 0
 **	TTINCRWC	0, 4, 0, 0
-**	addi	a5,a5,-1
-**	bne	a5,zero,.L[0-9]+
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	li	a5,0
 **	# WRITE L0
 **	ret
 */
@@ -82,8 +93,19 @@ void slots ()
 **	TTINCRWC	0, 4, 0, 0
 **	TTREPLAY	0, 4, 0, 0
 **	TTINCRWC	0, 4, 0, 0
-**	addi	a5,a5,-1
-**	bne	a5,zero,.L[0-9]+
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	0, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	li	a5,0
 **	li	a5,4
 **	TTREPLAY	4, 4, 0, 1
 **	SFPADD	L0, L0, L0, 0
@@ -94,8 +116,19 @@ void slots ()
 **	TTINCRWC	0, 4, 0, 0
 **	TTREPLAY	4, 4, 0, 0
 **	TTINCRWC	0, 4, 0, 0
-**	addi	a5,a5,-1
-**	bne	a5,zero,.L[0-9]+
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	TTREPLAY	4, 4, 0, 0
+**	TTINCRWC	0, 4, 0, 0
+**	li	a5,0
 **	# WRITE L0
 **	ret
 */

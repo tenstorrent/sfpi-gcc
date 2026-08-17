@@ -2,7 +2,8 @@
 // { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Counted-loop replay payload" 1 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
-// { dg-final { scan-assembler-times "TTREPLAY" 2 } }
+// { dg-final { scan-assembler-times "TTREPLAY" 17 } }
+// { dg-final { scan-assembler-not "\\tbne\\t" } }
 
 // Sixteen-trip loop around the 10-instruction payload (Wormhole may add
 // SFPNOP slots, growing the capture): the modeled benefit at 16 trips is

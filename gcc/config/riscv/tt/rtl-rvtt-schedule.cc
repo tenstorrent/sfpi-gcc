@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "recog.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 
 namespace {
 
@@ -290,6 +291,363 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   return false;
 }
 
+// Decide whether the nop inserter below would pad INSN's delay: the exact
+// probe transform uses, factored out so the shadow-filling phase can target
+// (and re-verify) precisely the bubbles that would otherwise become SFPNOPs.
+// DELAY must be INSN's non-NONE delay contract.
+
+static bool
+delay_nop_needed_p (std::vector<basic_block> &visited, basic_block bb,
+		    rtx_insn *insn, enum xtt_delay delay)
+{
+  bool insert = false;
+  if (delay == XTT_DELAY_STATIC)
+    {
+      insert = find_next_insn (visited, bb, 0, insn);
+      for (auto *bb : visited)
+	bb->flags &= ~BB_VISITED;
+      visited.clear ();
+    }
+  else
+    {
+      gcc_assert (delay == XTT_DELAY_DYNAMIC);
+      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
+			   rtx_insn *insn, rtx rtl) -> bool
+      {
+	switch (GET_CODE (rtl))
+	  {
+	  default:
+	    gcc_unreachable ();
+
+	  case SET:
+	    if (REG_P (SET_DEST (rtl)))
+	      {
+		unsigned regno = REGNO (SET_DEST (rtl));
+		if (SFPU_REG_P (regno))
+		  {
+		    // Writing to a constant reg falls on the floor
+		    bool insert = regno < SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
+		      && find_next_insn (visited, bb, regno, insn);
+
+		    for (auto *bb : visited)
+		      bb->flags &= ~BB_VISITED;
+		    visited.clear ();
+
+		    return insert;
+		  }
+	      }
+	    break;
+
+	  case PARALLEL:
+	    {
+	      auto &vec = XVEC (rtl, 0);
+	      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+		if (self (self, visited, bb, insn, RTVEC_ELT (vec, ix)))
+		  return true;
+	    }
+	    break;
+
+	  case CLOBBER:
+	  case SCRATCH:
+	    break;
+	  }
+
+	return false;
+      };
+
+      insert = find_next (find_next, visited, bb, insn, PATTERN (insn));
+    }
+  return insert;
+}
+
+/* ---- Generalized latency-shadow filling ----
+
+   fill_latency_bubbles above moves only the one instruction immediately
+   behind an exposed result-latency slot.  That misses payloads whose only
+   independent ready instruction sits deeper in the block: the nop inserter
+   below then pads the bubble with an SFPNOP -- reissued on every playback
+   when the padding lands inside a later replay capture.  This phase targets
+   exactly the bubbles the inserter would pad (delay_nop_needed_p, the same
+   probe, decides both before and after), and fills each with the first
+   provably independent instruction found further down the block.  No new
+   instruction is created; the move only reorders proven-independent
+   operations.
+
+   Safety vocabulary, refusing by default:
+   - the filler must be a pure-LREG operation: every register reference an
+     SFPU register, no memory, and one of (a) the unpredicated bare
+     LREG-to-LREG copy (below), (b) audited XTT_LATENCY_REORDER_SAFE, or
+     (c) on record in the typed effect table (rvtt_insn_effects) with no CC
+     write, no configuration access, no RWC step, and no Dst traffic;
+   - what a crossed instruction must prove depends on what the filler
+     touches.  A hidden-state-free filler (the bare copy) is invariant to
+     every piece of hidden state -- CC, Dst, RWC, configuration -- so a
+     crossed instruction only has to be a recognized non-replay-owner
+     Tensix instruction with DF-disjoint register sets: after register
+     allocation every effect on an allocatable LREG must be visible in the
+     pattern (a SET or CLOBBER), or allocation itself would be unsound, so
+     DF reference sets are complete for allocatable registers; hidden
+     effects can only target state this filler neither reads nor writes.
+     A CC-reading (lane-predicated) filler additionally requires every
+     crossed instruction to be provably non-CC-writing: one of the audited
+     classes or a bare copy;
+   - register independence is proved on DF hard-register references, with a
+     predicated filler's writes also treated as reads (CC-disabled lanes
+     preserve prior destination contents: read-modify-write);
+   - a block containing an explicit replay-buffer owner refuses entirely:
+     a fixed capture records the following delivered words by POSITION, so
+     any reorder that straddles its extent would change the recording;
+   - unrecognized, opaque, zero-length, or non-Tensix instructions end the
+     search (the established barrier discipline);
+   - the move commits only if the probe confirms the producer's bubble is
+     closed, the filler opens none of its own, and no new bubble appears at
+     the vacated position; otherwise it is undone, leaving the block
+     byte-identical.
+
+   Static delays are out of scope: they pad before any non-nop instruction,
+   so no filler can close them.  Purely structural: no operation identity,
+   opcode calendar, coefficient value, or instruction-word fingerprint
+   participates.  */
+
+/* The unpredicated LREG-to-LREG copy: the target's register-move pattern,
+   emitted as the all-lanes SFPMOV variant.  It writes every lane of its
+   destination and reads nothing but its source register -- no CC read or
+   write, no Dst, RWC, or configuration access.  (Register allocation
+   itself depends on exactly this full-copy semantics for spill copies
+   inside predicated regions.)  */
+
+static bool
+bare_lreg_copy_p (rtx_insn *insn)
+{
+  rtx set = single_set (insn);
+  return set && REG_P (SET_DEST (set)) && SFPU_REG_P (REGNO (SET_DEST (set)))
+    && REG_P (SET_SRC (set)) && SFPU_REG_P (REGNO (SET_SRC (set)));
+}
+
+static bool
+issued_tensix_p (rtx_insn *insn)
+{
+  return GET_CODE (insn) == INSN
+    && GET_CODE (PATTERN (insn)) != USE
+    && GET_CODE (PATTERN (insn)) != CLOBBER
+    && recog_memoized (insn) >= 0
+    && get_attr_type (insn) == TYPE_TENSIX
+    && get_attr_length (insn) > 0;
+}
+
+/* SFPU-register references of INSN from DF; other references (scalar
+   registers, memory) cannot conflict with a pure-LREG filler.  */
+
+static void
+sfpu_reg_refs (rtx_insn *insn, insn_regs *regs)
+{
+  CLEAR_HARD_REG_SET (regs->uses);
+  CLEAR_HARD_REG_SET (regs->defs);
+  for (df_ref ref = DF_INSN_USES (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    if (DF_REF_REGNO (ref) < FIRST_PSEUDO_REGISTER
+	&& SFPU_REG_P (DF_REF_REGNO (ref)))
+      SET_HARD_REG_BIT (regs->uses, DF_REF_REGNO (ref));
+  for (df_ref ref = DF_INSN_DEFS (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    if (DF_REF_REGNO (ref) < FIRST_PSEUDO_REGISTER
+	&& SFPU_REG_P (DF_REF_REGNO (ref)))
+      SET_HARD_REG_BIT (regs->defs, DF_REF_REGNO (ref));
+}
+
+static bool
+shadow_crossing_safe_p (rtx_insn *insn, bool hidden_free_filler)
+{
+  if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+    return false;
+  if (hidden_free_filler)
+    /* issued_tensix_p held at the caller: a recognized Tensix pattern's
+       allocatable-register effects are DF-complete, and its hidden
+       effects touch only state this filler is invariant to.  */
+    return true;
+  if (get_attr_xtt_latency_reorder (insn) == XTT_LATENCY_REORDER_SAFE)
+    return true;
+  if (bare_lreg_copy_p (insn))
+    return true;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  return !e.opaque && !e.cc_write;
+}
+
+/* Returns nonzero for an admissible filler; *HIDDEN_FREE reports the bare
+   unpredicated copy, whose crossing obligations are weaker.  */
+
+static bool
+shadow_filler_p (rtx_insn *insn, insn_regs *regs, bool *hidden_free)
+{
+  if (JUMP_P (insn) || !issued_tensix_p (insn)
+      || contains_mem_rtx_p (PATTERN (insn))
+      || !collect_sfpu_regs (insn, regs))
+    return false;
+  if (bare_lreg_copy_p (insn))
+    {
+      *hidden_free = true;
+      return true;
+    }
+  *hidden_free = false;
+  /* Read-modify-write conservatism for CC-predicated lane writes.  */
+  regs->uses |= regs->defs;
+  if (get_attr_xtt_latency_reorder (insn) == XTT_LATENCY_REORDER_SAFE)
+    return true;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  return !e.opaque && !e.cc_write
+    && !e.config_dests_written && !e.config_dests_read
+    && e.rwc.kind == xtt_rwc_effect_t::NONE
+    && !e.dst_mem_read && !e.dst_mem_write;
+}
+
+static void
+fill_nop_shadows (function *fn)
+{
+  std::vector<basic_block> visited;
+  std::vector<rtx_insn *> crossed_insns;
+  constexpr unsigned SEARCH_WINDOW = 24;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *producer;
+      FOR_BB_INSNS (bb, producer)
+	{
+	  if (GET_CODE (producer) != INSN || recog_memoized (producer) < 0
+	      || get_attr_type (producer) != TYPE_TENSIX)
+	    continue;
+	  /* An explicit replay owner ends the block's eligible region: a
+	     fixed capture records the following delivered words by
+	     position, so no later window may be reordered.  */
+	  if (get_attr_xtt_replay (producer) == XTT_REPLAY_OWNER)
+	    break;
+	  /* Only a dynamic delay can be closed by an independent filler.  */
+	  if (get_attr_xtt_delay (producer) != XTT_DELAY_DYNAMIC)
+	    continue;
+	  visited.reserve (n_basic_blocks_for_fn (fn));
+	  if (!delay_nop_needed_p (visited, bb, producer, XTT_DELAY_DYNAMIC))
+	    continue;
+
+	  insn_regs producer_regs;
+	  sfpu_reg_refs (producer, &producer_regs);
+
+	  rtx_insn *consumer = next_issued_insn (bb, producer);
+	  if (!consumer)
+	    continue;
+
+	  insn_regs crossed;
+	  CLEAR_HARD_REG_SET (crossed.uses);
+	  CLEAR_HARD_REG_SET (crossed.defs);
+	  crossed_insns.clear ();
+	  unsigned scanned = 0;
+	  rtx_insn *prev_issued = nullptr;
+	  bool moved = false;
+	  for (rtx_insn *cand = consumer;
+	       cand && cand != NEXT_INSN (BB_END (bb))
+	       && scanned != SEARCH_WINDOW && !moved;
+	       cand = NEXT_INSN (cand))
+	    {
+	      if (!NONDEBUG_INSN_P (cand))
+		continue;
+	      /* Bookkeeping-only insns emit no instruction word: USE/CLOBBER
+		 markers and recognized zero-length ghosts.  They cannot fill
+		 or separate anything, but their register references join the
+		 crossed sets conservatively.  */
+	      if (GET_CODE (cand) == INSN
+		  && (GET_CODE (PATTERN (cand)) == USE
+		      || GET_CODE (PATTERN (cand)) == CLOBBER
+		      || (recog_memoized (cand) >= 0
+			  && get_attr_type (cand) == TYPE_TENSIX
+			  && !get_attr_length (cand))))
+		{
+		  insn_regs ghost_regs;
+		  sfpu_reg_refs (cand, &ghost_regs);
+		  crossed.uses |= ghost_regs.uses;
+		  crossed.defs |= ghost_regs.defs;
+		  continue;
+		}
+	      if (!issued_tensix_p (cand)
+		  || get_attr_xtt_replay (cand) == XTT_REPLAY_OWNER)
+		break;
+	      ++scanned;
+
+	      insn_regs cand_regs;
+	      bool hidden_free;
+	      if (cand != consumer
+		  && shadow_filler_p (cand, &cand_regs, &hidden_free)
+		  && !hard_reg_set_intersect_p (cand_regs.uses,
+						producer_regs.defs)
+		  && !hard_reg_set_intersect_p (cand_regs.defs,
+						producer_regs.defs)
+		  && !hard_reg_set_intersect_p (cand_regs.uses, crossed.defs)
+		  && !hard_reg_set_intersect_p (cand_regs.defs, crossed.uses)
+		  && !hard_reg_set_intersect_p (cand_regs.defs, crossed.defs))
+		{
+		  /* Crossing obligations depend on the filler's class, so
+		     they are verified per candidate over the whole crossed
+		     range.  */
+		  bool crossable = true;
+		  for (rtx_insn *x : crossed_insns)
+		    if (!shadow_crossing_safe_p (x, hidden_free))
+		      {
+			crossable = false;
+			break;
+		      }
+
+		  if (crossable)
+		    {
+		      /* Vacated-position guard data, gathered before
+			 moving.  */
+		      bool prev_dynamic
+			= (prev_issued
+			   && get_attr_xtt_delay (prev_issued)
+			      == XTT_DELAY_DYNAMIC);
+		      bool prev_needed_before
+			= prev_dynamic
+			  && delay_nop_needed_p (visited, bb, prev_issued,
+						 XTT_DELAY_DYNAMIC);
+		      bool cand_dynamic
+			= get_attr_xtt_delay (cand) == XTT_DELAY_DYNAMIC;
+		      rtx_insn *restore_after = PREV_INSN (cand);
+		      int cand_uid = INSN_UID (cand);
+
+		      reorder_insns (cand, cand, producer);
+
+		      bool closed
+			= (!delay_nop_needed_p (visited, bb, producer,
+						XTT_DELAY_DYNAMIC)
+			   && (!cand_dynamic
+			       || !delay_nop_needed_p (visited, bb, cand,
+						       XTT_DELAY_DYNAMIC))
+			   && (!prev_dynamic || prev_needed_before
+			       || !delay_nop_needed_p (visited, bb,
+						       prev_issued,
+						       XTT_DELAY_DYNAMIC)));
+		      if (closed)
+			{
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "Shadow-fill moved uid=%d into the "
+				     "bubble after uid=%d target=%s\n",
+				     cand_uid, INSN_UID (producer),
+				     TARGET_XTT_TENSIX_WH ? "wh" :
+				     TARGET_XTT_TENSIX_BH ? "bh" : "qsr");
+			  moved = true;
+			  continue;
+			}
+		      reorder_insns (cand, cand, restore_after);
+		    }
+		}
+
+	      insn_regs cross_regs;
+	      sfpu_reg_refs (cand, &cross_regs);
+	      crossed.uses |= cross_regs.uses;
+	      crossed.defs |= cross_regs.defs;
+	      crossed_insns.push_back (cand);
+	      prev_issued = cand;
+	    }
+	}
+    }
+}
+
 // Perform instruction scheduling. We conditionally insert a nop after
 // instructions.
 
@@ -319,63 +677,7 @@ transform (function *fn)
 	    continue;
 
 	  visited.reserve (n_basic_blocks_for_fn (fn));
-	  bool insert = false;
-	  if (delay == XTT_DELAY_STATIC)
-	    {
-	      insert = find_next_insn (visited, bb, 0, insn);
-	      for (auto *bb : visited)
-		bb->flags &= ~BB_VISITED;
-	      visited.clear ();
-	    }
-	  else
-	    {
-	      gcc_assert (delay == XTT_DELAY_DYNAMIC);
-	      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
-				   rtx_insn *insn, rtx rtl) -> bool
-	      {
-		switch (GET_CODE (rtl))
-		  {
-		  default:
-		    gcc_unreachable ();
-
-		  case SET:
-		    if (REG_P (SET_DEST (rtl)))
-		      {
-			unsigned regno = REGNO (SET_DEST (rtl));
-			if (SFPU_REG_P (regno))
-			  {
-			    // Writing to a constant reg falls on the floor
-			    bool insert = regno < SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
-			      && find_next_insn (visited, bb, regno, insn);
-
-			    for (auto *bb : visited)
-			      bb->flags &= ~BB_VISITED;
-			    visited.clear ();
-
-			    return insert;
-			  }
-		      }
-		    break;
-
-		  case PARALLEL:
-		    {
-		      auto &vec = XVEC (rtl, 0);
-		      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
-			if (self (self, visited, bb, insn, RTVEC_ELT (vec, ix)))
-			  return true;
-		    }
-		    break;
-
-		  case CLOBBER:
-		  case SCRATCH:
-		    break;
-		  }
-
-		return false;
-	      };
-
-	      insert = find_next (find_next, visited, bb, insn, PATTERN (insn));
-	    }
+	  bool insert = delay_nop_needed_p (visited, bb, insn, delay);
 
 	  if (insert)
 	    for (unsigned nops = rvtt_delay_bubbles (insn); nops; --nops)
@@ -422,7 +724,10 @@ public:
   virtual unsigned execute (function *fn) override
   {
     if (riscv_tt_opt_latency_schedule)
-      fill_latency_bubbles (fn);
+      {
+	fill_latency_bubbles (fn);
+	fill_nop_shadows (fn);
+      }
     transform (fn);
     return 0;
   }
