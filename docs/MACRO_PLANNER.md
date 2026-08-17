@@ -153,15 +153,107 @@ previous layers' vocabulary, never IR shape names.
   SETC16 program the tables carry (slots 2 and 6; the launch's two-bit
   selector maps through unencoded incoming Base state).
 * **Where → named refusal.**  A CC-writing value event inside a row
-  slice needs a CC-manipulating instruction template; no proven
-  CC-template program exists, so the predicated-select shape refuses
+  slice needs a CC-manipulating instruction template; at WP8 no proven
+  CC-template program existed, so the predicated-select shape refused
   `cc-template-unsupported` byte-identically (the quarantined pass's
   0x706-misc select emission — which failed TTNN Where integration
-  against the simulator's 0x770 protocol — is gone with the pass).
+  against the then-whitelisting simulator's 0x770 protocol — is gone
+  with the pass).  SUPERSEDED at WP9: see Sec. 2a — the simulator now
+  executes descriptors architecturally, and the proven CC-template
+  programs form the select class; unproven CC forms keep named
+  refusals (`cc-template-unsupported`, `cc-template-unproved`,
+  `cc-enable-unproved`).
 * **Deletion.**  `rtl-rvtt-loadmacro.cc`, its registration, its md
   patterns, and its flags (now erroring) are deleted; the oracle store
   under `testsuite/.../oracles/` (bodies, mint script, manifest) is the
   permanent parity record.
+
+## 2a. WP9: the CC-template extension (predicated select / TTNN Where)
+
+Rows whose dataflow carries CC-writing events -- the select class:
+predicate write, lane-predicated merge, all-lanes restore, store --
+previously refused `cc-template-unsupported`.  WP9 makes proven
+CC-write template events representable end to end:
+
+* **Discovery** admits CC writers in exactly two structural roles: a
+  predicate DEFINITION (a value event reading an LREG and writing CC)
+  and, only after a definition, the in-row all-lanes RESTORE (a pure CC
+  write proven word-exact through the shared P0 SFPENCC derivation).
+  The row slice follows CC edges as well as LREG edges; a CC need
+  surviving to the row entry is the sanctioned ambient-enable
+  dependency.  Every other CC writer keeps its named refusal
+  (`cc-template-unsupported`, `cc-enable-unproved`).
+
+* **Scheduling** hosts the definition on its predicate-source load's
+  carrier (the existing producer rule) and the restore on the
+  LAST-issued load carrier; the lane-merge (a CC-reading value event
+  that reads its own destination, takes one other input, both produced
+  by this row's loads, result consumed by the store) is realized as
+  `CC_COALESCED` -- no issued word, no template slot: the shared launch
+  VD receives every payload and the post-visibility load IS the
+  predicated write.  Any other CC-dependent value event in a
+  predicate-writing row refuses `cc-template-unproved`.  A CC row never
+  absorbs its separator: the explicit counter word is the restore's
+  visibility slot.
+
+* **The descriptor CC model** (`macro_cc_model`) derives, from the
+  matched program's proven delays and two architectural facts in the
+  capability tables (`cc_visibility_lag` = 1: a macro event's CC result
+  is visible to issues one slot after it executes;
+  `store_lane_mask_latched_at_launch`: the delayed store's lane
+  predicate is captured at its launch), the slots that make the
+  coalescing sound: pre-visibility payload < definition-visible <=
+  post-visibility payload; store launch before visibility (all-lanes
+  latch, backed by the ambient-enable proof); restore visible after the
+  predicated payload and by the next row's first slot (the kept
+  separator provides it).  The template predicate SENSE is complemented
+  exactly when the post-visibility payload carries the merge's live
+  operand; the complement mapping (SFPSETCC mod1 bit 2, register-test
+  class only) is capability-table data.  Any failed obligation refuses
+  `cc-template-unproved`.  The Layer-7 verifier re-derives the whole
+  model and re-checks the inequalities.
+
+* **The derived calendar** is two launches plus one explicit payload
+  load per row (the demoted hostless middle carrier -- the production
+  handwritten Where protocol's own shape): macro 0 carries the
+  condition load, the SETCC template (dest 0, packed from the admitted
+  source with the derived sense), and the delayed store; macro 1
+  carries the post-visibility payload and the ENCC restore template
+  (dest 1, table fields).  Sequence words: the frozen `select-m0`
+  (SETCC d0, store d2) and `select-m1-encc` (the frozen "ENCC d0" whole
+  word at the derived calendar's macro index -- the word does not
+  encode the index; validated by the generic descriptor-driven CRAQ
+  path).  Misc is FIELD-DERIVED: 0x700 | store mode
+  (`encode_misc_select`), so varied payload modes re-derive.  VD is
+  fixed at 0 (every payload flows through the shared launch VD).
+
+* **Formation**: the ambient all-lanes proof composes with P0 -- the
+  first row's local enable, the loop preheader's trailing enable, or
+  (the real-LLK case, where init is opaque TTI assembly) the
+  FIRST-ROW PEEL: the first row stays byte-original in place and its
+  own typed all-lanes restore proves entry for the formed remainder
+  (`lane-proof=peeled-first-row`; rows without an in-row proven restore
+  keep `all-lanes-proof-missing`).  Proven CC-template programs use a
+  REGION-SCOPED configuration-ownership proof (prefix-to-region-end
+  clean of calls/asm/owned-config accesses; foreign config before the
+  prefix is dead because the prefix rewrites every consumed
+  destination; foreign code after the region is tolerated under the LLK
+  convention that every SFPLOADMACRO consumer programs its own
+  descriptors -- a documented accepted risk carried from the frozen
+  pass's select contract).  Every other shape keeps the conservative
+  function-global gate.  The kept separator is re-emitted verbatim per
+  row.
+
+* **Evidence**: the real TTNN Where kernel (tt-metal
+  `sfpu_ternary_test.cpp`, `ttnn_where_impl=1`) forms on BH and WH
+  (7 macro rows + peeled lane-proof row, config in the face-loop
+  preheader) and passes the exact-equality (`torch_equal_nan`) CRAQ
+  correctness nodes on both CPUs through the simulator's generic
+  descriptor-driven SFPLOADMACRO path; the launch trace shows the
+  formed calendar executing with the all-lanes store latch.  The
+  derived descriptor words equal the frozen select protocol's
+  (templates 0x7b0000c6 / 0x8a0000d0, seq 0x13000004 / 0x00000005, misc
+  0x706) with the misc StoreMod0 and the SETCC sense now field-derived.
 
 ## 3. Why the proven-program tables carry whole sequence/misc words
 
@@ -189,12 +281,14 @@ this per program).
 Discovery: `row-opaque-effect`, `row-not-closed`,
 `cc-template-unsupported` (supersedes pre-WP8 `row-cc-write`),
 `row-config-write`, `row-not-isomorphic`, `row-stride-mismatch`,
-`row-live-through`.
+`row-live-through`, `cc-enable-unproved`.
 Schedule: `event-delay-unproven`, `sequence-encoding-unproven`,
 `template-capacity-exceeded`, `port-conflict`, `latency-violation`,
-`target-macro-encoding-unproven` (table-absent CPU).
+`target-macro-encoding-unproven` (table-absent CPU),
+`cc-template-unproved` (WP9: an unprovable CC realization).
 Descriptor: `descriptor-program-unproven`,
-`descriptor-encoding-failed`, `descriptor-verification-failed`.
+`descriptor-encoding-failed`, `descriptor-verification-failed`,
+`cc-template-unproved` (WP9: a failed CC-model obligation).
 Formation: `config-ownership-unproven`, `planned-lreg-live`,
 `all-lanes-proof-missing`, `loop-preheader-unproven`,
 `zero-trip-preheader-unproven`, `loop-body-not-owned`,
@@ -237,3 +331,15 @@ bh/wh/qsr32, all identical).
   node has not been run in this lane (simulators are read-only for WP8;
   no sim change was needed).  Blocked-on-integration, not on sim
   coverage.
+* WP9 carry-forwards: (a) the region-scoped ownership proof tolerates
+  foreign code AFTER the region (the LLK own-descriptors convention) --
+  an accepted risk of the same class as the M1 exit-block exemption;
+  (b) the first-row peel pays one explicit row per loop trip; a proven
+  kernel-level enable source would remove it; (c) the handwritten
+  3-slot select calendar (restore hosted on the MIDDLE carrier, stride
+  absorbed by the explicit payload load's auto-increment address mode,
+  launch-sourced store mod0 via misc bits 6:4) is architecturally
+  derivable and one slot per row cheaper than the derived 4-slot
+  calendar -- the next scheduling increment; (d) the formed body is
+  RISC-pushed, not replay-wrapped: delivery parity with the handwritten
+  replay path needs the replay pass to record the formed loop.
