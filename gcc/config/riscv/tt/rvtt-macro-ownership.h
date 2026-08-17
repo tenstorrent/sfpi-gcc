@@ -104,4 +104,47 @@ extern bool rvtt_preheader_insertion_blocked_p (edge entry);
    to the flag-off compilation.  */
 extern basic_block rvtt_commit_hoist_preheader (edge entry);
 
+/* ---- Loop invariant-materialization proofs (gimple-rvtt-invariant.cc) --
+
+   Shared discipline for placing loop-invariant SFPU immediate
+   materializations in a loop preheader.  The invariant-loadi pass and
+   the LUT instruction selection's coefficient placement consume the
+   same proofs so preheader placement carries one refusal discipline
+   everywhere.  */
+
+/* No statement in LOOP's body changes the lane-enable CC state or owns
+   a volatile target effect other than the typed Dst load/store/counter
+   operations.  A hoisted lane-predicated materialization therefore
+   executes under the same CC state in the preheader as at its original
+   position inside the loop.  */
+extern bool rvtt_loop_has_sfpu_barrier_p (class loop *loop);
+
+/* CALL is an SFPU immediate materialization (sfpxloadi of all-constant
+   operands through a canonical instruction-buffer operand) whose value
+   is consumed only inside LOOP.  ALLOW_SHORTENED additionally admits
+   the single-issue sfploadi form that pass_rvtt_immload_shorten
+   produces, for consumers running after it; the early invariant pass
+   must not set it.  */
+extern bool rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
+					    bool allow_shortened = false);
+
+/* Keeping every load in LOADS live across LOOP holds the loop's peak
+   vector pressure within the architectural eight-LREG file
+   (conservative liveness proof; refusal is all-or-nothing for the
+   given candidate set).  */
+extern bool rvtt_loop_lreg_pressure_legal_p (class loop *loop,
+					     const auto_vec<gcall *> &loads,
+					     bool report = true);
+
+/* LOOP's first header test provably enters the loop body through
+   ENTRY, so an architectural LREG write is never speculated out of a
+   possibly-zero-trip loop.  */
+extern bool rvtt_loop_first_iteration_executes_p (class loop *loop,
+						  edge entry);
+
+/* BB provably executes on every iteration that enters LOOP's body
+   (pure CFG dominance structure; no statement content examined).  */
+extern bool rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
+							  basic_block bb);
+
 #endif /* GCC_RVTT_MACRO_OWNERSHIP_H */
