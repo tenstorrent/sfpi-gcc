@@ -20,6 +20,9 @@
 #ifndef SELECT_SETCC_MOD
 #define SELECT_SETCC_MOD 2
 #endif
+#ifndef SELECT_STRIDE
+#define SELECT_STRIDE 2
+#endif
 
 #define SELECT_ROW()                                                          \
   do                                                                          \
@@ -41,7 +44,7 @@
       __builtin_rvtt_sfppopc (0);                                             \
       __builtin_rvtt_sfpstore (nullptr, result, SELECT_COND_ADDR, 0, 0,       \
 			       SELECT_PAYLOAD_MODE, SELECT_ADDR_MODE);        \
-      __builtin_rvtt_ttincrwc (0, 2, 0, 0);                                   \
+      __builtin_rvtt_ttincrwc (0, SELECT_STRIDE, 0, 0);                                   \
     }                                                                         \
   while (0)
 

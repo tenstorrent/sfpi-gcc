@@ -209,6 +209,14 @@ struct desc_program
   bool cc_select;
   bool misc_from_store_mode;
   bool keep_separator;
+  /* WP10 compact select program: matches only a schedule that absorbed
+     the row stride into the trailing explicit load (the 3-slot
+     handwritten protocol shape), and sources the delayed store's data
+     mode from its carrying launch's mod0 (misc UsesLoadMod0ForStore)
+     -- which obliges the definition carrier's load mode to equal the
+     store mode (checked in derive_cc_model).  */
+  bool require_absorbed_stride;
+  bool misc_launch_mod0;
 };
 
 #define OPB_WH(M) ((uint8_t) ((M) >> 24))
@@ -321,6 +329,39 @@ static const desc_program desc_programs[] = {
     nullptr,
     0, 0, false,
     true, true, true,
+    false, false,
+  },
+  /* Predicated select, COMPACT calendar (WP10; the production
+     handwritten Where protocol's 3-slot row, ckernel_sfpu_where.h
+     "3 cycles per input row"): the definition carrier hosts the
+     predicate template and the delayed store; the SECOND launch hosts
+     the all-lanes restore; the trailing payload load stays explicit
+     and absorbs the row stride through its own auto-increment address
+     mode, so the typed separator is deleted rather than kept.  The
+     store's data mode rides the launch (proven whole misc word
+     "select-launch-mod0", UsesLoadMod0ForStore), which obliges the
+     definition carrier's load mode to equal the store mode -- rows
+     with a differently-typed condition keep the established 4-slot
+     program above.  Matched only when the schedule absorbed the stride
+     into the explicit load (require_absorbed_stride).  */
+  {
+    "predicated-select-compact (ckernel_sfpu_where.h 3-slot; WP10)",
+    2,
+    { { 1, { { SU_SIMPLE, OPB_WH (TT_OP_WH_SFPSETCC (0, 0, 0, 0)),
+	       OPB_WH (TT_OP_BH_SFPSETCC (0, 0, 0, 0)) } }, true },
+      { 1, { { SU_SIMPLE, OPB_WH (TT_OP_WH_SFPENCC (0, 0, 0, 0)),
+	       OPB_WH (TT_OP_BH_SFPENCC (0, 0, 0, 0)) } }, false } },
+    2,
+    { { TR_FIELDS_FROM_SOURCE_CC_SENSE, 0, 0, 0, 0, 0,
+	1 /* setcc mod1 operand */, -1, 0, -1, 0, 0 },
+      { TR_TABLE_FIELDS, OPB_WH (TT_OP_WH_SFPENCC (0, 0, 0, 0)),
+	OPB_WH (TT_OP_BH_SFPENCC (0, 0, 0, 0)), 0, 0, -1, -1, -1, 0,
+	-1, 0, 0 } },
+    { "select-m0", "select-m1-encc" },
+    "select-launch-mod0",
+    0, 0, false,
+    true, false, false,
+    true, true,
   },
 };
 
@@ -425,12 +466,17 @@ find_misc_word (const caps *c, const char *name, uint32_t *word)
 }
 
 static const desc_program *
-find_program (const derived_structure &derived)
+find_program (const derived_structure &derived, bool absorbed_into_explicit)
 {
   bool is_wh = TARGET_XTT_TENSIX_WH;
   for (const desc_program &p : desc_programs)
     {
       if (p.n_macros != derived.n_macros)
+	continue;
+      /* The compact select program exists only for the schedule that
+	 absorbed the stride into the trailing explicit load; every
+	 other program only for schedules that did not.  */
+      if (p.require_absorbed_stride != absorbed_into_explicit)
 	continue;
       bool match = true;
       for (unsigned m = 0; m != p.n_macros && match; ++m)
@@ -483,8 +529,8 @@ const_operand (rtx_insn *insn, int pos, HOST_WIDE_INT *value)
 
 static bool
 derive_cc_model (const macro_region &region, const macro_schedule &schedule,
-		 const rvtt_macro::caps *c, macro_cc_model *out,
-		 HOST_WIDE_INT *store_mode)
+		 const rvtt_macro::caps *c, bool launch_mod0,
+		 macro_cc_model *out, HOST_WIDE_INT *store_mode)
 {
   memset (out, 0, sizeof (*out));
   const macro_row &row = region.rows[0];
@@ -644,6 +690,21 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
   st_mode = INTVAL (mode);
   if (live_mode != sel_mode || sel_mode != st_mode)
     return false;
+  /* Launch-sourced store mod0 (WP10 compact program,
+     UsesLoadMod0ForStore): the delayed store's data mode is the
+     carrying launch's own mod0, i.e. the definition carrier's load
+     mode -- which must therefore equal the store mode.  The
+     established program keeps the definition carrier's mode free (the
+     misc word carries the store mode).  */
+  if (launch_mod0)
+    {
+      xtt_effect_set def_src_e = rvtt_insn_effects (row.insns[def_src_ix]);
+      if (!rvtt_dst_access_operands (row.insns[def_src_ix], def_src_e,
+				     &address, &mode, &addr_mode)
+	  || !CONST_INT_P (mode)
+	  || INTVAL (mode) != st_mode)
+	return false;
+    }
   (void) c;
 
   out->active = true;
@@ -680,10 +741,22 @@ rvtt_macro_synthesize (const macro_region &region,
   if (!c)
     return false;		/* already refused at schedule time */
 
+  /* A schedule that named its own blocker is not a synthesis input:
+     the candidate is unproven and the search advances.  The ONE
+     documented carve-out is event-delay-unproven (NOTES 9(g),
+     docs/MACRO_PLANNER.md Sec. 6): an unproven per-event delay does
+     not block a whole-word program proven end to end.  Every other
+     refusal -- including the compact candidate's mandatory-absorption
+     failure (WP10), whose partially-compact structure must never fall
+     through to a program keyed for a different calendar -- stands.  */
+  if (schedule.refusal
+      && schedule.refusal != macro_sched_refusal_event_delay_unproven)
+    return false;
+
   derived_structure derived;
   const desc_program *program = nullptr;
   if (derive_structure (region, schedule, &derived))
-    program = find_program (derived);
+    program = find_program (derived, schedule.absorb_into_explicit);
   if (program && program->uniform_mode_required)
     {
       /* The proven envelope covers only a uniform data mode across the
@@ -724,7 +797,8 @@ rvtt_macro_synthesize (const macro_region &region,
   memset (&cc_model, 0, sizeof (cc_model));
   HOST_WIDE_INT cc_store_mode = 0;
   if (program->cc_select
-      && !derive_cc_model (region, schedule, c, &cc_model, &cc_store_mode))
+      && !derive_cc_model (region, schedule, c, program->misc_launch_mod0,
+			   &cc_model, &cc_store_mode))
     {
       out->refusal = macro_desc_refusal_cc_template_unproved;
       if (dump)
@@ -944,7 +1018,7 @@ rvtt_macro_synthesize (const macro_region &region,
 	if (!have)
 	  continue;
 	bool absorbs = schedule.absorbed_stride
-	  && m == program->n_macros - 1;
+	  && !schedule.absorb_into_explicit && m == program->n_macros - 1;
 	launch.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
 	  : c->no_increment_addr_mode;
 	if (program->fixed_vd >= 0)
@@ -1014,11 +1088,12 @@ rvtt_macro_synthesize (const macro_region &region,
 	fprintf (dump,
 		 "Macro-planner descriptor-cc: sense=%s def-visible=%d"
 		 " pre-load=%d post-load=%d store-latch=%d"
-		 " restore-visible=%d interval=%d separator=kept\n",
+		 " restore-visible=%d interval=%d separator=%s\n",
 		 out->cc.complement ? "complement" : "direct",
 		 out->cc.def_visible_slot, out->cc.pre_load_slot,
 		 out->cc.post_load_slot, out->cc.store_launch_slot,
-		 out->cc.restore_visible_slot, out->cc.row_interval);
+		 out->cc.restore_visible_slot, out->cc.row_interval,
+		 out->keep_separator ? "kept" : "absorbed");
       for (unsigned t = 0; t != out->n_templates; ++t)
 	fprintf (dump, "Macro-planner descriptor-word dest=%u: 0x%08x\n",
 		 t, out->templ[t]);
@@ -1085,7 +1160,7 @@ rvtt_macro_build_expectations (const macro_region &region,
   derived_structure derived;
   if (!derive_structure (region, schedule, &derived))
     return false;
-  const desc_program *program = find_program (derived);
+  const desc_program *program = find_program (derived, schedule.absorb_into_explicit);
   if (!program)
     return false;
 
@@ -1096,7 +1171,8 @@ rvtt_macro_build_expectations (const macro_region &region,
   HOST_WIDE_INT cc_store_mode = 0;
   if (program->cc_select)
     {
-      if (!derive_cc_model (region, schedule, c, &cc_model, &cc_store_mode))
+      if (!derive_cc_model (region, schedule, c, program->misc_launch_mod0,
+			    &cc_model, &cc_store_mode))
 	return false;
       out->cc.active = true;
       out->cc.complement = cc_model.complement;
@@ -1235,7 +1311,8 @@ rvtt_macro_build_expectations (const macro_region &region,
 	}
       if (!have)
 	continue;
-      bool absorbs = schedule.absorbed_stride && m == program->n_macros - 1;
+      bool absorbs = schedule.absorbed_stride
+	&& !schedule.absorb_into_explicit && m == program->n_macros - 1;
       a.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
 	: c->no_increment_addr_mode;
       a.vd = program->fixed_vd >= 0 ? (unsigned) program->fixed_vd

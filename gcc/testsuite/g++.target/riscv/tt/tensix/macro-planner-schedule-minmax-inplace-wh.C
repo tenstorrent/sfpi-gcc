@@ -5,7 +5,11 @@
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule: ii=2 issues=2 launches=1 explicit=1 launched-events=2 vd=alternating drain=1" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner issue 0: launch macro=0 carries=load\\+store hosted=2 absorbs-stride=2" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule-refusal: latency-violation" 1 "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump-times "Macro-planner descriptor-refusal: descriptor-program-unproven" 1 "rvtt_macro_planner" } }
+// (Since WP10 a schedule that names its own blocker never reaches
+// descriptor synthesis -- except the documented event-delay-unproven
+// carve-out below -- so the latency-refused candidate produces no
+// descriptor-refusal line.)
+// { dg-final { scan-rtl-dump-not "Macro-planner descriptor-refusal" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule-candidate: stores-demoted" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule: ii=3 issues=3 launches=2 explicit=1 launched-events=2 vd=alternating drain=unproven" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner issue 0: launch macro=0 carries=load hosted=1" 1 "rvtt_macro_planner" } }

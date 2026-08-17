@@ -493,6 +493,32 @@ loop_region_preheader (function *fn, const macro_region &region, FILE *dump)
   return incoming->src;
 }
 
+/* Rewrite the typed address-mode operand of a copied explicit-load
+   pattern to ADDR_MODE (WP10 compact CC calendar: the trailing load's
+   own auto-increment mode absorbs the deleted separator's stride).
+   The operand position mirrors rvtt_dst_access_operands' positional
+   knowledge for the one admitted load pattern: rvtt_sfpload_lv_int
+   carries operands 1..8 as unspec_volatile vector elements 0..7, so
+   the addr_mode operand 8 is element 7.  Returns false -- without
+   mutating -- for any other pattern; formation checks this BEFORE any
+   emission so refusal paths never mutate.  */
+
+static bool
+planner_rewrite_load_addr_mode (rtx_insn *orig, rtx pat, unsigned addr_mode)
+{
+  if (recog_memoized (orig) != CODE_FOR_rvtt_sfpload_lv_int)
+    return false;
+  rtx set = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, 0) : pat;
+  if (GET_CODE (set) != SET)
+    return false;
+  rtx src = SET_SRC (set);
+  if (GET_CODE (src) != UNSPEC_VOLATILE || XVECLEN (src, 0) < 8)
+    return false;
+  if (pat != PATTERN (orig))	/* the copy, never the original */
+    XVECEXP (src, 0, 7) = GEN_INT (addr_mode);
+  return true;
+}
+
 /* Emit one run: the configuration prefix (first run only; hoisted to
    CONFIG_PREHEADER for a proven loop-body region), the per-row issue
    calendar from the descriptor, and the drain; then delete the explicit
@@ -698,6 +724,19 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		      SET_DEST (set)
 			= gen_rtx_REG (XTT32SImode,
 				       SFPU_REG_FIRST + explicit_planned[ix]);
+		  }
+		/* WP10 compact CC calendar: the trailing explicit load
+		   absorbs the deleted separator's Dst stride through the
+		   tables' owned auto-increment address-modifier slot
+		   (the SETC16 programs in the configuration prefix own
+		   its meaning).  Formation proved the operand rewrite
+		   possible before any mutation.  */
+		if (ev.absorbs_stride)
+		  {
+		    bool ok = planner_rewrite_load_addr_mode
+		      (region.rows[r].insns[ix], pat,
+		       c->auto_increment_dst2_addr_mode);
+		    gcc_assert (ok);
 		  }
 		emit_insn (pat);
 	      }
@@ -962,6 +1001,23 @@ form_region (function *fn, macro_region &region,
 		   " stride-not-absorbed\n");
 	return false;
       }
+
+  /* WP10 compact CC calendar: the absorbing explicit load's address
+     mode operand must be rewritable (the one admitted load pattern);
+     proven here as a dry run -- refusal paths never mutate.  */
+  if (schedule.absorb_into_explicit)
+    for (unsigned ix = 0; ix != region.rows[0].insns.length (); ++ix)
+      if (schedule.events[ix].absorbs_stride
+	  && !planner_rewrite_load_addr_mode
+	       (region.rows[0].insns[ix],
+		PATTERN (region.rows[0].insns[ix]),
+		c->auto_increment_dst2_addr_mode))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " stride-not-absorbed\n");
+	  return false;
+	}
 
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {

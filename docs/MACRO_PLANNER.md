@@ -249,9 +249,9 @@ CC-write template events representable end to end:
   `cc-template-unproved`.  The Layer-7 verifier re-derives the whole
   model and re-checks the inequalities.
 
-* **The derived calendar** is two launches plus one explicit payload
-  load per row (the demoted hostless middle carrier -- the production
-  handwritten Where protocol's own shape): macro 0 carries the
+* **The derived calendars.**  The ESTABLISHED (WP9) calendar is two
+  launches plus one explicit payload load per row (the demoted hostless
+  middle carrier): macro 0 carries the
   condition load, the SETCC template (dest 0, packed from the admitted
   source with the derived sense), and the delayed store; macro 1
   carries the post-visibility payload and the ENCC restore template
@@ -262,6 +262,33 @@ CC-write template events representable end to end:
   path).  Misc is FIELD-DERIVED: 0x700 | store mode
   (`encode_misc_select`), so varied payload modes re-derive.  VD is
   fixed at 0 (every payload flows through the shared launch VD).
+
+  The COMPACT calendar (WP10; the production handwritten Where
+  protocol's own 3-slot row, one issue slot per row cheaper) is a new
+  deterministic scheduling candidate tried AHEAD of the established
+  two for predicate-writing rows: the restore is hosted on the
+  EARLIEST non-definition load carrier (the second launch), the
+  trailing payload load stays EXPLICIT and absorbs the row stride
+  through its own auto-increment address mode (the owned SETC16
+  address-modifier program; the typed separator is deleted), and the
+  store's data mode rides its carrying launch's mod0 (the proven whole
+  misc word `select-launch-mod0`, 0x770 -- the shipped
+  ckernel_sfpu_where.h init's own word).  The interval compresses to 3
+  exactly because the earlier-hosted restore becomes visible in the
+  next row's first slot; the same macro_cc_model inequalities prove
+  it, with the additional launch-sourced-mod0 obligations: the
+  definition carrier's load mode must EQUAL the store mode, and the
+  absorbing explicit load must occupy the row's last issue slot (every
+  other issued word's typed address is launch-latched or dispatched
+  before the auto-increment executes).  Rows outside the envelope --
+  a differently-typed condition (the fp16b TTNN Where selector loads
+  the condition as F16b and stores U16), an uncovered stride delta, or
+  a non-trailing payload -- refuse the compact candidate by name and
+  form the established 4-slot calendar unchanged.  Both sequence words
+  and the templates are the same proven table rows in both calendars.
+  Since WP10 a schedule that names its own blocker never reaches
+  descriptor synthesis; the ONE carve-out remains
+  `event-delay-unproven` (Sec. 6).
 
 * **Formation**: the ambient all-lanes proof composes with P0 -- the
   first row's local enable, the loop preheader's trailing enable, or
@@ -387,11 +414,14 @@ bh/wh/qsr32, all identical).
   trip) is superseded by the materialized preheader enable -- the
   peel's own proof source, emitted once under the rvtt_cc
   outermost-CC-depth contract (see the Formation bullet in Sec. 2a);
-  (c) the handwritten
-  3-slot select calendar (restore hosted on the MIDDLE carrier, stride
-  absorbed by the explicit payload load's auto-increment address mode,
-  launch-sourced store mod0 via misc bits 6:4) is architecturally
-  derivable and one slot per row cheaper than the derived 4-slot
-  calendar -- the next scheduling increment; (d) the formed body is
+  (c) RESOLVED at WP10: the handwritten
+  3-slot select calendar is now the derived COMPACT candidate (Sec. 2a)
+  -- restore on the second carrier, explicit-load auto-increment stride
+  absorption, launch-sourced store mod0 through the proven whole misc
+  word 0x770; the real Int32/UInt32 TTNN Where kernel forms it
+  end-to-end (the fp16b selector keeps the 4-slot calendar because its
+  condition and store modes differ; matching the handwritten kernel's
+  uniform-mode condition load is a one-line kernel-side change left to
+  review); (d) the formed body is
   RISC-pushed, not replay-wrapped: delivery parity with the handwritten
   replay path needs the replay pass to record the formed loop.
