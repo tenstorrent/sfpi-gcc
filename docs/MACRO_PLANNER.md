@@ -391,6 +391,76 @@ CC-write template events representable end to end:
   (templates 0x7b0000c6 / 0x8a0000d0, seq 0x13000004 / 0x00000005, misc
   0x706) with the misc StoreMod0 and the SETCC sense now field-derived.
 
+## 2b. WP11: cross-tile prefix elision (the configuration epoch)
+
+The measured Where replay arm (silicon promotions 2026-08-17) pays its
+17-word configuration prefix once per `_calculate` call -- once per
+tile -- while the handwritten kernel pays 9; under the corrected
+delivery model the prefix is RISC-pushed, outside the launch run, so
+every re-programmed word is real delivery cost.  Of our 17 words, the
+13 descriptor words (templates, sequence words, misc through the owned
+LREG) program SFPU state that provably survives from the previous tile
+of the SAME kernel: nothing in the per-tile LLK bracket writes an
+SFPCONFIG destination.  WP11 makes that a proof and elides them:
+
+* **The configuration-epoch proof** (`rvtt-macro-epoch.cc`).  When a
+  formed CC calendar's configuration preheader itself sits inside an
+  enclosing issue loop (the tile loop), every instruction of that loop
+  outside the region must be a proven NON-OWNER of the planner's
+  SFPCONFIG destinations: typed effects must carry no owned config
+  access and no foreign SFPU dataflow; raw `.ttinsn` words (the
+  constant single-input asm form, plus the audited scalar templates:
+  fence, ebreak, the pcbuf/mailbox store-load-consume roundtrip) must
+  not be an owned-destination SFPCONFIG, with the opcode and field
+  layout taken from the capability tables; and EVERY volatile store is
+  treated as a potential RISC instruction push whose stored word must
+  resolve to a 32-bit interval with a provably non-SFPCONFIG opcode
+  byte (or a provably unowned destination).  The value resolver is a
+  demand-driven memoized reaching-value walk over post-RA hard
+  registers -- constants, lui/addi chains, scc/shift/and/disjoint-or
+  composition, predecessor joins, and monotone self-loop inductions
+  bounded by an equality exit (the LLK math-sync push loops); anything
+  else refuses.  Calls, unrecognized assembly, and opaque Tensix
+  issues refuse.  Refusal names (append-only):
+  `prefix-epoch-invalidated` (an intervening owner),
+  `prefix-epoch-unproven` (an unresolvable word or opaque issue),
+  `prefix-hoist-preheader-unproven` (no unique external entry).  Every
+  refusal keeps today's per-tile prefix byte-identically.
+
+* **Placement.**  The descriptor words hoist to the enclosing loop's
+  structural preheader; when the unique entry edge's source is shared
+  control flow (the guarded tile loop), the edge is split AT COMMIT
+  TIME only -- after every proof has passed, so refusal paths never
+  mutate -- and the split block executes exactly when the loop is
+  entered, discharging the zero-trip obligation by construction.  The
+  hoisted block is self-sufficient under lane masking: a copy of the
+  proven all-lanes enable precedes the lane-predicated LREG
+  materialization, under the same outermost-CC-depth license as the
+  materialized enable.
+
+* **What stays per tile.**  The ambient enable (the calendar's entry
+  lane state is re-established every tile -- the LLK bracket's
+  LaneConfig default reset intervenes) and the owned SETC16
+  address-modifier program (SETC16-visible state is reachable from
+  data-plane MMIO writes the value proof cannot bound -- the pcbuf and
+  mailbox pointers are runtime-loaded).  The recurring per-tile prefix
+  drops from 17 words to 4 (enable + 3 SETC16); the launch calendar,
+  drain, and every body word are unchanged.
+
+* **Scope.**  CC-template calendars only (`desc.cc.active`), so every
+  non-CC formed shape (minmax, signbit, typecast) is byte-identical;
+  a second formed region in the same enclosing loop refuses
+  automatically (its sibling's typed config writes and SFPU dataflow
+  are intervening owners).  Success prints `Macro-planner
+  prefix-epoch: cross-tile config invariance proven (...)` and the
+  formed line gains `prefix-epoch=hoisted`.  On the real TTNN Where
+  kernel (all three unified formats) the tile loop's semaphores, MOP
+  programming, fences, mailbox flags, dest-offset SETC16 push
+  (`0xB2010000 | dyn<<9`, opcode byte provably constant), and math
+  dvalid push loops (monotone induction, opcode byte constant across
+  the bounded range) all classify inert, and the 13 descriptor words
+  are elided from tiles 2+.
+
 ## 3. Why the proven-program tables carry whole sequence/misc words
 
 SUPERSEDED IN PART (timing-calendar derivation): the sequence-word bit
@@ -440,6 +510,9 @@ Formation: `config-ownership-unproven`, `planned-lreg-live`,
 `all-lanes-proof-missing`, `loop-preheader-unproven`,
 `zero-trip-preheader-unproven`, `loop-body-not-owned`,
 `unprofitable`, `stride-not-absorbed`.
+Prefix epoch (WP11; refusing keeps the per-tile prefix, never blocks
+formation): `prefix-epoch-invalidated`, `prefix-epoch-unproven`,
+`prefix-hoist-preheader-unproven`.
 
 ## 5. Flags
 

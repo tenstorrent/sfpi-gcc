@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "basic-block.h"
 #include "cfgrtl.h"
+#include "cfghooks.h"
 #include "df.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
@@ -41,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
+#include "rvtt-macro-epoch.h"
 
 /* The macro planner replaces every exact-calendar SFPLOADMACRO
    recognizer with regions, schedules, and descriptors derived from typed
@@ -519,17 +521,34 @@ planner_rewrite_load_addr_mode (rtx_insn *orig, rtx pat, unsigned addr_mode)
   return true;
 }
 
+/* Insert the sequence SEQ at BB's tail (before a trailing jump), the
+   compiler-owned insertion point after the last reachable foreign
+   owner.  */
+
+static void
+insert_at_preheader_tail (rtx_insn *seq, basic_block bb)
+{
+  rtx_insn *tail = BB_END (bb);
+  if (tail && JUMP_P (tail))
+    emit_insn_before (seq, tail);
+  else
+    emit_insn_after (seq, tail);
+}
+
 /* Emit one run: the configuration prefix (first run only; hoisted to
-   CONFIG_PREHEADER for a proven loop-body region), the per-row issue
-   calendar from the descriptor, and the drain; then delete the explicit
-   rows.  Everything emitted is descriptor data.  */
+   CONFIG_PREHEADER for a proven loop-body region; the descriptor-word
+   part hoisted further to HOIST_PREHEADER under a proven cross-tile
+   configuration epoch), the per-row issue calendar from the descriptor,
+   and the drain; then delete the explicit rows.  Everything emitted is
+   descriptor data.  */
 
 static void
 emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc,
 		  const rvtt_macro::caps *c,
 		  unsigned begin, unsigned end, bool emit_config,
-		  basic_block config_preheader, rtx_insn *enable_src)
+		  basic_block config_preheader, rtx_insn *enable_src,
+		  basic_block hoist_preheader, rtx_insn *hoist_enable_src)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
@@ -546,13 +565,6 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	 net effect is the proven all-lanes restore.  A null ENABLE_SRC
 	 is the loop preheader's own trailing enable (proven all-lanes;
 	 already in place; no copy).  */
-      start_sequence ();
-      if (enable_src)
-	emit_insn (copy_rtx (PATTERN (enable_src)));
-      for (unsigned s = 0; s != desc.n_setc16; ++s)
-	emit_insn (gen_rvtt_owned_setc16
-		   (GEN_INT (desc.setc16[s].config_reg),
-		    GEN_INT (desc.setc16[s].value)));
       rtx config_lreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST);
       auto config_word = [&] (uint32_t word, unsigned dest)
 	{
@@ -561,27 +573,72 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	  emit_insn (gen_rvtt_sfpwriteconfig_v (config_lreg,
 						GEN_INT (dest)));
 	};
-      for (unsigned t = 0; t != desc.n_templates; ++t)
-	config_word (desc.templ[t], t);
-      for (unsigned m = 0; m != desc.n_seq; ++m)
-	config_word (desc.seq[m], 4 + m);
-      if (desc.has_misc)
-	config_word (desc.misc, 8);
-      rtx_insn *prefix = get_insns ();
-      end_sequence ();
-      if (config_preheader)
+      auto emit_config_words = [&] ()
 	{
-	  /* Loop-body region: the prefix executes once, in the proven
-	     structural preheader (>= one trip; see
-	     loop_region_preheader).  */
-	  rtx_insn *tail = BB_END (config_preheader);
-	  if (tail && JUMP_P (tail))
-	    emit_insn_before (prefix, tail);
+	  for (unsigned t = 0; t != desc.n_templates; ++t)
+	    config_word (desc.templ[t], t);
+	  for (unsigned m = 0; m != desc.n_seq; ++m)
+	    config_word (desc.seq[m], 4 + m);
+	  if (desc.has_misc)
+	    config_word (desc.misc, 8);
+	};
+
+      if (hoist_preheader)
+	{
+	  /* Cross-tile configuration epoch (WP11): the descriptor words
+	     execute once, in the enclosing loop's structural preheader
+	     -- the epoch proof shows no intervening owner, so every
+	     trip's launches read exactly these words.  The block is
+	     self-sufficient under lane masking: the copied proven
+	     all-lanes enable precedes the lane-predicated LREG
+	     materialization, under the same outermost-CC-depth license
+	     as the per-trip materialized enable.  */
+	  start_sequence ();
+	  emit_insn (copy_rtx (PATTERN (hoist_enable_src)));
+	  emit_config_words ();
+	  rtx_insn *hoisted = get_insns ();
+	  end_sequence ();
+	  insert_at_preheader_tail (hoisted, hoist_preheader);
+
+	  /* Retained per-trip prefix: the ambient enable (the calendar's
+	     entry lane state is re-established every tile) and the owned
+	     SETC16 address-modifier program (SETC16-visible state stays
+	     inside the per-tile discipline; the epoch proof does not
+	     cover data-plane MMIO writes to it).  */
+	  start_sequence ();
+	  if (enable_src)
+	    emit_insn (copy_rtx (PATTERN (enable_src)));
+	  for (unsigned s = 0; s != desc.n_setc16; ++s)
+	    emit_insn (gen_rvtt_owned_setc16
+		       (GEN_INT (desc.setc16[s].config_reg),
+			GEN_INT (desc.setc16[s].value)));
+	  rtx_insn *retained = get_insns ();
+	  end_sequence ();
+	  if (config_preheader)
+	    insert_at_preheader_tail (retained, config_preheader);
 	  else
-	    emit_insn_after (prefix, tail);
+	    emit_insn_before (retained, anchor);
 	}
       else
-	emit_insn_before (prefix, anchor);
+	{
+	  start_sequence ();
+	  if (enable_src)
+	    emit_insn (copy_rtx (PATTERN (enable_src)));
+	  for (unsigned s = 0; s != desc.n_setc16; ++s)
+	    emit_insn (gen_rvtt_owned_setc16
+		       (GEN_INT (desc.setc16[s].config_reg),
+			GEN_INT (desc.setc16[s].value)));
+	  emit_config_words ();
+	  rtx_insn *prefix = get_insns ();
+	  end_sequence ();
+	  if (config_preheader)
+	    /* Loop-body region: the prefix executes once, in the proven
+	       structural preheader (>= one trip; see
+	       loop_region_preheader).  */
+	    insert_at_preheader_tail (prefix, config_preheader);
+	  else
+	    emit_insn_before (prefix, anchor);
+	}
     }
 
   /* Per-macro carried memory operands and hidden template writes.  */
@@ -1019,19 +1076,86 @@ form_region (function *fn, macro_region &region,
 	  return false;
 	}
 
+  /* WP11: cross-tile prefix elision for formed CC calendars.  When the
+     configuration preheader itself sits inside an enclosing issue loop
+     (the tile loop) and the configuration-epoch proof shows no
+     intervening owner of the planner's SFPCONFIG destinations across
+     that loop, the descriptor words are hoisted to the enclosing
+     loop's structural preheader and elided from every later trip; the
+     ambient enable and the owned SETC16 program stay per trip.  The
+     hoisted block needs its own copyable proven all-lanes enable (the
+     lane-predicated LREG materialization must not run masked), so a
+     region relying purely on an in-place trailing enable copies that
+     proven word.  Every refusal keeps today's per-trip prefix
+     byte-identically, under a stable name.  */
+  basic_block hoist_preheader = nullptr;
+  edge hoist_edge = nullptr;
+  rtx_insn *hoist_enable_src = nullptr;
+  if (desc.cc.active && config_preheader)
+    {
+      hoist_enable_src = enable_src
+	? enable_src : preheader_trailing_enable (config_preheader);
+      if (hoist_enable_src
+	  && !cc_enable_all_lanes_proved_p (hoist_enable_src))
+	hoist_enable_src = nullptr;
+      if (hoist_enable_src)
+	{
+	  const char *epoch_refusal = nullptr;
+	  rtx_insn *epoch_refusal_insn = nullptr;
+	  if (rvtt_macro_prefix_epoch_hoist (fn, region, config_preheader,
+					     c, &hoist_preheader,
+					     &hoist_edge, &epoch_refusal,
+					     &epoch_refusal_insn))
+	    {
+	      /* Commit-time edge split (guarded enclosing loop): every
+		 proof has passed, so this is no longer a refusal path.
+		 The split block executes exactly when the loop is
+		 entered.  */
+	      if (!hoist_preheader)
+		hoist_preheader = split_edge (hoist_edge);
+	      if (dump)
+		{
+		  unsigned words = 0;
+		  for (unsigned t = 0; t != desc.n_templates; ++t)
+		    words += config_word_loadi_issues (desc.templ[t]) + 1;
+		  for (unsigned m = 0; m != desc.n_seq; ++m)
+		    words += config_word_loadi_issues (desc.seq[m]) + 1;
+		  if (desc.has_misc)
+		    words += config_word_loadi_issues (desc.misc) + 1;
+		  fprintf (dump, "Macro-planner prefix-epoch: cross-tile"
+			   " config invariance proven (owned SFPCONFIG"
+			   " dests epoch-clean across the enclosing loop;"
+			   " %u descriptor words hoisted to the outer"
+			   " preheader; enable+setc16 retained per"
+			   " trip)\n", words);
+		}
+	    }
+	  else if (epoch_refusal && dump)
+	    {
+	      fprintf (dump, "Macro-planner prefix-epoch-refusal: %s",
+		       epoch_refusal);
+	      if (epoch_refusal_insn)
+		fprintf (dump, " (insn %d)", INSN_UID (epoch_refusal_insn));
+	      fprintf (dump, "\n");
+	    }
+	}
+    }
+
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
-			config_preheader, enable_src);
+			config_preheader, enable_src,
+			hoist_preheader, hoist_enable_src);
     }
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s\n",
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s\n",
 	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
-	     materialized_enable ? " lane-proof=materialized-enable" : "");
+	     materialized_enable ? " lane-proof=materialized-enable" : "",
+	     hoist_preheader ? " prefix-epoch=hoisted" : "");
   return true;
 }
 
