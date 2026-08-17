@@ -167,6 +167,39 @@ previous layers' vocabulary, never IR shape names.
   patterns, and its flags (now erroring) are deleted; the oracle store
   under `testsuite/.../oracles/` (bodies, mint script, manifest) is the
   permanent parity record.
+* **Region-scoped configuration ownership for loop-body regions** (the
+  cross-function increment, post-WP8).  The function-global ownership
+  proof can never hold on a real kernel: the enclosing function carries
+  opaque init/dataflow code (raw MMIO instruction pushes, asm, typed
+  config accesses), so the WP8 dynamic typecast form only ever fired on
+  synthetic whole-function tests while the real four-face loop refused
+  `config-ownership-unproven`.  When the global proof fails and the
+  region is a loop body, formation now attempts the scoped window: the
+  proven structural preheader (unique guarded external predecessor,
+  zero-trip obligation, whole-body Tensix ownership — the existing
+  `loop_region_preheader` proofs) plus a body scan proving every
+  instruction is either region-owned or provably inert scalar code (no
+  call, no asm, no Tensix issue, no volatile memory reference — the
+  shape of every raw issue the typed vocabulary cannot see).  The
+  configuration prefix materializes at the preheader's TAIL — the
+  compiler-owned insertion point after the last reachable foreign owner
+  — which dominates every trip's launches, and no path from it to the
+  final drain contains another owner.  Foreign owners before the
+  insertion point are overwritten by the prefix; code after the loop
+  exit runs beyond the descriptor's lifetime, exactly as when the
+  planner forms inside an out-of-line callee invoked from an opaque
+  caller (the shipped straight-line contract).  Success prints the
+  info line `Macro-planner config-ownership: loop-scoped window
+  (preheader tail dominates every launch)`; every scoped failure keeps
+  the established `config-ownership-unproven` name and the bytes
+  explicit.  On the real typecast-shaped kernel (the opt-in
+  TYPECAST_TYPED_RWC_BOUNDARY probe of the blocker doc) this produces
+  ONE descriptor configuration per tile in the face-loop preheader and
+  eight alternating-VD launches per face — the one-configuration,
+  32-launch dynamic tile schedule the blocker demanded, on BH and (with
+  the dual-slot bank-base SETC16 program) on WH.  The straight-line
+  contract, non-loop regions, and every previously-refusing shape are
+  unchanged.
 
 ## 2a. WP9: the CC-template extension (predicated select / TTNN Where)
 
@@ -233,8 +266,12 @@ CC-write template events representable end to end:
   FIRST-ROW PEEL: the first row stays byte-original in place and its
   own typed all-lanes restore proves entry for the formed remainder
   (`lane-proof=peeled-first-row`; rows without an in-row proven restore
-  keep `all-lanes-proof-missing`).  Proven CC-template programs use a
-  REGION-SCOPED configuration-ownership proof (prefix-to-region-end
+  keep `all-lanes-proof-missing`).  Configuration ownership is the
+  ordered union of the scoped proofs: when the function-global proof
+  fails, any loop-body region first tries the loop-scoped WINDOW proof
+  above; a proven CC-template program the window did not prove --
+  including the straight-line shapes the window never covers --
+  additionally tries the WP9 REGION-SCOPED proof (prefix-to-region-end
   clean of calls/asm/owned-config accesses; foreign config before the
   prefix is dead because the prefix rewrites every consumed
   destination; foreign code after the region is tolerated under the LLK

@@ -1370,6 +1370,57 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; SFPIADD.md: "Backend execution unit: Vector Unit (SFPU), simple
+   ;; sub-unit".  The write-port claim is the same Simple-unit 9(h)-class
+   ;; inference already recorded for SFPSHFT/SFPCAST.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   ;; Effects audited per mod1 (operand 4) from craq-sim
+   ;; TENSIX_EXECUTE_SFPIADD + the SFPIADD.md functional model, both of
+   ;; which cover WH and BH only (QSR has no simulator specification and
+   ;; keeps the refusing defaults).  The proven envelope for this
+   ;; register-argument pattern is mod1 <= 10 with the ARG_IMM bit
+   ;; clear: reads VC (operand 3) and VB=VD (operand 2), writes VD
+   ;; (operand 0), lane-predicated.  LaneFlags are written unless
+   ;; MOD1_CC_NONE is set without MOD1_CC_GTE0 ((mod1 & 12) == 4);
+   ;; craq-sim and the functional model agree on that effect class for
+   ;; every admitted mod (their mod-12 value divergence -- invert
+   ;; vs sign-derived -- stays inside the cc-write class).  An ARG_IMM
+   ;; mod in this operand shape would not read VB, so its read claim is
+   ;; unproven here and it refuses.
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
+				   && (INTVAL (operands[4]) & 1) == 0")
+		      (const_int 13) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
+				   && (INTVAL (operands[4]) & 1) == 0")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(cond [(match_test "!((TARGET_XTT_TENSIX_BH
+			       || TARGET_XTT_TENSIX_WH)
+			      && IN_RANGE (INTVAL (operands[4]), 0, 10)
+			      && (INTVAL (operands[4]) & 1) == 0)")
+		 (const_string "unknown")
+	       (match_test "(INTVAL (operands[4]) & 12) == 4")
+		 (const_string "read")]
+	      (const_string "readwrite")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
+				   && (INTVAL (operands[4]) & 1) == 0")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
+				   && (INTVAL (operands[4]) & 1) == 0")
+		      (const_string "none") (const_string "unknown")))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_insn "rvtt_sfpiadd_v_nv"
@@ -2039,17 +2090,52 @@
    SFPCAST\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md
-   ;; ("the signbit SFPCAST is recorded Simple by analogy with the
-   ;; cast-round shape's documented Simple cast"); flagged for the
-   ;; architectural reference.
+   ;; Subunit: the architectural reference (SFPCAST.md) confirms the
+   ;; former 9(h)-class inference: "Backend execution unit: Vector Unit
+   ;; (SFPU), simple sub-unit".
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "shared_simple_round")
-   (set_attr "xtt_lreg_read_ops" "7")
-   (set_attr "xtt_lreg_write_ops" "2")
-   (set_attr "xtt_cc_effect" "read")
-   (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   ;; The effect claims (reads operand 2, writes operand 0, lane-
+   ;; predicated CC read, no CC write / config / RWC effect) are audited
+   ;; per mod1 (operand 3) and hold only for the proven conversions:
+   ;;   mod1 0 (SM32->FP32 round-nearest-even): craq-sim
+   ;;     TENSIX_EXECUTE_SFPCAST + SFPCAST.md functional model.
+   ;;   mod1 3, BH only (self-inverse sign-preserving conditional
+   ;;     negate, the SM32<->INT32 conversion): craq-sim mod3 branch +
+   ;;     SFPCAST_IntInt.md; silicon exact-equality boundary evidence
+   ;;     (convert-smag-evidence-20260816).
+   ;; mod1 1 (stochastic rounding) additionally advances the PRNG --
+   ;; architectural state outside the effect vocabulary -- and BH mod1 2
+   ;; is the documented cast-as-ABS hardware bug the simulator refuses
+   ;; to execute; both keep the refusing defaults, as does every higher
+   ;; (non-contractual) mod.  QSR retains only the mod-0 claim the WP5
+   ;; audit recorded (unproven-by-simulator; flagged with review
+   ;; carry-forward risk 1).
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_int 7) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "INTVAL (operands[3]) == 0
+				   || (TARGET_XTT_TENSIX_BH
+				       && INTVAL (operands[3]) == 3)")
+		      (const_string "none") (const_string "unknown")))])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2434,6 +2520,24 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int (WH and
+   ;; BH functional models are bit-identical; default-LaneConfig
+   ;; envelope, the planner refuses config mutation around rows).  Here
+   ;; the VC source (operand 2) is a hardware constant register -- every
+   ;; cstlreg is L8..L15 (SFPU_CREG_IDX_LWM) -- and SFPSWAP.md drops
+   ;; writes to LRegs >= 8 ("if (VC < 8)"), matching craq-sim
+   ;; TENSIX_EXECUTE_SFPSWAP.  The dual write therefore reduces to the
+   ;; single VD result tied to operand 0; both sources are read
+   ;; (constant-register reads fall outside the allocatable-LREG mask
+   ;; domain by construction).  Lane-predicated; never writes CC.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "borrows_mad")
+   (set_attr "xtt_lreg_read_ops" "7")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_macro_encodable" "yes")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2472,6 +2576,22 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int; here the
+   ;; VD operand (operand 1) is a hardware constant register.  The "xs"
+   ;; constraint (cstlreg < 12) is exactly SFPSWAP.md's VD execution
+   ;; gate ("if (VD < 12 || ...)"), and since every cstlreg is L8..L15
+   ;; the VD-side write is architecturally dropped ("if (VD < 8)",
+   ;; matching craq-sim).  The surviving write is the VC result tied to
+   ;; operand 0; both sources are read.  Lane-predicated; never writes
+   ;; CC.  Default-LaneConfig envelope as for rvtt_sfpswap_int.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "borrows_mad")
+   (set_attr "xtt_lreg_read_ops" "7")
+   (set_attr "xtt_lreg_write_ops" "2")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_macro_encodable" "yes")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
@@ -2509,6 +2629,21 @@
   "SFPSWAP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int with BOTH
+   ;; operands hardware constant registers (VD constrained "xs" < 12,
+   ;; SFPSWAP.md's VD execution gate).  Every cstlreg is L8..L15, so
+   ;; both architectural writes are dropped ("if (VC < 8)" /
+   ;; "if (VD < 8)", matching craq-sim): under the default-LaneConfig
+   ;; envelope this event reads its two constant sources and the lane
+   ;; state and writes no allocatable LREG (write mask audited empty; no
+   ;; writeback-port occupancy claim).  Never writes CC.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "4")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_macro_encodable" "yes")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
 (define_split
