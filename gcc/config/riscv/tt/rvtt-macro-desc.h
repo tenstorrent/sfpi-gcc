@@ -44,6 +44,34 @@ struct macro_launch_spec
   uint32_t word_alt;		/* odd-row word when vd_alternates     */
 };
 
+/* CC-template model (WP9): the descriptor's representation of a proven
+   CC-writing calendar.  The row's predicate DEFINITION is a launched
+   template event; its CC result becomes visible to later issue slots
+   after the architectural deferred-CC lag (capability tables,
+   cc_visibility_lag); the payload load issued before that slot executes
+   under the ambient all-lanes mask, the one issued at or after it under
+   the definition; the store-carrying launch latches its lane mask at
+   issue (store_lane_mask_latched_at_launch) and must issue before the
+   definition is visible; the row-end RESTORE template re-establishes
+   the all-lanes state, and its own visibility slot must not exceed the
+   row initiation interval so the next row's launch latches the restored
+   mask.  Every slot below is derived from the matched program's proven
+   delays -- synthesis refuses when any obligation fails.  */
+struct macro_cc_model
+{
+  bool active;
+  bool complement;		/* template predicate sense is the
+				   architectural complement of the
+				   source's (the post-visibility load
+				   carries the merge's LIVE operand)   */
+  int def_visible_slot;		/* first issue slot seeing the def     */
+  int pre_load_slot;		/* payload load under the ambient mask */
+  int post_load_slot;		/* payload load under the definition   */
+  int store_launch_slot;	/* lane-mask latch slot (ambient)      */
+  int restore_visible_slot;	/* first slot seeing the restore       */
+  int row_interval;		/* schedule ii the visibility must meet*/
+};
+
 struct macro_descriptor
 {
   uint32_t templ[4];
@@ -57,6 +85,11 @@ struct macro_descriptor
   vec<macro_launch_spec> launches;
   int drain_slots;
   bool needs_all_lanes_prefix;	/* lane-predicated rows need SFPENCC   */
+  /* The proven program keeps the row's explicit typed separator in
+     place instead of absorbing the stride: its issue slot is the
+     restore's visibility slot (see macro_cc_model).  */
+  bool keep_separator;
+  macro_cc_model cc;
   uint32_t planned_lregs;	/* planner-owned physical LREG mask    */
   const char *refusal;		/* stable name; null = synthesized     */
 };
@@ -65,6 +98,9 @@ struct macro_descriptor
 extern const char *macro_desc_refusal_program_unproven;
 extern const char *macro_desc_refusal_encoding_failed;
 extern const char *macro_desc_refusal_verification_failed;
+/* A CC-writing row whose dataflow, sense mapping, or visibility timing
+   the CC-template model cannot prove.  */
+extern const char *macro_desc_refusal_cc_template_unproved;
 
 /* Synthesize REGION/SCHEDULE into OUT.  Returns false when synthesis
    could not begin (no capability table); OUT->refusal names any other
