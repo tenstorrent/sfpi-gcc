@@ -195,8 +195,11 @@ region_scanner::close_row (basic_block bb)
   /* Effect legality inside the row.  A CC-writing member is admitted in
      exactly two structural roles (WP9 CC-template extension); whether a
      proven CC-template program realizes them is a descriptor question:
-       - a predicate DEFINITION: a value event that reads an LREG and
-	 writes CC (the typed SFPSETCC-on-register class);
+       - a predicate DEFINITION: a value event that reads LREGs, writes
+	 CC, and produces NO LREG result (the typed
+	 SFPSETCC-on-register class; a CC-writing event that also
+	 produces a value -- the SFPIADD CC-mod class -- has no proven
+	 dual-effect template and keeps the refusal);
        - the row-end all-lanes RESTORE: a pure CC write whose written
 	 state is provably the all-lanes enable (cc_write_all_lanes,
 	 word-exact through the one shared SFPENCC derivation).
@@ -209,7 +212,8 @@ region_scanner::close_row (basic_block bb)
     {
       if (e.cc_write)
 	{
-	  bool cc_def = e.lreg_read != 0 && !pure_cc_write_p (e);
+	  bool cc_def = e.lreg_read != 0 && !e.lreg_write
+	    && !pure_cc_write_p (e);
 	  bool cc_restore = cc_def_seen && pure_cc_write_p (e)
 	    && e.cc_write_all_lanes;
 	  if (!cc_def && !cc_restore)
@@ -555,19 +559,23 @@ region_scanner::scan_bb (basic_block bb)
 	{
 	  /* CC-writing value events extend the span in their two
 	     admitted structural roles (WP9; see close_row): a predicate
-	     definition (reads an LREG) or the in-row all-lanes restore
-	     (pure, proven, and only AFTER a definition -- a restore
-	     with nothing to restore is not the select structure and
-	     keeps the pre-WP9 refusal).  A mid-span pure CC write that
-	     is NOT the proven all-lanes pattern is a
-	     partial-lane/unproved enable (cc-enable-unproved); any
-	     other CC writer keeps the missing CC-template refusal.
-	     Both remain hard region boundaries.  */
+	     definition (reads LREGs, writes CC, no LREG result) or the
+	     in-row all-lanes restore (pure, proven, and only AFTER a
+	     definition -- a restore with nothing to restore is not the
+	     select structure and keeps the pre-WP9 refusal).  A
+	     mid-span pure CC write that is NOT the proven all-lanes
+	     pattern is a partial-lane/unproved enable
+	     (cc-enable-unproved); any other CC writer -- including the
+	     value-producing SFPIADD CC-mod class, for which no proven
+	     dual-effect template exists -- keeps the missing
+	     CC-template refusal.  Both remain hard region
+	     boundaries.  */
 	  bool span_has_def = false;
 	  for (const xtt_effect_set &se : span_effects_)
 	    span_has_def |= se.cc_write && se.lreg_read != 0
-	      && !pure_cc_write_p (se);
-	  bool cc_def = e.lreg_read != 0 && !pure_cc_write_p (e);
+	      && !se.lreg_write && !pure_cc_write_p (se);
+	  bool cc_def = e.lreg_read != 0 && !e.lreg_write
+	    && !pure_cc_write_p (e);
 	  bool cc_restore = span_has_def && pure_cc_write_p (e)
 	    && e.cc_write_all_lanes;
 	  if (cc_def || cc_restore)

@@ -209,7 +209,10 @@ previously refused `cc-template-unsupported`.  WP9 makes proven
 CC-write template events representable end to end:
 
 * **Discovery** admits CC writers in exactly two structural roles: a
-  predicate DEFINITION (a value event reading an LREG and writing CC)
+  predicate DEFINITION (a value event reading LREGs and writing CC
+  with NO LREG result -- the SFPSETCC-on-register class; value-producing
+  CC writers such as the SFPIADD CC mods keep `cc-template-unsupported`,
+  no proven dual-effect template exists)
   and, only after a definition, the in-row all-lanes RESTORE (a pure CC
   write proven word-exact through the shared P0 SFPENCC derivation).
   The row slice follows CC edges as well as LREG edges; a CC need

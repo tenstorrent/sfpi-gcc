@@ -262,7 +262,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   bool row_has_cc_def = false;
   for (row_item &item : items)
     row_has_cc_def |= !item.address && item.effects.cc_write
-      && item.effects.lreg_read != 0;
+      && item.effects.lreg_read != 0 && !item.effects.lreg_write;
 
   /* Launched-event hosting: a non-Dst value event is hosted on the
      carrier of its earliest LREG producer that is a Dst load; a store
