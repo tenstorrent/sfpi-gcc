@@ -34,6 +34,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-macro-region.o \
 	rvtt-macro-sched.o \
 	rvtt-macro-desc.o \
+	rvtt-macro-epoch.o \
 	rvtt-macro-verify.o \
 	rvtt-macro-tables.o \
 	gimple-rvtt-attrib.o \
