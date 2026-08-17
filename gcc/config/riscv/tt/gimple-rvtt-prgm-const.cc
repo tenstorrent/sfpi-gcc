@@ -165,6 +165,18 @@ scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why)
     ++s;
   if (!*s)
     return true;		/* pure barrier, no instruction */
+  /* Audited scalar RISC-V templates: base-ISA instructions with no
+     Tensix encoding space and no SFPU/PRGM/CC effect (fence = memory
+     ordering; ebreak = debug trap; the startup stack-pointer load).  */
+  if (!strcmp (s, "fence") || !strcmp (s, "ebreak")
+      || !strcmp (s, "la sp, %0")
+      /* The scalar store-load-consume roundtrip idiom (pcbuf/mailbox
+	 reads): base-ISA memory operations only.  */
+      || !strcmp (s, "sw %0, (%1)\n\tlw %0, (%1)\n\tand x0, x0, %0")
+      /* The crt0 global-pointer initialization.  */
+      || !strcmp (s, ".option push\n.option norelax\n"
+		     "la gp, __global_pointer$\n.option pop"))
+    return true;
   if (strncmp (s, ".ttinsn", 7) != 0)
     {
       *why = "non-.ttinsn assembly";
@@ -206,10 +218,30 @@ scan_function_body (function *fn, unsigned *claimed, const char **why)
 	  if (is_gimple_debug (stmt))
 	    continue;
 
+	  /* Every statement inside a declared region is covered by the
+	     trusted declaration -- raw words the table cannot decode
+	     and calls the scan cannot follow alike; only the end
+	     marker is looked for.  */
+	  if (declared && is_gimple_call (stmt))
+	    {
+	      const rvtt_insn_data *d = rvtt_get_insn_data (stmt);
+	      if (d && d->id == rvtt_insn_data::ttregion_end)
+		{
+		  declared = false;
+		  continue;
+		}
+	      if (d && d->id == rvtt_insn_data::ttregion_begin)
+		{
+		  *why = "malformed effects declaration";
+		  return false;
+		}
+	      continue;
+	    }
+	  if (declared)
+	    continue;
+
 	  if (gasm *a = dyn_cast <gasm *> (stmt))
 	    {
-	      if (declared)
-		continue;	/* covered by the trusted declaration */
 	      if (!scan_raw_asm (a, claimed, why))
 		return false;
 	      continue;
@@ -309,19 +341,29 @@ tu_prgm_facts ()
 	continue;		/* thunks/aliases carry no code */
       function *ofn = DECL_STRUCT_FUNCTION (node->decl);
       const char *why = nullptr;
+      /* Keep scanning after a refusal: later declarations must still
+	 claim their destinations, and the complete blocker set is what
+	 an unblocking header increment needs to know.  Only the first
+	 blocker is reported.  */
+      static char reason_buf[192];
       if (!ofn || !ofn->cfg)
 	{
 	  /* A defined body this pass cannot walk must refuse, never be
 	     presumed clean.  */
 	  tu_facts.refused = true;
-	  tu_facts.reason = "function body unavailable to the scan";
-	  break;
+	  if (!tu_facts.reason)
+	    tu_facts.reason = "function body unavailable to the scan";
+	  continue;
 	}
       if (!scan_function_body (ofn, &tu_facts.claimed, &why))
 	{
 	  tu_facts.refused = true;
-	  tu_facts.reason = why;
-	  break;
+	  if (!tu_facts.reason)
+	    {
+	      snprintf (reason_buf, sizeof reason_buf, "%s in %s", why,
+			node->dump_name ());
+	      tu_facts.reason = reason_buf;
+	    }
 	}
     }
   return tu_facts;
@@ -358,9 +400,11 @@ canonical_buffer_arg_p (tree addr)
 
 struct candidate
 {
-  gcall *addi;
+  gcall *addi;			/* the SFPADDI or SFPADD to rewrite */
   gcall *mul;
-  unsigned value;		/* fp32 bits of the bf16 immediate */
+  gcall *loadi;			/* in-loop materialization, or null for
+				   the immediate SFPADDI shape */
+  unsigned value;		/* fp32 bits of the constant */
   class loop *loop;
   edge entry;
 };
@@ -383,43 +427,132 @@ single_nondebug_use_p (tree value, gimple *expected)
   return seen == expected;
 }
 
-static bool
-fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
-{
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (!insnd || insnd->id != rvtt_insn_data::sfpaddi)
-    return false;
-  if (!gimple_call_lhs (call)
-      || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
-      || !canonical_buffer_arg_p (gimple_call_arg (call, 0)))
-    return false;
-  for (unsigned ix = 2; ix != gimple_call_num_args (call); ++ix)
-    if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
-      return false;
-  /* Plain-add form only: synthesized id/var fields and mod all zero.  */
-  for (unsigned ix = 3; ix != gimple_call_num_args (call); ++ix)
-    if (!integer_zerop (gimple_call_arg (call, ix)))
-      return false;
+/* A single-use in-loop SFPMUL with the plain mod, defining SRC.  */
 
-  tree src = gimple_call_arg (call, 1);
+static gcall *
+fusable_mul_p (tree src, class loop *loop, gimple *only_use)
+{
   if (TREE_CODE (src) != SSA_NAME)
-    return false;
+    return nullptr;
   gcall *mul = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
   if (!mul)
-    return false;
+    return nullptr;
   const rvtt_insn_data *muld = rvtt_get_insn_data (mul);
   if (!muld || muld->id != rvtt_insn_data::sfpmul
       || !integer_zerop (gimple_call_arg (mul, 2))
       || !gimple_bb (mul)
       || !flow_bb_inside_loop_p (loop, gimple_bb (mul))
-      || !single_nondebug_use_p (src, call))
+      || !single_nondebug_use_p (src, only_use))
+    return nullptr;
+  return mul;
+}
+
+/* An in-loop invariant float materialization defining SRC whose fp32
+   value is recoverable: the canonical sfpxloadi 32-bit float form, or
+   the shortened single-issue SFPLOADI FLOATB form.  Other encodings
+   refuse (their value reconstruction is not on record here).  */
+
+static gcall *
+invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
+			unsigned *value)
+{
+  if (TREE_CODE (src) != SSA_NAME)
+    return nullptr;
+  gcall *load = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+  if (!load
+      || !gimple_bb (load)
+      || !flow_bb_inside_loop_p (loop, gimple_bb (load))
+      || !rvtt_invariant_constant_load_p (load, loop,
+					  /*allow_shortened=*/true)
+      || !single_nondebug_use_p (src, only_use))
+    return nullptr;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
+  unsigned imm = TREE_INT_CST_LOW (gimple_call_arg (load, 1));
+  tree mod = gimple_call_arg (load, gimple_call_num_args (load) - 1);
+  if (insnd->id == rvtt_insn_data::sfpxloadi)
+    {
+      /* The float-typed 32-bit form only.  */
+      if (tree_to_shwi (mod) != -32)
+	return nullptr;
+      *value = imm;
+    }
+  else
+    {
+      /* Shortened SFPLOADI: FLOATB (mod0 0, imm16 << 16) only.  */
+      if (!integer_zerop (mod))
+	return nullptr;
+      *value = (imm & 0xffff) << 16;
+    }
+  return load;
+}
+
+static bool
+fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd)
     return false;
 
-  out->addi = call;
-  out->mul = mul;
-  out->value = (TREE_INT_CST_LOW (gimple_call_arg (call, 2)) & 0xffff) << 16;
-  out->loop = loop;
-  return true;
+  if (insnd->id == rvtt_insn_data::sfpaddi)
+    {
+      /* The immediate shape: LHS = sfpaddi (buf, MUL, imm, 0, 0, 0).  */
+      if (!gimple_call_lhs (call)
+	  || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
+	  || !canonical_buffer_arg_p (gimple_call_arg (call, 0)))
+	return false;
+      for (unsigned ix = 2; ix != gimple_call_num_args (call); ++ix)
+	if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
+	  return false;
+      /* Plain-add form only: synthesized id/var fields and mod all
+	 zero.  */
+      for (unsigned ix = 3; ix != gimple_call_num_args (call); ++ix)
+	if (!integer_zerop (gimple_call_arg (call, ix)))
+	  return false;
+
+      gcall *mul = fusable_mul_p (gimple_call_arg (call, 1), loop, call);
+      if (!mul)
+	return false;
+      out->addi = call;
+      out->mul = mul;
+      out->loadi = nullptr;
+      out->value
+	= (TREE_INT_CST_LOW (gimple_call_arg (call, 2)) & 0xffff) << 16;
+      out->loop = loop;
+      return true;
+    }
+
+  if (insnd->id == rvtt_insn_data::sfpadd)
+    {
+      /* The materialized shape the pressure refusal actually leaves in
+	 a loop: LHS = sfpadd (MUL, LOADI, 0) (either operand order),
+	 with the in-loop invariant materialization feeding only the
+	 add.  */
+      if (!gimple_call_lhs (call)
+	  || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
+	  || !integer_zerop (gimple_call_arg (call, 2)))
+	return false;
+      for (unsigned swap = 0; swap != 2; ++swap)
+	{
+	  tree mul_op = gimple_call_arg (call, swap);
+	  tree load_op = gimple_call_arg (call, 1 - swap);
+	  gcall *mul = fusable_mul_p (mul_op, loop, call);
+	  unsigned value;
+	  gcall *load = mul
+	    ? invariant_float_load_p (load_op, loop, call, &value) : nullptr;
+	  if (mul && load)
+	    {
+	      out->addi = call;
+	      out->mul = mul;
+	      out->loadi = load;
+	      out->value = value;
+	      out->loop = loop;
+	      return true;
+	    }
+	}
+      return false;
+    }
+
+  return false;
 }
 
 /* Any CC-writing statement in FN defeats the all-lanes proof for the
@@ -583,11 +716,33 @@ transform (function *fn)
       gimple_call_set_lhs (read, creg);
       gsi_insert_before (&gsi, read, GSI_SAME_STMT);
 
-      gcall *add = gimple_build_call
-	(add_d->decl, 3, gimple_call_arg (c.addi, 1), creg,
-	 build_int_cst (unsigned_type_node, 0));
-      gimple_call_set_lhs (add, gimple_call_lhs (c.addi));
-      gsi_replace (&gsi, add, false);
+      if (!c.loadi)
+	{
+	  /* Immediate shape: the SFPADDI becomes a plain SFPADD of the
+	     constant register.  */
+	  gcall *add = gimple_build_call
+	    (add_d->decl, 3, gimple_call_arg (c.addi, 1), creg,
+	     build_int_cst (unsigned_type_node, 0));
+	  gimple_call_set_lhs (add, gimple_call_lhs (c.addi));
+	  gsi_replace (&gsi, add, false);
+	}
+      else
+	{
+	  /* Materialized shape: the SFPADD keeps its form with the
+	     constant-register operand; the in-loop materialization is
+	     removed (its only use was this add).  */
+	  tree load_lhs = gimple_call_lhs (c.loadi);
+	  for (unsigned ix = 0; ix != 2; ++ix)
+	    if (gimple_call_arg (c.addi, ix) == load_lhs)
+	      gimple_call_set_arg (c.addi, ix, creg);
+	  update_stmt (c.addi);
+	  gimple_stmt_iterator lgsi = gsi_for_stmt (c.loadi);
+	  if (tree vdef = gimple_vdef (c.loadi))
+	    if (TREE_CODE (vdef) == SSA_NAME)
+	      unlink_stmt_vdef (c.loadi);
+	  gsi_remove (&lgsi, true);
+	  release_defs (c.loadi);
+	}
 
       changed = true;
       if (dump_file)
