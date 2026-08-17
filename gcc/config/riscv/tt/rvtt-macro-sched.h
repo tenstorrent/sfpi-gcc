@@ -88,6 +88,16 @@ extern const char *macro_sched_refusal_latency_violation;
    realization (template hosting or coalescing) cannot be proven; shared
    spelling with the descriptor layer's CC refusal.  */
 extern const char *macro_sched_refusal_cc_template_unproved;
+/* A predicate-writing row whose derived schedule keeps its typed
+   separator (the established 4-slot select calendar,
+   absorb_into_explicit == false).  Silicon adjudication 2026-08-17
+   (evidence root ~/sfpi-uplift/where-adjudication-20260817): the
+   separator-kept formed calendar mis-selects on BH silicon
+   deterministically across two resets while passing CRAQ on identical
+   bytes; the separator-absorbed compact calendar is silicon-correct in
+   both delivery arms.  Keyed on the structural property, never on misc
+   words or data formats.  */
+extern const char *macro_sched_refusal_cc_separator_kept_silicon_unproven;
 
 /* Derive and dump the schedule of REGION's canonical row for carrier
    grouping CANDIDATE.  The grouping search is deterministic and

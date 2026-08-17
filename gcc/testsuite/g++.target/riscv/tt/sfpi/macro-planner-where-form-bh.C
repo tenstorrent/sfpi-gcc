@@ -1,19 +1,27 @@
-// WP9: the canonical SFPI where selector (the TTNN Where kernel's v_if
-// spelling), eight rows, forms through the generic planner: the
-// outermost-CC combine lowers each v_if to SETCC/predicated-MOV/ENCC,
-// the planner derives the select CC-template descriptor, and the eight
-// rows become two launches plus an explicit payload load each.
+// The canonical SFPI where selector (the TTNN Where kernel's v_if
+// spelling, F16b condition / U16 payloads -- the fp16b class), eight
+// rows, REFUSING since the 2026-08-17 Where silicon adjudication
+// (tt-quietbox-0, BH p150; evidence root
+// ~/sfpi-uplift/where-adjudication-20260817, verdicts/VERDICT.md):
+// this is the exact source class whose formed separator-kept 4-slot
+// calendar (misc 0x706) mis-selected on silicon deterministically
+// across two resets while the byte-identical binaries passed CRAQ in
+// the generic sim.  The mixed-mode compact candidate refuses its
+// descriptor by name, the established calendar keeps the typed
+// separator and refuses cc-separator-kept-silicon-unproven, and the
+// eight rows stay byte-identically on the semantic (planner-OFF)
+// lowering -- the silicon-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x7b0000c6" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=1: 0x8a0000d0" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=8: 0x00000706" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner verify: ok" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-times "\\.ttinsn" 16 } }
-// { dg-final { scan-assembler-not "SFPSETCC" } }
-// { dg-final { scan-assembler-not "SFPMOV" } }
-// { dg-final { scan-assembler-not "SFPSTORE" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner descriptor-cc:" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "\\.ttinsn" } }
+// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-not "SFPLOADMACRO" } }
+// { dg-final { scan-assembler-times "SFPSETCC" 1 } }
+// { dg-final { scan-assembler-times "SFPSTORE" 1 } }
 // { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
 namespace ckernel { unsigned *instrn_buffer; }
