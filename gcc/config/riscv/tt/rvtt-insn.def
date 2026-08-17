@@ -138,6 +138,14 @@ RVTT_FN (sfplut,              ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_US
 RVTT_OVR(sfplut,       qsr,_qsr,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x0011}))
 RVTT_FN (sfplutfp32,       qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x44dd}))
 RVTT_FN (sfplutfp32_3r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4400}))
+// Mod values {0,2,3} select the FP32-3ENTRY/FP16-6ENTRY-T1/T2 tables and +4
+// is SGN_RETAIN, all architecturally defined for the 6-register form; values
+// with bit 3 (indirect destination via LReg7) stay refused because this
+// builtin's pattern encodes the destination register directly.  main reaches
+// the same acceptance set by arch-splitting rather than by a _6r qsr
+// override: wh_bh carries 0x00dd here, and Quasar keeps its conservative set
+// in the sfplutfp32 entry above because its SFPLUT-family execution is
+// unvalidated.
 RVTT_FN (sfplutfp32_6r,  wh_bh,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0, ({M, 0x00dd}))
 
 RVTT_FN (sfpswap,          ,_wh,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
