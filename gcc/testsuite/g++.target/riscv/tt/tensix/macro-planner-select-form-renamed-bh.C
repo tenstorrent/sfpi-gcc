@@ -1,22 +1,25 @@
-// WP9 genericity: renamed-equivalent twin of
-// macro-planner-select-form-bh.C -- different function and value names,
-// identical structure -- must derive the identical descriptor (name
-// independence).
-// Default-ON promotion of -mtt-tensix-optimize-dst-ownership: this
-// twin's raw body carries a provable-identity Dst reload the (now
-// default-on) ownership fold removes, changing the region the planner
-// sees and defeating this formation (pre-existing interaction,
-// reproduced on the pre-promotion compiler with the explicit flag).
-// Pin the -mno- spelling: the test's subject is the planner's
-// name-independence on the unfolded shape.
+// Genericity: renamed-equivalent twin of macro-planner-select-form-bh.C
+// -- different function and value names, identical structure -- must
+// refuse IDENTICALLY (name independence): since the 2026-08-17 Where
+// silicon adjudication (evidence root
+// ~/sfpi-uplift/where-adjudication-20260817) the established 4-slot
+// select calendar, whose schedule keeps its typed separator, refuses
+// cc-separator-kept-silicon-unproven, keyed on the structural
+// property alone -- no name, misc word, or data format participates.
+// Default-ON promotion of -mtt-tensix-optimize-dst-ownership: the (now
+// default-on) ownership fold removes this raw body's provable-identity
+// Dst reload before the planner runs, and the folded shape refuses
+// earlier (cc-template-unproved) without ever reaching the pinned
+// separator-kept refusal.  Pin the -mno- spelling: the test's subject
+// is the adjudicated refusal on the unfolded shape.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mno-tt-tensix-optimize-dst-ownership -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-cc: sense=complement" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x7b0000c6" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=1: 0x8a0000d0" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=8: 0x00000706" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "Macro-planner formed: rows=8 runs=1" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-times "\\.ttinsn" 16 } }
-// { dg-final { scan-assembler-not "SFPSETCC" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner schedule-refusal: cc-separator-kept-silicon-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-not "Macro-planner formed" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "\\.ttinsn" } }
+// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-assembler-times "SFPSETCC" 1 } }
+// { dg-final { scan-assembler-times "TTINCRWC" 8 } }
 
 #define PICK()                                                                \
   do                                                                          \

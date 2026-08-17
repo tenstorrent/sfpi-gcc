@@ -78,7 +78,12 @@ Five tests relied on the ambient default being off and now pin the
 `tensix/macro-planner-where-raw-bh.C`.  The last two pin
 `-mno-tt-tensix-optimize-dst-ownership` because the (now default-on)
 ownership fold removes a provable-identity Dst reload from their raw
-bodies before the planner runs, changing what the planner forms/refuses
-— a pre-existing interaction, reproduced on the pristine compiler with
-the explicit flag; those tests' subject is the planner on the unfolded
-shape.
+bodies before the planner runs — a pre-existing interaction, reproduced
+on the pristine compiler with the explicit flag; those tests' subject
+is the planner on the unfolded shape.  After the 2026-08-17 Where
+silicon adjudication rewrote both tests into
+cc-separator-kept-silicon-unproven refusal-trail pins (nkapre/sfpi
+7f4caae659a), the pins were re-verified at the merged tip: the default
+fold makes the folded shape refuse earlier (cc-template-unproved)
+without ever reaching the adjudicated separator-kept refusal, so the
+`-mno-` pins remain required for the tests to exercise their subject.

@@ -84,6 +84,8 @@ const char *macro_sched_refusal_port_conflict = "port-conflict";
 const char *macro_sched_refusal_latency_violation = "latency-violation";
 const char *macro_sched_refusal_cc_template_unproved
   = "cc-template-unproved";
+const char *macro_sched_refusal_cc_separator_kept_silicon_unproven
+  = "cc-separator-kept-silicon-unproven";
 
 namespace {
 
@@ -432,6 +434,7 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   int absorb_carrier = -1;
   bool absorb_into_explicit = false;
   const char *cc_compact_refusal = nullptr;
+  const char *cc_separator_refusal = nullptr;
   /* A predicate-writing row's ESTABLISHED (WP9) calendar never absorbs
      its separator: the explicit counter word occupies the issue slot in
      which the row-end restore's CC result becomes visible
@@ -495,6 +498,27 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
       else
 	cc_compact_refusal = macro_sched_refusal_cc_template_unproved;
     }
+  /* Silicon adjudication 2026-08-17 (tt-quietbox-0, BH p150; evidence
+     root ~/sfpi-uplift/where-adjudication-20260817): a predicate-writing
+     row whose derived schedule KEEPS its typed separator -- the
+     established 4-slot select calendar, the only CC schedule with
+     absorb_into_explicit == false -- MIS-SELECTS on silicon,
+     deterministically across two independent resets, while the
+     byte-identical binaries pass CRAQ (bit-exact-NaN) in the generic
+     sim: the TRUE-branch (CC-visible) store slot delivers wrong data
+     (all_zeros PASS, all_ones FAIL, on both failing formats).  The
+     separator-ABSORBED compact calendar is silicon-correct in both
+     delivery arms across the same resets.  The key is the STRUCTURAL
+     property (the kept separator), never a misc word value or a data
+     format: the fp16b/Float32-vs-Int32 split observed on silicon is a
+     consequence of which shapes can absorb.  Until the sim's
+     RISC-pushed delivery model around the TTINCRWC barrier is proven
+     against silicon (VERDICT.md item 4), every separator-kept CC
+     schedule refuses by name and the bytes stay explicit -- the
+     semantic (planner-OFF) lowering, which is silicon-green.  */
+  else if (row_has_cc_def && row.separator)
+    cc_separator_refusal
+      = macro_sched_refusal_cc_separator_kept_silicon_unproven;
 
   /* Deterministic issue-slot assignment: carriers and explicit issues in
      program order of their first instruction.  */
@@ -529,8 +553,12 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   /* Sequence lookup per carrier: derived events in program order;
      template ids in derivation order.  Delays come exclusively from the
      matched proven program.  A CC-realization refusal from the
-     coalescing or compact-absorption rules above takes precedence.  */
-  const char *refusal = cc_refusal ? cc_refusal : cc_compact_refusal;
+     coalescing or compact-absorption rules above takes precedence; the
+     separator-kept silicon refusal ranks below them so shapes already
+     refusing for a CC-realization reason keep their established
+     names.  */
+  const char *refusal = cc_refusal ? cc_refusal
+    : cc_compact_refusal ? cc_compact_refusal : cc_separator_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());
