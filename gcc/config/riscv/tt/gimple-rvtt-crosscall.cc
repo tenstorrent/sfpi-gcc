@@ -1967,8 +1967,7 @@ discover_contract (function *fn, auto_vec<contract_entry> *contract,
 
 static bool
 callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
-		  class loop *consumer_loop, unsigned contract_mask,
-		  scan_ctx *ctx)
+		  class loop *consumer_loop, scan_ctx *ctx)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -2027,7 +2026,6 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
       if (!dominated_by_p (CDI_DOMINATORS, e->src, gimple_bb (c.load)))
 	return refuse ("crosscall-callee-shape-unproven", fn->decl, c.load);
 
-  (void) contract_mask;
   return true;
 }
 
@@ -2240,8 +2238,7 @@ transform (function *fn)
   callee_ctx.contract_mask = contract_mask;
   callee_ctx.callee_decl = NULL_TREE;
   callee_ctx.in_caller = false;
-  if (!callee_body_ok_p (fn, contract, consumer_loop, contract_mask,
-			 &callee_ctx))
+  if (!callee_body_ok_p (fn, contract, consumer_loop, &callee_ctx))
     return false;
   if (callee_ctx.saw_mop)
     {
