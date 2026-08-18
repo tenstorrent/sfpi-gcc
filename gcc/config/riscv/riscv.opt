@@ -598,6 +598,10 @@ mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
 Rotate replayed capture rows to fill audited interlock stalls across the row boundary
 
+mtt-tensix-optimize-drain-schedule
+Target Var(riscv_tt_opt_drain_schedule) Init(0)
+Prove per-boundary macro-event drain requirements from the derived descriptor calendars and elide structurally multiplied drain NOPs at proven-neutral macro run boundaries (refusals keep the full derived drain byte-identically)
+
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates
@@ -704,6 +708,10 @@ Testing only: corrupt the verifier's local copy of the first synthesized templat
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
 Default-off delivery increment: admit planner-formed SFPLOADMACRO launches into automatic replay recording (the launch is a pure instruction word; execution at a replay site reads the then-current descriptor configuration, matching the production handwritten Where kernel's own recorded launches).  Off keeps every planner-formed calendar byte-identical to the pre-flag output.
+
+mtt-tensix-macro-planner-residency
+Target Var(riscv_tt_macro_planner_residency) Init(0)
+Default-off delivery increment: descriptor-program residency for the macro planner.  Extends the proven cross-tile configuration epoch outward through successively enclosing loops (the programming words become resident once per kernel entry instead of once per enclosing-loop trip), and elides the descriptor-word programming of a later region whose derived descriptor words are bit-identical to an already-programmed dominating one (content-equality de-duplication; the per-region ambient enable and owned SETC16 program always stay).  Every proof failure refuses by a stable name and keeps today's placement byte-identically.
 
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)

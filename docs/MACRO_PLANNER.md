@@ -513,6 +513,19 @@ Formation: `config-ownership-unproven`, `planned-lreg-live`,
 Prefix epoch (WP11; refusing keeps the per-tile prefix, never blocks
 formation): `prefix-epoch-invalidated`, `prefix-epoch-unproven`,
 `prefix-hoist-preheader-unproven`.
+Drain placement (WP13; refusing keeps the full derived drain, never
+blocks formation): `drain-follower-opaque`, `drain-lreg-overlap`,
+`drain-cc-live`, `drain-config-overlap`, `drain-dst-raw`,
+`drain-delay-unproven`, `drain-horizon-spill`.
+Residency (WP13; refusing keeps today's placement, never blocks
+formation): `resid-skip-path-unproven` (function-wide owned-state
+invariance walk failed; the underlying epoch name and insn are cited
+in the dump line), `resid-span-unproven` (de-duplication span dirty),
+`resid-dominance-unproven` (content matched but no dominating resident
+program).  Reserved for the future eviction-choice increment, no
+current emission site: `resid-capacity-exceeded` (with content-equality
+de-duplication the descriptor register file is never contended, so
+increment 1 has no honest site for it).
 
 ## 5. Flags
 
@@ -521,7 +534,11 @@ formation): `prefix-epoch-invalidated`, `prefix-epoch-unproven`,
 verifier; forced under internal checking),
 `-mtt-tensix-macro-planner-verify-corrupt-template` (verifier
 self-test), `-mtt-tensix-macro-planner-replay` (WP10 delivery: admit
-planner-formed launches into automatic replay recording; see Sec. 6).
+planner-formed launches into automatic replay recording; see Sec. 6),
+`-mtt-tensix-optimize-drain-schedule` (WP13: per-boundary drain
+placement proofs; see Sec. 2d).
+`-mtt-tensix-macro-planner-residency` (WP13 delivery: descriptor-program
+residency; see Sec. 2d).
 All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
@@ -701,3 +718,147 @@ follow-up, not implemented here.  The template-sharing dedup of this
 increment is the seed of Idea 6's dictionary-selection residency
 (canonical derived words shared kernel-wide); noted as overlap for
 that follow-up.
+
+## 2d. Drain-aware boundary placement (WP13; Step A+B of the drain design)
+
+Under default-off `-mtt-tensix-optimize-drain-schedule` the planner's
+emission stops multiplying the derived drain with the region's run
+structure.  Pre-registered design (Lane AU, 2026-08-18,
+`~/sfpi-uplift/drain-study-20260818/DESIGN-drain-aware-scheduling.md`);
+implementation `rvtt_macro_drain_boundary_elidable`
+(rtl-rvtt-schedule.cc), consumed by `form_region` before any mutation.
+
+**The problem.** `core_drain_slots` (rvtt-macro-sched-core.h) derives
+the greatest event writeback distance past a run's last issue slot from
+the descriptor's own SequenceBits delay fields -- exact static facts of
+the derived timing calendars.  Emission pays that many SFPNOPs after
+EVERY run, so a region split into R runs by an architectural boundary
+instruction (the minmax face advance) executes the drain R times --
+and the replay window then captures the tail, replaying it verbatim
+with every launch (minmax: 3 NOPs x 4 faces = 12 slots/tile where the
+architecture needs 3).
+
+**The derivation.** Every fact is descriptor data or an adjudicated
+retirement-semantics fact of the corrected simulator (craq-sim
+9f324140, src/tensix.cpp:9820-9945, pinned to the BlackholeA0
+SFPLOADMACRO functional spec; the store-predicate rule silicon-
+adjudicated 2026-08-17):
+
+* Launch-latched (safe to mutate while events are in flight): the store
+  event's Dst row (read AT LAUNCH, :9848-9853, 9905), the store format
+  (:9907), and the Dst layout its decode reads (:9913-9917).  A pure
+  Dst/RWC counter write -- the run-separator class discovery already
+  admits, typed or the audited raw `.ttinsn` decode -- therefore cannot
+  disturb any in-flight event.
+* Live-at-execution (mutation inside the horizon races): the lane
+  predicate (:9908-9911), LReg contents staged events read or write
+  (:9830-9833), the LoadMacroConfig words, and Dst rows an in-flight
+  store writes.
+* Horizon arithmetic: writeback slot = carrier issue slot + programmed
+  delay (the identical model `core_drain_slots` uses), and at most one
+  instruction issues per cycle, so a follower word's position in the
+  issue stream lower-bounds its cycle distance from the boundary; any
+  dynamic stall moves follower accesses later -- the safe direction,
+  since every proof is "follower access strictly after the last pending
+  writeback".
+
+**The verdict, per intra-region boundary.** Elide the run's drain
+exactly when (a) the inter-run stream is discovery-admitted pure-RWC
+separators only, all launch-latched; slot credit is granted only to the
+classes no later pass absorbs (the dst-autoincr `AIC_RWC_STEP` contract:
+FACE-class typed advances -- word count from the machine-description
+length, 4 bytes per word -- and audited raw SETRWC-class words, exactly
+one word by the extraction contract; INC-class TTINCRWC is absorbable
+and earns nothing); (b) every access of the next run is ordered after every
+pending event by the decoded arithmetic — per-event delays decoded from
+the descriptor's OWN sequence words through the established SequenceBits
+format (case bits 2:0, event executes at issue + 1 + delay bits 5:3;
+`decompose_sequence_word`, provenance
+docs/TIMING_CALENDAR_DERIVATION.md 1-2), cross-checked against the
+descriptor's drain_slots (a mismatch refuses).  Same-cycle ordering
+follows the same established transactional model: a staged event
+retiring at cycle X retires BEFORE the front-end instruction issuing at
+X executes ("retire-before-issue"), so a front-end access (an explicit
+word, or a launch word's own immediate load) at the last retirement
+cycle is admitted at EQUALITY, while two staged events at one cycle
+remain a race (the silicon-adjudicated cc-restore-store-race failure
+mode) and launched follower events keep the strict inequality; and
+(c) the enumerated follower words cover the whole horizon.  The
+final run's drain is the region's exit contract -- a formed function or
+loop body must never hand in-flight events to an invisible follower
+stream -- and is never elided.  Refusals are named and keep the full
+derived drain byte-identically.
+
+**What it does not do (follow-ups, pre-registered in the design):**
+partial gaps (emitting `max(0, drain - credit)` NOPs at a refusing
+boundary), shadow-filling a kept gap with proven-neutral init traffic
+(Step C, the M3 coupling), and re-pricing the MOP per-run drain term
+(design Sec. 7).  The profitability model (`run_profitable_p`,
+`loop_profitable_p`) still prices the full per-run drain: pricing
+follows placement conservatively, never ahead of it.
+## 2d. WP13: descriptor-program residency (dictionary selection)
+
+Adaptation of the dictionary-selection compression line (Lefurgy et
+al., MICRO-30 1997; literature scan 2026-08-18 Idea 6): the
+SFPLOADMACRO descriptor registers are a programmable dictionary, and
+the planner's derived descriptor words are its entries.  WP13 selects
+which entries stay RESIDENT kernel-wide so identical descriptor
+programs are pushed once per kernel instead of once per region or per
+enclosing-loop trip.  Default off (`-mtt-tensix-macro-planner-residency`);
+every refusal keeps today's placement byte-identically.
+
+Two increments, both implemented in `rvtt-macro-desc.cc` (solver) with
+the emission wiring at the planner's WP11 call site and
+`emit_planner_run`:
+
+* **Outward span extension** (`rvtt_macro_residency_extend`).  After a
+  successful WP11 hoist, the per-level configuration-epoch proof
+  (`rvtt_macro_prefix_epoch_hoist`, full conservative discipline
+  including the foreign-LREG/CC refusal) is iterated through
+  successively enclosing loops; the final proven level's structural
+  preheader (or commit-time entry-edge split) receives the hoisted
+  block.  The occurrence obligation the multi-level hoist adds -- the
+  resident program may now execute on paths that never reach the
+  region -- is discharged by the function-wide OWNED-STATE INVARIANCE
+  walk (`rvtt_macro_epoch_owned_state_invariant_p`): outside the
+  planner's own emissions and the region, no instruction of the
+  function may write an owned SFPCONFIG destination or deliver an
+  unresolvable/opaque word, so executing the programming words early is
+  observationally inert (the copied enable re-asserts the outermost-CC
+  all-lanes contract under WP11's materialization license).  Placement
+  executions are monotone non-increasing on every loop path, so no
+  benefit threshold applies; the walk deliberately ADMITS foreign
+  LREG/CC dataflow and owned-destination reads (a placement move
+  cannot be observed through them -- rationale at `resid_insn_check`).
+
+* **Content-equality de-duplication** (`rvtt_macro_residency_lookup`).
+  Descriptor programs are canonicalized by CONTENT: the bit-exact
+  derived template/sequence/misc words (SETC16 programs and launch
+  tuples excluded -- they are per-region regardless).  A later formed
+  region whose canonical words equal an already-programmed entry, whose
+  launch block the entry's placement dominates (regions are processed
+  in forward program order; the increment-1 first-formed-wins policy),
+  and whose function-wide owned-state invariance holds, elides its
+  descriptor-word programming entirely; its retained ambient enable and
+  owned SETC16 program stay.  Eliding a bit-identical rewrite is
+  observationally inert given the values provably reach the launches.
+  Different canonical content simply programs per-region as today (no
+  eviction, no contention: identical content shares destinations by
+  construction).  The selection value function is the R2 delivery
+  model (rvtt-cost.md, RISC_PUSH_X100 = 123 centislots per pushed
+  word), used for dump diagnostics and ordering only -- never for
+  shape keying; capacities and field layouts are capability-table
+  facts.
+
+The per-region ambient enable and the owned SETC16 program are never
+elided or moved by WP13: their contract discharges (AT PREFIX-LEDGER
+rows 1-4 -- the CC epoch through the per-tile LaneConfig reset, and
+the SETC16-visible state reachable from data-plane MMIO) are separate
+named follow-ups.  Replay-record residency (the replay-linker half of
+the same dictionary idea: keeping a RECORDED RANGE resident across
+tiles) is NOT implemented here: on the measured where shape the
+per-trip re-record is execution-covered (Lane-S saturation -- removing
+pushes below the execution floor realizes ~0), the hand kernel pays
+the same re-record class, and the emission home is the replay pass;
+recorded as a design note with the residency solver as its intended
+slot allocator when a push-bound shape appears.

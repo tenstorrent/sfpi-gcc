@@ -559,10 +559,26 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const rvtt_macro::caps *c,
 		  unsigned begin, unsigned end, bool emit_config,
 		  basic_block config_preheader, rtx_insn *enable_src,
-		  basic_block hoist_preheader, rtx_insn *hoist_enable_src)
+		  basic_block hoist_preheader, rtx_insn *hoist_enable_src,
+		  bool emit_drain,
+		  /* WP13 residency (rvtt-macro-desc.cc): elide the
+		     descriptor words when a bit-identical dominating
+		     resident program exists; collect the programming
+		     insns (benign for later residency walks); report
+		     where the words were programmed.  */
+		  bool resident_elide, macro_residency_state *resid,
+		  basic_block *config_placement)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
+
+  /* Record every insn of SEQ as planner-emitted (residency-benign).  */
+  auto collect_emitted = [&] (rtx_insn *seq)
+    {
+      if (resid)
+	for (rtx_insn *i = seq; i; i = NEXT_INSN (i))
+	  resid->emitted.add (i);
+    };
 
   if (emit_config)
     {
@@ -594,7 +610,31 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	    config_word (desc.misc, 8);
 	};
 
-      if (hoist_preheader)
+      if (resident_elide)
+	{
+	  /* WP13 residency: the descriptor words are already resident
+	     (a bit-identical program at a proven dominating placement
+	     under function-wide owned-state invariance) -- only the
+	     per-region ambient enable and owned SETC16 program are
+	     re-established.  */
+	  start_sequence ();
+	  if (enable_src)
+	    emit_insn (copy_rtx (PATTERN (enable_src)));
+	  for (unsigned s = 0; s != desc.n_setc16; ++s)
+	    emit_insn (gen_rvtt_owned_setc16
+		       (GEN_INT (desc.setc16[s].config_reg),
+			GEN_INT (desc.setc16[s].value)));
+	  rtx_insn *retained = get_insns ();
+	  end_sequence ();
+	  collect_emitted (retained);
+	  if (config_preheader)
+	    insert_at_preheader_tail (retained, config_preheader);
+	  else
+	    emit_insn_before (retained, anchor);
+	  if (config_placement)
+	    *config_placement = nullptr;	/* nothing newly programmed */
+	}
+      else if (hoist_preheader)
 	{
 	  /* Cross-tile configuration epoch (WP11): the descriptor words
 	     execute once, in the enclosing loop's structural preheader
@@ -609,7 +649,10 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	  emit_config_words ();
 	  rtx_insn *hoisted = get_insns ();
 	  end_sequence ();
+	  collect_emitted (hoisted);
 	  insert_at_preheader_tail (hoisted, hoist_preheader);
+	  if (config_placement)
+	    *config_placement = hoist_preheader;
 
 	  /* Retained per-trip prefix: the ambient enable (the calendar's
 	     entry lane state is re-established every tile) and the owned
@@ -625,6 +668,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 			GEN_INT (desc.setc16[s].value)));
 	  rtx_insn *retained = get_insns ();
 	  end_sequence ();
+	  collect_emitted (retained);
 	  if (config_preheader)
 	    insert_at_preheader_tail (retained, config_preheader);
 	  else
@@ -642,13 +686,22 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	  emit_config_words ();
 	  rtx_insn *prefix = get_insns ();
 	  end_sequence ();
+	  collect_emitted (prefix);
 	  if (config_preheader)
-	    /* Loop-body region: the prefix executes once, in the proven
-	       structural preheader (>= one trip; see
-	       loop_region_preheader).  */
-	    insert_at_preheader_tail (prefix, config_preheader);
+	    {
+	      /* Loop-body region: the prefix executes once, in the proven
+		 structural preheader (>= one trip; see
+		 loop_region_preheader).  */
+	      insert_at_preheader_tail (prefix, config_preheader);
+	      if (config_placement)
+		*config_placement = config_preheader;
+	    }
 	  else
-	    emit_insn_before (prefix, anchor);
+	    {
+	      emit_insn_before (prefix, anchor);
+	      if (config_placement)
+		*config_placement = BLOCK_FOR_INSN (anchor);
+	    }
 	}
     }
 
@@ -816,10 +869,26 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
       if (desc.keep_separator && row.separator)
 	emit_insn (copy_rtx (PATTERN (row.separator)));
     }
-  for (int d = 0; d != desc.drain_slots; ++d)
-    emit_insn (gen_rvtt_sfpnop ());
+  /* The derived drain (core_drain_slots over the descriptor's own
+     SequenceBits delays).  Under -mtt-tensix-optimize-drain-schedule an
+     intra-region run boundary whose follower stream provably cannot
+     conflict with the in-flight events elides it
+     (rvtt_macro_drain_boundary_elidable, rtl-rvtt-schedule.cc); every
+     refusal and the final run keep it byte-identically.  */
+  if (emit_drain)
+    for (int d = 0; d != desc.drain_slots; ++d)
+      emit_insn (gen_rvtt_sfpnop ());
   rtx_insn *replacement = get_insns ();
   end_sequence ();
+  /* The emitted calendar (launches, explicit reloads, separators,
+     drain) is planner-emitted and benign for the WP13 residency walks
+     by construction -- launch effects are deliberately opaque to the
+     effect vocabulary (descriptor-dependent), so without this the
+     walks would refuse on our own launches.  Collected BEFORE
+     insertion (the sequence walk must end at the sequence).  */
+  if (resid)
+    for (rtx_insn *i = replacement; i; i = NEXT_INSN (i))
+      resid->emitted.add (i);
   emit_insn_before (replacement, anchor);
 
   for (unsigned r = begin; r != end; ++r)
@@ -840,7 +909,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 static bool
 form_region (function *fn, macro_region &region,
 	     const macro_schedule &schedule, const macro_descriptor &desc,
-	     FILE *dump)
+	     macro_residency_state *resid, FILE *dump)
 {
   rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
     : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
@@ -1099,10 +1168,19 @@ form_region (function *fn, macro_region &region,
      region relying purely on an in-place trailing enable copies that
      proven word.  Every refusal keeps today's per-trip prefix
      byte-identically, under a stable name.  */
+  /* WP13 residency de-duplication (rvtt-macro-desc.cc): when a
+     bit-identical descriptor program is already resident at a proven
+     dominating placement under function-wide owned-state invariance,
+     this region elides its descriptor-word programming entirely; the
+     WP11 hoist is then moot for it.  Refusals keep today's emission
+     byte-identically.  */
+  bool resident_elide
+    = rvtt_macro_residency_lookup (fn, region, desc, c, resid, dump);
+
   basic_block hoist_preheader = nullptr;
   edge hoist_edge = nullptr;
   rtx_insn *hoist_enable_src = nullptr;
-  if (desc.cc.active && config_preheader)
+  if (!resident_elide && desc.cc.active && config_preheader)
     {
       hoist_enable_src = enable_src
 	? enable_src : preheader_trailing_enable (config_preheader);
@@ -1118,6 +1196,15 @@ form_region (function *fn, macro_region &region,
 					     &hoist_edge, &epoch_refusal,
 					     &epoch_refusal_insn))
 	    {
+	      /* WP13 residency outward extension (rvtt-macro-desc.cc):
+		 proof-only iteration of the epoch discipline through
+		 further enclosing loops; on any refusal the placement
+		 stays WP11's, byte-identically.  */
+	      unsigned resid_levels = 0;
+	      rvtt_macro_residency_extend (fn, region, desc, c, resid,
+					   &hoist_preheader, &hoist_edge,
+					   &resid_levels, dump);
+
 	      /* Commit-time edge split (guarded enclosing loop): every
 		 proof has passed, so this is no longer a refusal path.
 		 The split block executes exactly when the loop is
@@ -1152,6 +1239,27 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* Drain-aware boundary placement (default-off; proofs and derivation
+     in rtl-rvtt-schedule.cc): decide every intra-region boundary BEFORE any
+     mutation.  The final run's drain -- the region's exit contract (no
+     events in flight may reach the invisible follower stream) -- is
+     never elided.  */
+  auto_vec<bool> drain_elide;
+  drain_elide.safe_grow_cleared (run_begins.length ());
+  unsigned drains_elided = 0;
+  if (riscv_tt_opt_drain_schedule && desc.drain_slots > 0)
+    for (unsigned b = 0; b + 1 < run_begins.length (); ++b)
+      {
+	unsigned rend = run_begins[b + 1];
+	unsigned rnext_end = b + 2 < run_begins.length ()
+	  ? run_begins[b + 2] : region.rows.length ();
+	drain_elide[b] = rvtt_macro_drain_boundary_elidable
+	  (region, schedule, desc, run_begins[b], rend, rnext_end, dump);
+	if (drain_elide[b])
+	  ++drains_elided;
+      }
+
+  basic_block config_placement = nullptr;
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
@@ -1159,14 +1267,21 @@ form_region (function *fn, macro_region &region,
 	? region.rows.length () : run_begins[b + 1];
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
 			config_preheader, enable_src,
-			hoist_preheader, hoist_enable_src);
+			hoist_preheader, hoist_enable_src,
+			!drain_elide[b],
+			resident_elide, resid,
+			b == 0 ? &config_placement : nullptr);
     }
+  if (!resident_elide)
+    rvtt_macro_residency_record (desc, config_placement, resid);
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s\n",
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s%s\n",
 	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
 	     materialized_enable ? " lane-proof=materialized-enable" : "",
-	     hoist_preheader ? " prefix-epoch=hoisted" : "");
+	     hoist_preheader ? " prefix-epoch=hoisted" : "",
+	     drains_elided ? " drain-elided" : "",
+	     resident_elide ? " resident=elided" : "");
   return true;
 }
 
@@ -1199,6 +1314,11 @@ public:
   unsigned execute (function *fn) final override
   {
     bool changed = false;
+    /* WP13 residency: per-function store of programmed descriptor
+       content and planner-emitted insns (rvtt-macro-desc.cc).  Regions
+       are processed in discovery order = forward program order, the
+       increment-1 first-formed-wins selection policy.  */
+    macro_residency_state resid;
     auto_vec<macro_region> regions;
     rvtt_macro_regions_discover (fn, dump_file, &regions);
     for (macro_region &region : regions)
@@ -1229,7 +1349,7 @@ public:
 		proven = !descriptor.refusal && !verify_fail;
 		if (proven && riscv_tt_macro_planner)
 		  changed |= form_region (fn, region, schedule,
-					  descriptor, dump_file);
+					  descriptor, &resid, dump_file);
 		rvtt_macro_descriptor_release (&descriptor);
 	      }
 	    rvtt_macro_schedule_release (&schedule);
