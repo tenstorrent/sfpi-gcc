@@ -126,6 +126,34 @@ raw_ttinsn_const_word (rtx_insn *insn, uint32_t *word)
   return true;
 }
 
+/* See rvtt-raw-boundary.h: public canonical-word extraction (no
+   classification -- callers apply their own audited, refusing-default
+   classification to the extracted word).  */
+
+bool
+rvtt_raw_ttinsn_word (rtx_insn *insn, uint32_t *word)
+{
+  return raw_ttinsn_const_word (insn, word);
+}
+
+/* See rvtt-raw-boundary.h: is WORD an architectural replay-owner word?
+   Field derivation only -- the opcode byte is compared against the
+   REPLAY encoding of the target's encoding table (the same source the
+   typed TTREPLAY emission uses), never against a whole-word value.
+   Unproven targets answer true (the refusing direction for every
+   caller: an owner word inside a capture refuses).  */
+
+bool
+rvtt_raw_replay_owner_word_p (uint32_t word)
+{
+  unsigned opcode = word >> 24;
+  if (TARGET_XTT_TENSIX_BH)
+    return opcode == (TT_OP_BH_REPLAY (0, 0, 0, 0) >> 24);
+  if (TARGET_XTT_TENSIX_WH)
+    return opcode == (TT_OP_WH_REPLAY (0, 0, 0, 0) >> 24);
+  return true;
+}
+
 /* See rvtt-raw-boundary.h.  */
 
 bool

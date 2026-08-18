@@ -59,6 +59,10 @@ struct xtt_effect_set {
 /* Attribute-driven; opaque=true default.  */
 extern xtt_effect_set rvtt_insn_effects (rtx_insn *);
 
+/* The target's architectural no-increment load/store address mode
+   (capability data; -1 = unproven, refuse).  */
+extern int rvtt_no_increment_address_mode ();
+
 /* Gimple-level access for builtin calls: the subunit of the late RTL
    pattern a builtin resolves to.  Returns XTT_SU_NONE (the refusing
    default) for unaudited builtins.  */
