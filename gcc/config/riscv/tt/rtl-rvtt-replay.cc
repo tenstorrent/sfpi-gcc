@@ -3084,18 +3084,6 @@ crf_scan_block (basic_block bb, crf_block &blk)
       blk.values[cur[i]].live_out
 	= conv_reg_consumed_after_p (SFPU_REG_FIRST + i, BB_END (bb), bb);
 
-  if (dump_file && getenv ("CRF_DEBUG_STREAM"))
-    for (unsigned ix = 0; ix != blk.pos.size (); ++ix)
-      {
-	crf_position const &p = blk.pos[ix];
-	fprintf (dump_file, "crf pos %u: uid %d %s%s%s%s d=0x%x u=0x%x\n",
-		 ix, INSN_UID (p.insn), p.barrier ? "BAR " : "",
-		 p.empty ? "EMPTY " : "", p.excludable ? "EXCL " : "",
-		 p.eligible ? "MEM " : "", p.defs, p.uses);
-	if (!p.empty && !p.barrier)
-	  dump_insn_slim (dump_file, p.insn);
-      }
-
   return !blk.pos.empty ();
 }
 
