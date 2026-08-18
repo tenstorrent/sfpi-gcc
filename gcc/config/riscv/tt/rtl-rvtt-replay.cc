@@ -1093,10 +1093,21 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 	continue;
       xtt_effect_set e = rvtt_insn_effects (pos->insn);
       if (e.opaque)
-	return -1;
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "  reissue-unproved: payload insn %d is"
+		     " effect-opaque\n", INSN_UID (pos->insn));
+	  return -1;
+	}
       uint32_t deps = (e.lreg_read | e.lreg_write) & 0xFFFF;
       if (deps & unproved)
-	return -1;
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "  reissue-unproved edge: consumer insn %d"
+		     " (deps 0x%x) of an unaudited producer (mask 0x%x)\n",
+		     INSN_UID (pos->insn), deps, unproved);
+	  return -1;
+	}
       HOST_WIDE_INT at = slot;
       for (int i = 0; i != 16; ++i)
 	if ((deps & (1u << i)) && ready[i] > at)
