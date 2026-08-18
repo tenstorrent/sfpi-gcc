@@ -61,4 +61,16 @@ extern bool rvtt_raw_pure_dst_rwc (rtx_insn *insn, xtt_rwc_effect_t *rwc);
    point.  */
 extern bool rvtt_raw_pure_dst_rwc_gimple (const gimple *stmt);
 
+/* Canonical-word EXTRACTION only (the TTI_ macro shape: an
+   output-and-clobber-free `.ttinsn %0' asm with one constant input):
+   fills *WORD and returns true; anything else refuses.  No
+   classification happens here -- every caller must apply its own
+   audited, refusing-default classification to the word.  */
+extern bool rvtt_raw_ttinsn_word (rtx_insn *insn, uint32_t *word);
+
+/* Architectural replay-owner opcode test on an extracted word (field
+   derivation against the target encoding table; unproven targets answer
+   true, the refusing direction).  */
+extern bool rvtt_raw_replay_owner_word_p (uint32_t word);
+
 #endif /* GCC_RVTT_RAW_BOUNDARY_H */

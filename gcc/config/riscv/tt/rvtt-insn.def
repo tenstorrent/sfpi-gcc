@@ -164,6 +164,15 @@ RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 
 // companions and SFPTRANSP always transforms both four-register banks.
 RVTT_FN (sfpswap_indexed,     ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,          0, ({M, 0x1ff}))
 RVTT_FN (sfptransp8,          ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC, 0, ())
+// Compiler-internal companion-preserving involution bundle (formed by the
+// transp-involution pass, never spelled by users): SFPTRANSP, four
+// constant-address full-bank SFPLOADs into L0-L3, SFPTRANSP -- one atomic
+// instruction whose net effect on the L4-L7 companion bank is the identity.
+// Args: addr0..addr3, mod0, addr_mode.  (The RTL insn carries a seventh
+// leading-all-lanes-enable operand; the builtin lowering always passes 0 --
+// the pass materializes any needed enable as a separate typed SFPENCC so it
+// also covers the parked stores of the formation group.)
+RVTT_FN (sfptransp_gather,    ,,XTT_VEC4_FTYPE_USI_USI_USI_USI_USI_USI,                      VOL, ({CU, 13}, {CU, 13}, {CU, 13}, {CU, 13}, {CU, 4}, {CU, 3}))
 RVTT_FN (sfpshft2_copy4,      ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0, ({M, 0x1}))
 RVTT_FN (sfpshft2_subvec_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,        0, ({M, 0x2}))
 RVTT_FN (sfpshft2_subvec_shfl1_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,  0, ({M, 0x4}))

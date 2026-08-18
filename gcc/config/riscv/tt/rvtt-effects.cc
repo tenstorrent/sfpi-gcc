@@ -98,6 +98,15 @@ no_increment_address_mode ()
   return -1;			/* QSR: unproven -> refuse.  */
 }
 
+/* Public accessor (transp-involution formation shares the same
+   capability fact; see the comment above).  */
+
+int
+rvtt_no_increment_address_mode ()
+{
+  return no_increment_address_mode ();
+}
+
 xtt_effect_set
 rvtt_insn_effects (rtx_insn *insn)
 {
@@ -484,6 +493,27 @@ rvtt_replay_epoch_close (rtx_insn *capture, unsigned payload_words)
 	continue;
       if (asm_noperands (pattern) >= 0 || recog_memoized (cur) < 0)
 	{
+	  /* Canonical raw `.ttinsn' constant words (the TTI_ macro shape
+	     of the LLK library, rvtt-raw-boundary extraction) deliver
+	     exactly one 32-bit instruction word each -- a typed-length
+	     fact of the canonical shape itself, independent of the
+	     word's effect audit.  The recording swallows payload words
+	     without executing them, so the word COUNT is the whole
+	     obligation here; the one exception is a raw word of the
+	     architectural replay-owner opcode (the REPLAY encoding of
+	     the target's encoding table), which stays refused so the
+	     typed OWNER_DURING_CAPTURE refusal cannot be bypassed by
+	     spelling the owner as a raw word.  Multi-word or otherwise
+	     non-canonical asm keeps the refusing default.  */
+	  uint32_t raw_word;
+	  if (asm_noperands (pattern) >= 0
+	      && rvtt_raw_ttinsn_word (cur, &raw_word)
+	      && !rvtt_raw_replay_owner_word_p (raw_word))
+	    {
+	      remaining -= 1;
+	      epoch.close_at = cur;
+	      continue;
+	    }
 	  epoch.status = xtt_replay_epoch::OPAQUE_PAYLOAD;
 	  epoch.blocker = cur;
 	  return epoch;
