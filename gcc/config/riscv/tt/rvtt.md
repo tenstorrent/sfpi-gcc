@@ -2998,6 +2998,16 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "simple_mad_write")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "borrows_mad")
    (set_attr "xtt_lreg_read_ops" "13")
@@ -3020,6 +3030,16 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int (WH and
    ;; BH functional models are bit-identical; default-LaneConfig
    ;; envelope, the planner refuses config mutation around rows).  Here
@@ -3076,6 +3096,16 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int; here the
    ;; VD operand (operand 1) is a hardware constant register.  The "xs"
    ;; constraint (cstlreg < 12) is exactly SFPSWAP.md's VD execution
@@ -3129,6 +3159,16 @@
   "SFPSWAP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int with BOTH
    ;; operands hardware constant registers (VD constrained "xs" < 12,
    ;; SFPSWAP.md's VD execution gate).  Every cstlreg is L8..L15, so
@@ -3289,6 +3329,16 @@
   "SFPSWAP\t%x4, %x5, %8\t# INDEXED R:%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Audited multi-result effect envelope (SFPSWAP.md functional model,
    ;; ENABLE_DEST_INDEX leg; craq-sim TENSIX_EXECUTE_SFPSWAP agrees).  One
    ;; SFPSWAP event on the Simple sub-unit, LREG writeback borrowing the
@@ -3871,6 +3921,17 @@
   ;; refusing defaults, as does every non-BH target.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH mod1 == 8 arm only;
+   ;; three sources in rvtt-cost.md's table): result latency 0 -- [ISA]
+   ;; SFPGT.md/SFPLE.md carry no next-cycle result-read rule; [SIM]
+   ;; immediate lane-write of the tied destination; [HAND] the hand exp
+   ;; kernel's SFPGT->SFPAND one-slot Simple stepping cited by the
+   ;; mod-8 effect audit above.  Every other mod keeps the refusing
+   ;; default.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_int 1) (const_int 0)))
    (set (attr "xtt_subunit")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   && INTVAL (operands[4]) == 8")

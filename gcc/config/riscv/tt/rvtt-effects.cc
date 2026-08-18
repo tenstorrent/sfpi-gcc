@@ -113,6 +113,7 @@ rvtt_insn_effects (rtx_insn *insn)
   xtt_effect_set e = {};
   e.opaque = true;
   e.result_latency = -1;
+  e.next_slot_stall = false;
   e.rwc.kind = xtt_rwc_effect_t::UNKNOWN;
 
   if (!insn || !NONDEBUG_INSN_P (insn) || CALL_P (insn))
@@ -272,6 +273,8 @@ rvtt_insn_effects (rtx_insn *insn)
   e.dst_mem_read = e.subunit == XTT_SU_LOAD;
   e.dst_mem_write = e.subunit == XTT_SU_STORE;
   e.result_latency = get_attr_xtt_result_latency (insn) - 1;
+  e.next_slot_stall
+    = get_attr_xtt_next_slot_stall (insn) == XTT_NEXT_SLOT_STALL_YES;
   e.opaque = false;
   return e;
 }
