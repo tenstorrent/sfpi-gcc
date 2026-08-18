@@ -10,6 +10,23 @@
 
 using vec_t = __xtt_vector;
 
+// Two interleaved dependence chains keep the reissue delivery-bound
+// under the corrected pricing (dependence distance two absorbs the
+// audited mad-family latency).
+#define ROW(SLOT_A, SLOT_B)						\
+  vec_t a##SLOT_A = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 0);	\
+  vec_t b##SLOT_A = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 2);	\
+  vec_t a1##SLOT_A = __builtin_rvtt_sfpmul (a##SLOT_A, c0, 0);		\
+  vec_t b1##SLOT_A = __builtin_rvtt_sfpmul (b##SLOT_A, c0, 0);		\
+  vec_t a2##SLOT_A = __builtin_rvtt_sfpmul (a1##SLOT_A, c1, 0);		\
+  vec_t b2##SLOT_A = __builtin_rvtt_sfpmul (b1##SLOT_A, c1, 0);		\
+  vec_t a3##SLOT_A = __builtin_rvtt_sfpmul (a2##SLOT_A, c2, 0);		\
+  vec_t b3##SLOT_A = __builtin_rvtt_sfpmul (b2##SLOT_A, c2, 0);		\
+  vec_t a4##SLOT_A = __builtin_rvtt_sfpmul (a3##SLOT_A, c3, 0);		\
+  vec_t b4##SLOT_A = __builtin_rvtt_sfpmul (b3##SLOT_A, c3, 0);		\
+  __builtin_rvtt_sfpstore (nullptr, a4##SLOT_A, 0, 0, 0, 0, 0);		\
+  __builtin_rvtt_sfpstore (nullptr, b4##SLOT_A, 0, 0, 0, 0, 2)
+
 void
 tail_rows_rwc ()
 {
@@ -17,24 +34,12 @@ tail_rows_rwc ()
   vec_t c1 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e000002, 0, 0, 31);
   vec_t c2 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e000003, 0, 0, 31);
   vec_t c3 = __builtin_rvtt_sfpxloadi (nullptr, 0x3e000004, 0, 0, 31);
-  for (unsigned ix = 0; ix != 7; ++ix)
+  for (unsigned ix = 0; ix != 16; ++ix)
     {
-      vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
-      vec_t t1 = __builtin_rvtt_sfpmul (a, c0, 0);
-      vec_t t2 = __builtin_rvtt_sfpmul (t1, c1, 0);
-      vec_t t3 = __builtin_rvtt_sfpmul (t2, c2, 0);
-      vec_t t4 = __builtin_rvtt_sfpmul (t3, t1, 0);
-      vec_t t5 = __builtin_rvtt_sfpmul (t4, c3, 0);
-      __builtin_rvtt_sfpstore (nullptr, t5, 0, 0, 0, 0, 7);
+      ROW (r, r);
       __builtin_rvtt_ttincrwc (0, 2, 0, 0);
     }
   /* Identical row followed by a different Dst advance.  */
-  vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
-  vec_t t1 = __builtin_rvtt_sfpmul (a, c0, 0);
-  vec_t t2 = __builtin_rvtt_sfpmul (t1, c1, 0);
-  vec_t t3 = __builtin_rvtt_sfpmul (t2, c2, 0);
-  vec_t t4 = __builtin_rvtt_sfpmul (t3, t1, 0);
-  vec_t t5 = __builtin_rvtt_sfpmul (t4, c3, 0);
-  __builtin_rvtt_sfpstore (nullptr, t5, 0, 0, 0, 0, 7);
+  ROW (t, t);
   __builtin_rvtt_ttincrwc (0, 4, 0, 0);
 }

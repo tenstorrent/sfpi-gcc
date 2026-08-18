@@ -1033,9 +1033,112 @@ provable_constant_trips (class loop *loop, basic_block preheader,
    are exactly the provable trip count, the capture length, the longest
    contiguous sibling-launch run, and the cost-table constants.  */
 
+/* Interlock-aware replay-hoist pricing (2026-08-18 recalibration; Lane
+   BP's five-shape diagnosis + 14-shape silicon validation matrix,
+   laneBP-evidence-20260818/DIAGNOSIS-AND-FIX-SPEC-laneBP.md).
+
+   The superseded model priced the replay reissue stall-free
+   (after = max(PUSH, len*SLOT)) and the pushed body as pure delivery
+   ((1+len)*PUSH): on serially-chained short bodies that converts a
+   delivery-bound loop into an equally-or-more expensive execution-bound
+   one and adds a per-trip record re-delivery.  Silicon charges the
+   reissue len + the audited RAW interlock stalls + a per-launch
+   turnaround, and each record pass an engine overhead beyond word
+   delivery.  Per trip, in centislots (constants in rvtt-cost.md):
+
+     exec   = exec_interlocked_slots(payload) * SLOT
+     before = max(deliver_body, exec)                    ; pushed loop
+              max(deliver_record + RECORD_OVERHEAD, exec); re-record loop
+     after  = max(PUSH, exec + TURNAROUND)               ; launch+reissue
+     record = deliver_record + RECORD_OVERHEAD           ; hoisted pass
+     benefit = trips * (before - after) - record         ; >= MIN_BENEFIT
+
+   A dependence edge whose producer carries no audited result-latency
+   fact makes the payload unpriceable: named refusal
+   replay-reissue-latency-unproved (the -mtt-tensix-replay-hoist-
+   min-benefit= override cannot force an unpriceable payload).  The old
+   execution-saturation (`hidden') term was a special case of
+   exec-bound `after' pricing and is subsumed.  No operation identity,
+   opcode calendar, coefficient value, or instruction-word fingerprint
+   participates.  */
+
+/* Interlocked issue-slot count of the payload span of BLOCK:
+   dependence-tracked with the audited xtt_result_latency facts
+   (intervening slots absorb latency -- the interlock scheduler's own
+   accounting), plus the architectural next-slot acceptance stall fact
+   (xtt_next_slot_stall: the next instruction issues one slot late).
+   Dependence follows the scheduler's definition: a consumer references
+   a producer's SFPU destination by reading it or by lane-predicated
+   writing (disabled lanes preserve prior contents).  Returns -1 when a
+   consumed producer carries no audited latency fact.  */
+
+static HOST_WIDE_INT
+exec_interlocked_slots (replay_block const &block, replay_span span)
+{
+  // QSR carries no audited latency facts (the simulator refuses these
+  // opcode semantics, rvtt-cost.md): the whole target is unpriceable,
+  // matching the interlock scheduler's target-level refusal.
+  if (TARGET_XTT_TENSIX_QSR)
+    return -1;
+  HOST_WIDE_INT slot = 0;
+  HOST_WIDE_INT ready[16];
+  uint32_t unproved = 0;	// regs whose pending producer is unaudited
+  for (int i = 0; i != 16; ++i)
+    ready[i] = 0;
+
+  for (auto pos = block.data () + span.begin,
+	 end = block.data () + span.end; pos != end; ++pos)
+    {
+      if (pos->empty)
+	continue;
+      xtt_effect_set e = rvtt_insn_effects (pos->insn);
+      if (e.opaque)
+	return -1;
+      uint32_t deps = (e.lreg_read | e.lreg_write) & 0xFFFF;
+      if (deps & unproved)
+	return -1;
+      HOST_WIDE_INT at = slot;
+      for (int i = 0; i != 16; ++i)
+	if ((deps & (1u << i)) && ready[i] > at)
+	  at = ready[i];
+      unsigned words = get_attr_length (pos->insn) / 4;
+      HOST_WIDE_INT done = at + words;
+      if (e.next_slot_stall)
+	++done;
+      for (int i = 0; i != 16; ++i)
+	if (e.lreg_write & (1u << i))
+	  {
+	    if (e.result_latency < 0)
+	      unproved |= 1u << i;
+	    else
+	      {
+		unproved &= ~(1u << i);
+		ready[i] = done + e.result_latency;
+	      }
+	  }
+      slot = done;
+    }
+  return slot;
+}
+
+/* Delivered instruction words of the span (multi-word instructions count
+   each word; zero-length ghosts none).  */
+
+static HOST_WIDE_INT
+delivered_words (replay_block const &block, replay_span span)
+{
+  HOST_WIDE_INT words = 0;
+  for (auto pos = block.data () + span.begin,
+	 end = block.data () + span.end; pos != end; ++pos)
+    if (!pos->empty)
+      words += get_attr_length (pos->insn) / 4;
+  return words;
+}
+
 static bool
-hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length,
-		    unsigned launch_run)
+hoist_profitable_p (class loop *loop, basic_block preheader,
+		    replay_block const &block, replay_span payload,
+		    bool body_rerecords, unsigned launch_run)
 {
   uint64_t niter;
   if (!provable_constant_trips (loop, preheader, &niter))
@@ -1056,45 +1159,76 @@ hoist_profitable_p (class loop *loop, basic_block preheader, unsigned length,
       return false;
     }
 
-  HOST_WIDE_INT deliver = ((1 + (HOST_WIDE_INT) length)
-			   * XTT_REPLAY_COST_RISC_PUSH_X100);
-  HOST_WIDE_INT execute = ((HOST_WIDE_INT) length
-			   * XTT_REPLAY_COST_REPLAY_SLOT_X100);
-  HOST_WIDE_INT after = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
-			     execute);
-  // Execution-saturation context: when the body's contiguous run of
-  // sibling launches of this same buffer has enough execution surplus to
-  // hide the record pass's delivery, hoisting relieves nothing per trip.
-  HOST_WIDE_INT surplus = ((HOST_WIDE_INT) launch_run
-			   * (execute - XTT_REPLAY_COST_RISC_PUSH_X100));
-  bool hidden = surplus >= deliver;
-  HOST_WIDE_INT before = hidden ? after : deliver;
-  HOST_WIDE_INT benefit = trips * (before - after) - deliver;
-  if (hidden && dump_file)
-    fprintf (dump_file,
-	     "Record delivery hidden: contiguous launch run %u x length %u"
-	     " exec surplus %ld >= record delivery %ld\n",
-	     launch_run, length, (long) surplus, (long) deliver);
+  HOST_WIDE_INT words = delivered_words (block, payload);
+  HOST_WIDE_INT eslots = exec_interlocked_slots (block, payload);
+  if (eslots < 0)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Not hoisting: replay-reissue-latency-unproved: a"
+		 " consumed payload producer carries no audited result"
+		 " latency (loop %d, %ld words)\n",
+		 loop->num, (long) words);
+      return false;
+    }
+
+  HOST_WIDE_INT exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
+  HOST_WIDE_INT deliver_record
+    = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
+  HOST_WIDE_INT record
+    = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+  HOST_WIDE_INT before = body_rerecords
+    ? MAX (record, exec) : MAX (deliver_body, exec);
+  HOST_WIDE_INT after
+    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
+	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
+  // Execution-saturation cross-check (silicon-validated on the
+  // unary-maxmin shape; retained from the superseded model): when the
+  // body's contiguous run of sibling launches of this same buffer has
+  // enough execution surplus to hide the record pass's delivery,
+  // hoisting relieves nothing per trip.
+  HOST_WIDE_INT surplus = (HOST_WIDE_INT) launch_run
+    * (exec - XTT_REPLAY_COST_RISC_PUSH_X100);
+  if (body_rerecords && surplus >= deliver_record)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Record delivery hidden: contiguous launch run %u exec"
+		 " surplus %ld >= record delivery %ld\n",
+		 launch_run, (long) surplus, (long) deliver_record);
+      before = after;
+    }
+  HOST_WIDE_INT benefit = trips * (before - after) - record;
   HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
 			       ? (HOST_WIDE_INT)
 				 riscv_tt_replay_hoist_min_benefit
 			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
 
+  if (dump_file)
+    fprintf (dump_file,
+	     "Hoist pricing (loop %d): trips %ld, words %ld,"
+	     " exec_ilk %ld slots%s, deliver_body %ld,"
+	     " deliver_record %ld, record %ld, before %ld, after %ld,"
+	     " benefit %ld (min %ld)\n",
+	     loop->num, (long) trips, (long) words, (long) eslots,
+	     body_rerecords ? " [re-record body]" : "",
+	     (long) deliver_body, (long) deliver_record, (long) record,
+	     (long) before, (long) after, (long) benefit,
+	     (long) min_benefit);
+
   if (benefit < min_benefit)
     {
       if (dump_file)
 	fprintf (dump_file,
-		 "Not hoisting: modeled benefit %ld < %ld"
-		 " (trips %ld, length %u)\n",
-		 (long) benefit, (long) min_benefit, (long) trips, length);
+		 "Not hoisting: modeled benefit %ld < %ld\n",
+		 (long) benefit, (long) min_benefit);
       return false;
     }
 
   if (dump_file)
-    fprintf (dump_file,
-	     "Hoist profitable: modeled benefit %ld >= %ld"
-	     " (trips %ld, length %u)\n",
-	     (long) benefit, (long) min_benefit, (long) trips, length);
+    fprintf (dump_file, "Hoist profitable: modeled benefit %ld >= %ld\n",
+	     (long) benefit, (long) min_benefit);
   return true;
 }
 
@@ -1247,7 +1381,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
       return nullptr;
     }
 
-  if (!hoist_profitable_p (loop, preheader, seq.length,
+  if (!hoist_profitable_p (loop, preheader, block, seq.clones.front (),
+			   /*body_rerecords=*/true,
 			   max_contiguous_launch_run (seq, block)))
     return nullptr;
 
@@ -1502,7 +1637,9 @@ hoist_counted_loops (function *cfn,
       // The counted-loop payload is its own single clone; across trips the
       // launch is always separated from the next by the loop-control
       // delivery, so the contiguous launch run is 1.
-      if (!hoist_profitable_p (loop, preheader, seq.length, 1))
+      if (!hoist_profitable_p (loop, preheader, info, seq.clones.front (),
+			       /*body_rerecords=*/false,
+			       /*launch_run=*/1))
 	continue;
 
       auto spans = available_replay_spans (replay_spans, persistent_slots);
@@ -2526,6 +2663,2053 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
     delete cap;
 }
 
+/* ==== Counted-row parameterized formation (canonicalization phase) ====
+
+   docs/COUNTED_ROW_FORMATION.md.  The word-exact sequence discovery above
+   cannot form a record over template-expanded "rows" that repeat modulo
+   (a) per-row immediate materializations and (b) the register allocator's
+   rotation of equivalent assignments.  This phase, gated by
+   -mtt-tensix-optimize-counted-row-formation (default off), REWRITES such
+   parameterized clone families into word-exact form so the existing
+   discovery, budgeting, capture and launch machinery -- unchanged -- forms
+   one parameterized row program:
+
+   1. Invariant-violation exclusion.  A member position whose clones
+      disagree only on compile-time-constant operands is EXCLUDED from the
+      residual and moved to its clone's head, where it will be issued
+      between launches.  The excluded class is derived from the invariance
+      proof itself (the clones' reaching constant operands differ) plus the
+      audited effect set: a single-slot materialization whose only SFPU
+      dataflow is the write (and read-modify-write) of its single
+      destination register and which carries no CC, Dst, RWC, or
+      configuration effect.  No instruction identity participates.
+
+   2. Clone canonicalization for register rotation.  Clones are matched
+      against the first clone under an evolving register value map (the
+      launch-conversion matcher's exact test, run as a transform): every
+      hard-register value whose mapping differs is REWRITTEN to the
+      recorded register -- the whole value, definition and every use, with
+      a linear in-block value analysis proving the rewrite sound.  A
+      live-in value pinned by a fixed multi-definition instruction is
+      bridged with one all-lanes register move issued before the launch
+      and priced as a slot.
+
+   3. Slot-budget honesty.  Candidates are ranked by modeled slot saving
+      (shorter residuals with more clones win ties); a family whose
+      residual exceeds the largest available replay-buffer span refuses by
+      name.  The budget never grows by stealing user-recorded slots.
+
+   Refusals, each by name in the dump, leaving code byte-identical:
+   counted-row-excluded-member-unmovable, counted-row-residual-not-uniform,
+   counted-row-map-live-out, counted-row-slot-budget,
+   counted-row-rename-interference, counted-row-rename-constraint,
+   counted-row-lane-state, counted-row-bridge-clobber.  */
+
+// LREG index domain helpers: xtt_effect_set masks are over L0..L15; the
+// allocatable SFPU hard registers are L0..L7.
+static inline uint32_t
+crf_reg_bit (unsigned regno)
+{
+  gcc_checking_assert (SFPU_REG_P (regno));
+  return 1u << (regno - SFPU_REG_FIRST);
+}
+
+// A member admissible for exclusion from a parameterized record: a
+// single-slot immediate materialization -- every non-register operand a
+// compile-time constant, its only SFPU dataflow the write (and
+// read-modify-write) of its single destination register, and its audited
+// effect set free of CC, Dst, RWC, and configuration effects.  Derived
+// from the effect audit and the cross-clone invariance proof; never from
+// instruction identity.
+
+static bool
+crf_excludable_insn_p (rtx_insn *insn)
+{
+  if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
+    return false;
+  rtx pattern = PATTERN (insn);
+  if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
+    return false;
+  if (get_attr_type (insn) != TYPE_TENSIX
+      || get_attr_xtt_replay (insn) != XTT_REPLAY_SAFE
+      || get_attr_length (insn) != 4
+      || !fixed_replay_rtx_p (pattern))
+    return false;
+
+  // cc_read (the audited model of a lane-gated write) is admissible: the
+  // movement window is proven free of CC writes, so the lane state at the
+  // new position is the state at the old one.  A CC write is not.
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque || e.cc_write
+      || e.config_dests_written || e.config_dests_read
+      || e.addr_mod_slot_write
+      || e.rwc.kind != xtt_rwc_effect_t::NONE
+      || e.dst_mem_read || e.dst_mem_write)
+    return false;
+
+  uint32_t w = e.lreg_write & 0xFF;
+  if (popcount_hwi (w) != 1)
+    return false;
+  if ((e.lreg_write & ~0xFFu) || (e.lreg_read & ~(uint32_t) w))
+    return false;
+  return true;
+}
+
+// Classified SFPU register mentions of an rtx, by pattern position.
+
+static void
+crf_scan_rtx (rtx x, bool in_def, uint32_t *defs, uint32_t *uses,
+	      bool *unhandled)
+{
+  switch (GET_CODE (x))
+    {
+    case REG:
+      if (SFPU_REG_P (REGNO (x)))
+	{
+	  if (REG_NREGS (x) != 1)
+	    *unhandled = true;
+	  else
+	    *(in_def ? defs : uses) |= crf_reg_bit (REGNO (x));
+	}
+      return;
+
+    case SET:
+      crf_scan_rtx (SET_SRC (x), false, defs, uses, unhandled);
+      crf_scan_rtx (SET_DEST (x), true, defs, uses, unhandled);
+      return;
+
+    case CLOBBER:
+      crf_scan_rtx (XEXP (x, 0), true, defs, uses, unhandled);
+      return;
+
+    case USE:
+      crf_scan_rtx (XEXP (x, 0), false, defs, uses, unhandled);
+      return;
+
+    case MEM:
+      // Address registers are uses even under a store destination.
+      crf_scan_rtx (XEXP (x, 0), false, defs, uses, unhandled);
+      return;
+
+    case SUBREG:
+    case STRICT_LOW_PART:
+    case ZERO_EXTRACT:
+      // Partial or indirect register access: not a whole-value def/use.
+      {
+	uint32_t d = 0, u = 0;
+	crf_scan_rtx (XEXP (x, 0), false, &d, &u, unhandled);
+	if (u | d)
+	  *unhandled = true;
+      }
+      return;
+
+    default:
+      {
+	const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+	for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+	  if (fmt[i] == 'e')
+	    crf_scan_rtx (XEXP (x, i), in_def, defs, uses, unhandled);
+	  else if (fmt[i] == 'E')
+	    for (int j = XVECLEN (x, i); j--;)
+	      crf_scan_rtx (XVECEXP (x, i, j), in_def, defs, uses, unhandled);
+      }
+      return;
+    }
+}
+
+// One whole-register value in the linear in-block dataflow model.
+
+struct crf_value
+{
+  int def_pos = -1;		 // -1: live into the block
+  rtx_insn *def_insn = nullptr;
+  unsigned reg = 0;		 // original hard register
+  std::vector<unsigned> use_positions;
+  int last_pos = -1;
+  bool live_out = false;	 // consumed on some path after the block
+  bool fixed = false;		 // multi-definition or hidden-effect def
+  bool poisoned = false;	 // range crosses an opaque event or shadow
+  int renamed_to = -1;		 // planned final hard register (-1 = keep)
+};
+
+// Per-position facts for the whole block.
+
+struct crf_position
+{
+  rtx_insn *insn;
+  uint32_t defs = 0, uses = 0;	 // SFPU reg masks (pattern + audited extra)
+  bool eligible = false;	 // may be a family member
+  bool excludable = false;	 // admissible for invariant-violation exclusion
+  bool barrier = false;		 // breaks family runs
+  bool empty = false;		 // zero-length marker: transparent
+  bool cc_write = false;
+  bool opaque = false;
+  uint32_t marker_mask = 0;	 // zero-length LREG interface marker
+  unsigned phash = 0;		 // parameterized structural hash
+  int value_of_def[8];		 // value index defined per reg, or -1
+  int value_of_use[8];		 // value index consumed per reg, or -1
+  crf_position () { memset (value_of_def, -1, sizeof (value_of_def));
+		    memset (value_of_use, -1, sizeof (value_of_use)); }
+};
+
+struct crf_block
+{
+  basic_block bb;
+  std::vector<crf_position> pos;
+  std::vector<crf_value> values;
+};
+
+// Parameterized structural hash: instruction code and full structure with
+// SFPU register numbers abstracted, and with constant operands abstracted
+// only for exclusion-admissible instructions (their constants never enter
+// the record; every other constant is part of the recorded word).
+
+static unsigned
+crf_param_hash (rtx_insn *insn, bool excludable)
+{
+  auto hasher = [excludable] (auto &self, unsigned hash, rtx rtl) -> unsigned
+  {
+    hash = crc32_unsigned (hash, GET_CODE (rtl) + (GET_MODE (rtl) << 16));
+    switch (GET_CODE (rtl))
+      {
+      case UNSPEC:
+      case UNSPEC_VOLATILE:
+	hash = crc32_unsigned (hash, XINT (rtl, 1));
+	// FALLTHROUGH
+      case PARALLEL:
+	{
+	  auto &vec = XVEC (rtl, 0);
+	  for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
+	    hash = self (self, hash, RTVEC_ELT (vec, ix));
+	}
+	break;
+
+      case SET:
+	hash = self (self, hash, SET_SRC (rtl));
+	hash = self (self, hash, SET_DEST (rtl));
+	break;
+
+      case REG:
+	if (!SFPU_REG_P (REGNO (rtl)))
+	  hash = crc32_unsigned (hash, REGNO (rtl));
+	break;
+
+      case CONST_INT:
+	if (!excludable)
+	  hash = crc32_unsigned (hash, unsigned (INTVAL (rtl)));
+	break;
+
+      case CLOBBER:
+      case USE:
+	hash = self (self, hash, XEXP (rtl, 0));
+	break;
+
+      default:
+	break;
+      }
+    return hash;
+  };
+  return hasher (hasher, recog_memoized (insn), PATTERN (insn));
+}
+
+// Build the linear value model and per-position facts for BB.  Returns
+// false when the block cannot be modeled (variable user capture).
+
+static bool
+crf_scan_block (basic_block bb, crf_block &blk)
+{
+  blk.bb = bb;
+  blk.pos.clear ();
+  blk.values.clear ();
+
+  int cur[8];
+  for (int i = 0; i != 8; ++i)
+    cur[i] = -1;
+
+  unsigned shadow = 0;
+
+  auto value_at = [&] (unsigned regix, unsigned pos_ix) -> int
+  {
+    if (cur[regix] < 0)
+      {
+	// Live into the block.
+	blk.values.emplace_back ();
+	crf_value &v = blk.values.back ();
+	v.reg = SFPU_REG_FIRST + regix;
+	v.def_pos = -1;
+	cur[regix] = int (blk.values.size ()) - 1;
+      }
+    crf_value &v = blk.values[cur[regix]];
+    v.use_positions.push_back (pos_ix);
+    v.last_pos = int (pos_ix);
+    return cur[regix];
+  };
+
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+
+      blk.pos.emplace_back ();
+      crf_position &p = blk.pos.back ();
+      unsigned pos_ix = blk.pos.size () - 1;
+      p.insn = insn;
+
+      bool opaque_event = false;
+      bool in_shadow = shadow > 0;
+
+      if (CALL_P (insn) || GET_CODE (insn) == JUMP_INSN)
+	opaque_event = CALL_P (insn);
+      else if (asm_noperands (PATTERN (insn)) >= 0
+	       || (GET_CODE (insn) == INSN && recog_memoized (insn) < 0))
+	opaque_event = true;
+
+      rtx pattern = PATTERN (insn);
+      bool unhandled = false;
+      if (!opaque_event)
+	crf_scan_rtx (pattern, false, &p.defs, &p.uses, &unhandled);
+      if (unhandled)
+	opaque_event = true;
+
+      bool tensix = GET_CODE (insn) == INSN && !opaque_event
+	&& recog_memoized (insn) >= 0
+	&& GET_CODE (pattern) != USE && GET_CODE (pattern) != CLOBBER
+	&& get_attr_type (insn) == TYPE_TENSIX;
+
+      uint32_t fixed_extra = 0;
+      if (tensix)
+	{
+	  replay_span span;
+	  auto rtype = get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER
+	    ? is_replay_insn (span, insn) : REPLAY_none;
+	  if (rtype != REPLAY_none)
+	    {
+	      if (rtype == REPLAY_variable_capture)
+		return false;
+	      if (rtype == REPLAY_fixed_capture)
+		shadow = span.end;
+	      p.barrier = true;
+	    }
+	  else
+	    {
+	      xtt_effect_set e = rvtt_insn_effects (insn);
+	      if (e.opaque)
+		opaque_event = true;
+	      else
+		{
+		  p.cc_write = e.cc_write;
+		  // Audited architectural effects beyond the pattern's
+		  // registers: hidden dataflow, modeled as fixed def+use.
+		  fixed_extra = ((e.lreg_write | e.lreg_read) & 0xFF)
+		    & ~(p.defs | p.uses);
+		  p.defs |= fixed_extra;
+		  p.uses |= fixed_extra;
+		}
+	      p.empty = !get_attr_length (insn);
+	      if (p.empty)
+		rvtt_lreg_marker (insn, &p.marker_mask);
+	      if (in_shadow && !p.empty)
+		shadow--;
+	    }
+	}
+      p.opaque = opaque_event;
+
+      if (opaque_event)
+	{
+	  // Unknown reads and writes: poison every live value, extend
+	  // their ranges, and act as a run barrier.
+	  for (int i = 0; i != 8; ++i)
+	    if (cur[i] >= 0)
+	      {
+		blk.values[cur[i]].poisoned = true;
+		blk.values[cur[i]].use_positions.push_back (pos_ix);
+		blk.values[cur[i]].last_pos = int (pos_ix);
+	      }
+	  p.barrier = true;
+	  continue;
+	}
+
+      // Uses consume the current values.
+      for (int i = 0; i != 8; ++i)
+	if (p.uses & (1u << i))
+	  p.value_of_use[i] = value_at (i, pos_ix);
+
+      // Definitions begin new values.
+      unsigned ndefs = popcount_hwi (p.defs);
+      for (int i = 0; i != 8; ++i)
+	if (p.defs & (1u << i))
+	  {
+	    blk.values.emplace_back ();
+	    crf_value &v = blk.values.back ();
+	    v.reg = SFPU_REG_FIRST + i;
+	    v.def_pos = int (pos_ix);
+	    v.def_insn = insn;
+	    v.last_pos = int (pos_ix);
+	    v.fixed = ndefs > 1 || (fixed_extra & (1u << i));
+	    v.poisoned = in_shadow || (fixed_extra & (1u << i));
+	    cur[i] = int (blk.values.size ()) - 1;
+	    p.value_of_def[i] = cur[i];
+	  }
+
+      if (in_shadow)
+	{
+	  // Values consumed by a user capture payload feed a recorded
+	  // program with launch sites this analysis cannot see.
+	  for (int i = 0; i != 8; ++i)
+	    if (p.value_of_use[i] >= 0)
+	      blk.values[p.value_of_use[i]].poisoned = true;
+	  p.barrier = true;
+	  continue;
+	}
+
+      if (p.barrier || p.empty)
+	continue;
+
+      p.excludable = crf_excludable_insn_p (insn);
+      if (p.excludable)
+	// Transparent to discovery: re-attached to the containing clone
+	// at verification, moved to its head or tail by dataflow.
+	continue;
+      p.eligible = conv_run_insn_p (insn);
+      if (p.eligible)
+	p.phash = crf_param_hash (insn, false);
+      else
+	p.barrier = true;
+    }
+
+  // Values still live at the block's end that some path consumes.
+  for (int i = 0; i != 8; ++i)
+    if (cur[i] >= 0)
+      blk.values[cur[i]].live_out
+	= conv_reg_consumed_after_p (SFPU_REG_FIRST + i, BB_END (bb), bb);
+
+  if (dump_file && getenv ("CRF_DEBUG_STREAM"))
+    for (unsigned ix = 0; ix != blk.pos.size (); ++ix)
+      {
+	crf_position const &p = blk.pos[ix];
+	fprintf (dump_file, "crf pos %u: uid %d %s%s%s%s d=0x%x u=0x%x\n",
+		 ix, INSN_UID (p.insn), p.barrier ? "BAR " : "",
+		 p.empty ? "EMPTY " : "", p.excludable ? "EXCL " : "",
+		 p.eligible ? "MEM " : "", p.defs, p.uses);
+	if (!p.empty && !p.barrier)
+	  dump_insn_slim (dump_file, p.insn);
+      }
+
+  return !blk.pos.empty ();
+}
+
+// One clone of a parameterized family: a span of positions and the
+// evolving register value map relating it to the family's first clone.
+
+struct crf_clone
+{
+  unsigned begin, end;		 // half-open position span
+  std::map<unsigned, unsigned> p2r, r2p; // seed reg <-> clone reg
+  std::map<unsigned, bool> defined_p, defined_r;
+};
+
+struct crf_seq
+{
+  unsigned parent = 0;
+  unsigned hash = 0;
+  unsigned length = 0;		 // members (excludable/empty not counted)
+  std::vector<crf_clone> clones; // clones[0] is the seed
+};
+
+// Structural lockstep match of one seed/clone member pair under the
+// evolving map.  Extends the launch-conversion matcher in exactly one
+// way: a live-in register pair may differ, recorded in the map as a
+// canonicalization requirement rather than failing.  Everything else --
+// codes, modes, structure, constants, run-local value correspondence --
+// must agree.
+
+static bool
+crf_match_rtx (rtx a, rtx b, bool in_def, crf_clone &map,
+	       std::vector<std::pair<unsigned, unsigned>> &pending_defs)
+{
+  if (GET_CODE (a) != GET_CODE (b) || GET_MODE (a) != GET_MODE (b))
+    return false;
+  switch (GET_CODE (a))
+    {
+    case REG:
+      {
+	if (REG_NREGS (a) != 1 || REG_NREGS (b) != 1)
+	  return false;
+	unsigned pa = REGNO (a), rb = REGNO (b);
+	if (!SFPU_REG_P (pa) || !SFPU_REG_P (rb))
+	  return pa == rb;
+	if (in_def)
+	  {
+	    pending_defs.emplace_back (pa, rb);
+	    return true;
+	  }
+	if (map.defined_p.count (pa) || map.defined_r.count (rb))
+	  // Run-local value: must be the corresponding definition.
+	  return map.defined_p.count (pa) && map.defined_r.count (rb)
+	    && map.p2r.count (pa) && map.p2r[pa] == rb
+	    && map.r2p.count (rb) && map.r2p[rb] == pa;
+	// Live-in use: record the (possibly differing) correspondence.
+	auto pi = map.p2r.find (pa), ri = map.r2p.find (rb);
+	if (pi != map.p2r.end () || ri != map.r2p.end ())
+	  return pi != map.p2r.end () && pi->second == rb
+	    && ri != map.r2p.end () && ri->second == pa;
+	map.p2r[pa] = rb;
+	map.r2p[rb] = pa;
+	return true;
+      }
+
+    case CONST_INT:
+      return INTVAL (a) == INTVAL (b);
+
+    case SCRATCH:
+      return true;
+
+    case SET:
+      return crf_match_rtx (SET_SRC (a), SET_SRC (b), false, map,
+			    pending_defs)
+	&& crf_match_rtx (SET_DEST (a), SET_DEST (b), true, map,
+			  pending_defs);
+
+    case CLOBBER:
+      return crf_match_rtx (XEXP (a, 0), XEXP (b, 0), true, map,
+			    pending_defs);
+
+    case USE:
+    case MEM:
+      return crf_match_rtx (XEXP (a, 0), XEXP (b, 0), false, map,
+			    pending_defs);
+
+    case UNSPEC:
+    case UNSPEC_VOLATILE:
+      if (XINT (a, 1) != XINT (b, 1))
+	return false;
+      // FALLTHROUGH
+    case PARALLEL:
+      {
+	if (XVECLEN (a, 0) != XVECLEN (b, 0))
+	  return false;
+	for (int ix = 0; ix != XVECLEN (a, 0); ++ix)
+	  if (!crf_match_rtx (XVECEXP (a, 0, ix), XVECEXP (b, 0, ix),
+			      in_def, map, pending_defs))
+	    return false;
+	return true;
+      }
+
+    default:
+      return false;
+    }
+}
+
+static bool
+crf_match_insn (rtx_insn *p, rtx_insn *r, crf_clone &map)
+{
+  if (recog_memoized (p) != recog_memoized (r))
+    return false;
+  std::vector<std::pair<unsigned, unsigned>> pending_defs;
+  if (!crf_match_rtx (PATTERN (p), PATTERN (r), false, map, pending_defs))
+    return false;
+  for (auto const &def : pending_defs)
+    {
+      map.p2r[def.first] = def.second;
+      map.r2p[def.second] = def.first;
+      map.defined_p[def.first] = true;
+      map.defined_r[def.second] = true;
+    }
+  return true;
+}
+
+// Transparent positions never become members: zero-length markers and
+// exclusion-admissible materializations (the latter are re-attached to
+// the clone that contains them at verification).
+
+static inline bool
+crf_transparent_p (crf_position const &p)
+{
+  return p.empty || p.excludable;
+}
+
+// Grow parameterized sequences over the block, mirroring build_sequences'
+// grow-by-one architecture with the lockstep matcher in place of word
+// equality.
+
+static void
+crf_extend (std::map<unsigned, std::vector<unsigned>> &map,
+	    std::vector<crf_seq> &list, crf_block &blk,
+	    unsigned parent, unsigned length, unsigned begin, unsigned end)
+{
+  crf_position &p = blk.pos[end - 1];
+  unsigned hash = parent ? crc32_unsigned (list[parent].hash, p.phash)
+    : p.phash;
+
+  auto slot = map.emplace (hash, std::vector<unsigned> ());
+  for (auto ix : slot.first->second)
+    {
+      if (list[ix].parent != parent)
+	continue;
+      // A joining clone matches all members from scratch against the
+      // sequence's seed.
+      crf_clone cand;
+      cand.begin = begin;
+      cand.end = end;
+      bool ok = true;
+      crf_seq &seq0 = list[ix];
+      unsigned spos = seq0.clones.front ().begin;
+      unsigned cpos = begin;
+      for (unsigned member = 0; member != length; ++member)
+	{
+	  while (crf_transparent_p (blk.pos[spos]))
+	    ++spos;
+	  while (crf_transparent_p (blk.pos[cpos]))
+	    ++cpos;
+	  if (!crf_match_insn (blk.pos[spos].insn, blk.pos[cpos].insn,
+			       cand))
+	    {
+	      ok = false;
+	      break;
+	    }
+	  ++spos;
+	  ++cpos;
+	}
+      if (!ok)
+	continue;
+      if (begin <= seq0.clones.back ().begin)
+	continue;
+      seq0.clones.push_back (std::move (cand));
+      return;
+    }
+
+  slot.first->second.push_back (unsigned (list.size ()));
+  list.emplace_back ();
+  crf_seq &seq = list.back ();
+  seq.parent = parent;
+  seq.hash = hash;
+  seq.length = length;
+  crf_clone seed;
+  seed.begin = begin;
+  seed.end = end;
+  // Seed self-match establishes the identity map and def sets.
+  {
+    unsigned spos = begin;
+    for (unsigned member = 0; member != length; ++member)
+      {
+	while (crf_transparent_p (blk.pos[spos]))
+	  ++spos;
+	crf_match_insn (blk.pos[spos].insn, blk.pos[spos].insn, seed);
+	++spos;
+      }
+  }
+  seq.clones.push_back (std::move (seed));
+}
+
+static void
+crf_build_sequences (std::vector<crf_seq> &list, crf_block &blk,
+		     unsigned max_residual)
+{
+  list.clear ();
+  list.push_back (crf_seq ()); // null
+  std::map<unsigned, std::vector<unsigned>> map;
+
+  unsigned n = blk.pos.size ();
+  for (unsigned ix = 0; ix != n; ++ix)
+    {
+      crf_position &p = blk.pos[ix];
+      if (p.barrier || crf_transparent_p (p) || !p.eligible)
+	continue;
+      crf_extend (map, list, blk, 0, 1, ix, ix + 1);
+    }
+
+  unsigned from = 1, length = 1;
+  unsigned max_length = max_residual;
+  while (length++ < max_length)
+    {
+      map.clear ();
+      unsigned seq_end = list.size ();
+      for (unsigned seq_ix = from; seq_ix != seq_end; ++seq_ix)
+	{
+	  if (list[seq_ix].clones.size () == 1)
+	    continue;
+	  for (unsigned clone_ix = 0,
+		 clone_end = list[seq_ix].clones.size ();
+	       clone_ix != clone_end; ++clone_ix)
+	    {
+	      unsigned span_begin = list[seq_ix].clones[clone_ix].begin;
+	      unsigned span_end = list[seq_ix].clones[clone_ix].end;
+	    skip_transparent:
+	      if (span_end >= blk.pos.size ())
+		continue;
+	      if (crf_transparent_p (blk.pos[span_end]))
+		{
+		  span_end++;
+		  goto skip_transparent;
+		}
+	      crf_position &nxt = blk.pos[span_end];
+	      if (nxt.barrier || !nxt.eligible)
+		continue;
+	      crf_extend (map, list, blk, seq_ix, length, span_begin,
+			  span_end + 1);
+	    }
+	}
+      from = seq_end;
+    }
+}
+
+// A selected family, fully verified: the rename plan, bridges, and
+// member movements ready to apply.
+
+struct crf_plan
+{
+  unsigned residual = 0;		   // recorded slot words (= members)
+  int saving = 0;			   // modeled issued-slot saving
+  std::vector<crf_clone> clones;	   // surviving, disjoint
+  // per clone: member positions (block indices), lockstep with the seed's
+  std::vector<std::vector<unsigned>> members;
+  // value index -> final hard reg
+  std::map<unsigned, unsigned> renames;
+  // value index -> clone whose lockstep walk required the rename
+  // (bystander cascade swaps carry -1)
+  std::map<unsigned, int> rename_source;
+  // per clone: bridge moves (dest_reg <- src_reg) inserted at clone head
+  std::vector<std::vector<std::pair<unsigned, unsigned>>> bridges;
+  // per clone: excludable positions inside the span moving to the head
+  // (its consumer is a member) or the tail (consumers all later)
+  std::vector<std::vector<unsigned>> moves_head;
+  std::vector<std::vector<unsigned>> moves_tail;
+};
+
+static void
+crf_clone_members (crf_block const &blk, crf_clone const &c, unsigned length,
+		   std::vector<unsigned> &out)
+{
+  out.clear ();
+  for (unsigned pos = c.begin; pos != c.end && out.size () != length; ++pos)
+    if (!crf_transparent_p (blk.pos[pos]) && blk.pos[pos].eligible
+	&& !blk.pos[pos].barrier)
+      out.push_back (pos);
+}
+
+// The final register of a value under the plan.
+
+static inline unsigned
+crf_final_reg (crf_block const &blk, crf_plan const &plan, int vix)
+{
+  auto it = plan.renames.find (vix);
+  return it != plan.renames.end () ? it->second : blk.values[vix].reg;
+}
+
+// Final-assignment def/use register masks of the instruction at POS.
+
+static void
+crf_final_masks (crf_block const &blk, crf_plan const &plan, unsigned pos,
+		 uint32_t *defs, uint32_t *uses)
+{
+  crf_position const &p = blk.pos[pos];
+  *defs = 0;
+  *uses = 0;
+  for (int i = 0; i != 8; ++i)
+    {
+      if (p.value_of_def[i] >= 0)
+	*defs |= crf_reg_bit (crf_final_reg (blk, plan, p.value_of_def[i]));
+      if (p.value_of_use[i] >= 0)
+	*uses |= crf_reg_bit (crf_final_reg (blk, plan, p.value_of_use[i]));
+    }
+  *uses |= p.marker_mask & 0xFF;
+}
+
+// Can the excluded materialization at POS move to the clone HEAD (before
+// ANCHOR) or TAIL (after LAST), under the FINAL register assignment?
+// Ordinary dependence check against every crossed instruction; a crossed
+// CC write would change the member's lane gating.  Positions in SKIP move
+// with it (order preserved) and are transparent.
+
+static bool
+crf_move_ok (crf_block const &blk, crf_plan const &plan, unsigned pos,
+	     unsigned from, unsigned to,
+	     std::vector<unsigned> const &skip)
+{
+  uint32_t mdefs, muses;
+  crf_final_masks (blk, plan, pos, &mdefs, &muses);
+  for (unsigned ix = from; ix != to; ++ix)
+    {
+      if (ix == pos)
+	continue;
+      if (std::find (skip.begin (), skip.end (), ix) != skip.end ())
+	continue;
+      crf_position const &q = blk.pos[ix];
+      if (q.empty && !q.marker_mask)
+	continue;
+      if (q.opaque || q.cc_write)
+	return false;
+      uint32_t qdefs, quses;
+      crf_final_masks (blk, plan, ix, &qdefs, &quses);
+      if ((qdefs & (mdefs | muses)) || (quses & mdefs))
+	return false;
+    }
+  return true;
+}
+
+
+static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
+			      int *conflict_a = nullptr,
+			      int *conflict_b = nullptr);
+
+// True read-modify-write tie of INSN's definition of REG: a source
+// operand carries a matching constraint naming the destination operand,
+// so both share one encoded register field and a rename must carry the
+// register's previous value along.  A source that merely happens to name
+// the same register in an independently encoded field is not a tie.
+
+static bool
+crf_tied_rmw_p (rtx_insn *insn, unsigned reg)
+{
+  extract_insn_cached (insn);
+  int dest_op = -1;
+  for (int i = 0; i < recog_data.n_operands; ++i)
+    if (recog_data.operand_type[i] != OP_IN
+	&& REG_P (recog_data.operand[i])
+	&& REGNO (recog_data.operand[i]) == reg)
+      {
+	if (recog_data.operand_type[i] == OP_INOUT)
+	  return true;
+	dest_op = i;
+      }
+  if (dest_op < 0)
+    return false;
+  for (int i = 0; i < recog_data.n_operands; ++i)
+    {
+      if (i == dest_op || !REG_P (recog_data.operand[i])
+	  || REGNO (recog_data.operand[i]) != reg)
+	continue;
+      for (const char *c = recog_data.constraints[i]; *c;)
+	if (ISDIGIT (*c))
+	  {
+	    char *end;
+	    if (strtol (c, &end, 10) == dest_op)
+	      return true;
+	    c = end;
+	  }
+	else
+	  ++c;
+    }
+  return false;
+}
+
+// Verify one candidate family and build its plan.  Returns true with PLAN
+// filled on success; every refusal dumps its taxonomy name.
+
+static bool
+crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
+		   bool sticky, crf_plan &plan, unsigned ref)
+{
+  unsigned length = seq.length;
+
+  // Overlap triage: clones ascending by begin; keep a maximal disjoint set.
+  plan.clones.clear ();
+  {
+    unsigned bound = 0;
+    for (auto const &c : seq.clones)
+      {
+	if (plan.clones.size () && c.begin < bound)
+	  continue;
+	plan.clones.push_back (c);
+	bound = c.end;
+      }
+  }
+  if (plan.clones.size () < 2 || ref >= plan.clones.size ())
+    return false;
+
+  plan.residual = length;
+  if (length < MIN_SEQUENCE)
+    return false;
+  if (length > budget)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		 " counted-row-slot-budget: residual %u exceeds the largest"
+		 " available replay span %u\n",
+		 plan.clones.front ().begin, plan.clones.front ().end,
+		 length, budget);
+      return false;
+    }
+
+  plan.members.assign (plan.clones.size (), {});
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      crf_clone_members (blk, plan.clones[c], length, plan.members[c]);
+      if (plan.members[c].size () != length)
+	return false;
+    }
+
+  // Residual soundness under possibly-enabled shadow coupling, and the
+  // v1 multi-result restriction (companion-group boundary semantics stay
+  // with the word-exact machinery).
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    for (unsigned m = 0; m != length; ++m)
+      {
+	rtx_insn *insn = blk.pos[plan.members[c][m]].insn;
+	xtt_effect_set e = rvtt_insn_effects (insn);
+	xtt_multiresult_group group;
+	if (rvtt_multiresult_group (insn, e, &group))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		       " counted-row-residual-not-uniform: member %u is a"
+		       " multi-result instruction\n",
+		       plan.clones.front ().begin,
+		       plan.clones.front ().end, m);
+	    return false;
+	  }
+	if (sticky && (e.lreg_write & 0xF))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		       " shadow-state-unproved: member %u writes the value"
+		       " bank under possibly-enabled index tracking\n",
+		       plan.clones.front ().begin,
+		       plan.clones.front ().end, m);
+	    return false;
+	  }
+      }
+
+  // Rename planning with seed chain-closure.  SEED_REMAP retargets the
+  // seed's own definition at member M when a cross-clone value carries a
+  // def role and a live-in role that demand different registers.  A
+  // refusal specific to one clone drops that clone; only seed-side
+  // refusals and non-converging chain closure refuse the whole family.
+  plan.bridges.assign (plan.clones.size (), {});
+  plan.moves_head.assign (plan.clones.size (), {});
+  plan.moves_tail.assign (plan.clones.size (), {});
+  std::map<unsigned, unsigned> seed_remap; // member index -> target reg
+
+  auto seed_def_reg = [&] (unsigned m) -> int
+  {
+    auto it = seed_remap.find (m);
+    if (it != seed_remap.end ())
+      return int (it->second);
+    crf_position const &p = blk.pos[plan.members[ref][m]];
+    if (!p.defs)
+      return -1;
+    gcc_assert (popcount_hwi (p.defs) == 1);
+    return SFPU_REG_FIRST + exact_log2 (p.defs);
+  };
+
+  unsigned iter_limit = 8 + unsigned (plan.clones.size ());
+  int drop_clone = -1;
+  for (unsigned iter = 0; ; ++iter)
+    {
+      if (drop_clone >= 0)
+	{
+	  gcc_assert (unsigned (drop_clone) != ref);
+	  plan.clones.erase (plan.clones.begin () + drop_clone);
+	  plan.members.erase (plan.members.begin () + drop_clone);
+	  plan.bridges.erase (plan.bridges.begin () + drop_clone);
+	  plan.moves_head.erase (plan.moves_head.begin () + drop_clone);
+	  plan.moves_tail.erase (plan.moves_tail.begin () + drop_clone);
+	  if (unsigned (drop_clone) < ref)
+	    --ref;
+	  drop_clone = -1;
+	  if (plan.clones.size () < 2)
+	    return false;
+	}
+      if (iter == iter_limit)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		     " counted-row-map-live-out: chain closure did not"
+		     " converge\n", plan.clones.front ().begin,
+		     plan.clones.front ().end);
+	  return false;
+	}
+
+      plan.renames.clear ();
+      plan.rename_source.clear ();
+      for (auto &b : plan.bridges)
+	b.clear ();
+      bool remapped = false;
+      bool refused = false;
+      // Which member's definition role planned a value's rename, for
+      // chain closure from the live-in side.
+      std::map<unsigned, unsigned> plan_def_member;
+
+      uint32_t seed_writes = 0;
+      for (unsigned m = 0; m != length; ++m)
+	{
+	  int r = seed_def_reg (m);
+	  if (r >= 0)
+	    seed_writes |= crf_reg_bit (r);
+	}
+
+      // Plan one value's rename with read-modify-write chain closure:
+      // when a renamed value's definition also consumes the register's
+      // previous value (an RMW half), that value must move to the same
+      // register or the single encoded register field would tear.
+      // Returns 1 on success, 0 on an in-plan conflict (caller decides),
+      // -1 on an unrenameable value.
+      int planning_clone = -1;
+      auto plan_rename = [&] (int vix0, unsigned target) -> int
+      {
+	std::vector<int> work (1, vix0);
+	while (!work.empty ())
+	  {
+	    int vix = work.back ();
+	    work.pop_back ();
+	    crf_value const &v = blk.values[vix];
+	    if (v.reg == target && !plan.renames.count (vix))
+	      continue;
+	    auto it = plan.renames.find (vix);
+	    if (it != plan.renames.end ())
+	      {
+		if (it->second == target)
+		  continue;
+		return 0;
+	      }
+	    if (v.fixed || v.poisoned || v.live_out || v.def_pos < 0)
+	      return -1;
+	    plan.renames[vix] = target;
+	    plan.rename_source[vix] = planning_clone;
+	    // RMW chain: the definition consumes the register's previous
+	    // value through a TIED operand (one encoded field).
+	    crf_position const &dp = blk.pos[v.def_pos];
+	    int bit = int (v.reg) - SFPU_REG_FIRST;
+	    if (dp.value_of_use[bit] >= 0
+		&& crf_tied_rmw_p (v.def_insn, v.reg))
+	      work.push_back (dp.value_of_use[bit]);
+	  }
+	return 1;
+      };
+
+      for (unsigned c = 0;
+	   c != plan.clones.size () && !refused && drop_clone < 0
+	   && !remapped; ++c)
+	{
+	  if (c == ref)
+	    continue;
+	  planning_clone = int (c);
+	  crf_clone map;
+	  for (unsigned m = 0;
+	       m != length && !refused && drop_clone < 0 && !remapped; ++m)
+	    {
+	      unsigned spos = plan.members[ref][m];
+	      unsigned cpos = plan.members[c][m];
+	      std::map<unsigned, unsigned> before_r2p = map.r2p;
+	      if (!crf_match_insn (blk.pos[spos].insn, blk.pos[cpos].insn,
+				   map))
+		{
+		  drop_clone = int (c);
+		  if (dump_file)
+		    fprintf (dump_file, "Dropping counted-row clone"
+			     " [%u,%u): counted-row-residual-not-uniform:"
+			     " diverges at member %u\n",
+			     plan.clones[c].begin, plan.clones[c].end, m);
+		  break;
+		}
+
+	      crf_position const &cp = blk.pos[cpos];
+
+	      // New live-in correspondences discovered at this member.
+	      for (auto const &pr : map.r2p)
+		{
+		  if (map.defined_r.count (pr.first))
+		    continue;
+		  if (before_r2p.count (pr.first))
+		    continue;
+		  unsigned t = pr.first, s = pr.second;
+		  if (t == s)
+		    continue;
+		  int ci = int (t) - SFPU_REG_FIRST;
+		  int vu = cp.value_of_use[ci];
+		  if (vu < 0)
+		    continue;
+		  crf_value const &v = blk.values[vu];
+		  if (!v.fixed && !v.poisoned && !v.live_out
+		      && v.def_pos >= 0)
+		    {
+		      int rr = plan_rename (vu, s);
+		      if (rr == 1)
+			continue;
+		      if (rr == 0)
+			{
+			  // Def role vs live-in role conflict: close the
+			  // chain by retargeting the seed definition the
+			  // def role mirrors, then replan.
+			  auto dm = plan_def_member.find (vu);
+			  if (dm != plan_def_member.end ())
+			    {
+			      seed_remap[dm->second] = s;
+			      remapped = true;
+			      break;
+			    }
+			}
+		      drop_clone = int (c);
+		      if (dump_file)
+			fprintf (dump_file, "Dropping counted-row clone"
+				 " [%u,%u): counted-row-map-live-out:"
+				 " live-in value in r%u cannot move to"
+				 " r%u\n", plan.clones[c].begin,
+				 plan.clones[c].end, t, s);
+		      break;
+		    }
+		  // Unrenameable live-in: bridge with one all-lanes move,
+		  // unless the recorded program would clobber the source
+		  // still needed later.
+		  bool used_later = false;
+		  for (unsigned up : v.use_positions)
+		    if (up >= plan.clones[c].end)
+		      used_later = true;
+		  if (v.live_out)
+		    used_later = true;
+		  if (used_later && (seed_writes & crf_reg_bit (t)))
+		    {
+		      drop_clone = int (c);
+		      if (dump_file)
+			fprintf (dump_file, "Dropping counted-row clone"
+				 " [%u,%u): counted-row-bridge-clobber:"
+				 " r%u is written by the recorded program"
+				 " but consumed after the clone\n",
+				 plan.clones[c].begin,
+				 plan.clones[c].end, t);
+		      break;
+		    }
+		  plan.bridges[c].emplace_back (s, t);
+		}
+	      if (refused || drop_clone >= 0 || remapped)
+		break;
+
+	      // Definition roles.
+	      if (cp.defs)
+		{
+		  gcc_assert (popcount_hwi (cp.defs) == 1);
+		  int ci = exact_log2 (cp.defs);
+		  int vd = cp.value_of_def[ci];
+		  gcc_assert (vd >= 0);
+		  crf_value const &v = blk.values[vd];
+		  int want = seed_def_reg (m);
+		  gcc_assert (want >= 0);
+		  auto it = plan.renames.find (vd);
+		  if (it != plan.renames.end ()
+		      && int (it->second) != want)
+		    {
+		      // The value already carries a live-in role demanding
+		      // a different register: close the seed chain at this
+		      // member and replan.
+		      seed_remap[m] = it->second;
+		      remapped = true;
+		      break;
+		    }
+		  if (int (v.reg) != want || it != plan.renames.end ())
+		    {
+		      if (v.fixed || v.poisoned || v.live_out)
+			{
+			  drop_clone = int (c);
+			  if (dump_file)
+			    fprintf (dump_file, "Dropping counted-row"
+				     " clone [%u,%u):"
+				     " counted-row-map-live-out: pinned or"
+				     " live-out definition of r%u at"
+				     " member %u\n", plan.clones[c].begin,
+				     plan.clones[c].end, v.reg, m);
+			  break;
+			}
+		      int rr = plan_rename (vd, want);
+		      if (rr != 1)
+			{
+			  drop_clone = int (c);
+			  if (dump_file)
+			    fprintf (dump_file, "Dropping counted-row"
+				     " clone [%u,%u):"
+				     " counted-row-map-live-out:"
+				     " definition of r%u at member %u"
+				     " cannot move to r%u\n",
+				     plan.clones[c].begin,
+				     plan.clones[c].end, v.reg, m, want);
+			  break;
+			}
+		    }
+		  if (!plan_def_member.count (vd))
+		    plan_def_member[vd] = m;
+		}
+	    }
+	}
+
+      // Seed remap entries are renames of the seed's own def values.
+      planning_clone = -1;
+      if (!remapped && drop_clone < 0 && !refused)
+	for (auto const &sr : seed_remap)
+	  {
+	    crf_position const &p = blk.pos[plan.members[ref][sr.first]];
+	    int vd = p.value_of_def[exact_log2 (p.defs)];
+	    gcc_assert (vd >= 0);
+	    if (plan_rename (vd, sr.second) != 1)
+	      {
+		if (dump_file)
+		  fprintf (dump_file, "Refusing counted-row family"
+			   " [%u,%u): counted-row-map-live-out: seed chain"
+			   " closure needs an unrenameable value\n",
+			   plan.clones.front ().begin,
+			   plan.clones.front ().end);
+		return false;
+	      }
+	  }
+
+      if (!remapped && drop_clone < 0 && !refused)
+	{
+	  // Excludable materializations: every one whose value feeds a
+	  // clone member relocates to that clone's head (canonical-register
+	  // recips serialize between launches, the hand's own delivery
+	  // discipline); one inside a span but feeding nothing in the
+	  // family moves out past the tail.  Movement legality is
+	  // VALUE-based: uses must follow the new position, no CC write or
+	  // opaque instruction may be crossed (lane-state constancy), and
+	  // the whole-block occupancy simulation of the final assignment
+	  // is the authoritative gate.
+	  for (auto &mh : plan.moves_head)
+	    mh.clear ();
+	  for (auto &mt : plan.moves_tail)
+	    mt.clear ();
+
+	  // Clone of the first member-use of an excludable's value,
+	  // following chains through other excludables (the RMW pair).
+	  std::map<unsigned, int> consumer_clone; // position -> clone or -1
+	  std::vector<unsigned> excl_all;
+	  for (unsigned pos = 0; pos != blk.pos.size (); ++pos)
+	    if (blk.pos[pos].excludable)
+	      excl_all.push_back (pos);
+	  std::map<unsigned, unsigned> member_clone; // member pos -> clone
+	  for (unsigned c = 0; c != plan.clones.size (); ++c)
+	    for (unsigned m = 0; m != length; ++m)
+	      member_clone[plan.members[c][m]] = c;
+	  for (auto pit = excl_all.rbegin (); pit != excl_all.rend ();
+	       ++pit)
+	    {
+	      unsigned pos = *pit;
+	      crf_position const &p = blk.pos[pos];
+	      int cc = -1;
+	      for (int i = 0; i != 8 && cc < 0; ++i)
+		{
+		  if (p.value_of_def[i] < 0)
+		    continue;
+		  for (unsigned up
+			 : blk.values[p.value_of_def[i]].use_positions)
+		    {
+		      auto mi = member_clone.find (up);
+		      if (mi != member_clone.end ())
+			{
+			  cc = int (mi->second);
+			  break;
+			}
+		      auto ei = consumer_clone.find (up);
+		      if (ei != consumer_clone.end () && ei->second >= 0)
+			{
+			  cc = ei->second;
+			  break;
+			}
+		    }
+		}
+	      consumer_clone[pos] = cc;
+	    }
+
+	  // Lane-state/opacity constancy over a movement range.
+	  auto move_window_ok = [&] (unsigned lo, unsigned hi) -> bool
+	  {
+	    for (unsigned ix = lo; ix < hi; ++ix)
+	      if (blk.pos[ix].cc_write || blk.pos[ix].opaque)
+		return false;
+	    return true;
+	  };
+
+	  bool moves_ok = true;
+	  for (unsigned pos : excl_all)
+	    {
+	      int cc = consumer_clone[pos];
+	      if (cc >= 0)
+		{
+		  unsigned anchor = plan.members[cc].front ();
+		  if (pos < anchor)
+		    {
+		      // Already directly ahead of the clone (only
+		      // transparent positions between): leave it.
+		      bool clean = true;
+		      for (unsigned ix = pos + 1; ix != anchor; ++ix)
+			if (!crf_transparent_p (blk.pos[ix]))
+			  clean = false;
+		      if (clean)
+			continue;
+		    }
+		  // Uses must all follow the new position; a use by a
+		  // fellow excludable relocating to the same head keeps
+		  // its original order there.
+		  crf_position const &p = blk.pos[pos];
+		  bool uses_ok = true;
+		  for (int i = 0; i != 8; ++i)
+		    if (p.value_of_def[i] >= 0)
+		      for (unsigned up
+			     : blk.values[p.value_of_def[i]].use_positions)
+			if (up < anchor
+			    && !(blk.pos[up].excludable
+				 && consumer_clone.count (up)
+				 && consumer_clone[up] == cc))
+			  uses_ok = false;
+		  unsigned lo = MIN (pos, anchor), hi = MAX (pos, anchor);
+		  if (!uses_ok || !move_window_ok (lo, hi))
+		    {
+		      if (unsigned (cc) == ref)
+			{
+			  if (dump_file)
+			    fprintf (dump_file, "Refusing counted-row"
+				     " family [%u,%u):"
+				     " counted-row-excluded-member-"
+				     "unmovable: insn %d cannot reach its"
+				     " consumer clone\n",
+				     plan.clones.front ().begin,
+				     plan.clones.front ().end,
+				     INSN_UID (blk.pos[pos].insn));
+			  return false;
+			}
+		      if (dump_file)
+			fprintf (dump_file, "Dropping counted-row clone"
+				 " [%u,%u):"
+				 " counted-row-excluded-member-unmovable:"
+				 " insn %d cannot reach its consumer"
+				 " clone\n", plan.clones[cc].begin,
+				 plan.clones[cc].end,
+				 INSN_UID (blk.pos[pos].insn));
+		      drop_clone = cc;
+		      moves_ok = false;
+		      break;
+		    }
+		  plan.moves_head[cc].push_back (pos);
+		  continue;
+		}
+	      // No consumer in the family: if inside a clone span, move
+	      // out past the tail.
+	      for (unsigned c = 0; c != plan.clones.size (); ++c)
+		if (pos > plan.members[c].front ()
+		    && pos < plan.members[c].back ())
+		  {
+		    unsigned last = plan.members[c].back ();
+		    crf_position const &p = blk.pos[pos];
+		    bool uses_ok = true;
+		    for (int i = 0; i != 8; ++i)
+		      if (p.value_of_def[i] >= 0)
+			for (unsigned up
+			       : blk.values[p.value_of_def[i]]
+				   .use_positions)
+			  if (up <= last)
+			    uses_ok = false;
+		    if (!uses_ok || !move_window_ok (pos, last + 1))
+		      {
+			if (c == ref)
+			  return false;
+			if (dump_file)
+			  fprintf (dump_file, "Dropping counted-row clone"
+				   " [%u,%u):"
+				   " counted-row-excluded-member-"
+				   "unmovable: insn %d cannot move past"
+				   " the tail\n", plan.clones[c].begin,
+				   plan.clones[c].end,
+				   INSN_UID (blk.pos[pos].insn));
+			drop_clone = int (c);
+			moves_ok = false;
+		      }
+		    else
+		      plan.moves_tail[c].push_back (pos);
+		    break;
+		  }
+	      if (!moves_ok)
+		break;
+	    }
+	  (void) moves_ok;
+	}
+
+      // Occupancy of the final assignment, with the bystander cascade:
+      // a conflict against an untouched renameable value swaps it into
+      // the evacuated register; a non-cascadable conflict drops the
+      // clone whose lockstep walk required the conflicting rename.
+      if (!remapped && drop_clone < 0 && !refused)
+	{
+	  bool occupancy = false;
+	  for (unsigned swap = 0; swap != 64; ++swap)
+	    {
+	      int a = -2, b = -2;
+	      if (crf_occupancy_ok (blk, plan, &a, &b))
+		{
+		  occupancy = true;
+		  break;
+		}
+	      int renamed = -1, bystander = -1;
+	      if (a >= 0 && plan.renames.count (a)
+		  && b >= 0 && !plan.renames.count (b))
+		{
+		  renamed = a;
+		  bystander = b;
+		}
+	      else if (b >= 0 && plan.renames.count (b)
+		       && a >= 0 && !plan.renames.count (a))
+		{
+		  renamed = b;
+		  bystander = a;
+		}
+	      if (renamed >= 0)
+		{
+		  crf_value const &bv = blk.values[bystander];
+		  if (!bv.fixed && !bv.poisoned && !bv.live_out
+		      && bv.def_pos >= 0)
+		    {
+		      plan.renames[bystander] = blk.values[renamed].reg;
+		      plan.rename_source[bystander] = -1;
+		      if (dump_file)
+			fprintf (dump_file, "counted-row bystander swap:"
+				 " value of r%u (insn %d) -> r%u\n",
+				 bv.reg, INSN_UID (bv.def_insn),
+				 blk.values[renamed].reg);
+		      continue;
+		    }
+		}
+	      // Not cascadable: drop the responsible clone.
+	      int src = -1;
+	      for (int v : { a, b })
+		if (v >= 0 && plan.rename_source.count (v)
+		    && plan.rename_source[v] >= 0)
+		  src = plan.rename_source[v];
+	      if (src >= 0 && unsigned (src) != ref)
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Dropping counted-row clone"
+			     " [%u,%u): counted-row-rename-interference:"
+			     " unresolvable occupancy conflict\n",
+			     plan.clones[src].begin,
+			     plan.clones[src].end);
+		  drop_clone = src;
+		}
+	      break;
+	    }
+	  if (drop_clone < 0 && !occupancy)
+	    return false;
+	}
+
+      if (drop_clone >= 0 || remapped)
+	continue;
+      if (refused)
+	return false;
+      break;
+    }
+
+  // Modeled saving: every non-seed clone's residual collapses to one
+  // launch; bridges are bought slots; the capture word is one slot.
+  {
+    int bridges_total = 0;
+    for (auto const &b : plan.bridges)
+      bridges_total += b.size ();
+    plan.saving = int (plan.clones.size () - 1) * int (length - 1)
+      - bridges_total - 1;
+  }
+  if (plan.saving < 1)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Not canonicalizing counted-row family"
+		 " [%u,%u): modeled saving %d\n",
+		 plan.clones.front ().begin, plan.clones.front ().end,
+		 plan.saving);
+      return false;
+    }
+
+  // A plan that changes nothing is the word-exact machinery's territory.
+  {
+    bool any_change = !plan.renames.empty ();
+    for (unsigned c = 0; c != plan.clones.size () && !any_change; ++c)
+      any_change = !plan.moves_head[c].empty ()
+	|| !plan.moves_tail[c].empty () || !plan.bridges[c].empty ();
+    if (!any_change)
+      return false;
+  }
+
+  return true;
+}
+
+// Whole-block occupancy verification of the plan's final register
+// assignment, over the stream in its FINAL order (excluded members moved,
+// bridges inserted), plus the lane-state window proof: no CC write may
+// fall inside the span affected by any rewritten value (state-constancy
+// makes the rewrites lane-exact for any entry lane state).
+
+static bool
+crf_occupancy_ok (crf_block &blk, crf_plan &plan,
+		  int *conflict_a, int *conflict_b)
+{
+  unsigned n = blk.pos.size ();
+
+  std::vector<int> time (n, -1);
+  std::vector<char> is_moved (n, 0);
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      for (unsigned pos : plan.moves_head[c])
+	is_moved[pos] = 1;
+      for (unsigned pos : plan.moves_tail[c])
+	is_moved[pos] = 1;
+    }
+
+  std::vector<int> bridge_time (plan.clones.size (), -1);
+  std::map<unsigned, unsigned> anchor_clone, tail_clone;
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      anchor_clone[plan.members[c].front ()] = c;
+      tail_clone[plan.members[c].back ()] = c;
+    }
+
+  int t = 0;
+  for (unsigned pos = 0; pos != n; ++pos)
+    {
+      auto ac = anchor_clone.find (pos);
+      if (ac != anchor_clone.end ())
+	{
+	  unsigned c = ac->second;
+	  for (unsigned mpos : plan.moves_head[c])
+	    time[mpos] = t++;
+	  bridge_time[c] = t++;
+	}
+      if (!is_moved[pos])
+	time[pos] = t++;
+      auto tc = tail_clone.find (pos);
+      if (tc != tail_clone.end ())
+	for (unsigned mpos : plan.moves_tail[tc->second])
+	  time[mpos] = t++;
+    }
+
+  struct interval { long start, end; int val; };
+  std::vector<std::vector<interval>> per_reg (8);
+
+  // Bridged values: their uses inside the bridging clone move to the
+  // bridge read.
+  std::map<unsigned, std::vector<unsigned>> value_bridge_clones;
+  for (unsigned c = 0; c < plan.clones.size (); ++c)
+    for (auto const &br : plan.bridges[c])
+      {
+	int vix = -1;
+	for (unsigned m = 0; m != plan.members[c].size () && vix < 0; ++m)
+	  {
+	    crf_position const &p = blk.pos[plan.members[c][m]];
+	    int ci = int (br.second) - SFPU_REG_FIRST;
+	    if (p.value_of_use[ci] >= 0
+		&& blk.values[p.value_of_use[ci]].reg == br.second)
+	      vix = p.value_of_use[ci];
+	  }
+	if (vix >= 0)
+	  value_bridge_clones[vix].push_back (c);
+      }
+
+  long horizon = 2L * t + 4;
+  for (unsigned vix = 0; vix != blk.values.size (); ++vix)
+    {
+      crf_value const &v = blk.values[vix];
+      long start = v.def_pos < 0 ? -1 : 2L * time[v.def_pos] + 1;
+      long end = start;
+      auto vb = value_bridge_clones.find (vix);
+      for (unsigned up : v.use_positions)
+	{
+	  bool moved_use = false;
+	  if (vb != value_bridge_clones.end ())
+	    for (unsigned c : vb->second)
+	      if (up >= plan.clones[c].begin && up < plan.clones[c].end)
+		moved_use = true;
+	  if (moved_use)
+	    continue;
+	  long ut = 2L * time[up];
+	  if (ut > end)
+	    end = ut;
+	}
+      if (vb != value_bridge_clones.end ())
+	for (unsigned c : vb->second)
+	  {
+	    long bt = 2L * bridge_time[c];
+	    if (bt > end)
+	      end = bt;
+	  }
+      if (v.live_out)
+	end = horizon;
+      unsigned freg = crf_final_reg (blk, plan, vix);
+      per_reg[freg - SFPU_REG_FIRST].push_back ({ start, end,
+						  int (vix) });
+    }
+
+  // Bridge destination values: from the bridge write to the end of the
+  // clone's span (conservative).
+  for (unsigned c = 0; c < plan.clones.size (); ++c)
+    for (auto const &br : plan.bridges[c])
+      {
+	long start = 2L * bridge_time[c] + 1;
+	long end = 2L * time[plan.members[c].back ()];
+	per_reg[br.first - SFPU_REG_FIRST].push_back ({ start, end, -1 });
+      }
+
+  for (unsigned r = 0; r != 8; ++r)
+    {
+      auto &iv = per_reg[r];
+      std::sort (iv.begin (), iv.end (),
+		 [] (interval const &a, interval const &b)
+		 { return a.start < b.start; });
+      // Abutment (def at 2t+1 after uses at 2t) is already encoded in the
+      // timestamps; any remaining overlap is a conflict.
+      long reach = LONG_MIN;
+      int reach_val = -1;
+      for (unsigned i = 0; i < iv.size (); ++i)
+	{
+	  if (i && iv[i].start <= reach)
+	    {
+	      if (conflict_a)
+		{
+		  *conflict_a = reach_val;
+		  *conflict_b = iv[i].val;
+		}
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Refusing counted-row family"
+			   " [%u,%u): counted-row-rename-interference:"
+			   " two values occupy r%u:\n",
+			   plan.clones.front ().begin,
+			   plan.clones.front ().end, SFPU_REG_FIRST + r);
+		  for (auto const &e : iv)
+		    fprintf (dump_file, "    val %d [%ld,%ld] def insn %d"
+			     " orig r%u\n", e.val, e.start, e.end,
+			     e.val >= 0 && blk.values[e.val].def_insn
+			     ? INSN_UID (blk.values[e.val].def_insn) : -1,
+			     e.val >= 0 ? blk.values[e.val].reg : 0);
+		}
+	      return false;
+	    }
+	  if (iv[i].end >= reach)
+	    {
+	      reach = iv[i].end;
+	      reach_val = iv[i].val;
+	    }
+	}
+    }
+
+  // Lane-state window: the rewrites are lane-exact only while the lane
+  // state is constant over every affected value's span.
+  long wmin = LONG_MAX, wmax = LONG_MIN;
+  auto widen = [&] (long s, long e) { wmin = MIN (wmin, s);
+				      wmax = MAX (wmax, e); };
+  for (auto const &rn : plan.renames)
+    {
+      crf_value const &v = blk.values[rn.first];
+      if (v.def_pos >= 0)
+	widen (2L * time[v.def_pos], 2L * time[v.def_pos]);
+      for (unsigned up : v.use_positions)
+	widen (2L * time[up], 2L * time[up]);
+    }
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      if (!plan.bridges[c].empty ())
+	widen (2L * bridge_time[c], 2L * time[plan.members[c].back ()]);
+      for (unsigned pos : plan.moves_head[c])
+	widen (2L * time[pos],
+	       2L * time[plan.members[c].back ()]);
+      for (unsigned pos : plan.moves_tail[c])
+	widen (2L * time[plan.members[c].front ()], 2L * time[pos]);
+    }
+  if (wmin <= wmax)
+    for (unsigned pos = 0; pos != n; ++pos)
+      if (blk.pos[pos].cc_write && time[pos] >= 0
+	  && 2L * time[pos] >= wmin && 2L * time[pos] <= wmax)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		     " counted-row-lane-state: CC write (insn %d) inside"
+		     " the rewritten window\n", plan.clones.front ().begin,
+		     plan.clones.front ().end,
+		     INSN_UID (blk.pos[pos].insn));
+	  return false;
+	}
+
+  return true;
+}
+
+// Apply a verified plan: queue every register replacement in one change
+// group (recog and constraints re-verify each rewritten instruction),
+// then fix the dead-note registers, move the excluded members, and issue
+// the bridge moves.
+
+static bool
+crf_apply (crf_block &blk, crf_plan &plan)
+{
+  // Replace registers per value, ROLE-AWARE: a definition rename touches
+  // only definition positions (SET_DEST outside a MEM), a use rename only
+  // use positions.  One instruction can carry two same-numbered registers
+  // belonging to different values with different targets (the abutting
+  // accumulator chain).  Renames can chain (L5->L1 while L1->L3), so all
+  // locations are collected against the ORIGINAL patterns first.
+  std::vector<std::pair<rtx_insn *, std::pair<rtx *, unsigned>>> changes;
+  auto queue_reg = [&changes] (rtx_insn *insn, unsigned from, unsigned to,
+			       bool def_side)
+  {
+    auto walk = [&] (auto &self, rtx *loc, bool in_def) -> void
+    {
+      rtx x = *loc;
+      if (!x)
+	return;
+      switch (GET_CODE (x))
+	{
+	case REG:
+	  if (REGNO (x) == from && in_def == def_side)
+	    changes.push_back ({ insn, { loc, to } });
+	  return;
+	case SET:
+	  self (self, &SET_SRC (x), false);
+	  self (self, &SET_DEST (x), true);
+	  return;
+	case CLOBBER:
+	  self (self, &XEXP (x, 0), true);
+	  return;
+	case USE:
+	case MEM:
+	  self (self, &XEXP (x, 0), false);
+	  return;
+	default:
+	  {
+	    const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+	    for (int i = GET_RTX_LENGTH (GET_CODE (x)); i--;)
+	      if (fmt[i] == 'e')
+		self (self, &XEXP (x, i), in_def);
+	      else if (fmt[i] == 'E')
+		for (int j = XVECLEN (x, i); j--;)
+		  self (self, &XVECEXP (x, i, j), in_def);
+	  }
+	  return;
+	}
+    };
+    walk (walk, &PATTERN (insn), false);
+  };
+
+  for (auto const &rn : plan.renames)
+    {
+      crf_value const &v = blk.values[rn.first];
+      if (v.def_pos >= 0)
+	queue_reg (blk.pos[v.def_pos].insn, v.reg, rn.second, true);
+      unsigned prev = (unsigned) -1;
+      for (unsigned up : v.use_positions)
+	{
+	  if (up == prev)
+	    continue;
+	  prev = up;
+	  queue_reg (blk.pos[up].insn, v.reg, rn.second, false);
+	}
+    }
+
+  for (auto const &ch : changes)
+    validate_change (ch.first, ch.second.first,
+		     gen_rtx_REG (XTT32SImode, ch.second.second), 1);
+
+  if (!apply_change_group ())
+    {
+      if (dump_file)
+	fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		 " counted-row-rename-constraint: a rewritten instruction"
+		 " failed re-recognition\n", plan.clones.front ().begin,
+		 plan.clones.front ().end);
+      return false;
+    }
+
+  // Dead/unused notes riding the rewritten instructions.
+  for (auto const &rn : plan.renames)
+    {
+      crf_value const &v = blk.values[rn.first];
+      rtx to_reg = gen_rtx_REG (XTT32SImode, rn.second);
+      auto fix_notes = [&] (rtx_insn *insn)
+      {
+	for (rtx note = REG_NOTES (insn); note; note = XEXP (note, 1))
+	  if ((REG_NOTE_KIND (note) == REG_DEAD
+	       || REG_NOTE_KIND (note) == REG_UNUSED)
+	      && REG_P (XEXP (note, 0))
+	      && REGNO (XEXP (note, 0)) == v.reg)
+	    XEXP (note, 0) = to_reg;
+      };
+      if (v.def_pos >= 0)
+	fix_notes (blk.pos[v.def_pos].insn);
+      for (unsigned up : v.use_positions)
+	fix_notes (blk.pos[up].insn);
+    }
+
+  // Move the excluded members and issue the bridges.
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      rtx_insn *anchor = blk.pos[plan.members[c].front ()].insn;
+      for (unsigned mpos : plan.moves_head[c])
+	{
+	  rtx_insn *insn = blk.pos[mpos].insn;
+	  reorder_insns (insn, insn, PREV_INSN (anchor));
+	}
+      for (auto const &br : plan.bridges[c])
+	{
+	  rtx mv = gen_rtx_SET (gen_rtx_REG (XTT32SImode, br.first),
+				gen_rtx_REG (XTT32SImode, br.second));
+	  rtx_insn *mvi = emit_insn_before (mv, anchor);
+	  gcc_assert (recog_memoized (mvi) >= 0);
+	}
+      rtx_insn *tail_after = blk.pos[plan.members[c].back ()].insn;
+      for (unsigned mpos : plan.moves_tail[c])
+	{
+	  rtx_insn *insn = blk.pos[mpos].insn;
+	  reorder_insns (insn, insn, tail_after);
+	  tail_after = insn;
+	}
+    }
+
+  if (dump_file)
+    {
+      int bridges_total = 0, moved_total = 0;
+      for (unsigned c = 0; c != plan.clones.size (); ++c)
+	{
+	  bridges_total += int (plan.bridges[c].size ());
+	  moved_total += int (plan.moves_head[c].size ()
+			      + plan.moves_tail[c].size ());
+	}
+      fprintf (dump_file, "Canonicalized counted-row family: %u clones,"
+	       " %u members, %d renames, %d bridges, %d moved,"
+	       " modeled saving %d slots\n",
+	       unsigned (plan.clones.size ()),
+	       unsigned (plan.members[0].size ()),
+	       int (plan.renames.size ()), bridges_total, moved_total,
+	       plan.saving);
+      for (unsigned c = 0; c != plan.clones.size (); ++c)
+	fprintf (dump_file,
+		 "  clone %u at [%u,%u): %u+%u moved, %u bridged\n",
+		 c, plan.clones[c].begin, plan.clones[c].end,
+		 unsigned (plan.moves_head[c].size ()),
+		 unsigned (plan.moves_tail[c].size ()),
+		 unsigned (plan.bridges[c].size ()));
+    }
+  return true;
+}
+
+
+// Form the record and launches for an applied plan, mirroring
+// replace_sequence: the first clone hosts the capture (executing while
+// recording where the target allows), every other clone collapses to a
+// launch.  The consumed slots are marked persistent so the word-exact
+// machinery below never reallocates them.
+
+static void
+crf_form (crf_block &blk, crf_plan &plan, unsigned slot_start)
+{
+  unsigned length = plan.residual;
+  bool not_quasar_fix = !(riscv_tt_fix_qsr_replay > 0);
+
+  rtx capture = gen_rvtt_ttreplay_int
+    (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+     rvtt_gen_rtx_noval (XTT32SImode),
+     GEN_INT (slot_start), GEN_INT (not_quasar_fix), GEN_INT (1));
+  emit_insn_before (capture, blk.pos[plan.members[0].front ()].insn);
+
+  bool keep = not_quasar_fix;
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      if (c == 0 && keep)
+	continue;
+      rtx replay = gen_rvtt_ttreplay_int
+	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+	 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (slot_start),
+	 const0_rtx, const0_rtx);
+      emit_insn_after (replay, blk.pos[plan.members[c].back ()].insn);
+      if (c != 0)
+	for (unsigned m = 0; m != length; ++m)
+	  SET_INSN_DELETED (blk.pos[plan.members[c][m]].insn);
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "Formed counted-row record [%u,+%u): %u launch"
+	     " sites\n", slot_start, length,
+	     unsigned (plan.clones.size ()) - keep);
+}
+
+// Driver: canonicalize parameterized counted-row families so the ordinary
+// word-exact discovery below records one parameterized row program per
+// family.  Budget honesty: candidates are ranked by modeled slot saving
+// with shorter residuals winning ties, and the local budget model shrinks
+// by each applied family's residual.
+
+static void
+canonicalize_counted_rows (function *cfn,
+			   std::vector<replay_span> const &replay_spans,
+			   std::vector<bool> &persistent_slots,
+			   bitmap dirty_bbs, bool sticky)
+{
+  auto spans = available_replay_spans (replay_spans, persistent_slots);
+  if (spans.empty ())
+    return;
+  unsigned budget = spans.front ().end;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      if (bitmap_bit_p (dirty_bbs, bb->index))
+	continue;
+
+      // Iterate: apply the best verifiable family, rescan, repeat.
+      // Instructions of an applied family are frozen: a later family may
+      // not rewrite values they define or use, or it would break the
+      // earlier family's canonical form.
+      std::set<rtx_insn *> frozen;
+      for (unsigned round = 0; round != 8 && budget >= MIN_SEQUENCE;
+	   ++round)
+	{
+	  crf_block blk;
+	  if (!crf_scan_block (bb, blk))
+	    break;
+
+	  std::vector<crf_seq> list;
+	  crf_build_sequences (list, blk, budget);
+
+	  // Rank candidates: modeled saving descending, residual
+	  // ascending (budget honesty), position ascending.
+	  std::vector<unsigned> order;
+	  for (unsigned ix = 1; ix < list.size (); ++ix)
+	    {
+	      crf_seq &seq = list[ix];
+	      if (seq.clones.size () < 2 || seq.length < MIN_SEQUENCE)
+		continue;
+	      int bound = int (seq.clones.size () - 1)
+		* int (seq.length - 1) - 1;
+	      if (bound < 1)
+		continue;
+	      // Identity families (no divergence, nothing excludable in
+	      // any span) are the word-exact machinery's own territory.
+	      bool any_divergence = false;
+	      for (auto const &c : seq.clones)
+		{
+		  for (auto const &pr : c.p2r)
+		    if (pr.first != pr.second)
+		      {
+			any_divergence = true;
+			break;
+		      }
+		  if (any_divergence)
+		    break;
+		  for (unsigned pos = c.begin;
+		       pos != c.end && !any_divergence; ++pos)
+		    if (blk.pos[pos].excludable)
+		      any_divergence = true;
+		  if (any_divergence)
+		    break;
+		}
+	      if (!any_divergence)
+		continue;
+	      order.push_back (ix);
+	    }
+	  auto rank = [&list] (unsigned ix, int *bound, unsigned *residual,
+			       unsigned *begin)
+	  {
+	    crf_seq &s = list[ix];
+	    *bound = int (s.clones.size () - 1) * int (s.length - 1);
+	    *residual = s.length;
+	    *begin = s.clones.front ().begin;
+	  };
+	  std::sort (order.begin (), order.end (),
+		     [&rank] (unsigned a, unsigned b)
+	  {
+	    int ba, bb_;
+	    unsigned ra, rb, pa, pb;
+	    rank (a, &ba, &ra, &pa);
+	    rank (b, &bb_, &rb, &pb);
+	    if (ba != bb_)
+	      return ba > bb_;
+	    if (ra != rb)
+	      return ra < rb;
+	    return pa < pb;
+	  });
+	  if (order.size () > 64)
+	    order.resize (64);
+	  if (dump_file)
+	    for (unsigned oi = 0; oi != order.size () && oi != 12; ++oi)
+	      {
+		crf_seq &s = list[order[oi]];
+		fprintf (dump_file, "counted-row candidate %u: [%u,%u)"
+			 " len %u clones %u\n", oi,
+			 s.clones.front ().begin, s.clones.front ().end,
+			 s.length, unsigned (s.clones.size ()));
+	      }
+
+	  // Verify every ranked candidate and apply the best VERIFIED
+	  // plan: a high-bound family that lost most of its clones must
+	  // not shadow a smaller family that survived whole.
+	  bool applied = false;
+	  crf_plan best;
+	  bool have_best = false;
+	  for (unsigned ix : order)
+	    for (unsigned ref = 0;
+		 ref != 8 && ref < list[ix].clones.size (); ++ref)
+	    {
+	      crf_plan plan;
+	      if (!crf_verify_family (blk, list[ix], budget, sticky, plan,
+				      ref))
+		continue;
+	      bool touches_frozen = false;
+	      for (auto const &rn : plan.renames)
+		{
+		  crf_value const &v = blk.values[rn.first];
+		  if (v.def_pos >= 0
+		      && frozen.count (blk.pos[v.def_pos].insn))
+		    touches_frozen = true;
+		  for (unsigned up : v.use_positions)
+		    if (frozen.count (blk.pos[up].insn))
+		      touches_frozen = true;
+		}
+	      if (touches_frozen)
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Refusing counted-row family"
+			     " [%u,%u): counted-row-rename-interference:"
+			     " rewrite touches an already-canonicalized"
+			     " family\n", plan.clones.front ().begin,
+			     plan.clones.front ().end);
+		  continue;
+		}
+	      if (dump_file)
+		fprintf (dump_file, "counted-row verified [%u,%u) ref %u:"
+			 " %u clones, saving %d\n",
+			 plan.clones.front ().begin,
+			 plan.clones.front ().end, ref,
+			 unsigned (plan.clones.size ()), plan.saving);
+	      if (!have_best || plan.saving > best.saving
+		  || (plan.saving == best.saving
+		      && plan.residual < best.residual))
+		{
+		  best = std::move (plan);
+		  have_best = true;
+		}
+	    }
+	  if (have_best && crf_apply (blk, best))
+	    {
+	      // Best-fit slot span (smallest that holds the record).
+	      auto avail = available_replay_spans (replay_spans,
+						   persistent_slots);
+	      unsigned start = 0;
+	      bool found = false;
+	      for (auto pos = avail.rbegin (); pos != avail.rend (); ++pos)
+		if (pos->end >= best.residual)
+		  {
+		    start = pos->begin;
+		    found = true;
+		    break;
+		  }
+	      gcc_assert (found); // budget model guaranteed a fit
+	      std::fill (persistent_slots.begin () + start,
+			 persistent_slots.begin () + start + best.residual,
+			 true);
+	      crf_form (blk, best, start);
+	      for (unsigned c = 0; c != best.clones.size (); ++c)
+		for (unsigned m = 0; m != best.members[c].size (); ++m)
+		  frozen.insert (blk.pos[best.members[c][m]].insn);
+	      auto navail = available_replay_spans (replay_spans,
+						    persistent_slots);
+	      budget = navail.empty () ? 0 : navail.front ().end;
+	      applied = true;
+	    }
+	  if (!applied)
+	    break;
+	}
+    }
+}
+
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
 
@@ -2810,6 +4994,13 @@ transform (function *cfn, unsigned buffer_size)
   if (riscv_tt_opt_replay_hoist > 0)
     hoist_counted_loops (cfn, replay_spans, persistent_slots, dirty_bbs,
 			 sticky);
+
+  // Counted-row parameterized formation: canonicalize eligible clone
+  // families so the word-exact discovery below records one parameterized
+  // row program per family (docs/COUNTED_ROW_FORMATION.md).
+  if (riscv_tt_opt_counted_row > 0)
+    canonicalize_counted_rows (cfn, replay_spans, persistent_slots,
+			       dirty_bbs, sticky);
 
   replay_block info; // insn info
   replay_list list; // list of sequences

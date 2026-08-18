@@ -1,9 +1,44 @@
 # Counted-row parameterized replay formation — design (Lane BF, 2026-08-18)
 
-Status: DESIGN ONLY.  The two increments this lane shipped (raw-word
-recording-epoch closure; execute-while-recording for hoisted captures) fix
-what was dump-refusable; the formation described here is the next
-increment and is NOT implemented.
+Status: IMPLEMENTED (Lane BM, 2026-08-18) as
+-mtt-tensix-optimize-counted-row-formation (default off) in
+rtl-rvtt-replay.cc: a canonicalization-and-formation phase ahead of the
+word-exact discovery.  Deviations from the sketch below, learned on the
+real welford stream:
+
+- Exclusion is TRANSPARENCY: exclusion-admissible members (single-slot
+  immediate materializations by the audited effect classes -- never by
+  instruction identity) are transparent to sequence discovery and are
+  RELOCATED to the head of the clone that consumes their value (the
+  hand's serial recip-delivery discipline); one with no consumer in the
+  family moves out past the containing clone's tail.  Movement legality
+  is value-based (uses follow the new position; no CC write or opaque
+  instruction crossed), with the occupancy simulation as the final gate.
+- Clone canonicalization is a whole-value REWRITE plan (definition and
+  every use), with: seed chain-closure (a value carrying both a def role
+  and a live-in role retargets the reference definition), read-modify-
+  write tie propagation (tied-operand halves move together), reference-
+  clone rotation, per-clone drops, live-in bridging by one all-lanes
+  move where the pinning definition is fixed (multi-definition bundles),
+  and a bystander cascade (an untouched value displaced into the
+  evacuated register) -- all verified by a whole-block final-assignment
+  occupancy simulation plus a lane-state constancy window (no CC write
+  inside any rewritten value's span).
+- The phase EMITS the capture and launches itself (mirroring
+  replace_sequence) and marks its slots persistent, rather than relying
+  on rediscovery.
+- Refusal taxonomy (append-only, extended): counted-row-excluded-member-
+  unmovable, counted-row-residual-not-uniform, counted-row-map-live-out,
+  counted-row-slot-budget, counted-row-rename-interference,
+  counted-row-rename-constraint, counted-row-lane-state,
+  counted-row-bridge-clobber.
+- Coverage on the welford perf body at this pin: one 5-member record,
+  7 clones (the x2-variant rows + the trailing-delta alignment), body
+  issue census 234 -> 218.  The full x-bridged single-record coverage
+  (~26 rows, the ~203-slot arithmetic below) remains open: the mixed-
+  alignment clone partition and reference-clone x-liveness interact
+  (bridge targets must be dead across each block), documented for the
+  next increment.
 
 ## The measured gap it addresses
 

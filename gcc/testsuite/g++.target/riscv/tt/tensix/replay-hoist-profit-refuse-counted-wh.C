@@ -1,38 +1,25 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump-not "Counted-loop replay payload" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit " "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
+// { dg-final { scan-assembler "\\tbne\\t" } }
 
-// Three-trip loop around the 20-instruction payload (Wormhole may add
-// SFPNOP slots, growing the capture): at 3 trips the modeled benefit is
-// negative, below the cost-table minimum of 60, for any length in that
-// range.  This is
-// the silicon-regressing 3-trip long-capture shape class and must refuse.
-void counted_refuse_3trip_long ()
+// Low-trip refusal on WH: a chain of DISTINCT immediate multiplies (no
+// repeated subsequence anywhere, so the in-loop replay former has no
+// alternative capture) over four trips prices below the cost-table
+// minimum and refuses.
+void refuse_serial_chain_wh ()
 {
   auto x = __builtin_rvtt_sfpreadlreg (0);
-  for (unsigned ix = 0; ix != 3; ++ix)
+  for (unsigned ix = 0; ix != 4; ++ix)
     {
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c11, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c21, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c31, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c41, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c51, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c61, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c71, 0, 0, 0);
+      x = __builtin_rvtt_sfpmuli (nullptr, x, 0x3c81, 0, 0, 0);
     }
   __builtin_rvtt_sfpwritelreg (x, 0);
 }

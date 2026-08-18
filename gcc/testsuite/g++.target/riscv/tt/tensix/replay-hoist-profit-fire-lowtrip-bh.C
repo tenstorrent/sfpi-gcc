@@ -1,46 +1,52 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump-times "Hoist profitable: modeled benefit 121 >= 60" 2 "rvtt_replay" } }
+// { dg-final { scan-rtl-dump-times "Hoist profitable: modeled benefit 75 >= 60" 2 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Counted-loop replay payload" 2 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 2 "rvtt_replay" } }
 
-// Four-trip loop around an 8-slot payload: the silicon-winning short-payload
-// low-trip class (21.5 cycles/body on Blackhole, rvtt-cost.md calibration).
-// Modeled benefit 4*(123 + 23*8) - 123*9 = 121 centislots >= 60: the hoist
-// must fire at the DEFAULT threshold.  The renamed, constant-varied twin
-// (different function name, opcode, and LREG) must make the same decision,
-// which depends only on the provable trip count, the capture length, and
-// the cost table.
-
-void lowtrip_fire_8slot ()
+// Two independent minimum-trip fire shapes (varied constants relative to
+// the boundary test: different loop counters, same arithmetic).
+void lowtrip_one ()
 {
-  auto x = __builtin_rvtt_sfpreadlreg (0);
-  for (unsigned ix = 0; ix != 4; ++ix)
+  auto a = __builtin_rvtt_sfpreadlreg (0);
+  auto b = __builtin_rvtt_sfpreadlreg (1);
+  auto c = __builtin_rvtt_sfpreadlreg (2);
+  auto d = __builtin_rvtt_sfpreadlreg (3);
+  for (unsigned ix = 0; ix != 13; ++ix)
     {
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
-      x = __builtin_rvtt_sfpmul (x, x, 0);
+      a = __builtin_rvtt_sfpmul (a, a, 0);
+      b = __builtin_rvtt_sfpmul (b, b, 0);
+      c = __builtin_rvtt_sfpmul (c, c, 0);
+      d = __builtin_rvtt_sfpmul (d, d, 0);
+      a = __builtin_rvtt_sfpmul (a, a, 0);
+      b = __builtin_rvtt_sfpmul (b, b, 0);
+      c = __builtin_rvtt_sfpmul (c, c, 0);
+      d = __builtin_rvtt_sfpmul (d, d, 0);
     }
-  __builtin_rvtt_sfpwritelreg (x, 0);
+  __builtin_rvtt_sfpwritelreg (a, 0);
+  __builtin_rvtt_sfpwritelreg (b, 1);
+  __builtin_rvtt_sfpwritelreg (c, 2);
+  __builtin_rvtt_sfpwritelreg (d, 3);
 }
 
-void a_completely_unrelated_name (void)
+void lowtrip_two ()
 {
-  auto w = __builtin_rvtt_sfpreadlreg (3);
-  for (unsigned rep = 0; rep != 4; ++rep)
+  auto p = __builtin_rvtt_sfpreadlreg (4);
+  auto q = __builtin_rvtt_sfpreadlreg (5);
+  auto r = __builtin_rvtt_sfpreadlreg (6);
+  auto t = __builtin_rvtt_sfpreadlreg (7);
+  for (unsigned k = 13; k != 0; --k)
     {
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
-      w = __builtin_rvtt_sfpadd (w, w, 0);
+      p = __builtin_rvtt_sfpmul (p, p, 0);
+      q = __builtin_rvtt_sfpmul (q, q, 0);
+      r = __builtin_rvtt_sfpmul (r, r, 0);
+      t = __builtin_rvtt_sfpmul (t, t, 0);
+      p = __builtin_rvtt_sfpmul (p, p, 0);
+      q = __builtin_rvtt_sfpmul (q, q, 0);
+      r = __builtin_rvtt_sfpmul (r, r, 0);
+      t = __builtin_rvtt_sfpmul (t, t, 0);
     }
-  __builtin_rvtt_sfpwritelreg (w, 3);
+  __builtin_rvtt_sfpwritelreg (p, 4);
+  __builtin_rvtt_sfpwritelreg (q, 5);
+  __builtin_rvtt_sfpwritelreg (r, 6);
+  __builtin_rvtt_sfpwritelreg (t, 7);
 }

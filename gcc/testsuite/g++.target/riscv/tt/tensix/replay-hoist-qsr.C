@@ -32,19 +32,8 @@ void hoist ()
 **	TTINCRWC	0, 4, 0, 0
 **	TTREPLAY	0, 4, 0, 0, 0, 0
 **	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	TTREPLAY	0, 4, 0, 0, 0, 0
-**	TTINCRWC	0, 4, 0, 0
-**	li	a5,0
+**	addi	a5,a5,-1
+**	bne	a5,zero,.L[0-9]+
 **	# WRITE L0
 **	ret
 */
