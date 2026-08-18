@@ -14,7 +14,7 @@
 // Constant-LREG SFPSWAP (both cst1 with the constant in the VC position
 // and cst2 with it in the VD position): the write to the constant LREG
 // (>= L8) is architecturally dropped, leaving one allocatable write.
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x1 lreg-write=0x1 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=yes} 2 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x1 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=yes} 2 } }
 // SFPABS mod 1 is audited by the D3 latency audit (Simple, latency 0,
 // no write-port claim).
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x1 port=none cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }

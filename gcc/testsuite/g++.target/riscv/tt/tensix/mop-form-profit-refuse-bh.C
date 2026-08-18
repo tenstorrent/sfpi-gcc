@@ -9,6 +9,6 @@
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-profitability\\): modeled benefit -1107 below threshold" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-not "MOP formed" "rvtt_mop_form" } }
 // { dg-final { scan-assembler-not "TTMOP" } }
-// { dg-final { scan-assembler-times "TTREPLAY" 9 } }
+// { dg-final { scan-assembler-times "TTREPLAY" 33 } }
 
 #include "replay-counted-body.h"

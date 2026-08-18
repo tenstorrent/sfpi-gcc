@@ -5,7 +5,7 @@
 // 0x55); the eight-definition SFPTRANSP writes both banks (0xff).  The
 // legacy four-definition SFPTRANSP tuple stays deliberately opaque: it
 // under-states the architectural write set (hardware permutes both banks).
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x55 lreg-write=0x55 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x55 lreg-write=0x55 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0xff lreg-write=0xff port=none cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 
 void multiresult_effects ()

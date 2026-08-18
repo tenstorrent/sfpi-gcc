@@ -8,13 +8,14 @@
 // typed face-advance body).  No scalar row backedge remains.
 //
 // The record-only preheader hoist REFUSES here by the execution-saturation
-// context term (silicon: the unary-max/min +2.06% flip root-cause): with
-// the per-row increments absorbed, the eight sibling launches of the same
-// buffer are contiguous in the final stream, their execution surplus
-// 8 * (400 - 123) = 2216 centislots hides the in-loop record pass's
-// (1+4) * 123 = 615-centislot delivery, and the modeled benefit
-// degenerates to -615 -- below any non-negative threshold, so even the
-// =0 override cannot force the hoist.  The capture therefore stays in the
+// cross-check retained in the interlock-aware model (silicon: the
+// unary-max/min +2.06% flip root-cause): with the per-row increments
+// absorbed, the eight sibling launches of the same buffer are contiguous
+// in the final stream, their execution surplus 8 * (600 - 123) = 3816
+// centislots (6 interlocked slots per pass) hides the in-loop record
+// pass's (1+4) * 123 = 615-centislot delivery, and the modeled benefit
+// degenerates to -record = -915 -- below any non-negative threshold, so
+// even the =0 override cannot force the hoist.  The capture therefore stays in the
 // face-loop body as a record-with-execution first row (TTREPLAY count 8:
 // one recording plus seven launches), the silicon-measured winning form
 // for this shape class.
@@ -22,7 +23,7 @@
 // { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }
 // { dg-final { scan-tree-dump-times "Requested complete unroll for constant replay loop" 1 "rvtt_invariant" } }
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 8 x length 4 exec surplus 2216 >= record delivery 615" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 8 exec surplus 3816 >= record delivery 615" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-assembler-times "TTREPLAY" 8 } }
 // { dg-final { scan-assembler-times "SFPLOADI" 2 } }
