@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 /* No longer noreturn: after rtl-rvtt-spill-diag.cc has reported a
    named lreg-pressure-exceeded error, the backstop stands down.  */
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_COLD;
+extern bool rvtt_spill_diag_reported;
 
 /* Capability-table architectural all-lanes SFPENCC word (defined in
    rvtt-macro-tables.cc; redeclared here so instruction output templates

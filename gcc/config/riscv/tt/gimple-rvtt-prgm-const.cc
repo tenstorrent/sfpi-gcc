@@ -673,6 +673,28 @@ function_writes_cc_p (function *fn)
    (rvtt.md rvtt_sfpreadlreg expander; riscv.cc rtx cost 0) and are
    excluded.  */
 
+/* LREG occupancy of a tracked value.  The multi-result classes carry
+   2 or 4 registers (riscv-modes.def XTT64SI/XTT128SI; the
+   sfpswap/sfptransp result types).  An unknown vector mode weighs as
+   the whole file: over-counting only fires the relief tiers earlier,
+   it never admits an unsound state.  */
+
+static unsigned
+lreg_width (tree name)
+{
+  switch (TYPE_MODE (TREE_TYPE (name)))
+    {
+    case E_XTT32SImode:
+      return 1;
+    case E_XTT64SImode:
+      return 2;
+    case E_XTT128SImode:
+      return 4;
+    default:
+      return SFPU_REG_NUM;
+    }
+}
+
 static bool
 pressure_tracked_p (tree name)
 {
@@ -791,7 +813,13 @@ compute_lreg_pressure (function *fn, unsigned capacity,
     {
       bitmap live = BITMAP_ALLOC (&m->obstack);
       bitmap_copy (live, live_out[bb->index]);
-      unsigned count = bitmap_count_bits (live);
+      unsigned count = 0;
+      {
+	bitmap_iterator bi;
+	unsigned v;
+	EXECUTE_IF_SET_IN_BITMAP (live, 0, v, bi)
+	  count += lreg_width (ssa_name (v));
+      }
       unsigned bb_max = count;
       for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
 	   gsi_prev (&gsi))
@@ -803,17 +831,17 @@ compute_lreg_pressure (function *fn, unsigned capacity,
 	  if (lhs && pressure_tracked_p (lhs))
 	    {
 	      if (bitmap_clear_bit (live, SSA_NAME_VERSION (lhs)))
-		--count;
+		count -= lreg_width (lhs);
 	      else
-		/* Dead def: transiently occupies a register here.  */
-		bb_max = MAX (bb_max, count + 1);
+		/* Dead def: transiently occupies its registers here.  */
+		bb_max = MAX (bb_max, count + lreg_width (lhs));
 	    }
 	  ssa_op_iter iter;
 	  tree use;
 	  FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
 	    if (pressure_tracked_p (use)
 		&& bitmap_set_bit (live, SSA_NAME_VERSION (use)))
-	      ++count;
+	      count += lreg_width (use);
 	  bb_max = MAX (bb_max, count);
 	}
       BITMAP_FREE (live);
@@ -989,6 +1017,16 @@ remat_consumer_audited_p (gimple *stmt, tree name)
   if (!insnd)
     return false;
   gcall *call = as_a <gcall *> (stmt);
+  /* A live-value operand is tied to the destination (rvtt.md _lv
+     alternatives constrain it "0"): the consumer's CC-DISABLED result
+     lanes ARE this operand's lanes, so a clone that wrote only the
+     enabled lanes would leak garbage through the merge.  Refuse the
+     whole use.  (SFPSWAP is excluded from the table below for the
+     same reason: both of its operands are tied in/out,
+     rvtt.md rvtt_sfpswap.)  */
+  if (insnd->is_live ()
+      && gimple_call_arg (call, insnd->live_arg ()) == name)
+    return false;
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpmad:
@@ -1046,7 +1084,6 @@ remat_consumer_audited_p (gimple *stmt, tree name)
     case rvtt_insn_data::sfpstochrnd_i_lv:
     case rvtt_insn_data::sfpstochrnd_v:
     case rvtt_insn_data::sfpstochrnd_v_lv:
-    case rvtt_insn_data::sfpswap:
     case rvtt_insn_data::sfplut:
     case rvtt_insn_data::sfplutfp32_3r:
     case rvtt_insn_data::sfplutfp32_6r:
@@ -1142,8 +1179,12 @@ remat_transform (function *fn)
     fprintf (dump_file, "const-remat: pressure %u exceeds the %u-LREG "
 	     "file\n", model.peak, capacity);
 
-  /* Candidates in SSA version order.  */
+  /* Candidates in SSA version order.  A two-issue chain's first-load
+     name is itself a well-formed single-issue chain; it is the tail's
+     private link, not a candidate (deleting the tail's chain releases
+     it).  */
   auto_vec<tree> names;
+  hash_set<tree> chain_links;
   unsigned version;
   tree name;
   FOR_EACH_SSA_NAME (version, name, fn)
@@ -1151,6 +1192,8 @@ remat_transform (function *fn)
       remat_chain chain;
       if (!pressure_tracked_p (name) || !remat_chain_p (name, &chain))
 	continue;
+      if (chain.root != chain.tail)
+	chain_links.add (gimple_call_lhs (chain.root));
       /* Live through (or defined in) an over-pressure block?  */
       bool relevant = bitmap_bit_p (model.over_bbs,
 				    gimple_bb (chain.tail)->index);
@@ -1176,6 +1219,14 @@ remat_transform (function *fn)
   unsigned last_peak = model.peak;
   for (tree cand : names)
     {
+      /* Re-validate: an earlier candidate's chain deletion may have
+	 released this name (its version is then in the free list and
+	 its definition statement cleared).  */
+      if (TREE_CODE (cand) != SSA_NAME
+	  || SSA_NAME_IN_FREE_LIST (cand)
+	  || !SSA_NAME_DEF_STMT (cand)
+	  || chain_links.contains (cand))
+	continue;
       remat_chain chain;
       if (!remat_chain_p (cand, &chain))
 	continue;
@@ -1877,8 +1928,16 @@ residency_transform (function *fn, prgm_state *st)
       st->claimed |= 1u << prgm;
 
       basic_block point_bb = c.loop ? c.entry->dest : gimple_bb (c.load);
+      /* Reuse without reprogramming needs the earlier programming to
+	 provably execute first.  Block dominance is reflexive, and an
+	 in-place (pressure class) programming point does NOT dominate
+	 later statements of its own block -- so equality must
+	 reprogram (same register, same value: always sound, merely
+	 redundant).  */
       bool reprogram
-	= !prior_bb || !dominated_by_p (CDI_DOMINATORS, point_bb, prior_bb);
+	= !prior_bb
+	  || point_bb == prior_bb
+	  || !dominated_by_p (CDI_DOMINATORS, point_bb, prior_bb);
       tree vec_type = TREE_TYPE (gimple_call_lhs (c.load));
       if (reprogram)
 	{
@@ -1904,8 +1963,11 @@ residency_transform (function *fn, prgm_state *st)
 		}
 	      else
 		{
-		  gsi_insert_before (&phg, wrcfg, GSI_SAME_STMT);
+		  /* GSI_SAME_STMT keeps the iterator on the block
+		     terminator: insert the definition first so the
+		     SFPCONFIG lands after its staged operand.  */
 		  gsi_insert_before (&phg, stage, GSI_SAME_STMT);
+		  gsi_insert_before (&phg, wrcfg, GSI_SAME_STMT);
 		}
 	    }
 	  else
@@ -1931,6 +1993,12 @@ residency_transform (function *fn, prgm_state *st)
 	(readlreg_d->decl, 1, build_int_cst (unsigned_type_node, prgm));
       gimple_call_set_lhs (read, gimple_call_lhs (c.load));
       unlink_stmt_vdef (c.load);
+      if (tree vdef = gimple_vdef (c.load))
+	{
+	  gimple_set_vdef (c.load, NULL_TREE);
+	  if (TREE_CODE (vdef) == SSA_NAME)
+	    release_ssa_name (vdef);
+	}
       gsi_replace (&lgsi, read, false);
 
       if (dump_file && reprogram)
