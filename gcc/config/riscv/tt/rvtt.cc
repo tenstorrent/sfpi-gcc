@@ -248,6 +248,15 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
 
 void rvtt_mov_error (const rtx_insn *insn, bool is_load)
 {
+  /* The named user diagnosis of allocated SFPU memory moves lives in
+     rtl-rvtt-spill-diag.cc (lreg-pressure-exceeded), which runs
+     directly after allocation.  When it has already reported, the
+     failed compilation may still reach assembly output; emitting the
+     BAD placeholder text quietly is correct then -- no object file is
+     produced after errors.  An SFPU memory move on an error-free
+     stream remains what it always was: a compiler bug.  */
+  if (seen_error ())
+    return;
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
   debug_rtx (insn);

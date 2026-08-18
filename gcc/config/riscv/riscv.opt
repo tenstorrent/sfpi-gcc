@@ -602,6 +602,14 @@ mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates
 
+mtt-tensix-optimize-const-residency
+Target Var(riscv_tt_opt_const_residency) Init(0)
+Allocate programmable constant registers to proven-constant SFPU values by priced selection, in-loop materializations first
+
+mtt-tensix-optimize-const-remat
+Target Var(riscv_tt_opt_const_remat) Init(0)
+Rematerialize proven loadi-materialized SFPU values at their uses when vector register pressure exceeds the LREG file
+
 mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)
 Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one companion-preserving involution bundle, and forward proven-identity Dst parks across it.
