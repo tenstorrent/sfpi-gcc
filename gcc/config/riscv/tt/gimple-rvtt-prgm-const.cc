@@ -305,18 +305,73 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	  if (fndecl_built_in_p (fndecl))
 	    continue;		/* scalar compiler builtin */
 	  cgraph_node *cn = cgraph_node::get (fndecl);
+	  /* The callee decl's own node can already be gone when this
+	     scan runs: IPA inlining consumes a fully-inlined comdat
+	     (e.g. an implicitly-instantiated inline destructor in a
+	     profiler zone scope) and the unreachable-node sweep removes
+	     it before the late pipeline starts.  When the target
+	     assembler supports comdat groups (HAVE_COMDAT_GROUP
+	     toolchain builds) that decl is moreover the bodiless
+	     complete-object cdtor SAME-BODY ALIAS (D1 -> D2), so the
+	     decl-level body lookup below cannot see the code either.
+	     The caller's own call edge survives both: it tracks the
+	     alias redirection and the inline-clone bookkeeping, and its
+	     ultimate callee's decl still holds the gimple body that
+	     must stay alive until the last caller's inline transform
+	     has run.  Resolve through it; what executes here is exactly
+	     that body.  An unresolvable callee still refuses -- never
+	     presume clean.  */
 	  if (!cn || !cn->definition)
+	    if (cgraph_node *caller = cgraph_node::get (fn->decl))
+	      if (cgraph_edge *e = caller->get_edge (stmt))
+		if (e->callee)
+		  if (cgraph_node *target = e->callee->ultimate_alias_target ())
+		    cn = target;
+	  /* A defined alias or thunk in the symtab executes its ultimate
+	     target's body, not its own (an alias has none; thunk glue
+	     is compiler-generated scalar this-adjustment): resolve
+	     before deciding whether a walkable body backs this call.
+	     The bound is proof work, not semantics -- an unresolved
+	     chain falls through to the refusal.  */
+	  for (unsigned depth = 0;
+	       cn && cn->definition && (cn->alias || cn->thunk) && depth != 8;
+	       ++depth)
 	    {
-	      /* The cgraph node can already be gone when this scan runs:
-		 IPA inlining consumes a fully-inlined comdat (e.g. an
-		 implicitly-instantiated inline destructor in a profiler
-		 zone scope) and the unreachable-node sweep removes it
-		 before the late pipeline starts, while its gimple body
-		 must stay alive until the last caller's inline transform
-		 has run.  What executes here is exactly that body, so
-		 scan it on demand (memoized).  A decl with no walkable
-		 body still refuses -- never presume clean.  */
-	      function *cfn = DECL_STRUCT_FUNCTION (fndecl);
+	      cgraph_node *target
+		= cn->alias ? cn->ultimate_alias_target ()
+		: cn->callees ? cn->callees->callee : nullptr;
+	      if (!target || target == cn)
+		break;
+	      cn = target;
+	    }
+	  if (!cn || !cn->definition || !cn->has_gimple_body_p ()
+	      /* An inline clone shares its original's decl and body but
+		 is not an ordinary TU-walk enumeration subject: scan the
+		 shared body on demand rather than presume the walk got
+		 it (the memoization makes the overlap transparent).  */
+	      || cn->inlined_to)
+	    {
+	      /* Scan the resolved body on demand (memoized).  A
+		 parameter-adjusted clone (IPA-SRA) carries no body of
+		 its own until materialization: it materializes from its
+		 clone_of origin's body, and clone transforms only
+		 re-parameterize -- they never add effects -- so
+		 scanning the origin body is a sound over-approximation
+		 of what executes here.  A decl with no walkable body
+		 anywhere on the chain still refuses -- never presume
+		 clean.  */
+	      function *cfn = DECL_STRUCT_FUNCTION (cn ? cn->decl : fndecl);
+	      if (!cfn || !cfn->cfg)
+		for (cgraph_node *origin = cn ? cn->clone_of : nullptr;
+		     origin; origin = origin->clone_of)
+		  {
+		    function *ofn = DECL_STRUCT_FUNCTION (origin->decl);
+		    if (ofn && ofn->cfg)
+		      {
+			cfn = ofn;
+			break;
+		      }
+		  }
 	      if (cfn && cfn->cfg)
 		{
 		  const char *w = nullptr;
@@ -361,12 +416,28 @@ tu_prgm_facts ()
       static char reason_buf[192];
       if (!ofn || !ofn->cfg)
 	{
-	  /* A defined body this pass cannot walk must refuse, never be
-	     presumed clean.  */
-	  tu_facts.refused = true;
-	  if (!tu_facts.reason)
-	    tu_facts.reason = "function body unavailable to the scan";
-	  continue;
+	  /* A parameter-adjusted clone (IPA-SRA) carries no body of its
+	     own until materialization: it materializes from its
+	     clone_of origin's body, and clone transforms only
+	     re-parameterize -- they never add effects -- so scanning
+	     the origin body is a sound over-approximation.  */
+	  for (cgraph_node *origin = node->clone_of; origin;
+	       origin = origin->clone_of)
+	    if (function *orig_fn = DECL_STRUCT_FUNCTION (origin->decl))
+	      if (orig_fn->cfg)
+		{
+		  ofn = orig_fn;
+		  break;
+		}
+	  if (!ofn || !ofn->cfg)
+	    {
+	      /* A defined body this pass cannot walk must refuse, never
+		 be presumed clean.  */
+	      tu_facts.refused = true;
+	      if (!tu_facts.reason)
+		tu_facts.reason = "function body unavailable to the scan";
+	      continue;
+	    }
 	}
       if (!scan_function_body (ofn, &tu_facts.claimed, &why, visited,
 			       &tu_facts.mop))
