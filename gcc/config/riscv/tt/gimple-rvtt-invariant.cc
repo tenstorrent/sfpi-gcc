@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-raw-boundary.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -136,8 +137,19 @@ rvtt_loop_has_sfpu_barrier_p (class loop *loop)
 	    continue;
 	  }
 
-	if (gimple_code (stmt) == GIMPLE_ASM
-	    || is_gimple_call (stmt)
+	if (gimple_code (stmt) == GIMPLE_ASM)
+	  {
+	    /* Raw `.ttinsn' constant words: the audited architectural
+	       decode (rvtt-raw-boundary.cc) proves the pure Dst/RWC
+	       counter class -- the same explicit architectural boundary
+	       as the typed Dst counter operations admitted above, and
+	       equally unable to change an invariant SFPLOADI value or
+	       the incoming CC state.  Every other asm is a barrier.  */
+	    if (!rvtt_raw_pure_dst_rwc_gimple (stmt))
+	      barrier = true;
+	    continue;
+	  }
+	if (is_gimple_call (stmt)
 	    || gimple_vuse (stmt) || gimple_vdef (stmt))
 	  barrier = true;
       }

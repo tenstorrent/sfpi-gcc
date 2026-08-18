@@ -3938,8 +3938,12 @@
 
 ;; Typed architectural Dst/RWC face advance: one face is two architectural
 ;; Dst += 8 counter steps with no LREG, CC, or configuration effect.  Late
-;; analyses recognize the run-separator effect by this typed identity; raw
-;; `.ttinsn' words are never decoded (they remain opaque and refuse).
+;; analyses recognize the run-separator effect by this typed identity.
+;; Raw `.ttinsn' constant words of the same architectural class (a
+;; SETRWC-class word writing only the Dst counter pair) are field-decoded
+;; against the capability tables and carry the identical effect set
+;; (rvtt-raw-boundary.cc); every other raw word remains opaque and
+;; refuses.
 (define_expand "rvtt_ttdstface"
   [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTDSTFACE)]
   "TARGET_XTT_TENSIX"

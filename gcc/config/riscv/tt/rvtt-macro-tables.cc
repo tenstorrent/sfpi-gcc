@@ -678,6 +678,24 @@ absorbed_dst_increment_word ()
   return (0x38u << 24) | (2u << 14);	/* 0x38008000 */
 }
 
+bool
+setrwc_decode (uint32_t word, setrwc_fields *f)
+{
+  /* TT_OP_{WH,BH}_SETRWC (0x37): clear_ab_vld << 22 | rwc_cr << 18
+     | rwc_d << 14 | rwc_b << 10 | rwc_a << 6 | bit_mask -- the same
+     layout dst_step8_setrwc_word () above encodes with.  Any other
+     opcode byte refuses.  */
+  if ((word >> 24) != 0x37u)
+    return false;
+  f->clear_ab_vld = (word >> 22) & 0x3;
+  f->rwc_cr = (word >> 18) & 0xf;
+  f->rwc_d = (word >> 14) & 0xf;
+  f->rwc_b = (word >> 10) & 0xf;
+  f->rwc_a = (word >> 6) & 0xf;
+  f->bit_mask = word & 0x3f;
+  return true;
+}
+
 /* ------------------------------------------------------------------ */
 /* Derived-calendar architectural facts.			      */
 /* Provenance for everything in this section:			      */
