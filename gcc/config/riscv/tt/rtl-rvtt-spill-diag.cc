@@ -28,13 +28,19 @@ along with GCC; see the file COPYING3.  If not see
    not a compiler bug.
 
    This pass runs directly after register allocation, before any other
-   Tensix RTL pass consumes the stream, and turns every allocated
-   XTT32SI memory move into a named user error (lreg-pressure-exceeded)
-   at the offending statement's location, pointing at the two relief
-   mechanisms (-mtt-tensix-optimize-const-residency /
-   -mtt-tensix-optimize-const-remat).  rvtt_mov_error stays as the
-   backstop for streams this pass has not seen, and stands down only
-   when an error has already been reported here.
+   Tensix RTL pass consumes the stream.  Every allocated SFPU-mode
+   memory move (detected by MODE, not by insn code, so a wrapped or
+   re-patterned reload cannot slip past) becomes a named user error
+   (lreg-pressure-exceeded) at the offending statement's location,
+   pointing at the two relief mechanisms
+   (-mtt-tensix-optimize-const-residency /
+   -mtt-tensix-optimize-const-remat).  The offending moves are then
+   DELETED so the remaining Tensix RTL passes -- which assume vector
+   operands are registers -- never see them: after a hard error no
+   object file is produced, and crash-freedom of the doomed compilation
+   is what matters.  rvtt_mov_error stays as the backstop for streams
+   this pass has not diagnosed (rvtt_spill_diag_reported), so a genuine
+   compiler bug still ICEs loudly.
 
    The pass changes nothing on spill-free streams: flag-off and clean
    compilations are byte-identical.  */
@@ -52,26 +58,28 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "recog.h"
 #include "insn-codes.h"
+#include "cfgrtl.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
 
 namespace {
 
-/* An allocated SFPU fill or spill: the rvtt_sfpassign pattern with a
-   memory operand on either side.  No other XTT32SI pattern accepts a
-   memory vector operand (the SImode memory operand of
-   rvtt_sfploadi_lv_int is the synthesized opcode word, not a vector).  */
+/* An allocated SFPU fill or spill: any single-set move of an SFPU
+   vector mode with a memory operand on either side.  Keyed on the MODE
+   rather than the insn code so a PARALLEL-wrapped or secondary-reload
+   re-patterning of the move cannot dodge the diagnosis.  */
 
 static bool
 sfpu_mem_move_p (rtx_insn *insn, bool *is_fill)
 {
-  if (!NONJUMP_INSN_P (insn) || recog_memoized (insn) < 0)
-    return false;
-  if (INSN_CODE (insn) != CODE_FOR_rvtt_sfpassign)
+  if (!NONJUMP_INSN_P (insn))
     return false;
   rtx set = single_set (insn);
   if (!set)
+    return false;
+  machine_mode mode = GET_MODE (SET_DEST (set));
+  if (mode != XTT32SImode && mode != XTT64SImode && mode != XTT128SImode)
     return false;
   if (MEM_P (SET_DEST (set)))
     {
@@ -89,7 +97,12 @@ sfpu_mem_move_p (rtx_insn *insn, bool *is_fill)
 static unsigned
 diagnose_spills (function *fn)
 {
-  unsigned reported = 0;
+  /* Collect first: reporting policy needs to know whether any spill
+     STORE exists (each store is a distinct spill site; a fill without
+     any store still proves over-pressure and reports once), and the
+     offenders are deleted afterwards.  */
+  auto_vec<rtx_insn *> stores;
+  auto_vec<rtx_insn *> fills;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -97,31 +110,48 @@ diagnose_spills (function *fn)
       FOR_BB_INSNS (bb, insn)
 	{
 	  bool is_fill;
-	  if (!sfpu_mem_move_p (insn, &is_fill))
-	    continue;
-	  /* Report each spilled value once, at the spill store (the
-	     fills follow from it); a lone fill still reports.  */
-	  if (is_fill && reported)
-	    continue;
-	  location_t loc = INSN_HAS_LOCATION (insn)
-	    ? INSN_LOCATION (insn) : fn->function_start_locus;
-	  error_at (loc,
-		    "SFPU vector register pressure exceeds the "
-		    "%d-register LREG file: a vector value must be "
-		    "%s memory, which the Tensix SFPU cannot do "
-		    "(lreg-pressure-exceeded)",
-		    SFPU_REG_NUM, is_fill ? "reloaded from" : "spilled to");
-	  if (!reported)
-	    inform (loc,
-		    "proven-constant values can be parked in programmable "
-		    "constant registers with "
-		    "%<-mtt-tensix-optimize-const-residency%> or "
-		    "rematerialized at their uses with "
-		    "%<-mtt-tensix-optimize-const-remat%>; otherwise reduce "
-		    "the number of simultaneously live vector values");
-	  ++reported;
+	  if (sfpu_mem_move_p (insn, &is_fill))
+	    (is_fill ? fills : stores).safe_push (insn);
 	}
     }
+  if (stores.is_empty () && fills.is_empty ())
+    return 0;
+
+  unsigned reported = 0;
+  auto report = [&] (rtx_insn *insn, bool is_fill)
+    {
+      location_t loc = INSN_HAS_LOCATION (insn)
+	? INSN_LOCATION (insn) : fn->function_start_locus;
+      error_at (loc,
+		"SFPU vector register pressure exceeds the "
+		"%d-register LREG file: a vector value must be "
+		"%s memory, which the Tensix SFPU cannot do "
+		"(lreg-pressure-exceeded)",
+		SFPU_REG_NUM, is_fill ? "reloaded from" : "spilled to");
+      if (!reported)
+	inform (loc,
+		"proven-constant values can be parked in programmable "
+		"constant registers with "
+		"%<-mtt-tensix-optimize-const-residency%> or "
+		"rematerialized at their uses with "
+		"%<-mtt-tensix-optimize-const-remat%>; otherwise reduce "
+		"the number of simultaneously live vector values");
+      ++reported;
+    };
+
+  for (rtx_insn *insn : stores)
+    report (insn, false);
+  if (stores.is_empty ())
+    report (fills[0], true);
+
+  /* Neutralize: the downstream Tensix RTL passes assume vector
+     operands are registers; the doomed stream must not ICE past the
+     named error.  */
+  rvtt_spill_diag_reported = true;
+  for (rtx_insn *insn : stores)
+    delete_insn (insn);
+  for (rtx_insn *insn : fills)
+    delete_insn (insn);
   return reported;
 }
 
@@ -156,7 +186,7 @@ public:
     unsigned n = diagnose_spills (fn);
     if (n && dump_file)
       fprintf (dump_file, "SFPU spill diagnosis: %u memory move(s) "
-	       "reported (lreg-pressure-exceeded)\n", n);
+	       "reported (lreg-pressure-exceeded) and deleted\n", n);
     return 0;
   }
 };

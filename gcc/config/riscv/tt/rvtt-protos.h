@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
    main also dropped the is_load parameter; rvtt.cc's definition and
    rvtt.md's single call site are both already one-argument.  */
 extern void rvtt_mov_error (const rtx_insn *) ATTRIBUTE_COLD;
+extern bool rvtt_spill_diag_reported;
 
 /* Capability-table architectural all-lanes SFPENCC word (defined in
    rvtt-macro-tables.cc; redeclared here so instruction output templates

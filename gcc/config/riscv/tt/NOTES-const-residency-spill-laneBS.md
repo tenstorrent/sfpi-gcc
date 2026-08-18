@@ -159,15 +159,74 @@ lane-local single ops (abs/mul from still-live operands) -- it would
 close asinh's clean form without touching Dst; operand-liveness-at-use
 bookkeeping is the only new obligation.
 
+## Adversarial-review outcomes (2026-08-18, independent agent pass)
+
+Three real defects found and fixed before push:
+1. A rematerialized value feeding the LIVE (destination-tied) operand
+   of an _lv consumer was wrong code: the consumer's CC-disabled result
+   lanes ARE that operand's lanes.  Fixed by refusing the use
+   (insnd->is_live () && arg == live_arg) and removing SFPSWAP (both
+   operands tied in/out) from the audited table; near-miss test
+   const-remat-live-operand-nearmiss-bh.C.
+2. The residency PRGM dedup could reuse an allocation programmed later
+   in the same block (block dominance is reflexive; in-place
+   programming does not dominate later statements of its own block).
+   Fixed: reuse-without-reprogramming requires STRICT dominance.
+3. The remat candidate loop could touch an SSA name released by an
+   earlier candidate's chain deletion (a two-issue chain's first load
+   is itself a candidate shape).  Fixed: free-list re-validation +
+   chain links excluded at collection.
+Hardening from the same review: def-before-use insertion order in the
+terminator branch of the preheader emission; the replaced load's
+orphaned vdef released; the pressure model weights XTT64/XTT128 values
+as 2/4 LREGs (unknown vector modes weigh as the whole file); spill
+diagnosis detects by MODE not insn code, reports every spill store,
+DELETES the offenders so no downstream Tensix RTL pass can ICE past the
+named error, and the rvtt_mov_error stand-down is gated on this pass
+having reported (not on any unrelated error).
+
+Known model gaps (safe direction, documented):
+- a tied live operand adds RA copy pressure the SSA model does not
+  count: the model can report <= 8 while LRA still spills -- the
+  outcome is the named error, never an ICE or wrong code (the
+  live-operand near-miss test exercises exactly this).
+- remat clones of runtime-scalar chains share the synthesized opcode
+  word and slot id verbatim; the emitted word's register fields are
+  patched per-insn at output (rvtt_synth::pattern), and the xielu
+  loop-held CRAQ leg is the passing witness for the multi-consumer
+  shape.  If rtl-rvtt-synth ever asserts single-consumer slots, the
+  clones need renumbering.
+- the pressure-class gate is computed before the loop-class placements
+  apply, so it can park a constant the loop class was about to relieve
+  anyway (redundant SFPCONFIG, never unsound).
+
 ## Gate summary (evidence ~/sfpi-uplift/laneBS-evidence-20260818/)
 
-- corpus flags-off byte-identity, 270-node shared-farm session,
-  base-60bc8dc-vs-edited cc1plus (-B hybrid method);
-- shim-farm OFF vs ON changed-row inventory + CRAQ (pinned BH sim
-  32489dda) on every changed row;
-- full rvtt.exp FAIL set == frozen-14, 2911 PASS (new families
-  const-remat*, const-residency*, spill-diag* all green; prgm-const*
-  and neighbors unchanged);
-- flagship: xielu loop-held body and acosh clean form COMPILE and are
-  CRAQ-green under the new flags; asinh clean form refuses by name
-  (computed-value class, Tier 4).
+All gates re-run at the post-review build (cc1plus 9526dca9c5cc882e):
+- corpus flags-off byte-identity: 270-node single-session shared-farm
+  legs, base-60bc8dc vs edited cc1plus (-B hybrid method): 1858/1858
+  .text hashes identical;
+- changed-row inventory (own shim farm, defaults vs
+  const-residency+const-remat): exactly 12 math.elf rows change
+  (ternary/where x7, sdpa-exp x2, binop-scalar x3; instruction-diff
+  shows the designed fire: one-time SFPLOADI+SFPCONFIG L12..L14
+  programming replacing in-loop materializations, constant-register
+  operands in consumers, branch-offset ripple only otherwise);
+- CRAQ at ON (pinned BH sim 32489dda), all 142 correctness nodes of
+  the corpus list (superset of the changed rows): 142/142 PASS (two
+  device-profile fixture rows fail only under same-session CSV
+  accumulation and pass isolated -- harness artifact, logs kept);
+- full rvtt.exp: 2914 PASS, FAIL set == frozen-14;
+- focused families: 1388/1388 (const-remat* + const-residency* +
+  spill-diag* 59, prgm-const*/invariant-loadi*/lut*/macro-planner*
+  1329);
+- flagship (fixed build): xielu loop-held body CRAQ PASS, acosh clean
+  form CRAQ PASS, asinh clean form refuses by the named error
+  (computed-value class, Tier 4 subject);
+- merge cleanliness: git merge-tree vs nkapre/sfpi tip e59ba9f2303
+  (AY + BN merged after this branch's base) = zero conflicts; only
+  shared file riscv.opt, disjoint additive hunks.  BN's
+  -mtt-tensix-macro-planner-residency is DESCRIPTOR-program residency
+  (rvtt-macro-desc); this lane's -mtt-tensix-optimize-const-residency
+  is VALUE residency in PRGM registers -- distinct names, distinct
+  machinery, no interaction.
