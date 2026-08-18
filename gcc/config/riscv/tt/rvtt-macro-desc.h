@@ -153,4 +153,88 @@ extern bool rvtt_macro_build_expectations
   (const macro_region &region, const macro_schedule &schedule,
    rvtt_macro_verify::expectations *out);
 
+/* ------------------------------------------------------------------ */
+/* WP13: descriptor-program residency (default-off,
+   -mtt-tensix-macro-planner-residency).  Dictionary-selection residency
+   of DERIVED descriptor programs (Lefurgy-line adaptation, literature
+   scan 2026-08-18 Idea 6): descriptor words are canonicalized by
+   CONTENT (the bit-exact derived template/sequence/misc words -- never
+   shape or operation identity) and become resident kernel-wide when the
+   dominance and owned-state-invariance proofs hold, so identical
+   descriptor programs are pushed once per kernel instead of once per
+   region or per enclosing-loop trip.  Increment-1 selection policy:
+   first-formed-wins, content-equality only, no eviction -- with
+   identical content the descriptor register file is never contended, so
+   the residency knapsack degenerates; capacity and field layouts are
+   capability-table facts; the R2 delivery model (rvtt-cost.md,
+   RISC_PUSH_X100) prices the dump diagnostics only.  The per-region
+   ambient enable and owned SETC16 program are never elided (AT
+   PREFIX-LEDGER rows 1-4 contract discharges are separate follow-ups).
+   Every refusal keeps today's placement byte-identically.  */
+
+struct macro_residency_entry
+{
+  uint32_t templ[4];
+  unsigned n_templates;
+  uint32_t seq[4];
+  unsigned n_seq;
+  uint32_t misc;
+  bool has_misc;
+  basic_block placement;	/* block whose end programs the words   */
+};
+
+struct macro_residency_state
+{
+  auto_vec<macro_residency_entry> programmed;
+  /* Every insn emitted by this planner invocation (programming,
+     retained prefixes, calendars): benign for the residency walks by
+     construction.  */
+  hash_set<rtx_insn *> emitted;
+};
+
+/* Stable refusal names (append-only dump API).  */
+extern const char *macro_resid_refusal_skip_path;  /* function not
+						      owned-state clean  */
+extern const char *macro_resid_refusal_span;	   /* dedupe span dirty  */
+extern const char *macro_resid_refusal_dominance;  /* no dominating
+						      resident program   */
+
+/* Outward residency extension: iterate the WP11 configuration-epoch
+   proof through successively enclosing loops from the already-proven
+   placement in *HOIST_PREHEADER / *HOIST_EDGE, gated by the
+   whole-function owned-state invariance walk (the skip-path inertness
+   discharge: paths that reach the resident program but not the region
+   observe nothing -- the enable re-asserts the outermost-CC all-lanes
+   contract under WP11's materialization license, and the owned-dest
+   words are unread outside the region).  On success updates the
+   placement to the outermost proven level and returns true; on any
+   refusal leaves the placement untouched (WP11 behavior) and returns
+   false.  Proof-only: never mutates the function.  */
+extern bool rvtt_macro_residency_extend (function *fn,
+					 const macro_region &region,
+					 const macro_descriptor &desc,
+					 const rvtt_macro::caps *c,
+					 macro_residency_state *state,
+					 basic_block *hoist_preheader,
+					 edge *hoist_edge,
+					 unsigned *levels, FILE *dump);
+
+/* Content-equality de-duplication: true when DESC's descriptor words
+   are bit-identical to an already-programmed entry whose placement
+   dominates REGION's launch block and the whole-function
+   owned-state invariance holds -- the region may then elide its
+   descriptor-word programming entirely (retained enable/SETC16 stay).
+   Proof-only: never mutates the function.  */
+extern bool rvtt_macro_residency_lookup (function *fn,
+					 const macro_region &region,
+					 const macro_descriptor &desc,
+					 const rvtt_macro::caps *c,
+					 macro_residency_state *state,
+					 FILE *dump);
+
+/* Record DESC's programming placement after a successful emission.  */
+extern void rvtt_macro_residency_record (const macro_descriptor &desc,
+					 basic_block placement,
+					 macro_residency_state *state);
+
 #endif /* GCC_RVTT_MACRO_DESC_H */
