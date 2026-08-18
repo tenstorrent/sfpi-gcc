@@ -709,6 +709,10 @@ mtt-tensix-macro-planner-residency
 Target Var(riscv_tt_macro_planner_residency) Init(0)
 Default-off delivery increment: descriptor-program residency for the macro planner.  Extends the proven cross-tile configuration epoch outward through successively enclosing loops (the programming words become resident once per kernel entry instead of once per enclosing-loop trip), and elides the descriptor-word programming of a later region whose derived descriptor words are bit-identical to an already-programmed dominating one (content-equality de-duplication; the per-region ambient enable and owned SETC16 program always stay).  Every proof failure refuses by a stable name and keeps today's placement byte-identically.
 
+mtt-tensix-macro-ims
+Target Var(riscv_tt_macro_ims) Init(0)
+Default-off placement increment (WP13): iterative-modulo-scheduling repair over the macro sub-unit calendar -- when the maximal hosting proposal refuses downstream, deterministically retry with reduced hosted sets (Rau-style bounded unplacement) instead of refusing the whole region -- plus delivery-model formation-vs-replay arbitration: formation additionally requires the formed calendar to price below the replay-compressed explicit alternative under the shared issue-cost model.  Off keeps every schedule candidate and formation decision byte-identical to the pre-flag output.
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).
