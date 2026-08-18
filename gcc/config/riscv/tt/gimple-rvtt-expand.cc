@@ -124,12 +124,18 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
 }
 
 static void
-emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
+emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
+	    unsigned mod, unsigned type, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
-    rvtt_get_insn_data(rvtt_insn_data::sfpsetcc_v);
-  gimple *new_stmt = gimple_build_call(new_insnd->decl, 2, in,
-				       build_int_cst (unsigned_type_node, SFPSETCC_MOD1_LREG_EQ0));
+    rvtt_get_insn_data(rvtt_insn_data::sfpsetcc);
+  gimple *new_stmt = gimple_build_call (new_insnd->decl, new_insnd->num_args ());
+  gimple_call_set_arg (new_stmt, new_insnd->src_arg (), in);
+  gimple_call_set_arg (new_stmt, new_insnd->mod_arg (),
+		       build_int_cst (unsigned_type_node, mod));
+  if (TARGET_XTT_TENSIX_QSR)
+    gimple_call_set_arg (new_stmt, new_insnd->mod_arg () + 1,
+			 build_int_cst (unsigned_type_node, type));
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
@@ -238,7 +244,6 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     SFPSETCC_MOD1_LREG_GTE0,
     SFPSETCC_MOD1_LREG_GTE0
   };
-  auto *setcc_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpsetcc_v);
   bool integral = type != SFPXCMP_MOD1_TYPE_FLOAT;
   bool needs_sub = true;
   if (args[1].cst)
@@ -339,24 +344,12 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     }
 
   if (!integral || !needs_sub)
-    {
-      auto setcc = gimple_build_call (setcc_v_insnd->decl, setcc_v_insnd->num_args ());
-      gimple_call_set_arg (setcc, setcc_v_insnd->src_arg (), args[0].arg);
-      gimple_call_set_arg (setcc, setcc_v_insnd->mod_arg (),
-			   build_int_cst (unsigned_type_node, map[op]));
-      gimple_set_location (setcc, gimple_location (cmp));
-      gsi_insert_after (right, setcc, GSI_NEW_STMT);
-    }
+    emit_setcc (right, cmp, args[0].arg, map[op],
+		integral ? SFPSETCC_IMM_TYPE_INT : SFPSETCC_IMM_TYPE_FLOAT, false);
 
   if (late_cc_op >= 0)
-    {
-      auto setcc = gimple_build_call (setcc_v_insnd->decl, setcc_v_insnd->num_args ());
-      gimple_call_set_arg (setcc, setcc_v_insnd->src_arg (), args[0].arg);
-      gimple_call_set_arg (setcc, setcc_v_insnd->mod_arg (),
-			   build_int_cst (unsigned_type_node, map[late_cc_op]));
-      gimple_set_location (setcc, gimple_location (cmp));
-      gsi_insert_after (right, setcc, GSI_NEW_STMT);
-    }
+    emit_setcc (right, cmp, args[0].arg, map[late_cc_op],
+		integral ? SFPSETCC_IMM_TYPE_INT : SFPSETCC_IMM_TYPE_FLOAT, false);
 
   if (dump_file)
     {
@@ -506,7 +499,7 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
 
       saved_enables = emit_loadi_lv(rightmost, call, NULL_TREE, saved_enables, 0, false);
       emit_popc(rightmost, call, false);
-      emit_setcc_v(rightmost, call, saved_enables, false);
+      emit_setcc (rightmost, call, saved_enables, SFPSETCC_MOD1_LREG_EQ0, SFPSETCC_IMM_TYPE_INT, false);
     }
 
   if (negated)

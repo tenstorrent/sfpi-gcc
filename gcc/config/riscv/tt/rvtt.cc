@@ -143,14 +143,13 @@ rvtt_insn_data::init ()
     }
 
   // Remaining arguments must be integers
-  while (ops[ix])
+  for (bool first = true; ops[ix]; first = false, ix++)
     {
       auto kind = ops[ix].kind ();
       if (kind == op_t::MOD || kind == op_t::XMOD)
 	{
-	  gcc_assert (!has_mod ());
-	  if (kind == op_t::MOD)
-	    gcc_assert (ops[ix].mod () != 0);
+	  gcc_assert (first);
+	  gcc_assert (!(kind == op_t::MOD && !ops[ix].mod ()));
 	  flags = flags_t (flags | HAS_MOD);
 	  mod_pos = argno;
 	}
@@ -159,7 +158,6 @@ rvtt_insn_data::init ()
 
       arg_types = TREE_CHAIN (arg_types);
       argno++;
-      ix++;
     }
   gcc_assert (VOID_TYPE_P (TREE_VALUE (arg_types)));
   arg_num = argno;

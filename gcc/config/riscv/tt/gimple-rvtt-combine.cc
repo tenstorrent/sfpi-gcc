@@ -155,7 +155,9 @@ static std::vector<imminfo> synths;
 
 static bool ATTRIBUTE_UNUSED combiner_enable_false () { return false; }
 static bool combiner_enable_WH () { return TARGET_XTT_TENSIX_WH; }
+static bool combiner_enable_WH_BH () { return TARGET_XTT_TENSIX_WH_BH; }
 static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
+static bool combiner_enable_QSR () { return TARGET_XTT_TENSIX_QSR; }
 
 #define OU unsigned (Flags::OtherUses)
 #define MU unsigned (Flags::MaybeUnused)
