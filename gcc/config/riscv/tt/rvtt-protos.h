@@ -275,6 +275,10 @@ constexpr unsigned SFPGTLE_MOD1_OR_TOS = 0;
 constexpr unsigned SFPGTLE_MOD1_AND_TOS = 4;
 constexpr unsigned SFPGTLE_MOD1_SET_DEST = 8;
 
+constexpr unsigned int SFPGTLE_IMM_TYPE_INT = 0;
+constexpr unsigned int SFPGTLE_IMM_TYPE_FLOAT = 1;
+constexpr unsigned int SFPGTLE_IMM_TYPE_SMAG = 1;
+
 constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
