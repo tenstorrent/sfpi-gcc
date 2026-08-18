@@ -204,7 +204,7 @@ void ice ()
 **_Z3icev:
 **	# READ L0
 **	# READ L1
-**	SFPSETCC	L1, 0, 2
+**	SFPSETCC	L1, 2048, 2
 **	SFPMOV	L1, L0, 2
 **	SFPSWAP	L9, L1, 1, 1
 **	SFPMOV	L0, L1, 0	# LV:L0

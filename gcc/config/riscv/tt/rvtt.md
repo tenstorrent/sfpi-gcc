@@ -747,22 +747,37 @@
   }
   [(set_attr "type" "tensix")])
 
-(define_insn "rvtt_sfpsetcc_i"
-  [(unspec_volatile:XTT32SI [
-     (match_operand:SI   0 "const_int_operand" "n")
-     (match_operand:SI   1 "const_int_operand" "n")
-     ] UNSPECV_SFPSETCC)]
-  "TARGET_XTT_TENSIX"
-  "SFPSETCC\tL0, %1, %0"
-  [(set_attr "type" "tensix")])
-
-(define_insn "rvtt_sfpsetcc_v"
+(define_expand "rvtt_sfpsetcc_wh"
   [(unspec_volatile:XTT32SI [
      (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
      (match_operand:SI   1 "const_int_operand" "n")
      ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX_WH_BH"
+  {
+    emit_insn (gen_rvtt_sfpsetcc
+      (operands[0], operands[1], const0_rtx));
+    DONE;
+  })
+
+(define_expand "rvtt_sfpsetcc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
+     (match_operand:SI   1 "const_int_operand" "n")
+     (match_operand:SI   2 "const_int_operand" "n")
+     ] UNSPECV_SFPSETCC)]
   "TARGET_XTT_TENSIX"
-  "SFPSETCC\t%x0, 0, %1"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) << 11);
+  })
+
+(define_insn "*rvtt_sfpsetcc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxc")
+     (match_operand:SI   1 "const_int_operand" "n")
+     (match_operand:SI   2 "const_int_operand" "n")
+     ] UNSPECV_SFPSETCC)]
+  "TARGET_XTT_TENSIX"
+  "SFPSETCC\t%x0, %2, %1"
   [(set_attr "type" "tensix")])
 
 (define_insn "rvtt_sfpencc"

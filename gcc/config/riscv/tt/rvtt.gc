@@ -262,9 +262,33 @@ combine (BH_QSR) {
 // Xiadd_i, Xiadd_i -> Xiadd_i
 
 // FIXME Overly tricky until we cleanup compares
-combine () {
+combine (WH_BH) {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
-  res|MU = sfpsetcc_v (sum, set_mod);
+  res|MU = sfpsetcc (sum, set_mod);
+  {
+    // SUM_MOD can't set CC
+    if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
+      return false;
+
+    // set mod must be on sign
+    auto isetcc = TREE_INT_CST_LOW (set_mod);
+    if (!(isetcc == SFPSETCC_MOD1_LREG_LT0
+	  || isetcc == SFPSETCC_MOD1_LREG_GTE0))
+      return false;
+  }
+  {
+    mod = build_int_cst (TREE_TYPE (sum_mod),
+			 TREE_INT_CST_LOW (sum_mod)
+			 ^ (SFPIADD_MOD1_CC_NONE
+			    | (TREE_INT_CST_LOW (set_mod) == SFPSETCC_MOD1_LREG_LT0
+			       ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0)));
+  }
+  sum = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, mod);
+}
+
+combine (QSR) {
+  sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
+  res|MU = sfpsetcc (sum, set_mod, 0);
   {
     // SUM_MOD can't set CC
     if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
@@ -287,9 +311,35 @@ combine () {
 }
 
 // exexp, Xiadd_i -> exexp
-combine () {
+combine (WH_BH) {
   exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);
-  res|MU = sfpsetcc_v (exp, set_mod);
+  res|MU = sfpsetcc (exp, set_mod);
+  {
+    // EX_MOD can't set cc
+    if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))
+      return false;
+
+    // check res_mod is cc-setting on sign bit
+    auto isetcc = TREE_INT_CST_LOW (set_mod);
+    if (!(isetcc == SFPSETCC_MOD1_LREG_LT0
+	  || isetcc == SFPSETCC_MOD1_LREG_GTE0))
+      return false;
+  }
+  {
+    exp_mod = build_int_cst (TREE_TYPE (exp_mod),
+			     TREE_INT_CST_LOW (exp_mod)
+			     | SFPEXEXP_MOD1_SET_CC_SGN_EXP
+			     | (TREE_INT_CST_LOW (set_mod)
+				== SFPSETCC_MOD1_LREG_GTE0
+				? SFPEXEXP_MOD1_SET_CC_COMP_EXP : 0));
+  }
+  exp = sfpexexp_lv (exp_lv, a, exp_mod);
+  res = sfpassign_lv (add_lv, exp);
+}
+
+combine (QSR) {
+  exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);
+  res|MU = sfpsetcc (exp, set_mod, 0);
   {
     // EX_MOD can't set cc
     if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))
