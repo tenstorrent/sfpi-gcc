@@ -39,6 +39,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
+#include "rvtt-effects.h"
+#include "rvtt-raw-boundary.h"
 
 /* Semantic SFPI code performs every logical Dst access through the target
    no-increment address modifier and advances the Dst RWC with an explicit
@@ -242,7 +244,18 @@ classify_insn (rtx_insn *insn, access_info *acc)
   if (CALL_P (insn))
     return AIC_FOREIGN;
   if (asm_noperands (PATTERN (insn)) >= 0)
-    return AIC_FOREIGN;
+    {
+      /* Raw `.ttinsn' constant words: the audited architectural decode
+	 (rvtt-raw-boundary.cc) proves the pure Dst/RWC counter class --
+	 the same class as the typed face advance below: no
+	 modifier-slot or LREG effect, but RWC state changes, so it
+	 separates rows and never absorbs an increment.  Every other
+	 asm keeps the refusing default.  */
+      xtt_rwc_effect_t rwc;
+      if (rvtt_raw_pure_dst_rwc (insn, &rwc))
+	return AIC_RWC_STEP;
+      return AIC_FOREIGN;
+    }
   if (JUMP_P (insn))
     /* Branches have no Dst-RWC or configuration effect.  They bound the
        block, so they can only trail a region.  */
@@ -268,7 +281,8 @@ classify_insn (rtx_insn *insn, access_info *acc)
   if (code == CODE_FOR_rvtt_ttdstface_wh_bh)
     /* Typed Dst/RWC face advance: advances RWC counters only; the
        address-modifier configuration slots are untouched by identity of
-       the typed pattern (no raw word is ever decoded).  */
+       the typed pattern.  (Raw `.ttinsn' words of the same architectural
+       class are admitted above through the audited field decode.)  */
     return AIC_RWC_STEP;
   if (code == CODE_FOR_rvtt_ttreplay_int)
     return AIC_REPLAY;

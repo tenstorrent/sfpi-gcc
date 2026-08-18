@@ -18,6 +18,11 @@
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=w config=0x0 rwc=none dst=none encodable=no} 1 } }
 // The audited bare copy (no CC access, no write-port claim).
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x1 lreg-write=0x4 port=none cc=none config=0x0 rwc=none dst=none encodable=no} 1 } }
+// The raw canonical `.ttinsn %0' Dst-step word (LLK-pristine upstream
+// face-advance shape) is field-decoded architecturally and carries the
+// typed TTSETRWC effect set; a raw word of any other class (here an
+// SFPCONFIG-class word) keeps the refusing opaque default.
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=set:mask=0x4 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: opaque} 1 } }
 
 __attribute__((noinline)) void effects_probe ()
@@ -35,5 +40,6 @@ __attribute__((noinline)) void effects_probe ()
   __builtin_rvtt_ttdstface ();
   __builtin_rvtt_sfpnop ();
   __builtin_rvtt_sfpencc (0, 10);	/* lanes-off: cc=w, no proof */
-  asm volatile (".ttinsn %0" :: "n" (0x37120004));
+  asm volatile (".ttinsn %0" :: "n" (0x37120004)); /* decoded: pure Dst/RWC */
+  asm volatile (".ttinsn %0" :: "n" (0x91000000)); /* SFPCONFIG-class: opaque */
 }

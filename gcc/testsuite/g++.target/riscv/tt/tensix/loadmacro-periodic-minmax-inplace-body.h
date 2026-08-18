@@ -48,17 +48,24 @@ constexpr unsigned minmax_no_increment = 7;
     }                                                                         \
   while (0)
 
+/* The face advance between runs: the typed builtin by default; the
+   rawword test variants override it with the LLK-pristine upstream shape
+   (two canonical raw `.ttinsn %0' SETRWC words).  */
+#ifndef MINMAX_FACE_ADVANCE
+#define MINMAX_FACE_ADVANCE() __builtin_rvtt_ttdstface ()
+#endif
+
 __attribute__((noinline)) void periodic_minmax_inplace ()
 {
 #ifdef MINMAX_FOUR_FACE_RUNS
   /* The production shape: four eight-row face runs (rows=32 runs=4)
-     separated by the typed architectural face advance.  */
+     separated by the architectural face advance.  */
   MINMAX_EIGHT_ROWS ();
-  __builtin_rvtt_ttdstface ();
+  MINMAX_FACE_ADVANCE ();
   MINMAX_EIGHT_ROWS ();
-  __builtin_rvtt_ttdstface ();
+  MINMAX_FACE_ADVANCE ();
   MINMAX_EIGHT_ROWS ();
-  __builtin_rvtt_ttdstface ();
+  MINMAX_FACE_ADVANCE ();
   MINMAX_EIGHT_ROWS ();
 #else
   MINMAX_EIGHT_ROWS ();

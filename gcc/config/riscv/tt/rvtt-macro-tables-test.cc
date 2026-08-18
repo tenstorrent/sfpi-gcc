@@ -489,6 +489,22 @@ test_fixed_words ()
   CHECK (dst_face_advance_step_count () == 2);
   /* TTINCRWC (0, 2, 0, 0), the absorbed explicit increment.  */
   CHECK_EQ_HEX (absorbed_dst_increment_word (), 0x38008000u);
+  {
+    /* setrwc_decode round-trips the derived Dst-step word (the field
+       decode and the encoding share one layout, pinned here).  */
+    setrwc_fields f;
+    CHECK (setrwc_decode (dst_step8_setrwc_word (), &f));
+    CHECK (f.clear_ab_vld == 0 && f.rwc_cr == 4 && f.rwc_d == 8
+	   && f.rwc_b == 0 && f.rwc_a == 0 && f.bit_mask == 4);
+    /* Field placement: each field lands in its own slot.  */
+    CHECK (setrwc_decode (0x37u << 24 | 1u << 22 | 5u << 14 | 3u << 10
+			  | 2u << 6 | 0x9u, &f));
+    CHECK (f.clear_ab_vld == 1 && f.rwc_cr == 0 && f.rwc_d == 5
+	   && f.rwc_b == 3 && f.rwc_a == 2 && f.bit_mask == 0x9);
+    /* Any other opcode byte refuses (SFPCONFIG-class word).  */
+    CHECK (!setrwc_decode (0x91u << 24 | 0x4u, &f));
+    CHECK (!setrwc_decode (absorbed_dst_increment_word (), &f));
+  }
 }
 
 /* -------------------- scalar capability data -------------------- */

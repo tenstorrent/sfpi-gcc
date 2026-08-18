@@ -30,6 +30,7 @@ MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
 	rvtt-effects.o \
+	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
 	rvtt-macro-region.o \
 	rvtt-macro-sched.o \

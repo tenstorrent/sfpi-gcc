@@ -37,11 +37,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-tables.h"
+#include "rvtt-raw-boundary.h"
 
 /* Effect data lives once, in the generated attribute family of
    rvtt-cost.md; this file only resolves it against operands.  Every
-   default is refusing: an unaudited pattern, a call, or any asm yields
-   opaque=true and consumers must refuse byte-identically.  */
+   default is refusing: an unaudited pattern, a call, or asm yields
+   opaque=true and consumers must refuse byte-identically.  The one
+   audited asm exception is the raw `.ttinsn' constant word whose
+   architectural field decode proves the pure Dst/RWC counter class
+   (rvtt-raw-boundary.cc); it carries the typed TTSETRWC effect set.  */
 
 static xtt_subunit_t
 subunit_from_attr (enum xtt_subunit a)
@@ -105,7 +109,23 @@ rvtt_insn_effects (rtx_insn *insn)
   if (!insn || !NONDEBUG_INSN_P (insn) || CALL_P (insn))
     return e;
   if (asm_noperands (PATTERN (insn)) >= 0)
-    return e;
+    {
+      /* Raw `.ttinsn' constant words (the LLK TTI_ macro shape) are
+	 field-decoded architecturally -- rvtt-raw-boundary.cc; only
+	 the pure Dst/RWC counter class is on record.  A proven word
+	 carries the typed TTSETRWC effect set verbatim: no LREG, CC,
+	 configuration, or Dst-memory effect, a SET-class RWC counter
+	 effect, sync sub-unit, no audited result latency.  Every
+	 other asm keeps the refusing opaque default.  */
+      xtt_rwc_effect_t rwc;
+      if (rvtt_raw_pure_dst_rwc (insn, &rwc))
+	{
+	  e.rwc = rwc;
+	  e.subunit = XTT_SU_SYNC;
+	  e.opaque = false;
+	}
+      return e;
+    }
   int code = recog_memoized (insn);
   if (code < 0 || get_attr_type (insn) != TYPE_TENSIX)
     return e;
