@@ -25,7 +25,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-bh.h"
 #include "sfpu-ops-qsr.h"
 
-extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
+/* No longer noreturn: after rtl-rvtt-spill-diag.cc has reported a
+   named lreg-pressure-exceeded error, the backstop stands down.  */
+extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_COLD;
+extern bool rvtt_spill_diag_reported;
 
 /* Capability-table architectural all-lanes SFPENCC word (defined in
    rvtt-macro-tables.cc; redeclared here so instruction output templates
@@ -140,6 +143,7 @@ extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_rename (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_mop_form (gcc::context *ctxt);

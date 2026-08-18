@@ -71,6 +71,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
+	rtl-rvtt-spill-diag.o \
 	rtl-rvtt-synth.o \
 	rtl-rvtt-unspec.o \
 	rvtt-lpsolve.o \

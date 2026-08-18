@@ -83,6 +83,11 @@ INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
    has an independently validated grouped-change implementation.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lreg_livein);
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_alloc);
+/* Named SFPU spill diagnosis runs first after allocation, before any
+   other Tensix RTL pass consumes the stream: an allocated XTT32SI
+   memory move becomes a user error (lreg-pressure-exceeded) instead of
+   the assembly-output ICE it used to be.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_spill_diag);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 /* The generic macro planner analyzes and forms macro regions after IRA
    has assigned LREGs, ahead of the hazard scheduler and replay

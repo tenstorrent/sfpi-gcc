@@ -246,8 +246,22 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
+/* Set by rtl-rvtt-spill-diag.cc when it has reported (and deleted)
+   allocated SFPU memory moves in this compilation.  */
+bool rvtt_spill_diag_reported;
+
 void rvtt_mov_error (const rtx_insn *insn, bool is_load)
 {
+  /* The named user diagnosis of allocated SFPU memory moves lives in
+     rtl-rvtt-spill-diag.cc (lreg-pressure-exceeded), which runs
+     directly after allocation.  Only when THAT diagnosis has fired may
+     the backstop stand down (a stray placeholder in the discarded
+     assembly of a failed compilation is harmless).  An SFPU memory
+     move on any other stream -- including one where unrelated user
+     errors were reported -- remains what it always was: a compiler
+     bug.  */
+  if (rvtt_spill_diag_reported && seen_error ())
+    return;
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
   debug_rtx (insn);

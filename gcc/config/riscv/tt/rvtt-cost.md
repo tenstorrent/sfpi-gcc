@@ -580,3 +580,35 @@
   (eq_attr "xtt_issue" "cfg") "rvtt_cfg")
 (define_insn_reservation "rvtt_issue_sync" 1
   (eq_attr "xtt_issue" "sync") "rvtt_sync")
+
+;; -----------------------------------------------------------------------
+;; Constant residency and rematerialization pricing (lane BS,
+;; gimple-rvtt-prgm-const.cc const-residency / const-remat phases).
+;;
+;; Both mechanisms move SFPLOADI materializations, so they price in the
+;; same delivered-word units as the replay model above (RISC_PUSH_X100).
+;;
+;;   materialize (fp32)   = 2 pushed words  (SFPLOADI lo + hi pair; the
+;;                          16-bit-encodable forms are 1 word -- the
+;;                          conservative bound prices 2)
+;;   PRGM programming     = 3 pushed words once (2 staging SFPLOADI +
+;;                          1 SFPCONFIG; the staging register model is
+;;                          NOTES-exp-parity-laneR2.md D1)
+;;   PRGM read-back       = 0 allocatable-LREG pressure and 0 delivered
+;;                          words (constant-register operand folded into
+;;                          the consumer by the unspec propagation)
+;;
+;; Residency of an IN-LOOP invariant materialization therefore pays for
+;; itself when 2 * trips >= 3, i.e. at two proven trips -- the LOOP
+;; class requires the structural first-iteration exit-test proof of a
+;; second trip and refuses otherwise (trip-count-unproven).  An
+;; OUT-OF-LOOP materialization executes once either way, so parking it
+;; buys nothing in delivered words; its value is one freed LREG, and the
+;; PRESSURE class fires only while the liveness model exceeds the
+;; eight-LREG file.  Rematerialization re-issues the materialization per
+;; consumer: 2 pushed words per rematerialized use (~2.46
+;; slot-equivalents outside launch runs at RISC_PUSH_X100; free inside a
+;; run per the concurrent-delivery correction recorded above), which is
+;; why the allocator ranks residency (free reads) above remat and remat
+;; fires only under residual over-pressure -- where the alternative is
+;; not slower code but NO code (the spill diagnosis error).
