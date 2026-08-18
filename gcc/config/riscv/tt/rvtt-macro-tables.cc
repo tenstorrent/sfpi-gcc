@@ -731,6 +731,21 @@ encode_sequence_bits (unsigned case_kind, unsigned delay, bool vd16,
   return true;
 }
 
+/* Field extraction of one sequence byte -- the exact inverse of
+   encode_sequence_bits, kept beside it so the SequenceBits layout has
+   ONE home.  Returns false for case 1 (architecturally undefined).  */
+
+bool
+decode_sequence_bits (uint8_t byte, unsigned *case_kind, unsigned *delay,
+		      bool *vd16, bool *route_vb)
+{
+  *case_kind = byte & 7;
+  *delay = (byte >> 3) & 7;
+  *vd16 = (byte & 0x40u) != 0;
+  *route_vb = (byte & 0x80u) != 0;
+  return *case_kind != 1;
+}
+
 uint32_t
 compose_sequence_word (const uint8_t bytes[4])
 {

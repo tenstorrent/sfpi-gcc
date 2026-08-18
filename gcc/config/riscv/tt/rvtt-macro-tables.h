@@ -416,6 +416,11 @@ const unsigned SEQ_MAX_DELAY = 7;
    Refuses case 1, out-of-range delay, and template indices > 3.  */
 extern bool encode_sequence_bits (unsigned case_kind, unsigned delay,
 				  bool vd16, bool route_vb, uint8_t *out);
+/* Exact inverse (kept beside the encoder: one home for the layout);
+   false for the architecturally undefined case 1.  */
+extern bool decode_sequence_bits (uint8_t byte, unsigned *case_kind,
+				  unsigned *delay, bool *vd16,
+				  bool *route_vb);
 
 /* Byte i of the word programs sub-unit i (Simple, MAD, Round, Store).  */
 extern uint32_t compose_sequence_word (const uint8_t bytes[4]);
