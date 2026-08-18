@@ -3730,8 +3730,51 @@
 
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
+  ;; Effect audit (BH, pure SET_VD form mod1 == 8 only): three sources --
+  ;; (1) ISA spec (docs/tensix_instruction_set_architecture.md, SFPGT/
+  ;;     SFPLE): "simple sub-unit"; SET_VD writes -1/0 into VD under
+  ;;     LaneEnabled; LaneFlags written only under SFPGT_MOD1_SET_CC and
+  ;;     the flag stack only under MUTATE_STACK -- neither in mod 8;
+  ;; (2) craq-sim TENSIX_EXECUTE_SFPGT/SFPLE (mod1==8 arm): reads the
+  ;;     tied destination and lreg_c, lane-writes the destination mask,
+  ;;     no CC write, configuration, or counter effect;
+  ;; (3) the silicon-proven hand exp kernel issues SFPGT inside the
+  ;;     poly-MAD chain's shadow with its consumer SFPAND in the S1
+  ;;     Simple column -- the same one-slot Simple dependence stepping
+  ;;     whose latency-0 the SFPAND->SFPSETEXP back-to-back audit
+  ;;     already carries.
+  ;; Every other mod1 (CC-setting and stack-mutating forms) keeps the
+  ;; refusing defaults, as does every non-BH target.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_int 16) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
   [(unspec_volatile:XTT32SI [

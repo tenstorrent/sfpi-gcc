@@ -1,0 +1,17 @@
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename-details" }
+// Renamed-equivalent, varied consumer operation and trip count: the
+// rename decision is name- and operation-independent.
+// { dg-final { scan-rtl-dump-times "Lreg rename: chain L\\d+ -> L\\d+" 1 "rvtt_lreg_rename" } }
+#define REN_FN wallaby_row
+#define REN_TRIPS 12
+#define REN_K1 quokka
+#define REN_K2 dingo
+#define REN_X numbat
+#define REN_T tuatara
+#define REN_P pademelon
+#define REN_Q quoll
+#define REN_R rosella
+#define REN_U uakari
+#define REN_ROW lap
+#define REN_CONSUME(a, b) __builtin_rvtt_sfpor ((a), (b))
+#include "lreg-rename-body.h"

@@ -7,7 +7,8 @@
 // 2. Vacating the row's head exposes an equal loop-carried stall at the
 //    seam: no modeled stall decrease, byte-identical refusal.
 // 3. A stalled gap behind a producer without an audited result latency
-//    (SFPGT carries no entry) refuses by name.
+//    (SFPARECIP carries no entry; SFPGT's pure SET_VD form is
+//    audited since the ccmask increment) refuses by name.
 // (The multi-writer wall -- the exp sfpmov refusal "writes a register
 // another row member also writes" -- is register-allocation dependent
 // at dg level; the exp dump evidence carries that name.)
@@ -62,7 +63,7 @@ void unaudited_gap_refuses ()
   auto g = __builtin_rvtt_sfpreadlreg (4);
   for (unsigned row = 0; row != 20; ++row)
     {
-      auto p = __builtin_rvtt_sfpgt (a, b, 8);
+      auto p = __builtin_rvtt_sfparecip (a, 0);
       q = __builtin_rvtt_sfpxor (q, p);
       f = __builtin_rvtt_sfpor (f, f);
       g = __builtin_rvtt_sfpand (g, g);

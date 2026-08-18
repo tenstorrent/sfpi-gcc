@@ -40,6 +40,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-macro-tables.o \
 	gimple-rvtt-attrib.o \
 	gimple-rvtt-cc.o \
+	gimple-rvtt-ccmask.o \
 	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-dce.o \
@@ -61,6 +62,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-fix-raw.o \
 	rtl-rvtt-hll.o \
 	rtl-rvtt-lreg-livein.o \
+	rtl-rvtt-lreg-rename.o \
 	rtl-rvtt-lp-alloc.o \
 	rtl-rvtt-macro-planner.o \
 	rtl-rvtt-mop-form.o \

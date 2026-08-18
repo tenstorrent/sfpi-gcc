@@ -20,6 +20,13 @@
 
 // Gimple passes
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_check_early);
+/* The CC-mask fold rewrites structured single-zero-assign v_if regions
+   into value-mask arithmetic.  It must run before the invariant pass so
+   the removed CC statement no longer bars the loop's immediate hoists
+   and the mask's live range is visible to the pressure proof, and
+   before pass_rvtt_immvar_expand while the canonical structured forms
+   are intact.  */
+INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_ccmask);
 /* Place semantic SFPU constants outside counted loops while values are still
    SSA pseudos.  Doing this after allocation would extend hard-LREG lifetimes.  */
 INSERT_PASS_BEFORE (pass_all_optimizations, 1, pass_rvtt_invariant);
@@ -76,6 +83,10 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
    formation.  (The quarantined exact-calendar pass it replaced was
    deleted at WP8.)  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
+/* The LREG chain rename runs after allocation and macro formation and
+   ahead of the hazard scheduler's fill passes, so a broken storage
+   collision widens the fill candidate sets the same compilation.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_lreg_rename);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 /* MOP loop-delivery formation re-rolls runs and counted loops of replay
    playback launches into the hardware MOP expander.  It must see the
