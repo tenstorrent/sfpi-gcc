@@ -52,6 +52,8 @@ struct xtt_effect_set {
   xtt_rwc_effect_t rwc;
   bool	   dst_mem_read, dst_mem_write;	  /* from MEM operands (existing)      */
   int	   result_latency;	  /* from xtt_result_latency		       */
+  bool	   next_slot_stall;	  /* architectural next-slot acceptance
+				     stall (xtt_next_slot_stall)	       */
   xtt_subunit_t subunit;
   bool	   opaque;		  /* CALL_P, unclassified asm, unknown	       */
 };
