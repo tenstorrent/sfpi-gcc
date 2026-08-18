@@ -661,9 +661,87 @@ outer_structural_entry (function *fn, basic_block header, bitmap body,
     *entry = incoming;
 }
 
+/* Residency-mode classification (WP13, consumed by rvtt-macro-desc.cc's
+   descriptor-residency solver).  Deliberately WEAKER than
+   epoch_insn_check, with a documented rationale: the residency
+   transforms only (a) move an owned-dest programming block to a point
+   that still dominates every launch, or (b) elide a programming block
+   whose words are bit-identical to a dominating one -- in both cases
+   the VALUES held by the owned SFPCONFIG destinations at every read are
+   unchanged, so the only instructions that can observe the difference
+   are writers of the owned destinations (different content would now
+   survive differently), unresolvable pushed words, opaque Tensix
+   issues, and calls.  Foreign LREG/CC dataflow and foreign reads of the
+   owned destinations cannot distinguish the two placements and are
+   admitted here (they stay refused in the WP11 per-loop walk, which
+   guards the enable-materialization license).  */
+
+static const char *
+resid_insn_check (epoch_resolver *ctx, rtx_insn *insn,
+		  hash_set<rtx_insn *> &benign,
+		  const rvtt_macro::caps *c)
+{
+  if (!NONDEBUG_INSN_P (insn))
+    return nullptr;
+  if (benign.contains (insn))
+    return nullptr;
+  if (CALL_P (insn))
+    return macro_epoch_refusal_unproven;
+  if (GET_CODE (PATTERN (insn)) == USE || GET_CODE (PATTERN (insn)) == CLOBBER)
+    return nullptr;
+  if (asm_noperands (PATTERN (insn)) >= 0)
+    return epoch_asm_check (ctx, insn, c);
+  if (recog_memoized (insn) >= 0)
+    {
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (!e.opaque)
+	{
+	  if (e.config_dests_written & c->owned_config_dests)
+	    return macro_epoch_refusal_invalidated;
+	  /* Address-modifier slot writes (typed or raw SETC16) are
+	     deliberately OUT of this walk's scope: residency never
+	     changes the retained per-region prefix, which re-establishes
+	     the owned SETC16 program under the region's own unchanged
+	     ownership discipline (function-global or window proof) --
+	     the walk guards only the resident descriptor-destination
+	     VALUES.  */
+	  return nullptr;
+	}
+      if (get_attr_type (insn) == TYPE_TENSIX)
+	return macro_epoch_refusal_unproven;
+      if (volatile_refs_p (PATTERN (insn)))
+	return epoch_volatile_check (ctx, insn, PATTERN (insn), c);
+      return nullptr;
+    }
+  return macro_epoch_refusal_unproven;
+}
+
 } // anonymous namespace
 
 /* See rvtt-macro-epoch.h.  */
+
+const char *
+rvtt_macro_epoch_owned_state_invariant_p (function *fn,
+					  hash_set<rtx_insn *> &benign,
+					  const rvtt_macro::caps *c,
+					  rtx_insn **refusal_insn)
+{
+  *refusal_insn = nullptr;
+  epoch_resolver ctx;
+  ctx.fn = fn;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	if (const char *why = resid_insn_check (&ctx, insn, benign, c))
+	  {
+	    *refusal_insn = insn;
+	    return why;
+	  }
+    }
+  return nullptr;
+}
 
 bool
 rvtt_macro_prefix_epoch_hoist (function *fn, const macro_region &region,

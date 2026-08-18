@@ -40,6 +40,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
 #include "rvtt-macro-derive-core.h"
+#include "dominance.h"
+#include "rvtt-macro-epoch.h"
 
 /* Selection is keyed by the DERIVED event structure -- per-macro subunit
    lists, store placement, and the admitted source instructions' encoding
@@ -2590,4 +2592,260 @@ rvtt_output_owned_setc16 (rtx *operands)
     fatal_insn ("owned SETC16 fields not encodable", operands[0]);
   snprintf (buffer, sizeof (buffer), ".ttinsn\t%u", word);
   return buffer;
+}
+
+/* ------------------------------------------------------------------ */
+/* WP13: descriptor-program residency (default-off,
+   -mtt-tensix-macro-planner-residency).  Contract in
+   rvtt-macro-desc.h; walk semantics in rvtt-macro-epoch.{h,cc}
+   (rvtt_macro_epoch_owned_state_invariant_p).  Selection is keyed on
+   descriptor CONTENT equality (bit-exact derived words) and
+   dominance/ownership proofs -- never on shape or operation identity.
+   Increment-1 policy: first-formed-wins, no eviction; with identical
+   content the descriptor register file is never contended, so the
+   residency knapsack degenerates and the R2 delivery model
+   (rvtt-cost.md RISC_PUSH_X100 = 123 centislots/pushed word) prices
+   dump diagnostics only.  Every refusal keeps today's placement
+   byte-identically.  */
+
+const char *macro_resid_refusal_skip_path = "resid-skip-path-unproven";
+const char *macro_resid_refusal_span = "resid-span-unproven";
+const char *macro_resid_refusal_dominance = "resid-dominance-unproven";
+
+namespace {
+
+/* Canonical content equality: the bit-exact derived descriptor words.
+   SETC16 programs and launch tuples are deliberately excluded -- they
+   are emitted per region regardless of residency, and launches read
+   (never define) the resident state.  */
+
+static bool
+residency_content_equal (const macro_residency_entry &e,
+			 const macro_descriptor &d)
+{
+  if (e.n_templates != d.n_templates || e.n_seq != d.n_seq
+      || e.has_misc != d.has_misc)
+    return false;
+  for (unsigned t = 0; t != d.n_templates; ++t)
+    if (e.templ[t] != d.templ[t])
+      return false;
+  for (unsigned m = 0; m != d.n_seq; ++m)
+    if (e.seq[m] != d.seq[m])
+      return false;
+  if (d.has_misc && e.misc != d.misc)
+    return false;
+  return true;
+}
+
+/* The benign set for the invariance walks: every insn this planner
+   invocation emitted (their owned-dest writes are the residency
+   candidates themselves) plus REGION's own members (deleted or
+   re-expressed by emission).  */
+
+static void
+residency_benign_set (const macro_region &region,
+		      macro_residency_state *state,
+		      hash_set<rtx_insn *> *benign)
+{
+  for (hash_set<rtx_insn *>::iterator it = state->emitted.begin ();
+       it != state->emitted.end (); ++it)
+    benign->add (*it);
+  for (const macro_row &row : region.rows)
+    {
+      if (row.enable)
+	benign->add (row.enable);
+      if (row.separator)
+	benign->add (row.separator);
+      for (rtx_insn *member : row.insns)
+	benign->add (member);
+    }
+  for (rtx_insn *sep : region.run_separators)
+    benign->add (sep);
+}
+
+} // anonymous namespace
+
+/* See rvtt-macro-desc.h.  */
+
+bool
+rvtt_macro_residency_extend (function *fn, const macro_region &region,
+			     const macro_descriptor &desc,
+			     const rvtt_macro::caps *c,
+			     macro_residency_state *state,
+			     basic_block *hoist_preheader, edge *hoist_edge,
+			     unsigned *levels, FILE *dump)
+{
+  *levels = 0;
+  if (!riscv_tt_macro_planner_residency)
+    return false;
+  if (!*hoist_preheader && !*hoist_edge)
+    return false;
+
+  /* Skip-path inertness discharge: the resident program may execute on
+     paths that never reach the region (guarded loops), so every
+     instruction of the function outside the benign set must be unable
+     to observe or redefine the owned state.  The enable word
+     re-asserts the outermost-CC all-lanes contract under WP11's
+     materialization license (cc_enable_all_lanes_proved_p held at
+     formation).  */
+  hash_set<rtx_insn *> benign;
+  residency_benign_set (region, state, &benign);
+  rtx_insn *skip_insn = nullptr;
+  if (const char *why
+	= rvtt_macro_epoch_owned_state_invariant_p (fn, benign, c,
+						    &skip_insn))
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner residency-refusal: %s (%s%s%d)\n",
+		 macro_resid_refusal_skip_path, why,
+		 skip_insn ? ", insn " : "",
+		 skip_insn ? INSN_UID (skip_insn) : 0);
+      return false;
+    }
+
+  /* Iterate the per-level epoch proof outward.  Each level re-proves
+     the full WP11 discipline (including the conservative foreign
+     LREG/CC refusal) over the next enclosing loop's body; a level
+     without a unique structural entry, or any named refusal, stops the
+     extension at the last proven placement.  Placement executions are
+     monotone non-increasing on every loop path (an outer placement
+     executes at most once per enclosing entry), so no benefit
+     threshold applies.  */
+  basic_block preheader = *hoist_preheader;
+  edge entry = *hoist_edge;
+  for (;;)
+    {
+      basic_block place = preheader ? preheader : entry->src;
+      if (!place || place == ENTRY_BLOCK_PTR_FOR_FN (fn))
+	break;
+      basic_block ph = nullptr;
+      edge e = nullptr;
+      const char *why = nullptr;
+      rtx_insn *why_insn = nullptr;
+      if (!rvtt_macro_prefix_epoch_hoist (fn, region, place, c, &ph, &e,
+					  &why, &why_insn))
+	{
+	  if (why && dump)
+	    {
+	      fprintf (dump, "Macro-planner residency-extension-stop: %s",
+		       why);
+	      if (why_insn)
+		fprintf (dump, " (insn %d)", INSN_UID (why_insn));
+	      fprintf (dump, "\n");
+	    }
+	  break;
+	}
+      preheader = ph;
+      entry = e;
+      ++*levels;
+    }
+  if (!*levels)
+    return false;
+  *hoist_preheader = preheader;
+  *hoist_edge = entry;
+  if (dump)
+    fprintf (dump, "Macro-planner residency: descriptor program resident"
+	     " %u enclosing level(s) further out (owned-state invariance"
+	     " function-wide; placement executions monotone"
+	     " non-increasing)\n", *levels);
+  return true;
+}
+
+/* See rvtt-macro-desc.h.  */
+
+bool
+rvtt_macro_residency_lookup (function *fn, const macro_region &region,
+			     const macro_descriptor &desc,
+			     const rvtt_macro::caps *c,
+			     macro_residency_state *state, FILE *dump)
+{
+  if (!riscv_tt_macro_planner_residency || state->programmed.is_empty ())
+    return false;
+
+  /* The dominance target is the launch site itself: region discovery
+     collects a region's rows within one basic block, so the first
+     row's block covers every launch the elision must feed.  */
+  const macro_row &first = region.rows[0];
+  rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
+  basic_block anchor_bb = BLOCK_FOR_INSN (anchor);
+
+  for (const macro_residency_entry &e : state->programmed)
+    {
+      if (!residency_content_equal (e, desc))
+	continue;
+
+      /* The resident program must dominate this region's configuration
+	 anchor.  Same-block domination is program order: regions are
+	 discovered in forward program order, so an earlier entry's
+	 programming precedes this region's rows within the block.  */
+      bool free_dom = !dom_info_available_p (CDI_DOMINATORS);
+      calculate_dominance_info (CDI_DOMINATORS);
+      bool dominates
+	= dominated_by_p (CDI_DOMINATORS, anchor_bb, e.placement);
+      if (free_dom)
+	free_dominance_info (CDI_DOMINATORS);
+      if (!dominates)
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner residency-refusal: %s\n",
+		     macro_resid_refusal_dominance);
+	  continue;
+	}
+
+      /* Span invariance, conservatively widened to the whole function:
+	 no foreign instruction may redefine the owned state anywhere,
+	 so in particular not between the resident program and this
+	 region's launches.  Eliding a bit-identical rewrite is then
+	 observationally inert.  */
+      hash_set<rtx_insn *> benign;
+      residency_benign_set (region, state, &benign);
+      rtx_insn *span_insn = nullptr;
+      if (const char *why
+	    = rvtt_macro_epoch_owned_state_invariant_p (fn, benign, c,
+							&span_insn))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner residency-refusal: %s (%s%s%d)\n",
+		     macro_resid_refusal_span, why,
+		     span_insn ? ", insn " : "",
+		     span_insn ? INSN_UID (span_insn) : 0);
+	  return false;	/* the walk is entry-independent: stop */
+	}
+
+      if (dump)
+	{
+	  unsigned words
+	    = desc.n_templates + desc.n_seq + (desc.has_misc ? 1 : 0);
+	  fprintf (dump, "Macro-planner residency: descriptor program"
+		   " content-identical to a dominating resident program;"
+		   " %u descriptor words elided for this region"
+		   " (delivery priced by the R2 model, 1.23"
+		   " slot-equivalents per pushed word)\n", words);
+	}
+      return true;
+    }
+  return false;
+}
+
+/* See rvtt-macro-desc.h.  */
+
+void
+rvtt_macro_residency_record (const macro_descriptor &desc,
+			     basic_block placement,
+			     macro_residency_state *state)
+{
+  if (!riscv_tt_macro_planner_residency || !placement)
+    return;
+  macro_residency_entry e;
+  memset (&e, 0, sizeof (e));
+  e.n_templates = desc.n_templates;
+  for (unsigned t = 0; t != desc.n_templates; ++t)
+    e.templ[t] = desc.templ[t];
+  e.n_seq = desc.n_seq;
+  for (unsigned m = 0; m != desc.n_seq; ++m)
+    e.seq[m] = desc.seq[m];
+  e.has_misc = desc.has_misc;
+  e.misc = desc.misc;
+  e.placement = placement;
+  state->programmed.safe_push (e);
 }
