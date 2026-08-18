@@ -8,7 +8,7 @@ void foo ()
   auto a = __builtin_rvtt_sfpreadlreg (8);
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
-  auto c = __builtin_rvtt_sfpgt (a, b, 8);
+  auto c = __builtin_rvtt_sfpgt (a, b, 8, 0);
   __builtin_rvtt_sfpwritelreg (c, 3);
 }
 /*
@@ -25,7 +25,7 @@ void bar ()
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
   __builtin_rvtt_sfppushc (0);
-  auto c = __builtin_rvtt_sfpgt (a, b, 1);
+  auto c = __builtin_rvtt_sfpgt (a, b, 1, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (a, 3);
 }
@@ -44,7 +44,7 @@ void baz ()
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
   __builtin_rvtt_sfppushc (0);
-  auto c = __builtin_rvtt_sfpgt (a, b, 8 + 1);
+  auto c = __builtin_rvtt_sfpgt (a, b, 8 + 1, 0);
   __builtin_rvtt_sfppopc (0);
 }
 /*
@@ -62,7 +62,7 @@ void foo ()
   auto a = __builtin_rvtt_sfpreadlreg (8);
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
-  auto c = __builtin_rvtt_sfple (a, b, 8);
+  auto c = __builtin_rvtt_sfple (a, b, 8, 0);
   __builtin_rvtt_sfpwritelreg (c, 3);
 }
 /*
@@ -79,7 +79,7 @@ void bar ()
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
   __builtin_rvtt_sfppushc (0);
-  auto c = __builtin_rvtt_sfple (a, b, 1);
+  auto c = __builtin_rvtt_sfple (a, b, 1, 0);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (c, 3);
 }
@@ -98,7 +98,7 @@ void baz ()
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
   __builtin_rvtt_sfppushc (0);
-  auto c = __builtin_rvtt_sfple (a, b, 8 + 1);
+  auto c = __builtin_rvtt_sfple (a, b, 8 + 1, 0);
   __builtin_rvtt_sfppopc (0);
 }
 /*
@@ -113,7 +113,7 @@ void toto ()
   auto a = __builtin_rvtt_sfpreadlreg (8);
   auto b = __builtin_rvtt_sfpreadlreg (9);
 
-  auto c = __builtin_rvtt_sfple (a, b, 0);
+  auto c = __builtin_rvtt_sfple (a, b, 0, 0);
 }
 /*
 **_ZN2le4totoEv:

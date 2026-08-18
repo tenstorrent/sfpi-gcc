@@ -84,8 +84,8 @@ RVTT_FN (sfppopc,            ,,VOID_FTYPE_USI,                                  
 
 // sfpassign is a placeholder to allow describing some combines
 // simply -- that pass then elides any actual uses.
-RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                                        0,())
-RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV,())
+RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                                        0, ())
+RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV, ())
 
 RVTT_FN (sfploadi,           ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                       0, ({E, 16, 0}, {M, 0x17}))
 RVTT_FN (sfploadi_lv,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               LV, ({U, 16, 0}, {M, 0xa17}))
@@ -128,7 +128,8 @@ RVTT_FN (sfplut,             ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI
 RVTT_FN (sfplutfp32_3r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,            0, ({M, 0x4411}))
 RVTT_FN (sfplutfp32_6r,      ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI, 0, ({M, 0xc}))
 
-RVTT_FN (sfpswap,             ,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
+RVTT_FN (sfpswap,          ,_wh,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x1ff}))
+RVTT_OVR(sfpswap,          qsr,,XTT_VEC2_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      0, ({M, 0x1ff}, {U, 1}))
 RVTT_FN (sfptransp,           ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC,              0, ())
 RVTT_FN (sfpshft2_copy4,      ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  0, ({M, 0x1}))
 RVTT_FN (sfpshft2_subvec_copy4, ,,XTT_VEC4_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_XTT_VEC_USI,        0, ({M, 0x2}))
@@ -211,10 +212,14 @@ RVTT_FN (sfpreadconfig,   bh_qsr,,XTT_VEC_FTYPE_USI,                            
 RVTT_FN (sfpreadconfig_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 LV, ({CU, 4}))
 RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                                    VOL, ({CU, 4}))
 
-RVTT_FN (sfpgt,          bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
-RVTT_FN (sfpgt_lv,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
-RVTT_FN (sfple,          bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
-RVTT_FN (sfple_lv,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
+RVTT_FN (sfpgt,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
+RVTT_OVR(sfpgt,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                     CC(0xeeee), ({M, 0xffff}, {U, 1}))
+RVTT_FN (sfpgt_lv,        bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
+RVTT_OVR(sfpgt_lv,          qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV|CC(0xeeee), ({M, 0xffff}, {U, 1}))
+RVTT_FN (sfple,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
+RVTT_OVR(sfple,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      CC(0xeeee), ({M, 0xffff}, {U, 1}))
+RVTT_FN (sfple_lv,        bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
+RVTT_OVR(sfple_lv,          qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV|CC(0xeeee), ({M, 0xffff}, {U, 1}))
 
 RVTT_FN (sfpmul24,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          0, ({M, 0x3}))
 RVTT_FN (sfpmul24_lv,    bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV, ({M, 0x3}))

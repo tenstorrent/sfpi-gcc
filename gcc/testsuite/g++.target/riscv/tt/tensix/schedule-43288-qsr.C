@@ -70,7 +70,7 @@ void mad_swap () {
   auto b = __builtin_rvtt_sfpreadlreg(1);
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpswap(r, b, 0);
+  auto s = __builtin_rvtt_sfpswap(r, b, 0, 0);
   auto s0 = __builtin_rvtt_sfpselect2(s, 0);
   __builtin_rvtt_sfpstore(nullptr, s0, 0, 0, 0, 0, 0);
 }
@@ -80,7 +80,7 @@ void mad_swap () {
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
-**	SFPSWAP	L0, L1, 0
+**	SFPSWAP	L0, L1, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -91,7 +91,7 @@ void mad_swap_cst1 () {
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto c10 = __builtin_rvtt_sfpreadlreg(10);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpswap(r, c10, 0);
+  auto s = __builtin_rvtt_sfpswap(r, c10, 0, 0);
   auto s0 = __builtin_rvtt_sfpselect2(s, 0);
   __builtin_rvtt_sfpstore(nullptr, s0, 0, 0, 0, 0, 0);
 }
@@ -101,7 +101,7 @@ void mad_swap_cst1 () {
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
-**	SFPSWAP	L0, L10, 0
+**	SFPSWAP	L0, L10, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -112,7 +112,7 @@ void mad_swap_cst2 () {
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto c10 = __builtin_rvtt_sfpreadlreg(10);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpswap(c10, r, 0);
+  auto s = __builtin_rvtt_sfpswap(c10, r, 0, 0);
   auto s1 = __builtin_rvtt_sfpselect2(s, 1);
   __builtin_rvtt_sfpstore(nullptr, s1, 0, 0, 0, 0, 0);
 }
@@ -122,7 +122,7 @@ void mad_swap_cst2 () {
 **	# READ L1
 **	SFPMAD	L0, L11, L0, L1, 0
 **	SFPNOP
-**	SFPSWAP	L10, L0, 0
+**	SFPSWAP	L10, L0, 0, 0
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	ret
 */
@@ -216,7 +216,7 @@ void mad_swap_cst3 () {
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto c10 = __builtin_rvtt_sfpreadlreg(10);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  auto s = __builtin_rvtt_sfpswap(c10, neg1, 0);
+  auto s = __builtin_rvtt_sfpswap(c10, neg1, 0, 0);
   __builtin_rvtt_sfpstore(nullptr, r, 0, 0, 0, 0, 0);
 }
 /*
