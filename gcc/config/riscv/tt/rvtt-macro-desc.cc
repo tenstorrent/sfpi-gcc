@@ -866,6 +866,226 @@ swap_cst_template_fields (rtx_insn *insn, uint8_t *src_c, uint8_t *mod1)
   return true;
 }
 
+/* Architectural index of any LREG operand -- a hard physical register
+   L0..L7, or a hardware constant register (cstlreg unspec / hard reg
+   L8..L15).  -1 for anything else.  */
+
+static int
+lreg_index (rtx x)
+{
+  if (REG_P (x) && REGNO (x) >= SFPU_REG_FIRST
+      && REGNO (x) <= SFPU_REG_FIRST + 15)
+    return (int) (REGNO (x) - SFPU_REG_FIRST);
+  return cstlreg_index (x);
+}
+
+/* WP12: generic derived template classes beyond the constant-register
+   SFPSWAP family.  Each admitted class maps one launched value insn to
+   the template fields whose SFPLOADMACRO realization is EXACTLY the
+   explicit instruction's semantics under the spec's override function
+   (SFPLOADMACRO.md functional model: VD := launch VD or LReg16; route
+   bit 0x80 replaces VB with the launch VD, else VC; the surviving
+   source fields come verbatim from the template word):
+
+   - SFPCAST (audited mods 0 / BH 3, mirroring the pattern's effect
+     audit): reads VC only (SFPCAST.md).  Source == the launch-VD
+     register packs src_c 0 and takes the VC:=VD route (identity);
+     any other source survives as the encoded VC under the VB route
+     (SFPCAST has no VB read, so the override lands on a field the
+     functional model never consumes).
+
+   - SFPIADD register form (mods 0..10, ARG_IMM clear -- the pattern's
+     audited envelope): computes VB + VC with VB = VD implicit
+     (SFPIADD.md).  The tied accumulator must BE the launch-VD register
+     so the VB:=VD route is the identity; the VC addend survives as
+     src_c.
+
+   - SFPSHFT immediate in-place form: realized as the SFPSHFT2
+     immediate template on the Round sub-unit -- the single proven
+     explicit-mode -> template-word pair the frozen signbit calendar
+     established (WH mode 1 / BH mode 5 -> SHFT2 template mod1 6,
+     NOTES-wp6-prep.md 9(e); craq-sim executes both).  The shifted
+     value must be the launch-VD register (the SHFT2 realization
+     consumes VB:=VD, SFPLOADMACRO.md special case), and the immediate
+     rides the template imm12 field exactly as the frozen rule packed
+     it.
+
+   - SFPMUL24, BH only (mods 0 LOWER / 1 UPPER -- the plain
+     spec-and-simulator-audited modes; indirect-VA/VD mods refuse):
+     computes low/high 23 bits of VA*VB with the VC addend pinned to
+     the architectural zero register L9 (SFPMUL24.md mandates VC == 9).
+     The VB factor must be the launch-VD register (VB:=VD route); VA
+     survives in its own template field (packed through the imm12
+     region per the TT_OP layout), and src_c carries the mandated L9.
+
+   Everything else stays outside the admitted class and keeps the
+   established descriptor-program-unproven refusal.  LAUNCH_VD < 0
+   (unknown carrier register) admits nothing.  An encoded VC of L0 is
+   indistinguishable from the src-unused convention (planned_src_c 0
+   routes the launch VD to VC) and refuses.  */
+
+/* insn_unspecv through a PARALLEL's leading SET (the shift patterns
+   carry a scratch clobber).  */
+
+static int
+value_insn_unspecv (rtx_insn *insn)
+{
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) == PARALLEL)
+    pat = XVECEXP (pat, 0, 0);
+  if (GET_CODE (pat) == SET)
+    pat = SET_SRC (pat);
+  if (GET_CODE (pat) == UNSPEC_VOLATILE || GET_CODE (pat) == UNSPEC)
+    return XINT (pat, 1);
+  return -1;
+}
+
+struct derived_template_fields
+{
+  uint8_t opcode;
+  uint8_t mod1;
+  uint8_t src_c;
+  uint16_t imm12;
+  /* Physical LRegs (L0..L7) the template encodes BY NAME (surviving
+     source fields) -- as opposed to the launch-VD route.  Drives the
+     WP12 fixed-VD escape analysis: a name-encoded read of a value
+     carrier's loaded register requires that carrier to keep its own
+     physical destination.  */
+  uint32_t name_reads;
+};
+
+static bool
+derived_value_template_fields (rtx_insn *insn, int launch_vd,
+			       derived_template_fields *out)
+{
+  /* LAUNCH_VD -2 marks a store-only carrier: its sacrificial VD holds
+     an unread garbage load, so no admitted class may claim a VD
+     identity there -- equality tests against -2 are vacuously false
+     (the cast/mov class still encodes its source by name; the
+     accumulate/factor classes refuse).  -1 admits nothing.  */
+  if (launch_vd == -1)
+    return false;
+  rtx pat = PATTERN (insn);
+  rtx set = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, 0) : pat;
+  if (GET_CODE (set) != SET || !REG_P (SET_DEST (set)))
+    return false;
+  int dest = lreg_index (SET_DEST (set));
+  if (dest < 0 || dest > 7)
+    return false;
+  rtx un = SET_SRC (set);
+  if (GET_CODE (un) != UNSPEC_VOLATILE)
+    return false;
+
+  switch (value_insn_unspecv (insn))
+    {
+    case UNSPECV_SFPCAST:
+      {
+	if (XVECLEN (un, 0) != 3)
+	  return false;
+	rtx src = XVECEXP (un, 0, 1);
+	rtx mod = XVECEXP (un, 0, 2);
+	int s = lreg_index (src);
+	if (s < 0 || !CONST_INT_P (mod))
+	  return false;
+	HOST_WIDE_INT m = INTVAL (mod);
+	if (!(m == 0 || (TARGET_XTT_TENSIX_BH && m == 3)))
+	  return false;		/* mirror the pattern's audited mods */
+	out->opcode = source_opcode_byte (insn);
+	out->mod1 = (uint8_t) m;
+	out->imm12 = 0;
+	out->name_reads = 0;
+	if (s == launch_vd)
+	  out->src_c = 0;	/* VC:=VD route, identity	       */
+	else if (s != 0)
+	  {
+	    out->src_c = (uint8_t) s;
+	    if (s < 8)
+	      out->name_reads |= 1u << s;
+	  }
+	else
+	  return false;		/* L0 collides with the unused code    */
+	return true;
+      }
+    case UNSPECV_SFPIADD:
+      {
+	if (XVECLEN (un, 0) != 4)
+	  return false;
+	rtx acc = XVECEXP (un, 0, 1);
+	rtx src = XVECEXP (un, 0, 2);
+	rtx mod = XVECEXP (un, 0, 3);
+	int a = lreg_index (acc);
+	int s = lreg_index (src);
+	if (a < 0 || s <= 0 || !CONST_INT_P (mod))
+	  return false;
+	HOST_WIDE_INT m = INTVAL (mod);
+	if (!IN_RANGE (m, 0, 10) || (m & 1) != 0)
+	  return false;		/* the audited register-form envelope  */
+	if (a != dest || a != launch_vd)
+	  return false;		/* accumulator must be the launch VD   */
+	out->opcode = (TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPIADD (0, 0, 0, 0)
+		       : TT_OP_BH_SFPIADD (0, 0, 0, 0)) >> 24;
+	out->mod1 = (uint8_t) m;
+	out->src_c = (uint8_t) s;
+	out->imm12 = 0;
+	out->name_reads = s < 8 ? 1u << s : 0;
+	return true;
+      }
+    case UNSPECV_SFPSHFT:
+      {
+	if (XVECLEN (un, 0) != 7)
+	  return false;
+	rtx imm = XVECEXP (un, 0, 3);
+	rtx src = XVECEXP (un, 0, 4);
+	rtx mod = XVECEXP (un, 0, 6);
+	int s = lreg_index (src);
+	if (s < 0 || !CONST_INT_P (imm) || !CONST_INT_P (mod))
+	  return false;
+	if (INTVAL (mod) != (TARGET_XTT_TENSIX_WH ? 1 : 5))
+	  return false;		/* the proven 9(e) pair only	       */
+	HOST_WIDE_INT iv = INTVAL (imm);
+	if (iv < -2048 || iv > 2047)
+	  return false;
+	if (s != dest || s != launch_vd)
+	  return false;		/* in-place on the launch VD	       */
+	out->opcode = (TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPSHFT2 (0, 0, 0, 0)
+		       : TT_OP_BH_SFPSHFT2 (0, 0, 0, 0)) >> 24;
+	out->mod1 = 6;
+	out->src_c = 0;
+	out->imm12 = (uint16_t) (iv & 0xfff);
+	out->name_reads = 0;
+	return true;
+      }
+    case UNSPECV_SFPMUL24:
+      {
+	if (!TARGET_XTT_TENSIX_BH || XVECLEN (un, 0) != 4)
+	  return false;
+	rtx va = XVECEXP (un, 0, 1);
+	rtx vb = XVECEXP (un, 0, 2);
+	rtx mod = XVECEXP (un, 0, 3);
+	int a = lreg_index (va);
+	int b = lreg_index (vb);
+	if (a < 0 || b < 0 || !CONST_INT_P (mod))
+	  return false;
+	HOST_WIDE_INT m = INTVAL (mod);
+	if (m != 0 && m != 1)
+	  return false;		/* plain LOWER/UPPER only	       */
+	if (b != dest || b != launch_vd)
+	  return false;		/* VB factor must be the launch VD     */
+	/* The TT_OP layout places VA at word bits 19:16 = imm12 bits
+	   7:4; the VB field (bits 15:12 = imm12 bits 3:0) is overridden
+	   at execution and packs 0.  */
+	out->opcode = (uint8_t) (TT_OP_BH_SFPMUL24 (0, 0, 0, 0, 0) >> 24);
+	out->mod1 = (uint8_t) m;
+	out->src_c = 9;		/* the mandated zero constant LReg[9]  */
+	out->imm12 = (uint16_t) (a << 4);
+	out->name_reads = a < 8 ? 1u << a : 0;
+	return true;
+      }
+    default:
+      return false;
+    }
+}
+
 /* Shared derived synthesis state: the row_spec fed to the derivation
    core, the derived calendar, and the packed template fields.  */
 
@@ -876,11 +1096,18 @@ struct derived_synthesis
   uint8_t template_opcode[4];
   uint8_t template_src_c[4];
   uint8_t template_mod1[4];
+  uint16_t template_imm12[4];	/* WP12 generic classes; swap packs 0  */
   unsigned n_templates;
   int store_macro;
   unsigned store_mode;
   bool store_uses_carrier_mode;
   unsigned store_only_vd;
+  /* WP12 fixed launch VDs: when any explicit row member consumes a
+     value carrier's loaded register by name, every value carrier keeps
+     its own physical load destination (vd_pin >= 0) instead of the
+     alternating {0,1} pair, under the derivation core's launch-VD
+     lifetime obligation.  -1 = established alternating behavior.  */
+  int vd_pin[4];
   const char *refusal;
 };
 
@@ -900,8 +1127,12 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   ds->row.store_input_last_slot = -1;
   ds->row.store_vd_next_write = -1;
   ds->row.store_event = -1;
+  for (unsigned m = 0; m < 4; ++m)
+    ds->vd_pin[m] = -1;
 
   const macro_row &row = region.rows[0];
+
+
 
   /* Owned configuration destinations bound the derived resources.  */
   unsigned max_templates = 0, max_macros = 0;
@@ -948,12 +1179,20 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   ds->row.n_macros = (unsigned) n_macros;
 
   unsigned n_ev = 0;
+  unsigned ev_pos[rvtt_macro_derive::MAX_EVENTS] = {};	/* insn index  */
+  uint32_t name_reads_all = 0;	/* WP12 fixed-VD escape analysis       */
+  uint32_t first_touch_write = 0, touched = 0;	/* WP12 sacrificial VD */
+  uint32_t name_reads_all_launched = 0;	/* launched surviving fields   */
   for (unsigned ix = 0; ix != row.insns.length (); ++ix)
     {
       const macro_event &ev = schedule.events[ix];
       xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
       bool is_load = e.dst_mem_read;
       bool is_store = e.dst_mem_write;
+      /* First-touch kind per register, program order (reads shadow the
+	 same insn's writes -- an in-place op's first touch is a read).  */
+      first_touch_write |= e.lreg_write & ~e.lreg_read & ~touched;
+      touched |= e.lreg_read | e.lreg_write;
       bool launched_value = ev.realization
 	== macro_event::LAUNCHED_TEMPLATE_SLOT && !ev.is_store;
       bool launched_store = is_store
@@ -961,14 +1200,64 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 
       if (launched_value)
 	{
-	  /* Admitted derived template class: constant-register SFPSWAP.  */
+	  /* Admitted derived template classes: constant-register SFPSWAP
+	     (the established family) and the WP12 generic families
+	     (derived_value_template_fields).  */
+	  derived_template_fields tf;
 	  uint8_t src_c = 0, mod1 = 0;
-	  if (!swap_cst_template_fields (row.insns[ix], &src_c, &mod1))
-	    return false;	/* outside the admitted class	       */
-	  if (n_ev == MAX_EVENTS || ds->n_templates == 4)
+	  if (swap_cst_template_fields (row.insns[ix], &src_c, &mod1))
+	    {
+	      tf.opcode = source_opcode_byte (row.insns[ix]);
+	      tf.mod1 = mod1;
+	      tf.src_c = src_c;
+	      tf.imm12 = 0;
+	      tf.name_reads = 0;	/* constant-register source     */
+	    }
+	  else
+	    {
+	      /* The launch-VD register of this event's carrier: the
+		 carried load's destination, or the sacrificial VD of a
+		 store-only carrier.  */
+	      int launch_vd = -1;
+	      if (ev.macro_index < 4)
+		{
+		  uint32_t regs = carrier_load_regs[ev.macro_index];
+		  if (regs && !(regs & (regs - 1)))
+		    launch_vd = ctz_hwi (regs);
+		  else if (!regs)
+		    launch_vd = -2;	/* store-only carrier	       */
+		}
+	      if (!derived_value_template_fields (row.insns[ix], launch_vd,
+						  &tf))
+		return false;	/* outside the admitted class	       */
+	    }
+	  if (n_ev == MAX_EVENTS)
 	    return false;
+	  name_reads_all |= tf.name_reads;
+	  name_reads_all_launched |= tf.name_reads;
+	  /* Template slot sharing (WP12): bit-identical derived field
+	     tuples encode to bit-identical template words and share one
+	     InstructionTemplate destination.  */
+	  int slot = -1;
+	  for (unsigned t = 0; t != ds->n_templates && slot < 0; ++t)
+	    if (ds->template_opcode[t] == tf.opcode
+		&& ds->template_src_c[t] == tf.src_c
+		&& ds->template_mod1[t] == tf.mod1
+		&& ds->template_imm12[t] == tf.imm12)
+	      slot = (int) t;
+	  if (slot < 0)
+	    {
+	      if (ds->n_templates == 4)
+		return false;
+	      slot = (int) ds->n_templates;
+	      ds->template_opcode[slot] = tf.opcode;
+	      ds->template_src_c[slot] = tf.src_c;
+	      ds->template_mod1[slot] = tf.mod1;
+	      ds->template_imm12[slot] = tf.imm12;
+	      ++ds->n_templates;
+	    }
 	  event_spec &spec = ds->row.events[n_ev];
-	  spec.opcode = source_opcode_byte (row.insns[ix]);
+	  spec.opcode = tf.opcode;
 	  spec.is_store = false;
 	  spec.macro_index = ev.macro_index;
 	  spec.carrier_slot = ds->row.macro_slot[ev.macro_index];
@@ -976,7 +1265,9 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	  spec.latest_issued_input_slot = -1;
 	  spec.reads_carrier_vd_reg
 	    = (e.lreg_read & carrier_load_regs[ev.macro_index]) != 0;
-	  spec.planned_src_c = src_c;
+	  spec.planned_src_c = tf.src_c;
+	  spec.template_key = (uint8_t) (slot + 1);
+	  spec.template_imm12 = tf.imm12;
 	  for (unsigned r = 0; r < 16; ++r)
 	    if ((e.lreg_read >> r) & 1)
 	      {
@@ -987,15 +1278,10 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 			    > spec.latest_issued_input_slot)
 		  spec.latest_issued_input_slot = last_writer_slot[r];
 	      }
-	  /* Constant-register sources are architectural constants, not
-	     dataflow inputs.  */
-	  ds->template_opcode[ds->n_templates] = spec.opcode;
-	  ds->template_src_c[ds->n_templates] = src_c;
-	  ds->template_mod1[ds->n_templates] = mod1;
-	  ++ds->n_templates;
 	  for (unsigned r = 0; r < 16; ++r)
 	    if ((e.lreg_write >> r) & 1)
 	      last_writer[r] = (int) n_ev;
+	  ev_pos[n_ev] = ix;
 	  ++n_ev;
 	}
       else if (launched_store)
@@ -1018,6 +1304,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 		ds->row.store_producer = last_writer[r];
 	      }
 	  ds->row.store_event = (int) n_ev;
+	  ev_pos[n_ev] = ix;
 	  ds->store_macro = ev.macro_index;
 	  rtx address, mode, addr_mode;
 	  if (!rvtt_dst_access_operands (row.insns[ix], e, &address, &mode,
@@ -1047,7 +1334,9 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
       else if (ev.realization == macro_event::EXPLICIT_INSN)
 	{
 	  /* An explicit compute issue occupies its architectural
-	     sub-unit in its issue cycle (the ISA discard rule).  */
+	     sub-unit in its issue cycle (the ISA discard rule).  It
+	     consumes every register operand by name.  */
+	  name_reads_all |= e.lreg_read;
 	  unsigned mask = 0;
 	  switch (e.subunit)
 	    {
@@ -1092,6 +1381,120 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   ds->row.ii = schedule.ii;
   ds->row.last_issue_slot = schedule.ii - 1;
   ds->row.vd_alternates = schedule.alternating_vd;
+
+  /* WP12 hazards of hosted events against the row's EXPLICIT issues
+     and earlier events (register WAR floors, later-consumer/overwrite
+     deadlines, same-cycle anti-dependences).  Slot+1 encoding; 0 = no
+     constraint.  */
+  for (unsigned ei = 0; ei < n_ev; ++ei)
+    {
+      event_spec &spec = ds->row.events[ei];
+      if (spec.is_store)
+	continue;
+      xtt_effect_set ee = rvtt_insn_effects (row.insns[ev_pos[ei]]);
+      uint32_t w = ee.lreg_write;
+      if (!w)
+	continue;
+      for (unsigned jx = 0; jx != row.insns.length (); ++jx)
+	{
+	  if (jx == ev_pos[ei])
+	    continue;
+	  const macro_event &jev = schedule.events[jx];
+	  if (jev.realization != macro_event::EXPLICIT_INSN)
+	    continue;
+	  xtt_effect_set je = rvtt_insn_effects (row.insns[jx]);
+	  int p1 = jev.slot + 1;
+	  if (jx < ev_pos[ei])
+	    {
+	      if ((je.lreg_read & w) && p1 > spec.war_floor_slot_p1)
+		spec.war_floor_slot_p1 = (int16_t) p1;
+	    }
+	  else
+	    {
+	      if ((je.lreg_read & w)
+		  && (!spec.issue_consumer_slot_p1
+		      || p1 < spec.issue_consumer_slot_p1))
+		spec.issue_consumer_slot_p1 = (int16_t) p1;
+	      if ((je.lreg_write & w)
+		  && (!spec.issue_overwrite_slot_p1
+		      || p1 < spec.issue_overwrite_slot_p1))
+		spec.issue_overwrite_slot_p1 = (int16_t) p1;
+	    }
+	}
+      /* Earlier events reading a register this event writes.  */
+      for (unsigned d = 0; d < ei; ++d)
+	{
+	  xtt_effect_set de = rvtt_insn_effects (row.insns[ev_pos[d]]);
+	  if (de.lreg_read & w)
+	    spec.anti_dep_mask |= (uint8_t) (1u << d);
+	}
+    }
+
+  /* WP12 fixed launch VDs: when any surviving name-encoded read (an
+     explicit issue's register operand or a hosted template's surviving
+     source field) consumes a value carrier's loaded register, the
+     alternating {0,1} VD pair would move the loaded value away from
+     the name its consumers use -- every value carrier then keeps its
+     own physical load destination, under the derivation core's
+     launch-VD lifetime obligation (the next row instance's rewrite).
+     Multiple value carriers likewise pin (the alternating scheme has a
+     single proven pair).  */
+  {
+    uint32_t all_carrier_regs = 0;
+    unsigned value_carriers = 0;
+    for (unsigned m = 0; m < ds->row.n_macros && m < 4; ++m)
+      if (carrier_load_regs[m])
+	{
+	  all_carrier_regs |= carrier_load_regs[m];
+	  ++value_carriers;
+	}
+    if ((name_reads_all & all_carrier_regs) || value_carriers > 1)
+      {
+	for (unsigned m = 0; m < ds->row.n_macros && m < 4; ++m)
+	  {
+	    uint32_t regs = carrier_load_regs[m];
+	    if (!regs)
+	      continue;
+	    if ((regs & (regs - 1)) != 0 || (unsigned) ctz_hwi (regs) > 7)
+	      return false;	/* not one physical L0..L7 register    */
+	    ds->vd_pin[m] = ctz_hwi (regs);
+	  }
+	ds->row.vd_alternates = false;
+      }
+  }
+
+  /* The store-only carrier's sacrificial VD.  The launch's VDLo field
+     encodes VD 0..3 (VDHi is punned with the address LSB and stays 0
+     for the even Dst addresses these calendars use), so the register
+     must come from L0..L3.  The established choice -- the lowest
+     register outside the alternating pair and the region's internal
+     set -- is kept whenever it is encodable; otherwise (WP12: every
+     low register live inside the row) a PROVEN-CLOBBERABLE internal
+     temporary serves: its first row access is a write (the next row
+     instance never reads the garbage), it is no value carrier's
+     pinned VD, and no launched event's surviving name field reads it
+     (explicit readers all issue before the store carrier's final
+     slot).  No candidate: the row refuses.  */
+  {
+    unsigned vd = rvtt_macro_store_only_sacrificial_vd (region.internal_lregs);
+    if (vd >= 4)
+      {
+	vd = 8;
+	uint32_t carrier_regs = 0;
+	for (unsigned m = 0; m < ds->row.n_macros && m < 4; ++m)
+	  carrier_regs |= carrier_load_regs[m];
+	/* Only a pinned row is proven: alternating rows own {0,1}.  */
+	if (!ds->row.vd_alternates)
+	  for (unsigned r = 0; r < 4 && vd == 8; ++r)
+	    if (((first_touch_write >> r) & 1)
+		&& !((carrier_regs >> r) & 1)
+		&& !((name_reads_all_launched >> r) & 1))
+	      vd = r;
+	if (vd == 8)
+	  return false;
+      }
+    ds->store_only_vd = vd;
+  }
   /* An unabsorbed separator occupies the last issue slot and is not an
      SFPU-class instruction.  */
   bool kept_separator = row.separator && !schedule.absorbed_stride;
@@ -1123,18 +1526,6 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	      = UINTVAL (mode) == ds->store_mode;
 	}
     }
-
-  /* The store-only carrier's sacrificial VD: the lowest physical LREG
-     outside the alternating pair and the row's internal registers.  */
-  {
-    uint32_t used = region.internal_lregs | 0x3u;
-    unsigned vd = 2;
-    while (vd < 8 && ((used >> vd) & 1))
-      ++vd;
-    if (vd == 8)
-      return false;
-    ds->store_only_vd = vd;
-  }
 
   if (!rvtt_macro_derive::derive_calendar (c, ds->row, &ds->cal))
     {
@@ -1171,6 +1562,80 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 
 } // anonymous namespace
 
+/* Realized hosted sub-unit of a value insn, for the scheduler's
+   per-(carrier, unit) capacity bookkeeping: the capability-table
+   placement descriptor synthesis will prove.  The in-place immediate
+   shift realizes on the Round sub-unit through the proven SHFT2 pair
+   (the frozen signbit calendar's rule); everything else executes on
+   its own architectural sub-unit.  */
+
+/* The store-only carrier's sacrificial VD for a region: the lowest
+   physical LREG outside the alternating pair and the region's internal
+   registers; 8 when none is available.  Shared between descriptor
+   synthesis and the scheduler's hosting probe so the two views cannot
+   diverge.  */
+
+unsigned
+rvtt_macro_store_only_sacrificial_vd (uint32_t internal_lregs)
+{
+  uint32_t used = internal_lregs | 0x3u;
+  unsigned vd = 2;
+  while (vd < 8 && ((used >> vd) & 1))
+    ++vd;
+  return vd;
+}
+
+/* Scheduler-facing probe of the admitted derived template classes: the
+   field tuple a launched value event would realize as, or false when
+   the event is outside every admitted class.  Capacity-aware hosting
+   counts DISTINCT tuples against the InstructionTemplate budget; the
+   descriptor layer re-derives everything authoritatively.  */
+
+bool
+rvtt_macro_derived_template_probe (rtx_insn *insn, int launch_vd,
+				   uint8_t *opcode, uint8_t *mod1,
+				   uint8_t *src_c, uint16_t *imm12)
+{
+  uint8_t sc = 0, m = 0;
+  if (swap_cst_template_fields (insn, &sc, &m))
+    {
+      *opcode = source_opcode_byte (insn);
+      *mod1 = m;
+      *src_c = sc;
+      *imm12 = 0;
+      return true;
+    }
+  derived_template_fields tf;
+  if (!derived_value_template_fields (insn, launch_vd, &tf))
+    return false;
+  *opcode = tf.opcode;
+  *mod1 = tf.mod1;
+  *src_c = tf.src_c;
+  *imm12 = tf.imm12;
+  return true;
+}
+
+int
+rvtt_macro_hosted_subunit (rtx_insn *insn)
+{
+  if (value_insn_unspecv (insn) == UNSPECV_SFPSHFT)
+    {
+      rtx pat = PATTERN (insn);
+      rtx set = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, 0) : pat;
+      if (GET_CODE (set) == SET)
+	{
+	  rtx un = SET_SRC (set);
+	  if (GET_CODE (un) == UNSPEC_VOLATILE && XVECLEN (un, 0) == 7
+	      && CONST_INT_P (XVECEXP (un, 0, 3))
+	      && CONST_INT_P (XVECEXP (un, 0, 6))
+	      && INTVAL (XVECEXP (un, 0, 6))
+		 == (TARGET_XTT_TENSIX_WH ? 1 : 5))
+	    return XTT_SU_ROUND;
+	}
+    }
+  return (int) rvtt_insn_effects (insn).subunit;
+}
+
 void
 rvtt_macro_descriptor_release (macro_descriptor *desc)
 {
@@ -1193,8 +1658,10 @@ rvtt_macro_synthesize (const macro_region &region,
     return false;		/* already refused at schedule time */
 
   /* A schedule that named its own blocker is not a synthesis input:
-     the candidate is unproven and the search advances.  TWO documented
-     carve-outs (union of WP10 and the timing-calendar derivation):
+     the candidate is unproven and the search advances.  THREE documented
+     carve-outs (union of WP10, the timing-calendar derivation, and the
+     WP12 template-sharing increment -- pre-sharing capacity overflow is
+     re-decided by derive_row's post-sharing gate):
      event-delay-unproven (NOTES 9(g), docs/MACRO_PLANNER.md Sec. 6 --
      an unproven per-event delay does not block a whole-word program
      proven end to end) and sequence-encoding-unproven (the missing
@@ -1206,7 +1673,8 @@ rvtt_macro_synthesize (const macro_region &region,
      latency/port violations no descriptor can repair -- stands.  */
   if (schedule.refusal
       && schedule.refusal != macro_sched_refusal_event_delay_unproven
-      && schedule.refusal != macro_sched_refusal_sequence_encoding_unproven)
+      && schedule.refusal != macro_sched_refusal_sequence_encoding_unproven
+      && schedule.refusal != macro_sched_refusal_template_capacity_exceeded)
     return false;
 
   derived_structure derived;
@@ -1252,7 +1720,7 @@ rvtt_macro_synthesize (const macro_region &region,
 	    {
 	      template_spec spec;
 	      spec.opcode = ds.template_opcode[t];
-	      spec.imm12 = 0;
+	      spec.imm12 = ds.template_imm12[t];
 	      spec.src_c = ds.template_src_c[t];
 	      spec.dest_sel = 0xc + t;
 	      spec.mod1 = ds.template_mod1[t];
@@ -1338,6 +1806,15 @@ rvtt_macro_synthesize (const macro_region &region,
 	      if (is_store_only)
 		{
 		  launch.vd = ds.store_only_vd;
+		  launch.vd_alternates = false;
+		}
+	      else if (ds.vd_pin[m] >= 0)
+		{
+		  /* WP12 fixed launch VD: the carrier keeps its own
+		     physical load destination (name-encoded consumers;
+		     lifetime obligation proven in the derivation
+		     core).  */
+		  launch.vd = (unsigned) ds.vd_pin[m];
 		  launch.vd_alternates = false;
 		}
 	      else
@@ -1798,9 +2275,36 @@ rvtt_macro_build_expectations (const macro_region &region,
     return false;
 
   derived_structure derived;
-  if (!derive_structure (region, schedule, &derived))
-    return false;
-  const desc_program *program = find_program (derived, schedule.absorb_into_explicit);
+  const desc_program *program = nullptr;
+  if (derive_structure (region, schedule, &derived))
+    program = find_program (derived, schedule.absorb_into_explicit);
+  if (program && program->uniform_mode_required)
+    {
+      /* Mirror synthesis' proven-envelope filter exactly, so the
+	 expectation builder can never key a different program than the
+	 one synthesis realized (the WP12 mode-mismatch shape exposed
+	 this asymmetry: synthesis fell through to the derived calendar
+	 while the expectations still keyed the frozen uniform-mode
+	 program).  */
+      rtx first_mode = nullptr;
+      for (rtx_insn *insn : region.rows[0].insns)
+	{
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (!e.dst_mem_read && !e.dst_mem_write)
+	    continue;
+	  rtx address, mode, addr_mode;
+	  if (!rvtt_dst_access_operands (insn, e, &address, &mode,
+					 &addr_mode))
+	    continue;
+	  if (!first_mode)
+	    first_mode = mode;
+	  else if (!rtx_equal_p (first_mode, mode))
+	    {
+	      program = nullptr;
+	      break;
+	    }
+	}
+    }
   if (!program)
     {
       /* Derived-calendar expectations (Layer 4b): re-run the shared
@@ -1818,7 +2322,7 @@ rvtt_macro_build_expectations (const macro_region &region,
 	  rvtt_macro_verify::expect_template &e = out->templates[t];
 	  e.whole_word = false;
 	  e.opcode = ds.template_opcode[t];
-	  e.imm12 = 0;
+	  e.imm12 = ds.template_imm12[t];
 	  e.dest_sel = 0xc + t;
 	  e.mod1 = ds.template_mod1[t];
 	}
@@ -1874,7 +2378,8 @@ rvtt_macro_build_expectations (const macro_region &region,
 	    && m == ds.row.n_macros - 1;
 	  a.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
 	    : c->no_increment_addr_mode;
-	  a.vd = is_store_only ? ds.store_only_vd : 0;
+	  a.vd = is_store_only ? ds.store_only_vd
+	    : ds.vd_pin[m] >= 0 ? (unsigned) ds.vd_pin[m] : 0;
 	  ++out->n_accesses;
 	}
 
@@ -1886,7 +2391,7 @@ rvtt_macro_build_expectations (const macro_region &region,
 	{
 	  template_spec spec;
 	  spec.opcode = ds.template_opcode[t];
-	  spec.imm12 = 0;
+	  spec.imm12 = ds.template_imm12[t];
 	  spec.src_c = ds.template_src_c[t];
 	  spec.dest_sel = 0xc + t;
 	  spec.mod1 = ds.template_mod1[t];

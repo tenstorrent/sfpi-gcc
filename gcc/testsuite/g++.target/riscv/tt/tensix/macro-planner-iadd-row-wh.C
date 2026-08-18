@@ -5,9 +5,13 @@
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=4 row-len=4" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor: templates=1 seq=2 misc=0x00000010 setc16=3 launches=2 drain=2" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x790001c4" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-launch: macro=0 vd=1 word=0x9314c000" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-launch: macro=1 vd=0 word=0x93448040" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner formed: rows=4 runs=1" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "SFPIADD" } }
+// { dg-final { scan-assembler-not "SFPSTORE" } }
 
 __attribute__((noinline)) void iadd_row_wh ()
 {

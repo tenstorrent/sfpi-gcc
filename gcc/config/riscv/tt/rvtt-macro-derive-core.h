@@ -68,6 +68,40 @@ struct event_spec
      same-register event result).  */
   bool reads_carrier_vd_reg;
   uint8_t planned_src_c;	/* template VC field; 0 = unused       */
+  /* Template sharing (WP12): events whose derived template words are
+     bit-identical share one InstructionTemplate slot.  0 keeps the
+     established one-template-per-event assignment; a nonzero value K
+     assigns template index K-1, and equal keys share the slot.  The
+     caller owns key consistency (equal keys iff equal derived words);
+     capacity counts distinct slots.  */
+  uint8_t template_key;
+  /* Template imm12 field (WP12 generic template classes; the
+     established swap class always packed 0).  Carried here so the
+     derivation's capacity/identity view and the descriptor encoder
+     cannot diverge.  */
+  uint16_t template_imm12;
+  /* WP12 hazards against the row's EXPLICIT issues and earlier events,
+     required once hosted events share registers with explicit row
+     members (all values are slot+1 with 0 = no constraint, so
+     zero-initialized rows keep the established behavior):
+
+     - war_floor_slot_p1: the event WRITES a register an EARLIER
+       explicit issue reads; the write must retire strictly after that
+       read (exec >= slot + 1).
+     - issue_consumer_slot_p1: a LATER explicit issue reads the event's
+       result; the result must be readable by then
+       (exec + (latency - 1) <= slot; scheduled events retire before
+       same-cycle issues, S1/S2).
+     - issue_overwrite_slot_p1: a LATER explicit issue overwrites the
+       event's written register; the event must retire no later than
+       that cycle (exec <= slot).
+     - anti_dep_mask: EARLIER events reading a register this event
+       writes; same-cycle groups read one pre-write snapshot, so
+       exec >= their exec.  */
+  int16_t war_floor_slot_p1;
+  int16_t issue_consumer_slot_p1;
+  int16_t issue_overwrite_slot_p1;
+  uint8_t anti_dep_mask;
 };
 
 /* An explicitly issued instruction inside the row's window.  */
@@ -213,7 +247,19 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	}
       unit_taken[ev.macro_index][unit] = true;
       out->unit_of[e] = unit;
-      out->template_index_of[e] = next_template++;
+      /* Template slot: shared by key (WP12) when the caller proved the
+	 derived words bit-identical; otherwise one slot per event (the
+	 established assignment).  next_template stays the count of
+	 DISTINCT slots so capacity and the staging-copy slot follow.  */
+      if (ev.template_key)
+	{
+	  unsigned idx = ev.template_key - 1;
+	  out->template_index_of[e] = (int) idx;
+	  if (idx + 1 > next_template)
+	    next_template = idx + 1;
+	}
+      else
+	out->template_index_of[e] = next_template++;
     }
 
   /* 2. Store-source resolution.  The delayed store reads only its own
@@ -302,6 +348,8 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
       if (ev.is_store && sp < 0
 	  && row.store_input_last_slot + 1 > start)
 	start = row.store_input_last_slot + 1;
+      if (ev.war_floor_slot_p1 > start)
+	start = ev.war_floor_slot_p1;
       exec[e] = start;
     }
   exec[MAX_EVENTS] = out->has_staging_copy
@@ -327,16 +375,24 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	  changed = false;
 	  for (unsigned e = 0; e < row.n_events; ++e)
 	    for (unsigned d = 0; d < e; ++d)
-	      if ((row.events[e].dep_mask >> d) & 1)
-		{
-		  int ready = exec[d]
-		    + (int) subunit_result_latency (out->unit_of[d]);
-		  if (exec[e] < ready)
-		    {
-		      exec[e] = ready;
-		      changed = true;
-		    }
-		}
+	      {
+		if ((row.events[e].dep_mask >> d) & 1)
+		  {
+		    int ready = exec[d]
+		      + (int) subunit_result_latency (out->unit_of[d]);
+		    if (exec[e] < ready)
+		      {
+			exec[e] = ready;
+			changed = true;
+		      }
+		  }
+		if ((row.events[e].anti_dep_mask >> d) & 1
+		    && exec[e] < exec[d])
+		  {
+		    exec[e] = exec[d];
+		    changed = true;
+		  }
+	      }
 	  if (out->has_staging_copy)
 	    {
 	      int ready = exec[sp]
@@ -465,6 +521,30 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	++exec[bump];
     }
 
+  /* Explicit-issue visibility deadlines (WP12): the fixpoint computes
+     earliest-feasible cycles and hazard bumps only delay events, so a
+     violated deadline is a genuine infeasibility.  */
+  for (unsigned e = 0; e < row.n_events; ++e)
+    {
+      const event_spec &ev = row.events[e];
+      if (ev.is_store)
+	continue;
+      int lat = (int) subunit_result_latency (out->unit_of[e]);
+      if (ev.issue_consumer_slot_p1
+	  && exec[e] + (lat > 0 ? lat - 1 : 0)
+	     > ev.issue_consumer_slot_p1 - 1)
+	{
+	  out->refusal = refusal_hazard ();
+	  return false;
+	}
+      if (ev.issue_overwrite_slot_p1
+	  && exec[e] > ev.issue_overwrite_slot_p1 - 1)
+	{
+	  out->refusal = refusal_hazard ();
+	  return false;
+	}
+    }
+
   /* Delay ranges.  */
   for (unsigned e = 0; e < row.n_events; ++e)
     {
@@ -529,6 +609,23 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	  return false;
 	}
     }
+
+  /* Fixed launch VD (WP12: the calendar keeps the row's own physical
+     load destinations because explicit row members consume them by
+     name).  The next row instance's launch rewrites the same register
+     one interval later, so every event consuming the launch-VD value
+     must execute no later than that rewrite (the boundary is
+     tolerated: scheduled events retire before same-cycle issues,
+     S1/S2).  Alternating calendars satisfy this by construction over
+     the doubled period.  */
+  if (!row.vd_alternates)
+    for (unsigned e = 0; e < row.n_events; ++e)
+      if (row.events[e].reads_carrier_vd_reg && !row.events[e].is_store
+	  && exec[e] > row.macro_slot[row.events[e].macro_index] + row.ii)
+	{
+	  out->refusal = refusal_hazard ();
+	  return false;
+	}
 
   /* Delay-counting kinds: an event consuming a value issued after its
      own launch requires instruction counting on its sub-unit, sound

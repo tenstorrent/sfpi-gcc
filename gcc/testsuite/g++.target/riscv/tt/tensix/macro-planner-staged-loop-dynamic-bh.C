@@ -1,14 +1,16 @@
-// Encodability refusal direction (WP8): a run-time shift amount cannot
-// pack the template imm12 field, so the region refuses by name and the
-// explicit rows stay byte-identical.
+// Encodability direction (WP8, re-adjudicated at WP12): a run-time
+// shift amount cannot pack the template imm12 field, so the SHIFT has
+// no template realization and stays an EXPLICIT issue -- while the
+// provable remainder of the row (the store-producer cast through
+// LReg16 and the delayed store) still forms, with the configuration
+// prefix hoisted to the loop preheader.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "descriptor-encoding-failed" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
-// { dg-final { scan-assembler-not "\\.ttinsn" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor: templates=1 seq=2 misc=0x00000120 setc16=3 launches=2 drain=1" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x900000c0" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner formed: rows=1 runs=1 config=preheader" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-times "SFPSHFT" 1 } }
-// { dg-final { scan-assembler-times "SFPCAST" 1 } }
-// { dg-final { scan-assembler-times "TTINCRWC" 1 } }
+// { dg-final { scan-assembler-not "SFPCAST" } }
+// { dg-final { scan-assembler-not "TTINCRWC" } }
 
 #if __riscv_xtttensixwh
 constexpr unsigned no_increment = 3;

@@ -54,8 +54,16 @@ along with GCC; see the file COPYING3.  If not see
    select path's tighter 0xff bound is a deliberate protocol
    restriction, not a field width -- see rtl-rvtt-loadmacro.cc).
    No-increment addr mode 7 (:442,579,717,1489); Dst += 2 auto-increment
-   addr mode 6 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
-   (:164-169) = mask 0x0173.  Drain 3 slots (:988-990,1059-1062).
+   addr mode 6 (:503,619,1024-1025).  Owned config dests: the frozen pass
+   exercised {0,1,4,5,6,8} = 0x0173 (:164-169); widened at WP12 to the
+   full LoadMacroConfig class {0..8} = 0x01ff -- SFPCONFIG destinations
+   0-3 (InstructionTemplate[0..3]), 4-7 (Sequence[0..3]), and 8 (Misc)
+   are one architectural state class (SFPCONFIG.md / SFPLOADMACRO.md
+   functional model), programmed through the identical discipline by
+   the production handwritten kernels (e.g. the metal MulInt32 init
+   writes templates 2-3 and Sequence[2-3]) and executed by the
+   simulator's single generic decode path.  Ownership is a refusal
+   surface: widening only makes foreign-access proofs stricter.  Drain 3 slots (:988-990,1059-1062).
    Break-even 7 rows (:1123) -- reference data for the WP7 cost-model
    regression only, never a planner input.  */
 XTT_MACRO_CAPS_SCALARS ("bh", /*n_templates*/4, /*n_sequence_slots*/4,
@@ -66,7 +74,7 @@ XTT_MACRO_CAPS_SCALARS ("bh", /*n_templates*/4, /*n_sequence_slots*/4,
 			/*no_inc*/7, /*auto_inc_dst2*/6,
 			/*needs_bank_base_ownership*/false,
 			/*setc16_opcode*/0xb2, /*sfpconfig_opcode*/0x91,
-			/*owned_config_dests*/0x0173,
+			/*owned_config_dests*/0x01ff,
 			/*proven_drain_slots*/3,
 			/*reference_breakeven_rows*/7)
 
