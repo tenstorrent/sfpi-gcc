@@ -629,6 +629,10 @@ mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
+mtt-tensix-optimize-counted-row-formation
+Target Var(riscv_tt_opt_counted_row) Init(0)
+Canonicalize parameterized repeated Tensix SFPU rows (immediate-varying members excluded from the record and delivered between launches; clone register maps rewritten to the recorded registers) so replay formation records one parameterized row program.
+
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.

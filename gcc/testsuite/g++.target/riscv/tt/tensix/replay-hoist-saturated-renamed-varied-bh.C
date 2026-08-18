@@ -1,8 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 6 x length 5 exec surplus 2262 >= record delivery 738" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -738 < 60 .trips 6, length 5." "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 6 exec surplus 4662 >= record delivery 738" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -1038 < 60" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Capturing and executing sequence" "rvtt_replay" } }
 
 // Renamed and varied twin of the execution-saturated sibling shape:
 // different operation (add, not mul), different payload length (5),

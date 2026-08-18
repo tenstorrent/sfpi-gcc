@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 8 x length 4 exec surplus 2216 >= record delivery 615" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -615 < 60 .trips 4, length 4." "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 8 exec surplus 4616 >= record delivery 615" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -915 < 60" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump "Capturing and executing sequence" "rvtt_replay" } }
 

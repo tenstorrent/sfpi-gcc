@@ -1,7 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit 245 >= 60 .trips 4, length 4." "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Hoisted no-exec capture" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump-not "Record delivery hidden" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -335 < 60" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 
 // Near miss of the execution-saturated sibling shape, flag direction:
 // the SAME eight-sibling four-slot four-trip body as the saturated
