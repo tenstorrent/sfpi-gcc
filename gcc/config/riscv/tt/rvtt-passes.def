@@ -64,6 +64,12 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_interleave);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
 
+/* Transpose-involution formation + Dst-park elision: late, after the
+   structured-CC lowering and scheduling shape are final, so the
+   operand-def windows and lane-state scan see the stream that will
+   expand.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
+
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
 INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);

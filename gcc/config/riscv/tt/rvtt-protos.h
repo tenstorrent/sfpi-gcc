@@ -26,6 +26,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "sfpu-ops-qsr.h"
 
 extern void rvtt_mov_error (const rtx_insn *, bool is_load) ATTRIBUTE_NORETURN ATTRIBUTE_COLD;
+
+/* Capability-table architectural all-lanes SFPENCC word (defined in
+   rvtt-macro-tables.cc; redeclared here so instruction output templates
+   can emit it without pulling the whole tables header).  */
+namespace rvtt_macro { extern uint32_t sfpencc_all_lanes_word (); }
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 extern const char *rvtt_output_owned_setc16 (rtx *operands);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
@@ -119,6 +124,7 @@ extern gimple_opt_pass *make_pass_rvtt_lut_select (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_lp_schedule (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_transp_involution (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);

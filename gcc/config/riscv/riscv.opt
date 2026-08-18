@@ -602,6 +602,14 @@ mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates
 
+mtt-tensix-optimize-transp-involution
+Target Var(riscv_tt_opt_transp_involution) Init(0)
+Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one companion-preserving involution bundle, and forward proven-identity Dst parks across it.
+mtt-tensix-optimize-replay-exec-record
+Target Var(riscv_tt_opt_replay_exec_record) Init(0)
+Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch when the unrolled launch run structurally proves the exchange.
+
+
 mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
 Recognize legal adjacent Tensix Dst-register iterations
