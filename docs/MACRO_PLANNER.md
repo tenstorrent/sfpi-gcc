@@ -517,6 +517,15 @@ Drain placement (WP13; refusing keeps the full derived drain, never
 blocks formation): `drain-follower-opaque`, `drain-lreg-overlap`,
 `drain-cc-live`, `drain-config-overlap`, `drain-dst-raw`,
 `drain-delay-unproven`, `drain-horizon-spill`.
+Residency (WP13; refusing keeps today's placement, never blocks
+formation): `resid-skip-path-unproven` (function-wide owned-state
+invariance walk failed; the underlying epoch name and insn are cited
+in the dump line), `resid-span-unproven` (de-duplication span dirty),
+`resid-dominance-unproven` (content matched but no dominating resident
+program).  Reserved for the future eviction-choice increment, no
+current emission site: `resid-capacity-exceeded` (with content-equality
+de-duplication the descriptor register file is never contended, so
+increment 1 has no honest site for it).
 
 ## 5. Flags
 
@@ -528,6 +537,8 @@ self-test), `-mtt-tensix-macro-planner-replay` (WP10 delivery: admit
 planner-formed launches into automatic replay recording; see Sec. 6),
 `-mtt-tensix-optimize-drain-schedule` (WP13: per-boundary drain
 placement proofs; see Sec. 2d).
+`-mtt-tensix-macro-planner-residency` (WP13 delivery: descriptor-program
+residency; see Sec. 2d).
 All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
@@ -785,3 +796,69 @@ boundary), shadow-filling a kept gap with proven-neutral init traffic
 (design Sec. 7).  The profitability model (`run_profitable_p`,
 `loop_profitable_p`) still prices the full per-run drain: pricing
 follows placement conservatively, never ahead of it.
+## 2d. WP13: descriptor-program residency (dictionary selection)
+
+Adaptation of the dictionary-selection compression line (Lefurgy et
+al., MICRO-30 1997; literature scan 2026-08-18 Idea 6): the
+SFPLOADMACRO descriptor registers are a programmable dictionary, and
+the planner's derived descriptor words are its entries.  WP13 selects
+which entries stay RESIDENT kernel-wide so identical descriptor
+programs are pushed once per kernel instead of once per region or per
+enclosing-loop trip.  Default off (`-mtt-tensix-macro-planner-residency`);
+every refusal keeps today's placement byte-identically.
+
+Two increments, both implemented in `rvtt-macro-desc.cc` (solver) with
+the emission wiring at the planner's WP11 call site and
+`emit_planner_run`:
+
+* **Outward span extension** (`rvtt_macro_residency_extend`).  After a
+  successful WP11 hoist, the per-level configuration-epoch proof
+  (`rvtt_macro_prefix_epoch_hoist`, full conservative discipline
+  including the foreign-LREG/CC refusal) is iterated through
+  successively enclosing loops; the final proven level's structural
+  preheader (or commit-time entry-edge split) receives the hoisted
+  block.  The occurrence obligation the multi-level hoist adds -- the
+  resident program may now execute on paths that never reach the
+  region -- is discharged by the function-wide OWNED-STATE INVARIANCE
+  walk (`rvtt_macro_epoch_owned_state_invariant_p`): outside the
+  planner's own emissions and the region, no instruction of the
+  function may write an owned SFPCONFIG destination or deliver an
+  unresolvable/opaque word, so executing the programming words early is
+  observationally inert (the copied enable re-asserts the outermost-CC
+  all-lanes contract under WP11's materialization license).  Placement
+  executions are monotone non-increasing on every loop path, so no
+  benefit threshold applies; the walk deliberately ADMITS foreign
+  LREG/CC dataflow and owned-destination reads (a placement move
+  cannot be observed through them -- rationale at `resid_insn_check`).
+
+* **Content-equality de-duplication** (`rvtt_macro_residency_lookup`).
+  Descriptor programs are canonicalized by CONTENT: the bit-exact
+  derived template/sequence/misc words (SETC16 programs and launch
+  tuples excluded -- they are per-region regardless).  A later formed
+  region whose canonical words equal an already-programmed entry, whose
+  launch block the entry's placement dominates (regions are processed
+  in forward program order; the increment-1 first-formed-wins policy),
+  and whose function-wide owned-state invariance holds, elides its
+  descriptor-word programming entirely; its retained ambient enable and
+  owned SETC16 program stay.  Eliding a bit-identical rewrite is
+  observationally inert given the values provably reach the launches.
+  Different canonical content simply programs per-region as today (no
+  eviction, no contention: identical content shares destinations by
+  construction).  The selection value function is the R2 delivery
+  model (rvtt-cost.md, RISC_PUSH_X100 = 123 centislots per pushed
+  word), used for dump diagnostics and ordering only -- never for
+  shape keying; capacities and field layouts are capability-table
+  facts.
+
+The per-region ambient enable and the owned SETC16 program are never
+elided or moved by WP13: their contract discharges (AT PREFIX-LEDGER
+rows 1-4 -- the CC epoch through the per-tile LaneConfig reset, and
+the SETC16-visible state reachable from data-plane MMIO) are separate
+named follow-ups.  Replay-record residency (the replay-linker half of
+the same dictionary idea: keeping a RECORDED RANGE resident across
+tiles) is NOT implemented here: on the measured where shape the
+per-trip re-record is execution-covered (Lane-S saturation -- removing
+pushes below the execution floor realizes ~0), the hand kernel pays
+the same re-record class, and the emission home is the replay pass;
+recorded as a design note with the residency solver as its intended
+slot allocator when a push-bound shape appears.

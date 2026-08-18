@@ -91,4 +91,21 @@ extern bool rvtt_macro_prefix_epoch_hoist (function *fn,
 					   const char **refusal,
 					   rtx_insn **refusal_insn);
 
+/* Residency-mode whole-function invariance walk (WP13; consumed by the
+   descriptor-residency solver in rvtt-macro-desc.cc).  Proves that no
+   instruction of FN outside BENIGN can change the values held by the
+   planner's owned SFPCONFIG destinations or deliver an unresolvable /
+   opaque word: foreign owned-dest WRITES, unresolvable raw or
+   volatile-stored words, opaque Tensix issues, and calls refuse by the
+   epoch names; foreign LREG/CC dataflow and foreign owned-dest READS
+   are admitted (a residency placement change or content-equal elision
+   is unobservable through them -- rationale at resid_insn_check).
+   Returns null when clean, else the stable refusal name with
+   *REFUSAL_INSN set.  Never mutates the function.  */
+extern const char *
+rvtt_macro_epoch_owned_state_invariant_p (function *fn,
+					  hash_set<rtx_insn *> &benign,
+					  const rvtt_macro::caps *c,
+					  rtx_insn **refusal_insn);
+
 #endif /* GCC_RVTT_MACRO_EPOCH_H */
