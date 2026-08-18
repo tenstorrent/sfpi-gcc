@@ -653,6 +653,14 @@ mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-lut-select): select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
+mtt-tensix-optimize-lreg-rename
+Target Var(riscv_tt_opt_lreg_rename) Init(0)
+Rename storage-colliding invariant-input LREG chains inside capturable rows to a proven-free register so the audited stall-fill mechanisms stop refusing them; every unproven case refuses by name.
+
+mtt-tensix-optimize-ccmask
+Target Var(riscv_tt_opt_ccmask) Init(0)
+Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.
+
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-setexp-fold): fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.

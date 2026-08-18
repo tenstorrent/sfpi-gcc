@@ -1,5 +1,5 @@
 // Near misses for the interlock-stall shadow fill.
-// 1. A producer without an audited result latency (SFPGT carries no
+// 1. A producer without an audited result latency (SFPARECIP carries no
 //    entry) refuses by name even with a filler available.
 // 2. A move whose vacated seam exposes an equal stall (the consumer's
 //    own dependent successor becomes adjacent) refuses on the modeled
@@ -14,8 +14,8 @@ void unaudited_producer_refuses ()
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto b = __builtin_rvtt_sfpreadlreg (1);
   auto c = __builtin_rvtt_sfpreadlreg (2);
-  // SFPGT with SET_VD writes its destination; its latency is unaudited.
-  auto p = __builtin_rvtt_sfpgt (a, b, 8);
+  // SFPARECIP writes its destination; its latency is unaudited.
+  auto p = __builtin_rvtt_sfparecip (a, 0);
   auto q = __builtin_rvtt_sfpand (p, p);
   auto f = __builtin_rvtt_sfpor (c, c);
   __builtin_rvtt_sfpwritelreg (q, 0);
