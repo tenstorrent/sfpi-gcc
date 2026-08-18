@@ -140,17 +140,70 @@
 ;;   SFPNOP                              0     pure issue-slot filler
 ;;                                             (pre-existing entry)
 ;;
-;; Deliberately UNAUDITED (refusing): SFPSWAP -- its hazard is the
-;; structural next-slot rule (only SFPNOP is accepted in the following
-;; cycle, SFPSWAP.md), not a consumable result latency, so it must
-;; never become a fill target; SFPSHFT2 -- mod-dependent next-cycle
-;; register constraints (SFPSHFT2.md) outside the single-latency
-;; vocabulary; SFPGT/SFPLE -- no proven sub-unit placement (absent from
-;; the S1 legality table); LUT/LUTFP32 -- mad-unit but no per-mod
+;;   swap (sfpswap int/cst/indexed)     0     [ISA] SFPSWAP.md: the
+;;                                             next-cycle rule is an
+;;                                             ACCEPTANCE stall (only
+;;                                             SFPNOP accepted; hardware
+;;                                             stalls otherwise), with
+;;                                             no further result-read
+;;                                             constraint; [SIM]
+;;                                             TENSIX_EXECUTE_SFPSWAP
+;;                                             atomic register update;
+;;                                             [HAND] the silicon-proven
+;;                                             reduce_custom bitonic
+;;                                             calendar issues CHAINED
+;;                                             dependent SFPSWAPs
+;;                                             back-to-back (each reads
+;;                                             the previous swap's
+;;                                             result).  The acceptance
+;;                                             stall itself is the
+;;                                             separate structural fact
+;;                                             xtt_next_slot_stall
+;;                                             below; a latency entry
+;;                                             alone does NOT make swap
+;;                                             a fill target (the
+;;                                             interlock scheduler
+;;                                             refuses any
+;;                                             next-slot-stall insn).
+;;   compare set-dest (sfpgt/sfple,
+;;     BH mod1 == 8 arm only)            0     [ISA] SFPGT.md/SFPLE.md
+;;                                             carry no next-cycle
+;;                                             result-read rule (the
+;;                                             audited latency-0 page
+;;                                             convention above); [SIM]
+;;                                             TENSIX_EXECUTE_SFPGT/LE
+;;                                             lane-write the tied
+;;                                             destination immediately;
+;;                                             [HAND] the hand exp
+;;                                             kernel's SFPGT feeds its
+;;                                             SFPAND through the same
+;;                                             one-slot Simple stepping
+;;                                             the mod-8 effect audit
+;;                                             on the pattern already
+;;                                             cites.  Every other mod
+;;                                             keeps the refusing
+;;                                             default.
+;;
+;; Deliberately UNAUDITED (refusing): SFPSHFT2 -- mod-dependent
+;; next-cycle register constraints (SFPSHFT2.md) outside the
+;; single-latency vocabulary; LUT/LUTFP32 -- mad-unit but no per-mod
 ;; effect audit yet; everything QSR (simulator returns
 ;; MissingSpecification for these opcode semantics).
 (define_attr "xtt_result_latency" ""
   (const_int 0))
+
+;; Architectural next-slot ACCEPTANCE stall (SFPSWAP.md: "on the next
+;; cycle, the only instruction that the Vector Unit can accept is
+;; SFPNOP; hardware will automatically stall the thread" otherwise).
+;; A structural per-instruction fact, distinct from result latency: the
+;; result is consumable by the very next ACCEPTED instruction, but that
+;; instruction issues one slot late.  Consumers: reissue pricing charges
+;; one extra slot per occurrence; the interlock scheduler REFUSES any
+;; next-slot-stall instruction as a fill participant (preserving its
+;; pre-audit behavior exactly).  Default no; set only under an audited
+;; per-instruction provenance block.
+(define_attr "xtt_next_slot_stall" "no,yes"
+  (const_string "no"))
 
 ;; LREG writeback-port occupancy.  Replaces the SFPSWAP-borrows-MAD and
 ;; Simple/Round shared-port folklore previously embedded in pass code.
@@ -458,6 +511,25 @@
   (XTT_REPLAY_COST_REPLAY_SLOT_X100 100)
   (XTT_REPLAY_HOIST_MIN_BENEFIT      60)
   (XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS 128)
+  ;; Interlock-aware reissue pricing (2026-08-18 recalibration; Lane BP
+  ;; diagnosis of the five causal ON regressions -- clamp/hardtanh/
+  ;; softsign/hardmish/tanhderivative-lut -- laneBP-evidence-20260818/
+  ;; DIAGNOSIS-AND-FIX-SPEC-laneBP.md, validation-matrix over 14
+  ;; independent silicon eltwise counted-loop shapes at pin 10):
+  ;;
+  ;;   TURNAROUND_X100 (70)  - per-launch replay reissue turnaround.
+  ;;     Provenance: residual analysis across the 14 shapes (consistent
+  ;;     0.7 +/- 0.2 cyc/launch over payload lengths 4-27); the same
+  ;;     class of silicon-calibrated machine constant as PUSH=123
+  ;;     (itself a re-fit measured actual).
+  ;;   RECORD_OVERHEAD_X100 (300) - per-record-pass engine overhead
+  ;;     beyond word delivery.  Provenance: the Reduce-SDPA hoist A/B
+  ;;     (silicon 21.5 cyc/body over 4 trips = 540 cs/trip removed vs
+  ;;     the delivery-only model's 237); keeps that silicon winner
+  ;;     firing (+461) while making the five refusals MORE negative
+  ;;     (the safe direction).
+  (XTT_REPLAY_COST_TURNAROUND_X100      70)
+  (XTT_REPLAY_COST_RECORD_OVERHEAD_X100 300)
 ])
 
 

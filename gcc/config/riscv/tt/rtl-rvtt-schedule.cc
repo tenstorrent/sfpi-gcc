@@ -703,6 +703,14 @@ audited_latency (rtx_insn *insn)
   xtt_effect_set e = rvtt_insn_effects (insn);
   if (e.opaque)
     return -1;
+  // Lane BM (minimal, coordinated with the drain-model work): an
+  // instruction with the architectural next-slot ACCEPTANCE stall
+  // (xtt_next_slot_stall; SFPSWAP.md) keeps refusing here even once it
+  // carries an audited result latency for the reissue-pricing model --
+  // this preserves the pass's documented pre-audit behavior exactly
+  // ("SFPSWAP ... never becomes a fill target").
+  if (e.next_slot_stall)
+    return -1;
   return e.result_latency;
 }
 

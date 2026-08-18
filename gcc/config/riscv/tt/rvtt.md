@@ -1247,6 +1247,15 @@
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")])
 
+  ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
+  ;; state, no register result -- [ISA] SFPCOMPC.md: reads and rewrites the
+  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPCOMPC
+  ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
+  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; calendars issue these back-to-back inside recorded replay payloads.
+  ;; Latency entry 1 (= 0 slots): there is no register result to wait
+  ;; on; the flag update is architecturally visible to the next issued
+  ;; instruction.
 (define_insn "rvtt_sfpcompc"
   [(unspec_volatile:XTT32SI [
      (const_int 0)
@@ -1254,8 +1263,24 @@
   "TARGET_XTT_TENSIX"
   "SFPCOMPC"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_result_latency" "1")])
 
+  ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
+  ;; state, no register result -- [ISA] SFPPUSHC.md: reads and rewrites the
+  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPPUSHC
+  ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
+  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; calendars issue these back-to-back inside recorded replay payloads.
+  ;; Latency entry 1 (= 0 slots): there is no register result to wait
+  ;; on; the flag update is architecturally visible to the next issued
+  ;; instruction.
 (define_insn "rvtt_sfppushc"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI    0 "const_int_operand" "n")
@@ -1263,8 +1288,24 @@
   "TARGET_XTT_TENSIX"
   "SFPPUSHC\t%0"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_result_latency" "1")])
 
+  ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
+  ;; state, no register result -- [ISA] SFPPOPC.md: reads and rewrites the
+  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPPOPC
+  ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
+  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; calendars issue these back-to-back inside recorded replay payloads.
+  ;; Latency entry 1 (= 0 slots): there is no register result to wait
+  ;; on; the flag update is architecturally visible to the next issued
+  ;; instruction.
 (define_insn "rvtt_sfppopc"
   [(unspec_volatile:XTT32SI [
      (match_operand:SI    0 "const_int_operand" "n")
@@ -1272,7 +1313,14 @@
   "TARGET_XTT_TENSIX"
   "SFPPOPC\t%0"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "xtt_result_latency" "1")])
 
 (define_int_iterator rvtt_muladd_op [
   UNSPECV_SFPMUL
@@ -2087,8 +2135,53 @@
       : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
+  ;; Effect audit extension (2026-08-18, Lane BM; WH/BH, the mod-1
+  ;; immediate arm the register-form audit above names): [SIM] craq
+  ;; TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN mod-1 arms read the
+  ;; source and the tied destination, lane-write the destination, touch
+  ;; no CC bit, configuration word, or counter; [ISA] the SFPSET*.md
+  ;; immediate arms carry no next-cycle result-read rule (the audited
+  ;; latency-0 page convention); [HAND] the silicon-proven hand
+  ;; signbit/round-class calendars record and replay immediate-form
+  ;; SETSGN back-to-back.  S1 Simple column, result latency 0.  Every
+  ;; other mod keeps the refusing defaults.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 97) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 1) (const_int 0)))])
 
 (define_int_iterator rvtt_logical_op [
   UNSPECV_SFPAND
@@ -2998,6 +3091,16 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "simple_mad_write")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "borrows_mad")
    (set_attr "xtt_lreg_read_ops" "13")
@@ -3020,6 +3123,16 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int (WH and
    ;; BH functional models are bit-identical; default-LaneConfig
    ;; envelope, the planner refuses config mutation around rows).  Here
@@ -3076,6 +3189,16 @@
   "SFPSWAP\t%x1, %x2, %3"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int; here the
    ;; VD operand (operand 1) is a hardware constant register.  The "xs"
    ;; constraint (cstlreg < 12) is exactly SFPSWAP.md's VD execution
@@ -3129,6 +3252,16 @@
   "SFPSWAP\t%x0, %x1, %2"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Same audited SFPSWAP effect envelope as rvtt_sfpswap_int with BOTH
    ;; operands hardware constant registers (VD constrained "xs" < 12,
    ;; SFPSWAP.md's VD execution gate).  Every cstlreg is L8..L15, so
@@ -3289,6 +3422,16 @@
   "SFPSWAP\t%x4, %x5, %8\t# INDEXED R:%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH/WH; three sources in
+   ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
+   ;; next-cycle rule is an ACCEPTANCE stall with no result-read
+   ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
+   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; SFPSWAPs.  The acceptance stall is the separate structural fact
+   ;; xtt_next_slot_stall (pricing charges one slot; the interlock
+   ;; scheduler refuses next-slot-stall insns as fill participants).
+   (set_attr "xtt_result_latency" "1")
+   (set_attr "xtt_next_slot_stall" "yes")
    ;; Audited multi-result effect envelope (SFPSWAP.md functional model,
    ;; ENABLE_DEST_INDEX leg; craq-sim TENSIX_EXECUTE_SFPSWAP agrees).  One
    ;; SFPSWAP event on the Simple sub-unit, LREG writeback borrowing the
@@ -3871,6 +4014,17 @@
   ;; refusing defaults, as does every non-BH target.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
+   ;; D3 latency-audit extension (2026-08-18, BH mod1 == 8 arm only;
+   ;; three sources in rvtt-cost.md's table): result latency 0 -- [ISA]
+   ;; SFPGT.md/SFPLE.md carry no next-cycle result-read rule; [SIM]
+   ;; immediate lane-write of the tied destination; [HAND] the hand exp
+   ;; kernel's SFPGT->SFPAND one-slot Simple stepping cited by the
+   ;; mod-8 effect audit above.  Every other mod keeps the refusing
+   ;; default.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   && INTVAL (operands[4]) == 8")
+		      (const_int 1) (const_int 0)))
    (set (attr "xtt_subunit")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   && INTVAL (operands[4]) == 8")

@@ -1,19 +1,27 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-replay-exec-record" }
-// Renamed-equivalent + varied twin: different names, a different payload
-// length (6) and a different trip count (4).
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 1, 1" 1 } }
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 0" 3 } }
-void rotated_polynomial_walk ()
+// Renamed + constant-varied twin (down-counting loop, muli immediates):
+// the exchange keys on the structural shape only.
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 1, 1" 1 } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 0, 0" 15 } }
+void renamed_varied_columns ()
 {
-  auto lane_state = __builtin_rvtt_sfpreadlreg (2);
-  for (unsigned step = 0; step != 4; ++step)
+  auto north = __builtin_rvtt_sfpreadlreg (4);
+  auto south = __builtin_rvtt_sfpreadlreg (5);
+  auto east = __builtin_rvtt_sfpreadlreg (6);
+  auto west = __builtin_rvtt_sfpreadlreg (7);
+  for (unsigned lap = 16; lap != 0; --lap)
     {
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
-      lane_state = __builtin_rvtt_sfpmul (lane_state, lane_state, 0);
+      north = __builtin_rvtt_sfpmuli (nullptr, north, 0x3a11, 0, 0, 0);
+      south = __builtin_rvtt_sfpmuli (nullptr, south, 0x3a21, 0, 0, 0);
+      east = __builtin_rvtt_sfpmuli (nullptr, east, 0x3a31, 0, 0, 0);
+      west = __builtin_rvtt_sfpmuli (nullptr, west, 0x3a41, 0, 0, 0);
+      north = __builtin_rvtt_sfpmuli (nullptr, north, 0x3a51, 0, 0, 0);
+      south = __builtin_rvtt_sfpmuli (nullptr, south, 0x3a61, 0, 0, 0);
+      east = __builtin_rvtt_sfpmuli (nullptr, east, 0x3a71, 0, 0, 0);
+      west = __builtin_rvtt_sfpmuli (nullptr, west, 0x3a81, 0, 0, 0);
     }
-  __builtin_rvtt_sfpwritelreg (lane_state, 2);
+  __builtin_rvtt_sfpwritelreg (north, 4);
+  __builtin_rvtt_sfpwritelreg (south, 5);
+  __builtin_rvtt_sfpwritelreg (east, 6);
+  __builtin_rvtt_sfpwritelreg (west, 7);
 }

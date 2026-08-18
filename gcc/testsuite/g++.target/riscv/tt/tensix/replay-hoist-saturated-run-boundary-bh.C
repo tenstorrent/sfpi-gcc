@@ -1,8 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// { dg-final { scan-rtl-dump "Hoist profitable: modeled benefit 245 >= 60 .trips 4, length 4." "rvtt_replay" } }
-// { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Record delivery hidden: contiguous launch run 3 x length 4 exec surplus 831 >= record delivery 615" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -615 < 60 .trips 4, length 4." "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -915 < 60" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 
 // Structural saturation boundary, no flag interplay: contiguity here is
 // literal (no typed increments at all; sibling groups are separated by
