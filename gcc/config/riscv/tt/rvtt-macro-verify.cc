@@ -112,8 +112,22 @@ rvtt_macro_verify_descriptor (const macro_region &region,
   if (dump)
     {
       if (component)
-	fprintf (dump, "Macro-planner refusal: %s (%s)\n",
-		 macro_desc_refusal_verification_failed, component);
+	{
+	  fprintf (dump, "Macro-planner refusal: %s (%s)\n",
+		   macro_desc_refusal_verification_failed, component);
+	  /* Diagnostic detail: the synthesized words next to the
+	     re-derived expectations (dump-only; the refusal stands
+	     either way).  */
+	  for (unsigned l = 0; l != words.n_launches; ++l)
+	    fprintf (dump, "Macro-planner verify-launch %u: got=0x%08x"
+		     " expect={m=%u vd=%u mode=%u am=%u addr=%u}\n",
+		     l, words.launch_words[l],
+		     l < expect.n_accesses ? expect.accesses[l].macro_index : 99,
+		     l < expect.n_accesses ? expect.accesses[l].vd : 99,
+		     l < expect.n_accesses ? expect.accesses[l].mode : 99,
+		     l < expect.n_accesses ? expect.accesses[l].addr_mode : 99,
+		     l < expect.n_accesses ? expect.accesses[l].address : 99);
+	}
       else
 	fprintf (dump, "Macro-planner verify: ok\n");
     }

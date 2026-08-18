@@ -46,7 +46,7 @@ XTT_MACRO_CAPS_SCALARS ("wh", /*n_templates*/4, /*n_sequence_slots*/4,
 			/*no_inc*/3, /*auto_inc_dst2*/2,
 			/*needs_bank_base_ownership*/true,
 			/*setc16_opcode*/0xb2, /*sfpconfig_opcode*/0x91,
-			/*owned_config_dests*/0x0173,
+			/*owned_config_dests*/0x01ff,
 			/*proven_drain_slots*/3,
 			/*reference_breakeven_rows*/8)
 

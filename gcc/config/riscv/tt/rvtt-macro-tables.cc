@@ -492,8 +492,13 @@ encode_template (const caps *c, const template_spec &t, uint32_t *word)
     return false;
   if (t.imm12 > 0xfff || t.src_c > 0xf || t.mod1 > 0xf)
     return false;
-  /* Destination is a physical LREG 0-7 or a proven routing selector.  */
-  if (t.dest_sel > 7 && t.dest_sel != 0xc && t.dest_sel != 0xd)
+  /* Destination is a physical LREG 0-7 or an InstructionTemplate
+     destination selector: SFPCONFIG.md / SFPLOADMACRO.md name
+     InstructionTemplate[i] through VD = 12 + i (the production
+     handwritten inits write templates via that VD; the frozen shapes
+     exercised 0xc/0xd, widened to the full architectural 0xc..0xf at
+     WP12).  */
+  if (t.dest_sel > 7 && (t.dest_sel < 0xc || t.dest_sel > 0xf))
     return false;
   /* SFP_STOCH_RND (0x8e) has a different field layout above bit 12
      (rnd_mode << 21 | imm8 << 16 | lreg_src_b << 12); the generic imm12

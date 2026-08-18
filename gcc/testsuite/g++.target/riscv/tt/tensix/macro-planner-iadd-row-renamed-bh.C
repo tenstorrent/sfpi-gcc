@@ -7,7 +7,7 @@
 // { dg-final { scan-rtl-dump-not "row-opaque-effect" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=4 row-len=7" "rvtt_macro_planner" } }
-// { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner formation-refusal: unprofitable" "rvtt_macro_planner" } }
 // { dg-final { scan-assembler-not "\\.ttinsn" } }
 // { dg-final { scan-assembler-not "SFPCONFIG" } }
 

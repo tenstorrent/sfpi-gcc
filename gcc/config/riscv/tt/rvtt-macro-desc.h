@@ -142,6 +142,13 @@ extern const char *rvtt_macro_verify_descriptor
 /* Build the verifier's expectations from the region's explicit facts
    (implemented beside synthesis; consumed by rvtt-macro-verify.cc).  */
 namespace rvtt_macro_verify { struct expectations; }
+/* WP12 scheduler-facing helpers (rvtt-macro-desc.cc).  */
+extern int rvtt_macro_hosted_subunit (rtx_insn *);
+extern unsigned rvtt_macro_store_only_sacrificial_vd (uint32_t internal_lregs);
+extern bool rvtt_macro_derived_template_probe (rtx_insn *, int launch_vd,
+					       uint8_t *opcode, uint8_t *mod1,
+					       uint8_t *src_c, uint16_t *imm12);
+
 extern bool rvtt_macro_build_expectations
   (const macro_region &region, const macro_schedule &schedule,
    rvtt_macro_verify::expectations *out);

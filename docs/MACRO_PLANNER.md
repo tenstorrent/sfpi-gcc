@@ -591,3 +591,113 @@ bh/wh/qsr32, all identical).
   replay launches itself (amortizing the record across trips and
   removing the RISC-paced execute-while-record occurrence, which is
   also the silicon-robustness concern for RISC-pushed CC calendars).
+
+## 2c. WP12: generic multi-sub-unit integer rows (the MulInt32 class)
+
+Lane BH, 2026-08-18 (`agent/mulint32-win`).  Target: the corpus' worst
+open loss, mul_int32 at +98.16% (562.6 vs hand 283.9, MATH_ISOLATE) —
+a 17-slot integer row (2 INT32 loads + sign-magnitude casts + 4
+SFPMUL24 partial products + shifts/accumulates + store) against the
+handwritten kernel's 4-template SFPLOADMACRO program at 8 issued
+words/row.  Every increment is a capability fact or a dataflow proof;
+none names an operation or a calendar.
+
+1. **Generalized hosting (rvtt-macro-sched.cc).**  A value event is a
+   hosting candidate when the SFPLOADMACRO override function realizes
+   it exactly (SFPLOADMACRO.md functional model): its single written
+   physical register is a carrier load's destination (the launch-VD
+   chain — a scheduled template's result is always the launch VD or
+   LReg16), or it is the store's sole data producer (dataflow-ordered
+   consumer scan) and rides the store's carrier.  MAD-class events are
+   admitted (the sub-unit legality table already carried SFPMUL24).
+   One event per (carrier, realized sub-unit); overflow and
+   probe-refused events stay explicit issues.  Events outside the
+   single-result class (the dual-result binary swap) keep the
+   established read-based rule for the proven whole-word programs.
+   Hosting is capacity-aware: distinct probed template tuples are
+   counted against the InstructionTemplate budget, and the store's
+   sole producer is admitted first (it is load-bearing for the derived
+   store-source realization).
+
+2. **Generic derived template classes (rvtt-macro-desc.cc,
+   `derived_value_template_fields`).**  Beyond the constant-register
+   SFPSWAP family: SFPCAST (audited mods 0 / BH 3; in-place VC:=VD
+   route or a name-encoded surviving VC), register-form SFPIADD
+   (audited mods, accumulator must BE the launch VD so VB:=VD is the
+   identity), the in-place immediate SFPSHFT realized as the SHFT2
+   immediate template on Round (the frozen signbit pair, NOTES 9(e)),
+   and BH SFPMUL24 (plain LOWER/UPPER mods; VB factor = launch VD; VC
+   pinned to the architectural zero register L9 per SFPMUL24.md; VA in
+   its own template field through the imm12 region).  An encoded VC of
+   L0 is indistinguishable from the src-unused convention and refuses.
+
+3. **Template sharing.**  Bit-identical derived field tuples encode to
+   bit-identical template words and share one InstructionTemplate
+   destination (event_spec.template_key; capacity counts distinct
+   slots).  Ownership widened to the full LoadMacroConfig class
+   {0..8} = 0x01ff (SFPCONFIG.md: InstructionTemplate[0..3],
+   Sequence[0..3], Misc are one architectural state class; the
+   production hand inits program all of them; widening only makes
+   foreign-access ownership proofs stricter).  encode_template admits
+   the architectural dest selectors 0xc..0xf (VD = 12 + i).
+
+4. **Fixed launch VDs.**  When a surviving name-encoded read (an
+   explicit issue's operand or a hosted template's surviving source
+   field) consumes a value carrier's loaded register, the alternating
+   {0,1} pair would move the value away from the name its consumers
+   use: every value carrier then keeps its own physical load
+   destination, under a derivation-core lifetime obligation (every
+   VD-consuming event executes before the next row instance's launch
+   rewrites the register).
+
+5. **Explicit-issue hazard model (rvtt-macro-derive-core.h).**  Rows
+   whose hosted events share registers with explicit members carry
+   WAR floors (an event's write retires strictly after every earlier
+   explicit reader), later-consumer/overwrite deadlines
+   (exec + latency − 1 <= reader slot; exec <= overwriter slot;
+   scheduled events retire before same-cycle issues, S1/S2), and
+   same-cycle anti-dependence edges between events.  The fixpoint
+   computes earliest-feasible cycles, so a violated deadline is a
+   genuine infeasibility and refuses (sequence-derivation-hazard).
+
+6. **Store-only sacrificial VD.**  The launch's VDLo field encodes VD
+   0..3 (VDHi puns with the address LSB and stays 0 for even Dst
+   addresses), so when every low register is row-live the established
+   lowest-free rule has no encodable answer: a PROVEN-CLOBBERABLE
+   internal temporary serves instead — first row access is a write
+   (the next instance never reads the garbage), not a pinned carrier
+   VD, and no launched name field reads it.  Store-carrier extraction
+   is VD-agnostic (launch_vd = −2): no admitted class may claim a VD
+   identity on a garbage register.
+
+7. **Expectation-builder parity fix.**  `rvtt_macro_build_expectations`
+   now mirrors synthesis' uniform-mode program filter and falls
+   through to derived-calendar expectations when `derive_structure`
+   does not apply — previously a mode-mismatched row could key a
+   different program in the verifier than the one synthesis realized
+   (caught by the Layer-7 launch-word comparison during WP12 bring-up;
+   the verifier dump now prints got-vs-expected launch words).
+
+**Result on the fresh mul_int semantic body** (tt-metal
+`agent/mulint32-semantic`, tests/helpers/include/fresh_cpp_operations.h):
+BH forms a 3-macro, 4-template, 6-event derived calendar at ii=12
+issued words/row (from 18 explicit), verify: ok, CRAQ bit-exact on the
+corrected sim (32489dda) at OFF and the full ON set, both fresh impls
+and both production arms.  Pre-registered silicon expectation:
+~430±30 TILE_LOOP cycles/tile ≈ −20..24% causal, +50..60% vs hand
+283.9 (from +98%).
+
+**Named residual (mechanism gap, not a tuning gap):** the row's ten
+simple-unit operations compete for at most one Simple slot per macro
+and the launch-VD chain realization is hostage to the register
+allocator's post-RA names (only in-place chains host).  Reaching hand
+parity (8 words/row) needs the placement half of iterative modulo
+scheduling over the five sub-units — reservation-table placement with
+backtracking on top of this derivation layer — per the literature
+scan's Idea 5 (Rau, IMS; `~/sfpi-uplift/literature-scan-20260818/
+IDEAS.md`), plus either planner-directed register renaming or extra
+carrier formation (the hand kernel's re-load trick).  Design-doc
+follow-up, not implemented here.  The template-sharing dedup of this
+increment is the seed of Idea 6's dictionary-selection residency
+(canonical derived words shared kernel-wide); noted as overlap for
+that follow-up.

@@ -36,6 +36,12 @@ along with GCC; see the file COPYING3.  If not see
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+
+/* The WP12 event_spec extensions (template sharing, explicit-issue
+   hazard bounds) are zero-meaning-unconstrained by design, so the
+   frozen-row cases below intentionally leave them brace-omitted.  */
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
 #include "rvtt-macro-derive-core.h"
 
 using namespace rvtt_macro;

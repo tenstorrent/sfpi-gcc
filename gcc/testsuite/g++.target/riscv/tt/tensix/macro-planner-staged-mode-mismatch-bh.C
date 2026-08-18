@@ -1,15 +1,15 @@
-// Near-miss refusal (WP8 desc-program audit): the unary shift/cast
-// program's CRAQ-validated envelope covers only a uniform data mode
-// across the row's Dst accesses; a load/store mode mismatch is
-// structurally identical but outside the envelope and refuses by name,
-// keeping the bytes explicit.
+// WP8's uniform-mode envelope covered the frozen whole-word signbit
+// program; the WP12 DERIVED calendar carries the store's own data mode
+// in the architectural Misc.StoreMod0 field (SFPLOADMACRO.md; the same
+// field-derived route the silicon-validated where select misc uses),
+// so the mode-mismatched row now forms through the derived path -- the
+// frozen program still refuses it (build_expectations mirrors the
+// synthesis-side uniform-mode filter).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -fdump-rtl-rvtt_macro_planner-details" }
-// { dg-final { scan-rtl-dump "descriptor-program-unproven" "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-not "SFPLOADMACRO" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
-// { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler "SFPSHFT" } }
-// { dg-final { scan-assembler "TTINCRWC" } }
+// { dg-final { scan-rtl-dump "Macro-planner descriptor: templates=2 seq=1 misc=0x00000002 setc16=3 launches=1 drain=3" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "Macro-planner formed: rows=1 runs=1 config=preheader" "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "SFPSHFT" } }
+// { dg-final { scan-assembler-not "TTINCRWC" } }
 
 __attribute__((noinline)) void staged_mode_mismatch (unsigned iterations)
 {
