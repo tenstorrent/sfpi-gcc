@@ -36,6 +36,12 @@ along with GCC; see the file COPYING3.  If not see
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+
+/* The WP12 event_spec extensions (template sharing, explicit-issue
+   hazard bounds) are zero-meaning-unconstrained by design, so the
+   frozen-row cases below intentionally leave them brace-omitted.  */
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
 #include "rvtt-macro-derive-core.h"
 
 using namespace rvtt_macro;
@@ -414,6 +420,81 @@ test_packers ()
 	      " documented)");
 }
 
+/* WP12 template sharing: events with equal template_key share one
+   InstructionTemplate slot and capacity counts DISTINCT slots (two
+   in-place casts on two macros, one shared template; the second cast
+   is the store's sole producer and routes through LReg16).  */
+static void
+test_wp12_template_sharing (const caps *c)
+{
+  row_spec row = fresh_row ();
+  row.n_events = 3;
+  row.events[0] = { 0x90, false, 0, 0, 0, -1, true, 0 };
+  row.events[0].template_key = 1;
+  row.events[1] = { 0x90, false, 1, 1, 0, -1, true, 0 };
+  row.events[1].template_key = 1;
+  row.events[2] = { 0, true, 1, 1, 0x2, -1, false, 0 };
+  row.n_macros = 2;
+  row.macro_slot[0] = 0;
+  row.macro_slot[1] = 1;
+  row.ii = 2;
+  row.last_issue_slot = 1;
+  row.vd_alternates = true;
+  row.window_all_sfpu = true;
+  row.store_event = 2;
+  row.store_producer = 1;
+  row.max_templates = 4;
+  row.max_macros = 4;
+
+  derived_calendar cal;
+  bool ok = derive_calendar (c, row, &cal);
+  check (ok && !cal.refusal, "wp12 shared-template row derives");
+  if (!ok || cal.refusal)
+    return;
+  check (cal.n_templates == 1, "wp12 equal keys share one template slot");
+  check (cal.template_index_of[0] == 0 && cal.template_index_of[1] == 0,
+	 "wp12 both events reference the shared slot");
+}
+
+/* WP12 explicit-issue hazards: the WAR floor delays an event past an
+   earlier explicit reader of its written register, and an
+   impossible overwrite deadline refuses.  */
+static void
+test_wp12_explicit_hazards (const caps *c)
+{
+  row_spec row = fresh_row ();
+  row.n_events = 2;
+  row.events[0] = { 0x79, false, 0, 0, 0, -1, true, 2 };
+  row.events[0].war_floor_slot_p1 = 3;	/* explicit reader at slot 2   */
+  row.events[1] = { 0, true, 0, 0, 0x1, -1, false, 0 };
+  row.n_macros = 1;
+  row.macro_slot[0] = 0;
+  row.ii = 6;
+  row.last_issue_slot = 5;
+  row.explicits[0] = { 2, 0 };
+  row.n_explicits = 1;
+  row.vd_alternates = false;
+  row.window_all_sfpu = true;
+  row.store_event = 1;
+  row.store_producer = 0;
+  row.max_templates = 4;
+  row.max_macros = 4;
+
+  derived_calendar cal;
+  bool ok = derive_calendar (c, row, &cal);
+  check (ok && !cal.refusal, "wp12 war-floored row derives");
+  if (ok && !cal.refusal)
+    check (cal.exec_of[0] == 3, "wp12 war floor delays exec past the reader");
+
+  /* Same row with an overwriter strictly before the floored exec: the
+     deadline is unsatisfiable and refuses by the hazard name.  */
+  row.events[0].issue_overwrite_slot_p1 = 3;	/* overwriter at slot 2 */
+  ok = derive_calendar (c, row, &cal);
+  check (!ok && cal.refusal
+	 && std::strcmp (cal.refusal, refusal_hazard ()) == 0,
+	 "wp12 impossible overwrite deadline refuses (hazard)");
+}
+
 int
 main ()
 {
@@ -431,6 +512,8 @@ main ()
       test_mul_int32_one_slot_refuses (c);
       test_unary_maxmin (c);
       test_addsub_placement_refusal (c);
+      test_wp12_template_sharing (c);
+      test_wp12_explicit_hazards (c);
     }
   check (!rvtt_macro_caps_for_cpu (CPU_QSR),
 	 "QSR stays table-absent");

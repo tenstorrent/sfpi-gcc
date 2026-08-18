@@ -74,6 +74,14 @@ along with GCC; see the file COPYING3.  If not see
    Nothing here names an operation, matches an opcode calendar, or
    assembles a raw word.  */
 
+/* WP12 scheduler-facing helpers (rvtt-macro-desc.cc): the realized
+   hosted sub-unit, the shared sacrificial-VD formula, and the derived
+   template-class probe backing capacity-aware hosting.  */
+extern int rvtt_macro_hosted_subunit (rtx_insn *);
+extern bool rvtt_macro_derived_template_probe (rtx_insn *, int launch_vd,
+					       uint8_t *opcode, uint8_t *mod1,
+					       uint8_t *src_c, uint16_t *imm12);
+
 const char *macro_sched_refusal_event_delay_unproven
   = "event-delay-unproven";
 const char *macro_sched_refusal_sequence_encoding_unproven
@@ -290,36 +298,225 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   if (cc_compact && dump)
     fprintf (dump, "Macro-planner schedule-candidate: cc-compact\n");
 
-  /* Launched-event hosting: a non-Dst value event is hosted on the
-     carrier of its earliest LREG producer that is a Dst load; a store
-     rides its own carrier as a delayed store event.  In a
-     predicate-writing row, CC-READING value events are never template
-     events -- their lane predication depends on the in-row definition,
-     whose deferred visibility a template realization cannot honor --
-     they are realized by coalescing below or refuse by name.  */
+  /* Launched-event hosting (generalized at WP12):
+
+     - CC-DEFINITION events (a CC write reading LREGs, writing none)
+       keep the established rule: hosted on the carrier of their
+       earliest producing Dst load (the WP9/WP10 select programs key
+       on exactly this assignment).
+
+     - Any SIMPLE/ROUND/MAD value event whose single written register
+       is a carrier load's destination is hosted on that carrier: the
+       launch-VD chain realization (a scheduled template's result is
+       always routed to the launch VD or LReg16, SFPLOADMACRO.md).
+
+     - The store's sole data producer, when its result register is no
+       carrier's destination, rides the store's own carrier (the
+       LReg16 / same-macro-VD store-source realizations the descriptor
+       layer proves).
+
+     One event per (carrier, realized sub-unit) -- the realized unit is
+     the capability-table placement descriptor synthesis will prove (an
+     in-place immediate shift realizes on Round through the proven
+     SHFT2 pair); an event whose unit slot is taken simply stays an
+     explicit issue.  In a predicate-writing row, CC-READING value
+     events are never template events -- their lane predication depends
+     on the in-row definition, whose deferred visibility a template
+     realization cannot honor -- they are realized by coalescing below
+     or refuse by name.  Hosting is a candidate proposal: operand
+     encodability and timing are proven (or refused by name)
+     downstream.  */
   unsigned launched_events = 0, template_events = 0;
+  auto_vec<uint8_t> carrier_unit_taken (carrier_first.length ());
+  carrier_unit_taken.safe_grow_cleared (carrier_first.length ());
+  /* The row's store and its sole-producer relationship.  */
+  int store_ix = -1;
+  bool multiple_stores = false;
   for (unsigned ix = 0; ix != items.length (); ++ix)
+    if (items[ix].effects.dst_mem_write)
+      {
+	multiple_stores |= store_ix >= 0;
+	store_ix = (int) ix;
+      }
+  /* Capacity-aware tuple budget for the derived template classes: the
+     hosting pass counts DISTINCT probed field tuples against the
+     InstructionTemplate budget (bit-identical tuples share a slot);
+     probe-refused events hosted through the established rule are the
+     proven whole-word programs' territory and consume no tuple here.  */
+  struct probe_tuple { uint8_t opcode, mod1, src_c; uint16_t imm12; };
+  probe_tuple tuples[4];
+  unsigned n_tuples = 0;
+  const unsigned max_tuples = c->n_templates > 4 ? 4 : c->n_templates;
+
+  /* One hosting attempt; PASS selects the eligible rules so the store's
+     sole producer is admitted before the chain events contend for the
+     template budget (it is load-bearing for the derived store-source
+     realization).  */
+  auto try_host = [&] (unsigned ix, bool producer_pass) -> void
     {
       row_item &item = items[ix];
-      if (item.address)
-	continue;
+      if (item.address || item.launched)
+	return;
       if (item.effects.subunit != XTT_SU_SIMPLE
-	  && item.effects.subunit != XTT_SU_ROUND)
-	continue;		/* stays an explicit issue (e.g. mad)  */
+	  && item.effects.subunit != XTT_SU_ROUND
+	  && item.effects.subunit != XTT_SU_MAD)
+	return;			/* stays an explicit issue	       */
       if (row_has_cc_def && item.effects.cc_read && !item.effects.cc_write)
-	continue;		/* lane-merge candidate (see below)    */
-      uint32_t needed = item.effects.lreg_read;
-      for (unsigned p = 0; p != ix && item.carrier < 0; ++p)
-	if (items[p].address && items[p].effects.dst_mem_read
-	    && (items[p].effects.lreg_write & needed))
-	  item.carrier = items[p].carrier;
-      if (item.carrier >= 0)
+	return;			/* lane-merge candidate (see below)    */
+
+      bool cc_definition = item.effects.cc_write
+	&& item.effects.lreg_read != 0 && !item.effects.lreg_write;
+      if (cc_definition && producer_pass)
+	return;
+      int cand = -1;
+      int launch_vd = -1;
+      bool legacy_reads_rule = false;
+      if (cc_definition)
 	{
-	  item.launched = true;
-	  ++launched_events;
-	  ++template_events;
+	  /* Established WP9/WP10 rule.  */
+	  uint32_t needed = item.effects.lreg_read;
+	  for (unsigned p = 0; p != ix && cand < 0; ++p)
+	    if (items[p].address && items[p].effects.dst_mem_read
+		&& (items[p].effects.lreg_write & needed))
+	      cand = items[p].carrier;
 	}
-    }
+      else
+	{
+	  /* The launch-VD-routed result is a physical L0..L7 register;
+	     audited writes to hardware constant registers (the
+	     dropped-constant-side class of the swap family, L8+) ride
+	     the proven program envelopes and do not constrain the
+	     routing.  Events OUTSIDE the single-result class (the
+	     dual-result binary swap of the frozen binary-periodic
+	     program) keep the established pre-WP12 read-based hosting
+	     unchanged: SIMPLE/ROUND only, on the carrier of the
+	     earliest producing Dst load, no tuple accounting (the
+	     proven whole-word programs own their realization).  */
+	  uint32_t dest = item.effects.lreg_write & 0xffu;
+	  if (!dest || (dest & (dest - 1)) != 0)
+	    {
+	      if (producer_pass)
+		return;
+	      if (item.effects.subunit != XTT_SU_SIMPLE
+		  && item.effects.subunit != XTT_SU_ROUND)
+		return;
+	      uint32_t needed = item.effects.lreg_read;
+	      for (unsigned p = 0; p != ix && cand < 0; ++p)
+		if (items[p].address && items[p].effects.dst_mem_read
+		    && (items[p].effects.lreg_write & needed))
+		  cand = items[p].carrier;
+	      if (cand < 0)
+		return;
+	      int lunit = rvtt_macro_hosted_subunit (item.insn);
+	      if (lunit != XTT_SU_SIMPLE && lunit != XTT_SU_MAD
+		  && lunit != XTT_SU_ROUND)
+		return;
+	      if ((carrier_unit_taken[cand] >> lunit) & 1)
+		return;
+	      carrier_unit_taken[cand] |= (uint8_t) (1u << lunit);
+	      item.carrier = cand;
+	      item.launched = true;
+	      ++launched_events;
+	      ++template_events;
+	      return;
+	    }
+	  bool is_producer = false;
+	  /* Sole store producer: dataflow-ordered consumer scan (only
+	     readers AFTER the producer consume its value).  */
+	  if (store_ix >= 0 && !multiple_stores && (unsigned) store_ix > ix
+	      && (items[store_ix].effects.lreg_read & dest))
+	    {
+	      is_producer = true;
+	      for (unsigned jx = ix + 1;
+		   jx != items.length () && is_producer; ++jx)
+		if ((int) jx != store_ix
+		    && (items[jx].effects.lreg_read & dest))
+		  is_producer = false;
+	    }
+	  if (producer_pass && !is_producer)
+	    return;
+	  /* (a) launch-VD chain: a carrier load writes this register.  */
+	  for (unsigned p = 0; p != items.length () && cand < 0; ++p)
+	    if (items[p].address && items[p].effects.dst_mem_read
+		&& items[p].effects.lreg_write == dest)
+	      {
+		cand = items[p].carrier;
+		launch_vd = ctz_hwi (items[p].effects.lreg_write);
+	      }
+	  /* (b) the sole store producer rides the store's carrier.  */
+	  if (cand < 0 && is_producer)
+	    {
+	      cand = items[store_ix].carrier;
+	      /* A store-only carrier's sacrificial VD holds unread
+		 garbage: -2 = no VD identity (descriptor synthesis
+		 selects and proves the register).  A merged
+		 (load+store) carrier's VD is its load's destination.  */
+	      launch_vd = -2;
+	      if (carrier_has_load[cand])
+		for (unsigned p = 0; p != items.length (); ++p)
+		  if (items[p].address && items[p].effects.dst_mem_read
+		      && items[p].carrier == cand
+		      && items[p].effects.lreg_write
+		      && !(items[p].effects.lreg_write
+			   & (items[p].effects.lreg_write - 1)))
+		    launch_vd = ctz_hwi (items[p].effects.lreg_write);
+	    }
+	  /* Probe-refused events fall back to the established
+	     read-based rule (the proven whole-word programs host their
+	     own event classes, e.g. the cast-round STOCHRND).  */
+	  probe_tuple t;
+	  if (cand >= 0
+	      && rvtt_macro_derived_template_probe (item.insn, launch_vd,
+						    &t.opcode, &t.mod1,
+						    &t.src_c, &t.imm12))
+	    {
+	      int slot = -1;
+	      for (unsigned k = 0; k != n_tuples && slot < 0; ++k)
+		if (tuples[k].opcode == t.opcode && tuples[k].mod1 == t.mod1
+		    && tuples[k].src_c == t.src_c
+		    && tuples[k].imm12 == t.imm12)
+		  slot = (int) k;
+	      if (slot < 0)
+		{
+		  if (n_tuples == max_tuples)
+		    return;	/* template budget exhausted	       */
+		  tuples[n_tuples++] = t;
+		}
+	    }
+	  else if (cand >= 0)
+	    {
+	      /* Established rule only: the event must read a Dst
+		 load's written register and hosts on that load's
+		 carrier.  */
+	      cand = -1;
+	      uint32_t needed = item.effects.lreg_read;
+	      for (unsigned p = 0; p != ix && cand < 0; ++p)
+		if (items[p].address && items[p].effects.dst_mem_read
+		    && (items[p].effects.lreg_write & needed))
+		  cand = items[p].carrier;
+	      legacy_reads_rule = true;
+	    }
+	  else if (cand < 0)
+	    return;
+	  (void) legacy_reads_rule;
+	}
+      if (cand < 0)
+	return;
+      int unit = rvtt_macro_hosted_subunit (item.insn);
+      if (unit != XTT_SU_SIMPLE && unit != XTT_SU_MAD && unit != XTT_SU_ROUND)
+	return;
+      if (!cc_definition && (carrier_unit_taken[cand] >> unit) & 1)
+	return;			/* unit slot taken: stays explicit     */
+      carrier_unit_taken[cand] |= (uint8_t) (1u << unit);
+      item.carrier = cand;
+      item.launched = true;
+      ++launched_events;
+      ++template_events;
+    };
+  for (unsigned ix = 0; ix != items.length (); ++ix)
+    try_host (ix, true);	/* the store's sole producer first     */
+  for (unsigned ix = 0; ix != items.length (); ++ix)
+    try_host (ix, false);
 
   /* The row's pure all-lanes CC restore (admitted by discovery only
      after a definition) rides a load carrier; which one is the
@@ -410,12 +607,19 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
     if (item.effects.dst_mem_write && item.carrier >= 0)
       ++launched_events;	/* the delayed store event	       */
 
+  /* More launched events than InstructionTemplate destinations is no
+     longer a hard stop (WP12): bit-identical derived template words
+     share one destination, and only descriptor synthesis derives the
+     words.  The refusal is recorded for the schedule dump and carved
+     out at synthesis, whose own post-sharing capacity gate is
+     authoritative.  */
+  const char *capacity_refusal = nullptr;
   if (template_events > c->n_templates)
     {
-      out->refusal = macro_sched_refusal_template_capacity_exceeded;
+      capacity_refusal = macro_sched_refusal_template_capacity_exceeded;
       if (dump)
-	fprintf (dump, "Macro-planner schedule-refusal: %s\n", out->refusal);
-      return true;
+	fprintf (dump, "Macro-planner schedule-note: template capacity"
+		 " pre-sharing overflow (synthesis decides)\n");
     }
 
   /* Demote carriers that host nothing: an ordinary explicit issue costs
@@ -544,7 +748,8 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
      matched proven program.  A CC-realization refusal from the
      coalescing rule takes precedence over the compact-absorption
      one.  */
-  const char *refusal = cc_refusal ? cc_refusal : cc_compact_refusal;
+  const char *refusal = cc_refusal ? cc_refusal
+    : cc_compact_refusal ? cc_compact_refusal : capacity_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());

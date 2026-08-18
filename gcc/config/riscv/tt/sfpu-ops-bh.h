@@ -305,6 +305,12 @@
 #define TT_OP_BH_SFPMUL(lreg_src_a, lreg_src_b, lreg_src_c, lreg_dest, instr_mod1) \
   TT_OP_BH(0x86, (((lreg_src_a) << 16) + ((lreg_src_b) << 12) + ((lreg_src_c) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))
 
+/* BH-only 24x24 integer multiply (no WH twin).  Field layout matches
+   upstream tt-llk ckernel_ops.h TT_OP_SFPMUL24 and the SFPMUL24.md
+   functional model (VA 19:16, VB 15:12, VC 11:8, VD 7:4, Mod1 3:0).  */
+#define TT_OP_BH_SFPMUL24(lreg_src_a, lreg_src_b, lreg_src_c, lreg_dest, instr_mod1) \
+  TT_OP_BH(0x98, (((lreg_src_a) << 16) + ((lreg_src_b) << 12) + ((lreg_src_c) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))
+
 #define TT_OP_BH_SFPMULI(imm16_math, lreg_dest, instr_mod1) \
   TT_OP_BH(0x74, (((imm16_math) << 8) + ((lreg_dest) << 4) + ((instr_mod1) << 0)))
 
