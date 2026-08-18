@@ -559,7 +559,8 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const rvtt_macro::caps *c,
 		  unsigned begin, unsigned end, bool emit_config,
 		  basic_block config_preheader, rtx_insn *enable_src,
-		  basic_block hoist_preheader, rtx_insn *hoist_enable_src)
+		  basic_block hoist_preheader, rtx_insn *hoist_enable_src,
+		  bool emit_drain)
 {
   const macro_row &first = region.rows[begin];
   rtx_insn *anchor = first.enable ? first.enable : first.insns[0];
@@ -816,8 +817,15 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
       if (desc.keep_separator && row.separator)
 	emit_insn (copy_rtx (PATTERN (row.separator)));
     }
-  for (int d = 0; d != desc.drain_slots; ++d)
-    emit_insn (gen_rvtt_sfpnop ());
+  /* The derived drain (core_drain_slots over the descriptor's own
+     SequenceBits delays).  Under -mtt-tensix-optimize-drain-schedule an
+     intra-region run boundary whose follower stream provably cannot
+     conflict with the in-flight events elides it
+     (rvtt_macro_drain_boundary_elidable, rtl-rvtt-schedule.cc); every
+     refusal and the final run keep it byte-identically.  */
+  if (emit_drain)
+    for (int d = 0; d != desc.drain_slots; ++d)
+      emit_insn (gen_rvtt_sfpnop ());
   rtx_insn *replacement = get_insns ();
   end_sequence ();
   emit_insn_before (replacement, anchor);
@@ -1152,6 +1160,26 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* Drain-aware boundary placement (default-off; proofs and derivation
+     in rtl-rvtt-schedule.cc): decide every intra-region boundary BEFORE any
+     mutation.  The final run's drain -- the region's exit contract (no
+     events in flight may reach the invisible follower stream) -- is
+     never elided.  */
+  auto_vec<bool> drain_elide;
+  drain_elide.safe_grow_cleared (run_begins.length ());
+  unsigned drains_elided = 0;
+  if (riscv_tt_opt_drain_schedule && desc.drain_slots > 0)
+    for (unsigned b = 0; b + 1 < run_begins.length (); ++b)
+      {
+	unsigned rend = run_begins[b + 1];
+	unsigned rnext_end = b + 2 < run_begins.length ()
+	  ? run_begins[b + 2] : region.rows.length ();
+	drain_elide[b] = rvtt_macro_drain_boundary_elidable
+	  (region, schedule, desc, run_begins[b], rend, rnext_end, dump);
+	if (drain_elide[b])
+	  ++drains_elided;
+      }
+
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
@@ -1159,14 +1187,16 @@ form_region (function *fn, macro_region &region,
 	? region.rows.length () : run_begins[b + 1];
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
 			config_preheader, enable_src,
-			hoist_preheader, hoist_enable_src);
+			hoist_preheader, hoist_enable_src,
+			!drain_elide[b]);
     }
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s\n",
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s\n",
 	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
 	     materialized_enable ? " lane-proof=materialized-enable" : "",
-	     hoist_preheader ? " prefix-epoch=hoisted" : "");
+	     hoist_preheader ? " prefix-epoch=hoisted" : "",
+	     drains_elided ? " drain-elided" : "");
   return true;
 }
 
