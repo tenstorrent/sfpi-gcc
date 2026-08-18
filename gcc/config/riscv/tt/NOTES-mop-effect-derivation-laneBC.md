@@ -1,5 +1,28 @@
 # MOP effect derivation for the prgm-const freedom proof — Lane BC design (2026-08-18)
 
+> **STATUS: IMPLEMENTED (Lane BL, 2026-08-18, branch agent/mopcfg-derivation).**
+> The derivation below is landed in `rvtt-mop-derive.{h,cc}` (new file) +
+> `gimple-rvtt-prgm-const.cc` (scan integration) + `rvtt-mop-tables.h`
+> (new provenanced facts: MMIO-store census, instruction apertures,
+> PC_BUF words, debug block, link-image disjointness, reset-template).
+> Steps 1–3 are as designed; the gap note's volatile-store census is
+> closed (including the blocking-store asm idiom, which used to be
+> admitted blind); the crt0 init-array blocker is discharged
+> STRUCTURALLY (`rvtt_mop_init_array_call_p`: pointer derivation
+> anchored on `__init_array_start` + the TU-registered-constructors
+> argument under AXIOM kernel-single-TU, refusing on section-attribute
+> extensions and toplevel asm).  Additional derivations the real exp TU
+> required: foldable TU global-pointer values (assume + store-census
+> verify; the pc_buf_base/regfile/profiler-pointer aperture convention),
+> the pointer-parameter caller-closure join (copy_runtimes_from_L1),
+> and the bounded-IV store-range proof (the GPR-file fill).  M3 fires
+> on the real exp perf node with the STOCK harness (no source changes,
+> no markers): capture 17→16 at pin-10's restructured exp source (the
+> 16→15 figure below was the pre-restructure shape — same −1-slot,
+> −1-stall fire class), SFPMUL+SFPADDI fused to SFPMAD reading L14.
+> The sdpa identical-immediate dedup landed alongside (1 register + 1
+> programming write + dominated reuses instead of L12+L13+L14).
+
 ## Problem
 
 The M3 pass (`gimple-rvtt-prgm-const.cc`) allocates PRGM constant

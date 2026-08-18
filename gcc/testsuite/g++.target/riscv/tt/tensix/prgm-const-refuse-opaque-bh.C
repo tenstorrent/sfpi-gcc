@@ -1,7 +1,10 @@
 // Near miss: an UNDECLARED raw region containing an unauditable word
-// (MOP) anywhere in the translation unit refuses every allocation --
-// PRGM registers are persistent global state and the region could
-// program or consume them.  Byte-identical refusal, dumped by name.
+// (a raw SFPU-class opcode) anywhere in the translation unit refuses
+// every allocation -- PRGM registers are persistent global state and
+// the region could program or consume them.  Byte-identical refusal,
+// dumped by name.  (A raw MOP word no longer serves as the opaque
+// class: its effects are DERIVED from the TU's template-programming
+// stores -- see prgm-const-mop-derive-bh.C.)
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump "prgm-const: refused .opaque-region-undeclared.: unaudited raw opcode" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "prgm-const: allocated" "rvtt_prgm_const" } }
@@ -10,7 +13,7 @@
 
 void undeclared_init ()
 {
-  __asm__ __volatile__ (".ttinsn %0" : : "n" (0x01800000));
+  __asm__ __volatile__ (".ttinsn %0" : : "n" (0x81000000));
 }
 
 void prgm_const_blocked ()

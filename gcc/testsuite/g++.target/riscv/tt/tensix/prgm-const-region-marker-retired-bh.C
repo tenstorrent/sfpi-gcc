@@ -1,14 +1,15 @@
 // The trusted effects-declaration channel is RETIRED (2026-08-18
 // ruling): __builtin_rvtt_ttregion_begin/end are deprecated no-ops that
-// declare nothing, so a raw MOP word refuses through the audited table
-// like any other unaudited opcode even when a marker pair brackets it
-// and even though a fusion candidate exists.  MOP-expansion effects
-// become provable only through the mop_cfg dataflow derivation
-// (NOTES-mop-effect-derivation-laneBC.md).
+// declare NOTHING in either direction.  The bracketed raw MOP word is
+// admitted by the mop_cfg effects DERIVATION (the TU programs no
+// template slot, so the audited reset-template state is all it can
+// expand) -- never by the marker; and the marker's config_write_mask
+// (declaring L12/L13 written) claims nothing: the allocator takes L12,
+// the first free register, proving the mask was not honored as a
+// claim.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
-// { dg-final { scan-tree-dump "prgm-const: refused .opaque-region-undeclared.: unaudited raw opcode" "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-not "prgm-const: allocated" "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-not "SFPMAD" } }
+// { dg-final { scan-tree-dump "prgm-const: allocated PRGM L12 for invariant immediate" "rvtt_prgm_const" } }
+// { dg-final { scan-assembler "SFPMAD" } }
 
 void formerly_declared_init ()
 {
