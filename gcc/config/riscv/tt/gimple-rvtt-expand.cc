@@ -139,66 +139,6 @@ emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
-// This is temporary code, and somewhet yucky ...
-static void
-emit_sfploadi (gimple_stmt_iterator *gsi, tree dst, uint32_t int_imm)
-{
-  // FIXME: we're just moving bits around here, the type of the input value
-  // doesnt matter.
-  int new_mod = -1;
-
-  if (int_imm <= 0x7fff || int_imm >= 0xffff8000)
-    new_mod = SFPLOADI_MOD0_SHORT;
-  else if (int_imm <= 0xffff)
-    new_mod = SFPLOADI_MOD0_USHORT;
-  else if (!(int_imm & 0xffff))
-    {
-      new_mod = SFPLOADI_MOD0_FLOATB;
-      int_imm >>= 16;
-    }
-  else if (!(int_imm & 0x1FFF))
-    {
-      int exp = (int_imm >> 23) & 0xFF;
-
-      if (exp < 127 + 16 && exp >= 127 - 14)
-	  {
-	    // Fits in fp16a
-	    int_imm = ((int_imm >> 13) & 0x3ff)
-	      | ((int_imm >> 16) & 0x8000)
-	      | ((exp - 0x70) << 10);
-	    new_mod = SFPLOADI_MOD0_FLOATA;
-	  }
-    }
-
-  auto *loadi_insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
-  auto *loadi = gimple_build_call (loadi_insnd->decl, loadi_insnd->num_args ());
-  gimple_set_lhs (loadi, new_mod < 0 ? make_ssa_name (TREE_TYPE (dst)) : dst);
-  gimple_call_set_arg (loadi, 0, null_pointer_node);
-  gimple_call_set_arg (loadi, loadi_insnd->imm_arg (),
-		       build_int_cst (unsigned_type_node, int_imm & 0xffff));
-  gimple_call_set_arg (loadi, loadi_insnd->var_arg (), integer_zero_node);
-  gimple_call_set_arg (loadi, loadi_insnd->id_arg (), integer_zero_node);
-  gimple_call_set_arg (loadi, loadi_insnd->mod_arg (),
-		       build_int_cst (unsigned_type_node, new_mod < 0 ? SFPLOADI_MOD0_USHORT : new_mod));
-  gsi_insert_after (gsi, loadi, GSI_NEW_STMT);
-
-  if (new_mod < 0)
-    {
-      auto *loadi_lv_insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi_lv);
-      auto *loadi_lv = gimple_build_call (loadi_lv_insnd->decl, loadi_lv_insnd->num_args ());
-      gimple_set_lhs (loadi_lv, dst);
-      gimple_call_set_arg (loadi_lv, 0, null_pointer_node);
-      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->live_arg (), gimple_get_lhs (loadi));
-      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->imm_arg (),
-			   build_int_cst (unsigned_type_node, (int_imm >> 16) & 0xffff));
-      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->var_arg (), integer_zero_node);
-      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->id_arg (), integer_zero_node);
-      gimple_call_set_arg (loadi_lv, loadi_lv_insnd->mod_arg (),
-			   build_int_cst (unsigned_type_node, SFPLOADI_MOD0_UPPER));
-      gsi_insert_after (gsi, loadi_lv, GSI_NEW_STMT);
-    }
-}
-
 static bool
 expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
 	    gcall *cmp, const rvtt_insn_data *insnd, bool negate)
@@ -212,28 +152,9 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   if (negate)
     op ^= SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE;
 
-  struct arg_info
-  {
-    tree arg;
-    gcall *def = nullptr; // loadi def
-    tree cst = nullptr; // scalar const
-    uint32_t imm = 0; // scalar const
-
-    arg_info (tree arg)
-      : arg (arg)
-    {
-      if (!SSA_VAR_P (arg))
-	{
-	  cst = arg;
-	  imm = TREE_INT_CST_LOW (cst);
-	  return;
-	}
-    }
-  };
-  bool is_scalar = insnd->has_var ();
-  arg_info args[2] =
-    {{gimple_call_arg (cmp, insnd->src_arg ())},
-     {gimple_call_arg (cmp, is_scalar ? insnd->imm_arg () : insnd->src_arg () + 1)}};
+  rvtt_arg_info args[2] =
+    {{gimple_call_arg (cmp, insnd->src_arg ()), true},
+     {gimple_call_arg (cmp, insnd->src_arg () + 1), true}};
 
   // direct reimplementation of existing scheme
   static const int map[] = {
@@ -244,33 +165,8 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     SFPSETCC_MOD1_LREG_GTE0,
     SFPSETCC_MOD1_LREG_GTE0
   };
-  bool integral = type != SFPXCMP_MOD1_TYPE_FLOAT;
-  bool needs_sub = true;
-  if (args[1].cst)
-    {
-      if (!args[1].imm || (!integral && args[1].imm == 0x80000000))
-	needs_sub = false;
-      else if ((args[1].imm & 0x7fffffff) == 0x3f800000)
-	{
-	  args[1].arg = make_ssa_name (TREE_TYPE (args[0].arg));
-	  args[1].cst = nullptr;
-	  const rvtt_insn_data *new_insnd =
-	    rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
-	  unsigned cst = args[1].imm >> 31 ? CREG_IDX_NEG_1 : CREG_IDX_1;
-	  gcall *read_lreg = gimple_build_call (new_insnd->decl, 1,
-						build_int_cst (unsigned_type_node, cst));
-	  gimple_call_set_lhs (read_lreg, args[1].arg);
-	  gsi_insert_after (right, read_lreg, GSI_NEW_STMT);
-	}
-      else if (args[1].imm <= 0x800 || args[1].imm > 0xfffff800)
-	args[1].cst = build_int_cst (unsigned_type_node, -args[1].imm);
-      else
-	{
-	  args[1].cst = nullptr;
-	  args[1].arg = make_ssa_name (TREE_TYPE (args[0].arg));
-	  emit_sfploadi (right, args[1].arg, args[1].imm);
-	}
-    }
+  bool fp = type == SFPXCMP_MOD1_TYPE_FLOAT;
+  bool zero = args[1].is_zero ();
   gcall *sub = nullptr;
   int late_cc_op = -1;
   if (op == SFPXCMP_MOD1_CC_GT || op == SFPXCMP_MOD1_CC_LE)
@@ -279,21 +175,25 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     // use of the loadi
     late_cc_op = SFPXCMP_MOD1_CC_NE;
 
-  if (!needs_sub)
+  if (zero)
     ;
-  else if (!integral)
+  else if (fp)
     {
-      auto neg1 = make_ssa_name (TREE_TYPE (args[0].arg));
+      // We're gonna reomplement this per-arch, so not bothering using sfpadd on bh/qsr
+      auto one = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
       const rvtt_insn_data *new_insnd =
 	rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
-      gcall *read_lreg = gimple_build_call (new_insnd->decl, 1,
-					    build_int_cst (unsigned_type_node, CREG_IDX_NEG_1));
-      gimple_call_set_lhs (read_lreg, neg1);
+      auto reg = build_int_cst (unsigned_type_node,
+				TARGET_XTT_TENSIX_WH ? CREG_IDX_NEG_1 : CREG_IDX_1);
+      gcall *read_lreg = gimple_build_call (new_insnd->decl, new_insnd->num_args (), reg);
+      gimple_call_set_lhs (read_lreg, one);
       gsi_insert_after (right, read_lreg, GSI_NEW_STMT);
 
       const rvtt_insn_data *mad_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmad);
+      auto mod =  build_int_cst (unsigned_type_node,
+				 TARGET_XTT_TENSIX_WH ? 0 : SFPMAD_MOD1_BH_COMPL_A);
       sub = gimple_build_call (mad_insnd->decl, mad_insnd->num_args (),
-			       args[1].arg, neg1, args[0].arg, integer_zero_node);
+			       args[1].get_arg (), one, args[0].get_arg (), mod);
     }
   else
     {
@@ -307,49 +207,34 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
       };
 
       unsigned mod = iadd_map[op];
-      if (args[1].cst)
-	{
-	  auto *iadd_i_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_i);
-	  sub = gimple_build_call (iadd_i_insnd->decl, iadd_i_insnd->num_args ());
-	  gimple_call_set_arg (sub, 0, null_pointer_node);
-	  gimple_call_set_arg (sub, iadd_i_insnd->src_arg (), args[0].arg);
-	  gimple_call_set_arg (sub, iadd_i_insnd->imm_arg (), args[1].cst);
-	  gimple_call_set_arg (sub, iadd_i_insnd->var_arg (), integer_zero_node);
-	  gimple_call_set_arg (sub, iadd_i_insnd->id_arg (), integer_zero_node);
-	  gimple_call_set_arg (sub, iadd_i_insnd->mod_arg (),
-			       build_int_cst (unsigned_type_node, mod));
-	}
-      else
-	{
-	  auto *iadd_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
-	  sub = gimple_build_call (iadd_v_insnd->decl, iadd_v_insnd->num_args ());
-	  gimple_call_set_arg (sub, iadd_v_insnd->src_arg (), args[1].arg);
-	  gimple_call_set_arg (sub, iadd_v_insnd->src_arg () + 1, args[0].arg);
-	  gimple_call_set_arg (sub, iadd_v_insnd->mod_arg (),
-			       build_int_cst (unsigned_type_node,
-					      mod | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST));
-	}
+      auto *iadd_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
+      sub = gimple_build_call (iadd_v_insnd->decl, iadd_v_insnd->num_args ());
+      gimple_call_set_arg (sub, iadd_v_insnd->src_arg (), args[1].get_arg ());
+      gimple_call_set_arg (sub, iadd_v_insnd->src_arg () + 1, args[0].get_arg ());
+      gimple_call_set_arg (sub, iadd_v_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node,
+					  mod | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST));
       if (mod == SFPIADD_MOD1_CC_NONE)
 	late_cc_op = op;
     }
 
   if (sub)
     {
-      if (late_cc_op >= 0 || !integral)
+      if (late_cc_op >= 0 || fp)
 	{
-	  args[0].arg = make_ssa_name (TREE_TYPE (args[0].arg));
-	  gimple_set_lhs (sub, args[0].arg);
+	  args[0].set_arg (make_ssa_name (TREE_TYPE (args[0].get_arg ())));
+	  gimple_set_lhs (sub, args[0].get_arg ());
 	}
       gsi_insert_after (right, sub, GSI_NEW_STMT);
     }
 
-  if (!integral || !needs_sub)
-    emit_setcc (right, cmp, args[0].arg, map[op],
-		integral ? SFPSETCC_IMM_TYPE_INT : SFPSETCC_IMM_TYPE_FLOAT, false);
+  if (fp || zero)
+    emit_setcc (right, cmp, args[0].get_arg (), map[op],
+		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
 
   if (late_cc_op >= 0)
-    emit_setcc (right, cmp, args[0].arg, map[late_cc_op],
-		integral ? SFPSETCC_IMM_TYPE_INT : SFPSETCC_IMM_TYPE_FLOAT, false);
+    emit_setcc (right, cmp, args[0].get_arg (), map[late_cc_op],
+		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
 
   if (dump_file)
     {
@@ -358,9 +243,6 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     }
   unlink_stmt_vdef (cmp);
   gsi_remove (left, true);
-
-  if (dump_file)
-    print_ssa_def_use (dump_file, args[0].arg);
 
   return op == SFPXCMP_MOD1_CC_LE;
 }
@@ -372,8 +254,7 @@ find_top_of_cond_tree(gcall *stmt)
 
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpxcmps:
-    case rvtt_insn_data::sfpxcmpv:
+    case rvtt_insn_data::sfpxcmp:
       break;
 
     case rvtt_insn_data::sfpxbool:
@@ -506,7 +387,7 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
     {
       if (dump_file)
 	fprintf (dump_file, "	node negated, emitting compc\n");
-      
+
       emit_compc (rightmost, call, false);
     }
 
@@ -611,30 +492,7 @@ simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *
 
   switch (insnd->id)
     {
-    case rvtt_insn_data::sfpxcmps:
-      {
-	// Note: negation happens at the use of these trees below the fall thru
-	gimple *child = SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->src_arg ()));
-	if (child->code == GIMPLE_PHI)
-	  process_tree_phi(stmt, child);
-	else if (child->code == GIMPLE_CALL) // could be inline asm...
-	  {
-	    gcall *child_call = dyn_cast<gcall *>(child);
-	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data(child_call);
-	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
-	      {
-		if (dump_file)
-		  fprintf (dump_file, "  descending to process xcondi before xicmps\n");
-		// Process child before fixing up this insn
-		if (process_xcondi(child_call, stmt, true))
-		  // Optimized this node away...
-		  break;
-	      }
-	  }
-      }
-      // Fall thru
-
-    case rvtt_insn_data::sfpxcmpv:
+    case rvtt_insn_data::sfpxcmp:
       if (expand_cmp (leftmost, rightmost, stmt, insnd, negate))
 	{
 	  emit_compc (rightmost, stmt, false);

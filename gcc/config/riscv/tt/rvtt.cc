@@ -368,15 +368,11 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   return pattern;
 }
 
-rvtt_arg_info::rvtt_arg_info (tree arg)
+rvtt_arg_info::rvtt_arg_info (tree arg, bool only_zeroness)
   : arg (arg)
 {
   if (!SSA_VAR_P (arg))
-    {
-      imm = arg;
-      cst = TREE_INT_CST_LOW (imm);
-      return;
-    }
+    return;
 
   auto *d = SSA_NAME_DEF_STMT (arg);
   auto *insnd = rvtt_get_insn_data (d);
@@ -384,42 +380,42 @@ rvtt_arg_info::rvtt_arg_info (tree arg)
     return;
 
   auto *call = as_a <gcall *> (d);
-  switch (insnd->id)
+  if (insnd->id == rvtt_insn_data::sfpreadlreg)
     {
-    default:
-      return;
-
-    case rvtt_insn_data::sfpreadlreg:
       // We only care about detecting zero here
       if (TREE_INT_CST_LOW (gimple_call_arg (call, 0))
 	  != CREG_IDX_0)
 	return;
-      break;
-
-    case rvtt_insn_data::sfploadi:
+    }
+  else if (only_zeroness)
+    return;
+  else if (insnd->id == rvtt_insn_data::sfploadi)
+    {
       if (!integer_zerop (gimple_call_arg (call, 0)))
 	// Runtime computed value
 	return;
 
-      cst = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->imm_arg ()));
+      uint32_t val = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->imm_arg ()));
       switch (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ())))
 	{
 	default:
 	  return;
 
 	case SFPLOADI_MOD0_FLOATB:
-	  cst = cst << 16;
+	  val = val << 16;
 	  break;
 
 	case SFPLOADI_MOD0_SHORT:
-	  cst = int32_t (cst << 16) >> 16;
+	  val = int32_t (val << 16) >> 16;
 	  break;
 
 	case SFPLOADI_MOD0_USHORT:
 	  break;
 	}
-      break;
+      cst = val;
     }
+  else
+    return;
   def = call;
 }
 

@@ -25,7 +25,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
+  auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpand (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
@@ -37,7 +37,7 @@ void bar () {
 **	# READ L1
 **	# READ L2
 **	# READ L4
-**	SFPMAD	L0, L2, L11, L1, 0
+**	SFPMAD	L0, L2, L10, L1, 1
 **	SFPSETCC	L0, 2048, 6
 **	SFPMOV	L3, L4, 2
 **	SFPMOV	L3, L1, 0	# LV:L3
@@ -72,7 +72,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
+  auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
@@ -84,7 +84,7 @@ void bar () {
 **	# READ L1
 **	# READ L2
 **	# READ L4
-**	SFPMAD	L0, L2, L11, L1, 0
+**	SFPMAD	L0, L2, L10, L1, 1
 **	SFPSETCC	L0, 2048, 6
 **	SFPMOV	L3, L4, 2
 **	SFPMOV	L3, L1, 0	# LV:L3
@@ -119,7 +119,7 @@ void bar () {
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
   auto i = __builtin_rvtt_sfpxvif ();
-  auto cond = __builtin_rvtt_sfpxcmpv (a, b, 0x32);
+  auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
   __builtin_rvtt_sfpxcondb (cond, i);
   auto r = __builtin_rvtt_sfpxor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
@@ -131,7 +131,7 @@ void bar () {
 **	# READ L1
 **	# READ L2
 **	# READ L4
-**	SFPMAD	L0, L2, L11, L1, 0
+**	SFPMAD	L0, L2, L10, L1, 1
 **	SFPSETCC	L0, 2048, 6
 **	SFPMOV	L3, L4, 2
 **	SFPMOV	L3, L1, 0	# LV:L3

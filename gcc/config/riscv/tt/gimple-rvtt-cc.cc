@@ -141,8 +141,7 @@ process_block_stmts(basic_block bb,
 		break;
 	      }
 
-	    case rvtt_insn_data::sfpxcmps:
-	    case rvtt_insn_data::sfpxcmpv:
+	    case rvtt_insn_data::sfpxcmp:
 	      gcc_unreachable ();
 
 	    case rvtt_insn_data::sfpcompc:

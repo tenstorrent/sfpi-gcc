@@ -40,7 +40,7 @@ void bar () {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L1, L1, L11, L0, 0
+**	SFPMAD	L1, L1, L10, L0, 1
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2

@@ -208,16 +208,6 @@ immvar_expand (gimple_stmt_iterator &gsi, const rvtt_insn_data *insnd, gcall *ca
 		      bits, addr, imm, gimple_call_lhs (call));
 	return true;
       }
-
-    case rvtt_insn_data::sfpxcmps:
-      if (SSA_VAR_P (imm))
-	{
-	  // This should totally be handled at the source level.
-	  tree tmp = emit_loadimm (gsi, gimple_location (call), -32, addr, imm, nullptr);
-	  return emit_replacement (gsi, insnd, call,
-				   rvtt_get_insn_data (rvtt_insn_data::sfpxcmpv), tmp, mod);
-	}
-      break;
     }
   return false;
 }

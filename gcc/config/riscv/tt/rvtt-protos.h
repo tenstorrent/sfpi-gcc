@@ -90,30 +90,23 @@ class rvtt_arg_info
 {
   tree arg;
   gcall *def = nullptr; // cst def stmt
-  tree imm = nullptr; // scalar const
   uint32_t cst = 0; // scalar const
 
  public:
   rvtt_arg_info () = default;
-  rvtt_arg_info (tree arg);
-  rvtt_arg_info &operator= (tree arg) {
-    // Construct in place
-    this->~rvtt_arg_info ();
-    new (this) rvtt_arg_info (arg);
-    return *this;
-  }
+  rvtt_arg_info (const rvtt_arg_info &) = default;
+  rvtt_arg_info (tree arg, bool only_zeroness = false);
 
 public:
   tree get_arg () const { return arg; }
+  tree set_arg (tree a) { arg = a; return arg; }
+
   gcall *get_def () const { return def; }
-
-  bool is_imm () const { return bool (imm); }
-  tree get_imm () const { return imm; }
-
   bool is_cst () const { return bool (def); }
-  uint32_t get_cst () const { return cst; };
 
-  bool is_zero () const { return is_cst () && !cst; }
+  uint32_t get_cst () const { return cst; };
+  bool is_zero () const { return is_cst () && !get_cst (); }
+
 };
 
 extern bool rvtt_hll_p (rtx pat);

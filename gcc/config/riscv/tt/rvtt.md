@@ -249,22 +249,7 @@
   "TARGET_XTT_TENSIX"
   "FAIL;")
 
-(define_expand "rvtt_sfpxcmps"
-  [(set (match_operand:SI 0 "register_operand")
-        (unspec_volatile:XTT32SI [
-	  (match_operand:SI    1 "reg_or_0_operand")
-          (match_operand:XTT32SI 2 "reg_or_cstlreg_operand")
-          (match_operand:SI    3 "reg_or_const_int_operand")
-          (match_operand:SI    4 "reg_or_const_int_operand")
-          (match_operand:SI    5 "const_int_operand")
-          (match_operand:SI    6 "const_int_operand")
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-{
-  FAIL;
-})
-
-(define_expand "rvtt_sfpxcmpv"
+(define_expand "rvtt_sfpxcmp"
   [(set (match_operand:SI 0 "register_operand")
         (unspec_volatile:SI [
 	  (match_operand:XTT32SI 1 "reg_or_cstlreg_operand")
