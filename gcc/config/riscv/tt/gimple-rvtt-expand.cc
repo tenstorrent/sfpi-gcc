@@ -222,6 +222,48 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
 	  imm = TREE_INT_CST_LOW (cst);
 	  return;
 	}
+#if 0 // later ....
+      auto *d = SSA_NAME_DEF_STMT (lhs);
+      if (auto *insnd = rvtt_get_insn_data (d))
+	{
+	  auto *call = as_a <gcall *> (d);
+	  switch (insnd->id)
+	    {
+	    default:
+	      return;
+
+	    case rvtt_insn_data::sfpreadlreg:
+	      // We only care about detecting zero here
+	      if (TREE_INT_CST_LOW (gimple_call_arg (call, 0))
+		  != CREG_IDX_0)
+		return;
+	      cst = build_int_cst (unsigned_type_node, 0);
+	      return;
+
+	    case rvtt_insn_data::sfploadi:
+	      if (!integer_zerop (gimple_call_arg (call, 0)))
+		return;
+	      bool ushort = false;
+	      switch (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ())))
+		{
+		default:
+		  return;
+
+		case SFPLOADI_MOD0_SHORT:
+		  ushort = true;
+		  break;
+
+		case SFPLOADI_MOD0_USHORT:
+		  break;
+		}
+	      imm = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->imm_arg ()));
+	      if (ushort && imm & 0x8000)
+		imm |= 0xffff0000;
+	      def = d; // Remember this so we can delete or replace it maybe
+	      break:
+	    }
+	}
+#endif
     }
   };
   bool is_scalar = insnd->has_var ();
@@ -513,7 +555,7 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
     {
       if (dump_file)
 	fprintf (dump_file, "	node negated, emitting compc\n");
-      
+
       emit_compc (rightmost, call, false);
     }
 
