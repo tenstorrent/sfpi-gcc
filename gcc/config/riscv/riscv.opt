@@ -598,6 +598,10 @@ mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
 Rotate replayed capture rows to fill audited interlock stalls across the row boundary
 
+mtt-tensix-optimize-drain-schedule
+Target Var(riscv_tt_opt_drain_schedule) Init(0)
+Prove per-boundary macro-event drain requirements from the derived descriptor calendars and elide structurally multiplied drain NOPs at proven-neutral macro run boundaries (refusals keep the full derived drain byte-identically)
+
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates

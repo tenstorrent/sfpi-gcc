@@ -153,4 +153,17 @@ extern bool rvtt_macro_build_expectations
   (const macro_region &region, const macro_schedule &schedule,
    rvtt_macro_verify::expectations *out);
 
+/* Drain-aware boundary placement (rtl-rvtt-schedule.cc, consumed by the
+   planner's emission under -mtt-tensix-optimize-drain-schedule): prove
+   that the derived drain of the run ending at row END-1 may be elided at
+   the boundary into the next run [END, NEXT_END), because every
+   in-flight macro event's writeback provably precedes the first
+   conflicting follower access.  All distances derive from the
+   descriptor's own SequenceBits delays (the derived timing calendars);
+   refusals are named to DUMP and keep the full derived drain.  */
+extern bool rvtt_macro_drain_boundary_elidable
+  (const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, unsigned begin, unsigned end,
+   unsigned next_end, FILE *dump);
+
 #endif /* GCC_RVTT_MACRO_DESC_H */
