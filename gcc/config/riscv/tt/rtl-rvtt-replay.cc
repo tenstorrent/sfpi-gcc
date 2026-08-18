@@ -1722,6 +1722,139 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
       return false;
     }
 
+  // ---- Execute-while-recording increment ----
+  //
+  // The hoisted capture in the dedicated preheader records without
+  // executing, so the first trip's launch re-delivers work the recording
+  // already streamed through the buffer.  When the structural conditions
+  // below hold, flip the capture to execute-while-loading and drop the
+  // first trip's launch: the payload's first execution happens at the
+  // record itself (the same semantics the planner CC path emits, and the
+  // in-place replace_sequence has always used).  Conditions, all
+  // refusing by leaving the plain unroll behavior:
+  //   - not Quasar (cannot exec while capturing there; the same guard
+  //     replace_sequence applies);
+  //   - the first delivered word of the trip is a playback launch of
+  //     exactly the capture's span (payload execution moves from that
+  //     launch site to the record site);
+  //   - the preheder's only Tensix content after the capture is the
+  //     capture's own payload: scalar insns cannot interact with Tensix
+  //     state, so crossing them preserves the payload's CC, Dst, and RWC
+  //     context; any other Tensix word between record and first launch
+  //     refuses.
+  // The typed Dst auto-increment pass models an executing capture as a
+  // row of its own (ROW_CAPTURE_EXEC), so its later ownership placement
+  // sees the record-time execution site like any other row.
+  rtx_insn *exec_capture = nullptr;
+  rtx_insn *exec_payload_end = nullptr;
+  bool drop_first_launch = false;
+  if (!(riscv_tt_fix_qsr_replay > 0) && riscv_tt_opt_replay_exec_record > 0)
+    {
+      replay_span lead_span;
+      if (is_replay_insn (lead_span, delivery.front ()) == REPLAY_playback)
+	{
+	  // Find the capture of this span in the preheader and prove it is
+	  // the last Tensix content (past its own payload words).
+	  rtx_insn *pinsn;
+	  rtx_insn *cap = nullptr;
+	  unsigned payload_left = 0;
+	  bool clean = true;
+	  FOR_BB_INSNS (preheader, pinsn)
+	    {
+	      if (!NONDEBUG_INSN_P (pinsn) || GET_CODE (pinsn) != INSN)
+		continue;
+	      rtx pat = PATTERN (pinsn);
+	      if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+		continue;
+	      if (asm_noperands (pat) >= 0 || recog_memoized (pinsn) < 0
+		  || get_attr_type (pinsn) != TYPE_TENSIX)
+		{
+		  if (asm_noperands (pat) >= 0)
+		    {
+		      // An empty-template asm (the compiler memory-barrier
+		      // idiom) emits nothing; every real asm is an
+		      // unclassified word: refuse.
+		      const char *tmpl
+			= GET_CODE (pat) == ASM_OPERANDS
+			  ? ASM_OPERANDS_TEMPLATE (pat)
+			  : GET_CODE (pat) == PARALLEL
+			      && GET_CODE (XVECEXP (pat, 0, 0)) == ASM_OPERANDS
+			    ? ASM_OPERANDS_TEMPLATE (XVECEXP (pat, 0, 0))
+			    : nullptr;
+		      while (tmpl && (*tmpl == ' ' || *tmpl == '\t'))
+			++tmpl;
+		      if (!tmpl || *tmpl)
+			{
+			  clean = false;
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "Exec-while-record refused: preheader"
+				     " insn %d is a non-empty asm\n",
+				     INSN_UID (pinsn));
+			  break;
+			}
+		    }
+		  continue;	// scalar work / empty barrier
+		}
+	      if (payload_left)
+		{
+		  unsigned words = get_attr_length (pinsn) / 4;
+		  if (words > payload_left)
+		    {
+		      clean = false;
+		      break;
+		    }
+		  payload_left -= words;
+		  if (!payload_left)
+		    exec_payload_end = pinsn;
+		  continue;
+		}
+	      replay_span span;
+	      auto type = is_replay_insn (span, pinsn);
+	      // is_replay_insn's raw span carries {begin = start slot,
+	      // end = length}.
+	      if (type == REPLAY_fixed_capture && !cap
+		  && span.begin == lead_span.begin
+		  && span.end == lead_span.end
+		  && XVECEXP (pat, 0, 6) == const0_rtx)
+		{
+		  cap = pinsn;
+		  payload_left = span.end;
+		  continue;
+		}
+	      if (!cap)
+		// Tensix work BEFORE the record retires before it and is
+		// unaffected by executing the payload at the record point.
+		continue;
+	      if (!get_attr_length (pinsn))
+		// Zero-length architectural markers deliver no word.
+		continue;
+	      // A Tensix word between the capture's payload and the first
+	      // launch: refuse (the payload's execution would cross it).
+	      clean = false;
+	      if (dump_file)
+		fprintf (dump_file,
+			 "Exec-while-record refused: preheader insn %d is a"
+			 " Tensix word between record and first launch\n",
+			 INSN_UID (pinsn));
+	      break;
+	    }
+	  if (clean && cap && !payload_left)
+	    {
+	      exec_capture = cap;
+	      drop_first_launch = true;
+	    }
+	  else if (dump_file && clean)
+	    fprintf (dump_file,
+		     "Exec-while-record refused: no matching record-only"
+		     " capture terminates the dedicated preheader\n");
+	}
+      else if (dump_file)
+	fprintf (dump_file,
+		 "Exec-while-record refused: the trip's first delivered"
+		 " word is not the playback launch\n");
+    }
+
   // Commit.  Replicate the per-trip delivery TRIPS-1 further times in body
   // order (the scalar counter step commutes with every delivered word: it
   // touches only the counter register), set the counter's proven final
@@ -1729,11 +1862,43 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
   // backedge; record the pending fixup before mutating the CFG.
   loops_state_set (LOOPS_NEED_FIXUP);
 
-  rtx_insn *anchor = delivery.back ();
-  for (uint64_t trip = 1; trip != trips; ++trip)
-    for (rtx_insn *d : delivery)
-      anchor = emit_insn_after (copy_insn (PATTERN (d)), anchor);
-  emit_insn_after (gen_rtx_SET (counter, final_rtx), anchor);
+  if (drop_first_launch)
+    {
+      // Flip the record to execute-while-loading, drop the first trip's
+      // now-redundant launch, and emit the WHOLE unrolled delivery run in
+      // the preheader directly after the executed payload: trip 1's
+      // remaining typed Dst steps followed by trips 2..N.  Everything
+      // crossed is scalar work (proven above), and the later Dst
+      // auto-increment ownership pass then sees the record-time execution
+      // row and every launch row in ONE block -- the same shared-placement
+      // shape an in-place capture produces.
+      XVECEXP (PATTERN (exec_capture), 0, 6) = const1_rtx;
+      INSN_CODE (exec_capture) = -1;
+      rtx_insn *anchor = exec_payload_end;
+      for (rtx_insn *d : delivery)
+	if (d != delivery.front ())
+	  anchor = emit_insn_after (copy_insn (PATTERN (d)), anchor);
+      for (uint64_t trip = 1; trip != trips; ++trip)
+	for (rtx_insn *d : delivery)
+	  anchor = emit_insn_after (copy_insn (PATTERN (d)), anchor);
+      emit_insn_after (gen_rtx_SET (counter, final_rtx), anchor);
+      for (rtx_insn *d : delivery)
+	delete_insn (d);
+      if (dump_file)
+	fprintf (dump_file,
+		 "Exec-while-record: capture insn %d executes trip 1;"
+		 " first launch removed; %lu-trip delivery run emitted at"
+		 " the record\n", INSN_UID (exec_capture),
+		 (unsigned long) trips);
+    }
+  else
+    {
+      rtx_insn *anchor = delivery.back ();
+      for (uint64_t trip = 1; trip != trips; ++trip)
+	for (rtx_insn *d : delivery)
+	  anchor = emit_insn_after (copy_insn (PATTERN (d)), anchor);
+      emit_insn_after (gen_rtx_SET (counter, final_rtx), anchor);
+    }
 
   delete_insn (step);
   remove_edge (e_branch);
