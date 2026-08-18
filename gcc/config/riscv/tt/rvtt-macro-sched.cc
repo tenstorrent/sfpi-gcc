@@ -157,9 +157,15 @@ rvtt_macro_schedule_release (macro_schedule *sched)
   sched->events.release ();
 }
 
-bool
-rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
-			    FILE *dump, unsigned candidate)
+/* One deterministic scheduling attempt: grouping candidate CANDIDATE
+   with the hosting proposals in BANNED (bit per row-item index) forced
+   to stay explicit issues.  BANNED = 0 is the established maximal
+   greedy hosting; the WP13 IMS repair driver below enumerates reduced
+   hosted sets when the maximal proposal refuses downstream.  */
+
+static bool
+schedule_region_1 (const macro_region &region, macro_schedule *out,
+		   FILE *dump, unsigned candidate, uint64_t banned)
 {
   memset (out, 0, sizeof (*out));
   out->events = vNULL;
@@ -355,6 +361,8 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
   auto try_host = [&] (unsigned ix, bool producer_pass) -> void
     {
       row_item &item = items[ix];
+      if (ix < 64 && ((banned >> ix) & 1))
+	return;			/* IMS repair: forced explicit (WP13)  */
       if (item.address || item.launched)
 	return;
       if (item.effects.subunit != XTT_SU_SIMPLE
@@ -1015,4 +1023,110 @@ rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
 	fprintf (dump, "Macro-planner schedule-refusal: %s\n", refusal);
     }
   return true;
+}
+
+/* WP13 IMS placement repair (literature scan Idea 5, Rau's iterative
+   modulo scheduling adapted to the macro sub-unit calendar).  The
+   established search is all-or-nothing per grouping candidate: when the
+   maximal greedy hosting proposal refuses anywhere downstream
+   (sequence derivation, descriptor synthesis, Layer-7 verification),
+   the whole region refuses.  Under -mtt-tensix-macro-ims the candidate
+   space instead continues past the established candidates with
+   deterministically enumerated REDUCED hosted sets -- bounded
+   unplacement, the backtracking half of IMS; the reservation-table
+   half (per-sub-unit occupancy modulo the interval, delay ranges,
+   port and hazard bounds) is the existing derivation core, which
+   remains the only feasibility oracle.  Enumeration order is
+   best-first: established (maximal) proposals first, then single
+   unplacements in reverse program order (the event furthest from its
+   carrier is the likeliest delay-range/hazard participant), then
+   pairs, capped by a fixed budget.  The first candidate whose
+   synthesis and verification prove is committed by the caller, so a
+   repair can only recover regions the established search refused --
+   never change one it already proves.  Rows carrying a predicate
+   definition keep the established CC candidate space untouched.  Off,
+   the candidate space is byte-identical to the established search.  */
+
+static const unsigned IMS_REPAIR_BUDGET = 12; /* variants per grouping */
+
+bool
+rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,
+			    FILE *dump, unsigned candidate)
+{
+  if (!riscv_tt_macro_ims)
+    return schedule_region_1 (region, out, dump, candidate, 0);
+
+  /* Predicate-definition rows keep the established candidate space:
+     their hosting rules are the proven CC select programs' territory.  */
+  for (rtx_insn *insn : region.rows[0].insns)
+    {
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (!(e.dst_mem_read || e.dst_mem_write) && e.cc_write
+	  && e.lreg_read != 0 && !e.lreg_write)
+	return schedule_region_1 (region, out, dump, candidate, 0);
+    }
+
+  /* Established candidates first, byte-identically.  */
+  unsigned n_established = 0;
+  {
+    macro_schedule probe;
+    while (schedule_region_1 (region, &probe, nullptr, n_established, 0))
+      {
+	rvtt_macro_schedule_release (&probe);
+	++n_established;
+      }
+  }
+  if (candidate < n_established)
+    return schedule_region_1 (region, out, dump, candidate, 0);
+
+  /* Repair variants: per established grouping, the greedy hosted set
+     reduced by one, then by two, in reverse program order (drop-latest
+     first), capped at IMS_REPAIR_BUDGET variants per grouping.  */
+  unsigned idx = candidate - n_established;
+  for (unsigned g = 0; g != n_established; ++g)
+    {
+      macro_schedule greedy;
+      if (!schedule_region_1 (region, &greedy, nullptr, g, 0))
+	continue;
+      auto_vec<unsigned> hosted;	/* item indices, program order  */
+      for (unsigned ix = 0; ix != greedy.events.length (); ++ix)
+	if (greedy.events[ix].realization
+	      == macro_event::LAUNCHED_TEMPLATE_SLOT
+	    && !greedy.events[ix].is_store && ix < 64)
+	  hosted.safe_push (ix);
+      rvtt_macro_schedule_release (&greedy);
+
+      auto_vec<uint64_t> masks;
+      for (unsigned i = hosted.length (); i-- > 0
+	   && masks.length () < IMS_REPAIR_BUDGET;)
+	masks.safe_push (uint64_t (1) << hosted[i]);
+      for (unsigned i = hosted.length (); i-- > 0;)
+	for (unsigned j = i; j-- > 0;)
+	  {
+	    if (masks.length () >= IMS_REPAIR_BUDGET)
+	      break;
+	    masks.safe_push ((uint64_t (1) << hosted[i])
+			     | (uint64_t (1) << hosted[j]));
+	  }
+
+      if (idx < masks.length ())
+	{
+	  if (dump)
+	    {
+	      fprintf (dump, "Macro-planner schedule-candidate: ims-repair"
+		       " grouping=%u banned-items={", g);
+	      bool first = true;
+	      for (unsigned ix = 0; ix != 64; ++ix)
+		if ((masks[idx] >> ix) & 1)
+		  {
+		    fprintf (dump, "%s%u", first ? "" : ",", ix);
+		    first = false;
+		  }
+	      fprintf (dump, "} greedy-hosted=%u\n", hosted.length ());
+	    }
+	  return schedule_region_1 (region, out, dump, g, masks[idx]);
+	}
+      idx -= masks.length ();
+    }
+  return false;			/* deterministic search exhausted */
 }

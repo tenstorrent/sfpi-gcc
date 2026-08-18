@@ -315,6 +315,150 @@ run_profitable_p (const macro_region &region, const macro_schedule &schedule,
   return macro_cost < run_rows * explicit_row_cost (region);
 }
 
+/* WP13 formation-vs-replay arbitration (-mtt-tensix-macro-ims).  The
+   established profitability gates above price the formed calendar
+   against RISC-pushed explicit rows word-for-word.  When the replay
+   optimization is enabled and every row word is replay-admissible, the
+   honest alternative is cheaper than that: the replay unit records the
+   row once and re-executes it per instance with RISC delivery hidden
+   under execution (the corrected concurrent-delivery accounting,
+   rvtt-cost.md).  Formation must then ALSO price below that
+   alternative, under the one shared issue-cost model
+   (XTT_REPLAY_COST_*): the alternative is priced at its steady-state
+   LOWER BOUND -- record-pass and launch delivery charged at zero --
+   so the arbitration is refusal-biased: a formation that cannot beat
+   even the ideal replay delivery of the same rows refuses by name
+   (replay-delivery-preferred), keeping measured replay wins intact.
+   Both sides are model outputs of the same constants; no operation
+   identity participates.  Off, formation decisions are untouched.  */
+
+static bool
+region_rows_replay_safe_p (const macro_region &region)
+{
+  auto safe = [] (rtx_insn *insn) -> bool
+    {
+      return insn && recog_memoized (insn) >= 0
+	&& get_attr_xtt_replay (insn) == XTT_REPLAY_SAFE;
+    };
+  const macro_row &row = region.rows[0];
+  for (rtx_insn *insn : row.insns)
+    if (!safe (insn))
+      return false;
+  if (row.enable && !safe (row.enable))
+    return false;
+  /* The typed Dst-counter separator is a replay barrier by itself, but
+     the Dst auto-increment pass -- which runs after replay formation
+     and absorbs exactly these separators around replay launches
+     (rvtt-cost.md, the launch_run context term's own discount rule) --
+     removes it from the replayed steady state when enabled.  Without
+     that pass the separator survives, replay runs cannot form across
+     rows, and the alternative stays the RISC-pushed stream the
+     established gates already price.  */
+  if (row.separator && !riscv_tt_opt_dst_autoincr)
+    return false;
+  return true;
+}
+
+/* Words one row instance re-executes in the replay-delivered steady
+   state: the row's issue words minus the separator the auto-increment
+   pass absorbs.  */
+
+static unsigned
+ims_replayed_row_words (const macro_region &region)
+{
+  unsigned w = explicit_row_cost (region);
+  if (region.rows[0].separator && riscv_tt_opt_dst_autoincr && w > 0)
+    --w;
+  return w;
+}
+
+/* Centislot price of the formed calendar for RUN_ROWS rows: descriptor
+   prefix delivered at the RISC push rate, launches and explicit words
+   at the push rate (or the replay slot rate when the planner-replay
+   delivery increment wraps them), drain at the slot rate.  */
+
+static uint64_t
+ims_formed_cost_x100 (const macro_schedule &schedule,
+		      const macro_descriptor &desc, unsigned run_rows)
+{
+  uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
+  uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
+  uint64_t drain = desc.drain_slots > 0 ? desc.drain_slots : 0;
+  return (uint64_t) config_prefix_cost (desc) * push
+    + (uint64_t) run_rows * (uint64_t) schedule.ii * word
+    + drain * slot;
+}
+
+/* Steady-state lower bound of the replay-delivered explicit
+   alternative: every row instance re-executes its words at the slot
+   rate with delivery hidden; record and launch words charged at
+   zero (refusal-biased).  */
+
+static uint64_t
+ims_replay_alt_cost_x100 (const macro_region &region, unsigned run_rows)
+{
+  return (uint64_t) run_rows * (uint64_t) ims_replayed_row_words (region)
+    * (uint64_t) XTT_REPLAY_COST_REPLAY_SLOT_X100;
+}
+
+static bool
+ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
+		   const macro_descriptor &desc, unsigned run_rows,
+		   FILE *dump)
+{
+  if (!riscv_tt_macro_ims || !riscv_tt_opt_replay
+      || !region_rows_replay_safe_p (region))
+    return true;
+  uint64_t formed = ims_formed_cost_x100 (schedule, desc, run_rows);
+  uint64_t alt = ims_replay_alt_cost_x100 (region, run_rows);
+  if (dump)
+    fprintf (dump, "Macro-planner ims-arbitration: formed=%llu"
+	     " replay-alt=%llu (centislots; run-rows=%u ii=%d"
+	     " row-words=%u) -> %s\n",
+	     (unsigned long long) formed, (unsigned long long) alt,
+	     run_rows, schedule.ii, ims_replayed_row_words (region),
+	     formed < alt ? "form" : "replay-delivery-preferred");
+  return formed < alt;
+}
+
+/* Loop-body analogue: the descriptor prefix is paid once per loop
+   entry; per-trip launches and drains weigh against the per-trip
+   replay-delivered alternative through the same profile ratio the
+   established loop gate uses.  */
+
+static bool
+ims_arbitrate_loop (const macro_region &region,
+		    const macro_schedule &schedule,
+		    const macro_descriptor &desc, gcov_type body_count,
+		    gcov_type preheader_count, unsigned n_runs, FILE *dump)
+{
+  if (!riscv_tt_macro_ims || !riscv_tt_opt_replay
+      || !region_rows_replay_safe_p (region))
+    return true;
+  uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
+  uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
+  unsigned total_rows = region.rows.length ();
+  uint64_t drain = desc.drain_slots > 0 ? desc.drain_slots : 0;
+  uint64_t formed = (uint64_t) config_prefix_cost (desc) * push
+      * (uint64_t) preheader_count
+    + ((uint64_t) total_rows * (uint64_t) schedule.ii * word
+       + (uint64_t) n_runs * drain * slot) * (uint64_t) body_count;
+  uint64_t alt = (uint64_t) total_rows
+    * (uint64_t) ims_replayed_row_words (region) * slot
+    * (uint64_t) body_count;
+  if (dump)
+    fprintf (dump, "Macro-planner ims-arbitration: formed=%llu"
+	     " replay-alt=%llu (centislots; loop rows=%u ii=%d"
+	     " row-words=%u trip-weight=%lld/%lld) -> %s\n",
+	     (unsigned long long) formed, (unsigned long long) alt,
+	     total_rows, schedule.ii, ims_replayed_row_words (region),
+	     (long long) body_count, (long long) preheader_count,
+	     formed < alt ? "form" : "replay-delivery-preferred");
+  return formed < alt;
+}
+
 /* Loop trip weight (WP8): the profile-estimated body/preheader
    execution-count ratio of a loop-body region.  Purely a profitability
    weight -- never a correctness input -- exact where the profile is
@@ -1110,6 +1254,14 @@ form_region (function *fn, macro_region &region,
 		     (long) body_count, (long) preheader_count);
 	  return false;
 	}
+      if (!ims_arbitrate_loop (region, schedule, desc, body_count,
+			       preheader_count, run_begins.length (), dump))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " replay-delivery-preferred\n");
+	  return false;
+	}
     }
   else
     for (unsigned b = 0; b != run_begins.length (); ++b)
@@ -1122,6 +1274,13 @@ form_region (function *fn, macro_region &region,
 	    if (dump)
 	      fprintf (dump, "Macro-planner formation-refusal:"
 		       " unprofitable\n");
+	    return false;
+	  }
+	if (!ims_arbitrate_run (region, schedule, desc, end - begin, dump))
+	  {
+	    if (dump)
+	      fprintf (dump, "Macro-planner formation-refusal:"
+		       " replay-delivery-preferred\n");
 	    return false;
 	  }
       }

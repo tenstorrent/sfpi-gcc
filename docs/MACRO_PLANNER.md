@@ -539,6 +539,8 @@ planner-formed launches into automatic replay recording; see Sec. 6),
 placement proofs; see Sec. 2d).
 `-mtt-tensix-macro-planner-residency` (WP13 delivery: descriptor-program
 residency; see Sec. 2d).
+`-mtt-tensix-macro-ims` (WP14: IMS placement repair over the sub-unit
+calendar + formation-vs-replay delivery arbitration; see Sec. 2d).
 All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
@@ -862,3 +864,146 @@ pushes below the execution floor realizes ~0), the hand kernel pays
 the same re-record class, and the emission home is the replay pass;
 recorded as a design note with the residency solver as its intended
 slot allocator when a push-bound shape appears.
+## 2d. WP14: IMS placement repair + formation-vs-replay arbitration
+
+Lane BO, 2026-08-18 (`agent/ims-placement`), literature scan Idea 5
+(B.R. Rau, *Iterative Modulo Scheduling*, MICRO-27 1994).  Flag:
+`-mtt-tensix-macro-ims`, default off; off keeps every schedule
+candidate and formation decision byte-identical.
+
+### The IMS mapping
+
+Rau's IMS schedules a loop body onto a machine described by
+reservation tables and latencies: compute the minimum initiation
+interval MII = max(ResMII, RecMII), place operations at slots modulo
+II, and BACKTRACK (unplace/replace) on resource conflict.  The macro
+planner's problem maps exactly:
+
+- **II** = issued words per row (`macro_schedule.ii`): launches plus
+  explicit issues.  Rows repeat every II slots, so occupancy is checked
+  modulo II — which the derivation core already does
+  (`same_residue`, rvtt-macro-derive-core.h).
+- **Reservation tables** = the audited capability tables: one event per
+  (macro, sub-unit byte) in the sequence word (`unit_taken`), one event
+  per sub-unit per cycle across row instances, the write-port classes,
+  the Simple/Round VD16-split and SWAP-adjacency predicates, delay
+  fields 0..SEQ_MAX_DELAY.
+- **Latencies** = `subunit_result_latency` (Simple/Round 1, MAD 2 —
+  table facts with recorded provenance).
+- **Placement feasibility oracle** = the existing derivation fixpoint
+  (`derive_calendar`) plus descriptor synthesis and the Layer-7
+  verifier.  Nothing new judges feasibility; IMS only searches.
+- **Backtracking** = the WP14 repair driver
+  (rvtt-macro-sched.cc `rvtt_macro_schedule_region`): the established
+  search was all-or-nothing per grouping candidate — one downstream
+  refusal (a delay-range, hazard, or encoding obligation) refused the
+  whole region even when a smaller hosted set is feasible.  Under the
+  flag, the candidate space continues past the established candidates
+  with deterministically enumerated REDUCED hosted sets: single
+  unplacements in reverse program order (the event furthest from its
+  carrier is the likeliest delay-range participant), then pairs,
+  capped at IMS_REPAIR_BUDGET (12) variants per grouping.  Best-first:
+  maximal hosting proposals are tried first, so a repair can only
+  recover regions the established search refused, never change one it
+  already proves — previously-formed calendars stay byte-identical.
+- **MII bounds**: ResMII for this machine is
+  `launches + max(0, forced-unit demand beyond per-macro capacity)`;
+  RecMII enters through the delay-range ceiling (a dependence chain
+  whose earliest-feasible execution exceeds carrier slot +
+  SEQ_MAX_DELAY refuses `delay-range-exceeded`).  Both remain the
+  derivation core's judgement; the repair driver dumps the greedy
+  hosted count and each variant's banned set so the search is fully
+  reviewable.
+
+Rows carrying a predicate definition keep the established CC candidate
+space untouched (the proven select programs' territory).
+
+### Formation-vs-replay arbitration
+
+The established Layer-6 gates price the formed calendar against
+RISC-pushed explicit rows word-for-word.  That alternative is
+over-priced whenever the replay unit would compress those same rows:
+under the corrected concurrent-delivery accounting (rvtt-cost.md,
+`XTT_REPLAY_COST_*`), a recorded row re-executes at the slot rate with
+RISC delivery hidden under execution.  A formation committed against
+the word-for-word comparison can therefore regress a measured replay
+win (the add/sub_int fresh kernels' −34.8%-vs-hand class, which today
+survives only because their maximal hosting proposal happens to refuse
+`sequence-derivation-hazard` — exactly the refusal class WP14's repair
+now recovers).  The arbitration closes that hole the honest way: when
+`-mtt-tensix-macro-ims` is on, the replay optimization is enabled, and
+every row word (insns, enable, separator) is replay-admissible
+(`xtt_replay == safe`), formation ADDITIONALLY requires
+
+    config·PUSH + rows·ii·D + drain·SLOT  <  rows·row_words·SLOT
+
+per run (loop regions: config weighted by the preheader count, the
+rest by the body count, the same profile ratio the established loop
+gate uses), where D = SLOT when `-mtt-tensix-macro-planner-replay`
+wraps the formed launches and PUSH otherwise.  The right-hand side is
+the alternative's steady-state LOWER bound — record-pass and launch
+delivery charged at zero — so the arbitration is refusal-biased: a
+formation that cannot beat even the ideal replay delivery of the same
+rows refuses by the stable name `replay-delivery-preferred`, with both
+prices printed.  Both sides are outputs of the one shared cost model;
+no operation identity, calendar, or threshold participates.  When the
+rows are not replay-admissible the alternative does not exist and the
+established gates stand alone.
+
+The WP12 intmul shape passes the arbitration on both delivery arms
+(rows=8, ii=12, row_words=19, config≈24, drain=2: PUSH-arm 14,960 <
+15,200; planner-replay arm 12,152 < 15,200 centislots) — the formed
+mul_int calendar keeps firing byte-identically with the flag on.
+
+### The mul_int32 residual: why placement alone conserves ii, and the
+### named follow-up
+
+WP12's named residual hoped IMS placement plus renaming/extra-carrier
+formation would close toward the handwritten 8 words/row.  Working the
+derived-intmul row (17 members: 2 loads, 10 Simple-class, 4 MAD-class,
+1 store) exhaustively against the architectural budgets gives a
+sharper statement:
+
+- **Unit caps**: one event per (macro, sub-unit); at 3 Dst-access
+  carriers the Simple/Round/MAD capacity is 3+3+3 with Round further
+  restricted to the in-place SHFT2 class and the store-only carrier's
+  units unusable for VD-identity classes (sacrificial VD).
+- **Template budget**: 4 InstructionTemplate destinations; the row
+  already needs {in-place cast, SHFT2(-23), MUL24(VA=L0,LOWER),
+  store-producer cast} = 4 distinct derived words.  Every additional
+  hosted event must SHARE one of these words bit-identically.
+- **Alignment renaming** (rename a value event's destination web onto
+  a carrier VD + sink past the remaining readers) is RTL-order-sound
+  only when no OTHER source of the event is redefined inside the sink
+  span.  In this row every candidate (lo/hi partial products, the sa
+  shift chain) crosses the in-place redefinition of the second load's
+  register — the allocator's own in-place packing on carrier 1 is
+  precisely what blocks re-packing anything else onto carrier 0.
+  Result: zero sound alignment renames on this dataflow.
+- **Extra value carriers** (the hand kernel's re-load trick:
+  re-load a row address into a free LREG, replicate the in-place
+  prefix chain, version-split-rename consumer webs onto it): each
+  added carrier costs one issued word and, under the template budget,
+  every enumerated configuration nets 0 or −1 words: the two best
+  routes both reach **ii = 11** (e.g. re-load carrier hosting the
+  shared cast + the VA=L0 MUL24 with the lo web renamed onto it, or
+  the 4-macro load+store-merged grouping hosting ten events with the
+  UPPER MUL24 and +23 shift explicit).  ii=8 parity is NOT reachable
+  by placement over this semantic body: the conservation is
+  structural (each extra launch word must be repaid by ≥2 net
+  template-shared hostings, and the row runs out of shareable
+  template words first).
+
+Pre-registered arithmetic for the ii=11 follow-up (NOT implemented
+here): 32×11 + config ≈26 + drains ≈8 + face separators ≈3 → ~390
+issue slots/tile vs the measured ii=12 stream's ~420-435, i.e. a
+booked TILE_LOOP prediction of ~52-54 against the 2026-08-19 measured
+58.36 (hand 35.62): +46..52% vs hand, from +63.8%.  Reaching the
+hand's 8 words/row needs one of: (a) the upward IMS search over
+virtual carriers × version-split renames with commit-or-revert
+mutation (a dedicated lane: per-row vmap application across 32
+unrolled copies), (b) descriptor residency (Idea 6) lifting the
+4-template pressure kernel-wide, or (c) a semantic-source restructure
+(the exp-parity precedent) that re-factorizes the radix identity into
+more template-shareable form.  WP14 lands the downward half (repair)
+and the pricing discipline both halves need.
