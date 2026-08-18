@@ -2135,8 +2135,53 @@
       : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
+  ;; Effect audit extension (2026-08-18, Lane BM; WH/BH, the mod-1
+  ;; immediate arm the register-form audit above names): [SIM] craq
+  ;; TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN mod-1 arms read the
+  ;; source and the tied destination, lane-write the destination, touch
+  ;; no CC bit, configuration word, or counter; [ISA] the SFPSET*.md
+  ;; immediate arms carry no next-cycle result-read rule (the audited
+  ;; latency-0 page convention); [HAND] the silicon-proven hand
+  ;; signbit/round-class calendars record and replay immediate-form
+  ;; SETSGN back-to-back.  S1 Simple column, result latency 0.  Every
+  ;; other mod keeps the refusing defaults.
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "simple") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 97) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && INTVAL (operands[7]) == 1")
+		      (const_int 1) (const_int 0)))])
 
 (define_int_iterator rvtt_logical_op [
   UNSPECV_SFPAND
