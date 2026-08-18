@@ -701,6 +701,10 @@ mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
 Default-off delivery increment: admit planner-formed SFPLOADMACRO launches into automatic replay recording (the launch is a pure instruction word; execution at a replay site reads the then-current descriptor configuration, matching the production handwritten Where kernel's own recorded launches).  Off keeps every planner-formed calendar byte-identical to the pre-flag output.
 
+mtt-tensix-macro-ims
+Target Var(riscv_tt_macro_ims) Init(0)
+Default-off placement increment (WP13): iterative-modulo-scheduling repair over the macro sub-unit calendar -- when the maximal hosting proposal refuses downstream, deterministically retry with reduced hosted sets (Rau-style bounded unplacement) instead of refusing the whole region -- plus delivery-model formation-vs-replay arbitration: formation additionally requires the formed calendar to price below the replay-compressed explicit alternative under the shared issue-cost model.  Off keeps every schedule candidate and formation decision byte-identical to the pre-flag output.
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).
