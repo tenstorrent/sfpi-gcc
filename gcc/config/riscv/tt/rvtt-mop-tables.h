@@ -137,6 +137,95 @@ constexpr unsigned HOST_WIDE_INT XTT_MOP_CFG_MMIO_BASE = 0xFFB80000;
 constexpr unsigned XTT_MOP_CFG_FLAGS_INDEX = 1; /* unpack-template flags */
 constexpr unsigned XTT_MOP_CFG_A0_INDEX = 3;    /* unpack-template A0 */
 
+/* The MOP config MMIO block decodes a 4KB page; the write handler
+   accepts exactly the nine aligned words (offsets 0x0..0x20) and
+   nothing else.  [SIM] tile_regs.h TENSIX_MOP_CFG_{BASE,LIMIT}
+   (wh:13-14, bh:15-16); tile.cpp tensix_mop_cfg_wr32 (~3076): switch
+   `case 0x0/4 ... 0x20/4', misaligned/other offsets fault.  A store
+   into the page beyond the nine words has no recorded fact and
+   refuses (mop-template-slot-range-unproven).  */
+constexpr unsigned HOST_WIDE_INT XTT_MOP_CFG_MMIO_LIMIT = 0xFFB80FFF;
+constexpr unsigned XTT_MOP_CFG_SLOTS = 9;
+
+/* REPLAY is Tensix frontend opcode 0x04.  [SIM] replay_expander
+   (`bits<31,24>(inst) == 0x04'); [ENC] TT_OP_{WH,BH}_REPLAY
+   (sfpu-ops-wh.h / sfpu-ops-bh.h:155).  */
+constexpr unsigned XTT_REPLAY_OPCODE = 0x04;
+
+/* -- Instruction-delivery MMIO census (the volatile-store proof) ------- */
+
+/* The RISC instruction-FIFO aperture: a 32-bit MMIO store of a raw
+   instruction word at TENSIX_INST_BASE word 0 -- the ONLY accepted
+   offset ([SIM] tile.cpp tensix_inst_wr32 (~3155): TTSIM_VERIFY
+   (!offset)).  [SIM] tile_regs.h TENSIX_INST_{BASE,LIMIT} (identical
+   wh/bh); [PROD] the harness linker scripts pin the ABI anchor to it
+   (tests/helpers/ld/memory.<arch>.ld: `PROVIDE(__instrn_buffer =
+   0xFFE40000)'), and the TT_ macro family (ckernel_ops.h) delivers
+   runtime-composed words as `ckernel::instrn_buffer[0] = TT_OP_*'
+   volatile stores through exactly that anchor.  */
+constexpr unsigned HOST_WIDE_INT XTT_INSTRN_BUF_MMIO_BASE = 0xFFE40000;
+constexpr unsigned HOST_WIDE_INT XTT_INSTRN_BUF_MMIO_LIMIT = 0xFFE40FFF;
+
+/* The PC_BUF block: the architected store targets are the blocking
+   sync words and the eight semaphores -- none delivers an instruction
+   word or touches PRGM/LaneConfig/CC.  [SIM] tile_regs.h
+   TENSIX_PC_BUF_{BASE,LIMIT}, TENSIX_PC_BUF_TENSIX_SYNC 0x4,
+   TENSIX_PC_BUF_MOP_SYNC 0x8, TENSIX_PC_BUF_SEMAPHORE(i) 0x20+4i
+   (wh:131-135, bh:136-140); tile.cpp tensix_pc_buf_wr32 (~3227):
+   exactly those cases, everything else faults.  Stores at unproven
+   offsets refuse (pc-buf-write-unproven).  */
+constexpr unsigned HOST_WIDE_INT XTT_PC_BUF_MMIO_BASE = 0xFFE80000;
+constexpr unsigned HOST_WIDE_INT XTT_PC_BUF_MMIO_LIMIT = 0xFFE80FFF;
+constexpr unsigned XTT_PC_BUF_TENSIX_SYNC_OFFSET = 0x4;
+constexpr unsigned XTT_PC_BUF_MOP_SYNC_OFFSET = 0x8;
+constexpr unsigned XTT_PC_BUF_SEMAPHORE_OFFSET = 0x20;
+
+/* The RISCV debug-register block: silicon documents an instruction-
+   injection interface behind it (DBG_INSTRN_BUF*, tile_regs.h wh/bh:55;
+   LLK ckernel_debug.h), and the simulator leaves those offsets
+   unimplemented -- so no store into the block has a recorded
+   PRGM/LaneConfig/CC-inertness fact and every one refuses
+   (debug-regs-write-unproven).  [SIM] tile_regs.h
+   RISCV_DEBUG_REGS_{BASE,LIMIT} (wh/bh:5-6).  */
+constexpr unsigned HOST_WIDE_INT XTT_DEBUG_REGS_MMIO_BASE = 0xFFB12000;
+constexpr unsigned HOST_WIDE_INT XTT_DEBUG_REGS_MMIO_LIMIT = 0xFFB12FFF;
+
+/* XTT_MMIO_STORE_INERT: outside the four blocks above, no MMIO-store
+   decoder arm reaches instruction delivery or SFPU state.  [SIM]
+   tile.cpp t_tile_mmio_wr32 (~3845) is a total decoder: its arms are
+   TDMA regs, debug regs (refused above), NOC/overlay regs, the MOP
+   config block, the Tensix GPR regfile, the instruction aperture, the
+   PC_BUF block, the mailboxes, and the CFG register file; only
+   tensix_inst_wr32 and tensix_mop_cfg_wr32 feed the instruction
+   frontend, and no arm writes the SFPU LReg file or LaneConfig
+   (l_regs/lane_config assignments exist only in the SFPU instruction
+   executors, tensix.cpp).  Consequence: a volatile store to any OTHER
+   constant address (L1 data, CFG, GPRs, semaphore/mailbox state) is
+   inert for the PRGM freedom proof.  */
+
+/* XTT_LINK_IMAGE_DISJOINT: every linker-allocated section and every
+   C-runtime section anchor the harness scripts define lives inside
+   the script MEMORY regions (L1 and the per-core local-data memories),
+   all of which are disjoint from the four MMIO blocks above; the one
+   script symbol deliberately pinned INTO an MMIO block is
+   `__instrn_buffer' (the FIFO anchor).  [PROD]
+   tests/helpers/ld/memory.<arch>.ld MEMORY regions and PROVIDE
+   anchors.  Consequence: a store whose address derives in-bounds from
+   a TU-defined object or a C-runtime data anchor cannot alias an
+   instruction FIFO.  */
+
+/* XTT_RESET_TEMPLATE_AUDITED: a MOP that launches before any in-TU
+   template programming expands the thread-entry template state, which
+   is audited: the registers reset to all-zero words -- a type-1 MOP
+   over them is architecturally a silent no-op (zero loop lengths;
+   [SIM] mop_expander's RTL-mirrored early return, citing RTL
+   tt_mop_decode.sv:211-216), and a type-0 MOP expands the zero word,
+   whose opcode (0x00) is an audited-table row.  [SIM] sim.h
+   TensixState::mop_cfg lives in zero-initialized global tile state.
+   Residual (review carry-forward): the silicon power-on/soft-reset
+   value of the template registers is RTL-cited for type 1 but not
+   independently confirmed for the type-0 zero-word path.  */
+
 /* mop_type 1 (the ckernel_template double-loop class, the production
    math datacopy dispatch TTI_MOP (1, 0, 0)) consumes MOP config words
    0..8 -- outer/inner loop lengths from words 0/1 when the instruction

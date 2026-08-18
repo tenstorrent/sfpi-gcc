@@ -41,26 +41,36 @@ along with GCC; see the file COPYING3.  If not see
    proof is TU-wide and cached at the first execution (when every function
    body in the translation unit is still in gimple):
    - every raw `.ttinsn' word in the TU must decode through the audited
-     raw-word table: TENSIX NOP, the sync family (0xA0-0xA7), the
-     thread-config family (0xB0-0xB8), CLEARDVALID/SETRWC, SFPLOADI with
-     an architecturally verified allocatable destination, and SFPCONFIG
-     with a decoded constant destination (which CLAIMS that
-     destination).  Anything else -- MOP (expands runtime-configured
-     instruction words), TTREPLAY, any raw SFPU-class word, a
-     non-literal operand, a non-.ttinsn template -- refuses the whole TU
-     byte-identically.  The MOP class is the known coverage gap: its
-     expanded words are the mop_cfg programming writes, and PROVING
-     their effects by must-dataflow derivation (not by trusting a
-     source annotation) is the designed successor -- see
-     NOTES-mop-effect-derivation-laneBC.md.  The former
-     `__builtin_rvtt_ttregion_begin/end' TRUSTED effects declarations
-     are RETIRED (2026-08-18 ruling: the compiler proves region
-     effects, it is not told them); the builtins are deprecated no-ops
-     that declare nothing;
+     raw-word table (rvtt-mop-derive.cc rvtt_mop_audited_word_p):
+     TENSIX NOP, the sync family (0xA0-0xA7), the thread-config family
+     (0xB0-0xB8), CLEARDVALID/SETRWC, SFPLOADI with an architecturally
+     verified allocatable destination, and SFPCONFIG with a decoded
+     constant destination (which CLAIMS that destination).  Anything
+     else -- TTREPLAY, any raw SFPU-class word, a non-literal operand,
+     a non-.ttinsn template -- refuses the whole TU byte-identically.
+     MOP (expands runtime-configured instruction words) is DERIVED,
+     never trusted: every mop_cfg template-slot write in the TU is
+     itself a scanned store whose word must decode through the same
+     table, and the MOP word is admitted exactly when all of them do
+     (rvtt-mop-derive.cc; design NOTES-mop-effect-derivation-laneBC.md).
+     The former `__builtin_rvtt_ttregion_begin/end' TRUSTED effects
+     declarations are RETIRED (2026-08-18 ruling: the compiler proves
+     region effects, it is not told them); the builtins are deprecated
+     no-ops that declare nothing;
+   - every store in the TU is a scan object (the volatile-push blind
+     spot is closed): constant-address stores classify by target range
+     (template slots, instruction-FIFO aperture, PC_BUF sync words,
+     debug block, inert MMIO -- facts in rvtt-mop-tables.h);
+     volatile stores at unresolved addresses must prove they cannot
+     alias an instruction FIFO or refuse; the scalar blocking-store
+     asm idiom classifies identically instead of being admitted blind;
    - user `vConstFloatPrgm' assignments (sfpwriteconfig_v) claim their
      constant destination; a non-constant destination refuses;
    - an indirect call or a call to a function with no body in this TU
-     refuses (it could contain undeclared Tensix code); defined functions
+     refuses (it could contain undeclared Tensix code) -- with one
+     PROVEN exception: the crt0 init-array walk, whose callees are
+     structurally this TU's own scanned static constructors
+     (rvtt_mop_init_array_call_p); defined functions
      are scanned themselves (including, on demand, a body whose cgraph
      node IPA inlining has already consumed) and ordinary scalar
      compiler builtins are transparent;
@@ -100,6 +110,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-mop-derive.h"
 
 namespace {
 
@@ -113,78 +124,20 @@ struct prgm_tu_facts
   const char *reason = nullptr;
   /* SFPCONFIG destinations 0..15 written anywhere in the TU.  */
   unsigned claimed = 0;
+  /* The MOP template derivation facts (rvtt-mop-derive.h).  */
+  rvtt_mop_derive_state mop;
 };
 
 static prgm_tu_facts tu_facts;
 
-/* Audited raw-word capability table (BH/WH encodings).  Returns false
-   for any word whose PRGM/LaneConfig/CC effect is not architecturally
-   pinned; a decoded SFPCONFIG claims its destination in *CLAIMED.  */
-
-static bool
-audited_raw_word_p (uint32_t word, unsigned *claimed, const char **why)
-{
-  unsigned opcode = word >> 24;
-  if (opcode == 0x00)		/* TENSIX NOP */
-    return true;
-  if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family */
-    return true;
-  if (opcode >= 0xB0 && opcode <= 0xB8)	/* thread-config family (SETC16) */
-    return true;
-  if (opcode == 0x36 || opcode == 0x37)	/* CLEARDVALID / SETRWC */
-    return true;
-  if (opcode == 0x71)		/* SFPLOADI: dest architecturally < 8 */
-    {
-      if (((word >> 20) & 0xf) < 8)
-	return true;
-      *why = "raw SFPLOADI with non-allocatable destination";
-      return false;
-    }
-  if (opcode == 0x91)		/* SFPCONFIG: claim the decoded dest */
-    {
-      unsigned dest = (word >> 4) & 0xf;
-      if (dest == 15)
-	{
-	  /* LaneConfig default-reset class: dest 15, mod1 bit0
-	     (MOD1_IMM16_IS_VALUE) set, imm16 == 0 -- the SFPU init's
-	     TTI_SFPCONFIG (0, 0xF, 1), word 0x910000F1.
-
-	     Audited by the architectural spec (SFPCONFIG.md functional
-	     model) and the corrected simulator (craq tensix.cpp
-	     TENSIX_EXECUTE_SFPCONFIG, craq 9f324140): the VD == 15 arm
-	     assigns LaneConfig only; LReg[11..14] writes exist solely in
-	     the VD 11..14 arm, so the programmable constant registers
-	     SURVIVE this word.  Within the admitted class every mod1
-	     completion is still LaneConfig-confined: set/AND with value
-	     0 is the hardware default-reset (reserved high bits
-	     restored per spec), OR/XOR with 0 is a no-op, and
-	     IMM16_IS_LANE_MASK with imm16 == 0 masks every lane off.
-	     The resulting LaneConfig is always {unchanged, default}, and
-	     default (0) is exactly the all-lanes, no-ROW_MASK state the
-	     allocator's own SFPCONFIG programming write assumes.  No
-	     destination is claimed: the word touches no PRGM register.
-
-	     Near misses stay refused by class: imm16 != 0 can set
-	     ROW_MASK/behavior bits (unproven lane model); mod1 bit0 == 0
-	     takes the value from LReg[0] (unauditable from the word).  */
-	  if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
-	    return true;
-	  *why = "raw SFPCONFIG writes LaneConfig";
-	  return false;
-	}
-      *claimed |= 1u << dest;
-      return true;
-    }
-  *why = "unaudited raw opcode";
-  return false;
-}
-
 /* A gimple_asm whose template is empty emits nothing; the single
    canonical raw form is one `.ttinsn' directive with one constant
-   input.  Everything else refuses.  */
+   input.  The scalar blocking-store idiom classifies as the store it
+   is.  Everything else refuses.  */
 
 static bool
-scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why)
+scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why,
+	      rvtt_mop_derive_state *st)
 {
   const char *s = gimple_asm_string (stmt);
   while (*s == ' ' || *s == '\t')
@@ -196,13 +149,17 @@ scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why)
      ordering; ebreak = debug trap; the startup stack-pointer load).  */
   if (!strcmp (s, "fence") || !strcmp (s, "ebreak")
       || !strcmp (s, "la sp, %0")
-      /* The scalar store-load-consume roundtrip idiom (pcbuf/mailbox
-	 reads): base-ISA memory operations only.  */
-      || !strcmp (s, "sw %0, (%1)\n\tlw %0, (%1)\n\tand x0, x0, %0")
       /* The crt0 global-pointer initialization.  */
       || !strcmp (s, ".option push\n.option norelax\n"
 		     "la gp, __global_pointer$\n.option pop"))
     return true;
+  /* The scalar store-load-consume roundtrip idiom (pcbuf/mailbox
+     handshakes): base-ISA memory operations only, but it STORES its
+     value operand at its address operand, so it classifies like any
+     other store (the former blanket admission was the asm face of the
+     volatile-push blind spot).  */
+  if (rvtt_mop_blocking_store_asm_p (stmt))
+    return rvtt_mop_derive_asm_store (stmt, claimed, why, st);
   if (strncmp (s, ".ttinsn", 7) != 0)
     {
       *why = "non-.ttinsn assembly";
@@ -224,20 +181,41 @@ scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why)
       *why = "non-literal .ttinsn word";
       return false;
     }
-  return audited_raw_word_p ((uint32_t) TREE_INT_CST_LOW (op), claimed, why);
+  return rvtt_mop_audited_word_p ((uint32_t) TREE_INT_CST_LOW (op), claimed,
+				  why, st);
 }
 
-/* Scan one function body.  Returns false (with *WHY set) on refusal.
-   VISITED memoizes bodies across the TU walk and the on-demand callee
-   scans below (a body's facts fold into *CLAIMED exactly once; a
-   repeat visit is transparent).  */
+/* Scan one function body.  Returns false (with *WHY set to the FIRST
+   refusal) on refusal, but keeps scanning: later statements must still
+   claim their destinations and record template-slot facts, and the
+   complete blocker inventory is dumped for diagnosis (refused facts
+   are only consumed when the TU is clean, so the extra folding is
+   inert).  VISITED memoizes bodies across the TU walk and the
+   on-demand callee scans below (a body's facts fold into *CLAIMED
+   exactly once; a repeat visit is transparent).  */
 
 static bool
 scan_function_body (function *fn, unsigned *claimed, const char **why,
-		    hash_set<function *> &visited)
+		    hash_set<function *> &visited,
+		    rvtt_mop_derive_state *st)
 {
   if (visited.add (fn))
     return true;
+  bool ok = true;
+  auto refuse = [&] (const char *w, gimple *stmt)
+    {
+      if (ok)
+	{
+	  *why = w;
+	  ok = false;
+	}
+      if (dump_file)
+	{
+	  fprintf (dump_file, "prgm-const: blocker in %s: %s: ",
+		   function_name (fn), w);
+	  print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
+	}
+    };
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -250,13 +228,22 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 
 	  if (gasm *a = dyn_cast <gasm *> (stmt))
 	    {
-	      if (!scan_raw_asm (a, claimed, why))
-		return false;
+	      const char *w = nullptr;
+	      if (!scan_raw_asm (a, claimed, &w, st))
+		refuse (w, stmt);
 	      continue;
 	    }
 
 	  if (!is_gimple_call (stmt))
-	    continue;
+	    {
+	      /* Stores are first-class scan objects: template-slot
+		 writes, instruction-FIFO pushes, and the FIFO-alias
+		 proof for unresolved volatile addresses.  */
+	      const char *w = nullptr;
+	      if (!rvtt_mop_derive_store (stmt, claimed, &w, st))
+		refuse (w, stmt);
+	      continue;
+	    }
 
 	  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
 	  if (insnd)
@@ -270,24 +257,22 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		     the markers are deprecated no-ops and declare
 		     nothing.  Every raw word classifies through the
 		     audited table on its own; MOP-expansion effects
-		     await the mop_cfg dataflow derivation
-		     (NOTES-mop-effect-derivation-laneBC.md), so a raw
-		     MOP word refuses below like any unaudited
-		     opcode.  */
+		     are DERIVED from the TU's template-programming
+		     stores (rvtt-mop-derive.cc).  */
 		}
 	      else if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
 		{
 		  tree dest = gimple_call_arg (call, 1);
 		  if (TREE_CODE (dest) != INTEGER_CST)
 		    {
-		      *why = "non-constant user SFPCONFIG destination";
-		      return false;
+		      refuse ("non-constant user SFPCONFIG destination", stmt);
+		      continue;
 		    }
 		  unsigned d = TREE_INT_CST_LOW (dest) & 0xf;
 		  if (d == 15)
 		    {
-		      *why = "user SFPCONFIG writes LaneConfig";
-		      return false;
+		      refuse ("user SFPCONFIG writes LaneConfig", stmt);
+		      continue;
 		    }
 		  *claimed |= 1u << d;
 		}
@@ -299,8 +284,21 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	  tree fndecl = gimple_call_fndecl (stmt);
 	  if (!fndecl)
 	    {
-	      *why = "indirect call";
-	      return false;
+	      /* One proven exception: the crt0 init-array walk calls
+		 only this TU's own registered static constructors --
+		 every one a scanned definition of this same TU walk
+		 (structural proof: rvtt_mop_init_array_call_p).  */
+	      if (rvtt_mop_init_array_call_p (as_a <gcall *> (stmt)))
+		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "prgm-const: init-array walk call in %s proven "
+			     "(TU-registered constructors only)\n",
+			     function_name (fn));
+		  continue;
+		}
+	      refuse ("indirect call", stmt);
+	      continue;
 	    }
 	  if (fndecl_built_in_p (fndecl))
 	    continue;		/* scalar compiler builtin */
@@ -319,17 +317,19 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	      function *cfn = DECL_STRUCT_FUNCTION (fndecl);
 	      if (cfn && cfn->cfg)
 		{
-		  if (!scan_function_body (cfn, claimed, why, visited))
-		    return false;
+		  const char *w = nullptr;
+		  if (!scan_function_body (cfn, claimed, &w, visited, st))
+		    refuse (w, stmt);
 		  continue;
 		}
-	      *why = "call to a function outside this translation unit";
-	      return false;
+	      refuse ("call to a function outside this translation unit",
+		      stmt);
+	      continue;
 	    }
 	  /* Defined in this TU: its body is scanned itself.  */
 	}
     }
-  return true;
+  return ok;
 }
 
 /* Compute (once) the TU facts.  Runs at the first execution of this
@@ -366,7 +366,8 @@ tu_prgm_facts ()
 	    tu_facts.reason = "function body unavailable to the scan";
 	  continue;
 	}
-      if (!scan_function_body (ofn, &tu_facts.claimed, &why, visited))
+      if (!scan_function_body (ofn, &tu_facts.claimed, &why, visited,
+			       &tu_facts.mop))
 	{
 	  tu_facts.refused = true;
 	  if (!tu_facts.reason)
@@ -376,6 +377,16 @@ tu_prgm_facts ()
 	      tu_facts.reason = reason_buf;
 	    }
 	}
+    }
+  /* Deferred MOP admission: a delivered MOP word was provisionally
+     admitted above; it stands only if every TU template-slot write
+     audited (rvtt-mop-derive.cc).  */
+  const char *mop_why = nullptr;
+  if (!rvtt_mop_derive_finish (&tu_facts.mop, &mop_why))
+    {
+      tu_facts.refused = true;
+      if (!tu_facts.reason)
+	tu_facts.reason = mop_why;
     }
   return tu_facts;
 }
@@ -673,15 +684,58 @@ transform (function *fn)
     = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
   const rvtt_insn_data *add_d = rvtt_get_insn_data (rvtt_insn_data::sfpadd);
 
+  /* Identical-immediate reuse: an earlier allocation of the SAME fp32
+     value shares its PRGM register (the register is claimed by us and
+     every programming write stores the same constant, so reuse is
+     order-insensitive); when the earlier allocation's LOOP HEADER
+     moreover DOMINATES the new loop's entry, the earlier programming
+     provably executed first (any path to a loop header passes its
+     entry edge by induction over the backedge) and no second
+     programming write is emitted.  (The sdpa shape: three inlined exp
+     bodies used to burn L12+L13+L14 on one immediate.)  Candidates
+     are visited in block order so the dominating allocation is seen
+     first.  */
+  struct prgm_alloc { unsigned value; unsigned reg; basic_block bb; };
+  auto_vec<prgm_alloc, 4> allocs;
+
+  /* Sort candidates by the function's block order (an approximation
+     of program order; correctness never depends on it -- the
+     dominance test does the proving).  */
+  {
+    hash_map<basic_block, int> seq;
+    int n = 0;
+    basic_block obb;
+    FOR_EACH_BB_FN (obb, fn)
+      seq.put (obb, n++);
+    auto key = [&seq] (const candidate &c) -> int
+      {
+	int *p = seq.get (c.entry->dest);
+	return p ? *p : INT_MAX;
+      };
+    for (unsigned i = 1; i < candidates.length (); ++i)
+      for (unsigned j = i; j > 0 && key (candidates[j - 1])
+					> key (candidates[j]); --j)
+	std::swap (candidates[j - 1], candidates[j]);
+  }
+
   for (candidate &c : candidates)
     {
       unsigned prgm = 0;
-      for (unsigned reg : prgm_regs)
-	if (!(claimed & (1u << reg)))
+      basic_block prior_bb = nullptr;
+      for (prgm_alloc &a : allocs)
+	if (a.value == c.value)
 	  {
-	    prgm = reg;
+	    prgm = a.reg;
+	    prior_bb = a.bb;
 	    break;
 	  }
+      if (!prgm)
+	for (unsigned reg : prgm_regs)
+	  if (!(claimed & (1u << reg)))
+	    {
+	      prgm = reg;
+	      break;
+	    }
       if (!prgm)
 	{
 	  if (dump_file)
@@ -692,31 +746,45 @@ transform (function *fn)
 	}
       claimed |= 1u << prgm;
 
-      /* Program the constant on the loop entry edge.  */
-      basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
       tree vec_type = TREE_TYPE (gimple_call_lhs (c.addi));
-      gcall *load = gimple_build_call
-	(xloadi_d->decl, 5, null_pointer_node,
-	 build_int_cst (unsigned_type_node, c.value),
-	 build_int_cst (unsigned_type_node, 0),
-	 build_int_cst (unsigned_type_node, 0),
-	 build_int_cst (integer_type_node, -32));
-      tree staged = make_ssa_name (vec_type);
-      gimple_call_set_lhs (load, staged);
-      gcall *wrcfg = gimple_build_call
-	(wrcfg_d->decl, 2, staged, build_int_cst (unsigned_type_node, prgm));
+      bool reprogram
+	= !prior_bb
+	  || !dominated_by_p (CDI_DOMINATORS, c.entry->dest, prior_bb);
+      if (reprogram)
+	{
+	  /* Program the constant on the loop entry edge.  */
+	  basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
+	  gcall *load = gimple_build_call
+	    (xloadi_d->decl, 5, null_pointer_node,
+	     build_int_cst (unsigned_type_node, c.value),
+	     build_int_cst (unsigned_type_node, 0),
+	     build_int_cst (unsigned_type_node, 0),
+	     build_int_cst (integer_type_node, -32));
+	  tree staged = make_ssa_name (vec_type);
+	  gimple_call_set_lhs (load, staged);
+	  gcall *wrcfg = gimple_build_call
+	    (wrcfg_d->decl, 2, staged,
+	     build_int_cst (unsigned_type_node, prgm));
 
-      gimple_stmt_iterator phg = gsi_last_bb (preheader);
-      if (gsi_end_p (phg) || !stmt_ends_bb_p (gsi_stmt (phg)))
-	{
-	  gsi_insert_after (&phg, wrcfg, GSI_NEW_STMT);
-	  gsi_insert_before (&phg, load, GSI_SAME_STMT);
+	  gimple_stmt_iterator phg = gsi_last_bb (preheader);
+	  if (gsi_end_p (phg) || !stmt_ends_bb_p (gsi_stmt (phg)))
+	    {
+	      gsi_insert_after (&phg, wrcfg, GSI_NEW_STMT);
+	      gsi_insert_before (&phg, load, GSI_SAME_STMT);
+	    }
+	  else
+	    {
+	      gsi_insert_before (&phg, wrcfg, GSI_SAME_STMT);
+	      gsi_insert_before (&phg, load, GSI_SAME_STMT);
+	    }
+	  if (!prior_bb)
+	    allocs.safe_push (prgm_alloc { c.value, prgm, c.entry->dest });
 	}
-      else
-	{
-	  gsi_insert_before (&phg, wrcfg, GSI_SAME_STMT);
-	  gsi_insert_before (&phg, load, GSI_SAME_STMT);
-	}
+      else if (dump_file)
+	fprintf (dump_file,
+		 "prgm-const: reused PRGM L%u for identical immediate "
+		 "0x%08x (dominating programming point bb %d)\n",
+		 prgm, c.value, prior_bb->index);
 
       /* Read it back as a constant register and re-offer the pair to
 	 the mad combine (which runs after this pass).  */
@@ -756,7 +824,7 @@ transform (function *fn)
 	}
 
       changed = true;
-      if (dump_file)
+      if (dump_file && reprogram)
 	fprintf (dump_file,
 		 "prgm-const: allocated PRGM L%u for invariant immediate "
 		 "0x%08x (loop header bb %d)\n",
