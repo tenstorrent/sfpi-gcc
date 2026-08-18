@@ -523,6 +523,33 @@ extern unsigned dst_face_advance_step_count ();   /* 2 */
    = 0x38008000.  */
 extern uint32_t absorbed_dst_increment_word ();
 
+/* SETRWC instruction-word field decode (WH/BH share the encoding):
+   TT_OP_{WH,BH}_SETRWC (0x37): clear_ab_vld << 22 | rwc_cr << 18
+   | rwc_d << 14 | rwc_b << 10 | rwc_a << 6 | bit_mask.  This is the
+   ONE derivation of SETRWC fields; dst_step8_setrwc_word () above
+   round-trips through it (unit-pinned in rvtt-macro-tables-test.cc),
+   so field decode can never drift from the emitted encoding.
+   Returns false (refusing) for any other opcode byte.  Field
+   SEMANTICS (normative, concordant ISA spec + simulator executor
+   TENSIX_EXECUTE_SETRWC + ckernel_instr_params.h p_setrwc):
+     clear_ab_vld  two bits: clear SrcA/SrcB bank data-valid
+     bit_mask      bit0 SrcA RWC write, bit1 SrcB RWC write,
+		   bit2 Dst RWC write, bit3 fidelity-phase reset
+     rwc_cr	   bit0/bit1 SrcA/SrcB CR mode, bit2 Dst CR-relative
+		   (Dst = Dst_CR + rwc_d, CR follows), bit3 Dst
+		   current-relative (Dst += rwc_d, CR follows)
+     rwc_a/rwc_b/rwc_d  the 4-bit per-leg values.  */
+struct setrwc_fields
+{
+  unsigned clear_ab_vld;
+  unsigned rwc_cr;
+  unsigned rwc_d;
+  unsigned rwc_b;
+  unsigned rwc_a;
+  unsigned bit_mask;
+};
+extern bool setrwc_decode (uint32_t word, setrwc_fields *);
+
 }  /* namespace rvtt_macro */
 
 #endif /* GCC_RVTT_MACRO_TABLES_H */

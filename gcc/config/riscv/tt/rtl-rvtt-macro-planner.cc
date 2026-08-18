@@ -76,9 +76,15 @@ planner_config_ownership_ok (function *fn, const rvtt_macro::caps *c)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
-	  if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+	  if (CALL_P (insn))
 	    return false;
 	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (asm_noperands (PATTERN (insn)) >= 0 && e.opaque)
+	    /* Raw asm refuses unless the audited `.ttinsn' decode
+	       proves it a pure Dst/RWC counter word (rvtt-raw-boundary
+	       via rvtt_insn_effects) -- such a word touches no
+	       configuration destination by that proof.  */
+	    return false;
 	  if (!e.opaque
 	      && ((e.config_dests_written | e.config_dests_read)
 		  & c->owned_config_dests))
@@ -183,9 +189,14 @@ planner_scope_insn_clean_p (rtx_insn *insn, const rvtt_macro::caps *c)
 {
   if (!NONDEBUG_INSN_P (insn))
     return true;
-  if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+  if (CALL_P (insn))
     return false;
   xtt_effect_set e = rvtt_insn_effects (insn);
+  if (asm_noperands (PATTERN (insn)) >= 0 && e.opaque)
+    /* Raw asm refuses unless the audited `.ttinsn' decode proves it a
+       pure Dst/RWC counter word (rvtt-raw-boundary via
+       rvtt_insn_effects).  */
+    return false;
   if (!e.opaque
       && ((e.config_dests_written | e.config_dests_read)
 	  & c->owned_config_dests))

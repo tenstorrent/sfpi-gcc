@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-protos.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-raw-boundary.h"
 
 /* ---------------- RTL ownership lattice (planner, WP4+) -------------- */
 
@@ -123,15 +124,20 @@ rvtt_ownership_state::transfer (const xtt_effect_set &effects)
 
 /* Opaque assembly or an unrepresented call can own architectural Tensix
    state without creating a vector SSA value.  Known RVTT calls expose
-   their vector values and effects to the typed analyses; everything else
-   stays opaque -- no content of any assembly statement is ever
-   inspected.  */
+   their vector values and effects to the typed analyses.  The one
+   audited assembly exception is the raw `.ttinsn' constant word whose
+   architectural field decode proves the pure Dst/RWC counter class
+   (rvtt-raw-boundary.cc): such a word can own no LREG, CC, or
+   configuration state -- the same standing the typed TTINCRWC /
+   TTSETRWC / face-advance builtins already have here.  Every other
+   assembly statement stays opaque.  */
 
 bool
 rvtt_gimple_opaque_stmt_p (gimple *stmt)
 {
-  return gimple_code (stmt) == GIMPLE_ASM
-    || (is_gimple_call (stmt) && !rvtt_get_insn_data (stmt));
+  if (gimple_code (stmt) == GIMPLE_ASM)
+    return !rvtt_raw_pure_dst_rwc_gimple (stmt);
+  return is_gimple_call (stmt) && !rvtt_get_insn_data (stmt);
 }
 
 edge
