@@ -40,28 +40,30 @@ along with GCC; see the file COPYING3.  If not see
    extension).  PRGM registers are persistent global machine state, so the
    proof is TU-wide and cached at the first execution (when every function
    body in the translation unit is still in gimple):
-   - every raw `.ttinsn' word in the TU must either sit inside a declared
-     effects region (below) or decode through the audited raw-word table:
-     TENSIX NOP, the sync family (0xA0-0xA7), the thread-config family
-     (0xB0-0xB8), CLEARDVALID/SETRWC, SFPLOADI with an architecturally
-     verified allocatable destination, and SFPCONFIG with a decoded
-     constant destination (which CLAIMS that destination).  Anything else
-     -- MOP (expands runtime-configured instruction words), TTREPLAY, any
-     raw SFPU-class word, a non-literal operand, a non-.ttinsn template --
-     refuses the whole TU byte-identically;
-   - `__builtin_rvtt_ttregion_begin (config_write_mask, 0)' ...
-     `__builtin_rvtt_ttregion_end ()' bracket a raw region with a TRUSTED
-     typed effects declaration (the sfprawlreg_access discipline): the
-     region writes exactly the SFPCONFIG destinations in the mask, never
-     LaneConfig (bit 15 must be clear), and neither reads nor writes any
-     other PRGM register.  Both markers must sit in the same basic block
-     as the statements they cover.  CRAQ is the check;
+   - every raw `.ttinsn' word in the TU must decode through the audited
+     raw-word table: TENSIX NOP, the sync family (0xA0-0xA7), the
+     thread-config family (0xB0-0xB8), CLEARDVALID/SETRWC, SFPLOADI with
+     an architecturally verified allocatable destination, and SFPCONFIG
+     with a decoded constant destination (which CLAIMS that
+     destination).  Anything else -- MOP (expands runtime-configured
+     instruction words), TTREPLAY, any raw SFPU-class word, a
+     non-literal operand, a non-.ttinsn template -- refuses the whole TU
+     byte-identically.  The MOP class is the known coverage gap: its
+     expanded words are the mop_cfg programming writes, and PROVING
+     their effects by must-dataflow derivation (not by trusting a
+     source annotation) is the designed successor -- see
+     NOTES-mop-effect-derivation-laneBC.md.  The former
+     `__builtin_rvtt_ttregion_begin/end' TRUSTED effects declarations
+     are RETIRED (2026-08-18 ruling: the compiler proves region
+     effects, it is not told them); the builtins are deprecated no-ops
+     that declare nothing;
    - user `vConstFloatPrgm' assignments (sfpwriteconfig_v) claim their
      constant destination; a non-constant destination refuses;
    - an indirect call or a call to a function with no body in this TU
      refuses (it could contain undeclared Tensix code); defined functions
-     are scanned themselves and ordinary scalar compiler builtins are
-     transparent;
+     are scanned themselves (including, on demand, a body whose cgraph
+     node IPA inlining has already consumed) and ordinary scalar
+     compiler builtins are transparent;
    - the programming point must run under the all-lanes CC state: the sfpi
      structured-CC model makes function entry all-lanes, and any CC-writing
      statement anywhere in the function refuses (cc-region-unproven), so
@@ -225,43 +227,25 @@ scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why)
   return audited_raw_word_p ((uint32_t) TREE_INT_CST_LOW (op), claimed, why);
 }
 
-/* Scan one function body.  Returns false (with *WHY set) on refusal.  */
+/* Scan one function body.  Returns false (with *WHY set) on refusal.
+   VISITED memoizes bodies across the TU walk and the on-demand callee
+   scans below (a body's facts fold into *CLAIMED exactly once; a
+   repeat visit is transparent).  */
 
 static bool
-scan_function_body (function *fn, unsigned *claimed, const char **why)
+scan_function_body (function *fn, unsigned *claimed, const char **why,
+		    hash_set<function *> &visited)
 {
+  if (visited.add (fn))
+    return true;
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
-      bool declared = false;
-      unsigned decl_mask = 0;
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	   gsi_next (&gsi))
 	{
 	  gimple *stmt = gsi_stmt (gsi);
 	  if (is_gimple_debug (stmt))
-	    continue;
-
-	  /* Every statement inside a declared region is covered by the
-	     trusted declaration -- raw words the table cannot decode
-	     and calls the scan cannot follow alike; only the end
-	     marker is looked for.  */
-	  if (declared && is_gimple_call (stmt))
-	    {
-	      const rvtt_insn_data *d = rvtt_get_insn_data (stmt);
-	      if (d && d->id == rvtt_insn_data::ttregion_end)
-		{
-		  declared = false;
-		  continue;
-		}
-	      if (d && d->id == rvtt_insn_data::ttregion_begin)
-		{
-		  *why = "malformed effects declaration";
-		  return false;
-		}
-	      continue;
-	    }
-	  if (declared)
 	    continue;
 
 	  if (gasm *a = dyn_cast <gasm *> (stmt))
@@ -278,27 +262,18 @@ scan_function_body (function *fn, unsigned *claimed, const char **why)
 	  if (insnd)
 	    {
 	      gcall *call = as_a <gcall *> (stmt);
-	      if (insnd->id == rvtt_insn_data::ttregion_begin)
+	      if (insnd->id == rvtt_insn_data::ttregion_begin
+		  || insnd->id == rvtt_insn_data::ttregion_end)
 		{
-		  tree mask = gimple_call_arg (call, 0);
-		  if (declared || TREE_CODE (mask) != INTEGER_CST
-		      || (TREE_INT_CST_LOW (mask) & (1u << 15)))
-		    {
-		      *why = "malformed effects declaration";
-		      return false;
-		    }
-		  declared = true;
-		  decl_mask = TREE_INT_CST_LOW (mask);
-		  *claimed |= decl_mask;
-		}
-	      else if (insnd->id == rvtt_insn_data::ttregion_end)
-		{
-		  if (!declared)
-		    {
-		      *why = "unmatched effects declaration end";
-		      return false;
-		    }
-		  declared = false;
+		  /* RETIRED trusted channel (2026-08-18 ruling): a
+		     source-annotated effects claim is not a proof --
+		     the markers are deprecated no-ops and declare
+		     nothing.  Every raw word classifies through the
+		     audited table on its own; MOP-expansion effects
+		     await the mop_cfg dataflow derivation
+		     (NOTES-mop-effect-derivation-laneBC.md), so a raw
+		     MOP word refuses below like any unaudited
+		     opcode.  */
 		}
 	      else if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
 		{
@@ -332,15 +307,26 @@ scan_function_body (function *fn, unsigned *claimed, const char **why)
 	  cgraph_node *cn = cgraph_node::get (fndecl);
 	  if (!cn || !cn->definition)
 	    {
+	      /* The cgraph node can already be gone when this scan runs:
+		 IPA inlining consumes a fully-inlined comdat (e.g. an
+		 implicitly-instantiated inline destructor in a profiler
+		 zone scope) and the unreachable-node sweep removes it
+		 before the late pipeline starts, while its gimple body
+		 must stay alive until the last caller's inline transform
+		 has run.  What executes here is exactly that body, so
+		 scan it on demand (memoized).  A decl with no walkable
+		 body still refuses -- never presume clean.  */
+	      function *cfn = DECL_STRUCT_FUNCTION (fndecl);
+	      if (cfn && cfn->cfg)
+		{
+		  if (!scan_function_body (cfn, claimed, why, visited))
+		    return false;
+		  continue;
+		}
 	      *why = "call to a function outside this translation unit";
 	      return false;
 	    }
 	  /* Defined in this TU: its body is scanned itself.  */
-	}
-      if (declared)
-	{
-	  *why = "effects declaration not closed in its block";
-	  return false;
 	}
     }
   return true;
@@ -358,6 +344,7 @@ tu_prgm_facts ()
     return tu_facts;
   tu_facts.computed = true;
 
+  hash_set<function *> visited;
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
@@ -379,7 +366,7 @@ tu_prgm_facts ()
 	    tu_facts.reason = "function body unavailable to the scan";
 	  continue;
 	}
-      if (!scan_function_body (ofn, &tu_facts.claimed, &why))
+      if (!scan_function_body (ofn, &tu_facts.claimed, &why, visited))
 	{
 	  tu_facts.refused = true;
 	  if (!tu_facts.reason)
