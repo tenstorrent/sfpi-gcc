@@ -137,8 +137,12 @@ along with GCC; see the file COPYING3.  If not see
      crosscall-callee-cc-unproven	CC-writing statement in the callee
      crosscall-callee-clobber		explicit lreg builtin / raw-access
 					marker on a contract register
-     crosscall-callee-stmt-unproven	call/asm/word in the callee not
-					proven contract-inert
+     crosscall-callee-stmt-unproven	call/asm in the callee not proven
+					contract-inert
+     crosscall-callee-word-unproven	delivered word in the callee not
+					audited contract-inert
+     crosscall-callee-replay-unproven	REPLAY word delivered in the
+					callee
      crosscall-callee-vector-outside-loop vector statement in the
 					liveness-extension tail
      crosscall-callee-pressure		eight-LREG file exceeded
@@ -1537,14 +1541,28 @@ struct scan_ctx
   unsigned contract_mask;
   tree callee_decl;		/* the contract call target (caller scan);
 				   NULL_TREE for the callee's own scan */
+  bool in_caller = false;	/* which side this scan covers (names) */
   bool saw_mop = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
 };
 
+/* Record a refusal.  The word/replay/statement classifiers share one
+   code path for both scan sides; the dump name carries the side.  */
+
 static bool
 scan_refuse (scan_ctx *ctx, const char *why, gimple *stmt)
 {
+  if (!ctx->in_caller && strncmp (why, "crosscall-caller-", 17) == 0)
+    {
+      const char *tail = why + 17;
+      if (!strcmp (tail, "word-unproven"))
+	why = "crosscall-callee-word-unproven";
+      else if (!strcmp (tail, "replay-unproven"))
+	why = "crosscall-callee-replay-unproven";
+      else if (!strcmp (tail, "stmt-unproven"))
+	why = "crosscall-callee-stmt-unproven";
+    }
   ctx->why = why;
   ctx->why_stmt = stmt;
   return false;
@@ -2038,6 +2056,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   scan_ctx ctx;
   ctx.contract_mask = contract_mask;
   ctx.callee_decl = callee_decl;
+  ctx.in_caller = true;
 
   basic_block *body = get_loop_body (loop);
   bool ok = true;
@@ -2220,6 +2239,7 @@ transform (function *fn)
   scan_ctx callee_ctx;
   callee_ctx.contract_mask = contract_mask;
   callee_ctx.callee_decl = NULL_TREE;
+  callee_ctx.in_caller = false;
   if (!callee_body_ok_p (fn, contract, consumer_loop, contract_mask,
 			 &callee_ctx))
     return false;

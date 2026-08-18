@@ -27,12 +27,12 @@
 __attribute__((noinline)) void
 CCH_CALLEE ()
 {
-  auto CCH_A0 = __builtin_rvtt_sfpxloadi (CCH_VAL_A0, -32);
-  auto CCH_A1 = __builtin_rvtt_sfpxloadi (CCH_VAL_A1, -32);
-  auto CCH_A2 = __builtin_rvtt_sfpxloadi (CCH_VAL_A2, -32);
-  auto CCH_B0 = __builtin_rvtt_sfpxloadi (CCH_VAL_B0, -32);
-  auto CCH_B1 = __builtin_rvtt_sfpxloadi (CCH_VAL_B1, -32);
-  auto CCH_B2 = __builtin_rvtt_sfpxloadi (CCH_VAL_B2, -32);
+  auto CCH_A0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A0, 0, 0, -32);
+  auto CCH_A1 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A1, 0, 0, -32);
+  auto CCH_A2 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A2, 0, 0, -32);
+  auto CCH_B0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_B0, 0, 0, -32);
+  auto CCH_B1 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_B1, 0, 0, -32);
+  auto CCH_B2 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_B2, 0, 0, -32);
   for (int CCH_ROW = 0; CCH_ROW != 8; ++CCH_ROW)
     {
       auto CCH_X = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 6,
