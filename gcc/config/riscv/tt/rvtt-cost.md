@@ -184,6 +184,61 @@
 ;;                                             keeps the refusing
 ;;                                             default.
 ;;
+;;   iadd immediate (sfpiadd_i_lv_int,
+;;     constant-imm alternatives,
+;;     mods 1/5/9)                       0     [ISA] SFPIADD.md: simple
+;;                                             sub-unit, no next-cycle
+;;                                             rule; the ARG_IMM arm
+;;                                             reads only LReg[VC];
+;;                                             [SIM] craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPIADD
+;;                                             :8894 (envelope
+;;                                             mod1 <= 10, (mod1&3)<=2;
+;;                                             lane-predicated write,
+;;                                             CC written unless
+;;                                             (mod1&12)==4); [CAL]
+;;                                             Simple chains step one
+;;                                             slot.  D3-follow-up
+;;                                             audit (2026-08-19, lane
+;;                                             CF): this row unblocks
+;;                                             the reissue pricing of
+;;                                             the fresh-body ceil and
+;;                                             rewritten-lcm loops,
+;;                                             whose first unaudited
+;;                                             payload producer was
+;;                                             this pattern (NOT
+;;                                             SFPSWAP, which the swap
+;;                                             row above already
+;;                                             covers).  The
+;;                                             register-immediate
+;;                                             (runtime-synth)
+;;                                             alternatives keep the
+;;                                             refusing default: their
+;;                                             instruction-buffer push
+;;                                             is outside this audit.
+;;
+;;   divp2 (sfpdivp2_lv_int,
+;;     constant-imm alternatives,
+;;     mods 0/1)                        0     [ISA] SFPDIVP2.md: simple
+;;                                             sub-unit, no next-cycle
+;;                                             rule; reads only
+;;                                             LReg[VC], writes VD
+;;                                             lane-predicated, no
+;;                                             lane-flag effect; [SIM]
+;;                                             craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPDIVP2
+;;                                             (envelope mod1 <= 1);
+;;                                             [CAL] Simple chains step
+;;                                             one slot.  D3-follow-up
+;;                                             audit (2026-08-19, lane
+;;                                             CF): unblocks the
+;;                                             reissue pricing of the
+;;                                             fresh-body rsqrt loop
+;;                                             (25 words after
+;;                                             residency), whose first
+;;                                             unaudited producer was
+;;                                             this pattern.
+;;
 ;; Deliberately UNAUDITED (refusing): SFPSHFT2 -- mod-dependent
 ;; next-cycle register constraints (SFPSHFT2.md) outside the
 ;; single-latency vocabulary; LUT/LUTFP32 -- mad-unit but no per-mod
