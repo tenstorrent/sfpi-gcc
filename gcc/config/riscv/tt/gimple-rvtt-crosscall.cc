@@ -353,7 +353,8 @@ struct word_verdict
 };
 
 static word_verdict
-classify_word_lreg (uint32_t word, unsigned contract_mask)
+classify_word_lreg (uint32_t word, unsigned contract_mask,
+		    bool region_strict = false)
 {
   word_verdict v = { true, false, false, nullptr };
   unsigned opcode = word >> 24;
@@ -391,7 +392,18 @@ classify_word_lreg (uint32_t word, unsigned contract_mask)
 				   in the VD 11..14 arm (constant
 				   registers, never allocatable L0-7;
 				   spec case-15 + sim facts recorded in
-				   rvtt-mop-derive.cc)		     */
+				   rvtt-mop-derive.cc).  The audited
+				   hoist-region discipline refuses it
+				   outright: a region-delivered config
+				   word could rewrite a programmable
+				   constant register or the LaneConfig
+				   lane-enable state the hoisted
+				   materialization relies on.	     */
+      if (region_strict)
+	{
+	  v.ok = false;
+	  v.why = "crosscall-caller-config-word-unproven";
+	}
       return v;
     default:
       if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
@@ -594,21 +606,45 @@ resolve_exact_word (tree val, uint32_t *word, unsigned depth = 0)
    destination and refuses.  */
 
 static word_verdict
-classify_delivered_value (tree val, unsigned contract_mask)
+classify_delivered_value (tree val, unsigned contract_mask,
+			  bool region_strict = false, unsigned phi_depth = 0)
 {
   word_verdict v = { false, false, false, "crosscall-caller-word-unproven" };
   if (TREE_CODE (val) == INTEGER_CST)
     return classify_word_lreg ((uint32_t) (TREE_INT_CST_LOW (val)
-					   & 0xffffffff), contract_mask);
+					   & 0xffffffff), contract_mask,
+			       region_strict);
   uint32_t base;
   if (!pushed_word_base (val, &base))
-    return v;
+    {
+      /* Region discipline only: a PHI-joined delivered word (one push
+	 site fed by branch-selected compositions) is inert exactly
+	 when EVERY argument's composition is audited inert; MOP and
+	 REPLAY classifications aggregate.  Bounded, refusing
+	 default.  */
+      if (region_strict && phi_depth < 2 && TREE_CODE (val) == SSA_NAME)
+	if (gphi *phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (val)))
+	  {
+	    word_verdict agg = { true, false, false, nullptr };
+	    for (unsigned ix = 0; ix != gimple_phi_num_args (phi); ++ix)
+	      {
+		word_verdict a = classify_delivered_value
+		  (gimple_phi_arg_def (phi, ix), contract_mask,
+		   region_strict, phi_depth + 1);
+		if (!a.ok)
+		  return a;
+		agg.is_mop |= a.is_mop;
+	      }
+	    return agg;
+	  }
+      return v;
+    }
   unsigned opcode = base >> 24;
   if (opcode == 0x71)
     /* Runtime-completed SFPLOADI: the destination field is not pinned
        by the base under the field axiom alone.  */
     return v;
-  return classify_word_lreg (base, contract_mask);
+  return classify_word_lreg (base, contract_mask, region_strict);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1542,6 +1578,13 @@ struct scan_ctx
   tree callee_decl;		/* the contract call target (caller scan);
 				   NULL_TREE for the callee's own scan */
   bool in_caller = false;	/* which side this scan covers (names) */
+  bool region = false;		/* audited hoist-region discipline (the
+				   cross-loop hoist consumers): vector
+				   dataflow is register-allocation
+				   visible and admitted, side-effecting
+				   typed calls beyond the explicit Dst
+				   boundary set refuse, and delivered
+				   SFPCONFIG words refuse */
   bool saw_mop = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
@@ -1553,7 +1596,32 @@ struct scan_ctx
 static bool
 scan_refuse (scan_ctx *ctx, const char *why, gimple *stmt)
 {
-  if (!ctx->in_caller && strncmp (why, "crosscall-caller-", 17) == 0)
+  if (ctx->region && strncmp (why, "crosscall-caller-", 17) == 0)
+    {
+      /* Region-scan consumers get the crossloop taxonomy.  */
+      const char *tail = why + 17;
+      if (!strcmp (tail, "word-unproven"))
+	why = "crossloop-word-unproven";
+      else if (!strcmp (tail, "replay-unproven"))
+	why = "crossloop-replay-unproven";
+      else if (!strcmp (tail, "stmt-unproven"))
+	why = "crossloop-stmt-unproven";
+      else if (!strcmp (tail, "cc-unproven"))
+	why = "crossloop-cc-unproven";
+      else if (!strcmp (tail, "config-word-unproven"))
+	why = "crossloop-config-word-unproven";
+    }
+  else if (ctx->region && strncmp (why, "crosscall-callee-", 17) == 0)
+    {
+      const char *tail = why + 17;
+      if (!strcmp (tail, "clobber"))
+	why = "crossloop-lreg-clobber";
+      else if (!strcmp (tail, "cc-unproven"))
+	why = "crossloop-cc-unproven";
+      else if (!strcmp (tail, "stmt-unproven"))
+	why = "crossloop-stmt-unproven";
+    }
+  else if (!ctx->in_caller && strncmp (why, "crosscall-caller-", 17) == 0)
     {
       const char *tail = why + 17;
       if (!strcmp (tail, "word-unproven"))
@@ -1598,7 +1666,8 @@ scan_asm (scan_ctx *ctx, gasm *stmt)
 	return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
       return apply_word_verdict
 	(ctx, classify_delivered_value
-	   (TREE_VALUE (gimple_asm_input_op (stmt, 0)), ctx->contract_mask),
+	   (TREE_VALUE (gimple_asm_input_op (stmt, 0)), ctx->contract_mask,
+	    ctx->region),
 	 stmt);
     }
   tree value, ptr;
@@ -1613,7 +1682,8 @@ scan_asm (scan_ctx *ctx, gasm *stmt)
 	  if (addr >= XTT_INSTRN_BUF_MMIO_BASE
 	      && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
 	    return apply_word_verdict
-	      (ctx, classify_delivered_value (value, ctx->contract_mask),
+	      (ctx, classify_delivered_value (value, ctx->contract_mask,
+					      ctx->region),
 	       stmt);
 	  if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
 	    return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
@@ -1640,7 +1710,8 @@ scan_store (scan_ctx *ctx, gimple *stmt)
       if (addr >= XTT_INSTRN_BUF_MMIO_BASE && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
 	return apply_word_verdict
 	  (ctx, classify_delivered_value (gimple_assign_rhs1 (stmt),
-					  ctx->contract_mask), stmt);
+					  ctx->contract_mask, ctx->region),
+	   stmt);
       if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
 	/* Re-programming template slots inside the epoch: the written
 	   word joins the TU census anyway, but a slot write inside the
@@ -1660,7 +1731,8 @@ scan_store (scan_ctx *ctx, gimple *stmt)
       if (name && !strcmp (name, "__instrn_buffer"))
 	return apply_word_verdict
 	  (ctx, classify_delivered_value (gimple_assign_rhs1 (stmt),
-					  ctx->contract_mask), stmt);
+					  ctx->contract_mask, ctx->region),
+	   stmt);
       if (!DECL_EXTERNAL (base))
 	return true;		/* TU data object */
     }
@@ -1695,6 +1767,25 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 	    return scan_refuse (ctx, in_caller
 				? "crosscall-caller-cc-unproven"
 				: "crosscall-callee-cc-unproven", stmt);
+	  /* The audited hoist-region discipline keeps the invariant
+	     pass's side-effect boundary: a typed call with target side
+	     effects beyond the explicit Dst load/store/counter set is
+	     not proven inert for a hoisted live range crossing it
+	     (mirrors allowed_dst_effect_p, gimple-rvtt-invariant.cc).  */
+	  if (ctx->region
+	      && insnd->has_side_effects (call)
+	      && insnd->id != rvtt_insn_data::sfpload
+	      && insnd->id != rvtt_insn_data::sfpload_lv
+	      && insnd->id != rvtt_insn_data::sfpstore
+	      && insnd->id != rvtt_insn_data::ttincrwc
+	      && insnd->id != rvtt_insn_data::ttdstface
+	      /* These reach their dedicated arms in the switch below
+		 (replay refusal; masked hard-LREG access checks).  */
+	      && insnd->id != rvtt_insn_data::ttreplay
+	      && insnd->id != rvtt_insn_data::sfpreadlreg
+	      && insnd->id != rvtt_insn_data::sfpwritelreg
+	      && insnd->id != rvtt_insn_data::sfprawlreg_access)
+	    return scan_refuse (ctx, "crosscall-caller-stmt-unproven", stmt);
 	  switch (insnd->id)
 	    {
 	    case rvtt_insn_data::sfpreadlreg:
@@ -1702,6 +1793,21 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 	      {
 		tree regno = gimple_call_arg
 		  (call, insnd->id == rvtt_insn_data::sfpwritelreg ? 1 : 0);
+		if (ctx->region)
+		  {
+		    /* Register allocation sees a typed hard-LREG read
+		       and coordinates around it; only a WRITE into the
+		       audited mask clobbers a hoisted live range.  */
+		    if (insnd->id == rvtt_insn_data::sfpreadlreg
+			&& TREE_CODE (regno) == INTEGER_CST)
+		      return true;
+		    if (TREE_CODE (regno) != INTEGER_CST
+			|| ((ctx->contract_mask
+			     >> (TREE_INT_CST_LOW (regno) & 0xf)) & 1))
+		      return scan_refuse (ctx, "crosscall-callee-clobber",
+					  stmt);
+		    return true;
+		  }
 		if (TREE_CODE (regno) != INTEGER_CST
 		    || ((ctx->contract_mask
 			 >> (TREE_INT_CST_LOW (regno) & 0xf)) & 1))
@@ -2374,6 +2480,70 @@ public:
 };
 
 } // anonymous namespace
+
+/* Audited hoist-region scan for the cross-loop hoist consumers
+   (rvtt-macro-ownership.h).  The region is {LOOP body} union
+   {preheader tail at/after the ENTRY insertion point} -- the same
+   region rvtt_loop_hoist_region_opaque_p covers -- walked under the
+   region discipline of scan_stmt: vector dataflow is
+   register-allocation visible and admitted; CC writes, replay words,
+   delivered SFPCONFIG words, unaudited words/calls/asm, explicit
+   hard-LREG writes into LREG_MASK, and side-effecting typed calls
+   beyond the explicit Dst boundary set all refuse by name.  A MOP word
+   defers to the TU template census (LREG face) against LREG_MASK.  */
+
+bool
+rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
+			    const char **why, gimple **why_stmt)
+{
+  compute_tu_facts ();
+
+  scan_ctx ctx;
+  ctx.contract_mask = lreg_mask;
+  ctx.callee_decl = NULL_TREE;
+  ctx.in_caller = false;
+  ctx.region = true;
+
+  bool ok = true;
+  basic_block *body = get_loop_body (loop);
+  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi) && ok; gsi_next (&gsi))
+      ok = scan_stmt (&ctx, gsi_stmt (gsi), /*in_caller=*/false);
+  free (body);
+
+  /* Preheader tail at/after the hoist insertion point: with
+     end-of-block insertion only a block-terminating statement can
+     execute after the hoisted statements.  */
+  if (ok && single_succ_p (entry->src))
+    {
+      gimple_stmt_iterator last = gsi_last_nondebug_bb (entry->src);
+      if (!gsi_end_p (last) && stmt_ends_bb_p (gsi_stmt (last)))
+	ok = scan_stmt (&ctx, gsi_stmt (last), /*in_caller=*/false);
+    }
+
+  if (ok && ctx.saw_mop)
+    {
+      const char *mop_why = nullptr;
+      if (!mop_contract_ok_p (lreg_mask, &mop_why))
+	{
+	  if (dump_file && mop_why)
+	    fprintf (dump_file, "crossloop-hoist:   (%s)\n", mop_why);
+	  ctx.why = "crossloop-mop-slot-unproven";
+	  ctx.why_stmt = nullptr;
+	  ok = false;
+	}
+    }
+
+  if (!ok)
+    {
+      if (why)
+	*why = ctx.why;
+      if (why_stmt)
+	*why_stmt = ctx.why_stmt;
+    }
+  return ok;
+}
 
 gimple_opt_pass *
 make_pass_rvtt_crosscall (gcc::context *ctxt)

@@ -409,17 +409,21 @@ rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
   return ok;
 }
 
-namespace {
-
 /* Estimate the number of SFPLOADI issues needed to materialize CALL's
    constant after the later immediate-shortening passes run.  Prefer keeping
    two-issue constants live when pressure prevents hoisting every invariant;
    one-issue values remain cheap to rematerialize in the loop.  This models
    only the target's immediate encodings.  It deliberately does not recognize
-   particular values or source patterns.  */
-static unsigned
-materialization_cost (gcall *call)
+   particular values or source patterns.  A load already shortened to the
+   single-issue sfploadi form (consumers running after
+   pass_rvtt_immload_shorten) costs one issue by construction.  */
+unsigned
+rvtt_sfpxloadi_materialization_cost (gcall *call)
 {
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (insnd && insnd->id == rvtt_insn_data::sfploadi)
+    return 1;
+
   uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
   unsigned upper = value >> 16;
   unsigned lower = value & 0xffff;
@@ -431,6 +435,15 @@ materialization_cost (gcall *call)
   unsigned exponent = (value >> 23) & 0xff;
   return !(value & 0x1fff)
     && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+}
+
+namespace {
+
+/* Local spelling kept for the greedy selection below.  */
+static unsigned
+materialization_cost (gcall *call)
+{
+  return rvtt_sfpxloadi_materialization_cost (call);
 }
 
 /* Select the most expensive invariant materializations which fit the

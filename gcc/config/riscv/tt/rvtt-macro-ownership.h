@@ -147,4 +147,44 @@ extern bool rvtt_loop_first_iteration_executes_p (class loop *loop,
 extern bool rvtt_stmt_executes_every_entered_iteration_p (class loop *loop,
 							  basic_block bb);
 
+/* Modeled SFPLOADI issue count to materialize CALL's constant after
+   the immediate-shortening passes run (target immediate encodings
+   only; never recognizes particular values or source patterns).  */
+extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
+
+/* Audited hoist-region scan (implemented with the cross-call hoist's
+   audited word classification and TU MOP template census,
+   gimple-rvtt-crosscall.cc): every statement of {LOOP body} union
+   {preheader tail at/after the ENTRY insertion point} is proven unable
+   to write an LREG in LREG_MASK, unable to change the SFPU CC/lane
+   state, and unable to deliver an unaudited or replay word.  On
+   refusal returns false with the dump-stable name in *WHY (and the
+   offending statement in *WHY_STMT when known).  Refusing default for
+   every class not on record.  */
+extern bool rvtt_crossloop_region_scan (class loop *loop, edge entry,
+					unsigned lreg_mask,
+					const char **why,
+					gimple **why_stmt);
+
+/* The outermost enclosing entry edge to which a loop-entry placement
+   of LOOP may be lifted under the audited-region discipline: walks
+   outward from ENTRY while the enclosing loop's region scan, preheader
+   insertion, and first-entry execution proofs all hold; returns ENTRY
+   unchanged when nothing is proven.  ANCHOR names the block whose
+   execution the original placement is tied to (the inner loop's
+   header).  */
+extern edge rvtt_crossloop_outermost_entry (class loop *loop, edge entry,
+					    unsigned lreg_mask);
+
+/* BB provably executes on the first iteration of LOOP entered through
+   ENTRY: the header exit test folds (or is implied by a dominating
+   guard on the same SSA operands) toward the body, and BB is reached
+   from the taken edge by a single-successor chain.  Together with
+   rvtt_stmt_executes_every_entered_iteration_p's exit discipline this
+   discharges the no-speculation obligation for do-while and
+   guard-protected loop shapes the constant fold cannot see.  */
+extern bool rvtt_crossloop_block_executes_on_entry_p (class loop *loop,
+						      edge entry,
+						      basic_block bb);
+
 #endif /* GCC_RVTT_MACRO_OWNERSHIP_H */
