@@ -167,3 +167,14 @@ void eight ()
 **	# WRITE L0
 **	ret
 */
+
+void float16a () {
+  auto a = __builtin_rvtt_sfpxloadi (nullptr, 0x3f804000, 0, 0, -32);
+  __builtin_rvtt_sfpwritelreg (a, 0);
+}
+/*
+**_Z8float16av:
+**	SFPLOADI	L0, 15362, 1
+**	# WRITE L0
+**	ret
+*/
