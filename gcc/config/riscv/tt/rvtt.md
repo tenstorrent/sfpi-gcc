@@ -4316,6 +4316,40 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")])
 
+;; Canonical proven all-lanes enable (lane CA init hoist): expands to the
+;; architectural all-lanes SFPENCC operands -- the exact word the
+;; formation's cc_enable_all_lanes_proved_p proof compares against
+;; (capability tables, rvtt_macro::sfpencc_all_lanes_word).  Zero
+;; arguments by design: the word is an architectural constant, never
+;; caller data.
+(define_expand "rvtt_sfpencc_all_lanes"
+  [(const_int 0)]
+  "TARGET_XTT_TENSIX"
+{
+  uint32_t word;
+  gcc_assert (rvtt_macro::sfpencc_encode (SFPENCC_IMM12_BOTH,
+					  SFPENCC_MOD1_EI_RI, &word)
+	      && word == rvtt_macro::sfpencc_all_lanes_word ());
+  emit_insn (gen_rvtt_sfpencc (GEN_INT (SFPENCC_MOD1_EI_RI),
+			       GEN_INT (SFPENCC_IMM12_BOTH)));
+  DONE;
+})
+
+;; Gimple-spellable owned SETC16 (lane CA init hoist): the caller-side
+;; materialization of a callee's owned address-modifier program, emitted
+;; only by the init-hoist commit under its proven contract.  Forwards to
+;; the compiler-owned pattern above; the assembler owns the encoding.
+(define_expand "rvtt_ttsetc16"
+  [(unspec_volatile:SI [
+     (match_operand:SI    0 "const_int_operand")
+     (match_operand:SI    1 "const_int_operand")
+     ] UNSPECV_TTSETC16)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+{
+  emit_insn (gen_rvtt_ttsetc16_int (operands[0], operands[1]));
+  DONE;
+})
+
 ;; MOP loop delivery (formed only by the rvtt_mop_form pass; capability
 ;; facts and provenance in rvtt-mop-tables.h).  MOP (opcode 0x01) fires
 ;; the programmed template; the operands are the raw encoding fields
