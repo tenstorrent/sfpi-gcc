@@ -211,6 +211,13 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 
 	    if (type == REPLAY_fixed_capture)
 	      shadow = span.end;
+	    // A replay owner is a slot-occupying word.  A sequence
+	    // spanning it would form a capture whose recording swallows
+	    // the owner word (a REPLAY issued while recording is
+	    // recorded, not executed) and the counted-row phase's inline
+	    // reference body along with it.  End sequence continuity
+	    // here: the owner and its recorded shadow separate runs.
+	    may_continue = false;
 	    continue;
 	  }
 
@@ -3576,7 +3583,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
   for (unsigned c = 0; c != plan.clones.size (); ++c)
     for (unsigned m = 0; m != length; ++m)
       {
-	rtx_insn *insn = blk.pos[plan.members[c][m]].insn;
+	crf_position const &mp = blk.pos[plan.members[c][m]];
+	rtx_insn *insn = mp.insn;
 	xtt_effect_set e = rvtt_insn_effects (insn);
 	xtt_multiresult_group group;
 	if (rvtt_multiresult_group (insn, e, &group))
@@ -3585,6 +3593,22 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
 		       " counted-row-residual-not-uniform: member %u is a"
 		       " multi-result instruction\n",
+		       plan.clones.front ().begin,
+		       plan.clones.front ().end, m);
+	    return false;
+	  }
+	// Rename planning (seed_def_reg below and the clone definition
+	// roles) requires a single canonical definition register per
+	// member.  A member defining several registers (a two-register
+	// SFPSWAP, or audited hidden dataflow modeled as fixed def+use)
+	// has no single seed register: refuse by name rather than
+	// asserting.
+	if (popcount_hwi (mp.defs) > 1)
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+		       " counted-row-multidef-member: member %u defines"
+		       " multiple registers\n",
 		       plan.clones.front ().begin,
 		       plan.clones.front ().end, m);
 	    return false;
