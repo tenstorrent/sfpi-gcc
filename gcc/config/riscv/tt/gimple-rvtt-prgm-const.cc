@@ -1439,7 +1439,15 @@ transform (function *fn, prgm_state *st)
 		  && fusion_candidate_p (as_a <gcall *> (gsi_stmt (gsi)),
 					 loop, &c))
 		{
-		  c.entry = entry;
+		  /* Under the cross-loop hoist, lift the programming
+		     point to the outermost enclosing entry edge whose
+		     region is audited-inert for the whole LREG file
+		     (allocatable staging register plus the
+		     programmable-constant destinations); the walk
+		     returns ENTRY unchanged when nothing is proven.  */
+		  c.entry = riscv_tt_opt_crossloop_hoist > 0
+		    ? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
+		    : entry;
 		  candidates.safe_push (c);
 		}
 	    }
@@ -1853,7 +1861,10 @@ residency_transform (function *fn, prgm_state *st)
 	      c.load = load;
 	      c.value = value;
 	      c.loop = loop;
-	      c.entry = entry;
+	      /* Same outermost audited placement as the fusion class.  */
+	      c.entry = riscv_tt_opt_crossloop_hoist > 0
+		? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
+		: entry;
 	      c.uses = count_nondebug_uses (gimple_call_lhs (load));
 	      loop_cands.safe_push (c);
 	      taken.add (load);
