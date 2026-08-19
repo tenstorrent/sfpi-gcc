@@ -739,3 +739,27 @@
 ;; why the allocator ranks residency (free reads) above remat and remat
 ;; fires only under residual over-pressure -- where the alternative is
 ;; not slower code but NO code (the spill diagnosis error).
+;;
+;; Residency-peel extension (lane CF, CC-canonical loop bodies): when
+;; the loop body carries a lowered v_if region ending in the all-lanes
+;; SFPENCC, the programming point is created by peeling iteration one
+;; onto the entry edge (the lane-state proof: the programming executes
+;; after the peeled copy's own all-lanes SFPENCC; iterations 2..N begin
+;; in that same state).  The peel changes iteration one's delivery
+;; class -- its body words are RISC-pushed instead of replayed -- so the
+;; model charges, in the same centislot units:
+;;
+;;   save  = SLOT * candidate_words        per iteration after the first
+;;   cost  = PUSH * (candidate_words + n_SFPCONFIG)          ; programming
+;;         + (PUSH - SLOT) * body_words                      ; peel class
+;;                                                           ; change
+;;   fire  when (trips - 1) * save >= cost, with trips proven by bounded
+;;   forward evaluation of the loop's own scalar control (never profile
+;;   data); the refusal is peel-trip-count-unproven.
+;;
+;; body_words is a delivered-word proxy over the gimple body (one word
+;; per typed RVTT call or audited raw word, the immediate-encoding word
+;; count for materializations, zero for scalar statements -- scalar
+;; control is RISC-side and concurrent per the delivery accounting
+;; above).  Overestimating body_words only raises the required trip
+;; proof; it never admits an unpriced fire.
