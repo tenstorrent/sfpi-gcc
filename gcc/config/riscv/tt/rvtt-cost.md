@@ -306,37 +306,67 @@
 ;;   REPLAY_SLOT_X100 (100) - one slot reissued by the Tensix replay
 ;;                            expander with no RISC involvement.
 ;;
-;; The profitability model in rtl-rvtt-replay.cc prices one loop entry:
+;; The profitability model in rtl-rvtt-replay.cc prices one loop entry
+;; (2026-08-19 re-record re-derivation; the audited-interlock reissue
+;; terms are Lane BP's 14-shape recalibration):
 ;;
-;;   deliver = (1 + length) * RISC_PUSH_X100     ; capture word + payload
-;;   execute = length * REPLAY_SLOT_X100
-;;   after   = max (RISC_PUSH_X100, execute)     ; one launch push; the
+;;   deliver_body   = words * RISC_PUSH_X100     ; per-trip delivered words
+;;   deliver_record = (1 + words) * RISC_PUSH_X100 ; capture word + payload
+;;   exec    = exec_interlocked_slots * REPLAY_SLOT_X100
+;;                                               ; dependence-tracked with
+;;                                               ; the audited
+;;                                               ; xtt_result_latency and
+;;                                               ; xtt_next_slot_stall
+;;                                               ; facts; an unaudited
+;;                                               ; consumed producer makes
+;;                                               ; the payload unpriceable
+;;                                               ; (named refusal
+;;                                               ; replay-reissue-latency-
+;;                                               ; unproved)
+;;   after   = max (RISC_PUSH_X100, exec + TURNAROUND_X100)
+;;                                               ; one launch push; the
 ;;                                               ; replay unit reissues
 ;;                                               ; the payload
-;;   surplus = launch_run * (execute - RISC_PUSH_X100)
-;;                                               ; execution surplus of the
-;;                                               ; body's longest run of
-;;                                               ; final-stream-contiguous
-;;                                               ; sibling launches of the
-;;                                               ; same buffer
-;;   hidden  = surplus >= deliver                ; the record pass's
-;;                                               ; delivery streams into
-;;                                               ; that execution shadow
-;;   before  = hidden ? after : deliver          ; in-loop record WITH
+;;
+;;   counted-loop capture (the body records nothing per trip):
+;;     before = max (deliver_body, exec)
+;;     record = deliver_record + RECORD_OVERHEAD_X100
+;;
+;;   re-record body, EXECUTION-bound (exec >= deliver_record):
+;;     before = exec + RECORD_OVERHEAD_X100      ; the in-loop record pass
+;;                                               ; executes the payload at
+;;                                               ; its interlocked pace and
+;;                                               ; exposes the record
+;;                                               ; engine's per-pass
+;;                                               ; overhead on the critical
+;;                                               ; path
+;;     record = RECORD_OVERHEAD_X100             ; the hoisted preheader
+;;                                               ; pass's delivery hides
+;;                                               ; behind the loop's own
+;;                                               ; execution backlog
+;;                                               ; (delivery is CONCURRENT
+;;                                               ; with playback execution;
+;;                                               ; witnesses below)
+;;
+;;   re-record body, DELIVERY-bound (exec < deliver_record):
+;;     before = deliver_record                   ; in-loop record WITH
 ;;                                               ; execution: the payload
 ;;                                               ; does the loop's real
 ;;                                               ; work while recording,
-;;                                               ; overlapped under the
-;;                                               ; dominant delivery cost
+;;                                               ; execution AND the record
+;;                                               ; overhead absorbed in the
+;;                                               ; per-word delivery slack
 ;;                                               ; (RISC_PUSH >= REPLAY_SLOT)
-;;                                               ; -- unless hidden, when
-;;                                               ; removing it relieves
-;;                                               ; nothing per trip
-;;   benefit = trips * (before - after) - deliver ; minus the added
-;;                                               ; record-only preheader
-;;                                               ; pass: 1 + length words
-;;                                               ; delivered, nothing
-;;                                               ; executed
+;;                                               ; -- unless hidden (below)
+;;     record = deliver_record + RECORD_OVERHEAD_X100
+;;     surplus = launch_run * (exec - RISC_PUSH_X100)
+;;     hidden  = surplus >= deliver_record       ; the record pass's
+;;                                               ; delivery streams into
+;;                                               ; the contiguous sibling
+;;                                               ; launch run's execution
+;;                                               ; shadow: before = after
+;;
+;;   benefit = trips * (before - after) - record
 ;;   hoist iff benefit >= MIN_BENEFIT            ; trips provably constant
 ;;
 ;; The context term (launch_run) is computed from the candidate's own
@@ -345,16 +375,22 @@
 ;; typed per-row Dst-counter increment separator is discounted when the
 ;; Dst auto-increment pass -- which runs after replay formation and
 ;; absorbs exactly those separators around replay launches -- is enabled.
-;; A contiguous run of R launches occupies the issue plane for R * execute
+;; A contiguous run of R launches occupies the issue plane for R * exec
 ;; centislots while delivering only R * RISC_PUSH_X100 words; once its
 ;; surplus covers the record pass's delivery, that delivery is hidden
-;; under execution and the hoist's true benefit degenerates to -deliver
-;; (the preheader record-only pass is pure cost).  A single launch can
-;; never hide a record pass (length*100 - 123 < (1+length)*123 for every
-;; length), so counted-loop hoists -- one clone per trip, launches always
-;; separated across trips by the loop-control delivery -- and every other
-;; single-instance shape are arithmetically unaffected, with byte-identical
-;; decisions and dump numbers.  The saturation term is part of the modeled
+;; under execution and the hoist's true benefit degenerates to -record
+;; (the preheader record-only pass is pure cost).  The term applies to
+;; DELIVERY-bound re-record bodies only: a single launch of a
+;; delivery-bound payload can never hide its record pass (exec <
+;; deliver_record in that branch), so counted-loop hoists -- one clone
+;; per trip, launches always separated across trips by the loop-control
+;; delivery -- and every other single-instance shape are arithmetically
+;; unaffected.  An EXECUTION-bound re-record pass is never hidden this
+;; way: its cost is its own interlocked execution plus the exposed
+;; record-engine overhead, which no sibling surplus can absorb (the
+;; Reduce-class A/B below measured the in-loop record pass exposed
+;; inside a fully execution-backlogged, 8-contiguous-sibling body).
+;; The saturation term is part of the modeled
 ;; benefit, not of the threshold: -mtt-tensix-replay-hoist-min-benefit=
 ;; cannot force a hoist whose record delivery is hidden.
 ;;
@@ -449,6 +485,89 @@
 ;; end (before = after), the conservative bound of the measured band,
 ;; using only the two pre-existing rates -- no newly fitted constant.
 ;;
+;; RE-RECORD RE-DERIVATION (2026-08-19; the tables above are the
+;; delivery-only-era history and their run/benefit columns describe
+;; that era's arithmetic).  The 2026-08-18 interlock recalibration's
+;; first re-record spelling -- before = max(deliver_record +
+;; RECORD_OVERHEAD, exec), record = deliver_record + RECORD_OVERHEAD,
+;; saturation term applied to every re-record body -- inverted BOTH
+;; re-record silicon anchors at the installed pin:
+;;
+;;   - Reduce-class (trips 4, words 8, exec_ilk 12 with the audited
+;;     SFPSWAP acceptance stalls, deliver_record 1107, two hoist
+;;     sites): priced -859 (its measurement flags, launch run 1) and
+;;     -1407 (full ON set, run 8, saturation-clamped) -- refusing the
+;;     measured 855.5 -> 832.75 = 21.5+ cyc/body silicon WIN
+;;     (gatefix-evidence-20260816 step-1 A/B, three fresh processes
+;;     per selector).
+;;   - Log-class (trips 4, words 17, exec_ilk 17, deliver_record
+;;     2214): priced +462 and FIRED at its measurement flags (run 1)
+;;     -- firing a measured +1.81% silicon LOSS the delivery-era
+;;     model refused at -158.
+;;
+;; The corrected split prices which resource the in-loop
+;; record-with-execution pass is bound by:
+;;
+;;   EXECUTION-bound (exec >= deliver_record): word delivery is
+;;   concurrent with execution (max, not sum -- the sigmoidappx
+;;   pure-delivery control, 64 delivered words removed = +0.006 units
+;;   noise, and the exp pre-Z -> Z increment, -33.0 measured vs -32
+;;   modeled execution-side; see the MOP section below), so the
+;;   record pass costs its interlocked execution plus the exposed
+;;   record-engine overhead: before = exec + RECORD_OVERHEAD.  The
+;;   hoisted preheader record-only pass's delivery hides behind the
+;;   execution backlog such a loop necessarily accumulates (its
+;;   launches deliver one word each and execute exec >= deliver_record
+;;   apiece); its exposed cost is charged at the full engine overhead:
+;;   record = RECORD_OVERHEAD.  Anchor arithmetic, Reduce-class:
+;;   before = 1200 + 300 = 1500, after = 1200 + 70 = 1270, benefit =
+;;   4*(1500-1270) - 300 = +620 >= 60, FIRE -- against silicon net
+;;   +1075 cs/site (855.5 -> 832.75 over two 4-trip sites) and
+;;   measured per-trip record exposure 2275/8 ~= 284 cs vs the modeled
+;;   RECORD_OVERHEAD - TURNAROUND = 230 cs: the model under-claims
+;;   both, the safe direction.  Two independent witnesses back the
+;;   hidden preheader delivery: the Reduce-class net leaves ~61 cs per
+;;   preheader pass unaccounted (2*record_true ~= 2275 - 8*284), and
+;;   the counted-loop clamp row measured +0.58 cyc/tile amortized
+;;   record delivery (laneBP-evidence-20260818 §4) against a 12-word
+;;   deliver_record of 1476 cs -- both ~ 4-25x smaller than the
+;;   RECORD_OVERHEAD = 300 charged.
+;;
+;;   DELIVERY-bound (exec < deliver_record): the delivery-only-era
+;;   calibration is restored exactly (before = deliver_record; the
+;;   record pass's execution and engine overhead fit inside the
+;;   per-word delivery slack), with the interlock era's TURNAROUND in
+;;   `after' and RECORD_OVERHEAD in `record' pushing every refusal
+;;   further negative -- byte-identical refusals.  Anchors: Log
+;;   (4,17): 4*(2214 - 1770) - 2514 = -738, refuse (silicon +1.81%
+;;   LOSS; delivery-era -158); Log1p (4,31): 4*(3936 - 3170) - 4236 =
+;;   -1172, refuse (silicon +2.30% LOSS); unary-max/min (4,4, run 8,
+;;   full ON): saturation-clamped, benefit = -record = -915, refuse
+;;   (silicon +2.06%/+3.93 cyc/tile LOSS) -- today that payload's
+;;   cst-LREG SFPSWAP is effect-unaudited and the shape refuses
+;;   upstream as replay-reissue-latency-unproved; the clamp arithmetic
+;;   documents the class for the day the audit lands, at which point
+;;   the unary-max/min silicon point must re-validate this branch.
+;;
+;;   The counted-loop branch is untouched by the re-derivation: the
+;;   14-shape validation matrix (laneBP-evidence-20260818) and the
+;;   five-loser refusals calibrate it as of the interlock
+;;   recalibration.
+;;
+;;   No-silicon bands of the re-derivation, pre-registered: (a)
+;;   execution-bound re-record fires at any provable trips >= 2
+;;   (benefit = trips*230 - 300); the only silicon point is trips 4
+;;   (Reduce-class, two sites) -- a trips-2 or trips-3 fire has no
+;;   silicon yet.  (b) The full-ON Reduce-class form (Dst
+;;   auto-increment absorbs the launch separators, run 8) fires by the
+;;   same execution-bound arithmetic; its silicon record is the run-1
+;;   measurement-flag form -- the run-8 fire is pre-registered for
+;;   nightly full2x2 adjudication (expected <= the 855.5 unhoisted
+;;   bound, target ~832.75).  (c) The execution-bound boundary exec ==
+;;   deliver_record sits in the exec-bound branch; shapes within one
+;;   stall slot of the boundary flip branches on a single audit fact
+;;   change and have no silicon.
+;;
 ;; MIN_BENEFIT = 60 centislots (0.6 slot per loop entry): every measured
 ;; losing shape models negative (max -158), so any non-negative
 ;; threshold refuses the entire measured losing class with the whole
@@ -524,10 +643,12 @@
   ;;     (itself a re-fit measured actual).
   ;;   RECORD_OVERHEAD_X100 (300) - per-record-pass engine overhead
   ;;     beyond word delivery.  Provenance: the Reduce-SDPA hoist A/B
-  ;;     (silicon 21.5 cyc/body over 4 trips = 540 cs/trip removed vs
-  ;;     the delivery-only model's 237); keeps that silicon winner
-  ;;     firing (+461) while making the five refusals MORE negative
-  ;;     (the safe direction).
+  ;;     (silicon 21.5+ cyc/body over two 4-trip sites; measured
+  ;;     per-trip record exposure ~284 cs vs the modeled
+  ;;     RECORD_OVERHEAD - TURNAROUND = 230); keeps that silicon
+  ;;     winner firing (+620 per site under the 2026-08-19 re-record
+  ;;     derivation above) while making the five counted-loop
+  ;;     refusals MORE negative (the safe direction).
   (XTT_REPLAY_COST_TURNAROUND_X100      70)
   (XTT_REPLAY_COST_RECORD_OVERHEAD_X100 300)
 ])
