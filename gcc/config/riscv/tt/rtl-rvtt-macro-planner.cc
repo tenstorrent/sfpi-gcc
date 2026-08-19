@@ -1418,28 +1418,101 @@ form_region (function *fn, macro_region &region,
 	  ++drains_elided;
       }
 
+  /* Loop-backedge drain elision (lane CA): a loop-body region's FINAL
+     run ends at the loop latch, so its drain executes once per trip
+     where the architecture requires it once per loop exit.  When the
+     backedge follower stream proves (rvtt_macro_drain_backedge_elidable,
+     rtl-rvtt-schedule.cc) AND a sound exit placement exists (the sole
+     non-self successor, entered only from this loop), the in-body drain
+     is elided and the FULL derived drain is emitted at the exit block's
+     head instead -- the exit contract is preserved, only its placement
+     moves.  Any unprovable piece keeps today's in-body drain
+     byte-identically, under a stable name.  */
+  bool backedge_elide = false;
+  edge drain_exit_edge = nullptr;
+  if (riscv_tt_opt_drain_schedule && desc.drain_slots > 0
+      && region.loop_body && region.bb)
+    {
+      edge exit_e = nullptr;
+      bool shape_ok = EDGE_COUNT (region.bb->succs) == 2;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, region.bb->succs)
+	if (e->dest != region.bb)
+	  {
+	    if (exit_e)
+	      shape_ok = false;
+	    exit_e = e;
+	  }
+      if (!shape_ok || !exit_e
+	  || (exit_e->flags & (EDGE_ABNORMAL | EDGE_EH | EDGE_COMPLEX)))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner drain-refusal:"
+		     " drain-exit-shared\n");
+	}
+      else
+	{
+	  unsigned first_run_end = run_begins.length () > 1
+	    ? run_begins[1] : region.rows.length ();
+	  backedge_elide = rvtt_macro_drain_backedge_elidable
+	    (region, schedule, desc, first_run_end, dump);
+	  if (backedge_elide)
+	    drain_exit_edge = exit_e;
+	}
+    }
+
   basic_block config_placement = nullptr;
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
+      bool last_run = b + 1 == run_begins.length ();
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
 			config_preheader, enable_src,
 			hoist_preheader, hoist_enable_src,
-			!drain_elide[b],
+			last_run ? !backedge_elide : !drain_elide[b],
 			resident_elide, resid,
 			b == 0 ? &config_placement : nullptr);
+    }
+  if (backedge_elide)
+    {
+      /* Exit compensation: the full derived drain on the loop's exit
+	 path -- events from the final trip never reach the invisible
+	 follower stream.  Placement: the exit destination's head when
+	 this loop is its only predecessor, else a commit-time edge
+	 split (every proof has passed; the split block executes
+	 exactly when the loop exits) -- the same discipline as the
+	 WP11 hoist's guarded-enclosing-loop split.  */
+      basic_block dest = drain_exit_edge->dest;
+      if (dest == EXIT_BLOCK_PTR_FOR_FN (fn) || !single_pred_p (dest)
+	  || !bb_note (dest))
+	dest = split_edge (drain_exit_edge);
+      start_sequence ();
+      for (int d = 0; d != desc.drain_slots; ++d)
+	emit_insn (gen_rvtt_sfpnop ());
+      rtx_insn *nops = get_insns ();
+      end_sequence ();
+      if (resid)
+	for (rtx_insn *i = nops; i; i = NEXT_INSN (i))
+	  resid->emitted.add (i);
+      emit_insn_after (nops, bb_note (dest));
+      if (dump)
+	fprintf (dump, "Macro-planner drain-backedge: loop-carried drain"
+		 " elided; exit compensation %d SFPNOPs (bb %d)\n",
+		 desc.drain_slots, dest->index);
     }
   if (!resident_elide)
     rvtt_macro_residency_record (desc, config_placement, resid);
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s%s\n",
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s%s%s\n",
 	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
 	     materialized_enable ? " lane-proof=materialized-enable" : "",
 	     hoist_preheader ? " prefix-epoch=hoisted" : "",
 	     drains_elided ? " drain-elided" : "",
+	     backedge_elide ? " drain-backedge" : "",
 	     resident_elide ? " resident=elided" : "");
   return true;
 }
