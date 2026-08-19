@@ -173,13 +173,15 @@ tu_fold_claim_value (unsigned dest, bool known, uint32_t value)
 }
 
 /* Claims folded inside the shared classifiers (raw words, template
-   slots) carry no derivable staged value: any NEWLY claimed
-   destination they produce loses value uniqueness.  */
+   slots) carry no derivable staged value: every destination such a
+   call claims -- including a REPEAT claim of an already-claimed
+   destination -- loses value uniqueness.  The classifiers are given a
+   zeroed local accumulator so repeat claims stay visible.  */
 
 static void
-tu_mark_new_claims_unknown (unsigned before, unsigned after)
+tu_mark_claims_unknown (unsigned claims)
 {
-  tu_facts.value_known &= ~(after & ~before);
+  tu_facts.value_known &= ~claims;
 }
 
 /* A gimple_asm whose template is empty emits nothing; the single
@@ -332,10 +334,11 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		for (unsigned i = 0; i != gimple_asm_ninputs (a); ++i)
 		  poison_bare_addr (TREE_VALUE (gimple_asm_input_op (a, i)));
 	      const char *w = nullptr;
-	      unsigned before = *claimed;
-	      if (!scan_raw_asm (a, claimed, &w, st))
+	      unsigned local_claims = 0;
+	      if (!scan_raw_asm (a, &local_claims, &w, st))
 		refuse (w, stmt);
-	      tu_mark_new_claims_unknown (before, *claimed);
+	      *claimed |= local_claims;
+	      tu_mark_claims_unknown (local_claims);
 	      continue;
 	    }
 
@@ -351,10 +354,11 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		 writes, instruction-FIFO pushes, and the FIFO-alias
 		 proof for unresolved volatile addresses.  */
 	      const char *w = nullptr;
-	      unsigned before = *claimed;
-	      if (!rvtt_mop_derive_store (stmt, claimed, &w, st, ctx))
+	      unsigned local_claims = 0;
+	      if (!rvtt_mop_derive_store (stmt, &local_claims, &w, st, ctx))
 		refuse (w, stmt);
-	      tu_mark_new_claims_unknown (before, *claimed);
+	      *claimed |= local_claims;
+	      tu_mark_claims_unknown (local_claims);
 	      continue;
 	    }
 
