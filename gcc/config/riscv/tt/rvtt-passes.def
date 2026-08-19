@@ -55,6 +55,15 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lut_select);
    the callee's callers -- callers expand after their callees, the same
    ordering fact the MOP outward-ownership proof relies on.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosscall);
+/* The cross-loop hoist lifts loop-invariant SFPU immediate
+   materializations already sitting in a loop body (an inner loop's
+   preheader placement) across ENCLOSING loops whose bodies deliver
+   only audited-inert words -- the audited generalization of the
+   opaque-region/sfpu-barrier refusals that stop the early invariant
+   pass at the first delivered word.  It runs after the cross-call
+   hoist has settled contract placements and before pass_rvtt_expand
+   lowers the canonical builtin forms.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crossloop);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
