@@ -968,64 +968,47 @@ provable_constant_trips (class loop *loop, basic_block preheader,
    payload, WITH execution) into a single record-only capture pass in the
    preheader plus one playback launch per trip.  The in-loop recording is
    not pure overhead: while being recorded the payload performs the loop's
-   real work, so removing it saves only the RISC-delivery premium over
-   replay reissue, while the added preheader record-only pass is bought at
-   full delivery price and executes nothing.  Model, in centislots
-   (hundredths of one issue slot), with every constant taken from the
-   target cost table (rvtt-cost.md):
+   real work, so removing it saves only the delivery/overhead premium
+   over replay reissue, while the added preheader record-only pass
+   executes nothing.  The pricing arithmetic lives in the next comment
+   block and the full silicon-anchor derivation with the constants in
+   rvtt-cost.md.
 
-     deliver = (1 + length) * XTT_REPLAY_COST_RISC_PUSH_X100
-     execute = length * XTT_REPLAY_COST_REPLAY_SLOT_X100
-     before  = deliver                        ; per-trip in-loop recording,
-                                              ; execution overlapped under
-                                              ; the dominant delivery cost,
-                                              ; UNLESS hidden (below)
-     after   = max (RISC_PUSH_X100, execute)  ; per-trip launch + replay
-                                              ; reissue of the payload
-     benefit = trips * (before - after)       ; per-trip delivery saved
-               - deliver                      ; added record-only preheader
-                                              ; pass (delivers, no work)
+   Execution-saturation context term (the LAUNCH_RUN parameter;
+   delivery-bound re-record bodies only).  The delivery-bound
+   `before = deliver_record' pricing assumes removing the record pass's
+   delivered words shortens the trip.  That is false when the body's
+   sibling launches of the SAME capture buffer are contiguous in the
+   final instruction stream: a contiguous run of R launches occupies the
+   issue plane for R * exec centislots while delivering only
+   R * RISC_PUSH_X100, and the record pass's delivery streams into that
+   execution shadow instead of extending the trip.  When the run's
+   execution surplus covers the record pass's delivery,
 
-   Execution-saturation context term (the LAUNCH_RUN parameter).  The
-   `before = deliver' pricing assumes the loop body is delivery-bound, so
-   removing the record pass's delivered words shortens the trip.  That is
-   false when the body's sibling launches of the SAME capture buffer are
-   contiguous in the final instruction stream: a contiguous run of R
-   launches occupies the issue plane for R * execute centislots while
-   delivering only R * RISC_PUSH_X100, and the record pass's delivery
-   streams into that execution shadow instead of extending the trip.
-   When the run's execution surplus covers the record pass's delivery,
+     launch_run * (exec - RISC_PUSH_X100) >= deliver_record
 
-     launch_run * (execute - RISC_PUSH_X100) >= deliver
-
-   the per-trip relief is ~zero: before = after, so benefit degenerates to
-   -deliver (the preheader pass is pure cost) and the hoist refuses.  A
-   single launch can never satisfy this (length * SLOT - PUSH <
-   (1 + length) * PUSH for every length), so counted-loop hoists -- whose
-   per-trip launch is always separated from the next trip's by the loop
-   control words -- and all single-instance shapes are unaffected and pass
-   LAUNCH_RUN = 1.  Silicon: the unary-max/min (trips 4, length 4, 8
-   contiguous sibling launches per trip) shape measured +2.06% when
-   hoisted under the delivery-only model (which priced it +245); the
-   Reduce-SDPA winner (trips 4, length 8, 8 sibling launches per trip,
-   each separated by a surviving typed Dst increment, +121) and the
-   SDPA-exp counted loop (8, 24, +2325) are delivery-bound and keep their
-   unchanged benefits.  Full derivation in rvtt-cost.md.
+   the per-trip relief is ~zero: before = after, so benefit degenerates
+   to -record (the preheader pass is pure cost) and the hoist refuses.
+   A single launch of a delivery-bound payload can never satisfy this
+   (exec < deliver_record in this branch), so counted-loop hoists --
+   whose per-trip launch is always separated from the next trip's by the
+   loop control words -- and all single-instance shapes are unaffected
+   and pass LAUNCH_RUN = 1.  An EXECUTION-bound record pass is never
+   hidden this way: its cost is its own interlocked execution plus the
+   exposed record-engine overhead, which no sibling surplus can absorb
+   -- the Reduce-class A/B (trips 4, words 8, exec_ilk 12, 8 siblings)
+   measured the in-loop record pass ~2.8 cyc/trip MORE expensive than
+   its launch inside a fully execution-backlogged body, and hoisting it
+   won 21.5+ cyc/body (855.5 -> 832.75).  Silicon anchor for the
+   delivery-bound term: the unary-max/min shape (trips 4, words 4, 8
+   contiguous sibling launches per trip) measured +2.06% when hoisted
+   under the delivery-only model (which priced it +245).
 
    Hoist only when benefit >= the minimum-benefit threshold
    (XTT_REPLAY_HOIST_MIN_BENEFIT, overridable in the same centislot units
    through -mtt-tensix-replay-hoist-min-benefit=; the saturation term is
    part of the modeled benefit, not of the threshold, so an override
-   cannot force a hoist whose record delivery is hidden).  The calibration
-   derivation lives with the constants in rvtt-cost.md: the Blackhole
-   same-source silicon A/Bs place every measured losing shape at negative
-   modeled benefit (max -158: 4-trip captures of 17..31 slots, +1.8%..+2.3%
-   regressions; -615: the execution-saturated 4-trip 4-slot 8-sibling
-   shape, +2.06%) and every measured winning shape at positive benefit
-   (minimum +121: the 4-trip 8-slot preheader-capture pair worth 21.5
-   cycles/body; +2325: the 8-trip 24-slot counted payload, -9.83%), so the
-   default threshold 60 refuses the entire measured losing class while
-   accepting the measured winners with ~2x headroom under the nearest one.
+   cannot force a hoist whose record delivery is hidden).
 
    TRIPS must be provable (see provable_constant_trips above).  An unknown
    or merely estimated trip count refuses the hoist, which keeps the
@@ -1035,32 +1018,52 @@ provable_constant_trips (class loop *loop, basic_block preheader,
 
 /* Interlock-aware replay-hoist pricing (2026-08-18 recalibration; Lane
    BP's five-shape diagnosis + 14-shape silicon validation matrix,
-   laneBP-evidence-20260818/DIAGNOSIS-AND-FIX-SPEC-laneBP.md).
+   laneBP-evidence-20260818/DIAGNOSIS-AND-FIX-SPEC-laneBP.md; re-record
+   branch re-derived 2026-08-19 against the Reduce-class and Log-class
+   silicon anchors after the first spelling inverted both -- full
+   derivation and the five-anchor table in rvtt-cost.md).
 
-   The superseded model priced the replay reissue stall-free
-   (after = max(PUSH, len*SLOT)) and the pushed body as pure delivery
-   ((1+len)*PUSH): on serially-chained short bodies that converts a
-   delivery-bound loop into an equally-or-more expensive execution-bound
-   one and adds a per-trip record re-delivery.  Silicon charges the
-   reissue len + the audited RAW interlock stalls + a per-launch
-   turnaround, and each record pass an engine overhead beyond word
-   delivery.  Per trip, in centislots (constants in rvtt-cost.md):
+   The delivery-only model priced the replay reissue stall-free
+   (after = max(PUSH, len*SLOT)): on serially-chained short bodies that
+   converts a delivery-bound loop into an equally-or-more expensive
+   execution-bound one.  Silicon charges the reissue len + the audited
+   RAW interlock stalls + a per-launch turnaround.  Per trip, in
+   centislots (constants in rvtt-cost.md):
 
      exec   = exec_interlocked_slots(payload) * SLOT
-     before = max(deliver_body, exec)                    ; pushed loop
-              max(deliver_record + RECORD_OVERHEAD, exec); re-record loop
      after  = max(PUSH, exec + TURNAROUND)               ; launch+reissue
-     record = deliver_record + RECORD_OVERHEAD           ; hoisted pass
+
+     counted-loop capture (body records nothing per trip):
+       before = max(deliver_body, exec)
+       record = deliver_record + RECORD_OVERHEAD         ; hoisted pass
+
+     re-record body, execution-bound (exec >= deliver_record):
+       before = exec + RECORD_OVERHEAD   ; the record pass executes the
+                                         ; payload at its interlocked
+                                         ; pace and exposes the record
+                                         ; engine's per-pass overhead
+       record = RECORD_OVERHEAD          ; the hoisted pass's delivery
+                                         ; hides behind the loop's own
+                                         ; execution backlog (delivery
+                                         ; is concurrent with playback
+                                         ; execution, rvtt-cost.md)
+
+     re-record body, delivery-bound (exec < deliver_record):
+       before = deliver_record           ; pin-11 calibration restored:
+                                         ; execution and the record
+                                         ; overhead absorb into the
+                                         ; per-word delivery slack
+       record = deliver_record + RECORD_OVERHEAD
+       (execution-saturation `hidden' term may set before = after)
+
      benefit = trips * (before - after) - record         ; >= MIN_BENEFIT
 
    A dependence edge whose producer carries no audited result-latency
    fact makes the payload unpriceable: named refusal
    replay-reissue-latency-unproved (the -mtt-tensix-replay-hoist-
-   min-benefit= override cannot force an unpriceable payload).  The old
-   execution-saturation (`hidden') term was a special case of
-   exec-bound `after' pricing and is subsumed.  No operation identity,
-   opcode calendar, coefficient value, or instruction-word fingerprint
-   participates.  */
+   min-benefit= override cannot force an unpriceable payload).  No
+   operation identity, opcode calendar, coefficient value, or
+   instruction-word fingerprint participates.  */
 
 /* Interlocked issue-slot count of the payload span of BLOCK:
    dependence-tracked with the audited xtt_result_latency facts
@@ -1187,28 +1190,54 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
   HOST_WIDE_INT deliver_record
     = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
-  HOST_WIDE_INT record
-    = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-  HOST_WIDE_INT before = body_rerecords
-    ? MAX (record, exec) : MAX (deliver_body, exec);
   HOST_WIDE_INT after
     = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
 	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
-  // Execution-saturation cross-check (silicon-validated on the
-  // unary-maxmin shape; retained from the superseded model): when the
-  // body's contiguous run of sibling launches of this same buffer has
-  // enough execution surplus to hide the record pass's delivery,
-  // hoisting relieves nothing per trip.
-  HOST_WIDE_INT surplus = (HOST_WIDE_INT) launch_run
-    * (exec - XTT_REPLAY_COST_RISC_PUSH_X100);
-  if (body_rerecords && surplus >= deliver_record)
+  // The re-record shapes split on which resource paces the in-loop
+  // record-with-execution pass (rvtt-cost.md, re-record derivation):
+  // execution-bound (exec >= deliver_record) exposes the record
+  // engine's per-pass overhead on the critical path and hides the
+  // hoisted preheader pass's delivery behind the loop's own execution
+  // backlog (Reduce-class silicon A/B); delivery-bound keeps the
+  // pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
+  // engine overhead absorbed in the per-word delivery slack.
+  bool exec_bound_rerecord = body_rerecords && exec >= deliver_record;
+  HOST_WIDE_INT record;
+  HOST_WIDE_INT before;
+  if (!body_rerecords)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "Record delivery hidden: contiguous launch run %u exec"
-		 " surplus %ld >= record delivery %ld\n",
-		 launch_run, (long) surplus, (long) deliver_record);
-      before = after;
+      before = MAX (deliver_body, exec);
+      record = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+    }
+  else if (exec_bound_rerecord)
+    {
+      before = exec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      record = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+    }
+  else
+    {
+      before = deliver_record;
+      record = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      // Execution-saturation term (delivery-bound re-record bodies
+      // only; silicon-witnessed on the unary-maxmin shape): when the
+      // body's contiguous run of sibling launches of this same buffer
+      // has enough execution surplus to hide the record pass's
+      // delivery, hoisting relieves nothing per trip.  An
+      // execution-bound record pass is never hidden this way: its cost
+      // is its own execution plus the exposed record-engine overhead,
+      // which no sibling surplus can absorb (Reduce-class silicon A/B,
+      // rvtt-cost.md).
+      HOST_WIDE_INT surplus = (HOST_WIDE_INT) launch_run
+	* (exec - XTT_REPLAY_COST_RISC_PUSH_X100);
+      if (surplus >= deliver_record)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Record delivery hidden: contiguous launch run %u exec"
+		     " surplus %ld >= record delivery %ld\n",
+		     launch_run, (long) surplus, (long) deliver_record);
+	  before = after;
+	}
     }
   HOST_WIDE_INT benefit = trips * (before - after) - record;
   HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
@@ -1223,7 +1252,9 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	     " deliver_record %ld, record %ld, before %ld, after %ld,"
 	     " benefit %ld (min %ld)\n",
 	     loop->num, (long) trips, (long) words, (long) eslots,
-	     body_rerecords ? " [re-record body]" : "",
+	     !body_rerecords ? ""
+	     : exec_bound_rerecord ? " [re-record body, execution-bound]"
+	     : " [re-record body, delivery-bound]",
 	     (long) deliver_body, (long) deliver_record, (long) record,
 	     (long) before, (long) after, (long) benefit,
 	     (long) min_benefit);
