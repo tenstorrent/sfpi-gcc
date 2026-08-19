@@ -119,6 +119,33 @@ extern basic_block rvtt_commit_hoist_preheader (edge entry);
    position inside the loop.  */
 extern bool rvtt_loop_has_sfpu_barrier_p (class loop *loop);
 
+/* CC-canonical single-block loop body (the shape pass_rvtt_cc lowers a
+   structured in-loop v_if region to: candidate materializations, then
+   CC writers, with an all-lanes SFPENCC as the LAST CC writer on the
+   single linear path).  In such a body the lane-enable mask at every
+   statement before FIRST_CC_WRITER equals, on every iteration after the
+   first, the architectural all-lanes state the trailing SFPENCC
+   re-establishes (capability word rvtt_macro::sfpencc_all_lanes_word;
+   craq-sim TENSIX_EXECUTE_SFPENCC).  The first iteration's mask is the
+   unknown ambient state -- consumers must reproduce iteration one
+   exactly (the const-residency first-iteration peel) rather than reason
+   about it.  PROVEN is false for multi-block bodies, bodies with no CC
+   writer (the plain-barrier classes handle those), a non-SFPENCC or
+   non-all-lanes final CC writer, any opaque statement, memory-touching
+   scalar code, or any volatile target effect outside the typed Dst
+   load/store/counter class.  A proven body contains only typed RVTT
+   calls, pure scalar/vector assignments, PHIs, labels, debug
+   statements, and the loop condition -- the statement classes a
+   first-iteration peel can duplicate exactly.  */
+struct rvtt_cc_canonical_body
+{
+  bool proven;
+  gimple *first_cc_writer;
+  const char *why;		/* refusal detail for dumps (never a
+				   decision input) */
+};
+extern rvtt_cc_canonical_body rvtt_loop_cc_canonical_body (class loop *loop);
+
 /* CALL is an SFPU immediate materialization (sfpxloadi of all-constant
    operands through a canonical instruction-buffer operand) whose value
    is consumed only inside LOOP.  ALLOW_SHORTENED additionally admits
