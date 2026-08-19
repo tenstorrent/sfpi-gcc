@@ -184,6 +184,61 @@
 ;;                                             keeps the refusing
 ;;                                             default.
 ;;
+;;   iadd immediate (sfpiadd_i_lv_int,
+;;     constant-imm alternatives,
+;;     mods 1/5/9)                       0     [ISA] SFPIADD.md: simple
+;;                                             sub-unit, no next-cycle
+;;                                             rule; the ARG_IMM arm
+;;                                             reads only LReg[VC];
+;;                                             [SIM] craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPIADD
+;;                                             :8894 (envelope
+;;                                             mod1 <= 10, (mod1&3)<=2;
+;;                                             lane-predicated write,
+;;                                             CC written unless
+;;                                             (mod1&12)==4); [CAL]
+;;                                             Simple chains step one
+;;                                             slot.  D3-follow-up
+;;                                             audit (2026-08-19, lane
+;;                                             CF): this row unblocks
+;;                                             the reissue pricing of
+;;                                             the fresh-body ceil and
+;;                                             rewritten-lcm loops,
+;;                                             whose first unaudited
+;;                                             payload producer was
+;;                                             this pattern (NOT
+;;                                             SFPSWAP, which the swap
+;;                                             row above already
+;;                                             covers).  The
+;;                                             register-immediate
+;;                                             (runtime-synth)
+;;                                             alternatives keep the
+;;                                             refusing default: their
+;;                                             instruction-buffer push
+;;                                             is outside this audit.
+;;
+;;   divp2 (sfpdivp2_lv_int,
+;;     constant-imm alternatives,
+;;     mods 0/1)                        0     [ISA] SFPDIVP2.md: simple
+;;                                             sub-unit, no next-cycle
+;;                                             rule; reads only
+;;                                             LReg[VC], writes VD
+;;                                             lane-predicated, no
+;;                                             lane-flag effect; [SIM]
+;;                                             craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPDIVP2
+;;                                             (envelope mod1 <= 1);
+;;                                             [CAL] Simple chains step
+;;                                             one slot.  D3-follow-up
+;;                                             audit (2026-08-19, lane
+;;                                             CF): unblocks the
+;;                                             reissue pricing of the
+;;                                             fresh-body rsqrt loop
+;;                                             (25 words after
+;;                                             residency), whose first
+;;                                             unaudited producer was
+;;                                             this pattern.
+;;
 ;; Deliberately UNAUDITED (refusing): SFPSHFT2 -- mod-dependent
 ;; next-cycle register constraints (SFPSHFT2.md) outside the
 ;; single-latency vocabulary; LUT/LUTFP32 -- mad-unit but no per-mod
@@ -805,3 +860,27 @@
 ;; why the allocator ranks residency (free reads) above remat and remat
 ;; fires only under residual over-pressure -- where the alternative is
 ;; not slower code but NO code (the spill diagnosis error).
+;;
+;; Residency-peel extension (lane CF, CC-canonical loop bodies): when
+;; the loop body carries a lowered v_if region ending in the all-lanes
+;; SFPENCC, the programming point is created by peeling iteration one
+;; onto the entry edge (the lane-state proof: the programming executes
+;; after the peeled copy's own all-lanes SFPENCC; iterations 2..N begin
+;; in that same state).  The peel changes iteration one's delivery
+;; class -- its body words are RISC-pushed instead of replayed -- so the
+;; model charges, in the same centislot units:
+;;
+;;   save  = SLOT * candidate_words        per iteration after the first
+;;   cost  = PUSH * (candidate_words + n_SFPCONFIG)          ; programming
+;;         + (PUSH - SLOT) * body_words                      ; peel class
+;;                                                           ; change
+;;   fire  when (trips - 1) * save >= cost, with trips proven by bounded
+;;   forward evaluation of the loop's own scalar control (never profile
+;;   data); the refusal is peel-trip-count-unproven.
+;;
+;; body_words is a delivered-word proxy over the gimple body (one word
+;; per typed RVTT call or audited raw word, the immediate-encoding word
+;; count for materializations, zero for scalar statements -- scalar
+;; control is RISC-side and concurrent per the delivery accounting
+;; above).  Overestimating body_words only raises the required trip
+;; proof; it never admits an unpriced fire.

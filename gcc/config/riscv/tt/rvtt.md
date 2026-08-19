@@ -1736,7 +1736,78 @@
     DONE;
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; SFPIADD.md: "Backend execution unit: Vector Unit (SFPU), simple
+   ;; sub-unit" -- the same Simple-unit write-port class as the
+   ;; register-argument pattern above.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   ;; Effects audited per mod1 (operand 7) from craq-sim
+   ;; TENSIX_EXECUTE_SFPIADD (tensix.cpp:8894: verifies mod1 <= 10 and
+   ;; (mod1 & 3) <= 2; TT_VERSION <= 1 = WH/BH) + the SFPIADD.md
+   ;; functional model (QSR has no simulator specification and keeps
+   ;; the refusing defaults).  The proven envelope for this
+   ;; immediate-argument pattern is the ARG_IMM bit SET with the
+   ;; 2SCOMP bit clear and mod1 <= 10 (mods 1, 5, 9), in the
+   ;; single-word constant-immediate alternatives only (a register
+   ;; immediate raises the runtime-synthesized instruction push, whose
+   ;; memory effects this audit does not cover): src = LReg[VC]
+   ;; (operand 5) + SignExtend(Imm12), written to VD (operand 0)
+   ;; lane-predicated -- VB is NOT read (SFPIADD.md functional model:
+   ;; the ARG_IMM arm reads only LReg[VC]); the lane-predicated write
+   ;; keeps the live-in (operand 6, tied to the destination in the LV
+   ;; alternatives) in disabled lanes, so both carry the read claim.
+   ;; LaneFlags are written unless MOD1_CC_NONE is set without
+   ;; MOD1_CC_GTE0 ((mod1 & 12) == 4) -- same effect class as the
+   ;; register-argument audit above.
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
+				   && (INTVAL (operands[7]) & 3) == 1")
+		      (const_int 98) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
+				   && (INTVAL (operands[7]) & 3) == 1")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(cond [(match_test "!((TARGET_XTT_TENSIX_BH
+			       || TARGET_XTT_TENSIX_WH)
+			      && CONST_INT_P (operands[4])
+			      && IN_RANGE (INTVAL (operands[7]), 0, 10)
+			      && (INTVAL (operands[7]) & 3) == 1)")
+		 (const_string "unknown")
+	       (match_test "(INTVAL (operands[7]) & 12) == 4")
+		 (const_string "read")]
+	      (const_string "readwrite")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
+				   && (INTVAL (operands[7]) & 3) == 1")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
+				   && (INTVAL (operands[7]) & 3) == 1")
+		      (const_string "none") (const_string "unknown")))
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot and SFPIADD.md has no next-cycle constraint: result
+   ;; latency 0 (audited mods only).
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
+				   && (INTVAL (operands[7]) & 3) == 1")
+		      (const_int 1) (const_int 0)))])
 
 (define_insn "rvtt_sfpiadd_i_nv"
   [(unspec_volatile:XTT32SI [
@@ -2789,7 +2860,63 @@
       operands, true, 8);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; SFPDIVP2.md: "Backend execution unit: Vector Unit (SFPU), simple
+   ;; sub-unit"; same write-port class as the other Simple-unit
+   ;; exponent operations.
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_write_port" "shared_simple_round")
+   ;; Effects audited per mod1 (operand 7) from craq-sim
+   ;; TENSIX_EXECUTE_SFPDIVP2 (verifies mod1 <= 1; TT_VERSION <= 1 =
+   ;; WH/BH) + the SFPDIVP2.md functional model (QSR has no simulator
+   ;; specification and keeps the refusing defaults).  Both mods read
+   ;; LReg[VC] (operand 5) only and write VD (operand 0)
+   ;; lane-predicated; neither touches the lane flags, configuration,
+   ;; or counters.  The lane-predicated write keeps the live-in
+   ;; (operand 6, tied to the destination in the LV alternatives), so
+   ;; both carry the read claim.  The single-word constant-immediate
+   ;; alternatives only (a register immediate raises the
+   ;; runtime-synthesized instruction push, whose memory effects this
+   ;; audit does not cover).
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_int 98) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_string "none") (const_string "unknown")))
+   ;; D3 latency audit: S1 Simple; Simple dependence chains step one
+   ;; slot and SFPDIVP2.md has no next-cycle constraint: result
+   ;; latency 0 (audited mods only).
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[4])
+				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
+		      (const_int 1) (const_int 0)))])
 
 (define_expand "rvtt_sfpstochrnd_i"
   [(set (match_operand:XTT32SI 0 "register_operand")

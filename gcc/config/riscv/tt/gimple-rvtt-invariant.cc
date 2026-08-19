@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
 
 #include <unordered_map>
@@ -155,6 +156,157 @@ rvtt_loop_has_sfpu_barrier_p (class loop *loop)
       }
   free (body);
   return barrier;
+}
+
+/* The typed all-lanes SFPENCC: both operands constant and the encoded
+   word EXACTLY the capability table's architectural all-lanes enable
+   (rvtt_macro::sfpencc_all_lanes_word, the single derivation every
+   lane-state proof shares -- the RTL twin is rvtt_insn_effects's
+   cc_write_all_lanes).  Operand roles follow the builtin's emission:
+   pass_rvtt_cc builds the canonical call as
+   sfpencc (SFPENCC_MOD1_EI_RI, SFPENCC_IMM12_BOTH), i.e. argument 0 is
+   the encoded mod1 and argument 1 the encoded imm12
+   (gimple-rvtt-cc.cc; the rvtt_sfpencc template prints "%1, %0" for
+   assembler "SFPENCC imm12, mod1").  Any other CC writer, non-constant
+   operand, or non-all-lanes word refuses.  */
+
+static bool
+all_lanes_encc_p (gimple *stmt)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+  if (!insnd || insnd->id != rvtt_insn_data::sfpencc)
+    return false;
+  gcall *call = as_a <gcall *> (stmt);
+  if (gimple_call_num_args (call) < 2)
+    return false;
+  tree mod1 = gimple_call_arg (call, 0);
+  tree imm12 = gimple_call_arg (call, 1);
+  if (TREE_CODE (mod1) != INTEGER_CST || TREE_CODE (imm12) != INTEGER_CST)
+    return false;
+  uint32_t word;
+  return rvtt_macro::sfpencc_encode (TREE_INT_CST_LOW (imm12),
+				     TREE_INT_CST_LOW (mod1), &word)
+    && word == rvtt_macro::sfpencc_all_lanes_word ();
+}
+
+/* CC-canonical single-block body proof (contract in
+   rvtt-macro-ownership.h).  The walk mirrors
+   rvtt_loop_has_sfpu_barrier_p statement class by statement class; the
+   ONLY admitted difference is CC writers, and those only under the
+   linear-path canonical-tail discipline:
+
+   - the body is one basic block (header == latch), so program order is
+     the unique execution order and "before"/"after" are line facts;
+   - the LAST CC-writing statement is the all-lanes SFPENCC (word-exact
+     against the capability table); every statement after it therefore
+     executes -- and the loop backedge is taken -- in the architectural
+     all-lanes state (craq-sim TENSIX_EXECUTE_SFPENCC writes cc/cc_en
+     from the immediate; nothing after the last CC writer changes
+     them);
+   - everything else that would be a barrier still is: opaque
+     statements, unrepresented calls, memory-touching scalar code, and
+     volatile target effects outside the typed Dst load/store/counter
+     class all refuse.
+
+   The proof deliberately says nothing about the FIRST iteration's
+   lane state (function-entry ambient): consumers must reproduce
+   iteration one exactly (peel) and place any lane-sensitive write
+   after the peeled copy's trailing SFPENCC.  */
+
+rvtt_cc_canonical_body
+rvtt_loop_cc_canonical_body (class loop *loop)
+{
+  rvtt_cc_canonical_body out = { false, nullptr, "multi-block-body" };
+  if (loop->num_nodes != 1 || !loop->latch || loop->header != loop->latch)
+    return out;
+
+  basic_block bb = loop->header;
+  gimple *first_cc = nullptr;
+  gimple *last_cc = nullptr;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_code (stmt) == GIMPLE_COND)
+	continue;
+
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (insnd)
+	{
+	  gcall *call = as_a <gcall *> (stmt);
+	  /* SFPPUSHC/SFPPOPC are CC-stack machinery (a nested v_if
+	     region the lowering kept): PUSHC copies the live flags to
+	     the stack, POPC restores them from it (craq-sim
+	     TENSIX_EXECUTE_SFPPUSHC/SFPPOPC; SFPPUSHC.md/SFPPOPC.md).
+	     Both only move state between the flags and the flag stack
+	     -- and the body's trailing all-lanes SFPENCC then
+	     OVERWRITES cc/cc_en from its immediates, so the mask
+	     entering the next iteration is the architectural all-lanes
+	     state regardless of any stack traffic before it.  The
+	     stack-depth side effect itself is reproduced exactly by
+	     the peel (the copied iteration performs the identical
+	     pushes and pops).  They therefore classify exactly like CC
+	     writers: admitted, position-limiting for candidates, and
+	     required to precede the canonical tail.  */
+	  if (insnd->sets_cc (call)
+	      || insnd->id == rvtt_insn_data::sfppushc
+	      || insnd->id == rvtt_insn_data::sfppopc)
+	    {
+	      if (!first_cc)
+		first_cc = stmt;
+	      last_cc = stmt;
+	    }
+	  else if (insnd->has_side_effects (call)
+		   && !allowed_dst_effect_p (insnd))
+	    {
+	      out.why = insnd->name;	/* volatile-non-dst-effect */
+	      return out;
+	    }
+	  continue;
+	}
+
+      /* Same classes as the barrier walk: raw `.ttinsn' words are
+	 admitted only through the audited pure-Dst/RWC decode; any
+	 other assembly, unrepresented call, or memory-touching scalar
+	 statement refuses.  What remains -- pure scalar/vector
+	 assignments -- is exactly what a first-iteration peel can
+	 duplicate.  */
+      if (gimple_code (stmt) == GIMPLE_ASM)
+	{
+	  if (!rvtt_raw_pure_dst_rwc_gimple (stmt))
+	    {
+	      out.why = "opaque-asm";
+	      return out;
+	    }
+	  continue;
+	}
+      if (is_gimple_call (stmt) || gimple_vuse (stmt) || gimple_vdef (stmt))
+	{
+	  out.why = "memory-or-unrepresented-call";
+	  return out;
+	}
+      if (!is_gimple_assign (stmt))
+	{
+	  out.why = "unduplicable-statement";
+	  return out;
+	}
+    }
+
+  if (!last_cc)
+    {
+      out.why = "no-cc-writer";
+      return out;
+    }
+  if (!all_lanes_encc_p (last_cc))
+    {
+      out.why = "tail-not-all-lanes-encc";
+      return out;
+    }
+  out.proven = true;
+  out.first_cc_writer = first_cc;
+  out.why = nullptr;
+  return out;
 }
 
 bool

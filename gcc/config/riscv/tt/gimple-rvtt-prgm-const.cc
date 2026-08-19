@@ -126,11 +126,63 @@ struct prgm_tu_facts
   const char *reason = nullptr;
   /* SFPCONFIG destinations 0..15 written anywhere in the TU.  */
   unsigned claimed = 0;
+  /* Per-destination unique programmed value, when every TU write to
+     that destination derives to the SAME 32-bit constant image
+     (typed staged SFPCONFIG writes only; any claim from a raw word, a
+     template, or an underivable staging chain clears the bit).  A
+     residency candidate whose value equals a destination's unique TU
+     value may REUSE that claimed register: every write anywhere
+     stores the same value, and the candidate's own all-lanes
+     programming makes the register hold it in every lane at every
+     later point regardless of write order or the other writes' lane
+     masks (value idempotence -- no cross-function ordering proof is
+     needed or used).  */
+  unsigned value_known = 0;	/* bitmask over destinations */
+  uint32_t value[16] = {};
   /* The MOP template derivation facts (rvtt-mop-derive.h).  */
   rvtt_mop_derive_state mop;
 };
 
 static prgm_tu_facts tu_facts;
+
+/* Defined with the rematerialization machinery below: the 32-bit
+   constant image staged into a typed SFPCONFIG write, when its
+   defining materialization has all-constant operands.  */
+static bool staged_config_value (tree staged, unsigned *value);
+
+/* Fold one SFPCONFIG destination claim into the TU facts' unique-value
+   table.  KNOWN false marks the destination's value underivable.  */
+
+static void
+tu_fold_claim_value (unsigned dest, bool known, uint32_t value)
+{
+  unsigned bit = 1u << dest;
+  if (!(tu_facts.claimed & bit) && !(tu_facts.value_known & bit))
+    {
+      /* First claim of this destination.  */
+      if (known)
+	{
+	  tu_facts.value_known |= bit;
+	  tu_facts.value[dest] = value;
+	}
+      return;
+    }
+  if ((tu_facts.value_known & bit)
+      && (!known || tu_facts.value[dest] != value))
+    tu_facts.value_known &= ~bit;
+}
+
+/* Claims folded inside the shared classifiers (raw words, template
+   slots) carry no derivable staged value: every destination such a
+   call claims -- including a REPEAT claim of an already-claimed
+   destination -- loses value uniqueness.  The classifiers are given a
+   zeroed local accumulator so repeat claims stay visible.  */
+
+static void
+tu_mark_claims_unknown (unsigned claims)
+{
+  tu_facts.value_known &= ~claims;
+}
 
 /* A gimple_asm whose template is empty emits nothing; the single
    canonical raw form is one `.ttinsn' directive with one constant
@@ -199,10 +251,25 @@ scan_raw_asm (gasm *stmt, unsigned *claimed, const char **why,
 static bool
 scan_function_body (function *fn, unsigned *claimed, const char **why,
 		    hash_set<function *> &visited,
-		    rvtt_mop_derive_state *st)
+		    rvtt_mop_derive_state *st,
+		    rvtt_mop_scan_ctx *ctx,
+		    hash_set<function *> &active)
 {
-  if (visited.add (fn))
+  /* Context-free scans are memoized as before (a body's facts fold
+     exactly once); a context-BOUND scan re-reads the body under its
+     call site's parameter bindings, so each driving call scans it
+     afresh.  The active set breaks call cycles for both -- a cycle
+     cannot be bound and refuses by name.  */
+  if ((!ctx || !ctx->parms) && visited.contains (fn))
     return true;
+  if (active.contains (fn))
+    {
+      *why = "mop-scan-recursion-unproven";
+      return false;
+    }
+  active.add (fn);
+  if (!ctx || !ctx->parms)
+    visited.add (fn);
   bool ok = true;
   auto refuse = [&] (const char *w, gimple *stmt)
     {
@@ -218,9 +285,42 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	  print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
 	}
     };
+  /* Census-escape discipline (lane CF): a BARE ADDR_EXPR of an
+     automatic aggregate in a value position is an address escape and
+     poisons the object's field census -- direct field references
+     (var.field in a store/load lvalue) are not escapes and are
+     censused instead.  Call arguments are exempted only on the
+     on-demand bound-scan path below, where the callee's own stores
+     are censused under the binding.  */
+  auto poison_bare_addr = [&] (tree op)
+    {
+      if (op && TREE_CODE (op) == ADDR_EXPR)
+	{
+	  tree var = TREE_OPERAND (op, 0);
+	  if (VAR_P (var) && !TREE_STATIC (var) && !DECL_EXTERNAL (var)
+	      && AGGREGATE_TYPE_P (TREE_TYPE (var)))
+	    {
+	      if (dump_file && ctx && ctx->census)
+		{
+		  fprintf (dump_file, "prgm-const: census poison in %s: ",
+			   function_name (fn));
+		  print_generic_expr (dump_file, var, TDF_NONE);
+		  fprintf (dump_file, "\n");
+		}
+	      rvtt_mop_census_poison (ctx, var);
+	    }
+	}
+    };
+
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
+      if (ctx && ctx->census)
+	for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+	     gsi_next (&psi))
+	  for (unsigned i = 0; i != gimple_phi_num_args (psi.phi ()); ++i)
+	    poison_bare_addr (gimple_phi_arg_def (psi.phi (), i));
+
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	   gsi_next (&gsi))
 	{
@@ -230,26 +330,57 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 
 	  if (gasm *a = dyn_cast <gasm *> (stmt))
 	    {
+	      if (ctx && ctx->census)
+		for (unsigned i = 0; i != gimple_asm_ninputs (a); ++i)
+		  poison_bare_addr (TREE_VALUE (gimple_asm_input_op (a, i)));
 	      const char *w = nullptr;
-	      if (!scan_raw_asm (a, claimed, &w, st))
+	      unsigned local_claims = 0;
+	      if (!scan_raw_asm (a, &local_claims, &w, st))
 		refuse (w, stmt);
+	      *claimed |= local_claims;
+	      tu_mark_claims_unknown (local_claims);
 	      continue;
 	    }
 
 	  if (!is_gimple_call (stmt))
 	    {
+	      /* Non-lvalue ADDR_EXPR operands escape (pointer
+		 formation; the field store/load lvalues themselves
+		 never carry a bare ADDR_EXPR operand).  */
+	      if (ctx && ctx->census && is_gimple_assign (stmt))
+		for (unsigned i = 1; i != gimple_num_ops (stmt); ++i)
+		  poison_bare_addr (gimple_op (stmt, i));
 	      /* Stores are first-class scan objects: template-slot
 		 writes, instruction-FIFO pushes, and the FIFO-alias
 		 proof for unresolved volatile addresses.  */
 	      const char *w = nullptr;
-	      if (!rvtt_mop_derive_store (stmt, claimed, &w, st))
+	      unsigned local_claims = 0;
+	      if (!rvtt_mop_derive_store (stmt, &local_claims, &w, st, ctx))
 		refuse (w, stmt);
+	      *claimed |= local_claims;
+	      tu_mark_claims_unknown (local_claims);
 	      continue;
 	    }
 
 	  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	  /* Aggregate addresses passed to a call escape the census
+	     unless the callee's body is scanned UNDER this call's
+	     bindings (the on-demand branch below); every other callee
+	     class -- typed builtins, compiler builtins, internal
+	     calls, top-level-scanned definitions (their context-free
+	     scan cannot attribute stores to OUR object), refused calls
+	     -- poisons.  */
+	  auto poison_call_addr_args = [&] ()
+	    {
+	      if (!ctx || !ctx->census)
+		return;
+	      gcall *c = as_a <gcall *> (stmt);
+	      for (unsigned i = 0; i != gimple_call_num_args (c); ++i)
+		poison_bare_addr (gimple_call_arg (c, i));
+	    };
 	  if (insnd)
 	    {
+	      poison_call_addr_args ();
 	      gcall *call = as_a <gcall *> (stmt);
 	      if (insnd->id == rvtt_insn_data::ttregion_begin
 		  || insnd->id == rvtt_insn_data::ttregion_end)
@@ -276,16 +407,24 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		      refuse ("user SFPCONFIG writes LaneConfig", stmt);
 		      continue;
 		    }
+		  unsigned value = 0;
+		  bool known
+		    = staged_config_value (gimple_call_arg (call, 0), &value);
+		  tu_fold_claim_value (d, known, value);
 		  *claimed |= 1u << d;
 		}
 	      continue;		/* typed builtins are transparent */
 	    }
 
 	  if (gimple_call_internal_p (stmt))
-	    continue;
+	    {
+	      poison_call_addr_args ();
+	      continue;
+	    }
 	  tree fndecl = gimple_call_fndecl (stmt);
 	  if (!fndecl)
 	    {
+	      poison_call_addr_args ();
 	      /* One proven exception: the crt0 init-array walk calls
 		 only this TU's own registered static constructors --
 		 every one a scanned definition of this same TU walk
@@ -303,7 +442,10 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	      continue;
 	    }
 	  if (fndecl_built_in_p (fndecl))
-	    continue;		/* scalar compiler builtin */
+	    {
+	      poison_call_addr_args ();
+	      continue;		/* scalar compiler builtin */
+	    }
 	  cgraph_node *cn = cgraph_node::get (fndecl);
 	  /* The callee decl's own node can already be gone when this
 	     scan runs: IPA inlining consumes a fully-inlined comdat
@@ -374,18 +516,47 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		  }
 	      if (cfn && cfn->cfg)
 		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "prgm-const: on-demand scan of %s for call in %s\n",
+			     function_name (cfn), function_name (fn));
+		  /* Bind the callee's parameters to this call's actual
+		     arguments, each read under THIS context, and scan
+		     the body bound (unmemoized: another call site may
+		     bind differently).  Aggregate-address arguments
+		     are attributed rather than poisoned: the bound
+		     callee's own stores and escapes census against the
+		     caller-frame object through the binding.  */
+		  hash_map<tree, rvtt_mop_bound_arg> parm_map;
+		  {
+		    gcall *c = as_a <gcall *> (stmt);
+		    tree parm = DECL_ARGUMENTS (cfn->decl);
+		    for (unsigned i = 0;
+			 parm && i != gimple_call_num_args (c);
+			 ++i, parm = DECL_CHAIN (parm))
+		      parm_map.put (parm, rvtt_mop_bound_arg
+				      { gimple_call_arg (c, i), ctx });
+		  }
+		  rvtt_mop_scan_ctx child
+		    = { ctx ? ctx->census : nullptr, &parm_map };
 		  const char *w = nullptr;
-		  if (!scan_function_body (cfn, claimed, &w, visited, st))
+		  if (!scan_function_body (cfn, claimed, &w, visited, st,
+					   &child, active))
 		    refuse (w, stmt);
 		  continue;
 		}
+	      poison_call_addr_args ();
 	      refuse ("call to a function outside this translation unit",
 		      stmt);
 	      continue;
 	    }
-	  /* Defined in this TU: its body is scanned itself.  */
+	  /* Defined in this TU: its body is scanned at the top level,
+	     context-free -- it cannot attribute stores to our
+	     caller-frame objects.  */
+	  poison_call_addr_args ();
 	}
     }
+  active.remove (fn);
   return ok;
 }
 
@@ -402,11 +573,27 @@ tu_prgm_facts ()
   tu_facts.computed = true;
 
   hash_set<function *> visited;
+  hash_set<function *> active;
+  rvtt_mop_obj_census census;
+  rvtt_mop_scan_ctx root_ctx = { &census, nullptr };
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
       if (!node->definition || !node->has_gimple_body_p ())
 	continue;		/* thunks/aliases carry no code */
+      /* An inline clone is never emitted as standalone code: it exists
+	 only as bookkeeping for one call site that WILL be inlined into
+	 node->inlined_to (cgraph.h).  Its execution is therefore fully
+	 covered by scanning that call in its caller's body -- which the
+	 walk does, on demand and UNDER the call's parameter bindings.
+	 Enumerating the shared generic body here context-free would
+	 only re-read the same code with its parameters unbound (the
+	 unclassifiable-composed-word refusals of the pre-binding scan).
+	 A surviving master node (standalone emission possible: out-of-
+	 line calls, address taken) has inlined_to == NULL and is still
+	 scanned here context-free, refusing-default.  */
+      if (node->inlined_to)
+	continue;
       function *ofn = DECL_STRUCT_FUNCTION (node->decl);
       const char *why = nullptr;
       /* Keep scanning after a refusal: later declarations must still
@@ -440,7 +627,7 @@ tu_prgm_facts ()
 	    }
 	}
       if (!scan_function_body (ofn, &tu_facts.claimed, &why, visited,
-			       &tu_facts.mop))
+			       &tu_facts.mop, &root_ctx, active))
 	{
 	  tu_facts.refused = true;
 	  if (!tu_facts.reason)
@@ -1044,6 +1231,29 @@ constant_chain_value_p (const remat_chain &c, unsigned *value)
     return false;
   *value = (TREE_INT_CST_LOW (imm) & 0xffff) << 16;
   return true;
+}
+
+/* The 32-bit constant image staged into a typed SFPCONFIG write:
+   STAGED's defining statement must be a single-issue admitted
+   materialization with all-constant operands (the same derivation the
+   residency candidates use).  Underivable staging refuses -- the
+   destination's TU value stays unknown and no reuse is offered.  */
+
+static bool
+staged_config_value (tree staged, unsigned *value)
+{
+  if (!staged || TREE_CODE (staged) != SSA_NAME)
+    return false;
+  gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (staged));
+  if (!def)
+    return false;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpxloadi
+	  && insnd->id != rvtt_insn_data::sfploadi))
+    return false;
+  remat_chain chain { def, def };
+  return constant_chain_value_p (chain, value);
 }
 
 /* Audited remat consumers: instructions whose destination lanes are
@@ -1657,6 +1867,9 @@ struct residency_candidate
   class loop *loop;		/* LOOP class: the enclosing loop */
   edge entry;			/* LOOP class: its entry edge */
   unsigned uses;		/* non-debug uses (the ranking key) */
+  bool peel = false;		/* LOOP class: CC-canonical body; the
+				   programming point is created by a
+				   first-iteration peel at placement */
 };
 
 /* Fold VAL through the in-loop constant chain from a header PHI to OP:
@@ -1792,6 +2005,328 @@ count_nondebug_uses (tree name)
   return n;
 }
 
+/* ------------------------------------------------------------------ */
+/* CC-canonical loops: first-iteration peel (lane CF).
+
+   The LOOP class above requires a CC-write-free loop (sfpu-barrier)
+   and a CC-write-free function (cc-region-unproven), because its
+   entry-edge programming executes under the loop-entry lane state and
+   every replaced in-loop materialization must have executed under that
+   SAME state.  The fresh-body kernels the storm lanes generate violate
+   both: their row loop carries a lowered v_if region
+   (SFPSETCC/SFPXFCMP* ... all-lanes SFPENCC) and re-materializes the
+   loop-invariant paired-SFPLOADI constants every row -- the exact
+   structural gap adjudicated by lane CE (log 23 vs 17 replay slots,
+   sqrt 27 vs 21, rsqrt 33 vs 25 crossing the 32-slot replay cliff).
+
+   For the CC-canonical single-block body (rvtt_loop_cc_canonical_body:
+   the LAST CC writer on the unique linear path is the word-exact
+   all-lanes SFPENCC), a first-iteration PEEL makes the residency
+   transformation exact without any ambient lane-state assumption:
+
+   - iteration one is duplicated statement for statement onto the entry
+     edge (same statements, same order, same operand values), so its
+     behavior -- including under an arbitrary unknown ambient CC mask --
+     is reproduced bit for bit, and its trailing all-lanes SFPENCC
+     leaves the machine in the architectural all-lanes state;
+   - the staging SFPLOADI + SFPCONFIG programming is appended AFTER the
+     peeled copy: it executes exactly when the loop continues past
+     iteration one, in the proven all-lanes state (satisfying the
+     architectural all-lanes requirement on SFPCONFIG: craq-sim
+     tensix.cpp TENSIX_EXECUTE_SFPCONFIG verifies every lane enabled,
+     and its lanewise LReg[0][lane & 7] copy needs the staged constant
+     present in ALL of L0's lanes);
+   - every remaining iteration k >= 2 begins in that same all-lanes
+     state (the body's last CC writer is the all-lanes SFPENCC), so a
+     candidate materialization placed BEFORE the body's first CC writer
+     executed all-lanes there -- writing every lane with the constant --
+     and the constant-register read that replaces it yields the
+     identical value in every lane.  Iterations 2..N are therefore
+     bit-exact as well.
+
+   Profitability (rvtt-cost.md, residency-peel model): the peel
+   re-delivers one body as RISC-pushed words (a delivery-class change
+   worth (PUSH - SLOT) per word against the replayed loop it came from)
+   and the programming costs PUSH per staged word and per SFPCONFIG;
+   the loop saves the candidates' materialization words every remaining
+   iteration.  The required trip count is proven by bounded forward
+   evaluation of the rotated loop's own scalar control -- never assumed
+   from profile data.  */
+
+/* Post-shortening issue words of one admitted materialization: the
+   single-issue sfploadi form is one word; the sfpxloadi form models the
+   target's immediate encodings exactly as the invariant pass's
+   materialization_cost (gimple-rvtt-invariant.cc) -- values with a free
+   half or a FLOATA-encodable image issue once, everything else twice.
+   No value identity participates; this reads only encoding structure.  */
+
+static unsigned
+loadi_issue_words (gcall *call)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (insnd->id == rvtt_insn_data::sfploadi)
+    return 1;
+  uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
+  unsigned upper = value >> 16;
+  unsigned lower = value & 0xffff;
+  if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
+    return 1;
+  unsigned exponent = (value >> 23) & 0xff;
+  return !(value & 0x1fff)
+    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+}
+
+/* Prove LOOP's body executes at least NEED times, by bounded forward
+   evaluation of the single-block body's scalar control from the entry
+   values (the same discipline as loop_second_trip_proven_p and the
+   invariant pass's short-constant-loop proof; scalar evolution is
+   unusable at this pipeline position).  Statements that do not fold
+   simply leave their results unknown; the proof fails -- refusing --
+   only when the exit test itself does not fold to a constant, when a
+   header PHI's next value is unknown, or when the loop provably exits
+   before NEED iterations.  */
+
+static bool
+loop_trips_at_least_p (class loop *loop, edge entry, unsigned need)
+{
+  if (need <= 1)
+    return true;
+
+  basic_block bb = loop->header;
+  auto_vec<edge> exits = get_loop_exit_edges (loop);
+  if (exits.length () != 1 || exits[0]->src != bb)
+    return false;
+  edge exit = exits[0];
+  edge latch_e = loop_latch_edge (loop);
+  gimple_stmt_iterator last = gsi_last_bb (bb);
+  gcond *cond = gsi_end_p (last) ? nullptr
+    : dyn_cast <gcond *> (gsi_stmt (last));
+  if (!cond || !latch_e)
+    return false;
+
+  edge true_edge, false_edge;
+  extract_true_false_edges_from_block (bb, &true_edge, &false_edge);
+  if (!true_edge || !false_edge)
+    return false;
+
+  /* Current values of the header PHIs (and, within an iteration, of
+     folded body definitions).  A PHI whose entry value does not fold
+     (e.g. a loop-carried vector) simply stays unknown; the proof fails
+     only when the exit test itself needs an unknown value.  */
+  hash_map<tree, tree> vals;
+  auto_vec<gphi *, 4> phis;
+  for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+       gsi_next (&psi))
+    {
+      gphi *phi = psi.phi ();
+      tree res = gimple_phi_result (phi);
+      if (virtual_operand_p (res))
+	continue;
+      tree init = PHI_ARG_DEF_FROM_EDGE (phi, entry);
+      if (!is_gimple_min_invariant (init))
+	continue;
+      phis.safe_push (phi);
+      vals.put (res, init);
+    }
+
+  auto lookup = [&vals] (tree op) -> tree
+    {
+      if (!op || is_gimple_min_invariant (op))
+	return op;
+      if (TREE_CODE (op) != SSA_NAME)
+	return NULL_TREE;
+      tree *v = vals.get (op);
+      return v ? *v : NULL_TREE;
+    };
+
+  bool proven = true;
+  fold_defer_overflow_warnings ();
+  for (unsigned trips = 1; trips < need; ++trips)
+    {
+      /* One pass over the body: fold what folds.  */
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gassign *a = dyn_cast <gassign *> (gsi_stmt (gsi));
+	  if (!a)
+	    continue;
+	  tree lhs = gimple_assign_lhs (a);
+	  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+	    continue;
+	  tree_code code = gimple_assign_rhs_code (a);
+	  tree type = TREE_TYPE (lhs);
+	  tree op1 = lookup (gimple_assign_rhs1 (a));
+	  tree op2 = gimple_num_ops (a) > 2
+	    ? lookup (gimple_assign_rhs2 (a)) : NULL_TREE;
+	  tree value = NULL_TREE;
+	  switch (get_gimple_rhs_class (code))
+	    {
+	    case GIMPLE_SINGLE_RHS:
+	      value = op1;
+	      break;
+	    case GIMPLE_UNARY_RHS:
+	      value = op1 ? fold_unary (code, type, op1) : NULL_TREE;
+	      break;
+	    case GIMPLE_BINARY_RHS:
+	      value = op1 && op2
+		? fold_binary (code, type, op1, op2) : NULL_TREE;
+	      break;
+	    default:
+	      value = NULL_TREE;
+	      break;
+	    }
+	  if (value && is_gimple_min_invariant (value))
+	    vals.put (lhs, value);
+	  else
+	    vals.remove (lhs);
+	}
+
+      tree lhs = lookup (gimple_cond_lhs (cond));
+      tree rhs = lookup (gimple_cond_rhs (cond));
+      tree test = lhs && rhs
+	? fold_binary (gimple_cond_code (cond), boolean_type_node, lhs, rhs)
+	: NULL_TREE;
+      if (!test || TREE_CODE (test) != INTEGER_CST)
+	{
+	  proven = false;
+	  break;
+	}
+      edge taken = integer_zerop (test) ? false_edge : true_edge;
+      if (taken == exit)
+	{
+	  proven = false;	/* provably exits before NEED trips */
+	  break;
+	}
+
+      /* Advance the tracked header PHIs through the latch; one whose
+	 next value does not fold merely stops being tracked.  */
+      auto_vec<tree, 4> next;
+      for (gphi *phi : phis)
+	next.safe_push (lookup (PHI_ARG_DEF_FROM_EDGE (phi, latch_e)));
+      /* Body definitions do not survive the backedge.  */
+      vals.empty ();
+      unsigned kept = 0;
+      for (unsigned ix = 0; ix != phis.length (); ++ix)
+	if (next[ix])
+	  {
+	    vals.put (gimple_phi_result (phis[ix]), next[ix]);
+	    phis[kept++] = phis[ix];
+	  }
+      phis.truncate (kept);
+    }
+  fold_undefer_and_ignore_overflow_warnings ();
+  return proven;
+}
+
+/* Duplicate LOOP's single-block body once onto its entry edge and
+   return the loop's new entry edge (peeled block -> header), on which
+   the caller places the constant programming.  Every proof has already
+   passed: the body is CC-canonical (only typed RVTT calls, audited raw
+   Dst/RWC words, pure assignments, PHIs, labels, debug statements and
+   the loop condition), and the bounded trip evaluation proved the
+   first iteration never exits -- the peeled copy therefore falls
+   through to the loop unconditionally and the copied exit test is
+   dropped (its scalar chain is still copied; the header PHIs consume
+   it).  Header PHIs evaluate to their entry arguments inside the copy
+   and are re-seeded with the copy's latch values.  Virtual operands on
+   the copies are cleared for the pass-level virtual-SSA update.  */
+
+static edge
+peel_first_iteration (class loop *loop, edge entry)
+{
+  basic_block bb = loop->header;
+  edge latch_e = loop_latch_edge (loop);
+
+  hash_map<tree, tree> map;
+  for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+       gsi_next (&psi))
+    {
+      gphi *phi = psi.phi ();
+      tree res = gimple_phi_result (phi);
+      if (!virtual_operand_p (res))
+	map.put (res, PHI_ARG_DEF_FROM_EDGE (phi, entry));
+    }
+
+  basic_block copy_bb = split_edge (entry);
+  gimple_stmt_iterator at = gsi_start_bb (copy_bb);
+
+  auto remap = [&map] (tree op) -> tree
+    {
+      if (op && TREE_CODE (op) == SSA_NAME)
+	if (tree *found = map.get (op))
+	  return *found;
+      return op;
+    };
+
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_code (stmt) == GIMPLE_COND)
+	continue;
+
+      gimple *cp = gimple_copy (stmt);
+
+      /* Remap operands, then give each definition a fresh name.  */
+      if (gcall *call = dyn_cast <gcall *> (cp))
+	{
+	  for (unsigned ix = 0; ix != gimple_call_num_args (call); ++ix)
+	    gimple_call_set_arg (call, ix, remap (gimple_call_arg (call, ix)));
+	}
+      else if (gassign *a = dyn_cast <gassign *> (cp))
+	{
+	  for (unsigned ix = 1; ix != gimple_num_ops (a); ++ix)
+	    gimple_set_op (a, ix, remap (gimple_op (a, ix)));
+	}
+      /* Audited raw Dst/RWC words carry one constant input: nothing to
+	 remap and nothing defined.  */
+
+      if (tree lhs = gimple_get_lhs (cp))
+	{
+	  gcc_assert (TREE_CODE (lhs) == SSA_NAME);
+	  tree fresh = make_ssa_name (TREE_TYPE (lhs));
+	  gimple_set_lhs (cp, fresh);
+	  map.put (lhs, fresh);
+	}
+
+      if (gimple_vdef (cp))
+	gimple_set_vdef (cp, NULL_TREE);
+      if (gimple_vuse (cp))
+	gimple_set_vuse (cp, NULL_TREE);
+
+      if (gsi_end_p (at))
+	{
+	  gsi_insert_before (&at, cp, GSI_NEW_STMT);
+	  at = gsi_for_stmt (cp);
+	}
+      else
+	gsi_insert_after (&at, cp, GSI_NEW_STMT);
+      update_stmt (cp);
+    }
+
+  /* The loop's entry values are now the peeled iteration's latch
+     values.  */
+  edge new_entry = single_succ_edge (copy_bb);
+  for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+       gsi_next (&psi))
+    {
+      gphi *phi = psi.phi ();
+      if (virtual_operand_p (gimple_phi_result (phi)))
+	continue;
+      tree larg = PHI_ARG_DEF_FROM_EDGE (phi, latch_e);
+      SET_USE (PHI_ARG_DEF_PTR_FROM_EDGE (phi, new_entry), remap (larg));
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "const-residency: peeled first iteration of loop bb %d into "
+	     "bb %d (CC-canonical body; programming point follows the "
+	     "peeled all-lanes SFPENCC)\n",
+	     bb->index, copy_bb->index);
+  return new_entry;
+}
+
 static bool
 residency_transform (function *fn, prgm_state *st)
 {
@@ -1808,12 +2343,36 @@ residency_transform (function *fn, prgm_state *st)
       if (!loop->num)
 	continue;
       edge entry = rvtt_loop_entry_edge (loop);
+      bool peel = false;
+      gimple *cc_limit = nullptr;
       const char *why
 	= !entry ? "no-single-entry"
 	: rvtt_loop_hoist_region_opaque_p (loop, entry) ? "opaque-hoist-region"
 	: rvtt_preheader_insertion_blocked_p (entry) ? "preheader-blocked"
-	: rvtt_loop_has_sfpu_barrier_p (loop) ? "sfpu-barrier"
 	: nullptr;
+      if (!why && rvtt_loop_has_sfpu_barrier_p (loop))
+	{
+	  /* CC-canonical rescue (lane CF): a single-block body whose
+	     only barrier statements are CC writers ending in the
+	     word-exact all-lanes SFPENCC admits the first-iteration
+	     peel below; candidates must precede the body's first CC
+	     writer.  Anything else keeps the barrier refusal
+	     byte-identically.  */
+	  rvtt_cc_canonical_body canon = rvtt_loop_cc_canonical_body (loop);
+	  if (canon.proven)
+	    {
+	      peel = true;
+	      cc_limit = canon.first_cc_writer;
+	    }
+	  else
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "const-residency: loop bb %d cc-canonical proof "
+			 "failed (%s)\n", loop->header->index, canon.why);
+	      why = "sfpu-barrier";
+	    }
+	}
       if (why)
 	{
 	  if (dump_file)
@@ -1827,8 +2386,9 @@ residency_transform (function *fn, prgm_state *st)
 	 once: two staging SFPLOADI + one SFPCONFIG) pays for itself
 	 against the two pushed SFPLOADI words saved per iteration at
 	 two proven trips (rvtt-cost.md delivery model).  The proof is
-	 the structural first-iteration exit-test evaluation.  */
-      if (!loop_second_trip_proven_p (loop, entry))
+	 the structural first-iteration exit-test evaluation.  (The
+	 CC-canonical peel class prices its peel separately below.)  */
+      if (!peel && !loop_second_trip_proven_p (loop, entry))
 	{
 	  if (dump_file)
 	    fprintf (dump_file,
@@ -1838,6 +2398,7 @@ residency_transform (function *fn, prgm_state *st)
 	  continue;
 	}
 
+      auto_vec<residency_candidate> this_loop;
       basic_block *body = get_loop_body_in_dom_order (loop);
       for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
 	{
@@ -1845,9 +2406,18 @@ residency_transform (function *fn, prgm_state *st)
 	  if (bb->loop_father != loop
 	      || !rvtt_stmt_executes_every_entered_iteration_p (loop, bb))
 	    continue;
+	  bool cc_reached = false;
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	       gsi_next (&gsi))
 	    {
+	      /* Peel class: a candidate at or after the body's first
+		 CC writer executed under the v_if region's partial
+		 lane state; only the pre-region prefix is proven
+		 all-lanes on iterations 2..N.  */
+	      if (cc_limit && gsi_stmt (gsi) == cc_limit)
+		cc_reached = true;
+	      if (cc_reached)
+		break;
 	      gcall *load = dyn_cast <gcall *> (gsi_stmt (gsi));
 	      if (!load || taken.contains (load)
 		  || !rvtt_invariant_constant_load_p (load, loop,
@@ -1866,11 +2436,69 @@ residency_transform (function *fn, prgm_state *st)
 		? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
 		: entry;
 	      c.uses = count_nondebug_uses (gimple_call_lhs (load));
-	      loop_cands.safe_push (c);
-	      taken.add (load);
+	      c.peel = peel;
+	      this_loop.safe_push (c);
 	    }
 	}
       free (body);
+
+      /* Peel pricing (rvtt-cost.md, residency-peel model): the loop
+	 saves the candidates' materialization words at SLOT each on
+	 every iteration after the first; the programming costs PUSH
+	 per staged word plus PUSH per SFPCONFIG; the peeled body's
+	 words change delivery class from replayed SLOT to pushed PUSH
+	 once.  All constants are the established delivery-economics
+	 table values; the required trip count is proven by bounded
+	 evaluation of the loop's own scalar control.  */
+      if (peel && !this_loop.is_empty ())
+	{
+	  unsigned sum_w = 0;
+	  for (residency_candidate &c : this_loop)
+	    sum_w += loadi_issue_words (c.load);
+	  unsigned nprog = this_loop.length ();
+	  unsigned body_w = 0;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (loop->header);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    {
+	      gimple *stmt = gsi_stmt (gsi);
+	      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	      if (!insnd)
+		body_w += gimple_code (stmt) == GIMPLE_ASM;
+	      else if (insnd->id == rvtt_insn_data::sfpxloadi
+		       || insnd->id == rvtt_insn_data::sfploadi)
+		body_w += loadi_issue_words (as_a <gcall *> (stmt));
+	      else
+		++body_w;
+	    }
+	  unsigned push = XTT_REPLAY_COST_RISC_PUSH_X100;
+	  unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+	  unsigned cost = push * (sum_w + nprog) + (push - slot) * body_w;
+	  unsigned need = 1 + (cost + slot * sum_w - 1) / (slot * sum_w);
+	  if (need > 64 || !loop_trips_at_least_p (loop, entry, need))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "const-residency: loop bb %d refused "
+			 "(peel-trip-count-unproven: break-even needs %u "
+			 "proven trips; %u candidate words, %u programming "
+			 "words, %u-word body)\n",
+			 loop->header->index, need, sum_w, sum_w + nprog,
+			 body_w);
+	      continue;
+	    }
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "const-residency: loop bb %d admits the CC-canonical "
+		     "peel (%u candidate words/iteration, break-even %u "
+		     "trips proven)\n",
+		     loop->header->index, sum_w, need);
+	}
+
+      for (residency_candidate &c : this_loop)
+	{
+	  loop_cands.safe_push (c);
+	  taken.add (c.load);
+	}
     }
 
   /* PRESSURE class: only when the model exceeds the LREG file.  */
@@ -1944,11 +2572,31 @@ residency_transform (function *fn, prgm_state *st)
     }
   if (function_writes_cc_p (fn))
     {
+      /* The CC-canonical peel class is exempt: its programming point
+	 is placed after the peeled iteration's own all-lanes SFPENCC,
+	 and every replaced materialization is proven to have executed
+	 in that same architectural state -- both facts are local to
+	 the peeled loop and independent of other CC writes in the
+	 function.  Every other class still refuses by name.  */
+      unsigned kept = 0;
+      for (residency_candidate &c : loop_cands)
+	if (c.peel)
+	  loop_cands[kept++] = c;
+      loop_cands.truncate (kept);
+      pressure_cands.truncate (0);
+      if (loop_cands.is_empty ())
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
+		     " -- in-function CC writes defeat the all-lanes"
+		     " programming proof; cross-call ambient proof is not on"
+		     " record here\n");
+	  return false;
+	}
       if (dump_file)
-	fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
-		 " -- in-function CC writes defeat the all-lanes programming"
-		 " proof; cross-call ambient proof is not on record here\n");
-      return false;
+	fprintf (dump_file, "const-residency: non-peel classes refused "
+		 "(cc-region-unproven); the CC-canonical peel class "
+		 "proceeds on its local lane-state proof\n");
     }
   if (!st->initialized)
     {
@@ -1979,6 +2627,7 @@ residency_transform (function *fn, prgm_state *st)
     = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
 
   bool changed = false;
+  hash_map<class loop *, edge> peeled;
   auto place = [&] (residency_candidate &c) -> bool
     {
       unsigned prgm = 0;
@@ -1997,6 +2646,26 @@ residency_transform (function *fn, prgm_state *st)
 	      prgm = reg;
 	      break;
 	    }
+      /* TU value-identical reuse: a claimed destination whose EVERY
+	 TU write derives to this candidate's exact 32-bit value may
+	 be reused.  Soundness is value idempotence, not ordering:
+	 every write anywhere stores the same value, and the
+	 candidate's own all-lanes programming (still emitted below)
+	 puts that value in every lane; any interleaved lane-predicated
+	 write of the same value preserves it.  No cross-function
+	 ordering or dominance is used.  */
+      bool tu_reuse = false;
+      if (!prgm)
+	{
+	  const prgm_tu_facts &tu = tu_prgm_facts ();
+	  for (unsigned reg : prgm_regs)
+	    if ((tu.value_known & (1u << reg)) && tu.value[reg] == c.value)
+	      {
+		prgm = reg;
+		tu_reuse = true;
+		break;
+	      }
+	}
       if (!prgm)
 	{
 	  if (dump_file)
@@ -2008,6 +2677,27 @@ residency_transform (function *fn, prgm_state *st)
 	  return false;
 	}
       st->claimed |= 1u << prgm;
+      if (tu_reuse && dump_file)
+	fprintf (dump_file,
+		 "const-residency: reusing TU-programmed PRGM L%u (every "
+		 "TU write stores 0x%08x; programming is value-idempotent)\n",
+		 prgm, c.value);
+
+      /* CC-canonical class: the programming point is the fall-through
+	 edge of the peeled first iteration (one peel per loop; later
+	 candidates of the same loop share it).  Peeling happens only
+	 here, after a register has actually been allocated, so refused
+	 candidates never mutate the CFG.  */
+      if (c.peel)
+	{
+	  if (edge *found = peeled.get (c.loop))
+	    c.entry = *found;
+	  else
+	    {
+	      c.entry = peel_first_iteration (c.loop, c.entry);
+	      peeled.put (c.loop, c.entry);
+	    }
+	}
 
       basic_block point_bb = c.loop ? c.entry->dest : gimple_bb (c.load);
       /* Reuse without reprogramming needs the earlier programming to
