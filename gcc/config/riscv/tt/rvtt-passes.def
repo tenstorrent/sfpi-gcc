@@ -48,6 +48,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_synth_renumber);
    structured condition form (sfpxvif/sfpxcondb) is still explicit,
    i.e. before pass_rvtt_expand lowers it to raw CC side effects.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lut_select);
+/* The cross-call prefix hoist runs right after LUT selection has formed
+   the coefficient prefix and placed it in the callee's row-loop
+   preheader, and before pass_rvtt_expand lowers the builtin forms.  It
+   reads (and, on a complete proof, edits) the still-gimple bodies of
+   the callee's callers -- callers expand after their callees, the same
+   ordering fact the MOP outward-ownership proof relies on.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosscall);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);
