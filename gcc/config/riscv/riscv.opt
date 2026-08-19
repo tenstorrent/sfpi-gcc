@@ -602,6 +602,10 @@ mtt-tensix-optimize-drain-schedule
 Target Var(riscv_tt_opt_drain_schedule) Init(0)
 Prove per-boundary macro-event drain requirements from the derived descriptor calendars and elide structurally multiplied drain NOPs at proven-neutral macro run boundaries (refusals keep the full derived drain byte-identically)
 
+mtt-tensix-optimize-init-hoist
+Target Var(riscv_tt_opt_init_hoist) Init(0)
+Hoist a noinline callee's loop-invariant idempotent macro-planner init prefix (the derived descriptor program, and where the caller's reaching configuration is proven value-equal, the owned SETC16 program and all-lanes enable) into the proven caller's loop preheader, executing it once per loop instead of once per call; every unproven link refuses by name and keeps the per-call prefix byte-identically.
+
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
 Allocate programmable constant registers to loop-invariant SFPU immediates

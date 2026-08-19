@@ -202,6 +202,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-macro-tables.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
 
@@ -682,6 +683,8 @@ struct crosscall_tu_facts
   bool slot_replay = false;
   unsigned slot_loadi_dests = 0;   /* SFPLOADI destinations programmed
 				      into instruction slots	       */
+  vec<uint32_t> slot_words = vNULL; /* every audited slot word (lane CA:
+				      re-classified per proof face)    */
   hash_map<tree, global_census_entry> *globals = nullptr;
   vec<slot_demand> demands = vNULL;
 };
@@ -826,6 +829,7 @@ census_slot_refusal (const char *why)
 static void
 audit_slot_word (uint32_t word)
 {
+  tu_facts.slot_words.safe_push (word);
   unsigned opcode = word >> 24;
   if (opcode == 0x71)
     {
@@ -1446,8 +1450,21 @@ compute_tu_facts ()
       function *ofn = DECL_STRUCT_FUNCTION (node->decl);
       if (!ofn || !ofn->cfg)
 	{
-	  census_slot_refusal ("mop-template-body-unavailable");
-	  continue;
+	  /* A pre-materialization clone carries no body of its own; the
+	     clone_of origin's is the sound over-approximation (the
+	     laneBT resolution: the clone's statements are the origin's
+	     under parameter substitution, and any word the origin
+	     leaves unresolved defers to the demands machinery).  */
+	  cgraph_node *o = node->clone_of;
+	  while (o && (!DECL_STRUCT_FUNCTION (o->decl)
+		       || !DECL_STRUCT_FUNCTION (o->decl)->cfg))
+	    o = o->clone_of;
+	  ofn = o ? DECL_STRUCT_FUNCTION (o->decl) : nullptr;
+	  if (!ofn || !ofn->cfg)
+	    {
+	      census_slot_refusal ("mop-template-body-unavailable");
+	      continue;
+	    }
 	}
       census_fname = node->dump_name ();
       census_fndecl = node->decl;
@@ -2543,6 +2560,909 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
 	*why_stmt = ctx.why_stmt;
     }
   return ok;
+}
+
+/* ==================================================================
+   Lane CA: cross-call invariant-init hoist (macro-planner service).
+
+   A noinline per-tile callee whose macro formation emits an idempotent
+   init prefix -- the derived descriptor program (staged SFPLOADI +
+   SFPCONFIG writes), the owned SETC16 address-modifier program, and the
+   proven all-lanes enable -- re-executes that prefix on EVERY call,
+   although every written value is compile-time descriptor data that
+   provably cannot change between calls.  A hand kernel programs the
+   equivalent state once at kernel init.  This service, called from the
+   callee's macro-planner formation (rtl-rvtt-macro-planner.cc) while
+   every caller body is still gimple (callees run the late pipeline
+   before their callers -- the same ordering fact this file's
+   coefficient hoist relies on), proves the caller side and, on a
+   complete proof, inserts the prefix as typed builtin calls in the
+   caller's loop preheader; the planner then omits the hoisted part
+   from the callee's emission.  Both sides commit together or not at
+   all; every unproven link refuses by name and the per-call prefix
+   stays byte-identically.
+
+   Two stages, decided by proof strength:
+
+     stage 1 (descriptor words): the SFPCONFIG destinations are read
+       ONLY by SFPLOADMACRO launches (SFPLOADMACRO.md: the launch
+       resolves templates/sequence/misc from LoadMacroConfig), and the
+       callee holds the function's only launches; the caller epoch must
+       merely prove no LoadMacroConfig writer and no launch inside the
+       loop.  The callee retains its per-call enable + owned SETC16
+       program.  The hoisted block carries its own all-lanes enable for
+       the lane-predicated staging loads, under the architectural
+       outermost-CC contract (the same license as the planner's
+       materialized enable).
+
+     stage 2 (full prefix): additionally the owned SETC16 rows and the
+       lane state.  Sound only when the caller's reaching configuration
+       is VALUE-EQUAL: every decodable SETC16-class delivery to an
+       owned row anywhere in the caller equals the contract's encoded
+       word, and each owned row has such a write dominating the loop --
+       then no instruction between the preheader and the first call can
+       distinguish the hoisted programming from today's state, whatever
+       it reads.  Loop CC-cleanliness keeps the hoisted enable's state
+       across every trip (the callee's own body was proven CC-neutral
+       by its side of the contract).
+
+   Refusal vocabulary (stable, append-only):
+     drain-init-callers-unproven   closure (alias/clone/address-taken/
+				   multi-caller/multi-site/expanded)
+     drain-init-loop-unproven      no natural loop / no provable entry
+     drain-init-ownership-unproven a loop statement or delivered word
+				   that could write the hoisted state,
+				   launch a macro, or replay recorded
+				   content (the mission-named refusal)
+     drain-init-vector-live	   vector dataflow in the loop (a later
+				   formation could own the state)
+     drain-init-mop-slot-unproven  the TU template census cannot prove
+				   the MOP words init-inert
+   Stage-2 demotions (to stage 1) are not refusals: value inequality or
+   loop CC writes simply keep the enable + SETC16 per call.  */
+
+namespace {
+
+/* Word classification for the init face: can this delivered word write
+   LoadMacroConfig (SFPCONFIG class), launch a macro, or replay recorded
+   content?  OWNED_ROWS_CHECK additionally tracks SETC16-class writes to
+   the contract's owned rows (stage 2).  Refusing default for every
+   class not on record; classes mirror the audited raw-word capability
+   table of rvtt-mop-derive.cc, asking the config/launch question.  */
+
+struct init_word_verdict
+{
+  bool ok;
+  bool is_mop;
+  bool owned_row_write;		/* SETC16-class write to an owned row */
+  uint32_t word;		/* the resolved word (constant only)  */
+  bool word_exact;
+  const char *why;
+};
+
+static init_word_verdict
+classify_word_init (uint32_t word, const rvtt_init_hoist_program &prog,
+		    const rvtt_macro::caps *c)
+{
+  init_word_verdict v = { true, false, false, word, true, nullptr };
+  unsigned opcode = word >> 24;
+  if (c && opcode == c->setc16_opcode)
+    {
+      unsigned reg, value;
+      if (!rvtt_macro::decode_setc16 (c, word, &reg, &value))
+	{
+	  v.ok = false;
+	  v.why = "drain-init-ownership-unproven";
+	  return v;
+	}
+      for (unsigned i = 0; i != prog.n_setc16; ++i)
+	if (prog.setc16[i].reg == reg)
+	  v.owned_row_write = true;
+      return v;
+    }
+  if (c && opcode == c->sfpconfig_opcode)
+    {
+      /* Any SFPCONFIG-class word: LoadMacroConfig/LaneConfig writer.  */
+      v.ok = false;
+      v.why = "drain-init-ownership-unproven";
+      return v;
+    }
+  switch (opcode)
+    {
+    case 0x00:			/* TENSIX NOP (zero word)	     */
+    case 0x02:			/* Tensix NOP: swallowed at the FIFO */
+      return v;
+    case XTT_MOP_OPCODE:	/* effects live in the template file */
+      v.is_mop = true;
+      return v;
+    case XTT_MOP_CFG_OPCODE:	/* zmask high half only		     */
+      return v;
+    case XTT_REPLAY_OPCODE:	/* recorded content: not derivable   */
+      v.ok = false;
+      v.why = "drain-init-ownership-unproven";
+      return v;
+    case 0x12:			/* MOVA2D: Dst rows only	     */
+    case 0x28:			/* ELWADD: matrix-unit state only    */
+    case 0x36:			/* CLEARDVALID			     */
+    case 0x37:			/* SETRWC: RWC counters only	     */
+    case 0x38:			/* INCRWC: RWC counters only	     */
+      return v;
+    case 0x71:			/* SFPLOADI: LREG staging only; lane-
+				   predicated under the architectural
+				   outermost all-lanes contract	     */
+      return v;
+    default:
+      if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
+	return v;
+      if (opcode >= 0xB0 && opcode <= 0xB8)
+	/* Main-CFG family (WRCFG/RDCFG/RMWCIB/...): a DIFFERENT
+	   register file from both the SETC16 thread-config rows and
+	   the SFPU-internal SFPCONFIG state (the simulator's
+	   separated thread_cfg / config / sfpu state stores; SETC16's
+	   own opcode was handled above).  */
+	return v;
+      v.ok = false;
+      v.why = "drain-init-ownership-unproven";
+      return v;
+    }
+}
+
+static init_word_verdict
+classify_delivered_init (tree val, const rvtt_init_hoist_program &prog,
+			 const rvtt_macro::caps *c)
+{
+  init_word_verdict v
+    = { false, false, false, 0, false, "drain-init-ownership-unproven" };
+  if (TREE_CODE (val) == INTEGER_CST)
+    return classify_word_init ((uint32_t) (TREE_INT_CST_LOW (val)
+					   & 0xffffffff), prog, c);
+  uint32_t base;
+  if (!pushed_word_base (val, &base))
+    return v;
+  v = classify_word_init (base, prog, c);
+  /* A runtime-completed word keeps its opcode and non-value fields
+     under the field axiom, but its exact value is not a constant --
+     the stage-2 value-equality proof cannot use it.  */
+  v.word_exact = false;
+  return v;
+}
+
+struct init_scan_ctx
+{
+  const rvtt_init_hoist_program *prog;
+  const rvtt_macro::caps *c;
+  tree callee_decl;		/* admitted contract-call target      */
+  hash_set<tree> *chain_decls = nullptr; /* admitted chain-call targets */
+  bool saw_mop = false;
+  bool cc_dirty = false;	/* loop CC write: demotes stage 2      */
+  bool owned_row_dirty = false;	/* in-loop owned-row write: demotes    */
+  const char *why = nullptr;
+  gimple *why_stmt = nullptr;
+};
+
+static bool
+init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
+{
+  ctx->why = why;
+  ctx->why_stmt = stmt;
+  if (dump_file)
+    {
+      fprintf (dump_file, "init-hoist: refused (%s)", why);
+      if (stmt)
+	{
+	  fprintf (dump_file, ": ");
+	  print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
+	}
+      else
+	fprintf (dump_file, "\n");
+    }
+  return false;
+}
+
+static bool
+apply_init_verdict (init_scan_ctx *ctx, const init_word_verdict &v,
+		    gimple *stmt)
+{
+  if (v.is_mop)
+    ctx->saw_mop = true;
+  if (v.owned_row_write)
+    ctx->owned_row_dirty = true;
+  if (!v.ok)
+    return init_refuse (ctx, v.why, stmt);
+  return true;
+}
+
+/* One asm statement of the caller's loop (mirrors scan_asm on the
+   init face).  */
+
+static bool
+init_scan_asm (init_scan_ctx *ctx, gasm *stmt)
+{
+  const char *str = gimple_asm_string (stmt);
+  const char *sp = str;
+  while (*sp == ' ' || *sp == '\t')
+    ++sp;
+  if (strncmp (sp, ".ttinsn", 7) == 0)
+    {
+      const char *t = sp + 7;
+      while (*t == ' ' || *t == '\t')
+	++t;
+      if (strcmp (t, "%0") != 0 || gimple_asm_ninputs (stmt) != 1
+	  || gimple_asm_noutputs (stmt) != 0)
+	return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+      return apply_init_verdict
+	(ctx, classify_delivered_init
+	   (TREE_VALUE (gimple_asm_input_op (stmt, 0)), *ctx->prog, ctx->c),
+	 stmt);
+    }
+  tree value, ptr;
+  if (blocking_store_asm_p (stmt, &value, &ptr))
+    {
+      unsigned HOST_WIDE_INT addr;
+      if (pointer_constant_address (ptr, &addr))
+	{
+	  if (addr >= XTT_INSTRN_BUF_MMIO_BASE
+	      && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+	    return apply_init_verdict
+	      (ctx, classify_delivered_init (value, *ctx->prog, ctx->c),
+	       stmt);
+	  if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
+	    return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+	  return true;		/* sync/data aperture */
+	}
+      return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+    }
+  if (audited_scalar_asm_p (str))
+    return true;
+  return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+}
+
+/* One statement of the caller's loop body.  */
+
+static bool
+init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
+{
+  if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+      || gimple_code (stmt) == GIMPLE_COND
+      || gimple_code (stmt) == GIMPLE_GOTO
+      || gimple_code (stmt) == GIMPLE_NOP
+      || gimple_code (stmt) == GIMPLE_PREDICT
+      || gimple_code (stmt) == GIMPLE_RETURN)
+    return true;
+
+  if (gasm *a = dyn_cast <gasm *> (stmt))
+    return init_scan_asm (ctx, a);
+
+  if (gcall *call = dyn_cast <gcall *> (stmt))
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (insnd)
+	{
+	  if (insnd->sets_cc (call))
+	    {
+	      /* A loop CC write demotes stage 2 (the hoisted enable
+		 would not survive the trip); stage 1 is indifferent
+		 (the callee re-establishes its own lane state).  */
+	      ctx->cc_dirty = true;
+	      return true;
+	    }
+	  switch (insnd->id)
+	    {
+	    case rvtt_insn_data::ttreplay:
+	      return init_refuse (ctx, "drain-init-ownership-unproven",
+				  stmt);
+	    case rvtt_insn_data::sfpwriteconfig_v:
+	      return init_refuse (ctx, "drain-init-ownership-unproven",
+				  stmt);
+	    case rvtt_insn_data::ttsetc16:
+	    case rvtt_insn_data::sfpencc_all_lanes:
+	      /* Another compiler contract's programming: not ordered
+		 against this one.  */
+	      return init_refuse (ctx, "drain-init-ownership-unproven",
+				  stmt);
+	    default:
+	      break;
+	    }
+	  if (call_has_vector_dataflow_p (call))
+	    /* Vector dataflow inside the loop: a later formation in
+	       the caller could own the very state this contract
+	       hoists.	*/
+	    return init_refuse (ctx, "drain-init-vector-live", stmt);
+	  return true;
+	}
+      tree target = gimple_call_fndecl (call);
+      if (ctx->callee_decl && target == ctx->callee_decl)
+	return true;		/* the contract call itself */
+      if (target && ctx->chain_decls && ctx->chain_decls->contains (target))
+	return true;		/* a proven chain hop */
+      if (gimple_call_internal_p (call))
+	return gimple_vdef (call)
+	  ? init_refuse (ctx, "drain-init-ownership-unproven", stmt) : true;
+      tree fndecl = gimple_call_fndecl (call);
+      if (fndecl && fndecl_built_in_p (fndecl))
+	return true;		/* scalar compiler builtin */
+      return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+    }
+
+  if (is_gimple_assign (stmt))
+    {
+      if (vector_typed_p (gimple_assign_lhs (stmt)))
+	return init_refuse (ctx, "drain-init-vector-live", stmt);
+      if (!gimple_store_p (stmt))
+	return true;
+      tree lhs = gimple_get_lhs (stmt);
+      if (!lhs || TREE_CODE (lhs) == SSA_NAME)
+	return true;
+      unsigned HOST_WIDE_INT addr;
+      if (ref_constant_address (lhs, &addr))
+	{
+	  if (addr >= XTT_INSTRN_BUF_MMIO_BASE
+	      && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+	    return apply_init_verdict
+	      (ctx, classify_delivered_init (gimple_assign_rhs1 (stmt),
+					     *ctx->prog, ctx->c), stmt);
+	  if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
+	    return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+	  return true;		/* other constant MMIO / L1 */
+	}
+      tree base = get_base_address (lhs);
+      if (!TREE_THIS_VOLATILE (lhs)
+	  && (!base || !DECL_P (base) || !TREE_THIS_VOLATILE (base)))
+	return true;		/* plain memory */
+      if (base && DECL_P (base))
+	{
+	  const char *name = DECL_ASSEMBLER_NAME (base)
+	    ? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base)) : nullptr;
+	  if (name && !strcmp (name, "__instrn_buffer"))
+	    return apply_init_verdict
+	      (ctx, classify_delivered_init (gimple_assign_rhs1 (stmt),
+					     *ctx->prog, ctx->c), stmt);
+	  if (!DECL_EXTERNAL (base))
+	    return true;	/* TU data object */
+	}
+      return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+    }
+
+  return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+}
+
+/* Stage-2 value equality: every decodable SETC16-class delivery to an
+   owned row anywhere in CALLER_FN must equal the contract's encoded
+   word, and each owned row needs one such delivery whose block
+   dominates the loop header.  Any shortfall demotes to stage 1 (never
+   a refusal).  Runs under the caller's cfun with dominators live.  */
+
+/* One statement's contribution to the value-equality proof: when STMT
+   delivers a SETC16-class word to an owned row, require it equal the
+   contract's encoded word; DOM_BB (the statement's executing site in
+   the hoist function, or the U-level call block for a committed-inline
+   body) marks a dominating reaching write.  Returns false on an
+   unequal or unprovable owned-row write.  */
+
+static bool
+init_value_equal_stmt (gimple *stmt, basic_block dom_bb, class loop *loop,
+		       const rvtt_init_hoist_program &prog,
+		       const rvtt_macro::caps *c, const uint32_t *want,
+		       bool *have_dom)
+{
+  {
+	tree val = NULL_TREE;
+	if (gasm *a = dyn_cast <gasm *> (stmt))
+	  {
+	    const char *sp = gimple_asm_string (a);
+	    while (*sp == ' ' || *sp == '\t')
+	      ++sp;
+	    if (strncmp (sp, ".ttinsn", 7) == 0
+		&& gimple_asm_ninputs (a) == 1)
+	      val = TREE_VALUE (gimple_asm_input_op (a, 0));
+	    else
+	      {
+		tree ptr;
+		tree v2;
+		if (blocking_store_asm_p (a, &v2, &ptr))
+		  {
+		    unsigned HOST_WIDE_INT addr;
+		    if (pointer_constant_address (ptr, &addr)
+			&& addr >= XTT_INSTRN_BUF_MMIO_BASE
+			&& addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+		      val = v2;
+		  }
+	      }
+	  }
+	else if (is_gimple_assign (stmt) && gimple_store_p (stmt))
+	  {
+	    tree lhs = gimple_get_lhs (stmt);
+	    unsigned HOST_WIDE_INT addr;
+	    if (lhs && TREE_CODE (lhs) != SSA_NAME
+		&& ref_constant_address (lhs, &addr)
+		&& addr >= XTT_INSTRN_BUF_MMIO_BASE
+		&& addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+	      val = gimple_assign_rhs1 (stmt);
+	    else if (lhs)
+	      {
+		tree base = get_base_address (lhs);
+		if (base && DECL_P (base) && DECL_ASSEMBLER_NAME (base)
+		    && !strcmp (IDENTIFIER_POINTER
+				  (DECL_ASSEMBLER_NAME (base)),
+				"__instrn_buffer"))
+		  val = gimple_assign_rhs1 (stmt);
+	      }
+	  }
+	if (!val)
+	  return true;
+	uint32_t base_word;
+	bool exact = false;
+	uint32_t word = 0;
+	if (TREE_CODE (val) == INTEGER_CST)
+	  {
+	    word = (uint32_t) (TREE_INT_CST_LOW (val) & 0xffffffff);
+	    base_word = word;
+	    exact = true;
+	  }
+	else if (pushed_word_base (val, &base_word))
+	  word = base_word;
+	else
+	  return true;		/* not a pinned word; other faces cover */
+	if ((base_word >> 24) != c->setc16_opcode)
+	  return true;
+	unsigned reg, value;
+	if (!rvtt_macro::decode_setc16 (c, base_word, &reg, &value))
+	  return true;
+	for (unsigned i = 0; i != prog.n_setc16; ++i)
+	  if (prog.setc16[i].reg == reg)
+	    {
+	      if (!exact || word != want[i])
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "init-hoist: value-equality: row %u"
+			     " write %s (0x%08x vs 0x%08x)\n", reg,
+			     exact ? "unequal" : "runtime-completed",
+			     word, want[i]);
+		  return false;	/* unequal or unprovable value */
+		}
+	      if (dom_bb
+		  && dominated_by_p (CDI_DOMINATORS, loop->header, dom_bb))
+		have_dom[i] = true;
+	    }
+  }
+  return true;
+}
+
+/* The U-level call block through which committed-inline node N's
+   statements execute: walk N's single-caller chain up to UCALLER; the
+   final hop's call statement lives in UCALLER's body.  Null when the
+   chain is not single-sited.  */
+
+static basic_block
+init_dom_call_bb (cgraph_node *ucaller, cgraph_node *n)
+{
+  gcall *stmt = nullptr;
+  unsigned depth = 0;
+  while (n != ucaller)
+    {
+      if (++depth > 8)
+	return nullptr;
+      cgraph_edge *e = n->callers;
+      if (!e || e->next_caller)
+	return nullptr;
+      stmt = e->call_stmt;
+      n = e->caller;
+    }
+  return stmt ? gimple_bb (stmt) : nullptr;
+}
+
+static bool
+init_value_equal_p (cgraph_node *ucaller, function *caller_fn,
+		    class loop *loop,
+		    const rvtt_init_hoist_program &prog,
+		    const rvtt_macro::caps *c)
+{
+  uint32_t want[8];
+  bool have_dom[8] = {};
+  for (unsigned i = 0; i != prog.n_setc16; ++i)
+    if (!rvtt_macro::encode_setc16 (c, prog.setc16[i].reg,
+				    prog.setc16[i].value, &want[i]))
+      return false;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, caller_fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      if (!init_value_equal_stmt (gsi_stmt (gsi), bb, loop, prog, c,
+				  want, have_dom))
+	return false;
+
+  /* Committed-inline bodies (inlined_to == UCALLER): their statements
+     execute at their U-level call sites -- the production hw-configure
+     init lives here until the inline transform materializes it.  The
+     body resolves through the clone_of origin (laneBT); the write's
+     dominance is its U-level call block's.  */
+  cgraph_node *node;
+  FOR_EACH_FUNCTION (node)
+    {
+      if (node->inlined_to != ucaller)
+	continue;
+      cgraph_node *body_node = node;
+      while (body_node && !gimple_has_body_p (body_node->decl)
+	     && body_node->clone_of)
+	body_node = body_node->clone_of;
+      function *nfn = body_node
+	? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+      if (!nfn || !nfn->cfg)
+	return false;		/* unscannable committed-inline body */
+      basic_block dom_bb = init_dom_call_bb (ucaller, node);
+      basic_block nbb;
+      FOR_EACH_BB_FN (nbb, nfn)
+	for (gimple_stmt_iterator gsi = gsi_start_bb (nbb); !gsi_end_p (gsi);
+	     gsi_next (&gsi))
+	  if (!init_value_equal_stmt (gsi_stmt (gsi), dom_bb, loop, prog, c,
+				      want, have_dom))
+	    return false;
+    }
+
+  /* MOP template words touching owned rows must be value-equal too
+     (they execute at their MOP sites, before and between calls).  */
+  for (uint32_t w : tu_facts.slot_words)
+    if ((w >> 24) == c->setc16_opcode)
+      {
+	unsigned reg, value;
+	if (!rvtt_macro::decode_setc16 (c, w, &reg, &value))
+	  return false;
+	for (unsigned i = 0; i != prog.n_setc16; ++i)
+	  if (prog.setc16[i].reg == reg && w != want[i])
+	    return false;
+      }
+
+  for (unsigned i = 0; i != prog.n_setc16; ++i)
+    if (!have_dom[i])
+      {
+	if (dump_file)
+	  fprintf (dump_file, "init-hoist: value-equality: row %u has no"
+		   " dominating reaching write\n", prog.setc16[i].reg);
+	return false;		/* no dominating reaching write */
+      }
+  return true;
+}
+
+/* The MOP template audit on the init face.  */
+
+static bool
+mop_init_ok_p (const rvtt_init_hoist_program &prog,
+	       const rvtt_macro::caps *c, bool *owned_dirty,
+	       const char **why)
+{
+  if (tu_facts.slots_unproven)
+    {
+      *why = tu_facts.slot_reason;
+      return false;
+    }
+  if (tu_facts.slot_replay)
+    {
+      *why = "drain-init-mop-slot-unproven";
+      return false;
+    }
+  for (uint32_t w : tu_facts.slot_words)
+    {
+      init_word_verdict v = classify_word_init (w, prog, c);
+      if (v.owned_row_write)
+	*owned_dirty = true;
+      if (v.is_mop || !v.ok)
+	{
+	  *why = "drain-init-mop-slot-unproven";
+	  return false;
+	}
+    }
+  return true;
+}
+
+/* Commit: insert the hoisted prefix as typed builtin calls at the tail
+   of the caller loop's dedicated preheader (created on the entry edge
+   when needed), in the callee's own emission order: enable, owned
+   SETC16 program (stage 2), staged descriptor words.  The caller's
+   inline transform has not run yet, so every inserted call carries a
+   cgraph edge (the coefficient-hoist commit's discipline).  */
+
+static void
+init_commit_caller (cgraph_node *caller, edge entry,
+		    const rvtt_init_hoist_program &prog, int stage)
+{
+  const rvtt_insn_data *encc_d
+    = rvtt_get_insn_data (rvtt_insn_data::sfpencc_all_lanes);
+  const rvtt_insn_data *setc16_d
+    = rvtt_get_insn_data (rvtt_insn_data::ttsetc16);
+  const rvtt_insn_data *xloadi_d
+    = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
+  const rvtt_insn_data *wrcfg_d
+    = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
+  tree vec_type = TREE_TYPE (TREE_TYPE (xloadi_d->decl));
+
+  basic_block ph = rvtt_commit_hoist_preheader (entry);
+  auto place = [&] (gimple *stmt)
+    {
+      insert_in_preheader (ph, stmt);
+      caller->create_edge (cgraph_node::get_create
+			     (gimple_call_fndecl (as_a <gcall *> (stmt))),
+			   as_a <gcall *> (stmt), ph->count);
+    };
+
+  /* The canonical zero-argument all-lanes enable: expands to the
+     architectural word the callee's proven enable was compared
+     against, so both sides program the identical lane state.  */
+  gcall *encc = gimple_build_call (encc_d->decl, 0);
+  place (encc);
+  if (stage >= 2)
+    for (unsigned i = 0; i != prog.n_setc16; ++i)
+      {
+	gcall *sc = gimple_build_call
+	  (setc16_d->decl, 2,
+	   build_int_cst (unsigned_type_node, prog.setc16[i].reg),
+	   build_int_cst (unsigned_type_node, prog.setc16[i].value));
+	place (sc);
+      }
+  for (unsigned i = 0; i != prog.n_words; ++i)
+    {
+      gcall *load = gimple_build_call
+	(xloadi_d->decl, 5, null_pointer_node,
+	 build_int_cst (unsigned_type_node, prog.words[i].word),
+	 build_int_cst (unsigned_type_node, 0),
+	 build_int_cst (unsigned_type_node, 0),
+	 build_int_cst (integer_type_node, -32));
+      tree staged = make_ssa_name (vec_type);
+      gimple_call_set_lhs (load, staged);
+      gcall *wrcfg = gimple_build_call
+	(wrcfg_d->decl, 2, staged,
+	 build_int_cst (unsigned_type_node, prog.words[i].dest));
+      place (load);
+      place (wrcfg);
+    }
+  update_ssa (TODO_update_ssa_only_virtuals);
+  if (dump_file)
+    fprintf (dump_file,
+	     "init-hoist: placed stage-%d init contract (%u setc16, %u"
+	     " descriptor words) in %s preheader bb %d\n",
+	     stage, stage >= 2 ? prog.n_setc16 : 0, prog.n_words,
+	     caller->dump_name (), ph->index);
+}
+
+} // anonymous namespace (lane CA init hoist)
+
+/* See rvtt-protos.h.  Returns the refusal name, or NULL after a
+   committed caller-side insertion with PROG->stage set.  */
+
+const char *
+rvtt_crosscall_init_hoist (function *callee_fn,
+			   rvtt_init_hoist_program *prog)
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    return "drain-init-callers-unproven";
+  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
+    : rvtt_macro::CPU_WH;
+  const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu (cpu);
+  if (!c)
+    return "drain-init-callers-unproven";
+
+  cgraph_node *cn = cgraph_node::get (callee_fn->decl);
+  auto closure_why = [&] (const char *what) -> const char *
+    {
+      if (dump_file)
+	fprintf (dump_file, "init-hoist: closure (%s)\n", what);
+      return "drain-init-callers-unproven";
+    };
+  if (!cn)
+    return closure_why ("no-node");
+  if (!cn->definition)
+    return closure_why ("no-definition");
+  if (cn->address_taken)
+    return closure_why ("address-taken");
+  if (cn->alias || cn->thunk)
+    return closure_why ("alias-or-thunk");
+  if (cn->clones)
+    return closure_why ("clones");
+
+  /* Resolve the effective caller chain F <- W1 <- ... <- U.  The
+     production shape reaches F through an inline wrapper (possibly an
+     IPA clone): each intermediate must be the target of exactly one
+     call edge, not address-taken, and COMMITTED into its inliner
+     (inlined_to) -- so at execution time its statements run inline at
+     the call site, between the loop's trips -- and its body (through
+     the clone_of origin chain, the laneBT resolution: origin body =
+     sound over-approximation) is scanned as part of the loop epoch
+     below.  U is the outermost node still carrying its own gimple CFG;
+     the hoist lands in U's loop preheader.  */
+  auto_vec<cgraph_node *, 4> chain;	/* intermediates, innermost first */
+  cgraph_node *cur = cn;
+  cgraph_node *ucaller = nullptr;
+  gcall *ucall = nullptr;
+  for (unsigned depth = 0; !ucaller; ++depth)
+    {
+      if (depth > 3)
+	return closure_why ("chain-too-deep");
+      cgraph_edge *e = cur->callers;
+      if (!e)
+	return closure_why ("no-callers");
+      if (e->next_caller)
+	return closure_why ("multi-site");
+      if (e->caller == cn)
+	return closure_why ("recursion");
+      cgraph_node *caller = e->caller;
+      if (!caller->definition)
+	return closure_why ("caller-body-unavailable");
+      function *this_fn = DECL_STRUCT_FUNCTION (caller->decl);
+      if (this_fn && this_fn->cfg && !caller->inlined_to)
+	{
+	  ucaller = caller;
+	  ucall = e->call_stmt;
+	  if (!ucall)
+	    return closure_why ("caller-body-unavailable");
+	  break;
+	}
+      /* Intermediate hop: must be committed inline (its statements
+	 execute at the call site) and resolvable to a scannable
+	 body.  */
+      if (!caller->inlined_to || caller->address_taken || caller->alias
+	  || caller->thunk)
+	return closure_why ("chain-unproven");
+      chain.safe_push (caller);
+      cur = caller;
+    }
+  cgraph_edge *e = ucaller->callees;
+  /* Find U's edge into the chain (its call_stmt is the loop member).  */
+  {
+    cgraph_node *first_hop = chain.is_empty () ? cn : chain.last ();
+    cgraph_edge *found = nullptr;
+    for (e = ucaller->callees; e; e = e->next_callee)
+      if (e->callee == first_hop)
+	{
+	  if (found)
+	    return closure_why ("multi-site");
+	  found = e;
+	}
+    if (!found || !found->call_stmt)
+      return closure_why ("caller-body-unavailable");
+    ucall = found->call_stmt;
+    e = found;
+  }
+  function *cfn = DECL_STRUCT_FUNCTION (ucaller->decl);
+  if (!cfn || !cfn->cfg)
+    return closure_why ("caller-cfg-unavailable");
+
+  /* TU facts (MOP template census) while every body that still has
+     gimple is scannable; already-expanded bodies are outside the
+     census by the established discipline (their delivered words were
+     scanned when they were the contract subject).  */
+  compute_tu_facts ();
+
+  const char *result = nullptr;
+  int stage = 2;
+  push_cfun (cfn);
+  loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+  bool dom = dom_info_available_p (CDI_DOMINATORS);
+  if (!dom)
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  basic_block call_bb = gimple_bb (ucall);
+  class loop *loop = call_bb ? call_bb->loop_father : nullptr;
+  edge entry = nullptr;
+  if (!loop || !loop_outer (loop))
+    result = "drain-init-loop-unproven";
+  else
+    {
+      entry = rvtt_loop_entry_edge (loop);
+      if (!entry || rvtt_preheader_insertion_blocked_p (entry))
+	result = "drain-init-loop-unproven";
+    }
+
+  /* Admitted call targets along the chain: every hop's decl and its
+     clone-origin decl (U's loop calls the outermost hop; each hop's
+     body calls the next).  */
+  hash_set<tree> chain_decls;
+  chain_decls.add (callee_fn->decl);
+  for (cgraph_node *hop : chain)
+    {
+      chain_decls.add (hop->decl);
+      for (cgraph_node *o = hop; o; o = o->clone_of)
+	chain_decls.add (o->decl);
+    }
+
+  init_scan_ctx ctx;
+  ctx.prog = prog;
+  ctx.c = c;
+  ctx.callee_decl = callee_fn->decl;
+  ctx.chain_decls = &chain_decls;
+  if (!result)
+    {
+      basic_block *body = get_loop_body (loop);
+      for (unsigned ix = 0; !ctx.why && ix != loop->num_nodes; ++ix)
+	{
+	  for (gphi_iterator psi = gsi_start_phis (body[ix]);
+	       !gsi_end_p (psi); gsi_next (&psi))
+	    if (vector_typed_p (gimple_phi_result (psi.phi ()))
+		&& !virtual_operand_p (gimple_phi_result (psi.phi ())))
+	      {
+		init_refuse (&ctx, "drain-init-vector-live", psi.phi ());
+		break;
+	      }
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	       !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
+	    init_scan_stmt (&ctx, gsi_stmt (gsi));
+	}
+      free (body);
+      if (ctx.why)
+	result = ctx.why;
+    }
+
+  /* The chain hops' statements execute per trip, between the loop's
+     calls: scan every hop's body (through the clone_of origin when the
+     clone carries no materialized body -- statement classification is
+     parameter-independent, so the origin over-approximates soundly)
+     with the same epoch discipline.  */
+  if (!result)
+    for (cgraph_node *hop : chain)
+      {
+	cgraph_node *body_node = hop;
+	while (body_node && !gimple_has_body_p (body_node->decl)
+	       && body_node->clone_of)
+	  body_node = body_node->clone_of;
+	function *hfn = body_node
+	  ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+	if (!hfn || !hfn->cfg)
+	  {
+	    result = "drain-init-callers-unproven";
+	    if (dump_file)
+	      fprintf (dump_file, "init-hoist: closure (hop-body %s)\n",
+		       hop->dump_name ());
+	    break;
+	  }
+	basic_block hbb;
+	FOR_EACH_BB_FN (hbb, hfn)
+	  {
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
+		 !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
+	      init_scan_stmt (&ctx, gsi_stmt (gsi));
+	    if (ctx.why)
+	      break;
+	  }
+	if (ctx.why)
+	  {
+	    result = ctx.why;
+	    break;
+	  }
+      }
+
+  if (!result && ctx.saw_mop)
+    {
+      const char *why = nullptr;
+      if (!mop_init_ok_p (*prog, c, &ctx.owned_row_dirty, &why))
+	result = why;
+    }
+
+  if (!result)
+    {
+      /* Stage decision.  An in-loop owned-row write means the caller
+	 re-programs an owned row between calls: with the callee's
+	 per-call SETC16 program retained (stage 1) that is exactly
+	 today's interleaving; hoisting it (stage 2) would change what
+	 the next call's launches address -- demote.  */
+      bool value_equal = !ctx.cc_dirty && !ctx.owned_row_dirty
+	&& init_value_equal_p (ucaller, cfn, loop, *prog, c);
+      if (!value_equal)
+	{
+	  stage = 1;
+	  if (dump_file)
+	    fprintf (dump_file, "init-hoist: stage-2 demoted (%s)\n",
+		     ctx.cc_dirty ? "loop-cc-write"
+		     : ctx.owned_row_dirty ? "loop-owned-row-write"
+		     : "value-equality-unproven");
+	}
+      init_commit_caller (ucaller, entry, *prog, stage);
+      prog->stage = stage;
+    }
+
+  if (!dom)
+    free_dominance_info (CDI_DOMINATORS);
+  loop_optimizer_finalize ();
+  pop_cfun ();
+  return result;
 }
 
 gimple_opt_pass *
