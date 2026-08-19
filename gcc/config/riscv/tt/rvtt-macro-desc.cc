@@ -916,9 +916,14 @@ lreg_index (rtx x)
      spec-and-simulator-audited modes; indirect-VA/VD mods refuse):
      computes low/high 23 bits of VA*VB with the VC addend pinned to
      the architectural zero register L9 (SFPMUL24.md mandates VC == 9).
-     The VB factor must be the launch-VD register (VB:=VD route); VA
-     survives in its own template field (packed through the imm12
-     region per the TT_OP layout), and src_c carries the mandated L9.
+     ONE factor must be the launch-VD register (VB:=VD route); the
+     OTHER factor's register survives in the template's VA field
+     (packed through the imm12 region per the TT_OP layout), and
+     src_c carries the mandated L9.  Both audited mods are symmetric
+     in VA/VB (sfpmul24_result), so the in-place product the register
+     allocator tied onto the VA-side factor is admitted through the
+     commuted word; the established VB-side order is matched first so
+     previously derived words stay bit-identical.
 
    Everything else stays outside the admitted class and keeps the
    established descriptor-program-unproven refusal.  LAUNCH_VD < 0
@@ -1071,16 +1076,31 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	HOST_WIDE_INT m = INTVAL (mod);
 	if (m != 0 && m != 1)
 	  return false;		/* plain LOWER/UPPER only	       */
-	if (b != dest || b != launch_vd)
-	  return false;		/* VB factor must be the launch VD     */
-	/* The TT_OP layout places VA at word bits 19:16 = imm12 bits
-	   7:4; the VB field (bits 15:12 = imm12 bits 3:0) is overridden
-	   at execution and packs 0.  */
+	/* One factor must be the launch-VD register (the VB:=VD route
+	   supplies it at execution); the OTHER factor's register is
+	   named in the template's VA field.  Both audited mods are
+	   symmetric in VA/VB (LOWER: (a*b) low 23; UPPER:
+	   (a_23*b_23) >> 23 — craq-sim sfpmul24_result, SFPMUL24.md),
+	   so when the allocator tied the product in-place onto the
+	   VA-side factor instead, the commuted word — naming the
+	   VB-side factor — realizes the identical value.  The
+	   established operand order is admitted first so previously
+	   derived words stay bit-identical.  */
+	int named;
+	if (b == dest && b == launch_vd)
+	  named = a;		/* established: VA named	       */
+	else if (a == dest && a == launch_vd)
+	  named = b;		/* commuted: VB-side factor named      */
+	else
+	  return false;		/* no factor is the launch VD	       */
+	/* The TT_OP layout places the named factor at word bits 19:16
+	   = imm12 bits 7:4; the VB field (bits 15:12 = imm12 bits 3:0)
+	   is overridden at execution and packs 0.  */
 	out->opcode = (uint8_t) (TT_OP_BH_SFPMUL24 (0, 0, 0, 0, 0) >> 24);
 	out->mod1 = (uint8_t) m;
 	out->src_c = 9;		/* the mandated zero constant LReg[9]  */
-	out->imm12 = (uint16_t) (a << 4);
-	out->name_reads = a < 8 ? 1u << a : 0;
+	out->imm12 = (uint16_t) (named << 4);
+	out->name_reads = named < 8 ? 1u << named : 0;
 	return true;
       }
     default:
@@ -1529,6 +1549,34 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	}
     }
 
+  /* Reviewable derivation input: the exact row spec the core judges
+     (event tuples and explicit floors), so a derivation refusal names
+     its participants in the dump.  */
+  if (dump_file)
+    {
+      for (unsigned e = 0; e < ds->row.n_events; ++e)
+	{
+	  const rvtt_macro_derive::event_spec &sp = ds->row.events[e];
+	  fprintf (dump_file,
+		   "Macro-planner derive-event %u: opcode=0x%02x%s "
+		   "macro=%d carrier-slot=%d dep=0x%02x anti=0x%02x "
+		   "tmpl-key=%d imm12=0x%03x war-floor+1=%d "
+		   "consumer-slot+1=%d overwrite-slot+1=%d "
+		   "issued-input-slot=%d reads-carrier-vd=%d\n",
+		   e, sp.opcode, sp.is_store ? " (store)" : "",
+		   sp.macro_index, sp.carrier_slot, sp.dep_mask,
+		   sp.anti_dep_mask, sp.template_key, sp.template_imm12,
+		   sp.war_floor_slot_p1, sp.issue_consumer_slot_p1,
+		   sp.issue_overwrite_slot_p1,
+		   sp.latest_issued_input_slot, sp.reads_carrier_vd_reg);
+	}
+      for (unsigned x = 0; x < ds->row.n_explicits; ++x)
+	fprintf (dump_file,
+		 "Macro-planner derive-explicit %u: slot=%d "
+		 "unit-mask=0x%x\n",
+		 x, ds->row.explicits[x].slot,
+		 ds->row.explicits[x].unit_mask);
+    }
   if (!rvtt_macro_derive::derive_calendar (c, ds->row, &ds->cal))
     {
       ds->refusal = ds->cal.refusal;
