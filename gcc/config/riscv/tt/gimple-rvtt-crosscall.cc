@@ -91,9 +91,27 @@ along with GCC; see the file COPYING3.  If not see
    - the (single, v1) call site sits in a natural loop with a unique
      entry edge; the hoisted loads land on that edge (dedicated
      preheader or commit-time split), so they execute exactly when the
-     loop body -- and therefore the original per-call prefix --
-     would have executed at least once.  Zero-trip paths keep the
-     original register contents bit-for-bit;
+     loop is ENTERED.  Entering the loop does NOT imply the body runs:
+     on a zero-trip path (guard in the header) the hoisted loads
+     execute although the original per-call prefix never would, so the
+     contract registers ARE written where the original left them
+     untouched.  The actual soundness argument is that this zero-trip
+     clobber is unobservable: (a) no vector SSA value of the caller is
+     live anywhere in the loop (proven below), and every path from the
+     insertion point reaches the exit only through the loop header, so
+     the caller's register allocation cannot hold any live value in a
+     contract register across the clobber; (b) the explicit
+     architectural LREG interfaces -- the only contract-carrying
+     readers of residual register state under the no-residual-contents
+     model (rtl-rvtt-replay.cc: SFPU register state is not an implicit
+     cross-function interface; an explicit hand-off is an lreg
+     builtin) -- are refused inside the loop wholesale and, for reads
+     of a contract register, anywhere else in the caller
+     (crosscall-caller-foreign-contract); (c) any execution that DID
+     enter the loop body already had the callee's per-call
+     materializations write the same constants to the same registers,
+     so no downstream reader can distinguish the hoisted write from
+     the state every trip-taking execution always produced;
    - every statement of the loop body is proven LREG-inert for the
      contract registers: scalar code, audited scalar asm, typed rvtt
      calls with no vector dataflow (at gimple, hard LREGs are touched
@@ -116,10 +134,23 @@ along with GCC; see the file COPYING3.  If not see
      be allocated to a contract register).
 
    [TU, consulted only when a MOP word is delivered in a scanned range]
-   - every store anywhere in the TU that can reach the MOP template
-     file (constant-address stores into the architected nine words;
-     volatile stores whose address cannot be proven elsewhere fail
-     closed) programs an instruction slot with a constant word whose
+   - the census walks every body in the TU's EXECUTABLE CLOSURE,
+     rooted at everything the link image can enter from outside the
+     TU under the link model (AXIOM extern-fixed-surface): the entry
+     anchor -- `_start' when the TU carries it, else `main' (the crt0
+     entry; the wave-8 production shape this census used to unroot),
+     else every externally-visible non-comdat definition (firmware ->
+     run_kernel) -- plus asm/vector-callable forced definitions,
+     static constructors/destructors, address-taken definitions, and
+     every function a variable initializer references; membership
+     propagates through call edges and references.  A TU with defined
+     bodies and NO root fails closed (crosscall-census-unrooted): a
+     census that can see no entry can vouch for nothing;
+   - every store anywhere in the executable closure that can reach the
+     MOP template file (constant-address stores into the architected
+     nine words; volatile stores whose address cannot be proven
+     elsewhere fail closed) programs an instruction slot with a
+     constant word whose
      audited class cannot write an allocatable contract LREG.  Address
      facts and slot semantics are the recorded facts of
      rvtt-mop-tables.h; the word classes mirror the audited raw-word
@@ -165,6 +196,19 @@ along with GCC; see the file COPYING3.  If not see
      crosscall-caller-replay-unproven	REPLAY word delivered in the loop
      crosscall-caller-mop-slot-unproven	MOP delivered in the loop but the
 					TU template audit failed
+     crosscall-caller-foreign-contract	explicit lreg read (or raw-access
+					marker naming a read) of a contract
+					register in the caller outside the
+					loop: a residual-contents observer
+					the zero-trip clobber cannot be
+					ordered against
+     crosscall-caller-unrooted		caller body outside the TU
+					executable closure: the census
+					cannot vouch for it
+     crosscall-census-unrooted		defined bodies but no census root
+					(no entry / constructor /
+					externally-visible symbol): the
+					whole template audit fails closed
    QSR refuses by pass gate (no validated capability).  */
 
 #define INCLUDE_VECTOR
@@ -687,6 +731,14 @@ struct crosscall_tu_facts
 				      re-classified per proof face)    */
   hash_map<tree, global_census_entry> *globals = nullptr;
   vec<slot_demand> demands = vNULL;
+  /* The executable closure and its direct roots (file header, [TU]).
+     ENTRY_ROOTS are the closure roots themselves -- the functions the
+     link image may enter from OUTSIDE the TU, whose call sites the TU
+     therefore cannot enumerate.  CENSUS_UNROOTED records the
+     fail-closed no-root verdict.  */
+  hash_set<cgraph_node *> *executable = nullptr;
+  hash_set<cgraph_node *> *entry_roots = nullptr;
+  bool census_unrooted = false;
 };
 
 static crosscall_tu_facts tu_facts;
@@ -769,8 +821,23 @@ pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
       unsigned HOST_WIDE_INT value;
       if (foldable_global_p (rhs1, &value))
 	{
+	  /* An unrooted census recorded no store facts at all: the
+	     assume+verify discipline has nothing to verify against,
+	     so the fold fails closed.  */
+	  if (tu_facts.census_unrooted)
+	    return false;
 	  if (tu_facts.globals)
-	    tu_facts.globals->get_or_insert (rhs1).assumed = true;
+	    {
+	      global_census_entry &ge
+		= tu_facts.globals->get_or_insert (rhs1);
+	      /* A censused conflicting store makes the initializer
+		 fold unsound at any later assumption point (the
+		 end-of-census verification only covers assumptions
+		 recorded during the walk itself).  */
+	      if (ge.stored_unknown)
+		return false;
+	      ge.assumed = true;
+	    }
 	  *addr = value;
 	  return true;
 	}
@@ -1133,6 +1200,12 @@ param_not_template_p (tree parm, hash_set<cgraph_node *> *executable,
   if (!cn || !cn->definition || cn->address_taken || cn->alias
       || cn->thunk || cn->clones || !cn->callers)
     return false;
+  /* A closure root is enterable from OUTSIDE the TU (crt0/firmware):
+     its in-TU call edges are not all the calls that can execute, so a
+     parameter binding cannot be proven from them.  Fail closed (the
+     same direction the address-taken check above takes).  */
+  if (tu_facts.entry_roots && tu_facts.entry_roots->contains (cn))
+    return false;
   int idx = -1, i = 0;
   for (tree p = DECL_ARGUMENTS (fndecl); p; p = DECL_CHAIN (p), ++i)
     if (p == parm)
@@ -1357,19 +1430,43 @@ census_asm (gasm *stmt, hash_set<cgraph_node *> *executable)
 }
 
 /* The executable closure of the TU under AXIOM kernel-single-TU (the
-   whole thread program is this TU plus crt0): roots are the link
-   model's entry anchor (`_start', the crt0 entry the raw-word census
-   already treats as the startup axiom), static constructors and
-   destructors, anything forced live for the ABI or by attribute, and
-   every function a variable initializer references (the init_array
-   entries); membership propagates through call edges and function
-   references FROM members only.  A defined body outside the closure --
-   comdat or not -- has no executable call path: every call was inlined
-   away and nothing holds its address.  Over-approximation is the safe
-   direction: an extra member only adds census obligations.  */
+   whole thread program is this TU plus crt0/firmware): roots are
+   everything the link image can enter from OUTSIDE the TU.  The link
+   model (AXIOM extern-fixed-surface) makes that set precise:
+
+   - a TU that carries its own `_start' is entered ONLY at `_start'
+     (the reset vector; no external component exists that could call
+     anything else) -- the raw-word census's startup axiom.  A public
+     body no live code calls is then an orphaned out-of-line copy of
+     an inlined function, not a hidden entry (the production trisc
+     shape leaves exactly such orphans);
+   - a TU with `main' but no `_start' is entered only at `main' (the
+     external crt0 calls exactly `main' -- the wave-8 production
+     shape this census used to unroot);
+   - a TU with neither anchor can be entered at any externally-visible
+     non-comdat definition (firmware -> run_kernel; pre-built external
+     components can call the public surface but cannot name this TU's
+     comdat instantiations, which exist only where instantiated);
+   - attribute/ABI-forced and interrupt definitions can additionally
+     be entered from assembly or vectors in every model.
+
+   Roots further include static constructors and destructors, address-
+   taken definitions, and every function a variable initializer
+   references (the init_array entries); membership propagates through
+   call edges and function references FROM members only.  A defined
+   body outside the closure has no executable call path: every call
+   was inlined away and nothing holds its address.  Within the model,
+   over-approximation is the safe direction: an extra member only adds
+   census obligations.
+
+   *ENTRY_ROOTS receives the external entries themselves -- the
+   functions whose call sites the TU cannot enumerate, which the
+   parameter-binding and slot-demand resolutions must fail closed
+   on.  */
 
 static void
-compute_executable_closure (hash_set<cgraph_node *> *executable)
+compute_executable_closure (hash_set<cgraph_node *> *executable,
+			    hash_set<cgraph_node *> *entry_roots)
 {
   auto_vec<cgraph_node *, 32> work;
   auto add = [&] (symtab_node *s)
@@ -1378,6 +1475,9 @@ compute_executable_closure (hash_set<cgraph_node *> *executable)
 	if (!executable->add (cn))
 	  work.safe_push (cn);
     };
+  /* The link model's entry anchor: `_start' when the TU carries it,
+     else `main' (the crt0 entry).  */
+  cgraph_node *anchor_start = nullptr, *anchor_main = nullptr;
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
@@ -1385,13 +1485,41 @@ compute_executable_closure (hash_set<cgraph_node *> *executable)
 	continue;
       const char *name = DECL_ASSEMBLER_NAME (node->decl)
 	? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node->decl)) : nullptr;
-      if ((name && !strcmp (name, "_start"))
+      if (name && !strcmp (name, "_start"))
+	anchor_start = node;
+      else if (DECL_NAME (node->decl) && MAIN_NAME_P (DECL_NAME (node->decl))
+	       && TREE_PUBLIC (node->decl))
+	anchor_main = node;
+    }
+  cgraph_node *anchor = anchor_start ? anchor_start : anchor_main;
+  FOR_EACH_FUNCTION (node)
+    {
+      if (!node->definition)
+	continue;
+      bool externally_visible
+	= TREE_PUBLIC (node->decl) && !DECL_COMDAT (node->decl);
+      bool forced = DECL_PRESERVE_P (node->decl)
+	|| node->force_output || node->forced_by_abi
+	|| lookup_attribute ("interrupt", DECL_ATTRIBUTES (node->decl));
+      /* The external entries under the link model: the anchor when one
+	 pins the surface (with an in-TU `_start' the reset vector is
+	 the image's ONLY external entry, so a public body no live code
+	 calls is an orphaned out-of-line copy, not a hidden entry --
+	 the production trisc shape leaves exactly such orphans after
+	 inlining); every externally-visible non-comdat definition when
+	 no anchor does; asm-callable forced definitions always.  */
+      bool entry = node == anchor
+	|| (!anchor && externally_visible)
+	|| forced;
+      if (entry
 	  || DECL_STATIC_CONSTRUCTOR (node->decl)
 	  || DECL_STATIC_DESTRUCTOR (node->decl)
-	  || DECL_PRESERVE_P (node->decl)
-	  || node->force_output || node->forced_by_abi
 	  || node->address_taken)
-	add (node);
+	{
+	  add (node);
+	  if (entry)
+	    entry_roots->add (node);
+	}
     }
   varpool_node *vnode;
   FOR_EACH_VARIABLE (vnode)
@@ -1422,23 +1550,45 @@ compute_tu_facts ()
     return;
   tu_facts.computed = true;
   tu_facts.globals = new hash_map<tree, global_census_entry>;
+  tu_facts.executable = new hash_set<cgraph_node *>;
+  tu_facts.entry_roots = new hash_set<cgraph_node *>;
 
-  hash_set<cgraph_node *> executable_set;
-  hash_set<cgraph_node *> *executable = &executable_set;
-  compute_executable_closure (executable);
+  hash_set<cgraph_node *> *executable = tu_facts.executable;
+  compute_executable_closure (executable, tu_facts.entry_roots);
+
+  /* Fail closed on an unrooted TU: defined bodies with no entry /
+     constructor / externally-visible root.  A census that can see no
+     entry can vouch for nothing -- the wave-8 defect was the opposite
+     (vacuously "proven") verdict.  */
+  if (executable->is_empty ())
+    {
+      cgraph_node *body_node;
+      FOR_EACH_FUNCTION (body_node)
+	if (body_node->definition && body_node->has_gimple_body_p ())
+	  {
+	    tu_facts.census_unrooted = true;
+	    census_slot_refusal ("crosscall-census-unrooted");
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "crosscall-hoist: census unrooted: defined bodies "
+		       "but no entry/constructor/externally-visible root "
+		       "(crosscall-census-unrooted)\n");
+	    break;
+	  }
+    }
 
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
       if (!node->definition || !node->has_gimple_body_p ())
 	continue;
-      /* A comdat body outside the executable closure cannot run: under
-	 AXIOM kernel-single-TU (rtl-rvtt-mop-form.cc) the whole thread
-	 program is this TU plus crt0, so only the closure computed
-	 below can reach it.  (The production shape: the retained
-	 ckernel_template member bodies whose every call was inlined --
-	 their `this'-relative slot stores are dead code that would
-	 otherwise refuse the audit unresolvably.)  */
+      /* A body outside the executable closure cannot run: under AXIOM
+	 kernel-single-TU (rtl-rvtt-mop-form.cc) the whole thread
+	 program is this TU plus crt0/firmware, whose only entries into
+	 the TU are the closure roots above.  (The production shape:
+	 the retained comdat ckernel_template member bodies whose every
+	 call was inlined -- their `this'-relative slot stores are dead
+	 code that would otherwise refuse the audit unresolvably.)  */
       if (!executable->contains (node))
 	{
 	  if (dump_file)
@@ -1448,21 +1598,37 @@ compute_tu_facts ()
 	  continue;
 	}
       function *ofn = DECL_STRUCT_FUNCTION (node->decl);
-      if (!ofn || !ofn->cfg)
+      if (!ofn || !ofn->cfg || (ofn->curr_properties & PROP_rtl))
 	{
 	  /* A pre-materialization clone carries no body of its own; the
 	     clone_of origin's is the sound over-approximation (the
 	     laneBT resolution: the clone's statements are the origin's
 	     under parameter substitution, and any word the origin
-	     leaves unresolved defers to the demands machinery).  */
+	     leaves unresolved defers to the demands machinery).  An
+	     already-EXPANDED body (PROP_rtl: the init-hoist service
+	     computes the census at planner time, when the contract
+	     subject itself is past gimple) has no gimple left to walk:
+	     its stores cannot be audited any more, so it fails closed
+	     the same way.  */
 	  cgraph_node *o = node->clone_of;
 	  while (o && (!DECL_STRUCT_FUNCTION (o->decl)
-		       || !DECL_STRUCT_FUNCTION (o->decl)->cfg))
+		       || !DECL_STRUCT_FUNCTION (o->decl)->cfg
+		       || (DECL_STRUCT_FUNCTION (o->decl)->curr_properties
+			   & PROP_rtl)))
 	    o = o->clone_of;
 	  ofn = o ? DECL_STRUCT_FUNCTION (o->decl) : nullptr;
 	  if (!ofn || !ofn->cfg)
 	    {
 	      census_slot_refusal ("mop-template-body-unavailable");
+	      if (dump_file)
+		fprintf (dump_file,
+			 "crosscall-hoist: census body unavailable "
+			 "(%s): %s\n",
+			 DECL_STRUCT_FUNCTION (node->decl)
+			 && (DECL_STRUCT_FUNCTION (node->decl)
+			       ->curr_properties & PROP_rtl)
+			 ? "already expanded" : "no gimple cfg",
+			 node->dump_name ());
 	      continue;
 	    }
 	}
@@ -1503,6 +1669,19 @@ compute_tu_facts ()
       if (!fnode)
 	{
 	  census_slot_refusal ("mop-template-slot-word-unresolved");
+	  break;
+	}
+      /* A demanding function that is itself a closure root can be
+	 called from OUTSIDE the TU with arguments the TU cannot see:
+	 its in-TU call sites are not all the sites.  Fail closed.  */
+      if (tu_facts.entry_roots->contains (fnode))
+	{
+	  census_slot_refusal ("mop-template-slot-word-unresolved");
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "crosscall-hoist: demanded slot word in closure root "
+		     "%s: out-of-TU call sites cannot be enumerated\n",
+		     fnode->dump_name ());
 	  break;
 	}
       for (cgraph_edge *e = fnode->callers; e; e = e->next_caller)
@@ -2214,6 +2393,47 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   if (vector_value_live_in_loop_p (fn, loop))
     return refuse ("crosscall-caller-lreg-live", caller->decl, call_stmt);
 
+  /* Explicit architectural READS of a contract register anywhere in
+     the caller OUTSIDE the loop: the one contract-carrying observer of
+     residual register state (no-residual-contents model) the zero-trip
+     clobber argument cannot order against -- the hoisted loads execute
+     on loop entry even when the body never runs, so a pre-loop
+     hand-off read after the loop would observe the clobber (file
+     header, [caller]).  In-loop markers were already refused by the
+     scan above; writes cannot observe.  */
+  basic_block obb;
+  FOR_EACH_BB_FN (obb, fn)
+    {
+      if (flow_bb_inside_loop_p (loop, obb))
+	continue;
+      for (gimple_stmt_iterator gsi = gsi_start_bb (obb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gcall *call = dyn_cast <gcall *> (gsi_stmt (gsi));
+	  const rvtt_insn_data *insnd
+	    = call ? rvtt_get_insn_data (call) : nullptr;
+	  if (!insnd)
+	    continue;
+	  if (insnd->id == rvtt_insn_data::sfpreadlreg)
+	    {
+	      tree regno = gimple_call_arg (call, 0);
+	      if (TREE_CODE (regno) != INTEGER_CST
+		  || ((contract_mask
+		       >> (TREE_INT_CST_LOW (regno) & 0xf)) & 1))
+		return refuse ("crosscall-caller-foreign-contract",
+			       caller->decl, call);
+	    }
+	  else if (insnd->id == rvtt_insn_data::sfprawlreg_access)
+	    {
+	      tree rel = gimple_call_arg (call, 0);
+	      if (TREE_CODE (rel) != INTEGER_CST
+		  || (TREE_INT_CST_LOW (rel) & contract_mask))
+		return refuse ("crosscall-caller-foreign-contract",
+			       caller->decl, call);
+	    }
+	}
+    }
+
   *entry_out = entry;
   return true;
 }
@@ -2392,6 +2612,14 @@ transform (function *fn)
 	  || !e->call_stmt)
 	return refuse ("crosscall-caller-body-unavailable",
 		       e->caller->decl, nullptr);
+      /* A caller outside the TU executable closure: the census never
+	 vouched for its stores, so no proof over it can consult the
+	 template audit consistently (the wave-8 internal-inconsistency
+	 shape: proving a caller epoch the census skipped).  */
+      cgraph_node *ccheck = e->caller->inlined_to
+	? e->caller->inlined_to : e->caller;
+      if (tu_facts.executable && !tu_facts.executable->contains (ccheck))
+	return refuse ("crosscall-caller-unrooted", ccheck->decl, nullptr);
       function *cfn = DECL_STRUCT_FUNCTION (e->caller->decl);
       if (!cfn || !cfn->cfg)
 	return refuse ("crosscall-caller-body-unavailable",
@@ -3331,6 +3559,15 @@ rvtt_crosscall_init_hoist (function *callee_fn,
      census by the established discipline (their delivered words were
      scanned when they were the contract subject).  */
   compute_tu_facts ();
+
+  /* The commit target must be a body the census vouched for (the
+     coefficient hoist's crosscall-caller-unrooted discipline).  */
+  {
+    cgraph_node *ucheck = ucaller->inlined_to
+      ? ucaller->inlined_to : ucaller;
+    if (tu_facts.executable && !tu_facts.executable->contains (ucheck))
+      return closure_why ("caller-unrooted");
+  }
 
   const char *result = nullptr;
   int stage = 2;

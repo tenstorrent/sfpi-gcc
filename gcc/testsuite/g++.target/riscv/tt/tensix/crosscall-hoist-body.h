@@ -9,6 +9,8 @@
    Hooks:
      CCH_CALLEE_EXTRA(r)  extra statement inside the callee's row loop
      CCH_LOOP_EXTRA()     extra statement inside the caller's tile loop
+     CCH_CALLER_HEAD()    extra statement in the caller BEFORE the loop
+     CCH_CALLER_TAIL()    extra statement in the caller AFTER the loop
      CCH_AFTER_DEFS()     file-scope extra after the definitions  */
 
 #ifndef CCH_ADDR_MODE
@@ -19,6 +21,12 @@
 #endif
 #ifndef CCH_LOOP_EXTRA
 #define CCH_LOOP_EXTRA() do {} while (0)
+#endif
+#ifndef CCH_CALLER_HEAD
+#define CCH_CALLER_HEAD() do {} while (0)
+#endif
+#ifndef CCH_CALLER_TAIL
+#define CCH_CALLER_TAIL() do {} while (0)
 #endif
 #ifndef CCH_LUT_MOD
 #define CCH_LUT_MOD 4		/* FP32 3-entry, SGN_RETAIN */
@@ -49,11 +57,13 @@ CCH_CALLEE ()
 void
 CCH_CALLER (int CCH_TILES)
 {
+  CCH_CALLER_HEAD ();
   for (int CCH_T = 0; CCH_T != CCH_TILES; ++CCH_T)
     {
       CCH_LOOP_EXTRA ();
       CCH_CALLEE ();
     }
+  CCH_CALLER_TAIL ();
 }
 
 #ifdef CCH_AFTER_DEFS
