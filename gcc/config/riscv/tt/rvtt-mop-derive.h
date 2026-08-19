@@ -58,14 +58,73 @@ extern bool rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed,
 				     rvtt_mop_derive_state *st,
 				     bool in_slot = false);
 
+/* ---- Context-bound scanning (lane CF) ----
+
+   The TU walk scans callee bodies on demand for calls whose callee
+   will be inlined later (the eager scan runs before the callers'
+   inline transforms materialize).  Those generic bodies read their
+   parameters and -- in the ckernel_template discipline -- load
+   template words back out of a caller-frame aggregate the caller's
+   own (already specialized) code stored.  The scan context carries
+   the two facts that make such a body classifiable AT ITS CALL SITE:
+
+   - PARM bindings: the actual argument trees of the driving call
+     (each with the context it must be read under, so bindings chain
+     through nested on-demand scans);
+   - the local-aggregate FIELD census of the whole subtree under one
+     top-level scanned function: every store to a field of an
+     automatic aggregate is recorded with whether its stored value
+     classifies through the audited word table; any escape of the
+     aggregate's address outside the scanned subtree poisons it.
+
+   A template-slot word loaded from such a field is then admissible
+   exactly when the census proves every store to that field audited
+   and the object unpoisoned -- the same union-over-programmings
+   discipline the slot taxonomy itself uses (flow-insensitive: WHICH
+   store reached the load never matters, only that no unaudited one
+   exists).  Everything unresolvable keeps the refusing default.  */
+
+struct rvtt_mop_scan_ctx;
+
+struct rvtt_mop_bound_arg
+{
+  tree value;
+  rvtt_mop_scan_ctx *ctx;	/* context the value must be read under */
+};
+
+struct rvtt_mop_obj_census
+{
+  struct entry { tree var; tree field; bool ok; };
+  auto_vec<entry, 16> fields;
+  hash_set<tree> poisoned;
+};
+
+struct rvtt_mop_scan_ctx
+{
+  rvtt_mop_obj_census *census;			/* shared per subtree */
+  hash_map<tree, rvtt_mop_bound_arg> *parms;	/* null at a root scan */
+};
+
+/* Poison VAR's census entries: its address escaped the scanned
+   subtree, so unaudited stores can no longer be excluded.  */
+extern void rvtt_mop_census_poison (rvtt_mop_scan_ctx *ctx, tree var);
+
+/* Resolve VAL through the PARM-binding chain of CTX (bounded); returns
+   the final value and updates *CTX_IO to the context it is read
+   under.  */
+extern tree rvtt_mop_resolve_bound (tree val, rvtt_mop_scan_ctx **ctx_io);
+
 /* Classify one gimple statement that stores to memory.  Returns true
    when the store is proven inert for the TU freedom proof (template
    slot writes are audited into ST; instruction-FIFO pushes classify
    their word); false with *WHY on refusal.  Statements that are not
-   stores return true untouched.  */
+   stores return true untouched.  CTX (nullable) enables the
+   context-bound classification above; field stores into censused
+   aggregates are additionally recorded there.  */
 extern bool rvtt_mop_derive_store (gimple *stmt, unsigned *claimed,
 				   const char **why,
-				   rvtt_mop_derive_state *st);
+				   rvtt_mop_derive_state *st,
+				   rvtt_mop_scan_ctx *ctx = nullptr);
 
 /* Recognize / classify the canonical scalar blocking-store asm idiom
    (store, reload, consume), which stores its value operand at its

@@ -126,6 +126,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "fold-const.h"
 #include "gimple.h"
 #include "gimple-iterator.h"
+#include "gimple-pretty-print.h"
 #include "tree-pass.h"
 #include "ssa.h"
 #include "tree-ssa.h"
@@ -437,16 +438,108 @@ ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
   return true;
 }
 
+/* ---- Context-bound resolution (lane CF; contract in
+   rvtt-mop-derive.h).  */
+
+/* Resolve VAL through the PARM-binding chain of *CTX_IO: while VAL is
+   the default definition of a bound parameter, replace it by the
+   driving call's actual argument, read under the caller's context.
+   The hop bound is proof work, not semantics (an unresolved chain
+   refuses downstream).  */
+
+} // anonymous namespace
+
+tree
+rvtt_mop_resolve_bound (tree val, rvtt_mop_scan_ctx **ctx_io)
+{
+  for (unsigned hop = 0; hop != 8; ++hop)
+    {
+      rvtt_mop_scan_ctx *ctx = *ctx_io;
+      if (!ctx || !ctx->parms || !val || TREE_CODE (val) != SSA_NAME
+	  || !SSA_NAME_IS_DEFAULT_DEF (val)
+	  || !SSA_NAME_VAR (val)
+	  || TREE_CODE (SSA_NAME_VAR (val)) != PARM_DECL)
+	return val;
+      rvtt_mop_bound_arg *bound = ctx->parms->get (SSA_NAME_VAR (val));
+      if (!bound)
+	return val;
+      val = bound->value;
+      *ctx_io = bound->ctx;
+    }
+  return val;
+}
+
+void
+rvtt_mop_census_poison (rvtt_mop_scan_ctx *ctx, tree var)
+{
+  if (ctx && ctx->census && var)
+    ctx->census->poisoned.add (var);
+}
+
+namespace {
+
+/* The automatic local aggregate a pointer value provably addresses, or
+   NULL_TREE: the value must resolve (through the binding chain) to the
+   address of an automatic VAR_DECL.  Anything else -- globals, unknown
+   pointers, offsets -- stays unresolved and the consumer refuses.  */
+
+static tree
+bound_local_object (tree ptr, rvtt_mop_scan_ctx *ctx)
+{
+  rvtt_mop_scan_ctx *c = ctx;
+  ptr = rvtt_mop_resolve_bound (ptr, &c);
+  if (ptr && TREE_CODE (ptr) == ADDR_EXPR)
+    {
+      tree var = TREE_OPERAND (ptr, 0);
+      if (VAR_P (var) && !TREE_STATIC (var) && !DECL_EXTERNAL (var))
+	return var;
+    }
+  return NULL_TREE;
+}
+
+/* The censused automatic aggregate and field a memory reference REF
+   denotes: a direct field of an automatic local
+   (var.field / COMPONENT_REF(VAR_DECL)), or a field reached through a
+   bound this-pointer (COMPONENT_REF(MEM_REF(bound &var, 0))).  */
+
+static bool
+censused_field_ref (tree ref, rvtt_mop_scan_ctx *ctx, tree *var, tree *field)
+{
+  if (!ref || TREE_CODE (ref) != COMPONENT_REF)
+    return false;
+  tree base = TREE_OPERAND (ref, 0);
+  *field = TREE_OPERAND (ref, 1);
+  if (VAR_P (base) && !TREE_STATIC (base) && !DECL_EXTERNAL (base))
+    {
+      *var = base;
+      return true;
+    }
+  if (TREE_CODE (base) == MEM_REF
+      && integer_zerop (TREE_OPERAND (base, 1)))
+    {
+      *var = bound_local_object (TREE_OPERAND (base, 0), ctx);
+      return *var != NULL_TREE;
+    }
+  return false;
+}
+
 /* Classify the 32-bit word VAL by the constant opcode base of its
    PLUS / BIT_IOR composition (AXIOM tt-op-field-discipline,
    rvtt-mop-tables.h).  Returns the frontend opcode byte, or -1 when no
    constant base pins it.  */
 
 static int
-pushed_word_base (tree val, unsigned depth = 0)
+pushed_word_base (tree val, unsigned depth = 0,
+		  rvtt_mop_scan_ctx *ctx = nullptr)
 {
   if (depth > 12 || !val)
     return -1;
+  {
+    rvtt_mop_scan_ctx *c = ctx;
+    tree bound = rvtt_mop_resolve_bound (val, &c);
+    if (bound != val)
+      return pushed_word_base (bound, depth + 1, c);
+  }
   if (TREE_CODE (val) == INTEGER_CST)
     {
       if (!tree_fits_uhwi_p (val) && !tree_fits_shwi_p (val))
@@ -462,8 +555,8 @@ pushed_word_base (tree val, unsigned depth = 0)
       tree_code code = gimple_assign_rhs_code (def);
       if (code == PLUS_EXPR || code == BIT_IOR_EXPR)
 	{
-	  int a = pushed_word_base (gimple_assign_rhs1 (def), depth + 1);
-	  int b = pushed_word_base (gimple_assign_rhs2 (def), depth + 1);
+	  int a = pushed_word_base (gimple_assign_rhs1 (def), depth + 1, ctx);
+	  int b = pushed_word_base (gimple_assign_rhs2 (def), depth + 1, ctx);
 	  /* Exactly one side carries the opcode base; two competing
 	     bases (or none) leave the word unclassified.  */
 	  if (a > 0 && b <= 0)
@@ -475,7 +568,7 @@ pushed_word_base (tree val, unsigned depth = 0)
 	  return -1;
 	}
       if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME || code == NOP_EXPR)
-	return pushed_word_base (gimple_assign_rhs1 (def), depth + 1);
+	return pushed_word_base (gimple_assign_rhs1 (def), depth + 1, ctx);
       /* Shifted single fields below the opcode byte cannot construct
 	 an opcode by themselves under the discipline axiom.  */
       if (code == LSHIFT_EXPR || code == BIT_AND_EXPR || code == RSHIFT_EXPR)
@@ -510,13 +603,22 @@ field_insensitive_audited_class_p (int base)
 static bool
 classify_word_value (tree val, unsigned *claimed, const char **why,
 		     rvtt_mop_derive_state *st, bool in_slot,
-		     unsigned depth = 0)
+		     unsigned depth = 0, rvtt_mop_scan_ctx *ctx = nullptr)
 {
   if (!val || depth > 4)
     {
       *why = "unclassifiable stored word";
       return false;
     }
+  {
+    /* Context-bound scan: a parameter value classifies as the driving
+       call's actual argument, read under the caller's context.  */
+    rvtt_mop_scan_ctx *c = ctx;
+    tree bound = rvtt_mop_resolve_bound (val, &c);
+    if (bound != val)
+      return classify_word_value (bound, claimed, why, st, in_slot,
+				  depth + 1, c);
+  }
   if (TREE_CODE (val) == INTEGER_CST)
     {
       if (!tree_fits_uhwi_p (val) && !tree_fits_shwi_p (val))
@@ -534,7 +636,7 @@ classify_word_value (tree val, unsigned *claimed, const char **why,
 	{
 	  for (unsigned i = 0; i != gimple_phi_num_args (phi); ++i)
 	    if (!classify_word_value (gimple_phi_arg_def (phi, i), claimed,
-				      why, st, in_slot, depth + 1))
+				      why, st, in_slot, depth + 1, ctx))
 	      return false;
 	  return true;
 	}
@@ -542,8 +644,59 @@ classify_word_value (tree val, unsigned *claimed, const char **why,
 	  && (CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def))
 	      || gimple_assign_rhs_code (def) == SSA_NAME))
 	return classify_word_value (gimple_assign_rhs1 (def), claimed, why,
-				    st, in_slot, depth + 1);
-      int base = pushed_word_base (val);
+				    st, in_slot, depth + 1, ctx);
+      /* A runtime-selected word: both arms must classify (the same
+	 union rule as the PHI form above; at this pipeline position
+	 the select may still be a COND_EXPR assignment).  */
+      if (is_gimple_assign (def)
+	  && gimple_assign_rhs_code (def) == COND_EXPR)
+	return classify_word_value (gimple_assign_rhs2 (def), claimed, why,
+				    st, in_slot, depth + 1, ctx)
+	  && classify_word_value (gimple_assign_rhs3 (def), claimed, why,
+				  st, in_slot, depth + 1, ctx);
+      /* A word loaded back out of a censused local aggregate's field:
+	 admissible exactly when the subtree census proves every store
+	 to that (object, field) audited and the object's address never
+	 escaped the scanned subtree.  Flow-insensitive by design --
+	 WHICH store reached this load never matters.  */
+      if (is_gimple_assign (def)
+	  && gimple_assign_rhs_class (def) == GIMPLE_SINGLE_RHS)
+	{
+	  tree var = NULL_TREE, field = NULL_TREE;
+	  if (censused_field_ref (gimple_assign_rhs1 (def), ctx,
+				  &var, &field))
+	    {
+	      if (!ctx || !ctx->census)
+		{
+		  *why = "aggregate-field word outside a censused scan";
+		  return false;
+		}
+	      if (ctx->census->poisoned.contains (var))
+		{
+		  *why = "mop-template-field-unproven: the aggregate's "
+			 "address escaped the scanned subtree";
+		  return false;
+		}
+	      bool seen = false;
+	      for (rvtt_mop_obj_census::entry &e : ctx->census->fields)
+		if (e.var == var && e.field == field)
+		  {
+		    if (!e.ok)
+		      {
+			*why = "mop-template-field-unproven: an unaudited "
+			       "store reaches this aggregate field";
+			return false;
+		      }
+		    seen = true;
+		  }
+	      if (seen)
+		return true;
+	      *why = "mop-template-field-unproven: no censused store "
+		     "reaches this aggregate field";
+	      return false;
+	    }
+	}
+      int base = pushed_word_base (val, 0, ctx);
       if (base < 0)
 	{
 	  *why = "unclassifiable composed word (no constant opcode base)";
@@ -598,7 +751,22 @@ record_slot_refusal (rvtt_mop_derive_state *st, unsigned slot,
   else
     snprintf (out, outsz, "%s%s (template slot %u)", pfx, why, slot);
   if (dump_file)
-    fprintf (dump_file, "prgm-const: mop-derive: %s\n", out);
+    {
+      fprintf (dump_file, "prgm-const: mop-derive: %s\n", out);
+      if (value)
+	{
+	  fprintf (dump_file, "prgm-const: mop-derive: refusing value: ");
+	  print_generic_expr (dump_file, value, TDF_NONE);
+	  if (TREE_CODE (value) == SSA_NAME)
+	    {
+	      fprintf (dump_file, " def: ");
+	      print_gimple_stmt (dump_file, SSA_NAME_DEF_STMT (value), 0,
+				 TDF_NONE);
+	    }
+	  else
+	    fprintf (dump_file, "\n");
+	}
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1001,7 +1169,8 @@ store_range_inert_p (unsigned HOST_WIDE_INT lo, unsigned HOST_WIDE_INT hi)
 static bool
 classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
 			  unsigned *claimed, const char **why,
-			  rvtt_mop_derive_state *st)
+			  rvtt_mop_derive_state *st,
+			  rvtt_mop_scan_ctx *ctx = nullptr)
 {
   /* MOP template file: slot rules.  */
   if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
@@ -1022,7 +1191,7 @@ classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
 	return true;
       const char *slot_why = nullptr;
       if (!classify_word_value (value, claimed, &slot_why, st,
-				/*in_slot=*/true))
+				/*in_slot=*/true, 0, ctx))
 	record_slot_refusal (st, slot, slot_why, value);
       return true;		/* deferred to the MOP admission */
     }
@@ -1037,7 +1206,7 @@ classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
 	  return false;
 	}
       return classify_word_value (value, claimed, why, st,
-				  /*in_slot=*/false);
+				  /*in_slot=*/false, 0, ctx);
     }
   /* PC_BUF: the sync and semaphore words are inert for
      PRGM/LaneConfig/CC and deliver no instruction ([SIM]
@@ -1077,9 +1246,13 @@ classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
 
 bool
 rvtt_mop_derive_store (gimple *stmt, unsigned *claimed, const char **why,
-		       rvtt_mop_derive_state *st)
+		       rvtt_mop_derive_state *st, rvtt_mop_scan_ctx *ctx)
 {
   if (!is_gimple_assign (stmt) || !gimple_store_p (stmt))
+    return true;
+  /* An end-of-life clobber marks storage death; it stores nothing and
+     in particular is not an unaudited write for the field census.  */
+  if (gimple_clobber_p (stmt))
     return true;
   tree lhs = gimple_get_lhs (stmt);
   if (!lhs || TREE_CODE (lhs) == SSA_NAME)
@@ -1090,10 +1263,45 @@ rvtt_mop_derive_store (gimple *stmt, unsigned *claimed, const char **why,
   if (DECL_P (lhs))
     census_global_pointer_store (lhs, gimple_assign_rhs1 (stmt));
 
+  /* Context-bound scan: census stores into fields of automatic local
+     aggregates (rvtt-mop-derive.h) -- each store records whether its
+     value classifies through the audited word table, so a later
+     template-slot load out of the same field can be admitted by the
+     union-over-stores proof.  A stored ADDRESS of such an aggregate is
+     an escape and poisons it (a store census can no longer exclude
+     unaudited writers).  */
+  if (ctx && ctx->census)
+    {
+      tree var = NULL_TREE, field = NULL_TREE;
+      if (censused_field_ref (lhs, ctx, &var, &field))
+	{
+	  const char *fwhy = nullptr;
+	  bool ok = classify_word_value (gimple_assign_rhs1 (stmt), claimed,
+					 &fwhy, st, /*in_slot=*/true, 0, ctx);
+	  ctx->census->fields.safe_push
+	    (rvtt_mop_obj_census::entry { var, field, ok });
+	}
+      else if (tree evar = bound_local_object (gimple_assign_rhs1 (stmt),
+					       ctx))
+	rvtt_mop_census_poison (ctx, evar);
+      /* A whole-aggregate store: zero-initialization stores the
+	 audited all-zero word to every field; anything else poisons
+	 (refusing default).  */
+      tree base = get_base_address (lhs);
+      if (lhs == base && VAR_P (base) && !TREE_STATIC (base)
+	  && !DECL_EXTERNAL (base)
+	  && AGGREGATE_TYPE_P (TREE_TYPE (base)))
+	{
+	  tree rhs = gimple_assign_rhs1 (stmt);
+	  if (!(TREE_CODE (rhs) == CONSTRUCTOR && initializer_zerop (rhs)))
+	    rvtt_mop_census_poison (ctx, base);
+	}
+    }
+
   unsigned HOST_WIDE_INT addr;
   if (ref_constant_address (lhs, &addr))
     return classify_constant_target (addr, gimple_assign_rhs1 (stmt),
-				     claimed, why, st);
+				     claimed, why, st, ctx);
 
   /* Non-constant address.  A store into a known non-volatile object is
      memory, not MMIO (hardware registers are declared volatile; the
@@ -1117,7 +1325,7 @@ rvtt_mop_derive_store (gimple *stmt, unsigned *claimed, const char **why,
     return true;
   if (cls == ADDR_INSTRN_FIFO)
     return classify_word_value (gimple_assign_rhs1 (stmt), claimed, why, st,
-				/*in_slot=*/false);
+				/*in_slot=*/false, 0, ctx);
   /* Last resort: a bounded induction over a constant-based range whose
      whole extent is inert (the GPR-file fill class).  */
   unsigned HOST_WIDE_INT lo, hi;
