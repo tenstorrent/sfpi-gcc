@@ -729,6 +729,10 @@ mtt-tensix-macro-ims
 Target Var(riscv_tt_macro_ims) Init(0)
 Default-off placement increment (WP13): iterative-modulo-scheduling repair over the macro sub-unit calendar -- when the maximal hosting proposal refuses downstream, deterministically retry with reduced hosted sets (Rau-style bounded unplacement) instead of refusing the whole region -- plus delivery-model formation-vs-replay arbitration: formation additionally requires the formed calendar to price below the replay-compressed explicit alternative under the shared issue-cost model.  Off keeps every schedule candidate and formation decision byte-identical to the pre-flag output.
 
+mtt-tensix-macro-ims-carrier
+Target Var(riscv_tt_macro_ims_carrier) Init(0)
+Default-off placement increment (WP15, the upward half of the WP14 IMS mapping): extra-value-carrier formation for the macro planner.  When the established (and, under -mtt-tensix-macro-ims, repaired) search proves a formed calendar, deterministically enumerate re-load carrier variants -- duplicate one of the row's proven no-increment Dst loads into a provably free LREG, replicate its in-place cooking prefix, and version-split-rename one explicit consumer web onto the new carrier -- applied by commit-or-revert mutation across every unrolled row copy.  A variant commits only when the mutated region re-proves through the full derivation pipeline at a strictly smaller initiation interval and passes every established formation gate; otherwise the mutation reverts byte-identically under a stable refusal name.  Off keeps every schedule and formation decision byte-identical to the pre-flag output.
+
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
 Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).

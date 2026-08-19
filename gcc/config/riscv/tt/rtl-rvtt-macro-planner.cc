@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgrtl.h"
 #include "cfghooks.h"
 #include "df.h"
+#include "rtl-iter.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
@@ -1444,6 +1445,967 @@ form_region (function *fn, macro_region &region,
   return true;
 }
 
+/* Drive one region through the established candidate search exactly as
+   the pass spine always has: schedule candidates ascend, the first whose
+   descriptor synthesis (and Layer-7 verification) proves is committed
+   through form_region.  Returns true when a candidate PROVED (the search
+   stops there whether or not formation committed); *CHANGED accumulates
+   actual code mutation.  Shared verbatim by the spine and the WP15
+   upward-carrier commit path so both can never diverge.  */
+
+static bool
+planner_process_region (function *fn, macro_region &region,
+			macro_residency_state *resid, FILE *dump,
+			bool *changed)
+{
+  for (unsigned candidate = 0; ; ++candidate)
+    {
+      macro_schedule schedule;
+      if (!rvtt_macro_schedule_region (region, &schedule, dump, candidate))
+	return false;		/* search exhausted (or no table)  */
+      bool proven = false;
+      macro_descriptor descriptor;
+      if (rvtt_macro_synthesize (region, schedule, &descriptor, dump))
+	{
+	  /* A Layer-7 verification mismatch is a descriptor refusal: the
+	     candidate is unproven and must never reach form_region.  */
+	  const char *verify_fail = nullptr;
+	  if (riscv_tt_macro_planner_verify || flag_checking)
+	    verify_fail = rvtt_macro_verify_descriptor (region, schedule,
+							descriptor, dump);
+	  proven = !descriptor.refusal && !verify_fail;
+	  if (proven && riscv_tt_macro_planner)
+	    *changed |= form_region (fn, region, schedule, descriptor,
+				     resid, dump);
+	  rvtt_macro_descriptor_release (&descriptor);
+	}
+      rvtt_macro_schedule_release (&schedule);
+      if (proven)
+	return true;
+    }
+}
+
+/* ---------------- WP15: upward-IMS carrier former ------------------- */
+/* The upward half of the WP14 IMS mapping (-mtt-tensix-macro-ims-carrier,
+   default off).  WP14's repair driver searches DOWNWARD -- reduced
+   hosted sets -- and provably conserves the initiation interval on rows
+   whose maximal hosting already proves (docs/MACRO_PLANNER.md 2d).  The
+   upward former searches the other direction, the handwritten kernels'
+   re-load idiom: duplicate one of the row's Dst loads into a provably
+   free LREG (a fresh value carrier), replicate the load's in-place
+   cooking prefix onto it, and version-split-rename one explicit consumer
+   web onto the new carrier so its events can host there.  Everything is
+   applied as a REAL commit-or-revert mutation of every unrolled row
+   copy: the mutated region re-runs the full established pipeline --
+   discovery, scheduling (including WP14 repair when enabled), descriptor
+   synthesis, Layer-7 verification, and every formation gate -- which
+   remains the only feasibility oracle.  A variant commits only when it
+   re-proves at a STRICTLY smaller initiation interval than the
+   established outcome; every other path reverts byte-identically under a
+   stable refusal name.  Nothing here names an operation, matches an
+   opcode calendar, or assembles a raw word: seeds, prefixes, and webs
+   are typed-effect dataflow classes, and the duplication legality rides
+   the effect vocabulary's own proofs (a region-admitted load is
+   RWC-inert by the no-increment address-mode derivation).  */
+
+static const unsigned UPWARD_CARRIER_BUDGET = 24; /* variants per region */
+
+/* Stable refusal vocabulary (append-only dump API).  */
+static const char *upward_refusal_legality
+  = "ims-carrier-legality-unproven";
+static const char *upward_refusal_lreg
+  = "ims-carrier-lreg-unavailable";
+static const char *upward_refusal_web
+  = "ims-carrier-web-unsplittable";
+static const char *upward_refusal_row_divergent
+  = "ims-carrier-row-divergent";
+static const char *upward_refusal_rederive
+  = "ims-carrier-rederive-unproven";
+static const char *upward_refusal_no_improvement
+  = "ims-carrier-no-improvement";
+
+/* Commit-or-revert journal.  Renamed insns keep their ORIGINAL pattern
+   rtx (the mutation installs a copy), so revert restores the exact
+   pre-mutation objects.  */
+
+struct upward_journal
+{
+  auto_vec<rtx_insn *> inserted;
+  auto_vec<rtx_insn *> renamed_insns;
+  auto_vec<rtx> renamed_old_pats;
+  auto_vec<int> renamed_old_codes;
+
+  void revert ()
+  {
+    for (unsigned i = inserted.length (); i-- > 0;)
+      delete_insn (inserted[i]);
+    for (unsigned i = renamed_insns.length (); i-- > 0;)
+      {
+	PATTERN (renamed_insns[i]) = renamed_old_pats[i];
+	INSN_CODE (renamed_insns[i]) = renamed_old_codes[i];
+	df_insn_rescan (renamed_insns[i]);
+      }
+    drop ();
+  }
+
+  void drop ()
+  {
+    inserted.truncate (0);
+    renamed_insns.truncate (0);
+    renamed_old_pats.truncate (0);
+    renamed_old_codes.truncate (0);
+  }
+};
+
+/* Replace, in place, every hard-LREG occurrence in *LOC whose lane
+   register number is in LREG_MASK by NEWREG.  Per-insn replacement is
+   whole-register: within one instruction either every occurrence of a
+   register renames (an in-place chain member: the post-RA tie holds
+   because both sides move together) or the register only appears as
+   reads (a stop-through consumer) -- the rename computation below only
+   emits masks with that property.  */
+
+static void
+upward_replace_lregs (rtx *loc, uint32_t lreg_mask, rtx newreg)
+{
+  subrtx_ptr_iterator::array_type array;
+  FOR_EACH_SUBRTX_PTR (iter, array, loc, NONCONST)
+    {
+      rtx *p = *iter;
+      rtx x = *p;
+      if (x && REG_P (x) && REGNO (x) >= SFPU_REG_FIRST
+	  && REGNO (x) - SFPU_REG_FIRST < 32
+	  && ((lreg_mask >> (REGNO (x) - SFPU_REG_FIRST)) & 1))
+	*p = newreg;
+    }
+}
+
+/* The carrier register choice.  The launch word's VDLo field encodes
+   VD 0..3 only (VDHi is punned with the address LSB -- the capability
+   tables' sacrificial-VD rule), so the carrier register must come from
+   L0..L3.  When every low register is taken, a row-internal low WEB may
+   be RELOCATED to a free high register first (the version-split-rename
+   half of the pre-registered design): a pure whole-web physical rename
+   is value-inert, and re-derivation re-proves every encoding that
+   embedded the old name.  Highest-first choices keep away from L0,
+   which additionally collides with the cast class's VC:=VD encoding
+   (the derivation core's audited fact).  */
+
+struct upward_carrier_choice
+{
+  int vd;			/* carrier register (0..3)	       */
+  int relocate_to;		/* free high register, or -1	       */
+};
+
+static bool
+upward_pick_carrier_reg (const macro_region &region,
+			 upward_carrier_choice *out)
+{
+  basic_block bb = region.bb;
+  uint32_t used = 0;
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    if (NONDEBUG_INSN_P (insn))
+      {
+	subrtx_iterator::array_type array;
+	FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+	  {
+	    const_rtx x = *iter;
+	    if (x && REG_P (x) && REGNO (x) >= SFPU_REG_FIRST
+		&& REGNO (x) - SFPU_REG_FIRST < 32)
+	      used |= 1u << (REGNO (x) - SFPU_REG_FIRST);
+	  }
+      }
+  auto free_p = [&] (unsigned r) -> bool
+    {
+      return !((used >> r) & 1)
+	&& !bitmap_bit_p (df_get_live_in (bb), SFPU_REG_FIRST + r)
+	&& !bitmap_bit_p (df_get_live_out (bb), SFPU_REG_FIRST + r);
+    };
+  out->relocate_to = -1;
+  for (unsigned r = 4; r-- > 0;)
+    if (free_p (r))
+      {
+	out->vd = (int) r;
+	return true;
+      }
+  /* Relocation: a free high register and a low register whose block
+     usage is entirely this region's row members (row-internal web:
+     defined and consumed inside the rows, never live across the block
+     or referenced by foreign instructions).  */
+  int high = -1;
+  for (unsigned r = 8; r-- > 4;)
+    if (free_p (r))
+      {
+	high = (int) r;
+	break;
+      }
+  if (high < 0)
+    return false;
+  for (unsigned r = 4; r-- > 0;)
+    {
+      if (!((region.internal_lregs >> r) & 1)
+	  || bitmap_bit_p (df_get_live_in (bb), SFPU_REG_FIRST + r)
+	  || bitmap_bit_p (df_get_live_out (bb), SFPU_REG_FIRST + r))
+	continue;
+      bool foreign = false;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn) || foreign)
+	    continue;
+	  bool refs = false;
+	  subrtx_iterator::array_type array;
+	  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+	    {
+	      const_rtx x = *iter;
+	      if (x && REG_P (x)
+		  && REGNO (x) == SFPU_REG_FIRST + r)
+		refs = true;
+	    }
+	  if (!refs)
+	    continue;
+	  bool member = false;
+	  for (const macro_row &row : region.rows)
+	    for (rtx_insn *m : row.insns)
+	      member |= m == insn;
+	  foreign |= !member;
+	}
+      if (!foreign)
+	{
+	  out->vd = (int) r;
+	  out->relocate_to = high;
+	  return true;
+	}
+    }
+  return false;
+}
+
+/* One enumerated variant: re-load the SEED load, replicate its in-place
+   cooking prefix, and version-split the TARGET event's web onto the new
+   carrier.  Indices are row0 positions; per-row application recomputes
+   the same structure from each row's own registers (isomorphism makes
+   the index sets agree; any divergence refuses).  */
+
+struct upward_variant
+{
+  unsigned seed_ix;
+  /* The version-split target CHAIN, program order: the first member
+     reads the seed's cooked value; each later member reads the previous
+     member's result.  Every member's fresh single-register definition
+     web renames onto the new carrier -- the hand kernels' chained
+     re-load idiom (a one-member chain is the plain split).  */
+  unsigned targets[4];
+  unsigned n_targets;
+  /* Carrier placement: the re-load sits directly after the seed load,
+     or -- when the cooking prefix is empty, so the copy has no in-row
+     value dependences -- at the row head (an earlier launch slot gives
+     the hosted chain earlier execution windows against its explicit
+     consumers' deadlines).  Both positions read the same Dst word
+     under the same counter state (the row's members are RWC-inert by
+     admission).  */
+  bool reload_at_head;
+};
+
+/* Derive the per-insn rename masks and the prefix-clone index set of one
+   ROW for VARIANT.  Pure analysis (never mutates).  On success MASKS[i]
+   holds the lane-register numbers to rewrite onto the new carrier in
+   row insn i, and PREFIX holds the in-place cooking events to clone (in
+   program order).  Refusals set *REFUSAL to a stable name.
+
+   Soundness of the split, at the value level:
+   - the seed is a region-admitted Dst load, so its address-mode operand
+     is the derived no-increment slot (rvtt_insn_effects maps any other
+     mode to an UNKNOWN RWC effect, which discovery refuses): executing
+     the copy is architecturally inert beyond writing the new register;
+   - the copy is inserted directly after the seed with the cooking
+     clones following, and no member between the seed and a cloned
+     event's original defines the clone's other sources, so every clone
+     computes exactly the seed web's value into the new register;
+   - the chain's first member reads the seed's cooked value (the new
+     register holds that exact value after the clones) and each later
+     member reads the previous member's result; every member writes a
+     fresh single register, so renaming the member definitions onto the
+     new carrier is a linear version split: the new register holds each
+     chain value in turn, every use reached by a renamed definition is
+     renamed with it, and a use of an earlier version positioned at or
+     after the next version's definition refuses (the versions are only
+     linear when their live ranges are).  After the chain tail the
+     established single-web propagation continues: a tied in-place
+     follower moves with the register (the post-RA tie holds because
+     every occurrence renames together), a fresh redefinition ends the
+     renamed range.  */
+
+static bool
+upward_compute_renames (const macro_row &row, const upward_variant &v,
+			auto_vec<uint32_t> *masks,
+			auto_vec<unsigned> *prefix, const char **refusal)
+{
+  unsigned n = row.insns.length ();
+  masks->truncate (0);
+  masks->safe_grow_cleared (n);
+  prefix->truncate (0);
+
+  if (v.n_targets == 0 || v.n_targets > 4)
+    {
+      *refusal = upward_refusal_legality;
+      return false;
+    }
+
+  /* Seed legality: a plain (no live-value merge) Dst load writing one
+     physical L0..L7 register.  The RWC-inert property is already the
+     admission condition (see above).  */
+  xtt_effect_set se = rvtt_insn_effects (row.insns[v.seed_ix]);
+  if (se.opaque || !se.dst_mem_read
+      || se.rwc.kind != xtt_rwc_effect_t::NONE)
+    {
+      *refusal = upward_refusal_legality;
+      return false;
+    }
+  if (recog_memoized (row.insns[v.seed_ix]) != CODE_FOR_rvtt_sfpload_lv_int)
+    {
+      *refusal = upward_refusal_legality;
+      return false;
+    }
+  extract_insn (row.insns[v.seed_ix]);
+  if (recog_data.n_operands < 9
+      || !noval_operand (recog_data.operand[6],
+			 GET_MODE (recog_data.operand[6])))
+    {
+      /* A live-value merging load reads its destination's prior value;
+	 duplicating it is not value-inert.  */
+      *refusal = upward_refusal_legality;
+      return false;
+    }
+  uint32_t dmask = se.lreg_write;
+  if (!dmask || (dmask & (dmask - 1)) != 0 || (unsigned) ctz_hwi (dmask) > 7)
+    {
+      *refusal = upward_refusal_legality;
+      return false;
+    }
+
+  /* Chain legality: ascending positions after the seed; the first
+     member reads the seed register; each later member reads the
+     previous member's result; every member is a non-memory value event
+     writing one fresh (not self-read) register.  */
+  uint32_t chain_w[4];
+  for (unsigned k = 0; k != v.n_targets; ++k)
+    {
+      unsigned tix = v.targets[k];
+      if (tix >= n || tix <= v.seed_ix
+	  || (k && tix <= v.targets[k - 1]))
+	{
+	  *refusal = upward_refusal_legality;
+	  return false;
+	}
+      xtt_effect_set te = rvtt_insn_effects (row.insns[tix]);
+      uint32_t need = k == 0 ? dmask : chain_w[k - 1];
+      if (te.opaque || te.dst_mem_read || te.dst_mem_write
+	  || !(te.lreg_read & need))
+	{
+	  *refusal = upward_refusal_legality;
+	  return false;
+	}
+      /* Two admitted member forms: a FRESH single-register definition
+	 (version split), or an IN-PLACE continuation (the member reads
+	 and writes the incoming version register -- the launch-VD chain
+	 idiom itself); anything else is outside the split vocabulary.  */
+      uint32_t w = te.lreg_write;
+      bool in_place = w == need && (te.lreg_read & w) != 0;
+      if (!w || (w & (w - 1)) != 0 || (!in_place && (te.lreg_read & w)))
+	{
+	  *refusal = upward_refusal_legality;
+	  return false;
+	}
+      /* A later chain member must not read the SEED register: the new
+	 carrier register no longer holds that value at its position.
+	 (Reading it by its own name stays untouched and correct; only
+	 a rename would be wrong, so nothing to rename means nothing to
+	 refuse -- the mask below simply never adds dmask for k > 0.)  */
+      chain_w[k] = w;
+    }
+
+  /* Cooking prefix: every writer of the seed register between the seed
+     and the FIRST chain member must be an in-place event (reads and
+     writes exactly that register); each is cloned onto the new
+     carrier.  A fresh redefinition means the chain head does not
+     consume the seed load's value at all.  */
+  for (unsigned ix = v.seed_ix + 1; ix < v.targets[0]; ++ix)
+    {
+      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+      if (e.opaque)
+	continue;
+      if (e.lreg_write & dmask)
+	{
+	  if (e.lreg_write != dmask || !(e.lreg_read & dmask)
+	      || e.dst_mem_read || e.dst_mem_write)
+	    {
+	      *refusal = upward_refusal_legality;
+	      return false;
+	    }
+	  /* The clone sits directly after the re-load; its other
+	     sources must still carry their original reaching values
+	     there: no member between the seed and this event may
+	     define them.  */
+	  uint32_t other = e.lreg_read & ~dmask;
+	  for (unsigned jx = v.seed_ix + 1; jx < ix; ++jx)
+	    if (rvtt_insn_effects (row.insns[jx]).lreg_write & other)
+	      {
+		*refusal = upward_refusal_web;
+		return false;
+	      }
+	  prefix->safe_push (ix);
+	}
+    }
+
+  /* Chain member renames: the head's reads of the seed register plus
+     its definition; every later member's read of the previous version
+     plus its definition.  */
+  (*masks)[v.targets[0]] = dmask | chain_w[0];
+  for (unsigned k = 1; k != v.n_targets; ++k)
+    (*masks)[v.targets[k]] = chain_w[k - 1] | chain_w[k];
+
+  /* Version linearity between chain members: a use of version k
+     between its definition and the next chain member reads the new
+     register (renamed); a use at or after the next member's definition
+     would read a later version and refuses; an interleaved foreign
+     redefinition of the version register likewise refuses.  */
+  for (unsigned k = 0; k + 1 < v.n_targets; ++k)
+    {
+      uint32_t w = chain_w[k];
+      unsigned from = v.targets[k] + 1;
+      unsigned upto = v.targets[k + 1];
+      for (unsigned ix = from; ix < upto; ++ix)
+	{
+	  xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+	  if (e.opaque)
+	    {
+	      *refusal = upward_refusal_web;
+	      return false;
+	    }
+	  if (e.lreg_write & w)
+	    {
+	      /* A redefinition of the version register before the next
+		 chain member: the split is not linear here.  */
+	      *refusal = upward_refusal_web;
+	      return false;
+	    }
+	  if (e.lreg_read & w)
+	    (*masks)[ix] |= w;
+	}
+      /* Uses of a non-tail version after the next member's definition
+	 read a later version: refuse.  (Reads of the OLD register name
+	 past this window belong to other, unrenamed definitions only
+	 when a fresh redefinition intervenes; without one such a read
+	 consumed our renamed value and refuses.)  An in-place next
+	 member carries the same register forward -- later reads bind to
+	 the renamed continuation and its own windows judge them.  */
+      if (chain_w[k + 1] == w)
+	continue;
+      for (unsigned ix = upto + 1; ix < n; ++ix)
+	{
+	  xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+	  if (e.opaque)
+	    continue;
+	  if ((e.lreg_write & w) && !(e.lreg_read & w))
+	    break;		/* fresh redefinition: later reads foreign */
+	  if (e.lreg_read & w)
+	    {
+	      *refusal = upward_refusal_web;
+	      return false;
+	    }
+	}
+    }
+
+  /* Established single-web propagation past the chain tail.  */
+  uint32_t wmask = chain_w[v.n_targets - 1];
+  bool active = true;
+  for (unsigned ix = v.targets[v.n_targets - 1] + 1; ix < n && active; ++ix)
+    {
+      xtt_effect_set e = rvtt_insn_effects (row.insns[ix]);
+      if (e.opaque)
+	{
+	  /* An opaque member's register accesses are unknown; a live
+	     renamed value across it cannot be proven to move.  */
+	  *refusal = upward_refusal_web;
+	  return false;
+	}
+      bool reads = (e.lreg_read & wmask) != 0;
+      bool writes = (e.lreg_write & wmask) != 0;
+      if (reads)
+	{
+	  (*masks)[ix] |= wmask;
+	  if (writes && e.lreg_write != wmask)
+	    {
+	      /* Writes the renamed register AND another: outside the
+		 single-result web vocabulary this split can prove.  */
+	      *refusal = upward_refusal_web;
+	      return false;
+	    }
+	}
+      else if (writes)
+	/* Fresh redefinition: later uses read it, unrenamed.  */
+	active = false;
+    }
+  return true;
+}
+
+/* Apply VARIANT to every row of REGION (journal-recorded).  NEWREG_LREG
+   is the free carrier register.  Returns false -- after reverting any
+   partial application -- with *REFUSAL named when a row diverges from
+   the row0 structure.  */
+
+static bool
+upward_apply (macro_region &region, const upward_variant &v,
+	      const upward_carrier_choice &regs,
+	      const auto_vec<uint32_t> &masks0,
+	      const auto_vec<unsigned> &prefix0, upward_journal *journal,
+	      const char **refusal)
+{
+  int newreg_lreg = regs.vd;
+  rtx newreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + newreg_lreg);
+  /* Web relocation first: the freed low register becomes the carrier.
+     A pure whole-web physical rename of a proven row-internal web; the
+     re-derivation re-proves every encoding embedding the name.  */
+  if (regs.relocate_to >= 0)
+    {
+      rtx high = gen_rtx_REG (XTT32SImode,
+			      SFPU_REG_FIRST + regs.relocate_to);
+      for (macro_row &row : region.rows)
+	for (rtx_insn *insn : row.insns)
+	  {
+	    bool refs = false;
+	    subrtx_iterator::array_type array;
+	    FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+	      {
+		const_rtx x = *iter;
+		if (x && REG_P (x)
+		    && REGNO (x) == SFPU_REG_FIRST + (unsigned) regs.vd)
+		  refs = true;
+	      }
+	    if (!refs)
+	      continue;
+	    rtx old_pat = PATTERN (insn);
+	    int old_code = INSN_CODE (insn);
+	    rtx new_pat = copy_rtx (old_pat);
+	    upward_replace_lregs (&new_pat, 1u << regs.vd, high);
+	    PATTERN (insn) = new_pat;
+	    INSN_CODE (insn) = -1;
+	    journal->renamed_insns.safe_push (insn);
+	    journal->renamed_old_pats.safe_push (old_pat);
+	    journal->renamed_old_codes.safe_push (old_code);
+	    if (recog_memoized (insn) < 0)
+	      {
+		*refusal = upward_refusal_web;
+		journal->revert ();
+		return false;
+	      }
+	    df_insn_rescan (insn);
+	  }
+    }
+  for (macro_row &row : region.rows)
+    {
+      auto_vec<uint32_t> masks;
+      auto_vec<unsigned> prefix;
+      if (row.insns.length () != masks0.length ()
+	  || !upward_compute_renames (row, v, &masks, &prefix, refusal))
+	{
+	  if (*refusal == nullptr)
+	    *refusal = upward_refusal_row_divergent;
+	  journal->revert ();
+	  return false;
+	}
+      /* The per-row structure must agree with row0's: same clone set
+	 and same rename positions (isomorphism should force this; any
+	 divergence refuses rather than trusts).  */
+      bool agrees = prefix.length () == prefix0.length ();
+      for (unsigned i = 0; agrees && i != prefix.length (); ++i)
+	agrees = prefix[i] == prefix0[i];
+      for (unsigned i = 0; agrees && i != masks.length (); ++i)
+	agrees = (masks[i] != 0) == (masks0[i] != 0);
+      if (!agrees)
+	{
+	  *refusal = upward_refusal_row_divergent;
+	  journal->revert ();
+	  return false;
+	}
+
+      /* Renames first (patterns swap to mutated copies).  */
+      for (unsigned ix = 0; ix != row.insns.length (); ++ix)
+	{
+	  if (!masks[ix])
+	    continue;
+	  rtx_insn *insn = row.insns[ix];
+	  rtx old_pat = PATTERN (insn);
+	  int old_code = INSN_CODE (insn);
+	  rtx new_pat = copy_rtx (old_pat);
+	  upward_replace_lregs (&new_pat, masks[ix], newreg);
+	  PATTERN (insn) = new_pat;
+	  INSN_CODE (insn) = -1;
+	  journal->renamed_insns.safe_push (insn);
+	  journal->renamed_old_pats.safe_push (old_pat);
+	  journal->renamed_old_codes.safe_push (old_code);
+	  if (recog_memoized (insn) < 0)
+	    {
+	      *refusal = upward_refusal_web;
+	      journal->revert ();
+	      return false;
+	    }
+	  df_insn_rescan (insn);
+	}
+
+      /* The re-load and the cooking clones, directly after the seed
+	 (or the re-load alone at the row head for a prefix-free
+	 variant).  */
+      uint32_t dmask
+	= rvtt_insn_effects (row.insns[v.seed_ix]).lreg_write;
+      rtx reload_pat = copy_rtx (PATTERN (row.insns[v.seed_ix]));
+      upward_replace_lregs (&reload_pat, dmask, newreg);
+      rtx_insn *reload;
+      if (v.reload_at_head && prefix.is_empty ())
+	reload = emit_insn_before (reload_pat, row.insns[0]);
+      else
+	reload = emit_insn_after (reload_pat, row.insns[v.seed_ix]);
+      journal->inserted.safe_push (reload);
+      rtx_insn *pos = reload;
+      bool clones_ok = recog_memoized (reload) >= 0;
+      if (clones_ok)
+	df_insn_rescan (reload);
+      for (unsigned i = 0; clones_ok && i != prefix.length (); ++i)
+	{
+	  rtx clone_pat = copy_rtx (PATTERN (row.insns[prefix[i]]));
+	  upward_replace_lregs (&clone_pat, dmask, newreg);
+	  rtx_insn *clone = emit_insn_after (clone_pat, pos);
+	  journal->inserted.safe_push (clone);
+	  pos = clone;
+	  clones_ok = recog_memoized (clone) >= 0;
+	  if (clones_ok)
+	    df_insn_rescan (clone);
+	}
+      if (!clones_ok)
+	{
+	  *refusal = upward_refusal_legality;
+	  journal->revert ();
+	  return false;
+	}
+    }
+  return true;
+}
+
+/* First proven candidate of REGION through the established pipeline
+   (analysis only, no dumps, no mutation).  */
+
+static bool
+upward_probe_region (const macro_region &region, int *ii_out,
+		     unsigned *candidate_out, FILE *dump = nullptr)
+{
+  for (unsigned candidate = 0; ; ++candidate)
+    {
+      macro_schedule schedule;
+      if (!rvtt_macro_schedule_region (region, &schedule, dump,
+				       candidate))
+	return false;
+      bool proven = false;
+      macro_descriptor descriptor;
+      if (rvtt_macro_synthesize (region, schedule, &descriptor, dump))
+	{
+	  const char *verify_fail = nullptr;
+	  if (riscv_tt_macro_planner_verify || flag_checking)
+	    verify_fail = rvtt_macro_verify_descriptor (region, schedule,
+							descriptor, dump);
+	  proven = !descriptor.refusal && !verify_fail;
+	  rvtt_macro_descriptor_release (&descriptor);
+	}
+      int ii = schedule.ii;
+      rvtt_macro_schedule_release (&schedule);
+      if (proven)
+	{
+	  *ii_out = ii;
+	  *candidate_out = candidate;
+	  return true;
+	}
+    }
+}
+
+/* The WP15 driver: try upward-carrier variants on REGION; returns true
+   when one committed (the mutated region formed).  On false the
+   function is byte-identical to entry.  */
+
+static bool
+upward_carrier_try (function *fn, macro_region &region,
+		    macro_residency_state *resid, FILE *dump, bool *changed)
+{
+  if (region.rows.is_empty ())
+    return false;
+
+  /* Predicate-definition rows keep the established candidate space:
+     their hosting rules are the proven CC select programs' territory
+     (the WP14 discipline).  */
+  for (rtx_insn *insn : region.rows[0].insns)
+    {
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (!(e.dst_mem_read || e.dst_mem_write) && e.cc_write
+	  && e.lreg_read != 0 && !e.lreg_write)
+	return false;
+    }
+
+  /* The established outcome is the improvement baseline: the upward
+     search only ever replaces a PROVEN formation by a strictly denser
+     one.  When the established search proves NOTHING, the upward
+     variants may still recover the region (the WP14 repair symmetry:
+     the re-load can be exactly what makes a refusing hosted set
+     realizable); the baseline is then no formation at all, and the
+     established profitability and arbitration gates inside
+     form_region price the variant against the explicit stream.  */
+  int est_ii = INT_MAX;
+  unsigned est_candidate = 0;
+  bool est_proven = upward_probe_region (region, &est_ii, &est_candidate);
+
+  upward_carrier_choice reg_choice;
+  if (!upward_pick_carrier_reg (region, &reg_choice))
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner upward-carrier-refusal: %s\n",
+		 upward_refusal_lreg);
+      return false;
+    }
+  int newreg = reg_choice.vd;
+
+  /* Classify the established schedule's explicit value events (the
+     hosting frontier the upward search can move).  For an unproven
+     region the frontier comes from the first grouping proposal (the
+     maximal-sharing candidate always exists for a discovered region).  */
+  macro_schedule est;
+  if (!rvtt_macro_schedule_region (region, &est, nullptr,
+				   est_proven ? est_candidate : 0))
+    return false;
+  const macro_row &row0 = region.rows[0];
+  auto_vec<upward_variant> variants;
+  /* A hostable chain member: an explicit non-memory value event of a
+     hostable sub-unit class writing one fresh single register.  */
+  auto chain_member_p = [&] (unsigned ix, uint32_t need) -> bool
+    {
+      /* For a PROVEN baseline only explicit events are a frontier (a
+	 hosted event already realizes); an unproven baseline's greedy
+	 hosting is not a realization, so every value event is fair.  */
+      if (est_proven
+	  && est.events[ix].realization != macro_event::EXPLICIT_INSN)
+	return false;
+      if (!est_proven
+	  && est.events[ix].realization == macro_event::CC_COALESCED)
+	return false;
+      xtt_effect_set te = rvtt_insn_effects (row0.insns[ix]);
+      if (te.opaque || te.dst_mem_read || te.dst_mem_write
+	  || !(te.lreg_read & need)
+	  || (te.subunit != XTT_SU_SIMPLE && te.subunit != XTT_SU_ROUND
+	      && te.subunit != XTT_SU_MAD))
+	return false;
+      uint32_t w = te.lreg_write;
+      bool in_place = w == need && (te.lreg_read & w) != 0;
+      return w && (w & (w - 1)) == 0
+	&& (in_place || !(te.lreg_read & w));
+    };
+  for (unsigned seed_ix = 0; seed_ix != row0.insns.length (); ++seed_ix)
+    {
+      xtt_effect_set se = rvtt_insn_effects (row0.insns[seed_ix]);
+      if (se.opaque || !se.dst_mem_read)
+	continue;
+      uint32_t dmask = se.lreg_write;
+      if (!dmask || (dmask & (dmask - 1)) != 0)
+	continue;
+      for (unsigned tix = seed_ix + 1; tix != row0.insns.length (); ++tix)
+	{
+	  if (variants.length () >= UPWARD_CARRIER_BUDGET)
+	    break;
+	  if (!chain_member_p (tix, dmask))
+	    continue;
+	  /* Greedy deterministic chain: extend with the next explicit
+	     event reading the current tail's result, as long as that
+	     result has a UNIQUE reading successor position (linear
+	     version ranges; upward_compute_renames re-proves).  */
+	  upward_variant v;
+	  v.seed_ix = seed_ix;
+	  v.targets[0] = tix;
+	  v.n_targets = 1;
+	  v.reload_at_head = false;
+	  while (v.n_targets < 4)
+	    {
+	      uint32_t w = rvtt_insn_effects
+		(row0.insns[v.targets[v.n_targets - 1]]).lreg_write;
+	      /* The tail version's live window ends at the next
+		 definition of its register; the extension member is
+		 that definition when it is an in-place continuation
+		 (it reads the version), else the window's LAST reader
+		 (earlier readers stay read-renamed uses of the same
+		 version).  */
+	      int next = -1;
+	      for (unsigned jx = v.targets[v.n_targets - 1] + 1;
+		   jx != row0.insns.length (); ++jx)
+		{
+		  xtt_effect_set je = rvtt_insn_effects (row0.insns[jx]);
+		  if (je.opaque)
+		    continue;
+		  if (je.lreg_write & w)
+		    {
+		      if (je.lreg_read & w)
+			next = (int) jx;   /* in-place continuation */
+		      break;	/* any definition ends the window    */
+		    }
+		  if (je.lreg_read & w)
+		    next = (int) jx;	   /* last reader so far      */
+		}
+	      if (next < 0 || !chain_member_p ((unsigned) next, w))
+		break;
+	      v.targets[v.n_targets++] = (unsigned) next;
+	    }
+	  /* Placement axis: a prefix-free variant (no cooking writer of
+	     the seed register before the chain head) additionally tries
+	     the row-head carrier slot FIRST -- the earlier launch slot
+	     gives the hosted chain earlier execution windows against
+	     its explicit consumers' deadlines.  */
+	  bool prefix_free = true;
+	  for (unsigned jx = seed_ix + 1; jx < tix; ++jx)
+	    {
+	      xtt_effect_set je = rvtt_insn_effects (row0.insns[jx]);
+	      if (!je.opaque && (je.lreg_write & dmask))
+		prefix_free = false;
+	    }
+	  /* The maximal chain first, then each shorter prefix (a deeper
+	     rename can refuse where a shallower one proves).  */
+	  for (unsigned len = v.n_targets; len > 0; --len)
+	    {
+	      if (variants.length () >= UPWARD_CARRIER_BUDGET)
+		break;
+	      upward_variant p = v;
+	      p.n_targets = len;
+	      if (prefix_free)
+		{
+		  p.reload_at_head = true;
+		  variants.safe_push (p);
+		  if (variants.length () >= UPWARD_CARRIER_BUDGET)
+		    break;
+		}
+	      p.reload_at_head = false;
+	      variants.safe_push (p);
+	    }
+	}
+    }
+  rvtt_macro_schedule_release (&est);
+
+  for (const upward_variant &v : variants)
+    {
+      char chain_str[32];
+      {
+	int off = 0;
+	for (unsigned k = 0; k != v.n_targets && off < 24; ++k)
+	  off += snprintf (chain_str + off, sizeof (chain_str) - off,
+			   "%s%u", k ? "," : "", v.targets[k]);
+      }
+      const char *refusal = nullptr;
+      auto_vec<uint32_t> masks0;
+      auto_vec<unsigned> prefix0;
+      if (!upward_compute_renames (row0, v, &masks0, &prefix0, &refusal))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
+		     " (seed=%u chain={%s})\n", refusal, v.seed_ix,
+		     chain_str);
+	  continue;
+	}
+      upward_journal journal;
+      if (!upward_apply (region, v, reg_choice, masks0, prefix0, &journal,
+			 &refusal))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
+		     " (seed=%u chain={%s})\n", refusal, v.seed_ix,
+		     chain_str);
+	  continue;
+	}
+
+      /* Re-derive: the mutated block re-enters discovery; the variant's
+	 region must reappear with the same row count (the whole
+	 unrolled span re-proves or the variant refuses).  */
+      auto_vec<macro_region> fresh;
+      rvtt_macro_regions_discover (fn, nullptr, &fresh);
+      macro_region *sel = nullptr;
+      rtx_insn *row0_reload = journal.inserted[0];
+      for (macro_region &fr : fresh)
+	if (fr.bb == region.bb
+	    && fr.rows.length () == region.rows.length () && !sel)
+	  for (rtx_insn *i : fr.rows[0].insns)
+	    if (i == row0_reload)
+	      {
+		sel = &fr;
+		break;
+	      }
+
+      bool committed = false;
+      int new_ii = 0;
+      unsigned new_candidate = 0;
+      /* The variant's re-derivation search is dumped in full (the WP14
+	 repair discipline): the probe's schedule and descriptor lines
+	 are the reviewable record of why a variant proves or dies.  */
+      if (dump)
+	{
+	  fprintf (dump, "Macro-planner upward-carrier: probing seed=%u"
+		   " chain={%s} reload-vd=%d placement=%s", v.seed_ix,
+		   chain_str, newreg, v.reload_at_head ? "head" : "after-seed");
+	  if (reg_choice.relocate_to >= 0)
+	    fprintf (dump, " web-relocated=L%d->L%d", reg_choice.vd,
+		     reg_choice.relocate_to);
+	  fprintf (dump, "\n");
+	}
+      if (!sel || !upward_probe_region (*sel, &new_ii, &new_candidate, dump))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
+		     " (seed=%u chain={%s})\n", upward_refusal_rederive,
+		     v.seed_ix, chain_str);
+	}
+      else if (new_ii >= est_ii)
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
+		     " (seed=%u chain={%s} est-ii=%d variant-ii=%d)\n",
+		     upward_refusal_no_improvement, v.seed_ix, chain_str,
+		     est_ii, new_ii);
+	}
+      else
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier: seed=%u chain={%s}"
+		     " reload-vd=%d prefix-clones=%u ii=%d->%d\n",
+		     v.seed_ix, chain_str, newreg, prefix0.length (),
+		     est_ii, new_ii);
+	  bool local_changed = false;
+	  bool proven = planner_process_region (fn, *sel, resid, dump,
+						&local_changed);
+	  if (proven && local_changed)
+	    {
+	      *changed = true;
+	      committed = true;
+	      if (dump)
+		fprintf (dump, "Macro-planner upward-carrier: formed"
+			 " (ii=%d, was %d)\n", new_ii, est_ii);
+	    }
+	  else if (dump)
+	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
+		     " (seed=%u chain={%s} formation declined)\n",
+		     upward_refusal_rederive, v.seed_ix, chain_str);
+	}
+
+      for (macro_region &fr : fresh)
+	rvtt_macro_region_release (&fr);
+      if (committed)
+	{
+	  journal.drop ();	/* mutation is the committed code */
+	  return true;
+	}
+      journal.revert ();
+    }
+  return false;
+}
+
 const pass_data pass_data_rvtt_macro_planner =
 {
   RTL_PASS,
@@ -1482,39 +2444,22 @@ public:
     rvtt_macro_regions_discover (fn, dump_file, &regions);
     for (macro_region &region : regions)
       {
+	/* WP15 upward-IMS carrier former (default off): when a variant
+	   commits, the mutated region has already formed and the
+	   established search is superseded for this region.  On any
+	   refusal the function is byte-identical and the established
+	   search below proceeds untouched.  */
+	if (riscv_tt_macro_planner && riscv_tt_macro_ims_carrier
+	    && upward_carrier_try (fn, region, &resid, dump_file, &changed))
+	  {
+	    rvtt_macro_region_release (&region);
+	    continue;
+	  }
 	/* Deterministic carrier-grouping search: candidates ascend from
 	   maximal sharing; the first whose descriptor synthesis proves
 	   is committed.  When every candidate refuses, the region
 	   refuses byte-identically.  */
-	for (unsigned candidate = 0; ; ++candidate)
-	  {
-	    macro_schedule schedule;
-	    if (!rvtt_macro_schedule_region (region, &schedule, dump_file,
-					     candidate))
-	      break;		/* search exhausted (or no table)  */
-	    bool proven = false;
-	    macro_descriptor descriptor;
-	    if (rvtt_macro_synthesize (region, schedule, &descriptor,
-				       dump_file))
-	      {
-		/* A Layer-7 verification mismatch is a descriptor
-		   refusal: the candidate is unproven and must never
-		   reach form_region.  */
-		const char *verify_fail = nullptr;
-		if (riscv_tt_macro_planner_verify || flag_checking)
-		  verify_fail
-		    = rvtt_macro_verify_descriptor (region, schedule,
-						    descriptor, dump_file);
-		proven = !descriptor.refusal && !verify_fail;
-		if (proven && riscv_tt_macro_planner)
-		  changed |= form_region (fn, region, schedule,
-					  descriptor, &resid, dump_file);
-		rvtt_macro_descriptor_release (&descriptor);
-	      }
-	    rvtt_macro_schedule_release (&schedule);
-	    if (proven)
-	      break;
-	  }
+	planner_process_region (fn, region, &resid, dump_file, &changed);
 	rvtt_macro_region_release (&region);
       }
     return changed ? TODO_df_finish : 0;
