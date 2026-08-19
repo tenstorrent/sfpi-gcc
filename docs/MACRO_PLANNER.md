@@ -1209,3 +1209,83 @@ pattern) and the zero-argument `__builtin_rvtt_sfpencc_all_lanes`
 proof compares against; the pre-existing user `sfpencc` builtin's
 operand-spec-vs-expansion order mismatch is documented at its
 definition and deliberately not relied upon).
+
+## 2g. Lane CI: derived-SFPMUL24 commuted-operand admission, and the
+## mul_int32 route adjudication (queue item 7)
+
+Lane CI, 2026-08-19 (`agent/mulint32-route`).  No new flag: the
+admission extends the WP12 derived MUL24 class inside
+`-mtt-tensix-macro-planner` (rvtt-macro-desc.cc,
+`derived_value_template_fields`).
+
+**The admission.**  Both audited SFPMUL24 mods are symmetric in VA/VB
+(LOWER: `(a*b) & 0x7FFFFF`; UPPER: `(a_23*b_23) >> 23` — craq-sim
+`sfpmul24_result`, SFPMUL24.md), so the class requirement "the VB
+factor must be the launch VD" was one operand-order too narrow: when
+the register allocator ties the product in-place onto the VA-side
+factor instead, the commuted word — naming the VB-side factor's
+register through the template's VA field, with the launch VD supplying
+the other factor through the VB:=VD route — realizes the identical
+value.  The established order is matched first, so every previously
+derived word stays bit-identical; the commuted arm only admits rows
+that previously refused `descriptor-program-unproven`.  Twins:
+`macro-planner-mul24-commuted-{fire,refuse,varied}-bh.C` (fire = the
+allocator-tied-VA shape forms with the word naming the surviving
+factor; refuse = a fresh-destination product where neither factor is
+the launch VD keeps the established refusal byte-identically; varied =
+renamed row, different offsets/immediates and the UPPER mod).  The
+`derive_row` synthesis now also dumps the exact row spec it feeds the
+derivation core (`derive-event` / `derive-explicit` lines), so a
+derivation refusal names its participants in the dump.
+
+**mul_int32 adjudication (both remaining WP15 routes).**  Loss shape
+re-derived at pin 13 (fresh SM32 row, ON set): formed ii=12 + 1
+interlock NOP = 13 words/row vs the hand kernel's 8; per-tile 26-word
+config prefix (a census-quarantined cross-call residual, not this
+lane's surface).
+
+* Route (a) template-budget relief: REFUSED
+  (`mulint32-template-budget-architectural`).  The budget is the
+  architectural 4 InstructionTemplate destinations (SFPCONFIG.md class
+  {0..8}); kernel-wide residency (WP13) cannot raise within-row
+  capacity because every launch resolves its template selectors
+  against the same 4 live registers; mid-row reprogramming costs one
+  issued word per reprogrammed word (the backdoor VD=12+i form is
+  already the 1-word minimum) and hosts at most one event per distinct
+  word on this row — conservation nets >= 0 — and LoadMacroConfig
+  words are live-at-execution for in-flight events (WP13 drain
+  derivation), so an in-row rewrite inside the replay steady state is
+  a race the planner must refuse.  Widening MAX_EVENTS alone
+  unblocks nothing (WP15 falsification facts 1-3 are independent).
+
+* Route (b) semantic-source restructure: REFUSED for ii < 12
+  (`mulint32-restructure-deadline-floor`), with the sharper deadline
+  arithmetic discovered by driving reassociated bodies through the
+  pipeline (the only oracle): the row's three explicit raw-b-reading
+  MUL24s plus the sa-shift occupy issue slots through slot 5, the
+  in-place b-chain shift's WAR floor puts the hosted chain product's
+  execution at >= 7 (MAD latency 2), and the WP12 visibility deadline
+  (retire-at-equality) then requires its explicit consumer at slot
+  >= 8 followed by the serial 2-word tail — exactly the 17-member V0
+  row at ii=12.  Every 16-member reassociation (the copy eliminated)
+  presents ii=11 candidates that refuse `sequence-derivation-hazard`
+  and fall back to the UNFORMED replay stream (~19 words/row —
+  strictly worse), because the "wasted" copy is load-bearing twice:
+  it holds the consumer one slot past the deadline AND steers the
+  allocator to the hostable operand order (the commuted admission
+  closes the second half only; the deadline half stands).  The
+  SM32 -> raw-U32 rewrite (drops 3 cast words; BH INT32_2S_COMP is
+  architecturally inert, ckernel_sfpu_sub_int.h) is REFUSED as an
+  owner-level contract decision (`mulint32-raw-contract-owner-
+  decision`): it weakens the fresh body's stated golden contract to
+  the hand kernel's non-negative test domain — the eqz -0.0 class.
+  Extra-carrier restructures stay net-negative under SM32 (each
+  re-load needs its own cast; the cast occupies exactly the Simple
+  slot the hosting needs — WP15 fact 3 generalized).
+
+Pre-registered follow-ups (NOT implemented): the three -1-word paths
+past the floor are (i) interval padding on deadline refusals (retry
+the same grouping at ii+1 with a scheduled hole — the IMS textbook
+move), (ii) WP14 repair (reduced hosted sets) joining the ON set, and
+(iii) allocator-directed consumer placement.  Each is a scheduler
+increment, none is a source or template-budget fact.
