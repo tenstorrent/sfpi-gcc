@@ -517,6 +517,24 @@ Drain placement (WP13; refusing keeps the full derived drain, never
 blocks formation): `drain-follower-opaque`, `drain-lreg-overlap`,
 `drain-cc-live`, `drain-config-overlap`, `drain-dst-raw`,
 `drain-delay-unproven`, `drain-horizon-spill`.
+Loop-backedge drain elision (lane CA, same flag; refusing keeps the
+in-body drain): the WP13 names above at the backedge boundary, plus
+`drain-exit-shared` (the loop-body block's successor structure admits
+no sound exit-compensation placement).
+Cross-call init hoist (lane CA, `-mtt-tensix-optimize-init-hoist`;
+refusing keeps the per-call prefix, never blocks formation):
+`drain-init-callers-unproven` (closure/chain), `drain-init-loop-unproven`,
+`drain-init-ownership-unproven` (a caller-loop statement or delivered
+word that could write the hoisted state, launch a macro, or replay
+recorded content; also the MOP-census body shortfalls),
+`drain-init-vector-live`, `drain-init-mop-slot-unproven`,
+`drain-init-callee-unproven` (the callee carries unproven content
+outside the region), `drain-init-idempotence-unproven` (the prefix's
+lane proof is not the typed architectural all-lanes enable, or the
+program exceeds the contract capacity).  Stage-2 demotions (loop CC
+writes, owned-row value inequality or missing dominating reaching
+write) are dump-documented but are not refusals: stage 1 still hoists
+the descriptor words and retains the enable + owned SETC16 per call.
 Residency (WP13; refusing keeps today's placement, never blocks
 formation): `resid-skip-path-unproven` (function-wide owned-state
 invariance walk failed; the underlying epoch name and insn are cited
@@ -536,7 +554,10 @@ verifier; forced under internal checking),
 self-test), `-mtt-tensix-macro-planner-replay` (WP10 delivery: admit
 planner-formed launches into automatic replay recording; see Sec. 6),
 `-mtt-tensix-optimize-drain-schedule` (WP13: per-boundary drain
-placement proofs; see Sec. 2d).
+placement proofs, including the lane-CA loop-backedge elision with
+exit-edge compensation; see Sec. 2d/2e).
+`-mtt-tensix-optimize-init-hoist` (lane CA D2: cross-call residency of
+the idempotent formation init prefix; see Sec. 2e).
 `-mtt-tensix-macro-planner-residency` (WP13 delivery: descriptor-program
 residency; see Sec. 2d).
 `-mtt-tensix-macro-ims` (WP14: IMS placement repair over the sub-unit
@@ -1120,3 +1141,71 @@ calendar byte-identical.  mul_int32's residual vs hand therefore
 does not close by placement search at all: the remaining routes are
 the 2d follow-ups (b) template-budget relief and (c) semantic-source
 restructure.
+
+## 2f. Lane CA drain completion: loop-backedge elision + cross-call init hoist
+
+Two increments close the drain-class residual the AY itemization left
+open (`~/sfpi-uplift/drain-study-20260818/ITEMIZATION.md` D1-residual
+and D2).
+
+**Loop-backedge drain elision** (rides
+`-mtt-tensix-optimize-drain-schedule`).  A loop-body region has one
+boundary the intra-region proof can never reach: its final run ends at
+the loop latch, so the derived drain executes once per trip where the
+architecture requires it once per loop exit (the TTNN-Where compact
+loop paid 3 SFPNOPs x 4 trips per tile).  The backedge follower stream
+is the in-body tail, the loop-head prefix, and the region's OWN first
+run in the next iteration -- the identical row succession the adopted
+schedule already sequences run-internally.
+`rvtt_macro_drain_backedge_elidable` (rtl-rvtt-schedule.cc) proves that
+stream with the shared decoded slot arithmetic after classifying every
+interposed instruction: never-absorbed launch-latched pure-RWC words
+earn slot credit (AIC_RWC_STEP), absorbable INC words none,
+proven-neutral scalars (no call, no asm, no memory store -- a scalar
+touches Tensix state only by delivering a word through the instruction
+FIFO) none.  The proof horizon is the DECODED SequenceBits pending --
+the derivation that cannot drift from what the hardware sequences --
+admitted when it does not exceed the emitted drain (the compact CC
+program's proven-calendar figure of 3 is conservative over the decoded
+pending of 1); the intra-region path keeps its strict equality
+cross-check byte-identically.  On a proven elision the FULL derived
+drain lands once on the loop's exit path (sole-predecessor exit head or
+a commit-time edge split): the exit contract is preserved, only its
+placement moves.  The replay/MOP re-deliveries only ADD issue slots
+ahead of the follower words -- the safe direction (H2).
+
+**Cross-call invariant-init hoist**
+(`-mtt-tensix-optimize-init-hoist`, D2).  A noinline per-tile callee
+re-executes the formation's idempotent init prefix -- descriptor
+program, owned SETC16 program, proven all-lanes enable; 17 issue slots
+on the production minmax shape -- on every call, although every written
+value is compile-time descriptor data.  The planner's formation hands
+the prefix to `rvtt_crosscall_init_hoist` (gimple-rvtt-crosscall.cc),
+which proves the caller side while every caller body is still gimple
+(callees run the late pipeline first) and inserts the prefix as typed
+builtin calls in the caller's loop preheader; the callee's emission
+omits the hoisted part.  Closure resolves the effective caller chain
+through committed-inline clones (`inlined_to` + `clone_of` origin
+bodies); the loop epoch is scanned on the config face (an audited
+delivered-word classifier asking the LoadMacroConfig / owned-SETC16 /
+launch / replay question, with the MOP template census re-audited per
+word).  Stage 1 hoists the descriptor words only -- their sole readers
+are the callee's launches (SFPLOADMACRO.md resolves
+templates/sequence/misc from LoadMacroConfig) -- with the callee
+retaining its per-call enable + owned SETC16.  Stage 2 additionally
+hoists those under the value-equality proof: every decodable
+SETC16-class delivery to an owned row anywhere in the caller closure
+equals the contract's encoded word (decode_setc16, capability tables)
+and each owned row has such a write dominating the loop; then no
+instruction between the preheader and the first call can distinguish
+the hoisted programming from today's state, whatever it reads, and the
+zero-trip preheader execution is likewise unobservable (idempotent
+value-equal writes; descriptor destinations unread outside launches;
+the all-lanes enable re-writes the architectural outermost contract
+state).  Gimple spellings for the caller side:
+`__builtin_rvtt_ttsetc16` (forwards to the compiler-owned TTSETC16
+pattern) and the zero-argument `__builtin_rvtt_sfpencc_all_lanes`
+(expands to the architectural all-lanes SFPENCC operands the formation
+proof compares against; the pre-existing user `sfpencc` builtin's
+operand-spec-vs-expansion order mismatch is documented at its
+definition and deliberately not relied upon).

@@ -165,6 +165,17 @@ extern bool rvtt_macro_drain_boundary_elidable
   (const macro_region &region, const macro_schedule &schedule,
    const macro_descriptor &desc, unsigned begin, unsigned end,
    unsigned next_end, FILE *dump);
+/* Loop-backedge drain elision (lane CA, the drain-route remainder):
+   prove that a loop-body region's FINAL run may elide its in-body
+   drain because the backedge follower stream -- the in-body tail, the
+   loop-head prefix, and the region's own first run [0, FIRST_RUN_END)
+   in the next iteration -- provably orders every access after every
+   pending writeback.  The caller must emit the full derived drain on
+   the loop's exit path (the architectural exit contract is preserved,
+   only its placement moves from once-per-trip to once-per-exit).  */
+extern bool rvtt_macro_drain_backedge_elidable
+  (const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, unsigned first_run_end, FILE *dump);
 /* ------------------------------------------------------------------ */
 /* WP13: descriptor-program residency (default-off,
    -mtt-tensix-macro-planner-residency).  Dictionary-selection residency

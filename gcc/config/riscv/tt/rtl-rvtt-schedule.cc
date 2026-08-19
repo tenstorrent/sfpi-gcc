@@ -1846,6 +1846,211 @@ drain_conflict_name (const xtt_effect_set &e)
   return "drain-lreg-overlap";
 }
 
+/* Decoded pending-event horizon of one emitted run, shared by the
+   intra-region boundary proof and the loop-backedge proof below.  All
+   fields derive from the descriptor's own SequenceBits delays and the
+   adopted schedule's slot assignment -- derived timing calendars,
+   never hand constants.  */
+
+struct drain_horizon
+{
+  int max_dist;			/* == desc.drain_slots, cross-checked  */
+  unsigned words_per_row;
+  int carrier_pos[8];
+  auto_vec<int> word_pos;	/* per schedule event: row position    */
+  struct { unsigned kind; unsigned delay; } events[8][4];
+  int n_events[8];
+};
+
+/* Decode the run horizon from SCHEDULE and DESC into *H.  Word
+   positions mirror emit_planner_run's emission order (issue slots
+   ascending).  Per-macro launched-event timing is decoded from the
+   descriptor's OWN sequence words through the established SequenceBits
+   format (rvtt-macro-tables.h: byte i programs sub-unit i; case = bits
+   2:0, the event executes at issue + 1 + delay(bits 5:3); provenance
+   docs/TIMING_CALENDAR_DERIVATION.md 1-2).  The frozen whole-word
+   programs left per-event delays untranscribed in the schedule
+   (DELAY_UNKNOWN), but the words themselves carry them -- decoding
+   the emitted words is the one derivation that can never drift from
+   what the hardware sequences.  Case 1 is architecturally undefined;
+   SKIP/NOP bytes stage no architectural event.  The decoded pending
+   horizon is cross-checked against the descriptor's own drain_slots
+   -- the two derive from the same calendar, so a mismatch means the
+   timing facts are not established for this shape and the boundary
+   refuses.  */
+
+/* REQUIRE_EXACT selects the establishment rule.  The intra-region
+   boundary proof (the lane-AY envelope) requires the decoded pending
+   horizon to EQUAL the descriptor's emitted drain_slots -- byte-stable
+   with the shipped behavior.  The loop-backedge proof admits a
+   conservative emitted drain (a frozen proven-calendar figure may
+   exceed the decoded truth -- the compact CC program carries 3 where
+   the SequenceBits pend only 1); the decoded words are the derivation
+   that can never drift from what the hardware sequences, so the proof
+   horizon is the DECODED pending, refused if it ever exceeded the
+   emitted drain.  */
+
+static bool
+drain_decode_horizon (const macro_schedule &schedule,
+		      const macro_descriptor &desc,
+		      drain_horizon *h, FILE *dump, bool require_exact)
+{
+  h->max_dist = desc.drain_slots;
+
+  for (int m = 0; m != 8; ++m)
+    h->carrier_pos[m] = -1;
+  h->word_pos.safe_grow_cleared (schedule.events.length ());
+  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+    h->word_pos[ix] = -1;
+  h->words_per_row = 0;
+  for (int slot = 0; slot != schedule.ii; ++slot)
+    for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+      {
+	const macro_event &ev = schedule.events[ix];
+	if (!ev.issues_word || ev.slot != slot)
+	  continue;
+	h->word_pos[ix] = h->words_per_row;
+	if (ev.is_carrier && ev.macro_index < 8)
+	  h->carrier_pos[ev.macro_index] = h->words_per_row;
+	++h->words_per_row;
+      }
+  if (h->words_per_row == 0)
+    return drain_refuse (dump, "drain-follower-opaque", nullptr);
+
+  for (int m = 0; m != 8; ++m)
+    h->n_events[m] = 0;
+  for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+    {
+      uint8_t bytes[4];
+      rvtt_macro::decompose_sequence_word (desc.seq[m], bytes);
+      for (int i = 0; i != 4; ++i)
+	{
+	  unsigned kind, delay;
+	  bool vd16, route_vb;
+	  if (!rvtt_macro::decode_sequence_bits (bytes[i], &kind, &delay,
+						 &vd16, &route_vb))
+	    return drain_refuse (dump, "drain-delay-unproven", nullptr);
+	  if (kind == rvtt_macro::SEQ_CASE_SKIP
+	      || kind == rvtt_macro::SEQ_CASE_NOP)
+	    continue;
+	  h->events[m][h->n_events[m]].kind = kind;
+	  h->events[m][h->n_events[m]].delay = delay;
+	  ++h->n_events[m];
+	}
+    }
+
+  /* Every sequence word's events ride a known carrier; a macro without
+     a located carrier word leaves events unaccounted -- refuse.  */
+  for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+    if (h->n_events[m] > 0 && h->carrier_pos[m] < 0)
+      return drain_refuse (dump, "drain-delay-unproven", nullptr);
+
+  /* Pending horizon: greatest event-execution distance past the run's
+     last issue slot, over the decoded events of the trailing rows
+     (event execution = carrier position + 1 + delay; rows are
+     words_per_row issue slots apart).  */
+  int last_issue = (int) h->words_per_row - 1;
+  int max_pending = 0;
+  for (int j = 0;
+       j * (int) h->words_per_row <= (int) rvtt_macro::SEQ_MAX_DELAY + 1;
+       ++j)
+    for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+      {
+	if (h->carrier_pos[m] < 0)
+	  continue;
+	for (int e = 0; e != h->n_events[m]; ++e)
+	  {
+	    int dist = h->carrier_pos[m] + 1 + (int) h->events[m][e].delay
+	      - last_issue - j * (int) h->words_per_row;
+	    if (dist > max_pending)
+	      max_pending = dist;
+	  }
+      }
+  if (require_exact ? max_pending != h->max_dist
+		    : max_pending > h->max_dist)
+    return drain_refuse (dump, "drain-delay-unproven", nullptr);
+  if (!require_exact)
+    h->max_dist = max_pending;
+  return true;
+}
+
+/* Prove that every architectural access of the follower rows
+   [ROW_BEGIN, ROW_END) is ordered after every pending event of the
+   horizon H, with SEP_CREDIT proven follower words already issued
+   before the first row (H1+H2): a follower word at run position P
+   issues no earlier than boundary + sep_credit + 1 + P, its launched
+   events execute at issue + 1 + delay, an explicit word's own access
+   is counted at issue (the conservative earliest).  Ordering at equal
+   cycles follows the established transactional model
+   (rvtt-macro-tables.h derived-calendar provenance: ISA spec + CRAQ
+   generic executor + hand MulInt32 -- "retire-before-issue"): a
+   staged event retiring at cycle X retires BEFORE the front-end
+   instruction issuing at X executes, so a FRONT-END access at the
+   last retirement cycle is ordered after every pending event
+   (equality admitted); two staged EVENTS at one cycle stay a race --
+   the silicon-adjudicated cc-restore-store-race failure mode -- so
+   launched follower events keep the strict inequality.  The
+   enumerated follower words must cover the whole horizon.  */
+
+static bool
+drain_follower_rows_ok (const macro_region &region,
+			const macro_schedule &schedule,
+			const macro_descriptor &desc,
+			const drain_horizon &h,
+			unsigned row_begin, unsigned row_end,
+			unsigned sep_credit, FILE *dump)
+{
+  int max_dist = h.max_dist;
+  unsigned base = sep_credit;	/* follower words issued before this row */
+  for (unsigned r = row_begin; r != row_end; ++r)
+    {
+      if ((int) base + 1 > max_dist)
+	break;			/* every later access clears by time */
+      if (region.rows[r].insns.length () != schedule.events.length ())
+	return drain_refuse (dump, "drain-follower-opaque", nullptr);
+      /* Launched events, per carrier word.  */
+      for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+	{
+	  if (h.carrier_pos[m] < 0)
+	    continue;
+	  for (int e = 0; e != h.n_events[m]; ++e)
+	    {
+	      int exec = (int) base + 1 + h.carrier_pos[m] + 1
+		+ (int) h.events[m][e].delay;
+	      if (exec > max_dist)
+		continue;	/* strictly after the last writeback */
+	      return drain_refuse
+		(dump, h.events[m][e].kind == rvtt_macro::SEQ_CASE_STORE
+		 ? "drain-dst-raw" : "drain-lreg-overlap", nullptr);
+	    }
+	}
+      /* Explicit words, at issue.  */
+      for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+	{
+	  const macro_event &ev = schedule.events[ix];
+	  if (ev.realization != macro_event::EXPLICIT_INSN
+	      || h.word_pos[ix] < 0)
+	    continue;
+	  int access_lb = (int) base + 1 + h.word_pos[ix];
+	  /* Front-end access: retire-before-issue admits equality with
+	     the last pending retirement.  */
+	  if (access_lb >= max_dist)
+	    continue;
+	  xtt_effect_set e = rvtt_insn_effects (region.rows[r].insns[ix]);
+	  return drain_refuse (dump, drain_conflict_name (e),
+			       region.rows[r].insns[ix]);
+	}
+      base += h.words_per_row;
+      if (desc.keep_separator && region.rows[r].separator)
+	base += 1;		/* pure-RWC word re-emitted verbatim */
+    }
+
+  /* The enumerated follower words must cover the whole horizon.  */
+  if ((int) base < max_dist)
+    return drain_refuse (dump, "drain-horizon-spill", nullptr);
+  return true;
+}
+
 bool
 rvtt_macro_drain_boundary_elidable (const macro_region &region,
 				    const macro_schedule &schedule,
@@ -1917,163 +2122,200 @@ rvtt_macro_drain_boundary_elidable (const macro_region &region,
 	}
     }
 
-  /* Word positions within one emitted row, mirroring emit_planner_run's
-     emission order (issue slots ascending).  */
-  int carrier_pos[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-  auto_vec<int> word_pos;
-  word_pos.safe_grow_cleared (schedule.events.length ());
-  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
-    word_pos[ix] = -1;
-  unsigned words_per_row = 0;
-  for (int slot = 0; slot != schedule.ii; ++slot)
-    for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
-      {
-	const macro_event &ev = schedule.events[ix];
-	if (!ev.issues_word || ev.slot != slot)
-	  continue;
-	word_pos[ix] = words_per_row;
-	if (ev.is_carrier && ev.macro_index < 8)
-	  carrier_pos[ev.macro_index] = words_per_row;
-	++words_per_row;
-      }
-  if (words_per_row == 0)
-    return drain_refuse (dump, "drain-follower-opaque", nullptr);
-
-  /* Per-macro launched-event timing, decoded from the descriptor's OWN
-     sequence words through the established SequenceBits format
-     (rvtt-macro-tables.h: byte i programs sub-unit i; case = bits 2:0,
-     the event executes at issue + 1 + delay(bits 5:3); provenance
-     docs/TIMING_CALENDAR_DERIVATION.md 1-2).  The frozen whole-word
-     programs left per-event delays untranscribed in the schedule
-     (DELAY_UNKNOWN), but the words themselves carry them -- decoding
-     the emitted words is the one derivation that can never drift from
-     what the hardware sequences.  Case 1 is architecturally undefined;
-     SKIP/NOP bytes stage no architectural event.  */
-  struct seq_event { unsigned kind; unsigned delay; };
-  seq_event macro_events[8][4];
-  int macro_n_events[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-  for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
-    {
-      uint8_t bytes[4];
-      rvtt_macro::decompose_sequence_word (desc.seq[m], bytes);
-      for (int i = 0; i != 4; ++i)
-	{
-	  unsigned kind, delay;
-	  bool vd16, route_vb;
-	  if (!rvtt_macro::decode_sequence_bits (bytes[i], &kind, &delay,
-						 &vd16, &route_vb))
-	    return drain_refuse (dump, "drain-delay-unproven", nullptr);
-	  if (kind == rvtt_macro::SEQ_CASE_SKIP
-	      || kind == rvtt_macro::SEQ_CASE_NOP)
-	    continue;
-	  macro_events[m][macro_n_events[m]].kind = kind;
-	  macro_events[m][macro_n_events[m]].delay = delay;
-	  ++macro_n_events[m];
-	}
-    }
-
-  /* Every sequence word's events ride a known carrier; a macro without
-     a located carrier word leaves events unaccounted -- refuse.  */
-  for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
-    if (macro_n_events[m] > 0 && carrier_pos[m] < 0)
-      return drain_refuse (dump, "drain-delay-unproven", nullptr);
-
-  /* Pending horizon: greatest event-execution distance past the run's
-     last issue slot, over the decoded events of the trailing rows
-     (event execution = carrier position + 1 + delay; rows are
-     words_per_row issue slots apart).  Cross-checked against the
-     descriptor's own drain_slots -- the two derive from the same
-     calendar, so a mismatch means the timing facts are not established
-     for this shape and the boundary refuses.  */
-  int last_issue = (int) words_per_row - 1;
-  int max_pending = 0;
-  for (int j = 0; j * (int) words_per_row <= (int) rvtt_macro::SEQ_MAX_DELAY + 1;
-       ++j)
-    for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
-      {
-	if (carrier_pos[m] < 0)
-	  continue;
-	for (int e = 0; e != macro_n_events[m]; ++e)
-	  {
-	    int dist = carrier_pos[m] + 1 + (int) macro_events[m][e].delay
-	      - last_issue - j * (int) words_per_row;
-	    if (dist > max_pending)
-	      max_pending = dist;
-	  }
-      }
-  if (max_pending != max_dist)
-    return drain_refuse (dump, "drain-delay-unproven", nullptr);
+  drain_horizon h;
+  if (!drain_decode_horizon (schedule, desc, &h, dump, /*require_exact=*/true))
+    return false;
   if (dump)
     fprintf (dump, "Macro-planner drain-boundary: drain=%d"
 	     " separator-credit=%u words-per-row=%u\n",
-	     max_dist, sep_credit, words_per_row);
+	     h.max_dist, sep_credit, h.words_per_row);
 
-  /* (b) Every architectural access of the next run inside the horizon
-     must be ordered after every pending event, by the same decoded
-     arithmetic (H1+H2): a follower word at run position P issues no
-     earlier than boundary + sep_credit + 1 + P, its launched events
-     execute at issue + 1 + delay, an explicit word's own access is
-     counted at issue (the conservative earliest).  Ordering at equal
-     cycles follows the established transactional model
-     (rvtt-macro-tables.h derived-calendar provenance: ISA spec + CRAQ
-     generic executor + hand MulInt32 -- "retire-before-issue"): a
-     staged event retiring at cycle X retires BEFORE the front-end
-     instruction issuing at X executes, so a FRONT-END access at the
-     last retirement cycle is ordered after every pending event
-     (equality admitted); two staged EVENTS at one cycle stay a race --
-     the silicon-adjudicated cc-restore-store-race failure mode -- so
-     launched follower events keep the strict inequality.  */
-  unsigned base = sep_credit;	/* follower words issued before this row */
-  for (unsigned r = end; r != next_end; ++r)
-    {
-      if ((int) base + 1 > max_dist)
-	break;			/* every later access clears by time */
-      if (region.rows[r].insns.length () != schedule.events.length ())
-	return drain_refuse (dump, "drain-follower-opaque", nullptr);
-      /* Launched events, per carrier word.  */
-      for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
-	{
-	  if (carrier_pos[m] < 0)
-	    continue;
-	  for (int e = 0; e != macro_n_events[m]; ++e)
-	    {
-	      int exec = (int) base + 1 + carrier_pos[m] + 1
-		+ (int) macro_events[m][e].delay;
-	      if (exec > max_dist)
-		continue;	/* strictly after the last writeback */
-	      return drain_refuse
-		(dump, macro_events[m][e].kind == rvtt_macro::SEQ_CASE_STORE
-		 ? "drain-dst-raw" : "drain-lreg-overlap", nullptr);
-	    }
-	}
-      /* Explicit words, at issue.  */
-      for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
-	{
-	  const macro_event &ev = schedule.events[ix];
-	  if (ev.realization != macro_event::EXPLICIT_INSN
-	      || word_pos[ix] < 0)
-	    continue;
-	  int access_lb = (int) base + 1 + word_pos[ix];
-	  /* Front-end access: retire-before-issue admits equality with
-	     the last pending retirement.  */
-	  if (access_lb >= max_dist)
-	    continue;
-	  xtt_effect_set e = rvtt_insn_effects (region.rows[r].insns[ix]);
-	  return drain_refuse (dump, drain_conflict_name (e),
-			       region.rows[r].insns[ix]);
-	}
-      base += words_per_row;
-      if (desc.keep_separator && region.rows[r].separator)
-	base += 1;		/* pure-RWC word re-emitted verbatim */
-    }
-
-  /* (c) The enumerated follower words must cover the whole horizon.  */
-  if ((int) base < max_dist)
-    return drain_refuse (dump, "drain-horizon-spill", nullptr);
+  /* (b)+(c) The next run's accesses and horizon coverage.  */
+  if (!drain_follower_rows_ok (region, schedule, desc, h, end, next_end,
+			       sep_credit, dump))
+    return false;
 
   if (dump)
     fprintf (dump, "Macro-planner drain-schedule: run-boundary drain"
 	     " elided (drain=%d separator-credit=%u)\n",
-	     max_dist, sep_credit);
+	     h.max_dist, sep_credit);
+  return true;
+}
+
+/* ----------------------------------------------------------------------
+   Loop-backedge drain elision (the drain-route remainder, lane CA).
+
+   A loop-body region has one boundary the intra-region proof above can
+   never reach: its final run ends at the loop latch, so today the
+   derived drain executes once per trip -- where the architecture
+   requires it once per loop EXIT.  The backedge follower stream is not
+   invisible: it is the in-body tail after the final run, plus anything
+   ahead of the region at the loop-body head, plus the region's OWN
+   first run in the next iteration -- the identical row-succession the
+   adopted schedule already sequences run-internally.  The verdict
+   below proves that stream with the same decoded slot arithmetic
+   (drain_decode_horizon / drain_follower_rows_ok) after classifying
+   every interposed instruction:
+
+     - never-absorbed launch-latched pure-RWC words (SET/FACE class,
+       the AIC_RWC_STEP contract) earn slot credit, absorbable INC
+       words none -- the intra-region separator discipline verbatim;
+     - proven-neutral scalar instructions (no call, no asm, no memory
+       store -- a scalar can only touch Tensix state by delivering a
+       word through the instruction FIFO, which is a memory store)
+       earn no credit: they can only DELAY follower issue, the safe
+       direction under H2;
+     - anything else refuses by name.
+
+   The architectural exit contract is PRESERVED, not weakened: the
+   caller of this verdict emits the full derived drain on the loop's
+   exit path, so no event ever reaches an unproven follower stream.
+   The first trip trivially satisfies the proof (no pending events at
+   loop entry).  The replay/MOP passes that later re-deliver the body
+   can only ADD issue slots ahead of the follower words (record and
+   playback words), which moves follower accesses later -- the safe
+   direction, same as any dynamic stall (H2).  */
+
+static void
+drain_note_mem_store (rtx x, const_rtx, void *data)
+{
+  if (MEM_P (x))
+    *(bool *) data = true;
+}
+
+/* Classify one interposed follower-stream instruction at the loop
+   backedge.  Returns true when INSN is proven drain-neutral,
+   accumulating slot credit into *CREDIT; otherwise false with the
+   refusal name in *WHY.  */
+
+static bool
+drain_stream_insn_neutral (rtx_insn *insn, unsigned *credit,
+			   const char **why)
+{
+  *why = "drain-follower-opaque";
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+    return true;
+  if (CALL_P (insn))
+    return false;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (!e.opaque)
+    {
+      if (e.lreg_read || e.lreg_write || e.cc_read || e.cc_write
+	  || e.config_dests_written || e.config_dests_read
+	  || e.addr_mod_slot_write || e.dst_mem_read || e.dst_mem_write)
+	{
+	  /* A real effect conflict names its class (E1-E4).  */
+	  *why = drain_conflict_name (e);
+	  return false;
+	}
+      switch (e.rwc.kind)
+	{
+	case xtt_rwc_effect_t::SET:
+	case xtt_rwc_effect_t::FACE:
+	  /* Never-absorbed launch-latched words hold their stream slots
+	     (AIC_RWC_STEP contract): slot credit, sized as in the
+	     intra-region walk.  */
+	  if (asm_noperands (pat) >= 0)
+	    *credit += 1;
+	  else
+	    *credit += get_attr_length (insn) / 4;
+	  return true;
+	case xtt_rwc_effect_t::INC:
+	  /* Absorbable (AIC_INCRWC): neutral, no slot credit.  */
+	  return true;
+	case xtt_rwc_effect_t::NONE:
+	  /* Audited effect-free Tensix instruction: neutral; its slot
+	     survival is unproven, so no credit.  */
+	  return true;
+	default:
+	  return false;
+	}
+    }
+  /* Unaudited Tensix instruction or unproven raw word: refuse.  */
+  if (asm_noperands (pat) >= 0)
+    return false;
+  if (recog_memoized (insn) >= 0 && get_attr_type (insn) == TYPE_TENSIX)
+    return false;
+  /* A scalar RISC instruction.  It can only touch Tensix state by
+     delivering a word through a memory store; refuse stores, admit
+     pure register/branch scalars with no slot credit.  */
+  bool stores_mem = false;
+  note_stores (insn, drain_note_mem_store, &stores_mem);
+  if (stores_mem)
+    return false;
+  return true;
+}
+
+bool
+rvtt_macro_drain_backedge_elidable (const macro_region &region,
+				    const macro_schedule &schedule,
+				    const macro_descriptor &desc,
+				    unsigned first_run_end, FILE *dump)
+{
+  if (!region.loop_body || !region.bb)
+    return drain_refuse (dump, "drain-follower-opaque", nullptr);
+  int max_dist = desc.drain_slots;
+  if (max_dist < 0)
+    return drain_refuse (dump, "drain-delay-unproven", nullptr);
+  if (max_dist == 0)
+    return true;
+  if (first_run_end == 0 || first_run_end > region.rows.length ())
+    return drain_refuse (dump, "drain-follower-opaque", nullptr);
+
+  const char *why = nullptr;
+  unsigned credit = 0;
+
+  /* Tail walk: from the final run's end to the end of the loop body
+     (the latch branch included).  */
+  const macro_row &last_row = region.rows[region.rows.length () - 1];
+  rtx_insn *from = last_row.separator
+    ? last_row.separator : last_row.insns[last_row.insns.length () - 1];
+  for (rtx_insn *insn = NEXT_INSN (from);
+       insn && BLOCK_FOR_INSN (insn) == region.bb; insn = NEXT_INSN (insn))
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (drain_region_member_p (region, insn))
+	continue;
+      /* A discovery-admitted pure-RWC run separator surviving in the
+	 tail is exactly the creditable launch-latched class; classify
+	 it like any other stream insn (it earns its slot credit).  */
+      if (!drain_stream_insn_neutral (insn, &credit, &why))
+	return drain_refuse (dump, why, insn);
+    }
+
+  /* Head walk: anything ahead of the region at the loop-body head
+     (executed after the backedge, before the region re-enters).  */
+  rtx_insn *anchor = region.rows[0].enable
+    ? region.rows[0].enable : region.rows[0].insns[0];
+  for (rtx_insn *insn = BB_HEAD (region.bb); insn && insn != anchor;
+       insn = NEXT_INSN (insn))
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (drain_region_member_p (region, insn))
+	continue;
+      if (!drain_stream_insn_neutral (insn, &credit, &why))
+	return drain_refuse (dump, why, insn);
+    }
+
+  drain_horizon h;
+  if (!drain_decode_horizon (schedule, desc, &h, dump,
+			     /*require_exact=*/false))
+    return false;
+  if (dump)
+    fprintf (dump, "Macro-planner drain-backedge: drain=%d pending=%d"
+	     " stream-credit=%u words-per-row=%u\n",
+	     desc.drain_slots, h.max_dist, credit, h.words_per_row);
+
+  if (!drain_follower_rows_ok (region, schedule, desc, h, 0, first_run_end,
+			       credit, dump))
+    return false;
+
+  if (dump)
+    fprintf (dump, "Macro-planner drain-schedule: loop-backedge drain"
+	     " elided (drain=%d stream-credit=%u)\n",
+	     h.max_dist, credit);
   return true;
 }

@@ -712,6 +712,11 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		     insns (benign for later residency walks); report
 		     where the words were programmed.  */
 		  bool resident_elide, macro_residency_state *resid,
+		  /* Lane CA cross-call init hoist: 0 = none, 1 = the
+		     descriptor words live in the caller's preheader
+		     (retain enable + owned SETC16 per call), 2 = the
+		     full prefix lives there (emit nothing).  */
+		  int init_hoist_stage,
 		  basic_block *config_placement)
 {
   const macro_row &first = region.rows[begin];
@@ -755,7 +760,34 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	    config_word (desc.misc, 8);
 	};
 
-      if (resident_elide)
+      if (init_hoist_stage == 2)
+	{
+	  /* The whole prefix is resident in the caller's loop
+	     preheader under the committed cross-call contract; nothing
+	     to establish per call.  */
+	  if (config_placement)
+	    *config_placement = nullptr;
+	}
+      else if (init_hoist_stage == 1)
+	{
+	  /* Descriptor words live in the caller's preheader; the
+	     ambient enable and the owned SETC16 program stay per call
+	     (the stage-1 contract).  */
+	  start_sequence ();
+	  if (enable_src)
+	    emit_insn (copy_rtx (PATTERN (enable_src)));
+	  for (unsigned sx = 0; sx != desc.n_setc16; ++sx)
+	    emit_insn (gen_rvtt_owned_setc16
+		       (GEN_INT (desc.setc16[sx].config_reg),
+			GEN_INT (desc.setc16[sx].value)));
+	  rtx_insn *retained = get_insns ();
+	  end_sequence ();
+	  collect_emitted (retained);
+	  emit_insn_before (retained, anchor);
+	  if (config_placement)
+	    *config_placement = nullptr;
+	}
+      else if (resident_elide)
 	{
 	  /* WP13 residency: the descriptor words are already resident
 	     (a bit-identical program at a proven dominating placement
@@ -1048,13 +1080,91 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
     }
 }
 
+/* Lane CA cross-call init hoist, callee side: every instruction of FN
+   outside REGION must be proven unable to disturb the hoisted state or
+   depend on the per-call prefix -- no call, no unaudited asm or Tensix
+   instruction, no CC write other than the proven all-lanes enable
+   class, no configuration or LREG or Dst effect, no scalar memory
+   store (the delivered-word idiom).  Pure-RWC counter words and plain
+   scalar register/branch code are neutral.  Returns the refusing insn
+   through *WHY_INSN, or nullptr when clean.  */
+
+static const char *
+init_hoist_callee_scan (function *fn, const macro_region &region,
+			rtx_insn **why_insn)
+{
+  *why_insn = nullptr;
+  hash_set<rtx_insn *> members;
+  for (const macro_row &row : region.rows)
+    {
+      if (row.enable)
+	members.add (row.enable);
+      if (row.separator)
+	members.add (row.separator);
+      for (rtx_insn *member : row.insns)
+	members.add (member);
+    }
+  for (rtx_insn *sep : region.run_separators)
+    members.add (sep);
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn) || members.contains (insn))
+	    continue;
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	    continue;
+	  *why_insn = insn;
+	  if (CALL_P (insn))
+	    return "drain-init-callee-unproven";
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (!e.opaque)
+	    {
+	      if (e.cc_write && e.cc_write_all_lanes && !e.cc_read
+		  && !e.lreg_read && !e.lreg_write
+		  && !e.config_dests_written && !e.config_dests_read
+		  && !e.addr_mod_slot_write
+		  && !e.dst_mem_read && !e.dst_mem_write)
+		continue;	/* re-establishes the contract state */
+	      if (e.cc_read || e.cc_write
+		  || e.config_dests_written || e.config_dests_read
+		  || e.addr_mod_slot_write
+		  || e.lreg_read || e.lreg_write
+		  || e.dst_mem_read || e.dst_mem_write)
+		return "drain-init-callee-unproven";
+	      continue;		/* pure-RWC counter class */
+	    }
+	  if (asm_noperands (pat) >= 0)
+	    return "drain-init-callee-unproven";
+	  if (recog_memoized (insn) >= 0
+	      && get_attr_type (insn) == TYPE_TENSIX)
+	    return "drain-init-callee-unproven";
+	  bool stores_mem = false;
+	  auto note_mem = [] (rtx x, const_rtx, void *data)
+	    {
+	      if (MEM_P (x))
+		*(bool *) data = true;
+	    };
+	  note_stores (insn, note_mem, &stores_mem);
+	  if (stores_mem)
+	    return "drain-init-callee-unproven";
+	}
+    }
+  *why_insn = nullptr;
+  return nullptr;
+}
+
 /* Form REGION when every proof holds; returns true when code changed.
    Refusal paths never mutate.  */
 
 static bool
 form_region (function *fn, macro_region &region,
 	     const macro_schedule &schedule, const macro_descriptor &desc,
-	     macro_residency_state *resid, FILE *dump)
+	     macro_residency_state *resid, bool sole_region, FILE *dump)
 {
   rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
     : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
@@ -1399,6 +1509,84 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* Lane CA cross-call init hoist (D2): when this straight-line region
+     is the function's whole macro content and its idempotent init
+     prefix is call-invariant descriptor data, prove the (single)
+     caller's loop epoch and move the prefix to the caller's loop
+     preheader -- once per loop instead of once per call.  Attempted
+     LAST among the refusal points (a committed caller-side insertion
+     and the callee-side suppression stand together).  Every unproven
+     link refuses by name and keeps today's per-call prefix
+     byte-identically.  */
+  int init_hoist_stage = 0;
+  if (riscv_tt_opt_init_hoist && !region.loop_body && !resident_elide
+      && !hoist_preheader && !config_preheader)
+    {
+      const char *init_refusal = nullptr;
+      rtx_insn *init_refusal_insn = nullptr;
+      if (!sole_region)
+	init_refusal = "drain-init-callee-unproven";
+      else if (!enable_src || materialized_enable
+	       || !cc_enable_all_lanes_proved_p (enable_src)
+	       || recog_memoized (enable_src) != CODE_FOR_rvtt_sfpencc)
+	/* v1: the prefix's lane proof must be the typed proven
+	   all-lanes SFPENCC (the minmax-class ambient enable); the
+	   materialized-enable license is not carried cross-call.  */
+	init_refusal = "drain-init-idempotence-unproven";
+      else if (desc.n_setc16 > 8
+	       || desc.n_templates + desc.n_seq + (desc.has_misc ? 1 : 0)
+		  > 16)
+	init_refusal = "drain-init-idempotence-unproven";
+      else
+	init_refusal = init_hoist_callee_scan (fn, region,
+					       &init_refusal_insn);
+      if (!init_refusal)
+	{
+	  rvtt_init_hoist_program prog = {};
+	  prog.n_setc16 = desc.n_setc16;
+	  for (unsigned i = 0; i != desc.n_setc16; ++i)
+	    {
+	      prog.setc16[i].reg = desc.setc16[i].config_reg;
+	      prog.setc16[i].value = desc.setc16[i].value;
+	    }
+	  prog.n_words = 0;
+	  for (unsigned t = 0; t != desc.n_templates; ++t)
+	    {
+	      prog.words[prog.n_words].word = desc.templ[t];
+	      prog.words[prog.n_words++].dest = t;
+	    }
+	  for (unsigned m = 0; m != desc.n_seq; ++m)
+	    {
+	      prog.words[prog.n_words].word = desc.seq[m];
+	      prog.words[prog.n_words++].dest = 4 + m;
+	    }
+	  if (desc.has_misc)
+	    {
+	      prog.words[prog.n_words].word = desc.misc;
+	      prog.words[prog.n_words++].dest = 8;
+	    }
+	  init_refusal = rvtt_crosscall_init_hoist (fn, &prog);
+	  if (!init_refusal)
+	    {
+	      init_hoist_stage = prog.stage;
+	      if (dump)
+		fprintf (dump, "Macro-planner init-hoist: stage=%d"
+			 " init contract hoisted to caller loop preheader"
+			 " (%u descriptor words, %u setc16, enable %s)\n",
+			 init_hoist_stage, prog.n_words, prog.n_setc16,
+			 init_hoist_stage >= 2 ? "hoisted" : "retained");
+	    }
+	}
+      if (init_refusal && dump)
+	{
+	  fprintf (dump, "Macro-planner init-hoist-refusal: %s",
+		   init_refusal);
+	  if (init_refusal_insn)
+	    fprintf (dump, " (insn %d)", INSN_UID (init_refusal_insn));
+	  fprintf (dump, "\n");
+	}
+    }
+
   /* Drain-aware boundary placement (default-off; proofs and derivation
      in rtl-rvtt-schedule.cc): decide every intra-region boundary BEFORE any
      mutation.  The final run's drain -- the region's exit contract (no
@@ -1419,29 +1607,104 @@ form_region (function *fn, macro_region &region,
 	  ++drains_elided;
       }
 
+  /* Loop-backedge drain elision (lane CA): a loop-body region's FINAL
+     run ends at the loop latch, so its drain executes once per trip
+     where the architecture requires it once per loop exit.  When the
+     backedge follower stream proves (rvtt_macro_drain_backedge_elidable,
+     rtl-rvtt-schedule.cc) AND a sound exit placement exists (the sole
+     non-self successor, entered only from this loop), the in-body drain
+     is elided and the FULL derived drain is emitted at the exit block's
+     head instead -- the exit contract is preserved, only its placement
+     moves.  Any unprovable piece keeps today's in-body drain
+     byte-identically, under a stable name.  */
+  bool backedge_elide = false;
+  edge drain_exit_edge = nullptr;
+  if (riscv_tt_opt_drain_schedule && desc.drain_slots > 0
+      && region.loop_body && region.bb)
+    {
+      edge exit_e = nullptr;
+      bool shape_ok = EDGE_COUNT (region.bb->succs) == 2;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, region.bb->succs)
+	if (e->dest != region.bb)
+	  {
+	    if (exit_e)
+	      shape_ok = false;
+	    exit_e = e;
+	  }
+      if (!shape_ok || !exit_e
+	  || (exit_e->flags & (EDGE_ABNORMAL | EDGE_EH | EDGE_COMPLEX)))
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner drain-refusal:"
+		     " drain-exit-shared\n");
+	}
+      else
+	{
+	  unsigned first_run_end = run_begins.length () > 1
+	    ? run_begins[1] : region.rows.length ();
+	  backedge_elide = rvtt_macro_drain_backedge_elidable
+	    (region, schedule, desc, first_run_end, dump);
+	  if (backedge_elide)
+	    drain_exit_edge = exit_e;
+	}
+    }
+
   basic_block config_placement = nullptr;
   for (unsigned b = 0; b != run_begins.length (); ++b)
     {
       unsigned begin = run_begins[b];
       unsigned end = b + 1 == run_begins.length ()
 	? region.rows.length () : run_begins[b + 1];
+      bool last_run = b + 1 == run_begins.length ();
       emit_planner_run (region, schedule, desc, c, begin, end, b == 0,
 			config_preheader, enable_src,
 			hoist_preheader, hoist_enable_src,
-			!drain_elide[b],
-			resident_elide, resid,
+			last_run ? !backedge_elide : !drain_elide[b],
+			resident_elide, resid, init_hoist_stage,
 			b == 0 ? &config_placement : nullptr);
+    }
+  if (backedge_elide)
+    {
+      /* Exit compensation: the full derived drain on the loop's exit
+	 path -- events from the final trip never reach the invisible
+	 follower stream.  Placement: the exit destination's head when
+	 this loop is its only predecessor, else a commit-time edge
+	 split (every proof has passed; the split block executes
+	 exactly when the loop exits) -- the same discipline as the
+	 WP11 hoist's guarded-enclosing-loop split.  */
+      basic_block dest = drain_exit_edge->dest;
+      if (dest == EXIT_BLOCK_PTR_FOR_FN (fn) || !single_pred_p (dest)
+	  || !bb_note (dest))
+	dest = split_edge (drain_exit_edge);
+      start_sequence ();
+      for (int d = 0; d != desc.drain_slots; ++d)
+	emit_insn (gen_rvtt_sfpnop ());
+      rtx_insn *nops = get_insns ();
+      end_sequence ();
+      if (resid)
+	for (rtx_insn *i = nops; i; i = NEXT_INSN (i))
+	  resid->emitted.add (i);
+      emit_insn_after (nops, bb_note (dest));
+      if (dump)
+	fprintf (dump, "Macro-planner drain-backedge: loop-carried drain"
+		 " elided; exit compensation %d SFPNOPs (bb %d)\n",
+		 desc.drain_slots, dest->index);
     }
   if (!resident_elide)
     rvtt_macro_residency_record (desc, config_placement, resid);
   if (dump)
-    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s%s\n",
+    fprintf (dump, "Macro-planner formed: rows=%u runs=%u%s%s%s%s%s%s%s\n",
 	     region.rows.length (), run_begins.length (),
 	     config_preheader ? " config=preheader" : "",
 	     materialized_enable ? " lane-proof=materialized-enable" : "",
 	     hoist_preheader ? " prefix-epoch=hoisted" : "",
 	     drains_elided ? " drain-elided" : "",
-	     resident_elide ? " resident=elided" : "");
+	     backedge_elide ? " drain-backedge" : "",
+	     resident_elide ? " resident=elided" : "",
+	     init_hoist_stage == 2 ? " init-hoist=full"
+	     : init_hoist_stage == 1 ? " init-hoist=descriptor" : "");
   return true;
 }
 
@@ -1455,8 +1718,8 @@ form_region (function *fn, macro_region &region,
 
 static bool
 planner_process_region (function *fn, macro_region &region,
-			macro_residency_state *resid, FILE *dump,
-			bool *changed)
+			macro_residency_state *resid, bool sole_region,
+			FILE *dump, bool *changed)
 {
   for (unsigned candidate = 0; ; ++candidate)
     {
@@ -1476,7 +1739,7 @@ planner_process_region (function *fn, macro_region &region,
 	  proven = !descriptor.refusal && !verify_fail;
 	  if (proven && riscv_tt_macro_planner)
 	    *changed |= form_region (fn, region, schedule, descriptor,
-				     resid, dump);
+				     resid, sole_region, dump);
 	  rvtt_macro_descriptor_release (&descriptor);
 	}
       rvtt_macro_schedule_release (&schedule);
@@ -2132,7 +2395,8 @@ upward_probe_region (const macro_region &region, int *ii_out,
 
 static bool
 upward_carrier_try (function *fn, macro_region &region,
-		    macro_residency_state *resid, FILE *dump, bool *changed)
+		    macro_residency_state *resid, bool sole_region,
+		    FILE *dump, bool *changed)
 {
   if (region.rows.is_empty ())
     return false;
@@ -2378,8 +2642,8 @@ upward_carrier_try (function *fn, macro_region &region,
 		     v.seed_ix, chain_str, newreg, prefix0.length (),
 		     est_ii, new_ii);
 	  bool local_changed = false;
-	  bool proven = planner_process_region (fn, *sel, resid, dump,
-						&local_changed);
+	  bool proven = planner_process_region (fn, *sel, resid, sole_region,
+						dump, &local_changed);
 	  if (proven && local_changed)
 	    {
 	      *changed = true;
@@ -2450,7 +2714,9 @@ public:
 	   refusal the function is byte-identical and the established
 	   search below proceeds untouched.  */
 	if (riscv_tt_macro_planner && riscv_tt_macro_ims_carrier
-	    && upward_carrier_try (fn, region, &resid, dump_file, &changed))
+	    && upward_carrier_try (fn, region, &resid,
+				   regions.length () == 1, dump_file,
+				   &changed))
 	  {
 	    rvtt_macro_region_release (&region);
 	    continue;
@@ -2459,7 +2725,8 @@ public:
 	   maximal sharing; the first whose descriptor synthesis proves
 	   is committed.  When every candidate refuses, the region
 	   refuses byte-identically.  */
-	planner_process_region (fn, region, &resid, dump_file, &changed);
+	planner_process_region (fn, region, &resid, regions.length () == 1,
+				dump_file, &changed);
 	rvtt_macro_region_release (&region);
       }
     return changed ? TODO_df_finish : 0;

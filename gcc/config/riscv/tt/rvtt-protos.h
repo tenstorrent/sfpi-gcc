@@ -33,7 +33,10 @@ extern bool rvtt_spill_diag_reported;
 /* Capability-table architectural all-lanes SFPENCC word (defined in
    rvtt-macro-tables.cc; redeclared here so instruction output templates
    can emit it without pulling the whole tables header).  */
-namespace rvtt_macro { extern uint32_t sfpencc_all_lanes_word (); }
+namespace rvtt_macro {
+  extern uint32_t sfpencc_all_lanes_word ();
+  extern bool sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word);
+}
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 extern const char *rvtt_output_owned_setc16 (rtx *operands);
 extern rtx rvtt_gen_rtx_creg (machine_mode, unsigned sfpu_regno);
@@ -309,5 +312,30 @@ constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
 constexpr unsigned int CREG_IDX_NEG_1 = 11;
 constexpr unsigned int CREG_IDX_TILEID = 15;
+
+/* Lane CA cross-call invariant-init hoist (gimple-rvtt-crosscall.cc
+   service for the macro planner): the callee's idempotent init prefix
+   as descriptor data.  The planner fills the program from its own
+   emission inputs; the service proves the (single) caller and, on a
+   complete proof, inserts the prefix as typed builtin calls in the
+   caller's loop preheader, returning NULL with STAGE set (1 =
+   descriptor words only, enable + SETC16 stay per call; 2 = full
+   prefix under the value-equality proof).  Any refusal returns its
+   stable name and inserts nothing.  */
+
+struct rvtt_init_hoist_program
+{
+  /* The enable is always the architectural all-lanes SFPENCC word (the
+     formation proof admits nothing else); the commit spells it as the
+     canonical zero-argument builtin.  */
+  unsigned n_setc16;
+  struct { unsigned reg; unsigned value; } setc16[8];
+  unsigned n_words;
+  struct { uint32_t word; unsigned dest; } words[16];
+  int stage;			/* out */
+};
+
+extern const char *rvtt_crosscall_init_hoist (function *callee,
+					      rvtt_init_hoist_program *);
 
 #endif /* ! GCC_RVTT_PROTOS_H */

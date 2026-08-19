@@ -99,6 +99,13 @@ RVTT_FN (sfpselect4,         ,,XTT_VEC_FTYPE_XTT_VEC4_USI,                      
 
 RVTT_FN (sfpsetcc_i,         ,,VOID_FTYPE_USI_USI,                                           CC(), ({U, 1}, {M, 0x102}))
 RVTT_FN (sfpsetcc_v,         ,,VOID_FTYPE_XTT_VEC_USI,                                       CC(), ({M, 0x55}))
+// PRE-EXISTING QUIRK (documented lane CA, not changed here): the ops
+// spec checks (arg1 imm12 {U,2}, arg2 mod1 {M,0x707}) while the direct
+// positional expansion maps (arg1 -> operand0 = mod1, arg2 -> operand1
+// = imm12); the compiler-built calls (gimple-rvtt-cc.cc) use the
+// expansion order and are inserted after the checkers.  Compiler-side
+// emission of the all-lanes enable uses the zero-argument
+// sfpencc_all_lanes below instead of relying on either order.
 RVTT_FN (sfpencc,            ,,VOID_FTYPE_USI_USI,                                           CC(), ({U, 2}, {M, 0x707}))
 RVTT_FN (sfpcompc,           ,,VOID_FTYPE,                                                   CC(), ())
 RVTT_FN (sfppushc,           ,,VOID_FTYPE_USI,                                               VOL|CC(0x2000), ({M, 0xffff}))
@@ -256,6 +263,19 @@ RVTT_OVR(sfpstochrnd_v_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,
 RVTT_FN (sfpreadconfig,   bh_qsr,,XTT_VEC_FTYPE_USI,                                         0, ({CU, 4}))
 RVTT_FN (sfpreadconfig_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 LV, ({CU, 4}))
 RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                                    VOL, ({CU, 4}))
+// Owned SETC16 programming, gimple-spellable (lane CA init hoist): the
+// caller-side materialization of a callee's owned address-modifier
+// program.  Args: SETC16 configuration register index, 16-bit value.
+RVTT_FN (ttsetc16,              ,,VOID_FTYPE_USI_USI,                                        VOL, ({CU, 8}, {CU, 16}))
+// Canonical proven all-lanes enable, gimple-spellable (lane CA init
+// hoist): expands to the architectural all-lanes SFPENCC encoding from
+// the capability tables (the exact word cc_enable_all_lanes_proved_p
+// proves against); zero arguments by design.
+// No CC() flag by design: the structured-CC validator owns pushc/popc
+// nesting, and this enable is inserted only at a proven loop preheader
+// at the architectural outermost depth -- the expanded rvtt_sfpencc
+// insn carries the authoritative CC effect attributes at RTL.
+RVTT_FN (sfpencc_all_lanes,     ,,VOID_FTYPE,                                                VOL, ())
 
 RVTT_FN (sfpgt,          bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
 RVTT_FN (sfpgt_lv,       bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
