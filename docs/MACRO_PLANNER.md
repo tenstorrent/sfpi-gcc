@@ -541,6 +541,9 @@ placement proofs; see Sec. 2d).
 residency; see Sec. 2d).
 `-mtt-tensix-macro-ims` (WP14: IMS placement repair over the sub-unit
 calendar + formation-vs-replay delivery arbitration; see Sec. 2d).
+`-mtt-tensix-macro-ims-carrier` (WP15: upward-IMS extra-value-carrier
+former -- re-load + version-split chain rename, commit-or-revert; see
+Sec. 2e).
 All default off; default codegen is byte-identical to the
 pre-planner compiler (corpus A/B re-verified at WP8: 721 objects across
 bh/wh/qsr32, all identical).
@@ -1007,3 +1010,113 @@ unrolled copies), (b) descriptor residency (Idea 6) lifting the
 (the exp-parity precedent) that re-factorizes the radix identity into
 more template-shareable form.  WP14 lands the downward half (repair)
 and the pricing discipline both halves need.
+
+## 2e. WP15: the upward-IMS carrier former (extra value carriers)
+
+Lane CC, 2026-08-19 (`agent/ims-carrier-former`), the upward half of
+the WP14 IMS mapping.  Flag: `-mtt-tensix-macro-ims-carrier`, default
+off; off keeps every schedule and formation decision byte-identical.
+
+### The mechanism
+
+WP14's repair driver searches DOWNWARD (reduced hosted sets) and
+provably conserves the initiation interval on rows whose maximal
+hosting already proves.  WP15 searches the other direction -- the
+handwritten kernels' re-load idiom -- as a REAL commit-or-revert
+mutation of every unrolled row copy:
+
+1. **Seed re-load.**  A region-admitted plain Dst load (no live-value
+   merge; RWC-inert by the no-increment address-mode derivation, so a
+   copy is architecturally inert beyond its register write) is
+   duplicated into a provably free launch-encodable register --
+   VDLo encodes VD 0..3 only (the sacrificial-VD table fact), so the
+   carrier register comes from L0..L3, highest-first (L0 additionally
+   collides with the cast class's VC:=VD encoding).  When every low
+   register is taken, a row-internal low WEB (defined and consumed
+   inside the rows, never live across the block or referenced by a
+   foreign instruction) is first RELOCATED to a free high register --
+   a pure whole-web physical rename, value-inert, re-proven by
+   re-derivation.  Placement: directly after the seed, or (for a
+   prefix-free variant) at the row head, tried first -- the earlier
+   launch slot gives the hosted chain earlier execution windows
+   against its explicit consumers' deadlines.
+2. **Cooking-prefix replication.**  Every in-place writer of the seed
+   register between the seed and the chain head is cloned onto the new
+   carrier (the clone's other sources are proven un-redefined at the
+   clone point), so the new register carries the exact cooked value
+   the chain consumes.
+3. **Version-split chain rename.**  A deterministically enumerated
+   target CHAIN -- the head reads the seed's cooked value, each later
+   member reads the previous member's result, members are fresh
+   single-register definitions or in-place continuations (the
+   launch-VD idiom itself) -- renames onto the carrier register.
+   Version linearity is proven per member (an interleaved foreign
+   redefinition, an opaque member, or a use of a non-tail version
+   after the next member's definition refuses); past the tail the
+   established single-web propagation moves tied in-place followers
+   and read-renames stop-through consumers.
+4. **Rederivation as the only oracle.**  The mutated function re-runs
+   the FULL established pipeline -- discovery, scheduling (with WP14
+   repair when enabled), descriptor synthesis, Layer-7 verification,
+   and every formation gate (profitability, WP14 arbitration).  A
+   variant commits only when the re-discovered region (same rows)
+   proves at a STRICTLY smaller initiation interval than the
+   established outcome -- or proves at all where the established
+   search proved nothing (the repair symmetry; the established gates
+   then price it against the explicit stream).  Everything else
+   reverts byte-identically: the journal restores the original
+   pattern objects and deletes the inserted copies.
+
+Refusal vocabulary (append-only): `ims-carrier-legality-unproven`
+(seed or chain-member class), `ims-carrier-lreg-unavailable` (no
+encodable carrier register, no relocatable web),
+`ims-carrier-web-unsplittable` (version linearity),
+`ims-carrier-row-divergent` (per-row recomputation disagrees with
+row 0), `ims-carrier-rederive-unproven` (the mutated region refuses
+downstream or formation declines), `ims-carrier-no-improvement`
+(proves without shrinking the interval).  Budget: 24 deterministic
+variants per region (seeds ascending, chains longest-first, head
+placement before after-seed).
+
+### The mul_int32 verdict: the pre-registered ii=11 is FALSIFIED
+
+WP14's 2d analysis pre-registered two paper routes to ii=11 on the
+derived-intmul row.  Driving the implemented former over the real
+fresh-mul_int32 kernel and the in-tree intmul twin refuses every
+variant, and the refusals are structural facts of the derivation
+core, not search gaps:
+
+- **Template-word identity carries the VA name**: the derived MUL24
+  class packs the named factor register into the word (imm12 bits
+  7:4), so a moved product shares the existing MUL24 word only when
+  its named factor is the SAME register (VA=L0).  Both movable
+  products of the mul_int32 row read (ua>>23, ub) or (sa, ub) --
+  neither names L0 -- so each needs a fifth template word, and the
+  budget is already saturated by {in-place cast, SHFT2(-23),
+  MUL24(VA=L0), store-producer cast}.
+- **The architectural SFPIADD VD tie** (operand 2 constraint "0"):
+  the accumulate consumers of any moved product read their own
+  destination, so a split cannot stop before them; renaming them
+  in-place onto the carrier register makes them explicit issued
+  WRITERS of the carrier VD, which the derivation's issued-input
+  conservatism (latest_issued_input_slot) must order before every
+  hosted event -- the delay range then exceeds SEQ_MAX_DELAY.
+- **The mandatory cooking clone** (the row's loads cook through
+  in-place SM32 casts) occupies the new carrier's Simple slot, so a
+  single re-load can host at most two existing explicit events, and
+  the only template-shareable pair (the SHFT2 chain and the VA=L0
+  product) needs the carrier to hold different values.
+- **MAX_EVENTS = 8** (dep masks are 8-bit): the mul_int32 row's
+  hosted set is already 6; +clone +2 moved events +store = 9.
+
+The in-tree witness pair pins both sides: the fire row
+(macro-planner-ims-carrier-fire-bh.C -- the same shape with the
+second product pair reading the RAW second operand, so the moved
+MUL24 names L0 and shares bit-identically) commits at ii 13->12 with
+four launches and both moved events sharing existing words; the
+near-miss (macro-planner-ims-carrier-intmul-refuse-bh.C -- the real
+MulInt32 shape) refuses by name with the established WP12 ii=12
+calendar byte-identical.  mul_int32's residual vs hand therefore
+does not close by placement search at all: the remaining routes are
+the 2d follow-ups (b) template-budget relief and (c) semantic-source
+restructure.
