@@ -1,6 +1,15 @@
 /* Optional lp_solve adapter for Tensix SFPU scheduling.
    Copyright (C) 2026 Tenstorrent Inc.
 
+   ROLE: this adapter is compiled in only when GCC was configured
+   --with-lp-solve (gcc/configure.ac probes lpsolve/lp_lib.h and links
+   liblpsolve55; HAVE_LPSOLVE).  It is never the primary solver:
+   rvtt_solve_schedule (rvtt-bnb.cc) always answers with the built-in
+   exact branch-and-bound solver and only CROSS-CHECKS that answer
+   against this MILP formulation when it is available.  Production
+   builds therefore do not need lp_solve, and configuring it cannot
+   change code generation.
+
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
