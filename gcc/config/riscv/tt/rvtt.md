@@ -1137,6 +1137,21 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "addr_mode")
+   ;; D3 latency audit (lane DL): SFPSTORE writes Dst only -- it has no
+   ;; LREG result a following issue slot could wait on.  SFPSTORE.md
+   ;; (BH and WH) carries no next-cycle rule (the audited latency-0
+   ;; page convention), and the BH SFPMAD.md hardware-bug list of
+   ;; consumers the automatic stalling logic misses does not name
+   ;; SFPSTORE, so a store consuming a MAD result is scoreboard-covered
+   ;; on BH and nop-inserter territory on WH (xtt_delay untouched by
+   ;; this row).  The silicon-proven hand exp kernel issues its stores
+   ;; back-to-back with dependent neighbours; craq-sim
+   ;; TENSIX_EXECUTE_SFPSTORE commits Dst at issue (sim proof archived,
+   ;; laneDL-evidence-20260820).  Result latency 0, BH/WH only.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))
    (set_attr "xtt_macro_encodable" "yes")])
 
 (define_expand "rvtt_sfpstoresrcs"
@@ -4382,7 +4397,20 @@
    (set_attr "xtt_lreg_write_ops" "1")
    (set_attr "xtt_cc_effect" "none")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "inc")])
+   (set_attr "xtt_rwc_effect" "inc")
+   ;; D3 latency audit (lane DL): INCRWC updates the RWC counters and
+   ;; nothing else -- no LREG result exists.  WH INCRWC.md's functional
+   ;; model is the pure counter update with no next-cycle rule; the BH
+   ;; tree carries no INCRWC page (doc gap, recorded in
+   ;; laneDL-evidence-20260820); craq-sim TENSIX_EXECUTE_INCRWC applies
+   ;; the counter deltas at issue (sim proof archived); every
+   ;; silicon-proven counted production row issues TTINCRWC ->
+   ;; SFPLOAD back-to-back at the row boundary, consuming the stepped
+   ;; counter in the next slot.  Result latency 0, BH/WH only.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 ;; Typed architectural Dst/RWC face advance: one face is two architectural
 ;; Dst += 8 counter steps with no LREG, CC, or configuration effect.  Late

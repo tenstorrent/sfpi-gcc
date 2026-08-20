@@ -239,6 +239,70 @@
 ;;                                             unaudited producer was
 ;;                                             this pattern.
 ;;
+;;   store (rvtt_sfpstore_int)           0     [ISA] SFPSTORE.md (BH+WH):
+;;                                             Dst write only, no LREG
+;;                                             result, no next-cycle rule
+;;                                             (the audited latency-0
+;;                                             page convention); the BH
+;;                                             SFPMAD.md undetected-
+;;                                             consumer bug list does not
+;;                                             name SFPSTORE, so the
+;;                                             mad->store read IS
+;;                                             scoreboard-covered; [SIM]
+;;                                             craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPSTORE
+;;                                             commits Dst at issue
+;;                                             (reorder-equivalence run
+;;                                             archived, laneDL-evidence-
+;;                                             20260820); [HAND] the
+;;                                             silicon-proven hand exp
+;;                                             kernel stores back-to-back
+;;                                             with dependent neighbours.
+;;                                             D3-follow-up audit
+;;                                             (2026-08-20, lane DL):
+;;                                             admits the store class
+;;                                             into capture-rotation's
+;;                                             plain-reorder filler pool
+;;                                             (the pool's Dst-crossing
+;;                                             proof is separate,
+;;                                             rtl-rvtt-schedule.cc); the
+;;                                             replay reissue recurrence
+;;                                             is unchanged (stores write
+;;                                             no LREG and never mark a
+;;                                             register unproved).
+;;
+;;   row step (rvtt_ttincrwc)            0     [ISA] WH INCRWC.md: pure
+;;                                             RWC counter update, no
+;;                                             LREG result, no next-cycle
+;;                                             rule; the BH tree carries
+;;                                             NO INCRWC page (doc gap,
+;;                                             recorded); [SIM] craq
+;;                                             tensix.cpp
+;;                                             TENSIX_EXECUTE_INCRWC
+;;                                             applies counter deltas at
+;;                                             issue (reorder-equivalence
+;;                                             run archived, laneDL-
+;;                                             evidence-20260820); [HAND]
+;;                                             every silicon-proven
+;;                                             counted production row
+;;                                             issues TTINCRWC->SFPLOAD
+;;                                             back-to-back at the row
+;;                                             boundary.  D3-follow-up
+;;                                             audit (2026-08-20, lane
+;;                                             DL): admits the typed
+;;                                             row-step word into
+;;                                             capture-rotation's
+;;                                             plain-reorder filler pool
+;;                                             under its RWC-crossing
+;;                                             proof and the replay-
+;;                                             formation deferral gate
+;;                                             (a mid-row TTINCRWC makes
+;;                                             a loop ineligible to
+;;                                             counted_loop_payload, so
+;;                                             the mover defers by name
+;;                                             while replay-hoist is
+;;                                             enabled).
+;;
 ;;   planner-emitted SFPLOADMACRO
 ;;     (rvtt_sfploadmacro_int /          issue-plane record (lane CK):
 ;;      rvtt_sfploadmacro_hidden_int,    the launch pattern itself stays
