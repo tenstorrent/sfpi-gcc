@@ -3147,7 +3147,66 @@
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; D3 effect/latency audit (lane DL, 2026-08-20): SFPLUT.md (BH+WH,
+   ;; identical functional models) reads LReg[0..2] (coefficient table)
+   ;; and LReg[3] (input, the tied destination), lane-predicated write
+   ;; to the destination, no CC write, no configuration, RWC, or Dst
+   ;; access; MAD sub-unit; instruction scheduling "as per SFPMAD" ->
+   ;; result latency 1 (craq tensix.cpp TENSIX_EXECUTE_SFPLUT matches
+   ;; the model; extract archived, laneDL-evidence-20260820).  Audited
+   ;; envelope: mod0 in {0, SGN_RETAIN=4} on BH/WH only --
+   ;; INDIRECT_VD (mod0 & 8) redirects the write through LReg[7] and
+   ;; keeps every refusing default (position masks cannot express it).
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "mad") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 31) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 2) (const_int 0)))])
 
 (define_insn_and_split "rvtt_sfplutfp32_3r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
