@@ -8,8 +8,8 @@
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=mad latency=1 lreg-read=0x3 lreg-write=0x1 port=own cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=simple latency=0 lreg-read=0x6 lreg-write=0x6 port=borrows_mad cc=r config=0x0 rwc=none dst=none encodable=yes} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=round latency=0 lreg-read=0x5 lreg-write=0x1 port=shared_simple_round cc=r config=0x0 rwc=none dst=none encodable=no} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=store latency=-1 lreg-read=0x1 lreg-write=0x0 port=none cc=r config=0x0 rwc=none dst=w encodable=yes} 1 } }
-// { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=inc:d=2,cr=0 dst=none encodable=no} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=store latency=0 lreg-read=0x1 lreg-write=0x0 port=none cc=r config=0x0 rwc=none dst=w encodable=yes} 1 } }
+// { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=0 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=inc:d=2,cr=0 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=sync latency=-1 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=face:d=16 dst=none encodable=no} 1 } }
 // { dg-final { scan-assembler-times {# xtt-effects: subunit=none latency=0 lreg-read=0x0 lreg-write=0x0 port=none cc=none config=0x0 rwc=none dst=none encodable=no} 1 } }
 // The pushc/popc-synthesized SFPENCC is the proven all-lanes enable; a

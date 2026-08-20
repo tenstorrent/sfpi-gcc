@@ -1137,6 +1137,21 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "addr_mode")
+   ;; D3 latency audit (lane DL): SFPSTORE writes Dst only -- it has no
+   ;; LREG result a following issue slot could wait on.  SFPSTORE.md
+   ;; (BH and WH) carries no next-cycle rule (the audited latency-0
+   ;; page convention), and the BH SFPMAD.md hardware-bug list of
+   ;; consumers the automatic stalling logic misses does not name
+   ;; SFPSTORE, so a store consuming a MAD result is scoreboard-covered
+   ;; on BH and nop-inserter territory on WH (xtt_delay untouched by
+   ;; this row).  The silicon-proven hand exp kernel issues its stores
+   ;; back-to-back with dependent neighbours; craq-sim
+   ;; TENSIX_EXECUTE_SFPSTORE commits Dst at issue (sim proof archived,
+   ;; laneDL-evidence-20260820).  Result latency 0, BH/WH only.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))
    (set_attr "xtt_macro_encodable" "yes")])
 
 (define_expand "rvtt_sfpstoresrcs"
@@ -3132,7 +3147,66 @@
   "SFPLUT\t%x0, %5\t# R:%x1,%x2,%x3,%x4"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; D3 effect/latency audit (lane DL, 2026-08-20): SFPLUT.md (BH+WH,
+   ;; identical functional models) reads LReg[0..2] (coefficient table)
+   ;; and LReg[3] (input, the tied destination), lane-predicated write
+   ;; to the destination, no CC write, no configuration, RWC, or Dst
+   ;; access; MAD sub-unit; instruction scheduling "as per SFPMAD" ->
+   ;; result latency 1 (craq tensix.cpp TENSIX_EXECUTE_SFPLUT matches
+   ;; the model; extract archived, laneDL-evidence-20260820).  Audited
+   ;; envelope: mod0 in {0, SGN_RETAIN=4} on BH/WH only --
+   ;; INDIRECT_VD (mod0 & 8) redirects the write through LReg[7] and
+   ;; keeps every refusing default (position masks cannot express it).
+   (set (attr "xtt_subunit")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "mad") (const_string "none")))
+   (set (attr "xtt_lreg_read_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 31) (const_int 0)))
+   (set (attr "xtt_lreg_write_ops")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 2) (const_int 0)))
+   (set (attr "xtt_cc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "read") (const_string "unknown")))
+   (set (attr "xtt_config_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_rwc_effect")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_string "none") (const_string "unknown")))
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
+				    || TARGET_XTT_TENSIX_WH)
+				   && CONST_INT_P (operands[5])
+				   && (INTVAL (operands[5]) == 0
+				       || INTVAL (operands[5]) == 4)")
+		      (const_int 2) (const_int 0)))])
 
 (define_insn_and_split "rvtt_sfplutfp32_3r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -4382,7 +4456,20 @@
    (set_attr "xtt_lreg_write_ops" "1")
    (set_attr "xtt_cc_effect" "none")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "inc")])
+   (set_attr "xtt_rwc_effect" "inc")
+   ;; D3 latency audit (lane DL): INCRWC updates the RWC counters and
+   ;; nothing else -- no LREG result exists.  WH INCRWC.md's functional
+   ;; model is the pure counter update with no next-cycle rule; the BH
+   ;; tree carries no INCRWC page (doc gap, recorded in
+   ;; laneDL-evidence-20260820); craq-sim TENSIX_EXECUTE_INCRWC applies
+   ;; the counter deltas at issue (sim proof archived); every
+   ;; silicon-proven counted production row issues TTINCRWC ->
+   ;; SFPLOAD back-to-back at the row boundary, consuming the stepped
+   ;; counter in the next slot.  Result latency 0, BH/WH only.
+   (set (attr "xtt_result_latency")
+	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
+				   || TARGET_XTT_TENSIX_WH")
+		      (const_int 1) (const_int 0)))])
 
 ;; Typed architectural Dst/RWC face advance: one face is two architectural
 ;; Dst += 8 counter steps with no LREG, CC, or configuration effect.  Late

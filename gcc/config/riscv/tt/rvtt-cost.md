@@ -239,6 +239,107 @@
 ;;                                             unaudited producer was
 ;;                                             this pattern.
 ;;
+;;   store (rvtt_sfpstore_int)           0     [ISA] SFPSTORE.md (BH+WH):
+;;                                             Dst write only, no LREG
+;;                                             result, no next-cycle rule
+;;                                             (the audited latency-0
+;;                                             page convention); the BH
+;;                                             SFPMAD.md undetected-
+;;                                             consumer bug list does not
+;;                                             name SFPSTORE, so the
+;;                                             mad->store read IS
+;;                                             scoreboard-covered; [SIM]
+;;                                             craq tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPSTORE
+;;                                             commits Dst at issue
+;;                                             (reorder-equivalence run
+;;                                             archived, laneDL-evidence-
+;;                                             20260820); [HAND] the
+;;                                             silicon-proven hand exp
+;;                                             kernel stores back-to-back
+;;                                             with dependent neighbours.
+;;                                             D3-follow-up audit
+;;                                             (2026-08-20, lane DL):
+;;                                             admits the store class
+;;                                             into capture-rotation's
+;;                                             plain-reorder filler pool
+;;                                             (the pool's Dst-crossing
+;;                                             proof is separate,
+;;                                             rtl-rvtt-schedule.cc); the
+;;                                             replay reissue recurrence
+;;                                             is unchanged (stores write
+;;                                             no LREG and never mark a
+;;                                             register unproved).
+;;
+;;   row step (rvtt_ttincrwc)            0     [ISA] WH INCRWC.md: pure
+;;                                             RWC counter update, no
+;;                                             LREG result, no next-cycle
+;;                                             rule; the BH tree carries
+;;                                             NO INCRWC page (doc gap,
+;;                                             recorded); [SIM] craq
+;;                                             tensix.cpp
+;;                                             TENSIX_EXECUTE_INCRWC
+;;                                             applies counter deltas at
+;;                                             issue (reorder-equivalence
+;;                                             run archived, laneDL-
+;;                                             evidence-20260820); [HAND]
+;;                                             every silicon-proven
+;;                                             counted production row
+;;                                             issues TTINCRWC->SFPLOAD
+;;                                             back-to-back at the row
+;;                                             boundary.  D3-follow-up
+;;                                             audit (2026-08-20, lane
+;;                                             DL): admits the typed
+;;                                             row-step word into
+;;                                             capture-rotation's
+;;                                             plain-reorder filler pool
+;;                                             under its RWC-crossing
+;;                                             proof and the replay-
+;;                                             formation deferral gate
+;;                                             (a mid-row TTINCRWC makes
+;;                                             a loop ineligible to
+;;                                             counted_loop_payload, so
+;;                                             the mover defers by name
+;;                                             while replay-hoist is
+;;                                             enabled).
+;;
+;;   lut (rvtt_sfplut, mod0 0/4)         1     [ISA] SFPLUT.md (BH+WH,
+;;                                             identical functional
+;;                                             models): reads LReg[0..2]
+;;                                             + LReg[3] (tied dest),
+;;                                             lane-predicated write, no
+;;                                             CC write, no config/RWC/
+;;                                             Dst access; MAD sub-unit;
+;;                                             scheduling "as per
+;;                                             SFPMAD" -> the mad
+;;                                             family's one-slot result
+;;                                             delay; [SIM] craq
+;;                                             tensix.cpp
+;;                                             TENSIX_EXECUTE_SFPLUT
+;;                                             matches the model
+;;                                             (extract archived,
+;;                                             laneDL-evidence-
+;;                                             20260820); [HAND] the
+;;                                             production sigmoid_appx
+;;                                             LUT kernel issues SFPLUT
+;;                                             in the mad-family
+;;                                             calendar shape.
+;;                                             D3-follow-up audit
+;;                                             (2026-08-20, lane DL):
+;;                                             un-opaques the LUT rows
+;;                                             for the replay reissue
+;;                                             recurrence (LUT loops
+;;                                             previously refused
+;;                                             effect-opaque) and the
+;;                                             interlock window.
+;;                                             INDIRECT_VD (mod0 & 8)
+;;                                             keeps every refusing
+;;                                             default: the write
+;;                                             target is dynamic
+;;                                             (LReg[7]-indexed) and
+;;                                             position masks cannot
+;;                                             express it.
+;;
 ;;   planner-emitted SFPLOADMACRO
 ;;     (rvtt_sfploadmacro_int /          issue-plane record (lane CK):
 ;;      rvtt_sfploadmacro_hidden_int,    the launch pattern itself stays
@@ -293,9 +394,15 @@
 ;;
 ;; Deliberately UNAUDITED (refusing): SFPSHFT2 -- mod-dependent
 ;; next-cycle register constraints (SFPSHFT2.md) outside the
-;; single-latency vocabulary; LUT/LUTFP32 -- mad-unit but no per-mod
-;; effect audit yet; everything QSR (simulator returns
-;; MissingSpecification for these opcode semantics).
+;; single-latency vocabulary; LUTFP32 -- mad-unit, but its
+;; Mod1/Mod1Mirror scheduling split (SFPLUTFP32.md: the stalling logic
+;; keys on Mod1Mirror, not Mod1) and its per-mode register envelopes
+;; (3-entry/6-entry/FP32 tables read different LReg sets) need their
+;; own per-mod audit before any entry lands (SFPLUT's audit above does
+;; NOT transfer); SFPLUT INDIRECT_VD (dynamic write target); the
+;; auto-incrementing load/store address modes (positional Dst/RWC
+;; state, WP6 capability-table territory); everything QSR (simulator
+;; returns MissingSpecification for these opcode semantics).
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 

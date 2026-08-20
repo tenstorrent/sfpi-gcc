@@ -1071,8 +1071,14 @@ rotation_row_p (basic_block bb, rotation_row *row, const char **reason)
   FOR_EACH_EDGE (e, ei, bb->succs)
     if (e->dest == bb)
       self = true;
-  if (!self || EDGE_COUNT (bb->succs) != 2 || EDGE_COUNT (bb->preds) != 2)
+  if (!self)
     return false;
+  if (EDGE_COUNT (bb->succs) != 2 || EDGE_COUNT (bb->preds) != 2)
+    {
+      *reason = "self-loop without the two-predecessor/two-successor "
+		"row shape";
+      return false;
+    }
 
   row->bb = bb;
   row->issued.clear ();
@@ -1190,6 +1196,152 @@ rotation_crossed_segment (rtx_insn *from, rtx_insn *to, bool hidden_free,
   return nullptr;
 }
 
+/* ---- Plain-reorder filler pool widening (lane DL, D3 follow-up) ----
+
+   The plain-reorder movers (seam fill and the interior gap fill below)
+   change only the within-iteration issue order; no prologue copy ever
+   executes outside the row.  For those movers the filler pool extends
+   beyond the pure-LREG classes to two audited hidden-state classes,
+   each admissible only when every crossed word is proven inert to the
+   state the filler carries:
+
+   - an audited Dst-touching word (the load/store subunits with an
+     audited result latency and no RWC step of its own): legal to move
+     iff no crossed word touches Dst or steps an RWC counter -- then
+     the filler reads/writes the identical Dst rows at its new
+     position, and every other word's Dst view is unchanged;
+   - the typed row-step word (TTINCRWC): legal to move iff no crossed
+     word touches Dst or the RWC state -- the counter step commutes
+     with pure-LREG words.  While replay-hoist is enabled this class
+     DEFERS by name: counted_loop_payload (rtl-rvtt-replay.cc) refuses
+     any loop whose TTINCRWC is not the trailing word, so moving it
+     inward would trade a whole capture for one issue slot.
+
+   The prologue mover keeps the pure-LREG pool unchanged: its prologue
+   copy executes once outside the row, which is only sound for the
+   row-invariant values that pool guarantees -- a Dst access or an RWC
+   step executed twice is not.
+
+   Everything else refuses by name.  Purely structural: no operation
+   identity, opcode calendar, coefficient value, or instruction-word
+   fingerprint participates.  */
+
+enum rotation_filler_kind
+{
+  ROT_FILLER_REFUSED,
+  ROT_FILLER_LREG,	/* the established shadow_filler_p classes */
+  ROT_FILLER_DST,	/* audited Dst-touching word, RWC-neutral */
+  ROT_FILLER_RWC_STEP	/* the typed row-step word */
+};
+
+/* Classify INSN for the plain-reorder movers.  *WHY names the refusal
+   for the widened classes; the established pure-LREG refusals stay
+   silent exactly as before (byte-identical dump behavior on rows the
+   widening does not reach).  */
+
+static rotation_filler_kind
+rotation_filler_kind_p (rtx_insn *insn, insn_regs *regs, bool *hidden_free,
+			const char **why)
+{
+  *why = nullptr;
+  if (shadow_filler_p (insn, regs, hidden_free))
+    return ROT_FILLER_LREG;
+  *hidden_free = false;
+  if (JUMP_P (insn) || !issued_tensix_p (insn)
+      || contains_mem_rtx_p (PATTERN (insn)))
+    return ROT_FILLER_REFUSED;
+  /* Every register reference must be an SFPU register (a scalar
+     reference carries dependences this pool does not track), but unlike
+     collect_sfpu_regs the widened classes need no LREG destination:
+     stores and the row-step word define nothing.  */
+  CLEAR_HARD_REG_SET (regs->uses);
+  CLEAR_HARD_REG_SET (regs->defs);
+  for (df_ref ref = DF_INSN_USES (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    {
+      unsigned regno = DF_REF_REGNO (ref);
+      if (regno >= FIRST_PSEUDO_REGISTER || !SFPU_REG_P (regno))
+	return ROT_FILLER_REFUSED;
+      SET_HARD_REG_BIT (regs->uses, regno);
+    }
+  for (df_ref ref = DF_INSN_DEFS (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    {
+      unsigned regno = DF_REF_REGNO (ref);
+      if (regno >= FIRST_PSEUDO_REGISTER || !SFPU_REG_P (regno))
+	return ROT_FILLER_REFUSED;
+      SET_HARD_REG_BIT (regs->defs, regno);
+    }
+  /* Read-modify-write conservatism for CC-predicated lane writes.  */
+  regs->uses |= regs->defs;
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque || e.cc_write
+      || e.config_dests_written || e.config_dests_read)
+    return ROT_FILLER_REFUSED;
+  if (e.dst_mem_read || e.dst_mem_write)
+    {
+      if (e.rwc.kind != xtt_rwc_effect_t::NONE)
+	{
+	  *why = "carries a non-neutral or unaudited RWC mode on a "
+		 "Dst access";
+	  return ROT_FILLER_REFUSED;
+	}
+      return ROT_FILLER_DST;
+    }
+  if (e.rwc.kind == xtt_rwc_effect_t::INC)
+    return ROT_FILLER_RWC_STEP;
+  return ROT_FILLER_REFUSED;
+}
+
+/* A crossed word a Dst-touching or RWC-stepping filler may pass:
+   effects on record, no CC write (the filler's lane predicate and the
+   row's CC constancy), and no Dst, RWC, or memory interaction of its
+   own.  Fail-closed: a Dst-reading filler does not even cross another
+   Dst reader.  */
+
+static bool
+rotation_dst_rwc_crossing_safe_p (rtx_insn *x)
+{
+  if (get_attr_xtt_replay (x) == XTT_REPLAY_OWNER
+      || contains_mem_rtx_p (PATTERN (x)))
+    return false;
+  xtt_effect_set e = rvtt_insn_effects (x);
+  return !e.opaque && !e.cc_write
+    && !e.config_dests_written && !e.config_dests_read
+    && !e.dst_mem_read && !e.dst_mem_write
+    && e.rwc.kind == xtt_rwc_effect_t::NONE;
+}
+
+/* Kind-aware crossing walk: the established discipline for the
+   pure-LREG classes, the Dst/RWC-inert proof for the widened ones.  */
+
+static rtx_insn *
+rotation_crossed_segment_kind (rtx_insn *from, rtx_insn *to,
+			       rotation_filler_kind kind, bool hidden_free,
+			       insn_regs *crossed)
+{
+  if (kind == ROT_FILLER_LREG)
+    return rotation_crossed_segment (from, to, hidden_free, crossed);
+  CLEAR_HARD_REG_SET (crossed->uses);
+  CLEAR_HARD_REG_SET (crossed->defs);
+  for (rtx_insn *x = from; x != NEXT_INSN (to); x = NEXT_INSN (x))
+    {
+      if (!NONDEBUG_INSN_P (x))
+	continue;
+      insn_regs x_regs;
+      sfpu_reg_refs (x, &x_regs);
+      crossed->uses |= x_regs.uses;
+      crossed->defs |= x_regs.defs;
+      if (GET_CODE (PATTERN (x)) == USE
+	  || GET_CODE (PATTERN (x)) == CLOBBER
+	  || (recog_memoized (x) >= 0
+	      && get_attr_type (x) == TYPE_TENSIX
+	      && !get_attr_length (x)))
+	continue;
+      if (!issued_tensix_p (x) || !rotation_dst_rwc_crossing_safe_p (x))
+	return x;
+    }
+  return nullptr;
+}
+
 /* Post-move required-nop guards, exactly fill_nop_shadows' discipline:
    the committed order must not manufacture a new DYNAMIC-delay pad site
    at the producer, the filler, or the filler's old predecessor.  */
@@ -1233,7 +1385,12 @@ rotate_seam_fill (rotation_row const &row, std::vector<basic_block> &visited)
       return false;
     }
   if (s_seam == 0)
-    return false;
+    {
+      if (dump_file)
+	fprintf (dump_file, "Capture rotation: no modeled seam stall in "
+		 "bb %d\n", row.bb->index);
+      return false;
+    }
   /* A STATIC delay pads before any non-nop word: no filler can close it,
      and a pad materializing at the tail would eat the closure.  */
   if (get_attr_xtt_delay (last) == XTT_DELAY_STATIC)
@@ -1249,18 +1406,36 @@ rotate_seam_fill (rotation_row const &row, std::vector<basic_block> &visited)
 	rtx_insn *cand = issued[o];
 	insn_regs cand_regs;
 	bool hidden_free;
-	if (!shadow_filler_p (cand, &cand_regs, &hidden_free)
-	    || audited_latency (cand) != 0
+	const char *kind_why;
+	rotation_filler_kind kind
+	  = rotation_filler_kind_p (cand, &cand_regs, &hidden_free,
+				    &kind_why);
+	if (kind == ROT_FILLER_REFUSED)
+	  {
+	    if (kind_why && dump_file)
+	      fprintf (dump_file, "Capture rotation refused: filler uid=%d "
+		       "%s\n", INSN_UID (cand), kind_why);
+	    continue;
+	  }
+	if (kind == ROT_FILLER_RWC_STEP && riscv_tt_opt_replay_hoist)
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Capture rotation refused: row-step "
+		       "filler uid=%d deferred to replay capture "
+		       "formation\n", INSN_UID (cand));
+	    continue;
+	  }
+	if (audited_latency (cand) != 0
 	    /* A STATIC-delay filler drags its pad into the seam slot.  */
 	    || get_attr_xtt_delay (cand) == XTT_DELAY_STATIC)
 	  continue;
 
 	insn_regs crossed;
 	rtx_insn *blocker
-	  = dir ? rotation_crossed_segment (first, PREV_INSN (cand),
-					    hidden_free, &crossed)
-		: rotation_crossed_segment (NEXT_INSN (cand), last,
-					    hidden_free, &crossed);
+	  = dir ? rotation_crossed_segment_kind (first, PREV_INSN (cand),
+						 kind, hidden_free, &crossed)
+		: rotation_crossed_segment_kind (NEXT_INSN (cand), last,
+						 kind, hidden_free, &crossed);
 	if (blocker)
 	  {
 	    if (dump_file)
@@ -1322,6 +1497,162 @@ rotate_seam_fill (rotation_row const &row, std::vector<basic_block> &visited)
   if (dump_file)
     fprintf (dump_file, "Capture rotation refused: no independent filler "
 	     "reaches the seam of bb %d\n", row.bb->index);
+  return false;
+}
+
+/* Close a modeled in-row stall by moving one provably independent row
+   member into the gap -- a plain within-iteration reorder exactly like
+   the seam fill, extended to interior gaps and the widened filler
+   classes (lane DL).  Runs after the seam and prologue movers, so the
+   established fire shapes keep their movers byte-identically.
+   Adjacency accounting is cyclic: the row replays, so a candidate at
+   either row end trades against the seam adjacency.  */
+
+static bool
+rotate_interior_fill (rotation_row const &row,
+		      std::vector<basic_block> &visited)
+{
+  auto const &issued = row.issued;
+  unsigned m = issued.size ();
+
+  for (unsigned i = 0; i + 1 < m; ++i)
+    {
+      rtx_insn *producer = issued[i];
+      rtx_insn *consumer = issued[i + 1];
+      int s = adjacency_stall (producer, consumer);
+      if (s < 0)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Capture rotation refused: unaudited result "
+		     "latency after uid=%d\n", INSN_UID (producer));
+	  continue;
+	}
+      if (s == 0)
+	continue;
+      /* Required-nop sites inside the row stay owned by the nop
+	 inserter and fill_nop_shadows.  */
+      if (get_attr_xtt_delay (producer) == XTT_DELAY_DYNAMIC
+	  && delay_nop_needed_p (visited, row.bb, producer,
+				 XTT_DELAY_DYNAMIC))
+	continue;
+      if (dump_file)
+	fprintf (dump_file, "Capture rotation: modeled in-row stall after "
+		 "uid=%d in bb %d\n", INSN_UID (producer), row.bb->index);
+
+      /* Forward candidates nearest-first, then backward nearest-first.  */
+      for (unsigned step = 0; step != m; ++step)
+	{
+	  unsigned o;
+	  if (step <= i && i - step <= i)
+	    o = i - step;		/* i, i-1, ..., 0 */
+	  else
+	    o = i + 1 + (step - i);	/* i+2, i+3, ..., m-1 */
+	  if (o == i || o == i + 1 || o >= m)
+	    continue;
+
+	  rtx_insn *cand = issued[o];
+	  insn_regs cand_regs;
+	  bool hidden_free;
+	  const char *kind_why;
+	  rotation_filler_kind kind
+	    = rotation_filler_kind_p (cand, &cand_regs, &hidden_free,
+				      &kind_why);
+	  if (kind == ROT_FILLER_REFUSED)
+	    {
+	      if (kind_why && dump_file)
+		fprintf (dump_file, "Capture rotation refused: filler "
+			 "uid=%d %s\n", INSN_UID (cand), kind_why);
+	      continue;
+	    }
+	  if (kind == ROT_FILLER_RWC_STEP && riscv_tt_opt_replay_hoist)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation refused: row-step "
+			 "filler uid=%d deferred to replay capture "
+			 "formation\n", INSN_UID (cand));
+	      continue;
+	    }
+	  if (audited_latency (cand) != 0)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation refused: filler "
+			 "uid=%d carries an unaudited or nonzero result "
+			 "latency\n", INSN_UID (cand));
+	      continue;
+	    }
+	  /* A STATIC-delay filler drags its pad into the vacated slot.  */
+	  if (get_attr_xtt_delay (cand) == XTT_DELAY_STATIC)
+	    continue;
+
+	  insn_regs crossed;
+	  rtx_insn *blocker
+	    = o < i ? rotation_crossed_segment_kind (NEXT_INSN (cand),
+						     producer, kind,
+						     hidden_free, &crossed)
+		    : rotation_crossed_segment_kind (consumer,
+						     PREV_INSN (cand), kind,
+						     hidden_free, &crossed);
+	  if (blocker)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation refused: filler "
+			 "uid=%d cannot cross uid=%d\n",
+			 INSN_UID (cand), INSN_UID (blocker));
+	      continue;
+	    }
+	  if (hard_reg_set_intersect_p (cand_regs.uses, crossed.defs)
+	      || hard_reg_set_intersect_p (cand_regs.defs, crossed.uses)
+	      || hard_reg_set_intersect_p (cand_regs.defs, crossed.defs))
+	    continue;
+
+	  /* Cyclic vacated-position exchange.  */
+	  rtx_insn *prev = issued[(o + m - 1) % m];
+	  rtx_insn *next = issued[(o + 1) % m];
+	  int s_prev_cand = adjacency_stall (prev, cand);
+	  int s_cand_next = adjacency_stall (cand, next);
+	  int s_prev_next = adjacency_stall (prev, next);
+	  int s_p_cand = adjacency_stall (producer, cand);
+	  int s_cand_c = adjacency_stall (cand, consumer);
+	  if (s_prev_cand < 0 || s_cand_next < 0 || s_prev_next < 0
+	      || s_p_cand < 0 || s_cand_c < 0)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation refused: unaudited "
+			 "latency at the vacated seam of uid=%d\n",
+			 INSN_UID (cand));
+	      continue;
+	    }
+	  if (s_prev_next + s_p_cand + s_cand_c
+	      >= s_prev_cand + s_cand_next + s)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation refused: no modeled "
+			 "stall decrease rotating uid=%d\n",
+			 INSN_UID (cand));
+	      continue;
+	    }
+
+	  bool prev_needed_before
+	    = (get_attr_xtt_delay (prev) == XTT_DELAY_DYNAMIC
+	       && delay_nop_needed_p (visited, row.bb, prev,
+				      XTT_DELAY_DYNAMIC));
+	  rtx_insn *restore_after = PREV_INSN (cand);
+	  int cand_uid = INSN_UID (cand);
+
+	  reorder_insns (cand, cand, producer);
+	  if (rotation_delay_clean_p (visited, row.bb, producer, cand,
+				      prev, prev_needed_before))
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Capture rotation moved uid=%d into "
+			 "the in-row stall after uid=%d target=%s\n",
+			 cand_uid, INSN_UID (producer),
+			 rotation_target_name ());
+	      return true;
+	    }
+	  reorder_insns (cand, cand, restore_after);
+	}
+    }
   return false;
 }
 
@@ -1627,7 +1958,8 @@ rotate_capture_rows (function *fn)
 
       visited.reserve (n_basic_blocks_for_fn (fn));
       while (rotate_seam_fill (row, visited)
-	     || rotate_prologue_fill (row, preheader, visited))
+	     || rotate_prologue_fill (row, preheader, visited)
+	     || rotate_interior_fill (row, visited))
 	if (!rotation_row_p (bb, &row, &reason))
 	  break;
     }
