@@ -457,11 +457,29 @@ renumber (function *fn)
 	      {
 		gcc_assert (first_add_ix || !this_addend);
 		this_addend += TREE_INT_CST_LOW (other);
-		this_first_add_ix = first_add_ix;
+		// If there is a base add above, chain to it.  Otherwise
+		// this add directly consumes the synth_opcode value with a
+		// constant operand -- constant propagation (e.g. after
+		// complete unrolling) folded the synthesized encoding to a
+		// constant -- and this add is itself the chain's base.
+		this_first_add_ix = first_add_ix ? first_add_ix : this_add_ix;
 	      }
 	    else
 	      {
-		gcc_assert (!first_add_ix);
+		// A variable operand.  Either this is the level-0 add
+		// created by synth splitting (no base above), or the base
+		// above is a constant add (its constant is accumulated in
+		// this_addend) and this add supplies the variable part
+		// itself.  A variable add below a variable base remains
+		// unmodeled.
+		if (first_add_ix)
+		  {
+		    node_t &base = graph[first_add_ix];
+		    tree base_other = base.rhs2
+		      ? gimple_assign_rhs1 (base.stmt)
+		      : gimple_assign_rhs2 (base.stmt);
+		    gcc_assert (TREE_CODE (base_other) == INTEGER_CST);
+		  }
 		if (this_addend)
 		  self_add_ix = this_add_ix;
 	      }
@@ -551,12 +569,14 @@ renumber (function *fn)
 	continue;
 
       gcc_assert (node.used);
+      if (node.phi_use)
+	// Has a phi_use: uses reached through the PHI keep the original
+	// id, so renumbering this add would detach them from their
+	// synth_opcode.  Do not alter this add.
+	continue;
+
       if (!node.add_ix && !node.addend)
 	{
-	  if (node.phi_use)
-	    // Has a phi_use, do not alter this add
-	    continue;
-
 	  auto &opcode_slot = graph[node.opcode_ix];
 	  if (!--opcode_slot.addend)
 	    {
@@ -573,12 +593,18 @@ renumber (function *fn)
       tree addend = integer_zero_node;
       if (node.addend)
 	{
-	  // Propagate the iv_var
-	  gcc_assert (node.add_ix);
-	  auto &add_slot = graph[node.add_ix];
-	  auto iv_var = add_slot.rhs2
+	  // The accumulated constant moves into the new synth_opcode's
+	  // addend; re-base this add on the chain's variable part.  The
+	  // base is the level-0 add (node.add_ix), or this add itself
+	  // when it directly consumes the synth_opcode value.
+	  auto &add_slot = node.add_ix ? graph[node.add_ix] : node;
+	  tree iv_var = add_slot.rhs2
 	    ? gimple_assign_rhs1 (add_slot.stmt)
 	    : gimple_assign_rhs2 (add_slot.stmt);
+	  if (TREE_CODE (iv_var) == INTEGER_CST)
+	    // A constant-based chain has no variable part; the base's
+	    // constant is already accumulated in node.addend.
+	    iv_var = build_zero_cst (TREE_TYPE (gimple_assign_lhs (node.stmt)));
 	  if (node.rhs2)
 	    gimple_assign_set_rhs1 (node.stmt, iv_var);
 	  else
