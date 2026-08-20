@@ -400,12 +400,14 @@ scan_spill_legality (function *fn, spill_ctx &ctx)
 	    continue;
 
 	  int code = recog_memoized (insn);
-	  /* The zero-length LREG metadata patterns (raw-access sentinels
-	     and user read/write markers) emit nothing and have no Dst,
-	     RWC, configuration, or CC effect; the raw .ttinsn region
-	     they bracket is an asm and refuses below on its own.  */
+	  /* The zero-length LREG metadata patterns (the raw-access
+	     ownership marker and the user read/write markers) emit
+	     nothing and have no Dst, RWC, configuration, or CC effect;
+	     any raw .ttinsn region a marker describes is an asm and
+	     refuses below on its own.  */
 	  if (sentinel_read_lregno (code) >= 0
-	      || sentinel_write_lregno (code) >= 0)
+	      || sentinel_write_lregno (code) >= 0
+	      || code == CODE_FOR_rvtt_sfprawlreg_access)
 	    continue;
 
 	  if (pattern_transparent_p (insn))
@@ -957,13 +959,13 @@ rollback (spill_transaction &tx)
 /* Spill web REGNO through Dst scratch row ROW: SFPSTORE mod0 4 after
    each def, SFPLOAD mod0 4 before each reading insn, fresh pseudo per
    insn.  New pseudos are recorded in SPILL_TMPS; every stream change
-   is recorded in TX.  Returns false when some insn does not admit the
-   operand rewrite (the caller rolls the whole transaction back) --
-   never asserts after emission.  */
+   is recorded in TX.  Returns false with *WHY named when some insn
+   does not admit the rewrite (the caller rolls the whole transaction
+   back) -- never asserts after emission.  */
 
 static bool
 spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
-	   bitmap spill_tmps, spill_transaction &tx)
+	   bitmap spill_tmps, spill_transaction &tx, const char **why)
 {
   rtx preg = regno_reg_rtx[regno];
 
@@ -977,9 +979,18 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 	  if (GET_CODE (PATTERN (insn)) == USE)
-	    /* Reservation webs are never chosen; a bare USE of any
-	       other web cannot occur.  Fail closed, not loud.  */
-	    return false;
+	    {
+	      /* Bare USEs belong to the livein reservation sentinels,
+		 which are never chosen for spilling; skip them.  A bare
+		 USE of the web being spilled would be an interval this
+		 pass does not understand: refuse it by name.  */
+	      if (reg_referenced_p (preg, PATTERN (insn)))
+		{
+		  *why = "lreg-alloc-unknown-use";
+		  return false;
+		}
+	      continue;
+	    }
 	  bool reads = reg_referenced_p (preg, PATTERN (insn));
 	  bool writes = reg_set_p (preg, insn);
 	  if (!reads && !writes)
@@ -991,7 +1002,10 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	  /* Rewrite first: a refused rewrite must precede any emission
 	     for this insn (the caller still rolls back prior ones).  */
 	  if (!validate_replace_rtx (preg, q, insn))
-	    return false;
+	    {
+	      *why = "lreg-spill-rewrite-refused";
+	      return false;
+	    }
 	  tx.replaced_insn.safe_push (insn);
 	  tx.replaced_from.safe_push (preg);
 	  tx.replaced_to.safe_push (q);
@@ -1153,9 +1167,10 @@ enforce_colorability (function *fn)
 		 vregno, g.webs[victim].occ, g.degree[victim], row,
 		 ctx.noinc_addr_mode);
 
-      if (!spill_web (fn, vregno, row, ctx.noinc_addr_mode, spill_tmps, tx))
-	return bail ("lreg-spill-rewrite-refused",
-		     "an insn does not admit the operand rewrite");
+      const char *why = NULL;
+      if (!spill_web (fn, vregno, row, ctx.noinc_addr_mode, spill_tmps, tx,
+		      &why))
+	return bail (why, "web rewrite abandoned");
       spills++;
       df_analyze ();
     }
