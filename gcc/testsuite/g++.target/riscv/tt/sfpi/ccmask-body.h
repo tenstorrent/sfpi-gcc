@@ -19,6 +19,10 @@ constexpr inline volatile unsigned (&instrn_buffer)[] = ::__instrn_buffer;
 #define CCMASK_COND(x) ((x) <= 0.0f)
 #endif
 
+#ifndef CCMASK_ZERO
+#define CCMASK_ZERO 0.0f
+#endif
+
 __attribute__((noinline)) void
 CCMASK_FN ()
 {
@@ -27,7 +31,7 @@ CCMASK_FN ()
       sfpi::vFloat CCMASK_X = sfpi::dst_reg[0];
       sfpi::vFloat CCMASK_Y = CCMASK_X * CCMASK_A + CCMASK_B;
       sfpi::vFloat CCMASK_W = CCMASK_Y;
-      v_if (CCMASK_COND (CCMASK_X)) { CCMASK_W = 0.0f; }
+      v_if (CCMASK_COND (CCMASK_X)) { CCMASK_W = CCMASK_ZERO; }
       v_endif;
       sfpi::dst_reg[0] = CCMASK_W + CCMASK_Y;
       sfpi::dst_reg++;

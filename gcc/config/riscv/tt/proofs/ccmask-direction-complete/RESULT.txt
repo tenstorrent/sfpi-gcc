@@ -1,0 +1,29 @@
+sweep_ccmask_dirs.c — ccmask keep-mask equivalence, all four float
+order directions vs +0.0, exhaustive over 2^32 lane encodings each.
+
+Oracle provenance: craq-sim pinned @ 9f324140
+  SFPSETCC  src/tensix.cpp:8969-9000
+  SFPCOMPC  src/tensix.cpp:9458-9477
+  SFPGT     src/tensix.cpp:10236-10261 (mod1==8 SET_DEST arm)
+  SFPLE     src/tensix.cpp:10210-10235 (mod1==8 SET_DEST arm)
+  SFPAND    src/tensix.cpp:9068-9084
+  sign_mag32_total_order src/tensix.cpp:3816-3822
+Compiler-side lowering provenance: rvtt_emit_sfpxfcmps
+  gcc/config/riscv/tt/rvtt.cc:513-556 (fval==0 arm).
+
+Run (laneDN, 2026-08-20, cc -O2, host x86-64):
+
+LE (x<=0)  mismatches=0  cut-stream=269ba7dc7bdddcda  hw-stream=269ba7dc7bdddcda  EQUAL
+GT (x>0)   mismatches=0  cut-stream=7b9f655a7bdddcda  hw-stream=7b9f655a7bdddcda  EQUAL
+LT (x<0)   mismatches=0  cut-stream=54a3e8b604222325  hw-stream=54a3e8b604222325  EQUAL
+GE (x>=0)  mismatches=0  cut-stream=7d40380004222325  hw-stream=7d40380004222325  EQUAL
+RESULT: EQUAL over 2^32 x 4 directions
+
+Stream commitments are position-salted FNV-1a 64 over the per-x
+expected keep-mask (cut) and computed keep-mask (hw); equality per
+direction plus mismatches=0 is the licensing condition.
+
+LICENSES: the LT/GE (swapped-operand, writable-zero) arms of the
+rvtt_ccmask fold; the LE/GT arms re-verify laneBG's original lane
+evidence in the same harness.  Retire those arms if this RESULT ever
+stops being EQUAL.
