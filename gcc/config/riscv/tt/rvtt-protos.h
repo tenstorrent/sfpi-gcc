@@ -86,10 +86,35 @@ class rvtt_synth
   }
 };
 
-extern void rvtt_emit_sfpxfcmps (rtx v1, rtx f, rtx mod);
-extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
-extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
-extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
+class rvtt_arg_info
+{
+  tree arg;
+  gcall *def = nullptr; // cst def stmt
+  tree imm = nullptr; // scalar const
+  uint32_t cst = 0; // scalar const
+
+ public:
+  rvtt_arg_info () = default;
+  rvtt_arg_info (tree arg);
+  rvtt_arg_info &operator= (tree arg) {
+    // Construct in place
+    this->~rvtt_arg_info ();
+    new (this) rvtt_arg_info (arg);
+    return *this;
+  }
+
+public:
+  tree get_arg () const { return arg; }
+  gcall *get_def () const { return def; }
+
+  bool is_imm () const { return bool (imm); }
+  tree get_imm () const { return imm; }
+
+  bool is_cst () const { return bool (def); }
+  uint32_t get_cst () const { return cst; };
+
+  bool is_zero () const { return is_cst () && !cst; }
+};
 
 extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);

@@ -216,7 +216,6 @@ process_block_stmts(basic_block bb,
 	      break;
 
 	    default:
-	    default_:
 		DUMP("Intervening %s\n", insnd->name);
 		// Could be smarter about the non-__builtin_riscv_sfp
 		// calls, but bail if anything else comes in to be safe

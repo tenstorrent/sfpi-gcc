@@ -529,6 +529,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 
 // CALL has a SCALAR variant, if its second op is from a LOADI and the value
 // being loaded fits in the immediate slot, make it so.
+// Also consider commuting sfpiadd_v's operands (and inverting)
 
 static gcall *
 immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
@@ -538,82 +539,58 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 
   auto nlv_call_insnd = call_insnd->get_non_live ();
   int mod = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
-  bool maybe_flip_sign = (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v
-			  && mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST);
-  if (maybe_flip_sign)
-    mod ^= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
-  if (!(scalar_insnd->mod_info ().mod () & (1u << mod)))
-    // Mod is incompatible
-    return nullptr;
+  auto info = scalar_insnd->ops[0];
+  bool is_signed = info.kind () == rvtt_insn_data::op_t::SIGNED;
+  int bits = info.bits () - int (is_signed);
 
-  tree imm_op = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 0 : 1));
-  gimple *def = SSA_NAME_DEF_STMT (imm_op);
+  rvtt_arg_info arg_info;
+  bool iadd_commute = false;
+  int32_t cst;
 
-  auto *def_insnd = rvtt_get_insn_data (def);
-  if (!def_insnd)
-    return nullptr;
-
-  auto *def_call = as_a <gcall *> (def);
-  int32_t imm = 0;
-  switch (def_insnd->id)
+  // For sfpiadd_v try the first operand, do this first
+  if (nlv_call_insnd->id == rvtt_insn_data::sfpiadd_v)
     {
-    default:
-      return nullptr;
-
-    case rvtt_insn_data::sfploadi:
-      {
-	tree imm_op = gimple_call_arg (def_call, def_insnd->imm_arg ());
-	if (SSA_VAR_P (imm_op))
-	  return nullptr;
-	imm = TREE_INT_CST_LOW (imm_op);
-	tree mod_op = gimple_call_arg (def_call, def_insnd->mod_arg ());
-	switch (TREE_INT_CST_LOW (mod_op))
-	  {
-	  default:
-	    return nullptr;
-
-	  case SFPLOADI_MOD0_USHORT:
-	    break;
-
-	  case SFPLOADI_MOD0_SHORT:
-	    imm = imm << 16 >> 16;
-	    break;
-	  }
-
-	if (maybe_flip_sign)
-	  imm = -imm;
-
-	auto info = scalar_insnd->ops[0];
-	int32_t bound = (1u << info.bits ()) - 1;
-	if (info.kind () == rvtt_insn_data::op_t::SIGNED)
-	  {
-	    bound >>= 1;
-	    if (imm < ~bound)
-	      return nullptr;
-	  }
-
-	if (imm > bound)
-	  return nullptr;
-      }
-      break;
-
-    case rvtt_insn_data::sfpreadlreg:
-      if (TREE_INT_CST_LOW (gimple_call_arg (def_call, 0)) != CREG_IDX_0)
-	return nullptr;
-
-      // imm is zero,
-      break;
+      arg_info = gimple_call_arg (call, call_insnd->src_arg ());
+      if (arg_info.is_cst ())
+	{
+	  cst = int32_t (arg_info.get_cst ());
+	  if (mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST)
+	    {
+	      cst = -cst;
+	      mod ^= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
+	    }
+	  auto upper = cst >> bits;
+	  if (!(upper && (!is_signed || upper != -1)))
+	    {
+	      iadd_commute = true;
+	      goto iadd_commute;
+	    }
+	}
     }
 
+  // Try the second operand
+  if (scalar_insnd->mod_info ().mod () & (1u << mod))
+    {
+      arg_info = gimple_call_arg (call, call_insnd->src_arg () + 1);
+      if (!arg_info.is_cst ())
+	return nullptr;
+      cst = int32_t (arg_info.get_cst ());
+      auto upper = cst >> bits;
+      if (upper && (!is_signed || upper != -1))
+	return nullptr;
+    }
+  else
+    return nullptr;
+
+ iadd_commute:;
   if (dump_file)
     {
       fprintf (dump_file, "Combining:\n");
-      print_gimple_stmt (dump_file, def_call, 2);
+      print_gimple_stmt (dump_file, arg_info.get_def (), 2);
       print_gimple_stmt (dump_file, call, 2);
     }
 
   // Replace the CALL with one of SCALAR
-  tree input = gimple_call_arg (call, call_insnd->src_arg () + (maybe_flip_sign ? 1 : 0));
   gimple *new_call = gimple_build_call (scalar_insnd->decl, scalar_insnd->num_args ());
   gimple_set_location (new_call, gimple_location (call));
   gimple_call_set_lhs (new_call, gimple_call_lhs (call));
@@ -622,9 +599,11 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
   if (scalar_insnd->is_live ())
     gimple_call_set_arg (new_call, argno++, gimple_call_arg (call, 0));
 
-  gimple_call_set_arg (new_call, argno++, input);
+  gimple_call_set_arg (new_call, argno++,
+		       gimple_call_arg (call, call_insnd->src_arg () + (iadd_commute ? 1 : 0)));
 
-  gimple_call_set_arg (new_call, argno++, build_int_cst (integer_type_node, imm));
+  gimple_call_set_arg (new_call, argno++, build_int_cst (is_signed ? integer_type_node : unsigned_type_node,
+							 cst));
   gimple_call_set_arg (new_call, argno++, integer_zero_node);
   gimple_call_set_arg (new_call, argno++, integer_zero_node);
 
@@ -642,7 +621,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
       print_gimple_stmt (dump_file, new_call, 2);
     }
 
-  return def_call;
+  return arg_info.get_def ();
 }
 
 namespace {
