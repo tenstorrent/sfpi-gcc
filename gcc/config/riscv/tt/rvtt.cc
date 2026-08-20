@@ -369,6 +369,57 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   return pattern;
 }
 
+rvtt_arg_info::rvtt_arg_info (tree arg)
+  : arg (arg)
+{
+  if (!SSA_VAR_P (arg))
+    {
+      imm = arg;
+      cst = TREE_INT_CST_LOW (imm);
+      return;
+    }
+
+  auto *d = SSA_NAME_DEF_STMT (arg);
+  auto *insnd = rvtt_get_insn_data (d);
+  if (!insnd)
+    return;
+
+  auto *call = as_a <gcall *> (d);
+  switch (insnd->id)
+    {
+    default:
+      return;
+
+    case rvtt_insn_data::sfpreadlreg:
+      // We only care about detecting zero here
+      if (TREE_INT_CST_LOW (gimple_call_arg (call, 0))
+	  != CREG_IDX_0)
+	return;
+      break;
+
+    case rvtt_insn_data::sfploadi:
+      if (!integer_zerop (gimple_call_arg (call, 0)))
+	// Runtime computed value
+	return;
+
+      cst = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->imm_arg ()));
+      switch (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ())))
+	{
+	default:
+	  return;
+
+	case SFPLOADI_MOD0_SHORT:
+	  cst = int32_t (cst << 16) >> 16;
+	  break;
+
+	case SFPLOADI_MOD0_USHORT:
+	  break;
+	}
+      break;
+    }
+  def = call;
+}
+
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
