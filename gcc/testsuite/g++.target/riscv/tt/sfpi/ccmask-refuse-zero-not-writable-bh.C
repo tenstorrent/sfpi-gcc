@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-ccmask -fdump-tree-rvtt_ccmask" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -Wno-deprecated-declarations -mtt-tensix-optimize-ccmask -fdump-tree-rvtt_ccmask" }
 // Near miss for the strict directions: the assigned zero is the
 // read-only constant register (sfpi::vConst0), which SET_DEST cannot
 // overwrite -- the swapped-operand keep-mask has no writable operand
