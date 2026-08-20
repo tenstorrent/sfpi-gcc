@@ -5,7 +5,7 @@
 // only unreserved webs -- the sentinel is a precolored node that
 // constrains coloring, never a candidate -- and still prove
 // colorability with the reservation held.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "colorability=proven" "rvtt_lp_alloc" } }
 // { dg-final { scan-assembler "# RAWLREG 0, 128" } }
 // { dg-final { scan-assembler {\mSFPSTORE\tL[0-7], 252, 4, 7} } }

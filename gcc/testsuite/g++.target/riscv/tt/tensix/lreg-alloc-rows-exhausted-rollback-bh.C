@@ -2,7 +2,7 @@
 // spills than the 64 scratch-row groups can carry; the allocator
 // exhausts rows AFTER mutating, rolls the stream back, and the named
 // pressure error reports on the exact pre-allocation stream.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "lreg-spill-no-free-dst" "rvtt_lp_alloc" } }
 // { dg-final { scan-rtl-dump "rolling back" "rvtt_lp_alloc" } }
 // { dg-final { scan-rtl-dump-not "colorability=proven" "rvtt_lp_alloc" } }

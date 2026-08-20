@@ -1,12 +1,17 @@
-// Wormhole twin of lreg-alloc-fire-bh.C: nine loop-carried values
-// compile under the DSATUR allocator; the WH no-increment address
-// mode is 3 (BH is 7).
-// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
-// { dg-final { scan-rtl-dump "colorability=proven" "rvtt_lp_alloc" } }
-// { dg-final { scan-assembler {\mSFPSTORE\tL[0-7], 252, 4, 3} } }
-// { dg-final { scan-assembler {\mSFPLOAD\tL[0-7], 252, 4, 3} } }
+// DP-8 enforcement witness: without the integration-layer
+// -mtt-tensix-dst-layout-32b declaration (and with no affirmative
+// 32-bit-class Dst access as in-function evidence), a Dst-untouched
+// or SRCB-resolved kernel must NOT be spilled -- under an actual
+// 16-bit Dst layout the scratch round trip would corrupt output
+// SILENTLY.  The allocator refuses by name and the pressure error
+// stands.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
+// { dg-final { scan-rtl-dump "lreg-spill-inexact-dst-mode" "rvtt_lp_alloc" } }
+// { dg-final { scan-rtl-dump "dst-layout-undeclared" "rvtt_lp_alloc" } }
+// { dg-final { scan-rtl-dump-not "colorability=proven" "rvtt_lp_alloc" } }
+// { dg-error "lreg-pressure-exceeded" "" { target *-*-* } 0 }
 
-void lreg_alloc_fire_wh (void)
+void lreg_alloc_layout_undeclared (void)
 {
   auto a0 = __builtin_rvtt_sfpreadlreg (0);
   auto a1 = __builtin_rvtt_sfpreadlreg (1);
