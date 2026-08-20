@@ -930,6 +930,14 @@ lreg_index (rtx x)
      the launch VD; the SIGNED amount register survives as the encoded
      VC (route 1); imm12 packs 0.  Differentially proven WH+BH.
 
+   - The audited Simple unary family: SFPLZ (mods 0/2/4), SFPMOV
+     (mods 0/1/2; mod 8 PRNG stays outside), SFPABS (0/1), SFPEXEXP
+     (0/1/2/10), SFPEXMAN (0/1) -- each reads only LReg[VC] under its
+     audited mods.  LZ/MOV/ABS are route-overridable (CAST-shaped
+     arms); EXEXP/EXMAN have no operand override and always name their
+     source (naming the launch-VD register pins fixed VDs).
+     Differentially proven WH+BH, CC-writing mods included.
+
    - SFPMUL24, BH only (mods 0 LOWER / 1 UPPER -- the plain
      spec-and-simulator-audited modes; indirect-VA/VD mods refuse):
      computes low/high 23 bits of VA*VB with the VC addend pinned to
@@ -1147,6 +1155,90 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	out->src_c = 0;
 	out->imm12 = (uint16_t) (iv & 0xfff);
 	out->name_reads = 0;
+	return true;
+      }
+    case UNSPECV_SFPLZ:
+    case UNSPECV_SFPMOV:
+    case UNSPECV_SFPABS:
+    case UNSPECV_SFPEXEXP:
+    case UNSPECV_SFPEXMAN:
+      {
+	/* The audited Simple unary family (rvtt_sfp<unary>_lv, one
+	   pattern iterator): each reads only LReg[VC] under its
+	   audited mods and lane-writes VD (the functional models;
+	   craq-sim executors; the pattern's per-mod effect audit).
+	   Differentially proven WH+BH (laneCZ vocab_diff), including
+	   the CC-writing mods (LZ 2, EXEXP 2/10 -- the register-form
+	   SFPIADD envelope precedent).  LZ, MOV, and ABS are
+	   route-overridable (RC_VC): source == launch VD packs src_c 0
+	   under the VC:=VD route, any other source survives by name.
+	   EXEXP and EXMAN take no operand override (build_dispatch has
+	   no arm for 0x77/0x78): their source is ALWAYS name-encoded,
+	   including the launch-VD register itself (the surviving name
+	   pins fixed VDs through the established escape analysis).
+	   SFPMOV mod 8 (PRNG state) stays outside the class.  */
+	if (XVECLEN (un, 0) != 3)
+	  return false;
+	rtx src = XVECEXP (un, 0, 1);
+	rtx mod = XVECEXP (un, 0, 2);
+	int s = lreg_index (src);
+	if (s < 0 || !CONST_INT_P (mod))
+	  return false;
+	HOST_WIDE_INT m = INTVAL (mod);
+	bool routed = true;
+	switch (value_insn_unspecv (insn))
+	  {
+	  case UNSPECV_SFPLZ:
+	    if (!(m == 0 || m == 2 || m == 4))
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPLZ (0, 0, 0, 0)
+			   : TT_OP_BH_SFPLZ (0, 0, 0, 0)) >> 24;
+	    break;
+	  case UNSPECV_SFPMOV:
+	    if (!IN_RANGE (m, 0, 2))
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPMOV (0, 0, 0, 0)
+			   : TT_OP_BH_SFPMOV (0, 0, 0, 0)) >> 24;
+	    break;
+	  case UNSPECV_SFPABS:
+	    if (!IN_RANGE (m, 0, 1))
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPABS (0, 0, 0, 0)
+			   : TT_OP_BH_SFPABS (0, 0, 0, 0)) >> 24;
+	    break;
+	  case UNSPECV_SFPEXEXP:
+	    if (!(IN_RANGE (m, 0, 2) || m == 10))
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPEXEXP (0, 0, 0, 0)
+			   : TT_OP_BH_SFPEXEXP (0, 0, 0, 0)) >> 24;
+	    routed = false;
+	    break;
+	  default:		/* UNSPECV_SFPEXMAN */
+	    if (!IN_RANGE (m, 0, 1))
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPEXMAN (0, 0, 0, 0)
+			   : TT_OP_BH_SFPEXMAN (0, 0, 0, 0)) >> 24;
+	    routed = false;
+	    break;
+	  }
+	out->mod1 = (uint8_t) m;
+	out->imm12 = 0;
+	out->name_reads = 0;
+	if (routed && s == launch_vd)
+	  out->src_c = 0;	/* VC:=VD route, identity	       */
+	else if (s != 0)
+	  {
+	    out->src_c = (uint8_t) s;
+	    if (s < 8)
+	      out->name_reads |= 1u << s;
+	  }
+	else
+	  return false;		/* L0 collides with the unused code    */
 	return true;
       }
     case UNSPECV_SFPMUL24:
