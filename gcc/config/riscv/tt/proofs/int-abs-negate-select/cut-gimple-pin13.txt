@@ -1,0 +1,33 @@
+# absint32 fresh-body cut, pin-13 (installed 8e87fba0e35f cc1plus),
+# -O3 -mcpu=tt-bh-tensix, dump 275t.optimized (one row of 8) +
+# emitted row stream.  TU: laneCU-evidence dumps/absint32_tu.cpp
+# wrapping tt-metal fresh_cpp/absint32.h.
+
+  <bb 2> [local count: 14762290]:
+  _16 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 4, 7); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _29 = __builtin_rvtt_sfpxvif ();
+  _32 = __builtin_rvtt_sfpxicmps (0B, _16, 0, 0, 0, 16);
+  __builtin_rvtt_sfpxcondb (_32, _29);
+  _35 = __builtin_rvtt_sfploadi (0B, 0, 0, 0, 0); [return slot optimization]
+  _37 = __builtin_rvtt_sfpiadd_v (_16, _35, 6); [return slot optimization]
+  _39 = __builtin_rvtt_sfpassign_lv (_16, _37); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _39, 0, 0, 0, 4, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+
+# emitted row (pin-13, flag absent -- the 5-word replayed form):
+	TTREPLAY	0, 5, 1, 1
+	SFPLOAD	L0, 0, 4, 7
+	SFPSETCC	L0, 0, 0
+	SFPIADD	L0, L9, 0, 6	# LV:L0
+	SFPENCC	3, 10
+	SFPSTORE	L0, 0, 4, 7
+	TTINCRWC	0, 2, 0, 0
+
+# emitted row (laneCU cc1plus, -mtt-tensix-optimize-int-abs -- the folded form,
+# byte-identical to the hand kernel calculate_abs_int32's stream):
+	SFPLOAD	L0, 0, 4, 7
+	SFPABS	L0, L0, 0
+	SFPSTORE	L0, 0, 4, 7
+	TTINCRWC	0, 2, 0, 0

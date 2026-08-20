@@ -1,0 +1,18 @@
+# unaryshift row streams, pin-13, -O3 -mcpu=tt-bh-tensix.
+# FRESH (fresh_cpp/unaryshift.h) in-range leg row:
+	SFPLOAD	L0, 0, 4, 7
+	lui	a4,%hi(_ZN7ckernel13instrn_bufferE)
+	slli	a5,a0,12
+	li	a3, 2046820359	# 1:7a000007
+	lw	a4,%lo(_ZN7ckernel13instrn_bufferE)(a4)
+	add	a5,a5,a3
+	sw	a5, 0(a4)	# 1:SFPSHFT	L0, L0, a5, 7
+	SFPSTORE	L0, 0, 4, 7
+	TTINCRWC	0, 2, 0, 0
+# HAND (ckernel_sfpu_unary_shift.h calculate_left_shift) in-range leg row:
+	SFPLOAD	L0, 0, 4, 7
+	sw	a5, 0(a4)	# 1:SFPSHFT	L0, L0, a5, 7
+	SFPSTORE	L0, 0, 4, 7
+	TTINCRWC	0, 2, 0, 0
+# Both rows: [SFPLOAD mod0=4; RISC-patched dynamic-immediate SFPSHFT;
+# SFPSTORE mod0=4] -- identical streams; no conversion slots exist.

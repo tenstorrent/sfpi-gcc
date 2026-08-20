@@ -1,0 +1,21 @@
+# leftshift-fresh (binary Int32 left shift) SM32 chain, pin-13,
+# -O3 -mcpu=tt-bh-tensix.  TU: laneCU-evidence dumps/leftshift_tu.cpp
+# (verbatim calculate_left_shift_fresh_cpp, fresh_cpp_operations.h).
+# The 12-word replayed row; the proposed elision deletes the three
+# SFPCAST words = the hand kernel's 9-word INT32_2S_COMP form
+# (ckernel_sfpu_shift.h calculate_binary_left_shift).
+
+	TTREPLAY	0, 12, 1, 1
+	SFPLOAD	L0, 0, 4, 7
+	SFPCAST	L0, L0, 3
+	SFPLOAD	L1, 64, 4, 7
+	SFPCAST	L1, L1, 3
+	SFPSHFT	L0, L1, 0, 0
+	SFPSETCC	L1, 0, 4
+	SFPIADD	L1, L1, -32, 1
+	SFPCOMPC
+	SFPMOV	L0, L9, 0	# LV:L0
+	SFPENCC	3, 10
+	SFPCAST	L0, L0, 3
+	SFPSTORE	L0, 0, 4, 7
+	TTINCRWC	0, 2, 0, 0
