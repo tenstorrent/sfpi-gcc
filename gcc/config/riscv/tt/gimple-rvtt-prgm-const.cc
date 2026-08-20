@@ -30,11 +30,14 @@ along with GCC; see the file COPYING3.  If not see
    one issue slot AND one result-latency stall per iteration on the exp
    shape.
 
-   Admitted class (deliberately narrow): a fusion-enabling SFPADDI whose
-   vector operand is a single-use SFPMUL in the same loop, plain-add mod,
-   all-constant scalar operands, canonical instruction-buffer operand.
-   The pure in-loop-loadi class (design D1 candidate (a)) refuses pending
-   its own benefit discipline.
+   Admitted class: a fusion-enabling SFPADDI whose vector operand is a
+   single-use SFPMUL in the same loop, plain-add mod, all-constant
+   scalar operands, canonical instruction-buffer operand; the
+   materialized SFPADD form of the same shape; and (laneDM widening)
+   the canonical fused SFPMAD form those shapes lower to, per
+   materialized-constant operand (mad_operand_candidates).  The pure
+   in-loop-loadi class (design D1 candidate (a)) refuses pending its
+   own benefit discipline.
 
    Freedom proof for a PRGM register (the D2 region-scoped opacity
    extension).  PRGM registers are persistent global machine state, so the
@@ -738,10 +741,15 @@ fusable_mul_p (tree src, class loop *loop, gimple *only_use)
   return mul;
 }
 
-/* An in-loop invariant float materialization defining SRC whose fp32
-   value is recoverable: the canonical sfpxloadi 32-bit float form, or
-   the shortened single-issue SFPLOADI FLOATB form.  Other encodings
-   refuse (their value reconstruction is not on record here).  */
+/* An in-loop invariant constant materialization defining SRC whose
+   full 32-bit lane image is recoverable through the audited
+   single-issue-chain derivation (single_issue_constant_image_p below:
+   the sfpxloadi 31/32/-32 verbatim-image forms and the shortened
+   SFPLOADI FLOATB form -- the same recovery the residency classes
+   use).  Other encodings refuse (their value reconstruction is not on
+   record).  */
+
+static bool single_issue_constant_image_p (gcall *load, unsigned *value);
 
 static gcall *
 invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
@@ -755,25 +763,9 @@ invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
       || !flow_bb_inside_loop_p (loop, gimple_bb (load))
       || !rvtt_invariant_constant_load_p (load, loop,
 					  /*allow_shortened=*/true)
-      || !single_nondebug_use_p (src, only_use))
+      || !single_nondebug_use_p (src, only_use)
+      || !single_issue_constant_image_p (load, value))
     return nullptr;
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
-  unsigned imm = TREE_INT_CST_LOW (gimple_call_arg (load, 1));
-  tree mod = gimple_call_arg (load, gimple_call_num_args (load) - 1);
-  if (insnd->id == rvtt_insn_data::sfpxloadi)
-    {
-      /* The float-typed 32-bit form only.  */
-      if (tree_to_shwi (mod) != -32)
-	return nullptr;
-      *value = imm;
-    }
-  else
-    {
-      /* Shortened SFPLOADI: FLOATB (mod0 0, imm16 << 16) only.  */
-      if (!integer_zerop (mod))
-	return nullptr;
-      *value = (imm & 0xffff) << 16;
-    }
   return load;
 }
 
@@ -844,6 +836,83 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
     }
 
   return false;
+}
+
+/* The fused-MAD admission (laneDM widening): the canonical form the
+   mul->add shapes lower to.  LHS = sfpmad (A, B, C, 0) computes
+   per-lane A*B + C from its operand VALUES alone -- the plain mod has
+   no implicit register pairing or operand reinterpretation -- so an
+   operand defined by an in-loop invariant single-issue constant
+   materialization used only by this statement can be parked in a PRGM
+   register and read back: the constant-register read yields the
+   identical 32-bit image in every lane the materialization wrote (the
+   all-lanes proof for both is the same cc-region proof every class
+   passes).  Each qualifying operand is its own candidate (the sdpa exp
+   leg carries two).  Non-plain mods refuse by name -- their operand
+   semantics are not audited here; the _lv variant is excluded (its
+   lane-victim operand is not value-only).  Like the materialized
+   SFPADD shape, no trip proof is required: the entry-edge programming
+   is never speculated and establishment/no-clobber is
+   trip-independent.  Appends candidates (without entry edges -- the
+   caller places them) and returns how many.  */
+
+static unsigned
+mad_operand_candidates (gcall *call, class loop *loop,
+			auto_vec<candidate> *out)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::sfpmad)
+    return 0;
+  if (!gimple_call_lhs (call)
+      || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
+      || gimple_call_num_args (call) != 4)
+    return 0;
+
+  gcall *loads[3] = { nullptr, nullptr, nullptr };
+  unsigned values[3] = { 0, 0, 0 };
+  bool any = false;
+  for (unsigned ix = 0; ix != 3; ++ix)
+    {
+      loads[ix] = invariant_float_load_p (gimple_call_arg (call, ix), loop,
+					  call, &values[ix]);
+      any |= loads[ix] != nullptr;
+    }
+  if (!any)
+    return 0;
+
+  tree mod = gimple_call_arg (call, 3);
+  if (TREE_CODE (mod) != INTEGER_CST || !integer_zerop (mod))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "prgm-const: sfpmad refused (mad-mod-unproven): a non-plain "
+		 "mod's operand semantics are not audited here\n");
+      return 0;
+    }
+
+  unsigned n = 0;
+  for (unsigned ix = 0; ix != 3; ++ix)
+    {
+      if (!loads[ix])
+	continue;
+      /* One candidate per materialization: mad (x, k, k) carries the
+	 same load in two operand slots.  */
+      bool dup = false;
+      for (unsigned jx = 0; jx != ix; ++jx)
+	dup |= loads[jx] == loads[ix];
+      if (dup)
+	continue;
+      candidate c;
+      c.addi = call;
+      c.mul = nullptr;
+      c.loadi = loads[ix];
+      c.value = values[ix];
+      c.loop = loop;
+      c.entry = nullptr;
+      out->safe_push (c);
+      ++n;
+    }
+  return n;
 }
 
 /* Every CC-writing statement in FN, collected once per function.  */
@@ -1306,6 +1375,17 @@ constant_chain_value_p (const remat_chain &c, unsigned *value)
   return true;
 }
 
+/* Forward-declared above for the fusion classes: the single-issue
+   constant image of one materialization, through the same audited
+   derivation as the residency chains.  */
+
+static bool
+single_issue_constant_image_p (gcall *load, unsigned *value)
+{
+  remat_chain chain { load, load };
+  return constant_chain_value_p (chain, value);
+}
+
 /* The 32-bit constant image staged into a typed SFPCONFIG write:
    STAGED's defining statement must be a single-issue admitted
    materialization with all-constant operands (the same derivation the
@@ -1717,22 +1797,32 @@ transform (function *fn, prgm_state *st)
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	       gsi_next (&gsi))
 	    {
+	      if (!is_a <gcall *> (gsi_stmt (gsi)))
+		continue;
+	      gcall *call = as_a <gcall *> (gsi_stmt (gsi));
 	      candidate c;
-	      if (is_a <gcall *> (gsi_stmt (gsi))
-		  && fusion_candidate_p (as_a <gcall *> (gsi_stmt (gsi)),
-					 loop, &c))
+	      unsigned pushed = 0;
+	      if (fusion_candidate_p (call, loop, &c))
 		{
-		  /* Under the cross-loop hoist, lift the programming
-		     point to the outermost enclosing entry edge whose
-		     region is audited-inert for the whole LREG file
-		     (allocatable staging register plus the
-		     programmable-constant destinations); the walk
-		     returns ENTRY unchanged when nothing is proven.  */
-		  c.entry = riscv_tt_opt_crossloop_hoist > 0
-		    ? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
-		    : entry;
 		  candidates.safe_push (c);
+		  pushed = 1;
 		}
+	      else
+		pushed = mad_operand_candidates (call, loop, &candidates);
+	      if (!pushed)
+		continue;
+	      /* Under the cross-loop hoist, lift the programming
+		 point to the outermost enclosing entry edge whose
+		 region is audited-inert for the whole LREG file
+		 (allocatable staging register plus the
+		 programmable-constant destinations); the walk
+		 returns ENTRY unchanged when nothing is proven.  */
+	      edge point = riscv_tt_opt_crossloop_hoist > 0
+		? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
+		: entry;
+	      for (unsigned kx = candidates.length () - pushed;
+		   kx != candidates.length (); ++kx)
+		candidates[kx].entry = point;
 	    }
 	}
       free (body);
@@ -1922,11 +2012,14 @@ transform (function *fn, prgm_state *st)
 	}
       else
 	{
-	  /* Materialized shape: the SFPADD keeps its form with the
-	     constant-register operand; the in-loop materialization is
-	     removed (its only use was this add).  */
+	  /* Materialized shape: the SFPADD or SFPMAD keeps its form
+	     with the constant-register operand (every vector operand
+	     slot equal to the materialization is rewritten -- a MAD
+	     can carry the same constant twice); the in-loop
+	     materialization is removed (its only use was this
+	     statement).  */
 	  tree load_lhs = gimple_call_lhs (c.loadi);
-	  for (unsigned ix = 0; ix != 2; ++ix)
+	  for (unsigned ix = 0; ix != gimple_call_num_args (c.addi) - 1; ++ix)
 	    if (gimple_call_arg (c.addi, ix) == load_lhs)
 	      gimple_call_set_arg (c.addi, ix, creg);
 	  update_stmt (c.addi);
