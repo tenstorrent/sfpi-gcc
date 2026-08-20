@@ -55,6 +55,14 @@ struct rvtt_lut_mode_desc
      the input operand (SGN_RETAIN); false when the result keeps the
      sign the per-range MAD produced (SGN_UPDATE).  */
   bool sign_restore;
+
+  /* True when the mode's coefficient slots hold any FP32 value
+     verbatim.  A future mode with a narrower coefficient encoding
+     (the FP16/FP8 entry tables) must set this false, and every
+     compile-time coefficient the selector wants to place must then
+     prove exact re-encoding or refuse
+     (lut-coeff-encoding-unrepresentable).  */
+  bool coeff_fp32_direct;
 };
 
 /* Return the descriptor for the requested range arity with the
@@ -62,5 +70,31 @@ struct rvtt_lut_mode_desc
    target has no such LUT capability (refusal).  */
 extern const rvtt_lut_mode_desc *rvtt_lut_lookup (unsigned num_ranges,
 						  bool sign_restore);
+
+/* Leaf classes the extended selector can place into a LUT slot beyond
+   the plain affine leaf: a multiply-only leaf (the slot's B coefficient
+   is a synthesized +0.0) and a compile-time-provable constant leaf (the
+   slot's A coefficient is a synthesized +0.0).  */
+enum rvtt_lut_leaf_class
+{
+  RVTT_LUT_LEAF_MUL0,
+  RVTT_LUT_LEAF_CONST,
+};
+
+/* True when CLS is certified bit-exact against the LUT slot semantics
+   on the current target for a slot whose input partition is
+   TAIL_PARTITION (the top, unbounded range) or not, given the
+   function's finite-math license.  The certification facts are
+   recorded per-target in rvtt-lut-tables.cc with their exhaustive
+   enumeration provenance; anything not recorded there is false
+   (refusal).  */
+extern bool rvtt_lut_leaf_class_certified_p (rvtt_lut_leaf_class cls,
+					     bool tail_partition,
+					     bool finite_math);
+
+/* True when the compile-time constant-leaf value BITS belongs to a
+   value class whose bit-exact slot reproduction is certified (see
+   rvtt-lut-tables.cc); anything else refuses.  */
+extern bool rvtt_lut_const_value_certified_p (uint32_t bits);
 
 #endif /* GCC_RVTT_LUT_TABLES_H */
