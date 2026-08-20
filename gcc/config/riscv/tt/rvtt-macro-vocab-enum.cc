@@ -454,6 +454,7 @@ static const admitted_class admitted[] = {
   /* Lane CZ admissions (kept in sync with rvtt-macro-desc.cc).  */
   { 0x79, (1u << 1) | (1u << 5) | (1u << 9),
     (1u << B_INPLACE) | (1u << B_NAMED), "iadd-imm (lane CZ)" },
+  { 0x7a, (1u << 0) | (1u << 2), 1u << B_INPLACE, "shft-reg (lane CZ)" },
 };
 
 static bool

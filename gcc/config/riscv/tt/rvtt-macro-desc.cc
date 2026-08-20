@@ -925,6 +925,11 @@ lreg_index (rtx x)
      rides the template imm12 field exactly as the frozen rule packed
      it.
 
+   - SFPSHFT register-amount form (mod 0 logical WH/BH, BH mod 2
+     arithmetic -- the variable-shift audited envelope): in-place on
+     the launch VD; the SIGNED amount register survives as the encoded
+     VC (route 1); imm12 packs 0.  Differentially proven WH+BH.
+
    - SFPMUL24, BH only (mods 0 LOWER / 1 UPPER -- the plain
      spec-and-simulator-audited modes; indirect-VA/VD mods refuse):
      computes low/high 23 bits of VA*VB with the VC addend pinned to
@@ -1086,6 +1091,41 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
       }
     case UNSPECV_SFPSHFT:
       {
+	if (XVECLEN (un, 0) == 4)
+	  {
+	    /* Register-amount form (rvtt_sfpshft_v_lv_int): [0] lv,
+	       [1] tied value, [2] amount, [3] mod1.  The audited
+	       variable-shift envelope: mod 0 (logical, WH/BH) and BH
+	       mod 2 (arithmetic right for negative amounts).  The
+	       shifted value is LReg[VD] (in-place on the launch VD);
+	       the SIGNED amount is LReg[VC] and survives as the
+	       encoded VC under route 1; imm12 must pack 0 (the
+	       simulator's decode requires it; the functional model
+	       never reads it).  Differentially proven WH+BH (laneCZ
+	       vocab_diff).  */
+	    rtx val = XVECEXP (un, 0, 1);
+	    rtx amt = XVECEXP (un, 0, 2);
+	    rtx mod = XVECEXP (un, 0, 3);
+	    int v = lreg_index (val);
+	    int s = lreg_index (amt);
+	    if (v < 0 || s < 0 || !CONST_INT_P (mod))
+	      return false;
+	    HOST_WIDE_INT m = INTVAL (mod);
+	    if (!(m == 0 || (TARGET_XTT_TENSIX_BH && m == 2)))
+	      return false;
+	    if (v != dest || v != launch_vd)
+	      return false;	/* in-place on the launch VD	       */
+	    if (s == 0)
+	      return false;	/* L0 collides with the unused code    */
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPSHFT (0, 0, 0, 0)
+			   : TT_OP_BH_SFPSHFT (0, 0, 0, 0)) >> 24;
+	    out->mod1 = (uint8_t) m;
+	    out->src_c = (uint8_t) s;
+	    out->imm12 = 0;
+	    out->name_reads = s < 8 ? 1u << s : 0;
+	    return true;
+	  }
 	if (XVECLEN (un, 0) != 7)
 	  return false;
 	rtx imm = XVECEXP (un, 0, 3);
