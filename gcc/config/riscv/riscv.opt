@@ -620,7 +620,11 @@ Rematerialize proven loadi-materialized SFPU values at their uses when vector re
 
 mtt-tensix-optimize-lreg-alloc
 Target Var(riscv_tt_opt_lreg_alloc) Init(0)
-Prove SFPU LREG colorability by DSATUR graph coloring before IRA and, when the interference graph exceeds the 8-register file, spill selected vector webs through proven-free 32-bit Dst scratch rows (SFPSTORE/SFPLOAD round trip); every unproven ingredient refuses by name and keeps the lreg-pressure-exceeded error byte-identically
+When SFPU vector pressure exceeds the 8-register LREG file, DSATUR-color the interference graph before IRA and spill selected vector webs through proven-free 32-bit Dst scratch rows (SFPSTORE/SFPLOAD round trip) until the graph is 8-colorable; assignment stays with IRA, every unproven ingredient refuses by name, and the lreg-pressure-exceeded error is kept byte-identically on refusal
+
+mtt-tensix-dst-layout-32b
+Target Var(riscv_tt_dst_layout_32b) Init(0)
+Integration-layer declaration that every SFPU calc body in this translation unit executes under a 32-bit-row Dst layout (fp32 dest accumulation / 32-bit dest addressing); consumed by -mtt-tensix-optimize-lreg-alloc to admit runtime-resolved (SRCB mode 0) and Dst-untouched kernels for scratch-row spilling. DECLARING THIS FALSELY ON A 16-BIT-LAYOUT KERNEL MAKES A SPILLED COMPILATION PRODUCE SILENT WRONG OUTPUT (no run-time error exists); the build layer must set it from the kernel's dest-accumulation mode. Affirmative 16-bit-format accesses refuse regardless of this declaration
 
 mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)

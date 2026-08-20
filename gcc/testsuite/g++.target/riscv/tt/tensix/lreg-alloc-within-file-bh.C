@@ -1,9 +1,10 @@
-// No-op-below-the-wall control: eight live values fit the file, the
-// allocator proves it trivially and changes NOTHING (flags-on
-// byte-identity below the wall is corpus-gated; this is the dg-level
-// witness).
+// No-op-below-the-wall control: eight live values fit the file, so the
+// allocator stands down and changes NOTHING -- allocation is left to
+// IRA exactly as today (flags-on byte-identity below the wall is
+// corpus-gated; this is the dg-level witness).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
-// { dg-final { scan-rtl-dump "colorability=trivial" "rvtt_lp_alloc" } }
+// { dg-final { scan-rtl-dump "peak pressure 8 within" "rvtt_lp_alloc" } }
+// { dg-final { scan-rtl-dump "allocation left to IRA as today" "rvtt_lp_alloc" } }
 // { dg-final { scan-rtl-dump-not "engaging DSATUR" "rvtt_lp_alloc" } }
 // { dg-final { scan-assembler-not {\mSFPSTORE\t} } }
 

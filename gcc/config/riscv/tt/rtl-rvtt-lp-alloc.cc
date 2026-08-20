@@ -74,24 +74,26 @@ along with GCC; see the file COPYING3.  If not see
 
       - lreg-spill-inexact-dst-mode: the spill round trip is bit-exact
 	only through the 32-bit Dst formats.  Any typed Dst access in
-	the function carrying a 16-bit data mode (FP16A/FP16B/INT8/
-	UINT16/INT16/INT8_COMP/LO16_ONLY/HI16_ONLY), the runtime-
-	resolved SRCB mode 0, or a non-constant mode operand proves a
-	16-bit (or unprovable) Dst view and refuses.  A function whose
-	typed accesses are all 32-bit-class, or that performs no typed
-	Dst access at all, proceeds; the residual assumption -- that
-	the surrounding kernel does not view the scratch rows through a
-	16-bit format -- is the flag's documented contract, exactly
-	parallel to the ambient all-lanes CC contract the shipped CC
-	synthesis already bakes in (see rtl-rvtt-dst-ownership.cc).
+	the function carrying an AFFIRMATIVE 16-bit data mode (FP16A/
+	FP16B/INT8/UINT16/INT16/INT8_COMP/LO16_ONLY/HI16_ONLY) or a
+	non-constant mode operand proves a 16-bit (or unprovable) Dst
+	view and refuses.  Runtime-resolved SRCB accesses (mod0 0 --
+	every plain SFPI dst_reg[] access) and functions with no typed
+	Dst access at all are admitted SOLELY under the explicit
+	integration-layer declaration -mtt-tensix-dst-layout-32b (DP-9:
+	an in-function 32-bit access is NOT layout proof -- a mixed-view
+	kernel can park through an explicit 32-bit view while its SRCB
+	accesses resolve 16-bit); evidence only ever REFUSES, so an
+	affirmative 16-bit access refuses even against the declaration.
 
       - lreg-spill-no-free-dst: scratch rows are derived from the
 	function's own typed Dst addresses.  All of them must be
-	CONST_INT and the RWC/layout base must be provably stable
-	function-wide (no RWC-effect, config-write, address-modifier
-	or opaque instruction anywhere), because a Dst address is
-	base-relative ((imm + RWC_Dst + MATH_Offset + REGW_Base) &
-	0x3FF).  Two accesses can only touch the same physical rows
+	CONST_INT and reachable at a PROVEN RWC delta (typed INC/FACE
+	effects contribute audited deltas; TTSETRWC, opaque insns and
+	disagreeing joins make the delta unknown), and the layout must
+	be free of config/address-modifier writes, because a Dst
+	address is base-relative ((imm + RWC_Dst + MATH_Offset +
+	REGW_Base) & 0x3FF).  Two accesses can only touch the same physical rows
 	when their immediates are congruent within +/-3 modulo 256
 	(the dst32b_adjust_row aliasing window; the same physical-row
 	model gimple-rvtt-transp-involution.cc:486 audits), so a
@@ -102,12 +104,26 @@ along with GCC; see the file COPYING3.  If not see
 
       - cc-enable-unproved: SFPSTORE and SFPLOAD move only CC-enabled
 	lanes and no all-lanes store variant exists, so the round trip
-	is complete only under all-lanes CC.  Any instruction anywhere
-	in the function that can narrow CC (PUSHC/POPC/COMPC, or a
-	typed CC write that is not the proven all-lanes SFPENCC)
-	refuses.  This is deliberately function-coarse and
-	fail-closed; a point-wise CC lattice (the
-	rtl-rvtt-dst-ownership.cc machinery) can refine it later.
+	is complete only under all-lanes CC.  A point-wise CC lattice
+	(the rtl-rvtt-dst-ownership.cc machinery: PUSHC/POPC stack,
+	COMPC/typed writes narrow, the proven all-lanes SFPENCC
+	restores) annotates every insn; a web is spillable only when
+	every occurrence point -- store points use the AFTER-insn
+	state -- is provably all-lanes.  Webs touched inside predicated
+	regions are simply not candidates; others still relieve the
+	pressure.
+
+      - RWC motion: the epoch/offset lattice tracks the Dst counter
+	symbolically (typed INC/FACE effects add audited deltas within
+	an epoch; disagreeing joins mint the block's stable epoch
+	token, so a row loop's whole body shares the header's epoch;
+	TTSETRWC or any unproven effect clears the proof).  Kernel rows
+	are recorded epoch-relative and every spill immediate is
+	compensated per point (S - off), so face-advancing and
+	row-looping kernels spill correctly; rows or spill points at an
+	unknown or foreign epoch refuse (lreg-spill-no-free-dst), and a
+	web live into a minted join (loop-carried across the rwc
+	backedge) is never a candidate.
 
       - lreg-spill-laneconfig-unproven: SFPLOAD/SFPSTORE lane-to-cell
 	addressing is redirected by the LaneConfig column-exchange bits
@@ -128,10 +144,13 @@ along with GCC; see the file COPYING3.  If not see
    synthesis bakes in, and they are spelled out in the flag's
    documentation):
 
-      - ambient Dst data width: with no typed Dst access in the
-	function, nothing in it can prove the 16-bit view absent; the
-	flag asserts the surrounding kernel does not view the scratch
-	rows through a 16-bit format.
+      - ambient Dst data width: the flag asserts the calc body runs
+	under a 32-bit-row Dst layout (SFPU_Fp32_enabled /
+	dst_32bit_addr_en) and that the surrounding kernel does not
+	view the scratch rows through a 16-bit format.  This is what
+	admits mod0-0 (SRCB-resolved) accesses and zero-access
+	functions; an affirmative 16-bit access in the function still
+	refuses.
 
       - ambient LaneConfig: the architectural default (no column
 	exchange, no block bits -- the simulator's reset state, and
@@ -171,10 +190,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "memmodel.h"
 #include "basic-block.h"
 #include "cfgrtl.h"
+#include "cfgloop.h"
+#include "expr.h"
 #include "emit-rtl.h"
 #include "function.h"
 #include "recog.h"
 #include "hard-reg-set.h"
+#include "diagnostic-core.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
@@ -344,6 +366,91 @@ static int sentinel_write_lregno (int code);
 
 /* -------------------------- spill legality -------------------------- */
 
+/* CC lane-state lattice value (mirror of rtl-rvtt-dst-ownership.cc).  */
+enum lpa_cc_val : uint8_t { LPA_CC_ALL, LPA_CC_OTHER, LPA_CC_UNPROVED };
+
+constexpr unsigned LPA_CC_STACK_MAX = 16;
+
+/* Abstract state at a program point: the CC lane state (with the
+   explicit PUSHC/POPC stack, exactly the rtl-rvtt-dst-ownership.cc
+   lattice) plus a SYMBOLIC Dst-counter position: an epoch token (base
+   identity; joins that disagree mint the block's stable token -- the
+   dst-ownership idiom) and a proven offset within the epoch (typed
+   INC/FACE effects add their audited deltas).  Two points name the
+   same physical row exactly when they share the epoch and the
+   compensated immediates agree, so a spill at epoch-relative offset S
+   uses immediate S - off at each insertion point; loop-variant bases
+   (a row loop's dst_reg++) work because all in-body points share the
+   header's epoch.  A value LIVE ACROSS a minted join (a loop-carried
+   web crossing the rwc backedge) is never spilled: its base changes
+   between instances.  An unproven counter effect (TTSETRWC, opacity)
+   clears `known'.  */
+
+struct lpa_state
+{
+  lpa_cc_val cc;
+  uint8_t cc_depth;
+  uint8_t cc_stack[LPA_CC_STACK_MAX];
+  bool known;			/* epoch/offset proven */
+  int epoch;			/* base-identity token; 0 = function entry */
+  int off;			/* proven Dst-counter offset within the epoch */
+  bool reached;
+
+  static lpa_state entry ()
+  {
+    lpa_state s = {};
+    s.cc = LPA_CC_ALL;
+    s.known = true;
+    s.reached = true;
+    return s;
+  }
+  static lpa_state unreached ()
+  {
+    lpa_state s = {};
+    s.reached = false;
+    return s;
+  }
+  bool operator== (const lpa_state &o) const
+  {
+    if (reached != o.reached)
+      return false;
+    if (!reached)
+      return true;
+    if (cc != o.cc || cc_depth != o.cc_depth || known != o.known
+	|| (known && (epoch != o.epoch || off != o.off)))
+      return false;
+    for (unsigned i = 0; i < cc_depth && i < LPA_CC_STACK_MAX; i++)
+      if (cc_stack[i] != o.cc_stack[i])
+	return false;
+    return true;
+  }
+  bool operator!= (const lpa_state &o) const { return !(*this == o); }
+
+  void poison_cc () { cc = LPA_CC_UNPROVED; cc_depth = 0; }
+  void cc_push ()
+  {
+    if (cc == LPA_CC_UNPROVED)
+      return;
+    if (cc_depth >= LPA_CC_STACK_MAX)
+      {
+	poison_cc ();
+	return;
+      }
+    cc_stack[cc_depth++] = cc;
+  }
+  void cc_pop ()
+  {
+    if (cc == LPA_CC_UNPROVED)
+      return;
+    if (cc_depth == 0)
+      {
+	poison_cc ();
+	return;
+      }
+    cc = (lpa_cc_val) cc_stack[--cc_depth];
+  }
+};
+
 struct spill_ctx
 {
   bool ok;
@@ -351,9 +458,28 @@ struct spill_ctx
   const char *detail;
   rtx_insn *at;
   int noinc_addr_mode;
-  /* Every CONST_INT Dst immediate the function's typed accesses touch,
-     plus the scratch immediates this pass has assigned.  */
+  /* Epoch-relative Dst rows the function's typed accesses touch
+     (immediate + proven offset, with the epoch token), plus assigned
+     scratch offsets.  */
   auto_vec<HOST_WIDE_INT> used_rows;
+  auto_vec<int> row_epoch;
+  bool have_dst_access;
+  bool have_mod0_srcb;		/* runtime-resolved (mod0 0) access */
+  /* Per-insn recorded states, indexed by INSN_UID.  */
+  auto_vec<uint8_t> cc_before, cc_after;
+  auto_vec<int> epoch_before, epoch_after;
+  auto_vec<int> off_before, off_after;
+  auto_vec<bool> known_before, known_after;
+  /* Blocks whose in-state minted a fresh epoch: values live into them
+     cross a base-identity boundary and are never spilled.  */
+  auto_vec<basic_block> minted_bbs;
+  /* Per-bb sweep metadata for minted epochs (DP-11): the audited
+     per-iteration step (0 = unproven) and the proven max trip count
+     (-1 = unproven) of the epoch's own cycle.  A spill in a minted
+     epoch is admitted only when both are proven, and its scratch
+     window is checked across the WHOLE swept range.  */
+  auto_vec<int> mint_step;
+  auto_vec<int> mint_trips;
 };
 
 static void
@@ -367,9 +493,210 @@ refuse (spill_ctx &ctx, const char *name, const char *detail, rtx_insn *at)
   ctx.at = at;
 }
 
-/* Prove the function admits Dst scratch-row spills at all: 32-bit-only
-   typed Dst views, stable RWC/layout base, all-lanes CC everywhere,
-   and no opacity.  Collect the used Dst immediates.  */
+/* Apply INSN's audited effects to S; when COLLECT is non-null, also
+   record Dst rows, layout evidence, and hard refusals.  */
+
+static void
+lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect)
+{
+  int code = recog_memoized (insn);
+  /* Zero-length LREG metadata: no Dst/RWC/config/CC effect; raw
+     .ttinsn regions are asm and refuse as opaque on their own.  */
+  if (sentinel_read_lregno (code) >= 0
+      || sentinel_write_lregno (code) >= 0
+      || code == CODE_FOR_rvtt_sfprawlreg_access)
+    return;
+
+  if (code == CODE_FOR_rvtt_sfppushc)
+    {
+      extract_insn (insn);
+      bool plain = CONST_INT_P (recog_data.operand[0])
+	&& INTVAL (recog_data.operand[0]) == 0;
+      s.cc_push ();
+      if (!plain)
+	/* A mod-bearing PUSHC (e.g. replace) is a CC write of
+	   unmodeled shape.  */
+	s.cc = LPA_CC_OTHER;
+      return;
+    }
+  if (code == CODE_FOR_rvtt_sfppopc)
+    {
+      s.cc_pop ();
+      return;
+    }
+  if (code == CODE_FOR_rvtt_sfpcompc)
+    {
+      s.cc = LPA_CC_OTHER;
+      return;
+    }
+
+  /* The predicated-assign copy: a pure CC-reading LREG move.  */
+  {
+    rtx pat = PATTERN (insn);
+    if (GET_CODE (pat) == SET
+	&& GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE
+	&& XINT (SET_SRC (pat), 1) == UNSPECV_SFPASSIGN)
+      return;
+  }
+
+  for (const lpa_effect_override &o : effect_overrides)
+    if (code == o.code)
+      {
+	if (o.cc_writes)
+	  /* Mod-conditional CC write (SFPEXEXP/SFPLZ/SFPIADD),
+	     recorded conservatively: the lane state narrows.  */
+	  s.cc = LPA_CC_OTHER;
+	return;
+      }
+
+  if (pattern_transparent_p (insn))
+    return;
+
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque)
+    {
+      if (collect)
+	refuse (*collect, "dst-rwc-effect-unproved", "opaque-insn", insn);
+      s.poison_cc ();
+      s.known = false;
+      return;
+    }
+
+  if (e.config_dests_written & (1u << 15))
+    {
+      /* LaneConfig (SFPCONFIG dest 15): the column-exchange and
+	 lane-block bits redirect or drop SFPLOAD/SFPSTORE lanes
+	 -- a silent round-trip corruption, not a truncation.  */
+      if (collect)
+	refuse (*collect, "lreg-spill-laneconfig-unproven",
+		"laneconfig-written-in-function", insn);
+    }
+  else if (e.config_dests_written != 0 || e.addr_mod_slot_write)
+    {
+      /* Any other configuration write can change the Dst layout or
+	 address-modifier interpretation under the accesses.  */
+      if (collect)
+	refuse (*collect, "lreg-spill-no-free-dst", "layout-boundary", insn);
+    }
+
+  /* Typed Dst accesses read the counter BEFORE this insn's own RWC
+     effect applies; collect rows first.  */
+  if (collect && (e.dst_mem_read || e.dst_mem_write))
+    {
+      spill_ctx &ctx = *collect;
+      ctx.have_dst_access = true;
+      rtx addr, mode, addr_mode;
+      if (!rvtt_dst_access_operands (insn, e, &addr, &mode, &addr_mode))
+	refuse (ctx, "dst-rwc-effect-unproved", "unaudited-dst-access", insn);
+      else if (!CONST_INT_P (mode))
+	refuse (ctx, "lreg-spill-inexact-dst-mode", "mode-nonconstant", insn);
+      else
+	{
+	  HOST_WIDE_INT m = INTVAL (mode);
+	  /* mod0 0 (FMT_SRCB) resolves at runtime from the ALU
+	     configuration: admitted only under the declared or
+	     evidenced 32-bit-row layout (checked at scan end);
+	     affirmative 16-bit formats refuse regardless.  */
+	  if (m == 10)
+	    refuse (ctx, "lreg-spill-no-free-dst",
+		    "int32-all-masks-rwc-base", insn);
+	  else if (m != 0 && !dst_mode_32bit_p (m) && e.dst_mem_read)
+	    /* An EXPLICIT 16-bit-format READ of Dst is layout
+	       counter-evidence (its author knows the rows are 16-bit)
+	       and refuses even against the declaration.  A 16-bit-
+	       format STORE is an output-format conversion, routine in
+	       declared-32-bit kernels (the store writes through the
+	       32-bit geometry there); it is admitted and its row
+	       accounted like any other.  */
+	    refuse (ctx, "lreg-spill-inexact-dst-mode",
+		    "16-bit-dst-format", insn);
+	  else if (!CONST_INT_P (addr))
+	    refuse (ctx, "lreg-spill-no-free-dst",
+		    "address-nonconstant", insn);
+	  else if (!s.known)
+	    refuse (ctx, "lreg-spill-no-free-dst",
+		    "rwc-window-unproven", insn);
+	  else
+	    {
+	      if (m == 0)
+		ctx.have_mod0_srcb = true;
+	      ctx.row_epoch.safe_push (s.epoch);
+	      ctx.used_rows.safe_push (INTVAL (addr) + s.off);
+	      if (dump_file)
+		fprintf (dump_file,
+			 "lreg-alloc: dst row " HOST_WIDE_INT_PRINT_DEC
+			 " (imm " HOST_WIDE_INT_PRINT_DEC " + off %d) "
+			 "epoch %d mode " HOST_WIDE_INT_PRINT_DEC
+			 " at insn %d\n",
+			 INTVAL (addr) + s.off, INTVAL (addr), s.off,
+			 s.epoch, m, INSN_UID (insn));
+	    }
+	}
+    }
+
+  switch (e.rwc.kind)
+    {
+    case xtt_rwc_effect_t::NONE:
+      break;
+    case xtt_rwc_effect_t::INC:
+    case xtt_rwc_effect_t::FACE:
+      if (s.known)
+	s.off += e.rwc.dst_delta;
+      break;
+    default:
+      /* SET / UNKNOWN: the window moves by an unproven amount.  */
+      s.known = false;
+      break;
+    }
+
+  if (e.cc_write)
+    s.cc = e.cc_write_all_lanes ? LPA_CC_ALL : LPA_CC_OTHER;
+}
+
+/* Join PRED into ACC for block BB.  A pred carrying BB's OWN token is
+   the value coming back around BB's own cycle: at offset 0 the cycle
+   is rwc-net-zero and the pred is self-consistent (ignored -- no mint
+   needed); at a nonzero offset the base really moves per iteration
+   (the caller records the step and forces the mint).  Any other
+   disagreeing counter position mints BB's stable epoch token
+   (offset 0); a disagreeing CC poisons.  */
+
+static void
+lpa_join (lpa_state &acc, const lpa_state &pred, basic_block bb)
+{
+  if (!pred.reached)
+    return;
+  if (!acc.reached)
+    {
+      acc = pred;
+      return;
+    }
+  if (!acc.known || !pred.known)
+    acc.known = false;
+  else if (acc.epoch != pred.epoch || acc.off != pred.off)
+    {
+      acc.epoch = -(bb->index + 2);
+      acc.off = 0;
+    }
+  if (acc.cc != pred.cc || acc.cc_depth != pred.cc_depth)
+    acc.poison_cc ();
+  else
+    for (unsigned i = 0; i < acc.cc_depth; i++)
+      if (acc.cc_stack[i] != pred.cc_stack[i])
+	{
+	  acc.poison_cc ();
+	  break;
+	}
+}
+
+/* Prove what the function admits: run the CC/delta dataflow to a
+   fixpoint, record per-insn states, collect entry-relative Dst rows
+   and layout evidence, and apply the ambient-layout admission rule
+   (DP-8): runtime-resolved (mod0 0) accesses and Dst-untouched
+   functions are admitted ONLY under -mtt-tensix-dst-layout-32b (the
+   integration-layer declaration) or an affirmative in-function
+   32-bit-class access; declaring the flag falsely on a 16-bit-layout
+   kernel makes a spilled compilation produce SILENT WRONG OUTPUT.  */
 
 static void
 scan_spill_legality (function *fn, spill_ctx &ctx)
@@ -387,147 +714,208 @@ scan_spill_legality (function *fn, spill_ctx &ctx)
       return;
     }
 
+  /* Fixpoint.  */
+  const unsigned n_bbs = last_basic_block_for_fn (fn);
+  auto_vec<lpa_state> in, out;
+  in.safe_grow_cleared (n_bbs);
+  out.safe_grow_cleared (n_bbs);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
+      in[bb->index] = lpa_state::unreached ();
+      out[bb->index] = lpa_state::unreached ();
+    }
+  bool changed;
+  do
+    {
+      changed = false;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  lpa_state next_in = lpa_state::unreached ();
+	  bool entry_pred = false;
+	  const int own_token = -(bb->index + 2);
+	  bool moving_backedge = false;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    {
+	      if (e->src == ENTRY_BLOCK_PTR_FOR_FN (fn))
+		{
+		  lpa_join (next_in, lpa_state::entry (), bb);
+		  entry_pred = true;
+		  continue;
+		}
+	      const lpa_state &p = out[e->src->index];
+	      if (p.reached && p.known && p.epoch == own_token)
+		{
+		  /* Own-cycle pred: net-zero is self-consistent; a
+		     moving cycle forces the mint below.  */
+		  if (p.off != 0)
+		    moving_backedge = true;
+		  continue;
+		}
+	      lpa_join (next_in, p, bb);
+	    }
+	  if (!entry_pred && EDGE_COUNT (bb->preds) == 0)
+	    next_in = lpa_state::entry ();
+	  if (moving_backedge && next_in.reached && next_in.known)
+	    {
+	      next_in.epoch = own_token;
+	      next_in.off = 0;
+	    }
+	  lpa_state next_out = next_in;
+	  if (next_in.reached)
+	    {
+	      rtx_insn *insn;
+	      FOR_BB_INSNS (bb, insn)
+		if (NONDEBUG_INSN_P (insn))
+		  lpa_transfer (next_out, insn, NULL);
+	    }
+	  if (next_in != in[bb->index] || next_out != out[bb->index])
+	    {
+	      in[bb->index] = next_in;
+	      out[bb->index] = next_out;
+	      changed = true;
+	    }
+	}
+    }
+  while (changed);
+
+  /* Recording pass: per-insn states + row/evidence collection +
+     hard refusals.  Unreached insns keep the fail-closed defaults
+     (CC unproved, delta unknown).  */
+  ctx.mint_step.safe_grow_cleared (n_bbs);
+  ctx.mint_trips.safe_grow_cleared (n_bbs);
+  for (unsigned i = 0; i < n_bbs; i++)
+    ctx.mint_trips[i] = -1;
+
+  unsigned max_uid = get_max_uid () + 1;
+  ctx.cc_before.safe_grow_cleared (max_uid);
+  ctx.cc_after.safe_grow_cleared (max_uid);
+  ctx.epoch_before.safe_grow_cleared (max_uid);
+  ctx.epoch_after.safe_grow_cleared (max_uid);
+  ctx.off_before.safe_grow_cleared (max_uid);
+  ctx.off_after.safe_grow_cleared (max_uid);
+  ctx.known_before.safe_grow_cleared (max_uid);
+  ctx.known_after.safe_grow_cleared (max_uid);
+  for (unsigned i = 0; i < max_uid; i++)
+    {
+      ctx.cc_before[i] = LPA_CC_UNPROVED;
+      ctx.cc_after[i] = LPA_CC_UNPROVED;
+    }
+
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      if (!in[bb->index].reached)
+	continue;
+      lpa_state s = in[bb->index];
+      if (s.known && s.epoch == -(bb->index + 2))
+	{
+	  ctx.minted_bbs.safe_push (bb);
+	  /* The epoch's own per-iteration step: every own-token pred
+	     must return with the same nonzero offset.  */
+	  int step = 0;
+	  bool step_ok = true;
+	  edge e;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    {
+	      if (e->src == ENTRY_BLOCK_PTR_FOR_FN (fn))
+		continue;
+	      const lpa_state &p = out[e->src->index];
+	      if (p.reached && p.known && p.epoch == s.epoch && p.off != 0)
+		{
+		  if (step == 0)
+		    step = p.off;
+		  else if (step != p.off)
+		    step_ok = false;
+		}
+	    }
+	  ctx.mint_step[bb->index] = step_ok ? step : 0;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "lreg-alloc: bb %d minted epoch %d (step %d)\n",
+		     bb->index, s.epoch, step_ok ? step : 0);
+	}
       rtx_insn *insn;
       FOR_BB_INSNS (bb, insn)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
-	  if (GET_CODE (PATTERN (insn)) == USE
-	      || GET_CODE (PATTERN (insn)) == CLOBBER)
-	    continue;
-
-	  int code = recog_memoized (insn);
-	  /* The zero-length LREG metadata patterns (the raw-access
-	     ownership marker and the user read/write markers) emit
-	     nothing and have no Dst, RWC, configuration, or CC effect;
-	     any raw .ttinsn region a marker describes is an asm and
-	     refuses below on its own.  */
-	  if (sentinel_read_lregno (code) >= 0
-	      || sentinel_write_lregno (code) >= 0
-	      || code == CODE_FOR_rvtt_sfprawlreg_access)
-	    continue;
-
-	  if (pattern_transparent_p (insn))
-	    continue;
-	  /* The compiler's own CC bracket patterns: any bracket implies
-	     a narrowed region somewhere -- function-coarse refusal.  */
-	  if (code == CODE_FOR_rvtt_sfppushc
-	      || code == CODE_FOR_rvtt_sfppopc
-	      || code == CODE_FOR_rvtt_sfpcompc)
-	    {
-	      refuse (ctx, "cc-enable-unproved", "cc-bracket-present", insn);
-	      return;
-	    }
-
-	  /* The predicated-assign copy: a pure CC-reading LREG move.  */
-	  {
-	    rtx pat = PATTERN (insn);
-	    if (GET_CODE (pat) == SET
-		&& GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE
-		&& XINT (SET_SRC (pat), 1) == UNSPECV_SFPASSIGN)
-	      continue;
-	  }
-
-	  bool overridden = false;
-	  for (const lpa_effect_override &o : effect_overrides)
-	    if (code == o.code)
-	      {
-		if (o.cc_writes)
-		  {
-		    refuse (ctx, "cc-enable-unproved",
-			    "mod-conditional-cc-write", insn);
-		    return;
-		  }
-		overridden = true;
-		break;
-	      }
-	  if (overridden)
-	    continue;
-
-	  xtt_effect_set e = rvtt_insn_effects (insn);
-	  if (e.opaque)
-	    {
-	      refuse (ctx, "dst-rwc-effect-unproved", "opaque-insn", insn);
-	      return;
-	    }
-	  if (e.rwc.kind != xtt_rwc_effect_t::NONE)
-	    {
-	      refuse (ctx, "dst-rwc-effect-unproved", "rwc-boundary", insn);
-	      return;
-	    }
-	  if (e.config_dests_written & (1u << 15))
-	    {
-	      /* LaneConfig (SFPCONFIG dest 15): the column-exchange and
-		 lane-block bits redirect or drop SFPLOAD/SFPSTORE lanes
-		 -- a silent round-trip corruption, not a truncation.  */
-	      refuse (ctx, "lreg-spill-laneconfig-unproven",
-		      "laneconfig-written-in-function", insn);
-	      return;
-	    }
-	  if (e.config_dests_written != 0 || e.addr_mod_slot_write)
-	    {
-	      refuse (ctx, "dst-rwc-effect-unproved", "layout-boundary", insn);
-	      return;
-	    }
-	  if (e.cc_write && !e.cc_write_all_lanes)
-	    {
-	      refuse (ctx, "cc-enable-unproved", "cc-write-not-all-lanes",
-		      insn);
-	      return;
-	    }
-
-	  if (e.dst_mem_read || e.dst_mem_write)
-	    {
-	      rtx addr, mode, addr_mode;
-	      if (!rvtt_dst_access_operands (insn, e, &addr, &mode,
-					     &addr_mode))
-		{
-		  refuse (ctx, "dst-rwc-effect-unproved",
-			  "unaudited-dst-access", insn);
-		  return;
-		}
-	      if (!CONST_INT_P (mode))
-		{
-		  refuse (ctx, "lreg-spill-inexact-dst-mode",
-			  "mode-nonconstant", insn);
-		  return;
-		}
-	      HOST_WIDE_INT m = INTVAL (mode);
-	      if (m == 0)
-		{
-		  refuse (ctx, "lreg-spill-inexact-dst-mode",
-			  "srcb-runtime-resolved", insn);
-		  return;
-		}
-	      if (m == 10)
-		{
-		  refuse (ctx, "lreg-spill-no-free-dst",
-			  "int32-all-masks-rwc-base", insn);
-		  return;
-		}
-	      if (!dst_mode_32bit_p (m))
-		{
-		  refuse (ctx, "lreg-spill-inexact-dst-mode",
-			  "16-bit-dst-format", insn);
-		  return;
-		}
-	      if (!CONST_INT_P (addr))
-		{
-		  refuse (ctx, "lreg-spill-no-free-dst",
-			  "address-nonconstant", insn);
-		  return;
-		}
-	      ctx.used_rows.safe_push (INTVAL (addr));
-	    }
+	  unsigned uid = INSN_UID (insn);
+	  ctx.cc_before[uid] = s.cc;
+	  ctx.epoch_before[uid] = s.epoch;
+	  ctx.off_before[uid] = s.off;
+	  ctx.known_before[uid] = s.known;
+	  lpa_transfer (s, insn, &ctx);
+	  ctx.cc_after[uid] = s.cc;
+	  ctx.epoch_after[uid] = s.epoch;
+	  ctx.off_after[uid] = s.off;
+	  ctx.known_after[uid] = s.known;
 	}
     }
+
+  /* DP-11: bound each minted epoch's sweep with the RTL loop
+     analysis.  The minted block must be its loop's header and the
+     loop must have a proven constant iteration count (capped: a wide
+     sweep covers every mod-256 residue anyway).  */
+  if (!ctx.minted_bbs.is_empty ())
+    {
+      /* Full loop normalization (preheaders/simple latches) is
+	 required by the simple-loop analysis.  This scan runs only
+	 once coloring has blocked: every continuation either mutates
+	 the stream (spills) or ends in the hard pressure error, so
+	 the normalization's forwarder blocks never perturb a
+	 byte-identity surface.  */
+      loop_optimizer_init (LOOPS_NORMAL | LOOPS_HAVE_RECORDED_EXITS);
+      for (basic_block mbb : ctx.minted_bbs)
+	{
+	  if (ctx.mint_step[mbb->index] == 0)
+	    continue;
+	  class loop *l = mbb->loop_father;
+	  if (!l || l->header != mbb)
+	    continue;
+	  struct niter_desc *desc = get_simple_loop_desc (l);
+	  if (desc && desc->simple_p && !desc->infinite && desc->const_iter
+	      && desc->niter <= 96)
+	    ctx.mint_trips[mbb->index] = (int) desc->niter;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "lreg-alloc: minted bb %d trip bound %d\n",
+		     mbb->index, ctx.mint_trips[mbb->index]);
+	}
+      iv_analysis_done ();
+      loop_optimizer_finalize ();
+    }
+
+  if (!ctx.ok)
+    return;
+
+  /* DP-9: in-function 32-bit accesses are NOT layout proof (a mixed-
+     view kernel can park through an explicit 32-bit view while its
+     SRCB accesses resolve 16-bit).  Evidence only ever REFUSES;
+     admission of runtime-resolved accesses and Dst-untouched bodies
+     comes SOLELY from the integration-layer declaration.  */
+  if ((ctx.have_mod0_srcb || !ctx.have_dst_access)
+      && !riscv_tt_dst_layout_32b)
+    {
+      refuse (ctx, "lreg-spill-inexact-dst-mode", "dst-layout-undeclared",
+	      NULL);
+      return;
+    }
+
+  /* Rows in more than one epoch cannot all be proven disjoint from
+     one scratch base.  */
+  for (unsigned i = 1; i < ctx.row_epoch.length (); i++)
+    if (ctx.row_epoch[i] != ctx.row_epoch[0])
+      {
+	refuse (ctx, "lreg-spill-no-free-dst", "cross-epoch-rows", NULL);
+	return;
+      }
 }
 
-/* A scratch immediate S may alias a used immediate K only when they
-   are congruent within +/-3 modulo 256 (see the file comment).  */
+/* A scratch offset S may alias a used row K only when they are
+   congruent within +/-3 modulo 256 (see the file comment).  */
 
 static bool
 rows_may_alias_p (HOST_WIDE_INT s, HOST_WIDE_INT k)
@@ -538,29 +926,53 @@ rows_may_alias_p (HOST_WIDE_INT s, HOST_WIDE_INT k)
   return d <= 3 || d >= 253;
 }
 
-/* Pick the highest proven-free 4-aligned scratch row in [0, 252].
-   Returns -1 when none exists.  */
+/* Pick the highest proven-free 4-aligned epoch-relative scratch offset
+   >= MAX_DELTA (so every compensated immediate S - off stays
+   non-negative): [252..0] first (the historical range), then
+   [1008..256] for offset-heavy functions.  In a minted epoch the
+   check runs across the whole bounded sweep (DP-11): S is free only
+   when S - K - m*step clears the alias window for every kernel row K
+   and every iteration distance |m| <= trips.  Returns -1 when none.  */
 
 static HOST_WIDE_INT
-choose_scratch_row (spill_ctx &ctx)
+choose_scratch_row (spill_ctx &ctx, int max_delta, int epoch)
 {
-  for (HOST_WIDE_INT s = 252; s >= 0; s -= 4)
+  int step = 0, trips = 0;
+  if (epoch < 0)
     {
-      bool clash = false;
-      for (HOST_WIDE_INT k : ctx.used_rows)
-	if (rows_may_alias_p (s, k))
-	  {
-	    clash = true;
-	    break;
-	  }
-      if (!clash)
+      int mbb = -epoch - 2;
+      gcc_assert (mbb >= 0 && mbb < (int) ctx.mint_step.length ()
+		  && ctx.mint_step[mbb] != 0 && ctx.mint_trips[mbb] >= 0);
+      step = ctx.mint_step[mbb];
+      trips = ctx.mint_trips[mbb];
+    }
+  for (int range = 0; range < 2; range++)
+    {
+      HOST_WIDE_INT hi = range == 0 ? 252 : 1008;
+      HOST_WIDE_INT lo = range == 0 ? 0 : 256;
+      for (HOST_WIDE_INT s = hi; s >= lo; s -= 4)
 	{
-	  ctx.used_rows.safe_push (s);
-	  return s;
+	  if (s < max_delta)
+	    break;
+	  bool clash = false;
+	  for (HOST_WIDE_INT k : ctx.used_rows)
+	    {
+	      for (int m = -trips; m <= trips && !clash; m++)
+		if (rows_may_alias_p (s, k + (HOST_WIDE_INT) m * step))
+		  clash = true;
+	      if (clash)
+		break;
+	    }
+	  if (!clash)
+	    {
+	      ctx.used_rows.safe_push (s);
+	      return s;
+	    }
 	}
     }
   return -1;
 }
+
 
 /* --------------------------- web collection ------------------------ */
 
@@ -892,16 +1304,285 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
     }
 }
 
-/* Deterministic spill choice around BLOCKED: the cheapest spillable
-   web among the blocked node and its neighbors
-   (cost = occurrences scaled down by degree).  -1 when none.  */
+/* Consumers whose LREG/Dst WRITES are lane-gated and whose dataflow
+   is lane-local (no value movement between lanes): a reload feeding
+   only such an insn is complete under narrowed CC -- the reload's
+   disabled-lane garbage is computed on but never written through the
+   lane gate -- and an RMW def by such an insn under narrowed CC
+   store-backs only its enabled lanes while the scratch keeps the old
+   disabled lanes, which is exactly the predicated-write semantics.
+   Cross-lane ops (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain
+   all-lanes copies (rvtt_sfpassign SETs, SFPMOV mod 2), SrcS stores,
+   loadmacro forms and the zero-length LREG markers are deliberately
+   ABSENT: fail-closed allowlist, generated from the audited
+   lane-local families.  */
+
+static const insn_code lane_gated_consumers[] = {
+  CODE_FOR_rvtt_sfpabs,
+  CODE_FOR_rvtt_sfpabs_lv,
+  CODE_FOR_rvtt_sfpabs_nv,
+  CODE_FOR_rvtt_sfpadd,
+  CODE_FOR_rvtt_sfpaddi,
+  CODE_FOR_rvtt_sfpaddi_int_lv,
+  CODE_FOR_rvtt_sfpaddi_lv,
+  CODE_FOR_rvtt_sfpadd_lv,
+  CODE_FOR_rvtt_sfpand,
+  CODE_FOR_rvtt_sfpand_lv,
+  CODE_FOR_rvtt_sfpand_lv_2op,
+  CODE_FOR_rvtt_sfpand_lv_bh,
+  CODE_FOR_rvtt_sfparecip,
+  CODE_FOR_rvtt_sfparecip_lv,
+  CODE_FOR_rvtt_sfpcast,
+  CODE_FOR_rvtt_sfpcast_lv,
+  CODE_FOR_rvtt_sfpdivp2,
+  CODE_FOR_rvtt_sfpdivp2_lv,
+  CODE_FOR_rvtt_sfpdivp2_lv_int,
+  CODE_FOR_rvtt_sfpexexp,
+  CODE_FOR_rvtt_sfpexexp_lv,
+  CODE_FOR_rvtt_sfpexexp_nv,
+  CODE_FOR_rvtt_sfpexman,
+  CODE_FOR_rvtt_sfpexman_lv,
+  CODE_FOR_rvtt_sfpexman_nv,
+  CODE_FOR_rvtt_sfpiadd_i,
+  CODE_FOR_rvtt_sfpiadd_i_lv,
+  CODE_FOR_rvtt_sfpiadd_i_lv_int,
+  CODE_FOR_rvtt_sfpiadd_i_nv,
+  CODE_FOR_rvtt_sfpiadd_v,
+  CODE_FOR_rvtt_sfpiadd_v_lv,
+  CODE_FOR_rvtt_sfpiadd_v_nv,
+  CODE_FOR_rvtt_sfploadi,
+  CODE_FOR_rvtt_sfploadi_lv,
+  CODE_FOR_rvtt_sfploadi_lv_int,
+  CODE_FOR_rvtt_sfplut,
+  CODE_FOR_rvtt_sfplutfp32_3r,
+  CODE_FOR_rvtt_sfplutfp32_3r_split,
+  CODE_FOR_rvtt_sfplutfp32_6r,
+  CODE_FOR_rvtt_sfplz,
+  CODE_FOR_rvtt_sfplz_lv,
+  CODE_FOR_rvtt_sfplz_nv,
+  CODE_FOR_rvtt_sfpmad,
+  CODE_FOR_rvtt_sfpmad_lv,
+  CODE_FOR_rvtt_sfpmov,
+  CODE_FOR_rvtt_sfpmov_lv,
+  CODE_FOR_rvtt_sfpmov_nv,
+  CODE_FOR_rvtt_sfpmul,
+  CODE_FOR_rvtt_sfpmul24,
+  CODE_FOR_rvtt_sfpmul24_lv,
+  CODE_FOR_rvtt_sfpmuli,
+  CODE_FOR_rvtt_sfpmuli_int_lv,
+  CODE_FOR_rvtt_sfpmuli_lv,
+  CODE_FOR_rvtt_sfpmul_lv,
+  CODE_FOR_rvtt_sfpnonlinear,
+  CODE_FOR_rvtt_sfpnonlinear_lv,
+  CODE_FOR_rvtt_sfpnot,
+  CODE_FOR_rvtt_sfpnot_lv,
+  CODE_FOR_rvtt_sfpor,
+  CODE_FOR_rvtt_sfpor_lv,
+  CODE_FOR_rvtt_sfpor_lv_2op,
+  CODE_FOR_rvtt_sfpor_lv_bh,
+  CODE_FOR_rvtt_sfpsetcc_i,
+  CODE_FOR_rvtt_sfpsetcc_v,
+  CODE_FOR_rvtt_sfpsetexp_i,
+  CODE_FOR_rvtt_sfpsetexp_i_lv,
+  CODE_FOR_rvtt_sfpsetexp_i_lv_int,
+  CODE_FOR_rvtt_sfpsetexp_v,
+  CODE_FOR_rvtt_sfpsetexp_v_lv,
+  CODE_FOR_rvtt_sfpsetman_i,
+  CODE_FOR_rvtt_sfpsetman_i_lv,
+  CODE_FOR_rvtt_sfpsetman_i_lv_int,
+  CODE_FOR_rvtt_sfpsetman_v,
+  CODE_FOR_rvtt_sfpsetman_v_lv,
+  CODE_FOR_rvtt_sfpsetsgn_i,
+  CODE_FOR_rvtt_sfpsetsgn_i_lv,
+  CODE_FOR_rvtt_sfpsetsgn_i_lv_int,
+  CODE_FOR_rvtt_sfpsetsgn_v,
+  CODE_FOR_rvtt_sfpsetsgn_v_lv,
+  CODE_FOR_rvtt_sfpshft_i,
+  CODE_FOR_rvtt_sfpshft_i_lv,
+  CODE_FOR_rvtt_sfpshft_i_lv_int,
+  CODE_FOR_rvtt_sfpshft_v,
+  CODE_FOR_rvtt_sfpshft_v_lv,
+  CODE_FOR_rvtt_sfpshft_v_lv_int,
+  CODE_FOR_rvtt_sfpstochrnd_i,
+  CODE_FOR_rvtt_sfpstochrnd_i_lv,
+  CODE_FOR_rvtt_sfpstochrnd_i_lv_int,
+  CODE_FOR_rvtt_sfpstochrnd_v,
+  CODE_FOR_rvtt_sfpstochrnd_v_lv,
+  CODE_FOR_rvtt_sfpstore,
+  CODE_FOR_rvtt_sfpstore_int,
+  CODE_FOR_rvtt_sfpxor,
+  CODE_FOR_rvtt_sfpxor_lv,
+  CODE_FOR_rvtt_sfpxor_lv_2op,
+  CODE_FOR_rvtt_sfpxor_lv_bh,
+};
+
+static bool
+lane_gated_consumer_p (rtx_insn *insn)
+{
+  int code = recog_memoized (insn);
+  for (insn_code c : lane_gated_consumers)
+    if (code == c)
+      return true;
+  /* The predicated-assign copy is CC-gated by definition.  */
+  rtx pat = PATTERN (insn);
+  return GET_CODE (pat) == SET
+    && GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE
+    && XINT (SET_SRC (pat), 1) == UNSPECV_SFPASSIGN;
+}
+
+/* Whether web REGNO admits the exact Dst round trip: every occurrence
+   point must have provably all-lanes CC (SFPSTORE/SFPLOAD move only
+   CC-enabled lanes; a narrowed point would silently lose disabled
+   lanes) and a proven RWC delta (so the compensated immediate names
+   the same physical row at every point).  Stores-after-def use the
+   AFTER-insn state (the def itself may narrow CC or move the
+   counter).  *MAX_DELTA collects the largest compensation needed.  */
+
+static bool
+web_spill_admissible_p (function *fn, unsigned regno, const spill_ctx &ctx,
+			int *max_off, int *epoch_out, const char **why)
+{
+  rtx preg = regno_reg_rtx[regno];
+  *max_off = 0;
+  bool have_epoch = false;
+  int epoch = 0;
+  /* A value live into a minted join crosses a base-identity boundary
+     (e.g. a loop-carried web across the rwc backedge): its spill row
+     would name different physical rows at def and use.  */
+  for (basic_block mbb : ctx.minted_bbs)
+    if (REGNO_REG_SET_P (DF_LR_IN (mbb), regno))
+      {
+	*why = "lreg-spill-no-free-dst";
+	return false;
+      }
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (GET_CODE (PATTERN (insn)) == USE)
+	    {
+	      if (reg_referenced_p (preg, PATTERN (insn)))
+		{
+		  *why = "lreg-alloc-unknown-use";
+		  return false;
+		}
+	      continue;
+	    }
+	  bool reads = reg_referenced_p (preg, PATTERN (insn));
+	  bool writes = reg_set_p (preg, insn);
+	  if (!reads && !writes)
+	    continue;
+	  unsigned uid = INSN_UID (insn);
+	  if (uid >= ctx.cc_before.length ())
+	    {
+	      /* An insn minted after the legality scan (another web's
+		 round trip) never references this web; fail closed.  */
+	      *why = "lreg-alloc-post-scan-insn";
+	      return false;
+	    }
+	  if (reads)
+	    {
+	      if (ctx.cc_before[uid] != LPA_CC_ALL
+		  && !lane_gated_consumer_p (insn))
+		{
+		  *why = "cc-enable-unproved";
+		  return false;
+		}
+	      if (!ctx.known_before[uid])
+		{
+		  *why = "lreg-spill-no-free-dst";
+		  return false;
+		}
+	      if (!have_epoch)
+		{
+		  have_epoch = true;
+		  epoch = ctx.epoch_before[uid];
+		}
+	      else if (epoch != ctx.epoch_before[uid])
+		{
+		  *why = "lreg-spill-no-free-dst";
+		  return false;
+		}
+	      *max_off = MAX (*max_off, ctx.off_before[uid]);
+	    }
+	  if (writes)
+	    {
+	      /* A pure def must be all-lanes; an RMW def by a
+		 lane-gated insn is exact at any CC (the scratch keeps
+		 the old disabled lanes -- predicated-write semantics).  */
+	      if (ctx.cc_after[uid] != LPA_CC_ALL
+		  && !(reads && lane_gated_consumer_p (insn)))
+		{
+		  *why = "cc-enable-unproved";
+		  return false;
+		}
+	      if (!ctx.known_after[uid])
+		{
+		  *why = "lreg-spill-no-free-dst";
+		  return false;
+		}
+	      if (!have_epoch)
+		{
+		  have_epoch = true;
+		  epoch = ctx.epoch_after[uid];
+		}
+	      else if (epoch != ctx.epoch_after[uid])
+		{
+		  *why = "lreg-spill-no-free-dst";
+		  return false;
+		}
+	      *max_off = MAX (*max_off, ctx.off_after[uid]);
+	    }
+	}
+    }
+  /* Every recorded kernel row must share the web's epoch, or scratch
+     disjointness cannot be proven against it.  */
+  if (have_epoch)
+    for (int re : ctx.row_epoch)
+      if (re != epoch)
+	{
+	  *why = "lreg-spill-no-free-dst";
+	  return false;
+	}
+  /* DP-11: a minted (loop) epoch's base advances per iteration, so the
+     scratch row SWEEPS Dst across iterations while earlier iterations'
+     kernel rows stay live for pack.  Such spills are admitted only
+     when the sweep is bounded: proven step AND proven trip count (the
+     chooser then checks the alias window across the whole range).  */
+  if (have_epoch && epoch < 0)
+    {
+      int mbb = -epoch - 2;
+      if (mbb < 0 || mbb >= (int) ctx.mint_step.length ()
+	  || ctx.mint_step[mbb] == 0 || ctx.mint_trips[mbb] < 0)
+	{
+	  *why = "lreg-spill-no-free-dst";
+	  return false;
+	}
+    }
+  *epoch_out = have_epoch ? epoch : 0;
+  return true;
+}
+
+/* Deterministic spill choice around BLOCKED: the cheapest spillable,
+   round-trip-admissible web among the blocked node and its neighbors
+   (cost = occurrences scaled down by degree).  -1 when none;
+   *WHY/*MAX_DELTA describe the choice or the cheapest inadmissible
+   candidate's blocker.  */
 
 static int
-choose_spill_web (const lpa_graph &g, int blocked)
+choose_spill_web (const lpa_graph &g, int blocked, function *fn,
+		  const spill_ctx &ctx, int *max_delta, int *epoch_out,
+		  const char **why)
 {
   unsigned n = g.webs.length ();
   int best = -1;
   HOST_WIDE_INT best_cost = 0;
+  const char *blocked_why = NULL;
+  HOST_WIDE_INT blocked_cost = 0;
   for (unsigned i = 0; i < n; i++)
     {
       if ((int) i != blocked && !g.conflict_p (blocked, i))
@@ -911,13 +1592,33 @@ choose_spill_web (const lpa_graph &g, int blocked)
 	continue;
       HOST_WIDE_INT cost
 	= (HOST_WIDE_INT) w.occ * 1024 / (g.degree[i] + 1);
-      if (best < 0 || cost < best_cost
-	  || (cost == best_cost && w.regno < g.webs[best].regno))
+      if (best >= 0 && (cost > best_cost
+			|| (cost == best_cost
+			    && w.regno >= g.webs[best].regno)))
+	continue;
+      int woff = 0, wepoch = 0;
+      const char *wwhy = NULL;
+      if (!web_spill_admissible_p (fn, w.regno, ctx, &woff, &wepoch, &wwhy))
 	{
-	  best = i;
-	  best_cost = cost;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "lreg-alloc: candidate r%u inadmissible (%s)\n",
+		     w.regno, wwhy);
+	  /* Report the cheapest inadmissible candidate's blocker.  */
+	  if (!blocked_why || cost < blocked_cost)
+	    {
+	      blocked_why = wwhy;
+	      blocked_cost = cost;
+	    }
+	  continue;
 	}
+      best = i;
+      best_cost = cost;
+      *max_delta = woff;
+      *epoch_out = wepoch;
     }
+  if (best < 0)
+    *why = blocked_why ? blocked_why : "lreg-spill-no-candidate";
   return best;
 }
 
@@ -956,16 +1657,19 @@ rollback (spill_transaction &tx)
   tx.replaced_to.truncate (0);
 }
 
-/* Spill web REGNO through Dst scratch row ROW: SFPSTORE mod0 4 after
-   each def, SFPLOAD mod0 4 before each reading insn, fresh pseudo per
-   insn.  New pseudos are recorded in SPILL_TMPS; every stream change
-   is recorded in TX.  Returns false with *WHY named when some insn
-   does not admit the rewrite (the caller rolls the whole transaction
-   back) -- never asserts after emission.  */
+/* Spill web REGNO through the entry-relative Dst scratch offset X:
+   SFPSTORE mod0 4 after each def, SFPLOAD mod0 4 before each reading
+   insn, fresh pseudo per insn, each immediate compensated by the
+   proven RWC delta at its point (X - delta names the same physical
+   row everywhere).  New pseudos are recorded in SPILL_TMPS; every
+   stream change is recorded in TX.  Returns false with *WHY named
+   when some insn does not admit the rewrite (the caller rolls the
+   whole transaction back) -- never asserts after emission.  */
 
 static bool
-spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
-	   bitmap spill_tmps, spill_transaction &tx, const char **why)
+spill_web (function *fn, unsigned regno, HOST_WIDE_INT x, int addr_mode,
+	   const spill_ctx &ctx, bitmap spill_tmps, spill_transaction &tx,
+	   const char **why)
 {
   rtx preg = regno_reg_rtx[regno];
 
@@ -996,6 +1700,21 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	  if (!reads && !writes)
 	    continue;
 
+	  unsigned uid = INSN_UID (insn);
+	  if (uid >= ctx.cc_before.length ())
+	    {
+	      *why = "lreg-alloc-post-scan-insn";
+	      return false;
+	    }
+	  HOST_WIDE_INT imm_r = x - ctx.off_before[uid];
+	  HOST_WIDE_INT imm_w = x - ctx.off_after[uid];
+	  if ((reads && (imm_r < 0 || imm_r > 1023))
+	      || (writes && (imm_w < 0 || imm_w > 1023)))
+	    {
+	      *why = "lreg-spill-no-free-dst";
+	      return false;
+	    }
+
 	  rtx q = gen_reg_rtx (XTT32SImode);
 	  bitmap_set_bit (spill_tmps, REGNO (q));
 
@@ -1014,7 +1733,7 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	    {
 	      rtx_insn *reload = emit_insn_before (
 		gen_rvtt_sfpload_lv_int (q, const0_rtx, const0_rtx,
-					 const0_rtx, GEN_INT (row),
+					 const0_rtx, GEN_INT (imm_r),
 					 rvtt_gen_rtx_noval (XTT32SImode),
 					 rvtt_gen_rtx_noval (XTT32SImode),
 					 GEN_INT (4 /* INT32 */),
@@ -1024,16 +1743,17 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	      if (dump_file)
 		fprintf (dump_file,
 			 "lreg-alloc: reload insn %d (r%u -> r%u) before "
-			 "insn %d from Dst row " HOST_WIDE_INT_PRINT_DEC "\n",
+			 "insn %d from Dst row " HOST_WIDE_INT_PRINT_DEC
+			 " (offset " HOST_WIDE_INT_PRINT_DEC " - delta %d)\n",
 			 INSN_UID (reload), regno, REGNO (q),
-			 INSN_UID (insn), row);
+			 INSN_UID (insn), imm_r, x, ctx.off_before[uid]);
 	    }
 
 	  if (writes)
 	    {
 	      rtx_insn *store = emit_insn_after (
 		gen_rvtt_sfpstore_int (const0_rtx, const0_rtx, const0_rtx,
-				       GEN_INT (row), q,
+				       GEN_INT (imm_w), q,
 				       GEN_INT (4 /* INT32 */),
 				       GEN_INT (addr_mode)),
 		insn);
@@ -1041,10 +1761,10 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	      if (dump_file)
 		fprintf (dump_file,
 			 "lreg-alloc: spill store insn %d (r%u via r%u) "
-			 "after insn %d to Dst row "
-			 HOST_WIDE_INT_PRINT_DEC "\n",
+			 "after insn %d to Dst row " HOST_WIDE_INT_PRINT_DEC
+			 " (offset " HOST_WIDE_INT_PRINT_DEC " - delta %d)\n",
 			 INSN_UID (store), regno, REGNO (q),
-			 INSN_UID (insn), row);
+			 INSN_UID (insn), imm_w, x, ctx.off_after[uid]);
 	    }
 	}
     }
@@ -1053,8 +1773,26 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 
 /* --------------------------- enforcement --------------------------- */
 
+/* Name a refusal to the user (the enabled allocator stood down; the
+   post-RA lreg-pressure-exceeded error follows).  The parenthesized
+   name is the machine-parseable token, mirroring the spill-diag error
+   format.  Notes appear only under the flag on refusing compilations;
+   flag-off diagnostics are untouched.  */
+
 static void
-dump_spill_refusal (const spill_ctx &ctx)
+inform_refusal (function *fn, const char *name, const char *detail,
+		rtx_insn *at)
+{
+  location_t loc = (at && INSN_HAS_LOCATION (at))
+    ? INSN_LOCATION (at) : fn->function_start_locus;
+  inform (loc,
+	  "SFPU LREG allocator refused to spill (%s): %s; "
+	  "the register-pressure error stands",
+	  name, detail ? detail : "unproven");
+}
+
+static void
+dump_spill_refusal (function *fn, const spill_ctx &ctx)
 {
   if (dump_file)
     fprintf (dump_file,
@@ -1062,6 +1800,7 @@ dump_spill_refusal (const spill_ctx &ctx)
 	     "keeping lreg-pressure-exceeded\n",
 	     ctx.refusal, ctx.detail ? ctx.detail : "",
 	     ctx.at ? INSN_UID (ctx.at) : -1);
+  inform_refusal (fn, ctx.refusal, ctx.detail, ctx.at);
 }
 
 static unsigned
@@ -1070,10 +1809,14 @@ enforce_colorability (function *fn)
   unsigned peak = function_peak_pressure (fn);
   if (peak <= SFPU_REG_NUM)
     {
+      /* Peak pressure within the file does NOT certify 8-colorability
+	 (the chromatic number can exceed the clique bound); it is the
+	 no-op condition: today's pipeline (IRA + the post-RA spill
+	 diagnosis) handles this case exactly as before, byte-identically.  */
       if (dump_file)
 	fprintf (dump_file,
 		 "lreg-alloc: peak pressure %u within the %u-LREG file; "
-		 "no-op (colorability=trivial)\n",
+		 "no-op (allocation left to IRA as today)\n",
 		 peak, SFPU_REG_NUM);
       return 0;
     }
@@ -1105,6 +1848,7 @@ enforce_colorability (function *fn)
       rollback (tx);
       if (had_mutations)
 	df_analyze ();
+      inform_refusal (fn, name, detail, NULL);
       return 0;
     };
 
@@ -1124,7 +1868,9 @@ enforce_colorability (function *fn)
 	    fprintf (dump_file,
 		     "lreg-alloc: %u web(s) DSATUR-colored with %u colors "
 		     "after %u spill(s), %u round-trip insn(s); "
-		     "colorability=proven\n",
+		     "colorability=proven (graph-level certificate: "
+		     "pattern tie/matching constraints remain IRA's, with "
+		     "the post-RA spill diagnosis as backstop)\n",
 		     g.webs.length (), SFPU_REG_NUM, spills,
 		     tx.n_round_trips ());
 	  return spills ? TODO_df_finish : 0;
@@ -1143,33 +1889,33 @@ enforce_colorability (function *fn)
 	  ctx_scanned = true;
 	  if (!ctx.ok)
 	    {
-	      dump_spill_refusal (ctx);
+	      dump_spill_refusal (fn, ctx);
 	      return 0;		/* precedes any mutation */
 	    }
 	}
 
-      int victim = choose_spill_web (g, blocked);
+      int vmax_delta = 0, vepoch = 0;
+      const char *why = NULL;
+      int victim = choose_spill_web (g, blocked, fn, ctx, &vmax_delta,
+				     &vepoch, &why);
       if (victim < 0)
-	return bail ("lreg-spill-no-candidate",
-		     "only reservations/reload temporaries in the blocked "
-		     "neighborhood");
+	return bail (why, "no admissible web in the blocked neighborhood");
 
-      HOST_WIDE_INT row = choose_scratch_row (ctx);
-      if (row < 0)
+      HOST_WIDE_INT x = choose_scratch_row (ctx, vmax_delta, vepoch);
+      if (x < 0)
 	return bail ("lreg-spill-no-free-dst", "scratch rows exhausted");
 
       unsigned vregno = g.webs[victim].regno;
       if (dump_file)
 	fprintf (dump_file,
 		 "lreg-alloc: spilling web r%u (occ %u, degree %u) to Dst "
-		 "scratch row " HOST_WIDE_INT_PRINT_DEC
-		 " (mod0 4 INT32 round trip, addr_mode %d)\n",
-		 vregno, g.webs[victim].occ, g.degree[victim], row,
-		 ctx.noinc_addr_mode);
+		 "scratch offset " HOST_WIDE_INT_PRINT_DEC
+		 " (mod0 4 INT32 round trip, addr_mode %d, max delta %d)\n",
+		 vregno, g.webs[victim].occ, g.degree[victim], x,
+		 ctx.noinc_addr_mode, vmax_delta);
 
-      const char *why = NULL;
-      if (!spill_web (fn, vregno, row, ctx.noinc_addr_mode, spill_tmps, tx,
-		      &why))
+      if (!spill_web (fn, vregno, x, ctx.noinc_addr_mode, ctx, spill_tmps,
+		      tx, &why))
 	return bail (why, "web rewrite abandoned");
       spills++;
       df_analyze ();

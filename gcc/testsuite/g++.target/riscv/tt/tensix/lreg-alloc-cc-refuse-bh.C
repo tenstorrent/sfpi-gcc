@@ -4,7 +4,7 @@
 // can architecturally set CC -- the conservative audited effect) makes
 // the function CC-impure: the allocator refuses by the established
 // name (cc-enable-unproved) and the named pressure error stays.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "cc-enable-unproved" "rvtt_lp_alloc" } }
 // { dg-final { scan-rtl-dump-not "colorability=proven" "rvtt_lp_alloc" } }
 // { dg-error "lreg-pressure-exceeded" "" { target *-*-* } 0 }

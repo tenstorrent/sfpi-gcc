@@ -2,7 +2,7 @@
 // accesses claim rows 0 and 252, so the allocator's proven-free
 // scratch row moves off the default 252 to 248 (the +/-3 mod 256
 // aliasing window around every used immediate is excluded).
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -fdump-rtl-rvtt_lp_alloc-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-lreg-alloc -mtt-tensix-dst-layout-32b -fdump-rtl-rvtt_lp_alloc-details" }
 // { dg-final { scan-rtl-dump "colorability=proven" "rvtt_lp_alloc" } }
 // { dg-final { scan-assembler {\mSFPSTORE\tL[0-7], 248, 4, 7} } }
 // { dg-final { scan-assembler-not {\mSFPSTORE\tL[0-7], 252, 4, 7} } }
