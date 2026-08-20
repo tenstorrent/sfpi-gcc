@@ -952,7 +952,9 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
      saves two pushed SFPLOADI words per iteration for a one-time
      three-word programming cost (rvtt-cost.md delivery model: a
      RISC-pushed word ~ 1.23 replayed slots), so it pays for itself at
-     two proven trips;
+     two trips; a loop PROVEN single-trip refuses (a proven loss), and
+     a runtime trip count is admitted (correctness is trip-independent;
+     worst case one extra pushed word on a single-trip entry);
    - under LREG pressure (peak > SFPU_REG_NUM), an out-of-loop
      proven-constant value is reprogrammed in place: the programming
      writes replace the materialization and every use reads the
@@ -962,7 +964,7 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
      propagation passes).
    Selection is priced: in-loop candidates (per-iteration savings) rank
    above pressure-only candidates; within a class, more uses first.
-   Refusals: prgm-exhausted, trip-count-unproven, cc-region-unproven,
+   Refusals: prgm-exhausted, trip-count-single-trip, cc-region-unproven,
    qsr-unproven, plus the TU freedom-proof refusals shared with the M3
    class.
 
@@ -1951,7 +1953,7 @@ transform (function *fn, prgm_state *st)
    PRGM registers by priced selection.  Class LOOP: an in-loop
    invariant constant materialization is programmed once on the loop
    entry edge (saves two pushed SFPLOADI words per proven iteration for
-   a one-time three-word cost, so it needs proven trips >= 2:
+   a one-time three-word cost, refusing only a proven single trip:
    rvtt-cost.md delivery model).  Class PRESSURE: under LREG
    over-pressure, an out-of-loop proven-constant value is reprogrammed
    in place -- the constant register read occupies no allocatable LREG,
@@ -2060,34 +2062,72 @@ first_iteration_value (class loop *loop, edge entry, tree op)
   return NULL_TREE;
 }
 
-/* Prove the loop's latch executes at least once (trips >= 2): evaluate
-   the single exit test on the first iteration and require it to stay
-   in the loop.  Refuses when anything fails to fold.  */
+/* Classify the loop's trip count for the LOOP-class break-even by
+   evaluating the single exit test on the first iteration.
 
-static bool
-loop_second_trip_proven_p (class loop *loop, edge entry)
+   The classification prices; it never licenses.  Correctness of the
+   LOOP class is trip-independent: the programming point sits on the
+   never-speculated entry edge of the rotated loop (control reaching it
+   executes the header at least once), the programmed register is
+   established there before any replaced use, and nothing in the
+   admitted loop body clobbers it (the sfpu-barrier/opaque gates refuse
+   bodies with foreign effects) -- so residency holds on every entered
+   iteration whatever the trip count.  What the bounded first-iteration
+   evaluation decides is only which side of the two-trip break-even the
+   loop is on:
+
+   TRIPS_AT_LEAST_2 -- the exit test provably stays in the loop after
+   the first trip: the two-trip break-even is proven and the programming
+   strictly pays.
+   TRIPS_PROVEN_SINGLE -- the exit test provably leaves the loop after
+   the first trip: the one-time programming can never recover its cost;
+   the candidate refuses by name (a proven loss).  Defensive: this
+   evaluator folds a strict subset of what scalar evolution folds, so a
+   constant single-trip loop has normally been flattened by complete
+   unrolling long before this pass; the branch keeps the pricing
+   fail-closed rather than relying on that pipeline fact.
+   TRIPS_UNKNOWN -- the test does not fold (runtime trip counts, the
+   dominant LLK loop shape): admitted.  The worst case is a single-trip
+   entry costing one extra pushed word per candidate (programming is
+   W+1 words against the W it saves on the executed iteration,
+   rvtt-cost.md delivery model); every second trip onward is pure
+   saving.  (The CC-canonical peel class is different: its peel
+   DUPLICATES a body unconditionally, so it genuinely needs proven
+   trips and keeps its own named refusal.)  */
+
+enum loop_trip_class
+{
+  TRIPS_AT_LEAST_2,
+  TRIPS_PROVEN_SINGLE,
+  TRIPS_UNKNOWN
+};
+
+static loop_trip_class
+classify_second_trip (class loop *loop, edge entry)
 {
   auto_vec<edge> exits = get_loop_exit_edges (loop);
   if (exits.length () != 1)
-    return false;
+    return TRIPS_UNKNOWN;
   edge exit = exits[0];
   gimple_stmt_iterator last = gsi_last_bb (exit->src);
   gcond *cond = gsi_end_p (last) ? nullptr
     : dyn_cast <gcond *> (gsi_stmt (last));
   if (!cond)
-    return false;
+    return TRIPS_UNKNOWN;
   tree lhs = first_iteration_value (loop, entry, gimple_cond_lhs (cond));
   tree rhs = first_iteration_value (loop, entry, gimple_cond_rhs (cond));
   if (!lhs || !rhs)
-    return false;
+    return TRIPS_UNKNOWN;
   tree test = fold_binary (gimple_cond_code (cond), boolean_type_node,
 			   lhs, rhs);
   if (!test || TREE_CODE (test) != INTEGER_CST)
-    return false;
+    return TRIPS_UNKNOWN;
   edge true_edge, false_edge;
   extract_true_false_edges_from_block (exit->src, &true_edge, &false_edge);
   edge taken = integer_zerop (test) ? false_edge : true_edge;
-  return taken && taken != exit;
+  if (!taken)
+    return TRIPS_UNKNOWN;
+  return taken == exit ? TRIPS_PROVEN_SINGLE : TRIPS_AT_LEAST_2;
 }
 
 static unsigned
@@ -2479,21 +2519,38 @@ residency_transform (function *fn, prgm_state *st)
 	  continue;
 	}
 
-      /* Profitability: the entry-edge programming (three pushed words
-	 once: two staging SFPLOADI + one SFPCONFIG) pays for itself
-	 against the two pushed SFPLOADI words saved per iteration at
-	 two proven trips (rvtt-cost.md delivery model).  The proof is
-	 the structural first-iteration exit-test evaluation.  (The
-	 CC-canonical peel class prices its peel separately below.)  */
-      if (!peel && !loop_second_trip_proven_p (loop, entry))
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "const-residency: loop bb %d refused "
-		     "(trip-count-unproven: the two-trip break-even is "
-		     "not proven)\n", loop->header->index);
-	  continue;
-	}
+      /* Profitability: the entry-edge programming (W+1 pushed words
+	 once) pays for itself against the W pushed SFPLOADI words
+	 saved per iteration at two trips (rvtt-cost.md delivery
+	 model).  Correctness is trip-independent -- see
+	 classify_second_trip -- so only a PROVEN single-trip loop
+	 refuses (a proven loss); a runtime trip count is admitted with
+	 a worst case of one extra pushed word on a single-trip entry.
+	 (The CC-canonical peel class prices its peel separately below
+	 and genuinely needs proven trips for the peel itself.)  */
+      if (!peel)
+	switch (classify_second_trip (loop, entry))
+	  {
+	  case TRIPS_AT_LEAST_2:
+	    break;
+	  case TRIPS_PROVEN_SINGLE:
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "const-residency: loop bb %d refused "
+		       "(trip-count-single-trip: the loop provably runs "
+		       "one trip; the programming can never recover its "
+		       "cost)\n", loop->header->index);
+	    continue;
+	  case TRIPS_UNKNOWN:
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "const-residency: loop bb %d admits runtime trips "
+		       "(entry-edge programming is never speculated; "
+		       "establishment and no-clobber are trip-independent; "
+		       "worst case one extra pushed word per candidate on "
+		       "a single-trip entry)\n", loop->header->index);
+	    break;
+	  }
 
       auto_vec<residency_candidate> this_loop;
       basic_block *body = get_loop_body_in_dom_order (loop);
