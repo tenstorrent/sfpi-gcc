@@ -139,9 +139,10 @@ rvtt_lut_lookup (unsigned num_ranges, bool sign_restore)
      and WH NaN results carry non-canonical payloads (WH SFPMAD.md).
      No extension class is certified on WH without a finite-math
      license.  (The same enumeration shows the base all-affine
-     formation shares this WH negative-NaN divergence; that
-     pre-existing finding is reported in the lane evidence, not
-     changed here.)  */
+     formation shares this WH negative-NaN divergence; the pass now
+     fails closed on it: gimple-rvtt-lut-select.cc refuses every WH
+     formation without a -ffinite-math-only license by the name
+     lut-wh-negative-nan-divergent.)  */
 
 bool
 rvtt_lut_leaf_class_certified_p (rvtt_lut_leaf_class cls,

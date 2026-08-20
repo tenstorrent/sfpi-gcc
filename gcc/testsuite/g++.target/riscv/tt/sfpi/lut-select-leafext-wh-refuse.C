@@ -4,8 +4,10 @@
 // fails on WH for negative-NaN inputs (SFPABS keeps the -NaN sign and
 // the WH compare-subtract inherits it, routing those lanes to range 0
 // while the LUT buckets them by magnitude into the tail; WH NaN
-// results also carry non-canonical payloads).  Refuse by name.
-// { dg-final { scan-tree-dump "refused \\(lut-leaf-bitexact-unproven\\)" "rvtt_lut_select" } }
+// results also carry non-canonical payloads).  Refuse by name: the
+// whole-formation WH guard (lut-wh-negative-nan-divergent) fires at
+// the capability check, ahead of the per-slot leaf admission.
+// { dg-final { scan-tree-dump "refused \\(lut-wh-negative-nan-divergent\\)" "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-not "formed " "rvtt_lut_select" } }
 // { dg-final { scan-assembler-not "SFPLUTFP32" } }
 
