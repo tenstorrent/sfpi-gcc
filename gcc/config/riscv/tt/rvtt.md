@@ -1027,7 +1027,9 @@
     if (noval_or_omit_operand (operands[1], GET_MODE (operands[1])))
       FAIL; // No need to do anything
 
-    rvtt_merge_lv_src (&operands[1], &operands[2]);
+    rvtt_merge_lv_src (&operands[1], &operands[2],
+        INTVAL (operands[4]) & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST
+	? nullptr : &operands[3]);
   }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
@@ -1421,7 +1423,7 @@
    #"
   "&& !noval_or_omit_operand (operands[1], GET_MODE (operands[1]))"
   {
-    rvtt_merge_lv_src (&operands[1], &operands[2]);
+    rvtt_merge_lv_src (&operands[1], &operands[2], &operands[3]);
   }
   [(set_attr "type" "tensix")])
 
