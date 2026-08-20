@@ -86,6 +86,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
    expand.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
 
+/* Replay-window loop-unroll request: annotation only (loop->unroll on
+   qualifying counted SFPU row loops, consumed by the generic RTL
+   unroller so the always-on replay former can capture the row).  Runs
+   last so its typed census sees the final pre-expansion statement
+   stream.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_replay_unroll);
+
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
 INSERT_PASS_AFTER (pass_cse, 1, pass_rvtt_fix_ebreak);

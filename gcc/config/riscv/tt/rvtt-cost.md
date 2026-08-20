@@ -706,6 +706,34 @@
   ;;     refusals MORE negative (the safe direction).
   (XTT_REPLAY_COST_TURNAROUND_X100      70)
   (XTT_REPLAY_COST_RECORD_OVERHEAD_X100 300)
+  ;; Replay-window loop-unroll request (-mtt-tensix-optimize-replay-
+  ;; loop-unroll, lane CV 2026-08-20).  A counted single-block SFPU row
+  ;; loop delivers its whole row every trip; the same row written by a
+  ;; production author under `#pragma GCC unroll 8' is captured by the
+  ;; always-on replay former as one execute-while-record pass plus
+  ;; (factor - 1) one-word launches per group.  The pass grants the
+  ;; compiler that same request from typed loop-shape facts alone.
+  ;;
+  ;;   LOOP_UNROLL_FACTOR (8) - the group size requested.  Provenance:
+  ;;     the five measured pin-12 hand/semantic pairs whose hand arms
+  ;;     are exactly this factor (sqrt/cbrt/hardsigmoid/hardshrink/
+  ;;     softsign: every production eltwise row kernel in the corpus
+  ;;     carries `#pragma GCC unroll 8'); the per-group record
+  ;;     amortization curve (W+1+(k-1))/k flattens past k~8 while the
+  ;;     re-record delivery per group stays W+1, so larger factors buy
+  ;;     little and cost code size.  A cost-table machine constant of
+  ;;     the same class as PUSH/TURNAROUND: no operation identity,
+  ;;     opcode calendar, coefficient value, or instruction-word
+  ;;     fingerprint participates.
+  ;;   LOOP_UNROLL_MIN_WORDS (4) - the replay former's MIN_SEQUENCE:
+  ;;     smaller rows cannot form a window, so unrolling them is pure
+  ;;     code growth.
+  ;;   LOOP_UNROLL_MAX_WORDS (256) - code-size bound on factor times
+  ;;     the estimated row words (the launch-unroll analog of
+  ;;     XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS).
+  (XTT_REPLAY_LOOP_UNROLL_FACTOR      8)
+  (XTT_REPLAY_LOOP_UNROLL_MIN_WORDS   4)
+  (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS 256)
 ])
 
 
