@@ -12,3 +12,10 @@ re-mined.
 - cast-fp16a-rne/ — castfp32tofp16a software-RNE cut vs SFP_STOCH_RND
   mod1=0 rnd=0. NOT-EQUAL (33,810,429/2^32). Refusal:
   cast-cut-equivalence-refuted. laneCT 2026-08-20.
+- int-abs-negate-select/ — conditional-negate CC region (v_if (v<0)
+  r=0-v) vs SFPABS mod1=0 integer. EQUAL (0/2^32, INT32_MIN included;
+  streams hash-identical). LICENSES the rvtt_int_abs fold
+  (-mtt-tensix-optimize-int-abs, gimple-rvtt-int-abs.cc); the fold must
+  be retired if this RESULT ever stops being EQUAL. BH-proven; QSR
+  changes integer-abs(INT32_MIN) per the simulator, so the pass gate is
+  BH-only. laneCU 2026-08-20.

@@ -697,6 +697,10 @@ mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
 Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.
 
+mtt-tensix-optimize-int-abs
+Target Var(riscv_tt_opt_int_abs) Init(0)
+Fold a conditional-negate Tensix SFPU CC region (predicated two's-complement negation under a signed-int sign test against 0) into the single integer SFPABS, per the shipped exhaustive equivalence proof; misses refuse by name and keep the CC lowering byte-identically.
+
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-setexp-fold): fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
