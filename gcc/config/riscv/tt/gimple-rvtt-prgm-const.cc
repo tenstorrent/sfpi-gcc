@@ -75,9 +75,18 @@ along with GCC; see the file COPYING3.  If not see
      node IPA inlining has already consumed) and ordinary scalar
      compiler builtins are transparent;
    - the programming point must run under the all-lanes CC state: the sfpi
-     structured-CC model makes function entry all-lanes, and any CC-writing
-     statement anywhere in the function refuses (cc-region-unproven), so
-     the entry state provably reaches the loop entry edge.
+     structured-CC model makes function entry all-lanes, and the proof is
+     that no fn-local CC-writing statement can execute before the
+     programming point -- a CC writer whose block can reach the point
+     (fn-local CFG reachability, computed backwards from the candidate
+     loop's header so it covers the programming point and every block
+     between a cross-loop hoisted point and the loop) refuses by name
+     (cc-region-unproven).  A CC writer the point can never be reached
+     from -- post-loop epilogue code, a sibling branch -- leaves the
+     entry state provably intact on every path to the point, so it no
+     longer defeats the proof (laneDM widening; the fn-entry-all-lanes
+     model and the call-transparency assumption are unchanged from the
+     function-granular version of this proof).
 
    Refusals never mutate the CFG: flag-off and every refusal path are
    byte-identical.  */
@@ -837,11 +846,10 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
   return false;
 }
 
-/* Any CC-writing statement in FN defeats the all-lanes proof for the
-   programming point.  */
+/* Every CC-writing statement in FN, collected once per function.  */
 
-static bool
-function_writes_cc_p (function *fn)
+static void
+collect_cc_writers (function *fn, auto_vec<gimple *> *out)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -850,8 +858,71 @@ function_writes_cc_p (function *fn)
       {
 	const rvtt_insn_data *insnd = rvtt_get_insn_data (gsi_stmt (gsi));
 	if (insnd && insnd->sets_cc (as_a <gcall *> (gsi_stmt (gsi))))
-	  return true;
+	  out->safe_push (gsi_stmt (gsi));
       }
+}
+
+/* Whether any CC writer in WRITERS can execute before the programming
+   point (POINT_BB, and POINT_STMT within it when the point is a
+   statement rather than the block entry).  The all-lanes proof needs
+   the function-entry lane state to reach the point on every path; a
+   fn-local CC writer defeats it exactly when some CFG path runs the
+   writer and then reaches the point.  Reachability is block-granular
+   (fail-closed over-approximation of "can execute before"): the reach
+   set is computed backwards from POINT_BB's predecessors, so POINT_BB
+   itself is in the set only when it lies on a cycle; a writer in
+   POINT_BB outside any cycle defeats the proof exactly when it
+   precedes POINT_STMT in the block (a block-entry point is defeated by
+   any writer in the block).  Everything else about the proof -- the
+   fn-entry-all-lanes model and call transparency -- is unchanged from
+   the function-granular version.  */
+
+static bool
+cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
+			  basic_block point_bb, gimple *point_stmt)
+{
+  if (writers.is_empty ())
+    return false;
+
+  hash_set<basic_block> reach;
+  auto_vec<basic_block, 16> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, point_bb->preds)
+    work.safe_push (e->src);
+  while (!work.is_empty ())
+    {
+      basic_block b = work.pop ();
+      if (reach.add (b))
+	continue;
+      FOR_EACH_EDGE (e, ei, b->preds)
+	work.safe_push (e->src);
+    }
+
+  for (gimple *w : writers)
+    {
+      basic_block wbb = gimple_bb (w);
+      if (!wbb)
+	continue;
+      if (reach.contains (wbb))
+	return true;
+      if (wbb == point_bb)
+	{
+	  /* POINT_BB is not on a cycle (the reach test above would have
+	     caught it): the writer executes before the point exactly
+	     when it textually precedes it.  */
+	  if (!point_stmt)
+	    return true;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (wbb);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    {
+	      if (gsi_stmt (gsi) == w)
+		return true;
+	      if (gsi_stmt (gsi) == point_stmt)
+		break;
+	    }
+	}
+    }
   return false;
 }
 
@@ -1679,12 +1750,38 @@ transform (function *fn, prgm_state *st)
       return false;
     }
 
-  if (function_writes_cc_p (fn))
-    {
-      if (dump_file)
-	fprintf (dump_file, "prgm-const: refused (cc-region-unproven)\n");
-      return false;
-    }
+  /* The all-lanes proof, scoped by reachability: a candidate refuses
+     exactly when some fn-local CC writer can execute before its
+     programming point.  One reach set from the candidate loop's header
+     covers the (possibly cross-loop hoisted) entry-edge point and every
+     block between it and the loop: the point can reach the header, so
+     each of the point's CFG ancestors is an ancestor of the header
+     too.  */
+  {
+    auto_vec<gimple *> cc_writers;
+    collect_cc_writers (fn, &cc_writers);
+    if (!cc_writers.is_empty ())
+      {
+	unsigned kept = 0;
+	for (candidate &c : candidates)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, c.loop->header,
+					  nullptr))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "prgm-const: loop bb %d refused "
+			   "(cc-region-unproven): a CC write reaches the "
+			   "programming point\n", c.loop->header->index);
+		continue;
+	      }
+	    candidates[kept++] = c;
+	  }
+	candidates.truncate (kept);
+	if (candidates.is_empty ())
+	  return false;
+      }
+  }
 
   if (!st->initialized)
     {
@@ -2570,34 +2667,67 @@ residency_transform (function *fn, prgm_state *st)
 		 facts.reason);
       return false;
     }
-  if (function_writes_cc_p (fn))
-    {
-      /* The CC-canonical peel class is exempt: its programming point
-	 is placed after the peeled iteration's own all-lanes SFPENCC,
-	 and every replaced materialization is proven to have executed
-	 in that same architectural state -- both facts are local to
-	 the peeled loop and independent of other CC writes in the
-	 function.  Every other class still refuses by name.  */
-      unsigned kept = 0;
-      for (residency_candidate &c : loop_cands)
-	if (c.peel)
-	  loop_cands[kept++] = c;
-      loop_cands.truncate (kept);
-      pressure_cands.truncate (0);
-      if (loop_cands.is_empty ())
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
-		     " -- in-function CC writes defeat the all-lanes"
-		     " programming proof; cross-call ambient proof is not on"
-		     " record here\n");
-	  return false;
-	}
-      if (dump_file)
-	fprintf (dump_file, "const-residency: non-peel classes refused "
-		 "(cc-region-unproven); the CC-canonical peel class "
-		 "proceeds on its local lane-state proof\n");
-    }
+  {
+    auto_vec<gimple *> cc_writers;
+    collect_cc_writers (fn, &cc_writers);
+    if (!cc_writers.is_empty ())
+      {
+	/* The all-lanes proof, scoped by reachability: a candidate
+	   refuses exactly when some fn-local CC writer can execute
+	   before its programming point (the same reach-set cover as
+	   the fusion class: the loop header's CFG ancestors include
+	   the hoisted entry point's).  The CC-canonical peel class is
+	   exempt: its programming point is placed after the peeled
+	   iteration's own all-lanes SFPENCC, and every replaced
+	   materialization is proven to have executed in that same
+	   architectural state -- both facts are local to the peeled
+	   loop and independent of other CC writes in the function.
+	   The pressure class's point is its own in-place statement.  */
+	unsigned kept = 0;
+	for (residency_candidate &c : loop_cands)
+	  {
+	    if (!c.peel
+		&& cc_write_reaches_point_p (cc_writers, c.loop->header,
+					     nullptr))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: loop bb %d refused "
+			   "(cc-region-unproven): a CC write reaches the "
+			   "programming point\n", c.loop->header->index);
+		continue;
+	      }
+	    loop_cands[kept++] = c;
+	  }
+	loop_cands.truncate (kept);
+	kept = 0;
+	for (residency_candidate &c : pressure_cands)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
+					  c.load))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: pressure candidate in bb %d "
+			   "refused (cc-region-unproven): a CC write reaches "
+			   "the in-place programming point\n",
+			   gimple_bb (c.load)->index);
+		continue;
+	      }
+	    pressure_cands[kept++] = c;
+	  }
+	pressure_cands.truncate (kept);
+	if (loop_cands.is_empty () && pressure_cands.is_empty ())
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
+		       " -- in-function CC writes reach every candidate"
+		       " programming point; cross-call ambient proof is not on"
+		       " record here\n");
+	    return false;
+	  }
+      }
+  }
   if (!st->initialized)
     {
       st->claimed = facts.claimed;
