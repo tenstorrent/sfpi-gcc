@@ -7,15 +7,22 @@
 //   - SFPCAST mod 2 (the documented BH cast-as-ABS hardware bug).
 // Each row dissolves at the opaque member; a CC-writing SFPIADD
 // (CC_LT0) instead refuses at the CC write by name.  The D3 latency
-// audit gave SFPABS mod 1 a Layer-1 effect set, so the abs rows now
-// pass effect discovery and refuse one gate later, at the Layer-4
-// capability tables (no delay/placement/descriptor program is proven
-// for ABS) -- still byte-identical refusals, never formation.
+// audit gave SFPABS mod 1 a Layer-1 effect set (the rows then refused
+// one gate later at the Layer-4 tables), and the lane CZ enumerated
+// vocabulary admission PROVED the ABS descriptor program
+// (differential vs the pinned simulators, macro-planner-unary-*), so
+// the abs rows now legitimately FORM -- this guard keeps watching the
+// still-unproven neighbors: both stochastic/bug cast mods stay
+// opaque, and the CC-writing accumulate still refuses at the CC gate
+// by name, never forming.
 // { dg-final { scan-rtl-dump-times "row-opaque-effect" 8 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "event-delay-unproven|descriptor-program-unproven|row-not-closed" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "cc-template-unsupported" 4 "rvtt_macro_planner" } }
-// { dg-final { scan-assembler-not "\\.ttinsn" } }
-// { dg-final { scan-assembler-not "SFPCONFIG" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=4 runs=1" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump-times "Macro-planner descriptor-word dest=0: 0x7d0000c1" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-not "SFPABS" } }
+// { dg-final { scan-assembler-times "SFPCAST" 8 } }
+// { dg-final { scan-assembler "SFPIADD" } }
 
 __attribute__((noinline)) void nearmiss_abs_row ()
 {
