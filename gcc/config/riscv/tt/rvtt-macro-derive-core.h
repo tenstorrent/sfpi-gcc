@@ -120,7 +120,11 @@ struct row_spec
   int macro_slot[4];		/* issue slot per macro carrier	       */
   int ii;			/* row initiation interval	       */
   int last_issue_slot;
-  explicit_issue explicits[8];
+  /* 16 = the architectural sequencer bound (lane DG2 4.4: the old 8
+     was an array-size artifact whose silent overflow truncation
+     dropped real hazard constraints).  The builder refuses by name
+     beyond this bound -- never truncates.  */
+  explicit_issue explicits[16];
   unsigned n_explicits;
   bool vd_alternates;		/* value-carrier VD rewrite period is
 				   two rows (else one)		       */
