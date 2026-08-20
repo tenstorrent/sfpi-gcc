@@ -2,13 +2,14 @@
 // with no raw regions (the freedom proof itself passes):
 // 1. every PRGM register already claimed by user vConstFloatPrgm
 //    assignments (sfpwriteconfig_v): prgm-exhausted;
-// 2. a CC-writing statement in the candidate's function defeats the
-//    all-lanes proof for the programming point: cc-region-unproven;
+// 2. a CC-writing statement that can execute before the programming
+//    point (here it precedes the loop) defeats the all-lanes proof:
+//    cc-region-unproven (reach-scoped per the laneDM widening);
 // 3. an SFPADDI whose operand is not a single-use SFPMUL is not in the
 //    admitted fusion class: no candidate, bytes untouched.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump "prgm-const: refused .prgm-exhausted.:" "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump "prgm-const: refused .cc-region-unproven." "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump "prgm-const: loop bb \\d+ refused .cc-region-unproven.: a CC write reaches the programming point" "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-not "prgm-const: allocated" "rvtt_prgm_const" } }
 
 void user_claims_all_prgm ()
