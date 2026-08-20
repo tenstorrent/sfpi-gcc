@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
 // Wormhole: identical coefficient placement discipline.
 // { dg-final { scan-tree-dump-times "formed fp32-3entry-sgn-update" 1 "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-times "placed coefficient materialization in loop preheader" 6 "rvtt_lut_select" } }

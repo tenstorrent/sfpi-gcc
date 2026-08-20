@@ -1,4 +1,4 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
 // Wormhole has the same FP32 3-entry sign-retain capability; the fold
 // and the coefficient placement fire identically.
 // { dg-final { scan-tree-dump-times "formed fp32-3entry-sgn-retain \\(mod0 0x4\\)" 1 "rvtt_lut_select" } }

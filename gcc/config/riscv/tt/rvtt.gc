@@ -289,7 +289,8 @@ combine () {
 // every input, so consume z directly and let a single-use exexp die.  The
 // combiner's same-BB/same-CC-region discipline keeps the lane masks of both
 // instructions identical, which the equivalence requires.
-// Gated: -mtt-tensix-optimize-setexp-fold (default off).
+// Gated: -mtt-tensix-optimize-setexp-fold (compiler-default ON, promoted
+// after silicon validation; -mno-tt-tensix-optimize-setexp-fold disables).
 combine (SETEXP_FOLD) {
   exp|OU = sfpexexp_lv (exp_lv, z, SFPEXEXP_MOD1_NODEBIAS);
   res = sfpsetexp_v_lv (lv, man, exp, SFPSETEXP_MOD1_LREG);

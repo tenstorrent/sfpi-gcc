@@ -44,9 +44,16 @@ along with GCC; see the file COPYING3.  If not see
 
    Equivalence notes (first increment, FP32 3-entry, SGN_UPDATE):
    - the hardware buckets on strict magnitude-bit compares of |x|;
-     for the proven non-negative magnitude these order identically to
-     the tree's float less-than compares, including for NaN (bucket
-     num_ranges-1 on both paths) and infinities;
+     ON BLACKHOLE, for the proven non-negative magnitude these order
+     identically to the tree's float less-than compares, including for
+     NaN (bucket num_ranges-1 on both paths) and infinities.  ON
+     WORMHOLE this bucket agreement FAILS for negative-NaN inputs
+     (SFPABS keeps the -NaN sign; the WH compare-subtract inherits the
+     operand's sign into its NaN result), so WH formation is admitted
+     only under the function's -ffinite-math-only license and refuses
+     lut-wh-negative-nan-divergent otherwise -- see the certification
+     record in rvtt-lut-tables.cc and the guard at the capability
+     check below;
    - the hardware evaluates fma (A_i, |x|, B_i) with a single
      rounding; the tree's separate mul+add pair is already fused into
      the same single-rounding SFPMAD by the default-on rvtt combine
@@ -800,6 +807,20 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
     }
   if (!mode)
     return refuse ("lut-no-target-capability", g->pushc[0]);
+
+  /* Wormhole fail-closed guard.  The exhaustive certification recorded
+     in rvtt-lut-tables.cc found that on WH the tree-vs-LUT BUCKET
+     agreement itself fails for the 8388607 negative-NaN inputs: the WH
+     SFPABS keeps the -NaN sign and the WH compare-subtract inherits
+     the operand's sign into its NaN result, so the source tree takes
+     range 0 while the hardware LUT buckets |x| by magnitude into the
+     top range (first witness input 0xff800001).  Every formation on WH
+     therefore diverges from the tree it replaces on exactly those
+     inputs.  The function's own -ffinite-math-only license excludes
+     precisely that divergence set; without it, refuse by name.
+     Blackhole's bucketing is certified and is untouched here.  */
+  if (TARGET_XTT_TENSIX_WH && !flag_finite_math_only)
+    return refuse ("lut-wh-negative-nan-divergent", g->pushc[0]);
 
   /* Map each hardware slot to a source leaf.  A full-arity tree maps
      one-to-one after matching every boundary.  A two-range tree

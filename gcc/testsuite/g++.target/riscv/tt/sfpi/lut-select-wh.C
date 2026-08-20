@@ -1,5 +1,7 @@
-// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
-// Wormhole has the same FP32 3-entry capability.
+// { dg-options "-mcpu=tt-wh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -fdump-tree-rvtt_lut_select" }
+// Wormhole has the same FP32 3-entry capability.  Formation on WH
+// requires the -ffinite-math-only license: without it the certified
+// negative-NaN bucket divergence refuses (lut-select-wh-nan-guard.C).
 // { dg-final { scan-tree-dump-times "formed fp32-3entry-sgn-update" 1 "rvtt_lut_select" } }
 // { dg-final { scan-assembler-times "SFPLUTFP32" 1 } }
 // { dg-final { scan-assembler-not "SFPSETCC" } }
