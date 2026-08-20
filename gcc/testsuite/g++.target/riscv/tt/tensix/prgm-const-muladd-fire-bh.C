@@ -4,12 +4,20 @@
 // classes, so the canonical sfpxloadi mod-31 (int bit-image) constant
 // the frontend emits is admitted -- previously only the mod -32
 // float-typed form was.  The mul-side coefficient stays materialized
-// (not in this admission; the fused-MAD arm covers the post-fusion
-// form).  The second function is the renamed, constant-varied twin.
+// (not in this admission; the fused-MAD arm covers the already-fused
+// form).  RECOGNITION-ONLY invariant: the pass itself never fuses --
+// its gimple output keeps the mul and add as separate statements (the
+// dump-not below proves no sfpmad appears at 293t); the SFPMADs in the
+// final assembly come from the pre-existing downstream mul+add->mad
+// combine, which fuses this shape identically when the pass is off
+// (fusing in gimple here would collapse two roundings into one --
+// bit-changing -- and is banned).  The second function is the renamed,
+// constant-varied twin.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "prgm-const: allocated PRGM L1\\d for invariant immediate" 2 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-not "sfpmad" "rvtt_prgm_const" } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
-// { dg-final { scan-assembler "SFPMAD" } }
+// { dg-final { scan-assembler-times "SFPMAD" 2 } }
 
 void muladd_fire ()
 {

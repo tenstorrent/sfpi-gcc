@@ -34,8 +34,13 @@ along with GCC; see the file COPYING3.  If not see
    single-use SFPMUL in the same loop, plain-add mod, all-constant
    scalar operands, canonical instruction-buffer operand; the
    materialized SFPADD form of the same shape; and (laneDM widening)
-   the canonical fused SFPMAD form those shapes lower to, per
-   materialized-constant operand (mad_operand_candidates).  The pure
+   an SFPMAD the front-end already fused, per materialized-constant
+   operand (mad_operand_candidates -- RECOGNITION-ONLY: this pass never
+   fuses a MUL+ADD into a MAD itself; that rewrite collapses two
+   roundings into one and is bit-changing.  Whether the final code is
+   fused is decided by the pre-existing downstream mul+add->mad
+   combine identically in the fired and unfired legs; this pass only
+   changes which register a constant operand is read from).  The pure
    in-loop-loadi class (design D1 candidate (a)) refuses pending its
    own benefit discipline.
 
@@ -838,23 +843,30 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
   return false;
 }
 
-/* The fused-MAD admission (laneDM widening): the canonical form the
-   mul->add shapes lower to.  LHS = sfpmad (A, B, C, 0) computes
-   per-lane A*B + C from its operand VALUES alone -- the plain mod has
-   no implicit register pairing or operand reinterpretation -- so an
-   operand defined by an in-loop invariant single-issue constant
-   materialization used only by this statement can be parked in a PRGM
-   register and read back: the constant-register read yields the
-   identical 32-bit image in every lane the materialization wrote (the
-   all-lanes proof for both is the same cc-region proof every class
-   passes).  Each qualifying operand is its own candidate (the sdpa exp
-   leg carries two).  Non-plain mods refuse by name -- their operand
-   semantics are not audited here; the _lv variant is excluded (its
-   lane-victim operand is not value-only).  Like the materialized
-   SFPADD shape, no trip proof is required: the entry-edge programming
-   is never speculated and establishment/no-clobber is
-   trip-independent.  Appends candidates (without entry edges -- the
-   caller places them) and returns how many.  */
+/* The fused-MAD admission (laneDM widening) -- RECOGNITION-ONLY.
+   This arm matches an sfpmad the front-end ALREADY emitted; it never
+   forms one.  Fusing an unfused MUL+ADD into a MAD collapses two
+   roundings into one and is bit-changing on any Horner step, so no
+   arm of this pass may perform that rewrite: the only transformation
+   here is re-sourcing one operand of the EXISTING statement (whether
+   the final code is fused is decided by the pre-existing downstream
+   mul+add->mad combine identically in the fired and unfired legs).
+   LHS = sfpmad (A, B, C, 0) computes per-lane A*B + C from its operand
+   VALUES alone -- the plain mod has no implicit register pairing or
+   operand reinterpretation -- so an operand defined by an in-loop
+   invariant single-issue constant materialization used only by this
+   statement can be parked in a PRGM register and read back: the
+   constant-register read yields the identical 32-bit image in every
+   lane the materialization wrote (the all-lanes proof for both is the
+   same cc-region proof every class passes).  Each qualifying operand
+   is its own candidate (the sdpa exp leg carries two).  Non-plain mods
+   refuse by name -- their operand semantics are not audited here; the
+   _lv variant is excluded (its lane-victim operand is not value-only).
+   Like the materialized SFPADD shape, no trip proof is required: the
+   entry-edge programming is never speculated and
+   establishment/no-clobber is trip-independent.  Appends candidates
+   (without entry edges -- the caller places them) and returns how
+   many.  */
 
 static unsigned
 mad_operand_candidates (gcall *call, class loop *loop,
