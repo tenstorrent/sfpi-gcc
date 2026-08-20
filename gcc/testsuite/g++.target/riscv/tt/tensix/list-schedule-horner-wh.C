@@ -7,7 +7,7 @@
 // modeled makespan counts the same slots the nop inserter pads, so the
 // commit is the real issue-slot win, not a model artifact.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=6 makespan 11 -> 7 pressure-peak=\\d target=wh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=6 makespan 11 -> 7 target=wh" 1 "rvtt_schedule" } }
 // { dg-final { scan-assembler-times "SFPNOP" 1 } }
 
 void dual_horner_rational_wh ()

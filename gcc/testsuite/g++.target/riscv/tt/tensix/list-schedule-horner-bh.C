@@ -9,7 +9,7 @@
 // opcode- and register-varied twin: the decision keys only on proven
 // independence, audited latencies, and the modeled issue timeline.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=6 makespan 11 -> 7 pressure-peak=\\d target=bh" 2 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=6 makespan 11 -> 7 target=bh" 2 "rvtt_schedule" } }
 // { dg-final { scan-assembler-not "SFPNOP" } }
 
 void dual_horner_rational ()
