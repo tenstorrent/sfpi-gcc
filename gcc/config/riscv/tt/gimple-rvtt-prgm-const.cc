@@ -30,11 +30,19 @@ along with GCC; see the file COPYING3.  If not see
    one issue slot AND one result-latency stall per iteration on the exp
    shape.
 
-   Admitted class (deliberately narrow): a fusion-enabling SFPADDI whose
-   vector operand is a single-use SFPMUL in the same loop, plain-add mod,
-   all-constant scalar operands, canonical instruction-buffer operand.
-   The pure in-loop-loadi class (design D1 candidate (a)) refuses pending
-   its own benefit discipline.
+   Admitted class: a fusion-enabling SFPADDI whose vector operand is a
+   single-use SFPMUL in the same loop, plain-add mod, all-constant
+   scalar operands, canonical instruction-buffer operand; the
+   materialized SFPADD form of the same shape; and (laneDM widening)
+   an SFPMAD the front-end already fused, per materialized-constant
+   operand (mad_operand_candidates -- RECOGNITION-ONLY: this pass never
+   fuses a MUL+ADD into a MAD itself; that rewrite collapses two
+   roundings into one and is bit-changing.  Whether the final code is
+   fused is decided by the pre-existing downstream mul+add->mad
+   combine identically in the fired and unfired legs; this pass only
+   changes which register a constant operand is read from).  The pure
+   in-loop-loadi class (design D1 candidate (a)) refuses pending its
+   own benefit discipline.
 
    Freedom proof for a PRGM register (the D2 region-scoped opacity
    extension).  PRGM registers are persistent global machine state, so the
@@ -75,9 +83,18 @@ along with GCC; see the file COPYING3.  If not see
      node IPA inlining has already consumed) and ordinary scalar
      compiler builtins are transparent;
    - the programming point must run under the all-lanes CC state: the sfpi
-     structured-CC model makes function entry all-lanes, and any CC-writing
-     statement anywhere in the function refuses (cc-region-unproven), so
-     the entry state provably reaches the loop entry edge.
+     structured-CC model makes function entry all-lanes, and the proof is
+     that no fn-local CC-writing statement can execute before the
+     programming point -- a CC writer whose block can reach the point
+     (fn-local CFG reachability, computed backwards from the candidate
+     loop's header so it covers the programming point and every block
+     between a cross-loop hoisted point and the loop) refuses by name
+     (cc-region-unproven).  A CC writer the point can never be reached
+     from -- post-loop epilogue code, a sibling branch -- leaves the
+     entry state provably intact on every path to the point, so it no
+     longer defeats the proof (laneDM widening; the fn-entry-all-lanes
+     model and the call-transparency assumption are unchanged from the
+     function-granular version of this proof).
 
    Refusals never mutate the CFG: flag-off and every refusal path are
    byte-identical.  */
@@ -729,10 +746,15 @@ fusable_mul_p (tree src, class loop *loop, gimple *only_use)
   return mul;
 }
 
-/* An in-loop invariant float materialization defining SRC whose fp32
-   value is recoverable: the canonical sfpxloadi 32-bit float form, or
-   the shortened single-issue SFPLOADI FLOATB form.  Other encodings
-   refuse (their value reconstruction is not on record here).  */
+/* An in-loop invariant constant materialization defining SRC whose
+   full 32-bit lane image is recoverable through the audited
+   single-issue-chain derivation (single_issue_constant_image_p below:
+   the sfpxloadi 31/32/-32 verbatim-image forms and the shortened
+   SFPLOADI FLOATB form -- the same recovery the residency classes
+   use).  Other encodings refuse (their value reconstruction is not on
+   record).  */
+
+static bool single_issue_constant_image_p (gcall *load, unsigned *value);
 
 static gcall *
 invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
@@ -746,25 +768,9 @@ invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
       || !flow_bb_inside_loop_p (loop, gimple_bb (load))
       || !rvtt_invariant_constant_load_p (load, loop,
 					  /*allow_shortened=*/true)
-      || !single_nondebug_use_p (src, only_use))
+      || !single_nondebug_use_p (src, only_use)
+      || !single_issue_constant_image_p (load, value))
     return nullptr;
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
-  unsigned imm = TREE_INT_CST_LOW (gimple_call_arg (load, 1));
-  tree mod = gimple_call_arg (load, gimple_call_num_args (load) - 1);
-  if (insnd->id == rvtt_insn_data::sfpxloadi)
-    {
-      /* The float-typed 32-bit form only.  */
-      if (tree_to_shwi (mod) != -32)
-	return nullptr;
-      *value = imm;
-    }
-  else
-    {
-      /* Shortened SFPLOADI: FLOATB (mod0 0, imm16 << 16) only.  */
-      if (!integer_zerop (mod))
-	return nullptr;
-      *value = (imm & 0xffff) << 16;
-    }
   return load;
 }
 
@@ -837,11 +843,94 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
   return false;
 }
 
-/* Any CC-writing statement in FN defeats the all-lanes proof for the
-   programming point.  */
+/* The fused-MAD admission (laneDM widening) -- RECOGNITION-ONLY.
+   This arm matches an sfpmad the front-end ALREADY emitted; it never
+   forms one.  Fusing an unfused MUL+ADD into a MAD collapses two
+   roundings into one and is bit-changing on any Horner step, so no
+   arm of this pass may perform that rewrite: the only transformation
+   here is re-sourcing one operand of the EXISTING statement (whether
+   the final code is fused is decided by the pre-existing downstream
+   mul+add->mad combine identically in the fired and unfired legs).
+   LHS = sfpmad (A, B, C, 0) computes per-lane A*B + C from its operand
+   VALUES alone -- the plain mod has no implicit register pairing or
+   operand reinterpretation -- so an operand defined by an in-loop
+   invariant single-issue constant materialization used only by this
+   statement can be parked in a PRGM register and read back: the
+   constant-register read yields the identical 32-bit image in every
+   lane the materialization wrote (the all-lanes proof for both is the
+   same cc-region proof every class passes).  Each qualifying operand
+   is its own candidate (the sdpa exp leg carries two).  Non-plain mods
+   refuse by name -- their operand semantics are not audited here; the
+   _lv variant is excluded (its lane-victim operand is not value-only).
+   Like the materialized SFPADD shape, no trip proof is required: the
+   entry-edge programming is never speculated and
+   establishment/no-clobber is trip-independent.  Appends candidates
+   (without entry edges -- the caller places them) and returns how
+   many.  */
 
-static bool
-function_writes_cc_p (function *fn)
+static unsigned
+mad_operand_candidates (gcall *call, class loop *loop,
+			auto_vec<candidate> *out)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd || insnd->id != rvtt_insn_data::sfpmad)
+    return 0;
+  if (!gimple_call_lhs (call)
+      || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
+      || gimple_call_num_args (call) != 4)
+    return 0;
+
+  gcall *loads[3] = { nullptr, nullptr, nullptr };
+  unsigned values[3] = { 0, 0, 0 };
+  bool any = false;
+  for (unsigned ix = 0; ix != 3; ++ix)
+    {
+      loads[ix] = invariant_float_load_p (gimple_call_arg (call, ix), loop,
+					  call, &values[ix]);
+      any |= loads[ix] != nullptr;
+    }
+  if (!any)
+    return 0;
+
+  tree mod = gimple_call_arg (call, 3);
+  if (TREE_CODE (mod) != INTEGER_CST || !integer_zerop (mod))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "prgm-const: sfpmad refused (mad-mod-unproven): a non-plain "
+		 "mod's operand semantics are not audited here\n");
+      return 0;
+    }
+
+  unsigned n = 0;
+  for (unsigned ix = 0; ix != 3; ++ix)
+    {
+      if (!loads[ix])
+	continue;
+      /* One candidate per materialization: mad (x, k, k) carries the
+	 same load in two operand slots.  */
+      bool dup = false;
+      for (unsigned jx = 0; jx != ix; ++jx)
+	dup |= loads[jx] == loads[ix];
+      if (dup)
+	continue;
+      candidate c;
+      c.addi = call;
+      c.mul = nullptr;
+      c.loadi = loads[ix];
+      c.value = values[ix];
+      c.loop = loop;
+      c.entry = nullptr;
+      out->safe_push (c);
+      ++n;
+    }
+  return n;
+}
+
+/* Every CC-writing statement in FN, collected once per function.  */
+
+static void
+collect_cc_writers (function *fn, auto_vec<gimple *> *out)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -850,8 +939,71 @@ function_writes_cc_p (function *fn)
       {
 	const rvtt_insn_data *insnd = rvtt_get_insn_data (gsi_stmt (gsi));
 	if (insnd && insnd->sets_cc (as_a <gcall *> (gsi_stmt (gsi))))
-	  return true;
+	  out->safe_push (gsi_stmt (gsi));
       }
+}
+
+/* Whether any CC writer in WRITERS can execute before the programming
+   point (POINT_BB, and POINT_STMT within it when the point is a
+   statement rather than the block entry).  The all-lanes proof needs
+   the function-entry lane state to reach the point on every path; a
+   fn-local CC writer defeats it exactly when some CFG path runs the
+   writer and then reaches the point.  Reachability is block-granular
+   (fail-closed over-approximation of "can execute before"): the reach
+   set is computed backwards from POINT_BB's predecessors, so POINT_BB
+   itself is in the set only when it lies on a cycle; a writer in
+   POINT_BB outside any cycle defeats the proof exactly when it
+   precedes POINT_STMT in the block (a block-entry point is defeated by
+   any writer in the block).  Everything else about the proof -- the
+   fn-entry-all-lanes model and call transparency -- is unchanged from
+   the function-granular version.  */
+
+static bool
+cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
+			  basic_block point_bb, gimple *point_stmt)
+{
+  if (writers.is_empty ())
+    return false;
+
+  hash_set<basic_block> reach;
+  auto_vec<basic_block, 16> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, point_bb->preds)
+    work.safe_push (e->src);
+  while (!work.is_empty ())
+    {
+      basic_block b = work.pop ();
+      if (reach.add (b))
+	continue;
+      FOR_EACH_EDGE (e, ei, b->preds)
+	work.safe_push (e->src);
+    }
+
+  for (gimple *w : writers)
+    {
+      basic_block wbb = gimple_bb (w);
+      if (!wbb)
+	continue;
+      if (reach.contains (wbb))
+	return true;
+      if (wbb == point_bb)
+	{
+	  /* POINT_BB is not on a cycle (the reach test above would have
+	     caught it): the writer executes before the point exactly
+	     when it textually precedes it.  */
+	  if (!point_stmt)
+	    return true;
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (wbb);
+	       !gsi_end_p (gsi); gsi_next (&gsi))
+	    {
+	      if (gsi_stmt (gsi) == w)
+		return true;
+	      if (gsi_stmt (gsi) == point_stmt)
+		break;
+	    }
+	}
+    }
   return false;
 }
 
@@ -881,7 +1033,9 @@ function_writes_cc_p (function *fn)
      saves two pushed SFPLOADI words per iteration for a one-time
      three-word programming cost (rvtt-cost.md delivery model: a
      RISC-pushed word ~ 1.23 replayed slots), so it pays for itself at
-     two proven trips;
+     two trips; a loop PROVEN single-trip refuses (a proven loss), and
+     a runtime trip count is admitted (correctness is trip-independent;
+     worst case one extra pushed word on a single-trip entry);
    - under LREG pressure (peak > SFPU_REG_NUM), an out-of-loop
      proven-constant value is reprogrammed in place: the programming
      writes replace the materialization and every use reads the
@@ -891,7 +1045,7 @@ function_writes_cc_p (function *fn)
      propagation passes).
    Selection is priced: in-loop candidates (per-iteration savings) rank
    above pressure-only candidates; within a class, more uses first.
-   Refusals: prgm-exhausted, trip-count-unproven, cc-region-unproven,
+   Refusals: prgm-exhausted, trip-count-single-trip, cc-region-unproven,
    qsr-unproven, plus the TU freedom-proof refusals shared with the M3
    class.
 
@@ -1231,6 +1385,17 @@ constant_chain_value_p (const remat_chain &c, unsigned *value)
     return false;
   *value = (TREE_INT_CST_LOW (imm) & 0xffff) << 16;
   return true;
+}
+
+/* Forward-declared above for the fusion classes: the single-issue
+   constant image of one materialization, through the same audited
+   derivation as the residency chains.  */
+
+static bool
+single_issue_constant_image_p (gcall *load, unsigned *value)
+{
+  remat_chain chain { load, load };
+  return constant_chain_value_p (chain, value);
 }
 
 /* The 32-bit constant image staged into a typed SFPCONFIG write:
@@ -1644,22 +1809,32 @@ transform (function *fn, prgm_state *st)
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	       gsi_next (&gsi))
 	    {
+	      if (!is_a <gcall *> (gsi_stmt (gsi)))
+		continue;
+	      gcall *call = as_a <gcall *> (gsi_stmt (gsi));
 	      candidate c;
-	      if (is_a <gcall *> (gsi_stmt (gsi))
-		  && fusion_candidate_p (as_a <gcall *> (gsi_stmt (gsi)),
-					 loop, &c))
+	      unsigned pushed = 0;
+	      if (fusion_candidate_p (call, loop, &c))
 		{
-		  /* Under the cross-loop hoist, lift the programming
-		     point to the outermost enclosing entry edge whose
-		     region is audited-inert for the whole LREG file
-		     (allocatable staging register plus the
-		     programmable-constant destinations); the walk
-		     returns ENTRY unchanged when nothing is proven.  */
-		  c.entry = riscv_tt_opt_crossloop_hoist > 0
-		    ? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
-		    : entry;
 		  candidates.safe_push (c);
+		  pushed = 1;
 		}
+	      else
+		pushed = mad_operand_candidates (call, loop, &candidates);
+	      if (!pushed)
+		continue;
+	      /* Under the cross-loop hoist, lift the programming
+		 point to the outermost enclosing entry edge whose
+		 region is audited-inert for the whole LREG file
+		 (allocatable staging register plus the
+		 programmable-constant destinations); the walk
+		 returns ENTRY unchanged when nothing is proven.  */
+	      edge point = riscv_tt_opt_crossloop_hoist > 0
+		? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
+		: entry;
+	      for (unsigned kx = candidates.length () - pushed;
+		   kx != candidates.length (); ++kx)
+		candidates[kx].entry = point;
 	    }
 	}
       free (body);
@@ -1679,12 +1854,38 @@ transform (function *fn, prgm_state *st)
       return false;
     }
 
-  if (function_writes_cc_p (fn))
-    {
-      if (dump_file)
-	fprintf (dump_file, "prgm-const: refused (cc-region-unproven)\n");
-      return false;
-    }
+  /* The all-lanes proof, scoped by reachability: a candidate refuses
+     exactly when some fn-local CC writer can execute before its
+     programming point.  One reach set from the candidate loop's header
+     covers the (possibly cross-loop hoisted) entry-edge point and every
+     block between it and the loop: the point can reach the header, so
+     each of the point's CFG ancestors is an ancestor of the header
+     too.  */
+  {
+    auto_vec<gimple *> cc_writers;
+    collect_cc_writers (fn, &cc_writers);
+    if (!cc_writers.is_empty ())
+      {
+	unsigned kept = 0;
+	for (candidate &c : candidates)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, c.loop->header,
+					  nullptr))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "prgm-const: loop bb %d refused "
+			   "(cc-region-unproven): a CC write reaches the "
+			   "programming point\n", c.loop->header->index);
+		continue;
+	      }
+	    candidates[kept++] = c;
+	  }
+	candidates.truncate (kept);
+	if (candidates.is_empty ())
+	  return false;
+      }
+  }
 
   if (!st->initialized)
     {
@@ -1823,11 +2024,14 @@ transform (function *fn, prgm_state *st)
 	}
       else
 	{
-	  /* Materialized shape: the SFPADD keeps its form with the
-	     constant-register operand; the in-loop materialization is
-	     removed (its only use was this add).  */
+	  /* Materialized shape: the SFPADD or SFPMAD keeps its form
+	     with the constant-register operand (every vector operand
+	     slot equal to the materialization is rewritten -- a MAD
+	     can carry the same constant twice); the in-loop
+	     materialization is removed (its only use was this
+	     statement).  */
 	  tree load_lhs = gimple_call_lhs (c.loadi);
-	  for (unsigned ix = 0; ix != 2; ++ix)
+	  for (unsigned ix = 0; ix != gimple_call_num_args (c.addi) - 1; ++ix)
 	    if (gimple_call_arg (c.addi, ix) == load_lhs)
 	      gimple_call_set_arg (c.addi, ix, creg);
 	  update_stmt (c.addi);
@@ -1854,7 +2058,7 @@ transform (function *fn, prgm_state *st)
    PRGM registers by priced selection.  Class LOOP: an in-loop
    invariant constant materialization is programmed once on the loop
    entry edge (saves two pushed SFPLOADI words per proven iteration for
-   a one-time three-word cost, so it needs proven trips >= 2:
+   a one-time three-word cost, refusing only a proven single trip:
    rvtt-cost.md delivery model).  Class PRESSURE: under LREG
    over-pressure, an out-of-loop proven-constant value is reprogrammed
    in place -- the constant register read occupies no allocatable LREG,
@@ -1963,34 +2167,72 @@ first_iteration_value (class loop *loop, edge entry, tree op)
   return NULL_TREE;
 }
 
-/* Prove the loop's latch executes at least once (trips >= 2): evaluate
-   the single exit test on the first iteration and require it to stay
-   in the loop.  Refuses when anything fails to fold.  */
+/* Classify the loop's trip count for the LOOP-class break-even by
+   evaluating the single exit test on the first iteration.
 
-static bool
-loop_second_trip_proven_p (class loop *loop, edge entry)
+   The classification prices; it never licenses.  Correctness of the
+   LOOP class is trip-independent: the programming point sits on the
+   never-speculated entry edge of the rotated loop (control reaching it
+   executes the header at least once), the programmed register is
+   established there before any replaced use, and nothing in the
+   admitted loop body clobbers it (the sfpu-barrier/opaque gates refuse
+   bodies with foreign effects) -- so residency holds on every entered
+   iteration whatever the trip count.  What the bounded first-iteration
+   evaluation decides is only which side of the two-trip break-even the
+   loop is on:
+
+   TRIPS_AT_LEAST_2 -- the exit test provably stays in the loop after
+   the first trip: the two-trip break-even is proven and the programming
+   strictly pays.
+   TRIPS_PROVEN_SINGLE -- the exit test provably leaves the loop after
+   the first trip: the one-time programming can never recover its cost;
+   the candidate refuses by name (a proven loss).  Defensive: this
+   evaluator folds a strict subset of what scalar evolution folds, so a
+   constant single-trip loop has normally been flattened by complete
+   unrolling long before this pass; the branch keeps the pricing
+   fail-closed rather than relying on that pipeline fact.
+   TRIPS_UNKNOWN -- the test does not fold (runtime trip counts, the
+   dominant LLK loop shape): admitted.  The worst case is a single-trip
+   entry costing one extra pushed word per candidate (programming is
+   W+1 words against the W it saves on the executed iteration,
+   rvtt-cost.md delivery model); every second trip onward is pure
+   saving.  (The CC-canonical peel class is different: its peel
+   DUPLICATES a body unconditionally, so it genuinely needs proven
+   trips and keeps its own named refusal.)  */
+
+enum loop_trip_class
+{
+  TRIPS_AT_LEAST_2,
+  TRIPS_PROVEN_SINGLE,
+  TRIPS_UNKNOWN
+};
+
+static loop_trip_class
+classify_second_trip (class loop *loop, edge entry)
 {
   auto_vec<edge> exits = get_loop_exit_edges (loop);
   if (exits.length () != 1)
-    return false;
+    return TRIPS_UNKNOWN;
   edge exit = exits[0];
   gimple_stmt_iterator last = gsi_last_bb (exit->src);
   gcond *cond = gsi_end_p (last) ? nullptr
     : dyn_cast <gcond *> (gsi_stmt (last));
   if (!cond)
-    return false;
+    return TRIPS_UNKNOWN;
   tree lhs = first_iteration_value (loop, entry, gimple_cond_lhs (cond));
   tree rhs = first_iteration_value (loop, entry, gimple_cond_rhs (cond));
   if (!lhs || !rhs)
-    return false;
+    return TRIPS_UNKNOWN;
   tree test = fold_binary (gimple_cond_code (cond), boolean_type_node,
 			   lhs, rhs);
   if (!test || TREE_CODE (test) != INTEGER_CST)
-    return false;
+    return TRIPS_UNKNOWN;
   edge true_edge, false_edge;
   extract_true_false_edges_from_block (exit->src, &true_edge, &false_edge);
   edge taken = integer_zerop (test) ? false_edge : true_edge;
-  return taken && taken != exit;
+  if (!taken)
+    return TRIPS_UNKNOWN;
+  return taken == exit ? TRIPS_PROVEN_SINGLE : TRIPS_AT_LEAST_2;
 }
 
 static unsigned
@@ -2382,21 +2624,38 @@ residency_transform (function *fn, prgm_state *st)
 	  continue;
 	}
 
-      /* Profitability: the entry-edge programming (three pushed words
-	 once: two staging SFPLOADI + one SFPCONFIG) pays for itself
-	 against the two pushed SFPLOADI words saved per iteration at
-	 two proven trips (rvtt-cost.md delivery model).  The proof is
-	 the structural first-iteration exit-test evaluation.  (The
-	 CC-canonical peel class prices its peel separately below.)  */
-      if (!peel && !loop_second_trip_proven_p (loop, entry))
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "const-residency: loop bb %d refused "
-		     "(trip-count-unproven: the two-trip break-even is "
-		     "not proven)\n", loop->header->index);
-	  continue;
-	}
+      /* Profitability: the entry-edge programming (W+1 pushed words
+	 once) pays for itself against the W pushed SFPLOADI words
+	 saved per iteration at two trips (rvtt-cost.md delivery
+	 model).  Correctness is trip-independent -- see
+	 classify_second_trip -- so only a PROVEN single-trip loop
+	 refuses (a proven loss); a runtime trip count is admitted with
+	 a worst case of one extra pushed word on a single-trip entry.
+	 (The CC-canonical peel class prices its peel separately below
+	 and genuinely needs proven trips for the peel itself.)  */
+      if (!peel)
+	switch (classify_second_trip (loop, entry))
+	  {
+	  case TRIPS_AT_LEAST_2:
+	    break;
+	  case TRIPS_PROVEN_SINGLE:
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "const-residency: loop bb %d refused "
+		       "(trip-count-single-trip: the loop provably runs "
+		       "one trip; the programming can never recover its "
+		       "cost)\n", loop->header->index);
+	    continue;
+	  case TRIPS_UNKNOWN:
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "const-residency: loop bb %d admits runtime trips "
+		       "(entry-edge programming is never speculated; "
+		       "establishment and no-clobber are trip-independent; "
+		       "worst case one extra pushed word per candidate on "
+		       "a single-trip entry)\n", loop->header->index);
+	    break;
+	  }
 
       auto_vec<residency_candidate> this_loop;
       basic_block *body = get_loop_body_in_dom_order (loop);
@@ -2570,34 +2829,67 @@ residency_transform (function *fn, prgm_state *st)
 		 facts.reason);
       return false;
     }
-  if (function_writes_cc_p (fn))
-    {
-      /* The CC-canonical peel class is exempt: its programming point
-	 is placed after the peeled iteration's own all-lanes SFPENCC,
-	 and every replaced materialization is proven to have executed
-	 in that same architectural state -- both facts are local to
-	 the peeled loop and independent of other CC writes in the
-	 function.  Every other class still refuses by name.  */
-      unsigned kept = 0;
-      for (residency_candidate &c : loop_cands)
-	if (c.peel)
-	  loop_cands[kept++] = c;
-      loop_cands.truncate (kept);
-      pressure_cands.truncate (0);
-      if (loop_cands.is_empty ())
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
-		     " -- in-function CC writes defeat the all-lanes"
-		     " programming proof; cross-call ambient proof is not on"
-		     " record here\n");
-	  return false;
-	}
-      if (dump_file)
-	fprintf (dump_file, "const-residency: non-peel classes refused "
-		 "(cc-region-unproven); the CC-canonical peel class "
-		 "proceeds on its local lane-state proof\n");
-    }
+  {
+    auto_vec<gimple *> cc_writers;
+    collect_cc_writers (fn, &cc_writers);
+    if (!cc_writers.is_empty ())
+      {
+	/* The all-lanes proof, scoped by reachability: a candidate
+	   refuses exactly when some fn-local CC writer can execute
+	   before its programming point (the same reach-set cover as
+	   the fusion class: the loop header's CFG ancestors include
+	   the hoisted entry point's).  The CC-canonical peel class is
+	   exempt: its programming point is placed after the peeled
+	   iteration's own all-lanes SFPENCC, and every replaced
+	   materialization is proven to have executed in that same
+	   architectural state -- both facts are local to the peeled
+	   loop and independent of other CC writes in the function.
+	   The pressure class's point is its own in-place statement.  */
+	unsigned kept = 0;
+	for (residency_candidate &c : loop_cands)
+	  {
+	    if (!c.peel
+		&& cc_write_reaches_point_p (cc_writers, c.loop->header,
+					     nullptr))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: loop bb %d refused "
+			   "(cc-region-unproven): a CC write reaches the "
+			   "programming point\n", c.loop->header->index);
+		continue;
+	      }
+	    loop_cands[kept++] = c;
+	  }
+	loop_cands.truncate (kept);
+	kept = 0;
+	for (residency_candidate &c : pressure_cands)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
+					  c.load))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: pressure candidate in bb %d "
+			   "refused (cc-region-unproven): a CC write reaches "
+			   "the in-place programming point\n",
+			   gimple_bb (c.load)->index);
+		continue;
+	      }
+	    pressure_cands[kept++] = c;
+	  }
+	pressure_cands.truncate (kept);
+	if (loop_cands.is_empty () && pressure_cands.is_empty ())
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
+		       " -- in-function CC writes reach every candidate"
+		       " programming point; cross-call ambient proof is not on"
+		       " record here\n");
+	    return false;
+	  }
+      }
+  }
   if (!st->initialized)
     {
       st->claimed = facts.claimed;
