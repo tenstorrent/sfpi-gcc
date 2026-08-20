@@ -56,6 +56,30 @@ along with GCC; see the file COPYING3.  If not see
    SFPLE.  A host-side exhaustive sweep over all 2^32 x encodings of
    both lane models accompanies the lane evidence.
 
+   The strict directions complete the family with the SWAPPED operand
+   order.  "x < 0.0f" lowers to the single SETCC mod0 (raw sign bit
+   set), so the kept set is {sign clear}; "x >= 0.0f" lowers to the
+   single SETCC mod4 (raw sign bit clear), kept set {sign set}.  In the
+   same total order, 0 <= x holds exactly on {sign clear} (+0 maps to
+   0, every sign-set encoding maps to <= -1) and 0 > x exactly on
+   {sign set}:
+
+       mask = SFPLE (0, x, SET_DEST)     -- keep-mask for x <  0.0f
+       mask = SFPGT (0, x, SET_DEST)     -- keep-mask for x >= 0.0f
+
+   SET_DEST writes the FIRST compare operand (the md pattern ties it to
+   the result), so these forms need the zero on the writable side: the
+   region's own sfpxloadi/sfploadi zero materialization is reused as
+   that operand, which the compare then overwrites with the mask.  The
+   read-only constant register CREG_IDX_0 cannot serve (named refusal
+   ccmask-zero-not-writable), and a zero with other uses is refused
+   rather than silently split (ccmask-zero-shared).  EQ/NE have no
+   single-order complement and keep refusing by name.  The exhaustive
+   four-direction sweep of both lane models ships in
+   tt/proofs/ccmask-direction-complete/ (EQUAL over 2^32 per
+   direction); per the tt/proofs README contract the strict-direction
+   folds may fire ONLY while that RESULT is EQUAL.
+
    Both replacement instructions execute under the enclosing CC state,
    so a fold inside an enclosing v_if keeps nested semantics: disabled
    lanes write neither mask nor z.  The deleted pushc/popc pair is
@@ -143,6 +167,31 @@ zero_vector_p (tree val)
       return int_arg (call, 1) == 0;
     default:
       return false;
+    }
+}
+
+/* Return the defining call when VAL is a WRITABLE architectural zero
+   -- an immediate materialization of 0 into an allocatable LREG (the
+   read-only constant register does not qualify).  The swapped-operand
+   keep-mask compares overwrite this operand with SET_DEST.  */
+
+static gcall *
+writable_zero_def (tree val)
+{
+  if (TREE_CODE (val) != SSA_NAME)
+    return nullptr;
+  gimple *def = SSA_NAME_DEF_STMT (val);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return nullptr;
+  gcall *call = as_a <gcall *> (def);
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpxloadi:
+    case rvtt_insn_data::sfploadi:
+      return int_arg (call, 1) == 0 ? call : nullptr;
+    default:
+      return nullptr;
     }
 }
 
@@ -357,11 +406,24 @@ match_group (gimple_stmt_iterator gsi, ccmask_group *g, bool *candidate)
     if (type != SFPXCMP_MOD1_TYPE_FLOAT)
       return refuse ("ccmask-compare-kind-unsupported", g->fcmp);
     g->cc = (unsigned) mod & SFPXCMP_MOD1_CC_MASK;
-    if (g->cc != SFPXCMP_MOD1_CC_LE && g->cc != SFPXCMP_MOD1_CC_GT)
-      /* LT/GE complements would place the constant in the written
-	 (destination) compare operand -- the constant register cannot
-	 be a destination; EQ/NE have no single-order complement.  */
+    if (g->cc != SFPXCMP_MOD1_CC_LE && g->cc != SFPXCMP_MOD1_CC_GT
+	&& g->cc != SFPXCMP_MOD1_CC_LT && g->cc != SFPXCMP_MOD1_CC_GE)
+      /* EQ/NE have no single-order complement.  */
       return refuse ("ccmask-compare-direction-unsupported", g->fcmp);
+    if (g->cc == SFPXCMP_MOD1_CC_LT || g->cc == SFPXCMP_MOD1_CC_GE)
+      {
+	/* The strict-direction keep-masks are the swapped-operand
+	   compares (0 <= x, 0 > x): SET_DEST writes the first operand,
+	   so the zero must be a writable materialization the compare
+	   can overwrite.  Reuse the region's own zero; the read-only
+	   constant register cannot be a SET_DEST operand, and a zero
+	   with other uses is not silently split.  */
+	gcall *zdef = writable_zero_def (g->zv);
+	if (!zdef)
+	  return refuse ("ccmask-zero-not-writable", g->assign);
+	if (!has_single_use (g->zv))
+	  return refuse ("ccmask-zero-shared", g->assign);
+      }
     if (int_arg (g->fcmp, 2) != 0
 	|| int_arg (g->fcmp, 3) != 0 || int_arg (g->fcmp, 4) != 0)
       /* The equivalence proof is against the +0.0 boundary's pure
@@ -381,9 +443,15 @@ static void
 transform_group (ccmask_group *g)
 {
   /* keep-mask = complement of the zeroing condition:
-     x <= 0  ->  SFPGT (x, 0);    x > 0  ->  SFPLE (x, 0).  */
+     x <= 0  ->  SFPGT (x, 0);    x > 0  ->  SFPLE (x, 0);
+     x <  0  ->  SFPLE (0, x);    x >= 0 ->  SFPGT (0, x)
+     where the strict directions swap the operands and reuse the
+     region's writable zero as the SET_DEST (written) operand.  */
+  bool swapped = (g->cc == SFPXCMP_MOD1_CC_LT
+		  || g->cc == SFPXCMP_MOD1_CC_GE);
   const rvtt_insn_data *cmp_insnd
-    = rvtt_get_insn_data (g->cc == SFPXCMP_MOD1_CC_LE
+    = rvtt_get_insn_data ((g->cc == SFPXCMP_MOD1_CC_LE
+			   || g->cc == SFPXCMP_MOD1_CC_GE)
 			  ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
   const rvtt_insn_data *and_insnd
     = rvtt_get_insn_data (rvtt_insn_data::sfpand);
@@ -395,17 +463,30 @@ transform_group (ccmask_group *g)
   gimple_stmt_iterator at = gsi_for_stmt (g->assign);
   location_t loc = gimple_location (g->assign);
 
-  gcall *zero = gimple_build_call (zero_insnd->decl, 1,
-				   build_int_cst (unsigned_type_node,
-						  CREG_IDX_0));
-  tree zero_ssa = make_ssa_name (vec_type);
-  gimple_call_set_lhs (zero, zero_ssa);
-  gimple_set_location (zero, loc);
-  gsi_insert_before (&at, zero, GSI_SAME_STMT);
+  tree zero_ssa;
+  if (swapped)
+    /* The region's own zero materialization (checked writable and
+       single-use in match_group); its def dominates the assign, hence
+       this insertion point.  */
+    zero_ssa = g->zv;
+  else
+    {
+      gcall *zero = gimple_build_call (zero_insnd->decl, 1,
+				       build_int_cst (unsigned_type_node,
+						      CREG_IDX_0));
+      zero_ssa = make_ssa_name (vec_type);
+      gimple_call_set_lhs (zero, zero_ssa);
+      gimple_set_location (zero, loc);
+      gsi_insert_before (&at, zero, GSI_SAME_STMT);
+    }
 
-  gcall *cmp = gimple_build_call (cmp_insnd->decl, 3, g->x, zero_ssa,
-				  build_int_cst (unsigned_type_node,
-						 SFPGTLE_MOD1_SET_DEST));
+  gcall *cmp = swapped
+    ? gimple_build_call (cmp_insnd->decl, 3, zero_ssa, g->x,
+			 build_int_cst (unsigned_type_node,
+					SFPGTLE_MOD1_SET_DEST))
+    : gimple_build_call (cmp_insnd->decl, 3, g->x, zero_ssa,
+			 build_int_cst (unsigned_type_node,
+					SFPGTLE_MOD1_SET_DEST));
   tree mask = make_ssa_name (vec_type);
   gimple_call_set_lhs (cmp, mask);
   gimple_set_location (cmp, loc);
