@@ -383,17 +383,22 @@ rvtt_gen_rtx_noval (machine_mode mode)
 			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
 }
 
-void
-rvtt_merge_lv_src (rtx *lv, rtx *src)
+bool
+rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
 {
   if (noval_operand (*lv, GET_MODE (*lv)))
-    return;
+    return false;
+
+  bool commuted = commute && *lv != *src && *lv == *commute;
+  if (commuted)
+    std::swap (*src, *commute);
 
   rtx tmp = gen_reg_rtx (XTT32SImode);
   emit_insn (gen_rvtt_sfpassign_lv (tmp, *lv, *src));
   *src = tmp;
   *lv = gen_rtx_UNSPEC (XTT32SImode,
 			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
+  return commuted;
 }
 
 void
