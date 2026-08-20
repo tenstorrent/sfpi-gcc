@@ -12,11 +12,17 @@
 // (The multi-writer wall -- the exp sfpmov refusal "writes a register
 // another row member also writes" -- is register-allocation dependent
 // at dg level; the exp dump evidence carries that name.)
+// Lane DL: the interior plain-reorder mover legitimately serves shape 1
+// (no prologue executes, so the entry-boundary read is untouched: the
+// invariant-input AND moves between the muls within each trip).  The
+// prologue mover's named refusal still stands and the prologue itself
+// must never fire here.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -fno-unroll-loops -mtt-tensix-optimize-capture-rotation -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // { dg-final { scan-rtl-dump "Capture rotation refused: filler uid=\\d+ carries a live value across the row boundary" "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump "Capture rotation refused: no modeled stall decrease rotating uid=\\d+" "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump "Capture rotation refused: unaudited result latency after uid=\\d+" "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-not "Capture rotation moved" "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-not "with prologue" "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-not "moved uid=\\d+ to the seam" "rvtt_schedule" } }
 
 void carried_value_refuses ()
 {
