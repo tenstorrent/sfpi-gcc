@@ -234,7 +234,10 @@ private:
 bool
 repr_web::require_entrant (tree v, gimple *why)
 {
-  if (TREE_CODE (v) != SSA_NAME)
+  if (TREE_CODE (v) != SSA_NAME
+      /* An abnormal-PHI participant cannot be safely re-routed
+	 (replace_uses_by on abnormal edges is invalid); fail closed.  */
+      || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (v))
     return fail ("repr-web-leaf-unproven", why);
   if (m_web.contains (v))
     return true;
@@ -316,7 +319,8 @@ repr_web::admit_choose (gimple *stmt)
     lhs = gimple_assign_lhs (stmt);
   else
     lhs = gimple_call_lhs (stmt);
-  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME
+      || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
     return fail ("repr-web-consumer-not-transparent", stmt);
   m_chooses.add (stmt);
   m_web.add (lhs);
@@ -374,6 +378,10 @@ repr_web::check_uses (tree v)
 		return fail ("repr-web-kind-mismatch", use_stmt);
 	      if (m_source_set.contains (use_stmt))
 		return fail ("repr-web-kind-mismatch", use_stmt);
+	      tree slhs = gimple_call_lhs (call);
+	      if (slhs && TREE_CODE (slhs) == SSA_NAME
+		  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (slhs))
+		return fail ("repr-web-consumer-not-transparent", use_stmt);
 	      if (!m_sink_set.add (use_stmt))
 		m_sinks.safe_push (call);
 	      continue;
@@ -407,7 +415,8 @@ repr_web::check_uses (tree v)
       if (gimple_assign_ssa_name_copy_p (use_stmt))
 	{
 	  tree lhs = gimple_assign_lhs (use_stmt);
-	  if (TREE_CODE (lhs) != SSA_NAME)
+	  if (TREE_CODE (lhs) != SSA_NAME
+	      || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
 	    return fail ("repr-web-consumer-not-transparent", use_stmt);
 	  if (!m_web.contains (lhs))
 	    {
@@ -428,7 +437,8 @@ bool
 repr_web::build (gcall *seed)
 {
   tree lhs = gimple_call_lhs (seed);
-  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME
+      || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
     return false;		/* Dead cast; DCE territory.  */
   m_sources.safe_push (seed);
   m_source_set.add (seed);
