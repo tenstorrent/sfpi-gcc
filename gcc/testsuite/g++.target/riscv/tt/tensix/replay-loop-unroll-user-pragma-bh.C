@@ -2,7 +2,7 @@
 // A user's own unroll annotation is never overridden: the pass makes no
 // request, and the user's factor (4) shapes the capture.
 // { dg-final { scan-tree-dump-not "requested unroll" "rvtt_replay_unroll" } }
-// { dg-final { scan-assembler "TTREPLAY\t0, [0-9]+, 1, 1" } }
+// { dg-final { scan-assembler "TTREPLAY\t0, \[0-9\]+, 1, 1" } }
 
 void rlu_user_pragma ()
 {
