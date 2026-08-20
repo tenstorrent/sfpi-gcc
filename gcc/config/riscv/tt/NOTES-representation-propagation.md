@@ -229,8 +229,8 @@ pre-registered.
 
 ## 7b. Contract-adjudication discipline inherited from lane CL (eqz memo)
 
-Lane CL's DECISION-eqz-negzero.md generalization section governs this
-class.  Instantiated for mulint32: (1) the operative golden is the
+Lane CL's DECISION-eqz-negzero.md §Generalization — OWNER-SIGNED precedent
+for contract-boundary reasoning — governs this class.  Instantiated for mulint32: (1) the operative golden is the
 framework-level signed int32 wrap product — negative operands are IN the
 shipped contract; (2) hand-leg identity must be verified against the
 archived ELF's runtime dispatch, not symbol presence (CI's numbers carry
