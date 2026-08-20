@@ -67,8 +67,8 @@ the default-off flag `-mtt-tensix-optimize-lreg-alloc`:
 
 | name | trigger |
 |---|---|
-| `lreg-spill-inexact-dst-mode` | any typed Dst access with a 16-bit format (FP16A/FP16B/INT8/UINT16/INT16/INT8_COMP/LO16_ONLY/HI16_ONLY), the runtime-resolved SRCB mode 0, or a non-constant mode operand |
-| `lreg-spill-no-free-dst` | a non-constant Dst address; a load in mod0 10 (INT32_ALL masks the RWC base); scratch rows exhausted; unproven no-increment mode |
+| `lreg-spill-inexact-dst-mode` | an explicit 16-bit-format Dst READ (FP16A/FP16B/INT8/UINT16/INT16/INT8_COMP/LO16_ONLY/HI16_ONLY — layout counter-evidence, refuses even against the declaration), a non-constant mode operand, or `dst-layout-undeclared` (mod0-0 / Dst-untouched body without `-mtt-tensix-dst-layout-32b`) |
+| `lreg-spill-no-free-dst` | a non-constant Dst address; a load in mod0 10 (INT32_ALL masks the RWC base); an rwc-window/cross-epoch row (unproven counter position); a layout boundary (config/address-modifier write); an unproven minted-epoch step or trip bound; scratch rows exhausted; unproven no-increment mode |
 | `lreg-spill-laneconfig-unproven` | a function-local SFPCONFIG write to dest 15 (LaneConfig): column-exchange / lane-block bits silently redirect or drop round-trip lanes |
 | `cc-enable-unproved` | any CC bracket (PUSHC/POPC/COMPC) or typed CC write that is not the proven all-lanes SFPENCC, anywhere in the function (SFPSTORE/SFPLOAD move only CC-enabled lanes; no all-lanes store variant exists) |
 | `dst-rwc-effect-unproved` | any opaque insn (call, asm, unaudited pattern), RWC boundary, or non-LaneConfig layout boundary |
@@ -85,12 +85,12 @@ A Dst address is base-relative: `(imm + RWC_Dst + MATH_Offset +
 REGW_Base) & 0x3FF`, and the physical 32-bit row map
 (`dst32b_adjust_row`) aliases two logical rows only when they are
 congruent within ±3 modulo 256 (the same physical-row model
-`gimple-rvtt-transp-involution.cc` audits).  A scratch immediate is
-therefore proven free iff it keeps that distance from every kernel
-Dst immediate; rows are taken 4-aligned descending from 252, the
-whole-function base is required stable (no RWC/layout boundary
-anywhere), and `lreg-alloc-dst32-scratch-derivation-bh.C` witnesses the
-derivation moving off a kernel-claimed row.
+`gimple-rvtt-transp-involution.cc` audits).  A scratch offset is
+therefore proven free iff it keeps that distance from every kernel row
+across the epoch's whole bounded sweep; offsets are taken 4-aligned
+descending from 252 (then 1008..256 for offset-heavy functions), and
+`lreg-alloc-dst32-scratch-derivation-bh.C` witnesses the derivation
+moving off a kernel-claimed row.
 
 ## The v3 layer (DU red-team rounds DP-8..DP-11)
 
