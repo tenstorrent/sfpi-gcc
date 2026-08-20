@@ -1623,6 +1623,14 @@ list_schedule_regions (function *fn)
 
       auto flush = [&] ()
       {
+	/* Interleaving needs a third participant: a two-node region is
+	   either order-forced (dependent) or model-symmetric under the
+	   interior objective, so regions below three nodes are skipped
+	   by name rather than scheduled.  */
+	if (nodes.size () == 2 && dump_file)
+	  fprintf (dump_file, "List-schedule skipped: two-node region at "
+		   "uid=%d in bb %d (below the interleave minimum)\n",
+		   INSN_UID (nodes[0].insn), bb->index);
 	if (nodes.size () >= 3)
 	  {
 	    ls_region r;

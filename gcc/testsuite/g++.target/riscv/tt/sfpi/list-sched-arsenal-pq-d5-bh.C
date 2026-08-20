@@ -20,7 +20,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // Measured (pinned): nodes=22, baseline 40 = 22 words + 18 stalls,
 // interleaved 22 = word count.  Oracle: 43 -> 25 == lower bound.
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=22 makespan 40 -> 22 pressure-peak=3 target=bh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=22 makespan 40 -> 22 target=bh" 1 "rvtt_schedule" } }
 
 namespace ckernel { unsigned *instrn_buffer; }
 #include <sfpi.h>

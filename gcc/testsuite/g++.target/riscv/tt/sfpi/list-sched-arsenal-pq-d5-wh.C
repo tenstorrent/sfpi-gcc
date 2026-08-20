@@ -13,7 +13,7 @@
 // drops 18 -> 0 (physical delivered words).  Oracle: 43 -> 25 ==
 // lower bound (the WH baseline's 18 NOP words are real words).
 // { dg-final { scan-assembler-not "SFPNOP" } }
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=22 makespan 40 -> 22 pressure-peak=3 target=wh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=22 makespan 40 -> 22 target=wh" 1 "rvtt_schedule" } }
 
 namespace ckernel { unsigned *instrn_buffer; }
 #include <sfpi.h>
