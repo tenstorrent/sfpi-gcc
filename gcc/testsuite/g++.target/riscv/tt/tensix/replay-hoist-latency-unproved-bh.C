@@ -1,8 +1,10 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -fdump-rtl-rvtt_replay-details" }
 // A dependence edge whose PRODUCER carries no audited result-latency
-// fact (SFPLUT is deliberately unaudited in the cost table) makes the
-// payload unpriceable: the hoist refuses BY NAME, and the min-benefit
-// override cannot force it.  The same body without the consumed
+// fact (SFPLUTFP32: audit deliberately deferred in the cost table --
+// its Mod1/Mod1Mirror scheduling split and per-mode register envelopes
+// need their own audit; SFPLUT itself is audited since lane DL) makes
+// the payload unpriceable: the hoist refuses BY NAME, and the
+// min-benefit override cannot force it.  The same body without the consumed
 // unaudited producer fires (see the counted fire witnesses) -- the
 // refusal keys on the audit edge, both directions covered.
 // { dg-final { scan-rtl-dump "Not hoisting: replay-reissue-latency-unproved" "rvtt_replay" } }
@@ -19,7 +21,7 @@ void latency_unproved ()
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
       c = __builtin_rvtt_sfpmul (c, c, 0);
-      d = __builtin_rvtt_sfplut (a, b, c, d, 0);
+      d = __builtin_rvtt_sfplutfp32_3r (a, b, c, d, 0);
       a = __builtin_rvtt_sfpmul (a, a, 0);
       b = __builtin_rvtt_sfpmul (b, b, 0);
       c = __builtin_rvtt_sfpmul (c, c, 0);
