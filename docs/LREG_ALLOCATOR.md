@@ -70,7 +70,7 @@ the default-off flag `-mtt-tensix-optimize-lreg-alloc`:
 | `lreg-spill-inexact-dst-mode` | an explicit 16-bit-format Dst READ (FP16A/FP16B/INT8/UINT16/INT16/INT8_COMP/LO16_ONLY/HI16_ONLY — layout counter-evidence, refuses even against the declaration), a non-constant mode operand, or `dst-layout-undeclared` (mod0-0 / Dst-untouched body without `-mtt-tensix-dst-layout-32b`) |
 | `lreg-spill-no-free-dst` | a non-constant Dst address; a load in mod0 10 (INT32_ALL masks the RWC base); an rwc-window/cross-epoch row (unproven counter position); a layout boundary (config/address-modifier write); an unproven minted-epoch step or trip bound; scratch rows exhausted; unproven no-increment mode |
 | `lreg-spill-laneconfig-unproven` | a function-local SFPCONFIG write to dest 15 (LaneConfig): column-exchange / lane-block bits silently redirect or drop round-trip lanes |
-| `cc-enable-unproved` | any CC bracket (PUSHC/POPC/COMPC) or typed CC write that is not the proven all-lanes SFPENCC, anywhere in the function (SFPSTORE/SFPLOAD move only CC-enabled lanes; no all-lanes store variant exists) |
+| `cc-enable-unproved` | a spill point the point-wise CC lattice cannot prove all-lanes: a pure def under narrowed/unproved CC, or a read feeding a consumer outside the lane-gated allowlist (SFPSTORE/SFPLOAD move only CC-enabled lanes; no all-lanes store variant exists; the lattice is the rtl-rvtt-dst-ownership.cc one -- PUSHC/POPC stack, COMPC/typed writes narrow, the proven all-lanes SFPENCC restores) |
 | `dst-rwc-effect-unproved` | any opaque insn (call, asm, unaudited pattern), RWC boundary, or non-LaneConfig layout boundary |
 | `lreg-alloc-unknown-use` | a bare USE of the web being spilled (livein sentinels' own USEs are skipped; they are never candidates) |
 | `lreg-spill-rewrite-refused` | an insn that does not admit the operand rewrite |
@@ -128,7 +128,10 @@ moving off a kernel-claimed row.
 - **Point-wise CC**: spill stores need provably all-lanes CC; reloads
   are admitted under narrowed CC into lane-gated lane-local consumers
   (fail-closed 96-entry allowlist; cross-lane ops, plain all-lanes
-  copies, SrcS stores, loadmacro forms absent); RMW defs by lane-gated
+  copies -- the `rvtt_sfpassign` SET pattern, i.e. the unconditional
+  SFPMOV-mod-2 move, NOT the CC-gated predicated-assign whose SET_SRC
+  is `UNSPECV_SFPASSIGN`, which IS admitted -- SrcS stores, loadmacro
+  forms absent); RMW defs by lane-gated
   insns are exact at any CC (the scratch keeps the old disabled lanes
   -- predicated-write semantics).
 

@@ -1312,10 +1312,12 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
    store-backs only its enabled lanes while the scratch keeps the old
    disabled lanes, which is exactly the predicated-write semantics.
    Cross-lane ops (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain
-   all-lanes copies (rvtt_sfpassign SETs, SFPMOV mod 2), SrcS stores,
-   loadmacro forms and the zero-length LREG markers are deliberately
-   ABSENT: fail-closed allowlist, generated from the audited
-   lane-local families.  */
+   all-lanes copies (the rvtt_sfpassign SET pattern -- the
+   unconditional SFPMOV-mod-2 move; NOT the CC-gated predicated-assign
+   below, whose SET_SRC is UNSPECV_SFPASSIGN and which IS admitted),
+   SrcS stores, loadmacro forms and the zero-length LREG markers are
+   deliberately ABSENT: fail-closed allowlist, generated from the
+   audited lane-local families.  */
 
 static const insn_code lane_gated_consumers[] = {
   CODE_FOR_rvtt_sfpabs,
