@@ -239,6 +239,58 @@
 ;;                                             unaudited producer was
 ;;                                             this pattern.
 ;;
+;;   planner-emitted SFPLOADMACRO
+;;     (rvtt_sfploadmacro_int /          issue-plane record (lane CK):
+;;      rvtt_sfploadmacro_hidden_int,    the launch pattern itself stays
+;;      planner emission records only)   attribute-UNAUDITED (its effects
+;;                                             are descriptor-dependent and
+;;                                             inexpressible here), but the
+;;                                             macro planner records the
+;;                                             effect interface of each
+;;                                             launch IT emits, derived
+;;                                             from the descriptor it just
+;;                                             synthesized (rvtt-effects.h
+;;                                             contract).  [ISA]
+;;                                             SFPLOADMACRO.md: every
+;;                                             sub-unit event executes at
+;;                                             issue + 1 + delay; no
+;;                                             issue-cycle register rule,
+;;                                             so launch issue is never
+;;                                             operand-gated and reads
+;;                                             nothing at the issue plane;
+;;                                             [SIM] craq-sim f80a8d64
+;;                                             sfploadmacro_events.h:
+;;                                             events enqueue
+;;                                             unconditionally at issue,
+;;                                             "there is no FIFO between
+;;                                             launches"; [HAND] the
+;;                                             production Where kernel and
+;;                                             the handwritten typecast
+;;                                             issue launches
+;;                                             back-to-back.  The record's
+;;                                             result latency is the
+;;                                             launch's SETTLE distance
+;;                                             (greatest SequenceBits
+;;                                             delay + the sub-unit's
+;;                                             audited writeback latency
+;;                                             above -- the drain
+;;                                             derivation's own math), so
+;;                                             a foreign consumer of a
+;;                                             launch-written LREG waits
+;;                                             for the macro to settle.
+;;                                             Full-lane writes by the
+;;                                             record contract (records
+;;                                             refuse CC-writing
+;;                                             calendars), so the reissue
+;;                                             pricing drops the
+;;                                             write-side dependence edge
+;;                                             for record-carried
+;;                                             launches.  USER-written
+;;                                             launches (raw `.ttinsn'
+;;                                             words) never acquire
+;;                                             records and keep every
+;;                                             refusing default.
+;;
 ;; Deliberately UNAUDITED (refusing): SFPSHFT2 -- mod-dependent
 ;; next-cycle register constraints (SFPSHFT2.md) outside the
 ;; single-latency vocabulary; LUT/LUTFP32 -- mad-unit but no per-mod
