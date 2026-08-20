@@ -464,6 +464,11 @@ static const admitted_class admitted[] = {
   { 0x77, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 10),
     1u << B_NAMED, "exexp (lane CZ)" },
   { 0x78, (1u << 0) | (1u << 1), 1u << B_NAMED, "exman (lane CZ)" },
+  { 0x7e, (1u << 0) | (1u << 1),
+    (1u << B_INPLACE) | (1u << B_NAMED), "and (lane CZ)" },
+  { 0x7f, (1u << 0) | (1u << 1),
+    (1u << B_INPLACE) | (1u << B_NAMED), "or (lane CZ)" },
+  { 0x8d, 1u << 0, 1u << B_INPLACE, "xor (lane CZ)" },
 };
 
 static bool

@@ -938,6 +938,13 @@ lreg_index (rtx x)
      source (naming the launch-VD register pins fixed VDs).
      Differentially proven WH+BH, CC-writing mods included.
 
+   - The audited logic family SFPAND/SFPOR/SFPXOR: the tied in-place
+     form (VD op= VC; XOR everywhere, AND/OR on WH) and the BH
+     three-operand USE_VB form (VD write-only; one source named
+     through the VB subfield -- where L0 is a legal name -- the other
+     as the encoded VC or the launch VD through the VC:=VD route).
+     Differentially proven WH+BH.
+
    - SFPMUL24, BH only (mods 0 LOWER / 1 UPPER -- the plain
      spec-and-simulator-audited modes; indirect-VA/VD mods refuse):
      computes low/high 23 bits of VA*VB with the VC addend pinned to
@@ -1156,6 +1163,90 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	out->imm12 = (uint16_t) (iv & 0xfff);
 	out->name_reads = 0;
 	return true;
+      }
+    case UNSPECV_SFPAND:
+    case UNSPECV_SFPOR:
+    case UNSPECV_SFPXOR:
+      {
+	/* The audited logic family.  Two pattern shapes:
+
+	   - The tied in-place form (rvtt_sfp<logical>_lv_2op: XOR on
+	     every CPU, AND/OR on WH): VD op= VC.  The tied operand
+	     must BE the launch VD; the other source survives as the
+	     encoded VC.  XOR (0x8d) takes no operand override at all;
+	     AND/OR mod 0 require imm12/VB zero -- both exactly what
+	     the template packs.
+
+	   - The BH three-operand form (rvtt_sfp<logical>_lv_bh, mod1
+	     = SFPAND_MOD1_USE_VB): VD is write-only; one source is
+	     named through the VB subfield (imm12 bits 3:0 = word bits
+	     15:12 -- L0 is a legal VB name; the unused-code collision
+	     is a VC-field convention only), the other survives as the
+	     encoded VC or, when it is the launch-VD register, routes
+	     through the VC:=VD override with src_c 0.
+
+	   Functional models SFPAND/SFPOR/SFPXOR.md (BH tree);
+	   craq-sim tensix_execute_sfpu_int32; the patterns' effect
+	   audits.  Differentially proven WH+BH (laneCZ vocab_diff),
+	   including the route-0 arm and the VB=L0 name.  */
+	int uv = value_insn_unspecv (insn);
+	uint8_t opb;
+	if (uv == UNSPECV_SFPAND)
+	  opb = (TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPAND (0, 0, 0, 0)
+		 : TT_OP_BH_SFPAND (0, 0, 0, 0)) >> 24;
+	else if (uv == UNSPECV_SFPOR)
+	  opb = (TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPOR (0, 0, 0, 0)
+		 : TT_OP_BH_SFPOR (0, 0, 0, 0)) >> 24;
+	else
+	  opb = (TARGET_XTT_TENSIX_WH ? TT_OP_WH_SFPXOR (0, 0, 0, 0)
+		 : TT_OP_BH_SFPXOR (0, 0, 0, 0)) >> 24;
+	if (XVECLEN (un, 0) == 3)
+	  {
+	    /* Tied in-place: [0] lv, [1] tied, [2] src.  */
+	    rtx tied = XVECEXP (un, 0, 1);
+	    rtx src = XVECEXP (un, 0, 2);
+	    int v = lreg_index (tied);
+	    int s = lreg_index (src);
+	    if (v < 0 || s <= 0)
+	      return false;	/* L0 collides with the unused code    */
+	    if (v != dest || v != launch_vd)
+	      return false;	/* in-place on the launch VD	       */
+	    out->opcode = opb;
+	    out->mod1 = 0;
+	    out->src_c = (uint8_t) s;
+	    out->imm12 = 0;
+	    out->name_reads = s < 8 ? 1u << s : 0;
+	    return true;
+	  }
+	if (XVECLEN (un, 0) == 4 && uv != UNSPECV_SFPXOR
+	    && TARGET_XTT_TENSIX_BH)
+	  {
+	    /* BH USE_VB: [0] lv, [1] srcA, [2] srcB, [3] mod1.  */
+	    rtx sa = XVECEXP (un, 0, 1);
+	    rtx sb = XVECEXP (un, 0, 2);
+	    rtx mod = XVECEXP (un, 0, 3);
+	    int a = lreg_index (sa);
+	    int b = lreg_index (sb);
+	    if (a < 0 || b < 0 || !CONST_INT_P (mod)
+		|| INTVAL (mod) != (HOST_WIDE_INT) SFPAND_MOD1_USE_VB)
+	      return false;
+	    out->opcode = opb;
+	    out->mod1 = (uint8_t) SFPAND_MOD1_USE_VB;
+	    out->imm12 = (uint16_t) (a & 0xf);	/* the VB subfield     */
+	    out->name_reads = a < 8 ? 1u << a : 0;
+	    if (b == launch_vd)
+	      out->src_c = 0;	/* VC:=VD route		       */
+	    else if (b != 0)
+	      {
+		out->src_c = (uint8_t) b;
+		if (b < 8)
+		  out->name_reads |= 1u << b;
+	      }
+	    else
+	      return false;	/* L0 collides with the unused code    */
+	    return true;
+	  }
+	return false;
       }
     case UNSPECV_SFPLZ:
     case UNSPECV_SFPMOV:
