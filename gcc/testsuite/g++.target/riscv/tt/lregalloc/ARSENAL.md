@@ -119,14 +119,34 @@ Example (future gate, from a build dir with $SFPI set):
         -isystem <target-include>/c++/15.1.0/riscv-tt-elf \
         -isystem <target-include>"
 
-### CRAQ procedure
+### CRAQ procedure -- goldens are SIM-VERIFIED
 Pinned sims: craq-sim 9f324140 (bh libttsim.so sha256 32489dda..., wh
-8f0079a9...).  The spilled twins and the 8-rung control compile today;
-run them on the bh sim via the tt-llk pytest probe (shim +
---run-simulator) with the splitmix32 stimulus and compare every output
-row against tools/ladder_golden.py -- bit-exact (int32).  Under the
-allocator, the rungs themselves compile and must reproduce the same
-rows.  Evidence: `~/sfpi-uplift/laneDS-evidence-20260820/`.
+8f0079a9...).  VERIFIED 2026-08-20 on the pinned bh sim: the four
+hand-spilled twins (N=9/10/12/16) and the 8-live control reproduce the
+committed goldens BIT-EXACTLY, every output row, every lane (probe +
+logs: tools/craq-probe/ here, full evidence
+`~/sfpi-uplift/laneDS-evidence-20260820/craq/CRAQ-GOLDENS.md`).  Under
+the allocator, the rungs themselves compile and must reproduce the same
+rows via the same probe (modes select rung vs twin).
+
+Harness-integration facts learned by the probe (tools/craq-probe/):
+- TestConfig template parameters materialize as `constexpr` variables in
+  build.h, NOT macros: kernel-side dispatch must be `if constexpr`
+  (an `#if` silently compiles one arm for every variant).
+- In fp32-dest-acc mode a packed result tile spans 64 sixteen-bit dst
+  rows: pack arg t <-> SFPU byte addresses 64t..64t+62.  The arsenal's
+  layout (in 0..30 / scratch 160..178 / out 192..222) returns in result
+  tiles 0, 2 and 3.
+- Raw-builtin bodies outside the eltwise wrappers need
+  `math::reset_counters(SET_ABD_F)` after datacopy and an explicit
+  `__builtin_rvtt_sfpencc_all_lanes()` before the body.
+- The sfpi headers macro-wrap the load/store/xloadi builtins: `#undef`
+  them to use the dg-test arity inside harness kernels.
+- `TTSIM_TRACE_NG_TYPECAST=1` on the pinned sim prints per-SFPSTORE
+  dst_row/cc/value traces (the decisive diagnostic).
+- The tensor<->dst-row mapping is derived EMPIRICALLY by three
+  calibration modes (identity / rowtag / lanetag=vConstTileId) -- no
+  tile-geometry assumptions to go stale.
 
 ### Known holes recorded while building this (not allocator work)
 - gimple-rvtt-synth.cc:553 `gcc_assert (node.used)` ICE on an sfpxor
