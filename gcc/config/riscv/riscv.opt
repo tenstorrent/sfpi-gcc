@@ -649,6 +649,10 @@ mtt-tensix-optimize-counted-row-formation
 Target Var(riscv_tt_opt_counted_row) Init(0)
 Canonicalize parameterized repeated Tensix SFPU rows (immediate-varying members excluded from the record and delivered between launches; clone register maps rewritten to the recorded registers) so replay formation records one parameterized row program.
 
+mtt-tensix-optimize-replay-loop-unroll
+Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
+Request generic loop unrolling for counted single-block Tensix SFPU row loops whose every statement is a typed SFPU builtin, so the existing replay formation can capture the repeated row (default off).
+
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
