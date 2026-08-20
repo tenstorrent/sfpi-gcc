@@ -1,0 +1,293 @@
+
+;; Function ckernel::sfpu::calculate_cast_fp32_to_fp16a_fresh_cpp<8> (_ZN7ckernel4sfpu38calculate_cast_fp32_to_fp16a_fresh_cppILi8EEEvv, funcdef_no=723, decl_uid=16774, cgraph_uid=747, symbol_order=746)
+
+__attribute__((noinline))
+void ckernel::sfpu::calculate_cast_fp32_to_fp16a_fresh_cpp<8> ()
+{
+  __xtt_vector _5;
+  __xtt_vector _6;
+  __xtt_vector _7;
+  unsigned int _9;
+  unsigned int _10;
+  __xtt_vector _11;
+  __xtt_vector _12;
+  __xtt_vector _13;
+  __xtt_vector _14;
+  __xtt_vector _16;
+  __xtt_vector _17;
+  __xtt_vector _18;
+  __xtt_vector _20;
+  __xtt_vector _22;
+  __xtt_vector _23;
+  __xtt_vector _25;
+  __xtt_vector _27;
+  __xtt_vector _28;
+  __xtt_vector _45;
+  __xtt_vector _48;
+  __xtt_vector _58;
+  __xtt_vector _60;
+  __xtt_vector _62;
+  __xtt_vector _64;
+  __xtt_vector _66;
+  __xtt_vector _68;
+  __xtt_vector _70;
+  unsigned int _73;
+  unsigned int _75;
+  __xtt_vector _78;
+  __xtt_vector _86;
+  __xtt_vector _88;
+  __xtt_vector _90;
+  __xtt_vector _92;
+  __xtt_vector _94;
+  __xtt_vector _96;
+  __xtt_vector _98;
+  __xtt_vector _100;
+  __xtt_vector _102;
+  __xtt_vector _104;
+  __xtt_vector _106;
+  __xtt_vector _108;
+  unsigned int _111;
+  unsigned int _113;
+  __xtt_vector _116;
+  __xtt_vector _124;
+  __xtt_vector _126;
+  __xtt_vector _128;
+  __xtt_vector _130;
+  __xtt_vector _132;
+  __xtt_vector _134;
+  __xtt_vector _136;
+  __xtt_vector _138;
+  __xtt_vector _140;
+  __xtt_vector _142;
+  __xtt_vector _144;
+  __xtt_vector _146;
+  unsigned int _149;
+  unsigned int _151;
+  __xtt_vector _154;
+  __xtt_vector _162;
+  __xtt_vector _164;
+  __xtt_vector _166;
+  __xtt_vector _168;
+  __xtt_vector _170;
+  __xtt_vector _172;
+  __xtt_vector _174;
+  __xtt_vector _176;
+  __xtt_vector _178;
+  __xtt_vector _180;
+  __xtt_vector _182;
+  __xtt_vector _184;
+  unsigned int _187;
+  unsigned int _189;
+  __xtt_vector _192;
+  __xtt_vector _200;
+  __xtt_vector _202;
+  __xtt_vector _204;
+  __xtt_vector _206;
+  __xtt_vector _208;
+  __xtt_vector _210;
+  __xtt_vector _212;
+  __xtt_vector _214;
+  __xtt_vector _216;
+  __xtt_vector _218;
+  __xtt_vector _220;
+  __xtt_vector _222;
+  unsigned int _225;
+  unsigned int _227;
+  __xtt_vector _230;
+  __xtt_vector _238;
+  __xtt_vector _240;
+  __xtt_vector _242;
+  __xtt_vector _244;
+  __xtt_vector _246;
+  __xtt_vector _248;
+  __xtt_vector _250;
+  __xtt_vector _252;
+  __xtt_vector _254;
+  __xtt_vector _256;
+  __xtt_vector _258;
+  __xtt_vector _260;
+  unsigned int _263;
+  unsigned int _265;
+  __xtt_vector _268;
+  __xtt_vector _276;
+  __xtt_vector _278;
+  __xtt_vector _280;
+  __xtt_vector _282;
+  __xtt_vector _284;
+  __xtt_vector _286;
+  __xtt_vector _288;
+  __xtt_vector _290;
+  __xtt_vector _292;
+  __xtt_vector _294;
+  __xtt_vector _296;
+  __xtt_vector _298;
+  unsigned int _301;
+  unsigned int _303;
+  __xtt_vector _306;
+
+  <bb 2> [local count: 14762290]:
+  _28 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _11 = __builtin_rvtt_sfpshft_i (0B, _28, 4294967283, 0, 0, 0); [return slot optimization]
+  _5 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _45 = __builtin_rvtt_sfpand (_11, _5); [return slot optimization]
+  _6 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _58 = __builtin_rvtt_sfpiadd_v (_28, _6, 4); [return slot optimization]
+  _60 = __builtin_rvtt_sfpiadd_v (_58, _45, 4); [return slot optimization]
+  _62 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _64 = __builtin_rvtt_sfpand (_60, _62); [return slot optimization]
+  _66 = __builtin_rvtt_sfpassign_lv (_60, _64); [return slot optimization]
+  _68 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _70 = __builtin_rvtt_sfpand (_28, _68); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _73 = __builtin_rvtt_sfpxvif ();
+  _75 = __builtin_rvtt_sfpxicmps (0B, _70, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_75, _73);
+  _78 = __builtin_rvtt_sfpassign_lv (_66, _28); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _78, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _86 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _88 = __builtin_rvtt_sfpshft_i (0B, _86, 4294967283, 0, 0, 0); [return slot optimization]
+  _90 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _92 = __builtin_rvtt_sfpand (_88, _90); [return slot optimization]
+  _94 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _96 = __builtin_rvtt_sfpiadd_v (_86, _94, 4); [return slot optimization]
+  _98 = __builtin_rvtt_sfpiadd_v (_96, _92, 4); [return slot optimization]
+  _100 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _102 = __builtin_rvtt_sfpand (_98, _100); [return slot optimization]
+  _104 = __builtin_rvtt_sfpassign_lv (_98, _102); [return slot optimization]
+  _106 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _108 = __builtin_rvtt_sfpand (_86, _106); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _111 = __builtin_rvtt_sfpxvif ();
+  _113 = __builtin_rvtt_sfpxicmps (0B, _108, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_113, _111);
+  _116 = __builtin_rvtt_sfpassign_lv (_104, _86); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _116, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _124 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _126 = __builtin_rvtt_sfpshft_i (0B, _124, 4294967283, 0, 0, 0); [return slot optimization]
+  _128 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _130 = __builtin_rvtt_sfpand (_126, _128); [return slot optimization]
+  _132 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _134 = __builtin_rvtt_sfpiadd_v (_124, _132, 4); [return slot optimization]
+  _136 = __builtin_rvtt_sfpiadd_v (_134, _130, 4); [return slot optimization]
+  _138 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _140 = __builtin_rvtt_sfpand (_136, _138); [return slot optimization]
+  _142 = __builtin_rvtt_sfpassign_lv (_136, _140); [return slot optimization]
+  _144 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _146 = __builtin_rvtt_sfpand (_124, _144); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _149 = __builtin_rvtt_sfpxvif ();
+  _151 = __builtin_rvtt_sfpxicmps (0B, _146, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_151, _149);
+  _154 = __builtin_rvtt_sfpassign_lv (_142, _124); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _154, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _162 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _164 = __builtin_rvtt_sfpshft_i (0B, _162, 4294967283, 0, 0, 0); [return slot optimization]
+  _166 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _168 = __builtin_rvtt_sfpand (_164, _166); [return slot optimization]
+  _170 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _172 = __builtin_rvtt_sfpiadd_v (_162, _170, 4); [return slot optimization]
+  _174 = __builtin_rvtt_sfpiadd_v (_172, _168, 4); [return slot optimization]
+  _176 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _178 = __builtin_rvtt_sfpand (_174, _176); [return slot optimization]
+  _180 = __builtin_rvtt_sfpassign_lv (_174, _178); [return slot optimization]
+  _182 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _184 = __builtin_rvtt_sfpand (_162, _182); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _187 = __builtin_rvtt_sfpxvif ();
+  _189 = __builtin_rvtt_sfpxicmps (0B, _184, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_189, _187);
+  _192 = __builtin_rvtt_sfpassign_lv (_180, _162); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _192, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _200 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _202 = __builtin_rvtt_sfpshft_i (0B, _200, 4294967283, 0, 0, 0); [return slot optimization]
+  _204 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _206 = __builtin_rvtt_sfpand (_202, _204); [return slot optimization]
+  _208 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _210 = __builtin_rvtt_sfpiadd_v (_200, _208, 4); [return slot optimization]
+  _212 = __builtin_rvtt_sfpiadd_v (_210, _206, 4); [return slot optimization]
+  _214 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _216 = __builtin_rvtt_sfpand (_212, _214); [return slot optimization]
+  _218 = __builtin_rvtt_sfpassign_lv (_212, _216); [return slot optimization]
+  _220 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _222 = __builtin_rvtt_sfpand (_200, _220); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _225 = __builtin_rvtt_sfpxvif ();
+  _227 = __builtin_rvtt_sfpxicmps (0B, _222, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_227, _225);
+  _230 = __builtin_rvtt_sfpassign_lv (_218, _200); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _230, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _238 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _240 = __builtin_rvtt_sfpshft_i (0B, _238, 4294967283, 0, 0, 0); [return slot optimization]
+  _242 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _244 = __builtin_rvtt_sfpand (_240, _242); [return slot optimization]
+  _246 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _248 = __builtin_rvtt_sfpiadd_v (_238, _246, 4); [return slot optimization]
+  _250 = __builtin_rvtt_sfpiadd_v (_248, _244, 4); [return slot optimization]
+  _252 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _254 = __builtin_rvtt_sfpand (_250, _252); [return slot optimization]
+  _256 = __builtin_rvtt_sfpassign_lv (_250, _254); [return slot optimization]
+  _258 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _260 = __builtin_rvtt_sfpand (_238, _258); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _263 = __builtin_rvtt_sfpxvif ();
+  _265 = __builtin_rvtt_sfpxicmps (0B, _260, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_265, _263);
+  _268 = __builtin_rvtt_sfpassign_lv (_256, _238); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _268, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _276 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _278 = __builtin_rvtt_sfpshft_i (0B, _276, 4294967283, 0, 0, 0); [return slot optimization]
+  _280 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _282 = __builtin_rvtt_sfpand (_278, _280); [return slot optimization]
+  _284 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _286 = __builtin_rvtt_sfpiadd_v (_276, _284, 4); [return slot optimization]
+  _288 = __builtin_rvtt_sfpiadd_v (_286, _282, 4); [return slot optimization]
+  _290 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _292 = __builtin_rvtt_sfpand (_288, _290); [return slot optimization]
+  _294 = __builtin_rvtt_sfpassign_lv (_288, _292); [return slot optimization]
+  _296 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _298 = __builtin_rvtt_sfpand (_276, _296); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _301 = __builtin_rvtt_sfpxvif ();
+  _303 = __builtin_rvtt_sfpxicmps (0B, _298, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_303, _301);
+  _306 = __builtin_rvtt_sfpassign_lv (_294, _276); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _306, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  _27 = __builtin_rvtt_sfpload (0B, 0, 0, 0, 0, 7); [return slot optimization]
+  _25 = __builtin_rvtt_sfpshft_i (0B, _27, 4294967283, 0, 0, 0); [return slot optimization]
+  _22 = __builtin_rvtt_sfploadi (0B, 1, 0, 0, 2); [return slot optimization]
+  _23 = __builtin_rvtt_sfpand (_25, _22); [return slot optimization]
+  _48 = __builtin_rvtt_sfploadi (0B, 4095, 0, 0, 2); [return slot optimization]
+  _20 = __builtin_rvtt_sfpiadd_v (_27, _48, 4); [return slot optimization]
+  _18 = __builtin_rvtt_sfpiadd_v (_20, _23, 4); [return slot optimization]
+  _16 = __builtin_rvtt_sfploadi (0B, 57344, 0, 0, 4); [return slot optimization]
+  _17 = __builtin_rvtt_sfpand (_18, _16); [return slot optimization]
+  _14 = __builtin_rvtt_sfpassign_lv (_18, _17); [return slot optimization]
+  _12 = __builtin_rvtt_sfploadi (0B, 32640, 0, 0, 0); [return slot optimization]
+  _13 = __builtin_rvtt_sfpand (_27, _12); [return slot optimization]
+  __builtin_rvtt_sfppushc (0);
+  _10 = __builtin_rvtt_sfpxvif ();
+  _9 = __builtin_rvtt_sfpxicmps (0B, _13, 2139095040, 0, 0, 18);
+  __builtin_rvtt_sfpxcondb (_9, _10);
+  _7 = __builtin_rvtt_sfpassign_lv (_14, _27); [return slot optimization]
+  __builtin_rvtt_sfppopc (0);
+  __builtin_rvtt_sfpstore (0B, _7, 0, 0, 0, 0, 7);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0); [tail call]
+  return;
+
+}
+
+
