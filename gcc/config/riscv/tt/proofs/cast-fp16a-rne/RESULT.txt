@@ -1,0 +1,15 @@
+inputs swept          : 4294967296
+total mismatches      : 33810429
+  tie-even (RNE vs half-away) : 260096
+  denormal value (hw flush)   : 16769022
+  denormal/zero sign lost     : 4097
+  NaN payload (hw -> inf)     : 16777214
+  other                       : 0
+verdict               : NOT-EQUAL (proof obligation FAILS)
+cut-stream sha256 = 70608a8835321ce609bb64c6c2688831b971d393d0b7656c0565d3a98d8f3bec
+hw-stream  sha256 = 600148d0715697a3dac5fdfbfb201c05d635d5940c6f1c3bd07e750b39e5e12b
+mismatches sha256 = fda38ab873d374aee91447077148812cb17f6c9ee478e01b5f99aad2a1171e70
+example: u=0x00001001 cut=0x00002000 hw=0x00000000
+example: u=0x00801000 cut=0x00800000 hw=0x00802000
+example: u=0x7f800001 cut=0x7f800001 hw=0x7f800000
+example: u=0x80000000 cut=0x80000000 hw=0x00000000
