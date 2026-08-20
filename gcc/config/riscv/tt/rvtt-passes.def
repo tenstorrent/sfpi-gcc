@@ -71,6 +71,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosscall);
    hoist has settled contract placements and before pass_rvtt_expand
    lowers the canonical builtin forms.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crossloop);
+/* Representation propagation cancels audited conversion-involution
+   pairs across choose-only value webs (SSA proof, bit-exact).  It
+   runs after the synth CSE/DCE have canonicalized duplicate
+   conversions and before pass_rvtt_expand lowers the structured CC
+   forms, so the whole downstream pipeline -- including macro-planner
+   region discovery -- sees the shorter bodies.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_reprprop);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_expand);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_immload_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_live);

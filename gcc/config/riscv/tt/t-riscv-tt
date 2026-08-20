@@ -54,6 +54,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-lut-select.o \
 	gimple-rvtt-crosscall.o \
 	gimple-rvtt-crossloop.o \
+	gimple-rvtt-reprprop.o \
 	gimple-rvtt-transp-involution.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-lp-schedule.o \
