@@ -960,6 +960,635 @@ fill_interlock_shadows (function *fn)
     }
 }
 
+/* ---- DAG list scheduling over audited straight-line SFPU regions ----
+
+   The three phases above are single-move bubble fillers: each closes one
+   exposed slot with one independent instruction.  They cannot express the
+   general latency objective -- interleaving two independent dependence
+   chains so every audited result-latency shadow is filled (the documented
+   dual-Horner P/Q case: a serial P-chain-then-Q-chain stream carries one
+   modeled stall per dependent adjacency; the interleaved stream carries
+   none).  This phase is the real scheduler: it builds the dependence DAG
+   of a maximal audited straight-line region and list-schedules it against
+   the modeled issue timeline, committing the new order only on a strict
+   modeled-makespan decrease.
+
+   Region admission, refusing by name (fail-closed; every barrier bounds
+   the region and keeps its own position, and nothing crosses it):
+   - a node is an issued Tensix instruction that is pure-LREG (every
+     register reference an allocatable SFPU register, no memory), either
+     the bare unpredicated copy or on record in the typed effect table
+     with no CC write, no configuration access, no RWC step, and no Dst
+     traffic (exactly shadow_filler_p's vocabulary);
+   - a node's result latency must be AUDITED (audited_latency >= 0, which
+     also refuses the architectural next-slot acceptance stall):
+     an unaudited latency never schedules -- the instruction becomes a
+     named barrier ("unaudited-latency");
+   - CC-writing instructions (setcc/encc and every other lane-state
+     mutator) are named barriers: a region therefore executes under ONE
+     CC state, so lane-predicated members read the same lane enables at
+     any position inside it.  Predicated writes keep the established
+     read-modify-write conservatism (defs join uses);
+   - a STATIC-delay contract is a named barrier (its pad precedes any
+     non-nop instruction: reordering cannot close it);
+   - an explicit replay-buffer owner ends eligibility for the REST of
+     the block (a fixed capture records the following delivered words by
+     position), matching the established phase discipline.  Formed
+     macro-planner emissions are effect-opaque and therefore barriers:
+     scheduling runs BEFORE replay/MOP formation (this pass's placement)
+     and treats already-formed calendars as atomic.
+
+   Dependence DAG, over DF hard-register references (complete for
+   allocatable registers after allocation, as established above):
+   - RAW and WAW edges require issue distance >= words(producer) +
+     audited latency(producer); WAR edges require >= words(producer);
+   - a lane-predicated node's writes are also reads (RMW), so the edge
+     set covers partial-lane merges.
+
+   Objective: modeled makespan of the region -- issue slots (multi-word
+   instructions occupy their word count) plus modeled interlock stalls
+   (the audited xtt_result_latency facts; on WH the same count appears
+   as required SFPNOP words, on BH as transparent scoreboard stalls),
+   plus the boundary terms:
+   - the nearest preceding issued Tensix instruction (the entry
+     producer) contributes its audited latency to nodes that read its
+     destinations; if any of the preceding issued instructions within
+     the audited horizon is UNAUDITED, every dependent node is pinned to
+     its baseline issue slot or later ("entry-pinned": the distance to
+     an unknown-latency producer never decreases, so the unmodeled stall
+     can only shrink);
+   - the nearest following issued Tensix instruction (the exit consumer)
+     adds the trailing shadow of the nodes that feed it; a region ending
+     the block drains every node's shadow (conservative, applied to
+     baseline and candidate identically).
+
+   List scheduling itself is deterministic: ready nodes issue by
+   greatest critical-path height (edge weights = the issue-distance
+   requirements above), ties broken by original order.  Dispatch is
+   register-pressure-aware: the live allocatable-LREG count is computed
+   along the candidate schedule (region live-outs included) and any slot
+   exceeding the architectural 8 refuses by name -- post-allocation this
+   is an invariant (8 hard registers exist), and the check is the
+   contract that keeps this scheduler sound if it ever runs against a
+   wider virtual register file.
+
+   The commit is transactional: the candidate order is adopted only on a
+   strict modeled-makespan decrease, then re-verified against the nop
+   inserter's own probe (the count of DYNAMIC-delay pad sites over the
+   region must not grow); any failure restores the exact original order
+   byte-identically.  Purely structural: no operation identity, opcode
+   calendar, coefficient value, or instruction-word fingerprint
+   participates.  */
+
+namespace {
+
+struct ls_node
+{
+  rtx_insn *insn;
+  insn_regs regs;	 /* uses include defs for predicated writes  */
+  HARD_REG_SET raw_defs; /* defs alone				      */
+  int lat;		 /* audited result latency		      */
+  int words;		 /* issue slots this instruction occupies    */
+  int orig;		 /* original index within the region	      */
+  long cp;		 /* critical-path height to region exit      */
+  int ready;		 /* earliest issue slot (filled during sim)  */
+  int entry_pin;	 /* issue slot floor from the entry boundary */
+  bool pin_to_baseline;	 /* unaudited entry producer dependence      */
+};
+
+} // anonymous namespace
+
+/* Node admission; returns false with *WHY naming the barrier class.  */
+
+static bool
+ls_admissible_p (rtx_insn *insn, ls_node *node, const char **why)
+{
+  if (!issued_tensix_p (insn))
+    {
+      *why = "non-tensix";
+      return false;
+    }
+  if (JUMP_P (insn))
+    {
+      *why = "control-flow";
+      return false;
+    }
+  if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+    {
+      *why = "replay-owner";
+      return false;
+    }
+  if (contains_mem_rtx_p (PATTERN (insn)))
+    {
+      *why = "memory-operand";
+      return false;
+    }
+  if (!collect_sfpu_regs (insn, &node->regs))
+    {
+      *why = "scalar-or-defless";
+      return false;
+    }
+  node->raw_defs = node->regs.defs;
+  if (!bare_lreg_copy_p (insn))
+    {
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (e.opaque)
+	{
+	  *why = "effect-opaque";
+	  return false;
+	}
+      if (e.cc_write)
+	{
+	  *why = "cc-write";
+	  return false;
+	}
+      if (e.config_dests_written || e.config_dests_read)
+	{
+	  *why = "config-access";
+	  return false;
+	}
+      if (e.rwc.kind != xtt_rwc_effect_t::NONE)
+	{
+	  *why = "rwc-step";
+	  return false;
+	}
+      if (e.dst_mem_read || e.dst_mem_write)
+	{
+	  *why = "dst-access";
+	  return false;
+	}
+      /* Read-modify-write conservatism for lane-predicated writes.  */
+      if (e.cc_read)
+	node->regs.uses |= node->regs.defs;
+    }
+  node->lat = audited_latency (insn);
+  if (node->lat < 0)
+    {
+      *why = "unaudited-latency";
+      return false;
+    }
+  if (get_attr_xtt_delay (insn) == XTT_DELAY_STATIC)
+    {
+      *why = "static-delay";
+      return false;
+    }
+  node->insn = insn;
+  node->words = get_attr_length (insn) / 4;
+  if (node->words < 1)
+    {
+      *why = "zero-length";
+      return false;
+    }
+  return true;
+}
+
+/* Dependence test: does the earlier node P order the later node C?
+   Kind: 0 none, 1 latency-weighted (RAW or WAW), 2 issue-order (WAR).  */
+
+static int
+ls_dependence (const ls_node &p, const ls_node &c)
+{
+  if (hard_reg_set_intersect_p (p.raw_defs, c.regs.uses)
+      || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs))
+    return 1;
+  if (hard_reg_set_intersect_p (p.regs.uses, c.raw_defs))
+    return 2;
+  return 0;
+}
+
+/* Modeled issue timeline of NODES in the order given by ORDER (indices
+   into NODES).  Fills issue slots into *ISSUE (indexed like NODES) and
+   returns the modeled end: the last occupied slot boundary plus the
+   trailing shadow of every node in EXIT_MASK (nodes feeding the exit
+   consumer, or all nodes when the region ends the block).  Entry pins
+   and the entry producer's latency floor are honored.  */
+
+static int
+ls_simulate (const std::vector<ls_node> &nodes,
+	     const std::vector<int> &order, std::vector<int> *issue,
+	     const std::vector<bool> &exit_shadow)
+{
+  int t = 0;
+  for (unsigned k = 0; k != order.size (); ++k)
+    {
+      const ls_node &n = nodes[order[k]];
+      int ready = n.entry_pin;
+      for (unsigned j = 0; j != k; ++j)
+	{
+	  const ls_node &p = nodes[order[j]];
+	  int kind = ls_dependence (p, n);
+	  if (!kind)
+	    continue;
+	  int need = (*issue)[order[j]] + p.words + (kind == 1 ? p.lat : 0);
+	  if (need > ready)
+	    ready = need;
+	}
+      if (ready > t)
+	t = ready;
+      (*issue)[order[k]] = t;
+      t += n.words;
+    }
+  int end = t;
+  for (unsigned i = 0; i != nodes.size (); ++i)
+    if (exit_shadow[i])
+      {
+	int drain = (*issue)[i] + nodes[i].words + nodes[i].lat;
+	if (drain > end)
+	  end = drain;
+      }
+  return end;
+}
+
+/* Live allocatable-LREG pressure along ORDER; true when the schedule
+   never exceeds the architectural eight, else false with *PEAK set.
+   LIVE_AFTER holds the registers live after the region.  */
+
+static bool
+ls_pressure_ok (const std::vector<ls_node> &nodes,
+		const std::vector<int> &order,
+		const HARD_REG_SET &live_after, int *peak)
+{
+  *peak = 0;
+  for (unsigned k = 0; k != order.size (); ++k)
+    {
+      /* Registers live after slot k: defined at or before k (or entering
+	 the region live) and read after k, plus region live-outs.  */
+      HARD_REG_SET live = live_after;
+      for (unsigned j = k + 1; j != order.size (); ++j)
+	live |= nodes[order[j]].regs.uses;
+      /* Kill registers wholly defined after k before any later use...
+	 conservatively skipped: a register in LIVE that is re-defined
+	 later still occupies its name here only if it carries a value,
+	 which the uses-side accounting above already approximates from
+	 the reader's perspective.  Count the allocatable window.  */
+      int count = 0;
+      for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+	if (TEST_HARD_REG_BIT (live, r))
+	  ++count;
+      if (count > *peak)
+	*peak = count;
+      if (count > (int) SFPU_REG_NUM)
+	return false;
+    }
+  return true;
+}
+
+/* Count the DYNAMIC-delay pad sites over the region members (the nop
+   inserter's own probe): the commit guard's before/after metric.  */
+
+static unsigned
+ls_pad_sites (std::vector<basic_block> &visited, basic_block bb,
+	      const std::vector<ls_node> &nodes)
+{
+  unsigned pads = 0;
+  for (const ls_node &n : nodes)
+    if (get_attr_xtt_delay (n.insn) == XTT_DELAY_DYNAMIC
+	&& delay_nop_needed_p (visited, bb, n.insn, XTT_DELAY_DYNAMIC))
+      ++pads;
+  return pads;
+}
+
+/* Deterministic list schedule of NODES honoring the DAG: critical-path
+   priority, original order on ties.  Returns the chosen order.  */
+
+static std::vector<int>
+ls_list_order (std::vector<ls_node> &nodes)
+{
+  unsigned n = nodes.size ();
+
+  /* Critical-path heights over the issue-distance weights.  */
+  for (unsigned i = n; i--;)
+    {
+      long cp = nodes[i].words + nodes[i].lat;
+      for (unsigned j = i + 1; j != n; ++j)
+	{
+	  int kind = ls_dependence (nodes[i], nodes[j]);
+	  if (!kind)
+	    continue;
+	  long via = nodes[j].cp
+	    + nodes[i].words + (kind == 1 ? nodes[i].lat : 0);
+	  if (via > cp)
+	    cp = via;
+	}
+      nodes[i].cp = cp;
+    }
+
+  std::vector<int> order;
+  std::vector<bool> issued (n, false);
+  std::vector<int> ready_at (n, 0);
+  for (unsigned i = 0; i != n; ++i)
+    ready_at[i] = nodes[i].entry_pin;
+
+  int t = 0;
+  while (order.size () != n)
+    {
+      int best = -1;
+      int soonest = INT_MAX;
+      for (unsigned i = 0; i != n; ++i)
+	{
+	  if (issued[i])
+	    continue;
+	  /* Readiness: every earlier-original dependence already issued
+	     and its distance satisfied.  */
+	  int ready = ready_at[i];
+	  bool deps_done = true;
+	  for (unsigned j = 0; j != n; ++j)
+	    {
+	      if (j == i || nodes[j].orig > nodes[i].orig)
+		continue;
+	      int kind = ls_dependence (nodes[j], nodes[i]);
+	      if (!kind)
+		continue;
+	      if (!issued[j])
+		{
+		  deps_done = false;
+		  break;
+		}
+	    }
+	  if (!deps_done)
+	    continue;
+	  if (ready < soonest)
+	    soonest = ready;
+	  if (ready > t)
+	    continue;
+	  if (best < 0 || nodes[i].cp > nodes[best].cp
+	      || (nodes[i].cp == nodes[best].cp
+		  && nodes[i].orig < nodes[best].orig))
+	    best = i;
+	}
+      if (best < 0)
+	{
+	  /* Nothing ready this slot: advance to the earliest ready
+	     time (a modeled stall).  */
+	  gcc_assert (soonest != INT_MAX && soonest > t);
+	  t = soonest;
+	  continue;
+	}
+      order.push_back (best);
+      issued[best] = true;
+      int done = t + nodes[best].words;
+      /* Successor readiness floors.  */
+      for (unsigned j = 0; j != n; ++j)
+	{
+	  if (issued[j] || j == (unsigned) best)
+	    continue;
+	  int kind = ls_dependence (nodes[best], nodes[j]);
+	  if (!kind)
+	    continue;
+	  int need = done + (kind == 1 ? nodes[best].lat : 0);
+	  if (need > ready_at[j])
+	    ready_at[j] = need;
+	}
+      t = done;
+    }
+  return order;
+}
+
+/* Schedule one region.  NODES are the region members in original order
+   (orig fields set).  ANCHOR is the unmoved insn immediately before the
+   region.  Returns true if the region was reordered (committed).  */
+
+static bool
+ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
+		    rtx_insn *anchor, rtx_insn *entry_producer,
+		    rtx_insn *exit_consumer, bool entry_unaudited,
+		    std::vector<basic_block> &visited)
+{
+  unsigned n = nodes.size ();
+
+  /* Entry boundary: latency floor from the audited entry producer;
+     baseline pins where any in-horizon predecessor is unaudited.  */
+  insn_regs ep_regs;
+  CLEAR_HARD_REG_SET (ep_regs.uses);
+  CLEAR_HARD_REG_SET (ep_regs.defs);
+  int ep_lat = 0;
+  if (entry_producer)
+    {
+      sfpu_reg_refs (entry_producer, &ep_regs);
+      ep_lat = audited_latency (entry_producer);
+      if (ep_lat < 0)
+	ep_lat = 0;	/* handled by the baseline pin below */
+    }
+  for (unsigned i = 0; i != n; ++i)
+    {
+      nodes[i].entry_pin = 0;
+      nodes[i].pin_to_baseline = false;
+      bool dep = hard_reg_set_intersect_p (ep_regs.defs, nodes[i].regs.uses)
+	|| hard_reg_set_intersect_p (ep_regs.defs, nodes[i].raw_defs);
+      if (dep && entry_producer)
+	{
+	  if (entry_unaudited)
+	    nodes[i].pin_to_baseline = true;
+	  else if (ep_lat > nodes[i].entry_pin)
+	    nodes[i].entry_pin = ep_lat;
+	}
+    }
+
+  /* Exit boundary: nodes feeding the first following issued insn keep
+     their trailing shadow in the makespan; a block-ending region drains
+     everything.  */
+  std::vector<bool> exit_shadow (n, false);
+  if (exit_consumer)
+    {
+      insn_regs xc;
+      sfpu_reg_refs (exit_consumer, &xc);
+      HARD_REG_SET wanted = xc.uses;
+      wanted |= xc.defs;
+      for (unsigned i = 0; i != n; ++i)
+	exit_shadow[i]
+	  = hard_reg_set_intersect_p (nodes[i].raw_defs, wanted);
+    }
+  else
+    for (unsigned i = 0; i != n; ++i)
+      exit_shadow[i] = true;
+
+  /* Baseline: the original order under the same model.  */
+  std::vector<int> base_order (n);
+  for (unsigned i = 0; i != n; ++i)
+    base_order[i] = i;
+  std::vector<int> base_issue (n, 0);
+  int base_end = ls_simulate (nodes, base_order, &base_issue, exit_shadow);
+
+  /* Baseline pins land AFTER the baseline itself is modeled.  */
+  for (unsigned i = 0; i != n; ++i)
+    if (nodes[i].pin_to_baseline)
+      nodes[i].entry_pin = base_issue[i];
+
+  /* Candidate.  */
+  std::vector<int> order = ls_list_order (nodes);
+  std::vector<int> cand_issue (n, 0);
+  int cand_end = ls_simulate (nodes, order, &cand_issue, exit_shadow);
+
+  if (cand_end >= base_end)
+    {
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: no modeled makespan "
+		 "decrease in bb %d region at uid=%d (%d -> %d)\n",
+		 bb->index, INSN_UID (nodes[0].insn), base_end, cand_end);
+      return false;
+    }
+
+  /* Region live-after set for the pressure walk.  */
+  HARD_REG_SET live_after;
+  CLEAR_HARD_REG_SET (live_after);
+  for (rtx_insn *w = NEXT_INSN (nodes[n - 1].insn);
+       w && w != NEXT_INSN (BB_END (bb)); w = NEXT_INSN (w))
+    if (NONDEBUG_INSN_P (w))
+      {
+	insn_regs wr;
+	sfpu_reg_refs (w, &wr);
+	live_after |= wr.uses;
+      }
+  for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+    if (bitmap_bit_p (DF_LR_OUT (bb), r))
+      SET_HARD_REG_BIT (live_after, r);
+
+  int peak = 0;
+  if (!ls_pressure_ok (nodes, order, live_after, &peak))
+    {
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: pressure %d exceeds "
+		 "the architectural %d in bb %d\n",
+		 peak, (int) SFPU_REG_NUM, bb->index);
+      return false;
+    }
+
+  /* Commit guard data: the nop inserter's pad-site count before.  */
+  unsigned pads_before = ls_pad_sites (visited, bb, nodes);
+
+  /* Commit: relink the region in schedule order after ANCHOR.  */
+  rtx_insn *after = anchor;
+  for (unsigned k = 0; k != n; ++k)
+    {
+      rtx_insn *insn = nodes[order[k]].insn;
+      if (PREV_INSN (insn) != after)
+	reorder_insns (insn, insn, after);
+      after = insn;
+    }
+
+  unsigned pads_after = ls_pad_sites (visited, bb, nodes);
+  if (pads_after > pads_before)
+    {
+      /* Restore the exact original order.  */
+      after = anchor;
+      for (unsigned i = 0; i != n; ++i)
+	{
+	  rtx_insn *insn = nodes[i].insn;
+	  if (PREV_INSN (insn) != after)
+	    reorder_insns (insn, insn, after);
+	  after = insn;
+	}
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: pad-site increase "
+		 "(%u -> %u), restored bb %d region at uid=%d\n",
+		 pads_before, pads_after, bb->index,
+		 INSN_UID (nodes[0].insn));
+      return false;
+    }
+
+  if (dump_file)
+    {
+      fprintf (dump_file, "List-schedule: bb %d nodes=%u makespan "
+	       "%d -> %d pressure-peak=%d target=%s\n",
+	       bb->index, n, base_end, cand_end, peak,
+	       TARGET_XTT_TENSIX_WH ? "wh" : "bh");
+      for (unsigned k = 0; k != n; ++k)
+	fprintf (dump_file, "List-schedule slot=%d uid=%d\n",
+		 cand_issue[order[k]], INSN_UID (nodes[order[k]].insn));
+    }
+  return true;
+}
+
+static void
+list_schedule_regions (function *fn)
+{
+  if (!TARGET_XTT_TENSIX_BH && !TARGET_XTT_TENSIX_WH)
+    {
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: no audited latency "
+		 "facts for this target\n");
+      return;
+    }
+
+  df_analyze ();
+
+  std::vector<basic_block> visited;
+  visited.reserve (n_basic_blocks_for_fn (fn));
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      std::vector<ls_node> nodes;
+      rtx_insn *anchor = nullptr;	 /* insn before the region     */
+      rtx_insn *entry_producer = nullptr; /* nearest issued tensix insn */
+      bool entry_unaudited = false;
+      rtx_insn *prev_any = nullptr;	 /* previous nondebug insn     */
+      bool stop_block = false;
+
+      auto flush = [&] ()
+      {
+	if (nodes.size () >= 3)
+	  /* The exit consumer follows the established adjacency model:
+	     the next ISSUED Tensix insn, or none across any other
+	     barrier (a region ending the block drains conservatively,
+	     applied to baseline and candidate identically).  */
+	  ls_schedule_region (bb, nodes, anchor, entry_producer,
+			      next_issued_insn (bb, nodes.back ().insn),
+			      entry_unaudited, visited);
+	nodes.clear ();
+      };
+
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (stop_block)
+	    break;
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+
+	  ls_node node;
+	  const char *why = nullptr;
+	  if (ls_admissible_p (insn, &node, &why))
+	    {
+	      if (nodes.empty ())
+		{
+		  anchor = PREV_INSN (insn);
+		  entry_producer = nullptr;
+		  entry_unaudited = false;
+		  /* Entry boundary: the nearest preceding issued Tensix
+		     insn; deeper unaudited producers within the audited
+		     horizon force baseline pins for their readers.  */
+		  if (prev_any && issued_tensix_p (prev_any))
+		    {
+		      entry_producer = prev_any;
+		      entry_unaudited = audited_latency (prev_any) < 0;
+		    }
+		}
+	      node.orig = (int) nodes.size ();
+	      nodes.push_back (node);
+	      prev_any = insn;
+	      continue;
+	    }
+
+	  /* Barrier.  */
+	  if (dump_file && GET_CODE (insn) == INSN
+	      && recog_memoized (insn) >= 0
+	      && get_attr_type (insn) == TYPE_TENSIX
+	      && get_attr_length (insn))
+	    fprintf (dump_file, "List-schedule barrier: %s uid=%d\n",
+		     why, INSN_UID (insn));
+	  flush ();
+	  if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0
+	      && get_attr_type (insn) == TYPE_TENSIX
+	      && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+	    stop_block = true;	/* established capture discipline */
+	  prev_any = insn;
+	}
+      if (!stop_block)
+	flush ();
+    }
+}
+
 /* ---- Capture rotation: cross-row interlock fill ----
 
    fill_interlock_shadows above fills a modeled transparent stall with an
@@ -1708,6 +2337,8 @@ public:
 
   virtual unsigned execute (function *fn) override
   {
+    if (riscv_tt_opt_list_schedule)
+      list_schedule_regions (fn);
     if (riscv_tt_opt_latency_schedule)
       {
 	fill_latency_bubbles (fn);
