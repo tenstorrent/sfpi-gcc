@@ -48,8 +48,17 @@ along with GCC; see the file COPYING3.  If not see
 	audited no-increment address mode.  The INT32 format pair is
 	the bit-exact 32-bit round trip on both WH and BH (simulator
 	models read_dst32b/write_dst32b through the exact
-	encode_fp32/decode_fp32 involution; FP32 mod0 3 is NOT used
-	because the BH store flushes denormals).
+	encode_fp32/decode_fp32 involution, verified bit-exact over all
+	2^32 patterns in the adjudicated simulator; FP32 mod0 3 is NOT
+	used because the BH store flushes denormals).
+
+      - The whole allocation is TRANSACTIONAL: every emitted round-trip
+	insn and every operand rewrite is recorded, and any refusal
+	discovered after mutation (no spillable candidate, scratch rows
+	exhausted, a rewrite the insn does not admit, the round limit)
+	rolls the stream back to the pre-allocation shape before
+	returning, so every refusal path hands the post-RA spill
+	diagnosis exactly today's stream.
 
       - After spilling makes the graph 8-colorable, register
 	assignment is deliberately left to IRA: the DSATUR verdict is
@@ -60,8 +69,8 @@ along with GCC; see the file COPYING3.  If not see
 	remains the backstop.
 
    Bit-exactness gates (each failure is a named refusal that keeps
-   today's lreg-pressure-exceeded error byte-identically -- refusal
-   paths never mutate anything):
+   today's lreg-pressure-exceeded error; refusals either precede any
+   mutation or roll the stream back transactionally):
 
       - lreg-spill-inexact-dst-mode: the spill round trip is bit-exact
 	only through the 32-bit Dst formats.  Any typed Dst access in
@@ -100,9 +109,43 @@ along with GCC; see the file COPYING3.  If not see
 	fail-closed; a point-wise CC lattice (the
 	rtl-rvtt-dst-ownership.cc machinery) can refine it later.
 
+      - lreg-spill-laneconfig-unproven: SFPLOAD/SFPSTORE lane-to-cell
+	addressing is redirected by the LaneConfig column-exchange bits
+	(DEST_RD_COL_EXCHANGE / DEST_WR_COL_EXCHANGE) and gated by the
+	per-lane block bits (BLOCK_SFPU_RD_FROM_DEST /
+	BLOCK_DEST_WR_FROM_SFPU): under a nondefault LaneConfig the
+	round trip silently moves or drops lanes.  Any function-local
+	SFPCONFIG write to dest 15 (LaneConfig) therefore refuses by
+	this name (other config writes refuse as layout boundaries).
+
       - dst-rwc-effect-unproved: any opaque instruction (call, asm,
 	unaudited pattern), RWC boundary, or layout boundary refuses,
 	per the vocabulary of SFPLOADMACRO_FORMATION.md.
+
+   Ambient contracts the flag carries (function-local analysis cannot
+   see state established before the function; these are the same trust
+   boundary as the ambient all-lanes CC contract the shipped CC
+   synthesis bakes in, and they are spelled out in the flag's
+   documentation):
+
+      - ambient Dst data width: with no typed Dst access in the
+	function, nothing in it can prove the 16-bit view absent; the
+	flag asserts the surrounding kernel does not view the scratch
+	rows through a 16-bit format.
+
+      - ambient LaneConfig: the architectural default (no column
+	exchange, no block bits -- the simulator's reset state, and
+	what the LLK init sequence leaves in place per the audited
+	dest-15 table) is assumed to be active at the calc body.
+
+      - concurrent Dst consumers: scratch rows are proven free only
+	against the FUNCTION'S OWN typed accesses.  The surrounding
+	kernel contract is that no concurrent consumer (the packer
+	reading result tiles, a neighbouring thread) touches Dst rows
+	the calc body does not itself address while it runs.  A kernel
+	that violates this cannot be detected function-locally; the
+	CRAQ gate on every newly-compiling kernel is the empirical
+	backstop.
 
    QSR is excluded by the gate (and independently by the unproven
    no-increment address mode).  XTT64/XTT128-mode pseudos refuse
@@ -411,6 +454,15 @@ scan_spill_legality (function *fn, spill_ctx &ctx)
 	  if (e.rwc.kind != xtt_rwc_effect_t::NONE)
 	    {
 	      refuse (ctx, "dst-rwc-effect-unproved", "rwc-boundary", insn);
+	      return;
+	    }
+	  if (e.config_dests_written & (1u << 15))
+	    {
+	      /* LaneConfig (SFPCONFIG dest 15): the column-exchange and
+		 lane-block bits redirect or drop SFPLOAD/SFPSTORE lanes
+		 -- a silent round-trip corruption, not a truncation.  */
+	      refuse (ctx, "lreg-spill-laneconfig-unproven",
+		      "laneconfig-written-in-function", insn);
 	      return;
 	    }
 	  if (e.config_dests_written != 0 || e.addr_mod_slot_write)
@@ -869,17 +921,51 @@ choose_spill_web (const lpa_graph &g, int blocked)
 
 /* --------------------------- spill rewrite -------------------------- */
 
+/* Transaction log: everything the allocator does to the stream, so any
+   later refusal can roll the function back to its pre-allocation
+   shape.  */
+
+struct spill_transaction
+{
+  auto_vec<rtx_insn *> emitted;		/* round-trip insns, delete on undo */
+  auto_vec<rtx_insn *> replaced_insn;	/* operand rewrites, revert on undo */
+  auto_vec<rtx> replaced_from;
+  auto_vec<rtx> replaced_to;
+  unsigned n_round_trips () const { return emitted.length (); }
+};
+
+static void
+rollback (spill_transaction &tx)
+{
+  for (unsigned i = tx.replaced_insn.length (); i-- > 0;)
+    {
+      /* Reversing a just-validated reg-for-reg replacement re-forms the
+	 exact original pattern; recog cannot answer differently.  */
+      bool ok = validate_replace_rtx (tx.replaced_to[i],
+				      tx.replaced_from[i],
+				      tx.replaced_insn[i]);
+      gcc_assert (ok);
+    }
+  for (unsigned i = tx.emitted.length (); i-- > 0;)
+    delete_insn (tx.emitted[i]);
+  tx.emitted.truncate (0);
+  tx.replaced_insn.truncate (0);
+  tx.replaced_from.truncate (0);
+  tx.replaced_to.truncate (0);
+}
+
 /* Spill web REGNO through Dst scratch row ROW: SFPSTORE mod0 4 after
    each def, SFPLOAD mod0 4 before each reading insn, fresh pseudo per
-   insn.  New pseudos are recorded in SPILL_TMPS.  Returns the number
-   of memory round-trip insns emitted.  */
+   insn.  New pseudos are recorded in SPILL_TMPS; every stream change
+   is recorded in TX.  Returns false when some insn does not admit the
+   operand rewrite (the caller rolls the whole transaction back) --
+   never asserts after emission.  */
 
-static unsigned
+static bool
 spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
-	   bitmap spill_tmps)
+	   bitmap spill_tmps, spill_transaction &tx)
 {
   rtx preg = regno_reg_rtx[regno];
-  unsigned emitted = 0;
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
@@ -890,14 +976,25 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	  next = NEXT_INSN (insn);
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
+	  if (GET_CODE (PATTERN (insn)) == USE)
+	    /* Reservation webs are never chosen; a bare USE of any
+	       other web cannot occur.  Fail closed, not loud.  */
+	    return false;
 	  bool reads = reg_referenced_p (preg, PATTERN (insn));
 	  bool writes = reg_set_p (preg, insn);
 	  if (!reads && !writes)
 	    continue;
-	  gcc_assert (GET_CODE (PATTERN (insn)) != USE);
 
 	  rtx q = gen_reg_rtx (XTT32SImode);
 	  bitmap_set_bit (spill_tmps, REGNO (q));
+
+	  /* Rewrite first: a refused rewrite must precede any emission
+	     for this insn (the caller still rolls back prior ones).  */
+	  if (!validate_replace_rtx (preg, q, insn))
+	    return false;
+	  tx.replaced_insn.safe_push (insn);
+	  tx.replaced_from.safe_push (preg);
+	  tx.replaced_to.safe_push (q);
 
 	  if (reads)
 	    {
@@ -909,7 +1006,7 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 					 GEN_INT (4 /* INT32 */),
 					 GEN_INT (addr_mode)),
 		insn);
-	      emitted++;
+	      tx.emitted.safe_push (reload);
 	      if (dump_file)
 		fprintf (dump_file,
 			 "lreg-alloc: reload insn %d (r%u -> r%u) before "
@@ -917,9 +1014,6 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 			 INSN_UID (reload), regno, REGNO (q),
 			 INSN_UID (insn), row);
 	    }
-
-	  bool ok = validate_replace_rtx (preg, q, insn);
-	  gcc_assert (ok);
 
 	  if (writes)
 	    {
@@ -929,7 +1023,7 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 				       GEN_INT (4 /* INT32 */),
 				       GEN_INT (addr_mode)),
 		insn);
-	      emitted++;
+	      tx.emitted.safe_push (store);
 	      if (dump_file)
 		fprintf (dump_file,
 			 "lreg-alloc: spill store insn %d (r%u via r%u) "
@@ -940,7 +1034,7 @@ spill_web (function *fn, unsigned regno, HOST_WIDE_INT row, int addr_mode,
 	    }
 	}
     }
-  return emitted;
+  return true;
 }
 
 /* --------------------------- enforcement --------------------------- */
@@ -979,8 +1073,26 @@ enforce_colorability (function *fn)
   spill_ctx ctx;
   bool ctx_scanned = false;
   auto_bitmap spill_tmps;
-  unsigned spills = 0, emitted = 0;
-  bool mutated = false;
+  spill_transaction tx;
+  unsigned spills = 0;
+
+  /* Transactional bail-out: restore the exact pre-allocation stream,
+     then let the post-RA spill diagnosis speak.  */
+  auto bail = [&] (const char *name, const char *detail) -> unsigned
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "lreg-alloc refusal: %s (%s); rolling back %u round-trip "
+		 "insn(s) and %u rewrite(s); keeping lreg-pressure-exceeded\n",
+		 name, detail ? detail : "",
+		 tx.emitted.length (), tx.replaced_insn.length ());
+      bool had_mutations = !tx.emitted.is_empty ()
+	|| !tx.replaced_insn.is_empty ();
+      rollback (tx);
+      if (had_mutations)
+	df_analyze ();
+      return 0;
+    };
 
   const unsigned max_rounds = 256;
   for (unsigned round = 0; round < max_rounds; round++)
@@ -988,14 +1100,7 @@ enforce_colorability (function *fn)
       lpa_graph g;
       build_graph (fn, g, spill_tmps);
       if (g.fail)
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "lreg-alloc refusal: %s at insn %d; "
-		     "keeping lreg-pressure-exceeded\n",
-		     g.fail, g.fail_at ? INSN_UID (g.fail_at) : -1);
-	  return mutated ? TODO_df_finish : 0;
-	}
+	return bail (g.fail, "graph-collection");
 
       auto_vec<int> color;
       int blocked = -1;
@@ -1006,8 +1111,9 @@ enforce_colorability (function *fn)
 		     "lreg-alloc: %u web(s) DSATUR-colored with %u colors "
 		     "after %u spill(s), %u round-trip insn(s); "
 		     "colorability=proven\n",
-		     g.webs.length (), SFPU_REG_NUM, spills, emitted);
-	  return mutated ? TODO_df_finish : 0;
+		     g.webs.length (), SFPU_REG_NUM, spills,
+		     tx.n_round_trips ());
+	  return spills ? TODO_df_finish : 0;
 	}
 
       if (dump_file)
@@ -1024,31 +1130,19 @@ enforce_colorability (function *fn)
 	  if (!ctx.ok)
 	    {
 	      dump_spill_refusal (ctx);
-	      return 0;		/* refusals never mutate */
+	      return 0;		/* precedes any mutation */
 	    }
 	}
 
       int victim = choose_spill_web (g, blocked);
       if (victim < 0)
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "lreg-alloc refusal: lreg-spill-no-candidate "
-		     "(only reservations/reload temporaries in the blocked "
-		     "neighborhood); keeping lreg-pressure-exceeded\n");
-	  return mutated ? TODO_df_finish : 0;
-	}
+	return bail ("lreg-spill-no-candidate",
+		     "only reservations/reload temporaries in the blocked "
+		     "neighborhood");
 
       HOST_WIDE_INT row = choose_scratch_row (ctx);
       if (row < 0)
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "lreg-alloc spill-refusal: lreg-spill-no-free-dst "
-		     "(scratch rows exhausted); "
-		     "keeping lreg-pressure-exceeded\n");
-	  return mutated ? TODO_df_finish : 0;
-	}
+	return bail ("lreg-spill-no-free-dst", "scratch rows exhausted");
 
       unsigned vregno = g.webs[victim].regno;
       if (dump_file)
@@ -1059,18 +1153,14 @@ enforce_colorability (function *fn)
 		 vregno, g.webs[victim].occ, g.degree[victim], row,
 		 ctx.noinc_addr_mode);
 
-      emitted += spill_web (fn, vregno, row, ctx.noinc_addr_mode,
-			    spill_tmps);
+      if (!spill_web (fn, vregno, row, ctx.noinc_addr_mode, spill_tmps, tx))
+	return bail ("lreg-spill-rewrite-refused",
+		     "an insn does not admit the operand rewrite");
       spills++;
-      mutated = true;
       df_analyze ();
     }
 
-  if (dump_file)
-    fprintf (dump_file,
-	     "lreg-alloc refusal: round limit reached; "
-	     "keeping lreg-pressure-exceeded\n");
-  return mutated ? TODO_df_finish : 0;
+  return bail ("lreg-spill-round-limit", "allocation did not converge");
 }
 
 /* ------------------------------- pass ------------------------------ */
