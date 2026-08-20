@@ -149,4 +149,63 @@ extern xtt_replay_epoch rvtt_replay_epoch_close (rtx_insn *capture,
    transition, so one enable is function-sticky.  */
 extern bool rvtt_shadow_coupling_possible (function *);
 
+/* ---- Planner emission records: launch issue-plane effects.
+
+   A macro launch's architectural effects are descriptor-dependent, so
+   rvtt_insn_effects keeps every SFPLOADMACRO pattern effect-opaque (the
+   attribute family cannot express them).  When the MACRO PLANNER ITSELF
+   emits the launch it has just synthesized the descriptor the launch
+   executes, so it can derive the launch's effect interface from its own
+   construction -- a planner emission record, the same discipline as the
+   residency-benign emitted set.  These records are the pricing-side
+   consumer interface for exec_interlocked_slots (rtl-rvtt-replay.cc);
+   they never alter rvtt_insn_effects itself, so every other consumer of
+   the vocabulary keeps the refusing opaque default byte-identically.
+
+   Record contract (all facts derived at emission from the synthesized
+   descriptor, never from op names or word fingerprints):
+
+     - lreg_read = 0: SFPLOADMACRO issue is never operand-gated.  [ISA]
+       SFPLOADMACRO.md schedules every sub-unit event for an absolute
+       later cycle (issue + 1 + delay) and states no issue-cycle
+       register rule; [SIM] the CRAQ executor (craq-sim f80a8d64
+       sfploadmacro_events.h) enqueues events unconditionally at issue
+       -- "there is no FIFO between launches"; [HAND] the production
+       Where kernel and handwritten typecast issue launches
+       back-to-back.  Every register a launch's events read is either
+       the launch's own VD (produced by its load), a planner-planned
+       resident constant, or an explicit calendar member whose
+       availability the schedule's delay derivation proved -- event
+       operand readiness is discharged by the calendar's construction,
+       not by issue stalls.
+     - lreg_write = launch VD | the descriptor's hidden template writes:
+       the complete architectural LREG write set of the launch.
+     - result_latency = the launch's settle distance: the greatest
+       event completion past the launch's own done slot, from the
+       descriptor's own SequenceBits delays plus the audited
+       subunit_result_latency facts (the drain derivation's math), so a
+       foreign consumer of a launch-written register waits for the
+       macro to settle.
+     - Writes are FULL-LANE by construction: records exist only for
+       non-CC calendars, whose formation carries the all-lanes ambient
+       proof, so a later full overwrite of a launch-written register is
+       not a dependence under the scheduler's definition (only reads
+       and lane-predicated writes are).  The pricing consumer may
+       therefore drop the write-side dependence edge for record-carried
+       insns.
+
+   Refusing defaults everywhere: derivation fails closed (no record) for
+   CC-writing calendars and any undecodable sequence byte; lookup
+   fails closed unless the insn is a
+   recognized SFPLOADMACRO pattern whose INSN_UID, containing function,
+   encoded launch word, and VD operand all match the record written at
+   emission.  USER-written launches (raw `.ttinsn' words) never acquire
+   records: they are asm, refused upstream of any record lookup.  */
+
+extern void rvtt_planner_launch_effects_reset ();
+extern void rvtt_planner_launch_effects_record (rtx_insn *, uint64_t word,
+						unsigned vd_regno,
+						const xtt_effect_set &);
+extern bool rvtt_planner_launch_effects (rtx_insn *, xtt_effect_set *);
+
 #endif /* GCC_RVTT_EFFECTS_H */
