@@ -618,6 +618,10 @@ mtt-tensix-optimize-const-remat
 Target Var(riscv_tt_opt_const_remat) Init(0)
 Rematerialize proven loadi-materialized SFPU values at their uses when vector register pressure exceeds the LREG file
 
+mtt-tensix-optimize-lreg-alloc
+Target Var(riscv_tt_opt_lreg_alloc) Init(0)
+Prove SFPU LREG colorability by DSATUR graph coloring before IRA and, when the interference graph exceeds the 8-register file, spill selected vector webs through proven-free 32-bit Dst scratch rows (SFPSTORE/SFPLOAD round trip); every unproven ingredient refuses by name and keeps the lreg-pressure-exceeded error byte-identically
+
 mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)
 Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one companion-preserving involution bundle, and forward proven-identity Dst parks across it.
