@@ -594,6 +594,10 @@ mtt-tensix-optimize-interlock-schedule
 Target Var(riscv_tt_opt_interlock_schedule) Init(0)
 Fill audited transparent hardware-interlock stalls with independent SFPU instructions
 
+mtt-tensix-optimize-list-schedule
+Target Var(riscv_tt_opt_list_schedule) Init(0)
+List-schedule audited straight-line SFPU regions over the typed-effect dependence DAG against the modeled issue timeline (latency-shadow filling and independent-chain interleaving; post-allocation, where the eight hard LREGs and their WAR/WAW edges are themselves the pressure bound); unaudited or effect-unproven instructions bound regions and refuse by name, self-loop and repeated-row shapes defer to capture formation by name, and any schedule without a strict modeled-makespan decrease keeps the original order byte-identically
+
 mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
 Rotate replayed capture rows to fill audited interlock stalls across the row boundary

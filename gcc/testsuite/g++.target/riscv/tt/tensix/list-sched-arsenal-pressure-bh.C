@@ -4,13 +4,14 @@
 // fn 1 (pressure_fit_7): seven independent two-mad chains plus the
 // shared multiplicand x.  All eight allocatable LREGs are live from
 // entry to the writebacks, so EVERY schedule of this region runs at
-// pressure peak exactly 8 -- the architectural bound, not above it.
+// all eight hard LREGs concurrently live -- the architectural boundary.
 // The serial emission carries one modeled stall inside each chain
 // (audited mad-family latency 1); the seven-wide interleave hides all
-// of them.  The scheduler must choose the fitting schedule AND report
-// the boundary pressure: fire with pressure-peak=8.  A scheduler whose
-// pressure walk over-counts (>8 at any slot of this region) would
-// refuse here -- that regression flips this test red by name
+// of them.  The scheduler must choose the fitting schedule at the
+// architectural boundary (all eight hard LREGs live across the
+// interleave).  Post-allocation the eight names themselves are the
+// pressure bound (DU-S3): there is no pressure gate to report, and
+// no "pressure" refusal line may ever appear
 // ("pressure ... exceeds").
 //
 // fn 2 (pressure_reuse_8): an EIGHTH chain whose accumulator has no
@@ -31,8 +32,12 @@
 // the critical-path lower bound.  fn 2: 15 nodes (the c1 sub-chain is
 // cut off by its writeback marker's region flush), same 22 -> 15, and
 // the emitted stream keeps c1's L1 writeback before c8's L1 reuse.
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 22 -> 15 pressure-peak=8 target=bh" 1 "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=15 makespan 22 -> 15 pressure-peak=8 target=bh" 1 "rvtt_schedule" } }
+// [lane DQ adjudication] fn2 baseline is now 23 (was 22): the DU-S6
+// entry-producer walk reaches across the zero-length markers to the
+// real audited producer, so the boundary stall lane DT's oracle counted
+// (finding 5) is now IN the region model -- same optimum, honest base.
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 22 -> 15 target=bh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=15 makespan 23 -> 15 target=bh" 1 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-not "List-schedule refused: pressure" "rvtt_schedule" } }
 
 void pressure_fit_7 ()
