@@ -1620,13 +1620,13 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 		last_writer[r] = -2;
 		last_writer_slot[r] = ev.slot;
 	      }
-	  if (!ev.is_carrier && ev.realization == macro_event::EXPLICIT_INSN
-	      && ds->row.n_explicits < 8)
-	    {
-	      ds->row.explicits[ds->row.n_explicits].slot = ev.slot;
-	      ds->row.explicits[ds->row.n_explicits].unit_mask = 0;
-	      ++ds->row.n_explicits;
-	    }
+	  /* Explicit LOADS record with unit_mask 0 -- PROVEN INERT in the
+	     derivation core's hazard rule (a zero mask never bumps:
+	     derive-core.h's silent-discard loop tests the mask first),
+	     so they are not recorded at all; recording them only burned
+	     cap slots the CONSTRAINT-CARRYING issues need (the lane DG2
+	     4.4 truncation dropped real constraints once zero-mask
+	     entries filled the array).  */
 	}
       else if (ev.realization == macro_event::EXPLICIT_INSN)
 	{
@@ -1653,8 +1653,20 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	      mask = 0;
 	      break;
 	    }
-	  if (ds->row.n_explicits < 8)
+	  /* Only CONSTRAINT-CARRYING explicit issues (nonzero sub-unit
+	     mask) are recorded: a zero mask is proven inert in
+	     derive-core's silent-discard rule (the mask test comes
+	     first), so omitting it cannot change any verdict, while a
+	     dropped NONZERO mask would judge the calendar against an
+	     INCOMPLETE hazard set (lane DG2 finding 4.4).  Beyond the
+	     cap: refuse by name, never truncate.  */
+	  if (mask != 0)
 	    {
+	      if (ds->row.n_explicits >= 16)
+		{
+		  ds->refusal = "descriptor-explicit-issue-cap-exceeded";
+		  return false;
+		}
 	      ds->row.explicits[ds->row.n_explicits].slot = ev.slot;
 	      ds->row.explicits[ds->row.n_explicits].unit_mask = mask;
 	      ++ds->row.n_explicits;
@@ -1796,12 +1808,9 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
      SFPU-class instruction.  */
   bool kept_separator = row.separator && !schedule.absorbed_stride;
   ds->row.window_all_sfpu = !kept_separator;
-  if (kept_separator && ds->row.n_explicits < 8)
-    {
-      ds->row.explicits[ds->row.n_explicits].slot = schedule.ii - 1;
-      ds->row.explicits[ds->row.n_explicits].unit_mask = 0;
-      ++ds->row.n_explicits;
-    }
+  /* The kept separator recorded with unit_mask 0 -- proven inert in the
+     derivation core's hazard rule (see the explicit-issue cap rule
+     above), so it is not recorded at all.  */
 
   /* Store mod0 source: the store-carrying launch encodes the mode of
      the access it carries, so a store-only carrier (or a merged
