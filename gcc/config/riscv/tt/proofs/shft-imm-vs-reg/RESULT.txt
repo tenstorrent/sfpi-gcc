@@ -1,0 +1,34 @@
+k= 0 mismatches=0
+k= 1 mismatches=0
+k= 2 mismatches=0
+k= 3 mismatches=0
+k= 4 mismatches=0
+k= 5 mismatches=0
+k= 6 mismatches=0
+k= 7 mismatches=0
+k= 8 mismatches=0
+k= 9 mismatches=0
+k=10 mismatches=0
+k=11 mismatches=0
+k=12 mismatches=0
+k=13 mismatches=0
+k=14 mismatches=0
+k=15 mismatches=0
+k=16 mismatches=0
+k=17 mismatches=0
+k=18 mismatches=0
+k=19 mismatches=0
+k=20 mismatches=0
+k=21 mismatches=0
+k=22 mismatches=0
+k=23 mismatches=0
+k=24 mismatches=0
+k=25 mismatches=0
+k=26 mismatches=0
+k=27 mismatches=0
+k=28 mismatches=0
+k=29 mismatches=0
+k=30 mismatches=0
+k=31 mismatches=0
+total mismatches      : 0
+verdict               : EQUAL
