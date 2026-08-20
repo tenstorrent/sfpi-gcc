@@ -52,6 +52,29 @@ along with GCC; see the file COPYING3.  If not see
    tt/proofs/int-abs-negate-select/; per the tt/proofs README contract
    this fold may fire ONLY while that RESULT is EQUAL.
 
+   The proof is a statement about the VALUE FUNCTION r(v), not about
+   one spelling; every spelling whose region reduces to the identical
+   value function is admitted by the same artifact (the reduction
+   record accompanies it as REDUCTION.md there):
+
+     - "v <= 0" (CC_LE): the enabled set gains exactly raw v == 0
+       (two's complement zero is unique), where the wrapping negation
+       is the identity 0 - 0 = 0 = v -- pointwise the same r(v).
+     - the v_else spelling, v_if (v >= 0) { } v_else { r = 0 - v; }:
+       a single SFPCOMPC directly after the condition binds (an empty
+       then-arm) complements the enabled set within the enclosing
+       frame (craq-sim TENSIX_EXECUTE_SFPCOMPC), so CC_GE folds to the
+       CC_LT set and CC_GT to the CC_LE set on the enclosing-enabled
+       lanes -- the sets already covered.
+
+   Every other order direction (CC_GE/CC_GT direct, CC_LT/CC_LE under
+   an else-arm) yields the negate-on-complement value function, which
+   is NOT an absolute value: it refuses int-abs-region-shape.  EQ/NE
+   are not order tests and keep refusing
+   int-abs-compare-kind-unsupported.  A COMPC anywhere but directly
+   after the condition binds -- in particular after a lane-predicated
+   materialization (a non-empty then-arm) -- is not this shape.
+
    The replacement executes under the enclosing CC state, so a fold
    inside an enclosing v_if keeps nested semantics (the ccmask
    precedent): on enclosing-disabled lanes SFPABS writes nothing and
@@ -145,6 +168,7 @@ zero_vector_p (tree val)
 struct intabs_group
 {
   gcall *pushc, *xvif, *icmp, *condb, *iadd, *assign, *popc;
+  gcall *compc;	  /* the else-arm marker, when present */
   tree x;	  /* compared vector */
 };
 
@@ -159,6 +183,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
   enum { WANT_XVIF, WANT_ICMP, WANT_CONDB, WANT_IADD, WANT_ASSIGN,
 	 WANT_POPC }
     want = WANT_XVIF;
+  unsigned lreg_mats_after_condb = 0;
 
   *candidate = false;
   memset (g, 0, sizeof (*g));
@@ -285,9 +310,21 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	  }
 
 	case rvtt_insn_data::sfppushc:
+	  /* A nested region is not a single negate assignment.  */
+	  return *candidate ? refuse ("int-abs-region-shape", stmt) : false;
+
 	case rvtt_insn_data::sfpcompc:
-	  /* A nested region or an else-arm is not a single negate
-	     assignment.  */
+	  /* The else-arm marker: admissible exactly once, directly
+	     after the condition binds and before any lane-predicated
+	     materialization -- i.e. an empty then-arm.  The fold
+	     accounts for it by complementing the compare's enabled
+	     set (region_closed below).  Anywhere else it is not this
+	     shape.  */
+	  if (want == WANT_IADD && !g->compc && lreg_mats_after_condb == 0)
+	    {
+	      g->compc = call;
+	      continue;
+	    }
 	  return *candidate ? refuse ("int-abs-region-shape", stmt) : false;
 
 	case rvtt_insn_data::sfpxloadi:
@@ -298,6 +335,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	     and similar): no CC, configuration, or Dst effect; a
 	     lane-predicated materialization feeding only the predicated
 	     subtract is re-expressed exactly by SFPABS.  */
+	  if (want == WANT_IADD && !g->compc)
+	    lreg_mats_after_condb++;
 	  continue;
 
 	default:
@@ -357,10 +396,15 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
   return *candidate ? refuse ("int-abs-region-open-cfg", g->pushc) : false;
 
  region_closed:
-  /* The compare: signed-int sign test against immediate bits 0, i.e.
-     exactly "v < 0" on the raw two's-complement lane.  The proof is
-     against the pure sign-bit CC lowering; every other type, direction
-     or boundary lowers differently.  */
+  /* The compare: a signed-int order test against immediate bits 0
+     whose EFFECTIVE enabled set -- after the else-arm complement when
+     one is present -- reduces to the proven value function's enabled
+     sets: {v < 0} (the proof's own set) or {v <= 0} (gains exactly
+     raw v == 0, where the wrapping negation is the identity, so the
+     value function is pointwise unchanged).  Any other effective set
+     computes a different value function and is not an absolute value.
+     EQ/NE are not order tests; every other type or boundary lowers
+     differently.  */
   {
     long mod = int_arg (g->icmp, 5);
     if (mod < 0)
@@ -368,8 +412,15 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
     unsigned type = ((unsigned) mod >> SFPXCMP_MOD1_TYPE_SHIFT)
       & SFPXCMP_MOD1_TYPE_MASK;
     unsigned cc = (unsigned) mod & SFPXCMP_MOD1_CC_MASK;
-    if (type != SFPXCMP_MOD1_TYPE_INT || cc != SFPXCMP_MOD1_CC_LT)
+    if (type != SFPXCMP_MOD1_TYPE_INT
+	|| (cc != SFPXCMP_MOD1_CC_LT && cc != SFPXCMP_MOD1_CC_LE
+	    && cc != SFPXCMP_MOD1_CC_GE && cc != SFPXCMP_MOD1_CC_GT))
       return refuse ("int-abs-compare-kind-unsupported", g->icmp);
+    /* The order-test complement pairs are LT<->GE and LE<->GT: encoded
+       as cc ^ 1 (LT=0 GE=1, GT=4 LE=5).  */
+    unsigned eff = g->compc ? (cc ^ 1) : cc;
+    if (eff != SFPXCMP_MOD1_CC_LT && eff != SFPXCMP_MOD1_CC_LE)
+      return refuse ("int-abs-region-shape", g->icmp);
     if (int_arg (g->icmp, 2) != 0
 	|| int_arg (g->icmp, 3) != 0 || int_arg (g->icmp, 4) != 0)
       return refuse ("int-abs-boundary-unsupported", g->icmp);
@@ -446,6 +497,8 @@ transform_group (intabs_group *g)
 	zdef = d;
     }
   remove (g->iadd);
+  if (g->compc)
+    remove (g->compc);
   remove (g->condb);
   remove (g->icmp);
   remove (g->xvif);
