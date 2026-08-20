@@ -1,0 +1,9 @@
+inputs swept          : 4294967296
+total mismatches      : 0
+  INT32_MIN (0x80000000)      : 0
+  negative (bit31 set)        : 0
+  zero                        : 0
+  positive (bit31 clear)      : 0
+verdict               : EQUAL
+cut-stream sha256 = 5b92413d61754470325806cc7a829d0ab88bd0b9f2f996220dcb24024d75eb98
+hw-stream  sha256 = 5b92413d61754470325806cc7a829d0ab88bd0b9f2f996220dcb24024d75eb98
