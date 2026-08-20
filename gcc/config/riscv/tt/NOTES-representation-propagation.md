@@ -167,19 +167,82 @@ delivery shapes:
    domain.  Same emitted code; requires assertion plumbing (not in the
    prototype).
 
-Either way the recovered cycles are a property of the 14-member raw row, and
-are measured empirically in §7, not asserted.
+Either way the recovered cycles are a property of the raw row, measured
+empirically in §7 — and the measurement REFUTES the hoped-for recovery.
 
-## 7. Deadline re-derivation on the raw row (empirical)
+## 7. The raw-row oracle (MEASURED, lane CN 2026-08-19)
 
-(filled in from the lane CN oracle compile of the raw-contract variant in a
-shim worktree; planner derive-event dumps are the instrument, per lane CI's
-method)
+Two oracle surfaces, agreeing exactly.  (a) dg builtin surface: the WP12
+derived-intmul-row twin compiled as-is (SM32) and with the 3 conversions
+dropped (raw).  (b) The REAL fresh-kernel TU: worktree tt-metal-laneCN @
+e637598767, `perf_...fresh_cpp_mul_int[...impl:1]` compiled through the
+harness with the reviewed 22-flag ON set, compiler = pin-14 seed
+e0754714a5b + this pass (flag off), planner dumps read from RUNNER_TEMP.
 
-- RESULT-PLACEHOLDER: row membership, presented ii candidates, derivation
-  verdicts, formed ii + interlock count, words/row, modeled slots/tile and
-  cy/tile via the lane-CI slot model (slots ~= 32*wpr + overhead; cy ~=
-  slots/8), delta vs V0 57.6 and vs hand 35.6.
+SM32 baseline TU: `region rows=32 row-len=17 runs=4`, candidates ii=12
+(2-launch) and ii=12 (3-launch), **formed ii=12 launches=3 drain-elided**
+— reproduces lane CI's V0 numbers exactly (79-instruction function; 26-slot
+2-row record + 15 replays + config prefix ≈ 452-460 slots/tile ≈ 57.6
+cy/tile measured basis).
+
+Raw-contract TU (`DataLayout::I32` at the 3 sites): `region rows=32
+row-len=13 runs=4` — the 3 conversions AND V0's load-bearing copy vanish
+(17 → 13 members).  The scheduler PRESENTS ii=10 (2-launch,
+launched-events=3) and ii=11 (3-launch) candidates — so the WP12 visibility
+deadline is NOT the binding floor on the raw row; the slack the conversions
+consumed is real.  But BOTH candidates refuse derivation:
+`sequence-encoding-unproven` (schedule) then `descriptor-program-unproven`
+(derive), and the row FALLS BACK to the unformed replay stream: TTREPLAY
+len=15 x32 (one 15-slot row per tile row, no descriptor config).
+
+Slot model (same accounting as lane CI):
+- SM32 formed:   ~452 slots/tile  = 57.6 cy/tile  (+61.7% vs hand 35.6)
+- raw unformed:  32x15 + 9 ≈ 489 slots/tile ≈ **62.3 cy/tile modeled — a
+  REGRESSION of ~4.7 cy/tile vs the SM32 V0**
+- raw formed ii=10/11 (hypothetical, requires new derivation vocabulary):
+  26 + 16x(2x11..12) + 10 ≈ 388..420 slots ≈ 49.4..53.5 cy/tile — would
+  recover only 4..8 of the 22 cy/tile gap to hand.
+
+WHY formation collapses: the conversions were load-bearing for the
+derivation, exactly as the WP12 twin's own prose records — the two in-place
+operand casts are the hosted launch-VD chain events on the load carriers,
+and the result cast is the launchable store-producer (the store-producer
+must be a LAUNCHED event; lane CC fact).  Remove them and launched-events
+drops 6 → 3: the loads have nothing to host and the store's producer is the
+final SFPIADD, which cannot take the launched role (VD-tie, lane CC
+falsification fact 2).  The floor MOVED from the deadline to derivation
+vocabulary.
+
+**Quantified verdict for `mulint32-raw-contract-owner-decision`:**
+1. Under the SM32 contract the pass refuses (correct, bit-observable web);
+   V0 formed ii=12 stands (lane CI's optimality proof unchanged).
+2. The raw-U32 contract change ALONE is a net LOSS today: modeled ~62.3 vs
+   57.6 cy/tile, while also weakening the golden contract (CL framework
+   point 5 — and here the weaker-contract arm doesn't even win).
+3. The contract change becomes profitable ONLY combined with new derivation
+   vocabulary (a launchable non-conversion store-producer and sequence
+   encoding for low-launched-event rows), ceiling ~49-54 cy/tile — closing
+   at most ~a third of the gap to hand 35.6.
+Recommendation: KEEP the SM32-typed fresh body; close the owner decision as
+refused-on-measurement; re-open only alongside the scheduler follow-ups CI
+pre-registered.
+
+## 7b. Contract-adjudication discipline inherited from lane CL (eqz memo)
+
+Lane CL's DECISION-eqz-negzero.md generalization section governs this
+class.  Instantiated for mulint32: (1) the operative golden is the
+framework-level signed int32 wrap product — negative operands are IN the
+shipped contract; (2) hand-leg identity must be verified against the
+archived ELF's runtime dispatch, not symbol presence (CI's numbers carry
+that provenance; the production row is an ablation pair, quoted as such);
+(3) reachability is pipeline-dependent and must be checked per route: the
+mul_int row drives Int32->Int32 through the 32-BIT unpack-to-dest path,
+where negative values (unlike the 16-bit path's sign-of-zero) SURVIVE to
+Dst — so the raw weakening is observable on the row's own pipeline and any
+future raw adoption needs an executed golden-edge divergence twin
+(negative-operand lanes) per CL's Option-B discipline; (4) both rulings
+priced as code (this oracle); (5) prefer same-contract A/B arms — moot
+here, the weaker arm loses anyway.
 
 ## 8. Failure modes and non-goals
 
@@ -225,13 +288,13 @@ shape, refuses without audited rows.
 Removing conversions does not change the deadline *rule* (consumer_slot >=
 last-raw-operand-reader + 4 is a property of the derivation core), but it
 changes which insns are the raw-operand readers and how many explicit slots
-exist between them and their consumers.  On the SM32 row the conversions sit
-between the loads and the multiply chain, so the multiplies read *cooked*
-regs; on the raw row the multiplies read the *loaded* regs directly and the
-deadline is measured from the loads.  Whether the shorter row clears or
-trips the deadline is an empirical planner question — §7 answers it with
-derive-event dumps rather than hand arithmetic (lane CC's falsification of
-the pre-registered ii=11 is the cautionary precedent).
+exist between them and their consumers.  MEASURED ANSWER (§7): on the raw
+row the scheduler presents ii=10 — the deadline arithmetic DOES relax when
+the cooking casts and their WAR chains vanish — but the candidates die at
+derivation (`sequence-encoding-unproven`/`descriptor-program-unproven`), so
+the deadline is no longer the binding floor; derivation vocabulary is.
+(Lane CC's falsification of the pre-registered ii=11 was the cautionary
+precedent for trusting hand arithmetic here; the pipeline was the oracle.)
 
 ## 10. Prototype scope and gates
 
