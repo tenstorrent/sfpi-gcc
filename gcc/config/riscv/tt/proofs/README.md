@@ -18,7 +18,19 @@ re-mined.
   (-mtt-tensix-optimize-int-abs, gimple-rvtt-int-abs.cc); the fold must
   be retired if this RESULT ever stops being EQUAL. BH-proven; QSR
   changes integer-abs(INT32_MIN) per the simulator, so the pass gate is
-  BH-only. laneCU 2026-08-20.
+  BH-only. laneCU 2026-08-20.  REDUCTION.md (laneDN 2026-08-20) records
+  the complete admitted-spelling set that reduces pointwise to this
+  RESULT's value function (LE polarity; GE/GT else-forms) — reductions
+  retire with the RESULT.
+- ccmask-direction-complete/ — the four float order directions vs +0.0
+  of the ccmask zeroing fold: SETCC/COMPC CC lowering vs the
+  SFPGT/SFPLE mod1=8 SET_DEST keep-masks (LE/GT direct-operand, LT/GE
+  swapped-operand writable-zero forms). EQUAL (0 mismatches per
+  direction over 2^32; cut/hw stream commitments identical per
+  direction). LICENSES the LT/GE arms of the rvtt_ccmask fold
+  (gimple-rvtt-ccmask.cc); those arms must be retired if this RESULT
+  ever stops being EQUAL. BH-only (SFPGT/SFPLE are BH_QSR; the pass
+  gate is BH). laneDN 2026-08-20.
 - sm32-cast-elision-shift/ — leftshift SM32 software-cast chain vs the
   INT32_2S_COMP conversion-in-load (cast-free) form. Amount dimension
   EQUAL (2^32); value dimension NOT-EQUAL (92,341,796,868 over 32x2^32,
