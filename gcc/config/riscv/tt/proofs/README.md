@@ -25,3 +25,9 @@ re-mined.
   two exact closed-form classes, other=0; sound only at k=0 and k=31).
   Refusal: sm32-cast-elision-refuted. laneCU 2026-08-20
   (NOTES-sm32-cast-elision-refusal-laneCU.md).
+- shft-imm-vs-reg/ — SFPSHFT dynamic-immediate form vs register form,
+  per amount k in [0,31] x 2^32 values. EQUAL (0 mismatches every
+  stratum). Pre-discharged obligation for a FUTURE loop-invariant
+  amount-materialization (formation) mechanism on the unaryshift row;
+  no rule attached here (NOTES-unaryshift-adjudication-laneCU.md).
+  laneCU 2026-08-20.
