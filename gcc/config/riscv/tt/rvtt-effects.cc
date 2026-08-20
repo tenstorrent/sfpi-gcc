@@ -668,3 +668,78 @@ rvtt_dump_insn_effects (FILE *file, rtx_insn *insn)
 	   get_attr_xtt_macro_encodable (insn) == XTT_MACRO_ENCODABLE_YES
 	   ? "yes" : "no");
 }
+
+/* ---- Planner emission records: launch issue-plane effects (see the
+   contract block in rvtt-effects.h).  The store keeps no GC pointers:
+   each record holds the emitted insn's UID, the emitting function's
+   DECL_UID, the encoded launch word, and the launch VD hard register,
+   and a lookup succeeds only when every one of them still matches the
+   recognized SFPLOADMACRO pattern instance -- integrity verification of
+   the planner's own emission, never region identity.  The planner pass
+   resets the store at entry for every function it visits; functions the
+   planner never visits can hold no records (the store starts empty and
+   only the planner writes it).  */
+
+struct planner_launch_record
+{
+  int uid;
+  unsigned fn_uid;
+  uint64_t word;
+  unsigned vd_regno;
+  xtt_effect_set fx;
+};
+
+static vec<planner_launch_record> planner_launch_records;
+
+void
+rvtt_planner_launch_effects_reset ()
+{
+  planner_launch_records.truncate (0);
+}
+
+void
+rvtt_planner_launch_effects_record (rtx_insn *insn, uint64_t word,
+				    unsigned vd_regno,
+				    const xtt_effect_set &fx)
+{
+  gcc_assert (insn && cfun);
+  planner_launch_record rec;
+  rec.uid = INSN_UID (insn);
+  rec.fn_uid = DECL_UID (cfun->decl);
+  rec.word = word;
+  rec.vd_regno = vd_regno;
+  rec.fx = fx;
+  planner_launch_records.safe_push (rec);
+}
+
+bool
+rvtt_planner_launch_effects (rtx_insn *insn, xtt_effect_set *out)
+{
+  if (planner_launch_records.is_empty ()
+      || !insn || !NONDEBUG_INSN_P (insn) || !cfun)
+    return false;
+  int code = recog_memoized (insn);
+  if (code != CODE_FOR_rvtt_sfploadmacro_int
+      && code != CODE_FOR_rvtt_sfploadmacro_hidden_int)
+    return false;
+  unsigned fn_uid = DECL_UID (cfun->decl);
+  int uid = INSN_UID (insn);
+  for (const planner_launch_record &rec : planner_launch_records)
+    {
+      if (rec.uid != uid || rec.fn_uid != fn_uid)
+	continue;
+      /* Fail-closed integrity: the recognized instance must still carry
+	 the recorded launch word and VD.  */
+      extract_insn (insn);
+      if (recog_data.n_operands < 7
+	  || !REG_P (recog_data.operand[0])
+	  || !HARD_REGISTER_P (recog_data.operand[0])
+	  || REGNO (recog_data.operand[0]) != rec.vd_regno
+	  || !CONST_INT_P (recog_data.operand[6])
+	  || UINTVAL (recog_data.operand[6]) != rec.word)
+	return false;
+      *out = rec.fx;
+      return true;
+    }
+  return false;
+}

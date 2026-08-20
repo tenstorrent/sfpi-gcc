@@ -1070,7 +1070,20 @@ provable_constant_trips (class loop *loop, basic_block preheader,
    replay-reissue-latency-unproved (the -mtt-tensix-replay-hoist-
    min-benefit= override cannot force an unpriceable payload).  No
    operation identity, opcode calendar, coefficient value, or
-   instruction-word fingerprint participates.  */
+   instruction-word fingerprint participates.
+
+   Planner-emitted macro launches (lane CK): an SFPLOADMACRO pattern is
+   attribute-opaque (descriptor-dependent effects), but when the macro
+   planner itself emitted the launch it recorded the launch's
+   issue-plane effect interface, derived from the descriptor it
+   synthesized (rvtt-effects.h, planner emission records; provenance in
+   rvtt-cost.md).  The pricing consults the record: issue is never
+   operand-gated (no read deps), writes are full-lane (no write-side
+   dependence edge from the record-carried insn itself), and each
+   written LREG carries the launch's settle distance as its audited
+   result latency.  A launch without a matching record -- user-written
+   raw words never have one, and derivation fails closed on CC-writing
+   calendars -- keeps the refusal above by the same name.  */
 
 /* Interlocked issue-slot count of the payload span of BLOCK:
    dependence-tracked with the audited xtt_result_latency facts
@@ -1102,6 +1115,23 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
       if (pos->empty)
 	continue;
       xtt_effect_set e = rvtt_insn_effects (pos->insn);
+      bool planner_record = false;
+      if (e.opaque && rvtt_planner_launch_effects (pos->insn, &e))
+	{
+	  /* Planner-emitted macro launch: the planner derived this
+	     launch's issue-plane effect interface from the descriptor
+	     it synthesized (planner emission record, rvtt-effects.h).
+	     Its writes are full-lane by the record contract (non-CC
+	     calendar, all-lanes ambient proof), so a record-carried
+	     insn contributes no write-side dependence edge -- only
+	     reads and lane-predicated writes are dependences under the
+	     scheduler's definition.  */
+	  planner_record = true;
+	  if (dump_file)
+	    fprintf (dump_file, "  planner-derived launch effects: insn %d"
+		     " writes 0x%x settle %d\n", INSN_UID (pos->insn),
+		     e.lreg_write, e.result_latency);
+	}
       if (e.opaque)
 	{
 	  if (dump_file)
@@ -1109,7 +1139,8 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 		     " effect-opaque\n", INSN_UID (pos->insn));
 	  return -1;
 	}
-      uint32_t deps = (e.lreg_read | e.lreg_write) & 0xFFFF;
+      uint32_t deps = (e.lreg_read
+		       | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
       if (deps & unproved)
 	{
 	  if (dump_file)

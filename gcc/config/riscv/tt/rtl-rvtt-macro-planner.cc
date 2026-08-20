@@ -698,6 +698,84 @@ insert_at_preheader_tail (rtx_insn *seq, basic_block bb)
    and the drain; then delete the explicit rows.  Everything emitted is
    descriptor data.  */
 
+/* Derive the launch's issue-plane effect record from the descriptor
+   this planner invocation just synthesized (contract: rvtt-effects.h).
+   MACRO_INDEX selects the launch's sequence word; VD is the actual
+   (parity-resolved) launch VD index; HIDDEN the launch's hidden
+   template-write mask; LMEM/SMEM the carried Dst memory operands.
+   Every fact comes from the descriptor's own SequenceBits and the
+   audited capability-table latency facts -- never from op names or
+   instruction-word fingerprints.  Fails closed (no record): a
+   CC-writing calendar (its loads are lane-predicated, outside the
+   full-lane write contract), an out-of-range template index, or an
+   undecodable byte.  VD16 staging events record an LREG16 write
+   (bit 16 of the mask domain, handled by consumers exactly as every
+   other insn's LREG16 effect).  */
+
+static bool
+derive_planner_launch_effects (const macro_descriptor &desc,
+			       unsigned macro_index, unsigned vd,
+			       uint32_t hidden, int addr_mode,
+			       rtx lmem, rtx smem,
+			       xtt_effect_set *out)
+{
+  using namespace rvtt_macro;
+
+  if (desc.cc.active || macro_index >= desc.n_seq || vd >= 16
+      || (hidden & ~0xFFFFu))
+    return false;
+
+  uint8_t bytes[4];
+  decompose_sequence_word (desc.seq[macro_index], bytes);
+  int settle = 0;
+  uint32_t writes = (1u << vd) | hidden;
+  for (unsigned u = 0; u != 4; ++u)
+    {
+      unsigned case_kind, delay;
+      bool vd16, route_vb;
+      if (!decode_sequence_bits (bytes[u], &case_kind, &delay, &vd16,
+				 &route_vb))
+	return false;
+      if (case_kind == SEQ_CASE_SKIP || case_kind == SEQ_CASE_NOP)
+	continue;
+      if (case_kind >= SEQ_CASE_TEMPLATE0)
+	{
+	  if (case_kind - SEQ_CASE_TEMPLATE0 >= desc.n_templates)
+	    return false;
+	  /* A value event targets the launch VD, or LREG16 when its
+	     VD16 flag is set (the staging register; bit 16 of the
+	     vocabulary's L0..L15/LREG16 mask domain).  A store event's
+	     VD16 flag is a READ of LREG16 -- no LREG write.  */
+	  writes |= vd16 ? (1u << 16) : (1u << vd);
+	}
+      /* Event writeback completes at issue + 1 + delay +
+	 subunit_result_latency; the launch's own done slot is
+	 issue + 1, so the settle distance past done is
+	 delay + subunit_result_latency.  */
+      int done = (int) delay + (int) subunit_result_latency (u);
+      if (done > settle)
+	settle = done;
+    }
+
+  xtt_effect_set e = {};
+  e.opaque = false;
+  e.subunit = XTT_SU_LOAD;
+  e.lreg_read = 0;		/* issue-plane: never operand-gated */
+  e.lreg_write = writes;
+  e.result_latency = settle;
+  e.next_slot_stall = false;
+  /* Address-mode RWC effect, the same capability fact the sfpload
+     ADDR_MODE class resolves against: the no-increment mode is NONE;
+     auto-increment deltas stay UNKNOWN (capability-table data).  */
+  int no_inc = rvtt_no_increment_address_mode ();
+  e.rwc.kind = (no_inc >= 0 && addr_mode == no_inc
+		? xtt_rwc_effect_t::NONE : xtt_rwc_effect_t::UNKNOWN);
+  e.dst_mem_read = lmem && MEM_P (lmem);
+  e.dst_mem_write = smem && MEM_P (smem);
+  *out = e;
+  return true;
+}
+
 static void
 emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  const macro_descriptor &desc,
@@ -989,26 +1067,41 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		if (!smem)
 		  mem2 = const0_rtx;
 		uint32_t hidden = carrier_hidden[ev.macro_index];
+		rtx_insn *launch_insn;
 		if (hidden)
 		  {
 		    unsigned hreg = ctz_hwi (hidden);
-		    emit_insn (gen_rvtt_sfploadmacro_hidden_int
-			       (vd_reg, mem1, mem2,
-				GEN_INT (launch->address),
-				GEN_INT (launch->mode),
-				GEN_INT (launch->addr_mode),
-				GEN_INT (word),
-				gen_rtx_REG (XTT32SImode,
-					     SFPU_REG_FIRST + hreg)));
+		    launch_insn
+		      = emit_insn (gen_rvtt_sfploadmacro_hidden_int
+				   (vd_reg, mem1, mem2,
+				    GEN_INT (launch->address),
+				    GEN_INT (launch->mode),
+				    GEN_INT (launch->addr_mode),
+				    GEN_INT (word),
+				    gen_rtx_REG (XTT32SImode,
+						 SFPU_REG_FIRST + hreg)));
 		  }
 		else
-		  emit_insn (gen_rvtt_sfploadmacro_int
-			     (vd_reg, mem1, mem2 == const0_rtx && smem
-			      ? smem : mem2,
-			      GEN_INT (launch->address),
-			      GEN_INT (launch->mode),
-			      GEN_INT (launch->addr_mode),
-			      GEN_INT (word)));
+		  launch_insn
+		    = emit_insn (gen_rvtt_sfploadmacro_int
+				 (vd_reg, mem1, mem2 == const0_rtx && smem
+				  ? smem : mem2,
+				  GEN_INT (launch->address),
+				  GEN_INT (launch->mode),
+				  GEN_INT (launch->addr_mode),
+				  GEN_INT (word)));
+		/* Planner emission record (rvtt-effects.h): the launch's
+		   issue-plane effect interface, derived from the
+		   descriptor just synthesized.  Fail-closed: a refused
+		   derivation leaves the launch effect-opaque exactly as
+		   before.  */
+		xtt_effect_set launch_fx;
+		if (derive_planner_launch_effects (desc, ev.macro_index,
+						   vd, hidden,
+						   launch->addr_mode,
+						   lmem, smem, &launch_fx))
+		  rvtt_planner_launch_effects_record
+		    (launch_insn, word, SFPU_REG_FIRST + vd, launch_fx);
 	      }
 	    else
 	      {
@@ -2699,6 +2792,11 @@ public:
   unsigned execute (function *fn) final override
   {
     bool changed = false;
+    /* Planner emission records are per-function: clear the previous
+       function's launch effect records before any formation
+       (rvtt-effects.h contract; lookups additionally verify the
+       function identity, so this reset is belt-and-braces).  */
+    rvtt_planner_launch_effects_reset ();
     /* WP13 residency: per-function store of programmed descriptor
        content and planner-emitted insns (rvtt-macro-desc.cc).  Regions
        are processed in discovery order = forward program order, the
