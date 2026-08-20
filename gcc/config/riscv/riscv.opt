@@ -689,6 +689,10 @@ mtt-tensix-optimize-crossloop-hoist
 Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
 Hoist loop-invariant SFPU immediate materializations (and, with the programmable-constant passes, their SFPCONFIG programming points) across enclosing loops whose bodies deliver only audited-inert instruction words (raw .ttinsn constants, instruction-FIFO stores, MOPs with a proven TU template census); every unaudited word or statement class refuses by name.
 
+mtt-tensix-optimize-repr-prop
+Target Var(riscv_tt_opt_repr_prop) Init(0)
+Cancel Tensix SFPU representation-conversion pairs (audited bit involutions, e.g. the BH sign-magnitude/two's-complement cast) across value webs that only lanewise choose bits (control joins, predicated live-value merges, copies); any unaudited conversion, non-transparent consumer, or unproven web leaf refuses by name.
+
 mtt-tensix-optimize-lreg-rename
 Target Var(riscv_tt_opt_lreg_rename) Init(0)
 Rename storage-colliding invariant-input LREG chains inside capturable rows to a proven-free register so the audited stall-fill mechanisms stop refusing them; every unproven case refuses by name.
