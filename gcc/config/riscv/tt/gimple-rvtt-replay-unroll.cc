@@ -230,6 +230,58 @@ row_words_for (const rvtt_insn_data *insnd)
     }
 }
 
+/* Resolve T to a host integer through a bounded walk of dominating SSA
+   constant arithmetic (a freshly peeled loop's entry value can be an
+   unfolded `N - 1' assignment).  SSA defs always dominate their uses,
+   so every step reads a value proven available at the loop entry.  */
+
+static bool
+resolve_int_cst (tree t, HOST_WIDE_INT *out, int depth = 0)
+{
+  if (depth > 8 || !t)
+    return false;
+  if (TREE_CODE (t) == INTEGER_CST)
+    {
+      if (!tree_fits_shwi_p (t))
+	return false;
+      *out = tree_to_shwi (t);
+      return true;
+    }
+  if (TREE_CODE (t) != SSA_NAME)
+    return false;
+  gassign *def = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (t));
+  if (!def)
+    return false;
+  tree_code code = gimple_assign_rhs_code (def);
+  HOST_WIDE_INT a, b;
+  switch (code)
+    {
+    case INTEGER_CST:
+    case SSA_NAME:
+      return resolve_int_cst (gimple_assign_rhs1 (def), out, depth + 1);
+    CASE_CONVERT:
+      if (!resolve_int_cst (gimple_assign_rhs1 (def), &a, depth + 1))
+	return false;
+      *out = a;
+      return true;
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case MULT_EXPR:
+      {
+	if (!resolve_int_cst (gimple_assign_rhs1 (def), &a, depth + 1)
+	    || !resolve_int_cst (gimple_assign_rhs2 (def), &b, depth + 1))
+	  return false;
+	const HOST_WIDE_INT LIM = HOST_WIDE_INT_1 << 40;
+	if (a > LIM || a < -LIM || b > LIM || b < -LIM)
+	  return false;
+	*out = code == PLUS_EXPR ? a + b : code == MINUS_EXPR ? a - b : a * b;
+	return true;
+      }
+    default:
+      return false;
+    }
+}
+
 /* Bounded forward evaluation of a single-block counted loop's own scalar
    control (the same discipline as the programmable-constant pass's trip
    proof: no SCEV, no CFG normalization, refuse anything non-trivial).
@@ -331,8 +383,8 @@ counted_trips (class loop *loop, unsigned HOST_WIDE_INT *trips)
       else
 	init = gimple_phi_arg_def (phi, ix);
     }
-  if (!init || TREE_CODE (init) != INTEGER_CST || !tree_fits_shwi_p (init)
-      || !latch_val)
+  HOST_WIDE_INT init_val;
+  if (!init || !latch_val || !resolve_int_cst (init, &init_val))
     return false;
 
   if (!tests_next)
@@ -408,7 +460,7 @@ counted_trips (class loop *loop, unsigned HOST_WIDE_INT *trips)
       return false;
     }
 
-  HOST_WIDE_INT v = norm (tree_to_shwi (init));
+  HOST_WIDE_INT v = norm (init_val);
   HOST_WIDE_INT b = norm (tree_to_shwi (bound));
   unsigned HOST_WIDE_INT n = 0;
   for (;;)
