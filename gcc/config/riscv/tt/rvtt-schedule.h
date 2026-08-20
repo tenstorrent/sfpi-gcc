@@ -64,11 +64,34 @@ struct rvtt_solver_solution
   std::vector<unsigned> order;
   unsigned solver_nodes = 0;
   const char *diagnostic = "none";
+  /* Result of cross-checking the primary exact solver against the
+     optional lp_solve backend: "none" (lp_solve not configured),
+     "agree", "disagree", or "skipped" (either side capped or errored,
+     so terminal verdicts cannot be compared).  */
+  const char *cross_check = "none";
 };
 
+/* The optional lp_solve adapter (rvtt-lpsolve.cc).  Compiled in only
+   under --with-lp-solve; used exclusively as an independent
+   cross-check of the built-in solver, never as the primary backend,
+   so production code generation is byte-identical whether or not it
+   was configured.  */
 extern bool rvtt_lpsolve_available ();
 extern rvtt_solver_solution
 rvtt_lpsolve_schedule (const rvtt_sched_problem &);
+
+/* The built-in exact branch-and-bound solver (rvtt-bnb.cc).  Always
+   compiled; dependency-free; deterministic.  */
+extern rvtt_solver_solution
+rvtt_bnb_schedule (const rvtt_sched_problem &);
+
+/* Solver entry points for passes: the built-in exact solver, with the
+   lp_solve cross-check folded in when configured.  */
+extern bool rvtt_solver_available ();
+extern const char *rvtt_solver_backend_name ();
+extern rvtt_solver_solution
+rvtt_solve_schedule (const rvtt_sched_problem &);
+
 extern const char *rvtt_solver_status_name (rvtt_solver_status);
 
 #endif /* GCC_RVTT_SCHEDULE_H */

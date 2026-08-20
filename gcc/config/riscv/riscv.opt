@@ -647,7 +647,7 @@ Target Undocumented Alias(mtt-tensix-optimize-pressure-schedule)
 
 mtt-tensix-pressure-schedule-use-milp
 Target Var(riscv_tt_pressure_schedule_use_milp) Init(0)
-Use the optional lp_solve MILP backend for Tensix pressure scheduling.
+Use the built-in exact branch-and-bound solver for Tensix pressure scheduling when the list schedule cannot satisfy capacity (--with-lp-solve builds also cross-check it against lp_solve).
 
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)

@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
+#include "rvtt-raw-boundary.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -4803,6 +4804,44 @@ transform (function *cfn, unsigned buffer_size)
 {
   basic_block bb;
   std::vector<replay_span> replay_spans;
+
+  /* Fail-closed raw-capture census.  The allocator's only view of
+     already-claimed slots is the typed rvtt_ttreplay_int stream: an
+     opaque asm never reaches is_replay_insn (the TYPE_TENSIX filter
+     below skips it before classification), so a hand-authored raw
+     ".ttinsn" word carrying the architectural REPLAY opcode would
+     leave replay_spans untouched and the formation below would
+     silently allocate -- and launch over -- slots the raw word already
+     owns.  The raw word's slot range is not derivable here, and
+     capture cannot be distinguished from launch by the opcode byte
+     alone, so any such word refuses ALL replay allocation in the
+     function by name.  Typed owners still declare their ranges and are
+     excluded exactly by the span subtraction below; raw words that do
+     not carry the REPLAY opcode remain ordinary sequence boundaries;
+     a non-constant raw word remains an opaque boundary as before (it
+     cannot be decoded, and its slots cannot be proven claimed --
+     unchanged first-increment behavior, recorded as a limitation).  */
+  FOR_EACH_BB_FN (bb, cfn)
+    {
+      rtx_insn *census_insn;
+      FOR_BB_INSNS (bb, census_insn)
+	{
+	  uint32_t raw_word;
+	  if (NONDEBUG_INSN_P (census_insn)
+	      && asm_noperands (PATTERN (census_insn)) >= 0
+	      && rvtt_raw_ttinsn_word (census_insn, &raw_word)
+	      && rvtt_raw_replay_owner_word_p (raw_word))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "replay-raw-capture-present: raw .ttinsn word "
+			 "0x%08x (insn %d) carries the REPLAY opcode; "
+			 "refusing all replay allocation in this function\n",
+			 raw_word, INSN_UID (census_insn));
+	      return;
+	    }
+	}
+    }
 
   /* Recording-epoch scoping (ownership-epoch model, TOP3-2 layer 2).
 
