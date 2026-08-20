@@ -1,0 +1,15 @@
+# Audited result-latency facts NOT yet carried by the base tree's
+# generated attributes: lane DL's D3-follow-up audit rows
+# (rvtt-cost.md on sfpi-gcc agent/latency-audit-widening, 2026-08-20,
+# each with [ISA]/[SIM]/[HAND] provenance there).  The oracle applies a
+# row ONLY to instructions the dump reports as unaudited (latency=-1);
+# in-dump audited values always win.  Delete this file once the DL
+# branch is merged -- the dump then carries these facts itself.
+#
+# key	latency	provenance
+subunit:store	0	SFPSTORE (BH+WH): Dst write only, no LREG result, no next-cycle rule
+mnem:TTINCRWC	0	pure RWC counter update, applied at issue
+# SFPLUT mods 0/4 only; the INDIRECT_VD form (mod0&8) keeps refusing.
+# The .s operand carries the mod; the oracle cannot see the envelope,
+# so apply this row only to kernels known to use mods 0/4.
+mnem:SFPLUT	1	SFPLUT.md scheduling as per SFPMAD; mad-family one-slot delay
