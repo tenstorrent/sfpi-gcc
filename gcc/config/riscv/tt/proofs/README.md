@@ -19,3 +19,9 @@ re-mined.
   be retired if this RESULT ever stops being EQUAL. BH-proven; QSR
   changes integer-abs(INT32_MIN) per the simulator, so the pass gate is
   BH-only. laneCU 2026-08-20.
+- sm32-cast-elision-shift/ — leftshift SM32 software-cast chain vs the
+  INT32_2S_COMP conversion-in-load (cast-free) form. Amount dimension
+  EQUAL (2^32); value dimension NOT-EQUAL (92,341,796,868 over 32x2^32,
+  two exact closed-form classes, other=0; sound only at k=0 and k=31).
+  Refusal: sm32-cast-elision-refuted. laneCU 2026-08-20
+  (NOTES-sm32-cast-elision-refusal-laneCU.md).
