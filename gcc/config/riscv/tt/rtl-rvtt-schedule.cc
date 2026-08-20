@@ -1021,7 +1021,10 @@ fill_interlock_shadows (function *fn)
      last copy's exit consumer) would otherwise schedule sibling copies
      differently.  Two regions with the same insn-code signature in one
      block therefore both refuse ("repeated-row shape deferred to
-     replay capture formation").
+     replay capture formation").  Named residual: RUNTIME-unrolled
+     copies living in separate blocks (branches between copies) evade
+     both deferrals -- exact/counted unrolls land in one block and are
+     covered; the corpus formation gate owns the residual.
 
    Dependence DAG, over DF hard-register references (complete for
    allocatable registers after allocation, as established above):
@@ -1365,9 +1368,11 @@ ls_list_order (std::vector<ls_node> &nodes)
 
 /* Schedule one region.  NODES are the region members in original order
    (orig fields set).  ANCHOR is the unmoved insn immediately before the
-   region.  UNAUDITED_DEFS is the block-tracked hazard set: registers
-   whose most recent pre-region writer has no audited in-window latency.
-   Returns true if the region was reordered (committed).  */
+   region.  UNAUDITED_DEFS is the entry-adjacent hazard: the entry
+   producer's defs when its latency is outside the audited window
+   (empty otherwise; deeper unknown-latency producers are unmodeled in
+   both arms, see the head comment).  Returns true if the region was
+   reordered (committed).  */
 
 static bool
 ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
@@ -1380,8 +1385,8 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
 
   /* Entry boundary: latency floor from the audited entry producer.
      An entry producer whose latency is unaudited or beyond the window
-     contributes through UNAUDITED_DEFS (the caller tracked it), never
-     through a modeled floor.  */
+     contributes through UNAUDITED_DEFS (entry-adjacent, never a
+     modeled floor).  */
   insn_regs ep_regs;
   CLEAR_HARD_REG_SET (ep_regs.uses);
   CLEAR_HARD_REG_SET (ep_regs.defs);
@@ -1464,7 +1469,9 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
       && delay_nop_needed_p (visited, bb, entry_producer, XTT_DELAY_DYNAMIC);
 
   /* Exact-restore record: the chain from ANCHOR to the region's last
-     member, debug insns included (notes never move and are skipped).  */
+     member, debug insns included.  Notes are not recorded: a mid-block
+     note can migrate relative to insns across a commit-then-restore
+     (it emits no code; post-RA mid-block notes are rare).  */
   std::vector<rtx_insn *> chain;
   for (rtx_insn *w = NEXT_INSN (anchor);; w = NEXT_INSN (w))
     {
@@ -1521,6 +1528,40 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
   return true;
 }
 
+/* The entry producer of a region starting at FIRST: the nearest
+   preceding instruction the DYNAMIC pad probe (find_next_insn) would
+   treat as word-adjacent to the region's first member.  The probe
+   SKIPS non-Tensix insns, USE/CLOBBER markers, and non-dependent
+   zero-length ghosts, so a scalar RISC insn in the gap (a loop
+   counter, an address materialization) does NOT break the adjacency:
+   the walk here skips exactly the probe's vocabulary, or the entry
+   pin, latency floor, and pad-flip guard would all silently bypass
+   across a one-scalar gap.  */
+
+static rtx_insn *
+ls_entry_producer (basic_block bb, rtx_insn *first)
+{
+  for (rtx_insn *w = PREV_INSN (first); w && w != PREV_INSN (BB_HEAD (bb));
+       w = PREV_INSN (w))
+    {
+      if (!NONDEBUG_INSN_P (w))
+	continue;
+      if (GET_CODE (w) != INSN)
+	return nullptr;		/* jump/call boundary */
+      rtx pat = PATTERN (w);
+      if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	continue;
+      if (recog_memoized (w) < 0)
+	return nullptr;
+      if (get_attr_type (w) != TYPE_TENSIX)
+	continue;		/* scalar: probe-transparent */
+      if (!get_attr_length (w))
+	continue;		/* zero-length marker: no word, no event */
+      return w;
+    }
+  return nullptr;
+}
+
 /* One collected candidate region of a block.  */
 
 struct ls_region
@@ -1528,7 +1569,8 @@ struct ls_region
   std::vector<ls_node> nodes;
   rtx_insn *anchor;
   rtx_insn *entry_producer;
-  HARD_REG_SET unaudited_defs;	/* hazard-set snapshot at region entry */
+  HARD_REG_SET unaudited_defs;	/* entry producer's defs when its
+				   latency is out of the audited window */
   std::vector<int> signature;	/* insn codes, for the repeat deferral */
 };
 
@@ -1577,7 +1619,6 @@ list_schedule_regions (function *fn)
       rtx_insn *entry_producer = nullptr;
       HARD_REG_SET region_unaudited;
       CLEAR_HARD_REG_SET (region_unaudited);
-      rtx_insn *prev_any = nullptr;
       bool stop_block = false;
 
       auto flush = [&] ()
@@ -1611,9 +1652,7 @@ list_schedule_regions (function *fn)
 	      if (nodes.empty ())
 		{
 		  anchor = PREV_INSN (insn);
-		  entry_producer
-		    = (prev_any && issued_tensix_p (prev_any))
-		      ? prev_any : nullptr;
+		  entry_producer = ls_entry_producer (bb, insn);
 		  /* The audited entry horizon is exactly ONE issued
 		     instruction deep: every admitted latency is <= 1,
 		     so a producer two issue slots back has an expired
@@ -1640,7 +1679,6 @@ list_schedule_regions (function *fn)
 		}
 	      node.orig = (int) nodes.size ();
 	      nodes.push_back (node);
-	      prev_any = insn;
 	      continue;
 	    }
 
@@ -1656,7 +1694,6 @@ list_schedule_regions (function *fn)
 	      && get_attr_type (insn) == TYPE_TENSIX
 	      && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
 	    stop_block = true;	/* established capture discipline */
-	  prev_any = insn;
 	}
       if (!stop_block)
 	flush ();
