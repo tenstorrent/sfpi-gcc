@@ -22,8 +22,15 @@
 // barrier printer only names recognized Tensix insns, so fn 2's
 // witness is its two INDEPENDENTLY refused sub-regions plus the
 // absence of any fire (an asm word is never crossed or moved).
+// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// stage-1 measurements: (a) effect classification now precedes the
+// defless check, so Dst words all name dst-access; (b) identical chain
+// shapes now DEFER by name to replay capture formation (DU-S4
+// repeated-row rule) instead of engaging and refusing no-decrease --
+// no motion either way, and the deferral is the stronger contract.
 // { dg-final { scan-rtl-dump-times "List-schedule barrier: replay-owner uid=\\d+" 1 "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-times "List-schedule refused: no modeled makespan decrease" 3 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule deferred: repeated-row shape at uid=\\d+" 2 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule refused: no modeled makespan decrease" 1 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-not "List-schedule: bb" "rvtt_schedule" } }
 
 void replay_owner_bait ()

@@ -24,8 +24,14 @@
 // refusal is sound either way (the words bound the region and nothing
 // crosses); the scan below accepts either name so a naming fix keeps
 // this twin green, and the finding is recorded in the arsenal verdicts.
+// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// stage-1 measurements: (a) effect classification now precedes the
+// defless check, so Dst words all name dst-access; (b) identical chain
+// shapes now DEFER by name to replay capture formation (DU-S4
+// repeated-row rule) instead of engaging and refusing no-decrease --
+// no motion either way, and the deferral is the stronger contract.
 // { dg-final { scan-rtl-dump-times "List-schedule barrier: (?:cc-write|scalar-or-defless) uid=\\d+" 2 "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-times "List-schedule refused: no modeled makespan decrease" 3 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule deferred: repeated-row shape at uid=\\d+" 3 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-not "List-schedule: bb" "rvtt_schedule" } }
 
 void cc_region_bait ()

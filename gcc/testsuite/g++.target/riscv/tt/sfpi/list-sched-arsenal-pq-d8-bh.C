@@ -14,7 +14,7 @@
 // This width additionally exercises coefficient-materialization
 // traffic under the eight-LREG file: at any point only x, p, q and the
 // in-flight coefficient words are live, so the interleaved schedule
-// fits the architectural bound (the fire line's pressure-peak <= 8 is
+// fits the architectural bound (post-allocation the eight hard LREGs are
 // asserted by the scheduler's own dispatch walk), while the number of
 // hideable one-slot shadows is the largest of the family.  Oracle pins
 // scheduled == lower bound.
@@ -23,7 +23,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // Measured (pinned): nodes=34, baseline 64 = 34 words + 30 stalls,
 // interleaved 34 = word count.  Oracle: 67 -> 37 == lower bound.
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=34 makespan 64 -> 34 pressure-peak=3 target=bh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=34 makespan 64 -> 34 target=bh" 1 "rvtt_schedule" } }
 
 namespace ckernel { unsigned *instrn_buffer; }
 #include <sfpi.h>

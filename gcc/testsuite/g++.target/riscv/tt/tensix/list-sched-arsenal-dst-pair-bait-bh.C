@@ -17,9 +17,15 @@
 // "dst-access"; the stores carry no def and print "scalar-or-defless"
 // (the defless check precedes the dst check).  Sound but imprecise;
 // both accepted below, finding recorded in the arsenal verdicts.
-// { dg-final { scan-rtl-dump-times "List-schedule barrier: dst-access uid=\\d+" 2 "rvtt_schedule" } }
+// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// stage-1 measurements: (a) effect classification now precedes the
+// defless check, so Dst words all name dst-access; (b) identical chain
+// shapes now DEFER by name to replay capture formation (DU-S4
+// repeated-row rule) instead of engaging and refusing no-decrease --
+// no motion either way, and the deferral is the stronger contract.
+// { dg-final { scan-rtl-dump-times "List-schedule barrier: dst-access uid=\\d+" 4 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-times "List-schedule barrier: (?:dst-access|scalar-or-defless) uid=\\d+" 4 "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-times "List-schedule refused: no modeled makespan decrease" 2 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule deferred: repeated-row shape at uid=\\d+" 2 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-not "List-schedule: bb" "rvtt_schedule" } }
 
 using vec_t = decltype (__builtin_rvtt_sfpreadlreg (0));

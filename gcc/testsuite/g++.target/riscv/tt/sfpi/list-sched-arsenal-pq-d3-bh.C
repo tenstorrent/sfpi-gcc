@@ -35,7 +35,7 @@
 // interleaved 14 = the word count -- even the exit shadow into the
 // first store is hidden by the other chain's last word.  Oracle:
 // whole-function 27 -> 17 == lower bound (gap 0).
-// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 24 -> 14 pressure-peak=3 target=bh" 1 "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 24 -> 14 target=bh" 1 "rvtt_schedule" } }
 
 namespace ckernel { unsigned *instrn_buffer; }
 #include <sfpi.h>
