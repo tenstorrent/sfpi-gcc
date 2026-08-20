@@ -627,7 +627,36 @@ sfpu_budget (function *fn)
 	    case CODE_FOR_rvtt_sfpwritelreg6: reserved |= 1u << 6; break;
 	    case CODE_FOR_rvtt_sfpreadlreg7:
 	    case CODE_FOR_rvtt_sfpwritelreg7: reserved |= 1u << 7; break;
-	    default: break;
+	    default:
+	      {
+		/* Fail closed: a raw-LREG accessor the cases above did
+		   not decode must never be silently unreserved --
+		   omission would OVERSTATE the budget and fold into
+		   unallocatable pressure (the unsound direction; every
+		   sibling gate fails closed on omission).  Any insn
+		   carrying the raw-accessor unspec families reserves
+		   the entire variable file.  */
+		subrtx_iterator::array_type array;
+		FOR_EACH_SUBRTX (iter, array, PATTERN (insn), ALL)
+		  {
+		    const_rtx x = *iter;
+		    if (GET_CODE (x) == UNSPEC_VOLATILE
+			&& (XINT (x, 1) == UNSPECV_SFPVARLREG
+			    || XINT (x, 1) == UNSPECV_SFPRAWLREG_ACCESS))
+		      {
+			reserved = 0xff;
+			if (dump_file)
+			  fprintf (dump_file,
+				   "Dst-ownership: unlisted raw-LREG"
+				   " accessor at insn %d"
+				   " (raw-lreg-accessor-unlisted):"
+				   " reserving the variable file\n",
+				   INSN_UID (insn));
+			break;
+		      }
+		  }
+	      }
+	      break;
 	    }
 	}
     }

@@ -724,6 +724,15 @@ struct crosscall_tu_facts
   /* The MOP template-file audit.  */
   bool slots_unproven = false;
   const char *slot_reason = nullptr;
+  /* Refusal provenance for the slots_unproven verdict: every node whose
+     body the census could not walk (already expanded / no gimple cfg),
+     and whether ANY refusal other than body-unavailability fired
+     (SLOT_REASON keeps only the first).  The init-hoist value-equality
+     guard may excuse body-unavailability attributable solely to the
+     contract subject itself -- whose delivered words its own planner
+     audits -- and nothing else.  */
+  hash_set<cgraph_node *> *unavailable_bodies = nullptr;
+  bool slot_refusal_non_body = false;
   bool slot_replay = false;
   unsigned slot_loadi_dests = 0;   /* SFPLOADI destinations programmed
 				      into instruction slots	       */
@@ -889,6 +898,11 @@ census_slot_refusal (const char *why)
       tu_facts.slots_unproven = true;
       tu_facts.slot_reason = why;
     }
+  /* Recorded for EVERY refusal, not only the first: the init-hoist
+     value-equality guard must know whether anything beyond
+     body-unavailability fired.  */
+  if (strcmp (why, "mop-template-body-unavailable") != 0)
+    tu_facts.slot_refusal_non_body = true;
 }
 
 /* Audit one resolved instruction-slot word (slots 2..8).  */
@@ -1620,6 +1634,9 @@ compute_tu_facts ()
 	  if (!ofn || !ofn->cfg)
 	    {
 	      census_slot_refusal ("mop-template-body-unavailable");
+	      if (!tu_facts.unavailable_bodies)
+		tu_facts.unavailable_bodies = new hash_set<cgraph_node *>;
+	      tu_facts.unavailable_bodies->add (node);
 	      if (dump_file)
 		fprintf (dump_file,
 			 "crosscall-hoist: census body unavailable "
@@ -1684,6 +1701,22 @@ compute_tu_facts ()
 		     fnode->dump_name ());
 	  break;
 	}
+      /* A demanding function whose address is taken can be entered
+	 through a function pointer with arguments no cgraph caller
+	 edge carries: the enumerable direct sites are not all the
+	 sites.  Fail closed (the entry-root rule above, same class).  */
+      if (fnode->address_taken)
+	{
+	  census_slot_refusal ("mop-template-slot-caller-unenumerable");
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "crosscall-hoist: demanded slot word in address-taken "
+		     "%s: indirect call sites cannot be enumerated "
+		     "(mop-template-slot-caller-unenumerable)\n",
+		     fnode->dump_name ());
+	  break;
+	}
+      unsigned n_resolved = 0;
       for (cgraph_edge *e = fnode->callers; e; e = e->next_caller)
 	{
 	  if (!executable->contains (e->caller))
@@ -1710,6 +1743,22 @@ compute_tu_facts ()
 	      break;
 	    }
 	  audit_slot_word (word);
+	  ++n_resolved;
+	}
+      /* Zero enumerable executable call sites satisfy the demand only
+	 VACUOUSLY -- the comment above this resolver says fail-closed,
+	 so at least one resolved site must vouch for every demand
+	 (the parameter-binding closure's !callers rule).  */
+      if (!tu_facts.slots_unproven && n_resolved == 0)
+	{
+	  census_slot_refusal ("mop-template-slot-caller-unenumerable");
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "crosscall-hoist: demanded slot word in %s has no "
+		     "enumerable executable call site "
+		     "(mop-template-slot-caller-unenumerable)\n",
+		     fnode->dump_name ());
+	  break;
 	}
     }
 
@@ -2743,6 +2792,29 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
 {
   compute_tu_facts ();
 
+  /* The verdict below leans on the TU census (a MOP word defers to the
+     template audit; the extern-fixed-surface axiom covers only rooted
+     bodies, and the census SKIPS bodies outside the rooted closure
+     entirely).  The function being edited must itself be a closure
+     member -- an unrooted body (a naked-asm-entry TU, an unrooted
+     census) was never audited, so nothing vouches for the region.
+     Fail closed by name.  */
+  cgraph_node *self = cfun ? cgraph_node::get (cfun->decl) : nullptr;
+  if (tu_facts.census_unrooted || !self
+      || !tu_facts.executable->contains (self))
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "crossloop-hoist: editing function %s outside the rooted "
+		 "census closure (crossloop-caller-unrooted)\n",
+		 self ? self->dump_name () : "?");
+      if (why)
+	*why = "crossloop-caller-unrooted";
+      if (why_stmt)
+	*why_stmt = nullptr;
+      return false;
+    }
+
   scan_ctx ctx;
   ctx.contract_mask = lreg_mask;
   ctx.callee_decl = NULL_TREE;
@@ -3283,8 +3355,48 @@ static bool
 init_value_equal_p (cgraph_node *ucaller, function *caller_fn,
 		    class loop *loop,
 		    const rvtt_init_hoist_program &prog,
-		    const rvtt_macro::caps *c)
+		    const rvtt_macro::caps *c, cgraph_node *subject)
 {
+  /* The owned-row scan below reads TU_FACTS.SLOT_WORDS; a census that
+     failed closed leaves it empty or truncated, and the equality would
+     pass VACUOUSLY.  mop_init_ok_p guards this only when a MOP word is
+     delivered inside the scanned epoch, while template words execute
+     at their MOP sites before and between calls -- guard here too.
+     One census verdict is excusable: body-unavailability attributable
+     SOLELY to the contract subject itself (the callee being planned is
+     past gimple at planner time by construction; its delivered words
+     are exactly the prog its own planner audits -- the established
+     discipline).  Everything else fails closed: the caller demotes to
+     stage 1.  */
+  if (tu_facts.slots_unproven)
+    {
+      bool excusable = !tu_facts.slot_refusal_non_body
+	&& subject && tu_facts.unavailable_bodies;
+      if (excusable)
+	for (hash_set<cgraph_node *>::iterator it
+	       = tu_facts.unavailable_bodies->begin ();
+	     it != tu_facts.unavailable_bodies->end (); ++it)
+	  {
+	    cgraph_node *u = *it;
+	    while (u && u != subject)
+	      u = u->clone_of;
+	    if (u != subject)
+	      {
+		excusable = false;
+		break;
+	      }
+	  }
+      if (!excusable)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "init-hoist: value-equality: mop slot "
+		     "census unproven (%s) -- owned-row equality "
+		     "unprovable\n",
+		     tu_facts.slot_reason ? tu_facts.slot_reason : "?");
+	  return false;
+	}
+    }
+
   uint32_t want[8];
   bool have_dom[8] = {};
   for (unsigned i = 0; i != prog.n_setc16; ++i)
@@ -3681,7 +3793,7 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 	 today's interleaving; hoisting it (stage 2) would change what
 	 the next call's launches address -- demote.  */
       bool value_equal = !ctx.cc_dirty && !ctx.owned_row_dirty
-	&& init_value_equal_p (ucaller, cfn, loop, *prog, c);
+	&& init_value_equal_p (ucaller, cfn, loop, *prog, c, cn);
       if (!value_equal)
 	{
 	  stage = 1;
