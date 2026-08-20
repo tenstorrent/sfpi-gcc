@@ -827,10 +827,10 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
   bool solver_selected = false;
 
   if (old_peak > 8 && riscv_tt_pressure_schedule_use_milp
-      && rvtt_lpsolve_available ())
+      && rvtt_solver_available ())
     {
       solver_solution
-	= rvtt_lpsolve_schedule (build_solver_problem (ops, values, schedule,
+	= rvtt_solve_schedule (build_solver_problem (ops, values, schedule,
 					      new_peak <= 8));
       if (solver_solution.status == rvtt_solver_status::optimal)
 	{
@@ -898,13 +898,14 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
 	       validation_reason, rejection_selftest ? "passed" : "not-run",
 	       applied ? "yes" : "no");
       fprintf (dump_file,
-	       "SFPU MILP: requested=%s available=%s status=%s detail=%s nodes=%u "
-	       "selected=%s\n",
+	       "SFPU MILP: requested=%s backend=%s status=%s detail=%s nodes=%u "
+	       "cross-check=%s selected=%s\n",
 	       riscv_tt_pressure_schedule_use_milp ? "yes" : "no",
-	       rvtt_lpsolve_available () ? "yes" : "no",
+	       rvtt_solver_backend_name (),
 	       rvtt_solver_status_name (solver_solution.status),
 	       solver_solution.diagnostic,
-	       solver_solution.solver_nodes, solver_selected ? "yes" : "no");
+	       solver_solution.solver_nodes, solver_solution.cross_check,
+	       solver_selected ? "yes" : "no");
 
       const std::vector<gcall *> &shown
 	= scheduled ? solution.order : ops;
