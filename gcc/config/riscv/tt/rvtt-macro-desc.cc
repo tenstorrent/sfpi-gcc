@@ -902,6 +902,19 @@ lreg_index (rtx x)
      so the VB:=VD route is the identity; the VC addend survives as
      src_c.
 
+   - SFPIADD immediate form (mods 1, 5, 9 = ARG_IMM set, 2SCOMP clear,
+     mod1 <= 10 -- exactly the rvtt_sfpiadd_i_lv_int pattern's audited
+     effect envelope; the ISA functional model reads ONLY LReg[VC] and
+     SignExtend(Imm12), never VD): the immediate rides the template
+     imm12 field.  Two exact operand bindings, differentially proven
+     against the pinned simulators (laneCZ vocab_diff, WH+BH): the
+     in-place form (source == destination == the launch-VD register)
+     packs src_c 0 and takes the VC:=VD route; a named source survives
+     as the encoded VC under route 1 (no override is applied).  The
+     single-word constant-immediate alternative only: a register
+     immediate raises the runtime-synthesized instruction push (mem
+     operand nonzero) and refuses.
+
    - SFPSHFT immediate in-place form: realized as the SFPSHFT2
      immediate template on the Round sub-unit -- the single proven
      explicit-mode -> template-word pair the frozen signbit calendar
@@ -1010,6 +1023,45 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
       }
     case UNSPECV_SFPIADD:
       {
+	if (XVECLEN (un, 0) == 7)
+	  {
+	    /* Immediate form (rvtt_sfpiadd_i_lv_int): [0] mem-or-0,
+	       [1] opcode const, [2] shifts const, [3] imm-or-insn,
+	       [4] src (VC), [5] lv, [6] mod1 (ARG_IMM already OR'd).
+	       Only the single-word constant-immediate alternative is
+	       inside the audited envelope.  */
+	    rtx mem = XVECEXP (un, 0, 0);
+	    rtx imm = XVECEXP (un, 0, 3);
+	    rtx src = XVECEXP (un, 0, 4);
+	    rtx mod = XVECEXP (un, 0, 6);
+	    int s = lreg_index (src);
+	    if (mem != const0_rtx || !CONST_INT_P (imm) || s < 0
+		|| !CONST_INT_P (mod))
+	      return false;
+	    HOST_WIDE_INT m = INTVAL (mod);
+	    if (!IN_RANGE (m, 0, 10) || (m & 3) != 1)
+	      return false;	/* audited: ARG_IMM set, 2SCOMP clear  */
+	    HOST_WIDE_INT iv = INTVAL (imm);
+	    if (iv < -2048 || iv > 2047)
+	      return false;
+	    out->opcode = (TARGET_XTT_TENSIX_WH
+			   ? TT_OP_WH_SFPIADD (0, 0, 0, 0)
+			   : TT_OP_BH_SFPIADD (0, 0, 0, 0)) >> 24;
+	    out->mod1 = (uint8_t) m;
+	    out->imm12 = (uint16_t) (iv & 0xfff);
+	    out->name_reads = 0;
+	    if (s == dest && s == launch_vd)
+	      out->src_c = 0;	/* in-place: VC:=VD route	       */
+	    else if (s != 0)
+	      {
+		out->src_c = (uint8_t) s;	/* named source, route 1 */
+		if (s < 8)
+		  out->name_reads |= 1u << s;
+	      }
+	    else
+	      return false;	/* L0 collides with the unused code    */
+	    return true;
+	  }
 	if (XVECLEN (un, 0) != 4)
 	  return false;
 	rtx acc = XVECEXP (un, 0, 1);

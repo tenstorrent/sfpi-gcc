@@ -1209,3 +1209,62 @@ pattern) and the zero-argument `__builtin_rvtt_sfpencc_all_lanes`
 proof compares against; the pre-existing user `sfpencc` builtin's
 operand-spec-vs-expansion order mismatch is documented at its
 definition and deliberately not relied upon).
+
+## 2g. Lane CZ: enumerated template-word vocabulary (laneCO P5)
+
+Every earlier vocabulary extension was found by a lane tripping over a
+hole (the WP12 generic classes, Misc.StoreMod0, lane CI's commuted
+SFPMUL24).  The offline enumerator
+`gcc/config/riscv/tt/rvtt-macro-vocab-enum.cc` inverts the discovery
+direction: it enumerates the encodable (opcode, mod1, operand-binding)
+class space from the typed capability tables plus a typed per-opcode
+semantic model grounded in the owner ISA functional models
+(tt-isa-documentation BlackholeA0/TensixTile/TensixCoprocessor) and
+intersected with the CRAQ executor, classifies every class as
+admitted / candidate / named-wall, and ranks candidates by corpus
+hosting value.  Candidates are PROVEN before admission by the
+out-of-tree differential validator (laneCZ-evidence-20260820/
+diff-validator/vocab_diff.cpp): descriptor path vs explicit
+decomposition on the pinned simulators (BH 9f324140 + WH), full
+architectural-state comparison (all LRegs, LReg16, Dst, cc, cc_en)
+over stratified lane inputs, all launch VDs, and both cc_en states,
+with a negative control proving the harness discriminates.
+
+Admissions landed from the enumerator's ranked candidates (each with
+its own dg twins; established classes stay bit-identical -- every new
+arm only converts prior descriptor-program-unproven refusals):
+
+- **SFPIADD immediate** (mods 1/5/9 -- the rvtt_sfpiadd_i_lv_int
+  audited envelope; the functional model reads only LReg[VC] and
+  SignExtend(Imm12)): the immediate rides the template imm12 field;
+  in-place (src == dest == launch VD, src_c 0, VC:=VD route) and
+  named-source (route 1) bindings.  Hosts the gcd-fresh round's two
+  iadd-imm members and the general int-body `v + const` class.
+
+Named walls the enumeration proves NO admission row can convert:
+SFPSWAP live-operand/dual-result (writes BOTH VD and VC, and the
+decision inverts under lane_config bits 8/11), SFPLUT/SFPLUTFP32
+(hidden LUT registers), PRNG modes (SFPMOV mod 8, SFPSTOCHRND rnd!=0),
+SFPMAD/SFPMUL LReg[7]-indirect mods, and SFPNOT (exact in the model
+but its RTL pattern carries no effect audit).
+
+Doc/sim divergences found by the enumeration (intersection admitted;
+standing findings, not silently resolved): SFPLZ mods 6/8/10/12/14 are
+documented (CC_COMP combos) but simulator-refused; SFPSETMAN's
+immediate-mantissa mode is documented but the simulator forces
+imm12 == 0.
+
+mulint32 ceiling (enumeration-complete upgrade of lane CI's twin
+refusals): the V0 row's formed calendar occupies all four
+InstructionTemplate destinations with pairwise-distinct words;
+template sharing requires bit-identity; every explicit row member is
+a different opcode byte or names a different factor register than all
+four resident words, and word identity is a function of
+(opcode, mod1, src_c, imm12) only -- so ANY additional hosted event,
+under any admission this enumeration can ever produce, demands a
+fifth distinct word (template-capacity-exceeded).  The ii=11
+restructure floor is likewise vocabulary-independent: the WP12
+visibility deadline prices slots and sub-unit latencies, never words.
+`mulint32-template-budget-architectural` and
+`mulint32-restructure-deadline-floor` are therefore
+enumeration-complete over the template-word space.

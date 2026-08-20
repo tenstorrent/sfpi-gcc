@@ -451,11 +451,9 @@ static const admitted_class admitted[] = {
      signbit pair; BH source mod 5, WH 1).  Modeled under 0x94.  */
   { 0x94, 1u << 6, 1u << B_INPLACE, "shft-imm->shft2 (frozen 9(e))" },
   { 0x98, (1u << 0) | (1u << 1), 1u << B_VB_CARRIER, "mul24" },
-  /* Lane CZ admissions land here commit by commit:
-     iadd-imm {1,5,9} inplace+named; shft-reg {0,2} inplace;
-     unary {lz 0/2/4, mov 0/1/2, abs 0/1, exman 0/1, exexp 0/1/2/10}
-     named(+inplace where RC_VC); logic {and/or mod1 named-2src,
-     and/or mod0 + xor inplace}.  */
+  /* Lane CZ admissions (kept in sync with rvtt-macro-desc.cc).  */
+  { 0x79, (1u << 1) | (1u << 5) | (1u << 9),
+    (1u << B_INPLACE) | (1u << B_NAMED), "iadd-imm (lane CZ)" },
 };
 
 static bool
