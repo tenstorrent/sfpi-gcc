@@ -681,6 +681,10 @@ mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-lut-select): select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
+mtt-tensix-optimize-lut-select-leaf-ext
+Target Var(riscv_tt_opt_lut_select_leaf_ext) Init(0)
+Default-off: extend LUT instruction selection with certified non-affine leaf classes (multiply-only leaves, provable-constant leaves) and below-arity partition duplication; admission per slot is the exhaustive bit-exact certification recorded in rvtt-lut-tables.cc.
+
 mtt-tensix-optimize-crosscall-hoist
 Target Var(riscv_tt_opt_crosscall_hoist) Init(0)
 Hoist a noinline callee's call-invariant pinned-LREG immediate materializations (the LUT coefficient prefix) into every proven caller's loop preheader, carrying the values across calls in the architecturally pinned hard LREGs; every unproven link refuses by name.
