@@ -2,7 +2,7 @@
 // Renamed function, varied trip count and immediate: the decision is
 // structural, so the request still fires (trips 24 also group by 8).
 // { dg-final { scan-tree-dump "requested unroll 8 of loop" "rvtt_replay_unroll" } }
-// { dg-final { scan-assembler "TTREPLAY\t0, [0-9]+, 1, 1" } }
+// { dg-final { scan-assembler "TTREPLAY\t0, \[0-9\]+, 1, 1" } }
 
 #define RLU_KERNEL some_other_row_engine
 #define RLU_TRIPS 24
