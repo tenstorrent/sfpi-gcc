@@ -209,6 +209,13 @@ constexpr unsigned int SFPPUSHCC_MOD1_REPLACE = 1;
 
 constexpr unsigned int SFPPOPCC_MOD1_POP = 0;
 
+constexpr unsigned int SFPCONFIG_MOD1_ARG_IMM = 1;
+constexpr unsigned int SFPCONFIG_MOD1_AND = 2;
+constexpr unsigned int SFPCONFIG_MOD1_OR = 4;
+constexpr unsigned int SFPCONFIG_MOD1_XOR = 6;
+constexpr unsigned int SFPCONFIG_IMM_FIXED_CREG_LWM = 11;
+constexpr unsigned int SFPCONFIG_IMM_FIXED_CREG_HWM = 14;
+
 constexpr unsigned int SFPAND_MOD1_USE_VB = 1;
 
 constexpr unsigned int SFPOR_MOD1_USE_VB = 1;

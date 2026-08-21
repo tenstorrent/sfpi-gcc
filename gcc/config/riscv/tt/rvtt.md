@@ -1890,11 +1890,66 @@
 
 (define_insn "rvtt_sfpwriteconfig_v"
   [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "register_operand"   "x0")
-     (match_operand:SI   1 "const_int_operand"  "n")
+     (match_operand:XTT32SI 0 "register_operand" "x0")
+     (match_operand:SI   1 "const_int_operand" "n")
+     (match_operand:SI   2 "const_int_operand" "n")
      ] UNSPECV_SFPCONFIG)]
   "TARGET_XTT_TENSIX"
-  "SFPCONFIG\t%1, 0, 0\t# R:%x0 CFG:%1"
+  "SFPCONFIG\t%2, 0, %1\t# R:%x0 CFG:%2"
+  [(set_attr "type" "tensix")
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+
+(define_expand "rvtt_sfpwriteconfig_i"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "mem_or_0_operand")
+     (match_operand:SI 1 "reg_or_const_int_operand")
+     (match_operand:SI 2 "reg_or_0_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     (match_operand:SI 5 "const_int_operand")
+     ] UNSPECV_SFPCONFIG)]
+  "TARGET_XTT_TENSIX"
+{
+  operands[4] = GEN_INT (INTVAL (operands[4]) | SFPCONFIG_MOD1_ARG_IMM);
+  auto mem = const0_rtx;
+  auto opc = const0_rtx;
+  auto enc = const0_rtx;
+  auto imm = operands[1];
+  if (!CONST_INT_P (imm))
+    {
+      mem = gen_rtx_MEM (SImode, operands[0]);
+      int op
+        = TARGET_XTT_TENSIX_WH 	? TT_OP_WH_SFPCONFIG (0, INTVAL (operands[5]), INTVAL (operands[4]))
+	: TARGET_XTT_TENSIX_BH 	? TT_OP_BH_SFPCONFIG (0, INTVAL (operands[5]), INTVAL (operands[4]))
+	: TARGET_XTT_TENSIX_QSR	? TT_OP_QSR_SFPCONFIG (0, INTVAL (operands[5]), INTVAL (operands[4]))
+        : (gcc_unreachable (), 0);
+      opc = GEN_INT (op);
+      enc = GEN_INT (rvtt_synth (UINTVAL (operands[3])));
+      imm = operands[2];
+    }
+
+  emit_insn (gen_rvtt_sfpwriteconfig_i_int
+    (mem, opc, enc, imm,
+    rvtt_gen_rtx_noval (XTT32SImode),
+    operands[4], operands[5]));
+  DONE;
+})
+
+(define_insn "rvtt_sfpwriteconfig_i_int"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "mem_or_0_operand" "J,m")
+     (match_operand:SI 1 "const_int_operand" "J,n") ;; opcode
+     (match_operand:SI 2 "const_int_operand" "J,n") ;; id
+     (match_operand:SI 3 "reg_or_const_int_operand" "n,r") ;; imm or insn
+     (match_operand:XTT32SI 4 "noval_operand" "xn,xn") ;; src (none)
+     (match_operand:SI 5 "const_int_operand" "n,n")
+     (match_operand:SI 6 "const_int_operand" "n,n")
+     ] UNSPECV_SFPCONFIG)]
+  "TARGET_XTT_TENSIX"
+  {
+    return rvtt_synth::pattern (which_alternative,
+      "SFPCONFIG\t%6, %3, %5\t# CFG:%6", operands, false, -1);
+  }
   [(set_attr "type" "tensix")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 

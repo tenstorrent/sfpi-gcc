@@ -53,7 +53,7 @@ void mad_config () {
   auto b = __builtin_rvtt_sfpreadlreg(1);
   auto neg1 = __builtin_rvtt_sfpreadlreg(11);
   auto r = __builtin_rvtt_sfpmad(neg1, a, b, 0);
-  __builtin_rvtt_sfpwriteconfig_v(r, 0);
+  __builtin_rvtt_sfpwriteconfig_v(r, 0, 0);
 }
 /*
 **_ZN3nop10mad_configEv:

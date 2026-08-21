@@ -343,7 +343,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	  sfp_use |= 1;
 	  if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v)
 	    {
-	      int reg = TREE_INT_CST_LOW (gimple_call_arg (use_call, 1));
+	      int reg = TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg () + 1));
 	      if (reg == CREG_IDX_0 || reg == CREG_IDX_1 || reg == CREG_IDX_NEG_1)
 		// We must not simplify this to a load of the constant register
 		// that we're intializing!
@@ -527,24 +527,27 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
   return changed;
 }
 
-// CALL has a SCALAR variant, if its second op is from a LOADI and the value
+// CALL has a SCALAR variant, if its last op is from a LOADI and the value
 // being loaded fits in the immediate slot, make it so.
-// Also consider commuting sfpiadd_v's operands (and inverting)
+// Also consider commuting sfpiadd_v's operands (and maybe negating)
 
 static gcall *
 immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 		 gcall *call, const rvtt_insn_data *scalar_insnd)
 {
-  gcc_assert (call_insnd->is_live () == scalar_insnd->is_live ());
+  gcc_checking_assert (call_insnd->is_live () == scalar_insnd->is_live ());
+  gcc_checking_assert (call_insnd->num_srcs () == 0 || call_insnd->num_srcs () == 1);
+  gcc_checking_assert (scalar_insnd->num_srcs () + 1 == call_insnd->num_srcs ());
+  gcc_checking_assert (scalar_insnd->num_args ()
+		       == call_insnd->num_args () + (scalar_insnd->has_var () ? 3 : 0));
 
   auto nlv_call_insnd = call_insnd->get_non_live ();
   int mod = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
   auto info = scalar_insnd->ops[0];
   bool is_signed = info.kind () == rvtt_insn_data::op_t::SIGNED;
   int bits = info.bits () - int (is_signed);
-
   rvtt_arg_info arg_info;
-  bool iadd_commute = false;
+  int keep_arg = call_insnd->src_arg ();
   int32_t cst;
 
   // For sfpiadd_v try the first operand, do this first
@@ -562,22 +565,44 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	  auto upper = cst >> bits;
 	  if (!(upper && (!is_signed || upper != -1)))
 	    {
-	      iadd_commute = true;
+	      keep_arg++;
 	      goto iadd_commute;
 	    }
 	}
     }
 
-  // Try the second operand
+  // Try the last operand
   if (scalar_insnd->mod_info ().mod () & (1u << mod))
     {
-      arg_info = gimple_call_arg (call, call_insnd->src_arg () + 1);
+      arg_info = gimple_call_arg
+	(call, keep_arg + call_insnd->num_srcs () - 1);
       if (!arg_info.is_cst ())
 	return nullptr;
       cst = int32_t (arg_info.get_cst ());
-      auto upper = cst >> bits;
-      if (upper && (!is_signed || upper != -1))
-	return nullptr;
+
+      if (scalar_insnd->id == rvtt_insn_data::sfpwriteconfig_i)
+	{
+	  // Extra constraints for sfpwriteconfig. Some registers will get a
+	  // hard-wired number.
+	  unsigned reg = TREE_INT_CST_LOW
+	    (gimple_call_arg (call, call_insnd->mod_arg () + 1));
+	  if (reg >= SFPCONFIG_IMM_FIXED_CREG_LWM
+	      && reg <= SFPCONFIG_IMM_FIXED_CREG_HWM)
+	    {
+	      // Unless we're setting to the fixed constant, fail.  Only check
+	      // this particular constant.
+	      if (!(reg == SFPCONFIG_IMM_FIXED_CREG_LWM
+		    && cst == 0xbf800000))
+		return nullptr;
+	      cst = 0;
+	    }
+	}
+      else
+	{
+	  auto upper = cst >> bits;
+	  if (upper && (!is_signed || upper != -1))
+	    return nullptr;
+	}
     }
   else
     return nullptr;
@@ -598,9 +623,8 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
   gimple_call_set_arg (new_call, argno++, null_pointer_node);
   if (scalar_insnd->is_live ())
     gimple_call_set_arg (new_call, argno++, gimple_call_arg (call, 0));
-
-  gimple_call_set_arg (new_call, argno++,
-		       gimple_call_arg (call, call_insnd->src_arg () + (iadd_commute ? 1 : 0)));
+  if (scalar_insnd->num_srcs ())
+    gimple_call_set_arg (new_call, argno++, gimple_call_arg (call, keep_arg));
 
   gimple_call_set_arg (new_call, argno++, build_int_cst (is_signed ? integer_type_node : unsigned_type_node,
 							 cst));

@@ -114,15 +114,14 @@ rvtt_insn_data::init ()
     }
 
   // Skip src vectors
-  int num_srcs = 0;
   for (; TREE_CODE (TREE_VALUE (arg_types)) == VECTOR_TYPE;
        arg_types = TREE_CHAIN (arg_types))
     {
       argno++;
-      num_srcs++;
+      src_num++;
     }
-  if (num_srcs)
-    src_pos = argno - num_srcs;
+  if (src_num)
+    src_pos = argno - src_num;
 
   if (has_var ())
     {
@@ -407,6 +406,10 @@ rvtt_arg_info::rvtt_arg_info (tree arg)
 	{
 	default:
 	  return;
+
+	case SFPLOADI_MOD0_FLOATB:
+	  cst = cst << 16;
+	  break;
 
 	case SFPLOADI_MOD0_SHORT:
 	  cst = int32_t (cst << 16) >> 16;

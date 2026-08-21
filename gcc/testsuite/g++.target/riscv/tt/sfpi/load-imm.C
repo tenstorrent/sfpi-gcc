@@ -174,7 +174,6 @@ void cfg () {
 }
 /*
 **_Z3cfgv:
-**	SFPLOADI	L0, 49024, 0
-**	SFPCONFIG	11, 0, 0	# R:L0 CFG:11
+**	SFPCONFIG	11, 0, 1	# CFG:11
 **	ret
 */
