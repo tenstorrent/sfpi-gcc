@@ -109,6 +109,22 @@ previous layers' vocabulary, never IR shape names.
    address-modifier program, descriptor words through an owned LREG),
    per-row launch calendar, and the drain.  Refusal paths never mutate.
 
+   **Inter-row drain (lane EV, P0 wrong-code adjudication 2026-08-21).**
+   Within a run, rows are emitted back-to-back; the scheduler's
+   conservative VD policy makes that sound only under VD alternation.
+   When synthesis pins a VALUE carrier's VD (the frozen whole-word
+   programs' `fixed_vd`; the WP12 name-encoded-consumer pin), every row
+   re-targets the SAME register while the previous row's hosted events
+   still pend up to `drain_slots` past its launch — back-to-back rows
+   race the next launch's VD write against the pending events (silicon
+   + pinned-sim adjudicated on the replay-loop-unroll signbit shape).
+   Emission therefore places the FULL derived drain between consecutive
+   rows of such regions, reproducing the proven rolled per-row calendar
+   byte-for-byte.  Store-only sacrificial VDs (written, never read),
+   the established alternating envelope, and the CC-template model
+   (its `macro_cc_model` next-row obligations are the proven inter-row
+   contract) keep their existing emission.
+
 ## 2. WP8 additions
 
 * **Single-row regions** — discovery admits one-row regions;

@@ -25,7 +25,20 @@
 // The hosted product vanishes into the calendar; the accumulate, one
 // slack shift, and one cast remain the row's explicit issues.
 // { dg-final { scan-assembler-not "SFPMUL24" } }
-// { dg-final { scan-assembler-times "SFPIADD" 8 } }
+// Lane EV (2026-08-21): this row's launches are fixed-VD value
+// carriers (drain=2), so the inter-row drain applies -- the old
+// back-to-back expectation pinned a stream whose next-row events land
+// ON the pending-writeback cycle (a staged-event same-cycle race by
+// the established retire-before-issue model; the boundary proof
+// refuses it).  With the per-row drain the eight rows become uniform
+// and the always-on replay former folds the explicit tail: one
+// execute-while-record copy plus seven playbacks -- the launch words
+// still issue once per row.
+// { dg-final { scan-rtl-dump-times "Macro-planner drain-interrow: drain=2 rows=8" 1 "rvtt_macro_planner" } }
+// { dg-final { scan-assembler-times "SFPIADD" 1 } }
+// { dg-final { scan-assembler-times "SFPNOP" 2 } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, \[0-9\]+, 1, 1" 1 } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, \[0-9\]+, 0, 0" 7 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2467618816" 8 } }
 // { dg-final { scan-assembler-times "\\.ttinsn\\t2470756416" 8 } }
 

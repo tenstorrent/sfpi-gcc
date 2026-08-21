@@ -784,6 +784,12 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  basic_block config_preheader, rtx_insn *enable_src,
 		  basic_block hoist_preheader, rtx_insn *hoist_enable_src,
 		  bool emit_drain,
+		  /* Lane EV (P0 wrong-code fix, 2026-08-21): place the
+		     FULL derived drain between consecutive rows of this
+		     run -- required when a fixed-VD VALUE carrier's
+		     hosted events pend past the next row's launch (see
+		     form_region for the derivation and provenance).  */
+		  bool interrow_drain,
 		  /* WP13 residency (rvtt-macro-desc.cc): elide the
 		     descriptor words when a bit-identical dominating
 		     resident program exists; collect the programming
@@ -1138,6 +1144,15 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	 the restored all-lanes mask.  Re-emitted verbatim.  */
       if (desc.keep_separator && row.separator)
 	emit_insn (copy_rtx (PATTERN (row.separator)));
+      /* Lane EV inter-row drain: between consecutive rows only (the
+	 run-end drain below still owns the run boundary).  Reproduces
+	 byte-for-byte the proven rolled per-row calendar -- launch
+	 followed by the full derived drain -- whose issue-stream
+	 spacing is the proven envelope (H2: stream slots lower-bound
+	 issue-cycle distance).  */
+      if (interrow_drain && r + 1 != end)
+	for (int d = 0; d != desc.drain_slots; ++d)
+	  emit_insn (gen_rvtt_sfpnop ());
     }
   /* The derived drain (core_drain_slots over the descriptor's own
      SequenceBits delays).  Under -mtt-tensix-optimize-drain-schedule an
@@ -1685,6 +1700,39 @@ form_region (function *fn, macro_region &region,
      mutation.  The final run's drain -- the region's exit contract (no
      events in flight may reach the invisible follower stream) -- is
      never elided.  */
+  /* Inter-row drain (lane EV, P0 wrong-code adjudication 2026-08-21).
+     Within a run, rows are emitted back-to-back.  The conservative VD
+     policy's own stated rule (rvtt-macro-sched.cc: a hosted launched
+     event consumes the launch VD; without a proven consumption slot
+     before the next row's launch, consecutive rows must alternate VDs)
+     makes that sound ONLY under VD alternation.  When descriptor
+     synthesis pins a VALUE carrier's VD (WP12 name-encoded consumers;
+     the frozen whole-word programs' fixed_vd), every row re-targets the
+     SAME register while the previous row's hosted consumers still pend
+     up to drain_slots past its launch -- back-to-back rows race the
+     next launch's VD write against the pending events.  Adjudicated on
+     the replay-loop-unroll signbit shape (device corr FAIL, weekly
+     pin-15 + pin-18 e2e; pinned-sim 32489dda reproduction; sim trace
+     shows three launches' events in flight on one LReg and the shift
+     event consuming overwritten data).  Placement: the FULL derived
+     drain between consecutive rows, reproducing exactly the proven
+     rolled per-row calendar (launch + drain), whose issue-stream
+     spacing is the proven envelope.  The established alternating
+     envelope, store-only sacrificial VDs (written, never read), and
+     the CC-template model (its macro_cc_model next-row obligations --
+     store-before-next-def, restore-visibility <= row interval -- are
+     the proven inter-row contract, silicon-proven multi-row on the
+     unified where kernel) keep today's bytes.  */
+  bool interrow_drain = false;
+  if (desc.drain_slots > 0 && region.rows.length () > 1 && !desc.cc.active)
+    for (const macro_launch_spec &l : desc.launches)
+      if (!l.vd_alternates && !l.is_store_only)
+	interrow_drain = true;
+  if (interrow_drain && dump)
+    fprintf (dump, "Macro-planner drain-interrow: drain=%d rows=%u"
+	     " (fixed-vd value carrier)\n", desc.drain_slots,
+	     region.rows.length ());
+
   auto_vec<bool> drain_elide;
   drain_elide.safe_grow_cleared (run_begins.length ());
   unsigned drains_elided = 0;
@@ -1755,6 +1803,7 @@ form_region (function *fn, macro_region &region,
 			config_preheader, enable_src,
 			hoist_preheader, hoist_enable_src,
 			last_run ? !backedge_elide : !drain_elide[b],
+			interrow_drain,
 			resident_elide, resid, init_hoist_stage,
 			b == 0 ? &config_placement : nullptr);
     }

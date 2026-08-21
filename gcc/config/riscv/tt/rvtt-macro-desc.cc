@@ -2137,6 +2137,7 @@ rvtt_macro_synthesize (const macro_region &region,
 		&& m == ds.row.n_macros - 1;
 	      launch.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
 		: c->no_increment_addr_mode;
+	      launch.is_store_only = is_store_only;
 	      if (is_store_only)
 		{
 		  launch.vd = ds.store_only_vd;
@@ -2472,6 +2473,7 @@ rvtt_macro_synthesize (const macro_region &region,
 	  && !schedule.absorb_into_explicit && m == program->n_macros - 1;
 	launch.addr_mode = absorbs ? c->auto_increment_dst2_addr_mode
 	  : c->no_increment_addr_mode;
+	launch.is_store_only = is_store_only;
 	if (program->fixed_vd >= 0)
 	  {
 	    launch.vd = program->fixed_vd;
