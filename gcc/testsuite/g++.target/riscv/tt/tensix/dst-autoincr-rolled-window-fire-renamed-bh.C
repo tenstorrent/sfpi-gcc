@@ -2,10 +2,10 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Renamed-and-varied twin of the rolled-window fire: different function
 // names, compute chain, Dst address, stride and trip count keep firing --
-// the pricing keys on rows-per-crossing, never on kernel identity or
-// constants.
+// the pricing keys on the iteration's covering slot words, never on
+// kernel identity or constants.
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 6 stride 4 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing priced .rows 6, uncovered crossing slots 2, bb \[0-9\]+." "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing covered .rows 6, iteration slot words 20 >= drain window 7, bb \[0-9\]+." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "mod-write-dominates-rolled-body" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t34, 4" 1 } }

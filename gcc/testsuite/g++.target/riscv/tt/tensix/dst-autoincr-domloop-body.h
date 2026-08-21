@@ -9,11 +9,11 @@
    unsoundness.
 
    Four rows per iteration: the final row's implicit advance crosses the
-   loop backedge and pays the mod-write crossing charge (see
-   rtl-rvtt-dst-autoincr.cc); four rows cover it with slots to spare, so
-   the dominating placement keeps firing.  The one-row rolled shape is the
-   silicon-regressive witness class and lives in the rolled-tiny refusal
-   twins instead.  */
+   loop backedge, and the iteration's own slot-occupying words cover the
+   audited drained-frontend window with slots to spare (see
+   rtl-rvtt-dst-autoincr.cc), so the dominating placement keeps firing.
+   The skinny one-row rolled shape is the silicon-regressive witness class
+   and lives in the rolled-tiny refusal twins instead.  */
 
 using vec_t = __xtt_vector;
 

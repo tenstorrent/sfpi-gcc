@@ -4,9 +4,9 @@
 // the crossing charge and the transform keeps firing.
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
 // (On Wormhole the default replay formation folds the eight rows into a
-// capture-exec plus seven launches; the launch word covers one crossing
-// slot, so one uncovered slot remains.)
-// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing priced .rows 8, uncovered crossing slots 1, bb \[0-9\]+." "rvtt_dst_autoincr" } }
+// capture-exec plus seven launches; the capture's members plus the seven
+// one-word launch floors plus the scalar loop control cover the window.)
+// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing covered .rows 8, iteration slot words 14 >= drain window 7, bb \[0-9\]+." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "mod-write-dominates-rolled-body" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t29, 2" 1 } }

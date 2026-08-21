@@ -1,12 +1,12 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // The measured-WIN twin of the rolled-tiny refusal (the unaryshift hand
-// kernel's -23.6% shape): the SAME live backedge crossing, but eight rows
-// per iteration pay the crossing charge with slots to spare -- the
-// transform keeps firing and the emission is unchanged by the pricing
-// term.
+// kernel's -23.6% shape): the SAME live backedge crossing, but the
+// eight-row iteration's own slot words cover the audited drained-frontend
+// window many times over -- the transform keeps firing and the emission
+// is unchanged by the pricing term.
 // { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words .preheader." 1 "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing priced .rows 8, uncovered crossing slots 2, bb \[0-9\]+." "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump "Dst-autoincr: mod-write backedge crossing covered .rows 8, iteration slot words 26 >= drain window 7, bb \[0-9\]+." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "mod-write-dominates-rolled-body" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t18, 0" 1 } }
