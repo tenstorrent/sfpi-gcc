@@ -184,10 +184,16 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpstochrnd_v_lv:
     case rvtt_insn_data::sfpsetexp_v:
     case rvtt_insn_data::sfpsetexp_v_lv:
+    case rvtt_insn_data::sfpsetexp_i:
+    case rvtt_insn_data::sfpsetexp_i_lv:
     case rvtt_insn_data::sfpsetman_v:
     case rvtt_insn_data::sfpsetman_v_lv:
+    case rvtt_insn_data::sfpsetman_i:
+    case rvtt_insn_data::sfpsetman_i_lv:
     case rvtt_insn_data::sfpsetsgn_v:
     case rvtt_insn_data::sfpsetsgn_v_lv:
+    case rvtt_insn_data::sfpsetsgn_i:
+    case rvtt_insn_data::sfpsetsgn_i_lv:
     case rvtt_insn_data::sfparecip:
     case rvtt_insn_data::sfparecip_lv:
     case rvtt_insn_data::sfpsetcc_i:
