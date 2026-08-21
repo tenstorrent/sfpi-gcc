@@ -260,7 +260,12 @@ audit_function (function *fn)
     }
 }
 
-/* Function-wide peak simultaneous SFPU pressure.  */
+/* Function-wide peak simultaneous SFPU pressure.  BACKWARD simulation
+   on purpose: the forward simulator consumes REG_DEAD/REG_UNUSED
+   notes, i.e. requires df_note_add_problem -- and adding the NOTES
+   problem refreshes notes that downstream passes consume, breaking
+   flag-on byte-identity below the wall (the corpus AB caught three
+   TUs).  Backward simulation needs only DF_LR.  */
 
 static unsigned
 function_peak_pressure (function *fn)
@@ -270,13 +275,14 @@ function_peak_pressure (function *fn)
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
-      bitmap_copy (live, DF_LR_IN (bb));
-      df_simulate_initialize_forwards (bb, live);
+      bitmap_copy (live, DF_LR_OUT (bb));
+      df_simulate_initialize_backwards (bb, live);
       peak = MAX (peak, count_xtt32_units (live));
       rtx_insn *insn;
-      FOR_BB_INSNS (bb, insn)
+      FOR_BB_INSNS_REVERSE (bb, insn)
 	{
-	  df_simulate_one_insn_forwards (bb, insn, live);
+	  if (NONDEBUG_INSN_P (insn))
+	    df_simulate_one_insn_backwards (bb, insn, live);
 	  peak = MAX (peak, count_xtt32_units (live));
 	}
     }
@@ -1956,13 +1962,26 @@ public:
 
   unsigned execute (function *fn) final override
   {
-    df_note_add_problem ();
-    df_analyze ();
+    /* The NOTES problem is added only for the historical audit dump
+       (byte-identical stub behavior for pressure_schedule users):
+       adding it refreshes REG_DEAD/REG_UNUSED notes that downstream
+       passes consume, which is a visible side effect.  Enforcement
+       needs only DF_LR: a plain df_analyze is analysis-only, keeping
+       the flag byte-identical below the pressure wall (the corpus AB
+       caught exactly this on three peak-0 TUs).  */
     if (riscv_tt_opt_pressure_schedule)
-      audit_function (fn);
+      {
+	df_note_add_problem ();
+	df_analyze ();
+	audit_function (fn);
+      }
     unsigned todo = TODO_df_finish;
     if (riscv_tt_opt_lreg_alloc)
-      todo |= enforce_colorability (fn);
+      {
+	if (!riscv_tt_opt_pressure_schedule)
+	  df_analyze ();
+	todo |= enforce_colorability (fn);
+      }
     return todo;
   }
 };
