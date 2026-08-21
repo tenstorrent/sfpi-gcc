@@ -1025,6 +1025,12 @@ fill_interlock_shadows (function *fn)
      copies living in separate blocks (branches between copies) evade
      both deferrals -- exact/counted unrolls land in one block and are
      covered; the corpus formation gate owns the residual.
+   - Both deferrals are LIFTED, for exactly the shapes whose proofs
+     hold, by -mtt-tensix-optimize-round-interleave (default off): a
+     one-region self-loop row schedules under the wrapped steady-state
+     II model, and an exactly-two isomorphic-copy family schedules as a
+     pair under one shared permutation; every other shape keeps its
+     deferral by name.  See the round-chain interleave section below.
 
    Dependence DAG, over DF hard-register references (complete for
    allocatable registers after allocation, as established above):
@@ -1371,15 +1377,21 @@ ls_list_order (std::vector<ls_node> &nodes)
    region.  UNAUDITED_DEFS is the entry-adjacent hazard: the entry
    producer's defs when its latency is outside the audited window
    (empty otherwise; deeper unknown-latency producers are unmodeled in
-   both arms, see the head comment).  Returns true if the region was
-   reordered (committed).  */
+   both arms, see the head comment).  FORCED_ORDER, when given, replaces
+   the list heuristic (the isomorphic-pair extension applies one
+   region's chosen permutation to its sibling; legality is the caller's
+   proven obligation via positional dependence-matrix equality);
+   CHOSEN_ORDER, when given, receives the committed permutation.
+   Returns true if the region was reordered (committed).  */
 
 static bool
 ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
 		    rtx_insn *anchor, rtx_insn *entry_producer,
 		    rtx_insn *exit_consumer,
 		    const HARD_REG_SET &unaudited_defs,
-		    std::vector<basic_block> &visited)
+		    std::vector<basic_block> &visited,
+		    const std::vector<int> *forced_order = nullptr,
+		    std::vector<int> *chosen_order = nullptr)
 {
   unsigned n = nodes.size ();
 
@@ -1442,7 +1454,8 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
       nodes[i].entry_pin = base_issue[i];
 
   /* Candidate.  */
-  std::vector<int> order = ls_list_order (nodes);
+  std::vector<int> order
+    = forced_order ? *forced_order : ls_list_order (nodes);
   std::vector<int> cand_issue (n, 0);
   int cand_end = ls_simulate (nodes, order, &cand_issue, exit_shadow);
 
@@ -1525,8 +1538,397 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
 	fprintf (dump_file, "List-schedule slot=%d uid=%d\n",
 		 cand_issue[order[k]], INSN_UID (nodes[order[k]].insn));
     }
+  if (chosen_order)
+    *chosen_order = order;
   return true;
 }
+
+/* ---- Round-chain interleave extensions (lane EI, default off) ----
+
+   -mtt-tensix-optimize-round-interleave lifts the two formation
+   deferrals above for exactly the shapes whose proofs hold, refusing
+   the rest by name:
+
+   (1) SELF-LOOP rows: the deferral exists because the linear boundary
+       model mispredicts the backedge seam.  The cyclic extension
+       replaces the boundary terms with the seam itself: acceptance is
+       judged on the STEADY-STATE INITIATION INTERVAL of the wrapped
+       dependence model (the body simulated as replicated back-to-back
+       copies under the same issue-distance rules, converged when two
+       successive iteration start distances agree -- the achieved-II of
+       the makespan oracle's RecMII extension), committed only on a
+       strict II decrease.  The reorder itself never crosses the
+       backedge (per-iteration semantics are untouched), so
+       bit-exactness holds exactly as in the straight-line case.
+       Admission fails closed: the row must be ONE region with no other
+       issued Tensix word (a seam barrier word breaks the modeled
+       adjacency), no replay owner, and no call.  Cross-block producers
+       into iteration one remain unmodeled in baseline and candidate
+       alike -- the same exposure class the straight-line pass carries
+       for block-head regions.  Before judging the interleave, a
+       region-scoped storage-collision rename (ls_cyclic_rename_
+       collisions, the lreg-rename pass's discipline) breaks the
+       allocator-packed false WAW/WAR recurrences between the unrolled
+       copies; a refusal restores the original registers exactly.
+
+   (2) REPEATED (isomorphic) region pairs: the deferral exists because
+       sibling copies scheduled differently stop being textually
+       isomorphic for the replay/MOP re-roll.  For EXACTLY TWO regions
+       sharing one insn-code signature whose positional dependence
+       matrices are equal, ONE permutation (the first region's list
+       order) is applied to both: the copies stay isomorphic by
+       construction, each region is judged by its own boundary model,
+       and the commit is transactional across the PAIR (a second-region
+       refusal restores the first).  Three or more copies stay deferred
+       to replay formation (its re-roll material), and unequal
+       dependence matrices refuse by name
+       ("copies-not-dataflow-isomorphic").  */
+
+/* Queue every occurrence of hard reg OLDR inside *LOC as a
+   validate_change to NEWR (the lreg-rename pass's replacement helper,
+   restated here for the region-scoped rename below).  */
+
+static void
+ls_queue_reg_replacements (rtx_insn *insn, rtx *loc, unsigned oldr,
+			   unsigned newr)
+{
+  rtx x = *loc;
+  if (!x)
+    return;
+  if (REG_P (x))
+    {
+      if (REGNO (x) == oldr)
+	validate_change (insn, loc, gen_rtx_REG (GET_MODE (x), newr), true);
+      return;
+    }
+  const char *fmt = GET_RTX_FORMAT (GET_CODE (x));
+  for (int i = GET_RTX_LENGTH (GET_CODE (x)) - 1; i >= 0; --i)
+    {
+      if (fmt[i] == 'e')
+	ls_queue_reg_replacements (insn, &XEXP (x, i), oldr, newr);
+      else if (fmt[i] == 'E')
+	for (int j = XVECLEN (x, i) - 1; j >= 0; --j)
+	  ls_queue_reg_replacements (insn, &XVECEXP (x, i, j), oldr, newr);
+    }
+}
+
+/* Storage-collision rename for the cyclic doubled row (round-interleave
+   extension; the lreg-rename pass's discipline, region-scoped).  The
+   allocator packs the two unrolled copies' short lifetimes into the
+   same LREGs, manufacturing a false WAW/WAR recurrence that serializes
+   the doubled row.  A colliding definition web -- node I defining reg
+   R that an EARLIER region node also defines -- moves to a provably
+   untouched LREG when:
+   - R is not live INTO the block (excludes every loop-carried value:
+     the self-loop's live-in is exactly the backedge-carried set);
+   - the renamed value dies inside the region: a LATER region writer of
+     R exists, or R is not live OUT of the block;
+   - the defining write is not a read-modify-write of R (an implicit
+     read of the colliding value never moves);
+   - the target F is an allocatable LREG untouched by every region node
+     (as currently composed), not live in or out of the block, and not
+     fixed.
+   The web = node I's definition plus every following reader of R up to
+   (exclusive) the next writer of R.  Every rename is recorded so a
+   scheduling refusal restores the original registers EXACTLY (each web
+   gets a fresh untouched F, so the inverse replacement F -> R over the
+   region is unambiguous).  Value soundness under lane predication
+   follows the region invariant the head comment establishes: a region
+   executes under ONE CC state, every region write is masked by the
+   same lane-enable set, and the region's outputs on disabled lanes
+   come from pre-region register content, which the rename never
+   touches (R keeps its pre-region content; F was dead).  */
+
+struct ls_rename
+{
+  unsigned oldr, newr;
+  std::vector<rtx_insn *> insns;	/* web members rewritten */
+};
+
+static void
+ls_refresh_node_regs (std::vector<ls_node> &nodes)
+{
+  for (ls_node &nd : nodes)
+    {
+      collect_sfpu_regs (nd.insn, &nd.regs);
+      nd.raw_defs = nd.regs.defs;
+    }
+}
+
+static bool
+ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
+			     std::vector<ls_rename> *record)
+{
+  unsigned n = nodes.size ();
+  bool any = false;
+  for (unsigned i = 0; i != n; ++i)
+    for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+      {
+	if (!TEST_HARD_REG_BIT (nodes[i].raw_defs, r))
+	  continue;
+	bool earlier = false;
+	for (unsigned j = 0; j != i && !earlier; ++j)
+	  earlier = TEST_HARD_REG_BIT (nodes[j].raw_defs, r);
+	if (!earlier)
+	  continue;
+	unsigned next_writer = n;
+	for (unsigned k = i + 1; k != n; ++k)
+	  if (TEST_HARD_REG_BIT (nodes[k].raw_defs, r))
+	    {
+	      next_writer = k;
+	      break;
+	    }
+	if (REGNO_REG_SET_P (df_get_live_in (bb), r))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-live-in reg %u uid=%d\n",
+		       r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
+	if (next_writer == n && REGNO_REG_SET_P (df_get_live_out (bb), r))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-live-out reg %u uid=%d\n",
+		       r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
+	if (TEST_HARD_REG_BIT (nodes[i].regs.uses, r))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-rmw-def reg %u uid=%d\n",
+		       r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
+
+	int f = -1;
+	for (unsigned c = SFPU_REG_FIRST; c <= SFPU_REG_LAST && f < 0; ++c)
+	  {
+	    if (fixed_regs[c])
+	      continue;
+	    bool touched = false;
+	    for (unsigned j = 0; j != n && !touched; ++j)
+	      touched = TEST_HARD_REG_BIT (nodes[j].regs.uses, c)
+			|| TEST_HARD_REG_BIT (nodes[j].raw_defs, c);
+	    if (touched
+		|| REGNO_REG_SET_P (df_get_live_in (bb), c)
+		|| REGNO_REG_SET_P (df_get_live_out (bb), c))
+	      continue;
+	    f = (int) c;
+	  }
+	if (f < 0)
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-no-free-lreg reg %u "
+		       "uid=%d\n", r, INSN_UID (nodes[i].insn));
+	    return any;
+	  }
+
+	ls_rename rn;
+	rn.oldr = r;
+	rn.newr = (unsigned) f;
+	ls_queue_reg_replacements (nodes[i].insn, &PATTERN (nodes[i].insn),
+				   r, (unsigned) f);
+	rn.insns.push_back (nodes[i].insn);
+	for (unsigned k = i + 1; k != next_writer; ++k)
+	  if (TEST_HARD_REG_BIT (nodes[k].regs.uses, r))
+	    {
+	      ls_queue_reg_replacements (nodes[k].insn,
+					 &PATTERN (nodes[k].insn),
+					 r, (unsigned) f);
+	      rn.insns.push_back (nodes[k].insn);
+	    }
+	if (!apply_change_group ())
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-constraint reg %u "
+		       "uid=%d\n", r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
+	for (rtx_insn *ins : rn.insns)
+	  df_insn_rescan (ins);
+	if (dump_file)
+	  fprintf (dump_file, "List-schedule rename: reg %u -> %u web at "
+		   "uid=%d (%zu insns) in bb %d\n",
+		   r, (unsigned) f, INSN_UID (nodes[i].insn),
+		   rn.insns.size (), bb->index);
+	record->push_back (std::move (rn));
+	ls_refresh_node_regs (nodes);
+	any = true;
+      }
+  return any;
+}
+
+/* Undo every recorded rename exactly (each web's F was untouched
+   before, so replacing F back with R over the web is unambiguous).  */
+
+static void
+ls_undo_renames (std::vector<ls_rename> &record)
+{
+  for (unsigned i = record.size (); i--;)
+    {
+      ls_rename &rn = record[i];
+      for (rtx_insn *ins : rn.insns)
+	ls_queue_reg_replacements (ins, &PATTERN (ins), rn.newr, rn.oldr);
+      bool ok = apply_change_group ();
+      gcc_assert (ok);
+      for (rtx_insn *ins : rn.insns)
+	df_insn_rescan (ins);
+    }
+  record.clear ();
+}
+
+/* Steady-state initiation interval of NODES issued repeatedly in ORDER:
+   the wrapped (cyclic) issue model of a self-loop row.  Entry pins do
+   not apply (the seam is the model); dependences reach across copies
+   through the same ls_dependence vocabulary.  */
+
+static int
+ls_cyclic_ii (const std::vector<ls_node> &nodes,
+	      const std::vector<int> &order)
+{
+  unsigned n = nodes.size ();
+  const unsigned COPIES = 6;
+  std::vector<int> issue (n * COPIES, 0);
+  std::vector<int> start (COPIES, 0);
+  int t = 0;
+  int last_d = 0;
+  for (unsigned c = 0; c != COPIES; ++c)
+    {
+      for (unsigned k = 0; k != n; ++k)
+	{
+	  const ls_node &nd = nodes[order[k]];
+	  int ready = t;
+	  for (unsigned pc = 0; pc <= c; ++pc)
+	    for (unsigned j = 0; j != (pc == c ? k : n); ++j)
+	      {
+		const ls_node &p = nodes[order[j]];
+		int kind = ls_dependence (p, nd);
+		if (!kind)
+		  continue;
+		int need = issue[pc * n + order[j]] + p.words
+			   + (kind == 1 ? p.lat : 0);
+		if (need > ready)
+		  ready = need;
+	      }
+	  issue[c * n + order[k]] = ready;
+	  t = ready + nd.words;
+	  if (k == 0)
+	    start[c] = ready;
+	}
+      if (c >= 2)
+	{
+	  int d1 = start[c] - start[c - 1];
+	  int d2 = start[c - 1] - start[c - 2];
+	  last_d = d1;
+	  if (d1 == d2)
+	    return d1;
+	}
+      else if (c == 1)
+	last_d = start[1] - start[0];
+    }
+  return last_d;
+}
+
+/* Cyclic scheduling of the single region of a self-loop row.
+   Transactional exactly like ls_schedule_region; acceptance = strict
+   steady-state II decrease; the same pad-site commit guard applies
+   (the nop inserter's probe is the WH correctness carrier and must not
+   grow).  */
+
+static bool
+ls_schedule_region_cyclic (basic_block bb, std::vector<ls_node> &nodes,
+			   rtx_insn *anchor,
+			   std::vector<basic_block> &visited)
+{
+  unsigned n = nodes.size ();
+  for (unsigned i = 0; i != n; ++i)
+    {
+      nodes[i].entry_pin = 0;
+      nodes[i].pin_to_baseline = false;
+    }
+
+  /* Guard metric and baseline on the ORIGINAL code, before any
+     rename.  */
+  unsigned pads_before = ls_pad_sites (visited, bb, nodes);
+  std::vector<int> base_order (n);
+  for (unsigned i = 0; i != n; ++i)
+    base_order[i] = i;
+  int base_ii = ls_cyclic_ii (nodes, base_order);
+
+  /* Break storage-induced false recurrences before judging the
+     interleave; every rename is undone on refusal.  */
+  std::vector<ls_rename> renames;
+  ls_cyclic_rename_collisions (bb, nodes, &renames);
+
+  std::vector<int> order = ls_list_order (nodes);
+  int cand_ii = ls_cyclic_ii (nodes, order);
+
+  if (cand_ii >= base_ii)
+    {
+      ls_undo_renames (renames);
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: no modeled "
+		 "steady-state II decrease in bb %d cyclic region at "
+		 "uid=%d (%d -> %d)\n",
+		 bb->index, INSN_UID (nodes[0].insn), base_ii, cand_ii);
+      return false;
+    }
+
+  /* Exact-restore record, debug insns included.  */
+  std::vector<rtx_insn *> chain;
+  for (rtx_insn *w = NEXT_INSN (anchor);; w = NEXT_INSN (w))
+    {
+      if (INSN_P (w))
+	chain.push_back (w);
+      if (w == nodes[n - 1].insn)
+	break;
+    }
+
+  rtx_insn *after = anchor;
+  for (unsigned k = 0; k != n; ++k)
+    {
+      rtx_insn *insn = nodes[order[k]].insn;
+      if (PREV_INSN (insn) != after)
+	reorder_insns (insn, insn, after);
+      after = insn;
+    }
+
+  unsigned pads_after = ls_pad_sites (visited, bb, nodes);
+  if (pads_after > pads_before)
+    {
+      after = anchor;
+      for (rtx_insn *insn : chain)
+	{
+	  if (PREV_INSN (insn) != after)
+	    reorder_insns (insn, insn, after);
+	  after = insn;
+	}
+      ls_undo_renames (renames);
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: pad-site increase, "
+		 "restored bb %d cyclic region at uid=%d\n",
+		 bb->index, INSN_UID (nodes[0].insn));
+      return false;
+    }
+
+  if (dump_file)
+    {
+      fprintf (dump_file, "List-schedule (round-interleave cyclic): "
+	       "bb %d nodes=%u II %d -> %d renames=%zu target=%s\n",
+	       bb->index, n, base_ii, cand_ii, renames.size (),
+	       TARGET_XTT_TENSIX_WH ? "wh" : "bh");
+      for (unsigned k = 0; k != n; ++k)
+	fprintf (dump_file, "List-schedule slot-order=%u uid=%d\n",
+		 k, INSN_UID (nodes[order[k]].insn));
+    }
+  return true;
+}
+
 
 /* The entry producer of a region starting at FIRST: the nearest
    preceding instruction the DYNAMIC pad probe (find_next_insn) would
@@ -1574,6 +1976,80 @@ struct ls_region
   std::vector<int> signature;	/* insn codes, for the repeat deferral */
 };
 
+/* Isomorphic-pair scheduling (round-interleave extension): apply R1's
+   chosen permutation to R2, keeping the copies textually isomorphic
+   for the replay/MOP re-roll.  Legality of the shared permutation
+   rests on positional dependence-matrix equality, proven before any
+   motion; each region is judged by its own boundary model; the commit
+   is transactional across the PAIR (a second-region refusal restores
+   the first exactly).  */
+
+static void
+ls_schedule_iso_pair (basic_block bb, ls_region &r1, ls_region &r2,
+		      std::vector<basic_block> &visited)
+{
+  unsigned n = r1.nodes.size ();
+  if (r2.nodes.size () != n)
+    return;	/* signatures equal implies equal sizes; belt only.  */
+
+  for (unsigned i = 0; i != n; ++i)
+    for (unsigned j = i + 1; j != n; ++j)
+      if (ls_dependence (r1.nodes[i], r1.nodes[j])
+	  != ls_dependence (r2.nodes[i], r2.nodes[j]))
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule refused: "
+		     "copies-not-dataflow-isomorphic at uid=%d/uid=%d "
+		     "in bb %d (repeated-row pair keeps its deferral)\n",
+		     INSN_UID (r1.nodes[0].insn),
+		     INSN_UID (r2.nodes[0].insn), bb->index);
+	  return;
+	}
+
+  /* First region's exact-restore record, captured BEFORE its commit so
+     a second-region refusal can undo the pair.  */
+  std::vector<rtx_insn *> chain1;
+  for (rtx_insn *w = NEXT_INSN (r1.anchor);; w = NEXT_INSN (w))
+    {
+      if (INSN_P (w))
+	chain1.push_back (w);
+      if (w == r1.nodes[n - 1].insn)
+	break;
+    }
+
+  std::vector<int> order;
+  if (!ls_schedule_region (bb, r1.nodes, r1.anchor, r1.entry_producer,
+			   next_issued_insn (bb, r1.nodes.back ().insn),
+			   r1.unaudited_defs, visited, nullptr, &order))
+    return;	/* first copy refused; nothing moved.  */
+
+  if (!ls_schedule_region (bb, r2.nodes, r2.anchor, r2.entry_producer,
+			   next_issued_insn (bb, r2.nodes.back ().insn),
+			   r2.unaudited_defs, visited, &order, nullptr))
+    {
+      /* Restore the first region exactly: pair-transactional.  */
+      rtx_insn *after = r1.anchor;
+      for (rtx_insn *insn : chain1)
+	{
+	  if (PREV_INSN (insn) != after)
+	    reorder_insns (insn, insn, after);
+	  after = insn;
+	}
+      if (dump_file)
+	fprintf (dump_file, "List-schedule refused: iso-pair sibling at "
+		 "uid=%d would not improve, restored pair in bb %d\n",
+		 INSN_UID (r2.nodes[0].insn), bb->index);
+      return;
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "List-schedule (round-interleave iso-pair): "
+	     "bb %d regions at uid=%d/uid=%d share one permutation "
+	     "(isomorphism preserved)\n",
+	     bb->index, INSN_UID (r1.nodes[0].insn),
+	     INSN_UID (r2.nodes[0].insn));
+}
+
 static void
 list_schedule_regions (function *fn)
 {
@@ -1603,7 +2079,7 @@ list_schedule_regions (function *fn)
       FOR_EACH_EDGE (e, ei, bb->succs)
 	if (e->dest == bb)
 	  self_loop = true;
-      if (self_loop)
+      if (self_loop && !riscv_tt_opt_round_interleave)
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "List-schedule deferred: cyclic row "
@@ -1620,6 +2096,10 @@ list_schedule_regions (function *fn)
       HARD_REG_SET region_unaudited;
       CLEAR_HARD_REG_SET (region_unaudited);
       bool stop_block = false;
+      unsigned tensix_barriers = 0;	/* issued Tensix words outside
+					   any region (seam hazards for
+					   the cyclic extension) */
+      bool bb_has_call = false;
 
       auto flush = [&] ()
       {
@@ -1691,12 +2171,25 @@ list_schedule_regions (function *fn)
 	    }
 
 	  /* Barrier.  */
-	  if (dump_file && GET_CODE (insn) == INSN
+	  if (GET_CODE (insn) == INSN
 	      && recog_memoized (insn) >= 0
 	      && get_attr_type (insn) == TYPE_TENSIX
 	      && get_attr_length (insn))
-	    fprintf (dump_file, "List-schedule barrier: %s uid=%d\n",
-		     why, INSN_UID (insn));
+	    {
+	      ++tensix_barriers;
+	      if (dump_file)
+		fprintf (dump_file, "List-schedule barrier: %s uid=%d\n",
+			 why, INSN_UID (insn));
+	    }
+	  else if (GET_CODE (insn) == INSN && PATTERN (insn)
+		   && asm_noperands (PATTERN (insn)) >= 0)
+	    /* Raw assembly may deliver Tensix words the effect
+	       vocabulary cannot see: a seam hazard for the cyclic
+	       extension (the straight-line phases already never move
+	       anything across it).  */
+	    ++tensix_barriers;
+	  if (CALL_P (insn))
+	    bb_has_call = true;
 	  flush ();
 	  if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0
 	      && get_attr_type (insn) == TYPE_TENSIX
@@ -1706,18 +2199,65 @@ list_schedule_regions (function *fn)
       if (!stop_block)
 	flush ();
 
+      /* Round-interleave cyclic extension: a self-loop row whose
+	 admitted nodes are its ONE region and whose block carries no
+	 other issued/foreign Tensix word, no replay owner, and no call
+	 schedules under the wrapped steady-state II model; every other
+	 self-loop shape keeps the deferral, by name.  */
+      if (self_loop)
+	{
+	  const char *why_c = nullptr;
+	  if (stop_block)
+	    why_c = "round-interleave-replay-owner-in-row";
+	  else if (bb_has_call)
+	    why_c = "round-interleave-call-in-row";
+	  else if (tensix_barriers)
+	    why_c = "round-interleave-seam-barrier-word";
+	  else if (regions.size () != 1)
+	    why_c = "round-interleave-row-not-one-region";
+	  if (why_c)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "List-schedule deferred: cyclic row "
+			 "adjacency in bb %d (%s)\n", bb->index, why_c);
+	      continue;
+	    }
+	  ls_schedule_region_cyclic (bb, regions[0].nodes,
+				     regions[0].anchor, visited);
+	  continue;
+	}
+
       /* Phase 2: repeated region shapes defer by name -- unrolled row
 	 copies must stay textually isomorphic for the replay former's
 	 re-roll and the MOP re-roll, and boundary-context differences
-	 would schedule sibling copies differently.  */
+	 would schedule sibling copies differently.  Under the
+	 round-interleave flag, EXACTLY TWO isomorphic copies schedule
+	 as a pair under one shared permutation (isomorphism preserved;
+	 see ls_schedule_iso_pair); larger families keep the deferral.  */
+      std::vector<bool> pair_done (regions.size (), false);
       for (unsigned i = 0; i != regions.size (); ++i)
 	{
-	  bool repeated = false;
+	  if (pair_done[i])
+	    continue;
+	  unsigned nmatch = 0;
+	  unsigned mate = 0;
 	  for (unsigned j = 0; j != regions.size (); ++j)
 	    if (j != i && regions[j].signature == regions[i].signature)
-	      repeated = true;
-	  if (repeated)
+	      {
+		if (!nmatch)
+		  mate = j;
+		++nmatch;
+	      }
+	  if (nmatch)
 	    {
+	      if (riscv_tt_opt_round_interleave && nmatch == 1
+		  && mate > i)
+		{
+		  pair_done[mate] = true;
+		  ls_schedule_iso_pair (bb, regions[i], regions[mate],
+					visited);
+		  continue;
+		}
 	      if (dump_file)
 		fprintf (dump_file, "List-schedule deferred: repeated-row "
 			 "shape at uid=%d in bb %d (replay capture "
@@ -1725,6 +2265,8 @@ list_schedule_regions (function *fn)
 			 INSN_UID (regions[i].nodes[0].insn), bb->index);
 	      continue;
 	    }
+	  if (!riscv_tt_opt_list_schedule)
+	    continue;	/* round-interleave alone owns no single region */
 	  ls_schedule_region (bb, regions[i].nodes, regions[i].anchor,
 			      regions[i].entry_producer,
 			      next_issued_insn
@@ -2814,7 +3356,10 @@ public:
 
   virtual unsigned execute (function *fn) override
   {
-    if (riscv_tt_opt_list_schedule)
+    if (riscv_tt_opt_list_schedule || riscv_tt_opt_round_interleave)
+      /* The round-interleave flag enables only the cyclic self-loop
+	 and isomorphic-pair extensions inside; single straight-line
+	 regions still require the list-schedule flag.  */
       list_schedule_regions (fn);
     if (riscv_tt_opt_latency_schedule)
       {

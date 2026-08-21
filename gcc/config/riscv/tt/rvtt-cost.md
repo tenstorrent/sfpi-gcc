@@ -893,6 +893,29 @@
   (XTT_REPLAY_LOOP_UNROLL_FACTOR      8)
   (XTT_REPLAY_LOOP_UNROLL_MIN_WORDS   4)
   (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS 256)
+  ;; Round-chain interleave request (-mtt-tensix-optimize-round-
+  ;; interleave, lane EI 2026-08-21).  A counted round loop whose
+  ;; iterations are independent by dataflow (every loop-carried value's
+  ;; recurrence is at most a single word-delivering update) is asked to
+  ;; unroll by TWO so the post-RA cyclic list scheduler can interleave
+  ;; the two copies' chains -- the dual-Horner shape, one iteration
+  ;; ahead.
+  ;;
+  ;;   ROUND_INTERLEAVE_FACTOR (2) - two-ahead is the minimal depth
+  ;;     that creates cross-copy slack, and each further copy multiplies
+  ;;     the live-range bound toward the hard 8-LREG file (the same
+  ;;     reason modulo variable expansion is refused outright on this
+  ;;     target); deeper factors are not priced and not requested.
+  ;;   ROUND_INTERLEAVE_MIN_WORDS (2) - the doubled body must present
+  ;;     at least the scheduler's three-node interleave minimum
+  ;;     (2 * 2 = 4 > 3); a one-word body has nothing to interleave.
+  ;;   ROUND_INTERLEAVE_MAX_WORDS (128) - code-size bound on the
+  ;;     DOUBLED body (2 * estimated row words), half the
+  ;;     LOOP_UNROLL_MAX_WORDS budget class since the factor is fixed
+  ;;     at two.
+  (XTT_ROUND_INTERLEAVE_FACTOR      2)
+  (XTT_ROUND_INTERLEAVE_MIN_WORDS   2)
+  (XTT_ROUND_INTERLEAVE_MAX_WORDS 128)
 ])
 
 
