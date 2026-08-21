@@ -91,6 +91,52 @@ along with GCC; see the file COPYING3.  If not see
        hoisting.  No numeric row thresholds appear anywhere; break-evens fall
        out of the model.
 
+     - Mod-write backedge-crossing price.  The transform replaces an explicit
+       TTINCRWC -- an audited latency-0 issue-time RWC counter update
+       (rvtt-cost.md row step: [ISA] pure counter update, [SIM] applied at
+       issue, [HAND] TTINCRWC->SFPLOAD back-to-back in every silicon-proven
+       counted production row) -- with a positional-state side effect of the
+       terminator access itself, executed inside the vector unit.  The
+       audited latency table DELIBERATELY REFUSES an entry for the
+       auto-incrementing access modes (rvtt-cost.md: "positional Dst/RWC
+       state"), so the mod-write's retirement distance is an unaudited
+       quantity.  Consumers inside a continuous Tensix word stream are
+       covered by hand witnesses (production unrolled and replay-windowed
+       kernels issue live-modifier stores back to back with dependent
+       accesses); a consumer reached ACROSS A LOOP BACKEDGE is not: the
+       scalar loop control drains the frontend and the next iteration's
+       first Dst access issues onto an empty pipe a few slots after the
+       mod-write, inside the unaudited retirement window.  Silicon measures
+       that crossing at roughly two to three issue slots per iteration --
+       two whole-ELF witnesses at pin 14 flip tiny rolled loops from wins
+       to regressions (absint32 hand 16.950 -> 18.853, unaryshift-fresh
+       semantic 16.962 -> 19.631; lane DX finding F2; bitwisenot hand
+       16.950 -> 18.853 is a third whole-row witness of the same class,
+       lane EE anatomy row 8), while the same transform in
+       eight-row-per-iteration and straight-line bodies stays a measured
+       win.  Lane EE's whole-row closure model (within ~3% on all 14
+       anatomized cells) independently calibrates the constants: the
+       ~1.3-1.8-cycle measured per-launch boundary cost makes the one-slot
+       credit for a launch word in the distance walk a conservative
+       floor, and the witnesses' per-iteration stall brackets the 2-slot
+       charge.
+
+       The pricing term charges each loop-iteration crossing the audited
+       positional-state retirement guard (min_config_distance, the only
+       audited retirement distance in the model -- the same two-slot
+       configuration-class discipline the SETC16 program itself obeys),
+       LESS the slot-occupying Tensix words that actually separate the
+       final terminator from the next iteration's first RWC consumer (the
+       body tail after the last row plus the next iteration's consume
+       prefix).  An audited issue-time RWC writer (a surviving explicit
+       TTINCRWC or a typed face advance) standing between the last
+       terminator and the backedge re-anchors the crossing and clears the
+       charge.  A group whose per-iteration rows cannot pay the charge
+       refuses by name (mod-write-dominates-rolled-body); otherwise the
+       charge is deducted from the dynamically removed increments before
+       the configuration-cost comparison.  No trip-count or body-length
+       thresholds appear; the break-even falls out of the audited guard.
+
    All refusals leave the function byte-identical.  */
 
 namespace {
@@ -794,6 +840,109 @@ item_issue_words (const bb_item &item)
   return words;
 }
 
+/* Slot-occupying words reissued strictly after the payload terminator
+   (the tail of a replay row's playback).  */
+
+static unsigned
+payload_suffix_words (const capture_rec *cap)
+{
+  unsigned words = 0;
+  bool after = false;
+  for (unsigned ix = 0; ix != cap->members.size (); ++ix)
+    {
+      if (cap->members[ix] == cap->terminator)
+	{
+	  after = true;
+	  continue;
+	}
+      if (after && occupies_replay_slot_p (cap->members[ix]))
+	++words;
+    }
+  return words;
+}
+
+/* Mod-write backedge-crossing price (see the file comment).  The final
+   transformed terminator of a loop-hosted block carries the iteration's
+   implicit advance across the backedge; its unaudited retirement window
+   must be covered by slot-occupying words, or re-anchored by an audited
+   issue-time RWC writer, or paid for.
+
+   Slot-occupying words between the last row's terminator and the end of
+   the block.  An audited issue-time RWC writer (explicit TTINCRWC,
+   typed face advance) re-anchors the crossing: it is the last RWC
+   writer the backedge sees and its own producer adjacency is in-stream
+   (continuous words, hand-witnessed).  */
+
+static unsigned
+crossing_tail_words (const bb_scan &scan, const candidate &cand,
+		     bool *reanchored)
+{
+  unsigned words = 0;
+  *reanchored = false;
+  if (cand.payload)
+    words += payload_suffix_words (cand.payload);
+  for (unsigned ix = cand.incr_item + 1; ix != scan.items.size (); ++ix)
+    {
+      const bb_item &item = scan.items[ix];
+      if (item.cls == AIC_INCRWC || item.cls == AIC_RWC_STEP)
+	{
+	  *reanchored = true;
+	  return words;
+	}
+      words += item_issue_words (item);
+    }
+  return words;
+}
+
+/* Slot-occupying words the next iteration issues before its first Dst-RWC
+   consumer (access, explicit increment, or counter step; for replay rows
+   the launch word plus the payload prefix before the first access).  */
+
+static unsigned
+crossing_head_words (const bb_scan &scan)
+{
+  unsigned words = 0;
+  for (const bb_item &item : scan.items)
+    switch (item.cls)
+      {
+      case AIC_ACCESS:
+      case AIC_INCRWC:
+      case AIC_RWC_STEP:
+	return words;
+      case AIC_REPLAY:
+	{
+	  const capture_rec *cap
+	    = item.cap ? item.cap : item.launch ? item.launch->payload
+						: nullptr;
+	  bool executes = item.launch || (item.cap && item.cap->exec);
+	  if (!cap || !cap->valid)
+	    /* Unknown playback contents: stop counting (conservative).  */
+	    return words;
+	  if (!executes)
+	    {
+	      /* A pure recording issues its members without touching
+		 RWC state.  */
+	      words += item_issue_words (item);
+	      continue;
+	    }
+	  ++words; /* the launch (or executing-capture) word itself */
+	  for (unsigned ix = 0; ix != cap->members.size (); ++ix)
+	    {
+	      autoincr_class mcls = cap->member_cls[ix];
+	      if (mcls == AIC_ACCESS || mcls == AIC_INCRWC
+		  || mcls == AIC_RWC_STEP)
+		return words;
+	      if (occupies_replay_slot_p (cap->members[ix]))
+		++words;
+	    }
+	  continue;
+	}
+      default:
+	words += item_issue_words (item);
+      }
+  return words;
+}
+
 struct group
 {
   bb_scan *scan;
@@ -814,6 +963,9 @@ struct group
   int shared_set = -1;
   /* Set when no placement satisfying the distance guard exists.  */
   bool guard_refused = false;
+  /* Mod-write backedge-crossing charge, issue slots per execution of the
+     block (see the file comment).  */
+  unsigned crossing_charge = 0;
 };
 
 /* Mirror of the replay pass's dedicated preheader discovery.  */
@@ -848,6 +1000,46 @@ find_scan (function_scan &fn, basic_block bb)
     if (scan.bb == bb)
       return &scan;
   return nullptr;
+}
+
+/* The mod-write backedge-crossing charge for GRP, in issue slots per
+   execution of its block (see the file comment).  Zero when the block is
+   not inside a loop, when GRP does not hold the block's final surviving
+   candidate (an untransformed later row's explicit increment, or a later
+   group's rows, stand between GRP and the backedge), when an audited
+   issue-time RWC writer re-anchors the crossing, or when the separating
+   slot-occupying words already cover the audited retirement guard.
+   Multi-block loop bodies are charged per block-end crossing: every
+   scalar redirect between Tensix words is a frontend drain point.  */
+
+static unsigned
+crossing_penalty (const group &grp, const autoincr_caps &caps)
+{
+  basic_block bb = grp.scan->bb;
+  class loop *loop = bb->loop_father;
+  if (!loop || loop->num == 0)
+    return 0;
+
+  /* The block's final surviving candidate carries the crossing.  */
+  int last = -1;
+  for (unsigned cx = 0; cx != grp.scan->candidates.size (); ++cx)
+    if (!grp.scan->candidates[cx].dropped)
+      last = cx;
+  if (last < 0
+      || std::find (grp.cand_ix.begin (), grp.cand_ix.end (),
+		    (unsigned) last) == grp.cand_ix.end ())
+    return 0;
+
+  bool reanchored;
+  unsigned dist = crossing_tail_words (*grp.scan,
+				       grp.scan->candidates[last],
+				       &reanchored);
+  if (reanchored)
+    return 0;
+  if (loop->header == bb)
+    dist += crossing_head_words (*grp.scan);
+  return dist >= caps.min_config_distance
+    ? 0 : caps.min_config_distance - dist;
 }
 
 /* Ownership of a dominating placement over LOOP for MEMBERS: every
@@ -979,6 +1171,7 @@ place_groups (function_scan &fn, std::vector<group> &groups,
       grp.emit_config = true;
       grp.shared_set = -1;
       grp.guard_refused = false;
+      grp.crossing_charge = 0;
       grp.dynamic_rows = grp.cand_ix.size ();
       grp.anchor_item
 	= grp.scan->candidates[grp.cand_ix.front ()].lead_item;
@@ -1345,19 +1538,65 @@ transform (function *cfn)
 	  if (changed)
 	    continue;
 
+	  /* Mod-write backedge-crossing price (see the file comment): the
+	     block's final implicit advance inside a loop is charged the
+	     uncovered part of the audited positional-state retirement
+	     guard, per iteration.  Rows that cannot pay refuse by name;
+	     survivors carry the charge into the configuration-cost
+	     comparison below.  */
+	  for (auto it = groups.begin (); it != groups.end ();)
+	    {
+	      group &grp = *it;
+	      grp.crossing_charge = crossing_penalty (grp, caps);
+	      if ((HOST_WIDE_INT) grp.crossing_charge
+		  >= (HOST_WIDE_INT) grp.cand_ix.size ())
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Dst-autoincr refusal: "
+			     "mod-write-dominates-rolled-body (rows %u, "
+			     "uncovered crossing slots %u, bb %d)\n",
+			     unsigned (grp.cand_ix.size ()),
+			     grp.crossing_charge, grp.scan->bb->index);
+		  for (unsigned cx : grp.cand_ix)
+		    grp.scan->candidates[cx].dropped = true;
+		  changed = true;
+		  it = groups.erase (it);
+		}
+	      else
+		{
+		  if (grp.crossing_charge && dump_file)
+		    fprintf (dump_file, "Dst-autoincr: mod-write backedge "
+			     "crossing priced (rows %u, uncovered crossing "
+			     "slots %u, bb %d)\n",
+			     unsigned (grp.cand_ix.size ()),
+			     grp.crossing_charge, grp.scan->bb->index);
+		  ++it;
+		}
+	    }
+	  if (changed)
+	    continue;
+
 	  /* Profitability: configuration cost against dynamically removed
-	     increments.  A shared program's cost is paid once for every
-	     group it serves.  */
+	     increments, less the per-iteration mod-write crossing charge.
+	     A shared program's cost is paid once for every group it
+	     serves.  */
+	  auto priced_rows = [] (const group &grp)
+	  {
+	    HOST_WIDE_INT iter_mult
+	      = grp.dynamic_rows / (HOST_WIDE_INT) grp.cand_ix.size ();
+	    return grp.dynamic_rows
+		   - (HOST_WIDE_INT) grp.crossing_charge * iter_mult;
+	  };
 	  std::map<int, HOST_WIDE_INT> shared_rows;
 	  for (const group &grp : groups)
 	    if (grp.shared_set >= 0)
-	      shared_rows[grp.shared_set] += grp.dynamic_rows;
+	      shared_rows[grp.shared_set] += priced_rows (grp);
 	  for (auto it = groups.begin (); it != groups.end ();)
 	    {
 	      group &grp = *it;
 	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
 	      HOST_WIDE_INT removed = grp.shared_set >= 0
-		? shared_rows[grp.shared_set] : grp.dynamic_rows;
+		? shared_rows[grp.shared_set] : priced_rows (grp);
 	      if (removed <= cost)
 		{
 		  if (dump_file)
