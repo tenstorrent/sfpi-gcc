@@ -973,6 +973,18 @@
 ;;     LReg[VD] at issue, no next-cycle rule (SFPARECIP.md); the
 ;;     silicon-measured fresh_recip_hwseed bodies (lane DJ, addcdiv
 ;;     -25.3%) issue SFPARECIP -> SFPMAD back-to-back.
+;;   SFPSETEXP/SFPSETMAN/SFPSETSGN immediate arms: the pages carry no
+;;     next-cycle rule on either architecture and the immediate arms
+;;     share the register forms' functional model (the D3 simple-unit
+;;     row listed only the register forms as an audit-scope choice,
+;;     not a hardware distinction); latency 0 in the gimple mirror.
+;;   Structured float compares (sfpxfcmps/sfpxfcmpv): the lowered
+;;     compare-vs-operand executes as a mad-family member in the final
+;;     stream (lane EE anatomy; the recorded pin-13 hoist refusal
+;;     arithmetic on the hardshrink body requires exec_ilk = words + 1)
+;;     -- charged one slot in the downstream-mirror exec, absorbed in
+;;     the measured exec like the rest of the mad family.  Integer
+;;     compares lower to the audited iadd class, latency 0.
 ;;   Class-level envelope caveat: per-mod refinements (shft variable
 ;;     mods, iadd mods, cast mods) are enforced by the RTL consumers;
 ;;     a mis-refined mod in this mirror can only shift the modeled
