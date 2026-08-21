@@ -122,9 +122,21 @@ all_ones_vector_p (tree val)
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpxloadi:
-    case rvtt_insn_data::sfploadi:
-      /* (ib, value, ...) -- all-constant argument forms only.  */
-      return (int_arg (call, 1) & 0xFFFFFFFFl) == 0xFFFFFFFFl;
+      /* Only the synthetic 32-bit load, whose value argument IS the
+	 architectural 32-bit value.  A raw sfploadi's value argument is
+	 mod-interpreted (sign/zero-extending 16-bit forms), so an
+	 all-ones LITERAL there is not mod-invariant the way int-abs's
+	 zero is -- raw forms never match.  */
+      {
+	/* (ib, value, ...) -- LITERAL-constant argument forms only: the
+	   int_arg "not a constant" sentinel (-1) would collide with the
+	   all-ones value itself, and variable-immediate loads (the immvar
+	   RISC-composed forms) must never match.  */
+	tree varg = gimple_call_arg (call, 1);
+	if (TREE_CODE (varg) != INTEGER_CST)
+	  return false;
+	return (TREE_INT_CST_LOW (varg) & 0xFFFFFFFFul) == 0xFFFFFFFFul;
+      }
     default:
       return false;
     }
