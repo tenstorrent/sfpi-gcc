@@ -206,8 +206,6 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpxcondi:
     case rvtt_insn_data::sfpxicmps:
     case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
     case rvtt_insn_data::sfpreadlreg:
     case rvtt_insn_data::sfpassign:
     case rvtt_insn_data::sfpassign_lv:
@@ -229,6 +227,18 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpmul24:
     case rvtt_insn_data::sfpmul24_lv:
     case rvtt_insn_data::sfplut:
+      return 2;
+
+    /* Structured float compares lower through the mad unit (the
+       expanded compare-vs-operand is an SFPMAD-family member in the
+       final stream -- lane EE anatomy rows 1/2; the recorded pin-13
+       hoist-refusal arithmetic requires exec_ilk = words + 1 on
+       exactly these bodies).  Same treatment as the mad family:
+       absorbed in the measured exec, one slot in the downstream
+       mirror.  Integer compares lower to the audited iadd class and
+       stay latency-0.  */
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
       return 2;
 
     /* No audited latency fact (SFPLUTFP32's per-mode split, SFPSHFT2's
