@@ -57,6 +57,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-reprprop.o \
 	gimple-rvtt-transp-involution.o \
 	gimple-rvtt-replay-unroll.o \
+	gimple-rvtt-delivery-shape.o \
 	rvtt-lut-tables.o \
 	gimple-rvtt-lp-schedule.o \
 	gimple-rvtt-noval.o \
