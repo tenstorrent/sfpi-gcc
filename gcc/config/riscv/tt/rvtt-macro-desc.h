@@ -37,6 +37,12 @@ struct macro_launch_spec
   unsigned macro_index;
   unsigned vd;			/* planned launch VD (even-row value)  */
   bool vd_alternates;		/* odd rows use vd ^ 1		       */
+  /* Store-only carrier: the launch VD is sacrificial (written, never
+     read); a fixed VD is then harmless across back-to-back rows.  A
+     VALUE carrier's fixed VD is not -- its hosted consumers pend past
+     the next row's launch (see the inter-row drain in form_region,
+     lane EV P0 adjudication 2026-08-21).  */
+  bool is_store_only;
   unsigned mode;
   unsigned addr_mode;
   unsigned address;
