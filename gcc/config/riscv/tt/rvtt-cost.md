@@ -895,6 +895,129 @@
   (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS 256)
 ])
 
+;; ---------------------------------------------------------------------
+;; Delivery-shape arbitration (-mtt-tensix-optimize-delivery-shape,
+;; lane EG 2026-08-21).  Additive section; every model above is
+;; unchanged and its constants are reused read-only.
+;;
+;; One solver, one model: per proven-trip counted single-block SFPU row
+;; loop, gimple-rvtt-delivery-shape.cc enumerates the whole discrete
+;; shape lattice {unroll factor U} x {payload rows R}, PREDICTS the
+;; shape the downstream machinery materializes for each U by mirroring
+;; the replay former's grouping and the replay-hoist gate's model above
+;; (with the DOWNSTREAM constants -- prediction, never re-pricing),
+;; prices each predicted shape with the MEASURED delivery table below,
+;; and requests the exact argmin through the same loop->unroll
+;; annotation as the fixed-factor request pass (which never overrides
+;; an existing annotation; an affirmative rolled selection annotates
+;; factor 1 to own the slot).  Exact solver: rvtt_bnb_delivery_shape
+;; (rvtt-bnb.cc), deterministic branch-and-bound with an admissible
+;; prune over the (tiny) lattice.
+;;
+;; MEASURED DELIVERY TABLE.  Provenance: lane EE loser-anatomy closure
+;; (laneEE-evidence-20260821/LOSER-ANATOMY.md) -- fourteen silicon rows
+;; (pin-15 headline + pin-13 storm cells) reproduced within ~3% from
+;; instruction-class censuses of the timed ELFs:
+;;
+;;   WORD_X100 (100)        - one delivered word (RISC-pushed SFPU word
+;;     or scalar control word) on an issue-bound leg measures ~1.0
+;;     cycle (threshold sem 355 w -> 350.8 c; hardshrink sem 365 ->
+;;     357.8; log hand 576 -> 577.9; ceil hand 512 -> 477.9).  The
+;;     ceil-hand point shows scalar pairs partially dual-issue folding
+;;     (<= 7% closure slack, the documented residual of this table);
+;;     the model prices all words at 1.0 and carries the slack as
+;;     model error, never as a fitted constant.  Note this table
+;;     deliberately does NOT reuse the RISC_PUSH_X100 = 123 premium:
+;;     that constant was re-fit on launch-conversion shapes and is the
+;;     downstream hoist gate's own term (mirrored for prediction);
+;;     EE's issue-bound closure on these row classes measures 1.0.
+;;   BOUNDARY_{LB,UB}_X100 (130, 180) - measured per-launch boundary
+;;     cost on serial-chain replay windows, where the payload's
+;;     dependence chain leaves no across-launch overlap and every
+;;     reissue boundary is exposed (EE rows 3/11/13: ceil 31 launches
+;;     ~= 28-43 c; log 31 launches + record ~= +49 c; rsqrt 30
+;;     launches ~= +45 c).  Carried as an INTERVAL: every candidate is
+;;     priced at both ends and a non-rolled request must clear the
+;;     benefit threshold at both -- no averaging, no per-shape fit.
+;;     The relation to TURNAROUND_X100 (70): that constant averages
+;;     over the 14-shape recalibration set where boundaries partially
+;;     overlap; the EE rows isolate the exposed serial-chain case.
+;;   record pass = (1 + payload_slots) delivered words (EE machine-
+;;     model fact 1: an n-slot record costs n+1 issue words), priced
+;;     at WORD_X100 and ADDITIVE to the leg's execution: the ceil
+;;     closure books exec 448 + record 15 + boundaries -- record
+;;     delivery measures exposed, "issue words that never retire as
+;;     work" (EE row 3), so the measured table charges it in full.
+;;     Loop-control delivery on a replay leg measures HIDDEN under the
+;;     execution backlog (none of the EE replay closures carries a
+;;     control term), while an issue-bound leg pays its control words
+;;     at WORD_X100.
+;;   execution = payload slots at 1.0 cycle each, plus one slot per
+;;     audited next-slot acceptance stall (SFPSWAP family).  The
+;;     mad-family latency-1 stalls measure as ABSORBED on every
+;;     chain-heavy anatomy row (EE: ceil/sqrt/rsqrt/lcm exec ==
+;;     slots), so no per-member stall is charged; a row member with
+;;     no audited latency fact at all makes the term unpriceable and
+;;     the loop refuses by name (delivery-shape-exec-term-unaudited).
+;;
+;; GIMPLE LATENCY MIRROR page audits (2026-08-21, lane EG; the audited
+;; latency-0 page convention of the D3 audit above, applied at the
+;; pre-expansion census where the RTL attributes are not yet
+;; readable):
+;;   CC family (SFPSETCC/SFPENCC/SFPCOMPC/SFPPUSHC/SFPPOPC): no
+;;     next-cycle rule on either architecture's page
+;;     (tt-isa-documentation BlackholeA0 + WormholeB0
+;;     TensixCoprocessor); lane-flag state consumed by the next
+;;     instruction by construction of every silicon-passing kernel.
+;;   SFPARECIP (BH-only): "simple sub-unit", functional model writes
+;;     LReg[VD] at issue, no next-cycle rule (SFPARECIP.md); the
+;;     silicon-measured fresh_recip_hwseed bodies (lane DJ, addcdiv
+;;     -25.3%) issue SFPARECIP -> SFPMAD back-to-back.
+;;   Class-level envelope caveat: per-mod refinements (shft variable
+;;     mods, iadd mods, cast mods) are enforced by the RTL consumers;
+;;     a mis-refined mod in this mirror can only shift the modeled
+;;     delta, never semantics (the transform is an unroll request;
+;;     bit-exactness is CRAQ-gated independently of every cost term).
+;;
+;; MODEL SEAMS (stubbed to current-model values, documented):
+;;   - lane EB's dst-autoincr body-length pricing term (DX-F2) is not
+;;     yet pushed: the solver models no autoincr setup cost (value 0)
+;;     and consumes only the enable bit for the mirror's saturation
+;;     run term.  When EB lands, its term joins this table.
+;;   - lane EC's record-hoist scope widening (DX-F3) is not yet
+;;     pushed: the downstream mirror models only the hoist branches
+;;     present at this pin.  When EC lands, its wider scope joins the
+;;     mirror.
+;;   - rolled-override seam: where the modeled winner is the explicit
+;;     ROLLED shape but the downstream hoist's own gate is predicted
+;;     to window the loop anyway (the ceil-fresh class: straight-push
+;;     478 c measured vs hoisted window 521 c), this pass has no
+;;     channel to suppress that pass; the disagreement is dumped by
+;;     name (delivery-shape-downstream-override-required) as the
+;;     wiring seam for the pricing-consumer follow-up.
+;;
+;; CAPTURE_SLOTS (32) - the replay buffer's 32 entries (the same bound
+;; the S+L <= 32 MOP/replay co-ownership invariant divides,
+;; rvtt-mop-tables.h); no payload may exceed it.
+;;
+;; MIN_BENEFIT (60) mirrors the replay-hoist threshold's rationale
+;; verbatim: refusal (staying rolled) is byte-identical code and costs
+;; nothing, and no silicon point yet anchors this solver's own
+;; acceptance region -- the interval discipline (boundary ends) is the
+;; buffer.  -mtt-tensix-delivery-shape-min-benefit= (same centislot
+;; units) overrides it for experimentation and A/B legs.
+;;
+;; These constants describe measured delivery economics only.  They
+;; are deliberately independent of any operation identity, opcode
+;; calendar, coefficient value, or instruction-word fingerprint.
+(define_constants [
+  (XTT_DELIVERY_WORD_X100           100)
+  (XTT_DELIVERY_BOUNDARY_LB_X100    130)
+  (XTT_DELIVERY_BOUNDARY_UB_X100    180)
+  (XTT_DELIVERY_CAPTURE_SLOTS        32)
+  (XTT_DELIVERY_SHAPE_MIN_BENEFIT    60)
+])
+
 
 ;; ---------------------------------------------------------------------
 ;; MOP loop-delivery formation (rvtt_mop_form).  Additive section; the

@@ -433,6 +433,383 @@ rvtt_solver_backend_name ()
   return rvtt_lpsolve_available () ? "bnb+lpsolve-check" : "bnb";
 }
 
+/* ---------------------------------------------------------------------
+   Delivery-shape arbitration (lane EG): exact minimization over the
+   discrete shape lattice {U} x {payload R} of one proven-trip counted
+   SFPU row loop.
+
+   For every unroll factor U the solver first PREDICTS which delivery
+   shape the downstream machinery materializes:
+     - the row's typed Dst-step words (TTINCRWC/TTDSTFACE) are
+       xtt_replay=barrier, so the always-on replay former can only
+       capture the row's replay-SAFE span (safe = row_words -
+       barrier_words); multi-row payloads exist only for rows with no
+       barrier word at all;
+     - a safe span below the former's MIN_SEQUENCE (or above the
+       32-slot buffer) captures nothing: the unrolled copies deliver
+       explicitly (unrolled-explicit -- verified by compilation: eight
+       copies, zero TTREPLAY);
+     - the replay-hoist gate of rtl-rvtt-replay.cc may lift the record
+       out of the loop; its decision is predicted by mirroring its own
+       published rvtt-cost.md model with the DOWNSTREAM constants and
+       ITS interlock exec estimate (ds_exec) -- prediction, never
+       re-pricing (the mirror reproduces the recorded pin-13 refusal
+       arithmetic exactly);
+     - the Dst auto-increment pass runs after replay formation and
+       absorbs the separator words around launches, so on replay legs
+       under -mtt-tensix-optimize-dst-autoincr the separators neither
+       execute nor deliver (the measured lane-EE log-fresh fact).
+   It then prices the predicted shape with the MEASURED lane-EE
+   delivery table (rvtt-schedule.h, rvtt-cost.md section) and returns
+   the exact argmin, depth-first over the tiny lattice with an
+   admissible incumbent prune and a deterministic order -- the same
+   branch-and-bound discipline as the scheduling solver above.  A node
+   cap mirrors the scheduling solver's for form; the lattice cannot
+   approach it.
+
+   The per-launch BOUNDARY cost is a measured INTERVAL (1.3..1.8
+   cycles, serial-chain exposure); every candidate is priced at both
+   ends and a non-rolled request must clear the benefit threshold at
+   both.  */
+
+namespace {
+
+int64_t
+imax64 (int64_t a, int64_t b)
+{
+  return a > b ? a : b;
+}
+
+/* The row's replay-safe span (slots the former can record).  */
+unsigned
+safe_words (const rvtt_delivery_problem &p)
+{
+  return p.row_words - p.barrier_words;
+}
+
+/* Window-leg execution slots per row: separators absorbed by the Dst
+   auto-increment pass neither execute nor deliver.  */
+unsigned
+window_exec (const rvtt_delivery_problem &p)
+{
+  return p.autoincr_enabled ? p.row_exec - p.barrier_words : p.row_exec;
+}
+
+/* Window-leg separator words delivered per row.  */
+unsigned
+window_sep (const rvtt_delivery_problem &p)
+{
+  return p.autoincr_enabled ? 0 : p.barrier_words;
+}
+
+/* Downstream-mirror: does the replay-hoist gate lift the counted-loop
+   record of a ROLLED row loop (rvtt-cost.md counted-loop capture
+   branch, downstream constants and interlock exec)?  Validated: at
+   trips 31, words 9, ds_exec 10 this prices the recorded pin-13
+   hardshrink refusal -383 exactly.  */
+bool
+mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
+{
+  if (!p.hoist_enabled
+      || safe_words (p) < p.min_sequence
+      || safe_words (p) > p.capture_slots)
+    return false;
+  const int64_t push = p.ds_push, slot = p.ds_slot;
+  const int64_t exec = (int64_t) p.ds_exec * slot;
+  const int64_t before = imax64 ((int64_t) p.row_words * push, exec);
+  const int64_t after = imax64 (push, exec + p.ds_turnaround);
+  const int64_t record
+    = (int64_t) (1 + p.row_words) * push + p.ds_record_overhead;
+  const int64_t benefit = (int64_t) p.trips * (before - after) - record;
+  return benefit >= p.ds_hoist_min_benefit;
+}
+
+/* Downstream-mirror: does the replay-hoist gate lift the re-record
+   pass of an UNROLLED group body (rvtt-cost.md re-record branches,
+   including the execution-saturation context term) out of the group
+   loop?  GROUPS is the post-unroll trip count, PAYLOAD_ROWS the
+   former-ranked payload R.  */
+bool
+mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
+			     unsigned factor, unsigned payload_rows,
+			     unsigned groups)
+{
+  if (!p.hoist_enabled || groups < 2)
+    return false;
+  const int64_t push = p.ds_push, slot = p.ds_slot;
+  const unsigned payload_slots = payload_rows * safe_words (p);
+  const int64_t exec
+    = (int64_t) payload_rows * (p.ds_exec - p.barrier_words) * slot;
+  const int64_t deliver_record = (int64_t) (1 + payload_slots) * push;
+  const int64_t after = imax64 (push, exec + p.ds_turnaround);
+  int64_t benefit;
+  if (exec >= deliver_record)
+    {
+      /* Execution-bound re-record.  */
+      const int64_t before = exec + p.ds_record_overhead;
+      benefit = (int64_t) groups * (before - after)
+		- p.ds_record_overhead;
+    }
+  else
+    {
+      /* Delivery-bound re-record, with the saturation context term:
+	 the launch run is contiguous only when the Dst auto-increment
+	 pass absorbs the typed separators.  */
+      const unsigned run = p.autoincr_enabled ? factor / payload_rows : 1;
+      const int64_t surplus = (int64_t) run * (exec - push);
+      if (surplus >= deliver_record)
+	benefit = -(deliver_record + p.ds_record_overhead);
+      else
+	benefit = (int64_t) groups * (deliver_record - after)
+		  - (deliver_record + p.ds_record_overhead);
+    }
+  return benefit >= p.ds_hoist_min_benefit;
+}
+
+/* Measured-table price of one explicit row without loop control (a
+   peeled remainder copy).  */
+int64_t
+delivery_explicit_row (const rvtt_delivery_problem &p)
+{
+  return imax64 ((int64_t) p.row_exec * 100,
+		 (int64_t) p.row_words * p.word);
+}
+
+/* Measured-table price of the U = 1 explicit rolled loop.  */
+int64_t
+delivery_rolled_explicit_cost (const rvtt_delivery_problem &p)
+{
+  return (int64_t) p.trips
+	 * imax64 ((int64_t) p.row_exec * 100,
+		   (int64_t) (p.row_words + p.control_words) * p.word);
+}
+
+/* Measured-table price of the U = 1 hoisted shape (record once, one
+   launch per trip) at boundary cost B.  EE closure form: payload
+   slots at 1.0 + record words + one exposed boundary per launch +
+   any surviving separator word; loop-control delivery hides under
+   the execution backlog a launch loop necessarily accumulates (the
+   ceil/log/rsqrt closures carry no control term).  */
+int64_t
+delivery_rolled_hoisted_cost (const rvtt_delivery_problem &p, int64_t b)
+{
+  return (int64_t) (1 + safe_words (p)) * p.word
+	 + (int64_t) p.trips
+	   * ((int64_t) window_exec (p) * 100 + b
+	      + (int64_t) window_sep (p) * p.word);
+}
+
+/* Measured-table price of an unrolled group WINDOW shape at boundary
+   cost B.  HOISTED selects record-once versus re-record per group.
+   Trips not covered by full groups are peeled by the generic unroller
+   and priced at explicit delivery -- an upper bound (peeled copies
+   adjacent to the unrolled body can still join the former's clone
+   sets).  */
+int64_t
+delivery_group_cost (const rvtt_delivery_problem &p, unsigned factor,
+		     unsigned payload_rows, bool hoisted, int64_t b)
+{
+  const unsigned groups = p.trips / factor;
+  const unsigned remainder = p.trips % factor;
+  const unsigned payload_slots = payload_rows * safe_words (p);
+  const int64_t record_words = (int64_t) (1 + payload_slots) * p.word;
+  const int64_t group_exec
+    = (int64_t) factor * window_exec (p) * 100;
+  const int64_t group_sep
+    = (int64_t) factor * window_sep (p) * p.word;
+  const unsigned launches
+    = factor / payload_rows - (hoisted ? 0 : 1);
+  int64_t per_group = group_exec + group_sep + (int64_t) launches * b;
+  int64_t once = 0;
+  if (hoisted)
+    once = record_words;
+  else
+    per_group += record_words;
+  return once + (int64_t) groups * per_group
+	 + (int64_t) remainder * delivery_explicit_row (p);
+}
+
+/* Measured-table price of an unrolled group with NO capture (the
+   former's safe span is below MIN_SEQUENCE or above the buffer): the
+   copies deliver explicitly; the request buys loop-control
+   amortization only.  Boundary-independent.  */
+int64_t
+delivery_unrolled_explicit_cost (const rvtt_delivery_problem &p,
+				 unsigned factor)
+{
+  const unsigned groups = p.trips / factor;
+  const unsigned remainder = p.trips % factor;
+  const int64_t per_group
+    = imax64 ((int64_t) factor * p.row_exec * 100,
+	      ((int64_t) factor * p.row_words + p.control_words)
+	      * p.word);
+  return (int64_t) groups * per_group
+	 + (int64_t) remainder * delivery_explicit_row (p);
+}
+
+/* The former-ranked payload for FACTOR -- argmax of the former's own
+   clone-saving score (clones - 1) * (length - 1) over admissible
+   payloads: R = 1 always a candidate when the safe span fits; R > 1
+   only when the row carries no barrier word (a window cannot span the
+   typed Dst step).  Ties to the smaller R (more clones).  0 when no
+   window fits.  */
+unsigned
+delivery_payload_for (const rvtt_delivery_problem &p, unsigned factor)
+{
+  const unsigned safe = safe_words (p);
+  const unsigned r_max = p.barrier_words ? 1 : factor;
+  unsigned best = 0;
+  int64_t best_score = -1;
+  for (unsigned r = 1; r <= r_max; ++r)
+    {
+      if (factor % r != 0 || factor / r < 2)
+	continue;
+      const unsigned len = r * safe;
+      if (len < p.min_sequence || len > p.capture_slots)
+	continue;
+      const int64_t score
+	= (int64_t) (factor / r - 1) * ((int64_t) len - 1);
+      if (score > best_score)
+	{
+	  best_score = score;
+	  best = r;
+	}
+    }
+  return best;
+}
+
+} // anonymous namespace
+
+rvtt_delivery_solution
+rvtt_bnb_delivery_shape (const rvtt_delivery_problem &p)
+{
+  rvtt_delivery_solution sol;
+
+  if (p.trips < 2 || p.row_words == 0 || p.row_exec < p.row_words
+      || p.barrier_words > p.row_words || p.ds_exec < p.row_exec
+      || p.word == 0 || p.boundary_lb > p.boundary_ub
+      || p.max_factor < 2 || p.control_words == 0)
+    {
+      sol.status = rvtt_solver_status::invalid_model;
+      sol.diagnostic = "problem";
+      return sol;
+    }
+
+  /* The U = 1 reference: predicted materialization, priced at both
+     boundary ends.  */
+  rvtt_delivery_candidate rolled;
+  rolled.factor = 1;
+  rolled.payload_rows = 0;
+  if (mirror_counted_hoist_fires (p))
+    {
+      rolled.mode = rvtt_delivery_mode::rolled_hoisted;
+      rolled.payload_rows = 1;
+      rolled.cost_blb = delivery_rolled_hoisted_cost (p, p.boundary_lb);
+      rolled.cost_bub = delivery_rolled_hoisted_cost (p, p.boundary_ub);
+    }
+  else
+    {
+      rolled.mode = rvtt_delivery_mode::rolled_explicit;
+      rolled.cost_blb = delivery_rolled_explicit_cost (p);
+      rolled.cost_bub = rolled.cost_blb;
+    }
+  sol.rolled = rolled;
+  sol.candidates.push_back (rolled);
+  sol.selected = rolled;
+  ++sol.solver_nodes;
+
+  bool any_window = false;
+  const unsigned factor_cap
+    = p.max_factor < p.trips ? p.max_factor : p.trips;
+  /* Enumerate dividing factors when any exists in range: for them the
+     modeled shape is exact (whole groups, no peel).  Only when the
+     trip count has no divisor in range (prime trips -- the production
+     31-row loops) are non-dividing factors admitted, with the peeled
+     remainder priced explicitly (documented approximation: peeled
+     copies can still join the former's clone sets).  */
+  bool has_divisor = false;
+  for (unsigned factor = 2; factor <= factor_cap; ++factor)
+    if (p.trips % factor == 0)
+      {
+	has_divisor = true;
+	break;
+      }
+  for (unsigned factor = 2; factor <= factor_cap; ++factor)
+    {
+      if (has_divisor && p.trips % factor != 0)
+	continue;
+      if (++sol.solver_nodes > bnb_node_limit)
+	{
+	  sol.status = rvtt_solver_status::capped;
+	  sol.diagnostic = "node-limit";
+	  return sol;
+	}
+      /* Code-size budget: total straight-line row words per group.  */
+      if ((int64_t) factor * p.row_words > p.max_words)
+	continue;
+
+      /* Admissible prune: every group must at least execute its rows
+	 and the remainder must at least deliver -- if that floor
+	 already meets the incumbent, no leg of this factor can win.  */
+      const int64_t optimistic
+	= (int64_t) (p.trips / factor)
+	  * (int64_t) factor * window_exec (p) * 100
+	  + (int64_t) (p.trips % factor) * delivery_explicit_row (p);
+      if (optimistic >= sol.selected.cost_bub)
+	continue;
+
+      rvtt_delivery_candidate cand;
+      cand.factor = factor;
+      const unsigned payload_rows = delivery_payload_for (p, factor);
+      if (payload_rows == 0)
+	{
+	  /* No window fits: the copies deliver explicitly.  */
+	  cand.payload_rows = 0;
+	  cand.mode = rvtt_delivery_mode::unrolled_explicit;
+	  cand.cost_blb = delivery_unrolled_explicit_cost (p, factor);
+	  cand.cost_bub = cand.cost_blb;
+	}
+      else
+	{
+	  any_window = true;
+	  const unsigned groups = p.trips / factor;
+	  const bool hoisted
+	    = mirror_rerecord_hoist_fires (p, factor, payload_rows,
+					   groups);
+	  cand.payload_rows = payload_rows;
+	  cand.mode = hoisted ? rvtt_delivery_mode::group_hoisted
+			      : rvtt_delivery_mode::group_rerecord;
+	  cand.cost_blb
+	    = delivery_group_cost (p, factor, payload_rows, hoisted,
+				   p.boundary_lb);
+	  cand.cost_bub
+	    = delivery_group_cost (p, factor, payload_rows, hoisted,
+				   p.boundary_ub);
+	}
+      sol.candidates.push_back (cand);
+
+      /* Deterministic selection: strictly better at the conservative
+	 boundary end wins; ties keep the smaller factor.  */
+      if (cand.cost_bub < sol.selected.cost_bub)
+	sol.selected = cand;
+    }
+  sol.window_infeasible = !any_window;
+
+  /* Firing benefit versus the rolled reference, minimized over the
+     boundary interval (each leg is linear in B between the priced
+     ends, so the two ends bound the interval exactly).  */
+  if (sol.selected.factor >= 2)
+    {
+      const int64_t b_lb = sol.rolled.cost_blb - sol.selected.cost_blb;
+      const int64_t b_ub = sol.rolled.cost_bub - sol.selected.cost_bub;
+      sol.benefit_min = b_lb < b_ub ? b_lb : b_ub;
+    }
+
+  sol.status = rvtt_solver_status::optimal;
+  sol.diagnostic = "ok";
+  return sol;
+}
+
 rvtt_solver_solution
 rvtt_solve_schedule (const rvtt_sched_problem &problem)
 {

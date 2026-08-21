@@ -665,6 +665,14 @@ mtt-tensix-optimize-replay-loop-unroll
 Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
 Request generic loop unrolling for counted single-block Tensix SFPU row loops whose every statement is a typed SFPU builtin, so the existing replay formation can capture the repeated row (default off).
 
+mtt-tensix-optimize-delivery-shape
+Target Var(riscv_tt_opt_delivery_shape) Init(0)
+Choose the delivery shape (unroll factor and delivery tier) of each proven-trip counted single-block Tensix SFPU row loop by exact optimization over the audited issue-cost model (rvtt-cost.md rates; exec bounds from the audited latency mirror); the winning shape is requested through the same generic annotation the unroll-request pass uses, every uncalibrated model term refuses by name, and a refusal or rolled selection leaves the function byte-identical (default off).
+
+mtt-tensix-delivery-shape-min-benefit=
+Target Joined RejectNegative UInteger Var(riscv_tt_delivery_shape_min_benefit) Init(-1)
+Minimum modeled benefit, in hundredths of an issue slot per loop entry, required for the delivery-shape solver to request a non-rolled shape; overrides the target cost-table default.
+
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
