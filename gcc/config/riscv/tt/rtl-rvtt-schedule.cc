@@ -1628,11 +1628,16 @@ ls_queue_reg_replacements (rtx_insn *insn, rtx *loc, unsigned oldr,
    - the target F is an allocatable LREG untouched by every region node
      (as currently composed), not live in or out of the block, and not
      fixed.
-   The web = node I's definition plus every following reader of R up to
-   (exclusive) the next writer of R.  Every rename is recorded so a
-   scheduling refusal restores the original registers EXACTLY (each web
-   gets a fresh untouched F, so the inverse replacement F -> R over the
-   region is unambiguous).  Value soundness under lane predication
+   The web = node I's definition plus every following reader of R, and
+   THROUGH every read-modify-write redefinition of R (an in-place
+   operation both consumes the renamed value and continues it --
+   SFPMULI's destination IS its source -- so all its R occurrences
+   move), ending exclusive before the next FRESH (non-reading) writer
+   of R, which starts an unrelated value; reaching the region end
+   instead needs R dead out of the block.  Every rename is recorded so
+   a scheduling refusal restores the original registers EXACTLY (each
+   web gets a fresh untouched F, so the inverse replacement F -> R over
+   the region is unambiguous).  Value soundness under lane predication
    follows the region invariant the head comment establishes: a region
    executes under ONE CC state, every region write is masked by the
    same lane-enable set, and the region's outputs on disabled lanes
@@ -1671,13 +1676,16 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	  earlier = TEST_HARD_REG_BIT (nodes[j].raw_defs, r);
 	if (!earlier)
 	  continue;
-	unsigned next_writer = n;
-	for (unsigned k = i + 1; k != n; ++k)
-	  if (TEST_HARD_REG_BIT (nodes[k].raw_defs, r))
-	    {
-	      next_writer = k;
-	      break;
-	    }
+	if (TEST_HARD_REG_BIT (nodes[i].regs.uses, r))
+	  {
+	    /* An RMW definition reads the COLLIDING value: the chain
+	       start must be a fresh value.  */
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "round-interleave-rename-rmw-def reg %u uid=%d\n",
+		       r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
 	if (REGNO_REG_SET_P (df_get_live_in (bb), r))
 	  {
 	    if (dump_file)
@@ -1686,19 +1694,29 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 		       r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
-	if (next_writer == n && REGNO_REG_SET_P (df_get_live_out (bb), r))
+	/* Web extent: from the fresh definition at I, forward through
+	   every reader of R and THROUGH every read-modify-write
+	   redefinition of R (an in-place operation both consumes the
+	   renamed value and continues it -- SFPMULI's dest IS its
+	   source -- so its R occurrences all move), ending exclusive
+	   before the next FRESH (non-reading) writer of R, which
+	   starts an unrelated value.  Reaching the region end without
+	   such a writer needs R dead out of the block.  */
+	unsigned extent_end = n;	/* exclusive */
+	bool fresh_terminator = false;
+	for (unsigned k = i + 1; k != n; ++k)
+	  if (TEST_HARD_REG_BIT (nodes[k].raw_defs, r)
+	      && !TEST_HARD_REG_BIT (nodes[k].regs.uses, r))
+	    {
+	      extent_end = k;
+	      fresh_terminator = true;
+	      break;
+	    }
+	if (!fresh_terminator && REGNO_REG_SET_P (df_get_live_out (bb), r))
 	  {
 	    if (dump_file)
 	      fprintf (dump_file, "List-schedule rename refused: "
 		       "round-interleave-rename-live-out reg %u uid=%d\n",
-		       r, INSN_UID (nodes[i].insn));
-	    continue;
-	  }
-	if (TEST_HARD_REG_BIT (nodes[i].regs.uses, r))
-	  {
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-rmw-def reg %u uid=%d\n",
 		       r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
@@ -1733,8 +1751,9 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	ls_queue_reg_replacements (nodes[i].insn, &PATTERN (nodes[i].insn),
 				   r, (unsigned) f);
 	rn.insns.push_back (nodes[i].insn);
-	for (unsigned k = i + 1; k != next_writer; ++k)
-	  if (TEST_HARD_REG_BIT (nodes[k].regs.uses, r))
+	for (unsigned k = i + 1; k != extent_end; ++k)
+	  if (TEST_HARD_REG_BIT (nodes[k].regs.uses, r)
+	      || TEST_HARD_REG_BIT (nodes[k].raw_defs, r))
 	    {
 	      ls_queue_reg_replacements (nodes[k].insn,
 					 &PATTERN (nodes[k].insn),
