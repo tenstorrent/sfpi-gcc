@@ -430,37 +430,73 @@
 ;;     rolled hand kernel with the same live crossing measures a
 ;;     -23.6% WIN (laneDX-evidence-20260820/EVIDENCE.md).
 ;;
-;; The pass therefore charges each per-iteration crossing the audited
-;; positional-state retirement guard -- min_config_distance (2), the
-;; only audited retirement distance in this model (the two-cycle
-;; configuration-class reservation, mirrored from craq-sim's issue
-;; classes) -- less the slot-occupying words that separate the final
-;; terminator from the next iteration's first RWC consumer.  An audited
-;; issue-time RWC writer (surviving explicit TTINCRWC, typed face
-;; advance) between the last terminator and the backedge re-anchors the
-;; crossing and clears the charge.  Groups whose per-iteration rows
-;; cannot pay refuse by name (mod-write-dominates-rolled-body).  The
-;; charge is a model-derived floor of an unaudited quantity, not a
-;; tuned constant: it already separates the measured one-row losers
-;; (1 row <= 2 slots: refuse) from the measured eight-row winner
-;; (8 - 2 = 6 net slots per iteration: fire, bytes unchanged) with no
-;; trip-count or body-length threshold anywhere.
+;; AUDITED CONSTANT: W_drain = 7 -- the drained-frontend retirement
+;; window of a backedge-crossing mod-write, in frontend issue-slot
+;; words (lane EP finding F1,
+;; laneEP-evidence-20260821/EP-FINDINGS.md).  Consecutive
+;; backedge-crossing mod-writes serialize at the window: the covering
+;; distance per crossing is the WHOLE iteration's issue-slot word
+;; count, scalar words included (they occupy the same frontend issue
+;; slots that elapse while the mod-write retires), Tensix words at
+;; their audited slot counts, launch words at the one-word
+;; conservative floor.  Per-crossing stall = max(0, W_drain -
+;; iteration_slots).
+;;
+;; Five-witness derivation (whole-ELF silicon, the entire math.elf
+;; delta is the transform in every case):
+;;
+;;   UNCOVERED (skinny) regime -- 5-slot iterations (3 Tensix +
+;;   2 scalar), measured stall per crossing:
+;;     absint32 hand         16.950 -> 18.853  = 1.38 c/crossing
+;;     unaryshift-fresh sem  16.962 -> 19.631  = 1.57 c/crossing
+;;     bitwisenot hand       16.950 -> 18.853  = 1.38 c/crossing
+;;   => W_drain - 5 ~= 1.4..1.6, W_drain ~= 6.4..6.6.
+;;
+;;   COVERED (fat) regime -- 10/12-slot iterations, measured stall per
+;;   crossing (from the ~2-cycle/tile residual the pin-15 fired forms
+;;   pay over 32 crossings):
+;;     threshold-fresh sem   0.064 c/crossing
+;;     hardshrink-fresh sem  0.061 c/crossing
+;;   => W_drain <= 10.  (Refusing these shapes at pin 16 under the
+;;   old 2-slot-guard walk -- which ignored the iteration's own body
+;;   words -- reinstated 29 slots/tile and measured +26.95/+27.06
+;;   booked: the EP-F1 counterexample that forced this audit.)
+;;
+;; The audited value takes the CONSERVATIVE 7 (fit ~6.5): it preserves
+;; every witness verdict on both sides, including the eight-row rolled
+;; hand winner at 12.955 (-23.6%, ~26-slot iterations).  The Wormhole
+;; capability entry carries the same value as the same-frontend-class
+;; conservative adoption (no WH silicon witness; a larger W only
+;; widens refusal).  The once-per-loop-entry drain residual -- the
+;; ~2 cycles/tile TOTAL the covered witnesses still measure, the first
+;; crossing's cost before the pipeline reaches steady state -- is
+;; charged on the configuration-cost side at the audited
+;; min_config_distance (2), never per iteration.
+;;
+;; An audited issue-time RWC writer (surviving explicit TTINCRWC,
+;; typed face advance) between the last terminator and the backedge
+;; re-anchors the crossing and clears the charge.  Groups whose
+;; per-iteration rows cannot pay refuse by name
+;; (mod-write-dominates-rolled-body).  The charge is a model-derived
+;; bracket of an unaudited quantity, not a tuned constant: the same
+;; W_drain separates the measured one-row 5-slot losers (charge 2 >=
+;; 1 row: refuse) from the measured 10-slot one-row winner class
+;; (threshold: covered, fire) and the eight-row winner (covered,
+;; fire) with no trip-count or body-length threshold anywhere.
 ;;
 ;; Calibration cross-check (lane EE whole-row closure model,
 ;; laneEE-evidence-20260821/LOSER-ANATOMY.md -- reproduces all 14
-;; anatomized measured cells within ~3%): the witnesses' crossing stall
-;; of about 2-3 cycles per iteration brackets the 2-slot charge; the
-;; measured per-TTREPLAY-launch boundary cost of ~1.3-1.8 cycles on
-;; serial-chain windows means the launch word the crossing-distance
-;; walk credits as ONE covering slot in fact separates producer from
-;; consumer by MORE than a slot -- the credit is a conservative floor,
-;; never an overcount.  EE also supplies a third whole-row witness of
-;; the loser class: bitwisenot hand-ON 16.950 -> 18.853 (+11.2%), the
-;; same one-row rolled shape; this pricing term restores that row's
-;; honest hand baseline.  (EE's launch-vs-straight-push arbitration --
-;; pricing a whole replay-window formation against rolled push
-;; delivery with the same boundary term -- is replay-formation
-;; territory, recorded there as the named follow-up.)
+;; anatomized measured cells within ~3%): the measured
+;; per-TTREPLAY-launch boundary cost of ~1.3-1.8 cycles on
+;; serial-chain windows means the launch word the covering walk
+;; credits as ONE slot in fact separates producer from consumer by
+;; MORE than a slot -- the credit is a conservative floor, never an
+;; overcount.  EE also supplies the third skinny witness (bitwisenot
+;; hand-ON, above); this pricing term restores that row's honest hand
+;; baseline.  (EE's launch-vs-straight-push arbitration -- pricing a
+;; whole replay-window formation against rolled push delivery with
+;; the same boundary term -- is replay-formation territory, recorded
+;; there as the named follow-up.)
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
@@ -1122,10 +1158,12 @@
 ;;     bit-exactness is CRAQ-gated independently of every cost term).
 ;;
 ;; MODEL SEAMS (stubbed to current-model values, documented):
-;;   - lane EB's dst-autoincr body-length pricing term (DX-F2) is not
-;;     yet pushed: the solver models no autoincr setup cost (value 0)
+;;   - the dst-autoincr crossing price (lane EB's DX-F2 term, corrected
+;;     to the W_drain covering walk above by lane EQ / EP-F1) is NOT yet
+;;     mirrored here: the solver models no autoincr setup cost (value 0)
 ;;     and consumes only the enable bit for the mirror's saturation
-;;     run term.  When EB lands, its term joins this table.
+;;     run term.  Joining the W_drain term into this mirror is the
+;;     named follow-up.
 ;;   - lane EC's record-hoist scope widening (DX-F3) is not yet
 ;;     pushed: the downstream mirror models only the hoist branches
 ;;     present at this pin.  When EC lands, its wider scope joins the
