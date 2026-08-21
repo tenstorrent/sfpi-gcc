@@ -7,7 +7,10 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // { dg-final { scan-rtl-dump "List-schedule deferred: cyclic row adjacency in bb \\d+ \\(capture rotation owns the backedge seam\\)" "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-times "List-schedule deferred: repeated-row shape at uid=\\d+" 2 "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump-not "round-interleave" "rvtt_schedule" } }
+// (The scan-not keys on the machinery's "(round-interleave" spelling --
+// fire tag and deferral names -- because this file's own NAME appears in
+// the dump's source-location strings.)
+// { dg-final { scan-rtl-dump-not "\\(round-interleave" "rvtt_schedule" } }
 
 void rci_rounds_off ()
 {
