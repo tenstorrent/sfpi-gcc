@@ -688,10 +688,669 @@ public:
   }
 };
 
+/* ---- Round-chain interleave: unroll-by-two request (lane EI) ----
+
+   -mtt-tensix-optimize-round-interleave (default off).
+
+   THE PROBLEM.  A counted round loop that is latency-bound carries the
+   full result-latency stall of its dependence chain on every trip: two
+   consecutive iterations' chains are ISOMORPHIC, and when the
+   iterations are independent by dataflow the second chain is exactly
+   the filler the first chain's stalls need (the dual-Horner interleave
+   the list scheduler already performs on straight-line code) -- but a
+   rolled loop never exposes the second copy, and the list scheduler
+   defers self-loop rows by name.
+
+   THE MECHANISM.  Two coupled increments behind one flag: (1) here,
+   request generic unrolling by TWO (XTT_ROUND_INTERLEAVE_FACTOR) on a
+   counted single-block innermost SFPU loop, under proof obligations
+   that fail closed; (2) in rtl-rvtt-schedule.cc, the round-interleave
+   cyclic extension lifts the self-loop deferral for exactly this
+   shape, judging the reorder by the steady-state initiation interval
+   of the wrapped (cyclic) dependence model with strict-decrease
+   acceptance.
+
+   PROOF OBLIGATIONS (refusing by name; annotation-only, so a refusal
+   leaves the function byte-identical):
+   - innermost single-block counted loop, trips proven by the same
+     bounded forward evaluation as the replay-loop-unroll pass above
+     and DIVISIBLE by two (the unrolled shape must stay a clean
+     doubled-body loop);
+   - every statement admitted by the replay-loop-unroll allow table
+     (typed SFPU builtins plus the loop's own scalar control) -- the
+     identical fail-closed census, including the denied config/raw/
+     owner/replay classes whose repetition semantics are not the
+     row's; word classes the post-RA scheduler treats as barriers
+     (Dst traffic, CC writers, the next-slot-stall and
+     unaudited-latency families, lane-state readers) additionally
+     refuse round-interleave-body-barrier-class -- requesting the
+     unroll there would double code the scheduler then refuses to
+     touch;
+   - ITERATION INDEPENDENCE: every loop-carried value (any header PHI
+     that is not a proven induction variable) must have a recurrence
+     circuit containing at most ONE word-delivering statement (a
+     reduction-tail update; the scheduler's own dependence edges keep
+     such updates in original order, so the interleave is a pure
+     reorder and bit-exactness holds by construction).  A
+     multi-statement recurrence circuit -- the Stein-round gcd/lcm
+     class -- refuses round-interleave-dependent-recurrence:
+     interleaving cannot overlap work each iteration serially consumes
+     from its predecessor.  At least one word-delivering statement
+     must sit OFF every circuit (the interleavable slack) or the same
+     refusal fires;
+   - PRESSURE: the interleaved doubled body must provably fit the
+     8-LREG file.  Until the pre-RA pressure-scheduling gate (the
+     pressure-sched lane) lands, the bound is deliberately
+     conservative: peak(one body's vector live set) + peak(body-defined
+     vector values only) <= 8 -- the union bound of one copy's full
+     live set overlapping the sibling copy's private live set;
+     exceeding it refuses round-interleave-pressure-exceeded.  (The
+     measured lcm/gcd two-chain interleave needs 10 live registers and
+     refuses here by design -- the honest current answer.)
+
+   Never overrides a user annotation or a replay-loop-unroll request
+   (this pass is registered after it and skips annotated loops).
+
+   RENAMING PREREQUISITE: the RTL unroller duplicates the body on the
+   SAME pseudos, and the allocator packs the copies' short lifetimes
+   into the same LREGs -- a storage-induced false WAW/WAR recurrence
+   that serializes the doubled row.  The cyclic scheduler therefore
+   performs a region-scoped storage-collision rename (the lreg-rename
+   pass's discipline, see ls_cyclic_rename_collisions in
+   rtl-rvtt-schedule.cc) before judging the interleave, restoring the
+   original registers exactly on refusal.
+
+   No operation identity, opcode calendar, coefficient value, or
+   instruction-word fingerprint participates in any decision.  */
+
+/* Interleave admission for one word-delivering builtin: the subset of
+   the replay-loop-unroll allow table whose expansions the post-RA list
+   scheduler can actually reorder -- pure-LREG compute with no CC
+   write, no Dst traffic, no RWC step, no config access, no next-slot
+   acceptance stall, no unaudited-latency class (mirrors
+   ls_admissible_p's fail-closed vocabulary in rtl-rvtt-schedule.cc;
+   anything else in the row is an RTL barrier, so requesting the unroll
+   would double code the scheduler then refuses to touch).  Returns
+   true for admissible word classes, false to refuse by name.  */
+
+static bool
+interleave_word_class_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpmov:
+    case rvtt_insn_data::sfpmov_lv:
+    case rvtt_insn_data::sfpexexp:
+    case rvtt_insn_data::sfpexexp_lv:
+    case rvtt_insn_data::sfpexman:
+    case rvtt_insn_data::sfpexman_lv:
+    case rvtt_insn_data::sfpabs:
+    case rvtt_insn_data::sfpabs_lv:
+    case rvtt_insn_data::sfplz:
+    case rvtt_insn_data::sfplz_lv:
+    case rvtt_insn_data::sfpand:
+    case rvtt_insn_data::sfpand_lv:
+    case rvtt_insn_data::sfpor:
+    case rvtt_insn_data::sfpor_lv:
+    case rvtt_insn_data::sfpxor:
+    case rvtt_insn_data::sfpxor_lv:
+    case rvtt_insn_data::sfpnot:
+    case rvtt_insn_data::sfpnot_lv:
+    case rvtt_insn_data::sfpshft_v:
+    case rvtt_insn_data::sfpshft_v_lv:
+    case rvtt_insn_data::sfpshft_i:
+    case rvtt_insn_data::sfpshft_i_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_v_lv:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+    case rvtt_insn_data::sfpxiadd_v:
+    case rvtt_insn_data::sfpxiadd_i:
+    case rvtt_insn_data::sfpxiadd_i_lv:
+    case rvtt_insn_data::sfpmul:
+    case rvtt_insn_data::sfpmul_lv:
+    case rvtt_insn_data::sfpmuli:
+    case rvtt_insn_data::sfpmuli_lv:
+    case rvtt_insn_data::sfpadd:
+    case rvtt_insn_data::sfpadd_lv:
+    case rvtt_insn_data::sfpaddi:
+    case rvtt_insn_data::sfpaddi_lv:
+    case rvtt_insn_data::sfpmul24:
+    case rvtt_insn_data::sfpmul24_lv:
+    case rvtt_insn_data::sfpsetexp_v:
+    case rvtt_insn_data::sfpsetexp_v_lv:
+    case rvtt_insn_data::sfpsetexp_i:
+    case rvtt_insn_data::sfpsetexp_i_lv:
+    case rvtt_insn_data::sfpsetman_v:
+    case rvtt_insn_data::sfpsetman_v_lv:
+    case rvtt_insn_data::sfpsetman_i:
+    case rvtt_insn_data::sfpsetman_i_lv:
+    case rvtt_insn_data::sfpsetsgn_v:
+    case rvtt_insn_data::sfpsetsgn_v_lv:
+    case rvtt_insn_data::sfpsetsgn_i:
+    case rvtt_insn_data::sfpsetsgn_i_lv:
+    case rvtt_insn_data::sfpmad:
+    case rvtt_insn_data::sfpmad_lv:
+    case rvtt_insn_data::sfpdivp2:
+    case rvtt_insn_data::sfpdivp2_lv:
+    case rvtt_insn_data::sfpcast:
+    case rvtt_insn_data::sfpcast_lv:
+    case rvtt_insn_data::sfpstochrnd_i:
+    case rvtt_insn_data::sfpstochrnd_i_lv:
+    case rvtt_insn_data::sfpstochrnd_v:
+    case rvtt_insn_data::sfpstochrnd_v_lv:
+    case rvtt_insn_data::sfploadi:
+    case rvtt_insn_data::sfploadi_lv:
+    case rvtt_insn_data::sfpxloadi:
+      return true;
+    /* Everything else the row table admits is a scheduler barrier
+       class: Dst loads/stores and counter steps (dst-access/rwc-step),
+       CC writers and structured-CC forms (cc-write), SFPSWAP
+       (next-slot acceptance stall), LUT/ARECIP/NONLINEAR families
+       (unaudited latency or effect-opaque), selects (lane-state
+       readers).  Fail closed.  */
+    default:
+      return false;
+    }
+}
+
+class round_interleave
+{
+public:
+  unsigned n_fired = 0;
+  unsigned n_refused = 0;
+
+  void refuse (class loop *loop, const char *name, const char *detail)
+  {
+    ++n_refused;
+    if (dump_file)
+      {
+	fprintf (dump_file, "round-interleave: refused (%s) loop %d",
+		 name, loop->num);
+	if (detail)
+	  fprintf (dump_file, ": %s", detail);
+	fprintf (dump_file, "\n");
+      }
+  }
+
+  /* Is PHI a proven induction variable of its single-block loop: a
+     scalar integral PHI whose latch value is the PHI stepped once by a
+     constant inside the block?  */
+  static bool
+  induction_phi_p (gphi *phi, basic_block bb, edge latch_e)
+  {
+    tree res = gimple_phi_result (phi);
+    if (!res || !INTEGRAL_TYPE_P (TREE_TYPE (res)))
+      return false;
+    tree lv = PHI_ARG_DEF_FROM_EDGE (phi, latch_e);
+    if (TREE_CODE (lv) != SSA_NAME)
+      return false;
+    gassign *upd = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (lv));
+    if (!upd || gimple_bb (upd) != bb)
+      return false;
+    tree_code uc = gimple_assign_rhs_code (upd);
+    return (uc == PLUS_EXPR || uc == MINUS_EXPR
+	    || uc == POINTER_PLUS_EXPR)
+	   && gimple_assign_rhs1 (upd) == res
+	   && gimple_assign_rhs2 (upd)
+	   && TREE_CODE (gimple_assign_rhs2 (upd)) == INTEGER_CST;
+  }
+
+  /* Forward closure: statements in BB reachable from SEED (an SSA name)
+     through use-def chains.  */
+  static void
+  forward_closure (tree seed, basic_block bb, hash_set<gimple *> *out)
+  {
+    auto_vec<tree, 16> work;
+    hash_set<tree> seen;
+    work.safe_push (seed);
+    seen.add (seed);
+    while (!work.is_empty ())
+      {
+	tree name = work.pop ();
+	gimple *use;
+	imm_use_iterator it;
+	FOR_EACH_IMM_USE_STMT (use, it, name)
+	  {
+	    if (is_gimple_debug (use) || gimple_bb (use) != bb
+		|| gimple_code (use) == GIMPLE_PHI
+		|| out->contains (use))
+	      continue;
+	    out->add (use);
+	    tree lhs = gimple_get_lhs (use);
+	    if (lhs && TREE_CODE (lhs) == SSA_NAME && !seen.contains (lhs))
+	      {
+		seen.add (lhs);
+		work.safe_push (lhs);
+	      }
+	  }
+      }
+  }
+
+  /* Backward closure: statements in BB feeding SEED (an SSA name)
+     through operand chains, PHIs excluded (they terminate at the
+     iteration boundary).  */
+  static void
+  backward_closure (tree seed, basic_block bb, hash_set<gimple *> *out)
+  {
+    auto_vec<tree, 16> work;
+    hash_set<tree> seen;
+    work.safe_push (seed);
+    seen.add (seed);
+    while (!work.is_empty ())
+      {
+	tree name = work.pop ();
+	if (TREE_CODE (name) != SSA_NAME)
+	  continue;
+	gimple *def = SSA_NAME_DEF_STMT (name);
+	if (!def || gimple_bb (def) != bb
+	    || gimple_code (def) == GIMPLE_PHI || out->contains (def))
+	  continue;
+	out->add (def);
+	ssa_op_iter it;
+	tree op;
+	FOR_EACH_SSA_TREE_OPERAND (op, def, it, SSA_OP_USE)
+	  if (!seen.contains (op))
+	    {
+	      seen.add (op);
+	      work.safe_push (op);
+	    }
+      }
+  }
+
+  /* Census one candidate loop; return true if the annotation fired.  */
+  bool process (function *fun, class loop *loop)
+  {
+    if (loop->inner || loop->num_nodes != 1)
+      {
+	refuse (loop, "round-interleave-body-not-flat", NULL);
+	return false;
+      }
+    if (loop->unroll)
+      /* A user annotation or a replay-loop-unroll request is already
+	 on record; never override it.  */
+      return false;
+
+    unsigned HOST_WIDE_INT trips;
+    if (!counted_trips (loop, &trips))
+      {
+	refuse (loop, "round-interleave-trip-count-unproven", NULL);
+	return false;
+      }
+    if (trips < 2)
+      {
+	refuse (loop, "round-interleave-trip-count-unproven",
+		"fewer than two trips");
+	return false;
+      }
+    if (trips % XTT_ROUND_INTERLEAVE_FACTOR)
+      {
+	refuse (loop, "round-interleave-trips-not-divisible", NULL);
+	return false;
+      }
+
+    basic_block bb = loop->header;
+    edge latch_e = NULL;
+    edge_iterator ei;
+    edge e;
+    FOR_EACH_EDGE (e, ei, bb->preds)
+      if (e->src == bb)
+	latch_e = e;
+    if (!latch_e)
+      {
+	refuse (loop, "round-interleave-body-not-flat", "no self edge");
+	return false;
+      }
+
+    /* Statement census: the replay-loop-unroll allow table, identical
+       fail-closed vocabulary.  Word-delivering calls are collected for
+       the circuit and slack analysis below.  */
+    unsigned words = 0;
+    bool saw_cond = false;
+    auto_vec<gimple *, 32> word_stmts;
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	    || gimple_nop_p (stmt) || gimple_clobber_p (stmt))
+	  continue;
+	if (dyn_cast <gcond *> (stmt))
+	  {
+	    saw_cond = true;
+	    continue;
+	  }
+	if (gcall *call = dyn_cast <gcall *> (stmt))
+	  {
+	    const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+	    if (!insnd)
+	      {
+		refuse (loop, "round-interleave-foreign-stmt",
+			"non-rvtt call");
+		return false;
+	      }
+	    int w = row_words_for (insnd);
+	    if (w < 0)
+	      {
+		refuse (loop, "round-interleave-denied-class", insnd->name);
+		return false;
+	      }
+	    if (w > 0 && !interleave_word_class_p (insnd))
+	      {
+		refuse (loop, "round-interleave-body-barrier-class",
+			insnd->name);
+		return false;
+	      }
+	    words += w;
+	    if (w > 0)
+	      word_stmts.safe_push (stmt);
+	    continue;
+	  }
+	if (gassign *assign = dyn_cast <gassign *> (stmt))
+	  {
+	    if (gimple_vuse (stmt) || gimple_vdef (stmt))
+	      {
+		refuse (loop, "round-interleave-memory", NULL);
+		return false;
+	      }
+	    if (TREE_CODE (gimple_assign_lhs (assign)) != SSA_NAME)
+	      {
+		refuse (loop, "round-interleave-foreign-stmt",
+			"non-SSA assignment");
+		return false;
+	      }
+	    continue;
+	  }
+	refuse (loop, "round-interleave-foreign-stmt",
+		gimple_code_name[gimple_code (stmt)]);
+	return false;
+      }
+    if (!saw_cond)
+      {
+	refuse (loop, "round-interleave-body-not-flat",
+		"no exit condition in header");
+	return false;
+      }
+    if (words < XTT_ROUND_INTERLEAVE_MIN_WORDS)
+      {
+	refuse (loop, "round-interleave-row-too-small", NULL);
+	return false;
+      }
+    if (words * XTT_ROUND_INTERLEAVE_FACTOR
+	> XTT_ROUND_INTERLEAVE_MAX_WORDS)
+      {
+	refuse (loop, "round-interleave-word-budget", NULL);
+	return false;
+      }
+
+    /* Iteration independence: every loop-carried PHI's recurrence
+       circuit (statements both reachable from the PHI and feeding its
+       latch value) must contain at most one word-delivering statement,
+       and at least one word-delivering statement must sit off every
+       circuit.  */
+    hash_set<gimple *> circuit_union;
+    for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+	 gsi_next (&psi))
+      {
+	gphi *phi = psi.phi ();
+	tree res = gimple_phi_result (phi);
+	if (!res || virtual_operand_p (res))
+	  continue;
+	if (induction_phi_p (phi, bb, latch_e))
+	  continue;
+	tree lv = PHI_ARG_DEF_FROM_EDGE (phi, latch_e);
+	hash_set<gimple *> fwd, back;
+	forward_closure (res, bb, &fwd);
+	if (TREE_CODE (lv) == SSA_NAME)
+	  backward_closure (lv, bb, &back);
+	unsigned circuit_words = 0;
+	for (hash_set<gimple *>::iterator it = fwd.begin ();
+	     it != fwd.end (); ++it)
+	  if (back.contains (*it))
+	    {
+	      circuit_union.add (*it);
+	      if (is_gimple_call (*it))
+		{
+		  const rvtt_insn_data *insnd
+		    = rvtt_get_insn_data (as_a <gcall *> (*it));
+		  if (insnd && row_words_for (insnd) > 0)
+		    ++circuit_words;
+		}
+	    }
+	if (circuit_words > 1)
+	  {
+	    refuse (loop, "round-interleave-dependent-recurrence",
+		    "multi-statement recurrence circuit");
+	    return false;
+	  }
+      }
+    unsigned slack = 0;
+    for (gimple *stmt : word_stmts)
+      if (!circuit_union.contains (stmt))
+	++slack;
+    if (!slack)
+      {
+	refuse (loop, "round-interleave-dependent-recurrence",
+		"no off-circuit work to interleave");
+	return false;
+      }
+
+    /* Pressure: conservative union bound for the interleaved doubled
+       body -- one copy's peak vector live set plus the sibling copy's
+       peak of body-defined values.  Linear scan of the single block;
+       a value used by a PHI latch argument or outside the loop stays
+       live to the block end (the loop-carried/exposed class).  */
+    {
+      struct range { int def_pos; int last_use; bool inside_def; };
+      hash_map<tree, range> ranges;
+      int pos = 0;
+      auto note_use = [&] (tree op, int at)
+      {
+	if (TREE_CODE (op) != SSA_NAME
+	    || !VECTOR_TYPE_P (TREE_TYPE (op)))
+	  return;
+	gimple *def = SSA_NAME_DEF_STMT (op);
+	bool inside = def && gimple_bb (def) == bb
+		      && gimple_code (def) != GIMPLE_PHI;
+	bool existed;
+	range &r = ranges.get_or_insert (op, &existed);
+	if (!existed)
+	  {
+	    r.def_pos = inside ? INT_MAX : 0;
+	    r.last_use = at;
+	    r.inside_def = inside;
+	  }
+	else if (at > r.last_use)
+	  r.last_use = at;
+	if (!inside)
+	  /* Defined outside the loop (or by a PHI) and read in the body:
+	     the next iteration reads it again, so it holds its LREG
+	     through the backedge -- live for the whole body.  */
+	  r.last_use = INT_MAX;
+      };
+      int n_pos = 0;
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (is_gimple_debug (stmt))
+	    continue;
+	  ++n_pos;
+	  ssa_op_iter it;
+	  tree op;
+	  FOR_EACH_SSA_TREE_OPERAND (op, stmt, it, SSA_OP_USE)
+	    note_use (op, n_pos);
+	  tree lhs = gimple_get_lhs (stmt);
+	  if (lhs && TREE_CODE (lhs) == SSA_NAME
+	      && VECTOR_TYPE_P (TREE_TYPE (lhs)))
+	    {
+	      bool existed;
+	      range &r = ranges.get_or_insert (lhs, &existed);
+	      r.def_pos = n_pos;
+	      r.inside_def = true;
+	      if (!existed)
+		r.last_use = n_pos;
+	    }
+	}
+      pos = n_pos;
+      /* PHI results are live from position 0; PHI latch arguments and
+	 names used outside the loop are live to the end.  */
+      for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
+	   gsi_next (&psi))
+	{
+	  gphi *phi = psi.phi ();
+	  tree res = gimple_phi_result (phi);
+	  if (res && !virtual_operand_p (res)
+	      && VECTOR_TYPE_P (TREE_TYPE (res)))
+	    {
+	      bool existed;
+	      range &r = ranges.get_or_insert (res, &existed);
+	      r.def_pos = 0;
+	      r.inside_def = false;
+	      if (!existed)
+		r.last_use = 0;
+	    }
+	  tree lv = PHI_ARG_DEF_FROM_EDGE (phi, latch_e);
+	  if (TREE_CODE (lv) == SSA_NAME
+	      && VECTOR_TYPE_P (TREE_TYPE (lv)))
+	    {
+	      bool existed;
+	      range &r = ranges.get_or_insert (lv, &existed);
+	      if (!existed)
+		{
+		  gimple *def = SSA_NAME_DEF_STMT (lv);
+		  r.inside_def = def && gimple_bb (def) == bb
+				 && gimple_code (def) != GIMPLE_PHI;
+		  r.def_pos = r.inside_def ? INT_MAX : 0;
+		}
+	      r.last_use = pos + 1;
+	    }
+	}
+      for (hash_map<tree, range>::iterator it = ranges.begin ();
+	   it != ranges.end (); ++it)
+	{
+	  tree name = (*it).first;
+	  range &r = (*it).second;
+	  gimple *use;
+	  imm_use_iterator ui;
+	  bool outside = false;
+	  FOR_EACH_IMM_USE_STMT (use, ui, name)
+	    if (!is_gimple_debug (use)
+		&& (!gimple_bb (use) || gimple_bb (use) != bb))
+	      {
+		outside = true;
+		break;
+	      }
+	  if (outside)
+	    r.last_use = pos + 1;
+	  if (r.def_pos == INT_MAX)
+	    /* Used before any def we saw: defined by a PHI or outside;
+	       treat as live from entry.  */
+	    r.def_pos = 0;
+	}
+      unsigned peak_total = 0, peak_inside = 0;
+      for (int p = 0; p <= pos + 1; ++p)
+	{
+	  unsigned total = 0, inside = 0;
+	  for (hash_map<tree, range>::iterator it = ranges.begin ();
+	       it != ranges.end (); ++it)
+	    {
+	      range &r = (*it).second;
+	      if (r.def_pos <= p && p <= r.last_use)
+		{
+		  ++total;
+		  if (r.inside_def)
+		    ++inside;
+		}
+	    }
+	  peak_total = MAX (peak_total, total);
+	  peak_inside = MAX (peak_inside, inside);
+	}
+      if (peak_total + peak_inside > 8)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "round-interleave: doubled-body bound "
+		     "%u+%u exceeds the 8-LREG file\n",
+		     peak_total, peak_inside);
+	  refuse (loop, "round-interleave-pressure-exceeded", NULL);
+	  return false;
+	}
+      if (dump_file)
+	fprintf (dump_file, "round-interleave: pressure bound %u+%u "
+		 "within the 8-LREG file\n", peak_total, peak_inside);
+    }
+
+    loop->unroll = (unsigned short) XTT_ROUND_INTERLEAVE_FACTOR;
+    fun->has_unroll = true;
+    ++n_fired;
+    if (dump_file)
+      fprintf (dump_file,
+	       "round-interleave: requested unroll %u of loop %d"
+	       " (~%u row words, slack %u, trips "
+	       HOST_WIDE_INT_PRINT_UNSIGNED ")\n",
+	       (unsigned) XTT_ROUND_INTERLEAVE_FACTOR, loop->num,
+	       words, slack, trips);
+    return true;
+  }
+};
+
+const pass_data pass_data_rvtt_round_interleave =
+{
+  GIMPLE_PASS,
+  "rvtt_round_interleave",
+  OPTGROUP_NONE,
+  TV_NONE,
+  PROP_ssa,
+  0,
+  0,
+  0,
+  0,
+};
+
+class pass_rvtt_round_interleave : public gimple_opt_pass
+{
+public:
+  pass_rvtt_round_interleave (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_round_interleave, ctxt)
+  {}
+
+  bool gate (function *) final override
+  {
+    return TARGET_XTT_TENSIX && riscv_tt_opt_round_interleave > 0;
+  }
+
+  unsigned execute (function *fun) final override
+  {
+    if (TARGET_XTT_TENSIX_QSR)
+      {
+	if (dump_file)
+	  fprintf (dump_file, "round-interleave: refused"
+		   " (round-interleave-qsr-unproven)\n");
+	return 0;
+      }
+    round_interleave ctx;
+    loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+    for (auto loop : loops_list (fun, LI_ONLY_INNERMOST))
+      ctx.process (fun, loop);
+    loop_optimizer_finalize ();
+    if (dump_file)
+      fprintf (dump_file, "round-interleave: fires=%u refusals=%u\n",
+	       ctx.n_fired, ctx.n_refused);
+    /* Annotation only; no IL edits.  */
+    return 0;
+  }
+};
+
 } // anonymous namespace
 
 gimple_opt_pass *
 make_pass_rvtt_replay_unroll (gcc::context *ctxt)
 {
   return new pass_rvtt_replay_unroll (ctxt);
+}
+
+gimple_opt_pass *
+make_pass_rvtt_round_interleave (gcc::context *ctxt)
+{
+  return new pass_rvtt_round_interleave (ctxt);
 }

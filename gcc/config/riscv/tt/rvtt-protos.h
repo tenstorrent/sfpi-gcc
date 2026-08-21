@@ -159,6 +159,7 @@ struct rvtt_insn_data;
 extern int rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd);
 extern bool rvtt_replay_unroll_counted_trips (class loop *loop,
 					      unsigned HOST_WIDE_INT *trips);
+extern gimple_opt_pass *make_pass_rvtt_round_interleave (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);

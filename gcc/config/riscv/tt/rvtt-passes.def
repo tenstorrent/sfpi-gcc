@@ -121,9 +121,17 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_delivery_shape);
 /* Replay-window loop-unroll request: annotation only (loop->unroll on
    qualifying counted SFPU row loops, consumed by the generic RTL
    unroller so the always-on replay former can capture the row).  Runs
-   last so its typed census sees the final pre-expansion statement
-   stream.  */
+   after every statement-editing pass so its typed census sees the
+   final pre-expansion statement stream (only the round-interleave
+   annotation pass below follows it).  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_replay_unroll);
+
+/* Round-chain interleave request: annotation only (unroll-by-two on
+   counted SFPU round loops whose iterations are proven independent by
+   dataflow; the cyclic extension of the post-RA list scheduler lifts
+   the self-loop deferral for the doubled body).  Runs after the
+   replay-loop-unroll request and never overrides its annotation.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_round_interleave);
 
 // RTL passes
 INSERT_PASS_BEFORE (pass_lower_subreg, 1, pass_rvtt_unspec_prop_rtl);
