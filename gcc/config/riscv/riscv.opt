@@ -725,6 +725,14 @@ mtt-tensix-optimize-int-abs
 Target Var(riscv_tt_opt_int_abs) Init(0)
 Fold a conditional-negate Tensix SFPU CC region (predicated two's-complement negation under a signed-int sign test against 0) into the single integer SFPABS, per the shipped exhaustive equivalence proof; misses refuse by name and keep the CC lowering byte-identically.
 
+mtt-tensix-optimize-int-not
+Target Var(riscv_tt_opt_int_not) Init(0)
+Select the single SFPNOT for the all-ones-minus-x one's-complement value function, per the shipped exhaustive equivalence proof; misses refuse by name and keep the subtract byte-identically.
+
+mtt-tensix-optimize-store-fold
+Target Var(riscv_tt_opt_store_fold) Init(0)
+Fold a lane-predicated SFPU value merge into its consuming Dst store: forward the merge source into a same-mask store, and sink a post-region store into the region as a predicated store where the format pair's Dst round trip is proven the identity; every unproven case refuses by name.
+
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-setexp-fold): fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
