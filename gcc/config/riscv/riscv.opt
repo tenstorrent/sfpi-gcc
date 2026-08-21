@@ -680,6 +680,7 @@ Choose the delivery shape (unroll factor and delivery tier) of each proven-trip 
 mtt-tensix-delivery-shape-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_delivery_shape_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot per loop entry, required for the delivery-shape solver to request a non-rolled shape; overrides the target cost-table default.
+
 mtt-tensix-optimize-round-interleave
 Target Var(riscv_tt_opt_round_interleave) Init(0)
 Interleave two consecutive iterations of counted Tensix SFPU round loops whose iterations are provably independent by dataflow (unroll-by-two request plus cyclic list scheduling of the doubled body with region-scoped storage-collision renaming; dependent recurrences, pressure beyond the 8-LREG file, and replay/MOP-owned shapes refuse by name; default off).
