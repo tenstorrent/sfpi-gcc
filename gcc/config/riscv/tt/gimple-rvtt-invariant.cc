@@ -347,7 +347,7 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 bool
 rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 				 const auto_vec<gcall *> &loads,
-				 bool report)
+				 bool report, bool cc_transients)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
@@ -469,16 +469,44 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
 	    && !candidates.count (lhs))
 	  live.insert (lhs);
-	peak = MAX (peak, live.size ());
+
+	/* CC machinery materializes LREG temporaries only at RTL --
+	   compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
+	   boolean-tree saved-enables value (gimple-rvtt-expand.cc
+	   process_bool_tree) -- which this SSA walk cannot see.  A
+	   value hoisted to the preheader is live across those
+	   positions and would compete for the registers the
+	   temporaries need, turning a previously-compiling loop into
+	   the post-allocation lreg-pressure-exceeded user error.
+	   Charge them at their positions when the caller asks
+	   (invariant-loadi hoisting into CC-carrying loops); the
+	   default keeps every other consumer's counting unchanged.  */
+	size_t transient = 0;
+	if (cc_transients)
+	  {
+	    const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	    if (insnd)
+	      {
+		if (insnd->id == rvtt_insn_data::sfpxbool
+		    || insnd->id == rvtt_insn_data::sfpxcondi)
+		  transient = 2;
+		else if (insnd->id != rvtt_insn_data::sfppushc
+			 && insnd->id != rvtt_insn_data::sfppopc
+			 && insnd->sets_cc (as_a <gcall *> (stmt)))
+		  transient = 1;
+	      }
+	  }
+	peak = MAX (peak, live.size () + transient);
       }
   free (body);
 
-  if (peak <= LREG_COUNT)
+  unsigned limit = LREG_COUNT;
+  if (peak <= limit)
     return true;
   if (report && dump_file)
     fprintf (dump_file,
 	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
-	     peak, LREG_COUNT);
+	     peak, limit);
   return false;
 }
 
@@ -605,7 +633,8 @@ materialization_cost (gcall *call)
    conservative liveness proof after every addition; it is also deterministic
    because equal-cost candidates retain source order.  */
 static auto_vec<gcall *>
-select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
+select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads,
+			     bool cc_transients)
 {
   std::stable_sort (loads.begin (), loads.end (),
 		    [] (gcall *a, gcall *b)
@@ -617,7 +646,8 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
   for (gcall *call : loads)
     {
       selected.safe_push (call);
-      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false))
+      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false,
+					    cc_transients))
 	{
 	  selected.pop ();
 	  if (dump_file)
@@ -779,6 +809,609 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
   return short_loop;
 }
 
+/* ---------------- Structured-CC-restore proof (EC-F1) ----------------
+
+   rvtt_loop_has_sfpu_barrier_p refuses a loop on ANY CC writer.  That
+   obligation is genuine -- SFPLOADI is lane-predicated (`if
+   (LaneEnabled)` in the functional model, tt-isa-documentation
+   SFPLOADI.md), so hoisting a load out of a loop whose CC state at the
+   load's position could differ from the preheader's would change which
+   lanes are written -- but it is DISCHARGEABLE when the loop provably
+   RESTORES the CC state:
+
+   The architectural lane-enable state is the pair {LaneFlags,
+   UseLaneFlagsForLaneEnable} (VectorUnit.md IsLaneEnabled).  SFPPUSHC
+   mod 0 pushes exactly that pair onto the flag stack and SFPPOPC mod 0
+   pops it back VERBATIM (SFPPUSHC.md / SFPPOPC.md functional models;
+   craq-sim TENSIX_EXECUTE_SFPPUSHC/SFPPOPC agree).  Therefore, in a
+   loop body where
+
+     (a) every SFPPUSHC is the plain push (gimple mod
+	 SFPPUSHCC_MOD1_PUSH; any other mod mutates the saved stack
+	 entry and breaks the restore),
+     (b) every SFPPOPC is the plain pop (SFPPOPCC_MOD1_POP; the peek
+	 modes rewrite the live flags without popping),
+     (c) push/pop depth is consistent at every control-flow join,
+	 never underflows, and returns to zero on the loop backedge,
+	 and
+     (d) no other CC-writing statement executes at push depth zero,
+
+   the lane-enable state at every depth-zero position equals the
+   loop-entry state on every iteration -- which is exactly the state at
+   the preheader insertion point.  Hoisting a depth-zero invariant
+   SFPLOADI to the preheader writes the same lanes it wrote in place.
+
+   For a candidate INSIDE a balanced region (depth > 0) the masks are
+   not equal, but hoisting is still sound when every in-region CC
+   modifier can only NARROW the enable set relative to the region
+   entry:
+
+     - SFPSETCC and the CC-writing SFPIADD forms update LaneFlags only
+       in enabled lanes (`if (LaneEnabled)`, SFPSETCC.md / SFPIADD.md),
+       so disabled lanes stay disabled;
+     - SFPCOMPC computes LaneFlags = Top.LaneFlags && !LaneFlags
+       against the stack top -- the region-entry save -- so its result
+       is contained in the region-entry enable set (SFPCOMPC.md);
+     - the structured condition markers (sfpxvif / sfpxcondb /
+       sfpxbool) lower in pass_rvtt_expand to exactly this class --
+       compare + SFPSETCC/SFPCOMPC chains, plus balanced internal
+       PUSHC/POPC pairs for De Morgan reworks -- all confined between
+       the region's PUSHC and the condition anchor
+       (gimple-rvtt-expand.cc process_tree/process_bool_tree audit).
+
+   Then the enable set at the candidate's position is a SUBSET of the
+   preheader's.  The hoisted load writes the constant to a superset of
+   the lanes the in-place load wrote; the extra lanes belong to the
+   candidate's own fresh SSA definition, whose content in those lanes
+   was never written by the original program (an all-constant,
+   non-live-value load) and is therefore an RA-dependent indeterminate
+   value no defined consumer can rely on: every SFPU consumer's write
+   is itself lane-predicated, so lanes outside its own mask do not
+   propagate, and a merge consumer (sfpassign_lv) keeps its own
+   position and mask and lowers to the lane-predicated SFPMOV merge
+   when the load no longer directly precedes it (rvtt.md
+   *rvtt_sfpassign_lv_int).  SFPENCC can WIDEN the enable set
+   (SFPENCC.md) and is not in the audited narrowing set: an ENCC (or
+   any unaudited CC writer) inside a region keeps the restore proof --
+   the POPC discards it -- but forfeits in-region candidate admission.
+
+   The remaining EE-obligations are discharged by existing machinery:
+   rename-to-free-LREG is inherent in hoisting the SSA definition (the
+   preheader definition gets its own register, live across the loop;
+   whether a free LREG exists is exactly the
+   rvtt_loop_lreg_pressure_legal_p proof, which refuses per-candidate
+   by name), and CC-position placement is the preheader itself, which
+   this proof shows carries the loop-entry mask.
+
+   The sfpi frontend's v_endif emits its POPCs through a small counted
+   scalar loop (the CC object's destructor); at this pass's position
+   that loop survives as a subloop of the row loop whose body is the
+   POPC block.  The analysis summarizes such a subloop by proving its
+   exact trip count with the same bounded constant evaluation the
+   replay-unroll request uses, then charges depth for POPC-count *
+   trips.  Any other CC-containing subloop shape refuses.  */
+
+struct cc_restore_analysis
+{
+  bool has_cc = false;		/* any CC machinery in the loop */
+  bool narrow_ok = true;	/* all in-region modifiers audited-narrowing */
+  const char *why = nullptr;	/* named refusal when the proof fails */
+  /* Push depth on entry to each top-level body block.  */
+  std::unordered_map<basic_block, int> entry_depth;
+  /* Exact POPC executions per full execution of a summarized subloop,
+     and its single in-loop continuation block.  */
+  std::unordered_map<class loop *, int> sub_pops;
+  std::unordered_map<class loop *, basic_block> sub_exit;
+};
+
+/* CC modifiers whose eventual hardware flag writes provably only
+   narrow the enable set relative to the enclosing region entry (see
+   the audit in the block comment above).  Everything else -- SFPENCC,
+   the exponent/priority-encode CC forms, and any future CC writer --
+   refuses in-region candidates until audited.  */
+static bool
+cc_narrowing_modifier_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpsetcc_i:
+    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpcompc:
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxiadd_v:
+    case rvtt_insn_data::sfpxiadd_i:
+    case rvtt_insn_data::sfpxiadd_i_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Constant integer mod operand of CALL, or -1.  */
+static long
+const_mod_arg (const rvtt_insn_data *insnd, gcall *call)
+{
+  if (!insnd->has_mod ()
+      || (unsigned) insnd->mod_arg () >= gimple_call_num_args (call))
+    return -1;
+  tree mod = gimple_call_arg (call, insnd->mod_arg ());
+  return TREE_CODE (mod) == INTEGER_CST ? (long) TREE_INT_CST_LOW (mod) : -1;
+}
+
+/* Classify one statement of LOOP's body for the restore proof,
+   adjusting *DEPTH.  DEPTH == nullptr means "no CC machinery allowed
+   here" (subloop bodies outside the audited destructor-pop shape).
+   Returns false and sets A.why on refusal.  */
+static bool
+cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
+{
+  if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+      || gimple_code (stmt) == GIMPLE_COND
+      || gimple_code (stmt) == GIMPLE_GOTO)
+    return true;
+
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+  if (insnd)
+    {
+      gcall *call = as_a <gcall *> (stmt);
+      switch (insnd->id)
+	{
+	case rvtt_insn_data::sfppushc:
+	  a.has_cc = true;
+	  if (!depth)
+	    a.why = "cc-restore-subloop-shape";
+	  else if (const_mod_arg (insnd, call) != SFPPUSHCC_MOD1_PUSH)
+	    /* Non-plain push mutates the saved stack entry: the later
+	       POPC would restore a value that is not the region-entry
+	       state.  */
+	    a.why = "cc-restore-pushc-mod";
+	  else if (++*depth > 8)
+	    /* Architectural stack capacity (SFPPUSHC.md).  */
+	    a.why = "cc-restore-depth-overflow";
+	  return !a.why;
+
+	case rvtt_insn_data::sfppopc:
+	  a.has_cc = true;
+	  if (!depth)
+	    a.why = "cc-restore-subloop-shape";
+	  else if (const_mod_arg (insnd, call) != SFPPOPCC_MOD1_POP)
+	    /* Peek modes rewrite the live flags without popping.  */
+	    a.why = "cc-restore-popc-mod";
+	  else if (--*depth < 0)
+	    /* Pops a save pushed outside the loop: iteration 2 would
+	       pop yet another -- no restore fact exists.  */
+	    a.why = "cc-restore-unbalanced";
+	  return !a.why;
+
+	case rvtt_insn_data::sfpxvif:
+	case rvtt_insn_data::sfpxcondb:
+	case rvtt_insn_data::sfpxbool:
+	  /* Structured condition markers: their expander-inserted CC
+	     effects are confined to the enclosing balanced region (see
+	     block comment).  Outside a region there is no PUSHC to
+	     confine them: refuse.  */
+	  a.has_cc = true;
+	  if (!depth || *depth == 0)
+	    a.why = "cc-restore-marker-ambient";
+	  return !a.why;
+
+	case rvtt_insn_data::sfpxcondi:
+	  /* Condition-value materialization: its expansion inserts CC
+	     writes at its own position outside any user region; not
+	     audited here.  Fail closed.  */
+	  a.has_cc = true;
+	  a.why = "cc-restore-cond-value-unaudited";
+	  return false;
+
+	default:
+	  if (insnd->sets_cc (call))
+	    {
+	      a.has_cc = true;
+	      if (!depth)
+		a.why = "cc-restore-subloop-shape";
+	      else if (*depth == 0)
+		/* A live-flag write with no enclosing save: the state
+		   entering the next iteration (and every later
+		   depth-zero position) is not the loop-entry state.  */
+		a.why = "cc-restore-ambient-cc-write";
+	      else if (!cc_narrowing_modifier_p (insnd))
+		/* Restore still holds (the POPC discards it), but
+		   in-region candidates lose the containment fact.  */
+		a.narrow_ok = false;
+	      return !a.why;
+	    }
+	  if (insnd->has_side_effects (call) && !allowed_dst_effect_p (insnd))
+	    {
+	      a.why = insnd->name;	/* volatile-non-dst-effect */
+	      return false;
+	    }
+	  return true;
+	}
+    }
+
+  if (gimple_code (stmt) == GIMPLE_ASM)
+    {
+      if (!rvtt_raw_pure_dst_rwc_gimple (stmt))
+	{
+	  a.why = "opaque-asm";
+	  return false;
+	}
+      return true;
+    }
+  if (is_gimple_call (stmt) || gimple_vuse (stmt) || gimple_vdef (stmt))
+    {
+      a.why = "memory-or-unrepresented-call";
+      return false;
+    }
+  return true;
+}
+
+/* Exact number of times the latch of the two-block subloop S executes,
+   proven by bounded constant evaluation of its header test through the
+   unique entry edge (the same discipline as
+   short_constant_replay_loop_p), or -1.  */
+static int
+destructor_pop_trip_count (class loop *s, edge entry)
+{
+  constexpr int MAX_POP_TRIPS = 8;	/* flag stack capacity */
+
+  gimple_stmt_iterator last = gsi_last_bb (s->header);
+  gcond *cond = gsi_end_p (last)
+    ? nullptr : dyn_cast <gcond *> (gsi_stmt (last));
+  edge latch_e = s->latch ? find_edge (s->latch, s->header) : nullptr;
+  if (!cond || !entry || !latch_e)
+    return -1;
+
+  edge true_edge, false_edge;
+  extract_true_false_edges_from_block (s->header, &true_edge, &false_edge);
+  if (!true_edge || !false_edge)
+    return -1;
+
+  tree op[2] = { gimple_cond_lhs (cond), gimple_cond_rhs (cond) };
+  tree value[2], next[2];
+  for (unsigned j = 0; j < 2; j++)
+    {
+      if (is_gimple_min_invariant (op[j]))
+	{
+	  value[j] = op[j];
+	  next[j] = NULL_TREE;
+	  op[j] = NULL_TREE;
+	  continue;
+	}
+      gphi *phi = constant_chain_phi (s, op[j]);
+      if (!phi)
+	return -1;
+      value[j] = PHI_ARG_DEF_FROM_EDGE (phi, entry);
+      next[j] = PHI_ARG_DEF_FROM_EDGE (phi, latch_e);
+      if (!is_gimple_min_invariant (value[j]))
+	return -1;
+      if (TREE_CODE (next[j]) == SSA_NAME
+	  && constant_chain_phi (s, next[j]) != phi)
+	return -1;
+    }
+
+  int trips = -1;
+  fold_defer_overflow_warnings ();
+  for (int taken_count = 0; taken_count <= MAX_POP_TRIPS; taken_count++)
+    {
+      tree lhs = constant_chain_value (op[0], value[0]);
+      tree rhs = constant_chain_value (op[1], value[1]);
+      tree test = lhs && rhs
+	? fold_binary (gimple_cond_code (cond), boolean_type_node, lhs, rhs)
+	: NULL_TREE;
+      if (!test || TREE_CODE (test) != INTEGER_CST)
+	break;
+
+      edge taken = integer_zerop (test) ? false_edge : true_edge;
+      if (taken->dest != s->latch)
+	{
+	  trips = taken_count;
+	  break;
+	}
+
+      value[0] = constant_chain_value (next[0], value[0]);
+      value[1] = constant_chain_value (next[1], value[1]);
+      if (!value[0] || !value[1])
+	break;
+    }
+  fold_undefer_and_ignore_overflow_warnings ();
+  return trips;
+}
+
+/* Summarize the direct subloop S of the loop under analysis: either it
+   contains no CC machinery at all (transparent, zero pops), or it is
+   the frontend's v_endif destructor-pop shape -- a two-block counted
+   loop whose latch performs only plain POPCs and scalar bookkeeping --
+   with a proven trip count.  Also classifies every statement for the
+   ordinary barrier classes.  Returns false and sets A.why on
+   refusal.  */
+static bool
+summarize_cc_subloop (class loop *s, cc_restore_analysis &a)
+{
+  /* First pass: any CC machinery in S?  */
+  bool s_has_cc = false;
+  basic_block *body = get_loop_body (s);
+  for (unsigned ix = 0; ix != s->num_nodes && !s_has_cc; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi) && !s_has_cc; gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	if (!insnd)
+	  continue;
+	switch (insnd->id)
+	  {
+	  case rvtt_insn_data::sfppushc:
+	  case rvtt_insn_data::sfppopc:
+	  case rvtt_insn_data::sfpxvif:
+	  case rvtt_insn_data::sfpxcondb:
+	  case rvtt_insn_data::sfpxbool:
+	  case rvtt_insn_data::sfpxcondi:
+	    s_has_cc = true;
+	    break;
+	  default:
+	    if (insnd->sets_cc (as_a <gcall *> (stmt)))
+	      s_has_cc = true;
+	    break;
+	  }
+      }
+
+  if (!s_has_cc)
+    {
+      /* Transparent: classify for barrier classes only.  */
+      for (unsigned ix = 0; ix != s->num_nodes; ++ix)
+	for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	     !gsi_end_p (gsi); gsi_next (&gsi))
+	  if (!cc_restore_classify_stmt (gsi_stmt (gsi), nullptr, a))
+	    {
+	      free (body);
+	      return false;
+	    }
+      free (body);
+      a.sub_pops[s] = 0;
+      a.sub_exit[s] = nullptr;	/* all exits transparent */
+      return true;
+    }
+  free (body);
+
+  /* CC-containing subloop: only the audited destructor-pop shape is
+     admitted.  Two blocks; header carries only the counter test;
+     latch carries the plain POPCs and scalar bookkeeping.  */
+  a.has_cc = true;
+  edge s_entry = rvtt_loop_entry_edge (s);
+  auto_vec<edge> exits = get_loop_exit_edges (s);
+  if (s->num_nodes != 2 || !s->latch || !s_entry || exits.length () != 1
+      || !flow_bb_inside_loop_p (loop_outer (s), exits[0]->dest))
+    {
+      a.why = "cc-restore-subloop-shape";
+      return false;
+    }
+
+  int pops_per_trip = 0;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (s->header); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (insnd)
+	{
+	  /* No CC machinery may sit in the header (it would execute
+	     once more than the latch).  */
+	  a.why = "cc-restore-subloop-shape";
+	  return false;
+	}
+      if (!cc_restore_classify_stmt (stmt, nullptr, a))
+	return false;
+    }
+  for (gimple_stmt_iterator gsi = gsi_start_bb (s->latch); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (insnd)
+	{
+	  if (insnd->id != rvtt_insn_data::sfppopc
+	      || const_mod_arg (insnd, as_a <gcall *> (stmt))
+		 != SFPPOPCC_MOD1_POP)
+	    {
+	      a.why = "cc-restore-subloop-shape";
+	      return false;
+	    }
+	  ++pops_per_trip;
+	  continue;
+	}
+      if (!cc_restore_classify_stmt (stmt, nullptr, a))
+	return false;
+    }
+
+  int trips = pops_per_trip ? destructor_pop_trip_count (s, s_entry) : 0;
+  if (trips < 0)
+    {
+      a.why = "cc-restore-pop-trips-unproven";
+      return false;
+    }
+  a.sub_pops[s] = pops_per_trip * trips;
+  a.sub_exit[s] = exits[0]->dest;
+  return true;
+}
+
+/* The restore proof for LOOP: propagate push depth over the top-level
+   body blocks (subloops summarized), requiring consistency at joins
+   and zero on the backedge.  Fills A.  Returns false (with A.why
+   named) when the proof fails or a non-CC barrier class is present --
+   the superset of rvtt_loop_has_sfpu_barrier_p's refusals minus the
+   provably-restored CC classes.  */
+static bool
+analyze_cc_restore (class loop *loop, cc_restore_analysis &a)
+{
+  for (class loop *s = loop->inner; s; s = s->next)
+    if (!summarize_cc_subloop (s, a))
+      return false;
+
+  std::vector<std::pair<basic_block, int>> work;
+  auto visit = [&a, &work] (basic_block bb, int d) -> bool
+    {
+      auto it = a.entry_depth.find (bb);
+      if (it == a.entry_depth.end ())
+	{
+	  a.entry_depth.emplace (bb, d);
+	  work.emplace_back (bb, d);
+	  return true;
+	}
+      if (it->second != d)
+	{
+	  a.why = "cc-restore-unstructured";
+	  return false;
+	}
+      return true;
+    };
+
+  if (!visit (loop->header, 0))
+    return false;
+  while (!work.empty ())
+    {
+      basic_block bb = work.back ().first;
+      int d = work.back ().second;
+      work.pop_back ();
+
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	if (!cc_restore_classify_stmt (gsi_stmt (gsi), &d, a))
+	  return false;
+
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	{
+	  basic_block dest = e->dest;
+	  if (!flow_bb_inside_loop_p (loop, dest))
+	    continue;		/* loop exit */
+	  if (dest == loop->header)
+	    {
+	      if (d != 0)
+		{
+		  a.why = "cc-restore-backedge-depth";
+		  return false;
+		}
+	      continue;
+	    }
+	  if (dest->loop_father != loop)
+	    {
+	      /* Entering a summarized subloop.  */
+	      class loop *s = dest->loop_father;
+	      while (loop_outer (s) != loop)
+		s = loop_outer (s);
+	      if (dest != s->header)
+		{
+		  a.why = "cc-restore-unstructured";
+		  return false;
+		}
+	      /* Join consistency on the subloop entry (recorded but
+		 never scanned as a block), then charge its summarized
+		 pops and continue at its single exit.  A transparent
+		 subloop (no pops, exit unrecorded) propagates the
+		 unchanged depth to every exit.  */
+	      auto sit = a.entry_depth.find (dest);
+	      if (sit != a.entry_depth.end ())
+		{
+		  if (sit->second != d)
+		    {
+		      a.why = "cc-restore-unstructured";
+		      return false;
+		    }
+		  continue;	/* already summarized and propagated */
+		}
+	      a.entry_depth.emplace (dest, d);
+	      int pops = a.sub_pops.find (s)->second;
+	      basic_block cont = a.sub_exit.find (s)->second;
+	      if (pops > d)
+		{
+		  a.why = "cc-restore-unbalanced";
+		  return false;
+		}
+	      if (cont)
+		{
+		  if (cont == loop->header)
+		    {
+		      if (d - pops != 0)
+			{
+			  a.why = "cc-restore-backedge-depth";
+			  return false;
+			}
+		    }
+		  else if (cont->loop_father != loop)
+		    {
+		      /* A summarized subloop exiting straight into
+			 another subloop's header: fail closed rather
+			 than scan subloop blocks as if top-level.  */
+		      a.why = "cc-restore-unstructured";
+		      return false;
+		    }
+		  else if (!visit (cont, d - pops))
+		    return false;
+		}
+	      else
+		{
+		  auto_vec<edge> sub_exits = get_loop_exit_edges (s);
+		  for (edge xe : sub_exits)
+		    {
+		      if (!flow_bb_inside_loop_p (loop, xe->dest))
+			continue;
+		      if (xe->dest == loop->header)
+			{
+			  if (d != 0)
+			    {
+			      a.why = "cc-restore-backedge-depth";
+			      return false;
+			    }
+			}
+		      else if (xe->dest->loop_father != loop)
+			{
+			  a.why = "cc-restore-unstructured";
+			  return false;
+			}
+		      else if (!visit (xe->dest, d))
+			return false;
+		    }
+		}
+	      continue;
+	    }
+	  if (!visit (dest, d))
+	    return false;
+	}
+    }
+  return true;
+}
+
+/* Push depth at CALL's position: the recorded block entry depth plus
+   the pushes/pops that precede it in its block.  */
+static int
+cc_depth_at_stmt (const cc_restore_analysis &a, gcall *call)
+{
+  basic_block bb = gimple_bb (call);
+  auto it = a.entry_depth.find (bb);
+  gcc_assert (it != a.entry_depth.end ());
+  int d = it->second;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (stmt == call)
+	return d;
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (!insnd)
+	continue;
+      if (insnd->id == rvtt_insn_data::sfppushc)
+	++d;
+      else if (insnd->id == rvtt_insn_data::sfppopc)
+	--d;
+    }
+  gcc_unreachable ();
+}
+
 static bool
 transform (function *fn)
 {
@@ -819,9 +1452,25 @@ transform (function *fn)
       if (rvtt_preheader_insertion_blocked_p (entry))
 	continue;
 
-      if (!rvtt_loop_first_iteration_executes_p (loop, entry)
-	  || rvtt_loop_has_sfpu_barrier_p (loop))
+      if (!rvtt_loop_first_iteration_executes_p (loop, entry))
 	continue;
+
+      /* Barrier classes, with the CC classes replaced by the
+	 structured-CC-restore proof (block comment above): a loop
+	 whose every CC write is confined to balanced plain-PUSHC /
+	 plain-POPC regions restores the lane-enable state each
+	 iteration, so depth-zero positions carry the preheader mask
+	 and in-region positions carry a provable subset of it.  Any
+	 failure refuses the loop exactly as the old barrier did.  */
+      cc_restore_analysis cc;
+      if (!analyze_cc_restore (loop, cc))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Invariant SFPU immediate hoist refused: %s\n",
+		     cc.why ? cc.why : "sfpu-barrier");
+	  continue;
+	}
 
       /* SFPLOADI writes an architectural LREG even though its SSA result is
 	 local.  Do not speculate it out of a loop that may execute zero times;
@@ -848,8 +1497,26 @@ transform (function *fn)
 	    if (is_a <gcall *> (gsi_stmt (gsi)))
 	      {
 		gcall *call = as_a <gcall *> (gsi_stmt (gsi));
-		if (rvtt_invariant_constant_load_p (call, loop))
-		  loads.safe_push (call);
+		if (!rvtt_invariant_constant_load_p (call, loop))
+		  continue;
+		/* A candidate inside a CC region (push depth > 0) is
+		   admitted only under the containment fact: every
+		   in-region CC modifier in this loop is in the audited
+		   narrowing set, so the position's enable set is a
+		   subset of the preheader's and the hoisted all-lanes
+		   write is a refinement (block comment above).  */
+		if (cc_depth_at_stmt (cc, call) > 0 && !cc.narrow_ok)
+		  {
+		    if (dump_file)
+		      {
+			fprintf (dump_file,
+				 "Invariant SFPU immediate left in loop:"
+				 " cc-position-widening-unproven: ");
+			print_gimple_stmt (dump_file, call, 0);
+		      }
+		    continue;
+		  }
+		loads.safe_push (call);
 	      }
 	}
       free (body_blocks);
@@ -857,7 +1524,27 @@ transform (function *fn)
       if (loads.is_empty ())
 	continue;
 
-      auto_vec<gcall *> selected = select_pressure_legal_loads (loop, loads);
+      /* A CC-carrying loop under an explicit unroll request multiplies
+	 its in-loop live ranges by the unroll factor after this pass;
+	 the single-body SSA pressure walk models none of that overlap,
+	 and a miss is not a lost optimization but the post-allocation
+	 lreg-pressure-exceeded USER ERROR on a previously-compiling
+	 kernel (corpus witness: the pragma-unroll-8 snake-beta body).
+	 Such loops are the replay-record delivery domain where in-loop
+	 immediates are captured into the recorded window anyway;
+	 refuse hoisting by name.  Non-CC unrolled loops keep their
+	 established behavior.  */
+      if (cc.has_cc && loop->unroll > 1)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Invariant SFPU immediate hoist refused:"
+		     " cc-restore-unroll-pressure-unmodeled\n");
+	  continue;
+	}
+
+      auto_vec<gcall *> selected
+	= select_pressure_legal_loads (loop, loads, cc.has_cc);
       if (selected.is_empty ())
 	continue;
 
@@ -866,7 +1553,12 @@ transform (function *fn)
 	 construction); in particular "#pragma GCC unroll 1" must keep its
 	 scalar loop.  Only the unroll request defers to the pragma — the
 	 invariant hoist below is independent and still proceeds.  */
+      /* CC-carrying loops are newly reachable here under the restore
+	 proof; the unroll request keeps its pre-existing surface (loops
+	 with no CC machinery at all) so this widening changes exactly
+	 the immediate hoists and nothing else.  */
       if (riscv_tt_opt_replay_hoist > 0
+	  && !cc.has_cc
 	  && !loop->unroll
 	  && short_constant_replay_loop_p (loop, entry))
 	{
