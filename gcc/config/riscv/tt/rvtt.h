@@ -171,7 +171,7 @@ public:
   constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
     : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
       cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
-      id (id_), src_pos (-1), arg_num (0), ops (ops_) {}
+      id (id_), src_pos (-1), arg_num (0), src_num (0), ops (ops_) {}
 
 public:
   void init ();
@@ -195,6 +195,7 @@ private:
   uint8_t mod_pos = 0;
   int8_t src_pos : 4;
   uint8_t arg_num : 4;
+  uint8_t src_num : 4;
 
 public:
   ops_t ops;
@@ -242,6 +243,7 @@ public:
 
 public:
   int num_args () const { return arg_num; };
+  int num_srcs () const { return src_num; };
 
   bool has_mod () const { return flags & HAS_MOD; }
   int mod_arg () const { return mod_pos; }

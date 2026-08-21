@@ -210,7 +210,8 @@ RVTT_OVR(sfpstochrnd_v_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,
 
 RVTT_FN (sfpreadconfig,   bh_qsr,,XTT_VEC_FTYPE_USI,                                         0, ({CU, 4}))
 RVTT_FN (sfpreadconfig_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 LV, ({CU, 4}))
-RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                                    VOL, ({CU, 4}))
+RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI_USI,                                VOL|EXP, ({M, 0x55}, {CU, 4}))
+RVTT_FN (sfpwriteconfig_i,      ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                   VOL|EXP, ({CU, 16, 8}, {M, 0x55}, {CU, 4}))
 
 RVTT_FN (sfpgt,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
 RVTT_OVR(sfpgt,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                     CC(0xeeee), ({M, 0xffff}, {U, 1}))
