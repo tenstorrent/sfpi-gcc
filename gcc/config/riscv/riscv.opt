@@ -586,6 +586,10 @@ mtt-tensix-optimize-pressure-schedule
 Target Var(riscv_tt_opt_pressure_schedule) Init(0)
 Schedule allowlisted straight-line SFPU regions to reduce register pressure
 
+mtt-tensix-optimize-pressure-schedule-prera
+Target Var(riscv_tt_opt_pressure_schedule_prera) Init(0)
+Pressure-cost list scheduling of audited straight-line SFPU regions on pre-allocation pseudo-register RTL, immediately before the LREG allocator stack (the model-schedule excess-cost-change algorithm of GCC's own -fsched-pressure, adapted to the typed-effect region model): a pressure-minimizing model schedule bounds the achievable peak, the real candidate ranks ready instructions by pressure excess cost plus modeled stall, and a candidate commits only when both its modeled peak pressure and its modeled makespan are non-worse than the original order's with a strict decrease in at least one (exact restore otherwise); baseline and committed pressure are re-verified against the dataflow live-register oracle, disagreement refuses by name, and unaudited producers, CC/config/RWC/Dst effects, self-loop rows, and repeated row shapes bound or defer regions by name
+
 mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
 Fill Tensix result-latency bubbles with independent ready SFPU instructions
