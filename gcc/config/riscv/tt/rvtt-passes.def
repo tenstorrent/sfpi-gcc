@@ -115,6 +115,13 @@ INSERT_PASS_AFTER (pass_late_combine, 1, pass_rvtt_rmext);
    proven-identity Dst reload changes SFPU liveness, which the raw-LREG
    livein reservation below must observe in final form.  */
 INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_dst_ownership);
+/* Pre-allocation pressure-cost list scheduling (default off) runs after
+   the Dst/RWC ownership folds have settled final SFPU pseudo liveness
+   and before the raw-LREG livein reservations and the LREG allocator
+   observe the stream: reordering over pseudos is the seam where a
+   ten-simultaneously-live instruction order can still become an
+   eight-register-schedulable one.  */
+INSERT_PASS_BEFORE (pass_ira, 1, pass_rvtt_lp_schedule_prera);
 /* Observe final SFPU pseudo pressure after sched1 and early rematerialization,
    immediately before IRA.  This pass is dump-only until coloring enforcement
    has an independently validated grouped-change implementation.  */

@@ -71,6 +71,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-lreg-livein.o \
 	rtl-rvtt-lreg-rename.o \
 	rtl-rvtt-lp-alloc.o \
+	rtl-rvtt-lp-schedule-prera.o \
 	rtl-rvtt-macro-planner.o \
 	rtl-rvtt-mop-form.o \
 	rtl-rvtt-replay.o \

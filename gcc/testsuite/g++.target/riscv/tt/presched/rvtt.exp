@@ -1,0 +1,48 @@
+# Copyright (C) 2026 Free Software Foundation, Inc.
+#
+# This file is part of GCC.
+#
+# GCC is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3, or (at your option)
+# any later version.
+#
+# GCC is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+
+# Pre-RA pressure-cost list scheduler twins (lane EH).  Raw-builtin tests
+# (raw-*.C) need no headers and always run; sfpi-dialect tests
+# (sfpi-*.C) need the SFPI headers and are skipped silently when the
+# SFPI environment variable is unset (same contract as tt/sfpi).
+
+# Exit immediately if this isn't a RISC-V target.
+if ![istarget riscv-tt-elf] then {
+  return
+}
+
+# Load support procs.
+load_lib g++-dg.exp
+
+# Initialize `dg'.
+dg-init
+
+# Raw-builtin arsenal: no external headers.
+dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/raw-*.C]] "" ""
+
+# sfpi-dialect arsenal: headers at $SFPI/include.
+if [info exists env(SFPI)] {
+  proc SFPI {} {
+    global env
+    return $env(SFPI)
+  }
+  dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/sfpi-*.C]] "" ""
+}
+
+# All done.
+dg-finish
