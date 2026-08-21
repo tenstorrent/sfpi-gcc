@@ -124,6 +124,13 @@ public:
 
 };
 
+/* The reassociation license key (owner ratification 2026-08-21): true
+   only when BOTH -fassociative-math (the generic opt-in to
+   value-changing FP reassociation) and -mtt-tensix-optimize-reassoc
+   are given.  Every value-changing FP reassociation site must test
+   this; integer/bitwise value-identical rebalancing tests only the
+   target flag.  */
+extern bool rvtt_reassoc_fp_licensed_p (void);
 extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
@@ -149,6 +156,7 @@ extern gimple_opt_pass *make_pass_rvtt_lut_select (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_crosscall (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_crossloop (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_reprprop (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_reassoc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
