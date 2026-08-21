@@ -3,7 +3,7 @@
 // { dg-final { scan-rtl-dump "Dst-autoincr: dominating placement refused: foreign effect on a path .loop \[0-9\]+." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "preheader" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "Dst-autoincr group:" "rvtt_dst_autoincr" } }
-// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 1 } }
+// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 4 } }
 // { dg-final { scan-assembler-not "TTSETC16" } }
 
 #define DST_MODE 3

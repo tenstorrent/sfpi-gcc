@@ -403,6 +403,64 @@
 ;; auto-incrementing load/store address modes (positional Dst/RWC
 ;; state, WP6 capability-table territory); everything QSR (simulator
 ;; returns MissingSpecification for these opcode semantics).
+;;
+;; Mod-write backedge-crossing price (lane EB, DX finding F2 / CK-P3).
+;; The Dst auto-increment pass (rtl-rvtt-dst-autoincr.cc) turns the
+;; audited-latency-0 TTINCRWC row step above into a positional-state
+;; side effect of the terminator access -- an auto-incrementing access
+;; mode, i.e. exactly the class this table DELIBERATELY REFUSES a
+;; latency row for.  The audit split that follows from the table:
+;;
+;;   - consumers inside a continuous Tensix word stream are covered by
+;;     [HAND] witnesses (production unrolled and replay-windowed kernels
+;;     issue live-modifier stores back to back with dependent accesses;
+;;     the pass's own silicon winners -- cast, minmax, the unrolled
+;;     unaryshift hand kernel at 12.955 -- have this shape);
+;;
+;;   - a consumer reached ACROSS A LOOP BACKEDGE has no witness: the
+;;     scalar loop control drains the frontend and the next iteration's
+;;     first Dst access issues onto an empty pipe a few slots after the
+;;     mod-write, inside the unaudited retirement window.  Two pin-14
+;;     whole-ELF silicon witnesses measure that crossing regressive on
+;;     one-row rolled loops (absint32 hand 16.950 -> 18.853, +11.2%;
+;;     unaryshift-fresh semantic 16.962 -> 19.631, +15.7%; the entire
+;;     math.elf delta is the transform: three preheader SETC16, the
+;;     store mode 7 -> 6, the TTINCRWC deleted), about two to three
+;;     issue slots per iteration -- while the eight-row-per-iteration
+;;     rolled hand kernel with the same live crossing measures a
+;;     -23.6% WIN (laneDX-evidence-20260820/EVIDENCE.md).
+;;
+;; The pass therefore charges each per-iteration crossing the audited
+;; positional-state retirement guard -- min_config_distance (2), the
+;; only audited retirement distance in this model (the two-cycle
+;; configuration-class reservation, mirrored from craq-sim's issue
+;; classes) -- less the slot-occupying words that separate the final
+;; terminator from the next iteration's first RWC consumer.  An audited
+;; issue-time RWC writer (surviving explicit TTINCRWC, typed face
+;; advance) between the last terminator and the backedge re-anchors the
+;; crossing and clears the charge.  Groups whose per-iteration rows
+;; cannot pay refuse by name (mod-write-dominates-rolled-body).  The
+;; charge is a model-derived floor of an unaudited quantity, not a
+;; tuned constant: it already separates the measured one-row losers
+;; (1 row <= 2 slots: refuse) from the measured eight-row winner
+;; (8 - 2 = 6 net slots per iteration: fire, bytes unchanged) with no
+;; trip-count or body-length threshold anywhere.
+;;
+;; Calibration cross-check (lane EE whole-row closure model,
+;; laneEE-evidence-20260821/LOSER-ANATOMY.md -- reproduces all 14
+;; anatomized measured cells within ~3%): the witnesses' crossing stall
+;; of about 2-3 cycles per iteration brackets the 2-slot charge; the
+;; measured per-TTREPLAY-launch boundary cost of ~1.3-1.8 cycles on
+;; serial-chain windows means the launch word the crossing-distance
+;; walk credits as ONE covering slot in fact separates producer from
+;; consumer by MORE than a slot -- the credit is a conservative floor,
+;; never an overcount.  EE also supplies a third whole-row witness of
+;; the loser class: bitwisenot hand-ON 16.950 -> 18.853 (+11.2%), the
+;; same one-row rolled shape; this pricing term restores that row's
+;; honest hand baseline.  (EE's launch-vs-straight-push arbitration --
+;; pricing a whole replay-window formation against rolled push
+;; delivery with the same boundary term -- is replay-formation
+;; territory, recorded there as the named follow-up.)
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
