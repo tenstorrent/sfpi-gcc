@@ -214,6 +214,57 @@ combine () {
   r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
+// a * b + c, MULTI-USE mul -- THE LICENSED MAD FUSION (lane EJ).
+// The default rule above is the sfpi single-use contract: the mul dies
+// into the mad, every consumer sees one rounding.  When the mul has
+// OTHER uses, fusing the add makes the add's consumers see the singly-
+// rounded product while the mul's surviving consumers keep the doubly-
+// rounded one -- a value divergence that only the reassociation
+// license admits (owner ratification 2026-08-21): it fires ONLY under
+// -fassociative-math AND -mtt-tensix-optimize-reassoc (REASSOC_FP =
+// rvtt_reassoc_fp_licensed_p), keeps the mul for its other uses, and
+// prints a named "reassoc:" dump line.  Single-use pairs defer to the
+// default rule so the licensed flags never change the default path.
+combine (REASSOC_FP) {
+  p|OU = sfpmul_lv (lv1, a, b, mul_mod);
+  r = sfpadd_lv (lv2, %p, c, add_mod);
+  {
+    // Defer single-use pairs to the default fuse rule byte-identically.
+    gcall *allowed[1] = { r_call };
+    if (!has_other_use (p, allowed, 1))
+      return false;
+    // Pressure budget: the kept mul adds one live range the default
+    // (mul-dies) fusion would not; refuse when the block cannot prove
+    // headroom (a licensed transform must never make a compilable
+    // kernel uncompilable -- the corpus lreg-pressure finding).
+    if (rvtt_reassoc_bb_vec_pressure_peak (gimple_bb (r_call)) + 1 > 8)
+      {
+	if (dump_file)
+	  fprintf (dump_file,
+		   "reassoc: refusing mad-fuse "
+		   "(reassoc-pressure-budget-exceeded: kept multi-use mul "
+		   "adds a live range beyond the 8-LREG budget)\n");
+	return false;
+      }
+  }
+  {
+    if (dump_file)
+      fprintf (dump_file,
+	       "reassoc: licensed mad-fuse of multi-use mul (kept for its "
+	       "other uses) (flag_associative_math && "
+	       "-mtt-tensix-optimize-reassoc)\n");
+    // For WH mul_mod and add_mod will be zero
+    unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
+    if (commuted && iadd_mod)
+      iadd_mod = (iadd_mod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (iadd_mod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+
+    mod = build_int_cst (TREE_TYPE (add_mod),
+			 iadd_mod ^ TREE_INT_CST_LOW (mul_mod));
+  }
+  r = sfpmad_lv (lv2, a, b, c, mod);
+}
+
 // -a + b (WH)
 combine (WH) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);

@@ -105,6 +105,17 @@ extern void rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm);
 extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
 
+/* The reassociation license key (owner ratification 2026-08-21): true
+   only when BOTH -fassociative-math (the generic opt-in to
+   value-changing FP reassociation) and -mtt-tensix-optimize-reassoc
+   are given.  Every value-changing FP reassociation site must test
+   this; integer/bitwise value-identical rebalancing tests only the
+   target flag.  */
+extern bool rvtt_reassoc_fp_licensed_p (void);
+/* Conservative peak simultaneously-live SFPU vector SSA count across one
+   block (gimple-rvtt-reassoc.cc) -- the pressure budget every
+   reassociation site checks before adding live ranges.  */
+extern unsigned rvtt_reassoc_bb_vec_pressure_peak (struct basic_block_def *bb);
 extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
@@ -131,6 +142,7 @@ extern gimple_opt_pass *make_pass_rvtt_lut_select (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_crosscall (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_crossloop (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_reprprop (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_reassoc (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_lp_schedule (gcc::context *ctxt);
