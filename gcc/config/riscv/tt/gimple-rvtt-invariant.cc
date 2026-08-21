@@ -347,7 +347,7 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 bool
 rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 				 const auto_vec<gcall *> &loads,
-				 bool report)
+				 bool report, bool cc_transients)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
@@ -469,7 +469,34 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
 	    && !candidates.count (lhs))
 	  live.insert (lhs);
-	peak = MAX (peak, live.size ());
+
+	/* CC machinery materializes LREG temporaries only at RTL --
+	   compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
+	   boolean-tree saved-enables value (gimple-rvtt-expand.cc
+	   process_bool_tree) -- which this SSA walk cannot see.  A
+	   value hoisted to the preheader is live across those
+	   positions and would compete for the registers the
+	   temporaries need, turning a previously-compiling loop into
+	   the post-allocation lreg-pressure-exceeded user error.
+	   Charge them at their positions when the caller asks
+	   (invariant-loadi hoisting into CC-carrying loops); the
+	   default keeps every other consumer's counting unchanged.  */
+	size_t transient = 0;
+	if (cc_transients)
+	  {
+	    const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	    if (insnd)
+	      {
+		if (insnd->id == rvtt_insn_data::sfpxbool
+		    || insnd->id == rvtt_insn_data::sfpxcondi)
+		  transient = 2;
+		else if (insnd->id != rvtt_insn_data::sfppushc
+			 && insnd->id != rvtt_insn_data::sfppopc
+			 && insnd->sets_cc (as_a <gcall *> (stmt)))
+		  transient = 1;
+	      }
+	  }
+	peak = MAX (peak, live.size () + transient);
       }
   free (body);
 
@@ -605,7 +632,8 @@ materialization_cost (gcall *call)
    conservative liveness proof after every addition; it is also deterministic
    because equal-cost candidates retain source order.  */
 static auto_vec<gcall *>
-select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
+select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads,
+			     bool cc_transients)
 {
   std::stable_sort (loads.begin (), loads.end (),
 		    [] (gcall *a, gcall *b)
@@ -617,7 +645,8 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads)
   for (gcall *call : loads)
     {
       selected.safe_push (call);
-      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false))
+      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false,
+					    cc_transients))
 	{
 	  selected.pop ();
 	  if (dump_file)
@@ -1494,7 +1523,8 @@ transform (function *fn)
       if (loads.is_empty ())
 	continue;
 
-      auto_vec<gcall *> selected = select_pressure_legal_loads (loop, loads);
+      auto_vec<gcall *> selected
+	= select_pressure_legal_loads (loop, loads, cc.has_cc);
       if (selected.is_empty ())
 	continue;
 
