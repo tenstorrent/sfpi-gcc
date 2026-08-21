@@ -500,12 +500,13 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
       }
   free (body);
 
-  if (peak <= LREG_COUNT)
+  unsigned limit = LREG_COUNT;
+  if (peak <= limit)
     return true;
   if (report && dump_file)
     fprintf (dump_file,
 	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
-	     peak, LREG_COUNT);
+	     peak, limit);
   return false;
 }
 
@@ -1522,6 +1523,25 @@ transform (function *fn)
 
       if (loads.is_empty ())
 	continue;
+
+      /* A CC-carrying loop under an explicit unroll request multiplies
+	 its in-loop live ranges by the unroll factor after this pass;
+	 the single-body SSA pressure walk models none of that overlap,
+	 and a miss is not a lost optimization but the post-allocation
+	 lreg-pressure-exceeded USER ERROR on a previously-compiling
+	 kernel (corpus witness: the pragma-unroll-8 snake-beta body).
+	 Such loops are the replay-record delivery domain where in-loop
+	 immediates are captured into the recorded window anyway;
+	 refuse hoisting by name.  Non-CC unrolled loops keep their
+	 established behavior.  */
+      if (cc.has_cc && loop->unroll > 1)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Invariant SFPU immediate hoist refused:"
+		     " cc-restore-unroll-pressure-unmodeled\n");
+	  continue;
+	}
 
       auto_vec<gcall *> selected
 	= select_pressure_legal_loads (loop, loads, cc.has_cc);
