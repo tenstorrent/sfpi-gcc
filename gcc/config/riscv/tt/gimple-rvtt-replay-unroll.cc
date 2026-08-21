@@ -972,7 +972,7 @@ public:
       return false;
 
     unsigned HOST_WIDE_INT trips;
-    if (!counted_trips (loop, &trips))
+    if (!rvtt_replay_unroll_counted_trips (loop, &trips))
       {
 	refuse (loop, "round-interleave-trip-count-unproven", NULL);
 	return false;
@@ -1029,7 +1029,7 @@ public:
 			"non-rvtt call");
 		return false;
 	      }
-	    int w = row_words_for (insnd);
+	    int w = rvtt_replay_unroll_row_words (insnd);
 	    if (w < 0)
 	      {
 		refuse (loop, "round-interleave-denied-class", insnd->name);
@@ -1113,7 +1113,7 @@ public:
 		{
 		  const rvtt_insn_data *insnd
 		    = rvtt_get_insn_data (as_a <gcall *> (*it));
-		  if (insnd && row_words_for (insnd) > 0)
+		  if (insnd && rvtt_replay_unroll_row_words (insnd) > 0)
 		    ++circuit_words;
 		}
 	    }
