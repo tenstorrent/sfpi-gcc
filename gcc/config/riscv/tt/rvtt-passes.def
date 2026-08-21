@@ -100,6 +100,17 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
    expand.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
 
+/* Priced delivery-shape arbitration: annotation only (loop->unroll on
+   proven-trip counted SFPU row loops, factor chosen by exact
+   minimization over the measured delivery model; an affirmative rolled
+   selection annotates factor 1 to own the decision slot).  Runs after
+   every body-shaping gimple pass so its census and the fixed-factor
+   request pass below see the same final pre-expansion stream, and
+   BEFORE that pass: a solver decision (any nonzero loop->unroll)
+   preempts the fixed-factor request, which never overrides an existing
+   annotation.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_delivery_shape);
+
 /* Replay-window loop-unroll request: annotation only (loop->unroll on
    qualifying counted SFPU row loops, consumed by the generic RTL
    unroller so the always-on replay former can capture the row).  Runs

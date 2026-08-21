@@ -135,7 +135,18 @@ extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_lp_schedule (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_transp_involution (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_delivery_shape (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
+
+/* Shared typed-census vocabulary of the replay-window loop-unroll
+   request pass (gimple-rvtt-replay-unroll.cc), consumed unchanged by
+   the delivery-shape solver pass so the two admissions cannot drift:
+   estimated delivered words for an admitted builtin (-1 refuses the
+   class), and the bounded-forward-evaluation trip proof.  */
+struct rvtt_insn_data;
+extern int rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd);
+extern bool rvtt_replay_unroll_counted_trips (class loop *loop,
+					      unsigned HOST_WIDE_INT *trips);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);

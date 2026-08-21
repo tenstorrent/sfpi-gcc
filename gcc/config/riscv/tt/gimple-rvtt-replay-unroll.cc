@@ -86,16 +86,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 
-namespace {
-
 /* Estimated delivered Tensix words for an admitted builtin, or -1 to
    refuse the class.  Zero-word entries are SSA plumbing that expands
    to no delivered word.  The estimate feeds only the size bounds; the
    replay former re-derives the exact window from the final insn
-   stream.  */
+   stream.  Exported (rvtt-protos.h): the delivery-shape solver pass
+   shares this admission vocabulary so the two passes cannot drift.  */
 
-static int
-row_words_for (const rvtt_insn_data *insnd)
+int
+rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
 {
   switch (insnd->id)
     {
@@ -230,6 +229,8 @@ row_words_for (const rvtt_insn_data *insnd)
     }
 }
 
+namespace {
+
 /* Resolve T to a host integer through a bounded walk of dominating SSA
    constant arithmetic (a freshly peeled loop's entry value can be an
    unfolded `N - 1' assignment).  SSA defs always dominate their uses,
@@ -282,16 +283,21 @@ resolve_int_cst (tree t, HOST_WIDE_INT *out, int depth = 0)
     }
 }
 
+} // anonymous namespace
+
 /* Bounded forward evaluation of a single-block counted loop's own scalar
    control (the same discipline as the programmable-constant pass's trip
    proof: no SCEV, no CFG normalization, refuse anything non-trivial).
    Returns true and sets *TRIPS to the exact number of body executions
    when the loop's exit condition is an integer compare of a
    constant-initialized, constant-stepped induction variable against a
-   constant, and the simulation exits within the cap.  */
+   constant, and the simulation exits within the cap.  Exported
+   (rvtt-protos.h): the delivery-shape solver pass shares this trip
+   proof so the two passes cannot drift.  */
 
-static bool
-counted_trips (class loop *loop, unsigned HOST_WIDE_INT *trips)
+bool
+rvtt_replay_unroll_counted_trips (class loop *loop,
+				  unsigned HOST_WIDE_INT *trips)
 {
   const unsigned HOST_WIDE_INT CAP = 4096;
   basic_block bb = loop->header;
@@ -485,6 +491,8 @@ counted_trips (class loop *loop, unsigned HOST_WIDE_INT *trips)
   return true;
 }
 
+namespace {
+
 class replay_unroll
 {
 public:
@@ -517,7 +525,7 @@ public:
       return false;
 
     unsigned HOST_WIDE_INT trips;
-    if (!counted_trips (loop, &trips))
+    if (!rvtt_replay_unroll_counted_trips (loop, &trips))
       {
 	refuse (loop, "replay-loop-unroll-trip-count-unproven", NULL);
 	return false;
@@ -559,7 +567,7 @@ public:
 			"non-rvtt call");
 		return false;
 	      }
-	    int w = row_words_for (insnd);
+	    int w = rvtt_replay_unroll_row_words (insnd);
 	    if (w < 0)
 	      {
 		refuse (loop, "replay-loop-unroll-denied-class",
