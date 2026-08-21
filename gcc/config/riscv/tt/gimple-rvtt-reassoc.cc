@@ -73,6 +73,13 @@ along with GCC; see the file COPYING3.  If not see
      reassoc-cc-region-boundary        a CC-writing or unaudited statement
                                        sits inside the chain window
      reassoc-chain-cap-exceeded        more than REASSOC_MAX_TERMS terms
+     reassoc-pressure-budget-exceeded  the block's conservative live-vector
+                                       peak plus the rebalance's new
+                                       simultaneously-live partials (or the
+                                       mad-fuse's kept mul) could exceed
+                                       the 8-LREG file: a licensed
+                                       transform must never make a
+                                       compilable kernel uncompilable
      reassoc-loop-carried-underived    loop-carried FP accumulator
                                        recognized (the welford-delta
                                        restructuring class) but no derived
@@ -99,7 +106,111 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssa-iterators.h"
 #include "tree-ssanames.h"
 #include "cfgloop.h"
+#include "cfganal.h"
+#include "dominance.h"
 #include "rvtt.h"
+#include <unordered_map>
+#include <unordered_set>
+
+/* Conservative peak count of simultaneously live SFPU vector SSA values
+   across BB (the corpus finding that mandated this: a pressure-blind
+   licensed rebalance turned compilable Cos/Sin/I1/welford kernels into
+   lreg-pressure-exceeded refusals -- a licensed transform must never
+   make a compilable kernel uncompilable).  Modeled on
+   rvtt_loop_lreg_pressure_legal_p (gimple-rvtt-invariant.cc), scoped to
+   one block, over-approximating in the refusing direction:
+   - vector values defined outside BB and used inside it are live from
+     block entry;
+   - vector values with any use outside BB are pinned (never released);
+   - vector values defined in a dominator of BB with a use outside their
+     own defining block are counted as live THROUGH the block (they may
+     span it without appearing in it);
+   - everything else releases at its last in-block use.  */
+
+unsigned
+rvtt_reassoc_bb_vec_pressure_peak (basic_block bb)
+{
+  if (!dom_info_available_p (CDI_DOMINATORS))
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  std::unordered_set<tree> live;
+  std::unordered_set<tree> pinned;
+  std::unordered_map<tree, unsigned> remaining;
+
+  /* Uses inside the block, per name.  */
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      ssa_op_iter iter;
+      tree use;
+      FOR_EACH_SSA_TREE_OPERAND (use, gsi_stmt (gsi), iter, SSA_OP_USE)
+	if (VECTOR_TYPE_P (TREE_TYPE (use)))
+	  ++remaining[use];
+    }
+
+  unsigned version;
+  tree name;
+  FOR_EACH_SSA_NAME (version, name, cfun)
+    {
+      if (!name || !VECTOR_TYPE_P (TREE_TYPE (name)))
+	continue;
+      gimple *def = SSA_NAME_DEF_STMT (name);
+      basic_block def_bb = def ? gimple_bb (def) : nullptr;
+      bool used_in_bb = remaining.count (name) != 0;
+      bool used_outside = false;
+      gimple *use;
+      imm_use_iterator iter;
+      FOR_EACH_IMM_USE_STMT (use, iter, name)
+	if (!is_gimple_debug (use) && gimple_bb (use) != bb)
+	  {
+	    used_outside = true;
+	    break;
+	  }
+      if (def_bb == bb)
+	{
+	  if (used_outside)
+	    pinned.insert (name);
+	  continue;
+	}
+      if (used_in_bb)
+	{
+	  live.insert (name);
+	  if (used_outside)
+	    pinned.insert (name);
+	}
+      else if (used_outside && def_bb
+	       && dominated_by_p (CDI_DOMINATORS, bb, def_bb))
+	{
+	  /* May span the block without appearing in it.  */
+	  live.insert (name);
+	  pinned.insert (name);
+	}
+    }
+
+  size_t peak = live.size ();
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      ssa_op_iter iter;
+      tree use;
+      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
+	if (VECTOR_TYPE_P (TREE_TYPE (use)))
+	  {
+	    auto found = remaining.find (use);
+	    if (found != remaining.end () && found->second
+		&& !--found->second && !pinned.count (use))
+	      live.erase (use);
+	  }
+      tree lhs = gimple_get_lhs (stmt);
+      if (lhs && TREE_CODE (lhs) == SSA_NAME
+	  && VECTOR_TYPE_P (TREE_TYPE (lhs)))
+	live.insert (lhs);
+      peak = MAX (peak, live.size ());
+    }
+  return peak;
+}
+
 
 namespace {
 
@@ -330,10 +441,34 @@ earliest_link (chain *c)
   return c->root;
 }
 
+/* Emit the balanced tree over C->terms[lo,hi) in depth-first order
+   immediately before the root (left subtree completes before the right
+   begins, so at most tree-depth partial results are ever simultaneously
+   live -- the Sethi-Ullman shape the pressure budget is computed for).
+   Split point = ceiling half; term order is preserved exactly.  */
+
+static tree
+rebalance_build (chain *c, gimple_stmt_iterator *at, tree type, tree fndecl,
+		 unsigned nargs, unsigned lo, unsigned hi)
+{
+  if (hi - lo == 1)
+    return c->terms[lo];
+  unsigned mid = lo + (hi - lo + 1) / 2;
+  tree l = rebalance_build (c, at, type, fndecl, nargs, lo, mid);
+  tree r = rebalance_build (c, at, type, fndecl, nargs, mid, hi);
+  gcall *comb = nargs == 3
+    ? gimple_build_call (fndecl, 3, l, r, c->mod)
+    : gimple_build_call (fndecl, 2, l, r);
+  tree fresh = make_ssa_name (type);
+  gimple_call_set_lhs (comb, fresh);
+  gsi_insert_before (at, comb, GSI_SAME_STMT);
+  return fresh;
+}
+
 /* Rebalance C in place: build the balanced binary tree over C->terms
-   (left-to-right pairing, deterministic) with new statements inserted
+   (depth-first emission, deterministic) with new statements inserted
    immediately before the root, rewrite the root's operands to the two
-   final subtree values, and delete the old interior links.  Statement
+   top subtree values, and delete the old interior links.  Statement
    count is unchanged (n-1 combines for n terms).  */
 
 static void
@@ -343,42 +478,20 @@ rebalance (chain *c)
   tree type = TREE_TYPE (gimple_call_lhs (c->root));
   tree fndecl = gimple_call_fndecl (c->root);
   unsigned nargs = gimple_call_num_args (c->root);
+  unsigned n = c->terms.length ();
 
-  auto_vec<tree, 16> level;
-  for (tree t : c->terms)
-    level.safe_push (t);
-
-  while (level.length () > 2)
-    {
-      auto_vec<tree, 16> next;
-      unsigned ix = 0;
-      for (; ix + 1 < level.length (); ix += 2)
-	{
-	  gcall *comb = nargs == 3
-	    ? gimple_build_call (fndecl, 3, level[ix], level[ix + 1], c->mod)
-	    : gimple_build_call (fndecl, 2, level[ix], level[ix + 1]);
-	  tree fresh = make_ssa_name (type);
-	  gimple_call_set_lhs (comb, fresh);
-	  gsi_insert_before (&at, comb, GSI_SAME_STMT);
-	  next.safe_push (fresh);
-	}
-      if (ix < level.length ())
-	next.safe_push (level[ix]);
-      level.truncate (0);
-      for (tree t : next)
-	level.safe_push (t);
-    }
-
-  gcc_assert (level.length () == 2);
-  gimple_call_set_arg (c->root, 0, level[0]);
-  gimple_call_set_arg (c->root, 1, level[1]);
+  unsigned mid = (n + 1) / 2;
+  tree l = rebalance_build (c, &at, type, fndecl, nargs, 0, mid);
+  tree r = rebalance_build (c, &at, type, fndecl, nargs, mid, n);
+  gimple_call_set_arg (c->root, 0, l);
+  gimple_call_set_arg (c->root, 1, r);
   update_stmt (c->root);
 
   /* Delete the old interior links, consumers first (a link is
      removable once its lhs has no remaining uses).  */
   auto_vec<gcall *, 16> pending;
-  for (gcall *l : c->links)
-    pending.safe_push (l);
+  for (gcall *lnk : c->links)
+    pending.safe_push (lnk);
   bool progress = true;
   while (!pending.is_empty () && progress)
     {
@@ -386,18 +499,18 @@ rebalance (chain *c)
       unsigned ix = 0;
       while (ix < pending.length ())
 	{
-	  gcall *l = pending[ix];
-	  tree lhs = gimple_call_lhs (l);
+	  gcall *lnk = pending[ix];
+	  tree lhs = gimple_call_lhs (lnk);
 	  if (lhs && !has_zero_uses (lhs))
 	    {
 	      ++ix;
 	      continue;
 	    }
-	  reset_debug_uses (l);
-	  unlink_stmt_vdef (l);
-	  gimple_stmt_iterator gsi = gsi_for_stmt (l);
+	  reset_debug_uses (lnk);
+	  unlink_stmt_vdef (lnk);
+	  gimple_stmt_iterator gsi = gsi_for_stmt (lnk);
 	  gsi_remove (&gsi, true);
-	  release_defs (l);
+	  release_defs (lnk);
 	  pending.unordered_remove (ix);
 	  progress = true;
 	}
@@ -451,6 +564,29 @@ process_root (gcall *root, chain_kind kind, tree mod)
 		 "FP reassociation needs -fassociative-math AND "
 		 "-mtt-tensix-optimize-reassoc)\n",
 		 chain_kind_name (kind), c.depth, balanced, bb->index);
+      return false;
+    }
+
+  /* Pressure budget (corpus finding: pressure-blind rebalancing turned
+     compilable Cos/Sin/I1/welford kernels into lreg-pressure-exceeded
+     refusals).  The DFS-emitted balanced tree keeps up to BALANCED
+     partial results simultaneously live where the serial chain keeps
+     one; refuse when the block's conservative peak plus that delta
+     could exceed the eight-LREG file.  Applies to the integer classes
+     too -- the physics is identical.  */
+  unsigned extra_live = balanced - 1;
+  unsigned peak = rvtt_reassoc_bb_vec_pressure_peak (bb);
+  if (peak + extra_live > 8)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "reassoc: refusing %s chain rebalance depth %u->%u in "
+		 "bb %d (reassoc-pressure-budget-exceeded: conservative "
+		 "block peak %u + %u new live partials > 8 LREGs -- a "
+		 "licensed transform must never make a compilable kernel "
+		 "uncompilable)\n",
+		 chain_kind_name (kind), c.depth, balanced, bb->index,
+		 peak, extra_live);
       return false;
     }
 
