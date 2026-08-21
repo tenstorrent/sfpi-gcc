@@ -782,6 +782,55 @@
 ;;   stall slot of the boundary flip branches on a single audit fact
 ;;   change and have no silicon.
 ;;
+;; RECORD-HOIST MEASUREMENT PRICING (-mtt-tensix-optimize-replay-record-
+;; hoist, default off; re-record bodies only, the counted-loop branch is
+;; untouched).  DX-F3 (laneDX-evidence-20260820, lcm decomposition)
+;; measured the in-loop `ttreplay 0,len,1,1' re-delivering len+1 words
+;; per row on a shape the saturation term prices as fully hidden, and
+;; attributed ~2-3 words/row of the row's residual loss to that
+;; re-delivery by word accounting.  Under this flag a re-record body
+;; whose capture window is proven iteration-invariant (every payload
+;; word fixed-encoding: hard LREGs and constants only -- a run-time-
+;; composed word refuses record-hoist-variant-encoding) prices
+;; issue-side only:
+;;
+;;   benefit = trips * (deliver_body - TURNAROUND) - (deliver_record + RECORD_OVERHEAD)
+;;
+;; The per-trip TURNAROUND term charges the launch boundary the hoist
+;; ADDS (the first clone converts from inline delivery to one more
+;; playback launch).  Lane EE's boundary calibration measured 1.3-1.8
+;; cycles per launch boundary on serial-chain windows (independent fits
+;; on the ceil/log/rsqrt anatomy, laneEE-evidence-20260821) -- above the
+;; 0.7-slot table constant; the ~60-110 cs/trip under-charge is absorbed
+;; by the MIN_BENEFIT margin and is on the fire side, which is
+;; acceptable for a measurement flag and recorded here for the
+;; promotion review.
+;;
+;; Derivation: the executed word stream of the hoisted and unhoisted
+;; worlds is identical (each launch expands to exactly the recorded
+;; words at the same stream positions the in-body clones held; the
+;; hoisted no-exec record executes nothing), so every execution-side
+;; term cancels in the difference and the modeled delta is pure
+;; delivery: `words' pushed words saved per trip, bought once at the
+;; preheader record's full delivery plus engine overhead.  For proven
+;; trips >= 2 the hoisted world delivers strictly fewer words on every
+;; execution (monotone in the delivery model).  HONEST OPPOSITION: the
+;; Log-class silicon anchors above ((4,17) +1.81%, (4,31) +2.30%) are
+;; re-record shapes whose hoist FIRED under the delivery-only era model
+;; and MEASURED AS LOSSES -- evidence that on those rows the per-trip
+;; record delivery was in fact hidden behind execution (the physics the
+;; saturation/MAX model encodes).  lcm's shape differs in trips (8 vs
+;; 4), sibling launch count, and round-chain seriality, and has NO
+;; hoisted silicon point in either direction.  This flag is therefore a
+;; measurement class in the -mtt-tensix-mop-form-force pattern: every
+;; structural, invariance, slot-liveness, and audited-latency proof
+;; still gates admission and refuses by name (record-hoist-loop-shape /
+;; -loop-opaque / -no-dedicated-preheader / -preheader-recording-open /
+;; -trip-count-unproven / -variant-encoding /
+;; replay-reissue-latency-unproved / record-hoist-benefit); only the
+;; profitability verdict changes, and promotion into any default or ON
+;; set requires this class's own silicon A/B.
+;;
 ;; MIN_BENEFIT = 60 centislots (0.6 slot per loop entry): every measured
 ;; losing shape models negative (max -158), so any non-negative
 ;; threshold refuses the entire measured losing class with the whole

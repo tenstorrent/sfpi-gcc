@@ -1193,13 +1193,20 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		    replay_block const &block, replay_span payload,
 		    bool body_rerecords, unsigned launch_run)
 {
+  bool record_hoist_mode
+    = body_rerecords && riscv_tt_opt_replay_record_hoist > 0;
   uint64_t niter;
   if (!provable_constant_trips (loop, preheader, &niter))
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "Not hoisting: loop %d trip count is not provably"
-		 " constant\n", loop->num);
+	{
+	  fprintf (dump_file,
+		   "Not hoisting: loop %d trip count is not provably"
+		   " constant\n", loop->num);
+	  if (record_hoist_mode)
+	    fprintf (dump_file,
+		     "record-hoist refused: record-hoist-trip-count-unproven\n");
+	}
       return false;
     }
 
@@ -1207,8 +1214,13 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   if (trips < 2)
     {
       if (dump_file)
-	fprintf (dump_file, "Not hoisting: loop %d runs %ld time(s)\n",
-		 loop->num, (long) trips);
+	{
+	  fprintf (dump_file, "Not hoisting: loop %d runs %ld time(s)\n",
+		   loop->num, (long) trips);
+	  if (record_hoist_mode)
+	    fprintf (dump_file,
+		     "record-hoist refused: record-hoist-trip-count-unproven\n");
+	}
       return false;
     }
 
@@ -1217,11 +1229,16 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   if (eslots < 0)
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "Not hoisting: replay-reissue-latency-unproved: a"
-		 " consumed payload producer carries no audited result"
-		 " latency (loop %d, %ld words)\n",
-		 loop->num, (long) words);
+	{
+	  fprintf (dump_file,
+		   "Not hoisting: replay-reissue-latency-unproved: a"
+		   " consumed payload producer carries no audited result"
+		   " latency (loop %d, %ld words)\n",
+		   loop->num, (long) words);
+	  if (record_hoist_mode)
+	    fprintf (dump_file,
+		     "record-hoist refused: replay-reissue-latency-unproved\n");
+	}
       return false;
     }
 
@@ -1229,6 +1246,74 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
   HOST_WIDE_INT deliver_record
     = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
+  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
+			       ? (HOST_WIDE_INT)
+				 riscv_tt_replay_hoist_min_benefit
+			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
+
+  /* Record-hoist measurement pricing (-mtt-tensix-optimize-replay-record-
+     hoist, re-record bodies only).  The candidate window is proven
+     iteration-invariant by the admission walk in hoist_preheader (every
+     payload word fixed-encoding), so the EXECUTED word stream of the two
+     worlds is identical: each playback launch expands to exactly the
+     recorded words at the same stream positions the in-body clones held,
+     and the hoisted no-exec record executes nothing (the Replay Expander
+     consumes its payload in the frontend).  Execution-side terms therefore
+     cancel between the worlds and the modeled delta is pure delivery: the
+     in-body world re-delivers the capture word plus the payload every trip
+     where the hoisted world delivers one launch word, a per-trip saving of
+     `words' pushed words, bought once at the preheader record's full
+     delivery plus the record-engine overhead.  This is the DX-F3
+     issue-side accounting (laneDX-evidence-20260820, lcm decomposition:
+     the in-loop `ttreplay 0,len,1,1' re-delivers len words per row while
+     the hand kernel records once at init).  The default model's
+     saturation/MAX pricing keeps the opposite verdict for this class from
+     the Log-class silicon anchors (rvtt-cost.md, re-record derivation);
+     this flag exists to build the silicon A/B legs for the DX-F3 class,
+     the same measurement-flag pattern as -mtt-tensix-mop-form-force --
+     with the difference that every structural proof still gates admission
+     and the delivery model itself is monotone: for proven trips >= 2 the
+     hoisted world delivers strictly fewer words on every execution.  */
+  if (body_rerecords && riscv_tt_opt_replay_record_hoist > 0)
+    {
+      /* The hoisted world converts the first clone from inline delivery
+	 to one more playback launch per trip: charge that added launch
+	 boundary at the audited turnaround constant.  Lane EE's
+	 calibration measured 1.3-1.8 cycles per launch boundary on
+	 serial-chain windows (laneEE-evidence-20260821, boundary fits on
+	 ceil/log/rsqrt) -- above the 0.7-slot table constant; the
+	 under-charge (~60-110 cs/trip) is absorbed by the MIN_BENEFIT
+	 margin and noted in rvtt-cost.md.  */
+      HOST_WIDE_INT record_once
+	= deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      HOST_WIDE_INT per_trip
+	= deliver_body - XTT_REPLAY_COST_TURNAROUND_X100;
+      HOST_WIDE_INT benefit = trips * per_trip - record_once;
+      if (dump_file)
+	fprintf (dump_file,
+		 "Record-hoist pricing (loop %d): trips %ld, words %ld,"
+		 " deliver_body %ld/trip, boundary %d/trip, record_once %ld,"
+		 " benefit %ld (min %ld)\n",
+		 loop->num, (long) trips, (long) words,
+		 (long) deliver_body, XTT_REPLAY_COST_TURNAROUND_X100,
+		 (long) record_once, (long) benefit,
+		 (long) min_benefit);
+      if (benefit < min_benefit)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Not hoisting: record-hoist-benefit: modeled issue-side"
+		     " benefit %ld < %ld\n",
+		     (long) benefit, (long) min_benefit);
+	  return false;
+	}
+      if (dump_file)
+	fprintf (dump_file,
+		 "record-hoist: invariant re-record window admitted"
+		 " (trips %ld, words %ld, benefit %ld)\n",
+		 (long) trips, (long) words, (long) benefit);
+      return true;
+    }
   HOST_WIDE_INT after
     = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
 	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
@@ -1279,10 +1364,6 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	}
     }
   HOST_WIDE_INT benefit = trips * (before - after) - record;
-  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
-			       ? (HOST_WIDE_INT)
-				 riscv_tt_replay_hoist_min_benefit
-			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
 
   if (dump_file)
     fprintf (dump_file,
@@ -1431,18 +1512,36 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
   class loop *loop = bb->loop_father;
   if (!loop || loop->num == 0)
     return nullptr;
+  bool record_hoist = riscv_tt_opt_replay_record_hoist > 0;
   if (loop->num_nodes != 1 || loop->header != bb)
     {
       if (dump_file)
-	fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
-		 bb->index);
+	{
+	  fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
+		   bb->index);
+	  if (record_hoist)
+	    fprintf (dump_file, "record-hoist refused: record-hoist-loop-shape\n");
+	}
       return nullptr;
     }
   if (!loop_preserves_replay_p (loop))
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "Not hoisting: loop contains call, opaque asm, or replay owner\n");
+	{
+	  fprintf (dump_file,
+		   "Not hoisting: loop contains call, opaque asm, or replay owner\n");
+	  /* For the record-hoist this is also the in-loop slot-liveness
+	     proof: an in-loop replay owner (or an asm/call that could hide
+	     one) could re-record the hoisted capture's slots between the
+	     preheader record and a later trip's launch.  Every other
+	     window this pass forms lives entirely inside one basic block
+	     (record to last launch), the loop is single-block, and
+	     persistent-slot marking excludes the hoisted range from all
+	     later formation, so this refusal closes the only re-record
+	     path into the hoisted slots.  */
+	  if (record_hoist)
+	    fprintf (dump_file, "record-hoist refused: record-hoist-loop-opaque\n");
+	}
     return nullptr;
     }
 
@@ -1450,17 +1549,50 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
   if (!preheader)
     {
       if (dump_file)
-	fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
+	{
+	  fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
+	  if (record_hoist)
+	    fprintf (dump_file,
+		     "record-hoist refused: record-hoist-no-dedicated-preheader\n");
+	}
       return nullptr;
     }
   if (bitmap_bit_p (dirty_bbs, preheader->index))
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "Not hoisting: preheader bb %d may hold open recording"
-		 " state\n", preheader->index);
+	{
+	  fprintf (dump_file,
+		   "Not hoisting: preheader bb %d may hold open recording"
+		   " state\n", preheader->index);
+	  if (record_hoist)
+	    fprintf (dump_file,
+		     "record-hoist refused: record-hoist-preheader-recording-open\n");
+	}
       return nullptr;
     }
+
+  /* Record-hoist invariance admission (before pricing): every payload
+     word must be fixed-encoding -- hard LREGs, constants, and compiler
+     scratch only.  A GPR or MEM operand means the delivered instruction
+     word is composed at run time; its value at the preheader is not
+     proven equal to its value at the original in-body record point, so
+     the recorded program could differ from what each trip's launch must
+     replay.  No rebase model exists for such words in this first
+     increment: refuse by name.  (The flag-off hoist path keeps its
+     original post-pricing check below, byte-identically.)  */
+  if (record_hoist)
+    for (auto pos = block.data () + seq.clones.front ().begin,
+	  end = block.data () + seq.clones.front ().end;
+	 pos != end; ++pos)
+      if (!pos->empty && !fixed_replay_rtx_p (PATTERN (pos->insn)))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist refused: record-hoist-variant-encoding:"
+		     " payload insn %d is a run-time-composed word\n",
+		     INSN_UID (pos->insn));
+	  return nullptr;
+	}
 
   if (!hoist_profitable_p (loop, preheader, block, seq.clones.front (),
 			   /*body_rerecords=*/true,
@@ -5161,7 +5293,13 @@ transform (function *cfn, unsigned buffer_size)
 	       ++probe != spans.end () && probe->end >= seq->length;)
 	    slot = probe;
 
-	  basic_block preheader = riscv_tt_opt_replay_hoist > 0
+	  /* The record-hoist flag admits the preheader hoist attempt on
+	     its own (its pricing branch owns the re-record class); with
+	     only the plain hoist flag the attempt behaves exactly as
+	     before.  */
+	  basic_block preheader
+	    = (riscv_tt_opt_replay_hoist > 0
+	       || riscv_tt_opt_replay_record_hoist > 0)
 	    ? hoist_preheader (*seq, info, dirty_bbs) : nullptr;
 	  unsigned len = preheader
 	    ? replace_hoisted_sequence (*seq, info, slot->begin, preheader)
@@ -5231,10 +5369,12 @@ public:
   /* opt_pass methods: */
   virtual unsigned execute (function *fn) override
   {
-    if (riscv_tt_opt_replay_hoist > 0)
+    bool loops_needed = riscv_tt_opt_replay_hoist > 0
+      || riscv_tt_opt_replay_record_hoist > 0;
+    if (loops_needed)
       loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
     transform (fn, riscv_tt_replay_size);
-    if (riscv_tt_opt_replay_hoist > 0)
+    if (loops_needed)
       {
 	loop_optimizer_finalize ();
 	free_dominance_info (CDI_DOMINATORS);
