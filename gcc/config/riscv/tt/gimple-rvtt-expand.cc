@@ -257,15 +257,15 @@ find_top_of_cond_tree(gcall *stmt)
     case rvtt_insn_data::sfpxcmp:
       break;
 
-    case rvtt_insn_data::sfpxbool:
+    case rvtt_insn_data::sfpxlogic:
       {
 	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
-	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
+	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, 1)));
 	return find_top_of_cond_tree (child);
       }
       break;
 
-    case rvtt_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxcondiX:
       // Should never get this deep
       gcc_assert(0);
       break;
@@ -348,13 +348,13 @@ static bool
 simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost, unsigned op, bool negate)
 {
   tree lhs = gimple_call_arg (call, 1);
-  if (op == SFPXBOOL_MOD1_NOT)
+  if (op == SFPXLOGIC_MOD1_NOT)
     return simplify_node (lhs, leftmost, rightmost, call, !negate);
 
   if (dump_file)
-    fprintf (dump_file, "    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
+    fprintf (dump_file, "    process %s n:%d\n", op == SFPXLOGIC_MOD1_AND ? "AND" : "OR", negate);
 
-  bool negated = op == (negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR);
+  bool negated = op == (negate ? SFPXLOGIC_MOD1_AND : SFPXLOGIC_MOD1_OR);
   negate ^= negated;
 
   // Emit LEFT
@@ -367,7 +367,7 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
   gimple_stmt_iterator rhs_leftmost;
   if (dump_file)
     fprintf (dump_file, "    right\n");
-  bool right_negated = simplify_node (gimple_call_arg(call, 2),
+  bool right_negated = simplify_node (gimple_call_arg (call, 2),
 				      &rhs_leftmost, rightmost, call, negate);
 
   if (right_negated)
@@ -474,7 +474,7 @@ process_tree_phi(gcall *stmt, gimple *child)
 	  gcall *origin_stmt = dyn_cast<gcall *>(origin);
 	  const rvtt_insn_data *origin_insnd;
 	  origin_insnd = rvtt_get_insn_data(origin_stmt);
-	  if (origin_insnd->id == rvtt_insn_data::sfpxcondi)
+	  if (origin_insnd->id == rvtt_insn_data::sfpxcondiX)
 	    process_tree(origin_stmt, stmt);
 	}
     }
@@ -500,7 +500,7 @@ simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *
 	}
       break;
 
-    case rvtt_insn_data::sfpxbool:
+    case rvtt_insn_data::sfpxlogic:
       {
 	negated = simplify_logical (stmt, leftmost, rightmost,
 				    TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())), negate);
@@ -508,7 +508,7 @@ simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *
       }
       break;
 
-    case rvtt_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxcondiX:
       process_xcondi(stmt, parent, false);
       break;
 
@@ -545,7 +545,6 @@ transform (function *fun)
   phi_stmts.reserve(20);
   vif_stmts.reserve(20);
   basic_block bb;
-  gimple_stmt_iterator gsi;
 
   // Must process xcondis in all BBs before xcondbs because vif stmts can fall
   // in a BB other than the one containing the associated xcondb
@@ -553,32 +552,27 @@ transform (function *fun)
     {
       if (dump_file)
 	fprintf (dump_file, "  bb process vif loop\n");
-      gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (gsi))
+      for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gimple_stmt_iterator next_gsi = gsi;
-	  gsi_next(&next_gsi);
-
 	  auto *insnd = rvtt_get_insn_data (*gsi);
-	  if (insnd && insnd->id == rvtt_insn_data::sfpxcondb)
+	  if (insnd && insnd->id == rvtt_insn_data::sfpxcond)
 	    {
 	      auto *stmt = as_a <gcall *> (*gsi);
 	      if (dump_file)
 		fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
-	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_TREE_ARG_POS)));
-	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_START_ARG_POS)));
+	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 2)));
+	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 1)));
 	      mark_vif_stmts(gsi_for_stmt(top), gsi);
 
+	      gcc_assert (gimple_bb (top) == gsi_bb (gsi));
 	      process_tree(child, stmt);
 
-	      remove_stmt(stmt);
-	      remove_stmt(top);
+	      gimple_call_set_arg (stmt, insnd->mod_arg () + 2, integer_zero_node);
+	      update_stmt (stmt);
 	      vif_stmts.clear();
 	      phi_stmts.clear();
 	    }
-
-	  gsi = next_gsi;
 	}
     }
 
@@ -587,7 +581,7 @@ transform (function *fun)
     {
       if (dump_file)
 	fprintf (dump_file, "  bb process outside vif loop\n");
-      gsi = gsi_start_bb (bb);
+      auto gsi = gsi_start_bb (bb);
       while (!gsi_end_p (gsi))
 	{
 	  gimple_stmt_iterator next_gsi = gsi;
@@ -595,7 +589,7 @@ transform (function *fun)
 
 	  if (auto *insnd = rvtt_get_insn_data (*gsi))
 	    {
-	      if (insnd->id == rvtt_insn_data::sfpxcondi)
+	      if (insnd->id == rvtt_insn_data::sfpxcondiX)
 		{
 		  auto *stmt = as_a <gcall *> (*gsi);
 		  if (dump_file)

@@ -271,15 +271,14 @@ constexpr unsigned int SFPIADD_MOD1_CC_GTE0 = 8;
 
 constexpr unsigned int SFPXIADD_MOD1_IS_SUB = 8;
 
-constexpr unsigned int SFPXBOOL_MOD1_AND = 0;
-constexpr unsigned int SFPXBOOL_MOD1_OR = 1;
-constexpr unsigned int SFPXBOOL_MOD1_NOT = 2;
+constexpr unsigned int SFPXPRED_MOD1_ENDIF = 0;
+constexpr unsigned int SFPXPRED_MOD1_IF = 1;
+constexpr unsigned int SFPXPRED_MOD1_ELSE = 2;
+constexpr unsigned int SFPXPRED_MOD1_PUSH = 4;
 
-constexpr unsigned int SFPXBOOL_LEFT_TREE_ARG_POS = 1;
-constexpr unsigned int SFPXBOOL_RIGHT_TREE_ARG_POS = 2;
-
-constexpr unsigned int SFPXCONDB_TREE_ARG_POS = 0;
-constexpr unsigned int SFPXCONDB_START_ARG_POS = 1;
+constexpr unsigned int SFPXLOGIC_MOD1_AND = 0;
+constexpr unsigned int SFPXLOGIC_MOD1_OR = 1;
+constexpr unsigned int SFPXLOGIC_MOD1_NOT = 2;
 
 constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 

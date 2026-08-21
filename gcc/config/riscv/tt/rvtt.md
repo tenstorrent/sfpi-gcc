@@ -214,34 +214,46 @@
   [(set_attr "type" "tensix")
    (set_attr "length" "0")])
 
+;; We need the predicate markers until here.  Turn them into something DCE will remove.
+(define_expand "rvtt_sfpxpred"
+  [(set:SI (match_operand:SI 0 "register_operand")
+     (unspec:SI [
+        (match_operand:SI 1 "const_int_operand")
+        (match_operand:SI 2 "reg_or_const_int_operand")]
+	0))]
+  "TARGET_XTT_TENSIX"
+  {
+    emit_move_insn (operands[0], operands[2]);
+    DONE;
+  })
+
+(define_expand "rvtt_sfpxcond"
+  [(set:SI (match_operand:SI 0 "register_operand")
+     (unspec:SI [
+        (match_operand:SI 1 "const_int_operand")
+        (match_operand:SI 2 "reg_or_const_int_operand")
+        (match_operand:SI 3 "reg_or_const_int_operand")]
+	0))]
+  "TARGET_XTT_TENSIX"
+  {
+    emit_move_insn (operands[0], operands[2]);
+    DONE;
+  })
+
 ;; These builtins are converted by gimple passes, but the insns are still
 ;; needed due to the way we expand them.
 
-(define_expand "rvtt_sfpxvif"
+(define_expand "rvtt_sfpxlogic"
   [(set (match_operand:SI 0 "register_operand")
         (unspec:SI [
-	  (const_int 0)
-	  ] 0))]
-  "TARGET_XTT_TENSIX"
-  "FAIL;")
-
-(define_expand "rvtt_sfpxbool"
-  [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [
-          (match_operand:SI 1 "register_operand")
+          (match_operand:SI 1 "const_int_operand")
+          (match_operand:SI 2 "reg_or_const_int_operand")
+          (match_operand:SI 3 "reg_or_const_int_operand")
           ] 0))]
   "TARGET_XTT_TENSIX"
   "FAIL;")
 
-(define_expand "rvtt_sfpxcondb"
-  [(unspec:SI [
-     (match_operand:SI 0 "register_operand")
-     (match_operand:SI 1 "register_operand")
-     ] 0)]
-  "TARGET_XTT_TENSIX"
-  "FAIL;")
-
-(define_expand "rvtt_sfpxcondi"
+(define_expand "rvtt_sfpxcondiX"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec:SI [
 	  (match_operand:SI 1 "register_operand")
