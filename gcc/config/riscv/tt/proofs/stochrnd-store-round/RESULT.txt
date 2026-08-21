@@ -1,0 +1,24 @@
+row A: STOCHRND fp32->fp16b NEAREST + STORE mod0=2  vs  STORE mod0=2
+  inputs swept        : 4294967296
+  total mismatches    : 2155741184
+    finite round-up (discarded >= half) : 2130706432
+    -0.0 sign normalization             : 1
+    denormal sign/flush                 : 8388607
+    NaN -> Inf normalization            : 16646144
+    infinity                            : 0
+    other exp==0                        : 0
+  verdict             : NOT-EQUAL
+row B: STOCHRND fp32->fp16a NEAREST + STORE mod0=1  vs  STORE mod0=1
+  inputs swept        : 4294967296
+  total mismatches    : 268435456
+    finite round-up (discarded >= half) : 260046848
+    -0.0 sign normalization             : 1
+    denormal sign/flush                 : 8388607
+    NaN -> Inf normalization            : 0
+    infinity                            : 0
+    other exp==0                        : 0
+  verdict             : NOT-EQUAL
+rowA fused-stream sha256  = 19db69aa97722e714519007a3f4b84bd0eae812ac485a4633341d323e0a18699
+rowA direct-stream sha256 = 5ffcf34fd77dc07f475b6973cf1cb3c82fb480524cfa97c281884b035311023f
+rowB fused-stream sha256  = 28a5eaee3f513e52a9536b0eadc73f283a235b001c290d99510915d91513f8d8
+rowB direct-stream sha256 = 6880d6bcc3d44bf0693419bfae8870aca6ecd04f5c265bf0ba928453faa6dd65

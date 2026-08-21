@@ -43,3 +43,28 @@ re-mined.
   amount-materialization (formation) mechanism on the unaryshift row;
   no rule attached here (NOTES-unaryshift-adjudication-laneCU.md).
   laneCU 2026-08-20.
+- int-not-allones-subtract/ — one's complement stated as (-1) - v
+  (SFPIADD mod1=2SCOMP|CC_NONE with all-ones minuend) vs SFPNOT.
+  EQUAL (0/2^32; streams hash-identical).  LICENSES the rvtt_int_not
+  fold (-mtt-tensix-optimize-int-not, gimple-rvtt-int-not.cc); the
+  fold must be retired if this RESULT ever stops being EQUAL.  Proven
+  against the shared TT_VERSION<=1 simulator arm (BH+WH oracles); the
+  pass gate is BH+WH, QSR fails closed.  laneEK 2026-08-21.
+- stochrnd-store-round/ — SFPSTOCHRND(NEAREST, fp32->fp16b/fp16a) then
+  SFPSTORE(BF16/FP16) vs the direct store, per float row.  NOT-EQUAL
+  both rows (BF16 2,155,741,184/2^32; FP16 268,435,456/2^32; classes:
+  finite round-up vs truncation, -0/denormal sign normalization,
+  NaN->Inf).  Standing refusal: stochrnd-store-rounding-divergent
+  (gimple-rvtt-store-fold.cc) — the explicit rounding instruction is
+  semantics the store's own conversion path cannot reproduce; the
+  "fold the rounding into the store" cut is never re-mined.  laneEK
+  2026-08-21.
+- store-sink-roundtrip/ — the Dst load->store round trip per format
+  pair, for the predicated store-sink arm of the store-fold pass.
+  (INT32,INT32) BH raw pair EQUAL over 2^32 — LICENSES the S2 sink for
+  that pair only (retire if it stops being EQUAL).  BF16 (254/2^16),
+  FP16 (2046/2^16), FP32 (16,777,214/2^32, all denormal-flush) and the
+  WH INT32_SM pair (1/2^32: -0) are NOT-EQUAL — standing refusal
+  store-sink-format-canonicalizing: an all-lanes write-back
+  canonicalizes Dst, so eliding it is architecturally visible.  laneEK
+  2026-08-21.
