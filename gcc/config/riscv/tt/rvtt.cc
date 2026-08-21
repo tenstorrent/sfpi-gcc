@@ -223,6 +223,20 @@ rvtt_get_insn_data (gcall const *call)
   return &sfpu_insn_data[ix];
 }
 
+/* The reassociation license key (owner ratification 2026-08-21).
+   Value-changing FP reassociation fires ONLY when the user passed BOTH
+   -fassociative-math (GCC's explicit opt-in: reassociation "may change
+   the computation result", invoke.texi) and our default-off
+   -mtt-tensix-optimize-reassoc.  Either flag absent = every FP
+   reassociation site fails closed with a named refusal and codegen is
+   byte-identical.  */
+
+bool
+rvtt_reassoc_fp_licensed_p (void)
+{
+  return riscv_tt_opt_reassoc > 0 && flag_associative_math;
+}
+
 const rvtt_insn_data *
 rvtt_get_insn_data (gimple const *stmt)
 {

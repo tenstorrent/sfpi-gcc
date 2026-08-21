@@ -157,6 +157,17 @@ static bool ATTRIBUTE_UNUSED combiner_enable_false () { return false; }
 static bool combiner_enable_WH () { return TARGET_XTT_TENSIX_WH; }
 static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 static bool combiner_enable_SETEXP_FOLD () { return riscv_tt_opt_setexp_fold; }
+/* The reassociation license: BOTH halves of the key (owner
+   ratification 2026-08-21) -- -fassociative-math (the generic industry
+   opt-in to value-changing FP reassociation) AND our default-off
+   -mtt-tensix-optimize-reassoc.  Guards the licensed multi-use
+   mul+add->mad fusion pattern; with either flag absent the pattern is
+   disabled and codegen is byte-identical.  */
+static bool combiner_enable_REASSOC_FP () { return rvtt_reassoc_fp_licensed_p (); }
+
+/* Used by the licensed multi-use mad-fuse pattern in rvtt.gc (defined
+   below the generated include).  */
+static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
 
 #define OU unsigned (Flags::OtherUses)
 #define MU unsigned (Flags::MaybeUnused)

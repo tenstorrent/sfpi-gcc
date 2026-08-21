@@ -86,6 +86,13 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_cc);
    immediately before the combiner, so a rewritten immediate pair is
    re-offered to the existing mul+add->mad rule in the same pipeline.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_prgm_const);
+/* Licensed reassociation runs after the CC analysis (its chain window
+   proof reads the explicit lowered CC writers) and immediately before
+   the combiner, so a licensed rebalance's fresh add pairs are
+   re-offered to the existing mul+add->mad rule in the same pipeline.
+   Default off; FP sites additionally require -fassociative-math (the
+   owner-ratified license, 2026-08-21) and refuse by name without it.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_reassoc);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_combine);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_unspec_prop_ssa);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
