@@ -476,6 +476,13 @@ struct function_scan
   std::vector<bb_scan> blocks;
   bool bail = false;
   const char *bail_reason = nullptr;
+  /* Replay captures recorded WITHOUT execution (TTREPLAY load=1 exec=0)
+     seen anywhere in the function.  Composing the store-side mod-write
+     with a no-exec recording window that begins ingesting while a
+     group's mod-write is still retiring is silicon-refuted (rvtt-cost.md,
+     "no-exec record composition"; see noexec_record_composition_p for
+     the audited-window guard and its witnesses).  */
+  std::vector<capture_rec *> noexec_captures;
 };
 
 /* Non-empty Tensix instructions occupy replay slots; everything else is
@@ -587,6 +594,8 @@ scan_block (function_scan &fn, basic_block bb, const autoincr_caps &caps)
 	      cap->begin = UINTVAL (begin);
 	      cap->len = UINTVAL (len);
 	      cap->exec = INTVAL (exec) != 0;
+	      if (!cap->exec)
+		fn.noexec_captures.push_back (cap);
 	      unsigned remaining = cap->len;
 	      while (remaining)
 		{
@@ -1070,6 +1079,121 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
   return caps.drained_frontend_window - cover;
 }
 
+/* Silicon-refuted composition guard (rvtt-cost.md, "no-exec record
+   composition", lane ES 2x2): a replay capture recorded WITHOUT
+   execution (TTREPLAY load=1 exec=0) may not begin ingesting while a
+   mod-write of GRP is still inside its unaudited positional-state
+   retirement window.  The lane ES device 2x2 on the lcm-fresh kernel
+   hangs Tensix (TENSIX TIMED OUT, reset required) when the record
+   re-executes two Tensix words after the previous face group's final
+   mod-write store, while every composition whose record is separated
+   from the stores by at least the audited drained-frontend window --
+   the per-tile LLK wrapper records behind the chunk-boundary
+   synchronization (celu/eqz-class ON-set rows), the loop-free preamble
+   records (xielu-fresh), records unreachable from any store (gcd/lcm
+   run_kernel init) -- passes on silicon.  So the guard prices the SAME
+   audited quantity the crossing charge does: the minimum issue-slot
+   word distance, over CFG paths, from GRP's block to the capture.
+   Unreachable or covered (>= drained_frontend_window) admits; anything
+   nearer refuses by name.  BlackholeA0 has no REPLAY functional model
+   in tt-isa-documentation to audit anything finer.  */
+
+static unsigned
+block_frontend_words (const function_scan &fn, basic_block bb)
+{
+  for (const bb_scan &scan : fn.blocks)
+    if (scan.bb == bb)
+      {
+	unsigned words = 0;
+	for (const bb_item &item : scan.items)
+	  words += item_frontend_words (item);
+	return words;
+      }
+  return 0; /* Unscanned block: zero cover is the refusing direction.  */
+}
+
+static unsigned
+words_before_capture (const function_scan &fn, const capture_rec *cap)
+{
+  for (const bb_scan &scan : fn.blocks)
+    if (scan.bb == cap->bb)
+      {
+	unsigned words = 0;
+	for (const bb_item &item : scan.items)
+	  {
+	    if (item.insn == cap->insn)
+	      return words;
+	    words += item_frontend_words (item);
+	  }
+	return words;
+      }
+  return 0;
+}
+
+static bool
+noexec_record_composition_p (const function_scan &fn, const group &grp,
+			     const autoincr_caps &caps,
+			     const capture_rec **hazard)
+{
+  *hazard = nullptr;
+  if (fn.noexec_captures.empty ())
+    return false;
+  unsigned window = caps.drained_frontend_window;
+
+  for (capture_rec *cap : fn.noexec_captures)
+    {
+      /* Same-block capture: intra-block ordering against every row is
+	 not modeled; refuse (fail-closed).  */
+      if (cap->bb == grp.scan->bb)
+	{
+	  *hazard = cap;
+	  return true;
+	}
+
+      /* Dijkstra-style minimum issue-word distance from the exit of
+	 GRP's block to CAP, pruned at WINDOW (any path carrying >=
+	 WINDOW words is covered).  The block tail after the group's
+	 last store is credited zero -- the refusing direction.  */
+      hash_map<basic_block, unsigned> best;
+      std::vector<std::pair<unsigned, basic_block>> work;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, grp.scan->bb->succs)
+	work.emplace_back (0u, e->dest);
+      bool refuse = false;
+      while (!work.empty () && !refuse)
+	{
+	  auto it = std::min_element (work.begin (), work.end ());
+	  unsigned cost = it->first;
+	  basic_block bb = it->second;
+	  work.erase (it);
+	  if (cost >= window)
+	    continue;
+	  unsigned *seen = best.get (bb);
+	  if (seen && *seen <= cost)
+	    continue;
+	  best.put (bb, cost);
+	  if (bb == cap->bb)
+	    {
+	      if (cost + words_before_capture (fn, cap) < window)
+		refuse = true;
+	      continue;
+	    }
+	  unsigned out = cost + block_frontend_words (fn, bb);
+	  if (out >= window)
+	    continue;
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    work.emplace_back (out, e->dest);
+	}
+      if (refuse)
+	{
+	  *hazard = cap;
+	  return true;
+	}
+    }
+  return false;
+}
+
 /* Ownership of a dominating placement over LOOP for MEMBERS: every
    instruction of every block of the loop must be a member group's row or
    increment, or configuration-window legal.  Every iteration is a path
@@ -1545,6 +1669,34 @@ transform (function *cfn)
 		}
 	      close_group ();
 	    }
+
+	  /* Silicon-refuted no-exec record composition (see
+	     noexec_record_composition_p): groups whose mod-write can
+	     still be retiring when a no-exec recording window begins
+	     ingesting refuse by name before any placement or pricing.  */
+	  for (auto it = groups.begin (); it != groups.end ();)
+	    {
+	      group &grp = *it;
+	      const capture_rec *hazard;
+	      if (noexec_record_composition_p (fn, grp, caps, &hazard))
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Dst-autoincr refusal: "
+			     "mod-write-noexec-record-composition-"
+			     "unaudited (no-exec replay capture within "
+			     "the drained-frontend window of the group's "
+			     "stores, bb %d, capture bb %d)\n",
+			     grp.scan->bb->index, hazard->bb->index);
+		  for (unsigned cx : grp.cand_ix)
+		    grp.scan->candidates[cx].dropped = true;
+		  changed = true;
+		  it = groups.erase (it);
+		}
+	      else
+		++it;
+	    }
+	  if (changed)
+	    continue;
 
 	  /* Placement: dominating/shared first, then per-group, all under
 	     the distance guard.  */

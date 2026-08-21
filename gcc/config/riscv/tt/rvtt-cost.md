@@ -497,6 +497,55 @@
 ;; whole replay-window formation against rolled push delivery with
 ;; the same boundary term -- is replay-formation territory, recorded
 ;; there as the named follow-up.)
+;;
+;; AUDITED COMPOSITION FACT: no-exec record composition (lane ES,
+;; laneES-evidence-20260821).  Composing the store-side mod-write with
+;; a replay capture recorded WITHOUT execution (TTREPLAY load=1
+;; exec=0) in the same function is silicon-refuted.  The device 2x2 on
+;; the lcm-fresh Int32/dest-acc kernel (identical TU, pin-17 compiler
+;; ae7342e4fda3, one flag toggled per cell, solo flocked runs, .text
+;; recorded per cell):
+;;
+;;   autoincr fired, no-exec record absent   (08d62bac...)  PASS
+;;   no-exec record fired, autoincr refused  (fd8c5ac4...)  PASS
+;;   BOTH fired                              (1c0bdce0...)  TENSIX
+;;     TIMED OUT (Math/Unpacker/Packer), device wedged until tt-smi
+;;     reset -- reproduced twice on a proven-healthy device (sweep
+;;     09:29:45 + lane ES controlled solo re-run), and the wedge
+;;     poisoned every subsequent device job until reset (the pin-17
+;;     divint32floor/log corr "hangs" were this collateral).
+;;
+;; The byte deltas between the hang binary and each passing neighbor
+;; are exactly one transform each, so the hazard is the COMPOSITION:
+;; a no-exec recording window swallows the following Tensix words
+;; while the mod-write's positional-state retirement (W_drain above)
+;; can still be in flight from the previous iteration's terminator,
+;; and the composed state wedges the Vector Unit pipeline (the
+;; math thread's STALLWAIT C11 drain condition never satisfies, so
+;; SEMPOST to the packer never issues).  Exec-while-record captures
+;; and launches carry fleet-wide silicon witnesses (minmax, sdpa,
+;; where, typecast, lcm ON-set) and stay admitted.  BlackholeA0 has NO
+;; REPLAY functional model in tt-isa-documentation (doc gap, filed
+;; ES-F1), so no finer-grained fact can be audited yet; until one is,
+;; rtl-rvtt-dst-autoincr.cc refuses per group by name
+;; (mod-write-noexec-record-composition-unaudited).
+;;
+;; The witnessed safe/unsafe boundary is DISTANCE, not presence: the
+;; hang witness's no-exec record sits in the inner loop's dedicated
+;; preheader INSIDE the face loop, re-executing FIVE issue-slot words
+;; after the previous face group's final mod-write store -- inside the
+;; audited drained-frontend retirement window (W_drain = 7 above).
+;; Every passing composition separates the record from the stores by
+;; at least that window or is unreachable from them: the per-tile LLK
+;; wrapper records (celu/eqz-class ON-set rows, 24 corpus rows) sit
+;; behind the chunk-boundary synchronization's dozens of issue words;
+;; xielu-fresh's preamble record and gcd/lcm's run_kernel init records
+;; are not reachable from any group store at all (all device PASS).
+;; The guard therefore prices the SAME audited quantity as the
+;; crossing charge: the minimum issue-slot word distance over CFG
+;; paths from the group's block to the capture, at the audited
+;; W_drain.  Unreachable or covered admits (bytes preserved on every
+;; witnessed-good row); nearer refuses by name.
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
