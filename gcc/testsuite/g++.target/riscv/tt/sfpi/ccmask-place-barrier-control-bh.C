@@ -1,8 +1,14 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_invariant" }
-// Control for ccmask-place-bh.C: with the fold off, the v_if's
-// CC-setting compare is a loop-scoped SFPU barrier and the invariant
-// pass refuses the whole loop's immediate hoists.
-// { dg-final { scan-tree-dump-not "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
+// Control for ccmask-place-bh.C.  RE-RECORDED (lane EL,
+// structured-CC-restore): with the fold off, the v_if's CC-setting
+// compare used to be a loop-scoped SFPU barrier refusing the whole
+// loop's immediate hoists; the restore proof now discharges that
+// barrier (balanced plain-PUSHC/POPC region, narrowing-only
+// modifiers), so the invariant immediates hoist here too.  The ccmask
+// fold's value is the CC-region removal itself, no longer
+// hoist-enablement; the placement assertions stay in
+// ccmask-place-bh.C.
+// { dg-final { scan-tree-dump "Hoisted invariant SFPU immediate" "rvtt_invariant" } }
 #define CCMASK_FN ccmask_place_ctl
 #define CCMASK_X x
 #define CCMASK_Y y
