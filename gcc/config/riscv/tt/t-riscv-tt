@@ -43,6 +43,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-cc.o \
 	gimple-rvtt-ccmask.o \
 	gimple-rvtt-int-abs.o \
+	gimple-rvtt-int-not.o \
+	gimple-rvtt-store-fold.o \
 	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-dce.o \
