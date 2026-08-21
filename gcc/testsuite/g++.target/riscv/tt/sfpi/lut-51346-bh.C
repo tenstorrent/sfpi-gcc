@@ -152,3 +152,93 @@ void LUT2_FP16_6b () {
 **	SFPSTORE	L0, 0, 0, 7
 **	ret
 */
+
+void llk1 () {
+  sfpi::l_reg[sfpi::LRegs::LReg0] = sfpi::vUInt(0x1DFF);
+  sfpi::l_reg[sfpi::LRegs::LReg1] = sfpi::vUInt(0x481A);
+  sfpi::l_reg[sfpi::LRegs::LReg2] = sfpi::vUInt(0xFF00);
+
+  sfpi::vUInt l0 = l_reg[sfpi::LRegs::LReg0];
+  sfpi::vUInt l1 = l_reg[sfpi::LRegs::LReg1];
+  sfpi::vUInt l2 = l_reg[sfpi::LRegs::LReg2];
+
+  sfpi::vFloat val = sfpi::dst_reg[0];
+  val = sfpi::lut(val, l0, l1, l2); // { dg-warning "" "" }
+  sfpi::dst_reg[0] = val;
+}
+/*
+**_Z4llk1v:
+**	SFPLOADI	L0, 7679, 2
+**	# WRITE L0
+**	SFPLOADI	L1, 18458, 2
+**	# WRITE L1
+**	SFPLOADI	L2, 65280, 2
+**	# WRITE L2
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPLOAD	L3, 0, 0, 7
+**	SFPLUT	L3, 4	# R:L0,L1,L2,L3
+**	SFPSTORE	L3, 0, 0, 7
+**	ret
+*/
+
+void llk2 () {
+  sfpi::l_reg[sfpi::LRegs::LReg0] = sfpi::vFloat8Pair(0.90625f, 0.0f);
+  sfpi::l_reg[sfpi::LRegs::LReg1] = sfpi::vFloat8Pair(0.09375f, 0.8125f);
+  sfpi::l_reg[sfpi::LRegs::LReg2] = sfpi::vFloat8Pair(0.0f, 1.0f);
+
+  sfpi::vFloat8Pair l0 = l_reg[sfpi::LRegs::LReg0];
+  sfpi::vFloat8Pair l1 = l_reg[sfpi::LRegs::LReg1];
+  sfpi::vFloat8Pair l2 = l_reg[sfpi::LRegs::LReg2];
+
+  sfpi::vFloat val = sfpi::dst_reg[0];
+  val = sfpi::lut(val, l0, l1, l2);
+  sfpi::dst_reg[0] = val;
+}
+/*
+**_Z4llk2v:
+**	SFPLOADI	L0, 7679, 2
+**	# WRITE L0
+**	SFPLOADI	L1, 18458, 2
+**	# WRITE L1
+**	SFPLOADI	L2, 65280, 2
+**	# WRITE L2
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPLOAD	L3, 0, 0, 7
+**	SFPLUT	L3, 4	# R:L0,L1,L2,L3
+**	SFPSTORE	L3, 0, 0, 7
+**	ret
+*/
+
+void llk3 () {
+  sfpi::l_reg[sfpi::LRegs::LReg0] = sfpi::vFloat8Pair(0.22656f, 0.0f);
+  sfpi::l_reg[sfpi::LRegs::LReg1] = sfpi::vFloat8Pair(0.26562f, -0.04687f);
+  sfpi::l_reg[sfpi::LRegs::LReg2] = sfpi::vFloat8Pair(0.0f, 0.5f);
+
+  sfpi::vFloat8Pair l0 = l_reg[sfpi::LRegs::LReg0];
+  sfpi::vFloat8Pair l1 = l_reg[sfpi::LRegs::LReg1];
+  sfpi::vFloat8Pair l2 = l_reg[sfpi::LRegs::LReg2];
+
+  sfpi::vFloat val = sfpi::dst_reg[0];
+  val = sfpi::lut(val, l0, l1, l2);
+  sfpi::dst_reg[0] = val;
+}
+/*
+**_Z4llk3v:
+**	SFPLOADI	L0, 15871, 2
+**	# WRITE L0
+**	SFPLOADI	L1, 8664, 2
+**	# WRITE L1
+**	SFPLOADI	L2, 65296, 2
+**	# WRITE L2
+**	# READ L0
+**	# READ L1
+**	# READ L2
+**	SFPLOAD	L3, 0, 0, 7
+**	SFPLUT	L3, 4	# R:L0,L1,L2,L3
+**	SFPSTORE	L3, 0, 0, 7
+**	ret
+*/
