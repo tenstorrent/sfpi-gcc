@@ -1523,3 +1523,74 @@
 ;; control is RISC-side and concurrent per the delivery accounting
 ;; above).  Overestimating body_words only raises the required trip
 ;; proof; it never admits an unpriced fire.
+;;
+;; WINDOW-PAIRING INTER-ROW DRAIN MODEL (lane FT; consumed by
+;; rvtt_macro_interrow_drain_tuned in rtl-rvtt-schedule.cc under
+;; -mtt-tensix-optimize-window-pairing).  The lane-EV inter-row
+;; obligation (P0 adjudication 2026-08-21) placed the FULL derived drain
+;; between consecutive rows whenever any launch is a fixed-VD VALUE
+;; carrier -- a register-blind shape rule.  The tuner derives the
+;; minimal spacing from the SAME architectural facts as the boundary and
+;; backedge drain proofs (L1-L3/E1-E4/H1-H2, the retire-before-issue
+;; transactional model whose provenance is the derived-calendar table's:
+;; ISA spec + CRAQ generic executor + hand MulInt32), made exact by
+;; per-event footprints.  Audited facts specific to this model:
+;;
+;;   F1  Hosted-event operand overrides.  For Simple/MAD/Round events
+;;       the launch VD joins the reads (Insn.VB or Insn.VC := VD) and
+;;       the result register is the launch VD or LReg[16] per the
+;;       SequenceBits VD16 bit; the scheduled store's value register is
+;;       LReg[16] (0x40), the template's own VD (0x80), or the launch VD.
+;;       [ISA] BlackholeA0 SFPLOADMACRO.md functional model (the
+;;       override block); identical on WH for the fields used.
+;;   F2  Dst physical-row footprint.  An access at constant address A
+;;       touches lane rows [A & ~3, (A & ~3) + 3]; the 32-bit format
+;;       class (mod0 3/4/7/9/12) maps lane row r to physical rows
+;;       adj32(r) and adj32(r)+8 with adj32(r) = ((r & 0x1F8) << 1)
+;;       | (r & 0x207); config-resolved classes (mod0 0) take the union
+;;       of both layouts.  Same audit as
+;;       gimple-rvtt-transp-involution.cc access_rows and the
+;;       rtl-rvtt-lp-alloc.cc dst32b aliasing window.  [ISA] SFPLOAD.md
+;;       "Row = (Addr & ~3) + (Lane / 8)"; Dst.md Dst32b/Dst16b storage
+;;       model.
+;;   F3  Column parity.  Both functional models compute
+;;       Column = (Lane & 7) * 2, then += 1 when
+;;       ((Addr & 2) || DEST_{RD,WR}_COL_EXCHANGE) -- so two accesses
+;;       whose addresses differ in bit 1 touch DISJOINT DstBits columns
+;;       (the column index is preserved by both the 16-bit and the
+;;       32-bit view) PROVIDED the column-exchange LaneConfig bits hold
+;;       their architectural default.  [ISA] SFPLOAD.md and SFPSTORE.md
+;;       lane loops; Dst.md view-to-storage mapping.  The default-state
+;;       proof discipline and the ambient platform contract are the
+;;       DSATUR spill machinery's (rtl-rvtt-lp-alloc.cc,
+;;       lreg-spill-laneconfig-unproven): any function-local writer that
+;;       could reach SFPCONFIG destination 15 refuses the clause.
+;;   F4  Mod0 10 (INT32_ALL) refuses the typed-address model: it adds
+;;       the Sp counter into the address AND decrements Sp, breaking the
+;;       shared-RWC-base distance arithmetic.  [ISA] SFPLOAD.md
+;;       MOD0_FMT_INT32_ALL arm.  Same exclusion as the spill machinery.
+;;   F5  Row-to-row distance = the schedule's absorbed typed stride,
+;;       valid because the absorbing access holds the row's LAST issue
+;;       slot (checked; the compact-absorber invariant) and
+;;       SFPLOAD/SFPSTORE resolve their own address BEFORE
+;;       ApplyPartialAddrMod runs.  [ISA] SFPLOAD.md functional-model
+;;       order.  Pending stores latch their Dst row at launch (L1), so
+;;       follower counter advances never move them.
+;;   F6  Same-cycle staged events on DISTINCT sub-units with disjoint
+;;       data are admitted: the Vector Unit executes one instruction per
+;;       sub-unit column per cycle by design ([ISA] SFPLOADMACRO.md,
+;;       "up to five instructions per cycle"), and the in-row scheduler
+;;       already relies on exactly this (core_check_subunit_occupancy
+;;       admits same-slot different-sub-unit events).  Same-cycle SAME
+;;       sub-unit, and any data-overlapping pair whose order the cycle
+;;       arithmetic does not preserve, refuse -- the
+;;       cc-restore-store-race failure mode stays refused through the CC
+;;       clause (a pending store reads the live lane mask; any follower
+;;       CC write inside the horizon conflicts).
+;;
+;; No constant is introduced: every distance derives from the schedule's
+;; transcribed delays cross-checked against the descriptor's own
+;; SequenceBits (two derivations of one calendar; mismatch refuses
+;; window-pairing-delay-unproven).  Frozen whole-word programs leave
+;; DELAY_UNKNOWN in the schedule and therefore refuse by name -- the
+;; signbit family keeps its proven rolled calendar byte-identically.
