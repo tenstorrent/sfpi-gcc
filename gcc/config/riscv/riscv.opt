@@ -638,6 +638,10 @@ mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)
 Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one companion-preserving involution bundle, and forward proven-identity Dst parks across it.
 
+mtt-tensix-optimize-crosslane
+Target Var(riscv_tt_opt_crosslane) Init(0)
+Recognize the typed cross-lane vocabulary's canonical instruction frames (SFPSHFT2 rotate chains, SFPSWAP compare-exchange stages, dual-bank SFPTRANSP and zip frames) and apply their proven permutation algebra -- rotate-chain collapse, per-arch slide re-lowering, swap refolding, transpose-involution and zip-round-trip cancellation -- with per-arch capability tables, issue-slot pricing from the audited next-slot-stall facts, and named refusals; also enforce the TEN-2932 ENABLE_DEST_INDEX window model on the final instruction stream (non-exempt LReg4-LReg7 writes inside a typed window become named compile errors).
+
 mtt-tensix-optimize-replay-exec-record
 Target Var(riscv_tt_opt_replay_exec_record) Init(0)
 Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch when the unrolled launch run structurally proves the exchange.

@@ -59,6 +59,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-reprprop.o \
 	gimple-rvtt-reassoc.o \
 	gimple-rvtt-transp-involution.o \
+	gimple-rvtt-crosslane.o \
+	rtl-rvtt-crosslane-window.o \
 	gimple-rvtt-replay-unroll.o \
 	gimple-rvtt-delivery-shape.o \
 	rvtt-lut-tables.o \
