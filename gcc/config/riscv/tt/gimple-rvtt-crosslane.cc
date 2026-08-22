@@ -104,7 +104,7 @@ along with GCC; see the file COPYING3.  If not see
      crosslane-unsupported-target, crosslane-lane-state-unproven,
      crosslane-cc-window, crosslane-kv-refold-tie-unadjudicated,
      crosslane-shflshr1-unsupported, crosslane-companion-escape,
-     crosslane-priced-no-gain.
+     crosslane-priced-no-gain, crosslane-frame-value-escape.
 
    All refusals leave the function byte-identical.  The TEN-2932
    ENABLE_DEST_INDEX window model (the other half of the X4 charter) is
@@ -1782,6 +1782,51 @@ crosslane_transform::collapse_zip_chains ()
 	     (or the chain inputs when m == 0).  */
 	  unsigned keep = m;
 	  unsigned del_from = start + keep;
+
+	  /* Use-exclusivity over the deleted suffix (lane FP audit,
+	     FP-1): every value a to-be-deleted frame defines must be
+	     consumed inside the chain.  An external tap keeps its
+	     value-carrying producers alive through delete_stmt's use
+	     guard, but the frame's lhs-less CC statements (the row>=2
+	     SFPXIADD CC set, the region-exit SFPENCC) delete
+	     unconditionally -- the surviving mod-0 SFPSWAP would then
+	     execute under the enclosing all-lanes enable and swap every
+	     row.  The final frame's own outputs are exempt: their uses
+	     are forwarded before deletion.  */
+	  bool exclusive = true;
+	  for (unsigned i = del_from; i <= end && exclusive; ++i)
+	    for (gimple *s : zips[i].stmts)
+	      {
+		tree lhs = gimple_get_lhs (s);
+		if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+		  continue;
+		if (lhs == zips[end].out_a || lhs == zips[end].out_b)
+		  continue;
+		imm_use_iterator it;
+		gimple *use;
+		bool escaped = false;
+		FOR_EACH_IMM_USE_STMT (use, it, lhs)
+		  if (!members.contains (use))
+		    {
+		      escaped = true;
+		      break;
+		    }
+		if (escaped)
+		  {
+		    DUMP ("crosslane: zip chain at uid %u refused "
+			  "(crosslane-frame-value-escape: deleted-frame "
+			  "value has a consumer outside the chain)\n",
+			  gimple_uid (zips[start].first));
+		    exclusive = false;
+		    break;
+		  }
+	      }
+	  if (!exclusive)
+	    {
+	      start = end + 1;
+	      continue;
+	    }
+
 	  tree fa = keep ? zips[start + keep - 1].out_a : zips[start].in_a;
 	  tree fb = keep ? zips[start + keep - 1].out_b : zips[start].in_b;
 	  unsigned frame_cost
