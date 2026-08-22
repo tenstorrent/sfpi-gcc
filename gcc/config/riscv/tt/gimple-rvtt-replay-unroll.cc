@@ -221,7 +221,7 @@ rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
     /* Everything else programs machine state outside the row or opens
        a raw/owner region: repetition semantics are not the row's.
        (sfpwritelreg, sfprawlreg_access, ttregion_begin/end,
-       sfpreadconfig, sfpwriteconfig_v, ttsetc16, ttsetrwc, ttreplay,
+       sfpreadconfig, sfpwriteconfig_v, sfpconfig_i, ttsetc16, ttsetrwc, ttreplay,
        sfpbankdone, synth_opcode, transpose family, shft2 family, ...)
        Fail closed.  */
     default:

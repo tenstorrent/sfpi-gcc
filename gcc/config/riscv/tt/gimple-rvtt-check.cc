@@ -262,6 +262,31 @@ check_early (function *fn)
 			    "your program will behave erratically");
 	      }
 
+	    if (insnd->id == rvtt_insn_data::sfpconfig_i)
+	      {
+		// Audited destination envelope of the immediate-form
+		// SFPCONFIG: LaneConfig (15) only.  Dests 0-8 program
+		// LoadMacroConfig (macro-planner-owned configuration),
+		// 9-10 are NonContractualBehavior, and 11-14 imm-form
+		// writes touch the programmable constants without the
+		// prgm-const pass modeling them (SFPCONFIG.md functional
+		// model; rvtt-insn.def provenance block).
+		tree dest = gimple_call_arg (call, 1);
+		if (TREE_CODE (dest) == INTEGER_CST
+		    && TREE_INT_CST_LOW (dest) != 15)
+		  {
+		    error_at (gimple_nonartificial_location (call),
+			      "sfpconfig-imm-dest-unaudited: immediate-form "
+			      "SFPCONFIG destination %d is outside the audited "
+			      "envelope (only LaneConfig, destination 15)",
+			      int (TREE_INT_CST_LOW (dest)));
+		    gimple_call_set_arg
+		      (call, 1, build_int_cst (TREE_TYPE (dest), 15));
+		    update_stmt (call);
+		    changed = true;
+		  }
+	      }
+
 	    for (unsigned argno = 0, limit = gimple_call_num_args (call);
 		 argno != limit; argno++)
 	      {

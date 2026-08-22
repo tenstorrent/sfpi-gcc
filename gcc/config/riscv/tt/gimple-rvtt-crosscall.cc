@@ -3152,6 +3152,7 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
 	      return init_refuse (ctx, "drain-init-ownership-unproven",
 				  stmt);
 	    case rvtt_insn_data::sfpwriteconfig_v:
+	    case rvtt_insn_data::sfpconfig_i:
 	      return init_refuse (ctx, "drain-init-ownership-unproven",
 				  stmt);
 	    case rvtt_insn_data::ttsetc16:

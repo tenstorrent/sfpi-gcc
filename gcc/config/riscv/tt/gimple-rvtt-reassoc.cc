@@ -393,6 +393,7 @@ window_stmt_transparent_p (gimple *stmt)
        configuration writers: refuse.  */
     case rvtt_insn_data::sfpencc_all_lanes:
     case rvtt_insn_data::sfpwriteconfig_v:
+    case rvtt_insn_data::sfpconfig_i:
       return false;
     default:
       return true;
