@@ -3134,6 +3134,57 @@
    (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
+;; Immediate-form SFPCONFIG (lane FA, 2026-08-21).  Operands:
+;; 0 = Imm16, 1 = destination (VD field), 2 = Mod1.  Assembler operand
+;; order is (VD, Imm16, Mod1) -- binutils riscv-opc-sfpu-insns.h
+;; "J4mf9ff,J8u16,J0md7ff" -- matching the hand kernels' TTI_SFPCONFIG
+;; (Imm16, VD, Mod1) words bit-for-bit (e.g. TTI_SFPCONFIG(0x4,0xF,1)
+;; == 0x910004f1).
+;;
+;; Effect audit (SFPCONFIG.md, WormholeB0 tree, shared verbatim by the
+;; BlackholeA0 tree; functional model read 2026-08-21):
+;;  - Frontend checking pins Mod1 to {1,3,5,7} (MOD1_IMM16_IS_VALUE set,
+;;    MOD1_IMM16_IS_LANE_MASK clear) and the destination to LaneConfig
+;;    (15) -- gimple-rvtt-check.cc, named refusal
+;;    sfpconfig-imm-dest-unaudited.  Within that envelope the functional
+;;    model's case-15 arm reads Imm16 only: NO LReg read (that is the
+;;    point of the form) and NO LReg write (the audited case-15 fact:
+;;    SFPCONFIG dest-15 words never touch LReg[11..14] -- laneAR
+;;    laneconfig-word-audit; both craq tensix.cpp models agree).  Hence
+;;    lreg_read_ops/write_ops = empty audited masks (bias 1), not the
+;;    refusing 0.
+;;  - cc_effect read: the write is gated per column by
+;;    UseLaneFlagsForLaneEnable/LaneFlags (functional model head), the
+;;    same envelope as the value form above.
+;;  - config_effect dest with the destination operand at position 1
+;;    (+1-biased attribute = 2), identical decoding position to the
+;;    value form.
+;;  - replay barrier + the BH/QSR dynamic-bug envelope mirror the value
+;;    form: LaneConfig bits (DISABLE_BACKDOOR_LOAD, ENABLE_DEST_INDEX,
+;;    EXCHANGE_SRCB_SRCC, ROW_MASK) change the semantics of neighbouring
+;;    instructions, and SFPCONFIG.md's scheduling note allows the next
+;;    instruction to observe either value of DISABLE_BACKDOOR_LOAD.
+;;  - No LReg result exists; xtt_result_latency keeps the unaudited
+;;    default, exactly as the value form does.
+(define_insn "rvtt_sfpconfig_i"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI   0 "const_int_operand"  "n")
+     (match_operand:SI   1 "const_int_operand"  "n")
+     (match_operand:SI   2 "const_int_operand"  "n")
+     ] UNSPECV_SFPCONFIG)]
+  "TARGET_XTT_TENSIX"
+  "SFPCONFIG\t%1, %0, %2\t# CFG:%1"
+  [(set_attr "xtt_subunit" "cfg")
+   (set_attr "xtt_lreg_read_ops" "1")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "read")
+   (set_attr "xtt_config_effect" "dest")
+   (set_attr "xtt_config_dest_op" "2")
+   (set_attr "xtt_rwc_effect" "none")
+   (set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+
 (define_insn "rvtt_sfplut"
   [(set (match_operand:XTT32SI 0 "register_operand" "=x3")
         (unspec_volatile:XTT32SI [
@@ -3959,7 +4010,13 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0 %x0, 0, %8"
+  ;; Missing-comma asm bug fixed (lane FB finding, lane FA fix,
+  ;; 2026-08-21): the template printed "SFPSHFT2\t%x0 %x0, ..." which gas
+  ;; rejects, so every emission of the CHAINED_COPY4 form failed to
+  ;; assemble.  The instruction itself is doc-exact (FB raw-probed
+  ;; SFPSHFT2.md Mod1=1 SUBVEC_CHAINED_COPY4); dg twin
+  ;; shft2-chained-copy4-assemble-bh.C asserts assembly succeeds.
+  "SFPSHFT2\t%x0, %x0, 0, %8"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
