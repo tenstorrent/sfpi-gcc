@@ -38,3 +38,14 @@ void neg () {
 **	SFPCONFIG	11, 0, 0	# R:L0 CFG:11
 **	ret
 */
+
+void no () {
+  auto r = __builtin_rvtt_sfpxloadi (nullptr, 0x3f800000, 0, 0, -32);
+  __builtin_rvtt_sfpwriteconfig_v (r, 0, 9);
+}
+/*
+**_Z2nov:
+**	SFPLOADI	L0, 16256, 0
+**	SFPCONFIG	9, 0, 0	# R:L0 CFG:9
+**	ret
+*/

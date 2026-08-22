@@ -597,12 +597,9 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	      cst = 0;
 	    }
 	}
-      else
-	{
-	  auto upper = cst >> bits;
-	  if (upper && (!is_signed || upper != -1))
-	    return nullptr;
-	}
+      auto upper = cst >> bits;
+      if (upper && (!is_signed || upper != -1))
+	return nullptr;
     }
   else
     return nullptr;
