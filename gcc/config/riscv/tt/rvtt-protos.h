@@ -169,6 +169,17 @@ extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 
+/* The audited drained-frontend retirement window of a mod-write
+   (rvtt-cost.md AUDITED CONSTANT W_drain; the per-target value lives in
+   rtl-rvtt-dst-autoincr.cc's capability record).  Exported so every
+   pass that must audit the silicon-refuted no-exec-record x mod-write
+   composition (rvtt-cost.md AUDITED COMPOSITION FACT) prices the SAME
+   quantity: dst-autoincr's group guard and the replay former's record
+   placement obligation (lane FL, FH-1).  Zero when the target has no
+   audited window (every distance then refuses -- the fail-closed
+   direction).  */
+extern unsigned rvtt_modwrite_drained_frontend_window (void);
+
 // RTL passes
 class rtl_opt_pass;
 extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);

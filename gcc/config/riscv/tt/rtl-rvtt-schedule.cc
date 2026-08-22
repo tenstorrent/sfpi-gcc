@@ -3663,7 +3663,11 @@ drain_decode_horizon (const macro_schedule &schedule,
    before the first row (H1+H2): a follower word at run position P
    issues no earlier than boundary + sep_credit + 1 + P, its launched
    events execute at issue + 1 + delay, an explicit word's own access
-   is counted at issue (the conservative earliest).  Ordering at equal
+   is counted at issue (the conservative earliest), and a carrier
+   word's own front-end VD write is counted at issue too (lane FL,
+   FH-4: admitted only under the lane-EV protections -- VD
+   alternation, store-only sacrificial VD, the CC-template model's
+   next-row obligations).  Ordering at equal
    cycles follows the established transactional model
    (rvtt-macro-tables.h derived-calendar provenance: ISA spec + CRAQ
    generic executor + hand MulInt32 -- "retire-before-issue"): a
@@ -3691,6 +3695,44 @@ drain_follower_rows_ok (const macro_region &region,
 	break;			/* every later access clears by time */
       if (region.rows[r].insns.length () != schedule.events.length ())
 	return drain_refuse (dump, "drain-follower-opaque", nullptr);
+      /* The launch word's OWN front-end VD write (lane FL, FH-4; the
+	 lane-EV corruption class at a RUN boundary).  A launch is a
+	 front-end instruction: retire-before-issue admits it at the
+	 last retirement cycle (equality), but an EARLIER issue writes
+	 its VD while the horizon's events -- hosted consumers of the
+	 SAME descriptor's previous rows -- are still in flight.  The
+	 established protections are exactly the lane-EV predicate
+	 (rvtt-macro-desc.h macro_launch_spec): VD alternation (the
+	 conservative VD policy's own envelope -- adjacent rows target
+	 different registers), a store-only sacrificial VD (written,
+	 never read), and the CC-template model's proven next-row
+	 obligations (macro_cc_model: store-before-next-def,
+	 restore-visibility; silicon-proven multi-row on the unified
+	 where kernel).  A fixed-VD VALUE carrier has none of them --
+	 the previous run's pending events read the register this
+	 launch overwrites -- so the boundary refuses by name.  A
+	 carrier with no launch spec on record refuses fail-closed.  */
+      for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+	{
+	  if (h.carrier_pos[m] < 0)
+	    continue;
+	  int issue = (int) base + 1 + h.carrier_pos[m];
+	  if (issue >= max_dist)
+	    continue;		/* front-end: equality admitted */
+	  if (desc.cc.active)
+	    continue;		/* CC-template inter-row contract */
+	  const macro_launch_spec *spec = nullptr;
+	  for (const macro_launch_spec &l : desc.launches)
+	    if (l.macro_index == m)
+	      {
+		spec = &l;
+		break;
+	      }
+	  if (!spec)
+	    return drain_refuse (dump, "drain-follower-opaque", nullptr);
+	  if (!spec->vd_alternates && !spec->is_store_only)
+	    return drain_refuse (dump, "drain-follower-vd-write", nullptr);
+	}
       /* Launched events, per carrier word.  */
       for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
 	{

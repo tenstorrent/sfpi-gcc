@@ -72,6 +72,15 @@ along with GCC; see the file COPYING3.  If not see
                                        not given (the critical refusal)
      reassoc-cc-region-boundary        a CC-writing or unaudited statement
                                        sits inside the chain window
+     reassoc-replay-playback-boundary  a TTREPLAY delivery boundary sits
+                                       inside the chain window: recorded
+                                       slot content is not derivable
+                                       (playback may deliver CC/config
+                                       writers; a link moved across a
+                                       recording would change the
+                                       recorded program), so value-order
+                                       across it is unproven (lane FL,
+                                       FH-3)
      reassoc-chain-cap-exceeded        more than REASSOC_MAX_TERMS terms
      reassoc-pressure-budget-exceeded  the block's conservative live-vector
                                        peak plus the rebalance's new
@@ -369,24 +378,32 @@ flatten (tree val, chain *c, basic_block bb)
    config writers, raw asm (undecoded words could program anything),
    and calls that are not typed rvtt builtins.  Plain scalar gimple,
    debug statements and the typed load/store/address-counter builtins
-   (no CC or configuration effect) are transparent.  */
+   (no CC or configuration effect) are transparent.
 
-static bool
-window_stmt_transparent_p (gimple *stmt)
+   Returns null when STMT is transparent, else the stable refusal name
+   the window verdict prints (lane FL, FH-3: the replay owner class
+   gets its own name -- a playback point is a window BARRIER).  */
+
+static const char *const window_barrier_cc = "reassoc-cc-region-boundary";
+static const char *const window_barrier_replay
+  = "reassoc-replay-playback-boundary";
+
+static const char *
+window_stmt_barrier_name (gimple *stmt)
 {
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL)
-    return true;
+    return nullptr;
   if (gimple_code (stmt) == GIMPLE_ASM)
-    return false;
+    return window_barrier_cc;
   gcall *call = dyn_cast<gcall *> (stmt);
   if (!call)
     /* Plain assignments/conditions: scalar values, no SFPU state.  */
-    return true;
+    return nullptr;
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
   if (!insnd)
-    return false;
+    return window_barrier_cc;
   if (insnd->sets_cc (call))
-    return false;
+    return window_barrier_cc;
   switch (insnd->id)
     {
     /* CC writers invisible to sets_cc (no CC() flag by design) and the
@@ -394,18 +411,29 @@ window_stmt_transparent_p (gimple *stmt)
     case rvtt_insn_data::sfpencc_all_lanes:
     case rvtt_insn_data::sfpwriteconfig_v:
     case rvtt_insn_data::sfpconfig_i:
-      return false;
+      return window_barrier_cc;
+    /* Replay ownership (lane FL, FH-3).  A TTREPLAY word is a delivery
+       boundary, both directions: a PLAYBACK re-delivers recorded slots
+       whose content is not derivable here (they may carry CC or
+       configuration writers -- crosscall refuses the same class by
+       name, crosscall-caller-replay-unproven), and a RECORDING window
+       swallows the following words, so a link moved across it would
+       change the recorded program itself.  Value-order across a
+       playback point is therefore unproven: the window refuses by
+       name rather than rebalancing across it.  */
+    case rvtt_insn_data::ttreplay:
+      return window_barrier_replay;
     default:
-      return true;
+      return nullptr;
     }
 }
 
-/* Whether every statement strictly between FIRST and LAST (same BB,
-   FIRST before LAST) that is not a chain member satisfies
-   window_stmt_transparent_p.  */
+/* The refusal name of the first non-member statement strictly between
+   FIRST and LAST (same BB, FIRST before LAST) that is not window-
+   transparent, or null when the window is clean.  */
 
-static bool
-window_clean_p (chain *c, gimple *first, gimple *last)
+static const char *
+window_barrier (chain *c, gimple *first, gimple *last)
 {
   for (gimple_stmt_iterator gsi = gsi_for_stmt (first);
        gsi_stmt (gsi) != last; gsi_next (&gsi))
@@ -422,10 +450,10 @@ window_clean_p (chain *c, gimple *first, gimple *last)
 	  }
       if (is_link)
 	continue;
-      if (!window_stmt_transparent_p (stmt))
-	return false;
+      if (const char *why = window_stmt_barrier_name (stmt))
+	return why;
     }
-  return true;
+  return nullptr;
 }
 
 /* The textually earliest link of C in its BB.  */
@@ -592,15 +620,26 @@ process_root (gcall *root, chain_kind kind, tree mod)
     }
 
   gimple *first = earliest_link (&c);
-  if (!window_clean_p (&c, first, root))
+  if (const char *barrier = window_barrier (&c, first, root))
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "reassoc: refusing %s chain rebalance in bb %d "
-		 "(reassoc-cc-region-boundary: a CC-writing, configuration-"
-		 "writing, or unaudited statement sits inside the chain "
-		 "window)\n",
-		 chain_kind_name (kind), bb->index);
+	{
+	  if (barrier == window_barrier_replay)
+	    fprintf (dump_file,
+		     "reassoc: refusing %s chain rebalance in bb %d "
+		     "(reassoc-replay-playback-boundary: a TTREPLAY "
+		     "delivery boundary sits inside the chain window -- "
+		     "recorded slot content is not derivable, so value-"
+		     "order across the playback point is unproven)\n",
+		     chain_kind_name (kind), bb->index);
+	  else
+	    fprintf (dump_file,
+		     "reassoc: refusing %s chain rebalance in bb %d "
+		     "(reassoc-cc-region-boundary: a CC-writing, "
+		     "configuration-writing, or unaudited statement sits "
+		     "inside the chain window)\n",
+		     chain_kind_name (kind), bb->index);
+	}
       return false;
     }
 

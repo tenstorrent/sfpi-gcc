@@ -4961,6 +4961,168 @@ canonicalize_counted_rows (function *cfn,
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
 
+/* Audited mod-write classification for the no-exec record placement
+   obligation (lane FL, FH-1; rvtt-cost.md AUDITED COMPOSITION FACT
+   "no-exec record composition").  The silicon-refuted composition is a
+   no-exec recording window opening while a mod-write's positional-state
+   retirement (the audited W_drain window) can still be in flight; the
+   guard in rtl-rvtt-dst-autoincr.cc prices it only for that pass's OWN
+   groups, so records this pass places must audit the same fact against
+   the stream's audited mod-write classes:
+
+     - the typed SETC16 address-modifier programming word (the user
+       builtin and every pass-owned emission reach the same
+       rvtt_ttsetc16_int pattern), and
+     - a typed Dst access through a non-no-increment address modifier
+       (the mod0-6 store/load class; the effect vocabulary's ADDR_MODE
+       leg answers NONE exactly for the audited no-increment mode, so
+       any other answer is a positional mutator or unaudited -- both
+       refuse).
+
+   Issue-time RWC writers (TTINCRWC, the SET/FACE separator class, raw
+   pure-Dst/RWC words) are NOT in the class: the crossing model records
+   them as re-anchoring issue-time words, and the celu/eqz-class wrapper
+   adjacency (records behind raw STALLWAIT-class words) is
+   silicon-witnessed good across many pins -- treating undecoded words
+   as hazards would refuse the witnessed-good class.  Undecodable words
+   (calls, non-raw asm, opaque typed words) instead earn ZERO cover in
+   the distance walk: they can never manufacture separation.
+
+   Returns true when INSN is in the audited mod-write class; *WORDS is
+   INSN's frontend issue-word cover credit (the dst-autoincr counting:
+   typed Tensix words at their machine-description length, raw
+   pure-RWC words at the one-word extraction contract, scalar words at
+   their issue length, jumps at the one-word conservative floor).  */
+
+static bool
+placement_modwrite_hazard_p (rtx_insn *insn, unsigned *words)
+{
+  *words = 0;
+  if (!NONDEBUG_INSN_P (insn))
+    return false;
+  if (CALL_P (insn))
+    return false;		/* audit boundary: zero cover */
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+    return false;
+  if (asm_noperands (pat) >= 0)
+    {
+      xtt_rwc_effect_t rwc;
+      if (rvtt_raw_pure_dst_rwc (insn, &rwc))
+	*words = 1;		/* audited issue-time separator class */
+      return false;
+    }
+  if (JUMP_P (insn))
+    {
+      *words = 1;		/* conservative pre-shortening floor */
+      return false;
+    }
+  if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
+    return false;
+  if (get_attr_type (insn) != TYPE_TENSIX)
+    {
+      *words = get_attr_length (insn) / 4;
+      return false;
+    }
+  if (recog_memoized (insn) == CODE_FOR_rvtt_ttsetc16_int)
+    {
+      *words = get_attr_length (insn) / 4;
+      return true;
+    }
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque)
+    return false;		/* zero cover, outside the audited class */
+  *words = get_attr_length (insn) / 4;
+  if ((e.dst_mem_write || e.dst_mem_read)
+      && e.rwc.kind != xtt_rwc_effect_t::NONE)
+    return true;
+  return false;
+}
+
+/* Whether an audited mod-write lies within WINDOW frontend issue-slot
+   words upstream of CAP over ANY CFG path (the minimum-distance
+   direction of the dst-autoincr guard, walked backward).  The distance
+   is the issue-word cover strictly between the mod-write and CAP; a
+   path that accumulates >= WINDOW cover, or ends at the function entry,
+   is proven separated.  *DIST reports the refuting distance.  */
+
+static bool
+capture_modwrite_within_window_p (rtx_insn *cap, unsigned window,
+				  unsigned *dist)
+{
+  basic_block cbb = BLOCK_FOR_INSN (cap);
+  unsigned cover = 0;
+  bool at_or_after_cap = true;
+  rtx_insn *insn;
+  bool hazard = false;
+  FOR_BB_INSNS_REVERSE (cbb, insn)
+    {
+      if (at_or_after_cap)
+	{
+	  if (insn == cap)
+	    at_or_after_cap = false;
+	  continue;
+	}
+      if (cover >= window)
+	return false;
+      unsigned w;
+      if (placement_modwrite_hazard_p (insn, &w))
+	{
+	  *dist = cover;
+	  return true;
+	}
+      cover += w;
+    }
+  if (cover >= window)
+    return false;
+
+  /* Backward min-distance walk over predecessors, pruned at WINDOW.  */
+  hash_map<basic_block, unsigned> best;
+  std::vector<std::pair<unsigned, basic_block>> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, cbb->preds)
+    work.emplace_back (cover, e->src);
+  while (!work.empty ())
+    {
+      auto it = std::min_element (work.begin (), work.end ());
+      unsigned cost = it->first;
+      basic_block bb = it->second;
+      work.erase (it);
+      if (cost >= window || bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      unsigned *seen = best.get (bb);
+      if (seen && *seen <= cost)
+	continue;
+      best.put (bb, cost);
+      unsigned c = cost;
+      bool covered = false;
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (c >= window)
+	    {
+	      covered = true;
+	      break;
+	    }
+	  unsigned w;
+	  if (placement_modwrite_hazard_p (insn, &w))
+	    {
+	      *dist = c;
+	      hazard = true;
+	      break;
+	    }
+	  c += w;
+	}
+      if (hazard)
+	return true;
+      if (covered || c >= window)
+	continue;
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	work.emplace_back (c, e->src);
+    }
+  return false;
+}
+
 /* Fail-closed no-exec re-record sweep (lane FJ; rvtt-cost.md "no-exec
    record composition", delivery-boundary paragraph).  A pass-hoisted
    NO-EXEC capture whose placement block lies inside a loop re-ingests
@@ -4982,7 +5144,22 @@ canonicalize_counted_rows (function *cfn,
    (celu/eqz-class wrapper records, silicon-good across many pins) and
    loop-free placements (xielu preamble, single-loop preheaders) are
    untouched.  Only captures this pass formed are swept: user-authored
-   records are the user's own contract.  */
+   records are the user's own contract.
+
+   Second placement obligation (lane FL, FH-1; same sweep, same
+   identity-restoring action): a still-no-exec formed capture whose
+   recording window can open within the audited W_drain issue-word
+   window of an audited mod-write (placement_modwrite_hazard_p; the
+   rvtt-cost.md AUDITED COMPOSITION FACT's distance boundary, priced
+   with the same exported constant the dst-autoincr group guard uses,
+   rvtt_modwrite_drained_frontend_window) is un-hoisted by name -- the
+   compiler must never FORM the silicon-refuted wedge adjacency it
+   refuses to compose elsewhere.  Loop-free placements are audited
+   too: the wedge condition is the record's ingestion inside the
+   retirement window; once is enough.  Captures proven separated
+   (>= W_drain issue words on every path, or no audited mod-write
+   upstream at all) keep their bytes -- the xielu/gcd/lcm preamble and
+   init placements are this proven class.  */
 
 static void
 unhoist_hazard_rerecords (function *cfn)
@@ -5002,8 +5179,10 @@ unhoist_hazard_rerecords (function *cfn)
       if (!bb)
 	continue;
       class loop *loop = bb->loop_father;
-      if (!loop || loop->num == 0)
-	continue; /* Loop-free placement: executes once, witnessed.  */
+      /* Rule 1 (lane FJ) applies to in-loop placements only (a
+	 loop-free record's payload executes once, the witnessed
+	 class); rule 2 (lane FL) audits every placement.  */
+      bool in_loop = loop && loop->num != 0;
       if (!CONST_INT_P (XVECEXP (pat, 0, 3))
 	  || !CONST_INT_P (XVECEXP (pat, 0, 5)))
 	continue;
@@ -5038,7 +5217,21 @@ unhoist_hazard_rerecords (function *cfn)
 	    has_store = true;
 	  --remaining;
 	}
-      if (!scan_ok || !has_store)
+      if (!scan_ok)
+	continue;
+
+      /* Rule 1 (lane FJ): in-loop re-record with a Dst-store payload.
+	 Rule 2 (lane FL, FH-1): recording window opens inside the
+	 audited W_drain window of an audited mod-write.  Rule 1 keeps
+	 its established dump line; both share the identity-restoring
+	 un-hoist below.  */
+      bool dststore_rule = in_loop && has_store;
+      unsigned modwrite_dist = 0;
+      unsigned window = rvtt_modwrite_drained_frontend_window ();
+      bool modwrite_rule
+	= !dststore_rule
+	  && capture_modwrite_within_window_p (cap, window, &modwrite_dist);
+      if (!dststore_rule && !modwrite_rule)
 	continue;
 
       /* Replace every launch of the exact span with the inline payload
@@ -5072,10 +5265,19 @@ unhoist_hazard_rerecords (function *cfn)
 	delete_insn (pw);
       delete_insn (cap);
       if (dump_file)
-	fprintf (dump_file, "Replay refusal: noexec-rerecord-dststore-"
-		 "composition-unaudited (capture bb %d in loop %d "
-		 "un-hoisted, %u launches inlined)\n",
-		 bb->index, loop->num, launches);
+	{
+	  if (dststore_rule)
+	    fprintf (dump_file, "Replay refusal: noexec-rerecord-dststore-"
+		     "composition-unaudited (capture bb %d in loop %d "
+		     "un-hoisted, %u launches inlined)\n",
+		     bb->index, loop->num, launches);
+	  else
+	    fprintf (dump_file, "Replay refusal: noexec-record-modwrite-"
+		     "window-unaudited (capture bb %d %u issue words after "
+		     "an audited mod-write, window %u; un-hoisted, "
+		     "%u launches inlined)\n",
+		     bb->index, modwrite_dist, window, launches);
+	}
     }
   formed_noexec_captures.clear ();
 }
