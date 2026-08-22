@@ -810,7 +810,14 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
      shared core checkers.  */
   bool all_delays_known = true;
   auto_vec<rvtt_macro_sched::core_event> core_events;
-  unsigned seq_pos[16] = {};
+  /* Sized to the actual carrier count: carrier grouping appends one
+     carrier per distinct typed Dst address with no admission cap, so a
+     fixed seq_pos[16] wrote one past its end on a 17-carrier row
+     (probe-confirmed reachable from plain typed source; the row then
+     refuses event-delay-unproven downstream, so the defect was silent
+     cc1plus stack corruption, never miscompilation -- FH audit FHP-1).  */
+  auto_vec<unsigned> seq_pos (carrier_macro.length ());
+  seq_pos.safe_grow_cleared (carrier_macro.length ());
   for (row_item &item : items)
     {
       macro_event ev;
@@ -1047,6 +1054,11 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
    definition keep the established CC candidate space untouched.  Off,
    the candidate space is byte-identical to the established search.  */
 
+/* Enumeration budget, NOT a cost-model constant: bounds the repair
+   variant SEARCH per grouping (refusal-biased -- exhausting it leaves
+   candidates unformed, never admits an unproven one).  No rvtt-cost.md
+   derivation exists (FH audit FHP-5); widening or deriving it is the
+   planner lane's follow-up.  */
 static const unsigned IMS_REPAIR_BUDGET = 12; /* variants per grouping */
 
 bool

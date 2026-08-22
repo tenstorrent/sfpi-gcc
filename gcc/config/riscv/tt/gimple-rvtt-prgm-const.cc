@@ -2308,26 +2308,14 @@ count_nondebug_uses (tree name)
    from profile data.  */
 
 /* Post-shortening issue words of one admitted materialization: the
-   single-issue sfploadi form is one word; the sfpxloadi form models the
-   target's immediate encodings exactly as the invariant pass's
-   materialization_cost (gimple-rvtt-invariant.cc) -- values with a free
-   half or a FLOATA-encodable image issue once, everything else twice.
-   No value identity participates; this reads only encoding structure.  */
+   shared exported encoding model (gimple-rvtt-invariant.cc, also the
+   crossloop pass's ranking key).  This was a verbatim local copy until
+   the FH audit (FHI-T2) -- one vocabulary, one drift surface.  */
 
 static unsigned
 loadi_issue_words (gcall *call)
 {
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-  if (insnd->id == rvtt_insn_data::sfploadi)
-    return 1;
-  uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
-  unsigned upper = value >> 16;
-  unsigned lower = value & 0xffff;
-  if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
-    return 1;
-  unsigned exponent = (value >> 23) & 0xff;
-  return !(value & 0x1fff)
-    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+  return rvtt_sfpxloadi_materialization_cost (call);
 }
 
 /* Prove LOOP's body executes at least NEED times, by bounded forward
@@ -2645,6 +2633,7 @@ residency_transform (function *fn, prgm_state *st)
 	 a worst case of one extra pushed word on a single-trip entry.
 	 (The CC-canonical peel class prices its peel separately below
 	 and genuinely needs proven trips for the peel itself.)  */
+      bool admits_runtime_trips = false;
       if (!peel)
 	switch (classify_second_trip (loop, entry))
 	  {
@@ -2659,13 +2648,11 @@ residency_transform (function *fn, prgm_state *st)
 		       "cost)\n", loop->header->index);
 	    continue;
 	  case TRIPS_UNKNOWN:
-	    if (dump_file)
-	      fprintf (dump_file,
-		       "const-residency: loop bb %d admits runtime trips "
-		       "(entry-edge programming is never speculated; "
-		       "establishment and no-clobber are trip-independent; "
-		       "worst case one extra pushed word per candidate on "
-		       "a single-trip entry)\n", loop->header->index);
+	    /* Dump deferred until candidates exist: this analysis
+	       admission printed on 144/179 corpus ops with zero
+	       candidates, drowning the fire signal (lane EM census
+	       gotcha; FH audit FHI-T3).  */
+	    admits_runtime_trips = true;
 	    break;
 	  }
 
@@ -2713,6 +2700,14 @@ residency_transform (function *fn, prgm_state *st)
 	}
       free (body);
 
+      if (admits_runtime_trips && !this_loop.is_empty () && dump_file)
+	fprintf (dump_file,
+		 "const-residency: loop bb %d admits runtime trips "
+		 "(entry-edge programming is never speculated; "
+		 "establishment and no-clobber are trip-independent; "
+		 "worst case one extra pushed word per candidate on "
+		 "a single-trip entry)\n", loop->header->index);
+
       /* Peel pricing (rvtt-cost.md, residency-peel model): the loop
 	 saves the candidates' materialization words at SLOT each on
 	 every iteration after the first; the programming costs PUSH
@@ -2745,6 +2740,11 @@ residency_transform (function *fn, prgm_state *st)
 	  unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
 	  unsigned cost = push * (sum_w + nprog) + (push - slot) * body_w;
 	  unsigned need = 1 + (cost + slot * sum_w - 1) / (slot * sum_w);
+	  /* 64 bounds the trip-proof WORK (bounded forward evaluation),
+	     not the benefit model: a break-even needing more proven
+	     trips than the evaluator will walk refuses by name (cf.
+	     DP-11's const_iter bound of 96 for the same discipline in
+	     the allocator; FH audit FHI-T4).  */
 	  if (need > 64 || !loop_trips_at_least_p (loop, entry, need))
 	    {
 	      if (dump_file)

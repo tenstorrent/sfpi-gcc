@@ -1913,6 +1913,11 @@ planner_process_region (function *fn, macro_region &region,
    the effect vocabulary's own proofs (a region-admitted load is
    RWC-inert by the no-increment address-mode derivation).  */
 
+/* Enumeration budget, NOT a cost-model constant: bounds the variant
+   SEARCH per region (refusal-biased -- exhausting it leaves candidates
+   unformed, never admits an unproven one).  No rvtt-cost.md derivation
+   exists (FH audit FHP-5); widening or deriving it is the planner
+   lane's follow-up.  */
 static const unsigned UPWARD_CARRIER_BUDGET = 24; /* variants per region */
 
 /* Stable refusal vocabulary (append-only dump API).  */

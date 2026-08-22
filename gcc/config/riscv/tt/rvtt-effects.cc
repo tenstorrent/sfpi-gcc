@@ -76,9 +76,11 @@ lreg_mask_of_positions (int position_mask)
     if ((position_mask >> i) & 1)
       {
 	rtx op = recog_data.operand[i];
-	if (REG_P (op) && HARD_REGISTER_P (op)
-	    && REGNO (op) >= SFPU_REG_FIRST
-	    && REGNO (op) - SFPU_REG_FIRST <= 16)
+	/* SFPU_REG_P bounds the bit to the real L0-L7 file; the former
+	   `<= 16' bound admitted regnos through 96 (v0) into a 16-bit
+	   mask -- bit 16 lies outside the mask contract (latent, FH
+	   audit FHN-5).  */
+	if (REG_P (op) && HARD_REGISTER_P (op) && SFPU_REG_P (REGNO (op)))
 	  mask |= 1u << (REGNO (op) - SFPU_REG_FIRST);
       }
   return mask;
@@ -369,9 +371,8 @@ rvtt_builtin_subunit (const rvtt_insn_data *insnd)
 static uint32_t
 hard_lreg_bit (rtx op)
 {
-  if (REG_P (op) && HARD_REGISTER_P (op)
-      && REGNO (op) >= SFPU_REG_FIRST
-      && REGNO (op) - SFPU_REG_FIRST <= 16)
+  /* SFPU_REG_P, not `<= 16': see the mask-bound note above (FHN-5).  */
+  if (REG_P (op) && HARD_REGISTER_P (op) && SFPU_REG_P (REGNO (op)))
     return 1u << (REGNO (op) - SFPU_REG_FIRST);
   return 0;
 }

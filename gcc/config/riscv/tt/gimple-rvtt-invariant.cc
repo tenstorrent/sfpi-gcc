@@ -1466,9 +1466,14 @@ transform (function *fn)
       if (!analyze_cc_restore (loop, cc))
 	{
 	  if (dump_file)
+	    /* The loop bb index makes multi-loop refusal dumps
+	       attributable (two bare identical lines were
+	       indistinguishable -- FH audit FHI-T5); dg twins scan the
+	       refusal-name substring, unaffected by the suffix.  */
 	    fprintf (dump_file,
-		     "Invariant SFPU immediate hoist refused: %s\n",
-		     cc.why ? cc.why : "sfpu-barrier");
+		     "Invariant SFPU immediate hoist refused: %s (loop bb %d)\n",
+		     cc.why ? cc.why : "sfpu-barrier",
+		     loop->header->index);
 	  continue;
 	}
 

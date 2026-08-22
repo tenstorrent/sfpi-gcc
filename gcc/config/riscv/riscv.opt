@@ -640,7 +640,7 @@ Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one 
 
 mtt-tensix-optimize-replay-exec-record
 Target Var(riscv_tt_opt_replay_exec_record) Init(0)
-Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch when the unrolled launch run structurally proves the exchange.
+Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch when the unrolled launch run structurally proves the exchange (effective only with -mtt-tensix-optimize-replay-hoist).
 
 mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)

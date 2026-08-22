@@ -501,13 +501,17 @@ shadow_filler_p (rtx_insn *insn, insn_regs *regs, bool *hidden_free)
     && !e.dst_mem_read && !e.dst_mem_write;
 }
 
+/* Filler-search window shared by the two fill phases below: an
+   enumeration budget, NOT a cost-model constant (candidates beyond it
+   are simply not considered -- refusal-direction only).  One definition
+   so the two phases cannot drift (FH audit FHS-3).  */
+constexpr unsigned SEARCH_WINDOW = 24;
+
 static void
 fill_nop_shadows (function *fn)
 {
   std::vector<basic_block> visited;
   std::vector<rtx_insn *> crossed_insns;
-  constexpr unsigned SEARCH_WINDOW = 24;
-
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -671,7 +675,10 @@ fill_nop_shadows (function *fn)
      family audited the pass fires on nothing, which is the correct
      starting state -- value arrives class-by-class as audits land;
    - audited latencies above one have no entries today and refuse, so
-     the two-adjacency stall accounting below is exact;
+     the two-adjacency stall accounting below is exact (NB the rvtt.md
+     `xtt_result_latency' ATTRIBUTE is encoded latency+1 -- attr "2" IS
+     latency one, not a latency-2 entry; two prior audits misread this,
+     FH audit FHS-5);
    - required-nop bubbles (the DYNAMIC probe fires) stay owned by the
      nop inserter and fill_nop_shadows: this phase skips them;
    - the filler and every insn whose adjacency changes must themselves
@@ -751,8 +758,6 @@ fill_interlock_shadows (function *fn)
 
   std::vector<basic_block> visited;
   std::vector<rtx_insn *> crossed_insns;
-  constexpr unsigned SEARCH_WINDOW = 24;
-
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -1968,7 +1973,13 @@ ls_entry_producer (basic_block bb, rtx_insn *first)
       if (!NONDEBUG_INSN_P (w))
 	continue;
       if (GET_CODE (w) != INSN)
-	return nullptr;		/* jump/call boundary */
+	/* Jump/call boundary.  KNOWN DIVERGENCE from the dynamic pad
+	   probe (DU-S8(a), still open): find_next_insn walks THROUGH a
+	   call while this walk stops, so a region entered right after a
+	   call sees no entry producer and keeps the conservative
+	   latency floor -- refusal-direction only (a fill opportunity
+	   is missed, never a hazard admitted).  */
+	return nullptr;
       rtx pat = PATTERN (w);
       if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
 	continue;
@@ -3808,6 +3819,10 @@ rvtt_macro_drain_boundary_elidable (const macro_region &region,
     return false;
 
   if (dump)
+    /* NB the harness fire witness 'run-boundary drain elided'
+       (_REVIEWED_FIRE_WITNESSES) is SPLIT across the two source lines
+       below -- a literal source grep for the full witness misses it;
+       the runtime dump line matches (FH audit witness-check gotcha).  */
     fprintf (dump, "Macro-planner drain-schedule: run-boundary drain"
 	     " elided (drain=%d separator-credit=%u)\n",
 	     h.max_dist, sep_credit);
