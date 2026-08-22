@@ -182,6 +182,18 @@ extern bool rvtt_macro_drain_boundary_elidable
 extern bool rvtt_macro_drain_backedge_elidable
   (const macro_region &region, const macro_schedule &schedule,
    const macro_descriptor &desc, unsigned first_run_end, FILE *dump);
+/* Window-pairing inter-row drain tuning (lane FT, rtl-rvtt-schedule.cc,
+   consumed by the planner's emission under
+   -mtt-tensix-optimize-window-pairing): the minimal proven inter-row
+   drain for a run of uniform rows under the lane-EV fixed-VD obligation
+   -- the exact pending-event-vs-follower-access model (register-, Dst-,
+   and sub-unit-aware) in place of the shape rule's full derived drain.
+   Returns a value in [0, desc.drain_slots]; desc.drain_slots (today's
+   bytes) on any refusal, named to DUMP.  A positive verdict below the
+   full drain names its binding conflict through *BOUND_NAME.  */
+extern int rvtt_macro_interrow_drain_tuned
+  (function *fn, const macro_region &region, const macro_schedule &schedule,
+   const macro_descriptor &desc, FILE *dump, const char **bound_name);
 /* ------------------------------------------------------------------ */
 /* WP13: descriptor-program residency (default-off,
    -mtt-tensix-macro-planner-residency).  Dictionary-selection residency
