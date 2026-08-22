@@ -1,10 +1,20 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-replay-exec-record -fdump-rtl-rvtt_replay" }
-// Near miss: a non-empty asm in the loop preheader is an unclassified
-// word between the record and the first launch -- the exchange refuses
-// and the record stays no-exec with every launch intact.
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 0, 1" 1 } }
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 0, 0" 16 } }
-// { dg-final { scan-rtl-dump "Exec-while-record refused" "rvtt_replay" } }
+// Position-aware asm boundary (lane FJ, FE-F1 follow-up): a non-empty
+// asm in the loop preheader sits BEFORE the hoisted record -- the
+// exec-while-record exchange moves the payload's execution from the
+// first launch back to the record, so only words BETWEEN the two are
+// crossed; a pre-record word is outside the motion window, exactly like
+// the typed Tensix words the conversion already admits there.  (The
+// LLK per-tile wrapper's raw TTI_STALLWAIT word sits in that position
+// on every llk_math_eltwise_sfpu_common.h tile loop, and refusing on it
+// left the silicon-refuted no-exec re-record delivery in place on the
+// sparse_k_filter shape.)  The record therefore executes trip 1 and the
+// first launch is dropped: 15 launches remain.  Words after the record
+// keep refusing -- the hoisted record terminates the preheader's Tensix
+// content by construction, so the refusing arm is defensive.
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 1, 1" 1 } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 8, 0, 0" 15 } }
+// { dg-final { scan-rtl-dump "Exec-while-record: capture insn \[0-9\]+ executes trip 1" "rvtt_replay" } }
 void exec_record_asm_guard ()
 {
   auto a = __builtin_rvtt_sfpreadlreg (0);

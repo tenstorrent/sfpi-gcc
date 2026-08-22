@@ -1613,6 +1613,12 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
   return preheader;
 }
 
+/* No-exec captures THIS PASS hoisted into preheaders this function, for
+   the fail-closed re-record sweep at the end of transform () (lane FJ,
+   FE-F1 follow-up; see unhoist_hazard_rerecords).  User-authored records
+   are never entered here and stay untouched.  */
+static std::vector<rtx_insn *> formed_noexec_captures;
+
 static unsigned
 replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
 			  unsigned replay_start, basic_block preheader)
@@ -1638,6 +1644,10 @@ replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
     emit_insn_before (recording, anchor);
   else
     emit_insn_after (recording, anchor);
+
+  /* The first insn of the emitted sequence is the no-exec capture:
+     register it for the fail-closed re-record sweep.  */
+  formed_noexec_captures.push_back (recording);
 
   for (auto const &clone : seq.clones)
     {
@@ -2123,7 +2133,19 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		    {
 		      // An empty-template asm (the compiler memory-barrier
 		      // idiom) emits nothing; every real asm is an
-		      // unclassified word: refuse.
+		      // unclassified word.  Position decides (lane FJ,
+		      // FE-F1 follow-up): the transformation moves the
+		      // payload's execution from the first launch back to
+		      // the record, so only words BETWEEN the record and
+		      // that launch are crossed -- a word before the
+		      // record is outside the motion window, exactly like
+		      // the typed Tensix words the branch below already
+		      // admits (the LLK per-tile wrapper's raw
+		      // TTI_STALLWAIT word sits there on every
+		      // llk_math_eltwise_sfpu_common.h tile loop).  A raw
+		      // word inside the payload span corrupts the typed
+		      // slot count, and one after the payload is crossed
+		      // by the motion: both keep refusing.
 		      const char *tmpl
 			= GET_CODE (pat) == ASM_OPERANDS
 			  ? ASM_OPERANDS_TEMPLATE (pat)
@@ -2133,18 +2155,18 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 			    : nullptr;
 		      while (tmpl && (*tmpl == ' ' || *tmpl == '\t'))
 			++tmpl;
-		      if (!tmpl || *tmpl)
+		      if ((!tmpl || *tmpl) && (cap || payload_left))
 			{
 			  clean = false;
 			  if (dump_file)
 			    fprintf (dump_file,
 				     "Exec-while-record refused: preheader"
-				     " insn %d is a non-empty asm\n",
-				     INSN_UID (pinsn));
+				     " insn %d is a non-empty asm after"
+				     " the record\n", INSN_UID (pinsn));
 			  break;
 			}
 		    }
-		  continue;	// scalar work / empty barrier
+		  continue;	// scalar work / empty barrier / pre-record raw word
 		}
 	      if (payload_left)
 		{
@@ -4931,11 +4953,131 @@ canonicalize_counted_rows (function *cfn,
 // The replay pass looks for sequences of instructions that repeat and replaces
 // the repeated portions w/ a REPLAY instruction
 
+/* Fail-closed no-exec re-record sweep (lane FJ; rvtt-cost.md "no-exec
+   record composition", delivery-boundary paragraph).  A pass-hoisted
+   NO-EXEC capture whose placement block lies inside a loop re-ingests
+   its payload every iteration; when that payload carries a Dst store,
+   the re-ingestion follows the previous iteration's launch-delivered
+   stores at runtime pacing no static model prices.  The silicon
+   witnesses: lcm-fresh ON+record-hoist (hang, lane ES 2x2) and
+   sparse_k_filter ON-25 at runtime trip 32 (hang, lane FE F1) -- and
+   lane FJ's device datum that the same shape hangs WITH EXPLICIT
+   TTINCRWC rows too, so the composition is the re-record x launches
+   x Dst-store-payload, not the mod-write alone.  The witnessed-good
+   exec-while-record conversion (fleet silicon: minmax, sdpa, where,
+   typecast, lcm ON-set) is the intended deliverer of these shapes;
+   when it has NOT fired by the end of the pass, this sweep un-hoists
+   the capture by name: every launch of the span is replaced by an
+   inline copy of the payload (a launch executes exactly the payload,
+   so this is the identity the capture was formed from), and the record
+   and its never-executed shadow are deleted.  Storeless payloads
+   (celu/eqz-class wrapper records, silicon-good across many pins) and
+   loop-free placements (xielu preamble, single-loop preheaders) are
+   untouched.  Only captures this pass formed are swept: user-authored
+   records are the user's own contract.  */
+
+static void
+unhoist_hazard_rerecords (function *cfn)
+{
+  for (rtx_insn *cap : formed_noexec_captures)
+    {
+      if (!cap || cap->deleted () || !INSN_P (cap))
+	continue;
+      rtx pat = PATTERN (cap);
+      if (GET_CODE (pat) != UNSPEC_VOLATILE
+	  || recog_memoized (cap) != CODE_FOR_rvtt_ttreplay_int)
+	continue;
+      if (XVECEXP (pat, 0, 6) != const0_rtx
+	  || XVECEXP (pat, 0, 7) == const0_rtx)
+	continue; /* Converted to exec-while-record: witnessed class.  */
+      basic_block bb = BLOCK_FOR_INSN (cap);
+      if (!bb)
+	continue;
+      class loop *loop = bb->loop_father;
+      if (!loop || loop->num == 0)
+	continue; /* Loop-free placement: executes once, witnessed.  */
+      if (!CONST_INT_P (XVECEXP (pat, 0, 3))
+	  || !CONST_INT_P (XVECEXP (pat, 0, 5)))
+	continue;
+      unsigned len = UINTVAL (XVECEXP (pat, 0, 3));
+      unsigned begin = UINTVAL (XVECEXP (pat, 0, 5));
+
+      /* Collect the payload shadow and test it for a Dst store.  */
+      std::vector<rtx_insn *> payload;
+      bool has_store = false;
+      bool scan_ok = true;
+      unsigned remaining = len;
+      for (rtx_insn *insn = NEXT_INSN (cap); remaining;
+	   insn = NEXT_INSN (insn))
+	{
+	  if (!insn || BLOCK_FOR_INSN (insn) != bb)
+	    {
+	      scan_ok = false;
+	      break;
+	    }
+	  if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN)
+	    continue;
+	  rtx ppat = PATTERN (insn);
+	  if (GET_CODE (ppat) == USE || GET_CODE (ppat) == CLOBBER)
+	    continue;
+	  if (recog_memoized (insn) < 0
+	      || get_attr_type (insn) != TYPE_TENSIX
+	      || !get_attr_length (insn))
+	    continue;
+	  payload.push_back (insn);
+	  if (recog_memoized (insn) == CODE_FOR_rvtt_sfpstore_int
+	      || recog_memoized (insn) == CODE_FOR_rvtt_sfpstoresrcs_int)
+	    has_store = true;
+	  --remaining;
+	}
+      if (!scan_ok || !has_store)
+	continue;
+
+      /* Replace every launch of the exact span with the inline payload
+	 and delete the capture and its shadow.  */
+      unsigned launches = 0;
+      basic_block lbb;
+      FOR_EACH_BB_FN (lbb, cfn)
+	{
+	  rtx_insn *insn, *next;
+	  for (insn = BB_HEAD (lbb); insn; insn = next)
+	    {
+	      next = insn == BB_END (lbb) ? nullptr : NEXT_INSN (insn);
+	      if (!NONDEBUG_INSN_P (insn) || insn == cap
+		  || GET_CODE (insn) != INSN
+		  || recog_memoized (insn) != CODE_FOR_rvtt_ttreplay_int)
+		continue;
+	      rtx lpat = PATTERN (insn);
+	      if (XVECEXP (lpat, 0, 7) != const0_rtx
+		  || !CONST_INT_P (XVECEXP (lpat, 0, 3))
+		  || !CONST_INT_P (XVECEXP (lpat, 0, 5))
+		  || UINTVAL (XVECEXP (lpat, 0, 3)) != len
+		  || UINTVAL (XVECEXP (lpat, 0, 5)) != begin)
+		continue;
+	      for (rtx_insn *pw : payload)
+		emit_insn_before (copy_insn (PATTERN (pw)), insn);
+	      delete_insn (insn);
+	      ++launches;
+	    }
+	}
+      for (rtx_insn *pw : payload)
+	delete_insn (pw);
+      delete_insn (cap);
+      if (dump_file)
+	fprintf (dump_file, "Replay refusal: noexec-rerecord-dststore-"
+		 "composition-unaudited (capture bb %d in loop %d "
+		 "un-hoisted, %u launches inlined)\n",
+		 bb->index, loop->num, launches);
+    }
+  formed_noexec_captures.clear ();
+}
+
 static void
 transform (function *cfn, unsigned buffer_size)
 {
   basic_block bb;
   std::vector<replay_span> replay_spans;
+  formed_noexec_captures.clear ();
 
   /* Fail-closed raw-capture census.  The allocator's only view of
      already-claimed slots is the typed rvtt_ttreplay_int stream: an
@@ -5336,6 +5478,11 @@ transform (function *cfn, unsigned buffer_size)
       unroll_launch_loops (cfn, dirty_bbs);
       convert_isomorphic_runs (cfn, dirty_bbs);
     }
+
+  /* Fail-closed: any pass-hoisted no-exec capture the exec-while-record
+     conversion did not reach, placed on a loop with a Dst-store payload,
+     is the silicon-refuted re-record composition -- un-hoist it.  */
+  unhoist_hazard_rerecords (cfn);
 }
 
 namespace {
