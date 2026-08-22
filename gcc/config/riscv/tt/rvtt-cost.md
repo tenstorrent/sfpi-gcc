@@ -1523,3 +1523,45 @@
 ;; control is RISC-side and concurrent per the delivery accounting
 ;; above).  Overestimating body_words only raises the required trip
 ;; proof; it never admits an unpriced fire.
+
+;; ---------------------------------------------------------------------
+;; Dual-bank pinned-chain binding caps (lane FU, rtl-rvtt-lp-alloc.cc
+;; layer 3).  These are STRUCTURAL bounds, not pricing constants: they
+;; cap the shapes and the search the binding layer will model, and an
+;; exceeded cap is a named refusal that keeps today's allocation
+;; byte-identically (fail-closed to today's behavior, which includes
+;; today's lreg-pressure-exceeded error where LRA cannot repair).
+;;
+;;   LPA_PIN_MAX_OPS = 24        largest pinning pattern operand count.
+;;                               Evidence: rvtt_sfptransp8_int has 16
+;;                               operands (8 exact-pinned outputs + 8
+;;                               matching inputs), the largest exact-
+;;                               register pattern in rvtt.md; 24 leaves
+;;                               headroom for a wider future quartet
+;;                               family without admitting unbounded
+;;                               shapes (refusal:
+;;                               dualbank-pin-shape-unmodeled).
+;;
+;;   LPA_PIN_MAX_ALTS = 16       largest alternative count on a pinning
+;;                               pattern.  Evidence: the relational
+;;                               rvtt_sfpswap_indexed_int carries 12
+;;                               alternatives (the twelve legal ordered
+;;                               value pairs under companion == value +
+;;                               4); every other pinning pattern is
+;;                               single-alternative (same refusal).
+;;
+;;   LPA_PIN_SEARCH_BUDGET = 4096  DFS alternative applications before
+;;                               the search refuses
+;;                               (dualbank-search-budget-exceeded).
+;;                               Evidence: the eager forced-color
+;;                               consistency pruning collapses anchored
+;;                               chains to near-linear search -- the
+;;                               lane-EX generic_moe_gate_topk top16
+;;                               kernel, the largest known pinned-chain
+;;                               body (1744 webs, 447 pin sites, 186
+;;                               relational), solves with budget 1336;
+;;                               the distilled dg fire tests use < 32.
+;;                               4096 covers a 3x growth in relational
+;;                               sites at the measured consumption rate
+;;                               while bounding the worst (infeasible-
+;;                               instance exhaustion) case.
