@@ -149,6 +149,8 @@ extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_lp_schedule (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_transp_involution (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_crosslane (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_crosslane_window (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_delivery_shape (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
 
