@@ -5220,30 +5220,16 @@ unhoist_hazard_rerecords (function *cfn)
       if (!scan_ok)
 	continue;
 
-      /* Rule 1 (lane FJ): in-loop re-record with a Dst-store payload.
-	 Rule 2 (lane FL, FH-1): recording window opens inside the
-	 audited W_drain window of an audited mod-write.  Rule 1 keeps
-	 its established dump line; both share the identity-restoring
-	 un-hoist below.  */
-      bool dststore_rule = in_loop && has_store;
-      unsigned modwrite_dist = 0;
-      unsigned window = rvtt_modwrite_drained_frontend_window ();
-      bool modwrite_rule
-	= !dststore_rule
-	  && capture_modwrite_within_window_p (cap, window, &modwrite_dist);
-      if (!dststore_rule && !modwrite_rule)
-	continue;
-
-      /* Replace every launch of the exact span with the inline payload
-	 and delete the capture and its shadow.  */
-      unsigned launches = 0;
+      /* Pre-collect every launch of this exact span (block-level) so the
+	 dominance-based rule 3 can inspect them before we decide to fire.  */
+      std::vector<rtx_insn *> launch_insns;
       basic_block lbb;
       FOR_EACH_BB_FN (lbb, cfn)
 	{
-	  rtx_insn *insn, *next;
-	  for (insn = BB_HEAD (lbb); insn; insn = next)
+	  rtx_insn *insn, *lnext;
+	  for (insn = BB_HEAD (lbb); insn; insn = lnext)
 	    {
-	      next = insn == BB_END (lbb) ? nullptr : NEXT_INSN (insn);
+	      lnext = insn == BB_END (lbb) ? nullptr : NEXT_INSN (insn);
 	      if (!NONDEBUG_INSN_P (insn) || insn == cap
 		  || GET_CODE (insn) != INSN
 		  || recog_memoized (insn) != CODE_FOR_rvtt_ttreplay_int)
@@ -5255,11 +5241,65 @@ unhoist_hazard_rerecords (function *cfn)
 		  || UINTVAL (XVECEXP (lpat, 0, 3)) != len
 		  || UINTVAL (XVECEXP (lpat, 0, 5)) != begin)
 		continue;
-	      for (rtx_insn *pw : payload)
-		emit_insn_before (copy_insn (PATTERN (pw)), insn);
-	      delete_insn (insn);
-	      ++launches;
+	      launch_insns.push_back (insn);
 	    }
+	}
+
+      /* Rule 1 (lane FJ): in-loop re-record with a Dst-store payload.
+	 Rule 2 (lane FL, FH-1): recording window opens inside the
+	 audited W_drain window of an audited mod-write.  Rule 3 (lane FS,
+	 FP-3): a still-no-exec Dst-store capture whose record does NOT
+	 dominate every launch of its span (or has no in-function launch
+	 at all) is live-at-exit relative to that launch -- the recorded
+	 store can be delivered from a launch the record never executed
+	 before, on a sibling CFG path or, since the per-thread Replay
+	 Expander buffer PERSISTS across the soft-reset kernel-invocation
+	 boundary (lane FS silicon model, laneFS-evidence-20260822: EXP-1
+	 cross-invocation + EXP-2 within-launch cross-function delivery),
+	 from a caller-loop re-entry or an entirely later kernel.  The
+	 intra-function reach walks (FJ dst-autoincr, FL W_drain) cannot
+	 see that consumer; forming the adjacency is the same silicon-
+	 refuted wedge (ES 2x2 / FE-F1 / FJ HANG-3), so fail closed.  The
+	 dominating-preamble class (xielu/gcd/lcm init record dominates its
+	 in-loop launches, all device PASS) is preserved: a dominating
+	 record executes before every launch in the same invocation.  All
+	 three rules share the identity-restoring un-hoist below.  */
+      bool dststore_rule = in_loop && has_store;
+      unsigned modwrite_dist = 0;
+      unsigned window = rvtt_modwrite_drained_frontend_window ();
+      bool modwrite_rule
+	= !dststore_rule
+	  && capture_modwrite_within_window_p (cap, window, &modwrite_dist);
+      bool exit_rule = false;
+      if (!dststore_rule && !modwrite_rule && has_store)
+	{
+	  calculate_dominance_info (CDI_DOMINATORS);
+	  bool dominates_all = !launch_insns.empty ();
+	  for (rtx_insn *li : launch_insns)
+	    {
+	      basic_block lb = BLOCK_FOR_INSN (li);
+	      if (!lb || !dominated_by_p (CDI_DOMINATORS, lb, bb))
+		{
+		  dominates_all = false;
+		  break;
+		}
+	    }
+	  exit_rule = !dominates_all;
+	}
+      if (!dststore_rule && !modwrite_rule && !exit_rule)
+	continue;
+
+      /* Replace every launch of the exact span with the inline payload
+	 and delete the capture and its shadow.  */
+      unsigned launches = 0;
+      for (rtx_insn *insn : launch_insns)
+	{
+	  if (!insn || insn->deleted ())
+	    continue;
+	  for (rtx_insn *pw : payload)
+	    emit_insn_before (copy_insn (PATTERN (pw)), insn);
+	  delete_insn (insn);
+	  ++launches;
 	}
       for (rtx_insn *pw : payload)
 	delete_insn (pw);
@@ -5271,14 +5311,22 @@ unhoist_hazard_rerecords (function *cfn)
 		     "composition-unaudited (capture bb %d in loop %d "
 		     "un-hoisted, %u launches inlined)\n",
 		     bb->index, loop->num, launches);
-	  else
+	  else if (modwrite_rule)
 	    fprintf (dump_file, "Replay refusal: noexec-record-modwrite-"
 		     "window-unaudited (capture bb %d %u issue words after "
 		     "an audited mod-write, window %u; un-hoisted, "
 		     "%u launches inlined)\n",
 		     bb->index, modwrite_dist, window, launches);
+	  else
+	    fprintf (dump_file, "Replay refusal: noexec-record-dststore-"
+		     "nondominating-launch-persist-unaudited (capture bb %d "
+		     "does not dominate all %u launches of its span; "
+		     "un-hoisted, %u launches inlined)\n",
+		     bb->index, (unsigned) launch_insns.size (), launches);
 	}
     }
+  if (dom_info_available_p (CDI_DOMINATORS))
+    free_dominance_info (CDI_DOMINATORS);
   formed_noexec_captures.clear ();
 }
 

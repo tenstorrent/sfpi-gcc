@@ -600,6 +600,52 @@
 ;; words earn zero cover in the walk (they never manufacture
 ;; separation) but are not themselves hazards -- the same audit
 ;; boundary the group guard's own function-scan has.
+;;
+;; REPLAY-STATE PERSISTENCE MODEL (lane FS, FP-3; the BH REPLAY doc gap,
+;; laneFS-evidence-20260822).  The reach walks above (dst-autoincr group
+;; guard, W_drain placement sweep) are BOTH intra-function.  The FP delta
+;; audit (FP-3) witnessed shapes that ADMIT under both walks yet reassemble
+;; the wedge trio ACROSS the analysis boundary.  Controlled Blackhole
+;; silicon experiments (p150, dual flocks, flush-verified; vehicle =
+;; datacopy-acquired 32-bit DEST with packer readback; sentinel FP32
+;; 0x42F70000 written by a recorded SFPSTORE the launch delivers) settle the
+;; hardware model the doc gap left open:
+;;
+;;   EXP-2  A record in one function body (TT_REPLAY load=1 exec=0 + payload)
+;;          and a launch (load=0) in a SIBLING function body, one kernel
+;;          launch, deliver the recorded store (sentinel present).  The
+;;          per-thread Replay Expander buffer persists across function-call /
+;;          basic-block boundaries within a launch -- the pfj1 shape is real.
+;;   EXP-1  A kernel A that ONLY records (never launches) then exits, followed
+;;          by a SEPARATE kernel B (distinct ELF, TRISC soft-reset + ELF
+;;          reload + brisc device_setup() between) that ONLY launches, with no
+;;          record of its own, DELIVERS kernel A's recorded store.  The buffer
+;;          persists across the standard kernel-invocation (soft-reset)
+;;          dispatch boundary.  device_setup() issues no REPLAY and neither
+;;          re-arms nor clears the buffer.
+;;   BASE   Launch-only as the first REPLAY-issuing kernel after a FULL board
+;;          reset (flush.sh / tt-smi -r) WEDGES (TENSIX TIMED OUT): a full
+;;          reset clears the buffer to zero words whose replay is not an inert
+;;          no-op.  So only a full board reset clears replay state; the
+;;          soft-reset boundary does not.
+;;
+;; CONSEQUENCE: a compiler-FORMED still-no-exec capture with a Dst-store
+;; payload that is not consumed by a launch its record dominates is a latent
+;; cross-path / cross-invocation deliverer of the silicon-refuted composition
+;; -- the intra-function walks cannot see the launch.  rtl-rvtt-replay.cc's
+;; end-of-transform sweep therefore adds a third fail-closed rule
+;; (noexec-record-dststore-nondominating-launch-persist-unaudited): a formed
+;; still-no-exec Dst-store capture whose record does not dominate EVERY launch
+;; of its span (or has no in-function launch at all) is un-hoisted by the same
+;; identity-restoring action (launches -> inline payload copies, record +
+;; shadow deleted).  The dominating-preamble class (xielu/gcd/lcm init records
+;; dominating their in-loop launches, all device PASS) executes the record
+;; before every launch in the same invocation and is preserved; the witnessed
+;; exec-while-record conversions (exec=1) are outside the still-no-exec filter.
+;; User-authored records remain the user's own contract (the sweep touches
+;; only pass-formed captures); the same-function admission of user records is
+;; the group guard's territory above, filed as the remaining FP-3 semantics
+;; item.
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 

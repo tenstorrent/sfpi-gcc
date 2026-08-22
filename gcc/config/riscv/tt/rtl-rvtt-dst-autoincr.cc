@@ -1118,8 +1118,12 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
    at runtime trip count 32 and passes at trip 8 on BYTE-IDENTICAL
    code (2/2 device, flush-verified), while the pinned sim passes both
    (frontend/RWC retirement timing unmodeled).  So for groups with any
-   replay-delivered row, a reachable (or same-block) no-exec capture
-   refuses at ANY distance; the window rule applies to issue-parity
+   replay-delivered row, a same-function no-exec capture refuses at ANY
+   distance -- lane FS (FP-3) widened this from forward-reachable to any
+   same-function capture, because the Replay Expander buffer persists
+   across function/kernel-invocation boundaries (laneFS-evidence-
+   20260822 silicon model) so a sibling-arm capture is armed by a prior
+   caller-loop invocation.  The window rule applies to issue-parity
    (explicit-row) groups only.  */
 
 /* True when any surviving row of GRP delivers its terminator through
@@ -1220,14 +1224,56 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 
       /* Replay-delivered rows break the issue-parity premise of the
 	 frontend-word distance audit (see the block comment above; lane
-	 FE finding F1 is the refuting silicon witness): any reachable
-	 no-exec capture refuses at any distance.  */
-      if (replay_delivered && block_reachable_p (grp.scan->bb, cap->bb))
+	 FE finding F1 is the refuting silicon witness): a reachable no-exec
+	 capture refuses at any distance.  Lane FS (FP-3, the BH REPLAY doc
+	 gap): the per-thread Replay Expander buffer PERSISTS across function
+	 and kernel-invocation boundaries (laneFS-evidence-20260822 silicon
+	 model, EXP-1/EXP-2), so the successor-reachability relation is not
+	 the true consumer relation.  A capture that DOMINATES the group is
+	 its legitimate deliverer -- it executes (records) before every launch
+	 in the same invocation, the witnessed-good record-hoist mechanism
+	 (dst-autoincr-loop-bh); admit it.  A capture that does NOT dominate
+	 the group is a SIBLING-arm (or forward-only) record -- the forward
+	 case already refused above; the sibling case is this walk's blind
+	 spot (FP delta-audit probe pfj1): a previous caller-loop invocation
+	 of this function arms it while the group's mod-write runs on the
+	 next, reassembling the exact silicon-refuted trio the intra-function
+	 walk cannot see.  For a replay-delivered group, therefore, refuse any
+	 same-function no-exec capture that does not dominate the group.  (FP
+	 filed this widening as analytically zero-delta on the mapped corpus --
+	 witnessed-good celu/eqz records are explicit-row, not replay-
+	 delivered; skf converts to exec-record -- and the persistence model
+	 is the missing justification to take it.)  */
+      if (replay_delivered)
 	{
-	  *hazard = cap;
-	  *detail = "replay-delivered mod-write, no-exec replay capture "
-		    "reachable from the group";
-	  return true;
+	  /* The legitimate deliverer of a replay-delivered group is a no-exec
+	     record that DOMINATES the group and is NOT re-ingested inside a
+	     loop the group also lives in -- it records once, before every
+	     launch of the same invocation (record-hoist preheader,
+	     dst-autoincr-loop-bh).  Two shapes are hazards: (a) the capture
+	     is forward-reachable from the group -- an in-loop re-record whose
+	     replay-delivered payload retires asynchronously (lane FE F1,
+	     block_reachable_p, kept from ES/FJ); (b) the capture does NOT
+	     dominate the group -- a sibling-arm record armed by a prior
+	     caller-loop invocation once the Replay buffer persists (lane FS
+	     FP-3, the new case).  A dominating, non-reachable capture is the
+	     deliverer and admits.  */
+	  bool reachable = block_reachable_p (grp.scan->bb, cap->bb);
+	  bool cap_dominates_group
+	    = dom_info_available_p (CDI_DOMINATORS)
+	      && dominated_by_p (CDI_DOMINATORS, grp.scan->bb, cap->bb);
+	  if (reachable || !cap_dominates_group)
+	    {
+	      *hazard = cap;
+	      *detail
+		= reachable
+		    ? "replay-delivered mod-write, no-exec replay capture "
+		      "reachable from the group"
+		    : "replay-delivered mod-write, no-exec replay capture in "
+		      "the same function (persistent replay slot, cross-"
+		      "invocation reassembly; lane FS FP-3)";
+	      return true;
+	    }
 	}
 
       /* Dijkstra-style minimum issue-word distance from the exit of
