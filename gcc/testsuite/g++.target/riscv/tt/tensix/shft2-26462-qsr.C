@@ -55,7 +55,7 @@ void subvec_copy ()
 **	SFPLOAD	L2, 0, 0, 0, 0, 0
 **	SFPLOAD	L3, 0, 0, 0, 0, 0
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	SFPSHFT2	L0 L0, 0, 1
+**	SFPSHFT2	L0, L0, 0, 1
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
 **	SFPSTORE	L1, 0, 0, 0, 0, 0
 **	SFPSTORE	L2, 0, 0, 0, 0, 0

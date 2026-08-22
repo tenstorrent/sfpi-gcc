@@ -4010,7 +4010,13 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_COPY4))]
   "TARGET_XTT_TENSIX"
-  "SFPSHFT2\t%x0 %x0, 0, %8"
+  ;; Missing-comma asm bug fixed (lane FB finding, lane FA fix,
+  ;; 2026-08-21): the template printed "SFPSHFT2\t%x0 %x0, ..." which gas
+  ;; rejects, so every emission of the CHAINED_COPY4 form failed to
+  ;; assemble.  The instruction itself is doc-exact (FB raw-probed
+  ;; SFPSHFT2.md Mod1=1 SUBVEC_CHAINED_COPY4); dg twin
+  ;; shft2-chained-copy4-assemble-bh.C asserts assembly succeeds.
+  "SFPSHFT2\t%x0, %x0, 0, %8"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
