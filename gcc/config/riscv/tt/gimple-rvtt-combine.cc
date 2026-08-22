@@ -112,6 +112,8 @@ namespace {
     int8_t commute_arg; // final pattern commutable arg, if non-negative
 
     unsigned lineno; // line in rvtt.gc file
+    const char *tag; // the rule's gate ident ("" when ungated): the
+		     // pin-stable dump witness (FH audit FHO-5/FHF-5)
 
     bool (*enable_hook) (); // combiner-specific emablement
     bool (*pred_hook) (gcall *[], tree [], bool); // combiner-specific checks
@@ -515,7 +517,11 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 
   if (dump_file)
     {
-      fprintf (dump_file, "Found pattern %u:\n", lineno);
+      /* The parenthesized gate tag, when the rule has one, is the
+	 PIN-STABLE witness (the line number shifts as rvtt.gc grows --
+	 harness regexes should key the tag, e.g. "(SETEXP_FOLD)").  */
+      fprintf (dump_file, "Found pattern %u%s%s%s:\n", lineno,
+	       *tag ? " (" : "", tag, *tag ? ")" : "");
       for (unsigned ix = 0; ix != pats_hwm; ix++)
 	{
 	  char c = 'K';

@@ -1239,15 +1239,15 @@
 ;;
 ;; MODEL SEAMS (stubbed to current-model values, documented):
 ;;   - the dst-autoincr crossing price (lane EB's DX-F2 term, corrected
-;;     to the W_drain covering walk above by lane EQ / EP-F1) is NOT yet
-;;     mirrored here: the solver models no autoincr setup cost (value 0)
-;;     and consumes only the enable bit for the mirror's saturation
-;;     run term.  Joining the W_drain term into this mirror is the
-;;     named follow-up.
-;;   - lane EC's record-hoist scope widening (DX-F3) is not yet
-;;     pushed: the downstream mirror models only the hoist branches
-;;     present at this pin.  When EC lands, its wider scope joins the
-;;     mirror.
+;;     to the W_drain covering walk above by lane EQ / EP-F1, LANDED at
+;;     pins 16/17) is NOT yet joined into this mirror: the solver models
+;;     no autoincr setup cost (value 0) and consumes only the enable bit
+;;     for the mirror's saturation run term.  Joining the W_drain term
+;;     into this mirror is the named follow-up (FH audit FHI-1/FHS-11).
+;;   - lane EC's record-hoist scope widening (DX-F3) LANDED at pin 16;
+;;     its wider hoist scope is NOT YET JOINED into this mirror -- the
+;;     downstream mirror still models only the pre-EC hoist branches.
+;;     The join is the named follow-up (same owner as the term above).
 ;;   - rolled-override seam: where the modeled winner is the explicit
 ;;     ROLLED shape but the downstream hoist's own gate is predicted
 ;;     to window the loop anyway (the ceil-fresh class: straight-push

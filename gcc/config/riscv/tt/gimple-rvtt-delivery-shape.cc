@@ -56,16 +56,17 @@ along with GCC; see the file COPYING3.  If not see
    (delivery-shape-exec-term-unaudited).
 
    MODEL SEAMS (documented, stubbed to current-model values):
-     - lane EB's dst-autoincr body-length pricing term is not yet
-       pushed; the solver models no autoincr setup cost (current-model
-       value 0) and consumes only the autoincr ENABLE bit for the
-       downstream mirror's saturation run.  When EB's term lands it
-       joins the measured table.
-     - lane EC's record-hoist (record-once one level further out) is
-       not yet pushed; the downstream mirror models only the hoist
-       machinery present at this pin (rtl-rvtt-replay.cc counted-loop
-       and re-record branches).  When EC lands, its wider hoist scope
-       joins the mirror.
+     - lane EB's dst-autoincr body-length pricing term (corrected to
+       the W_drain covering walk by lane EQ) LANDED at pins 16/17 but
+       is NOT YET JOINED here; the solver models no autoincr setup
+       cost (current-model value 0) and consumes only the autoincr
+       ENABLE bit for the downstream mirror's saturation run.  Joining
+       the W_drain term is the named follow-up (FH audit FHI-1).
+     - lane EC's record-hoist (record-once one level further out)
+       LANDED at pin 16 but is NOT YET JOINED here; the downstream
+       mirror still models only the pre-EC hoist machinery
+       (rtl-rvtt-replay.cc counted-loop and re-record branches).
+       Joining its wider hoist scope is the named follow-up.
      - where the modeled winner is a ROLLED shape but the downstream
        hoist's own gate is predicted to form a window anyway (the
        ceil-fresh class), this pass has no channel to suppress that
