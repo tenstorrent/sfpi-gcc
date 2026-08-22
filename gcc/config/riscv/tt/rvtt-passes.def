@@ -114,6 +114,15 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_attrib);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_dst_interleave);
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_lp_schedule);
 
+/* Cross-lane canonical-frame fusion (rotate-chain collapse, per-arch
+   slide re-lowering, swap refolding, transpose-involution and
+   zip-round-trip cancellation): late, after the structured-CC lowering
+   and scheduling shape are final -- the frame matchers and the
+   all-lanes proof read explicit SFPENCC/PUSHC/POPC words -- and before
+   the transpose-involution pass below so both see maximally-canonical
+   streams.  */
+INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_crosslane);
+
 /* Transpose-involution formation + Dst-park elision: late, after the
    structured-CC lowering and scheduling shape are final, so the
    operand-def windows and lane-state scan see the stream that will
@@ -205,3 +214,10 @@ INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 // free_bb_for_insn resulting in problems w/ df_analyze, so call before that
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_hll);
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_raw);
+/* TEN-2932 ENABLE_DEST_INDEX window enforcement must see the FINAL
+   stream -- after allocation (allocator-inserted moves ARE the caught
+   violation class), the hazard scheduler, and replay/MOP formation --
+   so it runs last among the Tensix RTL passes, right before free_cfg.
+   Later lines land closer to the anchor, so this line runs after the
+   two above.  */
+INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_crosslane_window);
