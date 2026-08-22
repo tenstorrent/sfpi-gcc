@@ -981,6 +981,11 @@ main (int argc, const char **argv)
 		 ", Combiner::");
       combine.emit_label (out);
       out.print (",\n   ");
+      // Stable dump tag: the rule's gate ident (empty when ungated).
+      // The line number alone made every fire witness pin a
+      // source-version-dependent number (lane EM recalibration class;
+      // FH audit FHO-5/FHF-5).
+      out.print (", \"", combine.target, "\"");
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
 	  if (ix)

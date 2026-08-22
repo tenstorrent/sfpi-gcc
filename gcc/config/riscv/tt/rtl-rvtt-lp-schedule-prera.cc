@@ -170,7 +170,10 @@ issued_tensix_p (rtx_insn *insn)
 /* Audited result latency of INSN in issue slots; -1 refuses (opaque
    effects, no audited xtt_result_latency entry, or the architectural
    next-slot acceptance stall, which is outside the single-latency
-   vocabulary -- the post-RA scheduler's audited_latency discipline).  */
+   vocabulary -- the post-RA scheduler's audited_latency discipline).
+   NB the rvtt.md `xtt_result_latency' ATTRIBUTE is encoded latency+1
+   (rvtt_insn_effects subtracts one): attr "2" IS latency one (FH audit
+   FHS-5 -- two prior audits misread this encoding).  */
 
 static int
 audited_latency_prera (rtx_insn *insn)

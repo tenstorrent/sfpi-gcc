@@ -3,7 +3,7 @@
 // Dynamically-addressed stores synthesize their encoding at runtime, so the
 // address-modifier operand cannot be retargeted: there is no owned
 // terminator to carry the implicit advance.  Byte-identical refusal.
-// { dg-final { scan-rtl-dump "Dst-autoincr refusal: no owned terminator access before increment" "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump "Dst-autoincr: not a candidate row .no owned terminator access before increment" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "Dst-autoincr group:" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 8 } }
 // { dg-final { scan-assembler-not "TTSETC16" } }

@@ -730,9 +730,9 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
 	  if (lead.acc.mode != caps.noinc_mode || !lead.acc.retargetable)
 	    {
 	      if (dump_file)
-		fprintf (dump_file, "Dst-autoincr refusal: no owned "
-			 "terminator access before increment (bb %d)\n",
-			 scan.bb->index);
+		fprintf (dump_file, "Dst-autoincr: not a candidate row "
+			 "(no owned terminator access before increment, "
+			 "bb %d)\n", scan.bb->index);
 	      continue;
 	    }
 	  cand.kind = ROW_EXPLICIT;
@@ -745,9 +745,9 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
 	  if (!cap || !cap->payload_ok)
 	    {
 	      if (dump_file)
-		fprintf (dump_file, "Dst-autoincr refusal: no owned "
-			 "terminator access before increment (bb %d)\n",
-			 scan.bb->index);
+		fprintf (dump_file, "Dst-autoincr: not a candidate row "
+			 "(no owned terminator access before increment, "
+			 "bb %d)\n", scan.bb->index);
 	      continue;
 	    }
 	  cand.kind = ROW_LAUNCH;
@@ -762,9 +762,9 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
 	  if (!cap->exec || !cap->payload_ok)
 	    {
 	      if (dump_file)
-		fprintf (dump_file, "Dst-autoincr refusal: no owned "
-			 "terminator access before increment (bb %d)\n",
-			 scan.bb->index);
+		fprintf (dump_file, "Dst-autoincr: not a candidate row "
+			 "(no owned terminator access before increment, "
+			 "bb %d)\n", scan.bb->index);
 	      continue;
 	    }
 	  cand.kind = ROW_CAPTURE_EXEC;
@@ -776,8 +776,9 @@ find_candidates (bb_scan &scan, const autoincr_caps &caps)
       else
 	{
 	  if (dump_file)
-	    fprintf (dump_file, "Dst-autoincr refusal: no owned terminator "
-		     "access before increment (bb %d)\n", scan.bb->index);
+	    fprintf (dump_file, "Dst-autoincr: not a candidate row "
+		     "(no owned terminator access before increment, "
+		     "bb %d)\n", scan.bb->index);
 	  continue;
 	}
 

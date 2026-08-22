@@ -65,8 +65,11 @@ along with GCC; see the file COPYING3.  If not see
 // doesn't affect the generation of any insn hoisted past. This may improve
 // synthesized insns where opcode or address computation is in the middle of a sequence.
 
-// Minimum acceptable sequence length
-// FIXME: We should experiment, 3 might also work. 2 is unlikely to be a win
+// Minimum acceptable sequence length.  4 mirrors
+// XTT_REPLAY_LOOP_UNROLL_MIN_WORDS (rvtt-cost.md): smaller rows cannot
+// amortize a record/playback window.  Self-declared uncalibrated there --
+// no silicon point separates 3 from 4 (DG2 audit item; a calibration
+// experiment remains the pricing lane's follow-up).
 constexpr unsigned MIN_SEQUENCE = 4;
 
 // Information about a tensix insn wrt replayability.  For an insn to be
@@ -4856,6 +4859,11 @@ canonicalize_counted_rows (function *cfn,
 	      return ra < rb;
 	    return pa < pb;
 	  });
+	  /* Deterministic-rank truncation: 64 is an uncited engineering
+	     search budget (DG2 ref-cap class, FH audit FHO-8), byte-stable
+	     because the ranking above is total.  A candidate dropped here is
+	     silently not formed -- widening or a cost.md derivation is the
+	     counted-row owner's follow-up.  */
 	  if (order.size () > 64)
 	    order.resize (64);
 	  if (dump_file)

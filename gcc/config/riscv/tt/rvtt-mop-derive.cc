@@ -529,7 +529,7 @@ censused_field_ref (tree ref, rvtt_mop_scan_ctx *ctx, tree *var, tree *field)
    constant base pins it.  */
 
 static int
-pushed_word_base (tree val, unsigned depth = 0,
+pushed_word_opcode_byte (tree val, unsigned depth = 0,
 		  rvtt_mop_scan_ctx *ctx = nullptr)
 {
   if (depth > 12 || !val)
@@ -538,7 +538,7 @@ pushed_word_base (tree val, unsigned depth = 0,
     rvtt_mop_scan_ctx *c = ctx;
     tree bound = rvtt_mop_resolve_bound (val, &c);
     if (bound != val)
-      return pushed_word_base (bound, depth + 1, c);
+      return pushed_word_opcode_byte (bound, depth + 1, c);
   }
   if (TREE_CODE (val) == INTEGER_CST)
     {
@@ -555,8 +555,8 @@ pushed_word_base (tree val, unsigned depth = 0,
       tree_code code = gimple_assign_rhs_code (def);
       if (code == PLUS_EXPR || code == BIT_IOR_EXPR)
 	{
-	  int a = pushed_word_base (gimple_assign_rhs1 (def), depth + 1, ctx);
-	  int b = pushed_word_base (gimple_assign_rhs2 (def), depth + 1, ctx);
+	  int a = pushed_word_opcode_byte (gimple_assign_rhs1 (def), depth + 1, ctx);
+	  int b = pushed_word_opcode_byte (gimple_assign_rhs2 (def), depth + 1, ctx);
 	  /* Exactly one side carries the opcode base; two competing
 	     bases (or none) leave the word unclassified.  */
 	  if (a > 0 && b <= 0)
@@ -568,7 +568,7 @@ pushed_word_base (tree val, unsigned depth = 0,
 	  return -1;
 	}
       if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME || code == NOP_EXPR)
-	return pushed_word_base (gimple_assign_rhs1 (def), depth + 1, ctx);
+	return pushed_word_opcode_byte (gimple_assign_rhs1 (def), depth + 1, ctx);
       /* Shifted single fields below the opcode byte cannot construct
 	 an opcode by themselves under the discipline axiom.  */
       if (code == LSHIFT_EXPR || code == BIT_AND_EXPR || code == RSHIFT_EXPR)
@@ -696,7 +696,7 @@ classify_word_value (tree val, unsigned *claimed, const char **why,
 	      return false;
 	    }
 	}
-      int base = pushed_word_base (val, 0, ctx);
+      int base = pushed_word_opcode_byte (val, 0, ctx);
       if (base < 0)
 	{
 	  *why = "unclassifiable composed word (no constant opcode base)";
