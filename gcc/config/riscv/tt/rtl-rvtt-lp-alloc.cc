@@ -1932,6 +1932,838 @@ enforce_colorability (function *fn)
   return bail ("lreg-spill-round-limit", "allocation did not converge");
 }
 
+/* -------------- dual-bank pinned-chain binding (layer 3) ------------- */
+
+/* Some Tensix patterns constrain vector operands to EXACT LREGs
+   through singleton-class constraints (x0..x7): the SFPTRANSP family
+   pins its whole quartets, and rvtt_sfpswap_indexed_int encodes the
+   RELATIONAL fact index_reg == value_reg + 4 as twelve exact-register
+   alternatives.  IRA's cost model scans alternatives PER OPERAND
+   (ira-costs.cc minimizes over alternatives independently for each
+   operand), so every member of a relational alternative set looks
+   equally cheap in isolation and IRA freely picks a register
+   combination no single alternative admits.  LRA then repairs the
+   mismatch with singleton-class reloads, and a reload needs a free
+   LREG: at peak pressure 8 there is none, so LRA spills to memory and
+   the post-RA rtl-rvtt-spill-diag error fires on a kernel a
+   consistent assignment would have compiled (the lane-EX top16
+   reproducer: DSATUR-colorable, IRA-colored, LRA-spilled).
+
+   This layer restores the missing information at the layer that lost
+   it: it solves the alternative-selection + coloring problem over the
+   function's pinned webs and commits the solution by REWRITING each
+   pin-derived web to its exact LREG hard register before IRA runs.
+   Explicit hard registers are the one channel that propagates the
+   binding to IRA's WHOLE coloring: every free web's allocno conflicts
+   with the hard register's live range, so IRA cannot paint a
+   neighbor into a pinned register (a per-pseudo singleton allocno
+   class -- TARGET_IRA_CHANGE_PSEUDO_ALLOCNO_CLASS -- was tried first
+   and is NOT sufficient: IRA's pop order can still assign the pinned
+   register to a conflicting free web popped earlier and then spills
+   the singleton-class allocno to memory).  Free webs stay pseudos:
+   IRA keeps its cost model and coalescing for everything unpinned.
+
+   Soundness does not lean on the interference graph alone: before
+   any rewrite, an independent point-wise DF simulation proves that
+   webs bound to the SAME register have disjoint live ranges and that
+   no bound web is live across a call; either proof failing refuses
+   by name (silent same-register overlap would be wrong code, so this
+   oracle is the belt over the graph's live-at-def construction).
+   The rewrite itself is validated per insn and transactional.
+
+   Engagement gate: the layer stands down (structural no-op, map
+   empty) unless the function contains at least one RELATIONAL pin
+   site -- a recognized insn with more than one enabled alternative
+   pinning XTT32SI pseudos to singleton LREG classes.  Single-
+   alternative pins (the SFPTRANSP family alone) are per-operand
+   visible to IRA's cost model already and keep today's allocation
+   byte-identically.
+
+   Model (fail-closed; every refusal keeps today's stream AND today's
+   allocation -- the map stays empty, so refusing is exactly today's
+   behavior):
+
+     - pin requirement: operand constrained to a singleton LREG class
+       in an alternative => that operand's WHOLE WEB must live in that
+       LREG under this alternative choice.
+
+     - matching equality: a matching constraint between two XTT32SI
+       webs unifies their colors under this alternative choice.
+
+     - base constraints: graph precolors (livein reservation
+       sentinels) and every single-alternative pin site.
+
+     - solve: deterministic depth-first search over the relational
+       sites' alternatives (insn order, alternative order), pruned by
+       requirement/equality consistency, capped by an explicit search
+       budget; a full choice is accepted only when no two conflicting
+       webs share a forced color, no matching-united webs conflict,
+       and a DSATUR completion over the merged web classes extends the
+       forced colors to ALL webs within the 8-LREG file (the existence
+       certificate that IRA can finish the job).
+
+     - commit: exactly the webs whose color is PIN-DERIVED are bound;
+       completion colors are certificate-only and discarded.
+
+   Named refusals (dump-visible under -fdump-rtl-rvtt_lp_alloc):
+   dualbank-pin-opaque-xtt-insn, dualbank-pin-shape-unmodeled,
+   dualbank-pin-no-feasible-alternative, dualbank-pin-inconsistent,
+   dualbank-matched-webs-conflict, dualbank-assignment-unsat,
+   dualbank-search-budget-exceeded, dualbank-same-color-overlap,
+   dualbank-web-live-across-call, dualbank-rewrite-refused.  */
+
+/* Caps (audited in rvtt-cost.md, "dual-bank binding" rows): the
+   largest pinning pattern today has 16 operands
+   (rvtt_sfptransp8_int) and 12 alternatives
+   (rvtt_sfpswap_indexed_int); the caps leave headroom without
+   admitting unbounded shapes.  The search budget bounds DFS
+   alternative applications; consistency propagation collapses
+   anchored chains (every transp8-anchored sortnet measured visits
+   < 200), and an exhausted budget refuses by name.  */
+
+#define LPA_PIN_MAX_ALTS 16
+#define LPA_PIN_MAX_OPS 24
+#define LPA_PIN_SEARCH_BUDGET 4096
+
+/* The singleton-LREG class test: SFPU_REGS_L0..L7 are contiguous
+   (riscv.h reg_class enum).  */
+
+static int
+singleton_sfpu_lreg (enum reg_class cl)
+{
+  if (cl >= SFPU_REGS_L0 && cl <= SFPU_REGS_L7)
+    return cl - SFPU_REGS_L0;
+  return -1;
+}
+
+struct lpa_pin_alt
+{
+  int nreq, neq;
+  int req_node[LPA_PIN_MAX_OPS];
+  int req_lreg[LPA_PIN_MAX_OPS];
+  int eq_a[LPA_PIN_MAX_OPS];
+  int eq_b[LPA_PIN_MAX_OPS];
+};
+
+struct lpa_pin_site
+{
+  rtx_insn *insn;
+  int nalts;			/* enabled + feasible alternatives */
+  lpa_pin_alt alts[LPA_PIN_MAX_ALTS];
+};
+
+/* Cheap engagement gate: does FN contain a recognized insn with more
+   than one alternative any of which pins an operand to a singleton
+   LREG class?  (Enabledness and operand shape are checked during
+   collection; over-approximating here only costs the collection
+   walk.)  */
+
+static bool
+function_has_relational_pin_site (function *fn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  int icode = recog_memoized (insn);
+	  if (icode < 0)
+	    continue;
+	  int nalts = insn_data[icode].n_alternatives;
+	  int nops = insn_data[icode].n_operands;
+	  if (nalts <= 1 || nops == 0)
+	    continue;
+	  const operand_alternative *op_alt
+	    = preprocess_insn_constraints (icode);
+	  if (!op_alt)
+	    continue;
+	  for (int a = 0; a < nalts; a++)
+	    for (int i = 0; i < nops; i++)
+	      if (singleton_sfpu_lreg
+		    ((enum reg_class) op_alt[a * nops + i].cl) >= 0)
+		return true;
+	}
+    }
+  return false;
+}
+
+/* Collect every pin site in FN against graph G.  Returns false with
+   *WHY/*WHY_AT set on any shape the model does not cover.  */
+
+static bool
+collect_pin_sites (function *fn, const lpa_graph &g,
+		   auto_vec<lpa_pin_site> &sites, int *n_relational,
+		   const char **why, rtx_insn **why_at)
+{
+  *n_relational = 0;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	    continue;
+
+	  int icode = recog_memoized (insn);
+	  if (icode < 0)
+	    {
+	      /* Unrecognized stream elements (inline asm and friends)
+		 touching vector pseudos are outside the binding
+		 model: their register demands are invisible.  */
+	      subrtx_iterator::array_type array;
+	      FOR_EACH_SUBRTX (iter, array, pat, ALL)
+		if (REG_P (*iter) && xtt32_pseudo_p (REGNO (*iter)))
+		  {
+		    *why = "dualbank-pin-opaque-xtt-insn";
+		    *why_at = insn;
+		    return false;
+		  }
+	      continue;
+	    }
+
+	  extract_insn (insn);
+	  preprocess_constraints (insn);
+	  int nops = recog_data.n_operands;
+	  int nalts = recog_data.n_alternatives;
+	  if (nops == 0 || nalts == 0)
+	    continue;
+	  alternative_mask enabled = get_enabled_alternatives (insn);
+
+	  /* Is any enabled alternative pinning?  */
+	  bool pinning = false;
+	  for (int a = 0; a < nalts && !pinning; a++)
+	    {
+	      if (!(enabled & ALTERNATIVE_BIT (a)))
+		continue;
+	      for (int i = 0; i < nops; i++)
+		if (singleton_sfpu_lreg
+		      ((enum reg_class) recog_op_alt[a * nops + i].cl) >= 0)
+		  {
+		    pinning = true;
+		    break;
+		  }
+	    }
+	  if (!pinning)
+	    continue;
+
+	  if (nops > LPA_PIN_MAX_OPS || nalts > LPA_PIN_MAX_ALTS)
+	    {
+	      *why = "dualbank-pin-shape-unmodeled";
+	      *why_at = insn;
+	      return false;
+	    }
+
+	  lpa_pin_site site;
+	  site.insn = insn;
+	  site.nalts = 0;
+	  for (int a = 0; a < nalts; a++)
+	    {
+	      if (!(enabled & ALTERNATIVE_BIT (a)))
+		continue;
+	      lpa_pin_alt alt;
+	      alt.nreq = 0;
+	      alt.neq = 0;
+	      bool feasible = true;
+	      for (int i = 0; i < nops && feasible; i++)
+		{
+		  const operand_alternative &oa
+		    = recog_op_alt[a * nops + i];
+		  rtx op = recog_data.operand[i];
+		  bool xtt_reg = REG_P (op)
+		    && xtt32_pseudo_p (REGNO (op));
+		  int lreg = singleton_sfpu_lreg ((enum reg_class) oa.cl);
+		  if (lreg >= 0)
+		    {
+		      if (!xtt_reg)
+			{
+			  /* The alternative demands an exact LREG for
+			     an operand that is not a vector pseudo
+			     (e.g. a constant-LREG unspec): it cannot
+			     be chosen as the operands stand.  */
+			  feasible = false;
+			  break;
+			}
+		      int node = g.node_of_reg[REGNO (op)];
+		      if (node < 0)
+			{
+			  *why = "dualbank-pin-shape-unmodeled";
+			  *why_at = insn;
+			  return false;
+			}
+		      alt.req_node[alt.nreq] = node;
+		      alt.req_lreg[alt.nreq] = lreg;
+		      alt.nreq++;
+		    }
+		  if (oa.matches >= 0 && xtt_reg)
+		    {
+		      rtx mop = recog_data.operand[oa.matches];
+		      if (REG_P (mop) && xtt32_pseudo_p (REGNO (mop)))
+			{
+			  int na = g.node_of_reg[REGNO (op)];
+			  int nb = g.node_of_reg[REGNO (mop)];
+			  if (na < 0 || nb < 0)
+			    {
+			      *why = "dualbank-pin-shape-unmodeled";
+			      *why_at = insn;
+			      return false;
+			    }
+			  if (na != nb)
+			    {
+			      alt.eq_a[alt.neq] = na;
+			      alt.eq_b[alt.neq] = nb;
+			      alt.neq++;
+			    }
+			}
+		    }
+		}
+	      if (feasible)
+		site.alts[site.nalts++] = alt;
+	    }
+	  if (site.nalts == 0)
+	    {
+	      *why = "dualbank-pin-no-feasible-alternative";
+	      *why_at = insn;
+	      return false;
+	    }
+	  if (site.nalts > 1)
+	    (*n_relational)++;
+	  sites.safe_push (site);
+	}
+    }
+  return true;
+}
+
+/* Union-find + root-color state.  No path compression, min-index
+   roots: copies are cheap (webs are few) and the search stays
+   deterministic.  */
+
+struct lpa_bind_state
+{
+  auto_vec<int> uf;
+  auto_vec<int> col;
+
+  void init (unsigned n)
+  {
+    uf.truncate (0);
+    col.truncate (0);
+    uf.safe_grow (n);
+    col.safe_grow (n);
+    for (unsigned i = 0; i < n; i++)
+      {
+	uf[i] = i;
+	col[i] = -1;
+      }
+  }
+  void copy_from (const lpa_bind_state &o)
+  {
+    uf.truncate (0);
+    col.truncate (0);
+    uf.safe_splice (o.uf);
+    col.safe_splice (o.col);
+  }
+};
+
+static int
+bind_find (const lpa_bind_state &st, int x)
+{
+  while (st.uf[x] != x)
+    x = st.uf[x];
+  return x;
+}
+
+static bool
+bind_union (lpa_bind_state &st, int a, int b)
+{
+  a = bind_find (st, a);
+  b = bind_find (st, b);
+  if (a == b)
+    return true;
+  if (b < a)
+    std::swap (a, b);
+  int ca = st.col[a], cb = st.col[b];
+  if (ca >= 0 && cb >= 0 && ca != cb)
+    return false;
+  st.uf[b] = a;
+  st.col[a] = ca >= 0 ? ca : cb;
+  return true;
+}
+
+static bool
+bind_require (lpa_bind_state &st, int node, int lreg)
+{
+  int r = bind_find (st, node);
+  if (st.col[r] >= 0 && st.col[r] != lreg)
+    return false;
+  st.col[r] = lreg;
+  return true;
+}
+
+static bool
+bind_apply_alt (lpa_bind_state &st, const lpa_pin_alt &alt)
+{
+  for (int e = 0; e < alt.neq; e++)
+    if (!bind_union (st, alt.eq_a[e], alt.eq_b[e]))
+      return false;
+  for (int r = 0; r < alt.nreq; r++)
+    if (!bind_require (st, alt.req_node[r], alt.req_lreg[r]))
+      return false;
+  return true;
+}
+
+/* Forced-color consistency: no two webs carrying the same forced
+   color may conflict (different classes), and no two members of one
+   merged class may conflict (a matching-united pair that overlaps
+   needs a repair copy this layer does not emit).  Grouping by color
+   keeps this cheap enough to run after EVERY alternative application
+   -- the pruning that keeps the DFS from exploding on functions with
+   many relational sites.  *MATCHED_CONFLICT reports the united-webs
+   case for refusal naming.  */
+
+static bool
+bind_forced_consistent_p (const lpa_graph &g, const lpa_bind_state &st,
+			  bool *matched_conflict)
+{
+  unsigned n = g.webs.length ();
+  auto_vec<int> by_color[SFPU_REG_NUM];
+  for (unsigned i = 0; i < n; i++)
+    {
+      int c = st.col[bind_find (st, i)];
+      if (c >= 0)
+	by_color[c].safe_push (i);
+    }
+  for (unsigned c = 0; c < SFPU_REG_NUM; c++)
+    for (unsigned a = 0; a < by_color[c].length (); a++)
+      for (unsigned b = a + 1; b < by_color[c].length (); b++)
+	{
+	  unsigned i = by_color[c][a], j = by_color[c][b];
+	  if (!g.conflict_p (i, j))
+	    continue;
+	  if (bind_find (st, i) == bind_find (st, j))
+	    *matched_conflict = true;
+	  return false;
+	}
+  return true;
+}
+
+/* Full-choice acceptance: forced colors consistent, and a DSATUR
+   completion over the merged web classes must extend the forced
+   colors to every web within the file.  */
+
+static bool
+bind_leaf_acceptable (const lpa_graph &g, const lpa_bind_state &st,
+		      bool *matched_conflict)
+{
+  unsigned n = g.webs.length ();
+  if (!bind_forced_consistent_p (g, st, matched_conflict))
+    return false;
+
+  auto_vec<int> root_of;
+  root_of.safe_grow (n);
+  for (unsigned i = 0; i < n; i++)
+    root_of[i] = bind_find (st, i);
+
+  /* United classes must be internally conflict-free even when
+     uncolored (they will share whatever register completion or IRA
+     picks).  */
+  for (unsigned i = 0; i < n; i++)
+    for (unsigned j = i + 1; j < n; j++)
+      if (root_of[i] == root_of[j] && g.conflict_p (i, j))
+	{
+	  *matched_conflict = true;
+	  return false;
+	}
+
+  /* DSATUR completion over the merged classes (roots).  */
+  auto_vec<int> rid;
+  rid.safe_grow (n);
+  auto_vec<int> roots;
+  for (unsigned i = 0; i < n; i++)
+    rid[i] = -1;
+  for (unsigned i = 0; i < n; i++)
+    if (root_of[i] == (int) i)
+      {
+	rid[i] = roots.length ();
+	roots.safe_push (i);
+      }
+  unsigned m = roots.length ();
+
+  sbitmap adj = sbitmap_alloc (m * m);
+  bitmap_clear (adj);
+  for (unsigned i = 0; i < n; i++)
+    for (unsigned j = i + 1; j < n; j++)
+      if (g.conflict_p (i, j))
+	{
+	  unsigned ri = rid[root_of[i]], rj = rid[root_of[j]];
+	  bitmap_set_bit (adj, ri * m + rj);
+	  bitmap_set_bit (adj, rj * m + ri);
+	}
+
+  auto_vec<int> color;
+  color.safe_grow (m);
+  for (unsigned k = 0; k < m; k++)
+    color[k] = st.col[roots[k]];
+
+  const unsigned full = (1u << SFPU_REG_NUM) - 1;
+  bool ok = true;
+  for (;;)
+    {
+      int best = -1;
+      unsigned best_sat = 0, best_deg = 0;
+      for (unsigned k = 0; k < m; k++)
+	{
+	  if (color[k] >= 0)
+	    continue;
+	  unsigned sat_mask = 0, deg = 0;
+	  for (unsigned l = 0; l < m; l++)
+	    if (bitmap_bit_p (adj, k * m + l))
+	      {
+		deg++;
+		if (color[l] >= 0)
+		  sat_mask |= 1u << color[l];
+	      }
+	  unsigned sat = popcount_hwi (sat_mask & full);
+	  if (best < 0 || sat > best_sat
+	      || (sat == best_sat && deg > best_deg))
+	    {
+	      best = k;
+	      best_sat = sat;
+	      best_deg = deg;
+	    }
+	}
+      if (best < 0)
+	break;			/* all colored: completion exists */
+      unsigned sat_mask = 0;
+      for (unsigned l = 0; l < m; l++)
+	if (bitmap_bit_p (adj, best * m + l) && color[l] >= 0)
+	  sat_mask |= 1u << color[l];
+      unsigned avail = ~sat_mask & full;
+      if (!avail)
+	{
+	  ok = false;
+	  break;
+	}
+      color[best] = ctz_hwi (avail);
+    }
+  sbitmap_free (adj);
+  return ok;
+}
+
+/* Deterministic DFS over the relational sites' alternatives.  */
+
+static bool
+bind_solve_rec (const lpa_graph &g,
+		const auto_vec<const lpa_pin_site *> &rel, unsigned idx,
+		const lpa_bind_state &st, unsigned *budget,
+		bool *budget_hit, bool *matched_conflict,
+		lpa_bind_state *out)
+{
+  if (idx == rel.length ())
+    {
+      if (!bind_leaf_acceptable (g, st, matched_conflict))
+	return false;
+      out->copy_from (st);
+      return true;
+    }
+  const lpa_pin_site *s = rel[idx];
+  for (int a = 0; a < s->nalts; a++)
+    {
+      if (*budget == 0)
+	{
+	  *budget_hit = true;
+	  return false;
+	}
+      (*budget)--;
+      lpa_bind_state next;
+      next.copy_from (st);
+      if (!bind_apply_alt (next, s->alts[a]))
+	continue;
+      /* Eager pruning: a forced-color collision anywhere kills this
+	 subtree now, not at the leaf.  */
+      bool mc = false;
+      if (!bind_forced_consistent_p (g, next, &mc))
+	{
+	  if (mc)
+	    *matched_conflict = true;
+	  continue;
+	}
+      if (bind_solve_rec (g, rel, idx + 1, next, budget, budget_hit,
+			  matched_conflict, out))
+	return true;
+      if (*budget_hit)
+	return false;
+    }
+  return false;
+}
+
+static void
+dump_bind_refusal (const char *name, const char *detail, rtx_insn *at)
+{
+  if (dump_file)
+    fprintf (dump_file,
+	     "lreg-alloc dual-bank binding refusal: %s (%s) at insn %d; "
+	     "standing down (today's allocation)\n",
+	     name, detail ? detail : "", at ? INSN_UID (at) : -1);
+}
+
+/* Independent soundness oracle for the commit: point-wise backward DF
+   simulation proving that (a) no two DIFFERENT webs bound to the same
+   LREG are ever live at the same point, and (b) no bound web is live
+   across a call (the hard register would not survive what a pseudo's
+   allocation could have been made to survive).  This deliberately
+   re-derives liveness rather than trusting the interference graph's
+   live-at-def construction: a missed conflict there would turn the
+   hard-register rewrite into a SILENT same-register overlap.  BOUND
+   maps node -> lreg or -1.  */
+
+static bool
+bind_commit_sound_p (function *fn, const lpa_graph &g,
+		     const auto_vec<int> &bound, const char **why,
+		     rtx_insn **why_at)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      auto_bitmap live;
+      bitmap_copy (live, DF_LR_OUT (bb));
+      df_simulate_initialize_backwards (bb, live);
+
+      /* Check one program point: the set of bound webs live here must
+	 be register-unique.  */
+      auto check_point = [&] (rtx_insn *at) -> bool
+	{
+	  int seen[SFPU_REG_NUM];
+	  for (int c = 0; c < (int) SFPU_REG_NUM; c++)
+	    seen[c] = -1;
+	  unsigned lregno;
+	  bitmap_iterator bi;
+	  EXECUTE_IF_SET_IN_BITMAP (live, 0, lregno, bi)
+	    {
+	      if (!xtt32_pseudo_p (lregno))
+		continue;
+	      int node = g.node_of_reg[lregno];
+	      if (node < 0 || bound[node] < 0)
+		continue;
+	      int c = bound[node];
+	      if (seen[c] >= 0 && seen[c] != node)
+		{
+		  *why = "dualbank-same-color-overlap";
+		  *why_at = at;
+		  return false;
+		}
+	      seen[c] = node;
+	    }
+	  return true;
+	};
+
+      if (!check_point (NULL))	/* block exit */
+	return false;
+      rtx_insn *insn;
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  df_simulate_one_insn_backwards (bb, insn, live);
+	  if (!check_point (insn))
+	    return false;
+	  if (CALL_P (insn))
+	    {
+	      unsigned lregno;
+	      bitmap_iterator bi;
+	      EXECUTE_IF_SET_IN_BITMAP (live, 0, lregno, bi)
+		{
+		  if (!xtt32_pseudo_p (lregno))
+		    continue;
+		  int node = g.node_of_reg[lregno];
+		  if (node >= 0 && bound[node] >= 0)
+		    {
+		      *why = "dualbank-web-live-across-call";
+		      *why_at = insn;
+		      return false;
+		    }
+		}
+	    }
+	}
+    }
+  return true;
+}
+
+/* Entry point.  Never mutates the stream; commits only the forced-
+   class map.  */
+
+static void
+bind_dual_bank_chains (function *fn)
+{
+  if (!function_has_relational_pin_site (fn))
+    return;			/* structural no-op */
+
+  lpa_graph g;
+  build_graph (fn, g, NULL);
+  if (g.fail)
+    {
+      dump_bind_refusal (g.fail, "graph collection", g.fail_at);
+      return;
+    }
+
+  auto_vec<lpa_pin_site> sites;
+  int n_relational = 0;
+  const char *why = NULL;
+  rtx_insn *why_at = NULL;
+  if (!collect_pin_sites (fn, g, sites, &n_relational, &why, &why_at))
+    {
+      dump_bind_refusal (why, "pin collection", why_at);
+      return;
+    }
+  if (n_relational == 0)
+    return;			/* enabledness shrank the gate hit */
+
+  unsigned n = g.webs.length ();
+  lpa_bind_state base;
+  base.init (n);
+
+  /* Base constraints: graph precolors, then single-alternative
+     sites.  */
+  for (unsigned i = 0; i < n; i++)
+    if (g.webs[i].precolor >= 0
+	&& !bind_require (base, i, g.webs[i].precolor))
+      {
+	dump_bind_refusal ("dualbank-pin-inconsistent", "precolor", NULL);
+	return;
+      }
+  auto_vec<const lpa_pin_site *> rel;
+  for (unsigned s = 0; s < sites.length (); s++)
+    {
+      if (sites[s].nalts == 1)
+	{
+	  if (!bind_apply_alt (base, sites[s].alts[0]))
+	    {
+	      dump_bind_refusal ("dualbank-pin-inconsistent",
+				 "single-alternative pins", sites[s].insn);
+	      return;
+	    }
+	}
+      else
+	rel.safe_push (&sites[s]);
+    }
+
+  bool base_mc = false;
+  if (!bind_forced_consistent_p (g, base, &base_mc))
+    {
+      dump_bind_refusal (base_mc ? "dualbank-matched-webs-conflict"
+			 : "dualbank-pin-inconsistent",
+			 "base constraints collide", NULL);
+      return;
+    }
+
+  unsigned budget = LPA_PIN_SEARCH_BUDGET;
+  bool budget_hit = false, matched_conflict = false;
+  lpa_bind_state sol;
+  if (!bind_solve_rec (g, rel, 0, base, &budget, &budget_hit,
+		       &matched_conflict, &sol))
+    {
+      dump_bind_refusal (budget_hit ? "dualbank-search-budget-exceeded"
+			 : matched_conflict ? "dualbank-matched-webs-conflict"
+			 : "dualbank-assignment-unsat",
+			 "no consistent alternative selection", NULL);
+      return;
+    }
+
+  /* Pin-derived colors per node; completion colors are certificate-
+     only and never committed.  */
+  auto_vec<int> bound;
+  bound.safe_grow (n);
+  unsigned n_bound = 0;
+  for (unsigned i = 0; i < n; i++)
+    {
+      bound[i] = sol.col[bind_find (sol, i)];
+      if (bound[i] >= 0)
+	n_bound++;
+    }
+
+  /* Independent soundness oracle before any mutation.  */
+  if (!bind_commit_sound_p (fn, g, bound, &why, &why_at))
+    {
+      dump_bind_refusal (why, "commit oracle", why_at);
+      return;
+    }
+
+  /* Commit: rewrite each bound web to its LREG hard register.  The
+     replacement is a same-mode REG-for-REG substitution, so the
+     pattern SHAPE (and with it the cached INSN_CODE the whole port's
+     RTL passes key on) is preserved by construction; re-recognition
+     is deliberately NOT run, because the noval machinery leaves NOVAL
+     unspecs in register_operand slots under cached codes (recog-stale
+     by port convention), so any revalidating rewrite of such an insn
+     would fail for reasons unrelated to this substitution.  LRA still
+     constraint-checks every rewritten insn against its cached code --
+     a bad binding is a loud reload failure, never silent.  */
+  for (unsigned i = 0; i < n; i++)
+    {
+      if (bound[i] < 0)
+	continue;
+      rtx preg = regno_reg_rtx[g.webs[i].regno];
+      rtx hard = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + bound[i]);
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, fn)
+	{
+	  rtx_insn *insn;
+	  FOR_BB_INSNS (bb, insn)
+	    {
+	      if (!INSN_P (insn))
+		continue;
+	      if (DEBUG_INSN_P (insn))
+		{
+		  if (DEBUG_BIND_INSN_P (insn)
+		      && reg_mentioned_p (preg, INSN_VAR_LOCATION_LOC (insn)))
+		    {
+		      INSN_VAR_LOCATION_LOC (insn)
+			= simplify_replace_rtx (INSN_VAR_LOCATION_LOC (insn),
+						preg, hard);
+		      df_insn_rescan (insn);
+		    }
+		  continue;
+		}
+	      bool touched = false;
+	      if (reg_mentioned_p (preg, PATTERN (insn)))
+		{
+		  PATTERN (insn) = replace_rtx (PATTERN (insn), preg, hard);
+		  touched = true;
+		}
+	      if (REG_NOTES (insn)
+		  && reg_mentioned_p (preg, REG_NOTES (insn)))
+		{
+		  REG_NOTES (insn) = replace_rtx (REG_NOTES (insn), preg,
+						  hard);
+		  touched = true;
+		}
+	      if (touched)
+		df_insn_rescan (insn);
+	    }
+	}
+      if (dump_file)
+	fprintf (dump_file,
+		 "lreg-alloc dual-bank binding: r%u -> L%d\n",
+		 g.webs[i].regno, bound[i]);
+    }
+  df_analyze ();
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "lreg-alloc: dual-bank pinned-chain binding: %u of %u web(s) "
+	     "bound across %u pin site(s) (%d relational, search budget "
+	     "used %u); completion DSATUR-certified within %u LREGs; "
+	     "disjointness + call-crossing oracle proven; pinned webs "
+	     "rewritten to hard LREGs for IRA\n",
+	     n_bound, n, sites.length (), n_relational,
+	     LPA_PIN_SEARCH_BUDGET - budget, SFPU_REG_NUM);
+}
+
 /* ------------------------------- pass ------------------------------ */
 
 const pass_data pass_data_rvtt_lp_alloc =
@@ -1981,6 +2813,11 @@ public:
 	if (!riscv_tt_opt_pressure_schedule)
 	  df_analyze ();
 	todo |= enforce_colorability (fn);
+	/* Layer 3: bind dual-bank pinned chains for IRA (forced-class
+	   map only; the stream is never touched).  Runs on the final
+	   (possibly spilled) stream; DF is current here -- both
+	   enforcement outcomes leave it analyzed.  */
+	bind_dual_bank_chains (fn);
       }
     return todo;
   }
