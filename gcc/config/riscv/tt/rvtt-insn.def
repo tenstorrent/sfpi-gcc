@@ -263,6 +263,20 @@ RVTT_OVR(sfpstochrnd_v_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,
 RVTT_FN (sfpreadconfig,   bh_qsr,,XTT_VEC_FTYPE_USI,                                         0, ({CU, 4}))
 RVTT_FN (sfpreadconfig_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 LV, ({CU, 4}))
 RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                                    VOL, ({CU, 4}))
+// Immediate-form SFPCONFIG (lane FA, 2026-08-21): (imm16, dest, mod1).
+// MOD1_IMM16_IS_VALUE (bit 0) is mandatory -- the mod mask 0xaa admits only
+// {1,3,5,7} (write/OR/AND/XOR of Imm16) so the instruction never reads
+// LReg[0]; that register-free property is the whole point (the value form
+// above stages through LReg[0] -- a 9th live vector, pressure-infeasible in
+// 8-live sort kernels).  The audited destination envelope is LaneConfig
+// (dest == 15) only, enforced by a named check in gimple-rvtt-check.cc
+// (sfpconfig-imm-dest-unaudited); dests 0-8 (LoadMacroConfig) stay owned by
+// the macro planner, 9-10 are NonContractualBehavior, and 11-14 imm-form
+// writes (fixed default constants) are refused until the prgm-const pass
+// models them.  Lane-mask forms (mod1 bit 3) take the value from LReg[0]
+// (SFPCONFIG.md functional model) and are therefore NOT immediate-form:
+// refused by the same mod mask.
+RVTT_FN (sfpconfig_i,           ,,VOID_FTYPE_USI_USI_USI,                                    VOL, ({CU, 16}, {CU, 4}, {M, 0xaa}))
 // Owned SETC16 programming, gimple-spellable (lane CA init hoist): the
 // caller-side materialization of a callee's owned address-modifier
 // program.  Args: SETC16 configuration register index, 16-bit value.

@@ -430,6 +430,18 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		  tu_fold_claim_value (d, known, value);
 		  *claimed |= 1u << d;
 		}
+	      else if (insnd->id == rvtt_insn_data::sfpconfig_i)
+		{
+		  /* Immediate-form SFPCONFIG: the frontend check pins its
+		     destination to LaneConfig (15) -- the same census class
+		     as the value form's d == 15 arm above (LaneConfig bits
+		     such as DISABLE_BACKDOOR_LOAD change how neighbouring
+		     template-slot programming behaves), so it refuses
+		     identically rather than falling through the transparent
+		     default.  */
+		  refuse ("user SFPCONFIG writes LaneConfig", stmt);
+		  continue;
+		}
 	      continue;		/* typed builtins are transparent */
 	    }
 
