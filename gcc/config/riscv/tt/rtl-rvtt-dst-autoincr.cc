@@ -1968,6 +1968,17 @@ public:
 
 } // anon namespace
 
+/* Exported single source of the audited W_drain value (rvtt-protos.h;
+   lane FL, FH-1): the replay former's no-exec record placement
+   obligation audits the same silicon-refuted composition this file's
+   group guard does, so both must price the same audited quantity.  */
+
+unsigned
+rvtt_modwrite_drained_frontend_window (void)
+{
+  return target_autoincr_caps ().drained_frontend_window;
+}
+
 rtl_opt_pass *
 make_pass_rvtt_dst_autoincr (gcc::context *ctxt)
 {

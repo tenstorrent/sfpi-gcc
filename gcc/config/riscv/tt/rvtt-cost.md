@@ -577,6 +577,29 @@
 ;; no-exec capture at ANY distance, by the same name; the W_drain
 ;; window rule remains in force for issue-parity (explicit-row)
 ;; groups, whose witnesses carry it.
+;;
+;; PLACEMENT SIDE OF THE SAME FACT (lane FL, FH-1).  The dst-autoincr
+;; guard above prices the composition only against that pass's OWN
+;; mod-write groups; the replay former PLACES no-exec captures and
+;; must audit the identical fact against the stream's audited
+;; mod-write classes -- the typed SETC16 address-modifier programming
+;; word and typed Dst accesses through non-no-increment address
+;; modifiers (the mod0-6 class).  rtl-rvtt-replay.cc's fail-closed
+;; end-of-transform sweep un-hoists, by name
+;; (noexec-record-modwrite-window-unaudited), any still-no-exec
+;; formed capture whose recording window can open within W_drain
+;; issue words of such a word on any CFG path (minimum-distance walk,
+;; the exported rvtt_modwrite_drained_frontend_window constant --
+;; both consumers price the SAME audited quantity); launches become
+;; inline payload copies (the identity the capture was formed from).
+;; Issue-time RWC writers (TTINCRWC, the SET/FACE separator class,
+;; raw pure-Dst/RWC words) are outside the class -- the crossing
+;; model records them as re-anchoring issue-time words, and the
+;; celu/eqz-class wrapper-record adjacency behind raw STALLWAIT-class
+;; words is silicon-witnessed good across many pins.  Undecodable
+;; words earn zero cover in the walk (they never manufacture
+;; separation) but are not themselves hazards -- the same audit
+;; boundary the group guard's own function-scan has.
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
