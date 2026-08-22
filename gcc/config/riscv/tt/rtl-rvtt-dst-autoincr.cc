@@ -1096,7 +1096,70 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
    word distance, over CFG paths, from GRP's block to the capture.
    Unreachable or covered (>= drained_frontend_window) admits; anything
    nearer refuses by name.  BlackholeA0 has no REPLAY functional model
-   in tt-isa-documentation to audit anything finer.  */
+   in tt-isa-documentation to audit anything finer.
+
+   The frontend-word distance is an audited retirement proxy ONLY for
+   issue-parity delivery: an explicit row's mod-write store is itself a
+   frontend word, so N subsequent frontend words bound the store's
+   retirement distance from below (the W_drain fit's witnesses are all
+   explicit-row shapes, and the celu/eqz-class chunk-boundary
+   compositions -- explicit mod-write rows with a reachable in-loop
+   no-exec wrapper record behind >= W_drain words -- are silicon-good
+   across many pins).  A REPLAY-DELIVERED row breaks that premise: the
+   launch issues ONE frontend word while the expander delivers the
+   payload's mod-write asynchronously, so no frontend word count after
+   the launch bounds the store's retirement, and admission decays to
+   runtime pacing the model cannot see.  Lane FE finding F1 is the
+   refuting witness (laneFE-evidence-20260822): the sparse_k_filter
+   Int32/dest-acc composition -- 32-launch group, its own no-exec
+   record re-ingesting the mod-write payload one block earlier in the
+   tile loop, admitted covered at 20+ frontend words -- wedges Tensix
+   at runtime trip count 32 and passes at trip 8 on BYTE-IDENTICAL
+   code (2/2 device, flush-verified), while the pinned sim passes both
+   (frontend/RWC retirement timing unmodeled).  So for groups with any
+   replay-delivered row, a reachable (or same-block) no-exec capture
+   refuses at ANY distance; the window rule applies to issue-parity
+   (explicit-row) groups only.  */
+
+/* True when any surviving row of GRP delivers its terminator through
+   the replay expander (a launch or an executing capture) instead of as
+   an inline frontend word.  */
+
+static bool
+group_replay_delivered_p (const group &grp)
+{
+  for (unsigned cx : grp.cand_ix)
+    if (grp.scan->candidates[cx].payload)
+      return true;
+  return false;
+}
+
+/* Unpruned successor reachability: can execution starting at FROM's
+   exits reach TO?  (FROM itself only counts via a cycle back to it;
+   the same-block case is handled separately, fail-closed.)  */
+
+static bool
+block_reachable_p (basic_block from, basic_block to)
+{
+  hash_set<basic_block> seen;
+  std::vector<basic_block> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, from->succs)
+    work.push_back (e->dest);
+  while (!work.empty ())
+    {
+      basic_block bb = work.back ();
+      work.pop_back ();
+      if (bb == to)
+	return true;
+      if (seen.add (bb))
+	continue;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	work.push_back (e->dest);
+    }
+  return false;
+}
 
 static unsigned
 block_frontend_words (const function_scan &fn, basic_block bb)
@@ -1133,12 +1196,16 @@ words_before_capture (const function_scan &fn, const capture_rec *cap)
 static bool
 noexec_record_composition_p (const function_scan &fn, const group &grp,
 			     const autoincr_caps &caps,
-			     const capture_rec **hazard)
+			     const capture_rec **hazard,
+			     const char **detail)
 {
   *hazard = nullptr;
+  *detail = "no-exec replay capture within the drained-frontend window "
+	    "of the group's stores";
   if (fn.noexec_captures.empty ())
     return false;
   unsigned window = caps.drained_frontend_window;
+  bool replay_delivered = group_replay_delivered_p (grp);
 
   for (capture_rec *cap : fn.noexec_captures)
     {
@@ -1147,6 +1214,18 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
       if (cap->bb == grp.scan->bb)
 	{
 	  *hazard = cap;
+	  return true;
+	}
+
+      /* Replay-delivered rows break the issue-parity premise of the
+	 frontend-word distance audit (see the block comment above; lane
+	 FE finding F1 is the refuting silicon witness): any reachable
+	 no-exec capture refuses at any distance.  */
+      if (replay_delivered && block_reachable_p (grp.scan->bb, cap->bb))
+	{
+	  *hazard = cap;
+	  *detail = "replay-delivered mod-write, no-exec replay capture "
+		    "reachable from the group";
 	  return true;
 	}
 
@@ -1678,15 +1757,16 @@ transform (function *cfn)
 	    {
 	      group &grp = *it;
 	      const capture_rec *hazard;
-	      if (noexec_record_composition_p (fn, grp, caps, &hazard))
+	      const char *detail;
+	      if (noexec_record_composition_p (fn, grp, caps, &hazard,
+					       &detail))
 		{
 		  if (dump_file)
 		    fprintf (dump_file, "Dst-autoincr refusal: "
 			     "mod-write-noexec-record-composition-"
-			     "unaudited (no-exec replay capture within "
-			     "the drained-frontend window of the group's "
-			     "stores, bb %d, capture bb %d)\n",
-			     grp.scan->bb->index, hazard->bb->index);
+			     "unaudited (%s, bb %d, capture bb %d)\n",
+			     detail, grp.scan->bb->index,
+			     hazard->bb->index);
 		  for (unsigned cx : grp.cand_ix)
 		    grp.scan->candidates[cx].dropped = true;
 		  changed = true;

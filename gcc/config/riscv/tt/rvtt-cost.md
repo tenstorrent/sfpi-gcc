@@ -546,6 +546,37 @@
 ;; paths from the group's block to the capture, at the audited
 ;; W_drain.  Unreachable or covered admits (bytes preserved on every
 ;; witnessed-good row); nearer refuses by name.
+;;
+;; DELIVERY BOUNDARY OF THE DISTANCE PROXY (lane FE finding F1,
+;; laneFE-evidence-20260822; guard extension lane FJ).  The
+;; frontend-word distance is an audited retirement proxy only at
+;; ISSUE PARITY: an explicit row's mod-write store is itself a
+;; frontend word, so N subsequent frontend words bound its retirement
+;; from below.  Every witness behind the W_drain fit is an
+;; explicit-row shape, and the witnessed-good celu/eqz-class
+;; compositions (24 ON-set corpus rows, silicon-good across many
+;; pins) are explicit mod-write rows with an in-loop no-exec wrapper
+;; record behind >= W_drain words.  A REPLAY-DELIVERED row (launch or
+;; executing capture whose payload carries the mod-write terminator)
+;; breaks the premise: the launch issues one frontend word while the
+;; expander delivers the payload asynchronously, so no frontend word
+;; count after the launch bounds the store's retirement.  The
+;; refuting silicon witness: sparse_k_filter Int32/dest-acc sem-ON
+;; (pin 19) -- a 32-launch group whose own no-exec record (TTREPLAY
+;; 0,11,0,1) re-ingests the mod-write payload one block earlier in
+;; the tile loop, admitted covered at 20+ frontend words -- wedges
+;; Tensix (TENSIX TIMED OUT, Math/Unpacker/Packer) at RUNTIME trip
+;; count 32 and passes at trip 8 on BYTE-IDENTICAL code (runtime
+;; TILE_CNT axis, 2/2 device reproductions, flush-verified healthy
+;; device, default-flags t32 re-verified PASS), while the pinned sim
+;; passes both legs (frontend/RWC retirement timing unmodeled).
+;; Admission at any static distance therefore decays to runtime
+;; semaphore pacing the model cannot see.  Until BlackholeA0 REPLAY
+;; documentation exists (ES-F1 doc gap still open), groups with any
+;; replay-delivered row refuse every reachable (or same-block)
+;; no-exec capture at ANY distance, by the same name; the W_drain
+;; window rule remains in force for issue-parity (explicit-row)
+;; groups, whose witnesses carry it.
 (define_attr "xtt_result_latency" ""
   (const_int 0))
 
