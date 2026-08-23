@@ -35,10 +35,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "dominance.h"
 #include "df.h"
 #include "tm_p.h"
+#include "insn-codes.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-epoch.h"
+#include "rvtt-macro-tables.h"
+#include "rvtt-mop-tables.h"
+#include "rvtt-raw-boundary.h"
 
 const char *macro_epoch_refusal_invalidated = "prefix-epoch-invalidated";
 const char *macro_epoch_refusal_unproven = "prefix-epoch-unproven";
@@ -716,7 +720,412 @@ resid_insn_check (epoch_resolver *ctx, rtx_insn *insn,
   return macro_epoch_refusal_unproven;
 }
 
+/* ------------------------------------------------------------------ */
+/* Replay-state preservation walk (lane FW, record-hoist admission).  */
+/*								      */
+/* The owner vocabulary here is the per-thread Replay Expander	      */
+/* buffer, not the configuration state the walks above guard: an      */
+/* instruction endangers a preheader-hoisted no-exec record exactly   */
+/* when it can WRITE replay-buffer slots (record forms) or deliver a  */
+/* word whose expansion could (REPLAY-opcode words with unprovable    */
+/* recorded content; MOP dispatches whose MopCfg template words are   */
+/* not audited -- the MOP Expander may legally emit REPLAY words,     */
+/* ISA MOPExpander.md).  Pure content reads -- playback launches this */
+/* pass itself formed -- are admitted; everything unresolvable	      */
+/* refuses.							      */
+/* ------------------------------------------------------------------ */
+
+struct replay_walk
+{
+  epoch_resolver resolver;
+  hash_set<rtx_insn *> *pass_launches;
+  basic_block loop_bb;
+  int mop_census;		/* -1 not yet computed, 0 failed, 1 ok */
+  const char *census_detail;
+};
+
+/* Architectural REPLAY opcode-byte test via the audited raw-boundary
+   decode (unproven targets answer true -- the refusing direction).  */
+
+static bool
+replay_opcode_byte_p (uint64_t opcode)
+{
+  return rvtt_raw_replay_owner_word_p ((uint32_t) ((opcode & 0xff) << 24));
+}
+
+static bool replay_mop_census_ok (replay_walk *ctx);
+
+/* One delivered (instruction-FIFO) word interval.  */
+
+static const char *
+replay_delivered_word_ck (replay_walk *ctx, const epoch_ival &v)
+{
+  uint64_t opcode;
+  if (!ival_field_constant (v, 24, &opcode))
+    return "delivered word opcode unresolvable";
+  if (replay_opcode_byte_p (opcode))
+    return "delivered REPLAY word (recorded slot content unprovable)";
+  if (opcode == XTT_MOP_OPCODE)
+    return replay_mop_census_ok (ctx) ? nullptr : ctx->census_detail;
+  /* MOP_CFG only sets the expander's MaskHi, which selects among the
+     same MopCfg words the census audits; every other opcode class
+     neither writes replay-buffer slots nor expands.  */
+  return nullptr;
+}
+
+/* True when ADDR provably references a named data object other than
+   the instruction FIFO: symbol-addressed memory is never a delivery
+   aperture unless the symbol is the recorded ABI anchor
+   __instrn_buffer itself (crosscall precedent).  */
+
+static bool
+symbol_not_fifo_addr_p (rtx addr)
+{
+  if (GET_CODE (addr) == CONST)
+    addr = XEXP (addr, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    addr = XEXP (addr, 0);
+  if (GET_CODE (addr) == LO_SUM)
+    addr = XEXP (addr, 1);
+  if (GET_CODE (addr) == CONST)
+    addr = XEXP (addr, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    addr = XEXP (addr, 0);
+  return GET_CODE (addr) == SYMBOL_REF
+    && strcmp (XSTR (addr, 0), "__instrn_buffer") != 0;
+}
+
+/* One volatile store.  DEST is the volatile MEM, SRC the stored value.
+   Returns a refusal detail or null.  */
+
+static const char *
+replay_volatile_store_ck (replay_walk *ctx, rtx dest, rtx src,
+			  rtx_insn *insn)
+{
+  rtx addr = XEXP (dest, 0);
+  if (symbol_not_fifo_addr_p (addr))
+    return nullptr;		/* named object: not a delivery aperture */
+  rtx base = addr;
+  if (GET_CODE (base) == PLUS && CONST_INT_P (XEXP (base, 1)))
+    base = XEXP (base, 0);
+  if (REG_P (base) && REGNO (base) == STACK_POINTER_REGNUM)
+    return nullptr;		/* stack slot */
+  epoch_ival av = eval_rtx (&ctx->resolver, addr, insn, 0);
+  if (av.known () && av.lo == av.hi)
+    {
+      uint64_t a = av.lo;
+      bool fifo = a >= XTT_INSTRN_BUF_MMIO_BASE
+	&& a <= XTT_INSTRN_BUF_MMIO_LIMIT;
+      bool mopcfg = a >= XTT_MOP_CFG_MMIO_BASE
+	&& a <= XTT_MOP_CFG_MMIO_LIMIT;
+      if (!fifo && !mopcfg)
+	return nullptr;		/* other MMIO / L1: delivers nothing */
+      if (mopcfg)
+	{
+	  /* A MopCfg slot rewrite is replay-benign as long as the word
+	     can never be a REPLAY instruction (the census separately
+	     proves coverage for any MOP consuming it).  */
+	  epoch_ival v = eval_rtx (&ctx->resolver, src, insn, 0);
+	  uint64_t opcode;
+	  if (!ival_field_constant (v, 24, &opcode))
+	    return "MopCfg word unresolvable";
+	  if (replay_opcode_byte_p (opcode))
+	    return "REPLAY word stored to MopCfg";
+	  return nullptr;
+	}
+      return replay_delivered_word_ck
+	(ctx, eval_rtx (&ctx->resolver, src, insn, 0));
+    }
+  /* Unresolvable address: the store could be a FIFO push, so the WORD
+     itself must be provably benign wherever it lands.  */
+  return replay_delivered_word_ck
+    (ctx, eval_rtx (&ctx->resolver, src, insn, 0));
+}
+
+/* Recursive volatile-store walk over one pattern.  */
+
+static const char *
+replay_volatile_ck (replay_walk *ctx, rtx_insn *insn, rtx pat)
+{
+  if (GET_CODE (pat) == PARALLEL)
+    {
+      for (int i = 0; i != XVECLEN (pat, 0); ++i)
+	if (const char *why
+	      = replay_volatile_ck (ctx, insn, XVECEXP (pat, 0, i)))
+	  return why;
+      return nullptr;
+    }
+  if (GET_CODE (pat) != SET)
+    return nullptr;		/* barrier forms deliver no words */
+  rtx dest = SET_DEST (pat);
+  if (MEM_P (dest) && MEM_VOLATILE_P (dest))
+    return replay_volatile_store_ck (ctx, dest, SET_SRC (pat), insn);
+  return nullptr;
+}
+
+/* Extract an asm template (mirrors epoch_asm_check's forms).  */
+
+static const char *
+asm_template_of (rtx pat, rtx *asmop_out)
+{
+  rtx asmop = extract_asm_operands (pat);
+  *asmop_out = asmop;
+  if (asmop)
+    return ASM_OPERANDS_TEMPLATE (asmop);
+  if (GET_CODE (pat) == ASM_INPUT)
+    return XSTR (pat, 0);
+  if (GET_CODE (pat) == PARALLEL
+      && GET_CODE (XVECEXP (pat, 0, 0)) == ASM_INPUT)
+    return XSTR (XVECEXP (pat, 0, 0), 0);
+  return nullptr;
+}
+
+/* One volatile store, census view: only MopCfg-range (coverage +
+   REPLAY exclusion) and unresolvable-address stores (word exclusion)
+   matter.  */
+
+static const char *
+census_store_ck (replay_walk *ctx, rtx_insn *insn, rtx dest, rtx src,
+		 basic_block bb, unsigned *covered)
+{
+  rtx addr = XEXP (dest, 0);
+  if (symbol_not_fifo_addr_p (addr))
+    return nullptr;
+  rtx sbase = addr;
+  if (GET_CODE (sbase) == PLUS && CONST_INT_P (XEXP (sbase, 1)))
+    sbase = XEXP (sbase, 0);
+  if (REG_P (sbase) && REGNO (sbase) == STACK_POINTER_REGNUM)
+    return nullptr;
+  epoch_ival av = eval_rtx (&ctx->resolver, addr, insn, 0);
+  if (av.known () && av.lo == av.hi)
+    {
+      uint64_t a = av.lo;
+      if (a < XTT_MOP_CFG_MMIO_BASE || a > XTT_MOP_CFG_MMIO_LIMIT)
+	return nullptr;
+      epoch_ival v = eval_rtx (&ctx->resolver, src, insn, 0);
+      uint64_t opcode;
+      if (!ival_field_constant (v, 24, &opcode))
+	return "unresolvable MopCfg word";
+      if (replay_opcode_byte_p (opcode))
+	return "REPLAY word stored to MopCfg";
+      if (a <= XTT_MOP_CFG_MMIO_BASE + 8 * 4
+	  && bb != ctx->loop_bb
+	  && dominated_by_p (CDI_DOMINATORS, ctx->loop_bb, bb))
+	*covered |= 1u << ((a - XTT_MOP_CFG_MMIO_BASE) / 4);
+      return nullptr;
+    }
+  /* Unresolvable address: could be a MopCfg slot; the word must be
+     provably non-REPLAY.  */
+  epoch_ival v = eval_rtx (&ctx->resolver, src, insn, 0);
+  uint64_t opcode;
+  if (!ival_field_constant (v, 24, &opcode))
+    return "unresolvable stored word (MopCfg census)";
+  if (replay_opcode_byte_p (opcode))
+    return "possible REPLAY word stored to MopCfg";
+  return nullptr;
+}
+
+static const char *
+census_walk_pattern (replay_walk *ctx, rtx_insn *insn, rtx pat,
+		     basic_block bb, unsigned *covered)
+{
+  if (GET_CODE (pat) == PARALLEL)
+    {
+      for (int i = 0; i != XVECLEN (pat, 0); ++i)
+	if (const char *why
+	      = census_walk_pattern (ctx, insn, XVECEXP (pat, 0, i), bb,
+				     covered))
+	  return why;
+      return nullptr;
+    }
+  if (GET_CODE (pat) != SET)
+    return nullptr;
+  rtx dest = SET_DEST (pat);
+  if (MEM_P (dest) && MEM_VOLATILE_P (dest))
+    return census_store_ck (ctx, insn, dest, SET_SRC (pat), bb, covered);
+  return nullptr;
+}
+
+/* The MopCfg template census: every MopCfg word an in-function MOP can
+   consume (MopCfg[0..8], both templates -- ISA MOPExpander.md) is a
+   function-programmed constant whose opcode byte is not REPLAY, all
+   nine slots covered by stores in blocks strictly dominating the loop
+   header (a caller-armed slot could hold a REPLAY record word:
+   MopCfg is per-thread state that outlives calls), and no call in the
+   function (a callee could re-arm it).  The audited scalar store-load
+   roundtrip asm idioms are admitted: the MopCfg aperture is write-only
+   (reading it is UndefinedBehavior, ISA MOPExpander.md), so a defined
+   execution's roundtrip is never a MopCfg access.  */
+
+static bool
+replay_mop_census_ok (replay_walk *ctx)
+{
+  if (ctx->mop_census >= 0)
+    return ctx->mop_census != 0;
+  ctx->mop_census = 0;
+  ctx->census_detail = "MopCfg template census unproven";
+  function *fn = ctx->resolver.fn;
+  bool free_dom = !dom_info_available_p (CDI_DOMINATORS);
+  calculate_dominance_info (CDI_DOMINATORS);
+  unsigned covered = 0;
+  bool ok = true;
+  const char *detail = nullptr;
+
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!ok)
+	    break;
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (CALL_P (insn))
+	    {
+	      ok = false;
+	      detail = "call in function: a callee could re-arm MopCfg";
+	      break;
+	    }
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	    continue;
+	  if (asm_noperands (pat) >= 0)
+	    {
+	      uint32_t word;
+	      if (rvtt_raw_ttinsn_word (insn, &word))
+		continue;	/* delivered word: never a MopCfg store */
+	      rtx asmop;
+	      const char *tmpl = asm_template_of (pat, &asmop);
+	      if (tmpl && audited_scalar_asm_p (tmpl))
+		continue;	/* write-only-aperture roundtrip argument */
+	      ok = false;
+	      detail = "unclassified asm in function (MopCfg census)";
+	      break;
+	    }
+	  if (recog_memoized (insn) < 0 || !volatile_refs_p (pat))
+	    continue;
+	  if (const char *why
+		= census_walk_pattern (ctx, insn, pat, bb, &covered))
+	    {
+	      ok = false;
+	      detail = why;
+	      break;
+	    }
+	}
+      if (!ok)
+	break;
+    }
+
+  if (ok && covered != 0x1ff)
+    {
+      ok = false;
+      detail = "MopCfg slots not all covered by dominating stores";
+    }
+  if (free_dom)
+    free_dominance_info (CDI_DOMINATORS);
+  if (detail)
+    ctx->census_detail = detail;
+  ctx->mop_census = ok;
+  return ok;
+}
+
+/* Classify one loop-body instruction.  Null when provably unable to
+   modify replay-buffer state.  */
+
+static const char *
+replay_insn_ck (replay_walk *ctx, rtx_insn *insn)
+{
+  if (!NONDEBUG_INSN_P (insn))
+    return nullptr;
+  if (CALL_P (insn))
+    return "call in loop";
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+    return nullptr;
+  if (asm_noperands (pat) >= 0)
+    {
+      rtx asmop;
+      const char *tmpl = asm_template_of (pat, &asmop);
+      if (!tmpl)
+	return "unclassified asm";
+      const char *s = tmpl;
+      while (*s == ' ' || *s == '\t')
+	++s;
+      if (strncmp (s, ".ttinsn", 7) == 0)
+	{
+	  s += 7;
+	  while (*s == ' ' || *s == '\t')
+	    ++s;
+	  if (strcmp (s, "%0") != 0 || !asmop
+	      || ASM_OPERANDS_INPUT_LENGTH (asmop) != 1)
+	    return "non-canonical raw word asm";
+	  return replay_delivered_word_ck
+	    (ctx, eval_rtx (&ctx->resolver,
+			    ASM_OPERANDS_INPUT (asmop, 0), insn, 0));
+	}
+      if (!audited_scalar_asm_p (tmpl))
+	return "unaudited scalar asm";
+      return nullptr;
+    }
+  if (recog_memoized (insn) >= 0)
+    {
+      int code = recog_memoized (insn);
+      if (code == CODE_FOR_rvtt_ttreplay_int)
+	{
+	  if (GET_CODE (pat) != UNSPEC_VOLATILE)
+	    return "unrecognized replay owner shape";
+	  rtx record = XVECEXP (pat, 0, 7);
+	  if (!CONST_INT_P (record) || INTVAL (record) != 0)
+	    return "in-loop replay record";
+	  if (!ctx->pass_launches || !ctx->pass_launches->contains (insn))
+	    return "user replay playback (recorded slot content unprovable)";
+	  return nullptr;	/* this pass's own playback: content known */
+	}
+      if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+	return "in-loop replay owner";
+      if (code == CODE_FOR_rvtt_ttmop_int)
+	return replay_mop_census_ok (ctx) ? nullptr : ctx->census_detail;
+      /* Every other typed pattern emits its own fixed architectural
+	 class -- never a REPLAY or MOP word (the xtt_replay attribute
+	 audit); only its volatile stores can deliver words.  */
+      if (volatile_refs_p (pat))
+	return replay_volatile_ck (ctx, insn, pat);
+      return nullptr;
+    }
+  return "unrecognized instruction";
+}
+
 } // anonymous namespace
+
+/* See rvtt-macro-epoch.h.  */
+
+const char *
+rvtt_macro_epoch_loop_replay_preserved_p (function *fn, basic_block *body,
+					  unsigned nbbs,
+					  basic_block loop_header,
+					  hash_set<rtx_insn *> &pass_launches,
+					  rtx_insn **refusal_insn)
+{
+  *refusal_insn = nullptr;
+  replay_walk ctx;
+  ctx.resolver.fn = fn;
+  ctx.pass_launches = &pass_launches;
+  ctx.loop_bb = loop_header;
+  ctx.mop_census = -1;
+  ctx.census_detail = nullptr;
+  for (unsigned i = 0; i != nbbs; ++i)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (body[i], insn)
+	if (const char *why = replay_insn_ck (&ctx, insn))
+	  {
+	    *refusal_insn = insn;
+	    return why;
+	  }
+    }
+  return nullptr;
+}
 
 /* See rvtt-macro-epoch.h.  */
 

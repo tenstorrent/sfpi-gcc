@@ -45,6 +45,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
 #include "rvtt-raw-boundary.h"
+#include "rvtt-mop-tables.h"
+#include "rvtt-macro-epoch.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -1199,22 +1201,26 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   bool record_hoist_mode
     = body_rerecords && riscv_tt_opt_replay_record_hoist > 0;
   uint64_t niter;
-  if (!provable_constant_trips (loop, preheader, &niter))
+  bool trips_proven = provable_constant_trips (loop, preheader, &niter);
+  /* Lane FW: a runtime trip count is admitted to the record-hoist
+     pricing under a structural trips >= 1 fact -- the hoisted record
+     lands in the DEDICATED preheader of a single-block loop, so
+     executing the record implies at least one body execution (the
+     preheader's single successor is the body); a zero-trip entry never
+     reaches the record.  The pricing branch below decides admission at
+     the 2-trip break-even.  */
+  bool runtime_trips = record_hoist_mode && !trips_proven;
+  if (!trips_proven && !runtime_trips)
     {
       if (dump_file)
-	{
-	  fprintf (dump_file,
-		   "Not hoisting: loop %d trip count is not provably"
-		   " constant\n", loop->num);
-	  if (record_hoist_mode)
-	    fprintf (dump_file,
-		     "record-hoist refused: record-hoist-trip-count-unproven\n");
-	}
+	fprintf (dump_file,
+		 "Not hoisting: loop %d trip count is not provably"
+		 " constant\n", loop->num);
       return false;
     }
 
-  HOST_WIDE_INT trips = (HOST_WIDE_INT) niter;
-  if (trips < 2)
+  HOST_WIDE_INT trips = trips_proven ? (HOST_WIDE_INT) niter : 0;
+  if (trips_proven && trips < 2)
     {
       if (dump_file)
 	{
@@ -1228,21 +1234,45 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
     }
 
   HOST_WIDE_INT words = delivered_words (block, payload);
-  HOST_WIDE_INT eslots = exec_interlocked_slots (block, payload);
-  if (eslots < 0)
+  /* Lane FW: under the record-hoist measurement flag the reissue-latency
+     audit gate is discharged structurally rather than per-producer.  Its
+     exec-side estimate feeds only the default model's pricing (the
+     record-hoist branch below prices pure delivery: the executed word
+     stream is IDENTICAL in both worlds by the fixed-encoding admission,
+     so per-word execution -- audited or not -- cancels).  Its reissue
+     soundness half is carried by the unhoisted world itself: every
+     window here has at least two clones, so the identical word stream is
+     ALREADY delivered by playback launches at expander pace in the
+     unhoisted world (the always-on former's formation, the
+     silicon-witnessed class); converting the first clone from
+     exec-while-record delivery to one more playback of that same stream
+     adds no reissue exposure a proven latency could bound.  The gate
+     stays for the default hoist model, whose pricing consumes the
+     estimate, and for unproven targets (no silicon-witnessed playback
+     class to carry the discharge -- QSR keeps the refusal).  */
+  bool reissue_gate_discharged
+    = record_hoist_mode
+      && (TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH);
+  HOST_WIDE_INT eslots = 0;
+  if (!reissue_gate_discharged)
     {
-      if (dump_file)
+      eslots = exec_interlocked_slots (block, payload);
+      if (eslots < 0)
 	{
-	  fprintf (dump_file,
-		   "Not hoisting: replay-reissue-latency-unproved: a"
-		   " consumed payload producer carries no audited result"
-		   " latency (loop %d, %ld words)\n",
-		   loop->num, (long) words);
-	  if (record_hoist_mode)
-	    fprintf (dump_file,
-		     "record-hoist refused: replay-reissue-latency-unproved\n");
+	  if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "Not hoisting: replay-reissue-latency-unproved: a"
+		       " consumed payload producer carries no audited result"
+		       " latency (loop %d, %ld words)\n",
+		       loop->num, (long) words);
+	      if (record_hoist_mode)
+		fprintf (dump_file,
+			 "record-hoist refused:"
+			 " replay-reissue-latency-unproved\n");
+	    }
+	  return false;
 	}
-      return false;
     }
 
   HOST_WIDE_INT exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
@@ -1291,6 +1321,46 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	= deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
       HOST_WIDE_INT per_trip
 	= deliver_body - XTT_REPLAY_COST_TURNAROUND_X100;
+      if (runtime_trips)
+	{
+	  /* Runtime trip count (lane FW; rvtt-cost.md RECORD-HOIST
+	     RUNTIME-TRIP derivation).  The delivery delta is monotone in
+	     the realized trip count: each trip saves per_trip delivered
+	     centislots, bought once at record_once.  With trips >= 1
+	     structural (dedicated preheader of a single-block loop) the
+	     worst realized outcome is the single-trip exposure
+	     record_once - per_trip -- about one record delivery -- and
+	     every trip from 2 on wins.  Admit when the 2-trip benefit
+	     clears the same audited margin proven trip counts must
+	     clear; refuse by name otherwise.  */
+	  HOST_WIDE_INT benefit2 = 2 * per_trip - record_once;
+	  HOST_WIDE_INT exposure = record_once - per_trip;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Record-hoist runtime-trip pricing (loop %d): words"
+		     " %ld, per_trip %ld, record_once %ld, 2-trip benefit"
+		     " %ld (min %ld), single-trip exposure %ld\n",
+		     loop->num, (long) words, (long) per_trip,
+		     (long) record_once, (long) benefit2,
+		     (long) min_benefit, (long) exposure);
+	  if (per_trip <= 0 || benefit2 < min_benefit)
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "record-hoist refused:"
+			 " record-hoist-runtime-trips-break-even: 2-trip"
+			 " benefit %ld < %ld\n",
+			 (long) benefit2, (long) min_benefit);
+	      return false;
+	    }
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist: runtime-trip re-record window admitted"
+		     " (structural trips>=1, words %ld, 2-trip benefit %ld,"
+		     " single-trip exposure %ld)\n",
+		     (long) words, (long) benefit2, (long) exposure);
+	  return true;
+	}
       HOST_WIDE_INT benefit = trips * per_trip - record_once;
       if (dump_file)
 	fprintf (dump_file,
@@ -1461,6 +1531,12 @@ max_contiguous_launch_run (replay_sequence const &seq,
   return max_run;
 }
 
+/* Playback launches THIS PASS emitted this function (lane FW): their
+   recorded slot content is the pass's own audited payload, so the
+   record-hoist loop replay-preservation walk may admit them where a
+   user-authored launch (unknowable recorded content) refuses.  */
+static std::vector<rtx_insn *> formed_playback_launches;
+
 static basic_block
 dedicated_loop_preheader (class loop *loop)
 {
@@ -1481,12 +1557,62 @@ dedicated_loop_preheader (class loop *loop)
     ? preheader : nullptr;
 }
 
+// A volatile store whose address is not provably outside the
+// instruction-FIFO aperture can deliver ANY word -- including a REPLAY
+// record that re-records hoisted slots (lane FW fail-closed widening of
+// the loop scan below; the flag-gated record-hoist path re-audits
+// refused loops with the interval walk in rvtt-macro-epoch.cc, which
+// also classifies the stored WORD).  Named data objects other than the
+// recorded ABI anchor __instrn_buffer (crosscall precedent) and stack
+// slots are provably not the FIFO; a constant address outside the
+// aperture range is too; everything else refuses.
+static bool
+volatile_store_maybe_fifo_p (rtx pat)
+{
+  if (GET_CODE (pat) == PARALLEL)
+    {
+      for (int i = 0; i != XVECLEN (pat, 0); ++i)
+	if (volatile_store_maybe_fifo_p (XVECEXP (pat, 0, i)))
+	  return true;
+      return false;
+    }
+  if (GET_CODE (pat) != SET)
+    return false;
+  rtx dest = SET_DEST (pat);
+  if (!MEM_P (dest) || !MEM_VOLATILE_P (dest))
+    return false;
+  rtx addr = XEXP (dest, 0);
+  if (CONST_INT_P (addr))
+    {
+      unsigned HOST_WIDE_INT a = UINTVAL (addr) & 0xffffffff;
+      return a >= XTT_INSTRN_BUF_MMIO_BASE && a <= XTT_INSTRN_BUF_MMIO_LIMIT;
+    }
+  rtx base = addr;
+  if (GET_CODE (base) == CONST)
+    base = XEXP (base, 0);
+  if (GET_CODE (base) == PLUS && CONST_INT_P (XEXP (base, 1)))
+    base = XEXP (base, 0);
+  if (GET_CODE (base) == LO_SUM)
+    base = XEXP (base, 1);
+  if (GET_CODE (base) == CONST)
+    base = XEXP (base, 0);
+  if (GET_CODE (base) == PLUS && CONST_INT_P (XEXP (base, 1)))
+    base = XEXP (base, 0);
+  if (GET_CODE (base) == SYMBOL_REF)
+    return strcmp (XSTR (base, 0), "__instrn_buffer") == 0;
+  if (REG_P (base) && REGNO (base) == STACK_POINTER_REGNUM)
+    return false;
+  return true;			/* unresolvable: fail closed */
+}
+
 // A raw asm or an unknown callee can own or overwrite replay state without
 // exposing that fact to this function's RTL.  Typed barriers are harmless
 // here: they remain outside the payload and do not change the selected replay
 // slots.  A typed owner is conservatively a boundary for this first hoisting
 // implementation even though global slot accounting has already excluded its
-// declared range.
+// declared range.  Volatile stores that could target the instruction FIFO
+// refuse fail-closed (they could push a REPLAY record word); see
+// volatile_store_maybe_fifo_p.
 static bool
 loop_preserves_replay_p (class loop *loop)
 {
@@ -1501,7 +1627,9 @@ loop_preserves_replay_p (class loop *loop)
 		  || asm_noperands (PATTERN (insn)) >= 0
 		  || (GET_CODE (insn) == INSN
 		      && recog_memoized (insn) >= 0
-		      && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)))
+		      && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+		  || (volatile_refs_p (PATTERN (insn))
+		      && volatile_store_maybe_fifo_p (PATTERN (insn)))))
 	    return false;
       }
   return true;
@@ -1518,34 +1646,98 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
   bool record_hoist = riscv_tt_opt_replay_record_hoist > 0;
   if (loop->num_nodes != 1 || loop->header != bb)
     {
-      if (dump_file)
+      /* Lane FW: under the record-hoist flag a MULTI-BLOCK loop admits
+	 when the capture bb dominates the loop latch -- the capture
+	 (and so its clone deliveries) executes on every completed trip,
+	 which is the fact the per-trip pricing consumes; the
+	 replay-preservation audit below walks EVERY block of the loop,
+	 so slot liveness needs no single-block shape.  Real measured
+	 vehicles are exactly this shape: the profiler zone code splits
+	 the tile loop into several blocks (buffer-management branches
+	 around an always-executed body).  A capture bb that does NOT
+	 dominate the latch executes conditionally -- its per-trip
+	 delivery saving is unpriced -- and refuses by the same name.  */
+      bool multi_bb_ok = false;
+      if (record_hoist && loop->latch)
 	{
-	  fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
-		   bb->index);
-	  if (record_hoist)
-	    fprintf (dump_file, "record-hoist refused: record-hoist-loop-shape\n");
+	  bool free_dom = !dom_info_available_p (CDI_DOMINATORS);
+	  calculate_dominance_info (CDI_DOMINATORS);
+	  multi_bb_ok = dominated_by_p (CDI_DOMINATORS, loop->latch, bb);
+	  if (free_dom)
+	    free_dominance_info (CDI_DOMINATORS);
 	}
-      return nullptr;
+      if (!multi_bb_ok)
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
+		       bb->index);
+	      if (record_hoist)
+		fprintf (dump_file,
+			 "record-hoist refused: record-hoist-loop-shape:"
+			 " capture bb %d does not dominate the latch"
+			 " (conditional per-trip execution unpriced)\n",
+			 bb->index);
+	    }
+	  return nullptr;
+	}
+      if (dump_file && record_hoist)
+	fprintf (dump_file,
+		 "record-hoist: multi-block loop %d admitted (capture bb %d"
+		 " dominates latch bb %d)\n",
+		 loop->num, bb->index, loop->latch->index);
     }
   if (!loop_preserves_replay_p (loop))
     {
-      if (dump_file)
+      /* Lane FW: under the record-hoist flag, re-audit the refused loop
+	 with the interval-resolving replay-preservation walk (LLK tile
+	 loops always carry raw sync words and computed FIFO pushes; the
+	 walk proves them unable to modify replay-buffer state, admits
+	 this pass's own playback launches -- the multi-record calendar
+	 -- and keeps everything unresolvable refused by name).  The
+	 walk covers every block of the loop (multi-block tile loops
+	 admit under the latch-dominance shape check above).  */
+      const char *audit_refusal = nullptr;
+      rtx_insn *audit_insn = nullptr;
+      if (record_hoist)
 	{
-	  fprintf (dump_file,
-		   "Not hoisting: loop contains call, opaque asm, or replay owner\n");
-	  /* For the record-hoist this is also the in-loop slot-liveness
-	     proof: an in-loop replay owner (or an asm/call that could hide
-	     one) could re-record the hoisted capture's slots between the
-	     preheader record and a later trip's launch.  Every other
-	     window this pass forms lives entirely inside one basic block
-	     (record to last launch), the loop is single-block, and
-	     persistent-slot marking excludes the hoisted range from all
-	     later formation, so this refusal closes the only re-record
-	     path into the hoisted slots.  */
-	  if (record_hoist)
-	    fprintf (dump_file, "record-hoist refused: record-hoist-loop-opaque\n");
+	  hash_set<rtx_insn *> pass_launches;
+	  for (rtx_insn *launch : formed_playback_launches)
+	    pass_launches.add (launch);
+	  basic_block *body = get_loop_body (loop);
+	  audit_refusal = rvtt_macro_epoch_loop_replay_preserved_p
+	    (cfun, body, loop->num_nodes, loop->header, pass_launches,
+	     &audit_insn);
+	  free (body);
 	}
-    return nullptr;
+      if (!record_hoist || audit_refusal)
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "Not hoisting: loop contains call, opaque asm, or replay owner\n");
+	      /* For the record-hoist this is also the in-loop slot-liveness
+		 proof: an in-loop replay owner (or an asm/call that could hide
+		 one) could re-record the hoisted capture's slots between the
+		 preheader record and a later trip's launch.  Every other
+		 window this pass forms lives entirely inside one basic block
+		 (record to last launch), the loop is single-block, and
+		 persistent-slot marking excludes the hoisted range from all
+		 later formation, so this refusal closes the only re-record
+		 path into the hoisted slots.  */
+	      if (record_hoist)
+		fprintf (dump_file,
+			 "record-hoist refused: record-hoist-loop-opaque:"
+			 " %s (insn %d)\n", audit_refusal,
+			 audit_insn ? INSN_UID (audit_insn) : -1);
+	    }
+	  return nullptr;
+	}
+      if (dump_file)
+	fprintf (dump_file,
+		 "record-hoist: loop %d replay-state audit admitted"
+		 " (every body word proven replay-preserving)\n",
+		 loop->num);
     }
 
   basic_block preheader = dedicated_loop_preheader (loop);
@@ -1597,6 +1789,41 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	  return nullptr;
 	}
 
+  /* Admission-side mirror of the fail-closed re-record sweep's rule 1
+     (lane FW): a Dst-store payload whose no-exec record would land in a
+     preheader that itself sits inside a natural loop is EXACTLY the
+     shape unhoist_hazard_rerecords un-hoists at the end of transform
+     (noexec-rerecord-dststore-composition-unaudited, lane FJ) -- and the
+     un-hoist's identity restoration is relative to the HOISTED world
+     (every launch becomes an inline payload copy), a strict delivery
+     pessimization against never having hoisted.  Forming a provably
+     doomed hoist is a known-losing transform: refuse it here by the
+     sweep's own name and keep the in-body formation byte-identically.
+     (The dominating loop-free-preheader Dst-store class stays admitted:
+     the sweep's rule 3 keeps it -- the witnessed init-record class.)  */
+  if (record_hoist)
+    {
+      class loop *ph_loop = preheader->loop_father;
+      if (ph_loop && ph_loop->num != 0)
+	for (auto pos = block.data () + seq.clones.front ().begin,
+	      end = block.data () + seq.clones.front ().end;
+	     pos != end; ++pos)
+	  if (!pos->empty
+	      && (recog_memoized (pos->insn) == CODE_FOR_rvtt_sfpstore_int
+		  || recog_memoized (pos->insn)
+		     == CODE_FOR_rvtt_sfpstoresrcs_int))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "record-hoist refused:"
+			 " noexec-rerecord-dststore-composition-unaudited:"
+			 " Dst-store payload, preheader bb %d inside loop %d"
+			 " (the re-record sweep would un-hoist)\n",
+			 preheader->index, ph_loop->num);
+	      return nullptr;
+	    }
+    }
+
   if (!hoist_profitable_p (loop, preheader, block, seq.clones.front (),
 			   /*body_rerecords=*/true,
 			   max_contiguous_launch_run (seq, block)))
@@ -1621,6 +1848,7 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
    FE-F1 follow-up; see unhoist_hazard_rerecords).  User-authored records
    are never entered here and stay untouched.  */
 static std::vector<rtx_insn *> formed_noexec_captures;
+
 
 static unsigned
 replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
@@ -1658,7 +1886,9 @@ replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
 	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
 	 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (replay_start),
 	 const0_rtx, const0_rtx);
-      emit_insn_after (replay, block[clone.end - 1].insn);
+      rtx_insn *launch
+	= emit_insn_after (replay, block[clone.end - 1].insn);
+      formed_playback_launches.push_back (launch);
       for (auto pos = block.data () + clone.begin,
 	    end = block.data () + clone.end; pos != end; ++pos)
 	SET_INSN_DELETED (pos->insn);
@@ -5328,6 +5558,7 @@ unhoist_hazard_rerecords (function *cfn)
   if (dom_info_available_p (CDI_DOMINATORS))
     free_dominance_info (CDI_DOMINATORS);
   formed_noexec_captures.clear ();
+  formed_playback_launches.clear ();
 }
 
 static void
@@ -5336,6 +5567,7 @@ transform (function *cfn, unsigned buffer_size)
   basic_block bb;
   std::vector<replay_span> replay_spans;
   formed_noexec_captures.clear ();
+  formed_playback_launches.clear ();
 
   /* Fail-closed raw-capture census.  The allocator's only view of
      already-claimed slots is the typed rvtt_ttreplay_int stream: an
