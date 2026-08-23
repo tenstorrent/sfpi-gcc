@@ -949,6 +949,46 @@ mad_operand_candidates (gcall *call, class loop *loop,
   return n;
 }
 
+/* The hoisted mad-pair operand (lane GA, FX-F1): a constant
+   materialization defining SRC that sits OUTSIDE LOOP (the invariant
+   pass's cc-restore-discharged hoist parks loop constants in the
+   preheader) with ONLY_USE as its single non-debug consumer inside the
+   loop, and whose full 32-bit lane image is recoverable through the
+   audited single-issue derivation.  *VULNERABLE reports whether the
+   materialization is the shortened SFPLOADI FLOATB form -- the exact
+   shape the downstream muli/addi immediate folds match ("in preference
+   to mul,add->mad"): folding rewrites the pair's add (or mul) into its
+   immediate form and the mad combine can no longer fuse, decaying a
+   one-word MAD row to a two-word MUL+ADDI row every iteration.  The
+   sfpxloadi 31/32/-32 forms are NOT vulnerable (the folds match only
+   the SFPLOADI insn) and need no re-claim: the mad rule fuses register
+   operands wherever they were materialized.  */
+
+static gcall *
+hoisted_madpair_load_p (tree src, class loop *loop, gimple *only_use,
+			unsigned *value, bool *vulnerable, bool *shared)
+{
+  if (TREE_CODE (src) != SSA_NAME)
+    return nullptr;
+  gcall *load = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+  if (!load
+      || !gimple_bb (load)
+      || flow_bb_inside_loop_p (loop, gimple_bb (load))
+      || !rvtt_invariant_constant_load_p (load, loop,
+					  /*allow_shortened=*/true)
+      || !single_issue_constant_image_p (load, value))
+    return nullptr;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
+  *vulnerable = insnd->id == rvtt_insn_data::sfploadi;
+  /* A materialization with consumers beyond the pair statement cannot
+     be re-claimed here: the constant-register substitution would reach
+     positions this class has not audited.  The caller refuses the
+     whole pair when such a constant is also fold-vulnerable (the
+     immediate fold fires on it regardless of our other claims).  */
+  *shared = !single_nondebug_use_p (src, only_use);
+  return load;
+}
+
 /* Every CC-writing statement in FN, collected once per function.  */
 
 static void
@@ -2096,6 +2136,18 @@ struct residency_candidate
   bool peel = false;		/* LOOP class: CC-canonical body; the
 				   programming point is created by a
 				   first-iteration peel at placement */
+  bool inplace = false;		/* MAD-PAIR class: the programming point
+				   is the hoisted materialization's own
+				   position (outside the loop), exactly
+				   the pressure class's in-place
+				   discipline */
+  unsigned group = 0;		/* MAD-PAIR class: pair-atomic admission
+				   key -- every fold-vulnerable constant
+				   of one mul+add pair claims together
+				   or not at all (a half-claimed pair
+				   leaves one immediate fold live and
+				   the mad rule still blocked: a pure
+				   loss) */
 };
 
 /* Fold VAL through the in-loop constant chain from a header PHI to OP:
@@ -2587,6 +2639,9 @@ residency_transform (function *fn, prgm_state *st)
 
   auto_vec<residency_candidate> loop_cands;
   auto_vec<residency_candidate> pressure_cands;
+  auto_vec<residency_candidate> madpair_cands;
+  unsigned madpair_group = 0;
+  hash_set<int_hash<unsigned, 0> > invalid_madpair_groups;
   hash_set<gimple *> taken;
 
   /* LOOP class.  */
@@ -2708,6 +2763,159 @@ residency_transform (function *fn, prgm_state *st)
 	      this_loop.safe_push (c);
 	    }
 	}
+
+      /* MAD-PAIR class (lane GA, FX-F1): the invariant pass's
+	 cc-restore-discharged hoist parks a loop's constants in the
+	 preheader, where neither this class's in-loop scan above nor
+	 the fusion class sees them; the downstream muli/addi immediate
+	 folds then consume the shortened FLOATB materializations "in
+	 preference to mul,add->mad" and a resident-MAD row body decays
+	 to a per-iteration MUL+ADDI (the pin-16 hardsigmoid
+	 regression).  Re-claim exactly the fold-vulnerable hoisted
+	 constants of a single-use mul+add pair into PRGM registers:
+	 the constant-register read is not an SFPLOADI, the immediate
+	 folds no longer match, and the pre-existing mad combine fuses
+	 the pair -- the same re-offer the in-loop fusion class
+	 performs, from the hoisted placement.  RECOGNITION-ONLY like
+	 that class: no arm here ever fuses (bit-exactness is decided
+	 by the unchanged downstream rule).  Programming is in-place at
+	 the hoisted materialization (the pressure class's discipline),
+	 so the staged write and the constant-register read keep the
+	 hoist's own execution point and the all-lanes proof is the
+	 pressure-style reach test below.  Pricing: one extra pushed
+	 word per claim once (the SFPCONFIG; the staged materialization
+	 replaces the hoisted one) against one saved word per proven
+	 iteration -- a proven single trip is a wash and refuses;
+	 runtime trips admit under the established W2 policy.  */
+      {
+	loop_trip_class mp_trips = !peel
+	  ? (admits_runtime_trips ? TRIPS_UNKNOWN : TRIPS_AT_LEAST_2)
+	  : classify_second_trip (loop, entry);
+	if (mp_trips == TRIPS_PROVEN_SINGLE)
+	  {
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "const-residency: madpair loop bb %d refused "
+		       "(trip-count-single-trip: the loop provably runs "
+		       "one trip; the re-claim can never recover its "
+		       "programming word)\n", loop->header->index);
+	  }
+	else
+	  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+	    {
+	      basic_block bb = body[ix];
+	      if (bb->loop_father != loop
+		  || !rvtt_stmt_executes_every_entered_iteration_p (loop, bb))
+		continue;
+	      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+		   !gsi_end_p (gsi); gsi_next (&gsi))
+		{
+		  gcall *add = dyn_cast <gcall *> (gsi_stmt (gsi));
+		  if (!add)
+		    continue;
+		  const rvtt_insn_data *addd = rvtt_get_insn_data (add);
+		  if (!addd || addd->id != rvtt_insn_data::sfpadd
+		      || !gimple_call_lhs (add)
+		      || TREE_CODE (gimple_call_lhs (add)) != SSA_NAME
+		      || !integer_zerop (gimple_call_arg (add, 2)))
+		    continue;
+		  for (unsigned swap = 0; swap != 2; ++swap)
+		    {
+		      gcall *mul
+			= fusable_mul_p (gimple_call_arg (add, swap), loop,
+					 add);
+		      if (!mul)
+			continue;
+		      /* Classify the pair's three value operands.  */
+		      struct pair_op
+		      {
+			gcall *load;
+			unsigned value;
+			bool vulnerable;
+			bool shared;
+		      };
+		      pair_op ops[3];
+		      unsigned nops = 0;
+		      unsigned value;
+		      bool vulnerable, is_shared;
+		      if (gcall *l
+			  = hoisted_madpair_load_p (gimple_call_arg
+						    (add, 1 - swap),
+						    loop, add, &value,
+						    &vulnerable, &is_shared))
+			ops[nops++]
+			  = pair_op { l, value, vulnerable, is_shared };
+		      for (unsigned mx = 0; mx != 2; ++mx)
+			if (gcall *l
+			    = hoisted_madpair_load_p (gimple_call_arg
+						      (mul, mx),
+						      loop, mul, &value,
+						      &vulnerable,
+						      &is_shared))
+			  ops[nops++]
+			    = pair_op { l, value, vulnerable, is_shared };
+		      /* Nothing fold-vulnerable: either no decay exists
+			 (register operands fuse as they are) or nothing
+			 here can prevent it.  */
+		      bool any_vulnerable = false;
+		      bool blocked = false;
+		      for (unsigned ox = 0; ox != nops; ++ox)
+			{
+			  if (!ops[ox].vulnerable)
+			    continue;
+			  any_vulnerable = true;
+			  if (ops[ox].shared
+			      || taken.contains (ops[ox].load))
+			    blocked = true;
+			}
+		      if (!any_vulnerable)
+			continue;
+		      if (blocked)
+			{
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "const-residency: madpair loop bb %d "
+				     "refused (madpair-shared-constant): a "
+				     "fold-vulnerable materialization has "
+				     "consumers beyond the pair; the "
+				     "immediate fold fires on it regardless "
+				     "of other claims\n",
+				     loop->header->index);
+			  break;
+			}
+		      /* Pair-atomic admission: every fold-vulnerable
+			 constant of the pair claims under one group
+			 key (all-or-none at placement).  */
+		      ++madpair_group;
+		      for (unsigned ox = 0; ox != nops; ++ox)
+			{
+			  if (!ops[ox].vulnerable)
+			    continue;
+			  residency_candidate c;
+			  c.load = ops[ox].load;
+			  c.value = ops[ox].value;
+			  c.loop = loop;
+			  c.entry = entry;
+			  c.uses = count_nondebug_uses
+			    (gimple_call_lhs (ops[ox].load));
+			  c.inplace = true;
+			  c.group = madpair_group;
+			  madpair_cands.safe_push (c);
+			  taken.add (c.load);
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "const-residency: madpair loop bb %d "
+				     "re-claims hoisted constant 0x%08x "
+				     "(immediate-fold vulnerability removed; "
+				     "the mul+add pair is re-offered to the "
+				     "mad combine)\n",
+				     loop->header->index, c.value);
+			}
+		      break;
+		    }
+		}
+	    }
+      }
       free (body);
 
       if (admits_runtime_trips && !this_loop.is_empty () && dump_file)
@@ -2837,7 +3045,8 @@ residency_transform (function *fn, prgm_state *st)
 	       "file; pressure class idle\n", model.peak, capacity);
   }
 
-  if (loop_cands.is_empty () && pressure_cands.is_empty ())
+  if (loop_cands.is_empty () && pressure_cands.is_empty ()
+      && madpair_cands.is_empty ())
     return false;
 
   /* The freedom proof and the all-lanes proof gate every allocation,
@@ -2901,7 +3110,32 @@ residency_transform (function *fn, prgm_state *st)
 	    pressure_cands[kept++] = c;
 	  }
 	pressure_cands.truncate (kept);
-	if (loop_cands.is_empty () && pressure_cands.is_empty ())
+	/* MAD-PAIR class: the in-place programming point is the hoisted
+	   materialization's own position -- the pressure-style reach
+	   test.  A refused member invalidates its whole group (the
+	   remaining claims would pay their programming word while the
+	   surviving immediate fold still blocks the mad rule), handled
+	   with the group sweep below.  */
+	kept = 0;
+	for (residency_candidate &c : madpair_cands)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
+					  c.load))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: madpair candidate in bb %d "
+			   "refused (cc-region-unproven): a CC write reaches "
+			   "the in-place programming point\n",
+			   gimple_bb (c.load)->index);
+		invalid_madpair_groups.add (c.group);
+		continue;
+	      }
+	    madpair_cands[kept++] = c;
+	  }
+	madpair_cands.truncate (kept);
+	if (loop_cands.is_empty () && pressure_cands.is_empty ()
+	    && madpair_cands.is_empty ())
 	  {
 	    if (dump_file)
 	      fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
@@ -2932,6 +3166,9 @@ residency_transform (function *fn, prgm_state *st)
     };
   rank (loop_cands);
   rank (pressure_cands);
+  /* MAD-PAIR candidates stay in discovery order: members of one pair
+     are contiguous and must remain so for the all-or-none placement
+     sweep below.  */
 
   const rvtt_insn_data *xloadi_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
@@ -3013,7 +3250,8 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
 
-      basic_block point_bb = c.loop ? c.entry->dest : gimple_bb (c.load);
+      basic_block point_bb = (c.loop && !c.inplace)
+	? c.entry->dest : gimple_bb (c.load);
       /* Reuse without reprogramming needs the earlier programming to
 	 provably execute first.  Block dominance is reflexive, and an
 	 in-place (pressure class) programming point does NOT dominate
@@ -3038,7 +3276,7 @@ residency_transform (function *fn, prgm_state *st)
 	  gcall *wrcfg = gimple_build_call
 	    (wrcfg_d->decl, 2, staged,
 	     build_int_cst (unsigned_type_node, prgm));
-	  if (c.loop)
+	  if (c.loop && !c.inplace)
 	    {
 	      basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
 	      gimple_stmt_iterator phg = gsi_last_bb (preheader);
@@ -3091,13 +3329,84 @@ residency_transform (function *fn, prgm_state *st)
 	fprintf (dump_file,
 		 "const-residency: allocated PRGM L%u for constant 0x%08x "
 		 "(%s class, %u uses, programming point bb %d)\n",
-		 prgm, c.value, c.loop ? "loop" : "pressure", c.uses,
-		 point_bb->index);
+		 prgm, c.value,
+		 c.inplace ? "madpair" : c.loop ? "loop" : "pressure",
+		 c.uses, point_bb->index);
       return true;
     };
 
   for (residency_candidate &c : loop_cands)
     changed |= place (c);
+
+  /* MAD-PAIR groups place all-or-none: a half-claimed pair pays its
+     programming word while the surviving immediate fold still blocks
+     the mad rule -- a pure loss.  Simulate place()'s register
+     selection (alloc value-dedup, then free-slot scan, then TU
+     value-identical reuse -- the same order) for the whole group
+     before editing anything.  */
+  for (unsigned gx = 0; gx < madpair_cands.length (); )
+    {
+      unsigned group = madpair_cands[gx].group;
+      unsigned gend = gx;
+      while (gend < madpair_cands.length ()
+	     && madpair_cands[gend].group == group)
+	++gend;
+      bool ok = !invalid_madpair_groups.contains (group);
+      if (ok)
+	{
+	  unsigned sim = st->claimed;
+	  auto_vec<unsigned, 3> sim_vals;
+	  for (unsigned ix = gx; ok && ix != gend; ++ix)
+	    {
+	      unsigned value = madpair_cands[ix].value;
+	      bool have = false;
+	      for (prgm_alloc &a : st->allocs)
+		if (a.value == value)
+		  {
+		    have = true;
+		    break;
+		  }
+	      for (unsigned v : sim_vals)
+		have |= v == value;
+	      if (have)
+		continue;
+	      unsigned reg = 0;
+	      for (unsigned r : prgm_regs)
+		if (!(sim & (1u << r)))
+		  {
+		    reg = r;
+		    break;
+		  }
+	      if (!reg)
+		{
+		  const prgm_tu_facts &tu = tu_prgm_facts ();
+		  for (unsigned r : prgm_regs)
+		    if ((tu.value_known & (1u << r)) && tu.value[r] == value)
+		      {
+			reg = r;
+			break;
+		      }
+		}
+	      if (!reg)
+		ok = false;
+	      else
+		{
+		  sim |= 1u << reg;
+		  sim_vals.safe_push (value);
+		}
+	    }
+	  if (!ok && dump_file)
+	    fprintf (dump_file,
+		     "const-residency: madpair group refused "
+		     "(madpair-prgm-exhausted): the pair needs more PRGM "
+		     "registers than remain free\n");
+	}
+      if (ok)
+	for (unsigned ix = gx; ix != gend; ++ix)
+	  changed |= place (madpair_cands[ix]);
+      gx = gend;
+    }
+
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);
   return changed;
