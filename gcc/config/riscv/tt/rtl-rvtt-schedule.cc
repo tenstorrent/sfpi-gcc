@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-raw-boundary.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
@@ -4047,4 +4048,726 @@ rvtt_macro_drain_backedge_elidable (const macro_region &region,
 	     " elided (drain=%d stream-credit=%u)\n",
 	     h.max_dist, credit);
   return true;
+}
+
+
+/* ----------------------------------------------------------------------
+   Lane FT window-pairing: inter-row drain tuning (macro-planner emission
+   service, under -mtt-tensix-optimize-window-pairing; the planner's
+   emission consumes the verdict).
+
+   The lane-EV inter-row obligation places the FULL derived drain between
+   consecutive rows whenever any launch is a fixed-VD VALUE carrier -- a
+   shape rule, deliberately register-blind.  This service derives the
+   MINIMAL inter-row drain from the same architectural model the boundary
+   and backedge proofs above already use (L1-L3/E1-E4/H1-H2, the
+   retire-before-issue transactional model), made register-, Dst-, and
+   sub-unit-exact:
+
+     - The pending horizon is decoded from the descriptor's OWN
+       SequenceBits (drain_decode_horizon's doctrine: the emitted words
+       are the one derivation that can never drift from what the
+       hardware sequences), cross-checked require-exact against the
+       descriptor's emitted drain figure.  Each decoded event is mapped
+       back to its origin row instruction through the schedule's
+       (macro, realized-sub-unit) key; any unaccounted or ambiguous
+       event refuses.
+     - Each staged event carries its realized architectural footprint:
+       the origin instruction's typed effect set, widened by the
+       SFPLOADMACRO override rules decoded from its OWN SequenceBits
+       byte (the launch VD joins the reads; the result register is the
+       launch VD or LReg[16] per the VD16 bit; the store's value
+       register follows the store override cases), plus the descriptor
+       template's hidden LREG writes.  [ISA] BlackholeA0 SFPLOADMACRO.md
+       functional model (Insn.VB/VC/VD overrides; store VD cases
+       0x40/0x80).
+     - A follower access ordered after every pending writeback needs no
+       footprint at all (the established rule: front-end accesses admit
+       equality under retire-before-issue; staged events keep the strict
+       inequality).  An access INSIDE the horizon is admitted exactly
+       when its footprint is disjoint from every not-yet-retired pending
+       event: LREG read/write intersection, CC (one side writing), any
+       configuration write, and Dst overlap all refuse; two staged
+       events at one cycle additionally refuse on sub-unit equality (the
+       occupancy rule core_check_subunit_occupancy already enforces
+       within a row; SFPLOADMACRO.md's four concurrent columns are the
+       architectural basis for admitting distinct sub-units).
+     - Dst overlap uses the audited physical-row model (the
+       gimple-rvtt-transp-involution.cc access-rows audit; the
+       rtl-rvtt-lp-alloc.cc dst32b window is the same fact): an access at
+       constant address A touches lane rows [A & ~3, (A & ~3) + 3],
+       mapped through dst32b_adjust_row for the 32-bit format class, with
+       the configuration-resolved classes taking the union.  Disjoint row
+       sets prove disjointness outright.  Overlapping row sets are still
+       disjoint when the two accesses select OPPOSITE column parities --
+       Column = (Lane & 7)*2 + ((Addr & 2) || DEST_{RD,WR}_COL_EXCHANGE)
+       in both functional models (SFPLOAD.md, SFPSTORE.md), and the
+       column index is preserved into the underlying DstBits storage by
+       both the 16-bit and the 32-bit view (Dst.md) -- PROVIDED the
+       column-exchange LaneConfig bits are architecturally default.  The
+       parity clause therefore demands the same LaneConfig discipline the
+       DSATUR spill machinery ships (rtl-rvtt-lp-alloc.cc,
+       lreg-spill-laneconfig-unproven): any function-local write that
+       could reach SFPCONFIG destination 15 -- a typed dest-15
+       configuration write, a call, an unproven asm word, an unaudited
+       Tensix instruction -- refuses the clause; the ambient default (no
+       column exchange; the simulator's reset state, what the LLK init
+       sequence leaves in place per the audited dest-15 table) is the
+       flag's documented platform contract, identical to the spill
+       flag's.  Mod0 10 (INT32_ALL) refuses: it couples the address to
+       the Sp counter and mutates it (SFPLOAD.md), breaking the
+       shared-RWC-base distance model.
+     - Row-to-row Dst distance is the schedule's absorbed typed stride.
+       The advancing address mode provably rides the row's LAST issued
+       word and every other access carries the architectural
+       no-increment mode (checked from the launch specs and the explicit
+       operands), and SFPLOAD/SFPSTORE apply their address-modifier
+       AFTER resolving their own address (SFPLOAD.md functional-model
+       order), so every access of row r resolves at the same counter
+       value and row r+j sits exactly j strides away.  Pending stores
+       latch their Dst row at launch (L1), so follower counter advances
+       never move them.
+
+   The verdict is the smallest inter-row NOP count n (0 <= n <
+   drain_slots) whose follower stream -- the next rows at spacing n --
+   passes every rule, or drain_slots (today's bytes) with the binding
+   blocker named.  Every distance is a stream-slot count: H2 makes it a
+   lower bound on issue-cycle distance, and dynamic stalls only move
+   followers later (the safe direction).  Emission under refusal is
+   byte-identical to lane EV's placement.  Frozen whole-word programs
+   whose events the schedule cannot account for refuse through the
+   mapping rule -- the signbit family stays on its proven rolled
+   calendar.  */
+
+namespace {
+
+/* One staged (launched) event with its realized footprint.  */
+struct wp_event
+{
+  int exec;			/* in-row execution time: carrier word
+				   position + 1 + decoded delay (the
+				   drain_decode_horizon convention)    */
+  xtt_subunit_t subunit;	/* realized sub-unit (byte position)   */
+  unsigned sched_ix;		/* schedule/row-insn index of origin   */
+  unsigned macro_index;
+  unsigned kind;		/* SequenceBits case		       */
+  bool vd16, route_vb;
+  uint32_t lreg_read, lreg_write;
+  bool cc_read, cc_write;
+  bool cfg_write;
+  bool dst_read, dst_write;
+  bool dst_typed;		/* constant (addr, mod0) on record     */
+  int dst_addr, dst_mod0;
+};
+
+/* Audited Dst physical-row model (see the comment above; the same model
+   gimple-rvtt-transp-involution.cc:access_rows audits).  */
+
+static unsigned
+wp_access_rows (int addr, int mod0, unsigned rows[20])
+{
+  unsigned n = 0;
+  unsigned r0 = ((unsigned) addr & 1023u) & ~3u;
+  bool m32 = mod0 == 3 || mod0 == 4 || mod0 == 7 || mod0 == 9 || mod0 == 12
+	     || mod0 == 10;
+  bool m16 = !m32;		/* incl. mod0 0: config-resolved, union */
+  if (mod0 == 0)
+    m32 = true;
+  for (unsigned r = r0; r != r0 + 4; ++r)
+    {
+      unsigned lane_row = r & 1023;
+      unsigned adj = ((lane_row & 0x1F8) << 1) | (lane_row & 0x207);
+      if (m32)
+	{
+	  rows[n++] = adj & 1023;
+	  rows[n++] = (adj + 8) & 1023;
+	}
+      if (m16)
+	{
+	  rows[n++] = lane_row;		/* 16-bit layout */
+	  rows[n++] = adj & 1023;	/* 32-bit layout via dst16->32 */
+	  rows[n++] = (adj + 8) & 1023;
+	}
+    }
+  return n;
+}
+
+static bool
+wp_rows_disjoint (int addr_a, int mod0_a, int addr_b, int mod0_b)
+{
+  unsigned ra[20], rb[20];
+  unsigned na = wp_access_rows (addr_a, mod0_a, ra);
+  unsigned nb = wp_access_rows (addr_b, mod0_b, rb);
+  for (unsigned i = 0; i != na; ++i)
+    for (unsigned j = 0; j != nb; ++j)
+      if (ra[i] == rb[j])
+	return false;
+  return true;
+}
+
+/* Whether the column-exchange LaneConfig bits are provably at their
+   architectural default throughout FN: no reachable writer of SFPCONFIG
+   destination 15 -- typed dest-15 writes, calls, unproven asm words, and
+   unaudited Tensix instructions all refuse.  Scalar (non-Tensix)
+   instructions cannot issue an SFPCONFIG.  Ambient state is the flag's
+   documented platform contract (rtl-rvtt-lp-alloc.cc discipline).  */
+
+static bool
+wp_laneconfig_default_proved (function *fn)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  rtx pat = PATTERN (insn);
+	  if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	    continue;
+	  if (CALL_P (insn))
+	    return false;
+	  if (asm_noperands (pat) >= 0)
+	    {
+	      xtt_rwc_effect_t rwc;
+	      if (!rvtt_raw_pure_dst_rwc (insn, &rwc))
+		return false;
+	      continue;
+	    }
+	  if (recog_memoized (insn) < 0)
+	    return false;
+	  if (get_attr_type (insn) != TYPE_TENSIX)
+	    continue;
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (e.opaque || (e.config_dests_written & (1u << 15)))
+	    return false;
+	}
+    }
+  return true;
+}
+
+/* Dst disjointness of two typed accesses under the audited model.
+   LANECFG is the lazily computed tri-state (-1 unknown / 0 unproven /
+   1 proven).  *WHY names the failing clause.  */
+
+static bool
+wp_dst_disjoint (const wp_event &a, const wp_event &b, function *fn,
+		 int *lanecfg, const char **why)
+{
+  if (!a.dst_typed || !b.dst_typed)
+    {
+      *why = "window-pairing-dst-mode-unproven";
+      return false;
+    }
+  if (wp_rows_disjoint (a.dst_addr, a.dst_mod0, b.dst_addr, b.dst_mod0))
+    return true;
+  /* Column-parity clause.  */
+  if (((a.dst_addr >> 1) & 1) != ((b.dst_addr >> 1) & 1))
+    {
+      if (*lanecfg < 0)
+	*lanecfg = wp_laneconfig_default_proved (fn) ? 1 : 0;
+      if (*lanecfg == 1)
+	return true;
+      *why = "window-pairing-laneconfig-unproven";
+      return false;
+    }
+  *why = "window-pairing-dst-alias";
+  return false;
+}
+
+/* Data-conflict verdict between follower access F and pending event P
+   (order not architecturally established).  Returns the stable blocker
+   name, or null when provably independent.  */
+
+static const char *
+wp_conflict (const wp_event &f, const wp_event &p, function *fn, int *lanecfg)
+{
+  if ((f.lreg_write & (p.lreg_read | p.lreg_write))
+      || (f.lreg_read & p.lreg_write))
+    return "window-pairing-lreg-overlap";
+  if ((f.cc_write && (p.cc_read || p.cc_write)) || (p.cc_write && f.cc_read))
+    return "window-pairing-cc-live";
+  if (f.cfg_write || p.cfg_write)
+    return "window-pairing-config-overlap";
+  if ((f.dst_write && (p.dst_read || p.dst_write))
+      || (f.dst_read && p.dst_write))
+    {
+      const char *why = nullptr;
+      if (!wp_dst_disjoint (f, p, fn, lanecfg, &why))
+	return why;
+    }
+  return nullptr;
+}
+
+/* Typed constant Dst operands of ORIGIN (post-admission), shifted by
+   SHIFT strides.  Fails soft: leaves *EV untyped (any Dst pairing then
+   refuses by name).  Mod0 10 (INT32_ALL) is never typed here (Sp-coupled
+   addressing; see the header comment).  */
+
+static void
+wp_type_dst (rtx_insn *origin, const xtt_effect_set &e, int shift,
+	     wp_event *ev)
+{
+  ev->dst_read = e.dst_mem_read;
+  ev->dst_write = e.dst_mem_write;
+  ev->dst_typed = false;
+  if (!e.dst_mem_read && !e.dst_mem_write)
+    return;
+  rtx address, mode, addr_mode;
+  if (!rvtt_dst_access_operands (origin, e, &address, &mode, &addr_mode)
+      || !CONST_INT_P (address) || !CONST_INT_P (mode)
+      || INTVAL (mode) == 10)
+    return;
+  ev->dst_typed = true;
+  ev->dst_addr = (int) INTVAL (address) + shift;
+  ev->dst_mod0 = (int) INTVAL (mode);
+}
+
+/* Complete EV's realized footprint from its origin instruction, its
+   launch spec, and its already-decoded SequenceBits fields, with its
+   Dst address shifted by SHIFT strides.  Returns false with *WHY set on
+   any unproven piece.  */
+
+static bool
+wp_event_footprint (const macro_descriptor &desc, const rvtt_macro::caps *c,
+		    rtx_insn *origin, int shift, wp_event *ev,
+		    const char **why)
+{
+  xtt_effect_set e = rvtt_insn_effects (origin);
+  if (e.opaque)
+    {
+      *why = "window-pairing-footprint-opaque";
+      return false;
+    }
+  const macro_launch_spec *spec = nullptr;
+  for (const macro_launch_spec &l : desc.launches)
+    if (l.macro_index == ev->macro_index)
+      {
+	spec = &l;
+	break;
+      }
+  if (!spec)
+    {
+      *why = "window-pairing-footprint-opaque";
+      return false;
+    }
+
+  ev->lreg_read = e.lreg_read;
+  ev->lreg_write = e.lreg_write;
+  if (ev->kind != rvtt_macro::SEQ_CASE_STORE)
+    {
+      /* Simple/MAD/Round: VB or VC is overridden with the launch VD; the
+	 result register is the launch VD or LReg[16].  */
+      ev->lreg_read |= 1u << spec->vd;
+      ev->lreg_write |= ev->vd16 ? (1u << 16) : (1u << spec->vd);
+    }
+  else
+    {
+      /* Store value register: LReg[16] (VD16), the template's own VD
+	 (route bit; the origin already names it), or the launch VD.  */
+      if (ev->vd16)
+	ev->lreg_read |= 1u << 16;
+      else if (!ev->route_vb)
+	ev->lreg_read |= 1u << spec->vd;
+    }
+  if (ev->kind >= rvtt_macro::SEQ_CASE_TEMPLATE0
+      && ev->kind - rvtt_macro::SEQ_CASE_TEMPLATE0 < desc.n_templates)
+    ev->lreg_write |= rvtt_macro::template_hidden_lreg_writes
+      (c, desc.templ[ev->kind - rvtt_macro::SEQ_CASE_TEMPLATE0]);
+
+  ev->cc_read = e.cc_read;
+  ev->cc_write = e.cc_write;
+  ev->cfg_write = e.config_dests_written != 0 || e.addr_mod_slot_write;
+  wp_type_dst (origin, e, shift, ev);
+  return true;
+}
+
+} /* anonymous namespace */
+
+/* Derive the minimal proven inter-row drain for REGION's uniform rows.
+   Returns a value in [0, desc.drain_slots]; desc.drain_slots (today's
+   bytes) on any refusal, with the blocker named to DUMP.  When the
+   verdict is positive but below the full drain, *BOUND_NAME names the
+   conflict that bounds it from below (the blocker at one NOP fewer).  */
+
+int
+rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
+				 const macro_schedule &schedule,
+				 const macro_descriptor &desc, FILE *dump,
+				 const char **bound_name)
+{
+  *bound_name = nullptr;
+  int full = desc.drain_slots;
+  auto refuse = [&] (const char *name) -> int
+    {
+      if (dump)
+	fprintf (dump, "Macro-planner window-pairing-refusal: %s\n", name);
+      return full;
+    };
+
+  if (full <= 0 || desc.cc.active || region.rows.length () < 2)
+    return full;
+  if (desc.keep_separator
+      || (region.rows[0].separator && !schedule.absorbed_stride))
+    return refuse ("window-pairing-separator-unproven");
+  for (const macro_row &row : region.rows)
+    if (row.insns.length () != schedule.events.length ())
+      return refuse ("window-pairing-footprint-opaque");
+
+  /* Rows are isomorphic to row 0 only UNDER A VALUE MAP -- their emitted
+     registers and typed operands may differ per row while the derived
+     footprints below come from row 0.  The tune is proven only when
+     every row's per-position effect sets and typed Dst operands are
+     IDENTICAL to row 0's (the pinned-VD calendars this service targets
+     are exactly the identical-register shapes); any variance refuses by
+     name and keeps the full drain.  */
+  for (unsigned r = 1; r < region.rows.length (); ++r)
+    for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+      {
+	rtx_insn *a = region.rows[0].insns[ix];
+	rtx_insn *b = region.rows[r].insns[ix];
+	xtt_effect_set ea = rvtt_insn_effects (a);
+	xtt_effect_set eb = rvtt_insn_effects (b);
+	if (ea.opaque || eb.opaque)
+	  return refuse ("window-pairing-footprint-opaque");
+	if (ea.lreg_read != eb.lreg_read || ea.lreg_write != eb.lreg_write
+	    || ea.cc_read != eb.cc_read || ea.cc_write != eb.cc_write
+	    || ea.config_dests_written != eb.config_dests_written
+	    || ea.addr_mod_slot_write != eb.addr_mod_slot_write
+	    || ea.dst_mem_read != eb.dst_mem_read
+	    || ea.dst_mem_write != eb.dst_mem_write)
+	  return refuse ("window-pairing-row-variance");
+	if (ea.dst_mem_read || ea.dst_mem_write)
+	  {
+	    rtx addr_a, mode_a, am_a, addr_b, mode_b, am_b;
+	    bool oa = rvtt_dst_access_operands (a, ea, &addr_a, &mode_a,
+						&am_a);
+	    bool ob = rvtt_dst_access_operands (b, eb, &addr_b, &mode_b,
+						&am_b);
+	    if (oa != ob)
+	      return refuse ("window-pairing-row-variance");
+	    if (oa
+		&& (!rtx_equal_p (addr_a, addr_b)
+		    || !rtx_equal_p (mode_a, mode_b)
+		    || !rtx_equal_p (am_a, am_b)))
+	      return refuse ("window-pairing-row-variance");
+	  }
+      }
+
+  const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu
+    (TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
+     : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR);
+  if (!c)
+    return refuse ("window-pairing-footprint-opaque");
+
+  /* Issue-word positions in emission order (slots ascending), the same
+     mapping the boundary proofs use.  */
+  auto_vec<int> word_pos;
+  word_pos.safe_grow_cleared (schedule.events.length ());
+  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+    word_pos[ix] = -1;
+  int carrier_pos[8];
+  for (int m = 0; m != 8; ++m)
+    carrier_pos[m] = -1;
+  int words_per_row = 0, last_issue = -1;
+  for (int slot = 0; slot != schedule.ii; ++slot)
+    for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+      {
+	const macro_event &ev = schedule.events[ix];
+	if (!ev.issues_word || ev.slot != slot)
+	  continue;
+	word_pos[ix] = words_per_row;
+	if (ev.is_carrier && ev.macro_index < 8)
+	  carrier_pos[ev.macro_index] = words_per_row;
+	++words_per_row;
+	last_issue = ev.slot;
+      }
+  if (words_per_row == 0)
+    return refuse ("window-pairing-footprint-opaque");
+  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+    if (schedule.events[ix].issues_word && word_pos[ix] < 0)
+      return refuse ("window-pairing-footprint-opaque");
+  int last_pos = words_per_row - 1;
+
+  /* Every Dst access of the row must resolve at one counter value with
+     the single absorbing advance riding the row's LAST issued word:
+     then consecutive rows sit exactly one stride apart (SFPLOAD.md
+     functional-model order: the address resolves before the modifier
+     applies).  The launches' EMITTED address modes live in the launch
+     specs (the origin operands predate absorption); explicit accesses
+     are emitted with their own typed operands.  */
+  int stride = schedule.absorbed_stride;
+  {
+    int expected_advances = stride ? 1 : 0;
+    int advances = 0;
+    for (const macro_launch_spec &l : desc.launches)
+      {
+	if (l.addr_mode == c->no_increment_addr_mode)
+	  continue;
+	if (l.addr_mode != c->auto_increment_dst2_addr_mode
+	    || l.macro_index >= 8
+	    || carrier_pos[l.macro_index] != last_pos)
+	  return refuse ("window-pairing-stride-unproven");
+	++advances;
+      }
+    for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+      {
+	const macro_event &ev = schedule.events[ix];
+	if (ev.realization != macro_event::EXPLICIT_INSN || ev.is_carrier)
+	  continue;
+	rtx_insn *origin = region.rows[0].insns[ix];
+	xtt_effect_set e = rvtt_insn_effects (origin);
+	if (e.opaque)
+	  return refuse ("window-pairing-footprint-opaque");
+	if (!e.dst_mem_read && !e.dst_mem_write)
+	  continue;
+	rtx address, mode, addr_mode;
+	if (!rvtt_dst_access_operands (origin, e, &address, &mode,
+				       &addr_mode)
+	    || !CONST_INT_P (addr_mode)
+	    || INTVAL (addr_mode) != (int) c->no_increment_addr_mode)
+	  return refuse ("window-pairing-stride-unproven");
+      }
+    if (advances != expected_advances)
+      return refuse ("window-pairing-stride-unproven");
+  }
+
+  /* The staged events, decoded from the descriptor's OWN SequenceBits
+     (the derivation that can never drift from what the hardware
+     sequences) and mapped back to their origin row instructions through
+     the schedule's (macro, realized-sub-unit) key.  Every launched
+     schedule event must be accounted for exactly once; the decoded
+     horizon must equal the descriptor's emitted drain figure.  */
+  auto_vec<wp_event> staged;
+  unsigned launched_total = 0;
+  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+    if (schedule.events[ix].realization
+	== macro_event::LAUNCHED_TEMPLATE_SLOT)
+      ++launched_total;
+  int max_pend = 0;
+  for (unsigned m = 0; m != desc.n_seq && m != 8; ++m)
+    {
+      uint8_t bytes[4];
+      rvtt_macro::decompose_sequence_word (desc.seq[m], bytes);
+      for (int i = 0; i != 4; ++i)
+	{
+	  unsigned kind, delay;
+	  bool vd16, route_vb;
+	  if (!rvtt_macro::decode_sequence_bits (bytes[i], &kind, &delay,
+						 &vd16, &route_vb))
+	    return refuse ("window-pairing-delay-unproven");
+	  if (kind == rvtt_macro::SEQ_CASE_SKIP
+	      || kind == rvtt_macro::SEQ_CASE_NOP)
+	    continue;
+	  if (carrier_pos[m] < 0)
+	    return refuse ("window-pairing-footprint-opaque");
+	  xtt_subunit_t su = i == 0 ? XTT_SU_SIMPLE
+	    : i == 1 ? XTT_SU_MAD : i == 2 ? XTT_SU_ROUND : XTT_SU_STORE;
+	  int found = -1;
+	  for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
+	    {
+	      const macro_event &ev = schedule.events[ix];
+	      if (ev.realization != macro_event::LAUNCHED_TEMPLATE_SLOT
+		  || ev.macro_index != m)
+		continue;
+	      if ((xtt_subunit_t) rvtt_macro_hosted_subunit
+		    (region.rows[0].insns[ix]) != su)
+		continue;
+	      if (found >= 0)
+		return refuse ("window-pairing-footprint-opaque");
+	      found = (int) ix;
+	    }
+	  if (found < 0)
+	    return refuse ("window-pairing-footprint-opaque");
+	  wp_event ev;
+	  memset (&ev, 0, sizeof (ev));
+	  ev.sched_ix = (unsigned) found;
+	  ev.macro_index = m;
+	  ev.subunit = su;
+	  ev.kind = kind;
+	  ev.vd16 = vd16;
+	  ev.route_vb = route_vb;
+	  ev.exec = carrier_pos[m] + 1 + (int) delay;
+	  if (ev.exec - last_pos > max_pend)
+	    max_pend = ev.exec - last_pos;
+	  staged.safe_push (ev);
+	}
+    }
+  if (staged.length () != launched_total)
+    return refuse ("window-pairing-footprint-opaque");
+  if (max_pend != full)
+    return refuse ("window-pairing-delay-unproven");
+
+  /* Pending horizon: the staged events still in flight past the row's
+     last issued word, with their realized footprints (unshifted -- row
+     r's own addresses).  */
+  auto_vec<wp_event> pending;
+  for (const wp_event &sv : staged)
+    if (sv.exec > last_pos)
+      {
+	wp_event p = sv;
+	p.exec = sv.exec - last_pos;	/* boundary-relative */
+	const char *why = nullptr;
+	if (!wp_event_footprint (desc, c, region.rows[0].insns[p.sched_ix],
+				 /*shift=*/0, &p, &why))
+	  return refuse (why);
+	pending.safe_push (p);
+      }
+
+  /* Ascending search for the smallest admissible spacing.  */
+  int lanecfg = -1;
+  const char *blocker_at[8] = {};
+  int best = full;
+  for (int n = 0; n < full; ++n)
+    {
+      const char *blocker = nullptr;
+      for (unsigned j = 1; !blocker; ++j)
+	{
+	  /* Follower row j at credit n: its first word issues at
+	     boundary-relative slot base+1.  Beyond the horizon every
+	     later access clears by time (H1+H2); run-tail rows only add
+	     the full run-end drain after them (more slack).  */
+	  int base = n + (int) (j - 1) * (words_per_row + n);
+	  if (base + 1 > full)
+	    break;
+	  /* Front-end issued words: ordered after every pending
+	     writeback at or past their issue slot (retire-before-issue
+	     admits equality).  */
+	  for (unsigned ix = 0; ix != schedule.events.length () && !blocker;
+	       ++ix)
+	    {
+	      const macro_event &ev = schedule.events[ix];
+	      if (!ev.issues_word)
+		continue;
+	      int t = base + 1 + word_pos[ix];
+	      if (t >= full)
+		continue;
+	      wp_event f;
+	      memset (&f, 0, sizeof (f));
+	      f.exec = t;
+	      xtt_effect_set e = rvtt_insn_effects (region.rows[0].insns[ix]);
+	      if (e.opaque)
+		{
+		  blocker = "window-pairing-footprint-opaque";
+		  break;
+		}
+	      if (ev.is_carrier)
+		{
+		  /* The launch's own front-end SFPLOAD: writes the
+		     launch VD, reads its carried Dst address (the
+		     store-only carrier's sacrificial load included).  */
+		  const macro_launch_spec *spec = nullptr;
+		  for (const macro_launch_spec &l : desc.launches)
+		    if (l.macro_index == ev.macro_index)
+		      spec = &l;
+		  if (!spec)
+		    {
+		      blocker = "window-pairing-footprint-opaque";
+		      break;
+		    }
+		  f.lreg_write = 1u << spec->vd;
+		  xtt_effect_set fe = e;
+		  fe.dst_mem_read = true;
+		  fe.dst_mem_write = false;
+		  wp_type_dst (region.rows[0].insns[ix], fe,
+			       stride * (int) j, &f);
+		}
+	      else
+		{
+		  f.lreg_read = e.lreg_read;
+		  f.lreg_write = e.lreg_write;
+		  /* The emission may retarget an explicit reload to its
+		     planned register (the template src field / the
+		     coalesced launch VD); the footprint takes the
+		     union.  */
+		  if (ev.realization == macro_event::EXPLICIT_INSN
+		      && e.dst_mem_read)
+		    for (unsigned jx = 0; jx != schedule.events.length ();
+			 ++jx)
+		      {
+			const macro_event &cons = schedule.events[jx];
+			xtt_effect_set ce
+			  = rvtt_insn_effects (region.rows[0].insns[jx]);
+			if (ce.opaque || !(ce.lreg_read & e.lreg_write))
+			  continue;
+			if (cons.realization == macro_event::CC_COALESCED
+			    && !desc.launches.is_empty ())
+			  f.lreg_write |= 1u << desc.launches[0].vd;
+			else if (cons.realization
+				   == macro_event::LAUNCHED_TEMPLATE_SLOT
+				 && !cons.is_store
+				 && cons.template_id < desc.n_templates)
+			  {
+			    rvtt_macro::template_spec tspec;
+			    if (rvtt_macro::decode_template
+				  (desc.templ[cons.template_id], &tspec)
+				&& tspec.src_c)
+			      f.lreg_write |= 1u << tspec.src_c;
+			  }
+		      }
+		  f.cc_read = e.cc_read;
+		  f.cc_write = e.cc_write;
+		  f.cfg_write = e.config_dests_written != 0
+		    || e.addr_mod_slot_write;
+		  wp_type_dst (region.rows[0].insns[ix], e,
+			       stride * (int) j, &f);
+		}
+	      for (const wp_event &p : pending)
+		{
+		  if (p.exec <= t)
+		    continue;		/* retired before this issue */
+		  blocker = wp_conflict (f, p, fn, &lanecfg);
+		  if (blocker)
+		    break;
+		}
+	    }
+	  /* Launched events of the follower row: strict ordering against
+	     every pending event; same-cycle admits only distinct
+	     sub-units with disjoint data (the occupancy rule).  */
+	  for (unsigned sx = 0; sx != staged.length () && !blocker; ++sx)
+	    {
+	      int exec_f = base + 1 + staged[sx].exec;
+	      if (exec_f > full)
+		continue;	/* strictly after every pending writeback */
+	      wp_event f = staged[sx];
+	      f.exec = exec_f;
+	      const char *why = nullptr;
+	      if (!wp_event_footprint (desc, c,
+				       region.rows[0].insns[f.sched_ix],
+				       stride * (int) j, &f, &why))
+		{
+		  blocker = why;
+		  break;
+		}
+	      for (const wp_event &p : pending)
+		{
+		  if (exec_f > p.exec)
+		    continue;		/* order preserved */
+		  if (exec_f == p.exec && f.subunit == p.subunit)
+		    {
+		      blocker = "window-pairing-subunit-collision";
+		      break;
+		    }
+		  blocker = wp_conflict (f, p, fn, &lanecfg);
+		  if (blocker)
+		    break;
+		}
+	    }
+	}
+      if (n < 8)
+	blocker_at[n] = blocker;
+      if (!blocker)
+	{
+	  best = n;
+	  break;
+	}
+    }
+
+  if (best == full)
+    return refuse (blocker_at[0] ? blocker_at[0]
+		   : "window-pairing-horizon-spill");
+  if (best > 0)
+    *bound_name = blocker_at[best - 1];
+  return best;
 }

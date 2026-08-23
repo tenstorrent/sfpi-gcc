@@ -784,12 +784,16 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		  basic_block config_preheader, rtx_insn *enable_src,
 		  basic_block hoist_preheader, rtx_insn *hoist_enable_src,
 		  bool emit_drain,
-		  /* Lane EV (P0 wrong-code fix, 2026-08-21): place the
-		     FULL derived drain between consecutive rows of this
-		     run -- required when a fixed-VD VALUE carrier's
-		     hosted events pend past the next row's launch (see
-		     form_region for the derivation and provenance).  */
-		  bool interrow_drain,
+		  /* Lane EV (P0 wrong-code fix, 2026-08-21): place this
+		     many drain NOPs between consecutive rows of this
+		     run -- the FULL derived drain when a fixed-VD VALUE
+		     carrier's hosted events pend past the next row's
+		     launch (see form_region for the derivation and
+		     provenance), or the smaller residual lane FT's
+		     window-pairing tuning proved
+		     (rvtt_macro_interrow_drain_tuned, under
+		     -mtt-tensix-optimize-window-pairing).  */
+		  int interrow_drain_slots,
 		  /* WP13 residency (rvtt-macro-desc.cc): elide the
 		     descriptor words when a bit-identical dominating
 		     resident program exists; collect the programming
@@ -1150,8 +1154,8 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	 followed by the full derived drain -- whose issue-stream
 	 spacing is the proven envelope (H2: stream slots lower-bound
 	 issue-cycle distance).  */
-      if (interrow_drain && r + 1 != end)
-	for (int d = 0; d != desc.drain_slots; ++d)
+      if (r + 1 != end)
+	for (int d = 0; d != interrow_drain_slots; ++d)
 	  emit_insn (gen_rvtt_sfpnop ());
     }
   /* The derived drain (core_drain_slots over the descriptor's own
@@ -1732,6 +1736,24 @@ form_region (function *fn, macro_region &region,
     fprintf (dump, "Macro-planner drain-interrow: drain=%d rows=%u"
 	     " (fixed-vd value carrier)\n", desc.drain_slots,
 	     region.rows.length ());
+  /* Lane FT window-pairing: replace the shape rule's full inter-row
+     drain with the minimal spacing the exact pending-event model proves
+     (rvtt_macro_interrow_drain_tuned, rtl-rvtt-schedule.cc).  Refusals
+     keep the lane-EV placement byte-identically.  */
+  int interrow_drain_slots = interrow_drain ? desc.drain_slots : 0;
+  if (interrow_drain && riscv_tt_opt_window_pairing)
+    {
+      const char *bound = nullptr;
+      int tuned = rvtt_macro_interrow_drain_tuned (fn, region, schedule,
+						   desc, dump, &bound);
+      gcc_assert (tuned >= 0 && tuned <= desc.drain_slots);
+      if (tuned < interrow_drain_slots && dump)
+	fprintf (dump, "Macro-planner window-pairing: interrow-drain"
+		 " %d -> %d rows=%u%s%s\n", desc.drain_slots, tuned,
+		 region.rows.length (), bound ? " bound=" : "",
+		 bound ? bound : "");
+      interrow_drain_slots = tuned;
+    }
 
   auto_vec<bool> drain_elide;
   drain_elide.safe_grow_cleared (run_begins.length ());
@@ -1803,7 +1825,7 @@ form_region (function *fn, macro_region &region,
 			config_preheader, enable_src,
 			hoist_preheader, hoist_enable_src,
 			last_run ? !backedge_elide : !drain_elide[b],
-			interrow_drain,
+			interrow_drain_slots,
 			resident_elide, resid, init_hoist_stage,
 			b == 0 ? &config_placement : nullptr);
     }
