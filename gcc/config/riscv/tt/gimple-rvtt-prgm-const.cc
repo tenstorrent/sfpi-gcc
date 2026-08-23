@@ -2905,10 +2905,10 @@ residency_transform (function *fn, prgm_state *st)
 			  if (dump_file)
 			    fprintf (dump_file,
 				     "const-residency: madpair loop bb %d "
-				     "re-claims hoisted constant 0x%08x "
-				     "(immediate-fold vulnerability removed; "
-				     "the mul+add pair is re-offered to the "
-				     "mad combine)\n",
+				     "candidate: hoisted constant 0x%08x is "
+				     "fold-vulnerable; re-claiming would "
+				     "re-offer the mul+add pair to the mad "
+				     "combine\n",
 				     loop->header->index, c.value);
 			}
 		      break;

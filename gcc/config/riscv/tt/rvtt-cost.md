@@ -1633,6 +1633,32 @@
 ;; control is RISC-side and concurrent per the delivery accounting
 ;; above).  Overestimating body_words only raises the required trip
 ;; proof; it never admits an unpriced fire.
+;;
+;; MAD-PAIR extension (lane GA, FX-F1): a constant the invariant pass
+;; has already HOISTED out of the loop executes once either way, so
+;; the LOOP-class per-iteration saving is zero -- but when the hoisted
+;; constant is the shortened SFPLOADI FLOATB form feeding one half of
+;; a single-use mul+add pair inside the loop, the downstream muli/addi
+;; immediate folds (which run "in preference to mul,add->mad" on the
+;; local-pressure rationale) consume it and the mad rule can no longer
+;; fuse: the loop body pays MUL+ADDI (2 words) instead of MAD (1 word)
+;; every iteration.  Re-claiming exactly those fold-vulnerable
+;; constants into PRGM registers removes the folds' SFPLOADI match and
+;; re-offers the pair to the unchanged mad combine:
+;;
+;;   cost  = PUSH * 1 per claim once   (the SFPCONFIG; the staging
+;;                                      materialization replaces the
+;;                                      hoisted one word for word)
+;;   save  = PUSH-class 1 word per iteration (MAD for MUL+ADDI)
+;;
+;; A proven single trip is a wash and refuses (trip-count-single-trip);
+;; runtime trips admit under the W2 policy (the in-place programming
+;; point is the hoist's own execution point -- never speculated).
+;; Placement is pair-atomic (all-or-none per pair): a half-claimed pair
+;; pays its programming word while the surviving immediate fold still
+;; blocks the mad rule -- a pure loss (madpair-prgm-exhausted).
+;; Non-vulnerable sfpxloadi chain operands are never claimed: the folds
+;; cannot match them and the mad rule fuses them from plain LREGs.
 
 ;; ---------------------------------------------------------------------
 ;; Dual-bank pinned-chain binding caps (lane FU, rtl-rvtt-lp-alloc.cc
