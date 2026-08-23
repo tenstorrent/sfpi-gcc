@@ -108,4 +108,41 @@ rvtt_macro_epoch_owned_state_invariant_p (function *fn,
 					  const rvtt_macro::caps *c,
 					  rtx_insn **refusal_insn);
 
+/* Replay-state preservation walk for the record-hoist loop admission
+   (lane FW).  Proves that no instruction of the loop body BODY[0..NBBS)
+   (header LOOP_HEADER) can modify per-thread Replay Expander buffer
+   state between a preheader no-exec record and any trip's playback
+   launch.  The owner
+   vocabulary is the replay-buffer analog of the configuration-epoch
+   walk above and reuses its interval resolution for delivered words:
+
+   - typed TTREPLAY playback launches (record operand 0) formed by the
+     replay pass itself (PASS_LAUNCHES) only READ recorded slots and are
+     admitted; every other typed replay owner -- records, exec-records,
+     user-authored launches whose recorded slot content is not
+     compiler-known -- refuses;
+   - typed and raw MOP dispatches are admitted only under the MopCfg
+     template census: every MopCfg word the expansion can consume
+     (MopCfg[0..8], both templates -- ISA MOPExpander.md) is a
+     function-programmed constant whose opcode byte is not REPLAY, with
+     all nine slots covered by stores dominating the loop header (a
+     caller-armed slot could hold a REPLAY record word) and no call in
+     the function (a callee could re-arm MopCfg);
+   - every raw `.ttinsn' constant word and every volatile store whose
+     address is not provably outside the instruction-FIFO aperture must
+     resolve to a word interval whose opcode byte provably is not
+     REPLAY (constant playback-launch words admit) and is a MOP only
+     under the census;
+   - calls, unrecognized assembly, and unresolvable words refuse.
+
+   Returns null when the loop body is proven replay-preserving; else a
+   stable refusal detail string with *REFUSAL_INSN set.  Never mutates
+   the function.  */
+extern const char *
+rvtt_macro_epoch_loop_replay_preserved_p (function *fn, basic_block *body,
+					  unsigned nbbs,
+					  basic_block loop_header,
+					  hash_set<rtx_insn *> &pass_launches,
+					  rtx_insn **refusal_insn);
+
 #endif /* GCC_RVTT_MACRO_EPOCH_H */

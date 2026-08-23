@@ -1,30 +1,30 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Genericity twin of record-hoist-fire-bh.C: different LRegs, different
-// operand roles, different trip count and counter direction, different
-// separator value (symbol-addressed volatile store: a named object is
-// provably not the instruction FIFO -- lane FW classification).  The
-// mechanism keys on structure only, never on a register calendar or
-// constant fingerprint.
-// 6 trips x (738 - 70) - 1161 = 2847.
-// { dg-final { scan-rtl-dump "record-hoist: invariant re-record window admitted \\(trips 6, words 6, benefit 2847\\)" "rvtt_replay" } }
+// Renamed-varied twin of record-hoist-runtime-loop-fire-bh.C (lane FW):
+// different names, LRegs and operand roles, a STALLWAIT sync word, and
+// a masked-counter field in the computed push.  Same structural facts,
+// so the same admission: per_trip = 6*123 - 70 = 668; record_once =
+// 7*123 + 300 = 1161; 2-trip benefit 175 >= 60; exposure 493.
+// { dg-final { scan-rtl-dump "record-hoist: loop \\d+ replay-state audit admitted" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "record-hoist: runtime-trip re-record window admitted .structural trips>=1, words 6, 2-trip benefit 175, single-trip exposure 493." "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
 // { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 1" 1 } }
 // { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 0" 2 } }
-static volatile int renamed_sink;
-void rerecord_fire_renamed (volatile int *)
+void tile_walk_varied (unsigned count)
 {
   auto p = __builtin_rvtt_sfpreadlreg (4);
   auto q = __builtin_rvtt_sfpreadlreg (5);
   auto r = __builtin_rvtt_sfpreadlreg (6);
-  for (unsigned k = 6; k != 0; --k)
+  volatile unsigned *push = (volatile unsigned *) 0xFFE40000u;
+  for (unsigned t = 0; t != count; ++t)
     {
+      __asm__ volatile (".ttinsn %0" :: "n" (0xA2008040u)); // TT_OP_STALLWAIT(1,64)
       p = __builtin_rvtt_sfpmul (p, q, 0);
       q = __builtin_rvtt_sfpmul (q, r, 0);
       r = __builtin_rvtt_sfpmul (r, r, 0);
       q = __builtin_rvtt_sfpmul (q, q, 0);
       p = __builtin_rvtt_sfpmul (p, p, 0);
       r = __builtin_rvtt_sfpmul (r, p, 0);
-      renamed_sink = (int) (k * 7u);	// volatile scalar separator
+      *push = 0xB2010000u + ((t & 3u) << 2);
       p = __builtin_rvtt_sfpmul (p, q, 0);
       q = __builtin_rvtt_sfpmul (q, r, 0);
       r = __builtin_rvtt_sfpmul (r, r, 0);
