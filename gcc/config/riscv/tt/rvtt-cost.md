@@ -1191,6 +1191,65 @@
 ;; preheader Dst-store class stays admitted (the sweep's rule 3 keeps
 ;; it -- the witnessed init-record class).
 ;;
+;; RECORD-HOIST x MOD-WRITE COMPOSITION (downstream-fallback pricing,
+;; lane FZ, 2026-08-23; record-hoist mode only, gated on the
+;; dst-autoincr pass being enabled).  The measurement pricing above is
+;; LICENSED by the streams-identical premise: both worlds execute the
+;; same words, so the modeled delta is pure delivery.  That premise has
+;; a composition hole: a no-exec record hoisted to within the audited
+;; drained-frontend window (W_drain above) of a row the dst-autoincr
+;; pass would otherwise transform into a mod-write forces that pass's
+;; group guard (the AUDITED COMPOSITION FACT above -- fail-closed and
+;; CORRECT, the lane ES hang class) to refuse the group, so the hoisted
+;; world executes the explicit-increment fallback (no-increment store +
+;; TTINCRWC per row, no slot program) while the unhoisted world executes
+;; the mod-write form.  Different EXECUTED streams: the execution-side
+;; terms no longer cancel, and their difference -- mod-write economics
+;; (config words, crossing charges, entry residual, the W_drain-fit
+;; dynamic behavior) -- is priced by dst-autoincr's model in a currency
+;; the delivery-only benefit above deliberately excludes.  The composed
+;; delta is therefore UNPRICEABLE here, and its one silicon point is
+;; NET NEGATIVE: lcm-fresh at ON-28 (record-hoist fires trips 8 words
+;; 14 modeled benefit 11071; dst-autoincr falls back, sfpstore mod 6->7
+;; + 1 TTINCRWC/row) measured 681.86 vs 675.85 cyc/tile against the
+;; unhoisted+mod-write ON-25 world = +6.0 cyc/tile, kernel-causal
+;; -0.37% -> +0.52% (headline-laneFY-plain-20260823c, device-golden
+;; corr PASS; laneFZ-evidence-20260823) -- the modeled 11071-centislot
+;; delivery saving was execution-hidden while the forfeited mod-write
+;; fire cost real cycles.  RULE: a re-record hoist whose planned no-exec
+;; capture placement would induce the fallback refuses by name
+;; (record-hoist-downstream-fallback-unprofitable) and keeps today's
+;; bytes.  The oracle
+;; (rvtt_dst_autoincr_hoist_capture_composition_p, single source in
+;; rtl-rvtt-dst-autoincr.cc next to the guard it mirrors) prices the
+;; SAME audited quantity with the SAME semantics as the group guard:
+;; W_drain window, candidate-block tail credited zero, intermediate
+;; blocks at full frontend issue-word cover, capture-block prefix before
+;; the insertion point; would-be candidates are find_candidates' own
+;; EXPLICIT row shape by forward folded scan (capture shadows folded;
+;; typed pure-Dst increment whose preceding non-neutral item is a
+;; retargetable no-increment explicit Dst access).  Replay-row leads
+;; are deliberately NOT mirrored: their candidacy needs the vetted
+;; payload terminator (whole-function launch resolution), and their
+;; formed groups refuse ANY same-function no-exec capture under the
+;; lane FS persistence clause regardless of distance -- a coarse
+;; replay-lead arm measurably over-refused (the sfpu_reduce_sdpa pack
+;; TUs: launch-led increments find_candidates rejects as "no owned
+;; terminator access" would have forfeited two real corpus hoists).
+;; NO NEW CONSTANTS: W_drain and the word accounting are the existing
+;; audited entries above.  Consistency: for every admitted hoist the guard later
+;; sees the capture at >= W_drain (or unreachable), so an admitted hoist
+;; can never flip a group the unhoisted world would have kept -- the
+;; ON-28 corpus point of this fact is that the refusal's only fire is
+;; the lcm TU (bytes revert to the reviewed ON-25 stream) with the other
+;; 44 record-hoist fires byte-identical.  SCOPE BOUND (documented, zero
+;; corpus instances): a replay-row-lead candidate BEYOND the window is
+;; not mirrored (the guard still refuses its group soundly; the composed
+;; bytes then price honestly worse) -- widening needs its own witness.
+;; The counted-loop hoist branch is deliberately untouched: it exists in
+;; both flag states (pin-11 class, reviewed bytes), so pricing it here
+;; would churn proven streams outside this flag's measurement charter.
+;;
 ;; FAIL-CLOSED COMPANION in the narrow scan (both flag states): a
 ;; volatile store whose ADDRESS is not provably outside the instruction
 ;; FIFO could push ANY word -- including a REPLAY record -- so

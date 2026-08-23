@@ -180,6 +180,18 @@ extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
    direction).  */
 extern unsigned rvtt_modwrite_drained_frontend_window (void);
 
+/* Downstream-fallback composition oracle for the record-hoist pricing
+   (lane FZ; rvtt-cost.md "RECORD-HOIST x MOD-WRITE COMPOSITION"): true
+   when a no-exec replay capture hoisted into PREHEADER would lie within
+   the audited drained-frontend window of a row dst-autoincr would
+   otherwise transform into a mod-write -- the placement that forces the
+   group guard's refusal and the explicit-increment fallback, voiding
+   the hoist pricing's streams-identical premise.  *DIST reports the
+   refuting frontend issue-word distance (the guard's own semantics).
+   A true return prices a hoist REFUSAL only; it grants nothing.  */
+extern bool rvtt_dst_autoincr_hoist_capture_composition_p
+  (struct basic_block_def *preheader, unsigned *dist);
+
 // RTL passes
 class rtl_opt_pass;
 extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);

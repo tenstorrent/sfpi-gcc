@@ -1824,6 +1824,46 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	    }
     }
 
+  /* Downstream-fallback composition pricing (lane FZ; rvtt-cost.md
+     "RECORD-HOIST x MOD-WRITE COMPOSITION").  The record-hoist pricing
+     below is licensed by the streams-identical premise: the hoisted and
+     unhoisted worlds EXECUTE the same word stream, so the modeled delta
+     is pure delivery.  A no-exec record hoisted to within the audited
+     drained-frontend window of a row the dst-autoincr pass would
+     otherwise transform into a mod-write voids that premise: the
+     dst-autoincr group guard is certain to refuse the group (the
+     silicon-refuted no-exec-record x mod-write composition, fail-closed
+     and correct), so the hoisted world executes the explicit-increment
+     fallback while the unhoisted world executes the mod-write form --
+     different executed streams whose delta the delivery-only model
+     cannot price.  The one silicon point on the composed shape measured
+     it NET NEGATIVE (lcm-fresh ON-28, +6.0 cyc/tile against the
+     unhoisted+mod-write world; rvtt-cost.md entry), so a hoist that
+     induces the fallback refuses by name and keeps today's bytes.  The
+     oracle mirrors the group guard's own distance semantics and audited
+     window (single source, rtl-rvtt-dst-autoincr.cc); no distance an
+     admitted hoist leaves behind can flip the guard.  Gated on the
+     dst-autoincr pass actually running: with it disabled both worlds
+     keep the explicit increments and the premise holds.  */
+  if (record_hoist && TARGET_XTT_TENSIX && riscv_tt_opt_dst_autoincr > 0)
+    {
+      unsigned dist = 0;
+      if (rvtt_dst_autoincr_hoist_capture_composition_p (preheader, &dist))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist refused:"
+		     " record-hoist-downstream-fallback-unprofitable:"
+		     " hoisted no-exec record within the drained-frontend"
+		     " window of a would-be dst-autoincr mod-write row"
+		     " (distance %u < %u, preheader bb %d; the group guard"
+		     " would refuse and the mod-write falls back)\n",
+		     dist, rvtt_modwrite_drained_frontend_window (),
+		     preheader->index);
+	  return nullptr;
+	}
+    }
+
   if (!hoist_profitable_p (loop, preheader, block, seq.clones.front (),
 			   /*body_rerecords=*/true,
 			   max_contiguous_launch_run (seq, block)))
