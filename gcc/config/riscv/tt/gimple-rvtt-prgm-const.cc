@@ -442,6 +442,16 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		  refuse ("user SFPCONFIG writes LaneConfig", stmt);
 		  continue;
 		}
+	      /* X6 FPU face-transpose family (ttmovd2b/ttmovb2a/ttmovb2d/
+		 ttmova2d/tttrnspsrcb/ttstallwait/ttrmwcib, lane FV):
+		 ADJUDICATED transparent for THIS census.  The census
+		 tracks the SFPU unit's PRGM/LaneConfig state (SFPCONFIG
+		 destinations 0..15); the X6 family programs the Matrix
+		 Unit's world -- Dst rows, Src banks, thread/backend
+		 configuration words -- and architecturally cannot write
+		 any SFPCONFIG destination (SFPCONFIG.md vs RMWCIB.md/
+		 SETC16.md config spaces).  Falling through transparent is
+		 therefore a proof, not a default.  */
 	      continue;		/* typed builtins are transparent */
 	    }
 

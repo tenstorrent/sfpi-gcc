@@ -3161,6 +3161,19 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
 		 against this one.  */
 	      return init_refuse (ctx, "drain-init-ownership-unproven",
 				  stmt);
+	    case rvtt_insn_data::ttmovd2b:
+	    case rvtt_insn_data::ttmovb2a:
+	    case rvtt_insn_data::ttmovb2d:
+	    case rvtt_insn_data::ttmova2d:
+	    case rvtt_insn_data::tttrnspsrcb:
+	    case rvtt_insn_data::ttstallwait:
+	    case rvtt_insn_data::ttrmwcib:
+	      /* X6 FPU face-transpose family (lane FV): Matrix-Unit
+		 choreography programming Dst rows, Src banks, and backend
+		 configuration -- state this contract neither owns nor
+		 orders against.  Fail closed.  */
+	      return init_refuse (ctx, "drain-init-ownership-unproven",
+				  stmt);
 	    default:
 	      break;
 	    }

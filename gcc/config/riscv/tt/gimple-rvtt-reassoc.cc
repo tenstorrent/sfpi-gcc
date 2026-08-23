@@ -387,6 +387,8 @@ flatten (tree val, chain *c, basic_block bb)
 static const char *const window_barrier_cc = "reassoc-cc-region-boundary";
 static const char *const window_barrier_replay
   = "reassoc-replay-playback-boundary";
+static const char *const window_barrier_fpu
+  = "reassoc-fpu-choreography-boundary";
 
 static const char *
 window_stmt_barrier_name (gimple *stmt)
@@ -423,6 +425,21 @@ window_stmt_barrier_name (gimple *stmt)
        name rather than rebalancing across it.  */
     case rvtt_insn_data::ttreplay:
       return window_barrier_replay;
+    /* X6 FPU face-transpose family (lane FV): Matrix-Unit Dst/Src-bank
+       moves, the SrcB transpose, the wait-gate stall, and the
+       backend-config byte RMW.  None of them writes an LREG or the CC
+       stack, but they read and write Dst rows and backend configuration
+       through state no gimple layer models (ALU formats, RWC counters,
+       bank validity) -- the window fails closed on the whole family
+       rather than adjudicate transparency per member.  */
+    case rvtt_insn_data::ttmovd2b:
+    case rvtt_insn_data::ttmovb2a:
+    case rvtt_insn_data::ttmovb2d:
+    case rvtt_insn_data::ttmova2d:
+    case rvtt_insn_data::tttrnspsrcb:
+    case rvtt_insn_data::ttstallwait:
+    case rvtt_insn_data::ttrmwcib:
+      return window_barrier_fpu;
     default:
       return nullptr;
     }
@@ -631,6 +648,14 @@ process_root (gcall *root, chain_kind kind, tree mod)
 		     "delivery boundary sits inside the chain window -- "
 		     "recorded slot content is not derivable, so value-"
 		     "order across the playback point is unproven)\n",
+		     chain_kind_name (kind), bb->index);
+	  else if (barrier == window_barrier_fpu)
+	    fprintf (dump_file,
+		     "reassoc: refusing %s chain rebalance in bb %d "
+		     "(reassoc-fpu-choreography-boundary: an X6 Matrix-"
+		     "Unit face-transpose family statement sits inside "
+		     "the chain window -- its Dst and backend-"
+		     "configuration effects are unmodeled at gimple)\n",
 		     chain_kind_name (kind), bb->index);
 	  else
 	    fprintf (dump_file,
