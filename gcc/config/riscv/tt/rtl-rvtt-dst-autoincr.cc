@@ -2025,6 +2025,196 @@ rvtt_modwrite_drained_frontend_window (void)
   return target_autoincr_caps ().drained_frontend_window;
 }
 
+/* Lane FZ (record-hoist x mod-write downstream-fallback pricing;
+   rvtt-cost.md "RECORD-HOIST x MOD-WRITE COMPOSITION" entry).
+
+   Would-be EXPLICIT candidate row, by forward folded scan of BB --
+   scan_block's own item shape without the function context: capture
+   recording shadows are folded (members are not items), and a typed
+   pure-Dst increment is a candidate exactly when its architecturally
+   preceding non-neutral ITEM is a retargetable no-increment explicit
+   Dst access (find_candidates' ROW_EXPLICIT arm).  Replay-row leads
+   (launch / executing capture) are NOT candidates here: their
+   candidacy needs the vetted payload terminator (payload_ok), which
+   needs whole-function launch resolution -- and their formed groups
+   refuse ANY same-function no-exec capture under the lane FS
+   persistence clause regardless of distance, so mirroring them buys
+   no byte outcome the group guard does not already own (documented
+   scope bound; the sdpa pack TUs are the witnessed shape: launch-led
+   increments that find_candidates rejects as "no owned terminator
+   access", where a coarse replay-lead arm over-refused real hoists).
+   BEFORE_INSN bounds the scan exclusively; null scans the whole
+   block.  A non-constant capture stops the scan (no-candidate
+   direction: this pricing may only refuse a HOIST; group-guard
+   soundness is unconditional either way).  */
+
+static bool
+block_has_explicit_candidate_increment_p (basic_block bb,
+					  const autoincr_caps &caps,
+					  rtx_insn *before_insn)
+{
+  bool lead_is_access = false;
+  access_info lead_acc;
+  rtx_insn *insn = BB_HEAD (bb);
+  rtx_insn *end = NEXT_INSN (BB_END (bb));
+  for (; insn && insn != end; insn = NEXT_INSN (insn))
+    {
+      if (insn == before_insn)
+	break;
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      access_info acc;
+      autoincr_class cls = classify_insn (insn, &acc);
+      if (cls == AIC_NEUTRAL)
+	continue;
+      if (cls == AIC_REPLAY)
+	{
+	  rtx pattern = PATTERN (insn);
+	  rtx len = XVECEXP (pattern, 0, 3);
+	  rtx load = XVECEXP (pattern, 0, 7);
+	  if (!CONST_INT_P (len) || !CONST_INT_P (load))
+	    return false; /* variable capture: stop, no-candidate side */
+	  if (INTVAL (load) != 0)
+	    {
+	      /* Capture: fold the recording shadow like scan_block.  */
+	      unsigned remaining = UINTVAL (len);
+	      while (remaining && insn)
+		{
+		  insn = NEXT_INSN (insn);
+		  if (!insn || insn == end || insn == before_insn)
+		    return false;
+		  if (!NONDEBUG_INSN_P (insn))
+		    continue;
+		  if (occupies_replay_slot_p (insn))
+		    --remaining;
+		}
+	    }
+	  lead_is_access = false; /* replay row lead: not mirrored */
+	  continue;
+	}
+      if (cls == AIC_INCRWC)
+	{
+	  HOST_WIDE_INT stride;
+	  if (pure_dst_increment_p (insn, &stride) && lead_is_access
+	      && lead_acc.mode == caps.noinc_mode && lead_acc.retargetable)
+	    return true;
+	  lead_is_access = false;
+	  continue;
+	}
+      if (cls == AIC_ACCESS)
+	{
+	  lead_is_access = true;
+	  lead_acc = acc;
+	  continue;
+	}
+      lead_is_access = false; /* AIC_RWC_STEP / AIC_FOREIGN */
+    }
+  return false;
+}
+
+/* Frontend issue-slot cover of one raw INSN: the per-insn spelling of
+   item_frontend_words (a folded capture item's words equal the sum of
+   its member insns' words, so the raw-insn walk prices blocks
+   identically to the scan's item view).  */
+
+static unsigned
+insn_frontend_cover_words (rtx_insn *insn)
+{
+  return (occupies_replay_slot_p (insn) ? 1 : 0) + scalar_issue_words (insn);
+}
+
+static unsigned
+block_frontend_cover_words (basic_block bb)
+{
+  unsigned words = 0;
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    if (NONDEBUG_INSN_P (insn))
+      words += insn_frontend_cover_words (insn);
+  return words;
+}
+
+/* Exported to the replay former (rvtt-protos.h; lane FZ): would a
+   NO-EXEC replay capture hoisted into PREHEADER (at the replay pass's
+   anchor rule: before a trailing jump, else at block end) lie within
+   the audited drained-frontend window of a WOULD-BE mod-write row --
+   a candidate this pass's find_candidates would transform?  If so this
+   pass's group guard (noexec_record_composition_p) is certain to
+   REFUSE the group formed from that candidate, the transformed stores
+   fall back to their explicit-increment form, and the record-hoist's
+   streams-identical pricing premise is void (the hoisted and unhoisted
+   worlds then EXECUTE different word streams).  Distance semantics
+   mirror the guard exactly: candidate-block tail credited zero, the
+   capture block's prefix before the insertion point, intermediate
+   blocks at their full frontend issue-word cover; a path reaching the
+   function entry, or accumulating >= the window, is separated.  A true
+   return is a PRICING refusal only (the hoist keeps today's reviewed
+   bytes); group-guard soundness is unconditional either way.  */
+
+bool
+rvtt_dst_autoincr_hoist_capture_composition_p (basic_block preheader,
+					       unsigned *dist)
+{
+  *dist = 0;
+  const autoincr_caps caps = target_autoincr_caps ();
+  if (!caps.available || !caps.drained_frontend_window)
+    return true; /* no audited window: every distance refuses */
+  unsigned window = caps.drained_frontend_window;
+
+  /* Prefix cover inside the preheader itself.  A candidate increment in
+     the capture's own block refuses fail-closed (the group guard's
+     same-block rule).  */
+  rtx_insn *anchor = BB_END (preheader);
+  rtx_insn *stop = (anchor && JUMP_P (anchor)) ? anchor : nullptr;
+  if (block_has_explicit_candidate_increment_p (preheader, caps, stop))
+    return true;
+  unsigned cover = 0;
+  rtx_insn *insn;
+  FOR_BB_INSNS (preheader, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (stop && insn == stop)
+	break; /* the capture lands before a trailing jump */
+      cover += insn_frontend_cover_words (insn);
+    }
+  if (cover >= window)
+    return false;
+
+  /* Backward min-distance walk over predecessors, pruned at WINDOW: the
+     group guard's forward Dijkstra reversed.  */
+  hash_map<basic_block, unsigned> best;
+  std::vector<std::pair<unsigned, basic_block>> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, preheader->preds)
+    work.emplace_back (cover, e->src);
+  while (!work.empty ())
+    {
+      auto it = std::min_element (work.begin (), work.end ());
+      unsigned cost = it->first;
+      basic_block bb = it->second;
+      work.erase (it);
+      if (cost >= window || bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      unsigned *seen = best.get (bb);
+      if (seen && *seen <= cost)
+	continue;
+      best.put (bb, cost);
+      if (block_has_explicit_candidate_increment_p (bb, caps, nullptr))
+	{
+	  *dist = cost;
+	  return true;
+	}
+      unsigned out = cost + block_frontend_cover_words (bb);
+      if (out >= window)
+	continue;
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	work.emplace_back (out, e->src);
+    }
+  return false;
+}
+
 rtl_opt_pass *
 make_pass_rvtt_dst_autoincr (gcc::context *ctxt)
 {
