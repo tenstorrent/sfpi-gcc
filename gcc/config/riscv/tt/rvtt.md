@@ -119,6 +119,14 @@
   UNSPECV_TTSETC16
   UNSPECV_TTMOP
   UNSPECV_TTMOPCFG
+
+  UNSPECV_TTMOVD2B
+  UNSPECV_TTMOVB2A
+  UNSPECV_TTMOVB2D
+  UNSPECV_TTMOVA2D
+  UNSPECV_TTTRNSPSRCB
+  UNSPECV_TTSTALLWAIT
+  UNSPECV_TTRMWCIB
 ])
 
 (define_enum "xtt_delay" [
@@ -4620,6 +4628,244 @@
   emit_insn (gen_rvtt_ttsetc16_int (operands[0], operands[1]));
   DONE;
 })
+
+;; ---------------------------------------------------------------------
+;; X6 FPU face-transpose family (lane FV).  Matrix-Unit (FPU) Dst <->
+;; SrcA/SrcB row moves, the SrcB[16:32) 16x16 transpose, the wait-gate
+;; stall, and the backend-config byte RMW -- the typed spellings of the
+;; hand face-transpose choreography (tt_llk_blackhole
+;; llk_math_transpose_dest.h / blaze ckernel_sfpu_topk_xl.h
+;; transpose_dest_face_32b).  Semantics: tt-isa-documentation WormholeB0
+;; MOVD2B/MOVB2A/MOVB2D/MOVA2D/TRNSPSRCB/RMWCIB .md functional models
+;; (which carry the Blackhole arms; the BlackholeA0 tree is a doc gap and
+;; the pinned sim is the BH oracle).
+;;
+;; Deliberately effect-UNAUDITED: no xtt_* effect attributes, so
+;; rvtt_insn_effects () resolves them opaque and every optimization layer
+;; (scheduler, dst-autoincr, macro planner, replay formation, ...) refuses
+;; around them byte-identically -- these instructions read and write Dst
+;; rows and Src banks through state (ALU formats, RWC counters, bank
+;; validity) no compiler layer models today.  xtt_replay barrier for the
+;; same reason.  QSR encodes this family differently (gas rejects the
+;; WH/BH operand ranges) and has no audited choreography: expand-time
+;; refusal.
+(define_expand "rvtt_ttmovd2b"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     ] UNSPECV_TTMOVD2B)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTMOVD2B is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttmovd2b_wh_bh (operands[0], operands[1], operands[2],
+				      operands[3], operands[4]));
+  DONE;
+})
+
+(define_insn "rvtt_ttmovd2b_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; UseDst32bLo
+     (match_operand:SI 1 "const_int_operand" "n") ;; SrcBRow
+     (match_operand:SI 2 "const_int_operand" "n") ;; AddrMod
+     (match_operand:SI 3 "const_int_operand" "n") ;; Move4Rows
+     (match_operand:SI 4 "const_int_operand" "n") ;; DstRow
+     ] UNSPECV_TTMOVD2B)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOVD2B\t%0, %1, %2, %3, %4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_expand "rvtt_ttmovb2a"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     ] UNSPECV_TTMOVB2A)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTMOVB2A is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttmovb2a_wh_bh (operands[0], operands[1], operands[2],
+				      operands[3]));
+  DONE;
+})
+
+(define_insn "rvtt_ttmovb2a_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; SrcARow
+     (match_operand:SI 1 "const_int_operand" "n") ;; AddrMod
+     (match_operand:SI 2 "const_int_operand" "n") ;; Move4Rows
+     (match_operand:SI 3 "const_int_operand" "n") ;; SrcBRow
+     ] UNSPECV_TTMOVB2A)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOVB2A\t%0, %1, %2, %3"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_expand "rvtt_ttmovb2d"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     ] UNSPECV_TTMOVB2D)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTMOVB2D is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttmovb2d_wh_bh (operands[0], operands[1], operands[2],
+				      operands[3], operands[4]));
+  DONE;
+})
+
+(define_insn "rvtt_ttmovb2d_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; UseDst32bLo
+     (match_operand:SI 1 "const_int_operand" "n") ;; SrcBRow
+     (match_operand:SI 2 "const_int_operand" "n") ;; AddrMod
+     (match_operand:SI 3 "const_int_operand" "n") ;; Mode
+     (match_operand:SI 4 "const_int_operand" "n") ;; DstRow
+     ] UNSPECV_TTMOVB2D)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOVB2D\t%0, %1, %2, %3, %4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_expand "rvtt_ttmova2d"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     (match_operand:SI 4 "const_int_operand")
+     ] UNSPECV_TTMOVA2D)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTMOVA2D is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttmova2d_wh_bh (operands[0], operands[1], operands[2],
+				      operands[3], operands[4]));
+  DONE;
+})
+
+(define_insn "rvtt_ttmova2d_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; UseDst32bLo
+     (match_operand:SI 1 "const_int_operand" "n") ;; SrcARow
+     (match_operand:SI 2 "const_int_operand" "n") ;; AddrMod
+     (match_operand:SI 3 "const_int_operand" "n") ;; Move8Rows
+     (match_operand:SI 4 "const_int_operand" "n") ;; DstRow
+     ] UNSPECV_TTMOVA2D)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTMOVA2D\t%0, %1, %2, %3, %4"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_expand "rvtt_tttrnspsrcb"
+  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTTRNSPSRCB)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTTRNSPSRCB is unaudited; refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_tttrnspsrcb_wh_bh ());
+  DONE;
+})
+
+(define_insn "rvtt_tttrnspsrcb_wh_bh"
+  [(unspec_volatile:XTT32SI [(const_int 0)] UNSPECV_TTTRNSPSRCB)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTTRNSPSRCB"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+(define_expand "rvtt_ttstallwait"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     ] UNSPECV_TTSTALLWAIT)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTSTALLWAIT is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttstallwait_wh_bh (operands[0], operands[1]));
+  DONE;
+})
+
+(define_insn "rvtt_ttstallwait_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; StallRes
+     (match_operand:SI 1 "const_int_operand" "n") ;; WaitRes
+     ] UNSPECV_TTSTALLWAIT)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+  "TTSTALLWAIT\t%0, %1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
+
+;; Operand 0 selects the byte lane (RMWCIB0..3); the mnemonic choice is
+;; emission data owned by this pattern and the assembler.
+(define_expand "rvtt_ttrmwcib"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand")
+     (match_operand:SI 1 "const_int_operand")
+     (match_operand:SI 2 "const_int_operand")
+     (match_operand:SI 3 "const_int_operand")
+     ] UNSPECV_TTRMWCIB)]
+  "TARGET_XTT_TENSIX"
+{
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      error ("QSR TTRMWCIB is unaudited (encoding differs); refuse");
+      DONE;
+    }
+  emit_insn (gen_rvtt_ttrmwcib_wh_bh (operands[0], operands[1], operands[2],
+				      operands[3]));
+  DONE;
+})
+
+(define_insn "rvtt_ttrmwcib_wh_bh"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI 0 "const_int_operand" "n") ;; ByteIndex
+     (match_operand:SI 1 "const_int_operand" "n") ;; Mask8
+     (match_operand:SI 2 "const_int_operand" "n") ;; Data8
+     (match_operand:SI 3 "const_int_operand" "n") ;; CfgAddr8
+     ] UNSPECV_TTRMWCIB)]
+  "TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH"
+{
+  switch (INTVAL (operands[0]))
+    {
+    case 0: return "TTRMWCIB0\t%1, %2, %3";
+    case 1: return "TTRMWCIB1\t%1, %2, %3";
+    case 2: return "TTRMWCIB2\t%1, %2, %3";
+    case 3: return "TTRMWCIB3\t%1, %2, %3";
+    default: gcc_unreachable ();
+    }
+}
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "barrier")])
 
 ;; MOP loop delivery (formed only by the rvtt_mop_form pass; capability
 ;; facts and provenance in rvtt-mop-tables.h).  MOP (opcode 0x01) fires

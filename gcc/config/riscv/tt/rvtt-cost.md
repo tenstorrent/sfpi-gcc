@@ -404,6 +404,27 @@
 ;; state, WP6 capability-table territory); everything QSR (simulator
 ;; returns MissingSpecification for these opcode semantics).
 ;;
+;; Deliberately UNAUDITED (refusing): the X6 FPU face-transpose family
+;; (lane FV 2026-08-22): TTMOVD2B / TTMOVB2A / TTMOVB2D / TTMOVA2D /
+;; TTTRNSPSRCB / TTSTALLWAIT / TTRMWCIB0..3.  Matrix-Unit (FPU)
+;; instructions moving Dst rows through the SrcA/SrcB banks under
+;; ALU-format state, plus the backend-config byte RMW and the wait-gate
+;; stall that choreograph them.  Their Dst addressing is positional
+;; (RWC + DEST_REGW_BASE + addr-mod), their data path is format-state-
+;; dependent (MOVD2B.md/MOVA2D.md conversion arms), their wait-gate
+;; behavior is bank-ownership-dependent, and TTSTALLWAIT's stall extent
+;; is condition-dependent -- every one of those is outside today's
+;; effect vocabulary, so the whole family carries NO effect attributes:
+;; rvtt_insn_effects () resolves it opaque and every optimization layer
+;; refuses around it byte-identically (scheduler barrier, dst-autoincr
+;; AIC_FOREIGN, replay barrier via xtt_replay=barrier, reassoc
+;; reassoc-fpu-choreography-boundary, crosscall
+;; drain-init-ownership-unproven).  Operand envelopes are the
+;; architectural encoding-field widths only (rvtt-insn.def {CU, width}
+;; = ckernel_ops.h TT_*_VALID); semantic legality (format protocol,
+;; bank grants, TEN-4245's TF32+UseDst32bLo UB edge) is owned by the
+;; sfpi_crosslane.h X6 surface contract and its sim gate, not by
+;; per-operand compiler checks.
 ;; Mod-write backedge-crossing price (lane EB, DX finding F2 / CK-P3).
 ;; The Dst auto-increment pass (rtl-rvtt-dst-autoincr.cc) turns the
 ;; audited-latency-0 TTINCRWC row step above into a positional-state

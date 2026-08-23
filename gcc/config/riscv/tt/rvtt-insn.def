@@ -310,6 +310,32 @@ RVTT_FN (ttdstface,            ,,VOID_FTYPE,                                    
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}))
 RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}))
 
+// X6 FPU face-transpose family (lane FV): the Matrix-Unit (FPU) Dst <->
+// SrcA/SrcB row moves, the SrcB[16:32) 16x16 transpose, the backend-config
+// byte RMW, and the wait-gate stall the hand face-transpose choreography
+// issues (tt-isa-documentation WormholeB0 MOVD2B/MOVB2A/MOVB2D/MOVA2D/
+// TRNSPSRCB/RMWCIB .md pages carry the BH arms; BlackholeA0 tree = doc gap,
+// pinned sim is the BH oracle).  Immediate-only, no LREG dataflow; effect
+// attributes deliberately UNAUDITED at RTL so rvtt_insn_effects () keeps
+// them opaque and every optimization layer refuses around them (the
+// refusing-default architecture).  Operand widths are the architectural
+// encoding-field widths (ckernel_ops.h TT_*_VALID; gas enforces the same).
+// ttmovd2b (UseDst32bLo, SrcBRow, AddrMod, Move4Rows, DstRow)
+RVTT_FN (ttmovd2b,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 2}, {CU, 12}))
+// ttmovb2a (SrcARow, AddrMod, Move4Rows, SrcBRow)
+RVTT_FN (ttmovb2a,             ,,VOID_FTYPE_USI_USI_USI_USI,                                 VOL, ({CU, 7}, {CU, 3}, {CU, 2}, {CU, 12}))
+// ttmovb2d (UseDst32bLo, SrcBRow, AddrMod, Mode{Move4Rows|Bcast8|BcastCol0}, DstRow)
+RVTT_FN (ttmovb2d,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 3}, {CU, 11}))
+// ttmova2d (UseDst32bLo, SrcARow, AddrMod, Move8Rows, DstRow)
+RVTT_FN (ttmova2d,             ,,VOID_FTYPE_USI_USI_USI_USI_USI,                             VOL, ({CU, 1}, {CU, 6}, {CU, 3}, {CU, 2}, {CU, 12}))
+RVTT_FN (tttrnspsrcb,          ,,VOID_FTYPE,                                                 VOL, ())
+// ttstallwait (StallRes, WaitRes)
+RVTT_FN (ttstallwait,          ,,VOID_FTYPE_USI_USI,                                         VOL, ({CU, 9}, {CU, 15}))
+// ttrmwcib (ByteIndex 0..3, Mask8, Data8, CfgAddr8): byte-granular RMW of
+// the CURRENT-state backend configuration word (the cfg_reg_rmw_tensix
+// lowering); byte index selects RMWCIB0..3.
+RVTT_FN (ttrmwcib,             ,,VOID_FTYPE_USI_USI_USI_USI,                                 VOL, ({CU, 2}, {CU, 8}, {CU, 8}, {CU, 8}))
+
 // Make sure the last defn is never something we ask for get-live of.
 
 #undef LV
