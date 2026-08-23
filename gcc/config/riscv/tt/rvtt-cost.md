@@ -1090,6 +1090,95 @@
 ;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
 ;; overrides this table value for experimentation.
 ;;
+;; RECORD-HOIST RUNTIME-TRIP ADMISSION (lane FW, 2026-08-22; rides the
+;; same measurement flag).  The blaze sdpa_reduce_row loss class -- the
+;; only corpus kernel whose loss WIDENS with tile count (+0.6% t8 ->
+;; +1.6% t32, laneFE scaling table) -- is a per-tile re-record inside a
+;; RUNTIME-counted tile loop (TILE_CNT from RuntimeParams), where
+;; provable_constant_trips can never resolve trips.  Two facts replace
+;; the proven trip count:
+;;
+;;   (1) STRUCTURAL trips >= 1.  The hoisted record lands in the
+;;       DEDICATED preheader of a SINGLE-BLOCK loop: the preheader's
+;;       single successor is the loop body itself, so executing the
+;;       record implies at least one body execution; a zero-trip entry
+;;       branches around the preheader and never pays the record.
+;;   (2) MONOTONE delivery delta.  benefit(t) = t*per_trip - record_once
+;;       with per_trip = deliver_body - TURNAROUND: each realized trip
+;;       saves the same delivered words.  Admission requires
+;;       benefit(2) = 2*per_trip - record_once >= MIN_BENEFIT (the same
+;;       audited margin proven trip counts must clear) and per_trip > 0;
+;;       the worst realized outcome is then the single-trip exposure
+;;       record_once - per_trip = PUSH + RECORD_OVERHEAD + TURNAROUND
+;;       (~493 cs = about one record delivery, once per kernel entry),
+;;       and every trip from 2 on wins.  Shapes whose 2-trip benefit
+;;       cannot clear the margin refuse by name
+;;       (record-hoist-runtime-trips-break-even): on the sdpa_reduce
+;;       shape the 10-word window admits (2-trip benefit 667) and the
+;;       4-word window refuses (-71) -- the refusal keeps its in-body
+;;       exec-record byte-identically.
+;;
+;; LOOP REPLAY-PRESERVATION AUDIT (same lane; rvtt-macro-epoch.cc
+;; rvtt_macro_epoch_loop_replay_preserved_p).  Production tile loops
+;; always carry raw LLK sync words and computed instruction-FIFO pushes,
+;; so the narrow loop_preserves_replay_p scan (call/asm/typed-owner)
+;; refuses every real tile loop (record-hoist-loop-opaque).  Under the
+;; flag the refused loop is re-audited word by word against the
+;; replay-BUFFER owner vocabulary, reusing the configuration-epoch
+;; interval resolver: raw `.ttinsn' constants and volatile-stored words
+;; must resolve to intervals whose opcode byte provably is not REPLAY
+;; (TT_OP 0x04 -- the same audited decode as rvtt-raw-boundary.cc);
+;; stores provably outside the FIFO aperture (named data objects other
+;; than __instrn_buffer, stack, non-aperture constant MMIO) are inert
+;; regardless of value; this pass's OWN playback launches are admitted
+;; (their recorded content is the pass's audited payload -- the
+;; multi-record calendar), while user-authored launches refuse (their
+;; recorded slot content is unknowable and, by the lane FS persistence
+;; model, may predate the kernel).  MOP dispatches admit only under the
+;; MopCfg template census: the MOP Expander may legally emit REPLAY
+;; words (ISA MOPExpander.md -- its performance section even recommends
+;; it), so every MopCfg[0..8] word (the consumption set of BOTH
+;; templates, same ISA source) must be a function-programmed constant
+;; whose opcode byte is not REPLAY, all nine slots covered by stores
+;; dominating the loop header (a caller-armed slot is unknowable) and
+;; no call in the function; the audited scalar store-load roundtrip asm
+;; idioms are admitted against the census because the MopCfg aperture
+;; is WRITE-ONLY (reading it is UndefinedBehavior, same ISA source), so
+;; a defined execution's roundtrip is never a MopCfg access.
+;;
+;; REISSUE-LATENCY GATE DISCHARGE (record-hoist mode only).  The
+;; replay-reissue-latency-unproved gate serves the DEFAULT model's
+;; exec-side estimate; in record-hoist mode execution cancels between
+;; the worlds (word-identical streams, above), and the reissue
+;; SOUNDNESS half is carried structurally: every window has >= 2
+;; clones, so the identical word stream is already playback-delivered
+;; at expander pace in the unhoisted world (the always-on former's
+;; silicon-witnessed formation); converting the first clone from
+;; exec-while-record delivery to one more playback of that same stream
+;; adds no exposure an audited latency could bound.  The gate stays for
+;; the default hoist model, which consumes the estimate, and on
+;; unproven targets (QSR): the discharge cites the silicon-witnessed
+;; playback class, which only BH/WH carry.
+;;
+;; ADMISSION-SIDE DOOMED-HOIST MIRROR: a Dst-store payload whose record
+;; would land in a preheader that itself sits inside a natural loop is
+;; exactly the shape the fail-closed re-record sweep un-hoists (lane FJ,
+;; noexec-rerecord-dststore-composition-unaudited) -- and the un-hoist
+;; inlines every launch as a payload copy, a strict delivery
+;; pessimization against never hoisting.  The record-hoist refuses that
+;; shape at admission by the sweep's own name; the dominating loop-free
+;; preheader Dst-store class stays admitted (the sweep's rule 3 keeps
+;; it -- the witnessed init-record class).
+;;
+;; FAIL-CLOSED COMPANION in the narrow scan (both flag states): a
+;; volatile store whose ADDRESS is not provably outside the instruction
+;; FIFO could push ANY word -- including a REPLAY record -- so
+;; loop_preserves_replay_p now refuses it (volatile_store_maybe_fifo_p)
+;; instead of silently ignoring it; the flag path re-audits by VALUE as
+;; above (a store of a provably non-REPLAY word is benign wherever it
+;; lands).  This closes a fail-open the pointer-parameter separator of
+;; the original fire twin demonstrated.
+;;
 ;; Launch-loop unroll (the post-hoist delivery companion).  A counted
 ;; loop whose body has been reduced to pure replay delivery -- playback
 ;; launches plus typed Dst steps -- still pays two delivered scalar
