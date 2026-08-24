@@ -1825,6 +1825,39 @@
 ;;       clause (a pending store reads the live lane mask; any follower
 ;;       CC write inside the horizon conflicts).
 ;;
+;;   F5' Stride-phase rebase (lane GJ; under
+;;       -mtt-tensix-optimize-window-pairing-stride).  F5's compact-
+;;       absorber invariant (the advancing address mode rides the row's
+;;       LAST issued word) is one sufficient condition for the uniform
+;;       "row r+j sits exactly j strides away" arithmetic, not a
+;;       hardware requirement.  When the single absorbing advance rides
+;;       an EARLIER issued word (position p), the row's Dst accesses
+;;       split into two phases by the POSITION of their carrying word:
+;;       accesses carried at or before p resolved at the row-entry
+;;       counter value (phase 0), accesses carried after p resolved one
+;;       stride later (phase 1).  This is exact because every access's
+;;       Dst address latches at its carrying word: the absorbing word's
+;;       own load resolves before ApplyPartialAddrMod runs ([ISA]
+;;       SFPLOAD.md functional-model order, = F5), and every
+;;       SFPLOADMACRO-hosted event's Dst row is computed AT LAUNCH and
+;;       never re-resolved ([ISA] BlackholeA0 SFPLOADMACRO.md StoreSubUnit
+;;       extras: "the computation in SFPSTORE will resolve to whatever
+;;       was computed in SFPLOADMACRO, regardless of whether SFPLOADMACRO
+;;       (or any other intermediate instruction) advanced any RWCs";
+;;       [SIM] craq-sim 9f324140 src/tensix.cpp macro_dst_row latched
+;;       from dst_rwc before the SFPLOAD dispatch applies the modifier,
+;;       = the L1 fact the boundary proofs already consume).  Rebasing
+;;       every footprint by phase*stride (pending events: phase*stride;
+;;       follower row j: (j+phase)*stride) restores the uniform distance
+;;       arithmetic: same-index events across rows keep relative shift
+;;       j*stride, cross-index pairs gain exactly the phase delta their
+;;       carrying positions imply.  With the absorber on the last word
+;;       every phase is 0 and the arithmetic is F5's verbatim (the
+;;       admission is flag-gated; flag-off keeps the compact-form
+;;       refusal byte-identically).  An event with no provable carrying
+;;       word refuses window-pairing-stride-unproven (fail closed).  No
+;;       new constant: the phase is 0 or 1 by position comparison.
+;;
 ;; No constant is introduced: every distance derives from the schedule's
 ;; transcribed delays cross-checked against the descriptor's own
 ;; SequenceBits (two derivations of one calendar; mismatch refuses

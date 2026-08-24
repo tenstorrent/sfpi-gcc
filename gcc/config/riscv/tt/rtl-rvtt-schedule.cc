@@ -4498,6 +4498,18 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
      specs (the origin operands predate absorption); explicit accesses
      are emitted with their own typed operands.  */
   int stride = schedule.absorbed_stride;
+  /* Issue-word position of the single absorbing advance.  The compact
+     form (absorber on the row's LAST issued word) is the established
+     proof; under -mtt-tensix-optimize-window-pairing-stride an absorber
+     riding an EARLIER word is admitted and every Dst footprint below is
+     rebased by its carrying word's stride phase (0 at or before the
+     absorber, 1 after it): the absorber's own access resolves before
+     ApplyPartialAddrMod runs (F5) and SFPLOADMACRO-hosted events latch
+     their Dst row at the launch word regardless of later advances (L1;
+     SFPLOADMACRO.md StoreSubUnit Addr-resolution extra), so a word's
+     POSITION relative to the absorber decides which counter value its
+     accesses resolved at -- see rvtt-cost.md F5'.  */
+  int absorber_pos = last_pos;
   {
     int expected_advances = stride ? 1 : 0;
     int advances = 0;
@@ -4507,8 +4519,12 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 	  continue;
 	if (l.addr_mode != c->auto_increment_dst2_addr_mode
 	    || l.macro_index >= 8
-	    || carrier_pos[l.macro_index] != last_pos)
+	    || carrier_pos[l.macro_index] < 0)
 	  return refuse ("window-pairing-stride-unproven");
+	if (carrier_pos[l.macro_index] != last_pos
+	    && !riscv_tt_opt_window_pairing_stride)
+	  return refuse ("window-pairing-stride-unproven");
+	absorber_pos = carrier_pos[l.macro_index];
 	++advances;
       }
     for (unsigned ix = 0; ix != schedule.events.length (); ++ix)
@@ -4532,6 +4548,24 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
     if (advances != expected_advances)
       return refuse ("window-pairing-stride-unproven");
   }
+
+  /* Stride phase of schedule event IX: 0 when its carrying word sits at
+     or before the absorbing word (its Dst address resolved at the
+     row-entry counter value), 1 when after it (resolved one stride
+     later).  The carrying word is the event's own issued word, or its
+     carrier's launch word for launched template slots (Dst row latched
+     at launch: L1).  -1 = no provable carrying word (fail closed).
+     With the absorber on the last issued word every phase is 0 and the
+     arithmetic below is the established compact-form model verbatim.  */
+  auto stride_phase = [&] (unsigned ix) -> int
+    {
+      const macro_event &ev = schedule.events[ix];
+      int carry = ev.issues_word ? word_pos[ix]
+	: ev.macro_index < 8 ? carrier_pos[ev.macro_index] : -1;
+      if (carry < 0)
+	return -1;
+      return carry > absorber_pos ? 1 : 0;
+    };
 
   /* The staged events, decoded from the descriptor's OWN SequenceBits
      (the derivation that can never drift from what the hardware
@@ -4608,9 +4642,12 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
       {
 	wp_event p = sv;
 	p.exec = sv.exec - last_pos;	/* boundary-relative */
+	int phase = stride_phase (sv.sched_ix);
+	if (phase < 0)
+	  return refuse ("window-pairing-stride-unproven");
 	const char *why = nullptr;
 	if (!wp_event_footprint (desc, c, region.rows[0].insns[p.sched_ix],
-				 /*shift=*/0, &p, &why))
+				 stride * phase, &p, &why))
 	  return refuse (why);
 	pending.safe_push (p);
       }
@@ -4652,6 +4689,12 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 		  blocker = "window-pairing-footprint-opaque";
 		  break;
 		}
+	      int fphase = stride_phase (ix);
+	      if (fphase < 0)
+		{
+		  blocker = "window-pairing-stride-unproven";
+		  break;
+		}
 	      if (ev.is_carrier)
 		{
 		  /* The launch's own front-end SFPLOAD: writes the
@@ -4671,7 +4714,7 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 		  fe.dst_mem_read = true;
 		  fe.dst_mem_write = false;
 		  wp_type_dst (region.rows[0].insns[ix], fe,
-			       stride * (int) j, &f);
+			       stride * ((int) j + fphase), &f);
 		}
 	      else
 		{
@@ -4711,7 +4754,7 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 		  f.cfg_write = e.config_dests_written != 0
 		    || e.addr_mod_slot_write;
 		  wp_type_dst (region.rows[0].insns[ix], e,
-			       stride * (int) j, &f);
+			       stride * ((int) j + fphase), &f);
 		}
 	      for (const wp_event &p : pending)
 		{
@@ -4732,10 +4775,16 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
 		continue;	/* strictly after every pending writeback */
 	      wp_event f = staged[sx];
 	      f.exec = exec_f;
+	      int fphase = stride_phase (f.sched_ix);
+	      if (fphase < 0)
+		{
+		  blocker = "window-pairing-stride-unproven";
+		  break;
+		}
 	      const char *why = nullptr;
 	      if (!wp_event_footprint (desc, c,
 				       region.rows[0].insns[f.sched_ix],
-				       stride * (int) j, &f, &why))
+				       stride * ((int) j + fphase), &f, &why))
 		{
 		  blocker = why;
 		  break;
