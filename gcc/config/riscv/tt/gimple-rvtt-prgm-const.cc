@@ -2801,7 +2801,8 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
 
-      /* Exact fail-closed break-even for ordinary LOOP candidates.  Entry
+      /* Exact fail-closed strict-positive profitability for ordinary LOOP
+	 candidates.  Entry
 	 programming costs W staging words plus one SFPCONFIG; each iteration
 	 saves W-R words, where R is zero only under the consumer-fold proof
 	 above.  Unknown/runtime trip counts do not establish profitability.  */
@@ -2812,13 +2813,15 @@ residency_transform (function *fn, prgm_state *st)
 	    {
 	      unsigned w = loadi_issue_words (c.load);
 	      unsigned r = resident_readback_words (c.load);
-	      unsigned need = (w + 1 + (w - r) - 1) / (w - r);
+	      /* Prefer unchanged code at exact equality: residency must save
+		 strictly more recurring words than its W+1 entry program costs.  */
+	      unsigned need = (w + 1) / (w - r) + 1;
 	      if (!loop_trips_at_least_p (loop, entry, need))
 		{
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "const-residency: loop bb %d refused "
-			     "(loop-profitability-unproven: break-even needs %u "
+			     "(loop-profitability-unproven: strict-positive needs %u "
 			     "proven trips; %u materialization words, %u resident "
 			     "read words, %u programming words)\n",
 			     loop->header->index, need, w, r, w + 1);
