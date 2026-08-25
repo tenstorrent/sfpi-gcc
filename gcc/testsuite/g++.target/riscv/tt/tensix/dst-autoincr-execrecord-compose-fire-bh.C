@@ -27,7 +27,7 @@ execrecord_inside_nest ()
       __builtin_rvtt_ttreplay (nullptr, 3, 0, 0, 0, 0, 0);
       __builtin_rvtt_ttreplay (nullptr, 3, 0, 0, 0, 0, 0);
 
-      for (unsigned ix = 0; ix != 8; ++ix)
+      for (unsigned ix = 0; ix != 11; ++ix)
 	{
 	  vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
 	  vec_t p = __builtin_rvtt_sfpmul (a, a, 0);

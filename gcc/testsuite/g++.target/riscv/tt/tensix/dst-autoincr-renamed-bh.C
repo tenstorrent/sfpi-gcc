@@ -3,10 +3,10 @@
 // Renamed-equivalent form of the explicit positive with a different Dst
 // address: the transform must key on structure, never on names or specific
 // constants.
-// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 9 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t34, 2" 1 } }
-// { dg-final { scan-assembler-times "SFPSTORE\tL., 8, 0, 6" 8 } }
+// { dg-final { scan-assembler-times "SFPSTORE\tL., 8, 0, 6" 9 } }
 
 using rechenvektor = __xtt_vector;
 
@@ -20,8 +20,9 @@ zeile (unsigned platz)
 }
 
 void
-acht_zeilen ()
+neun_zeilen ()
 {
+  zeile (8);
   zeile (8);
   zeile (8);
   zeile (8);
