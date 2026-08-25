@@ -31,9 +31,6 @@ SHARED_FN ()
 #if DST_GROUP1 >= 4
   SHARED_ROW (DST_ADDR);
 #endif
-#if DST_GROUP1 >= 5
-  SHARED_ROW (DST_ADDR);
-#endif
   __builtin_rvtt_ttincrwc (0, 0, 1, 0);
 #if DST_GROUP2 >= 1
   SHARED_ROW (DST_ADDR);
@@ -45,9 +42,6 @@ SHARED_FN ()
   SHARED_ROW (DST_ADDR);
 #endif
 #if DST_GROUP2 >= 4
-  SHARED_ROW (DST_ADDR);
-#endif
-#if DST_GROUP2 >= 5
   SHARED_ROW (DST_ADDR);
 #endif
 }

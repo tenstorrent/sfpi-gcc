@@ -41,7 +41,4 @@ unrolled_rows ()
 #if DST_ROWS >= 8
   row (DST_ADDR);
 #endif
-#if DST_ROWS >= 9
-  row (DST_ADDR);
-#endif
 }

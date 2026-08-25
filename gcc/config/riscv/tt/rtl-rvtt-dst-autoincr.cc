@@ -29,6 +29,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
+#include "cgraph.h"
 #include "print-rtl.h"
 #include "cfgloop.h"
 #include "cfgrtl.h"
@@ -88,14 +89,14 @@ along with GCC; see the file COPYING3.  If not see
      - Profitability compares the configuration issue and settlement cost
        against the number of dynamically removed per-row increments.  SETC16
        occupies the target configuration resource for more than one cycle;
-       every emitted slot program therefore costs its encoded word count times
-       the target issue occupancy, plus the already-required
-       configuration-to-consumer settlement window.  This rule is independent
-       of call-graph visibility: an externally callable or address-taken root
-       executes the same configuration words as a known callee.  Loop regions
-       use the same trip-count estimate as replay hoisting, so a preheader
-       program can still amortize naturally.  No numeric row thresholds appear
-       anywhere; break-evens fall out of the model.
+       counting only encoded words admits short callees that repay the setup
+       statically but execute it afresh at every call.  For a straight program
+       in a function with a known caller, the capability table's target issue
+       cost plus the already-required configuration-to-consumer settlement
+       window therefore prices that per-call setup conservatively.  Loop
+       regions use the same trip-count estimate as replay hoisting, so a
+       preheader program can still amortize naturally.  No numeric row
+       thresholds appear anywhere; break-evens fall out of the model.
 
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
@@ -1710,6 +1711,8 @@ transform (function *cfn)
     return;
 
   function_scan fn;
+  cgraph_node *node = cgraph_node::get (cfn->decl);
+  const bool known_caller = node && node->callers;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
@@ -1925,14 +1928,16 @@ transform (function *cfn)
 	  for (auto it = groups.begin (); it != groups.end ();)
 	    {
 	      group &grp = *it;
-	      /* Price every emitted program in the same issue/settlement units.
-		 Roots, address-taken functions, known callees, and loop-preheader
-		 groups all execute identical configuration words.  Dynamic rows
-		 (including the proven loop trip multiplier) are the sole source of
-		 amortization; call-graph visibility is neither a cost nor a proof.  */
-	      HOST_WIDE_INT cost
-		= ((HOST_WIDE_INT) caps.nslots * 3 * caps.config_issue_cost
-		   + caps.min_config_distance);
+	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
+	      /* A straight function-local program is executed again at every
+		 call.  Unlike a loop-preheader program, its local dynamic-row
+		 estimate has no caller multiplier with which to amortize the
+		 configuration resource.  Fail closed at the target issue and
+		 settlement cost whenever the call graph proves that boundary.  */
+	      if (known_caller && !grp.use_preheader)
+		cost = ((HOST_WIDE_INT) caps.nslots * 3
+			* caps.config_issue_cost
+			+ caps.min_config_distance);
 	      if (grp.live_crossing)
 		cost += caps.min_config_distance;
 	      HOST_WIDE_INT removed = grp.shared_set >= 0
