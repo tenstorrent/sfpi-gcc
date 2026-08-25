@@ -2117,10 +2117,9 @@ transform (function *fn, prgm_state *st)
 /* Residency allocation (lane BS): park proven-constant values in free
    PRGM registers by priced selection.  Class LOOP: an in-loop
    invariant constant materialization is programmed once on the loop
-   entry edge when the materialization costs more issue words than the
-   resident read (multiword load minus one-word SFPMOV), with a one-time
-   staging + SFPCONFIG cost (rvtt-cost.md delivery model).  Class PRESSURE:
-   under LREG
+   entry edge (saves two pushed SFPLOADI words per proven iteration for
+   a one-time three-word cost, refusing only a proven single trip:
+   rvtt-cost.md delivery model).  Class PRESSURE: under LREG
    over-pressure, an out-of-loop proven-constant value is reprogrammed
    in place -- the constant register read occupies no allocatable LREG,
    which is the cheapest relief tier (ahead of rematerialization).  */
@@ -2251,10 +2250,8 @@ first_iteration_value (class loop *loop, edge entry, tree op)
    admitted loop body clobbers it (the sfpu-barrier/opaque gates refuse
    bodies with foreign effects) -- so residency holds on every entered
    iteration whatever the trip count.  What the bounded first-iteration
-   evaluation is only a coarse early classification.  Ordinary LOOP
-   candidates subsequently prove their exact W/R break-even with
-   loop_trips_at_least_p; MAD-PAIR uses this classification under its
-   separate one-word fusion-savings model:
+   evaluation decides is only which side of the two-trip break-even the
+   loop is on:
 
    TRIPS_AT_LEAST_2 -- the exit test provably stays in the loop after
    the first trip.  This clears the coarse single-trip refusal; ordinary
@@ -2266,11 +2263,12 @@ first_iteration_value (class loop *loop, edge entry, tree op)
    constant single-trip loop has normally been flattened by complete
    unrolling long before this pass; the branch keeps the pricing
    fail-closed rather than relying on that pipeline fact.
-   TRIPS_UNKNOWN -- the first-iteration test does not fold (runtime trip
-   counts, the dominant LLK loop shape).  Ordinary LOOP candidates do not
-   admit from this result: their later exact profitability proof refuses an
-   unknown bound.  MAD-PAIR retains its separately documented W2 policy.
-   (The CC-canonical peel class is different: its peel
+   TRIPS_UNKNOWN -- the test does not fold (runtime trip counts, the
+   dominant LLK loop shape): admitted.  The worst case is a single-trip
+   entry costing one extra pushed word per candidate (programming is
+   W+1 words against the W it saves on the executed iteration,
+   rvtt-cost.md delivery model); every second trip onward is pure
+   saving.  (The CC-canonical peel class is different: its peel
    DUPLICATES a body unconditionally, so it genuinely needs proven
    trips and keeps its own named refusal.)  */
 
@@ -2379,29 +2377,6 @@ static unsigned
 loadi_issue_words (gcall *call)
 {
   return rvtt_sfpxloadi_materialization_cost (call);
-}
-
-/* Conservatively prove that every non-debug use can absorb a cstlreg operand
-   in its existing instruction word.  These are the consumer patterns used by
-   the LOOP residency class and explicitly accept reg_or_cstlreg operands in
-   rvtt.md.  Anything else prices a standalone SFPMOV read-back word.  */
-
-static unsigned
-resident_readback_words (gcall *load)
-{
-  tree lhs = gimple_call_lhs (load);
-  imm_use_iterator iter;
-  gimple *use;
-  FOR_EACH_IMM_USE_STMT (use, iter, lhs)
-    {
-      if (is_gimple_debug (use))
-	continue;
-      const rvtt_insn_data *d = rvtt_get_insn_data (use);
-      if (!d || (d->id != rvtt_insn_data::sfpmul
-		 && d->id != rvtt_insn_data::sfpadd))
-	return 1;
-    }
-  return 0;
 }
 
 /* Prove LOOP's body executes at least NEED times, by bounded forward
@@ -2713,12 +2688,15 @@ residency_transform (function *fn, prgm_state *st)
 	  continue;
 	}
 
-      /* Correctness is trip-independent, but profitability is not.  This
-	 early classification rejects a proven single trip and feeds MAD-PAIR's
-	 separate W2 policy.  Ordinary LOOP candidates below additionally prove
-	 their exact ceil((W+1)/(W-R)) break-even; runtime/unknown trip counts
-	 therefore refuse rather than being admitted here.  The CC-canonical
-	 peel class prices its peel separately.  */
+      /* Profitability: the entry-edge programming (W+1 pushed words
+	 once) pays for itself against the W pushed SFPLOADI words
+	 saved per iteration at two trips (rvtt-cost.md delivery
+	 model).  Correctness is trip-independent -- see
+	 classify_second_trip -- so only a PROVEN single-trip loop
+	 refuses (a proven loss); a runtime trip count is admitted with
+	 a worst case of one extra pushed word on a single-trip entry.
+	 (The CC-canonical peel class prices its peel separately below
+	 and genuinely needs proven trips for the peel itself.)  */
       bool admits_runtime_trips = false;
       if (!peel)
 	switch (classify_second_trip (loop, entry))
@@ -2771,21 +2749,6 @@ residency_transform (function *fn, prgm_state *st)
 	      unsigned value;
 	      if (!constant_chain_value_p (chain, &value))
 		continue;
-	      /* A non-folded resident read is one SFPMOV issue.  Refuse when
-		 it consumes all of the materialization's recurring issue cost;
-		 exact setup amortization is checked after discovery below.  */
-	      unsigned materialize = loadi_issue_words (load);
-	      unsigned readback = resident_readback_words (load);
-	      if (materialize <= readback)
-		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "const-residency: loop bb %d refused "
-			     "(no-net-loop-issue-saving: %u-word materialization "
-			     "requires a %u-word resident read)\n",
-			     loop->header->index, materialize, readback);
-		  continue;
-		}
 	      residency_candidate c;
 	      c.load = load;
 	      c.value = value;
@@ -2798,36 +2761,6 @@ residency_transform (function *fn, prgm_state *st)
 	      c.peel = peel;
 	      this_loop.safe_push (c);
 	    }
-	}
-
-      /* Exact fail-closed break-even for ordinary LOOP candidates.  Entry
-	 programming costs W staging words plus one SFPCONFIG; each iteration
-	 saves W-R words, where R is zero only under the consumer-fold proof
-	 above.  Unknown/runtime trip counts do not establish profitability.  */
-      if (!peel && !this_loop.is_empty ())
-	{
-	  auto_vec<residency_candidate> profitable;
-	  for (residency_candidate &c : this_loop)
-	    {
-	      unsigned w = loadi_issue_words (c.load);
-	      unsigned r = resident_readback_words (c.load);
-	      unsigned need = (w + 1 + (w - r) - 1) / (w - r);
-	      if (!loop_trips_at_least_p (loop, entry, need))
-		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "const-residency: loop bb %d refused "
-			     "(loop-profitability-unproven: break-even needs %u "
-			     "proven trips; %u materialization words, %u resident "
-			     "read words, %u programming words)\n",
-			     loop->header->index, need, w, r, w + 1);
-		  continue;
-		}
-	      profitable.safe_push (c);
-	    }
-	  this_loop.truncate (0);
-	  for (residency_candidate &c : profitable)
-	    this_loop.safe_push (c);
 	}
 
       /* MAD-PAIR class (lane GA, FX-F1): the invariant pass's

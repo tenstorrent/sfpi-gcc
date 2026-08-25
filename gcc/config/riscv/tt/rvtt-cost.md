@@ -1721,19 +1721,14 @@
 ;;   PRGM programming     = 3 pushed words once (2 staging SFPLOADI +
 ;;                          1 SFPCONFIG; the staging register model is
 ;;                          NOTES-exp-parity-laneR2.md D1)
-;;   PRGM read-back       = 0 allocatable-LREG pressure; 0 delivered words
-;;                          only when every consumer is proven to absorb its
-;;                          cstlreg operand, otherwise 1 SFPMOV word
+;;   PRGM read-back       = 0 allocatable-LREG pressure and 0 delivered
+;;                          words (constant-register operand folded into
+;;                          the consumer by the unspec propagation)
 ;;
-;; Residency of an IN-LOOP invariant materialization therefore has a
-;; recurring saving of (materialization_words - readback_words).  A shortened
-;; one-word SFPLOADI followed by an unfused one-word SFPMOV has zero recurring
-;; saving and is refused by no-net-loop-issue-saving.  A two-word
-;; materialization folded directly into every consumer has R=0 and breaks
-;; even at two trips: 2 * trips >= 3.  If it needs a standalone read,
-;; R=1 and breaks even at three trips: 1 * trips >= 3.  LOOP admission
-;; proves the exact ceil((W+1)/(W-R)) bound from scalar control; unknown
-;; runtime trips refuse by loop-profitability-unproven.  An
+;; Residency of an IN-LOOP invariant materialization therefore pays for
+;; itself when 2 * trips >= 3, i.e. at two proven trips -- the LOOP
+;; class requires the structural first-iteration exit-test proof of a
+;; second trip and refuses otherwise (trip-count-unproven).  An
 ;; OUT-OF-LOOP materialization executes once either way, so parking it
 ;; buys nothing in delivered words; its value is one freed LREG, and the
 ;; PRESSURE class fires only while the liveness model exceeds the
