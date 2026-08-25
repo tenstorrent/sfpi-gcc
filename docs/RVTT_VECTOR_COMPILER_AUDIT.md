@@ -251,6 +251,17 @@ trip-count special case.  Paired Blackhole/Wormhole fixtures cover ordinary
 fire versus guarded refusal, delivery-bound routing, long-payload refusal, and
 the truthful runtime-trip refusal.
 
+The compiler proof was also exercised over the complete 263-row runnable
+registry.  With the opt-in guard added, 263/263 classifications are OK:
+215 remain byte-identical and 48 change.  All 48 changed rows received fresh
+targeted silicon and paired correctness; 384/384 fresh leaves and 50/50 paired
+Blackhole/Wormhole CRAQ verdicts pass, with no scoreboard reds.  Drain-inclusive
+KERNEL performance is 11 WIN, 22 PARITY, and 15 LOSS at the +/-0.5% band.
+This closes the semantic/coverage question but rejects unconditional promotion
+of the guard.  It remains default-off pending a selective profitability gate.
+The exact campaign roots, pins, manifests, and hashes are recorded in
+`docs/RVTT_SILICON_VALIDATION.md`.
+
 ## Remaining architectural debt
 
 The following comparison is deliberately bounded to current official compiler
@@ -329,18 +340,21 @@ architecture x semantic mode x fire/refusal/near-miss.  Stable plan dumps
 should include obligations, cost components, chosen/no-op candidate, and
 refusal names.  Add a verifier that rejects a transform lacking a tested
 positive and a tested refusal for each materially different legality edge.
-The present tree does not contain a reproducible checked-in census that maps
-every named refusal to a direct oracle; producing that census is the next
-concrete coverage task, not a reason to mislabel operation-row coverage as
-100%.
+The final campaign now contains a reproducible operation-row decision census
+for the completion guard: all 263 runnable rows are classified and the 48
+changed rows are closed on targeted silicon.  That is one pass/decision
+surface, not a census of every internal named refusal in all 53 RVTT passes.
+The remaining concrete coverage task is a checked-in pass x shape x
+architecture x semantic-mode matrix mapping each materially distinct named
+refusal to a direct oracle.  Neither gap is a reason to mislabel registry
+accountability or hand-performance parity.
 
 ## Coverage and parity definitions
 
 Three targets must be reported independently:
 
-1. **Registry accountability:** at tt-metal
-   `ea54ec3a331e6d697f560437231d0761b52c185b`, whose registry was last changed
-   by `1611185df0b31ca701a85770d7d0b81ef474d145`, every row in the 284-row
+1. **Registry accountability:** at the final-run tt-metal
+   `984c9a687c4e4429f0a5a984f2ebf832c4bedff4`, every row in the 284-row
    `sweep_2x2_ops.tsv` registry is either a full 2x2, semantic-only comparison,
    or an explicit machine-readable skip.  The booked campaign accounts for
    all 284 rows: 164 full 2x2, 99 semantic-only, and 21 explicit skips.  This is
@@ -359,8 +373,9 @@ Three targets must be reported independently:
    or ISA ceilings remain (for example LUT accuracy floors, fixed entry
    surfaces, recurrence initiation intervals, and bivariate algorithms).
 
-The booked `rooting-hardening-whfix-final-20260824` campaign makes the
-distinction concrete.  Across its 263 runnable rows, semantic ON versus OFF is
+The penultimate booked `rooting-hardening-whfix-final-20260824` campaign first
+made the distinction concrete.  Across its 263 runnable rows, semantic ON
+versus OFF is
 193 WIN, 53 PARITY, 3 LOSS, and 14 unmeasured byte-identical non-engagements.
 Among the 164 rows with a handwritten arm, the hand comparison is 65 WIN, 27
 PARITY, 71 LOSS, and one unmeasured row.  The measured hand at-or-better rate is
@@ -370,14 +385,24 @@ therefore:
 (65 WIN + 27 PARITY) / 163 measured = 92 / 163 = 56.44%
 ```
 
-That campaign binds tt-metal
+That historical campaign binds tt-metal
 `ea54ec3a331e6d697f560437231d0761b52c185b` and `cc1plus`
 `649ac9476522afb9ca6bd29af161a3afca577c6dc339d5c51c2f73f2d80d09e6`.
-It is the prior booked silicon baseline, not a silicon result for the newer
-`075e9f2` candidate whose compiler hashes are recorded above.  A final-candidate
-silicon report must bind the `075e9f2` candidate hashes, harness and tt-metal
-commit, exact OFF/ON flag vectors, simulators, device identity, binaries, and
-raw measurements before replacing or extending these figures.
+It remains the prior booked baseline and is not the final `075e9f2` result.
+
+The completed final-candidate campaign at
+`pin29-on26-final-984c9a-20260825` binds cc1plus
+`45ba7169920924fd6ebeb6eeb3766156b413dbf895e091b53603bed1e35e7d79`
+and the final-run tt-metal revision above.  Its 263 runnable rows are
+**193 WIN / 54 PARITY / 1 LOSS / 15 unmeasured** ON versus OFF, or
+247/248 = **99.60% measured non-loss**.  On the 164 full-2x2 rows, ON versus
+hand is **66 WIN / 27 PARITY / 70 LOSS / 1 unmeasured**, or
+93/163 = **57.06% measured at-or-better**.  All 2,839 planned logical silicon
+legs are fresh, every one of 359 physical sessions returns zero, all 2,816
+device pytest calls pass, and the correctness scoreboard has no reds.  The
+284/284 registry result is therefore 100% accountability and runnable
+correctness closure; it is not 100% hand parity.  Exact evidence and the
+historical-report dispositions are in `docs/RVTT_SILICON_VALIDATION.md`.
 
 A selector that compiles to identical OFF/ON bytes is a measured
 non-engagement, not automatically a particular refusal.  Ordinary corpus
