@@ -399,7 +399,12 @@
 ;; keys on Mod1Mirror, not Mod1) and its per-mode register envelopes
 ;; (3-entry/6-entry/FP32 tables read different LReg sets) need their
 ;; own per-mod audit before any entry lands (SFPLUT's audit above does
-;; NOT transfer); SFPLUT INDIRECT_VD (dynamic write target); the
+;; NOT transfer) -- this stance is unchanged by the laneGU FP16
+;; six-entry SELECTION rows (rvtt-lut-tables.cc mod0 2/3/6/7,
+;; 2026-08-25): those are capability rows for the instruction-
+;; selection pass only; the emitted rvtt_sfplutfp32_6r insn keeps
+;; every refusing cost/effect default exactly as the mod0 0/4
+;; formations always have; SFPLUT INDIRECT_VD (dynamic write target); the
 ;; auto-incrementing load/store address modes (positional Dst/RWC
 ;; state, WP6 capability-table territory); everything QSR (simulator
 ;; returns MissingSpecification for these opcode semantics).
