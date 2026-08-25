@@ -960,9 +960,15 @@
 ;; backlog, so `record' is charged as DELIVER_RECORD + RECORD_OVERHEAD instead
 ;; of RECORD_OVERHEAD.  The counted-loop and delivery-bound branches of that
 ;; model already charge the complete record and are unchanged.  This is
-;; deliberately opt-in: it is a conservative completion-scope guard, not a
+;; deliberately opt-in: it is a completion-accurate scope guard, not a
 ;; replacement for the silicon-calibrated body throughput model, and contains
-;; no operation or kernel identity test.
+;; no operation or kernel identity test.  Guarded record-hoist deliberately
+;; changes from its delivery-only model to the shared binding-resource model.
+;; The semantic definition is completion accuracy, not a heuristic demand for
+;; a conservative verdict.  Nevertheless the legal replay domain makes its
+;; execution-bound verdict provably monotone relative to the measurement
+;; model: MIN_SEQUENCE requires at least four delivered words, and the exact
+;; benefit difference derived below is then strictly negative.
 ;; Both replay-hoist entry modes honor that contract.  The dedicated
 ;; -mtt-tensix-optimize-replay-record-hoist issue-side model normally cancels
 ;; payload execution between the two worlds.  Under the completion guard it
@@ -1150,8 +1156,39 @@
 ;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
 ;; overrides this table value for experimentation.
 ;;
+;; COMPLETION-GUARDED MEASUREMENT PRICING.  With both record-hoist and the
+;; completion guard enabled, the reissue audit is retained and the candidate
+;; uses the ordinary shared binding-resource arithmetic above, including the
+;; full preheader record delivery exactly once.  For an execution-bound
+;; re-record with W delivered words and T proven trips, both models charge the
+;; same one-time record cost 123*(W+1)+300.  Their per-trip terms are:
+;;
+;;   unguarded measurement model: 123*W - 70
+;;   completion shared model:     (EXEC+300) - (EXEC+70) = 230
+;;   guarded benefit - unguarded benefit
+;;     = T * (230 - (123*W - 70))
+;;     = T * (300 - 123*W)
+;;     <= -192*T, because the replay former's MIN_SEQUENCE makes W >= 4.
+;;
+;; The generic legal four-word, four-trip next-slot-stall witness on both BH
+;; and WH pins the boundary (PUSH=123, SLOT=100, TURNAROUND=70,
+;; RECORD_OVERHEAD=300):
+;;
+;;   words=4, exec_ilk=8 slots, deliver_body=492, deliver_record=615
+;;   record=615+300=915
+;;   unguarded: 4*(492-70)-915 = 773 >= 60              FIRE
+;;   guarded: before=800+300=1100, after=800+70=870,
+;;            4*(1100-870)-915 = 5 < 60                refuse
+;;   difference: 5-773 = -768 = 4*(300-123*4)
+;;
+;; No identity, opcode, payload-length special case, or target-specific
+;; threshold selects the result; BH and WH share the audited rates and
+;; resource effects.  A two-word arithmetic reversal exists outside this
+;; domain, but is not a compiler candidate because it is below MIN_SEQUENCE.
+;;
 ;; RECORD-HOIST RUNTIME-TRIP ADMISSION (lane FW, 2026-08-22; rides the
-;; same measurement flag).  The blaze sdpa_reduce_row loss class -- the
+;; same measurement flag without the completion guard).  The blaze
+;; sdpa_reduce_row loss class -- the
 ;; only corpus kernel whose loss WIDENS with tile count (+0.6% t8 ->
 ;; +1.6% t32, laneFE scaling table) -- is a per-tile re-record inside a
 ;; RUNTIME-counted tile loop (TILE_CNT from RuntimeParams), where
@@ -1177,6 +1214,14 @@
 ;;       shape the 10-word window admits (2-trip benefit 667) and the
 ;;       4-word window refuses (-71) -- the refusal keeps its in-body
 ;;       exec-record byte-identically.
+;;
+;; The completion-guarded path does not reuse this exception.  It routes to
+;; the shared binding-resource model, for which the structural trips>=1 fact
+;; and the delivery-only two-trip proof above do not establish the selected
+;; completion arithmetic.  A runtime/unknown count therefore remains
+;; byte-identically unhoisted and refuses by the truthful named reason
+;; record-hoist-completion-runtime-trips-unproven.  Its printed zero-trip
+;; shared-model benefit is diagnostic only, never an admission proof.
 ;;
 ;; LOOP REPLAY-PRESERVATION AUDIT (same lane; rvtt-macro-epoch.cc
 ;; rvtt_macro_epoch_loop_replay_preserved_p).  Production tile loops
@@ -1206,7 +1251,8 @@
 ;; is WRITE-ONLY (reading it is UndefinedBehavior, same ISA source), so
 ;; a defined execution's roundtrip is never a MopCfg access.
 ;;
-;; REISSUE-LATENCY GATE DISCHARGE (record-hoist mode only).  The
+;; REISSUE-LATENCY GATE DISCHARGE (ordinary, unguarded record-hoist mode
+;; only).  The
 ;; replay-reissue-latency-unproved gate serves the DEFAULT model's
 ;; exec-side estimate; in record-hoist mode execution cancels between
 ;; the worlds (word-identical streams, above), and the reissue
@@ -1218,7 +1264,12 @@
 ;; adds no exposure an audited latency could bound.  The gate stays for
 ;; the default hoist model, which consumes the estimate, and on
 ;; unproven targets (QSR): the discharge cites the silicon-witnessed
-;; playback class, which only BH/WH carry.
+;; playback class, which only BH/WH carry.  The completion guard also keeps
+;; this gate enabled: its shared binding-resource arithmetic consumes the
+;; audited interlocked execution estimate.  Audited BH/WH payloads proceed to
+;; that model; an effect-opaque producer refuses by
+;; replay-reissue-latency-unproved.  Thus the guard neither borrows the
+;; delivery-only discharge nor silently prices an unknown execution resource.
 ;;
 ;; ADMISSION-SIDE DOOMED-HOIST MIRROR: a Dst-store payload whose record
 ;; would land in a preheader that itself sits inside a natural loop is
