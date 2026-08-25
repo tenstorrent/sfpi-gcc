@@ -943,6 +943,13 @@
 ;; and is unchanged.  This is deliberately opt-in: it is a conservative
 ;; completion-scope guard, not a replacement for the silicon-calibrated body
 ;; throughput model, and contains no operation or kernel identity test.
+;; Both replay-hoist entry modes honor that contract.  The dedicated
+;; -mtt-tensix-optimize-replay-record-hoist issue-side model already sets
+;; RECORD_ONCE = DELIVER_RECORD + RECORD_OVERHEAD, so enabling the guard with
+;; record-hoist alone changes no arithmetic (and must not add DELIVER_RECORD a
+;; second time); its details dump explicitly witnesses that the complete
+;; delivery was charged.  Thus the option can be used consistently by either
+;; mechanism while leaving the record-hoist silicon A/B model intact.
 ;;
 ;;   (* Log/Log1p at their measurement flags: the Dst auto-increment
 ;;   pass is disabled there, so their typed increment separators

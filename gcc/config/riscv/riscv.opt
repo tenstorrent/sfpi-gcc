@@ -675,7 +675,7 @@ Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
 mtt-tensix-replay-hoist-completion-guard
 Target Var(riscv_tt_replay_hoist_completion_guard) Init(0)
-Require replay-hoist profitability to charge the complete hoisted record delivery on execution-bound re-record loops, conservatively modeling a drain-inclusive completion scope where preheader delivery cannot be hidden by the loop's execution backlog (effective only with -mtt-tensix-optimize-replay-hoist).
+Use a drain-inclusive completion contract for hoisted Tensix replay records.  With -mtt-tensix-optimize-replay-hoist, execution-bound re-record profitability charges the complete preheader record delivery instead of hiding it behind the loop's execution backlog.  With -mtt-tensix-optimize-replay-record-hoist, the dedicated issue-side model already charges that complete delivery and this option makes the shared contract explicit without charging it twice.
 
 mtt-tensix-optimize-replay-record-hoist
 Target Var(riscv_tt_opt_replay_record_hoist) Init(0)
