@@ -1321,6 +1321,59 @@
 ;; both flag states (pin-11 class, reviewed bytes), so pricing it here
 ;; would churn proven streams outside this flag's measurement charter.
 ;;
+;; EXEC-WHILE-RECORD FIRST-TRIP PEEL (lane GQ, 2026-08-25;
+;; -mtt-tensix-optimize-record-hoist-peel, Init(0), composing on
+;; record-hoist mode only).  Rescues exactly the ADMISSION-SIDE
+;; DOOMED-HOIST MIRROR refusal above (Dst-store payload, preheader
+;; inside an outer loop -- the recip-fresh face-loop shape: 4 in-body
+;; exec-record sites per tile, ON-28 dump witness
+;; noexec-rerecord-dststore-composition-unaudited).  SOUNDNESS: the
+;; mirror's hazard class is keyed to a capture that is STILL NO-EXEC at
+;; end of pass (the sweep's own skip: exec-converted captures are the
+;; fleet-witnessed class -- minmax/sdpa/where/typecast/lcm ON-set all
+;; re-record exec-while-record per trip with sibling launches between
+;; re-ingestions; the dst-autoincr group guard's refuted composition is
+;; likewise keyed TTREPLAY load=1 exec=0 in
+;; noexec_record_composition_p).  The peel therefore never forms the
+;; refused shape: the loop's ENTIRE proven first trip (capture flipped
+;; to exec-while-record + payload + its sibling launches) moves
+;; verbatim to the dedicated preheader, every former in-body record
+;; site becomes one playback launch, and the proven-constant counter
+;; re-initializes one step later (trips -> trips-1; a single-bb loop is
+;; do-while, so proven trips >= 2 is an admission bound, not pricing).
+;; The EXECUTED effect stream is unchanged (a launch delivers exactly
+;; the recorded words); the delivered stream drops (trips-1) per-trip
+;; record passes -- the same quantity the record-hoist measurement
+;; pricing above models -- so admission reuses hoist_profitable_p
+;; unchanged: the peel's true benefit is bounded below by the modeled
+;; no-exec hoist benefit minus nothing (the peeled preheader pass
+;; executes trip-1 work that was paid in both worlds, where the modeled
+;; no-exec record pass is pure cost), i.e. the reused model is
+;; conservative.  The FZ downstream-fallback oracle above is SKIPPED
+;; for an admitted peel BY THE GUARD'S OWN KEYING: the mirrored
+;; refuted composition exists only for no-exec records, and the group
+;; guard itself still audits the final placement at its own pass time
+;; (an exec capture cannot flip a group the unhoisted world kept).
+;; NO NEW CONSTANTS.  Refusal names (all keep the mirror's refusal and
+;; today's bytes): record-hoist-peel-qsr-exec-record-unavailable
+;; (cannot exec while capturing on QSR), record-hoist-peel-multibb-loop,
+;; record-hoist-peel-trips-unproven (constant trips >= 2 by the
+;; provable_constant_trips discipline; runtime-trip admission is
+;; deliberately NOT extended here -- the counter rewrite needs the
+;; proven chain), record-hoist-peel-body-foreign-insn (full body
+;; coverage: every body word is a clone-span member, the counter step,
+;; or the final jump -- a word outside the spans would be dropped from
+;; the peeled trip), record-hoist-peel-counter-rewrite-unproven (the
+;; re-init constant must be single-insn materializable post-reload,
+;; the launch-loop unroll's own SMALL_OPERAND/LUI_OPERAND bound).
+;; COMPOSITION DOWNSTREAM: the peeled loop body (pure launches + loop
+;; control, proven trips-1) is admissible to the existing launch-loop
+;; unroll, whose exec-flip increment correctly no-matches (it requires
+;; a no-exec capture, operand test XVECEXP 6 == 0) -- the plain unroll
+;; path then removes the loop control; both compositions leave the
+;; re-ingestion cadence at one exec-record per outer-loop entry, the
+;; witnessed class.
+;;
 ;; FAIL-CLOSED COMPANION in the narrow scan (both flag states): a
 ;; volatile store whose ADDRESS is not provably outside the instruction
 ;; FIFO could push ANY word -- including a REPLAY record -- so
