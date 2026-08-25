@@ -2569,24 +2569,153 @@ crp_queue_dst_rebase (rtx_insn *insn, HOST_WIDE_INT value)
 		   true);
 }
 
-/* Interleave one corresponding pure-span interval of the two rows via
-   the established deterministic list order.  */
+/* Candidate order construction: a dependence-legal global list
+   schedule over ITEMS, where each CC atom is one indivisible super-item
+   (its words emit contiguously in original interior order -- the
+   CC-state-equality placement proof) and every other row word is its
+   own item.  Item dependence uses the aggregated register sets through
+   the established ls_dependence vocabulary with original (sequential
+   two-iteration) order as the dependence direction, so an UNRENAMED
+   shared web serializes exactly as the two original iterations would
+   (the round-cc-modulo prototype's span construction ignored these
+   edges and could order a copy's redefinition ahead of the first row's
+   store -- the CRAQ-caught WAR defect this constructor removes by
+   construction).  */
 
-static void
-crp_append_span (const std::vector<ls_node> &all, unsigned n,
-		 unsigned begin, unsigned end,
-		 std::vector<rtx_insn *> *order)
+struct crp_item
 {
-  std::vector<ls_node> span;
-  for (unsigned i = begin; i != end; ++i)
-    span.push_back (all[i]);
-  for (unsigned i = begin; i != end; ++i)
-    span.push_back (all[n + i]);
-  for (unsigned i = 0; i != span.size (); ++i)
-    span[i].orig = i;
-  std::vector<int> chosen = ls_list_order (span);
-  for (int i : chosen)
-    order->push_back (span[i].insn);
+  std::vector<unsigned> members;	/* indices into ALL, in order */
+  HARD_REG_SET uses, raw_defs;
+  int words;
+  int lat;				/* conservative max member latency */
+  unsigned orig;			/* first member's original index */
+};
+
+static bool
+crp_item_dep (const crp_item &p, const crp_item &c)
+{
+  return hard_reg_set_intersect_p (p.raw_defs, c.uses)
+    || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs)
+    || hard_reg_set_intersect_p (p.uses, c.raw_defs);
+}
+
+static std::vector<rtx_insn *>
+crp_candidate_order (const std::vector<ls_node> &all, unsigned n,
+		     const std::vector<std::pair<unsigned, unsigned> > &atoms)
+{
+  /* Build the item list in original order: row A then row B.  */
+  std::vector<crp_item> items;
+  for (unsigned half = 0; half != 2; ++half)
+    {
+      unsigned base = half * n;
+      unsigned i = 0;
+      while (i != n)
+	{
+	  const std::pair<unsigned, unsigned> *atom = nullptr;
+	  for (const auto &a : atoms)
+	    if (a.first == i)
+	      atom = &a;
+	  crp_item it;
+	  CLEAR_HARD_REG_SET (it.uses);
+	  CLEAR_HARD_REG_SET (it.raw_defs);
+	  it.words = 0;
+	  it.lat = 0;
+	  it.orig = base + i;
+	  unsigned end = atom ? atom->second + 1 : i + 1;
+	  for (unsigned k = i; k != end; ++k)
+	    {
+	      const ls_node &nd = all[base + k];
+	      it.members.push_back (base + k);
+	      it.uses |= nd.regs.uses;
+	      it.raw_defs |= nd.raw_defs;
+	      it.words += nd.words;
+	      if (nd.lat > it.lat)
+		it.lat = nd.lat;
+	    }
+	  items.push_back (std::move (it));
+	  i = end;
+	}
+    }
+
+  /* Deterministic greedy list schedule over the items: modeled issue
+     time from the item dependence edges (latency-weighted like
+     ls_dependence kind 1 for RAW/WAW; issue-order for WAR is the same
+     conservative bound here since items are multi-word), earliest
+     ready first, critical original order on ties.  Dependence direction
+     is original order, so the result is legal by construction.  */
+  unsigned m = items.size ();
+  std::vector<bool> placed (m, false);
+  std::vector<int> finish (m, 0);
+  std::vector<rtx_insn *> order;
+  int t = 0;
+  for (unsigned step = 0; step != m; ++step)
+    {
+      int best = -1;
+      int best_ready = INT_MAX;
+      for (unsigned i = 0; i != m; ++i)
+	{
+	  if (placed[i])
+	    continue;
+	  bool deps_done = true;
+	  int ready = 0;
+	  for (unsigned j = 0; j != m; ++j)
+	    {
+	      if (j == i || items[j].orig > items[i].orig)
+		continue;
+	      if (!crp_item_dep (items[j], items[i]))
+		continue;
+	      if (!placed[j])
+		{
+		  deps_done = false;
+		  break;
+		}
+	      if (finish[j] > ready)
+		ready = finish[j];
+	    }
+	  if (!deps_done)
+	    continue;
+	  if (ready < best_ready
+	      || (ready == best_ready && best >= 0
+		  && items[i].orig < items[best].orig))
+	    {
+	      best = (int) i;
+	      best_ready = ready;
+	    }
+	}
+      gcc_assert (best >= 0);
+      if (best_ready > t)
+	t = best_ready;
+      t += items[best].words;
+      finish[best] = t + items[best].lat;
+      placed[best] = true;
+      for (unsigned k : items[best].members)
+	order.push_back (all[k].insn);
+    }
+  return order;
+}
+
+/* Legality belt: every original-order dependence must keep its
+   direction in the candidate.  Returns false on any violation (the
+   caller refuses by name; with the constructor above this cannot
+   fire, but the pairing never trusts its own scheduler).  */
+
+static bool
+crp_order_legal_p (const std::vector<ls_node> &all,
+		   const std::vector<rtx_insn *> &candidate)
+{
+  std::vector<int> pos (all.size (), -1);
+  for (unsigned p = 0; p != candidate.size (); ++p)
+    for (unsigned i = 0; i != all.size (); ++i)
+      if (all[i].insn == candidate[p])
+	pos[i] = (int) p;
+  for (unsigned i = 0; i != all.size (); ++i)
+    if (pos[i] < 0)
+      return false;
+  for (unsigned i = 0; i != all.size (); ++i)
+    for (unsigned j = i + 1; j != all.size (); ++j)
+      if (ls_dependence (all[i], all[j]) && pos[i] > pos[j])
+	return false;
+  return true;
 }
 
 /* The transform proper.  Returns true when the pairing committed.  */
@@ -2669,23 +2798,15 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   std::vector<ls_rename> renames;
   ls_cyclic_rename_collisions (bb, all, &renames, &start_allowed);
 
-  /* Phase 2e: candidate order -- pure spans interleave interval by
-     interval; atoms stay indivisible in original interior order, row A
-     before row B; stores keep architectural order at the tail.  */
-  std::vector<rtx_insn *> candidate;
-  unsigned pos = 0;
-  for (const auto &atom : lp.atoms)
+  /* Phase 2e: candidate order -- the dependence-legal global item
+     schedule (atoms indivisible, unrenamed shared webs serialize).  */
+  std::vector<rtx_insn *> candidate = crp_candidate_order (all, n, lp.atoms);
+  if (!crp_order_legal_p (all, candidate))
     {
-      crp_append_span (all, n, pos, atom.first, &candidate);
-      for (unsigned i = atom.first; i <= atom.second; ++i)
-	candidate.push_back (all[i].insn);
-      for (unsigned i = atom.first; i <= atom.second; ++i)
-	candidate.push_back (all[n + i].insn);
-      pos = atom.second + 1;
+      ls_undo_renames (renames);
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-order-hazard");
     }
-  crp_append_span (all, n, pos, lp.store, &candidate);
-  candidate.push_back (all[lp.store].insn);
-  candidate.push_back (all[n + lp.store].insn);
 
   std::vector<int> cand_index;
   for (rtx_insn *ci : candidate)
