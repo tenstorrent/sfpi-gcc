@@ -1,13 +1,13 @@
 # RVTT silicon validation record
 
-This note records the completed 2x2 validation campaign rooted at
-`/home/ttuser/sfpi-uplift/sweep-2x2/rooting-hardening-stride-final-20260825`.
-It is a result for the **penultimate rooting compiler**, whose primary backend
-pin is cc1plus SHA-256
+This note preserves the completed penultimate 2x2 campaign rooted at
+`/home/ttuser/sfpi-uplift/sweep-2x2/rooting-hardening-stride-final-20260825`
+and records the subsequent final `075e` closeout.  The historical campaign's
+primary backend pin is cc1plus SHA-256
 `649ac9476522afb9ca6bd29af161a3afca577c6dc339d5c51c2f73f2d80d09e6`
-(`649ac` below). It is not a validation result for the subsequent `075e`
-compiler. The final-compiler and completion-guard work remain explicitly open
-in [Final `075e` closeout](#final-075e-closeout).
+(`649ac` below).  Final-candidate results are reported separately in
+[Final `075e` closeout](#final-075e-closeout); counts are never copied between
+the two campaigns.
 
 ## Evidence and provenance
 
@@ -48,7 +48,7 @@ Two live aliases have advanced since the campaign. The preflight recorded the
 harness toolchain realpath as `/home/ttuser/sfpi-uplift/sfpi-candidate-rooting`,
 whereas it now resolves to
 `/home/ttuser/sfpi-uplift/sfpi-candidate-final-075e9f2`. The live tt-metal
-checkout is now `23f96f8c74d031050ab45686562317815cf0a4bb`, rather than the archived
+checkout is now `0c4e6c417db1e4811f5c51f9a940eb9cac9e098c`, rather than the archived
 `e7961c5933ddce7dc954236086ef5419021fde43`. These are mutable-workspace drift,
 not discrepancies inside the evidence tree. Reproduction must therefore use
 the archived hashes and revisions, not the current symlink or checkout HEAD.
@@ -161,40 +161,119 @@ retained here only to make the report-policy comparison unambiguous.
 
 ## Final `075e` closeout
 
-No `075e` classifier, CRAQ, or silicon result is present in the 649ac evidence
-tree. Populate this section only from a new, hash-pinned final evidence root.
-Do not copy the penultimate counts forward.
+The final fixed-head evidence root is
+`/home/ttuser/sfpi-uplift/sweep-2x2/pin29-on26-final-984c9a-20260825`.
+Its immutable run pins tt-metal
+`984c9a687c4e4429f0a5a984f2ebf832c4bedff4`, compiler source
+`075e9f2f4b22dd08342be730d42e34060da10d4a`, driver SHA-256
+`a04de6aad4c29aa222e7b5f2e9d699b8bb89fec6accfd38dcf4a78e72e47e720`,
+and cc1plus SHA-256
+`45ba7169920924fd6ebeb6eeb3766156b413dbf895e091b53603bed1e35e7d79`.
+The recorded compiler version is `riscv-tt-elf-g++ (wp8-planner) 15.1.0`.
+Its review record is `REVIEW_RECORD-45ba71699209.md`, SHA-256
+`8bea53e8c060dae6d519155455894d13231d4a97edf6ca093d7315383a0e7811`.
 
-| final evidence item | required record | status |
-|---|---|---|
-| compiler provenance | full driver and cc1plus SHA-256, version, source revision, flags, `PIN_STAMP` | **TBD** |
-| classifier | total expected, total completed, status/hash census | **TBD** |
-| paired CRAQ | total expected/completed, OFF/ON outcome, BH/WH split, simulator pins | **TBD** |
-| fresh silicon | logical legs, cached legs, physical sessions and rc census, pytest calls, collection errors | **TBD** |
-| row accounting | materialized verdicts, explicit skips, reused cells | **TBD** |
-| correctness | scoreboard red list and disposition | **TBD** |
-| performance policy | report status and every RED/YELLOW disposition | **TBD** |
-| causal scoreboard | WIN/PARITY/LOSS/unmeasured counts and denominator | **TBD** |
-| hand scoreboard | eligible population, WIN/PARITY/LOSS/unmeasured counts and denominator | **TBD** |
-| `mulint32-fresh` | final diagnostic and KERNEL raw cells, causal and hand deltas | **TBD** |
+The complete final accounting is:
+
+| final evidence item | observed result |
+|---|---:|
+| classifier | **854/854 OK**; 588 CHANGED and 266 IDENTICAL |
+| paired CRAQ | **439/439 OK, PASS/PASS**; 427 Blackhole and 12 Wormhole |
+| fresh logical silicon legs | **2,839/2,839**, 0 cached or reused; 721 correctness and 2,118 performance |
+| physical sessions | **359/359 rc=0** |
+| device pytest calls and phases | **2,816/2,816 calls passed**; 8,448/8,448 setup/call/teardown phases passed |
+| collection errors | **0** |
+| measurement cells | **824 diagnostic + 824 KERNEL**; every numeric cell has three samples |
+| row accounting | **263/263 runnable verdicts** plus 21 explicit skips |
+| registry accounting | **284/284**: 164 full 2x2, 99 semantic-only, 21 explicit skips |
+| scoreboard correctness reds | **0** |
+
+The archived `SHA256SUMS` contains 100,505 entries and verifies in full.  Its
+SHA-256 is
+`fbab34048fcb8650052a12ab74764703c292601e55e7d662bf88140596af958a`;
+`MANIFEST.txt` is
+`576f5dabe034d3d32154e3672f5750f8466ec78093878dfee2f3505d1d8bb4e6`,
+and `scoreboard.json` is
+`23bbd78b0e37a5657c9c83146853fce385cb9ec21d79381b7a3fd42f144c5402`.
+The Blackhole and Wormhole simulator hashes remain respectively
+`32489dda4fd6321262fbc7c18b8f05126ed760073c7030dc529555111967ffd3`
+and `8f0079a9a16c782bf47a56c2e48e0c73d4da32faa69b56a307bc0b921b29dbc5`.
+
+Using the authoritative KERNEL metric and the documented +/-0.5% band, final
+semantic ON versus OFF is **193 WIN / 54 PARITY / 1 LOSS / 15 unmeasured**:
+247/248, or **99.60%**, of measured rows are at-or-better.  The sole causal
+loss is `reduce-sdpa` at +0.776%.  Against hand on the 164 full-2x2 rows, the
+result is **66 WIN / 27 PARITY / 70 LOSS / 1 unmeasured**: 93/163, or
+**57.06%**, at-or-better among measured rows.  These are performance outcomes,
+not the registry-accountability percentage.
+
+For `mulint32-fresh`, diagnostic OFF/ON/hand are respectively
+49.9638671875, 35.97265625, and 35.622721354166664 cycles/tile.  That is a
+-28.002658% causal delta and +0.982336% versus hand.  KERNEL OFF/ON/hand are
+51,486, 37,157.666666666664, and 36,798.333333333336 cycles: -27.829572%
+causal and +0.976494% versus hand.  Relative to the preceding final-candidate
+full result, semantic ON moves from 40,744 to 37,157.667 KERNEL cycles, about
+-8.80%, while the hand gap contracts from +10.723409% to +0.976494%.
+
+The immutable run's historical-baseline `REPORT.md` is RED despite the clean
+correctness scoreboard: 244 GREEN, 6 YELLOW, and 13 RED.  Two REDs (`lcm-fresh`
+and `gcd-fresh`) were report-transition false positives caused by comparing
+sub-band PARITY movement as a WIN-to-LOSS transition.  The canonical harness
+fix at tt-metal `0c4e6c417db1e4811f5c51f9a940eb9cac9e098c` uses the documented
++/-0.5% classes and has regression fixtures.  The structural `softplus` RED
+was a missing lower-bound record, not a semantic failure; the audited bound is
+120.125 issue slots/tile.  A separate fresh, zero-reuse ceremony rooted at
+`softplus-reportfix-0c4e6c-20260825` completed 2/2 classifier, 1/1 paired CRAQ,
+2/2 correctness, and 6/6 performance legs and reports Overall GREEN with no
+scoreboard reds.  Its `SHA256SUMS` verifies and has SHA-256
+`2b6363efa9c00108dc71b3171abcbdf9b1fa3c4454c4e96f9406bfc69d9a51e5`.
+
+After those mechanical dispositions, the remaining ten RED rows are
+historical performance-policy exceptions: `minmax-min`, `minmax-max`,
+`polygamma`, `relu`, `sign`, `hardtanh-fresh`, `cbrt-fresh`,
+`hardshrink-fresh`, `threshold-fresh`, and `sigmoidlut-fresh`.  They are not
+correctness, CRAQ, collection, or silicon-semantic failures.
 
 ## Completion-guard census and targeted silicon
 
-The 649ac broad sweep predates the final completion-guard closeout. It cannot
-establish guard coverage merely because its broad correctness result is clean.
-The final record must add both a compiler census and targeted silicon evidence:
+The completion guard remains opt-in and default-off.  A strict final-compiler
+census over all 263 runnable registry rows is rooted at
+`pin29-on26-final-guard-census-984c9a-20260825`: 263/263 verdicts are OK,
+215 are byte-IDENTICAL, and 48 are CHANGED when the guard flag is added.  There
+are no omitted, missing, invalid, or excluded rows.  `KNOB-CENSUS.json` has
+SHA-256
+`172d1b21a6b03dfcbcf98fd46359dd7a8088340590db7c9f46611b4e5ae89cdd`.
 
-| guard evidence item | required record | status |
-|---|---|---|
-| census provenance | exact `075e` compiler pin, target architecture, options, corpus/config revision | **TBD** |
-| decision census | eligible sites; ordinary record-hoist fires/refusals; guarded fires/refusals; named refusal reasons | **TBD** |
-| architecture coverage | separate Blackhole and Wormhole counts, including zero-count categories | **TBD** |
-| default identity | default-off byte identity and proof that unrelated flags/passes are unchanged | **TBD** |
-| targeted semantic matrix | guard OFF/ON correctness for audited forming and refusal shapes, BH and WH | **TBD** |
-| targeted performance matrix | guard OFF/ON raw KERNEL samples, causal delta, and hand comparison where a hand arm exists | **TBD** |
-| campaign linkage | exact targeted artifacts, session logs, ELF `.text` hashes, CRAQ verdicts, and final dashboard references | **TBD** |
+All 48 changed rows then received fresh targeted guard silicon at
+`pin29-on26-final-guard-silicon48-984c9a-20260825`.  The target adopted exactly
+484/484 main-matrix leaves from the fully verified source root, with exact
+provenance, job-key, and ELF `.text` equivalence, and executed **384/384 fresh
+guard leaves**: 96 correctness and 288 performance.  Guard CRAQ is **50/50
+PASS/PASS**: 48 Blackhole pairs plus Wormhole twins for `typecast` and `where`.
+All 48 guard records are status OK, every OFF/guard correctness leg passes,
+and each performance leg has exactly three diagnostic and three KERNEL
+samples.  Both the source and target `SHA256SUMS` manifests verify in full.
+The targeted target hashes are:
 
-Until those fields are populated, the defensible statement is that 649ac has
-a complete and clean archived correctness campaign with strong aggregate
-causal performance, while final `075e` and completion-guard validation remain
-open.
+| artifact | SHA-256 |
+|---|---|
+| `KNOB-CENSUS.json` | `fcb0532689aea40112fcf83d1274d3ace90556a21088d6e16b8540d0317b42d4` |
+| `scoreboard.json` | `3410a5198347618545b62eb95f5b8cfb3ce25cba55b022a05571bd3ee1f50238` |
+| `MANIFEST.txt` | `a9c4e2160f1bca4dc13fe7ca9c1351de0d879d578c96d681948345a4dcea6a37` |
+| `SHA256SUMS` | `56173ed19ad045f5542d04630a39368773ac017d52937b01f610f4fda1313602` |
+
+The targeted census correctly records `full_registry_coverage=false`: it is
+the selected 48-row changed subset, while the separate strict census above is
+the 263-row registry proof.  The target scoreboard has no reds.  Its inherited
+overall-report RED is solely the main `polygamma` historical baseline flip,
+not a guard semantic failure.
+
+Guard KERNEL performance is **11 WIN / 22 PARITY / 15 LOSS** at +/-0.5%.
+Notable wins include `tanhshrink` (-2.157%), `mish` (-1.416%),
+`gelu-licensed` (-1.352%), `polygamma` (-1.123%), and `where` (-0.951%);
+the worst loss is `typecast` (+2.641%).  Diagnostic-body and drain-inclusive
+KERNEL direction can disagree, so promotion must use KERNEL: for example,
+`where` is +15.77% diagnostically but -0.951% in KERNEL.  With 15 losses versus
+11 wins, the evidence rejects unconditional promotion.  The completion guard
+therefore remains opt-in pending a selective, architecture-grounded
+profitability gate; its semantic coverage is complete and green.
