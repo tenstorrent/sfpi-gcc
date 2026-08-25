@@ -49,4 +49,6 @@ dominating_deliverer (unsigned go)
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
   __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 0, 0);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  __builtin_rvtt_ttreplay (nullptr, 4, 0, 0, 0, 0, 0);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 }

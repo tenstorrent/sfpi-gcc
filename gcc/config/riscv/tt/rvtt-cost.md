@@ -519,6 +519,25 @@
 ;; the same boundary term -- is replay-formation territory, recorded
 ;; there as the named follow-up.)
 ;;
+;; DST AUTO-INCREMENT CONFIGURATION PRICE.  Each emitted scratch-slot
+;; program contains three SETC16 words per physical slot.  The target
+;; scheduler reserves the configuration issue resource for two cycles per
+;; SETC16 (rvtt_issue_cfg), and the final word must precede its first
+;; consumer by min_config_distance = 2 slot-occupying words.  Profitability
+;; therefore charges, uniformly:
+;;
+;;   config_cost = (3 * programmed_slots * 2) + 2
+;;
+;; or 8 removed-row issue units for the current one-slot Blackhole and
+;; Wormhole programs.  The cost applies to straight roots, externally
+;; visible/address-taken functions, direct callees, shared placements, and
+;; loop-preheader placements alike: each emitted program occupies the same
+;; resource regardless of what the call graph happens to expose.  Shared
+;; groups aggregate all rows served by their single emission.  A proven loop
+;; trip count multiplies dynamic_rows and is the only preheader amortization;
+;; unknown trips remain fail-closed.  The once-per-entry live-crossing
+;; residual described above is additive when applicable.
+;;
 ;; AUDITED COMPOSITION FACT: no-exec record composition (lane ES,
 ;; laneES-evidence-20260821).  Composing the store-side mod-write with
 ;; a replay capture recorded WITHOUT execution (TTREPLAY load=1
