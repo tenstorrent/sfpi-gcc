@@ -1203,6 +1203,17 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 {
   bool record_hoist_mode
     = body_rerecords && riscv_tt_opt_replay_record_hoist > 0;
+  /* The record-hoist measurement model normally cancels payload execution
+     between the two worlds and prices only delivered words.  A
+     drain-inclusive completion contract cannot make that cancellation when
+     the binding resource is unknown: recording-with-execution performs the
+     first payload while a hoisted record-only pass does not, and the first
+     playback is serialized after that record.  Under the completion guard,
+     retain the ordinary reissue audit and use the calibrated shared
+     execution/delivery model below.  */
+  bool record_completion_model
+    = record_hoist_mode
+      && riscv_tt_replay_hoist_completion_guard > 0;
   uint64_t niter;
   bool trips_proven = provable_constant_trips (loop, preheader, &niter);
   /* Lane FW: a runtime trip count is admitted to the record-hoist
@@ -1254,7 +1265,7 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      estimate, and for unproven targets (no silicon-witnessed playback
      class to carry the discharge -- QSR keeps the refusal).  */
   bool reissue_gate_discharged
-    = record_hoist_mode
+    = record_hoist_mode && !record_completion_model
       && (TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH);
   HOST_WIDE_INT eslots = 0;
   if (!reissue_gate_discharged)
@@ -1310,7 +1321,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      with the difference that every structural proof still gates admission
      and the delivery model itself is monotone: for proven trips >= 2 the
      hoisted world delivers strictly fewer words on every execution.  */
-  if (body_rerecords && riscv_tt_opt_replay_record_hoist > 0)
+  if (body_rerecords && riscv_tt_opt_replay_record_hoist > 0
+      && !record_completion_model)
     {
       /* The hoisted world converts the first clone from inline delivery
 	 to one more playback launch per trip: charge that added launch
@@ -1322,16 +1334,6 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	 margin and noted in rvtt-cost.md.  */
       HOST_WIDE_INT record_once
 	= deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-      /* Record-hoist's issue-side model has always charged the complete
-	 preheader record delivery.  The completion guard therefore needs no
-	 numerical adjustment here: adding deliver_record again would charge the
-	 same words twice.  Emit an explicit witness when the shared contract is
-	 requested so record-hoist-only users can verify which pricing applies.  */
-      if (riscv_tt_replay_hoist_completion_guard > 0 && dump_file)
-	fprintf (dump_file,
-		 "Replay completion guard: record-hoist pricing already charges"
-		 " complete hoisted delivery %ld (record cost %ld)\n",
-		 (long) deliver_record, (long) record_once);
       HOST_WIDE_INT per_trip
 	= deliver_body - XTT_REPLAY_COST_TURNAROUND_X100;
       if (runtime_trips)

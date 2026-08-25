@@ -1,15 +1,15 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mno-tt-tensix-optimize-replay-hoist -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-replay-hoist-completion-guard -fdump-rtl-rvtt_replay-details" }
-// Record-hoist-only uses its dedicated delivery model.  That model already
-// charges the complete seven-word preheader record (capture plus six payload
-// words), so the completion guard witnesses the contract without double
-// charging it or changing the established 1511-centislot admission.
-// { dg-final { scan-rtl-dump "Replay completion guard: record-hoist pricing already charges complete hoisted delivery 861 .record cost 1161." "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "Record-hoist pricing .loop \\d+.: trips 4, words 6, deliver_body 738/trip, boundary 70/trip, record_once 1161, benefit 1511 .min 60." "rvtt_replay" } }
-// { dg-final { scan-rtl-dump "record-hoist: invariant re-record window admitted \\(trips 4, words 6, benefit 1511\\)" "rvtt_replay" } }
-// { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 1 "rvtt_replay" } }
-// { dg-final { scan-rtl-dump-not "Replay completion guard: execution-bound re-record" "rvtt_replay" } }
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 1" 1 } }
-// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 0" 2 } }
+// Completion-scope refusal twin.  Record-hoist's delivery-only model would
+// admit this four-trip, six-word window at +1511.  The completion guard keeps
+// the audited reissue term and uses the shared delivery-bound model instead:
+// 4*(861-670)-1161 = -397.  The executing in-loop record stays intact.
+// { dg-final { scan-rtl-dump "Hoist pricing .loop \\d+.: trips 4, words 6, exec_ilk 6 slots .re-record body, delivery-bound., deliver_body 738, deliver_record 861, record 1161, before 861, after 670, benefit -397 .min 60." "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -397 < 60" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
+// { dg-final { scan-rtl-dump "Capturing and executing sequence" "rvtt_replay" } }
+// { dg-final { scan-assembler-not "TTREPLAY\t0, 6, 0, 1" } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 1, 1" 1 } }
+// { dg-final { scan-assembler-times "TTREPLAY\t0, 6, 0, 0" 1 } }
 
 #include "record-hoist-body.h"
