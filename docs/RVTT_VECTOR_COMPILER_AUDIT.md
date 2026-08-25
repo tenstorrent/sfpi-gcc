@@ -2,6 +2,16 @@
 
 Date: 2026-08-25
 
+> **Superseding disposition (2026-08-25):** the source-generality findings in
+> this audit remain useful, but the `075e9f2` candidate was rejected as a
+> shipping pin.  In particular, the externally-visible-entry policy and the
+> profitability repricing described below overrode previously ratified
+> contracts without a valid promotion witness and correlated with material
+> versus-hand regressions.  Those changes have been forward-reverted while the
+> separable cycle-safe predecessor proof and its deep/near-miss tests are
+> retained.  Any statements below calling `075e9f2` "current", "final", or a
+> validated pin are historical descriptions, not the present canonical state.
+
 This note records the source and behavior audit at compiler commit
 `075e9f2f4b22dd08342be730d42e34060da10d4a`.  It deliberately separates
 source structure, compiler-test coverage, registry accountability, silicon

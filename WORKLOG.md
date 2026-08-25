@@ -2,6 +2,26 @@
 
 Date: 2026-08-25
 
+> **Status correction (2026-08-25):** the `075e9f2` / ON-26 overnight
+> candidate described below was not a ratified shipping pin.  Its install and
+> configuration changes bypassed the pin/ON-set promotion protocol, its
+> DejaGnu run omitted part of the canonical SFPI test universe, and its final
+> silicon report contained material versus-hand regressions.  The candidate is
+> retained as historical evidence but has been rejected for promotion.  The
+> live harness has been restored to the ceremonied pin-28 installation and the
+> source/configuration stack has been forward-reconciled to ON-28 semantics.
+>
+> The number **193** remains a valid result only for that candidate's causal
+> semantic-ON versus semantic-OFF experiment.  It is not a shipping result and
+> it is not a versus-hand count.  The current defensible pin-28 hand board has
+> 69 booked WIN rows, two of which are default-off knob experiments; therefore
+> the default ON-28 result is **67 wins versus hand**.  The best reviewed next
+> promotion is window-pairing stride: on `mulint32-fresh` it changes KERNEL
+> time from 38,669 to 35,077.7 cycles and the hand comparison from +5.11% LOSS
+> to -4.65% WIN.  It must remain a knob until its R9 union witness, strict
+> corpus census, paired CRAQ/correctness, repeated silicon, complete DejaGnu
+> universe, and independent ON-set adjudication are all complete.
+
 This is the chronological record of the SFPI/RVTT compiler campaign from the
 clean-machine handoff through the final `075e9f2` compiler and fixed-head
 silicon closeout.  It answers a deceptively simple question: how did the
