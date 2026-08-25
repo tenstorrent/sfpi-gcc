@@ -1,5 +1,16 @@
 # RVTT silicon validation record
 
+> **Promotion status (2026-08-25): REJECTED.**  This document accurately
+> records archived measurements, but the final `075e` candidate was never
+> ceremonied as a canonical pin.  The associated ON-26 configuration was
+> self-ratified without the required witness/adjudication chain, the reported
+> DejaGnu universe was incomplete relative to pin 28, and the report itself
+> contains material versus-hand regressions.  Do not use this record as proof
+> of a shipping toolchain or ON set.  The canonical live installation has been
+> restored to pin 28; the defensible default result is 67 versus-hand wins.
+> Window-pairing stride is a high-confidence knob result, not yet a promoted
+> default.
+
 This note preserves the completed penultimate 2x2 campaign rooted at
 `/home/ttuser/sfpi-uplift/sweep-2x2/rooting-hardening-stride-final-20260825`
 and records the subsequent final `075e` closeout.  The historical campaign's
