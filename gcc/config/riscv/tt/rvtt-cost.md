@@ -1715,9 +1715,9 @@
 ;; Both mechanisms move SFPLOADI materializations, so they price in the
 ;; same delivered-word units as the replay model above (RISC_PUSH_X100).
 ;;
-;;   materialize (fp32)   = exact exported encoding width W: 2 pushed words
-;;                          for an SFPLOADI lo + hi pair, or 1 word for a
-;;                          shortened 16-bit-encodable form
+;;   materialize (fp32)   = 2 pushed words  (SFPLOADI lo + hi pair; the
+;;                          16-bit-encodable forms are 1 word -- the
+;;                          conservative bound prices 2)
 ;;   PRGM programming     = 3 pushed words once (2 staging SFPLOADI +
 ;;                          1 SFPCONFIG; the staging register model is
 ;;                          NOTES-exp-parity-laneR2.md D1)
