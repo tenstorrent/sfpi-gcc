@@ -29,7 +29,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "tree.h"
 #include "tree-pass.h"
-#include "cgraph.h"
 #include "print-rtl.h"
 #include "cfgloop.h"
 #include "cfgrtl.h"
@@ -86,17 +85,11 @@ along with GCC; see the file COPYING3.  If not see
        row; otherwise the RWC state at the uncovered site would be
        unrestorably changed and the pass refuses.
 
-     - Profitability compares the configuration issue and settlement cost
-       against the number of dynamically removed per-row increments.  SETC16
-       occupies the target configuration resource for more than one cycle;
-       counting only encoded words admits short callees that repay the setup
-       statically but execute it afresh at every call.  For a straight program
-       in a function with a known caller, the capability table's target issue
-       cost plus the already-required configuration-to-consumer settlement
-       window therefore prices that per-call setup conservatively.  Loop
-       regions use the same trip-count estimate as replay hoisting, so a
-       preheader program can still amortize naturally.  No numeric row
-       thresholds appear anywhere; break-evens fall out of the model.
+     - Profitability compares the configuration cost (SETC16 words from the
+       capability table) against the number of dynamically removed per-row
+       increments.  Loop regions use the same trip-count estimate as replay
+       hoisting.  No numeric row thresholds appear anywhere; break-evens fall
+       out of the model.
 
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
@@ -217,11 +210,6 @@ struct autoincr_caps
   unsigned noinc_mode;   /* SFPI no-increment modifier value.  */
   unsigned scratch_mode; /* compiler-owned modifier value to retarget to.  */
   unsigned nslots;       /* physical slots behind scratch_mode.  */
-  /* Cycles for which one SETC16 occupies the configuration issue resource.
-     This is the target scheduler's rvtt_issue_cfg reservation, represented
-     here because profitability is computed in removed issue-time row steps,
-     not encoded words.  */
-  unsigned config_issue_cost;
   /* SETC16-to-consume distance guard: the minimum number of slot-occupying
      Tensix instruction words that must issue strictly between the final
      word of the slot program and the first access consuming the scratch
@@ -262,13 +250,10 @@ static autoincr_caps
 target_autoincr_caps ()
 {
   if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, 2, 2, 7,
-	     { { 18, 34, 53 }, { 0, 0, 0 } } };
+    return { true, 7, 6, 1, 2, 7, { { 18, 34, 53 }, { 0, 0, 0 } } };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 1, 2, 2, 7,
-	     { { 19, 29, 54 }, { 0, 0, 0 } } };
-  return { false, 0, 0, 0, 0, 0, 0,
-	   { { 0, 0, 0 }, { 0, 0, 0 } } };
+    return { true, 3, 2, 1, 2, 7, { { 19, 29, 54 }, { 0, 0, 0 } } };
+  return { false, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -1711,8 +1696,6 @@ transform (function *cfn)
     return;
 
   function_scan fn;
-  cgraph_node *node = cgraph_node::get (cfn->decl);
-  const bool known_caller = node && node->callers;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
@@ -1902,9 +1885,8 @@ transform (function *cfn)
 	  if (changed)
 	    continue;
 
-	  /* Profitability: configuration issue plus settlement cost against
-	     dynamically removed increments, less the per-iteration mod-write
-	     crossing charge.
+	  /* Profitability: configuration cost against dynamically removed
+	     increments, less the per-iteration mod-write crossing charge.
 	     A shared program's cost is paid once for every group it
 	     serves.  A group carrying a live backedge crossing adds the
 	     once-per-loop-entry drain residual -- the audited
@@ -1929,15 +1911,6 @@ transform (function *cfn)
 	    {
 	      group &grp = *it;
 	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
-	      /* A straight function-local program is executed again at every
-		 call.  Unlike a loop-preheader program, its local dynamic-row
-		 estimate has no caller multiplier with which to amortize the
-		 configuration resource.  Fail closed at the target issue and
-		 settlement cost whenever the call graph proves that boundary.  */
-	      if (known_caller && !grp.use_preheader)
-		cost = ((HOST_WIDE_INT) caps.nslots * 3
-			* caps.config_issue_cost
-			+ caps.min_config_distance);
 	      if (grp.live_crossing)
 		cost += caps.min_config_distance;
 	      HOST_WIDE_INT removed = grp.shared_set >= 0
