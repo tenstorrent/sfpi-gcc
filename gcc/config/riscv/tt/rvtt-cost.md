@@ -1729,11 +1729,10 @@
 ;; recurring saving of (materialization_words - readback_words).  A shortened
 ;; one-word SFPLOADI followed by an unfused one-word SFPMOV has zero recurring
 ;; saving and is refused by no-net-loop-issue-saving.  A two-word
-;; materialization folded directly into every consumer has R=0 and is
-;; strictly profitable at two trips: 2 * trips > 3.  If it needs a standalone read, R=1 is
-;; strictly profitable at four trips: 1 * trips > 3 (three trips is equality
-;; and refuses).  LOOP admission proves the exact
-;; floor((W+1)/(W-R))+1 strict-positive bound from scalar control; unknown
+;; materialization folded directly into every consumer has R=0 and breaks
+;; even at two trips: 2 * trips >= 3.  If it needs a standalone read,
+;; R=1 and breaks even at three trips: 1 * trips >= 3.  LOOP admission
+;; proves the exact ceil((W+1)/(W-R)) bound from scalar control; unknown
 ;; runtime trips refuse by loop-profitability-unproven.  An
 ;; OUT-OF-LOOP materialization executes once either way, so parking it
 ;; buys nothing in delivered words; its value is one freed LREG, and the
