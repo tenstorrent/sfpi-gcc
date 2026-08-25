@@ -1,11 +1,15 @@
 // Rename lane-domain discipline: a fresh definition INSIDE a CC atom may
 // not root a rename web (a dead LREG would expose stale disabled-lane
-// bits) -- the refusal is named, ambient-rooted webs still rename, and
-// the pairing commits on what remains provable.
+// bits) -- the refusal is named; with the webs unrenamed the copies
+// serialize on the shared registers in the dependence-legal candidate,
+// the modeled II does not improve, and the single row is kept
+// byte-identically.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-crossrow-pairing -fdump-rtl-rvtt_schedule-details" }
 // { dg-final { scan-rtl-dump "crossrow-pairing-rename-cc-domain" "rvtt_schedule" } }
-// { dg-final { scan-rtl-dump "Crossrow pairing: bb \\d+ rows=2" "rvtt_schedule" } }
-// { dg-final { scan-assembler-times "TTINCRWC\t0, 4, 0, 0" 1 } }
+// { dg-final { scan-rtl-dump "Crossrow pairing refused: no modeled steady-state II decrease" "rvtt_schedule" } }
+// { dg-final { scan-rtl-dump-not "Crossrow pairing: bb" "rvtt_schedule" } }
+// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 1 } }
+// { dg-final { scan-assembler-not "TTINCRWC\t0, 4, 0, 0" } }
 
 void predicated_accumulation_row ()
 {
