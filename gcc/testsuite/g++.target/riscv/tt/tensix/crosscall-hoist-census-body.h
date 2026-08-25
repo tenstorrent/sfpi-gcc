@@ -31,7 +31,7 @@ CCH_TMPL (unsigned CCH_OUTER, unsigned CCH_INNER)
   ((vu32 *) 0xFFB80000)[8] = 0x02000000;
 }
 
-__attribute__((noinline)) static void
+__attribute__((noinline)) void
 CCH_CALLEE ()
 {
   auto CCH_A0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A0, 0, 0, -32);

@@ -2,7 +2,7 @@
 // no window forms its TTMOP and compiles silently under the crosslane
 // flag -- the refusal keys on the proven-OPEN window, not on MOP
 // formation itself.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mtt-tensix-optimize-mop-form" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mtt-tensix-optimize-mop-form" }
 // { dg-final { scan-assembler-times "TTMOP\t0, 19, 0" 1 } }
 
 void mop_outside_window_control ()

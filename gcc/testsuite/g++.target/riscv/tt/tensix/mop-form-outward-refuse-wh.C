@@ -3,7 +3,7 @@
 // into the formed function; the formation refuses by name and the
 // delivery stays byte-identical (MOP facts are WH/BH-identical,
 // rvtt-mop-tables.h).
-// { dg-options "-mcpu=tt-wh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
+// { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-caller-template-live-unproven\\)" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "is reachable after a call to this function without a full template re-arm" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-not "MOP formed" "rvtt_mop_form" } }

@@ -9,12 +9,4 @@
 // { dg-final { scan-assembler-times "TTMOPCFG\\t0" 1 } }
 // { dg-final { scan-assembler-times "TTREPLAY" 1 } }
 
-#define COUNTED_REPLAY_LINKAGE __attribute__ ((noinline, noclone)) static
 #include "replay-counted-body.h"
-
-int
-main ()
-{
-  counted_replay ();
-  return 0;
-}

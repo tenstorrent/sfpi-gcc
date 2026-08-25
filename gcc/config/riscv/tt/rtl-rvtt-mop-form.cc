@@ -306,7 +306,7 @@ non_delivering_p (rtx_insn *insn)
 }
 
 /* ---- Provable constant trip counts (LOOP form) ----
-   The same cycle-safe constant-chain discipline as the accepted
+   The same bounded constant-chain discipline as the accepted
    replay-hoist prover (rtl-rvtt-replay.cc provable_constant_trips):
    single-block loop ending in a two-way conditional jump, one counter
    register with exactly one reg = reg + const step, constant bound,
@@ -320,10 +320,7 @@ static bool
 mop_constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
 {
   basic_block bb = preheader;
-  /* Keep the unique-predecessor reaching-definition proof, but make its
-     extent depend on the CFG rather than an arbitrary split-block count.  */
-  auto_bitmap visited;
-  while (bitmap_set_bit (visited, bb->index))
+  for (unsigned depth = 0; depth != 4; ++depth)
     {
       rtx_insn *insn;
       FOR_BB_INSNS_REVERSE (bb, insn)
@@ -1878,8 +1875,7 @@ mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
   *why = nullptr;
   *why_fn = nullptr;
 
-  if (DECL_FILE_SCOPE_P (decl)
-      && DECL_NAME (decl) && MAIN_NAME_P (DECL_NAME (decl)))
+  if (DECL_NAME (decl) && MAIN_NAME_P (DECL_NAME (decl)))
     {
       /* The kernel entry: its only caller is crt0, which delivers no
 	 Tensix work (AXIOM crt0-benign).  */
@@ -1903,24 +1899,6 @@ mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
   while (!work.is_empty ())
     {
       cgraph_node *cur = work.pop ();
-      tree cur_decl = cur->decl;
-      bool crt0_entry = (DECL_FILE_SCOPE_P (cur_decl)
-			 && DECL_NAME (cur_decl)
-			 && MAIN_NAME_P (DECL_NAME (cur_decl)));
-      bool external_entry = TREE_PUBLIC (cur_decl)
-	|| cur->forced_by_abi
-	|| lookup_attribute ("interrupt", DECL_ATTRIBUTES (cur_decl));
-      if (external_entry && !crt0_entry)
-	{
-	  /* The caller graph enumerates only calls emitted in this TU.  An
-	     externally callable definition can also return a formed template
-	     to an unseen caller, which may subsequently launch it without a
-	     re-arm.  Do not infer the crt0-benign kernel-entry contract from
-	     an empty in-TU caller list or from a particular symbol spelling.  */
-	  *why = "externally callable function on the caller chain";
-	  *why_fn = cur->dump_name ();
-	  return false;
-	}
       if (cur->address_taken)
 	{
 	  *why = "address-taken function on the caller chain";

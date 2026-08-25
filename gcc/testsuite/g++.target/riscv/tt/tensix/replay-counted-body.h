@@ -5,11 +5,7 @@
    words 8, exec_ilk 8 slots; before = 8*123 = 984, after = 800 + 70 =
    870; benefit = 32*114 - (9*123 + 300) = 2241 >= 60.  */
 
-#ifndef COUNTED_REPLAY_LINKAGE
-#define COUNTED_REPLAY_LINKAGE
-#endif
-
-COUNTED_REPLAY_LINKAGE void counted_replay ()
+void counted_replay ()
 {
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto b = __builtin_rvtt_sfpreadlreg (1);

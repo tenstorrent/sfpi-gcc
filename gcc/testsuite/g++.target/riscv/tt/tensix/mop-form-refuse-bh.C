@@ -9,7 +9,7 @@
 //   (mop-replay-window-overflow);
 // - a counted playback loop carrying a second scalar side effect beyond
 //   the counter step refuses on the body shape (mop-body-extra-delivery).
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-trips-unproved\\): loop bb \\d+ trip count is not provably constant" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-replay-window-overflow\\): launch \\\[20,\\+16\\) exceeds the 32-slot replay buffer \\(S\\+L > 32\\)" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-body-extra-delivery\\)" 1 "rvtt_mop_form" } }
