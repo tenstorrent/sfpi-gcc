@@ -306,7 +306,7 @@ non_delivering_p (rtx_insn *insn)
 }
 
 /* ---- Provable constant trip counts (LOOP form) ----
-   The same bounded constant-chain discipline as the accepted
+   The same cycle-safe constant-chain discipline as the accepted
    replay-hoist prover (rtl-rvtt-replay.cc provable_constant_trips):
    single-block loop ending in a two-way conditional jump, one counter
    register with exactly one reg = reg + const step, constant bound,
@@ -320,7 +320,10 @@ static bool
 mop_constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
 {
   basic_block bb = preheader;
-  for (unsigned depth = 0; depth != 4; ++depth)
+  /* Keep the unique-predecessor reaching-definition proof, but make its
+     extent depend on the CFG rather than an arbitrary split-block count.  */
+  auto_bitmap visited;
+  while (bitmap_set_bit (visited, bb->index))
     {
       rtx_insn *insn;
       FOR_BB_INSNS_REVERSE (bb, insn)
