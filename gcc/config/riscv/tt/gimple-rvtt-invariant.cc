@@ -347,13 +347,41 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 bool
 rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 				 const auto_vec<gcall *> &loads,
-				 bool report, bool cc_transients)
+				 bool report, bool cc_transients,
+				 bool exempt_creg_reads)
 {
   constexpr unsigned LREG_COUNT = 8;
   std::unordered_set<tree> candidates;
   std::unordered_set<tree> pinned;
   std::unordered_set<tree> live;
   std::unordered_map<tree, unsigned> remaining;
+
+  /* A value defined by a read of a constant-register-file register
+     (LReg[8..14]: the hardwired zero/one and the programmable
+     constants) never occupies one of the eight allocatable LREGs --
+     every vector operand position accepts the constant register class
+     directly (reg_or_cstlreg_operand), so register allocation
+     satisfies such a use in place.  Callers that place values around
+     instructions with creg-capable operand positions may ask to
+     exempt those definitions from the liveness count (the FP16 LUT
+     coefficient placement); the default keeps every historical
+     consumer's counting byte-identical.  */
+  auto creg_resident_p = [&] (tree name) -> bool
+    {
+      if (!exempt_creg_reads || TREE_CODE (name) != SSA_NAME)
+	return false;
+      gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (name));
+      if (!def)
+	return false;
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+      if (!insnd || insnd->id != rvtt_insn_data::sfpreadlreg)
+	return false;
+      tree arg = gimple_call_arg (def, 0);
+      if (TREE_CODE (arg) != INTEGER_CST)
+	return false;
+      HOST_WIDE_INT creg = tree_to_shwi (arg);
+      return creg >= 8 && creg <= 14;
+    };
   for (gcall *call : loads)
     {
       tree lhs = gimple_call_lhs (call);
@@ -387,8 +415,36 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 	    outside_use = true;
 	    break;
 	  }
-      if (outside_use)
+      if (outside_use && !creg_resident_p (name))
 	{
+	  /* Second fp16-placement refinement: a value whose every
+	     non-debug use executes BEFORE the loop is entered (each use
+	     block dominates the loop header and is outside the loop) is
+	     dead at loop entry -- e.g. a config-staging materialization
+	     consumed by a preheader SFPCONFIG write.  The historical
+	     counting deliberately over-approximates these; the refined
+	     path excludes them (false refusal is no longer preferable
+	     once the caller has an exact obligation to meet).  */
+	  if (exempt_creg_reads)
+	    {
+	      bool dead_before_entry = true;
+	      gimple *use2;
+	      imm_use_iterator iter2;
+	      FOR_EACH_IMM_USE_STMT (use2, iter2, name)
+		{
+		  if (is_gimple_debug (use2))
+		    continue;
+		  basic_block ub = gimple_bb (use2);
+		  if (!ub || flow_bb_inside_loop_p (loop, ub)
+		      || !dominated_by_p (CDI_DOMINATORS, loop->header, ub))
+		    {
+		      dead_before_entry = false;
+		      break;
+		    }
+		}
+	      if (dead_before_entry)
+		continue;
+	    }
 	  pinned.insert (name);
 	  gimple *def = SSA_NAME_DEF_STMT (name);
 	  basic_block def_bb = gimple_bb (def);
@@ -431,7 +487,8 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 		++remaining[use];
 		gimple *def = SSA_NAME_DEF_STMT (use);
 		basic_block def_bb = gimple_bb (def);
-		if (!def_bb || !flow_bb_inside_loop_p (loop, def_bb))
+		if ((!def_bb || !flow_bb_inside_loop_p (loop, def_bb))
+		    && !creg_resident_p (use))
 		  {
 		    pinned.insert (use);
 		    live.insert (use);
@@ -467,7 +524,8 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
 	tree lhs = gimple_get_lhs (stmt);
 	if (lhs && TREE_CODE (lhs) == SSA_NAME
 	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
-	    && !candidates.count (lhs))
+	    && !candidates.count (lhs)
+	    && !creg_resident_p (lhs))
 	  live.insert (lhs);
 
 	/* CC machinery materializes LREG temporaries only at RTL --

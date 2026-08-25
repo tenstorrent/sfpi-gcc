@@ -1317,8 +1317,19 @@ place_coefficients (gcall *lut)
 
   /* Architectural LREG budget, transactional: either every coefficient
      stays live across the loop within the eight-LREG file or none
-     moves.  */
-  if (!rvtt_loop_lreg_pressure_legal_p (loop, coeffs, false))
+     moves.  For the FP16 packed modes (mod0 bit 1) the count exempts
+     constant-register-file reads (LReg[8..14]): every operand position
+     around the formed LUT accepts the creg class directly, so such a
+     value never competes for the eight allocatable LREGs -- without the
+     exemption a kernel-shaped row like gelu (six packed words + input +
+     a PRGM-constant half) counts a phantom ninth LREG and forfeits the
+     whole placement (laneGU silicon: 71223 -> hand-shape loop).  The
+     historical FP32-direct counting is byte-identical (default-off
+     parameter).  */
+  bool fp16_mode = (int_arg (lut, 7) & 2) != 0;
+  if (!rvtt_loop_lreg_pressure_legal_p (loop, coeffs, /*report=*/true,
+					/*cc_transients=*/false,
+					/*exempt_creg_reads=*/fp16_mode))
     return keep ("lut-coefficient-pressure");
 
   basic_block preheader = rvtt_commit_hoist_preheader (entry);
