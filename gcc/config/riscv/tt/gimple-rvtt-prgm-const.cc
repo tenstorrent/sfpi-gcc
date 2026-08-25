@@ -2720,9 +2720,9 @@ residency_transform (function *fn, prgm_state *st)
 	 the strict-positive floor((W+1)/(W-R))+1 threshold; runtime/unknown trip
 	 counts therefore refuse rather than being admitted here.  The
 	 CC-canonical peel class prices its peel separately.  */
-      bool admits_runtime_trips = false;
+      loop_trip_class trips = classify_second_trip (loop, entry);
       if (!peel)
-	switch (classify_second_trip (loop, entry))
+	switch (trips)
 	  {
 	  case TRIPS_AT_LEAST_2:
 	    break;
@@ -2735,11 +2735,6 @@ residency_transform (function *fn, prgm_state *st)
 		       "cost)\n", loop->header->index);
 	    continue;
 	  case TRIPS_UNKNOWN:
-	    /* Dump deferred until candidates exist: this analysis
-	       admission printed on 144/179 corpus ops with zero
-	       candidates, drowning the fire signal (lane EM census
-	       gotcha; FH audit FHI-T3).  */
-	    admits_runtime_trips = true;
 	    break;
 	  }
 
@@ -2858,9 +2853,7 @@ residency_transform (function *fn, prgm_state *st)
 	 iteration -- a proven single trip is a wash and refuses;
 	 runtime trips admit under the established W2 policy.  */
       {
-	loop_trip_class mp_trips = !peel
-	  ? (admits_runtime_trips ? TRIPS_UNKNOWN : TRIPS_AT_LEAST_2)
-	  : classify_second_trip (loop, entry);
+	loop_trip_class mp_trips = trips;
 	if (mp_trips == TRIPS_PROVEN_SINGLE)
 	  {
 	    if (dump_file)
@@ -2988,17 +2981,10 @@ residency_transform (function *fn, prgm_state *st)
       }
       free (body);
 
-      if (admits_runtime_trips && !this_loop.is_empty () && dump_file)
-	fprintf (dump_file,
-		 "const-residency: loop bb %d admits runtime trips "
-		 "(entry-edge programming is never speculated; "
-		 "establishment and no-clobber are trip-independent; "
-		 "worst case one extra pushed word per candidate on "
-		 "a single-trip entry)\n", loop->header->index);
-
       /* Peel pricing (rvtt-cost.md, residency-peel model): the loop
-	 saves the candidates' materialization words at SLOT each on
-	 every iteration after the first; the programming costs PUSH
+	 saves each candidate's materialization words minus its resident
+	 read-back words at SLOT on every iteration after the first; the
+	 programming costs PUSH
 	 per staged word plus PUSH per SFPCONFIG; the peeled body's
 	 words change delivery class from replayed SLOT to pushed PUSH
 	 once.  All constants are the established delivery-economics
@@ -3007,8 +2993,15 @@ residency_transform (function *fn, prgm_state *st)
       if (peel && !this_loop.is_empty ())
 	{
 	  unsigned sum_w = 0;
+	  unsigned sum_saving = 0;
 	  for (residency_candidate &c : this_loop)
-	    sum_w += loadi_issue_words (c.load);
+	    {
+	      unsigned w = loadi_issue_words (c.load);
+	      unsigned r = resident_readback_words (c.load);
+	      gcc_checking_assert (w > r);
+	      sum_w += w;
+	      sum_saving += w - r;
+	    }
 	  unsigned nprog = this_loop.length ();
 	  unsigned body_w = 0;
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (loop->header);
@@ -3027,7 +3020,8 @@ residency_transform (function *fn, prgm_state *st)
 	  unsigned push = XTT_REPLAY_COST_RISC_PUSH_X100;
 	  unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
 	  unsigned cost = push * (sum_w + nprog) + (push - slot) * body_w;
-	  unsigned need = 1 + (cost + slot * sum_w - 1) / (slot * sum_w);
+	  unsigned saving = slot * sum_saving;
+	  unsigned need = 1 + (cost + saving - 1) / saving;
 	  /* 64 bounds the trip-proof WORK (bounded forward evaluation),
 	     not the benefit model: a break-even needing more proven
 	     trips than the evaluator will walk refuses by name (cf.
@@ -3039,18 +3033,18 @@ residency_transform (function *fn, prgm_state *st)
 		fprintf (dump_file,
 			 "const-residency: loop bb %d refused "
 			 "(peel-trip-count-unproven: break-even needs %u "
-			 "proven trips; %u candidate words, %u programming "
-			 "words, %u-word body)\n",
-			 loop->header->index, need, sum_w, sum_w + nprog,
-			 body_w);
+			 "proven trips; %u materialization words, %u recurring-"
+			 "saving words, %u programming words, %u-word body)\n",
+			 loop->header->index, need, sum_w, sum_saving,
+			 sum_w + nprog, body_w);
 	      continue;
 	    }
 	  if (dump_file)
 	    fprintf (dump_file,
 		     "const-residency: loop bb %d admits the CC-canonical "
-		     "peel (%u candidate words/iteration, break-even %u "
-		     "trips proven)\n",
-		     loop->header->index, sum_w, need);
+		     "peel (%u materialization words, %u recurring-saving "
+		     "words/iteration, break-even %u trips proven)\n",
+		     loop->header->index, sum_w, sum_saving, need);
 	}
 
       for (residency_candidate &c : this_loop)
