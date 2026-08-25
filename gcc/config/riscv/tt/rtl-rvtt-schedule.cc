@@ -28,13 +28,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tree-pass.h"
 #include "df.h"
+#include "memmodel.h"
+#include "emit-rtl.h"
+#include "cfgrtl.h"
 #include "print-rtl.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "insn-codes.h"
+#include "insn-constants.h"
 #include "recog.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -1668,7 +1673,8 @@ ls_refresh_node_regs (std::vector<ls_node> &nodes)
 
 static bool
 ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
-			     std::vector<ls_rename> *record)
+			     std::vector<ls_rename> *record,
+			     const std::vector<bool> *start_allowed = nullptr)
 {
   unsigned n = nodes.size ();
   bool any = false;
@@ -1677,6 +1683,22 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
       {
 	if (!TEST_HARD_REG_BIT (nodes[i].raw_defs, r))
 	  continue;
+	if (start_allowed && !(*start_allowed)[i])
+	  {
+	    /* Caller-scoped lane-domain restriction (cross-row pairing):
+	       a fresh definition inside a CC atom executes lane-predicated,
+	       so renaming its web to a dead LREG would leave stale disabled-
+	       lane bits in the new register where the original register
+	       carried the pre-atom value -- a later all-lanes consumer or
+	       store could expose them.  Only webs rooted in the proven
+	       ambient all-lanes state may rename (they write every lane at
+	       the root, so the fresh register never exposes dead bits).  */
+	    if (dump_file)
+	      fprintf (dump_file, "List-schedule rename refused: "
+		       "crossrow-pairing-rename-cc-domain reg %u uid=%d\n",
+		       r, INSN_UID (nodes[i].insn));
+	    continue;
+	  }
 	bool earlier = false;
 	for (unsigned j = 0; j != i && !earlier; ++j)
 	  earlier = TEST_HARD_REG_BIT (nodes[j].raw_defs, r);
@@ -2079,6 +2101,717 @@ ls_schedule_iso_pair (basic_block bb, ls_region &r1, ls_region &r2,
 	     "(isomorphism preserved)\n",
 	     bb->index, INSN_UID (r1.nodes[0].insn),
 	     INSN_UID (r2.nodes[0].insn));
+}
+
+/* ---- Cross-row pairing (-mtt-tensix-optimize-crossrow-pairing) ----
+
+   The FI-3c mechanism: pair two consecutive iterations of a capturable
+   single-row Dst loop into ONE doubled row whose iterations interleave,
+   keeping the counted-loop replay capture shape so delivery stays
+   record-plus-launch (halved launches) while the interleave fills the
+   modeled dependency stalls the single row cannot (the roundingops
+   mad->setcc distance-1 adjacency and the seam; capture rotation names
+   and cannot fill them -- every single-row filler is CC-bearing).
+
+   Admitted shape (everything else refuses by name, fail-closed, and the
+   single row is kept byte-identically):
+
+     row:   one constant-address no-increment Dst load FIRST, pure/CC
+	    words, one matching constant-address no-increment Dst store
+	    LAST, all words audited (typed effects, audited 0/1-slot
+	    latency, one issue slot, SFPU-only DF references, fixed
+	    replay encodings);
+     CC:    flat atoms only -- each opens at a CC writer and closes at
+	    the word-exact all-lanes SFPENCC restore (cc_write_all_lanes);
+	    no Dst or RWC effect inside an atom; ambient state between
+	    atoms is all-lanes, PROVEN at loop entry by a backward walk
+	    (nearest reaching CC writer is the all-lanes restore, or the
+	    walk reaches the function entry, whose all-lanes ambient is
+	    the shipped structured-CC lowering contract: gimple-rvtt-cc.cc
+	    removes the outermost PUSHC and closes every outermost region
+	    with the exact all-lanes ENCC);
+     step:  one trailing typed TTINCRWC (0, d, 0, 0) row separator, the
+	    only RWC effect in the loop;
+     ctrl:  the canonical scalar countdown (reg += -1; if (reg != 0)
+	    backedge) whose register is referenced nowhere else, counting
+	    down from a proven EVEN positive constant.
+
+   Transform (one transaction; every later refusal restores exactly):
+
+     1. row B = textual copy of row A, emitted after A;
+     2. B's load/store Dst addresses rebase A -> A+d (the typed static
+	offset the removed interior row step would have supplied), the
+	shared trailing separator doubles d -> 2d, and the countdown
+	halves -1 -> -2: the pair touches exactly the Dst rows and the
+	RWC walk the two original iterations touched, in the same
+	counter frame (disjointness: both footprints are constant-offset
+	in one frame, A aligned 0 mod 4 and B at A+d with d = 2 address
+	units, so the two rows' unit footprints cannot overlap);
+     3. allocator-packed row-B webs rename to dead LREGs through the
+	established transactional cyclic renamer, restricted to webs
+	rooted in the ambient all-lanes state (rename-cc-domain: a
+	fresh predicated definition renamed to a dead register would
+	expose stale disabled-lane bits -- the adjudicated defect of the
+	round-cc-modulo prototype, NO-GO 2026-08-25);
+     4. pure spans of the two rows list-schedule together interval by
+	interval; CC atoms stay indivisible, in original interior order,
+	atom A before atom B (each atom computes its own lane state from
+	its own row's data -- contiguity is the CC-state-equality
+	placement proof); stores stay in architectural order;
+     5. acceptance: strict modeled steady-state II decrease over the
+	doubled baseline (the two logical iterations cost-compared in
+	the same delivery mode) AND no pad-site increase (the nop
+	inserter's probe) AND the doubled row still fits the replay
+	buffer (2n <= XTT_DELIVERY_CAPTURE_SLOTS with the separator
+	explicit), so the counted-loop capture downstream keeps firing
+	and the transform never trades the replay delivery for issue
+	slots (the adjudicated profitability defect of the prototype).
+
+   Purely structural: no operation identity, opcode calendar,
+   coefficient value, or instruction-word fingerprint participates.
+   Blackhole only (the audited latency/adjacency model family).  */
+
+static basic_block rotation_dedicated_preheader (basic_block bb);
+
+struct crp_loop
+{
+  basic_block bb;
+  std::vector<ls_node> nodes;			/* row words in order */
+  std::vector<std::pair<unsigned, unsigned> > atoms; /* inclusive */
+  unsigned load = ~0u;
+  unsigned store = ~0u;
+  rtx_insn *separator = nullptr;
+  rtx_insn *counter = nullptr;
+  rtx_insn *jump = nullptr;
+  unsigned counter_regno = ~0u;
+  HOST_WIDE_INT trips = 0;
+  HOST_WIDE_INT dst_addr = 0;
+  HOST_WIDE_INT dst_step = 0;
+};
+
+static bool
+crp_refuse (basic_block bb, const char *why, rtx_insn *insn = nullptr)
+{
+  if (dump_file)
+    {
+      fprintf (dump_file, "Crossrow pairing refused: %s", why);
+      if (insn)
+	fprintf (dump_file, " (uid=%d)", INSN_UID (insn));
+      fprintf (dump_file, " in bb %d\n", bb->index);
+    }
+  return false;
+}
+
+/* Mirror of rtl-rvtt-replay.cc fixed_replay_rtx_p (the capture pass's
+   own fixed-encoding admission): hard LREGs, constants and scratch are
+   fixed; a GPR or MEM means the word cannot be recorded.  Kept in step
+   so the capture-shape precondition proven here is the one the
+   downstream counted-loop capture re-checks.  */
+
+static bool
+crp_fixed_word_p (const_rtx x)
+{
+  switch (GET_CODE (x))
+    {
+    case CONST_INT:
+    case SCRATCH:
+      return true;
+    case REG:
+      return SFPU_REG_P (REGNO (x));
+    case SET:
+      return crp_fixed_word_p (SET_DEST (x)) && crp_fixed_word_p (SET_SRC (x));
+    case CLOBBER:
+    case USE:
+      return crp_fixed_word_p (XEXP (x, 0));
+    case PARALLEL:
+    case UNSPEC:
+    case UNSPEC_VOLATILE:
+      for (int ix = XVECLEN (x, 0); ix--;)
+	if (!crp_fixed_word_p (XVECEXP (x, 0, ix)))
+	  return false;
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Row-word admission into the pairing's scheduling vocabulary.  The
+   node model is the list scheduler's own (audited 0/1-slot latencies,
+   LREG dependence edges); CC words enter with their real LREG uses for
+   RAW ordering -- their CC visibility is protected by the indivisible
+   atom and its original interior order, and the architectural lag is
+   exactly one (rvtt_macro::cc_visibility_lag).  */
+
+static bool
+crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
+{
+  if (!issued_tensix_p (insn) || JUMP_P (insn)
+      || get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+    return crp_refuse (bb, "crossrow-pairing-foreign-word", insn);
+  if (get_attr_xtt_replay (insn) != XTT_REPLAY_SAFE
+      || !crp_fixed_word_p (PATTERN (insn)))
+    return crp_refuse (bb, "crossrow-pairing-noncapturable-word", insn);
+  xtt_effect_set e = rvtt_insn_effects (insn);
+  if (e.opaque || e.config_dests_written || e.config_dests_read
+      || e.addr_mod_slot_write || e.next_slot_stall
+      || get_attr_xtt_delay (insn) == XTT_DELAY_STATIC)
+    return crp_refuse (bb, "crossrow-pairing-effect-unproven", insn);
+  /* Every DF reference must be an SFPU register: a scalar (GPR)
+     dependence is outside this vocabulary and would be reordered
+     untracked.  */
+  for (df_ref ref = DF_INSN_USES (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    if (DF_REF_REGNO (ref) >= FIRST_PSEUDO_REGISTER
+	|| !SFPU_REG_P (DF_REF_REGNO (ref)))
+      return crp_refuse (bb, "crossrow-pairing-scalar-dependence", insn);
+  for (df_ref ref = DF_INSN_DEFS (insn); ref; ref = DF_REF_NEXT_LOC (ref))
+    if (DF_REF_REGNO (ref) >= FIRST_PSEUDO_REGISTER
+	|| !SFPU_REG_P (DF_REF_REGNO (ref)))
+      return crp_refuse (bb, "crossrow-pairing-scalar-dependence", insn);
+  node->lat = audited_latency (insn);
+  /* Pure flag writers have no LREG result whose latency enters the
+     list model; their ordering is the atom's.  */
+  if ((node->lat < 0 || node->lat > 1) && e.cc_write && !e.lreg_write
+      && rvtt_macro::cc_visibility_lag () == 1)
+    node->lat = 0;
+  bool regs_ok = collect_sfpu_regs (insn, &node->regs);
+  if (!regs_ok && (e.cc_write || e.dst_mem_write) && !e.lreg_write)
+    {
+      /* Defless CC/store words fail collect_sfpu_regs' ordinary
+	 schedulable-node contract (no LREG destination); the explicit
+	 SFPU-only DF proof above already excluded scalar forms, so
+	 retain their real LREG uses for RAW ordering.  */
+      sfpu_reg_refs (insn, &node->regs);
+      regs_ok = true;
+    }
+  if (node->lat < 0 || node->lat > 1 || !regs_ok)
+    return crp_refuse (bb, "crossrow-pairing-latency-or-lreg-unproven", insn);
+  node->raw_defs = node->regs.defs;
+  node->insn = insn;
+  node->words = get_attr_length (insn) / 4;
+  if (node->words != 1)
+    return crp_refuse (bb, "crossrow-pairing-word-width-unproven", insn);
+  node->entry_pin = 0;
+  node->pin_to_baseline = false;
+  return true;
+}
+
+/* Prove the ambient lane state at the loop's entry is all-lanes: walk
+   backward from the loop's dedicated preheader through single-
+   predecessor blocks; the nearest reaching CC writer must be the
+   word-exact all-lanes restore, or the walk reaches the function entry
+   (the shipped structured-CC lowering contract's ambient).  Anything
+   opaque to the CC vocabulary refuses.  */
+
+static bool
+crp_entry_all_lanes_p (basic_block bb, basic_block preheader)
+{
+  basic_block cur = preheader;
+  while (true)
+    {
+      for (rtx_insn *insn = BB_END (cur); insn && insn != PREV_INSN (BB_HEAD (cur));
+	   insn = PREV_INSN (insn))
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0)
+	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
+	  if (GET_CODE (insn) != INSN
+	      || GET_CODE (PATTERN (insn)) == USE
+	      || GET_CODE (PATTERN (insn)) == CLOBBER)
+	    continue;
+	  if (recog_memoized (insn) < 0
+	      || get_attr_type (insn) != TYPE_TENSIX)
+	    continue;	/* scalar work carries no lane state */
+	  if (!get_attr_length (insn))
+	    continue;	/* bookkeeping ghost */
+	  xtt_effect_set e = rvtt_insn_effects (insn);
+	  if (e.opaque)
+	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
+	  if (e.cc_write_all_lanes)
+	    return true;
+	  if (e.cc_write)
+	    return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven", insn);
+	}
+      if (!single_pred_p (cur))
+	return crp_refuse (bb, "crossrow-pairing-entry-cc-unproven");
+      cur = single_pred (cur);
+      if (cur == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	return true;
+    }
+}
+
+/* Structural admission of the whole loop.  Silent (returns false with
+   no dump line) only when BB is not a self-loop at all.  */
+
+static bool
+crp_admit_loop (basic_block bb, crp_loop *lp)
+{
+  bool self = false;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    if (e->dest == bb)
+      self = true;
+  if (!self)
+    return false;
+  if (!TARGET_XTT_TENSIX_BH)
+    return crp_refuse (bb, "crossrow-pairing-bh-only");
+  if (EDGE_COUNT (bb->succs) != 2 || EDGE_COUNT (bb->preds) != 2)
+    return crp_refuse (bb, "crossrow-pairing-row-shape");
+
+  lp->bb = bb;
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (JUMP_P (insn))
+	{
+	  if (insn != BB_END (bb))
+	    return crp_refuse (bb, "crossrow-pairing-row-shape", insn);
+	  lp->jump = insn;
+	  continue;
+	}
+      if (CALL_P (insn) || asm_noperands (PATTERN (insn)) >= 0
+	  || contains_mem_rtx_p (PATTERN (insn)))
+	return crp_refuse (bb, "crossrow-pairing-foreign-word", insn);
+      if (GET_CODE (PATTERN (insn)) == USE
+	  || GET_CODE (PATTERN (insn)) == CLOBBER)
+	return crp_refuse (bb, "crossrow-pairing-bookkeeping-word", insn);
+      if (recog_memoized (insn) >= 0 && get_attr_type (insn) == TYPE_TENSIX)
+	{
+	  if (!get_attr_length (insn))
+	    return crp_refuse (bb, "crossrow-pairing-ghost-word", insn);
+	  if (lp->counter)
+	    return crp_refuse (bb, "crossrow-pairing-counter-position", insn);
+	  xtt_effect_set eff = rvtt_insn_effects (insn);
+	  if (!eff.opaque && eff.rwc.kind == xtt_rwc_effect_t::INC
+	      && !eff.lreg_read && !eff.lreg_write
+	      && !eff.cc_read && !eff.cc_write
+	      && !eff.dst_mem_read && !eff.dst_mem_write)
+	    {
+	      /* Typed row separator: exactly one, trailing.  */
+	      if (lp->separator || lp->nodes.empty ()
+		  || eff.rwc.dst_delta <= 0 || eff.rwc.cr_delta != 0)
+		return crp_refuse (bb, "crossrow-pairing-row-step-shape",
+				   insn);
+	      lp->separator = insn;
+	      lp->dst_step = eff.rwc.dst_delta;
+	      continue;
+	    }
+	  if (lp->separator)
+	    return crp_refuse (bb, "crossrow-pairing-word-after-row-step",
+			       insn);
+	  ls_node node;
+	  if (!crp_node (bb, insn, &node))
+	    return false;
+	  node.orig = lp->nodes.size ();
+	  lp->nodes.push_back (node);
+	  continue;
+	}
+      /* Scalar RISC insn: admit exactly the canonical countdown, after
+	 the separator.  */
+      if (lp->counter || !lp->separator)
+	return crp_refuse (bb, "crossrow-pairing-counter-shape", insn);
+      rtx set = single_set (insn);
+      if (!set || !REG_P (SET_DEST (set))
+	  || SFPU_REG_P (REGNO (SET_DEST (set)))
+	  || GET_CODE (SET_SRC (set)) != PLUS
+	  || !rtx_equal_p (XEXP (SET_SRC (set), 0), SET_DEST (set))
+	  || !CONST_INT_P (XEXP (SET_SRC (set), 1))
+	  || INTVAL (XEXP (SET_SRC (set), 1)) != -1)
+	return crp_refuse (bb, "crossrow-pairing-counter-shape", insn);
+      lp->counter = insn;
+      lp->counter_regno = REGNO (SET_DEST (set));
+    }
+
+  if (!lp->separator || !lp->counter || !lp->jump)
+    return crp_refuse (bb, "crossrow-pairing-row-shape");
+  if (lp->nodes.size () < XTT_CROSSROW_MIN_ROW_WORDS)
+    return crp_refuse (bb, "crossrow-pairing-row-too-short");
+  if (2 * lp->nodes.size () > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
+    return crp_refuse (bb, "crossrow-pairing-capture-budget");
+
+  /* The backedge condition: if (counter != 0) goto header.  */
+  rtx jset = single_set (lp->jump);
+  rtx cond = jset ? SET_SRC (jset) : nullptr;
+  if (!cond || GET_CODE (cond) != IF_THEN_ELSE
+      || GET_CODE (XEXP (cond, 0)) != NE
+      || !REG_P (XEXP (XEXP (cond, 0), 0))
+      || REGNO (XEXP (XEXP (cond, 0), 0)) != lp->counter_regno
+      || XEXP (XEXP (cond, 0), 1) != const0_rtx
+      || GET_CODE (XEXP (cond, 1)) != LABEL_REF
+      || XEXP (cond, 2) != pc_rtx)
+    return crp_refuse (bb, "crossrow-pairing-counter-shape", lp->jump);
+
+  /* Row shape: one load first, one store last, no other Dst or RWC
+     traffic, flat atoms closed by the all-lanes restore.  */
+  bool cc_open = false;
+  unsigned cc_begin = 0;
+  unsigned loads = 0, stores = 0;
+  for (unsigned i = 0; i != lp->nodes.size (); ++i)
+    {
+      xtt_effect_set eff = rvtt_insn_effects (lp->nodes[i].insn);
+      if (eff.rwc.kind != xtt_rwc_effect_t::NONE)
+	return crp_refuse (bb, "crossrow-pairing-rwc-inside-row",
+			   lp->nodes[i].insn);
+      if (eff.cc_write_all_lanes)
+	{
+	  if (!cc_open)
+	    return crp_refuse (bb, "crossrow-pairing-unmatched-restore",
+			       lp->nodes[i].insn);
+	  lp->atoms.push_back ({cc_begin, i});
+	  cc_open = false;
+	}
+      else if (eff.cc_write && !cc_open)
+	{
+	  cc_open = true;
+	  cc_begin = i;
+	}
+      if (eff.dst_mem_read || eff.dst_mem_write)
+	{
+	  if (cc_open)
+	    return crp_refuse (bb, "crossrow-pairing-dst-in-cc-window",
+			       lp->nodes[i].insn);
+	  rtx addr, mode, am;
+	  if (!rvtt_dst_access_operands (lp->nodes[i].insn, eff, &addr,
+					 &mode, &am)
+	      || !CONST_INT_P (addr) || !CONST_INT_P (mode)
+	      || !CONST_INT_P (am)
+	      || INTVAL (am) != rvtt_no_increment_address_mode ())
+	    return crp_refuse (bb, "crossrow-pairing-dst-operands-unproven",
+			       lp->nodes[i].insn);
+	  if (eff.dst_mem_read)
+	    lp->load = i, ++loads;
+	  if (eff.dst_mem_write)
+	    lp->store = i, ++stores;
+	}
+    }
+  if (cc_open)
+    return crp_refuse (bb, "crossrow-pairing-unclosed-cc-window");
+  if (loads != 1 || stores != 1 || lp->load != 0
+      || lp->store + 1 != lp->nodes.size ())
+    return crp_refuse (bb, "crossrow-pairing-row-shape");
+
+  /* Dst disjointness of the paired footprints: both accesses at one
+     constant address A in one counter frame, the copy at A+d with the
+     separator's own per-iteration advance d (2 address units = one
+     row); alignment and range keep the unit footprints disjoint and
+     the rebased address encodable.  */
+  xtt_effect_set le = rvtt_insn_effects (lp->nodes[lp->load].insn);
+  xtt_effect_set se = rvtt_insn_effects (lp->nodes[lp->store].insn);
+  rtx la, lm, lam, sa, sm, sam;
+  HOST_WIDE_INT addr_limit = 8191;	/* BH imm10-class Dst address */
+  if (!rvtt_dst_access_operands (lp->nodes[lp->load].insn, le, &la, &lm,
+				 &lam)
+      || !rvtt_dst_access_operands (lp->nodes[lp->store].insn, se, &sa,
+				    &sm, &sam)
+      || INTVAL (la) != INTVAL (sa)
+      || lp->dst_step != 2
+      || (INTVAL (la) & 3) || INTVAL (la) < 0
+      || INTVAL (la) > addr_limit - lp->dst_step)
+    return crp_refuse (bb, "crossrow-pairing-dst-disjointness-unproven");
+  lp->dst_addr = INTVAL (la);
+
+  /* Counter provenance: the loop's dedicated preheader must seed the
+     countdown with an even positive constant (halving -1 -> -2 then
+     preserves the NE-0 exit exactly), and the register is referenced
+     nowhere else in the row (the SFPU-only proof above covers every
+     row word; the separator is all-constant).  */
+  basic_block preheader = rotation_dedicated_preheader (bb);
+  if (!preheader)
+    return crp_refuse (bb, "crossrow-pairing-no-dedicated-preheader");
+  rtx_insn *init = nullptr;
+  for (rtx_insn *w = BB_END (preheader);
+       w && w != PREV_INSN (BB_HEAD (preheader)); w = PREV_INSN (w))
+    {
+      if (!NONDEBUG_INSN_P (w))
+	continue;
+      if (CALL_P (w) || asm_noperands (PATTERN (w)) >= 0)
+	return crp_refuse (bb, "crossrow-pairing-counter-init-unproven", w);
+      if (reg_set_p (SET_DEST (single_set (lp->counter)), w))
+	{
+	  init = w;
+	  break;
+	}
+    }
+  rtx iset = init ? single_set (init) : nullptr;
+  if (!iset || !REG_P (SET_DEST (iset))
+      || REGNO (SET_DEST (iset)) != lp->counter_regno
+      || !CONST_INT_P (SET_SRC (iset)))
+    return crp_refuse (bb, "crossrow-pairing-counter-init-unproven");
+  lp->trips = INTVAL (SET_SRC (iset));
+  if (lp->trips < 2)
+    return crp_refuse (bb, "crossrow-pairing-trips-unproven");
+  if (lp->trips & 1)
+    return crp_refuse (bb, "crossrow-pairing-trips-odd");
+
+  /* Ambient lane state at loop entry.  */
+  if (!crp_entry_all_lanes_p (bb, preheader))
+    return false;
+
+  return true;
+}
+
+/* Queue a typed Dst address replacement on a load/store copy.  Operand
+   identity is used only after effect admission, mirroring
+   rvtt_dst_access_operands' positional contract.  */
+
+static void
+crp_queue_dst_rebase (rtx_insn *insn, HOST_WIDE_INT value)
+{
+  int code = recog_memoized (insn);
+  int addr_pos = code == CODE_FOR_rvtt_sfpload_lv_int ? 4 : 3;
+  gcc_assert (code == CODE_FOR_rvtt_sfpload_lv_int
+	      || code == CODE_FOR_rvtt_sfpstore_int);
+  extract_insn (insn);
+  validate_change (insn, recog_data.operand_loc[addr_pos], GEN_INT (value),
+		   true);
+}
+
+/* Interleave one corresponding pure-span interval of the two rows via
+   the established deterministic list order.  */
+
+static void
+crp_append_span (const std::vector<ls_node> &all, unsigned n,
+		 unsigned begin, unsigned end,
+		 std::vector<rtx_insn *> *order)
+{
+  std::vector<ls_node> span;
+  for (unsigned i = begin; i != end; ++i)
+    span.push_back (all[i]);
+  for (unsigned i = begin; i != end; ++i)
+    span.push_back (all[n + i]);
+  for (unsigned i = 0; i != span.size (); ++i)
+    span[i].orig = i;
+  std::vector<int> chosen = ls_list_order (span);
+  for (int i : chosen)
+    order->push_back (span[i].insn);
+}
+
+/* The transform proper.  Returns true when the pairing committed.  */
+
+static bool
+crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
+{
+  crp_loop lp;
+  if (!crp_admit_loop (bb, &lp))
+    return false;
+
+  unsigned n = lp.nodes.size ();
+
+  /* Phase 2a: emit row B as a textual copy of row A, after A's last
+     word and before the separator.  Every later refusal deletes the
+     copies, leaving the original stream byte-identical (A's own words
+     are never mutated before the commit point).  */
+  std::vector<rtx_insn *> copies;
+  rtx_insn *after = lp.nodes[n - 1].insn;
+  for (unsigned i = 0; i != n; ++i)
+    {
+      rtx_insn *cp = emit_insn_after (copy_insn (PATTERN (lp.nodes[i].insn)),
+				      after);
+      df_insn_rescan (cp);
+      copies.push_back (cp);
+      after = cp;
+    }
+  auto crp_delete_copies = [&copies] ()
+    {
+      for (rtx_insn *cp : copies)
+	delete_insn (cp);
+    };
+
+  /* Phase 2b: rebase row B's Dst accesses to the second row of the
+     shared counter frame.  */
+  crp_queue_dst_rebase (copies[lp.load], lp.dst_addr + lp.dst_step);
+  crp_queue_dst_rebase (copies[lp.store], lp.dst_addr + lp.dst_step);
+  if (!apply_change_group ())
+    {
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-dst-rebase-constraint");
+    }
+  df_insn_rescan (copies[lp.load]);
+  df_insn_rescan (copies[lp.store]);
+
+  /* Phase 2c: node vectors over the doubled row.  The copies re-admit
+     through the same vocabulary (they are textual copies with typed
+     constant rewrites); a failure here is fail-closed, not an ICE.  */
+  std::vector<ls_node> all = lp.nodes;
+  for (unsigned i = 0; i != n; ++i)
+    {
+      ls_node node;
+      if (!crp_node (bb, copies[i], &node))
+	{
+	  crp_delete_copies ();
+	  return crp_refuse (bb, "crossrow-pairing-copy-unproven",
+			     copies[i]);
+	}
+      node.orig = n + i;
+      all.push_back (node);
+    }
+
+  /* Baseline: the two logical iterations in their original sequential
+     order (exactly the stream the doubled loop would execute), judged
+     by the same cyclic steady-state model as the candidate.  Measured
+     BEFORE any rename.  */
+  std::vector<int> base_order (2 * n);
+  for (unsigned i = 0; i != 2 * n; ++i)
+    base_order[i] = i;
+  int base_ii = ls_cyclic_ii (all, base_order);
+  unsigned pads_before = ls_pad_sites (visited, bb, all);
+
+  /* Phase 2d: break allocator-packed false recurrences; fresh webs may
+     root only in the ambient all-lanes state (never inside an atom).  */
+  std::vector<bool> start_allowed (2 * n, true);
+  for (unsigned half = 0; half != 2; ++half)
+    for (const auto &atom : lp.atoms)
+      for (unsigned i = atom.first; i <= atom.second; ++i)
+	start_allowed[half * n + i] = false;
+  std::vector<ls_rename> renames;
+  ls_cyclic_rename_collisions (bb, all, &renames, &start_allowed);
+
+  /* Phase 2e: candidate order -- pure spans interleave interval by
+     interval; atoms stay indivisible in original interior order, row A
+     before row B; stores keep architectural order at the tail.  */
+  std::vector<rtx_insn *> candidate;
+  unsigned pos = 0;
+  for (const auto &atom : lp.atoms)
+    {
+      crp_append_span (all, n, pos, atom.first, &candidate);
+      for (unsigned i = atom.first; i <= atom.second; ++i)
+	candidate.push_back (all[i].insn);
+      for (unsigned i = atom.first; i <= atom.second; ++i)
+	candidate.push_back (all[n + i].insn);
+      pos = atom.second + 1;
+    }
+  crp_append_span (all, n, pos, lp.store, &candidate);
+  candidate.push_back (all[lp.store].insn);
+  candidate.push_back (all[n + lp.store].insn);
+
+  std::vector<int> cand_index;
+  for (rtx_insn *ci : candidate)
+    for (unsigned i = 0; i != all.size (); ++i)
+      if (all[i].insn == ci)
+	{
+	  cand_index.push_back (i);
+	  break;
+	}
+  int cand_ii = cand_index.size () == all.size ()
+    ? ls_cyclic_ii (all, cand_index) : base_ii;
+  if (cand_ii >= base_ii)
+    {
+      ls_undo_renames (renames);
+      crp_delete_copies ();
+      if (dump_file)
+	fprintf (dump_file, "Crossrow pairing refused: no modeled "
+		 "steady-state II decrease in bb %d (%d -> %d)\n",
+		 bb->index, base_ii, cand_ii);
+      return false;
+    }
+
+  /* Phase 2f: exact-restore record, then commit the order.  */
+  rtx_insn *anchor = PREV_INSN (lp.nodes[0].insn);
+  std::vector<rtx_insn *> chain;
+  for (rtx_insn *w = NEXT_INSN (anchor);; w = NEXT_INSN (w))
+    {
+      if (INSN_P (w))
+	chain.push_back (w);
+      if (w == lp.separator)
+	break;
+    }
+  rtx_insn *tail = anchor;
+  for (rtx_insn *ci : candidate)
+    {
+      if (PREV_INSN (ci) != tail)
+	reorder_insns (ci, ci, tail);
+      tail = ci;
+    }
+  if (PREV_INSN (lp.separator) != tail)
+    reorder_insns (lp.separator, lp.separator, tail);
+
+  auto crp_restore_chain = [&chain, anchor] ()
+    {
+      rtx_insn *at = anchor;
+      for (rtx_insn *ci : chain)
+	{
+	  if (PREV_INSN (ci) != at)
+	    reorder_insns (ci, ci, at);
+	  at = ci;
+	}
+    };
+
+  unsigned pads_after = ls_pad_sites (visited, bb, all);
+  if (pads_after > pads_before)
+    {
+      crp_restore_chain ();
+      ls_undo_renames (renames);
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-pad-site-increase");
+    }
+
+  /* Phase 2g: shared control rewrite -- the separator advances both
+     rows at once and the countdown halves.  */
+  extract_insn (lp.separator);
+  validate_change (lp.separator, recog_data.operand_loc[1],
+		   GEN_INT (2 * lp.dst_step), true);
+  rtx cset = single_set (lp.counter);
+  validate_change (lp.counter, &XEXP (SET_SRC (cset), 1), GEN_INT (-2),
+		   true);
+  if (!apply_change_group ())
+    {
+      crp_restore_chain ();
+      ls_undo_renames (renames);
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-control-rewrite-constraint");
+    }
+  df_insn_rescan (lp.separator);
+  df_insn_rescan (lp.counter);
+
+  /* Post-commit belt: the doubled separator must still derive as the
+     typed row step at exactly twice the advance.  */
+  xtt_effect_set sep_eff = rvtt_insn_effects (lp.separator);
+  if (sep_eff.opaque || sep_eff.rwc.kind != xtt_rwc_effect_t::INC
+      || sep_eff.rwc.dst_delta != 2 * lp.dst_step
+      || sep_eff.rwc.cr_delta != 0)
+    {
+      extract_insn (lp.separator);
+      validate_change (lp.separator, recog_data.operand_loc[1],
+		       GEN_INT (lp.dst_step), true);
+      cset = single_set (lp.counter);
+      validate_change (lp.counter, &XEXP (SET_SRC (cset), 1), GEN_INT (-1),
+		       true);
+      bool restored = apply_change_group ();
+      gcc_assert (restored);
+      df_insn_rescan (lp.separator);
+      df_insn_rescan (lp.counter);
+      crp_restore_chain ();
+      ls_undo_renames (renames);
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-row-step-shape",
+			 lp.separator);
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "Crossrow pairing: bb %d rows=2 nodes=%zu "
+	     "II %d -> %d renames=%zu dst-addr=%ld/%ld step=%ld->%ld "
+	     "trips=%ld->%ld target=bh\n",
+	     bb->index, all.size (), base_ii, cand_ii, renames.size (),
+	     (long) lp.dst_addr, (long) (lp.dst_addr + lp.dst_step),
+	     (long) lp.dst_step, (long) (2 * lp.dst_step),
+	     (long) lp.trips, (long) (lp.trips / 2));
+  return true;
+}
+
+static void
+crossrow_pair_rows (function *fn)
+{
+  df_analyze ();
+  std::vector<basic_block> visited;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      visited.reserve (n_basic_blocks_for_fn (fn));
+      crp_pair_loop (bb, visited);
+    }
 }
 
 static void
@@ -3387,6 +4120,11 @@ public:
 
   virtual unsigned execute (function *fn) override
   {
+    if (riscv_tt_opt_crossrow_pairing)
+      /* Before the region schedulers: a committed pairing leaves a
+	 doubled self-loop row whose pure spans the later phases may
+	 still improve; a refusal leaves the stream byte-identical.  */
+      crossrow_pair_rows (fn);
     if (riscv_tt_opt_list_schedule || riscv_tt_opt_round_interleave)
       /* The round-interleave flag enables only the cyclic self-loop
 	 and isomorphic-pair extensions inside; single straight-line

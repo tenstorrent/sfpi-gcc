@@ -1589,6 +1589,74 @@
 
 
 ;; ---------------------------------------------------------------------
+;; Cross-row pairing (rtl-rvtt-schedule.cc, crossrow_pair_rows, under
+;; -mtt-tensix-optimize-crossrow-pairing).  Additive section.
+;;
+;; PAIR_FACTOR (2) - the pairing doubles exactly two consecutive
+;; iterations: two rows are the smallest interleave that fills a
+;; distance-1 producer/consumer adjacency and the row seam, the doubled
+;; footprint (one extra Dst row at +2 address units) stays inside the
+;; separator's own per-iteration frame, and the doubled live set is the
+;; only shape the eight-LREG file is known to carry for the target row
+;; class (laneGJ AUTOPSY roundingops: rename web L0-L2 -> L4-L6,
+;; pressure 7 <= 8).  Wider factors have no audited pressure or Dst
+;; footprint story and refuse structurally (capture budget).
+;;
+;; MIN_ROW_WORDS (4) - mirrors the replay pass's MIN_SEQUENCE (4,
+;; rtl-rvtt-replay.cc): a row the capture machinery would not record is
+;; not in this mechanism's charter (the pairing exists to improve the
+;; EXECUTION of a captured window, never to displace the capture).
+;;
+;; The capture budget bound reuses XTT_DELIVERY_CAPTURE_SLOTS (32, the
+;; replay buffer's entries): a doubled row of 2n words must still fit
+;; the buffer or the counted-loop capture downstream stops firing and
+;; the pairing would trade record-plus-launch delivery for a rolled
+;; issue stream -- the adjudicated profitability defect of the
+;; round-cc-modulo prototype (NO-GO 2026-08-25, evidence
+;; round-cc-modulo-evidence-20260825/REPORT.md: the committed rolled
+;; two-row loop lost the TTREPLAY delivery entirely).  The separator
+;; stays explicit per launch (counted_loop_payload's contract) and
+;; dst-autoincr may absorb it afterwards exactly as in the single-row
+;; stream.
+;;
+;; Dst disjointness fact: the admitted row separator TTINCRWC
+;; (0, 2, 0, 0) advances the Dst RWC by 2 address units = one 32-bit
+;; row (SFPLOAD/SFPSTORE unit addressing; tt-isa-documentation
+;; TTINCRWC/SFPLOAD address-unit semantics, the same 1-index-=-2-units
+;; fact laneFI's walk lift used with TTINCRWC imm <= 7).  Two accesses
+;; at constant offsets A and A+2 of one counter frame with A == 0 mod 4
+;; therefore touch disjoint unit footprints, and the doubled separator
+;; (0, 4, 0, 0) advances exactly the two rows the pair consumed
+;; (4 <= the TTINCRWC immediate bound).
+;;
+;; CC placement: interleaving is licensed by CC-STATE EQUALITY, proven
+;; structurally -- flat atoms (CC writer through word-exact all-lanes
+;; SFPENCC restore, the effect vocabulary's cc_write_all_lanes fact)
+;; stay indivisible in original interior order, so every atom word
+;; executes under its own row's lane state; every inter-atom position
+;; is the all-lanes state in both the sequential and the paired order
+;; (each atom closes with the restore), provided the LOOP-ENTRY ambient
+;; is all-lanes -- proven by the backward walk to the nearest reaching
+;; CC writer (must be the all-lanes restore) or to the function entry,
+;; whose all-lanes ambient is the shipped structured-CC lowering
+;; contract (gimple-rvtt-cc.cc: outermost PUSHC removed, every
+;; outermost region closed by the exact all-lanes ENCC; laneEL's
+;; structured-CC-restore proof).  Rename webs may root only in that
+;; ambient state (crossrow-pairing-rename-cc-domain): a fresh
+;; lane-predicated definition renamed to a dead LREG would expose stale
+;; disabled-lane bits -- the adjudicated wrong-code defect of the
+;; round-cc-modulo prototype's rename reuse.
+;;
+;; These constants describe structural bounds only.  They are
+;; deliberately independent of any operation identity, opcode calendar,
+;; coefficient value, or instruction-word fingerprint.
+(define_constants [
+  (XTT_CROSSROW_PAIR_FACTOR           2)
+  (XTT_CROSSROW_MIN_ROW_WORDS         4)
+])
+
+
+;; ---------------------------------------------------------------------
 ;; MOP loop-delivery formation (rvtt_mop_form).  Additive section; the
 ;; replay-hoist model above is unchanged and its constants are reused.
 ;;
