@@ -3,7 +3,7 @@
 // the window checker cannot audit positionally -- a TTMOP inside a
 // proven-OPEN window errors by name (the counted playback loop re-rolls
 // into one TTMOP at the default threshold, mop-form-counted shape).
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mtt-tensix-optimize-mop-form" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mtt-tensix-optimize-mop-form" }
 
 void mop_in_window ()
 {

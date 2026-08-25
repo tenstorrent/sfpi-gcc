@@ -6,7 +6,7 @@
 // the minmax post-pipeline delivery form.  Execution-bound rows price
 // negative under the corrected delivery model, so the force flag builds
 // this leg.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
 // { dg-final { scan-rtl-dump-times "MOP-form candidate \\(run\\): 4 x launch \\\[0,\\+3\\) \\+ 1 step word\\(s\\), config 16 words, modeled benefit -1968" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "MOP formed \\(mop0-lA-replay, run\\): 4 iterations of launch \\\[0,\\+3\\) -> TTMOP 0, 3, 0" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "MOP template carries 1 SETRWC step word\\(s\\) in the flags&2 slots" 1 "rvtt_mop_form" } }

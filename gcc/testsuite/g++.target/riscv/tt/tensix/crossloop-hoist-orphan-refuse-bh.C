@@ -1,15 +1,11 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -fdump-tree-rvtt_crossloop" }
-// FC-I fail-closed twin (lane DK, from lane DG2's adversarial audit):
-// crossloop consumed the census verdict but never checked that the
-// function it is EDITING is inside the rooted closure.  Here the in-TU
-// `_start' anchor pins the external surface, so the public kernel no
-// live code calls is an orphan the census SKIPS entirely (its body was
-// never audited) -- yet the pin-14 crossloop hoisted inside it
-// (verified: 2 fires on the installed binary), converting the
-// extern-fixed-surface axiom into a wrong-code exposure on
-// naked-asm-entry TUs.  Editing an unaudited body must refuse by name.
-// { dg-final { scan-tree-dump "refused .crossloop-caller-unrooted." "rvtt_crossloop" } }
-// { dg-final { scan-tree-dump-not "hoisted across" "rvtt_crossloop" } }
+// Public alternate-entry twin: the presence of an in-TU `_start' does not
+// prove that it is the image's only entry.  The public kernel is therefore a
+// linkage-derived census root even without an in-TU caller.  Its body is
+// audited and the ordinary crossloop proof may fire; treating it as an
+// unaudited orphan would reintroduce the symbol-name entry assumption.
+// { dg-final { scan-tree-dump-not "refused .crossloop-caller-unrooted." "rvtt_crossloop" } }
+// { dg-final { scan-tree-dump-times "hoisted across" 2 "rvtt_crossloop" } }
 
 __attribute__((noinline)) void
 xlho_kernel (int tiles)
@@ -29,7 +25,6 @@ xlho_kernel (int tiles)
     }
 }
 
-// The anchor: with an in-TU `_start' the reset vector is the image's
-// only external entry, so the uncalled public kernel above is outside
-// the rooted closure (an orphaned body under the census model).
+// A reset-vector entry does not close the image's externally callable
+// surface; xlho_kernel remains a root by linkage.
 extern "C" void _start () { }

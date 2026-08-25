@@ -4,7 +4,7 @@
 // corrected model prices 20 x 69 - 9 x 123 = +273 >= 60 and the loop
 // re-rolls into one TTMOP with its control removed -- no force flag,
 // no threshold override.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-mop-form -fdump-rtl-rvtt_mop_form-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -mtt-tensix-optimize-mop-form -fdump-rtl-rvtt_mop_form-details" }
 // { dg-final { scan-rtl-dump-times "MOP-form candidate \\(counted loop\\): 20 x launch \\\[0,\\+3\\), config 9 words, modeled benefit 273" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "MOP formed \\(mop0-lA-replay, counted loop\\): 20 iterations of launch \\\[0,\\+3\\) -> TTMOP 0, 19, 0" 1 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "Removed counted-loop control" 1 "rvtt_mop_form" } }

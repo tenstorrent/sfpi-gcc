@@ -748,7 +748,7 @@ fixed_replay_rtx_p (const_rtx x)
    LOOPS_HAVE_PREHEADERS, which this pass deliberately never establishes:
    refusal paths must not mutate the CFG, so loops are initialized with
    AVOID_CFG_MODIFICATIONS only.  Following the accepted replay-unroll
-   discipline, the trip count is instead proven by a bounded constant-chain
+   discipline, the trip count is instead proven by a cycle-safe constant-chain
    evaluation keyed to the pass's own dedicated-preheader proof:
 
    - the loop is a single basic block ending in a two-way conditional jump;
@@ -769,13 +769,16 @@ fixed_replay_rtx_p (const_rtx x)
 // Walk backwards from the end of PREHEADER through the unique-predecessor
 // chain looking for the last definition of REG.  Return true and set *VALUE
 // if that definition is a simple constant load; refuse on any other
-// definition, on a call (potential clobber), or when no definition is found
-// within a small bound.
+// definition or on a call (potential clobber).  Only a unique predecessor is
+// followed, so this remains a reaching-definition proof rather than a guess;
+// the visited set makes malformed or cyclic predecessor chains fail closed
+// without making the result depend on the number of harmless CFG splits.
 static bool
 constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
 {
   basic_block bb = preheader;
-  for (unsigned depth = 0; depth != 4; ++depth)
+  auto_bitmap visited;
+  while (bitmap_set_bit (visited, bb->index))
     {
       rtx_insn *insn;
       FOR_BB_INSNS_REVERSE (bb, insn)

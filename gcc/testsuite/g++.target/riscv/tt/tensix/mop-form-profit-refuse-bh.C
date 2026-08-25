@@ -11,4 +11,12 @@
 // { dg-final { scan-assembler-not "TTMOP" } }
 // { dg-final { scan-assembler-times "TTREPLAY" 33 } }
 
+#define COUNTED_REPLAY_LINKAGE __attribute__ ((noinline, noclone)) static
 #include "replay-counted-body.h"
+
+int
+main ()
+{
+  counted_replay ();
+  return 0;
+}
