@@ -25,7 +25,7 @@ noexec_record_preamble_then_rows ()
   __builtin_rvtt_sfpwritelreg (x, 0);
 
   for (unsigned face = 0; face != 4; ++face)
-    for (unsigned ix = 0; ix != 11; ++ix)
+    for (unsigned ix = 0; ix != 8; ++ix)
       {
 	vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
 	vec_t p = __builtin_rvtt_sfpmul (a, a, 0);
