@@ -18,7 +18,8 @@ void tile_rows_fallback_noautoincr ()
   auto gc = __builtin_rvtt_sfpreadlreg (6);
   for (unsigned tx = 0; tx != 4; ++tx)
     {
-      for (unsigned kx = 0; kx != 8; ++kx)
+      /* Keep the same eleven-row shape as the pass-enabled twins.  */
+      for (unsigned kx = 0; kx != 11; ++kx)
 	{
 	  ga = __builtin_rvtt_sfpmul (ga, ga, 0);
 	  gb = __builtin_rvtt_sfpmul (gb, gb, 0);
