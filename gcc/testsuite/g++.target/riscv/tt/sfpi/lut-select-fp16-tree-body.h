@@ -47,9 +47,14 @@ LUT_TREE_FN ()
 	}
       v_endif;
 #ifdef LUT_TREE_SETSGN
-      LUT_TREE_R = sfpi::setsgn (LUT_TREE_R, LUT_TREE_X);
-#endif
+      /* Stored directly: a reassignment through the vFloat variable
+	 would wrap the sign copy in a live-value assign and the tree
+	 result would no longer have the single consumer the fold
+	 requires.  */
+      sfpi::dst_reg[0] = sfpi::copysgn (LUT_TREE_R, LUT_TREE_X);
+#else
       sfpi::dst_reg[0] = LUT_TREE_R;
+#endif
       sfpi::dst_reg++;
     }
 }
