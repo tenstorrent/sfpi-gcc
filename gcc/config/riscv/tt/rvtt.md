@@ -4331,6 +4331,41 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
+;; Pure SET_CC comparison form (BH mod1 == 1, fixed in the template):
+;; LaneFlags = (VD <op> VC) for enabled lanes, no LREG write, no flag
+;; stack effect.  Emitted only by the -mtt-tensix-optimize-native-compare
+;; float compare lowering (rvtt_emit_sfpxfcmps/v GT/LE arms) with VC the
+;; constant +0.0 register.
+;; Effect audit (BH, SET_CC form mod1 == 1 only): three sources --
+;; (1) ISA spec (tt-isa-documentation BlackholeA0 SFPGT.md/SFPLE.md):
+;;     "simple sub-unit"; with Mod1 == SET_CC only LaneFlags is written,
+;;     under LaneEnabled (disabled lanes keep their flags); VD and VC are
+;;     read; no flag-stack, configuration, or counter effect;
+;; (2) craq-sim TENSIX_EXECUTE_SFPGT/SFPLE (instr_mod1 == 1 arm): reads
+;;     lreg_dest and lreg_c, lane-writes only the cc mask under the
+;;     current enables -- the identical read-modify-write flag shape the
+;;     SFPSETCC "readwrite" audit carries;
+;; (3) the silicon-proven hand corpus issues SFPGT mod1 == 1 in the
+;;     rounding_ops floor/ceil fixups and softmax_k with its dependent
+;;     predicated consumer in the next Simple slot.
+;; Every other mod1 (SET_VD and stack-mutating forms) keeps its own
+;; pattern; the stack-mutate mods stay unemitted (sim fail-closed).
+(define_insn "rvtt_sfp<rvtt_gtle_name>_cc"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:XTT32SI 0 "register_operand"  "xr")
+     (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
+     ] rvtt_gtle_op)]
+  "TARGET_XTT_TENSIX_BH"
+  "SFP<rvtt_gtle_insn>\t%x0, %x1, 0, 1"
+  [(set_attr "type" "tensix")
+   (set_attr "xtt_replay" "safe")
+   (set_attr "xtt_subunit" "simple")
+   (set_attr "xtt_lreg_read_ops" "4")
+   (set_attr "xtt_lreg_write_ops" "1")
+   (set_attr "xtt_cc_effect" "readwrite")
+   (set_attr "xtt_config_effect" "none")
+   (set_attr "xtt_rwc_effect" "none")])
+
 (define_expand "rvtt_sfpmul24"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [
@@ -4392,9 +4427,42 @@
           (match_operand:SI    3 "const_int_operand" "n,n")
 	  ] UNSPECV_SFPARECIP))]
   "TARGET_XTT_TENSIX_BH"
-  "@
-   SFPARECIP\t%x0, %x2, %3
-   SFPARECIP\t%x0, %x2, %3\t# LV:%x1"
+{
+  /* SFPARECIP_MOD1_COND_RECIP reads the condition sign from LReg[VB]
+     (ISA: BlackholeA0 SFPARECIP.md functional model), and VB rides the
+     imm12 field's low nibble -- which the gas mnemonic FORCES to zero
+     (binutils riscv-opc-sfpu-insns.h: match mask 0xfff000).  The sfpi
+     surface's single-source approx_recip(src, RecipMode::IfNegative)
+     contract is "reciprocal where src is negative", i.e. VB == VC, so
+     the mnemonic cannot express it; emit the architecturally-encoded
+     raw word instead (TT_OP encoding: op 0x99, imm12<<12 | VC<<8 |
+     VD<<4 | Mod1, VB == imm12 low nibble).  Mod1 RECIP and EXP ignore
+     VB (functional model reads only LReg[VC]) and keep the mnemonic
+     byte-identically.  */
+  if (INTVAL (operands[3]) == (int) SFPARECIP_MOD1_COND_RECIP)
+    {
+      unsigned vd = REGNO (operands[0]) - SFPU_REG_FIRST;
+      unsigned vc;
+      if (REG_P (operands[2]))
+	vc = REGNO (operands[2]) - SFPU_REG_FIRST;
+      else
+	{
+	  gcc_assert (GET_CODE (operands[2]) == UNSPEC
+		      && XINT (operands[2], 1) == UNSPEC_SFPCSTLREG);
+	  vc = (unsigned) INTVAL (XVECEXP (operands[2], 0, 0));
+	}
+      unsigned word = (0x99u << 24) | (vc << 12) | (vc << 8) | (vd << 4)
+		      | SFPARECIP_MOD1_COND_RECIP;
+      static char buf[96];
+      snprintf (buf, sizeof (buf),
+		".ttinsn\t%u\t# SFPARECIP\tL%u, L%u, %u (VB=L%u)%s",
+		word, vd, vc, (unsigned) SFPARECIP_MOD1_COND_RECIP, vc,
+		which_alternative == 1 ? " LV" : "");
+      return buf;
+    }
+  return which_alternative == 0 ? "SFPARECIP\t%x0, %x2, %3"
+				: "SFPARECIP\t%x0, %x2, %3\t# LV:%x1";
+}
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")])
 
