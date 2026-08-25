@@ -58,13 +58,23 @@ already measured:
 | versus hand | +5.11% LOSS | -4.65% WIN | LOSS to WIN |
 
 The existing lane-GJ evidence records one changed corpus translation unit,
-paired CRAQ and device correctness passes, three-repetition silicon, and a
-5,905-PASS DejaGnu campaign.  Those facts make the optimization a strong
-candidate; they do not substitute for an ON-set promotion ceremony.
+paired CRAQ and device correctness passes, and three-repetition silicon.  Its
+corpus and silicon legs used the pre-install hybrid cc1plus `2e32e5c08211`, so
+they are strong prior evidence but cannot be relabelled as the canonical
+ceremony.  Separately, canonical pin 28 has a complete 5,905-PASS DejaGnu
+record with the reviewed frozen failure set.  These facts make the
+optimization a strong candidate; they do not substitute for an ON-set
+promotion ceremony.
 
 Required gate, in order:
 
-1. Add a stride-specific R9 union fire witness.
+1. Add the stride-specific R9 union fire witness, already verified directly
+   on canonical pin 28:
+
+   ```text
+   -mtt-tensix-optimize-window-pairing-stride|perf_eltwise_binary_sfpu.py::test_perf_fresh_cpp_mul_int[formats:Int32->Int32-mathop:SfpuMulInt32-fresh_cpp_impl:2]|-fdump-rtl-rvtt_macro_planner|Macro-planner window-pairing: interrow-drain 2 -> 1 rows=[0-9]+ bound=window-pairing-lreg-overlap
+   ```
+
 2. Compile the strict full corpus at installed pin 28 under ON-28 and
    ON-28+stride; require exactly one changed TU and byte identity everywhere
    else.
@@ -74,8 +84,10 @@ Required gate, in order:
    anchor; require the booked LOSS-to-WIN transition and no regression.
 5. Run the complete SFPI-populated DejaGnu universe and require universe
    equality plus the frozen failure set.
-6. Obtain independent adjudication and make the ON-28 to ON-29 change in a
-   separate configuration commit.  Only then install or label a new pin.
+6. Obtain explicit owner acceptance and independent adjudication, then make
+   the ON-28 to ON-29 change in a separate configuration commit.  This is an
+   ON-set ceremony on the existing pin-28 compiler; it does not create or
+   install a new compiler pin.
 
 Primary evidence:
 
