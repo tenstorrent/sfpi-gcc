@@ -934,6 +934,16 @@
 ;;   Log1p (4,31) n=8        3936     3100    3100   1* 1x2977=2977 <3936  4*(3936-3100)-3936 =  -592  refuse (unchanged)
 ;;   unarymaxmin (4,4) n=8    615      400     400   8  8x 277=2216 >=615  4*(   0     )- 615 =  -615  refuse (NEW)
 ;;
+;; A drain-inclusive caller can request the stricter completion contract with
+;; -mtt-tensix-replay-hoist-completion-guard.  For execution-bound re-record
+;; loops only, it does not assume that the hoisted preheader record delivery
+;; hides behind the loop's execution backlog: `record' is charged as
+;; DELIVER_RECORD + RECORD_OVERHEAD instead of RECORD_OVERHEAD.  Counted-loop
+;; and delivery-bound re-record pricing already charges the complete record
+;; and is unchanged.  This is deliberately opt-in: it is a conservative
+;; completion-scope guard, not a replacement for the silicon-calibrated body
+;; throughput model, and contains no operation or kernel identity test.
+;;
 ;;   (* Log/Log1p at their measurement flags: the Dst auto-increment
 ;;   pass is disabled there, so their typed increment separators
 ;;   survive and run = 1; they refuse on the delivery benefit exactly

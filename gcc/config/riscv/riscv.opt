@@ -673,6 +673,10 @@ mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
 Hoist fixed-encoding Tensix replay capture out of profitable loops.
 
+mtt-tensix-replay-hoist-completion-guard
+Target Var(riscv_tt_replay_hoist_completion_guard) Init(0)
+Require replay-hoist profitability to charge the complete hoisted record delivery on execution-bound re-record loops, conservatively modeling a drain-inclusive completion scope where preheader delivery cannot be hidden by the loop's execution backlog (effective only with -mtt-tensix-optimize-replay-hoist).
+
 mtt-tensix-optimize-replay-record-hoist
 Target Var(riscv_tt_opt_replay_record_hoist) Init(0)
 Hoist the record phase of a proven iteration-invariant re-recorded Tensix replay capture window to the loop's dedicated preheader, leaving one playback launch per former record site.  Measurement class (DX-F3): admission keeps every structural, invariance, slot-liveness, and audited-latency proof (refusing by name), while profitability prices the removed per-trip record delivery as real issue cost where the default saturation-calibrated model refuses; the Log-class silicon anchors price the opposite verdict for this shape family, so promotion requires its own silicon A/B (default off).
