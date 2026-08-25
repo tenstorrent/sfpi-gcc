@@ -963,12 +963,14 @@
 ;; completion-scope guard, not a replacement for the silicon-calibrated body
 ;; throughput model, and contains no operation or kernel identity test.
 ;; Both replay-hoist entry modes honor that contract.  The dedicated
-;; -mtt-tensix-optimize-replay-record-hoist issue-side model already sets
-;; RECORD_ONCE = DELIVER_RECORD + RECORD_OVERHEAD, so enabling the guard with
-;; record-hoist alone changes no arithmetic (and must not add DELIVER_RECORD a
-;; second time); its details dump explicitly witnesses that the complete
-;; delivery was charged.  Thus the option can be used consistently by either
-;; mechanism while leaving the record-hoist silicon A/B model intact.
+;; -mtt-tensix-optimize-replay-record-hoist issue-side model normally cancels
+;; payload execution between the two worlds.  Under the completion guard it
+;; instead retains the audited interlocked-execution term and enters this
+;; shared binding-resource model: delivery-bound records charge the complete
+;; record exactly once, while execution-bound records additionally lose the
+;; body-throughput model's hidden-delivery credit.  An unaudited payload
+;; refuses by replay-reissue-latency-unproved because its binding resource is
+;; not known.  No delivery word is double charged.
 ;;
 ;;   (* Log/Log1p at their measurement flags: the Dst auto-increment
 ;;   pass is disabled there, so their typed increment separators
