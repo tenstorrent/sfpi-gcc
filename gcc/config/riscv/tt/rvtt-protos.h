@@ -365,6 +365,12 @@ constexpr unsigned SFPGTLE_MOD1_OR_TOS = 0;
 constexpr unsigned SFPGTLE_MOD1_AND_TOS = 4;
 constexpr unsigned SFPGTLE_MOD1_SET_DEST = 8;
 
+// SFPARECIP (BH) Mod1 values, transcribed from the ISA functional model
+// (tt-isa-documentation BlackholeA0 SFPARECIP.md supporting definitions).
+constexpr unsigned SFPARECIP_MOD1_RECIP = 0;
+constexpr unsigned SFPARECIP_MOD1_COND_RECIP = 1;
+constexpr unsigned SFPARECIP_MOD1_EXP = 2;
+
 constexpr unsigned int CREG_IDX_0P837300003 = 8;
 constexpr unsigned int CREG_IDX_0 = 9;
 constexpr unsigned int CREG_IDX_1 = 10;
