@@ -112,10 +112,23 @@ unconditional promotion.
 
 The restored installed pin has passed configuration lint, fail-closed harness
 self-tests, and all 12 R9 union witnesses.  The reconciled compiler source has
-passed an incremental build plus focused restored-family and completion-guard
-tests.  A full compiler gate may be called green only when it uses the complete
-SFPI test universe and reproduces the reviewed frozen failure set; file count,
-PASS/FAIL/XFAIL totals, and the failure-set hash must all be recorded.
+passed an incremental build, 929 restored-family checks, and 114 completion-
+guard/downstream checks.
+
+A fresh build configured with the canonical target assembler and linker paths
+then ran the complete SFPI-populated universe.  It accounted for 1,162 test
+files plus the ten intentionally excluded oracle inputs and reported **5,999
+PASS / 16 FAIL / 2 XFAIL**.  The 16-line unexpected-failure set is byte-equal
+to pin 28, with SHA-256
+`4764064c2c6cfb54a3b68f85550c879ca8e58d15580c1dc5fa0ce915a4bb59f7`.
+Evidence is archived in
+`/home/ttuser/sfpi-uplift/gcc-reconcile-evidence-20260825/canonical-config`.
+
+An earlier 5,993/22 run used a stale build directory configured without the
+target assembler/linker paths.  That disabled ZAAMO feature detection and left
+the build-tree assembler wrapper empty, mechanically causing the five ZAAMO
+scan failures and one assemble-only failure.  The canonical-config rerun
+removes all six; they were not source regressions.
 
 No result in this document authorizes a symlink repoint, pin number, or ON-set
 change by itself.
