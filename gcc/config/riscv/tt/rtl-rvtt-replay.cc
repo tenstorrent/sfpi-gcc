@@ -1696,9 +1696,149 @@ loop_preserves_replay_p (class loop *loop)
   return true;
 }
 
+/* Lane GQ: exec-while-record first-trip peel
+   (-mtt-tensix-optimize-record-hoist-peel, composing on
+   -mtt-tensix-optimize-replay-record-hoist).
+
+   The no-exec composition mirror below (lane FJ/FW) refuses every
+   Dst-store re-record hoist whose preheader sits inside an outer loop:
+   a STILL-NO-EXEC Dst-store capture re-ingested per outer trip with
+   launches of its span in between is the silicon-refuted wedge (ES 2x2
+   / FE-F1 / FJ HANG-3), and the end-of-pass sweep would un-hoist it
+   into a strict pessimization.  The refusal is exact for the no-exec
+   shape -- but the SAME payload hoisted as an EXEC-WHILE-RECORD pass is
+   the fleet-witnessed composition (minmax, sdpa, where, typecast, lcm
+   ON-set; the dst-autoincr group guard's refuted class is keyed to
+   TTREPLAY load=1 exec=0, rtl-rvtt-dst-autoincr.cc
+   noexec_record_composition_p): today's in-body formation already
+   re-records this very payload once per trip, exec-while-record, with
+   sibling launches between re-ingestions.
+
+   The peel therefore moves the loop's ENTIRE proven first trip to the
+   dedicated preheader instead of a bare record: the capture records
+   WHILE EXECUTING (exactly the words trip 1 executed in the loop), its
+   sibling launches follow verbatim, every former in-body record site
+   becomes one playback launch, and the proven-constant counter is
+   re-initialized one step later so the loop runs trips-1 times.  The
+   executed word stream is a pure peel -- no word is added, removed, or
+   reordered relative to today's bytes except the removed per-trip
+   record deliveries the record-hoist pricing already models -- so the
+   re-ingestion cadence (one exec-record per outer-loop entry, launches
+   between) stays inside the witnessed class.
+
+   Admission (all named, fail-closed; anything unproven keeps the
+   original composition refusal and today's bytes):
+     record-hoist-peel-qsr-exec-record-unavailable  cannot exec while
+                                        capturing on Quasar
+     record-hoist-peel-multibb-loop     peel needs full body coverage
+     record-hoist-peel-trips-unproven   constant trips >= 2 (a
+                                        single-bb loop is do-while: with
+                                        one proven trip the peeled loop
+                                        would still execute once more)
+     record-hoist-peel-body-foreign-insn a body insn outside the clone
+                                        spans, counter step, and final
+                                        jump (peel must cover the trip)
+     record-hoist-peel-counter-rewrite-unproven  counter re-init not a
+                                        provable single-insn constant
+   The FZ downstream-fallback oracle is skipped for an admitted peel:
+   it mirrors the dst-autoincr group guard's NO-EXEC-record clause, and
+   an exec-while-record capture is outside that refuted composition by
+   the guard's own keying (the group guard itself still audits the
+   final placement at its own pass time).  The end-of-pass sweep sees
+   the peeled capture through formed_noexec_captures and skips it as
+   the exec-converted witnessed class.  */
+
+struct peel_plan
+{
+  bool valid = false;
+  rtx counter = nullptr;
+  uint64_t new_init = 0;
+  machine_mode mode = VOIDmode;
+  uint64_t trips = 0;
+};
+
+static bool
+peel_admissible_p (class loop *loop, basic_block preheader,
+		   replay_block const &block, replay_sequence const &seq,
+		   peel_plan *plan)
+{
+  auto refuse = [] (const char *why, int uid) -> bool
+    {
+      if (dump_file)
+	{
+	  fprintf (dump_file, "record-hoist refused: record-hoist-peel-%s",
+		   why);
+	  if (uid >= 0)
+	    fprintf (dump_file, ": body insn %d", uid);
+	  fprintf (dump_file, "\n");
+	}
+      return false;
+    };
+
+  if (riscv_tt_fix_qsr_replay > 0)
+    return refuse ("qsr-exec-record-unavailable", -1);
+  if (loop->num_nodes != 1)
+    return refuse ("multibb-loop", -1);
+
+  uint64_t trips;
+  rtx_insn *step_insn = nullptr;
+  if (!provable_constant_trips (loop, preheader, &trips, &step_insn)
+      || trips < 2)
+    return refuse ("trips-unproven", -1);
+
+  rtx step_set = single_set (step_insn);
+  rtx counter = SET_DEST (step_set);
+  uint64_t step = UINTVAL (XEXP (SET_SRC (step_set), 1));
+  scalar_int_mode mode = as_a<scalar_int_mode> (GET_MODE (counter));
+  unsigned prec = GET_MODE_PRECISION (mode);
+  uint64_t mask = prec == 64 ? ~uint64_t (0) : (uint64_t (1) << prec) - 1;
+  uint64_t init;
+  if (!constant_reaching_value (preheader, counter, &init))
+    return refuse ("counter-rewrite-unproven", -1);
+  uint64_t new_init = (init + step) & mask;
+  rtx new_init_rtx = gen_int_mode (new_init, mode);
+  /* Post-reload only single-insn constants may be materialized.  */
+  if (!SMALL_OPERAND (INTVAL (new_init_rtx))
+      && !LUI_OPERAND (INTVAL (new_init_rtx)))
+    return refuse ("counter-rewrite-unproven", -1);
+
+  /* Full body coverage: every non-debug insn of the single-block body
+     is a clone-span member, a typed fixed-encoding TTINCRWC (the
+     per-trip Dst step the counted-loop and launch-unroll admissions
+     already type; the peel copies it verbatim in trip order), the
+     counter step, or the final jump.  A word outside these classes
+     would be silently dropped from the peeled first trip: refuse.  */
+  hash_set<rtx_insn *> covered;
+  for (auto const &clone : seq.clones)
+    for (auto pos = block.data () + clone.begin,
+	  end = block.data () + clone.end; pos != end; ++pos)
+      covered.add (pos->insn);
+  rtx_insn *jump = BB_END (loop->header);
+  rtx_insn *insn;
+  FOR_BB_INSNS (loop->header, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (insn == step_insn || insn == jump || covered.contains (insn))
+	continue;
+      if (GET_CODE (insn) == INSN
+	  && recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc
+	  && fixed_replay_rtx_p (PATTERN (insn)))
+	continue;
+      return refuse ("body-foreign-insn", INSN_UID (insn));
+    }
+
+  plan->valid = true;
+  plan->counter = counter;
+  plan->new_init = new_init;
+  plan->mode = mode;
+  plan->trips = trips;
+  return true;
+}
+
 static basic_block
 hoist_preheader (replay_sequence const &seq, replay_block const &block,
-		 bitmap dirty_bbs)
+		 bitmap dirty_bbs, peel_plan *peel)
 {
   basic_block bb = BLOCK_FOR_INSN (block[seq.clones.front ().begin].insn);
   class loop *loop = bb->loop_father;
@@ -1874,6 +2014,25 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		  || recog_memoized (pos->insn)
 		     == CODE_FOR_rvtt_sfpstoresrcs_int))
 	    {
+	      /* Lane GQ: the exec-while-record first-trip peel rescues
+		 this exact refusal class (see the block comment above
+		 peel_admissible_p); an admitted peel never leaves a
+		 no-exec Dst-store capture behind, so the composition
+		 this mirror refuses is never formed.  */
+	      if (riscv_tt_opt_record_hoist_peel > 0
+		  && peel_admissible_p (loop, preheader, block, seq, peel))
+		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "record-hoist-peel: dststore composition"
+			     " rescued by exec-while-record first-trip peel"
+			     " (preheader bb %d inside loop %d; trips %lu"
+			     " -> %lu)\n",
+			     preheader->index, ph_loop->num,
+			     (unsigned long) peel->trips,
+			     (unsigned long) (peel->trips - 1));
+		  break;
+		}
 	      if (dump_file)
 		fprintf (dump_file,
 			 "record-hoist refused:"
@@ -1906,7 +2065,13 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
      admitted hoist leaves behind can flip the guard.  Gated on the
      dst-autoincr pass actually running: with it disabled both worlds
      keep the explicit increments and the premise holds.  */
-  if (record_hoist && TARGET_XTT_TENSIX && riscv_tt_opt_dst_autoincr > 0)
+  /* Lane GQ: an admitted peel hoists an EXEC-WHILE-RECORD pass; the
+     oracle below mirrors the dst-autoincr group guard's NO-EXEC-record
+     clause (its refuted composition is keyed to TTREPLAY load=1 exec=0),
+     so the peel is outside the mirrored class by the guard's own keying
+     -- the guard itself still audits the final placement.  */
+  if (record_hoist && !peel->valid
+      && TARGET_XTT_TENSIX && riscv_tt_opt_dst_autoincr > 0)
     {
       unsigned dist = 0;
       if (rvtt_dst_autoincr_hoist_capture_composition_p (preheader, &dist))
@@ -2000,6 +2165,153 @@ replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
 	     "Hoisted no-exec capture [%u,+%u) to preheader bb %d; %u playbacks\n\n",
 	     replay_start, length, preheader->index,
 	     unsigned (seq.clones.size ()));
+  return length;
+}
+
+/* Lane GQ: commit an admitted exec-while-record first-trip peel (see
+   the block comment above peel_admissible_p).  The preheader receives,
+   in trip order: the counter re-init (scalar, commutes with every
+   Tensix word), the exec-while-record capture, the payload (executing
+   exactly as trip 1 executed it), and the first trip's sibling
+   launches.  Every in-body clone -- including the former record site --
+   becomes one playback launch.  */
+
+static unsigned
+replace_hoisted_sequence_peel (replay_sequence &seq, replay_block &block,
+			       unsigned replay_start, basic_block preheader,
+			       peel_plan const &plan)
+{
+  unsigned length = seq.length;
+  basic_block body_bb = BLOCK_FOR_INSN (block[seq.clones.front ().begin].insn);
+  rtx_insn *body_jump = BB_END (body_bb);
+
+  /* Classify body insns for the verbatim in-order trip walk: which
+     clone (if any) each member belongs to, and each clone's first
+     member.  */
+  hash_map<rtx_insn *, unsigned> member_clone;
+  hash_set<rtx_insn *> clone_first;
+  for (unsigned ix = 0; ix != seq.clones.size (); ++ix)
+    {
+      auto const &clone = seq.clones[ix];
+      clone_first.add (block[clone.begin].insn);
+      for (auto pos = block.data () + clone.begin,
+	    end = block.data () + clone.end; pos != end; ++pos)
+	member_clone.put (pos->insn, ix);
+    }
+
+  auto gen_launch = [&] () -> rtx
+    {
+      return gen_rvtt_ttreplay_int
+	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+	 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (replay_start),
+	 const0_rtx, const0_rtx);
+    };
+
+  start_sequence ();
+  emit_insn (gen_rtx_SET (plan.counter,
+			  gen_int_mode (plan.new_init, plan.mode)));
+  unsigned peeled_launches = 0, peeled_steps = 0;
+  {
+    rtx_insn *insn;
+    FOR_BB_INSNS (body_bb, insn)
+      {
+	if (!NONDEBUG_INSN_P (insn) || insn == body_jump)
+	  continue;
+	if (unsigned *cl = member_clone.get (insn))
+	  {
+	    if (*cl == 0)
+	      {
+		if (clone_first.contains (insn))
+		  emit_insn (gen_rvtt_ttreplay_int
+			     (const0_rtx, const0_rtx, const0_rtx,
+			      GEN_INT (length),
+			      rvtt_gen_rtx_noval (XTT32SImode),
+			      GEN_INT (replay_start),
+			      GEN_INT (1), GEN_INT (1)));
+		/* Copy the member itself (mirror the hoist path: only
+		   non-empty members deliver a word).  */
+		for (auto pos = block.data () + seq.clones.front ().begin,
+		      end = block.data () + seq.clones.front ().end;
+		     pos != end; ++pos)
+		  if (pos->insn == insn)
+		    {
+		      if (!pos->empty)
+			emit_insn (copy_insn (PATTERN (insn)));
+		      break;
+		    }
+	      }
+	    else if (clone_first.contains (insn))
+	      {
+		emit_insn (gen_launch ());
+		++peeled_launches;
+	      }
+	    continue;
+	  }
+	if (GET_CODE (insn) == INSN
+	    && recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc)
+	  {
+	    emit_insn (copy_insn (PATTERN (insn)));
+	    ++peeled_steps;
+	    continue;
+	  }
+	/* The counter step: handled by the re-init.  */
+      }
+  }
+  rtx_insn *recording = get_insns ();
+  end_sequence ();
+
+  rtx_insn *anchor = BB_END (preheader);
+  if (JUMP_P (anchor))
+    emit_insn_before (recording, anchor);
+  else
+    emit_insn_after (recording, anchor);
+
+  /* Register the capture for the end-of-pass sweep (it skips the
+     exec-converted witnessed class by the exec operand) and the peeled
+     launches for the loop replay-preservation audit.  */
+  bool saw_capture = false;
+  for (rtx_insn *insn = recording; insn; insn = NEXT_INSN (insn))
+    {
+      if (NONDEBUG_INSN_P (insn) && GET_CODE (insn) == INSN
+	  && recog_memoized (insn) == CODE_FOR_rvtt_ttreplay_int)
+	{
+	  if (!saw_capture)
+	    {
+	      formed_noexec_captures.push_back (insn);
+	      saw_capture = true;
+	    }
+	  else
+	    formed_playback_launches.push_back (insn);
+	}
+      if (insn == BB_END (preheader))
+	break;
+    }
+
+  for (auto const &clone : seq.clones)
+    {
+      rtx replay = gen_rvtt_ttreplay_int
+	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
+	 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (replay_start),
+	 const0_rtx, const0_rtx);
+      rtx_insn *launch
+	= emit_insn_after (replay, block[clone.end - 1].insn);
+      formed_playback_launches.push_back (launch);
+      for (auto pos = block.data () + clone.begin,
+	    end = block.data () + clone.end; pos != end; ++pos)
+	SET_INSN_DELETED (pos->insn);
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "record-hoist-peel: exec-recorded [%u,+%u) in preheader bb %d"
+	     " with %u peeled sibling launches + %u peeled Dst steps;"
+	     " %u body clones -> launches; trips %lu -> %lu;"
+	     " counter reinit " HOST_WIDE_INT_PRINT_DEC "\n\n",
+	     replay_start, length, preheader->index,
+	     peeled_launches, peeled_steps,
+	     unsigned (seq.clones.size ()),
+	     (unsigned long) plan.trips, (unsigned long) (plan.trips - 1),
+	     (HOST_WIDE_INT) plan.new_init);
   return length;
 }
 
@@ -6030,12 +6342,17 @@ transform (function *cfn, unsigned buffer_size)
 	     its own (its pricing branch owns the re-record class); with
 	     only the plain hoist flag the attempt behaves exactly as
 	     before.  */
+	  peel_plan peel;
 	  basic_block preheader
 	    = (riscv_tt_opt_replay_hoist > 0
 	       || riscv_tt_opt_replay_record_hoist > 0)
-	    ? hoist_preheader (*seq, info, dirty_bbs) : nullptr;
+	    ? hoist_preheader (*seq, info, dirty_bbs, &peel) : nullptr;
 	  unsigned len = preheader
-	    ? replace_hoisted_sequence (*seq, info, slot->begin, preheader)
+	    ? (peel.valid
+	       ? replace_hoisted_sequence_peel (*seq, info, slot->begin,
+						preheader, peel)
+	       : replace_hoisted_sequence (*seq, info, slot->begin,
+					   preheader))
 	    : replace_sequence (*seq, info, slot->begin);
 	  if (preheader)
 	    std::fill (persistent_slots.begin () + slot->begin,
