@@ -1,13 +1,14 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosscall-hoist -fdump-tree-rvtt_crosscall" }
-// Multi-entry adversary: `_start' is not proof that it is the image's
-// only externally callable definition.  The public alternate entry has
-// no in-TU caller and performs a parameter-relative volatile store that
-// may alias the MOP template.  The census must root it from linkage,
-// poison the template audit, and refuse rather than treating the body
-// as an orphan merely because `_start' exists.
-// { dg-final { scan-tree-dump-not "census skips unreachable body void cch_alternate_entry" "rvtt_crosscall" } }
-// { dg-final { scan-tree-dump "refused .crosscall-caller-mop-slot-unproven." "rvtt_crosscall" } }
-// { dg-final { scan-tree-dump-not "hoisted" "rvtt_crosscall" } }
+// Anchor discriminator (the production trisc shape): the TU carries
+// its own `_start', so the reset vector is the image's ONLY external
+// entry.  An orphaned PUBLIC body nothing live calls (the out-of-line
+// copy left behind by inlining) is dead, not a hidden entry: the
+// census must keep skipping it -- its unresolvable parameter-relative
+// volatile store must NOT poison the audit -- and the hoist under the
+// off-contract template slot still fires.
+// { dg-final { scan-tree-dump "census skips unreachable body void cch_orphan_copy" "rvtt_crosscall" } }
+// { dg-final { scan-tree-dump "TU template audit: proven loadi-dests=0x8" "rvtt_crosscall" } }
+// { dg-final { scan-tree-dump "hoisted 6 contract materializations from .* into 1 caller" "rvtt_crosscall" } }
 
 #define CCH_TMPL ccha_tmpl
 #define CCH_CALLEE ccha_callee
@@ -33,6 +34,6 @@
 #define CCH_VAL_B2 0x3f2e147b
 #define CCH_SLOT_WORD 0x71312345
 #define CCH_ENTRY_DEF \
-  void cch_alternate_entry (unsigned *p) { ((volatile unsigned *) p)[0] = 1u; } \
+  void cch_orphan_copy (unsigned *p) { ((volatile unsigned *) p)[0] = 1u; } \
   extern "C" void _start () { ccha_tmpl (4, 2); ccha_caller (4); }
 #include "crosscall-hoist-census-body.h"

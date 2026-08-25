@@ -8,10 +8,6 @@
    INIT_LOOP_TAIL() lets near-misses interpose a loop follower.  */
 
 #define MINMAX_FOUR_FACE_RUNS 1
-#ifndef INIT_CALLEE_LINKAGE
-#define INIT_CALLEE_LINKAGE static
-#endif
-#define MINMAX_INPLACE_LINKAGE INIT_CALLEE_LINKAGE
 #include "loadmacro-periodic-minmax-inplace-body.h"
 
 #ifndef INIT_CALLER_PRELUDE

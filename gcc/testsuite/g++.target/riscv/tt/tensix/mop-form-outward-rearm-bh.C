@@ -1,7 +1,7 @@
 // Outward ownership discharges: formation proceeds (under force; the
 // rows are execution-bound) exactly when the caller side is proven
 // safe.
-// - the internal rearming_kernel driver re-programs every MOP config word between the call
+// - rearming_kernel re-programs every MOP config word between the call
 //   and its next type-1 launch (the production per-epoch
 //   ckernel_template::program protocol, the correctness-harness
 //   shape): every caller root re-arms, the callee forms;
@@ -33,7 +33,7 @@ formed_callee ()
   __builtin_rvtt_ttreplay (nullptr, 3, 0, 0, 0, 0, 0);
 }
 
-__attribute__ ((used, noinline, noclone)) static void
+void
 rearming_kernel (unsigned n)
 {
   volatile unsigned *mop_cfg = (volatile unsigned *) 0xFFB80000;

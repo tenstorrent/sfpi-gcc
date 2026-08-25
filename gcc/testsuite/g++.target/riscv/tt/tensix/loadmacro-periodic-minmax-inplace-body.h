@@ -10,9 +10,6 @@
 #ifndef RESULT_INDEX
 #define RESULT_INDEX 0
 #endif
-#ifndef MINMAX_INPLACE_LINKAGE
-#define MINMAX_INPLACE_LINKAGE
-#endif
 
 #if __riscv_xtttensixwh
 constexpr unsigned minmax_no_increment = 3;
@@ -58,7 +55,7 @@ constexpr unsigned minmax_no_increment = 7;
 #define MINMAX_FACE_ADVANCE() __builtin_rvtt_ttdstface ()
 #endif
 
-__attribute__((noinline)) MINMAX_INPLACE_LINKAGE void periodic_minmax_inplace ()
+__attribute__((noinline)) void periodic_minmax_inplace ()
 {
 #ifdef MINMAX_FOUR_FACE_RUNS
   /* The production shape: four eight-row face runs (rows=32 runs=4)
