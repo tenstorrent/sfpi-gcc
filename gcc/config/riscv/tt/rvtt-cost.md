@@ -1720,10 +1720,16 @@
 ;; class -- its body words are RISC-pushed instead of replayed -- so the
 ;; model charges, in the same centislot units:
 ;;
-;;   save  = SLOT * candidate_words        per iteration after the first
-;;   cost  = PUSH * (candidate_words + n_SFPCONFIG)          ; programming
+;;   save  = SLOT * sum(materialization_words - readback_words)
+;;                                             per iteration after the first
+;;   cost  = PUSH * (materialization_words + n_SFPCONFIG)    ; programming
 ;;         + (PUSH - SLOT) * body_words                      ; peel class
 ;;                                                           ; change
+;; A resident value whose consumers cannot absorb a cstlreg operand needs
+;; one SFPMOV read-back word in every remaining iteration, exactly as in the
+;; ordinary LOOP model above; only its net W-R issue reduction is recurring
+;; benefit.  Programming still stages all W materialization words.
+;;
 ;;   fire  when (trips - 1) * save >= cost, with trips proven by bounded
 ;;   forward evaluation of the loop's own scalar control (never profile
 ;;   data); the refusal is peel-trip-count-unproven.
