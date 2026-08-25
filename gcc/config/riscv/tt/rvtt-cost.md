@@ -954,14 +954,15 @@
 ;;   unarymaxmin (4,4) n=8    615      400     400   8  8x 277=2216 >=615  4*(   0     )- 615 =  -615  refuse (NEW)
 ;;
 ;; A drain-inclusive caller can request the stricter completion contract with
-;; -mtt-tensix-replay-hoist-completion-guard.  For execution-bound re-record
-;; loops only, it does not assume that the hoisted preheader record delivery
-;; hides behind the loop's execution backlog: `record' is charged as
-;; DELIVER_RECORD + RECORD_OVERHEAD instead of RECORD_OVERHEAD.  Counted-loop
-;; and delivery-bound re-record pricing already charges the complete record
-;; and is unchanged.  This is deliberately opt-in: it is a conservative
-;; completion-scope guard, not a replacement for the silicon-calibrated body
-;; throughput model, and contains no operation or kernel identity test.
+;; -mtt-tensix-replay-hoist-completion-guard.  In the ordinary replay-hoist
+;; model, it changes execution-bound re-record loops only: it does not assume
+;; that the hoisted preheader record delivery hides behind the loop's execution
+;; backlog, so `record' is charged as DELIVER_RECORD + RECORD_OVERHEAD instead
+;; of RECORD_OVERHEAD.  The counted-loop and delivery-bound branches of that
+;; model already charge the complete record and are unchanged.  This is
+;; deliberately opt-in: it is a conservative completion-scope guard, not a
+;; replacement for the silicon-calibrated body throughput model, and contains
+;; no operation or kernel identity test.
 ;; Both replay-hoist entry modes honor that contract.  The dedicated
 ;; -mtt-tensix-optimize-replay-record-hoist issue-side model normally cancels
 ;; payload execution between the two worlds.  Under the completion guard it
