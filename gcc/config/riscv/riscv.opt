@@ -638,6 +638,10 @@ mtt-tensix-optimize-const-remat
 Target Var(riscv_tt_opt_const_remat) Init(0)
 Rematerialize proven loadi-materialized SFPU values at their uses when vector register pressure exceeds the LREG file
 
+mtt-tensix-optimize-pressure-park
+Target Var(riscv_tt_opt_pressure_park) Init(0)
+Widen the CC-canonical residency peel class to invariant constant materializations positioned at or after the body's first CC writer -- admitted only when every consumer is in the audited lane-predicated set, so the all-lanes constant-register read refines exactly the lanes the original fresh predicated load left indeterminate -- and, when the programmable constant registers are exhausted, hoist remaining admitted materializations to the same proven programming point as plain LREG live ranges while the function-wide SSA pressure model stays within the 8-LREG file; every unproven piece refuses by name and keeps the established placement byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes.
+
 mtt-tensix-optimize-lreg-alloc
 Target Var(riscv_tt_opt_lreg_alloc) Init(0)
 When SFPU vector pressure exceeds the 8-register LREG file, DSATUR-color the interference graph before IRA and spill selected vector webs through proven-free 32-bit Dst scratch rows (SFPSTORE/SFPLOAD round trip) until the graph is 8-colorable; assignment stays with IRA, every unproven ingredient refuses by name, and the lreg-pressure-exceeded error is kept byte-identically on refusal
