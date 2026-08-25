@@ -274,11 +274,14 @@ is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
    prgm-const residency discipline (gimple-rvtt-prgm-const.cc
    constant_chain_value_p): the 32-bit sfpxloadi forms carry the
    pattern verbatim, the shortened SFPLOADI FLOATB form is imm16 << 16,
-   and a read of a hardwired constant register carries that register's
-   architectural value (LReg.md: LReg[9] is read-only all-lanes zero,
-   LReg[10] is read-only all-lanes 1.0; the craq-sim SFPADD/SFPMUL
-   executors enforce the same two constants).  Every other form
-   refuses: its value is not on record here.  */
+   the shortened SFPLOADI FLOATA form is the architectural fp16
+   exponent-rebias (SFPLOADI.md; craq-sim TENSIX_EXECUTE_SFPLOADI
+   case 1, verbatim: (s << 16) | ((em + (112 << 10)) << 13) -- no
+   special cases), and a read of a hardwired constant register carries
+   that register's architectural value (LReg.md: LReg[9] is read-only
+   all-lanes zero, LReg[10] is read-only all-lanes 1.0; the craq-sim
+   SFPADD/SFPMUL executors enforce the same two constants).  Every
+   other form refuses: its value is not on record here.  */
 
 static bool
 const_leaf_value_p (gimple *def, uint32_t *bits)
@@ -318,11 +321,22 @@ const_leaf_value_p (gimple *def, uint32_t *bits)
       *bits = (uint32_t) TREE_INT_CST_LOW (imm);
       return true;
     }
-  /* Shortened SFPLOADI: FLOATB only.  */
-  if (!integer_zerop (mod))
-    return false;
-  *bits = ((uint32_t) TREE_INT_CST_LOW (imm) & 0xffff) << 16;
-  return true;
+  /* Shortened SFPLOADI: FLOATB and FLOATA.  */
+  HOST_WIDE_INT m0 = tree_to_shwi (mod);
+  uint32_t imm16 = (uint32_t) TREE_INT_CST_LOW (imm) & 0xffff;
+  if (m0 == SFPLOADI_MOD0_FLOATB)
+    {
+      *bits = imm16 << 16;
+      return true;
+    }
+  if (m0 == SFPLOADI_MOD0_FLOATA)
+    {
+      uint32_t s = imm16 & 0x8000;
+      uint32_t em = imm16 & 0x7fff;
+      *bits = (s << 16) | ((em + (112u << 10)) << 13);
+      return true;
+    }
+  return false;
 }
 
 /* Match VAL as leaf IX of G: an affine function of MAG (mul+add or a
@@ -1171,12 +1185,15 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
     }
   /* Under a packed mode the original coefficient materializations are
      dead once their leaves are gone (unless something else still uses
-     them, in which case they stay).  */
+     them, in which case they stay).  A null lhs means the recursive
+     single-use cleanup in the leaf deletions above already stripped
+     the definition's result: the load is equally dead.  */
   for (gimple *def : dead_coeff_defs)
     {
+      if (!gimple_bb (def))
+	continue;
       tree lhs = gimple_call_lhs (def);
-      if (lhs && TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)
-	  && gimple_bb (def))
+      if (!lhs || (TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)))
 	remove (def);
     }
   /* The magnitude may now be dead (the LUT recomputes |x|
