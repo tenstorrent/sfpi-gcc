@@ -1091,11 +1091,13 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
    word 0x910000F1 never touches LReg[11..14]).  Two admitted classes:
    - an in-loop invariant constant materialization (the loads the
      invariant pass left in a loop by LREG pressure) is programmed once
-     on the loop entry edge.  Its exact recurring issue saving is the
-     materialization width W minus the resident read-back width R; ordinary
-     LOOP candidates prove a strict-positive W/R trip threshold and refuse
-     unknown runtime bounds, while the CC-canonical peel class also prices
-     its one-time body delivery-class change (rvtt-cost.md);
+     on the loop entry edge and every use reads the constant register:
+     saves two pushed SFPLOADI words per iteration for a one-time
+     three-word programming cost (rvtt-cost.md delivery model: a
+     RISC-pushed word ~ 1.23 replayed slots), so it pays for itself at
+     two trips; a loop PROVEN single-trip refuses (a proven loss), and
+     a runtime trip count is admitted (correctness is trip-independent;
+     worst case one extra pushed word on a single-trip entry);
    - under LREG pressure (peak > SFPU_REG_NUM), an out-of-loop
      proven-constant value is reprogrammed in place: the programming
      writes replace the materialization and every use reads the
@@ -2254,8 +2256,8 @@ first_iteration_value (class loop *loop, edge entry, tree op)
    loop is on:
 
    TRIPS_AT_LEAST_2 -- the exit test provably stays in the loop after
-   the first trip.  This clears the coarse single-trip refusal; ordinary
-   LOOP and peel candidates still prove their exact W/R thresholds below.
+   the first trip: the two-trip break-even is proven and the programming
+   strictly pays.
    TRIPS_PROVEN_SINGLE -- the exit test provably leaves the loop after
    the first trip: the one-time programming can never recover its cost;
    the candidate refuses by name (a proven loss).  Defensive: this
@@ -2362,9 +2364,8 @@ count_nondebug_uses (tree name)
    re-delivers one body as RISC-pushed words (a delivery-class change
    worth (PUSH - SLOT) per word against the replayed loop it came from)
    and the programming costs PUSH per staged word and per SFPCONFIG;
-   the loop saves each candidate's materialization words minus its resident
-   read-back words every remaining iteration.  The required trip count is
-   proven by bounded forward
+   the loop saves the candidates' materialization words every remaining
+   iteration.  The required trip count is proven by bounded forward
    evaluation of the rotated loop's own scalar control -- never assumed
    from profile data.  */
 
