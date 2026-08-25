@@ -2,7 +2,7 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Varied-architecture counterpart to the Blackhole call-boundary refusal:
 // seven rows, stride four, a different Dst address, and Wormhole modifier
-// encodings.  The verdict depends only on caller/configuration economics.
+// encodings.  The verdict depends only on target configuration economics.
 // { dg-final { scan-rtl-dump "Dst-autoincr refusal: unprofitable group .config 8 >= removed 7" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "Dst-autoincr group:" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-times "TTINCRWC\t0, 4, 0, 0" 7 } }
