@@ -1413,6 +1413,24 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
     {
       before = exec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
       record = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      /* The body-throughput calibration above permits the hoisted record's
+	 delivery to hide behind the loop's execution backlog.  A caller that
+	 scores completion through a final Tensix drain cannot in general take
+	 credit for that overlap: the record must be complete before its first
+	 playback, and any remaining execution is charged at the drain.  Keep
+	 the established body model as the default, but offer a conservative,
+	 shape-generic completion guard which charges the full record delivery.
+	 It keys only on the already-proven binding resource; no opcode, kernel,
+	 payload length, or trip-count special case participates.  */
+      if (riscv_tt_replay_hoist_completion_guard > 0)
+	{
+	  record += deliver_record;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Replay completion guard: execution-bound re-record"
+		     " charges hoisted delivery %ld (record cost %ld)\n",
+		     (long) deliver_record, (long) record);
+	}
     }
   else
     {
