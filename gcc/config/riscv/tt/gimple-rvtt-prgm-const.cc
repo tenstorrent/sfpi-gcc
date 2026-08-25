@@ -2717,9 +2717,9 @@ residency_transform (function *fn, prgm_state *st)
       /* Correctness is trip-independent, but profitability is not.  This
 	 early classification rejects a proven single trip and feeds MAD-PAIR's
 	 separate W2 policy.  Ordinary LOOP candidates below additionally prove
-	 their exact ceil((W+1)/(W-R)) break-even; runtime/unknown trip counts
-	 therefore refuse rather than being admitted here.  The CC-canonical
-	 peel class prices its peel separately.  */
+	 the strict-positive floor((W+1)/(W-R))+1 threshold; runtime/unknown trip
+	 counts therefore refuse rather than being admitted here.  The
+	 CC-canonical peel class prices its peel separately.  */
       bool admits_runtime_trips = false;
       if (!peel)
 	switch (classify_second_trip (loop, entry))
