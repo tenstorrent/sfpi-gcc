@@ -1322,6 +1322,16 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	 margin and noted in rvtt-cost.md.  */
       HOST_WIDE_INT record_once
 	= deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      /* Record-hoist's issue-side model has always charged the complete
+	 preheader record delivery.  The completion guard therefore needs no
+	 numerical adjustment here: adding deliver_record again would charge the
+	 same words twice.  Emit an explicit witness when the shared contract is
+	 requested so record-hoist-only users can verify which pricing applies.  */
+      if (riscv_tt_replay_hoist_completion_guard > 0 && dump_file)
+	fprintf (dump_file,
+		 "Replay completion guard: record-hoist pricing already charges"
+		 " complete hoisted delivery %ld (record cost %ld)\n",
+		 (long) deliver_record, (long) record_once);
       HOST_WIDE_INT per_trip
 	= deliver_body - XTT_REPLAY_COST_TURNAROUND_X100;
       if (runtime_trips)
