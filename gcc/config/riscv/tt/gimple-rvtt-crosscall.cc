@@ -135,12 +135,10 @@ along with GCC; see the file COPYING3.  If not see
 
    [TU, consulted only when a MOP word is delivered in a scanned range]
    - the census walks every body in the TU's EXECUTABLE CLOSURE,
-     rooted at everything the link image can enter from outside the
-     TU under the link model (AXIOM extern-fixed-surface): the entry
-     anchor -- `_start' when the TU carries it, else `main' (the crt0
-     entry; the wave-8 production shape this census used to unroot),
-     else every externally-visible non-comdat definition (firmware ->
-     run_kernel) -- plus asm/vector-callable forced definitions,
+     rooted conservatively at everything the link image can enter from
+     outside the TU: every public definition (including `_start',
+     `main', alternate firmware entries, and COMDAT definitions), plus
+     asm/vector-callable forced definitions,
      static constructors/destructors, address-taken definitions, and
      every function a variable initializer references; membership
      propagates through call edges and references.  A TU with defined
@@ -177,6 +175,9 @@ along with GCC; see the file COPYING3.  If not see
      crosscall-callee-vector-outside-loop vector statement in the
 					liveness-extension tail
      crosscall-callee-pressure		eight-LREG file exceeded
+     crosscall-callee-external-entry	callee is directly enterable from
+					outside the TU, so cgraph callers are
+					not a complete call-site census
      crosscall-caller-body-unavailable	caller not analyzable (no gimple
 					body, address-taken, alias/clone,
 					recursion)
@@ -1445,24 +1446,14 @@ census_asm (gasm *stmt, hash_set<cgraph_node *> *executable)
 
 /* The executable closure of the TU under AXIOM kernel-single-TU (the
    whole thread program is this TU plus crt0/firmware): roots are
-   everything the link image can enter from OUTSIDE the TU.  The link
-   model (AXIOM extern-fixed-surface) makes that set precise:
-
-   - a TU that carries its own `_start' is entered ONLY at `_start'
-     (the reset vector; no external component exists that could call
-     anything else) -- the raw-word census's startup axiom.  A public
-     body no live code calls is then an orphaned out-of-line copy of
-     an inlined function, not a hidden entry (the production trisc
-     shape leaves exactly such orphans);
-   - a TU with `main' but no `_start' is entered only at `main' (the
-     external crt0 calls exactly `main' -- the wave-8 production
-     shape this census used to unroot);
-   - a TU with neither anchor can be entered at any externally-visible
-     non-comdat definition (firmware -> run_kernel; pre-built external
-     components can call the public surface but cannot name this TU's
-     comdat instantiations, which exist only where instantiated);
-   - attribute/ABI-forced and interrupt definitions can additionally
-     be entered from assembly or vectors in every model.
+   everything the link image can enter from OUTSIDE the TU.  Derive
+   that surface conservatively from linkage rather than guessing a
+   unique entry by symbol name: every public definition is a root,
+   including COMDAT definitions, `_start', `main', and any alternate
+   firmware/API entry in the same image.  A link may retain and call a
+   public body even when this TU has no call edge to it; the presence
+   of `_start' or `main' does not prove otherwise.  Attribute/ABI-
+   forced and interrupt definitions are roots as well.
 
    Roots further include static constructors and destructors, address-
    taken definitions, and every function a variable initializer
@@ -1489,42 +1480,22 @@ compute_executable_closure (hash_set<cgraph_node *> *executable,
 	if (!executable->add (cn))
 	  work.safe_push (cn);
     };
-  /* The link model's entry anchor: `_start' when the TU carries it,
-     else `main' (the crt0 entry).  */
-  cgraph_node *anchor_start = nullptr, *anchor_main = nullptr;
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
       if (!node->definition)
 	continue;
-      const char *name = DECL_ASSEMBLER_NAME (node->decl)
-	? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node->decl)) : nullptr;
-      if (name && !strcmp (name, "_start"))
-	anchor_start = node;
-      else if (DECL_NAME (node->decl) && MAIN_NAME_P (DECL_NAME (node->decl))
-	       && TREE_PUBLIC (node->decl))
-	anchor_main = node;
-    }
-  cgraph_node *anchor = anchor_start ? anchor_start : anchor_main;
-  FOR_EACH_FUNCTION (node)
-    {
-      if (!node->definition)
-	continue;
-      bool externally_visible
-	= TREE_PUBLIC (node->decl) && !DECL_COMDAT (node->decl);
+      /* TREE_PUBLIC is deliberately the conservative predicate here.
+	 A late visibility pass may know that a particular prevailing
+	 definition can be localized, but this safety census must not infer
+	 a closed entry surface merely from the absence of in-TU callers.
+	 In particular, COMDAT definitions remain externally nameable in
+	 ordinary non-whole-program links.  */
+      bool externally_visible = TREE_PUBLIC (node->decl);
       bool forced = DECL_PRESERVE_P (node->decl)
 	|| node->force_output || node->forced_by_abi
 	|| lookup_attribute ("interrupt", DECL_ATTRIBUTES (node->decl));
-      /* The external entries under the link model: the anchor when one
-	 pins the surface (with an in-TU `_start' the reset vector is
-	 the image's ONLY external entry, so a public body no live code
-	 calls is an orphaned out-of-line copy, not a hidden entry --
-	 the production trisc shape leaves exactly such orphans after
-	 inlining); every externally-visible non-comdat definition when
-	 no anchor does; asm-callable forced definitions always.  */
-      bool entry = node == anchor
-	|| (!anchor && externally_visible)
-	|| forced;
+      bool entry = externally_visible || forced;
       if (entry
 	  || DECL_STATIC_CONSTRUCTOR (node->decl)
 	  || DECL_STATIC_DESTRUCTOR (node->decl)
@@ -1599,10 +1570,9 @@ compute_tu_facts ()
       /* A body outside the executable closure cannot run: under AXIOM
 	 kernel-single-TU (rtl-rvtt-mop-form.cc) the whole thread
 	 program is this TU plus crt0/firmware, whose only entries into
-	 the TU are the closure roots above.  (The production shape:
-	 the retained comdat ckernel_template member bodies whose every
-	 call was inlined -- their `this'-relative slot stores are dead
-	 code that would otherwise refuse the audit unresolvably.)  */
+	 the TU are the closure roots above.  Only internal bodies with no
+	 rooted call/reference path can be skipped; public definitions are
+	 roots regardless of whether all their in-TU calls were inlined.  */
       if (!executable->contains (node))
 	{
 	  if (dump_file)
@@ -2646,6 +2616,13 @@ transform (function *fn)
       || cn->clones || !cn->callers)
     return refuse ("crosscall-caller-body-unavailable", fn->decl, nullptr);
 
+  /* Removing the materializations from FN is valid only when every
+     executable call site is represented by CN->callers.  A direct
+     closure root can also be called from outside the TU; in-TU edges
+     are therefore incomplete even when the address is not taken.  */
+  if (tu_facts.entry_roots && tu_facts.entry_roots->contains (cn))
+    return refuse ("crosscall-callee-external-entry", fn->decl, nullptr);
+
   /* One call site per caller (v1); collect and prove each caller.  */
   auto_vec<caller_plan> plans;
   for (cgraph_edge *e = cn->callers; e; e = e->next_caller)
@@ -2793,7 +2770,7 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
   compute_tu_facts ();
 
   /* The verdict below leans on the TU census (a MOP word defers to the
-     template audit; the extern-fixed-surface axiom covers only rooted
+     template audit; the linkage-derived surface covers only rooted
      bodies, and the census SKIPS bodies outside the rooted closure
      entirely).  The function being edited must itself be a closure
      member -- an unrooted body (a naked-asm-entry TU, an unrooted
@@ -3685,6 +3662,12 @@ rvtt_crosscall_init_hoist (function *callee_fn,
      census by the established discipline (their delivered words were
      scanned when they were the contract subject).  */
   compute_tu_facts ();
+
+  /* As above, the planner must not remove per-call initialization
+     from an externally enterable callee based only on its in-TU call
+     edges.  */
+  if (tu_facts.entry_roots && tu_facts.entry_roots->contains (cn))
+    return closure_why ("callee-external-entry");
 
   /* The commit target must be a body the census vouched for (the
      coefficient hoist's crosscall-caller-unrooted discipline).  */

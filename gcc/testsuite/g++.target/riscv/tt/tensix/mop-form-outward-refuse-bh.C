@@ -11,7 +11,7 @@
 // - transitive: the same hazard one call level up;
 // - partial re-arm: the caller rewrites only the A0 word between the
 //   call and its launch -- not the full clobbered set.
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fwhole-program -fkeep-static-functions -fno-unroll-loops -mtt-tensix-optimize-mop-form -mtt-tensix-mop-form-force -fdump-rtl-rvtt_mop_form-details" }
 // { dg-final { scan-rtl-dump-times "MOP-form refused \\(mop-caller-template-live-unproven\\)" 3 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-times "is reachable after a call to this function without a full template re-arm" 3 "rvtt_mop_form" } }
 // { dg-final { scan-rtl-dump-not "MOP formed" "rvtt_mop_form" } }

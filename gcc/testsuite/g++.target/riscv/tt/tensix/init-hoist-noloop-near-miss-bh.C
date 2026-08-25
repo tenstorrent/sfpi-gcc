@@ -1,7 +1,7 @@
-// Near miss (loop): the single call site sits in straight-line code --
-// nothing to amortize against, refused by name.
+// The public callee can also be called from outside this TU, so its
+// visible straight-line caller is not a complete call-site census.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
-// { dg-final { scan-rtl-dump "Macro-planner init-hoist-refusal: drain-init-loop-unproven" "rvtt_macro_planner" } }
+// { dg-final { scan-rtl-dump "init-hoist: closure \\(callee-external-entry\\)" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "init contract hoisted" "rvtt_macro_planner" } }
 
 #define MINMAX_FOUR_FACE_RUNS 1

@@ -31,8 +31,11 @@
 #ifndef CCH_LUT_MOD
 #define CCH_LUT_MOD 4		/* FP32 3-entry, SGN_RETAIN */
 #endif
+#ifndef CCH_CALLEE_LINKAGE
+#define CCH_CALLEE_LINKAGE static
+#endif
 
-__attribute__((noinline)) void
+__attribute__((noinline)) CCH_CALLEE_LINKAGE void
 CCH_CALLEE ()
 {
   auto CCH_A0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A0, 0, 0, -32);
