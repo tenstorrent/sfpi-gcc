@@ -1430,8 +1430,17 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	 scores completion through a final Tensix drain cannot in general take
 	 credit for that overlap: the record must be complete before its first
 	 playback, and any remaining execution is charged at the drain.  Keep
-	 the established body model as the default, but offer a conservative,
-	 shape-generic completion guard which charges the full record delivery.
+	 the established body model as the default, but offer a completion-
+	 accurate, shape-generic guard which charges the full record delivery.
+	 The guarded record-hoist path uses the shared binding-resource model.
+	 For every legal replay payload (at least four delivered words), its
+	 execution-bound benefit is strictly no greater than the delivery-only
+	 measurement benefit: their difference per trip is
+	 RECORD_OVERHEAD_X100 - RISC_PUSH_X100 * words (currently at most
+	 -192 centislots).  Thus the guard is a monotone
+	 restriction over the admitted candidate domain, but that ordering is a
+	 consequence of the cost constants and MIN_SEQUENCE, not its semantic
+	 definition.
 	 It keys only on the already-proven binding resource; no opcode, kernel,
 	 payload length, or trip-count special case participates.  */
       if (riscv_tt_replay_hoist_completion_guard > 0)
@@ -1484,6 +1493,25 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	     (long) deliver_body, (long) deliver_record, (long) record,
 	     (long) before, (long) after, (long) benefit,
 	     (long) min_benefit);
+
+  /* The ordinary record-hoist measurement model has a separately audited
+     runtime-trip policy because its pure-delivery delta is monotone and its
+     two-trip break-even bounds the single-trip exposure.  The completion
+     guard deliberately routes through the shared binding-resource model
+     instead.  With no proven trip count, pricing TRIPS as zero above is only
+     a diagnostic witness; it is not an amortization proof.  Preserve the
+     existing refusal, but name its actual cause rather than reporting a
+     synthetic zero-trip profitability loss.  */
+  if (runtime_trips && record_completion_model)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Not hoisting: record-hoist-completion-runtime-trips-unproven:"
+		 " completion-accurate shared model requires a proven trip count"
+		 " (loop %d)\n",
+		 loop->num);
+      return false;
+    }
 
   if (benefit < min_benefit)
     {
