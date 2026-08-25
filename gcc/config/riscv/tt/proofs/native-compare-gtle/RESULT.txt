@@ -1,0 +1,40 @@
+sweep_native_gtle.c — native-compare lowering equivalence, GT and LE
+float compare-against-+0.0 arms, exhaustive over 2^32 lane encodings each.
+
+Oracle provenance: craq-sim pinned @ 9f324140
+  SFPSETCC  src/tensix.cpp:8969-9000 (mod4 sign-clear, mod2 bits!=0,
+            sequential AND under the running enable mask)
+  SFPCOMPC  fenced complement (stack top == entry enables)
+  SFPGT     src/tensix.cpp:10236-10261 (mod1==1 SET_CC arm)
+  SFPLE     src/tensix.cpp:10210-10235 (mod1==1 SET_CC arm)
+  sign_mag32_total_order src/tensix.cpp:3816-3822
+ISA provenance: tt-isa-documentation BlackholeA0 SFPGT.md / SFPLE.md
+  (SignMagIsSmaller total order -NaN < -Inf < .. < -0 < +0 < .. < +NaN;
+  SET_CC written under LaneEnabled, exactly like SETCC).
+Compiler-side lowering provenance: rvtt_emit_sfpxfcmps /
+  rvtt_emit_sfpxfcmpv (GT/LE arms), gcc/config/riscv/tt/rvtt.cc.
+
+Run (laneGW, 2026-08-25, cc -O2 -fopenmp, host x86-64):
+
+GT (x>0)   mismatches=0  web-stream=5779f68ae3934a24  native-stream=5779f68ae3934a24  EQUAL
+LE (x<=0)  mismatches=0  web-stream=419f8f71c1934a24  native-stream=419f8f71c1934a24  EQUAL
+RESULT: EQUAL over 2^32 x 2 directions
+
+Stream commitments are position-salted FNV-1a 64 over (x, predicate)
+pairs (per-chunk streams folded in fixed chunk order); equality per
+direction plus mismatches=0 is the licensing condition.
+
+Covered classes: all normals, denormals, +-0 (web NE0 sees -0 =
+0x80000000 as nonzero but the mod4 sign test already excludes it — the
+total order agrees), +-Inf, +-NaN (the qNaN-admitting web shape is
+REPRODUCED exactly by the total order against +0: +NaN > +0 holds in
+both spellings; this cut preserves, not fixes, the established compare
+contract).
+
+LICENSES: the -mtt-tensix-optimize-native-compare GT/LE arms of
+rvtt_emit_sfpxfcmps and rvtt_emit_sfpxfcmpv (compare-vs-zero shape:
+both functions reduce every boundary/vector compare to a MAD-subtract
+followed by a compare of the difference against +0.0, so this proof
+covers every emitted spelling).  The LT/GE/EQ/NE directions and every
+non-REG operand keep the established lowering (out of scope, unchanged).
+Retire the flag's arms if this RESULT ever stops being EQUAL.

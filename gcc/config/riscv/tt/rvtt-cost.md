@@ -165,6 +165,28 @@
 ;;                                             interlock scheduler
 ;;                                             refuses any
 ;;                                             next-slot-stall insn).
+;;   compare set-cc (sfpgt/sfple,
+;;     BH mod1 == 1 arm,
+;;     rvtt_sfpgt_cc/rvtt_sfple_cc)      -     [ISA] SFPGT.md/SFPLE.md:
+;;                                             SET_CC writes only
+;;                                             LaneFlags under
+;;                                             LaneEnabled -- no LREG
+;;                                             result, so no result
+;;                                             latency entry; ordering
+;;                                             is carried by the
+;;                                             "readwrite" CC effect
+;;                                             (the SFPSETCC
+;;                                             convention); [SIM]
+;;                                             TENSIX_EXECUTE_SFPGT/LE
+;;                                             mod1==1 arm lane-writes
+;;                                             only the cc mask; [HAND]
+;;                                             rounding_ops floor/ceil
+;;                                             fixups + softmax_k issue
+;;                                             SFPGT mod1==1 with the
+;;                                             dependent predicated
+;;                                             consumer in the next
+;;                                             Simple slot.
+;;
 ;;   compare set-dest (sfpgt/sfple,
 ;;     BH mod1 == 8 arm only)            0     [ISA] SFPGT.md/SFPLE.md
 ;;                                             carry no next-cycle
