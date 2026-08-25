@@ -107,22 +107,46 @@ along with GCC; see the file COPYING3.  If not see
      value cannot be derived from the audited materialization forms
      refuse lut-leaf-not-affine as before.
 
-   - Below-arity partitions.  A two-range tree (one predicated region)
-     whose single boundary equals one of the mode's architectural
-     boundaries forms by DUPLICATING a leaf across the two adjacent
-     slots that share it -- two slots holding identical coefficients
-     evaluate the identical fma, so the per-slot leaf certifications
-     carry the whole argument.  The duplicated leaf must be admissible
-     for EACH slot it covers (in particular its tail copy is still
-     subject to the tail rules above).  Any other boundary refuses
-     lut-boundary-mismatch; arities above the mode's stay
-     lut-partition-arity-unsupported.
+   - Below-arity partitions.  A tree with fewer leaves than a mode's
+     arity, every one of whose boundaries equals one of the mode's
+     architectural boundaries, forms by DUPLICATING each leaf across
+     the consecutive slots it spans -- slots holding identical
+     coefficients evaluate the identical fma, so the per-slot leaf
+     certifications carry the whole argument.  The duplicated leaf
+     must be admissible for EACH slot it covers (in particular its
+     tail copy is still subject to the tail rules above).  Any other
+     boundary refuses lut-boundary-mismatch; arities above every
+     mode's stay lut-partition-arity-unsupported.
 
    - Coefficient encoding.  The FP32 3-entry table holds any FP32
-     coefficient verbatim; a future mode with a narrower coefficient
-     encoding must prove each compile-time coefficient re-encodes
-     exactly or refuse lut-coeff-encoding-unrepresentable (the check
-     is wired fail-closed; no current table row can trip it).  */
+     coefficient verbatim; the FP16 modes below have a narrower
+     coefficient encoding and prove each compile-time coefficient
+     re-encodes exactly or refuse lut-coeff-encoding-unrepresentable.
+
+   Fourth increment (-mtt-tensix-optimize-lut-select-fp16,
+   default-off):
+
+   - The FP16-coefficient six-entry SFPLUTFP32 table modes
+     (TABLE1/TABLE2).  A six-range magnitude dispatch tree over the
+     architectural 0.5/1.0/1.5/2.0/{3.0,4.0} boundaries (or a
+     below-arity tree on a boundary subset, under the leaf extension)
+     forms one SFPLUTFP32 whose six coefficient LRegs each pack two
+     LUT16-encoded coefficients.  Because the packed halves must be
+     assembled at compile time, EVERY slot coefficient must be a
+     compile-time-provable constant (the same audited materialization
+     forms the constant-leaf derivation uses); an unprovable
+     coefficient refuses lut-coeff-value-unproven, and a value that
+     does not re-encode exactly in the LUT16 format refuses
+     lut-coeff-encoding-unrepresentable.  The formed instruction then
+     evaluates bit-for-bit the same fma the source leaf's MAD
+     computed, so the whole equivalence argument reduces to the
+     six-way bucket-agreement certification recorded in
+     rvtt-lut-tables.cc (Blackhole: all 2^32 inputs, both tables;
+     Wormhole: behind the -ffinite-math-only guard shared with the
+     base increment).  The original per-leaf coefficient
+     materializations die with the tree; the packed words are
+     synthesized as ordinary invariant immediates and participate in
+     the shared preheader placement.  */
 
 #include "config.h"
 #include "system.h"
@@ -147,6 +171,9 @@ along with GCC; see the file COPYING3.  If not see
 
 namespace {
 
+/* Architectural ceiling over every table row's arity.  */
+#define RVTT_LUT_MAX_RANGES 6
+
 /* Leaf classes the matcher recognizes.  AFFINE is the base class; the
    others exist only under the leaf-extension flag and admit only
    against the certification table.  */
@@ -161,26 +188,27 @@ enum lut_leaf_kind
 /* Everything discovered about one candidate dispatch-tree group.  */
 struct lut_group
 {
-  /* Structural statements, in program order.  */
-  gimple *pushc[2];
-  gimple *xvif[2];
-  gimple *fcmp[2];
-  gimple *condb[2];
-  gimple *assign[2];
-  gimple *compc;
-  gimple *popc[2];
+  /* Structural statements, in program order.  Index = predicated
+     region.  */
+  gimple *pushc[RVTT_LUT_MAX_RANGES - 1];
+  gimple *xvif[RVTT_LUT_MAX_RANGES - 1];
+  gimple *fcmp[RVTT_LUT_MAX_RANGES - 1];
+  gimple *condb[RVTT_LUT_MAX_RANGES - 1];
+  gimple *assign[RVTT_LUT_MAX_RANGES - 1];
+  gimple *compc[RVTT_LUT_MAX_RANGES - 2];
+  gimple *popc[RVTT_LUT_MAX_RANGES - 1];
 
-  /* Number of predicated regions matched: 2 for the full three-range
-     tree, 1 for a two-range tree (leaf-extension only).  */
+  /* Number of predicated regions matched (1 to RVTT_LUT_MAX_RANGES-1;
+     below full arity only under the leaf extension / fp16 gates).  */
   unsigned num_pred;
 
   /* Leaf computations.  Index 0..num_pred-1 = predicated leaves,
      num_pred = default leaf.  An affine leaf is either mul+add or a
      single mad (mul null); mul-only and constant leaves per KIND.  */
-  gimple *leaf_mul[3];
-  gimple *leaf_add[3];
-  lut_leaf_kind leaf_kind[3];
-  uint32_t leaf_const_bits[3];
+  gimple *leaf_mul[RVTT_LUT_MAX_RANGES];
+  gimple *leaf_add[RVTT_LUT_MAX_RANGES];
+  lut_leaf_kind leaf_kind[RVTT_LUT_MAX_RANGES];
+  uint32_t leaf_const_bits[RVTT_LUT_MAX_RANGES];
 
   /* The magnitude, its defining abs, and the abs input.  */
   tree mag;
@@ -189,11 +217,11 @@ struct lut_group
 
   /* Coefficients, indexed like the leaves.  NULL_TREE = synthesize
      the certified +0.0 for that slot position.  */
-  tree a_coeff[3];
-  tree b_coeff[3];
+  tree a_coeff[RVTT_LUT_MAX_RANGES];
+  tree b_coeff[RVTT_LUT_MAX_RANGES];
 
   /* Boundary encodings found on the compares, in tree order.  */
-  uint32_t boundary_bits[2];
+  uint32_t boundary_bits[RVTT_LUT_MAX_RANGES - 1];
 
   /* Result SSA name (lhs of the final live-value assign).  */
   tree result;
@@ -241,9 +269,9 @@ is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
   return nullptr;
 }
 
-/* The 32-bit lane value of a provable constant-leaf definition, or
-   false.  The audited forms and their value reconstructions follow
-   the prgm-const residency discipline (gimple-rvtt-prgm-const.cc
+/* The 32-bit lane value of a provable constant definition, or false.
+   The audited forms and their value reconstructions follow the
+   prgm-const residency discipline (gimple-rvtt-prgm-const.cc
    constant_chain_value_p): the 32-bit sfpxloadi forms carry the
    pattern verbatim, the shortened SFPLOADI FLOATB form is imm16 << 16,
    and a read of a hardwired constant register carries that register's
@@ -460,6 +488,35 @@ synth_zero_coeff (tree vectype, gimple_stmt_iterator *gsi, location_t loc)
   return gimple_call_lhs (c);
 }
 
+/* Synthesize a packed 32-bit coefficient-word materialization (the
+   audited full sfpxloadi form, raw 32-bit lane pattern) before *GSI
+   and return its SSA value.  PTR is the instruction-buffer operand
+   lifted from the group's own compare (every sfpi-shaped call site
+   carries it as argument 0).  The synthesized load is an ordinary
+   invariant immediate for the shared preheader placement.  */
+
+static tree
+synth_packed_coeff (tree vectype, tree ptr, uint32_t word,
+		    gimple_stmt_iterator *gsi, location_t loc)
+{
+  const rvtt_insn_data *ld = rvtt_get_insn_data (rvtt_insn_data::sfpxloadi);
+  gcc_assert (ld->decl);
+  tree argts[5];
+  tree t = TYPE_ARG_TYPES (TREE_TYPE (ld->decl));
+  for (int i = 0; i < 5; i++, t = TREE_CHAIN (t))
+    argts[i] = TREE_VALUE (t);
+  gcall *c = gimple_build_call (ld->decl, 5,
+				ptr,
+				build_int_cst (argts[1], word),
+				build_int_cst (argts[2], 0),
+				build_int_cst (argts[3], 0),
+				build_int_cst (argts[4], -32));
+  gimple_call_set_lhs (c, make_ssa_name (vectype));
+  gimple_set_location (c, loc);
+  gsi_insert_before (gsi, c, GSI_SAME_STMT);
+  return gimple_call_lhs (c);
+}
+
 /* For a leaf duplicated across two slots, give the second slot its own
    coefficient materialization when the value's definition re-issues
    verbatim (an immediate load, or a read of a hardwired constant
@@ -499,6 +556,31 @@ dup_coeff_operand (tree val, gimple_stmt_iterator *gsi)
   return gimple_call_lhs (copy);
 }
 
+/* Map the group's leaves onto MODE's slots.  Every tree boundary must
+   equal one of the mode's architectural boundaries, in order; each
+   leaf then covers the consecutive slots between its enclosing
+   matched boundaries.  A one-to-one full-arity tree degenerates to
+   the identity map.  Returns false (no dump) when the boundaries do
+   not embed.  */
+
+static bool
+map_slots (const lut_group *g, const rvtt_lut_mode_desc *mode,
+	   unsigned *slot_map)
+{
+  unsigned ti = 0;
+  for (unsigned s = 0; s < mode->num_ranges; s++)
+    {
+      slot_map[s] = ti;
+      if (s + 1 < mode->num_ranges && ti < g->num_pred
+	  && g->boundary_bits[ti] == mode->boundary_bits[s])
+	ti++;
+    }
+  /* Every tree boundary must have been consumed by exactly one
+     architectural boundary.  (The boundaries arrive in program order;
+     an out-of-order or foreign boundary is simply never consumed.)  */
+  return ti == g->num_pred;
+}
+
 /* Collect the contiguous region starting at the sfppushc at *GSI up
    to the matching CC-stack balance point, classifying its statements
    into G.  Returns true when the full structural skeleton matched.
@@ -508,14 +590,27 @@ dup_coeff_operand (tree val, gimple_stmt_iterator *gsi)
 static bool
 match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 {
-  /* Structural cursor: which skeleton statement we expect next.  */
+  /* Structural cursor: which skeleton statement we expect next inside
+     the current predicated region.  */
   enum {
-    WANT_XVIF0, WANT_FCMP0, WANT_CONDB0, WANT_ASSIGN0,
-    WANT_COMPC, WANT_PUSHC1, WANT_XVIF1, WANT_FCMP1, WANT_CONDB1,
-    WANT_ASSIGN1, WANT_POPC0, WANT_POPC1, DONE
-  } want = WANT_XVIF0;
+    WANT_XVIF, WANT_FCMP, WANT_CONDB, WANT_ASSIGN,
+    WANT_NEXT,		/* after a region's assign: compc or popc */
+    WANT_PUSHC,		/* after a compc: the next region's pushc */
+    CLOSING		/* draining the popc chain */
+  } want = WANT_XVIF;
 
   *candidate = false;
+
+  /* Structural ceiling for this scan.  Regions beyond the second are
+     only ever formable through the fp16 six-entry modes, so without
+     that flag the scan keeps the historical two-region shape (and its
+     refusal points) exactly.  */
+  const unsigned max_pred
+    = riscv_tt_opt_lut_select_fp16 ? RVTT_LUT_MAX_RANGES - 1 : 2;
+  const unsigned budget = max_pred > 2 ? 160 : 64;
+
+  unsigned region = 0;		/* current predicated region */
+  unsigned closed = 0;		/* popcs consumed */
 
   gimple *stmt = gsi_stmt (gsi);
   gcall *pushc0 = is_rvtt_call (stmt, rvtt_insn_data::sfppushc);
@@ -530,7 +625,8 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 
   unsigned depth = 1;
   gsi_next (&gsi);
-  for (unsigned steps = 0; !gsi_end_p (gsi) && steps < 64; gsi_next (&gsi))
+  for (unsigned steps = 0; !gsi_end_p (gsi) && steps < budget;
+       gsi_next (&gsi))
     {
       stmt = gsi_stmt (gsi);
       /* Debug binds are not semantic statements and must not count
@@ -548,17 +644,18 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
       switch (insnd->id)
 	{
 	case rvtt_insn_data::sfpxvif:
-	  if (want == WANT_XVIF0)
-	    g->xvif[0] = stmt, want = WANT_FCMP0;
-	  else if (want == WANT_XVIF1)
-	    g->xvif[1] = stmt, want = WANT_FCMP1;
-	  else
+	  if (want != WANT_XVIF)
 	    return *candidate
 	      ? refuse ("lut-structure-mismatch", stmt) : false;
+	  g->xvif[region] = stmt;
+	  want = WANT_FCMP;
 	  continue;
 
 	case rvtt_insn_data::sfpxfcmps:
-	  if (want == WANT_FCMP0)
+	  if (want != WANT_FCMP)
+	    return *candidate
+	      ? refuse ("lut-structure-mismatch", stmt) : false;
+	  if (region == 0)
 	    {
 	      /* Candidate identification: a float compare whose vector
 		 operand is a float abs.  From here on refusals are
@@ -576,27 +673,16 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 		    }
 	      if (!*candidate)
 		return false;
-	      if (!match_lt_boundary (call, g->mag, &g->boundary_bits[0]))
-		return refuse ("lut-compare-kind-unsupported", stmt);
-	      g->fcmp[0] = stmt;
-	      want = WANT_CONDB0;
 	    }
-	  else if (want == WANT_FCMP1)
-	    {
-	      if (!match_lt_boundary (call, g->mag, &g->boundary_bits[1]))
-		return refuse ("lut-compare-kind-unsupported", stmt);
-	      g->fcmp[1] = stmt;
-	      want = WANT_CONDB1;
-	    }
-	  else
-	    return *candidate
-	      ? refuse ("lut-structure-mismatch", stmt) : false;
+	  if (!match_lt_boundary (call, g->mag, &g->boundary_bits[region]))
+	    return refuse ("lut-compare-kind-unsupported", stmt);
+	  g->fcmp[region] = stmt;
+	  want = WANT_CONDB;
 	  continue;
 
 	case rvtt_insn_data::sfpxcondb:
 	  {
-	    int ix = want == WANT_CONDB0 ? 0 : want == WANT_CONDB1 ? 1 : -1;
-	    if (ix < 0)
+	    if (want != WANT_CONDB)
 	      return *candidate
 		? refuse ("lut-structure-mismatch", stmt) : false;
 	    /* The condition tree must be exactly the compare, anchored
@@ -604,77 +690,68 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 	    tree c = gimple_call_arg (call, 0);
 	    tree t = gimple_call_arg (call, 1);
 	    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
-		|| SSA_NAME_DEF_STMT (c) != g->fcmp[ix]
-		|| SSA_NAME_DEF_STMT (t) != g->xvif[ix]
+		|| SSA_NAME_DEF_STMT (c) != g->fcmp[region]
+		|| SSA_NAME_DEF_STMT (t) != g->xvif[region]
 		|| !has_single_use (c) || !has_single_use (t))
 	      return refuse ("lut-structure-mismatch", stmt);
-	    g->condb[ix] = stmt;
-	    want = ix == 0 ? WANT_ASSIGN0 : WANT_ASSIGN1;
+	    g->condb[region] = stmt;
+	    want = WANT_ASSIGN;
 	  }
 	  continue;
 
 	case rvtt_insn_data::sfpassign_lv:
-	  {
-	    int ix = want == WANT_ASSIGN0 ? 0 : want == WANT_ASSIGN1 ? 1 : -1;
-	    if (ix < 0)
-	      return *candidate
-		? refuse ("lut-structure-mismatch", stmt) : false;
-	    g->assign[ix] = stmt;
-	    want = ix == 0 ? WANT_COMPC : WANT_POPC0;
-	  }
+	  if (want != WANT_ASSIGN)
+	    return *candidate
+	      ? refuse ("lut-structure-mismatch", stmt) : false;
+	  g->assign[region] = stmt;
+	  want = WANT_NEXT;
 	  continue;
 
 	case rvtt_insn_data::sfpcompc:
-	  if (want != WANT_COMPC)
-	    /* A further else-branch after the second range means the
-	       tree partitions more ranges than the capability table's
-	       arity.  */
+	  if (want != WANT_NEXT)
 	    return *candidate
-	      ? refuse (want == WANT_POPC0
-			? "lut-partition-arity-unsupported"
-			: "lut-structure-mismatch", stmt) : false;
-	  g->compc = stmt;
-	  want = WANT_PUSHC1;
+	      ? refuse ("lut-structure-mismatch", stmt) : false;
+	  if (region + 1 >= max_pred)
+	    /* A further else-branch means the tree partitions more
+	       ranges than any reachable capability arity.  */
+	    return *candidate
+	      ? refuse ("lut-partition-arity-unsupported", stmt) : false;
+	  g->compc[region] = stmt;
+	  want = WANT_PUSHC;
 	  continue;
 
 	case rvtt_insn_data::sfppushc:
-	  if (want != WANT_PUSHC1 || int_arg (call, 0) != 0)
+	  if (want != WANT_PUSHC || int_arg (call, 0) != 0)
 	    return *candidate
 	      ? refuse ("lut-partition-arity-unsupported", stmt) : false;
 	  depth++;
-	  g->pushc[1] = stmt;
-	  want = WANT_XVIF1;
+	  region++;
+	  g->pushc[region] = stmt;
+	  want = WANT_XVIF;
 	  continue;
 
 	case rvtt_insn_data::sfppopc:
 	  {
-	    /* Closing right after the first range's assign is a
-	       two-range partition: formable under the leaf extension
-	       by slot duplication, below the table's arity
-	       otherwise.  */
-	    if (want == WANT_COMPC && riscv_tt_opt_lut_select_leaf_ext
-		&& int_arg (call, 0) == 0)
-	      {
-		g->popc[0] = stmt;
-		depth--;
-		g->num_pred = 1;
-		gcc_assert (depth == 0);
-		goto region_closed;
-	      }
-	    int ix = want == WANT_POPC0 ? 0 : want == WANT_POPC1 ? 1 : -1;
-	    if (ix < 0 || int_arg (call, 0) != 0)
+	    if (int_arg (call, 0) != 0
+		|| (want != WANT_NEXT && want != CLOSING))
 	      return *candidate
-		? refuse (want == WANT_COMPC
-			  ? "lut-partition-arity-unsupported"
-			  : "lut-structure-mismatch", stmt) : false;
-	    g->popc[ix] = stmt;
+		? refuse ("lut-structure-mismatch", stmt) : false;
+	    if (want == WANT_NEXT)
+	      {
+		/* Region chain ends here: NUM_PRED = region count.
+		   Closing right after the FIRST region's assign is a
+		   below-arity partition, formable only under the leaf
+		   extension's slot duplication.  */
+		if (region == 0 && !riscv_tt_opt_lut_select_leaf_ext)
+		  return refuse ("lut-partition-arity-unsupported", stmt);
+		g->num_pred = region + 1;
+		want = CLOSING;
+	      }
+	    g->popc[closed++] = stmt;
 	    depth--;
-	    want = ix == 0 ? WANT_POPC1 : DONE;
-	    if (want == DONE)
+	    if (closed == g->num_pred)
 	      {
 		gcc_assert (depth == 0);
-		g->num_pred = 2;
-		/* Region closed: prove the leaves.  */
 		goto region_closed;
 	      }
 	  }
@@ -700,27 +777,24 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
   unsigned num_pred = g->num_pred;
   unsigned dflt = num_pred;
   tree old0 = gimple_call_arg (as_a <gcall *> (g->assign[0]), 0);
-  tree new0 = gimple_call_arg (as_a <gcall *> (g->assign[0]), 1);
-  tree new1 = NULL_TREE;
+  tree news[RVTT_LUT_MAX_RANGES - 1];
+  news[0] = gimple_call_arg (as_a <gcall *> (g->assign[0]), 1);
 
-  if (num_pred == 2)
+  for (unsigned r = 1; r < num_pred; r++)
     {
-      tree old1 = gimple_call_arg (as_a <gcall *> (g->assign[1]), 0);
-      new1 = gimple_call_arg (as_a <gcall *> (g->assign[1]), 1);
-      tree r1 = gimple_call_lhs (g->assign[0]);
-      if (old1 != r1 || !has_single_use (r1))
-	return refuse ("lut-structure-mismatch", g->assign[1]);
-      g->result = gimple_call_lhs (g->assign[1]);
+      tree oldr = gimple_call_arg (as_a <gcall *> (g->assign[r]), 0);
+      news[r] = gimple_call_arg (as_a <gcall *> (g->assign[r]), 1);
+      tree prev = gimple_call_lhs (g->assign[r - 1]);
+      if (oldr != prev || !has_single_use (prev))
+	return refuse ("lut-structure-mismatch", g->assign[r]);
     }
-  else
-    g->result = gimple_call_lhs (g->assign[0]);
+  g->result = gimple_call_lhs (g->assign[num_pred - 1]);
   if (!g->result)
     return refuse ("lut-structure-mismatch", g->assign[num_pred - 1]);
 
-  if (!match_leaf (g, 0, new0, g->mag))
-    return refuse ("lut-leaf-not-affine", g->assign[0]);
-  if (num_pred == 2 && !match_leaf (g, 1, new1, g->mag))
-    return refuse ("lut-leaf-not-affine", g->assign[1]);
+  for (unsigned r = 0; r < num_pred; r++)
+    if (!match_leaf (g, r, news[r], g->mag))
+      return refuse ("lut-leaf-not-affine", g->assign[r]);
   if (!match_leaf (g, dflt, old0, g->mag))
     return refuse ("lut-default-leaf-unproven", g->assign[0]);
 
@@ -728,8 +802,10 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
      default leaf only by the tree, so deleting the tree orphans
      nothing.  (A constant leaf's value additionally survives as a LUT
      operand after its assign is deleted.)  */
-  if (!has_single_use (new0) || (new1 && !has_single_use (new1))
-      || !has_single_use (old0))
+  for (unsigned r = 0; r < num_pred; r++)
+    if (!has_single_use (news[r]))
+      return refuse ("lut-leaf-value-escapes", g->assign[r]);
+  if (!has_single_use (old0))
     return refuse ("lut-leaf-value-escapes", g->assign[0]);
 
   /* The predicated leaves' computations must live inside the region
@@ -793,19 +869,17 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 	  sgn_use = sgn;
   }
 
-  /* Shape proven.  Now the capability check: these boundary encodings,
-     in ascending range order, with the required sign behavior, must
-     exist on this target.  A fold candidate without a sign-restore
-     capability falls back to the sign-update mode with the explicit
-     sign copy kept.  */
-  const rvtt_lut_mode_desc *mode = sgn_use ? rvtt_lut_lookup (3, true)
-    : nullptr;
-  if (!mode)
-    {
-      sgn_use = nullptr;
-      mode = rvtt_lut_lookup (3, false);
-    }
-  if (!mode)
+  /* Shape proven.  Now the capability check: a target mode must exist
+     whose boundary set embeds these boundary encodings in ascending
+     range order, with the required sign behavior and gates.  A fold
+     candidate without a sign-restore capability falls back to the
+     sign-update mode with the explicit sign copy kept.  Modes are
+     tried in table order (rvtt-lut-tables.cc preference order), so a
+     tree the FP32 3-entry table can host keeps forming exactly as it
+     did before the six-entry rows existed.  */
+  const rvtt_lut_mode_desc *table = nullptr;
+  unsigned n_modes = rvtt_lut_modes (&table);
+  if (!n_modes)
     return refuse ("lut-no-target-capability", g->pushc[0]);
 
   /* Wormhole fail-closed guard.  The exhaustive certification recorded
@@ -818,29 +892,51 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
      therefore diverges from the tree it replaces on exactly those
      inputs.  The function's own -ffinite-math-only license excludes
      precisely that divergence set; without it, refuse by name.
-     Blackhole's bucketing is certified and is untouched here.  */
+     Blackhole's bucketing is certified (both arities) and is untouched
+     here.  */
   if (TARGET_XTT_TENSIX_WH && !flag_finite_math_only)
     return refuse ("lut-wh-negative-nan-divergent", g->pushc[0]);
 
-  /* Map each hardware slot to a source leaf.  A full-arity tree maps
-     one-to-one after matching every boundary.  A two-range tree
-     (leaf-extension only) maps by duplicating the leaf that spans two
-     adjacent slots, keyed by which architectural boundary its single
-     compare carries.  */
-  unsigned slot_map[3];
-  if (num_pred == 2)
+  const rvtt_lut_mode_desc *mode = nullptr;
+  unsigned slot_map[RVTT_LUT_MAX_RANGES];
+  bool capability_seen = false;
+  bool below_arity_blocked = false;
+  for (int sgn_pass = sgn_use ? 1 : 0; sgn_pass >= 0 && !mode; sgn_pass--)
     {
-      for (unsigned i = 0; i < mode->num_ranges - 1; i++)
-	if (g->boundary_bits[i] != mode->boundary_bits[i])
-	  return refuse ("lut-boundary-mismatch", g->fcmp[i]);
-      slot_map[0] = 0, slot_map[1] = 1, slot_map[2] = 2;
+      bool want_sgn = sgn_pass == 1;
+      for (unsigned m = 0; m < n_modes; m++)
+	{
+	  const rvtt_lut_mode_desc *cand = &table[m];
+	  if (cand->sign_restore != want_sgn)
+	    continue;
+	  if (cand->gate && *cand->gate <= 0)
+	    continue;
+	  if (num_pred + 1 > cand->num_ranges)
+	    continue;
+	  if (num_pred + 1 < cand->num_ranges
+	      && !riscv_tt_opt_lut_select_leaf_ext)
+	    {
+	      /* Below this mode's arity: duplication is a leaf-ext
+		 capability.  */
+	      below_arity_blocked = true;
+	      continue;
+	    }
+	  capability_seen = true;
+	  if (!map_slots (g, cand, slot_map))
+	    continue;
+	  mode = cand;
+	  if (!want_sgn)
+	    sgn_use = nullptr;
+	  break;
+	}
     }
-  else if (g->boundary_bits[0] == mode->boundary_bits[0])
-    slot_map[0] = 0, slot_map[1] = 1, slot_map[2] = 1;
-  else if (g->boundary_bits[0] == mode->boundary_bits[1])
-    slot_map[0] = 0, slot_map[1] = 0, slot_map[2] = 1;
-  else
-    return refuse ("lut-boundary-mismatch", g->fcmp[0]);
+  if (!mode)
+    {
+      if (capability_seen)
+	return refuse ("lut-boundary-mismatch", g->fcmp[0]);
+      return refuse (below_arity_blocked ? "lut-partition-arity-unsupported"
+		     : "lut-no-target-capability", g->pushc[0]);
+    }
 
   /* Per-slot leaf admission against the certification table: each
      non-affine leaf class must be certified bit-exact for the slot's
@@ -868,11 +964,68 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 	    return refuse ("lut-leaf-bitexact-unproven", at);
 	  break;
 	}
+    }
+
+  /* Coefficient encoding admission.  The FP32 3-entry table holds any
+     FP32 value verbatim; the LUT16-packed modes must derive every
+     slot coefficient's compile-time value (the same audited
+     materialization forms the constant-leaf derivation uses) and
+     prove its exact re-encoding, then assemble the three packed
+     A-words and three packed B-words.  */
+  uint32_t packed_a[3], packed_b[3];
+  if (mode->coeff_encoding == RVTT_LUT_COEFF_LUT16_PACKED)
+    {
+      gcc_assert (mode->num_ranges == 6);
+      uint16_t enc_a[6], enc_b[6];
+      for (unsigned s = 0; s < mode->num_ranges; s++)
+	{
+	  unsigned leaf = slot_map[s];
+	  gimple *at = leaf < num_pred ? g->assign[leaf] : g->assign[0];
+	  uint32_t a_bits = 0, b_bits = 0;
+	  switch (g->leaf_kind[leaf])
+	    {
+	    case LUT_LEAF_AFFINE:
+	      if (!const_leaf_value_p (SSA_NAME_DEF_STMT (g->a_coeff[leaf]),
+				       &a_bits)
+		  || !const_leaf_value_p (SSA_NAME_DEF_STMT
+					  (g->b_coeff[leaf]), &b_bits))
+		return refuse ("lut-coeff-value-unproven", at);
+	      break;
+	    case LUT_LEAF_MUL0:
+	      if (!const_leaf_value_p (SSA_NAME_DEF_STMT (g->a_coeff[leaf]),
+				       &a_bits))
+		return refuse ("lut-coeff-value-unproven", at);
+	      b_bits = 0;
+	      break;
+	    case LUT_LEAF_CONST:
+	      a_bits = 0;
+	      b_bits = g->leaf_const_bits[leaf];
+	      break;
+	    }
+	  if (!rvtt_lut16_encode_exact_p (a_bits, &enc_a[s])
+	      || !rvtt_lut16_encode_exact_p (b_bits, &enc_b[s]))
+	    return refuse ("lut-coeff-encoding-unrepresentable", at);
+	}
+      for (unsigned j = 0; j < 3; j++)
+	{
+	  packed_a[j] = (uint32_t) enc_a[2 * j]
+	    | ((uint32_t) enc_a[2 * j + 1] << 16);
+	  packed_b[j] = (uint32_t) enc_b[2 * j]
+	    | ((uint32_t) enc_b[2 * j + 1] << 16);
+	}
+    }
+  else
+    {
       /* The synthesized +0.0 (and any value-known coefficient) must
 	 re-encode exactly in the mode's coefficient encoding; the
-	 FP32 3-entry table holds any FP32 value verbatim.  */
-      if (g->leaf_kind[leaf] != LUT_LEAF_AFFINE && !mode->coeff_fp32_direct)
-	return refuse ("lut-coeff-encoding-unrepresentable", at);
+	 FP32 3-entry table holds any FP32 value verbatim, so only a
+	 non-affine leaf against a narrower future mode could trip
+	 this (wired fail-closed).  */
+      for (unsigned s = 0; s < mode->num_ranges; s++)
+	if (g->leaf_kind[slot_map[s]] != LUT_LEAF_AFFINE
+	    && mode->coeff_encoding != RVTT_LUT_COEFF_FP32_DIRECT)
+	  return refuse ("lut-coeff-encoding-unrepresentable",
+			 g->assign[0]);
     }
 
   /* Materialize.  */
@@ -884,24 +1037,41 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
   location_t loc = gimple_location (anchor);
   tree vectype = TREE_TYPE (g->result);
 
-  /* Slot operand assembly: synthesized +0.0 coefficients for the
-     degenerate positions, own materializations for a duplicated
-     leaf's second slot where the definition re-issues verbatim.  */
+  /* Slot operand assembly.  The LUT16-packed modes take the three
+     packed A-words and three packed B-words as freshly synthesized
+     invariant immediates; the FP32-direct modes take the leaves' own
+     coefficient values, with synthesized +0.0 coefficients for the
+     degenerate positions and own materializations for a duplicated
+     leaf's later slots where the definition re-issues verbatim.  */
   tree aops[3], bops[3];
-  bool slot_seen[3] = { false, false, false };
-  for (unsigned s = 0; s < mode->num_ranges; s++)
+  if (mode->coeff_encoding == RVTT_LUT_COEFF_LUT16_PACKED)
     {
-      unsigned leaf = slot_map[s];
-      tree a = g->a_coeff[leaf];
-      tree b = g->b_coeff[leaf];
-      if (slot_seen[leaf])
+      tree ptr = gimple_call_arg (as_a <gcall *> (g->fcmp[0]), 0);
+      for (unsigned j = 0; j < 3; j++)
 	{
-	  a = dup_coeff_operand (a, &rsi);
-	  b = dup_coeff_operand (b, &rsi);
+	  aops[j] = synth_packed_coeff (vectype, ptr, packed_a[j],
+					&rsi, loc);
+	  bops[j] = synth_packed_coeff (vectype, ptr, packed_b[j],
+					&rsi, loc);
 	}
-      slot_seen[leaf] = true;
-      aops[s] = a ? a : synth_zero_coeff (vectype, &rsi, loc);
-      bops[s] = b ? b : synth_zero_coeff (vectype, &rsi, loc);
+    }
+  else
+    {
+      bool slot_seen[RVTT_LUT_MAX_RANGES] = {};
+      for (unsigned s = 0; s < mode->num_ranges; s++)
+	{
+	  unsigned leaf = slot_map[s];
+	  tree a = g->a_coeff[leaf];
+	  tree b = g->b_coeff[leaf];
+	  if (slot_seen[leaf])
+	    {
+	      a = dup_coeff_operand (a, &rsi);
+	      b = dup_coeff_operand (b, &rsi);
+	    }
+	  slot_seen[leaf] = true;
+	  aops[s] = a ? a : synth_zero_coeff (vectype, &rsi, loc);
+	  bops[s] = b ? b : synth_zero_coeff (vectype, &rsi, loc);
+	}
     }
 
   gcall *lut = gimple_build_call
@@ -921,18 +1091,22 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 	= { "affine", "mul0", "const" };
       fprintf (dump_file,
 	       "lut-select: formed %s (mod0 %#x) from %u-range magnitude"
-	       " dispatch tree, boundaries %#x,%#x, slot leaves"
-	       " %s,%s,%s: ",
-	       mode->name, mode->mod0, num_pred + 1,
-	       mode->boundary_bits[0], mode->boundary_bits[1],
-	       kind_names[g->leaf_kind[slot_map[0]]],
-	       kind_names[g->leaf_kind[slot_map[1]]],
-	       kind_names[g->leaf_kind[slot_map[2]]]);
+	       " dispatch tree, boundaries ",
+	       mode->name, mode->mod0, num_pred + 1);
+      for (unsigned s = 0; s + 1 < mode->num_ranges; s++)
+	fprintf (dump_file, "%s%#x", s ? "," : "", mode->boundary_bits[s]);
+      fprintf (dump_file, ", slot leaves ");
+      for (unsigned s = 0; s < mode->num_ranges; s++)
+	fprintf (dump_file, "%s%s", s ? "," : "",
+		 kind_names[g->leaf_kind[slot_map[s]]]);
+      fprintf (dump_file, ": ");
       print_gimple_stmt (dump_file, lut, 0);
     }
 
   /* Delete the tree: users before definers so nothing is orphaned.
-     Coefficient definitions stay (they now feed the LUT).  */
+     Coefficient definitions stay when they now feed the LUT
+     (FP32-direct modes); under a packed mode they die with the tree
+     and are swept below once use-free.  */
   auto remove = [] (gimple *stmt)
     {
       if (!stmt)
@@ -943,6 +1117,23 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
       gsi_remove (&gsi, true);
       release_defs (stmt);
     };
+
+  /* Record the coefficient definitions before the leaves disappear
+     (packed modes only: their SSA values are not LUT operands).  */
+  auto_vec<gimple *, 12> dead_coeff_defs;
+  if (mode->coeff_encoding == RVTT_LUT_COEFF_LUT16_PACKED)
+    for (unsigned i = 0; i <= dflt; i++)
+      {
+	tree ops[2] = { g->a_coeff[i], g->b_coeff[i] };
+	for (tree op : ops)
+	  if (op && TREE_CODE (op) == SSA_NAME)
+	    {
+	      gimple *def = SSA_NAME_DEF_STMT (op);
+	      if (def && rvtt_get_insn_data (def)
+		  && !dead_coeff_defs.contains (def))
+		dead_coeff_defs.safe_push (def);
+	    }
+      }
 
   /* A folded sign restore dissolves: the LUT's mode word already
      copies the input's sign, so the copy's consumers take the LUT
@@ -961,23 +1152,32 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
       remove (sgn_use);
     }
 
-  if (num_pred == 2)
-    remove (g->assign[0]);	/* assign[num_pred-1] was replaced.  */
-  remove (g->condb[0]);
-  remove (g->condb[1]);
-  remove (g->compc);
-  remove (g->popc[0]);
-  remove (g->popc[1]);
-  remove (g->pushc[0]);
-  remove (g->pushc[1]);
-  remove (g->xvif[0]);
-  remove (g->xvif[1]);
-  remove (g->fcmp[0]);
-  remove (g->fcmp[1]);
+  for (unsigned r = 0; r + 1 < num_pred; r++)
+    remove (g->assign[r]);	/* assign[num_pred-1] was replaced.  */
+  for (unsigned r = 0; r < num_pred; r++)
+    {
+      remove (g->condb[r]);
+      remove (g->popc[r]);
+      remove (g->xvif[r]);
+      remove (g->fcmp[r]);
+      remove (g->pushc[r]);
+      if (r + 1 < num_pred)
+	remove (g->compc[r]);
+    }
   for (int leaf = dflt; leaf >= 0; leaf--)
     {
       remove (g->leaf_add[leaf]);
       remove (g->leaf_mul[leaf]);
+    }
+  /* Under a packed mode the original coefficient materializations are
+     dead once their leaves are gone (unless something else still uses
+     them, in which case they stay).  */
+  for (gimple *def : dead_coeff_defs)
+    {
+      tree lhs = gimple_call_lhs (def);
+      if (lhs && TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs)
+	  && gimple_bb (def))
+	remove (def);
     }
   /* The magnitude may now be dead (the LUT recomputes |x|
      internally); the abs input feeds the LUT instead.  A null lhs
