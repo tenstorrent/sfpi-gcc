@@ -1,12 +1,14 @@
 // LOOP residency prefers unchanged code at equality and fires only for a
 // strict delivered-word saving.  W2/R0 therefore refuses when two trips are
 // not proven (including a possible one-trip execution) and fires at two;
-// W2/R1 refuses at three and fires at four.
+// W2/R1 refuses at three and fires at four.  A shortened W1/R0 candidate
+// refuses at its two-trip equality and fires at three.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops --param max-completely-peeled-insns=0 -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }
 // { dg-final { scan-tree-dump-times "loop-profitability-unproven: strict-positive needs 2 proven trips; 2 materialization words, 0 resident read words, 3 programming words" 1 "rvtt_prgm_const" } }
 // { dg-final { scan-tree-dump-times "loop-profitability-unproven: strict-positive needs 4 proven trips; 2 materialization words, 1 resident read words, 3 programming words" 1 "rvtt_prgm_const" } }
-// { dg-final { scan-tree-dump-times "const-residency: allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 2 "rvtt_prgm_const" } }
-// { dg-final { scan-assembler-times "SFPCONFIG" 2 } }
+// { dg-final { scan-tree-dump-times "loop-profitability-unproven: strict-positive needs 3 proven trips; 1 materialization words, 0 resident read words, 2 programming words" 1 "rvtt_prgm_const" } }
+// { dg-final { scan-tree-dump-times "const-residency: allocated PRGM L1\\d for constant 0x\[0-9a-f\]+ .loop class" 3 "rvtt_prgm_const" } }
+// { dg-final { scan-assembler-times "SFPCONFIG" 3 } }
 
 void folded_one_trip_possible_refuses (unsigned n)
 {
@@ -46,4 +48,26 @@ void standalone_positive_four_fires ()
       auto c = __builtin_rvtt_sfpxloadi (nullptr, 0x40e90fdb, 0, 0, 31);
       __builtin_rvtt_sfpstore (nullptr, c, 0, 0, 0, 0, 7);
     }
+}
+
+void folded_short_equal_two_refuses ()
+{
+  auto x = __builtin_rvtt_sfpreadlreg (2);
+  for (unsigned i = 0; i != 2; ++i)
+    {
+      auto half = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
+      x = __builtin_rvtt_sfpmul (x, half, 0);
+    }
+  __builtin_rvtt_sfpwritelreg (x, 2);
+}
+
+void folded_short_positive_three_fires ()
+{
+  auto x = __builtin_rvtt_sfpreadlreg (3);
+  for (unsigned i = 0; i != 3; ++i)
+    {
+      auto half = __builtin_rvtt_sfpxloadi (nullptr, 0x3f000000, 0, 0, 31);
+      x = __builtin_rvtt_sfpmul (x, half, 0);
+    }
+  __builtin_rvtt_sfpwritelreg (x, 3);
 }
