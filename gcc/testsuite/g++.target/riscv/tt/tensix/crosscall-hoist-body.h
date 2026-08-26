@@ -7,6 +7,8 @@
    renaming and under different values (nothing may key on either).
 
    Hooks:
+     CCH_CALLEE_HEAD()    extra statement at the top of the callee
+			  (before the coefficient prefix)
      CCH_CALLEE_EXTRA(r)  extra statement inside the callee's row loop
      CCH_LOOP_EXTRA()     extra statement inside the caller's tile loop
      CCH_CALLER_HEAD()    extra statement in the caller BEFORE the loop
@@ -15,6 +17,9 @@
 
 #ifndef CCH_ADDR_MODE
 #define CCH_ADDR_MODE 7		/* BH no-increment; WH tests use 3 */
+#endif
+#ifndef CCH_CALLEE_HEAD
+#define CCH_CALLEE_HEAD() do {} while (0)
 #endif
 #ifndef CCH_CALLEE_EXTRA
 #define CCH_CALLEE_EXTRA(r) do {} while (0)
@@ -35,6 +40,7 @@
 __attribute__((noinline)) void
 CCH_CALLEE ()
 {
+  CCH_CALLEE_HEAD ();
   auto CCH_A0 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A0, 0, 0, -32);
   auto CCH_A1 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A1, 0, 0, -32);
   auto CCH_A2 = __builtin_rvtt_sfpxloadi (nullptr, CCH_VAL_A2, 0, 0, -32);

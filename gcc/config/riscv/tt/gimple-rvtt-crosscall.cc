@@ -209,6 +209,31 @@ along with GCC; see the file COPYING3.  If not see
 					(no entry / constructor /
 					externally-visible symbol): the
 					whole template audit fails closed
+
+   Config-prefix widening (-mtt-tensix-optimize-crosscall-config-prefix,
+   lane HC): a callee prefix pair -- a qualifying materialization whose
+   SINGLE consumer is sfpwriteconfig_v to a programmable-constant
+   register 11..14 (never allocatable; laneAR audited-table provenance)
+   -- joins the contract: re-materialized in every proven caller's loop
+   preheader AHEAD of the contract loads (the SFPCONFIG source operand
+   is md-pinned to L0) and deleted from the callee.  The caller proofs
+   widen: the scan mask gains the programmed register (SFPLOADI
+   destinations, explicit lreg reads/writes, raw-access markers),
+   delivered SFPCONFIG-class words refuse outright (config_strict), and
+   the MOP template slots must be config-word-free.  Zero-trip
+   soundness is the coefficient contract's own argument with the
+   register file swapped: the destination is not allocatable, explicit
+   reads outside the loop refuse (crosscall-caller-foreign-contract),
+   and every trip-taking execution already wrote this constant to this
+   register.  Pair disqualifications (dump notes, behavior falls back
+   to the pre-flag refusals byte-identically):
+     crosscall-config-dest-unproven	destination not a constant 11..14
+     crosscall-config-writer-unproven	another writer of a pair register
+					in the callee
+     crosscall-config-shape-unproven	pair does not dominate every
+					return
+     mop-template-config-word-unproven	an audited MOP template slot
+					holds an SFPCONFIG-class word
    QSR refuses by pass gate (no validated capability).  */
 
 #define INCLUDE_VECTOR
@@ -399,7 +424,7 @@ struct word_verdict
 
 static word_verdict
 classify_word_lreg (uint32_t word, unsigned contract_mask,
-		    bool region_strict = false)
+		    bool region_strict = false, bool config_strict = false)
 {
   word_verdict v = { true, false, false, nullptr };
   unsigned opcode = word >> 24;
@@ -444,7 +469,12 @@ classify_word_lreg (uint32_t word, unsigned contract_mask,
 				   constant register or the LaneConfig
 				   lane-enable state the hoisted
 				   materialization relies on.	     */
-      if (region_strict)
+      /* CONFIG_STRICT (the config-prefix contract): the hoisted
+	 programming's target IS a programmable-constant register --
+	 any delivered SFPCONFIG-class word in the scanned range could
+	 rewrite it between calls (the per-call original re-programmed
+	 at every entry); refusing default, no dest-field decode.  */
+      if (region_strict || config_strict)
 	{
 	  v.ok = false;
 	  v.why = "crosscall-caller-config-word-unproven";
@@ -652,13 +682,14 @@ resolve_exact_word (tree val, uint32_t *word, unsigned depth = 0)
 
 static word_verdict
 classify_delivered_value (tree val, unsigned contract_mask,
-			  bool region_strict = false, unsigned phi_depth = 0)
+			  bool region_strict = false,
+			  bool config_strict = false, unsigned phi_depth = 0)
 {
   word_verdict v = { false, false, false, "crosscall-caller-word-unproven" };
   if (TREE_CODE (val) == INTEGER_CST)
     return classify_word_lreg ((uint32_t) (TREE_INT_CST_LOW (val)
 					   & 0xffffffff), contract_mask,
-			       region_strict);
+			       region_strict, config_strict);
   uint32_t base;
   if (!pushed_word_base (val, &base))
     {
@@ -675,7 +706,7 @@ classify_delivered_value (tree val, unsigned contract_mask,
 	      {
 		word_verdict a = classify_delivered_value
 		  (gimple_phi_arg_def (phi, ix), contract_mask,
-		   region_strict, phi_depth + 1);
+		   region_strict, config_strict, phi_depth + 1);
 		if (!a.ok)
 		  return a;
 		agg.is_mop |= a.is_mop;
@@ -689,7 +720,8 @@ classify_delivered_value (tree val, unsigned contract_mask,
     /* Runtime-completed SFPLOADI: the destination field is not pinned
        by the base under the field axiom alone.  */
     return v;
-  return classify_word_lreg (base, contract_mask, region_strict);
+  return classify_word_lreg (base, contract_mask, region_strict,
+			     config_strict);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1830,6 +1862,10 @@ struct scan_ctx
 				   typed calls beyond the explicit Dst
 				   boundary set refuse, and delivered
 				   SFPCONFIG words refuse */
+  bool config_strict = false;	/* a config-prefix pair rides the
+				   contract: delivered SFPCONFIG-class
+				   words refuse (they could rewrite the
+				   programmed constant register)       */
   bool saw_mop = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
@@ -1912,7 +1948,7 @@ scan_asm (scan_ctx *ctx, gasm *stmt)
       return apply_word_verdict
 	(ctx, classify_delivered_value
 	   (TREE_VALUE (gimple_asm_input_op (stmt, 0)), ctx->contract_mask,
-	    ctx->region),
+	    ctx->region, ctx->config_strict),
 	 stmt);
     }
   tree value, ptr;
@@ -1928,7 +1964,8 @@ scan_asm (scan_ctx *ctx, gasm *stmt)
 	      && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
 	    return apply_word_verdict
 	      (ctx, classify_delivered_value (value, ctx->contract_mask,
-					      ctx->region),
+					      ctx->region,
+					      ctx->config_strict),
 	       stmt);
 	  if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
 	    return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
@@ -1955,7 +1992,8 @@ scan_store (scan_ctx *ctx, gimple *stmt)
       if (addr >= XTT_INSTRN_BUF_MMIO_BASE && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
 	return apply_word_verdict
 	  (ctx, classify_delivered_value (gimple_assign_rhs1 (stmt),
-					  ctx->contract_mask, ctx->region),
+					  ctx->contract_mask, ctx->region,
+					  ctx->config_strict),
 	   stmt);
       if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
 	/* Re-programming template slots inside the epoch: the written
@@ -1976,7 +2014,8 @@ scan_store (scan_ctx *ctx, gimple *stmt)
       if (name && !strcmp (name, "__instrn_buffer"))
 	return apply_word_verdict
 	  (ctx, classify_delivered_value (gimple_assign_rhs1 (stmt),
-					  ctx->contract_mask, ctx->region),
+					  ctx->contract_mask, ctx->region,
+					  ctx->config_strict),
 	   stmt);
       if (!DECL_EXTERNAL (base))
 	return true;		/* TU data object */
@@ -2216,6 +2255,28 @@ struct contract_entry
   int lreg;			/* the pinned hard LREG		     */
 };
 
+/* A config-prefix pair (lane HC, -mtt-tensix-optimize-crosscall-
+   config-prefix): a qualifying prefix materialization whose SINGLE
+   consumer programs a programmable-constant register (SFPCONFIG
+   destinations 11..14 -- never allocatable, laneAR audited-table
+   provenance in rvtt-lut-tables.cc).  The pair joins the contract:
+   re-materialized once in every proven caller's loop preheader (ahead
+   of the contract loads -- the SFPCONFIG source operand is pinned to
+   the same L0 the coefficient contract may use) and deleted from the
+   callee.  Soundness mirrors the coefficient contract's zero-trip
+   argument with the register file swapped: the destination register
+   is not allocatable, the widened caller proofs refuse every
+   statement or delivered word able to write it inside the loop (and
+   any explicit read of it outside the loop), and every trip-taking
+   execution already produced exactly this value in this register.  */
+
+struct config_prefix_entry
+{
+  gcall *load;			/* the prefix materialization	     */
+  gcall *write;			/* its single use: sfpwriteconfig_v  */
+  unsigned dest;		/* the programmed register, 11..14   */
+};
+
 struct caller_plan
 {
   cgraph_node *node;
@@ -2223,6 +2284,9 @@ struct caller_plan
   class loop *loop;		/* valid only while the caller's loop
 				   state below is live		     */
   edge entry;
+  unsigned lift_levels;		/* enclosing loops the placement walk
+				   proved (config-prefix residency);
+				   0 = the call's own loop entry     */
 };
 
 /* Discover the contract in FN.  Returns true with CONTRACT filled (at
@@ -2313,11 +2377,181 @@ discover_contract (function *fn, auto_vec<contract_entry> *contract,
   return true;
 }
 
+/* Discover the callee's config-prefix pairs (flag-gated by the
+   caller).  Refusing default: a statement pair that fails any
+   qualification is simply not collected -- the callee body check then
+   refuses it exactly as before the flag existed
+   (crosscall-callee-vector-outside-loop), byte-identically.  A
+   qualified pair additionally requires WRITER UNIQUENESS: no other
+   sfpwriteconfig_v (any destination overlapping a pair's, or
+   unresolvable) and no raw-access marker naming a pair register
+   anywhere in the callee -- a second writer would make the once-only
+   preheader programming diverge from the per-call original on
+   iterations after the first.	*/
+
+static void
+discover_config_prefix (function *fn,
+			const auto_vec<contract_entry> &contract,
+			auto_vec<config_prefix_entry> *pairs)
+{
+  const rvtt_insn_data *write_d
+    = rvtt_get_insn_data (rvtt_insn_data::sfpwriteconfig_v);
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      if (loop_outer (bb->loop_father))
+	continue;		/* pairs live outside any loop */
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gcall *load = dyn_cast <gcall *> (gsi_stmt (gsi));
+	  if (!load || !prefix_load_p (load))
+	    continue;
+	  bool in_contract = false;
+	  for (const contract_entry &e : contract)
+	    if (e.load == load)
+	      in_contract = true;
+	  if (in_contract)
+	    continue;
+	  tree lhs = gimple_call_lhs (load);
+	  use_operand_p use_p;
+	  gimple *use_stmt;
+	  if (!single_imm_use (lhs, &use_p, &use_stmt))
+	    continue;
+	  gcall *write = dyn_cast <gcall *> (use_stmt);
+	  const rvtt_insn_data *uinsnd
+	    = write ? rvtt_get_insn_data (write) : nullptr;
+	  if (!uinsnd || uinsnd->id != rvtt_insn_data::sfpwriteconfig_v
+	      || gimple_call_num_args (write) < 2
+	      || gimple_call_arg (write, 0) != lhs
+	      || gimple_call_lhs (write))
+	    continue;
+	  basic_block wbb = gimple_bb (write);
+	  if (!wbb || wbb != bb)
+	    continue;		/* pair stays block-local (v1 shape) */
+	  tree dest = gimple_call_arg (write, 1);
+	  if (TREE_CODE (dest) != INTEGER_CST)
+	    continue;
+	  unsigned d = TREE_INT_CST_LOW (dest) & 0xf;
+	  if (d < 11 || d > 14 || TREE_INT_CST_LOW (dest) > 14)
+	    {
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "crosscall-hoist: config pair "
+			   "unqualified (crosscall-config-dest-unproven): ");
+		  print_gimple_stmt (dump_file, write, 0, TDF_NONE);
+		}
+	      continue;
+	    }
+	  config_prefix_entry p = { load, write, d };
+	  pairs->safe_push (p);
+	}
+    }
+  if (pairs->is_empty ())
+    return;
+
+  /* Writer uniqueness over the whole callee -- including among the
+     pairs themselves (two pairs to one register: refuse rather than
+     reason about ordering).  */
+  unsigned dest_mask = 0;
+  bool unique = true;
+  for (const config_prefix_entry &p : *pairs)
+    {
+      if ((dest_mask >> p.dest) & 1)
+	unique = false;
+      dest_mask |= 1u << p.dest;
+    }
+  FOR_EACH_BB_FN (bb, fn)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	 unique && !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gcall *call = dyn_cast <gcall *> (gsi_stmt (gsi));
+	const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call)
+	  : nullptr;
+	if (!insnd)
+	  continue;
+	if (insnd->id == rvtt_insn_data::sfpwriteconfig_v)
+	  {
+	    bool is_pair = false;
+	    for (const config_prefix_entry &p : *pairs)
+	      if (p.write == call)
+		is_pair = true;
+	    if (is_pair)
+	      continue;
+	    tree dest = gimple_call_arg (call, 1);
+	    if (TREE_CODE (dest) != INTEGER_CST
+		|| ((dest_mask >> (TREE_INT_CST_LOW (dest) & 0xf)) & 1))
+	      unique = false;
+	  }
+	else if (insnd->id == rvtt_insn_data::sfprawlreg_access)
+	  {
+	    tree rel = gimple_call_arg (call, 0);
+	    tree wr = gimple_call_arg (call, 1);
+	    if (TREE_CODE (rel) != INTEGER_CST
+		|| TREE_CODE (wr) != INTEGER_CST
+		|| ((TREE_INT_CST_LOW (rel) | TREE_INT_CST_LOW (wr))
+		    & dest_mask))
+	      unique = false;
+	  }
+      }
+  if (!unique)
+    {
+      if (dump_file)
+	fprintf (dump_file, "crosscall-hoist: config pairs dropped "
+		 "(crosscall-config-writer-unproven)\n");
+      pairs->truncate (0);
+      return;
+    }
+
+  /* Every return dominated by every pair (the per-call original
+     executed on every path; the preheader re-materialization must
+     replace an unconditional write).  */
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (fn)->preds)
+    for (const config_prefix_entry &p : *pairs)
+      if (!dominated_by_p (CDI_DOMINATORS, e->src, gimple_bb (p.write)))
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "crosscall-hoist: config pairs dropped "
+		     "(crosscall-config-shape-unproven)\n");
+	  pairs->truncate (0);
+	  return;
+	}
+
+  if (dump_file)
+    for (const config_prefix_entry &p : *pairs)
+      {
+	fprintf (dump_file,
+		 "crosscall-hoist: config pair (creg %u) joins the "
+		 "contract: ", p.dest);
+	print_gimple_stmt (dump_file, p.load, 0, TDF_NONE);
+      }
+}
+
+/* Config-word audit over the recorded MOP template slots: a config
+   contract additionally requires every audited slot word to be
+   SFPCONFIG-free (a template-delivered config word could rewrite the
+   programmed register at any MOP launch).  */
+
+static bool
+mop_config_ok_p (const char **why)
+{
+  for (uint32_t word : tu_facts.slot_words)
+    if ((word >> 24) == 0x91)
+      {
+	*why = "mop-template-config-word-unproven";
+	return false;
+      }
+  return true;
+}
+
 /* ------------------------------------------------------------------ */
 /* Callee-wide checks beyond the loop scans.			      */
 
 static bool
 callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
+		  const auto_vec<config_prefix_entry> &config,
 		  class loop *consumer_loop, scan_ctx *ctx)
 {
   basic_block bb;
@@ -2337,10 +2571,14 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
 	    continue;
 	  /* Vector statements outside the consumer loop must be
 	     exactly the contract loads (the liveness-extension tail is
-	     otherwise vector-free).  */
+	     otherwise vector-free) -- plus the qualified config-prefix
+	     pairs, which move with the contract.  */
 	  bool is_contract_load = false;
 	  for (const contract_entry &e : contract)
 	    if (stmt == e.load)
+	      is_contract_load = true;
+	  for (const config_prefix_entry &p : config)
+	    if (stmt == p.load || stmt == p.write)
 	      is_contract_load = true;
 	  if (!is_contract_load
 	      && !flow_bb_inside_loop_p (consumer_loop, bb))
@@ -2360,12 +2598,24 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
     }
 
   /* Keeping the contract live across the consumer loop must hold the
-     eight-LREG file (the shared conservative pressure proof).  */
+     eight-LREG file (the shared conservative pressure proof).  With a
+     config pair riding the contract, the callee's reads of the
+     programmed constant register are creg-file reads (LReg[8..14])
+     which never occupy an allocatable LREG (the invariant pass's
+     ratified exemption: every such operand position accepts the
+     constant register class in place, reg_or_cstlreg_operand); a
+     hypothetical non-capable use undercounts and is caught fail-closed
+     by the named post-RA spill diagnosis, never as wrong code.
+     Without a config pair the historical counting is byte-identical
+     (exemption off).  */
   auto_vec<gcall *> loads;
   for (const contract_entry &e : contract)
     loads.safe_push (e.load);
   if (!rvtt_loop_lreg_pressure_legal_p (consumer_loop, loads,
-					/*report=*/false))
+					/*report=*/false,
+					/*cc_transients=*/false,
+					/*exempt_creg_reads=*/
+					!config.is_empty ()))
     return refuse ("crosscall-callee-pressure", fn->decl, nullptr);
 
   /* Every return must be dominated by every load (the exit write-back
@@ -2386,8 +2636,10 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
 
 static bool
 prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
-	      unsigned contract_mask, edge *entry_out)
+	      unsigned contract_mask, unsigned config_mask, edge *entry_out,
+	      unsigned *lift_levels_out)
 {
+  *lift_levels_out = 0;
   function *fn = DECL_STRUCT_FUNCTION (caller->decl);
   basic_block bb = gimple_bb (call_stmt);
   if (!bb)
@@ -2403,9 +2655,10 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 		   call_stmt);
 
   scan_ctx ctx;
-  ctx.contract_mask = contract_mask;
+  ctx.contract_mask = contract_mask | config_mask;
   ctx.callee_decl = callee_decl;
   ctx.in_caller = true;
+  ctx.config_strict = config_mask != 0;
 
   basic_block *body = get_loop_body (loop);
   bool ok = true;
@@ -2426,10 +2679,67 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   if (!ok)
     return false;
 
+  /* Placement residency walk (config-prefix knob): lift the contract's
+     programming point across ENCLOSING loops whose bodies pass the
+     same caller-epoch scan (the zero-trip clobber argument is
+     loop-agnostic: nothing between the outer entry and the calls can
+     write or observe the contract state, so entering the outer loop
+     without reaching a call is as unobservable as entering the inner
+     one).  A level that fails any proof simply stops the walk -- the
+     inner placement stands, nothing refuses.  */
+  class loop *place_loop = loop;
+  if (riscv_tt_opt_crosscall_config_prefix)
+    for (class loop *outer = loop_outer (loop); outer && outer->num;
+	 outer = loop_outer (outer))
+      {
+	edge oentry = rvtt_loop_entry_edge (outer);
+	if (!oentry || rvtt_preheader_insertion_blocked_p (oentry))
+	  break;
+	basic_block *obody = get_loop_body (outer);
+	bool level_ok = true;
+	bool saved_mop = ctx.saw_mop;	/* a rejected level's words must
+					   not constrain the committed
+					   placement's MOP audit */
+	for (unsigned ix = 0; level_ok && ix != outer->num_nodes; ++ix)
+	  {
+	    if (flow_bb_inside_loop_p (place_loop, obody[ix]))
+	      continue;		/* already proven at the level below */
+	    for (gphi_iterator psi = gsi_start_phis (obody[ix]);
+		 level_ok && !gsi_end_p (psi); gsi_next (&psi))
+	      if (vector_typed_p (gimple_phi_result (psi.phi ()))
+		  && !virtual_operand_p (gimple_phi_result (psi.phi ())))
+		level_ok = false;
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (obody[ix]);
+		 level_ok && !gsi_end_p (gsi); gsi_next (&gsi))
+	      if (!scan_stmt (&ctx, gsi_stmt (gsi), /*in_caller=*/true))
+		level_ok = false;
+	  }
+	free (obody);
+	if (!level_ok || vector_value_live_in_loop_p (fn, outer))
+	  {
+	    ctx.saw_mop = saved_mop;
+	    if (dump_file)
+	      fprintf (dump_file,
+		       "crosscall-hoist: residency walk stops at loop bb %d"
+		       " (%s)\n", outer->header->index,
+		       level_ok ? "crosscall-caller-lreg-live"
+		       : (ctx.why ? ctx.why : "?"));
+	    break;
+	  }
+	place_loop = outer;
+	entry = oentry;
+	++*lift_levels_out;
+	if (dump_file)
+	  fprintf (dump_file,
+		   "crosscall-hoist: contract placement lifted to enclosing"
+		   " loop bb %d entry\n", outer->header->index);
+      }
+
   if (ctx.saw_mop)
     {
       const char *why = nullptr;
-      if (!mop_contract_ok_p (contract_mask, &why))
+      if (!mop_contract_ok_p (contract_mask | config_mask, &why)
+	  || (config_mask && !mop_config_ok_p (&why)))
 	{
 	  refuse ("crosscall-caller-mop-slot-unproven", caller->decl,
 		  call_stmt);
@@ -2439,7 +2749,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 	}
     }
 
-  if (vector_value_live_in_loop_p (fn, loop))
+  if (vector_value_live_in_loop_p (fn, place_loop))
     return refuse ("crosscall-caller-lreg-live", caller->decl, call_stmt);
 
   /* Explicit architectural READS of a contract register anywhere in
@@ -2453,7 +2763,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
   basic_block obb;
   FOR_EACH_BB_FN (obb, fn)
     {
-      if (flow_bb_inside_loop_p (loop, obb))
+      if (flow_bb_inside_loop_p (place_loop, obb))
 	continue;
       for (gimple_stmt_iterator gsi = gsi_start_bb (obb); !gsi_end_p (gsi);
 	   gsi_next (&gsi))
@@ -2467,7 +2777,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 	    {
 	      tree regno = gimple_call_arg (call, 0);
 	      if (TREE_CODE (regno) != INTEGER_CST
-		  || ((contract_mask
+		  || (((contract_mask | config_mask)
 		       >> (TREE_INT_CST_LOW (regno) & 0xf)) & 1))
 		return refuse ("crosscall-caller-foreign-contract",
 			       caller->decl, call);
@@ -2476,7 +2786,8 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 	    {
 	      tree rel = gimple_call_arg (call, 0);
 	      if (TREE_CODE (rel) != INTEGER_CST
-		  || (TREE_INT_CST_LOW (rel) & contract_mask))
+		  || (TREE_INT_CST_LOW (rel)
+		      & (contract_mask | config_mask)))
 		return refuse ("crosscall-caller-foreign-contract",
 			       caller->decl, call);
 	    }
@@ -2506,11 +2817,44 @@ insert_in_preheader (basic_block ph, gimple *stmt)
 
 static void
 commit_caller (cgraph_node *caller, edge entry,
-	       const auto_vec<contract_entry> &contract)
+	       const auto_vec<contract_entry> &contract,
+	       const auto_vec<config_prefix_entry> &config)
 {
   const rvtt_insn_data *write_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpwritelreg);
   basic_block ph = rvtt_commit_hoist_preheader (entry);
+  /* Config pairs first: the SFPCONFIG source operand is pinned (L0 by
+     the md), and materializing the pair ahead of the contract loads
+     keeps its temporary's live range disjoint from every pinned
+     contract range (the callee's original prefix order).  */
+  for (const config_prefix_entry &p : config)
+    {
+      unsigned nargs = gimple_call_num_args (p.load);
+      auto_vec<tree, 8> args;
+      for (unsigned i = 0; i != nargs; ++i)
+	args.safe_push (unshare_expr (gimple_call_arg (p.load, i)));
+      gcall *load = gimple_build_call_vec (gimple_call_fndecl (p.load), args);
+      tree val = make_ssa_name (TREE_TYPE (gimple_call_lhs (p.load)));
+      gimple_call_set_lhs (load, val);
+      gcall *write = gimple_build_call
+	(gimple_call_fndecl (p.write), 2, val,
+	 build_int_cst (integer_type_node, (int) p.dest));
+      insert_in_preheader (ph, load);
+      insert_in_preheader (ph, write);
+      caller->create_edge (cgraph_node::get_create
+			     (gimple_call_fndecl (load)), load, ph->count);
+      caller->create_edge (cgraph_node::get_create
+			     (gimple_call_fndecl (p.write)), write,
+			   ph->count);
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "crosscall-hoist: placed config pair (creg %u) in %s "
+		   "preheader bb %d: ",
+		   p.dest, caller->dump_name (), ph->index);
+	  print_gimple_stmt (dump_file, load, 0, TDF_NONE);
+	}
+    }
   for (const contract_entry &e : contract)
     {
       /* Clone the materialization verbatim (same builtin, same
@@ -2551,12 +2895,39 @@ commit_caller (cgraph_node *caller, edge entry,
 }
 
 static void
-commit_callee (function *fn, const auto_vec<contract_entry> &contract)
+commit_callee (function *fn, const auto_vec<contract_entry> &contract,
+	       const auto_vec<config_prefix_entry> &config)
 {
   const rvtt_insn_data *read_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
   const rvtt_insn_data *write_d
     = rvtt_get_insn_data (rvtt_insn_data::sfpwritelreg);
+
+  /* The config pairs move entirely: every caller preheader now
+     programs the register once per loop entry; the callee's readers
+     (explicit creg reads) observe the identical value on every call
+     (the widened caller proofs).  */
+  for (const config_prefix_entry &p : config)
+    {
+      gimple_stmt_iterator wsi = gsi_for_stmt (p.write);
+      if (tree vdef = gimple_vdef (p.write))
+	if (TREE_CODE (vdef) == SSA_NAME)
+	  unlink_stmt_vdef (p.write);
+      gsi_remove (&wsi, true);
+      gimple_stmt_iterator lsi = gsi_for_stmt (p.load);
+      if (tree vdef = gimple_vdef (p.load))
+	if (TREE_CODE (vdef) == SSA_NAME)
+	  unlink_stmt_vdef (p.load);
+      tree lhs = gimple_call_lhs (p.load);
+      gsi_remove (&lsi, true);
+      if (lhs && TREE_CODE (lhs) == SSA_NAME)
+	release_ssa_name (lhs);
+      if (dump_file)
+	fprintf (dump_file,
+		 "crosscall-hoist: config pair (creg %u) removed from %s "
+		 "(programmed in the caller preheaders)\n",
+		 p.dest, IDENTIFIER_POINTER (DECL_NAME (fn->decl)));
+    }
 
   for (const contract_entry &e : contract)
     {
@@ -2625,17 +2996,28 @@ transform (function *fn)
 	     IDENTIFIER_POINTER (DECL_NAME (fn->decl)),
 	     contract.length (), contract_mask);
 
+  /* Config-prefix pairs (flag-gated widening, lane HC): with the flag
+     off, discovery never runs and every proof and refusal below is
+     byte-identical to the pre-flag pass.  */
+  auto_vec<config_prefix_entry> config;
+  if (riscv_tt_opt_crosscall_config_prefix)
+    discover_config_prefix (fn, contract, &config);
+  unsigned config_mask = 0;
+  for (const config_prefix_entry &p : config)
+    config_mask |= 1u << p.dest;
+
   /* Callee-side proofs.  */
   scan_ctx callee_ctx;
   callee_ctx.contract_mask = contract_mask;
   callee_ctx.callee_decl = NULL_TREE;
   callee_ctx.in_caller = false;
-  if (!callee_body_ok_p (fn, contract, consumer_loop, &callee_ctx))
+  if (!callee_body_ok_p (fn, contract, config, consumer_loop, &callee_ctx))
     return false;
   if (callee_ctx.saw_mop)
     {
       const char *why = nullptr;
-      if (!mop_contract_ok_p (contract_mask, &why))
+      if (!mop_contract_ok_p (contract_mask | config_mask, &why)
+	  || (config_mask && !mop_config_ok_p (&why)))
 	return refuse ("crosscall-caller-mop-slot-unproven", fn->decl,
 		       nullptr);
     }
@@ -2673,7 +3055,7 @@ transform (function *fn)
       if (!cfn || !cfn->cfg)
 	return refuse ("crosscall-caller-body-unavailable",
 		       e->caller->decl, nullptr);
-      caller_plan p = { e->caller, e->call_stmt, nullptr, nullptr };
+      caller_plan p = { e->caller, e->call_stmt, nullptr, nullptr, 0 };
       plans.safe_push (p);
     }
 
@@ -2691,7 +3073,7 @@ transform (function *fn)
       if (!dom)
 	calculate_dominance_info (CDI_DOMINATORS);
       bool ok = prove_caller (p.node, p.call_stmt, fn->decl, contract_mask,
-			      &p.entry);
+			      config_mask, &p.entry, &p.lift_levels);
       if (!dom)
 	free_dominance_info (CDI_DOMINATORS);
       loop_optimizer_finalize ();
@@ -2707,22 +3089,26 @@ transform (function *fn)
       push_cfun (DECL_STRUCT_FUNCTION (p.node->decl));
       loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
       /* Recompute the entry edge in this context (structure is
-	 unchanged since the proof above).  */
+	 unchanged since the proof above), walking outward the same
+	 number of proven residency levels.  */
       class loop *loop = gimple_bb (p.call_stmt)->loop_father;
+      for (unsigned l = 0; l != p.lift_levels; ++l)
+	loop = loop_outer (loop);
       edge entry = rvtt_loop_entry_edge (loop);
       gcc_assert (entry);
-      commit_caller (p.node, entry, contract);
+      commit_caller (p.node, entry, contract, config);
       loop_optimizer_finalize ();
       pop_cfun ();
     }
 
-  commit_callee (fn, contract);
+  commit_callee (fn, contract, config);
 
   if (dump_file)
     fprintf (dump_file,
-	     "crosscall-hoist: hoisted %u contract materializations from "
+	     "crosscall-hoist: hoisted %u contract materializations%s from "
 	     "%s into %u caller(s)\n",
 	     contract.length (),
+	     config.is_empty () ? "" : " (+config prefix)",
 	     IDENTIFIER_POINTER (DECL_NAME (fn->decl)), plans.length ());
   return true;
 }
