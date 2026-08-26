@@ -1937,6 +1937,42 @@
 ;; blocks the mad rule -- a pure loss (madpair-prgm-exhausted).
 ;; Non-vulnerable sfpxloadi chain operands are never claimed: the folds
 ;; cannot match them and the mad rule fuses them from plain LREGs.
+;;
+;; PRESSURE-PARK extension (lane GV, -mtt-tensix-optimize-pressure-park;
+;; the FX PASS-GAP "invariant-loadi rename/pressure admission" class):
+;; two widenings of the CC-canonical residency PEEL class, both riding
+;; the peel's existing break-even proof (the candidate's issue words
+;; join sum_w exactly like pre-CC candidates; no new pricing constants).
+;;
+;; (1) POST-CC POSITION ADMISSION.  A candidate materialization at or
+;; after the body's first CC writer is admitted when every consumer is
+;; in the audited lane-predicated set (remat_consumer_audited_p; PHI
+;; uses and _lv-tied operands refuse by name).  The parked read carries
+;; the constant in EVERY lane -- a strict superset of whatever lane
+;; subset the original predicated SFPLOADI wrote -- so all
+;; originally-defined lanes are bit-exact and only
+;; originally-indeterminate lanes change (the invariant pass's ratified
+;; superset-write refinement).  Save = the candidate's issue words per
+;; iteration after the first; cost = PUSH per staged word + PUSH per
+;; SFPCONFIG, priced inside the peel break-even.
+;;
+;; (2) LREG TIER on prgm-exhausted.  When the three PRGM destinations
+;; are gone, a remaining admitted candidate hoists to the SAME proven
+;; programming point as a plain SSA live range (rename-to-free-LREG),
+;; budgeted by the function-wide SSA pressure model at this pipeline
+;; position (CC machinery already lowered to explicit statements, so
+;; the invariant pass's cc_transients blindness does not apply): each
+;; hoist charges one register; capacity 8 exceeded refuses by name
+;; (lreg-file-exhausted) and changes nothing.  Save = the candidate's
+;; issue words per iteration after the first; cost = zero extra words
+;; (the materialization moves; no SFPCONFIG).  The peel break-even
+;; computed over the full candidate set is therefore conservative for
+;; this tier.
+;;
+;; Named refusals: postcc-phi-use, consumer-lane-discipline-unaudited,
+;; lreg-file-exhausted, plus the pre-existing prgm-exhausted and every
+;; peel-class refusal unchanged.  Flag off: byte-identical (the scan
+;; break and single-tier placement are restored verbatim).
 
 ;; ---------------------------------------------------------------------
 ;; Dual-bank pinned-chain binding caps (lane FU, rtl-rvtt-lp-alloc.cc

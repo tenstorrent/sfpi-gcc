@@ -2736,10 +2736,28 @@ residency_transform (function *fn, prgm_state *st)
 	      /* Peel class: a candidate at or after the body's first
 		 CC writer executed under the v_if region's partial
 		 lane state; only the pre-region prefix is proven
-		 all-lanes on iterations 2..N.  */
+		 all-lanes on iterations 2..N.
+
+		 PRESSURE-PARK widening (lane GV): such a position is
+		 nevertheless admissible when every consumer of the
+		 candidate's value is in the audited lane-predicated
+		 set (remat_consumer_audited_p, the const-remat
+		 audit).  The constant-register read that replaces the
+		 materialization carries the constant in EVERY lane --
+		 a strict superset of whatever lane subset the original
+		 predicated SFPLOADI wrote -- so every lane the
+		 original program DEFINED reads the identical value,
+		 and the only changed lanes are ones whose original
+		 content was the fresh SSA definition's RA-dependent
+		 indeterminate garbage, which no audited consumer
+		 propagates (the same superset-write refinement the
+		 invariant pass's in-region hoist admission is built
+		 on, gimple-rvtt-invariant.cc block comment).  A PHI
+		 use or an unaudited/_lv-tied consumer refuses the
+		 candidate by name.  */
 	      if (cc_limit && gsi_stmt (gsi) == cc_limit)
 		cc_reached = true;
-	      if (cc_reached)
+	      if (cc_reached && riscv_tt_opt_pressure_park <= 0)
 		break;
 	      gcall *load = dyn_cast <gcall *> (gsi_stmt (gsi));
 	      if (!load || taken.contains (load)
@@ -2750,6 +2768,48 @@ residency_transform (function *fn, prgm_state *st)
 	      unsigned value;
 	      if (!constant_chain_value_p (chain, &value))
 		continue;
+	      if (cc_reached)
+		{
+		  const char *bad = nullptr;
+		  gimple *bad_use = nullptr;
+		  imm_use_iterator uit;
+		  gimple *use;
+		  FOR_EACH_IMM_USE_STMT (use, uit, gimple_call_lhs (load))
+		    {
+		      if (is_gimple_debug (use))
+			continue;
+		      if (gimple_code (use) == GIMPLE_PHI)
+			{
+			  bad = "postcc-phi-use";
+			  bad_use = use;
+			  break;
+			}
+		      if (!remat_consumer_audited_p (use,
+						     gimple_call_lhs (load)))
+			{
+			  bad = "consumer-lane-discipline-unaudited";
+			  bad_use = use;
+			  break;
+			}
+		    }
+		  if (bad)
+		    {
+		      if (dump_file)
+			{
+			  fprintf (dump_file,
+				   "pressure-park: refused (%s): ", bad);
+			  print_gimple_stmt (dump_file, bad_use, 0);
+			}
+		      continue;
+		    }
+		  if (dump_file)
+		    {
+		      fprintf (dump_file,
+			       "pressure-park: admitted post-CC candidate "
+			       "(every consumer lane-predicated-audited): ");
+		      print_gimple_stmt (dump_file, load, 0);
+		    }
+		}
 	      residency_candidate c;
 	      c.load = load;
 	      c.value = value;
@@ -3179,6 +3239,22 @@ residency_transform (function *fn, prgm_state *st)
 
   bool changed = false;
   hash_map<class loop *, edge> peeled;
+  /* CC-canonical class: the programming point is the fall-through edge
+     of the peeled first iteration (one peel per loop; later candidates
+     of the same loop share it).  Peeling happens only after a placement
+     decision is final, so refused candidates never mutate the CFG.  */
+  auto ensure_peeled = [&] (residency_candidate &c)
+    {
+      if (!c.peel)
+	return;
+      if (edge *found = peeled.get (c.loop))
+	c.entry = *found;
+      else
+	{
+	  c.entry = peel_first_iteration (c.loop, c.entry);
+	  peeled.put (c.loop, c.entry);
+	}
+    };
   auto place = [&] (residency_candidate &c) -> bool
     {
       unsigned prgm = 0;
@@ -3234,21 +3310,9 @@ residency_transform (function *fn, prgm_state *st)
 		 "TU write stores 0x%08x; programming is value-idempotent)\n",
 		 prgm, c.value);
 
-      /* CC-canonical class: the programming point is the fall-through
-	 edge of the peeled first iteration (one peel per loop; later
-	 candidates of the same loop share it).  Peeling happens only
-	 here, after a register has actually been allocated, so refused
-	 candidates never mutate the CFG.  */
-      if (c.peel)
-	{
-	  if (edge *found = peeled.get (c.loop))
-	    c.entry = *found;
-	  else
-	    {
-	      c.entry = peel_first_iteration (c.loop, c.entry);
-	      peeled.put (c.loop, c.entry);
-	    }
-	}
+      /* CC-canonical class: peel only here, after a register has
+	 actually been allocated (see ensure_peeled above).  */
+      ensure_peeled (c);
 
       basic_block point_bb = (c.loop && !c.inplace)
 	? c.entry->dest : gimple_bb (c.load);
@@ -3335,8 +3399,86 @@ residency_transform (function *fn, prgm_state *st)
       return true;
     };
 
+  /* PRESSURE-PARK LREG tier (lane GV): a loop-class candidate the
+     programmable constant registers cannot take may still leave the
+     loop as a plain LREG live range -- the rename-to-free-LREG
+     admission the early invariant pass refuses under its conservative
+     in-loop SSA walk (its per-candidate "left in loop by LREG
+     pressure" class).  The budget here is the function-wide SSA
+     pressure model at this pipeline position -- the CC machinery is
+     already lowered to explicit statements, so the RTL-only-temp
+     blindness that forced the invariant pass's cc_transients
+     surcharge does not exist -- the same model const-remat trusts to
+     FIX over-pressure; each committed hoist charges one register
+     against it, and exhaustion refuses by name changing nothing.
+     Placement soundness is the class's own programming-point proof:
+     for the peel class the hoisted SFPLOADI lands after the peeled
+     iteration's all-lanes SFPENCC, writing EVERY lane (a superset of
+     any consumer mask -- bit-exact on all originally-defined lanes,
+     the invariant-pass refinement on originally-indeterminate ones;
+     post-CC candidates additionally passed the consumer audit at
+     collection); for the plain LOOP class the point is the entry edge
+     of a loop no function-local CC write reaches (the cc-region
+     filter above), so the preheader lane state is the in-loop lane
+     state verbatim.  */
+  int lreg_budget = -1;		/* computed lazily on first exhaustion */
+  auto lreg_hoist = [&] (residency_candidate &c) -> bool
+    {
+      if (riscv_tt_opt_pressure_park <= 0 || !c.loop || c.inplace)
+	return false;
+      if (lreg_budget < 0)
+	{
+	  lreg_pressure_model model;
+	  compute_lreg_pressure (fn, SFPU_REG_NUM, &model);
+	  lreg_budget = (int) SFPU_REG_NUM - (int) model.peak;
+	}
+      if (lreg_budget < 1)
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "pressure-park: refused (lreg-file-exhausted): the "
+		       "function pressure model leaves no free LREG for "
+		       "another loop-wide live range: ");
+	      print_gimple_stmt (dump_file, c.load, 0);
+	    }
+	  return false;
+	}
+      ensure_peeled (c);
+      basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
+      /* Same virtual-operand discipline as the invariant pass's hoist:
+	 only a renamed SSA vdef has uses to unlink or a name to
+	 release; the pass-level TODO renumbers the rest.  */
+      if (tree vdef = gimple_vdef (c.load))
+	{
+	  if (TREE_CODE (vdef) == SSA_NAME)
+	    {
+	      unlink_stmt_vdef (c.load);
+	      release_ssa_name (vdef);
+	    }
+	  gimple_set_vdef (c.load, NULL_TREE);
+	}
+      if (gimple_vuse (c.load))
+	{
+	  gimple_set_vuse (c.load, NULL_TREE);
+	  update_stmt (c.load);
+	}
+      gimple_stmt_iterator from = gsi_for_stmt (c.load);
+      gsi_move_to_bb_end (&from, preheader);
+      --lreg_budget;
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "pressure-park: hoisted invariant materialization to a "
+		   "free LREG at the programming point (preheader bb %d): ",
+		   preheader->index);
+	  print_gimple_stmt (dump_file, c.load, 0);
+	}
+      return true;
+    };
+
   for (residency_candidate &c : loop_cands)
-    changed |= place (c);
+    changed |= place (c) || lreg_hoist (c);
 
   /* MAD-PAIR groups place all-or-none: a half-claimed pair pays its
      programming word while the surviving immediate fold still blocks
