@@ -1447,7 +1447,22 @@
 ;; delivered words cannot price the removed control words against
 ;; growth) and XTT_REPLAY_LOOP_UNROLL_MAX_WORDS on the flattened total
 ;; (the same straight-line size class the factor-8 row group commits
-;; to).  No new constants.
+;; to).
+;;
+;;   XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS bounds the SUM of flattened
+;;   totals (words * trips) across one function's fires.  The per-loop
+;;   bound cannot cap a vehicle that instantiates many admissible
+;;   delivery loops: the topk_xl K=2048 correctness TU overflowed
+;;   TRISC1_CODE by 1836 bytes with per-loop-only budgeting (a loud
+;;   link error; the refusal-by-name is the honest form).  1024 = four
+;;   per-loop budgets: the smallest power-of-two envelope over every
+;;   measured winning fire set (the topk flip needs ~880 estimated
+;;   words across phases_steps' five fires; the census overestimates
+;;   real growth ~5x -- typed plumbing words fold away -- so the cap
+;;   bounds real text growth to roughly 1KB per function).  A size
+;;   guard, not a shape key: only proven trips and delivered word
+;;   counts participate; loops refuse in program order once the budget
+;;   is exhausted (launch-flatten-function-budget).
 ;;
 ;; ORDERING RULE for the execution-saturation context term.  The
 ;; saturation term's LAUNCH_RUN input measures contiguous sibling
@@ -1526,6 +1541,7 @@
   (XTT_REPLAY_LOOP_UNROLL_FACTOR      8)
   (XTT_REPLAY_LOOP_UNROLL_MIN_WORDS   4)
   (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS 256)
+  (XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS 1024)
   ;; Round-chain interleave request (-mtt-tensix-optimize-round-
   ;; interleave, lane EI 2026-08-21).  A counted round loop whose
   ;; iterations are independent by dataflow (every loop-carried value's

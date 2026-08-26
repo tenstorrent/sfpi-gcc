@@ -790,6 +790,13 @@ class launch_flatten
 public:
   unsigned n_fired = 0;
   unsigned n_refused = 0;
+  /* Accumulated estimated flattened words across this function's fires
+     (words * trips per fired loop).  The per-loop budget bounds one
+     loop's straight-line run; this bounds the FUNCTION: a vehicle that
+     instantiates many admissible delivery loops (the topk_xl K=2048
+     correctness TU) otherwise grows past the TRISC code region -- a
+     loud link error, but a refusal-by-name is the honest form.  */
+  unsigned HOST_WIDE_INT fn_words = 0;
 
   void refuse (class loop *loop, const char *name, const char *detail)
   {
@@ -962,6 +969,12 @@ public:
 	refuse (loop, "launch-flatten-word-budget", NULL);
 	return false;
       }
+    if (fn_words + (unsigned HOST_WIDE_INT) words * trips
+	> XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS)
+      {
+	refuse (loop, "launch-flatten-function-budget", NULL);
+	return false;
+      }
     /* loop->unroll is a narrow field; the word budget above already
        bounds trips far below its range, so this is belt only.  */
     if (trips > 1024)
@@ -972,6 +985,7 @@ public:
 
     loop->unroll = (unsigned short) trips;
     fun->has_unroll = true;
+    fn_words += (unsigned HOST_WIDE_INT) words * trips;
     ++n_fired;
     if (dump_file)
       fprintf (dump_file,
