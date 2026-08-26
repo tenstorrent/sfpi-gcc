@@ -146,4 +146,23 @@ extern bool rvtt_mop_init_array_call_p (gcall *call);
 extern bool rvtt_mop_derive_finish (const rvtt_mop_derive_state *st,
 				    const char **why);
 
+/* ---- Raw REPLAY record regions (lane HS;
+   -mtt-tensix-optimize-opaque-replay-record) ----
+
+   Parse STMT as the canonical raw `.ttinsn' asm with one constant
+   input; on success *WORD receives the 32-bit instruction word.  */
+extern bool rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word);
+
+/* Adjudicate one raw REPLAY word (opcode XTT_REPLAY_OPCODE) for the TU
+   freedom proof.  On admission returns true; a load_mode=1/exec=0
+   record additionally proves its swallowed-word region and adds every
+   swallowed raw-word statement to *SUPPRESSED (those statements are
+   architecturally never delivered and must be EXCLUDED from the
+   executed-word census).  Refuses (false, *WHY) by name for playback
+   words, malformed encodings, and every unproven region shape.  The
+   theorem and its obligations: rvtt-mop-derive.cc file section.  */
+extern bool rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
+					  hash_set<gimple *> *suppressed,
+					  const char **why);
+
 #endif /* GCC_RVTT_MOP_DERIVE_H */

@@ -152,6 +152,35 @@ constexpr unsigned XTT_MOP_CFG_SLOTS = 9;
    (sfpu-ops-wh.h / sfpu-ops-bh.h:155).  */
 constexpr unsigned XTT_REPLAY_OPCODE = 0x04;
 
+/* REPLAY word field decode and the record-window disposition fact
+   (lane HS).  [SIM] tensix.cpp replay expander arm (pinned craq
+   32489dda): load_mode = bits<0,0>, execute_while_loading =
+   bits<1,1>, reserved bits<3,2> TTSIM_VERIFY'd zero on BH/WH
+   (TT_VERSION <= 1), len = bits<13,4> verified in [1,32], start_idx =
+   bits<23,14> verified with start_idx + len <= 32 (the 32-slot
+   per-thread buffer).  [SPEC] WormholeB0 REPLAY.md functional model +
+   Diagrams/Out/Bits32_REPLAY.svg encoding (Load bit 0, Exec bit 1,
+   Count bits 9:4 architected u6, Index bits 18:14 architected u5 --
+   the sim decodes wider fields and verifies the same architected
+   ranges).  THE DISPOSITION FACT: while a load window is open
+   (replay_left > 0) every incoming frontend instruction is STORED to
+   the buffer and pushed to the backend instruction FIFO ONLY when
+   execute_while_loading was set -- a load_mode=1/exec=0 record's next
+   LEN delivered words are architecturally SWALLOWED (zero backend
+   effects; the [SPEC] model's `if Exec: yield' arm is the same
+   statement).  A word arriving inside an open window is stored
+   blindly, REPLAY words included (the window arm precedes the REPLAY
+   decode arm in both models), so recorded content is data until a
+   playback delivers it.  */
+constexpr unsigned XTT_REPLAY_LOAD_BIT = 0;
+constexpr unsigned XTT_REPLAY_EXEC_BIT = 1;
+constexpr uint32_t XTT_REPLAY_RESERVED_MASK = 0xC;
+constexpr unsigned XTT_REPLAY_LEN_SHIFT = 4;
+constexpr uint32_t XTT_REPLAY_LEN_MASK = 0x3FF;	  /* [SIM] bits<13,4> */
+constexpr unsigned XTT_REPLAY_IDX_SHIFT = 14;
+constexpr uint32_t XTT_REPLAY_IDX_MASK = 0x3FF;	  /* [SIM] bits<23,14> */
+constexpr unsigned XTT_REPLAY_BUF_SLOTS = 32;
+
 /* -- Instruction-delivery MMIO census (the volatile-store proof) ------- */
 
 /* The RISC instruction-FIFO aperture: a 32-bit MMIO store of a raw

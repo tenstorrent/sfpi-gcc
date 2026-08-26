@@ -129,6 +129,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
 
 namespace {
@@ -329,6 +330,44 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	}
     };
 
+  /* Raw REPLAY record regions (lane HS, flag-gated Init(0)):
+     prepass every raw REPLAY word in this body through the record
+     admission (rvtt-mop-derive.cc theorem).  An admitted exec=0
+     record's swallowed words are architecturally never delivered and
+     are EXCLUDED from the executed-word census below; the record word
+     itself carries its admission (or its named refusal) into the main
+     walk.  Flag off, this map stays empty and every REPLAY word keeps
+     the established audited-table refusal byte-identically.  */
+  hash_set<gimple *> replay_suppressed;
+  hash_map<gimple *, const char *> replay_verdict;
+  if (riscv_tt_opt_opaque_replay_record)
+    {
+      basic_block pbb;
+      FOR_EACH_BB_FN (pbb, fn)
+	for (gimple_stmt_iterator pgsi = gsi_start_bb (pbb);
+	     !gsi_end_p (pgsi); gsi_next (&pgsi))
+	  if (gasm *pa = dyn_cast <gasm *> (gsi_stmt (pgsi)))
+	    {
+	      uint32_t w;
+	      if (!rvtt_raw_ttinsn_word_p (pa, &w)
+		  || (w >> 24) != XTT_REPLAY_OPCODE)
+		continue;
+	      const char *rwhy = nullptr;
+	      if (rvtt_mop_replay_record_admit (pa, w, &replay_suppressed,
+						&rwhy))
+		replay_verdict.put (pa, nullptr);
+	      else
+		replay_verdict.put (pa, rwhy);
+	    }
+      /* A record word swallowed by an ENCLOSING admitted window is
+	 data, not a window of its own -- but the region walk already
+	 refuses nested expander words, so an admitted window can
+	 never contain one (checked, not assumed).  */
+      if (flag_checking)
+	for (gimple *s : replay_suppressed)
+	  gcc_checking_assert (!replay_verdict.get (s));
+    }
+
   basic_block bb;
   FOR_EACH_BB_FN (bb, fn)
     {
@@ -350,6 +389,33 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	      if (ctx && ctx->census)
 		for (unsigned i = 0; i != gimple_asm_ninputs (a); ++i)
 		  poison_bare_addr (TREE_VALUE (gimple_asm_input_op (a, i)));
+	      /* Lane HS: a word swallowed by an admitted record window
+		 is never delivered -- no executed-word audit applies;
+		 the record word itself carries its prepass verdict.  */
+	      if (replay_suppressed.contains (stmt))
+		{
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "prgm-const: record-window word "
+			       "swallowed (never delivered) in %s: ",
+			       function_name (fn));
+		      print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
+		    }
+		  continue;
+		}
+	      if (const char **v = replay_verdict.get (a))
+		{
+		  if (*v)
+		    refuse (*v, stmt);
+		  else if (dump_file)
+		    {
+		      fprintf (dump_file, "prgm-const: replay record word "
+			       "admitted (no playback path) in %s: ",
+			       function_name (fn));
+		      print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
+		    }
+		  continue;
+		}
 	      const char *w = nullptr;
 	      unsigned local_claims = 0;
 	      if (!scan_raw_asm (a, &local_claims, &w, st))
