@@ -1866,6 +1866,13 @@ struct scan_ctx
 				   contract: delivered SFPCONFIG-class
 				   words refuse (they could rewrite the
 				   programmed constant register)       */
+  bool cc_immaterial = false;	/* programming-only region discipline
+				   (lane HR): typed structured-CC atoms
+				   are admitted -- the consumer's lifted
+				   object executes before the region and
+				   its parked constant-register state is
+				   out of any CC write's reach; every
+				   other discipline is unchanged        */
   bool saw_mop = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
@@ -2023,6 +2030,53 @@ scan_store (scan_ctx *ctx, gimple *stmt)
   return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
 }
 
+/* Structured typed CC atom (lane HR, the cc-immaterial region
+   discipline): a typed RVTT call whose WHOLE architectural effect is
+   the SFPU CC/lane-enable state plus its SSA-visible definition.  Such
+   a statement cannot touch a programmable constant register, deliver a
+   word, or write a hard LREG -- so it is immaterial to a
+   programming-only placement that executes BEFORE the scanned region
+   and whose parked state lives in a claimed constant register.
+   Fail-closed whitelist by insn id (every CC()-marked entry of
+   rvtt-insn.def today is such an atom, but a future CC-marked insn
+   with additional effects must not ride this admission silently).  */
+
+static bool
+crossloop_cc_atom_p (const rvtt_insn_data *insnd)
+{
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpxiadd_v:
+    case rvtt_insn_data::sfpxiadd_i:
+    case rvtt_insn_data::sfpxiadd_i_lv:
+    case rvtt_insn_data::sfpsetcc_i:
+    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpencc:
+    case rvtt_insn_data::sfpcompc:
+    case rvtt_insn_data::sfppushc:
+    case rvtt_insn_data::sfppopc:
+    case rvtt_insn_data::sfpexexp:
+    case rvtt_insn_data::sfpexexp_lv:
+    case rvtt_insn_data::sfplz:
+    case rvtt_insn_data::sfplz_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_v_lv:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+    case rvtt_insn_data::sfpgt:
+    case rvtt_insn_data::sfpgt_lv:
+    case rvtt_insn_data::sfple:
+    case rvtt_insn_data::sfple_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* One statement of a scanned range.  IN_CALLER selects the caller-loop
    discipline (the contract call is admitted; vector dataflow refuses);
    the callee scan admits vector dataflow (register allocation resolves
@@ -2048,9 +2102,22 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
       if (insnd)
 	{
 	  if (insnd->sets_cc (call))
-	    return scan_refuse (ctx, in_caller
-				? "crosscall-caller-cc-unproven"
-				: "crosscall-callee-cc-unproven", stmt);
+	    {
+	      if (!ctx->cc_immaterial)
+		return scan_refuse (ctx, in_caller
+				    ? "crosscall-caller-cc-unproven"
+				    : "crosscall-callee-cc-unproven", stmt);
+	      /* Programming-only discipline: a structured typed CC atom
+		 changes only the lane-enable state and its own SSA
+		 definition; the consumer's lifted placement executes
+		 before this region and parks state in a claimed
+		 constant register no CC write can reach.  Admit the
+		 whole statement (its side effect IS the CC write); a
+		 CC writer off the whitelist refuses by name.  */
+	      if (!crossloop_cc_atom_p (insnd))
+		return scan_refuse (ctx, "crossloop-cc-atom-unproven", stmt);
+	      return true;
+	    }
 	  /* The audited hoist-region discipline keeps the invariant
 	     pass's side-effect boundary: a typed call with target side
 	     effects beyond the explicit Dst load/store/counter set is
@@ -3174,7 +3241,8 @@ public:
 
 bool
 rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
-			    const char **why, gimple **why_stmt)
+			    const char **why, gimple **why_stmt,
+			    bool cc_immaterial)
 {
   compute_tu_facts ();
 
@@ -3206,6 +3274,7 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
   ctx.callee_decl = NULL_TREE;
   ctx.in_caller = false;
   ctx.region = true;
+  ctx.cc_immaterial = cc_immaterial;
 
   bool ok = true;
   basic_block *body = get_loop_body (loop);

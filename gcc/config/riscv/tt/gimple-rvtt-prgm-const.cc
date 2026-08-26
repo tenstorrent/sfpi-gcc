@@ -2214,6 +2214,16 @@ struct residency_candidate
   bool peel = false;		/* LOOP class: CC-canonical body; the
 				   programming point is created by a
 				   first-iteration peel at placement */
+  bool cc_lifted = false;	/* LOOP class (lane HR,
+				   -mtt-tensix-optimize-crossloop-cc-peel):
+				   a peel-class candidate whose
+				   programming lifted across the
+				   enclosing loops as a programming-only
+				   placement -- ENTRY is the lifted edge,
+				   proven at discovery (cc-immaterial
+				   region walk + no CC write reaches the
+				   lifted preheader), and no peel is
+				   created */
   bool inplace = false;		/* MAD-PAIR class: the programming point
 				   is the hoisted materialization's own
 				   position (outside the loop), exactly
@@ -2799,6 +2809,88 @@ residency_transform (function *fn, prgm_state *st)
 	    break;
 	  }
 
+      /* CROSSLOOP-CC-PEEL (lane HR): the peel exists only to
+	 manufacture an all-lanes programming point INSIDE a loop whose
+	 body writes CC -- and any loop that needs one sits inside
+	 enclosing loops whose region scans refuse those very CC writes
+	 (crossloop-cc-unproven), so the placement walk can never lift
+	 a peel-class placement and the peel-plus-programming
+	 re-executes on EVERY enclosing iteration for a value that
+	 cannot change (atan2's 295t face loop, the named witness).
+	 For a PROGRAMMING-ONLY placement the crossed CC writes are
+	 immaterial: the staged SFPLOADI + SFPCONFIG execute once
+	 BEFORE the crossed loops, and the parked constant register is
+	 state no CC write can touch.  Walk the enclosing loops under
+	 the cc-immaterial region discipline (structured typed CC atoms
+	 admitted; the word/replay/MOP/LREG refusals unchanged), then
+	 prove the lifted preheader under the plain loop class's own
+	 fn-entry-all-lanes ambient: no function-local CC write reaches
+	 it -- the point executes once, ahead of every crossed
+	 iteration, so the crossed loops' own CC writers are out of its
+	 past by construction, and the staged load writes EVERY lane (a
+	 superset of any consumer mask, the peel class's own refinement;
+	 post-CC candidates additionally pass the consumer audit at
+	 collection).  On success the loop's candidates place as plain
+	 loop-class programming at the lifted entry and the peel is
+	 never created.  Any unproven piece -- a walk stop (printed by
+	 name), a proven single trip, a CC write reaching the lifted
+	 preheader -- keeps the established peel byte-identically.  */
+      bool cc_lifted_loop = false;
+      edge lifted_entry = entry;
+      if (peel
+	  && riscv_tt_opt_crossloop_cc_peel > 0
+	  && riscv_tt_opt_crossloop_hoist > 0)
+	{
+	  lifted_entry
+	    = rvtt_crossloop_outermost_entry (loop, entry, 0x7fff,
+					      /*cc_immaterial=*/true);
+	  if (lifted_entry != entry)
+	    {
+	      if (classify_second_trip (loop, entry) == TRIPS_PROVEN_SINGLE)
+		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "const-residency: loop bb %d cc-peel lift "
+			     "refused (trip-count-single-trip: the loop "
+			     "provably runs one trip; the lifted "
+			     "programming can never recover its cost)\n",
+			     loop->header->index);
+		  lifted_entry = entry;
+		}
+	      else
+		{
+		  auto_vec<gimple *> lift_writers;
+		  collect_cc_writers (fn, &lift_writers);
+		  if (cc_write_reaches_point_p (lift_writers,
+						lifted_entry->src, nullptr))
+		    {
+		      if (dump_file)
+			fprintf (dump_file,
+				 "const-residency: loop bb %d cc-peel lift "
+				 "refused (crossloop-cc-peel-entrycc-"
+				 "unproven: a CC write reaches the lifted "
+				 "preheader bb %d)\n",
+				 loop->header->index,
+				 lifted_entry->src->index);
+		      lifted_entry = entry;
+		    }
+		  else
+		    {
+		      cc_lifted_loop = true;
+		      if (dump_file)
+			fprintf (dump_file,
+				 "const-residency: loop bb %d cc-peel "
+				 "placement lifted to entry bb %d "
+				 "(programming-only lift; crossed-loop CC "
+				 "immaterial to the parked constant; no "
+				 "peel)\n",
+				 loop->header->index,
+				 lifted_entry->dest->index);
+		    }
+		}
+	    }
+	}
+
       auto_vec<residency_candidate> this_loop;
       basic_block *body = get_loop_body_in_dom_order (loop);
       for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
@@ -2846,8 +2938,22 @@ residency_transform (function *fn, prgm_state *st)
 	      unsigned value;
 	      if (!constant_chain_value_p (chain, &value))
 		continue;
-	      if (cc_reached)
+	      bool lift_this = cc_lifted_loop;
+	      if (cc_reached || cc_lifted_loop)
 		{
+		  /* The consumer audit.  Post-CC candidates (the
+		     pressure-park admission) require it always.  A
+		     cc-lifted candidate (lane HR) requires it even in
+		     the pre-CC prefix: the peel this lift forgoes kept
+		     the FIRST iteration's materializations verbatim
+		     (the cc-canonical proof says nothing about the
+		     first iteration's lane state -- crossed-loop CC
+		     atoms may run before the loop is reached), so the
+		     all-lanes parked read is bit-exact only under the
+		     audited-consumer superset-write refinement.  A
+		     pre-CC candidate failing the audit under the lift
+		     keeps the established peel placement (named
+		     below), never a bare drop.  */
 		  const char *bad = nullptr;
 		  gimple *bad_use = nullptr;
 		  imm_use_iterator uit;
@@ -2870,7 +2976,7 @@ residency_transform (function *fn, prgm_state *st)
 			  break;
 			}
 		    }
-		  if (bad)
+		  if (bad && cc_reached)
 		    {
 		      if (dump_file)
 			{
@@ -2880,7 +2986,21 @@ residency_transform (function *fn, prgm_state *st)
 			}
 		      continue;
 		    }
-		  if (dump_file)
+		  if (bad)
+		    {
+		      /* Pre-CC candidate, lift refused by the audit:
+			 keep the peel placement byte-identically.  */
+		      lift_this = false;
+		      if (dump_file)
+			{
+			  fprintf (dump_file,
+				   "const-residency: cc-peel lift refused "
+				   "(crossloop-cc-peel-consumer-unaudited; "
+				   "candidate keeps the peel placement): ");
+			  print_gimple_stmt (dump_file, bad_use, 0);
+			}
+		    }
+		  else if (cc_reached && dump_file)
 		    {
 		      fprintf (dump_file,
 			       "pressure-park: admitted post-CC candidate "
@@ -2892,12 +3012,25 @@ residency_transform (function *fn, prgm_state *st)
 	      c.load = load;
 	      c.value = value;
 	      c.loop = loop;
-	      /* Same outermost audited placement as the fusion class.  */
-	      c.entry = riscv_tt_opt_crossloop_hoist > 0
-		? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
-		: entry;
+	      if (lift_this)
+		{
+		  /* Programming-only lift (lane HR): the lifted entry
+		     was proven at discovery; this candidate creates no
+		     peel.  */
+		  c.entry = lifted_entry;
+		  c.peel = false;
+		  c.cc_lifted = true;
+		}
+	      else
+		{
+		  /* Same outermost audited placement as the fusion
+		     class.  */
+		  c.entry = riscv_tt_opt_crossloop_hoist > 0
+		    ? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
+		    : entry;
+		  c.peel = peel;
+		}
 	      c.uses = count_nondebug_uses (gimple_call_lhs (load));
-	      c.peel = peel;
 	      this_loop.safe_push (c);
 	    }
 	}
@@ -3085,10 +3218,22 @@ residency_transform (function *fn, prgm_state *st)
 	 evaluation of the loop's own scalar control.  */
       if (peel && !this_loop.is_empty ())
 	{
+	  /* Price only the candidates that still place through the
+	     peel: a cc-lifted candidate (lane HR) pays its programming
+	     once at the lifted preheader under the plain class's model
+	     and creates no peel.  With the flag off every candidate is
+	     a peel candidate and this is the established computation
+	     verbatim.  */
 	  unsigned sum_w = 0;
+	  unsigned nprog = 0;
 	  for (residency_candidate &c : this_loop)
-	    sum_w += loadi_issue_words (c.load);
-	  unsigned nprog = this_loop.length ();
+	    if (c.peel)
+	      {
+		sum_w += loadi_issue_words (c.load);
+		++nprog;
+	      }
+	  if (nprog)
+	    {
 	  unsigned body_w = 0;
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (loop->header);
 	       !gsi_end_p (gsi); gsi_next (&gsi))
@@ -3122,14 +3267,24 @@ residency_transform (function *fn, prgm_state *st)
 			 "words, %u-word body)\n",
 			 loop->header->index, need, sum_w, sum_w + nprog,
 			 body_w);
-	      continue;
+	      /* Drop the peel members; a cc-lifted member (lane HR)
+		 keeps its lifted placement, whose once-per-kernel
+		 pricing does not ride the peel break-even.  With the
+		 flag off every member is a peel member and this is
+		 the established whole-loop refusal verbatim.  */
+	      unsigned kept = 0;
+	      for (residency_candidate &c : this_loop)
+		if (!c.peel)
+		  this_loop[kept++] = c;
+	      this_loop.truncate (kept);
 	    }
-	  if (dump_file)
+	  else if (dump_file)
 	    fprintf (dump_file,
 		     "const-residency: loop bb %d admits the CC-canonical "
 		     "peel (%u candidate words/iteration, break-even %u "
 		     "trips proven)\n",
 		     loop->header->index, sum_w, need);
+	    }
 	}
 
       for (residency_candidate &c : this_loop)
@@ -3228,7 +3383,13 @@ residency_transform (function *fn, prgm_state *st)
 	unsigned kept = 0;
 	for (residency_candidate &c : loop_cands)
 	  {
-	    if (!c.peel
+	    /* A cc-lifted candidate (lane HR) carried its own
+	       preheader proof at discovery: the lifted point executes
+	       once, before every crossed iteration, and no fn-local CC
+	       write reaches it -- the header-reach test below would
+	       wrongly count the candidate loop's own body writers,
+	       which are behind the lifted point by construction.  */
+	    if (!c.peel && !c.cc_lifted
 		&& cc_write_reaches_point_p (cc_writers, c.loop->header,
 					     nullptr))
 	      {

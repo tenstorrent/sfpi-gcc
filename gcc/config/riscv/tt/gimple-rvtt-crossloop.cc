@@ -250,7 +250,7 @@ rvtt_crossloop_block_executes_on_entry_p (class loop *loop, edge entry,
 
 edge
 rvtt_crossloop_outermost_entry (class loop *loop, edge entry,
-				unsigned lreg_mask)
+				unsigned lreg_mask, bool cc_immaterial)
 {
   edge best = entry;
   class loop *l = loop;
@@ -267,7 +267,7 @@ rvtt_crossloop_outermost_entry (class loop *loop, edge entry,
 	: !rvtt_crossloop_block_executes_on_entry_p (outer, oentry, l->header)
 	  ? "crossloop-speculation-unproven"
 	: !rvtt_crossloop_region_scan (outer, oentry, lreg_mask, &why,
-				       &why_stmt)
+				       &why_stmt, cc_immaterial)
 	  ? why
 	: nullptr;
       if (refusal)
