@@ -72,6 +72,30 @@ along with GCC; see the file COPYING3.  If not see
        Dst-canonicalization behavior than the all-lanes write-back its
        semantic twin compiles to.
 
+   THE STORE-SINK LICENSE (-mtt-tensix-optimize-store-sink, owner
+   ratification 2026-08-26): the float-pair refusal above is the
+   certified word floor of the threshold/hardshrink semantic class (one
+   predicated-merge word per SIMD row), and on those rows the value the
+   extra word buys is one the framework golden does NOT want -- torch
+   keeps pass-through lanes' values exactly, while the all-lanes
+   write-back flushes their denormals (every float-pair round-trip
+   mismatch is in the denormal class; no other divergence exists).  The
+   owner therefore licensed the S2 sink for the float pairs: with BOTH
+   -mtt-tensix-optimize-store-fold and the license token given, the
+   sink fires on a float pair exactly as on the proven INT32 pair, and
+   the licensed fire prints its own named dump line.  The admission is
+   SHAPE-GENERAL -- the same S2 recognizer, no operation identity or
+   magic constant is consulted -- and scope-bounded by the PROOF's
+   divergence class, not by intent: the WH INT32_SM pair diverges in an
+   integer negative-zero class the ratification does not cover and
+   refuses regardless; mixed pairs stay store-fold-sink-format-unproven;
+   every shape refusal of the sink applies to licensed fires unchanged.
+   License absent, behavior is byte-identical by construction (the same
+   named refusal on the same statement).  Licensed cells follow the
+   licensed-knob discipline (LICENSED booking, device-golden authority
+   at the row's documented tolerance, LICENSED-EXPECTED paired-CRAQ
+   disposition).
+
    The mask-subset argument for S2 admits only region refinements
    between the load and the merge (SETCC/COMPC and the structured
    x-forms refine or complement within the pushed frame, so the mask
@@ -124,6 +148,20 @@ namespace {
 
 static unsigned n_forwarded;
 static unsigned n_sunk;
+static unsigned n_sunk_licensed;
+
+/* The S2 sink license key (owner ratification 2026-08-26): the
+   value-changing float-pair sink fires ONLY when the user passed the
+   dedicated default-off license token -mtt-tensix-optimize-store-sink
+   (in addition to the pass's own -mtt-tensix-optimize-store-fold).
+   Token absent = the standing named refusal on every such site and
+   byte-identical codegen.  */
+
+static bool
+rvtt_store_sink_licensed_p (void)
+{
+  return riscv_tt_opt_store_sink > 0;
+}
 
 /* SFPLOAD/SFPSTORE Mod0 data-format selectors (capability data:
    BlackholeA0 SFPSTORE.md/SFPLOAD.md supporting definitions; pinned
@@ -454,16 +492,33 @@ fold_merge_store (gcall *assign, gcall *store)
 
   long lfmt = int_arg (load, 4);
   long sfmt = int_arg (store, 5);
+  bool licensed = false;
   if (lfmt == SFPMEM_MOD0_FMT_INT32 && sfmt == SFPMEM_MOD0_FMT_INT32)
     ; /* tt/proofs/store-sink-roundtrip/ pair (4,4): EQUAL over 2^32.  */
   else if ((lfmt == SFPMEM_MOD0_FMT_SRCB || lfmt == SFPMEM_MOD0_FMT_FP16
-	    || lfmt == SFPMEM_MOD0_FMT_BF16 || lfmt == SFPMEM_MOD0_FMT_FP32
-	    || lfmt == SFPMEM_MOD0_FMT_INT32_SM)
+	    || lfmt == SFPMEM_MOD0_FMT_BF16 || lfmt == SFPMEM_MOD0_FMT_FP32)
 	   && lfmt == sfmt)
-    /* Conversion paths canonicalize Dst (float pairs flush denormals;
-       the WH INT32_SM pair normalizes -0): tt/proofs/
-       store-sink-roundtrip/ NOT-EQUAL rows.  SRCB resolves at runtime
-       to one of the swept float paths.  */
+    {
+      /* Float pairs canonicalize Dst (the store conversion flushes
+	 denormals; every round-trip mismatch is in the denormal class:
+	 tt/proofs/store-sink-roundtrip/ NOT-EQUAL float rows, SRCB
+	 resolves at runtime to one of the swept float paths).  The
+	 predicated-store form preserves those bits -- admitted ONLY
+	 under the -mtt-tensix-optimize-store-sink license token (owner
+	 ratification 2026-08-26: the sunk form is the golden-closer
+	 semantics -- torch keeps pass-through lanes exactly, the
+	 write-back flushes them).  Token absent = the standing named
+	 refusal, byte-identical.  */
+      if (!rvtt_store_sink_licensed_p ())
+	return refuse ("store-fold-sink-format-canonicalizing", store);
+      licensed = true;
+    }
+  else if (lfmt == SFPMEM_MOD0_FMT_INT32_SM && lfmt == sfmt)
+    /* The WH INT32_SM pair normalizes -0 (tt/proofs/store-sink-roundtrip/
+       (12,12) row): an integer sign-magnitude divergence class the
+       store-sink license does NOT cover (it is scoped to the float
+       pairs' denormal-flush class).  Refuses with or without the
+       license token.  */
     return refuse ("store-fold-sink-format-canonicalizing", store);
   else
     return refuse ("store-fold-sink-format-unproven", store);
@@ -488,14 +543,25 @@ fold_merge_store (gcall *assign, gcall *store)
 
   if (dump_file)
     {
-      fprintf (dump_file,
-	       "store-fold: sank post-region store into region as ");
+      if (licensed)
+	fprintf (dump_file,
+		 "store-fold: licensed sink (-mtt-tensix-optimize-"
+		 "store-sink: predicated store preserves the enabled-"
+		 "complement lanes' Dst bits the all-lanes write-back "
+		 "would canonicalize) of post-region store into region "
+		 "as ");
+      else
+	fprintf (dump_file,
+		 "store-fold: sank post-region store into region as ");
       print_gimple_stmt (dump_file, newstore, 0);
     }
 
   remove_stmt (store);
   remove_stmt (assign);
-  n_sunk++;
+  if (licensed)
+    n_sunk_licensed++;
+  else
+    n_sunk++;
   return true;
 }
 
@@ -629,10 +695,11 @@ public:
       }
     n_forwarded = 0;
     n_sunk = 0;
+    n_sunk_licensed = 0;
     bool changed = transform (fn);
     if (dump_file)
-      fprintf (dump_file, "store-fold: forwarded=%u sunk=%u\n",
-	       n_forwarded, n_sunk);
+      fprintf (dump_file, "store-fold: forwarded=%u sunk=%u sunk-licensed=%u\n",
+	       n_forwarded, n_sunk, n_sunk_licensed);
     return changed ? TODO_update_ssa_only_virtuals | TODO_verify_all : 0;
   }
 };
