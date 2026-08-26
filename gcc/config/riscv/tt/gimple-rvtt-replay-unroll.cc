@@ -734,7 +734,10 @@ public:
 	     the delivery additions below),
 	 (b) a fixed raw `.ttinsn' asm word: no outputs, no clobbers, no
 	     labels, constant-only inputs, single-word template,
-	 (c) a scalar (non-memory) SSA assignment, PHI, or the loop's
+	 (c) a computed-word delivery store: a VOLATILE store of a scalar
+	     value (the LLK TT_ macro shape, `instrn_buffer[0] = word');
+	     volatile loads refuse -- a spin-wait is not delivery,
+	 (d) a scalar (non-memory) SSA assignment, PHI, or the loop's
 	     conditionals;
      - the flattened total is bounded by the replay-unroll word budget
        (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS: the same straight-line size
@@ -907,13 +910,30 @@ public:
 	      }
 	    if (gassign *assign = dyn_cast <gassign *> (stmt))
 	      {
+		tree lhs = gimple_assign_lhs (assign);
+		/* A VOLATILE store is the computed-word delivery spelling
+		   (the LLK TT_ macros: `instrn_buffer[0] = word'): one
+		   delivered word whose operand arithmetic is the scalar
+		   SSA control already admitted above.  The rolled world
+		   recomputes the word per trip; the flattened world folds
+		   it to a constant, exactly as the raw-word arm's unroll
+		   has always done.  Volatile LOADS stay refused (a
+		   spin-wait or status read is not delivery).  */
+		if (gimple_vdef (stmt) && !gimple_assign_load_p (assign)
+		    && TREE_CODE (lhs) != SSA_NAME
+		    && TREE_THIS_VOLATILE (lhs)
+		    && gimple_assign_single_p (assign)
+		    && is_gimple_val (gimple_assign_rhs1 (assign)))
+		  {
+		    words += 1;
+		    continue;
+		  }
 		if (gimple_vuse (stmt) || gimple_vdef (stmt))
 		  {
 		    refuse (loop, "launch-flatten-memory", NULL);
 		    free (body);
 		    return false;
 		  }
-		tree lhs = gimple_assign_lhs (assign);
 		if (TREE_CODE (lhs) != SSA_NAME)
 		  {
 		    refuse (loop, "launch-flatten-foreign-stmt",

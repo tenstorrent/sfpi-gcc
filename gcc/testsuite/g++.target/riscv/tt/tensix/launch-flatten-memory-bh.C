@@ -1,9 +1,11 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-launch-flatten -fdump-tree-rvtt_launch_flatten" }
-// A memory store in the body: scalar state this census cannot prove
-// per-trip, refuse by name.
+// A PLAIN (non-volatile) memory store in the body: frozen scalar state,
+// not delivery -- refuse by name.  (The volatile spelling of the same
+// store is the TT_ computed-word delivery class and ADMITS: see the
+// computed-word fire twin.)
 // { dg-final { scan-tree-dump "refused .launch-flatten-memory." "rvtt_launch_flatten" } }
 
-volatile int lf_side_channel;
+int lf_side_channel;
 
 void lf_memory ()
 {

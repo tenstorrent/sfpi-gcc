@@ -1431,7 +1431,10 @@
 ;; LAUNCH-FLATTEN complete-unroll request (lane HH; the GIMPLE-side
 ;; generalization of the launch-loop unroll above).  A counted innermost
 ;; DELIVERY loop -- typed replay records/launches, fixed raw .ttinsn
-;; words, typed SFPU builtins, own scalar control -- pays the same two
+;; words, computed-word volatile delivery stores (the LLK TT_ macro
+;; shape; the flatten folds each per-trip recomputed word to the
+;; constant the raw-word arm's unroll has always produced), typed SFPU
+;; builtins, own scalar control -- pays the same two
 ;; delivered loop-control words per trip, plus one folded-away branch
 ;; per per-trip conditional (a direction flip-flop, a record-once
 ;; guard), all functions of the proven trip number.  The request pass
