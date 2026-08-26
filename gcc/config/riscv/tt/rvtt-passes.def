@@ -140,6 +140,18 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
    annotation.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_delivery_shape);
 
+/* Launch-flatten complete-unroll request (lane HH): annotation only
+   (loop->unroll = the proven trip count on counted innermost DELIVERY
+   loops -- typed replay records/launches, fixed raw .ttinsn words, typed
+   SFPU builtins, own scalar control).  Placed immediately BEFORE the
+   GIMPLE complete unroller, unlike the pre-expansion requests below: the
+   pragma contract makes cunroll bypass its size estimate (which a typed
+   spelling inflates ~13x over the raw words it lowers to) and fold every
+   per-trip conditional at its proven value, so the flattened stream the
+   replay former and the delivery passes see is the one a hand `#pragma
+   GCC unroll' world has always given them.  */
+INSERT_PASS_BEFORE (pass_complete_unroll, 1, pass_rvtt_launch_flatten);
+
 /* Replay-window loop-unroll request: annotation only (loop->unroll on
    qualifying counted SFPU row loops, consumed by the generic RTL
    unroller so the always-on replay former can capture the row).  Runs

@@ -153,6 +153,7 @@ extern gimple_opt_pass *make_pass_rvtt_crosslane (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_crosslane_window (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_delivery_shape (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_replay_unroll (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_launch_flatten (gcc::context *ctxt);
 
 /* Shared typed-census vocabulary of the replay-window loop-unroll
    request pass (gimple-rvtt-replay-unroll.cc), consumed unchanged by

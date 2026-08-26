@@ -83,6 +83,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "dominance.h"
 #include "insn-constants.h"
+#include "tree-scalar-evolution.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
 
@@ -682,6 +683,401 @@ public:
     loop_optimizer_finalize ();
     if (dump_file)
       fprintf (dump_file, "replay-loop-unroll: fires=%u refusals=%u\n",
+	       ctx.n_fired, ctx.n_refused);
+    /* Annotation only; no IL edits.  */
+    return 0;
+  }
+};
+
+/* ---- Launch-flatten: complete-unroll request for delivery loops (lane HH) ----
+
+   -mtt-tensix-optimize-launch-flatten (default off).
+
+   THE PROBLEM.  A counted DELIVERY loop -- a body whose per-trip work is
+   already record-plus-launch playback of user replay windows, or a fixed
+   run of raw single-word Tensix instructions -- still drives its loop
+   control through the RISC front end on every trip: the counter update
+   and conditional branch ride the timed issue path between consecutive
+   launches, and per-trip conditionals (a direction flip-flop selecting a
+   config prologue, a record-once/launch-after init guard) cost a branch
+   per trip even though every value they test is a proven function of the
+   trip number.  The handwritten raw-word spelling of the SAME source
+   unrolls completely at GIMPLE (its asm words estimate small), so the
+   hand kernel issues a straight-line launch stream; a typed spelling of
+   the identical windows inflates the size ESTIMATE (each one-word typed
+   swap is more than a dozen GIMPLE statements), the complete unroller
+   refuses on its size limits, and the loop-control words stay in the
+   timed path -- the lane-HD topk replay-window-density gap.
+
+   THE MECHANISM.  Grant the typed world the request the raw world gets
+   from the size model: when a counted innermost loop's body consists
+   entirely of delivery content plus its own scalar control, set
+   loop->unroll to the proven trip count -- exactly what `#pragma GCC
+   unroll TRIPS' sets -- placed BEFORE the GIMPLE complete unroller so
+   cunroll both bypasses its size estimate (the pragma contract) and
+   constant-folds every per-trip conditional at its proven value.  The
+   transformation itself is the generic, unconditionally-sound complete
+   unroll of a counted loop; this pass never edits a statement, and the
+   dynamic word stream is unchanged by construction -- only the static
+   spelling flattens, which is precisely what removes the per-trip
+   loop-control words from the issue path and hands the replay former
+   and the delivery passes the same flattened stream the hand world has
+   always given them (no new window, record, or launch is created that
+   the rolled world did not already deliver dynamically).
+
+   ADMISSION is purely structural and fails closed (refusing by name):
+     - innermost loop, no abnormal or EH edges, single exit;
+     - trip count provably constant (SCEV latch count; symbolic refuses);
+     - every non-debug statement in every body block is one of:
+	 (a) a typed replay record or playback launch or another admitted
+	     rvtt builtin (words from the shared replay-unroll table plus
+	     the delivery additions below),
+	 (b) a fixed raw `.ttinsn' asm word: no outputs, no clobbers, no
+	     labels, constant-only inputs, single-word template,
+	 (c) a computed-word delivery store: a VOLATILE store of a scalar
+	     value (the LLK TT_ macro shape, `instrn_buffer[0] = word');
+	     volatile loads refuse -- a spin-wait is not delivery,
+	 (d) a scalar (non-memory) SSA assignment, PHI, or the loop's
+	     conditionals;
+     - at least one TYPED SFPU word is present (a body of owners, raw
+       words, and computed-word stores only IS the raw-spelling world:
+       its size pricing is already word-accurate, and the request must
+       not grant raw code an unroll that pricing correctly refused --
+       the topk_xl region-overflow/regression class);
+     - the flattened total is bounded by the replay-unroll word budget
+       (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS: the same straight-line size
+       class the row-group request already commits to), and a body
+       below the row minimum (XTT_REPLAY_LOOP_UNROLL_MIN_WORDS) refuses:
+       fewer delivered words per trip than that cannot price the two
+       removed loop-control words against code growth.
+
+   No operation identity, opcode calendar, coefficient value, or
+   instruction-word fingerprint participates in any decision.  A user
+   annotation (pragma) is never overridden.  QSR is refused wholesale,
+   mirroring the row-request pass, until the QSR replay erratum
+   machinery's interaction with flattened user records is audited.  */
+
+/* Delivered-word estimate for the launch-flatten class: the shared row
+   table, widened by the delivery spellings that class admits.  The
+   estimate feeds only the size bounds; downstream passes re-derive
+   exact windows from the final stream.  */
+
+static int
+launch_flatten_stmt_words (const rvtt_insn_data *insnd)
+{
+  int w = rvtt_replay_unroll_row_words (insnd);
+  if (w >= 0)
+    return w;
+  switch (insnd->id)
+    {
+    /* A typed replay owner delivers exactly one TTREPLAY word, record
+       and playback alike (the recorded payload's words are separate
+       statements, counted on their own).  */
+    case rvtt_insn_data::ttreplay:
+      return 1;
+    /* One-word typed spellings outside the row table.  */
+    case rvtt_insn_data::ttsetrwc:
+    case rvtt_insn_data::sfptransp:
+    case rvtt_insn_data::sfptransp8:
+      return 1;
+    /* LReg-bank placement plumbing: no delivered word of its own (the
+       moves it may force are register-allocation artifacts, not stream
+       words this census can price).  */
+    case rvtt_insn_data::sfpwritelreg:
+      return 0;
+    default:
+      return -1;
+    }
+}
+
+class launch_flatten
+{
+public:
+  unsigned n_fired = 0;
+  unsigned n_refused = 0;
+  /* Accumulated estimated flattened words across this function's fires
+     (words * trips per fired loop).  The per-loop budget bounds one
+     loop's straight-line run; this bounds the FUNCTION: a vehicle that
+     instantiates many admissible delivery loops (the topk_xl K=2048
+     correctness TU) otherwise grows past the TRISC code region -- a
+     loud link error, but a refusal-by-name is the honest form.  */
+  unsigned HOST_WIDE_INT fn_words = 0;
+
+  void refuse (class loop *loop, const char *name, const char *detail)
+  {
+    ++n_refused;
+    if (dump_file)
+      {
+	fprintf (dump_file, "launch-flatten: refused (%s) loop %d",
+		 name, loop->num);
+	if (detail)
+	  fprintf (dump_file, ": %s", detail);
+	fprintf (dump_file, "\n");
+      }
+  }
+
+  /* Census one innermost loop; return true if the annotation fired.  */
+  bool process (function *fun, class loop *loop)
+  {
+    if (loop->unroll)
+      /* A user annotation is already on record; never override it.  */
+      return false;
+
+    /* One exit: the proven trip count must govern every body block.  */
+    if (!single_exit (loop))
+      {
+	refuse (loop, "launch-flatten-multi-exit", NULL);
+	return false;
+      }
+
+    /* Proven constant trip count from the latch-execution chrec.  */
+    tree niter = number_of_latch_executions (loop);
+    if (!niter || TREE_CODE (niter) != INTEGER_CST
+	|| !tree_fits_uhwi_p (niter))
+      {
+	refuse (loop, "launch-flatten-trip-count-unproven", NULL);
+	return false;
+      }
+    unsigned HOST_WIDE_INT trips = tree_to_uhwi (niter) + 1;
+    if (trips < 2)
+      {
+	refuse (loop, "launch-flatten-trip-count-unproven",
+		"fewer than two trips");
+	return false;
+      }
+
+    /* Body census over every block.  */
+    unsigned words = 0;
+    /* The request exists to give the TYPED spelling the flatten the raw
+       spelling already gets from the size model: a typed SFPU word is a
+       dozen-plus GIMPLE statements, so the estimate refuses loops the
+       raw world unrolls.  A body with NO typed SFPU word (raw .ttinsn,
+       computed-word stores, and replay owners only) IS the raw world --
+       its size pricing is already word-accurate, and bypassing it
+       grants raw code an unroll that pricing correctly refused (the
+       topk_xl TRISC1_CODE overflow and its +3.8% e2e regression came
+       exactly from such raw launch loops).  Require at least one typed
+       SFPU word (the shared row table plus the transpose spellings;
+       TTREPLAY/TTSETRWC owners and plumbing do not count -- the raw
+       world spells those identically).  */
+    bool typed_word_seen = false;
+    basic_block *body = get_loop_body (loop);
+    for (unsigned i = 0; i < loop->num_nodes; ++i)
+      {
+	basic_block bb = body[i];
+	edge e;
+	edge_iterator ei;
+	FOR_EACH_EDGE (e, ei, bb->succs)
+	  if (e->flags & (EDGE_ABNORMAL | EDGE_EH))
+	    {
+	      refuse (loop, "launch-flatten-abnormal-edge", NULL);
+	      free (body);
+	      return false;
+	    }
+	for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	     gsi_next (&gsi))
+	  {
+	    gimple *stmt = gsi_stmt (gsi);
+	    if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+		|| gimple_nop_p (stmt) || gimple_clobber_p (stmt))
+	      continue;
+	    if (gimple_code (stmt) == GIMPLE_COND)
+	      /* The exit test or a per-trip conditional; the complete
+		 unroller folds it at each trip's proven values.  */
+	      continue;
+	    if (gasm *a = dyn_cast <gasm *> (stmt))
+	      {
+		const char *s = gimple_asm_string (a);
+		if (gimple_asm_noutputs (a) || gimple_asm_nclobbers (a)
+		    || gimple_asm_nlabels (a)
+		    || !s || !strstr (s, ".ttinsn")
+		    || strchr (s, '\n') || strchr (s, ';'))
+		  {
+		    refuse (loop, "launch-flatten-foreign-asm", NULL);
+		    free (body);
+		    return false;
+		  }
+		bool ok = true;
+		for (unsigned j = 0; j < gimple_asm_ninputs (a); ++j)
+		  if (!is_gimple_min_invariant
+		      (TREE_VALUE (gimple_asm_input_op (a, j))))
+		    ok = false;
+		if (!ok)
+		  {
+		    refuse (loop, "launch-flatten-foreign-asm",
+			    "non-constant raw-word operand");
+		    free (body);
+		    return false;
+		  }
+		words += 1;
+		continue;
+	      }
+	    if (gcall *call = dyn_cast <gcall *> (stmt))
+	      {
+		const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+		if (!insnd)
+		  {
+		    refuse (loop, "launch-flatten-foreign-stmt",
+			    "non-rvtt call");
+		    free (body);
+		    return false;
+		  }
+		int w = launch_flatten_stmt_words (insnd);
+		if (w < 0)
+		  {
+		    refuse (loop, "launch-flatten-unpriced-builtin",
+			    insnd->name);
+		    free (body);
+		    return false;
+		  }
+		if (w > 0 && insnd->id != rvtt_insn_data::ttreplay
+		    && insnd->id != rvtt_insn_data::ttsetrwc)
+		  /* A typed SFPU word: the class the size model
+		     over-prices (the raw world spells owners and
+		     plumbing identically).  */
+		  typed_word_seen = true;
+		words += w;
+		continue;
+	      }
+	    if (gassign *assign = dyn_cast <gassign *> (stmt))
+	      {
+		tree lhs = gimple_assign_lhs (assign);
+		/* A VOLATILE store is the computed-word delivery spelling
+		   (the LLK TT_ macros: `instrn_buffer[0] = word'): one
+		   delivered word whose operand arithmetic is the scalar
+		   SSA control already admitted above.  The rolled world
+		   recomputes the word per trip; the flattened world folds
+		   it to a constant, exactly as the raw-word arm's unroll
+		   has always done.  Volatile LOADS stay refused (a
+		   spin-wait or status read is not delivery).  */
+		if (gimple_vdef (stmt) && !gimple_assign_load_p (assign)
+		    && TREE_CODE (lhs) != SSA_NAME
+		    && TREE_THIS_VOLATILE (lhs)
+		    && gimple_assign_single_p (assign)
+		    && is_gimple_val (gimple_assign_rhs1 (assign)))
+		  {
+		    words += 1;
+		    continue;
+		  }
+		if (gimple_vuse (stmt) || gimple_vdef (stmt))
+		  {
+		    refuse (loop, "launch-flatten-memory", NULL);
+		    free (body);
+		    return false;
+		  }
+		if (TREE_CODE (lhs) != SSA_NAME)
+		  {
+		    refuse (loop, "launch-flatten-foreign-stmt",
+			    "non-SSA assignment");
+		    free (body);
+		    return false;
+		  }
+		continue;
+	      }
+	    refuse (loop, "launch-flatten-foreign-stmt",
+		    gimple_code_name[gimple_code (stmt)]);
+	    free (body);
+	    return false;
+	  }
+      }
+    free (body);
+
+    if (words < XTT_REPLAY_LOOP_UNROLL_MIN_WORDS)
+      {
+	refuse (loop, "launch-flatten-row-too-small", NULL);
+	return false;
+      }
+    if ((unsigned HOST_WIDE_INT) words * trips
+	> XTT_REPLAY_LOOP_UNROLL_MAX_WORDS)
+      {
+	refuse (loop, "launch-flatten-word-budget", NULL);
+	return false;
+      }
+    if (fn_words + (unsigned HOST_WIDE_INT) words * trips
+	> XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS)
+      {
+	refuse (loop, "launch-flatten-function-budget", NULL);
+	return false;
+      }
+    if (!typed_word_seen)
+      {
+	refuse (loop, "launch-flatten-no-typed-content", NULL);
+	return false;
+      }
+    /* loop->unroll is a narrow field; the word budget above already
+       bounds trips far below its range, so this is belt only.  */
+    if (trips > 1024)
+      {
+	refuse (loop, "launch-flatten-word-budget", "trip count");
+	return false;
+      }
+
+    loop->unroll = (unsigned short) trips;
+    fun->has_unroll = true;
+    fn_words += (unsigned HOST_WIDE_INT) words * trips;
+    ++n_fired;
+    if (dump_file)
+      fprintf (dump_file,
+	       "launch-flatten: requested complete unroll of loop %d"
+	       " (~%u delivery words/trip, trips "
+	       HOST_WIDE_INT_PRINT_UNSIGNED ")\n",
+	       loop->num, words, trips);
+    return true;
+  }
+};
+
+const pass_data pass_data_rvtt_launch_flatten =
+{
+  GIMPLE_PASS,
+  "rvtt_launch_flatten",
+  OPTGROUP_NONE,
+  TV_NONE,
+  PROP_ssa,
+  0,
+  0,
+  0,
+  0,
+};
+
+class pass_rvtt_launch_flatten : public gimple_opt_pass
+{
+public:
+  pass_rvtt_launch_flatten (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_launch_flatten, ctxt)
+  {}
+
+  bool gate (function *) final override
+  {
+    return TARGET_XTT_TENSIX && riscv_tt_opt_launch_flatten > 0;
+  }
+
+  unsigned execute (function *fun) final override
+  {
+    if (TARGET_XTT_TENSIX_QSR)
+      {
+	if (dump_file)
+	  fprintf (dump_file, "launch-flatten: refused"
+		   " (launch-flatten-qsr-unproven)\n");
+	return 0;
+      }
+    /* This pass sits inside the GIMPLE loop pipeline (immediately before
+       the complete unroller), where loops and SCEV are live; fall back
+       to a local setup if it is ever scheduled outside it.  */
+    bool own_loops = !current_loops;
+    if (own_loops)
+      loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+    bool own_scev = !scev_initialized_p ();
+    if (own_scev)
+      scev_initialize ();
+    launch_flatten ctx;
+    for (auto loop : loops_list (fun, LI_ONLY_INNERMOST))
+      ctx.process (fun, loop);
+    if (own_scev)
+      scev_finalize ();
+    if (own_loops)
+      loop_optimizer_finalize ();
+    if (dump_file)
+      fprintf (dump_file, "launch-flatten: fires=%u refusals=%u\n",
 	       ctx.n_fired, ctx.n_refused);
     /* Annotation only; no IL edits.  */
     return 0;
@@ -1347,6 +1743,12 @@ gimple_opt_pass *
 make_pass_rvtt_replay_unroll (gcc::context *ctxt)
 {
   return new pass_rvtt_replay_unroll (ctxt);
+}
+
+gimple_opt_pass *
+make_pass_rvtt_launch_flatten (gcc::context *ctxt)
+{
+  return new pass_rvtt_launch_flatten (ctxt);
 }
 
 gimple_opt_pass *
