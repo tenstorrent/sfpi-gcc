@@ -701,6 +701,10 @@ mtt-tensix-optimize-replay-loop-unroll
 Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
 Request generic loop unrolling for counted single-block Tensix SFPU row loops whose every statement is a typed SFPU builtin, so the existing replay formation can capture the repeated row (default off).
 
+mtt-tensix-optimize-launch-flatten
+Target Var(riscv_tt_opt_launch_flatten) Init(0)
+Request COMPLETE generic unrolling of counted innermost Tensix DELIVERY loops -- bodies whose statements are typed replay records or playback launches (TTREPLAY), fixed single-word raw .ttinsn asm with constant-only operands, typed SFPU builtins, and the loop's own scalar control -- so the per-trip RISC loop-control words leave the timed issue path and the flattened word stream reaches replay formation and the delivery passes exactly as a hand `#pragma GCC unroll' world does.  The annotation is placed before the GIMPLE complete unroller so per-trip conditionals fold at their proven values.  Trip count must prove (single exit, constant latch count), the flattened total is bounded by the replay-unroll word budget, and every unproven piece refuses by name, leaving the function byte-identical (default off).
+
 mtt-tensix-optimize-delivery-shape
 Target Var(riscv_tt_opt_delivery_shape) Init(0)
 Choose the delivery shape (unroll factor and delivery tier) of each proven-trip counted single-block Tensix SFPU row loop by exact optimization over the audited issue-cost model (rvtt-cost.md rates; exec bounds from the audited latency mirror); the winning shape is requested through the same generic annotation the unroll-request pass uses, every uncalibrated model term refuses by name, and a refusal or rolled selection leaves the function byte-identical (default off).

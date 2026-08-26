@@ -1428,6 +1428,24 @@
 ;;   silicon A/B promotes them.  A size guard, not a shape key: it
 ;;   depends only on the proven trip count and delivered word count.
 ;;
+;; LAUNCH-FLATTEN complete-unroll request (lane HH; the GIMPLE-side
+;; generalization of the launch-loop unroll above).  A counted innermost
+;; DELIVERY loop -- typed replay records/launches, fixed raw .ttinsn
+;; words, typed SFPU builtins, own scalar control -- pays the same two
+;; delivered loop-control words per trip, plus one folded-away branch
+;; per per-trip conditional (a direction flip-flop, a record-once
+;; guard), all functions of the proven trip number.  The request pass
+;; (gimple-rvtt-replay-unroll.cc, -mtt-tensix-optimize-launch-flatten)
+;; sets loop->unroll to the proven trip count immediately before the
+;; GIMPLE complete unroller: the transformation is the generic,
+;; unconditionally-sound complete unroll; the dynamic word stream is
+;; unchanged by construction.  Pricing reuses the row-request bounds
+;; unchanged -- XTT_REPLAY_LOOP_UNROLL_MIN_WORDS below per trip (fewer
+;; delivered words cannot price the removed control words against
+;; growth) and XTT_REPLAY_LOOP_UNROLL_MAX_WORDS on the flattened total
+;; (the same straight-line size class the factor-8 row group commits
+;; to).  No new constants.
+;;
 ;; ORDERING RULE for the execution-saturation context term.  The
 ;; saturation term's LAUNCH_RUN input measures contiguous sibling
 ;; launches present in the loop body INDEPENDENTLY of the hoist under
