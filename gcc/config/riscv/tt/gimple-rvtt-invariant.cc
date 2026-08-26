@@ -1633,6 +1633,53 @@ transform (function *fn)
       if (loads.is_empty ())
 	continue;
 
+      /* EL-vs-RESIDENCY ORDERING (lane HN): when the late
+	 const-residency walk with its pressure-park tier is enabled in
+	 this compilation, a CC-restore loop DEFERS its invariant
+	 immediate hoists to that walk entirely.  Two composition
+	 defects make the early hoist here strictly dominated on this
+	 loop class (softplus-fresh anatomy, laneHJ census):
+
+	 - BUDGET ORDERING: each hoist below pins one LREG across the
+	   loop under this pass's conservative single-body SSA walk,
+	   spending exactly the free registers the 295t walk's exact
+	   function-wide pressure model would allocate by priced
+	   selection over ALL of the loop's constants (PRGM tiers
+	   first, LREG parks by rank) -- first-come here starves the
+	   arbiter there (softplus: one early hoist cost two parks).
+
+	 - LV-CARRIER FORGING: hoisting a predicated in-region
+	   materialization to the preheader upgrades its disabled
+	   lanes from RA-indeterminate to defined-constant; a merge
+	   consumer (sfpassign_lv) whose live-tie the liveness pass
+	   would have BROKEN against the in-place definition (same
+	   region, same generation) now keeps a genuine cross-region
+	   tie and lowers to a per-iteration lane-predicated SFPMOV
+	   merge -- a forged word no later pass can remove.
+
+	 The late walk supersedes every hoist this pass could commit on
+	 such a loop (same candidates, superset of placements), so the
+	 deferral changes placement authority, never coverage.  Loops
+	 without CC machinery keep this pass's established behavior
+	 (the late peel/park classes target the CC-canonical shape;
+	 plain loops lose nothing here), and when either late flag is
+	 absent the ordering has no walk to yield to and this pass
+	 keeps its hoists byte-identically.  */
+      if (riscv_tt_opt_park_ordering > 0
+	  && cc.has_cc
+	  && riscv_tt_opt_const_residency > 0
+	  && riscv_tt_opt_pressure_park > 0)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Invariant SFPU immediate hoist deferred:"
+		     " residency-walk-ordering (loop bb %d): the enabled"
+		     " const-residency walk owns this CC-restore loop's"
+		     " invariant constants\n",
+		     loop->header->index);
+	  continue;
+	}
+
       /* A CC-carrying loop under an explicit unroll request multiplies
 	 its in-loop live ranges by the unroll factor after this pass;
 	 the single-body SSA pressure walk models none of that overlap,
