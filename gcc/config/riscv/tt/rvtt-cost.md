@@ -2058,6 +2058,35 @@
 ;; lreg-file-exhausted, plus the pre-existing prgm-exhausted and every
 ;; peel-class refusal unchanged.  Flag off: byte-identical (the scan
 ;; break and single-tier placement are restored verbatim).
+;;
+;; STORE-SOURCE TIER (lane HO, -mtt-tensix-optimize-store-source-tier;
+;; the HL-F1 encoding-ceiling copy tax, generalizing lane HL's
+;; license-gated refusal): SFPSTORE sources L0-L11 only
+;; (SFPSTORE_MAX_SRC_LREG), so a PRGM-parked (L12-L14) store-source
+;; constant is NOT free at its store consumers -- the register
+;; allocator materializes a per-consumer SFPMOV copy out of the
+;; constant file, one issued word per row inside a loop.  Placement
+;; economics per store-consumed loop-class candidate:
+;;
+;;   parked (status quo)   1 word/row (the copy) + programming words
+;;   LREG-tier hoisted     0 words/row, zero programming words
+;;                         (the materialization moves; no SFPCONFIG),
+;;                         1 LREG of function-wide pressure
+;;   bare refusal          the in-loop materialization stays:
+;;                         1 word/row (short imm) or 2 words/row
+;;                         (wide constant) -- NEVER chosen
+;;
+;; So the knob routes the candidate to the LREG tier FIRST and, when
+;; the tier refuses (lreg-file-exhausted, or the pressure-park tier is
+;; not enabled), falls through to the established park byte-identically
+;; -- a strict never-worse ordering (the copy word beats or ties the
+;; rematerialization; the hoist beats both).  Math consumers of the
+;; same candidate read the hoisted LREG exactly as they read the parked
+;; register.  The store-sink license token's own place() refusal (all
+;; candidate classes, no park fallback) is kept verbatim: the licensed
+;; sink's word accounting requires the value NEVER park.  Named dump
+;; line: "store-source-tier (store-source-encoding-ceiling)"; refusal
+;; names unchanged (lreg-file-exhausted).  Flag off: byte-identical.
 
 ;; ---------------------------------------------------------------------
 ;; CROSSCALL CONFIG-PREFIX + RESIDENCY (lane HC,

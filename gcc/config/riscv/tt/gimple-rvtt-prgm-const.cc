@@ -3344,44 +3344,48 @@ residency_transform (function *fn, prgm_state *st)
 	  peeled.put (c.loop, c.entry);
 	}
     };
+  /* SFPSTORE sources L0-L11 only (SFPSTORE.md functional model; the
+     store-fold pass's SFPSTORE_MAX_SRC_LREG capability fact), so a
+     PRGM-parked (L12-L14) store-source constant makes the register
+     allocator materialize a per-consumer copy out of the constant file
+     at every store -- inside a loop, one SFPMOV word per row (HL-F1,
+     the store-source-encoding-ceiling copy tax).  */
+  auto store_consumed_p = [] (residency_candidate &c) -> bool
+    {
+      imm_use_iterator uit;
+      gimple *use;
+      FOR_EACH_IMM_USE_STMT (use, uit, gimple_call_lhs (c.load))
+	{
+	  if (is_gimple_debug (use))
+	    continue;
+	  const rvtt_insn_data *uinsnd = rvtt_get_insn_data (use);
+	  if (uinsnd && uinsnd->id == rvtt_insn_data::sfpstore
+	      && gimple_call_arg (as_a <gcall *> (use), 1)
+		 == gimple_call_lhs (c.load))
+	    return true;
+	}
+      return false;
+    };
   auto place = [&] (residency_candidate &c) -> bool
     {
-      /* HL (store-sink license composition): SFPSTORE sources L0-L11
-	 only (SFPSTORE.md functional model; the store-fold pass's
-	 SFPSTORE_MAX_SRC_LREG capability fact), so parking a constant
-	 consumed as a store's data source forces the register
-	 allocator to materialize a per-consumer copy out of the
-	 constant file -- inside a loop that is a strict word
-	 regression (the licensed sink's erased merge word comes
-	 straight back as the copy).  Refuse the PRGM placement by name
-	 and let the LREG tier hoist the materialization whole (the
-	 handwritten kernels' own hoisted-value form).  Gated on the
-	 store-sink license token so unlicensed codegen stays
-	 byte-identical by construction; the general pricing defect
-	 (ANY store-consumed parked constant pays the same per-row
-	 copy) is HL-F1, filed for a successor.  */
-      if (riscv_tt_opt_store_sink > 0)
+      /* HL (store-sink license composition): under the license token
+	 the encoding-ceiling copy tax hands the licensed sink's erased
+	 merge word straight back, so the PRGM placement refuses by
+	 name for EVERY candidate class and the loop-class fallback
+	 lets the LREG tier hoist the materialization whole (the
+	 handwritten kernels' own hoisted-value form).  Kept exactly as
+	 shipped so licensed codegen stays byte-identical; the general
+	 (unlicensed) treatment is the store-source-tier knob at the
+	 loop-class placement sweep below.  */
+      if (riscv_tt_opt_store_sink > 0 && store_consumed_p (c))
 	{
-	  imm_use_iterator uit;
-	  gimple *use;
-	  FOR_EACH_IMM_USE_STMT (use, uit, gimple_call_lhs (c.load))
+	  if (dump_file)
 	    {
-	      if (is_gimple_debug (use))
-		continue;
-	      const rvtt_insn_data *uinsnd = rvtt_get_insn_data (use);
-	      if (uinsnd && uinsnd->id == rvtt_insn_data::sfpstore
-		  && gimple_call_arg (as_a <gcall *> (use), 1)
-		     == gimple_call_lhs (c.load))
-		{
-		  if (dump_file)
-		    {
-		      fprintf (dump_file, "const-residency: refused "
-			       "(store-source-encoding-ceiling): ");
-		      print_gimple_stmt (dump_file, c.load, 0);
-		    }
-		  return false;
-		}
+	      fprintf (dump_file, "const-residency: refused "
+		       "(store-source-encoding-ceiling): ");
+	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
+	  return false;
 	}
       unsigned prgm = 0;
       basic_block prior_bb = nullptr;
@@ -3604,7 +3608,40 @@ residency_transform (function *fn, prgm_state *st)
     };
 
   for (residency_candidate &c : loop_cands)
-    changed |= place (c) || lreg_hoist (c);
+    {
+      /* HL-F1 generalization (-mtt-tensix-optimize-store-source-tier):
+	 a store-consumed loop-class constant takes the pressure-park
+	 LREG tier INSTEAD of a PRGM park -- the hoisted plain-LREG
+	 materialization is SFPSTORE-sourceable, so the per-row SFPMOV
+	 copy out of the constant file disappears at zero programming
+	 cost (the materialization moves; no SFPCONFIG).  When the tier
+	 refuses (lreg-file-exhausted, or without
+	 -mtt-tensix-optimize-pressure-park providing the tier) the
+	 candidate falls through and KEEPS the established parked
+	 placement byte-identically: the one-word-per-row copy never
+	 loses to the in-loop rematerialization a bare refusal would
+	 leave behind (two words per row for wide constants).  The
+	 store-sink license token keeps its own stricter refusal inside
+	 place() unchanged (that path must not park even without the
+	 tier: the licensed sink's word accounting depends on it).  */
+      if (riscv_tt_opt_store_source_tier > 0
+	  && riscv_tt_opt_store_sink <= 0
+	  && store_consumed_p (c))
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "const-residency: store-source-tier "
+		       "(store-source-encoding-ceiling): ");
+	      print_gimple_stmt (dump_file, c.load, 0);
+	    }
+	  if (lreg_hoist (c))
+	    {
+	      changed = true;
+	      continue;
+	    }
+	}
+      changed |= place (c) || lreg_hoist (c);
+    }
 
   /* MAD-PAIR groups place all-or-none: a half-claimed pair pays its
      programming word while the surviving immediate fold still blocks
