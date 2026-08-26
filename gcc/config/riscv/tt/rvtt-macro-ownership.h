@@ -189,11 +189,22 @@ extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
    state, and unable to deliver an unaudited or replay word.  On
    refusal returns false with the dump-stable name in *WHY (and the
    offending statement in *WHY_STMT when known).  Refusing default for
-   every class not on record.  */
+   every class not on record.
+   CC_IMMATERIAL selects the programming-only discipline (lane HR,
+   -mtt-tensix-optimize-crossloop-cc-peel): a CC-writing statement is
+   admitted exactly when it is a structured typed CC atom (whitelisted
+   by insn id; its whole architectural effect is the lane-enable state
+   plus its SSA definition) -- sound only for a consumer whose lifted
+   object executes BEFORE the region and whose parked state (a claimed
+   programmable constant register) no CC write can touch.  Every other
+   discipline (delivered words, replay, MOP census, explicit LREG
+   writes, side-effecting calls) is unchanged; a CC writer off the
+   whitelist refuses by name (crossloop-cc-atom-unproven).  */
 extern bool rvtt_crossloop_region_scan (class loop *loop, edge entry,
 					unsigned lreg_mask,
 					const char **why,
-					gimple **why_stmt);
+					gimple **why_stmt,
+					bool cc_immaterial = false);
 
 /* The outermost enclosing entry edge to which a loop-entry placement
    of LOOP may be lifted under the audited-region discipline: walks
@@ -203,7 +214,8 @@ extern bool rvtt_crossloop_region_scan (class loop *loop, edge entry,
    execution the original placement is tied to (the inner loop's
    header).  */
 extern edge rvtt_crossloop_outermost_entry (class loop *loop, edge entry,
-					    unsigned lreg_mask);
+					    unsigned lreg_mask,
+					    bool cc_immaterial = false);
 
 /* BB provably executes on the first iteration of LOOP entered through
    ENTRY: the header exit test folds (or is implied by a dominating

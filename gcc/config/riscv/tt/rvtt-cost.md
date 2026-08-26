@@ -2088,6 +2088,55 @@
 ;; line: "store-source-tier (store-source-encoding-ceiling)"; refusal
 ;; names unchanged (lreg-file-exhausted).  Flag off: byte-identical.
 
+;; CROSSLOOP-CC-PEEL (lane HR, -mtt-tensix-optimize-crossloop-cc-peel;
+;; the atan2 "crossloop-cc-unproven" peel-composition class): a
+;; PROGRAMMING-ONLY lift of the CC-canonical peel class's placement
+;; across enclosing loops.  The peel exists only to manufacture an
+;; all-lanes programming point INSIDE a loop whose body writes CC --
+;; and the placement walk's region scan blanket-refuses those very CC
+;; writes at every enclosing level (crossloop-cc-unproven), so a
+;; peel-class placement could never lift and the peel-plus-programming
+;; re-executed on EVERY enclosing iteration (atan2: 27 peeled body
+;; words + 2x2 programming words per face entry for constants that
+;; cannot change).  Under the cc-immaterial region discipline
+;; (structured typed CC atoms admitted -- their whole effect is the
+;; lane-enable state plus an SSA definition, and the parked constant
+;; register is out of any CC write's reach; delivered words, replay,
+;; MOP census, and explicit LREG writes keep their established
+;; refusals) plus a no-CC-write-reaches proof at the lifted preheader
+;; (the plain loop class's own fn-entry-all-lanes ambient; the point
+;; executes once, ahead of every crossed iteration), the loop's
+;; candidates place as plain loop-class programming at the outermost
+;; proven entry and the peel is never created:
+;;
+;;   flag off (peel)     per enclosing entry: body_w peeled words +
+;;                       (sum_w + nprog) programming words, priced by
+;;                       the residency-peel break-even
+;;   lifted              once per kernel: (sum_w + nprog) programming
+;;                       words; zero peeled words; in-loop candidates
+;;                       read the parked register on every iteration
+;;
+;; Strictly cheaper than the peel wherever both fire; additionally
+;; fires where the peel break-even refused (the lift pays W+1 words
+;; once against W per iteration -- the plain class's model), gated by
+;; the plain class's trip policy (a proven single trip refuses:
+;; trip-count-single-trip; runtime trips admit, worst case one extra
+;; pushed word).  Lane discipline is the peel class's own: the lifted
+;; staged load writes EVERY lane under the proven ambient (superset of
+;; any consumer mask; post-CC candidates additionally passed the
+;; pressure-park consumer audit at collection).  The transform inserts,
+;; deletes, and reorders NO CC-writing statement relative to the
+;; original program (the peel it forgoes was this pass's own duplicate)
+;; -- no exec-state shape can form that the source did not already
+;; contain (the ES/FJ hazard discipline).  Named refusals:
+;; crossloop-cc-atom-unproven (a CC writer off the typed whitelist),
+;; crossloop-cc-peel-entrycc-unproven (a CC write reaches the lifted
+;; preheader), trip-count-single-trip, plus every walk-stop name
+;; (crossloop-word/replay/stmt/config-word/mop-slot-unproven,
+;; crossloop-speculation-unproven, crossloop-preheader-unproven) and
+;; every peel-class refusal unchanged.  Flag off: byte-identical (the
+;; peel path is restored verbatim).
+;;
 ;; ---------------------------------------------------------------------
 ;; CROSSCALL CONFIG-PREFIX + RESIDENCY (lane HC,
 ;; -mtt-tensix-optimize-crosscall-config-prefix; the geluappx
