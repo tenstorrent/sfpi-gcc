@@ -12,13 +12,22 @@
 // load/LUT/mad/store shape.
 // { dg-final { scan-tree-dump-times "formed fp32-3entry-sgn-update \\(mod0 0\\) from 3-range magnitude dispatch tree, boundaries 0x3f800000,0x40000000, slot leaves mul0,affine,const" 1 "rvtt_lut_select" } }
 // The earlier invariant hoist has already placed the three value
-// immediates and the addend read in the preheader; the two zero-slot
-// materializations formation creates at the LUT site are what remain
-// to place (exactly the real tanhderivlut TU shape).
-// { dg-final { scan-tree-dump-times "placed coefficient materialization in loop preheader" 2 "rvtt_lut_select" } }
-// { dg-final { scan-tree-dump "placements=2" "rvtt_lut_select" } }
+// immediates and the addend read in the preheader; formation creates
+// the two zero-slot materializations at the LUT site AND (laneHT
+// 4-word unlock) a FLOATB materialization for the const leaf's slot
+// word -- a LUT table slot is an implicit hard register, so a slot
+// operand defined by a creg read would otherwise force the allocator
+// to copy L10 into the slot LReg inside the row loop (the
+// tanhderivlut 5th loop word).  All three placements go to the
+// preheader; the surrounding mad still reads LReg[10] directly (the
+// hand kernel's exact 4-word row shape).
+// { dg-final { scan-tree-dump "slot creg value 0x3f800000 materialized as FLOATB immediate 0x3f80" "rvtt_lut_select" } }
+// { dg-final { scan-tree-dump-times "placed coefficient materialization in loop preheader" 3 "rvtt_lut_select" } }
+// { dg-final { scan-tree-dump "placements=3" "rvtt_lut_select" } }
 // { dg-final { scan-tree-dump-not "lut-coefficient-pressure" "rvtt_lut_select" } }
 // { dg-final { scan-assembler-times "SFPLUTFP32" 1 } }
+// { dg-final { scan-assembler "SFPMAD\tL3, L3, L3, L10" } }
+// { dg-final { scan-assembler-not "SFPMOV" } }
 
 extern volatile unsigned __instrn_buffer[];
 namespace ckernel {

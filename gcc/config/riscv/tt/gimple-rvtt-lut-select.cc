@@ -474,14 +474,18 @@ match_lt_boundary (gcall *fcmp, tree mag, uint32_t *bits)
   return true;
 }
 
-/* Synthesize the certified +0.0 coefficient materialization (the
-   shortened SFPLOADI FLOATB form with a zero immediate: lane value
-   imm16 << 16 == 0x00000000) before *GSI and return its SSA value.
-   The synthesized load is an ordinary in-loop invariant immediate;
-   the shared placement proofs may later move it to the preheader.  */
+/* Synthesize a shortened-SFPLOADI-FLOATB coefficient materialization
+   (lane value IMM16 << 16 -- SFPLOADI.md FLOATB, exact for any FP32
+   pattern with a zero low half) before *GSI and return its SSA value.
+   The synthesized +0.0 (imm16 0) is the certified degenerate-slot
+   coefficient; the leaf extension also uses this form to give a
+   FLOATB-exact constant-register value its own slot word.  The
+   synthesized load is an ordinary in-loop invariant immediate; the
+   shared placement proofs may later move it to the preheader.  */
 
 static tree
-synth_zero_coeff (tree vectype, gimple_stmt_iterator *gsi, location_t loc)
+synth_floatb_coeff (tree vectype, uint32_t imm16, gimple_stmt_iterator *gsi,
+		    location_t loc)
 {
   const rvtt_insn_data *ld = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
   gcc_assert (ld->decl);
@@ -491,7 +495,7 @@ synth_zero_coeff (tree vectype, gimple_stmt_iterator *gsi, location_t loc)
     argts[i] = TREE_VALUE (t);
   gcall *c = gimple_build_call (ld->decl, 5,
 				build_int_cst (argts[0], 0),
-				build_int_cst (argts[1], 0),
+				build_int_cst (argts[1], imm16),
 				build_int_cst (argts[2], 0),
 				build_int_cst (argts[3], 0),
 				build_int_cst (argts[4],
@@ -500,6 +504,67 @@ synth_zero_coeff (tree vectype, gimple_stmt_iterator *gsi, location_t loc)
   gimple_set_location (c, loc);
   gsi_insert_before (gsi, c, GSI_SAME_STMT);
   return gimple_call_lhs (c);
+}
+
+/* A LUT table slot is an implicit hard register: the formed
+   instruction reads the architectural table LRegs directly, so a slot
+   operand defined by a constant-register read forces a physical copy
+   into the slot LReg at register allocation -- and the allocator
+   inserts that copy at the USE, inside the row loop (the tanhderivlut
+   5th loop word, laneHF's named residual).  Under the leaf extension,
+   when the read is of a hardwired constant register whose
+   architectural value is on record (const_leaf_value_p: LReg[9] zero,
+   LReg[10] one) AND that value is FLOATB-exact (low 16 bits zero --
+   SFPLOADI.md: FLOATB materializes imm16 << 16 bit-exactly), the slot
+   coefficient becomes its own shortened-FLOATB materialization like
+   every other slot word: an invariant immediate the shared placement
+   moves to the preheader, leaving the row loop at the hand kernel's
+   word count.  The creg read itself stays for its creg-capable
+   consumers (a mad addend reads LReg[10] directly).  Anything else --
+   a mutable or unrecorded register, or a value that does not re-encode
+   exactly in FLOATB -- keeps the historical operand by name, byte
+   shape unchanged.  */
+
+static tree
+slot_coeff_operand (tree val, tree vectype, gimple_stmt_iterator *gsi,
+		    location_t loc)
+{
+  if (!riscv_tt_opt_lut_select_leaf_ext)
+    return val;
+  if (!val || TREE_CODE (val) != SSA_NAME)
+    return val;
+  gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (val));
+  if (!def)
+    return val;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd || insnd->id != rvtt_insn_data::sfpreadlreg)
+    return val;
+  uint32_t bits;
+  if (!const_leaf_value_p (def, &bits))
+    {
+      if (dump_file)
+	{
+	  fprintf (dump_file, "lut-select: slot creg read kept as operand"
+		   " (lut-slot-coeff-value-unproven): ");
+	  print_gimple_stmt (dump_file, def, 0);
+	}
+      return val;
+    }
+  if (bits & 0xffffu)
+    {
+      if (dump_file)
+	{
+	  fprintf (dump_file, "lut-select: slot creg value %#x not"
+		   " FLOATB-exact, operand kept"
+		   " (lut-slot-coeff-floatb-unrepresentable): ", bits);
+	  print_gimple_stmt (dump_file, def, 0);
+	}
+      return val;
+    }
+  if (dump_file)
+    fprintf (dump_file, "lut-select: slot creg value %#x materialized as"
+	     " FLOATB immediate %#x\n", bits, bits >> 16);
+  return synth_floatb_coeff (vectype, bits >> 16, gsi, loc);
 }
 
 /* Synthesize a packed 32-bit coefficient-word materialization (the
@@ -1083,8 +1148,10 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
 	      b = dup_coeff_operand (b, &rsi);
 	    }
 	  slot_seen[leaf] = true;
-	  aops[s] = a ? a : synth_zero_coeff (vectype, &rsi, loc);
-	  bops[s] = b ? b : synth_zero_coeff (vectype, &rsi, loc);
+	  a = slot_coeff_operand (a, vectype, &rsi, loc);
+	  b = slot_coeff_operand (b, vectype, &rsi, loc);
+	  aops[s] = a ? a : synth_floatb_coeff (vectype, 0, &rsi, loc);
+	  bops[s] = b ? b : synth_floatb_coeff (vectype, 0, &rsi, loc);
 	}
     }
 
