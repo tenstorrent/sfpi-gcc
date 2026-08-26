@@ -295,13 +295,13 @@ replace_loadi (gcall *call, gcall *earlier, int op, tree val,
 // is SFPLOADI_MOD0_UPPER.
 
 static bool
-immvar_simplify (gcall *call, std::vector<gcall *> uppers)
+immvar_simplify (gcall *call, std::vector<gcall *> seconds)
 {
   const auto *insnd = rvtt_get_insn_data (rvtt_insn_data::sfploadi);
 
   unsigned first_mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
-  tree val = gimple_call_arg (call, insnd->imm_arg ());
-  uint32_t ival = TREE_INT_CST_LOW (val);
+  tree first_val = gimple_call_arg (call, insnd->imm_arg ());
+  uint32_t first_ival = TREE_INT_CST_LOW (first_val);
 
   tree res = gimple_call_lhs (call);
   if (!res)
@@ -310,8 +310,11 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
   int sfp_use = 0;
   use_operand_p use_p;
   imm_use_iterator iter;
+  int second_mod = first_mod == SFPLOADI_MOD0_USHORT ? SFPLOADI_MOD0_UPPER
+    : first_mod == SFPLOADI_MOD0_FLOATB ? SFPLOADI_MOD0_LOWER
+    : -1;
 
-  uppers.clear ();
+  seconds.clear ();
   FOR_EACH_IMM_USE_FAST (use_p, iter, res)
     {
       gimple *use_stmt = USE_STMT (use_p);
@@ -322,73 +325,82 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	continue;
       auto *use_call = as_a <gcall *> (use_stmt);
 
-      if (first_mod == SFPLOADI_MOD0_USHORT
+      if (second_mod >= 0
 	  && use_insnd->id == rvtt_insn_data::sfploadi_lv
 	  && integer_zerop (gimple_call_arg (use_call, 0))
-	  && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg ()))
-	      == SFPLOADI_MOD0_UPPER))
-	uppers.push_back (use_call);
-      else
+	  && unsigned (second_mod)
+	  == TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg ())))
 	{
-	  sfp_use |= 1;
-	  if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v
-	      && HAVE_CREG_NEG_1
-	      && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg () + 1))
-		  == CREG_IDX_NEG_1))
-	    // We must not simplify this to a load of the constant register
-	    // that we're intializing!
-	    sfp_use |= 2;
+	  seconds.push_back (use_call);
+	  continue;
 	}
+
+      sfp_use |= 1;
+      if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v
+	  && HAVE_CREG_NEG_1
+	  && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg () + 1))
+	      == CREG_IDX_NEG_1))
+	// We must not simplify this to a load of the constant register
+	// that we're intializing!
+	sfp_use |= 2;
     }
 
   bool changed = false;
-  for (auto *upper : uppers)
+  for (auto *second : seconds)
     {
-      tree upper_val = gimple_call_arg (upper, insnd[1].imm_arg ());
-      uint32_t upper_ival = TREE_INT_CST_LOW (upper_val);
+      tree second_val = gimple_call_arg (second, insnd[1].imm_arg ());
+      uint32_t second_ival = TREE_INT_CST_LOW (second_val);
+      uint32_t full_ival
+	= (first_ival << (second_mod == SFPLOADI_MOD0_UPPER ? 0 : 16))
+	| (second_ival << (second_mod == SFPLOADI_MOD0_LOWER ? 0 : 16));
+      bool neg = full_ival >> 31;
       int op = -1;
       gcall *extra_call = nullptr;
       const rvtt_insn_data *extra_insnd = nullptr;
 
-      if (!ival)
+      if (!full_ival)
 	{
-	  if (upper_ival == 0x0000)
-	    {
-	      // 0.0f
-	      op = CREG_IDX_0;
-	      upper_val = nullptr;
-	      goto replace;
-	    }
-
-	  if ((upper_ival & 0x7fff) == 0x3f80)
-	    {
-	      // +1.0f or -1.0f
-	      if (!(upper_ival & 0x8000) || HAVE_CREG_NEG_1)
-		{
-		  op = upper_ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
-		  upper_val = nullptr;
-		  goto replace;
-		}
-	    }
-
-	  // fp16b
-	  op = SFPLOADI_MOD0_FLOATB;
+	  // 0.0f
+	  op = CREG_IDX_0;
+	  second_val = nullptr;
 	  goto replace;
 	}
 
-      if (upper_ival == 0)
+      if (full_ival << 1 == 0x3f800000 << 1)
+	{
+	  // +1.0f or -1.0f
+	  if (!neg || HAVE_CREG_NEG_1)
+	    {
+	      op = neg ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	      second_val = nullptr;
+	      goto replace;
+	    }
+	}
+
+      if (!(full_ival & 0xffff))
+	{
+	  // fp16b
+	  op = SFPLOADI_MOD0_FLOATB;
+	  if (second_mod == SFPLOADI_MOD0_LOWER)
+	    second_val = first_val;
+	  goto replace;
+	}
+
+      if (!(full_ival >> 16))
 	{
 	  // u16
 	  op = SFPLOADI_MOD0_USHORT;
-	  upper_val = val;
+	  if (second_mod == SFPLOADI_MOD0_UPPER)
+	    second_val = first_val;
 	  goto replace;
 	}
 
-      if (upper_ival == 0xffff && (ival >> 15) != 0)
+      if (!~(full_ival | 0x7fff))
 	{
 	  // i16
 	  op = SFPLOADI_MOD0_SHORT;
-	  upper_val = val;
+	  if (second_mod == SFPLOADI_MOD0_UPPER)
+	    second_val = first_val;
 	  goto replace;
 	}
 
@@ -397,7 +409,6 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	// FLOATA=SGN:1,EXP:5,MAN:10, bias 15
 	// FP32=SGN:1,EXP:8,MAN:23, bias 127
 	// Stay away from denorms & nans/infs
-	uint32_t full_ival = ival | upper_ival << 16;
 	unsigned exp = (full_ival >> 23) & 0xff;
 	if ((full_ival & 0x00001fff) == 0
 	    && exp > (127 - 15) && exp < (127 - 15) + 31)
@@ -407,9 +418,9 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	    uint32_t floata
 	      = (man >> 13)
 	      | ((exp - (127 - 15)) << 10)
-	      | ((full_ival >> 31) << 15);
+	      | (uint32_t (neg) << 15);
 	    op = SFPLOADI_MOD0_FLOATA;
-	    upper_val = build_int_cst (unsigned_type_node, floata);
+	    second_val = build_int_cst (unsigned_type_node, floata);
 	    goto replace;
 	  }
       }
@@ -426,8 +437,6 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	};
 	constexpr unsigned sfpiadd_i_bits = 12;
 
-	uint32_t full_ival = ival | upper_ival << 16;
-	bool neg = full_ival >> 31;
 	unsigned top_zeroes = 0, bot_zeroes = 0;
 	if (TARGET_XTT_TENSIX_BH_QSR)
 	  {
@@ -443,22 +452,22 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	  if (delta + (1u << (sfpiadd_i_bits - 1)) < (1u << sfpiadd_i_bits))
 	    {
 	      // known constant + delta
-	      upper_val = build_int_cst (unsigned_type_node, delta);
+	      second_val = build_int_cst (unsigned_type_node, delta);
 	      extra_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_i);
 	      imod = SFPIADD_MOD1_CC_NONE;
 
 	    replace_pair:
 	      op = cst.reg;
 	      if (!delta)
-		upper_val = nullptr;
+		second_val = nullptr;
 	      else
 		{
 		  extra_call = gimple_build_call (extra_insnd->decl, extra_insnd->num_args ());
 
-		  gimple_set_location (extra_call, gimple_location (upper));
+		  gimple_set_location (extra_call, gimple_location (second));
 		  gimple_call_set_arg (extra_call, 1,
 				       make_ssa_name (TREE_TYPE (gimple_call_lhs (call))));
-		  gimple_call_set_lhs (extra_call, gimple_call_lhs (upper));
+		  gimple_call_set_lhs (extra_call, gimple_call_lhs (second));
 		  gimple_call_set_arg (extra_call, extra_insnd->mod_arg (),
 				       build_int_cst (unsigned_type_node, imod));
 		}
@@ -476,7 +485,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 		    imod |= SFPSHFT_MOD1_ARITHMETIC;
 		  // sfpshft_i
 		replace_shft:
-		  upper_val = build_int_cst (integer_type_node, shift);
+		  second_val = build_int_cst (integer_type_node, shift);
 		  extra_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpshft_i);
 		  goto replace_pair;
 		}
@@ -494,7 +503,7 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       continue;
 
     replace:
-      replace_loadi (upper, call, op, upper_val, extra_call, extra_insnd);
+      replace_loadi (second, call, op, second_val, extra_call, extra_insnd);
       changed = true;
     }
 
@@ -503,15 +512,15 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       // The first loadi has other uses, can we simplify it itself?
       int op = -1;
 
-      if (!ival)
+      if (!first_ival)
 	op = CREG_IDX_0;
-      else if (int (ival & 0x7fff)
+      else if (int (first_ival & 0x7fff)
 	       == (first_mod == SFPLOADI_MOD0_FLOATB ? 0x3f80
 		   : first_mod == SFPLOADI_MOD0_FLOATA ? 0x3c00
 		   : ~0))
 	{
-	  if (!(ival & 0x8000) || HAVE_CREG_NEG_1)
-	    op = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	  if (!(first_ival & 0x8000) || HAVE_CREG_NEG_1)
+	    op = first_ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
 	}
 
       if (op >= 0)

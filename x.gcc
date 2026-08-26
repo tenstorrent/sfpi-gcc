@@ -1,0 +1,13 @@
+diff --git c/gcc/config/riscv/tt/rvtt.gc w/gcc/config/riscv/tt/rvtt.gc
+index 7c6e3825e..95a96733e 100644
+--- c/gcc/config/riscv/tt/rvtt.gc
++++ w/gcc/config/riscv/tt/rvtt.gc
+@@ -88,7 +88,7 @@ combine () {
+     auto ireg = TREE_INT_CST_LOW (regno);
+     negated_regno = build_int_cst
+       (TREE_TYPE (regno),
+-       ireg == CREG_IDX_NEG_1 ? CREG_IDX_1 : CREG_IDX_NEG_1)
++       ireg == CREG_IDX_NEG_1 ? CREG_IDX_1 : CREG_IDX_NEG_1);
+   }
+   negated_cst = sfpreadlreg (negated_regno);
+   res = sfpassign_lv (lv2, negated_cst);

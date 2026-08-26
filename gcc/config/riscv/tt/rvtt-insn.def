@@ -88,7 +88,7 @@ RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                           
 RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV, ())
 
 RVTT_FN (sfploadi,           ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                       0, ({E, 16, 0}, {M, 0x17}))
-RVTT_FN (sfploadi_lv,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               LV, ({U, 16, 0}, {M, 0xa17}))
+RVTT_FN (sfploadi_lv,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               LV, ({U, 16, 0}, {M, 0x517}))
 
 // Although sfpmov permits 0x107 for mask bits, only 0x2 makes sense here -- all other cases should be expressed differently
 RVTT_FN (sfpmov,             ,,XTT_VEC_FTYPE_XTT_VEC_USI,                                    0, ({M, 0x2}))
