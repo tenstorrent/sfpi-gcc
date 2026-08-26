@@ -739,6 +739,11 @@ public:
 	     volatile loads refuse -- a spin-wait is not delivery,
 	 (d) a scalar (non-memory) SSA assignment, PHI, or the loop's
 	     conditionals;
+     - at least one TYPED SFPU word is present (a body of owners, raw
+       words, and computed-word stores only IS the raw-spelling world:
+       its size pricing is already word-accurate, and the request must
+       not grant raw code an unroll that pricing correctly refused --
+       the topk_xl region-overflow/regression class);
      - the flattened total is bounded by the replay-unroll word budget
        (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS: the same straight-line size
        class the row-group request already commits to), and a body
@@ -843,6 +848,19 @@ public:
 
     /* Body census over every block.  */
     unsigned words = 0;
+    /* The request exists to give the TYPED spelling the flatten the raw
+       spelling already gets from the size model: a typed SFPU word is a
+       dozen-plus GIMPLE statements, so the estimate refuses loops the
+       raw world unrolls.  A body with NO typed SFPU word (raw .ttinsn,
+       computed-word stores, and replay owners only) IS the raw world --
+       its size pricing is already word-accurate, and bypassing it
+       grants raw code an unroll that pricing correctly refused (the
+       topk_xl TRISC1_CODE overflow and its +3.8% e2e regression came
+       exactly from such raw launch loops).  Require at least one typed
+       SFPU word (the shared row table plus the transpose spellings;
+       TTREPLAY/TTSETRWC owners and plumbing do not count -- the raw
+       world spells those identically).  */
+    bool typed_word_seen = false;
     basic_block *body = get_loop_body (loop);
     for (unsigned i = 0; i < loop->num_nodes; ++i)
       {
@@ -912,6 +930,12 @@ public:
 		    free (body);
 		    return false;
 		  }
+		if (w > 0 && insnd->id != rvtt_insn_data::ttreplay
+		    && insnd->id != rvtt_insn_data::ttsetrwc)
+		  /* A typed SFPU word: the class the size model
+		     over-prices (the raw world spells owners and
+		     plumbing identically).  */
+		  typed_word_seen = true;
 		words += w;
 		continue;
 	      }
@@ -973,6 +997,11 @@ public:
 	> XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS)
       {
 	refuse (loop, "launch-flatten-function-budget", NULL);
+	return false;
+      }
+    if (!typed_word_seen)
+      {
+	refuse (loop, "launch-flatten-no-typed-content", NULL);
 	return false;
       }
     /* loop->unroll is a narrow field; the word budget above already
