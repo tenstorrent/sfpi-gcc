@@ -1736,6 +1736,54 @@
 ])
 
 
+;; Rule-B preservation seeds (-mtt-tensix-optimize-crossrow-pairing-seed,
+;; the round-cc-modulo DESIGN-V2 Rule-B rename; additive sub-feature,
+;; effective only where the pairing above admits the loop).
+;;
+;; Lane-exactness fact: the seed word is the bare-SET rvtt_sfpassign
+;; alternative -- SFPMOV mod-2 -- which writes EVERY lane regardless of
+;; the CC state (craq-sim TENSIX_EXECUTE_SFPMOV mod 2 forces the full
+;; lane mask; the same audited hidden-state-free fact the shadow-fill
+;; crossing rule relies on).  Seeded immediately after the LAST
+;; definition of the old register that precedes the root -- in the
+;; ambient position before the flat atom's first CC writer when the
+;; value reaches the atom entry unwritten, or INSIDE the atom directly
+;; after an in-atom producer (the mod-2 copy's lane-immunity is exactly
+;; what licenses the interior position; the seed joins the atom's
+;; indivisible item so the original words keep their interior order and
+;; CC contexts) -- it makes
+;; the fresh register F lane-wise equal to the old register R at the
+;; atom-interior fresh root: the root then writes the same enabled
+;; lanes it originally wrote into R, disabled lanes of F carry exactly
+;; the value R's disabled lanes carried (a read-modify-write root's
+;; implicit read consumes the lane-equal F), and rewriting every later
+;; web member through the web's fresh terminator keeps the equality
+;; inductive across later CC domains, so an all-lanes consumer or store
+;; observes the identical value.  This is precisely the disabled-lane
+;; exposure the plain rename discipline refuses
+;; (crossrow-pairing-rename-cc-domain), discharged by paying one word.
+;; A web whose ROOT is itself a bare all-lanes copy (a full-lane root:
+;; SFPMOV mod-2 writes every lane wherever it sits, so the fresh
+;; register carries the complete value from the root on) renames
+;; seed-free at zero word cost -- DESIGN-V2 Rule A carried into the
+;; atom interior by the same lane-immunity fact.
+;;
+;; Pricing: NO new constants.  A seed is one issued word charged in the
+;; SAME steady-state II model and the SAME capture-budget bound
+;; (XTT_DELIVERY_CAPTURE_SLOTS) as every row word -- the modeled II of
+;; the seeded candidate already contains the seed's issue slot, so the
+;; strict-improvement acceptance (seeded II strictly below the unseeded
+;; candidate's, with the non-improving tail of the forward pass rolled
+;; back to the last strict checkpoint) is the complete cost comparison:
+;; a seed whose slot costs more than the serialization it removes never
+;; commits, and delivery stays record-plus-launch because the budget
+;; bound keeps the counted-loop capture firing.  Provenance:
+;; round-cc-modulo-evidence-20260825/DESIGN-V2.md (Rule B), the laneEL
+;; structured-CC restore contract (ambient positions), and the laneGP
+;; adjudication that Rule-A pairing alone leaves the atom-rooted webs
+;; serialized (laneGP-evidence-20260825/RESULTS.md).
+
+
 ;; ---------------------------------------------------------------------
 ;; MOP loop-delivery formation (rvtt_mop_form).  Additive section; the
 ;; replay-hoist model above is unchanged and its constants are reused.

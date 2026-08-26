@@ -2600,41 +2600,40 @@ crp_item_dep (const crp_item &p, const crp_item &c)
 }
 
 static std::vector<rtx_insn *>
-crp_candidate_order (const std::vector<ls_node> &all, unsigned n,
-		     const std::vector<std::pair<unsigned, unsigned> > &atoms)
+crp_candidate_order (const std::vector<ls_node> &all,
+		     const std::vector<int> &group)
 {
-  /* Build the item list in original order: row A then row B.  */
+  /* Build the item list in original (sequential two-iteration) order:
+     GROUP assigns every node its atom instance (a maximal run of one
+     non-negative id is one indivisible super-item; -1 nodes -- pure
+     words and preservation seeds -- are their own items).  */
   std::vector<crp_item> items;
-  for (unsigned half = 0; half != 2; ++half)
+  unsigned total = all.size ();
+  unsigned i = 0;
+  while (i != total)
     {
-      unsigned base = half * n;
-      unsigned i = 0;
-      while (i != n)
+      crp_item it;
+      CLEAR_HARD_REG_SET (it.uses);
+      CLEAR_HARD_REG_SET (it.raw_defs);
+      it.words = 0;
+      it.lat = 0;
+      it.orig = i;
+      unsigned end = i + 1;
+      if (group[i] >= 0)
+	while (end != total && group[end] == group[i])
+	  ++end;
+      for (unsigned k = i; k != end; ++k)
 	{
-	  const std::pair<unsigned, unsigned> *atom = nullptr;
-	  for (const auto &a : atoms)
-	    if (a.first == i)
-	      atom = &a;
-	  crp_item it;
-	  CLEAR_HARD_REG_SET (it.uses);
-	  CLEAR_HARD_REG_SET (it.raw_defs);
-	  it.words = 0;
-	  it.lat = 0;
-	  it.orig = base + i;
-	  unsigned end = atom ? atom->second + 1 : i + 1;
-	  for (unsigned k = i; k != end; ++k)
-	    {
-	      const ls_node &nd = all[base + k];
-	      it.members.push_back (base + k);
-	      it.uses |= nd.regs.uses;
-	      it.raw_defs |= nd.raw_defs;
-	      it.words += nd.words;
-	      if (nd.lat > it.lat)
-		it.lat = nd.lat;
-	    }
-	  items.push_back (std::move (it));
-	  i = end;
+	  const ls_node &nd = all[k];
+	  it.members.push_back (k);
+	  it.uses |= nd.regs.uses;
+	  it.raw_defs |= nd.raw_defs;
+	  it.words += nd.words;
+	  if (nd.lat > it.lat)
+	    it.lat = nd.lat;
 	}
+      items.push_back (std::move (it));
+      i = end;
     }
 
   /* Deterministic greedy list schedule over the items: modeled issue
@@ -2718,6 +2717,111 @@ crp_order_legal_p (const std::vector<ls_node> &all,
   return true;
 }
 
+/* ---- Rule-B preservation seeds (-mtt-tensix-optimize-crossrow-pairing-seed)
+
+   The DESIGN-V2 Rule-B rename (round-cc-modulo-evidence-20260825/
+   DESIGN-V2.md): a collision web whose fresh root executes INSIDE a
+   flat CC atom cannot rename to a dead LREG directly (the predicated
+   root writes only enabled lanes, so the dead register's stale
+   disabled-lane bits would reach an all-lanes consumer -- the
+   crossrow-pairing-rename-cc-domain refusal above).  It CAN rename
+   when a typed all-lanes copy F = R (SFPMOV mod-2, the audited
+   hidden-state-free assign: rvtt.md rvtt_sfpassign effect audit) is
+   seeded immediately after the LAST definition of R that precedes the
+   root: in the ambient position before the atom's first CC writer when
+   R reaches the atom entry unwritten, or INSIDE the atom directly
+   after R's last in-atom definition (e.g. the atom-opening compare
+   whose result the predicated root preserves) -- the interior position
+   is sound because SFPMOV mod-2 writes every lane REGARDLESS of the CC
+   state, and the seed joins the atom's indivisible item so the
+   original words keep their interior order and CC contexts:
+
+     - at the seed, F receives R's complete lane image exactly as it
+       stands (whatever mix of earlier all-lanes and predicated writes
+       produced it -- the copy is a semantic identity on all 32 lanes);
+     - between the seed and the fresh root neither R nor F changes
+       (F is untouched by every row word -- the free-register search
+       invariant -- and the seed sits after R's last preceding
+       definition by placement), so F == R lane by lane at the root;
+     - the root then writes the same enabled lanes it originally wrote
+       into R, and the disabled lanes of F carry exactly the value the
+       disabled lanes of R carried -- including a read-modify-write
+       root, whose implicit read now consumes the lane-equal F;
+     - every later member of the original web, across all later CC
+       domains, is rewritten to F until the web's fresh terminator, so
+       the equality is inductive and an all-lanes store observes the
+       identical value.
+
+   Each seed is one real issued word: it enters the node vector at its
+   sequential position and is charged by the same steady-state II model
+   and capture budget as every row word.  The seed set commits only on
+   a STRICT modeled II improvement over the unseeded (Rule-A) candidate;
+   a forward pass may accept an II-neutral seed only as an enabler, and
+   the tail of accepted seeds after the last strict improvement rolls
+   back (no rider seeds: every emitted seed either strictly improves the
+   modeled II or enables a later seed that does).  Everything unproven
+   refuses by name and keeps the unseeded pairing byte-identically.  */
+
+/* Dump helper for the seed phase's named refusals.  */
+
+static void
+crp_seed_refuse (basic_block bb, const char *why, unsigned r, rtx_insn *insn)
+{
+  if (dump_file)
+    fprintf (dump_file, "Crossrow pairing seed refused: "
+	     "crossrow-pairing-seed-%s reg %u uid=%d in bb %d\n",
+	     why, r, insn ? INSN_UID (insn) : -1, bb->index);
+}
+
+/* Rename the web rooted at node I (register R -> F, members I inclusive
+   through EXTENT_END exclusive: every node referencing R, through RMW
+   redefinitions) as one recorded transaction.  Mirrors the web-member
+   rewrite of ls_cyclic_rename_collisions.  */
+
+static bool
+crp_apply_web_rename (std::vector<ls_node> &nodes, unsigned i,
+		      unsigned extent_end, unsigned r, unsigned f,
+		      std::vector<ls_rename> *record)
+{
+  ls_rename rn;
+  rn.oldr = r;
+  rn.newr = f;
+  ls_queue_reg_replacements (nodes[i].insn, &PATTERN (nodes[i].insn), r, f);
+  rn.insns.push_back (nodes[i].insn);
+  for (unsigned k = i + 1; k != extent_end; ++k)
+    if (TEST_HARD_REG_BIT (nodes[k].regs.uses, r)
+	|| TEST_HARD_REG_BIT (nodes[k].raw_defs, r))
+      {
+	ls_queue_reg_replacements (nodes[k].insn, &PATTERN (nodes[k].insn),
+				   r, f);
+	rn.insns.push_back (nodes[k].insn);
+      }
+  if (!apply_change_group ())
+    return false;
+  for (rtx_insn *ins : rn.insns)
+    df_insn_rescan (ins);
+  record->push_back (std::move (rn));
+  return true;
+}
+
+/* Undo exactly the LAST recorded rename (the seed phase's per-candidate
+   rollback; each web's F was untouched elsewhere, so F -> R over the
+   web is unambiguous).  */
+
+static void
+crp_undo_last_rename (std::vector<ls_rename> *record)
+{
+  gcc_assert (!record->empty ());
+  ls_rename &rn = record->back ();
+  for (rtx_insn *ins : rn.insns)
+    ls_queue_reg_replacements (ins, &PATTERN (ins), rn.newr, rn.oldr);
+  bool ok = apply_change_group ();
+  gcc_assert (ok);
+  for (rtx_insn *ins : rn.insns)
+    df_insn_rescan (ins);
+  record->pop_back ();
+}
+
 /* The transform proper.  Returns true when the pairing committed.  */
 
 static bool
@@ -2798,12 +2902,299 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   std::vector<ls_rename> renames;
   ls_cyclic_rename_collisions (bb, all, &renames, &start_allowed);
 
+  /* Item grouping over the doubled row: every atom instance is one
+     indivisible super-item id; pure words (and any later preservation
+     seeds) are -1 singletons.  */
+  std::vector<int> group (2 * n, -1);
+  {
+    int gid = 0;
+    for (unsigned half = 0; half != 2; ++half)
+      for (const auto &atom : lp.atoms)
+	{
+	  for (unsigned i = atom.first; i <= atom.second; ++i)
+	    group[half * n + i] = gid;
+	  ++gid;
+	}
+  }
+
+  /* Modeled steady-state II of the current candidate order (INT_MAX on
+     a construction failure -- the caller's belts refuse).  */
+  auto crp_current_ii = [&all, &group] () -> int
+    {
+      std::vector<rtx_insn *> cand = crp_candidate_order (all, group);
+      if (!crp_order_legal_p (all, cand))
+	return INT_MAX;
+      std::vector<int> idx;
+      for (rtx_insn *ci : cand)
+	for (unsigned k = 0; k != all.size (); ++k)
+	  if (all[k].insn == ci)
+	    {
+	      idx.push_back ((int) k);
+	      break;
+	    }
+      if (idx.size () != all.size ())
+	return INT_MAX;
+      return ls_cyclic_ii (all, idx);
+    };
+
+  /* Phase 2d': Rule-B preservation seeds (sub-flag; see the header
+     comment above crp_seed_refuse).  Fail-closed: any refusal keeps
+     the unseeded Rule-A state exactly.  */
+  std::vector<rtx_insn *> seed_insns;
+  auto crp_delete_seeds = [&seed_insns] ()
+    {
+      for (unsigned k = seed_insns.size (); k--;)
+	delete_insn (seed_insns[k]);
+      seed_insns.clear ();
+    };
+  if (riscv_tt_opt_crossrow_pairing_seed)
+    {
+      int rule_a_ii = crp_current_ii ();
+      int cur_ii = rule_a_ii;
+      int strict_ii = rule_a_ii;	/* best strictly-improved II */
+      unsigned strict_commits = 0;	/* commits kept at that point */
+      /* One entry per accepted Rule-B rename, parallel to the tail of
+	 RENAMES: the emitted seed word, or null for a full-lane root
+	 (a bare all-lanes copy needs no preservation seed -- it writes
+	 every lane itself, so the fresh register never exposes dead
+	 bits; DESIGN-V2 Rule A carried into the atom interior by the
+	 mod-2 lane-immunity fact).  */
+      std::vector<rtx_insn *> commits;
+      bool progress = rule_a_ii != INT_MAX;
+      while (progress)
+	{
+	  progress = false;
+	  for (unsigned i = 0; i != all.size () && !progress; ++i)
+	    {
+	      if (group[i] < 0)
+		continue;	/* Rule-B roots live inside atoms */
+	      unsigned af = i;
+	      while (af && group[af - 1] == group[i])
+		--af;
+	      if (af == i)
+		continue;	/* the atom-opening CC writer roots no
+				   Rule-B web (no ambient point between
+				   it and the seed would separate them) */
+	      for (unsigned r = SFPU_REG_FIRST;
+		   r <= SFPU_REG_LAST && !progress; ++r)
+		{
+		  if (!TEST_HARD_REG_BIT (all[i].raw_defs, r))
+		    continue;
+		  bool earlier = false;
+		  for (unsigned j = 0; j != i && !earlier; ++j)
+		    earlier = TEST_HARD_REG_BIT (all[j].raw_defs, r);
+		  if (!earlier)
+		    continue;	/* no collision */
+		  /* A FULL-LANE root needs no seed: the bare all-lanes
+		     copy (SFPMOV mod-2, the audited full-copy-semantics
+		     spill vocabulary) writes every lane regardless of
+		     the CC state, so the fresh register carries the
+		     complete value from the root on and no disabled
+		     lane can expose dead bits (DESIGN-V2 Rule A,
+		     carried into the atom interior by the mod-2
+		     lane-immunity fact).  */
+		  bool full_lane_root = bare_lreg_copy_p (all[i].insn)
+		    && !TEST_HARD_REG_BIT (all[i].regs.uses, r);
+		  /* Seed placement (predicated roots): the root must
+		     observe exactly the value the seed captured, so the
+		     seed sits after the LAST definition of R that
+		     precedes the root -- in the ambient position
+		     immediately before the atom when R reaches the atom
+		     entry unwritten, or INSIDE the atom immediately
+		     after R's last in-atom definition (e.g. the
+		     atom-opening compare that produces the value the
+		     predicated root preserves).  The interior position
+		     is sound because the seed word itself is lane-
+		     immune -- the bare-SET SFPMOV mod-2 writes every
+		     lane regardless of the CC state (the audited
+		     hidden-state-free fact) -- and it joins the atom's
+		     indivisible item, so the original words' interior
+		     order and CC contexts are untouched.  */
+		  unsigned seed_pos = af;
+		  for (unsigned k = af; k != i; ++k)
+		    if (TEST_HARD_REG_BIT (all[k].raw_defs, r))
+		      seed_pos = k + 1;
+		  int seed_group = seed_pos == af ? -1 : group[i];
+		  if (REGNO_REG_SET_P (df_get_live_in (bb), r))
+		    {
+		      crp_seed_refuse (bb, "live-in", r, all[i].insn);
+		      continue;
+		    }
+		  /* Web extent: through RMW redefinitions, exclusive
+		     before the next fresh writer (the established web
+		     discipline).  */
+		  unsigned extent_end = all.size ();
+		  bool fresh_terminator = false;
+		  for (unsigned k = i + 1; k != all.size (); ++k)
+		    if (TEST_HARD_REG_BIT (all[k].raw_defs, r)
+			&& !TEST_HARD_REG_BIT (all[k].regs.uses, r))
+		      {
+			extent_end = k;
+			fresh_terminator = true;
+			break;
+		      }
+		  if (!fresh_terminator
+		      && REGNO_REG_SET_P (df_get_live_out (bb), r))
+		    {
+		      crp_seed_refuse (bb, "live-out", r, all[i].insn);
+		      continue;
+		    }
+		  int f = -1;
+		  for (unsigned c = SFPU_REG_FIRST;
+		       c <= SFPU_REG_LAST && f < 0; ++c)
+		    {
+		      if (fixed_regs[c])
+			continue;
+		      bool touched = false;
+		      for (unsigned j = 0; j != all.size () && !touched; ++j)
+			touched = TEST_HARD_REG_BIT (all[j].regs.uses, c)
+				  || TEST_HARD_REG_BIT (all[j].raw_defs, c);
+		      if (touched
+			  || REGNO_REG_SET_P (df_get_live_in (bb), c)
+			  || REGNO_REG_SET_P (df_get_live_out (bb), c))
+			continue;
+		      f = (int) c;
+		    }
+		  if (f < 0)
+		    {
+		      crp_seed_refuse (bb, "no-free-lreg", r, all[i].insn);
+		      continue;
+		    }
+		  /* The doubled row plus every seed must still fit the
+		     replay capture buffer (mirror of the admission
+		     bound), or the counted-loop capture downstream
+		     stops firing.  */
+		  if (!full_lane_root
+		      && all.size () + 1 > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
+		    {
+		      crp_seed_refuse (bb, "capture-budget", r, all[i].insn);
+		      continue;
+		    }
+		  /* Emit the all-lanes preservation copy at the chosen
+		     position (predicated roots only), then re-admit it
+		     through the row vocabulary.  */
+		  rtx_insn *seed = nullptr;
+		  ls_node seed_node;
+		  if (!full_lane_root)
+		    {
+		      seed = emit_insn_before (gen_rvtt_sfpassign
+						 (gen_rtx_REG (XTT32SImode,
+							       (unsigned) f),
+						  gen_rtx_REG (XTT32SImode,
+							       r)),
+					       all[seed_pos].insn);
+		      df_insn_rescan (seed);
+		      if (!crp_node (bb, seed, &seed_node))
+			{
+			  delete_insn (seed);
+			  crp_seed_refuse (bb, "word-unproven", r,
+					   all[i].insn);
+			  continue;
+			}
+		      seed_node.orig = (int) seed_pos;
+		    }
+		  if (!crp_apply_web_rename (all, i, extent_end, r,
+					     (unsigned) f, &renames))
+		    {
+		      if (seed)
+			delete_insn (seed);
+		      crp_seed_refuse (bb, "rename-constraint", r,
+				       all[i].insn);
+		      continue;
+		    }
+		  if (seed)
+		    {
+		      all.insert (all.begin () + seed_pos, seed_node);
+		      group.insert (group.begin () + seed_pos, seed_group);
+		    }
+		  ls_refresh_node_regs (all);
+		  int ii = crp_current_ii ();
+		  if (ii > cur_ii)
+		    {
+		      /* The charged seed does not pay here (an
+			 II-neutral commit is retained only as a possible
+			 enabler; a worse one never).  */
+		      if (seed)
+			{
+			  all.erase (all.begin () + seed_pos);
+			  group.erase (group.begin () + seed_pos);
+			}
+		      crp_undo_last_rename (&renames);
+		      if (seed)
+			delete_insn (seed);
+		      ls_refresh_node_regs (all);
+		      crp_seed_refuse (bb, "no-ii-improvement", r,
+				       all[i].insn);
+		      continue;
+		    }
+		  commits.push_back (seed);
+		  if (dump_file)
+		    {
+		      char seed_desc[32];
+		      if (seed)
+			snprintf (seed_desc, sizeof seed_desc, "uid=%d",
+				  INSN_UID (seed));
+		      else
+			snprintf (seed_desc, sizeof seed_desc,
+				  "none-full-lane-root");
+		      fprintf (dump_file, "Crossrow pairing seed: reg %u -> "
+			       "%u web at uid=%d (%zu insns) seed %s "
+			       "II %d -> %d in bb %d\n",
+			       r, (unsigned) f,
+			       INSN_UID (renames.back ().insns[0]),
+			       renames.back ().insns.size (), seed_desc,
+			       cur_ii, ii, bb->index);
+		    }
+		  cur_ii = ii;
+		  if (cur_ii < strict_ii)
+		    {
+		      strict_ii = cur_ii;
+		      strict_commits = commits.size ();
+		    }
+		  progress = true;
+		}
+	    }
+	}
+      /* No rider commits: roll back everything after the last STRICT
+	 modeled improvement (all of it when nothing improved).  */
+      if (commits.size () > strict_commits)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Crossrow pairing seeds rolled back: "
+		     "crossrow-pairing-seed-no-ii-improvement in bb %d "
+		     "(kept=%u of %zu, II %d)\n",
+		     bb->index, strict_commits, commits.size (),
+		     strict_ii);
+	  while (commits.size () > strict_commits)
+	    {
+	      rtx_insn *seed = commits.back ();
+	      commits.pop_back ();
+	      if (seed)
+		for (unsigned k = 0; k != all.size (); ++k)
+		  if (all[k].insn == seed)
+		    {
+		      all.erase (all.begin () + k);
+		      group.erase (group.begin () + k);
+		      break;
+		    }
+	      crp_undo_last_rename (&renames);
+	      if (seed)
+		delete_insn (seed);
+	    }
+	  ls_refresh_node_regs (all);
+	}
+      for (rtx_insn *seed : commits)
+	if (seed)
+	  seed_insns.push_back (seed);
+    }
+
   /* Phase 2e: candidate order -- the dependence-legal global item
      schedule (atoms indivisible, unrenamed shared webs serialize).  */
-  std::vector<rtx_insn *> candidate = crp_candidate_order (all, n, lp.atoms);
+  std::vector<rtx_insn *> candidate = crp_candidate_order (all, group);
   if (!crp_order_legal_p (all, candidate))
     {
       ls_undo_renames (renames);
+      crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-order-hazard");
     }
@@ -2821,6 +3212,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   if (cand_ii >= base_ii)
     {
       ls_undo_renames (renames);
+      crp_delete_seeds ();
       crp_delete_copies ();
       if (dump_file)
 	fprintf (dump_file, "Crossrow pairing refused: no modeled "
@@ -2865,6 +3257,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     {
       crp_restore_chain ();
       ls_undo_renames (renames);
+      crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-pad-site-increase");
     }
@@ -2881,6 +3274,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     {
       crp_restore_chain ();
       ls_undo_renames (renames);
+      crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-control-rewrite-constraint");
     }
@@ -2906,6 +3300,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       df_insn_rescan (lp.counter);
       crp_restore_chain ();
       ls_undo_renames (renames);
+      crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-row-step-shape",
 			 lp.separator);
@@ -2913,9 +3308,10 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 
   if (dump_file)
     fprintf (dump_file, "Crossrow pairing: bb %d rows=2 nodes=%zu "
-	     "II %d -> %d renames=%zu dst-addr=%ld/%ld step=%ld->%ld "
-	     "trips=%ld->%ld target=bh\n",
+	     "II %d -> %d renames=%zu seeds=%zu dst-addr=%ld/%ld "
+	     "step=%ld->%ld trips=%ld->%ld target=bh\n",
 	     bb->index, all.size (), base_ii, cand_ii, renames.size (),
+	     seed_insns.size (),
 	     (long) lp.dst_addr, (long) (lp.dst_addr + lp.dst_step),
 	     (long) lp.dst_step, (long) (2 * lp.dst_step),
 	     (long) lp.trips, (long) (lp.trips / 2));
