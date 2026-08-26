@@ -363,9 +363,53 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
      directly (reg_or_cstlreg_operand), so register allocation
      satisfies such a use in place.  Callers that place values around
      instructions with creg-capable operand positions may ask to
-     exempt those definitions from the liveness count (the FP16 LUT
+     exempt those definitions from the liveness count (the LUT
      coefficient placement); the default keeps every historical
-     consumer's counting byte-identical.  */
+     consumer's counting byte-identical.
+
+     One position is NOT creg-capable: a LUT table-slot argument.  The
+     slots are not encoded operands at all -- the instruction implicitly
+     reads the architectural table registers -- so a constant-register
+     value feeding a slot must be physically copied into that hard LREG
+     and holds it across the loop like any other coefficient.  A creg
+     read with such a use is therefore counted, not exempted (laneHF:
+     the FP32-direct placement exemption would otherwise undercount the
+     copy; for the FP16 packed modes slot words are compile-time-packed
+     immediates, so this test never fires there and their counting is
+     unchanged).  */
+  auto lut_slot_use_p = [] (tree name) -> bool
+    {
+      gimple *use;
+      imm_use_iterator iter;
+      FOR_EACH_IMM_USE_STMT (use, iter, name)
+	{
+	  if (is_gimple_debug (use))
+	    continue;
+	  gcall *call = dyn_cast <gcall *> (use);
+	  if (!call)
+	    continue;
+	  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+	  if (!insnd)
+	    continue;
+	  unsigned nslots;
+	  switch (insnd->id)
+	    {
+	    case rvtt_insn_data::sfplut:
+	    case rvtt_insn_data::sfplutfp32_3r:
+	      nslots = 3;
+	      break;
+	    case rvtt_insn_data::sfplutfp32_6r:
+	      nslots = 6;
+	      break;
+	    default:
+	      continue;
+	    }
+	  for (unsigned ix = 0; ix < nslots; ix++)
+	    if (gimple_call_arg (call, ix) == name)
+	      return true;
+	}
+      return false;
+    };
   auto creg_resident_p = [&] (tree name) -> bool
     {
       if (!exempt_creg_reads || TREE_CODE (name) != SSA_NAME)
@@ -380,7 +424,9 @@ rvtt_loop_lreg_pressure_legal_p (class loop *loop,
       if (TREE_CODE (arg) != INTEGER_CST)
 	return false;
       HOST_WIDE_INT creg = tree_to_shwi (arg);
-      return creg >= 8 && creg <= 14;
+      if (creg < 8 || creg > 14)
+	return false;
+      return !lut_slot_use_p (name);
     };
   for (gcall *call : loads)
     {
