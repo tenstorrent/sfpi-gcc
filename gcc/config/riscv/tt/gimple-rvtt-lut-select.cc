@@ -1323,13 +1323,29 @@ place_coefficients (gcall *lut)
      value never competes for the eight allocatable LREGs -- without the
      exemption a kernel-shaped row like gelu (six packed words + input +
      a PRGM-constant half) counts a phantom ninth LREG and forfeits the
-     whole placement (laneGU silicon: 71223 -> hand-shape loop).  The
-     historical FP32-direct counting is byte-identical (default-off
-     parameter).  */
+     whole placement (laneGU silicon: 71223 -> hand-shape loop).
+
+     The FP32-direct path under the leaf extension gets the same
+     exact-obligation counting (laneHF): the leaf extension is what puts
+     creg reads around the formed LUT in the first place (constant
+     leaves read LReg[10], and the surrounding kernel arithmetic reads
+     hardwired constants the earlier invariant hoist may have placed in
+     the preheader), and without the exemption a preheader-hoisted
+     hardwired-constant read counts a phantom LREG and forfeits the
+     whole placement -- the tanhderivlut +47.5%% silicon residual was
+     exactly this shape (pins 14/15 placed 6 coefficients; the pin-16
+     preheader hoist of the loop's `+ 1.0f' creg read flipped the count
+     to 9 and every coefficient rematerialized per row).  The counting
+     itself now refuses the exemption for a creg read feeding a LUT
+     table slot (that copy is physical -- see creg_resident_p), so the
+     budget stays an over-approximation of the file.  Without either
+     flag the historical FP32-direct counting is byte-identical
+     (default-off parameter).  */
   bool fp16_mode = (int_arg (lut, 7) & 2) != 0;
+  bool creg_exempt = fp16_mode || riscv_tt_opt_lut_select_leaf_ext;
   if (!rvtt_loop_lreg_pressure_legal_p (loop, coeffs, /*report=*/true,
 					/*cc_transients=*/false,
-					/*exempt_creg_reads=*/fp16_mode))
+					/*exempt_creg_reads=*/creg_exempt))
     return keep ("lut-coefficient-pressure");
 
   basic_block preheader = rvtt_commit_hoist_preheader (entry);
