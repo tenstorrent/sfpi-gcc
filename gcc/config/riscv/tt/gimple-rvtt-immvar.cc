@@ -331,14 +331,13 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
       else
 	{
 	  sfp_use |= 1;
-	  if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v)
-	    {
-	      int reg = TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg () + 1));
-	      if (reg == CREG_IDX_0 || reg == CREG_IDX_1 || reg == CREG_IDX_NEG_1)
-		// We must not simplify this to a load of the constant register
-		// that we're intializing!
-		sfp_use |= 2;
-	    }
+	  if (use_insnd->id == rvtt_insn_data::sfpwriteconfig_v
+	      && HAVE_CREG_NEG_1
+	      && (TREE_INT_CST_LOW (gimple_call_arg (use_call, use_insnd->mod_arg () + 1))
+		  == CREG_IDX_NEG_1))
+	    // We must not simplify this to a load of the constant register
+	    // that we're intializing!
+	    sfp_use |= 2;
 	}
     }
 
@@ -364,9 +363,12 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	  if ((upper_ival & 0x7fff) == 0x3f80)
 	    {
 	      // +1.0f or -1.0f
-	      op = upper_ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
-	      upper_val = nullptr;
-	      goto replace;
+	      if (!(upper_ival & 0x8000) || HAVE_CREG_NEG_1)
+		{
+		  op = upper_ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+		  upper_val = nullptr;
+		  goto replace;
+		}
 	    }
 
 	  // fp16b
@@ -434,6 +436,8 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	  }
 
 	for (auto const &cst : csts) {
+	  if (cst.reg == CREG_IDX_NEG_1 && !HAVE_CREG_NEG_1)
+	    continue;
 	  uint32_t delta = full_ival - cst.val;
 	  unsigned imod = 0;
 	  if (delta + (1u << (sfpiadd_i_bits - 1)) < (1u << sfpiadd_i_bits))
@@ -505,7 +509,10 @@ immvar_simplify (gcall *call, std::vector<gcall *> uppers)
 	       == (first_mod == SFPLOADI_MOD0_FLOATB ? 0x3f80
 		   : first_mod == SFPLOADI_MOD0_FLOATA ? 0x3c00
 		   : ~0))
-	op = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	{
+	  if (!(ival & 0x8000) || HAVE_CREG_NEG_1)
+	    op = ival & 0x8000 ? CREG_IDX_NEG_1 : CREG_IDX_1;
+	}
 
       if (op >= 0)
 	{
@@ -582,7 +589,7 @@ immload_combine (gimple_stmt_iterator gsi, const rvtt_insn_data *call_insnd,
 	      // Unless we're setting to the fixed constant, fail.  Only check
 	      // this particular constant.
 	      if (!(reg == SFPCONFIG_IMM_FIXED_CREG_LWM
-		    && cst == 0xbf800000))
+		    && cst == int32_t (0xbf800000)))
 		return nullptr;
 	      cst = 0;
 	    }

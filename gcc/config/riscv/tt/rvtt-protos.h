@@ -313,4 +313,6 @@ constexpr unsigned int CREG_IDX_1 = 10;
 constexpr unsigned int CREG_IDX_NEG_1 = 11;
 constexpr unsigned int CREG_IDX_TILEID = 15;
 
+#define HAVE_CREG_NEG_1 TARGET_XTT_TENSIX_WH_BH
+
 #endif /* ! GCC_RVTT_PROTOS_H */

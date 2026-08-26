@@ -67,26 +67,31 @@ combine () {
   res = sfpassign_lv (lv2, val);
 }
 
-// - [0,1,-1] -> [0,-1,1]
+// - 0 -> 0 if !flag_signed_zeros
 combine () {
+  { return !flag_signed_zeros; }
+  cst|OU|SA = sfpreadlreg (regno);
+  res = sfpmov_lv (lv2, cst, SFPMOV_MOD1_COMPL);
+  { return TREE_INT_CST_LOW (regno) == CREG_IDX_0; }
+  res = sfpassign_lv (lv2, cst);
+}
+// - [1,-1] -> [-1,1] if HAVE_CREG_NEG_1
+combine () {
+  { return HAVE_CREG_NEG_1; }
   cst|OU|SA = sfpreadlreg (regno);
   res = sfpmov_lv (lv2, cst, SFPMOV_MOD1_COMPL);
   {
     auto ireg = TREE_INT_CST_LOW (regno);
-    if (!(ireg == CREG_IDX_NEG_1
-	  || ireg == CREG_IDX_1
-	  || (ireg == CREG_IDX_0 && !flag_signed_zeros)))
-      return false;
+    return (ireg == CREG_IDX_NEG_1 || ireg == CREG_IDX_1);
   }
   {
     auto ireg = TREE_INT_CST_LOW (regno);
-    ireg = ireg == CREG_IDX_NEG_1 ? CREG_IDX_1
-      : ireg == CREG_IDX_1 ? CREG_IDX_NEG_1
-      : ireg;
-    neg_regno = build_int_cst (TREE_TYPE (regno), ireg);
+    negated_regno = build_int_cst
+      (TREE_TYPE (regno),
+       ireg == CREG_IDX_NEG_1 ? CREG_IDX_1 : CREG_IDX_NEG_1);
   }
-  neg_cst = sfpreadlreg (neg_regno);
-  res = sfpassign_lv (lv2, neg_cst);
+  negated_cst = sfpreadlreg (negated_regno);
+  res = sfpassign_lv (lv2, negated_cst);
 }
 
 // a * 1 -> a
@@ -99,12 +104,14 @@ combine () {
 
 // a * -1 -> -a
 combine () {
+  { return HAVE_CREG_NEG_1; }
   neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
   res = sfpmul_lv (lv, %a, neg, 0);
   {}
   res = sfpmov_lv (lv, a, SFPMOV_MOD1_COMPL);
 }
 combine () {
+  { return HAVE_CREG_NEG_1; }
   neg|OU|SA = sfpreadlreg (CREG_IDX_NEG_1);
   res = sfpmul_lv (lv, neg, neg, 0);
   {}
