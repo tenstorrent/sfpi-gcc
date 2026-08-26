@@ -3584,7 +3584,11 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
    counted-row-excluded-member-unmovable, counted-row-residual-not-uniform,
    counted-row-map-live-out, counted-row-slot-budget,
    counted-row-rename-interference, counted-row-rename-constraint,
-   counted-row-lane-state, counted-row-bridge-clobber.  */
+   counted-row-lane-state, counted-row-bridge-clobber,
+   counted-row-vacated-delay-shadow (lane HM: a move may not re-open a
+   delay shadow the nop inserter discharged against the original order;
+   the SFPMAD.md stall-detection erratum list makes that silicon
+   wrong-code, laneHI-F1).  */
 
 // LREG index domain helpers: xtt_effect_set masks are over L0..L15; the
 // allocatable SFPU hard registers are L0..L7.
@@ -4322,6 +4326,164 @@ static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 			      int *conflict_a = nullptr,
 			      int *conflict_b = nullptr);
 
+/* Delay-contract verification of the plan's FINAL order (lane HM,
+   P1 laneHI-F1 adjudication).
+
+   The nop inserter (rtl-rvtt-schedule.cc transform) discharges every
+   XTT_DELAY contract against the ORIGINAL instruction order: a
+   dependent erratum consumer (xtt_dynamic_bug -- the SFPMAD.md
+   "automatic stalling does not detect" list, e.g. SFPSWAP min/max's
+   1st-cycle reads) directly behind a DYNAMIC-delay producer gets an
+   SFPNOP, and a pair separated by any slot-occupying word needs none.
+   Moving an excluded member can VACATE exactly such a gap word: the
+   discharged contract silently re-opens, no later pass re-probes it,
+   and the recorded window replays the unpadded pair forever.  On the
+   tanh fresh sem body the canonicalization moved the next row's
+   SFPLOADI out of the SFPMUL->SFPSWAP gap; silicon's stall logic
+   cannot see SFPSWAP's 1st-cycle read (documented hardware bug), the
+   min clamp consumed the STALE accumulator and polynomial values > 1
+   escaped (device corr FAIL) while the pinned sim -- which executes
+   instructions atomically -- kept passing.
+
+   So: walk the plan's final order (moved members re-seated at their
+   clone heads/tails, bridges at the anchors) and re-verify every
+   producer/consumer adjacency with the inserter's own test -- the
+   producer's XTT_DELAY class, the register dependence under the FINAL
+   assignment, and the per-target erratum mask.  Any undischarged pair
+   refuses the family by name, byte-identically.  A barrier or opaque
+   position conservatively ends the walk segment (the shapes this
+   machinery forms are all-Tensix runs).  Renames cannot create new
+   dependences (values are preserved and occupancy is verified), so a
+   violation found here is always plan-caused.  */
+
+static bool
+crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
+{
+  unsigned n = blk.pos.size ();
+  std::vector<char> is_moved (n, 0);
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      for (unsigned pos : plan.moves_head[c])
+	is_moved[pos] = 1;
+      for (unsigned pos : plan.moves_tail[c])
+	is_moved[pos] = 1;
+    }
+
+  // The final order: block indices, with per-clone head moves (then
+  // bridges, encoded as ~clone) before the anchor and tail moves after
+  // the last member.  Mirrors crf_apply exactly.
+  std::vector<int> order;
+  order.reserve (n + 8);
+  std::map<unsigned, unsigned> anchor_clone, tail_clone;
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      anchor_clone[plan.members[c].front ()] = c;
+      tail_clone[plan.members[c].back ()] = c;
+    }
+  for (unsigned pos = 0; pos != n; ++pos)
+    {
+      auto ac = anchor_clone.find (pos);
+      if (ac != anchor_clone.end ())
+	{
+	  for (unsigned m : plan.moves_head[ac->second])
+	    order.push_back (int (m));
+	  for (unsigned b = 0; b != plan.bridges[ac->second].size (); ++b)
+	    order.push_back (-1 - int (ac->second));	// bridge of clone
+	}
+      if (!is_moved[pos])
+	order.push_back (int (pos));
+      auto tc = tail_clone.find (pos);
+      if (tc != tail_clone.end ())
+	for (unsigned m : plan.moves_tail[tc->second])
+	  order.push_back (int (m));
+    }
+
+  unsigned bug_mask = TARGET_XTT_TENSIX_BH ? XTT_DYNAMIC_BUG_BH
+    : TARGET_XTT_TENSIX_QSR ? XTT_DYNAMIC_BUG_QSR : 0;
+
+  int prod = -1;		// order entry of the open delay producer
+  unsigned bridge_ix = 0;	// running index into the clone's bridges
+  int bridge_clone = -1;
+  for (unsigned oi = 0; oi != order.size (); ++oi)
+    {
+      int e = order[oi];
+      uint32_t cuses;
+      bool slot_word, is_nop, is_bridge = e < 0;
+      rtx_insn *cinsn = nullptr;
+      if (is_bridge)
+	{
+	  // A bridge is an all-lanes register move: it occupies a slot,
+	  // reads its source, and (not yet emitted) carries no audited
+	  // erratum attribute -- treat a dependent one conservatively.
+	  unsigned c = unsigned (-1 - e);
+	  if (bridge_clone != int (c))
+	    {
+	      bridge_clone = int (c);
+	      bridge_ix = 0;
+	    }
+	  cuses = crf_reg_bit (plan.bridges[c][bridge_ix++].second);
+	  slot_word = true;
+	  is_nop = false;
+	}
+      else
+	{
+	  crf_position const &q = blk.pos[e];
+	  if (q.barrier || q.opaque
+	      || GET_CODE (q.insn) != INSN
+	      || recog_memoized (q.insn) < 0
+	      || get_attr_type (q.insn) != TYPE_TENSIX)
+	    {
+	      prod = -1;	// conservative segment end
+	      continue;
+	    }
+	  cinsn = q.insn;
+	  uint32_t cdefs;
+	  crf_final_masks (blk, plan, unsigned (e), &cdefs, &cuses);
+	  slot_word = get_attr_length (cinsn) != 0;
+	  is_nop = recog_memoized (cinsn) == CODE_FOR_rvtt_sfpnop;
+	}
+
+      if (prod >= 0)
+	{
+	  rtx_insn *pinsn = blk.pos[order[prod]].insn;
+	  bool hazard;
+	  if (get_attr_xtt_delay (pinsn) == XTT_DELAY_STATIC)
+	    hazard = !is_nop;
+	  else
+	    {
+	      uint32_t pdefs, puses;
+	      crf_final_masks (blk, plan, unsigned (order[prod]),
+			       &pdefs, &puses);
+	      hazard = (pdefs & cuses) != 0;
+	      if (hazard && bug_mask && !is_bridge)
+		hazard = (bug_mask & get_attr_xtt_dynamic_bug (cinsn)) != 0;
+	    }
+	  if (hazard)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Refusing counted-row family [%u,%u):"
+			 " counted-row-vacated-delay-shadow: the final"
+			 " order puts %s insn %d in insn %d's undischarged"
+			 " delay shadow (erratum consumer; SFPMAD.md"
+			 " stall-detection bug list)\n",
+			 plan.clones.front ().begin,
+			 plan.clones.front ().end,
+			 is_bridge ? "bridge for" : "dependent",
+			 is_bridge ? INSN_UID (blk.pos[order[prod]].insn)
+				   : INSN_UID (cinsn),
+			 INSN_UID (pinsn));
+	      return false;
+	    }
+	}
+
+      if (!slot_word)
+	continue;		// zero-length marker: the shadow stays open
+      prod = (!is_bridge && get_attr_xtt_delay (cinsn) != XTT_DELAY_NONE)
+	? int (oi) : -1;
+    }
+  return true;
+}
+
 // True read-modify-write tie of INSN's definition of REG: a source
 // operand carries a matching constraint naming the destination operand,
 // so both share one encoded register field and a rename must carry the
@@ -5008,6 +5170,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
     if (!any_change)
       return false;
   }
+
+  // The moves and bridges above may not re-open a delay shadow the nop
+  // inserter already discharged (lane HM, laneHI-F1): re-verify the
+  // whole delay contract over the plan's final order, refusing by name.
+  if (!crf_shadow_contract_ok (blk, plan))
+    return false;
 
   return true;
 }
