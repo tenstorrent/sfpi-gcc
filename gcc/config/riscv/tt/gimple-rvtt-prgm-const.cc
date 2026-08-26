@@ -3257,6 +3257,43 @@ residency_transform (function *fn, prgm_state *st)
     };
   auto place = [&] (residency_candidate &c) -> bool
     {
+      /* HL (store-sink license composition): SFPSTORE sources L0-L11
+	 only (SFPSTORE.md functional model; the store-fold pass's
+	 SFPSTORE_MAX_SRC_LREG capability fact), so parking a constant
+	 consumed as a store's data source forces the register
+	 allocator to materialize a per-consumer copy out of the
+	 constant file -- inside a loop that is a strict word
+	 regression (the licensed sink's erased merge word comes
+	 straight back as the copy).  Refuse the PRGM placement by name
+	 and let the LREG tier hoist the materialization whole (the
+	 handwritten kernels' own hoisted-value form).  Gated on the
+	 store-sink license token so unlicensed codegen stays
+	 byte-identical by construction; the general pricing defect
+	 (ANY store-consumed parked constant pays the same per-row
+	 copy) is HL-F1, filed for a successor.  */
+      if (riscv_tt_opt_store_sink > 0)
+	{
+	  imm_use_iterator uit;
+	  gimple *use;
+	  FOR_EACH_IMM_USE_STMT (use, uit, gimple_call_lhs (c.load))
+	    {
+	      if (is_gimple_debug (use))
+		continue;
+	      const rvtt_insn_data *uinsnd = rvtt_get_insn_data (use);
+	      if (uinsnd && uinsnd->id == rvtt_insn_data::sfpstore
+		  && gimple_call_arg (as_a <gcall *> (use), 1)
+		     == gimple_call_lhs (c.load))
+		{
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "const-residency: refused "
+			       "(store-source-encoding-ceiling): ");
+		      print_gimple_stmt (dump_file, c.load, 0);
+		    }
+		  return false;
+		}
+	    }
+	}
       unsigned prgm = 0;
       basic_block prior_bb = nullptr;
       for (prgm_alloc &a : st->allocs)
