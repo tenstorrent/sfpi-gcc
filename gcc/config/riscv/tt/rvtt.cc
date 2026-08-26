@@ -523,6 +523,49 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
     }
 }
 
+// -mtt-tensix-optimize-native-compare: admission for replacing the
+// strict-greater / less-or-equal float compare-against-zero SETCC webs
+// with the single BH-native SFPGT/SFPLE SET_CC compare against the
+// constant +0.0 register (CREG_IDX_0 == L9).
+//
+// Pointwise equivalence (tt/proofs/native-compare-gtle/, exhaustive over
+// all 2^32 compared bit patterns):
+//   GT web  {SETCC mod4 (sign clear); SETCC mod2 (bits != 0)}
+//     == sign-magnitude total order (v > +0.0)   [SFPGT SET_CC]
+//   LE web  {SETCC mod4; SETCC mod2; COMPC}
+//     == sign-magnitude total order (v <= +0.0)  [SFPLE SET_CC]
+// including the -0.0, +0.0, Inf and NaN classes (total order:
+// -NaN < -Inf < ... < -0 < +0 < ... < +Inf < +NaN, so "> +0" is exactly
+// sign-clear-and-nonzero and "<= +0" its lane complement).  The COMPC's
+// fence dependency disappears: SET_CC writes only enabled lanes, which
+// is the same lane set the fenced complement reconstructs.
+//
+// Fail-closed: BH only (the insns do not exist on WH; QSR keeps the
+// established lowering pending its own audit), flag default-off, and
+// the compared value must be a plain register (the SFPGT/SFPLE VD field
+// is architecturally a read in SET_CC form but gas limits the operand
+// to L0-L7 and the sim verifies lreg_dest < 8; constant-register
+// spellings keep the SETCC web).
+
+static bool
+rvtt_native_compare_gtle_p (rtx v)
+{
+  return TARGET_XTT_TENSIX_BH && riscv_tt_opt_native_compare && REG_P (v);
+}
+
+static void
+rvtt_emit_native_compare_gtle (rtx v, unsigned int cmp)
+{
+  rtx zero = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_0);
+  if (cmp == SFPXCMP_MOD1_CC_GT)
+    emit_insn (gen_rvtt_sfpgt_cc (v, zero));
+  else
+    {
+      gcc_assert (cmp == SFPXCMP_MOD1_CC_LE);
+      emit_insn (gen_rvtt_sfple_cc (v, zero));
+    }
+}
+
 void
 rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 {
@@ -560,10 +603,15 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 
   if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
-      emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
-      emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
-      if (cmp == SFPXCMP_MOD1_CC_LE)
-	emit_insn (gen_rvtt_sfpcompc ());
+      if (rvtt_native_compare_gtle_p (v))
+	rvtt_emit_native_compare_gtle (v, cmp);
+      else
+	{
+	  emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
+	  emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
+	  if (cmp == SFPXCMP_MOD1_CC_LE)
+	    emit_insn (gen_rvtt_sfpcompc ());
+	}
     }
   else
     emit_insn (gen_rvtt_sfpsetcc_v (v, setcc_mod));
@@ -581,10 +629,15 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
   unsigned int cmp = INTVAL (mod) & SFPXCMP_MOD1_CC_MASK;
   if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
-      emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
-      emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
-      if (cmp == SFPXCMP_MOD1_CC_LE)
-	emit_insn (gen_rvtt_sfpcompc ());
+      if (rvtt_native_compare_gtle_p (tmp))
+	rvtt_emit_native_compare_gtle (tmp, cmp);
+      else
+	{
+	  emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
+	  emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
+	  if (cmp == SFPXCMP_MOD1_CC_LE)
+	    emit_insn (gen_rvtt_sfpcompc ());
+	}
     }
   else
     emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
