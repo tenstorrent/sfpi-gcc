@@ -768,6 +768,84 @@ fusable_mul_p (tree src, class loop *loop, gimple *only_use)
   return mul;
 }
 
+/* The first VALUE operand position of a MAD-PAIR member call: the
+   lane-carrier _lv spellings carry the carrier vector in argument 0,
+   shifting both value operands and the mod one position right.  */
+
+static unsigned
+madpair_value_base (const rvtt_insn_data *insnd)
+{
+  return (insnd->id == rvtt_insn_data::sfpmul_lv
+	  || insnd->id == rvtt_insn_data::sfpadd_lv) ? 1 : 0;
+}
+
+/* MAD-PAIR discovery vocabulary (lane HJ,
+   -mtt-tensix-optimize-madpair-vocabulary): the downstream combine
+   fuses the mul+add pair through spellings the base discovery does not
+   walk -- the lane-carrier _lv forms of the members (the muli/addi
+   immediate folds match those spellings too, so the fold decay exists
+   there identically) and a single-use SFPMOV complement wrapper
+   between the mul and the add (the -a+b rewrite reduces it before the
+   mad rule fires).  Mirror exactly that vocabulary for the DISCOVERY
+   walk and nothing else: candidate admission, refusal names, grouping,
+   the cc-reach proof and pricing stay the reviewed MAD-PAIR class.
+   Flag off delegates to the base single-spelling test byte-identically.
+   *VALUE_BASE reports the returned mul's first value-operand position
+   for the caller's constant classification.  */
+
+static gcall *
+madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
+		     unsigned *value_base)
+{
+  *value_base = 0;
+  if (riscv_tt_opt_madpair_vocabulary <= 0)
+    return fusable_mul_p (src, loop, only_use);
+  if (TREE_CODE (src) != SSA_NAME)
+    return nullptr;
+  gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+  if (!def)
+    return nullptr;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return nullptr;
+  /* One complement wrapper: -(a*b) + c.  The wrapper must be the add's
+     single feed and the mul must die into the wrapper, mirroring the
+     single-use discipline of the -a+b and mad rules.  */
+  if (insnd->id == rvtt_insn_data::sfpmov
+      || insnd->id == rvtt_insn_data::sfpmov_lv)
+    {
+      unsigned base = insnd->id == rvtt_insn_data::sfpmov_lv ? 1 : 0;
+      tree mod = gimple_call_arg (def, base + 1);
+      if (TREE_CODE (mod) != INTEGER_CST
+	  || TREE_INT_CST_LOW (mod) != SFPMOV_MOD1_COMPL
+	  || !gimple_bb (def)
+	  || !flow_bb_inside_loop_p (loop, gimple_bb (def))
+	  || !single_nondebug_use_p (src, only_use))
+	return nullptr;
+      src = gimple_call_arg (def, base);
+      only_use = def;
+      if (TREE_CODE (src) != SSA_NAME)
+	return nullptr;
+      def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (src));
+      if (!def)
+	return nullptr;
+      insnd = rvtt_get_insn_data (def);
+      if (!insnd)
+	return nullptr;
+    }
+  if (insnd->id != rvtt_insn_data::sfpmul
+      && insnd->id != rvtt_insn_data::sfpmul_lv)
+    return nullptr;
+  unsigned base = madpair_value_base (insnd);
+  if (!integer_zerop (gimple_call_arg (def, base + 2))
+      || !gimple_bb (def)
+      || !flow_bb_inside_loop_p (loop, gimple_bb (def))
+      || !single_nondebug_use_p (src, only_use))
+    return nullptr;
+  *value_base = base;
+  return def;
+}
+
 /* An in-loop invariant constant materialization defining SRC whose
    full 32-bit lane image is recoverable through the audited
    single-issue-chain derivation (single_issue_constant_image_p below:
@@ -2874,16 +2952,27 @@ residency_transform (function *fn, prgm_state *st)
 		  if (!add)
 		    continue;
 		  const rvtt_insn_data *addd = rvtt_get_insn_data (add);
-		  if (!addd || addd->id != rvtt_insn_data::sfpadd
+		  /* Vocabulary widening (lane HJ): the _lv spelling of
+		     the pair's add joins the discovery under the flag;
+		     the base spelling keeps its established recognition
+		     byte-identically.  */
+		  bool add_lv = riscv_tt_opt_madpair_vocabulary > 0
+		    && addd && addd->id == rvtt_insn_data::sfpadd_lv;
+		  if (!addd
+		      || (addd->id != rvtt_insn_data::sfpadd && !add_lv)
 		      || !gimple_call_lhs (add)
-		      || TREE_CODE (gimple_call_lhs (add)) != SSA_NAME
-		      || !integer_zerop (gimple_call_arg (add, 2)))
+		      || TREE_CODE (gimple_call_lhs (add)) != SSA_NAME)
+		    continue;
+		  unsigned ab = add_lv ? madpair_value_base (addd) : 0;
+		  if (!integer_zerop (gimple_call_arg (add, ab + 2)))
 		    continue;
 		  for (unsigned swap = 0; swap != 2; ++swap)
 		    {
+		      unsigned mb;
 		      gcall *mul
-			= fusable_mul_p (gimple_call_arg (add, swap), loop,
-					 add);
+			= madpair_vocab_mul_p (gimple_call_arg
+					       (add, ab + swap), loop,
+					       add, &mb);
 		      if (!mul)
 			continue;
 		      /* Classify the pair's three value operands.  */
@@ -2900,7 +2989,7 @@ residency_transform (function *fn, prgm_state *st)
 		      bool vulnerable, is_shared;
 		      if (gcall *l
 			  = hoisted_madpair_load_p (gimple_call_arg
-						    (add, 1 - swap),
+						    (add, ab + (1 - swap)),
 						    loop, add, &value,
 						    &vulnerable, &is_shared))
 			ops[nops++]
@@ -2908,7 +2997,7 @@ residency_transform (function *fn, prgm_state *st)
 		      for (unsigned mx = 0; mx != 2; ++mx)
 			if (gcall *l
 			    = hoisted_madpair_load_p (gimple_call_arg
-						      (mul, mx),
+						      (mul, mb + mx),
 						      loop, mul, &value,
 						      &vulnerable,
 						      &is_shared))
