@@ -1975,6 +1975,43 @@
 ;; break and single-tier placement are restored verbatim).
 
 ;; ---------------------------------------------------------------------
+;; CROSSCALL CONFIG-PREFIX + RESIDENCY (lane HC,
+;; -mtt-tensix-optimize-crosscall-config-prefix; the geluappx
+;; "table-prefix/crosscall-residency" residual class): two widenings of
+;; the cross-call coefficient contract, no new pricing constants -- the
+;; contract's own amortization argument (per-call prefix words become
+;; per-loop-entry words) simply reaches more words and better entries.
+;;
+;; (1) CONFIG-PREFIX PAIR.  A callee prefix pair (all-constant
+;; immediate materialization whose single consumer is sfpwriteconfig_v
+;; to a programmable-constant register 11..14) joins the contract:
+;; re-materialized once per proven caller loop entry AHEAD of the
+;; contract loads (SFPCONFIG's source operand is md-pinned to L0 -- the
+;; callee's own prefix order), deleted from the callee.  Save = 2 words
+;; per call (the gelu licensed body's per-tile vConstFloatPrgm0
+;; programming); cost = the same 2 words once per loop entry.  The
+;; caller proofs widen to the programmed register (mask extension +
+;; config_strict: delivered SFPCONFIG-class words refuse; MOP template
+;; slots must be config-word-free) and the callee pressure proof uses
+;; the invariant pass's ratified creg-read exemption (LReg[8..14] reads
+;; never occupy an allocatable LREG).
+;;
+;; (2) PLACEMENT RESIDENCY WALK.  The committed contract entry lifts
+;; across ENCLOSING caller loops level-by-level while each level's body
+;; passes the SAME caller-epoch scan and vector-liveness proof (a
+;; failing level stops the walk -- never a refusal).  geluappx: tile
+;; loop -> 8-tile batch loop -> kernel entry = the hand init
+;; discipline (program once per kernel).
+;;
+;; Named refusals/disqualifications: crosscall-config-dest-unproven,
+;; crosscall-config-writer-unproven, crosscall-config-shape-unproven,
+;; mop-template-config-word-unproven, the widened
+;; crosscall-caller-foreign-contract/config-word-unproven; flag off:
+;; byte-identical (discovery never runs; the historical
+;; vector-outside-loop refusal and single-level placement restored
+;; verbatim).
+
+;; ---------------------------------------------------------------------
 ;; Dual-bank pinned-chain binding caps (lane FU, rtl-rvtt-lp-alloc.cc
 ;; layer 3).  These are STRUCTURAL bounds, not pricing constants: they
 ;; cap the shapes and the search the binding layer will model, and an

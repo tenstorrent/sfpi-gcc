@@ -757,6 +757,10 @@ mtt-tensix-optimize-crosscall-hoist
 Target Var(riscv_tt_opt_crosscall_hoist) Init(0)
 Hoist a noinline callee's call-invariant pinned-LREG immediate materializations (the LUT coefficient prefix) into every proven caller's loop preheader, carrying the values across calls in the architecturally pinned hard LREGs; every unproven link refuses by name.
 
+mtt-tensix-optimize-crosscall-config-prefix
+Target Var(riscv_tt_opt_crosscall_config_prefix) Init(0)
+Default-off widening of the cross-call prefix hoist: a callee prefix pair (all-constant immediate materialization whose single consumer is an SFPCONFIG write to a programmable-constant register 11..14) joins the pinned-LREG coefficient contract -- the pair is re-materialized once in every proven caller's loop preheader (ahead of the contract loads: the SFPCONFIG source operand is the same pinned L0 the first coefficient uses) and deleted from the callee; the caller proofs extend to the programmed constant register (delivered SFPCONFIG-class words refuse, SFPLOADI destinations and explicit lreg reads check the widened mask, MOP template slots must be config-word-free); every unproven link refuses by name and without -mtt-tensix-optimize-crosscall-hoist the flag is inert.
+
 mtt-tensix-optimize-crossloop-hoist
 Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
 Hoist loop-invariant SFPU immediate materializations (and, with the programmable-constant passes, their SFPCONFIG programming points) across enclosing loops whose bodies deliver only audited-inert instruction words (raw .ttinsn constants, instruction-FIFO stores, MOPs with a proven TU template census); every unaudited word or statement class refuses by name.
