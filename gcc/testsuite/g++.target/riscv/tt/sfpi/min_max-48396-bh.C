@@ -150,7 +150,7 @@ void clamp3 () {
 /*
 **_Z6clamp3v:
 **	# READ L0
-**	SFPABS	L1, L0, 1
+**	SFPSETSGN	L1, L0, 0, 1
 **	SFPSWAP	L1, L10, 1
 **	SFPSETSGN	L0, L1, 0, 0
 **	# WRITE L0
@@ -179,7 +179,7 @@ void clamp4b () {
 /*
 **_Z7clamp4bv:
 **	# READ L0
-**	SFPABS	L1, L0, 1
+**	SFPSETSGN	L1, L0, 0, 1
 **	SFPLOADI	L2, 16672, 0
 **	SFPSWAP	L1, L2, 1
 **	SFPSETSGN	L0, L1, 0, 0
