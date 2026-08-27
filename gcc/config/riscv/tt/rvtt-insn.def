@@ -60,7 +60,6 @@ RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                               
 RVTT_FN (sfpxlogic,          ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x7}, {R}, {R}))
 RVTT_FN (sfpxpred,           ,,USI_FTYPE_USI_USI,                                            VOL, ({XM, 0x2}, {R}))
 RVTT_FN (sfpxcond,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x1}, {R}, {R}))
-RVTT_FN (sfpxcondiX,          ,,XTT_VEC_FTYPE_USI,                                            VOL, ({R}, {}))
 RVTT_FN (sfpxcmp,            ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
 

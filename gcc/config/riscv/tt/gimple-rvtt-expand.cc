@@ -30,23 +30,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-pretty-print.h"
 #include "tree-into-ssa.h"
 #include "rvtt.h"
-#include <unordered_map>
 
-static void process_tree (gcall *stmt, gcall *parent);
-static bool simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-			   gcall *parent, bool negate);
-
-static std::unordered_map<gcall *, bool> vif_stmts;
-static std::unordered_map<gcall *, bool> phi_stmts;
+static bool expand_cond (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+			 gcall *parent, bool negate);
 
 static void
-remove_stmt(gimple *g)
+remove_stmt (gimple *g)
 {
-  //  rvtt_prep_stmt_for_deletion(g);
-  unlink_stmt_vdef(g);
+  unlink_stmt_vdef (g);
   gimple_stmt_iterator gsi = gsi_for_stmt(g);
-  gsi_remove(&gsi, true);
-  //  release_defs(g);
+  gsi_remove (&gsi, true);
 }
 
 static void
@@ -265,72 +258,12 @@ find_top_of_cond_tree(gcall *stmt)
       }
       break;
 
-    case rvtt_insn_data::sfpxcondiX:
-      // Should never get this deep
-      gcc_assert(0);
-      break;
-
     default:
       fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
       gcc_assert(0);
     }
 
   return stmt;
-}
-
-static void
-mark_vif_stmts(gimple_stmt_iterator top,
-	       gimple_stmt_iterator bot)
-{
-  while (top.ptr != bot.ptr &&
-	 !gsi_end_p(top))
-    {
-      if (rvtt_get_insn_data (*top))
-	{
-	  if (vif_stmts.find(as_a <gcall *> (*top)) == vif_stmts.end())
-	    vif_stmts.insert({as_a <gcall *> (*top), true});
-	  else
-	    {
-	      if (dump_file)
-		fprintf (dump_file, "  already processed these stmts, bailing out\n");
-	      return;
-	    }
-	}
-
-      gsi_next(&top);
-    }
-
-  if (gsi_end_p(top))
-    // Optimizing CCs split across BBs opens up a lot of cases, bail for now
-    if (dump_file)
-      fprintf (dump_file, "  didn't find xvif in same bb as xcondb, bailing out of optimization\n");
-}
-
-// Expand xcondi into:
-//  loadi(0)
-//  pushc
-//  loadi(1)
-//  popc
-// Returns results of loadi back to the same SSA as the xcondi for testing, up
-//  to the caller to adjust the test as needed (compare against 0)
-static void
-expand_xcondi (gcall *stmt)
-{
-  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
-  gcall *top = find_top_of_cond_tree(child);
-
-  gimple_stmt_iterator gsi = gsi_for_stmt(top);
-  tree save = emit_loadi(&gsi, top, 0, true);
-  emit_pushc(&gsi, top, true);
-  gsi = gsi_for_stmt(child);
-  tree lhs = gimple_call_lhs(stmt);
-  save = emit_loadi_lv(&gsi, top, lhs, save, 1, false);
-  emit_popc(&gsi, top, false);
-
-  // Delete the stmt, but not it's DEFs!
-  rvtt_prep_stmt_for_deletion(stmt);
-  gsi = gsi_for_stmt(stmt);
-  gsi_remove(&gsi, true);
 }
 
 // Handle AND and OR conditionals
@@ -345,11 +278,11 @@ expand_xcondi (gcall *stmt)
 // destroy the results of the RHS and so those results are saved/restored with
 // saved_enables.
 static bool
-simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost, unsigned op, bool negate)
+expand_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost, unsigned op, bool negate)
 {
   tree lhs = gimple_call_arg (call, 1);
   if (op == SFPXLOGIC_MOD1_NOT)
-    return simplify_node (lhs, leftmost, rightmost, call, !negate);
+    return expand_cond (lhs, leftmost, rightmost, call, !negate);
 
   if (dump_file)
     fprintf (dump_file, "    process %s n:%d\n", op == SFPXLOGIC_MOD1_AND ? "AND" : "OR", negate);
@@ -361,14 +294,14 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
   gimple_stmt_iterator lhs_rightmost;
   if (dump_file)
     fprintf (dump_file, "    left\n");
-  bool left_negated = simplify_node (lhs, leftmost, &lhs_rightmost, call, negate);
+  bool left_negated = expand_cond (lhs, leftmost, &lhs_rightmost, call, negate);
 
   // Emit RIGHT
   gimple_stmt_iterator rhs_leftmost;
   if (dump_file)
     fprintf (dump_file, "    right\n");
-  bool right_negated = simplify_node (gimple_call_arg (call, 2),
-				      &rhs_leftmost, rightmost, call, negate);
+  bool right_negated = expand_cond (gimple_call_arg (call, 2),
+				    &rhs_leftmost, rightmost, call, negate);
 
   if (right_negated)
     {
@@ -403,92 +336,12 @@ simplify_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_itera
 }
 
 static bool
-process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
-{
-  // Process the child as a new tree
-  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
-
-  bool optimized = false;
-  tree cmp_lhs = gimple_call_lhs (parent);
-  // These tests are redundant, but may be relevent if more cases are
-  // optimized in the future
-  if (optimizeit &&
-      has_single_use(cmp_lhs) &&
-      vif_stmts.find(stmt) != vif_stmts.end())
-    {
-      if (dump_file)
-	fprintf (dump_file, "  optimizing away xcondi\n");
-
-      // Parent is an xicmps, the single vuse is an xcondb, move the
-      // conditional into the xcondb and optimize away the xcondi and the
-      // associated xicmps
-      // Stuff the xcondi arg into the use of the icmps (and xcondi or xcondb)
-      tree xcondi_op = gimple_call_arg(stmt, 0);
-
-      gimple *xcondb_stmt;
-      use_operand_p use;
-      single_imm_use (cmp_lhs, &use, &xcondb_stmt);
-
-      gimple_call_set_arg(xcondb_stmt, 0, xcondi_op);
-      update_stmt(xcondb_stmt);
-
-      remove_stmt(parent);
-      remove_stmt(stmt);
-
-      optimized = true;
-    }
-  else
-    {
-      if (dump_file)
-	fprintf (dump_file, "  expanding xcondi\n");
-
-      // The integer conditional comparison falls outside a v_if, can't optimize
-      // Instead, save the result in an int to be used later
-      expand_xcondi(stmt);
-    }
-
-  process_tree(child, stmt);
-
-  return optimized;
-}
-
-static void
-process_tree_phi(gcall *stmt, gimple *child)
-{
-  if (dump_file)
-    fprintf (dump_file, "  process tree node phi\n");
-
-  // Don't recurse infinitely on phi nodes
-  if (phi_stmts.find(stmt) != phi_stmts.end())
-    return;
-  phi_stmts.insert({stmt, true});
-
-  // The source of this icmps comes from multiple BBs, traverse them
-  for (unsigned int i = 0; i < gimple_phi_num_args (child); i++)
-    {
-      gimple *origin = SSA_NAME_DEF_STMT(gimple_phi_arg_def(child, i));
-      if (origin->code == GIMPLE_PHI)
-	process_tree_phi(stmt, origin);
-      else if (origin->code == GIMPLE_CALL)
-	{
-	  gcall *origin_stmt = dyn_cast<gcall *>(origin);
-	  const rvtt_insn_data *origin_insnd;
-	  origin_insnd = rvtt_get_insn_data(origin_stmt);
-	  if (origin_insnd->id == rvtt_insn_data::sfpxcondiX)
-	    process_tree(origin_stmt, stmt);
-	}
-    }
-}
-
-static bool
-simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-	       gcall *parent, bool negate)
+expand_cond (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+	     gcall *parent, bool negate)
 {
   gcall *stmt = as_a <gcall *> (SSA_NAME_DEF_STMT (node));
   bool negated = false;
   const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
-  if (dump_file)
-    fprintf (dump_file, "  process %s n:%d\n", insnd->name, negate);
 
   switch (insnd->id)
     {
@@ -502,14 +355,10 @@ simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *
 
     case rvtt_insn_data::sfpxlogic:
       {
-	negated = simplify_logical (stmt, leftmost, rightmost,
-				    TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())), negate);
+	negated = expand_logical (stmt, leftmost, rightmost,
+				  TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())), negate);
 	remove_stmt(stmt);
       }
-      break;
-
-    case rvtt_insn_data::sfpxcondiX:
-      process_xcondi(stmt, parent, false);
       break;
 
     default:
@@ -518,14 +367,6 @@ simplify_node (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *
     }
 
   return negated;
-}
-
-static void
-process_tree(gcall *stmt, gcall *parent)
-{
-  gimple_stmt_iterator leftmost, rightmost;
-
-  simplify_node (gimple_call_lhs (stmt), &leftmost, &rightmost, parent, false);
 }
 
 // Expand boolean trees
@@ -539,71 +380,31 @@ process_tree(gcall *stmt, gcall *parent)
 static unsigned
 transform (function *fun)
 {
-  if (dump_file)
-    fprintf (dump_file, "Expand pass on: %s\n", function_name(fun));
-
-  phi_stmts.reserve(20);
-  vif_stmts.reserve(20);
   basic_block bb;
 
-  // Must process xcondis in all BBs before xcondbs because vif stmts can fall
-  // in a BB other than the one containing the associated xcondb
   FOR_EACH_BB_FN (bb, fun)
     {
-      if (dump_file)
-	fprintf (dump_file, "  bb process vif loop\n");
       for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  auto *insnd = rvtt_get_insn_data (*gsi);
 	  if (insnd && insnd->id == rvtt_insn_data::sfpxcond)
 	    {
 	      auto *stmt = as_a <gcall *> (*gsi);
-	      if (dump_file)
-		fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
 	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 2)));
 	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 1)));
-	      mark_vif_stmts(gsi_for_stmt(top), gsi);
 
 	      gcc_assert (gimple_bb (top) == gsi_bb (gsi));
-	      process_tree(child, stmt);
+	      gimple_stmt_iterator leftmost, rightmost;
+
+	      expand_cond (gimple_call_lhs (child), &leftmost, &rightmost, stmt, false);
 
 	      gimple_call_set_arg (stmt, insnd->mod_arg () + 2, integer_zero_node);
 	      update_stmt (stmt);
-	      vif_stmts.clear();
-	      phi_stmts.clear();
 	    }
 	}
     }
 
-  // Now process any xcondis that aren't associated w/ a xcondbs
-  FOR_EACH_BB_FN (bb, fun)
-    {
-      if (dump_file)
-	fprintf (dump_file, "  bb process outside vif loop\n");
-      auto gsi = gsi_start_bb (bb);
-      while (!gsi_end_p (gsi))
-	{
-	  gimple_stmt_iterator next_gsi = gsi;
-	  gsi_next(&next_gsi);
-
-	  if (auto *insnd = rvtt_get_insn_data (*gsi))
-	    {
-	      if (insnd->id == rvtt_insn_data::sfpxcondiX)
-		{
-		  auto *stmt = as_a <gcall *> (*gsi);
-		  if (dump_file)
-		    fprintf (dump_file, "  process xcondi tree\n");
-		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
-		  expand_xcondi(stmt);
-		  process_tree(child, stmt);
-		  phi_stmts.clear();
-		}
-	    }
-
-	  gsi = next_gsi;
-	}
-    }
 
   return TODO_update_ssa;
 }
