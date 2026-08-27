@@ -1,6 +1,7 @@
 /* Pass to expand (lower) boolean SFPU operators
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
+   Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
 This file is part of GCC.
 
@@ -17,6 +18,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -27,20 +29,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "ssa.h"
 #include "gimple-iterator.h"
-#include "gimple-pretty-print.h"
 #include "tree-into-ssa.h"
+#include "diagnostic-core.h"
 #include "rvtt.h"
 
-static bool expand_cond (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-			 gcall *parent, bool negate);
+using pred_list = std::vector<gcall *>;
 
-static void
-remove_stmt (gimple *g)
-{
-  unlink_stmt_vdef (g);
-  gimple_stmt_iterator gsi = gsi_for_stmt(g);
-  gsi_remove (&gsi, true);
-}
+static bool expand_cond (pred_list &, unsigned &ix,
+			 gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+			 tree var, gcall *sink, bool negate);
 
 static void
 finish_new_insn (gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
@@ -130,6 +127,36 @@ emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
     gimple_call_set_arg (new_stmt, new_insnd->mod_arg () + 1,
 			 build_int_cst (unsigned_type_node, type));
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
+}
+
+static bool
+verify_cond_call (pred_list &preds, unsigned &ix, gcall *call)
+{
+  if (!preds[0])
+    return true; // Already errored
+
+  auto expected = ix < preds.size () ? preds[ix++] : nullptr;
+  if (expected == call)
+    return false; // OK
+
+  preds[0] = nullptr;
+  error_at (gimple_location (call),
+	    "unexpected builtin %qD used within predication region",
+	    gimple_call_fndecl (call));
+  return true;
+}
+
+static gcall *
+verify_cond_var (tree var, gcall *call)
+{
+  if (SSA_VAR_P (var))
+    if (gcall *call = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (var)))
+      return call;
+
+  error_at (gimple_location (call),
+	    "operand of %qD call needs to be a variable",
+	    gimple_call_fndecl (call));
+  return nullptr;
 }
 
 static bool
@@ -229,14 +256,6 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     emit_setcc (right, cmp, args[0].get_arg (), map[late_cc_op],
 		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
 
-  if (dump_file)
-    {
-      fprintf (dump_file, "Deleting compare ");
-      print_gimple_stmt (dump_file, cmp, 0);
-    }
-  unlink_stmt_vdef (cmp);
-  gsi_remove (left, true);
-
   return op == SFPXCMP_MOD1_CC_LE;
 }
 
@@ -278,93 +297,89 @@ find_top_of_cond_tree(gcall *stmt)
 // destroy the results of the RHS and so those results are saved/restored with
 // saved_enables.
 static bool
-expand_logical (gcall *call, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost, unsigned op, bool negate)
+expand_logical (pred_list &preds, unsigned &ix,
+		gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+		gcall *call, const rvtt_insn_data *call_insnd, bool negate)
 {
-  tree lhs = gimple_call_arg (call, 1);
+  unsigned op = TREE_INT_CST_LOW (gimple_call_arg (call, call_insnd->mod_arg ()));
+  tree lhs = gimple_call_arg (call, call_insnd->mod_arg () + 1);
+  
   if (op == SFPXLOGIC_MOD1_NOT)
-    return expand_cond (lhs, leftmost, rightmost, call, !negate);
-
-  if (dump_file)
-    fprintf (dump_file, "    process %s n:%d\n", op == SFPXLOGIC_MOD1_AND ? "AND" : "OR", negate);
+    return expand_cond (preds, ix, leftmost, rightmost, lhs, call, !negate);
 
   bool negated = op == (negate ? SFPXLOGIC_MOD1_AND : SFPXLOGIC_MOD1_OR);
   negate ^= negated;
 
   // Emit LEFT
   gimple_stmt_iterator lhs_rightmost;
-  if (dump_file)
-    fprintf (dump_file, "    left\n");
-  bool left_negated = expand_cond (lhs, leftmost, &lhs_rightmost, call, negate);
+  bool left_negated = expand_cond (preds, ix, leftmost, &lhs_rightmost, lhs, call, negate);
 
   // Emit RIGHT
   gimple_stmt_iterator rhs_leftmost;
-  if (dump_file)
-    fprintf (dump_file, "    right\n");
-  bool right_negated = expand_cond (gimple_call_arg (call, 2),
-				    &rhs_leftmost, rightmost, call, negate);
+  tree rhs = gimple_call_arg (call, call_insnd->mod_arg () + 2);
+  bool right_negated = expand_cond (preds, ix, &rhs_leftmost, rightmost, rhs, call, negate);
 
   if (right_negated)
     {
-      if (dump_file)
-	fprintf (dump_file, "	right negated, emitting pre/post\n");
+      emit_pushc (&rhs_leftmost, call, true);
+      tree saved_enables = emit_loadi (&rhs_leftmost, call, 1, true);
 
-      emit_pushc(&rhs_leftmost, call, true);
-      tree saved_enables = emit_loadi(&rhs_leftmost, call, 1, true);
-
-      saved_enables = emit_loadi_lv(rightmost, call, NULL_TREE, saved_enables, 0, false);
-      emit_popc(rightmost, call, false);
+      saved_enables = emit_loadi_lv (rightmost, call, NULL_TREE, saved_enables, 0, false);
+      emit_popc (rightmost, call, false);
       emit_setcc (rightmost, call, saved_enables, SFPSETCC_MOD1_LREG_EQ0, SFPSETCC_IMM_TYPE_INT, false);
     }
 
   if (negated)
-    {
-      if (dump_file)
-	fprintf (dump_file, "	node negated, emitting compc\n");
-
-      emit_compc (rightmost, call, false);
-    }
+    emit_compc (rightmost, call, false);
 
   if (left_negated)
     // Parent needs a fence for this node's left and side (if the parent
     // isn't the root)
     negated = true;
 
-  if (dump_file)
-    fprintf (dump_file, "    exiting bool %d %d\n", op, negate);
-
   return negated;
 }
 
 static bool
-expand_cond (tree node, gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
-	     gcall *parent, bool negate)
+expand_cond (pred_list &preds, unsigned &ix,
+	     gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
+	     tree var, gcall *sink, bool negate)
 {
-  gcall *stmt = as_a <gcall *> (SSA_NAME_DEF_STMT (node));
   bool negated = false;
-  const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
+
+  gcall *call = verify_cond_var (var, sink);
+  const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call) : nullptr;
+  if (!insnd)
+    {
+    fail:
+      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
+      gcc_assert(0);
+    }
 
   switch (insnd->id)
     {
+    default:
+      goto fail;
+
     case rvtt_insn_data::sfpxcmp:
-      if (expand_cmp (leftmost, rightmost, stmt, insnd, negate))
+      if (expand_cmp (leftmost, rightmost, call, insnd, negate))
 	{
-	  emit_compc (rightmost, stmt, false);
+	  emit_compc (rightmost, call, false);
 	  negated = true;
 	}
       break;
 
     case rvtt_insn_data::sfpxlogic:
-      {
-	negated = expand_logical (stmt, leftmost, rightmost,
-				  TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ())), negate);
-	remove_stmt(stmt);
-      }
+      negated = expand_logical (preds, ix, leftmost, rightmost,
+				call, insnd, negate);
       break;
-
-    default:
-      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
-      gcc_assert(0);
     }
+
+  verify_cond_call (preds, ix, call);
+
+  unlink_stmt_vdef (call);
+  gimple_stmt_iterator gsi = gsi_for_stmt (call);
+  gsi_remove (&gsi, true);
 
   return negated;
 }
@@ -381,32 +396,78 @@ static unsigned
 transform (function *fun)
 {
   basic_block bb;
+  pred_list preds;
+  bool changed = false;
 
   FOR_EACH_BB_FN (bb, fun)
     {
       for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  auto *insnd = rvtt_get_insn_data (*gsi);
-	  if (insnd && insnd->id == rvtt_insn_data::sfpxcond)
-	    {
-	      auto *stmt = as_a <gcall *> (*gsi);
-	      // This will be the sfpxvif stmt
-	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 2)));
-	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->mod_arg () + 1)));
+	  if (!insnd)
+	    continue;
 
-	      gcc_assert (gimple_bb (top) == gsi_bb (gsi));
+	  auto *call = as_a <gcall *> (*gsi);
+	  switch (insnd->id)
+	    {
+	    default:
+	      if (!preds.empty () && insnd->sets_cc (call))
+		error_at (gimple_location (call),
+			  "disallowed cc-setting builtin %qD within predication region",
+			  gimple_call_fndecl (call));
+	      break;
+
+	    case rvtt_insn_data::sfpxpred:
+	      if (!preds.empty ())
+		{
+		  preds.clear ();
+		  error_at (gimple_location (call),
+			    "Disallowed nested predication region");
+		}
+	      preds.push_back (call);
+	      break;
+
+	    case rvtt_insn_data::sfpxlogic:
+	    case rvtt_insn_data::sfpxcmp:
+	    case rvtt_insn_data::sfpxcond:
+	      if (preds.empty ())
+		error_at (gimple_location (call),
+			  "predication builtin %qD outside of predication region",
+			  gimple_call_fndecl (call));
+	      preds.push_back (call);
+	      if (insnd->id != rvtt_insn_data::sfpxcond)
+		break;
+
+	      unsigned ix = 0;
+	      tree pred_var = gimple_call_arg (call, insnd->mod_arg () + 1);
+
+	      gcall *first = verify_cond_var (pred_var, call);
+	      if (!first)
+		break;
+	      verify_cond_call (preds, ix, first);
+
+	      tree cond_var = gimple_call_arg (call, insnd->mod_arg () + 2);
 	      gimple_stmt_iterator leftmost, rightmost;
 
-	      expand_cond (gimple_call_lhs (child), &leftmost, &rightmost, stmt, false);
+	      expand_cond (preds, ix, &leftmost, &rightmost, cond_var, call, false);
 
-	      gimple_call_set_arg (stmt, insnd->mod_arg () + 2, integer_zero_node);
-	      update_stmt (stmt);
+	      verify_cond_call (preds, ix, call);
+	      gimple_call_set_arg (call, insnd->mod_arg () + 2, integer_zero_node);
+	      update_stmt (call);
+	      preds.clear ();
+	      changed = true;
+	      break;
 	    }
+	}
+      if (!preds.empty ())
+	{
+	  error_at (gimple_location (*preds.begin ()),
+		    "untermated predication region");
+	  preds.clear ();
 	}
     }
 
-
-  return TODO_update_ssa;
+  return changed ? TODO_update_ssa : 0;
 }
 
 namespace {
