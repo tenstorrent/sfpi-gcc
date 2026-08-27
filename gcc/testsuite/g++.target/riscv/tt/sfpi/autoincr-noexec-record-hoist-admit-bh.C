@@ -20,6 +20,10 @@ qk_zeta_rows_far (volatile int *sep)
       sfpi::dst_reg[0] = qv * 3.25f; sfpi::dst_reg++;
       sfpi::dst_reg[0] = qv + 1.5f; sfpi::dst_reg++;
       sfpi::dst_reg[0] = qv * qv + qv; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * 0.5f; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv + 2.75f; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * qv - qv; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * 1.25f + qv; sfpi::dst_reg++;
     }
   sep[0] = 11; sep[1] = 22; sep[2] = 33; sep[3] = 44;
   sep[4] = 55; sep[5] = 66; sep[6] = 77; sep[7] = 88;

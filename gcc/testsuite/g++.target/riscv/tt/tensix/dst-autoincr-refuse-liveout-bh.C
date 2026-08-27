@@ -6,7 +6,7 @@
 // payload must refuse and every explicit increment must survive.
 // { dg-final { scan-rtl-dump "Dst-autoincr refusal: payload execution site without matching increment .live-out RWC state." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "Dst-autoincr group:" "rvtt_dst_autoincr" } }
-// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 7 } }
+// { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 9 } }
 // { dg-final { scan-assembler-not "TTSETC16" } }
 // { dg-final { scan-assembler-not "SFPSTORE\tL., 0, 0, 6" } }
 

@@ -521,6 +521,61 @@
 ;; charged on the configuration-cost side at the audited
 ;; min_config_distance (2), never per iteration.
 ;;
+;; PER-EXECUTION CONFIGURATION PRICING (lane IA, pin 35).  The
+;; profitability comparison is stated in frontend issue slots PER
+;; EXECUTION OF THE CONFIGURATION PROGRAM on both sides, and the cost
+;; model splits by PLACEMENT -- lane IA silicon bracketed BOTH
+;; directions (laneIA-evidence-20260827, 3-rep cycle-identical):
+;;
+;;   - a PREHEADER program executes once per loop entry inside the
+;;     same pre-steady-state window the once-per-entry drain residual
+;;     already prices: the lane EP covered witnesses measured that
+;;     whole entry window, three-word program INCLUDED, at ~2
+;;     cycles/entry -- so preheader words price at their word count,
+;;     plus the residual through a live crossing (the original
+;;     pricing, unchanged).  The refuting witnesses for charging more
+;;     there: the lcm-fresh row loop (preheader 8x1-row group,
+;;     692423 -> 694979 = +0.37% refused) and the relu hand rolled
+;;     loop (45744 -> 49330 = +7.8% refused) -- both measured BETTER
+;;     fired, so the configuration class occupancy must not be
+;;     double-counted against the entry residual;
+;;
+;;   - a NON-PREHEADER program re-executes on every execution of its
+;;     region, whose scalar entry control (call or branch) drains the
+;;     frontend the configuration then consumes: each SETC16 word
+;;     occupies the configuration issue class, an audited TWO-cycle
+;;     resource (rvtt_issue_cfg below; craq-sim
+;;     tensix_rtl_issue_class_for_inst models the same), while each
+;;     removed TTINCRWC frees a single-cycle slot, and the program
+;;     pays the once-per-entry drain residual (min_config_distance)
+;;     on every execution.  Charging the residual to a mid-block
+;;     program whose block carries prior covering words is
+;;     conservative in the refusing direction only.
+;;
+;;   - groups whose candidates share a rewritten capture payload are
+;;     priced as one FAMILY: payload coverage forces all-or-nothing
+;;     across the capture's execution sites, so the two real
+;;     alternatives are the whole family transformed or kept -- an
+;;     orphan split-off group priced alone would poison a paying
+;;     sibling stream (the rdiv/sqrt/cbrt hand kernels' 32-launch
+;;     streams split 8+24: 32 removed vs two programs' slots pays).
+;;
+;; Silicon witness for the non-preheader term (binopscalar-fresh,
+;; pin 35): the eight-row straight-line callee
+;; (8x{SFPLOAD,SFPADDI,SFPSTORE}) re-invoked 512 times per kernel
+;; fired under the old 3-words-vs-8-rows admission and measured
+;; KERNEL 21929 vs 21164 OFF (+3.61%, TILE_LOOP 168.95 vs 162.95 =
+;; ~1.5 cycles per invocation, delta = exactly 3 SETC16 + 8 mod-write
+;; retargets - 8 TTINCRWC per call).  Per-execution slot pricing
+;; refuses it at removed 8 <= 3*2 + 2 = cost 8 (unprofitable-group),
+;; returning the OFF bytes; the measured ~9.5 effective slots bracket
+;; the audited 8 from above, so the break-even remains a conservative
+;; floor.  Every prior witness verdict is preserved: the
+;; trips-amortized preheader winners (unaryshift hand 4x8 rows,
+;; threshold/hardshrink 32 removed/entry vs preheader cost 5, and the
+;; lcm/relu preheader 8x1 groups above) and the skinny rolled losers
+;; (crossing-refused upstream) are unchanged.
+;;
 ;; An audited issue-time RWC writer (surviving explicit TTINCRWC,
 ;; typed face advance) between the last terminator and the backedge
 ;; re-anchors the crossing and clears the charge.  Groups whose

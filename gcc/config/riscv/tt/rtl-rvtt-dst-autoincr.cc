@@ -85,11 +85,39 @@ along with GCC; see the file COPYING3.  If not see
        row; otherwise the RWC state at the uncovered site would be
        unrestorably changed and the pass refuses.
 
-     - Profitability compares the configuration cost (SETC16 words from the
-       capability table) against the number of dynamically removed per-row
-       increments.  Loop regions use the same trip-count estimate as replay
-       hoisting.  No numeric row thresholds appear anywhere; break-evens fall
-       out of the model.
+     - Profitability compares the configuration cost against the number of
+       dynamically removed per-row increments, both in frontend issue slots
+       per execution of the configuration program, and the cost model splits
+       by PLACEMENT (lane IA silicon, bracketed in both directions):
+
+         A PREHEADER program executes once per loop entry inside the same
+         pre-steady-state window the once-per-entry drain residual already
+         prices (the lane EP covered witnesses measured that whole window,
+         three-word program included, at ~2 cycles/entry), so its words
+         price at their word count, plus the residual through a live
+         crossing -- the original pricing.  Charging more there is refuted
+         by silicon: the lcm row loop (692423 -> 694979) and the relu hand
+         rolled loop (45744 -> 49330) are preheader 8x1 groups measured
+         BETTER fired.
+
+         A NON-PREHEADER program re-executes on every execution of its
+         region, entered through scalar control that drains the frontend:
+         each SETC16 word occupies the audited two-cycle configuration
+         issue class (rvtt-cost.md, rvtt_issue_cfg -- the same audited
+         resource the distance guard below stands on) while each removed
+         TTINCRWC frees one single-cycle slot, and the program pays the
+         once-per-entry drain residual (min_config_distance) on every
+         execution.  Silicon witness (binopscalar-fresh, pin 35): an
+         eight-row straight-line callee re-invoked 512 times per kernel
+         measured 21929 vs 21164 cycles (+3.61%, ~1.5 cycles/invocation)
+         under the old 3-word-vs-8-rows admission -- the per-execution
+         slot pricing refuses it at 8 <= 3*2 + 2.
+
+       Groups sharing a rewritten capture payload are priced as one FAMILY
+       (they live or die together under payload coverage; see the
+       profitability block).  Loop regions use the same trip-count estimate
+       as replay hoisting.  No numeric row thresholds appear anywhere;
+       break-evens fall out of the model.
 
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
@@ -243,6 +271,13 @@ struct autoincr_caps
      conservative adoption (no WH silicon witness; larger W only widens
      refusal).  */
   unsigned drained_frontend_window;
+  /* Frontend issue-slot occupancy of one SETC16 configuration word: the
+     configuration issue class is an audited two-cycle resource
+     (rvtt-cost.md rvtt_issue_cfg; craq-sim tensix_rtl_issue_class_for_inst
+     models the same), one cycle longer than the single-cycle class a
+     removed TTINCRWC occupies.  The profitability comparison prices the
+     slot program in these units so both sides are frontend issue slots.  */
+  unsigned config_issue_slots;
   autoincr_slot slots[2];
 };
 
@@ -250,10 +285,10 @@ static autoincr_caps
 target_autoincr_caps ()
 {
   if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, 2, 7, { { 18, 34, 53 }, { 0, 0, 0 } } };
+    return { true, 7, 6, 1, 2, 7, 2, { { 18, 34, 53 }, { 0, 0, 0 } } };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 1, 2, 7, { { 19, 29, 54 }, { 0, 0, 0 } } };
-  return { false, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
+    return { true, 3, 2, 1, 2, 7, 2, { { 19, 29, 54 }, { 0, 0, 0 } } };
+  return { false, 0, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -1886,16 +1921,18 @@ transform (function *cfn)
 	    continue;
 
 	  /* Profitability: configuration cost against dynamically removed
-	     increments, less the per-iteration mod-write crossing charge.
-	     A shared program's cost is paid once for every group it
-	     serves.  A group carrying a live backedge crossing adds the
-	     once-per-loop-entry drain residual -- the audited
-	     min_config_distance guard the first crossing pays before the
-	     pipeline reaches steady state (lane EP finding F1: the
-	     covered witnesses still measure ~2 cycles per loop entry) --
-	     to the cost side, in the cost's own units: once per entry
-	     for a preheader program, once per re-executed iteration for
-	     an in-body program.  */
+	     increments, less the per-iteration mod-write crossing charge,
+	     both in frontend issue slots per execution of the program.  A
+	     shared program's cost is paid once for every group it serves.
+	     The cost model splits by PLACEMENT (see group_cost below): a
+	     preheader program keeps the original word pricing plus the
+	     live-crossing entry residual (the lane EP covered witnesses
+	     measured the whole entry window, program included, at ~2
+	     cycles); a non-preheader program re-executes per region
+	     execution and pays the audited two-cycle configuration issue
+	     class per SETC16 word plus the once-per-entry drain residual
+	     (lane IA binopscalar silicon witness, both directions
+	     bracketed on lcm/relu).  */
 	  auto priced_rows = [] (const group &grp)
 	  {
 	    HOST_WIDE_INT iter_mult
@@ -1907,32 +1944,151 @@ transform (function *cfn)
 	  for (const group &grp : groups)
 	    if (grp.shared_set >= 0)
 	      shared_rows[grp.shared_set] += priced_rows (grp);
-	  for (auto it = groups.begin (); it != groups.end ();)
+
+	  /* Placement decides the program's slot pricing (lane IA silicon,
+	     both directions):
+	     - A PREHEADER program executes once per loop entry inside the
+	       same pre-steady-state window the once-per-entry drain
+	       residual already prices: the covered fat witnesses (lane EP)
+	       measured ~2 cycles per entry TOTAL with the three-word
+	       program in the preheader, so its words price at their word
+	       count and the residual is charged only through a live
+	       crossing, as before.  Charging the configuration class
+	       occupancy there double-counts the entry window: doing so
+	       refused the lcm row loop (692423 -> 694979, +0.37%) and the
+	       relu hand rolled loop (45744 -> 49330, +7.8%) -- both
+	       preheader 8x1 groups silicon-measured BETTER fired.
+	     - A NON-PREHEADER program re-executes on every execution of
+	       its region: each SETC16 occupies the audited two-cycle
+	       configuration issue class (rvtt_issue_cfg) against the
+	       removed increments' single-cycle slots, plus the
+	       once-per-entry drain residual -- the scalar entry control
+	       that reaches it drains the frontend the configuration then
+	       consumes (binopscalar witness: 21929 vs 21164, ~1.5
+	       cycles/invocation at the old admission).  */
+	  auto group_cost = [&] (const group &grp)
+	  {
+	    HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
+	    if (!grp.use_preheader)
+	      cost = cost * caps.config_issue_slots
+		     + caps.min_config_distance;
+	    else if (grp.live_crossing)
+	      cost += caps.min_config_distance;
+	    return cost;
+	  };
+
+	  /* Payload families: groups whose candidates share a rewritten
+	     capture payload live or die TOGETHER -- the payload-coverage
+	     rule below forces all-or-nothing on every execution site of
+	     the capture -- so the two real alternatives are the WHOLE
+	     family transformed or the whole family kept, and profitability
+	     must compare exactly those: family removed = sum of the member
+	     groups' priced rows; family cost = one program cost per
+	     distinct emitted program (a shared placement's program counted
+	     once for its set).  Pricing an orphan member in isolation
+	     would let a small split-off group's refusal poison a paying
+	     sibling stream through payload coverage (lane IA: the rdiv
+	     hand kernel's 32-launch stream splits 8+24; 32 removed vs two
+	     programs' 16 slots pays, the 8-row orphan alone does not).
+	     Union-find over shared captures.  */
+	  /* Union-find by group INDEX (verdicts are computed before any
+	     erasure mutates the vector).  */
+	  std::vector<int> fam (groups.size (), -1);
+	  auto fam_find = [&] (int g)
+	  {
+	    while (fam[g] >= 0 && fam[g] != g)
+	      g = fam[g];
+	    return g;
+	  };
+	  {
+	    std::map<const capture_rec *, int> cap_owner;
+	    for (unsigned gx = 0; gx != groups.size (); ++gx)
+	      for (unsigned cx : groups[gx].cand_ix)
+		if (capture_rec *cap
+		      = groups[gx].scan->candidates[cx].payload)
+		  {
+		    if (fam[gx] < 0)
+		      fam[gx] = gx;
+		    int me = fam_find (gx);
+		    auto it = cap_owner.find (cap);
+		    if (it == cap_owner.end ())
+		      cap_owner[cap] = me;
+		    else
+		      {
+			int other = fam_find (it->second);
+			if (other != me)
+			  fam[other] = me;
+		      }
+		  }
+	  }
+	  std::map<int, HOST_WIDE_INT> fam_removed, fam_cost;
+	  std::map<int, std::vector<int>> fam_shared_seen;
+	  for (unsigned gx = 0; gx != groups.size (); ++gx)
+	    if (fam[gx] >= 0)
+	      {
+		int root = fam_find (gx);
+		group &grp = groups[gx];
+		fam_removed[root] += priced_rows (grp);
+		bool count_cost = true;
+		if (grp.shared_set >= 0)
+		  {
+		    std::vector<int> &seen = fam_shared_seen[root];
+		    if (std::find (seen.begin (), seen.end (),
+				   grp.shared_set) != seen.end ())
+		      count_cost = false;
+		    else
+		      seen.push_back (grp.shared_set);
+		  }
+		if (count_cost)
+		  fam_cost[root] += group_cost (grp);
+	      }
+
+	  /* Verdicts first (indices stay stable), erasure second.  */
+	  std::vector<bool> refuse (groups.size (), false);
+	  for (unsigned gx = 0; gx != groups.size (); ++gx)
 	    {
-	      group &grp = *it;
-	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
-	      if (grp.live_crossing)
-		cost += caps.min_config_distance;
-	      HOST_WIDE_INT removed = grp.shared_set >= 0
-		? shared_rows[grp.shared_set] : priced_rows (grp);
-	      if (removed <= cost)
+	      group &grp = groups[gx];
+	      bool in_family = fam[gx] >= 0;
+	      HOST_WIDE_INT cost, removed;
+	      if (in_family)
 		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "Dst-autoincr refusal: unprofitable group "
-			     "(config " HOST_WIDE_INT_PRINT_DEC
-			     " >= removed " HOST_WIDE_INT_PRINT_DEC
-			     ", bb %d)\n",
-			     cost, removed,
-			     grp.scan->bb->index);
-		  for (unsigned cx : grp.cand_ix)
-		    grp.scan->candidates[cx].dropped = true;
-		  changed = true;
-		  it = groups.erase (it);
+		  int root = fam_find (gx);
+		  cost = fam_cost[root];
+		  removed = fam_removed[root];
 		}
 	      else
-		++it;
+		{
+		  cost = group_cost (grp);
+		  removed = grp.shared_set >= 0
+		    ? shared_rows[grp.shared_set] : priced_rows (grp);
+		}
+	      if (removed <= cost)
+		{
+		  refuse[gx] = true;
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "Dst-autoincr refusal: unprofitable %s "
+			     "(config+entry slots " HOST_WIDE_INT_PRINT_DEC
+			     " >= removed " HOST_WIDE_INT_PRINT_DEC
+			     ", bb %d)\n",
+			     in_family ? "payload family" : "group",
+			     cost, removed,
+			     grp.scan->bb->index);
+		}
 	    }
+	  {
+	    std::vector<group> kept;
+	    for (unsigned gx = 0; gx != groups.size (); ++gx)
+	      if (refuse[gx])
+		{
+		  for (unsigned cx : groups[gx].cand_ix)
+		    groups[gx].scan->candidates[cx].dropped = true;
+		  changed = true;
+		}
+	      else
+		kept.push_back (groups[gx]);
+	    groups.swap (kept);
+	  }
 
 	  /* Payload coverage: every execution site of a rewritten payload
 	     must be a surviving row, or the uncovered site's RWC state
