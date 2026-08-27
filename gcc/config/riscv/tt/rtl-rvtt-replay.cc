@@ -4250,6 +4250,102 @@ struct crf_plan
   std::vector<std::vector<unsigned>> moves_tail;
 };
 
+/* FINAL LOCKSTEP AUDIT comparator (lane ID): structural equality of a
+   seed/clone member pair under the plan's FINAL register assignment
+   (every value's register read through plan.renames).  Mirrors
+   crf_match_rtx's structure walk, but where the walk RECORDED live-in
+   correspondences to be canonicalized later, this comparator REQUIRES
+   the canonicalization to have happened: the record delivers the
+   seed's words byte-exactly at every clone, so any remaining register
+   divergence is wrong code.  */
+
+static bool
+crf_final_lockstep_rtx (rtx a, rtx b, bool in_def,
+			const crf_position &pa, const crf_position &pb,
+			const crf_plan &plan, const crf_block &blk,
+			const std::vector<std::pair<unsigned, unsigned>>
+			  &bridges)
+{
+  if (!a || !b)
+    return a == b;
+  if (GET_CODE (a) != GET_CODE (b) || GET_MODE (a) != GET_MODE (b))
+    return false;
+  switch (GET_CODE (a))
+    {
+    case REG:
+      {
+	if (REG_NREGS (a) != 1 || REG_NREGS (b) != 1)
+	  return false;
+	unsigned ra = REGNO (a), rb = REGNO (b);
+	if (!SFPU_REG_P (ra) || !SFPU_REG_P (rb))
+	  return ra == rb;
+	auto final_of = [&] (const crf_position &p, unsigned r) -> unsigned
+	{
+	  int bit = int (r) - SFPU_REG_FIRST;
+	  int vix = in_def ? p.value_of_def[bit] : p.value_of_use[bit];
+	  if (vix < 0)
+	    return r;
+	  auto it = plan.renames.find (unsigned (vix));
+	  return it != plan.renames.end () ? it->second
+					   : blk.values[vix].reg;
+	};
+	unsigned fa = final_of (pa, ra), fb = final_of (pb, rb);
+	if (fa == fb)
+	  return true;
+	/* A live-in correspondence resolved by a clone-head BRIDGE
+	   copy (dest <- src) legitimately leaves the clone's value in
+	   its own register: the bridge moves it into the seed's before
+	   the clone runs.  Def-side divergence is never bridged.  */
+	if (!in_def)
+	  for (auto const &br : bridges)
+	    if (br.first == fa && br.second == fb)
+	      return true;
+	return false;
+      }
+
+    case CONST_INT:
+      return INTVAL (a) == INTVAL (b);
+
+    case SCRATCH:
+      return true;
+
+    case SET:
+      return crf_final_lockstep_rtx (SET_SRC (a), SET_SRC (b), false,
+				     pa, pb, plan, blk, bridges)
+	&& crf_final_lockstep_rtx (SET_DEST (a), SET_DEST (b), true,
+				   pa, pb, plan, blk, bridges);
+
+    case CLOBBER:
+      return crf_final_lockstep_rtx (XEXP (a, 0), XEXP (b, 0), true,
+				     pa, pb, plan, blk, bridges);
+
+    case USE:
+    case MEM:
+      return crf_final_lockstep_rtx (XEXP (a, 0), XEXP (b, 0), false,
+				     pa, pb, plan, blk, bridges);
+
+    case UNSPEC:
+    case UNSPEC_VOLATILE:
+      if (XINT (a, 1) != XINT (b, 1))
+	return false;
+      // FALLTHROUGH
+    case PARALLEL:
+      {
+	if (XVECLEN (a, 0) != XVECLEN (b, 0))
+	  return false;
+	for (int ix = 0; ix != XVECLEN (a, 0); ++ix)
+	  if (!crf_final_lockstep_rtx (XVECEXP (a, 0, ix),
+				       XVECEXP (b, 0, ix), in_def,
+				       pa, pb, plan, blk, bridges))
+	    return false;
+	return true;
+      }
+
+    default:
+      return false;
+    }
+}
+
 static void
 crf_clone_members (crf_block const &blk, crf_clone const &c, unsigned length,
 		   std::vector<unsigned> &out)
@@ -5140,6 +5236,55 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
       if (refused)
 	return false;
       break;
+    }
+
+  // FINAL LOCKSTEP AUDIT (lane ID): the occupancy cascade's bystander
+  // swaps rewrite value registers AFTER the lockstep walk verified the
+  // member words' operand correspondence, and nothing re-checked the
+  // words against the FINAL assignment -- the launch replays the
+  // seed's words byte-exactly at every clone, so any remaining
+  // divergence is wrong code (observed live: the tanh corr TU under
+  // crossrow-2datum x loop-prgm-reclaim replayed a read of the
+  // register a bystander swap had just evacuated).  Re-verify every
+  // member pair under the final assignment, refusing by name.
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      if (c == ref)
+	continue;
+      for (unsigned m = 0; m != length; ++m)
+	{
+	  unsigned spos = plan.members[ref][m];
+	  unsigned cpos = plan.members[c][m];
+	  if (!crf_final_lockstep_rtx (PATTERN (blk.pos[spos].insn),
+				       PATTERN (blk.pos[cpos].insn),
+				       false, blk.pos[spos],
+				       blk.pos[cpos], plan, blk,
+				       plan.bridges[c]))
+	    {
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "Refusing counted-row family"
+			   " [%u,%u): counted-row-final-lockstep-"
+			   "divergence: member %u of clone %u diverges"
+			   " from the seed under the final register"
+			   " assignment\n",
+			   plan.clones.front ().begin,
+			   plan.clones.front ().end, m, c);
+		  fprintf (dump_file, "  seed (ref %u):  ", ref);
+		  print_rtl_single (dump_file, blk.pos[spos].insn);
+		  fprintf (dump_file, "  clone %u: ", c);
+		  print_rtl_single (dump_file, blk.pos[cpos].insn);
+		  for (auto const &rn : plan.renames)
+		    fprintf (dump_file, "  rename: val %u (r%u, insn %d)"
+			     " -> r%u\n", rn.first,
+			     blk.values[rn.first].reg,
+			     blk.values[rn.first].def_insn
+			     ? INSN_UID (blk.values[rn.first].def_insn)
+			     : -1, rn.second);
+		}
+	      return false;
+	    }
+	}
     }
 
   // Modeled saving: every non-seed clone's residual collapses to one
