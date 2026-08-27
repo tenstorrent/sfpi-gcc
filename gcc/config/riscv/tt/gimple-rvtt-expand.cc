@@ -129,6 +129,146 @@ emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
+static unsigned
+commute_cmp_args (unsigned op, rvtt_arg_info (&args)[2])
+{
+  std::swap (args[0], args[1]);
+  if ((op & ~(SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE))
+      != SFPXCMP_MOD1_CC_EQ)
+    op ^= SFPXCMP_MOD1_CC_LT ^ SFPXCMP_MOD1_CC_GT;
+  return op;
+}
+
+/* Expand compare using subtract and/or setcc insns.  This is not going to be
+   correct in all cases, for instance infinites will compare different, and
+   there is no complete ordering of fp types.
+   FIXME: integral ordering compares ignore overflow -- that's bug 14598. */
+
+static bool
+expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&args)[2], unsigned op, unsigned type)
+{
+  // Turn GT/GE to LT/LE to avoid extra insn,
+  // Turn 0 EQ/NE A into A EQ/NE 0 to avoid subtract
+  if (op >= SFPXCMP_MOD1_CC_GT
+      || (op >= SFPXCMP_MOD1_CC_EQ && args[0].is_zero ()))
+    op = commute_cmp_args (op, args);
+
+  int setcc_op = op;
+  if (!args[1].is_zero ())
+    {
+      const rvtt_insn_data *sub_insnd = nullptr;
+      unsigned sub_mod = 0;
+      tree neg1 = nullptr;
+
+      if (type == SFPXCMP_MOD1_TYPE_FLOAT && op < SFPXCMP_MOD1_CC_EQ)
+	{
+	  auto *lreg_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
+	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, lreg_insnd->num_args ());
+	  auto reg = build_int_cst (unsigned_type_node,
+				    TARGET_XTT_TENSIX_WH ? CREG_IDX_NEG_1 : CREG_IDX_1);
+	  gimple_call_set_arg (lreg_call, 0, reg);
+	  neg1 = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
+	  gimple_call_set_lhs (lreg_call, neg1);
+	  gimple_set_location (lreg_call, gimple_location (cmp));
+	  gsi_insert_after (right, lreg_call, GSI_NEW_STMT);
+
+	  sub_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmad);
+	  sub_mod = TARGET_XTT_TENSIX_WH ? 0 : SFPMAD_MOD1_BH_COMPL_A;
+	}
+      else
+	{
+	  static const unsigned char iadd_map[] = {
+	    SFPIADD_MOD1_CC_LT0,
+	    SFPIADD_MOD1_CC_GTE0,
+	    SFPIADD_MOD1_CC_NONE,
+	    SFPIADD_MOD1_CC_NONE,
+	    0xff,
+	    0xff,
+	  };
+
+	  sub_mod = iadd_map[op];
+	  if (sub_mod != SFPIADD_MOD1_CC_NONE)
+	    setcc_op = -1;
+	  sub_mod |= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
+	  sub_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
+	}
+
+      auto *sub_call = gimple_build_call (sub_insnd->decl, sub_insnd->num_args ());
+      if (neg1)
+	gimple_call_set_arg (sub_call, sub_insnd->src_arg (), neg1);
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1), args[1].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1) + 1, args[0].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, sub_mod));
+      if (setcc_op >= 0)
+	{
+	  auto tmp = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
+	  args[0].set_arg (tmp);
+	  gimple_set_lhs (sub_call, tmp);
+	}
+      gimple_set_location (sub_call, gimple_location (cmp));
+      gsi_insert_after (right, sub_call, GSI_NEW_STMT);
+    }
+
+  if (setcc_op >= 0)
+    {
+      static const unsigned char setcc_map[] = {
+	SFPSETCC_MOD1_LREG_LT0,
+	SFPSETCC_MOD1_LREG_GTE0,
+	SFPSETCC_MOD1_LREG_EQ0,
+	SFPSETCC_MOD1_LREG_NE0,
+	0xff,
+	0xff,
+      };
+      emit_setcc (right, cmp, args[0].get_arg (), setcc_map[setcc_op],
+		  type == SFPXCMP_MOD1_TYPE_FLOAT
+		  ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
+    }
+
+  return false;
+}
+
+/* Expand compare using gt, le insns. For equality compares emit using sub. */
+
+static bool
+expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&args)[2], unsigned op, unsigned type)
+{
+  if (op == SFPXCMP_MOD1_CC_EQ || op == SFPXCMP_MOD1_CC_NE)
+    // Add a combine pattern to turn an sfpiadd_v/setcc into a pari of sfple's
+    return expand_cmp_using_sub (right, cmp, args, op, type);
+
+  if (op < SFPXCMP_MOD1_CC_GT)
+    op = commute_cmp_args (op, args);
+
+  // Quasar and later use the int field to specify data type
+  // Blackhole treats gtle as smag/float
+  static const uint16_t gtle_type_map[] = {
+    0xffff, //SFPGTLE_IMM_TYPE_UINT, for 4.1
+    SFPGTLE_IMM_TYPE_INT,
+    SFPGTLE_IMM_TYPE_SMAG,
+    SFPGTLE_IMM_TYPE_FLOAT,
+  };
+
+  gcc_checking_assert (op == SFPXCMP_MOD1_CC_GT
+		       || op == SFPXCMP_MOD1_CC_LE);
+
+  auto *insnd = rvtt_get_insn_data (op == SFPXCMP_MOD1_CC_GT
+				    ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
+  auto mod_arg = build_int_cst (unsigned_type_node, SFPGTLE_MOD1_SET_CC);
+  auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
+  gimple_call_set_arg (call, insnd->src_arg (), args[0].get_arg ());
+  gimple_call_set_arg (call, insnd->src_arg () + 1, args[1].get_arg ());
+  gimple_call_set_arg (call, insnd->mod_arg (), mod_arg);
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      auto type_arg = build_int_cst (unsigned_type_node, gtle_type_map[type]);
+      gimple_call_set_arg (call, insnd->mod_arg () + 1, type_arg);
+    }
+  gimple_set_location (call, gimple_location (cmp));
+  gsi_insert_after (right, call, GSI_NEW_STMT);
+  return false;
+}
+
 static bool
 verify_cond_call (pred_list &preds, unsigned &ix, gcall *call)
 {
@@ -176,116 +316,105 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     {{gimple_call_arg (cmp, insnd->src_arg ()), true},
      {gimple_call_arg (cmp, insnd->src_arg () + 1), true}};
 
-  // direct reimplementation of existing scheme
-  static const int map[] = {
-    SFPSETCC_MOD1_LREG_LT0,
-    SFPSETCC_MOD1_LREG_GTE0,
-    SFPSETCC_MOD1_LREG_EQ0,
-    SFPSETCC_MOD1_LREG_NE0,
-    SFPSETCC_MOD1_LREG_GTE0,
-    SFPSETCC_MOD1_LREG_GTE0
-  };
-  bool fp = type == SFPXCMP_MOD1_TYPE_FLOAT;
-  bool zero = args[1].is_zero ();
-  gcall *sub = nullptr;
-  int late_cc_op = -1;
-  if (op == SFPXCMP_MOD1_CC_GT || op == SFPXCMP_MOD1_CC_LE)
-    // GT -> GE && NE0 LE -> !(GT && NE0)
-    // We can do better on consts that fit directly, or we only have one
-    // use of the loadi
-    late_cc_op = SFPXCMP_MOD1_CC_NE;
+  /*
+    We have SFPGT & SFPLE, which work on smag, 2's complement and unsigned (arch-depending)
+  LT  b > a
+  GE  b <= a
+  EQ  b <= a && a >= b (avoid clobbering a tmp)
+  NE  (a - b) as int is non zero
+  GT  a > b
+  LE  a <= b
 
-  if (zero)
-    ;
-  else if (fp)
-    {
-      // We're gonna reomplement this per-arch, so not bothering using sfpadd on bh/qsr
-      auto one = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
-      const rvtt_insn_data *new_insnd =
-	rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
-      auto reg = build_int_cst (unsigned_type_node,
-				TARGET_XTT_TENSIX_WH ? CREG_IDX_NEG_1 : CREG_IDX_1);
-      gcall *read_lreg = gimple_build_call (new_insnd->decl, new_insnd->num_args (), reg);
-      gimple_call_set_lhs (read_lreg, one);
-      gsi_insert_after (right, read_lreg, GSI_NEW_STMT);
+  if one side is zero:
+  LT0  0>a
+  GE0  0<=a
+  EQ0  a==0 or for signed_zeros as for above
+  NE0  a!=0 or for signed_zeros as for above
+  GT0  a>0
+  LE0  a<=0
 
-      const rvtt_insn_data *mad_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmad);
-      auto mod =  build_int_cst (unsigned_type_node,
-				 TARGET_XTT_TENSIX_WH ? 0 : SFPMAD_MOD1_BH_COMPL_A);
-      sub = gimple_build_call (mad_insnd->decl, mad_insnd->num_args (),
-			       args[1].get_arg (), one, args[0].get_arg (), mod);
-    }
+  If we do not have SFPGT & SFPLE, then we need to use a subtract.
+
+  For float we do:
+  LT  a - b is neg
+  GE  a - b is non neg
+  EQ  a - b is zero
+  NE  a - b is non zero
+  GT  b - a neg
+  LE  b - a non neg
+
+  These ignore signed_zero
+  LT0  a is neg
+  GE0  a is non neg
+  EQ0  a is zero
+  NE0  a is non zero
+  GT0  a is non neg and a is non zero
+  LE0  not (a is non neg and a is non zero)
+
+  For int and uint we do: (this ignores the overflow problem)
+  LT  a - b is neg
+  GE  a - b is non neg
+  EQ  a - b is zero
+  NE  a - b is non zero
+  GT  b - a neg
+  LE  b - a non neg
+
+  LT0  a is neg (false for uint)
+  GE0  a is non neg (true for uint)
+  EQ0  a is zero
+  NE0  a is non zero
+  GT0  a is non neg and a is non zero (just is non zero for uint)
+  LE0  not (a is non neg and a is non zero) (just is zero for uint)
+
+  FIXME: The following about ordered compares of ints is not yet implemented.
+
+  For int and uint correctly we must have both values within 2^31 of eachother,
+  do this by checking if the sign bits match or not.  This would be worth doing
+  constant folding using the sign of the constant to handle the result in the
+  different-signs case.
+
+  0-0  a - b, neg means a < b
+  1-1  a - b, neg means a < b
+  1-0  int a is < b, uint a is > b
+  0-1  int a is > b, uint a is < b
+
+  t = a ^ b, is neg or non-neg
+  t = a - b, is neg or non-neg
+
+  txor = a ^ b, ta_b = a - b
+
+  Int:
+  LT (txor is non-neg AND ta_b is neg) OR (txor is neg AND a is neg)
+  GE (txor is non-neg AND ta_b is non-neg) OR (txor is neg AND a is non-neg)
+  GT handle as b LT a
+  LE handle as b GE a
+
+  UInt:
+  LT (txor is non-neg AND ta_b is neg) OR (txor is neg AND a is non-neg)
+  GE (txor is non-neg AND ta_b is non-neg) OR (txor is neg AND a is neg)
+  GT handle as b LT a
+  LE handle as b GE a
+
+  We can apply De Morgan's here quite simply, which we do to avoid negations.
+
+  Type   WH    BH   QSR   TRI
+  Float fsub  >,<=  >,<=  >,<=
+  SMag   -    >,<=  >,<=  >,<=
+  Int   isub  isub  >,<=  >,<=
+  UInt  isub  isub  isub  >,<=
+  */
+
+  bool negated = false;
+  if ((TARGET_XTT_TENSIX_QSR && type >= SFPXCMP_MOD1_TYPE_INT)
+       || (TARGET_XTT_TENSIX_BH && type >= SFPXCMP_MOD1_TYPE_SMAG))
+    negated = expand_cmp_using_gtle (right, cmp, args, op, type);
   else
-    {
-      static const unsigned iadd_map[] = {
-	SFPIADD_MOD1_CC_LT0,
-	SFPIADD_MOD1_CC_GTE0,
-	SFPIADD_MOD1_CC_NONE,
-	SFPIADD_MOD1_CC_NONE,
-	SFPIADD_MOD1_CC_GTE0,
-	SFPIADD_MOD1_CC_GTE0,
-      };
+    negated = expand_cmp_using_sub (right, cmp, args, op, type);
 
-      unsigned mod = iadd_map[op];
-      auto *iadd_v_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
-      sub = gimple_build_call (iadd_v_insnd->decl, iadd_v_insnd->num_args ());
-      gimple_call_set_arg (sub, iadd_v_insnd->src_arg (), args[1].get_arg ());
-      gimple_call_set_arg (sub, iadd_v_insnd->src_arg () + 1, args[0].get_arg ());
-      gimple_call_set_arg (sub, iadd_v_insnd->mod_arg (),
-			   build_int_cst (unsigned_type_node,
-					  mod | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST));
-      if (mod == SFPIADD_MOD1_CC_NONE)
-	late_cc_op = op;
-    }
-
-  if (sub)
-    {
-      if (late_cc_op >= 0 || fp)
-	{
-	  args[0].set_arg (make_ssa_name (TREE_TYPE (args[0].get_arg ())));
-	  gimple_set_lhs (sub, args[0].get_arg ());
-	}
-      gsi_insert_after (right, sub, GSI_NEW_STMT);
-    }
-
-  if (fp || zero)
-    emit_setcc (right, cmp, args[0].get_arg (), map[op],
-		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
-
-  if (late_cc_op >= 0)
-    emit_setcc (right, cmp, args[0].get_arg (), map[late_cc_op],
-		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
-
-  return op == SFPXCMP_MOD1_CC_LE;
+  return negated;
 }
 
-static gcall *
-find_top_of_cond_tree(gcall *stmt)
-{
-  const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
-
-  switch (insnd->id)
-    {
-    case rvtt_insn_data::sfpxcmp:
-      break;
-
-    case rvtt_insn_data::sfpxlogic:
-      {
-	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
-	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, 1)));
-	return find_top_of_cond_tree (child);
-      }
-      break;
-
-    default:
-      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
-      gcc_assert(0);
-    }
-
-  return stmt;
-}
-
-// Handle AND and OR conditionals
+// Handle AND, OR & NOT logical operations
 //
 // Recursively processes a tree of boolean expressions.	 ORs are converted to
 // ANDs by negating the children of the current node.  The negation is toggled
@@ -296,6 +425,7 @@ find_top_of_cond_tree(gcall *stmt)
 // the LHS w/o a new fence, hence the PUSHC prior to the RHS.  The POPC would
 // destroy the results of the RHS and so those results are saved/restored with
 // saved_enables.
+
 static bool
 expand_logical (pred_list &preds, unsigned &ix,
 		gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
@@ -349,31 +479,25 @@ expand_cond (pred_list &preds, unsigned &ix,
 
   gcall *call = verify_cond_var (var, sink);
   const rvtt_insn_data *insnd = call ? rvtt_get_insn_data (call) : nullptr;
-  if (!insnd)
-    {
-    fail:
-      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
-      gcc_assert(0);
-    }
+  if (insnd)
+    switch (insnd->id)
+      {
+      default:
+	break;
 
-  switch (insnd->id)
-    {
-    default:
-      goto fail;
+      case rvtt_insn_data::sfpxcmp:
+	if (expand_cmp (leftmost, rightmost, call, insnd, negate))
+	  {
+	    emit_compc (rightmost, call, false);
+	    negated = true;
+	  }
+	break;
 
-    case rvtt_insn_data::sfpxcmp:
-      if (expand_cmp (leftmost, rightmost, call, insnd, negate))
-	{
-	  emit_compc (rightmost, call, false);
-	  negated = true;
-	}
-      break;
-
-    case rvtt_insn_data::sfpxlogic:
-      negated = expand_logical (preds, ix, leftmost, rightmost,
-				call, insnd, negate);
-      break;
-    }
+      case rvtt_insn_data::sfpxlogic:
+	negated = expand_logical (preds, ix, leftmost, rightmost,
+				  call, insnd, negate);
+	break;
+      }
 
   verify_cond_call (preds, ix, call);
 
@@ -384,7 +508,7 @@ expand_cond (pred_list &preds, unsigned &ix,
   return negated;
 }
 
-// Expand boolean trees
+// Expand v_if conditions
 //
 // The hardware does not support OR and generates some comparisons (LTE, GE)
 // by ANDing others together and issuing a compc.  This requires refactoring
@@ -392,6 +516,7 @@ expand_cond (pred_list &preds, unsigned &ix,
 // by an sfpxcondb.  All dependent operations are chained to this by their
 // return values.  This pass traverses the tree, more or less deletes it and
 // replaces it with one that works w/ the HW.
+
 static unsigned
 transform (function *fun)
 {
@@ -459,9 +584,10 @@ transform (function *fun)
 	      break;
 	    }
 	}
+
       if (!preds.empty ())
 	{
-	  error_at (gimple_location (*preds.begin ()),
+	  error_at (gimple_location (preds.front ()),
 		    "untermated predication region");
 	  preds.clear ();
 	}
