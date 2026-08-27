@@ -41,4 +41,28 @@ unrolled_rows ()
 #if DST_ROWS >= 8
   row (DST_ADDR);
 #endif
+#if DST_ROWS >= 9
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 10
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 11
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 12
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 13
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 14
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 15
+  row (DST_ADDR);
+#endif
+#if DST_ROWS >= 16
+  row (DST_ADDR);
+#endif
 }

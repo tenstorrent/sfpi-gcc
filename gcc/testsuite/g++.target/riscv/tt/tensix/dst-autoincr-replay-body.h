@@ -33,6 +33,10 @@ replayed_rows ()
   replay_row (0);
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
   replay_row (0);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  replay_row (0);
+  __builtin_rvtt_ttincrwc (0, 2, 0, 0);
+  replay_row (0);
 #ifndef DST_DROP_LAST_INCREMENT
   __builtin_rvtt_ttincrwc (0, 2, 0, 0);
 #endif

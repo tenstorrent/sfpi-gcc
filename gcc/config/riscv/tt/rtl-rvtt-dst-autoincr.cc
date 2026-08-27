@@ -85,11 +85,26 @@ along with GCC; see the file COPYING3.  If not see
        row; otherwise the RWC state at the uncovered site would be
        unrestorably changed and the pass refuses.
 
-     - Profitability compares the configuration cost (SETC16 words from the
-       capability table) against the number of dynamically removed per-row
-       increments.  Loop regions use the same trip-count estimate as replay
+     - Profitability compares the configuration cost against the number of
+       dynamically removed per-row increments, both in frontend issue slots
+       per execution of the configuration program.  Each SETC16 word occupies
+       the audited two-cycle configuration issue class (rvtt-cost.md,
+       rvtt_issue_cfg -- the same audited resource the distance guard below
+       stands on), while each removed TTINCRWC frees one single-cycle issue
+       slot, so the program's slot cost is SETC16 words times that class
+       occupancy.  A program that is not amortized by a preheader placement
+       re-executes on every execution of its region, entered through scalar
+       control that drains the frontend, and therefore pays the once-per-
+       entry drain residual (the audited min_config_distance guard; the same
+       residual a live backedge crossing's first iteration pays) on every
+       execution.  Loop regions use the same trip-count estimate as replay
        hoisting.  No numeric row thresholds appear anywhere; break-evens fall
-       out of the model.
+       out of the model.  Silicon witness (lane IA, binopscalar-fresh,
+       pin 35): an eight-row straight-line callee re-invoked 512 times per
+       kernel measured 21929 vs 21164 cycles (+3.61%, TILE_LOOP 168.95 vs
+       162.95, ~1.5 cycles per invocation) under the old 3-word-vs-8-rows
+       admission -- the per-execution slot pricing refuses it at
+       8 <= 3*2 + 2.
 
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
@@ -243,6 +258,13 @@ struct autoincr_caps
      conservative adoption (no WH silicon witness; larger W only widens
      refusal).  */
   unsigned drained_frontend_window;
+  /* Frontend issue-slot occupancy of one SETC16 configuration word: the
+     configuration issue class is an audited two-cycle resource
+     (rvtt-cost.md rvtt_issue_cfg; craq-sim tensix_rtl_issue_class_for_inst
+     models the same), one cycle longer than the single-cycle class a
+     removed TTINCRWC occupies.  The profitability comparison prices the
+     slot program in these units so both sides are frontend issue slots.  */
+  unsigned config_issue_slots;
   autoincr_slot slots[2];
 };
 
@@ -250,10 +272,10 @@ static autoincr_caps
 target_autoincr_caps ()
 {
   if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, 2, 7, { { 18, 34, 53 }, { 0, 0, 0 } } };
+    return { true, 7, 6, 1, 2, 7, 2, { { 18, 34, 53 }, { 0, 0, 0 } } };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 1, 2, 7, { { 19, 29, 54 }, { 0, 0, 0 } } };
-  return { false, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
+    return { true, 3, 2, 1, 2, 7, 2, { { 19, 29, 54 }, { 0, 0, 0 } } };
+  return { false, 0, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -1886,16 +1908,23 @@ transform (function *cfn)
 	    continue;
 
 	  /* Profitability: configuration cost against dynamically removed
-	     increments, less the per-iteration mod-write crossing charge.
-	     A shared program's cost is paid once for every group it
-	     serves.  A group carrying a live backedge crossing adds the
-	     once-per-loop-entry drain residual -- the audited
-	     min_config_distance guard the first crossing pays before the
-	     pipeline reaches steady state (lane EP finding F1: the
-	     covered witnesses still measure ~2 cycles per loop entry) --
-	     to the cost side, in the cost's own units: once per entry
-	     for a preheader program, once per re-executed iteration for
-	     an in-body program.  */
+	     increments, less the per-iteration mod-write crossing charge,
+	     both in frontend issue slots per execution of the program.
+	     Each SETC16 word occupies the audited two-cycle configuration
+	     issue class (rvtt_issue_cfg) while each removed TTINCRWC frees
+	     a single-cycle slot, so the program costs its word count times
+	     that occupancy.  A shared program's cost is paid once for
+	     every group it serves.  The once-per-entry drain residual --
+	     the audited min_config_distance guard paid before the pipeline
+	     reaches steady state (lane EP finding F1: the covered
+	     witnesses still measure ~2 cycles per loop entry) -- is
+	     charged whenever the program's execution is not amortized: a
+	     group carrying a live backedge crossing pays it at loop entry,
+	     and a non-preheader program pays it on every re-execution of
+	     its region, whose scalar entry control (call or branch) drains
+	     the frontend the configuration then consumes (lane IA silicon
+	     witness: the eight-row per-call straight-line callee, +3.61%
+	     kernel, ~1.5 cycles per invocation at the old admission).  */
 	  auto priced_rows = [] (const group &grp)
 	  {
 	    HOST_WIDE_INT iter_mult
@@ -1910,8 +1939,9 @@ transform (function *cfn)
 	  for (auto it = groups.begin (); it != groups.end ();)
 	    {
 	      group &grp = *it;
-	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
-	      if (grp.live_crossing)
+	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3
+				   * caps.config_issue_slots;
+	      if (grp.live_crossing || !grp.use_preheader)
 		cost += caps.min_config_distance;
 	      HOST_WIDE_INT removed = grp.shared_set >= 0
 		? shared_rows[grp.shared_set] : priced_rows (grp);
@@ -1920,7 +1950,7 @@ transform (function *cfn)
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "Dst-autoincr refusal: unprofitable group "
-			     "(config " HOST_WIDE_INT_PRINT_DEC
+			     "(config+entry slots " HOST_WIDE_INT_PRINT_DEC
 			     " >= removed " HOST_WIDE_INT_PRINT_DEC
 			     ", bb %d)\n",
 			     cost, removed,
