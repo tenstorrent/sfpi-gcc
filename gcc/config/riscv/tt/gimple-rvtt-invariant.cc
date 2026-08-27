@@ -1717,10 +1717,75 @@ transform (function *fn)
 	  && riscv_tt_opt_const_residency > 0
 	  && riscv_tt_opt_pressure_park > 0)
 	{
+	  /* LUT-COEFFICIENT AUTHORITY (measured, sigmoid-appx-tree
+	     anatomy): a loop whose body carries LUT machinery
+	     (SFPLUT/SFPLUTFP32) keeps the ESTABLISHED wholesale
+	     deferral regardless of depth — the in-loop constant
+	     materializations there are LUT slot coefficients whose
+	     placement authority belongs to the lut-select passes
+	     (shortened slot materializations at the LUT programming
+	     point, lane HT's machinery); an early depth-zero hoist
+	     moves the coefficient out from under that discovery and
+	     the 5-word LUT row decays to a mov-laden 7-word body
+	     (silicon: 29861 -> 43447 under an unconditional keep;
+	     byte-identical under this gate).  The kept-hoist evidence
+	     rows (ceil/rops/rdiv/sqrt/softsign/i0, hardsigmoid) carry
+	     no LUT statement.  */
+	  bool lut_body = false;
+	  basic_block *nest = get_loop_body (loop);
+	  for (unsigned ix = 0; ix != loop->num_nodes && !lut_body; ++ix)
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (nest[ix]);
+		 !gsi_end_p (gsi) && !lut_body; gsi_next (&gsi))
+	      if (const rvtt_insn_data *insnd
+		    = rvtt_get_insn_data (gsi_stmt (gsi)))
+		if (insnd->id == rvtt_insn_data::sfplut
+		    || insnd->id == rvtt_insn_data::sfplutfp32_3r
+		    || insnd->id == rvtt_insn_data::sfplutfp32_6r)
+		  lut_body = true;
+	  free (nest);
+	  if (lut_body && dump_file)
+	    fprintf (dump_file,
+		     "park-ordering: loop bb %d defers wholesale:"
+		     " lut-coefficient-authority (the body's LUT slot"
+		     " coefficients belong to the lut-select placement)\n",
+		     loop->header->index);
+
+	  /* IN-REGION DEMAND (measured, sigmoid-appx-tree /
+	     lut-variant anatomy): each in-region candidate is a
+	     placement demand on the LATER authorities (the lut-select
+	     coefficient placement at 288t, the walk's audited post-CC
+	     parks at 296t) whose budgets share the 8-LREG file with
+	     whatever this pass pins early.  A loop with THREE OR MORE
+	     in-region invariant constants is in the
+	     pressure-arbitrated regime — HN's budget-ordering defect
+	     applies to the depth-zero keeps too (sigmoid-appx-tree:
+	     three early keeps pushed the lut-select coefficient
+	     placement to lut-coefficient-pressure, LREG 9 > 8, and the
+	     5-word LUT row decayed to 43447 cycles) — so the whole
+	     loop keeps the ESTABLISHED wholesale deferral, by name
+	     (in-region-demand).  Every measured kept-hoist winner
+	     (ceil/rops/rdiv/sqrt 1, softsign/i0 2, hardsigmoid 1)
+	     sits at demand <= 2; every measured deferral winner
+	     (softplus 10, gelu 10, sigmoidlut 10, tanh-lut 4, the
+	     tree 4) at >= 3.  A finer per-authority priced
+	     arbitration is the named successor.  */
+	  unsigned in_region = 0;
+	  for (gcall *call : loads)
+	    if (cc_depth_at_stmt (cc, call) > 0)
+	      ++in_region;
+	  bool demand_defer = in_region >= 3;
+	  if (demand_defer && !lut_body && dump_file)
+	    fprintf (dump_file,
+		     "park-ordering: loop bb %d defers wholesale:"
+		     " in-region-demand (%u in-region constants: the"
+		     " later placement authorities own this loop's"
+		     " pressure arbitration)\n",
+		     loop->header->index, in_region);
+	  bool wholesale = lut_body || demand_defer;
 	  unsigned kept = 0;
 	  for (gcall *call : loads)
 	    {
-	      if (cc_depth_at_stmt (cc, call) == 0)
+	      if (!wholesale && cc_depth_at_stmt (cc, call) == 0)
 		{
 		  if (dump_file)
 		    {
@@ -1743,8 +1808,11 @@ transform (function *fn)
 			   "Invariant SFPU immediate hoist deferred:"
 			   " residency-walk-ordering (loop bb %d): the"
 			   " enabled const-residency walk owns this"
-			   " CC-restore loop's in-region constants: ",
-			   loop->header->index);
+			   " CC-restore loop's %s constants: ",
+			   loop->header->index,
+			   lut_body ? "lut-coefficient"
+			   : demand_defer ? "demand-arbitrated"
+			   : "in-region");
 		  print_gimple_stmt (dump_file, call, 0);
 		}
 	    }
