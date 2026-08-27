@@ -1874,6 +1874,47 @@
 ;; structured-CC restore contract (ambient positions), and the laneGP
 ;; adjudication that Rule-A pairing alone leaves the atom-rooted webs
 ;; serialized (laneGP-evidence-20260825/RESULTS.md).
+;;
+;; Stall-words extension (-mtt-tensix-optimize-crossrow-pairing-stall-
+;; words, lane IC).  Additive; NO new constants.  Three coordinated
+;; pieces, all priced through the existing models:
+;;   1. Vocabulary: a word carrying the architectural next-slot
+;;      ACCEPTANCE stall (xtt_next_slot_stall -- the SFPSWAP family)
+;;      joins crp_node with its audited biased result latency and an
+;;      issue occupancy of TWO slots (the xtt_next_slot_stall consumer
+;;      rule above: one extra slot per occurrence), charged identically
+;;      in the doubled sequential baseline and every candidate; its
+;;      recorded-word count against XTT_DELIVERY_CAPTURE_SLOTS stays
+;;      one (the stall is an issue fact, not a stream word).
+;;      audited_latency () itself is untouched: fill passes keep
+;;      refusing these words (lane BM).
+;;   2. Free-LREG priority: the Rule-A cyclic renamer offers the free
+;;      registers to the COPY half's webs first (scan order only; web
+;;      extents and rewrites stay in stream order).  Breaking row-B
+;;      serialization is the pairing's entire benefit; an intra-row
+;;      false-recurrence rename that grabs the last free register
+;;      leaves the row-B accumulator serialized and the II gate then
+;;      refuses the whole transform (the tanh anatomy).
+;;   3. Critical-path selection + capture-overflow belt: among READY
+;;      items the candidate constructor prefers the longer remaining
+;;      critical path (ls_list_order's rule at item granularity) so
+;;      the two rows' tails interleave and the SFPMAD->SFPSWAP delay
+;;      shadows fill with real words; and the doubled record is
+;;      admitted only while row words PLUS the pad sites the nop
+;;      inserter still owes fit XTT_DELIVERY_CAPTURE_SLOTS
+;;      (crossrow-pairing-capture-overflow refuses) -- at 2n == 32 a
+;;      single surviving pad silently trades record-plus-launch for a
+;;      rolled issue stream, the adjudicated round-cc-modulo
+;;      profitability defect.
+;; Soundness of the delay contracts is NOT this extension's burden:
+;; the pairing runs before the nop inserter, which re-discharges every
+;; STATIC/DYNAMIC delay (including the BH SFPMAD->SFPSWAP scoreboard
+;; erratum, xtt_dynamic_bug) over the committed final order; the
+;; pad-site probe and the overflow belt only PRICE that discharge.
+;; Provenance: laneIC-evidence-20260827 (tanh 2-datum window-density
+;; autopsy), SFPSWAP.md acceptance-stall rule, laneHM
+;; counted-row-vacated-delay-shadow adjudication (the delay-contract
+;; positional-discharge hazard class).
 
 
 ;; ---------------------------------------------------------------------

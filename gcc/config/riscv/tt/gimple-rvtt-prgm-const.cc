@@ -157,6 +157,21 @@ struct prgm_tu_facts
      needed or used).  */
   unsigned value_known = 0;	/* bitmask over destinations */
   uint32_t value[16] = {};
+  /* Constant registers READ anywhere in the TU (typed sfpreadlreg with
+     a constant index; a non-constant index poisons every bit).  The
+     typed vocabulary reaches constant registers only through
+     sfpreadlreg (sfpi vConst* reads lower to it), the audited raw-word
+     table admits no creg-reading word, and sfprawlreg_access masks
+     cover the allocatable file only -- so a clear bit here is a
+     TU-wide no-reader proof for that destination.  A claimed
+     destination nobody reads is a DEAD claim: overwriting it with a
+     different value is unobservable, which is what lets the
+     hoisted-reuse class reclaim an occupied slot whose unique TU value
+     does not match (the tanh-fitted anatomy: the shared op init
+     programs the hand polynomial's constants; the fitted kernel needs
+     its own).  Readers ADDED by such reclaims are dominated by their
+     own in-function programming and never enter this mask.  */
+  unsigned creg_read = 0;
   /* The MOP template derivation facts (rvtt-mop-derive.h).  */
   rvtt_mop_derive_state mop;
 };
@@ -742,6 +757,26 @@ tu_prgm_facts ()
 	      tu_facts.reason = reason_buf;
 	    }
 	}
+      /* Constant-register reader census (the creg_read comment above):
+	 every emitted body passes through this loop (inline clones'
+	 statements appear inlined in their standalone callers by this
+	 point), so a clear bit is a TU-wide no-reader fact.  */
+      basic_block rbb;
+      FOR_EACH_BB_FN (rbb, ofn)
+	for (gimple_stmt_iterator rgsi = gsi_start_bb (rbb);
+	     !gsi_end_p (rgsi); gsi_next (&rgsi))
+	  if (gcall *rc = dyn_cast <gcall *> (gsi_stmt (rgsi)))
+	    {
+	      const rvtt_insn_data *rd = rvtt_get_insn_data (rc);
+	      if (!rd || rd->id != rvtt_insn_data::sfpreadlreg)
+		continue;
+	      tree a = gimple_call_arg (rc, 0);
+	      if (TREE_CODE (a) == INTEGER_CST && tree_fits_uhwi_p (a)
+		  && tree_to_uhwi (a) < 16)
+		tu_facts.creg_read |= 1u << tree_to_uhwi (a);
+	      else
+		tu_facts.creg_read = 0xffff;
+	    }
     }
   /* Deferred MOP admission: a delivered MOP word was provisionally
      admitted above; it stands only if every TU template-slot write
@@ -2302,6 +2337,25 @@ struct residency_candidate
 				   leaves one immediate fold live and
 				   the mad rule still blocked: a pure
 				   loss) */
+  bool hoisted_reuse = false;	/* HOISTED-REUSE class (lane IC,
+				   -mtt-tensix-optimize-hoisted-prgm-reuse):
+				   a preheader-hoisted loop-invariant
+				   materialization re-claims a PRGM slot
+				   (free, or TU value-identical) to
+				   release its loop-wide LREG live
+				   range; in-place programming point,
+				   the pressure class's discipline */
+  bool call_free_window = false; /* HOISTED-REUSE: the materialization
+				   sits in the loop's entry block with
+				   no foreign call or asm between it
+				   and the loop's in-loop readers --
+				   the window a DEAD-claim reclaim
+				   (heterogeneous value into an unread
+				   claimed slot) needs so no callee can
+				   reprogram the slot between this
+				   function's own programming and its
+				   reads.  Value-identical reuse never
+				   needs it (idempotence).  */
 };
 
 /* Fold VAL through the in-loop constant chain from a header PHI to OP:
@@ -2794,6 +2848,7 @@ residency_transform (function *fn, prgm_state *st)
   auto_vec<residency_candidate> loop_cands;
   auto_vec<residency_candidate> pressure_cands;
   auto_vec<residency_candidate> madpair_cands;
+  auto_vec<residency_candidate> hoistreuse_cands;
   unsigned madpair_group = 0;
   hash_set<int_hash<unsigned, 0> > invalid_madpair_groups;
   hash_set<gimple *> taken;
@@ -3264,6 +3319,144 @@ residency_transform (function *fn, prgm_state *st)
 		}
 	    }
       }
+
+      /* HOISTED-REUSE class (lane IC,
+	 -mtt-tensix-optimize-hoisted-prgm-reuse): a loop-invariant
+	 constant materialization the invariant pass already parked
+	 OUTSIDE the loop occupies a loop-wide LREG live range the
+	 downstream cross-row pairing cannot break (an 8/8-pressure row
+	 loop leaves no dead LREG for the row-B rename webs).  Re-claim
+	 it into a PRGM constant register through the established
+	 place() machinery: a free slot, or the TU value-identical
+	 reuse (every typed TU write of the slot derives to this exact
+	 32-bit image; reprogramming in place is value-idempotent).
+	 The programming point is the materialization's own position --
+	 the pressure class's in-place discipline with its cc-reach
+	 test below -- and the replacement constant-register read keeps
+	 the SSA name, so every consumer (any position, any lane
+	 context) reads the identical all-lanes image the hoisted
+	 all-lanes materialization produced.  Pricing: one extra
+	 pushed word once per claim (the SFPCONFIG); a proven
+	 single-trip loop refuses by name (madpair's trip policy).  */
+      if (riscv_tt_opt_hoisted_prgm_reuse > 0)
+	{
+	  loop_trip_class hr_trips = !peel
+	    ? (admits_runtime_trips ? TRIPS_UNKNOWN : TRIPS_AT_LEAST_2)
+	    : classify_second_trip (loop, entry);
+	  if (hr_trips == TRIPS_PROVEN_SINGLE)
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "const-residency: hoisted-reuse loop bb %d refused "
+			 "(trip-count-single-trip: the loop provably runs "
+			 "one trip; the re-claim can never recover its "
+			 "programming word)\n", loop->header->index);
+	    }
+	  else
+	    {
+	      /* The call-free window (see call_free_window above):
+		 foreign calls or asm inside the loop body defeat the
+		 DEAD-claim reclaim placement for every candidate of
+		 this loop; the per-candidate half (the load's own
+		 block tail) is checked at collection below.  */
+	      bool loop_call_free = true;
+	      basic_block *hr_body = get_loop_body_in_dom_order (loop);
+	      for (unsigned ix = 0;
+		   ix != loop->num_nodes && loop_call_free; ++ix)
+		{
+		  basic_block bb = hr_body[ix];
+		  if (bb->loop_father != loop)
+		    continue;
+		  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+		       !gsi_end_p (gsi) && loop_call_free; gsi_next (&gsi))
+		    {
+		      gimple *stmt = gsi_stmt (gsi);
+		      if (is_gimple_debug (stmt))
+			continue;
+		      if (gimple_code (stmt) == GIMPLE_ASM
+			  || (is_gimple_call (stmt)
+			      && !rvtt_get_insn_data (stmt)))
+			loop_call_free = false;
+		    }
+		}
+	      for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
+		{
+		  basic_block bb = hr_body[ix];
+		  if (bb->loop_father != loop)
+		    continue;
+		  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+		       !gsi_end_p (gsi); gsi_next (&gsi))
+		    {
+		      gcall *use_call = dyn_cast <gcall *> (gsi_stmt (gsi));
+		      if (!use_call || !rvtt_get_insn_data (use_call))
+			continue;
+		      for (unsigned ax = 0;
+			   ax != gimple_call_num_args (use_call); ++ax)
+			{
+			  tree arg = gimple_call_arg (use_call, ax);
+			  if (TREE_CODE (arg) != SSA_NAME)
+			    continue;
+			  gcall *load
+			    = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (arg));
+			  if (!load || !gimple_bb (load)
+			      || flow_bb_inside_loop_p (loop,
+							gimple_bb (load))
+			      || taken.contains (load)
+			      || !rvtt_invariant_constant_load_p
+				   (load, loop, /*allow_shortened=*/true))
+			    continue;
+			  unsigned value;
+			  if (!single_issue_constant_image_p (load, &value))
+			    continue;
+			  residency_candidate c;
+			  c.load = load;
+			  c.value = value;
+			  c.loop = loop;
+			  c.entry = entry;
+			  c.uses = count_nondebug_uses
+			    (gimple_call_lhs (load));
+			  c.inplace = true;
+			  c.hoisted_reuse = true;
+			  /* Per-candidate half of the reclaim window:
+			     the load sits in the loop's entry block
+			     and nothing foreign follows it there.  */
+			  c.call_free_window = loop_call_free
+			    && entry && gimple_bb (load) == entry->src;
+			  if (c.call_free_window)
+			    for (gimple_stmt_iterator wgsi
+				   = gsi_for_stmt (load);
+				 !gsi_end_p (wgsi); gsi_next (&wgsi))
+			      {
+				gimple *wstmt = gsi_stmt (wgsi);
+				if (is_gimple_debug (wstmt))
+				  continue;
+				if (gimple_code (wstmt) == GIMPLE_ASM
+				    || (is_gimple_call (wstmt)
+					&& !rvtt_get_insn_data (wstmt)))
+				  {
+				    c.call_free_window = false;
+				    break;
+				  }
+			      }
+			  hoistreuse_cands.safe_push (c);
+			  taken.add (load);
+			  if (dump_file)
+			    {
+			      fprintf (dump_file,
+				       "const-residency: hoisted-reuse loop "
+				       "bb %d candidate: out-of-loop "
+				       "constant 0x%08x (%u uses); "
+				       "re-claiming releases its loop-wide "
+				       "LREG live range: ",
+				       loop->header->index, c.value, c.uses);
+			      print_gimple_stmt (dump_file, load, 0);
+			    }
+			}
+		    }
+		}
+	      free (hr_body);
+	    }
+	}
       free (body);
 
       if (admits_runtime_trips && !this_loop.is_empty () && dump_file)
@@ -3416,7 +3609,7 @@ residency_transform (function *fn, prgm_state *st)
   }
 
   if (loop_cands.is_empty () && pressure_cands.is_empty ()
-      && madpair_cands.is_empty ())
+      && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
     return false;
 
   /* The freedom proof and the all-lanes proof gate every allocation,
@@ -3510,8 +3703,27 @@ residency_transform (function *fn, prgm_state *st)
 	    madpair_cands[kept++] = c;
 	  }
 	madpair_cands.truncate (kept);
+	/* HOISTED-REUSE class: same in-place programming point, same
+	   pressure-style reach test; no grouping.  */
+	kept = 0;
+	for (residency_candidate &c : hoistreuse_cands)
+	  {
+	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
+					  c.load))
+	      {
+		if (dump_file)
+		  fprintf (dump_file,
+			   "const-residency: hoisted-reuse candidate in bb "
+			   "%d refused (cc-region-unproven): a CC write "
+			   "reaches the in-place programming point\n",
+			   gimple_bb (c.load)->index);
+		continue;
+	      }
+	    hoistreuse_cands[kept++] = c;
+	  }
+	hoistreuse_cands.truncate (kept);
 	if (loop_cands.is_empty () && pressure_cands.is_empty ()
-	    && madpair_cands.is_empty ())
+	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
 	  {
 	    if (dump_file)
 	      fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
@@ -3650,6 +3862,50 @@ residency_transform (function *fn, prgm_state *st)
 		break;
 	      }
 	}
+      /* DEAD-claim reclaim (hoisted-reuse class only): a claimed
+	 destination NO statement in the TU ever reads (creg_read
+	 no-reader proof) may be reprogrammed with a DIFFERENT value --
+	 the existing claim's stores are unobservable -- provided the
+	 candidate's own programming-to-readers window is call-free (a
+	 callee could otherwise reprogram the slot between this
+	 function's programming and its in-loop reads; value-identical
+	 reuse above never needs the window).  The tanh-fitted anatomy:
+	 the shared op init claims the slots with the HAND polynomial's
+	 constants, the fitted kernel needs its own.  */
+      bool tu_reclaim = false;
+      if (!prgm && c.hoisted_reuse && riscv_tt_opt_hoisted_prgm_reuse > 0)
+	{
+	  const prgm_tu_facts &tu = tu_prgm_facts ();
+	  unsigned dead = 0;
+	  for (unsigned reg : prgm_regs)
+	    {
+	      if (tu.creg_read & (1u << reg))
+		continue;
+	      bool in_allocs = false;
+	      for (prgm_alloc &a : st->allocs)
+		in_allocs |= a.reg == reg;
+	      if (!in_allocs)
+		{
+		  dead = reg;
+		  break;
+		}
+	    }
+	  if (dead && !c.call_free_window)
+	    {
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "const-residency: refused "
+			   "(hoisted-reuse-call-window): ");
+		  print_gimple_stmt (dump_file, c.load, 0);
+		}
+	      return false;
+	    }
+	  if (dead)
+	    {
+	      prgm = dead;
+	      tu_reclaim = true;
+	    }
+	}
       if (!prgm)
 	{
 	  if (dump_file)
@@ -3665,6 +3921,12 @@ residency_transform (function *fn, prgm_state *st)
 	fprintf (dump_file,
 		 "const-residency: reusing TU-programmed PRGM L%u (every "
 		 "TU write stores 0x%08x; programming is value-idempotent)\n",
+		 prgm, c.value);
+      if (tu_reclaim && dump_file)
+	fprintf (dump_file,
+		 "const-residency: reclaiming DEAD-claimed PRGM L%u for "
+		 "0x%08x (no TU reader of the slot; call-free "
+		 "programming-to-readers window)\n",
 		 prgm, c.value);
 
       /* CC-canonical class: peel only here, after a register has
@@ -3751,7 +4013,8 @@ residency_transform (function *fn, prgm_state *st)
 		 "const-residency: allocated PRGM L%u for constant 0x%08x "
 		 "(%s class, %u uses, programming point bb %d)\n",
 		 prgm, c.value,
-		 c.inplace ? "madpair" : c.loop ? "loop" : "pressure",
+		 c.hoisted_reuse ? "hoisted-reuse"
+		 : c.inplace ? "madpair" : c.loop ? "loop" : "pressure",
 		 c.uses, point_bb->index);
       return true;
     };
@@ -3938,6 +4201,13 @@ residency_transform (function *fn, prgm_state *st)
 	  changed |= place (madpair_cands[ix]);
       gx = gend;
     }
+
+  /* HOISTED-REUSE class: place through the shared machinery (free
+     slot, alloc value-dedup, or TU value-identical reuse -- place()'s
+     own order); a refused candidate keeps the hoisted LREG placement
+     byte-identically.  */
+  for (residency_candidate &c : hoistreuse_cands)
+    changed |= place (c);
 
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);

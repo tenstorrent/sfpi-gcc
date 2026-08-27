@@ -1674,11 +1674,21 @@ ls_refresh_node_regs (std::vector<ls_node> &nodes)
 static bool
 ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 			     std::vector<ls_rename> *record,
-			     const std::vector<bool> *start_allowed = nullptr)
+			     const std::vector<bool> *start_allowed = nullptr,
+			     const std::vector<unsigned> *scan_order = nullptr)
 {
   unsigned n = nodes.size ();
   bool any = false;
-  for (unsigned i = 0; i != n; ++i)
+  /* SCAN_ORDER reorders only the ROOT search (which fresh definitions
+     are offered the free registers first); web extents, collision
+     detection and member rewrites stay in stream index order.  The
+     cross-row pairing's stall-words extension passes the copy half
+     first: the row-B webs are the ones whose serialization the pairing
+     exists to break, so they must not be starved of free LREGs by an
+     intra-row false-recurrence rename that buys far less.  */
+  for (unsigned ii = 0; ii != n; ++ii)
+    {
+    unsigned i = scan_order ? (*scan_order)[ii] : ii;
     for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
       {
 	if (!TEST_HARD_REG_BIT (nodes[i].raw_defs, r))
@@ -1807,6 +1817,7 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	ls_refresh_node_regs (nodes);
 	any = true;
       }
+    }
   return any;
 }
 
@@ -2252,8 +2263,20 @@ crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
       || !crp_fixed_word_p (PATTERN (insn)))
     return crp_refuse (bb, "crossrow-pairing-noncapturable-word", insn);
   xtt_effect_set e = rvtt_insn_effects (insn);
+  /* Next-slot acceptance-stall words (the SFPSWAP family) join the
+     vocabulary under the sub-flag: the word is fully audited (its
+     biased xtt_result_latency is on record; an unaudited one still
+     refuses below) and its architectural stall is PRICED, not proven
+     away -- two issue slots in the steady-state II model (the
+     rvtt-cost.md consumer rule: one extra slot per occurrence),
+     charged identically in the doubled sequential baseline and every
+     candidate.  audited_latency () itself keeps returning -1 for
+     these words (lane BM): the interlock scheduler and capture
+     rotation never gain them as fill participants.  */
+  bool stall_word = e.next_slot_stall
+    && riscv_tt_opt_crossrow_pairing_stall_words > 0;
   if (e.opaque || e.config_dests_written || e.config_dests_read
-      || e.addr_mod_slot_write || e.next_slot_stall
+      || e.addr_mod_slot_write || (e.next_slot_stall && !stall_word)
       || get_attr_xtt_delay (insn) == XTT_DELAY_STATIC)
     return crp_refuse (bb, "crossrow-pairing-effect-unproven", insn);
   /* Every DF reference must be an SFPU register: a scalar (GPR)
@@ -2267,7 +2290,12 @@ crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
     if (DF_REF_REGNO (ref) >= FIRST_PSEUDO_REGISTER
 	|| !SFPU_REG_P (DF_REF_REGNO (ref)))
       return crp_refuse (bb, "crossrow-pairing-scalar-dependence", insn);
-  node->lat = audited_latency (insn);
+  /* A stall word bypasses audited_latency ()'s deliberate -1 (its
+     refusal there is the fill-participation contract, not a missing
+     audit): the biased attribute value is the audited result latency,
+     and an UNAUDITED one (-1) still refuses through the range check
+     below.  */
+  node->lat = stall_word ? e.result_latency : audited_latency (insn);
   /* Pure flag writers have no LREG result whose latency enters the
      list model; their ordering is the atom's.  */
   if ((node->lat < 0 || node->lat > 1) && e.cc_write && !e.lreg_write
@@ -2290,6 +2318,12 @@ crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
   node->words = get_attr_length (insn) / 4;
   if (node->words != 1)
     return crp_refuse (bb, "crossrow-pairing-word-width-unproven", insn);
+  /* The acceptance stall is an ISSUE fact, not a stream word: the
+     node occupies two slots in the II/greedy time accounting while
+     the capture-budget bound (a per-NODE count of recorded words)
+     stays one.  */
+  if (stall_word)
+    node->words = 2;
   node->entry_pin = 0;
   node->pin_to_baseline = false;
   return true;
@@ -2641,8 +2675,36 @@ crp_candidate_order (const std::vector<ls_node> &all,
      ls_dependence kind 1 for RAW/WAW; issue-order for WAR is the same
      conservative bound here since items are multi-word), earliest
      ready first, critical original order on ties.  Dependence direction
-     is original order, so the result is legal by construction.  */
+     is original order, so the result is legal by construction.
+
+     Under the stall-words extension the selection among READY items is
+     critical-path first (ls_list_order's own priority rule, applied at
+     the item granularity): the plain earliest-ready rule drains the
+     row-A tail while row B's longer remaining chain is the critical
+     path, leaving row B's SFPMUL->SFPSWAP delay shadow bare at the end
+     of the body -- one literal SFPNOP, which both costs the modeled
+     slot and can push the doubled record past the replay capture
+     budget (the capture-overflow belt below).  A critical-path
+     selection interleaves the two tails the way the hand kernels do.
+     Ties stay on original order; legality is unchanged (the belt
+     re-verifies every dependence direction).  */
   unsigned m = items.size ();
+  bool cp_priority = riscv_tt_opt_crossrow_pairing_stall_words > 0;
+  std::vector<long> cp (m, 0);
+  if (cp_priority)
+    for (unsigned i = m; i--;)
+      {
+	long best = items[i].words + items[i].lat;
+	for (unsigned j = i + 1; j != m; ++j)
+	  {
+	    if (!crp_item_dep (items[i], items[j]))
+	      continue;
+	    long via = cp[j] + items[i].words + items[i].lat;
+	    if (via > best)
+	      best = via;
+	  }
+	cp[i] = best;
+      }
   std::vector<bool> placed (m, false);
   std::vector<int> finish (m, 0);
   std::vector<rtx_insn *> order;
@@ -2673,9 +2735,28 @@ crp_candidate_order (const std::vector<ls_node> &all,
 	    }
 	  if (!deps_done)
 	    continue;
-	  if (ready < best_ready
-	      || (ready == best_ready && best >= 0
-		  && items[i].orig < items[best].orig))
+	  bool take;
+	  if (best < 0)
+	    take = true;
+	  else if (cp_priority)
+	    {
+	      /* Among items ready by the later of the two ready times,
+		 prefer the longer remaining critical path; earlier
+		 readiness only wins when the earlier item's issue
+		 cannot overlap the other's wait (both comparisons stay
+		 deterministic: ties fall to original order).  */
+	      int now = t > best_ready ? t : best_ready;
+	      int now_i = t > ready ? t : ready;
+	      if (now_i != now)
+		take = now_i < now;
+	      else
+		take = cp[i] > cp[best]
+		  || (cp[i] == cp[best] && items[i].orig < items[best].orig);
+	    }
+	  else
+	    take = ready < best_ready
+	      || (ready == best_ready && items[i].orig < items[best].orig);
+	  if (take)
 	    {
 	      best = (int) i;
 	      best_ready = ready;
@@ -2900,7 +2981,22 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       for (unsigned i = atom.first; i <= atom.second; ++i)
 	start_allowed[half * n + i] = false;
   std::vector<ls_rename> renames;
-  ls_cyclic_rename_collisions (bb, all, &renames, &start_allowed);
+  /* Under the stall-words extension the copy half's webs take the free
+     LREGs first: breaking row-B serialization is the pairing's whole
+     benefit, and an intra-row false-recurrence rename must not starve
+     it (the tanh anatomy: three free LREGs, three row-B webs, and the
+     row-A loadi WAW web grabbing one leaves the row-B accumulator
+     serialized -- II gate refuses and the transform dies).  */
+  std::vector<unsigned> scan_order;
+  if (riscv_tt_opt_crossrow_pairing_stall_words > 0)
+    {
+      for (unsigned i = n; i != 2 * n; ++i)
+	scan_order.push_back (i);
+      for (unsigned i = 0; i != n; ++i)
+	scan_order.push_back (i);
+    }
+  ls_cyclic_rename_collisions (bb, all, &renames, &start_allowed,
+			       scan_order.empty () ? nullptr : &scan_order);
 
   /* Item grouping over the doubled row: every atom instance is one
      indivisible super-item id; pure words (and any later preservation
@@ -3260,6 +3356,22 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-pad-site-increase");
+    }
+  /* Capture-overflow belt (stall-words extension): the doubled record
+     the downstream counted-loop capture will see is every row word
+     PLUS every pad the nop inserter still owes the final order; at
+     2n == XTT_DELIVERY_CAPTURE_SLOTS a single surviving pad site
+     silently trades the record-plus-launch delivery for a rolled
+     issue stream (the adjudicated round-cc-modulo profitability
+     defect).  Refuse rather than roll.  */
+  if (riscv_tt_opt_crossrow_pairing_stall_words > 0
+      && all.size () + pads_after > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
+    {
+      crp_restore_chain ();
+      ls_undo_renames (renames);
+      crp_delete_seeds ();
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-capture-overflow");
     }
 
   /* Phase 2g: shared control rewrite -- the separator advances both
