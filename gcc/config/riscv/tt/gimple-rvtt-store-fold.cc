@@ -119,7 +119,74 @@ along with GCC; see the file COPYING3.  If not see
    rows, citing the sweep) or stochrnd-store-no-conversion-path (the
    integer conversions, which no store mode performs at all).  Per the
    tt/proofs README contract the NOT-EQUAL result is a standing named
-   refusal: the cut is never re-mined.
+   refusal as a VALUE-PRESERVING fold: the bit-exact cut is never
+   re-mined.
+
+   THE STOCHRND-STORE-FOLD LICENSE (-mtt-tensix-optimize-stochrnd-
+   store-fold, lane HZ under the owner overnight mandate 2026-08-27):
+   the divergence above is exactly the delta between the semantic
+   body's explicit rounding and the HANDWRITTEN idiom the row's hand
+   kernel ships (bare converting store, binary-float class: one
+   delivered word per SIMD row).  The owner-side accuracy authority
+   (laneCX golden re-spec: golden = proven hw cast behavior) accepts
+   the hand arm's bits -- the hand cell is the row's passing
+   correctness arm -- so folding the semantic body ONTO the hand
+   idiom's instruction stream is a licensed value change whose
+   accuracy certificate is bit-identity with the hand kernel's own
+   store path, quantified by the standing sweep's census (BF16 row
+   2,155,741,184 / 2^32: finite round-up 2,130,706,432, -0 1,
+   denormal-sign 8,388,607, NaN->Inf 16,646,144; FP16 row
+   268,435,456 / 2^32).  With BOTH -mtt-tensix-optimize-store-fold and
+   the license token given, an SFPSTOCHRND fires the fold ONLY when
+   every one of these holds (each miss refuses by name, token or not):
+     - plain typed form (sfpstochrnd_i): the lv-carrier forms merge
+       under a mask (stochrnd-store-fold-carrier-unproven) and the
+       vector-descale forms are integer-class;
+     - deterministic nearest rounding (RND_NEAREST/EVEN encoding 0):
+       stochastic rounding is a semantic entropy feature and the
+       proof's rows are deterministic
+       (stochrnd-store-fold-mode-unlicensed);
+     - float conversion mod1 exactly FP32_TO_FP16A or FP32_TO_FP16B
+       (else the standing integer refusal);
+     - the store's Mod0 targets the MATCHING precision: FP16B->BF16,
+       FP16A->FP16, or the runtime-resolved SRCB store (the swept
+       rows; the row's ALU config owns the SRCB resolution and the
+       licensed booking's device-golden gate is the authority --
+       the laneHL SRCB precedent) -- cross-precision static pairs
+       refuse (stochrnd-store-fold-format-mismatch);
+     - the round's result has the store as its ONLY consumer
+       (stochrnd-store-fold-multi-use);
+     - the span from the round to the store is same-block and
+       CC/side-effect inert, so the store's lane mask is the round's
+       (stochrnd-store-fold-span-clobbered);
+     - the round's input is a storable LReg source
+       (stochrnd-store-fold-source-not-storable);
+     - the function contains NO PRNG-stream consumer (RND_STOCH
+       rounds, stochastic INT32->FP32 casts): deleting the
+       instruction removes one hidden PRNG advance
+       (stochrnd-store-fold-entropy-stream).
+   The fire deletes the rounding instruction and forwards its input
+   into the unchanged store; license absent, behavior is
+   byte-identical by construction (the same standing named refusal on
+   the same statement).  Licensed cells follow the licensed-knob
+   discipline (LICENSED booking, device-golden authority at the row's
+   documented tolerance, LICENSED-EXPECTED paired-CRAQ disposition).
+
+   The license token gates the pass BY ITSELF (the knob leg's delta
+   must read as the license's own effect): with only the token given,
+   the value-preserving S1/S2 merge folds stay OFF -- lane HZ's
+   silicon A/B showed the S1 forward alone re-shapes the production
+   (hand) binary-float TU's replay window (0,4,1,1 x8 -> 0,6,1,1 x4,
+   25766 -> 19498 cycles), so a knob string carrying the parent flag
+   would move BOTH arms and conflate two mechanisms.  Because the
+   typed convert wrapper spells its rounding through an all-lanes
+   merge, the licensed fold recognizes the merge-wrapped shape
+   directly (store <- assign_lv <- sfpstochrnd) under exactly the S1
+   same-mask dataflow contract plus every licensed belt, and commits
+   the forward+fold atomically -- no S1 fire ever escapes the license
+   on a non-candidate shape.  With both flags given the S1 forward
+   runs first and the fold sees the exposed shape; the result is the
+   same words.
 
    The pass runs beside the ccmask/int-abs folds before the invariant
    pass, while the structured CC forms are intact.  Every miss refuses
@@ -149,6 +216,7 @@ namespace {
 static unsigned n_forwarded;
 static unsigned n_sunk;
 static unsigned n_sunk_licensed;
+static unsigned n_stochrnd_folded;
 
 /* The S2 sink license key (owner ratification 2026-08-26): the
    value-changing float-pair sink fires ONLY when the user passed the
@@ -161,6 +229,19 @@ static bool
 rvtt_store_sink_licensed_p (void)
 {
   return riscv_tt_opt_store_sink > 0;
+}
+
+/* The SFPSTOCHRND-into-store fold license key (lane HZ, owner overnight
+   mandate 2026-08-27): the value-changing rounding-elision fold fires
+   ONLY when the user passed the dedicated default-off license token
+   -mtt-tensix-optimize-stochrnd-store-fold (in addition to the pass's
+   own -mtt-tensix-optimize-store-fold).  Token absent = the standing
+   named refusal on every such site and byte-identical codegen.  */
+
+static bool
+rvtt_stochrnd_store_fold_licensed_p (void)
+{
+  return riscv_tt_opt_stochrnd_store_fold > 0;
 }
 
 /* SFPLOAD/SFPSTORE Mod0 data-format selectors (capability data:
@@ -565,40 +646,208 @@ fold_merge_store (gcall *assign, gcall *store)
   return true;
 }
 
-/* Named-refusal recognition for the SFPSTOCHRND-into-store candidate.
-   The store's value operand is the rounding instruction's result; per
+/* SFPSTOCHRND-into-store candidate handling.  The store's value
+   operand is the rounding instruction's result.  Per
    tt/proofs/stochrnd-store-round/ no store conversion path reproduces
-   any SFPSTOCHRND conversion, so every instance refuses by name.  */
+   any SFPSTOCHRND conversion, so as a value-preserving fold every
+   instance refuses by name; under the
+   -mtt-tensix-optimize-stochrnd-store-fold license token (see the
+   file comment) the deterministic-nearest float rows whose store
+   targets the matching precision FIRE as a licensed value change --
+   the folded stream is the handwritten idiom's bare converting
+   store.  */
 
-static void
-refuse_stochrnd_store (gcall *rnd, gcall *store)
+/* Per-variant argument positions: (mod1, rnd) gimple arg indices, or
+   {-1,-1} when the variant is not an SFPSTOCHRND.  */
+
+static bool
+stochrnd_args (const rvtt_insn_data *insnd, int *mod1_pos, int *rnd_pos)
 {
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (rnd);
-  long mod1 = -1;
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpstochrnd_i:
-      mod1 = int_arg (rnd, 5);
-      break;
+      *mod1_pos = 5; *rnd_pos = 6; return true;
     case rvtt_insn_data::sfpstochrnd_i_lv:
-      mod1 = int_arg (rnd, 6);
-      break;
+      *mod1_pos = 6; *rnd_pos = 7; return true;
     case rvtt_insn_data::sfpstochrnd_v:
-      mod1 = int_arg (rnd, 2);
-      break;
+      *mod1_pos = 2; *rnd_pos = 3; return true;
     case rvtt_insn_data::sfpstochrnd_v_lv:
-      mod1 = int_arg (rnd, 3);
-      break;
+      *mod1_pos = 3; *rnd_pos = 4; return true;
     default:
-      return;
+      return false;
     }
+}
+
+/* True when the function contains any statement whose VALUE depends on
+   the PRNG stream: a stochastic-mode SFPSTOCHRND or a stochastic
+   INT32->FP32 SFPCAST.  Every SFPSTOCHRND advances the PRNG even in
+   the deterministic modes, so deleting one shifts the stream every
+   later consumer samples; the licensed fold fails closed when any
+   consumer exists (non-constant mode operands count as consumers).  */
+
+static bool
+fn_has_prng_consumer_p (function *fun)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fun)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (gsi_stmt (gsi));
+	if (!insnd)
+	  continue;
+	gcall *call = as_a <gcall *> (gsi_stmt (gsi));
+	int mod1_pos, rnd_pos;
+	if (stochrnd_args (insnd, &mod1_pos, &rnd_pos))
+	  {
+	    long rnd_mode = int_arg (call, rnd_pos);
+	    if (rnd_mode != (long) SFPSTOCHRND_RND_EVEN
+		&& rnd_mode != 2 /* BH round-to-zero: deterministic */)
+	      return true;
+	  }
+	else if (insnd->id == rvtt_insn_data::sfpcast
+		 || insnd->id == rvtt_insn_data::sfpcast_lv)
+	  {
+	    long mod1 = int_arg (call, insnd->id == rvtt_insn_data::sfpcast
+					? 1 : 2);
+	    if (mod1 < 0 || mod1 == (long) SFPCAST_MOD1_INT32_TO_FP32_RNS)
+	      return true;
+	  }
+      }
+  return false;
+}
+
+/* Scan the same-block span from RND (exclusive) to STORE (exclusive):
+   only CC-inert, side-effect-free statements may intervene, so the
+   store's lane mask provably equals the round's.  */
+
+static bool
+stochrnd_span_inert_p (gcall *rnd, gcall *store)
+{
+  if (gimple_bb (rnd) != gimple_bb (store))
+    return false;
+  gimple_stmt_iterator gsi = gsi_for_stmt (rnd);
+  gsi_next (&gsi);
+  for (; !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (stmt == store)
+	return true;
+      if (inert_stmt_p (stmt) || pure_vector_stmt_p (stmt))
+	continue;
+      return false;
+    }
+  return false;
+}
+
+/* Handle a store whose value operand is an SFPSTOCHRND result --
+   directly, or through a single all-lanes value merge (WRAP, the
+   typed convert wrapper's assign_lv) when the merge satisfies the S1
+   same-mask dataflow contract.  Returns true when the program changed
+   (the licensed fire); every miss refuses by name with the program
+   bytes unchanged.  */
+
+static bool
+fold_stochrnd_store (gcall *rnd, gcall *store, bool fn_prng_consumer,
+		     gcall *wrap)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (rnd);
+  int mod1_pos, rnd_pos;
+  if (!stochrnd_args (insnd, &mod1_pos, &rnd_pos))
+    return false;
+  long mod1 = int_arg (rnd, mod1_pos);
   unsigned conv = (unsigned) mod1 & SFPSTOCHRND_MOD1_CONV_MASK;
-  if (mod1 >= 0
-      && (conv == SFPSTOCHRND_MOD1_FP32_TO_FP16A
-	  || conv == SFPSTOCHRND_MOD1_FP32_TO_FP16B))
-    refuse ("stochrnd-store-rounding-divergent", store);
-  else
-    refuse ("stochrnd-store-no-conversion-path", store);
+  bool float_row = mod1 >= 0
+    && (conv == SFPSTOCHRND_MOD1_FP32_TO_FP16A
+	|| conv == SFPSTOCHRND_MOD1_FP32_TO_FP16B);
+
+  if (!float_row)
+    return refuse ("stochrnd-store-no-conversion-path", store);
+
+  if (!rvtt_stochrnd_store_fold_licensed_p ())
+    /* The standing named refusal: as a value-preserving fold the cut
+       is proven divergent (tt/proofs/stochrnd-store-round/).  */
+    return refuse ("stochrnd-store-rounding-divergent", store);
+
+  /* Licensed path.  Each belt refuses by its own name.  */
+  if (insnd->id != rvtt_insn_data::sfpstochrnd_i)
+    /* lv carriers merge under a mask; deleting the instruction would
+       lose the carrier semantics, not just the rounding.  */
+    return refuse ("stochrnd-store-fold-carrier-unproven", store);
+
+  /* The float class carries no extra mod1 bits (IMM8 is INT32-only);
+     anything else is outside the proof rows.  */
+  if (mod1 != (long) SFPSTOCHRND_MOD1_FP32_TO_FP16A
+      && mod1 != (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B)
+    return refuse ("stochrnd-store-fold-format-mismatch", store);
+
+  long rnd_mode = int_arg (rnd, rnd_pos);
+  if (rnd_mode != (long) SFPSTOCHRND_RND_EVEN)
+    /* Stochastic (and the BH round-to-zero mode, and any non-constant
+       mode) is not the proof's deterministic-nearest class.  */
+    return refuse ("stochrnd-store-fold-mode-unlicensed", store);
+
+  long mod0 = int_arg (store, 5);
+  bool pair_ok
+    = (mod0 == SFPMEM_MOD0_FMT_SRCB)
+      || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B
+	  && mod0 == SFPMEM_MOD0_FMT_BF16)
+      || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16A
+	  && mod0 == SFPMEM_MOD0_FMT_FP16);
+  if (!pair_ok)
+    return refuse ("stochrnd-store-fold-format-mismatch", store);
+
+  tree v = gimple_call_arg (store, 1);
+  if (!has_single_use (v))
+    return refuse ("stochrnd-store-fold-multi-use", store);
+  if (wrap)
+    {
+      /* The merge carries the rounded value: the round must feed ONLY
+	 the merge, and the merge->store span must satisfy the S1
+	 same-mask dataflow contract (the store writes exactly the
+	 merge's lanes).  */
+      tree z = gimple_call_arg (wrap, 1);
+      if (!has_single_use (z))
+	return refuse ("stochrnd-store-fold-multi-use", store);
+      gcall *popc = nullptr;
+      if (classify_assign_to_store (wrap, store, &popc) != SPAN_SAME_MASK)
+	return refuse ("stochrnd-store-fold-span-clobbered", store);
+    }
+
+  tree src = gimple_call_arg (rnd, 1);
+  if (TREE_CODE (src) != SSA_NAME)
+    return refuse ("stochrnd-store-fold-source-form", rnd);
+  if (!storable_source_p (src))
+    return refuse ("stochrnd-store-fold-source-not-storable", rnd);
+
+  if (!stochrnd_span_inert_p (rnd, wrap ? wrap : store))
+    return refuse ("stochrnd-store-fold-span-clobbered", store);
+
+  if (fn_prng_consumer)
+    return refuse ("stochrnd-store-fold-entropy-stream", store);
+
+  /* Commit: the store keeps its own conversion path (the handwritten
+     idiom); the explicit rounding word -- and the wrapper merge, when
+     present -- disappears.  */
+  gimple_call_set_arg (store, 1, src);
+  update_stmt (store);
+  if (dump_file)
+    {
+      fprintf (dump_file,
+	       "store-fold: licensed stochrnd fold (-mtt-tensix-optimize-"
+	       "stochrnd-store-fold: the store's own conversion delivers "
+	       "the hand idiom's truncating bits in place of the explicit "
+	       "nearest-ties-away round; divergence census "
+	       "tt/proofs/stochrnd-store-round/%s) into ",
+	       wrap ? "; wrapper merge folded under the S1 same-mask "
+		      "contract" : "");
+      print_gimple_stmt (dump_file, store, 0);
+    }
+  if (wrap)
+    remove_stmt (wrap);
+  remove_stmt (rnd);
+  n_stochrnd_folded++;
+  return true;
 }
 
 static bool
@@ -607,7 +856,38 @@ transform (function *fun)
   bool changed = false;
   basic_block bb;
 
-  /* Merge folds first...  */
+  /* Merge folds first (the S1/S2 flag's own transforms -- absent the
+     -mtt-tensix-optimize-store-fold flag they stay off even when the
+     stochrnd license opened the pass gate)...  */
+  if (riscv_tt_opt_store_fold > 0)
+    FOR_EACH_BB_FN (bb, fun)
+      {
+	gimple_stmt_iterator gsi = gsi_start_bb (bb);
+	while (!gsi_end_p (gsi))
+	  {
+	    gimple_stmt_iterator next = gsi;
+	    gsi_next (&next);
+	    if (gcall *store = is_rvtt_call (gsi_stmt (gsi),
+					     rvtt_insn_data::sfpstore))
+	      {
+		tree v = gimple_call_arg (store, 1);
+		if (TREE_CODE (v) == SSA_NAME)
+		  if (gcall *assign
+		      = is_rvtt_call (SSA_NAME_DEF_STMT (v),
+				      rvtt_insn_data::sfpassign_lv))
+		    changed |= fold_merge_store (assign, store);
+	      }
+	    gsi = next;
+	  }
+      }
+
+  /* ...then the stochrnd-into-store candidates on the settled stream
+     (a forwarded merge exposes the rounding instruction as the store's
+     direct operand).  Unlicensed this only prints the standing named
+     refusals; licensed it can transform, so it runs unconditionally
+     (the PRNG-consumer census is per-function, computed once).  */
+  bool fn_prng_consumer
+    = rvtt_stochrnd_store_fold_licensed_p () && fn_has_prng_consumer_p (fun);
   FOR_EACH_BB_FN (bb, fun)
     {
       gimple_stmt_iterator gsi = gsi_start_bb (bb);
@@ -620,37 +900,43 @@ transform (function *fun)
 	    {
 	      tree v = gimple_call_arg (store, 1);
 	      if (TREE_CODE (v) == SSA_NAME)
-		if (gcall *assign
-		    = is_rvtt_call (SSA_NAME_DEF_STMT (v),
-				    rvtt_insn_data::sfpassign_lv))
-		  changed |= fold_merge_store (assign, store);
+		{
+		  gimple *def = SSA_NAME_DEF_STMT (v);
+		  /* The typed convert wrapper spells the rounded value
+		     through an all-lanes merge; under the license the
+		     fold recognizes that wrapped shape directly (the
+		     merge itself is validated against the S1 same-mask
+		     contract inside the handler).  */
+		  gcall *wrap = nullptr;
+		  if (rvtt_stochrnd_store_fold_licensed_p ())
+		    if (gcall *assign
+			= is_rvtt_call (def, rvtt_insn_data::sfpassign_lv))
+		      {
+			tree z = gimple_call_arg (assign, 1);
+			if (TREE_CODE (z) == SSA_NAME)
+			  {
+			    gimple *zdef = SSA_NAME_DEF_STMT (z);
+			    if (rvtt_get_insn_data (zdef))
+			      {
+				wrap = assign;
+				def = zdef;
+			      }
+			  }
+		      }
+		  const rvtt_insn_data *dinsnd = rvtt_get_insn_data (def);
+		  if (dinsnd
+		      && (dinsnd->id == rvtt_insn_data::sfpstochrnd_i
+			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_i_lv
+			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_v
+			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_v_lv))
+		    changed |= fold_stochrnd_store (as_a <gcall *> (def),
+						    store, fn_prng_consumer,
+						    wrap);
+		}
 	    }
 	  gsi = next;
 	}
     }
-
-  /* ...then the stochrnd-into-store recognition on the settled stream
-     (a forwarded merge exposes the rounding instruction as the store's
-     direct operand).  */
-  if (dump_file)
-    FOR_EACH_BB_FN (bb, fun)
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
-	if (gcall *store = is_rvtt_call (gsi_stmt (gsi),
-					 rvtt_insn_data::sfpstore))
-	  {
-	    tree v = gimple_call_arg (store, 1);
-	    if (TREE_CODE (v) != SSA_NAME)
-	      continue;
-	    gimple *def = SSA_NAME_DEF_STMT (v);
-	    const rvtt_insn_data *dinsnd = rvtt_get_insn_data (def);
-	    if (dinsnd
-		&& (dinsnd->id == rvtt_insn_data::sfpstochrnd_i
-		    || dinsnd->id == rvtt_insn_data::sfpstochrnd_i_lv
-		    || dinsnd->id == rvtt_insn_data::sfpstochrnd_v
-		    || dinsnd->id == rvtt_insn_data::sfpstochrnd_v_lv))
-	      refuse_stochrnd_store (as_a <gcall *> (def), store);
-	  }
 
   return changed;
 }
@@ -677,7 +963,13 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_store_fold > 0;
+    /* The stochrnd license token opens the pass by itself (its knob
+       leg must not carry the S1/S2 flag: the delta has to read as the
+       license's own effect); the merge folds inside stay gated on
+       riscv_tt_opt_store_fold.  */
+    return TARGET_XTT_TENSIX
+	   && (riscv_tt_opt_store_fold > 0
+	       || riscv_tt_opt_stochrnd_store_fold > 0);
   }
 
   unsigned execute (function *fn) final override
@@ -696,10 +988,13 @@ public:
     n_forwarded = 0;
     n_sunk = 0;
     n_sunk_licensed = 0;
+    n_stochrnd_folded = 0;
     bool changed = transform (fn);
     if (dump_file)
-      fprintf (dump_file, "store-fold: forwarded=%u sunk=%u sunk-licensed=%u\n",
-	       n_forwarded, n_sunk, n_sunk_licensed);
+      fprintf (dump_file,
+	       "store-fold: forwarded=%u sunk=%u sunk-licensed=%u "
+	       "stochrnd-folded=%u\n",
+	       n_forwarded, n_sunk, n_sunk_licensed, n_stochrnd_folded);
     return changed ? TODO_update_ssa_only_virtuals | TODO_verify_all : 0;
   }
 };
