@@ -43,7 +43,7 @@ void bar () {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L1, L1, L10, L0, 1
+**	SFPMAD	L1, L10, L1, L0, 1
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 0	# LV:L2
@@ -89,7 +89,7 @@ void bar () {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L1, L1, L10, L0, 1
+**	SFPMAD	L1, L10, L1, L0, 1
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 1	# LV:L2
@@ -134,7 +134,7 @@ void bar () {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPMAD	L1, L1, L10, L0, 1
+**	SFPMAD	L1, L10, L1, L0, 1
 **	SFPSETCC	L1, 0, 0
 **	SFPCOMPC
 **	SFPARECIP	L2, L0, 2	# LV:L2

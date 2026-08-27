@@ -196,9 +196,9 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
 
       auto *sub_call = gimple_build_call (sub_insnd->decl, sub_insnd->num_args ());
       if (neg1)
-	gimple_call_set_arg (sub_call, sub_insnd->src_arg () + 1, neg1);
-      gimple_call_set_arg (sub_call, sub_insnd->src_arg (), args[1].get_arg ());
-      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + 1 + bool (neg1), args[0].get_arg ());
+	gimple_call_set_arg (sub_call, sub_insnd->src_arg (), neg1);
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1), args[1].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + bool (neg1) + 1, args[0].get_arg ());
       gimple_call_set_arg (sub_call, sub_insnd->mod_arg (),
 			   build_int_cst (unsigned_type_node, sub_mod));
       if (setcc_op >= 0)

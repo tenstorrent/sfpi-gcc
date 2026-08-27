@@ -44,7 +44,7 @@ void bar () {
 **_Z3barv:
 **	# READ L0
 **	# READ L1
-**	SFPMAD	L1, L1, L10, L0, 1
+**	SFPMAD	L1, L10, L1, L0, 1
 **	SFPSETCC	L1, 2048, 0
 **	SFPNONLINEAR	L0, L0, 3	# LV:L0
 **	SFPCOMPC

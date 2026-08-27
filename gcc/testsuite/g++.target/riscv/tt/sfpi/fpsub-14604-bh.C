@@ -80,7 +80,7 @@ void sub4() {
 **_Z4sub4v:
 **	# READ L0
 **	# READ L1
-**	SFPMAD	L2, L1, L10, L0, 1
+**	SFPMAD	L2, L10, L1, L0, 1
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L3, L1, L0, 1
 **	SFPCOMPC
@@ -106,7 +106,7 @@ void sub5() {
 **_Z4sub5v:
 **	# READ L0
 **	# READ L1
-**	SFPMAD	L2, L1, L10, L0, 1
+**	SFPMAD	L2, L10, L1, L0, 1
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L1, L0, L1, 1	# LV:L1
 **	SFPCOMPC
@@ -134,7 +134,7 @@ void sub6() {
 **_Z4sub6v:
 **	# READ L0
 **	# READ L1
-**	SFPMAD	L2, L1, L10, L0, 1
+**	SFPMAD	L2, L10, L1, L0, 1
 **	SFPSETCC	L2, 0, 0
 **	SFPADD	L3, L1, L0, 3
 **	SFPCOMPC
