@@ -30,6 +30,10 @@ qk_zeta_rows_near (volatile int *sep)
       sfpi::dst_reg[0] = qv * 3.25f; sfpi::dst_reg++;
       sfpi::dst_reg[0] = qv + 1.5f; sfpi::dst_reg++;
       sfpi::dst_reg[0] = qv * qv + qv; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * 0.5f; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv + 2.75f; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * qv - qv; sfpi::dst_reg++;
+      sfpi::dst_reg[0] = qv * 1.25f + qv; sfpi::dst_reg++;
     }
   auto ga = __builtin_rvtt_sfpreadlreg (2);
   auto gb = __builtin_rvtt_sfpreadlreg (3);

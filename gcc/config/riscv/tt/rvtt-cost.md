@@ -521,6 +521,43 @@
 ;; charged on the configuration-cost side at the audited
 ;; min_config_distance (2), never per iteration.
 ;;
+;; PER-EXECUTION CONFIGURATION PRICING (lane IA, pin 35).  The
+;; profitability comparison is stated in frontend issue slots PER
+;; EXECUTION OF THE CONFIGURATION PROGRAM on both sides:
+;;
+;;   - each SETC16 word of the slot program occupies the configuration
+;;     issue class, an audited TWO-cycle resource (rvtt_issue_cfg
+;;     below; craq-sim tensix_rtl_issue_class_for_inst models the
+;;     same), while each removed TTINCRWC frees a single-cycle slot --
+;;     pricing the program at its word count alone mixed units and
+;;     undercharged every program by nslots*3 slots;
+;;
+;;   - a program NOT amortized by a preheader placement re-executes on
+;;     every execution of its region, whose scalar entry control (call
+;;     or branch) drains the frontend the configuration then consumes:
+;;     it pays the once-per-entry drain residual (min_config_distance,
+;;     the same audited residual above) on every execution.  A
+;;     preheader program pays it only through a live backedge
+;;     crossing, as before.  Charging the residual to a mid-block
+;;     program whose block carries prior covering words is
+;;     conservative in the refusing direction only.
+;;
+;; Silicon witness (lane IA, binopscalar-fresh, pin 35, 3-rep
+;; cycle-identical, laneIA-evidence-20260827): the eight-row
+;; straight-line callee (8x{SFPLOAD,SFPADDI,SFPSTORE}) re-invoked 512
+;; times per kernel fired under the old 3-words-vs-8-rows admission
+;; and measured KERNEL 21929 vs 21164 OFF (+3.61%, TILE_LOOP 168.95
+;; vs 162.95 = ~1.5 cycles per invocation, delta = exactly 3 SETC16 +
+;; 8 mod-write retargets - 8 TTINCRWC per call).  Per-execution slot
+;; pricing refuses it at removed 8 <= 3*2 + 2 = cost 8
+;; (unprofitable-group), returning the OFF bytes; the measured ~9.5
+;; effective slots bracket the audited 8 from above, so the
+;; break-even remains a conservative floor.  Every prior witness
+;; verdict is preserved: the trips-amortized preheader winners
+;; (unaryshift hand 4x8 rows: 32 removed/entry >= cost 8; threshold/
+;; hardshrink 32 removed/entry, live crossing: cost 8) and the
+;; skinny rolled losers (crossing-refused upstream) are unchanged.
+;;
 ;; An audited issue-time RWC writer (surviving explicit TTINCRWC,
 ;; typed face advance) between the last terminator and the backedge
 ;; re-anchors the crossing and clears the charge.  Groups whose

@@ -3,7 +3,7 @@
 // Three rows cannot pay for the three-word Wormhole configuration (the
 // single compiler-owned physical slot behind the base-1 scratch modifier):
 // the break-even falls out of the cost model, not a row threshold.
-// { dg-final { scan-rtl-dump "Dst-autoincr refusal: unprofitable group .config 3 >= removed 3" "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump "Dst-autoincr refusal: unprofitable group .config.entry slots 8 >= removed 3" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "Dst-autoincr group:" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-times "TTINCRWC\t0, 2, 0, 0" 3 } }
 // { dg-final { scan-assembler-not "TTSETC16" } }

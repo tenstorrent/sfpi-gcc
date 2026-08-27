@@ -4,11 +4,11 @@
 // per trip, and the launch-loop unroll then replicates that delivery back
 // to back.  The pass proves whole-group ownership over the straight-line
 // eight-row run and absorbs every per-row increment into the payload store.
-// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 8 stride 4 config 3 words" 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 16 stride 4 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t34, 4" 1 } }
 // { dg-final { scan-assembler-times "SFPSTORE\tL., 0, 2, 6" 1 } }
-// { dg-final { scan-assembler-times "TTREPLAY" 9 } }
+// { dg-final { scan-assembler-times "TTREPLAY" 17 } }
 // { dg-final { scan-assembler-not "\\tbne\\t" } }
 
 using vec_t = __xtt_vector;
@@ -19,7 +19,7 @@ using vec_t = __xtt_vector;
 void
 counted_rows ()
 {
-  for (unsigned ix = 0; ix != 8; ++ix)
+  for (unsigned ix = 0; ix != 16; ++ix)
     {
       vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
       vec_t b = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 2, 7);
