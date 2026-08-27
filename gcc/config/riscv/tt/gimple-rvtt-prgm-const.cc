@@ -1996,7 +1996,13 @@ remat_transform (function *fn)
    the residency classes: SFPCONFIG destination claims and the
    identical-value allocation table.  */
 
-struct prgm_alloc { unsigned value; unsigned reg; basic_block bb; };
+struct prgm_alloc { unsigned value; unsigned reg; basic_block bb;
+		    /* The slot was DEAD-claim reclaimed: a foreign TU
+		       writer of a DIFFERENT value exists, so value
+		       persistence across any call is unprovable -- a
+		       later same-value candidate must re-prove its own
+		       call-free window and always reprograms.  */
+		    bool reclaimed = false; };
 
 struct prgm_state
 {
@@ -3546,6 +3552,50 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
 
+      /* LOOP-RECLAIM window proof (-mtt-tensix-optimize-loop-prgm-reclaim):
+	 a DEAD-claim reclaim placement for an in-loop candidate needs
+	 the programming-to-readers window call- and asm-free -- the
+	 dead claim has a foreign TU writer of a DIFFERENT value, so a
+	 callee anywhere between this function's own programming and
+	 the in-loop reads could interpose that store.  The window for
+	 the established loop programming point is the loop body itself
+	 (the CC-canonical peel is a body copy, covered by the same
+	 proof) plus the candidate's own entry edge: a crossloop- or
+	 cc-lifted entry widens the window across enclosing region
+	 content this walk does not prove, so those candidates refuse
+	 the reclaim tier by construction (call_free_window stays
+	 false; free-slot and value-identical placements are
+	 unaffected).  */
+      if (riscv_tt_opt_loop_prgm_reclaim > 0 && !this_loop.is_empty ())
+	{
+	  bool loop_call_free = true;
+	  basic_block *lr_body = get_loop_body_in_dom_order (loop);
+	  for (unsigned ix = 0;
+	       ix != loop->num_nodes && loop_call_free; ++ix)
+	    {
+	      basic_block bb = lr_body[ix];
+	      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
+		   !gsi_end_p (gsi) && loop_call_free; gsi_next (&gsi))
+		{
+		  gimple *stmt = gsi_stmt (gsi);
+		  if (is_gimple_debug (stmt))
+		    continue;
+		  if (gimple_code (stmt) == GIMPLE_ASM
+		      || (is_gimple_call (stmt)
+			  && !rvtt_get_insn_data (stmt)))
+		    loop_call_free = false;
+		}
+	    }
+	  free (lr_body);
+	  for (residency_candidate &c : this_loop)
+	    c.call_free_window
+	      = loop_call_free && !c.cc_lifted && c.entry == entry;
+	  if (!loop_call_free && dump_file)
+	    fprintf (dump_file,
+		     "const-residency: loop bb %d reclaim window unproven "
+		     "(loop-reclaim-call-window: foreign call or asm in "
+		     "the loop body)\n", loop->header->index);
+	}
       for (residency_candidate &c : this_loop)
 	{
 	  loop_cands.safe_push (c);
@@ -3742,7 +3792,14 @@ residency_transform (function *fn, prgm_state *st)
 
   /* Priced selection: per-iteration savers first (higher proven
      benefit first), then pressure-relief candidates by use count.
-     Deterministic tiebreak by value then use count.  */
+     Deterministic tiebreak by value then use count.  The
+     loop-prgm-reclaim tier deliberately does NOT reorder selection:
+     a words-saved key is pressure-blind (a duplicate-value pair can
+     starve a pressure-relieving loop-wide candidate of its slot and
+     blow the 8-LREG file downstream -- observed live on digamma-fresh
+     as lreg-pressure-exceeded during bring-up), so GV's
+     uses-then-value ranking stands and its known suboptimality for
+     mixed word-weight sets stays a named residual.  */
   auto rank = [] (auto_vec<residency_candidate> &v)
     {
       for (unsigned i = 1; i < v.length (); ++i)
@@ -3754,6 +3811,26 @@ residency_transform (function *fn, prgm_state *st)
     };
   rank (loop_cands);
   rank (pressure_cands);
+  /* LOOP-RECLAIM slot discipline: a DEAD claimed slot whose unique TU
+     value equals SOME pending candidate's value is that candidate's
+     value-identical home -- reclaiming it with a different value
+     forfeits the later (free) value-reuse placement (the repurposed-
+     slot belt then refuses it), a net placement LOSS that can starve a
+     pressure-relieving parking (observed live on digamma-fresh during
+     bring-up: lreg-pressure-exceeded).  The dead scan skips such
+     slots.  */
+  auto_vec<unsigned, 32> reclaim_reserved_values;
+  if (riscv_tt_opt_loop_prgm_reclaim > 0)
+    {
+      for (residency_candidate &c : loop_cands)
+	reclaim_reserved_values.safe_push (c.value);
+      for (residency_candidate &c : pressure_cands)
+	reclaim_reserved_values.safe_push (c.value);
+      for (residency_candidate &c : madpair_cands)
+	reclaim_reserved_values.safe_push (c.value);
+      for (residency_candidate &c : hoistreuse_cands)
+	reclaim_reserved_values.safe_push (c.value);
+    }
   /* MAD-PAIR candidates stay in discovery order: members of one pair
      are contiguous and must remain so for the all-or-none placement
      sweep below.  */
@@ -3828,13 +3905,32 @@ residency_transform (function *fn, prgm_state *st)
 	}
       unsigned prgm = 0;
       basic_block prior_bb = nullptr;
+      bool prior_reclaimed = false;
       for (prgm_alloc &a : st->allocs)
 	if (a.value == c.value)
 	  {
 	    prgm = a.reg;
 	    prior_bb = a.bb;
+	    prior_reclaimed = a.reclaimed;
 	    break;
 	  }
+      /* A same-value candidate landing on a DEAD-claim reclaimed slot:
+	 the slot has a foreign TU writer of a DIFFERENT value, so the
+	 earlier programming's persistence across any interposed call
+	 is unprovable -- the candidate must prove its OWN call-free
+	 window and always reprograms (idempotent; see below).  */
+      if (prgm && prior_reclaimed && !c.call_free_window)
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "const-residency: refused "
+		       "(loop-reclaim-call-window: same-value candidate "
+		       "on a reclaimed slot without its own proven "
+		       "window): ");
+	      print_gimple_stmt (dump_file, c.load, 0);
+	    }
+	  return false;
+	}
       if (!prgm)
 	for (unsigned reg : prgm_regs)
 	  if (!(st->claimed & (1u << reg)))
@@ -3857,6 +3953,17 @@ residency_transform (function *fn, prgm_state *st)
 	  for (unsigned reg : prgm_regs)
 	    if ((tu.value_known & (1u << reg)) && tu.value[reg] == c.value)
 	      {
+		/* A slot this walk already repurposed for a DIFFERENT
+		   value (a DEAD-claim reclaim) is no longer the TU
+		   value's home: reusing it would interleave two
+		   values' programmings at the same points.  Skip it --
+		   the candidate may still reclaim another dead slot
+		   below.  */
+		bool repurposed = false;
+		for (prgm_alloc &a : st->allocs)
+		  repurposed |= a.reg == reg && a.value != c.value;
+		if (repurposed)
+		  continue;
 		prgm = reg;
 		tu_reuse = true;
 		break;
@@ -3873,7 +3980,11 @@ residency_transform (function *fn, prgm_state *st)
 	 the shared op init claims the slots with the HAND polynomial's
 	 constants, the fitted kernel needs its own.  */
       bool tu_reclaim = false;
-      if (!prgm && c.hoisted_reuse && riscv_tt_opt_hoisted_prgm_reuse > 0)
+      bool loop_reclaim_cand = (!c.hoisted_reuse && c.loop
+				&& riscv_tt_opt_loop_prgm_reclaim > 0);
+      if (!prgm
+	  && ((c.hoisted_reuse && riscv_tt_opt_hoisted_prgm_reuse > 0)
+	      || loop_reclaim_cand))
 	{
 	  const prgm_tu_facts &tu = tu_prgm_facts ();
 	  unsigned dead = 0;
@@ -3881,6 +3992,22 @@ residency_transform (function *fn, prgm_state *st)
 	    {
 	      if (tu.creg_read & (1u << reg))
 		continue;
+	      if (!(tu.claimed & (1u << reg)))
+		continue;
+	      /* A slot that is some pending candidate's value-identical
+		 home stays available for that (free) reuse -- see the
+		 reclaim slot discipline above.  A hoisted-reuse
+		 candidate keeps IC's shipped scan (the set is only
+		 populated under loop-prgm-reclaim; when both flags run,
+		 the discipline protects both classes' reuse).  */
+	      if (tu.value_known & (1u << reg))
+		{
+		  bool reserved = false;
+		  for (unsigned rv : reclaim_reserved_values)
+		    reserved |= rv == tu.value[reg];
+		  if (reserved)
+		    continue;
+		}
 	      bool in_allocs = false;
 	      for (prgm_alloc &a : st->allocs)
 		in_allocs |= a.reg == reg;
@@ -3895,7 +4022,9 @@ residency_transform (function *fn, prgm_state *st)
 	      if (dump_file)
 		{
 		  fprintf (dump_file, "const-residency: refused "
-			   "(hoisted-reuse-call-window): ");
+			   "(%s): ",
+			   c.hoisted_reuse ? "hoisted-reuse-call-window"
+					   : "loop-reclaim-call-window");
 		  print_gimple_stmt (dump_file, c.load, 0);
 		}
 	      return false;
@@ -3925,9 +4054,10 @@ residency_transform (function *fn, prgm_state *st)
       if (tu_reclaim && dump_file)
 	fprintf (dump_file,
 		 "const-residency: reclaiming DEAD-claimed PRGM L%u for "
-		 "0x%08x (no TU reader of the slot; call-free "
+		 "0x%08x (%s class; no TU reader of the slot; call-free "
 		 "programming-to-readers window)\n",
-		 prgm, c.value);
+		 prgm, c.value,
+		 c.hoisted_reuse ? "hoisted-reuse" : "loop");
 
       /* CC-canonical class: peel only here, after a register has
 	 actually been allocated (see ensure_peeled above).  */
@@ -3943,6 +4073,7 @@ residency_transform (function *fn, prgm_state *st)
 	 redundant).  */
       bool reprogram
 	= !prior_bb
+	  || prior_reclaimed
 	  || point_bb == prior_bb
 	  || !dominated_by_p (CDI_DOMINATORS, point_bb, prior_bb);
       tree vec_type = TREE_TYPE (gimple_call_lhs (c.load));
@@ -3984,7 +4115,8 @@ residency_transform (function *fn, prgm_state *st)
 	      gsi_insert_before (&lgsi, wrcfg, GSI_SAME_STMT);
 	    }
 	  if (!prior_bb)
-	    st->allocs.safe_push (prgm_alloc { c.value, prgm, point_bb });
+	    st->allocs.safe_push (prgm_alloc { c.value, prgm, point_bb,
+					       tu_reclaim });
 	}
       else if (dump_file)
 	fprintf (dump_file,
