@@ -1657,27 +1657,100 @@ transform (function *fn)
 	   tie and lowers to a per-iteration lane-predicated SFPMOV
 	   merge -- a forged word no later pass can remove.
 
-	 The late walk supersedes every hoist this pass could commit on
-	 such a loop (same candidates, superset of placements), so the
-	 deferral changes placement authority, never coverage.  Loops
-	 without CC machinery keep this pass's established behavior
-	 (the late peel/park classes target the CC-canonical shape;
-	 plain loops lose nothing here), and when either late flag is
-	 absent the ordering has no walk to yield to and this pass
-	 keeps its hoists byte-identically.  */
+	 PARK-SEED COMPOSITION REFINEMENT (lane HY): the original
+	 wholesale deferral over-reached.  Its claim -- "the late walk
+	 supersedes every hoist this pass could commit (same
+	 candidates, superset of placements)" -- is REFUTED on the
+	 depth-zero candidate class by six measured pin-34 loss rows
+	 (ceil/roundingops/rdiv/sqrt/softsign/i0, laneHV attribution +
+	 laneHX dump chain + laneHY censuses): this pass's hoist of a
+	 depth-zero candidate is a mask-exact free code motion (the
+	 restore proof makes its position carry the preheader's
+	 lane-enable mask, so the moved statement reads the identical
+	 enable set), while the late walk can
+	 re-place such a candidate only BEHIND a manufactured all-lanes
+	 programming point -- the CC-canonical first-iteration peel --
+	 whose costs its break-even pricing measures against the
+	 in-loop materialization, never against this pass's free hoist:
+
+	 - the peel plus PRGM programming pairs are extra prologue
+	   words on every kernel entry (rdiv +2, softsign +2, i0 +4,
+	   sqrt +7 words vs the drop-one legs; 253-895 cycles pure);
+	 - a PRGM park of a value with a creg-incapable consumer trades
+	   the in-loop SFPLOADI for an in-loop SFPMOV copy (sqrt: word
+	   count unchanged, placement strictly worse);
+	 - and on an even-trip paired row loop the peel flips the trip
+	   parity, so the crossrow-pairing capture refuses
+	   crossrow-pairing-trips-odd and the paired 2-row record --
+	   plus everything the pairing seed builds on it -- never forms
+	   (ceil/roundingops: the paired 0,28/15-launch form degraded
+	   to per-row 0,14/30-launch, -4736 cycles forgone).
+
+	 Both HN defects live in the IN-REGION class: the lv-carrier
+	 forging is an in-region (predicated) materialization by
+	 construction, and the budget starvation was that same
+	 hoist's pinned LREG (softplus: the one early hoist was the
+	 region-interior 0xb8047b21 carrier).  So the deferral hands
+	 the walk exactly the in-region candidates -- the class the
+	 walk owns with added value (post-CC audited parks under its
+	 exact function-wide pressure model) -- and KEEPS the depth-zero
+	 hoists here, by name (depth-zero-hoist-dominant).  The
+	 boundary is the restore analysis's own CC-region depth, the
+	 same fact the collection admission above is built on: a
+	 depth-zero candidate's hoist moves the statement between two
+	 positions carrying the identical lane-enable mask (the
+	 restore proof), a pure free code motion no walk placement can
+	 beat, and one whose disabled-lane upgrade -- HN's forging
+	 mechanism -- cannot occur because the original position is
+	 already unpredicated relative to the preheader.  An IN-REGION
+	 (depth > 0) candidate is exactly where both HN defects live
+	 and where the walk's audited post-CC admission is the safe
+	 placement authority; it defers.  Measured discharge of the
+	 depth-zero claim: the six pin-34 loss rows above; measured
+	 discharge of the in-region claim: softplus-fresh, whose
+	 deferral class is entirely in-region and whose booked winning
+	 bytes this split preserves wholesale.  Loops without CC
+	 machinery, and compilations without both late flags, keep the
+	 early pass's established hoists byte-identically.  */
       if (riscv_tt_opt_park_ordering > 0
 	  && cc.has_cc
 	  && riscv_tt_opt_const_residency > 0
 	  && riscv_tt_opt_pressure_park > 0)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Invariant SFPU immediate hoist deferred:"
-		     " residency-walk-ordering (loop bb %d): the enabled"
-		     " const-residency walk owns this CC-restore loop's"
-		     " invariant constants\n",
-		     loop->header->index);
-	  continue;
+	  unsigned kept = 0;
+	  for (gcall *call : loads)
+	    {
+	      if (cc_depth_at_stmt (cc, call) == 0)
+		{
+		  if (dump_file)
+		    {
+		      fprintf (dump_file,
+			       "Invariant SFPU immediate hoist kept"
+			       " under park-ordering:"
+			       " depth-zero-hoist-dominant"
+			       " (loop bb %d): the hoist is a mask-exact"
+			       " free move; the late walk could re-place"
+			       " it only behind its manufactured"
+			       " trip-parity-flipping peel: ",
+			       loop->header->index);
+		      print_gimple_stmt (dump_file, call, 0);
+		    }
+		  loads[kept++] = call;
+		}
+	      else if (dump_file)
+		{
+		  fprintf (dump_file,
+			   "Invariant SFPU immediate hoist deferred:"
+			   " residency-walk-ordering (loop bb %d): the"
+			   " enabled const-residency walk owns this"
+			   " CC-restore loop's in-region constants: ",
+			   loop->header->index);
+		  print_gimple_stmt (dump_file, call, 0);
+		}
+	    }
+	  loads.truncate (kept);
+	  if (loads.is_empty ())
+	    continue;
 	}
 
       /* A CC-carrying loop under an explicit unroll request multiplies
