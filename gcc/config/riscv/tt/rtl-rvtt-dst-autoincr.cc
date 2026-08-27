@@ -1936,33 +1936,128 @@ transform (function *cfn)
 	  for (const group &grp : groups)
 	    if (grp.shared_set >= 0)
 	      shared_rows[grp.shared_set] += priced_rows (grp);
-	  for (auto it = groups.begin (); it != groups.end ();)
+
+	  auto group_cost = [&] (const group &grp)
+	  {
+	    HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3
+				 * caps.config_issue_slots;
+	    if (grp.live_crossing || !grp.use_preheader)
+	      cost += caps.min_config_distance;
+	    return cost;
+	  };
+
+	  /* Payload families: groups whose candidates share a rewritten
+	     capture payload live or die TOGETHER -- the payload-coverage
+	     rule below forces all-or-nothing on every execution site of
+	     the capture -- so the two real alternatives are the WHOLE
+	     family transformed or the whole family kept, and profitability
+	     must compare exactly those: family removed = sum of the member
+	     groups' priced rows; family cost = one program cost per
+	     distinct emitted program (a shared placement's program counted
+	     once for its set).  Pricing an orphan member in isolation
+	     would let a small split-off group's refusal poison a paying
+	     sibling stream through payload coverage (lane IA: the rdiv
+	     hand kernel's 32-launch stream splits 8+24; 32 removed vs two
+	     programs' 16 slots pays, the 8-row orphan alone does not).
+	     Union-find over shared captures.  */
+	  /* Union-find by group INDEX (verdicts are computed before any
+	     erasure mutates the vector).  */
+	  std::vector<int> fam (groups.size (), -1);
+	  auto fam_find = [&] (int g)
+	  {
+	    while (fam[g] >= 0 && fam[g] != g)
+	      g = fam[g];
+	    return g;
+	  };
+	  {
+	    std::map<const capture_rec *, int> cap_owner;
+	    for (unsigned gx = 0; gx != groups.size (); ++gx)
+	      for (unsigned cx : groups[gx].cand_ix)
+		if (capture_rec *cap
+		      = groups[gx].scan->candidates[cx].payload)
+		  {
+		    if (fam[gx] < 0)
+		      fam[gx] = gx;
+		    int me = fam_find (gx);
+		    auto it = cap_owner.find (cap);
+		    if (it == cap_owner.end ())
+		      cap_owner[cap] = me;
+		    else
+		      {
+			int other = fam_find (it->second);
+			if (other != me)
+			  fam[other] = me;
+		      }
+		  }
+	  }
+	  std::map<int, HOST_WIDE_INT> fam_removed, fam_cost;
+	  std::map<int, std::vector<int>> fam_shared_seen;
+	  for (unsigned gx = 0; gx != groups.size (); ++gx)
+	    if (fam[gx] >= 0)
+	      {
+		int root = fam_find (gx);
+		group &grp = groups[gx];
+		fam_removed[root] += priced_rows (grp);
+		bool count_cost = true;
+		if (grp.shared_set >= 0)
+		  {
+		    std::vector<int> &seen = fam_shared_seen[root];
+		    if (std::find (seen.begin (), seen.end (),
+				   grp.shared_set) != seen.end ())
+		      count_cost = false;
+		    else
+		      seen.push_back (grp.shared_set);
+		  }
+		if (count_cost)
+		  fam_cost[root] += group_cost (grp);
+	      }
+
+	  /* Verdicts first (indices stay stable), erasure second.  */
+	  std::vector<bool> refuse (groups.size (), false);
+	  for (unsigned gx = 0; gx != groups.size (); ++gx)
 	    {
-	      group &grp = *it;
-	      HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3
-				   * caps.config_issue_slots;
-	      if (grp.live_crossing || !grp.use_preheader)
-		cost += caps.min_config_distance;
-	      HOST_WIDE_INT removed = grp.shared_set >= 0
-		? shared_rows[grp.shared_set] : priced_rows (grp);
+	      group &grp = groups[gx];
+	      bool in_family = fam[gx] >= 0;
+	      HOST_WIDE_INT cost, removed;
+	      if (in_family)
+		{
+		  int root = fam_find (gx);
+		  cost = fam_cost[root];
+		  removed = fam_removed[root];
+		}
+	      else
+		{
+		  cost = group_cost (grp);
+		  removed = grp.shared_set >= 0
+		    ? shared_rows[grp.shared_set] : priced_rows (grp);
+		}
 	      if (removed <= cost)
 		{
+		  refuse[gx] = true;
 		  if (dump_file)
 		    fprintf (dump_file,
-			     "Dst-autoincr refusal: unprofitable group "
+			     "Dst-autoincr refusal: unprofitable %s "
 			     "(config+entry slots " HOST_WIDE_INT_PRINT_DEC
 			     " >= removed " HOST_WIDE_INT_PRINT_DEC
 			     ", bb %d)\n",
+			     in_family ? "payload family" : "group",
 			     cost, removed,
 			     grp.scan->bb->index);
-		  for (unsigned cx : grp.cand_ix)
-		    grp.scan->candidates[cx].dropped = true;
+		}
+	    }
+	  {
+	    std::vector<group> kept;
+	    for (unsigned gx = 0; gx != groups.size (); ++gx)
+	      if (refuse[gx])
+		{
+		  for (unsigned cx : groups[gx].cand_ix)
+		    groups[gx].scan->candidates[cx].dropped = true;
 		  changed = true;
-		  it = groups.erase (it);
 		}
 	      else
-		++it;
-	    }
+		kept.push_back (groups[gx]);
+	    groups.swap (kept);
+	  }
 
 	  /* Payload coverage: every execution site of a rewritten payload
 	     must be a surviving row, or the uncovered site's RWC state
