@@ -37,7 +37,7 @@ explicit_rows_reachable_noexec_record (unsigned faces)
 
       // Fat explicit rows: the mod-write store is an inline frontend
       // word (issue parity holds).
-      for (unsigned ix = 0; ix != 16; ++ix)
+      for (unsigned ix = 0; ix != 8; ++ix)
 	{
 	  vec_t a = __builtin_rvtt_sfpload (nullptr, 0, 0, 0, 0, 7);
 	  vec_t p = __builtin_rvtt_sfpmul (a, a, 0);

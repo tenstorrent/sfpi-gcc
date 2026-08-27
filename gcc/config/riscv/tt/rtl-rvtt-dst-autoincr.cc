@@ -87,24 +87,37 @@ along with GCC; see the file COPYING3.  If not see
 
      - Profitability compares the configuration cost against the number of
        dynamically removed per-row increments, both in frontend issue slots
-       per execution of the configuration program.  Each SETC16 word occupies
-       the audited two-cycle configuration issue class (rvtt-cost.md,
-       rvtt_issue_cfg -- the same audited resource the distance guard below
-       stands on), while each removed TTINCRWC frees one single-cycle issue
-       slot, so the program's slot cost is SETC16 words times that class
-       occupancy.  A program that is not amortized by a preheader placement
-       re-executes on every execution of its region, entered through scalar
-       control that drains the frontend, and therefore pays the once-per-
-       entry drain residual (the audited min_config_distance guard; the same
-       residual a live backedge crossing's first iteration pays) on every
-       execution.  Loop regions use the same trip-count estimate as replay
-       hoisting.  No numeric row thresholds appear anywhere; break-evens fall
-       out of the model.  Silicon witness (lane IA, binopscalar-fresh,
-       pin 35): an eight-row straight-line callee re-invoked 512 times per
-       kernel measured 21929 vs 21164 cycles (+3.61%, TILE_LOOP 168.95 vs
-       162.95, ~1.5 cycles per invocation) under the old 3-word-vs-8-rows
-       admission -- the per-execution slot pricing refuses it at
-       8 <= 3*2 + 2.
+       per execution of the configuration program, and the cost model splits
+       by PLACEMENT (lane IA silicon, bracketed in both directions):
+
+         A PREHEADER program executes once per loop entry inside the same
+         pre-steady-state window the once-per-entry drain residual already
+         prices (the lane EP covered witnesses measured that whole window,
+         three-word program included, at ~2 cycles/entry), so its words
+         price at their word count, plus the residual through a live
+         crossing -- the original pricing.  Charging more there is refuted
+         by silicon: the lcm row loop (692423 -> 694979) and the relu hand
+         rolled loop (45744 -> 49330) are preheader 8x1 groups measured
+         BETTER fired.
+
+         A NON-PREHEADER program re-executes on every execution of its
+         region, entered through scalar control that drains the frontend:
+         each SETC16 word occupies the audited two-cycle configuration
+         issue class (rvtt-cost.md, rvtt_issue_cfg -- the same audited
+         resource the distance guard below stands on) while each removed
+         TTINCRWC frees one single-cycle slot, and the program pays the
+         once-per-entry drain residual (min_config_distance) on every
+         execution.  Silicon witness (binopscalar-fresh, pin 35): an
+         eight-row straight-line callee re-invoked 512 times per kernel
+         measured 21929 vs 21164 cycles (+3.61%, ~1.5 cycles/invocation)
+         under the old 3-word-vs-8-rows admission -- the per-execution
+         slot pricing refuses it at 8 <= 3*2 + 2.
+
+       Groups sharing a rewritten capture payload are priced as one FAMILY
+       (they live or die together under payload coverage; see the
+       profitability block).  Loop regions use the same trip-count estimate
+       as replay hoisting.  No numeric row thresholds appear anywhere;
+       break-evens fall out of the model.
 
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
@@ -1909,22 +1922,17 @@ transform (function *cfn)
 
 	  /* Profitability: configuration cost against dynamically removed
 	     increments, less the per-iteration mod-write crossing charge,
-	     both in frontend issue slots per execution of the program.
-	     Each SETC16 word occupies the audited two-cycle configuration
-	     issue class (rvtt_issue_cfg) while each removed TTINCRWC frees
-	     a single-cycle slot, so the program costs its word count times
-	     that occupancy.  A shared program's cost is paid once for
-	     every group it serves.  The once-per-entry drain residual --
-	     the audited min_config_distance guard paid before the pipeline
-	     reaches steady state (lane EP finding F1: the covered
-	     witnesses still measure ~2 cycles per loop entry) -- is
-	     charged whenever the program's execution is not amortized: a
-	     group carrying a live backedge crossing pays it at loop entry,
-	     and a non-preheader program pays it on every re-execution of
-	     its region, whose scalar entry control (call or branch) drains
-	     the frontend the configuration then consumes (lane IA silicon
-	     witness: the eight-row per-call straight-line callee, +3.61%
-	     kernel, ~1.5 cycles per invocation at the old admission).  */
+	     both in frontend issue slots per execution of the program.  A
+	     shared program's cost is paid once for every group it serves.
+	     The cost model splits by PLACEMENT (see group_cost below): a
+	     preheader program keeps the original word pricing plus the
+	     live-crossing entry residual (the lane EP covered witnesses
+	     measured the whole entry window, program included, at ~2
+	     cycles); a non-preheader program re-executes per region
+	     execution and pays the audited two-cycle configuration issue
+	     class per SETC16 word plus the once-per-entry drain residual
+	     (lane IA binopscalar silicon witness, both directions
+	     bracketed on lcm/relu).  */
 	  auto priced_rows = [] (const group &grp)
 	  {
 	    HOST_WIDE_INT iter_mult
@@ -1937,11 +1945,34 @@ transform (function *cfn)
 	    if (grp.shared_set >= 0)
 	      shared_rows[grp.shared_set] += priced_rows (grp);
 
+	  /* Placement decides the program's slot pricing (lane IA silicon,
+	     both directions):
+	     - A PREHEADER program executes once per loop entry inside the
+	       same pre-steady-state window the once-per-entry drain
+	       residual already prices: the covered fat witnesses (lane EP)
+	       measured ~2 cycles per entry TOTAL with the three-word
+	       program in the preheader, so its words price at their word
+	       count and the residual is charged only through a live
+	       crossing, as before.  Charging the configuration class
+	       occupancy there double-counts the entry window: doing so
+	       refused the lcm row loop (692423 -> 694979, +0.37%) and the
+	       relu hand rolled loop (45744 -> 49330, +7.8%) -- both
+	       preheader 8x1 groups silicon-measured BETTER fired.
+	     - A NON-PREHEADER program re-executes on every execution of
+	       its region: each SETC16 occupies the audited two-cycle
+	       configuration issue class (rvtt_issue_cfg) against the
+	       removed increments' single-cycle slots, plus the
+	       once-per-entry drain residual -- the scalar entry control
+	       that reaches it drains the frontend the configuration then
+	       consumes (binopscalar witness: 21929 vs 21164, ~1.5
+	       cycles/invocation at the old admission).  */
 	  auto group_cost = [&] (const group &grp)
 	  {
-	    HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3
-				 * caps.config_issue_slots;
-	    if (grp.live_crossing || !grp.use_preheader)
+	    HOST_WIDE_INT cost = (HOST_WIDE_INT) caps.nslots * 3;
+	    if (!grp.use_preheader)
+	      cost = cost * caps.config_issue_slots
+		     + caps.min_config_distance;
+	    else if (grp.live_crossing)
 	      cost += caps.min_config_distance;
 	    return cost;
 	  };
