@@ -2010,13 +2010,18 @@ rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
       *why = "replay-record-word-unproven: malformed REPLAY encoding";
       return false;
     }
-  if ((word >> XTT_REPLAY_EXEC_BIT) & 1)
-    /* Exec-while-loading: every window word also executes and is
-       audited as delivered by the ordinary scan; the stored image is
-       unreachable (theorem arms (a)-(c)).  Nothing to suppress.  */
-    return true;
+  /* Exec-while-loading admits WITHOUT suppression -- every window
+     word also executes and is audited as delivered by the ordinary
+     scan, and the stored image is unreachable (theorem arms (a)-(c)).
+     The window must STILL be walked: a nested expander word inside an
+     open window is neutered to stored data by the hardware (the
+     window arm precedes the REPLAY decode arm), so a REPLAY/MOP word
+     the static scan would treat as ACTING must refuse -- and finding
+     the window's end requires the same statically-countable region
+     (a typed call's emitted word count is unknowable).  */
+  bool exec_while_loading = (word >> XTT_REPLAY_EXEC_BIT) & 1;
 
-  /* Exec=0: prove the swallowed region.  */
+  /* Prove the window region (swallowed when Exec=0).  */
   unsigned HOST_WIDE_INT need = len;
   basic_block bb = gimple_bb (record);
   if (!bb)
@@ -2217,7 +2222,12 @@ rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
 	}
       gsi_next (&gsi);
     }
-  for (gimple *m : members)
-    suppressed->add (m);
+  /* Exec=0: the window words are architecturally never delivered --
+     exclude them from the executed-word census.  Exec=1: they execute
+     and stay in the census (the walk above still proved the window
+     free of neutered expander words).  */
+  if (!exec_while_loading)
+    for (gimple *m : members)
+      suppressed->add (m);
   return true;
 }
