@@ -129,6 +129,106 @@ emit_setcc (gimple_stmt_iterator *gsip, gcall *stmt, tree in,
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
+static unsigned
+commute_cmp_args (unsigned op, rvtt_arg_info (&args)[2])
+{
+  std::swap (args[0], args[1]);
+  if ((op & ~(SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE))
+      != SFPXCMP_MOD1_CC_EQ)
+    op ^= SFPXCMP_MOD1_CC_LT ^ SFPXCMP_MOD1_CC_GT;
+  return op;
+}
+
+static bool
+expand_cmp_using_gtle (gimple_stmt_iterator *, gcall *, rvtt_arg_info (&)[2], unsigned, unsigned)
+{
+  return false;
+}
+
+static bool
+expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&args)[2], unsigned op, unsigned type)
+{
+  // Turn GT/GE to LT/LE to avoid extra insn,
+  // Turn 0 EQ/NE A into A EQ/NE 0 to avoid subtract
+  if (op >= SFPXCMP_MOD1_CC_GT
+      || (op >= SFPXCMP_MOD1_CC_EQ && args[0].is_zero ()))
+    op = commute_cmp_args (op, args);
+
+  int setcc_op = op;
+  if (!args[1].is_zero ())
+    {
+      const rvtt_insn_data *sub_insnd = nullptr;
+      unsigned sub_mod = 0;
+      tree neg1 = nullptr;
+
+      if (type == SFPXCMP_MOD1_TYPE_FLOAT)
+	{
+	  auto *lreg_insnd = rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
+	  gcall *lreg_call = gimple_build_call (lreg_insnd->decl, lreg_insnd->num_args ());
+	  auto reg = build_int_cst (unsigned_type_node,
+				    TARGET_XTT_TENSIX_WH ? CREG_IDX_NEG_1 : CREG_IDX_1);
+	  gimple_call_set_arg (lreg_call, 0, reg);
+	  neg1 = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
+	  gimple_call_set_lhs (lreg_call, neg1);
+	  gimple_set_location (lreg_call, gimple_location (cmp));
+	  gsi_insert_after (right, lreg_call, GSI_NEW_STMT);
+
+	  sub_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpmad);
+	  sub_mod = TARGET_XTT_TENSIX_WH ? 0 : SFPMAD_MOD1_BH_COMPL_A;
+	}
+      else
+	{
+	  static const unsigned char iadd_map[] = {
+	    SFPIADD_MOD1_CC_LT0,
+	    SFPIADD_MOD1_CC_GTE0,
+	    SFPIADD_MOD1_CC_NONE,
+	    SFPIADD_MOD1_CC_NONE,
+	    0xff,
+	    0xff,
+	  };
+
+	  sub_mod = iadd_map[op];
+	  if (sub_mod != SFPIADD_MOD1_CC_NONE)
+	    setcc_op = -1;
+	  sub_mod |= SFPIADD_MOD1_ARG_2SCOMP_LREG_DST;
+	  sub_insnd = rvtt_get_insn_data (rvtt_insn_data::sfpiadd_v);
+	}
+
+      auto *sub_call = gimple_build_call (sub_insnd->decl, sub_insnd->num_args ());
+      if (neg1)
+	gimple_call_set_arg (sub_call, sub_insnd->src_arg () + 1, neg1);
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg (), args[1].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->src_arg () + 1 + bool (neg1), args[0].get_arg ());
+      gimple_call_set_arg (sub_call, sub_insnd->mod_arg (),
+			   build_int_cst (unsigned_type_node, sub_mod));
+      if (setcc_op >= 0)
+	{
+	  auto tmp = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
+	  args[0].set_arg (tmp);
+	  gimple_set_lhs (sub_call, tmp);
+	}
+      gimple_set_location (sub_call, gimple_location (cmp));
+      gsi_insert_after (right, sub_call, GSI_NEW_STMT);
+    }
+
+  if (setcc_op >= 0)
+    {
+      static const unsigned char setcc_map[] = {
+	SFPSETCC_MOD1_LREG_LT0,
+	SFPSETCC_MOD1_LREG_GTE0,
+	SFPSETCC_MOD1_LREG_EQ0,
+	SFPSETCC_MOD1_LREG_NE0,
+	0xff,
+	0xff,
+      };
+      emit_setcc (right, cmp, args[0].get_arg (), setcc_map[setcc_op],
+		  type == SFPXCMP_MOD1_TYPE_FLOAT
+		  ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
+    }
+
+  return false;
+}
+
 static bool
 verify_cond_call (pred_list &preds, unsigned &ix, gcall *call)
 {
@@ -168,7 +268,6 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   unsigned mod = TREE_INT_CST_LOW (gimple_call_arg (cmp, insnd->mod_arg ()));
   unsigned type = (mod >> SFPXCMP_MOD1_TYPE_SHIFT) & SFPXCMP_MOD1_TYPE_MASK;
   unsigned op = mod & SFPXCMP_MOD1_CC_MASK;
-
   if (negate)
     op ^= SFPXCMP_MOD1_CC_EQ ^ SFPXCMP_MOD1_CC_NE;
 
@@ -176,6 +275,103 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     {{gimple_call_arg (cmp, insnd->src_arg ()), true},
      {gimple_call_arg (cmp, insnd->src_arg () + 1), true}};
 
+  /*
+    We have SFPGT & SFPLE, which work on smag, 2's complement and unsigned (arch-depending)
+  LT  b > a
+  GE  b <= a
+  EQ  b <= a && a >= b (avoid clobbering a tmp)
+  NE  (a ^ b) is non zero or for signed_zeros types: not (b <= a && a <= b)
+  GT  a > b
+  LE  a <= b
+
+  if one side is zero:
+  LT0  0>a
+  GE0  0<=a
+  EQ0  a==0 or for signed_zeros as for above
+  NE0  a!=0 or for signed_zeros as for above
+  GT0  a>0
+  LE0  a<=0
+
+  If we do not have SFPGT & SFPLE, then we need to use a subtract.
+
+  For float we do:
+  LT  a - b is neg
+  GE  a - b is non neg
+  EQ  a - b is zero
+  NE  a - b is non zero
+  GT  b - a neg
+  LE  b - a non neg
+
+  These ignore signed_zero
+  LT0  a is neg
+  GE0  a is non neg
+  EQ0  a is zero
+  NE0  a is non zero
+  GT0  a is non neg and a is non zero
+  LE0  not (a is non neg and a is non zero)
+
+  For int and uint we do: (this ignores the overflow problem)
+  LT  a - b is neg
+  GE  a - b is non neg
+  EQ  a - b is zero
+  NE  a - b is non zero
+  GT  b - a neg
+  LE  b - a non neg
+
+  LT0  a is neg (false for uint)
+  GE0  a is non neg (true for uint)
+  EQ0  a is zero
+  NE0  a is non zero
+  GT0  a is non neg and a is non zero (just is non zero for uint)
+  LE0  not (a is non neg and a is non zero) (just is zero for uint)
+
+  For int and uint correctly we must have both values within 2^31 of eachother,
+  do this by checking if the sign bits match or not.  This would be worth doing
+  constant folding using the sign of the constant to handle the result in the
+  different-signs case..
+
+  0-0  a - b, neg means a < b
+  1-1  a - b, neg means a < b
+  1-0  int a is < b, uint a is > b
+  0-1  int a is > b, uint a is < b
+
+  t = a ^ b, is neg or non-neg
+  t = a - b, is neg or non-neg
+
+  txor = a ^ b, ta_b = a - b
+
+  Int:
+  LT (txor is non-neg AND ta_b is neg) OR (txor is neg AND a is neg)
+  GE (txor is non-neg AND ta_b is non-neg) OR (txor is neg AND a is non-neg)
+  GT handle as b LT a
+  LE handle as b GE a
+  
+  UInt:
+  LT (txor is non-neg AND ta_b is neg) OR (txor is neg AND a is non-neg)
+  GE (txor is non-neg AND ta_b is non-neg) OR (txor is neg AND a is neg)
+  GT handle as b LT a
+  LE handle as b GE a
+
+  We can apply demorgans here quite simply.
+
+
+         WH    BH   QSR   TRI
+  Float fsub  >,<=  >,<=  >,<=
+  SMag   -    >,<=  >,<=  >,<=
+  Int   isub  isub  >,<=  >,<=
+  UInt  isub  isub  isub  >,<=
+  */
+
+  bool negated = false;
+#if 0
+  if ((TARGET_XTT_TENSIX_QSR && type >= SFPXCMP_MOD1_TYPE_INT)
+       || (TARGET_XTT_TENSIX_BH && type >= SFPXCMP_MOD1_TYPE_SMAG))
+    negated = expand_cmp_using_gtle (right, cmp, args, op, type);
+  else
+#endif
+    negated = expand_cmp_using_sub (right, cmp, args, op, type);
+
+#if 0
   // direct reimplementation of existing scheme
   static const int map[] = {
     SFPSETCC_MOD1_LREG_LT0,
@@ -199,7 +395,7 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
     ;
   else if (fp)
     {
-      // We're gonna reomplement this per-arch, so not bothering using sfpadd on bh/qsr
+      // We're gonna reimplement this per-arch, so not bothering using sfpadd on bh/qsr
       auto one = make_ssa_name (TREE_TYPE (args[0].get_arg ()));
       const rvtt_insn_data *new_insnd =
 	rvtt_get_insn_data(rvtt_insn_data::sfpreadlreg);
@@ -255,8 +451,9 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   if (late_cc_op >= 0)
     emit_setcc (right, cmp, args[0].get_arg (), map[late_cc_op],
 		fp ? SFPSETCC_IMM_TYPE_FLOAT : SFPSETCC_IMM_TYPE_INT, false);
-
-  return op == SFPXCMP_MOD1_CC_LE;
+  negated = op == SFPXCMP_MOD1_CC_LE;
+#endif
+  return negated;
 }
 
 static gcall *
