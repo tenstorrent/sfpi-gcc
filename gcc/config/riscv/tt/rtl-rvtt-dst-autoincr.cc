@@ -279,16 +279,29 @@ struct autoincr_caps
      slot program in these units so both sides are frontend issue slots.  */
   unsigned config_issue_slots;
   autoincr_slot slots[2];
+  /* Refuse-only watched configuration rows for the cross-call ADDR_MOD
+     contract (lane IK): thread-configuration registers whose rewrite
+     would re-target the scratch modifier WITHOUT writing the owned slot
+     registers.  Wormhole: the two-bit modifier field reaches physical
+     slot 6 only through the ADDR_MOD_SET_Base bank-select bit (thread
+     configuration address 2, tt-isa-documentation WormholeB0 RWCs.md);
+     a SETC16 flipping it re-aliases the scratch modifier to the base-0
+     bank LLK programs with live strides.  Blackhole's three-bit
+     modifier field selects the physical slot directly -- no watch
+     row.  (ExtraAddrModBit is immaterial under the base-1 platform
+     contract: the RWCs.md index OR already takes the +4 bank.)  */
+  unsigned n_watch;
+  unsigned watch_reg;
 };
 
 static autoincr_caps
 target_autoincr_caps ()
 {
   if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, 2, 7, 2, { { 18, 34, 53 }, { 0, 0, 0 } } };
+    return { true, 7, 6, 1, 2, 7, 2, { { 18, 34, 53 }, { 0, 0, 0 } }, 0, 0 };
   if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 1, 2, 7, 2, { { 19, 29, 54 }, { 0, 0, 0 } } };
-  return { false, 0, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } } };
+    return { true, 3, 2, 1, 2, 7, 2, { { 19, 29, 54 }, { 0, 0, 0 } }, 1, 2 };
+  return { false, 0, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } }, 0, 0 };
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -1044,6 +1057,11 @@ struct group
      loop entry's first crossing pays the once-per-entry drain residual
      on the configuration-cost side.  */
   bool live_crossing = false;
+  /* Set when the group's slot program is provided by the cross-call
+     ADDR_MOD contract (lane IK): the program is hoisted to the proven
+     caller's loop entry and the group emits nothing, at zero per-call
+     configuration cost.  */
+  bool contract = false;
 };
 
 /* Mirror of the replay pass's dedicated preheader discovery.  */
@@ -1524,6 +1542,7 @@ place_groups (function_scan &fn, std::vector<group> &groups,
       grp.guard_refused = false;
       grp.crossing_charge = 0;
       grp.live_crossing = false;
+      grp.contract = false;
       grp.dynamic_rows = grp.cand_ix.size ();
       grp.anchor_item
 	= grp.scan->candidates[grp.cand_ix.front ()].lead_item;
@@ -1755,10 +1774,190 @@ transform_group (const group &grp, const autoincr_caps &caps)
       else
 	fprintf (dump_file,
 		 "Dst-autoincr group: bb %d rows %u stride "
-		 HOST_WIDE_INT_PRINT_DEC " shared config%s\n",
+		 HOST_WIDE_INT_PRINT_DEC " %s%s\n",
 		 scan.bb->index, unsigned (grp.cand_ix.size ()),
-		 grp.stride, grp.use_preheader ? " (preheader)" : "");
+		 grp.stride,
+		 grp.contract ? "crosscall contract config" : "shared config",
+		 grp.use_preheader ? " (preheader)" : "");
     }
+}
+
+/* Cross-call ADDR_MOD contract (lane IK, flag-gated by
+   -mtt-tensix-optimize-crosscall-addrmod): a straight-line callee whose
+   groups ALL refuse by the per-execution configuration pricing may
+   instead have its slot program hoisted, once, into the proven caller's
+   loop entry (gimple-rvtt-crosscall.cc, rvtt_crosscall_addrmod_hoist:
+   the lane CA init-hoist machinery with the lane HC residency walk) --
+   the hand kernel's once-per-kernel ADDR_MOD discipline.  The groups
+   then fire with the program omitted entirely: the hoisted program is
+   preheader-class (lane IA placement split -- it executes once per
+   caller-loop entry inside the entry window the drain residual already
+   prices), so the per-call configuration cost is ZERO.
+
+   Callee-side admission, every condition fail-closed (a failure keeps
+   today's unprofitable refusal byte-identically):
+
+     - ALL surviving groups refused by profitability, non-preheader,
+       unshared, single stride, explicit rows only (a fired sibling or a
+       second stride would leave a per-call slot program in the callee
+       that clobbers the contract between calls; replay-delivered rows
+       keep the lane FE/FS issue-parity scope bound);
+
+     - WHOLE-CALLEE slot-clobber census: every instruction of every
+       block is a contract row/increment or configuration-window legal
+       (config_window_item_ok) -- this covers the callee TAIL too, where
+       a foreign word after the last row would clobber the slot for the
+       NEXT call (the ISA adjudication: only same-thread SETC16 words
+       can write the ThreadConfig ADDR_MOD rows; anything unaudited
+       refuses);
+
+     - entry distance: the words ahead of each group's first consumer
+       satisfy the SETC16-to-consume guard from the function entry (the
+       hoisted program retires at latest at the caller's loop entry,
+       strictly earlier than any callee word -- counting only the
+       callee-local prefix is the conservative floor);
+
+     - call-boundary crossing charge: the block-final live mod-write's
+       consumer is the NEXT invocation's first Dst access, reached
+       through frontend-draining scalar return/call control -- the same
+       audited drained-frontend window the loop-backedge pricing
+       charges.  Cover counts only the callee's own words after the
+       final increment (caller-side words credited zero, the refusing
+       direction); total rows must exceed the summed charge or the
+       contract refuses by name (mod-write-dominates-crosscall-body).
+
+   The caller-side proofs (epoch scan at every lifted level, MOP
+   template audit, watched bank-select row, preheader occupancy) live in
+   the service.  On success every group fires with emit_config clear; on
+   any refusal the pricing verdicts stand untouched.  */
+
+static void
+attempt_addrmod_contract (function_scan &fn, std::vector<group> &groups,
+			  const autoincr_caps &caps,
+			  std::vector<bool> *refuse)
+{
+  const char *why = nullptr;
+  HOST_WIDE_INT total_rows = 0;
+  for (unsigned gx = 0; !why && gx != groups.size (); ++gx)
+    {
+      group &grp = groups[gx];
+      if (grp.use_preheader || grp.shared_set >= 0)
+	why = "preheader-placement";
+      else if (grp.stride != groups.front ().stride)
+	why = "stride-plural";
+      else
+	for (unsigned cx : grp.cand_ix)
+	  if (grp.scan->candidates[cx].payload)
+	    {
+	      why = "replay-delivered-row";
+	      break;
+	    }
+      total_rows += grp.cand_ix.size ();
+    }
+
+  /* Whole-callee slot-clobber census.  */
+  if (!why)
+    for (bb_scan &scan : fn.blocks)
+      {
+	std::vector<bool> owned (scan.items.size (), false);
+	for (group &grp : groups)
+	  if (grp.scan == &scan)
+	    for (unsigned cx : grp.cand_ix)
+	      {
+		owned[scan.candidates[cx].lead_item] = true;
+		owned[scan.candidates[cx].incr_item] = true;
+	      }
+	for (unsigned jx = 0; !why && jx != scan.items.size (); ++jx)
+	  if (!owned[jx] && !config_window_item_ok (scan.items[jx], caps))
+	    why = "callee-slot-clobber";
+	if (why)
+	  break;
+      }
+
+  /* Entry distance guard (callee-local conservative floor).  */
+  if (!why)
+    for (group &grp : groups)
+      if (block_prefix_distance (grp) < caps.min_config_distance)
+	{
+	  why = "entry-distance";
+	  break;
+	}
+
+  /* Call-boundary crossing charge.  */
+  unsigned boundary_charge = 0;
+  if (!why)
+    for (bb_scan &scan : fn.blocks)
+      {
+	int last = -1;
+	for (unsigned cx = 0; cx != scan.candidates.size (); ++cx)
+	  if (!scan.candidates[cx].dropped)
+	    last = cx;
+	if (last < 0)
+	  continue;
+	const candidate &cand = scan.candidates[last];
+	if (crossing_reanchored_p (scan, cand))
+	  continue;
+	unsigned cover = 0;
+	for (unsigned ix = cand.incr_item + 1; ix != scan.items.size ();
+	     ++ix)
+	  cover += item_frontend_words (scan.items[ix]);
+	if (cover < caps.drained_frontend_window)
+	  boundary_charge += caps.drained_frontend_window - cover;
+      }
+  if (!why && total_rows <= (HOST_WIDE_INT) boundary_charge)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Dst-autoincr refusal: "
+		 "mod-write-dominates-crosscall-body (rows "
+		 HOST_WIDE_INT_PRINT_DEC ", uncovered boundary slots %u)\n",
+		 total_rows, boundary_charge);
+      return;
+    }
+  if (why)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Dst-autoincr refusal: "
+		 "crosscall-addrmod-unproven (%s)\n", why);
+      return;
+    }
+
+  rvtt_addrmod_hoist_program prog;
+  memset (&prog, 0, sizeof (prog));
+  for (unsigned sx = 0; sx != caps.nslots; ++sx)
+    {
+      const autoincr_slot &slot = caps.slots[sx];
+      prog.setc16[prog.n_setc16].reg = slot.src_reg;
+      prog.setc16[prog.n_setc16++].value = 0;
+      prog.setc16[prog.n_setc16].reg = slot.dst_reg;
+      prog.setc16[prog.n_setc16++].value = (unsigned) groups.front ().stride;
+      prog.setc16[prog.n_setc16].reg = slot.bias_reg;
+      prog.setc16[prog.n_setc16++].value = 0;
+    }
+  prog.n_watch = caps.n_watch;
+  if (caps.n_watch)
+    prog.watch[0] = caps.watch_reg;
+
+  const char *res = rvtt_crosscall_addrmod_hoist (cfun, &prog);
+  if (res)
+    {
+      if (dump_file)
+	fprintf (dump_file, "Dst-autoincr refusal: "
+		 "crosscall-addrmod-unproven (%s)\n", res);
+      return;
+    }
+
+  for (unsigned gx = 0; gx != groups.size (); ++gx)
+    {
+      (*refuse)[gx] = false;
+      groups[gx].emit_config = false;
+      groups[gx].contract = true;
+    }
+  if (dump_file)
+    fprintf (dump_file, "Dst-autoincr crosscall-addrmod contract: rows "
+	     HOST_WIDE_INT_PRINT_DEC " stride " HOST_WIDE_INT_PRINT_DEC
+	     " boundary charge %u, program hoisted to caller entry "
+	     "(lifted %u levels)\n", total_rows, groups.front ().stride,
+	     boundary_charge, prog.lift_levels);
 }
 
 static void
@@ -2083,6 +2282,8 @@ transform (function *cfn)
 
 	  /* Verdicts first (indices stay stable), erasure second.  */
 	  std::vector<bool> refuse (groups.size (), false);
+	  std::vector<HOST_WIDE_INT> verdict_cost (groups.size (), 0);
+	  std::vector<HOST_WIDE_INT> verdict_removed (groups.size (), 0);
 	  for (unsigned gx = 0; gx != groups.size (); ++gx)
 	    {
 	      group &grp = groups[gx];
@@ -2100,20 +2301,38 @@ transform (function *cfn)
 		  removed = grp.shared_set >= 0
 		    ? shared_rows[grp.shared_set] : priced_rows (grp);
 		}
+	      verdict_cost[gx] = cost;
+	      verdict_removed[gx] = removed;
 	      if (removed <= cost)
-		{
-		  refuse[gx] = true;
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "Dst-autoincr refusal: unprofitable %s "
-			     "(config+entry slots " HOST_WIDE_INT_PRINT_DEC
-			     " >= removed " HOST_WIDE_INT_PRINT_DEC
-			     ", bb %d)\n",
-			     in_family ? "payload family" : "group",
-			     cost, removed,
-			     grp.scan->bb->index);
-		}
+		refuse[gx] = true;
 	    }
+
+	  /* Cross-call ADDR_MOD contract (lane IK, flag-gated): a function
+	     whose groups ALL refuse by this pricing may fire them instead
+	     at zero per-call configuration cost under the hoisted-program
+	     contract; every unproven link keeps the verdicts untouched
+	     (see attempt_addrmod_contract).  A function with any firing
+	     group is out of scope: its per-call slot program would clobber
+	     the contract between calls.  */
+	  if (riscv_tt_opt_crosscall_addrmod && !groups.empty ())
+	    {
+	      bool all_refused = true;
+	      for (unsigned gx = 0; gx != groups.size (); ++gx)
+		all_refused &= refuse[gx] ? true : false;
+	      if (all_refused)
+		attempt_addrmod_contract (fn, groups, caps, &refuse);
+	    }
+
+	  for (unsigned gx = 0; gx != groups.size (); ++gx)
+	    if (refuse[gx] && dump_file)
+	      fprintf (dump_file,
+		       "Dst-autoincr refusal: unprofitable %s "
+		       "(config+entry slots " HOST_WIDE_INT_PRINT_DEC
+		       " >= removed " HOST_WIDE_INT_PRINT_DEC
+		       ", bb %d)\n",
+		       fam[gx] >= 0 ? "payload family" : "group",
+		       verdict_cost[gx], verdict_removed[gx],
+		       groups[gx].scan->bb->index);
 	  {
 	    std::vector<group> kept;
 	    for (unsigned gx = 0; gx != groups.size (); ++gx)
