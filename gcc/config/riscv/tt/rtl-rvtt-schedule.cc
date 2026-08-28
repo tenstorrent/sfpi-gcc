@@ -3951,6 +3951,304 @@ crossrow_pair_rows (function *fn)
     }
 }
 
+/* ---- Cyclic-interior region scheduling (lane IJ, default off) ----
+
+   -mtt-tensix-optimize-cyclic-region-schedule lifts the self-loop
+   deferral for the MULTI-REGION row shape the one-region cyclic
+   extension refuses (round-interleave-seam-barrier-word /
+   -row-not-one-region): a row chopped by issued barrier words (CC
+   writes, Dst traffic, config accesses) into several straight-line
+   regions.  Every barrier word keeps its position; each INTERIOR
+   region is re-list-scheduled under the established region vocabulary
+   (admission, entry pins, deterministic list order), and the candidate
+   commits only on a STRICT decrease of the WHOLE ROW's modeled
+   steady-state initiation interval -- the wrapped cyclic issue model
+   (ls_cyclic_ii) over EVERY issued word of the block, with unaudited
+   latencies floored at ZERO identically in baseline and candidate (a
+   modeled lower bound, never a claimed cycle count: only the strict
+   decrease is acted on, and a floored latency can only hide a stall
+   both orders share).  The linear boundary model that motivated the
+   self-loop deferral is never consulted for acceptance.
+
+   SOUNDNESS (why a within-region reorder is cyclically bit-exact):
+   region members move only relative to each other; barrier words and
+   region boundaries are fixed.  A dependence between two ITERATIONS
+   either involves a fixed word, or connects iteration i's instance of
+   the region to iteration i+1's instance -- and in the concatenated
+   stream every word of the earlier instance precedes every word of
+   the later one regardless of the interior permutation.  Dependences
+   WITHIN one iteration are the region DAG's, honored by the list
+   order exactly as in the straight-line case (the same fail-closed
+   ls_dependence vocabulary; predicated RMW uses include defs).
+
+   Refusals by name (original order kept byte-identically):
+     cyclic-interior-opaque-word     raw asm / opaque effects in the row
+     cyclic-interior-backedge-seam   region contains the row's first or
+				     last issued word (the boundary the
+				     deferral exists for)
+     cyclic-interior-repeated-shape  region signature repeats in the row
+				     (replay/MOP re-roll owns copy
+				     isomorphism)
+     cyclic-interior-no-ii-decrease  candidate II >= current II
+   plus the pad-site / entry-pad-flip commit guards of the
+   straight-line scheduler (the WH correctness carrier).  The row-level
+   replay-owner and call refusals are the caller's.  */
+
+static void
+ls_schedule_cyclic_interior (basic_block bb,
+			     std::vector<ls_region> &regions,
+			     std::vector<basic_block> &visited)
+{
+  /* Whole-row model: every issued Tensix word, in order.  */
+  std::vector<ls_node> body;
+  for (rtx_insn *insn = BB_HEAD (bb); insn != NEXT_INSN (BB_END (bb));
+       insn = NEXT_INSN (insn))
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (GET_CODE (insn) == INSN && PATTERN (insn)
+	  && asm_noperands (PATTERN (insn)) >= 0)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "cyclic-interior-opaque-word uid=%d in bb %d\n",
+		     INSN_UID (insn), bb->index);
+	  return;
+	}
+      if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0
+	  || get_attr_type (insn) != TYPE_TENSIX
+	  || !get_attr_length (insn))
+	continue;		/* scalar control / ghost: no word */
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (e.opaque)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "cyclic-interior-opaque-word uid=%d in bb %d\n",
+		     INSN_UID (insn), bb->index);
+	  return;
+	}
+      ls_node nd;
+      nd.insn = insn;
+      nd.lat = audited_latency (insn);
+      if (nd.lat < 0 || nd.lat > 1)
+	nd.lat = 0;		/* model floor, charged both sides */
+      nd.words = get_attr_length (insn) / 4;
+      if (e.next_slot_stall)
+	/* The architectural acceptance stall is an issue fact: one
+	   extra slot per occurrence (the crossrow pairing's priced
+	   rule), identical in baseline and candidate.  */
+	nd.words += 1;
+      if (!collect_sfpu_regs (insn, &nd.regs))
+	/* Defless CC/store words: keep their real LREG uses for RAW
+	   ordering (position fixed anyway -- they are never region
+	   members).  */
+	sfpu_reg_refs (insn, &nd.regs);
+      nd.raw_defs = nd.regs.defs;
+      nd.orig = (int) body.size ();
+      nd.cp = 0;
+      nd.ready = 0;
+      nd.entry_pin = 0;
+      nd.pin_to_baseline = false;
+      body.push_back (nd);
+    }
+  if (body.empty ())
+    return;
+
+  const unsigned bn = body.size ();
+  std::vector<int> body_order (bn);
+  for (unsigned i = 0; i != bn; ++i)
+    body_order[i] = i;
+  int cur_ii = ls_cyclic_ii (body, body_order);
+
+  for (unsigned ri = 0; ri != regions.size (); ++ri)
+    {
+      ls_region &r = regions[ri];
+      const unsigned n = r.nodes.size ();
+
+      /* Replay/MOP re-roll isomorphism: repeated shapes defer.  */
+      bool repeated = false;
+      for (unsigned rj = 0; rj != regions.size (); ++rj)
+	if (rj != ri && regions[rj].signature == r.signature)
+	  repeated = true;
+      if (repeated)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "cyclic-interior-repeated-shape at uid=%d in bb %d\n",
+		     INSN_UID (r.nodes[0].insn), bb->index);
+	  continue;
+	}
+
+      /* Locate the region inside the body model: admitted nodes are
+	 consecutive issued words (only barrier words separate
+	 regions), so the run is contiguous.  */
+      unsigned first = bn;
+      for (unsigned i = 0; i != bn; ++i)
+	if (body[i].insn == r.nodes[0].insn)
+	  {
+	    first = i;
+	    break;
+	  }
+      gcc_assert (first != bn && first + n <= bn);
+      for (unsigned k = 0; k != n; ++k)
+	gcc_assert (body[first + k].insn == r.nodes[k].insn);
+
+      /* Interior only: a region containing the row's first or last
+	 issued word sits on the backedge seam this pass never
+	 models.  */
+      if (first == 0 || first + n == bn)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "cyclic-interior-backedge-seam at uid=%d in bb %d\n",
+		     INSN_UID (r.nodes[0].insn), bb->index);
+	  continue;
+	}
+
+      /* Entry pins: the straight-line scheduler's own discipline over
+	 the region's acyclic baseline (candidate construction only;
+	 acceptance is the cyclic model below).  */
+      insn_regs ep_regs;
+      CLEAR_HARD_REG_SET (ep_regs.uses);
+      CLEAR_HARD_REG_SET (ep_regs.defs);
+      int ep_lat = 0;
+      if (r.entry_producer)
+	{
+	  sfpu_reg_refs (r.entry_producer, &ep_regs);
+	  ep_lat = audited_latency (r.entry_producer);
+	  if (ep_lat < 0 || ep_lat > 1)
+	    ep_lat = 0;
+	}
+      for (unsigned i = 0; i != n; ++i)
+	{
+	  r.nodes[i].entry_pin = 0;
+	  r.nodes[i].pin_to_baseline
+	    = hard_reg_set_intersect_p (r.unaudited_defs,
+					r.nodes[i].regs.uses)
+	      || hard_reg_set_intersect_p (r.unaudited_defs,
+					   r.nodes[i].raw_defs);
+	  if (r.entry_producer
+	      && (hard_reg_set_intersect_p (ep_regs.defs,
+					    r.nodes[i].regs.uses)
+		  || hard_reg_set_intersect_p (ep_regs.defs,
+					       r.nodes[i].raw_defs))
+	      && ep_lat > r.nodes[i].entry_pin)
+	    r.nodes[i].entry_pin = ep_lat;
+	}
+      rtx_insn *exit_consumer
+	= next_issued_insn (bb, r.nodes[n - 1].insn);
+      std::vector<bool> exit_shadow (n, false);
+      if (exit_consumer)
+	{
+	  insn_regs xc;
+	  sfpu_reg_refs (exit_consumer, &xc);
+	  HARD_REG_SET wanted = xc.uses;
+	  wanted |= xc.defs;
+	  for (unsigned i = 0; i != n; ++i)
+	    exit_shadow[i]
+	      = hard_reg_set_intersect_p (r.nodes[i].raw_defs, wanted);
+	}
+      else
+	for (unsigned i = 0; i != n; ++i)
+	  exit_shadow[i] = true;
+      std::vector<int> base_order (n);
+      for (unsigned i = 0; i != n; ++i)
+	base_order[i] = i;
+      std::vector<int> base_issue (n, 0);
+      ls_simulate (r.nodes, base_order, &base_issue, exit_shadow);
+      for (unsigned i = 0; i != n; ++i)
+	if (r.nodes[i].pin_to_baseline)
+	  r.nodes[i].entry_pin = base_issue[i];
+
+      /* Candidate: the deterministic list order, judged on the WHOLE
+	 row's steady-state II.  */
+      std::vector<int> order = ls_list_order (r.nodes);
+      std::vector<int> cand_body (body_order);
+      for (unsigned k = 0; k != n; ++k)
+	cand_body[first + k] = (int) (first + order[k]);
+      int cand_ii = ls_cyclic_ii (body, cand_body);
+      if (cand_ii >= cur_ii)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "cyclic-interior-no-ii-decrease at uid=%d in bb %d "
+		     "(%d -> %d)\n",
+		     INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
+		     cand_ii);
+	  continue;
+	}
+
+      /* Commit guards: the nop inserter's pad-site probe (the WH
+	 correctness carrier) and the entry producer's pad state, as
+	 in the straight-line scheduler.  */
+      unsigned pads_before = ls_pad_sites (visited, bb, r.nodes);
+      bool ep_dynamic
+	= r.entry_producer
+	  && get_attr_xtt_delay (r.entry_producer) == XTT_DELAY_DYNAMIC;
+      bool ep_needed_before
+	= ep_dynamic
+	  && delay_nop_needed_p (visited, bb, r.entry_producer,
+				 XTT_DELAY_DYNAMIC);
+
+      /* Exact-restore record, debug insns included.  */
+      std::vector<rtx_insn *> chain;
+      for (rtx_insn *w = NEXT_INSN (r.anchor);; w = NEXT_INSN (w))
+	{
+	  if (INSN_P (w))
+	    chain.push_back (w);
+	  if (w == r.nodes[n - 1].insn)
+	    break;
+	}
+
+      rtx_insn *after = r.anchor;
+      for (unsigned k = 0; k != n; ++k)
+	{
+	  rtx_insn *insn = r.nodes[order[k]].insn;
+	  if (PREV_INSN (insn) != after)
+	    reorder_insns (insn, insn, after);
+	  after = insn;
+	}
+
+      unsigned pads_after = ls_pad_sites (visited, bb, r.nodes);
+      bool ep_flipped
+	= ep_dynamic && !ep_needed_before
+	  && delay_nop_needed_p (visited, bb, r.entry_producer,
+				 XTT_DELAY_DYNAMIC);
+      if (pads_after > pads_before || ep_flipped)
+	{
+	  after = r.anchor;
+	  for (rtx_insn *insn : chain)
+	    {
+	      if (PREV_INSN (insn) != after)
+		reorder_insns (insn, insn, after);
+	      after = insn;
+	    }
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
+		     "%s, restored bb %d region at uid=%d\n",
+		     ep_flipped ? "entry-producer pad flip"
+				: "pad-site increase",
+		     bb->index, INSN_UID (r.nodes[0].insn));
+	  continue;
+	}
+
+      if (dump_file)
+	{
+	  fprintf (dump_file, "List-schedule (cyclic-interior): bb %d "
+		   "region at uid=%d nodes=%u row II %d -> %d "
+		   "target=%s\n",
+		   bb->index, INSN_UID (r.nodes[0].insn), n, cur_ii,
+		   cand_ii, TARGET_XTT_TENSIX_WH ? "wh" : "bh");
+	  for (unsigned k = 0; k != n; ++k)
+	    fprintf (dump_file, "List-schedule slot-order=%u uid=%d\n",
+		     k, INSN_UID (r.nodes[order[k]].insn));
+	}
+      body_order = cand_body;
+      cur_ii = cand_ii;
+    }
+}
+
 static void
 list_schedule_regions (function *fn)
 {
@@ -3980,7 +4278,8 @@ list_schedule_regions (function *fn)
       FOR_EACH_EDGE (e, ei, bb->succs)
 	if (e->dest == bb)
 	  self_loop = true;
-      if (self_loop && !riscv_tt_opt_round_interleave)
+      if (self_loop && !riscv_tt_opt_round_interleave
+	  && !riscv_tt_opt_cyclic_region_schedule)
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "List-schedule deferred: cyclic row "
@@ -4116,15 +4415,29 @@ list_schedule_regions (function *fn)
 	    why_c = "round-interleave-seam-barrier-word";
 	  else if (regions.size () != 1)
 	    why_c = "round-interleave-row-not-one-region";
-	  if (why_c)
+	  if (!why_c && riscv_tt_opt_round_interleave)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "List-schedule deferred: cyclic row "
-			 "adjacency in bb %d (%s)\n", bb->index, why_c);
+	      ls_schedule_region_cyclic (bb, regions[0].nodes,
+					 regions[0].anchor, visited);
 	      continue;
 	    }
-	  ls_schedule_region_cyclic (bb, regions[0].nodes,
-				     regions[0].anchor, visited);
+	  /* Cyclic-interior extension: the multi-region self-loop
+	     shapes the one-region path refuses -- and, when the
+	     round-interleave flag is off, every self-loop shape --
+	     schedule INTERIOR regions under the whole-row cyclic II
+	     acceptance.  The replay-owner and call refusals stand
+	     (an owner's capture discipline and a call's foreign words
+	     are outside the row model).  */
+	  if (riscv_tt_opt_cyclic_region_schedule
+	      && !stop_block && !bb_has_call)
+	    {
+	      ls_schedule_cyclic_interior (bb, regions, visited);
+	      continue;
+	    }
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule deferred: cyclic row "
+		     "adjacency in bb %d (%s)\n", bb->index,
+		     why_c ? why_c : "round-interleave-flag-off");
 	  continue;
 	}
 
@@ -5262,10 +5575,12 @@ public:
 	 doubled self-loop row whose pure spans the later phases may
 	 still improve; a refusal leaves the stream byte-identical.  */
       crossrow_pair_rows (fn);
-    if (riscv_tt_opt_list_schedule || riscv_tt_opt_round_interleave)
+    if (riscv_tt_opt_list_schedule || riscv_tt_opt_round_interleave
+	|| riscv_tt_opt_cyclic_region_schedule)
       /* The round-interleave flag enables only the cyclic self-loop
-	 and isomorphic-pair extensions inside; single straight-line
-	 regions still require the list-schedule flag.  */
+	 and isomorphic-pair extensions inside; the cyclic-interior
+	 flag only the multi-region self-loop extension; single
+	 straight-line regions still require the list-schedule flag.  */
       list_schedule_regions (fn);
     if (riscv_tt_opt_latency_schedule)
       {
