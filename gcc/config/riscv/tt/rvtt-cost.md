@@ -2477,3 +2477,110 @@
 ;;   silicon-proven precedent that a carried access inside a replayed
 ;;   payload walks exactly once per execution.
 ;; ---------------------------------------------------------------------
+
+;; ---------------------------------------------------------------------
+;; POST-AUTOINCR WINDOW RE-FORMATION (lane IH,
+;; -mtt-tensix-optimize-post-autoincr-window).  Additive section; no new
+;; pricing constant -- one ordering fact, one soundness theorem, and the
+;; carried-payload launch-arithmetic discipline.
+;;
+;; ORDERING FACT (the whole knob): the replay former runs BEFORE the Dst
+;; auto-increment fold (rvtt-passes.def anchor order), and the explicit
+;; per-row TTINCRWC separators are window-EXCLUDED barrier words
+;; (xtt_replay barrier), so a carried row body is word-uniform -- and
+;; therefore capturable -- only AFTER the fold, at a program point the
+;; formation never sees.  Capturing the increments instead is the
+;; silicon-refuted direction (lane IE uniform-block twins: every
+;; captured pre-fold form measured +17-39 cy/tile WORSE than the
+;; straight-push lift -- raw sync words excluded from windows, boundary
+;; and epilogue cost; the FI envelope law).  The knob DEFERS the
+;; formation wholesale: pass_rvtt_replay gates itself off and the same
+;; transform runs once, between pass_rvtt_dst_autoincr and
+;; pass_rvtt_mop_form (which by its own contract must see the final
+;; launch stream).  Deferral rather than a second run: a pre-fold run
+;; consumes replay-buffer slots on the small pre-fold-visible windows
+;; and starves the fold's larger windows (measured on the lane IE useq
+;; vehicle: tail-shuffle windows worth <= 11 delivered words claimed
+;; slots [0,14) and left 2 free slots against a 45-word carried-body
+;; candidate); the single post-fold allocation prices every candidate
+;; against the one buffer.  Deferral loses no opportunity: the fold
+;; only removes barrier words and retargets modifier operands of the
+;; rows those barriers separated, and no pre-fold-capturable run
+;; contains such a row, so every pre-fold-capturable run is
+;; post-fold-capturable verbatim.
+;;
+;; STREAM-IDENTITY THEOREM (the re-formation's soundness): restricted to
+;; the word-exact replacement paths, formation is an INSERTION-ONLY
+;; transformation of the delivered instruction stream --
+;;
+;;   in-block: one exec-while-record word inserted before the first
+;;   clone (its payload executes in place while recording); each other
+;;   clone replaced by one launch AT ITS POSITION whose expansion
+;;   re-emits exactly the clone's words ([ISA] WormholeB0 REPLAY.md:
+;;   the expander pushes stored words into the same pipeline; [SIM]
+;;   pinned-sim replay_expander, same tensix_push_inst_fifo);
+;;
+;;   hoisted: the no-exec record's preheader payload is INGESTED, never
+;;   executed (Load=1/Exec=0 swallowed words, the lane FR delivery
+;;   model), and every clone becomes one launch in place;
+;;
+;; so the delivered word sequence equals the folded sequence with words
+;; only INSERTED (capture/launch words, ingested preheader words).
+;; Consequences, each an obligation discharged by the theorem:
+;;   - carried walk arithmetic (per-execution-cumulative RWC/ADDR_MOD,
+;;     the LOAD-CARRIER model above) is preserved verbatim: each carried
+;;     access executes exactly once per replaced site, in stream order;
+;;   - every positionally discharged delay-shadow contract (lane HM) is
+;;     preserved: word gaps only GROW under insertion.  The one
+;;     word-MUTATING phase (counted-row canonicalization) runs exactly
+;;     once, in the deferred invocation, with all its own audits
+;;     (lockstep, occupancy, crf_shadow_contract_ok delay re-verify,
+;;     final lockstep) over the folded stream; its exclusion vocabulary
+;;     refuses every Dst/RWC-effecting word, so no carried access is
+;;     ever moved, and its register-map rewrites never touch a modifier
+;;     operand;
+;;   - the fold's ownership walls stand: formation edits no payload
+;;     word, no configuration word, and no modifier operand.
+;;
+;; CARRIED-PAYLOAD LAUNCH-ARITHMETIC DISCIPLINE (fail-closed, each by
+;; name): the fold's payload-coverage rule (executions == removed
+;; increments) extends to the re-formed window's launch arithmetic --
+;; the window's delivered payload executions must equal the replaced
+;; row sites.  The word-exact paths preserve the equality by
+;; construction (one delivery per replaced clone);
+;; reform_carried_launch_arithmetic_ok re-verifies its premises (clone
+;; non-overlap, word-exactness against the recorded clone) structurally
+;; over the final clone list and refuses
+;; post-autoincr-window-launch-arithmetic-skew.  The two
+;; stream-RESTRUCTURING mechanisms whose delivered words are NOT the
+;; replaced site's words refuse carried members by name:
+;;   - post-autoincr-window-carried-isomorphic-conversion-unproven (the
+;;     isomorphic-run launch conversion delivers the recorded words
+;;     under a register-rename proof; renamed delivery of a
+;;     positional-state access is unaudited in this increment);
+;;   - post-autoincr-window-carried-peel-launch-arithmetic-unproven
+;;     (the exec-while-record first-trip peel RELOCATES one trip's
+;;     carried executions into the preheader, across the owned
+;;     configuration program's placement point; the walk-order proof
+;;     for the relocation is not in this increment -- the dststore
+;;     mirror refusal then stands and the candidate falls back to
+;;     in-block formation).
+;;
+;; INHERITED BELTS (run again, over this run's own formed-capture
+;; list): the raw-REPLAY census, the recording-epoch scoping, slot-span
+;; subtraction (this run's records take only slots no prior owner --
+;; user, LLK envelope, or first formation -- declared, so no re-record
+;; path into foreign slots exists), and the FS/FJ/FL un-hoist sweep
+;; rules 1-3 (in-loop Dst-store re-record; mod-write W_drain window --
+;; carried accesses are audited mod-write hazard words for that rule;
+;; non-dominating persistent Dst-store record).  The ES/FJ no-exec
+;; shapes therefore cannot form here any more than in the first
+;; formation: formation itself never emits a launch a record does not
+;; dominate (in-block launches follow their capture in the same block;
+;; hoisted records dominate their loop), and the sweep un-hoists every
+;; residual hazardous composition by its established names.
+;;
+;; PRICING: none new.  The second run consumes the same audited issue
+;; model; profitability of hoists and conversions re-prices with the
+;; first run's own terms over the folded stream.
+;; ---------------------------------------------------------------------

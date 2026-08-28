@@ -210,6 +210,28 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
    separators that would otherwise break launch runs.  Per the anchor
    rule below, this line precedes both and therefore RUNS AFTER both.  */
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_mop_form);
+/* Post-auto-increment window RE-FORMATION (lane IH, default off): the
+   replay formation DEFERRED past the fold -- under the knob the
+   pre-fold pass_rvtt_replay invocation gates itself off and this
+   invocation is the function's ONLY formation, placed so it RUNS AFTER
+   pass_rvtt_dst_autoincr (per the anchor rule, this line precedes it
+   textually) and BEFORE pass_rvtt_mop_form (which must see the FINAL
+   launch stream, including launches this formation emits).  The fold
+   absorbs the per-row typed TTINCRWC separators -- window-excluded
+   barrier words that keep the pre-fold formation from capturing
+   carried row bodies -- so the folded body is word-uniform exactly
+   here and nowhere earlier, and the single post-fold allocation prices
+   every candidate against the one replay buffer (the pre-fold run
+   would otherwise starve the fold's windows of slots).  Deferral loses
+   no opportunity: the fold only removes barrier words, so every
+   pre-fold-capturable run is post-fold-capturable verbatim.  The
+   word-exact replacement paths keep the delivered word stream an
+   insertion-only extension of the (separately audited) canonicalized
+   folded stream, which is the proof that carried ADDR_MOD walk
+   arithmetic and discharged delay-shadow contracts survive verbatim;
+   carried payloads additionally carry the launch-arithmetic audit and
+   the conversion/peel refusals (rtl-rvtt-replay.cc reform_mode).  */
+INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay_reform);
 /* Dst auto-increment ownership must see the final replay structure: it
    absorbs the per-row typed TTINCRWC separators into an owned address
    modifier configuration, both around explicit rows and around replay

@@ -193,6 +193,16 @@ extern unsigned rvtt_modwrite_drained_frontend_window (void);
 extern bool rvtt_dst_autoincr_hoist_capture_composition_p
   (struct basic_block_def *preheader, unsigned *dist);
 
+/* Exported to the post-auto-increment window re-formation (lane IH):
+   is INSN a typed Dst access the Dst auto-increment pass has retargeted
+   to the compiler-owned auto-increment scratch modifier (a CARRIED
+   access -- its execution advances the Dst RWC through the owned
+   ADDR_MOD program)?  Classification is the pass's own classify_access
+   over the static modifier operand; only the pass ever writes the
+   scratch modifier (the SFPI programming-model contract), so the
+   static operand is authoritative.  */
+extern bool rvtt_dst_autoincr_carried_access_p (rtx_insn *insn);
+
 // RTL passes
 class rtl_opt_pass;
 extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);
@@ -207,6 +217,7 @@ extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_replay (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_replay_reform (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_mop_form (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_rmext (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_schedule (gcc::context *ctxt);
