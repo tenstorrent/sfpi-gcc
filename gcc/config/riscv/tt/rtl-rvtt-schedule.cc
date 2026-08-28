@@ -2798,6 +2798,496 @@ crp_order_legal_p (const std::vector<ls_node> &all,
   return true;
 }
 
+/* ---- Shared-reload dedupe (-mtt-tensix-optimize-crossrow-shared-reload)
+
+   The lane-IC residual: the doubled row carries the copy half's
+   duplicated in-loop constant materializations (the tanh anatomy: two
+   loadi def-groups per half into ONE reload register) because the
+   position-blind hard-reg web vocabulary cannot express one half's
+   consumer reading the OTHER half's earlier definition.  A naive
+   dedupe -- delete the copy's definitions, keep its consumers -- is
+   wrong code BEFORE any scheduling: in the sequential original order
+   the surviving consumer's nearest preceding definition of the shared
+   register is the first half's NEXT-epoch materialization (tanh: row
+   B's C3-mad would read row A's C1 loadi), and ls_dependence derives
+   value flow from position alone; no edge in the vocabulary can say
+   "read the earlier definition".
+
+   The sound form makes position value-correct again: split both
+   halves at each definition group into epoch segments and RE-SEQUENCE
+   the pairing's original order epoch by epoch (the first half's
+   segment, then the copy's with its definitions deleted).  In the
+   merged order every surviving consumer sits between its own epoch's
+   definition group and the next one, so the established name-based
+   vocabulary derives exactly the sharing constraints from position --
+   RAW from the epoch definition into both halves' consumers, WAR from
+   the copy's consumers into the next epoch's definition -- the greedy
+   scheduler cannot commit a value-breaking order (crp_order_legal_p
+   re-verifies every edge), and the value-oracle belt below re-walks
+   the committed order against the epoch assignment independently.
+
+   Value equivalence of the merged order to the sequential doubled
+   baseline: (1) the copy half's definition groups are word-for-word
+   identical to the first half's (the textual-copy fact, re-verified
+   byte-for-byte after every rename -- a rename that touched either
+   web refuses), so a deleted definition's value IS the surviving one;
+   (2) the shared register is dead into and out of the loop and every
+   consumer follows its group's last member, so each consumer reads
+   exactly its epoch's completed 32-bit image; (3) the merge only
+   moves copy-half words ahead of LATER-segment first-half words, and
+   any such reordered pair must be free of register interaction beyond
+   the shared register itself (the interference refusal: the halves'
+   other webs are disjoint after renaming, or read-only) -- disjoint
+   accesses commute, and the shared register's cross-half readings are
+   exactly (1)+(2).  Across iterations the committed record is one
+   linear word stream: the next iteration's first definition group
+   follows this iteration's last consumer in stream order, the same
+   single-register recycling the original row performed.  */
+
+struct crp_shared_reload_info
+{
+  unsigned reg = ~0u;			/* shared reload register, or ~0u */
+  unsigned removed = 0;			/* deleted copy-half def words */
+  /* Epoch (1-based) per participating insn, for the value-oracle
+     re-verification of the committed order.  */
+  std::vector<std::pair<rtx_insn *, unsigned> > def_epoch;
+  std::vector<std::pair<rtx_insn *, unsigned> > consumer_epoch;
+};
+
+static void
+crp_sr_refuse (basic_block bb, const char *why, unsigned r,
+	       rtx_insn *insn = nullptr)
+{
+  if (dump_file)
+    {
+      fprintf (dump_file, "Crossrow shared-reload refused: "
+	       "crossrow-shared-reload-%s reg %u", why, r);
+      if (insn)
+	fprintf (dump_file, " (uid=%d)", INSN_UID (insn));
+      fprintf (dump_file, " in bb %d\n", bb->index);
+    }
+}
+
+/* Candidate order plus modeled steady-state II over ALL/GROUP (the
+   pairing's own construction and model); INT_MAX on any construction
+   failure.  */
+
+static int
+crp_model_ii (const std::vector<ls_node> &all, const std::vector<int> &group)
+{
+  std::vector<rtx_insn *> cand = crp_candidate_order (all, group);
+  if (!crp_order_legal_p (all, cand))
+    return INT_MAX;
+  std::vector<int> idx;
+  for (rtx_insn *ci : cand)
+    for (unsigned k = 0; k != all.size (); ++k)
+      if (all[k].insn == ci)
+	{
+	  idx.push_back ((int) k);
+	  break;
+	}
+  if (idx.size () != all.size ())
+    return INT_MAX;
+  return ls_cyclic_ii (all, idx);
+}
+
+/* Value-oracle re-verification of the committed candidate order: walk
+   the final order and check that the definition groups appear whole,
+   in epoch order, and that every surviving consumer's nearest
+   preceding definition state is exactly its assigned, completed
+   epoch.  Independent of the dependence engine (the pairing never
+   trusts its own scheduler).  */
+
+static bool
+crp_shared_reload_order_sound_p (const crp_shared_reload_info &sr,
+				 const std::vector<rtx_insn *> &candidate)
+{
+  if (sr.reg == ~0u)
+    return true;
+  unsigned max_epoch = 0;
+  for (const auto &p : sr.def_epoch)
+    if (p.second > max_epoch)
+      max_epoch = p.second;
+  std::vector<unsigned> remaining (max_epoch + 1, 0);
+  for (const auto &p : sr.def_epoch)
+    ++remaining[p.second];
+  unsigned cur_epoch = 0;		/* highest def epoch started */
+  unsigned consumed_epoch = 0;		/* highest consumer epoch seen */
+  unsigned defs_seen = 0, consumers_seen = 0;
+  for (rtx_insn *w : candidate)
+    {
+      unsigned e = 0;
+      bool is_def = false, is_consumer = false;
+      for (const auto &p : sr.def_epoch)
+	if (p.first == w)
+	  {
+	    e = p.second;
+	    is_def = true;
+	    break;
+	  }
+      if (!is_def)
+	for (const auto &p : sr.consumer_epoch)
+	  if (p.first == w)
+	    {
+	      e = p.second;
+	      is_consumer = true;
+	      break;
+	    }
+      if (is_def)
+	{
+	  if (e < cur_epoch)
+	    return false;		/* groups interleaved */
+	  if (e > cur_epoch
+	      && (e != cur_epoch + 1 || remaining[cur_epoch] != 0))
+	    return false;		/* group started before the
+					   previous one completed */
+	  if (consumed_epoch >= e)
+	    return false;		/* a consumer already read this
+					   epoch's register image */
+	  cur_epoch = e;
+	  --remaining[e];
+	  ++defs_seen;
+	}
+      else if (is_consumer)
+	{
+	  if (cur_epoch != e || remaining[e] != 0)
+	    return false;		/* wrong or incomplete epoch */
+	  if (e > consumed_epoch)
+	    consumed_epoch = e;
+	  ++consumers_seen;
+	}
+    }
+  return defs_seen == sr.def_epoch.size ()
+	 && consumers_seen == sr.consumer_epoch.size ();
+}
+
+/* The dedupe proper.  Analyzes the doubled row (ALL/GROUP hold 2*N
+   nodes: the first half's words then the copy's), and on full
+   admission deletes the copy half's definition groups, re-sequences
+   ALL/GROUP into the epoch-merged original order, and fills *OUT for
+   the value-oracle belt.  Every unproven piece refuses by name and
+   leaves the duplicated pairing untouched.  */
+
+static void
+crp_shared_reload (basic_block bb, const crp_loop &lp,
+		   std::vector<ls_node> &all, std::vector<int> &group,
+		   std::vector<rtx_insn *> &copies, unsigned n,
+		   crp_shared_reload_info *out)
+{
+  if (all.size () != 2 * n)
+    {
+      /* Preservation seeds were inserted: the index-mirror mapping
+	 below (copy word I at N+I) no longer holds.  */
+      crp_sr_refuse (bb, "seeded-row", ~0u);
+      return;
+    }
+
+  struct sr_cand
+  {
+    unsigned r;
+    std::vector<char> is_def;			/* row index -> group member */
+    std::vector<int> epoch_of;			/* row index -> consumer epoch */
+    std::vector<unsigned> seg_of;		/* row index -> segment */
+    unsigned removed;
+    unsigned epochs;
+  };
+  sr_cand best;
+  best.removed = 0;
+
+  for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+    {
+      if (fixed_regs[r])
+	continue;
+      bool any_def = false;
+      for (unsigned i = 0; i != n && !any_def; ++i)
+	any_def = TEST_HARD_REG_BIT (all[i].raw_defs, r);
+      if (!any_def)
+	continue;
+
+      sr_cand c;
+      c.r = r;
+      c.is_def.assign (n, 0);
+      c.epoch_of.assign (n, -1);
+      c.seg_of.assign (n, 0);
+
+      /* Classify the first half's words against R: definition groups
+	 (one fresh constant-only writer plus RMW completions) and
+	 consumers, each consumer after its group's last member.  */
+      int cur = -1;
+      bool open = false;
+      bool ok = true;
+      for (unsigned i = 0; i != n && ok; ++i)
+	{
+	  bool d = TEST_HARD_REG_BIT (all[i].raw_defs, r);
+	  bool u = TEST_HARD_REG_BIT (all[i].regs.uses, r);
+	  if (!d && !u)
+	    continue;
+	  if (d)
+	    {
+	      HARD_REG_SET od = all[i].raw_defs;
+	      HARD_REG_SET ou = all[i].regs.uses;
+	      CLEAR_HARD_REG_BIT (od, r);
+	      CLEAR_HARD_REG_BIT (ou, r);
+	      if (!hard_reg_set_empty_p (od) || !hard_reg_set_empty_p (ou))
+		{
+		  /* Not a pure constant-materialization web.  Named
+		     only when groups had already formed (a genuine
+		     mixed candidate); a register whose defs are plain
+		     computation is simply not a reload web.  */
+		  if (cur >= 0)
+		    crp_sr_refuse (bb, "materialization-shape", r,
+				   all[i].insn);
+		  ok = false;
+		  break;
+		}
+	      if (!u)
+		{
+		  ++cur;
+		  open = true;
+		}
+	      else if (cur < 0 || !open)
+		{
+		  /* An RMW completion outside its group would let a
+		     consumer read a partial image.  */
+		  crp_sr_refuse (bb, "rmw-outside-group", r, all[i].insn);
+		  ok = false;
+		  break;
+		}
+	      c.is_def[i] = 1;
+	    }
+	  else
+	    {
+	      if (cur < 0)
+		{
+		  /* First touch is a read (a live-in invariant, or a
+		     value from outside the row): not a reload web;
+		     the live-in barrier on real webs is named below.  */
+		  ok = false;
+		  break;
+		}
+	      open = false;
+	      c.epoch_of[i] = cur;
+	    }
+	}
+      if (!ok || cur < 0)
+	continue;
+      c.epochs = (unsigned) cur + 1;
+
+      if (REGNO_REG_SET_P (df_get_live_in (bb), r))
+	{
+	  crp_sr_refuse (bb, "live-in", r);
+	  continue;
+	}
+      if (REGNO_REG_SET_P (df_get_live_out (bb), r))
+	{
+	  crp_sr_refuse (bb, "live-out", r);
+	  continue;
+	}
+
+      /* Copy-half mirror: identical R classification word for word,
+	 and byte-identical patterns on every definition-group member
+	 (a rename that touched either half's web refuses -- the value
+	 identity is the textual-copy fact, re-verified, never
+	 assumed).  */
+      ok = true;
+      for (unsigned i = 0; i != n && ok; ++i)
+	{
+	  bool da = TEST_HARD_REG_BIT (all[i].raw_defs, r);
+	  bool ua = TEST_HARD_REG_BIT (all[i].regs.uses, r);
+	  bool db = TEST_HARD_REG_BIT (all[n + i].raw_defs, r);
+	  bool ub = TEST_HARD_REG_BIT (all[n + i].regs.uses, r);
+	  if (da != db || ua != ub)
+	    {
+	      crp_sr_refuse (bb, "copy-shape", r, all[n + i].insn);
+	      ok = false;
+	    }
+	  else if (c.is_def[i])
+	    {
+	      /* Byte-identity of the materializations, compared on the
+		 word's single SET (the loadi patterns carry a scratch
+		 clobber, and two SCRATCHes never compare equal).  */
+	      rtx sa = single_set (all[i].insn);
+	      rtx sb = single_set (all[n + i].insn);
+	      if (!sa || !sb
+		  || !rtx_equal_p (SET_DEST (sa), SET_DEST (sb))
+		  || !rtx_equal_p (SET_SRC (sa), SET_SRC (sb)))
+		{
+		  crp_sr_refuse (bb, "web-mutated", r, all[n + i].insn);
+		  ok = false;
+		}
+	    }
+	}
+      if (!ok)
+	continue;
+
+      /* Segments: 0 before the first group; each group opens a new
+	 one.  */
+      {
+	unsigned seg = 0;
+	bool in_group = false;
+	for (unsigned i = 0; i != n; ++i)
+	  {
+	    if (c.is_def[i] && !in_group)
+	      {
+		++seg;
+		in_group = true;
+	      }
+	    else if (!c.is_def[i])
+	      in_group = false;
+	    c.seg_of[i] = seg;
+	  }
+      }
+
+      /* CC atoms: no participation, and no atom may span an epoch
+	 boundary (the merge interleaves at segment granularity).  */
+      ok = true;
+      for (const auto &atom : lp.atoms)
+	{
+	  for (unsigned i = atom.first; i <= atom.second && ok; ++i)
+	    if (c.is_def[i] || c.epoch_of[i] >= 0)
+	      {
+		crp_sr_refuse (bb, "atom-interior", r, all[i].insn);
+		ok = false;
+	      }
+	  if (ok && c.seg_of[atom.first] != c.seg_of[atom.second])
+	    {
+	      crp_sr_refuse (bb, "atom-spans-epoch", r);
+	      ok = false;
+	    }
+	  if (!ok)
+	    break;
+	}
+      if (!ok)
+	continue;
+
+      /* Cross-half interference: the merge moves every surviving
+	 copy-half word of segment S ahead of every first-half word of
+	 a LATER segment; each such reordered pair must interact
+	 through no register but R.  */
+      ok = true;
+      for (unsigned x = 0; x != n && ok; ++x)
+	for (unsigned y = 0; y != n && ok; ++y)
+	  {
+	    if (c.seg_of[y] >= c.seg_of[x] || c.is_def[y])
+	      continue;
+	    HARD_REG_SET xd = all[x].raw_defs;
+	    HARD_REG_SET xu = all[x].regs.uses;
+	    HARD_REG_SET yd = all[n + y].raw_defs;
+	    HARD_REG_SET yu = all[n + y].regs.uses;
+	    CLEAR_HARD_REG_BIT (xd, r);
+	    CLEAR_HARD_REG_BIT (xu, r);
+	    CLEAR_HARD_REG_BIT (yd, r);
+	    CLEAR_HARD_REG_BIT (yu, r);
+	    if (hard_reg_set_intersect_p (xd, yu)
+		|| hard_reg_set_intersect_p (xd, yd)
+		|| hard_reg_set_intersect_p (xu, yd))
+	      {
+		crp_sr_refuse (bb, "crossrow-interference", r,
+			       all[n + y].insn);
+		ok = false;
+	      }
+	  }
+      if (!ok)
+	continue;
+
+      c.removed = 0;
+      for (unsigned i = 0; i != n; ++i)
+	if (c.is_def[i])
+	  ++c.removed;
+      if (c.removed > best.removed)
+	best = c;
+    }
+
+  if (best.removed == 0)
+    return;
+
+  /* Modeled gate: the deduplicated candidate must not exceed the
+     duplicated candidate's steady-state II (the merge tightens the
+     cross-half coupling; a shape where lockstep costs more than the
+     removed words buy keeps the duplicated pairing).  */
+  int ii_dup = crp_model_ii (all, group);
+  std::vector<ls_node> merged;
+  std::vector<int> merged_group;
+  merged.reserve (2 * n - best.removed);
+  merged_group.reserve (2 * n - best.removed);
+  for (unsigned s = 0; s <= best.epochs; ++s)
+    {
+      for (unsigned i = 0; i != n; ++i)
+	if (best.seg_of[i] == s)
+	  {
+	    merged.push_back (all[i]);
+	    merged_group.push_back (group[i]);
+	  }
+      for (unsigned i = 0; i != n; ++i)
+	if (best.seg_of[i] == s && !best.is_def[i])
+	  {
+	    merged.push_back (all[n + i]);
+	    merged_group.push_back (group[n + i]);
+	  }
+    }
+  gcc_assert (merged.size () == 2 * n - best.removed);
+  for (unsigned k = 0; k != merged.size (); ++k)
+    merged[k].orig = (int) k;
+  int ii_dedup = crp_model_ii (merged, merged_group);
+  if (ii_dedup == INT_MAX || ii_dedup > ii_dup)
+    {
+      crp_sr_refuse (bb, "ii-regression", best.r);
+      return;
+    }
+
+  /* Fill the value oracle, then verify the merged model's own
+     candidate before mutating anything.  */
+  crp_shared_reload_info sr;
+  sr.reg = best.r;
+  sr.removed = best.removed;
+  for (unsigned i = 0; i != n; ++i)
+    {
+      if (best.is_def[i])
+	sr.def_epoch.emplace_back (all[i].insn, best.seg_of[i]);
+      if (best.epoch_of[i] >= 0)
+	{
+	  sr.consumer_epoch.emplace_back (all[i].insn, best.seg_of[i]);
+	  sr.consumer_epoch.emplace_back (all[n + i].insn, best.seg_of[i]);
+	}
+    }
+  {
+    std::vector<rtx_insn *> probe = crp_candidate_order (merged,
+							 merged_group);
+    if (!crp_order_legal_p (merged, probe)
+	|| !crp_shared_reload_order_sound_p (sr, probe))
+      {
+	crp_sr_refuse (bb, "final-order-unproven", best.r);
+	return;
+      }
+  }
+
+  /* Commit: delete the copy half's definition words (this
+     transaction's own copies -- any later whole-pairing refusal
+     restores the original single row exactly, the deleted words
+     included by never having survived), and install the merged
+     original order.  */
+  for (unsigned i = n; i-- != 0;)
+    if (best.is_def[i])
+      {
+	rtx_insn *dead = all[n + i].insn;
+	for (unsigned k = 0; k != copies.size (); ++k)
+	  if (copies[k] == dead)
+	    {
+	      copies.erase (copies.begin () + k);
+	      break;
+	    }
+	delete_insn (dead);
+      }
+  all.swap (merged);
+  group.swap (merged_group);
+  *out = sr;
+  if (dump_file)
+    fprintf (dump_file, "Crossrow shared-reload: reg %u epochs=%u "
+	     "removed=%u II %d -> %d in bb %d\n",
+	     best.r, best.epochs, best.removed, ii_dup, ii_dedup,
+	     bb->index);
+}
+
 /* ---- Rule-B preservation seeds (-mtt-tensix-optimize-crossrow-pairing-seed)
 
    The DESIGN-V2 Rule-B rename (round-cc-modulo-evidence-20260825/
@@ -3284,6 +3774,17 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 	  seed_insns.push_back (seed);
     }
 
+  /* Phase 2d'': shared-reload dedupe (sub-flag; see the header comment
+     above crp_shared_reload).  Fail-closed both ways: any admission
+     refusal keeps the duplicated pairing exactly, and a committed
+     dedupe that any LATER belt refuses abandons the whole pairing
+     transaction -- the deleted words were this transaction's own
+     copies, so the restore paths below still return the original
+     single row byte-identically.  */
+  crp_shared_reload_info shared_reload;
+  if (riscv_tt_opt_crossrow_shared_reload > 0)
+    crp_shared_reload (bb, lp, all, group, copies, n, &shared_reload);
+
   /* Phase 2e: candidate order -- the dependence-legal global item
      schedule (atoms indivisible, unrenamed shared webs serialize).  */
   std::vector<rtx_insn *> candidate = crp_candidate_order (all, group);
@@ -3293,6 +3794,13 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       crp_delete_seeds ();
       crp_delete_copies ();
       return crp_refuse (bb, "crossrow-pairing-order-hazard");
+    }
+  if (!crp_shared_reload_order_sound_p (shared_reload, candidate))
+    {
+      ls_undo_renames (renames);
+      crp_delete_seeds ();
+      crp_delete_copies ();
+      return crp_refuse (bb, "crossrow-pairing-shared-reload-final-order");
     }
 
   std::vector<int> cand_index;
