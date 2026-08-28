@@ -601,6 +601,39 @@
 ;; the same boundary term -- is replay-formation territory, recorded
 ;; there as the named follow-up.)
 ;;
+;; CROSS-CALL ADDR_MOD CONTRACT PRICING (lane IK,
+;; -mtt-tensix-optimize-crosscall-addrmod).  A straight-line callee
+;; whose groups ALL refuse by the non-preheader per-execution term may
+;; have its slot program hoisted, ONCE, into the proven caller's loop
+;; entry (gimple-rvtt-crosscall.cc addrmod service: the lane CA
+;; init-hoist scan at every lane HC residency-walk level, plus the TU
+;; MOP template audit and the Wormhole ADDR_MOD_SET_Base watch row).
+;; The hoisted program is PREHEADER-CLASS by construction -- it
+;; executes once per caller-loop entry inside the same entry window
+;; the drain residual already prices (the lane EP covered-witness
+;; measurement above) -- so the callee's groups price at ZERO
+;; configuration slots per call and the comparison becomes removed
+;; rows against the CALL-BOUNDARY crossing charge alone: the block-
+;; final live mod-write's next consumer is the NEXT invocation's first
+;; Dst access, reached through frontend-draining scalar return/call
+;; control -- the same audited W_drain the loop-backedge term charges.
+;; Cover credits only the callee's own frontend words after the final
+;; increment (caller-side words credited ZERO -- the refusing
+;; direction); rows <= charge refuses by name
+;; (mod-write-dominates-crosscall-body).  Soundness of the zero term
+;; is the ISA-adjudicated slot-clobber census (tt-isa-documentation:
+;; ThreadConfig ADDR_MOD rows are per-thread, writable ONLY by
+;; same-thread SETC16 -- WRCFG/CFGSHIFTMASK/RMWCIB functional models
+;; each exclude ThreadConfig), instantiated fail-closed over the whole
+;; callee, the caller epoch at every lifted level, and the TU template
+;; slots; any possible owned-row or watched-row write refuses -- there
+;; is no per-call re-establishment to fall back to.  Named refusals:
+;; crosscall-addrmod-unproven (callee shape / service),
+;; mod-write-dominates-crosscall-body (boundary charge),
+;; crosscall-addrmod-owned-row-write, crosscall-addrmod-loop-unproven,
+;; crosscall-addrmod-callers-unproven,
+;; crosscall-addrmod-preheader-occupied.
+;;
 ;; AUDITED COMPOSITION FACT: no-exec record composition (lane ES,
 ;; laneES-evidence-20260821).  Composing the store-side mod-write with
 ;; a replay capture recorded WITHOUT execution (TTREPLAY load=1

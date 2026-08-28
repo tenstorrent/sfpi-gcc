@@ -414,4 +414,33 @@ struct rvtt_init_hoist_program
 extern const char *rvtt_crosscall_init_hoist (function *callee,
 					      rvtt_init_hoist_program *);
 
+/* Lane IK cross-call ADDR_MOD contract (gimple-rvtt-crosscall.cc
+   service for the Dst auto-increment pass): the callee's owned
+   address-modifier slot program as SETC16 rows.  The service proves
+   the (single) caller chain, scans the caller epoch at the call's
+   loop and at every enclosing loop the residency walk can lift the
+   placement across, audits the TU MOP template slots, and, on a
+   complete proof, inserts the program as typed ttsetc16 builtin calls
+   in the final placement level's dedicated preheader, returning NULL
+   with LIFT_LEVELS set.  There is no demotion stage: the callee will
+   not re-emit the program per call, so ANY possible owned-row (or
+   watch-row) write in the scanned epoch refuses.  Any refusal returns
+   its stable name and inserts nothing.  */
+
+struct rvtt_addrmod_hoist_program
+{
+  unsigned n_setc16;
+  struct { unsigned reg; unsigned value; } setc16[4];
+  /* Refuse-only watched configuration rows: a SETC16-class write to one
+     of these anywhere in the scanned epoch refuses outright (the
+     Wormhole ADDR_MOD_SET_Base bank-select row; empty on Blackhole,
+     whose modifier field selects the physical slot directly).  */
+  unsigned n_watch;
+  unsigned watch[2];
+  unsigned lift_levels;		/* out: residency-walk levels lifted */
+};
+
+extern const char *rvtt_crosscall_addrmod_hoist (function *callee,
+						 rvtt_addrmod_hoist_program *);
+
 #endif /* ! GCC_RVTT_PROTOS_H */

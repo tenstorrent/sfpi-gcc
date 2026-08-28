@@ -3488,6 +3488,12 @@ struct init_scan_ctx
   const rvtt_macro::caps *c;
   tree callee_decl;		/* admitted contract-call target      */
   hash_set<tree> *chain_decls = nullptr; /* admitted chain-call targets */
+  /* The resolved contract call STATEMENT, admitted by identity: a
+     constprop/IPA clone's call statement can still spell the origin
+     decl while the cgraph edge targets the clone, so decl comparison
+     alone mis-refuses the contract call itself (lane IK).  Statement
+     identity admits exactly the one proven edge and nothing else.  */
+  gimple *contract_call = nullptr;
   bool saw_mop = false;
   bool cc_dirty = false;	/* loop CC write: demotes stage 2      */
   bool owned_row_dirty = false;	/* in-loop owned-row write: demotes    */
@@ -3639,6 +3645,8 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
 	    return init_refuse (ctx, "drain-init-vector-live", stmt);
 	  return true;
 	}
+      if (ctx->contract_call && stmt == ctx->contract_call)
+	return true;		/* the resolved contract edge itself */
       tree target = gimple_call_fndecl (call);
       if (ctx->callee_decl && target == ctx->callee_decl)
 	return true;		/* the contract call itself */
@@ -3714,6 +3722,51 @@ init_value_equal_stmt (gimple *stmt, basic_block dom_bb, class loop *loop,
 		       const rvtt_macro::caps *c, const uint32_t *want,
 		       bool *have_dom)
 {
+  /* Typed ttsetc16 builtin calls are SETC16 deliveries too.  Only the
+     ADDR_MOD contract commit (lane IK) plants them in caller bodies, so
+     the widening is gated by its flag: with the flag off no such call
+     exists on any audited path and the historical walk is byte-
+     identical.  An owned-row write with a non-constant operand or an
+     unequal value refuses (demotes) exactly like a delivered word.  */
+  if (riscv_tt_opt_crosscall_addrmod)
+    if (gcall *call = dyn_cast <gcall *> (stmt))
+      {
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+	if (insnd && insnd->id == rvtt_insn_data::ttsetc16)
+	  {
+	    tree reg_arg = gimple_call_arg (call, 0);
+	    tree val_arg = gimple_call_arg (call, 1);
+	    if (TREE_CODE (reg_arg) != INTEGER_CST
+		|| TREE_CODE (val_arg) != INTEGER_CST)
+	      {
+		/* Unresolvable row: could be an owned-row write.  */
+		if (dump_file)
+		  fprintf (dump_file, "init-hoist: value-equality: typed "
+			   "setc16 with non-constant operands\n");
+		return false;
+	      }
+	    unsigned reg = TREE_INT_CST_LOW (reg_arg) & 0xff;
+	    unsigned value = TREE_INT_CST_LOW (val_arg) & 0xffff;
+	    for (unsigned i = 0; i != prog.n_setc16; ++i)
+	      if (prog.setc16[i].reg == reg)
+		{
+		  uint32_t word;
+		  if (!rvtt_macro::encode_setc16 (c, reg, value, &word)
+		      || word != want[i])
+		    {
+		      if (dump_file)
+			fprintf (dump_file, "init-hoist: value-equality: "
+				 "row %u typed setc16 unequal\n", reg);
+		      return false;
+		    }
+		  if (dom_bb
+		      && dominated_by_p (CDI_DOMINATORS, loop->header,
+					 dom_bb))
+		    have_dom[i] = true;
+		}
+	    return true;
+	  }
+      }
   {
 	tree val = NULL_TREE;
 	if (gasm *a = dyn_cast <gasm *> (stmt))
@@ -4274,6 +4327,398 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 	}
       init_commit_caller (ucaller, entry, *prog, stage);
       prog->stage = stage;
+    }
+
+  if (!dom)
+    free_dominance_info (CDI_DOMINATORS);
+  loop_optimizer_finalize ();
+  pop_cfun ();
+  return result;
+}
+
+/* ==================================================================
+   Lane IK: cross-call ADDR_MOD contract (Dst auto-increment service).
+
+   A straight-line callee whose Dst auto-increment groups refuse solely
+   by the per-execution configuration pricing (lane IA: each SETC16
+   occupies the audited two-cycle configuration issue class plus the
+   once-per-entry drain residual on EVERY call) re-programs its owned
+   address-modifier slot on every invocation, although the program is
+   the same compile-time constant triple on every call.  A hand kernel
+   programs its ADDR_MOD slots ONCE at kernel init.  This service --
+   called from the callee's Dst auto-increment pass
+   (rtl-rvtt-dst-autoincr.cc) while every caller body is still gimple
+   (the lane CA ordering fact) -- proves the caller side and, on a
+   complete proof, inserts the slot program as typed ttsetc16 builtin
+   calls in the caller's loop-entry preheader, LIFTED across enclosing
+   caller loops by the residency walk (lane HC's discipline: a failing
+   level stops the walk, never refuses).  The callee's groups then fire
+   with the program omitted entirely.
+
+   Soundness is the ISA-adjudicated slot-clobber census
+   (tt-isa-documentation: ThreadConfig ADDR_MOD rows are per-thread and
+   writable ONLY by same-thread SETC16 -- WRCFG/CFGSHIFTMASK/RMWCIB
+   cannot write ThreadConfig), instantiated as:
+     - the caller epoch at the call's loop and at every lifted level is
+       scanned with the init-face discipline (init_scan_stmt): every
+       statement or delivered word that could write a contract row --
+       typed ttsetc16/config calls, replay content, unaudited words or
+       calls -- refuses by name, and vector dataflow refuses (a later
+       formation in the caller could own the very slot this contract
+       programs);
+     - a SETC16-class delivered word to an owned row (or a watched row:
+       the Wormhole ADDR_MOD_SET_Base bank-select register, whose flip
+       would re-alias the scratch modifier to the base-0 bank) REFUSES
+       -- there is no demotion stage, because the callee will not
+       re-emit the program per call;
+     - MOP template slots are audited TU-wide (mop_init_ok_p);
+     - the target preheader must not already carry another compiler
+       contract's typed programming (two contracts committing into one
+       preheader have no defined order against each other's consumers);
+     - CC state is immaterial: SETC16 is not lane-predicated.
+
+   The callee-side conditions (whole-callee ownership census, entry
+   distance guard, call-boundary crossing charge, all-groups/single-
+   stride/explicit-rows shape) live with the pricing in
+   rtl-rvtt-dst-autoincr.cc.
+
+   Refusal vocabulary (stable, append-only; the scan reasons are the
+   init face's own drain-init-* names -- it is the same audited scan):
+     crosscall-addrmod-callers-unproven   closure (alias/clone/address-
+					  taken/multi-site/expanded/
+					  caller past gimple)
+     crosscall-addrmod-loop-unproven      no natural loop / no provable
+					  entry edge
+     crosscall-addrmod-owned-row-write    a SETC16-class delivery to an
+					  owned or watched row in the
+					  scanned epoch
+     crosscall-addrmod-preheader-occupied another compiler contract's
+					  typed programming already sits
+					  in the target preheader  */
+
+const char *
+rvtt_crosscall_addrmod_hoist (function *callee_fn,
+			      rvtt_addrmod_hoist_program *prog)
+{
+  prog->lift_levels = 0;
+  if (TARGET_XTT_TENSIX_QSR)
+    return "crosscall-addrmod-callers-unproven";
+  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
+    : rvtt_macro::CPU_WH;
+  const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu (cpu);
+  if (!c || !prog->n_setc16)
+    return "crosscall-addrmod-callers-unproven";
+
+  /* The scan program: the contract rows plus the refuse-only watched
+     rows (classification compares registers only; a watched-row write
+     sets owned_row_dirty, which refuses below exactly like an
+     owned-row write).  */
+  rvtt_init_hoist_program iprog;
+  memset (&iprog, 0, sizeof (iprog));
+  for (unsigned i = 0; i != prog->n_setc16; ++i)
+    {
+      iprog.setc16[iprog.n_setc16].reg = prog->setc16[i].reg;
+      iprog.setc16[iprog.n_setc16++].value = prog->setc16[i].value;
+    }
+  for (unsigned i = 0; i != prog->n_watch; ++i)
+    {
+      iprog.setc16[iprog.n_setc16].reg = prog->watch[i];
+      iprog.setc16[iprog.n_setc16++].value = 0;
+    }
+
+  cgraph_node *cn = cgraph_node::get (callee_fn->decl);
+  auto closure_why = [&] (const char *what) -> const char *
+    {
+      if (dump_file)
+	fprintf (dump_file, "addrmod-hoist: closure (%s)\n", what);
+      return "crosscall-addrmod-callers-unproven";
+    };
+  if (!cn)
+    return closure_why ("no-node");
+  if (!cn->definition)
+    return closure_why ("no-definition");
+  if (cn->address_taken)
+    return closure_why ("address-taken");
+  if (cn->alias || cn->thunk)
+    return closure_why ("alias-or-thunk");
+  if (cn->clones)
+    return closure_why ("clones");
+
+  /* Resolve the effective caller chain (the lane CA discipline: each
+     intermediate committed inline, single-sited; U = the outermost node
+     still carrying gimple).  */
+  auto_vec<cgraph_node *, 4> chain;
+  cgraph_node *cur = cn;
+  cgraph_node *ucaller = nullptr;
+  gcall *ucall = nullptr;
+  for (unsigned depth = 0; !ucaller; ++depth)
+    {
+      if (depth > 3)
+	return closure_why ("chain-too-deep");
+      cgraph_edge *e = cur->callers;
+      if (!e)
+	return closure_why ("no-callers");
+      if (e->next_caller)
+	return closure_why ("multi-site");
+      if (e->caller == cn)
+	return closure_why ("recursion");
+      cgraph_node *caller = e->caller;
+      if (!caller->definition)
+	return closure_why ("caller-body-unavailable");
+      function *this_fn = DECL_STRUCT_FUNCTION (caller->decl);
+      if (this_fn && this_fn->cfg && !caller->inlined_to)
+	{
+	  ucaller = caller;
+	  ucall = e->call_stmt;
+	  if (!ucall)
+	    return closure_why ("caller-body-unavailable");
+	  break;
+	}
+      if (!caller->inlined_to || caller->address_taken || caller->alias
+	  || caller->thunk)
+	return closure_why ("chain-unproven");
+      chain.safe_push (caller);
+      cur = caller;
+    }
+  /* Find U's edge into the chain.  */
+  {
+    cgraph_node *first_hop = chain.is_empty () ? cn : chain.last ();
+    cgraph_edge *found = nullptr;
+    for (cgraph_edge *e = ucaller->callees; e; e = e->next_callee)
+      if (e->callee == first_hop)
+	{
+	  if (found)
+	    return closure_why ("multi-site");
+	  found = e;
+	}
+    if (!found || !found->call_stmt)
+      return closure_why ("caller-body-unavailable");
+    ucall = found->call_stmt;
+  }
+  /* The caller must still be gimple: the commit inserts typed builtin
+     calls into its body (an already-expanded caller has no insertable
+     gimple -- fail closed).  */
+  if (!ucaller->has_gimple_body_p ())
+    return closure_why ("caller-past-gimple");
+  function *cfn = DECL_STRUCT_FUNCTION (ucaller->decl);
+  if (!cfn || !cfn->cfg)
+    return closure_why ("caller-cfg-unavailable");
+
+  compute_tu_facts ();
+  {
+    cgraph_node *ucheck = ucaller->inlined_to
+      ? ucaller->inlined_to : ucaller;
+    if (tu_facts.executable && !tu_facts.executable->contains (ucheck))
+      return closure_why ("caller-unrooted");
+  }
+
+  const char *result = nullptr;
+  push_cfun (cfn);
+  loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+  bool dom = dom_info_available_p (CDI_DOMINATORS);
+  if (!dom)
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  basic_block call_bb = gimple_bb (ucall);
+  class loop *loop = call_bb ? call_bb->loop_father : nullptr;
+  edge entry = nullptr;
+  if (!loop || !loop_outer (loop))
+    result = "crosscall-addrmod-loop-unproven";
+  else
+    {
+      entry = rvtt_loop_entry_edge (loop);
+      if (!entry || rvtt_preheader_insertion_blocked_p (entry))
+	result = "crosscall-addrmod-loop-unproven";
+    }
+
+  hash_set<tree> chain_decls;
+  chain_decls.add (callee_fn->decl);
+  for (cgraph_node *hop : chain)
+    {
+      chain_decls.add (hop->decl);
+      for (cgraph_node *o = hop; o; o = o->clone_of)
+	chain_decls.add (o->decl);
+    }
+
+  init_scan_ctx ctx;
+  ctx.prog = &iprog;
+  ctx.c = c;
+  ctx.callee_decl = callee_fn->decl;
+  ctx.chain_decls = &chain_decls;
+  ctx.contract_call = ucall;
+  if (!result)
+    {
+      basic_block *body = get_loop_body (loop);
+      for (unsigned ix = 0; !ctx.why && ix != loop->num_nodes; ++ix)
+	{
+	  for (gphi_iterator psi = gsi_start_phis (body[ix]);
+	       !gsi_end_p (psi); gsi_next (&psi))
+	    if (vector_typed_p (gimple_phi_result (psi.phi ()))
+		&& !virtual_operand_p (gimple_phi_result (psi.phi ())))
+	      {
+		init_refuse (&ctx, "drain-init-vector-live", psi.phi ());
+		break;
+	      }
+	  for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	       !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
+	    init_scan_stmt (&ctx, gsi_stmt (gsi));
+	}
+      free (body);
+      if (ctx.why)
+	result = ctx.why;
+    }
+
+  /* Chain hops' statements execute per trip, between calls: same epoch
+     discipline over every hop body.  */
+  if (!result)
+    for (cgraph_node *hop : chain)
+      {
+	cgraph_node *body_node = hop;
+	while (body_node && !gimple_has_body_p (body_node->decl)
+	       && body_node->clone_of)
+	  body_node = body_node->clone_of;
+	function *hfn = body_node
+	  ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+	if (!hfn || !hfn->cfg)
+	  {
+	    result = "crosscall-addrmod-callers-unproven";
+	    if (dump_file)
+	      fprintf (dump_file, "addrmod-hoist: closure (hop-body %s)\n",
+		       hop->dump_name ());
+	    break;
+	  }
+	basic_block hbb;
+	FOR_EACH_BB_FN (hbb, hfn)
+	  {
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
+		 !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
+	      init_scan_stmt (&ctx, gsi_stmt (gsi));
+	    if (ctx.why)
+	      break;
+	  }
+	if (ctx.why)
+	  {
+	    result = ctx.why;
+	    break;
+	  }
+      }
+
+  /* Placement residency walk (lane HC's discipline): lift the program
+     point across enclosing caller loops whose EXTRA bodies pass the
+     same epoch scan.  A failing level stops the walk -- the inner
+     placement stands, nothing refuses -- and a rejected level's
+     accumulated facts (saw_mop, owned/cc dirt, refusal) are restored so
+     they cannot constrain the committed placement.  */
+  class loop *place_loop = loop;
+  if (!result)
+    for (class loop *outer = loop_outer (loop); outer && outer->num;
+	 outer = loop_outer (outer))
+      {
+	edge oentry = rvtt_loop_entry_edge (outer);
+	if (!oentry || rvtt_preheader_insertion_blocked_p (oentry))
+	  break;
+	bool saved_mop = ctx.saw_mop;
+	bool saved_cc = ctx.cc_dirty;
+	bool saved_owned = ctx.owned_row_dirty;
+	bool level_ok = true;
+	basic_block *obody = get_loop_body (outer);
+	for (unsigned ix = 0; level_ok && ix != outer->num_nodes; ++ix)
+	  {
+	    if (flow_bb_inside_loop_p (place_loop, obody[ix]))
+	      continue;		/* already proven at the level below */
+	    for (gphi_iterator psi = gsi_start_phis (obody[ix]);
+		 level_ok && !gsi_end_p (psi); gsi_next (&psi))
+	      if (vector_typed_p (gimple_phi_result (psi.phi ()))
+		  && !virtual_operand_p (gimple_phi_result (psi.phi ())))
+		level_ok = false;
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (obody[ix]);
+		 level_ok && !gsi_end_p (gsi); gsi_next (&gsi))
+	      if (!init_scan_stmt (&ctx, gsi_stmt (gsi)))
+		level_ok = false;
+	  }
+	free (obody);
+	if (!level_ok)
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "addrmod-hoist: residency walk stops at "
+		       "loop bb %d (%s)\n", outer->header->index,
+		       ctx.why ? ctx.why : "drain-init-vector-live");
+	    ctx.saw_mop = saved_mop;
+	    ctx.cc_dirty = saved_cc;
+	    ctx.owned_row_dirty = saved_owned;
+	    ctx.why = nullptr;
+	    ctx.why_stmt = nullptr;
+	    break;
+	  }
+	place_loop = outer;
+	entry = oentry;
+	++prog->lift_levels;
+	if (dump_file)
+	  fprintf (dump_file, "addrmod-hoist: placement lifted to enclosing "
+		   "loop bb %d entry\n", outer->header->index);
+      }
+
+  if (!result && ctx.saw_mop)
+    {
+      const char *why = nullptr;
+      if (!mop_init_ok_p (iprog, c, &ctx.owned_row_dirty, &why))
+	result = why;
+    }
+
+  /* No demotion stage: any possible owned-row (or watched-row) write in
+     the scanned epoch refuses -- the callee will not re-establish the
+     program per call.  (CC dirt is immaterial: SETC16 carries no lane
+     predication.)  */
+  if (!result && ctx.owned_row_dirty)
+    result = "crosscall-addrmod-owned-row-write";
+
+  /* The target preheader must not already carry another compiler
+     contract's typed programming: two contracts committing into one
+     preheader have no defined order against each other's consumers.  */
+  if (!result)
+    {
+      basic_block ph = entry->src;
+      for (gimple_stmt_iterator gsi = gsi_start_bb (ph); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gcall *call = dyn_cast <gcall *> (gsi_stmt (gsi));
+	  const rvtt_insn_data *insnd
+	    = call ? rvtt_get_insn_data (call) : nullptr;
+	  if (insnd
+	      && (insnd->id == rvtt_insn_data::ttsetc16
+		  || insnd->id == rvtt_insn_data::sfpencc_all_lanes
+		  || insnd->id == rvtt_insn_data::sfpwriteconfig_v
+		  || insnd->id == rvtt_insn_data::sfpconfig_i))
+	    {
+	      result = "crosscall-addrmod-preheader-occupied";
+	      break;
+	    }
+	}
+    }
+
+  if (!result)
+    {
+      const rvtt_insn_data *setc16_d
+	= rvtt_get_insn_data (rvtt_insn_data::ttsetc16);
+      basic_block ph = rvtt_commit_hoist_preheader (entry);
+      for (unsigned i = 0; i != prog->n_setc16; ++i)
+	{
+	  gcall *sc = gimple_build_call
+	    (setc16_d->decl, 2,
+	     build_int_cst (unsigned_type_node, prog->setc16[i].reg),
+	     build_int_cst (unsigned_type_node, prog->setc16[i].value));
+	  insert_in_preheader (ph, sc);
+	  ucaller->create_edge (cgraph_node::get_create
+				  (gimple_call_fndecl (sc)),
+				sc, ph->count);
+	}
+      update_ssa (TODO_update_ssa_only_virtuals);
+      if (dump_file)
+	fprintf (dump_file,
+		 "addrmod-hoist: placed ADDR_MOD contract (%u setc16) in %s "
+		 "preheader bb %d (lifted %u levels)\n",
+		 prog->n_setc16, ucaller->dump_name (), ph->index,
+		 prog->lift_levels);
     }
 
   if (!dom)
