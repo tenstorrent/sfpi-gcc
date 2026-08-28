@@ -2415,3 +2415,65 @@
 ;; window-pairing-delay-unproven).  Frozen whole-word programs leave
 ;; DELAY_UNKNOWN in the schedule and therefore refuse by name -- the
 ;; signbit family keeps its proven rolled calendar byte-identically.
+
+;; ---------------------------------------------------------------------
+;; LOAD-CARRIER unlock (lane IF,
+;; -mtt-tensix-optimize-dst-autoincr-load-carrier).  Additive section;
+;; no new pricing constant -- one audited COUNTING fact and one
+;; replay-soundness model note.
+;;
+;; COUNTING FACT (the whole knob): a canonical single-constant
+;; `.ttinsn' asm word (the TTI_ macro shape, audited extraction
+;; rvtt_raw_ttinsn_word) is by construction exactly one 32-bit Tensix
+;; word in the issue stream, so it occupies exactly one replay-buffer
+;; slot during a recording ([ISA] WormholeB0 REPLAY.md functional
+;; model: the Load loop stores every incoming instruction, one slot
+;; per word, with no opcode filtering; BlackholeA0 carries no REPLAY
+;; functional model -- doc gap already adjudicated by the lane FS
+;; silicon persistence experiments -- and the pinned craq sim ingests
+;; recorded words identically) and exactly one frontend issue slot
+;; ([SIM] every slot-word walk in the sim's issue model counts words,
+;; not classifications).  The pin-38 dst-autoincr walks counted raw
+;; words as ZERO slots, so an LLK envelope recording whose shadow is
+;; raw words overran its block and the scan refused the whole function
+;; ("replay capture crosses block") -- adjudicated as THE blocker of
+;; the load-carrier class (lane IE useq probe; the identical
+;; load-terminated rows fire in a record-free function at pin 38, so
+;; no admission gap exists in the row machinery itself).  The knob
+;; makes the count exact in occupies_replay_slot_p and every walk
+;; built on it (shadow folding, consume prefixes, iteration cover,
+;; no-exec-composition distances); classification is UNTOUCHED: raw
+;; words keep AIC_FOREIGN (or the audited pure-RWC decode), never
+;; become rewritable payload members, gap-legal items, or
+;; configuration-window-legal items, so every ownership wall stands.
+;;
+;; REPLAY-SOUNDNESS MODEL for carried walks (the lane IF adjudication,
+;; ISA-doc-derived; the walk-must-restart question answered):
+;;
+;;   [ISA] REPLAY (WormholeB0 REPLAY.md): a launch re-emits the STORED
+;;   WORDS into the same downstream pipeline; a replayed SFPLOAD /
+;;   SFPSTORE / INCRWC executes architecturally identically to the
+;;   inline word.  RWC effects (INCRWC.md, RWCs.md ApplyPartialAddrMod)
+;;   are PER-EXECUTION CUMULATIVE counter adds on RWCs[CurrentThread];
+;;   the ADDR_MOD increment values live in ThreadConfig (SETC16state),
+;;   which no launch resets.  There is NO per-launch reset of either --
+;;   and none is needed: the walk is execution-count-linear.
+;;
+;;   THEREFORE the only skew mechanism is a mismatch between the
+;;   number of EXECUTIONS of a carried access and the number of
+;;   removed explicit increments.  The pass's existing payload-coverage
+;;   rule ("payload execution site without matching increment") IS the
+;;   fail-closed skew guard: it forces every execution site (launches
+;;   + executing captures) of a rewritten payload to be a transformed
+;;   row, i.e. executions == removed increments, per capture, exactly.
+;;   Launch count per se is irrelevant; an uncovered launch site
+;;   refuses by that name.  Cross-invocation record persistence (lane
+;;   FS FP-3) is already handled by the no-exec-composition dominance
+;;   clause; it concerns record ARMING, not walk arithmetic.
+;;
+;;   [HAND] the production sdpa_reduce_row kernel records an SFPLOAD
+;;   with a live Dst increment on its ADDR_MOD as the last recorded
+;;   word and launches the window repeatedly per tile -- the
+;;   silicon-proven precedent that a carried access inside a replayed
+;;   payload walks exactly once per execution.
+;; ---------------------------------------------------------------------

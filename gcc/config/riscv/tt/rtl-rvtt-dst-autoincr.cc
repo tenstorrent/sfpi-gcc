@@ -520,14 +520,45 @@ struct function_scan
   std::vector<capture_rec *> noexec_captures;
 };
 
+/* Load-carrier word counting (riscv_tt_opt_dst_autoincr_load_carrier,
+   lane IF): a canonical single-constant `.ttinsn' asm (the TTI_ macro
+   shape the LLK library issues its raw boundary words in) is by
+   construction exactly one 32-bit Tensix word in the issue stream, so
+   it occupies exactly one replay slot and one frontend issue slot.
+   This is a COUNTING fact only, taken from the audited extraction
+   (rvtt_raw_ttinsn_word, rvtt-raw-boundary.cc); no classification
+   happens here, and the words keep every refusing default elsewhere:
+   classify_insn still answers AIC_FOREIGN (or the audited pure-RWC
+   class), so raw words never become rewritable payload members,
+   gap-legal items, or configuration-window-legal items.
+
+   The pin-38 behavior this knob replaces counted raw words as ZERO
+   slots, so a replay recording whose shadow is raw words (every LLK
+   datacopy envelope record) overran its block and refused the whole
+   function ("replay capture crosses block") -- the adjudicated blocker
+   of the load-carrier class (lane IE useq probe: unit-stride
+   `load dst_reg[0]; dst_reg += 1' walks emitted 32 raw TTINCRWC with
+   zero capture while the very same rows fire in a record-free
+   function).  Knob off preserves that behavior byte-identically.  */
+
+static bool
+raw_ttinsn_slot_word_p (rtx_insn *insn)
+{
+  if (!riscv_tt_opt_dst_autoincr_load_carrier)
+    return false;
+  uint32_t word;
+  return rvtt_raw_ttinsn_word (insn, &word);
+}
+
 /* Non-empty Tensix instructions occupy replay slots; everything else is
-   transparent to the recording shadow.  */
+   transparent to the recording shadow.  Under the load-carrier knob,
+   audited raw `.ttinsn' constant words count too (see above).  */
 
 static bool
 occupies_replay_slot_p (rtx_insn *insn)
 {
   if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0)
-    return false;
+    return raw_ttinsn_slot_word_p (insn);
   rtx pattern = PATTERN (insn);
   if (GET_CODE (pattern) == USE || GET_CODE (pattern) == CLOBBER)
     return false;
@@ -632,6 +663,7 @@ scan_block (function_scan &fn, basic_block bb, const autoincr_caps &caps)
 	      if (!cap->exec)
 		fn.noexec_captures.push_back (cap);
 	      unsigned remaining = cap->len;
+	      unsigned raw_words = 0;
 	      while (remaining)
 		{
 		  insn = NEXT_INSN (insn);
@@ -650,9 +682,15 @@ scan_block (function_scan &fn, basic_block bb, const autoincr_caps &caps)
 		  cap->members.push_back (insn);
 		  cap->member_cls.push_back (mcls);
 		  cap->member_acc.push_back (macc);
+		  if (raw_ttinsn_slot_word_p (insn))
+		    ++raw_words;
 		  if (occupies_replay_slot_p (insn))
 		    --remaining;
 		}
+	      if (raw_words && dump_file)
+		fprintf (dump_file, "Dst-autoincr: raw-word capture shadow "
+			 "counted (%u raw words of %u, bb %d; load-carrier)\n",
+			 raw_words, cap->len, bb->index);
 	      vet_payload (cap, caps);
 	      fn.captures.push_back (cap);
 	      bb_item item;

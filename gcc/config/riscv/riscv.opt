@@ -773,6 +773,10 @@ mtt-tensix-optimize-dst-autoincr
 Target Var(riscv_tt_opt_dst_autoincr) Init(0)
 Replace constant-stride per-row Dst RWC increments with owned address-modifier auto-increment.
 
+mtt-tensix-optimize-dst-autoincr-load-carrier
+Target Var(riscv_tt_opt_dst_autoincr_load_carrier) Init(0)
+Default-off: count audited raw single-constant .ttinsn words as replay-slot-occupying in the Dst auto-increment pass's capture-shadow and issue-word walks, unlocking load-carrier rows in functions whose replay recordings are raw LLK words (the recording-shadow scan otherwise overruns the block and refuses the whole function).  Raw words stay classification-refused: they never become rewritable payload members or configuration-window-legal items.
+
 mtt-tensix-optimize-dst-ownership
 Target Var(riscv_tt_opt_dst_ownership) Init(1)
 Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-dst-ownership): fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
