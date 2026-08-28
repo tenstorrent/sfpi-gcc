@@ -2409,6 +2409,36 @@ rvtt_dst_autoincr_hoist_capture_composition_p (basic_block preheader,
   return false;
 }
 
+/* Exported to the post-auto-increment window re-formation (rvtt-protos.h;
+   lane IH): is INSN a typed Dst access this pass has retargeted to the
+   compiler-owned auto-increment scratch modifier -- a CARRIED access
+   whose every execution advances the Dst RWC through the owned ADDR_MOD
+   program?  Classification is this pass's own classify_access over the
+   static modifier operand.  Only this pass writes the scratch modifier
+   (the platform contract the capability table documents: SFPI code uses
+   the no-increment modifier, the scratch slot is compiler-owned), so a
+   static modifier operand equal to the scratch mode is authoritative.
+   Dynamically-addressed alternatives return false: they cannot have been
+   retargeted (classify_access marks them non-retargetable and the pass
+   never rewrites them).  */
+
+bool
+rvtt_dst_autoincr_carried_access_p (rtx_insn *insn)
+{
+  const autoincr_caps caps = target_autoincr_caps ();
+  if (!caps.available)
+    return false;
+  if (GET_CODE (insn) != INSN)
+    return false;
+  int code = recog_memoized (insn);
+  if (code < 0)
+    return false;
+  access_info acc;
+  if (!classify_access (insn, code, &acc))
+    return false;
+  return acc.retargetable && acc.mode == caps.scratch_mode;
+}
+
 rtl_opt_pass *
 make_pass_rvtt_dst_autoincr (gcc::context *ctxt)
 {

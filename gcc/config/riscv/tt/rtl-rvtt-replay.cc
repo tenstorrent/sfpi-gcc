@@ -74,6 +74,75 @@ along with GCC; see the file COPYING3.  If not see
 // experiment remains the pricing lane's follow-up).
 constexpr unsigned MIN_SEQUENCE = 4;
 
+/* Post-auto-increment window RE-FORMATION mode (lane IH).  Under
+   -mtt-tensix-optimize-post-autoincr-window the formation DEFERS
+   wholesale past pass_rvtt_dst_autoincr: the pre-fold pass_rvtt_replay
+   invocation gates itself off and pass_rvtt_replay_reform (bottom of
+   this file) runs transform () as the function's ONLY formation, over
+   the folded stream.  Why: the fold absorbs the per-row typed TTINCRWC
+   separators -- window-excluded barrier words (xtt_replay barrier) --
+   into an owned address-modifier program, so a carried row body is
+   word-uniform only AFTER the fold; and a pre-fold run would consume
+   replay-buffer slots on the small pre-fold-visible windows, starving
+   the fold's (much larger) windows -- the single post-fold allocation
+   prices every candidate against the one buffer.  Deferral loses no
+   opportunity: the fold only removes barrier words and retargets
+   modifier operands of the rows those barriers separated, and no
+   pre-fold-capturable run contains such a row, so every
+   pre-fold-capturable run is post-fold-capturable verbatim.
+
+   Under this mode:
+
+   - Formation is the reviewed machinery unchanged, counted-row
+     canonicalization included (it runs exactly once, here, with all
+     its own audits -- lockstep, occupancy, delay-shadow contract,
+     final lockstep -- over the folded stream; its exclusion vocabulary
+     refuses every Dst/RWC-effecting word, so carried accesses are
+     never moved, and its register-map rewrites never touch a modifier
+     operand).  The word-exact replacement paths' soundness theorem is
+     STREAM IDENTITY: an in-block capture inserts one exec-while-record
+     word before the first clone, and every other clone is replaced by
+     one launch that re-emits exactly the clone's words at the clone's
+     position (the Replay Expander pushes stored words through the same
+     downstream pipeline, WormholeB0 REPLAY.md functional model;
+     pinned-sim replay_expander); a hoisted no-exec capture's preheader
+     payload is INGESTED, never executed (Load=1/Exec=0 swallowed
+     words, lane FR delivery-vision model), and every clone becomes one
+     launch in place.  The delivered instruction stream is therefore an
+     insertion-only extension of the (canonicalized) folded stream:
+     per-execution-cumulative RWC and ADDR_MOD walk arithmetic (lane IF
+     replay-soundness model) and every positionally discharged
+     delay-shadow contract (lane HM: gaps only grow under insertion)
+     are preserved verbatim.
+
+   - For payloads containing a CARRIED access (a Dst access the
+     auto-increment pass retargeted to the compiler-owned scratch
+     modifier, rvtt_dst_autoincr_carried_access_p): the fold's
+     payload-coverage discipline extends to the window's launch
+     arithmetic -- the window's delivered payload executions must equal
+     the replaced row sites, or the walk skews silently.  The
+     replacement paths preserve that equality by construction (one
+     delivery per replaced clone); reform_carried_launch_arithmetic_ok
+     re-verifies it structurally (clone non-overlap and word-exactness
+     are exactly the premises), refusing by name
+     post-autoincr-window-launch-arithmetic-skew.  The two
+     stream-RESTRUCTURING sub-mechanisms whose delivered words are not
+     the replaced site's words refuse carried members by name: the
+     isomorphic-run launch conversion (register-renamed delivery of a
+     positional-state access is unaudited) and the exec-while-record
+     first-trip peel (it RELOCATES one trip's carried executions into
+     the preheader, across the owned configuration program's placement
+     point -- unproven walk-order in this increment).
+
+   - Every fail-closed belt of the formation runs here over the
+     post-fold layout: the raw-REPLAY census, the recording-epoch
+     scoping, the FS/FJ/FL un-hoist sweep rules 1-3, and the slot-span
+     subtraction (records take only slots no prior owner -- user or LLK
+     envelope -- declared).  The downstream TEN-2932 window checker and
+     MOP formation see the formed stream as their pass ordering already
+     requires.  */
+static bool reform_mode = false;
+
 // Information about a tensix insn wrt replayability.  For an insn to be
 // replayable it must be the same as the original and same generation.
 // Sequences must not stradle a must_end insn.  Empty insns are ignored.
@@ -605,6 +674,118 @@ span_companion_sound_p (replay_block const &block, replay_span span,
   return true;
 }
 
+/* Does the candidate payload SPAN contain a CARRIED access -- a typed
+   Dst access the auto-increment pass retargeted to the compiler-owned
+   scratch modifier?  Meaningful only in reform_mode (the retarget
+   happens after the first formation).  */
+
+static bool
+payload_contains_carried_p (replay_block const &block, replay_span span)
+{
+  for (unsigned ix = span.begin; ix != span.end; ++ix)
+    if (!block[ix].empty
+	&& rvtt_dst_autoincr_carried_access_p (block[ix].insn))
+      return true;
+  return false;
+}
+
+/* Launch-arithmetic audit for a carried-payload candidate (reform_mode;
+   see the block comment at reform_mode above).  The replacement paths
+   deliver exactly one payload execution per replaced clone -- in-block:
+   one exec-while-record pass plus one launch per remaining clone (on
+   QSR the capture swallows the first clone and every clone launches);
+   hoisted: a no-exec record whose preheader payload is ingested, never
+   executed, plus one launch per clone.  Either way,
+
+       delivered executions == clones.size () == replaced row sites,
+
+   PROVIDED the clones are non-overlapping and word-exact: only then is
+   the delivered word at each site the site's own word, so the carried
+   access executes exactly as often -- and in the same stream positions
+   -- as the fold's payload-coverage proof accounted.  This function
+   re-verifies both premises structurally over the final clone list and
+   refuses by name on any violation.  The scratch-operand tolerance
+   mirrors the discovery's own equality (compiler GPR scratch and
+   synthesized-word MEMs do not reach the delivered Tensix word).  */
+
+static bool
+reform_carried_launch_arithmetic_ok (replay_block const &block,
+				     replay_sequence const &seq)
+{
+  auto refuse = [] (const char *why) -> bool
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Replay re-formation refusal:"
+		 " post-autoincr-window-launch-arithmetic-skew: %s\n", why);
+      return false;
+    };
+
+  if (seq.clones.empty ())
+    return refuse ("no clones");
+
+  /* Non-overlap, ascending: each site is replaced exactly once.  */
+  unsigned bound = 0;
+  for (auto const &clone : seq.clones)
+    {
+      if (clone.begin < bound || clone.end <= clone.begin)
+	return refuse ("overlapping or unordered clone spans"
+		       " (a site would be delivered twice)");
+      bound = clone.end;
+    }
+
+  /* Word-exactness: the k-th delivered word of every clone equals the
+     k-th recorded word.  Pair non-empty members in lockstep.  */
+  auto ignore = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb)
+    {
+      if (GET_CODE (*a) != GET_CODE (*b))
+	return false;
+      if (GET_CODE (*a) == MEM)
+	{
+	  if (GET_MODE (*a) != SImode)
+	    return false;
+	}
+      else if (GET_CODE (*a) != CLOBBER && GET_CODE (*a) != SCRATCH)
+	return false;
+      gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
+      *na = *nb = nullptr;
+      return true;
+    };
+  auto const &first = seq.clones.front ();
+  for (unsigned cx = 1; cx != seq.clones.size (); ++cx)
+    {
+      auto const &clone = seq.clones[cx];
+      unsigned fx = first.begin, ox = clone.begin;
+      unsigned matched = 0;
+      for (;;)
+	{
+	  while (fx != first.end && block[fx].empty)
+	    ++fx;
+	  while (ox != clone.end && block[ox].empty)
+	    ++ox;
+	  if (fx == first.end || ox == clone.end)
+	    break;
+	  if (!rtx_equal_p (PATTERN (block[fx].insn),
+			    PATTERN (block[ox].insn), ignore))
+	    return refuse ("clone word differs from recorded word"
+			   " (delivered carried execution would not be"
+			   " the replaced site's word)");
+	  ++fx, ++ox, ++matched;
+	}
+      if (matched != seq.length)
+	return refuse ("clone word count differs from recorded length");
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "post-autoincr-window: carried payload launch arithmetic"
+	     " proven: %u sites == %u deliveries"
+	     " (word-exact non-overlapping clones,"
+	     " one delivery per replaced site)\n",
+	     unsigned (seq.clones.size ()), unsigned (seq.clones.size ()));
+  return true;
+}
+
 static replay_sequence *
 pick_replay (replay_active &active, unsigned limit, replay_block const &block,
 	     bool sticky)
@@ -625,6 +806,20 @@ pick_replay (replay_active &active, unsigned limit, replay_block const &block,
       // Quasar exec-while-load doesn't work, so we need an extra replay
       unsigned saving = (seq->clones.size () - 1) * (seq->length - 1)
 	- !(riscv_tt_fix_qsr_replay > 0);
+      /* Measurement-only selection override (reform mode,
+	 -mtt-tensix-post-autoincr-window-prefer-longest): length-major
+	 key, word-saving as the tie-break.  */
+      if (reform_mode && riscv_tt_post_autoincr_window_prefer_longest > 0)
+	{
+	  unsigned cur_len = result ? result->length : 0;
+	  if (seq->length > cur_len
+	      || (seq->length == cur_len && best < saving))
+	    {
+	      best = saving;
+	      result = seq;
+	    }
+	  continue;
+	}
       if (best < saving || (best == saving && result && result->length < seq->length))
 	{
 	  best = saving;
@@ -2019,8 +2214,32 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		 peel_admissible_p); an admitted peel never leaves a
 		 no-exec Dst-store capture behind, so the composition
 		 this mirror refuses is never formed.  */
-	      if (riscv_tt_opt_record_hoist_peel > 0
-		  && peel_admissible_p (loop, preheader, block, seq, peel))
+	      /* Lane IH (reform_mode): the peel RELOCATES one trip's
+		 payload executions into the preheader.  For a CARRIED
+		 payload the relocated executions advance the owned
+		 ADDR_MOD walk at a new program point, across the
+		 configuration program's placement -- the walk-order proof
+		 for that relocation is not in this increment, so the
+		 launch-arithmetic guard refuses the peel by name and lets
+		 the mirror refusal below stand (the candidate falls back
+		 to in-block formation, which is stream-identity sound).  */
+	      if (reform_mode
+		  && payload_contains_carried_p (block, seq.clones.front ()))
+		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "record-hoist refused:"
+			     " post-autoincr-window-carried-peel-"
+			     "launch-arithmetic-unproven:"
+			     " carried payload, first-trip peel would"
+			     " relocate carried executions to preheader"
+			     " bb %d (walk-order proof not in this"
+			     " increment)\n",
+			     preheader->index);
+		}
+	      else if (riscv_tt_opt_record_hoist_peel > 0
+		       && peel_admissible_p (loop, preheader, block, seq,
+					     peel))
 		{
 		  if (dump_file)
 		    fprintf (dump_file,
@@ -2485,6 +2704,12 @@ hoist_counted_loops (function *cfn,
       if (!counted_loop_payload (loop, info, seq))
 	continue;
       if (!span_companion_sound_p (info, seq.clones.front (), sticky))
+	continue;
+      /* Reform-mode carried-payload launch-arithmetic audit (single
+	 clone: one launch per trip delivers the trip's own words).  */
+      if (reform_mode
+	  && payload_contains_carried_p (info, seq.clones.front ())
+	  && !reform_carried_launch_arithmetic_ok (info, seq))
 	continue;
 
       basic_block preheader = dedicated_loop_preheader (loop);
@@ -3468,6 +3693,45 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		{
 		  insn = next;
 		  continue;
+		}
+
+	      /* Lane IH (reform_mode): the conversion's delivered words are
+		 the RECORDED words under a register-renaming proof, not the
+		 site's own words.  For a CARRIED access (positional-state
+		 Dst walk) the renamed delivery is unaudited in this
+		 increment: refuse by name and keep the run inline.  */
+	      if (reform_mode)
+		{
+		  bool carried = false;
+		  for (rtx_insn *m : matched->members)
+		    if (rvtt_dst_autoincr_carried_access_p (m))
+		      {
+			carried = true;
+			break;
+		      }
+		  if (!carried)
+		    for (rtx_insn *cur = insn; cur; cur = NEXT_INSN (cur))
+		      {
+			if (NONDEBUG_INSN_P (cur)
+			    && rvtt_dst_autoincr_carried_access_p (cur))
+			  {
+			    carried = true;
+			    break;
+			  }
+			if (cur == run_last)
+			  break;
+		      }
+		  if (carried)
+		    {
+		      if (dump_file)
+			fprintf (dump_file,
+				 "Not converting isomorphic run at insn %d:"
+				 " post-autoincr-window-carried-isomorphic-"
+				 "conversion-unproven (renamed delivery of a"
+				 " carried access)\n", INSN_UID (insn));
+		      insn = next;
+		      continue;
+		    }
 		}
 
 	      // Trailing Dst-advance context parity with the other sites.
@@ -6612,6 +6876,14 @@ transform (function *cfn, unsigned buffer_size)
   // Counted-row parameterized formation: canonicalize eligible clone
   // families so the word-exact discovery below records one parameterized
   // row program per family (docs/COUNTED_ROW_FORMATION.md).
+  /* In reform mode this is the FUNCTION'S ONLY formation (the pre-fold
+     invocation defers, see pass_rvtt_replay::gate), so the counted-row
+     canonicalization runs here exactly once, with all its own audits
+     (lockstep, occupancy, delay-shadow contract, final lockstep) over
+     the folded stream.  Its member-exclusion vocabulary admits only
+     single-slot materializations with no Dst/RWC/CC/configuration
+     effect, so carried accesses are never moved by it; its clone
+     register-map rewrites never touch a modifier operand.  */
   if (riscv_tt_opt_counted_row > 0)
     canonicalize_counted_rows (cfn, replay_spans, persistent_slots,
 			       dirty_bbs, sticky);
@@ -6643,6 +6915,18 @@ transform (function *cfn, unsigned buffer_size)
 	  auto *seq = pick_replay (active, spans.front ().end, info, sticky);
 	  if (!seq)
 	    break;
+
+	  /* Reform-mode carried-payload launch-arithmetic audit (see the
+	     reform_mode block comment): a refused candidate is dropped
+	     from consideration (companion_ok doubles as the picked-set
+	     veto) and formation continues with the next candidate.  */
+	  if (reform_mode
+	      && payload_contains_carried_p (info, seq->clones.front ())
+	      && !reform_carried_launch_arithmetic_ok (info, *seq))
+	    {
+	      seq->companion_ok = 0;
+	      continue;
+	    }
 
 	  auto slot = spans.begin ();
 	  // Is there a better fit?
@@ -6731,8 +7015,20 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_replay > 0;
-  } 
+    /* Lane IH: under -mtt-tensix-optimize-post-autoincr-window the
+       formation DEFERS wholesale to the post-auto-increment invocation
+       below (pass_rvtt_replay_reform).  Deferral loses no opportunity:
+       the fold only REMOVES window-excluded barrier words (explicit
+       TTINCRWC separators) and retargets modifier operands of the rows
+       those barriers separated -- runs the pre-fold formation could
+       capture contain no such rows, so every pre-fold-capturable run is
+       post-fold-capturable verbatim, and the single post-fold
+       allocation prices ALL candidates (the folded carried bodies
+       included) against the one replay buffer instead of letting the
+       pre-fold run starve the fold's windows of slots.  */
+    return TARGET_XTT_TENSIX && riscv_tt_opt_replay > 0
+      && !(riscv_tt_opt_post_autoincr_window > 0);
+  }
 
   /* opt_pass methods: */
   virtual unsigned execute (function *fn) override
@@ -6751,10 +7047,70 @@ public:
   }
 }; // class pass_rvtt_replay
 
+/* Post-auto-increment window RE-FORMATION (lane IH): the same formation,
+   run a second time after pass_rvtt_dst_autoincr, under reform_mode (see
+   the block comment at reform_mode near the top of this file for the
+   design and its soundness obligations).  Default off
+   (-mtt-tensix-optimize-post-autoincr-window); knob-off keeps the
+   pipeline byte-identical (the pass does not run, and every reform_mode
+   branch above is unreachable in the first formation).  */
+
+const pass_data pass_data_rvtt_replay_reform =
+{
+  RTL_PASS, /* type */
+  "rvtt_replay_reform", /* name */
+  OPTGROUP_NONE, /* optinfo_flags */
+  TV_NONE, /* tv_id */
+  0, /* properties_required */
+  0, /* properties_provided */
+  0, /* properties_destroyed */
+  0, /* todo_flags_start */
+  0, /* todo_flags_finish */
+};
+
+class pass_rvtt_replay_reform : public rtl_opt_pass
+{
+public:
+  pass_rvtt_replay_reform (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_rvtt_replay_reform, ctxt)
+  {
+  }
+
+  virtual bool gate (function *) override
+  {
+    return TARGET_XTT_TENSIX && riscv_tt_opt_replay > 0
+      && riscv_tt_opt_post_autoincr_window > 0;
+  }
+
+  /* opt_pass methods: */
+  virtual unsigned execute (function *fn) override
+  {
+    bool loops_needed = riscv_tt_opt_replay_hoist > 0
+      || riscv_tt_opt_replay_record_hoist > 0;
+    if (loops_needed)
+      loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+    reform_mode = true;
+    transform (fn, riscv_tt_replay_size);
+    reform_mode = false;
+    if (loops_needed)
+      {
+	loop_optimizer_finalize ();
+	free_dominance_info (CDI_DOMINATORS);
+      }
+    return 0;
+  }
+}; // class pass_rvtt_replay_reform
+
 } // anon namespace
 
 rtl_opt_pass *
 make_pass_rvtt_replay (gcc::context *ctxt)
 {
   return new pass_rvtt_replay (ctxt);
+}
+
+rtl_opt_pass *
+make_pass_rvtt_replay_reform (gcc::context *ctxt)
+{
+  return new pass_rvtt_replay_reform (ctxt);
 }
