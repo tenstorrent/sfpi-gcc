@@ -4089,12 +4089,18 @@ init_commit_caller (cgraph_node *caller, edge entry,
 } // anonymous namespace (lane CA init hoist)
 
 /* See rvtt-protos.h.  Returns the refusal name, or NULL after a
-   committed caller-side insertion with PROG->stage set.  */
+   committed caller-side insertion with PROG->stage set.  COMMIT false
+   (lane IU pricing pre-run) evaluates the identical proof chain and
+   sets every out field -- stage and the caller-loop trip weight --
+   without inserting anything.  */
 
 const char *
 rvtt_crosscall_init_hoist (function *callee_fn,
-			   rvtt_init_hoist_program *prog)
+			   rvtt_init_hoist_program *prog, bool commit)
 {
+  prog->caller_weight_ok = false;
+  prog->caller_entry_count = 1;
+  prog->caller_body_count = 1;
   if (TARGET_XTT_TENSIX_QSR)
     return "drain-init-callers-unproven";
   rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
@@ -4325,7 +4331,34 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 		     : ctx.owned_row_dirty ? "loop-owned-row-write"
 		     : "value-equality-unproven");
 	}
-      init_commit_caller (ucaller, entry, *prog, stage);
+      /* Caller-loop trip weight (lane IU init-hoist-aware run
+	 pricing): the proven loop's profile entry/body execution-count
+	 fraction, filled for BOTH the proof-only and the committing
+	 call under the planner's loop_trip_weight discipline (exact
+	 where the profile is, the static estimate elsewhere; no usable
+	 estimate leaves caller_weight_ok false and the frozen pricing
+	 in force).  Purely a profitability weight.  */
+      {
+	basic_block body_bb = gimple_bb (ucall);
+	profile_count bc = body_bb->count, pc = entry->count ();
+	if (bc.initialized_p () && pc.initialized_p () && pc.nonzero_p ())
+	  {
+	    int64_t b = bc.to_gcov_type (), p = pc.to_gcov_type ();
+	    if (p > 0 && b >= p)
+	      {
+		while (b > (int64_t) 1 << 48)
+		  {
+		    b >>= 8;
+		    p = p >> 8 ? p >> 8 : 1;
+		  }
+		prog->caller_weight_ok = true;
+		prog->caller_entry_count = p;
+		prog->caller_body_count = b;
+	      }
+	  }
+      }
+      if (commit)
+	init_commit_caller (ucaller, entry, *prog, stage);
       prog->stage = stage;
     }
 
