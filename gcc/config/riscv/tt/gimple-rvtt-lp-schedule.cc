@@ -188,7 +188,10 @@ build_values (basic_block bb, const std::vector<gcall *> &ops)
       gimple *use;
       imm_use_iterator iter;
       FOR_EACH_IMM_USE_STMT (use, iter, entry.first)
-	if (!region_stmts.count (use))
+	/* Debug binds are not real consumers: counting them would make the
+	   pressure model (and therefore the committed schedule) depend on
+	   -g, breaking compare-debug identity.  */
+	if (!is_gimple_debug (use) && !region_stmts.count (use))
 	  {
 	    entry.second.live_out = true;
 	    break;
@@ -783,6 +786,19 @@ apply_schedule (const std::vector<gcall *> &ops,
   if (gsi_end_p (boundary))
     return false;
 
+  /* Debug statements are transparent to region formation, so binds may sit
+     between region operations.  Every operation is about to move to the
+     region end; a bind left in place could then precede the definition it
+     references.  Collect the span's debug statements now (original order)
+     and re-emit them after the scheduled operations, where every region
+     definition dominates them and their relative order — hence every
+     variable's final bound value — is preserved.  */
+  std::vector<gimple *> span_debugs;
+  for (gimple_stmt_iterator gsi = gsi_for_stmt (ops.front ());
+       gsi_stmt (gsi) != gsi_stmt (boundary); gsi_next (&gsi))
+    if (is_gimple_debug (gsi_stmt (gsi)))
+      span_debugs.push_back (gsi_stmt (gsi));
+
   /* RVTT builtins conservatively carry virtual operands even though the
      positive allowlist above is target-pure.  Rebuild virtual SSA after the
      transactional reorder rather than leaving a stale program-order chain.  */
@@ -804,6 +820,12 @@ apply_schedule (const std::vector<gcall *> &ops,
   for (gcall *call : schedule)
     {
       gimple_stmt_iterator from = gsi_for_stmt (call);
+      gsi_move_before (&from, &boundary);
+    }
+
+  for (gimple *dbg : span_debugs)
+    {
+      gimple_stmt_iterator from = gsi_for_stmt (dbg);
       gsi_move_before (&from, &boundary);
     }
   return true;
@@ -957,11 +979,16 @@ analyze_function (function *fn)
 	   !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  gimple *stmt = *gsi;
+	  /* Debug statements are transparent: treating them as region
+	     boundaries (or gating the whole pass on the debug level, as this
+	     pass originally did) makes generated code depend on -g — and the
+	     LLK harness compiles with -g, which silently reduced every
+	     harness compile to a no-op leg.  Region formation, the pressure
+	     model, and the committed order are all debug-blind;
+	     apply_schedule re-emits span-internal binds after the region so
+	     no bind precedes the definition it references.  */
 	  if (is_gimple_debug (stmt))
-	    {
-	      changed |= flush_region (bb, ops);
-	      continue;
-	    }
+	    continue;
 
 	  if (gcall *call = dyn_cast <gcall *> (stmt))
 	    {
@@ -1003,7 +1030,13 @@ public:
 
   bool gate (function *) final override
   {
-    return optimize > 0 && debug_info_level == DINFO_LEVEL_NONE
+    /* Deliberately no debug_info_level condition: the pass is
+       debug-transparent (regions, pressure, and the committed order are
+       computed debug-blind and span-internal binds are re-emitted after the
+       region), so -g and -g0 produce identical code.  The original
+       DINFO_LEVEL_NONE gate made the pass unmeasurable under the LLK
+       harness, which compiles with -g (audit finding IP-6).  */
+    return optimize > 0
       && (TARGET_XTT_TENSIX_WH || TARGET_XTT_TENSIX_BH)
       && riscv_tt_opt_pressure_schedule;
   }
