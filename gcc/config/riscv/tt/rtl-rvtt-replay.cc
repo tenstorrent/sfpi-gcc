@@ -2031,9 +2031,157 @@ peel_admissible_p (class loop *loop, basic_block preheader,
   return true;
 }
 
+/* Lane IL: record-hoist placement lift
+   (-mtt-tensix-optimize-record-hoist-lift, composing on
+   -mtt-tensix-optimize-replay-record-hoist).
+
+   The FZ downstream-fallback oracle below refuses a re-record hoist
+   whose no-exec record would be INGESTED within the audited
+   drained-frontend window downstream of a would-be dst-autoincr
+   mod-write row (the oracle's distance walk runs UPSTREAM of the
+   placement; the lcm-fresh shape: the row's own mod-write loads and
+   store reach the immediate preheader across the backedge in fewer
+   issue words than the window).  The refused placement is only the
+   INNERMOST dedicated preheader: a placement further out -- an
+   enclosing loop's dedicated preheader, ultimately the function entry,
+   whose every upstream path is proven separated (>= the window of
+   cover, or reaches the function entry) -- is outside the mirrored
+   composition class by the guard's own distance semantics, and is
+   exactly the witnessed init-record discipline (the xielu/gcd/lcm
+   preamble placements; the raw gcd init records its round program once
+   per kernel at entry).
+
+   The lift therefore walks OUTWARD from the refused preheader across
+   enclosing loops and commits the UNCHANGED no-exec hoist at the
+   outermost admissible oracle-clean placement:
+
+     - every crossed loop must prove replay-preserving under the
+       record-hoist interval walk (an in-loop replay owner, call, asm,
+       or possible instruction-FIFO push could re-record the lifted
+       slots between the record and a later trip's launch; the walk
+       covers every intermediate block -- they all lie in some crossed
+       loop's body);
+     - each candidate placement must be a DEDICATED preheader, hold no
+       open user recording state, and itself pass the same
+       downstream-fallback oracle (a placement still within a
+       mod-write's drained-frontend window walks on);
+     - a failing level stops the walk (never refuses; the lane HC
+       residency-walk discipline); with no oracle-clean admissible
+       level the original composition refusal stands byte-identically
+       (record-hoist-lift-no-admissible-level).
+
+   Soundness is the EXISTING hoisted no-exec capture class at a
+   different placement: the record still DOMINATES every launch and is
+   not forward-reachable from any without re-entering the placement
+   itself (preheader chain -- the FS persistence rules hold), the
+   payload is storeless here (the Dst-store mirror above refuses those
+   payloads before the oracle ever runs; rule 1 of the end-of-pass
+   sweep is keyed to Dst-store payloads, and storeless no-exec captures
+   are the silicon-good celu/eqz class), a placement still inside an
+   outer loop re-ingests the SAME fixed-encoding words once per that
+   loop's trip (idempotent; invariance is the record-hoist
+   fixed-encoding admission, checked before the oracle), and the
+   end-of-pass sweep's rule 2 re-audits the final placement's
+   mod-write distance with the same predicate.  The record-hoist
+   delivery pricing runs unchanged on the immediate loop: the lifted
+   record is delivered at most as often as the modeled
+   immediate-preheader record, so the modeled benefit is a floor.  */
+
+struct hoist_lift_plan
+{
+  bool valid = false;
+  basic_block placement = nullptr;
+  unsigned levels = 0;
+};
+
+static bool
+hoist_lift_admit (basic_block preheader, bitmap dirty_bbs,
+		  hoist_lift_plan *lift)
+{
+  hash_set<rtx_insn *> pass_launches;
+  for (rtx_insn *launch : formed_playback_launches)
+    pass_launches.add (launch);
+
+  basic_block best = nullptr;
+  unsigned best_levels = 0;
+  unsigned levels = 0;
+  basic_block ph = preheader;
+  for (class loop *l = ph->loop_father; l && l->num != 0;)
+    {
+      basic_block *body = get_loop_body (l);
+      rtx_insn *refusal_insn = nullptr;
+      const char *refusal = rvtt_macro_epoch_loop_replay_preserved_p
+	(cfun, body, l->num_nodes, l->header, pass_launches, &refusal_insn);
+      free (body);
+      if (refusal)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist-lift: level stop at loop %d"
+		     " (%s, insn %d)\n",
+		     l->num, refusal,
+		     refusal_insn ? INSN_UID (refusal_insn) : -1);
+	  break;
+	}
+      basic_block up = dedicated_loop_preheader (l);
+      if (!up)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist-lift: level stop at loop %d"
+		     " (no dedicated preheader)\n", l->num);
+	  break;
+	}
+      if (bitmap_bit_p (dirty_bbs, up->index))
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "record-hoist-lift: level stop at loop %d (preheader"
+		     " bb %d may hold open recording state)\n",
+		     l->num, up->index);
+	  break;
+	}
+      ++levels;
+      unsigned dist = 0;
+      if (!rvtt_dst_autoincr_hoist_capture_composition_p (up, &dist))
+	{
+	  best = up;
+	  best_levels = levels;
+	}
+      else if (dump_file)
+	fprintf (dump_file,
+		 "record-hoist-lift: level %u placement bb %d still within"
+		 " a mod-write drained-frontend window (distance %u);"
+		 " walking on\n", levels, up->index, dist);
+      ph = up;
+      l = ph->loop_father;
+    }
+
+  if (!best)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "record-hoist-lift refused:"
+		 " record-hoist-lift-no-admissible-level:"
+		 " no oracle-clean admissible placement (walked %u"
+		 " level(s))\n", levels);
+      return false;
+    }
+
+  lift->valid = true;
+  lift->placement = best;
+  lift->levels = best_levels;
+  if (dump_file)
+    fprintf (dump_file,
+	     "record-hoist-lift: lifted placement to bb %d (%u level(s)"
+	     " out; oracle-clean, crossed loops replay-preserving)\n",
+	     best->index, best_levels);
+  return true;
+}
+
 static basic_block
 hoist_preheader (replay_sequence const &seq, replay_block const &block,
-		 bitmap dirty_bbs, peel_plan *peel)
+		 bitmap dirty_bbs, peel_plan *peel, hoist_lift_plan *lift)
 {
   basic_block bb = BLOCK_FOR_INSN (block[seq.clones.front ().begin].insn);
   class loop *loop = bb->loop_father;
@@ -2295,17 +2443,29 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
       unsigned dist = 0;
       if (rvtt_dst_autoincr_hoist_capture_composition_p (preheader, &dist))
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "record-hoist refused:"
-		     " record-hoist-downstream-fallback-unprofitable:"
-		     " hoisted no-exec record within the drained-frontend"
-		     " window of a would-be dst-autoincr mod-write row"
-		     " (distance %u < %u, preheader bb %d; the group guard"
-		     " would refuse and the mod-write falls back)\n",
-		     dist, rvtt_modwrite_drained_frontend_window (),
-		     preheader->index);
-	  return nullptr;
+	  /* Lane IL: the placement lift (see the block comment above
+	     hoist_lift_plan).  An outer oracle-clean dedicated
+	     preheader is outside the mirrored composition class by the
+	     guard's own distance semantics; when the outward walk
+	     admits one, continue to the unchanged record-hoist pricing
+	     and commit the unchanged no-exec hoist there.  Any lift
+	     refusal keeps the composition refusal (and today's bytes)
+	     verbatim below.  */
+	  if (!(riscv_tt_opt_record_hoist_lift > 0
+		&& hoist_lift_admit (preheader, dirty_bbs, lift)))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "record-hoist refused:"
+			 " record-hoist-downstream-fallback-unprofitable:"
+			 " hoisted no-exec record within the drained-frontend"
+			 " window of a would-be dst-autoincr mod-write row"
+			 " (distance %u < %u, preheader bb %d; the group guard"
+			 " would refuse and the mod-write falls back)\n",
+			 dist, rvtt_modwrite_drained_frontend_window (),
+			 preheader->index);
+	      return nullptr;
+	    }
 	}
     }
 
@@ -6940,16 +7100,18 @@ transform (function *cfn, unsigned buffer_size)
 	     only the plain hoist flag the attempt behaves exactly as
 	     before.  */
 	  peel_plan peel;
+	  hoist_lift_plan lift;
 	  basic_block preheader
 	    = (riscv_tt_opt_replay_hoist > 0
 	       || riscv_tt_opt_replay_record_hoist > 0)
-	    ? hoist_preheader (*seq, info, dirty_bbs, &peel) : nullptr;
+	    ? hoist_preheader (*seq, info, dirty_bbs, &peel, &lift) : nullptr;
 	  unsigned len = preheader
 	    ? (peel.valid
 	       ? replace_hoisted_sequence_peel (*seq, info, slot->begin,
 						preheader, peel)
 	       : replace_hoisted_sequence (*seq, info, slot->begin,
-					   preheader))
+					   lift.valid ? lift.placement
+					   : preheader))
 	    : replace_sequence (*seq, info, slot->begin);
 	  if (preheader)
 	    std::fill (persistent_slots.begin () + slot->begin,
