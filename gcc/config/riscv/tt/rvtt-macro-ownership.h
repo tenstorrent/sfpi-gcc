@@ -146,6 +146,11 @@ struct rvtt_cc_canonical_body
 };
 extern rvtt_cc_canonical_body rvtt_loop_cc_canonical_body (class loop *loop);
 
+/* STMT is the typed word-exact all-lanes SFPENCC -- the canonical-tail
+   discipline's own predicate (gimple-rvtt-invariant.cc; encoded word
+   compared against rvtt_macro::sfpencc_all_lanes_word).  */
+extern bool rvtt_all_lanes_encc_p (gimple *stmt);
+
 /* CALL is an SFPU immediate materialization (sfpxloadi of all-constant
    operands through a canonical instruction-buffer operand) whose value
    is consumed only inside LOOP.  ALLOW_SHORTENED additionally admits

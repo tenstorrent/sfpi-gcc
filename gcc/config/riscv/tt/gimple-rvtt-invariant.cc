@@ -170,8 +170,8 @@ rvtt_loop_has_sfpu_barrier_p (class loop *loop)
    assembler "SFPENCC imm12, mod1").  Any other CC writer, non-constant
    operand, or non-all-lanes word refuses.  */
 
-static bool
-all_lanes_encc_p (gimple *stmt)
+bool
+rvtt_all_lanes_encc_p (gimple *stmt)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
   if (!insnd || insnd->id != rvtt_insn_data::sfpencc)
@@ -298,7 +298,7 @@ rvtt_loop_cc_canonical_body (class loop *loop)
       out.why = "no-cc-writer";
       return out;
     }
-  if (!all_lanes_encc_p (last_cc))
+  if (!rvtt_all_lanes_encc_p (last_cc))
     {
       out.why = "tail-not-all-lanes-encc";
       return out;
