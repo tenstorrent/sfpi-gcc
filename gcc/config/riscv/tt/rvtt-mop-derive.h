@@ -41,7 +41,20 @@ struct rvtt_mop_derive_state
   bool slots_refused = false;
   char slot_reason[192];
 
-  rvtt_mop_derive_state () { slot_reason[0] = 0; }
+  /* Lane IV: the TU-wide CC/lane-enable audit rides the same scan.
+     Every scan refusal marks the TU CC-dirty UNLESS the refusing
+     statement is a canonical raw `.ttinsn' word whose decoded
+     lane-enable verdict is ambient-preserving
+     (rvtt_raw_cc_word_ambient_preserving_p -- the PRGM audit can
+     refuse a word, e.g. an SFPU template capture or an SFPLOADI with a
+     non-allocatable destination, that provably cannot disturb the
+     all-lanes ambient).  A clean TU here is the entry-ambient walk's
+     license to see through non-word opaque statements (stores, MOP
+     expansions, scalar asm) the scan itself audited.  */
+  bool cc_dirty = false;
+  char cc_reason[192];
+
+  rvtt_mop_derive_state () { slot_reason[0] = 0; cc_reason[0] = 0; }
 };
 
 /* The audited raw-word capability table (BH/WH encodings), shared by

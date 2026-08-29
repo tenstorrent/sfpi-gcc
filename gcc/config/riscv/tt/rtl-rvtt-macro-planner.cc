@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
 #include "rvtt-macro-epoch.h"
+#include "rvtt-raw-boundary.h"
 
 /* The macro planner replaces every exact-calendar SFPLOADMACRO
    recognizer with regions, schedules, and descriptors derived from typed
@@ -638,37 +639,121 @@ preheader_trailing_enable (basic_block preheader)
    crossrow-pairing loop-entry walk, and prgm-const's pre-peel walk):
    function entry is all-lanes ambient; a word-exact all-lanes SFPENCC
    KILLS (re-establishes the state); any other CC-affecting statement
-   dirties.  This RTL walk is fail-closed beyond the gimple walks:
-   calls, raw asm, unrecognized instructions, and opaque Tensix effects
-   all dirty (the planner has no TU raw-boundary audit to lean on).
-   Scalar (non-Tensix) instructions cannot touch SFPU lane state and
-   are transparent.  */
+   dirties.  Scalar (non-Tensix) instructions cannot touch SFPU lane
+   state and are transparent.
+
+   Audited-TU walk transparency (lane IV, typecast recovery): the v1
+   walk was fail-closed on ALL asm -- the real LLK kernels inline their
+   envelope init as raw `.ttinsn' TTI_ words, so every production
+   preheader chain crossed "opaque" init and refused
+   (ambient-entry-unproven).  The walk now DERIVES a verdict from the
+   decoded content instead of refusing on shape (the lane HS
+   record-window discipline: derive from decoded fields, never trust):
+
+     - a canonical raw `.ttinsn' constant word classifies through the
+       audited lane-enable table (rvtt_raw_cc_word_class,
+       rvtt-raw-boundary.cc): a proven ambient-PRESERVING word (CC-inert
+       class, or an ambient-establishing all-lanes write) is
+       transparent; NEVER a kill -- a raw word can sit inside a REPLAY
+       record load window where it is architecturally swallowed, so its
+       execution cannot be asserted from the word alone
+       (kill-classification would be unsound; preserving-classification
+       is sound under both readings);
+     - an empty asm template is a compiler barrier: no instruction, no
+       lane-enable effect;
+     - every remaining asm shape (MMIO store idioms, expander words
+       such as MOP whose delivered content lives in template registers,
+       unaudited words) leans on the TU-wide CC/lane-enable audit
+       (rvtt_tu_opaque_cc_ambient_preserving_p): the gimple-time TU
+       scan -- the same enumeration the PRGM freedom proof stands on --
+       has classified every opaque-delivery channel in the TU (raw
+       words, stores against the instruction-FIFO/aperture audit, MOP
+       template slots, replay records, scalar asm) as unable to take
+       the lane-enable state away from the all-lanes ambient.  A dirty
+       or unavailable audit keeps the named refusal byte-identically.
+
+   Calls, unrecognized instructions, and opaque typed Tensix effects
+   stay DIRTY fail-closed (a call executes a whole body whose typed CC
+   writers the TU audit deliberately does not cover).  */
 
 static bool
-entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before)
+entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before,
+			   FILE *dump)
 {
+  /* Refusal diagnostics: the first dirty instruction and its class.  */
+  rtx_insn *dirty_insn = nullptr;
+  const char *dirty_why = nullptr;
+  unsigned derived_words = 0, tu_leaned = 0;
+
   /* 0 = transparent, 1 = kill (proven all-lanes), 2 = dirty.  */
-  auto classify = [] (rtx_insn *insn) -> int
+  auto classify = [&] (rtx_insn *insn) -> int
     {
+      auto dirty = [&] (const char *why) -> int
+	{
+	  if (!dirty_insn)
+	    {
+	      dirty_insn = insn;
+	      dirty_why = why;
+	    }
+	  return 2;
+	};
       if (!NONDEBUG_INSN_P (insn))
 	return 0;
       if (CALL_P (insn))
-	return 2;
+	return dirty ("call");
       rtx pat = PATTERN (insn);
       if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
 	return 0;
       if (asm_noperands (pat) >= 0)
-	return 2;
+	{
+	  /* Lane IV: derive through the asm (header comment).  */
+	  uint32_t word;
+	  if (rvtt_raw_ttinsn_word (insn, &word))
+	    {
+	      if (rvtt_raw_cc_word_ambient_preserving_p (word))
+		{
+		  ++derived_words;
+		  return 0;
+		}
+	      /* An unproven word could still ride the TU audit (an
+		 expander word such as MOP is a TU-level question: its
+		 delivered content is the audited template slots) --
+		 fall through to the lean below.  */
+	    }
+	  else
+	    {
+	      /* Empty template = pure compiler barrier.  */
+	      rtx aop = extract_asm_operands (pat);
+	      const char *templ = aop ? ASM_OPERANDS_TEMPLATE (aop)
+		: GET_CODE (pat) == ASM_INPUT ? XSTR (pat, 0) : nullptr;
+	      if (templ)
+		{
+		  while (*templ == ' ' || *templ == '\t')
+		    ++templ;
+		  if (!*templ)
+		    return 0;
+		}
+	    }
+	  const char *reason = nullptr;
+	  if (rvtt_tu_opaque_cc_ambient_preserving_p (&reason))
+	    {
+	      ++tu_leaned;
+	      return 0;
+	    }
+	  return dirty (reason);
+	}
       if (recog_memoized (insn) < 0)
-	return 2;
+	return dirty ("unrecognized");
       if (get_attr_type (insn) != TYPE_TENSIX)
 	return 0;
       xtt_effect_set e = rvtt_insn_effects (insn);
       if (e.opaque)
-	return 2;
+	return dirty ("opaque-typed-effects");
       if (!e.cc_write)
 	return 0;
-      return (e.cc_write_all_lanes && pure_cc_write_insn_p (insn)) ? 1 : 2;
+      if (e.cc_write_all_lanes && pure_cc_write_insn_p (insn))
+	return 1;
+      return dirty ("cc-write");
     };
 
   /* Scan BB backwards, from just before STOP_BEFORE (or the block end
@@ -689,9 +774,34 @@ entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before)
       return 0;
     };
 
+  auto report = [&] (bool proven) -> bool
+    {
+      if (!dump)
+	return proven;
+      if (proven)
+	{
+	  if (derived_words || tu_leaned)
+	    fprintf (dump, "Macro-planner ambient-walk: derived through"
+		     " opaque init (%u raw words decoded"
+		     " ambient-preserving, %u audited-TU asm)\n",
+		     derived_words, tu_leaned);
+	}
+      else if (dirty_insn)
+	{
+	  fprintf (dump, "Macro-planner ambient-walk dirty: insn %d bb %d"
+		   " (%s)", INSN_UID (dirty_insn),
+		   BLOCK_FOR_INSN (dirty_insn)->index, dirty_why);
+	  uint32_t w;
+	  if (rvtt_raw_ttinsn_word (dirty_insn, &w))
+	    fprintf (dump, " word=0x%08x", w);
+	  fprintf (dump, "\n");
+	}
+      return proven;
+    };
+
   int c = scan (point_bb, before);
   if (c)
-    return c == 1;
+    return report (c == 1);
 
   hash_set<basic_block> visited;
   auto_vec<basic_block, 16> work;
@@ -711,14 +821,14 @@ entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before)
 	case 1:
 	  continue;
 	case 2:
-	  return false;
+	  return report (false);
 	default:
 	  FOR_EACH_EDGE (e, ei, b->preds)
 	    work.safe_push (e->src);
 	  break;
 	}
     }
-  return true;
+  return report (true);
 }
 
 /* Structural preheader of a loop-body region, with the zero-trip and
@@ -1666,9 +1776,13 @@ form_region (function *fn, macro_region &region,
 	     kill-aware backwards CFG walk from the configuration
 	     placement point: every path must reach the function entry
 	     or a word-exact all-lanes SFPENCC before any other
-	     CC-affecting, unaudited, or opaque instruction (calls and
-	     raw asm are DIRTY -- fail-closed, stricter than the gimple
-	     walks' audited-TU transparency).  On success the formation
+	     CC-affecting, unaudited, or opaque instruction.  Raw asm is
+	     seen THROUGH, never trusted (lane IV, typecast recovery):
+	     decoded `.ttinsn' words classify against the audited
+	     lane-enable table and the rest leans on the TU-wide
+	     CC/lane-enable audit; calls and anything undecodable stay
+	     DIRTY fail-closed (entry_ambient_all_lanes_p header
+	     comment).  On success the formation
 	     SYNTHESIZES the canonical all-lanes enable
 	     (rvtt_sfpencc_all_lanes, the capability-table word, the
 	     same word the crosscall init hoist already synthesizes
@@ -1681,7 +1795,7 @@ form_region (function *fn, macro_region &region,
 		      ? config_preheader
 		      : BLOCK_FOR_INSN (region.rows[0].insns[0]),
 		      config_preheader
-		      ? nullptr : region.rows[0].insns[0]))
+		      ? nullptr : region.rows[0].insns[0], dump))
 	    {
 	      start_sequence ();
 	      emit_insn (gen_rvtt_sfpencc_all_lanes ());

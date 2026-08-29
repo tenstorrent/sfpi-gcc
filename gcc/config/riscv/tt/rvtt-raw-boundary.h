@@ -73,4 +73,46 @@ extern bool rvtt_raw_ttinsn_word (rtx_insn *insn, uint32_t *word);
    true, the refusing direction).  */
 extern bool rvtt_raw_replay_owner_word_p (uint32_t word);
 
+/* Audited CC/lane-enable classification of one raw instruction word
+   (lane IV, the typecast walk-transparency class).  The question is the
+   entry-ambient walk's: can this word disturb the architectural
+   all-lanes lane-enable state (the per-lane LaneFlags /
+   UseLaneFlagsForLaneEnable pair written by SFPENCC and friends, plus
+   the LaneConfig ROW_MASK lane-predication bits)?
+
+     RVTT_RAW_CC_INERT       -- the word's every architectural arm is
+                                proven to leave lane-enable state
+                                untouched (audited opcode classes below);
+     RVTT_RAW_CC_ALL_LANES   -- the word writes lane-enable state, and
+                                the written value is provably the
+                                all-lanes ambient (the word-exact
+                                canonical SFPENCC, or the audited
+                                LaneConfig default-reset);
+     RVTT_RAW_CC_UNPROVEN    -- everything else (fail-closed: unaudited
+                                opcodes, expander words whose delivered
+                                content this word does not carry,
+                                lane-enable writers of unproven value).
+
+   Consumers must treat both proven classes as AMBIENT-PRESERVING only
+   (a state already all-lanes stays all-lanes) and never as a KILL: a
+   raw word can sit inside a REPLAY record load window, where it is
+   architecturally swallowed (stored, not executed -- lane HS,
+   rvtt-mop-tables.h), so its execution can never be asserted from the
+   word alone.  Preserving-classification is sound under both readings;
+   kill-classification is not.  QSR has no capability table and every
+   word answers UNPROVEN.  */
+
+enum rvtt_raw_cc_class
+{
+  RVTT_RAW_CC_UNPROVEN = 0,
+  RVTT_RAW_CC_INERT,
+  RVTT_RAW_CC_ALL_LANES
+};
+
+extern rvtt_raw_cc_class rvtt_raw_cc_word_class (uint32_t word);
+
+/* Convenience: the word provably cannot take the lane-enable state away
+   from the all-lanes ambient (either proven class above).  */
+extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
+
 #endif /* GCC_RVTT_RAW_BOUNDARY_H */
