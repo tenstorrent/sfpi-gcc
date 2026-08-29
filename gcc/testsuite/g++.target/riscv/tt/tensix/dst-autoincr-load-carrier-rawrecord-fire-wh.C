@@ -9,7 +9,7 @@
 // Wormhole scratch modifier 2 = physical slot 6: SETC16 19/29/54.
 // { dg-final { scan-rtl-dump "Dst-autoincr: raw-word capture shadow counted .4 raw words of 4, bb \[0-9\]+; load-carrier." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "replay capture crosses block" "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 16 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 16 stride 2 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t29, 2" 1 } }
 // { dg-final { scan-assembler-not "TTSETC16\t25," } }
