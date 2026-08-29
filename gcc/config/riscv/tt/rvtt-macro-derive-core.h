@@ -284,7 +284,17 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
       for (unsigned e = 0; e < row.n_events; ++e)
 	if ((int) e != st && (row.events[e].dep_mask >> sp) & 1)
 	  sole_consumer = false;
-      if (!opcode_reads_vd (c, row.events[sp].opcode) && sole_consumer)
+      /* LReg16 staging is admitted ONLY for the oracle-proven direct-
+	 evaluator opcode set (lane IS, F1 honest fix): an LReg16 target
+	 has no encodable VD, so the event executes through the direct
+	 template evaluator, and that realization is proven for exactly
+	 the opcodes the reviewed oracle implements -- the SFPABS row the
+	 entry-ambient derivation first admitted was adjudicated WRONG on
+	 BH silicon under this staging (absint32 int-abs witness).
+	 Unproven opcodes fall to the VD-direct or staging-copy
+	 realizations (rewritten-word execution) or refuse by name.  */
+      if (!opcode_reads_vd (c, row.events[sp].opcode) && sole_consumer
+	  && opcode_l16_target_proven (c, row.events[sp].opcode))
 	{
 	  out->writes_l16[sp] = true;
 	  out->store_reads_l16 = true;

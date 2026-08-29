@@ -864,6 +864,46 @@ opcode_reads_vd (const caps *c, uint8_t opcode)
 }
 
 bool
+opcode_l16_target_proven (const caps *c, uint8_t opcode)
+{
+  /* The ORACLE-PROVEN LReg16-target evaluator set (lane IS, F1 honest
+     fix, 2026-08-29).  An event redirected to the LReg16 staging
+     register has no encodable VD, so it executes through the direct
+     template evaluator -- and that path is proven ONLY for the opcode
+     set the reviewed oracle implements (craq-sim
+     execute_load_macro_template_direct).  The first shape outside the
+     set to reach formation -- the int-abs knob's SFPABS (0x7d) row,
+     admitted by the entry-ambient derivation -- was adjudicated WRONG
+     on BH silicon (device corr FAIL, laneIS absint32 int-abs witness)
+     and refused by the oracle (UnsupportedFunctionality), so the old
+     assumption that any simple-unit template can stage via LReg16 is
+     architecturally false.  Opcodes outside this set keep the VD-direct
+     or staging-copy realizations (rewritten-word execution, full
+     opcode support) or refuse by name.  */
+  if (!c)
+    return false;
+  switch (opcode)
+    {
+    case 0x79:	/* SFPIADD	*/
+    case 0x7e:	/* SFPAND	*/
+    case 0x7f:	/* SFPOR	*/
+    case 0x80:	/* SFPNOT	*/
+    case 0x84:	/* SFPMAD	*/
+    case 0x85:	/* SFPADD	*/
+    case 0x86:	/* SFPMUL	*/
+    case 0x89:	/* SFPSETSGN	*/
+    case 0x8e:	/* SFPSTOCHRND	*/
+    case 0x90:	/* SFPCAST	*/
+    case 0x94:	/* SFPSHFT2	*/
+    case 0x98:	/* SFPMUL24	*/
+    case 0x99:	/* SFPARECIP	*/
+      return true;
+    default:
+      return false;
+    }
+}
+
+bool
 opcode_needs_swap_adjacency (const caps *c, uint8_t opcode)
 {
   /* S1 (‡): SWAP on Simple needs MAD idle in its execution cycle and

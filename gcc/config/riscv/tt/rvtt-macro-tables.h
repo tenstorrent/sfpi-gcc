@@ -452,6 +452,10 @@ extern route_class opcode_route_class (const caps *, uint8_t opcode);
 /* Does the opcode READ its VD operand (SFPSWAP)?  Such an event cannot
    target LReg16 and must keep route=1 so a planned VC survives.  */
 extern bool opcode_reads_vd (const caps *, uint8_t opcode);
+/* Whether OPCODE may be realized with the LReg16 staging target: the
+   oracle-proven direct-evaluator set (lane IS F1; see the table's
+   comment).  Everything else keeps VD-direct/staging-copy or refuses.  */
+extern bool opcode_l16_target_proven (const caps *, uint8_t opcode);
 
 /* The SFPSWAP scheduling rule (ISA (‡)): MAD hosts nothing in the
    SWAP's execution cycle, and Simple and Round host nothing in the
