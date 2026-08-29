@@ -8,7 +8,7 @@
 // encodes.
 // { dg-final { scan-rtl-dump "Dst-autoincr: raw-word capture shadow counted .6 raw words of 6, bb \[0-9\]+; load-carrier." "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "replay capture crosses block" "rvtt_dst_autoincr" } }
-// { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 12 stride 4 config 3 words" 1 "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump-times "Dst-autoincr group: bb \[0-9\]+ rows 12 stride 4 config 3 words" 1 "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }
 // { dg-final { scan-assembler-times "TTSETC16\t34, 4" 1 } }
 // { dg-final { scan-assembler-times "SFPLOAD\tL., 0, 0, 6" 12 } }
