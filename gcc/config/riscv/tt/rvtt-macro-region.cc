@@ -27,6 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "rtl.h"
 #include "insn-config.h"
+#include "insn-codes.h"
 #include "insn-attr.h"
 #include "recog.h"
 #include "memmodel.h"
@@ -277,6 +278,7 @@ region_scanner::close_row (basic_block bb)
     row.insns.safe_push (insn);
   row.separator = nullptr;
   row.dst_delta = 0;
+  row.imm_delta = 0;
   row.enable = pending_enable_;
   pending_enable_ = nullptr;
   row.starts_run = false;
@@ -301,9 +303,39 @@ region_scanner::close_row (basic_block bb)
   return true;
 }
 
+/* Typed Dst-address operand position of the two admitted Dst access
+   patterns -- post-admission positional access, the
+   rvtt_dst_access_operands precedent (rvtt-effects.cc): the effect
+   class has already admitted the instruction; reaching its typed
+   operands by recognized code is the permitted use of code
+   comparisons.  -1 when INSN is not an admitted typed Dst access.  */
+
+static int
+dst_address_operand_pos (rtx_insn *insn)
+{
+  int code = recog_memoized (insn);
+  if (code == CODE_FOR_rvtt_sfpload_lv_int)
+    return 4;
+  if (code == CODE_FOR_rvtt_sfpstore_int)
+    return 3;
+  return -1;
+}
+
 /* Pairwise isomorphism against rows[0] under a value map: identical
    pattern structure position by position, identical constant operands,
-   and a consistent renaming of register operands.  */
+   and a consistent renaming of register operands.
+
+   Immediate Dst-address deltas (lane IS, F1 honest fix): the loop
+   fusion passes (gimple rvtt_dst_iteration and kin) carry part of the
+   per-row Dst advance in the address immediates -- consecutive rows
+   differ ONLY in their typed Dst address constants, with the residual
+   advance in a shared separator.  Such rows are admitted here when
+   every typed Dst address in the row sits at ONE common constant delta
+   from rows[0]'s (recorded as row.imm_delta); any other constant
+   mismatch still refuses.  Whether the deltas form a uniform absolute
+   progression -- and are therefore expressible through the absorbed-
+   stride calendar -- is finalize_region's separate proof; rows
+   admitted here that fail it refuse there by name.  */
 
 bool
 region_scanner::isomorphic_to_first (macro_row &row)
@@ -312,12 +344,17 @@ region_scanner::isomorphic_to_first (macro_row &row)
   if (row.insns.length () != first.insns.length ())
     return false;
 
+  bool imm_delta_set = false;
+  HOST_WIDE_INT imm_delta = 0;
+
   for (unsigned ix = 0; ix != row.insns.length (); ++ix)
     {
       rtx_insn *a = first.insns[ix];
       rtx_insn *b = row.insns[ix];
       if (recog_memoized (a) != recog_memoized (b))
 	return false;
+
+      int addr_pos = dst_address_operand_pos (a);
 
       extract_insn (a);
       unsigned n_ops = recog_data.n_operands;
@@ -332,6 +369,23 @@ region_scanner::isomorphic_to_first (macro_row &row)
 	{
 	  rtx x = a_ops[op];
 	  rtx y = recog_data.operand[op];
+	  /* The typed Dst address operand participates in the row
+	     delta whether equal (delta 0) or offset: mixed deltas
+	     within one row are never a renaming and refuse.  */
+	  if (addr_pos >= 0 && op == (unsigned) addr_pos)
+	    {
+	      if (!CONST_INT_P (x) || !CONST_INT_P (y))
+		return false;
+	      HOST_WIDE_INT d = INTVAL (y) - INTVAL (x);
+	      if (!imm_delta_set)
+		{
+		  imm_delta = d;
+		  imm_delta_set = true;
+		}
+	      else if (d != imm_delta)
+		return false;
+	      continue;
+	    }
 	  if (rtx_equal_p (x, y))
 	    continue;
 	  /* Unallocated scratches compare by identity in rtx_equal_p;
@@ -354,6 +408,13 @@ region_scanner::isomorphic_to_first (macro_row &row)
 	    row.vmap.safe_push (std::make_pair (x, y));
 	}
     }
+  /* One common delta for the whole row (INT_MAX guard: the typed
+     address field is architecturally narrow; anything outsized
+     refuses).  */
+  if (imm_delta_set
+      && (imm_delta < INT_MIN / 2 || imm_delta > INT_MAX / 2))
+    return false;
+  row.imm_delta = imm_delta_set ? (int) imm_delta : 0;
   return true;
 }
 
@@ -388,6 +449,51 @@ region_scanner::finalize_region (basic_block bb)
 	    else if (row.dst_delta != stride)
 	      stride_uniform = false;
 	  }
+
+      /* Immediate-delta rows (lane IS, F1 honest fix): absolute
+	 progression proof.  Row k's absolute Dst advance -- the
+	 separator deltas accumulated before it plus its own immediate
+	 delta -- must equal k * S for one uniform S, and the region's
+	 total separator advance must equal rows * S: the absorbed-
+	 stride calendar the formation mandates for this shape advances
+	 the counter by S per row, so the downstream counter state is
+	 reproduced exactly.  Any other progression refuses by the
+	 stride-mismatch name (fail-closed).  */
+      region.imm_stride = 0;
+      bool any_imm = false;
+      for (const macro_row &row : rows_)
+	any_imm |= row.imm_delta != 0;
+      if (any_imm && stride_uniform)
+	{
+	  bool ok = rows_.length () >= 2;
+	  HOST_WIDE_INT acc = 0;
+	  HOST_WIDE_INT s = 0;
+	  for (unsigned k = 0; ok && k != rows_.length (); ++k)
+	    {
+	      HOST_WIDE_INT abs_k = acc + rows_[k].imm_delta;
+	      if (k == 0)
+		ok = abs_k == 0;
+	      else if (k == 1)
+		{
+		  s = abs_k;
+		  ok = s != 0;
+		}
+	      else
+		ok = abs_k == (HOST_WIDE_INT) k * s;
+	      if (rows_[k].separator)
+		acc += rows_[k].dst_delta;
+	    }
+	  if (ok)
+	    ok = acc == (HOST_WIDE_INT) rows_.length () * s
+	      && s > INT_MIN / 2 && s < INT_MAX / 2;
+	  if (!ok)
+	    stride_uniform = false;
+	  else
+	    {
+	      region.imm_stride = (int) s;
+	      stride = (int) s;	/* the dump reports the proven advance */
+	    }
+	}
 
       /* Row closure over the whole region: every LREG a row defines is
 	 dead after that row's last instruction (later isomorphic rows
@@ -426,9 +532,10 @@ region_scanner::finalize_region (basic_block bb)
 	{
 	  fprintf (dump_,
 		   "Macro-planner region: rows=%u row-len=%u runs=%u"
-		   " stride=%d loop=%s\n",
+		   " stride=%d%s loop=%s\n",
 		   rows_.length (), rows_[0].insns.length (), region.runs,
-		   stride, region.loop_body ? "yes" : "no");
+		   stride, region.imm_stride ? " (imm)" : "",
+		   region.loop_body ? "yes" : "no");
 	  fprintf (dump_, "Macro-planner row-subunits:");
 	  static const char *const subunit_names[] = {
 	    "none", "simple", "mad", "round", "load", "store", "cfg", "sync"
