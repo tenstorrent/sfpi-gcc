@@ -203,3 +203,140 @@ rvtt_raw_pure_dst_rwc_gimple (const gimple *stmt)
     return false;
   return pure_dst_rwc_word_p ((uint32_t) value);
 }
+
+/* ------------------------------------------------------------------ */
+/* Lane IV: audited CC/lane-enable word classification.
+
+   Discipline identical to the pure-Dst/RWC class above and to
+   rvtt_mop_audited_word_p (rvtt-mop-derive.cc): every admitted class is
+   a recorded architectural fact with provenance, classified by
+   opcode/field derivation -- never by operation identity or trust in
+   the emitting library.  A word not covered by a recorded fact answers
+   UNPROVEN (the refusing direction for every consumer).
+
+   The state under audit is the Vector Unit's lane-enable predication:
+   the per-lane LaneFlags / UseLaneFlagsForLaneEnable pair (SFPENCC.md
+   functional model) and the LaneConfig ROW_MASK predication bits
+   (SFPCONFIG.md LaneConfig table).  Provenance keys:
+
+     [ISA]  tt-isa-documentation BlackholeA0+WormholeB0
+            TensixTile/TensixCoprocessor (the mandatory prior); the
+            named .md file carries the cited functional model.
+     [SIM]  craq-sim src/tensix.cpp (pinned tree) executors.
+     [MOPT] an audited fact already recorded in rvtt-mop-tables.h /
+            rvtt_mop_audited_word_p with its own provenance; the CC
+            question is implied by the recorded effect confinement.  */
+
+rvtt_raw_cc_class
+rvtt_raw_cc_word_class (uint32_t word)
+{
+  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
+    : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
+  if (!rvtt_macro_caps_for_cpu (cpu))
+    return RVTT_RAW_CC_UNPROVEN;
+
+  unsigned opcode = word >> 24;
+
+  /* Tensix NOPs.  0x00 executes nothing; 0x02 is swallowed at the
+     instruction FIFO and delivers nothing.  [MOPT] NOP facts.  */
+  if (opcode == 0x00 || opcode == 0x02)
+    return RVTT_RAW_CC_INERT;
+
+  /* Sync family (ATGETM/ATRELM/SEMINIT/SEMPOST/SEMGET/SEMWAIT/
+     STALLWAIT/...): semaphore, mutex
+     and stall plumbing -- no SFPU lane state in any functional model.
+     [MOPT] sync-family fact; [ISA] SEMWAIT.md/STALLWAIT arms.  */
+  if (opcode >= 0xA0 && opcode <= 0xA7)
+    return RVTT_RAW_CC_INERT;
+
+  /* Thread-config family (SETC16 and neighbours): writes the backend
+     thread configuration space, disjoint from the Vector Unit's lane
+     state.  [MOPT] thread-config fact; [ISA] SETC16.md.  */
+  if (opcode >= 0xB0 && opcode <= 0xB8)
+    return RVTT_RAW_CC_INERT;
+
+  /* CLEARDVALID / SETRWC: Src/Dst counter and bank-valid bookkeeping
+     only.  [MOPT]; [ISA] SETRWC.md.  */
+  if (opcode == 0x36 || opcode == 0x37)
+    return RVTT_RAW_CC_INERT;
+
+  /* ELWADD / MOVA2D: matrix-unit data path (Src banks, Dst rows, RWC);
+     l_regs and lane predication untouched for every field value.
+     [MOPT] (spec + simulator citations recorded there).  */
+  if (opcode == 0x28 || opcode == 0x12)
+    return RVTT_RAW_CC_INERT;
+
+  /* SFPLOADI: writes LReg[VD] (or, VD >= 12 with backdoor loads
+     enabled, the LoadMacroConfig instruction template) -- never lane
+     flags, in either arm.  The dest >= 8 PRGM concern of the mop audit
+     is a PRGM-file question, not a lane-enable one.  [ISA] SFPLOADI.md;
+     SFPCONFIG.md DISABLE_BACKDOOR_LOAD row.  */
+  if (opcode == 0x71)
+    return RVTT_RAW_CC_INERT;
+
+  /* SFPCONFIG: every VD != 15 arm writes LoadMacroConfig storage or
+     LReg[11..14]; only the VD == 15 arm writes LaneConfig (which holds
+     the ROW_MASK predication bits).  [ISA] SFPCONFIG.md functional
+     model (no arm writes LaneFlags/UseLaneFlagsForLaneEnable).  The
+     admitted VD == 15 class is the audited default-reset word
+     (MOD1_IMM16_IS_VALUE set, imm16 == 0 -- TTI_SFPCONFIG (0, 0xF, 1),
+     0x910000F1): the resulting LaneConfig is the default all-lanes,
+     ROW_MASK == 0 state for every mod1 completion ([MOPT] LaneConfig
+     default-reset fact, lane AR audit) -- an ambient-establishing
+     write.  Any other VD == 15 word can set ROW_MASK and refuses.  */
+  if (opcode == 0x91)
+    {
+      unsigned dest = (word >> 4) & 0xf;
+      if (dest != 15)
+	return RVTT_RAW_CC_INERT;
+      if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
+	return RVTT_RAW_CC_ALL_LANES;
+      return RVTT_RAW_CC_UNPROVEN;
+    }
+
+  /* SFPCAST / SFPSTOCHRND: every mode of both functional models writes
+     only LReg[VD] (and only when VD < 8 || VD == 16); with VD >= 12 and
+     backdoor loads enabled the word is instead captured into
+     LoadMacroConfig.InstructionTemplate[VD-12] and executes nothing --
+     the LLK load-macro template-programming idiom (the typecast init's
+     0x900000C0 / 0x8E0000D1 words).  Lane-enable state is untouched
+     under BOTH the executed and the captured reading, so the class
+     needs no DISABLE_BACKDOOR_LOAD knowledge.  [ISA]
+     SFPCAST_{IntFloat,IntInt,IntAbs}.md,
+     SFPSTOCHRND_{FloatFloat,FloatInt,IntInt}.md, SFPCONFIG.md
+     DISABLE_BACKDOOR_LOAD row; [SIM] tensix.cpp SFPU dispatch
+     lreg_dest 12..15 capture arm + TENSIX_EXECUTE_SFPCAST/
+     SFP_STOCH_RND.  */
+  if (opcode == 0x90 || opcode == 0x8E)
+    return RVTT_RAW_CC_INERT;
+
+  /* SFPENCC: the lane-enable writer itself.  Only the word-exact
+     canonical all-lanes encoding is proven (the same capability-table
+     word the typed kill test and the synthesized enable stand on:
+     rvtt_macro::sfpencc_all_lanes_word, imm12 == SFPENCC_IMM12_BOTH,
+     mod1 == SFPENCC_MOD1_EI_RI, VD == 0).  Every other field
+     combination -- lanes-off, complement, VD >= 12 capture forms --
+     refuses.  [ISA] SFPENCC.md; [SIM] TENSIX_EXECUTE_SFPENCC.  */
+  if (opcode == 0x8A)
+    {
+      if (word == rvtt_macro::sfpencc_all_lanes_word ())
+	return RVTT_RAW_CC_ALL_LANES;
+      return RVTT_RAW_CC_UNPROVEN;
+    }
+
+  /* Everything else -- the SFPU CC writers (SFPSETCC/SFPCOMPC/
+     SFPPUSHC/SFPPOPC/compare-and-set mods), expander words whose
+     delivered content lives elsewhere (MOP/MOP_CFG/REPLAY), loads,
+     stores, packers, unaudited opcodes -- refuses.  Expander words are
+     a TU-level question (the mop derivation's slot audit), never a
+     word-level one.  */
+  return RVTT_RAW_CC_UNPROVEN;
+}
+
+/* See rvtt-raw-boundary.h.  */
+
+bool
+rvtt_raw_cc_word_ambient_preserving_p (uint32_t word)
+{
+  return rvtt_raw_cc_word_class (word) != RVTT_RAW_CC_UNPROVEN;
+}

@@ -131,6 +131,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
+#include "rvtt-raw-boundary.h"
 
 namespace {
 
@@ -304,12 +305,35 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
   if (!ctx || !ctx->parms)
     visited.add (fn);
   bool ok = true;
+  /* Lane IV: a scan refusal also marks the TU-wide CC/lane-enable
+     audit dirty (rvtt_mop_derive_state::cc_dirty), UNLESS the refusing
+     statement is a canonical raw `.ttinsn' word whose decoded verdict
+     is ambient-preserving -- the PRGM audit legitimately refuses words
+     (SFPU load-macro template captures, non-allocatable SFPLOADI
+     destinations, the canonical all-lanes SFPENCC itself) that provably
+     cannot take the lane-enable state away from the all-lanes ambient.
+     Refusals of any OTHER shape (unaudited words, unproven stores,
+     unscannable calls, replay refusals) dirty the CC audit fail-closed:
+     each could deliver a lane-enable write the walk cannot see.  */
+  auto cc_exempt_word_p = [] (gimple *stmt) -> bool
+    {
+      gasm *a = dyn_cast <gasm *> (stmt);
+      uint32_t w;
+      return a && rvtt_raw_ttinsn_word_p (a, &w)
+	&& rvtt_raw_cc_word_ambient_preserving_p (w);
+    };
   auto refuse = [&] (const char *w, gimple *stmt)
     {
       if (ok)
 	{
 	  *why = w;
 	  ok = false;
+	}
+      if (st && !st->cc_dirty && !cc_exempt_word_p (stmt))
+	{
+	  st->cc_dirty = true;
+	  snprintf (st->cc_reason, sizeof st->cc_reason, "%s in %s", w,
+		    function_name (fn));
 	}
       if (dump_file)
 	{
@@ -743,6 +767,14 @@ tu_prgm_facts ()
 	      tu_facts.refused = true;
 	      if (!tu_facts.reason)
 		tu_facts.reason = "function body unavailable to the scan";
+	      if (!tu_facts.mop.cc_dirty)
+		{
+		  tu_facts.mop.cc_dirty = true;
+		  snprintf (tu_facts.mop.cc_reason,
+			    sizeof tu_facts.mop.cc_reason,
+			    "function body unavailable to the scan (%s)",
+			    node->dump_name ());
+		}
 	      continue;
 	    }
 	}
@@ -787,6 +819,14 @@ tu_prgm_facts ()
       tu_facts.refused = true;
       if (!tu_facts.reason)
 	tu_facts.reason = mop_why;
+      /* Lane IV: an unadjudicated MOP expansion could deliver template
+	 words the walk cannot see -- the CC audit dirties with it.  */
+      if (!tu_facts.mop.cc_dirty)
+	{
+	  tu_facts.mop.cc_dirty = true;
+	  snprintf (tu_facts.mop.cc_reason, sizeof tu_facts.mop.cc_reason,
+		    "%s", mop_why);
+	}
     }
   return tu_facts;
 }
@@ -4631,4 +4671,38 @@ gimple_opt_pass *
 make_pass_rvtt_prgm_const (gcc::context *ctxt)
 {
   return new pass_rvtt_prgm_const (ctxt);
+}
+
+/* Lane IV (typecast walk-transparency): the TU-wide CC/lane-enable
+   audit, consumed by the macro-planner's entry-ambient walk
+   (rtl-rvtt-macro-planner.cc entry_ambient_all_lanes_p).  True exactly
+   when the memoized TU scan ran AND classified every opaque-delivery
+   channel in the TU -- raw `.ttinsn' words, stores (the
+   instruction-FIFO/aperture audit), MOP template expansions, replay
+   records, scalar asm -- as unable to take the lane-enable state away
+   from the all-lanes ambient (rvtt_mop_derive_state::cc_dirty, folded
+   by the scan's refusal funnel).  The coverage is exactly the
+   enumeration the PRGM freedom proof already stands on (tu_prgm_facts);
+   typed instructions are NOT covered here -- the RTL walk classifies
+   those itself, and calls stay dirty there regardless of this fact.
+
+   READ-ONLY AT RTL: this accessor never triggers the computation --
+   the scan iterates gimple bodies and is only sound at gimple time
+   (the pass's own first execution).  An uncomputed state answers
+   false, the refusing direction.  */
+
+bool
+rvtt_tu_opaque_cc_ambient_preserving_p (const char **reason)
+{
+  if (!tu_facts.computed)
+    {
+      *reason = "tu-audit-not-run";
+      return false;
+    }
+  if (tu_facts.mop.cc_dirty)
+    {
+      *reason = tu_facts.mop.cc_reason;
+      return false;
+    }
+  return true;
 }
