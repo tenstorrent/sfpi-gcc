@@ -1560,6 +1560,75 @@
 ;;   silicon A/B promotes them.  A size guard, not a shape key: it
 ;;   depends only on the proven trip count and delivered word count.
 ;;
+;; REPLAY WINDOW SIZING UNDER A HOISTED RECORD (lane IM, 2026-08-28;
+;; -mtt-tensix-optimize-replay-window-sizing, Init(0)).  pick_replay's
+;; saving key, (clones-1) x (length-1), prices IN-BLOCK
+;; exec-while-record economics: each replaced clone trades length words
+;; for one launch word while the record's own words STAY IN THE BODY,
+;; so a shorter window with more instances wins -- lcm-fresh picks the
+;; 14-word Stein round-pair at 7 instances (saving 77) over the 28-word
+;; round-quad at its only 3 non-overlapping instances (saving 53), and
+;; lane IH measured that key RIGHT for in-block windows (freed slots
+;; let tail windows form).  A HOISTED record (record-hoist /
+;; replay-hoist preheader placement, incl. the placement lift above)
+;; voids that model's record term: the record is delivered once per
+;; placement, the per-trip cost is the launch words alone, and the
+;; widest word-exact window that fits the free slots minimizes it.
+;; The hand kernels witness the discipline this flag reconstructs
+;; (gcd/lcm: TTI_REPLAY(0,28,0,1) once per kernel entry, then per row
+;; 3 x REPLAY(0,28) + 1 x REPLAY(0,13) -- the last launch a PARTIAL
+;; playback of the recorded window's 13-word prefix).  Two vocabulary
+;; pieces were missing, and both are gated behind this flag:
+;;
+;;   WIDENING: after the ORIGINAL pick's hoist admission succeeds (and
+;;   only then -- in-block picks keep pick_replay's measured-right
+;;   key; an admitted first-trip peel keeps its own audited shape),
+;;   same-anchor wider candidates that fit the largest free slot span
+;;   are re-priced by delivered per-trip issue words over the covered
+;;   span: full launches + one partial launch + every word left
+;;   inline.  Strict improvement is required; the widened candidate
+;;   re-proves the WHOLE hoist admission itself (oracle, pricing,
+;;   dedication, lift walk), its clones are structurally re-verified
+;;   word-exact and non-overlapping (discovery matches by hash), and
+;;   any failing premise keeps the original pick by name:
+;;   window-sizing-slot-exhausted (wider candidates exist, free slots
+;;   cannot hold the record -- the IH useq eviction class stays
+;;   protected), -no-wider-candidate, -no-cheaper-delivery,
+;;   -coverage-short, -clone-arithmetic, -hoist-refused,
+;;   -reform-composition-unaudited (a widened carried payload would
+;;   need the reform launch-arithmetic audit re-derived for the trim).
+;;
+;;   PARTIAL-LAUNCH TRIM: the trailing run after the last clone that
+;;   is a word-exact PREFIX of the recorded window is delivered as one
+;;   REPLAY launch whose Count is the run's word count.  ISA basis:
+;;   a playback launch emits ReplayBuffer[(Index+i)%32] for i in
+;;   [0,Count) -- a pure prefix of the recorded program, independent
+;;   of the recorded length (WormholeB0 REPLAY.md functional model;
+;;   BH mirrors it per the lane FS silicon persistence model; the hand
+;;   kernels' REPLAY(0,13) is the silicon witness).  The prefix walk
+;;   mirrors sequence-growth continuity exactly (never crosses a
+;;   must_end word, a deleted insn, or the block end; stops one word
+;;   short of a full clone), so the launch replaces words that
+;;   executed inline with the same delivered words in the same stream
+;;   positions: stream identity, like every full clone replacement.
+;;   The record dominates the partial launch (preheader placement),
+;;   the slots are persistent and disjoint (FS model; the widened
+;;   record's full span is marked), and the TEN-2932 window checker
+;;   resolves sub-span launches natively.
+;;
+;; PRICING: no new constants.  The widening comparison is a word count
+;; over the covered span (launches are delivered words; the launch
+;; boundary crossing cost, ~1.3-1.8 cy each at the lane EE table, is
+;; NOT modeled -- fewer launches strictly reduces both terms, so the
+;; word-count key is a conservative proxy).  The hoist pricing that
+;; licenses the placement is hoist_profitable_p on the widened window
+;; itself, unchanged.
+;;
+;; lcm-fresh (the naming shape): entry record widens 14 -> 28 words
+;; (18 free slots held; 28 <= 32), per row 7 x REPLAY(0,14) + 4 inline
+;; trim words -> 3 x REPLAY(0,28) + 1 x REPLAY(0,18) -- the hand
+;; kernel's exact 4-launch row delivery.
+;;
 ;; LAUNCH-FLATTEN complete-unroll request (lane HH; the GIMPLE-side
 ;; generalization of the launch-loop unroll above).  A counted innermost
 ;; DELIVERY loop -- typed replay records/launches, fixed raw .ttinsn
