@@ -1560,6 +1560,57 @@
 ;;   silicon A/B promotes them.  A size guard, not a shape key: it
 ;;   depends only on the proven trip count and delivered word count.
 ;;
+;; COUNTED-CAPTURE PEEL (lane IO, 2026-08-29;
+;; -mtt-tensix-optimize-counted-capture-peel, Init(0)).  Extends the
+;; lane-GQ exec-while-record first-trip peel to the COUNTED-LOOP
+;; capture class -- a counted single-block SFPU row loop whose body is
+;; one fixed replay-safe run and records nothing per trip.  The plain
+;; counted hoist places a NO-EXEC record in the dedicated preheader and
+;; pays the payload's FULL re-delivery there,
+;;
+;;   benefit_plain = trips * (before - after)
+;;                   - (deliver_record + RECORD_OVERHEAD)
+;;
+;; which cannot amortize on delivery-paced row loops whose per-trip
+;; relief (before - after) is small: the addrsqrt-fresh production-shape
+;; row loop (trips 31, words 24, exec_ilk 28) prices
+;; 31*82 - 3375 = -833 and refuses, leaving the row delivered inline
+;; from the RISC every trip while the hand kernel's exec-while-record +
+;; launches shape runs execution-paced.  The peeled shape never
+;; re-delivers the payload: the loop's proven first trip moves verbatim
+;; to the dedicated preheader with the capture flipped to
+;; exec-while-record (TTREPLAY load=1 exec=1 -- the fleet-witnessed
+;; class, never the silicon-refuted no-exec re-record wedge), every
+;; remaining trip becomes one playback launch, and the proven-constant
+;; counter re-initializes one step later (trips -> trips-1):
+;;
+;;   benefit_peel = (trips - 1) * (before - after)
+;;                  - (RISC_PUSH + RECORD_OVERHEAD)      ; >= MIN_BENEFIT
+;;
+;; The peel pass pays only the capture word (RISC_PUSH) plus the
+;; record-engine overhead beyond the payload delivery the baseline
+;; first trip already paid; before/after are the counted-loop capture
+;; terms unchanged.  For the addrsqrt shape: 30*82 - 423 = +2037.
+;; STREAM IDENTITY is inherited from the GQ peel with a weaker premise
+;; (there is no former in-body record site): payload instances
+;; 1 + (trips-1) = trips, in trip order, at the same stream positions
+;; (the dedicated preheader immediately precedes the loop).  ADMISSION
+;; = the counted-loop capture's own gates unchanged (fixed-encoding
+;; replay-safe payload, replay-preserving loop, dedicated preheader,
+;; slot availability) AND peel_admissible_p unchanged (non-QSR,
+;; single-bb body, proven constant trips >= 2, full body coverage,
+;; provable single-insn counter re-init).  An admitted PLAIN counted
+;; hoist is never converted (the peel is evaluated only on the plain
+;; pricing's refusal, so every booked counted-capture fire keeps its
+;; bytes).  A reform-mode carried payload refuses by lane IH's
+;; post-autoincr-window-carried-peel-launch-arithmetic-unproven (the
+;; peel relocates one trip's carried executions across the
+;; configuration program's placement; the walk-order proof is not in
+;; this increment).  Refusal names (all keep the plain refusal's
+;; bytes): counted-capture-peel-trips-unproven,
+;; counted-capture-peel-benefit, replay-reissue-latency-unproved, and
+;; peel_admissible_p's record-hoist-peel-* names.  NO NEW CONSTANTS.
+;;
 ;; REPLAY WINDOW SIZING UNDER A HOISTED RECORD (lane IM, 2026-08-28;
 ;; -mtt-tensix-optimize-replay-window-sizing, Init(0)).  pick_replay's
 ;; saving key, (clones-1) x (length-1), prices IN-BLOCK

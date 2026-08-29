@@ -3173,6 +3173,93 @@ counted_loop_payload (class loop *loop, replay_block &info,
   return true;
 }
 
+/* Lane IO: counted-loop capture exec-while-record peel pricing
+   (-mtt-tensix-optimize-counted-capture-peel; rvtt-cost.md
+   "COUNTED-CAPTURE PEEL").  The plain counted-loop hoist pays the full
+   preheader record delivery (deliver_record + RECORD_OVERHEAD) and
+   refuses when trips * (before - after) cannot amortize it.  The
+   PEELED shape never re-delivers the payload: the loop's proven first
+   trip moves verbatim to the dedicated preheader and executes WHILE
+   recording, so the record pass costs only the capture word plus the
+   record-engine overhead beyond the payload delivery the baseline
+   first trip already paid; trips - 1 playback launches remain in the
+   loop.
+
+     benefit = (trips - 1) * (before - after)
+	       - (RISC_PUSH + RECORD_OVERHEAD)	 ; >= MIN_BENEFIT
+
+   with before/after the counted-loop capture terms unchanged
+   (before = max(deliver_body, exec); after = max(PUSH, exec +
+   TURNAROUND)).  The executed word stream is a pure peel of the rolled
+   loop -- payload instances 1 + (trips-1) = trips, in trip order at
+   the same stream positions (the preheader immediately precedes the
+   loop) -- so this inherits the GQ peel's stream-identity argument
+   with a weaker premise: there is no former in-body record site at
+   all.  An unpriceable payload keeps the reissue-latency refusal by
+   name; trips must be proven >= 2 (the peel executes one trip in the
+   preheader).  Purely structural: no operation identity, opcode
+   calendar, coefficient value, or instruction-word fingerprint
+   participates.  */
+
+static bool
+counted_peel_profitable_p (class loop *loop, basic_block preheader,
+			   replay_block const &block, replay_span payload)
+{
+  uint64_t niter;
+  if (!provable_constant_trips (loop, preheader, &niter) || niter < 2)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "counted-capture-peel refused:"
+		 " counted-capture-peel-trips-unproven (loop %d)\n",
+		 loop->num);
+      return false;
+    }
+  HOST_WIDE_INT trips = (HOST_WIDE_INT) niter;
+  HOST_WIDE_INT eslots = exec_interlocked_slots (block, payload);
+  if (eslots < 0)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "counted-capture-peel refused:"
+		 " replay-reissue-latency-unproved (loop %d)\n",
+		 loop->num);
+      return false;
+    }
+  HOST_WIDE_INT words = delivered_words (block, payload);
+  HOST_WIDE_INT exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
+  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
+			       ? (HOST_WIDE_INT)
+				 riscv_tt_replay_hoist_min_benefit
+			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
+  HOST_WIDE_INT before = MAX (deliver_body, exec);
+  HOST_WIDE_INT after
+    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
+	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
+  HOST_WIDE_INT peel_cost = XTT_REPLAY_COST_RISC_PUSH_X100
+    + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+  HOST_WIDE_INT benefit = (trips - 1) * (before - after) - peel_cost;
+  if (dump_file)
+    fprintf (dump_file,
+	     "Counted-peel pricing (loop %d): trips %ld, words %ld,"
+	     " exec_ilk %ld slots, before %ld, after %ld, peel_cost %ld,"
+	     " benefit %ld (min %ld)\n",
+	     loop->num, (long) trips, (long) words, (long) eslots,
+	     (long) before, (long) after, (long) peel_cost,
+	     (long) benefit, (long) min_benefit);
+  if (benefit < min_benefit)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "counted-capture-peel refused:"
+		 " counted-capture-peel-benefit: modeled benefit %ld < %ld\n",
+		 (long) benefit, (long) min_benefit);
+      return false;
+    }
+  return true;
+}
+
 static void
 hoist_counted_loops (function *cfn,
 		     std::vector<replay_span> const &replay_spans,
@@ -3221,10 +3308,39 @@ hoist_counted_loops (function *cfn,
       // The counted-loop payload is its own single clone; across trips the
       // launch is always separated from the next by the loop-control
       // delivery, so the contiguous launch run is 1.
+      peel_plan peel;
       if (!hoist_profitable_p (loop, preheader, info, seq.clones.front (),
 			       /*body_rerecords=*/false,
 			       /*launch_run=*/1))
-	continue;
+	{
+	  /* Lane IO: a benefit-refused counted capture may still admit
+	     as the exec-while-record first-trip peel (see
+	     counted_peel_profitable_p above); every refusal below keeps
+	     the plain refusal's bytes.  A reform-mode carried payload
+	     refuses the peel by lane IH's name: the peel RELOCATES one
+	     trip's carried executions into the preheader, across the
+	     configuration program's placement, and the walk-order proof
+	     for that relocation is not in this increment.  */
+	  if (!(riscv_tt_opt_counted_capture_peel > 0))
+	    continue;
+	  if (reform_mode
+	      && payload_contains_carried_p (info, seq.clones.front ()))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "counted-capture-peel refused:"
+			 " post-autoincr-window-carried-peel-"
+			 "launch-arithmetic-unproven:"
+			 " carried payload, first-trip peel would relocate"
+			 " carried executions to the preheader (loop %d)\n",
+			 loop->num);
+	      continue;
+	    }
+	  if (!counted_peel_profitable_p (loop, preheader, info,
+					  seq.clones.front ())
+	      || !peel_admissible_p (loop, preheader, info, seq, &peel))
+	    continue;
+	}
 
       auto spans = available_replay_spans (replay_spans, persistent_slots);
       auto slot = std::find_if (spans.begin (), spans.end (),
@@ -3234,9 +3350,18 @@ hoist_counted_loops (function *cfn,
 	continue;
 
       unsigned length
-	= replace_hoisted_sequence (seq, info, slot->begin, preheader);
+	= peel.valid
+	  ? replace_hoisted_sequence_peel (seq, info, slot->begin, preheader,
+					   peel)
+	  : replace_hoisted_sequence (seq, info, slot->begin, preheader);
       std::fill (persistent_slots.begin () + slot->begin,
 		 persistent_slots.begin () + slot->begin + length, true);
+      if (dump_file && peel.valid)
+	fprintf (dump_file,
+		 "counted-capture-peel admitted: counted-loop bb %d peeled"
+		 " exec-while-record (trips %lu -> %lu)\n",
+		 bb->index, (unsigned long) peel.trips,
+		 (unsigned long) (peel.trips - 1));
       if (dump_file)
 	fprintf (dump_file,
 		 "Counted-loop replay payload bb %d length %u captured at %u\n",
