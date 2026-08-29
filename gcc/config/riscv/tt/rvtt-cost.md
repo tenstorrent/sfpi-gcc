@@ -2661,3 +2661,40 @@
 ;; model; profitability of hoists and conversions re-prices with the
 ;; first run's own terms over the folded stream.
 ;; ---------------------------------------------------------------------
+;; ---------------------------------------------------------------------
+;; PRESSURE-PARK PRE-PEEL PLACEMENT (lane IN, 2026-08-28; refinement of
+;; the park LREG tier under -mtt-tensix-optimize-park-ordering; no new
+;; flag, no new constants).  The park-ordering deferral hands a
+;; CC-restore loop's in-region constants to the const-residency walk;
+;; the walk's park LREG tier then placed the hoisted materialization at
+;; the POST-peel programming point while the peel had already
+;; duplicated the in-body load -- the parked constant was materialized
+;; TWICE per loop entry (peel inline copy + park hoist), a per-entry
+;; word tax the early invariant hoist never paid (it materialized
+;; BEFORE the peel copied the body).  Witness: softplus PRODUCTION body
+;; at ON-36, hand cell 138163 -> 139060 (+0.65% KERNEL, 8 duplicated
+;; words per face-loop entry; lane HN's named hand-arm residual).
+;;
+;; The refinement places the park-tier materialization at the HEAD of
+;; the peel block and erases the peel's duplicate (uses redirected to
+;; the parked definition), gated by a PRE-PEEL AMBIENT ALL-LANES proof:
+;; every backwards CFG path from the peel block's entry reaches the
+;; function entry (all-lanes ambient; calls stay CC-transparent, the
+;; plain loop class's established model) or an all-lanes-SFPENCC-
+;; terminated block (the canonical tail itself is the kill) before any
+;; escaping CC-affecting statement (typed sets_cc, SFPPUSHC/SFPPOPC;
+;; calls and raw asm stay CC-transparent because the transform is
+;; gated on the TU raw-boundary audit -- in any TU it runs in, every
+;; raw word decodes through the audited non-CC table and every store
+;; is proven unable to alias an instruction FIFO).
+;; With the ambient all-lanes, the placement writes EVERY lane: the
+;; identical superset-write refinement the post-peel point stands on,
+;; now also covering the peeled iteration's own audited consumers.  An
+;; unproven ambient refuses by name (park-prepeel-ambient-unproven) and
+;; keeps the post-peel placement byte-identically; without
+;; park-ordering the tier is byte-identical to its established form.
+;;
+;; PRICING: none new.  The tier's budget charge (one LREG per commit
+;; against the function-wide pressure model) is unchanged; the erased
+;; duplicate only removes issue words from the loop-entry path.
+;; ---------------------------------------------------------------------

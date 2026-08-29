@@ -2747,15 +2747,24 @@ loop_trips_at_least_p (class loop *loop, edge entry, unsigned need)
    dropped (its scalar chain is still copied; the header PHIs consume
    it).  Header PHIs evaluate to their entry arguments inside the copy
    and are re-seeded with the copy's latch values.  Virtual operands on
-   the copies are cleared for the pass-level virtual-SSA update.  */
+   the copies are cleared for the pass-level virtual-SSA update.
+
+   OUT_COPY_BB and NAMES (original in-body SSA name -> the copy's fresh
+   name) expose the peel to the pressure-park pre-peel placement below:
+   the park tier needs the peel block itself and the copy of a hoisted
+   candidate's materialization (to erase the duplicate).  NAMES also
+   carries the header-PHI -> entry-argument seeds the remap starts
+   from; the park lookup keys on a load's lhs, never a PHI result, so
+   the seeds are inert there.  */
 
 static edge
-peel_first_iteration (class loop *loop, edge entry)
+peel_first_iteration (class loop *loop, edge entry,
+		      basic_block *out_copy_bb, hash_map<tree, tree> *names)
 {
   basic_block bb = loop->header;
   edge latch_e = loop_latch_edge (loop);
 
-  hash_map<tree, tree> map;
+  hash_map<tree, tree> &map = *names;
   for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
        gsi_next (&psi))
     {
@@ -2823,6 +2832,9 @@ peel_first_iteration (class loop *loop, edge entry)
       update_stmt (cp);
     }
 
+  if (out_copy_bb)
+    *out_copy_bb = copy_bb;
+
   /* The loop's entry values are now the peeled iteration's latch
      values.  */
   edge new_entry = single_succ_edge (copy_bb);
@@ -2843,6 +2855,126 @@ peel_first_iteration (class loop *loop, edge entry)
 	     "peeled all-lanes SFPENCC)\n",
 	     bb->index, copy_bb->index);
   return new_entry;
+}
+
+/* -------------------------------------------------------------------- */
+/* Pre-peel ambient lane-state proof (lane IN, the HN hand-arm +0.65
+   residual).
+
+   The park-ordering deferral (gimple-rvtt-invariant.cc,
+   residency-walk-ordering) hands a CC-restore loop's in-region
+   constants to this walk -- and the walk's park tier then pays a cost
+   the early invariant hoist never paid: the peel duplicates every
+   still-in-body materialization statement for statement, and the park
+   placement at the POST-peel programming point leaves that duplicate
+   alive, so a park-hoisted constant is materialized twice per loop
+   entry (once inline in the peeled iteration, once at the programming
+   point).  On the softplus PRODUCTION body that tax measured +0.65%
+   KERNEL vs the early-hoist form (2 words x 4 parked constants per
+   face-loop entry).
+
+   The early hoist avoids it by materializing BEFORE the peel ever
+   copies the body -- sound at 114t because outside a structured region
+   the machine is architecturally all-lanes (no unstructured CC exists
+   at that pipeline position).  At this pass's position the CC is
+   lowered, so the equivalent placement needs the ambient fact proven
+   from the lowered statements: the pre-peel point is all-lanes exactly
+   when NO function-local CC-affecting statement reaches it without an
+   intervening word-exact all-lanes SFPENCC (the canonical-tail kill --
+   the very SFPENCC each CC-canonical body ends with; craq-sim
+   TENSIX_EXECUTE_SFPENCC overwrites cc/cc_en from the immediates).
+   cc_write_reaches_point_p cannot serve: it has no kill modeling, and
+   a CC-canonical loop's own writers always "reach" their preheader
+   around an enclosing backedge despite every such path passing the
+   trailing all-lanes SFPENCC.
+
+   With the ambient proven all-lanes, the pre-peel park placement
+   writes EVERY lane -- the identical superset-write refinement the
+   post-peel placement already stands on (extra lanes over any
+   iteration's in-place mask carried RA-indeterminate fresh-SSA
+   garbage no audited consumer propagates), now also covering the
+   peeled iteration's own consumers, so the peel's duplicated
+   materialization can be erased and its uses redirected to the parked
+   definition.  The CC-affecting vocabulary is the typed one -- calls
+   stay CC-transparent (the established fn-entry all-lanes model of
+   the plain loop class), and raw asm is transparent BECAUSE the whole
+   transform is gated on the TU raw-boundary audit (facts.refused
+   bails before any placement): in a TU where this code runs at all,
+   every raw `.ttinsn' word decodes through the audited table (NOP /
+   sync / thread-config / CLEARDVALID / SETRWC / LOADI / SFPCONFIG --
+   none writes lane state) and every store is proven unable to alias
+   an instruction FIFO, so no asm can carry a CC write.  An unproven
+   ambient keeps the post-peel placement byte-identically.  */
+
+enum cc_block_class
+{
+  CC_BLOCK_TRANSPARENT,		/* no CC-affecting statement */
+  CC_BLOCK_KILLS,		/* last CC event is the all-lanes SFPENCC */
+  CC_BLOCK_DIRTY		/* a CC-affecting statement escapes */
+};
+
+static cc_block_class
+classify_cc_block (basic_block bb)
+{
+  cc_block_class cls = CC_BLOCK_TRANSPARENT;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_code (stmt) == GIMPLE_COND)
+	continue;
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+      if (!insnd)
+	continue;		/* calls and raw asm are CC-transparent:
+				   the TU raw-boundary audit gates the
+				   whole transform (block comment).  */
+      gcall *call = as_a <gcall *> (stmt);
+      if (rvtt_all_lanes_encc_p (stmt))
+	cls = CC_BLOCK_KILLS;
+      else if (insnd->sets_cc (call)
+	       || insnd->id == rvtt_insn_data::sfppushc
+	       || insnd->id == rvtt_insn_data::sfppopc)
+	cls = CC_BLOCK_DIRTY;
+    }
+  return cls;
+}
+
+/* Whether the lane-enable state on entry to POINT_BB is provably the
+   architectural all-lanes state: every backwards CFG path from
+   POINT_BB's entry hits the function entry (all-lanes ambient) or an
+   all-lanes-SFPENCC-terminated block before any escaping CC-affecting
+   statement.  */
+
+static bool
+prepeel_ambient_all_lanes_p (basic_block point_bb)
+{
+  hash_set<basic_block> visited;
+  auto_vec<basic_block, 16> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, point_bb->preds)
+    work.safe_push (e->src);
+  while (!work.is_empty ())
+    {
+      basic_block b = work.pop ();
+      if (b == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      if (visited.add (b))
+	continue;
+      switch (classify_cc_block (b))
+	{
+	case CC_BLOCK_DIRTY:
+	  return false;
+	case CC_BLOCK_KILLS:
+	  continue;
+	case CC_BLOCK_TRANSPARENT:
+	  FOR_EACH_EDGE (e, ei, b->preds)
+	    work.safe_push (e->src);
+	  break;
+	}
+    }
+  return true;
 }
 
 static bool
@@ -3843,22 +3975,38 @@ residency_transform (function *fn, prgm_state *st)
     = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
 
   bool changed = false;
-  hash_map<class loop *, edge> peeled;
+  /* One record per peeled loop: the post-peel entry edge (the
+     programming point's home), the peel block itself, and the peel's
+     original-name -> copy-name map (the park tier's pre-peel placement
+     erases a candidate's duplicated materialization through it).  */
+  struct peel_record
+  {
+    edge entry;
+    basic_block copy_bb;
+    hash_map<tree, tree> names;
+  };
+  hash_map<class loop *, peel_record *> peeled;
+  auto_vec<peel_record *> peel_records;
   /* CC-canonical class: the programming point is the fall-through edge
      of the peeled first iteration (one peel per loop; later candidates
      of the same loop share it).  Peeling happens only after a placement
      decision is final, so refused candidates never mutate the CFG.  */
-  auto ensure_peeled = [&] (residency_candidate &c)
+  auto ensure_peeled = [&] (residency_candidate &c) -> peel_record *
     {
       if (!c.peel)
-	return;
-      if (edge *found = peeled.get (c.loop))
-	c.entry = *found;
-      else
+	return nullptr;
+      if (peel_record **found = peeled.get (c.loop))
 	{
-	  c.entry = peel_first_iteration (c.loop, c.entry);
-	  peeled.put (c.loop, c.entry);
+	  c.entry = (*found)->entry;
+	  return *found;
 	}
+      peel_record *rec = new peel_record;
+      rec->entry = peel_first_iteration (c.loop, c.entry, &rec->copy_bb,
+					 &rec->names);
+      c.entry = rec->entry;
+      peeled.put (c.loop, rec);
+      peel_records.safe_push (rec);
+      return rec;
     };
   /* SFPSTORE sources L0-L11 only (SFPSTORE.md functional model; the
      store-fold pass's SFPSTORE_MAX_SRC_LREG capability fact), so a
@@ -4196,8 +4344,35 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	  return false;
 	}
-      ensure_peeled (c);
-      basic_block preheader = rvtt_commit_hoist_preheader (c.entry);
+      peel_record *rec = ensure_peeled (c);
+      /* Pre-peel placement (lane IN): under the park-ordering regime
+	 the deferral moved this candidate from the early invariant
+	 hoist to this tier, and the post-peel placement would pay the
+	 peel's duplicated materialization on every loop entry.  When
+	 the pre-peel ambient is proven all-lanes (block comment at
+	 prepeel_ambient_all_lanes_p) the parked definition placed at
+	 the HEAD of the peel block writes every lane before the peeled
+	 iteration runs -- the same superset-write refinement as the
+	 post-peel point -- so the peel's copy of the materialization
+	 is erased and its uses redirected.  An unproven ambient keeps
+	 the post-peel placement byte-identically (named refusal).  */
+      bool prepeel = false;
+      if (rec && riscv_tt_opt_park_ordering > 0)
+	{
+	  if (prepeel_ambient_all_lanes_p (rec->copy_bb))
+	    prepeel = true;
+	  else if (dump_file)
+	    {
+	      fprintf (dump_file,
+		       "pressure-park: pre-peel placement refused "
+		       "(park-prepeel-ambient-unproven, peel bb %d); "
+		       "keeping the programming-point placement: ",
+		       rec->copy_bb->index);
+	      print_gimple_stmt (dump_file, c.load, 0);
+	    }
+	}
+      basic_block preheader = prepeel ? rec->copy_bb
+	: rvtt_commit_hoist_preheader (c.entry);
       /* Same virtual-operand discipline as the invariant pass's hoist:
 	 only a renamed SSA vdef has uses to unlink or a name to
 	 release; the pass-level TODO renumbers the rest.  */
@@ -4216,14 +4391,56 @@ residency_transform (function *fn, prgm_state *st)
 	  update_stmt (c.load);
 	}
       gimple_stmt_iterator from = gsi_for_stmt (c.load);
-      gsi_move_to_bb_end (&from, preheader);
+      bool erased_copy = false;
+      if (prepeel)
+	{
+	  /* Head of the peel block: the parked definition executes
+	     before the peeled iteration under the proven all-lanes
+	     ambient.  */
+	  gimple_stmt_iterator at = gsi_after_labels (preheader);
+	  gimple *load = gsi_stmt (from);
+	  gsi_remove (&from, false);
+	  if (gsi_end_p (at))
+	    gsi_insert_before (&at, load, GSI_NEW_STMT);
+	  else
+	    gsi_insert_before (&at, load, GSI_SAME_STMT);
+	  /* Erase the peel's duplicated materialization: the parked
+	     definition dominates the whole peel block and carries the
+	     identical constant in every lane the copy wrote (and the
+	     superset refinement on the rest).  */
+	  tree lhs = gimple_call_lhs (c.load);
+	  if (tree *fresh = rec->names.get (lhs))
+	    if (*fresh && TREE_CODE (*fresh) == SSA_NAME)
+	      {
+		gimple *cp = SSA_NAME_DEF_STMT (*fresh);
+		if (cp && gimple_bb (cp) == rec->copy_bb)
+		  {
+		    replace_uses_by (*fresh, lhs);
+		    gimple_stmt_iterator cgsi = gsi_for_stmt (cp);
+		    gsi_remove (&cgsi, true);
+		    release_defs (cp);
+		    erased_copy = true;
+		  }
+	      }
+	}
+      else
+	gsi_move_to_bb_end (&from, preheader);
       --lreg_budget;
       if (dump_file)
 	{
-	  fprintf (dump_file,
-		   "pressure-park: hoisted invariant materialization to a "
-		   "free LREG at the programming point (preheader bb %d): ",
-		   preheader->index);
+	  if (prepeel)
+	    fprintf (dump_file,
+		     "pressure-park: hoisted invariant materialization to "
+		     "a free LREG at the pre-peel entry (peel bb %d; "
+		     "ambient all-lanes proven; peel duplicate %s): ",
+		     preheader->index,
+		     erased_copy ? "erased" : "not-found");
+	  else
+	    fprintf (dump_file,
+		     "pressure-park: hoisted invariant materialization to "
+		     "a free LREG at the programming point (preheader "
+		     "bb %d): ",
+		     preheader->index);
 	  print_gimple_stmt (dump_file, c.load, 0);
 	}
       return true;
@@ -4343,6 +4560,9 @@ residency_transform (function *fn, prgm_state *st)
 
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);
+
+  for (peel_record *rec : peel_records)
+    delete rec;
   return changed;
 }
 
