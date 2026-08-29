@@ -786,6 +786,299 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
   return true;
 }
 
+/* Lane IM (hoisted-record window sizing;
+   -mtt-tensix-optimize-replay-window-sizing, Init(0); rvtt-cost.md
+   "REPLAY WINDOW SIZING UNDER A HOISTED RECORD").
+
+   pick_replay's saving key prices IN-BLOCK exec-while-record economics:
+   each replaced clone saves (length - 1) words against one launch word,
+   and the record itself stays in the body -- so a shorter window with
+   more instances wins (lcm-fresh: 14 words x 7 instances, saving 77,
+   over 28 words x 3 instances, saving 53), and lane IH measured that
+   key RIGHT for in-block windows.  A record the driver then HOISTS out
+   of the loop (record-hoist / replay-hoist preheader placement) changes
+   the economics: the record is delivered once per placement and the
+   per-trip cost is the LAUNCH WORDS alone, so the widest word-exact
+   window that fits the free slots minimizes per-trip issue.  The hand
+   kernels witness exactly this discipline (gcd/lcm: TTI_REPLAY(0,28,0,1)
+   once per kernel, then 3x REPLAY(0,28) + 1x REPLAY(0,13) per row --
+   the last launch a PARTIAL playback of the recorded window's prefix,
+   a shape the formation vocabulary could not express at all: every
+   launch it emits carries the full recorded length).
+
+   The helpers below re-pick the window AFTER the hoist admission of the
+   original pick has succeeded (and only then -- in-block picks keep
+   pick_replay's measured-right key):
+
+   - window_sizing_clones_exact_p: structural re-verification that a
+     candidate's clones are non-overlapping, ascending, word-exact
+     copies of its recorded window (discovery matches by hash; a launch
+     delivers the RECORDED words at every site, so word-exactness is
+     the launch-arithmetic premise -- the reform-mode audit's contract).
+
+   - window_sizing_prefix_trim: the longest trailing run after the last
+     clone that is a word-exact PREFIX of the recorded window, delivered
+     as one partial launch (ISA: a REPLAY launch emits
+     ReplayBuffer[(Index+i)%32] for i in [0,Count) -- a pure prefix of
+     the recorded program, independent of the recorded length; both
+     functional models, and the hand kernels' REPLAY(0,13) on silicon).
+     The walk mirrors sequence-growth continuity exactly: it never
+     crosses a must_end word, a deleted insn, or the block end, and
+     stops one word short of a full extra clone.
+
+   - window_sizing_widen: among same-anchor wider candidates that fit
+     the largest free slot span, pick the one that strictly minimizes
+     per-trip delivered issue words over the covered span
+     (launches + partial launch + words left inline); every premise
+     failing keeps the original pick by name.
+
+   The caller then re-runs the FULL hoist admission (hoist_preheader:
+   oracle, pricing, placement, lift) on the widened candidate itself and
+   falls back to the original pick if any of it refuses.  The committed
+   transform is the existing hoisted no-exec capture at the existing
+   placement machinery -- only WIDER, plus one partial launch whose
+   soundness premises are the full launch's (record dominates the
+   launch; slots persistent and disjoint per the FS model; the window
+   checker resolves sub-span launches).  The partial launch replaces
+   words that executed inline with the same delivered words in the same
+   stream position: stream-identity, like every full clone replacement.
+   Deliberately NOT taken: widening in reform_mode (a widened carried
+   payload would need the launch-arithmetic audit re-derived for the
+   trim; refused by name window-sizing-reform-composition-unaudited),
+   and widening of exec-while-record in-block picks (pick_replay's key
+   is measured right there; lane IH).  */
+
+static bool
+replay_word_equal_p (rtx_insn *a, rtx_insn *b)
+{
+  /* The scratch-operand tolerance mirrors the reform-mode audit's own
+     equality (compiler GPR scratch and synthesized-word MEMs do not
+     reach the delivered Tensix word).  */
+  auto ignore = [] (const_rtx *x, const_rtx *y, rtx *nx, rtx *ny)
+    {
+      if (GET_CODE (*x) != GET_CODE (*y))
+	return false;
+      if (GET_CODE (*x) == MEM)
+	{
+	  if (GET_MODE (*x) != SImode)
+	    return false;
+	}
+      else if (GET_CODE (*x) != CLOBBER && GET_CODE (*x) != SCRATCH)
+	return false;
+      gcc_checking_assert (GET_MODE (*x) == GET_MODE (*y));
+      *nx = *ny = nullptr;
+      return true;
+    };
+  return rtx_equal_p (PATTERN (a), PATTERN (b), ignore);
+}
+
+static bool
+window_sizing_clones_exact_p (replay_block const &block,
+			      replay_sequence const &cand)
+{
+  auto refuse = [] (const char *why) -> bool
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "window-sizing candidate refused:"
+		 " window-sizing-clone-arithmetic: %s\n", why);
+      return false;
+    };
+
+  unsigned bound = 0;
+  for (auto const &clone : cand.clones)
+    {
+      if (clone.begin < bound || clone.end <= clone.begin)
+	return refuse ("overlapping or unordered clone spans");
+      bound = clone.end;
+    }
+
+  auto const &first = cand.clones.front ();
+  for (unsigned cx = 1; cx != cand.clones.size (); ++cx)
+    {
+      auto const &clone = cand.clones[cx];
+      unsigned fx = first.begin, ox = clone.begin;
+      unsigned matched = 0;
+      for (;;)
+	{
+	  while (fx != first.end && block[fx].empty)
+	    ++fx;
+	  while (ox != clone.end && block[ox].empty)
+	    ++ox;
+	  if (fx == first.end || ox == clone.end)
+	    break;
+	  if (GET_CODE (block[fx].insn) != INSN
+	      || GET_CODE (block[ox].insn) != INSN
+	      || !replay_word_equal_p (block[fx].insn, block[ox].insn))
+	    return refuse ("clone word differs from recorded word");
+	  ++fx, ++ox, ++matched;
+	}
+      if (matched != cand.length)
+	return refuse ("clone word count differs from recorded length");
+    }
+  return true;
+}
+
+static unsigned
+window_sizing_prefix_trim (replay_block const &block,
+			   replay_sequence const &cand,
+			   unsigned *trim_end_out)
+{
+  auto const &first = cand.clones.front ();
+  unsigned pos = cand.clones.back ().end;
+  unsigned fx = first.begin;
+  unsigned matched = 0;
+  unsigned end = pos;
+
+  /* A full-length trailing run would be another clone, not a trim.  */
+  while (matched + 1 < cand.length && pos != block.size ())
+    {
+      while (fx != first.end && block[fx].empty)
+	++fx;
+      if (fx == first.end)
+	break;
+      if (block[pos].empty)
+	{
+	  ++pos;
+	  continue;
+	}
+      if (GET_CODE (block[pos].insn) != INSN
+	  || GET_CODE (block[fx].insn) != INSN
+	  || !replay_word_equal_p (block[fx].insn, block[pos].insn))
+	break;
+      /* Sequence-growth continuity: never walk past a must_end word.  */
+      bool stop = block[pos].must_end;
+      ++matched;
+      ++pos;
+      ++fx;
+      end = pos;
+      if (stop)
+	break;
+    }
+
+  *trim_end_out = end;
+  return matched;
+}
+
+static replay_sequence *
+window_sizing_widen (replay_active &active, replay_sequence *seq,
+		     replay_block const &block, unsigned free_span,
+		     bool sticky, unsigned *trim_len_out,
+		     unsigned *trim_end_out)
+{
+  unsigned begin = seq->clones.front ().begin;
+  unsigned seq_cov_end = seq->clones.back ().end;
+
+  replay_sequence *best = nullptr;
+  unsigned best_cost = 0, best_trim = 0, best_trim_end = 0;
+  bool saw_overflow = false;
+
+  for (auto *cand : active)
+    {
+      if (cand == seq
+	  || cand->length <= seq->length
+	  || cand->clones.front ().begin != begin)
+	continue;
+      if (cand->length > free_span)
+	{
+	  /* A wider same-anchor candidate exists but the free replay
+	     slots cannot hold its record.  */
+	  saw_overflow = true;
+	  continue;
+	}
+      if (cand->companion_ok < 0)
+	cand->companion_ok
+	  = span_companion_sound_p (block, cand->clones.front (), sticky);
+      if (!cand->companion_ok)
+	continue;
+      if (!window_sizing_clones_exact_p (block, *cand))
+	continue;
+
+      unsigned trim_end = 0;
+      unsigned trim = window_sizing_prefix_trim (block, *cand, &trim_end);
+      unsigned cov_end = trim ? trim_end : cand->clones.back ().end;
+      if (cov_end < seq_cov_end)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "window-sizing candidate refused:"
+		     " window-sizing-coverage-short: [%u,+%u) x%u + %u-word"
+		     " trim ends at %u, before the picked window's %u\n",
+		     begin, cand->length, unsigned (cand->clones.size ()),
+		     trim, cov_end, seq_cov_end);
+	  continue;
+	}
+
+      /* Delivered per-trip issue words over the covered span, both
+	 shapes: launches, plus one partial launch, plus every word the
+	 shape leaves inline.  The current pick keeps its trailing run
+	 inline (this mechanism adds no partial launch to it).  */
+      unsigned ne = 0;
+      for (unsigned ix = begin; ix != cov_end; ++ix)
+	if (!block[ix].empty)
+	  ++ne;
+      unsigned covered = cand->length * unsigned (cand->clones.size ()) + trim;
+      gcc_checking_assert (ne >= covered);
+      unsigned cost_cand
+	= unsigned (cand->clones.size ()) + (trim != 0) + (ne - covered);
+      unsigned cur_covered = seq->length * unsigned (seq->clones.size ());
+      unsigned cost_cur = unsigned (seq->clones.size ()) + (ne - cur_covered);
+      if (cost_cand >= cost_cur)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "window-sizing candidate refused:"
+		     " window-sizing-no-cheaper-delivery: [%u,+%u) x%u +"
+		     " %u-word trim delivers %u issue words vs %u\n",
+		     begin, cand->length, unsigned (cand->clones.size ()),
+		     trim, cost_cand, cost_cur);
+	  continue;
+	}
+      if (!best || cost_cand < best_cost
+	  || (cost_cand == best_cost && cand->length < best->length))
+	{
+	  best = cand;
+	  best_cost = cost_cand;
+	  best_trim = trim;
+	  best_trim_end = trim_end;
+	}
+    }
+
+  if (!best)
+    {
+      if (dump_file)
+	{
+	  if (saw_overflow)
+	    fprintf (dump_file,
+		     "window-sizing refused: window-sizing-slot-exhausted:"
+		     " every wider same-anchor candidate exceeds the free"
+		     " slot span %u; keeping the picked [%u,+%u) window\n",
+		     free_span, begin, seq->length);
+	  else
+	    fprintf (dump_file,
+		     "window-sizing refused: window-sizing-no-wider-candidate:"
+		     " no admissible wider same-anchor candidate; keeping the"
+		     " picked [%u,+%u) window\n", begin, seq->length);
+	}
+      return nullptr;
+    }
+
+  unsigned cur_covered = seq->length * unsigned (seq->clones.size ());
+  if (dump_file)
+    fprintf (dump_file,
+	     "window-sizing: widened [%u,+%u) x%u (covering %u words) to"
+	     " [%u,+%u) x%u + %u-word prefix trim (per-trip deliveries"
+	     " %u -> %u)\n",
+	     begin, seq->length, unsigned (seq->clones.size ()), cur_covered,
+	     begin, best->length, unsigned (best->clones.size ()), best_trim,
+	     unsigned (seq->clones.size ()),
+	     unsigned (best->clones.size ()) + (best_trim != 0));
+
+  *trim_len_out = best_trim;
+  *trim_end_out = best_trim_end;
+  return best;
+}
+
 static replay_sequence *
 pick_replay (replay_active &active, unsigned limit, replay_block const &block,
 	     bool sticky)
@@ -1792,6 +2085,43 @@ max_contiguous_launch_run (replay_sequence const &seq,
    record-hoist loop replay-preservation walk may admit them where a
    user-authored launch (unknowable recorded content) refuses.  */
 static std::vector<rtx_insn *> formed_playback_launches;
+
+/* Lane IM: commit the partial playback launch for an admitted widened
+   window's trailing prefix run (see the window-sizing block comment
+   above window_sizing_clones_exact_p): one REPLAY launch whose Count is
+   the trim's word count (below the recorded length -- the ISA
+   prefix-launch semantics), emitted at the run's own stream position,
+   then the run's insns deleted exactly like a full clone's.  The span
+   is appended to SEQ.clones so active_invalidate retires every
+   candidate overlapping the consumed positions.  */
+
+static void
+window_sizing_commit_trim (replay_sequence &seq, replay_block &block,
+			   unsigned replay_start, unsigned trim_len,
+			   unsigned trim_end)
+{
+  unsigned begin = seq.clones.back ().end;
+  rtx replay = gen_rvtt_ttreplay_int
+    (const0_rtx, const0_rtx, const0_rtx, GEN_INT (trim_len),
+     rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (replay_start),
+     const0_rtx, const0_rtx);
+  rtx_insn *launch = emit_insn_after (replay, block[trim_end - 1].insn);
+  formed_playback_launches.push_back (launch);
+  if (dump_file)
+    {
+      fprintf (dump_file,
+	       "window-sizing: trailing %u-word run [%u,%u) is a"
+	       " recorded-window prefix; launching [%u,+%u) as a partial"
+	       " playback\n",
+	       trim_len, begin, trim_end, replay_start, trim_len);
+      fprintf (dump_file, "Replaying (partial) ");
+      dump_insn_slim (dump_file, launch);
+    }
+  for (auto pos = block.data () + begin, end = block.data () + trim_end;
+       pos != end; ++pos)
+    SET_INSN_DELETED (pos->insn);
+  seq.clones.emplace_back (begin, trim_end);
+}
 
 static basic_block
 dedicated_loop_preheader (class loop *loop)
@@ -7088,13 +7418,6 @@ transform (function *cfn, unsigned buffer_size)
 	      continue;
 	    }
 
-	  auto slot = spans.begin ();
-	  // Is there a better fit?
-	  // FIXME: should we only accept exact fit?
-	  for (auto probe = slot;
-	       ++probe != spans.end () && probe->end >= seq->length;)
-	    slot = probe;
-
 	  /* The record-hoist flag admits the preheader hoist attempt on
 	     its own (its pricing branch owns the re-record class); with
 	     only the plain hoist flag the attempt behaves exactly as
@@ -7105,6 +7428,65 @@ transform (function *cfn, unsigned buffer_size)
 	    = (riscv_tt_opt_replay_hoist > 0
 	       || riscv_tt_opt_replay_record_hoist > 0)
 	    ? hoist_preheader (*seq, info, dirty_bbs, &peel, &lift) : nullptr;
+
+	  /* Lane IM: hoisted-record window re-sizing (see the block
+	     comment above window_sizing_clones_exact_p).  Only an
+	     admitted non-peel hoist changes the delivery economics; the
+	     widened candidate must re-prove the WHOLE hoist admission
+	     itself, and any refusal keeps the original pick verbatim.  */
+	  unsigned trim_len = 0, trim_end = 0;
+	  if (riscv_tt_opt_replay_window_sizing > 0 && preheader
+	      && !peel.valid)
+	    {
+	      if (reform_mode)
+		{
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "window-sizing refused:"
+			     " window-sizing-reform-composition-unaudited:"
+			     " widening a re-formation pick would need the"
+			     " carried launch-arithmetic audit re-derived for"
+			     " the partial trim; keeping the picked window\n");
+		}
+	      else if (replay_sequence *wide
+		       = window_sizing_widen (active, seq, info,
+					      spans.front ().end, sticky,
+					      &trim_len, &trim_end))
+		{
+		  peel_plan peel_w;
+		  hoist_lift_plan lift_w;
+		  basic_block ph_w
+		    = hoist_preheader (*wide, info, dirty_bbs, &peel_w,
+				       &lift_w);
+		  if (ph_w && !peel_w.valid)
+		    {
+		      seq = wide;
+		      peel = peel_w;
+		      lift = lift_w;
+		      preheader = ph_w;
+		    }
+		  else
+		    {
+		      trim_len = trim_end = 0;
+		      if (dump_file)
+			fprintf (dump_file,
+				 "window-sizing refused:"
+				 " window-sizing-hoist-refused: widened"
+				 " window [%u,+%u) does not re-prove the"
+				 " hoist admission; keeping the picked"
+				 " window\n",
+				 wide->clones.front ().begin, wide->length);
+		    }
+		}
+	    }
+
+	  auto slot = spans.begin ();
+	  // Is there a better fit?
+	  // FIXME: should we only accept exact fit?
+	  for (auto probe = slot;
+	       ++probe != spans.end () && probe->end >= seq->length;)
+	    slot = probe;
+
 	  unsigned len = preheader
 	    ? (peel.valid
 	       ? replace_hoisted_sequence_peel (*seq, info, slot->begin,
@@ -7113,6 +7495,9 @@ transform (function *cfn, unsigned buffer_size)
 					   lift.valid ? lift.placement
 					   : preheader))
 	    : replace_sequence (*seq, info, slot->begin);
+	  if (trim_len)
+	    window_sizing_commit_trim (*seq, info, slot->begin, trim_len,
+				       trim_end);
 	  if (preheader)
 	    std::fill (persistent_slots.begin () + slot->begin,
 		       persistent_slots.begin () + slot->begin + len, true);
