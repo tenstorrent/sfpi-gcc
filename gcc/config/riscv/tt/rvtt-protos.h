@@ -130,6 +130,12 @@ extern gimple_opt_pass *make_pass_rvtt_int_not (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_store_fold (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_combine (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_prgm_const (gcc::context *ctxt);
+/* Lane IV: the TU-wide CC/lane-enable audit computed by prgm-const's
+   TU scan (gimple-rvtt-prgm-const.cc), read-only at RTL by the
+   macro-planner's entry-ambient walk.  False (with *REASON named) when
+   the scan has not run or classified some opaque-delivery channel as a
+   possible lane-enable writer.  */
+extern bool rvtt_tu_opaque_cc_ambient_preserving_p (const char **reason);
 extern gimple_opt_pass *make_pass_rvtt_check_early (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_check_late (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_dce (gcc::context *ctxt);
