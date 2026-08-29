@@ -1489,6 +1489,50 @@
 ;; re-ingestion cadence at one exec-record per outer-loop entry, the
 ;; witnessed class.
 ;;
+;; RECORD-HOIST PLACEMENT LIFT (lane IL, 2026-08-28;
+;; -mtt-tensix-optimize-record-hoist-lift, Init(0), composing on
+;; record-hoist mode only).  Rescues exactly the DOWNSTREAM-FALLBACK
+;; refusal above for STORELESS payloads
+;; (record-hoist-downstream-fallback-unprofitable: the lcm-fresh shape
+;; -- an invariant computational window re-recorded exec-while-record
+;; once per row, whose no-exec hoist into the INNERMOST dedicated
+;; preheader would sit within the audited drained-frontend window of
+;; the row's own would-be dst-autoincr mod-write loads/store across
+;; the backedge).  KEY FACT: the oracle's distance walk runs UPSTREAM
+;; of the placement (the hazard is a record INGESTED inside the
+;; retirement window following a mod-write) and a path reaching the
+;; function entry is proven separated -- so an OUTER dedicated
+;; preheader, ultimately the function entry, is outside the refuted
+;; composition by the guard's own distance semantics.  That placement
+;; is the witnessed init-record discipline (the xielu/gcd/lcm preamble
+;; class; the raw gcd init records its round program once per kernel
+;; at entry).  The lift walks outward across enclosing loops and
+;; commits the UNCHANGED no-exec hoist at the outermost admissible
+;; oracle-clean level: each crossed loop must prove replay-preserving
+;; under the record-hoist interval walk (an in-loop replay owner,
+;; call, asm, or possible FIFO push could re-record the lifted slots
+;; between record and a later trip's launch; the walk covers every
+;; intermediate block), each candidate placement must be a DEDICATED
+;; preheader with no open user recording state, and each is re-audited
+;; by the SAME oracle (a still-covered placement walks on).  A failing
+;; level STOPS the walk (never refuses; the lane HC residency-walk
+;; discipline); no oracle-clean level keeps today's bytes by name
+;; (record-hoist-lift-no-admissible-level).  SOUNDNESS is the existing
+;; hoisted no-exec capture class at a different placement: dominating
+;; and not forward-reachable except through the placement itself (FS
+;; rules hold), STORELESS by construction (the Dst-store mirror
+;; refuses those payloads before the oracle; sweep rule 1 is keyed to
+;; Dst-store payloads and storeless no-exec captures are the
+;; silicon-good celu/eqz class), re-ingestion at a still-in-loop
+;; placement repeats the SAME fixed-encoding words once per that
+;; loop's trip (idempotent; invariance is the record-hoist
+;; fixed-encoding admission), and sweep rule 2 re-audits the final
+;; placement's mod-write distance with the same predicate at end of
+;; pass.  PRICING: hoist_profitable_p unchanged on the immediate loop
+;; -- the lifted record is delivered at most as often as the modeled
+;; immediate-preheader record, so the modeled benefit is a floor.
+;; NO NEW CONSTANTS.
+;;
 ;; FAIL-CLOSED COMPANION in the narrow scan (both flag states): a
 ;; volatile store whose ADDRESS is not provably outside the instruction
 ;; FIFO could push ANY word -- including a REPLAY record -- so
