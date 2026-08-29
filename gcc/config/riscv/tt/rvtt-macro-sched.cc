@@ -92,6 +92,8 @@ const char *macro_sched_refusal_port_conflict = "port-conflict";
 const char *macro_sched_refusal_latency_violation = "latency-violation";
 const char *macro_sched_refusal_cc_template_unproved
   = "cc-template-unproved";
+const char *macro_sched_refusal_imm_stride_unabsorbed
+  = "imm-stride-not-absorbed";
 
 namespace {
 
@@ -653,12 +655,23 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
      store itself executes under the restored mask is the descriptor CC
      model's live-mask race constraint (cc-restore-store-race) -- the
      established 4-slot calendar fails it and refuses there.  */
-  if (row.separator && row.dst_delta && !row_has_cc_def)
+  /* The row's per-trip Dst advance: the classic separator-carried
+     delta, or -- for an immediate-delta region (lane IS, F1 honest
+     fix) -- the discovery-proven uniform absolute advance
+     (macro_region::imm_stride), which the absorbed calendar reproduces
+     exactly (discovery proved the total separator advance equals
+     rows * imm_stride).  An immediate-delta region that fails to
+     absorb refuses by name below: its rows' address immediates cannot
+     be replayed verbatim.  */
+  int row_stride = row.separator && row.dst_delta ? row.dst_delta : 0;
+  if (region.imm_stride)
+    row_stride = region.imm_stride;
+  if (row_stride && !row_has_cc_def)
     {
       rvtt_macro::setc16_program programs[8];
       unsigned n_programs = 0;
       bool needs_bank_base = false;
-      if (rvtt_macro::addr_mod_program (c, row.dst_delta, programs,
+      if (rvtt_macro::addr_mod_program (c, row_stride, programs,
 					&n_programs, &needs_bank_base))
 	{
 	  for (unsigned ix = items.length (); ix-- > 0;)
@@ -668,7 +681,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
 		break;
 	      }
 	  if (absorb_carrier >= 0 && hosts[absorb_carrier])
-	    absorbed_stride = row.dst_delta;
+	    absorbed_stride = row_stride;
 	  else
 	    absorb_carrier = -1;
 	}
@@ -756,8 +769,15 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
      matched proven program.  A CC-realization refusal from the
      coalescing rule takes precedence over the compact-absorption
      one.  */
+  /* An immediate-delta region is only expressible through the absorbed
+     calendar (its rows' address immediates differ and cannot replay
+     verbatim); anything else refuses by name (fail-closed).  */
+  const char *imm_refusal
+    = (region.imm_stride && absorbed_stride != region.imm_stride)
+    ? macro_sched_refusal_imm_stride_unabsorbed : nullptr;
   const char *refusal = cc_refusal ? cc_refusal
-    : cc_compact_refusal ? cc_compact_refusal : capacity_refusal;
+    : cc_compact_refusal ? cc_compact_refusal
+    : capacity_refusal ? capacity_refusal : imm_refusal;
   unsigned next_template = 0;
   auto_vec<const rvtt_macro::seq_program *> programs (carrier_first.length ());
   programs.safe_grow_cleared (carrier_first.length ());

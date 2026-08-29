@@ -88,6 +88,11 @@ extern const char *macro_sched_refusal_latency_violation;
    realization (template hosting or coalescing) cannot be proven; shared
    spelling with the descriptor layer's CC refusal.  */
 extern const char *macro_sched_refusal_cc_template_unproved;
+/* An immediate-delta region (macro_region::imm_stride, lane IS F1
+   honest fix) whose schedule did not absorb the stride: its rows'
+   address immediates differ and cannot replay verbatim, so only the
+   absorbed calendar expresses it.  */
+extern const char *macro_sched_refusal_imm_stride_unabsorbed;
 /* The 2026-08-17 silicon adjudication's separator-kept mis-select is
    no longer a scheduler-level structural refusal
    (cc-separator-kept-silicon-unproven, retired): the corrected CRAQ

@@ -44,6 +44,15 @@ struct macro_row
   bool starts_run;
   /* Typed Dst stride established by the separator (0 when absent).  */
   int dst_delta;
+  /* Immediate Dst-address delta of this row's typed Dst accesses
+     relative to rows[0] (lane IS, F1 honest fix): the loop-fusion
+     passes carry part of the per-row Dst advance in the address
+     immediates instead of a separator.  Zero for the classic
+     separator-carried shape.  Admitted only under the region-level
+     uniform absolute-progression proof (finalize_region), and only
+     ever emitted through the absorbed-stride calendar (formation
+     refuses otherwise).  */
+  int imm_delta;
   /* Value map proving isomorphism to rows[0]: (rows[0] reg, this reg)
      pairs, one per distinct register operand.  */
   vec<std::pair<rtx, rtx>> vmap;
@@ -59,6 +68,15 @@ struct macro_region
   xtt_effect_set net;		/* union of row effects			*/
   uint32_t internal_lregs;	/* LREGs defined & consumed inside	*/
   rtx_insn *first, *last;
+  /* Uniform per-row absolute Dst advance for regions whose rows carry
+     immediate address deltas (macro_row::imm_delta); 0 for the classic
+     separator-carried shape.  Proven by finalize_region's absolute-
+     progression check: row k's accumulated separator advance plus its
+     immediate delta equals k * imm_stride for every row, and the
+     region's total separator advance equals rows * imm_stride (the
+     downstream counter state the absorbed-stride emission
+     reproduces).  */
+  int imm_stride;
 };
 
 /* Stable refusal vocabulary (append-only; names are dump API).  */
