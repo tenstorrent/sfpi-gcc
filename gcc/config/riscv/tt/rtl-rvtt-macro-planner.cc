@@ -305,15 +305,47 @@ explicit_row_cost (const macro_region &region)
 /* Layer-6 profitability, derived from configuration and drain costs --
    no row thresholds anywhere.  Every run must independently amortize
    the full configuration prefix (the frozen conservative-per-run
-   discipline): rows*ii + drain + config < rows * explicit-row issues.  */
+   discipline): rows*ii + drain + config < rows * explicit-row issues.
+
+   Init-hoist-aware run pricing (lane IU, 2026-08-29; rvtt-cost.md
+   caller-loop prefix amortization): when the crosscall init hoist's
+   FULL contract (stage 2) is already proven for this region -- the
+   proof-only pre-run ahead of this gate, committed after every later
+   refusal point -- the configuration prefix will not be emitted in
+   the callee at all: the init contract words execute once per proven
+   caller-loop entry, not once per run.  Pricing then weighs the
+   prefix by the caller loop's profile entry/body fraction, exactly
+   the loop_profitable_p discipline one call level up:
+     config * entry + (rows*ii + drain) * body < rows * explicit * body.
+   Refusal-biased: every run still charges the FULL amortized prefix
+   (n runs charge it n times); stage 1 (per-call enable+SETC16
+   retained) and an unusable profile weight keep the frozen per-run
+   pricing unchanged.  IH_STAGE is 0 unless the stage-2 proof and the
+   weight both hold.  */
 
 static bool
 run_profitable_p (const macro_region &region, const macro_schedule &schedule,
-		  const macro_descriptor &desc, unsigned run_rows)
+		  const macro_descriptor &desc, unsigned run_rows,
+		  int ih_stage, int64_t ih_entry, int64_t ih_body,
+		  FILE *dump)
 {
-  unsigned macro_cost = config_prefix_cost (desc) + run_rows * schedule.ii
-    + desc.drain_slots;
-  return macro_cost < run_rows * explicit_row_cost (region);
+  uint64_t config = config_prefix_cost (desc);
+  uint64_t per_run = (uint64_t) run_rows * schedule.ii + desc.drain_slots;
+  uint64_t explicit_side = (uint64_t) run_rows * explicit_row_cost (region);
+  if (ih_stage >= 2 && ih_body > 0 && ih_entry > 0 && ih_body >= ih_entry)
+    {
+      bool ok = config * (uint64_t) ih_entry
+	+ per_run * (uint64_t) ih_body < explicit_side * (uint64_t) ih_body;
+      if (dump)
+	fprintf (dump, "Macro-planner run-pricing: init-hoist-amortized"
+		 " config=%llu per-run=%llu explicit=%llu"
+		 " weight=%lld/%lld -> %s\n",
+		 (unsigned long long) config, (unsigned long long) per_run,
+		 (unsigned long long) explicit_side, (long long) ih_body,
+		 (long long) ih_entry, ok ? "profitable" : "unprofitable");
+      return ok;
+    }
+  return config + per_run < explicit_side;
 }
 
 /* WP13 formation-vs-replay arbitration (-mtt-tensix-macro-ims).  The
@@ -406,6 +438,7 @@ ims_replay_alt_cost_x100 (const macro_region &region, unsigned run_rows)
 static bool
 ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
 		   const macro_descriptor &desc, unsigned run_rows,
+		   int ih_stage, int64_t ih_entry, int64_t ih_body,
 		   FILE *dump)
 {
   if (!riscv_tt_macro_ims || !riscv_tt_opt_replay
@@ -413,6 +446,20 @@ ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
     return true;
   uint64_t formed = ims_formed_cost_x100 (schedule, desc, run_rows);
   uint64_t alt = ims_replay_alt_cost_x100 (region, run_rows);
+  /* Init-hoist-aware arbitration (lane IU): under the proven stage-2
+     contract the prefix's push words execute once per caller-loop
+     entry; weigh both sides by the same profile fraction the run
+     pricing uses (cross-multiplied, no rounding).  The replay
+     alternative carries no prefix, so its side scales by body
+     alone -- refusal-biased as before.  */
+  if (ih_stage >= 2 && ih_body > 0 && ih_entry > 0 && ih_body >= ih_entry)
+    {
+      uint64_t prefix = (uint64_t) config_prefix_cost (desc)
+	* XTT_REPLAY_COST_RISC_PUSH_X100;
+      formed = prefix * (uint64_t) ih_entry
+	+ (formed - prefix) * (uint64_t) ih_body;
+      alt *= (uint64_t) ih_body;
+    }
   if (dump)
     fprintf (dump, "Macro-planner ims-arbitration: formed=%llu"
 	     " replay-alt=%llu (centislots; run-rows=%u ii=%d"
@@ -1661,10 +1708,113 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
+  /* WP13 residency de-duplication (rvtt-macro-desc.cc): when a
+     bit-identical descriptor program is already resident at a proven
+     dominating placement under function-wide owned-state invariance,
+     this region elides its descriptor-word programming entirely.
+     Proof-only; computed here (lane IU) so the init-hoist pricing
+     pre-run below sees the same eligibility the commit site keeps.
+     Refusals keep today's emission byte-identically.  */
+  bool resident_elide
+    = rvtt_macro_residency_lookup (fn, region, desc, c, resid, dump);
+
+  /* Init-hoist pricing pre-run (lane IU, 2026-08-29): the crosscall
+     init hoist's proof chain, evaluated PROOF-ONLY ahead of the
+     profitability gate under exactly the guards the committing site
+     (below, still last among the refusal points) applies.  A proven
+     stage-2 contract means the configuration prefix will leave the
+     callee entirely -- the init contract words price ONCE per proven
+     caller-loop entry, not per run (rvtt-cost.md caller-loop prefix
+     amortization).  Nothing is inserted here; the commit only happens
+     after every later refusal point has passed, and a refusal
+     anywhere keeps caller and callee byte-identical.  */
+  int init_hoist_stage = 0;
+  rvtt_init_hoist_program init_prog = {};
+  const char *init_refusal = nullptr;
+  rtx_insn *init_refusal_insn = nullptr;
+  if (riscv_tt_opt_init_hoist && !region.loop_body && !resident_elide)
+    {
+      if (!sole_region)
+	init_refusal = "drain-init-callee-unproven";
+      else if (!enable_src || (materialized_enable && !ambient_enable)
+	       || !cc_enable_all_lanes_proved_p (enable_src)
+	       || recog_memoized (enable_src) != CODE_FOR_rvtt_sfpencc)
+	/* v1: the prefix's lane proof must be the typed proven
+	   all-lanes SFPENCC (the minmax-class ambient enable); the
+	   WP10 in-row-restore materialization license is not carried
+	   cross-call.  The entry-ambient SYNTHESIZED enable (F1 honest
+	   fix) is admitted: it is the same canonical word the hoist's
+	   caller-side emission synthesizes itself
+	   (rvtt_sfpencc_all_lanes), licensed by the derived fn-entry
+	   ambient fact rather than a row-local restore.  */
+	init_refusal = "drain-init-idempotence-unproven";
+      else if (desc.n_setc16 > 8
+	       || desc.n_templates + desc.n_seq + (desc.has_misc ? 1 : 0)
+		  > 16)
+	init_refusal = "drain-init-idempotence-unproven";
+      else
+	init_refusal = init_hoist_callee_scan (fn, region,
+					       &init_refusal_insn);
+      if (!init_refusal)
+	{
+	  init_prog.n_setc16 = desc.n_setc16;
+	  for (unsigned i = 0; i != desc.n_setc16; ++i)
+	    {
+	      init_prog.setc16[i].reg = desc.setc16[i].config_reg;
+	      init_prog.setc16[i].value = desc.setc16[i].value;
+	    }
+	  init_prog.n_words = 0;
+	  for (unsigned t = 0; t != desc.n_templates; ++t)
+	    {
+	      init_prog.words[init_prog.n_words].word = desc.templ[t];
+	      init_prog.words[init_prog.n_words++].dest = t;
+	    }
+	  for (unsigned m = 0; m != desc.n_seq; ++m)
+	    {
+	      init_prog.words[init_prog.n_words].word = desc.seq[m];
+	      init_prog.words[init_prog.n_words++].dest = 4 + m;
+	    }
+	  if (desc.has_misc)
+	    {
+	      init_prog.words[init_prog.n_words].word = desc.misc;
+	      init_prog.words[init_prog.n_words++].dest = 8;
+	    }
+	  init_refusal = rvtt_crosscall_init_hoist (fn, &init_prog,
+						    /*commit=*/false);
+	  if (!init_refusal)
+	    {
+	      init_hoist_stage = init_prog.stage;
+	      if (dump)
+		fprintf (dump, "Macro-planner init-hoist pricing"
+			 " pre-run: stage=%d proven (weight=%lld/%lld"
+			 " usable=%d)\n", init_hoist_stage,
+			 (long long) init_prog.caller_body_count,
+			 (long long) init_prog.caller_entry_count,
+			 (int) init_prog.caller_weight_ok);
+	    }
+	}
+      if (init_refusal && dump)
+	{
+	  fprintf (dump, "Macro-planner init-hoist-refusal: %s",
+		   init_refusal);
+	  if (init_refusal_insn)
+	    fprintf (dump, " (insn %d)", INSN_UID (init_refusal_insn));
+	  fprintf (dump, "\n");
+	}
+    }
+  /* The pricing sees the amortization only under the full (stage-2)
+     contract with a usable profile weight; anything less keeps the
+     frozen conservative-per-run discipline.  */
+  int ih_pricing_stage
+    = init_hoist_stage >= 2 && init_prog.caller_weight_ok
+      ? init_hoist_stage : 0;
+
   /* Profitability.  Straight-line: every run independently amortizes
      the full configuration prefix (the frozen conservative-per-run
-     discipline).  Loop body: the prefix is paid once in the preheader
-     and weighted against the profile trip estimate.  */
+     discipline), except under the proven full init-hoist contract,
+     where the prefix amortizes over the caller loop (above).  Loop
+     body: the prefix is paid once in the preheader and weighted
+     against the profile trip estimate.  */
   if (region.loop_body)
     {
       if (!loop_profitable_p (region, schedule, desc, body_count,
@@ -1691,14 +1841,20 @@ form_region (function *fn, macro_region &region,
 	unsigned begin = run_begins[b];
 	unsigned end = b + 1 == run_begins.length ()
 	  ? region.rows.length () : run_begins[b + 1];
-	if (!run_profitable_p (region, schedule, desc, end - begin))
+	if (!run_profitable_p (region, schedule, desc, end - begin,
+			       ih_pricing_stage,
+			       init_prog.caller_entry_count,
+			       init_prog.caller_body_count, dump))
 	  {
 	    if (dump)
 	      fprintf (dump, "Macro-planner formation-refusal:"
 		       " unprofitable\n");
 	    return false;
 	  }
-	if (!ims_arbitrate_run (region, schedule, desc, end - begin, dump))
+	if (!ims_arbitrate_run (region, schedule, desc, end - begin,
+				ih_pricing_stage,
+				init_prog.caller_entry_count,
+				init_prog.caller_body_count, dump))
 	  {
 	    if (dump)
 	      fprintf (dump, "Macro-planner formation-refusal:"
@@ -1791,15 +1947,10 @@ form_region (function *fn, macro_region &region,
      region relying purely on an in-place trailing enable copies that
      proven word.  Every refusal keeps today's per-trip prefix
      byte-identically, under a stable name.  */
-  /* WP13 residency de-duplication (rvtt-macro-desc.cc): when a
-     bit-identical descriptor program is already resident at a proven
-     dominating placement under function-wide owned-state invariance,
-     this region elides its descriptor-word programming entirely; the
-     WP11 hoist is then moot for it.  Refusals keep today's emission
-     byte-identically.  */
-  bool resident_elide
-    = rvtt_macro_residency_lookup (fn, region, desc, c, resid, dump);
-
+  /* WP13 residency de-duplication: RESIDENT_ELIDE was computed above
+     (moved ahead of profitability by lane IU, decision-identical --
+     the lookup is proof-only and profitability reads no residency
+     state); a resident program makes the WP11 hoist moot.  */
   basic_block hoist_preheader = nullptr;
   edge hoist_edge = nullptr;
   rtx_insn *hoist_enable_src = nullptr;
@@ -1866,84 +2017,38 @@ form_region (function *fn, macro_region &region,
      is the function's whole macro content and its idempotent init
      prefix is call-invariant descriptor data, prove the (single)
      caller's loop epoch and move the prefix to the caller's loop
-     preheader -- once per loop instead of once per call.  Attempted
-     LAST among the refusal points (a committed caller-side insertion
-     and the callee-side suppression stand together).  Every unproven
-     link refuses by name and keeps today's per-call prefix
-     byte-identically.  */
-  int init_hoist_stage = 0;
-  if (riscv_tt_opt_init_hoist && !region.loop_body && !resident_elide
-      && !hoist_preheader && !config_preheader)
+     preheader -- once per loop instead of once per call.  The proof
+     chain ran PROOF-ONLY ahead of profitability (lane IU pricing
+     pre-run); the COMMIT stays here, LAST among the refusal points (a
+     committed caller-side insertion and the callee-side suppression
+     stand together).  The committing call re-evaluates the identical
+     deterministic proof chain; a divergence would mean the function
+     changed between the two calls -- impossible on the refusal-free
+     path -- and refuses fail-closed (pricing that assumed the hoist
+     must never form without it).  Every unproven link keeps today's
+     per-call prefix byte-identically.  */
+  if (init_hoist_stage > 0
+      && !hoist_preheader && !config_preheader && !resident_elide)
     {
-      const char *init_refusal = nullptr;
-      rtx_insn *init_refusal_insn = nullptr;
-      if (!sole_region)
-	init_refusal = "drain-init-callee-unproven";
-      else if (!enable_src || (materialized_enable && !ambient_enable)
-	       || !cc_enable_all_lanes_proved_p (enable_src)
-	       || recog_memoized (enable_src) != CODE_FOR_rvtt_sfpencc)
-	/* v1: the prefix's lane proof must be the typed proven
-	   all-lanes SFPENCC (the minmax-class ambient enable); the
-	   WP10 in-row-restore materialization license is not carried
-	   cross-call.  The entry-ambient SYNTHESIZED enable (F1 honest
-	   fix) is admitted: it is the same canonical word the hoist's
-	   caller-side emission synthesizes itself
-	   (rvtt_sfpencc_all_lanes), licensed by the derived fn-entry
-	   ambient fact rather than a row-local restore.  */
-	init_refusal = "drain-init-idempotence-unproven";
-      else if (desc.n_setc16 > 8
-	       || desc.n_templates + desc.n_seq + (desc.has_misc ? 1 : 0)
-		  > 16)
-	init_refusal = "drain-init-idempotence-unproven";
-      else
-	init_refusal = init_hoist_callee_scan (fn, region,
-					       &init_refusal_insn);
-      if (!init_refusal)
+      const char *commit_refusal
+	= rvtt_crosscall_init_hoist (fn, &init_prog, /*commit=*/true);
+      if (commit_refusal || init_prog.stage != init_hoist_stage)
 	{
-	  rvtt_init_hoist_program prog = {};
-	  prog.n_setc16 = desc.n_setc16;
-	  for (unsigned i = 0; i != desc.n_setc16; ++i)
-	    {
-	      prog.setc16[i].reg = desc.setc16[i].config_reg;
-	      prog.setc16[i].value = desc.setc16[i].value;
-	    }
-	  prog.n_words = 0;
-	  for (unsigned t = 0; t != desc.n_templates; ++t)
-	    {
-	      prog.words[prog.n_words].word = desc.templ[t];
-	      prog.words[prog.n_words++].dest = t;
-	    }
-	  for (unsigned m = 0; m != desc.n_seq; ++m)
-	    {
-	      prog.words[prog.n_words].word = desc.seq[m];
-	      prog.words[prog.n_words++].dest = 4 + m;
-	    }
-	  if (desc.has_misc)
-	    {
-	      prog.words[prog.n_words].word = desc.misc;
-	      prog.words[prog.n_words++].dest = 8;
-	    }
-	  init_refusal = rvtt_crosscall_init_hoist (fn, &prog);
-	  if (!init_refusal)
-	    {
-	      init_hoist_stage = prog.stage;
-	      if (dump)
-		fprintf (dump, "Macro-planner init-hoist: stage=%d"
-			 " init contract hoisted to caller loop preheader"
-			 " (%u descriptor words, %u setc16, enable %s)\n",
-			 init_hoist_stage, prog.n_words, prog.n_setc16,
-			 init_hoist_stage >= 2 ? "hoisted" : "retained");
-	    }
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " init-hoist-commit-diverged (%s)\n",
+		     commit_refusal ? commit_refusal : "stage-mismatch");
+	  return false;
 	}
-      if (init_refusal && dump)
-	{
-	  fprintf (dump, "Macro-planner init-hoist-refusal: %s",
-		   init_refusal);
-	  if (init_refusal_insn)
-	    fprintf (dump, " (insn %d)", INSN_UID (init_refusal_insn));
-	  fprintf (dump, "\n");
-	}
+      if (dump)
+	fprintf (dump, "Macro-planner init-hoist: stage=%d"
+		 " init contract hoisted to caller loop preheader"
+		 " (%u descriptor words, %u setc16, enable %s)\n",
+		 init_hoist_stage, init_prog.n_words, init_prog.n_setc16,
+		 init_hoist_stage >= 2 ? "hoisted" : "retained");
     }
+  else
+    init_hoist_stage = 0;
 
   /* Drain-aware boundary placement (default-off; proofs and derivation
      in rtl-rvtt-schedule.cc): decide every intra-region boundary BEFORE any

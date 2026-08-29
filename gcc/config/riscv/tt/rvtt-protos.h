@@ -409,10 +409,27 @@ struct rvtt_init_hoist_program
   unsigned n_words;
   struct { uint32_t word; unsigned dest; } words[16];
   int stage;			/* out */
+  /* Out (lane IU init-hoist-aware run pricing): the proven caller
+     loop's profile trip weight as an unreduced entry/body fraction
+     (the planner's loop_trip_weight discipline: exact where the
+     profile is, the static estimate elsewhere; products kept inside
+     64 bits).  caller_weight_ok is false when the profile gives no
+     usable estimate -- profitability must then keep the frozen
+     conservative-per-run pricing.  Purely a profitability weight,
+     never a correctness input.  */
+  bool caller_weight_ok;
+  int64_t caller_entry_count;
+  int64_t caller_body_count;
 };
 
+/* COMMIT false runs every proof and sets the out fields but inserts
+   nothing (lane IU: the pricing pre-run ahead of the planner's
+   profitability gate); COMMIT true is the committing call.  Both
+   evaluate the identical proof chain, so a proof-only success is
+   exactly the committing call's success.  */
 extern const char *rvtt_crosscall_init_hoist (function *callee,
-					      rvtt_init_hoist_program *);
+					      rvtt_init_hoist_program *,
+					      bool commit);
 
 /* Lane IK cross-call ADDR_MOD contract (gimple-rvtt-crosscall.cc
    service for the Dst auto-increment pass): the callee's owned

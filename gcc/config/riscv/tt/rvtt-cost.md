@@ -2871,3 +2871,57 @@
 ;; extrapolation (refusal-biased for this shape: it undercounts the
 ;; explicit side's separators).
 ;; ---------------------------------------------------------------------
+;; ---------------------------------------------------------------------
+;; INIT-HOIST-AWARE RUN PRICING -- CALLER-LOOP PREFIX AMORTIZATION
+;; (lane IU, 2026-08-29; the laneIS-named successor for the minmax
+;; class).
+;;
+;; THE GAP.  The macro planner's straight-line run gate froze the
+;; conservative-per-run discipline:
+;;     config_prefix + rows*ii + drain  <  rows * explicit_row_words
+;; charging the FULL configuration prefix (all-lanes enable + owned
+;; SETC16 program + descriptor-word materializations, in issue words)
+;; to EVERY run -- priced BEFORE the crosscall init hoist was known,
+;; although the hoist (lane CA, D2) is decided in the same formation
+;; and, at stage 2, removes the prefix from the callee ENTIRELY: the
+;; init contract words execute once per proven caller-loop entry.  The
+;; post-F1 minmax shape (rows=32 runs=4, fused imm-stride rows,
+;; explicit row = 4 words after the deleted marker's padding) refused
+;; `unprofitable' at that arithmetic while the formed+hoisted form
+;; measures 17451 cy vs the refusal's replay-delivered 25000 cy on
+;; silicon (laneIS RESULTS.md) -- a pure pricing artifact.
+;;
+;; THE DERIVATION.  Let E = caller-loop entry executions and B = in-loop
+;; call executions (the caller's profile counts, B >= E > 0, the SAME
+;; unreduced-fraction discipline as loop_trip_weight/WP8 one call level
+;; up).  Under the proven stage-2 contract the formed shape's issue
+;; words per caller-loop entry are config_prefix once plus B *
+;; (rows*ii + drain) per call; the explicit alternative pays B * rows *
+;; explicit_row_words with NO prefix anywhere.  Cross-multiplied
+;; (no rounding):
+;;     config_prefix * E + (rows*ii + drain) * B
+;;         <  rows * explicit_row_words * B.
+;; Refusal-biased in every term: each run of a multi-run region charges
+;; the FULL amortized prefix again (n runs charge it n times); the
+;; weight comes from the committed hoist's own proven caller loop (the
+;; profile fraction, exact for constant-bound loops); stage 1 (enable +
+;; SETC16 retained per call) and an unusable profile weight keep the
+;; frozen per-run pricing UNCHANGED, as does init-hoist-off.  The
+;; PROOF-ONLY pre-run of the identical hoist proof chain
+;; (rvtt_crosscall_init_hoist commit=false) runs ahead of the gate;
+;; the caller-side insertion still commits LAST among the refusal
+;; points, and a formation whose pricing consumed the amortization
+;; refuses fail-closed (init-hoist-commit-diverged) if the committing
+;; call could ever diverge -- it cannot on the refusal-free path, the
+;; proof chain is deterministic over an unchanged function.
+;;
+;; The WP13/IMS arbitration composes identically: under the proven
+;; stage-2 contract the formed side's prefix push words
+;; (XTT_REPLAY_COST_RISC_PUSH_X100 centislots each) weigh by E while
+;; both sides' per-call words weigh by B; the replay alternative
+;; carries no prefix, so its lower-bound bias is preserved.  The lane
+;; IA per-execution config pricing is untouched: it prices the
+;; dst-autoincr SETC16 slot programs a NON-hoisted callee re-emits per
+;; call, and its own crosscall relief is the lane IK ADDR_MOD service
+;; -- the two contracts price disjoint words.
+;; ---------------------------------------------------------------------
