@@ -581,6 +581,99 @@ preheader_trailing_enable (basic_block preheader)
   return nullptr;
 }
 
+/* Entry-ambient all-lanes derivation (lane IS, owner-ratified F1
+   honest fix): whether the lane-enable state at the configuration
+   placement point is provably the architectural all-lanes state, with
+   NO marker instruction in the stream.  The ambient model is the
+   established structured-CC lowering contract (gimple-rvtt-cc.cc: the
+   outermost lane state is pinned all-lanes -- the same license behind
+   the outermost POPC -> ENCC rewrite, the WP10 materialization, the
+   crossrow-pairing loop-entry walk, and prgm-const's pre-peel walk):
+   function entry is all-lanes ambient; a word-exact all-lanes SFPENCC
+   KILLS (re-establishes the state); any other CC-affecting statement
+   dirties.  This RTL walk is fail-closed beyond the gimple walks:
+   calls, raw asm, unrecognized instructions, and opaque Tensix effects
+   all dirty (the planner has no TU raw-boundary audit to lean on).
+   Scalar (non-Tensix) instructions cannot touch SFPU lane state and
+   are transparent.  */
+
+static bool
+entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before)
+{
+  /* 0 = transparent, 1 = kill (proven all-lanes), 2 = dirty.  */
+  auto classify = [] (rtx_insn *insn) -> int
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	return 0;
+      if (CALL_P (insn))
+	return 2;
+      rtx pat = PATTERN (insn);
+      if (GET_CODE (pat) == USE || GET_CODE (pat) == CLOBBER)
+	return 0;
+      if (asm_noperands (pat) >= 0)
+	return 2;
+      if (recog_memoized (insn) < 0)
+	return 2;
+      if (get_attr_type (insn) != TYPE_TENSIX)
+	return 0;
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (e.opaque)
+	return 2;
+      if (!e.cc_write)
+	return 0;
+      return (e.cc_write_all_lanes && pure_cc_write_insn_p (insn)) ? 1 : 2;
+    };
+
+  /* Scan BB backwards, from just before STOP_BEFORE (or the block end
+     when null), and report the last CC event: 1 kill, 2 dirty, 0 none
+     (transparent -- the walk continues into the predecessors).  */
+  auto scan = [&classify] (basic_block bb, rtx_insn *stop_before) -> int
+    {
+      rtx_insn *insn = stop_before ? PREV_INSN (stop_before) : BB_END (bb);
+      while (insn && BLOCK_FOR_INSN (insn) == bb)
+	{
+	  int c = classify (insn);
+	  if (c)
+	    return c;
+	  if (insn == BB_HEAD (bb))
+	    break;
+	  insn = PREV_INSN (insn);
+	}
+      return 0;
+    };
+
+  int c = scan (point_bb, before);
+  if (c)
+    return c == 1;
+
+  hash_set<basic_block> visited;
+  auto_vec<basic_block, 16> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, point_bb->preds)
+    work.safe_push (e->src);
+  while (!work.is_empty ())
+    {
+      basic_block b = work.pop ();
+      if (b == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      if (visited.add (b))
+	continue;
+      switch (scan (b, nullptr))
+	{
+	case 1:
+	  continue;
+	case 2:
+	  return false;
+	default:
+	  FOR_EACH_EDGE (e, ei, b->preds)
+	    work.safe_push (e->src);
+	  break;
+	}
+    }
+  return true;
+}
+
 /* Structural preheader of a loop-body region, with the zero-trip and
    whole-body ownership obligations (WP8).  The loop header must have
    exactly its backedge plus one external incoming edge; the incoming
@@ -674,6 +767,40 @@ planner_rewrite_load_addr_mode (rtx_insn *orig, rtx pat, unsigned addr_mode)
     return false;
   if (pat != PATTERN (orig))	/* the copy, never the original */
     XVECEXP (src, 0, 7) = GEN_INT (addr_mode);
+  return true;
+}
+
+/* Rewrite the typed Dst address immediate of a copied row pattern to
+   NEW_ADDR (lane IS, F1 honest fix: immediate-delta rows normalize
+   their explicit reloads back to rows[0]'s base -- the absorbed-stride
+   calendar supplies the per-row advance through the counter).  The
+   operand positions mirror rvtt_dst_access_operands' positional
+   knowledge for the two admitted Dst patterns; the address element is
+   unspec element 3 in both.  Returns false -- without mutating -- for
+   any other shape; formation dry-runs this BEFORE any emission so
+   refusal paths never mutate.  */
+
+static bool
+planner_rewrite_dst_address (rtx_insn *orig, rtx pat, HOST_WIDE_INT new_addr)
+{
+  int code = recog_memoized (orig);
+  rtx unspec;
+  if (code == CODE_FOR_rvtt_sfpload_lv_int)
+    {
+      rtx set = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, 0) : pat;
+      if (GET_CODE (set) != SET)
+	return false;
+      unspec = SET_SRC (set);
+    }
+  else if (code == CODE_FOR_rvtt_sfpstore_int)
+    unspec = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, 0) : pat;
+  else
+    return false;
+  if (GET_CODE (unspec) != UNSPEC_VOLATILE || XVECLEN (unspec, 0) < 4
+      || !CONST_INT_P (XVECEXP (unspec, 0, 3)))
+    return false;
+  if (pat != PATTERN (orig))	/* the copy, never the original */
+    XVECEXP (unspec, 0, 3) = GEN_INT (new_addr);
   return true;
 }
 
@@ -1139,6 +1266,29 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		       c->auto_increment_dst2_addr_mode);
 		    gcc_assert (ok);
 		  }
+		/* Immediate-delta row (lane IS, F1 honest fix):
+		   normalize the copied explicit Dst access back to
+		   rows[0]'s base -- the absorbed calendar's counter
+		   supplies the per-row advance.  Formation dry-ran the
+		   rewrite on every Dst access of every offset row.  */
+		if (region.imm_stride && region.rows[r].imm_delta)
+		  {
+		    xtt_effect_set fe
+		      = rvtt_insn_effects (region.rows[r].insns[ix]);
+		    if (fe.dst_mem_read || fe.dst_mem_write)
+		      {
+			rtx address, mode, am;
+			bool ok = rvtt_dst_access_operands
+			  (region.rows[r].insns[ix], fe, &address, &mode,
+			   &am)
+			  && CONST_INT_P (address)
+			  && planner_rewrite_dst_address
+			       (region.rows[r].insns[ix], pat,
+				INTVAL (address)
+				- region.rows[r].imm_delta);
+			gcc_assert (ok);
+		      }
+		  }
 		emit_insn (pat);
 	      }
 	  }
@@ -1399,6 +1549,7 @@ form_region (function *fn, macro_region &region,
      enable (whole-body ownership keeps it live across every trip).  */
   rtx_insn *enable_src = region.rows[0].enable;
   bool materialized_enable = false;
+  bool ambient_enable = false;
   if (desc.needs_all_lanes_prefix && !region.rows[0].enable)
     {
       rtx_insn *trailing = config_preheader
@@ -1450,15 +1601,63 @@ form_region (function *fn, macro_region &region,
 		    && !e.lreg_write && e.cc_write_all_lanes)
 		  proof_restore = member;
 	      }
-	  if (!proof_restore)
+	  if (proof_restore)
+	    {
+	      enable_src = proof_restore;
+	      materialized_enable = true;
+	    }
+	  /* Entry-ambient derivation (lane IS, owner-ratified F1 honest
+	     fix, 2026-08-29): when no typed enable exists anywhere --
+	     the source carries no marker instruction -- the compiler
+	     derives the lane state itself.  The license is the SAME
+	     architectural contract every established consumer already
+	     stands on (rvtt_cc's outermost POPC -> ENCC rewrite, the
+	     WP10 materialization above, crossrow-pairing's loop-entry
+	     walk, prgm-const's pre-peel walk): the structured-CC
+	     lowering pins the function-entry and outermost lane state
+	     to the architectural all-lanes state.  The derivation is a
+	     kill-aware backwards CFG walk from the configuration
+	     placement point: every path must reach the function entry
+	     or a word-exact all-lanes SFPENCC before any other
+	     CC-affecting, unaudited, or opaque instruction (calls and
+	     raw asm are DIRTY -- fail-closed, stricter than the gimple
+	     walks' audited-TU transparency).  On success the formation
+	     SYNTHESIZES the canonical all-lanes enable
+	     (rvtt_sfpencc_all_lanes, the capability-table word, the
+	     same word the crosscall init hoist already synthesizes
+	     caller-side) at the head of the configuration prefix:
+	     re-writing the state the derivation just proved -- a
+	     machine-state no-op, priced as the one pushed word it
+	     is.  An unproven walk keeps the named refusal.  */
+	  else if (entry_ambient_all_lanes_p
+		     (config_preheader
+		      ? config_preheader
+		      : BLOCK_FOR_INSN (region.rows[0].insns[0]),
+		      config_preheader
+		      ? nullptr : region.rows[0].insns[0]))
+	    {
+	      start_sequence ();
+	      emit_insn (gen_rvtt_sfpencc_all_lanes ());
+	      rtx_insn *synth = get_insns ();
+	      end_sequence ();
+	      gcc_assert (synth && !NEXT_INSN (synth)
+			  && cc_enable_all_lanes_proved_p (synth));
+	      enable_src = synth;
+	      materialized_enable = true;
+	      ambient_enable = true;
+	      if (dump)
+		fprintf (dump, "Macro-planner formation: entry-ambient"
+			 " all-lanes derived (structured-CC fn-entry"
+			 " contract); canonical enable synthesized\n");
+	    }
+	  else
 	    {
 	      if (dump)
 		fprintf (dump, "Macro-planner formation-refusal:"
-			 " all-lanes-proof-missing\n");
+			 " all-lanes-proof-missing"
+			 " (ambient-entry-unproven)\n");
 	      return false;
 	    }
-	  enable_src = proof_restore;
-	  materialized_enable = true;
 	}
     }
 
@@ -1520,6 +1719,48 @@ form_region (function *fn, macro_region &region,
 		   " stride-not-absorbed\n");
 	return false;
       }
+
+  /* Immediate-delta regions (lane IS, F1 honest fix): only the
+     absorbed calendar expresses them (the schedule already refuses
+     imm-stride-not-absorbed; this re-check keeps the contract locally
+     auditable), the WP9 kept-separator program never carries them, and
+     every Dst access of every offset row must be address-rewritable
+     back to rows[0]'s base -- proven here as a dry run BEFORE any
+     mutation.  */
+  if (region.imm_stride)
+    {
+      if (schedule.absorbed_stride != region.imm_stride
+	  || desc.keep_separator)
+	{
+	  if (dump)
+	    fprintf (dump, "Macro-planner formation-refusal:"
+		     " imm-stride-not-absorbed\n");
+	  return false;
+	}
+      for (const macro_row &row : region.rows)
+	{
+	  if (!row.imm_delta)
+	    continue;
+	  for (rtx_insn *insn : row.insns)
+	    {
+	      xtt_effect_set e = rvtt_insn_effects (insn);
+	      if (!e.dst_mem_read && !e.dst_mem_write)
+		continue;
+	      rtx address, mode, addr_mode;
+	      if (!rvtt_dst_access_operands (insn, e, &address, &mode,
+					     &addr_mode)
+		  || !CONST_INT_P (address)
+		  || !planner_rewrite_dst_address (insn, PATTERN (insn),
+						   INTVAL (address)))
+		{
+		  if (dump)
+		    fprintf (dump, "Macro-planner formation-refusal:"
+			     " imm-stride-rewrite-unproven\n");
+		  return false;
+		}
+	    }
+	}
+    }
 
   /* WP10 compact CC calendar: the absorbing explicit load's address
      mode operand must be rewritable (the one admitted load pattern);
@@ -1638,12 +1879,17 @@ form_region (function *fn, macro_region &region,
       rtx_insn *init_refusal_insn = nullptr;
       if (!sole_region)
 	init_refusal = "drain-init-callee-unproven";
-      else if (!enable_src || materialized_enable
+      else if (!enable_src || (materialized_enable && !ambient_enable)
 	       || !cc_enable_all_lanes_proved_p (enable_src)
 	       || recog_memoized (enable_src) != CODE_FOR_rvtt_sfpencc)
 	/* v1: the prefix's lane proof must be the typed proven
 	   all-lanes SFPENCC (the minmax-class ambient enable); the
-	   materialized-enable license is not carried cross-call.  */
+	   WP10 in-row-restore materialization license is not carried
+	   cross-call.  The entry-ambient SYNTHESIZED enable (F1 honest
+	   fix) is admitted: it is the same canonical word the hoist's
+	   caller-side emission synthesizes itself
+	   (rvtt_sfpencc_all_lanes), licensed by the derived fn-entry
+	   ambient fact rather than a row-local restore.  */
 	init_refusal = "drain-init-idempotence-unproven";
       else if (desc.n_setc16 > 8
 	       || desc.n_templates + desc.n_seq + (desc.has_misc ? 1 : 0)

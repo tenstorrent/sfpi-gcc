@@ -2818,3 +2818,56 @@
 ;; against the function-wide pressure model) is unchanged; the erased
 ;; duplicate only removes issue words from the loop-entry path.
 ;; ---------------------------------------------------------------------
+;; ---------------------------------------------------------------------
+;; ENTRY-AMBIENT ENABLE DERIVATION + IMMEDIATE-DELTA ROWS (lane IS,
+;; 2026-08-29; the owner-ratified F1 honest fix: the semantic sources'
+;; empty sfppushc(0)/sfppopc(0) marker pairs are DELETED tree-wide and
+;; the compiler derives what the marker used to signal).
+;;
+;; The marker pair lowered (pass_rvtt_cc outermost transform) to a
+;; single all-lanes SFPENCC whose presence did two load-bearing jobs the
+;; source was never entitled to do:
+;;   (a) it was the planner's ambient all-lanes enable
+;;       (rows[0].enable / preheader trailing enable), and
+;;   (b) as a per-iteration CC write it BLOCKED the dst-iteration
+;;       fusion, keeping rows separator-carried and therefore
+;;       planner-isomorphic.
+;;
+;; (a) ENTRY-AMBIENT DERIVATION (rtl-rvtt-macro-planner.cc
+;; entry_ambient_all_lanes_p): when a needs-all-lanes region has no
+;; typed enable, no proven trailing enable, and no WP10 in-row restore,
+;; a kill-aware backwards CFG walk from the configuration placement
+;; point proves the fn-entry ambient all-lanes state (the established
+;; structured-CC lowering contract; kills = the word-exact all-lanes
+;; SFPENCC; calls/asm/opaque/unrecognized = DIRTY, fail-closed).  On
+;; success the formation SYNTHESIZES the canonical all-lanes enable
+;; (rvtt_sfpencc_all_lanes) at the prefix head -- re-writing the state
+;; the walk just proved, a machine-state no-op.  PRICING: the enable was
+;; ALWAYS counted in config_prefix_cost (the "+1 all-lanes enable"
+;; term); the synthesized word is that word.  The explicit-side price
+;; HONESTLY DROPS by the deleted marker's 1 word/row (rows[0].enable
+;; gone), so straight-line shapes that only amortized their prefix
+;; against marker padding now refuse unprofitable -- the honest verdict.
+;; Refusal: all-lanes-proof-missing (ambient-entry-unproven).  The
+;; crosscall init hoist v1 admits the ambient-synthesized enable (it is
+;; the same canonical word the hoist's caller side already synthesizes);
+;; the WP10 in-row materialization stays refused cross-call.
+;;
+;; (b) IMMEDIATE-DELTA ROWS (rvtt-macro-region.cc / rvtt-macro-sched.cc
+;; / formation): fusion-shaped rows equal to rows[0] up to ONE common
+;; typed Dst-address immediate delta are admitted when the region-level
+;; absolute progression is uniform (row k's accumulated separator
+;; advance + its immediate delta == k*S, total separator advance ==
+;; rows*S) -- the SAME +S-per-row progression the separator-carried
+;; shape expresses.  Formation MANDATES the absorbed-stride calendar
+;; (imm-stride-not-absorbed refusal otherwise: the rows' immediates
+;; cannot replay verbatim), dry-runs the address rewrite on every Dst
+;; access of every offset row (imm-stride-rewrite-unproven), and
+;; emission normalizes explicit copies back to rows[0]'s base while the
+;; absorbed auto-increment supplies the advance.  The emitted calendar
+;; is word-identical to the unfused shape's, and the final counter state
+;; matches by the total-advance proof.  PRICING: unchanged formulas; the
+;; per-run/per-trip explicit comparison keeps the frozen rows[0]
+;; extrapolation (refusal-biased for this shape: it undercounts the
+;; explicit side's separators).
+;; ---------------------------------------------------------------------
