@@ -68,6 +68,17 @@ along with GCC; see the file COPYING3.  If not see
 	colorer), the post-RA rtl-rvtt-spill-diag.cc named error
 	remains the backstop.
 
+      - Under the additional default-off
+	-mtt-tensix-optimize-lreg-coalesce (FABLE_GOES_BURR.md item
+	#6), Briggs/George CONSERVATIVE COALESCING merges copy-related
+	webs on the just-built graph before the colorability verdict
+	and spill-victim selection, so a web that only spilled because
+	its copy halves were counted separately colors for free; a
+	conservative merge can never turn an 8-colorable graph
+	uncolorable, so coalescing only ever removes spills.  See the
+	coalescing section comment below for the tests and the named
+	refusals.
+
    Bit-exactness gates (each failure is a named refusal that keeps
    today's lreg-pressure-exceeded error; refusals either precede any
    mutation or roll the stream back transactionally):
@@ -997,6 +1008,11 @@ struct lpa_graph
   auto_vec<int> node_of_reg;	/* regno -> node, -1 */
   sbitmap conflicts;		/* n*n symmetric matrix */
   auto_vec<unsigned> degree;
+  auto_vec<int> alias;		/* conservative coalescing: node ->
+				   merged-into node, -1 = representative.
+				   Identity (all -1) unless
+				   -mtt-tensix-optimize-lreg-coalesce
+				   performed merges this round.  */
   const char *fail;		/* fail-closed collection refusal */
   rtx_insn *fail_at;
 
@@ -1010,6 +1026,18 @@ struct lpa_graph
   bool conflict_p (unsigned i, unsigned j) const
   {
     return bitmap_bit_p (conflicts, i * webs.length () + j);
+  }
+  /* Whether node I is a live representative (not merged away).  */
+  bool live_p (unsigned i) const
+  {
+    return alias[i] < 0;
+  }
+  /* The representative of node I's coalesced web.  */
+  int rep (int i) const
+  {
+    while (alias[i] >= 0)
+      i = alias[i];
+    return i;
   }
   void add_conflict (unsigned i, unsigned j)
   {
@@ -1182,6 +1210,9 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
   g.conflicts = sbitmap_alloc (n * n);
   bitmap_clear (g.conflicts);
   g.degree.safe_grow_cleared (n);
+  g.alias.safe_grow_cleared (n);
+  for (unsigned i = 0; i < n; i++)
+    g.alias[i] = -1;
 
   if (g.fail)
     return;
@@ -1242,6 +1273,255 @@ build_graph (function *fn, lpa_graph &g, bitmap spill_tmps)
     }
 }
 
+/* ---------------- conservative coalescing (Briggs/George) ----------------
+
+   Under -mtt-tensix-optimize-lreg-coalesce, copy-related webs merge on
+   the just-built interference graph BEFORE the DSATUR colorability
+   verdict and spill-victim selection, so a web that only spilled
+   through a Dst round trip because its copy halves were counted
+   separately colors for free.  Merges are CONSERVATIVE in the
+   classical sense (Briggs/Cooper/Torczon, TOPLAS 1994): a merge is
+   performed only when it provably cannot turn an 8-colorable graph
+   uncolorable, so coalescing only ever REMOVES spills.
+
+   - Briggs test (neither web precolored): the merged node must have
+     fewer than SFPU_REG_NUM neighbors of significant degree.  A
+     common neighbor of both halves loses one edge to the merge, so it
+     is judged at degree-1; a precolored neighbor is always
+     significant (it is never simplifiable).  Failing the test refuses
+     coalesce-conservative-degree.
+
+   - George test (one web precolored): the uncolored web merges into
+     the precolored one only when every significant neighbor of the
+     uncolored web already interferes with the precolored one
+     (insignificant = uncolored neighbor of degree < SFPU_REG_NUM).
+     Failing the test refuses coalesce-george-interference.
+
+   - Equal-precolor pairs merge unconditionally (both fixed to the
+     same color already: no neighbor's palette changes and common
+     neighbors only lose degree).  Distinct-precolor pairs refuse
+     coalesce-precolor-conflict; pairs touching a livein reservation
+     sentinel or a spill-generated reload temporary refuse
+     coalesce-web-class (merging would export the never-spill class to
+     an ordinary web and could only remove spill candidates).
+
+   Merging is graph-side only: alias[] records the union-find, the
+   representative's conflict row absorbs the merged row, occurrence
+   counts accumulate for the Chaitin cost, and degrees are recomputed
+   over live representatives.  The instruction stream is untouched;
+   assignment stays delegated to IRA (whose own coalescing re-derives
+   the merge when it assigns).  Spilling a merged web round-trips ALL
+   of its constituents through ONE scratch row: constituents are
+   copy-related and never interfere, so at any point at most one is
+   live (or all live ones hold the same value, the copy-chain case)
+   and the shared row always holds that value; constituents with
+   disagreeing RWC epochs refuse lreg-spill-merged-epoch-mismatch in
+   the victim chooser.  Everything here runs to a fixpoint bounded by
+   the node count; iteration order is insn-stream order, so the
+   result is deterministic.  */
+
+/* Recompute degrees over live representatives after merges.  */
+
+static void
+coalesce_recompute_degrees (lpa_graph &g)
+{
+  unsigned n = g.webs.length ();
+  for (unsigned i = 0; i < n; i++)
+    {
+      g.degree[i] = 0;
+      if (!g.live_p (i))
+	continue;
+      for (unsigned j = 0; j < n; j++)
+	if (j != i && g.live_p (j) && g.conflict_p (i, j))
+	  g.degree[i]++;
+    }
+}
+
+/* Whether the conservative test admits merging live representatives I
+   and J (non-interfering, copy-related).  On refusal, *WHY names it.  */
+
+static bool
+coalesce_admissible_p (const lpa_graph &g, unsigned i, unsigned j,
+		       const char **why, const char **test)
+{
+  const lpa_web &wi = g.webs[i];
+  const lpa_web &wj = g.webs[j];
+
+  if (wi.reservation || wj.reservation || wi.reload_tmp || wj.reload_tmp)
+    {
+      *why = "coalesce-web-class";
+      return false;
+    }
+
+  unsigned n = g.webs.length ();
+  if (wi.precolor >= 0 && wj.precolor >= 0)
+    {
+      if (wi.precolor != wj.precolor)
+	{
+	  *why = "coalesce-precolor-conflict";
+	  return false;
+	}
+      *test = "precolor-equal";
+      return true;
+    }
+
+  if (wi.precolor >= 0 || wj.precolor >= 0)
+    {
+      /* George: every significant neighbor of the uncolored web U must
+	 already interfere with the precolored web P.  */
+      unsigned p = wi.precolor >= 0 ? i : j;
+      unsigned u = wi.precolor >= 0 ? j : i;
+      for (unsigned m = 0; m < n; m++)
+	{
+	  if (m == p || m == u || !g.live_p (m) || !g.conflict_p (u, m))
+	    continue;
+	  bool significant = g.webs[m].precolor >= 0
+	    || g.degree[m] >= SFPU_REG_NUM;
+	  if (significant && !g.conflict_p (p, m))
+	    {
+	      *why = "coalesce-george-interference";
+	      return false;
+	    }
+	}
+      *test = "george";
+      return true;
+    }
+
+  /* Briggs: the merged node must have fewer than SFPU_REG_NUM
+     significant-degree neighbors.  */
+  unsigned significant = 0;
+  for (unsigned m = 0; m < n; m++)
+    {
+      if (m == i || m == j || !g.live_p (m))
+	continue;
+      bool ni = g.conflict_p (i, m);
+      bool nj = g.conflict_p (j, m);
+      if (!ni && !nj)
+	continue;
+      unsigned dm = g.degree[m] - ((ni && nj) ? 1 : 0);
+      if (g.webs[m].precolor >= 0 || dm >= SFPU_REG_NUM)
+	significant++;
+    }
+  if (significant >= SFPU_REG_NUM)
+    {
+      *why = "coalesce-conservative-degree";
+      return false;
+    }
+  *test = "briggs";
+  return true;
+}
+
+/* Merge live representative J into live representative I.  */
+
+static void
+coalesce_merge (lpa_graph &g, unsigned i, unsigned j)
+{
+  unsigned n = g.webs.length ();
+  for (unsigned m = 0; m < n; m++)
+    if (m != i && g.conflict_p (j, m))
+      g.add_conflict (i, m);
+  if (g.webs[j].precolor >= 0)
+    g.webs[i].precolor = g.webs[j].precolor;
+  g.webs[i].occ += g.webs[j].occ;
+  g.alias[j] = i;
+  coalesce_recompute_degrees (g);
+}
+
+/* Conservative-coalesce copy-related webs on G to a fixpoint.
+   Returns the number of merges performed.  */
+
+static unsigned
+coalesce_conservative (function *fn, lpa_graph &g)
+{
+  /* Copy pairs in insn-stream order (deterministic).  */
+  auto_vec<int> pair_dst, pair_src;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  rtx set = single_set (insn);
+	  if (!set || !REG_P (SET_DEST (set)) || !REG_P (SET_SRC (set))
+	      || !xtt32_pseudo_p (REGNO (SET_DEST (set)))
+	      || !xtt32_pseudo_p (REGNO (SET_SRC (set))))
+	    continue;
+	  int dn = g.node_of_reg[REGNO (SET_DEST (set))];
+	  int sn = g.node_of_reg[REGNO (SET_SRC (set))];
+	  if (dn < 0 || sn < 0)
+	    continue;
+	  pair_dst.safe_push (dn);
+	  pair_src.safe_push (sn);
+	}
+    }
+
+  unsigned merges = 0;
+  unsigned n = g.webs.length ();
+  /* Each pass without a merge terminates; each merge kills one node.  */
+  for (unsigned pass = 0; pass <= n; pass++)
+    {
+      bool progress = false;
+      for (unsigned k = 0; k < pair_dst.length (); k++)
+	{
+	  unsigned i = g.rep (pair_dst[k]);
+	  unsigned j = g.rep (pair_src[k]);
+	  if (i == j)
+	    continue;		/* already one web */
+	  if (g.conflict_p (i, j))
+	    {
+	      /* A redefinition overlap: the halves hold different
+		 values somewhere.  Not a coalescing candidate.  */
+	      if (dump_file)
+		fprintf (dump_file,
+			 "lreg-alloc coalesce-refusal:"
+			 " coalesce-interfering-copy (r%u / r%u)\n",
+			 g.webs[i].regno, g.webs[j].regno);
+	      continue;
+	    }
+	  const char *why = NULL, *test = NULL;
+	  /* Keep the representative deterministic: merge the higher
+	     node index into the lower unless a precolor pins the
+	     representative.  */
+	  unsigned ri = MIN (i, j), rj = MAX (i, j);
+	  if (g.webs[rj].precolor >= 0 && g.webs[ri].precolor < 0)
+	    std::swap (ri, rj);
+	  if (!coalesce_admissible_p (g, ri, rj, &why, &test))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "lreg-alloc coalesce-refusal: %s (r%u / r%u)\n",
+			 why, g.webs[ri].regno, g.webs[rj].regno);
+	      continue;
+	    }
+	  coalesce_merge (g, ri, rj);
+	  merges++;
+	  progress = true;
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "lreg-alloc coalesce: merged web r%u into r%u"
+		     " (%s test, merged degree %u, occ %u)\n",
+		     g.webs[rj].regno, g.webs[ri].regno, test,
+		     g.degree[ri], g.webs[ri].occ);
+	}
+      if (!progress)
+	break;
+    }
+  if (dump_file && merges)
+    {
+      unsigned live = 0;
+      for (unsigned i = 0; i < n; i++)
+	if (g.live_p (i))
+	  live++;
+      fprintf (dump_file,
+	       "lreg-alloc coalesce: %u merge(s); %u web(s) -> %u"
+	       " coalesced web(s)\n",
+	       merges, n, live);
+    }
+  return merges;
+}
+
 /* ------------------------------ DSATUR ----------------------------- */
 
 /* DSATUR over SFPU_REG_NUM colors with precolored nodes fixed.
@@ -1258,9 +1538,11 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
   for (unsigned i = 0; i < n; i++)
     color[i] = -1;
 
-  /* Fix precolored nodes first; equal-precolor conflicts block.  */
+  /* Fix precolored nodes first; equal-precolor conflicts block.
+     Coalesced-away nodes are skipped throughout: their conflicts and
+     precolors live on their representative.  */
   for (unsigned i = 0; i < n; i++)
-    if (g.webs[i].precolor >= 0)
+    if (g.live_p (i) && g.webs[i].precolor >= 0)
       {
 	color[i] = g.webs[i].precolor;
 	for (unsigned j = 0; j < i; j++)
@@ -1278,7 +1560,7 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
       unsigned best_sat = 0, best_deg = 0;
       for (unsigned i = 0; i < n; i++)
 	{
-	  if (color[i] >= 0)
+	  if (color[i] >= 0 || !g.live_p (i))
 	    continue;
 	  unsigned sat_mask = 0;
 	  for (unsigned j = 0; j < n; j++)
@@ -1593,6 +1875,8 @@ choose_spill_web (const lpa_graph &g, int blocked, function *fn,
   HOST_WIDE_INT blocked_cost = 0;
   for (unsigned i = 0; i < n; i++)
     {
+      if (!g.live_p (i))
+	continue;		/* coalesced away; its rep is the web */
       if ((int) i != blocked && !g.conflict_p (blocked, i))
 	continue;
       const lpa_web &w = g.webs[i];
@@ -1604,14 +1888,45 @@ choose_spill_web (const lpa_graph &g, int blocked, function *fn,
 			|| (cost == best_cost
 			    && w.regno >= g.webs[best].regno)))
 	continue;
+      /* Every constituent of a coalesced web must admit the round
+	 trip through ONE shared scratch row: all admissible, one
+	 common RWC epoch, the largest compensation wins.  An
+	 uncoalesced web is its own single constituent (the plain
+	 pre-coalescing path, byte-identical).  */
       int woff = 0, wepoch = 0;
       const char *wwhy = NULL;
-      if (!web_spill_admissible_p (fn, w.regno, ctx, &woff, &wepoch, &wwhy))
+      bool admissible = true, have_epoch = false;
+      for (unsigned m = 0; m < n; m++)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "lreg-alloc: candidate r%u inadmissible (%s)\n",
-		     w.regno, wwhy);
+	  if (g.rep (m) != (int) i)
+	    continue;
+	  int moff = 0, mepoch = 0;
+	  if (!web_spill_admissible_p (fn, g.webs[m].regno, ctx, &moff,
+				       &mepoch, &wwhy))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "lreg-alloc: candidate r%u inadmissible (%s)\n",
+			 g.webs[m].regno, wwhy);
+	      admissible = false;
+	      break;
+	    }
+	  if (have_epoch && mepoch != wepoch)
+	    {
+	      wwhy = "lreg-spill-merged-epoch-mismatch";
+	      if (dump_file)
+		fprintf (dump_file,
+			 "lreg-alloc: candidate r%u inadmissible (%s)\n",
+			 g.webs[m].regno, wwhy);
+	      admissible = false;
+	      break;
+	    }
+	  wepoch = mepoch;
+	  have_epoch = true;
+	  woff = MAX (woff, moff);
+	}
+      if (!admissible)
+	{
 	  /* Report the cheapest inadmissible candidate's blocker.  */
 	  if (!blocked_why || cost < blocked_cost)
 	    {
@@ -1868,6 +2183,15 @@ enforce_colorability (function *fn)
       if (g.fail)
 	return bail (g.fail, "graph-collection");
 
+      /* Conservative coalescing (Briggs/George) merges copy-related
+	 webs before the colorability verdict and spill-victim
+	 selection; a conservative merge can never turn an 8-colorable
+	 graph uncolorable, so this only ever removes spills.  Graph-
+	 side only: the stream is untouched and assignment stays
+	 IRA's.  */
+      if (riscv_tt_opt_lreg_coalesce)
+	coalesce_conservative (fn, g);
+
       auto_vec<int> color;
       int blocked = -1;
       if (dsatur_color (g, color, &blocked))
@@ -1922,9 +2246,24 @@ enforce_colorability (function *fn)
 		 vregno, g.webs[victim].occ, g.degree[victim], x,
 		 ctx.noinc_addr_mode, vmax_delta);
 
-      if (!spill_web (fn, vregno, x, ctx.noinc_addr_mode, ctx, spill_tmps,
-		      tx, &why))
-	return bail (why, "web rewrite abandoned");
+      /* A coalesced victim round-trips every copy-related constituent
+	 through the SAME scratch row (the chooser proved each one
+	 admissible at one common epoch); an uncoalesced victim is its
+	 own single constituent, byte-identically today's path.  */
+      for (unsigned m = 0; m < g.webs.length (); m++)
+	{
+	  if (g.rep (m) != victim)
+	    continue;
+	  if (m != (unsigned) victim && dump_file)
+	    fprintf (dump_file,
+		     "lreg-alloc: spilling coalesced constituent r%u of "
+		     "web r%u to the shared scratch offset "
+		     HOST_WIDE_INT_PRINT_DEC "\n",
+		     g.webs[m].regno, vregno, x);
+	  if (!spill_web (fn, g.webs[m].regno, x, ctx.noinc_addr_mode, ctx,
+			  spill_tmps, tx, &why))
+	    return bail (why, "web rewrite abandoned");
+	}
       spills++;
       df_analyze ();
     }
