@@ -680,6 +680,9 @@ RVTT_REFUSAL (INTERNAL_ERROR,
 RVTT_REFUSAL (INVALID_MODEL,
   "invalid-model",
   "reason; first seen in rvtt-lpsolve.cc")
+RVTT_REFUSAL (IPA_SUMMARY_STALE,
+  "ipa-summary-stale",
+  "belt; a summary consulted after an uninvalidated body mutation is dropped and recomputed; first seen in rvtt-ipa-summary.cc")
 RVTT_REFUSAL (ISO_PAIR,
   "iso-pair",
   "dump; first seen in rtl-rvtt-schedule.cc")

@@ -163,9 +163,29 @@ public:
   /* The root (ambient) region.  */
   rvtt_cc_region *root () const { return m_root; }
 
+  /* Cross-call carry fold (FABLE_GOES_BURR item #15, stage A): the
+     function provably PRESERVES the all-lanes ambient lane-enable
+     state across its whole execution -- every reachable block
+     structurally proven (no break anywhere, blessed drain joins
+     admitted: they carry no CC-relevant statement by construction), no
+     frame unstructured or opaque anywhere, and the root (ambient)
+     frame itself CC-inert: no refinement, no SFPENCC (the all-lanes
+     ENCC included -- its ordering against a second root ENCC is not
+     folded here; sharpening that is stage-B precision), no
+     vocabulary-external write.  Inner frames may refine or ENCC
+     freely: their recorded popc restores the saved state.  Fail-closed
+     in every ambiguous direction.  Stage A only CARRIES this fact
+     across calls (rvtt-ipa-summary); no consumer admission widens on
+     it in this item.  */
+  bool ambient_preserving_fold_p () const;
+
 private:
   void build ();
   void clear ();
+
+  /* Every reachable block's walk completed structurally (see
+     ambient_preserving_fold_p).  */
+  bool m_complete;
 
   function *m_fn;
   rvtt_cc_region *m_root;
@@ -186,5 +206,10 @@ private:
    per-statement fact (needs no tree instance, so freshly inserted
    statements answer correctly).  */
 extern bool rvtt_cc_window_cc_event_p (gimple *stmt);
+
+/* Build a tree for FN and fold ambient_preserving_fold_p over it (the
+   rvtt-ipa-summary CC-carry entry point; fail-closed on a missing or
+   non-gimple body).  */
+extern bool rvtt_cc_region_fn_ambient_preserving_p (function *fn);
 
 #endif /* GCC_RVTT_CC_REGION_H */
