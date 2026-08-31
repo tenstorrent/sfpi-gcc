@@ -739,25 +739,28 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
       refuse_chain ("regrename-replay-boundary", w.insn, bb);
       return false;
     }
-  /* A def with an EXPLICIT input occurrence of its own destination
-     register -- the LV merge source, or the destructive families'
-     "0"-tied source (the BH XOR shape) -- genuinely reads the prior
-     value: the chain is not closed at the top and a whole-pattern
-     replacement would rewrite the source read too.  Refuse on ANY
-     explicit OP_IN occurrence, at every position (v1's canonical
-     operand-1 test was sufficient only under its latency-0 admission,
-     which never admits the destructive families).  The audited read
-     mask alone does not decide: it carries the tied-destination
-     artifact even for the noval (non-merging) alternatives, which
-     have no explicit source REG and are safe.  */
+  /* A def whose LV-merge source (the canonical operand-1 position;
+     the plain forms carry a noval marker there) is its own
+     destination register genuinely merges with the PRIOR destination
+     value on disabled lanes: renaming the destination breaks the
+     merge (the prior value lives in the source register) and refuses.
+     Other input occurrences of the destination register are ordinary
+     source reads of the register's PREVIOUS live range (the
+     allocator's reuse, e.g. p = mul (x, x) packed into x's register):
+     the commit edits ONLY the writer's output operands, so those
+     reads stay on the source register and remain correct.  The
+     destructive "0"-tied families (the BH XOR shape) cannot split
+     destination from tied source and fail the constraint
+     re-recognition (regrename-constraint), never silently.  */
   if (w.fx.lreg_read & oldbit)
     {
       extract_insn (w.insn);
-      for (int oi = 0; oi < recog_data.n_operands; ++oi)
+      for (int oi = 1; oi < recog_data.n_operands; ++oi)
 	{
 	  rtx op = recog_data.operand[oi];
 	  if (REG_P (op) && REGNO (op) == oldr
-	      && recog_data.operand_type[oi] == OP_IN)
+	      && recog_data.operand_type[oi] == OP_IN
+	      && oi == 1)
 	    {
 	      refuse_chain ("regrename-self-merge", w.insn, bb);
 	      return false;
@@ -1008,9 +1011,38 @@ commit_chain (const chain_desc &ch)
       pre_write.push_back (ch.scan[e].fx.lreg_write);
     }
 
+  /* The WRITER's edit is output-operands-only: an input occurrence of
+     the source register is a read of its previous live range and must
+     stay (see the self-merge comment in analyze_chain).  Readers are
+     whole-pattern (their only occurrences are reads of the chain
+     value).  */
+  {
+    rtx_insn *insn = ch.scan[ch.wi].insn;
+    extract_insn (insn);
+    bool renamed_op[MAX_RECOG_OPERANDS] = {};
+    for (int oi = 0; oi < recog_data.n_operands; ++oi)
+      {
+	rtx op = recog_data.operand[oi];
+	if (REG_P (op) && REGNO (op) == oldr
+	    && recog_data.operand_type[oi] != OP_IN)
+	  {
+	    validate_change (insn, recog_data.operand_loc[oi],
+			     gen_rtx_REG (GET_MODE (op), newr), true);
+	    renamed_op[oi] = true;
+	  }
+      }
+    for (int di = 0; di < recog_data.n_dups; ++di)
+      if (renamed_op[recog_data.dup_num[di]])
+	{
+	  rtx dup = *recog_data.dup_loc[di];
+	  validate_change (insn, recog_data.dup_loc[di],
+			   gen_rtx_REG (GET_MODE (dup), newr), true);
+	}
+  }
   for (size_t e : edited)
-    queue_reg_replacements (ch.scan[e].insn, &PATTERN (ch.scan[e].insn),
-			    oldr, newreg);
+    if (e != ch.wi)
+      queue_reg_replacements (ch.scan[e].insn, &PATTERN (ch.scan[e].insn),
+			      oldr, newreg);
   if (ch.close_reads)
     {
       /* The close both kills the register and genuinely reads the
@@ -1061,12 +1093,12 @@ commit_chain (const chain_desc &ch)
 	diverged = "edited insn effects opaque";
       else if (edited[ei] == ch.wi)
 	{
-	  /* The audited read mask may carry the tied-destination
-	     artifact, which legitimately moved to the target -- but an
-	     EXPLICIT input occurrence of the target would mean the
-	     replacement rewrote a genuine source read (the self-merge
-	     admission failed us): divergence.  */
-	  if (fx.lreg_write != newbit || (fx.lreg_read & oldbit))
+	  /* Every output operand must be the target and none the
+	     source; an EXPLICIT input occurrence of the target means
+	     the edit rewrote a genuine source read (input reads of
+	     the source register's previous live range legitimately
+	     remain -- the read mask may keep the source bit).  */
+	  if (fx.lreg_write != newbit)
 	    diverged = "writer web";
 	  else
 	    {
@@ -1074,16 +1106,22 @@ commit_chain (const chain_desc &ch)
 	      for (int oi = 0; oi < recog_data.n_operands; ++oi)
 		{
 		  rtx op = recog_data.operand[oi];
-		  if (REG_P (op) && REGNO (op) == newr
-		      && recog_data.operand_type[oi] == OP_IN)
+		  if (!REG_P (op))
+		    continue;
+		  if (recog_data.operand_type[oi] == OP_IN
+		      && REGNO (op) == newr)
 		    diverged = "writer source rewritten";
+		  if (recog_data.operand_type[oi] != OP_IN
+		      && REGNO (op) == oldr)
+		    diverged = "writer output kept source";
 		}
 	    }
 	}
       else if (!(fx.lreg_read & newbit) || (fx.lreg_read & oldbit)
 	       || fx.lreg_write != pre_write[ei])
 	diverged = "reader web";
-      if (!diverged && count_reg_occurrences (PATTERN (insn), oldr))
+      if (!diverged && edited[ei] != ch.wi
+	  && count_reg_occurrences (PATTERN (insn), oldr))
 	diverged = "stale source reference";
     }
   if (!diverged && ch.close != ch.scan.size ())
