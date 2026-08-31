@@ -1,0 +1,1519 @@
+/* Refusal-name registry for the Tensix (riscv-tt) backend.
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* The single source of truth for the backend's named refusal / verdict
+   vocabulary (FABLE_GOES_BURR.md item #1; the anchor audit is
+   AUDIT-cost-model-refusals.md section 1.6).
+
+   One row per name:
+
+     RVTT_REFUSAL (ENUM_ID, "name-string", "one-line provenance/contract")
+
+   Rules of the table:
+
+   - APPEND-ONLY.  The name strings are frozen API: the twin testsuite
+     pins them in dump scans and the board's dump-mining tooling keys on
+     them.  Never rename or delete a row; a retired mechanism keeps its
+     rows (they simply stop firing).
+   - Names are lowercase hyphenated, mechanism-prefixed, dump-stable
+     (see FABLE_GOES_BURR.md section 0.3).
+   - Uniqueness of ENUM_ID is a compile-time fact (duplicate = build
+     break via the enum); uniqueness of the name string is checked by
+     the rvtt-refusals.txt catalogue rule in t-riscv-tt.
+   - The catalogue rvtt-refusals.txt is GENERATED from this table by
+     the build; the 87-reason refusal catalogue class of artifact is
+     derived, never re-derived by hand (the laneJC lesson).
+   - The third column is a one-line provenance note seeded by the
+     mechanical laneJQ census of the pin-48 fprintf sites: the census
+     tag (reason = literal in refusal-helper call/return/reason-carrier
+     position; dump = named in a refusal-shaped dump message; composed
+     = full spelling of a prefix+%s assembled name) plus the file the
+     name was first seen in.  Rows added after item #1 should carry a
+     real one-line contract instead.
+
+   Emission goes through tt/rvtt-refuse.h; see there for the dual
+   legacy-dump / -fopt-info routing contract.  */
+
+RVTT_REFUSAL (ALL_LANES_PROOF_MISSING,
+  "all-lanes-proof-missing",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (AMBIENT_ENTRY_UNPROVEN,
+  "ambient-entry-unproven",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (ASSOCIATIVE_MATH_LICENSE_ABSENT,
+  "associative-math-license-absent",
+  "dump; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (BODY_FOREIGN_INSN,
+  "body-foreign-insn",
+  "reason; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (CALLEE_SLOT_CLOBBER,
+  "callee-slot-clobber",
+  "reason; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (CC_ENABLE_UNPROVED,
+  "cc-enable-unproved",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (CC_MODEL,
+  "cc-model",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (CC_POSITION_WIDENING_UNPROVEN,
+  "cc-position-widening-unproven",
+  "dump; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_REGION_UNPROVEN,
+  "cc-region-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (CC_RESTORE_AMBIENT_CC_WRITE,
+  "cc-restore-ambient-cc-write",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_BACKEDGE_DEPTH,
+  "cc-restore-backedge-depth",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_COND_VALUE_UNAUDITED,
+  "cc-restore-cond-value-unaudited",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_DEPTH_OVERFLOW,
+  "cc-restore-depth-overflow",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_MARKER_AMBIENT,
+  "cc-restore-marker-ambient",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_POP_TRIPS_UNPROVEN,
+  "cc-restore-pop-trips-unproven",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_POPC_MOD,
+  "cc-restore-popc-mod",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_PUSHC_MOD,
+  "cc-restore-pushc-mod",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_STORE_RACE,
+  "cc-restore-store-race",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (CC_RESTORE_SUBLOOP_SHAPE,
+  "cc-restore-subloop-shape",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_UNBALANCED,
+  "cc-restore-unbalanced",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_UNROLL_PRESSURE_UNMODELED,
+  "cc-restore-unroll-pressure-unmodeled",
+  "dump; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_RESTORE_UNSTRUCTURED,
+  "cc-restore-unstructured",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (CC_TEMPLATE_UNPROVED,
+  "cc-template-unproved",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (CC_TEMPLATE_UNSUPPORTED,
+  "cc-template-unsupported",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (CC_TIMING,
+  "cc-timing",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (CC_WRITE,
+  "cc-write",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (CCMASK_BOUNDARY_UNSUPPORTED,
+  "ccmask-boundary-unsupported",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_COMPARE_DIRECTION_UNSUPPORTED,
+  "ccmask-compare-direction-unsupported",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_COMPARE_FORM,
+  "ccmask-compare-form",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_COMPARE_KIND_UNSUPPORTED,
+  "ccmask-compare-kind-unsupported",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_OPERAND_FORM,
+  "ccmask-operand-form",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_REGION_FOREIGN_STMT,
+  "ccmask-region-foreign-stmt",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_REGION_OPEN_CFG,
+  "ccmask-region-open-cfg",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_REGION_SHAPE,
+  "ccmask-region-shape",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_TARGET_UNPROVEN,
+  "ccmask-target-unproven",
+  "dump; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_ZERO_NOT_WRITABLE,
+  "ccmask-zero-not-writable",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_ZERO_SHARED,
+  "ccmask-zero-shared",
+  "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CLAIMED_PEAK,
+  "claimed-peak",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (CONFIG_ACCESS,
+  "config-access",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (CONFIG_OWNERSHIP_UNPROVEN,
+  "config-ownership-unproven",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (CONFIGURATION_TO_CONSUME,
+  "configuration-to-consume",
+  "dump; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (CONSUMER_LANE_DISCIPLINE_UNAUDITED,
+  "consumer-lane-discipline-unaudited",
+  "reason; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (CONTROL_FLOW,
+  "control-flow",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (COPIES_NOT_DATAFLOW_ISOMORPHIC,
+  "copies-not-dataflow-isomorphic",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL,
+  "counted-capture-peel",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL_BENEFIT,
+  "counted-capture-peel-benefit",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_CAPTURE_PEEL_TRIPS_UNPROVEN,
+  "counted-capture-peel-trips-unproven",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_BRIDGE_CLOBBER,
+  "counted-row-bridge-clobber",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE,
+  "counted-row-excluded-member-unmovable",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_FINAL_LOCKSTEP_DIVERGENCE,
+  "counted-row-final-lockstep-divergence",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_LANE_STATE,
+  "counted-row-lane-state",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_MAP_LIVE_OUT,
+  "counted-row-map-live-out",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_MULTIDEF_MEMBER,
+  "counted-row-multidef-member",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_RENAME_CONSTRAINT,
+  "counted-row-rename-constraint",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_RENAME_INTERFERENCE,
+  "counted-row-rename-interference",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_RESIDUAL_NOT_UNIFORM,
+  "counted-row-residual-not-uniform",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_SLOT_BUDGET,
+  "counted-row-slot-budget",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTED_ROW_VACATED_DELAY_SHADOW,
+  "counted-row-vacated-delay-shadow",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (COUNTER_REWRITE_UNPROVEN,
+  "counter-rewrite-unproven",
+  "reason; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (CROSSCALL_ADDRMOD_CALLERS_UNPROVEN,
+  "crosscall-addrmod-callers-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_ADDRMOD_LOOP_UNPROVEN,
+  "crosscall-addrmod-loop-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_ADDRMOD_OWNED_ROW_WRITE,
+  "crosscall-addrmod-owned-row-write",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_ADDRMOD_PREHEADER_OCCUPIED,
+  "crosscall-addrmod-preheader-occupied",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_ADDRMOD_UNPROVEN,
+  "crosscall-addrmod-unproven",
+  "dump; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_PRESSURE,
+  "crosscall-callee-pressure",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_REPLAY_UNPROVEN,
+  "crosscall-callee-replay-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_SHAPE_UNPROVEN,
+  "crosscall-callee-shape-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_STMT_UNPROVEN,
+  "crosscall-callee-stmt-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_VECTOR_OUTSIDE_LOOP,
+  "crosscall-callee-vector-outside-loop",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLEE_WORD_UNPROVEN,
+  "crosscall-callee-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_BODY_UNAVAILABLE,
+  "crosscall-caller-body-unavailable",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_CONFIG_WORD_UNPROVEN,
+  "crosscall-caller-config-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_FOREIGN_CONTRACT,
+  "crosscall-caller-foreign-contract",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_LREG_LIVE,
+  "crosscall-caller-lreg-live",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_MOP_SLOT_UNPROVEN,
+  "crosscall-caller-mop-slot-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_MULTI_SITE,
+  "crosscall-caller-multi-site",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_NO_LOOP,
+  "crosscall-caller-no-loop",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_PREHEADER_UNPROVEN,
+  "crosscall-caller-preheader-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_REPLAY_UNPROVEN,
+  "crosscall-caller-replay-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_UNROOTED,
+  "crosscall-caller-unrooted",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CALLER_WORD_UNPROVEN,
+  "crosscall-caller-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CENSUS_UNROOTED,
+  "crosscall-census-unrooted",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CONFIG_DEST_UNPROVEN,
+  "crosscall-config-dest-unproven",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CONFIG_SHAPE_UNPROVEN,
+  "crosscall-config-shape-unproven",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CONFIG_WRITER_UNPROVEN,
+  "crosscall-config-writer-unproven",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CONSUMER_CONFLICT,
+  "crosscall-consumer-conflict",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSCALL_CONSUMER_NOT_PINNED,
+  "crosscall-consumer-not-pinned",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_CALLER_UNROOTED,
+  "crossloop-caller-unrooted",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED,
+  "crossloop-cc-peel-consumer-unaudited",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN,
+  "crossloop-cc-peel-entrycc-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (CROSSLOOP_CC_UNPROVEN,
+  "crossloop-cc-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_CONFIG_WORD_UNPROVEN,
+  "crossloop-config-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_LREG_CLOBBER,
+  "crossloop-lreg-clobber",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_MOP_SLOT_UNPROVEN,
+  "crossloop-mop-slot-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_PREHEADER_UNPROVEN,
+  "crossloop-preheader-unproven",
+  "dump; first seen in gimple-rvtt-crossloop.cc")
+RVTT_REFUSAL (CROSSLOOP_REPLAY_UNPROVEN,
+  "crossloop-replay-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_SPECULATION_UNPROVEN,
+  "crossloop-speculation-unproven",
+  "dump; first seen in gimple-rvtt-crossloop.cc")
+RVTT_REFUSAL (CROSSLOOP_STMT_UNPROVEN,
+  "crossloop-stmt-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_WORD_UNPROVEN,
+  "crossloop-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_RENAME_CC_DOMAIN,
+  "crossrow-pairing-rename-cc-domain",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED,
+  "crossrow-pairing-seed",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_CAPTURE_BUDGET,
+  "crossrow-pairing-seed-capture-budget",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_LIVE_IN,
+  "crossrow-pairing-seed-live-in",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_LIVE_OUT,
+  "crossrow-pairing-seed-live-out",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_NO_FREE_LREG,
+  "crossrow-pairing-seed-no-free-lreg",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_NO_II_IMPROVEMENT,
+  "crossrow-pairing-seed-no-ii-improvement",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_RENAME_CONSTRAINT,
+  "crossrow-pairing-seed-rename-constraint",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_PAIRING_SEED_WORD_UNPROVEN,
+  "crossrow-pairing-seed-word-unproven",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD,
+  "crossrow-shared-reload",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_ATOM_INTERIOR,
+  "crossrow-shared-reload-atom-interior",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_ATOM_SPANS_EPOCH,
+  "crossrow-shared-reload-atom-spans-epoch",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_COPY_SHAPE,
+  "crossrow-shared-reload-copy-shape",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_CROSSROW_INTERFERENCE,
+  "crossrow-shared-reload-crossrow-interference",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_FINAL_ORDER_UNPROVEN,
+  "crossrow-shared-reload-final-order-unproven",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_II_REGRESSION,
+  "crossrow-shared-reload-ii-regression",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_LIVE_IN,
+  "crossrow-shared-reload-live-in",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_LIVE_OUT,
+  "crossrow-shared-reload-live-out",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_MATERIALIZATION_SHAPE,
+  "crossrow-shared-reload-materialization-shape",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_RMW_OUTSIDE_GROUP,
+  "crossrow-shared-reload-rmw-outside-group",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_SEEDED_ROW,
+  "crossrow-shared-reload-seeded-row",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CROSSROW_SHARED_RELOAD_WEB_MUTATED,
+  "crossrow-shared-reload-web-mutated",
+  "composed; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CYCLIC_INTERIOR_BACKEDGE_SEAM,
+  "cyclic-interior-backedge-seam",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CYCLIC_INTERIOR_NO_II_DECREASE,
+  "cyclic-interior-no-ii-decrease",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CYCLIC_INTERIOR_OPAQUE_WORD,
+  "cyclic-interior-opaque-word",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (CYCLIC_INTERIOR_REPEATED_SHAPE,
+  "cyclic-interior-repeated-shape",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DEBUG_REGS_WRITE_UNPROVEN,
+  "debug-regs-write-unproven",
+  "reason; first seen in rvtt-mop-derive.cc")
+RVTT_REFUSAL (DEF_USE,
+  "def-use",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (DELAY_MODEL_UNPROVEN,
+  "delay-model-unproven",
+  "reason; first seen in rvtt-macro-derive-core.h")
+RVTT_REFUSAL (DELAY_RANGE_EXCEEDED,
+  "delay-range-exceeded",
+  "reason; first seen in rvtt-macro-derive-core.h")
+RVTT_REFUSAL (DELIVERY_SHAPE_BODY_NOT_FLAT,
+  "delivery-shape-body-not-flat",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_DENIED_CLASS,
+  "delivery-shape-denied-class",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_EXEC_TERM_UNAUDITED,
+  "delivery-shape-exec-term-unaudited",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_FOREIGN_STMT,
+  "delivery-shape-foreign-stmt",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_MEMORY,
+  "delivery-shape-memory",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_QSR_UNPROVEN,
+  "delivery-shape-qsr-unproven",
+  "dump; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_ROW_EMPTY,
+  "delivery-shape-row-empty",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_SOLVER,
+  "delivery-shape-solver",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_TRIP_COUNT_UNPROVEN,
+  "delivery-shape-trip-count-unproven",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DELIVERY_SHAPE_WINDOW_BUDGET,
+  "delivery-shape-window-budget",
+  "dump; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (DEPTH_ZERO_HOIST_DOMINANT,
+  "depth-zero-hoist-dominant",
+  "dump; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (DERIVED_STRIDE_ABSORPTION_UNPROVEN,
+  "derived-stride-absorption-unproven",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (DESCRIPTOR_ENCODING_FAILED,
+  "descriptor-encoding-failed",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (DESCRIPTOR_EXPLICIT_ISSUE_CAP_EXCEEDED,
+  "descriptor-explicit-issue-cap-exceeded",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (DESCRIPTOR_PROGRAM_UNPROVEN,
+  "descriptor-program-unproven",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (DESCRIPTOR_VERIFICATION_FAILED,
+  "descriptor-verification-failed",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (DRAIN_CC_LIVE,
+  "drain-cc-live",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DRAIN_CONFIG_OVERLAP,
+  "drain-config-overlap",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DRAIN_DST_RAW,
+  "drain-dst-raw",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DRAIN_EXIT_SHARED,
+  "drain-exit-shared",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (DRAIN_FOLLOWER_OPAQUE,
+  "drain-follower-opaque",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DRAIN_INIT_CALLEE_UNPROVEN,
+  "drain-init-callee-unproven",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (DRAIN_INIT_CALLERS_UNPROVEN,
+  "drain-init-callers-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (DRAIN_INIT_IDEMPOTENCE_UNPROVEN,
+  "drain-init-idempotence-unproven",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (DRAIN_INIT_LOOP_UNPROVEN,
+  "drain-init-loop-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (DRAIN_INIT_MOP_SLOT_UNPROVEN,
+  "drain-init-mop-slot-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (DRAIN_INIT_OWNERSHIP_UNPROVEN,
+  "drain-init-ownership-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (DRAIN_LREG_OVERLAP,
+  "drain-lreg-overlap",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (DST_ACCESS,
+  "dst-access",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (DST_RWC_EFFECT_UNPROVED,
+  "dst-rwc-effect-unproved",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DST_STORE_MAY_ALIAS,
+  "dst-store-may-alias",
+  "reason; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (DUAL_OUTPUT_EVENT_UNHOSTED,
+  "dual-output-event-unhosted",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (DUALBANK_PIN_NO_FEASIBLE_ALTERNATIVE,
+  "dualbank-pin-no-feasible-alternative",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DUALBANK_PIN_OPAQUE_XTT_INSN,
+  "dualbank-pin-opaque-xtt-insn",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DUALBANK_PIN_SHAPE_UNMODELED,
+  "dualbank-pin-shape-unmodeled",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DUALBANK_SAME_COLOR_OVERLAP,
+  "dualbank-same-color-overlap",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DUALBANK_WEB_LIVE_ACROSS_CALL,
+  "dualbank-web-live-across-call",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (DUPLICATE_DEF,
+  "duplicate-def",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (DUPLICATE_OP,
+  "duplicate-op",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (DUPLICATE_ORIGINAL,
+  "duplicate-original",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (DUPLICATE_SLOT,
+  "duplicate-slot",
+  "reason; first seen in rvtt-lpsolve.cc")
+RVTT_REFUSAL (EFFECT_OPAQUE,
+  "effect-opaque",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (ENTRY_DISTANCE,
+  "entry-distance",
+  "reason; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (EVENT_DELAY_UNPROVEN,
+  "event-delay-unproven",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (FOREIGN_OP,
+  "foreign-op",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (GIMPLE_IDS,
+  "gimple-ids",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (GLOBAL_POINTER_VALUE_UNPROVEN,
+  "global-pointer-value-unproven",
+  "reason; first seen in rvtt-mop-derive.cc")
+RVTT_REFUSAL (GROUP_HOISTED,
+  "group-hoisted",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (GROUP_RERECORD,
+  "group-rerecord",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (HARD_LREG_REFERENCE,
+  "hard-lreg-reference",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (HARD_SFPU_REG_PRE_IRA,
+  "hard-sfpu-reg-pre-ira",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (HIDDEN_STATE_DEPENDENT_SEMANTICS,
+  "hidden-state-dependent-semantics",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (HIDDEN_WRITE_UNOWNED,
+  "hidden-write-unowned",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (IMM_STRIDE_NOT_ABSORBED,
+  "imm-stride-not-absorbed",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (IMM_STRIDE_REWRITE_UNPROVEN,
+  "imm-stride-rewrite-unproven",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_LEGALITY_UNPROVEN,
+  "ims-carrier-legality-unproven",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_LREG_UNAVAILABLE,
+  "ims-carrier-lreg-unavailable",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_NO_IMPROVEMENT,
+  "ims-carrier-no-improvement",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_REDERIVE_UNPROVEN,
+  "ims-carrier-rederive-unproven",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_ROW_DIVERGENT,
+  "ims-carrier-row-divergent",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_CARRIER_WEB_UNSPLITTABLE,
+  "ims-carrier-web-unsplittable",
+  "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (INCOMPLETE_ORDER,
+  "incomplete-order",
+  "reason; first seen in rvtt-lpsolve.cc")
+RVTT_REFUSAL (INIT_HOIST_AMORTIZED,
+  "init-hoist-amortized",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (INIT_HOIST_COMMIT_DIVERGED,
+  "init-hoist-commit-diverged",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (INT_ABS_BOUNDARY_UNSUPPORTED,
+  "int-abs-boundary-unsupported",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_CARRIED_VALUE_MISMATCH,
+  "int-abs-carried-value-mismatch",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_COMPARE_FORM,
+  "int-abs-compare-form",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_COMPARE_KIND_UNSUPPORTED,
+  "int-abs-compare-kind-unsupported",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_IADD_MOD_UNSUPPORTED,
+  "int-abs-iadd-mod-unsupported",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_MINUEND_NOT_ZERO,
+  "int-abs-minuend-not-zero",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_OPERAND_FORM,
+  "int-abs-operand-form",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_OPERAND_MISMATCH,
+  "int-abs-operand-mismatch",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_REGION_FOREIGN_STMT,
+  "int-abs-region-foreign-stmt",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_REGION_OPEN_CFG,
+  "int-abs-region-open-cfg",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_REGION_SHAPE,
+  "int-abs-region-shape",
+  "reason; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_ABS_TARGET_UNPROVEN,
+  "int-abs-target-unproven",
+  "dump; first seen in gimple-rvtt-int-abs.cc")
+RVTT_REFUSAL (INT_NOT_CC_MODE_UNSUPPORTED,
+  "int-not-cc-mode-unsupported",
+  "reason; first seen in gimple-rvtt-int-not.cc")
+RVTT_REFUSAL (INT_NOT_OPERAND_FORM,
+  "int-not-operand-form",
+  "reason; first seen in gimple-rvtt-int-not.cc")
+RVTT_REFUSAL (INT_NOT_TARGET_UNPROVEN,
+  "int-not-target-unproven",
+  "dump; first seen in gimple-rvtt-int-not.cc")
+RVTT_REFUSAL (INTERNAL_ERROR,
+  "internal-error",
+  "reason; first seen in rvtt-lpsolve.cc")
+RVTT_REFUSAL (INVALID_MODEL,
+  "invalid-model",
+  "reason; first seen in rvtt-lpsolve.cc")
+RVTT_REFUSAL (ISO_PAIR,
+  "iso-pair",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (LATENCY_BEYOND_AUDITED_WINDOW,
+  "latency-beyond-audited-window",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (LATENCY_VIOLATION,
+  "latency-violation",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (LAUNCH_COUNT,
+  "launch-count",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (LAUNCH_DECODE,
+  "launch-decode",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (LAUNCH_FLATTEN_ABNORMAL_EDGE,
+  "launch-flatten-abnormal-edge",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_FOREIGN_ASM,
+  "launch-flatten-foreign-asm",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_FOREIGN_STMT,
+  "launch-flatten-foreign-stmt",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_FUNCTION_BUDGET,
+  "launch-flatten-function-budget",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_MEMORY,
+  "launch-flatten-memory",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_MULTI_EXIT,
+  "launch-flatten-multi-exit",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_NO_TYPED_CONTENT,
+  "launch-flatten-no-typed-content",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_QSR_UNPROVEN,
+  "launch-flatten-qsr-unproven",
+  "dump; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_ROW_TOO_SMALL,
+  "launch-flatten-row-too-small",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_TRIP_COUNT_UNPROVEN,
+  "launch-flatten-trip-count-unproven",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_UNPRICED_BUILTIN,
+  "launch-flatten-unpriced-builtin",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_FLATTEN_WORD_BUDGET,
+  "launch-flatten-word-budget",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (LAUNCH_MISMATCH,
+  "launch-mismatch",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (LAYOUT_BOUNDARY,
+  "layout-boundary",
+  "reason; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (LIVE_IN,
+  "live-in",
+  "reason; first seen in rvtt-bnb.cc")
+RVTT_REFUSAL (LOOP_BODY_NOT_OWNED,
+  "loop-body-not-owned",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (LOOP_PREHEADER_UNPROVEN,
+  "loop-preheader-unproven",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (LOOP_RECLAIM_CALL_WINDOW,
+  "loop-reclaim-call-window",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (LREG_ALLOC_POST_SCAN_INSN,
+  "lreg-alloc-post-scan-insn",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LREG_ALLOC_UNKNOWN_USE,
+  "lreg-alloc-unknown-use",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LREG_FILE_EXHAUSTED,
+  "lreg-file-exhausted",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (LREG_PRESSURE_EXCEEDED,
+  "lreg-pressure-exceeded",
+  "dump; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (LREG_PRESSURE_UNRESOLVABLE,
+  "lreg-pressure-unresolvable",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (LREG_SPILL_INEXACT_DST_MODE,
+  "lreg-spill-inexact-dst-mode",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LREG_SPILL_LANECONFIG_UNPROVEN,
+  "lreg-spill-laneconfig-unproven",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LREG_SPILL_NO_FREE_DST,
+  "lreg-spill-no-free-dst",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LREG_SPILL_REWRITE_REFUSED,
+  "lreg-spill-rewrite-refused",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (LUT_BOUNDARY_MISMATCH,
+  "lut-boundary-mismatch",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_COEFF_ENCODING_UNREPRESENTABLE,
+  "lut-coeff-encoding-unrepresentable",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_COEFF_VALUE_UNPROVEN,
+  "lut-coeff-value-unproven",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_COEFFICIENT_UNPROVEN,
+  "lut-coefficient-unproven",
+  "dump; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_COMPARE_KIND_UNSUPPORTED,
+  "lut-compare-kind-unsupported",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_DEFAULT_LEAF_UNPROVEN,
+  "lut-default-leaf-unproven",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_LEAF_BITEXACT_UNPROVEN,
+  "lut-leaf-bitexact-unproven",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_LEAF_NOT_AFFINE,
+  "lut-leaf-not-affine",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_LEAF_VALUE_ESCAPES,
+  "lut-leaf-value-escapes",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_NO_TARGET_CAPABILITY,
+  "lut-no-target-capability",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_PARTITION_ARITY_UNSUPPORTED,
+  "lut-partition-arity-unsupported",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_REGION_FOREIGN_STMT,
+  "lut-region-foreign-stmt",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_REGION_OPEN_CFG,
+  "lut-region-open-cfg",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_SLOT_COEFF_FLOATB_UNREPRESENTABLE,
+  "lut-slot-coeff-floatb-unrepresentable",
+  "dump; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_SLOT_COEFF_VALUE_UNPROVEN,
+  "lut-slot-coeff-value-unproven",
+  "dump; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_STRUCTURE_MISMATCH,
+  "lut-structure-mismatch",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (LUT_WH_NEGATIVE_NAN_DIVERGENT,
+  "lut-wh-negative-nan-divergent",
+  "reason; first seen in gimple-rvtt-lut-select.cc")
+RVTT_REFUSAL (MAD_MOD_UNPROVEN,
+  "mad-mod-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (MADPAIR_PRGM_EXHAUSTED,
+  "madpair-prgm-exhausted",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (MADPAIR_SHARED_CONSTANT,
+  "madpair-shared-constant",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (MEMORY_OPERAND,
+  "memory-operand",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (MEMORY_OR_UNREPRESENTED_CALL,
+  "memory-or-unrepresented-call",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (MISC_MISMATCH,
+  "misc-mismatch",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (MOD_WRITE_DOMINATES_ROLLED_BODY,
+  "mod-write-dominates-rolled-body",
+  "dump; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (MOD_WRITE_NOEXEC_RECORD_COMPOSITION_UNAUDITED,
+  "mod-write-noexec-record-composition-unaudited",
+  "dump; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (MOP_BODY_EXTRA_DELIVERY,
+  "mop-body-extra-delivery",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_BODY_NOT_INVARIANT,
+  "mop-body-not-invariant",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_CALLER_TEMPLATE_LIVE_UNPROVEN,
+  "mop-caller-template-live-unproven",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_CONFIG_EPOCH,
+  "mop-config-epoch",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_CONFIG_UNOWNED,
+  "mop-config-unowned",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_EMIT_UNRECOGNIZED,
+  "mop-emit-unrecognized",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_LOOP_COUNT_RANGE,
+  "mop-loop-count-range",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_NO_SCRATCH_GPR,
+  "mop-no-scratch-gpr",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_PROFITABILITY,
+  "mop-profitability",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_REPLAY_WINDOW_OVERFLOW,
+  "mop-replay-window-overflow",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MOP_SCAN_RECURSION_UNPROVEN,
+  "mop-scan-recursion-unproven",
+  "reason; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (MOP_TEMPLATE_CONFIG_WORD_UNPROVEN,
+  "mop-template-config-word-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (MOP_TEMPLATE_LOADI_CONTRACT,
+  "mop-template-loadi-contract",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (MOP_TEMPLATE_REPLAY_UNPROVEN,
+  "mop-template-replay-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (MOP_TEMPLATE_SLOT_CALLER_UNENUMERABLE,
+  "mop-template-slot-caller-unenumerable",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (MOP_TEMPLATE_SLOT_RANGE_UNPROVEN,
+  "mop-template-slot-range-unproven",
+  "reason; first seen in rvtt-mop-derive.cc")
+RVTT_REFUSAL (MOP_TRIPS_UNPROVED,
+  "mop-trips-unproved",
+  "dump; first seen in rtl-rvtt-mop-form.cc")
+RVTT_REFUSAL (MULTIBB_LOOP,
+  "multibb-loop",
+  "reason; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (MULTIRESULT_COMPANION_SPLIT,
+  "multiresult-companion-split",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (NATIVE_COMPARE_OPERAND_SHAPE,
+  "native-compare-operand-shape",
+  "reason; first seen in gimple-rvtt-combine.cc")
+RVTT_REFUSAL (NATIVE_COMPARE_TARGET_UNGATED,
+  "native-compare-target-ungated",
+  "reason; first seen in gimple-rvtt-combine.cc")
+RVTT_REFUSAL (NO_CARRIER_REACHABLE_OPERAND,
+  "no-carrier-reachable-operand",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (NO_CC_WRITER,
+  "no-cc-writer",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (NO_NAMED_SOURCE,
+  "no-named-source",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (NODE_LIMIT,
+  "node-limit",
+  "reason; first seen in rvtt-bnb.cc")
+RVTT_REFUSAL (NOEXEC_RECORD_DSTSTORE_NONDOMINATING_LAUNCH_PERSIST_UNAUDITED,
+  "noexec-record-dststore-nondominating-launch-persist-unaudited",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (NOEXEC_RECORD_MODWRITE_WINDOW_UNAUDITED,
+  "noexec-record-modwrite-window-unaudited",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED,
+  "noexec-rerecord-dststore-composition-unaudited",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (NON_TENSIX,
+  "non-tensix",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (NOT_A_VB_VC_OPCODE,
+  "not-a-vb-vc-opcode",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (OLD_PEAK,
+  "old-peak",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (OPAQUE_ASM,
+  "opaque-asm",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (OPAQUE_EFFECT,
+  "opaque-effect",
+  "reason; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (OPAQUE_REGION_UNDECLARED,
+  "opaque-region-undeclared",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PAD_SITE,
+  "pad-site",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (PARK_PREPEEL_AMBIENT_UNPROVEN,
+  "park-prepeel-ambient-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PC_BUF_WRITE_UNPROVEN,
+  "pc-buf-write-unproven",
+  "reason; first seen in rvtt-mop-derive.cc")
+RVTT_REFUSAL (PEEL_TRIP_COUNT_UNPROVEN,
+  "peel-trip-count-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PHI_USE_UNCLONABLE,
+  "phi-use-unclonable",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PLANNED_LREG_LIVE,
+  "planned-lreg-live",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (PORT_CONFLICT,
+  "port-conflict",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (POST_AUTOINCR_WINDOW_CARRIED_ISOMORPHIC_CONVERSION_UNPROVEN,
+  "post-autoincr-window-carried-isomorphic-conversion-unproven",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (POST_AUTOINCR_WINDOW_CARRIED_PEEL_LAUNCH_ARITHMETIC_UNPROVEN,
+  "post-autoincr-window-carried-peel-launch-arithmetic-unproven",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (POST_AUTOINCR_WINDOW_LAUNCH_ARITHMETIC_SKEW,
+  "post-autoincr-window-launch-arithmetic-skew",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (POSTCC_PHI_USE,
+  "postcc-phi-use",
+  "reason; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PRECOLOR_CONFLICT,
+  "precolor-conflict",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (PREDICATE_DEFINITION_SELECT_TERRITORY,
+  "predicate-definition-select-territory",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (PREFERRED_CAPACITY,
+  "preferred-capacity",
+  "reason; first seen in rvtt-bnb.cc")
+RVTT_REFUSAL (PREFERRED_DEPS,
+  "preferred-deps",
+  "reason; first seen in rvtt-bnb.cc")
+RVTT_REFUSAL (PREFIX_EPOCH_INVALIDATED,
+  "prefix-epoch-invalidated",
+  "reason; first seen in rvtt-macro-epoch.cc")
+RVTT_REFUSAL (PREFIX_EPOCH_UNPROVEN,
+  "prefix-epoch-unproven",
+  "reason; first seen in rvtt-macro-epoch.cc")
+RVTT_REFUSAL (PREFIX_HOIST_PREHEADER_UNPROVEN,
+  "prefix-hoist-preheader-unproven",
+  "reason; first seen in rvtt-macro-epoch.cc")
+RVTT_REFUSAL (PREHEADER_PLACEMENT,
+  "preheader-placement",
+  "reason; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (PRESSURE_MODEL_UNAUDITED_PRODUCER,
+  "pressure-model-unaudited-producer",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (PRESSURE_ORACLE_DISAGREEMENT,
+  "pressure-oracle-disagreement",
+  "dump; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (PRGM_EXHAUSTED,
+  "prgm-exhausted",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (QSR_EXEC_RECORD_UNAVAILABLE,
+  "qsr-exec-record-unavailable",
+  "reason; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (QSR_UNPROVEN,
+  "qsr-unproven",
+  "dump; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (REASSOC_CC_REGION_BOUNDARY,
+  "reassoc-cc-region-boundary",
+  "reason; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_CHAIN_CAP_EXCEEDED,
+  "reassoc-chain-cap-exceeded",
+  "dump; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_FPU_CHOREOGRAPHY_BOUNDARY,
+  "reassoc-fpu-choreography-boundary",
+  "reason; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_LOOP_CARRIED_UNDERIVED,
+  "reassoc-loop-carried-underived",
+  "dump; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_PRESSURE_BUDGET_EXCEEDED,
+  "reassoc-pressure-budget-exceeded",
+  "dump; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_REPLAY_PLAYBACK_BOUNDARY,
+  "reassoc-replay-playback-boundary",
+  "reason; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (RECORD_HOIST_BENEFIT,
+  "record-hoist-benefit",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN,
+  "record-hoist-completion-runtime-trips-unproven",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE,
+  "record-hoist-downstream-fallback-unprofitable",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_LIFT_NO_ADMISSIBLE_LEVEL,
+  "record-hoist-lift-no-admissible-level",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_LOOP_OPAQUE,
+  "record-hoist-loop-opaque",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_LOOP_SHAPE,
+  "record-hoist-loop-shape",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_NO_DEDICATED_PREHEADER,
+  "record-hoist-no-dedicated-preheader",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL,
+  "record-hoist-peel",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL_BODY_FOREIGN_INSN,
+  "record-hoist-peel-body-foreign-insn",
+  "composed; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL_COUNTER_REWRITE_UNPROVEN,
+  "record-hoist-peel-counter-rewrite-unproven",
+  "composed; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL_MULTIBB_LOOP,
+  "record-hoist-peel-multibb-loop",
+  "composed; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL_QSR_EXEC_RECORD_UNAVAILABLE,
+  "record-hoist-peel-qsr-exec-record-unavailable",
+  "composed; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PEEL_TRIPS_UNPROVEN,
+  "record-hoist-peel-trips-unproven",
+  "composed; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_PREHEADER_RECORDING_OPEN,
+  "record-hoist-preheader-recording-open",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN,
+  "record-hoist-runtime-trips-break-even",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_TRIP_COUNT_UNPROVEN,
+  "record-hoist-trip-count-unproven",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RECORD_HOIST_VARIANT_ENCODING,
+  "record-hoist-variant-encoding",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (REISSUE_UNPROVED,
+  "reissue-unproved",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (RENAME_CONSTRAINT,
+  "rename-constraint",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_CONSUMER_CLOBBERS,
+  "rename-consumer-clobbers",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_DEST_SELF_MERGE,
+  "rename-dest-self-merge",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_MEMBER_EFFECTS_UNAUDITED,
+  "rename-member-effects-unaudited",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_NO_FREE_LREG,
+  "rename-no-free-lreg",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_NO_STALL_DECREASE,
+  "rename-no-stall-decrease",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_SPAN_OPAQUE,
+  "rename-span-opaque",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (RENAME_VALUE_CROSSES_ROW_BOUNDARY,
+  "rename-value-crosses-row-boundary",
+  "reason; first seen in rtl-rvtt-lreg-rename.cc")
+RVTT_REFUSAL (REPEATED_ROW,
+  "repeated-row",
+  "dump; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (REPLAY_DELIVERED_ROW,
+  "replay-delivered-row",
+  "reason; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (REPLAY_DELIVERY_PREFERRED,
+  "replay-delivery-preferred",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_BODY_NOT_FLAT,
+  "replay-loop-unroll-body-not-flat",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_DENIED_CLASS,
+  "replay-loop-unroll-denied-class",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_FOREIGN_STMT,
+  "replay-loop-unroll-foreign-stmt",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_MEMORY,
+  "replay-loop-unroll-memory",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_QSR_UNPROVEN,
+  "replay-loop-unroll-qsr-unproven",
+  "dump; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_ROW_TOO_SMALL,
+  "replay-loop-unroll-row-too-small",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_TRIP_COUNT_UNPROVEN,
+  "replay-loop-unroll-trip-count-unproven",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_LOOP_UNROLL_WORD_BUDGET,
+  "replay-loop-unroll-word-budget",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (REPLAY_OWNER,
+  "replay-owner",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (REPLAY_RECORD_REGION_SHAPE_UNPROVEN,
+  "replay-record-region-shape-unproven",
+  "reason; first seen in rvtt-mop-derive.cc")
+RVTT_REFUSAL (REPLAY_REISSUE_LATENCY_UNPROVED,
+  "replay-reissue-latency-unproved",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (REPR_CONVERSION_UNAUDITED,
+  "repr-conversion-unaudited",
+  "reason; first seen in gimple-rvtt-reprprop.cc")
+RVTT_REFUSAL (RESID_DOMINANCE_UNPROVEN,
+  "resid-dominance-unproven",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (RESID_SKIP_PATH_UNPROVEN,
+  "resid-skip-path-unproven",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (RESID_SPAN_UNPROVEN,
+  "resid-span-unproven",
+  "reason; first seen in rvtt-macro-desc.cc")
+RVTT_REFUSAL (RESIDENCY_WALK_ORDERING,
+  "residency-walk-ordering",
+  "dump; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (ROLLED_EXPLICIT,
+  "rolled-explicit",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (ROLLED_HOISTED,
+  "rolled-hoisted",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_BODY_BARRIER_CLASS,
+  "round-interleave-body-barrier-class",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_BODY_NOT_FLAT,
+  "round-interleave-body-not-flat",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_CALL_IN_ROW,
+  "round-interleave-call-in-row",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_DENIED_CLASS,
+  "round-interleave-denied-class",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_DEPENDENT_RECURRENCE,
+  "round-interleave-dependent-recurrence",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_FOREIGN_STMT,
+  "round-interleave-foreign-stmt",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_MEMORY,
+  "round-interleave-memory",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_PRESSURE_EXCEEDED,
+  "round-interleave-pressure-exceeded",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_QSR_UNPROVEN,
+  "round-interleave-qsr-unproven",
+  "dump; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_RENAME_CONSTRAINT,
+  "round-interleave-rename-constraint",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_RENAME_LIVE_IN,
+  "round-interleave-rename-live-in",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_RENAME_LIVE_OUT,
+  "round-interleave-rename-live-out",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_RENAME_NO_FREE_LREG,
+  "round-interleave-rename-no-free-lreg",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_RENAME_RMW_DEF,
+  "round-interleave-rename-rmw-def",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_REPLAY_OWNER_IN_ROW,
+  "round-interleave-replay-owner-in-row",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_ROW_NOT_ONE_REGION,
+  "round-interleave-row-not-one-region",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_ROW_TOO_SMALL,
+  "round-interleave-row-too-small",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_SEAM_BARRIER_WORD,
+  "round-interleave-seam-barrier-word",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_TRIP_COUNT_UNPROVEN,
+  "round-interleave-trip-count-unproven",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_TRIPS_NOT_DIVISIBLE,
+  "round-interleave-trips-not-divisible",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROUND_INTERLEAVE_WORD_BUDGET,
+  "round-interleave-word-budget",
+  "reason; first seen in gimple-rvtt-replay-unroll.cc")
+RVTT_REFUSAL (ROW_CONFIG_WRITE,
+  "row-config-write",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (ROW_LIVE_THROUGH,
+  "row-live-through",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (ROW_NOT_CLOSED,
+  "row-not-closed",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (ROW_NOT_ISOMORPHIC,
+  "row-not-isomorphic",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (ROW_OPAQUE_EFFECT,
+  "row-opaque-effect",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (ROW_STEP,
+  "row-step",
+  "dump; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (ROW_STRIDE_MISMATCH,
+  "row-stride-mismatch",
+  "reason; first seen in rvtt-macro-region.cc")
+RVTT_REFUSAL (RWC_BOUNDARY,
+  "rwc-boundary",
+  "reason; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (RWC_STEP,
+  "rwc-step",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (SCALAR_DEF,
+  "scalar-def",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (SCALAR_OR_DEFLESS,
+  "scalar-or-defless",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (SEQUENCE_COUNT,
+  "sequence-count",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (SEQUENCE_DERIVATION_HAZARD,
+  "sequence-derivation-hazard",
+  "reason; first seen in rvtt-macro-derive-core.h")
+RVTT_REFUSAL (SEQUENCE_ENCODING_UNPROVEN,
+  "sequence-encoding-unproven",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (SEQUENCE_MISMATCH,
+  "sequence-mismatch",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (SETC16_COUNT,
+  "setc16-count",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (SETC16_MISMATCH,
+  "setc16-mismatch",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (SETC16_UNDERIVABLE,
+  "setc16-underivable",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (SFPU_BARRIER,
+  "sfpu-barrier",
+  "reason; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (SHADOW_STATE_UNPROVED,
+  "shadow-state-unproved",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (SOURCE_AVAILABILITY,
+  "source-availability",
+  "reason; first seen in gimple-rvtt-lp-schedule.cc")
+RVTT_REFUSAL (STATIC_DELAY,
+  "static-delay",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_CARRIER_UNPROVEN,
+  "stochrnd-store-fold-carrier-unproven",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_ENTROPY_STREAM,
+  "stochrnd-store-fold-entropy-stream",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_FORMAT_MISMATCH,
+  "stochrnd-store-fold-format-mismatch",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_MODE_UNLICENSED,
+  "stochrnd-store-fold-mode-unlicensed",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_MULTI_USE,
+  "stochrnd-store-fold-multi-use",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_SOURCE_FORM,
+  "stochrnd-store-fold-source-form",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_SOURCE_NOT_STORABLE,
+  "stochrnd-store-fold-source-not-storable",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_FOLD_SPAN_CLOBBERED,
+  "stochrnd-store-fold-span-clobbered",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_NO_CONVERSION_PATH,
+  "stochrnd-store-no-conversion-path",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STOCHRND_STORE_ROUNDING_DIVERGENT,
+  "stochrnd-store-rounding-divergent",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_MASK_MISMATCH,
+  "store-fold-mask-mismatch",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_MERGE_MULTI_USE,
+  "store-fold-merge-multi-use",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_ADDRESS_MISMATCH,
+  "store-fold-sink-address-mismatch",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_ADDRMODE_UNPROVEN,
+  "store-fold-sink-addrmode-unproven",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_CARRIED_NOT_LOAD,
+  "store-fold-sink-carried-not-load",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_FORMAT_CANONICALIZING,
+  "store-fold-sink-format-canonicalizing",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_FORMAT_UNPROVEN,
+  "store-fold-sink-format-unproven",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_REGION_SHAPE,
+  "store-fold-sink-region-shape",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SINK_SPAN_CLOBBERED,
+  "store-fold-sink-span-clobbered",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SOURCE_FORM,
+  "store-fold-source-form",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_SOURCE_NOT_STORABLE,
+  "store-fold-source-not-storable",
+  "reason; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_FOLD_TARGET_UNPROVEN,
+  "store-fold-target-unproven",
+  "dump; first seen in gimple-rvtt-store-fold.cc")
+RVTT_REFUSAL (STORE_SOURCE_ENCODING_CEILING,
+  "store-source-encoding-ceiling",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (STORE_SOURCE_TIER,
+  "store-source-tier",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (STORE_SOURCE_UNREACHABLE,
+  "store-source-unreachable",
+  "reason; first seen in rvtt-macro-derive-core.h")
+RVTT_REFUSAL (STRIDE_NOT_ABSORBED,
+  "stride-not-absorbed",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (STRIDE_PLURAL,
+  "stride-plural",
+  "reason; first seen in rtl-rvtt-dst-autoincr.cc")
+RVTT_REFUSAL (SUBUNIT_PLACEMENT_UNPROVEN,
+  "subunit-placement-unproven",
+  "reason; first seen in rvtt-macro-derive-core.h")
+RVTT_REFUSAL (TAIL_NOT_ALL_LANES_ENCC,
+  "tail-not-all-lanes-encc",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (TARGET_MACRO_ENCODING_UNPROVEN,
+  "target-macro-encoding-unproven",
+  "reason; first seen in rvtt-macro-tables.cc")
+RVTT_REFUSAL (TEMPLATE_CAPACITY_EXCEEDED,
+  "template-capacity-exceeded",
+  "reason; first seen in rvtt-macro-sched.cc")
+RVTT_REFUSAL (TEMPLATE_COUNT,
+  "template-count",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (TEMPLATE_DECODE,
+  "template-decode",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (TEMPLATE_MISMATCH,
+  "template-mismatch",
+  "reason; first seen in rvtt-macro-verify-core.h")
+RVTT_REFUSAL (TRANSP_INVOLUTION_OPERAND_SHAPE,
+  "transp-involution-operand-shape",
+  "reason; first seen in gimple-rvtt-transp-involution.cc")
+RVTT_REFUSAL (TRANSP_INVOLUTION_UNSUPPORTED_TARGET,
+  "transp-involution-unsupported-target",
+  "reason; first seen in gimple-rvtt-transp-involution.cc")
+RVTT_REFUSAL (TRANSP_INVOLUTION_WINDOW,
+  "transp-involution-window",
+  "reason; first seen in gimple-rvtt-transp-involution.cc")
+RVTT_REFUSAL (TRIP_COUNT_SINGLE_TRIP,
+  "trip-count-single-trip",
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (TRIPS_UNPROVEN,
+  "trips-unproven",
+  "reason; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (TU_AUDIT_NOT_RUN,
+  "tu-audit-not-run",
+  "reason; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (TWO_NODE,
+  "two-node",
+  "dump; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (UNAUDITED_LATENCY,
+  "unaudited-latency",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (UNDUPLICABLE_STATEMENT,
+  "unduplicable-statement",
+  "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (UNROLLED_EXPLICIT,
+  "unrolled-explicit",
+  "reason; first seen in gimple-rvtt-delivery-shape.cc")
+RVTT_REFUSAL (VALUE_CLOBBERED,
+  "value-clobbered",
+  "reason; first seen in rtl-rvtt-dst-ownership.cc")
+RVTT_REFUSAL (VD_READ_REQUIRES_INPLACE,
+  "vd-read-requires-inplace",
+  "reason; first seen in rvtt-macro-vocab-enum.cc")
+RVTT_REFUSAL (WIDE_SFPU_MODE_UNPROVEN,
+  "wide-sfpu-mode-unproven",
+  "reason; first seen in rtl-rvtt-lp-alloc.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_CC_LIVE,
+  "window-pairing-cc-live",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_CONFIG_OVERLAP,
+  "window-pairing-config-overlap",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_DELAY_UNPROVEN,
+  "window-pairing-delay-unproven",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_DST_ALIAS,
+  "window-pairing-dst-alias",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_DST_MODE_UNPROVEN,
+  "window-pairing-dst-mode-unproven",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_FOOTPRINT_OPAQUE,
+  "window-pairing-footprint-opaque",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_LANECONFIG_UNPROVEN,
+  "window-pairing-laneconfig-unproven",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_LREG_OVERLAP,
+  "window-pairing-lreg-overlap",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_ROW_VARIANCE,
+  "window-pairing-row-variance",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_SEPARATOR_UNPROVEN,
+  "window-pairing-separator-unproven",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_STRIDE_UNPROVEN,
+  "window-pairing-stride-unproven",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_PAIRING_SUBUNIT_COLLISION,
+  "window-pairing-subunit-collision",
+  "reason; first seen in rtl-rvtt-schedule.cc")
+RVTT_REFUSAL (WINDOW_SIZING_CLONE_ARITHMETIC,
+  "window-sizing-clone-arithmetic",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_COVERAGE_SHORT,
+  "window-sizing-coverage-short",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_HOIST_REFUSED,
+  "window-sizing-hoist-refused",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_NO_CHEAPER_DELIVERY,
+  "window-sizing-no-cheaper-delivery",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_NO_WIDER_CANDIDATE,
+  "window-sizing-no-wider-candidate",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_REFORM_COMPOSITION_UNAUDITED,
+  "window-sizing-reform-composition-unaudited",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (WINDOW_SIZING_SLOT_EXHAUSTED,
+  "window-sizing-slot-exhausted",
+  "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (ZERO_LENGTH,
+  "zero-length",
+  "reason; first seen in rtl-rvtt-lp-schedule-prera.cc")
+RVTT_REFUSAL (ZERO_TRIP_PREHEADER_UNPROVEN,
+  "zero-trip-preheader-unproven",
+  "dump; first seen in rtl-rvtt-macro-planner.cc")
