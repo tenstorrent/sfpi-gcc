@@ -739,22 +739,25 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
       refuse_chain ("regrename-replay-boundary", w.insn, bb);
       return false;
     }
-  /* A def that also reads its own destination merges with the prior
-     value: the chain is not closed at the top.  The audited read mask
-     carries the tied-destination artifact, so the pattern operand
-     scan decides, exactly as in the v1 pass above: a REG equal to the
-     destination in the canonical merge position (operand 1 -- the
-     plain forms carry a noval marker there instead of a register) is
-     a genuine live-value merge.  */
+  /* A def with an EXPLICIT input occurrence of its own destination
+     register -- the LV merge source, or the destructive families'
+     "0"-tied source (the BH XOR shape) -- genuinely reads the prior
+     value: the chain is not closed at the top and a whole-pattern
+     replacement would rewrite the source read too.  Refuse on ANY
+     explicit OP_IN occurrence, at every position (v1's canonical
+     operand-1 test was sufficient only under its latency-0 admission,
+     which never admits the destructive families).  The audited read
+     mask alone does not decide: it carries the tied-destination
+     artifact even for the noval (non-merging) alternatives, which
+     have no explicit source REG and are safe.  */
   if (w.fx.lreg_read & oldbit)
     {
       extract_insn (w.insn);
-      for (int oi = 1; oi < recog_data.n_operands; ++oi)
+      for (int oi = 0; oi < recog_data.n_operands; ++oi)
 	{
 	  rtx op = recog_data.operand[oi];
 	  if (REG_P (op) && REGNO (op) == oldr
-	      && recog_data.operand_type[oi] == OP_IN
-	      && oi == 1)
+	      && recog_data.operand_type[oi] == OP_IN)
 	    {
 	      refuse_chain ("regrename-self-merge", w.insn, bb);
 	      return false;
@@ -1059,9 +1062,23 @@ commit_chain (const chain_desc &ch)
       else if (edited[ei] == ch.wi)
 	{
 	  /* The audited read mask may carry the tied-destination
-	     artifact, which legitimately moved to the target.  */
+	     artifact, which legitimately moved to the target -- but an
+	     EXPLICIT input occurrence of the target would mean the
+	     replacement rewrote a genuine source read (the self-merge
+	     admission failed us): divergence.  */
 	  if (fx.lreg_write != newbit || (fx.lreg_read & oldbit))
 	    diverged = "writer web";
+	  else
+	    {
+	      extract_insn (insn);
+	      for (int oi = 0; oi < recog_data.n_operands; ++oi)
+		{
+		  rtx op = recog_data.operand[oi];
+		  if (REG_P (op) && REGNO (op) == newr
+		      && recog_data.operand_type[oi] == OP_IN)
+		    diverged = "writer source rewritten";
+		}
+	    }
 	}
       else if (!(fx.lreg_read & newbit) || (fx.lreg_read & oldbit)
 	       || fx.lreg_write != pre_write[ei])
