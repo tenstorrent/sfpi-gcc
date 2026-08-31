@@ -1037,6 +1037,18 @@ RVTT_REFUSAL (REASSOC_FPU_CHOREOGRAPHY_BOUNDARY,
 RVTT_REFUSAL (REASSOC_LOOP_CARRIED_UNDERIVED,
   "reassoc-loop-carried-underived",
   "dump; first seen in gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_PARTIALS_LATENCY_UNAUDITED,
+  "reassoc-partials-latency-unaudited",
+  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_PARTIALS_LOOP_SHAPE,
+  "reassoc-partials-loop-shape",
+  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_PARTIALS_PRESSURE,
+  "reassoc-partials-pressure",
+  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+RVTT_REFUSAL (REASSOC_PARTIALS_UNPROFITABLE,
+  "reassoc-partials-unprofitable",
+  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PRESSURE_BUDGET_EXCEEDED,
   "reassoc-pressure-budget-exceeded",
   "dump; first seen in gimple-rvtt-reassoc.cc")

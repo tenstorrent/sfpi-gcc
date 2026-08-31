@@ -357,6 +357,36 @@ rvtt_builtin_subunit (const rvtt_insn_data *insnd)
   return XTT_SU_NONE;
 }
 
+int
+rvtt_builtin_result_latency (const rvtt_insn_data *insnd)
+{
+  if (!insnd)
+    return -1;
+  for (const builtin_late_code_map &m : builtin_late_codes)
+    if (m.id == insnd->id)
+      {
+	/* Only patterns whose `xtt_result_latency' attribute is a
+	   CONSTANT (operand-free) expression may be queried through a
+	   pattern-less scratch insn; several patterns (sfpiadd, the
+	   loads) condition the attribute on operand values and would
+	   extract.  Allowlist = the MAD-family value ops, each carrying
+	   the constant encoded latency "2" in rvtt.md.  Everything else
+	   keeps the refusing default.  */
+	if (m.icode != CODE_FOR_rvtt_sfpadd_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmul_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmad_lv
+	    && m.icode != CODE_FOR_rvtt_sfpmul24_lv)
+	  return -1;
+	rtx_insn *scratch = as_a <rtx_insn *> (rtx_alloc (INSN));
+	PATTERN (scratch) = const0_rtx;
+	INSN_CODE (scratch) = (int) m.icode;
+	/* Encoded latency+1; 0 = unaudited (FHS-5), hence the -1
+	   refusing return after the bias is removed.  */
+	return get_attr_xtt_result_latency (scratch) - 1;
+      }
+  return -1;
+}
+
 /* ---- Multi-result / shadow-coupled effect structure (TOP3-2 layer 1/2).
 
    Post-admission operand access, following the rvtt_dst_access_operands

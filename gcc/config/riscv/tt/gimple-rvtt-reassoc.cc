@@ -91,14 +91,47 @@ along with GCC; see the file COPYING3.  If not see
                                        compilable kernel uncompilable
      reassoc-loop-carried-underived    loop-carried FP accumulator
                                        recognized (the welford-delta
-                                       restructuring class) but no derived
-                                       restructure exists yet: refuse
+                                       restructuring class) but the
+                                       derived restructure is not enabled
+                                       (-mtt-tensix-optimize-reassoc-
+                                       loop-carried absent): refuse
+     reassoc-partials-loop-shape       loop-carried candidate does not fit
+                                       the derived shape (links span
+                                       blocks, multiple exits, accumulator
+                                       consumed mid-sum, ...)
+     reassoc-partials-latency-unaudited  a link's result latency is not on
+                                       the audited record at the gimple
+                                       seam: no benefit derivation
+     reassoc-partials-unprofitable     chain shorter than the benefit
+                                       threshold (a 1-link recurrence
+                                       cannot split without unrolling;
+                                       no modeled recurrence saving)
+     reassoc-partials-pressure         no pressure headroom for even one
+                                       extra partial accumulator
 
-   The loop-carried arm is deliberately recognition-only: restructuring
-   a loop-carried accumulator (multiple partial accumulators, delta
-   forms) is reassociation-licensed in principle, but this pass ships
-   no derivation for it, so it refuses by name where a candidate is
-   seen.  Nothing fires that is not proven or licensed.  */
+   Site 3 -- loop-carried accumulator SPLITTING (licensed; FABLE item
+   #8, -mtt-tensix-optimize-reassoc-loop-carried).  A loop-header PHI
+   whose latch value chains through K plain-mod SFPADD/SFPMAD links back
+   to the PHI result is the classical reduction-variable-expansion
+   candidate (tree-vect-loop.cc reduction chains;
+   -fvariable-expansion-in-unroller): the serial recurrence bound is
+   K * (words + latency) slots per iteration.  Under the token the
+   chain is split into P round-robin partial accumulators -- P-1 new
+   header PHIs initialized to the +0.0 constant-register identity
+   (identity legality is part of the license: -0.0 + x vs x is exactly
+   the divergence class the FP license ratifies) -- and reduced by a
+   balanced SFPADD tree on the loop's single exit edge, cutting the
+   recurrence bound to ceil(K/P) * (words + latency).  P =
+   min(latency-derived ideal, pressure headroom + 1, 4, K); the
+   latency-derived ideal and the modeled saving live in rvtt-timing.h
+   (accum_split_factor / accum_split_saving) with the latency fact read
+   once at the audited gimple seam (rvtt_builtin_result_latency); the
+   one-time overhead words are priced through rvtt-delivery-cost in the
+   fire dump.  FP splits need BOTH license keys (-fassociative-math +
+   the token); with the token absent the standing
+   reassoc-loop-carried-underived refusal continues byte-identically
+   (note_loop_carried below is the historical diagnostic, kept
+   verbatim).  Nothing fires that is not proven or licensed.  */
 
 #define INCLUDE_VECTOR
 #include "config.h"
@@ -117,10 +150,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "cfganal.h"
 #include "dominance.h"
+#include "tree-cfg.h"
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-cc-region.h"
+#include "rvtt-effects.h"
+#include "rvtt-timing.h"
+#include "rvtt-delivery-cost.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -400,27 +437,53 @@ earliest_link (chain *c)
   return c->root;
 }
 
-/* Emit the balanced tree over C->terms[lo,hi) in depth-first order
-   immediately before the root (left subtree completes before the right
+/* Emit the balanced tree over TERMS[lo,hi) in depth-first order
+   immediately before *AT (left subtree completes before the right
    begins, so at most tree-depth partial results are ever simultaneously
    live -- the Sethi-Ullman shape the pressure budget is computed for).
-   Split point = ceiling half; term order is preserved exactly.  */
+   Split point = ceiling half; term order is preserved exactly.  MOD is
+   the shared mod operand tree (NULL for the modless bitwise ops).
+   Shared by the straight-line rebalance and the loop-carried split's
+   post-loop reduction (item #8).  */
 
 static tree
-rebalance_build (chain *c, gimple_stmt_iterator *at, tree type, tree fndecl,
-		 unsigned nargs, unsigned lo, unsigned hi)
+rebalance_build (const vec<tree> &terms, tree mod, gimple_stmt_iterator *at,
+		 tree type, tree fndecl, unsigned lo, unsigned hi)
 {
   if (hi - lo == 1)
-    return c->terms[lo];
+    return terms[lo];
   unsigned mid = lo + (hi - lo + 1) / 2;
-  tree l = rebalance_build (c, at, type, fndecl, nargs, lo, mid);
-  tree r = rebalance_build (c, at, type, fndecl, nargs, mid, hi);
-  gcall *comb = nargs == 3
-    ? gimple_build_call (fndecl, 3, l, r, c->mod)
+  tree l = rebalance_build (terms, mod, at, type, fndecl, lo, mid);
+  tree r = rebalance_build (terms, mod, at, type, fndecl, mid, hi);
+  gcall *comb = mod
+    ? gimple_build_call (fndecl, 3, l, r, mod)
     : gimple_build_call (fndecl, 2, l, r);
   tree fresh = make_ssa_name (type);
   gimple_call_set_lhs (comb, fresh);
   gsi_insert_before (at, comb, GSI_SAME_STMT);
+  return fresh;
+}
+
+/* Emit the balanced tree over TERMS[lo,hi) into *SEQ (no block yet):
+   the loop-carried split's post-loop reduction, built for edge
+   insertion.  Same deterministic ceiling-half shape as
+   rebalance_build.  */
+
+static tree
+reduction_build_seq (const vec<tree> &terms, tree mod, gimple_seq *seq,
+		     tree type, tree fndecl, unsigned lo, unsigned hi)
+{
+  if (hi - lo == 1)
+    return terms[lo];
+  unsigned mid = lo + (hi - lo + 1) / 2;
+  tree l = reduction_build_seq (terms, mod, seq, type, fndecl, lo, mid);
+  tree r = reduction_build_seq (terms, mod, seq, type, fndecl, mid, hi);
+  gcall *comb = mod
+    ? gimple_build_call (fndecl, 3, l, r, mod)
+    : gimple_build_call (fndecl, 2, l, r);
+  tree fresh = make_ssa_name (type);
+  gimple_call_set_lhs (comb, fresh);
+  gimple_seq_add_stmt (seq, comb);
   return fresh;
 }
 
@@ -436,12 +499,11 @@ rebalance (chain *c)
   gimple_stmt_iterator at = gsi_for_stmt (c->root);
   tree type = TREE_TYPE (gimple_call_lhs (c->root));
   tree fndecl = gimple_call_fndecl (c->root);
-  unsigned nargs = gimple_call_num_args (c->root);
   unsigned n = c->terms.length ();
 
   unsigned mid = (n + 1) / 2;
-  tree l = rebalance_build (c, &at, type, fndecl, nargs, 0, mid);
-  tree r = rebalance_build (c, &at, type, fndecl, nargs, mid, n);
+  tree l = rebalance_build (c->terms, c->mod, &at, type, fndecl, 0, mid);
+  tree r = rebalance_build (c->terms, c->mod, &at, type, fndecl, mid, n);
   gimple_call_set_arg (c->root, 0, l);
   gimple_call_set_arg (c->root, 1, r);
   update_stmt (c->root);
@@ -672,6 +734,577 @@ note_loop_carried (function *fn)
     }
 }
 
+/* ==================================================================
+   Loop-carried accumulator SPLITTING (FABLE_GOES_BURR item #8) --
+   the derived restructure behind -mtt-tensix-optimize-reassoc-loop-
+   carried.  Recognition is a widened form of the walk above (bound =
+   REASSOC_MAX_TERMS, not the historical 8-step diagnostic bound, which
+   note_loop_carried keeps verbatim for the token-off path); every
+   non-fitting candidate refuses by name.  */
+
+/* Hard cap on the split factor (the item-#8 plan constant): beyond
+   four partials the recurrence is issue-bound for every audited
+   latency on record and the register cost outweighs.  */
+constexpr unsigned SPLIT_MAX_PARTIALS = 4;
+
+/* Classify STMT as a loop-carried accumulation link: plain-mod SFPADD
+   (accumulator in value operand 0 or 1) or plain-mod SFPMAD
+   (accumulator strictly operand 2).  Returns the insn data and sets
+   *NVAL to the value-operand count, else null.  */
+
+static const rvtt_insn_data *
+loop_link_classify (gimple *stmt, unsigned *nval)
+{
+  gcall *call = dyn_cast<gcall *> (stmt);
+  if (!call)
+    return nullptr;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+  if (!insnd)
+    return nullptr;
+  tree lhs = gimple_call_lhs (call);
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+    return nullptr;
+  unsigned n;
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpadd:
+      n = 2;
+      break;
+    case rvtt_insn_data::sfpmad:
+      n = 3;
+      break;
+    default:
+      return nullptr;
+    }
+  if (gimple_call_num_args (call) != n + 1)
+    return nullptr;
+  tree mod = gimple_call_arg (call, n);
+  if (TREE_CODE (mod) != INTEGER_CST || !integer_zerop (mod))
+    return nullptr;
+  *nval = n;
+  return insnd;
+}
+
+/* Whether ARG can continue the accumulator chain toward RES: it is RES
+   itself or the result of another link in BB.  */
+
+static bool
+chain_continues_p (tree res, tree arg, basic_block bb)
+{
+  if (arg == res)
+    return true;
+  if (TREE_CODE (arg) != SSA_NAME)
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (arg);
+  if (!def || gimple_bb (def) != bb)
+    return false;
+  unsigned nval;
+  return loop_link_classify (def, &nval) != nullptr;
+}
+
+/* One recognized loop-carried accumulation chain.  */
+
+struct loop_chain
+{
+  class loop *loop;
+  gphi *phi;
+  tree res, lv;			/* Header PHI result / latch value.  */
+  basic_block bb;		/* The single block holding every link.  */
+  auto_vec<gcall *, 16> links;	/* Execution order, first..last.  */
+  auto_vec<unsigned, 16> accpos; /* Accumulator operand index per link.  */
+  bool has_add;			/* Some link is SFPADD (fndecl reuse).  */
+};
+
+/* Walk the accumulator chain of PHI from its latch value back to its
+   result.  True on a complete recognition (LC filled, links in
+   execution order); false with *WHY set to a dump-stable reason
+   fragment on any non-fitting shape.  Fail-closed: ambiguity refuses.  */
+
+static bool
+loop_chain_walk (class loop *loop, gphi *phi, loop_chain *lc,
+		 const char **why)
+{
+  lc->loop = loop;
+  lc->phi = phi;
+  lc->res = gimple_phi_result (phi);
+  lc->lv = PHI_ARG_DEF_FROM_EDGE (phi, loop_latch_edge (loop));
+  lc->bb = nullptr;
+  lc->has_add = false;
+  if (TREE_CODE (lc->lv) != SSA_NAME || TREE_CODE (lc->res) != SSA_NAME)
+    return *why = "latch value is not an SSA name", false;
+
+  tree cur = lc->lv;
+  unsigned steps = 0;
+  while (cur != lc->res)
+    {
+      if (TREE_CODE (cur) != SSA_NAME)
+	return *why = "chain leaves SSA", false;
+      if (++steps > REASSOC_MAX_TERMS)
+	return *why = "chain cap exceeded", false;
+      gimple *def = SSA_NAME_DEF_STMT (cur);
+      unsigned nval = 0;
+      const rvtt_insn_data *insnd = def ? loop_link_classify (def, &nval)
+					: nullptr;
+      if (!insnd)
+	return *why = "latch value does not chain through plain "
+		      "sfpadd/sfpmad links", false;
+      gcall *call = as_a<gcall *> (def);
+      basic_block dbb = gimple_bb (def);
+      if (!lc->bb)
+	{
+	  if (!flow_bb_inside_loop_p (loop, dbb) || dbb->loop_father != loop)
+	    return *why = "links outside the loop's own body", false;
+	  lc->bb = dbb;
+	}
+      else if (dbb != lc->bb)
+	return *why = "links span blocks", false;
+      if (cur != lc->lv)
+	{
+	  use_operand_p use_p;
+	  gimple *use_stmt;
+	  if (!single_imm_use (cur, &use_p, &use_stmt))
+	    return *why = "an intermediate sum has other consumers", false;
+	}
+      unsigned accpos;
+      if (nval == 3)
+	{
+	  /* MAD: the accumulator position is operand 2 strictly; the
+	     PHI result in a multiplicand is not an additive
+	     recurrence.  */
+	  accpos = 2;
+	  for (unsigned ax = 0; ax != 2; ++ax)
+	    if (gimple_call_arg (call, ax) == lc->res)
+	      return *why = "accumulator feeds a non-additive operand", false;
+	}
+      else
+	{
+	  bool c0 = chain_continues_p (lc->res, gimple_call_arg (call, 0),
+				       gimple_bb (call));
+	  bool c1 = chain_continues_p (lc->res, gimple_call_arg (call, 1),
+				       gimple_bb (call));
+	  if (c0 == c1)
+	    return *why = c0 ? "ambiguous accumulator operand"
+			     : "broken accumulator chain", false;
+	  accpos = c0 ? 0 : 1;
+	}
+      lc->links.safe_push (call);
+      lc->accpos.safe_push (accpos);
+      if (insnd->id == rvtt_insn_data::sfpadd)
+	lc->has_add = true;
+      cur = gimple_call_arg (call, accpos);
+    }
+  if (lc->links.is_empty ())
+    return *why = "empty chain", false;
+
+  /* Collected latch-to-header: reverse into execution order.  */
+  for (unsigned i = 0, j = lc->links.length () - 1; i < j; ++i, --j)
+    {
+      std::swap (lc->links[i], lc->links[j]);
+      std::swap (lc->accpos[i], lc->accpos[j]);
+    }
+
+  /* The PHI result must have exactly one non-debug use: the first
+     link's accumulator operand.  Any other inside use observes a
+     partial sum after the split; an outside use observes the value at
+     an iteration BOUNDARY (not the post-link total the exit reduction
+     reconstructs) -- both refuse.  */
+  {
+    imm_use_iterator imm;
+    use_operand_p use_p;
+    unsigned inside = 0;
+    FOR_EACH_IMM_USE_FAST (use_p, imm, lc->res)
+      {
+	gimple *us = USE_STMT (use_p);
+	if (is_gimple_debug (us))
+	  continue;
+	if (us != lc->links[0]
+	    || USE_FROM_PTR (use_p) != gimple_call_arg (lc->links[0],
+							lc->accpos[0])
+	    || ++inside > 1)
+	  return *why = "accumulator PHI has uses beyond the chain", false;
+      }
+    if (inside != 1)
+      return *why = "accumulator PHI has uses beyond the chain", false;
+  }
+
+  /* The latch value may feed only the header PHI inside the loop;
+     everything else must sit outside (the exit consumers the reduction
+     will retarget).  */
+  {
+    imm_use_iterator imm;
+    use_operand_p use_p;
+    FOR_EACH_IMM_USE_FAST (use_p, imm, lc->lv)
+      {
+	gimple *us = USE_STMT (use_p);
+	if (is_gimple_debug (us) || us == lc->phi)
+	  continue;
+	if (flow_bb_inside_loop_p (loop, gimple_bb (us)))
+	  return *why = "running sum consumed inside the loop", false;
+      }
+  }
+  return true;
+}
+
+/* Process one loop-carried candidate under the token.  Returns true
+   when code changed.  */
+
+static bool
+split_loop_carried_phi (class loop *loop, gphi *phi)
+{
+  loop_chain lc;
+  const char *why = nullptr;
+  if (!loop_chain_walk (loop, phi, &lc, &why))
+    {
+      /* Only diagnose candidates the recognition vocabulary sees as
+	 loop-carried FP accumulators at all (a latch value chaining
+	 through at least one link); everything else is not a candidate
+	 and stays silent, exactly like the historical walk.  */
+      if (lc.links.is_empty ())
+	return false;
+      rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_LOOP_SHAPE, dump_file,
+		   "reassoc: refusing loop-carried split (loop %d, phi in "
+		   "bb %d) (reassoc-partials-loop-shape: %s)\n",
+		   loop->num, loop->header->index, why);
+      return false;
+    }
+
+  unsigned k = lc.links.length ();
+
+  /* Loop shape: single entry beside the latch; every link executes
+     exactly once per latching iteration (the links' block dominates
+     the latch source by SSA construction); the single exit leaves from
+     the links' block AFTER the links (its controlling statement is the
+     block's last), so the exit edge carries every partial's final
+     value and the reduction can be placed on it under the same ambient
+     CC state.  */
+  edge entry_e = nullptr;
+  {
+    edge e;
+    edge_iterator ei;
+    FOR_EACH_EDGE (e, ei, loop->header->preds)
+      if (e != loop_latch_edge (loop))
+	{
+	  if (entry_e)
+	    {
+	      entry_e = nullptr;
+	      break;
+	    }
+	  entry_e = e;
+	}
+  }
+  auto_vec<edge> exits = get_loop_exit_edges (loop);
+  edge exit_e = exits.length () == 1 ? exits[0] : nullptr;
+  if (!entry_e || !exit_e || exit_e->src != lc.bb)
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_LOOP_SHAPE, dump_file,
+		   "reassoc: refusing loop-carried split of %u-link chain "
+		   "(loop %d, bb %d) (reassoc-partials-loop-shape: loop "
+		   "entry/exit shape unproven)\n",
+		   k, loop->num, lc.bb->index);
+      return false;
+    }
+
+  /* Window transparency over the WHOLE loop body, through the shared
+     CC-region vocabulary (the same fail-closed classification as the
+     straight-line window): the split leaves every link in place but
+     threads new values across all of them, adds identity reads before
+     the loop and the reduction after it -- the ambient CC lane-enable
+     state and the SFPU configuration must therefore be invariant from
+     the loop entry through the exit reduction.  Any CC event, config
+     writer, replay boundary, or FPU-choreography statement anywhere in
+     the body refuses by its established window name.  */
+  {
+    basic_block *body = get_loop_body (loop);
+    const char *barrier = nullptr;
+    for (unsigned i = 0; !barrier && i != loop->num_nodes; ++i)
+      for (gimple_stmt_iterator gsi = gsi_start_bb (body[i]);
+	   !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  bool is_link = false;
+	  for (gcall *l : lc.links)
+	    if (l == stmt)
+	      {
+		is_link = true;
+		break;
+	      }
+	  if (is_link)
+	    continue;
+	  if ((barrier = window_stmt_barrier_name (stmt)))
+	    break;
+	}
+    free (body);
+    if (barrier)
+      {
+	if (barrier == window_barrier_replay)
+	  rvtt_refuse (RVTT_REF_REASSOC_REPLAY_PLAYBACK_BOUNDARY,
+		       dump_file,
+		       "reassoc: refusing loop-carried split of %u-link "
+		       "chain (loop %d, bb %d) "
+		       "(reassoc-replay-playback-boundary: a TTREPLAY "
+		       "delivery boundary sits inside the loop body)\n",
+		       k, loop->num, lc.bb->index);
+	else if (barrier == window_barrier_fpu)
+	  rvtt_refuse (RVTT_REF_REASSOC_FPU_CHOREOGRAPHY_BOUNDARY,
+		       dump_file,
+		       "reassoc: refusing loop-carried split of %u-link "
+		       "chain (loop %d, bb %d) "
+		       "(reassoc-fpu-choreography-boundary: an X6 "
+		       "Matrix-Unit face-transpose family statement sits "
+		       "inside the loop body)\n",
+		       k, loop->num, lc.bb->index);
+	else
+	  rvtt_refuse (RVTT_REF_REASSOC_CC_REGION_BOUNDARY, dump_file,
+		       "reassoc: refusing loop-carried split of %u-link "
+		       "chain (loop %d, bb %d) "
+		       "(reassoc-cc-region-boundary: a CC-writing, "
+		       "configuration-writing, or unaudited statement "
+		       "sits inside the loop body)\n",
+		       k, loop->num, lc.bb->index);
+	return false;
+      }
+  }
+
+  /* License gate: every link is FP (SFPADD/SFPMAD), so the split needs
+     BOTH keys -- the token gated the pass arm, -fassociative-math is
+     tested here per candidate so the refusal is named and visible.  */
+  if (!flag_associative_math)
+    {
+      rvtt_refuse (RVTT_REF_ASSOCIATIVE_MATH_LICENSE_ABSENT, dump_file,
+		   "reassoc: refusing loop-carried split of %u-link chain "
+		   "(loop %d, bb %d) (associative-math-license-absent: "
+		   "value-changing FP reassociation needs -fassociative-math "
+		   "AND -mtt-tensix-optimize-reassoc-loop-carried)\n",
+		   k, loop->num, lc.bb->index);
+      return false;
+    }
+
+  /* Audited latency at the gimple seam; the benefit arithmetic lives
+     in rvtt-timing.h (item #11 discipline).  Every link is a one-word
+     MAD-family value op; the audited result latency must be on record
+     for each.  */
+  int lat = 0;
+  for (gcall *l : lc.links)
+    {
+      int ll = rvtt_builtin_result_latency (rvtt_get_insn_data (l));
+      if (ll < 0)
+	{
+	  rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_LATENCY_UNAUDITED,
+		       dump_file,
+		       "reassoc: refusing loop-carried split of %u-link "
+		       "chain (loop %d, bb %d) "
+		       "(reassoc-partials-latency-unaudited: a link's "
+		       "result latency is not on the audited record)\n",
+		       k, loop->num, lc.bb->index);
+	  return false;
+	}
+      lat = MAX (lat, ll);
+    }
+  int p_ideal = rvtt_timing::accum_split_factor (1, lat);
+
+  /* Benefit threshold before pressure: a 1-link recurrence cannot
+     split without unrolling (underived), and a 0-latency chain is
+     already issue-bound.  */
+  unsigned p_cap = MIN ((unsigned) MAX (p_ideal, 0), SPLIT_MAX_PARTIALS);
+  p_cap = MIN (p_cap, k);
+  if (p_cap < 2)
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_UNPROFITABLE, dump_file,
+		   "reassoc: refusing loop-carried split of %u-link chain "
+		   "(loop %d, bb %d) (reassoc-partials-unprofitable: chain "
+		   "shorter than the benefit threshold)\n",
+		   k, loop->num, lc.bb->index);
+      return false;
+    }
+
+  /* Pressure budget (item #10 engine): P-1 extra accumulators are
+     simultaneously live across the loop body and, until the reduction
+     retires them, across the exit block.  The same conservative
+     single-block peak the straight-line arm budgets against.  */
+  unsigned capacity = rvtt_pressure_capacity ();
+  unsigned peak = MAX (rvtt_pressure_bb_peak (lc.bb),
+		       rvtt_pressure_bb_peak (exit_e->dest));
+  unsigned headroom = capacity > peak ? capacity - peak : 0;
+  unsigned p = MIN (p_cap, headroom + 1);
+  if (p < 2)
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_PRESSURE, dump_file,
+		   "reassoc: refusing loop-carried split of %u-link chain "
+		   "(loop %d, bb %d) (reassoc-partials-pressure: "
+		   "conservative peak %u leaves no headroom for an extra "
+		   "partial in the 8-LREG file)\n",
+		   k, loop->num, lc.bb->index, peak);
+      return false;
+    }
+
+  int64_t saving = rvtt_timing::accum_split_saving (k, p, 1, lat);
+  if (saving <= 0)
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PARTIALS_UNPROFITABLE, dump_file,
+		   "reassoc: refusing loop-carried split of %u-link chain "
+		   "(loop %d, bb %d) (reassoc-partials-unprofitable: no "
+		   "modeled recurrence saving at P=%u)\n",
+		   k, loop->num, lc.bb->index, p);
+      return false;
+    }
+
+  /* ---- Commit.  ---- */
+
+  tree type = TREE_TYPE (lc.res);
+  location_t loc = gimple_location (lc.links[0]);
+
+  /* Identity: the +0.0 constant-register read, materialized once on
+     the entry path (dead on any non-loop path).  Identity legality is
+     the license's -0.0 + x vs x divergence class (see the file
+     head).  */
+  const rvtt_insn_data *zero_insnd
+    = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
+  gcc_assert (zero_insnd && zero_insnd->decl);
+  gcall *zero = gimple_build_call (zero_insnd->decl, 1,
+				   build_int_cst (unsigned_type_node,
+						  CREG_IDX_0));
+  tree zero_ssa = make_ssa_name (type);
+  gimple_call_set_lhs (zero, zero_ssa);
+  gimple_set_location (zero, loc);
+  {
+    gimple_stmt_iterator gsi = gsi_last_bb (entry_e->src);
+    if (!gsi_end_p (gsi) && stmt_ends_bb_p (gsi_stmt (gsi)))
+      gsi_insert_before (&gsi, zero, GSI_SAME_STMT);
+    else
+      gsi_insert_after (&gsi, zero, GSI_NEW_STMT);
+  }
+
+  /* P-1 new partial-accumulator PHIs, identity-initialized; the
+     original PHI keeps the original init and becomes partial 0.  */
+  auto_vec<tree, 4> cur;
+  cur.safe_push (lc.res);
+  auto_vec<gphi *, 4> new_phis;
+  for (unsigned j = 1; j != p; ++j)
+    {
+      gphi *pj = create_phi_node (make_ssa_name (type), loop->header);
+      add_phi_arg (pj, zero_ssa, entry_e, loc);
+      new_phis.safe_push (pj);
+      cur.safe_push (gimple_phi_result (pj));
+    }
+
+  /* Round-robin rewire: link i accumulates into partial i mod P.  */
+  for (unsigned i = 0; i != k; ++i)
+    {
+      unsigned j = i % p;
+      gimple_call_set_arg (lc.links[i], lc.accpos[i], cur[j]);
+      update_stmt (lc.links[i]);
+      cur[j] = gimple_call_lhs (lc.links[i]);
+    }
+
+  /* Latch arguments: each partial cycles through its own subchain.  */
+  edge latch_e = loop_latch_edge (loop);
+  SET_PHI_ARG_DEF (lc.phi, latch_e->dest_idx, cur[0]);
+  for (unsigned j = 1; j != p; ++j)
+    add_phi_arg (new_phis[j - 1], cur[j], latch_e, loc);
+
+  /* Post-loop balanced reduction over the P exit values (the exit
+     leaves lc.bb after every link, so cur[] holds the live values on
+     the exit edge), inserted ON the single exit edge (committing may
+     split a critical edge; the new block lies outside the loop and the
+     hooks keep the loop structure current).  Every outside consumer of
+     the old running sum is retargeted to the reduced total: for the
+     canonical guarded-loop shape that consumer is the exit-merge PHI's
+     exit-edge argument, which keeps the not-executed path's init value
+     intact.  */
+  {
+    auto_vec<use_operand_p, 8> out_uses;
+    imm_use_iterator imm;
+    use_operand_p use_p;
+    FOR_EACH_IMM_USE_FAST (use_p, imm, lc.lv)
+      {
+	gimple *us = USE_STMT (use_p);
+	if (is_gimple_debug (us) || us == lc.phi
+	    || flow_bb_inside_loop_p (loop, gimple_bb (us)))
+	  continue;
+	out_uses.safe_push (use_p);
+      }
+    if (!out_uses.is_empty ())
+      {
+	tree red_fndecl;
+	tree red_mod;
+	if (lc.has_add)
+	  {
+	    gcall *addl = nullptr;
+	    for (gcall *l : lc.links)
+	      if (rvtt_get_insn_data (l)->id == rvtt_insn_data::sfpadd)
+		{
+		  addl = l;
+		  break;
+		}
+	    red_fndecl = gimple_call_fndecl (addl);
+	    red_mod = gimple_call_arg (addl, 2);
+	  }
+	else
+	  {
+	    const rvtt_insn_data *add_insnd
+	      = rvtt_get_insn_data (rvtt_insn_data::sfpadd);
+	    gcc_assert (add_insnd && add_insnd->decl);
+	    red_fndecl = add_insnd->decl;
+	    red_mod = build_int_cst (unsigned_type_node, 0);
+	  }
+	gimple_seq seq = NULL;
+	auto_vec<tree, 4> terms;
+	for (unsigned j = 0; j != p; ++j)
+	  terms.safe_push (cur[j]);
+	tree red = reduction_build_seq (terms, red_mod, &seq, type,
+					red_fndecl, 0, p);
+	gsi_insert_seq_on_edge (exit_e, seq);
+	gsi_commit_edge_inserts ();
+	for (use_operand_p u : out_uses)
+	  {
+	    gimple *us = USE_STMT (u);
+	    SET_USE (u, red);
+	    update_stmt (us);
+	  }
+      }
+  }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "reassoc: licensed loop-carried split P=%u over %u-link "
+	     "sfpadd/sfpmad chain (loop %d, bb %d): modeled recurrence "
+	     "%" PRId64 "->%" PRId64 " slots/iter, +%u one-time words "
+	     "(%" PRId64 " centislots) (flag_associative_math && "
+	     "-mtt-tensix-optimize-reassoc-loop-carried)\n",
+	     p, k, loop->num, lc.bb->index,
+	     (int64_t) k * (1 + lat),
+	     (int64_t) k * (1 + lat) - saving,
+	     2 * (p - 1),
+	     rvtt_dcost_words_to_centislots
+	       (2 * ((int64_t) p - 1), rvtt_delivery_cost::PLANE_RISC_PUSH));
+  return true;
+}
+
+/* The token-on loop-carried arm: derive the split for every fitting
+   candidate; refuse the rest by name.  Returns true when code
+   changed.  */
+
+static bool
+split_loop_carried (function *fn)
+{
+  bool changed = false;
+  if (number_of_loops (fn) <= 1)
+    return false;
+  for (class loop *loop : loops_list (fn, LI_FROM_INNERMOST))
+    {
+      if (loop->num == 0 || !loop_latch_edge (loop))
+	continue;
+      /* Collect the header PHIs first (the transform adds PHIs).  */
+      auto_vec<gphi *, 8> phis;
+      for (gphi_iterator psi = gsi_start_phis (loop->header);
+	   !gsi_end_p (psi); gsi_next (&psi))
+	phis.safe_push (psi.phi ());
+      for (gphi *phi : phis)
+	changed |= split_loop_carried_phi (loop, phi);
+    }
+  return changed;
+}
+
 static bool
 transform (function *fn)
 {
@@ -742,15 +1375,29 @@ public:
     /* The target half of the license key gates the whole pass; the
        -fassociative-math half is tested per FP chain (named refusal).
        Integer/bitwise rebalancing is value-identical and needs only
-       this flag.  Default off: stock codegen is byte-identical.  */
-    return TARGET_XTT_TENSIX && riscv_tt_opt_reassoc > 0;
+       the straight-line flag.  The loop-carried token gates ONLY the
+       split arm (one-knob-one-mechanism, item #8).  Default off: stock
+       codegen is byte-identical.  */
+    return TARGET_XTT_TENSIX
+	   && (riscv_tt_opt_reassoc > 0
+	       || riscv_tt_opt_reassoc_loop_carried > 0);
   }
 
   unsigned execute (function *fn) final override
   {
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
-    note_loop_carried (fn);
-    bool changed = transform (fn);
+    bool changed = false;
+    if (riscv_tt_opt_reassoc_loop_carried > 0)
+      /* The derived split (item #8); every non-fitting candidate
+	 refuses by its reassoc-partials-* name.  */
+      changed |= split_loop_carried (fn);
+    else
+      /* Token absent: the standing reassoc-loop-carried-underived
+	 refusal continues byte-identically (the historical
+	 diagnostic walk, kept verbatim).  */
+      note_loop_carried (fn);
+    if (riscv_tt_opt_reassoc > 0)
+      changed |= transform (fn);
     loop_optimizer_finalize ();
     return changed ? TODO_update_ssa_only_virtuals | TODO_verify_all : 0;
   }
