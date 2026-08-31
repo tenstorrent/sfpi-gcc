@@ -709,7 +709,12 @@
 				   && CONST_INT_P (operands[7])
 				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
 				       || INTVAL (operands[7]) == 10)")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override row (FABLE item #4): lane-predicated LREG
+   ;; immediate materialization, never touches CC; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpload"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1097,7 +1102,10 @@
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
 		      (const_int 1) (const_int 0)))
-   (set_attr "xtt_macro_encodable" "yes")])
+   (set_attr "xtt_macro_encodable" "yes")
+   ;; Lane-gated consumer (FABLE item #4): SFPSTORE moves only
+   ;; CC-enabled lanes to Dst.
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpstoresrcs"
   [(unspec_volatile:XTT32SI [
@@ -1197,7 +1205,9 @@
    (set_attr "xtt_lreg_write_ops" "1")
    (set_attr "xtt_cc_effect" "readwrite")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpencc"
   [(unspec_volatile:XTT32SI [
@@ -1340,7 +1350,9 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpmad"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1382,7 +1394,9 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_int_iterator rvtt_muliaddi_op [
   UNSPECV_SFPMULI
@@ -1490,7 +1504,9 @@
    (set_attr "xtt_lreg_write_ops" "2")
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
-   (set_attr "xtt_rwc_effect" "none")])
+   (set_attr "xtt_rwc_effect" "none")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpiadd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1600,7 +1616,12 @@
 				   && IN_RANGE (INTVAL (operands[4]), 0, 10)
 				   && (INTVAL (operands[4]) & 1) == 0")
 		      (const_int 1) (const_int 0)))
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
+   ;; Migrated effect-override row (FABLE item #4): SFPIADD's mod field
+   ;; can architecturally set CC -- conservative CC write, any mod.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "yes")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpiadd_v_nv"
   [(unspec_volatile:XTT32SI [
@@ -1612,7 +1633,12 @@
   "SFPIADD\t%x0, %x1, 0, %2"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
+   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; write, any mod; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "yes")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpiadd_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -1777,7 +1803,12 @@
 				   && CONST_INT_P (operands[4])
 				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
 				   && (INTVAL (operands[7]) & 3) == 1")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; write, any mod; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "yes")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpiadd_i_nv"
   [(unspec_volatile:XTT32SI [
@@ -1796,7 +1827,12 @@
       operands, false, 6);
   }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; write, any mod; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "yes")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_int_iterator rvtt_unary_op [
   UNSPECV_SFPMOV
@@ -1976,7 +2012,17 @@
 					  || INTVAL (operands[3]) == 2
 					  || INTVAL (operands[3]) == 4)
 				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override rows (FABLE item #4), keyed per insn
+   ;; code and deliberately mod-independent: pure value unaries;
+   ;; SFPEXEXP/SFPLZ mod fields can architecturally set CC
+   ;; (conservative CC write), the rest never touch CC.
+   (set_attr "xtt_lane_local" "yes")
+   (set (attr "xtt_cc_write")
+	(if_then_else (match_test "<rvtt_unary_op> == UNSPECV_SFPEXEXP
+				   || <rvtt_unary_op> == UNSPECV_SFPLZ")
+		      (const_string "yes") (const_string "no")))
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfp<rvtt_unary_name>_nv"
   [(unspec_volatile:XTT32SI [
@@ -1986,7 +2032,15 @@
   "TARGET_XTT_TENSIX_QSR && <rvtt_unary_op> == UNSPECV_SFPLZ"
   "SFP<rvtt_unary_insn>\tL8, %x0, %1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Migrated effect-override rows (FABLE item #4): same per-family
+   ;; classification as the _lv forms above.
+   (set_attr "xtt_lane_local" "yes")
+   (set (attr "xtt_cc_write")
+	(if_then_else (match_test "<rvtt_unary_op> == UNSPECV_SFPEXEXP
+				   || <rvtt_unary_op> == UNSPECV_SFPLZ")
+		      (const_string "yes") (const_string "no")))
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_int_iterator rvtt_set_op [
   UNSPECV_SFPSETEXP
@@ -2096,7 +2150,12 @@
 				   && (INTVAL (operands[4]) == 0
 				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
 					   && INTVAL (operands[4]) == 2))")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override rows (FABLE item #4): field inserts
+   ;; never touch CC; lane-gated consumers.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpset<rvtt_set_name>_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2222,7 +2281,12 @@
 	(if_then_else (match_test "(TARGET_XTT_TENSIX_BH
 				    || TARGET_XTT_TENSIX_WH)
 				   && INTVAL (operands[7]) == 1")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override rows (FABLE item #4): field inserts
+   ;; never touch CC; lane-gated consumers.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_int_iterator rvtt_logical_op [
   UNSPECV_SFPAND
@@ -2332,7 +2396,9 @@
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfp<rvtt_logical_name>_lv_bh"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr,xr")
@@ -2375,7 +2441,9 @@
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
 		      (const_int 1) (const_int 0)))
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))])
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpnot"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -2399,7 +2467,9 @@
    SFPNOT\t%x0, %x2
    SFPNOT\t%x0, %x2\t# LV:%x1"
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpshft_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2507,7 +2577,13 @@
 				   : (TARGET_XTT_TENSIX_BH
 				      && INTVAL (operands[4]) == 2)")
 		      (const_int 1) (const_int 0)))
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
+   ;; Lane-gated consumer (FABLE item #4).  The starred immediate-shift
+   ;; forms are deliberately NOT annotated: the migrated allowlist named
+   ;; only the never-recognized sfpshft_i expand codes, so the effective
+   ;; membership -- this register-shift pattern only -- is preserved
+   ;; verbatim.
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpshft_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2753,7 +2829,12 @@
 	(if_then_else (match_test "INTVAL (operands[3]) == 0
 				   || (TARGET_XTT_TENSIX_BH
 				       && INTVAL (operands[3]) == 3)")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; never touches CC; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpdivp2"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2886,7 +2967,12 @@
 				    || TARGET_XTT_TENSIX_WH)
 				   && CONST_INT_P (operands[4])
 				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; never touches CC; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpstochrnd_i"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -2990,7 +3076,9 @@
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpstochrnd_v"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -3037,7 +3125,9 @@
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
-		      (const_int 1) (const_int 0)))])
+		      (const_int 1) (const_int 0)))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpreadconfig"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -3277,7 +3367,9 @@
 				   && CONST_INT_P (operands[5])
 				   && (INTVAL (operands[5]) == 0
 				       || INTVAL (operands[5]) == 4)")
-		      (const_int 2) (const_int 0)))])
+		      (const_int 2) (const_int 0)))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfplut_qsr"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -3331,7 +3423,9 @@
 }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfplutfp32_3r_split"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -3347,7 +3441,9 @@
   "SFPLUTFP32\t%x0, %5\t# R:%x1,%x2,%x3,%x4,%x6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfplutfp32_6r"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -3365,7 +3461,9 @@
   "SFPLUTFP32\t%x0, %8\t# R:%x1,%x2,%x3,%x4,%x5,%x6,%x7"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpswap_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
@@ -4518,7 +4616,9 @@
    (set_attr "xtt_rwc_effect" "none")
    (set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set_attr "xtt_delay" "dynamic")])
+   (set_attr "xtt_delay" "dynamic")
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfparecip"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -4579,7 +4679,12 @@
 				: "SFPARECIP\t%x0, %x2, %3\t# LV:%x1";
 }
   [(set_attr "type" "tensix")
-   (set_attr "xtt_replay" "safe")])
+   (set_attr "xtt_replay" "safe")
+   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; never touches CC; lane-gated consumer.
+   (set_attr "xtt_lane_local" "yes")
+   (set_attr "xtt_cc_write" "no")
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpnonlinear"
   [(set (match_operand:XTT32SI 0 "register_operand")
@@ -4608,7 +4713,9 @@
    SFPNONLINEAR\t%x0, %x2, %3\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))])
+   (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))
+   ;; Lane-gated consumer (FABLE item #4).
+   (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_ttsetrwc"
   [(unspec_volatile:XTT32SI [

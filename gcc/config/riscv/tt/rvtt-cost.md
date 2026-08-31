@@ -880,6 +880,58 @@
 (define_enum_attr "xtt_macro_encodable" "xtt_macro_encodable"
   (const_string "no"))
 
+;; Audited lane-local value-op class (the effect-override tables of
+;; rtl-rvtt-lp-alloc.cc / rtl-rvtt-dst-ownership.cc migrated to the
+;; definitions, FABLE_GOES_BURR item #4; planner-oracle re-freeze
+;; recorded in oracles/refreeze-pin49-20260831.txt).  `yes' marks a
+;; typed SFPU LREG value operation with no Dst-memory, RWC-counter, or
+;; configuration effect, keyed per insn code and deliberately
+;; mod-independent -- a verbatim re-homing of the audited tables, not a
+;; re-audit.  Decoded only by rvtt_lane_local_effects (rvtt-effects.h);
+;; rvtt_insn_effects and the rest of the effect family are untouched,
+;; so the frozen macro-planner refusal surface cannot move.  Default no
+;; (refusing).
+(define_enum "xtt_lane_local" [
+  no
+  yes
+])
+(define_enum_attr "xtt_lane_local" "xtt_lane_local"
+  (const_string "no"))
+
+;; Whether the lane-local operation's mod field can architecturally set
+;; CC (the SFPEXEXP/SFPLZ/SFPIADD families), recorded conservatively as
+;; a CC write regardless of the mod value -- exactly the migrated
+;; tables' CC_WRITES column.  Meaningful only under xtt_lane_local yes
+;; (rvtt_lane_local_effects asserts it is audited there); `unknown' is
+;; the refusing default.
+(define_enum "xtt_cc_write" [
+  unknown
+  no
+  yes
+])
+(define_enum_attr "xtt_cc_write" "xtt_cc_write"
+  (const_string "unknown"))
+
+;; Lane-gated consumer class (rtl-rvtt-lp-alloc.cc's hand
+;; lane_gated_consumers allowlist migrated to the definitions,
+;; FABLE_GOES_BURR item #4): `yes' marks an instruction whose LREG/Dst
+;; writes are lane-gated and whose dataflow is lane-local (no value
+;; movement between lanes) -- a reload feeding only such an insn is
+;; complete under narrowed CC, and an RMW def by such an insn under
+;; narrowed CC store-backs only its enabled lanes.  Cross-lane ops
+;; (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain all-lanes copies,
+;; SrcS stores, loadmacro forms and the zero-length LREG markers keep
+;; the refusing default `no' (fail-closed).  The CC-gated
+;; predicated-assign copy remains recognized structurally by its
+;; UNSPECV_SFPASSIGN shape at the consumer, exactly as before.  Decoded
+;; only by rvtt_lane_gated_consumer_p (rvtt-effects.h).
+(define_enum "xtt_lane_gated" [
+  no
+  yes
+])
+(define_enum_attr "xtt_lane_gated" "xtt_lane_gated"
+  (const_string "no"))
+
 ;; Replay-hoist profitability constants.
 ;;
 ;; Units: hundredths of one Tensix instruction issue slot (centislots).

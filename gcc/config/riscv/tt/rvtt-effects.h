@@ -74,6 +74,30 @@ extern xtt_subunit_t rvtt_builtin_subunit (const rvtt_insn_data *);
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 
+/* Audited lane-local value-op family (FABLE item #4: the
+   effect_overrides tables formerly copied verbatim between
+   rtl-rvtt-lp-alloc.cc and rtl-rvtt-dst-ownership.cc, migrated to the
+   xtt_lane_local/xtt_cc_write attributes at the definitions in
+   rvtt.md).  Returns true iff INSN's pattern is an audited SFPU LREG
+   value operation with no Dst-memory, RWC-counter, or configuration
+   effect (keyed per insn code, deliberately mod-independent -- a
+   verbatim re-homing of the audited tables); *CC_WRITES then reports
+   whether the operation's mod field can architecturally set CC,
+   recorded conservatively regardless of the mod value.  Refusing
+   default: unannotated patterns return false.  Deliberately separate
+   from rvtt_insn_effects, whose opacity surface (and with it the
+   frozen macro-planner refusal surface) is untouched by the migration
+   (planner-oracle re-freeze: oracles/refreeze-pin49-20260831.txt).  */
+extern bool rvtt_lane_local_effects (rtx_insn *, bool *cc_writes);
+
+/* Lane-gated consumer family (FABLE item #4: rtl-rvtt-lp-alloc.cc's
+   hand lane_gated_consumers allowlist migrated to the xtt_lane_gated
+   attribute): true iff INSN's LREG/Dst writes are lane-gated and its
+   dataflow is lane-local.  The CC-gated predicated-assign copy is NOT
+   covered here (its starred pattern is recognized structurally by the
+   consumer, exactly as before).  Refusing default false.  */
+extern bool rvtt_lane_gated_consumer_p (rtx_insn *);
+
 /* Post-admission operand access for a Dst load/store (EFFECTS must have
    dst_mem_read or dst_mem_write): the typed address, data-mode, and
    address-mode operands.  Returns false for insns whose Dst operand

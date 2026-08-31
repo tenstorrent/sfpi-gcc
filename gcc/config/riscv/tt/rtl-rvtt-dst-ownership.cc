@@ -264,58 +264,17 @@ pattern_transparent_p (rtx_insn *insn)
   return true;
 }
 
-/* Audited architectural effect data for typed value-op patterns the
-   generated attribute family does not carry yet (their attribute
-   defaults refuse, so rvtt_insn_effects reports them opaque).  Each row
-   is an SFPU LREG value operation with no Dst-memory, RWC-counter, or
-   configuration effect; CC_WRITES marks the families whose mod field
-   can architecturally set CC (SFPEXEXP/SFPLZ/SFPIADD), recorded
-   conservatively as a CC write regardless of the mod value.
-
-   This table is effect data, not operation-identity decision logic: the
+/* Audited architectural effect data for typed value-op patterns whose
+   generated FULL effect sets are not on record (rvtt_insn_effects
+   reports them opaque) now lives at the definitions: the
+   xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
+   through rvtt_lane_local_effects (FABLE item #4; the former
+   effect_overrides table copied verbatim from rtl-rvtt-lp-alloc.cc is
+   deleted, and the planner-oracle re-freeze that blocked the migration
+   is recorded in testsuite oracles/refreeze-pin49-20260831.txt).  The
+   query is effect data, not operation-identity decision logic: the
    fold never keys on these codes, they only refine "opaque" to the
-   pattern's architectural effect set.  Migrating these rows into the
-   rvtt-cost.md attribute family is the principled home, but doing so
-   changes the frozen macro-planner refusal surface (opacity currently
-   excludes these rows from planner regions), so the migration must be
-   a separate change that re-freezes the planner oracles.  */
-
-struct dstown_effect_override
-{
-  insn_code code;
-  bool cc_writes;
-};
-
-static const dstown_effect_override effect_overrides[] = {
-  /* Immediate materialization; lane-predicated LREG write.  */
-  { CODE_FOR_rvtt_sfploadi_lv_int,	false },
-  /* Sign/exponent/mantissa field inserts; never touch CC.  */
-  { CODE_FOR_rvtt_sfpsetsgn_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetsgn_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetexp_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetexp_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetman_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetman_i_lv_int,	false },
-  /* Pure value unaries.  */
-  { CODE_FOR_rvtt_sfpabs_lv,		false },
-  { CODE_FOR_rvtt_sfpabs_nv,		false },
-  { CODE_FOR_rvtt_sfpmov_lv,		false },
-  { CODE_FOR_rvtt_sfpmov_nv,		false },
-  { CODE_FOR_rvtt_sfpcast_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_nv,		false },
-  { CODE_FOR_rvtt_sfpdivp2_lv_int,	false },
-  { CODE_FOR_rvtt_sfparecip_lv,		false },
-  /* Mod field can architecturally set CC: conservative CC write.  */
-  { CODE_FOR_rvtt_sfpexexp_lv,		true },
-  { CODE_FOR_rvtt_sfpexexp_nv,		true },
-  { CODE_FOR_rvtt_sfplz_lv,		true },
-  { CODE_FOR_rvtt_sfplz_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_lv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_i_lv_int,	true },
-  { CODE_FOR_rvtt_sfpiadd_i_nv,		true },
-};
+   pattern's architectural effect set.  */
 
 static insn_facts
 classify (rtx_insn *insn)
@@ -364,12 +323,14 @@ classify (rtx_insn *insn)
       return f;
   }
 
-  for (const dstown_effect_override &o : effect_overrides)
-    if (code == o.code)
+  {
+    bool cc_writes;
+    if (rvtt_lane_local_effects (insn, &cc_writes))
       {
-	f.cc_write = o.cc_writes;
+	f.cc_write = cc_writes;
 	return f;
       }
+  }
 
   if (pattern_transparent_p (insn))
     return f;
