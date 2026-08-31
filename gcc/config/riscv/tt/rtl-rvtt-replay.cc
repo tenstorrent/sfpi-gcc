@@ -1355,16 +1355,11 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
   // matching the interlock scheduler's target-level refusal.
   if (TARGET_XTT_TENSIX_QSR)
     return -1;
-  HOST_WIDE_INT slot = 0;
-  HOST_WIDE_INT ready[16];
-  uint32_t unproved = 0;	// regs whose pending producer is unaudited
-  for (int i = 0; i != 16; ++i)
-    ready[i] = 0;
-
-  /* Item-#11 verdict-identity shadow: the unified engine's scoreboard
-     steps beside this one and must agree on every slot count, refusal
-     and unproved mask before this simulator retires.  */
-  rvtt_timing::interlock_sim chk_sim;
+  /* The 16-register ready[] scoreboard is the item-#11 engine's; this
+     walker owns only the IR-side effect extraction, dumps and
+     refusals (verdict identity proven by the stage-A shadow over a
+     full corpus -fchecking leg before the local scoreboard retired).  */
+  rvtt_timing::interlock_sim sim;
 
   for (auto pos = block.data () + span.begin,
 	 end = block.data () + span.end; pos != end; ++pos)
@@ -1396,54 +1391,23 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 		     " effect-opaque\n", INSN_UID (pos->insn));
 	  return -1;
 	}
-      uint32_t deps = (e.lreg_read
-		       | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
-      rvtt_timing::issue_op chk_op;
-      if (flag_checking)
+      rvtt_timing::issue_op op;
+      op.deps = (e.lreg_read
+		 | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
+      op.writes = e.lreg_write;
+      op.words = get_attr_length (pos->insn) / 4;
+      op.lat = e.result_latency;
+      op.next_slot_stall = e.next_slot_stall;
+      if (!sim.step (op))
 	{
-	  chk_op.deps = deps;
-	  chk_op.writes = e.lreg_write;
-	  chk_op.words = get_attr_length (pos->insn) / 4;
-	  chk_op.lat = e.result_latency;
-	  chk_op.next_slot_stall = e.next_slot_stall;
-	}
-      if (deps & unproved)
-	{
-	  if (flag_checking)
-	    gcc_assert (!chk_sim.step (chk_op)
-			&& chk_sim.unproved_mask () == unproved);
 	  if (dump_file)
 	    fprintf (dump_file, "  reissue-unproved edge: consumer insn %d"
 		     " (deps 0x%x) of an unaudited producer (mask 0x%x)\n",
-		     INSN_UID (pos->insn), deps, unproved);
+		     INSN_UID (pos->insn), op.deps, sim.unproved_mask ());
 	  return -1;
 	}
-      HOST_WIDE_INT at = slot;
-      for (int i = 0; i != 16; ++i)
-	if ((deps & (1u << i)) && ready[i] > at)
-	  at = ready[i];
-      unsigned words = get_attr_length (pos->insn) / 4;
-      HOST_WIDE_INT done = at + words;
-      if (e.next_slot_stall)
-	++done;
-      for (int i = 0; i != 16; ++i)
-	if (e.lreg_write & (1u << i))
-	  {
-	    if (e.result_latency < 0)
-	      unproved |= 1u << i;
-	    else
-	      {
-		unproved &= ~(1u << i);
-		ready[i] = done + e.result_latency;
-	      }
-	  }
-      slot = done;
-      if (flag_checking)
-	gcc_assert (chk_sim.step (chk_op)
-		    && chk_sim.slots () == slot
-		    && chk_sim.unproved_mask () == unproved);
     }
-  return slot;
+  return sim.slots ();
 }
 
 /* Delivered instruction words of the span (multi-word instructions count
@@ -1742,96 +1706,66 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		 (long) trips, (long) words, (long) benefit);
       return true;
     }
-  // The re-record shapes split on which resource paces the in-loop
-  // record-with-execution pass (rvtt-cost.md, re-record derivation):
-  // execution-bound (exec >= deliver_record) exposes the record
-  // engine's per-pass overhead on the critical path and hides the
-  // hoisted preheader pass's delivery behind the loop's own execution
-  // backlog (Reduce-class silicon A/B); delivery-bound keeps the
-  // pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
-  // engine overhead absorbed in the per-word delivery slack.
-  //
-  // Both shapes -- and the counted branch, the execution-saturation
-  // context term, and the completion guard's full-record charge --
-  // are priced by the shared spelling in rvtt-delivery-cost-core.h
-  // (replay_pricing); PRICE above carries every term.
-  bool exec_bound_rerecord = price.exec_bound;
-  HOST_WIDE_INT record = price.record;
-  HOST_WIDE_INT before = price.before;
-  HOST_WIDE_INT after = price.after;
-  if (exec_bound_rerecord && riscv_tt_replay_hoist_completion_guard > 0)
-    {
-      /* The body-throughput calibration above permits the hoisted record's
-	 delivery to hide behind the loop's execution backlog.  A caller that
-	 scores completion through a final Tensix drain cannot in general take
-	 credit for that overlap: the record must be complete before its first
-	 playback, and any remaining execution is charged at the drain.  Keep
-	 the established body model as the default, but offer a completion-
-	 accurate, shape-generic guard which charges the full record delivery.
-	 The guarded record-hoist path uses the shared binding-resource model.
-	 For every legal replay payload (at least four delivered words), its
-	 execution-bound benefit is strictly no greater than the delivery-only
-	 measurement benefit: their difference per trip is
-	 RECORD_OVERHEAD_X100 - RISC_PUSH_X100 * words (currently at most
-	 -192 centislots).  Thus the guard is a monotone
-	 restriction over the admitted candidate domain, but that ordering is a
-	 consequence of the cost constants and MIN_SEQUENCE, not its semantic
-	 definition.
-	 It keys only on the already-proven binding resource; no opcode, kernel,
-	 payload length, or trip-count special case participates.  */
-      if (dump_file)
-	fprintf (dump_file,
-		 "Replay completion guard: execution-bound re-record"
-		 " charges hoisted delivery %ld (record cost %ld)\n",
-		 (long) price.deliver_record, (long) record);
-    }
-  else if (price.hidden)
-    {
-      // Execution-saturation term (delivery-bound re-record bodies
-      // only; silicon-witnessed on the unary-maxmin shape): when the
-      // body's contiguous run of sibling launches of this same buffer
-      // has enough execution surplus to hide the record pass's
-      // delivery, hoisting relieves nothing per trip.  An
-      // execution-bound record pass is never hidden this way: its cost
-      // is its own execution plus the exposed record-engine overhead,
-      // which no sibling surplus can absorb (Reduce-class silicon A/B,
-      // rvtt-cost.md).
-      if (dump_file)
-	fprintf (dump_file,
-		 "Record delivery hidden: contiguous launch run %u exec"
-		 " surplus %ld >= record delivery %ld\n",
-		 launch_run, (long) price.surplus,
-		 (long) price.deliver_record);
-    }
-  HOST_WIDE_INT benefit = price.benefit;
-
-  /* Item-#11 verdict-identity shadow: the unified engine's pricing
-     form must reproduce every term of this shared model before the
-     inline spelling retires (the rvtt-bnb.cc downstream mirror
-     shadows the same form).  */
-  if (flag_checking)
-    {
-      rvtt_timing::hoist_costs chk_costs;
-      chk_costs.push = XTT_REPLAY_COST_RISC_PUSH_X100;
-      chk_costs.slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-      chk_costs.turnaround = XTT_REPLAY_COST_TURNAROUND_X100;
-      chk_costs.record_overhead = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-      rvtt_timing::hoist_pricing chk
-	= !body_rerecords
-	  ? rvtt_timing::counted_hoist_price (chk_costs, trips, words,
-					      eslots)
-	  : rvtt_timing::rerecord_hoist_price
-	      (chk_costs, trips, words, eslots, launch_run,
-	       riscv_tt_replay_hoist_completion_guard > 0);
-      gcc_assert (chk.exec == exec
-		  && chk.deliver_body == deliver_body
-		  && chk.deliver_record == deliver_record
-		  && chk.before == before
-		  && chk.after == after
-		  && chk.record == record
-		  && chk.benefit == benefit
-		  && chk.exec_bound == exec_bound_rerecord);
-    }
+  // The shared execution/delivery pricing forms are the item-#11
+  // engine's (verdict identity proven by the stage-A shadow over a
+  // full corpus -fchecking leg before the inline spellings retired);
+  // the rvtt-bnb.cc delivery-shape downstream mirror predicts through
+  // the SAME forms, so the two can no longer drift.  The re-record
+  // shapes split on which resource paces the in-loop record-with-
+  // execution pass (rvtt-cost.md, re-record derivation): execution-
+  // bound (exec >= deliver_record) exposes the record engine's
+  // per-pass overhead on the critical path and hides the hoisted
+  // preheader pass's delivery behind the loop's own execution backlog
+  // (Reduce-class silicon A/B); delivery-bound keeps the pin-11-
+  // calibrated delivery pricing (Log/Log1p refusals) with the engine
+  // overhead absorbed in the per-word delivery slack, and carries the
+  // execution-saturation context term (silicon-witnessed on the
+  // unary-maxmin shape).  The completion guard charges the hoisted
+  // record's full delivery on the execution-bound branch: a caller
+  // that scores completion through a final Tensix drain cannot take
+  // credit for the record-delivery overlap (the record must complete
+  // before its first playback).  The guard is a monotone restriction
+  // over the admitted candidate domain -- a consequence of the cost
+  // constants and MIN_SEQUENCE, not its semantic definition; it keys
+  // only on the already-proven binding resource.
+  rvtt_timing::hoist_costs costs;
+  costs.push = XTT_REPLAY_COST_RISC_PUSH_X100;
+  costs.slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  costs.turnaround = XTT_REPLAY_COST_TURNAROUND_X100;
+  costs.record_overhead = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+  rvtt_timing::hoist_pricing pricing
+    = !body_rerecords
+      ? rvtt_timing::counted_hoist_price (costs, trips, words, eslots)
+      : rvtt_timing::rerecord_hoist_price
+	  (costs, trips, words, eslots, launch_run,
+	   riscv_tt_replay_hoist_completion_guard > 0);
+  bool exec_bound_rerecord = body_rerecords && pricing.exec_bound;
+  HOST_WIDE_INT after = pricing.after;
+  HOST_WIDE_INT before = pricing.before;
+  HOST_WIDE_INT record = pricing.record;
+  HOST_WIDE_INT benefit = pricing.benefit;
+  /* The stage-B4 identity check.  This commit asserted the engine against
+     inline locals (exec / deliver_body / deliver_record); those locals no
+     longer exist -- the pricing was already routed through
+     rvtt_delivery_cost::replay_price (`price').  Asserting against `price'
+     instead is the stronger statement the commit message actually claims:
+     the two independent pricing implementations agree, so they cannot
+     drift.  */
+  gcc_checking_assert (pricing.exec == price.exec
+		       && pricing.deliver_body == price.deliver_body
+		       && pricing.deliver_record == price.deliver_record);
+  if (dump_file && exec_bound_rerecord
+      && riscv_tt_replay_hoist_completion_guard > 0)
+    fprintf (dump_file,
+	     "Replay completion guard: execution-bound re-record"
+	     " charges hoisted delivery %ld (record cost %ld)\n",
+	     (long) price.deliver_record, (long) record);
+  if (dump_file && body_rerecords && !exec_bound_rerecord
+      && pricing.hidden)
+    fprintf (dump_file,
+	     "Record delivery hidden: contiguous launch run %u exec"
+	     " surplus %ld >= record delivery %ld\n",
+	     launch_run, (long) pricing.surplus, (long) deliver_record);
 
   if (dump_file)
     fprintf (dump_file,
