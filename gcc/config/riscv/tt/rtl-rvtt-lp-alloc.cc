@@ -331,43 +331,12 @@ pattern_transparent_p (rtx_insn *insn)
 }
 
 /* Audited architectural effect data for typed value-op patterns the
-   generated attribute family does not carry yet.  Copied verbatim from
-   rtl-rvtt-dst-ownership.cc (the principled home is the attribute
-   family; that migration is blocked on a planner-oracle re-freeze, so
-   both consumers carry the same audited table until then).  */
-
-struct lpa_effect_override
-{
-  insn_code code;
-  bool cc_writes;
-};
-
-static const lpa_effect_override effect_overrides[] = {
-  { CODE_FOR_rvtt_sfploadi_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetsgn_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetsgn_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetexp_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetexp_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetman_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetman_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpabs_lv,		false },
-  { CODE_FOR_rvtt_sfpabs_nv,		false },
-  { CODE_FOR_rvtt_sfpmov_lv,		false },
-  { CODE_FOR_rvtt_sfpmov_nv,		false },
-  { CODE_FOR_rvtt_sfpcast_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_nv,		false },
-  { CODE_FOR_rvtt_sfpdivp2_lv_int,	false },
-  { CODE_FOR_rvtt_sfparecip_lv,		false },
-  { CODE_FOR_rvtt_sfpexexp_lv,		true },
-  { CODE_FOR_rvtt_sfpexexp_nv,		true },
-  { CODE_FOR_rvtt_sfplz_lv,		true },
-  { CODE_FOR_rvtt_sfplz_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_lv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_i_lv_int,	true },
-  { CODE_FOR_rvtt_sfpiadd_i_nv,		true },
-};
+   full generated effect sets do not cover lives at the definitions:
+   the xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
+   through rvtt_lane_local_effects (FABLE item #4; the effect_overrides
+   table formerly copied verbatim from rtl-rvtt-dst-ownership.cc is
+   deleted -- the migration's blocking planner-oracle re-freeze is
+   recorded in testsuite oracles/refreeze-pin49-20260831.txt).  */
 
 /* 32-bit Dst format class (simulator-audited; the same class
    gimple-rvtt-transp-involution.cc uses), minus mod0 10 (INT32_ALL)
@@ -557,15 +526,17 @@ lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect)
       return;
   }
 
-  for (const lpa_effect_override &o : effect_overrides)
-    if (code == o.code)
+  {
+    bool cc_writes;
+    if (rvtt_lane_local_effects (insn, &cc_writes))
       {
-	if (o.cc_writes)
+	if (cc_writes)
 	  /* Mod-conditional CC write (SFPEXEXP/SFPLZ/SFPIADD),
 	     recorded conservatively: the lane state narrows.  */
 	  s.cc = LPA_CC_OTHER;
 	return;
       }
+  }
 
   if (pattern_transparent_p (insn))
     return;
@@ -1600,120 +1571,21 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
    lane gate -- and an RMW def by such an insn under narrowed CC
    store-backs only its enabled lanes while the scratch keeps the old
    disabled lanes, which is exactly the predicated-write semantics.
-   Cross-lane ops (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain
-   all-lanes copies (the rvtt_sfpassign SET pattern -- the
-   unconditional SFPMOV-mod-2 move; NOT the CC-gated predicated-assign
-   below, whose SET_SRC is UNSPECV_SFPASSIGN and which IS admitted),
-   SrcS stores, loadmacro forms and the zero-length LREG markers are
-   deliberately ABSENT: fail-closed allowlist, generated from the
-   audited lane-local families.  */
-
-static const insn_code lane_gated_consumers[] = {
-  CODE_FOR_rvtt_sfpabs,
-  CODE_FOR_rvtt_sfpabs_lv,
-  CODE_FOR_rvtt_sfpabs_nv,
-  CODE_FOR_rvtt_sfpadd,
-  CODE_FOR_rvtt_sfpaddi,
-  CODE_FOR_rvtt_sfpaddi_int_lv,
-  CODE_FOR_rvtt_sfpaddi_lv,
-  CODE_FOR_rvtt_sfpadd_lv,
-  CODE_FOR_rvtt_sfpand,
-  CODE_FOR_rvtt_sfpand_lv,
-  CODE_FOR_rvtt_sfpand_lv_2op,
-  CODE_FOR_rvtt_sfpand_lv_bh,
-  CODE_FOR_rvtt_sfparecip,
-  CODE_FOR_rvtt_sfparecip_lv,
-  CODE_FOR_rvtt_sfpcast,
-  CODE_FOR_rvtt_sfpcast_lv,
-  CODE_FOR_rvtt_sfpdivp2,
-  CODE_FOR_rvtt_sfpdivp2_lv,
-  CODE_FOR_rvtt_sfpdivp2_lv_int,
-  CODE_FOR_rvtt_sfpexexp,
-  CODE_FOR_rvtt_sfpexexp_lv,
-  CODE_FOR_rvtt_sfpexexp_nv,
-  CODE_FOR_rvtt_sfpexman,
-  CODE_FOR_rvtt_sfpexman_lv,
-  CODE_FOR_rvtt_sfpexman_nv,
-  CODE_FOR_rvtt_sfpiadd_i,
-  CODE_FOR_rvtt_sfpiadd_i_lv,
-  CODE_FOR_rvtt_sfpiadd_i_lv_int,
-  CODE_FOR_rvtt_sfpiadd_i_nv,
-  CODE_FOR_rvtt_sfpiadd_v,
-  CODE_FOR_rvtt_sfpiadd_v_lv,
-  CODE_FOR_rvtt_sfpiadd_v_nv,
-  CODE_FOR_rvtt_sfploadi,
-  CODE_FOR_rvtt_sfploadi_lv,
-  CODE_FOR_rvtt_sfploadi_lv_int,
-  CODE_FOR_rvtt_sfplut,
-  CODE_FOR_rvtt_sfplutfp32_3r,
-  CODE_FOR_rvtt_sfplutfp32_3r_split,
-  CODE_FOR_rvtt_sfplutfp32_6r,
-  CODE_FOR_rvtt_sfplz,
-  CODE_FOR_rvtt_sfplz_lv,
-  CODE_FOR_rvtt_sfplz_nv,
-  CODE_FOR_rvtt_sfpmad,
-  CODE_FOR_rvtt_sfpmad_lv,
-  CODE_FOR_rvtt_sfpmov,
-  CODE_FOR_rvtt_sfpmov_lv,
-  CODE_FOR_rvtt_sfpmov_nv,
-  CODE_FOR_rvtt_sfpmul,
-  CODE_FOR_rvtt_sfpmul24,
-  CODE_FOR_rvtt_sfpmul24_lv,
-  CODE_FOR_rvtt_sfpmuli,
-  CODE_FOR_rvtt_sfpmuli_int_lv,
-  CODE_FOR_rvtt_sfpmuli_lv,
-  CODE_FOR_rvtt_sfpmul_lv,
-  CODE_FOR_rvtt_sfpnonlinear,
-  CODE_FOR_rvtt_sfpnonlinear_lv,
-  CODE_FOR_rvtt_sfpnot,
-  CODE_FOR_rvtt_sfpnot_lv,
-  CODE_FOR_rvtt_sfpor,
-  CODE_FOR_rvtt_sfpor_lv,
-  CODE_FOR_rvtt_sfpor_lv_2op,
-  CODE_FOR_rvtt_sfpor_lv_bh,
-  CODE_FOR_rvtt_sfpsetcc_i,
-  CODE_FOR_rvtt_sfpsetcc_v,
-  CODE_FOR_rvtt_sfpsetexp_i,
-  CODE_FOR_rvtt_sfpsetexp_i_lv,
-  CODE_FOR_rvtt_sfpsetexp_i_lv_int,
-  CODE_FOR_rvtt_sfpsetexp_v,
-  CODE_FOR_rvtt_sfpsetexp_v_lv,
-  CODE_FOR_rvtt_sfpsetman_i,
-  CODE_FOR_rvtt_sfpsetman_i_lv,
-  CODE_FOR_rvtt_sfpsetman_i_lv_int,
-  CODE_FOR_rvtt_sfpsetman_v,
-  CODE_FOR_rvtt_sfpsetman_v_lv,
-  CODE_FOR_rvtt_sfpsetsgn_i,
-  CODE_FOR_rvtt_sfpsetsgn_i_lv,
-  CODE_FOR_rvtt_sfpsetsgn_i_lv_int,
-  CODE_FOR_rvtt_sfpsetsgn_v,
-  CODE_FOR_rvtt_sfpsetsgn_v_lv,
-  CODE_FOR_rvtt_sfpshft_i,
-  CODE_FOR_rvtt_sfpshft_i_lv,
-  CODE_FOR_rvtt_sfpshft_i_lv_int,
-  CODE_FOR_rvtt_sfpshft_v,
-  CODE_FOR_rvtt_sfpshft_v_lv,
-  CODE_FOR_rvtt_sfpshft_v_lv_int,
-  CODE_FOR_rvtt_sfpstochrnd_i,
-  CODE_FOR_rvtt_sfpstochrnd_i_lv,
-  CODE_FOR_rvtt_sfpstochrnd_i_lv_int,
-  CODE_FOR_rvtt_sfpstochrnd_v,
-  CODE_FOR_rvtt_sfpstochrnd_v_lv,
-  CODE_FOR_rvtt_sfpstore,
-  CODE_FOR_rvtt_sfpstore_int,
-  CODE_FOR_rvtt_sfpxor,
-  CODE_FOR_rvtt_sfpxor_lv,
-  CODE_FOR_rvtt_sfpxor_lv_2op,
-  CODE_FOR_rvtt_sfpxor_lv_bh,
-};
+   Membership lives at the definitions (the xtt_lane_gated attribute,
+   rvtt.md; FABLE item #4 -- the former ~100-entry hand insn_code
+   allowlist here is deleted): cross-lane ops
+   (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain all-lanes copies
+   (the rvtt_sfpassign SET pattern -- the unconditional SFPMOV-mod-2
+   move; NOT the CC-gated predicated-assign below, whose SET_SRC is
+   UNSPECV_SFPASSIGN and which IS admitted), SrcS stores, loadmacro
+   forms and the zero-length LREG markers keep the refusing default
+   (fail-closed).  */
 
 static bool
 lane_gated_consumer_p (rtx_insn *insn)
 {
-  int code = recog_memoized (insn);
-  for (insn_code c : lane_gated_consumers)
-    if (code == c)
-      return true;
+  if (rvtt_lane_gated_consumer_p (insn))
+    return true;
   /* The predicated-assign copy is CC-gated by definition.  */
   rtx pat = PATTERN (insn);
   return GET_CODE (pat) == SET
