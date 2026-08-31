@@ -142,3 +142,50 @@ rvtt-refusals.txt: $(srcdir)/config/riscv/tt/rvtt-refusals.def \
 	  rvtt-refusals.txt
 
 rvtt-refuse.o: rvtt-refusals.txt
+
+# Store-fold format-pair verdict table (FABLE_GOES_BURR item #3).
+# tt/rvtt-storefold-verdicts.def is GENERATED from its sources of
+# truth -- the exhaustive proof RESULT files below -- by
+# genrvtt-storefold.  Every build regenerates the table into a scratch
+# file and byte-compares it against the checked-in .def: a RESULT file
+# change without regeneration+review, or a hand edit of the .def,
+# fails the build loudly (the tt/proofs/README.md "retire the rule if
+# the RESULT stops being EQUAL" contract as a build fact).
+
+genprog += rvtt-storefold
+
+build/genrvtt-storefold.o: $(srcdir)/config/riscv/tt/genrvtt-storefold.cc
+
+RVTT_STOREFOLD_PROOFS = \
+	$(srcdir)/config/riscv/tt/proofs/store-sink-roundtrip/RESULT.txt \
+	$(srcdir)/config/riscv/tt/proofs/stochrnd-store-round/RESULT.txt
+
+rvtt-storefold-verdicts.chk: build/genrvtt-storefold$(build_exeext) \
+		$(RVTT_STOREFOLD_PROOFS) \
+		$(srcdir)/config/riscv/tt/rvtt-storefold-verdicts.def
+	$(RUN_GEN) build/genrvtt-storefold$(build_exeext) \
+		$(RVTT_STOREFOLD_PROOFS) rvtt-storefold-verdicts.gen
+	@if cmp -s rvtt-storefold-verdicts.gen \
+		$(srcdir)/config/riscv/tt/rvtt-storefold-verdicts.def; then \
+	  $(STAMP) $@; \
+	else \
+	  echo "error: tt/rvtt-storefold-verdicts.def is not byte-identical" \
+	       "to its generation from the tt/proofs RESULT files." >&2; \
+	  echo "  A cited RESULT changed (retire/re-review the rule) or the" \
+	       ".def was hand-edited." >&2; \
+	  echo "  Inspect: diff -u" \
+	       "$(srcdir)/config/riscv/tt/rvtt-storefold-verdicts.def" \
+	       "`pwd`/rvtt-storefold-verdicts.gen" >&2; \
+	  echo "  Regenerate (review the diff!):" \
+	       "make rvtt-storefold-verdicts-regen" >&2; \
+	  exit 1; \
+	fi
+
+gimple-rvtt-store-fold.o: rvtt-storefold-verdicts.chk
+
+# Reviewed regeneration: write the fresh table back into the source
+# tree (then review + commit the diff alongside its RESULT change).
+rvtt-storefold-verdicts-regen: build/genrvtt-storefold$(build_exeext)
+	$(RUN_GEN) build/genrvtt-storefold$(build_exeext) \
+		$(RVTT_STOREFOLD_PROOFS) \
+		$(srcdir)/config/riscv/tt/rvtt-storefold-verdicts.def

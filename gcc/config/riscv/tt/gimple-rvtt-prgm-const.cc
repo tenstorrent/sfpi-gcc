@@ -928,12 +928,17 @@ madpair_value_base (const rvtt_insn_data *insnd)
    immediate folds match those spellings too, so the fold decay exists
    there identically) and a single-use SFPMOV complement wrapper
    between the mul and the add (the -a+b rewrite reduces it before the
-   mad rule fires).  Mirror exactly that vocabulary for the DISCOVERY
-   walk and nothing else: candidate admission, refusal names, grouping,
-   the cc-reach proof and pricing stay the reviewed MAD-PAIR class.
-   Flag off delegates to the base single-spelling test byte-identically.
-   *VALUE_BASE reports the returned mul's first value-operand position
-   for the caller's constant classification.  */
+   mad rule fires).  The vocabulary itself is answered by
+   rvtt_combine_will_fuse_p from the combiner's own GENERATED tables
+   (rvtt-combine.inc <- rvtt.gc; FABLE_GOES_BURR item #3) -- the hand
+   mirror of the spellings is deleted, so discovery/combine drift is
+   impossible by construction and every future rvtt.gc widening reaches
+   the discovery automatically.  Everything else stays the reviewed
+   MAD-PAIR class here: candidate admission (plain mod, in-loop,
+   single-use), refusal names, grouping, the cc-reach proof and
+   pricing.  Flag off delegates to the base single-spelling test
+   byte-identically.  *VALUE_BASE reports the returned mul's first
+   value-operand position for the caller's constant classification.  */
 
 static gcall *
 madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
@@ -950,17 +955,30 @@ madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
   const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
   if (!insnd)
     return nullptr;
-  /* One complement wrapper: -(a*b) + c.  The wrapper must be the add's
-     single feed and the mul must die into the wrapper, mirroring the
+  /* One complement wrapper: -(a*b) + c.  The wrapper spelling and its
+     constant mod are the -a+b reduction rules' feed shape, queried
+     from the generated tables.  The wrapper must be the add's single
+     feed and the mul must die into the wrapper, mirroring the
      single-use discipline of the -a+b and mad rules.  */
-  if (insnd->id == rvtt_insn_data::sfpmov
-      || insnd->id == rvtt_insn_data::sfpmov_lv)
+  bool wrapper = rvtt_combine_will_fuse_p (def, rvtt_insn_data::sfpmov_lv,
+					   rvtt_insn_data::sfpadd_lv);
+  if (flag_checking
+      && (insnd->id == rvtt_insn_data::sfpmov
+	  || insnd->id == rvtt_insn_data::sfpmov_lv))
     {
+      /* One-pin assert-equal phase (FABLE_GOES_BURR item #3): the
+	 generated-vocabulary answer must equal the deleted hand
+	 mirror's spelling+mod test.  DELETE with the next pin.  */
       unsigned base = insnd->id == rvtt_insn_data::sfpmov_lv ? 1 : 0;
       tree mod = gimple_call_arg (def, base + 1);
-      if (TREE_CODE (mod) != INTEGER_CST
-	  || TREE_INT_CST_LOW (mod) != SFPMOV_MOD1_COMPL
-	  || !gimple_bb (def)
+      gcc_assert (wrapper == (TREE_CODE (mod) == INTEGER_CST
+			      && TREE_INT_CST_LOW (mod)
+				 == SFPMOV_MOD1_COMPL));
+    }
+  if (wrapper)
+    {
+      unsigned base = insnd->is_live () ? 1 : 0;
+      if (!gimple_bb (def)
 	  || !flow_bb_inside_loop_p (loop, gimple_bb (def))
 	  || !single_nondebug_use_p (src, only_use))
 	return nullptr;
@@ -975,8 +993,16 @@ madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
       if (!insnd)
 	return nullptr;
     }
-  if (insnd->id != rvtt_insn_data::sfpmul
-      && insnd->id != rvtt_insn_data::sfpmul_lv)
+  /* The mul spellings the mad rules consume, from the same tables.  */
+  bool mul_spelling = rvtt_combine_will_fuse_p (def,
+						rvtt_insn_data::sfpmul_lv,
+						rvtt_insn_data::sfpadd_lv);
+  if (flag_checking)
+    /* One-pin assert-equal phase: generated vocabulary == the deleted
+       hand id mirror.  DELETE with the next pin.  */
+    gcc_assert (mul_spelling == (insnd->id == rvtt_insn_data::sfpmul
+				 || insnd->id == rvtt_insn_data::sfpmul_lv));
+  if (!mul_spelling)
     return nullptr;
   unsigned base = madpair_value_base (insnd);
   if (!integer_zerop (gimple_call_arg (def, base + 2))
@@ -1197,8 +1223,31 @@ hoisted_madpair_load_p (tree src, class loop *loop, gimple *only_use,
 					  /*allow_shortened=*/true)
       || !single_issue_constant_image_p (load, value))
     return nullptr;
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
-  *vulnerable = insnd->id == rvtt_insn_data::sfploadi;
+  /* Fold-vulnerable = the materialization's spelling is one the
+     downstream muli/addi immediate folds match, answered from the
+     combiner's GENERATED tables (the a{*,+}fp16b rules' sfploadi feed;
+     FABLE_GOES_BURR item #3) instead of a hand insn-id mirror: the
+     fold consumes exactly the shortened-SFPLOADI shape feeding this
+     pair member's spelling.  The sfpxloadi verbatim-image forms match
+     no fold row and need no re-claim.  */
+  *vulnerable = false;
+  if (const rvtt_insn_data *used = rvtt_get_insn_data (only_use))
+    {
+      rvtt_insn_data::insn_id consumer
+	= (used->is_live () || !used->get_live ())
+	  ? used->id : used->get_live ()->id;
+      *vulnerable
+	= rvtt_combine_will_fuse_p (load, rvtt_insn_data::sfploadi,
+				    consumer);
+    }
+  if (flag_checking)
+    /* One-pin assert-equal phase: generated fold-shape answer == the
+       deleted hand insn-id mirror (an admitted SFPLOADI is always the
+       shortened FLOATB form, so the pattern's constant test cannot
+       diverge).  DELETE with the next pin.  */
+    gcc_assert (*vulnerable
+		== (rvtt_get_insn_data (load)->id
+		    == rvtt_insn_data::sfploadi));
   /* A materialization with consumers beyond the pair statement cannot
      be re-claimed here: the constant-register substitution would reach
      positions this class has not audited.  The caller refuses the

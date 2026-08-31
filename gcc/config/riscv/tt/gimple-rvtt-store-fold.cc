@@ -261,6 +261,57 @@ constexpr long SFPMEM_MOD0_FMT_INT32_SM = 12;
    programmable-constant residency file) is not a storable operand.  */
 constexpr unsigned SFPSTORE_MAX_SRC_LREG = 12;
 
+/* Format-pair verdict tables, GENERATED from the exhaustive proof
+   sweeps: tt/rvtt-storefold-verdicts.def is emitted by
+   genrvtt-storefold from tt/proofs/store-sink-roundtrip/RESULT.txt and
+   tt/proofs/stochrnd-store-round/RESULT.txt, and the build
+   byte-compares the checked-in .def against a fresh generation
+   (tt/t-riscv-tt rvtt-storefold-verdicts.chk) -- these rows cannot
+   drift from their RESULT files without failing the build.  The fire
+   class per row is the reviewed pass policy (FIRE = EQUAL pair;
+   LICENSED = denormal-flush class under -mtt-tensix-optimize-
+   store-sink; REFUSE = divergence outside the ratified class); a pair
+   without a row has no proof on record.  */
+
+enum storefold_license
+{
+  STOREFOLD_FIRE,
+  STOREFOLD_LICENSED,
+  STOREFOLD_REFUSE
+};
+
+struct storefold_sink_row
+{
+  long lfmt, sfmt;
+  storefold_license license;
+};
+
+struct stochrnd_store_row
+{
+  long conv, sfmt;
+};
+
+#define RVTT_STOREFOLD_PROOF(path, sha256)
+#define RVTT_STOREFOLD_SINK_PAIR(lfmt, sfmt, verdict, divergence, license, \
+				 rsha, isha)	\
+  { lfmt, sfmt, STOREFOLD_##license },
+#define RVTT_STOCHRND_STORE_PAIR(conv, sfmt, fsha, dsha)
+static constexpr storefold_sink_row storefold_sink_rows[] = {
+#include "rvtt-storefold-verdicts.def"
+};
+#undef RVTT_STOREFOLD_SINK_PAIR
+#undef RVTT_STOCHRND_STORE_PAIR
+
+#define RVTT_STOREFOLD_SINK_PAIR(lfmt, sfmt, verdict, divergence, license, \
+				 rsha, isha)
+#define RVTT_STOCHRND_STORE_PAIR(conv, sfmt, fsha, dsha) { conv, sfmt },
+static constexpr stochrnd_store_row stochrnd_store_rows[] = {
+#include "rvtt-storefold-verdicts.def"
+};
+#undef RVTT_STOCHRND_STORE_PAIR
+#undef RVTT_STOREFOLD_SINK_PAIR
+#undef RVTT_STOREFOLD_PROOF
+
 static gcall *
 is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
 {
@@ -574,18 +625,56 @@ fold_merge_store (gcall *assign, gcall *store)
   long lfmt = int_arg (load, 4);
   long sfmt = int_arg (store, 5);
   bool licensed = false;
-  if (lfmt == SFPMEM_MOD0_FMT_INT32 && sfmt == SFPMEM_MOD0_FMT_INT32)
-    ; /* tt/proofs/store-sink-roundtrip/ pair (4,4): EQUAL over 2^32.  */
-  else if ((lfmt == SFPMEM_MOD0_FMT_SRCB || lfmt == SFPMEM_MOD0_FMT_FP16
-	    || lfmt == SFPMEM_MOD0_FMT_BF16 || lfmt == SFPMEM_MOD0_FMT_FP32)
-	   && lfmt == sfmt)
+  /* Format-pair admission by the GENERATED verdict table (one row per
+     exhaustively swept Dst round trip plus the runtime-resolved SRCB
+     row; tt/rvtt-storefold-verdicts.def, byte-checked against
+     tt/proofs/store-sink-roundtrip/RESULT.txt every build).  A pair
+     without a row has no round-trip proof on record.  */
+  const storefold_sink_row *pair = nullptr;
+  for (const storefold_sink_row &r : storefold_sink_rows)
+    if (r.lfmt == lfmt && r.sfmt == sfmt)
+      {
+	pair = &r;
+	break;
+      }
+  if (flag_checking)
     {
+      /* One-pin assert-equal phase (FABLE_GOES_BURR item #3
+	 compatibility contract): recompute the pre-table hand
+	 ladder's verdict and assert the generated table reproduces it
+	 exactly.  DELETE with the next pin.  */
+      bool ladder_known = true;
+      storefold_license ladder = STOREFOLD_REFUSE;
+      if (lfmt == SFPMEM_MOD0_FMT_INT32 && sfmt == SFPMEM_MOD0_FMT_INT32)
+	ladder = STOREFOLD_FIRE;
+      else if ((lfmt == SFPMEM_MOD0_FMT_SRCB || lfmt == SFPMEM_MOD0_FMT_FP16
+		|| lfmt == SFPMEM_MOD0_FMT_BF16
+		|| lfmt == SFPMEM_MOD0_FMT_FP32)
+	       && lfmt == sfmt)
+	ladder = STOREFOLD_LICENSED;
+      else if (lfmt == SFPMEM_MOD0_FMT_INT32_SM && lfmt == sfmt)
+	ladder = STOREFOLD_REFUSE;
+      else
+	ladder_known = false;
+      gcc_assert (ladder_known == (pair != nullptr)
+		  && (!pair || ladder == pair->license));
+    }
+  if (!pair)
+    return refuse ("store-fold-sink-format-unproven", store);
+  switch (pair->license)
+    {
+    case STOREFOLD_FIRE:
+      /* EQUAL over the full input space: the sink is value-preserving
+	 (the (INT32,INT32) BH raw pair).  */
+      break;
+
+    case STOREFOLD_LICENSED:
       /* Float pairs canonicalize Dst (the store conversion flushes
 	 denormals; every round-trip mismatch is in the denormal class:
-	 tt/proofs/store-sink-roundtrip/ NOT-EQUAL float rows, SRCB
-	 resolves at runtime to one of the swept float paths).  The
-	 predicated-store form preserves those bits -- admitted ONLY
-	 under the -mtt-tensix-optimize-store-sink license token (owner
+	 the NOT-EQUAL float rows, SRCB resolves at runtime to one of
+	 the swept float paths).  The predicated-store form preserves
+	 those bits -- admitted ONLY under the
+	 -mtt-tensix-optimize-store-sink license token (owner
 	 ratification 2026-08-26: the sunk form is the golden-closer
 	 semantics -- torch keeps pass-through lanes exactly, the
 	 write-back flushes them).  Token absent = the standing named
@@ -602,15 +691,14 @@ fold_merge_store (gcall *assign, gcall *store)
 	  return false;
 	}
       licensed = true;
-    }
-  else if (lfmt == SFPMEM_MOD0_FMT_INT32_SM && lfmt == sfmt)
-    {
-      /* The WH INT32_SM pair normalizes -0 (tt/proofs/store-sink-roundtrip/
-	 (12,12) row): an integer sign-magnitude divergence class the
-	 store-sink license does NOT cover (it is scoped to the float
-	 pairs' denormal-flush class).  Refuses with or without the
-	 license token -- proof class out of scope, enforced by the same
-	 gate.  */
+      break;
+
+    case STOREFOLD_REFUSE:
+      /* The WH INT32_SM pair normalizes -0 ((12,12) row): an integer
+	 sign-magnitude divergence class the store-sink license does
+	 NOT cover (it is scoped to the float pairs' denormal-flush
+	 class).  Refuses with or without the license token -- proof
+	 class out of scope, enforced by the same licensed gate.  */
       rvtt_refuse_licensed (RVTT_REF_STORE_FOLD_SINK_FORMAT_CANONICALIZING,
 			    rvtt_store_sink_licensed_p (),
 			    /*proof_in_scope=*/false, dump_file,
@@ -620,8 +708,6 @@ fold_merge_store (gcall *assign, gcall *store)
 	print_gimple_stmt (dump_file, store, 0);
       return false;
     }
-  else
-    return refuse ("store-fold-sink-format-unproven", store);
 
   if (!check_load_to_assign (load, assign))
     return false;
@@ -807,12 +893,29 @@ fold_stochrnd_store (gcall *rnd, gcall *store, bool fn_prng_consumer,
     return refuse ("stochrnd-store-fold-mode-unlicensed", store);
 
   long mod0 = int_arg (store, 5);
-  bool pair_ok
-    = (mod0 == SFPMEM_MOD0_FMT_SRCB)
-      || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B
-	  && mod0 == SFPMEM_MOD0_FMT_BF16)
-      || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16A
-	  && mod0 == SFPMEM_MOD0_FMT_FP16);
+  /* Matching-precision pairing by the GENERATED table (the swept
+     stochrnd proof rows plus the runtime-resolved SRCB store per
+     conversion; tt/rvtt-storefold-verdicts.def, byte-checked against
+     tt/proofs/stochrnd-store-round/RESULT.txt every build).
+     Cross-precision static pairs have no row.  */
+  bool pair_ok = false;
+  for (const stochrnd_store_row &r : stochrnd_store_rows)
+    if (r.conv == mod1 && r.sfmt == mod0)
+      {
+	pair_ok = true;
+	break;
+      }
+  if (flag_checking)
+    /* One-pin assert-equal phase (FABLE_GOES_BURR item #3
+       compatibility contract): the generated pairing table must
+       reproduce the pre-table hand expression exactly.  DELETE with
+       the next pin.  */
+    gcc_assert (pair_ok
+		== ((mod0 == SFPMEM_MOD0_FMT_SRCB)
+		    || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B
+			&& mod0 == SFPMEM_MOD0_FMT_BF16)
+		    || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16A
+			&& mod0 == SFPMEM_MOD0_FMT_FP16)));
   if (!pair_ok)
     return refuse ("stochrnd-store-fold-format-mismatch", store);
 

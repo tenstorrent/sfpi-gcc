@@ -283,6 +283,21 @@ extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATT
 extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
 
+/* Generated-vocabulary query (gimple-rvtt-combine.cc, answered from
+   the rvtt-combine.inc tables genrvtt-combine emits from rvtt.gc;
+   FABLE_GOES_BURR item #3): true when DEF matches the FEED_ID interior
+   pattern shape (insn identity, the _lv pattern covering the non-lv
+   spelling, plus every constant pattern operand) of some combine rule
+   whose final consumed pattern is CONSUMER_ID -- i.e. the downstream
+   combiner's fusion walk covers DEF's spelling when fusing a
+   CONSUMER_ID statement.  Spelling vocabulary ONLY: placement,
+   use-count, CC discipline and the rules' own predicates/enable gates
+   stay with the caller.  Discovery passes that must mirror what the
+   combiner will fuse ask this instead of hand-copying rvtt.gc.  */
+extern bool rvtt_combine_will_fuse_p (gcall *def,
+				      rvtt_insn_data::insn_id feed_id,
+				      rvtt_insn_data::insn_id consumer_id);
+
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
