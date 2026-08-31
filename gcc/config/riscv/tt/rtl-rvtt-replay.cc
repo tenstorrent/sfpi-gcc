@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt-trips.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-effects.h"
 #include "rvtt-raw-boundary.h"
 #include "rvtt-mop-tables.h"
@@ -404,28 +405,10 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
       auto &seq_insn = block[seq.clones.front ().end - 1];
       if (seq_insn.generation != insn.generation)
 	continue;
-      auto ignore = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb) {
-	if (GET_CODE (*a) != GET_CODE (*b))
-	  return false;
-
-	if (GET_CODE (*a) == MEM)
-	  {
-	    if (GET_MODE (*a) != SImode)
-	      // This is (probably) broken code attempting to spill/fill an
-	      // LReg
-	      return false;
-	  }
-	else if (GET_CODE (*a) != CLOBBER
-		 && GET_CODE (*a) != SCRATCH)
-	  return false;
-
-	gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
-
-	*na = *nb = nullptr;
-	return true;
-      };
-      if (!rtx_equal_p (PATTERN (seq_insn.insn), PATTERN (insn.insn),
-			ignore))
+      /* The one word-exact comparator (rvtt-delivery-cost.cc,
+	 FABLE_GOES_BURR #12): pattern equality under the
+	 scratch-operand tolerance.  */
+      if (!rvtt_dcost_replay_word_equal_p (seq_insn.insn, insn.insn))
 	continue;
 
       // Clones must be in ascending order (the invalidation presumes that)
@@ -706,49 +689,45 @@ payload_contains_carried_p (replay_block const &block, replay_span span)
    mirrors the discovery's own equality (compiler GPR scratch and
    synthesized-word MEMs do not reach the delivered Tensix word).  */
 
-static bool
-reform_carried_launch_arithmetic_ok (replay_block const &block,
-				     replay_sequence const &seq)
-{
-  auto refuse = [] (const char *why) -> bool
-    {
-      rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_LAUNCH_ARITHMETIC_SKEW,
-		   dump_file,
-		   "Replay re-formation refusal:"
-		   " post-autoincr-window-launch-arithmetic-skew: %s\n", why);
-      return false;
-    };
+/* The ONE clone word-exact lockstep walk (FABLE_GOES_BURR #12),
+   shared by the reform-mode launch-arithmetic audit and the
+   window-sizing re-verification below (previously two per-site
+   spellings; the per-word comparator itself is the module's
+   rvtt_dcost_replay_word_equal_p).  Verifies that SEQ's clones are
+   non-overlapping, ascending, word-exact copies of the recorded
+   window, pairing non-empty members in lockstep.  REQUIRE_INSN_CODE
+   preserves the window-sizing spelling's stricter plain-INSN check
+   (the reform audit tolerates identical non-INSN patterns -- the one
+   asymmetry between the prior spellings, preserved bug-compatibly).
+   Callers map the verdict onto their own refusal texts.  */
 
+enum clone_walk_verdict
+{
+  CLONE_WALK_OK,
+  CLONE_WALK_EMPTY,	/* no clones */
+  CLONE_WALK_OVERLAP,	/* overlapping or unordered clone spans */
+  CLONE_WALK_WORD,	/* clone word differs from recorded word */
+  CLONE_WALK_COUNT	/* clone word count differs from recorded length */
+};
+
+static clone_walk_verdict
+clones_word_exact_walk (replay_block const &block,
+			replay_sequence const &seq, bool require_insn_code)
+{
   if (seq.clones.empty ())
-    return refuse ("no clones");
+    return CLONE_WALK_EMPTY;
 
   /* Non-overlap, ascending: each site is replaced exactly once.  */
   unsigned bound = 0;
   for (auto const &clone : seq.clones)
     {
       if (clone.begin < bound || clone.end <= clone.begin)
-	return refuse ("overlapping or unordered clone spans"
-		       " (a site would be delivered twice)");
+	return CLONE_WALK_OVERLAP;
       bound = clone.end;
     }
 
   /* Word-exactness: the k-th delivered word of every clone equals the
      k-th recorded word.  Pair non-empty members in lockstep.  */
-  auto ignore = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb)
-    {
-      if (GET_CODE (*a) != GET_CODE (*b))
-	return false;
-      if (GET_CODE (*a) == MEM)
-	{
-	  if (GET_MODE (*a) != SImode)
-	    return false;
-	}
-      else if (GET_CODE (*a) != CLOBBER && GET_CODE (*a) != SCRATCH)
-	return false;
-      gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
-      *na = *nb = nullptr;
-      return true;
-    };
   auto const &first = seq.clones.front ();
   for (unsigned cx = 1; cx != seq.clones.size (); ++cx)
     {
@@ -763,15 +742,48 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
 	    ++ox;
 	  if (fx == first.end || ox == clone.end)
 	    break;
-	  if (!rtx_equal_p (PATTERN (block[fx].insn),
-			    PATTERN (block[ox].insn), ignore))
-	    return refuse ("clone word differs from recorded word"
-			   " (delivered carried execution would not be"
-			   " the replaced site's word)");
+	  if ((require_insn_code
+	       && (GET_CODE (block[fx].insn) != INSN
+		   || GET_CODE (block[ox].insn) != INSN))
+	      || !rvtt_dcost_replay_word_equal_p (block[fx].insn,
+						  block[ox].insn))
+	    return CLONE_WALK_WORD;
 	  ++fx, ++ox, ++matched;
 	}
       if (matched != seq.length)
-	return refuse ("clone word count differs from recorded length");
+	return CLONE_WALK_COUNT;
+    }
+  return CLONE_WALK_OK;
+}
+
+static bool
+reform_carried_launch_arithmetic_ok (replay_block const &block,
+				     replay_sequence const &seq)
+{
+  auto refuse = [] (const char *why) -> bool
+    {
+      rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_LAUNCH_ARITHMETIC_SKEW,
+		   dump_file,
+		   "Replay re-formation refusal:"
+		   " post-autoincr-window-launch-arithmetic-skew: %s\n", why);
+      return false;
+    };
+
+  switch (clones_word_exact_walk (block, seq, /*require_insn_code=*/false))
+    {
+    case CLONE_WALK_EMPTY:
+      return refuse ("no clones");
+    case CLONE_WALK_OVERLAP:
+      return refuse ("overlapping or unordered clone spans"
+		     " (a site would be delivered twice)");
+    case CLONE_WALK_WORD:
+      return refuse ("clone word differs from recorded word"
+		     " (delivered carried execution would not be"
+		     " the replaced site's word)");
+    case CLONE_WALK_COUNT:
+      return refuse ("clone word count differs from recorded length");
+    case CLONE_WALK_OK:
+      break;
     }
 
   if (dump_file)
@@ -847,30 +859,6 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
    is measured right there; lane IH).  */
 
 static bool
-replay_word_equal_p (rtx_insn *a, rtx_insn *b)
-{
-  /* The scratch-operand tolerance mirrors the reform-mode audit's own
-     equality (compiler GPR scratch and synthesized-word MEMs do not
-     reach the delivered Tensix word).  */
-  auto ignore = [] (const_rtx *x, const_rtx *y, rtx *nx, rtx *ny)
-    {
-      if (GET_CODE (*x) != GET_CODE (*y))
-	return false;
-      if (GET_CODE (*x) == MEM)
-	{
-	  if (GET_MODE (*x) != SImode)
-	    return false;
-	}
-      else if (GET_CODE (*x) != CLOBBER && GET_CODE (*x) != SCRATCH)
-	return false;
-      gcc_checking_assert (GET_MODE (*x) == GET_MODE (*y));
-      *nx = *ny = nullptr;
-      return true;
-    };
-  return rtx_equal_p (PATTERN (a), PATTERN (b), ignore);
-}
-
-static bool
 window_sizing_clones_exact_p (replay_block const &block,
 			      replay_sequence const &cand)
 {
@@ -882,36 +870,21 @@ window_sizing_clones_exact_p (replay_block const &block,
       return false;
     };
 
-  unsigned bound = 0;
-  for (auto const &clone : cand.clones)
+  /* The shared clone walk (clones_word_exact_walk above), at this
+     spelling's stricter plain-INSN check.  */
+  switch (clones_word_exact_walk (block, cand, /*require_insn_code=*/true))
     {
-      if (clone.begin < bound || clone.end <= clone.begin)
-	return refuse ("overlapping or unordered clone spans");
-      bound = clone.end;
-    }
-
-  auto const &first = cand.clones.front ();
-  for (unsigned cx = 1; cx != cand.clones.size (); ++cx)
-    {
-      auto const &clone = cand.clones[cx];
-      unsigned fx = first.begin, ox = clone.begin;
-      unsigned matched = 0;
-      for (;;)
-	{
-	  while (fx != first.end && block[fx].empty)
-	    ++fx;
-	  while (ox != clone.end && block[ox].empty)
-	    ++ox;
-	  if (fx == first.end || ox == clone.end)
-	    break;
-	  if (GET_CODE (block[fx].insn) != INSN
-	      || GET_CODE (block[ox].insn) != INSN
-	      || !replay_word_equal_p (block[fx].insn, block[ox].insn))
-	    return refuse ("clone word differs from recorded word");
-	  ++fx, ++ox, ++matched;
-	}
-      if (matched != cand.length)
-	return refuse ("clone word count differs from recorded length");
+    case CLONE_WALK_EMPTY:
+      /* A discovered candidate is its own first clone.  */
+      gcc_unreachable ();
+    case CLONE_WALK_OVERLAP:
+      return refuse ("overlapping or unordered clone spans");
+    case CLONE_WALK_WORD:
+      return refuse ("clone word differs from recorded word");
+    case CLONE_WALK_COUNT:
+      return refuse ("clone word count differs from recorded length");
+    case CLONE_WALK_OK:
+      break;
     }
   return true;
 }
@@ -941,7 +914,8 @@ window_sizing_prefix_trim (replay_block const &block,
 	}
       if (GET_CODE (block[pos].insn) != INSN
 	  || GET_CODE (block[fx].insn) != INSN
-	  || !replay_word_equal_p (block[fx].insn, block[pos].insn))
+	  || !rvtt_dcost_replay_word_equal_p (block[fx].insn,
+					      block[pos].insn))
 	break;
       /* Sequence-growth continuity: never walk past a must_end word.  */
       bool stop = block[pos].must_end;
@@ -1015,10 +989,20 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
 	  ++ne;
       unsigned covered = cand->length * unsigned (cand->clones.size ()) + trim;
       gcc_checking_assert (ne >= covered);
-      unsigned cost_cand
-	= unsigned (cand->clones.size ()) + (trim != 0) + (ne - covered);
+      /* The one delivered-issue spelling (rvtt-delivery-cost-core.h
+	 window_trip_issue_words; FABLE_GOES_BURR #12).  */
+      unsigned cost_cand = rvtt_delivery_cost::window_trip_issue_words
+	(unsigned (cand->clones.size ()), trim != 0, ne - covered);
       unsigned cur_covered = seq->length * unsigned (seq->clones.size ());
-      unsigned cost_cur = unsigned (seq->clones.size ()) + (ne - cur_covered);
+      unsigned cost_cur = rvtt_delivery_cost::window_trip_issue_words
+	(unsigned (seq->clones.size ()), false, ne - cur_covered);
+      /* One-pin recompute-assert of the migrated inline spelling
+	 (item #12 discipline; delete next pin).  */
+      if (flag_checking)
+	gcc_assert (cost_cand == (unsigned (cand->clones.size ())
+				  + (trim != 0) + (ne - covered))
+		    && cost_cur == (unsigned (seq->clones.size ())
+				    + (ne - cur_covered)));
       if (cost_cand >= cost_cur)
 	{
 	  rvtt_refuse (RVTT_REF_WINDOW_SIZING_NO_CHEAPER_DELIVERY, dump_file,
@@ -1547,14 +1531,94 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	}
     }
 
-  HOST_WIDE_INT exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
-  HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
-  HOST_WIDE_INT deliver_record
-    = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
-  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
-			       ? (HOST_WIDE_INT)
-				 riscv_tt_replay_hoist_min_benefit
-			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
+  HOST_WIDE_INT min_benefit = rvtt_dcost_replay_hoist_min_benefit ();
+
+  /* The one replay pricing spelling (rvtt-delivery-cost-core.h
+     replay_pricing; FABLE_GOES_BURR #12).  The shape selector is the
+     same flag-pair spelling the delivery-shape downstream mirror
+     consumes, so the mirror can no longer drift from this gate.  */
+  rvtt_delivery_cost::replay_shape shape
+    = !body_rerecords
+      ? rvtt_delivery_cost::SHAPE_COUNTED
+      : rvtt_delivery_cost::rerecord_shape
+	  (riscv_tt_opt_replay_record_hoist > 0,
+	   riscv_tt_replay_hoist_completion_guard > 0,
+	   !runtime_trips);
+  rvtt_delivery_cost::replay_price price = rvtt_dcost_replay_pricing
+    (shape, trips, words, eslots, launch_run,
+     riscv_tt_replay_hoist_completion_guard > 0, min_benefit);
+
+  /* One-pin recompute-assert of the migrated inline arithmetic
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      HOST_WIDE_INT c_exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      HOST_WIDE_INT c_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
+      HOST_WIDE_INT c_rec = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
+      gcc_assert (min_benefit
+		  == (riscv_tt_replay_hoist_min_benefit >= 0
+		      ? (HOST_WIDE_INT) riscv_tt_replay_hoist_min_benefit
+		      : XTT_REPLAY_HOIST_MIN_BENEFIT));
+      if (record_hoist_mode && !record_completion_model)
+	{
+	  gcc_assert (shape
+		      == (runtime_trips
+			  ? rvtt_delivery_cost::SHAPE_RECORD_HOIST_RUNTIME
+			  : rvtt_delivery_cost::SHAPE_RECORD_HOIST));
+	  HOST_WIDE_INT record_once
+	    = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+	  HOST_WIDE_INT per_trip
+	    = c_body - XTT_REPLAY_COST_TURNAROUND_X100;
+	  gcc_assert (price.record_once == record_once
+		      && price.per_trip == per_trip);
+	  if (runtime_trips)
+	    gcc_assert (price.benefit == 2 * per_trip - record_once
+			&& price.exposure == record_once - per_trip
+			&& price.profitable
+			     == !(per_trip <= 0
+				  || price.benefit < min_benefit));
+	  else
+	    gcc_assert (price.benefit == trips * per_trip - record_once
+			&& price.profitable
+			     == (price.benefit >= min_benefit));
+	}
+      else
+	{
+	  HOST_WIDE_INT c_after
+	    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
+		   c_exec + XTT_REPLAY_COST_TURNAROUND_X100);
+	  bool c_exec_bound = body_rerecords && c_exec >= c_rec;
+	  HOST_WIDE_INT c_record, c_before;
+	  if (!body_rerecords)
+	    {
+	      c_before = MAX (c_body, c_exec);
+	      c_record = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+	    }
+	  else if (c_exec_bound)
+	    {
+	      c_before = c_exec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+	      c_record = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+	      if (riscv_tt_replay_hoist_completion_guard > 0)
+		c_record += c_rec;
+	    }
+	  else
+	    {
+	      c_before = c_rec;
+	      c_record = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+	      HOST_WIDE_INT c_surplus = (HOST_WIDE_INT) launch_run
+		* (c_exec - XTT_REPLAY_COST_RISC_PUSH_X100);
+	      if (c_surplus >= c_rec)
+		c_before = c_after;
+	    }
+	  gcc_assert (price.before == c_before && price.after == c_after
+		      && price.record == c_record
+		      && price.exec_bound == c_exec_bound
+		      && price.benefit
+			   == trips * (c_before - c_after) - c_record
+		      && price.profitable
+			   == (price.benefit >= min_benefit));
+	}
+    }
 
   /* Record-hoist measurement pricing (-mtt-tensix-optimize-replay-record-
      hoist, re-record bodies only).  The candidate window is proven
@@ -1590,10 +1654,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	 ceil/log/rsqrt) -- above the 0.7-slot table constant; the
 	 under-charge (~60-110 cs/trip) is absorbed by the MIN_BENEFIT
 	 margin and noted in rvtt-cost.md.  */
-      HOST_WIDE_INT record_once
-	= deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-      HOST_WIDE_INT per_trip
-	= deliver_body - XTT_REPLAY_COST_TURNAROUND_X100;
+      HOST_WIDE_INT record_once = price.record_once;
+      HOST_WIDE_INT per_trip = price.per_trip;
       if (runtime_trips)
 	{
 	  /* Runtime trip count (lane FW; rvtt-cost.md RECORD-HOIST
@@ -1606,8 +1668,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	     every trip from 2 on wins.  Admit when the 2-trip benefit
 	     clears the same audited margin proven trip counts must
 	     clear; refuse by name otherwise.  */
-	  HOST_WIDE_INT benefit2 = 2 * per_trip - record_once;
-	  HOST_WIDE_INT exposure = record_once - per_trip;
+	  HOST_WIDE_INT benefit2 = price.benefit;
+	  HOST_WIDE_INT exposure = price.exposure;
 	  if (dump_file)
 	    fprintf (dump_file,
 		     "Record-hoist runtime-trip pricing (loop %d): words"
@@ -1616,7 +1678,7 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		     loop->num, (long) words, (long) per_trip,
 		     (long) record_once, (long) benefit2,
 		     (long) min_benefit, (long) exposure);
-	  if (per_trip <= 0 || benefit2 < min_benefit)
+	  if (!price.profitable)
 	    {
 	      rvtt_refuse (RVTT_REF_RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN, dump_file,
 			   "record-hoist refused:"
@@ -1633,17 +1695,17 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		     (long) words, (long) benefit2, (long) exposure);
 	  return true;
 	}
-      HOST_WIDE_INT benefit = trips * per_trip - record_once;
+      HOST_WIDE_INT benefit = price.benefit;
       if (dump_file)
 	fprintf (dump_file,
 		 "Record-hoist pricing (loop %d): trips %ld, words %ld,"
 		 " deliver_body %ld/trip, boundary %d/trip, record_once %ld,"
 		 " benefit %ld (min %ld)\n",
 		 loop->num, (long) trips, (long) words,
-		 (long) deliver_body, XTT_REPLAY_COST_TURNAROUND_X100,
+		 (long) price.deliver_body, XTT_REPLAY_COST_TURNAROUND_X100,
 		 (long) record_once, (long) benefit,
 		 (long) min_benefit);
-      if (benefit < min_benefit)
+      if (!price.profitable)
 	{
 	  rvtt_refuse (RVTT_REF_RECORD_HOIST_BENEFIT, dump_file,
 		       "Not hoisting: record-hoist-benefit: modeled issue-side"
@@ -1658,9 +1720,6 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		 (long) trips, (long) words, (long) benefit);
       return true;
     }
-  HOST_WIDE_INT after
-    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
-	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
   // The re-record shapes split on which resource paces the in-loop
   // record-with-execution pass (rvtt-cost.md, re-record derivation):
   // execution-bound (exec >= deliver_record) exposes the record
@@ -1669,18 +1728,17 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   // backlog (Reduce-class silicon A/B); delivery-bound keeps the
   // pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
   // engine overhead absorbed in the per-word delivery slack.
-  bool exec_bound_rerecord = body_rerecords && exec >= deliver_record;
-  HOST_WIDE_INT record;
-  HOST_WIDE_INT before;
-  if (!body_rerecords)
+  //
+  // Both shapes -- and the counted branch, the execution-saturation
+  // context term, and the completion guard's full-record charge --
+  // are priced by the shared spelling in rvtt-delivery-cost-core.h
+  // (replay_pricing); PRICE above carries every term.
+  bool exec_bound_rerecord = price.exec_bound;
+  HOST_WIDE_INT record = price.record;
+  HOST_WIDE_INT before = price.before;
+  HOST_WIDE_INT after = price.after;
+  if (exec_bound_rerecord && riscv_tt_replay_hoist_completion_guard > 0)
     {
-      before = MAX (deliver_body, exec);
-      record = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-    }
-  else if (exec_bound_rerecord)
-    {
-      before = exec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-      record = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
       /* The body-throughput calibration above permits the hoisted record's
 	 delivery to hide behind the loop's execution backlog.  A caller that
 	 scores completion through a final Tensix drain cannot in general take
@@ -1699,20 +1757,14 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	 definition.
 	 It keys only on the already-proven binding resource; no opcode, kernel,
 	 payload length, or trip-count special case participates.  */
-      if (riscv_tt_replay_hoist_completion_guard > 0)
-	{
-	  record += deliver_record;
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Replay completion guard: execution-bound re-record"
-		     " charges hoisted delivery %ld (record cost %ld)\n",
-		     (long) deliver_record, (long) record);
-	}
+      if (dump_file)
+	fprintf (dump_file,
+		 "Replay completion guard: execution-bound re-record"
+		 " charges hoisted delivery %ld (record cost %ld)\n",
+		 (long) price.deliver_record, (long) record);
     }
-  else
+  else if (price.hidden)
     {
-      before = deliver_record;
-      record = deliver_record + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
       // Execution-saturation term (delivery-bound re-record bodies
       // only; silicon-witnessed on the unary-maxmin shape): when the
       // body's contiguous run of sibling launches of this same buffer
@@ -1722,19 +1774,14 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
       // is its own execution plus the exposed record-engine overhead,
       // which no sibling surplus can absorb (Reduce-class silicon A/B,
       // rvtt-cost.md).
-      HOST_WIDE_INT surplus = (HOST_WIDE_INT) launch_run
-	* (exec - XTT_REPLAY_COST_RISC_PUSH_X100);
-      if (surplus >= deliver_record)
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Record delivery hidden: contiguous launch run %u exec"
-		     " surplus %ld >= record delivery %ld\n",
-		     launch_run, (long) surplus, (long) deliver_record);
-	  before = after;
-	}
+      if (dump_file)
+	fprintf (dump_file,
+		 "Record delivery hidden: contiguous launch run %u exec"
+		 " surplus %ld >= record delivery %ld\n",
+		 launch_run, (long) price.surplus,
+		 (long) price.deliver_record);
     }
-  HOST_WIDE_INT benefit = trips * (before - after) - record;
+  HOST_WIDE_INT benefit = price.benefit;
 
   if (dump_file)
     fprintf (dump_file,
@@ -1746,8 +1793,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	     !body_rerecords ? ""
 	     : exec_bound_rerecord ? " [re-record body, execution-bound]"
 	     : " [re-record body, delivery-bound]",
-	     (long) deliver_body, (long) deliver_record, (long) record,
-	     (long) before, (long) after, (long) benefit,
+	     (long) price.deliver_body, (long) price.deliver_record,
+	     (long) record, (long) before, (long) after, (long) benefit,
 	     (long) min_benefit);
 
   /* The ordinary record-hoist measurement model has a separately audited
@@ -2988,19 +3035,35 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
       return false;
     }
   HOST_WIDE_INT words = delivered_words (block, payload);
-  HOST_WIDE_INT exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
-  HOST_WIDE_INT deliver_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
-  HOST_WIDE_INT min_benefit = (riscv_tt_replay_hoist_min_benefit >= 0
-			       ? (HOST_WIDE_INT)
-				 riscv_tt_replay_hoist_min_benefit
-			       : XTT_REPLAY_HOIST_MIN_BENEFIT);
-  HOST_WIDE_INT before = MAX (deliver_body, exec);
-  HOST_WIDE_INT after
-    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
-	   exec + XTT_REPLAY_COST_TURNAROUND_X100);
-  HOST_WIDE_INT peel_cost = XTT_REPLAY_COST_RISC_PUSH_X100
-    + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-  HOST_WIDE_INT benefit = (trips - 1) * (before - after) - peel_cost;
+  HOST_WIDE_INT min_benefit = rvtt_dcost_replay_hoist_min_benefit ();
+  /* The one replay pricing spelling (rvtt-delivery-cost-core.h,
+     SHAPE_COUNTED_PEEL; FABLE_GOES_BURR #12).  */
+  rvtt_delivery_cost::replay_price price = rvtt_dcost_replay_pricing
+    (rvtt_delivery_cost::SHAPE_COUNTED_PEEL, trips, words, eslots,
+     /*launch_run=*/1, false, min_benefit);
+  HOST_WIDE_INT before = price.before;
+  HOST_WIDE_INT after = price.after;
+  HOST_WIDE_INT peel_cost = price.record;
+  HOST_WIDE_INT benefit = price.benefit;
+  /* One-pin recompute-assert of the migrated inline arithmetic
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      HOST_WIDE_INT c_exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      HOST_WIDE_INT c_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
+      gcc_assert (min_benefit
+		  == (riscv_tt_replay_hoist_min_benefit >= 0
+		      ? (HOST_WIDE_INT) riscv_tt_replay_hoist_min_benefit
+		      : XTT_REPLAY_HOIST_MIN_BENEFIT));
+      gcc_assert (before == MAX (c_body, c_exec));
+      gcc_assert (after
+		  == MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
+			  c_exec + XTT_REPLAY_COST_TURNAROUND_X100));
+      gcc_assert (peel_cost == XTT_REPLAY_COST_RISC_PUSH_X100
+			       + XTT_REPLAY_COST_RECORD_OVERHEAD_X100);
+      gcc_assert (benefit == (trips - 1) * (before - after) - peel_cost
+		  && price.profitable == (benefit >= min_benefit));
+    }
   if (dump_file)
     fprintf (dump_file,
 	     "Counted-peel pricing (loop %d): trips %ld, words %ld,"
@@ -3009,7 +3072,7 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
 	     loop->num, (long) trips, (long) words, (long) eslots,
 	     (long) before, (long) after, (long) peel_cost,
 	     (long) benefit, (long) min_benefit);
-  if (benefit < min_benefit)
+  if (!price.profitable)
     {
       rvtt_refuse (RVTT_REF_COUNTED_CAPTURE_PEEL_BENEFIT, dump_file,
 		   "counted-capture-peel refused:"

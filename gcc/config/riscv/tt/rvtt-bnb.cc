@@ -504,9 +504,12 @@ window_sep (const rvtt_delivery_problem &p)
 
 /* Downstream-mirror: does the replay-hoist gate lift the counted-loop
    record of a ROLLED row loop (rvtt-cost.md counted-loop capture
-   branch, downstream constants and interlock exec)?  Validated: at
-   trips 31, words 9, ds_exec 10 this prices the recorded pin-13
-   hardshrink refusal -383 exactly.  */
+   branch, the gate's own interlock exec estimate)?  Since item #12 the
+   mirror calls the SAME replay_pricing spelling the RTL gate prices
+   with (rvtt-delivery-cost-core.h) -- prediction, never re-pricing,
+   and drift is structurally impossible.  Validated: at trips 31,
+   words 9, ds_exec 10 this prices the recorded pin-13 hardshrink
+   refusal -383 exactly (pinned in rvtt-delivery-cost-test.cc).  */
 bool
 mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
 {
@@ -514,21 +517,40 @@ mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
       || safe_words (p) < p.min_sequence
       || safe_words (p) > p.capture_slots)
     return false;
-  const int64_t push = p.ds_push, slot = p.ds_slot;
-  const int64_t exec = (int64_t) p.ds_exec * slot;
-  const int64_t before = imax64 ((int64_t) p.row_words * push, exec);
-  const int64_t after = imax64 (push, exec + p.ds_turnaround);
-  const int64_t record
-    = (int64_t) (1 + p.row_words) * push + p.ds_record_overhead;
-  const int64_t benefit = (int64_t) p.trips * (before - after) - record;
-  return benefit >= p.ds_hoist_min_benefit;
+  const rvtt_delivery_cost::replay_price price
+    = rvtt_delivery_cost::replay_pricing
+	(p.dcost, rvtt_delivery_cost::SHAPE_COUNTED, p.trips, p.row_words,
+	 p.ds_exec, /*launch_run=*/1, /*drain_contract=*/false,
+	 p.ds_hoist_min_benefit);
+  /* One-pin recompute-assert of the migrated inline mirror
+     (item #12 discipline; delete next pin).  */
+  if (p.checking)
+    {
+      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
+      const int64_t exec = (int64_t) p.ds_exec * slot;
+      const int64_t before = imax64 ((int64_t) p.row_words * push, exec);
+      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
+      const int64_t record = (int64_t) (1 + p.row_words) * push
+	+ p.dcost.record_overhead_x100;
+      const int64_t benefit = (int64_t) p.trips * (before - after) - record;
+      gcc_assert (price.benefit == benefit
+		  && price.profitable
+		       == (benefit >= p.ds_hoist_min_benefit));
+    }
+  return price.profitable;
 }
 
 /* Downstream-mirror: does the replay-hoist gate lift the re-record
    pass of an UNROLLED group body (rvtt-cost.md re-record branches,
    including the execution-saturation context term) out of the group
    loop?  GROUPS is the post-unroll trip count, PAYLOAD_ROWS the
-   former-ranked payload R.  */
+   former-ranked payload R.  The shape selection is the gate's own
+   flag-pair spelling (rerecord_shape): under
+   -mtt-tensix-optimize-replay-record-hoist the gate prices the
+   measurement model and the mirror now predicts the same (formerly
+   the delivery-shape MODEL SEAM: the mirror modeled only the pre-EC
+   hoist machinery); at default flags the arithmetic is the pre-#12
+   mirror's, bit for bit.  */
 bool
 mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
 			     unsigned factor, unsigned payload_rows,
@@ -536,34 +558,50 @@ mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
 {
   if (!p.hoist_enabled || groups < 2)
     return false;
-  const int64_t push = p.ds_push, slot = p.ds_slot;
   const unsigned payload_slots = payload_rows * safe_words (p);
-  const int64_t exec
-    = (int64_t) payload_rows * (p.ds_exec - p.barrier_words) * slot;
-  const int64_t deliver_record = (int64_t) (1 + payload_slots) * push;
-  const int64_t after = imax64 (push, exec + p.ds_turnaround);
-  int64_t benefit;
-  if (exec >= deliver_record)
+  const int64_t exec_slots
+    = (int64_t) payload_rows * (p.ds_exec - p.barrier_words);
+  /* The launch run is contiguous only when the Dst auto-increment
+     pass absorbs the typed separators.  */
+  const unsigned run = p.autoincr_enabled ? factor / payload_rows : 1;
+  const rvtt_delivery_cost::replay_shape shape
+    = rvtt_delivery_cost::rerecord_shape (p.record_hoist_enabled,
+					  p.completion_guard,
+					  /*trips_proven=*/true);
+  const rvtt_delivery_cost::replay_price price
+    = rvtt_delivery_cost::replay_pricing
+	(p.dcost, shape, groups, payload_slots, exec_slots, run,
+	 p.completion_guard, p.ds_hoist_min_benefit);
+  /* One-pin recompute-assert of the migrated inline mirror (the
+     pre-#12 spelling exists only for the default flag state;
+     item #12 discipline; delete next pin).  */
+  if (p.checking && !p.record_hoist_enabled && !p.completion_guard)
     {
-      /* Execution-bound re-record.  */
-      const int64_t before = exec + p.ds_record_overhead;
-      benefit = (int64_t) groups * (before - after)
-		- p.ds_record_overhead;
-    }
-  else
-    {
-      /* Delivery-bound re-record, with the saturation context term:
-	 the launch run is contiguous only when the Dst auto-increment
-	 pass absorbs the typed separators.  */
-      const unsigned run = p.autoincr_enabled ? factor / payload_rows : 1;
-      const int64_t surplus = (int64_t) run * (exec - push);
-      if (surplus >= deliver_record)
-	benefit = -(deliver_record + p.ds_record_overhead);
+      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
+      const int64_t exec = exec_slots * slot;
+      const int64_t deliver_record = (int64_t) (1 + payload_slots) * push;
+      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
+      int64_t benefit;
+      if (exec >= deliver_record)
+	{
+	  const int64_t before = exec + p.dcost.record_overhead_x100;
+	  benefit = (int64_t) groups * (before - after)
+		    - p.dcost.record_overhead_x100;
+	}
       else
-	benefit = (int64_t) groups * (deliver_record - after)
-		  - (deliver_record + p.ds_record_overhead);
+	{
+	  const int64_t surplus = (int64_t) run * (exec - push);
+	  if (surplus >= deliver_record)
+	    benefit = -(deliver_record + p.dcost.record_overhead_x100);
+	  else
+	    benefit = (int64_t) groups * (deliver_record - after)
+		      - (deliver_record + p.dcost.record_overhead_x100);
+	}
+      gcc_assert (price.benefit == benefit
+		  && price.profitable
+		       == (benefit >= p.ds_hoist_min_benefit));
     }
-  return benefit >= p.ds_hoist_min_benefit;
+  return price.profitable;
 }
 
 /* Measured-table price of one explicit row without loop control (a
@@ -584,6 +622,17 @@ delivery_rolled_explicit_cost (const rvtt_delivery_problem &p)
 		   (int64_t) (p.row_words + p.control_words) * p.word);
 }
 
+/* Once-per-entry Dst-auto-increment setup charge of a window shape
+   (the pass's former W_drain MODEL SEAM, now the delivery-cost
+   module's named quantity carried in the problem; current-model
+   value 0 keeps every priced total unchanged, and a future
+   silicon-priced value moves every consumer together).  */
+int64_t
+autoincr_setup_term (const rvtt_delivery_problem &p)
+{
+  return p.autoincr_enabled ? p.autoincr_setup_x100 : 0;
+}
+
 /* Measured-table price of the U = 1 hoisted shape (record once, one
    launch per trip) at boundary cost B.  EE closure form: payload
    slots at 1.0 + record words + one exposed boundary per launch +
@@ -594,6 +643,7 @@ int64_t
 delivery_rolled_hoisted_cost (const rvtt_delivery_problem &p, int64_t b)
 {
   return (int64_t) (1 + safe_words (p)) * p.word
+	 + autoincr_setup_term (p)
 	 + (int64_t) p.trips
 	   * ((int64_t) window_exec (p) * 100 + b
 	      + (int64_t) window_sep (p) * p.word);
@@ -620,9 +670,9 @@ delivery_group_cost (const rvtt_delivery_problem &p, unsigned factor,
   const unsigned launches
     = factor / payload_rows - (hoisted ? 0 : 1);
   int64_t per_group = group_exec + group_sep + (int64_t) launches * b;
-  int64_t once = 0;
+  int64_t once = autoincr_setup_term (p);
   if (hoisted)
-    once = record_words;
+    once += record_words;
   else
     per_group += record_words;
   return once + (int64_t) groups * per_group

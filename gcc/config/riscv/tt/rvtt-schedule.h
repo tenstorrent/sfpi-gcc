@@ -24,6 +24,8 @@ along with GCC; see the file COPYING3.  If not see
 #include <utility>
 #include <vector>
 
+#include "rvtt-delivery-cost-core.h"
+
 /* This representation intentionally contains no GIMPLE or RTL pointers.
    Stable integer IDs make solver output independently checkable and allow
    the same small model to be exercised outside a compiler pass.  */
@@ -165,18 +167,35 @@ struct rvtt_delivery_problem
   unsigned boundary_lb = 130;	/* XTT_DELIVERY_BOUNDARY_{LB,UB}_X100 */
   unsigned boundary_ub = 180;
   unsigned min_benefit = 60;	/* XTT_DELIVERY_SHAPE_MIN_BENEFIT */
-  /* Downstream-mirror constants (rvtt-cost.md; used ONLY to predict
-     whether the replay-hoist gate lifts a record out of the loop).  */
-  unsigned ds_push = 123;
-  unsigned ds_slot = 100;
-  unsigned ds_turnaround = 70;
-  unsigned ds_record_overhead = 300;
+  /* Downstream-mirror table (rvtt-cost.md, carried through the one
+     delivery-cost API -- FABLE_GOES_BURR #12; used ONLY to predict
+     whether the replay-hoist gate lifts a record out of the loop):
+     the mirror calls the SAME replay_pricing spelling the RTL gate
+     prices with, so mirror drift is structurally impossible.  The
+     defaults repeat the audited values for standalone checking.  */
+  rvtt_delivery_cost::cost_table dcost = { 123, 100, 70, 300 };
   int ds_hoist_min_benefit = 60;
   bool hoist_enabled = false;	/* -mtt-tensix-optimize-replay-hoist */
+  bool record_hoist_enabled = false; /* -mtt-tensix-optimize-replay-
+					record-hoist: the downstream
+					re-record gate prices the
+					measurement model */
+  bool completion_guard = false; /* -mtt-tensix-replay-hoist-
+				    completion-guard: drain-inclusive
+				    completion contract */
   bool autoincr_enabled = false; /* -mtt-tensix-optimize-dst-autoincr:
 				    launch separators absorbed, so the
 				    mirror's saturation run counts the
 				    contiguous siblings */
+  /* Once-per-entry Dst-auto-increment setup charge of a window shape
+     (rvtt-cost.md XTT_AUTOINCR_SETUP_COST_X100 via the delivery-cost
+     module; the pass's former W_drain MODEL SEAM.  Current-model
+     value 0: the measured lane-EE table absorbs the SETC16 program in
+     the once-per-group record delivery).  */
+  int64_t autoincr_setup_x100 = 0;
+  bool checking = false;	/* flag_checking: one-pin
+				   recompute-asserts of the migrated
+				   mirror arithmetic (item #12) */
 };
 
 enum class rvtt_delivery_mode

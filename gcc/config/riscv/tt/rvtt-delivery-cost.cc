@@ -1,0 +1,117 @@
+/* The one delivery-cost API of the Tensix backend (FABLE_GOES_BURR #12).
+   Copyright (C) 2026 Tenstorrent Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
+
+/* This translation unit is the ONLY consumer that turns the
+   rvtt-cost.md `define_constants' delivery economics into arithmetic
+   (via the IR-free core, rvtt-delivery-cost-core.h) -- see the item
+   #12 charter in FABLE_GOES_BURR.md and the audit citations
+   (AUDIT-cost-model-refusals.md impr.3, AUDIT-replay-formation.md
+   impr.2, AUDIT-addressing-delivery.md impr.1).  */
+
+#define IN_TARGET_CODE 1
+
+#include "config.h"
+#include "system.h"
+#include "coretypes.h"
+#include "backend.h"
+#include "rtl.h"
+#include "tm_p.h"
+#include "rvtt-delivery-cost.h"
+
+using namespace rvtt_delivery_cost;
+
+/* The audited cost table, built once from the rvtt-cost.md
+   define_constants (insn-constants.h).  */
+
+const cost_table &
+rvtt_dcost_table (void)
+{
+  static const cost_table t
+    = { XTT_REPLAY_COST_RISC_PUSH_X100,
+	XTT_REPLAY_COST_REPLAY_SLOT_X100,
+	XTT_REPLAY_COST_TURNAROUND_X100,
+	XTT_REPLAY_COST_RECORD_OVERHEAD_X100 };
+  return t;
+}
+
+int64_t
+rvtt_dcost_words_to_centislots (int64_t words, plane p)
+{
+  return words_to_centislots (rvtt_dcost_table (), words, p);
+}
+
+unsigned
+rvtt_dcost_loadi_issue_words (uint32_t w)
+{
+  return loadi_issue_words (w);
+}
+
+int64_t
+rvtt_dcost_replay_hoist_min_benefit (void)
+{
+  return riscv_tt_replay_hoist_min_benefit >= 0
+    ? (int64_t) riscv_tt_replay_hoist_min_benefit
+    : (int64_t) XTT_REPLAY_HOIST_MIN_BENEFIT;
+}
+
+replay_price
+rvtt_dcost_replay_pricing (replay_shape shape, int64_t trips, int64_t words,
+			   int64_t exec_slots, int64_t launch_run,
+			   bool drain_contract, int64_t min_benefit)
+{
+  return replay_pricing (rvtt_dcost_table (), shape, trips, words,
+			 exec_slots, launch_run, drain_contract,
+			 min_benefit);
+}
+
+int64_t
+rvtt_dcost_autoincr_setup_cost_x100 (void)
+{
+  return XTT_AUTOINCR_SETUP_COST_X100;
+}
+
+/* The one word-exact replay comparator (previously spelled three times
+   in rtl-rvtt-replay.cc: the discovery bucket confirm, the reform-mode
+   carried-payload audit, and the window-sizing re-verification).  The
+   scratch-operand tolerance admits exactly the operand classes that do
+   not reach the delivered Tensix word: compiler GPR scratch
+   (CLOBBER/SCRATCH) and synthesized-word SImode MEMs (a non-SImode MEM
+   is (probably) broken code attempting to spill/fill an LReg and never
+   compares equal).  */
+
+bool
+rvtt_dcost_replay_word_equal_p (rtx_insn *a, rtx_insn *b)
+{
+  auto ignore = [] (const_rtx *x, const_rtx *y, rtx *nx, rtx *ny)
+    {
+      if (GET_CODE (*x) != GET_CODE (*y))
+	return false;
+      if (GET_CODE (*x) == MEM)
+	{
+	  if (GET_MODE (*x) != SImode)
+	    return false;
+	}
+      else if (GET_CODE (*x) != CLOBBER && GET_CODE (*x) != SCRATCH)
+	return false;
+      gcc_checking_assert (GET_MODE (*x) == GET_MODE (*y));
+      *nx = *ny = nullptr;
+      return true;
+    };
+  return rtx_equal_p (PATTERN (a), PATTERN (b), ignore);
+}

@@ -56,18 +56,16 @@ along with GCC; see the file COPYING3.  If not see
    term unpriceable and the loop refuses by name
    (delivery-shape-exec-term-unaudited).
 
-   MODEL SEAMS (documented, stubbed to current-model values):
-     - lane EB's dst-autoincr body-length pricing term (corrected to
-       the W_drain covering walk by lane EQ) LANDED at pins 16/17 but
-       is NOT YET JOINED here; the solver models no autoincr setup
-       cost (current-model value 0) and consumes only the autoincr
-       ENABLE bit for the downstream mirror's saturation run.  Joining
-       the W_drain term is the named follow-up (FH audit FHI-1).
-     - lane EC's record-hoist (record-once one level further out)
-       LANDED at pin 16 but is NOT YET JOINED here; the downstream
-       mirror still models only the pre-EC hoist machinery
-       (rtl-rvtt-replay.cc counted-loop and re-record branches).
-       Joining its wider hoist scope is the named follow-up.
+   The two former MODEL SEAMS (dst-autoincr W_drain term, record-hoist
+   mirror) are CLOSED by the one delivery-cost API (FABLE_GOES_BURR
+   item #12): the autoincr setup charge is the module's named quantity
+   (rvtt-cost.md XTT_AUTOINCR_SETUP_COST_X100, current-model value 0,
+   carried per-problem and added once per window shape), and the
+   downstream hoist mirrors call the same replay_pricing spelling the
+   RTL gate prices with -- including the record-hoist measurement
+   model and the completion guard under their flags -- so neither term
+   can drift from this solver by comment anymore.  One wiring seam
+   remains:
      - where the modeled winner is a ROLLED shape but the downstream
        hoist's own gate is predicted to form a window anyway (the
        ceil-fresh class), this pass has no channel to suppress that
@@ -97,6 +95,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-refuse.h"
 #include "rvtt-schedule.h"
+#include "rvtt-delivery-cost.h"
 
 namespace {
 
@@ -433,16 +432,31 @@ public:
       = riscv_tt_delivery_shape_min_benefit >= 0
 	  ? (unsigned) riscv_tt_delivery_shape_min_benefit
 	  : (unsigned) XTT_DELIVERY_SHAPE_MIN_BENEFIT;
-    prob.ds_push = XTT_REPLAY_COST_RISC_PUSH_X100;
-    prob.ds_slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-    prob.ds_turnaround = XTT_REPLAY_COST_TURNAROUND_X100;
-    prob.ds_record_overhead = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-    prob.ds_hoist_min_benefit
-      = riscv_tt_replay_hoist_min_benefit >= 0
-	  ? riscv_tt_replay_hoist_min_benefit
-	  : XTT_REPLAY_HOIST_MIN_BENEFIT;
+    /* The downstream-mirror table and flags, through the one
+       delivery-cost API (FABLE_GOES_BURR #12): the solver's hoist
+       mirrors call the same replay_pricing spelling the RTL gate
+       prices with.  */
+    prob.dcost = rvtt_dcost_table ();
+    prob.ds_hoist_min_benefit = rvtt_dcost_replay_hoist_min_benefit ();
     prob.hoist_enabled = riscv_tt_opt_replay_hoist != 0;
+    prob.record_hoist_enabled = riscv_tt_opt_replay_record_hoist > 0;
+    prob.completion_guard = riscv_tt_replay_hoist_completion_guard > 0;
     prob.autoincr_enabled = riscv_tt_opt_dst_autoincr != 0;
+    prob.autoincr_setup_x100 = rvtt_dcost_autoincr_setup_cost_x100 ();
+    prob.checking = flag_checking != 0;
+    /* One-pin recompute-assert of the migrated fills (item #12
+       discipline; delete next pin).  */
+    if (flag_checking)
+      gcc_assert (prob.dcost.push_x100 == XTT_REPLAY_COST_RISC_PUSH_X100
+		  && prob.dcost.slot_x100 == XTT_REPLAY_COST_REPLAY_SLOT_X100
+		  && prob.dcost.turnaround_x100
+		       == XTT_REPLAY_COST_TURNAROUND_X100
+		  && prob.dcost.record_overhead_x100
+		       == XTT_REPLAY_COST_RECORD_OVERHEAD_X100
+		  && prob.ds_hoist_min_benefit
+		       == (riscv_tt_replay_hoist_min_benefit >= 0
+			   ? riscv_tt_replay_hoist_min_benefit
+			   : XTT_REPLAY_HOIST_MIN_BENEFIT));
 
     rvtt_delivery_solution sol = rvtt_bnb_delivery_shape (prob);
     if (sol.status != rvtt_solver_status::optimal)
