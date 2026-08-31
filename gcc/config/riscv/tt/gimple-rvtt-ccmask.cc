@@ -112,6 +112,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "rvtt.h"
 #include "rvtt-refuse.h"
+#include "rvtt-cc-region.h"
 
 namespace {
 
@@ -207,10 +208,18 @@ struct ccmask_group
 /* Match the structured skeleton starting at the sfppushc at GSI.
    Returns true with G filled; CANDIDATE marks that the region
    identified itself as a zeroing conditional (enables named
-   refusals).  */
+   refusals).  The statement machine is the stage-A compatibility
+   predicate for the CC-region tree (FABLE_GOES_BURR #14): admission is
+   keyed off CCR's frame facts at region close -- the matched frame
+   must be the one the tree computed (entry, single exit, the exact
+   xvif/fcmp/condb refinement chain, the assign inside it) -- with the
+   machine restricting the tree to exactly the historical shape set.  A
+   disagreement is a FINDING (hard assert under flag_checking); release
+   builds fail closed by name.  */
 
 static bool
-match_group (gimple_stmt_iterator gsi, ccmask_group *g, bool *candidate)
+match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
+	     ccmask_group *g, bool *candidate)
 {
   enum { WANT_XVIF, WANT_FCMP, WANT_CONDB, WANT_ASSIGN, WANT_POPC, DONE }
     want = WANT_XVIF;
@@ -395,6 +404,23 @@ match_group (gimple_stmt_iterator gsi, ccmask_group *g, bool *candidate)
   return *candidate ? refuse ("ccmask-region-open-cfg", g->pushc) : false;
 
  region_closed:
+  /* Stage-A agreement with the CC-region tree: the frame this machine
+     matched must be exactly the frame the shared analysis computed.  */
+  {
+    rvtt_cc_region *r = ccr->region_opened_by (g->pushc);
+    bool tree_ok = r && ccr->refinements_pure_p (r)
+      && ccr->region_of (g->assign) == r
+      && r->exits.length () == 1 && r->exits[0] == g->popc
+      && r->refinements.length () == 3
+      && r->refinements[0] == g->xvif
+      && r->refinements[1] == g->fcmp
+      && r->refinements[2] == g->condb;
+    if (flag_checking)
+      gcc_assert (tree_ok);
+    if (!tree_ok)
+      return refuse ("ccmask-region-shape", g->popc);
+  }
+
   /* The compare: float order test against immediate bits 0 (+0.0),
      with a CC selection whose complement is a single GT or LE.  */
   {
@@ -536,6 +562,11 @@ transform (function *fun)
 {
   bool changed = false;
   basic_block bb;
+  /* The CC-region tree, computed once per function (FABLE_GOES_BURR
+     #14).  A fold deletes a whole leaf frame and inserts only CC-inert
+     statements, so the surviving frames' facts stay exact and no
+     rebuild is needed between fires.  */
+  rvtt_cc_region_tree ccr (fun);
   FOR_EACH_BB_FN (bb, fun)
     {
       gimple_stmt_iterator gsi = gsi_start_bb (bb);
@@ -547,7 +578,7 @@ transform (function *fun)
 	    {
 	      ccmask_group g;
 	      bool candidate;
-	      if (match_group (gsi, &g, &candidate))
+	      if (match_group (&ccr, gsi, &g, &candidate))
 		{
 		  transform_group (&g);
 		  changed = true;
