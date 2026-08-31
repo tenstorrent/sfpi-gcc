@@ -31,3 +31,18 @@ The cast-round oracle body `cast-round-rows.C` reproduces the
 quarantined matcher's proven envelope exactly (load mode 6, round
 instr_mod1 1 with zero imm8, store mode 2, Dst += 2 rows); the
 quarantined pass had no in-tree cast-round test of its own.
+
+## Pin-49 re-freeze (2026-08-31, lane JZ)
+
+FABLE_GOES_BURR item #4 names a planner-oracle re-freeze as the blocker
+of the audited-effect attribute migration.  Executed at pin-49
+(sfpi-gcc 1bb9b654b53): both mint scripts re-run verbatim against the
+pin-head compiler.  Verdict -- NO ORACLE ROW CHANGED: every WP8 `off'
+and `planner' hash reproduces bit-identically (11/11 rows; the
+emit-loadmacro column reports `quarantined-pass-deleted' as specified
+above), and cc-enable refusal identity holds 5/5 (the absolute -S
+hashes drift with forty pins of compiler change; the manifest's frozen
+fact is the off==planner identity, which is intact).  The historical
+manifests above stay untouched as the permanent record; the re-frozen
+pin-49 baselines live in `refreeze-pin49-20260831.txt` and are the
+reference the attribute migration must reproduce byte-for-byte.
