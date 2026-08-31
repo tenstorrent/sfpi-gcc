@@ -202,6 +202,17 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
    ahead of the hazard scheduler's fill passes, so a broken storage
    collision widens the fill candidate sets the same compilation.  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_lreg_rename);
+/* The GENERAL du-chain rename (item #7) runs at the same seam,
+   immediately after the single-shape pass above (which keeps its flag
+   and behavior until the parity-census retirement ceremony): post
+   dst-ownership and lp-alloc (the collisions it breaks are the
+   allocator's storage reuse, so it must see final hard LREGs), post
+   macro formation (planner calendars are effect-opaque members and
+   refuse chain spans by name rather than being half-visible), and
+   AHEAD of the hazard scheduler's fill passes for the identical
+   reason as v1 -- a broken collision widens the fill candidate sets
+   the same compilation.  */
+INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_lreg_rename_chains);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
 /* MOP loop-delivery formation re-rolls runs and counted loops of replay
    playback launches into the hardware MOP expander.  It must see the

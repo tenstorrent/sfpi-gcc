@@ -873,6 +873,10 @@ mtt-tensix-optimize-lreg-rename
 Target Var(riscv_tt_opt_lreg_rename) Init(0)
 Rename storage-colliding invariant-input LREG chains inside capturable rows to a proven-free register so the audited stall-fill mechanisms stop refusing them; every unproven case refuses by name.
 
+mtt-tensix-optimize-lreg-rename-chains
+Target Var(riscv_tt_opt_lreg_rename_chains) Init(0)
+General post-allocation du-chain LREG renaming (the gcc/regrename.cc formulation scoped to the Tensix vector file): move a storage-colliding single-definition def-use web in any basic block onto a proven-free LREG under the typed-effect veto, a fail-closed no-CC-event span rule, a lane-exact death proof, and a post-commit structural re-verification; delivered words never change, only register fields move, and every unproven clause refuses by name.  Also exports the rename service the fill/rotation/modulo-scheduling consumers request chains through.
+
 mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
 Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.

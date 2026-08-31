@@ -1124,6 +1124,51 @@ RVTT_REFUSAL (RECORD_HOIST_TRIP_COUNT_UNPROVEN,
 RVTT_REFUSAL (RECORD_HOIST_VARIANT_ENCODING,
   "record-hoist-variant-encoding",
   "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (REGRENAME_CC_SPAN,
+  "regrename-cc-span",
+  "item #7: a CC-state event inside the chain span; the disabled-lane contents of the two worlds diverge (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_CHAIN_OPEN,
+  "regrename-chain-open",
+  "item #7: no in-block kill and no beyond-suspicion DF death at block exit; the chain is open at the region boundary (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_COMPANION_COUPLED,
+  "regrename-companion-coupled",
+  "item #7: the definition is a companion-bank coupled multi-result group; the banks move together or not at all (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_CONSTRAINT,
+  "regrename-constraint",
+  "item #7: the queued register-field edits failed constraint re-recognition; nothing changed (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_COST_REGRESSED,
+  "regrename-cost-regressed",
+  "item #7 standalone mode: the whole-row modeled issue-slot count regressed; strict no-worse acceptance (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_EFFECT_VETO,
+  "regrename-effect-veto",
+  "item #7: the definition carries a vetoed typed effect (CC write, config dest, RWC/Dst counter, Dst store, multi-register write) (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_IMPLICIT_OPERAND,
+  "regrename-implicit-operand",
+  "item #7: an effect-mask reference to the chain register with no explicit REG occurrence (the LUT implicit-slot class); uneditable (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_NO_FREE_LREG,
+  "regrename-no-free-lreg",
+  "item #7: no architectural LREG is untouched in the block and dead across it (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_PINNED_PROTOCOL,
+  "regrename-pinned-protocol",
+  "item #7: the chain register is part of a pinned fixed-LREG interface (zero-length protocol marker or non-effect-audited pattern reference) (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_POSTCOMMIT_DIVERGENCE,
+  "regrename-postcommit-divergence",
+  "item #7: the post-commit structural lockstep re-verification diverged; the rename was reverted (assert channel under -fchecking) (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_REPLAY_BOUNDARY,
+  "regrename-replay-boundary",
+  "item #7: a replay-owner instruction is the definition or a reader; explicitly managed replay ranges never rename (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_ROW_UNPRICEABLE,
+  "regrename-row-unpriceable",
+  "item #7 standalone mode: an unaudited producer feeds a span consumer; the no-worse acceptance cannot price the row (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_SELF_MERGE,
+  "regrename-self-merge",
+  "item #7: the definition reads its own destination (a live-value merge); the chain is not closed at the top (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_SPAN_OPAQUE,
+  "regrename-span-opaque",
+  "item #7: an effect-opaque instruction (call, asm, raw word, unaudited pattern) inside the chain span (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_TIED_CLOSE,
+  "regrename-tied-close",
+  "item #7: the closing writer genuinely reads the chain register (a tied merge the rename cannot split) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REISSUE_UNPROVED,
   "reissue-unproved",
   "dump; first seen in rtl-rvtt-replay.cc")
