@@ -49,6 +49,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-tables.h"
 #include "rvtt-macro-epoch.h"
 #include "rvtt-refuse.h"
+#include "rvtt-timing.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -1376,6 +1377,11 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
   for (int i = 0; i != 16; ++i)
     ready[i] = 0;
 
+  /* Item-#11 verdict-identity shadow: the unified engine's scoreboard
+     steps beside this one and must agree on every slot count, refusal
+     and unproved mask before this simulator retires.  */
+  rvtt_timing::interlock_sim chk_sim;
+
   for (auto pos = block.data () + span.begin,
 	 end = block.data () + span.end; pos != end; ++pos)
     {
@@ -1408,8 +1414,20 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 	}
       uint32_t deps = (e.lreg_read
 		       | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
+      rvtt_timing::issue_op chk_op;
+      if (flag_checking)
+	{
+	  chk_op.deps = deps;
+	  chk_op.writes = e.lreg_write;
+	  chk_op.words = get_attr_length (pos->insn) / 4;
+	  chk_op.lat = e.result_latency;
+	  chk_op.next_slot_stall = e.next_slot_stall;
+	}
       if (deps & unproved)
 	{
+	  if (flag_checking)
+	    gcc_assert (!chk_sim.step (chk_op)
+			&& chk_sim.unproved_mask () == unproved);
 	  if (dump_file)
 	    fprintf (dump_file, "  reissue-unproved edge: consumer insn %d"
 		     " (deps 0x%x) of an unaudited producer (mask 0x%x)\n",
@@ -1436,6 +1454,10 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 	      }
 	  }
       slot = done;
+      if (flag_checking)
+	gcc_assert (chk_sim.step (chk_op)
+		    && chk_sim.slots () == slot
+		    && chk_sim.unproved_mask () == unproved);
     }
   return slot;
 }
@@ -1735,6 +1757,34 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	}
     }
   HOST_WIDE_INT benefit = trips * (before - after) - record;
+
+  /* Item-#11 verdict-identity shadow: the unified engine's pricing
+     form must reproduce every term of this shared model before the
+     inline spelling retires (the rvtt-bnb.cc downstream mirror
+     shadows the same form).  */
+  if (flag_checking)
+    {
+      rvtt_timing::hoist_costs chk_costs;
+      chk_costs.push = XTT_REPLAY_COST_RISC_PUSH_X100;
+      chk_costs.slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      chk_costs.turnaround = XTT_REPLAY_COST_TURNAROUND_X100;
+      chk_costs.record_overhead = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
+      rvtt_timing::hoist_pricing chk
+	= !body_rerecords
+	  ? rvtt_timing::counted_hoist_price (chk_costs, trips, words,
+					      eslots)
+	  : rvtt_timing::rerecord_hoist_price
+	      (chk_costs, trips, words, eslots, launch_run,
+	       riscv_tt_replay_hoist_completion_guard > 0);
+      gcc_assert (chk.exec == exec
+		  && chk.deliver_body == deliver_body
+		  && chk.deliver_record == deliver_record
+		  && chk.before == before
+		  && chk.after == after
+		  && chk.record == record
+		  && chk.benefit == benefit
+		  && chk.exec_bound == exec_bound_rerecord);
+    }
 
   if (dump_file)
     fprintf (dump_file,

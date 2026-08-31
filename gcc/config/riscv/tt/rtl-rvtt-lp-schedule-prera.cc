@@ -126,6 +126,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-timing.h"
 
 namespace {
 
@@ -182,11 +183,20 @@ audited_latency_prera (rtx_insn *insn)
   if (!issued_tensix_p (insn))
     return -1;
   xtt_effect_set e = rvtt_insn_effects (insn);
+  int lat;
   if (e.opaque)
-    return -1;
-  if (e.next_slot_stall)
-    return -1;
-  return e.result_latency;
+    lat = -1;
+  else if (e.next_slot_stall)
+    lat = -1;
+  else
+    lat = e.result_latency;
+  /* Item-#11 verdict-identity shadow: the unified engine must agree
+     on every reachable shape before this mirror retires.  */
+  if (flag_checking)
+    gcc_assert (lat == rvtt_timing::audited_latency (e.opaque,
+						     e.next_slot_stall,
+						     e.result_latency));
+  return lat;
 }
 
 struct pnode
@@ -387,11 +397,37 @@ vec_intersect_p (const std::vector<unsigned> &a, const std::vector<unsigned> &b)
 static int
 pnode_dependence (const pnode &p, const pnode &c)
 {
-  if (vec_intersect_p (p.defs, c.uses) || vec_intersect_p (p.defs, c.defs))
-    return 1;
-  if (vec_intersect_p (p.uses, c.defs))
-    return 2;
-  return 0;
+  bool raw_or_waw = vec_intersect_p (p.defs, c.uses)
+		    || vec_intersect_p (p.defs, c.defs);
+  bool war = vec_intersect_p (p.uses, c.defs);
+  int kind = raw_or_waw ? 1 : war ? 2 : 0;
+  /* Item-#11 verdict-identity shadow.  */
+  if (flag_checking)
+    gcc_assert (kind
+		== (int) rvtt_timing::classify_dependence (raw_or_waw, war));
+  return kind;
+}
+
+/* Marshal the region NODES into the item-#11 engine's plain-data
+   vocabulary (the pseudo-dependence twin of the post-RA marshaller).  */
+
+static rvtt_timing::seq
+pnode_timing_seq (const std::vector<pnode> &nodes)
+{
+  rvtt_timing::seq s;
+  unsigned n = nodes.size ();
+  s.ops.resize (n);
+  s.dep.resize (n * n);
+  for (unsigned i = 0; i != n; ++i)
+    {
+      s.ops[i].words = nodes[i].words;
+      s.ops[i].lat = nodes[i].lat;
+      s.ops[i].entry_pin = nodes[i].entry_pin;
+      for (unsigned j = 0; j != n; ++j)
+	s.dep[i * n + j]
+	  = (unsigned char) pnode_dependence (nodes[i], nodes[j]);
+    }
+  return s;
 }
 
 /* --------------------- pressure model (region) --------------------- */
@@ -506,6 +542,15 @@ simulate_order (const std::vector<pnode> &nodes, const std::vector<int> &order,
 	if (drain > end)
 	  end = drain;
       }
+  /* Item-#11 verdict-identity shadow: the unified engine's timeline
+     must agree slot-for-slot before this mirror retires.  */
+  if (flag_checking)
+    {
+      std::vector<int> chk_issue (nodes.size (), 0);
+      int chk_end = rvtt_timing::simulate (pnode_timing_seq (nodes), order,
+					   &chk_issue, exit_shadow);
+      gcc_assert (chk_end == end && chk_issue == *issue);
+    }
   return end;
 }
 
