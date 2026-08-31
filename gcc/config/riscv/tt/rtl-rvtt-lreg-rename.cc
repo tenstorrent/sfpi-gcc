@@ -1233,6 +1233,43 @@ public:
     return TARGET_XTT_TENSIX && riscv_tt_opt_lreg_rename_chains > 0;
   }
 
+  /* The candidate at SCAN[I] matches the v1 single-shape pass's
+     admission profile (rename_one_chain's writer conditions): a
+     latency-0, invariant-input, pure-value colliding definition in a
+     capturable self-loop row with an audited stall.  Phase 1 of the
+     standalone mode renames exactly these FIRST, in v1's own order,
+     so the scarce free registers are never spent on general chains
+     before every v1-renameable chain has claimed its target -- the
+     subsumption acceptance (v1 fires form a subset of this pass's
+     fires) holds by construction wherever the general proof admits
+     the v1 candidate.  */
+  static bool
+  v1_profile_candidate_p (const std::vector<span_insn> &scan, size_t i)
+  {
+    const span_insn &w = scan[i];
+    uint32_t row_writes = 0;
+    bool row_writes_cc = false;
+    for (const span_insn &si : scan)
+      if (si.kind == span_insn::SI_TENSIX && si.insn != w.insn)
+	{
+	  row_writes |= si.fx.lreg_write;
+	  row_writes_cc |= si.fx.cc_write;
+	}
+    if (w.fx.result_latency != 0
+	|| w.fx.cc_write
+	|| (w.fx.cc_read && row_writes_cc)
+	|| w.fx.config_dests_written || w.fx.addr_mod_slot_write
+	|| w.fx.rwc.kind != xtt_rwc_effect_t::NONE
+	|| w.fx.dst_mem_read || w.fx.dst_mem_write
+	|| popcount_hwi (w.fx.lreg_write) != 1)
+      return false;
+    /* Invariant inputs: nothing another member writes.  */
+    if ((w.fx.lreg_read & ~w.fx.lreg_write) & row_writes)
+      return false;
+    /* The wall.  */
+    return (w.fx.lreg_write & row_writes) != 0;
+  }
+
   unsigned execute (function *fn) final override
   {
     df_analyze ();
@@ -1241,52 +1278,80 @@ public:
     basic_block bb;
     FOR_EACH_BB_FN (bb, fn)
       {
-	/* Greedy standalone mode: rename storage-collision chains,
-	   in stream order, each under the whole-row no-worse
-	   acceptance.  Re-scan after every commit (effects moved).  */
-	bool progress = true;
-	unsigned attempts = 0;
-	std::vector<bool> tried;
-	while (progress && ++attempts < 64)
+	/* Standalone mode, two phases per block, re-scanning after
+	   every commit (effects moved):
+	   1. v1-profile candidates in the v1 pass's own row order --
+	      on rows the v1 admission accepts -- so the general
+	      engine's fires subsume the single-shape pass's fires
+	      (free registers are claimed in the same order);
+	   2. the general greedy sweep over every remaining
+	      storage-collision chain.
+	   Both phases run the identical analyze/price/commit/belt
+	   path; only candidate SELECTION differs.  */
+	std::vector<row_member> row;
+	const char *row_reason = nullptr;
+	bool v1_row = rename_row_p (bb, &row, &row_reason)
+		      && row_has_audited_stall_p (row);
+	for (int phase = v1_row ? 0 : 1; phase < 2; ++phase)
 	  {
-	    progress = false;
-	    std::vector<span_insn> scan;
-	    scan_block (bb, &scan);
-	    if (tried.size () < scan.size ())
-	      tried.resize (scan.size (), false);
-	    for (size_t i = 0; i < scan.size (); ++i)
+	    bool progress = true;
+	    unsigned attempts = 0;
+	    std::vector<bool> tried;
+	    while (progress && ++attempts < 64)
 	      {
-		if (tried[i] || scan[i].kind != span_insn::SI_TENSIX
-		    || scan[i].fx.opaque
-		    || popcount_hwi (scan[i].fx.lreg_write) != 1)
-		  continue;
-		uint32_t bit = scan[i].fx.lreg_write;
-		if (bit & ~0xFFu)
-		  continue;
-		/* The wall: another position also writes this
-		   register (the storage collision the fills refuse
-		   by).  Non-colliding chains are not candidates in
-		   standalone mode; consumers may still request them
-		   through the service.  */
-		bool collision = false;
-		for (size_t j = 0; j < scan.size () && !collision; ++j)
-		  if (j != i && scan[j].kind == span_insn::SI_TENSIX
-		      && (scan[j].fx.lreg_write & bit))
-		    collision = true;
-		if (!collision)
-		  continue;
-		tried[i] = true;
-		chain_desc ch;
-		if (!analyze_chain (bb, scan, i, fn_has_opaque, -1, &ch))
-		  continue;
-		if (!span_no_worse_p (ch))
-		  continue;
-		if (commit_chain (ch))
+		progress = false;
+		std::vector<span_insn> scan;
+		scan_block (bb, &scan);
+		if (tried.size () < scan.size ())
+		  tried.resize (scan.size (), false);
+		for (size_t i = 0; i < scan.size (); ++i)
 		  {
-		    progress = true;
-		    break;	/* re-scan */
+		    if (tried[i] || scan[i].kind != span_insn::SI_TENSIX
+			|| scan[i].fx.opaque
+			|| popcount_hwi (scan[i].fx.lreg_write) != 1)
+		      continue;
+		    uint32_t bit = scan[i].fx.lreg_write;
+		    if (bit & ~0xFFu)
+		      continue;
+		    if (phase == 0)
+		      {
+			if (!v1_profile_candidate_p (scan, i))
+			  continue;
+		      }
+		    else
+		      {
+			/* The wall: another position also writes this
+			   register (the storage collision the fills
+			   refuse by).  Non-colliding chains are not
+			   candidates in standalone mode; consumers may
+			   still request them through the service.  */
+			bool collision = false;
+			for (size_t j = 0; j < scan.size () && !collision;
+			     ++j)
+			  if (j != i && scan[j].kind == span_insn::SI_TENSIX
+			      && (scan[j].fx.lreg_write & bit))
+			    collision = true;
+			if (!collision)
+			  continue;
+		      }
+		    tried[i] = true;
+		    chain_desc ch;
+		    if (!analyze_chain (bb, scan, i, fn_has_opaque, -1, &ch))
+		      continue;
+		    if (!span_no_worse_p (ch))
+		      continue;
+		    if (commit_chain (ch))
+		      {
+			progress = true;
+			break;	/* re-scan */
+		      }
 		  }
 	      }
+	    /* Phase 2 re-attempts nothing phase 1 committed; a phase-1
+	       refusal may still be renameable... it is not: the same
+	       analyze path already refused it.  Reset the tried set
+	       anyway so phase 2 considers the candidates phase 1's
+	       PROFILE skipped.  */
 	  }
       }
     if (dump_file)
