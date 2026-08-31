@@ -169,6 +169,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-refuse.h"
 #include "rvtt-lut-tables.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-cc-region.h"
 
 namespace {
 
@@ -671,7 +672,8 @@ map_slots (const lut_group *g, const rvtt_lut_mode_desc *mode,
    itself as a magnitude dispatch candidate).  */
 
 static bool
-match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
+match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
+	     lut_group *g, bool *candidate)
 {
   /* Structural cursor: which skeleton statement we expect next inside
      the current predicated region.  */
@@ -853,6 +855,42 @@ match_group (gimple_stmt_iterator gsi, lut_group *g, bool *candidate)
   return *candidate ? refuse ("lut-region-open-cfg", g->pushc[0]) : false;
 
  region_closed:
+  /* Stage-A agreement with the CC-region tree (FABLE_GOES_BURR #14):
+     the region discipline this scan tracked with its own depth counter
+     -- each else-arm frame nested under the previous, the popc chain
+     draining innermost-first, each predicated assign inside its own
+     frame, each frame's refinement chain exactly its
+     xvif/fcmp/condb (+compc) words -- must be exactly what the shared
+     frame analysis computed.  The scan is the compatibility predicate
+     (the historical shape set); a disagreement is a FINDING (hard
+     assert under flag_checking); release builds fail closed by name.
+     The coefficient/leaf matching below is untouched (partial
+     conversion by design).  */
+  {
+    bool tree_ok = true;
+    rvtt_cc_region *prev = nullptr;
+    for (unsigned r = 0; r < g->num_pred && tree_ok; r++)
+      {
+	rvtt_cc_region *reg = ccr->region_opened_by (g->pushc[r]);
+	gimple *rpopc = g->popc[g->num_pred - 1 - r];
+	unsigned want_refs = r + 1 < g->num_pred ? 4 : 3;
+	tree_ok = reg && ccr->refinements_pure_p (reg)
+	  && (r == 0 || reg->parent == prev)
+	  && ccr->region_of (g->assign[r]) == reg
+	  && reg->exits.length () == 1 && reg->exits[0] == rpopc
+	  && reg->refinements.length () == want_refs
+	  && reg->refinements[0] == g->xvif[r]
+	  && reg->refinements[1] == g->fcmp[r]
+	  && reg->refinements[2] == g->condb[r]
+	  && (want_refs == 3 || reg->refinements[3] == g->compc[r]);
+	prev = reg;
+      }
+    if (flag_checking)
+      gcc_assert (tree_ok);
+    if (!tree_ok)
+      return refuse ("lut-structure-mismatch", g->pushc[0]);
+  }
+
   /* Recognize the predicated leaves through their live-value assigns:
      assign[ix] = sfpassign_lv (old, new).  The default (last-range)
      leaf reaches the tree as the first assign's incoming live
@@ -1455,6 +1493,11 @@ transform (function *fun, auto_vec<gcall *> *formed)
 {
   bool changed = false;
   basic_block bb;
+  /* The CC-region tree, computed once per function (FABLE_GOES_BURR
+     #14).  A formation deletes whole frames and inserts only CC-inert
+     statements, so the surviving frames' facts stay exact and no
+     rebuild is needed between fires.  */
+  rvtt_cc_region_tree ccr (fun);
   FOR_EACH_BB_FN (bb, fun)
     {
       gimple_stmt_iterator gsi = gsi_start_bb (bb);
@@ -1466,7 +1509,7 @@ transform (function *fun, auto_vec<gcall *> *formed)
 	    {
 	      lut_group g;
 	      bool candidate;
-	      if (match_group (gsi, &g, &candidate))
+	      if (match_group (&ccr, gsi, &g, &candidate))
 		{
 		  changed = true;
 		  /* The group's statements are gone; restart after the
