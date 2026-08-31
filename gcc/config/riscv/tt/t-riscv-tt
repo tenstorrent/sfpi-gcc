@@ -89,6 +89,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-unspec.o \
 	rvtt-lpsolve.o \
 	rvtt-bnb.o \
+	rvtt-trips.o \
 
 OBJS += $(RVTT_OBJS)
 
