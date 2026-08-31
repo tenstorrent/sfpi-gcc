@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
@@ -1528,6 +1529,92 @@ transform (function *fn)
 	    if (cc_depth_at_stmt (cc, call) > 0)
 	      ++in_region;
 	  bool demand_defer = in_region >= 3;
+	  /* ITEM #13 (placement arbiter): the `in_region >= 3' demand
+	     cut above is a measured local optimum (every kept-hoist
+	     winner sat at demand <= 2, every deferral winner at >= 3;
+	     the named successor was "a finer per-authority priced
+	     arbitration").  The arbiter's priced spelling asks the
+	     pressure engine the exact question the cut approximates:
+	     does keeping the depth-zero hoists AND the in-region
+	     parks-to-be live across this loop fit the LREG file?  A
+	     fit means there is no contention for the later authorities
+	     to arbitrate (keep the free depth-zero hoists); a miss
+	     means the loop is in the pressure-arbitrated regime.
+
+	     The priced verdict is MONOTONE fail-closed: it may only
+	     rescue an over-deferral (legacy defer -> priced keep --
+	     the keep side is fully proven here: the restore proof
+	     makes each depth-zero hoist a mask-exact free move and the
+	     capacity query proves no contention), never manufacture a
+	     new deferral (legacy keep -> priced defer): the defer
+	     side's value is UNPRICEABLE at this point -- it hands the
+	     candidates to the late walk, whose admission proofs live
+	     in that pass and may refuse them all, leaving pure hoist
+	     loss (the trigonometry census anatomy; the pin-34/35
+	     lesson) -- so that direction refuses by name
+	     (place-alternative-unpriceable) and keeps the legacy
+	     verdict.  Shadow mode dumps both verdicts and changes
+	     nothing; under -mtt-tensix-optimize-priced-placement the
+	     monotone priced verdict decides, an over-budget candidate
+	     set refusing by name back to the legacy cut.  The
+	     LUT-coefficient authority below is not a price and keeps
+	     its wholesale deferral in both modes.  */
+	  if (!lut_body && in_region > 0
+	      && (dump_file || riscv_tt_opt_priced_placement > 0))
+	    {
+	      if (loads.length () > RVTT_PLACE_MAX_CANDIDATES)
+		{
+		  if (riscv_tt_opt_priced_placement > 0)
+		    rvtt_refuse (RVTT_REF_PLACE_BUDGET_EXHAUSTED, dump_file,
+				 "placement-arbiter: park-ordering loop bb %d"
+				 " over budget (place-budget-exhausted); the"
+				 " legacy demand cut stands\n",
+				 loop->header->index);
+		  else if (dump_file)
+		    fprintf (dump_file,
+			     "placement-arbiter: park-ordering loop bb %d"
+			     " over budget; the legacy demand cut stands\n",
+			     loop->header->index);
+		}
+	      else
+		{
+		  rvtt_loop_pressure arb_profile (loop, cc.has_cc);
+		  bool priced_defer = !arb_profile.legal_with (loads);
+		  bool deciding = riscv_tt_opt_priced_placement > 0;
+		  bool unpriceable_defer = !demand_defer && priced_defer;
+		  char point[96];
+		  snprintf (point, sizeof point,
+			    "park-ordering loop bb %d (in-region %u)",
+			    loop->header->index, in_region);
+		  rvtt_place_dump_verdict (dump_file, point,
+					   demand_defer ? "defer" : "keep",
+					   priced_defer ? "defer" : "keep",
+					   !deciding ? "(deciding=legacy)"
+					   : unpriceable_defer
+					   ? "(deciding=legacy: the defer"
+					     " side is unpriceable)"
+					   : "(deciding=priced)");
+		  if (deciding)
+		    {
+		      if (unpriceable_defer)
+			/* Monotone contract (block comment above): the
+			   walk's ability to re-place these candidates
+			   is not provable here, so the priced defer's
+			   value cannot be stated -- fail closed to the
+			   legacy keep.  */
+			rvtt_refuse (RVTT_REF_PLACE_ALTERNATIVE_UNPRICEABLE,
+				     dump_file,
+				     "placement-arbiter: park-ordering loop"
+				     " bb %d priced defer refused"
+				     " (place-alternative-unpriceable: the"
+				     " late walk's re-placement is unproven"
+				     " here); the legacy keep stands\n",
+				     loop->header->index);
+		      else
+			demand_defer = priced_defer;
+		    }
+		}
+	    }
 	  if (demand_defer && !lut_body && dump_file)
 	    fprintf (dump_file,
 		     "park-ordering: loop bb %d defers wholesale:"
