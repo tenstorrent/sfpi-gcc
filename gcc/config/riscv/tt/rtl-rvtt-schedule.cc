@@ -722,21 +722,11 @@ audited_latency (rtx_insn *insn)
   // carries an audited result latency for the reissue-pricing model --
   // this preserves the pass's documented pre-audit behavior exactly
   // ("SFPSWAP ... never becomes a fill target").  That discipline,
-  // like every timing rule, has ONE spelling: the item-#11 engine's.
-  int lat;
-  if (e.opaque)
-    lat = -1;
-  else if (e.next_slot_stall)
-    lat = -1;
-  else
-    lat = e.result_latency;
-  /* Item-#11 verdict-identity shadow: the unified engine must agree
-     on every reachable shape before this spelling retires.  */
-  if (flag_checking)
-    gcc_assert (lat == rvtt_timing::audited_latency (e.opaque,
-						     e.next_slot_stall,
-						     e.result_latency));
-  return lat;
+  // like every timing rule, has ONE spelling: the item-#11 engine's
+  // (verdict identity proven by the stage-A shadow over a full corpus
+  // -fchecking leg, zero disagreements).
+  return rvtt_timing::audited_latency (e.opaque, e.next_slot_stall,
+				       e.result_latency);
 }
 
 /* Modeled interlock stall cycles between issued P and an immediately
@@ -757,19 +747,7 @@ adjacency_stall (rtx_insn *p, rtx_insn *c)
   bool dependent
     = hard_reg_set_intersect_p (p_regs.defs, c_regs.uses)
       || hard_reg_set_intersect_p (p_regs.defs, c_regs.defs);
-  if (!dependent)
-    {
-      /* Item-#11 verdict-identity shadow.  */
-      if (flag_checking)
-	gcc_assert (rvtt_timing::adjacent_stall (false,
-						 audited_latency (p)) == 0);
-      return 0;
-    }
-  int stall = audited_latency (p);
-  /* Item-#11 verdict-identity shadow.  */
-  if (flag_checking)
-    gcc_assert (stall == rvtt_timing::adjacent_stall (true, stall));
-  return stall;
+  return rvtt_timing::adjacent_stall (dependent, audited_latency (p));
 }
 
 static void
