@@ -166,6 +166,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-lut-tables.h"
 #include "rvtt-macro-ownership.h"
@@ -1415,9 +1416,9 @@ place_coefficients (gcall *lut)
      (default-off parameter).  */
   bool fp16_mode = (int_arg (lut, 7) & 2) != 0;
   bool creg_exempt = fp16_mode || riscv_tt_opt_lut_select_leaf_ext;
-  if (!rvtt_loop_lreg_pressure_legal_p (loop, coeffs, /*report=*/true,
-					/*cc_transients=*/false,
-					/*exempt_creg_reads=*/creg_exempt))
+  if (!rvtt_pressure_loop_legal_p (loop, coeffs, /*report=*/true,
+				   /*cc_transients=*/false,
+				   /*exempt_creg_reads=*/creg_exempt))
     return keep ("lut-coefficient-pressure");
 
   basic_block preheader = rvtt_commit_hoist_preheader (entry);

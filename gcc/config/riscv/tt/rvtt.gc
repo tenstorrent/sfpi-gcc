@@ -237,7 +237,8 @@ combine (REASSOC_FP) {
     // (mul-dies) fusion would not; refuse when the block cannot prove
     // headroom (a licensed transform must never make a compilable
     // kernel uncompilable -- the corpus lreg-pressure finding).
-    if (rvtt_reassoc_bb_vec_pressure_peak (gimple_bb (r_call)) + 1 > 8)
+    if (rvtt_pressure_bb_peak (gimple_bb (r_call)) + 1
+	> rvtt_pressure_capacity ())
       {
 	if (dump_file)
 	  fprintf (dump_file,

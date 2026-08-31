@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include <unordered_map>
 #include <unordered_set>
 

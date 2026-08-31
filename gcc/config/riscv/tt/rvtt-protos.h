@@ -112,10 +112,6 @@ extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
    this; integer/bitwise value-identical rebalancing tests only the
    target flag.  */
 extern bool rvtt_reassoc_fp_licensed_p (void);
-/* Conservative peak simultaneously-live SFPU vector SSA count across one
-   block (gimple-rvtt-reassoc.cc) -- the pressure budget every
-   reassociation site checks before adding live ranges.  */
-extern unsigned rvtt_reassoc_bb_vec_pressure_peak (struct basic_block_def *bb);
 extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);

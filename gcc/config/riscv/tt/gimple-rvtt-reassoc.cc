@@ -118,108 +118,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfganal.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include <unordered_map>
 #include <unordered_set>
 
-/* Conservative peak count of simultaneously live SFPU vector SSA values
-   across BB (the corpus finding that mandated this: a pressure-blind
-   licensed rebalance turned compilable Cos/Sin/I1/welford kernels into
-   lreg-pressure-exceeded refusals -- a licensed transform must never
-   make a compilable kernel uncompilable).  Modeled on
-   rvtt_loop_lreg_pressure_legal_p (gimple-rvtt-invariant.cc), scoped to
-   one block, over-approximating in the refusing direction:
-   - vector values defined outside BB and used inside it are live from
-     block entry;
-   - vector values with any use outside BB are pinned (never released);
-   - vector values defined in a dominator of BB with a use outside their
-     own defining block are counted as live THROUGH the block (they may
-     span it without appearing in it);
-   - everything else releases at its last in-block use.  */
-
-unsigned
-rvtt_reassoc_bb_vec_pressure_peak (basic_block bb)
-{
-  if (!dom_info_available_p (CDI_DOMINATORS))
-    calculate_dominance_info (CDI_DOMINATORS);
-
-  std::unordered_set<tree> live;
-  std::unordered_set<tree> pinned;
-  std::unordered_map<tree, unsigned> remaining;
-
-  /* Uses inside the block, per name.  */
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-       gsi_next (&gsi))
-    {
-      ssa_op_iter iter;
-      tree use;
-      FOR_EACH_SSA_TREE_OPERAND (use, gsi_stmt (gsi), iter, SSA_OP_USE)
-	if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	  ++remaining[use];
-    }
-
-  unsigned version;
-  tree name;
-  FOR_EACH_SSA_NAME (version, name, cfun)
-    {
-      if (!name || !VECTOR_TYPE_P (TREE_TYPE (name)))
-	continue;
-      gimple *def = SSA_NAME_DEF_STMT (name);
-      basic_block def_bb = def ? gimple_bb (def) : nullptr;
-      bool used_in_bb = remaining.count (name) != 0;
-      bool used_outside = false;
-      gimple *use;
-      imm_use_iterator iter;
-      FOR_EACH_IMM_USE_STMT (use, iter, name)
-	if (!is_gimple_debug (use) && gimple_bb (use) != bb)
-	  {
-	    used_outside = true;
-	    break;
-	  }
-      if (def_bb == bb)
-	{
-	  if (used_outside)
-	    pinned.insert (name);
-	  continue;
-	}
-      if (used_in_bb)
-	{
-	  live.insert (name);
-	  if (used_outside)
-	    pinned.insert (name);
-	}
-      else if (used_outside && def_bb
-	       && dominated_by_p (CDI_DOMINATORS, bb, def_bb))
-	{
-	  /* May span the block without appearing in it.  */
-	  live.insert (name);
-	  pinned.insert (name);
-	}
-    }
-
-  size_t peak = live.size ();
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-       gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      ssa_op_iter iter;
-      tree use;
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	  {
-	    auto found = remaining.find (use);
-	    if (found != remaining.end () && found->second
-		&& !--found->second && !pinned.count (use))
-	      live.erase (use);
-	  }
-      tree lhs = gimple_get_lhs (stmt);
-      if (lhs && TREE_CODE (lhs) == SSA_NAME
-	  && VECTOR_TYPE_P (TREE_TYPE (lhs)))
-	live.insert (lhs);
-      peak = MAX (peak, live.size ());
-    }
-  return peak;
-}
+/* The conservative single-block peak count this pass's pressure
+   budget consumes (and the licensed mad-fuse in rvtt.gc shares) lives
+   in the unified pressure engine, tt/rvtt-pressure.cc
+   (rvtt_pressure_bb_peak; FABLE_GOES_BURR.md item #10).  */
 
 
 namespace {
@@ -620,8 +527,8 @@ process_root (gcall *root, chain_kind kind, tree mod)
      could exceed the eight-LREG file.  Applies to the integer classes
      too -- the physics is identical.  */
   unsigned extra_live = balanced - 1;
-  unsigned peak = rvtt_reassoc_bb_vec_pressure_peak (bb);
-  if (peak + extra_live > 8)
+  unsigned peak = rvtt_pressure_bb_peak (bb);
+  if (peak + extra_live > rvtt_pressure_capacity ())
     {
       rvtt_refuse (RVTT_REF_REASSOC_PRESSURE_BUDGET_EXCEEDED, dump_file,
 		   "reassoc: refusing %s chain rebalance depth %u->%u in "
