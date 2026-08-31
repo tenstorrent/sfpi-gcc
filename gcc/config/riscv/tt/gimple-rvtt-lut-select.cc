@@ -546,8 +546,9 @@ slot_coeff_operand (tree val, tree vectype, gimple_stmt_iterator *gsi,
     {
       if (dump_file)
 	{
-	  fprintf (dump_file, "lut-select: slot creg read kept as operand"
-		   " (lut-slot-coeff-value-unproven): ");
+	  rvtt_refuse (RVTT_REF_LUT_SLOT_COEFF_VALUE_UNPROVEN, dump_file,
+		       "lut-select: slot creg read kept as operand"
+		       " (lut-slot-coeff-value-unproven): ");
 	  print_gimple_stmt (dump_file, def, 0);
 	}
       return val;
@@ -556,9 +557,10 @@ slot_coeff_operand (tree val, tree vectype, gimple_stmt_iterator *gsi,
     {
       if (dump_file)
 	{
-	  fprintf (dump_file, "lut-select: slot creg value %#x not"
-		   " FLOATB-exact, operand kept"
-		   " (lut-slot-coeff-floatb-unrepresentable): ", bits);
+	  rvtt_refuse (RVTT_REF_LUT_SLOT_COEFF_FLOATB_UNREPRESENTABLE, dump_file,
+		       "lut-select: slot creg value %#x not"
+		       " FLOATB-exact, operand kept"
+		       " (lut-slot-coeff-floatb-unrepresentable): ", bits);
 	  print_gimple_stmt (dump_file, def, 0);
 	}
       return val;
@@ -1372,8 +1374,9 @@ place_coefficients (gcall *lut)
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "lut-select: coefficient stays in loop"
-		       " (lut-coefficient-unproven): ");
+	      rvtt_refuse (RVTT_REF_LUT_COEFFICIENT_UNPROVEN, dump_file,
+			   "lut-select: coefficient stays in loop"
+			   " (lut-coefficient-unproven): ");
 	      print_gimple_stmt (dump_file, def, 0);
 	    }
 	  continue;
@@ -1512,9 +1515,9 @@ public:
     n_placed = 0;
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "lut-select: refused (lut-no-target-capability):"
-		   " QSR has no validated LUT capability\n");
+	rvtt_refuse (RVTT_REF_LUT_NO_TARGET_CAPABILITY, dump_file,
+		     "lut-select: refused (lut-no-target-capability):"
+		     " QSR has no validated LUT capability\n");
 	return 0;
       }
     auto_vec<gcall *> formed;

@@ -38,6 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 
@@ -146,9 +147,9 @@ public:
 private:
   void refuse (macro_region_refusal r)
   {
-    if (dump_)
-      fprintf (dump_, "Macro-planner refusal: %s\n",
-	       macro_region_refusal_name (r));
+    rvtt_refuse_by_name (macro_region_refusal_name (r), dump_,
+			 "Macro-planner refusal: %s\n",
+			 macro_region_refusal_name (r));
   }
 
   bool close_row (basic_block bb);

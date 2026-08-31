@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -2061,9 +2062,9 @@ rvtt_macro_synthesize (const macro_region &region,
 	      if (!encode_template (c, spec, &out->templ[t]))
 		{
 		  out->refusal = macro_desc_refusal_encoding_failed;
-		  if (dump)
-		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-			     out->refusal);
+		  rvtt_refuse_by_name (out->refusal, dump,
+				       "Macro-planner descriptor-refusal: %s\n",
+				       out->refusal);
 		  return true;
 		}
 	    }
@@ -2086,9 +2087,9 @@ rvtt_macro_synthesize (const macro_region &region,
 				     &needs_bank_base))
 		{
 		  out->refusal = macro_desc_refusal_encoding_failed;
-		  if (dump)
-		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-			     out->refusal);
+		  rvtt_refuse_by_name (out->refusal, dump,
+				       "Macro-planner descriptor-refusal: %s\n",
+				       out->refusal);
 		  return true;
 		}
 	    }
@@ -2166,9 +2167,9 @@ rvtt_macro_synthesize (const macro_region &region,
 					 &launch.word_alt)))
 		{
 		  out->refusal = macro_desc_refusal_encoding_failed;
-		  if (dump)
-		    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-			     out->refusal);
+		  rvtt_refuse_by_name (out->refusal, dump,
+				       "Macro-planner descriptor-refusal: %s\n",
+				       out->refusal);
 		  return true;
 		}
 	      out->launches.safe_push (launch);
@@ -2233,9 +2234,9 @@ rvtt_macro_synthesize (const macro_region &region,
 	}
       out->refusal = ds.refusal ? ds.refusal
 	: macro_desc_refusal_program_unproven;
-      if (dump)
-	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		 out->refusal);
+      rvtt_refuse_by_name (out->refusal, dump,
+			   "Macro-planner descriptor-refusal: %s\n",
+			   out->refusal);
       return true;
     }
 
@@ -2253,9 +2254,9 @@ rvtt_macro_synthesize (const macro_region &region,
     {
       out->refusal = cc_refusal ? cc_refusal
 	: macro_desc_refusal_cc_template_unproved;
-      if (dump)
-	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		 out->refusal);
+      rvtt_refuse_by_name (out->refusal, dump,
+			   "Macro-planner descriptor-refusal: %s\n",
+			   out->refusal);
       return true;
     }
 
@@ -2273,9 +2274,9 @@ rvtt_macro_synthesize (const macro_region &region,
 	      || pin != (TARGET_XTT_TENSIX_WH ? rule.pin_wh : rule.pin_bh))
 	    {
 	      out->refusal = macro_desc_refusal_program_unproven;
-	      if (dump)
-		fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-			 out->refusal);
+	      rvtt_refuse_by_name (out->refusal, dump,
+				   "Macro-planner descriptor-refusal: %s\n",
+				   out->refusal);
 	      return true;
 	    }
 	}
@@ -2364,9 +2365,9 @@ rvtt_macro_synthesize (const macro_region &region,
 	}
       if (out->refusal)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		     out->refusal);
+	  rvtt_refuse_by_name (out->refusal, dump,
+			       "Macro-planner descriptor-refusal: %s\n",
+			       out->refusal);
 	  return true;
 	}
       out->templ[t] = word;
@@ -2380,9 +2381,9 @@ rvtt_macro_synthesize (const macro_region &region,
 	|| !find_seq_word (c, program->seq_names[m], &out->seq[m]))
       {
 	out->refusal = macro_desc_refusal_program_unproven;
-	if (dump)
-	  fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		   out->refusal);
+	rvtt_refuse_by_name (out->refusal, dump,
+			     "Macro-planner descriptor-refusal: %s\n",
+			     out->refusal);
 	return true;
       }
   if (program->misc_from_store_mode)
@@ -2394,18 +2395,18 @@ rvtt_macro_synthesize (const macro_region &region,
 					   &out->misc))
 	{
 	  out->refusal = macro_desc_refusal_encoding_failed;
-	  if (dump)
-	    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		     out->refusal);
+	  rvtt_refuse_by_name (out->refusal, dump,
+			       "Macro-planner descriptor-refusal: %s\n",
+			       out->refusal);
 	  return true;
 	}
     }
   else if (!find_misc_word (c, program->misc_name, &out->misc))
     {
       out->refusal = macro_desc_refusal_program_unproven;
-      if (dump)
-	fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		 out->refusal);
+      rvtt_refuse_by_name (out->refusal, dump,
+			   "Macro-planner descriptor-refusal: %s\n",
+			   out->refusal);
       return true;
     }
   out->has_misc = true;
@@ -2420,9 +2421,9 @@ rvtt_macro_synthesize (const macro_region &region,
 			     &out->n_setc16, &needs_bank_base))
 	{
 	  out->refusal = macro_desc_refusal_encoding_failed;
-	  if (dump)
-	    fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		     out->refusal);
+	  rvtt_refuse_by_name (out->refusal, dump,
+			       "Macro-planner descriptor-refusal: %s\n",
+			       out->refusal);
 	  return true;
 	}
     }
@@ -2497,9 +2498,9 @@ rvtt_macro_synthesize (const macro_region &region,
 				   &launch.word_alt)))
 	  {
 	    out->refusal = macro_desc_refusal_encoding_failed;
-	    if (dump)
-	      fprintf (dump, "Macro-planner descriptor-refusal: %s\n",
-		       out->refusal);
+	    rvtt_refuse_by_name (out->refusal, dump,
+				 "Macro-planner descriptor-refusal: %s\n",
+				 out->refusal);
 	    return true;
 	  }
 	out->launches.safe_push (launch);
@@ -3029,11 +3030,11 @@ rvtt_macro_residency_extend (function *fn, const macro_region &region,
 	= rvtt_macro_epoch_owned_state_invariant_p (fn, benign, c,
 						    &skip_insn))
     {
-      if (dump)
-	fprintf (dump, "Macro-planner residency-refusal: %s (%s%s%d)\n",
-		 macro_resid_refusal_skip_path, why,
-		 skip_insn ? ", insn " : "",
-		 skip_insn ? INSN_UID (skip_insn) : 0);
+      rvtt_refuse_by_name (macro_resid_refusal_skip_path, dump,
+			   "Macro-planner residency-refusal: %s (%s%s%d)\n",
+			   macro_resid_refusal_skip_path, why,
+			   skip_insn ? ", insn " : "",
+			   skip_insn ? INSN_UID (skip_insn) : 0);
       return false;
     }
 
@@ -3120,9 +3121,9 @@ rvtt_macro_residency_lookup (function *fn, const macro_region &region,
 	free_dominance_info (CDI_DOMINATORS);
       if (!dominates)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner residency-refusal: %s\n",
-		     macro_resid_refusal_dominance);
+	  rvtt_refuse_by_name (macro_resid_refusal_dominance, dump,
+			       "Macro-planner residency-refusal: %s\n",
+			       macro_resid_refusal_dominance);
 	  continue;
 	}
 
@@ -3138,11 +3139,11 @@ rvtt_macro_residency_lookup (function *fn, const macro_region &region,
 	    = rvtt_macro_epoch_owned_state_invariant_p (fn, benign, c,
 							&span_insn))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner residency-refusal: %s (%s%s%d)\n",
-		     macro_resid_refusal_span, why,
-		     span_insn ? ", insn " : "",
-		     span_insn ? INSN_UID (span_insn) : 0);
+	  rvtt_refuse_by_name (macro_resid_refusal_span, dump,
+			       "Macro-planner residency-refusal: %s (%s%s%d)\n",
+			       macro_resid_refusal_span, why,
+			       span_insn ? ", insn " : "",
+			       span_insn ? INSN_UID (span_insn) : 0);
 	  return false;	/* the walk is entry-independent: stop */
 	}
 

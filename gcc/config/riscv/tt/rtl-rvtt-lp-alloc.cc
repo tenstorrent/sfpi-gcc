@@ -199,6 +199,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 
 namespace {
@@ -1802,12 +1803,11 @@ inform_refusal (function *fn, const char *name, const char *detail,
 static void
 dump_spill_refusal (function *fn, const spill_ctx &ctx)
 {
-  if (dump_file)
-    fprintf (dump_file,
-	     "lreg-alloc spill-refusal: %s (%s) at insn %d; "
-	     "keeping lreg-pressure-exceeded\n",
-	     ctx.refusal, ctx.detail ? ctx.detail : "",
-	     ctx.at ? INSN_UID (ctx.at) : -1);
+  rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED, dump_file,
+	       "lreg-alloc spill-refusal: %s (%s) at insn %d; "
+	       "keeping lreg-pressure-exceeded\n",
+	       ctx.refusal, ctx.detail ? ctx.detail : "",
+	       ctx.at ? INSN_UID (ctx.at) : -1);
   inform_refusal (fn, ctx.refusal, ctx.detail, ctx.at);
 }
 
@@ -1845,12 +1845,11 @@ enforce_colorability (function *fn)
      then let the post-RA spill diagnosis speak.  */
   auto bail = [&] (const char *name, const char *detail) -> unsigned
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "lreg-alloc refusal: %s (%s); rolling back %u round-trip "
-		 "insn(s) and %u rewrite(s); keeping lreg-pressure-exceeded\n",
-		 name, detail ? detail : "",
-		 tx.emitted.length (), tx.replaced_insn.length ());
+      rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED, dump_file,
+		   "lreg-alloc refusal: %s (%s); rolling back %u round-trip "
+		   "insn(s) and %u rewrite(s); keeping lreg-pressure-exceeded\n",
+		   name, detail ? detail : "",
+		   tx.emitted.length (), tx.replaced_insn.length ());
       bool had_mutations = !tx.emitted.is_empty ()
 	|| !tx.replaced_insn.is_empty ();
       rollback (tx);
@@ -2505,11 +2504,10 @@ bind_solve_rec (const lpa_graph &g,
 static void
 dump_bind_refusal (const char *name, const char *detail, rtx_insn *at)
 {
-  if (dump_file)
-    fprintf (dump_file,
-	     "lreg-alloc dual-bank binding refusal: %s (%s) at insn %d; "
-	     "standing down (today's allocation)\n",
-	     name, detail ? detail : "", at ? INSN_UID (at) : -1);
+  rvtt_refuse_by_name (name, dump_file,
+		       "lreg-alloc dual-bank binding refusal: %s (%s) at insn %d; "
+		       "standing down (today's allocation)\n",
+		       name, detail ? detail : "", at ? INSN_UID (at) : -1);
 }
 
 /* Independent soundness oracle for the commit: point-wise backward DF

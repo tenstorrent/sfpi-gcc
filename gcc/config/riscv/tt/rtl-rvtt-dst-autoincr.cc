@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-raw-boundary.h"
 
@@ -1488,10 +1489,10 @@ adjust_anchor_for_guard (group &grp, unsigned floor,
   if (dist < caps.min_config_distance)
     {
       grp.guard_refused = true;
-      if (dump_file)
-	fprintf (dump_file, "Dst-autoincr refusal: configuration-to-consume "
-		 "distance %u below guard %u (bb %d)\n", dist,
-		 caps.min_config_distance, scan.bb->index);
+      rvtt_refuse (RVTT_REF_CONFIGURATION_TO_CONSUME, dump_file,
+		   "Dst-autoincr refusal: configuration-to-consume "
+		   "distance %u below guard %u (bb %d)\n", dist,
+		   caps.min_config_distance, scan.bb->index);
     }
 }
 
@@ -1599,11 +1600,11 @@ place_groups (function_scan &fn, std::vector<group> &groups,
 	    dist = std::min (dist, block_prefix_distance (*grp));
 	  if (dist < caps.min_config_distance)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "Dst-autoincr: dominating placement "
-			 "refused: configuration-to-consume distance %u "
-			 "below guard %u (loop %d)\n", dist,
-			 caps.min_config_distance, loop->num);
+	      rvtt_refuse (RVTT_REF_CONFIGURATION_TO_CONSUME, dump_file,
+			   "Dst-autoincr: dominating placement "
+			   "refused: configuration-to-consume distance %u "
+			   "below guard %u (loop %d)\n", dist,
+			   caps.min_config_distance, loop->num);
 	      continue;
 	    }
 	  bool first = true;
@@ -1915,9 +1916,9 @@ attempt_addrmod_contract (function_scan &fn, std::vector<group> &groups,
     }
   if (why)
     {
-      if (dump_file)
-	fprintf (dump_file, "Dst-autoincr refusal: "
-		 "crosscall-addrmod-unproven (%s)\n", why);
+      rvtt_refuse (RVTT_REF_CROSSCALL_ADDRMOD_UNPROVEN, dump_file,
+		   "Dst-autoincr refusal: "
+		   "crosscall-addrmod-unproven (%s)\n", why);
       return;
     }
 
@@ -1940,9 +1941,9 @@ attempt_addrmod_contract (function_scan &fn, std::vector<group> &groups,
   const char *res = rvtt_crosscall_addrmod_hoist (cfun, &prog);
   if (res)
     {
-      if (dump_file)
-	fprintf (dump_file, "Dst-autoincr refusal: "
-		 "crosscall-addrmod-unproven (%s)\n", res);
+      rvtt_refuse (RVTT_REF_CROSSCALL_ADDRMOD_UNPROVEN, dump_file,
+		   "Dst-autoincr refusal: "
+		   "crosscall-addrmod-unproven (%s)\n", res);
       return;
     }
 
@@ -2080,12 +2081,12 @@ transform (function *cfn)
 	      if (noexec_record_composition_p (fn, grp, caps, &hazard,
 					       &detail))
 		{
-		  if (dump_file)
-		    fprintf (dump_file, "Dst-autoincr refusal: "
-			     "mod-write-noexec-record-composition-"
-			     "unaudited (%s, bb %d, capture bb %d)\n",
-			     detail, grp.scan->bb->index,
-			     hazard->bb->index);
+		  rvtt_refuse (RVTT_REF_MOD_WRITE_NOEXEC_RECORD_COMPOSITION_UNAUDITED, dump_file,
+			       "Dst-autoincr refusal: "
+			       "mod-write-noexec-record-composition-"
+			       "unaudited (%s, bb %d, capture bb %d)\n",
+			       detail, grp.scan->bb->index,
+			       hazard->bb->index);
 		  for (unsigned cx : grp.cand_ix)
 		    grp.scan->candidates[cx].dropped = true;
 		  changed = true;
@@ -2132,12 +2133,12 @@ transform (function *cfn)
 	      if ((HOST_WIDE_INT) grp.crossing_charge
 		  >= (HOST_WIDE_INT) grp.cand_ix.size ())
 		{
-		  if (dump_file)
-		    fprintf (dump_file, "Dst-autoincr refusal: "
-			     "mod-write-dominates-rolled-body (rows %u, "
-			     "uncovered crossing slots %u, bb %d)\n",
-			     unsigned (grp.cand_ix.size ()),
-			     grp.crossing_charge, grp.scan->bb->index);
+		  rvtt_refuse (RVTT_REF_MOD_WRITE_DOMINATES_ROLLED_BODY, dump_file,
+			       "Dst-autoincr refusal: "
+			       "mod-write-dominates-rolled-body (rows %u, "
+			       "uncovered crossing slots %u, bb %d)\n",
+			       unsigned (grp.cand_ix.size ()),
+			       grp.crossing_charge, grp.scan->bb->index);
 		  for (unsigned cx : grp.cand_ix)
 		    grp.scan->candidates[cx].dropped = true;
 		  changed = true;
@@ -2381,7 +2382,8 @@ transform (function *cfn)
 	}
     }
   else if (fn.bail && dump_file)
-    fprintf (dump_file, "Dst-autoincr refusal: %s\n", fn.bail_reason);
+    rvtt_refuse_by_name (fn.bail_reason, dump_file,
+			 "Dst-autoincr refusal: %s\n", fn.bail_reason);
 
   for (capture_rec *cap : fn.captures)
     delete cap;

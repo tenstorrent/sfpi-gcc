@@ -1704,10 +1704,10 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	       store could expose them.  Only webs rooted in the proven
 	       ambient all-lanes state may rename (they write every lane at
 	       the root, so the fresh register never exposes dead bits).  */
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "crossrow-pairing-rename-cc-domain reg %u uid=%d\n",
-		       r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_CROSSROW_PAIRING_RENAME_CC_DOMAIN, dump_file,
+			 "List-schedule rename refused: "
+			 "crossrow-pairing-rename-cc-domain reg %u uid=%d\n",
+			 r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
 	bool earlier = false;
@@ -1719,18 +1719,18 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	  {
 	    /* An RMW definition reads the COLLIDING value: the chain
 	       start must be a fresh value.  */
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-rmw-def reg %u uid=%d\n",
-		       r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_RMW_DEF, dump_file,
+			 "List-schedule rename refused: "
+			 "round-interleave-rename-rmw-def reg %u uid=%d\n",
+			 r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
 	if (REGNO_REG_SET_P (df_get_live_in (bb), r))
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-live-in reg %u uid=%d\n",
-		       r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_LIVE_IN, dump_file,
+			 "List-schedule rename refused: "
+			 "round-interleave-rename-live-in reg %u uid=%d\n",
+			 r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
 	/* Web extent: from the fresh definition at I, forward through
@@ -1753,10 +1753,10 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	    }
 	if (!fresh_terminator && REGNO_REG_SET_P (df_get_live_out (bb), r))
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-live-out reg %u uid=%d\n",
-		       r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_LIVE_OUT, dump_file,
+			 "List-schedule rename refused: "
+			 "round-interleave-rename-live-out reg %u uid=%d\n",
+			 r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
 
@@ -1777,10 +1777,10 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	  }
 	if (f < 0)
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-no-free-lreg reg %u "
-		       "uid=%d\n", r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_NO_FREE_LREG, dump_file,
+			 "List-schedule rename refused: "
+			 "round-interleave-rename-no-free-lreg reg %u "
+			 "uid=%d\n", r, INSN_UID (nodes[i].insn));
 	    return any;
 	  }
 
@@ -1801,10 +1801,10 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	    }
 	if (!apply_change_group ())
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "List-schedule rename refused: "
-		       "round-interleave-rename-constraint reg %u "
-		       "uid=%d\n", r, INSN_UID (nodes[i].insn));
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_CONSTRAINT, dump_file,
+			 "List-schedule rename refused: "
+			 "round-interleave-rename-constraint reg %u "
+			 "uid=%d\n", r, INSN_UID (nodes[i].insn));
 	    continue;
 	  }
 	for (rtx_insn *ins : rn.insns)
@@ -1968,10 +1968,10 @@ ls_schedule_region_cyclic (basic_block bb, std::vector<ls_node> &nodes,
 	  after = insn;
 	}
       ls_undo_renames (renames);
-      if (dump_file)
-	fprintf (dump_file, "List-schedule refused: pad-site increase, "
-		 "restored bb %d cyclic region at uid=%d\n",
-		 bb->index, INSN_UID (nodes[0].insn));
+      rvtt_refuse (RVTT_REF_PAD_SITE, dump_file,
+		   "List-schedule refused: pad-site increase, "
+		   "restored bb %d cyclic region at uid=%d\n",
+		   bb->index, INSN_UID (nodes[0].insn));
       return false;
     }
 
@@ -2062,12 +2062,12 @@ ls_schedule_iso_pair (basic_block bb, ls_region &r1, ls_region &r2,
       if (ls_dependence (r1.nodes[i], r1.nodes[j])
 	  != ls_dependence (r2.nodes[i], r2.nodes[j]))
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule refused: "
-		     "copies-not-dataflow-isomorphic at uid=%d/uid=%d "
-		     "in bb %d (repeated-row pair keeps its deferral)\n",
-		     INSN_UID (r1.nodes[0].insn),
-		     INSN_UID (r2.nodes[0].insn), bb->index);
+	  rvtt_refuse (RVTT_REF_COPIES_NOT_DATAFLOW_ISOMORPHIC, dump_file,
+		       "List-schedule refused: "
+		       "copies-not-dataflow-isomorphic at uid=%d/uid=%d "
+		       "in bb %d (repeated-row pair keeps its deferral)\n",
+		       INSN_UID (r1.nodes[0].insn),
+		       INSN_UID (r2.nodes[0].insn), bb->index);
 	  return;
 	}
 
@@ -2100,10 +2100,10 @@ ls_schedule_iso_pair (basic_block bb, ls_region &r1, ls_region &r2,
 	    reorder_insns (insn, insn, after);
 	  after = insn;
 	}
-      if (dump_file)
-	fprintf (dump_file, "List-schedule refused: iso-pair sibling at "
-		 "uid=%d would not improve, restored pair in bb %d\n",
-		 INSN_UID (r2.nodes[0].insn), bb->index);
+      rvtt_refuse (RVTT_REF_ISO_PAIR, dump_file,
+		   "List-schedule refused: iso-pair sibling at "
+		   "uid=%d would not improve, restored pair in bb %d\n",
+		   INSN_UID (r2.nodes[0].insn), bb->index);
       return;
     }
 
@@ -2206,7 +2206,8 @@ crp_refuse (basic_block bb, const char *why, rtx_insn *insn = nullptr)
 {
   if (dump_file)
     {
-      fprintf (dump_file, "Crossrow pairing refused: %s", why);
+      rvtt_refuse_by_name (why, dump_file,
+			   "Crossrow pairing refused: %s", why);
       if (insn)
 	fprintf (dump_file, " (uid=%d)", INSN_UID (insn));
       fprintf (dump_file, " in bb %d\n", bb->index);
@@ -3748,12 +3749,12 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 	 modeled improvement (all of it when nothing improved).  */
       if (commits.size () > strict_commits)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "Crossrow pairing seeds rolled back: "
-		     "crossrow-pairing-seed-no-ii-improvement in bb %d "
-		     "(kept=%u of %zu, II %d)\n",
-		     bb->index, strict_commits, commits.size (),
-		     strict_ii);
+	  rvtt_refuse (RVTT_REF_CROSSROW_PAIRING_SEED_NO_II_IMPROVEMENT, dump_file,
+		       "Crossrow pairing seeds rolled back: "
+		       "crossrow-pairing-seed-no-ii-improvement in bb %d "
+		       "(kept=%u of %zu, II %d)\n",
+		       bb->index, strict_commits, commits.size (),
+		       strict_ii);
 	  while (commits.size () > strict_commits)
 	    {
 	      rtx_insn *seed = commits.back ();
@@ -4012,10 +4013,10 @@ ls_schedule_cyclic_interior (basic_block bb,
       if (GET_CODE (insn) == INSN && PATTERN (insn)
 	  && asm_noperands (PATTERN (insn)) >= 0)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
-		     "cyclic-interior-opaque-word uid=%d in bb %d\n",
-		     INSN_UID (insn), bb->index);
+	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_OPAQUE_WORD, dump_file,
+		       "List-schedule (cyclic-interior) refused: "
+		       "cyclic-interior-opaque-word uid=%d in bb %d\n",
+		       INSN_UID (insn), bb->index);
 	  return;
 	}
       if (GET_CODE (insn) != INSN || recog_memoized (insn) < 0
@@ -4025,10 +4026,10 @@ ls_schedule_cyclic_interior (basic_block bb,
       xtt_effect_set e = rvtt_insn_effects (insn);
       if (e.opaque)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
-		     "cyclic-interior-opaque-word uid=%d in bb %d\n",
-		     INSN_UID (insn), bb->index);
+	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_OPAQUE_WORD, dump_file,
+		       "List-schedule (cyclic-interior) refused: "
+		       "cyclic-interior-opaque-word uid=%d in bb %d\n",
+		       INSN_UID (insn), bb->index);
 	  return;
 	}
       ls_node nd;
@@ -4076,10 +4077,10 @@ ls_schedule_cyclic_interior (basic_block bb,
 	  repeated = true;
       if (repeated)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
-		     "cyclic-interior-repeated-shape at uid=%d in bb %d\n",
-		     INSN_UID (r.nodes[0].insn), bb->index);
+	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_REPEATED_SHAPE, dump_file,
+		       "List-schedule (cyclic-interior) refused: "
+		       "cyclic-interior-repeated-shape at uid=%d in bb %d\n",
+		       INSN_UID (r.nodes[0].insn), bb->index);
 	  continue;
 	}
 
@@ -4102,10 +4103,10 @@ ls_schedule_cyclic_interior (basic_block bb,
 	 models.  */
       if (first == 0 || first + n == bn)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
-		     "cyclic-interior-backedge-seam at uid=%d in bb %d\n",
-		     INSN_UID (r.nodes[0].insn), bb->index);
+	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_BACKEDGE_SEAM, dump_file,
+		       "List-schedule (cyclic-interior) refused: "
+		       "cyclic-interior-backedge-seam at uid=%d in bb %d\n",
+		       INSN_UID (r.nodes[0].insn), bb->index);
 	  continue;
 	}
 
@@ -4173,12 +4174,12 @@ ls_schedule_cyclic_interior (basic_block bb,
       int cand_ii = ls_cyclic_ii (body, cand_body);
       if (cand_ii >= cur_ii)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
-		     "cyclic-interior-no-ii-decrease at uid=%d in bb %d "
-		     "(%d -> %d)\n",
-		     INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
-		     cand_ii);
+	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_NO_II_DECREASE, dump_file,
+		       "List-schedule (cyclic-interior) refused: "
+		       "cyclic-interior-no-ii-decrease at uid=%d in bb %d "
+		       "(%d -> %d)\n",
+		       INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
+		       cand_ii);
 	  continue;
 	}
 
@@ -4311,9 +4312,10 @@ list_schedule_regions (function *fn)
 	   interior objective, so regions below three nodes are skipped
 	   by name rather than scheduled.  */
 	if (nodes.size () == 2 && dump_file)
-	  fprintf (dump_file, "List-schedule skipped: two-node region at "
-		   "uid=%d in bb %d (below the interleave minimum)\n",
-		   INSN_UID (nodes[0].insn), bb->index);
+	  rvtt_refuse (RVTT_REF_TWO_NODE, dump_file,
+		       "List-schedule skipped: two-node region at "
+		       "uid=%d in bb %d (below the interleave minimum)\n",
+		       INSN_UID (nodes[0].insn), bb->index);
 	if (nodes.size () >= 3)
 	  {
 	    ls_region r;
@@ -4475,11 +4477,11 @@ list_schedule_regions (function *fn)
 					visited);
 		  continue;
 		}
-	      if (dump_file)
-		fprintf (dump_file, "List-schedule deferred: repeated-row "
-			 "shape at uid=%d in bb %d (replay capture "
-			 "formation owns row isomorphism)\n",
-			 INSN_UID (regions[i].nodes[0].insn), bb->index);
+	      rvtt_refuse (RVTT_REF_REPEATED_ROW, dump_file,
+			   "List-schedule deferred: repeated-row "
+			   "shape at uid=%d in bb %d (replay capture "
+			   "formation owns row isomorphism)\n",
+			   INSN_UID (regions[i].nodes[0].insn), bb->index);
 	      continue;
 	    }
 	  if (!riscv_tt_opt_list_schedule)
@@ -4952,10 +4954,10 @@ rotate_seam_fill (rotation_row const &row, std::vector<basic_block> &visited)
 	  }
 	if (kind == ROT_FILLER_RWC_STEP && riscv_tt_opt_replay_hoist)
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "Capture rotation refused: row-step "
-		       "filler uid=%d deferred to replay capture "
-		       "formation\n", INSN_UID (cand));
+	    rvtt_refuse (RVTT_REF_ROW_STEP, dump_file,
+			 "Capture rotation refused: row-step "
+			 "filler uid=%d deferred to replay capture "
+			 "formation\n", INSN_UID (cand));
 	    continue;
 	  }
 	if (audited_latency (cand) != 0
@@ -5099,10 +5101,10 @@ rotate_interior_fill (rotation_row const &row,
 	    }
 	  if (kind == ROT_FILLER_RWC_STEP && riscv_tt_opt_replay_hoist)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "Capture rotation refused: row-step "
-			 "filler uid=%d deferred to replay capture "
-			 "formation\n", INSN_UID (cand));
+	      rvtt_refuse (RVTT_REF_ROW_STEP, dump_file,
+			   "Capture rotation refused: row-step "
+			   "filler uid=%d deferred to replay capture "
+			   "formation\n", INSN_UID (cand));
 	      continue;
 	    }
 	  if (audited_latency (cand) != 0)
@@ -5483,8 +5485,9 @@ rotate_capture_rows (function *fn)
       if (!rotation_row_p (bb, &row, &reason))
 	{
 	  if (reason && dump_file)
-	    fprintf (dump_file, "Capture rotation refused: %s in bb %d\n",
-		     reason, bb->index);
+	    rvtt_refuse_by_name (reason, dump_file,
+				 "Capture rotation refused: %s in bb %d\n",
+				 reason, bb->index);
 	  continue;
 	}
       basic_block preheader = rotation_dedicated_preheader (bb);
@@ -5674,7 +5677,8 @@ drain_refuse (FILE *dump, const char *name, rtx_insn *insn)
 {
   if (dump)
     {
-      fprintf (dump, "Macro-planner drain-refusal: %s", name);
+      rvtt_refuse_by_name (name, dump,
+			   "Macro-planner drain-refusal: %s", name);
       if (insn)
 	fprintf (dump, " (insn %d)", INSN_UID (insn));
       fprintf (dump, "\n");

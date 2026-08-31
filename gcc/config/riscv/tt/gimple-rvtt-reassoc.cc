@@ -118,6 +118,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfganal.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -583,11 +584,10 @@ process_root (gcall *root, chain_kind kind, tree mod)
 
   if (c.capped)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "reassoc: refusing %s chain in bb %d "
-		 "(reassoc-chain-cap-exceeded: more than %u terms)\n",
-		 chain_kind_name (kind), bb->index, REASSOC_MAX_TERMS);
+      rvtt_refuse (RVTT_REF_REASSOC_CHAIN_CAP_EXCEEDED, dump_file,
+		   "reassoc: refusing %s chain in bb %d "
+		   "(reassoc-chain-cap-exceeded: more than %u terms)\n",
+		   chain_kind_name (kind), bb->index, REASSOC_MAX_TERMS);
       return false;
     }
 
@@ -603,13 +603,12 @@ process_root (gcall *root, chain_kind kind, tree mod)
      per chain, so the refusal is named and visible.  */
   if (chain_kind_fp (kind) && !flag_associative_math)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "reassoc: refusing fp %s chain rebalance depth %u->%u in "
-		 "bb %d (associative-math-license-absent: value-changing "
-		 "FP reassociation needs -fassociative-math AND "
-		 "-mtt-tensix-optimize-reassoc)\n",
-		 chain_kind_name (kind), c.depth, balanced, bb->index);
+      rvtt_refuse (RVTT_REF_ASSOCIATIVE_MATH_LICENSE_ABSENT, dump_file,
+		   "reassoc: refusing fp %s chain rebalance depth %u->%u in "
+		   "bb %d (associative-math-license-absent: value-changing "
+		   "FP reassociation needs -fassociative-math AND "
+		   "-mtt-tensix-optimize-reassoc)\n",
+		   chain_kind_name (kind), c.depth, balanced, bb->index);
       return false;
     }
 
@@ -624,15 +623,14 @@ process_root (gcall *root, chain_kind kind, tree mod)
   unsigned peak = rvtt_reassoc_bb_vec_pressure_peak (bb);
   if (peak + extra_live > 8)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "reassoc: refusing %s chain rebalance depth %u->%u in "
-		 "bb %d (reassoc-pressure-budget-exceeded: conservative "
-		 "block peak %u + %u new live partials > 8 LREGs -- a "
-		 "licensed transform must never make a compilable kernel "
-		 "uncompilable)\n",
-		 chain_kind_name (kind), c.depth, balanced, bb->index,
-		 peak, extra_live);
+      rvtt_refuse (RVTT_REF_REASSOC_PRESSURE_BUDGET_EXCEEDED, dump_file,
+		   "reassoc: refusing %s chain rebalance depth %u->%u in "
+		   "bb %d (reassoc-pressure-budget-exceeded: conservative "
+		   "block peak %u + %u new live partials > 8 LREGs -- a "
+		   "licensed transform must never make a compilable kernel "
+		   "uncompilable)\n",
+		   chain_kind_name (kind), c.depth, balanced, bb->index,
+		   peak, extra_live);
       return false;
     }
 
@@ -642,28 +640,28 @@ process_root (gcall *root, chain_kind kind, tree mod)
       if (dump_file)
 	{
 	  if (barrier == window_barrier_replay)
-	    fprintf (dump_file,
-		     "reassoc: refusing %s chain rebalance in bb %d "
-		     "(reassoc-replay-playback-boundary: a TTREPLAY "
-		     "delivery boundary sits inside the chain window -- "
-		     "recorded slot content is not derivable, so value-"
-		     "order across the playback point is unproven)\n",
-		     chain_kind_name (kind), bb->index);
+	    rvtt_refuse (RVTT_REF_REASSOC_REPLAY_PLAYBACK_BOUNDARY, dump_file,
+			 "reassoc: refusing %s chain rebalance in bb %d "
+			 "(reassoc-replay-playback-boundary: a TTREPLAY "
+			 "delivery boundary sits inside the chain window -- "
+			 "recorded slot content is not derivable, so value-"
+			 "order across the playback point is unproven)\n",
+			 chain_kind_name (kind), bb->index);
 	  else if (barrier == window_barrier_fpu)
-	    fprintf (dump_file,
-		     "reassoc: refusing %s chain rebalance in bb %d "
-		     "(reassoc-fpu-choreography-boundary: an X6 Matrix-"
-		     "Unit face-transpose family statement sits inside "
-		     "the chain window -- its Dst and backend-"
-		     "configuration effects are unmodeled at gimple)\n",
-		     chain_kind_name (kind), bb->index);
+	    rvtt_refuse (RVTT_REF_REASSOC_FPU_CHOREOGRAPHY_BOUNDARY, dump_file,
+			 "reassoc: refusing %s chain rebalance in bb %d "
+			 "(reassoc-fpu-choreography-boundary: an X6 Matrix-"
+			 "Unit face-transpose family statement sits inside "
+			 "the chain window -- its Dst and backend-"
+			 "configuration effects are unmodeled at gimple)\n",
+			 chain_kind_name (kind), bb->index);
 	  else
-	    fprintf (dump_file,
-		     "reassoc: refusing %s chain rebalance in bb %d "
-		     "(reassoc-cc-region-boundary: a CC-writing, "
-		     "configuration-writing, or unaudited statement sits "
-		     "inside the chain window)\n",
-		     chain_kind_name (kind), bb->index);
+	    rvtt_refuse (RVTT_REF_REASSOC_CC_REGION_BOUNDARY, dump_file,
+			 "reassoc: refusing %s chain rebalance in bb %d "
+			 "(reassoc-cc-region-boundary: a CC-writing, "
+			 "configuration-writing, or unaudited statement sits "
+			 "inside the chain window)\n",
+			 chain_kind_name (kind), bb->index);
 	}
       return false;
     }
@@ -738,13 +736,12 @@ note_loop_carried (function *fn)
 		  tree a = gimple_call_arg (def, ax);
 		  if (a == res)
 		    {
-		      if (dump_file)
-			fprintf (dump_file,
-				 "reassoc: loop-carried accumulator "
-				 "(loop %d, phi in bb %d) restructure "
-				 "underived -- refusing "
-				 "(reassoc-loop-carried-underived)\n",
-				 loop->num, loop->header->index);
+		      rvtt_refuse (RVTT_REF_REASSOC_LOOP_CARRIED_UNDERIVED, dump_file,
+				   "reassoc: loop-carried accumulator "
+				   "(loop %d, phi in bb %d) restructure "
+				   "underived -- refusing "
+				   "(reassoc-loop-carried-underived)\n",
+				   loop->num, loop->header->index);
 		      goto next_phi;
 		    }
 		  if (TREE_CODE (a) == SSA_NAME && !next)

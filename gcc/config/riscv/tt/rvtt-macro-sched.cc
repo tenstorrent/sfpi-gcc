@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-tables.h"
@@ -176,9 +177,9 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
   const caps *c = rvtt_macro_caps_for_cpu (current_cpu ());
   if (!c)
     {
-      if (dump)
-	fprintf (dump, "Macro-planner schedule-refusal: %s\n",
-		 rvtt_macro_caps_refusal (current_cpu ()));
+      rvtt_refuse_by_name (rvtt_macro_caps_refusal (current_cpu ()), dump,
+			   "Macro-planner schedule-refusal: %s\n",
+			   rvtt_macro_caps_refusal (current_cpu ()));
       return false;
     }
 
@@ -1047,7 +1048,8 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
 		   : "other",
 		   items[ix].absorbs ? " absorbs-stride" : "");
       if (refusal)
-	fprintf (dump, "Macro-planner schedule-refusal: %s\n", refusal);
+	rvtt_refuse_by_name (refusal, dump,
+			     "Macro-planner schedule-refusal: %s\n", refusal);
     }
   return true;
 }

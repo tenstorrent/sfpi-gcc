@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "dominance.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
@@ -1569,15 +1570,15 @@ transform (function *fn)
       cc_restore_analysis cc;
       if (!analyze_cc_restore (loop, cc))
 	{
-	  if (dump_file)
-	    /* The loop bb index makes multi-loop refusal dumps
-	       attributable (two bare identical lines were
-	       indistinguishable -- FH audit FHI-T5); dg twins scan the
-	       refusal-name substring, unaffected by the suffix.  */
-	    fprintf (dump_file,
-		     "Invariant SFPU immediate hoist refused: %s (loop bb %d)\n",
-		     cc.why ? cc.why : "sfpu-barrier",
-		     loop->header->index);
+	  /* The loop bb index makes multi-loop refusal dumps
+	     attributable (two bare identical lines were
+	     indistinguishable -- FH audit FHI-T5); dg twins scan the
+	     refusal-name substring, unaffected by the suffix.  */
+	  rvtt_refuse_by_name (cc.why ? cc.why : "sfpu-barrier", dump_file,
+			       "Invariant SFPU immediate hoist refused:"
+			       " %s (loop bb %d)\n",
+			       cc.why ? cc.why : "sfpu-barrier",
+			       loop->header->index);
 	  continue;
 	}
 
@@ -1618,9 +1619,9 @@ transform (function *fn)
 		  {
 		    if (dump_file)
 		      {
-			fprintf (dump_file,
-				 "Invariant SFPU immediate left in loop:"
-				 " cc-position-widening-unproven: ");
+			rvtt_refuse (RVTT_REF_CC_POSITION_WIDENING_UNPROVEN, dump_file,
+				     "Invariant SFPU immediate left in loop:"
+				     " cc-position-widening-unproven: ");
 			print_gimple_stmt (dump_file, call, 0);
 		      }
 		    continue;
@@ -1789,30 +1790,30 @@ transform (function *fn)
 		{
 		  if (dump_file)
 		    {
-		      fprintf (dump_file,
-			       "Invariant SFPU immediate hoist kept"
-			       " under park-ordering:"
-			       " depth-zero-hoist-dominant"
-			       " (loop bb %d): the hoist is a mask-exact"
-			       " free move; the late walk could re-place"
-			       " it only behind its manufactured"
-			       " trip-parity-flipping peel: ",
-			       loop->header->index);
+		      rvtt_refuse (RVTT_REF_DEPTH_ZERO_HOIST_DOMINANT, dump_file,
+				   "Invariant SFPU immediate hoist kept"
+				   " under park-ordering:"
+				   " depth-zero-hoist-dominant"
+				   " (loop bb %d): the hoist is a mask-exact"
+				   " free move; the late walk could re-place"
+				   " it only behind its manufactured"
+				   " trip-parity-flipping peel: ",
+				   loop->header->index);
 		      print_gimple_stmt (dump_file, call, 0);
 		    }
 		  loads[kept++] = call;
 		}
 	      else if (dump_file)
 		{
-		  fprintf (dump_file,
-			   "Invariant SFPU immediate hoist deferred:"
-			   " residency-walk-ordering (loop bb %d): the"
-			   " enabled const-residency walk owns this"
-			   " CC-restore loop's %s constants: ",
-			   loop->header->index,
-			   lut_body ? "lut-coefficient"
-			   : demand_defer ? "demand-arbitrated"
-			   : "in-region");
+		  rvtt_refuse (RVTT_REF_RESIDENCY_WALK_ORDERING, dump_file,
+			       "Invariant SFPU immediate hoist deferred:"
+			       " residency-walk-ordering (loop bb %d): the"
+			       " enabled const-residency walk owns this"
+			       " CC-restore loop's %s constants: ",
+			       loop->header->index,
+			       lut_body ? "lut-coefficient"
+			       : demand_defer ? "demand-arbitrated"
+			       : "in-region");
 		  print_gimple_stmt (dump_file, call, 0);
 		}
 	    }
@@ -1833,10 +1834,9 @@ transform (function *fn)
 	 established behavior.  */
       if (cc.has_cc && loop->unroll > 1)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Invariant SFPU immediate hoist refused:"
-		     " cc-restore-unroll-pressure-unmodeled\n");
+	  rvtt_refuse (RVTT_REF_CC_RESTORE_UNROLL_PRESSURE_UNMODELED, dump_file,
+		       "Invariant SFPU immediate hoist refused:"
+		       " cc-restore-unroll-pressure-unmodeled\n");
 	  continue;
 	}
 

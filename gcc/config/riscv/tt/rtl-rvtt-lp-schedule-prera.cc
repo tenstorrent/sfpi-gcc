@@ -124,6 +124,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 
 namespace {
@@ -1019,12 +1020,12 @@ prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
 
   if (base_peak != df_base_peak)
     {
-      if (dump_file)
-	fprintf (dump_file, "Prera-pressure-schedule refused: "
-		 "pressure-oracle-disagreement (baseline model=%u df=%u) "
-		 "in bb %d region at uid=%d\n",
-		 base_peak, df_base_peak, bb->index,
-		 INSN_UID (nodes[0].insn));
+      rvtt_refuse (RVTT_REF_PRESSURE_ORACLE_DISAGREEMENT, dump_file,
+		   "Prera-pressure-schedule refused: "
+		   "pressure-oracle-disagreement (baseline model=%u df=%u) "
+		   "in bb %d region at uid=%d\n",
+		   base_peak, df_base_peak, bb->index,
+		   INSN_UID (nodes[0].insn));
       return false;
     }
 
@@ -1130,12 +1131,12 @@ prera_schedule_region (basic_block bb, std::vector<pnode> &nodes,
 	    reorder_insns (insn, insn, after);
 	  after = insn;
 	}
-      if (dump_file)
-	fprintf (dump_file, "Prera-pressure-schedule refused: "
-		 "pressure-oracle-disagreement (post-commit model=%u df=%u), "
-		 "restored bb %d region at uid=%d\n",
-		 chosen->peak, df_new_peak, bb->index,
-		 INSN_UID (nodes[0].insn));
+      rvtt_refuse (RVTT_REF_PRESSURE_ORACLE_DISAGREEMENT, dump_file,
+		   "Prera-pressure-schedule refused: "
+		   "pressure-oracle-disagreement (post-commit model=%u df=%u), "
+		   "restored bb %d region at uid=%d\n",
+		   chosen->peak, df_new_peak, bb->index,
+		   INSN_UID (nodes[0].insn));
       return false;
     }
 
@@ -1211,9 +1212,10 @@ prera_schedule_function (function *fn)
       auto flush = [&] ()
       {
 	if (nodes.size () == 2 && dump_file)
-	  fprintf (dump_file, "Prera-pressure-schedule skipped: two-node "
-		   "region at uid=%d in bb %d (below the interleave "
-		   "minimum)\n", INSN_UID (nodes[0].insn), bb->index);
+	  rvtt_refuse (RVTT_REF_TWO_NODE, dump_file,
+		       "Prera-pressure-schedule skipped: two-node "
+		       "region at uid=%d in bb %d (below the interleave "
+		       "minimum)\n", INSN_UID (nodes[0].insn), bb->index);
 	if (nodes.size () >= 3)
 	  {
 	    prera_region r;
@@ -1286,11 +1288,11 @@ prera_schedule_function (function *fn)
 	      repeated = true;
 	  if (repeated)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "Prera-pressure-schedule deferred: "
-			 "repeated-row shape at uid=%d in bb %d (replay "
-			 "capture formation owns row isomorphism)\n",
-			 INSN_UID (regions[i].nodes[0].insn), bb->index);
+	      rvtt_refuse (RVTT_REF_REPEATED_ROW, dump_file,
+			   "Prera-pressure-schedule deferred: "
+			   "repeated-row shape at uid=%d in bb %d (replay "
+			   "capture formation owns row isomorphism)\n",
+			   INSN_UID (regions[i].nodes[0].insn), bb->index);
 	      continue;
 	    }
 	  prera_schedule_region (bb, regions[i].nodes, regions[i].anchor,

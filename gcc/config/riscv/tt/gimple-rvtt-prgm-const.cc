@@ -127,6 +127,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "stringpool.h"
 #include "attribs.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
@@ -1136,10 +1137,9 @@ mad_operand_candidates (gcall *call, class loop *loop,
   tree mod = gimple_call_arg (call, 3);
   if (TREE_CODE (mod) != INTEGER_CST || !integer_zerop (mod))
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "prgm-const: sfpmad refused (mad-mod-unproven): a non-plain "
-		 "mod's operand semantics are not audited here\n");
+      rvtt_refuse (RVTT_REF_MAD_MOD_UNPROVEN, dump_file,
+		   "prgm-const: sfpmad refused (mad-mod-unproven): a non-plain "
+		   "mod's operand semantics are not audited here\n");
       return 0;
     }
 
@@ -1969,9 +1969,8 @@ remat_transform (function *fn)
 	    continue;
 	  if (gimple_code (use_stmt) == GIMPLE_PHI)
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "const-remat: use refused (phi-use-unclonable): ");
+	      rvtt_refuse (RVTT_REF_PHI_USE_UNCLONABLE, dump_file,
+			   "const-remat: use refused (phi-use-unclonable): ");
 	      if (dump_file)
 		print_gimple_stmt (dump_file, use_stmt, 0);
 	      kept_any = true;
@@ -1979,9 +1978,9 @@ remat_transform (function *fn)
 	    }
 	  if (!remat_consumer_audited_p (use_stmt, cand))
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "const-remat: use refused "
-			 "(consumer-lane-discipline-unaudited): ");
+	      rvtt_refuse (RVTT_REF_CONSUMER_LANE_DISCIPLINE_UNAUDITED, dump_file,
+			   "const-remat: use refused "
+			   "(consumer-lane-discipline-unaudited): ");
 	      if (dump_file)
 		print_gimple_stmt (dump_file, use_stmt, 0);
 	      kept_any = true;
@@ -2080,9 +2079,9 @@ transform (function *fn, prgm_state *st)
 	: nullptr;
       if (why)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "prgm-const: loop bb %d refused (%s)\n",
-		     loop->header->index, why);
+	  rvtt_refuse_by_name (why, dump_file,
+			       "prgm-const: loop bb %d refused (%s)\n",
+			       loop->header->index, why);
 	  continue;
 	}
 
@@ -2134,10 +2133,9 @@ transform (function *fn, prgm_state *st)
   const prgm_tu_facts &facts = tu_prgm_facts ();
   if (facts.refused)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "prgm-const: refused (opaque-region-undeclared): %s\n",
-		 facts.reason);
+      rvtt_refuse (RVTT_REF_OPAQUE_REGION_UNDECLARED, dump_file,
+		   "prgm-const: refused (opaque-region-undeclared): %s\n",
+		   facts.reason);
       return false;
     }
 
@@ -2159,11 +2157,10 @@ transform (function *fn, prgm_state *st)
 	    if (cc_write_reaches_point_p (cc_writers, c.loop->header,
 					  nullptr))
 	      {
-		if (dump_file)
-		  fprintf (dump_file,
-			   "prgm-const: loop bb %d refused "
-			   "(cc-region-unproven): a CC write reaches the "
-			   "programming point\n", c.loop->header->index);
+		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			     "prgm-const: loop bb %d refused "
+			     "(cc-region-unproven): a CC write reaches the "
+			     "programming point\n", c.loop->header->index);
 		continue;
 	      }
 	    candidates[kept++] = c;
@@ -2242,8 +2239,8 @@ transform (function *fn, prgm_state *st)
 	    }
       if (!prgm)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "prgm-const: refused (prgm-exhausted): ");
+	  rvtt_refuse (RVTT_REF_PRGM_EXHAUSTED, dump_file,
+		       "prgm-const: refused (prgm-exhausted): ");
 	  if (dump_file)
 	    print_gimple_stmt (dump_file, c.addi, 0);
 	  continue;
@@ -3069,10 +3066,9 @@ residency_transform (function *fn, prgm_state *st)
 	}
       if (why)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "const-residency: loop bb %d refused (%s)\n",
-		     loop->header->index, why);
+	  rvtt_refuse_by_name (why, dump_file,
+			       "const-residency: loop bb %d refused (%s)\n",
+			       loop->header->index, why);
 	  continue;
 	}
 
@@ -3092,12 +3088,11 @@ residency_transform (function *fn, prgm_state *st)
 	  case TRIPS_AT_LEAST_2:
 	    break;
 	  case TRIPS_PROVEN_SINGLE:
-	    if (dump_file)
-	      fprintf (dump_file,
-		       "const-residency: loop bb %d refused "
-		       "(trip-count-single-trip: the loop provably runs "
-		       "one trip; the programming can never recover its "
-		       "cost)\n", loop->header->index);
+	    rvtt_refuse (RVTT_REF_TRIP_COUNT_SINGLE_TRIP, dump_file,
+			 "const-residency: loop bb %d refused "
+			 "(trip-count-single-trip: the loop provably runs "
+			 "one trip; the programming can never recover its "
+			 "cost)\n", loop->header->index);
 	    continue;
 	  case TRIPS_UNKNOWN:
 	    /* Dump deferred until candidates exist: this analysis
@@ -3147,13 +3142,12 @@ residency_transform (function *fn, prgm_state *st)
 	    {
 	      if (classify_second_trip (loop, entry) == TRIPS_PROVEN_SINGLE)
 		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "const-residency: loop bb %d cc-peel lift "
-			     "refused (trip-count-single-trip: the loop "
-			     "provably runs one trip; the lifted "
-			     "programming can never recover its cost)\n",
-			     loop->header->index);
+		  rvtt_refuse (RVTT_REF_TRIP_COUNT_SINGLE_TRIP, dump_file,
+			       "const-residency: loop bb %d cc-peel lift "
+			       "refused (trip-count-single-trip: the loop "
+			       "provably runs one trip; the lifted "
+			       "programming can never recover its cost)\n",
+			       loop->header->index);
 		  lifted_entry = entry;
 		}
 	      else
@@ -3163,14 +3157,13 @@ residency_transform (function *fn, prgm_state *st)
 		  if (cc_write_reaches_point_p (lift_writers,
 						lifted_entry->src, nullptr))
 		    {
-		      if (dump_file)
-			fprintf (dump_file,
-				 "const-residency: loop bb %d cc-peel lift "
-				 "refused (crossloop-cc-peel-entrycc-"
-				 "unproven: a CC write reaches the lifted "
-				 "preheader bb %d)\n",
-				 loop->header->index,
-				 lifted_entry->src->index);
+		      rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN, dump_file,
+				   "const-residency: loop bb %d cc-peel lift "
+				   "refused (crossloop-cc-peel-entrycc-"
+				   "unproven: a CC write reaches the lifted "
+				   "preheader bb %d)\n",
+				   loop->header->index,
+				   lifted_entry->src->index);
 		      lifted_entry = entry;
 		    }
 		  else
@@ -3279,8 +3272,8 @@ residency_transform (function *fn, prgm_state *st)
 		    {
 		      if (dump_file)
 			{
-			  fprintf (dump_file,
-				   "pressure-park: refused (%s): ", bad);
+			  rvtt_refuse_by_name (bad, dump_file,
+					       "pressure-park: refused (%s): ", bad);
 			  print_gimple_stmt (dump_file, bad_use, 0);
 			}
 		      continue;
@@ -3292,10 +3285,10 @@ residency_transform (function *fn, prgm_state *st)
 		      lift_this = false;
 		      if (dump_file)
 			{
-			  fprintf (dump_file,
-				   "const-residency: cc-peel lift refused "
-				   "(crossloop-cc-peel-consumer-unaudited; "
-				   "candidate keeps the peel placement): ");
+			  rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED, dump_file,
+				       "const-residency: cc-peel lift refused "
+				       "(crossloop-cc-peel-consumer-unaudited; "
+				       "candidate keeps the peel placement): ");
 			  print_gimple_stmt (dump_file, bad_use, 0);
 			}
 		    }
@@ -3363,12 +3356,11 @@ residency_transform (function *fn, prgm_state *st)
 	  : classify_second_trip (loop, entry);
 	if (mp_trips == TRIPS_PROVEN_SINGLE)
 	  {
-	    if (dump_file)
-	      fprintf (dump_file,
-		       "const-residency: madpair loop bb %d refused "
-		       "(trip-count-single-trip: the loop provably runs "
-		       "one trip; the re-claim can never recover its "
-		       "programming word)\n", loop->header->index);
+	    rvtt_refuse (RVTT_REF_TRIP_COUNT_SINGLE_TRIP, dump_file,
+			 "const-residency: madpair loop bb %d refused "
+			 "(trip-count-single-trip: the loop provably runs "
+			 "one trip; the re-claim can never recover its "
+			 "programming word)\n", loop->header->index);
 	  }
 	else
 	  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
@@ -3453,15 +3445,14 @@ residency_transform (function *fn, prgm_state *st)
 			continue;
 		      if (blocked)
 			{
-			  if (dump_file)
-			    fprintf (dump_file,
-				     "const-residency: madpair loop bb %d "
-				     "refused (madpair-shared-constant): a "
-				     "fold-vulnerable materialization has "
-				     "consumers beyond the pair; the "
-				     "immediate fold fires on it regardless "
-				     "of other claims\n",
-				     loop->header->index);
+			  rvtt_refuse (RVTT_REF_MADPAIR_SHARED_CONSTANT, dump_file,
+				       "const-residency: madpair loop bb %d "
+				       "refused (madpair-shared-constant): a "
+				       "fold-vulnerable materialization has "
+				       "consumers beyond the pair; the "
+				       "immediate fold fires on it regardless "
+				       "of other claims\n",
+				       loop->header->index);
 			  break;
 			}
 		      /* Pair-atomic admission: every fold-vulnerable
@@ -3523,12 +3514,11 @@ residency_transform (function *fn, prgm_state *st)
 	    : classify_second_trip (loop, entry);
 	  if (hr_trips == TRIPS_PROVEN_SINGLE)
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "const-residency: hoisted-reuse loop bb %d refused "
-			 "(trip-count-single-trip: the loop provably runs "
-			 "one trip; the re-claim can never recover its "
-			 "programming word)\n", loop->header->index);
+	      rvtt_refuse (RVTT_REF_TRIP_COUNT_SINGLE_TRIP, dump_file,
+			   "const-residency: hoisted-reuse loop bb %d refused "
+			   "(trip-count-single-trip: the loop provably runs "
+			   "one trip; the re-claim can never recover its "
+			   "programming word)\n", loop->header->index);
 	    }
 	  else
 	    {
@@ -3696,14 +3686,13 @@ residency_transform (function *fn, prgm_state *st)
 	     the allocator; FH audit FHI-T4).  */
 	  if (need > 64 || !loop_trips_at_least_p (loop, entry, need))
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "const-residency: loop bb %d refused "
-			 "(peel-trip-count-unproven: break-even needs %u "
-			 "proven trips; %u candidate words, %u programming "
-			 "words, %u-word body)\n",
-			 loop->header->index, need, sum_w, sum_w + nprog,
-			 body_w);
+	      rvtt_refuse (RVTT_REF_PEEL_TRIP_COUNT_UNPROVEN, dump_file,
+			   "const-residency: loop bb %d refused "
+			   "(peel-trip-count-unproven: break-even needs %u "
+			   "proven trips; %u candidate words, %u programming "
+			   "words, %u-word body)\n",
+			   loop->header->index, need, sum_w, sum_w + nprog,
+			   body_w);
 	      /* Drop the peel members; a cc-lifted member (lane HR)
 		 keeps its lifted placement, whose once-per-kernel
 		 pricing does not ride the peel break-even.  With the
@@ -3839,10 +3828,9 @@ residency_transform (function *fn, prgm_state *st)
   const prgm_tu_facts &facts = tu_prgm_facts ();
   if (facts.refused)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "const-residency: refused (opaque-region-undeclared): %s\n",
-		 facts.reason);
+      rvtt_refuse (RVTT_REF_OPAQUE_REGION_UNDECLARED, dump_file,
+		   "const-residency: refused (opaque-region-undeclared): %s\n",
+		   facts.reason);
       return false;
     }
   {
@@ -3874,11 +3862,10 @@ residency_transform (function *fn, prgm_state *st)
 		&& cc_write_reaches_point_p (cc_writers, c.loop->header,
 					     nullptr))
 	      {
-		if (dump_file)
-		  fprintf (dump_file,
-			   "const-residency: loop bb %d refused "
-			   "(cc-region-unproven): a CC write reaches the "
-			   "programming point\n", c.loop->header->index);
+		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			     "const-residency: loop bb %d refused "
+			     "(cc-region-unproven): a CC write reaches the "
+			     "programming point\n", c.loop->header->index);
 		continue;
 	      }
 	    loop_cands[kept++] = c;
@@ -3890,12 +3877,11 @@ residency_transform (function *fn, prgm_state *st)
 	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
 					  c.load))
 	      {
-		if (dump_file)
-		  fprintf (dump_file,
-			   "const-residency: pressure candidate in bb %d "
-			   "refused (cc-region-unproven): a CC write reaches "
-			   "the in-place programming point\n",
-			   gimple_bb (c.load)->index);
+		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			     "const-residency: pressure candidate in bb %d "
+			     "refused (cc-region-unproven): a CC write reaches "
+			     "the in-place programming point\n",
+			     gimple_bb (c.load)->index);
 		continue;
 	      }
 	    pressure_cands[kept++] = c;
@@ -3913,12 +3899,11 @@ residency_transform (function *fn, prgm_state *st)
 	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
 					  c.load))
 	      {
-		if (dump_file)
-		  fprintf (dump_file,
-			   "const-residency: madpair candidate in bb %d "
-			   "refused (cc-region-unproven): a CC write reaches "
-			   "the in-place programming point\n",
-			   gimple_bb (c.load)->index);
+		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			     "const-residency: madpair candidate in bb %d "
+			     "refused (cc-region-unproven): a CC write reaches "
+			     "the in-place programming point\n",
+			     gimple_bb (c.load)->index);
 		invalid_madpair_groups.add (c.group);
 		continue;
 	      }
@@ -3933,12 +3918,11 @@ residency_transform (function *fn, prgm_state *st)
 	    if (cc_write_reaches_point_p (cc_writers, gimple_bb (c.load),
 					  c.load))
 	      {
-		if (dump_file)
-		  fprintf (dump_file,
-			   "const-residency: hoisted-reuse candidate in bb "
-			   "%d refused (cc-region-unproven): a CC write "
-			   "reaches the in-place programming point\n",
-			   gimple_bb (c.load)->index);
+		rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			     "const-residency: hoisted-reuse candidate in bb "
+			     "%d refused (cc-region-unproven): a CC write "
+			     "reaches the in-place programming point\n",
+			     gimple_bb (c.load)->index);
 		continue;
 	      }
 	    hoistreuse_cands[kept++] = c;
@@ -3947,11 +3931,11 @@ residency_transform (function *fn, prgm_state *st)
 	if (loop_cands.is_empty () && pressure_cands.is_empty ()
 	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "const-residency: refused (cc-region-unproven)"
-		       " -- in-function CC writes reach every candidate"
-		       " programming point; cross-call ambient proof is not on"
-		       " record here\n");
+	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
+			 "const-residency: refused (cc-region-unproven)"
+			 " -- in-function CC writes reach every candidate"
+			 " programming point; cross-call ambient proof is not on"
+			 " record here\n");
 	    return false;
 	  }
       }
@@ -4085,8 +4069,9 @@ residency_transform (function *fn, prgm_state *st)
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "const-residency: refused "
-		       "(store-source-encoding-ceiling): ");
+	      rvtt_refuse (RVTT_REF_STORE_SOURCE_ENCODING_CEILING, dump_file,
+			   "const-residency: refused "
+			   "(store-source-encoding-ceiling): ");
 	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
 	  return false;
@@ -4111,10 +4096,11 @@ residency_transform (function *fn, prgm_state *st)
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "const-residency: refused "
-		       "(loop-reclaim-call-window: same-value candidate "
-		       "on a reclaimed slot without its own proven "
-		       "window): ");
+	      rvtt_refuse (RVTT_REF_LOOP_RECLAIM_CALL_WINDOW, dump_file,
+			   "const-residency: refused "
+			   "(loop-reclaim-call-window: same-value candidate "
+			   "on a reclaimed slot without its own proven "
+			   "window): ");
 	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
 	  return false;
@@ -4209,10 +4195,15 @@ residency_transform (function *fn, prgm_state *st)
 	    {
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "const-residency: refused "
-			   "(%s): ",
-			   c.hoisted_reuse ? "hoisted-reuse-call-window"
-					   : "loop-reclaim-call-window");
+		  rvtt_refuse_by_name (c.hoisted_reuse
+				       ? "hoisted-reuse-call-window"
+				       : "loop-reclaim-call-window",
+				       dump_file,
+				       "const-residency: refused "
+				       "(%s): ",
+				       c.hoisted_reuse
+				       ? "hoisted-reuse-call-window"
+				       : "loop-reclaim-call-window");
 		  print_gimple_stmt (dump_file, c.load, 0);
 		}
 	      return false;
@@ -4227,8 +4218,9 @@ residency_transform (function *fn, prgm_state *st)
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "const-residency: refused "
-		       "(prgm-exhausted): ");
+	      rvtt_refuse (RVTT_REF_PRGM_EXHAUSTED, dump_file,
+			   "const-residency: refused "
+			   "(prgm-exhausted): ");
 	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
 	  return false;
@@ -4376,10 +4368,10 @@ residency_transform (function *fn, prgm_state *st)
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file,
-		       "pressure-park: refused (lreg-file-exhausted): the "
-		       "function pressure model leaves no free LREG for "
-		       "another loop-wide live range: ");
+	      rvtt_refuse (RVTT_REF_LREG_FILE_EXHAUSTED, dump_file,
+			   "pressure-park: refused (lreg-file-exhausted): the "
+			   "function pressure model leaves no free LREG for "
+			   "another loop-wide live range: ");
 	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
 	  return false;
@@ -4403,11 +4395,11 @@ residency_transform (function *fn, prgm_state *st)
 	    prepeel = true;
 	  else if (dump_file)
 	    {
-	      fprintf (dump_file,
-		       "pressure-park: pre-peel placement refused "
-		       "(park-prepeel-ambient-unproven, peel bb %d); "
-		       "keeping the programming-point placement: ",
-		       rec->copy_bb->index);
+	      rvtt_refuse (RVTT_REF_PARK_PREPEEL_AMBIENT_UNPROVEN, dump_file,
+			   "pressure-park: pre-peel placement refused "
+			   "(park-prepeel-ambient-unproven, peel bb %d); "
+			   "keeping the programming-point placement: ",
+			   rec->copy_bb->index);
 	      print_gimple_stmt (dump_file, c.load, 0);
 	    }
 	}
@@ -4580,10 +4572,10 @@ residency_transform (function *fn, prgm_state *st)
 		}
 	    }
 	  if (!ok && dump_file)
-	    fprintf (dump_file,
-		     "const-residency: madpair group refused "
-		     "(madpair-prgm-exhausted): the pair needs more PRGM "
-		     "registers than remain free\n");
+	    rvtt_refuse (RVTT_REF_MADPAIR_PRGM_EXHAUSTED, dump_file,
+			 "const-residency: madpair group refused "
+			 "(madpair-prgm-exhausted): the pair needs more PRGM "
+			 "registers than remain free\n");
 	}
       if (ok)
 	for (unsigned ix = gx; ix != gend; ++ix)
@@ -4638,8 +4630,8 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "prgm-const: refused (qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_QSR_UNPROVEN, dump_file,
+		     "prgm-const: refused (qsr-unproven)\n");
 	return 0;
       }
     /* Compute the TU facts EAGERLY on the first function through this
