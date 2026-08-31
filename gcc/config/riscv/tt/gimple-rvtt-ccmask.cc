@@ -567,7 +567,7 @@ const pass_data pass_data_rvtt_ccmask =
 {
   GIMPLE_PASS,
   "rvtt_ccmask",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

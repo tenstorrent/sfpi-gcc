@@ -123,7 +123,7 @@ const pass_data pass_data_rvtt_dce =
 {
   GIMPLE_PASS, /* type */
   "rvtt_dce", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */

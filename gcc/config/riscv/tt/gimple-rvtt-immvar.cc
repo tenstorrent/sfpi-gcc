@@ -694,7 +694,7 @@ const pass_data pass_data_rvtt_immvar_expand =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immvar_expand", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -752,7 +752,7 @@ const pass_data pass_data_rvtt_immload_shorten =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immload_shorten", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -810,7 +810,7 @@ const pass_data pass_data_rvtt_immload_combine =
 {
   GIMPLE_PASS, /* type */
   "rvtt_immload_combine", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */

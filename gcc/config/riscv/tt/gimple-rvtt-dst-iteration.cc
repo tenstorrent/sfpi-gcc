@@ -411,7 +411,7 @@ discover (function *fn)
 }
 
 const pass_data pass_data_rvtt_dst_iteration = {
-  GIMPLE_PASS, "rvtt_dst_iteration", OPTGROUP_NONE, TV_NONE,
+  GIMPLE_PASS, "rvtt_dst_iteration", OPTGROUP_OTHER, TV_NONE,
   PROP_cfg | PROP_ssa, 0, 0, 0, 0
 };
 
@@ -786,7 +786,7 @@ interleave_function (function *fn)
 }
 
 const pass_data pass_data_rvtt_dst_interleave = {
-  GIMPLE_PASS, "rvtt_dst_interleave", OPTGROUP_NONE, TV_NONE,
+  GIMPLE_PASS, "rvtt_dst_interleave", OPTGROUP_OTHER, TV_NONE,
   PROP_cfg | PROP_ssa, 0, 0, 0, 0
 };
 

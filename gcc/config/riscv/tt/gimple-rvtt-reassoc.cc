@@ -809,7 +809,7 @@ const pass_data pass_data_rvtt_reassoc =
 {
   GIMPLE_PASS,
   "rvtt_reassoc",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

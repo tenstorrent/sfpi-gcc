@@ -253,7 +253,7 @@ const pass_data pass_data_rvtt_unspec_prop_ssa =
 {
   GIMPLE_PASS, /* type */
   "rvtt_unspec_prop", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */

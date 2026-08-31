@@ -956,7 +956,7 @@ dst_ownership (function *fn)
 
 const pass_data pass_data_rvtt_dst_ownership =
 {
-  RTL_PASS, "rvtt_dst_ownership", OPTGROUP_NONE, TV_NONE,
+  RTL_PASS, "rvtt_dst_ownership", OPTGROUP_OTHER, TV_NONE,
   0, 0, 0, 0, 0
 };
 

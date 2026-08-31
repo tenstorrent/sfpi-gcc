@@ -3312,7 +3312,7 @@ const pass_data pass_data_rvtt_macro_planner =
 {
   RTL_PASS,
   "rvtt_macro_planner",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   0,
   0,

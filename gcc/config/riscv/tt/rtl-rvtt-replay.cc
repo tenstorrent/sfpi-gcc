@@ -7654,7 +7654,7 @@ const pass_data pass_data_rvtt_replay =
 {
   RTL_PASS, /* type */
   "rvtt_replay", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */
@@ -7717,7 +7717,7 @@ const pass_data pass_data_rvtt_replay_reform =
 {
   RTL_PASS, /* type */
   "rvtt_replay_reform", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */

@@ -945,7 +945,7 @@ const pass_data pass_data_rvtt_crosslane_window =
 {
   RTL_PASS, /* type */
   "rvtt_crosslane_window", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */

@@ -374,7 +374,7 @@ const pass_data pass_data_rvtt_lreg_rename =
 {
   RTL_PASS,
   "rvtt_lreg_rename",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   0,
   0,

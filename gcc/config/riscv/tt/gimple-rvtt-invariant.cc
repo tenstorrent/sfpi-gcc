@@ -1911,7 +1911,7 @@ const pass_data pass_data_rvtt_invariant =
 {
   GIMPLE_PASS,
   "rvtt_invariant",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

@@ -1487,7 +1487,7 @@ const pass_data pass_data_rvtt_lut_select =
 {
   GIMPLE_PASS,
   "rvtt_lut_select",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

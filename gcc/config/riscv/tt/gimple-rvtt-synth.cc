@@ -674,7 +674,7 @@ const pass_data pass_data_rvtt_synth_split =
 {
   GIMPLE_PASS, /* type */
   "rvtt_synth_split", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -715,7 +715,7 @@ const pass_data pass_data_rvtt_synth_cse =
 {
   GIMPLE_PASS, /* type */
   "rvtt_synth_cse", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -756,7 +756,7 @@ const pass_data pass_data_rvtt_synth_renumber =
 {
   GIMPLE_PASS, /* type */
   "rvtt_synth_renumber", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa | PROP_cfg, /* properties_required */
   0, /* properties_provided */

@@ -41,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-propagate.h"
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
 #include "tm_p.h"
@@ -550,7 +551,23 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
 static bool
 rvtt_native_compare_gtle_p (rtx v)
 {
-  return TARGET_XTT_TENSIX_BH && riscv_tt_opt_native_compare && REG_P (v);
+  /* Named telemetry for the previously silent unit (plan item #1;
+     AUDIT-interprocedural.md native-compare).  */
+  if (!TARGET_XTT_TENSIX_BH || !riscv_tt_opt_native_compare)
+    {
+      rvtt_refuse (RVTT_REF_NATIVE_COMPARE_TARGET_UNGATED, dump_file,
+		   "native-compare refused"
+		   " (native-compare-target-ungated)\n");
+      return false;
+    }
+  if (!REG_P (v))
+    {
+      rvtt_refuse (RVTT_REF_NATIVE_COMPARE_OPERAND_SHAPE, dump_file,
+		   "native-compare refused"
+		   " (native-compare-operand-shape)\n");
+      return false;
+    }
+  return true;
 }
 
 static void

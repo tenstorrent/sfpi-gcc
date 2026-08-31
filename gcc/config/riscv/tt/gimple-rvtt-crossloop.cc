@@ -468,7 +468,7 @@ const pass_data pass_data_rvtt_crossloop =
 {
   GIMPLE_PASS,
   "rvtt_crossloop",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,
