@@ -92,6 +92,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-bnb.o \
 	rvtt-trips.o \
 	rvtt-cc-region.o \
+	rvtt-delivery-cost.o \
 
 OBJS += $(RVTT_OBJS)
 

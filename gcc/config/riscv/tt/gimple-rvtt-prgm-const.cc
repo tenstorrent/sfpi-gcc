@@ -130,6 +130,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-pressure.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
@@ -3546,10 +3547,21 @@ residency_transform (function *fn, prgm_state *st)
 	      else
 		++body_w;
 	    }
-	  unsigned push = XTT_REPLAY_COST_RISC_PUSH_X100;
-	  unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-	  unsigned cost = push * (sum_w + nprog) + (push - slot) * body_w;
-	  unsigned need = 1 + (cost + slot * sum_w - 1) / (slot * sum_w);
+	  /* The one break-even spelling (rvtt-delivery-cost-core.h
+	     residency_peel_break_even_trips; FABLE_GOES_BURR #12).  */
+	  unsigned need = rvtt_delivery_cost::residency_peel_break_even_trips
+	    (rvtt_dcost_table (), sum_w, nprog, body_w);
+	  /* One-pin recompute-assert of the migrated inline spelling
+	     (item #12 discipline; delete next pin).  */
+	  if (flag_checking)
+	    {
+	      unsigned push = XTT_REPLAY_COST_RISC_PUSH_X100;
+	      unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+	      unsigned cost = push * (sum_w + nprog)
+		+ (push - slot) * body_w;
+	      gcc_assert (need
+			  == 1 + (cost + slot * sum_w - 1) / (slot * sum_w));
+	    }
 	  /* 64 bounds the trip-proof WORK (bounded forward evaluation),
 	     not the benefit model: a break-even needing more proven
 	     trips than the evaluator will walk refuses by name (cf.

@@ -41,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
@@ -261,20 +262,30 @@ planned_value_dead_after_p (rtx value, rtx_insn *start)
 }
 
 /* Issue cost of materializing one 32-bit configuration word through an
-   LREG: the SFPLOADI half count mirrors rvtt_emit_sfpxloadi's forms.  */
+   LREG: the SFPLOADI half count mirrors rvtt_emit_sfpxloadi's forms --
+   the one delivery-cost spelling (rvtt-delivery-cost-core.h
+   loadi_issue_words; FABLE_GOES_BURR #12).  */
 
 static unsigned
 config_word_loadi_issues (uint32_t w)
 {
-  if (w <= 0x7fff || w >= 0xffff8000u || w <= 0xffff || !(w & 0xffff))
-    return 1;
-  if (!(w & 0x1fff))
+  unsigned issues = rvtt_dcost_loadi_issue_words (w);
+  if (flag_checking)
     {
-      unsigned exp = (w >> 23) & 0xff;
-      if (exp < 127 + 16 && exp >= 127 - 14)
-	return 1;
+      /* One-pin recompute-assert of the migrated inline spelling
+	 (item #12 discipline; delete next pin).  */
+      unsigned old;
+      if (w <= 0x7fff || w >= 0xffff8000u || w <= 0xffff || !(w & 0xffff))
+	old = 1;
+      else if (!(w & 0x1fff)
+	       && ((w >> 23) & 0xff) < 127 + 16
+	       && ((w >> 23) & 0xff) >= 127 - 14)
+	old = 1;
+      else
+	old = 2;
+      gcc_assert (old == issues);
     }
-  return 2;
+  return issues;
 }
 
 /* Issue cost of the full configuration prefix (all-lanes enable, owned
@@ -336,8 +347,16 @@ run_profitable_p (const macro_region &region, const macro_schedule &schedule,
   uint64_t explicit_side = (uint64_t) run_rows * explicit_row_cost (region);
   if (ih_stage >= 2 && ih_body > 0 && ih_entry > 0 && ih_body >= ih_entry)
     {
-      bool ok = config * (uint64_t) ih_entry
-	+ per_run * (uint64_t) ih_body < explicit_side * (uint64_t) ih_body;
+      bool ok = rvtt_delivery_cost::run_amortized_p (config, per_run,
+						     explicit_side,
+						     (uint64_t) ih_entry,
+						     (uint64_t) ih_body);
+      /* One-pin recompute-assert of the migrated inline spelling
+	 (item #12 discipline; delete next pin).  */
+      if (flag_checking)
+	gcc_assert (ok == (config * (uint64_t) ih_entry
+			   + per_run * (uint64_t) ih_body
+			   < explicit_side * (uint64_t) ih_body));
       if (dump)
 	fprintf (dump, "Macro-planner run-pricing: init-hoist-amortized"
 		 " config=%llu per-run=%llu explicit=%llu"
@@ -347,7 +366,11 @@ run_profitable_p (const macro_region &region, const macro_schedule &schedule,
 		 (long long) ih_entry, ok ? "profitable" : "unprofitable");
       return ok;
     }
-  return config + per_run < explicit_side;
+  bool ok = rvtt_delivery_cost::run_amortized_p (config, per_run,
+						 explicit_side, 1, 1);
+  if (flag_checking)
+    gcc_assert (ok == (config + per_run < explicit_side));
+  return ok;
 }
 
 /* WP13 formation-vs-replay arbitration (-mtt-tensix-macro-ims).  The
@@ -416,13 +439,23 @@ static uint64_t
 ims_formed_cost_x100 (const macro_schedule &schedule,
 		      const macro_descriptor &desc, unsigned run_rows)
 {
-  uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
-  uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-  uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
   uint64_t drain = desc.drain_slots > 0 ? desc.drain_slots : 0;
-  return (uint64_t) config_prefix_cost (desc) * push
-    + (uint64_t) run_rows * (uint64_t) schedule.ii * word
-    + drain * slot;
+  uint64_t formed = rvtt_delivery_cost::ims_formed_cost_x100
+    (rvtt_dcost_table (), config_prefix_cost (desc),
+     (uint64_t) run_rows * (uint64_t) schedule.ii, drain,
+     riscv_tt_macro_planner_replay != 0);
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
+      uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
+      gcc_assert (formed == (uint64_t) config_prefix_cost (desc) * push
+		  + (uint64_t) run_rows * (uint64_t) schedule.ii * word
+		  + drain * slot);
+    }
+  return formed;
 }
 
 /* Steady-state lower bound of the replay-delivered explicit
@@ -433,8 +466,13 @@ ims_formed_cost_x100 (const macro_schedule &schedule,
 static uint64_t
 ims_replay_alt_cost_x100 (const macro_region &region, unsigned run_rows)
 {
-  return (uint64_t) run_rows * (uint64_t) ims_replayed_row_words (region)
-    * (uint64_t) XTT_REPLAY_COST_REPLAY_SLOT_X100;
+  uint64_t alt = rvtt_delivery_cost::ims_replay_alt_cost_x100
+    (rvtt_dcost_table (), run_rows, ims_replayed_row_words (region));
+  if (flag_checking)
+    gcc_assert (alt == (uint64_t) run_rows
+			 * (uint64_t) ims_replayed_row_words (region)
+			 * (uint64_t) XTT_REPLAY_COST_REPLAY_SLOT_X100);
+  return alt;
 }
 
 static bool
@@ -456,8 +494,11 @@ ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
      alone -- refusal-biased as before.  */
   if (ih_stage >= 2 && ih_body > 0 && ih_entry > 0 && ih_body >= ih_entry)
     {
-      uint64_t prefix = (uint64_t) config_prefix_cost (desc)
-	* XTT_REPLAY_COST_RISC_PUSH_X100;
+      uint64_t prefix = (uint64_t) rvtt_dcost_words_to_centislots
+	(config_prefix_cost (desc), rvtt_delivery_cost::PLANE_RISC_PUSH);
+      if (flag_checking)
+	gcc_assert (prefix == (uint64_t) config_prefix_cost (desc)
+			      * XTT_REPLAY_COST_RISC_PUSH_X100);
       formed = prefix * (uint64_t) ih_entry
 	+ (formed - prefix) * (uint64_t) ih_body;
       alt *= (uint64_t) ih_body;
@@ -486,18 +527,38 @@ ims_arbitrate_loop (const macro_region &region,
   if (!riscv_tt_macro_ims || !riscv_tt_opt_replay
       || !region_rows_replay_safe_p (region))
     return true;
-  uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
-  uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-  uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
   unsigned total_rows = region.rows.length ();
   uint64_t drain = desc.drain_slots > 0 ? desc.drain_slots : 0;
-  uint64_t formed = (uint64_t) config_prefix_cost (desc) * push
-      * (uint64_t) preheader_count
-    + ((uint64_t) total_rows * (uint64_t) schedule.ii * word
-       + (uint64_t) n_runs * drain * slot) * (uint64_t) body_count;
-  uint64_t alt = (uint64_t) total_rows
-    * (uint64_t) ims_replayed_row_words (region) * slot
+  uint64_t prefix = (uint64_t) rvtt_dcost_words_to_centislots
+    (config_prefix_cost (desc), rvtt_delivery_cost::PLANE_RISC_PUSH);
+  uint64_t per_trip = (uint64_t) rvtt_dcost_words_to_centislots
+      ((uint64_t) total_rows * (uint64_t) schedule.ii,
+       rvtt_delivery_cost::planner_word_plane
+	 (riscv_tt_macro_planner_replay != 0))
+    + (uint64_t) rvtt_dcost_words_to_centislots
+	((uint64_t) n_runs * drain, rvtt_delivery_cost::PLANE_REPLAY_SLOT);
+  uint64_t formed = prefix * (uint64_t) preheader_count
+    + per_trip * (uint64_t) body_count;
+  uint64_t alt = rvtt_delivery_cost::ims_replay_alt_cost_x100
+      (rvtt_dcost_table (), total_rows, ims_replayed_row_words (region))
     * (uint64_t) body_count;
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      uint64_t push = XTT_REPLAY_COST_RISC_PUSH_X100;
+      uint64_t slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      uint64_t word = riscv_tt_macro_planner_replay ? slot : push;
+      gcc_assert (formed == (uint64_t) config_prefix_cost (desc) * push
+			      * (uint64_t) preheader_count
+			    + ((uint64_t) total_rows
+			       * (uint64_t) schedule.ii * word
+			       + (uint64_t) n_runs * drain * slot)
+			      * (uint64_t) body_count);
+      gcc_assert (alt == (uint64_t) total_rows
+			   * (uint64_t) ims_replayed_row_words (region)
+			   * slot * (uint64_t) body_count);
+    }
   if (dump)
     fprintf (dump, "Macro-planner ims-arbitration: formed=%llu"
 	     " replay-alt=%llu (centislots; loop rows=%u ii=%d"
@@ -527,14 +588,25 @@ loop_trip_weight (basic_block body, basic_block preheader,
   gcov_type b = bc.to_gcov_type (), p = pc.to_gcov_type ();
   if (p <= 0 || b < p)
     return false;
-  /* Keep the products of profitability inside 64 bits.  */
-  while (b > (gcov_type) 1 << 48)
+  /* Keep the products of profitability inside 64 bits (the one
+     scaling spelling, shared with the crosscall init-hoist caller
+     weight: rvtt-delivery-cost-core.h scale_trip_weight).  */
+  int64_t sb = b, sp = p;
+  rvtt_delivery_cost::scale_trip_weight (&sb, &sp);
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
     {
-      b >>= 8;
-      p = p >> 8 ? p >> 8 : 1;
+      gcov_type cb = b, cp = p;
+      while (cb > (gcov_type) 1 << 48)
+	{
+	  cb >>= 8;
+	  cp = cp >> 8 ? cp >> 8 : 1;
+	}
+      gcc_assert (sb == cb && sp == cp);
     }
-  *body_count = b;
-  *preheader_count = p;
+  *body_count = sb;
+  *preheader_count = sp;
   return true;
 }
 
@@ -554,9 +626,20 @@ loop_profitable_p (const macro_region &region, const macro_schedule &schedule,
   unsigned per_trip_macro = total_rows * schedule.ii
     + n_runs * desc.drain_slots;
   unsigned per_trip_explicit = total_rows * explicit_row_cost (region);
-  uint64_t macro_cost = (uint64_t) config_prefix_cost (desc) * preheader_count
-    + (uint64_t) per_trip_macro * body_count;
-  return macro_cost < (uint64_t) per_trip_explicit * body_count;
+  bool ok = rvtt_delivery_cost::run_amortized_p
+    (config_prefix_cost (desc), per_trip_macro, per_trip_explicit,
+     (uint64_t) preheader_count, (uint64_t) body_count);
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      uint64_t macro_cost
+	= (uint64_t) config_prefix_cost (desc) * preheader_count
+	  + (uint64_t) per_trip_macro * body_count;
+      gcc_assert (ok == (macro_cost
+			 < (uint64_t) per_trip_explicit * body_count));
+    }
+  return ok;
 }
 
 /* An ambient lane-enable shape: only a CC write, no other

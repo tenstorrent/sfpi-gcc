@@ -179,6 +179,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-mop-tables.h"
 
 namespace {
@@ -890,17 +891,35 @@ static bool
 mop_profitable_p (mop_candidate const &cand, HOST_WIDE_INT config_words,
 		  HOST_WIDE_INT *benefit_out)
 {
-  HOST_WIDE_INT push = XTT_REPLAY_COST_RISC_PUSH_X100;
-  HOST_WIDE_INT slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
   HOST_WIDE_INT k = (HOST_WIDE_INT) cand.step_words.size ();
-  HOST_WIDE_INT exec_row = ((HOST_WIDE_INT) cand.len + k) * slot;
+  /* Plane rates through the one delivery-cost API (FABLE_GOES_BURR
+     #12): the executed row at the slot rate, delivered words and the
+     MMIO configuration block at the push rate.  */
+  HOST_WIDE_INT exec_row = rvtt_dcost_words_to_centislots
+    ((HOST_WIDE_INT) cand.len + k, rvtt_delivery_cost::PLANE_REPLAY_SLOT);
   // RUN rows deliver the launch word plus their step words; LOOP trips
   // additionally deliver the two loop-control words.
   HOST_WIDE_INT delivered = cand.form == mop_candidate::RUN ? 1 + k : 3;
-  HOST_WIDE_INT before_row = MAX (exec_row, delivered * push);
+  HOST_WIDE_INT before_row
+    = MAX (exec_row,
+	   rvtt_dcost_words_to_centislots
+	     (delivered, rvtt_delivery_cost::PLANE_RISC_PUSH));
   HOST_WIDE_INT benefit = ((HOST_WIDE_INT) cand.iterations
 			   * (before_row - exec_row))
-    - config_words * push;
+    - rvtt_dcost_words_to_centislots (config_words,
+				      rvtt_delivery_cost::PLANE_RISC_PUSH);
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      HOST_WIDE_INT push = XTT_REPLAY_COST_RISC_PUSH_X100;
+      HOST_WIDE_INT slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
+      gcc_assert (exec_row == ((HOST_WIDE_INT) cand.len + k) * slot);
+      gcc_assert (before_row == MAX (exec_row, delivered * push));
+      gcc_assert (benefit == ((HOST_WIDE_INT) cand.iterations
+			      * (before_row - exec_row))
+			     - config_words * push);
+    }
   *benefit_out = benefit;
 
   // The testing/measurement force flag bypasses only this pricing

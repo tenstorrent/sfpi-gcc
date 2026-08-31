@@ -298,11 +298,66 @@ struct autoincr_caps
 static autoincr_caps
 target_autoincr_caps ()
 {
-  if (TARGET_XTT_TENSIX_BH)
-    return { true, 7, 6, 1, 2, 7, 2, { { 18, 34, 53 }, { 0, 0, 0 } }, 0, 0 };
-  if (TARGET_XTT_TENSIX_WH)
-    return { true, 3, 2, 1, 2, 7, 2, { { 19, 29, 54 }, { 0, 0, 0 } }, 1, 2 };
-  return { false, 0, 0, 0, 0, 0, 0, { { 0, 0, 0 }, { 0, 0, 0 } }, 0, 0 };
+  /* Named-member construction (FABLE_GOES_BURR #12): the audited
+     frontend quantities come from the rvtt-cost.md define_constants
+     they document (single-sourced at build time); the per-target
+     modifier encodings and slot registers are the ISA facts the file
+     comment above adjudicates.  QSR has no capability entry and
+     refuses (every field zero).  */
+  autoincr_caps caps = autoincr_caps ();
+  if (TARGET_XTT_TENSIX_BH || TARGET_XTT_TENSIX_WH)
+    {
+      caps.available = true;
+      caps.nslots = 1;
+      caps.min_config_distance = XTT_AUTOINCR_MIN_CONFIG_DISTANCE;
+      caps.drained_frontend_window = XTT_MODWRITE_DRAINED_FRONTEND_WINDOW;
+      caps.config_issue_slots = XTT_CONFIG_ISSUE_SLOTS;
+      if (TARGET_XTT_TENSIX_BH)
+	{
+	  caps.noinc_mode = 7;
+	  caps.scratch_mode = 6;
+	  caps.slots[0].src_reg = 18;
+	  caps.slots[0].dst_reg = 34;
+	  caps.slots[0].bias_reg = 53;
+	}
+      else
+	{
+	  caps.noinc_mode = 3;
+	  caps.scratch_mode = 2;
+	  caps.slots[0].src_reg = 19;
+	  caps.slots[0].dst_reg = 29;
+	  caps.slots[0].bias_reg = 54;
+	  caps.n_watch = 1;
+	  caps.watch_reg = 2;
+	}
+    }
+  /* One-pin recompute-assert of the migrated positional literals
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      autoincr_caps old = TARGET_XTT_TENSIX_BH
+	? autoincr_caps { true, 7, 6, 1, 2, 7, 2,
+			  { { 18, 34, 53 }, { 0, 0, 0 } }, 0, 0 }
+	: TARGET_XTT_TENSIX_WH
+	? autoincr_caps { true, 3, 2, 1, 2, 7, 2,
+			  { { 19, 29, 54 }, { 0, 0, 0 } }, 1, 2 }
+	: autoincr_caps { false, 0, 0, 0, 0, 0, 0,
+			  { { 0, 0, 0 }, { 0, 0, 0 } }, 0, 0 };
+      gcc_assert (caps.available == old.available
+		  && caps.noinc_mode == old.noinc_mode
+		  && caps.scratch_mode == old.scratch_mode
+		  && caps.nslots == old.nslots
+		  && caps.min_config_distance == old.min_config_distance
+		  && caps.drained_frontend_window
+		       == old.drained_frontend_window
+		  && caps.config_issue_slots == old.config_issue_slots
+		  && caps.slots[0].src_reg == old.slots[0].src_reg
+		  && caps.slots[0].dst_reg == old.slots[0].dst_reg
+		  && caps.slots[0].bias_reg == old.slots[0].bias_reg
+		  && caps.n_watch == old.n_watch
+		  && caps.watch_reg == old.watch_reg);
+    }
+  return caps;
 }
 
 /* Classification of one instruction by architectural effect, derived from
@@ -1015,18 +1070,43 @@ scalar_issue_words (rtx_insn *insn)
   return get_attr_length (insn) / 4;
 }
 
+/* Frontend issue-slot cover of one raw INSN: the ONE cover spelling
+   (FABLE_GOES_BURR #12) behind both the per-item view below and the
+   raw-insn block walks (lane FZ): slot words occupy frontend issue
+   slots, and scalar words cover crossing distance exactly like Tensix
+   words do (lane EP finding F1).  */
+
+static unsigned
+insn_frontend_cover_words (rtx_insn *insn)
+{
+  return (occupies_replay_slot_p (insn) ? 1 : 0) + scalar_issue_words (insn);
+}
+
 /* Frontend issue-slot words of ITEM: the Tensix slot words (recordings
    issue their members; a launch keeps the audited one-word conservative
    floor of the measured 1.3-1.8-cycle launch boundary) plus the scalar
-   words of the item and of any recording's scalar members.  */
+   words of the item and of any recording's scalar members -- the item
+   sum of insn_frontend_cover_words over the item's own insn and any
+   recording's members, so the per-item and per-raw-insn views price
+   the same cover by construction, not by comment.  */
 
 static unsigned
 item_frontend_words (const bb_item &item)
 {
-  unsigned words = item_issue_words (item) + scalar_issue_words (item.insn);
+  unsigned words = insn_frontend_cover_words (item.insn);
   if (item.cap)
     for (rtx_insn *member : item.cap->members)
-      words += scalar_issue_words (member);
+      words += insn_frontend_cover_words (member);
+  /* One-pin recompute-assert of the migrated per-item spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      unsigned old = item_issue_words (item) + scalar_issue_words (item.insn);
+      if (item.cap)
+	for (rtx_insn *member : item.cap->members)
+	  old += scalar_issue_words (member);
+      gcc_assert (old == words);
+    }
   return words;
 }
 
@@ -2527,16 +2607,10 @@ block_has_explicit_candidate_increment_p (basic_block bb,
   return false;
 }
 
-/* Frontend issue-slot cover of one raw INSN: the per-insn spelling of
-   item_frontend_words (a folded capture item's words equal the sum of
-   its member insns' words, so the raw-insn walk prices blocks
-   identically to the scan's item view).  */
-
-static unsigned
-insn_frontend_cover_words (rtx_insn *insn)
-{
-  return (occupies_replay_slot_p (insn) ? 1 : 0) + scalar_issue_words (insn);
-}
+/* The raw-insn block walk prices blocks identically to the scan's
+   item view BY CONSTRUCTION: insn_frontend_cover_words (defined with
+   item_frontend_words above -- the one cover spelling, item #12) is
+   the per-insn primitive both views sum.  */
 
 static unsigned
 block_frontend_cover_words (basic_block bb)

@@ -45,6 +45,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-pressure.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
@@ -441,16 +442,34 @@ rvtt_sfpxloadi_materialization_cost (gcall *call)
     return 1;
 
   uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
-  unsigned upper = value >> 16;
-  unsigned lower = value & 0xffff;
-  if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
-    return 1;
-
-  /* A full value whose low thirteen bits are zero and whose exponent fits
-     binary16 can use the single-issue FLOATA encoding.  */
-  unsigned exponent = (value >> 23) & 0xff;
-  return !(value & 0x1fff)
-    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+  /* The one value-classification spelling (rvtt-delivery-cost-core.h
+     loadi_issue_words; FABLE_GOES_BURR #12 -- this function's prior
+     inline spelling and the macro-planner's config_word_loadi_issues
+     were proven equivalent term-by-term at migration: the halfword
+     cases match set-for-set and both FLOATA exponent windows are
+     [113, 143)).  */
+  unsigned issues = rvtt_dcost_loadi_issue_words (value);
+  /* One-pin recompute-assert of the migrated inline spelling
+     (item #12 discipline; delete next pin).  */
+  if (flag_checking)
+    {
+      unsigned upper = value >> 16;
+      unsigned lower = value & 0xffff;
+      unsigned old;
+      if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
+	old = 1;
+      else
+	{
+	  /* A full value whose low thirteen bits are zero and whose
+	     exponent fits binary16 can use the single-issue FLOATA
+	     encoding.  */
+	  unsigned exponent = (value >> 23) & 0xff;
+	  old = !(value & 0x1fff)
+	    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
+	}
+      gcc_assert (old == issues);
+    }
+  return issues;
 }
 
 namespace {

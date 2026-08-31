@@ -2010,6 +2010,45 @@
 
 
 ;; ---------------------------------------------------------------------
+;; Dst auto-increment audited frontend constants (FABLE_GOES_BURR item
+;; #12: the target_autoincr_caps positional literals re-expressed as
+;; named initializers cross-checked against THESE constants -- the
+;; audited entries above carry the provenance; this block is only their
+;; GCC-idiomatic single-source carrier).
+;;
+;;   AUTOINCR_MIN_CONFIG_DISTANCE (2) - SETC16-to-consume distance
+;;     guard: the configuration issue class is a two-cycle resource
+;;     (rvtt_issue_cfg below; craq-sim tensix_rtl_issue_class_for_inst
+;;     models the same), so two intervening issued words guarantee the
+;;     configuration write has retired before the consumer issues.
+;;   MODWRITE_DRAINED_FRONTEND_WINDOW (7) - the audited W_drain
+;;     retirement window (lane EP finding F1 fit, conservative 7; the
+;;     full derivation and its silicon witnesses are the W_drain
+;;     entry above).  Target caps adopt it on BH and WH (same
+;;     frontend class); QSR has no capability entry and its caps row
+;;     stays zero.
+;;   CONFIG_ISSUE_SLOTS (2) - frontend issue-slot occupancy of one
+;;     SETC16 configuration word (the same audited two-cycle class),
+;;     one cycle longer than the single-cycle class a removed TTINCRWC
+;;     occupies; the group profitability comparison prices the slot
+;;     program in these units so both sides are frontend issue slots.
+;;   AUTOINCR_SETUP_COST_X100 (0) - CURRENT-MODEL Dst-auto-increment
+;;     setup charge of a replay-delivered shape in the delivery-shape
+;;     solver (formerly that pass's documented W_drain MODEL SEAM,
+;;     stubbed to zero by comment; now this named quantity, consumed
+;;     through rvtt-delivery-cost only).  The measured lane-EE table
+;;     absorbs the SETC16 program in the once-per-group record
+;;     delivery; a future silicon-priced value lands here and every
+;;     consumer moves together.
+(define_constants [
+  (XTT_AUTOINCR_MIN_CONFIG_DISTANCE      2)
+  (XTT_MODWRITE_DRAINED_FRONTEND_WINDOW  7)
+  (XTT_CONFIG_ISSUE_SLOTS                2)
+  (XTT_AUTOINCR_SETUP_COST_X100          0)
+])
+
+
+;; ---------------------------------------------------------------------
 ;; Cross-row pairing (rtl-rvtt-schedule.cc, crossrow_pair_rows, under
 ;; -mtt-tensix-optimize-crossrow-pairing).  Additive section.
 ;;
