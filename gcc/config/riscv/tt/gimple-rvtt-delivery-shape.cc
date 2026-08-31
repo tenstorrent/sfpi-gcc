@@ -48,8 +48,9 @@ along with GCC; see the file COPYING3.  If not see
    the decision slot; every refusal leaves the function byte-identical.
 
    ADMISSION is the fixed-factor pass's typed census, consumed through
-   its exported vocabulary (rvtt_replay_unroll_row_words /
-   rvtt_replay_unroll_counted_trips, rvtt-protos.h) so the two
+   its exported vocabulary (rvtt_replay_unroll_row_words,
+   rvtt-protos.h; the trip proof through the shared dual-oracle facade
+   rvtt_loop_trips_gimple, rvtt-trips.h) so the two
    admissions cannot drift, PLUS the audited-latency mirror below:
    a row member with no audited latency fact makes the row's execution
    term unpriceable and the loop refuses by name
@@ -92,6 +93,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "insn-constants.h"
 #include "rvtt-protos.h"
+#include "rvtt-trips.h"
 #include "rvtt.h"
 #include "rvtt-refuse.h"
 #include "rvtt-schedule.h"
@@ -308,7 +310,7 @@ public:
       return;
 
     unsigned HOST_WIDE_INT trips;
-    if (!rvtt_replay_unroll_counted_trips (loop, &trips))
+    if (!rvtt_loop_trips_gimple (loop, &trips))
       {
 	refuse (loop, "delivery-shape-trip-count-unproven", NULL);
 	return;
