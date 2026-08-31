@@ -518,43 +518,19 @@ mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
       || safe_words (p) < p.min_sequence
       || safe_words (p) > p.capture_slots)
     return false;
-  const rvtt_delivery_cost::replay_price price
-    = rvtt_delivery_cost::replay_pricing
-	(p.dcost, rvtt_delivery_cost::SHAPE_COUNTED, p.trips, p.row_words,
-	 p.ds_exec, /*launch_run=*/1, /*drain_contract=*/false,
-	 p.ds_hoist_min_benefit);
-  /* One-pin recompute-assert of the migrated inline mirror
-     (item #12 discipline; delete next pin).  */
-  if (p.checking)
-    {
-      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
-      const int64_t exec = (int64_t) p.ds_exec * slot;
-      const int64_t before = imax64 ((int64_t) p.row_words * push, exec);
-      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
-      const int64_t record = (int64_t) (1 + p.row_words) * push
-	+ p.dcost.record_overhead_x100;
-      const int64_t benefit = (int64_t) p.trips * (before - after) - record;
-      gcc_assert (price.benefit == benefit
-		  && price.profitable
-		       == (benefit >= p.ds_hoist_min_benefit));
-    }
-  return price.profitable;
-  /* Item-#11 verdict-identity shadow: the unified engine's pricing
-     form must reproduce this downstream mirror exactly before the
-     inline spelling retires (rtl-rvtt-replay.cc's gate shadows the
-     same form, so the "must agree by convention" seam closes).  */
-  {
-    rvtt_timing::hoist_costs chk_costs;
-    chk_costs.push = p.ds_push;
-    chk_costs.slot = p.ds_slot;
-    chk_costs.turnaround = p.ds_turnaround;
-    chk_costs.record_overhead = p.ds_record_overhead;
-    rvtt_timing::hoist_pricing chk
-      = rvtt_timing::counted_hoist_price (chk_costs, p.trips, p.row_words,
-					  p.ds_exec);
-    gcc_assert (chk.before == before && chk.after == after
-		&& chk.record == record && chk.benefit == benefit);
-  }
+  /* The pricing form is the item-#11 engine's -- the SAME function
+     rtl-rvtt-replay.cc's gate computes with, so the mirror can no
+     longer drift from the gate (prediction stays prediction: the
+     inputs are the downstream ds_* constants and the ds_exec
+     interlock estimate, never a re-pricing).  */
+  rvtt_timing::hoist_costs costs;
+  costs.push = p.ds_push;
+  costs.slot = p.ds_slot;
+  costs.turnaround = p.ds_turnaround;
+  costs.record_overhead = p.ds_record_overhead;
+  return rvtt_timing::counted_hoist_price (costs, p.trips, p.row_words,
+					   p.ds_exec).benefit
+	 >= p.ds_hoist_min_benefit;
 }
 
 /* Downstream-mirror: does the replay-hoist gate lift the re-record
@@ -575,66 +551,24 @@ mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
 {
   if (!p.hoist_enabled || groups < 2)
     return false;
+  /* The re-record pricing form (execution/delivery bound + the
+     saturation context term) is the item-#11 engine's -- the SAME
+     function rtl-rvtt-replay.cc's gate computes with.  The mirror
+     predicts the DEFAULT model, so no completion guard.  The launch
+     run is contiguous only when the Dst auto-increment pass absorbs
+     the typed separators.  */
   const unsigned payload_slots = payload_rows * safe_words (p);
-  const int64_t exec_slots
-    = (int64_t) payload_rows * (p.ds_exec - p.barrier_words);
-  /* The launch run is contiguous only when the Dst auto-increment
-     pass absorbs the typed separators.  */
   const unsigned run = p.autoincr_enabled ? factor / payload_rows : 1;
-  const rvtt_delivery_cost::replay_shape shape
-    = rvtt_delivery_cost::rerecord_shape (p.record_hoist_enabled,
-					  p.completion_guard,
-					  /*trips_proven=*/true);
-  const rvtt_delivery_cost::replay_price price
-    = rvtt_delivery_cost::replay_pricing
-	(p.dcost, shape, groups, payload_slots, exec_slots, run,
-	 p.completion_guard, p.ds_hoist_min_benefit);
-  /* One-pin recompute-assert of the migrated inline mirror (the
-     pre-#12 spelling exists only for the default flag state;
-     item #12 discipline; delete next pin).  */
-  if (p.checking && !p.record_hoist_enabled && !p.completion_guard)
-    {
-      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
-      const int64_t exec = exec_slots * slot;
-      const int64_t deliver_record = (int64_t) (1 + payload_slots) * push;
-      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
-      int64_t benefit;
-      if (exec >= deliver_record)
-	{
-	  const int64_t before = exec + p.dcost.record_overhead_x100;
-	  benefit = (int64_t) groups * (before - after)
-		    - p.dcost.record_overhead_x100;
-	}
-      else
-	{
-	  const int64_t surplus = (int64_t) run * (exec - push);
-	  if (surplus >= deliver_record)
-	    benefit = -(deliver_record + p.dcost.record_overhead_x100);
-	  else
-	    benefit = (int64_t) groups * (deliver_record - after)
-		      - (deliver_record + p.dcost.record_overhead_x100);
-	}
-      gcc_assert (price.benefit == benefit
-		  && price.profitable
-		       == (benefit >= p.ds_hoist_min_benefit));
-    }
-  /* Item-#11 verdict-identity shadow (see mirror_counted_hoist_fires;
-     the mirror predicts the DEFAULT model, so no completion guard).  */
-  {
-    rvtt_timing::hoist_costs chk_costs;
-    chk_costs.push = p.ds_push;
-    chk_costs.slot = p.ds_slot;
-    chk_costs.turnaround = p.ds_turnaround;
-    chk_costs.record_overhead = p.ds_record_overhead;
-    const unsigned chk_run = p.autoincr_enabled ? factor / payload_rows : 1;
-    rvtt_timing::hoist_pricing chk
-      = rvtt_timing::rerecord_hoist_price
-	  (chk_costs, groups, payload_slots,
-	   (int64_t) payload_rows * (p.ds_exec - p.barrier_words),
-	   chk_run, false);
-    gcc_assert (chk.benefit == benefit && chk.after == after);
-  }
-  return price.profitable;
+  rvtt_timing::hoist_costs costs;
+  costs.push = p.ds_push;
+  costs.slot = p.ds_slot;
+  costs.turnaround = p.ds_turnaround;
+  costs.record_overhead = p.ds_record_overhead;
+  return rvtt_timing::rerecord_hoist_price
+	   (costs, groups, payload_slots,
+	    (int64_t) payload_rows * (p.ds_exec - p.barrier_words),
+	    run, false).benefit
+	 >= p.ds_hoist_min_benefit;
 }
 
 /* Measured-table price of one explicit row without loop control (a
