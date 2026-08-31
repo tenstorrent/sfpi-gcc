@@ -30,6 +30,7 @@ MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
 	rvtt-refuse.o \
+	rvtt-pressure.o \
 	rvtt-effects.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \

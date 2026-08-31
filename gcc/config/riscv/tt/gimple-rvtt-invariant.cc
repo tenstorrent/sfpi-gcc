@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
@@ -339,281 +340,11 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
   return true;
 }
 
-/* Keep the transformed loop within the architectural eight-LREG file before
-   IRA.  Every hoisted value is live across the loop, as is each vector PHI
-   (a loop-carried value) and each vector value defined outside the loop that
-   is consumed directly by a non-PHI statement in it.  This is intentionally
-   conservative: refuse the whole loop before changing virtual operands or
-   statement placement when the bound is exceeded.  */
-bool
-rvtt_loop_lreg_pressure_legal_p (class loop *loop,
-				 const auto_vec<gcall *> &loads,
-				 bool report, bool cc_transients,
-				 bool exempt_creg_reads)
-{
-  constexpr unsigned LREG_COUNT = 8;
-  std::unordered_set<tree> candidates;
-  std::unordered_set<tree> pinned;
-  std::unordered_set<tree> live;
-  std::unordered_map<tree, unsigned> remaining;
-
-  /* A value defined by a read of a constant-register-file register
-     (LReg[8..14]: the hardwired zero/one and the programmable
-     constants) never occupies one of the eight allocatable LREGs --
-     every vector operand position accepts the constant register class
-     directly (reg_or_cstlreg_operand), so register allocation
-     satisfies such a use in place.  Callers that place values around
-     instructions with creg-capable operand positions may ask to
-     exempt those definitions from the liveness count (the LUT
-     coefficient placement); the default keeps every historical
-     consumer's counting byte-identical.
-
-     One position is NOT creg-capable: a LUT table-slot argument.  The
-     slots are not encoded operands at all -- the instruction implicitly
-     reads the architectural table registers -- so a constant-register
-     value feeding a slot must be physically copied into that hard LREG
-     and holds it across the loop like any other coefficient.  A creg
-     read with such a use is therefore counted, not exempted (laneHF:
-     the FP32-direct placement exemption would otherwise undercount the
-     copy; for the FP16 packed modes slot words are compile-time-packed
-     immediates, so this test never fires there and their counting is
-     unchanged).  */
-  auto lut_slot_use_p = [] (tree name) -> bool
-    {
-      gimple *use;
-      imm_use_iterator iter;
-      FOR_EACH_IMM_USE_STMT (use, iter, name)
-	{
-	  if (is_gimple_debug (use))
-	    continue;
-	  gcall *call = dyn_cast <gcall *> (use);
-	  if (!call)
-	    continue;
-	  const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
-	  if (!insnd)
-	    continue;
-	  unsigned nslots;
-	  switch (insnd->id)
-	    {
-	    case rvtt_insn_data::sfplut:
-	    case rvtt_insn_data::sfplutfp32_3r:
-	      nslots = 3;
-	      break;
-	    case rvtt_insn_data::sfplutfp32_6r:
-	      nslots = 6;
-	      break;
-	    default:
-	      continue;
-	    }
-	  for (unsigned ix = 0; ix < nslots; ix++)
-	    if (gimple_call_arg (call, ix) == name)
-	      return true;
-	}
-      return false;
-    };
-  auto creg_resident_p = [&] (tree name) -> bool
-    {
-      if (!exempt_creg_reads || TREE_CODE (name) != SSA_NAME)
-	return false;
-      gcall *def = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (name));
-      if (!def)
-	return false;
-      const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
-      if (!insnd || insnd->id != rvtt_insn_data::sfpreadlreg)
-	return false;
-      tree arg = gimple_call_arg (def, 0);
-      if (TREE_CODE (arg) != INTEGER_CST)
-	return false;
-      HOST_WIDE_INT creg = tree_to_shwi (arg);
-      if (creg < 8 || creg > 14)
-	return false;
-      return !lut_slot_use_p (name);
-    };
-  for (gcall *call : loads)
-    {
-      tree lhs = gimple_call_lhs (call);
-      candidates.insert (lhs);
-      pinned.insert (lhs);
-      live.insert (lhs);
-    }
-
-  /* A vector can occupy an LREG throughout the loop without appearing in
-     the loop at all: for example, a value read before the loop and stored
-     after it.  Account for every vector SSA definition available at loop
-     entry that has any non-debug use outside the loop.  This deliberately
-     over-approximates values used only before the loop; false refusal is
-     preferable to creating an unspillable LREG live range.  */
-  if (!dom_info_available_p (CDI_DOMINATORS))
-    calculate_dominance_info (CDI_DOMINATORS);
-  unsigned version;
-  tree name;
-  FOR_EACH_SSA_NAME (version, name, cfun)
-    {
-      if (!VECTOR_TYPE_P (TREE_TYPE (name)) || candidates.count (name))
-	continue;
-      bool outside_use = false;
-      gimple *use;
-      imm_use_iterator iter;
-      FOR_EACH_IMM_USE_STMT (use, iter, name)
-	if (!is_gimple_debug (use)
-	    && (!gimple_bb (use)
-		|| !flow_bb_inside_loop_p (loop, gimple_bb (use))))
-	  {
-	    outside_use = true;
-	    break;
-	  }
-      if (outside_use && !creg_resident_p (name))
-	{
-	  /* Second fp16-placement refinement: a value whose every
-	     non-debug use executes BEFORE the loop is entered (each use
-	     block dominates the loop header and is outside the loop) is
-	     dead at loop entry -- e.g. a config-staging materialization
-	     consumed by a preheader SFPCONFIG write.  The historical
-	     counting deliberately over-approximates these; the refined
-	     path excludes them (false refusal is no longer preferable
-	     once the caller has an exact obligation to meet).  */
-	  if (exempt_creg_reads)
-	    {
-	      bool dead_before_entry = true;
-	      gimple *use2;
-	      imm_use_iterator iter2;
-	      FOR_EACH_IMM_USE_STMT (use2, iter2, name)
-		{
-		  if (is_gimple_debug (use2))
-		    continue;
-		  basic_block ub = gimple_bb (use2);
-		  if (!ub || flow_bb_inside_loop_p (loop, ub)
-		      || !dominated_by_p (CDI_DOMINATORS, loop->header, ub))
-		    {
-		      dead_before_entry = false;
-		      break;
-		    }
-		}
-	      if (dead_before_entry)
-		continue;
-	    }
-	  pinned.insert (name);
-	  gimple *def = SSA_NAME_DEF_STMT (name);
-	  basic_block def_bb = gimple_bb (def);
-	  if (!def_bb
-	      || (!flow_bb_inside_loop_p (loop, def_bb)
-		  && dominated_by_p (CDI_DOMINATORS, loop->header, def_bb)))
-	    live.insert (name);
-	}
-    }
-
-  basic_block *body = get_loop_body_in_dom_order (loop);
-  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
-    {
-      basic_block bb = body[ix];
-      for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
-	   gsi_next (&psi))
-	{
-	  gphi *phi = psi.phi ();
-	  tree lhs = gimple_phi_result (phi);
-	  if (lhs && VECTOR_TYPE_P (TREE_TYPE (lhs)))
-	    live.insert (lhs);
-	  for (unsigned argno = 0; argno != gimple_phi_num_args (phi); ++argno)
-	    {
-	      tree use = gimple_phi_arg_def (phi, argno);
-	      if (TREE_CODE (use) == SSA_NAME
-		  && VECTOR_TYPE_P (TREE_TYPE (use)))
-		++remaining[use];
-	    }
-	}
-
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-	   !gsi_end_p (gsi); gsi_next (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  ssa_op_iter iter;
-	  tree use;
-	  FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	    if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	      {
-		++remaining[use];
-		gimple *def = SSA_NAME_DEF_STMT (use);
-		basic_block def_bb = gimple_bb (def);
-		if ((!def_bb || !flow_bb_inside_loop_p (loop, def_bb))
-		    && !creg_resident_p (use))
-		  {
-		    pinned.insert (use);
-		    live.insert (use);
-		  }
-	      }
-	}
-    }
-
-  /* Walk every body block in dominance order (SSA definitions are walked
-     before their non-PHI uses), releasing values at their last counted use
-     and admitting locally defined vectors, tracking the peak.  PHI-argument
-     uses are counted but never released here, so loop-carried values remain
-     live through the walk — conservative in the refusing direction.  For a
-     multi-block body this measures pressure across the whole region,
-     including any inner loops.  */
-  size_t peak = live.size ();
-  for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
-    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
-	 !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gimple *stmt = gsi_stmt (gsi);
-	ssa_op_iter iter;
-	tree use;
-	FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	  if (VECTOR_TYPE_P (TREE_TYPE (use)))
-	    {
-	      auto found = remaining.find (use);
-	      gcc_assert (found != remaining.end () && found->second);
-	      if (!--found->second && !pinned.count (use))
-		live.erase (use);
-	    }
-
-	tree lhs = gimple_get_lhs (stmt);
-	if (lhs && TREE_CODE (lhs) == SSA_NAME
-	    && VECTOR_TYPE_P (TREE_TYPE (lhs))
-	    && !candidates.count (lhs)
-	    && !creg_resident_p (lhs))
-	  live.insert (lhs);
-
-	/* CC machinery materializes LREG temporaries only at RTL --
-	   compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
-	   boolean-tree saved-enables value (gimple-rvtt-expand.cc
-	   process_bool_tree) -- which this SSA walk cannot see.  A
-	   value hoisted to the preheader is live across those
-	   positions and would compete for the registers the
-	   temporaries need, turning a previously-compiling loop into
-	   the post-allocation lreg-pressure-exceeded user error.
-	   Charge them at their positions when the caller asks
-	   (invariant-loadi hoisting into CC-carrying loops); the
-	   default keeps every other consumer's counting unchanged.  */
-	size_t transient = 0;
-	if (cc_transients)
-	  {
-	    const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
-	    if (insnd)
-	      {
-		if (insnd->id == rvtt_insn_data::sfpxbool
-		    || insnd->id == rvtt_insn_data::sfpxcondi)
-		  transient = 2;
-		else if (insnd->id != rvtt_insn_data::sfppushc
-			 && insnd->id != rvtt_insn_data::sfppopc
-			 && insnd->sets_cc (as_a <gcall *> (stmt)))
-		  transient = 1;
-	      }
-	  }
-	peak = MAX (peak, live.size () + transient);
-      }
-  free (body);
-
-  unsigned limit = LREG_COUNT;
-  if (peak <= limit)
-    return true;
-  if (report && dump_file)
-    fprintf (dump_file,
-	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
-	     peak, limit);
-  return false;
-}
+/* The loop-scoped candidate-set pressure proof this pass (and the
+   crossloop, crosscall and LUT-placement consumers) uses lives in the
+   unified pressure engine, tt/rvtt-pressure.cc
+   (rvtt_pressure_loop_legal_p and the incremental rvtt_loop_pressure
+   profile; FABLE_GOES_BURR.md item #10).  */
 
 /* Prove that the loop's first header test enters the loop body.  This
    avoids speculating an architectural LREG write out of a zero-trip loop,
@@ -747,12 +478,15 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads,
 		      return materialization_cost (a) > materialization_cost (b);
 		    });
 
+  /* One base profile; each verdict is an incremental residual query
+     (verdict-identical to the full proof, asserted under
+     flag_checking) instead of a full-function walk per candidate.  */
+  rvtt_loop_pressure profile (loop, cc_transients);
   auto_vec<gcall *> selected;
   for (gcall *call : loads)
     {
       selected.safe_push (call);
-      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false,
-					    cc_transients))
+      if (!profile.legal_with (selected))
 	{
 	  selected.pop ();
 	  if (dump_file)
@@ -984,7 +718,7 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
    rename-to-free-LREG is inherent in hoisting the SSA definition (the
    preheader definition gets its own register, live across the loop;
    whether a free LREG exists is exactly the
-   rvtt_loop_lreg_pressure_legal_p proof, which refuses per-candidate
+   loop pressure proof (rvtt-pressure.cc), which refuses per-candidate
    by name), and CC-position placement is the preheader itself, which
    this proof shows carries the loop-entry mask.
 

@@ -270,6 +270,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
@@ -2681,11 +2682,11 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
   auto_vec<gcall *> loads;
   for (const contract_entry &e : contract)
     loads.safe_push (e.load);
-  if (!rvtt_loop_lreg_pressure_legal_p (consumer_loop, loads,
-					/*report=*/false,
-					/*cc_transients=*/false,
-					/*exempt_creg_reads=*/
-					!config.is_empty ()))
+  if (!rvtt_pressure_loop_legal_p (consumer_loop, loads,
+				   /*report=*/false,
+				   /*cc_transients=*/false,
+				   /*exempt_creg_reads=*/
+				   !config.is_empty ()))
     return refuse ("crosscall-callee-pressure", fn->decl, nullptr);
 
   /* Every return must be dominated by every load (the exit write-back

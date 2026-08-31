@@ -41,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "rvtt.h"
 #include <deque>
+#include "rvtt-pressure.h"
 #include <unordered_map>
 #include <unordered_set>
 

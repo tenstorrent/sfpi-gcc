@@ -93,6 +93,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-macro-ownership.h"
 
 namespace {
@@ -304,11 +305,15 @@ select_pressure_legal (class loop *loop, auto_vec<gcall *> &loads)
 			> rvtt_sfpxloadi_materialization_cost (b);
 		    });
 
+  /* One base profile; each verdict is an incremental residual query
+     (verdict-identical to the full proof, asserted under
+     flag_checking) instead of a full-function walk per candidate.  */
+  rvtt_loop_pressure profile (loop, /*cc_transients=*/false);
   auto_vec<gcall *> selected;
   for (gcall *call : loads)
     {
       selected.safe_push (call);
-      if (!rvtt_loop_lreg_pressure_legal_p (loop, selected, false))
+      if (!profile.legal_with (selected))
 	{
 	  selected.pop ();
 	  if (dump_file)

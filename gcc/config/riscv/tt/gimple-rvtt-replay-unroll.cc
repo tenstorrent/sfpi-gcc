@@ -87,6 +87,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-trips.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 
 /* Estimated delivered Tensix words for an admitted builtin, or -1 to
@@ -1144,7 +1145,8 @@ public:
      8-LREG file.  Until the pre-RA pressure-scheduling gate (the
      pressure-sched lane) lands, the bound is deliberately
      conservative: peak(one body's vector live set) + peak(body-defined
-     vector values only) <= 8 -- the union bound of one copy's full
+     vector values only) <= the file capacity (rvtt_pressure_capacity,
+     the engine's one constant) -- the union bound of one copy's full
      live set overlapping the sibling copy's private live set;
      exceeding it refuses round-interleave-pressure-exceeded.  (The
      measured lcm/gcd two-chain interleave needs 10 live registers and
@@ -1669,7 +1671,7 @@ public:
 	  peak_total = MAX (peak_total, total);
 	  peak_inside = MAX (peak_inside, inside);
 	}
-      if (peak_total + peak_inside > 8)
+      if (peak_total + peak_inside > rvtt_pressure_capacity ())
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "round-interleave: doubled-body bound "
