@@ -47,6 +47,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-raw-boundary.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-macro-epoch.h"
+#include "rvtt-refuse.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -714,10 +715,10 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
 {
   auto refuse = [] (const char *why) -> bool
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "Replay re-formation refusal:"
-		 " post-autoincr-window-launch-arithmetic-skew: %s\n", why);
+      rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_LAUNCH_ARITHMETIC_SKEW,
+		   dump_file,
+		   "Replay re-formation refusal:"
+		   " post-autoincr-window-launch-arithmetic-skew: %s\n", why);
       return false;
     };
 
@@ -878,10 +879,9 @@ window_sizing_clones_exact_p (replay_block const &block,
 {
   auto refuse = [] (const char *why) -> bool
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "window-sizing candidate refused:"
-		 " window-sizing-clone-arithmetic: %s\n", why);
+      rvtt_refuse (RVTT_REF_WINDOW_SIZING_CLONE_ARITHMETIC, dump_file,
+		   "window-sizing candidate refused:"
+		   " window-sizing-clone-arithmetic: %s\n", why);
       return false;
     };
 
@@ -2289,6 +2289,7 @@ peel_admissible_p (class loop *loop, basic_block preheader,
 {
   auto refuse = [] (const char *why, int uid) -> bool
     {
+      rvtt_refusal_fire_composed ("record-hoist-peel", why);
       if (dump_file)
 	{
 	  fprintf (dump_file, "record-hoist refused: record-hoist-peel-%s",

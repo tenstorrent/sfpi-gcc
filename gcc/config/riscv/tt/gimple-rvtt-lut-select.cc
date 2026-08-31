@@ -166,6 +166,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 #include "rvtt-lut-tables.h"
 #include "rvtt-macro-ownership.h"
 
@@ -238,9 +239,10 @@ static bool
 refuse (const char *reason, gimple *stmt)
 {
   n_refused++;
+  rvtt_refuse_by_name_at (reason, stmt, dump_file,
+			  "lut-select: refused (%s): ", reason);
   if (dump_file)
     {
-      fprintf (dump_file, "lut-select: refused (%s): ", reason);
       if (stmt)
 	print_gimple_stmt (dump_file, stmt, 0);
       else

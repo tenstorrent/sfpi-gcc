@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -2858,6 +2859,7 @@ static void
 crp_sr_refuse (basic_block bb, const char *why, unsigned r,
 	       rtx_insn *insn = nullptr)
 {
+  rvtt_refusal_fire_composed ("crossrow-shared-reload", why);
   if (dump_file)
     {
       fprintf (dump_file, "Crossrow shared-reload refused: "
@@ -3338,6 +3340,7 @@ crp_shared_reload (basic_block bb, const crp_loop &lp,
 static void
 crp_seed_refuse (basic_block bb, const char *why, unsigned r, rtx_insn *insn)
 {
+  rvtt_refusal_fire_composed ("crossrow-pairing-seed", why);
   if (dump_file)
     fprintf (dump_file, "Crossrow pairing seed refused: "
 	     "crossrow-pairing-seed-%s reg %u uid=%d in bb %d\n",
@@ -6591,8 +6594,9 @@ rvtt_macro_interrow_drain_tuned (function *fn, const macro_region &region,
   int full = desc.drain_slots;
   auto refuse = [&] (const char *name) -> int
     {
-      if (dump)
-	fprintf (dump, "Macro-planner window-pairing-refusal: %s\n", name);
+      rvtt_refuse_by_name (name, dump,
+			   "Macro-planner window-pairing-refusal: %s\n",
+			   name);
       return full;
     };
 

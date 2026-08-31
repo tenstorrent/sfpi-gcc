@@ -86,6 +86,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-scalar-evolution.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 
 /* Estimated delivered Tensix words for an admitted builtin, or -1 to
    refuse the class.  Zero-word entries are SSA plumbing that expands
@@ -503,10 +504,11 @@ public:
   void refuse (class loop *loop, const char *name, const char *detail)
   {
     ++n_refused;
+    rvtt_refuse_by_name (name, dump_file,
+			 "replay-loop-unroll: refused (%s) loop %d",
+			 name, loop->num);
     if (dump_file)
       {
-	fprintf (dump_file, "replay-loop-unroll: refused (%s) loop %d",
-		 name, loop->num);
 	if (detail)
 	  fprintf (dump_file, ": %s", detail);
 	fprintf (dump_file, "\n");
@@ -806,10 +808,11 @@ public:
   void refuse (class loop *loop, const char *name, const char *detail)
   {
     ++n_refused;
+    rvtt_refuse_by_name (name, dump_file,
+			 "launch-flatten: refused (%s) loop %d",
+			 name, loop->num);
     if (dump_file)
       {
-	fprintf (dump_file, "launch-flatten: refused (%s) loop %d",
-		 name, loop->num);
 	if (detail)
 	  fprintf (dump_file, ": %s", detail);
 	fprintf (dump_file, "\n");
@@ -1259,10 +1262,11 @@ public:
   void refuse (class loop *loop, const char *name, const char *detail)
   {
     ++n_refused;
+    rvtt_refuse_by_name (name, dump_file,
+			 "round-interleave: refused (%s) loop %d",
+			 name, loop->num);
     if (dump_file)
       {
-	fprintf (dump_file, "round-interleave: refused (%s) loop %d",
-		 name, loop->num);
 	if (detail)
 	  fprintf (dump_file, ": %s", detail);
 	fprintf (dump_file, "\n");

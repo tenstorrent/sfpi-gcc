@@ -270,6 +270,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-mop-tables.h"
@@ -283,6 +284,7 @@ namespace {
 static bool
 refuse (const char *reason, tree fn, gimple *stmt)
 {
+  rvtt_refusal_fire_by_name (reason, stmt);
   if (dump_file)
     {
       fprintf (dump_file, "crosscall-hoist: refused (%s)", reason);
