@@ -602,6 +602,9 @@ RVTT_REFUSAL (IMM_STRIDE_NOT_ABSORBED,
 RVTT_REFUSAL (IMM_STRIDE_REWRITE_UNPROVEN,
   "imm-stride-rewrite-unproven",
   "dump; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_BUDGET_EXHAUSTED,
+  "ims-budget-exhausted",
+  "item #5: Rau iterative modulo scheduling ran out of its eviction budget at every II up to the acceptance bound; the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (IMS_CARRIER_LEGALITY_UNPROVEN,
   "ims-carrier-legality-unproven",
   "reason; first seen in rtl-rvtt-macro-planner.cc")
@@ -620,6 +623,18 @@ RVTT_REFUSAL (IMS_CARRIER_ROW_DIVERGENT,
 RVTT_REFUSAL (IMS_CARRIER_WEB_UNSPLITTABLE,
   "ims-carrier-web-unsplittable",
   "reason; first seen in rtl-rvtt-macro-planner.cc")
+RVTT_REFUSAL (IMS_DEPENDENCE_DISTANCE_UNPROVEN,
+  "ims-dependence-distance-unproven",
+  "item #5: the modulo-scheduling DDG carries cross-iteration edges at distance 1 only; a deeper distance is outside the proven vocabulary and refuses (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (IMS_NO_II_DECREASE,
+  "ims-no-ii-decrease",
+  "item #5: the IMS candidate cannot prove a strict whole-row steady-state II decrease (MII at or above the current II, or the placed order not accepted by the wrapped model); the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (IMS_ORDER_HAZARD,
+  "ims-order-hazard",
+  "item #5: the committed-order legality belt found an original-order dependence direction the IMS placement's sorted order would reverse; fail-closed, existing schedule kept (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (IMS_UNAUDITED_LATENCY,
+  "ims-unaudited-latency",
+  "item #5: a result-bearing (or acceptance-stall) word of the self-loop row carries no audited in-window result latency; IMS refuses the whole row rather than place under a floored fact (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (INCOMPLETE_ORDER,
   "incomplete-order",
   "reason; first seen in rvtt-lpsolve.cc")
@@ -908,6 +923,9 @@ RVTT_REFUSAL (MULTIBB_LOOP,
 RVTT_REFUSAL (MULTIRESULT_COMPANION_SPLIT,
   "multiresult-companion-split",
   "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (MVE_RENAME_EXHAUSTED,
+  "mve-rename-exhausted",
+  "item #5: the IMS placement's value lifetimes exceed the II (kernel copies owed -- modulo variable expansion) but the rename resources do not fit: the steady-state live-copy demand exceeds the register file net of loop-live invariants, or the region rename search already exhausted the free LREGs (the 8-LREG wall).  The EXPANSION refuses; the flat IMS order is still judged by the wrapped acceptance model, which cannot ride the unrealized overlap (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (NATIVE_COMPARE_OPERAND_SHAPE,
   "native-compare-operand-shape",
   "reason; first seen in gimple-rvtt-combine.cc")

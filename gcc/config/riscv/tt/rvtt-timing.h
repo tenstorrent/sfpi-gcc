@@ -60,8 +60,12 @@ along with GCC; see the file COPYING3.  If not see
    as data.
 
    Two precision tiers, callers choose (the item-#11 contract):
-   cyclic_ii is initially the 6-copy convergence probe moved verbatim
-   (CLASS-I); the RecMII/ResMII exact form arrives with item #5's MRT.
+   cyclic_ii is the 6-copy convergence probe moved verbatim (CLASS-I,
+   the acceptance oracle); the exact tier (ResMII / RecMII / the Rau
+   iterative-modulo-scheduling placement over an II-column modulo
+   reservation table, item #5) lives below in the modulo-scheduling
+   section -- same seq/dep vocabulary, one marshaller (make_mod_prob),
+   so the MRT and the acceptance simulator cannot drift.
 
    Jointly owned seam with item #12 (one delivery-cost API): the hoist
    pricing forms below own the execution-side stall/latency simulation;
@@ -371,6 +375,411 @@ extern hoist_pricing rerecord_hoist_price (const hoist_costs &c,
 					   int64_t exec_slots,
 					   int64_t launch_run,
 					   bool completion_guard);
+
+/* ------------------------------------------------------------------
+   Modulo-scheduling exact tier (FABLE_GOES_BURR item #5).
+
+   Rau's Iterative Modulo Scheduling (Rau, MICRO-27 1994) over the SAME
+   dependence vocabulary the acceptance simulator (cyclic_ii above)
+   consumes: one marshaller, make_mod_prob, derives the dependence-
+   distance graph from a seq exactly as the 6-copy probe consults its
+   matrix -- an intra-iteration edge i->j (omega 0) for every ordered
+   pair i < j the matrix constrains, and a cross-iteration edge a->b
+   (omega 1, the diagonal's cross-copy self-dependence included) for
+   EVERY constrained pair, because in the wrapped stream every word of
+   an earlier iteration issues before every word of a later one.
+   Deeper dependence distances are never manufactured here (the
+   consumer's `ims-dependence-distance-unproven' contract).
+
+   The reservation model is the single-issue Tensix front end: the MRT
+   is II issue-slot columns, an op occupies `words' consecutive columns
+   modulo II (a priced acceptance-stall word arrives with its extra
+   slot already in `words', exactly as in the acceptance model), so
+   ResMII is the body's total issue-slot count.  RecMII is exact: the
+   smallest II at which the constraint graph with edge weights
+   (delta - II*omega) carries no positive cycle (longest-path
+   feasibility; monotone in II, so binary search).
+
+   Modulo variable expansion (Lam, PLDI 1988) bookkeeping: mve_kmin is
+   the kernel-copy count ceil(maxlifetime/II) the placement's value
+   lifetimes demand, and mve_live_demand the peak simultaneously-live
+   value-copy count of the steady state -- the consumer prices it
+   against the register file (item #10's capacity) and refuses
+   `mve-rename-exhausted' when it does not fit.  Lifetimes are read
+   from DEP_LATENCY edges; the vocabulary merges RAW and WAW, so a
+   WAW-only edge can only LENGTHEN a computed lifetime -- conservative
+   in the refusing direction, never admitting.
+
+   Pure data throughout: header-inline, no GCC or IR types, so the
+   standalone unit test (rvtt-timing-test.cc) compiles this section
+   directly.  All loops are index-ordered; results are deterministic
+   functions of the problem alone.  */
+
+struct mod_edge
+{
+  unsigned from = 0, to = 0;
+  int delta = 0;	/* required issue-slot distance */
+  int omega = 0;	/* iteration distance (0 or 1) */
+  dep_kind kind = DEP_NONE;
+};
+
+struct mod_prob
+{
+  std::vector<int> words;	/* issue slots per node */
+  std::vector<mod_edge> edges;
+};
+
+/* The one marshaller from the acceptance vocabulary.  */
+
+inline mod_prob
+make_mod_prob (const seq &s)
+{
+  mod_prob p;
+  const unsigned n = s.ops.size ();
+  p.words.resize (n);
+  for (unsigned i = 0; i != n; ++i)
+    p.words[i] = s.ops[i].words;
+  for (unsigned a = 0; a != n; ++a)
+    for (unsigned b = 0; b != n; ++b)
+      {
+	dep_kind kind = s.kind (a, b);
+	if (kind == DEP_NONE)
+	  continue;
+	int delta = s.ops[a].words
+		    + (kind == DEP_LATENCY ? s.ops[a].lat : 0);
+	mod_edge e;
+	e.from = a;
+	e.to = b;
+	e.delta = delta;
+	e.kind = kind;
+	if (a < b)
+	  {
+	    e.omega = 0;	/* original program order */
+	    p.edges.push_back (e);
+	  }
+	e.omega = 1;		/* the wrapped-stream constraint */
+	p.edges.push_back (e);
+      }
+  return p;
+}
+
+/* Resource-minimum II of the single-issue front end: the body's total
+   issue-slot count.  */
+
+inline int
+resmii (const mod_prob &p)
+{
+  int sum = 0;
+  for (unsigned i = 0; i != p.words.size (); ++i)
+    sum += p.words[i];
+  return sum;
+}
+
+/* Longest-path feasibility of candidate II: no positive cycle under
+   edge weights (delta - II*omega).  */
+
+inline bool
+mod_ii_feasible (const mod_prob &p, int ii)
+{
+  const unsigned n = p.words.size ();
+  std::vector<long> x (n, 0);
+  for (unsigned pass = 0; pass <= n; ++pass)
+    {
+      bool changed = false;
+      for (unsigned k = 0; k != p.edges.size (); ++k)
+	{
+	  const mod_edge &e = p.edges[k];
+	  long need = x[e.from] + e.delta - (long) ii * e.omega;
+	  if (need > x[e.to])
+	    {
+	      x[e.to] = need;
+	      changed = true;
+	    }
+	}
+      if (!changed)
+	return true;
+    }
+  return false;
+}
+
+/* Exact recurrence-minimum II: the smallest feasible II (monotone in
+   II -- raising II only loosens omega-carrying edges).  Returns -1 on
+   a problem infeasible at every II (an intra-iteration positive cycle;
+   impossible for a program-order marshalling, kept fail-closed).  */
+
+inline int
+recmii (const mod_prob &p)
+{
+  long cap = 1;
+  for (unsigned k = 0; k != p.edges.size (); ++k)
+    if (p.edges[k].delta > 0)
+      cap += p.edges[k].delta;
+  if (!mod_ii_feasible (p, (int) cap))
+    return -1;
+  int lo = 0, hi = (int) cap;
+  while (lo < hi)
+    {
+      int mid = lo + (hi - lo) / 2;
+      if (mod_ii_feasible (p, mid))
+	hi = mid;
+      else
+	lo = mid + 1;
+    }
+  return lo;
+}
+
+struct mod_placement
+{
+  bool scheduled = false;
+  bool budget_exhausted = false;
+  int ii = 0;
+  std::vector<int> sigma;	/* absolute issue slots */
+};
+
+/* One Rau IMS attempt at fixed II under an eviction BUDGET (total
+   placements).  Deterministic: height-directed priority (longest path
+   over (delta - II*omega) weights), index order on ties; the modulo
+   reservation table is II single-issue columns; an op finding no
+   conflict-free slot in its II-wide window force-places and evicts the
+   occupants and any dependence-violated successors (Rau's rule).
+   Returns false with *EXHAUSTED set when the budget runs out.  */
+
+inline bool
+ims_try (const mod_prob &p, int ii, int budget, std::vector<int> *sigma_out,
+	 bool *exhausted)
+{
+  const unsigned n = p.words.size ();
+  *exhausted = false;
+  if (ii <= 0)
+    return false;
+  for (unsigned v = 0; v != n; ++v)
+    if (p.words[v] > ii)
+      return false;
+
+  /* Heights at this II (bounded iff II is feasible).  */
+  std::vector<long> height (n, 0);
+  for (unsigned pass = 0;; ++pass)
+    {
+      bool changed = false;
+      for (unsigned k = 0; k != p.edges.size (); ++k)
+	{
+	  const mod_edge &e = p.edges[k];
+	  long h = height[e.to] + e.delta - (long) ii * e.omega;
+	  if (h > height[e.from])
+	    {
+	      height[e.from] = h;
+	      changed = true;
+	    }
+	}
+      if (!changed)
+	break;
+      if (pass > n)
+	return false;		/* infeasible II */
+    }
+
+  /* Priority: height descending, index ascending.  */
+  std::vector<unsigned> prio (n);
+  for (unsigned i = 0; i != n; ++i)
+    prio[i] = i;
+  for (unsigned i = 1; i < n; ++i)	/* stable insertion sort */
+    {
+      unsigned v = prio[i];
+      unsigned j = i;
+      while (j > 0 && (height[prio[j - 1]] < height[v]
+		       || (height[prio[j - 1]] == height[v]
+			   && prio[j - 1] > v)))
+	{
+	  prio[j] = prio[j - 1];
+	  --j;
+	}
+      prio[j] = v;
+    }
+
+  std::vector<int> sigma (n, -1);
+  std::vector<int> prev (n, -1);
+  std::vector<int> owner (ii, -1);	/* MRT column -> op or -1 */
+
+  auto unschedule = [&] (unsigned w)
+  {
+    for (int c = 0; c != p.words[w]; ++c)
+      {
+	int col = (sigma[w] + c) % ii;
+	if (owner[col] == (int) w)
+	  owner[col] = -1;
+      }
+    sigma[w] = -1;
+  };
+
+  unsigned placed = 0;
+  while (placed != n)
+    {
+      /* Highest-priority unscheduled op.  */
+      unsigned v = n;
+      for (unsigned k = 0; k != n; ++k)
+	if (sigma[prio[k]] < 0)
+	  {
+	    v = prio[k];
+	    break;
+	  }
+      if (budget-- <= 0)
+	{
+	  *exhausted = true;
+	  return false;
+	}
+
+      /* Earliest start from scheduled predecessors.  */
+      long estart = 0;
+      for (unsigned k = 0; k != p.edges.size (); ++k)
+	{
+	  const mod_edge &e = p.edges[k];
+	  if (e.to != v || e.from == v || sigma[e.from] < 0)
+	    continue;
+	  long need = sigma[e.from] + e.delta - (long) ii * e.omega;
+	  if (need > estart)
+	    estart = need;
+	}
+
+      /* First conflict-free slot in the II-wide window.  */
+      long t = -1;
+      for (long s = estart; s != estart + ii; ++s)
+	{
+	  bool free_slot = true;
+	  for (int c = 0; c != p.words[v] && free_slot; ++c)
+	    free_slot = owner[(s + c) % ii] < 0;
+	  if (free_slot)
+	    {
+	      t = s;
+	      break;
+	    }
+	}
+      if (t < 0)
+	t = (prev[v] < 0 || estart > prev[v]) ? estart : prev[v] + 1;
+
+      /* Evict MRT occupants of the chosen columns.  */
+      for (int c = 0; c != p.words[v]; ++c)
+	{
+	  int col = (int) ((t + c) % ii);
+	  if (owner[col] >= 0 && owner[col] != (int) v)
+	    unschedule ((unsigned) owner[col]);
+	}
+      sigma[v] = (int) t;
+      prev[v] = (int) t;
+      for (int c = 0; c != p.words[v]; ++c)
+	owner[(t + c) % ii] = (int) v;
+
+      /* Evict dependence-violated scheduled successors (predecessor
+	 constraints hold by estart).  */
+      for (unsigned k = 0; k != p.edges.size (); ++k)
+	{
+	  const mod_edge &e = p.edges[k];
+	  if (e.from != v || e.to == v || sigma[e.to] < 0)
+	    continue;
+	  if ((long) sigma[e.to] < sigma[v] + e.delta - (long) ii * e.omega)
+	    unschedule (e.to);
+	}
+
+      placed = 0;
+      for (unsigned k = 0; k != n; ++k)
+	if (sigma[k] >= 0)
+	  ++placed;
+    }
+
+  /* Belt: every constraint of the committed placement re-verified.  */
+  for (unsigned k = 0; k != p.edges.size (); ++k)
+    {
+      const mod_edge &e = p.edges[k];
+      if ((long) sigma[e.to] < sigma[e.from] + e.delta - (long) ii * e.omega)
+	return false;
+    }
+  *sigma_out = sigma;
+  return true;
+}
+
+/* Iterate II from MII to MAX_II; the first success wins.  */
+
+inline mod_placement
+ims_schedule (const mod_prob &p, int mii, int max_ii, int budget)
+{
+  mod_placement pl;
+  if (mii < 1)
+    mii = 1;
+  for (int ii = mii; ii <= max_ii; ++ii)
+    {
+      bool exhausted = false;
+      std::vector<int> sigma;
+      if (ims_try (p, ii, budget, &sigma, &exhausted))
+	{
+	  pl.scheduled = true;
+	  pl.ii = ii;
+	  pl.sigma = sigma;
+	  return pl;
+	}
+      if (exhausted)
+	pl.budget_exhausted = true;
+    }
+  return pl;
+}
+
+/* MVE kernel-copy count: ceil of the longest value lifetime over the
+   II.  Lifetimes are DEP_LATENCY producer-to-consumer spans of the
+   placement (>= delta by construction).  */
+
+inline int
+mve_kmin (const mod_prob &p, const mod_placement &pl)
+{
+  long maxlife = 0;
+  for (unsigned k = 0; k != p.edges.size (); ++k)
+    {
+      const mod_edge &e = p.edges[k];
+      if (e.kind != DEP_LATENCY || e.from == e.to)
+	continue;
+      long life = pl.sigma[e.to] + (long) pl.ii * e.omega
+		  - pl.sigma[e.from];
+      if (life > maxlife)
+	maxlife = life;
+    }
+  if (maxlife <= 0)
+    return 1;
+  return (int) ((maxlife + pl.ii - 1) / pl.ii);
+}
+
+/* Peak simultaneously-live value-copy count of the steady state: at
+   each modulo phase, every producer contributes one copy per started-
+   but-undrained iteration of its longest lifetime.  */
+
+inline unsigned
+mve_live_demand (const mod_prob &p, const mod_placement &pl)
+{
+  const unsigned n = p.words.size ();
+  std::vector<long> life (n, 0);
+  for (unsigned k = 0; k != p.edges.size (); ++k)
+    {
+      const mod_edge &e = p.edges[k];
+      if (e.kind != DEP_LATENCY || e.from == e.to)
+	continue;
+      long l = pl.sigma[e.to] + (long) pl.ii * e.omega - pl.sigma[e.from];
+      if (l > life[e.from])
+	life[e.from] = l;
+    }
+  unsigned peak = 0;
+  for (int s = 0; s != pl.ii; ++s)
+    {
+      unsigned live = 0;
+      for (unsigned v = 0; v != n; ++v)
+	{
+	  if (life[v] <= 0)
+	    continue;
+	  long r = ((long) s - pl.sigma[v]) % pl.ii;
+	  if (r < 0)
+	    r += pl.ii;
+	  if (life[v] > r)
+	    live += (unsigned) ((life[v] - r - 1) / pl.ii + 1);
+	}
+      if (live > peak)
+	peak = live;
+    }
+  return peak;
+}
 
 } // namespace rvtt_timing
 
