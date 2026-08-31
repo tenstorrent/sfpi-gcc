@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-raw-boundary.h"
@@ -1528,6 +1529,59 @@ transform (function *fn)
 	    if (cc_depth_at_stmt (cc, call) > 0)
 	      ++in_region;
 	  bool demand_defer = in_region >= 3;
+	  /* ITEM #13 (placement arbiter): the `in_region >= 3' demand
+	     cut above is a measured local optimum (every kept-hoist
+	     winner sat at demand <= 2, every deferral winner at >= 3;
+	     the named successor was "a finer per-authority priced
+	     arbitration").  The arbiter's priced spelling asks the
+	     pressure engine the exact question the cut approximates:
+	     does keeping the depth-zero hoists AND the in-region
+	     parks-to-be live across this loop fit the LREG file?  A
+	     fit means there is no contention for the later authorities
+	     to arbitrate (keep the free depth-zero hoists); a miss
+	     means the loop is in the pressure-arbitrated regime the
+	     later authorities own (defer wholesale).  Shadow mode
+	     dumps both verdicts and changes nothing; under
+	     -mtt-tensix-optimize-priced-placement the priced verdict
+	     decides, an over-budget candidate set refusing by name
+	     back to the legacy cut.  The LUT-coefficient authority
+	     below is not a price and keeps its wholesale deferral in
+	     both modes.  */
+	  if (!lut_body && in_region > 0
+	      && (dump_file || riscv_tt_opt_priced_placement > 0))
+	    {
+	      if (loads.length () > RVTT_PLACE_MAX_CANDIDATES)
+		{
+		  if (riscv_tt_opt_priced_placement > 0)
+		    rvtt_refuse (RVTT_REF_PLACE_BUDGET_EXHAUSTED, dump_file,
+				 "placement-arbiter: park-ordering loop bb %d"
+				 " over budget (place-budget-exhausted); the"
+				 " legacy demand cut stands\n",
+				 loop->header->index);
+		  else if (dump_file)
+		    fprintf (dump_file,
+			     "placement-arbiter: park-ordering loop bb %d"
+			     " over budget; the legacy demand cut stands\n",
+			     loop->header->index);
+		}
+	      else
+		{
+		  rvtt_loop_pressure arb_profile (loop, cc.has_cc);
+		  bool priced_defer = !arb_profile.legal_with (loads);
+		  char point[96];
+		  snprintf (point, sizeof point,
+			    "park-ordering loop bb %d (in-region %u)",
+			    loop->header->index, in_region);
+		  rvtt_place_dump_verdict (dump_file, point,
+					   demand_defer ? "defer" : "keep",
+					   priced_defer ? "defer" : "keep",
+					   riscv_tt_opt_priced_placement > 0
+					   ? "(deciding=priced)"
+					   : "(deciding=legacy)");
+		  if (riscv_tt_opt_priced_placement > 0)
+		    demand_defer = priced_defer;
+		}
+	    }
 	  if (demand_defer && !lut_body && dump_file)
 	    fprintf (dump_file,
 		     "park-ordering: loop bb %d defers wholesale:"

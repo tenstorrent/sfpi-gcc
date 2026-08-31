@@ -674,6 +674,80 @@ span_pressure_with_extension (basic_block bb, rtx_insn *from, rtx_insn *to,
   return max_pressure;
 }
 
+/* ITEM #13 (placement arbiter) shadow census: on a pressure-guard
+   refusal, name the rematerializable constant-materialization webs
+   live through the refused span -- the relief anatomy the arbiter's
+   pressure-park fold reserve (gimple-rvtt-prgm-const.cc) prices at
+   placement time.  A web qualifies as remat-class when its every
+   definition is the constant-immediate SFPLOADI materialization (a
+   multi-issue constant's completion writes are loadi too); such webs
+   are exactly what the placement tiers pinned into the file.  Pure
+   dump; the fold verdict is decided above, unchanged, in both flag
+   states.  */
+
+static void
+dump_relief_census (basic_block bb, rtx_insn *from, rtx_insn *to)
+{
+  if (!dump_file)
+    return;
+  auto_bitmap live, span_live;
+  bitmap_copy (live, DF_LR_OUT (bb));
+  df_simulate_initialize_backwards (bb, live);
+  bool in_span = false;
+  for (rtx_insn *insn = BB_END (bb); insn; insn = PREV_INSN (insn))
+    {
+      if (insn == to)
+	in_span = true;
+      if (NONDEBUG_INSN_P (insn))
+	df_simulate_one_insn_backwards (bb, insn, live);
+      if (in_span)
+	bitmap_ior_into (span_live, live);
+      if (insn == from || insn == BB_HEAD (bb))
+	break;
+    }
+  unsigned webs = 0;
+  fprintf (dump_file, "placement-arbiter: relief census at insn %d:",
+	   INSN_UID (to));
+  unsigned regno;
+  bitmap_iterator bi;
+  EXECUTE_IF_SET_IN_BITMAP (span_live, FIRST_PSEUDO_REGISTER, regno, bi)
+    {
+      if (!sfpu_pressure_reg_p (regno))
+	continue;
+      bool remat = false;
+      unsigned HOST_WIDE_INT value = 0;
+      for (df_ref def = DF_REG_DEF_CHAIN (regno); def;
+	   def = DF_REF_NEXT_REG (def))
+	{
+	  rtx_insn *di = DF_REF_INSN (def);
+	  if (!di || recog_memoized (di) != CODE_FOR_rvtt_sfploadi_lv_int)
+	    {
+	      remat = false;
+	      break;
+	    }
+	  extract_insn (di);
+	  rtx imm = recog_data.operand[4];
+	  if (!CONST_INT_P (imm))
+	    {
+	      remat = false;
+	      break;
+	    }
+	  if (!remat)
+	    value = UINTVAL (imm);
+	  remat = true;
+	}
+      if (remat)
+	{
+	  ++webs;
+	  fprintf (dump_file, " r%u(loadi 0x%08x)", regno,
+		   (unsigned) value);
+	}
+    }
+  fprintf (dump_file,
+	   " -- %u remat-class constant web(s) live through the refused"
+	   " span\n", webs);
+}
+
 /* ------------------------------ pass ------------------------------- */
 
 static void
@@ -819,6 +893,7 @@ dst_ownership (function *fn)
 				       " (pressure %d > budget %d) at insn"
 				       " %d\n",
 				       pressure, budget, INSN_UID (insn));
+			  dump_relief_census (bb, hit->insn, insn);
 			}
 		      else
 			{

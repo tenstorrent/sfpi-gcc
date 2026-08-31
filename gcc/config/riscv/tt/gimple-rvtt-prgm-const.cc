@@ -131,6 +131,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
+#include "rvtt-placement.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
@@ -3850,6 +3851,138 @@ residency_transform (function *fn, prgm_state *st)
     };
   rank (loop_cands);
   rank (pressure_cands);
+  /* ITEM #13 (placement arbiter): the priced within-class ranking GV's
+     comment above names as the known residual.  The digamma-fresh
+     starvation that vetoed a words-saved key was pricing WITHOUT a
+     pressure term; the arbiter prices both: the primary key is
+     pressure relief (the candidate's programming point sits in a
+     block the function-wide pressure model marks over capacity), the
+     secondary key the run-amortized delivery benefit through the one
+     delivery-cost API (loop class: the one-word in-loop
+     materialization saved per body execution against the two-word
+     PRGM programming once per entry; in-place classes: the extra
+     programming word at the same position -- their value IS the
+     relief term), then GV's uses-then-value, then discovery order.
+     Shadow mode dumps both orders and changes nothing; under
+     -mtt-tensix-optimize-priced-placement the priced order decides.
+     Any unpriceable member (trip weight unproven) or an over-budget
+     class fails the whole class closed to the legacy order, by name
+     when deciding.  */
+  /* Heap-held: the model's destructor releases an obstack only its
+     compute initializes, so an unused model must never be
+     destructed.  */
+  rvtt_pressure_model *arb_model = nullptr;
+  auto priced_rank = [&] (auto_vec<residency_candidate> &v, const char *cls)
+    {
+      bool decide = riscv_tt_opt_priced_placement > 0;
+      if (v.length () < 2 || (!dump_file && !decide))
+	return;
+      if (v.length () > RVTT_PLACE_MAX_CANDIDATES)
+	{
+	  if (decide)
+	    rvtt_refuse (RVTT_REF_PLACE_BUDGET_EXHAUSTED, dump_file,
+			 "placement-arbiter: residency-rank %s over budget "
+			 "(place-budget-exhausted); the legacy order "
+			 "stands\n", cls);
+	  else if (dump_file)
+	    fprintf (dump_file,
+		     "placement-arbiter: residency-rank %s over budget; "
+		     "the legacy order stands\n", cls);
+	  return;
+	}
+      struct priced_key
+      {
+	bool relief;
+	int64_t net;
+	unsigned uses;
+	unsigned value;
+	unsigned idx;		/* legacy-order position (stability) */
+      };
+      auto_vec<priced_key, 32> keys;
+      for (unsigned i = 0; i < v.length (); ++i)
+	{
+	  residency_candidate &c = v[i];
+	  rvtt_place_weight w
+	    = rvtt_place_loop_weight (c.loop && !c.inplace ? c.loop
+				      : nullptr);
+	  if (!w.proven)
+	    {
+	      if (decide)
+		rvtt_refuse (RVTT_REF_PLACE_ALTERNATIVE_UNPRICEABLE,
+			     dump_file,
+			     "placement-arbiter: residency-rank %s "
+			     "unpriceable (place-alternative-unpriceable: "
+			     "trip weight unproven); the legacy order "
+			     "stands\n", cls);
+	      else if (dump_file)
+		fprintf (dump_file,
+			 "placement-arbiter: residency-rank %s unpriceable "
+			 "(trip weight unproven); the legacy order "
+			 "stands\n", cls);
+	      return;
+	    }
+	  if (!arb_model)
+	    {
+	      arb_model = new rvtt_pressure_model;
+	      rvtt_pressure_compute (fn, rvtt_pressure_capacity (),
+				     arb_model);
+	    }
+	  priced_key k;
+	  k.relief = arb_model->over_bbs
+	    && bitmap_bit_p (arb_model->over_bbs,
+			     gimple_bb (c.load)->index);
+	  k.net = c.loop && !c.inplace
+	    ? rvtt_place_net_benefit (1, 2, w)
+	    : rvtt_place_net_benefit (0, 1, w);
+	  k.uses = c.uses;
+	  k.value = c.value;
+	  k.idx = i;
+	  keys.safe_push (k);
+	}
+      auto before = [] (const priced_key &a, const priced_key &b)
+	{
+	  if (a.relief != b.relief)
+	    return a.relief;
+	  if (a.net != b.net)
+	    return a.net > b.net;
+	  if (a.uses != b.uses)
+	    return a.uses > b.uses;
+	  if (a.value != b.value)
+	    return a.value < b.value;
+	  return a.idx < b.idx;
+	};
+      /* The same deterministic insertion discipline as GV's rank.  */
+      for (unsigned i = 1; i < keys.length (); ++i)
+	for (unsigned j = i; j > 0 && before (keys[j], keys[j - 1]); --j)
+	  std::swap (keys[j - 1], keys[j]);
+      bool differs = false;
+      for (unsigned i = 0; i < keys.length (); ++i)
+	differs |= keys[i].idx != i;
+      if (dump_file)
+	{
+	  fprintf (dump_file, "placement-arbiter: residency-rank %s legacy=[",
+		   cls);
+	  for (unsigned i = 0; i < v.length (); ++i)
+	    fprintf (dump_file, "%s0x%08x", i ? "," : "", v[i].value);
+	  fprintf (dump_file, "] priced=[");
+	  for (unsigned i = 0; i < keys.length (); ++i)
+	    fprintf (dump_file, "%s0x%08x", i ? "," : "",
+		     v[keys[i].idx].value);
+	  fprintf (dump_file, "] %s (deciding=%s)\n",
+		   differs ? "DISAGREE" : "AGREE",
+		   decide ? "priced" : "legacy");
+	}
+      if (decide && differs)
+	{
+	  auto_vec<residency_candidate, 32> reordered;
+	  for (unsigned i = 0; i < keys.length (); ++i)
+	    reordered.safe_push (v[keys[i].idx]);
+	  for (unsigned i = 0; i < keys.length (); ++i)
+	    v[i] = reordered[i];
+	}
+    };
+  priced_rank (loop_cands, "loop-class");
+  priced_rank (pressure_cands, "pressure-class");
   /* LOOP-RECLAIM slot discipline: a DEAD claimed slot whose unique TU
      value equals SOME pending candidate's value is that candidate's
      value-identical home -- reclaiming it with a different value
@@ -4257,6 +4390,39 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	  return false;
 	}
+      /* ITEM #13 (placement arbiter), the erfinv relief lever: "price
+	 the dst-ownership fold through the pressure-park tier" (the
+	 pin-48 named successor; laneJT structurally refuted post-alloc
+	 coalescing as the alternative relief).  The MARGINAL park --
+	 the one about to take the function's last free LREG -- is
+	 priced against the downstream identity-reload fold demand
+	 whose lreg-pressure-exceeded guard loses to a full file: when
+	 the priced fold demand outbids this park's amortized benefit,
+	 the park yields by name and the register stays free for the
+	 fold's own (unchanged) RTL proof to spend.  Shadow mode dumps
+	 the bid comparison and parks exactly as before.  */
+      if (lreg_budget == 1
+	  && (dump_file || riscv_tt_opt_priced_placement > 0))
+	{
+	  bool decide = riscv_tt_opt_priced_placement > 0;
+	  rvtt_place_weight w = rvtt_place_loop_weight (c.loop);
+	  int64_t park_bid
+	    = w.proven ? rvtt_place_net_benefit (1, 1, w) : 0;
+	  bool outbid
+	    = rvtt_place_fold_reserve_outbids (fn, park_bid, w.proven,
+					       "park-tier", dump_file,
+					       decide);
+	  if (decide && outbid)
+	    {
+	      rvtt_refuse (RVTT_REF_PLACE_FOLD_RESERVE_OUTBID, dump_file,
+			   "park-tier: refused (place-fold-reserve-outbid): "
+			   "the priced fold demand outbids the marginal "
+			   "LREG park: ");
+	      if (dump_file)
+		print_gimple_stmt (dump_file, c.load, 0);
+	      return false;
+	    }
+	}
       peel_record *rec = ensure_peeled (c);
       /* Pre-peel placement (lane IN): under the park-ordering regime
 	 the deferral moved this candidate from the early invariant
@@ -4385,6 +4551,28 @@ residency_transform (function *fn, prgm_state *st)
 	      fprintf (dump_file, "const-residency: store-source-tier "
 		       "(store-source-encoding-ceiling): ");
 	      print_gimple_stmt (dump_file, c.load, 0);
+	      /* ITEM #13 shadow: the LREG-tier-first choice as a bid
+		 pair.  The LREG park saves the materialization word
+		 AND the per-row copy tax; a PRGM park keeps paying
+		 the copy tax and adds the programming pair -- the
+		 LREG bid dominates whenever a register is free, which
+		 is exactly the established tier order (the arbitrated
+		 margin is the fold reserve inside the tier).  */
+	      rvtt_place_weight w = rvtt_place_loop_weight (c.loop);
+	      if (w.proven)
+		fprintf (dump_file,
+			 "placement-arbiter: store-source bb %d lreg-park "
+			 "bid %" PRId64 " vs prgm-park bid %" PRId64
+			 " -> lreg-tier-first\n",
+			 gimple_bb (c.load)->index,
+			 rvtt_place_net_benefit (2, 1, w),
+			 rvtt_place_net_benefit (0, 2, w));
+	      else
+		fprintf (dump_file,
+			 "placement-arbiter: store-source bb %d bids "
+			 "unpriceable (trip weight unproven); the "
+			 "established tier order stands\n",
+			 gimple_bb (c.load)->index);
 	    }
 	  if (lreg_hoist (c))
 	    {
@@ -4476,6 +4664,7 @@ residency_transform (function *fn, prgm_state *st)
 
   for (peel_record *rec : peel_records)
     delete rec;
+  delete arb_model;
   return changed;
 }
 

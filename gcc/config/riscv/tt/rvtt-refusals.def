@@ -968,6 +968,15 @@ RVTT_REFUSAL (PEEL_TRIP_COUNT_UNPROVEN,
 RVTT_REFUSAL (PHI_USE_UNCLONABLE,
   "phi-use-unclonable",
   "dump; first seen in gimple-rvtt-prgm-const.cc")
+RVTT_REFUSAL (PLACE_ALTERNATIVE_UNPRICEABLE,
+  "place-alternative-unpriceable",
+  "item #13 placement arbiter: an arbitrated alternative whose trip weight or word count cannot be derived refuses pricing and keeps the legacy decision (rvtt-placement.cc)")
+RVTT_REFUSAL (PLACE_BUDGET_EXHAUSTED,
+  "place-budget-exhausted",
+  "item #13 placement arbiter: a decision point whose candidate set exceeds the deterministic arbitration budget refuses whole and keeps the legacy policy chain (rvtt-placement.cc)")
+RVTT_REFUSAL (PLACE_FOLD_RESERVE_OUTBID,
+  "place-fold-reserve-outbid",
+  "item #13 placement arbiter: the marginal pressure-park LREG park yields the last free register to the priced dst-ownership fold demand (the erfinv 9>8 relief lever; gimple-rvtt-prgm-const.cc)")
 RVTT_REFUSAL (PLANNED_LREG_LIVE,
   "planned-lreg-live",
   "dump; first seen in rtl-rvtt-macro-planner.cc")

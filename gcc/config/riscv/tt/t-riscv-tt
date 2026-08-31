@@ -94,6 +94,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-cc-region.o \
 	rvtt-delivery-cost.o \
 	rvtt-timing.o \
+	rvtt-placement.o \
 
 OBJS += $(RVTT_OBJS)
 
