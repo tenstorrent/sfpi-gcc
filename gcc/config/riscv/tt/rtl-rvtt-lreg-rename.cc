@@ -1338,6 +1338,15 @@ public:
 		    chain_desc ch;
 		    if (!analyze_chain (bb, scan, i, fn_has_opaque, -1, &ch))
 		      continue;
+		    /* Phase 1 admits only v1-SHAPED chains end to end:
+		       a pure kill close inside the row (v1 refuses
+		       reading closes as tied consumers and open chains
+		       at the boundary), so the free registers phase 1
+		       claims are exactly the ones the v1 pass would --
+		       general chains wait for phase 2.  */
+		    if (phase == 0
+			&& (ch.close == ch.scan.size () || ch.close_reads))
+		      continue;
 		    if (!span_no_worse_p (ch))
 		      continue;
 		    if (commit_chain (ch))
