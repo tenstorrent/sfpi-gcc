@@ -1,0 +1,75 @@
+/* Dst store-fold format-pair verdicts -*- mode: c++ -*-
+   Generated automatically by genrvtt-storefold from the
+   exhaustive proof sweeps -- DO NOT EDIT.
+
+   Sources of truth (SHA256 of the RESULT bytes at generation time):
+     tt/proofs/store-sink-roundtrip/RESULT.txt
+       c8dec879ce6418896cdb7c6fb5cdf6d9062281bd3d80e2a161abecae7517f457
+     tt/proofs/stochrnd-store-round/RESULT.txt
+       651ed50f909f269cfacf7644242926c9f09097896c71bdf0a5d21e308efe4b86
+
+   Regenerate: `make rvtt-storefold-verdicts-regen` in the gcc
+   build directory (writes back into the source tree).  Every
+   build regenerates into a scratch file and BYTE-COMPARES it
+   against this checked-in table (tt/t-riscv-tt
+   rvtt-storefold-verdicts.chk): if a RESULT file changes, or
+   this file is edited by hand, the build fails loudly -- the
+   tt/proofs/README.md "retire the rule if the RESULT stops
+   being EQUAL" contract as a build fact, and the transcription
+   fidelity of every row below as a machine check (FABLE_GOES_BURR item #3).
+
+   RVTT_STOREFOLD_SINK_PAIR (lfmt, sfmt, verdict, divergence,
+				license, roundtrip_sha, identity_sha)
+     One S2-sink admission row per proven (load Mod0, store Mod0)
+     Dst round trip; license = FIRE (EQUAL pair) / LICENSED
+     (denormal-flush class, -mtt-tensix-optimize-store-sink only) /
+     REFUSE (divergence outside the ratified class).  Pairs without
+     a row refuse store-fold-sink-format-unproven.
+   RVTT_STOCHRND_STORE_PAIR (conv_mod1, store_mod0, fused_sha,
+			       direct_sha)
+     One licensed matching-precision pairing for the stochrnd
+     store fold's pair_ok (-mtt-tensix-optimize-stochrnd-store-fold).
+
+   SRCB rows carry no stream commitment of their own: the SRCB
+   store resolves at runtime to one of the swept float paths (the
+   row's ALU config owns the resolution; laneHL SRCB precedent) --
+   their class is derived as the most refusing of the swept float
+   pairs.  */
+
+RVTT_STOREFOLD_PROOF ("store-sink-roundtrip/RESULT.txt", "c8dec879ce6418896cdb7c6fb5cdf6d9062281bd3d80e2a161abecae7517f457")
+RVTT_STOREFOLD_PROOF ("stochrnd-store-round/RESULT.txt", "651ed50f909f269cfacf7644242926c9f09097896c71bdf0a5d21e308efe4b86")
+
+/* BF16, 16-bit Dst layout: 254 mismatches / 65536 swept.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_BF16, SFPMEM_MOD0_FMT_BF16, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
+			  "be7fd9fb887be23ee9b933786157a2378fee8dfcd9fdd3770b454ab3de91d252",
+			  "68e419472d25e0b85e9917ccf692fd58245c5e95e9a46f07d1df81d2e9da246b")
+/* FP16, 16-bit Dst layout: 2046 mismatches / 65536 swept.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_FP16, SFPMEM_MOD0_FMT_FP16, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
+			  "0e39418569caf807a185d6bd734d677e198a5644383988d8567be8bc56abfab0",
+			  "68e419472d25e0b85e9917ccf692fd58245c5e95e9a46f07d1df81d2e9da246b")
+/* INT32 raw, Dst32b (BH): 0 mismatches / 4294967296 swept.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_INT32, SFPMEM_MOD0_FMT_INT32, EQUAL, NONE, FIRE,
+			  "1e2ba2146ddd69bcb06ede6c03578e7060de163d7a0b54cc4367eec762db3df9",
+			  "1e2ba2146ddd69bcb06ede6c03578e7060de163d7a0b54cc4367eec762db3df9")
+/* FP32, Dst32b (BH): 16777214 mismatches / 4294967296 swept.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_FP32, SFPMEM_MOD0_FMT_FP32, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
+			  "f2bf368ce8bd5f53fe4ddd98f1474cf211a8e09014093a68d7f4c4fb291cf8e1",
+			  "1e2ba2146ddd69bcb06ede6c03578e7060de163d7a0b54cc4367eec762db3df9")
+/* INT32_SM, Dst32b (WH): 1 mismatch / 4294967296 swept.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_INT32_SM, SFPMEM_MOD0_FMT_INT32_SM, NOT_EQUAL, NEGATIVE_ZERO, REFUSE,
+			  "87578e3c7f5c5d2d6b3b7dbb0fdb8ee7bde96584c5c28502f2719af865ab4021",
+			  "1e2ba2146ddd69bcb06ede6c03578e7060de163d7a0b54cc4367eec762db3df9")
+/* SRCB, runtime-resolved to a swept float path.  */
+RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_SRCB, SFPMEM_MOD0_FMT_SRCB, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
+			  "-", "-")
+
+/* row A: fp32->fp16b nearest vs the bare mod0=2 store.  */
+RVTT_STOCHRND_STORE_PAIR (SFPSTOCHRND_MOD1_FP32_TO_FP16B, SFPMEM_MOD0_FMT_BF16,
+			  "19db69aa97722e714519007a3f4b84bd0eae812ac485a4633341d323e0a18699",
+			  "5ffcf34fd77dc07f475b6973cf1cb3c82fb480524cfa97c281884b035311023f")
+RVTT_STOCHRND_STORE_PAIR (SFPSTOCHRND_MOD1_FP32_TO_FP16B, SFPMEM_MOD0_FMT_SRCB, "-", "-")
+/* row B: fp32->fp16a nearest vs the bare mod0=1 store.  */
+RVTT_STOCHRND_STORE_PAIR (SFPSTOCHRND_MOD1_FP32_TO_FP16A, SFPMEM_MOD0_FMT_FP16,
+			  "28a5eaee3f513e52a9536b0eadc73f283a235b001c290d99510915d91513f8d8",
+			  "6880d6bcc3d44bf0693419bfae8870aca6ecd04f5c265bf0ba928453faa6dd65")
+RVTT_STOCHRND_STORE_PAIR (SFPSTOCHRND_MOD1_FP32_TO_FP16A, SFPMEM_MOD0_FMT_SRCB, "-", "-")

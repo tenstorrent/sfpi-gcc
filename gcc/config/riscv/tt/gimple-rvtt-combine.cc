@@ -197,6 +197,71 @@ Shape::is_match (const rvtt_insn_data *insnd) const
   return false;
 }
 
+/* The generated-vocabulary query (FABLE_GOES_BURR item #3).  Discovery
+   passes used to hand-mirror which spellings the combiner walks (the
+   madpair discovery vocabulary; the muli/addi immediate-fold
+   vulnerability test).  Answering from the same generated tables the
+   combiner fires deletes that drift channel: every future rvtt.gc
+   vocabulary widening reaches the discoveries automatically.
+
+   True when DEF matches the FEED_ID interior pattern (one whose LHS
+   feeds a later pattern) of some rule whose FINAL pattern id is
+   CONSUMER_ID: Shape::is_match on DEF's insn (the _lv pattern admits
+   the non-lv spelling) and the matcher's own constant-operand test,
+   with the non-lv argument shift, on every constant pattern operand.
+   Enable gates and rule predicates are NOT consulted -- the vocabulary
+   is the union over targets and licenses, exactly as the hand mirrors
+   were; placement/use-count/CC discipline stay with the caller.  */
+
+bool
+rvtt_combine_will_fuse_p (gcall *def, rvtt_insn_data::insn_id feed_id,
+			  rvtt_insn_data::insn_id consumer_id)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return false;
+
+  for (const Combiner &comb : combiners)
+    {
+      if (comb.shapes[comb.pats_hwm - 1].id != consumer_id)
+	continue;
+      for (unsigned ix = 0; ix + 1 < comb.pats_hwm; ix++)
+	{
+	  const Shape &pat = comb.shapes[ix];
+	  if (pat.id != feed_id || !pat.used_by_mask
+	      || !pat.is_match (insnd))
+	    continue;
+
+	  bool ok = true;
+	  for (unsigned argno = 0; ok && argno != pat.num_args; argno++)
+	    {
+	      /* Mirror Combiner::match_arg's argument seating.  */
+	      unsigned lv_delta = 0;
+	      if (insnd->id == pat.id)
+		;
+	      else if ((int) argno == insnd->live_arg ())
+		continue;	/* the absent lane-carrier slot */
+	      else if (argno)
+		lv_delta = 1;
+
+	      if (pat.args[argno].is_var)
+		continue;
+	      if (argno - lv_delta >= gimple_call_num_args (def))
+		ok = false;
+	      else
+		{
+		  tree arg = gimple_call_arg (def, argno - lv_delta);
+		  ok = (TREE_CODE (arg) == INTEGER_CST
+			&& TREE_INT_CST_LOW (arg) == pat.args[argno].val);
+		}
+	    }
+	  if (ok)
+	    return true;
+	}
+    }
+  return false;
+}
+
 static bool
 has_cc_insn_between (gcall *first, gcall *last)
 {

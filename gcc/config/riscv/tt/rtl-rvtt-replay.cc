@@ -5301,6 +5301,64 @@ static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 			      int *conflict_a = nullptr,
 			      int *conflict_b = nullptr);
 
+/* THE plan-order interpreter (FABLE_GOES_BURR item #3): the final
+   instruction order of a plan over BLK, as entries into blk.pos --
+   e >= 0 is block position e; e < 0 is one bridge move of clone
+   (-1 - e), one entry per bridge in plan order.  Per-clone head moves,
+   then bridges, seat immediately before the clone's anchor (its first
+   member); tail moves seat immediately after its last member; unmoved
+   positions keep block order.
+
+   BOTH consumers walk this one stream: crf_shadow_contract_ok
+   SIMULATES it (delay-contract re-verification of the final order)
+   and crf_apply REALIZES it (reseating the moved members and emitting
+   the bridges).  The hand-maintained mirror the verifier used to
+   carry ("mirrors crf_apply exactly") is deleted, not patched; any
+   residual divergence between simulation and realization is still
+   caught fail-closed by the final-lockstep re-verification belt
+   (counted-row-final-lockstep-divergence).  */
+
+static std::vector<int>
+crf_plan_order (crf_block &blk, crf_plan &plan)
+{
+  unsigned n = blk.pos.size ();
+  std::vector<char> is_moved (n, 0);
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      for (unsigned pos : plan.moves_head[c])
+	is_moved[pos] = 1;
+      for (unsigned pos : plan.moves_tail[c])
+	is_moved[pos] = 1;
+    }
+
+  std::vector<int> order;
+  order.reserve (n + 8);
+  std::map<unsigned, unsigned> anchor_clone, tail_clone;
+  for (unsigned c = 0; c != plan.clones.size (); ++c)
+    {
+      anchor_clone[plan.members[c].front ()] = c;
+      tail_clone[plan.members[c].back ()] = c;
+    }
+  for (unsigned pos = 0; pos != n; ++pos)
+    {
+      auto ac = anchor_clone.find (pos);
+      if (ac != anchor_clone.end ())
+	{
+	  for (unsigned m : plan.moves_head[ac->second])
+	    order.push_back (int (m));
+	  for (unsigned b = 0; b != plan.bridges[ac->second].size (); ++b)
+	    order.push_back (-1 - int (ac->second));	// bridge of clone
+	}
+      if (!is_moved[pos])
+	order.push_back (int (pos));
+      auto tc = tail_clone.find (pos);
+      if (tc != tail_clone.end ())
+	for (unsigned m : plan.moves_tail[tc->second])
+	  order.push_back (int (m));
+    }
+  return order;
+}
+
 /* Delay-contract verification of the plan's FINAL order (lane HM,
    P1 laneHI-F1 adjudication).
 
@@ -5334,44 +5392,9 @@ static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 static bool
 crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
 {
-  unsigned n = blk.pos.size ();
-  std::vector<char> is_moved (n, 0);
-  for (unsigned c = 0; c != plan.clones.size (); ++c)
-    {
-      for (unsigned pos : plan.moves_head[c])
-	is_moved[pos] = 1;
-      for (unsigned pos : plan.moves_tail[c])
-	is_moved[pos] = 1;
-    }
-
-  // The final order: block indices, with per-clone head moves (then
-  // bridges, encoded as ~clone) before the anchor and tail moves after
-  // the last member.  Mirrors crf_apply exactly.
-  std::vector<int> order;
-  order.reserve (n + 8);
-  std::map<unsigned, unsigned> anchor_clone, tail_clone;
-  for (unsigned c = 0; c != plan.clones.size (); ++c)
-    {
-      anchor_clone[plan.members[c].front ()] = c;
-      tail_clone[plan.members[c].back ()] = c;
-    }
-  for (unsigned pos = 0; pos != n; ++pos)
-    {
-      auto ac = anchor_clone.find (pos);
-      if (ac != anchor_clone.end ())
-	{
-	  for (unsigned m : plan.moves_head[ac->second])
-	    order.push_back (int (m));
-	  for (unsigned b = 0; b != plan.bridges[ac->second].size (); ++b)
-	    order.push_back (-1 - int (ac->second));	// bridge of clone
-	}
-      if (!is_moved[pos])
-	order.push_back (int (pos));
-      auto tc = tail_clone.find (pos);
-      if (tc != tail_clone.end ())
-	for (unsigned m : plan.moves_tail[tc->second])
-	  order.push_back (int (m));
-    }
+  // The final order, from the one plan-order interpreter crf_apply
+  // realizes (crf_plan_order above).
+  std::vector<int> order = crf_plan_order (blk, plan);
 
   unsigned bug_mask = TARGET_XTT_TENSIX_BH ? XTT_DYNAMIC_BUG_BH
     : TARGET_XTT_TENSIX_QSR ? XTT_DYNAMIC_BUG_QSR : 0;
@@ -6507,30 +6530,67 @@ crf_apply (crf_block &blk, crf_plan &plan)
 	fix_notes (blk.pos[up].insn);
     }
 
-  // Move the excluded members and issue the bridges.
-  for (unsigned c = 0; c != plan.clones.size (); ++c)
-    {
-      rtx_insn *anchor = blk.pos[plan.members[c].front ()].insn;
-      for (unsigned mpos : plan.moves_head[c])
+  // Move the excluded members and issue the bridges by REALIZING the
+  // final order of the one plan-order interpreter (crf_plan_order) --
+  // the same stream the shadow-contract verifier simulated.  Walk the
+  // order keeping LAST = the previously realized instruction: an
+  // unmoved position realizes in place (unmoved insns keep block
+  // order, which the interpreter preserves), a moved member reseats
+  // directly after LAST, a bridge entry emits its move there.  Moved
+  // entries always follow at least one realized fixed position or
+  // moved neighbor by construction (heads/bridges seat at their
+  // clone's anchor), so LAST is the anchor's final predecessor when
+  // they are placed -- the same seat the per-clone placement used.
+  {
+    std::vector<int> order = crf_plan_order (blk, plan);
+    std::vector<char> is_moved (blk.pos.size (), 0);
+    for (unsigned c = 0; c != plan.clones.size (); ++c)
+      {
+	for (unsigned mpos : plan.moves_head[c])
+	  is_moved[mpos] = 1;
+	for (unsigned mpos : plan.moves_tail[c])
+	  is_moved[mpos] = 1;
+      }
+    rtx_insn *last = nullptr;
+    for (int e : order)
+      if (e >= 0 && !is_moved[e])
 	{
-	  rtx_insn *insn = blk.pos[mpos].insn;
-	  reorder_insns (insn, insn, PREV_INSN (anchor));
+	  // Seat for leading moved/bridge entries: the final
+	  // predecessor of the first fixed position.
+	  last = blk.pos[e].insn;
+	  break;
 	}
-      for (auto const &br : plan.bridges[c])
-	{
-	  rtx mv = gen_rtx_SET (gen_rtx_REG (XTT32SImode, br.first),
-				gen_rtx_REG (XTT32SImode, br.second));
-	  rtx_insn *mvi = emit_insn_before (mv, anchor);
-	  gcc_assert (recog_memoized (mvi) >= 0);
-	}
-      rtx_insn *tail_after = blk.pos[plan.members[c].back ()].insn;
-      for (unsigned mpos : plan.moves_tail[c])
-	{
-	  rtx_insn *insn = blk.pos[mpos].insn;
-	  reorder_insns (insn, insn, tail_after);
-	  tail_after = insn;
-	}
-    }
+    gcc_assert (last);
+    last = PREV_INSN (last);
+
+    unsigned bridge_ix = 0;
+    int bridge_clone = -1;
+    for (int e : order)
+      {
+	if (e >= 0)
+	  {
+	    rtx_insn *insn = blk.pos[e].insn;
+	    if (is_moved[e])
+	      reorder_insns (insn, insn, last);
+	    last = insn;
+	  }
+	else
+	  {
+	    unsigned c = unsigned (-1 - e);
+	    if (bridge_clone != int (c))
+	      {
+		bridge_clone = int (c);
+		bridge_ix = 0;
+	      }
+	    auto const &br = plan.bridges[c][bridge_ix++];
+	    rtx mv = gen_rtx_SET (gen_rtx_REG (XTT32SImode, br.first),
+				  gen_rtx_REG (XTT32SImode, br.second));
+	    rtx_insn *mvi = emit_insn_after (mv, last);
+	    gcc_assert (recog_memoized (mvi) >= 0);
+	    last = mvi;
+	  }
+      }
+  }
 
   if (dump_file)
     {
