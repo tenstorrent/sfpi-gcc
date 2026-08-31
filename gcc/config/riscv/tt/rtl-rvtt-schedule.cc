@@ -45,6 +45,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-sched.h"
 #include "rvtt-macro-desc.h"
 #include "rvtt-refuse.h"
+#include "rvtt-timing.h"
 
 namespace {
 
@@ -715,17 +716,17 @@ audited_latency (rtx_insn *insn)
   if (!issued_tensix_p (insn))
     return -1;
   xtt_effect_set e = rvtt_insn_effects (insn);
-  if (e.opaque)
-    return -1;
   // Lane BM (minimal, coordinated with the drain-model work): an
   // instruction with the architectural next-slot ACCEPTANCE stall
   // (xtt_next_slot_stall; SFPSWAP.md) keeps refusing here even once it
   // carries an audited result latency for the reissue-pricing model --
   // this preserves the pass's documented pre-audit behavior exactly
-  // ("SFPSWAP ... never becomes a fill target").
-  if (e.next_slot_stall)
-    return -1;
-  return e.result_latency;
+  // ("SFPSWAP ... never becomes a fill target").  That discipline,
+  // like every timing rule, has ONE spelling: the item-#11 engine's
+  // (verdict identity proven by the stage-A shadow over a full corpus
+  // -fchecking leg, zero disagreements).
+  return rvtt_timing::audited_latency (e.opaque, e.next_slot_stall,
+				       e.result_latency);
 }
 
 /* Modeled interlock stall cycles between issued P and an immediately
@@ -743,10 +744,10 @@ adjacency_stall (rtx_insn *p, rtx_insn *c)
   if (hard_reg_set_empty_p (p_regs.defs))
     return 0;
   sfpu_reg_refs (c, &c_regs);
-  if (!hard_reg_set_intersect_p (p_regs.defs, c_regs.uses)
-      && !hard_reg_set_intersect_p (p_regs.defs, c_regs.defs))
-    return 0;
-  return audited_latency (p);
+  bool dependent
+    = hard_reg_set_intersect_p (p_regs.defs, c_regs.uses)
+      || hard_reg_set_intersect_p (p_regs.defs, c_regs.defs);
+  return rvtt_timing::adjacent_stall (dependent, audited_latency (p));
 }
 
 static void
@@ -1222,12 +1223,34 @@ ls_admissible_p (rtx_insn *insn, ls_node *node, const char **why)
 static int
 ls_dependence (const ls_node &p, const ls_node &c)
 {
-  if (hard_reg_set_intersect_p (p.raw_defs, c.regs.uses)
-      || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs))
-    return 1;
-  if (hard_reg_set_intersect_p (p.regs.uses, c.raw_defs))
-    return 2;
-  return 0;
+  return rvtt_timing::classify_dependence
+    (hard_reg_set_intersect_p (p.raw_defs, c.regs.uses)
+     || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs),
+     hard_reg_set_intersect_p (p.regs.uses, c.raw_defs));
+}
+
+/* Marshal the region NODES into the item-#11 engine's plain-data
+   vocabulary: per-node {words, lat, entry_pin} plus the full
+   dependence matrix (both directions; the diagonal carries the
+   cross-copy self-dependence the cyclic model consumes).  */
+
+static rvtt_timing::seq
+ls_timing_seq (const std::vector<ls_node> &nodes)
+{
+  rvtt_timing::seq s;
+  unsigned n = nodes.size ();
+  s.ops.resize (n);
+  s.dep.resize (n * n);
+  for (unsigned i = 0; i != n; ++i)
+    {
+      s.ops[i].words = nodes[i].words;
+      s.ops[i].lat = nodes[i].lat;
+      s.ops[i].entry_pin = nodes[i].entry_pin;
+      for (unsigned j = 0; j != n; ++j)
+	s.dep[i * n + j]
+	  = (unsigned char) ls_dependence (nodes[i], nodes[j]);
+    }
+  return s;
 }
 
 /* Modeled issue timeline of NODES in the order given by ORDER (indices
@@ -1242,35 +1265,8 @@ ls_simulate (const std::vector<ls_node> &nodes,
 	     const std::vector<int> &order, std::vector<int> *issue,
 	     const std::vector<bool> &exit_shadow)
 {
-  int t = 0;
-  for (unsigned k = 0; k != order.size (); ++k)
-    {
-      const ls_node &n = nodes[order[k]];
-      int ready = n.entry_pin;
-      for (unsigned j = 0; j != k; ++j)
-	{
-	  const ls_node &p = nodes[order[j]];
-	  int kind = ls_dependence (p, n);
-	  if (!kind)
-	    continue;
-	  int need = (*issue)[order[j]] + p.words + (kind == 1 ? p.lat : 0);
-	  if (need > ready)
-	    ready = need;
-	}
-      if (ready > t)
-	t = ready;
-      (*issue)[order[k]] = t;
-      t += n.words;
-    }
-  int end = t;
-  for (unsigned i = 0; i != nodes.size (); ++i)
-    if (exit_shadow[i])
-      {
-	int drain = (*issue)[i] + nodes[i].words + nodes[i].lat;
-	if (drain > end)
-	  end = drain;
-      }
-  return end;
+  return rvtt_timing::simulate (ls_timing_seq (nodes), order, issue,
+				exit_shadow);
 }
 
 /* Count the DYNAMIC-delay pad sites over the region members (the nop
@@ -1850,47 +1846,7 @@ static int
 ls_cyclic_ii (const std::vector<ls_node> &nodes,
 	      const std::vector<int> &order)
 {
-  unsigned n = nodes.size ();
-  const unsigned COPIES = 6;
-  std::vector<int> issue (n * COPIES, 0);
-  std::vector<int> start (COPIES, 0);
-  int t = 0;
-  int last_d = 0;
-  for (unsigned c = 0; c != COPIES; ++c)
-    {
-      for (unsigned k = 0; k != n; ++k)
-	{
-	  const ls_node &nd = nodes[order[k]];
-	  int ready = t;
-	  for (unsigned pc = 0; pc <= c; ++pc)
-	    for (unsigned j = 0; j != (pc == c ? k : n); ++j)
-	      {
-		const ls_node &p = nodes[order[j]];
-		int kind = ls_dependence (p, nd);
-		if (!kind)
-		  continue;
-		int need = issue[pc * n + order[j]] + p.words
-			   + (kind == 1 ? p.lat : 0);
-		if (need > ready)
-		  ready = need;
-	      }
-	  issue[c * n + order[k]] = ready;
-	  t = ready + nd.words;
-	  if (k == 0)
-	    start[c] = ready;
-	}
-      if (c >= 2)
-	{
-	  int d1 = start[c] - start[c - 1];
-	  int d2 = start[c - 1] - start[c - 2];
-	  last_d = d1;
-	  if (d1 == d2)
-	    return d1;
-	}
-      else if (c == 1)
-	last_d = start[1] - start[0];
-    }
-  return last_d;
+  return rvtt_timing::cyclic_ii (ls_timing_seq (nodes), order);
 }
 
 /* Cyclic scheduling of the single region of a self-loop row.

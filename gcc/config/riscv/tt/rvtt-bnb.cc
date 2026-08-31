@@ -56,6 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "rvtt-schedule.h"
+#include "rvtt-timing.h"
 
 #include <algorithm>
 

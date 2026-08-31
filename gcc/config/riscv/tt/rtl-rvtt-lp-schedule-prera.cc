@@ -126,6 +126,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-timing.h"
 
 namespace {
 
@@ -182,11 +183,8 @@ audited_latency_prera (rtx_insn *insn)
   if (!issued_tensix_p (insn))
     return -1;
   xtt_effect_set e = rvtt_insn_effects (insn);
-  if (e.opaque)
-    return -1;
-  if (e.next_slot_stall)
-    return -1;
-  return e.result_latency;
+  return rvtt_timing::audited_latency (e.opaque, e.next_slot_stall,
+				       e.result_latency);
 }
 
 struct pnode
@@ -387,11 +385,31 @@ vec_intersect_p (const std::vector<unsigned> &a, const std::vector<unsigned> &b)
 static int
 pnode_dependence (const pnode &p, const pnode &c)
 {
-  if (vec_intersect_p (p.defs, c.uses) || vec_intersect_p (p.defs, c.defs))
-    return 1;
-  if (vec_intersect_p (p.uses, c.defs))
-    return 2;
-  return 0;
+  return rvtt_timing::classify_dependence
+    (vec_intersect_p (p.defs, c.uses) || vec_intersect_p (p.defs, c.defs),
+     vec_intersect_p (p.uses, c.defs));
+}
+
+/* Marshal the region NODES into the item-#11 engine's plain-data
+   vocabulary (the pseudo-dependence twin of the post-RA marshaller).  */
+
+static rvtt_timing::seq
+pnode_timing_seq (const std::vector<pnode> &nodes)
+{
+  rvtt_timing::seq s;
+  unsigned n = nodes.size ();
+  s.ops.resize (n);
+  s.dep.resize (n * n);
+  for (unsigned i = 0; i != n; ++i)
+    {
+      s.ops[i].words = nodes[i].words;
+      s.ops[i].lat = nodes[i].lat;
+      s.ops[i].entry_pin = nodes[i].entry_pin;
+      for (unsigned j = 0; j != n; ++j)
+	s.dep[i * n + j]
+	  = (unsigned char) pnode_dependence (nodes[i], nodes[j]);
+    }
+  return s;
 }
 
 /* --------------------- pressure model (region) --------------------- */
@@ -475,38 +493,12 @@ static int
 simulate_order (const std::vector<pnode> &nodes, const std::vector<int> &order,
 		std::vector<int> *issue, const std::vector<bool> &exit_shadow)
 {
-  int t = 0;
-  for (unsigned k = 0; k != order.size (); ++k)
-    {
-      const pnode &n = nodes[order[k]];
-      int ready = n.entry_pin;
-      for (unsigned j = 0; j != k; ++j)
-	{
-	  const pnode &p = nodes[order[j]];
-	  /* The dependence test is register-set-based: P here is the
-	     node the simulated order issues earlier, whatever its
-	     original index (the post-RA ls_simulate discipline).  */
-	  int kind = pnode_dependence (p, n);
-	  if (!kind)
-	    continue;
-	  int need = (*issue)[order[j]] + p.words + (kind == 1 ? p.lat : 0);
-	  if (need > ready)
-	    ready = need;
-	}
-      if (ready > t)
-	t = ready;
-      (*issue)[order[k]] = t;
-      t += n.words;
-    }
-  int end = t;
-  for (unsigned i = 0; i != nodes.size (); ++i)
-    if (exit_shadow[i])
-      {
-	int drain = (*issue)[i] + nodes[i].words + nodes[i].lat;
-	if (drain > end)
-	  end = drain;
-      }
-  return end;
+  /* The dependence matrix is register-set-based over the marshalled
+     pseudo references: the engine's P is whichever node the simulated
+     order issues earlier, whatever its original index (the post-RA
+     ls_simulate discipline, now the ONE engine's).  */
+  return rvtt_timing::simulate (pnode_timing_seq (nodes), order, issue,
+				exit_shadow);
 }
 
 /* ------------------------- schedulers ------------------------------ */

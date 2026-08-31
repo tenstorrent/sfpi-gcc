@@ -50,6 +50,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-tables.h"
 #include "rvtt-macro-epoch.h"
 #include "rvtt-refuse.h"
+#include "rvtt-timing.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
 // them.  Finding the sequences is O(N^2), and allocating them to the replay
@@ -1354,11 +1355,11 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
   // matching the interlock scheduler's target-level refusal.
   if (TARGET_XTT_TENSIX_QSR)
     return -1;
-  HOST_WIDE_INT slot = 0;
-  HOST_WIDE_INT ready[16];
-  uint32_t unproved = 0;	// regs whose pending producer is unaudited
-  for (int i = 0; i != 16; ++i)
-    ready[i] = 0;
+  /* The 16-register ready[] scoreboard is the item-#11 engine's; this
+     walker owns only the IR-side effect extraction, dumps and
+     refusals (verdict identity proven by the stage-A shadow over a
+     full corpus -fchecking leg before the local scoreboard retired).  */
+  rvtt_timing::interlock_sim sim;
 
   for (auto pos = block.data () + span.begin,
 	 end = block.data () + span.end; pos != end; ++pos)
@@ -1390,38 +1391,23 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
 		     " effect-opaque\n", INSN_UID (pos->insn));
 	  return -1;
 	}
-      uint32_t deps = (e.lreg_read
-		       | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
-      if (deps & unproved)
+      rvtt_timing::issue_op op;
+      op.deps = (e.lreg_read
+		 | (planner_record ? 0 : e.lreg_write)) & 0xFFFF;
+      op.writes = e.lreg_write;
+      op.words = get_attr_length (pos->insn) / 4;
+      op.lat = e.result_latency;
+      op.next_slot_stall = e.next_slot_stall;
+      if (!sim.step (op))
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "  reissue-unproved edge: consumer insn %d"
 		     " (deps 0x%x) of an unaudited producer (mask 0x%x)\n",
-		     INSN_UID (pos->insn), deps, unproved);
+		     INSN_UID (pos->insn), op.deps, sim.unproved_mask ());
 	  return -1;
 	}
-      HOST_WIDE_INT at = slot;
-      for (int i = 0; i != 16; ++i)
-	if ((deps & (1u << i)) && ready[i] > at)
-	  at = ready[i];
-      unsigned words = get_attr_length (pos->insn) / 4;
-      HOST_WIDE_INT done = at + words;
-      if (e.next_slot_stall)
-	++done;
-      for (int i = 0; i != 16; ++i)
-	if (e.lreg_write & (1u << i))
-	  {
-	    if (e.result_latency < 0)
-	      unproved |= 1u << i;
-	    else
-	      {
-		unproved &= ~(1u << i);
-		ready[i] = done + e.result_latency;
-	      }
-	  }
-      slot = done;
     }
-  return slot;
+  return sim.slots ();
 }
 
 /* Delivered instruction words of the span (multi-word instructions count
