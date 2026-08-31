@@ -181,6 +181,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-mop-tables.h"
+#include "rvtt-ipa-summary.h"
 
 namespace {
 
@@ -1164,6 +1165,10 @@ struct mop_outward_ctx
 {
   tree formee = NULL_TREE;
   cgraph_node *formee_node = nullptr;
+  /* Item #15 shadow discipline: true selects the legacy gimple-walk
+     analysis (flag_checking twin only; DELETE NEXT PIN), false the
+     production digest replay (rvtt-ipa-summary).  */
+  bool legacy = false;
   /* Node-stable storage: summaries are referenced across recursive
      insertions.  */
   std::map<tree, mop_caller_summary> summaries;
@@ -1404,13 +1409,15 @@ mop_classify_delivered_word (tree word, bool ttinsn_direct, mop_event &ev)
     }
 }
 
-/* Classify a gimple asm.  The canonical raw delivery is a single
-   `.ttinsn %0' with one constant input (the TTI_ macro shape the raw
-   census audits); the audited scalar templates deliver nothing; and
-   base-ISA store/load/consume compositions (the blocking-store and
-   memcpy idioms) deliver exactly their stored operands, each
-   classified by value.  Everything else is opaque and counts as a
-   potential launch.  */
+/* LEGACY asm classifier -- flag_checking shadow only since item #15's
+   canonical-vocabulary tightening (see mop_digest_stmt); DELETE NEXT
+   PIN on a clean corpus census.  The canonical raw delivery is a
+   single `.ttinsn %0' with one constant input (the TTI_ macro shape
+   the raw census audits); the audited scalar templates deliver
+   nothing; and base-ISA store/load/consume compositions (the
+   blocking-store and memcpy idioms) deliver exactly their stored
+   operands, each classified by value.  Everything else is opaque and
+   counts as a potential launch.  */
 
 static mop_event
 mop_classify_asm (const gasm *stmt)
@@ -1568,7 +1575,10 @@ mop_classify_store (gimple *stmt)
   return ev;
 }
 
-/* Classify one gimple statement of a caller body.  */
+/* Classify one gimple statement of a caller body.  LEGACY walk-time
+   classifier -- flag_checking shadow only since item #15 (the
+   production path replays the rvtt-ipa-summary digest); DELETE NEXT
+   PIN with mop_analyze_fn_walk.  */
 
 static mop_event
 mop_classify_stmt (mop_outward_ctx &ctx, gimple *stmt)
@@ -1717,10 +1727,11 @@ mop_apply_event (mop_outward_ctx &ctx, const mop_event &ev,
 
 /* Analyze DECL's gimple body: a forward must-dataflow over the pair
    state, then a recording pass.  Memoized in CTX; recursion and
-   unavailable bodies invalidate.  */
+   unavailable bodies invalidate.  LEGACY per-formee body re-walk --
+   flag_checking shadow only since item #15; DELETE NEXT PIN.  */
 
 static mop_caller_summary &
-mop_analyze_fn (mop_outward_ctx &ctx, tree decl)
+mop_analyze_fn_walk (mop_outward_ctx &ctx, tree decl)
 {
   mop_caller_summary &sum = ctx.summaries[decl];
   if (sum.computed)
@@ -1878,13 +1889,394 @@ mop_analyze_fn (mop_outward_ctx &ctx, tree decl)
   return sum;
 }
 
+/* ---- Item #15 (rvtt-ipa-summary): the MOP cover-face body digest ----
+
+   mop_analyze_fn_walk re-walked the gimple bodies of the transitive
+   caller closure once per FORMING function.  The digest records the
+   formee-independent part of mop_classify_stmt once per body (the
+   classified events plus the CFG skeleton the must-dataflow iterates
+   over); the analysis replays it per formee, resolving only the
+   formee-dependent CLOBBER/COMPOSE split at consult time
+   (mop_resolve_event) with the identical cgraph lookups.
+
+   ASM TIGHTENING (the plan's conversion 2 sub-step): the digest
+   classifies assembly through the CANONICAL vocabulary only -- the
+   empty barrier, the four audited scalar templates, and the
+   single-constant `.ttinsn %0' form; every other template (including
+   the base-ISA store-idiom shapes mop_classify_asm line-parsed)
+   classifies as an opaque potential launch, strictly MORE
+   conservative.  The legacy parser survives only inside the
+   flag_checking shadow (mop_outward_owned_p): a verdict changed by the
+   tightening is a hard assert there, and the corpus -fchecking census
+   adjudicates -- a dirty census re-classifies the tightening as a
+   stage-B adjudication, a clean one deletes the parser next pin.  */
+
+static void
+mop_digest_push (vec<rvtt_ipa_event> *out, const mop_event &ev, gimple *stmt)
+{
+  if (ev.kind == mop_event::BENIGN)
+    return;
+  gcc_assert (ev.kind == mop_event::LAUNCH || ev.kind == mop_event::COVER);
+  rvtt_ipa_event de = {};
+  de.kind = ev.kind == mop_event::LAUNCH
+    ? rvtt_ipa_event::EV_LAUNCH : rvtt_ipa_event::EV_COVER;
+  de.stmt = stmt;
+  de.bits = ev.bits;
+  de.what = ev.what;
+  out->safe_push (de);
+}
+
+/* One statement's contribution to the digest: the formee-independent
+   image of mop_classify_stmt (typed rvtt builtins and scalar builtins
+   can never be a formee, so resolving them here commutes with the
+   consult-time CLOBBER split).  */
+
+static void
+mop_digest_stmt (vec<rvtt_ipa_event> *out, gimple *stmt)
+{
+  if (is_gimple_debug (stmt))
+    return;
+  if (const gasm *a = dyn_cast<const gasm *> (stmt))
+    {
+      mop_event ev;
+      const char *s = gimple_asm_string (a);
+      while (*s == ' ' || *s == '\t')
+	++s;
+      if (!*s
+	  || !strcmp (s, "fence") || !strcmp (s, "ebreak")
+	  || !strcmp (s, "la sp, %0")
+	  || !strcmp (s, ".option push\n.option norelax\n"
+			 "la gp, __global_pointer$\n.option pop"))
+	return;			/* barrier / audited scalar templates */
+      if (strncmp (s, ".ttinsn", 7) == 0)
+	{
+	  s += 7;
+	  while (*s == ' ' || *s == '\t')
+	    ++s;
+	  if (strcmp (s, "%0") == 0 && gimple_asm_ninputs (a) == 1
+	      && gimple_asm_noutputs (a) == 0)
+	    {
+	      mop_classify_delivered_word
+		(TREE_VALUE (gimple_asm_input_op (a, 0)), true, ev);
+	      mop_digest_push (out, ev, stmt);
+	      return;
+	    }
+	  ev.kind = mop_event::LAUNCH;
+	  ev.bits = MOP_REQ_ANY;
+	  ev.what = "a non-canonical .ttinsn template";
+	  mop_digest_push (out, ev, stmt);
+	  return;
+	}
+      /* The canonical-vocabulary tightening: no base-ISA line
+	 parsing.  */
+      ev.kind = mop_event::LAUNCH;
+      ev.bits = MOP_REQ_ANY;
+      ev.what = "opaque assembly";
+      mop_digest_push (out, ev, stmt);
+      return;
+    }
+  if (is_gimple_call (stmt))
+    {
+      if (gimple_call_internal_p (stmt))
+	return;
+      tree fndecl = gimple_call_fndecl (stmt);
+      if (!fndecl)
+	{
+	  rvtt_ipa_event de = {};
+	  de.kind = rvtt_ipa_event::EV_LAUNCH;
+	  de.stmt = stmt;
+	  de.bits = MOP_REQ_ANY;
+	  de.what = "an indirect call";
+	  out->safe_push (de);
+	  return;
+	}
+      if (const rvtt_insn_data *d = rvtt_get_insn_data (stmt))
+	{
+	  if (strncmp (d->name, "ttmop", 5) == 0)
+	    {
+	      rvtt_ipa_event de = {};
+	      de.kind = rvtt_ipa_event::EV_LAUNCH;
+	      de.stmt = stmt;
+	      de.bits = MOP_REQ_ANY;
+	      de.what = "a ttmop builtin";
+	      out->safe_push (de);
+	    }
+	  return;
+	}
+      if (fndecl_built_in_p (fndecl))
+	return;
+      rvtt_ipa_event de = {};
+      de.kind = rvtt_ipa_event::EV_CALL;
+      de.stmt = stmt;
+      de.decl = fndecl;
+      de.composable = false;
+      if (cgraph_node *cn = cgraph_node::get (fndecl))
+	if (cn->definition || DECL_STRUCT_FUNCTION (fndecl))
+	  de.composable = true;
+      out->safe_push (de);
+      return;
+    }
+  if (gimple_store_p (stmt) && is_gimple_assign (stmt))
+    mop_digest_push (out, mop_classify_store (stmt), stmt);
+}
+
+/* Build FN's cover-face digest into IPA (events per block plus the CFG
+   skeleton).  */
+
+static void
+mop_digest_build (function *fn, rvtt_ipa_fn_summary *ipa)
+{
+  ipa->mop_nblocks = last_basic_block_for_fn (fn);
+  basic_block entry_bb = ENTRY_BLOCK_PTR_FOR_FN (fn);
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fn)
+    {
+      rvtt_ipa_mop_block b;
+      b.index = bb->index;
+      b.exit_succ = false;
+      b.preds = vNULL;
+      b.events = vNULL;
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	b.preds.safe_push (e->src == entry_bb ? -1 : e->src->index);
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if (e->dest == EXIT_BLOCK_PTR_FOR_FN (fn))
+	  b.exit_succ = true;
+      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	mop_digest_stmt (&b.events, gsi_stmt (gsi));
+      ipa->mop_blocks.safe_push (b);
+    }
+  ipa->mop_computed = true;
+}
+
+/* Resolve one digest event against this analysis's formee: the
+   consult-time CLOBBER (a call into the forming function or an
+   alias/clone of it) vs COMPOSE (an analyzable in-TU callee) vs benign
+   (extern under the kernel-single-TU axiom) split, with the legacy
+   lookup order.  */
+
+static mop_event
+mop_resolve_event (mop_outward_ctx &ctx, const rvtt_ipa_event &ev)
+{
+  mop_event mev;
+  switch (ev.kind)
+    {
+    case rvtt_ipa_event::EV_LAUNCH:
+      mev.kind = mop_event::LAUNCH;
+      mev.bits = ev.bits;
+      mev.what = ev.what;
+      break;
+    case rvtt_ipa_event::EV_COVER:
+      mev.kind = mop_event::COVER;
+      mev.bits = ev.bits;
+      break;
+    case rvtt_ipa_event::EV_CALL:
+      if (ev.decl == ctx.formee)
+	{
+	  mev.kind = mop_event::CLOBBER;
+	  break;
+	}
+      if (ctx.formee_node && ev.decl)
+	if (cgraph_node *cn = cgraph_node::get (ev.decl))
+	  if (cn->ultimate_alias_target () == ctx.formee_node)
+	    {
+	      mev.kind = mop_event::CLOBBER;
+	      break;
+	    }
+      if (ev.composable)
+	{
+	  mev.kind = mop_event::COMPOSE;
+	  mev.callee = ev.decl;
+	}
+      break;			/* extern with no body: benign */
+    default:
+      gcc_unreachable ();
+    }
+  return mev;
+}
+
+/* Analyze DECL through its digest (the production mop_analyze_fn):
+   the identical must-dataflow and recording pass as the legacy walk,
+   over recorded events instead of statements.  */
+
+static mop_caller_summary &
+mop_analyze_fn_digest (mop_outward_ctx &ctx, tree decl)
+{
+  mop_caller_summary &sum = ctx.summaries[decl];
+  if (sum.computed)
+    return sum;
+  if (sum.in_progress)
+    {
+      /* Recursive caller chain: no epoch discipline is provable.  */
+      sum.computed = true;
+      sum.valid = false;
+      sum.invalid_why = "recursive call chain";
+      return sum;
+    }
+  sum.in_progress = true;
+
+  function *fn = DECL_STRUCT_FUNCTION (decl);
+  if (!fn || !fn->cfg || (fn->curr_properties & PROP_rtl))
+    {
+      sum.in_progress = false;
+      sum.computed = true;
+      sum.valid = false;
+      sum.invalid_why = "body not analyzable at formation time";
+      return sum;
+    }
+  cgraph_node *node = cgraph_node::get (decl);
+  rvtt_ipa_fn_summary *ipa = node ? rvtt_ipa_summary_get (node) : nullptr;
+  if (!ipa)
+    {
+      sum.in_progress = false;
+      sum.computed = true;
+      sum.valid = false;
+      sum.invalid_why = "body not analyzable at formation time";
+      return sum;
+    }
+  if (!ipa->mop_computed)
+    {
+      mop_digest_build (fn, ipa);
+      if (dump_file)
+	fprintf (dump_file,
+		 "ipa-summary: mop-face digest built (%s, %d blocks)\n",
+		 node->dump_name (), ipa->mop_nblocks);
+    }
+
+  unsigned n = ipa->mop_nblocks;
+  std::vector<const rvtt_ipa_mop_block *> blocks (n, nullptr);
+  for (const rvtt_ipa_mop_block &b : ipa->mop_blocks)
+    blocks[b.index] = &b;
+
+  /* Per-BB IN states; TOP = all-ones on both tracks.  */
+  std::vector<unsigned> in_se (n, MOP_STATE_FULL);
+  std::vector<unsigned> in_sf (n, MOP_STATE_FULL);
+
+  bool valid = true;
+  const char *invalid_why = nullptr;
+
+  /* Fixpoint (states only descend).  */
+  bool changed = true;
+  unsigned iter = 0;
+  while (changed && valid && iter++ < 64)
+    {
+      changed = false;
+      for (const rvtt_ipa_mop_block &blk : ipa->mop_blocks)
+	{
+	  unsigned se = MOP_STATE_FULL, sf = MOP_STATE_FULL;
+	  bool first = true;
+	  for (int pred : blk.preds)
+	    {
+	      unsigned pse, psf;
+	      if (pred < 0)
+		{
+		  pse = 0;
+		  psf = MOP_STATE_FULL;
+		}
+	      else
+		{
+		  /* Predecessor OUT: recompute cheaply by transfer of
+		     its stored IN (the legacy discipline).  */
+		  pse = in_se[pred];
+		  psf = in_sf[pred];
+		  if (const rvtt_ipa_mop_block *pb = blocks[pred])
+		    for (const rvtt_ipa_event &pev : pb->events)
+		      if (!mop_apply_event (ctx,
+					    mop_resolve_event (ctx, pev),
+					    &pse, &psf, nullptr, decl))
+			{
+			  valid = false;
+			  invalid_why = "unanalyzable callee";
+			}
+		}
+	      if (first)
+		{
+		  se = pse;
+		  sf = psf;
+		  first = false;
+		}
+	      else
+		{
+		  se &= pse;
+		  sf &= psf;
+		}
+	    }
+	  if (first)
+	    /* Unreachable block; keep TOP.  */
+	    continue;
+	  if (se != in_se[blk.index] || sf != in_sf[blk.index])
+	    {
+	      /* Must-meet only descends.  */
+	      in_se[blk.index] &= se;
+	      in_sf[blk.index] &= sf;
+	      changed = true;
+	    }
+	}
+    }
+  if (changed && valid)
+    {
+      valid = false;
+      invalid_why = "cover dataflow did not converge";
+    }
+
+  /* Recording pass: hazards, entry requirements, exit meets.  */
+  unsigned out_e = MOP_STATE_FULL, out_f = MOP_STATE_FULL;
+  bool have_exit = false;
+  if (valid)
+    for (const rvtt_ipa_mop_block &blk : ipa->mop_blocks)
+      {
+	unsigned se = in_se[blk.index];
+	unsigned sf = in_sf[blk.index];
+	for (const rvtt_ipa_event &ev : blk.events)
+	  if (!mop_apply_event (ctx, mop_resolve_event (ctx, ev),
+				&se, &sf, &sum, decl))
+	    {
+	      valid = false;
+	      invalid_why = "unanalyzable callee";
+	    }
+	if (blk.exit_succ)
+	  {
+	    out_e &= se;
+	    out_f &= sf;
+	    have_exit = true;
+	  }
+      }
+  if (!have_exit)
+    {
+      out_e = MOP_STATE_FULL;
+      out_f = MOP_STATE_FULL;
+    }
+
+  sum.in_progress = false;
+  sum.computed = true;
+  sum.valid = valid;
+  sum.invalid_why = invalid_why;
+  sum.out_empty = out_e;
+  sum.out_full = out_f;
+  return sum;
+}
+
+/* The analysis dispatcher: production = digest replay; the legacy
+   whole-body walk survives only as the flag_checking shadow's engine
+   (mop_outward_owned_p).  DELETE NEXT PIN with ctx.legacy.  */
+
+static mop_caller_summary &
+mop_analyze_fn (mop_outward_ctx &ctx, tree decl)
+{
+  return ctx.legacy ? mop_analyze_fn_walk (ctx, decl)
+		    : mop_analyze_fn_digest (ctx, decl);
+}
+
 /* Discharge the outward ownership obligation for CFN.  On failure,
    *WHY and *WHY_FN carry the refusal detail; on success *HOW names the
-   discharged form for the dump.  */
+   discharged form for the dump.  LEGACY selects the shadow analysis
+   engine (item #15; see mop_outward_owned_p below).  */
 
 static bool
-mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
-		     const char **how)
+mop_outward_owned_1 (function *cfn, bool legacy, const char **why,
+		     const char **why_fn, const char **how)
 {
   tree decl = cfn->decl;
   *why = nullptr;
@@ -1943,6 +2335,7 @@ mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
   mop_outward_ctx ctx;
   ctx.formee = decl;
   ctx.formee_node = node;
+  ctx.legacy = legacy;
 
   unsigned roots = 0;
   for (cgraph_node *m : closure)
@@ -1989,6 +2382,62 @@ mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
   *how = "every caller root re-arms the template before its next"
 	 " post-return MOP launch";
   return true;
+}
+
+/* Item #15 stage-A assertion phase: the production verdict comes from
+   the digest replay; under flag_checking the legacy whole-body walk
+   re-derives it on a fresh analysis context and the VERDICT must agree
+   -- ok (the only fact transform consumes: !ok drops every candidate
+   under the one registered mop-caller-template-live-unproven name),
+   plus the proven form's HOW spelling (a pinned dump line).  The
+   refusal DETAIL strings are diagnostics and may legitimately differ
+   where the canonical-vocabulary tightening classifies an asm more
+   conservatively yet both engines refuse (e.g. legacy "an
+   unclassifiable delivered word in assembly" vs "opaque assembly") --
+   a tightening that flips OK is the census finding this assert exists
+   to catch.  Shadow DELETE NEXT PIN on a clean corpus -fchecking
+   leg.  */
+
+static bool
+mop_outward_owned_p (function *cfn, const char **why, const char **why_fn,
+		     const char **how)
+{
+  bool ok = mop_outward_owned_1 (cfn, /*legacy=*/false, why, why_fn, how);
+  if (flag_checking)
+    {
+      /* The refusal detail can live in a static buffer the shadow run
+	 overwrites: keep byte copies for the report.  */
+      char pwhy[256] = "", phow[256] = "";
+      if (*why)
+	snprintf (pwhy, sizeof pwhy, "%s", *why);
+      if (*how)
+	snprintf (phow, sizeof phow, "%s", *how);
+      const char *lwhy = nullptr, *lwhy_fn = nullptr, *lhow = nullptr;
+      bool lok = mop_outward_owned_1 (cfn, /*legacy=*/true, &lwhy, &lwhy_fn,
+				      &lhow);
+      bool how_equal = !ok
+	|| (*how && lhow && !strcmp (phow, lhow))
+	|| (!*how && !lhow);
+      if (lok != ok || !how_equal)
+	{
+	  fprintf (stderr,
+		   "ipa-summary: mop-face verdict disagreement in %s "
+		   "(summary %s/%s vs walk %s/%s)\n",
+		   function_name (cfn),
+		   ok ? "owned" : "unproven", *why ? pwhy : "-",
+		   lok ? "owned" : "unproven", lwhy ? lwhy : "-");
+	  gcc_assert (lok == ok && how_equal);
+	}
+      /* When both engines refuse, restore the production detail for
+	 the dump (the shadow overwrote the shared buffer).  */
+      if (!ok && *why && strcmp (*why, pwhy) != 0)
+	{
+	  static char pdetail[256];
+	  snprintf (pdetail, sizeof pdetail, "%s", pwhy);
+	  *why = pdetail;
+	}
+    }
+  return ok;
 }
 
 /* ---- Driver ---- */

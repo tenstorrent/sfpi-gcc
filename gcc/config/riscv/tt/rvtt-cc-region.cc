@@ -239,6 +239,7 @@ mark_stack_unstructured (const vec<rvtt_cc_region *> &stack)
 void
 rvtt_cc_region_tree::build ()
 {
+  m_complete = true;
   m_map = new hash_map<const gimple *, rvtt_cc_region *>;
   m_opened = new hash_map<const gimple *, rvtt_cc_region *>;
 
@@ -673,6 +674,11 @@ rvtt_cc_region_tree::build ()
     {
       bb = BASIC_BLOCK_FOR_FN (m_fn, rpo[i]);
       bb_state &st = states[bb->index];
+      if (st.kind == BB_BROKEN)
+	/* A break can occur with only the ambient frame open, where no
+	   region node carries the unstructured flag: the whole-function
+	   fold (ambient_preserving_fold_p) must still fail closed.  */
+	m_complete = false;
       if (st.kind != BB_SET)
 	/* Drain joins execute under a varying frame; broken and
 	   unreached blocks are unproven.  All stay unmapped.  */
@@ -702,6 +708,7 @@ rvtt_cc_region_tree::build ()
 		      r->flags |= RVTT_CCR_UNSTRUCTURED;
 		    mark_stack_unstructured (stack);
 		    live = false;
+		    m_complete = false;
 		    break;
 		  }
 		stack.safe_push (r);
@@ -713,6 +720,7 @@ rvtt_cc_region_tree::build ()
 		{
 		  mark_stack_unstructured (stack);
 		  live = false;
+		  m_complete = false;
 		  break;
 		}
 	      top->exits.safe_push (stmt);
@@ -740,6 +748,7 @@ rvtt_cc_region_tree::build ()
 	    case STMT_CC_BREAKER:
 	      mark_stack_unstructured (stack);
 	      live = false;
+	      m_complete = false;
 	      break;
 	    case STMT_CC_NONE:
 	      m_map->put (stmt, top);
@@ -838,4 +847,36 @@ const vec<gimple *> &
 rvtt_cc_region_tree::refinement_chain (const rvtt_cc_region *r) const
 {
   return r->refinements;
+}
+
+/* See rvtt-cc-region.h: the item-#15 stage-A cross-call carry fold.  */
+
+bool
+rvtt_cc_region_tree::ambient_preserving_fold_p () const
+{
+  if (!m_complete || !m_root)
+    return false;
+  /* No frame anywhere unstructured or opaque (mark_stack_unstructured
+     writes flags directly, without the subtree fold, so scan every
+     region rather than trusting subtree_flags for these two bits).  */
+  for (const rvtt_cc_region *r : m_regions)
+    if (r->flags & (RVTT_CCR_UNSTRUCTURED | RVTT_CCR_OPAQUE))
+      return false;
+  /* The ambient frame itself must be CC-inert (header contract).  */
+  if (m_root->flags & (RVTT_CCR_ENCC | RVTT_CCR_VOCAB_EXTERNAL))
+    return false;
+  if (!m_root->refinements.is_empty ())
+    return false;
+  return true;
+}
+
+/* See rvtt-cc-region.h.  */
+
+bool
+rvtt_cc_region_fn_ambient_preserving_p (function *fn)
+{
+  if (!fn || !fn->cfg)
+    return false;
+  rvtt_cc_region_tree tree (fn);
+  return tree.ambient_preserving_fold_p ();
 }
