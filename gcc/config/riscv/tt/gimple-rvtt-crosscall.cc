@@ -284,11 +284,10 @@ namespace {
 static bool
 refuse (const char *reason, tree fn, gimple *stmt)
 {
-  rvtt_refusal_fire_by_name (reason, stmt);
+  rvtt_refuse_by_name_at (reason, stmt, dump_file,
+			  "crosscall-hoist: refused (%s)", reason);
   if (dump_file)
     {
-      rvtt_refuse_by_name (reason, dump_file,
-			   "crosscall-hoist: refused (%s)", reason);
       if (fn)
 	fprintf (dump_file, " in %s", IDENTIFIER_POINTER (DECL_NAME (fn)));
       if (stmt)
@@ -3509,10 +3508,10 @@ init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
 {
   ctx->why = why;
   ctx->why_stmt = stmt;
+  rvtt_refuse_by_name_at (why, stmt, dump_file,
+			  "init-hoist: refused (%s)", why);
   if (dump_file)
     {
-      rvtt_refuse_by_name (why, dump_file,
-			   "init-hoist: refused (%s)", why);
       if (stmt)
 	{
 	  fprintf (dump_file, ": ");
