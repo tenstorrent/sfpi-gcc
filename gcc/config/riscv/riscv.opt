@@ -773,6 +773,10 @@ mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
 Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
 
+mtt-tensix-trips-oracle-skew=
+Target Joined RejectNegative UInteger Var(riscv_tt_trips_oracle_skew) Init(0) IntegerRange(0,65535)
+Testing only: add this many trips to a proven classical (loop-iv/SCEV) verdict inside the dual-oracle trip-count facade to manufacture a trip-oracle-divergence diagnostic; the legacy bounded-simulation oracle still decides, so generated code is unchanged.
+
 mtt-tensix-optimize-mop-form
 Target Var(riscv_tt_opt_mop_form) Init(0)
 Re-roll runs and counted loops of identical Tensix replay playback launches into a hardware MOP loop.

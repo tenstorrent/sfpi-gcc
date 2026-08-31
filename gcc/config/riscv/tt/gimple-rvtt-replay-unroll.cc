@@ -85,6 +85,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-constants.h"
 #include "tree-scalar-evolution.h"
 #include "rvtt-protos.h"
+#include "rvtt-trips.h"
 #include "rvtt.h"
 
 /* Estimated delivered Tensix words for an admitted builtin, or -1 to
@@ -293,8 +294,10 @@ resolve_int_cst (tree t, HOST_WIDE_INT *out, int depth = 0)
    when the loop's exit condition is an integer compare of a
    constant-initialized, constant-stepped induction variable against a
    constant, and the simulation exits within the cap.  Exported
-   (rvtt-protos.h): the delivery-shape solver pass shares this trip
-   proof so the two passes cannot drift.  */
+   (rvtt-protos.h) as the stage-A LEGACY (deciding) oracle of the
+   shared trip facade (rvtt_loop_trips_gimple, rvtt-trips.cc), through
+   which this pass, the delivery-shape solver, and round-interleave
+   all query so the admissions cannot drift.  */
 
 bool
 rvtt_replay_unroll_counted_trips (class loop *loop,
@@ -526,7 +529,7 @@ public:
       return false;
 
     unsigned HOST_WIDE_INT trips;
-    if (!rvtt_replay_unroll_counted_trips (loop, &trips))
+    if (!rvtt_loop_trips_gimple (loop, &trips))
       {
 	refuse (loop, "replay-loop-unroll-trip-count-unproven", NULL);
 	return false;
@@ -1368,7 +1371,7 @@ public:
       return false;
 
     unsigned HOST_WIDE_INT trips;
-    if (!rvtt_replay_unroll_counted_trips (loop, &trips))
+    if (!rvtt_loop_trips_gimple (loop, &trips))
       {
 	refuse (loop, "round-interleave-trip-count-unproven", NULL);
 	return false;
