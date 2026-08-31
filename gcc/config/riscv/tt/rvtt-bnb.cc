@@ -56,6 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "rvtt-schedule.h"
+#include "rvtt-timing.h"
 
 #include <algorithm>
 
@@ -538,6 +539,22 @@ mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
 		       == (benefit >= p.ds_hoist_min_benefit));
     }
   return price.profitable;
+  /* Item-#11 verdict-identity shadow: the unified engine's pricing
+     form must reproduce this downstream mirror exactly before the
+     inline spelling retires (rtl-rvtt-replay.cc's gate shadows the
+     same form, so the "must agree by convention" seam closes).  */
+  {
+    rvtt_timing::hoist_costs chk_costs;
+    chk_costs.push = p.ds_push;
+    chk_costs.slot = p.ds_slot;
+    chk_costs.turnaround = p.ds_turnaround;
+    chk_costs.record_overhead = p.ds_record_overhead;
+    rvtt_timing::hoist_pricing chk
+      = rvtt_timing::counted_hoist_price (chk_costs, p.trips, p.row_words,
+					  p.ds_exec);
+    gcc_assert (chk.before == before && chk.after == after
+		&& chk.record == record && chk.benefit == benefit);
+  }
 }
 
 /* Downstream-mirror: does the replay-hoist gate lift the re-record
@@ -601,6 +618,22 @@ mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
 		  && price.profitable
 		       == (benefit >= p.ds_hoist_min_benefit));
     }
+  /* Item-#11 verdict-identity shadow (see mirror_counted_hoist_fires;
+     the mirror predicts the DEFAULT model, so no completion guard).  */
+  {
+    rvtt_timing::hoist_costs chk_costs;
+    chk_costs.push = p.ds_push;
+    chk_costs.slot = p.ds_slot;
+    chk_costs.turnaround = p.ds_turnaround;
+    chk_costs.record_overhead = p.ds_record_overhead;
+    const unsigned chk_run = p.autoincr_enabled ? factor / payload_rows : 1;
+    rvtt_timing::hoist_pricing chk
+      = rvtt_timing::rerecord_hoist_price
+	  (chk_costs, groups, payload_slots,
+	   (int64_t) payload_rows * (p.ds_exec - p.barrier_words),
+	   chk_run, false);
+    gcc_assert (chk.benefit == benefit && chk.after == after);
+  }
   return price.profitable;
 }
 
