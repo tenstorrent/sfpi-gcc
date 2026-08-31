@@ -783,160 +783,9 @@ rvtt_planner_launch_effects (rtx_insn *insn, xtt_effect_set *out)
    replace the effect_overrides tables formerly copied verbatim between
    rtl-rvtt-lp-alloc.cc and rtl-rvtt-dst-ownership.cc and the hand
    lane_gated_consumers insn_code allowlist of rtl-rvtt-lp-alloc.cc.
-
-   ONE-PIN EQUALITY-ASSERTION PHASE (delete next pin, with the legacy
-   tables): under -fchecking every query also recomputes its verdict
-   from the legacy tables kept below (one copy each, verbatim from the
-   consumers they were deleted from) and asserts equality per insn per
-   query -- the plan's equality-assertion phase, discharged corpus-wide
-   and testsuite-wide by the checking legs.  The plan treats any
-   inequality as a P1 adjudication (the divergence hazard the audit
-   flags), never a blocker to route around.  */
-
-namespace {
-
-/* LEGACY (assertion phase only): the audited effect-override rows,
-   verbatim from rtl-rvtt-dst-ownership.cc / rtl-rvtt-lp-alloc.cc.  */
-
-struct legacy_effect_override
-{
-  insn_code code;
-  bool cc_writes;
-};
-
-static const legacy_effect_override legacy_effect_overrides[] = {
-  { CODE_FOR_rvtt_sfploadi_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetsgn_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetsgn_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetexp_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetexp_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpsetman_v_lv,	false },
-  { CODE_FOR_rvtt_sfpsetman_i_lv_int,	false },
-  { CODE_FOR_rvtt_sfpabs_lv,		false },
-  { CODE_FOR_rvtt_sfpabs_nv,		false },
-  { CODE_FOR_rvtt_sfpmov_lv,		false },
-  { CODE_FOR_rvtt_sfpmov_nv,		false },
-  { CODE_FOR_rvtt_sfpcast_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_lv,		false },
-  { CODE_FOR_rvtt_sfpexman_nv,		false },
-  { CODE_FOR_rvtt_sfpdivp2_lv_int,	false },
-  { CODE_FOR_rvtt_sfparecip_lv,		false },
-  { CODE_FOR_rvtt_sfpexexp_lv,		true },
-  { CODE_FOR_rvtt_sfpexexp_nv,		true },
-  { CODE_FOR_rvtt_sfplz_lv,		true },
-  { CODE_FOR_rvtt_sfplz_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_lv,		true },
-  { CODE_FOR_rvtt_sfpiadd_v_nv,		true },
-  { CODE_FOR_rvtt_sfpiadd_i_lv_int,	true },
-  { CODE_FOR_rvtt_sfpiadd_i_nv,		true },
-};
-
-/* LEGACY (assertion phase only): the lane-gated consumer allowlist,
-   verbatim from rtl-rvtt-lp-alloc.cc.  Rows naming define_expand codes
-   (e.g. CODE_FOR_rvtt_sfpabs) were dead there -- recog never returns
-   an expand code -- and stay dead here; the attribute mirrors only the
-   effective (recognizable) membership.  */
-
-static const insn_code legacy_lane_gated_consumers[] = {
-  CODE_FOR_rvtt_sfpabs,
-  CODE_FOR_rvtt_sfpabs_lv,
-  CODE_FOR_rvtt_sfpabs_nv,
-  CODE_FOR_rvtt_sfpadd,
-  CODE_FOR_rvtt_sfpaddi,
-  CODE_FOR_rvtt_sfpaddi_int_lv,
-  CODE_FOR_rvtt_sfpaddi_lv,
-  CODE_FOR_rvtt_sfpadd_lv,
-  CODE_FOR_rvtt_sfpand,
-  CODE_FOR_rvtt_sfpand_lv,
-  CODE_FOR_rvtt_sfpand_lv_2op,
-  CODE_FOR_rvtt_sfpand_lv_bh,
-  CODE_FOR_rvtt_sfparecip,
-  CODE_FOR_rvtt_sfparecip_lv,
-  CODE_FOR_rvtt_sfpcast,
-  CODE_FOR_rvtt_sfpcast_lv,
-  CODE_FOR_rvtt_sfpdivp2,
-  CODE_FOR_rvtt_sfpdivp2_lv,
-  CODE_FOR_rvtt_sfpdivp2_lv_int,
-  CODE_FOR_rvtt_sfpexexp,
-  CODE_FOR_rvtt_sfpexexp_lv,
-  CODE_FOR_rvtt_sfpexexp_nv,
-  CODE_FOR_rvtt_sfpexman,
-  CODE_FOR_rvtt_sfpexman_lv,
-  CODE_FOR_rvtt_sfpexman_nv,
-  CODE_FOR_rvtt_sfpiadd_i,
-  CODE_FOR_rvtt_sfpiadd_i_lv,
-  CODE_FOR_rvtt_sfpiadd_i_lv_int,
-  CODE_FOR_rvtt_sfpiadd_i_nv,
-  CODE_FOR_rvtt_sfpiadd_v,
-  CODE_FOR_rvtt_sfpiadd_v_lv,
-  CODE_FOR_rvtt_sfpiadd_v_nv,
-  CODE_FOR_rvtt_sfploadi,
-  CODE_FOR_rvtt_sfploadi_lv,
-  CODE_FOR_rvtt_sfploadi_lv_int,
-  CODE_FOR_rvtt_sfplut,
-  CODE_FOR_rvtt_sfplutfp32_3r,
-  CODE_FOR_rvtt_sfplutfp32_3r_split,
-  CODE_FOR_rvtt_sfplutfp32_6r,
-  CODE_FOR_rvtt_sfplz,
-  CODE_FOR_rvtt_sfplz_lv,
-  CODE_FOR_rvtt_sfplz_nv,
-  CODE_FOR_rvtt_sfpmad,
-  CODE_FOR_rvtt_sfpmad_lv,
-  CODE_FOR_rvtt_sfpmov,
-  CODE_FOR_rvtt_sfpmov_lv,
-  CODE_FOR_rvtt_sfpmov_nv,
-  CODE_FOR_rvtt_sfpmul,
-  CODE_FOR_rvtt_sfpmul24,
-  CODE_FOR_rvtt_sfpmul24_lv,
-  CODE_FOR_rvtt_sfpmuli,
-  CODE_FOR_rvtt_sfpmuli_int_lv,
-  CODE_FOR_rvtt_sfpmuli_lv,
-  CODE_FOR_rvtt_sfpmul_lv,
-  CODE_FOR_rvtt_sfpnonlinear,
-  CODE_FOR_rvtt_sfpnonlinear_lv,
-  CODE_FOR_rvtt_sfpnot,
-  CODE_FOR_rvtt_sfpnot_lv,
-  CODE_FOR_rvtt_sfpor,
-  CODE_FOR_rvtt_sfpor_lv,
-  CODE_FOR_rvtt_sfpor_lv_2op,
-  CODE_FOR_rvtt_sfpor_lv_bh,
-  CODE_FOR_rvtt_sfpsetcc_i,
-  CODE_FOR_rvtt_sfpsetcc_v,
-  CODE_FOR_rvtt_sfpsetexp_i,
-  CODE_FOR_rvtt_sfpsetexp_i_lv,
-  CODE_FOR_rvtt_sfpsetexp_i_lv_int,
-  CODE_FOR_rvtt_sfpsetexp_v,
-  CODE_FOR_rvtt_sfpsetexp_v_lv,
-  CODE_FOR_rvtt_sfpsetman_i,
-  CODE_FOR_rvtt_sfpsetman_i_lv,
-  CODE_FOR_rvtt_sfpsetman_i_lv_int,
-  CODE_FOR_rvtt_sfpsetman_v,
-  CODE_FOR_rvtt_sfpsetman_v_lv,
-  CODE_FOR_rvtt_sfpsetsgn_i,
-  CODE_FOR_rvtt_sfpsetsgn_i_lv,
-  CODE_FOR_rvtt_sfpsetsgn_i_lv_int,
-  CODE_FOR_rvtt_sfpsetsgn_v,
-  CODE_FOR_rvtt_sfpsetsgn_v_lv,
-  CODE_FOR_rvtt_sfpshft_i,
-  CODE_FOR_rvtt_sfpshft_i_lv,
-  CODE_FOR_rvtt_sfpshft_i_lv_int,
-  CODE_FOR_rvtt_sfpshft_v,
-  CODE_FOR_rvtt_sfpshft_v_lv,
-  CODE_FOR_rvtt_sfpshft_v_lv_int,
-  CODE_FOR_rvtt_sfpstochrnd_i,
-  CODE_FOR_rvtt_sfpstochrnd_i_lv,
-  CODE_FOR_rvtt_sfpstochrnd_i_lv_int,
-  CODE_FOR_rvtt_sfpstochrnd_v,
-  CODE_FOR_rvtt_sfpstochrnd_v_lv,
-  CODE_FOR_rvtt_sfpstore,
-  CODE_FOR_rvtt_sfpstore_int,
-  CODE_FOR_rvtt_sfpxor,
-  CODE_FOR_rvtt_sfpxor_lv,
-  CODE_FOR_rvtt_sfpxor_lv_2op,
-  CODE_FOR_rvtt_sfpxor_lv_bh,
-};
-
-} // anonymous namespace
+   The one-pin equality-assertion phase (legacy tables recomputed under
+   -fchecking) was discharged corpus- and testsuite-wide at pin 50 with
+   zero inequalities and deleted at pin 51.  */
 
 bool
 rvtt_lane_local_effects (rtx_insn *insn, bool *cc_writes)
@@ -954,18 +803,6 @@ rvtt_lane_local_effects (rtx_insn *insn, bool *cc_writes)
       gcc_assert (w != XTT_CC_WRITE_UNKNOWN);
       ccw = (w == XTT_CC_WRITE_YES);
     }
-  if (flag_checking)
-    {
-      bool lhit = false, lccw = false;
-      for (const legacy_effect_override &o : legacy_effect_overrides)
-	if (code == o.code)
-	  {
-	    lhit = true;
-	    lccw = o.cc_writes;
-	    break;
-	  }
-      gcc_checking_assert (hit == lhit && (!hit || ccw == lccw));
-    }
   if (hit)
     *cc_writes = ccw;
   return hit;
@@ -977,16 +814,5 @@ rvtt_lane_gated_consumer_p (rtx_insn *insn)
   int code = recog_memoized (insn);
   bool hit = code >= 0
 	     && get_attr_xtt_lane_gated (insn) == XTT_LANE_GATED_YES;
-  if (flag_checking)
-    {
-      bool lhit = false;
-      for (insn_code c : legacy_lane_gated_consumers)
-	if (code == c)
-	  {
-	    lhit = true;
-	    break;
-	  }
-      gcc_checking_assert (hit == lhit);
-    }
   return hit;
 }

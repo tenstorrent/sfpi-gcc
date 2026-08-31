@@ -45,8 +45,9 @@ along with GCC; see the file COPYING3.  If not see
 
    All arithmetic is exact integer arithmetic; re-hosting a formula
    here must be BIT-EQUAL to the consumer spelling it replaces
-   (per-consumer flag_checking recompute-asserts hold the old inline
-   spellings against this module for one pin before deletion).  */
+   (per-consumer flag_checking recompute-asserts held the old inline
+   spellings against this module for one pin -- discharged with zero
+   inequalities and deleted at pin 51).  */
 
 #ifndef GCC_RVTT_DELIVERY_COST_CORE_H
 #define GCC_RVTT_DELIVERY_COST_CORE_H

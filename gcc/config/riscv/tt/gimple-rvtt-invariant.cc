@@ -450,26 +450,6 @@ rvtt_sfpxloadi_materialization_cost (gcall *call)
      cases match set-for-set and both FLOATA exponent windows are
      [113, 143)).  */
   unsigned issues = rvtt_dcost_loadi_issue_words (value);
-  /* One-pin recompute-assert of the migrated inline spelling
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      unsigned upper = value >> 16;
-      unsigned lower = value & 0xffff;
-      unsigned old;
-      if (!lower || !upper || (upper == 0xffff && (lower >> 15)))
-	old = 1;
-      else
-	{
-	  /* A full value whose low thirteen bits are zero and whose
-	     exponent fits binary16 can use the single-issue FLOATA
-	     encoding.  */
-	  unsigned exponent = (value >> 23) & 0xff;
-	  old = !(value & 0x1fff)
-	    && exponent > 127 - 15 && exponent < (127 - 15) + 31 ? 1 : 2;
-	}
-      gcc_assert (old == issues);
-    }
   return issues;
 }
 

@@ -523,21 +523,6 @@ mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
 	(p.dcost, rvtt_delivery_cost::SHAPE_COUNTED, p.trips, p.row_words,
 	 p.ds_exec, /*launch_run=*/1, /*drain_contract=*/false,
 	 p.ds_hoist_min_benefit);
-  /* One-pin recompute-assert of the migrated inline mirror
-     (item #12 discipline; delete next pin).  */
-  if (p.checking)
-    {
-      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
-      const int64_t exec = (int64_t) p.ds_exec * slot;
-      const int64_t before = imax64 ((int64_t) p.row_words * push, exec);
-      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
-      const int64_t record = (int64_t) (1 + p.row_words) * push
-	+ p.dcost.record_overhead_x100;
-      const int64_t benefit = (int64_t) p.trips * (before - after) - record;
-      gcc_assert (price.benefit == benefit
-		  && price.profitable
-		       == (benefit >= p.ds_hoist_min_benefit));
-    }
   return price.profitable;
 }
 
@@ -573,35 +558,6 @@ mirror_rerecord_hoist_fires (const rvtt_delivery_problem &p,
     = rvtt_delivery_cost::replay_pricing
 	(p.dcost, shape, groups, payload_slots, exec_slots, run,
 	 p.completion_guard, p.ds_hoist_min_benefit);
-  /* One-pin recompute-assert of the migrated inline mirror (the
-     pre-#12 spelling exists only for the default flag state;
-     item #12 discipline; delete next pin).  */
-  if (p.checking && !p.record_hoist_enabled && !p.completion_guard)
-    {
-      const int64_t push = p.dcost.push_x100, slot = p.dcost.slot_x100;
-      const int64_t exec = exec_slots * slot;
-      const int64_t deliver_record = (int64_t) (1 + payload_slots) * push;
-      const int64_t after = imax64 (push, exec + p.dcost.turnaround_x100);
-      int64_t benefit;
-      if (exec >= deliver_record)
-	{
-	  const int64_t before = exec + p.dcost.record_overhead_x100;
-	  benefit = (int64_t) groups * (before - after)
-		    - p.dcost.record_overhead_x100;
-	}
-      else
-	{
-	  const int64_t surplus = (int64_t) run * (exec - push);
-	  if (surplus >= deliver_record)
-	    benefit = -(deliver_record + p.dcost.record_overhead_x100);
-	  else
-	    benefit = (int64_t) groups * (deliver_record - after)
-		      - (deliver_record + p.dcost.record_overhead_x100);
-	}
-      gcc_assert (price.benefit == benefit
-		  && price.profitable
-		       == (benefit >= p.ds_hoist_min_benefit));
-    }
   return price.profitable;
 }
 

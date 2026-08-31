@@ -1010,19 +1010,6 @@ madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
      single-use discipline of the -a+b and mad rules.  */
   bool wrapper = rvtt_combine_will_fuse_p (def, rvtt_insn_data::sfpmov_lv,
 					   rvtt_insn_data::sfpadd_lv);
-  if (flag_checking
-      && (insnd->id == rvtt_insn_data::sfpmov
-	  || insnd->id == rvtt_insn_data::sfpmov_lv))
-    {
-      /* One-pin assert-equal phase (FABLE_GOES_BURR item #3): the
-	 generated-vocabulary answer must equal the deleted hand
-	 mirror's spelling+mod test.  DELETE with the next pin.  */
-      unsigned base = insnd->id == rvtt_insn_data::sfpmov_lv ? 1 : 0;
-      tree mod = gimple_call_arg (def, base + 1);
-      gcc_assert (wrapper == (TREE_CODE (mod) == INTEGER_CST
-			      && TREE_INT_CST_LOW (mod)
-				 == SFPMOV_MOD1_COMPL));
-    }
   if (wrapper)
     {
       unsigned base = insnd->is_live () ? 1 : 0;
@@ -1045,11 +1032,6 @@ madpair_vocab_mul_p (tree src, class loop *loop, gimple *only_use,
   bool mul_spelling = rvtt_combine_will_fuse_p (def,
 						rvtt_insn_data::sfpmul_lv,
 						rvtt_insn_data::sfpadd_lv);
-  if (flag_checking)
-    /* One-pin assert-equal phase: generated vocabulary == the deleted
-       hand id mirror.  DELETE with the next pin.  */
-    gcc_assert (mul_spelling == (insnd->id == rvtt_insn_data::sfpmul
-				 || insnd->id == rvtt_insn_data::sfpmul_lv));
   if (!mul_spelling)
     return nullptr;
   unsigned base = madpair_value_base (insnd);
@@ -1288,14 +1270,6 @@ hoisted_madpair_load_p (tree src, class loop *loop, gimple *only_use,
 	= rvtt_combine_will_fuse_p (load, rvtt_insn_data::sfploadi,
 				    consumer);
     }
-  if (flag_checking)
-    /* One-pin assert-equal phase: generated fold-shape answer == the
-       deleted hand insn-id mirror (an admitted SFPLOADI is always the
-       shortened FLOATB form, so the pattern's constant test cannot
-       diverge).  DELETE with the next pin.  */
-    gcc_assert (*vulnerable
-		== (rvtt_get_insn_data (load)->id
-		    == rvtt_insn_data::sfploadi));
   /* A materialization with consumers beyond the pair statement cannot
      be re-claimed here: the constant-register substitution would reach
      positions this class has not audited.  The caller refuses the
@@ -3597,17 +3571,6 @@ residency_transform (function *fn, prgm_state *st)
 	     residency_peel_break_even_trips; FABLE_GOES_BURR #12).  */
 	  unsigned need = rvtt_delivery_cost::residency_peel_break_even_trips
 	    (rvtt_dcost_table (), sum_w, nprog, body_w);
-	  /* One-pin recompute-assert of the migrated inline spelling
-	     (item #12 discipline; delete next pin).  */
-	  if (flag_checking)
-	    {
-	      unsigned push = XTT_REPLAY_COST_RISC_PUSH_X100;
-	      unsigned slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-	      unsigned cost = push * (sum_w + nprog)
-		+ (push - slot) * body_w;
-	      gcc_assert (need
-			  == 1 + (cost + slot * sum_w - 1) / (slot * sum_w));
-	    }
 	  /* 64 bounds the trip-proof WORK (bounded forward evaluation),
 	     not the benefit model: a break-even needing more proven
 	     trips than the evaluator will walk refuses by name (cf.

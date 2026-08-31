@@ -1006,13 +1006,6 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
       unsigned cur_covered = seq->length * unsigned (seq->clones.size ());
       unsigned cost_cur = rvtt_delivery_cost::window_trip_issue_words
 	(unsigned (seq->clones.size ()), false, ne - cur_covered);
-      /* One-pin recompute-assert of the migrated inline spelling
-	 (item #12 discipline; delete next pin).  */
-      if (flag_checking)
-	gcc_assert (cost_cand == (unsigned (cand->clones.size ())
-				  + (trim != 0) + (ne - covered))
-		    && cost_cur == (unsigned (seq->clones.size ())
-				    + (ne - cur_covered)));
       if (cost_cand >= cost_cur)
 	{
 	  rvtt_refuse (RVTT_REF_WINDOW_SIZING_NO_CHEAPER_DELIVERY, dump_file,
@@ -2052,78 +2045,6 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   rvtt_delivery_cost::replay_price price = rvtt_dcost_replay_pricing
     (shape, trips, words, eslots, launch_run,
      riscv_tt_replay_hoist_completion_guard > 0, min_benefit);
-
-  /* One-pin recompute-assert of the migrated inline arithmetic
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      HOST_WIDE_INT c_exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
-      HOST_WIDE_INT c_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
-      HOST_WIDE_INT c_rec = (1 + words) * XTT_REPLAY_COST_RISC_PUSH_X100;
-      gcc_assert (min_benefit
-		  == (riscv_tt_replay_hoist_min_benefit >= 0
-		      ? (HOST_WIDE_INT) riscv_tt_replay_hoist_min_benefit
-		      : XTT_REPLAY_HOIST_MIN_BENEFIT));
-      if (record_hoist_mode && !record_completion_model)
-	{
-	  gcc_assert (shape
-		      == (runtime_trips
-			  ? rvtt_delivery_cost::SHAPE_RECORD_HOIST_RUNTIME
-			  : rvtt_delivery_cost::SHAPE_RECORD_HOIST));
-	  HOST_WIDE_INT record_once
-	    = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-	  HOST_WIDE_INT per_trip
-	    = c_body - XTT_REPLAY_COST_TURNAROUND_X100;
-	  gcc_assert (price.record_once == record_once
-		      && price.per_trip == per_trip);
-	  if (runtime_trips)
-	    gcc_assert (price.benefit == 2 * per_trip - record_once
-			&& price.exposure == record_once - per_trip
-			&& price.profitable
-			     == !(per_trip <= 0
-				  || price.benefit < min_benefit));
-	  else
-	    gcc_assert (price.benefit == trips * per_trip - record_once
-			&& price.profitable
-			     == (price.benefit >= min_benefit));
-	}
-      else
-	{
-	  HOST_WIDE_INT c_after
-	    = MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
-		   c_exec + XTT_REPLAY_COST_TURNAROUND_X100);
-	  bool c_exec_bound = body_rerecords && c_exec >= c_rec;
-	  HOST_WIDE_INT c_record, c_before;
-	  if (!body_rerecords)
-	    {
-	      c_before = MAX (c_body, c_exec);
-	      c_record = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-	    }
-	  else if (c_exec_bound)
-	    {
-	      c_before = c_exec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-	      c_record = XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-	      if (riscv_tt_replay_hoist_completion_guard > 0)
-		c_record += c_rec;
-	    }
-	  else
-	    {
-	      c_before = c_rec;
-	      c_record = c_rec + XTT_REPLAY_COST_RECORD_OVERHEAD_X100;
-	      HOST_WIDE_INT c_surplus = (HOST_WIDE_INT) launch_run
-		* (c_exec - XTT_REPLAY_COST_RISC_PUSH_X100);
-	      if (c_surplus >= c_rec)
-		c_before = c_after;
-	    }
-	  gcc_assert (price.before == c_before && price.after == c_after
-		      && price.record == c_record
-		      && price.exec_bound == c_exec_bound
-		      && price.benefit
-			   == trips * (c_before - c_after) - c_record
-		      && price.profitable
-			   == (price.benefit >= min_benefit));
-	}
-    }
 
   /* Record-hoist measurement pricing (-mtt-tensix-optimize-replay-record-
      hoist, re-record bodies only).  The candidate window is proven
@@ -3550,25 +3471,6 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
   HOST_WIDE_INT after = price.after;
   HOST_WIDE_INT peel_cost = price.record;
   HOST_WIDE_INT benefit = price.benefit;
-  /* One-pin recompute-assert of the migrated inline arithmetic
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      HOST_WIDE_INT c_exec = eslots * XTT_REPLAY_COST_REPLAY_SLOT_X100;
-      HOST_WIDE_INT c_body = words * XTT_REPLAY_COST_RISC_PUSH_X100;
-      gcc_assert (min_benefit
-		  == (riscv_tt_replay_hoist_min_benefit >= 0
-		      ? (HOST_WIDE_INT) riscv_tt_replay_hoist_min_benefit
-		      : XTT_REPLAY_HOIST_MIN_BENEFIT));
-      gcc_assert (before == MAX (c_body, c_exec));
-      gcc_assert (after
-		  == MAX ((HOST_WIDE_INT) XTT_REPLAY_COST_RISC_PUSH_X100,
-			  c_exec + XTT_REPLAY_COST_TURNAROUND_X100));
-      gcc_assert (peel_cost == XTT_REPLAY_COST_RISC_PUSH_X100
-			       + XTT_REPLAY_COST_RECORD_OVERHEAD_X100);
-      gcc_assert (benefit == (trips - 1) * (before - after) - peel_cost
-		  && price.profitable == (benefit >= min_benefit));
-    }
   if (dump_file)
     fprintf (dump_file,
 	     "Counted-peel pricing (loop %d): trips %ld, words %ld,"

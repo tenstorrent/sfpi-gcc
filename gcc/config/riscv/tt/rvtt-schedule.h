@@ -193,9 +193,6 @@ struct rvtt_delivery_problem
      value 0: the measured lane-EE table absorbs the SETC16 program in
      the once-per-group record delivery).  */
   int64_t autoincr_setup_x100 = 0;
-  bool checking = false;	/* flag_checking: one-pin
-				   recompute-asserts of the migrated
-				   mirror arithmetic (item #12) */
 };
 
 enum class rvtt_delivery_mode

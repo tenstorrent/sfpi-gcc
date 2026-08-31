@@ -443,20 +443,6 @@ public:
     prob.completion_guard = riscv_tt_replay_hoist_completion_guard > 0;
     prob.autoincr_enabled = riscv_tt_opt_dst_autoincr != 0;
     prob.autoincr_setup_x100 = rvtt_dcost_autoincr_setup_cost_x100 ();
-    prob.checking = flag_checking != 0;
-    /* One-pin recompute-assert of the migrated fills (item #12
-       discipline; delete next pin).  */
-    if (flag_checking)
-      gcc_assert (prob.dcost.push_x100 == XTT_REPLAY_COST_RISC_PUSH_X100
-		  && prob.dcost.slot_x100 == XTT_REPLAY_COST_REPLAY_SLOT_X100
-		  && prob.dcost.turnaround_x100
-		       == XTT_REPLAY_COST_TURNAROUND_X100
-		  && prob.dcost.record_overhead_x100
-		       == XTT_REPLAY_COST_RECORD_OVERHEAD_X100
-		  && prob.ds_hoist_min_benefit
-		       == (riscv_tt_replay_hoist_min_benefit >= 0
-			   ? riscv_tt_replay_hoist_min_benefit
-			   : XTT_REPLAY_HOIST_MIN_BENEFIT));
 
     rvtt_delivery_solution sol = rvtt_bnb_delivery_shape (prob);
     if (sol.status != rvtt_solver_status::optimal)

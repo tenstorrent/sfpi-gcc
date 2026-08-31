@@ -4742,18 +4742,6 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 		   rvtt-delivery-cost-core.h).  */
 		int64_t sb = b, sp = p;
 		rvtt_delivery_cost::scale_trip_weight (&sb, &sp);
-		/* One-pin recompute-assert of the migrated inline
-		   spelling (item #12 discipline; delete next pin).  */
-		if (flag_checking)
-		  {
-		    int64_t cb = b, cp = p;
-		    while (cb > (int64_t) 1 << 48)
-		      {
-			cb >>= 8;
-			cp = cp >> 8 ? cp >> 8 : 1;
-		      }
-		    gcc_assert (sb == cb && sp == cp);
-		  }
 		prog->caller_weight_ok = true;
 		prog->caller_entry_count = sp;
 		prog->caller_body_count = sb;

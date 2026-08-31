@@ -709,28 +709,6 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
 	pair = &r;
 	break;
       }
-  if (flag_checking)
-    {
-      /* One-pin assert-equal phase (FABLE_GOES_BURR item #3
-	 compatibility contract): recompute the pre-table hand
-	 ladder's verdict and assert the generated table reproduces it
-	 exactly.  DELETE with the next pin.  */
-      bool ladder_known = true;
-      storefold_license ladder = STOREFOLD_REFUSE;
-      if (lfmt == SFPMEM_MOD0_FMT_INT32 && sfmt == SFPMEM_MOD0_FMT_INT32)
-	ladder = STOREFOLD_FIRE;
-      else if ((lfmt == SFPMEM_MOD0_FMT_SRCB || lfmt == SFPMEM_MOD0_FMT_FP16
-		|| lfmt == SFPMEM_MOD0_FMT_BF16
-		|| lfmt == SFPMEM_MOD0_FMT_FP32)
-	       && lfmt == sfmt)
-	ladder = STOREFOLD_LICENSED;
-      else if (lfmt == SFPMEM_MOD0_FMT_INT32_SM && lfmt == sfmt)
-	ladder = STOREFOLD_REFUSE;
-      else
-	ladder_known = false;
-      gcc_assert (ladder_known == (pair != nullptr)
-		  && (!pair || ladder == pair->license));
-    }
   if (!pair)
     return refuse ("store-fold-sink-format-unproven", store);
   switch (pair->license)
@@ -983,17 +961,6 @@ fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
 	pair_ok = true;
 	break;
       }
-  if (flag_checking)
-    /* One-pin assert-equal phase (FABLE_GOES_BURR item #3
-       compatibility contract): the generated pairing table must
-       reproduce the pre-table hand expression exactly.  DELETE with
-       the next pin.  */
-    gcc_assert (pair_ok
-		== ((mod0 == SFPMEM_MOD0_FMT_SRCB)
-		    || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B
-			&& mod0 == SFPMEM_MOD0_FMT_BF16)
-		    || (mod1 == (long) SFPSTOCHRND_MOD1_FP32_TO_FP16A
-			&& mod0 == SFPMEM_MOD0_FMT_FP16)));
   if (!pair_ok)
     return refuse ("stochrnd-store-fold-format-mismatch", store);
 
