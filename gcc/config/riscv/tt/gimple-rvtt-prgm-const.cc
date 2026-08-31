@@ -135,6 +135,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
 #include "rvtt-raw-boundary.h"
+#include "rvtt-ipa-summary.h"
 
 namespace {
 
@@ -830,6 +831,50 @@ tu_prgm_facts ()
 	  snprintf (tu_facts.mop.cc_reason, sizeof tu_facts.mop.cc_reason,
 		    "%s", mop_why);
 	}
+    }
+
+  /* Item #15: the tu_facts dump/verify surface.  The snapshot's
+     structural invariants are checked once at compute time; the
+     kernel-single-TU / crt0-benign axioms' decl-level footing (the
+     entry-root enumeration) is recorded and dumped as a CHECKED
+     property (rvtt_ipa_tu_anchors; body-free, so consulting it moves
+     no census snapshot point).  Dump spellings deliberately avoid the
+     twin suite's pinned scan-dump-not stems.  */
+  if (flag_checking)
+    {
+      /* A unique programmed value exists only for a claimed
+	 destination; a blocked snapshot always names its blocker.  */
+      gcc_assert ((tu_facts.value_known & ~tu_facts.claimed) == 0);
+      gcc_assert (!tu_facts.refused || tu_facts.reason);
+      gcc_assert (!tu_facts.mop.cc_dirty || tu_facts.mop.cc_reason[0]);
+    }
+  /* The checked decl-level anchor property computes with the snapshot
+     whether or not anyone dumps.  */
+  rvtt_ipa_tu_anchors ();
+  if (dump_file)
+    {
+      const rvtt_ipa_tu_anchor_facts &anchors = rvtt_ipa_tu_anchors ();
+      fprintf (dump_file,
+	       "tu-facts: claimed %#x value-known %#x creg-read %#x%s\n",
+	       tu_facts.claimed, tu_facts.value_known, tu_facts.creg_read,
+	       tu_facts.refused ? " (blocked)" : "");
+      if (tu_facts.refused && tu_facts.reason)
+	fprintf (dump_file, "tu-facts: blocked by: %s\n", tu_facts.reason);
+      for (unsigned d = 0; d != 16; ++d)
+	if (tu_facts.value_known & (1u << d))
+	  fprintf (dump_file, "tu-facts: dest %u unique value 0x%08x\n",
+		   d, tu_facts.value[d]);
+      if (tu_facts.mop.cc_dirty)
+	fprintf (dump_file, "tu-facts: cc audit dirty: %s\n",
+		 tu_facts.mop.cc_reason);
+      else
+	fprintf (dump_file, "tu-facts: cc audit clean\n");
+      fprintf (dump_file,
+	       "tu-facts: entry anchor %s, %u enumerable root(s), image %s\n",
+	       anchors.has_start ? "_start"
+	       : anchors.has_main ? "main" : "none",
+	       anchors.n_entry_roots,
+	       anchors.rooted ? "rooted" : "unrooted");
     }
   return tu_facts;
 }

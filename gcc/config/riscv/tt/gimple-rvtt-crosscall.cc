@@ -277,6 +277,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-tables.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
+#include "rvtt-ipa-summary.h"
 
 namespace {
 
@@ -3169,11 +3170,15 @@ transform (function *fn)
       edge entry = rvtt_loop_entry_edge (loop);
       gcc_assert (entry);
       commit_caller (p.node, entry, contract, config);
+      /* Item #15: the caller's body just mutated from outside its own
+	 pipeline -- any cached summary of it is void.  */
+      rvtt_ipa_summary_invalidate (DECL_STRUCT_FUNCTION (p.node->decl));
       loop_optimizer_finalize ();
       pop_cfun ();
     }
 
   commit_callee (fn, contract, config);
+  rvtt_ipa_summary_invalidate (fn);
 
   if (dump_file)
     fprintf (dump_file,
@@ -3221,6 +3226,18 @@ public:
     /* TU facts first, while every body is still gimple (the
        prgm-const timing argument).  */
     compute_tu_facts ();
+    /* Item #15 stage A: surface the cross-call CC carry fact
+       (rvtt-cc-region fold, cached in the IPA summary).  Dump-gated
+       and verdict-inert by contract -- no consumer admission widens on
+       it in this item (that is R2/stage-B, by name).  */
+    if (dump_file)
+      {
+	cgraph_node *self = cgraph_node::get (fn->decl);
+	fprintf (dump_file, "ipa-summary: cc-carry %s: %s\n",
+		 self ? self->dump_name () : "?",
+		 self && rvtt_ipa_cc_ambient_preserving_p (self)
+		 ? "ambient-preserving" : "unproven");
+      }
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
     if (!dom_info_available_p (CDI_DOMINATORS))
       calculate_dominance_info (CDI_DOMINATORS);
@@ -3501,6 +3518,10 @@ struct init_scan_ctx
   bool saw_mop = false;
   bool cc_dirty = false;	/* loop CC write: demotes stage 2      */
   bool owned_row_dirty = false;	/* in-loop owned-row write: demotes    */
+  /* Item #15 shadow discipline: a flag_checking twin of the
+     summary-fed hop replay records verdicts without emitting (no
+     double dump lines, no double refusal-counter fires).  */
+  bool quiet = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
 };
@@ -3510,6 +3531,8 @@ init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
 {
   ctx->why = why;
   ctx->why_stmt = stmt;
+  if (ctx->quiet)
+    return false;
   rvtt_refuse_by_name_at (why, stmt, dump_file,
 			  "init-hoist: refused (%s)", why);
   if (dump_file)
@@ -3706,6 +3729,363 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
     }
 
   return init_refuse (ctx, "drain-init-ownership-unproven", stmt);
+}
+
+/* ------------------------------------------------------------------ */
+/* Item #15 (rvtt-ipa-summary): the init/epoch-face body digest.
+
+   The chain hops' whole-body scans re-ran init_scan_stmt over the same
+   hop bodies once per consuming contract (the init hoist and the
+   ADDR_MOD hoist each re-walked every hop per callee).  The digest
+   records init_scan_stmt's classification of one body ONCE in a
+   parameter-independent event stream; init_replay_events re-folds it
+   against a contract's parameters (owned rows via classify_word_init
+   on the recorded word image, call admission via the contract's decl
+   set) with the exact legacy accumulator and refusal emission.  Every
+   arm below mirrors init_scan_stmt / init_scan_asm /
+   classify_delivered_init's input handling verbatim; a divergence
+   between replay and the legacy walk is a hard flag_checking FINDING
+   (scan_chain_hops).  */
+
+static void
+init_digest_push_refuse (vec<rvtt_ipa_event> *out, gimple *stmt,
+			 const char *why)
+{
+  rvtt_ipa_event ev = {};
+  ev.kind = rvtt_ipa_event::EV_REFUSE;
+  ev.stmt = stmt;
+  ev.what = why;
+  out->safe_push (ev);
+}
+
+/* A delivered word: record the constant image (or the constant opcode
+   base of a runtime-completed word, WORD_EXACT false -- the
+   classify_delivered_init split), refusing the underivable default.  */
+
+static void
+init_digest_push_deliver (vec<rvtt_ipa_event> *out, gimple *stmt, tree val)
+{
+  rvtt_ipa_event ev = {};
+  ev.kind = rvtt_ipa_event::EV_DELIVER;
+  ev.stmt = stmt;
+  if (TREE_CODE (val) == INTEGER_CST)
+    {
+      ev.word = (uint32_t) (TREE_INT_CST_LOW (val) & 0xffffffff);
+      ev.word_exact = true;
+      out->safe_push (ev);
+      return;
+    }
+  uint32_t base;
+  if (!pushed_word_base (val, &base))
+    {
+      init_digest_push_refuse (out, stmt, "drain-init-ownership-unproven");
+      return;
+    }
+  ev.word = base;
+  ev.word_exact = false;
+  out->safe_push (ev);
+}
+
+/* One statement's contribution to the digest (mirrors init_scan_stmt;
+   statements the scan admits parameter-free record nothing).  */
+
+static void
+init_digest_stmt (vec<rvtt_ipa_event> *out, gimple *stmt)
+{
+  if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+      || gimple_code (stmt) == GIMPLE_COND
+      || gimple_code (stmt) == GIMPLE_GOTO
+      || gimple_code (stmt) == GIMPLE_NOP
+      || gimple_code (stmt) == GIMPLE_PREDICT
+      || gimple_code (stmt) == GIMPLE_RETURN)
+    return;
+
+  if (gasm *a = dyn_cast <gasm *> (stmt))
+    {
+      const char *str = gimple_asm_string (a);
+      const char *sp = str;
+      while (*sp == ' ' || *sp == '\t')
+	++sp;
+      if (strncmp (sp, ".ttinsn", 7) == 0)
+	{
+	  const char *t = sp + 7;
+	  while (*t == ' ' || *t == '\t')
+	    ++t;
+	  if (strcmp (t, "%0") != 0 || gimple_asm_ninputs (a) != 1
+	      || gimple_asm_noutputs (a) != 0)
+	    return init_digest_push_refuse (out, stmt,
+					    "drain-init-ownership-unproven");
+	  return init_digest_push_deliver
+	    (out, stmt, TREE_VALUE (gimple_asm_input_op (a, 0)));
+	}
+      tree value, ptr;
+      if (blocking_store_asm_p (a, &value, &ptr))
+	{
+	  unsigned HOST_WIDE_INT addr;
+	  if (pointer_constant_address (ptr, &addr))
+	    {
+	      if (addr >= XTT_INSTRN_BUF_MMIO_BASE
+		  && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+		return init_digest_push_deliver (out, stmt, value);
+	      if (addr >= XTT_MOP_CFG_MMIO_BASE
+		  && addr <= XTT_MOP_CFG_MMIO_LIMIT)
+		return init_digest_push_refuse
+		  (out, stmt, "drain-init-ownership-unproven");
+	      return;		/* sync/data aperture */
+	    }
+	  return init_digest_push_refuse (out, stmt,
+					  "drain-init-ownership-unproven");
+	}
+      if (audited_scalar_asm_p (str))
+	return;
+      return init_digest_push_refuse (out, stmt,
+				      "drain-init-ownership-unproven");
+    }
+
+  if (gcall *call = dyn_cast <gcall *> (stmt))
+    {
+      const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
+      if (insnd)
+	{
+	  if (insnd->sets_cc (call))
+	    {
+	      rvtt_ipa_event ev = {};
+	      ev.kind = rvtt_ipa_event::EV_CC_WRITE;
+	      ev.stmt = stmt;
+	      out->safe_push (ev);
+	      return;
+	    }
+	  switch (insnd->id)
+	    {
+	    case rvtt_insn_data::ttreplay:
+	    case rvtt_insn_data::sfpwriteconfig_v:
+	    case rvtt_insn_data::sfpconfig_i:
+	    case rvtt_insn_data::ttsetc16:
+	    case rvtt_insn_data::sfpencc_all_lanes:
+	    case rvtt_insn_data::ttmovd2b:
+	    case rvtt_insn_data::ttmovb2a:
+	    case rvtt_insn_data::ttmovb2d:
+	    case rvtt_insn_data::ttmova2d:
+	    case rvtt_insn_data::tttrnspsrcb:
+	    case rvtt_insn_data::ttstallwait:
+	    case rvtt_insn_data::ttrmwcib:
+	      return init_digest_push_refuse
+		(out, stmt, "drain-init-ownership-unproven");
+	    default:
+	      break;
+	    }
+	  if (call_has_vector_dataflow_p (call))
+	    return init_digest_push_refuse (out, stmt,
+					    "drain-init-vector-live");
+	  return;
+	}
+      /* Untyped calls that admit parameter-free: internal without a
+	 vdef, scalar compiler builtins.  Everything else is a
+	 consumer-side admission (the contract call / chain decls) --
+	 an internal call or a builtin can never be one of those, so
+	 hoisting their classification ahead of the admission checks is
+	 order-inert.  */
+      if (gimple_call_internal_p (call))
+	{
+	  if (gimple_vdef (call))
+	    init_digest_push_refuse (out, stmt,
+				     "drain-init-ownership-unproven");
+	  return;
+	}
+      tree fndecl = gimple_call_fndecl (call);
+      if (fndecl && fndecl_built_in_p (fndecl))
+	return;
+      rvtt_ipa_event ev = {};
+      ev.kind = rvtt_ipa_event::EV_CALL;
+      ev.stmt = stmt;
+      ev.decl = fndecl;
+      out->safe_push (ev);
+      return;
+    }
+
+  if (is_gimple_assign (stmt))
+    {
+      if (vector_typed_p (gimple_assign_lhs (stmt)))
+	return init_digest_push_refuse (out, stmt, "drain-init-vector-live");
+      if (!gimple_store_p (stmt))
+	return;
+      tree lhs = gimple_get_lhs (stmt);
+      if (!lhs || TREE_CODE (lhs) == SSA_NAME)
+	return;
+      unsigned HOST_WIDE_INT addr;
+      if (ref_constant_address (lhs, &addr))
+	{
+	  if (addr >= XTT_INSTRN_BUF_MMIO_BASE
+	      && addr <= XTT_INSTRN_BUF_MMIO_LIMIT)
+	    return init_digest_push_deliver (out, stmt,
+					     gimple_assign_rhs1 (stmt));
+	  if (addr >= XTT_MOP_CFG_MMIO_BASE && addr <= XTT_MOP_CFG_MMIO_LIMIT)
+	    return init_digest_push_refuse
+	      (out, stmt, "drain-init-ownership-unproven");
+	  return;		/* other constant MMIO / L1 */
+	}
+      tree base = get_base_address (lhs);
+      if (!TREE_THIS_VOLATILE (lhs)
+	  && (!base || !DECL_P (base) || !TREE_THIS_VOLATILE (base)))
+	return;			/* plain memory */
+      if (base && DECL_P (base))
+	{
+	  const char *name = DECL_ASSEMBLER_NAME (base)
+	    ? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base)) : nullptr;
+	  if (name && !strcmp (name, "__instrn_buffer"))
+	    return init_digest_push_deliver (out, stmt,
+					     gimple_assign_rhs1 (stmt));
+	  if (!DECL_EXTERNAL (base))
+	    return;		/* TU data object */
+	}
+      return init_digest_push_refuse (out, stmt,
+				      "drain-init-ownership-unproven");
+    }
+
+  init_digest_push_refuse (out, stmt, "drain-init-ownership-unproven");
+}
+
+/* Replay a body digest against this contract's parameters, with the
+   legacy accumulator/emission semantics (stop at the first refusal;
+   dumps and refusal counters fire exactly as the legacy walk's
+   init_refuse did).  */
+
+static bool
+init_replay_events (init_scan_ctx *ctx, const vec<rvtt_ipa_event> &evs)
+{
+  for (const rvtt_ipa_event &ev : evs)
+    switch (ev.kind)
+      {
+      case rvtt_ipa_event::EV_CC_WRITE:
+	ctx->cc_dirty = true;
+	break;
+      case rvtt_ipa_event::EV_REFUSE:
+	return init_refuse (ctx, ev.what, ev.stmt);
+      case rvtt_ipa_event::EV_DELIVER:
+	{
+	  init_word_verdict v
+	    = classify_word_init (ev.word, *ctx->prog, ctx->c);
+	  if (!ev.word_exact)
+	    v.word_exact = false;
+	  if (!apply_init_verdict (ctx, v, ev.stmt))
+	    return false;
+	  break;
+	}
+      case rvtt_ipa_event::EV_CALL:
+	if (ctx->contract_call && ev.stmt == ctx->contract_call)
+	  break;			/* the resolved contract edge */
+	if (ctx->callee_decl && ev.decl == ctx->callee_decl)
+	  break;			/* the contract call itself */
+	if (ev.decl && ctx->chain_decls
+	    && ctx->chain_decls->contains (ev.decl))
+	  break;			/* a proven chain hop */
+	return init_refuse (ctx, "drain-init-ownership-unproven", ev.stmt);
+      default:
+	gcc_unreachable ();
+      }
+  return true;
+}
+
+/* The chain hops' whole-body epoch scans, summary-fed (item #15): one
+   digest per hop body, computed once and consulted per contract,
+   replacing the per-contract re-walks.  Under flag_checking the legacy
+   per-statement walk shadows every hop quietly and the verdicts must
+   agree exactly -- the stage-A assertion phase (shadow walk DELETE
+   NEXT PIN on a clean corpus -fchecking leg).  FACE_UNAVAILABLE is the
+   consuming face's closure refusal; TAG its dump prefix.  Returns the
+   refusal name, or null with CTX's accumulators advanced.  */
+
+static const char *
+scan_chain_hops (init_scan_ctx *ctx, const auto_vec<cgraph_node *, 4> &chain,
+		 const char *face_unavailable, const char *tag)
+{
+  for (cgraph_node *hop : chain)
+    {
+      cgraph_node *body_node = hop;
+      while (body_node && !gimple_has_body_p (body_node->decl)
+	     && body_node->clone_of)
+	body_node = body_node->clone_of;
+      function *hfn = body_node
+	? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
+      if (!hfn || !hfn->cfg)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "%s: closure (hop-body %s)\n", tag,
+		     hop->dump_name ());
+	  return face_unavailable;
+	}
+      rvtt_ipa_fn_summary *sum = rvtt_ipa_summary_get (body_node);
+      if (!sum)
+	{
+	  /* The engine could not see the walkable body this face just
+	     probed: fail closed on the face's own name.  */
+	  if (dump_file)
+	    fprintf (dump_file, "%s: closure (hop-body %s)\n", tag,
+		     hop->dump_name ());
+	  return face_unavailable;
+	}
+      if (!sum->init_computed)
+	{
+	  basic_block hbb;
+	  FOR_EACH_BB_FN (hbb, hfn)
+	    for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
+		 !gsi_end_p (gsi); gsi_next (&gsi))
+	      init_digest_stmt (&sum->init_events, gsi_stmt (gsi));
+	  sum->init_computed = true;
+	  /* The one new dump spelling is face-neutral by design: the
+	     bare face tags are pinned scan-dump-not patterns in the
+	     twin suite.  */
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "ipa-summary: init-face digest built (%s, %u events)\n",
+		     body_node->dump_name (), sum->init_events.length ());
+	}
+      init_scan_ctx shadow;
+      if (flag_checking)
+	shadow = *ctx;
+      bool ok = init_replay_events (ctx, sum->init_events);
+      if (flag_checking)
+	{
+	  /* Stage-A assertion phase: the legacy whole-body walk, run
+	     quietly on a twin accumulator, must reach the identical
+	     verdict.  DELETE NEXT PIN.  */
+	  shadow.quiet = true;
+	  bool sok = true;
+	  basic_block hbb;
+	  FOR_EACH_BB_FN (hbb, hfn)
+	    {
+	      for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
+		   sok && !gsi_end_p (gsi); gsi_next (&gsi))
+		sok = init_scan_stmt (&shadow, gsi_stmt (gsi));
+	      if (!sok)
+		break;
+	    }
+	  bool why_equal = shadow.why == ctx->why
+	    || (shadow.why && ctx->why && !strcmp (shadow.why, ctx->why));
+	  if (sok != ok
+	      || shadow.saw_mop != ctx->saw_mop
+	      || shadow.cc_dirty != ctx->cc_dirty
+	      || shadow.owned_row_dirty != ctx->owned_row_dirty
+	      || !why_equal
+	      || shadow.why_stmt != ctx->why_stmt)
+	    {
+	      fprintf (stderr,
+		       "ipa-summary: init-face hop verdict disagreement"
+		       " (%s: summary %s vs walk %s)\n",
+		       body_node->dump_name (),
+		       ctx->why ? ctx->why : "ok",
+		       shadow.why ? shadow.why : "ok");
+	      gcc_assert (sok == ok && why_equal
+			  && shadow.saw_mop == ctx->saw_mop
+			  && shadow.cc_dirty == ctx->cc_dirty
+			  && shadow.owned_row_dirty == ctx->owned_row_dirty
+			  && shadow.why_stmt == ctx->why_stmt);
+	    }
+	}
+      if (!ok)
+	return ctx->why;
+    }
+  return nullptr;
 }
 
 /* Stage-2 value equality: every decodable SETC16-class delivery to an
@@ -4093,33 +4473,36 @@ init_commit_caller (cgraph_node *caller, edge entry,
 
 } // anonymous namespace (lane CA init hoist)
 
-/* See rvtt-protos.h.  Returns the refusal name, or NULL after a
-   committed caller-side insertion with PROG->stage set.  COMMIT false
-   (lane IU pricing pre-run) evaluates the identical proof chain and
-   sets every out field -- stage and the caller-loop trip weight --
-   without inserting anything.  */
+/* Item #15: the ONE caller-chain resolver behind the init-face
+   contracts (lane CA init hoist, lane IK ADDR_MOD hoist) -- previously
+   two byte-similar copies.  Resolve the effective caller chain
+   F <- W1 <- ... <- U: each intermediate must be the target of exactly
+   one call edge, not address-taken, and COMMITTED into its inliner
+   (inlined_to) -- so at execution time its statements run inline at
+   the call site, between the loop's trips -- and its body (through the
+   clone_of origin chain, the laneBT resolution: origin body = sound
+   over-approximation) is scanned as part of the loop epoch.  U is the
+   outermost node still carrying its own gimple CFG; the hoist lands in
+   U's loop preheader.  REQUIRE_GIMPLE_BODY adds the ADDR_MOD face's
+   commit-target check (typed builtin calls must still be insertable).
+   Ends with the TU census rooting check on U (the coefficient hoist's
+   crosscall-caller-unrooted discipline).  Returns null on success with
+   CHAIN/UCALLER/UCALL/CFN filled; otherwise FACE_UNAVAILABLE after the
+   face's historical "TAG: closure (<what>)" dump line.  */
 
-const char *
-rvtt_crosscall_init_hoist (function *callee_fn,
-			   rvtt_init_hoist_program *prog, bool commit)
+static const char *
+resolve_contract_chain (function *callee_fn,
+			auto_vec<cgraph_node *, 4> *chain,
+			cgraph_node **ucaller_out, gcall **ucall_out,
+			function **cfn_out, bool require_gimple_body,
+			const char *face_unavailable, const char *tag)
 {
-  prog->caller_weight_ok = false;
-  prog->caller_entry_count = 1;
-  prog->caller_body_count = 1;
-  if (TARGET_XTT_TENSIX_QSR)
-    return "drain-init-callers-unproven";
-  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
-    : rvtt_macro::CPU_WH;
-  const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu (cpu);
-  if (!c)
-    return "drain-init-callers-unproven";
-
   cgraph_node *cn = cgraph_node::get (callee_fn->decl);
   auto closure_why = [&] (const char *what) -> const char *
     {
       if (dump_file)
-	fprintf (dump_file, "init-hoist: closure (%s)\n", what);
-      return "drain-init-callers-unproven";
+	fprintf (dump_file, "%s: closure (%s)\n", tag, what);
+      return face_unavailable;
     };
   if (!cn)
     return closure_why ("no-node");
@@ -4132,17 +4515,6 @@ rvtt_crosscall_init_hoist (function *callee_fn,
   if (cn->clones)
     return closure_why ("clones");
 
-  /* Resolve the effective caller chain F <- W1 <- ... <- U.  The
-     production shape reaches F through an inline wrapper (possibly an
-     IPA clone): each intermediate must be the target of exactly one
-     call edge, not address-taken, and COMMITTED into its inliner
-     (inlined_to) -- so at execution time its statements run inline at
-     the call site, between the loop's trips -- and its body (through
-     the clone_of origin chain, the laneBT resolution: origin body =
-     sound over-approximation) is scanned as part of the loop epoch
-     below.  U is the outermost node still carrying its own gimple CFG;
-     the hoist lands in U's loop preheader.  */
-  auto_vec<cgraph_node *, 4> chain;	/* intermediates, innermost first */
   cgraph_node *cur = cn;
   cgraph_node *ucaller = nullptr;
   gcall *ucall = nullptr;
@@ -4175,15 +4547,14 @@ rvtt_crosscall_init_hoist (function *callee_fn,
       if (!caller->inlined_to || caller->address_taken || caller->alias
 	  || caller->thunk)
 	return closure_why ("chain-unproven");
-      chain.safe_push (caller);
+      chain->safe_push (caller);
       cur = caller;
     }
-  cgraph_edge *e = ucaller->callees;
   /* Find U's edge into the chain (its call_stmt is the loop member).  */
   {
-    cgraph_node *first_hop = chain.is_empty () ? cn : chain.last ();
+    cgraph_node *first_hop = chain->is_empty () ? cn : chain->last ();
     cgraph_edge *found = nullptr;
-    for (e = ucaller->callees; e; e = e->next_callee)
+    for (cgraph_edge *e = ucaller->callees; e; e = e->next_callee)
       if (e->callee == first_hop)
 	{
 	  if (found)
@@ -4193,8 +4564,12 @@ rvtt_crosscall_init_hoist (function *callee_fn,
     if (!found || !found->call_stmt)
       return closure_why ("caller-body-unavailable");
     ucall = found->call_stmt;
-    e = found;
   }
+  /* The caller must still be gimple when the face inserts typed
+     builtin calls into its body (an already-expanded caller has no
+     insertable gimple -- fail closed).  */
+  if (require_gimple_body && !ucaller->has_gimple_body_p ())
+    return closure_why ("caller-past-gimple");
   function *cfn = DECL_STRUCT_FUNCTION (ucaller->decl);
   if (!cfn || !cfn->cfg)
     return closure_why ("caller-cfg-unavailable");
@@ -4205,14 +4580,53 @@ rvtt_crosscall_init_hoist (function *callee_fn,
      scanned when they were the contract subject).  */
   compute_tu_facts ();
 
-  /* The commit target must be a body the census vouched for (the
-     coefficient hoist's crosscall-caller-unrooted discipline).  */
+  /* The commit target must be a body the census vouched for.  */
   {
     cgraph_node *ucheck = ucaller->inlined_to
       ? ucaller->inlined_to : ucaller;
     if (tu_facts.executable && !tu_facts.executable->contains (ucheck))
       return closure_why ("caller-unrooted");
   }
+
+  *ucaller_out = ucaller;
+  *ucall_out = ucall;
+  *cfn_out = cfn;
+  return nullptr;
+}
+
+/* See rvtt-protos.h.  Returns the refusal name, or NULL after a
+   committed caller-side insertion with PROG->stage set.  COMMIT false
+   (lane IU pricing pre-run) evaluates the identical proof chain and
+   sets every out field -- stage and the caller-loop trip weight --
+   without inserting anything.  */
+
+const char *
+rvtt_crosscall_init_hoist (function *callee_fn,
+			   rvtt_init_hoist_program *prog, bool commit)
+{
+  prog->caller_weight_ok = false;
+  prog->caller_entry_count = 1;
+  prog->caller_body_count = 1;
+  if (TARGET_XTT_TENSIX_QSR)
+    return "drain-init-callers-unproven";
+  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
+    : rvtt_macro::CPU_WH;
+  const rvtt_macro::caps *c = rvtt_macro_caps_for_cpu (cpu);
+  if (!c)
+    return "drain-init-callers-unproven";
+
+  /* The one caller-chain resolver (item #15); dump lines and refusal
+     verdicts are the historical ones.  */
+  auto_vec<cgraph_node *, 4> chain;	/* intermediates, innermost first */
+  cgraph_node *ucaller = nullptr;
+  gcall *ucall = nullptr;
+  function *cfn = nullptr;
+  if (const char *chain_why
+      = resolve_contract_chain (callee_fn, &chain, &ucaller, &ucall, &cfn,
+				/*require_gimple_body=*/false,
+				"drain-init-callers-unproven", "init-hoist"))
+    return chain_why;
+  cgraph_node *cn = cgraph_node::get (callee_fn->decl);
 
   const char *result = nullptr;
   int stage = 2;
@@ -4274,42 +4688,14 @@ rvtt_crosscall_init_hoist (function *callee_fn,
     }
 
   /* The chain hops' statements execute per trip, between the loop's
-     calls: scan every hop's body (through the clone_of origin when the
-     clone carries no materialized body -- statement classification is
-     parameter-independent, so the origin over-approximates soundly)
-     with the same epoch discipline.  */
+     calls: the same epoch discipline over every hop body (through the
+     clone_of origin when the clone carries no materialized body --
+     statement classification is parameter-independent, so the origin
+     over-approximates soundly), summary-fed (item #15): each hop
+     body's digest is computed once per TU and replayed here.  */
   if (!result)
-    for (cgraph_node *hop : chain)
-      {
-	cgraph_node *body_node = hop;
-	while (body_node && !gimple_has_body_p (body_node->decl)
-	       && body_node->clone_of)
-	  body_node = body_node->clone_of;
-	function *hfn = body_node
-	  ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
-	if (!hfn || !hfn->cfg)
-	  {
-	    result = "drain-init-callers-unproven";
-	    if (dump_file)
-	      fprintf (dump_file, "init-hoist: closure (hop-body %s)\n",
-		       hop->dump_name ());
-	    break;
-	  }
-	basic_block hbb;
-	FOR_EACH_BB_FN (hbb, hfn)
-	  {
-	    for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
-		 !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
-	      init_scan_stmt (&ctx, gsi_stmt (gsi));
-	    if (ctx.why)
-	      break;
-	  }
-	if (ctx.why)
-	  {
-	    result = ctx.why;
-	    break;
-	  }
-      }
+    result = scan_chain_hops (&ctx, chain, "drain-init-callers-unproven",
+			      "init-hoist");
 
   if (!result && ctx.saw_mop)
     {
@@ -4375,7 +4761,12 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 	  }
       }
       if (commit)
-	init_commit_caller (ucaller, entry, *prog, stage);
+	{
+	  init_commit_caller (ucaller, entry, *prog, stage);
+	  /* Item #15: the caller's body just mutated from outside its
+	     own pipeline -- any cached summary of it is void.  */
+	  rvtt_ipa_summary_invalidate (cfn);
+	}
       prog->stage = stage;
     }
 
@@ -4476,91 +4867,20 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
       iprog.setc16[iprog.n_setc16++].value = 0;
     }
 
-  cgraph_node *cn = cgraph_node::get (callee_fn->decl);
-  auto closure_why = [&] (const char *what) -> const char *
-    {
-      if (dump_file)
-	fprintf (dump_file, "addrmod-hoist: closure (%s)\n", what);
-      return "crosscall-addrmod-callers-unproven";
-    };
-  if (!cn)
-    return closure_why ("no-node");
-  if (!cn->definition)
-    return closure_why ("no-definition");
-  if (cn->address_taken)
-    return closure_why ("address-taken");
-  if (cn->alias || cn->thunk)
-    return closure_why ("alias-or-thunk");
-  if (cn->clones)
-    return closure_why ("clones");
-
-  /* Resolve the effective caller chain (the lane CA discipline: each
-     intermediate committed inline, single-sited; U = the outermost node
-     still carrying gimple).  */
+  /* The one caller-chain resolver (item #15; the lane CA discipline:
+     each intermediate committed inline, single-sited; U = the
+     outermost node still carrying gimple).  Dump lines and refusal
+     verdicts are the historical ones.  */
   auto_vec<cgraph_node *, 4> chain;
-  cgraph_node *cur = cn;
   cgraph_node *ucaller = nullptr;
   gcall *ucall = nullptr;
-  for (unsigned depth = 0; !ucaller; ++depth)
-    {
-      if (depth > 3)
-	return closure_why ("chain-too-deep");
-      cgraph_edge *e = cur->callers;
-      if (!e)
-	return closure_why ("no-callers");
-      if (e->next_caller)
-	return closure_why ("multi-site");
-      if (e->caller == cn)
-	return closure_why ("recursion");
-      cgraph_node *caller = e->caller;
-      if (!caller->definition)
-	return closure_why ("caller-body-unavailable");
-      function *this_fn = DECL_STRUCT_FUNCTION (caller->decl);
-      if (this_fn && this_fn->cfg && !caller->inlined_to)
-	{
-	  ucaller = caller;
-	  ucall = e->call_stmt;
-	  if (!ucall)
-	    return closure_why ("caller-body-unavailable");
-	  break;
-	}
-      if (!caller->inlined_to || caller->address_taken || caller->alias
-	  || caller->thunk)
-	return closure_why ("chain-unproven");
-      chain.safe_push (caller);
-      cur = caller;
-    }
-  /* Find U's edge into the chain.  */
-  {
-    cgraph_node *first_hop = chain.is_empty () ? cn : chain.last ();
-    cgraph_edge *found = nullptr;
-    for (cgraph_edge *e = ucaller->callees; e; e = e->next_callee)
-      if (e->callee == first_hop)
-	{
-	  if (found)
-	    return closure_why ("multi-site");
-	  found = e;
-	}
-    if (!found || !found->call_stmt)
-      return closure_why ("caller-body-unavailable");
-    ucall = found->call_stmt;
-  }
-  /* The caller must still be gimple: the commit inserts typed builtin
-     calls into its body (an already-expanded caller has no insertable
-     gimple -- fail closed).  */
-  if (!ucaller->has_gimple_body_p ())
-    return closure_why ("caller-past-gimple");
-  function *cfn = DECL_STRUCT_FUNCTION (ucaller->decl);
-  if (!cfn || !cfn->cfg)
-    return closure_why ("caller-cfg-unavailable");
-
-  compute_tu_facts ();
-  {
-    cgraph_node *ucheck = ucaller->inlined_to
-      ? ucaller->inlined_to : ucaller;
-    if (tu_facts.executable && !tu_facts.executable->contains (ucheck))
-      return closure_why ("caller-unrooted");
-  }
+  function *cfn = nullptr;
+  if (const char *chain_why
+      = resolve_contract_chain (callee_fn, &chain, &ucaller, &ucall, &cfn,
+				/*require_gimple_body=*/true,
+				"crosscall-addrmod-callers-unproven",
+				"addrmod-hoist"))
+    return chain_why;
 
   const char *result = nullptr;
   push_cfun (cfn);
@@ -4619,39 +4939,12 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
     }
 
   /* Chain hops' statements execute per trip, between calls: same epoch
-     discipline over every hop body.  */
+     discipline over every hop body, summary-fed (item #15): one digest
+     per hop body, computed once per TU and replayed here.  */
   if (!result)
-    for (cgraph_node *hop : chain)
-      {
-	cgraph_node *body_node = hop;
-	while (body_node && !gimple_has_body_p (body_node->decl)
-	       && body_node->clone_of)
-	  body_node = body_node->clone_of;
-	function *hfn = body_node
-	  ? DECL_STRUCT_FUNCTION (body_node->decl) : nullptr;
-	if (!hfn || !hfn->cfg)
-	  {
-	    result = "crosscall-addrmod-callers-unproven";
-	    if (dump_file)
-	      fprintf (dump_file, "addrmod-hoist: closure (hop-body %s)\n",
-		       hop->dump_name ());
-	    break;
-	  }
-	basic_block hbb;
-	FOR_EACH_BB_FN (hbb, hfn)
-	  {
-	    for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
-		 !ctx.why && !gsi_end_p (gsi); gsi_next (&gsi))
-	      init_scan_stmt (&ctx, gsi_stmt (gsi));
-	    if (ctx.why)
-	      break;
-	  }
-	if (ctx.why)
-	  {
-	    result = ctx.why;
-	    break;
-	  }
-      }
+    result = scan_chain_hops (&ctx, chain,
+			      "crosscall-addrmod-callers-unproven",
+			      "addrmod-hoist");
 
   /* Placement residency walk (lane HC's discipline): lift the program
      point across enclosing caller loops whose EXTRA bodies pass the
@@ -4763,6 +5056,9 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
 				sc, ph->count);
 	}
       update_ssa (TODO_update_ssa_only_virtuals);
+      /* Item #15: the caller's body just mutated from outside its own
+	 pipeline -- any cached summary of it is void.  */
+      rvtt_ipa_summary_invalidate (cfn);
       if (dump_file)
 	fprintf (dump_file,
 		 "addrmod-hoist: placed ADDR_MOD contract (%u setc16) in %s "
