@@ -1223,16 +1223,10 @@ ls_admissible_p (rtx_insn *insn, ls_node *node, const char **why)
 static int
 ls_dependence (const ls_node &p, const ls_node &c)
 {
-  bool raw_or_waw = hard_reg_set_intersect_p (p.raw_defs, c.regs.uses)
-		    || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs);
-  bool war = hard_reg_set_intersect_p (p.regs.uses, c.raw_defs);
-  int kind = raw_or_waw ? 1 : war ? 2 : 0;
-  /* Item-#11 verdict-identity shadow: one spelling of the RAW/WAW
-     latency-weighted vs WAR issue-order classification.  */
-  if (flag_checking)
-    gcc_assert (kind
-		== (int) rvtt_timing::classify_dependence (raw_or_waw, war));
-  return kind;
+  return rvtt_timing::classify_dependence
+    (hard_reg_set_intersect_p (p.raw_defs, c.regs.uses)
+     || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs),
+     hard_reg_set_intersect_p (p.regs.uses, c.raw_defs));
 }
 
 /* Marshal the region NODES into the item-#11 engine's plain-data
@@ -1271,44 +1265,8 @@ ls_simulate (const std::vector<ls_node> &nodes,
 	     const std::vector<int> &order, std::vector<int> *issue,
 	     const std::vector<bool> &exit_shadow)
 {
-  int t = 0;
-  for (unsigned k = 0; k != order.size (); ++k)
-    {
-      const ls_node &n = nodes[order[k]];
-      int ready = n.entry_pin;
-      for (unsigned j = 0; j != k; ++j)
-	{
-	  const ls_node &p = nodes[order[j]];
-	  int kind = ls_dependence (p, n);
-	  if (!kind)
-	    continue;
-	  int need = (*issue)[order[j]] + p.words + (kind == 1 ? p.lat : 0);
-	  if (need > ready)
-	    ready = need;
-	}
-      if (ready > t)
-	t = ready;
-      (*issue)[order[k]] = t;
-      t += n.words;
-    }
-  int end = t;
-  for (unsigned i = 0; i != nodes.size (); ++i)
-    if (exit_shadow[i])
-      {
-	int drain = (*issue)[i] + nodes[i].words + nodes[i].lat;
-	if (drain > end)
-	  end = drain;
-      }
-  /* Item-#11 verdict-identity shadow: the unified engine's timeline
-     must agree slot-for-slot before this simulator retires.  */
-  if (flag_checking)
-    {
-      std::vector<int> chk_issue (nodes.size (), 0);
-      int chk_end = rvtt_timing::simulate (ls_timing_seq (nodes), order,
-					   &chk_issue, exit_shadow);
-      gcc_assert (chk_end == end && chk_issue == *issue);
-    }
-  return end;
+  return rvtt_timing::simulate (ls_timing_seq (nodes), order, issue,
+				exit_shadow);
 }
 
 /* Count the DYNAMIC-delay pad sites over the region members (the nop
@@ -1888,57 +1846,7 @@ static int
 ls_cyclic_ii (const std::vector<ls_node> &nodes,
 	      const std::vector<int> &order)
 {
-  unsigned n = nodes.size ();
-  const unsigned COPIES = 6;
-  std::vector<int> issue (n * COPIES, 0);
-  std::vector<int> start (COPIES, 0);
-  int t = 0;
-  int last_d = 0;
-  for (unsigned c = 0; c != COPIES; ++c)
-    {
-      for (unsigned k = 0; k != n; ++k)
-	{
-	  const ls_node &nd = nodes[order[k]];
-	  int ready = t;
-	  for (unsigned pc = 0; pc <= c; ++pc)
-	    for (unsigned j = 0; j != (pc == c ? k : n); ++j)
-	      {
-		const ls_node &p = nodes[order[j]];
-		int kind = ls_dependence (p, nd);
-		if (!kind)
-		  continue;
-		int need = issue[pc * n + order[j]] + p.words
-			   + (kind == 1 ? p.lat : 0);
-		if (need > ready)
-		  ready = need;
-	      }
-	  issue[c * n + order[k]] = ready;
-	  t = ready + nd.words;
-	  if (k == 0)
-	    start[c] = ready;
-	}
-      if (c >= 2)
-	{
-	  int d1 = start[c] - start[c - 1];
-	  int d2 = start[c - 1] - start[c - 2];
-	  last_d = d1;
-	  if (d1 == d2)
-	    {
-	      /* Item-#11 verdict-identity shadow.  */
-	      if (flag_checking)
-		gcc_assert (rvtt_timing::cyclic_ii (ls_timing_seq (nodes),
-						    order) == d1);
-	      return d1;
-	    }
-	}
-      else if (c == 1)
-	last_d = start[1] - start[0];
-    }
-  /* Item-#11 verdict-identity shadow.  */
-  if (flag_checking)
-    gcc_assert (rvtt_timing::cyclic_ii (ls_timing_seq (nodes), order)
-		== last_d);
-  return last_d;
+  return rvtt_timing::cyclic_ii (ls_timing_seq (nodes), order);
 }
 
 /* Cyclic scheduling of the single region of a self-loop row.
