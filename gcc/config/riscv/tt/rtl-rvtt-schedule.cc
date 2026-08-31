@@ -1672,7 +1672,8 @@ static bool
 ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 			     std::vector<ls_rename> *record,
 			     const std::vector<bool> *start_allowed = nullptr,
-			     const std::vector<unsigned> *scan_order = nullptr)
+			     const std::vector<unsigned> *scan_order = nullptr,
+			     bool *no_free_lreg = nullptr)
 {
   unsigned n = nodes.size ();
   bool any = false;
@@ -1773,6 +1774,8 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	  }
 	if (f < 0)
 	  {
+	    if (no_free_lreg)
+	      *no_free_lreg = true;
 	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_NO_FREE_LREG, dump_file,
 			 "List-schedule rename refused: "
 			 "round-interleave-rename-no-free-lreg reg %u "
@@ -1849,6 +1852,257 @@ ls_cyclic_ii (const std::vector<ls_node> &nodes,
   return rvtt_timing::cyclic_ii (ls_timing_seq (nodes), order);
 }
 
+/* ---- Rau iterative modulo scheduling (item #5, default off) ----
+
+   -mtt-tensix-optimize-ims adds an IMS-generated candidate order to
+   the established cyclic paths (the one-region wrapped row below, and
+   the interior regions of ls_schedule_cyclic_interior).  The engine
+   side lives in rvtt-timing.h's modulo tier: MII = max(ResMII,
+   RecMII-exact) over the dependence-distance graph marshalled from
+   the SAME seq/dep vocabulary the acceptance simulator consumes
+   (make_mod_prob -- one marshaller, so the MRT and the acceptance
+   model cannot drift), then Rau's budgeted-eviction placement against
+   a single-issue modulo reservation table of II columns.
+
+   The committed transform is a within-region permutation exactly like
+   the list order's (sort the placement by issue slot, original index
+   on ties): the ACCEPTANCE authority is unchanged -- strict whole-row
+   steady-state II decrease under ls_cyclic_ii, plus the pad-site and
+   entry-pad-flip guards -- so the IMS can never book a modeled
+   regression, and bit-exactness holds by the established argument
+   (barrier words and the backedge are never crossed).
+
+   Modulo variable expansion is priced, never assumed: a placement
+   whose value lifetimes exceed the II owes kmin = ceil(maxlife/II)
+   kernel copies (Lam, PLDI 1988).  The kmin > 1 case commits only its
+   flat order (judged by the same acceptance); the rename half is
+   bounded fail-closed -- when the steady-state live-copy demand does
+   not fit the register file net of loop-live invariants (capacity
+   through item #10's one constant, rvtt_pressure_capacity), or the
+   region rename search already exhausted the free LREGs (the 8-LREG
+   wall), the IMS candidate refuses `mve-rename-exhausted'.  The
+   kernel-unroll realization of kmin > 1 placements is the item's
+   staged follow-up (the crp-parity ceremony's territory), not this
+   flag.
+
+   Refusals by name (existing schedule kept byte-identically):
+     ims-unaudited-latency             a result-bearing or acceptance-
+					stall row word without an audited
+					in-window latency (IMS places
+					under no floored fact)
+     ims-budget-exhausted              Rau eviction budget ran out at
+					every II below the bound
+     ims-no-ii-decrease                MII at or above the current II,
+					or no accepted candidate
+     ims-order-hazard                  legality-belt reversal (cannot
+					fire by construction; belts stay)
+     ims-dependence-distance-unproven  a cross-iteration edge deeper
+					than distance 1 (outside the
+					marshalled vocabulary)
+     mve-rename-exhausted              kmin > 1 with unfittable rename
+					demand (see above)  */
+
+/* Capacity of the allocatable vector-register file -- item #10's one
+   spelling (rvtt-pressure.h; the header's model types are GIMPLE-side,
+   the constant is not).  */
+extern unsigned rvtt_pressure_capacity ();
+
+namespace {
+
+struct ls_ims_candidate
+{
+  std::vector<int> order;
+  int resmii = 0;
+  int recmii = 0;
+  int mii = 0;
+  int place_ii = 0;
+  int kmin = 1;
+  unsigned demand = 0;
+};
+
+} // anonymous namespace
+
+/* Generate the IMS candidate order for the region NODES (admitted
+   members, audited 0/1-slot latencies).  MAX_II is the acceptance
+   bound: only a placement that could prove II strictly below it is
+   worth offering.  RENAME_EXHAUSTED carries the region renamer's
+   no-free-lreg signal into the MVE register bound.  Returns false with
+   the refusal named; never mutates NODES.  */
+
+static bool
+ls_ims_order (basic_block bb, const std::vector<ls_node> &nodes,
+	      int max_ii, bool rename_exhausted, ls_ims_candidate *out)
+{
+  const unsigned n = nodes.size ();
+  rvtt_timing::mod_prob prob
+    = rvtt_timing::make_mod_prob (ls_timing_seq (nodes));
+
+  /* Distance vocabulary belt: the marshaller emits distances 0 and 1
+     only; anything deeper is outside the proven dependence vocabulary
+     and refuses by name (fail-closed against future callers).  */
+  for (unsigned k = 0; k != prob.edges.size (); ++k)
+    if (prob.edges[k].omega > 1)
+      {
+	rvtt_refuse (RVTT_REF_IMS_DEPENDENCE_DISTANCE_UNPROVEN, dump_file,
+		     "List-schedule (ims) refused: "
+		     "ims-dependence-distance-unproven at uid=%d in bb %d\n",
+		     INSN_UID (nodes[0].insn), bb->index);
+	return false;
+      }
+
+  out->resmii = rvtt_timing::resmii (prob);
+  out->recmii = rvtt_timing::recmii (prob);
+  out->mii = out->resmii > out->recmii ? out->resmii : out->recmii;
+  if (dump_file)
+    fprintf (dump_file, "List-schedule (ims) region: bb %d nodes=%u "
+	     "ResMII=%d RecMII=%d MII=%d\n",
+	     bb->index, n, out->resmii, out->recmii, out->mii);
+  if (out->recmii < 0 || out->mii >= max_ii)
+    {
+      rvtt_refuse (RVTT_REF_IMS_NO_II_DECREASE, dump_file,
+		   "List-schedule (ims) refused: ims-no-ii-decrease at "
+		   "uid=%d in bb %d (MII %d >= II %d)\n",
+		   INSN_UID (nodes[0].insn), bb->index, out->mii, max_ii);
+      return false;
+    }
+
+  int budget = riscv_tt_ims_budget > 0 ? (int) riscv_tt_ims_budget
+					: 8 * (int) n;
+  rvtt_timing::mod_placement pl
+    = rvtt_timing::ims_schedule (prob, out->mii, max_ii - 1, budget);
+  if (!pl.scheduled)
+    {
+      rvtt_refuse (RVTT_REF_IMS_BUDGET_EXHAUSTED, dump_file,
+		   "List-schedule (ims) refused: ims-budget-exhausted at "
+		   "uid=%d in bb %d (MII %d, bound %d, budget %d)\n",
+		   INSN_UID (nodes[0].insn), bb->index, out->mii, max_ii,
+		   budget);
+      return false;
+    }
+  out->place_ii = pl.ii;
+  out->kmin = rvtt_timing::mve_kmin (prob, pl);
+  out->demand = rvtt_timing::mve_live_demand (prob, pl);
+
+  if (out->kmin > 1)
+    {
+      /* The placement's value lifetimes exceed the II: realizing its
+	 overlap needs kmin kernel copies (modulo variable expansion) --
+	 the item's staged follow-up, never performed here.  The
+	 EXPANSION is adjudicated by name now: its steady state carries
+	 DEMAND simultaneously-live value copies, which must fit the
+	 file net of the loop-live invariants (live into the row,
+	 defined by no region node), and the region rename search must
+	 not already have exhausted the free LREGs.  Either way the
+	 FLAT order below is still offered -- it realizes only what the
+	 wrapped acceptance model proves, so it can never ride the
+	 unrealized overlap.  */
+      unsigned invariants = 0;
+      for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+	{
+	  if (!REGNO_REG_SET_P (df_get_live_in (bb), r))
+	    continue;
+	  bool defined = false;
+	  for (unsigned i = 0; i != n && !defined; ++i)
+	    defined = TEST_HARD_REG_BIT (nodes[i].raw_defs, r);
+	  if (!defined)
+	    ++invariants;
+	}
+      unsigned capacity = rvtt_pressure_capacity ();
+      unsigned net = capacity > invariants ? capacity - invariants : 0;
+      if (rename_exhausted || out->demand > net)
+	rvtt_refuse (RVTT_REF_MVE_RENAME_EXHAUSTED, dump_file,
+		     "List-schedule (ims) refused: mve-rename-exhausted "
+		     "at uid=%d in bb %d (kmin=%d demand=%u capacity=%u "
+		     "invariants=%u%s; flat order still offered)\n",
+		     INSN_UID (nodes[0].insn), bb->index, out->kmin,
+		     out->demand, capacity, invariants,
+		     rename_exhausted ? " rename-search-exhausted" : "");
+      else if (dump_file)
+	fprintf (dump_file, "List-schedule (ims) MVE owed: bb %d kmin=%d "
+		 "demand=%u invariants=%u (fits; kernel unroll is the "
+		 "staged follow-up, flat order offered)\n",
+		 bb->index, out->kmin, out->demand, invariants);
+    }
+
+  /* Committed order: placement slots ascending, original index on
+     ties.  Intra-iteration edges force strict slot increase, so the
+     sort respects every original-order dependence by construction;
+     the belt below re-verifies anyway (fail-closed).  */
+  out->order.clear ();
+  for (unsigned i = 0; i != n; ++i)
+    out->order.push_back ((int) i);
+  for (unsigned i = 1; i < n; ++i)
+    {
+      int v = out->order[i];
+      unsigned j = i;
+      while (j > 0 && (pl.sigma[out->order[j - 1]] > pl.sigma[v]
+		       || (pl.sigma[out->order[j - 1]] == pl.sigma[v]
+			   && out->order[j - 1] > v)))
+	{
+	  out->order[j] = out->order[j - 1];
+	  --j;
+	}
+      out->order[j] = v;
+    }
+  std::vector<int> pos (n, 0);
+  for (unsigned k = 0; k != n; ++k)
+    pos[out->order[k]] = (int) k;
+  for (unsigned i = 0; i != n; ++i)
+    for (unsigned j = i + 1; j != n; ++j)
+      if (ls_dependence (nodes[i], nodes[j]) && pos[i] > pos[j])
+	{
+	  rvtt_refuse (RVTT_REF_IMS_ORDER_HAZARD, dump_file,
+		       "List-schedule (ims) refused: ims-order-hazard at "
+		       "uid=%d/uid=%d in bb %d\n",
+		       INSN_UID (nodes[i].insn), INSN_UID (nodes[j].insn),
+		       bb->index);
+	  return false;
+	}
+  if (dump_file)
+    fprintf (dump_file, "List-schedule (ims) placed: bb %d place-II=%d "
+	     "kmin=%d demand=%u\n",
+	     bb->index, out->place_ii, out->kmin, out->demand);
+  return true;
+}
+
+/* Under -mtt-tensix-optimize-ims a self-loop row whose issued words
+   include a result-bearing (or acceptance-stall) word WITHOUT an
+   audited in-window result latency refuses IMS treatment wholesale, by
+   name: IMS is a placement authority and places under no floored fact
+   (the legacy cyclic paths keep their identically-floored acceptance
+   model and are untouched).  Defless words (stores, pure CC writers)
+   carry no result latency the model would consult -- their lat never
+   weights an edge -- so they do not refuse.  */
+
+static bool
+ls_ims_row_audited_p (basic_block bb)
+{
+  bool ok = true;
+  for (rtx_insn *insn = BB_HEAD (bb); insn != NEXT_INSN (BB_END (bb));
+       insn = NEXT_INSN (insn))
+    {
+      if (!NONDEBUG_INSN_P (insn) || GET_CODE (insn) != INSN
+	  || recog_memoized (insn) < 0
+	  || get_attr_type (insn) != TYPE_TENSIX
+	  || !get_attr_length (insn))
+	continue;
+      xtt_effect_set e = rvtt_insn_effects (insn);
+      if (e.opaque)
+	continue;	/* the row-level opaque refusals own this */
+      if (!e.lreg_write && !e.next_slot_stall)
+	continue;
+      int lat = audited_latency (insn);
+      if (lat < 0 || lat > 1)
+	{
+	  rvtt_refuse (RVTT_REF_IMS_UNAUDITED_LATENCY, dump_file,
+		       "List-schedule (ims) refused: ims-unaudited-latency "
+		       "uid=%d in bb %d\n", INSN_UID (insn), bb->index);
+	  ok = false;
+	}
+    }
+  return ok;
+}
+
 /* Cyclic scheduling of the single region of a self-loop row.
    Transactional exactly like ls_schedule_region; acceptance = strict
    steady-state II decrease; the same pad-site commit guard applies
@@ -1878,19 +2132,54 @@ ls_schedule_region_cyclic (basic_block bb, std::vector<ls_node> &nodes,
   /* Break storage-induced false recurrences before judging the
      interleave; every rename is undone on refusal.  */
   std::vector<ls_rename> renames;
-  ls_cyclic_rename_collisions (bb, nodes, &renames);
+  bool rename_exhausted = false;
+  ls_cyclic_rename_collisions (bb, nodes, &renames, nullptr, nullptr,
+			       &rename_exhausted);
 
-  std::vector<int> order = ls_list_order (nodes);
-  int cand_ii = ls_cyclic_ii (nodes, order);
+  /* Candidate orders, one per enabled mechanism, all judged by the one
+     wrapped acceptance model: the deterministic list order
+     (round-interleave), and the IMS placement order (item #5).  */
+  std::vector<int> order;
+  int cand_ii = INT_MAX;
+  bool used_ims = false;
+  if (riscv_tt_opt_round_interleave)
+    {
+      order = ls_list_order (nodes);
+      cand_ii = ls_cyclic_ii (nodes, order);
+    }
+  if (riscv_tt_opt_ims)
+    {
+      ls_ims_candidate ims;
+      if (ls_ims_order (bb, nodes, base_ii, rename_exhausted, &ims))
+	{
+	  int ims_ii = ls_cyclic_ii (nodes, ims.order);
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (ims) candidate: bb %d "
+		     "modeled II %d (place-II %d MII %d)\n",
+		     bb->index, ims_ii, ims.place_ii, ims.mii);
+	  if (ims_ii < cand_ii)
+	    {
+	      order = ims.order;
+	      cand_ii = ims_ii;
+	      used_ims = true;
+	    }
+	}
+    }
 
-  if (cand_ii >= base_ii)
+  if (order.empty () || cand_ii >= base_ii)
     {
       ls_undo_renames (renames);
+      if (riscv_tt_opt_ims && !order.empty ())
+	rvtt_refuse (RVTT_REF_IMS_NO_II_DECREASE, dump_file,
+		     "List-schedule (ims) refused: ims-no-ii-decrease at "
+		     "uid=%d in bb %d (%d -> %d)\n",
+		     INSN_UID (nodes[0].insn), bb->index, base_ii, cand_ii);
       if (dump_file)
 	fprintf (dump_file, "List-schedule refused: no modeled "
 		 "steady-state II decrease in bb %d cyclic region at "
 		 "uid=%d (%d -> %d)\n",
-		 bb->index, INSN_UID (nodes[0].insn), base_ii, cand_ii);
+		 bb->index, INSN_UID (nodes[0].insn), base_ii,
+		 cand_ii == INT_MAX ? base_ii : cand_ii);
       return false;
     }
 
@@ -1933,8 +2222,9 @@ ls_schedule_region_cyclic (basic_block bb, std::vector<ls_node> &nodes,
 
   if (dump_file)
     {
-      fprintf (dump_file, "List-schedule (round-interleave cyclic): "
+      fprintf (dump_file, "List-schedule (%s cyclic): "
 	       "bb %d nodes=%u II %d -> %d renames=%zu target=%s\n",
+	       used_ims ? "ims" : "round-interleave",
 	       bb->index, n, base_ii, cand_ii, renames.size (),
 	       TARGET_XTT_TENSIX_WH ? "wh" : "bh");
       for (unsigned k = 0; k != n; ++k)
@@ -4021,6 +4311,27 @@ ls_schedule_cyclic_interior (basic_block bb,
     body_order[i] = i;
   int cur_ii = ls_cyclic_ii (body, body_order);
 
+  /* Item #5: IMS treats no floored latency fact as placement input --
+     a result-bearing word without an audited in-window latency refuses
+     the whole row by name (the legacy path's identically-floored
+     acceptance is untouched).  The row-level ResMII/RecMII line is the
+     exact-tier floor artifact (the DT/EI chain-bound cross-check
+     anchor).  */
+  bool ims_row_ok = false;
+  if (riscv_tt_opt_ims)
+    {
+      ims_row_ok = ls_ims_row_audited_p (bb);
+      if (ims_row_ok && dump_file)
+	{
+	  rvtt_timing::mod_prob rowp
+	    = rvtt_timing::make_mod_prob (ls_timing_seq (body));
+	  fprintf (dump_file, "List-schedule (ims) row: bb %d words=%u "
+		   "ResMII=%d RecMII=%d row-II=%d\n",
+		   bb->index, bn, rvtt_timing::resmii (rowp),
+		   rvtt_timing::recmii (rowp), cur_ii);
+	}
+    }
+
   for (unsigned ri = 0; ri != regions.size (); ++ri)
     {
       ls_region &r = regions[ri];
@@ -4121,21 +4432,60 @@ ls_schedule_cyclic_interior (basic_block bb,
 	if (r.nodes[i].pin_to_baseline)
 	  r.nodes[i].entry_pin = base_issue[i];
 
-      /* Candidate: the deterministic list order, judged on the WHOLE
-	 row's steady-state II.  */
-      std::vector<int> order = ls_list_order (r.nodes);
-      std::vector<int> cand_body (body_order);
-      for (unsigned k = 0; k != n; ++k)
-	cand_body[first + k] = (int) (first + order[k]);
-      int cand_ii = ls_cyclic_ii (body, cand_body);
+      /* Candidates, one per enabled mechanism, all judged on the WHOLE
+	 row's steady-state II: the deterministic list order (the
+	 cyclic-interior flag), and the IMS placement order (item #5).  */
+      std::vector<int> order;
+      int cand_ii = INT_MAX;
+      bool used_ims = false;
+      if (riscv_tt_opt_cyclic_region_schedule)
+	{
+	  order = ls_list_order (r.nodes);
+	  std::vector<int> cb (body_order);
+	  for (unsigned k = 0; k != n; ++k)
+	    cb[first + k] = (int) (first + order[k]);
+	  cand_ii = ls_cyclic_ii (body, cb);
+	}
+      if (riscv_tt_opt_ims && ims_row_ok)
+	{
+	  ls_ims_candidate ims;
+	  if (ls_ims_order (bb, r.nodes, cur_ii, false, &ims))
+	    {
+	      std::vector<int> cb (body_order);
+	      for (unsigned k = 0; k != n; ++k)
+		cb[first + k] = (int) (first + ims.order[k]);
+	      int ims_ii = ls_cyclic_ii (body, cb);
+	      if (dump_file)
+		fprintf (dump_file, "List-schedule (ims) candidate: bb %d "
+			 "region at uid=%d modeled row II %d (place-II %d "
+			 "MII %d)\n",
+			 bb->index, INSN_UID (r.nodes[0].insn), ims_ii,
+			 ims.place_ii, ims.mii);
+	      if (ims_ii < cand_ii)
+		{
+		  order = ims.order;
+		  cand_ii = ims_ii;
+		  used_ims = true;
+		}
+	    }
+	}
+      if (order.empty ())
+	continue;	/* every candidate already refused by name */
       if (cand_ii >= cur_ii)
 	{
-	  rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_NO_II_DECREASE, dump_file,
-		       "List-schedule (cyclic-interior) refused: "
-		       "cyclic-interior-no-ii-decrease at uid=%d in bb %d "
-		       "(%d -> %d)\n",
-		       INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
-		       cand_ii);
+	  if (riscv_tt_opt_cyclic_region_schedule)
+	    rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_NO_II_DECREASE, dump_file,
+			 "List-schedule (cyclic-interior) refused: "
+			 "cyclic-interior-no-ii-decrease at uid=%d in bb %d "
+			 "(%d -> %d)\n",
+			 INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
+			 cand_ii);
+	  else
+	    rvtt_refuse (RVTT_REF_IMS_NO_II_DECREASE, dump_file,
+			 "List-schedule (ims) refused: ims-no-ii-decrease "
+			 "at uid=%d in bb %d (%d -> %d)\n",
+			 INSN_UID (r.nodes[0].insn), bb->index, cur_ii,
+			 cand_ii);
 	  continue;
 	}
 
@@ -4195,16 +4545,18 @@ ls_schedule_cyclic_interior (basic_block bb,
 
       if (dump_file)
 	{
-	  fprintf (dump_file, "List-schedule (cyclic-interior): bb %d "
+	  fprintf (dump_file, "List-schedule (%s): bb %d "
 		   "region at uid=%d nodes=%u row II %d -> %d "
 		   "target=%s\n",
+		   used_ims ? "ims-interior" : "cyclic-interior",
 		   bb->index, INSN_UID (r.nodes[0].insn), n, cur_ii,
 		   cand_ii, TARGET_XTT_TENSIX_WH ? "wh" : "bh");
 	  for (unsigned k = 0; k != n; ++k)
 	    fprintf (dump_file, "List-schedule slot-order=%u uid=%d\n",
 		     k, INSN_UID (r.nodes[order[k]].insn));
 	}
-      body_order = cand_body;
+      for (unsigned k = 0; k != n; ++k)
+	body_order[first + k] = (int) (first + order[k]);
       cur_ii = cand_ii;
     }
 }
@@ -4239,7 +4591,8 @@ list_schedule_regions (function *fn)
 	if (e->dest == bb)
 	  self_loop = true;
       if (self_loop && !riscv_tt_opt_round_interleave
-	  && !riscv_tt_opt_cyclic_region_schedule)
+	  && !riscv_tt_opt_cyclic_region_schedule
+	  && !riscv_tt_opt_ims)
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "List-schedule deferred: cyclic row "
@@ -4376,7 +4729,7 @@ list_schedule_regions (function *fn)
 	    why_c = "round-interleave-seam-barrier-word";
 	  else if (regions.size () != 1)
 	    why_c = "round-interleave-row-not-one-region";
-	  if (!why_c && riscv_tt_opt_round_interleave)
+	  if (!why_c && (riscv_tt_opt_round_interleave || riscv_tt_opt_ims))
 	    {
 	      ls_schedule_region_cyclic (bb, regions[0].nodes,
 					 regions[0].anchor, visited);
@@ -4389,7 +4742,7 @@ list_schedule_regions (function *fn)
 	     acceptance.  The replay-owner and call refusals stand
 	     (an owner's capture discipline and a call's foreign words
 	     are outside the row model).  */
-	  if (riscv_tt_opt_cyclic_region_schedule
+	  if ((riscv_tt_opt_cyclic_region_schedule || riscv_tt_opt_ims)
 	      && !stop_block && !bb_has_call)
 	    {
 	      ls_schedule_cyclic_interior (bb, regions, visited);
@@ -5538,10 +5891,11 @@ public:
 	 still improve; a refusal leaves the stream byte-identical.  */
       crossrow_pair_rows (fn);
     if (riscv_tt_opt_list_schedule || riscv_tt_opt_round_interleave
-	|| riscv_tt_opt_cyclic_region_schedule)
+	|| riscv_tt_opt_cyclic_region_schedule || riscv_tt_opt_ims)
       /* The round-interleave flag enables only the cyclic self-loop
 	 and isomorphic-pair extensions inside; the cyclic-interior
-	 flag only the multi-region self-loop extension; single
+	 flag only the multi-region self-loop extension; the ims flag
+	 only its candidate orders on those two cyclic paths; single
 	 straight-line regions still require the list-schedule flag.  */
       list_schedule_regions (fn);
     if (riscv_tt_opt_latency_schedule)
