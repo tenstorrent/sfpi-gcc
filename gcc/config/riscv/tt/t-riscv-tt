@@ -29,6 +29,7 @@ MULTILIB_EXCEPTIONS :=
 MULTILIB_EXTRA_OPTS :=
 
 RVTT_OBJS := rvtt.o \
+	rvtt-refuse.o \
 	rvtt-effects.o \
 	rvtt-raw-boundary.o \
 	rvtt-macro-ownership.o \
@@ -107,3 +108,37 @@ build/genrvtt-combine.o: $(srcdir)/config/riscv/tt/genrvtt-combine.cc
 
 rvtt-combine.inc: build/genrvtt-combine$(build_exeext) $(srcdir)/config/riscv/tt/rvtt.gc
 	$(RUN_GEN) $^ $@
+
+# FABLE_GOES_BURR.md item #1: the refusal catalogue is a generated
+# build artifact (never re-derived by hand), and generating it enforces
+# the registry invariants at build time:
+#   - name-string uniqueness across rvtt-refusals.def (duplicate enum
+#     ids already break the build via the enum);
+#   - append-only coverage: every string literal passed to a
+#     rvtt_refuse*_by_name emission macro in tt/*.cc must be a
+#     registered name.
+rvtt-refusals.txt: $(srcdir)/config/riscv/tt/rvtt-refusals.def \
+  $(srcdir)/config/riscv/tt/t-riscv-tt
+	$(AWK) -F'"' '/^  "/ { if (n == "") n = $$2; else { print n "\t" $$2; n = "" } }' \
+	  $(srcdir)/config/riscv/tt/rvtt-refusals.def > tmp-rvtt-refusals.txt
+	@dups=`cut -f1 tmp-rvtt-refusals.txt | sort | uniq -d`; \
+	if test -n "$$dups"; then \
+	  echo "rvtt-refusals.def: duplicate refusal name(s):" $$dups >&2; \
+	  rm -f tmp-rvtt-refusals.txt; exit 1; \
+	fi
+	@cut -f1 tmp-rvtt-refusals.txt | sort -u > tmp-rvtt-refusal-names.txt; \
+	grep -ho 'rvtt_refus[a-z_]*_by_name[a-z_]* ("[a-z0-9-]*"' \
+	  $(srcdir)/config/riscv/tt/*.cc 2>/dev/null \
+	  | sed 's/.*("\([a-z0-9-]*\)".*/\1/' | sort -u \
+	  > tmp-rvtt-refusal-lits.txt; \
+	missing=`comm -23 tmp-rvtt-refusal-lits.txt tmp-rvtt-refusal-names.txt`; \
+	rm -f tmp-rvtt-refusal-names.txt tmp-rvtt-refusal-lits.txt; \
+	if test -n "$$missing"; then \
+	  echo "refusal name literal(s) not registered in rvtt-refusals.def:" \
+	    $$missing >&2; \
+	  rm -f tmp-rvtt-refusals.txt; exit 1; \
+	fi
+	$(SHELL) $(srcdir)/../move-if-change tmp-rvtt-refusals.txt \
+	  rvtt-refusals.txt
+
+rvtt-refuse.o: rvtt-refusals.txt
