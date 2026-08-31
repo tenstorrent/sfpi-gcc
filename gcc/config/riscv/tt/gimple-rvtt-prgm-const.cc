@@ -129,6 +129,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-pressure.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
@@ -1402,196 +1403,17 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
    copies) are structurally excluded.
 
    The pressure model is the gimple analogue of the invariant pass's
-   loop proof (rvtt_loop_lreg_pressure_legal_p), generalized function
+   loop proof (rvtt_pressure_loop_legal_p), generalized function
    wide: backward liveness of allocatable vector SSA values with a
    per-point peak.  It is a model, not the allocator: residual
    over-pressure after both mechanisms dumps a named refusal and the
    post-reload spill diagnosis (rtl-rvtt-spill-diag.cc) turns any
    actual spill into a named user error instead of an ICE.  */
 
-/* A vector SSA value that will occupy an allocatable LREG.  Constant
-   register reads (rvtt_sfpreadlreg with index >= SFPU_CREG_IDX_LWM)
-   expand to a zero-cost cstlreg unspec folded into consumers
-   (rvtt.md rvtt_sfpreadlreg expander; riscv.cc rtx cost 0) and are
-   excluded.  */
-
-/* LREG occupancy of a tracked value.  The multi-result classes carry
-   2 or 4 registers (riscv-modes.def XTT64SI/XTT128SI; the
-   sfpswap/sfptransp result types).  An unknown vector mode weighs as
-   the whole file: over-counting only fires the relief tiers earlier,
-   it never admits an unsound state.  */
-
-static unsigned
-lreg_width (tree name)
-{
-  switch (TYPE_MODE (TREE_TYPE (name)))
-    {
-    case E_XTT32SImode:
-      return 1;
-    case E_XTT64SImode:
-      return 2;
-    case E_XTT128SImode:
-      return 4;
-    default:
-      return SFPU_REG_NUM;
-    }
-}
-
-static bool
-pressure_tracked_p (tree name)
-{
-  if (TREE_CODE (name) != SSA_NAME || !VECTOR_TYPE_P (TREE_TYPE (name)))
-    return false;
-  gimple *def = SSA_NAME_DEF_STMT (name);
-  const rvtt_insn_data *insnd = def ? rvtt_get_insn_data (def) : nullptr;
-  if (insnd && insnd->id == rvtt_insn_data::sfpreadlreg)
-    {
-      tree arg = gimple_call_arg (as_a <gcall *> (def), 0);
-      if (TREE_CODE (arg) == INTEGER_CST
-	  && TREE_INT_CST_LOW (arg) >= SFPU_CREG_IDX_LWM)
-	return false;
-    }
-  return true;
-}
-
-/* Function-wide LREG pressure model: standard backward SSA liveness of
-   pressure-tracked vector values, plus a per-block point-pressure
-   maximum.  PHI results are defined at block entry; PHI arguments are
-   live out of the corresponding predecessor.  Deliberately mirrors the
-   conservative counting of rvtt_loop_lreg_pressure_legal_p
-   (gimple-rvtt-invariant.cc).  */
-
-struct lreg_pressure_model
-{
-  unsigned peak = 0;
-  /* Per-BB (by index) live-in SSA-version bitmaps and the set of
-     blocks whose point pressure exceeds the capacity.  */
-  vec<bitmap> live_in = vNULL;
-  bitmap over_bbs = nullptr;
-  bitmap_obstack obstack;
-
-  ~lreg_pressure_model ()
-  {
-    live_in.release ();
-    bitmap_obstack_release (&obstack);
-  }
-};
-
-static void
-compute_lreg_pressure (function *fn, unsigned capacity,
-		       lreg_pressure_model *m)
-{
-  bitmap_obstack_initialize (&m->obstack);
-  unsigned nbb = last_basic_block_for_fn (fn);
-  m->live_in.safe_grow_cleared (nbb, true);
-  auto_vec<bitmap> live_out (nbb);
-  live_out.safe_grow_cleared (nbb, true);
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, fn)
-    {
-      m->live_in[bb->index] = BITMAP_ALLOC (&m->obstack);
-      live_out[bb->index] = BITMAP_ALLOC (&m->obstack);
-    }
-  m->over_bbs = BITMAP_ALLOC (&m->obstack);
-
-  /* Fixpoint over the may-live sets.  */
-  bool changed = true;
-  while (changed)
-    {
-      changed = false;
-      FOR_EACH_BB_FN (bb, fn)
-	{
-	  bitmap out = live_out[bb->index];
-	  edge e;
-	  edge_iterator ei;
-	  FOR_EACH_EDGE (e, ei, bb->succs)
-	    {
-	      if (e->dest == EXIT_BLOCK_PTR_FOR_FN (fn))
-		continue;
-	      changed |= bitmap_ior_into (out, m->live_in[e->dest->index]);
-	      for (gphi_iterator psi = gsi_start_phis (e->dest);
-		   !gsi_end_p (psi); gsi_next (&psi))
-		{
-		  tree arg = gimple_phi_arg_def (psi.phi (), e->dest_idx);
-		  if (pressure_tracked_p (arg))
-		    changed |= bitmap_set_bit (out, SSA_NAME_VERSION (arg));
-		}
-	    }
-
-	  /* live_in = upward-exposed uses + (live_out - defs).  */
-	  bitmap in = BITMAP_ALLOC (&m->obstack);
-	  bitmap_copy (in, out);
-	  for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
-	       gsi_prev (&gsi))
-	    {
-	      gimple *stmt = gsi_stmt (gsi);
-	      if (is_gimple_debug (stmt))
-		continue;
-	      tree lhs = gimple_get_lhs (stmt);
-	      if (lhs && pressure_tracked_p (lhs))
-		bitmap_clear_bit (in, SSA_NAME_VERSION (lhs));
-	      ssa_op_iter iter;
-	      tree use;
-	      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-		if (pressure_tracked_p (use))
-		  bitmap_set_bit (in, SSA_NAME_VERSION (use));
-	    }
-	  for (gphi_iterator psi = gsi_start_phis (bb); !gsi_end_p (psi);
-	       gsi_next (&psi))
-	    {
-	      tree res = gimple_phi_result (psi.phi ());
-	      if (pressure_tracked_p (res))
-		bitmap_clear_bit (in, SSA_NAME_VERSION (res));
-	    }
-	  changed |= bitmap_ior_into (m->live_in[bb->index], in);
-	  BITMAP_FREE (in);
-	}
-    }
-
-  /* Point-pressure maxima: walk each block backward from its live-out
-     set.  A dead definition still occupies a register at its
-     definition point.  */
-  FOR_EACH_BB_FN (bb, fn)
-    {
-      bitmap live = BITMAP_ALLOC (&m->obstack);
-      bitmap_copy (live, live_out[bb->index]);
-      unsigned count = 0;
-      {
-	bitmap_iterator bi;
-	unsigned v;
-	EXECUTE_IF_SET_IN_BITMAP (live, 0, v, bi)
-	  count += lreg_width (ssa_name (v));
-      }
-      unsigned bb_max = count;
-      for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
-	   gsi_prev (&gsi))
-	{
-	  gimple *stmt = gsi_stmt (gsi);
-	  if (is_gimple_debug (stmt))
-	    continue;
-	  tree lhs = gimple_get_lhs (stmt);
-	  if (lhs && pressure_tracked_p (lhs))
-	    {
-	      if (bitmap_clear_bit (live, SSA_NAME_VERSION (lhs)))
-		count -= lreg_width (lhs);
-	      else
-		/* Dead def: transiently occupies its registers here.  */
-		bb_max = MAX (bb_max, count + lreg_width (lhs));
-	    }
-	  ssa_op_iter iter;
-	  tree use;
-	  FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	    if (pressure_tracked_p (use)
-		&& bitmap_set_bit (live, SSA_NAME_VERSION (use)))
-	      count += lreg_width (use);
-	  bb_max = MAX (bb_max, count);
-	}
-      BITMAP_FREE (live);
-      m->peak = MAX (m->peak, bb_max);
-      if (bb_max > capacity)
-	bitmap_set_bit (m->over_bbs, bb->index);
-    }
-}
+/* The pressure model itself -- the width table, the tracked-value
+   predicate, and the function-wide may-live computation -- is the
+   promoted seed of the unified pressure engine and lives in
+   tt/rvtt-pressure.cc (FABLE_GOES_BURR.md item #10).  */
 
 /* An SFPLOADI materialization chain defining a vector value from
    scalar-only inputs: a single sfpxloadi/sfploadi, or an sfploadi
@@ -1940,9 +1762,9 @@ delete_chain (const remat_chain &c)
 static bool
 remat_transform (function *fn)
 {
-  const unsigned capacity = SFPU_REG_NUM;
-  lreg_pressure_model model;
-  compute_lreg_pressure (fn, capacity, &model);
+  const unsigned capacity = rvtt_pressure_capacity ();
+  rvtt_pressure_model model;
+  rvtt_pressure_compute (fn, capacity, &model);
   if (model.peak <= capacity)
     {
       if (dump_file)
@@ -1966,7 +1788,7 @@ remat_transform (function *fn)
   FOR_EACH_SSA_NAME (version, name, fn)
     {
       remat_chain chain;
-      if (!pressure_tracked_p (name) || !remat_chain_p (name, &chain))
+      if (!rvtt_pressure_tracked_p (name) || !remat_chain_p (name, &chain))
 	continue;
       if (chain.root != chain.tail)
 	chain_links.add (gimple_call_lhs (chain.root));
@@ -2060,8 +1882,8 @@ remat_transform (function *fn)
 	delete_chain (chain);
       changed = true;
 
-      lreg_pressure_model next;
-      compute_lreg_pressure (fn, capacity, &next);
+      rvtt_pressure_model next;
+      rvtt_pressure_compute (fn, capacity, &next);
       last_peak = next.peak;
       if (next.peak <= capacity)
 	break;
@@ -3815,9 +3637,9 @@ residency_transform (function *fn, prgm_state *st)
 
   /* PRESSURE class: only when the model exceeds the LREG file.  */
   {
-    const unsigned capacity = SFPU_REG_NUM;
-    lreg_pressure_model model;
-    compute_lreg_pressure (fn, capacity, &model);
+    const unsigned capacity = rvtt_pressure_capacity ();
+    rvtt_pressure_model model;
+    rvtt_pressure_compute (fn, capacity, &model);
     if (model.peak > capacity)
       {
 	unsigned version;
@@ -3825,7 +3647,7 @@ residency_transform (function *fn, prgm_state *st)
 	FOR_EACH_SSA_NAME (version, name, fn)
 	  {
 	    remat_chain chain;
-	    if (!pressure_tracked_p (name) || !remat_chain_p (name, &chain))
+	    if (!rvtt_pressure_tracked_p (name) || !remat_chain_p (name, &chain))
 	      continue;
 	    if (chain.root != chain.tail || taken.contains (chain.tail))
 	      continue;
@@ -4409,9 +4231,7 @@ residency_transform (function *fn, prgm_state *st)
 	return false;
       if (lreg_budget < 0)
 	{
-	  lreg_pressure_model model;
-	  compute_lreg_pressure (fn, SFPU_REG_NUM, &model);
-	  lreg_budget = (int) SFPU_REG_NUM - (int) model.peak;
+	  lreg_budget = rvtt_pressure_residual (fn);
 	}
       if (lreg_budget < 1)
 	{

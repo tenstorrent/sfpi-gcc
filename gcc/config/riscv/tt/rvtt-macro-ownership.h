@@ -160,16 +160,6 @@ extern bool rvtt_all_lanes_encc_p (gimple *stmt);
 extern bool rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 					    bool allow_shortened = false);
 
-/* Keeping every load in LOADS live across LOOP holds the loop's peak
-   vector pressure within the architectural eight-LREG file
-   (conservative liveness proof; refusal is all-or-nothing for the
-   given candidate set).  */
-extern bool rvtt_loop_lreg_pressure_legal_p (class loop *loop,
-					     const auto_vec<gcall *> &loads,
-					     bool report = true,
-					     bool cc_transients = false,
-					     bool exempt_creg_reads = false);
-
 /* LOOP's first header test provably enters the loop body through
    ENTRY, so an architectural LREG write is never speculated out of a
    possibly-zero-trip loop.  */
