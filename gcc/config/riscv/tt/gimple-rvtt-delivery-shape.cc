@@ -93,6 +93,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-constants.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 #include "rvtt-schedule.h"
 
 namespace {
@@ -282,10 +283,11 @@ public:
   void refuse (class loop *loop, const char *name, const char *detail)
   {
     ++n_refused;
+    rvtt_refuse_by_name (name, dump_file,
+			 "delivery-shape: refused (%s) loop %d",
+			 name, loop->num);
     if (dump_file)
       {
-	fprintf (dump_file, "delivery-shape: refused (%s) loop %d",
-		 name, loop->num);
 	if (detail)
 	  fprintf (dump_file, ": %s", detail);
 	fprintf (dump_file, "\n");

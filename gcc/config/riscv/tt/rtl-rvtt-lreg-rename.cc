@@ -68,6 +68,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "print-rtl.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -76,9 +77,9 @@ static unsigned n_renamed;
 static void
 refuse (const char *reason, basic_block bb)
 {
-  if (dump_file)
-    fprintf (dump_file, "Lreg rename refused: %s in bb %d\n",
-	     reason, bb->index);
+  rvtt_refuse_by_name (reason, dump_file,
+		       "Lreg rename refused: %s in bb %d\n",
+		       reason, bb->index);
 }
 
 struct row_member

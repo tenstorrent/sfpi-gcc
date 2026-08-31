@@ -124,6 +124,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -172,6 +173,7 @@ repr_involution_p (const rvtt_insn_data *insnd, const gcall *call,
 static void
 repr_refuse (const char *reason, gimple *stmt)
 {
+  rvtt_refusal_fire_by_name (reason, stmt);
   if (!dump_file)
     return;
   fprintf (dump_file, "repr-prop: refused (%s)", reason);

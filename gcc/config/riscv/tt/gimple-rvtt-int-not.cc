@@ -81,6 +81,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-pretty-print.h"
 #include "tree-cfg.h"
 #include "rvtt.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -96,11 +97,10 @@ int_arg (gcall *call, unsigned n)
 static bool
 refuse (const char *reason, gimple *stmt)
 {
+  rvtt_refuse_by_name_at (reason, stmt, dump_file,
+			  "int-not refused (%s): ", reason);
   if (dump_file)
-    {
-      fprintf (dump_file, "int-not refused (%s): ", reason);
-      print_gimple_stmt (dump_file, stmt, 0);
-    }
+    print_gimple_stmt (dump_file, stmt, 0);
   return false;
 }
 

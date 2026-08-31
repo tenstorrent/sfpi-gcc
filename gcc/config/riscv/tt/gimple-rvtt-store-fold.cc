@@ -210,6 +210,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "fold-const.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -279,11 +280,10 @@ int_arg (gcall *call, unsigned n)
 static bool
 refuse (const char *reason, gimple *stmt)
 {
+  rvtt_refuse_by_name_at (reason, stmt, dump_file,
+			  "store-fold refused (%s): ", reason);
   if (dump_file)
-    {
-      fprintf (dump_file, "store-fold refused (%s): ", reason);
-      print_gimple_stmt (dump_file, stmt, 0);
-    }
+    print_gimple_stmt (dump_file, stmt, 0);
   return false;
 }
 
