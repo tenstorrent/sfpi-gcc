@@ -211,6 +211,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-effects.h"
 #include "rvtt-refuse.h"
+#include "rvtt-cc-region.h"
 
 namespace {
 
@@ -423,15 +424,42 @@ storable_source_p (tree z)
 
 enum span_kind { SPAN_BAD, SPAN_SAME_MASK, SPAN_REGION_CLOSED };
 
+/* The stage-A CC-region-tree agreement check (FABLE_GOES_BURR #14):
+   where the historical shape walk admits a span, the shared frame
+   analysis must agree -- SAME_MASK means the store executes under the
+   assign's own frame, REGION_CLOSED means the store's frame is the
+   assign's parent frame and the crossed popc is that frame's recorded
+   exit.  A disagreement is a FINDING (hard assert under
+   flag_checking); in release builds it fails closed to the walk's
+   standing refusal.  */
+
+static bool
+span_tree_agrees_p (const rvtt_cc_region_tree *ccr, span_kind kind,
+		    gcall *assign, gcall *store, gcall *popc)
+{
+  bool agree;
+  if (kind == SPAN_SAME_MASK)
+    agree = ccr->same_frame_p (assign, store);
+  else
+    agree = ccr->parent_frame_p (store, assign)
+      && ccr->closes_frame_p (popc, ccr->region_of (assign));
+  if (flag_checking)
+    gcc_assert (agree);
+  return agree;
+}
+
 /* Scan from the statement after ASSIGN to STORE, classifying the CC
    delta.  Handles the same-block layout and the v_endif diamond (the
    counted CC-frame destructor): body block -> join with exactly two
    predecessors, the other being a popc-only block, and the store in
    the join's other successor.  POPC_OUT receives the closing popc when
-   the span crosses one.  */
+   the span crosses one.  The walk is the stage-A compatibility
+   predicate: it accepts exactly the historical shape set, and CCR must
+   agree wherever it accepts (span_tree_agrees_p).  */
 
 static span_kind
-classify_assign_to_store (gcall *assign, gcall *store, gcall **popc_out)
+classify_assign_to_store (const rvtt_cc_region_tree *ccr, gcall *assign,
+			  gcall *store, gcall **popc_out)
 {
   *popc_out = nullptr;
   basic_block abb = gimple_bb (assign);
@@ -445,7 +473,13 @@ classify_assign_to_store (gcall *assign, gcall *store, gcall **popc_out)
     {
       gimple *stmt = gsi_stmt (gsi);
       if (stmt == store)
-	return *popc_out ? SPAN_REGION_CLOSED : SPAN_SAME_MASK;
+	{
+	  span_kind kind
+	    = *popc_out ? SPAN_REGION_CLOSED : SPAN_SAME_MASK;
+	  if (!span_tree_agrees_p (ccr, kind, assign, store, *popc_out))
+	    return SPAN_BAD;
+	  return kind;
+	}
       if (inert_stmt_p (stmt))
 	continue;
       if (gcall *popc = is_rvtt_call (stmt, rvtt_insn_data::sfppopc))
@@ -505,7 +539,12 @@ classify_assign_to_store (gcall *assign, gcall *store, gcall **popc_out)
     {
       gimple *sstmt = gsi_stmt (ssi);
       if (sstmt == store)
-	return SPAN_REGION_CLOSED;
+	{
+	  if (!span_tree_agrees_p (ccr, SPAN_REGION_CLOSED, assign, store,
+				   *popc_out))
+	    return SPAN_BAD;
+	  return SPAN_REGION_CLOSED;
+	}
       if (inert_stmt_p (sstmt))
 	continue;
       return SPAN_BAD;
@@ -515,33 +554,66 @@ classify_assign_to_store (gcall *assign, gcall *store, gcall **popc_out)
 
 /* Scan backward context for S2: from LOAD (exclusive) to ASSIGN
    (exclusive), same block: a side-effect-free prefix, then exactly one
-   sfppushc (0), then mask-refining and pure statements only.  */
+   sfppushc (0), then mask-refining and pure statements only.  The walk
+   is the stage-A compatibility predicate; where it admits, the
+   CC-region tree must agree that the assign executes under exactly one
+   frame opened after the load (the load's frame is its parent frame),
+   entered by the pushc the walk found, whose refinement chain is
+   exactly the mask-refining statements the walk admitted
+   (FABLE_GOES_BURR #14 -- the refinement-chain query).  */
 
 static bool
-check_load_to_assign (gcall *load, gcall *assign)
+check_load_to_assign (const rvtt_cc_region_tree *ccr, gcall *load,
+		      gcall *assign)
 {
   if (gimple_bb (load) != gimple_bb (assign))
     return refuse ("store-fold-sink-region-shape", assign);
-  bool in_region = false;
+  gcall *region_pushc = nullptr;
+  auto_vec<gimple *, 8> refs_seen;
   gimple_stmt_iterator gsi = gsi_for_stmt (load);
   gsi_next (&gsi);
   for (; !gsi_end_p (gsi); gsi_next (&gsi))
     {
       gimple *stmt = gsi_stmt (gsi);
       if (stmt == assign)
-	return in_region ? true
-			 : refuse ("store-fold-sink-region-shape", assign);
+	{
+	  if (!region_pushc)
+	    return refuse ("store-fold-sink-region-shape", assign);
+	  /* Stage-A agreement check against the shared frame analysis;
+	     a disagreement is a FINDING (hard assert under
+	     flag_checking), release builds fail closed.  */
+	  rvtt_cc_region *ra = ccr->region_of (assign);
+	  bool tree_ok = ra && ra->entry == region_pushc
+	    && ccr->parent_frame_p (load, assign)
+	    && ccr->refinements_pure_p (ra)
+	    && ccr->refinement_chain (ra).length () == refs_seen.length ();
+	  if (tree_ok)
+	    for (unsigned i = 0; i < refs_seen.length (); i++)
+	      if (ccr->refinement_chain (ra)[i] != refs_seen[i])
+		{
+		  tree_ok = false;
+		  break;
+		}
+	  if (flag_checking)
+	    gcc_assert (tree_ok);
+	  if (!tree_ok)
+	    return refuse ("store-fold-sink-region-shape", assign);
+	  return true;
+	}
       if (inert_stmt_p (stmt))
 	continue;
       if (gcall *pushc = is_rvtt_call (stmt, rvtt_insn_data::sfppushc))
 	{
-	  if (in_region || int_arg (pushc, 0) != 0)
+	  if (region_pushc || int_arg (pushc, 0) != 0)
 	    return refuse ("store-fold-sink-region-shape", stmt);
-	  in_region = true;
+	  region_pushc = pushc;
 	  continue;
 	}
-      if (in_region && mask_refining_stmt_p (stmt))
-	continue;
+      if (region_pushc && mask_refining_stmt_p (stmt))
+	{
+	  refs_seen.safe_push (stmt);
+	  continue;
+	}
       if (pure_vector_stmt_p (stmt))
 	continue;
       /* SFPENCC, nested frames, other Dst/RWC/config traffic, raw asm:
@@ -565,7 +637,7 @@ remove_stmt (gimple *stmt)
    Returns true when the program changed.  */
 
 static bool
-fold_merge_store (gcall *assign, gcall *store)
+fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
 {
   tree merged = gimple_call_arg (store, 1);
   if (!has_single_use (merged))
@@ -579,7 +651,7 @@ fold_merge_store (gcall *assign, gcall *store)
     return refuse ("store-fold-source-not-storable", assign);
 
   gcall *popc = nullptr;
-  span_kind kind = classify_assign_to_store (assign, store, &popc);
+  span_kind kind = classify_assign_to_store (ccr, assign, store, &popc);
 
   if (kind == SPAN_BAD)
     return refuse ("store-fold-mask-mismatch", store);
@@ -709,7 +781,7 @@ fold_merge_store (gcall *assign, gcall *store)
       return false;
     }
 
-  if (!check_load_to_assign (load, assign))
+  if (!check_load_to_assign (ccr, load, assign))
     return false;
 
   /* Commit: predicated store of Z at the merge position; the original
@@ -748,6 +820,12 @@ fold_merge_store (gcall *assign, gcall *store)
     n_sunk_licensed++;
   else
     n_sunk++;
+  /* The sink minted NEWSTORE, a statement the frame analysis must be
+     able to answer for if a later candidate's span reaches it (chained
+     merges).  Frame structure itself did not move (the region's
+     pushc/popc stand), but the statement map is per-statement:
+     recompute.  */
+  ccr->rebuild ();
   return true;
 }
 
@@ -853,8 +931,8 @@ stochrnd_span_inert_p (gcall *rnd, gcall *store)
    bytes unchanged.  */
 
 static bool
-fold_stochrnd_store (gcall *rnd, gcall *store, bool fn_prng_consumer,
-		     gcall *wrap)
+fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
+		     bool fn_prng_consumer, gcall *wrap)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data (rnd);
   int mod1_pos, rnd_pos;
@@ -932,7 +1010,8 @@ fold_stochrnd_store (gcall *rnd, gcall *store, bool fn_prng_consumer,
       if (!has_single_use (z))
 	return refuse ("stochrnd-store-fold-multi-use", store);
       gcall *popc = nullptr;
-      if (classify_assign_to_store (wrap, store, &popc) != SPAN_SAME_MASK)
+      if (classify_assign_to_store (ccr, wrap, store, &popc)
+	  != SPAN_SAME_MASK)
 	return refuse ("stochrnd-store-fold-span-clobbered", store);
     }
 
@@ -978,6 +1057,12 @@ transform (function *fun)
   bool changed = false;
   basic_block bb;
 
+  /* The CC-region tree: the frame structure computed once per function
+     (FABLE_GOES_BURR #14); the shape walks below are its stage-A
+     compatibility predicates.  Rebuilt only after an S2 sink mints a
+     new store statement.  */
+  rvtt_cc_region_tree ccr (fun);
+
   /* Merge folds first (the S1/S2 flag's own transforms -- absent the
      -mtt-tensix-optimize-store-fold flag they stay off even when the
      stochrnd license opened the pass gate)...  */
@@ -997,7 +1082,7 @@ transform (function *fun)
 		  if (gcall *assign
 		      = is_rvtt_call (SSA_NAME_DEF_STMT (v),
 				      rvtt_insn_data::sfpassign_lv))
-		    changed |= fold_merge_store (assign, store);
+		    changed |= fold_merge_store (&ccr, assign, store);
 	      }
 	    gsi = next;
 	  }
@@ -1051,7 +1136,7 @@ transform (function *fun)
 			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_i_lv
 			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_v
 			  || dinsnd->id == rvtt_insn_data::sfpstochrnd_v_lv))
-		    changed |= fold_stochrnd_store (as_a <gcall *> (def),
+		    changed |= fold_stochrnd_store (&ccr, as_a <gcall *> (def),
 						    store, fn_prng_consumer,
 						    wrap);
 		}

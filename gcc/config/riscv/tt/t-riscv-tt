@@ -91,6 +91,7 @@ RVTT_OBJS := rvtt.o \
 	rvtt-lpsolve.o \
 	rvtt-bnb.o \
 	rvtt-trips.o \
+	rvtt-cc-region.o \
 
 OBJS += $(RVTT_OBJS)
 

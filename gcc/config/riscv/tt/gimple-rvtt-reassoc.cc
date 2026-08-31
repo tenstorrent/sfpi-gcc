@@ -120,6 +120,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
+#include "rvtt-cc-region.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -303,7 +304,12 @@ window_stmt_barrier_name (gimple *stmt)
 {
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL)
     return nullptr;
-  if (gimple_code (stmt) == GIMPLE_ASM)
+  /* The CC arm is the shared CC-region analysis vocabulary
+     (FABLE_GOES_BURR #14, rvtt-cc-region.cc): raw asm, calls with
+     unknown bodies, CC writers, and the typed all-lanes SFPENCC --
+     exactly the classification this walk historically spelled
+     locally.  */
+  if (rvtt_cc_window_cc_event_p (stmt))
     return window_barrier_cc;
   gcall *call = dyn_cast<gcall *> (stmt);
   if (!call)
@@ -311,14 +317,13 @@ window_stmt_barrier_name (gimple *stmt)
     return nullptr;
   const rvtt_insn_data *insnd = rvtt_get_insn_data (call);
   if (!insnd)
-    return window_barrier_cc;
-  if (insnd->sets_cc (call))
+    /* Unreachable (a foreign call is a CC event above); keep the
+       fail-closed belt.  */
     return window_barrier_cc;
   switch (insnd->id)
     {
-    /* CC writers invisible to sets_cc (no CC() flag by design) and the
-       configuration writers: refuse.  */
-    case rvtt_insn_data::sfpencc_all_lanes:
+    /* The frame-scoped configuration writers: refuse (historically
+       under the CC name).  */
     case rvtt_insn_data::sfpwriteconfig_v:
     case rvtt_insn_data::sfpconfig_i:
       return window_barrier_cc;
