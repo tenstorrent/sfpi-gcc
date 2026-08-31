@@ -279,7 +279,7 @@ make_raw_lregs_live (function *fn)
 
 const pass_data pass_data_rvtt_lreg_livein =
 {
-  RTL_PASS, "rvtt_lreg_livein", OPTGROUP_NONE, TV_NONE,
+  RTL_PASS, "rvtt_lreg_livein", OPTGROUP_OTHER, TV_NONE,
   0, 0, 0, 0, TODO_df_finish
 };
 

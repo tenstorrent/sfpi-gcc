@@ -41,6 +41,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-propagate.h"
 #include "tree-ssa.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
 #include "print-rtl.h"

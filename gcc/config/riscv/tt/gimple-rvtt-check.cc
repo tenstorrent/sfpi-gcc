@@ -358,7 +358,7 @@ const pass_data pass_data_rvtt_check_early =
 {
   GIMPLE_PASS, /* type */
   "rvtt_check_early", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */
@@ -399,7 +399,7 @@ const pass_data pass_data_rvtt_check_late =
 {
   GIMPLE_PASS, /* type */
   "rvtt_check_late", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
   0, /* properties_provided */

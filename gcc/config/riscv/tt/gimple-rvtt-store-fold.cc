@@ -589,18 +589,37 @@ fold_merge_store (gcall *assign, gcall *store)
 	 ratification 2026-08-26: the sunk form is the golden-closer
 	 semantics -- torch keeps pass-through lanes exactly, the
 	 write-back flushes them).  Token absent = the standing named
-	 refusal, byte-identical.  */
-      if (!rvtt_store_sink_licensed_p ())
-	return refuse ("store-fold-sink-format-canonicalizing", store);
+	 refusal, byte-identical (the licensed-refusal invariants are
+	 enforced mechanically by rvtt_refuse_licensed).  */
+      if (!rvtt_refuse_licensed (RVTT_REF_STORE_FOLD_SINK_FORMAT_CANONICALIZING,
+				 rvtt_store_sink_licensed_p (),
+				 /*proof_in_scope=*/true, dump_file,
+				 "store-fold refused"
+				 " (store-fold-sink-format-canonicalizing): "))
+	{
+	  if (dump_file)
+	    print_gimple_stmt (dump_file, store, 0);
+	  return false;
+	}
       licensed = true;
     }
   else if (lfmt == SFPMEM_MOD0_FMT_INT32_SM && lfmt == sfmt)
-    /* The WH INT32_SM pair normalizes -0 (tt/proofs/store-sink-roundtrip/
-       (12,12) row): an integer sign-magnitude divergence class the
-       store-sink license does NOT cover (it is scoped to the float
-       pairs' denormal-flush class).  Refuses with or without the
-       license token.  */
-    return refuse ("store-fold-sink-format-canonicalizing", store);
+    {
+      /* The WH INT32_SM pair normalizes -0 (tt/proofs/store-sink-roundtrip/
+	 (12,12) row): an integer sign-magnitude divergence class the
+	 store-sink license does NOT cover (it is scoped to the float
+	 pairs' denormal-flush class).  Refuses with or without the
+	 license token -- proof class out of scope, enforced by the same
+	 gate.  */
+      rvtt_refuse_licensed (RVTT_REF_STORE_FOLD_SINK_FORMAT_CANONICALIZING,
+			    rvtt_store_sink_licensed_p (),
+			    /*proof_in_scope=*/false, dump_file,
+			    "store-fold refused"
+			    " (store-fold-sink-format-canonicalizing): ");
+      if (dump_file)
+	print_gimple_stmt (dump_file, store, 0);
+      return false;
+    }
   else
     return refuse ("store-fold-sink-format-unproven", store);
 
@@ -945,7 +964,7 @@ const pass_data pass_data_rvtt_store_fold =
 {
   GIMPLE_PASS,
   "rvtt_store_fold",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

@@ -230,7 +230,7 @@ const pass_data pass_data_rvtt_int_not =
 {
   GIMPLE_PASS,
   "rvtt_int_not",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

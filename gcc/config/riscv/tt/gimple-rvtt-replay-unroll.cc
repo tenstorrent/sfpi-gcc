@@ -648,7 +648,7 @@ const pass_data pass_data_rvtt_replay_unroll =
 {
   GIMPLE_PASS,
   "rvtt_replay_unroll",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,
@@ -1033,7 +1033,7 @@ const pass_data pass_data_rvtt_launch_flatten =
 {
   GIMPLE_PASS,
   "rvtt_launch_flatten",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,
@@ -1698,7 +1698,7 @@ const pass_data pass_data_rvtt_round_interleave =
 {
   GIMPLE_PASS,
   "rvtt_round_interleave",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

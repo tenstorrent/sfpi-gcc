@@ -556,7 +556,7 @@ const pass_data pass_data_rvtt_reprprop =
 {
   GIMPLE_PASS,
   "rvtt_reprprop",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,

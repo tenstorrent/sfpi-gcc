@@ -515,7 +515,7 @@ const pass_data pass_data_rvtt_rmext =
 {
   RTL_PASS, /* type */
   "rvtt_rmext", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */

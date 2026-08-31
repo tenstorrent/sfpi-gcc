@@ -532,7 +532,7 @@ const pass_data pass_data_rvtt_delivery_shape =
 {
   GIMPLE_PASS,
   "rvtt_delivery_shape",
-  OPTGROUP_NONE,
+  OPTGROUP_OTHER,
   TV_NONE,
   PROP_ssa,
   0,
