@@ -173,11 +173,10 @@ repr_involution_p (const rvtt_insn_data *insnd, const gcall *call,
 static void
 repr_refuse (const char *reason, gimple *stmt)
 {
-  rvtt_refusal_fire_by_name (reason, stmt);
+  rvtt_refuse_by_name_at (reason, stmt, dump_file,
+			  "repr-prop: refused (%s)", reason);
   if (!dump_file)
     return;
-  rvtt_refuse_by_name (reason, dump_file,
-		       "repr-prop: refused (%s)", reason);
   if (stmt)
     {
       fprintf (dump_file, ": ");
