@@ -271,6 +271,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-refuse.h"
+#include "rvtt-delivery-cost.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-macro-tables.h"
 #include "rvtt-mop-tables.h"
@@ -4349,14 +4350,26 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 	    int64_t b = bc.to_gcov_type (), p = pc.to_gcov_type ();
 	    if (p > 0 && b >= p)
 	      {
-		while (b > (int64_t) 1 << 48)
+		/* The one 48-bit scaling spelling (shared with the
+		   planner's loop_trip_weight;
+		   rvtt-delivery-cost-core.h).  */
+		int64_t sb = b, sp = p;
+		rvtt_delivery_cost::scale_trip_weight (&sb, &sp);
+		/* One-pin recompute-assert of the migrated inline
+		   spelling (item #12 discipline; delete next pin).  */
+		if (flag_checking)
 		  {
-		    b >>= 8;
-		    p = p >> 8 ? p >> 8 : 1;
+		    int64_t cb = b, cp = p;
+		    while (cb > (int64_t) 1 << 48)
+		      {
+			cb >>= 8;
+			cp = cp >> 8 ? cp >> 8 : 1;
+		      }
+		    gcc_assert (sb == cb && sp == cp);
 		  }
 		prog->caller_weight_ok = true;
-		prog->caller_entry_count = p;
-		prog->caller_body_count = b;
+		prog->caller_entry_count = sp;
+		prog->caller_body_count = sb;
 	      }
 	  }
       }
