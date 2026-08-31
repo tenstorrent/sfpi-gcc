@@ -387,6 +387,38 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
   return !info.empty ();
 }
 
+/* The pattern-equality relaxation used by the discovery's rtx_equal_p
+   re-check: MEM operands (synthesized-insn spill slots) and
+   clobber/scratch outputs compare equal by class, everything else
+   compares structurally.  Extracted verbatim from extend_sequence so the
+   suffix-automaton shadow discovery (item #9 stage A) can form its
+   symbol classes under EXACTLY the legacy predicate -- symbol equality
+   diverging from this callback is the failure mode the stage-A superset
+   assertion exists to catch, so the two must not be spelled twice.  */
+
+static bool
+replay_ignore_rtx_p (const_rtx *a, const_rtx *b, rtx *na, rtx *nb)
+{
+  if (GET_CODE (*a) != GET_CODE (*b))
+    return false;
+
+  if (GET_CODE (*a) == MEM)
+    {
+      if (GET_MODE (*a) != SImode)
+	// This is (probably) broken code attempting to spill/fill an
+	// LReg
+	return false;
+    }
+  else if (GET_CODE (*a) != CLOBBER
+	   && GET_CODE (*a) != SCRATCH)
+    return false;
+
+  gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
+
+  *na = *nb = nullptr;
+  return true;
+}
+
 static void
 extend_sequence (replay_map &map, replay_list &list, replay_block &block,
 		 unsigned parent, unsigned length, unsigned begin, unsigned end)
@@ -404,26 +436,7 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
       auto &seq_insn = block[seq.clones.front ().end - 1];
       if (seq_insn.generation != insn.generation)
 	continue;
-      auto ignore = [] (const_rtx *a, const_rtx *b, rtx *na, rtx *nb) {
-	if (GET_CODE (*a) != GET_CODE (*b))
-	  return false;
-
-	if (GET_CODE (*a) == MEM)
-	  {
-	    if (GET_MODE (*a) != SImode)
-	      // This is (probably) broken code attempting to spill/fill an
-	      // LReg
-	      return false;
-	  }
-	else if (GET_CODE (*a) != CLOBBER
-		 && GET_CODE (*a) != SCRATCH)
-	  return false;
-
-	gcc_checking_assert (GET_MODE (*a) == GET_MODE (*b));
-
-	*na = *nb = nullptr;
-	return true;
-      };
+      auto ignore = replay_ignore_rtx_p;
       if (!rtx_equal_p (PATTERN (seq_insn.insn), PATTERN (insn.insn),
 			ignore))
 	continue;
@@ -1072,6 +1085,517 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
   *trim_len_out = best_trim;
   *trim_end_out = best_trim_end;
   return best;
+}
+
+/* ==================================================================
+   FABLE_GOES_BURR.md item #9, STAGE A -- SUFFIX-AUTOMATON MAXIMAL-REPEAT
+   DISCOVERY, RUN AS A SHADOW.
+
+   The legacy discovery (build_sequences) grows every candidate by one
+   insn at a time and is self-admittedly O(N^2) (":448"); the classical
+   structure for the same question -- enumerate every factor of a mapped
+   instruction stream that repeats -- is the suffix automaton (LLVM's
+   MachineOutliner uses the equivalent suffix tree).  This is stage A of
+   the two-stage plan: the automaton ENUMERATES, the legacy candidate
+   list and the existing greedy picker still DECIDE, and nothing about
+   the formed windows moves.  Stage B (admitting the extra candidates)
+   is a separate ceremony.
+
+   SYMBOLS.  One integer symbol per non-empty entry of the scanned
+   block, formed under EXACTLY the legacy length-1 sequence classes:
+   same crc32 class hash (which folds in the register GENERATION counter
+   reg_ages, the piece that makes textual equality value-safe), same
+   generation equality, same rtx_equal_p re-check through the same
+   replay_ignore_rtx_p callback, first-match-wins in increasing block
+   order.  Two insns therefore get one symbol iff the legacy discovery
+   would have merged them.
+
+   BOUNDARIES.  Wherever the legacy extension refuses to walk (a
+   must_end entry -- asm, non-Tensix, a replay owner, a variable
+   capture, the end of the block, or any empty entry in between that is
+   itself must_end), a UNIQUE separator symbol is spliced into the
+   string.  A unique symbol occurs once, so no factor containing it can
+   have two occurrences: candidates never cross a boundary BY
+   CONSTRUCTION, which is why admission semantics cannot move.
+
+   CANDIDATES.  Each automaton state is a right-extension-maximal class
+   of factors sharing one endpos set; its occurrence count is the endpos
+   size.  A candidate is a (state, length) pair with length in
+   (len[link], len[state]], length >= MIN_SEQUENCE, length <=
+   max_length (the replay buffer bound the legacy discovery also
+   applies), and two or more occurrences surviving the same greedy
+   overlap triage active_triage performs.
+
+   WHAT THIS PRINTS.  Under -mtt-tensix-replay-shadow-discovery (a
+   measurement knob, default off, no behaviour attached), per block:
+
+     replay-maximal-repeats: <census line>
+     replay-maximal-repeats-missed: <candidate the picker was never offered>
+     replay-maximal-repeats-truncated: <maximal repeat longer than the buffer>
+
+   THE STAGE-A OBLIGATION.  Under -fchecking -- independently of the
+   knob, so an ordinary checking build discharges it corpus-wide -- every
+   legacy candidate is looked up in the automaton and asserted to be
+   enumerable there WITH THE IDENTICAL TRIAGED CLONE SET.  The risk this
+   catches is not hash collision (the legacy path re-checks with
+   rtx_equal_p and so does the symbol mapping) but the reverse: a symbol
+   mapping that DISTINGUISHES what the legacy path merged would silently
+   shrink the candidate set.  The picker's input is untouched in stage A,
+   so the selected windows are identical by construction.  */
+
+namespace replay_sa {
+
+/* Largest symbol string this shadow will build.  The census is a
+   measurement instrument: a pathological block is reported and skipped
+   rather than paying for endpos materialisation.  */
+constexpr unsigned MAX_SHADOW_SYMBOLS = 4096;
+
+struct state
+{
+  int len;
+  int link;
+  std::map<int, int> next;
+
+  state (int l, int lk) : len (l), link (lk) {}
+};
+
+/* Textbook online suffix-automaton construction: O(n) states and
+   transitions in the alphabet-independent formulation, one clone split
+   per divergent transition.  */
+
+struct automaton
+{
+  std::vector<state> st;
+  int last;
+
+  automaton () : last (0) { st.emplace_back (0, -1); }
+
+  void extend (int c)
+  {
+    int cur = int (st.size ());
+    st.emplace_back (st[last].len + 1, -1);
+    int p = last;
+    while (p != -1 && !st[p].next.count (c))
+      {
+	st[p].next[c] = cur;
+	p = st[p].link;
+      }
+    if (p == -1)
+      st[cur].link = 0;
+    else
+      {
+	int q = st[p].next[c];
+	if (st[p].len + 1 == st[q].len)
+	  st[cur].link = q;
+	else
+	  {
+	    int clone = int (st.size ());
+	    st.emplace_back (st[p].len + 1, st[q].link);
+	    st[clone].next = st[q].next;
+	    while (p != -1)
+	      {
+		auto it = st[p].next.find (c);
+		if (it == st[p].next.end () || it->second != q)
+		  break;
+		it->second = clone;
+		p = st[p].link;
+	      }
+	    st[q].link = clone;
+	    st[cur].link = clone;
+	  }
+      }
+    last = cur;
+  }
+
+  /* Walk SYMS from the root.  Returns the state whose class contains
+     that factor, or -1 if the factor does not occur at all.  */
+  int walk (std::vector<int> const &syms) const
+  {
+    int v = 0;
+    for (int c : syms)
+      {
+	auto it = st[v].next.find (c);
+	if (it == st[v].next.end ())
+	  return -1;
+	v = it->second;
+      }
+    return v;
+  }
+};
+
+/* The whole shadow view of one scanned block.  */
+
+struct view
+{
+  /* Symbol string, and the block index each real symbol came from
+     (UINT_MAX for a separator).  */
+  std::vector<int> str;
+  std::vector<unsigned> at;
+  /* Symbol per non-empty block entry (UINT_MAX-indexed lookup by block
+     position); -1 where the entry is empty.  */
+  std::vector<int> sym_of;
+  unsigned classes = 0;
+  unsigned segments = 1;
+
+  automaton sa;
+  /* Occurrence END positions in STR, per state, ascending.  */
+  std::vector<std::vector<int> > endpos;
+  bool built = false;
+};
+
+/* Form the symbol string for BLOCK.  Mirrors scan_insns' own notion of
+   continuity: EMPTY entries never carry a symbol (they do not count
+   toward a sequence's length and the legacy extension walks over them),
+   and a break is spliced wherever the legacy extension's must_end check
+   would have refused to walk from one real entry to the next.  */
+
+static void
+build_symbols (view &v, replay_block const &block)
+{
+  std::map<unsigned, std::vector<unsigned> > buckets; // hash -> class ids
+  std::vector<unsigned> rep;			     // class id -> block index
+  int next_sep = -1;
+
+  v.sym_of.assign (block.size (), -1);
+
+  unsigned prev = UINT_MAX;
+  for (unsigned ix = 0; ix != block.size (); ++ix)
+    {
+      if (block[ix].empty)
+	continue;
+
+      /* Legacy continuity: from the previous real entry the extension
+	 walks forward over empties, refusing at the first must_end it
+	 meets (the entry itself, or any empty it steps over).  */
+      if (prev != UINT_MAX)
+	{
+	  bool linked = true;
+	  for (unsigned j = prev; j != ix; ++j)
+	    if (block[j].must_end)
+	      {
+		linked = false;
+		break;
+	      }
+	  if (!linked)
+	    {
+	      v.str.push_back (next_sep--);
+	      v.at.push_back (UINT_MAX);
+	      v.segments++;
+	    }
+	}
+
+      /* Class formation, byte-for-byte the legacy length-1 rule.  */
+      int sym = -1;
+      auto slot = buckets.emplace (block[ix].hash, std::vector<unsigned> ());
+      for (auto id : slot.first->second)
+	{
+	  auto &other = block[rep[id]];
+	  if (other.generation != block[ix].generation)
+	    continue;
+	  auto ignore = replay_ignore_rtx_p;
+	  if (!rtx_equal_p (PATTERN (other.insn), PATTERN (block[ix].insn),
+			    ignore))
+	    continue;
+	  sym = int (id);
+	  break;
+	}
+      if (sym < 0)
+	{
+	  sym = int (rep.size ());
+	  rep.push_back (ix);
+	  slot.first->second.push_back (unsigned (sym));
+	}
+
+      v.sym_of[ix] = sym;
+      v.str.push_back (sym);
+      v.at.push_back (ix);
+      prev = ix;
+    }
+
+  v.classes = unsigned (rep.size ());
+}
+
+/* Build the automaton and materialise every state's endpos set (the
+   occurrence ends), by one pass down the suffix-link tree in decreasing
+   state length -- the standard linear counting-sort order.  */
+
+static bool
+build (view &v, replay_block const &block)
+{
+  build_symbols (v, block);
+  if (v.str.empty () || v.str.size () > MAX_SHADOW_SYMBOLS)
+    return false;
+
+  std::vector<int> prefix_state;
+  prefix_state.reserve (v.str.size ());
+  for (int c : v.str)
+    {
+      v.sa.extend (c);
+      prefix_state.push_back (v.sa.last);
+    }
+
+  unsigned n = unsigned (v.sa.st.size ());
+  v.endpos.assign (n, std::vector<int> ());
+  for (unsigned i = 0; i != v.str.size (); ++i)
+    v.endpos[prefix_state[i]].push_back (int (i));
+
+  /* Counting sort of the states by len.  */
+  unsigned maxlen = 0;
+  for (auto const &s : v.sa.st)
+    maxlen = MAX (maxlen, unsigned (s.len));
+  std::vector<unsigned> bucket (maxlen + 2, 0);
+  for (auto const &s : v.sa.st)
+    bucket[s.len]++;
+  for (unsigned i = 1; i <= maxlen; ++i)
+    bucket[i] += bucket[i - 1];
+  std::vector<unsigned> order (n);
+  for (unsigned i = n; i--;)
+    order[--bucket[v.sa.st[i].len]] = i;
+
+  for (unsigned i = n; i-- > 1;)
+    {
+      unsigned s = order[i];
+      int link = v.sa.st[s].link;
+      if (link <= 0)
+	continue;
+      auto &dst = v.endpos[link];
+      dst.insert (dst.end (), v.endpos[s].begin (), v.endpos[s].end ());
+    }
+  for (unsigned i = 1; i != n; ++i)
+    std::sort (v.endpos[i].begin (), v.endpos[i].end ());
+
+  v.built = true;
+  return true;
+}
+
+/* Occurrences of the LENGTH-symbol factor whose class is STATE, after
+   the same greedy left-to-right overlap triage active_triage runs on
+   the legacy clone lists.  */
+
+static std::vector<replay_span>
+triaged_clones (view const &v, int st, unsigned length)
+{
+  std::vector<replay_span> out;
+  unsigned bound = 0;
+  for (int end_ix : v.endpos[st])
+    {
+      unsigned begin_ix = unsigned (end_ix) + 1 - length;
+      unsigned begin = v.at[begin_ix];
+      unsigned end = v.at[unsigned (end_ix)] + 1;
+      gcc_checking_assert (begin != UINT_MAX && end != UINT_MAX);
+      if (!out.empty () && bound > begin)
+	continue;
+      bound = end;
+      out.emplace_back (begin, end);
+    }
+  return out;
+}
+
+/* The factor a legacy candidate span carries, as symbols.  */
+
+static std::vector<int>
+span_symbols (view const &v, replay_block const &block, replay_span span)
+{
+  std::vector<int> out;
+  for (unsigned ix = span.begin; ix != span.end; ++ix)
+    if (!block[ix].empty)
+      out.push_back (v.sym_of[ix]);
+  return out;
+}
+
+} // namespace replay_sa
+
+/* Run the shadow.  BLOCK/ACTIVE are the legacy scan and its triaged
+   candidate list, MAX_LENGTH the replay-buffer bound the legacy
+   discovery grew to, PICK_LIMIT the free-span length the picker will
+   actually honour.  Prints nothing unless the measurement knob is on;
+   asserts the stage-A superset obligation whenever -fchecking is on.  */
+
+static void
+shadow_discovery_census (replay_block const &block,
+			 replay_active const &active, unsigned legacy_seqs,
+			 unsigned max_length, unsigned pick_limit,
+			 bool sticky, int bb_index)
+{
+  bool talk = riscv_tt_replay_shadow_discovery > 0 && dump_file;
+  replay_sa::view v;
+
+  if (!replay_sa::build (v, block))
+    {
+      if (talk && !v.str.empty ())
+	fprintf (dump_file,
+		 "replay-maximal-repeats: bb %d: shadow skipped"
+		 " (%u symbols over the %u bound)\n",
+		 bb_index, unsigned (v.str.size ()),
+		 replay_sa::MAX_SHADOW_SYMBOLS);
+      return;
+    }
+
+  unsigned nstates = unsigned (v.sa.st.size ());
+
+  /* -------- the stage-A obligation: legacy candidates are a subset. */
+  unsigned legacy_n = 0, violations = 0;
+  std::set<uint64_t> legacy_key; // (first clone begin << 32) | length
+  unsigned legacy_best_saving = 0;
+  for (auto *seq : active)
+    {
+      legacy_n++;
+      legacy_key.insert ((uint64_t (seq->clones.front ().begin) << 32)
+			 | seq->length);
+
+      if (seq->length <= pick_limit
+	  && span_companion_sound_p (block, seq->clones.front (), sticky))
+	{
+	  unsigned saving = (unsigned (seq->clones.size ()) - 1)
+	    * (seq->length - 1) - !(riscv_tt_fix_qsr_replay > 0);
+	  legacy_best_saving = MAX (legacy_best_saving, saving);
+	}
+
+      auto syms = replay_sa::span_symbols (v, block, seq->clones.front ());
+      bool ok = syms.size () == seq->length;
+      int st = ok ? v.sa.walk (syms) : -1;
+      if (st > 0)
+	{
+	  /* The factor must live in this state's class (its length must
+	     exceed the suffix link's longest), and its triaged
+	     occurrences must be the legacy clone list verbatim.  */
+	  ok = unsigned (v.sa.st[st].len) >= seq->length
+	    && unsigned (v.sa.st[v.sa.st[st].link].len) < seq->length;
+	  if (ok)
+	    {
+	      auto clones = replay_sa::triaged_clones (v, st, seq->length);
+	      ok = clones.size () == seq->clones.size ();
+	      for (unsigned i = 0; ok && i != clones.size (); ++i)
+		ok = clones[i].begin == seq->clones[i].begin
+		  && clones[i].end == seq->clones[i].end;
+	    }
+	}
+      else
+	ok = false;
+
+      if (!ok)
+	{
+	  violations++;
+	  if (talk)
+	    fprintf (dump_file,
+		     "replay-maximal-repeats-superset-violation: bb %d:"
+		     " legacy candidate [%u,%u) length %u x%u is not"
+		     " enumerable from the automaton with the same clones\n",
+		     bb_index, seq->clones.front ().begin,
+		     seq->clones.front ().end, seq->length,
+		     unsigned (seq->clones.size ()));
+	}
+    }
+
+  /* -------- the automaton's own candidate set. */
+  unsigned auto_n = 0, missed = 0, truncated = 0, truncated_max = 0;
+  unsigned maximal = 0, left_maximal = 0;
+  for (unsigned st = 1; st != nstates; ++st)
+    {
+      if (v.endpos[st].size () < 2)
+	continue;
+
+      unsigned own = unsigned (v.sa.st[st].len);
+      unsigned parent = unsigned (v.sa.st[v.sa.st[st].link].len);
+
+      /* Classification of the state's OWN (right-extension-maximal)
+	 repeat: left-extension-maximal iff its occurrences are not all
+	 preceded by one and the same symbol -- otherwise the longer
+	 repeat one symbol to the left carries the same occurrences and
+	 this one is a pure suffix of it.  */
+      if (own >= unsigned (MIN_SEQUENCE))
+	{
+	  maximal++;
+	  bool left_max = false;
+	  int prev_sym = 0;
+	  bool first = true;
+	  for (int end_ix : v.endpos[st])
+	    {
+	      int begin_ix = end_ix + 1 - int (own);
+	      if (begin_ix == 0)
+		{
+		  left_max = true;
+		  break;
+		}
+	      int c = v.str[begin_ix - 1];
+	      if (first)
+		{
+		  prev_sym = c;
+		  first = false;
+		}
+	      else if (c != prev_sym)
+		{
+		  left_max = true;
+		  break;
+		}
+	    }
+	  if (left_max)
+	    left_maximal++;
+	}
+
+      if (own > max_length)
+	{
+	  truncated++;
+	  truncated_max = MAX (truncated_max, own);
+	}
+
+      unsigned hi = MIN (own, max_length);
+      unsigned lo = MAX (parent + 1, unsigned (MIN_SEQUENCE));
+      for (unsigned len = lo; len <= hi; ++len)
+	{
+	  auto clones = replay_sa::triaged_clones (v, int (st), len);
+	  if (clones.size () < 2)
+	    continue;
+	  auto_n++;
+
+	  if (legacy_key.count ((uint64_t (clones.front ().begin) << 32) | len))
+	    continue;
+
+	  /* A candidate the legacy discovery never offered the picker.
+	     Price it with the picker's own key so the census is a value
+	     estimate for stage B, and run the companion contract so an
+	     inadmissible one is not counted as an opportunity.  */
+	  missed++;
+	  if (!talk)
+	    continue;
+	  unsigned saving = (unsigned (clones.size ()) - 1) * (len - 1)
+	    - !(riscv_tt_fix_qsr_replay > 0);
+	  bool sound = span_companion_sound_p (block, clones.front (), sticky);
+	  fprintf (dump_file,
+		   "replay-maximal-repeats-missed: bb %d: [%u,%u) length %u"
+		   " x%u saving %u%s%s (legacy best saving %u)\n",
+		   bb_index, clones.front ().begin, clones.front ().end,
+		   len, unsigned (clones.size ()), saving,
+		   sound ? "" : " companion-refused",
+		   len <= pick_limit ? "" : " over-slot-limit",
+		   legacy_best_saving);
+	}
+    }
+
+  if (talk)
+    {
+      fprintf (dump_file,
+	       "replay-maximal-repeats: bb %d: %u symbols in %u classes,"
+	       " %u segments, %u automaton states vs %u grown sequences;"
+	       " maximal repeats %u (left-maximal %u); legacy candidates %u,"
+	       " automaton candidates %u, automaton-only %u,"
+	       " superset %s (%u violations)\n",
+	       bb_index, unsigned (v.str.size ()), v.classes, v.segments,
+	       nstates, legacy_seqs, maximal, left_maximal, legacy_n, auto_n,
+	       missed, violations ? "VIOLATED" : "OK", violations);
+      if (truncated)
+	fprintf (dump_file,
+		 "replay-maximal-repeats-truncated: bb %d: %u maximal"
+		 " repeats longer than the %u-word buffer bound"
+		 " (longest %u)\n",
+		 bb_index, truncated, max_length, truncated_max);
+    }
+
+  /* The stage-A proof artifact: a checking build discharges it over
+     whatever it compiles, and the corpus checking leg discharges it
+     corpus-wide.  */
+  if (flag_checking)
+    gcc_assert (!violations);
 }
 
 static replay_sequence *
@@ -7348,6 +7872,16 @@ transform (function *cfn, unsigned buffer_size)
       auto spans = available_replay_spans (replay_spans, persistent_slots);
       if (spans.empty ())
 	continue;
+
+      /* Item #9 stage A: the suffix automaton runs here as a SHADOW --
+	 it enumerates over the same scanned block and reports what the
+	 legacy discovery above did not offer the picker, but ACTIVE (the
+	 picker's input) is not touched, so the formed windows below are
+	 the legacy ones byte-for-byte.  */
+      if (riscv_tt_replay_shadow_discovery > 0 || flag_checking)
+	shadow_discovery_census (info, active, unsigned (list.size ()),
+				 replay_spans.front ().end,
+				 spans.front ().end, sticky, bb->index);
 
       while (!active.empty ())
 	{
