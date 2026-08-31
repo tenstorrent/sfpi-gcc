@@ -1,0 +1,55 @@
+# Planner-oracle re-freeze at pin-49 (2026-08-31, lane JZ) -- the
+# reviewed baseline step FABLE_GOES_BURR item #4 names as the blocker
+# of the audited-effect attribute migration ("re-run the macro-planner
+# oracle suite at pin-head, freeze the new oracle baselines, and record
+# the re-freeze as its own reviewed commit").
+#
+# Pin-head       : sfpi-gcc 1bb9b654b53f7669f4d0b1a06e1482a75ba700a0
+#                  (pin-49 union: pin-48 6af4fb42f9b + FABLE plan +
+#                  laneJQ/laneJR/laneJS/laneJT merges)
+# Minting build  : gcc-build-laneFR (cc1plus sha256 da957c5793b72c02...,
+#                  auto-host.h hand-pinned per the laneJS build-env
+#                  reproducibility finding); binutils = the pinned sfpi
+#                  toolchain riscv-tt-elf/bin.
+# Suites run     : mint-wp8-oracles.sh, mint-cc-enable-oracles.sh
+#                  (both committed scripts, run verbatim).
+#
+# VERDICT -- NO ORACLE ROW CHANGED; the historical manifests are kept
+# untouched (they remain the permanent record):
+#
+# 1. wp8-oracle-manifest.txt: every `off' and every `planner' hash
+#    reproduces BIT-IDENTICALLY at pin-49 (11/11 rows).  The
+#    `emit-loadmacro' column reports `quarantined-pass-deleted' exactly
+#    as the store README specifies for any post-WP8 re-mint; the
+#    committed emit hashes remain the permanent frozen record.
+# 2. cc-enable-refusal-manifest.txt: the frozen fact -- refusal
+#    identity, off-S == planner-S per row -- HOLDS 5/5 at pin-49 (the
+#    mint script fails closed on any violation).  The absolute hash
+#    values differ from the committed snapshot because that snapshot
+#    hashes the whole -S output of the 8b62a832aaf-era compiler; forty
+#    pins of default-on promotions since have changed unrelated bytes
+#    of those assemblies.  The identity, not the absolute value, is the
+#    frozen oracle content (the manifest's own header: "must be equal").
+#
+# The re-frozen pin-49 baselines below are the reference the attribute
+# migration must reproduce byte-for-byte (data rows; the `minted from'
+# header line names whatever tree performs the re-mint).
+#
+# ---- pin-49 WP8 manifest (data rows) ----
+staged                       bh  6abc654ac3b279ac4bafdd6a457457137784851e316d17a55c4a48ee40b88d6b quarantined-pass-deleted 6abc654ac3b279ac4bafdd6a457457137784851e316d17a55c4a48ee40b88d6b
+staged                       wh  e3783b9d566b0b0d22f5733d17885d723cf52c04d7068810017223c58c8c3e07 quarantined-pass-deleted e3783b9d566b0b0d22f5733d17885d723cf52c04d7068810017223c58c8c3e07
+staged-loop                  bh  9cabfa4ec73064f28041c71fa43de5a65fed92553c696cfa3e3921c13a0e86f0 quarantined-pass-deleted 32c7cee8b238328a0836af3d7dc388d18d7e70289b20c22402d0ca6bdc153a7c
+staged-loop                  wh  d8755cb3b9259213a94880c3067d355c40ef27d5757d7abfb18b8d97a0175354 quarantined-pass-deleted 0a7df0162cdeec19da1124a968bad1f3c9725f94fd8af491935881debbf2bfed
+staged-successor             bh  0a44a16f3bfbfeaef0823033635633857bd45970d679976553a66d32ab45dd32 quarantined-pass-deleted 0a44a16f3bfbfeaef0823033635633857bd45970d679976553a66d32ab45dd32
+staged-boundary              bh  e679756d2248a9920fe765dd49f956ce537417438d6257570e888af073e00295 quarantined-pass-deleted e679756d2248a9920fe765dd49f956ce537417438d6257570e888af073e00295
+staged-fixed-asm             bh  a500df682722d47aa263ec41d465e86a531b90c2139b43ed2d4b92702992552c quarantined-pass-deleted a500df682722d47aa263ec41d465e86a531b90c2139b43ed2d4b92702992552c
+staged-refuse                bh  856957ae02b72ab91e135c939e3f182f2a5a2479a96da34ed2b2f8727120c06d quarantined-pass-deleted 856957ae02b72ab91e135c939e3f182f2a5a2479a96da34ed2b2f8727120c06d
+staged-loop-refuse           bh  2af5391e054402616c4ce289938a421a865fa2d9df4e6c8510acee8b71a83243 quarantined-pass-deleted 2af5391e054402616c4ce289938a421a865fa2d9df4e6c8510acee8b71a83243
+cast-round                   bh  3fdde30a5966e565003eaebaa6ae9b99c27a564006e8ab23b7131d8abaa11711 quarantined-pass-deleted 55ad0ea225813bfddf24a32b39fc2e9c3b5461f48be51a0d88eba97e39daf1bc
+cast-round                   wh  1ccc8c7120e49240ea3da705c2474f87b2b41157c45f7f881cf39d5e3b97a46d quarantined-pass-deleted 927b89e55dec25130d56fd4a9e7a2e13d9013d474b09946b0d994daa022c3d23
+# ---- pin-49 cc-enable manifest (data rows; identity holds per row) ----
+macro-planner-cc-enable-unproved-bh      bh    e6d918ba09970eeeb9edc46960d33c7b9717af91785e69bcdb93481a440a1517 e6d918ba09970eeeb9edc46960d33c7b9717af91785e69bcdb93481a440a1517
+macro-planner-cc-enable-unproved-wh      wh    20f7ea3015ffb8a8ca614459b24a1c638be7348e347da9b4ca8b650fa73998fd 20f7ea3015ffb8a8ca614459b24a1c638be7348e347da9b4ca8b650fa73998fd
+macro-planner-cc-enable-varied-bh        bh    ce466d390cbb1db4aa9ded1d33c1ec322435e2a8fc6d4888deba5cecc2bf8974 ce466d390cbb1db4aa9ded1d33c1ec322435e2a8fc6d4888deba5cecc2bf8974
+macro-planner-cc-enable-loop-bh          bh    8ab287da9e1f8d647d0e1b3272f8c02e805068194db9c92d005ff7ff40666551 8ab287da9e1f8d647d0e1b3272f8c02e805068194db9c92d005ff7ff40666551
+macro-planner-cc-enable-unproved-qsr     qsr32 c553cfec550635c27f06bde5306b0354787dd89b352f790a73950f119b0bc7b9 c553cfec550635c27f06bde5306b0354787dd89b352f790a73950f119b0bc7b9
