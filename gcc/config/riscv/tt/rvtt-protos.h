@@ -215,6 +215,14 @@ extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_rename (gcc::context *ctxt);
+extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);
+/* Item-#7 rename service (rtl-rvtt-lreg-rename.cc): rename the
+   du-chain of DEF_INSN's single-LREG definition inside its block onto
+   TARGET_LREG (L index; -1 = lowest proven-free), full legality proof
+   plus post-commit structural re-verification; refuses by name and
+   changes nothing on any unproven clause.  DF must be current.  */
+extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
+				    rtx_insn *def_insn, int target_lreg);
 extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
