@@ -331,32 +331,6 @@ target_autoincr_caps ()
 	  caps.watch_reg = 2;
 	}
     }
-  /* One-pin recompute-assert of the migrated positional literals
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      autoincr_caps old = TARGET_XTT_TENSIX_BH
-	? autoincr_caps { true, 7, 6, 1, 2, 7, 2,
-			  { { 18, 34, 53 }, { 0, 0, 0 } }, 0, 0 }
-	: TARGET_XTT_TENSIX_WH
-	? autoincr_caps { true, 3, 2, 1, 2, 7, 2,
-			  { { 19, 29, 54 }, { 0, 0, 0 } }, 1, 2 }
-	: autoincr_caps { false, 0, 0, 0, 0, 0, 0,
-			  { { 0, 0, 0 }, { 0, 0, 0 } }, 0, 0 };
-      gcc_assert (caps.available == old.available
-		  && caps.noinc_mode == old.noinc_mode
-		  && caps.scratch_mode == old.scratch_mode
-		  && caps.nslots == old.nslots
-		  && caps.min_config_distance == old.min_config_distance
-		  && caps.drained_frontend_window
-		       == old.drained_frontend_window
-		  && caps.config_issue_slots == old.config_issue_slots
-		  && caps.slots[0].src_reg == old.slots[0].src_reg
-		  && caps.slots[0].dst_reg == old.slots[0].dst_reg
-		  && caps.slots[0].bias_reg == old.slots[0].bias_reg
-		  && caps.n_watch == old.n_watch
-		  && caps.watch_reg == old.watch_reg);
-    }
   return caps;
 }
 
@@ -1097,16 +1071,6 @@ item_frontend_words (const bb_item &item)
   if (item.cap)
     for (rtx_insn *member : item.cap->members)
       words += insn_frontend_cover_words (member);
-  /* One-pin recompute-assert of the migrated per-item spelling
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      unsigned old = item_issue_words (item) + scalar_issue_words (item.insn);
-      if (item.cap)
-	for (rtx_insn *member : item.cap->members)
-	  old += scalar_issue_words (member);
-      gcc_assert (old == words);
-    }
   return words;
 }
 

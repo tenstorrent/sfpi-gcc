@@ -42,11 +42,10 @@ along with GCC; see the file COPYING3.  If not see
    charges, and the LUT table-slot operand-class fact are each defined
    exactly once, in rvtt-pressure.cc.
 
-   Conservatism contract (stage A): every query, under flag_checking,
-   recomputes its verdict with a verbatim copy of the retired mirror
-   and asserts equality.  Any inequality is a live latent divergence
-   and is adjudicated as a finding, not patched around.  The verbatim
-   copies are the one-pin rollback provision; delete them next pin.  */
+   Conservatism contract (stage A): for one pin (50) every query
+   recomputed its verdict under flag_checking with a verbatim copy of
+   the retired mirror and asserted equality, with zero disagreements;
+   the copies and asserts were deleted at pin 51.  */
 
 /* Capacity of the allocatable vector-register file.  THE one place
    the engine reads it; every pressure/budget comparison must route

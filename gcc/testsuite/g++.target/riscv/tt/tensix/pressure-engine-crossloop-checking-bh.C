@@ -1,11 +1,12 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -fchecking=2 -fdump-tree-rvtt_crossloop" }
-// Item-#10 verdict-identity twin: the crossloop greedy selector now
+// Item-#10 verdict-identity twin: the crossloop greedy selector
 // prices each candidate through the unified engine's incremental
 // per-loop profile (rvtt_loop_pressure, rvtt-pressure.cc) instead of
 // a full proof re-run per candidate; under -fchecking every
-// incremental verdict is recomputed through the full proof AND the
-// verbatim legacy loop counter and asserted equal.  The hoists must
-// fire exactly as in crossloop-hoist-bh.C, plus the checking leg.
+// incremental verdict is recomputed through the full proof and
+// asserted equal (the legacy loop-counter mirror served its one-pin
+// window at pin 50 and is deleted).  The hoists must fire exactly as
+// in crossloop-hoist-bh.C, plus the checking leg.
 // { dg-final { scan-tree-dump-times "crossloop-hoist: hoisted across loop" 2 "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump-not "refused" "rvtt_crossloop" } }
 

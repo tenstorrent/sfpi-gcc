@@ -909,18 +909,6 @@ mop_profitable_p (mop_candidate const &cand, HOST_WIDE_INT config_words,
 			   * (before_row - exec_row))
     - rvtt_dcost_words_to_centislots (config_words,
 				      rvtt_delivery_cost::PLANE_RISC_PUSH);
-  /* One-pin recompute-assert of the migrated inline spelling
-     (item #12 discipline; delete next pin).  */
-  if (flag_checking)
-    {
-      HOST_WIDE_INT push = XTT_REPLAY_COST_RISC_PUSH_X100;
-      HOST_WIDE_INT slot = XTT_REPLAY_COST_REPLAY_SLOT_X100;
-      gcc_assert (exec_row == ((HOST_WIDE_INT) cand.len + k) * slot);
-      gcc_assert (before_row == MAX (exec_row, delivered * push));
-      gcc_assert (benefit == ((HOST_WIDE_INT) cand.iterations
-			      * (before_row - exec_row))
-			     - config_words * push);
-    }
   *benefit_out = benefit;
 
   // The testing/measurement force flag bypasses only this pricing
