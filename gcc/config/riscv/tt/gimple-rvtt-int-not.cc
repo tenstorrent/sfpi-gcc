@@ -259,8 +259,8 @@ public:
        run.  */
     if (!TARGET_XTT_TENSIX_BH && !TARGET_XTT_TENSIX_WH)
       {
-	if (dump_file)
-	  fprintf (dump_file, "int-not refused (int-not-target-unproven)\n");
+	rvtt_refuse (RVTT_REF_INT_NOT_TARGET_UNPROVEN, dump_file,
+		     "int-not refused (int-not-target-unproven)\n");
 	return 0;
       }
     n_folded = 0;

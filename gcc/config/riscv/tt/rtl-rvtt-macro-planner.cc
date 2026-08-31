@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl-iter.h"
 #include "tm_p.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -856,16 +857,16 @@ loop_region_preheader (function *fn, const macro_region &region, FILE *dump)
   if (self_edges != 1 || external_edges != 1
       || incoming->src == ENTRY_BLOCK_PTR_FOR_FN (fn))
     {
-      if (dump)
-	fprintf (dump, "Macro-planner formation-refusal:"
-		 " loop-preheader-unproven\n");
+      rvtt_refuse (RVTT_REF_LOOP_PREHEADER_UNPROVEN, dump,
+		   "Macro-planner formation-refusal:"
+		   " loop-preheader-unproven\n");
       return nullptr;
     }
   if (EDGE_COUNT (incoming->src->succs) != 1)
     {
-      if (dump)
-	fprintf (dump, "Macro-planner formation-refusal:"
-		 " zero-trip-preheader-unproven\n");
+      rvtt_refuse (RVTT_REF_ZERO_TRIP_PREHEADER_UNPROVEN, dump,
+		   "Macro-planner formation-refusal:"
+		   " zero-trip-preheader-unproven\n");
       return nullptr;
     }
 
@@ -885,9 +886,9 @@ loop_region_preheader (function *fn, const macro_region &region, FILE *dump)
 	    owned |= insn == sep;
 	  if (!owned)
 	    {
-	      if (dump)
-		fprintf (dump, "Macro-planner formation-refusal:"
-			 " loop-body-not-owned\n");
+	      rvtt_refuse (RVTT_REF_LOOP_BODY_NOT_OWNED, dump,
+			   "Macro-planner formation-refusal:"
+			   " loop-body-not-owned\n");
 	      return nullptr;
 	    }
 	}
@@ -1615,9 +1616,9 @@ form_region (function *fn, macro_region &region,
 	}
       if (!scoped_ok)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " config-ownership-unproven\n");
+	  rvtt_refuse (RVTT_REF_CONFIG_OWNERSHIP_UNPROVEN, dump,
+		       "Macro-planner formation-refusal:"
+		       " config-ownership-unproven\n");
 	  return false;
 	}
     }
@@ -1630,9 +1631,9 @@ form_region (function *fn, macro_region &region,
       if (!planned_value_dead_after_p
 	    (gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + reg), region_end))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " planned-lreg-live\n");
+	  rvtt_refuse (RVTT_REF_PLANNED_LREG_LIVE, dump,
+		       "Macro-planner formation-refusal:"
+		       " planned-lreg-live\n");
 	  return false;
 	}
 
@@ -1673,9 +1674,9 @@ form_region (function *fn, macro_region &region,
   for (const macro_row &row : region.rows)
     if (row.enable && !cc_enable_all_lanes_proved_p (row.enable))
       {
-	if (dump)
-	  fprintf (dump, "Macro-planner formation-refusal:"
-		   " cc-enable-unproved\n");
+	rvtt_refuse (RVTT_REF_CC_ENABLE_UNPROVED, dump,
+		     "Macro-planner formation-refusal:"
+		     " cc-enable-unproved\n");
 	return false;
       }
 
@@ -1701,9 +1702,9 @@ form_region (function *fn, macro_region &region,
 		 state is not provably the all-lanes pattern (lanes-off,
 		 partial mask, complement, ...): name the unproved
 		 enable.  */
-	      if (dump)
-		fprintf (dump, "Macro-planner formation-refusal:"
-			 " cc-enable-unproved\n");
+	      rvtt_refuse (RVTT_REF_CC_ENABLE_UNPROVED, dump,
+			   "Macro-planner formation-refusal:"
+			   " cc-enable-unproved\n");
 	      return false;
 	    }
 	  enable_src = nullptr;	/* already in place; no copy */
@@ -1795,10 +1796,10 @@ form_region (function *fn, macro_region &region,
 	    }
 	  else
 	    {
-	      if (dump)
-		fprintf (dump, "Macro-planner formation-refusal:"
-			 " all-lanes-proof-missing"
-			 " (ambient-entry-unproven)\n");
+	      rvtt_refuse (RVTT_REF_ALL_LANES_PROOF_MISSING, dump,
+			   "Macro-planner formation-refusal:"
+			   " all-lanes-proof-missing"
+			   " (ambient-entry-unproven)\n");
 	      return false;
 	    }
 	}
@@ -1891,8 +1892,9 @@ form_region (function *fn, macro_region &region,
 	}
       if (init_refusal && dump)
 	{
-	  fprintf (dump, "Macro-planner init-hoist-refusal: %s",
-		   init_refusal);
+	  rvtt_refuse_by_name (init_refusal, dump,
+			       "Macro-planner init-hoist-refusal: %s",
+			       init_refusal);
 	  if (init_refusal_insn)
 	    fprintf (dump, " (insn %d)", INSN_UID (init_refusal_insn));
 	  fprintf (dump, "\n");
@@ -1925,9 +1927,9 @@ form_region (function *fn, macro_region &region,
       if (!ims_arbitrate_loop (region, schedule, desc, body_count,
 			       preheader_count, run_begins.length (), dump))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " replay-delivery-preferred\n");
+	  rvtt_refuse (RVTT_REF_REPLAY_DELIVERY_PREFERRED, dump,
+		       "Macro-planner formation-refusal:"
+		       " replay-delivery-preferred\n");
 	  return false;
 	}
     }
@@ -1952,9 +1954,9 @@ form_region (function *fn, macro_region &region,
 				init_prog.caller_entry_count,
 				init_prog.caller_body_count, dump))
 	  {
-	    if (dump)
-	      fprintf (dump, "Macro-planner formation-refusal:"
-		       " replay-delivery-preferred\n");
+	    rvtt_refuse (RVTT_REF_REPLAY_DELIVERY_PREFERRED, dump,
+			 "Macro-planner formation-refusal:"
+			 " replay-delivery-preferred\n");
 	    return false;
 	  }
       }
@@ -1966,9 +1968,9 @@ form_region (function *fn, macro_region &region,
   for (const macro_row &row : region.rows)
     if (row.separator && !schedule.absorbed_stride && !desc.keep_separator)
       {
-	if (dump)
-	  fprintf (dump, "Macro-planner formation-refusal:"
-		   " stride-not-absorbed\n");
+	rvtt_refuse (RVTT_REF_STRIDE_NOT_ABSORBED, dump,
+		     "Macro-planner formation-refusal:"
+		     " stride-not-absorbed\n");
 	return false;
       }
 
@@ -1984,9 +1986,9 @@ form_region (function *fn, macro_region &region,
       if (schedule.absorbed_stride != region.imm_stride
 	  || desc.keep_separator)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " imm-stride-not-absorbed\n");
+	  rvtt_refuse (RVTT_REF_IMM_STRIDE_NOT_ABSORBED, dump,
+		       "Macro-planner formation-refusal:"
+		       " imm-stride-not-absorbed\n");
 	  return false;
 	}
       for (const macro_row &row : region.rows)
@@ -2005,9 +2007,9 @@ form_region (function *fn, macro_region &region,
 		  || !planner_rewrite_dst_address (insn, PATTERN (insn),
 						   INTVAL (address)))
 		{
-		  if (dump)
-		    fprintf (dump, "Macro-planner formation-refusal:"
-			     " imm-stride-rewrite-unproven\n");
+		  rvtt_refuse (RVTT_REF_IMM_STRIDE_REWRITE_UNPROVEN, dump,
+			       "Macro-planner formation-refusal:"
+			       " imm-stride-rewrite-unproven\n");
 		  return false;
 		}
 	    }
@@ -2025,9 +2027,9 @@ form_region (function *fn, macro_region &region,
 		PATTERN (region.rows[0].insns[ix]),
 		c->auto_increment_dst2_addr_mode))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " stride-not-absorbed\n");
+	  rvtt_refuse (RVTT_REF_STRIDE_NOT_ABSORBED, dump,
+		       "Macro-planner formation-refusal:"
+		       " stride-not-absorbed\n");
 	  return false;
 	}
 
@@ -2100,8 +2102,9 @@ form_region (function *fn, macro_region &region,
 	    }
 	  else if (epoch_refusal && dump)
 	    {
-	      fprintf (dump, "Macro-planner prefix-epoch-refusal: %s",
-		       epoch_refusal);
+	      rvtt_refuse_by_name (epoch_refusal, dump,
+				   "Macro-planner prefix-epoch-refusal: %s",
+				   epoch_refusal);
 	      if (epoch_refusal_insn)
 		fprintf (dump, " (insn %d)", INSN_UID (epoch_refusal_insn));
 	      fprintf (dump, "\n");
@@ -2130,10 +2133,10 @@ form_region (function *fn, macro_region &region,
 	= rvtt_crosscall_init_hoist (fn, &init_prog, /*commit=*/true);
       if (commit_refusal || init_prog.stage != init_hoist_stage)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner formation-refusal:"
-		     " init-hoist-commit-diverged (%s)\n",
-		     commit_refusal ? commit_refusal : "stage-mismatch");
+	  rvtt_refuse (RVTT_REF_INIT_HOIST_COMMIT_DIVERGED, dump,
+		       "Macro-planner formation-refusal:"
+		       " init-hoist-commit-diverged (%s)\n",
+		       commit_refusal ? commit_refusal : "stage-mismatch");
 	  return false;
 	}
       if (dump)
@@ -2246,9 +2249,9 @@ form_region (function *fn, macro_region &region,
       if (!shape_ok || !exit_e
 	  || (exit_e->flags & (EDGE_ABNORMAL | EDGE_EH | EDGE_COMPLEX)))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner drain-refusal:"
-		     " drain-exit-shared\n");
+	  rvtt_refuse (RVTT_REF_DRAIN_EXIT_SHARED, dump,
+		       "Macro-planner drain-refusal:"
+		       " drain-exit-shared\n");
 	}
       else
 	{
@@ -3043,9 +3046,9 @@ upward_carrier_try (function *fn, macro_region &region,
   upward_carrier_choice reg_choice;
   if (!upward_pick_carrier_reg (region, &reg_choice))
     {
-      if (dump)
-	fprintf (dump, "Macro-planner upward-carrier-refusal: %s\n",
-		 upward_refusal_lreg);
+      rvtt_refuse_by_name (upward_refusal_lreg, dump,
+			   "Macro-planner upward-carrier-refusal: %s\n",
+			   upward_refusal_lreg);
       return false;
     }
   int newreg = reg_choice.vd;
@@ -3185,20 +3188,20 @@ upward_carrier_try (function *fn, macro_region &region,
       auto_vec<unsigned> prefix0;
       if (!upward_compute_renames (row0, v, &masks0, &prefix0, &refusal))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
-		     " (seed=%u chain={%s})\n", refusal, v.seed_ix,
-		     chain_str);
+	  rvtt_refuse_by_name (refusal, dump,
+			       "Macro-planner upward-carrier-refusal: %s"
+			       " (seed=%u chain={%s})\n", refusal, v.seed_ix,
+			       chain_str);
 	  continue;
 	}
       upward_journal journal;
       if (!upward_apply (region, v, reg_choice, masks0, prefix0, &journal,
 			 &refusal))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
-		     " (seed=%u chain={%s})\n", refusal, v.seed_ix,
-		     chain_str);
+	  rvtt_refuse_by_name (refusal, dump,
+			       "Macro-planner upward-carrier-refusal: %s"
+			       " (seed=%u chain={%s})\n", refusal, v.seed_ix,
+			       chain_str);
 	  continue;
 	}
 
@@ -3237,18 +3240,18 @@ upward_carrier_try (function *fn, macro_region &region,
 	}
       if (!sel || !upward_probe_region (*sel, &new_ii, &new_candidate, dump))
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
-		     " (seed=%u chain={%s})\n", upward_refusal_rederive,
-		     v.seed_ix, chain_str);
+	  rvtt_refuse_by_name (upward_refusal_rederive, dump,
+			       "Macro-planner upward-carrier-refusal: %s"
+			       " (seed=%u chain={%s})\n", upward_refusal_rederive,
+			       v.seed_ix, chain_str);
 	}
       else if (new_ii >= est_ii)
 	{
-	  if (dump)
-	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
-		     " (seed=%u chain={%s} est-ii=%d variant-ii=%d)\n",
-		     upward_refusal_no_improvement, v.seed_ix, chain_str,
-		     est_ii, new_ii);
+	  rvtt_refuse_by_name (upward_refusal_no_improvement, dump,
+			       "Macro-planner upward-carrier-refusal: %s"
+			       " (seed=%u chain={%s} est-ii=%d variant-ii=%d)\n",
+			       upward_refusal_no_improvement, v.seed_ix, chain_str,
+			       est_ii, new_ii);
 	}
       else
 	{
@@ -3269,9 +3272,10 @@ upward_carrier_try (function *fn, macro_region &region,
 			 " (ii=%d, was %d)\n", new_ii, est_ii);
 	    }
 	  else if (dump)
-	    fprintf (dump, "Macro-planner upward-carrier-refusal: %s"
-		     " (seed=%u chain={%s} formation declined)\n",
-		     upward_refusal_rederive, v.seed_ix, chain_str);
+	    rvtt_refuse_by_name (upward_refusal_rederive, dump,
+				 "Macro-planner upward-carrier-refusal: %s"
+				 " (seed=%u chain={%s} formation declined)\n",
+				 upward_refusal_rederive, v.seed_ix, chain_str);
 	}
 
       for (macro_region &fr : fresh)

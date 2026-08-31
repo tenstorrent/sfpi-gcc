@@ -176,7 +176,8 @@ repr_refuse (const char *reason, gimple *stmt)
   rvtt_refusal_fire_by_name (reason, stmt);
   if (!dump_file)
     return;
-  fprintf (dump_file, "repr-prop: refused (%s)", reason);
+  rvtt_refuse_by_name (reason, dump_file,
+		       "repr-prop: refused (%s)", reason);
   if (stmt)
     {
       fprintf (dump_file, ": ");
@@ -580,8 +581,8 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "repr-prop: refused (qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_QSR_UNPROVEN, dump_file,
+		     "repr-prop: refused (qsr-unproven)\n");
 	return 0;
       }
     bool changed = transform (fn);

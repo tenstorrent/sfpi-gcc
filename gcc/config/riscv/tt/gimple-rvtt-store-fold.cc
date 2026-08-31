@@ -980,9 +980,8 @@ public:
        for a single audited fire surface.  Fail closed elsewhere.  */
     if (!TARGET_XTT_TENSIX_BH && !TARGET_XTT_TENSIX_WH)
       {
-	if (dump_file)
-	  fprintf (dump_file,
-		   "store-fold refused (store-fold-target-unproven)\n");
+	rvtt_refuse (RVTT_REF_STORE_FOLD_TARGET_UNPROVEN, dump_file,
+		     "store-fold refused (store-fold-target-unproven)\n");
 	return 0;
       }
     n_forwarded = 0;

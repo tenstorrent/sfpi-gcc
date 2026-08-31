@@ -584,8 +584,8 @@ public:
        Fail closed everywhere the proof was not run.  */
     if (!TARGET_XTT_TENSIX_BH)
       {
-	if (dump_file)
-	  fprintf (dump_file, "int-abs refused (int-abs-target-unproven)\n");
+	rvtt_refuse (RVTT_REF_INT_ABS_TARGET_UNPROVEN, dump_file,
+		     "int-abs refused (int-abs-target-unproven)\n");
 	return 0;
       }
     n_folded = 0;

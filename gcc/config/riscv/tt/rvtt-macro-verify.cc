@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-region.h"
 #include "rvtt-macro-sched.h"
@@ -70,9 +71,9 @@ rvtt_macro_verify_descriptor (const macro_region &region,
   rvtt_macro_verify::expectations expect;
   if (!rvtt_macro_build_expectations (region, schedule, &expect))
     {
-      if (dump)
-	fprintf (dump, "Macro-planner refusal: %s (expectations)\n",
-		 macro_desc_refusal_verification_failed);
+      rvtt_refuse_by_name (macro_desc_refusal_verification_failed, dump,
+			   "Macro-planner refusal: %s (expectations)\n",
+			   macro_desc_refusal_verification_failed);
       return "expectations";
     }
 
@@ -113,8 +114,9 @@ rvtt_macro_verify_descriptor (const macro_region &region,
     {
       if (component)
 	{
-	  fprintf (dump, "Macro-planner refusal: %s (%s)\n",
-		   macro_desc_refusal_verification_failed, component);
+	  rvtt_refuse_by_name (macro_desc_refusal_verification_failed, dump,
+			       "Macro-planner refusal: %s (%s)\n",
+			       macro_desc_refusal_verification_failed, component);
 	  /* Diagnostic detail: the synthesized words next to the
 	     re-derived expectations (dump-only; the refusal stands
 	     either way).  */

@@ -673,9 +673,9 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "replay-loop-unroll: refused"
-		   " (replay-loop-unroll-qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_REPLAY_LOOP_UNROLL_QSR_UNPROVEN, dump_file,
+		     "replay-loop-unroll: refused"
+		     " (replay-loop-unroll-qsr-unproven)\n");
 	return 0;
       }
     replay_unroll ctx;
@@ -1058,9 +1058,9 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "launch-flatten: refused"
-		   " (launch-flatten-qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_LAUNCH_FLATTEN_QSR_UNPROVEN, dump_file,
+		     "launch-flatten: refused"
+		     " (launch-flatten-qsr-unproven)\n");
 	return 0;
       }
     /* This pass sits inside the GIMPLE loop pipeline (immediately before
@@ -1723,9 +1723,9 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "round-interleave: refused"
-		   " (round-interleave-qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_QSR_UNPROVEN, dump_file,
+		     "round-interleave: refused"
+		     " (round-interleave-qsr-unproven)\n");
 	return 0;
       }
     round_interleave ctx;

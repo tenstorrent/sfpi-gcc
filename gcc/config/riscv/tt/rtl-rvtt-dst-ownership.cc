@@ -137,6 +137,7 @@
 #include "regs.h"
 #include "rvtt.h"
 #include "rvtt-effects.h"
+#include "rvtt-refuse.h"
 
 namespace {
 
@@ -717,10 +718,9 @@ span_pressure_with_extension (basic_block bb, rtx_insn *from, rtx_insn *to,
 static void
 dump_refusal (const char *reason, const char *detail, rtx_insn *insn)
 {
-  if (dump_file)
-    fprintf (dump_file,
-	     "Dst-ownership formation-refusal: %s (%s) at insn %d\n",
-	     reason, detail ? detail : "", insn ? INSN_UID (insn) : -1);
+  rvtt_refuse_by_name (reason, dump_file,
+		       "Dst-ownership formation-refusal: %s (%s) at insn %d\n",
+		       reason, detail ? detail : "", insn ? INSN_UID (insn) : -1);
 }
 
 static unsigned
@@ -852,13 +852,12 @@ dst_ownership (function *fn)
 							hit->dest);
 		      if (pressure > budget)
 			{
-			  if (dump_file)
-			    fprintf (dump_file,
-				     "Dst-ownership formation-refusal:"
-				     " lreg-pressure-exceeded"
-				     " (pressure %d > budget %d) at insn"
-				     " %d\n",
-				     pressure, budget, INSN_UID (insn));
+			  rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED, dump_file,
+				       "Dst-ownership formation-refusal:"
+				       " lreg-pressure-exceeded"
+				       " (pressure %d > budget %d) at insn"
+				       " %d\n",
+				       pressure, budget, INSN_UID (insn));
 			}
 		      else
 			{

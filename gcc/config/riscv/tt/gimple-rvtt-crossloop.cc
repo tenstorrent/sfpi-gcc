@@ -91,6 +91,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "dominance.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
 
@@ -343,10 +344,9 @@ transform (function *fn)
       edge entry = rvtt_loop_entry_edge (loop);
       if (!entry || rvtt_preheader_insertion_blocked_p (entry))
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "crossloop-hoist: loop bb %d refused "
-		     "(crossloop-preheader-unproven)\n", loop->header->index);
+	  rvtt_refuse (RVTT_REF_CROSSLOOP_PREHEADER_UNPROVEN, dump_file,
+		       "crossloop-hoist: loop bb %d refused "
+		       "(crossloop-preheader-unproven)\n", loop->header->index);
 	  continue;
 	}
 
@@ -390,10 +390,10 @@ transform (function *fn)
       if (loads.is_empty ())
 	{
 	  if (speculation_seen && dump_file)
-	    fprintf (dump_file,
-		     "crossloop-hoist: loop bb %d refused "
-		     "(crossloop-speculation-unproven)\n",
-		     loop->header->index);
+	    rvtt_refuse (RVTT_REF_CROSSLOOP_SPECULATION_UNPROVEN, dump_file,
+			 "crossloop-hoist: loop bb %d refused "
+			 "(crossloop-speculation-unproven)\n",
+			 loop->header->index);
 	  continue;
 	}
 
@@ -406,10 +406,11 @@ transform (function *fn)
 				       CROSSLOOP_ALLOCATABLE_MASK,
 				       &why, &why_stmt))
 	{
+	  rvtt_refuse_by_name (why ? why : "?", dump_file,
+			       "crossloop-hoist: loop bb %d refused (%s)",
+			       loop->header->index, why ? why : "?");
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "crossloop-hoist: loop bb %d refused (%s)",
-		       loop->header->index, why ? why : "?");
 	      if (why_stmt)
 		{
 		  fprintf (dump_file, ": ");
@@ -492,8 +493,8 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "crossloop-hoist: refused (qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_QSR_UNPROVEN, dump_file,
+		     "crossloop-hoist: refused (qsr-unproven)\n");
 	return 0;
       }
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);

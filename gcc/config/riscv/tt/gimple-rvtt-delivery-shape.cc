@@ -463,11 +463,11 @@ public:
 		   c.factor, c.payload_rows, delivery_mode_name (c.mode),
 		   c.cost_blb, c.cost_bub);
 	if (sol.window_infeasible)
-	  fprintf (dump_file,
-		   "delivery-shape: window legs refused"
-		   " (delivery-shape-window-budget) loop %d:"
-		   " no payload fits [%u..%u] slots\n",
-		   loop->num, prob.min_sequence, prob.capture_slots);
+	  rvtt_refuse (RVTT_REF_DELIVERY_SHAPE_WINDOW_BUDGET, dump_file,
+		       "delivery-shape: window legs refused"
+		       " (delivery-shape-window-budget) loop %d:"
+		       " no payload fits [%u..%u] slots\n",
+		       loop->num, prob.min_sequence, prob.capture_slots);
       }
 
     if (sol.selected.factor >= 2
@@ -557,9 +557,9 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file, "delivery-shape: refused"
-		   " (delivery-shape-qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_DELIVERY_SHAPE_QSR_UNPROVEN, dump_file,
+		     "delivery-shape: refused"
+		     " (delivery-shape-qsr-unproven)\n");
 	return 0;
       }
     delivery_shape ctx;

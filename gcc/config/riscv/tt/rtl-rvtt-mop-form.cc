@@ -177,6 +177,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "langhooks.h"
 #include "rvtt-protos.h"
+#include "rvtt-refuse.h"
 #include "rvtt.h"
 #include "rvtt-mop-tables.h"
 
@@ -742,37 +743,33 @@ collect_loops (function *cfn, std::vector<mop_candidate> &out)
 	continue;
       if (not_invariant)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-body-not-invariant): loop bb %d"
-		     " launch word is synthesized at run time\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_BODY_NOT_INVARIANT, dump_file,
+		       "MOP-form refused (mop-body-not-invariant): loop bb %d"
+		       " launch word is synthesized at run time\n", bb->index);
 	  continue;
 	}
       if (extra || !scalar)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-body-extra-delivery): loop bb %d"
-		     " body is not exactly one launch plus the counter"
-		     " step\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_BODY_EXTRA_DELIVERY, dump_file,
+		       "MOP-form refused (mop-body-extra-delivery): loop bb %d"
+		       " body is not exactly one launch plus the counter"
+		       " step\n", bb->index);
 	  continue;
 	}
       if (loop->unroll)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-body-extra-delivery): loop bb %d"
-		     " carries an explicit user unroll request\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_BODY_EXTRA_DELIVERY, dump_file,
+		       "MOP-form refused (mop-body-extra-delivery): loop bb %d"
+		       " carries an explicit user unroll request\n", bb->index);
 	  continue;
 	}
 
       basic_block preheader = mop_dedicated_loop_preheader (loop);
       if (!preheader)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-trips-unproved): loop bb %d has"
-		     " no dedicated preheader\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_TRIPS_UNPROVED, dump_file,
+		       "MOP-form refused (mop-trips-unproved): loop bb %d has"
+		       " no dedicated preheader\n", bb->index);
 	  continue;
 	}
 
@@ -781,19 +778,17 @@ collect_loops (function *cfn, std::vector<mop_candidate> &out)
       if (!mop_provable_constant_trips (loop, preheader, &trips, &step,
 					&final_value))
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-trips-unproved): loop bb %d trip"
-		     " count is not provably constant\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_TRIPS_UNPROVED, dump_file,
+		       "MOP-form refused (mop-trips-unproved): loop bb %d trip"
+		       " count is not provably constant\n", bb->index);
 	  continue;
 	}
       if (step != scalar)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-body-extra-delivery): loop bb %d"
-		     " scalar insn is not the proven counter step\n",
-		     bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_BODY_EXTRA_DELIVERY, dump_file,
+		       "MOP-form refused (mop-body-extra-delivery): loop bb %d"
+		       " scalar insn is not the proven counter step\n",
+		       bb->index);
 	  continue;
 	}
 
@@ -803,10 +798,9 @@ collect_loops (function *cfn, std::vector<mop_candidate> &out)
       if (!SMALL_OPERAND (INTVAL (final_rtx))
 	  && !LUI_OPERAND (INTVAL (final_rtx)))
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-body-extra-delivery): loop bb %d"
-		     " counter exit value is not materializable\n", bb->index);
+	  rvtt_refuse (RVTT_REF_MOP_BODY_EXTRA_DELIVERY, dump_file,
+		       "MOP-form refused (mop-body-extra-delivery): loop bb %d"
+		       " counter exit value is not materializable\n", bb->index);
 	  continue;
 	}
 
@@ -1020,9 +1014,9 @@ build_mop_sequence (mop_candidate const &cand, unsigned scratch[2])
       {
 	if (dump_file)
 	  {
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-emit-unrecognized): emitted"
-		     " configuration insn is not recognized:\n");
+	    rvtt_refuse (RVTT_REF_MOP_EMIT_UNRECOGNIZED, dump_file,
+			 "MOP-form refused (mop-emit-unrecognized): emitted"
+			 " configuration insn is not recognized:\n");
 	    dump_insn_slim (dump_file, insn);
 	  }
 	return nullptr;
@@ -1036,11 +1030,10 @@ commit_candidate (mop_candidate &cand)
   unsigned scratch[2];
   if (!find_scratch_gprs (cand.launches.front (), scratch))
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "MOP-form refused (mop-no-scratch-gpr): no two dead"
-		 " temporaries before insn %d\n",
-		 INSN_UID (cand.launches.front ()));
+      rvtt_refuse (RVTT_REF_MOP_NO_SCRATCH_GPR, dump_file,
+		   "MOP-form refused (mop-no-scratch-gpr): no two dead"
+		   " temporaries before insn %d\n",
+		   INSN_UID (cand.launches.front ()));
       return false;
     }
 
@@ -2012,11 +2005,10 @@ transform (function *cfn)
 
   if (unowned)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "MOP-form refused (mop-config-unowned): function contains"
-		 " a call or opaque asm; %u candidate(s) dropped\n",
-		 unsigned (candidates.size ()));
+      rvtt_refuse (RVTT_REF_MOP_CONFIG_UNOWNED, dump_file,
+		   "MOP-form refused (mop-config-unowned): function contains"
+		   " a call or opaque asm; %u candidate(s) dropped\n",
+		   unsigned (candidates.size ()));
       return;
     }
 
@@ -2031,15 +2023,15 @@ transform (function *cfn)
 	if (dump_file)
 	  {
 	    if (why_fn)
-	      fprintf (dump_file,
-		       "MOP-form refused (mop-caller-template-live-"
-		       "unproven): %s (%s); %u candidate(s) dropped\n",
-		       why, why_fn, unsigned (candidates.size ()));
+	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN, dump_file,
+			   "MOP-form refused (mop-caller-template-live-"
+			   "unproven): %s (%s); %u candidate(s) dropped\n",
+			   why, why_fn, unsigned (candidates.size ()));
 	    else
-	      fprintf (dump_file,
-		       "MOP-form refused (mop-caller-template-live-"
-		       "unproven): %s; %u candidate(s) dropped\n",
-		       why, unsigned (candidates.size ()));
+	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN, dump_file,
+			   "MOP-form refused (mop-caller-template-live-"
+			   "unproven): %s; %u candidate(s) dropped\n",
+			   why, unsigned (candidates.size ()));
 	  }
 	return;
       }
@@ -2054,22 +2046,20 @@ transform (function *cfn)
     {
       if (cand.start + cand.len > buffer_size)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-replay-window-overflow): launch"
-		     " [%u,+%u) exceeds the %u-slot replay buffer"
-		     " (S+L > %u)\n",
-		     cand.start, cand.len, buffer_size, buffer_size);
+	  rvtt_refuse (RVTT_REF_MOP_REPLAY_WINDOW_OVERFLOW, dump_file,
+		       "MOP-form refused (mop-replay-window-overflow): launch"
+		       " [%u,+%u) exceeds the %u-slot replay buffer"
+		       " (S+L > %u)\n",
+		       cand.start, cand.len, buffer_size, buffer_size);
 	  continue;
 	}
       if (cand.iterations < 2 || cand.iterations > XTT_MOP0_MAX_ITERATIONS)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-loop-count-range): %lu iterations"
-		     " outside [2, %u]\n",
-		     (unsigned long) cand.iterations,
-		     XTT_MOP0_MAX_ITERATIONS);
+	  rvtt_refuse (RVTT_REF_MOP_LOOP_COUNT_RANGE, dump_file,
+		       "MOP-form refused (mop-loop-count-range): %lu iterations"
+		       " outside [2, %u]\n",
+		       (unsigned long) cand.iterations,
+		       XTT_MOP0_MAX_ITERATIONS);
 	  continue;
 	}
 
@@ -2098,10 +2088,9 @@ transform (function *cfn)
 	}
       if (!profitable)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "MOP-form refused (mop-profitability): modeled benefit"
-		     " %ld below threshold\n", (long) benefit);
+	  rvtt_refuse (RVTT_REF_MOP_PROFITABILITY, dump_file,
+		       "MOP-form refused (mop-profitability): modeled benefit"
+		       " %ld below threshold\n", (long) benefit);
 	  continue;
 	}
       if (!best || benefit > best_benefit)
@@ -2124,10 +2113,10 @@ transform (function *cfn)
       if (&cand != best && cand.start + cand.len <= buffer_size
 	  && cand.iterations >= 2
 	  && cand.iterations <= XTT_MOP0_MAX_ITERATIONS)
-	fprintf (dump_file,
-		 "MOP-form refused (mop-config-epoch): a MOP was already"
-		 " formed in this function (candidate %lu x [%u,+%u))\n",
-		 (unsigned long) cand.iterations, cand.start, cand.len);
+	rvtt_refuse (RVTT_REF_MOP_CONFIG_EPOCH, dump_file,
+		     "MOP-form refused (mop-config-epoch): a MOP was already"
+		     " formed in this function (candidate %lu x [%u,+%u))\n",
+		     (unsigned long) cand.iterations, cand.start, cand.len);
 }
 
 const pass_data pass_data_rvtt_mop_form =

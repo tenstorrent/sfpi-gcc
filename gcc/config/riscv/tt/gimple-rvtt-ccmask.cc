@@ -595,8 +595,8 @@ public:
        before BH.  Other targets keep the CC lowering byte-identically.  */
     if (!TARGET_XTT_TENSIX_BH)
       {
-	if (dump_file)
-	  fprintf (dump_file, "ccmask refused (ccmask-target-unproven)\n");
+	rvtt_refuse (RVTT_REF_CCMASK_TARGET_UNPROVEN, dump_file,
+		     "ccmask refused (ccmask-target-unproven)\n");
 	return 0;
       }
     n_folded = 0;

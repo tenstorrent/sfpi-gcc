@@ -607,21 +607,19 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 	{
 	  if (e.opaque)
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "Refusing capture: shadow-state-unproved:"
-			 " insn %d is effect-opaque under possibly-enabled"
-			 " index tracking\n", INSN_UID (insn));
+	      rvtt_refuse (RVTT_REF_SHADOW_STATE_UNPROVED, dump_file,
+			   "Refusing capture: shadow-state-unproved:"
+			   " insn %d is effect-opaque under possibly-enabled"
+			   " index tracking\n", INSN_UID (insn));
 	      return false;
 	    }
 	  if (!multi && (e.lreg_write & 0xF))
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "Refusing capture: multiresult-companion-split:"
-			 " insn %d writes the value bank without typed"
-			 " companion results under possibly-enabled"
-			 " index tracking\n", INSN_UID (insn));
+	      rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT, dump_file,
+			   "Refusing capture: multiresult-companion-split:"
+			   " insn %d writes the value bank without typed"
+			   " companion results under possibly-enabled"
+			   " index tracking\n", INSN_UID (insn));
 	      return false;
 	    }
 	}
@@ -641,13 +639,12 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 		if (rvtt_lreg_marker (block[probe].insn, &mask)
 		    && (mask & group_mask))
 		  {
-		    if (dump_file)
-		      fprintf (dump_file,
-			       "Refusing capture:"
-			       " multiresult-companion-split: boundary"
-			       " separates insn %d from companion marker"
-			       " insn %d\n", INSN_UID (insn),
-			       INSN_UID (block[probe].insn));
+		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT, dump_file,
+				 "Refusing capture:"
+				 " multiresult-companion-split: boundary"
+				 " separates insn %d from companion marker"
+				 " insn %d\n", INSN_UID (insn),
+				 INSN_UID (block[probe].insn));
 		    return false;
 		  }
 	      }
@@ -660,13 +657,12 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 		if (rvtt_lreg_marker (block[probe].insn, &mask)
 		    && (mask & group_mask))
 		  {
-		    if (dump_file)
-		      fprintf (dump_file,
-			       "Refusing capture:"
-			       " multiresult-companion-split: boundary"
-			       " separates insn %d from companion marker"
-			       " insn %d\n", INSN_UID (insn),
-			       INSN_UID (block[probe].insn));
+		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT, dump_file,
+				 "Refusing capture:"
+				 " multiresult-companion-split: boundary"
+				 " separates insn %d from companion marker"
+				 " insn %d\n", INSN_UID (insn),
+				 INSN_UID (block[probe].insn));
 		    return false;
 		  }
 	      }
@@ -999,13 +995,12 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
       unsigned cov_end = trim ? trim_end : cand->clones.back ().end;
       if (cov_end < seq_cov_end)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "window-sizing candidate refused:"
-		     " window-sizing-coverage-short: [%u,+%u) x%u + %u-word"
-		     " trim ends at %u, before the picked window's %u\n",
-		     begin, cand->length, unsigned (cand->clones.size ()),
-		     trim, cov_end, seq_cov_end);
+	  rvtt_refuse (RVTT_REF_WINDOW_SIZING_COVERAGE_SHORT, dump_file,
+		       "window-sizing candidate refused:"
+		       " window-sizing-coverage-short: [%u,+%u) x%u + %u-word"
+		       " trim ends at %u, before the picked window's %u\n",
+		       begin, cand->length, unsigned (cand->clones.size ()),
+		       trim, cov_end, seq_cov_end);
 	  continue;
 	}
 
@@ -1025,13 +1020,12 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
       unsigned cost_cur = unsigned (seq->clones.size ()) + (ne - cur_covered);
       if (cost_cand >= cost_cur)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "window-sizing candidate refused:"
-		     " window-sizing-no-cheaper-delivery: [%u,+%u) x%u +"
-		     " %u-word trim delivers %u issue words vs %u\n",
-		     begin, cand->length, unsigned (cand->clones.size ()),
-		     trim, cost_cand, cost_cur);
+	  rvtt_refuse (RVTT_REF_WINDOW_SIZING_NO_CHEAPER_DELIVERY, dump_file,
+		       "window-sizing candidate refused:"
+		       " window-sizing-no-cheaper-delivery: [%u,+%u) x%u +"
+		       " %u-word trim delivers %u issue words vs %u\n",
+		       begin, cand->length, unsigned (cand->clones.size ()),
+		       trim, cost_cand, cost_cur);
 	  continue;
 	}
       if (!best || cost_cand < best_cost
@@ -1049,16 +1043,16 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
       if (dump_file)
 	{
 	  if (saw_overflow)
-	    fprintf (dump_file,
-		     "window-sizing refused: window-sizing-slot-exhausted:"
-		     " every wider same-anchor candidate exceeds the free"
-		     " slot span %u; keeping the picked [%u,+%u) window\n",
-		     free_span, begin, seq->length);
+	    rvtt_refuse (RVTT_REF_WINDOW_SIZING_SLOT_EXHAUSTED, dump_file,
+			 "window-sizing refused: window-sizing-slot-exhausted:"
+			 " every wider same-anchor candidate exceeds the free"
+			 " slot span %u; keeping the picked [%u,+%u) window\n",
+			 free_span, begin, seq->length);
 	  else
-	    fprintf (dump_file,
-		     "window-sizing refused: window-sizing-no-wider-candidate:"
-		     " no admissible wider same-anchor candidate; keeping the"
-		     " picked [%u,+%u) window\n", begin, seq->length);
+	    rvtt_refuse (RVTT_REF_WINDOW_SIZING_NO_WIDER_CANDIDATE, dump_file,
+			 "window-sizing refused: window-sizing-no-wider-candidate:"
+			 " no admissible wider same-anchor candidate; keeping the"
+			 " picked [%u,+%u) window\n", begin, seq->length);
 	}
       return nullptr;
     }
@@ -1729,8 +1723,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	  fprintf (dump_file, "Not hoisting: loop %d runs %ld time(s)\n",
 		   loop->num, (long) trips);
 	  if (record_hoist_mode)
-	    fprintf (dump_file,
-		     "record-hoist refused: record-hoist-trip-count-unproven\n");
+	    rvtt_refuse (RVTT_REF_RECORD_HOIST_TRIP_COUNT_UNPROVEN, dump_file,
+			 "record-hoist refused: record-hoist-trip-count-unproven\n");
 	}
       return false;
     }
@@ -1763,15 +1757,15 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file,
-		       "Not hoisting: replay-reissue-latency-unproved: a"
-		       " consumed payload producer carries no audited result"
-		       " latency (loop %d, %ld words)\n",
-		       loop->num, (long) words);
+	      rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED, dump_file,
+			   "Not hoisting: replay-reissue-latency-unproved: a"
+			   " consumed payload producer carries no audited result"
+			   " latency (loop %d, %ld words)\n",
+			   loop->num, (long) words);
 	      if (record_hoist_mode)
-		fprintf (dump_file,
-			 "record-hoist refused:"
-			 " replay-reissue-latency-unproved\n");
+		rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED, dump_file,
+			     "record-hoist refused:"
+			     " replay-reissue-latency-unproved\n");
 	    }
 	  return false;
 	}
@@ -1848,12 +1842,11 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		     (long) min_benefit, (long) exposure);
 	  if (per_trip <= 0 || benefit2 < min_benefit)
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "record-hoist refused:"
-			 " record-hoist-runtime-trips-break-even: 2-trip"
-			 " benefit %ld < %ld\n",
-			 (long) benefit2, (long) min_benefit);
+	      rvtt_refuse (RVTT_REF_RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN, dump_file,
+			   "record-hoist refused:"
+			   " record-hoist-runtime-trips-break-even: 2-trip"
+			   " benefit %ld < %ld\n",
+			   (long) benefit2, (long) min_benefit);
 	      return false;
 	    }
 	  if (dump_file)
@@ -1876,11 +1869,10 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		 (long) min_benefit);
       if (benefit < min_benefit)
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Not hoisting: record-hoist-benefit: modeled issue-side"
-		     " benefit %ld < %ld\n",
-		     (long) benefit, (long) min_benefit);
+	  rvtt_refuse (RVTT_REF_RECORD_HOIST_BENEFIT, dump_file,
+		       "Not hoisting: record-hoist-benefit: modeled issue-side"
+		       " benefit %ld < %ld\n",
+		       (long) benefit, (long) min_benefit);
 	  return false;
 	}
       if (dump_file)
@@ -1992,12 +1984,11 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      synthetic zero-trip profitability loss.  */
   if (runtime_trips && record_completion_model)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "Not hoisting: record-hoist-completion-runtime-trips-unproven:"
-		 " completion-accurate shared model requires a proven trip count"
-		 " (loop %d)\n",
-		 loop->num);
+      rvtt_refuse (RVTT_REF_RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN, dump_file,
+		   "Not hoisting: record-hoist-completion-runtime-trips-unproven:"
+		   " completion-accurate shared model requires a proven trip count"
+		   " (loop %d)\n",
+		   loop->num);
       return false;
     }
 
@@ -2490,12 +2481,11 @@ hoist_lift_admit (basic_block preheader, bitmap dirty_bbs,
 
   if (!best)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "record-hoist-lift refused:"
-		 " record-hoist-lift-no-admissible-level:"
-		 " no oracle-clean admissible placement (walked %u"
-		 " level(s))\n", levels);
+      rvtt_refuse (RVTT_REF_RECORD_HOIST_LIFT_NO_ADMISSIBLE_LEVEL, dump_file,
+		   "record-hoist-lift refused:"
+		   " record-hoist-lift-no-admissible-level:"
+		   " no oracle-clean admissible placement (walked %u"
+		   " level(s))\n", levels);
       return false;
     }
 
@@ -2548,11 +2538,11 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	      fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
 		       bb->index);
 	      if (record_hoist)
-		fprintf (dump_file,
-			 "record-hoist refused: record-hoist-loop-shape:"
-			 " capture bb %d does not dominate the latch"
-			 " (conditional per-trip execution unpriced)\n",
-			 bb->index);
+		rvtt_refuse (RVTT_REF_RECORD_HOIST_LOOP_SHAPE, dump_file,
+			     "record-hoist refused: record-hoist-loop-shape:"
+			     " capture bb %d does not dominate the latch"
+			     " (conditional per-trip execution unpriced)\n",
+			     bb->index);
 	    }
 	  return nullptr;
 	}
@@ -2601,10 +2591,10 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		 later formation, so this refusal closes the only re-record
 		 path into the hoisted slots.  */
 	      if (record_hoist)
-		fprintf (dump_file,
-			 "record-hoist refused: record-hoist-loop-opaque:"
-			 " %s (insn %d)\n", audit_refusal,
-			 audit_insn ? INSN_UID (audit_insn) : -1);
+		rvtt_refuse (RVTT_REF_RECORD_HOIST_LOOP_OPAQUE, dump_file,
+			     "record-hoist refused: record-hoist-loop-opaque:"
+			     " %s (insn %d)\n", audit_refusal,
+			     audit_insn ? INSN_UID (audit_insn) : -1);
 	    }
 	  return nullptr;
 	}
@@ -2622,8 +2612,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	{
 	  fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
 	  if (record_hoist)
-	    fprintf (dump_file,
-		     "record-hoist refused: record-hoist-no-dedicated-preheader\n");
+	    rvtt_refuse (RVTT_REF_RECORD_HOIST_NO_DEDICATED_PREHEADER, dump_file,
+			 "record-hoist refused: record-hoist-no-dedicated-preheader\n");
 	}
       return nullptr;
     }
@@ -2635,8 +2625,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		   "Not hoisting: preheader bb %d may hold open recording"
 		   " state\n", preheader->index);
 	  if (record_hoist)
-	    fprintf (dump_file,
-		     "record-hoist refused: record-hoist-preheader-recording-open\n");
+	    rvtt_refuse (RVTT_REF_RECORD_HOIST_PREHEADER_RECORDING_OPEN, dump_file,
+			 "record-hoist refused: record-hoist-preheader-recording-open\n");
 	}
       return nullptr;
     }
@@ -2656,11 +2646,10 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	 pos != end; ++pos)
       if (!pos->empty && !fixed_replay_rtx_p (PATTERN (pos->insn)))
 	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "record-hoist refused: record-hoist-variant-encoding:"
-		     " payload insn %d is a run-time-composed word\n",
-		     INSN_UID (pos->insn));
+	  rvtt_refuse (RVTT_REF_RECORD_HOIST_VARIANT_ENCODING, dump_file,
+		       "record-hoist refused: record-hoist-variant-encoding:"
+		       " payload insn %d is a run-time-composed word\n",
+		       INSN_UID (pos->insn));
 	  return nullptr;
 	}
 
@@ -2705,16 +2694,15 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	      if (reform_mode
 		  && payload_contains_carried_p (block, seq.clones.front ()))
 		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "record-hoist refused:"
-			     " post-autoincr-window-carried-peel-"
-			     "launch-arithmetic-unproven:"
-			     " carried payload, first-trip peel would"
-			     " relocate carried executions to preheader"
-			     " bb %d (walk-order proof not in this"
-			     " increment)\n",
-			     preheader->index);
+		  rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_CARRIED_PEEL_LAUNCH_ARITHMETIC_UNPROVEN, dump_file,
+			       "record-hoist refused:"
+			       " post-autoincr-window-carried-peel-"
+			       "launch-arithmetic-unproven:"
+			       " carried payload, first-trip peel would"
+			       " relocate carried executions to preheader"
+			       " bb %d (walk-order proof not in this"
+			       " increment)\n",
+			       preheader->index);
 		}
 	      else if (riscv_tt_opt_record_hoist_peel > 0
 		       && peel_admissible_p (loop, preheader, block, seq,
@@ -2731,13 +2719,12 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 			     (unsigned long) (peel->trips - 1));
 		  break;
 		}
-	      if (dump_file)
-		fprintf (dump_file,
-			 "record-hoist refused:"
-			 " noexec-rerecord-dststore-composition-unaudited:"
-			 " Dst-store payload, preheader bb %d inside loop %d"
-			 " (the re-record sweep would un-hoist)\n",
-			 preheader->index, ph_loop->num);
+	      rvtt_refuse (RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED, dump_file,
+			   "record-hoist refused:"
+			   " noexec-rerecord-dststore-composition-unaudited:"
+			   " Dst-store payload, preheader bb %d inside loop %d"
+			   " (the re-record sweep would un-hoist)\n",
+			   preheader->index, ph_loop->num);
 	      return nullptr;
 	    }
     }
@@ -2785,16 +2772,15 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	  if (!(riscv_tt_opt_record_hoist_lift > 0
 		&& hoist_lift_admit (preheader, dirty_bbs, lift)))
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "record-hoist refused:"
-			 " record-hoist-downstream-fallback-unprofitable:"
-			 " hoisted no-exec record within the drained-frontend"
-			 " window of a would-be dst-autoincr mod-write row"
-			 " (distance %u < %u, preheader bb %d; the group guard"
-			 " would refuse and the mod-write falls back)\n",
-			 dist, rvtt_modwrite_drained_frontend_window (),
-			 preheader->index);
+	      rvtt_refuse (RVTT_REF_RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE, dump_file,
+			   "record-hoist refused:"
+			   " record-hoist-downstream-fallback-unprofitable:"
+			   " hoisted no-exec record within the drained-frontend"
+			   " window of a would-be dst-autoincr mod-write row"
+			   " (distance %u < %u, preheader bb %d; the group guard"
+			   " would refuse and the mod-write falls back)\n",
+			   dist, rvtt_modwrite_drained_frontend_window (),
+			   preheader->index);
 	      return nullptr;
 	    }
 	}
@@ -3209,22 +3195,20 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
   uint64_t niter;
   if (!provable_constant_trips (loop, preheader, &niter) || niter < 2)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "counted-capture-peel refused:"
-		 " counted-capture-peel-trips-unproven (loop %d)\n",
-		 loop->num);
+      rvtt_refuse (RVTT_REF_COUNTED_CAPTURE_PEEL_TRIPS_UNPROVEN, dump_file,
+		   "counted-capture-peel refused:"
+		   " counted-capture-peel-trips-unproven (loop %d)\n",
+		   loop->num);
       return false;
     }
   HOST_WIDE_INT trips = (HOST_WIDE_INT) niter;
   HOST_WIDE_INT eslots = exec_interlocked_slots (block, payload);
   if (eslots < 0)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "counted-capture-peel refused:"
-		 " replay-reissue-latency-unproved (loop %d)\n",
-		 loop->num);
+      rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED, dump_file,
+		   "counted-capture-peel refused:"
+		   " replay-reissue-latency-unproved (loop %d)\n",
+		   loop->num);
       return false;
     }
   HOST_WIDE_INT words = delivered_words (block, payload);
@@ -3251,11 +3235,10 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
 	     (long) benefit, (long) min_benefit);
   if (benefit < min_benefit)
     {
-      if (dump_file)
-	fprintf (dump_file,
-		 "counted-capture-peel refused:"
-		 " counted-capture-peel-benefit: modeled benefit %ld < %ld\n",
-		 (long) benefit, (long) min_benefit);
+      rvtt_refuse (RVTT_REF_COUNTED_CAPTURE_PEEL_BENEFIT, dump_file,
+		   "counted-capture-peel refused:"
+		   " counted-capture-peel-benefit: modeled benefit %ld < %ld\n",
+		   (long) benefit, (long) min_benefit);
       return false;
     }
   return true;
@@ -3327,14 +3310,14 @@ hoist_counted_loops (function *cfn,
 	  if (reform_mode
 	      && payload_contains_carried_p (info, seq.clones.front ()))
 	    {
-	      if (dump_file)
-		fprintf (dump_file,
-			 "counted-capture-peel refused:"
-			 " post-autoincr-window-carried-peel-"
-			 "launch-arithmetic-unproven:"
-			 " carried payload, first-trip peel would relocate"
-			 " carried executions to the preheader (loop %d)\n",
-			 loop->num);
+	      rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_CARRIED_PEEL_LAUNCH_ARITHMETIC_UNPROVEN,
+			   dump_file,
+			   "counted-capture-peel refused:"
+			   " post-autoincr-window-carried-peel-"
+			   "launch-arithmetic-unproven:"
+			   " carried payload, first-trip peel would relocate"
+			   " carried executions to the preheader (loop %d)\n",
+			   loop->num);
 	      continue;
 	    }
 	  if (!counted_peel_profitable_p (loop, preheader, info,
@@ -4339,12 +4322,11 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		      }
 		  if (carried)
 		    {
-		      if (dump_file)
-			fprintf (dump_file,
-				 "Not converting isomorphic run at insn %d:"
-				 " post-autoincr-window-carried-isomorphic-"
-				 "conversion-unproven (renamed delivery of a"
-				 " carried access)\n", INSN_UID (insn));
+		      rvtt_refuse (RVTT_REF_POST_AUTOINCR_WINDOW_CARRIED_ISOMORPHIC_CONVERSION_UNPROVEN, dump_file,
+				   "Not converting isomorphic run at insn %d:"
+				   " post-autoincr-window-carried-isomorphic-"
+				   "conversion-unproven (renamed delivery of a"
+				   " carried access)\n", INSN_UID (insn));
 		      insn = next;
 		      continue;
 		    }
@@ -5436,18 +5418,18 @@ crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
 	    }
 	  if (hazard)
 	    {
-	      if (dump_file)
-		fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-			 " counted-row-vacated-delay-shadow: the final"
-			 " order puts %s insn %d in insn %d's undischarged"
-			 " delay shadow (erratum consumer; SFPMAD.md"
-			 " stall-detection bug list)\n",
-			 plan.clones.front ().begin,
-			 plan.clones.front ().end,
-			 is_bridge ? "bridge for" : "dependent",
-			 is_bridge ? INSN_UID (blk.pos[order[prod]].insn)
-				   : INSN_UID (cinsn),
-			 INSN_UID (pinsn));
+	      rvtt_refuse (RVTT_REF_COUNTED_ROW_VACATED_DELAY_SHADOW, dump_file,
+			   "Refusing counted-row family [%u,%u):"
+			   " counted-row-vacated-delay-shadow: the final"
+			   " order puts %s insn %d in insn %d's undischarged"
+			   " delay shadow (erratum consumer; SFPMAD.md"
+			   " stall-detection bug list)\n",
+			   plan.clones.front ().begin,
+			   plan.clones.front ().end,
+			   is_bridge ? "bridge for" : "dependent",
+			   is_bridge ? INSN_UID (blk.pos[order[prod]].insn)
+				     : INSN_UID (cinsn),
+			   INSN_UID (pinsn));
 	      return false;
 	    }
 	}
@@ -5530,12 +5512,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
     return false;
   if (length > budget)
     {
-      if (dump_file)
-	fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		 " counted-row-slot-budget: residual %u exceeds the largest"
-		 " available replay span %u\n",
-		 plan.clones.front ().begin, plan.clones.front ().end,
-		 length, budget);
+      rvtt_refuse (RVTT_REF_COUNTED_ROW_SLOT_BUDGET, dump_file,
+		   "Refusing counted-row family [%u,%u):"
+		   " counted-row-slot-budget: residual %u exceeds the largest"
+		   " available replay span %u\n",
+		   plan.clones.front ().begin, plan.clones.front ().end,
+		   length, budget);
       return false;
     }
 
@@ -5559,12 +5541,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	xtt_multiresult_group group;
 	if (rvtt_multiresult_group (insn, e, &group))
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		       " counted-row-residual-not-uniform: member %u is a"
-		       " multi-result instruction\n",
-		       plan.clones.front ().begin,
-		       plan.clones.front ().end, m);
+	    rvtt_refuse (RVTT_REF_COUNTED_ROW_RESIDUAL_NOT_UNIFORM, dump_file,
+			 "Refusing counted-row family [%u,%u):"
+			 " counted-row-residual-not-uniform: member %u is a"
+			 " multi-result instruction\n",
+			 plan.clones.front ().begin,
+			 plan.clones.front ().end, m);
 	    return false;
 	  }
 	// Rename planning (seed_def_reg below and the clone definition
@@ -5575,22 +5557,22 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	// asserting.
 	if (popcount_hwi (mp.defs) > 1)
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		       " counted-row-multidef-member: member %u defines"
-		       " multiple registers\n",
-		       plan.clones.front ().begin,
-		       plan.clones.front ().end, m);
+	    rvtt_refuse (RVTT_REF_COUNTED_ROW_MULTIDEF_MEMBER, dump_file,
+			 "Refusing counted-row family [%u,%u):"
+			 " counted-row-multidef-member: member %u defines"
+			 " multiple registers\n",
+			 plan.clones.front ().begin,
+			 plan.clones.front ().end, m);
 	    return false;
 	  }
 	if (sticky && (e.lreg_write & 0xF))
 	  {
-	    if (dump_file)
-	      fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		       " shadow-state-unproved: member %u writes the value"
-		       " bank under possibly-enabled index tracking\n",
-		       plan.clones.front ().begin,
-		       plan.clones.front ().end, m);
+	    rvtt_refuse (RVTT_REF_SHADOW_STATE_UNPROVED, dump_file,
+			 "Refusing counted-row family [%u,%u):"
+			 " shadow-state-unproved: member %u writes the value"
+			 " bank under possibly-enabled index tracking\n",
+			 plan.clones.front ().begin,
+			 plan.clones.front ().end, m);
 	    return false;
 	  }
       }
@@ -5637,11 +5619,11 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	}
       if (iter == iter_limit)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		     " counted-row-map-live-out: chain closure did not"
-		     " converge\n", plan.clones.front ().begin,
-		     plan.clones.front ().end);
+	  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+		       "Refusing counted-row family [%u,%u):"
+		       " counted-row-map-live-out: chain closure did not"
+		       " converge\n", plan.clones.front ().begin,
+		       plan.clones.front ().end);
 	  return false;
 	}
 
@@ -5720,11 +5702,11 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 				   map))
 		{
 		  drop_clone = int (c);
-		  if (dump_file)
-		    fprintf (dump_file, "Dropping counted-row clone"
-			     " [%u,%u): counted-row-residual-not-uniform:"
-			     " diverges at member %u\n",
-			     plan.clones[c].begin, plan.clones[c].end, m);
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RESIDUAL_NOT_UNIFORM, dump_file,
+			       "Dropping counted-row clone"
+			       " [%u,%u): counted-row-residual-not-uniform:"
+			       " diverges at member %u\n",
+			       plan.clones[c].begin, plan.clones[c].end, m);
 		  break;
 		}
 
@@ -5765,12 +5747,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 			    }
 			}
 		      drop_clone = int (c);
-		      if (dump_file)
-			fprintf (dump_file, "Dropping counted-row clone"
-				 " [%u,%u): counted-row-map-live-out:"
-				 " live-in value in r%u cannot move to"
-				 " r%u\n", plan.clones[c].begin,
-				 plan.clones[c].end, t, s);
+		      rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+				   "Dropping counted-row clone"
+				   " [%u,%u): counted-row-map-live-out:"
+				   " live-in value in r%u cannot move to"
+				   " r%u\n", plan.clones[c].begin,
+				   plan.clones[c].end, t, s);
 		      break;
 		    }
 		  // Unrenameable live-in: bridge with one all-lanes move,
@@ -5785,13 +5767,13 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  if (used_later && (seed_writes & crf_reg_bit (t)))
 		    {
 		      drop_clone = int (c);
-		      if (dump_file)
-			fprintf (dump_file, "Dropping counted-row clone"
-				 " [%u,%u): counted-row-bridge-clobber:"
-				 " r%u is written by the recorded program"
-				 " but consumed after the clone\n",
-				 plan.clones[c].begin,
-				 plan.clones[c].end, t);
+		      rvtt_refuse (RVTT_REF_COUNTED_ROW_BRIDGE_CLOBBER, dump_file,
+				   "Dropping counted-row clone"
+				   " [%u,%u): counted-row-bridge-clobber:"
+				   " r%u is written by the recorded program"
+				   " but consumed after the clone\n",
+				   plan.clones[c].begin,
+				   plan.clones[c].end, t);
 		      break;
 		    }
 		  plan.bridges[c].emplace_back (s, t);
@@ -5825,27 +5807,27 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      if (v.fixed || v.poisoned || v.live_out)
 			{
 			  drop_clone = int (c);
-			  if (dump_file)
-			    fprintf (dump_file, "Dropping counted-row"
-				     " clone [%u,%u):"
-				     " counted-row-map-live-out: pinned or"
-				     " live-out definition of r%u at"
-				     " member %u\n", plan.clones[c].begin,
-				     plan.clones[c].end, v.reg, m);
+			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+				       "Dropping counted-row"
+				       " clone [%u,%u):"
+				       " counted-row-map-live-out: pinned or"
+				       " live-out definition of r%u at"
+				       " member %u\n", plan.clones[c].begin,
+				       plan.clones[c].end, v.reg, m);
 			  break;
 			}
 		      int rr = plan_rename (vd, want);
 		      if (rr != 1)
 			{
 			  drop_clone = int (c);
-			  if (dump_file)
-			    fprintf (dump_file, "Dropping counted-row"
-				     " clone [%u,%u):"
-				     " counted-row-map-live-out:"
-				     " definition of r%u at member %u"
-				     " cannot move to r%u\n",
-				     plan.clones[c].begin,
-				     plan.clones[c].end, v.reg, m, want);
+			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+				       "Dropping counted-row"
+				       " clone [%u,%u):"
+				       " counted-row-map-live-out:"
+				       " definition of r%u at member %u"
+				       " cannot move to r%u\n",
+				       plan.clones[c].begin,
+				       plan.clones[c].end, v.reg, m, want);
 			  break;
 			}
 		    }
@@ -5865,12 +5847,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	    gcc_assert (vd >= 0);
 	    if (plan_rename (vd, sr.second) != 1)
 	      {
-		if (dump_file)
-		  fprintf (dump_file, "Refusing counted-row family"
-			   " [%u,%u): counted-row-map-live-out: seed chain"
-			   " closure needs an unrenameable value\n",
-			   plan.clones.front ().begin,
-			   plan.clones.front ().end);
+		rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+			     "Refusing counted-row family"
+			     " [%u,%u): counted-row-map-live-out: seed chain"
+			     " closure needs an unrenameable value\n",
+			     plan.clones.front ().begin,
+			     plan.clones.front ().end);
 		return false;
 	      }
 	  }
@@ -5978,25 +5960,25 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		    {
 		      if (unsigned (cc) == ref)
 			{
-			  if (dump_file)
-			    fprintf (dump_file, "Refusing counted-row"
-				     " family [%u,%u):"
-				     " counted-row-excluded-member-"
-				     "unmovable: insn %d cannot reach its"
-				     " consumer clone\n",
-				     plan.clones.front ().begin,
-				     plan.clones.front ().end,
-				     INSN_UID (blk.pos[pos].insn));
+			  rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
+				       "Refusing counted-row"
+				       " family [%u,%u):"
+				       " counted-row-excluded-member-"
+				       "unmovable: insn %d cannot reach its"
+				       " consumer clone\n",
+				       plan.clones.front ().begin,
+				       plan.clones.front ().end,
+				       INSN_UID (blk.pos[pos].insn));
 			  return false;
 			}
-		      if (dump_file)
-			fprintf (dump_file, "Dropping counted-row clone"
-				 " [%u,%u):"
-				 " counted-row-excluded-member-unmovable:"
-				 " insn %d cannot reach its consumer"
-				 " clone\n", plan.clones[cc].begin,
-				 plan.clones[cc].end,
-				 INSN_UID (blk.pos[pos].insn));
+		      rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
+				   "Dropping counted-row clone"
+				   " [%u,%u):"
+				   " counted-row-excluded-member-unmovable:"
+				   " insn %d cannot reach its consumer"
+				   " clone\n", plan.clones[cc].begin,
+				   plan.clones[cc].end,
+				   INSN_UID (blk.pos[pos].insn));
 		      drop_clone = cc;
 		      moves_ok = false;
 		      break;
@@ -6024,14 +6006,14 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      {
 			if (c == ref)
 			  return false;
-			if (dump_file)
-			  fprintf (dump_file, "Dropping counted-row clone"
-				   " [%u,%u):"
-				   " counted-row-excluded-member-"
-				   "unmovable: insn %d cannot move past"
-				   " the tail\n", plan.clones[c].begin,
-				   plan.clones[c].end,
-				   INSN_UID (blk.pos[pos].insn));
+			rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
+				     "Dropping counted-row clone"
+				     " [%u,%u):"
+				     " counted-row-excluded-member-"
+				     "unmovable: insn %d cannot move past"
+				     " the tail\n", plan.clones[c].begin,
+				     plan.clones[c].end,
+				     INSN_UID (blk.pos[pos].insn));
 			drop_clone = int (c);
 			moves_ok = false;
 		      }
@@ -6097,12 +6079,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  src = plan.rename_source[v];
 	      if (src >= 0 && unsigned (src) != ref)
 		{
-		  if (dump_file)
-		    fprintf (dump_file, "Dropping counted-row clone"
-			     " [%u,%u): counted-row-rename-interference:"
-			     " unresolvable occupancy conflict\n",
-			     plan.clones[src].begin,
-			     plan.clones[src].end);
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+			       "Dropping counted-row clone"
+			       " [%u,%u): counted-row-rename-interference:"
+			       " unresolvable occupancy conflict\n",
+			       plan.clones[src].begin,
+			       plan.clones[src].end);
 		  drop_clone = src;
 		}
 	      break;
@@ -6143,13 +6125,14 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	    {
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "Refusing counted-row family"
-			   " [%u,%u): counted-row-final-lockstep-"
-			   "divergence: member %u of clone %u diverges"
-			   " from the seed under the final register"
-			   " assignment\n",
-			   plan.clones.front ().begin,
-			   plan.clones.front ().end, m, c);
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_FINAL_LOCKSTEP_DIVERGENCE, dump_file,
+			       "Refusing counted-row family"
+			       " [%u,%u): counted-row-final-lockstep-"
+			       "divergence: member %u of clone %u diverges"
+			       " from the seed under the final register"
+			       " assignment\n",
+			       plan.clones.front ().begin,
+			       plan.clones.front ().end, m, c);
 		  fprintf (dump_file, "  seed (ref %u):  ", ref);
 		  print_rtl_single (dump_file, blk.pos[spos].insn);
 		  fprintf (dump_file, "  clone %u: ", c);
@@ -6341,11 +6324,12 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 		}
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "Refusing counted-row family"
-			   " [%u,%u): counted-row-rename-interference:"
-			   " two values occupy r%u:\n",
-			   plan.clones.front ().begin,
-			   plan.clones.front ().end, SFPU_REG_FIRST + r);
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+			       "Refusing counted-row family"
+			       " [%u,%u): counted-row-rename-interference:"
+			       " two values occupy r%u:\n",
+			       plan.clones.front ().begin,
+			       plan.clones.front ().end, SFPU_REG_FIRST + r);
 		  for (auto const &e : iv)
 		    fprintf (dump_file, "    val %d [%ld,%ld] def insn %d"
 			     " orig r%u\n", e.val, e.start, e.end,
@@ -6391,12 +6375,12 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
       if (blk.pos[pos].cc_write && time[pos] >= 0
 	  && 2L * time[pos] >= wmin && 2L * time[pos] <= wmax)
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		     " counted-row-lane-state: CC write (insn %d) inside"
-		     " the rewritten window\n", plan.clones.front ().begin,
-		     plan.clones.front ().end,
-		     INSN_UID (blk.pos[pos].insn));
+	  rvtt_refuse (RVTT_REF_COUNTED_ROW_LANE_STATE, dump_file,
+		       "Refusing counted-row family [%u,%u):"
+		       " counted-row-lane-state: CC write (insn %d) inside"
+		       " the rewritten window\n", plan.clones.front ().begin,
+		       plan.clones.front ().end,
+		       INSN_UID (blk.pos[pos].insn));
 	  return false;
 	}
 
@@ -6480,11 +6464,11 @@ crf_apply (crf_block &blk, crf_plan &plan)
 
   if (!apply_change_group ())
     {
-      if (dump_file)
-	fprintf (dump_file, "Refusing counted-row family [%u,%u):"
-		 " counted-row-rename-constraint: a rewritten instruction"
-		 " failed re-recognition\n", plan.clones.front ().begin,
-		 plan.clones.front ().end);
+      rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_CONSTRAINT, dump_file,
+		   "Refusing counted-row family [%u,%u):"
+		   " counted-row-rename-constraint: a rewritten instruction"
+		   " failed re-recognition\n", plan.clones.front ().begin,
+		   plan.clones.front ().end);
       return false;
     }
 
@@ -6739,12 +6723,12 @@ canonicalize_counted_rows (function *cfn,
 		}
 	      if (touches_frozen)
 		{
-		  if (dump_file)
-		    fprintf (dump_file, "Refusing counted-row family"
-			     " [%u,%u): counted-row-rename-interference:"
-			     " rewrite touches an already-canonicalized"
-			     " family\n", plan.clones.front ().begin,
-			     plan.clones.front ().end);
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+			       "Refusing counted-row family"
+			       " [%u,%u): counted-row-rename-interference:"
+			       " rewrite touches an already-canonicalized"
+			       " family\n", plan.clones.front ().begin,
+			       plan.clones.front ().end);
 		  continue;
 		}
 	      if (dump_file)
@@ -7143,22 +7127,25 @@ unhoist_hazard_rerecords (function *cfn)
       if (dump_file)
 	{
 	  if (dststore_rule)
-	    fprintf (dump_file, "Replay refusal: noexec-rerecord-dststore-"
-		     "composition-unaudited (capture bb %d in loop %d "
-		     "un-hoisted, %u launches inlined)\n",
-		     bb->index, loop->num, launches);
+	    rvtt_refuse (RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED, dump_file,
+			 "Replay refusal: noexec-rerecord-dststore-"
+			 "composition-unaudited (capture bb %d in loop %d "
+			 "un-hoisted, %u launches inlined)\n",
+			 bb->index, loop->num, launches);
 	  else if (modwrite_rule)
-	    fprintf (dump_file, "Replay refusal: noexec-record-modwrite-"
-		     "window-unaudited (capture bb %d %u issue words after "
-		     "an audited mod-write, window %u; un-hoisted, "
-		     "%u launches inlined)\n",
-		     bb->index, modwrite_dist, window, launches);
+	    rvtt_refuse (RVTT_REF_NOEXEC_RECORD_MODWRITE_WINDOW_UNAUDITED, dump_file,
+			 "Replay refusal: noexec-record-modwrite-"
+			 "window-unaudited (capture bb %d %u issue words after "
+			 "an audited mod-write, window %u; un-hoisted, "
+			 "%u launches inlined)\n",
+			 bb->index, modwrite_dist, window, launches);
 	  else
-	    fprintf (dump_file, "Replay refusal: noexec-record-dststore-"
-		     "nondominating-launch-persist-unaudited (capture bb %d "
-		     "does not dominate all %u launches of its span; "
-		     "un-hoisted, %u launches inlined)\n",
-		     bb->index, (unsigned) launch_insns.size (), launches);
+	    rvtt_refuse (RVTT_REF_NOEXEC_RECORD_DSTSTORE_NONDOMINATING_LAUNCH_PERSIST_UNAUDITED, dump_file,
+			 "Replay refusal: noexec-record-dststore-"
+			 "nondominating-launch-persist-unaudited (capture bb %d "
+			 "does not dominate all %u launches of its span; "
+			 "un-hoisted, %u launches inlined)\n",
+			 bb->index, (unsigned) launch_insns.size (), launches);
 	}
     }
   if (dom_info_available_p (CDI_DOMINATORS))
@@ -7566,13 +7553,12 @@ transform (function *cfn, unsigned buffer_size)
 	    {
 	      if (reform_mode)
 		{
-		  if (dump_file)
-		    fprintf (dump_file,
-			     "window-sizing refused:"
-			     " window-sizing-reform-composition-unaudited:"
-			     " widening a re-formation pick would need the"
-			     " carried launch-arithmetic audit re-derived for"
-			     " the partial trim; keeping the picked window\n");
+		  rvtt_refuse (RVTT_REF_WINDOW_SIZING_REFORM_COMPOSITION_UNAUDITED, dump_file,
+			       "window-sizing refused:"
+			       " window-sizing-reform-composition-unaudited:"
+			       " widening a re-formation pick would need the"
+			       " carried launch-arithmetic audit re-derived for"
+			       " the partial trim; keeping the picked window\n");
 		}
 	      else if (replay_sequence *wide
 		       = window_sizing_widen (active, seq, info,
@@ -7594,14 +7580,13 @@ transform (function *cfn, unsigned buffer_size)
 		  else
 		    {
 		      trim_len = trim_end = 0;
-		      if (dump_file)
-			fprintf (dump_file,
-				 "window-sizing refused:"
-				 " window-sizing-hoist-refused: widened"
-				 " window [%u,+%u) does not re-prove the"
-				 " hoist admission; keeping the picked"
-				 " window\n",
-				 wide->clones.front ().begin, wide->length);
+		      rvtt_refuse (RVTT_REF_WINDOW_SIZING_HOIST_REFUSED, dump_file,
+				   "window-sizing refused:"
+				   " window-sizing-hoist-refused: widened"
+				   " window [%u,+%u) does not re-prove the"
+				   " hoist admission; keeping the picked"
+				   " window\n",
+				   wide->clones.front ().begin, wide->length);
 		    }
 		}
 	    }

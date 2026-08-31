@@ -287,7 +287,8 @@ refuse (const char *reason, tree fn, gimple *stmt)
   rvtt_refusal_fire_by_name (reason, stmt);
   if (dump_file)
     {
-      fprintf (dump_file, "crosscall-hoist: refused (%s)", reason);
+      rvtt_refuse_by_name (reason, dump_file,
+			   "crosscall-hoist: refused (%s)", reason);
       if (fn)
 	fprintf (dump_file, " in %s", IDENTIFIER_POINTER (DECL_NAME (fn)));
       if (stmt)
@@ -2506,8 +2507,9 @@ discover_config_prefix (function *fn,
 	    {
 	      if (dump_file)
 		{
-		  fprintf (dump_file, "crosscall-hoist: config pair "
-			   "unqualified (crosscall-config-dest-unproven): ");
+		  rvtt_refuse (RVTT_REF_CROSSCALL_CONFIG_DEST_UNPROVEN, dump_file,
+			       "crosscall-hoist: config pair "
+			       "unqualified (crosscall-config-dest-unproven): ");
 		  print_gimple_stmt (dump_file, write, 0, TDF_NONE);
 		}
 	      continue;
@@ -2565,9 +2567,9 @@ discover_config_prefix (function *fn,
       }
   if (!unique)
     {
-      if (dump_file)
-	fprintf (dump_file, "crosscall-hoist: config pairs dropped "
-		 "(crosscall-config-writer-unproven)\n");
+      rvtt_refuse (RVTT_REF_CROSSCALL_CONFIG_WRITER_UNPROVEN, dump_file,
+		   "crosscall-hoist: config pairs dropped "
+		   "(crosscall-config-writer-unproven)\n");
       pairs->truncate (0);
       return;
     }
@@ -2581,9 +2583,9 @@ discover_config_prefix (function *fn,
     for (const config_prefix_entry &p : *pairs)
       if (!dominated_by_p (CDI_DOMINATORS, e->src, gimple_bb (p.write)))
 	{
-	  if (dump_file)
-	    fprintf (dump_file, "crosscall-hoist: config pairs dropped "
-		     "(crosscall-config-shape-unproven)\n");
+	  rvtt_refuse (RVTT_REF_CROSSCALL_CONFIG_SHAPE_UNPROVEN, dump_file,
+		       "crosscall-hoist: config pairs dropped "
+		       "(crosscall-config-shape-unproven)\n");
 	  pairs->truncate (0);
 	  return;
 	}
@@ -3211,9 +3213,8 @@ public:
   {
     if (TARGET_XTT_TENSIX_QSR)
       {
-	if (dump_file)
-	  fprintf (dump_file,
-		   "crosscall-hoist: refused (qsr-unproven)\n");
+	rvtt_refuse (RVTT_REF_QSR_UNPROVEN, dump_file,
+		     "crosscall-hoist: refused (qsr-unproven)\n");
 	return 0;
       }
     /* TU facts first, while every body is still gimple (the
@@ -3510,7 +3511,8 @@ init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
   ctx->why_stmt = stmt;
   if (dump_file)
     {
-      fprintf (dump_file, "init-hoist: refused (%s)", why);
+      rvtt_refuse_by_name (why, dump_file,
+			   "init-hoist: refused (%s)", why);
       if (stmt)
 	{
 	  fprintf (dump_file, ": ");
