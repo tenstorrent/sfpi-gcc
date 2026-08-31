@@ -857,6 +857,10 @@ mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
 Default-off licensing half-key for value-changing floating-point reassociation in the Tensix SFPU passes (accumulation-chain rebalancing, multi-use MUL+ADD->SFPMAD fusion): a reassociating FP transform fires ONLY when -fassociative-math is ALSO given (the explicit industry opt-in that licenses changed rounding; owner ratification 2026-08-21); with either flag absent every site refuses by name and codegen is byte-identical.  Every reassociating site prints a named reassoc: dump line.  Integer/bitwise chain rebalancing under this flag alone is value-identical (mod-2^32 and bitwise associativity) and is separately labeled in dumps; it needs no FP license.
 
+mtt-tensix-optimize-reassoc-loop-carried
+Target Var(riscv_tt_opt_reassoc_loop_carried) Init(0)
+Default-off licensed derivation for the loop-carried arm of the Tensix SFPU reassociation vocabulary (FABLE_GOES_BURR item #8; the reassoc license lineage, owner ratification 2026-08-21): a loop-carried FP accumulation chain (header PHI cycling through plain SFPADD/SFPMAD links) is split into P round-robin partial accumulators initialized to the +0.0 identity and reduced by a balanced tree after the loop, cutting the recurrence bound by P; the value-change class is re-association order only (identity legality included: -0.0 + x vs x is exactly the divergence class the FP license ratifies).  An FP split fires ONLY when -fassociative-math is ALSO given (the same two-key wall as -mtt-tensix-optimize-reassoc); with this flag absent the standing reassoc-loop-carried-underived refusal continues byte-identically, and every non-fitting candidate under the flag refuses by name (reassoc-partials-*).
+
 mtt-tensix-optimize-lreg-rename
 Target Var(riscv_tt_opt_lreg_rename) Init(0)
 Rename storage-colliding invariant-input LREG chains inside capturable rows to a proven-free register so the audited stall-fill mechanisms stop refusing them; every unproven case refuses by name.

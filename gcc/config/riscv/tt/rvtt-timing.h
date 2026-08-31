@@ -143,6 +143,45 @@ adjacent_stall (bool dependent, int producer_latency)
 }
 
 /* ------------------------------------------------------------------
+   Loop-carried accumulator splitting arithmetic (FABLE item #8).
+
+   A loop-carried associative chain of K links per iteration, each
+   link WORDS issue slots with audited result latency LAT, has the
+   serial recurrence bound K * (WORDS + LAT) slots per iteration
+   (every link waits for the previous link's writeback).  Split into P
+   round-robin partial accumulators the recurrence bound becomes
+   ceil(K/P) * (WORDS + LAT), floored by the issue bound K * WORDS.
+   Pure data-in/data-out: the caller reads WORDS/LAT once at its
+   audited seam (rvtt_builtin_result_latency) and admits only audited
+   values.  */
+
+/* Smallest split factor that makes the recurrence issue-bound:
+   ceil((WORDS + LAT) / WORDS).  -1 refuses on an unaudited latency.  */
+
+inline int
+accum_split_factor (int words, int producer_latency)
+{
+  if (producer_latency < 0 || words <= 0)
+    return -1;
+  return (words + producer_latency + words - 1) / words;
+}
+
+/* Modeled recurrence-bound slots per iteration saved by splitting the
+   K-link chain into P partials: serial bound minus the split bound
+   (itself floored by the issue bound).  <= 0 = unprofitable.  */
+
+inline int64_t
+accum_split_saving (int64_t k, int64_t p, int64_t words, int64_t lat)
+{
+  if (k <= 0 || p <= 0 || words <= 0 || lat < 0)
+    return 0;
+  int64_t serial = k * (words + lat);
+  int64_t split = (k + p - 1) / p * (words + lat);
+  int64_t issue = k * words;
+  return serial - (split > issue ? split : issue);
+}
+
+/* ------------------------------------------------------------------
    Linear/cyclic region issue-timeline model.
 
    One issued node: WORDS issue slots occupied (multi-word instructions

@@ -71,6 +71,17 @@ extern int rvtt_no_increment_address_mode ();
 struct rvtt_insn_data;
 extern xtt_subunit_t rvtt_builtin_subunit (const rvtt_insn_data *);
 
+/* Gimple-level access to the audited result latency of the late RTL
+   pattern a builtin resolves to (the same scratch-code attribute seam
+   as rvtt_builtin_subunit): the encoded `xtt_result_latency' minus the
+   +1 bias, so 0 = same-slot chaining and -1 = UNAUDITED (the refusing
+   default, also returned for unlisted builtins).  Only builtins whose
+   late pattern carries a constant (operand-free) latency attribute are
+   listed in the map; the timing semantics consuming this value live in
+   rvtt-timing.h (item #11 discipline: facts read once at the consumer
+   seam, math in the engine).  */
+extern int rvtt_builtin_result_latency (const rvtt_insn_data *);
+
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 
