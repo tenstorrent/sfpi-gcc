@@ -1,0 +1,57 @@
+cc-narrowing-writers — audited-narrowing certificate for the raw typed
+CC writers admitted into the CC-restore containment fact by
+-mtt-tensix-optimize-cc-region-general (FABLE_GOES_BURR R2 widening 1;
+gimple-rvtt-invariant.cc cc_narrowing_modifier_p).
+
+OBLIGATION.  A modifier is NARROWING when a lane disabled before the
+write is still disabled after it: enable_out subset-of enable_in,
+pointwise per lane, for every operand value.  (The containment fact the
+invariant pass needs: the enable set at an in-region candidate is a
+subset of the region entry's.)
+
+FORM.  This is a STRUCTURAL certificate, not a value sweep: for every
+writer below, the pinned simulator computes its per-lane flag decision
+strictly inside `for_each_lane (mask)` where
+`mask = p_tensix->cc_en ? p_tensix->cc : 0xFFFFFFFF` -- a lane outside
+the current enable mask is never visited, so its enable bit cannot
+change, for EVERY operand value; the per-lane decision only chooses
+between `cc |= bit` and `cc &= ~bit` on visited lanes.  A 2^32 value
+sweep would exercise only the visited-lane decision, which the
+obligation does not constrain; the disabled-lane case is a two-row
+truth table decided by the loop guard.  The certificate is therefore
+the file:line audit of that guard per writer.
+
+Oracle provenance: craq-sim pinned @ 9f324140, src/tensix.cpp:
+
+  writer         guard (mask defn + for_each_lane)   flag writes
+  SFPEXEXP       8845-8892 (mask 8851, loop 8852)    8859/8861/8865/8867
+  SFPIADD        8894-8967 (masked loop)             8912/8914/8918/8920
+  SFPSETCC       8969-9000 (mask 8975, loop 8976)    8991/8993   [already admitted]
+  SFPLZ          9106-9135 (masked loop)             9121/9123
+  SFPLE  SET_CC  10210-10235 (mask 10215, loop)      10222/10224
+  SFPGT  SET_CC  10236-10261 (mask 10241, loop)      10248/10250
+  SFPLOADMACRO-embedded IADD 11395-11420 (loop 11400) 11411/11413 [not a
+    typed gimple statement; recorded for completeness]
+
+  SFPCOMPC       9458-9477: with a save on the stack,
+                 cc = cc_stack[top] & ~cc -- capped by the SAVED set
+                 (the region entry), hence narrowing IN-REGION; with an
+                 EMPTY stack, cc = cc_en ? ~cc : 0 -- a full ambient
+                 complement, NOT narrowing.  The restore proof only
+                 consults the fact at in-region positions (depth > 0,
+                 where the save exists); depth-0 writers refuse
+                 separately (cc-restore-ambient-cc-write).
+
+  SFPENCC        9437-9456: assigns cc / cc_en outright (can ENABLE
+                 lanes).  NOT narrowing; deliberately excluded.
+
+LICENSES.  The riscv_tt_opt_cc_region_general arm of
+cc_narrowing_modifier_p (sfpgt/sfpgt_lv/sfple/sfple_lv/sfpexexp/
+sfpexexp_lv/sfplz/sfplz_lv/sfpiadd_v/sfpiadd_v_lv/sfpiadd_i/
+sfpiadd_i_lv), and the STMT_CC_OTHER (vocabulary-external, in-frame)
+admission of rvtt_cc_region_tree::loop_cc_ambient_preserving_p
+(rvtt-cc-region.cc) -- both lean on exactly this guard discipline.
+Retire those arms if any listed writer's simulator semantics stop
+visiting lanes through the enable-masked for_each_lane.
+
+laneKL 2026-08-31.

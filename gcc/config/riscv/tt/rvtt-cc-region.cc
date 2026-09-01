@@ -58,6 +58,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "rvtt.h"
 #include "rvtt-macro-ownership.h"
+#include "rvtt-mop-derive.h"
+#include "rvtt-raw-boundary.h"
 #include "rvtt-cc-region.h"
 
 /* Architectural CC-stack depth (frames).  */
@@ -868,6 +870,89 @@ rvtt_cc_region_tree::ambient_preserving_fold_p () const
   if (!m_root->refinements.is_empty ())
     return false;
   return true;
+}
+
+/* See rvtt-cc-region.h: the loop-scoped R2 carry.  */
+
+bool
+rvtt_cc_region_tree::loop_cc_ambient_preserving_p (class loop *loop) const
+{
+  bool ok = true;
+  basic_block *body = get_loop_body (loop);
+  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
+	 !gsi_end_p (gsi) && ok; gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	stmt_cc_kind kind = classify_stmt (stmt);
+	if (kind == STMT_CC_NONE)
+	  continue;
+	rvtt_cc_region **slot = m_map->get (stmt);
+	rvtt_cc_region *r = slot ? *slot : nullptr;
+	if (!r || !structured_p (r))
+	  {
+	    /* Unmapped CC word (broken block, drain join) or an
+	       unproven frame.  */
+	    ok = false;
+	    break;
+	  }
+	switch (kind)
+	  {
+	  case STMT_CC_PUSHC:
+	    /* Balanced-open discipline is the dataflow's; a frame
+	       left open across the backedge is a join inconsistency
+	       and never maps.  */
+	    break;
+	  case STMT_CC_POPC:
+	    /* The restored save must have been taken inside the
+	       loop: popping an outside save rewinds past the entry
+	       state.  */
+	    if (!r->entry
+		|| !flow_bb_inside_loop_p (loop, gimple_bb (r->entry)))
+	      ok = false;
+	    break;
+	  case STMT_CC_REFINE:
+	  case STMT_CC_OTHER:
+	    /* Narrowing relative to the enclosing frame entry
+	       (pinned-sim for_each_lane discipline; COMPC caps at the
+	       frame's save).  At the ambient depth there is no save
+	       to cap against: fail closed.  */
+	    if (r == m_root)
+	      ok = false;
+	    break;
+	  case STMT_CC_ENCC:
+	    /* Can widen beyond the entry ambient; the all-lanes form
+	       included (the entry ambient is not proven all-lanes
+	       here).  */
+	    ok = false;
+	    break;
+	  case STMT_CC_OPAQUE:
+	    /* A raw `.ttinsn' constant word whose audited class is
+	       CC-INERT (rvtt-raw-boundary.cc: never touches the
+	       lane-enable state in any architectural arm) is
+	       CC-transparent for this fact; the consumer's own word
+	       verdicts still audit its every other effect.  The
+	       ALL_LANES class (canonical all-lanes SFPENCC /
+	       LaneConfig reset) is a WIDENING here -- the entry
+	       ambient is not proven all-lanes -- and refuses with
+	       everything unproven.  Foreign calls stay opaque.  */
+	    {
+	      gasm *a = dyn_cast <gasm *> (stmt);
+	      uint32_t w;
+	      if (!a || !rvtt_raw_ttinsn_word_p (a, &w)
+		  || rvtt_raw_cc_word_class (w) != RVTT_RAW_CC_INERT)
+		ok = false;
+	    }
+	    break;
+	  case STMT_CC_BREAKER:
+	    ok = false;
+	    break;
+	  case STMT_CC_NONE:
+	    break;
+	  }
+      }
+  free (body);
+  return ok;
 }
 
 /* See rvtt-cc-region.h.  */

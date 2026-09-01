@@ -146,6 +146,9 @@ RVTT_REFUSAL (CCMASK_OPERAND_FORM,
 RVTT_REFUSAL (CCMASK_REGION_FOREIGN_STMT,
   "ccmask-region-foreign-stmt",
   "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_REGION_LAYOUT_UNPROVEN,
+  "ccmask-region-layout-unproven",
+  "stage-B tree-keyed matcher (laneKL, FABLE #14 stage B): the frame's structure statements lack a proven pairwise execution order (same-block order or block dominance), so the mask at the assign is not the chain's")
 RVTT_REFUSAL (CCMASK_REGION_OPEN_CFG,
   "ccmask-region-open-cfg",
   "reason; first seen in gimple-rvtt-ccmask.cc")
@@ -314,6 +317,12 @@ RVTT_REFUSAL (CROSSCALL_CONSUMER_NOT_PINNED,
 RVTT_REFUSAL (CROSSLOOP_CALLER_UNROOTED,
   "crossloop-caller-unrooted",
   "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_CC_AMBIENT_UNPROVEN,
+  "crossloop-cc-ambient-unproven",
+  "R2 stage-B widening (laneKL): -mtt-tensix-optimize-cc-region-general was live but the CC-region tree could not prove the crossed loop's CC activity ambient-preserving-and-narrowing (unmapped CC word, unstructured frame, outside-save popc, SFPENCC, ambient-depth write, or opaque statement)")
+RVTT_REFUSAL (CROSSLOOP_CC_ATOM_UNPROVEN,
+  "crossloop-cc-atom-unproven",
+  "reason; first seen in gimple-rvtt-crosscall.cc (lane HR cc-immaterial discipline; row backfilled by laneKL)")
 RVTT_REFUSAL (CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED,
   "crossloop-cc-peel-consumer-unaudited",
   "dump; first seen in gimple-rvtt-prgm-const.cc")

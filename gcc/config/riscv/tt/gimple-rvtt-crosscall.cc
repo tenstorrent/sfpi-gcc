@@ -278,6 +278,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
 #include "rvtt-ipa-summary.h"
+#include "rvtt-cc-region.h"
 
 namespace {
 
@@ -1878,6 +1879,21 @@ struct scan_ctx
 				   its parked constant-register state is
 				   out of any CC write's reach; every
 				   other discipline is unchanged        */
+  bool cc_ambient_ok = false;	/* -mtt-tensix-optimize-cc-region-general
+				   (FABLE_GOES_BURR R2): the scanned
+				   loop's CC activity is CC-region-tree
+				   proven ambient-preserving-and-
+				   narrowing (rvtt-cc-region.h,
+				   loop_cc_ambient_preserving_p) -- the
+				   enable set at every in-loop point is
+				   a subset of the lifted entry's
+				   ambient, so an all-lanes hoisted
+				   materialization is a refinement (the
+				   invariant pass's containment fact,
+				   carried across the crossed loop);
+				   typed structured-CC atoms are then
+				   admitted under the cc_immaterial
+				   whitelist discipline               */
   bool saw_mop = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
@@ -2108,17 +2124,30 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 	{
 	  if (insnd->sets_cc (call))
 	    {
-	      if (!ctx->cc_immaterial)
-		return scan_refuse (ctx, in_caller
+	      if (!ctx->cc_immaterial && !ctx->cc_ambient_ok)
+		return scan_refuse (ctx,
+				    (ctx->region
+				     && riscv_tt_opt_cc_region_general > 0)
+				    /* The stage-B widening was live and
+				       the tree could not prove the
+				       loop: its own name.  */
+				    ? "crossloop-cc-ambient-unproven"
+				    : in_caller
 				    ? "crosscall-caller-cc-unproven"
 				    : "crosscall-callee-cc-unproven", stmt);
-	      /* Programming-only discipline: a structured typed CC atom
-		 changes only the lane-enable state and its own SSA
-		 definition; the consumer's lifted placement executes
-		 before this region and parks state in a claimed
-		 constant register no CC write can reach.  Admit the
-		 whole statement (its side effect IS the CC write); a
-		 CC writer off the whitelist refuses by name.  */
+	      /* Programming-only discipline (cc_immaterial, lane HR):
+		 a structured typed CC atom changes only the lane-enable
+		 state and its own SSA definition; the consumer's lifted
+		 placement executes before this region and parks state
+		 in a claimed constant register no CC write can reach.
+		 Tree-proven discipline (cc_ambient_ok, FABLE_GOES_BURR
+		 R2): the loop's CC activity is ambient-preserving-and-
+		 narrowing, so the enable set at every in-loop consumer
+		 stays a subset of the lifted entry's -- the hoisted
+		 all-lanes materialization is a refinement.  Either way
+		 admit the whole statement (its side effect IS the CC
+		 write); a CC writer off the whitelist refuses by
+		 name.  */
 	      if (!crossloop_cc_atom_p (insnd))
 		return scan_refuse (ctx, "crossloop-cc-atom-unproven", stmt);
 	      return true;
@@ -2135,6 +2164,14 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 	      && insnd->id != rvtt_insn_data::sfpstore
 	      && insnd->id != rvtt_insn_data::ttincrwc
 	      && insnd->id != rvtt_insn_data::ttdstface
+	      /* The plain sfppushc (0) carries no CC-write effect under
+		 its mod encoding (sets_cc is false), so it lands here:
+		 under the R2 tree-proven loop fact it is exactly the
+		 save the proof leans on -- admit it there (the popc
+		 side is sets_cc and goes through the CC arm above).
+		 Without the fact the standing refusal is unchanged.  */
+	      && !(ctx->cc_ambient_ok
+		   && insnd->id == rvtt_insn_data::sfppushc)
 	      /* These reach their dedicated arms in the switch below
 		 (replay refusal; masked hard-LREG access checks).  */
 	      && insnd->id != rvtt_insn_data::ttreplay
@@ -3296,6 +3333,26 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
   ctx.in_caller = false;
   ctx.region = true;
   ctx.cc_immaterial = cc_immaterial;
+
+  /* FABLE_GOES_BURR R2 (the crossloop-cc-unproven widening): under
+     -mtt-tensix-optimize-cc-region-general, a crossed loop whose CC
+     activity the CC-region tree proves ambient-preserving-and-
+     narrowing admits its typed structured-CC atoms -- the enable set
+     at every in-loop point stays a subset of the lifted entry's
+     ambient, which is exactly the containment fact the consumers'
+     all-lanes hoisted writes need.  Computed once per scanned loop;
+     fail-closed to the standing refusal (with its own name) when the
+     tree cannot prove the loop.  */
+  if (riscv_tt_opt_cc_region_general > 0 && !cc_immaterial)
+    {
+      rvtt_cc_region_tree ccr (cfun);
+      ctx.cc_ambient_ok = ccr.loop_cc_ambient_preserving_p (loop);
+      if (dump_file && ctx.cc_ambient_ok)
+	fprintf (dump_file,
+		 "crossloop-hoist: loop bb %d CC activity tree-proven "
+		 "ambient-preserving (cc-region-general)\n",
+		 loop->header->index);
+    }
 
   bool ok = true;
   basic_block *body = get_loop_body (loop);

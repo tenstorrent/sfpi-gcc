@@ -1,9 +1,14 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-ccmask -fdump-tree-rvtt_ccmask" }
 // Genuine near miss: `x == 0.0f` -- EQ/NE are not order tests and have
-// no single-order complement, so no SFPGT/SFPLE keep-mask expresses
-// the kept set (which here splits both zeros from everything else);
-// refuse by name.  All four order directions fold; equality never
-// does.
+// no SINGLE-order complement, so no lone SFPGT/SFPLE keep-mask
+// expresses the kept set; refuse by name.  All four order directions
+// fold; equality does NOT under this flag alone.  FUTURE-VERDICT
+// (flipped by laneKL, FABLE R2): under
+// -mtt-tensix-optimize-cc-region-general the exhaustively proven
+// TWO-compare compositions (tt/proofs/ccmask-eqne-zero/) fold EQ/NE
+// too -- see ccmask-zero-eq-general-bh.C / ccmask-zero-ne-general-bh.C;
+// without that flag this refusal stands byte-identically, which is
+// what this twin pins.
 // { dg-final { scan-tree-dump "ccmask refused .ccmask-compare-direction-unsupported" "rvtt_ccmask" } }
 // { dg-final { scan-assembler-not "SFPGT" } }
 // { dg-final { scan-assembler-not "SFPLE" } }

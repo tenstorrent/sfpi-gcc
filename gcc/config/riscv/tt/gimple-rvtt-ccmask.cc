@@ -108,6 +108,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-iterator.h"
 #include "gimple-pretty-print.h"
 #include "tree-cfg.h"
+#include "dominance.h"
 #include "tree-ssa-loop-niter.h"
 #include "cfgloop.h"
 #include "rvtt.h"
@@ -204,6 +205,8 @@ struct ccmask_group
   tree zv;	  /* the assigned zero value */
   unsigned cc;	  /* SFPXCMP_MOD1_CC_* of the source compare */
 };
+
+static bool check_compare_form (ccmask_group *g);
 
 /* Match the structured skeleton starting at the sfppushc at GSI.
    Returns true with G filled; CANDIDATE marks that the region
@@ -421,8 +424,22 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
       return refuse ("ccmask-region-shape", g->popc);
   }
 
-  /* The compare: float order test against immediate bits 0 (+0.0),
-     with a CC selection whose complement is a single GT or LE.  */
+  return check_compare_form (g);
+}
+
+/* The compare-form half of the admission, shared by the stage-A
+   statement machine and the stage-B tree-keyed matcher: float test
+   against immediate bits 0 (+0.0), with a CC selection whose
+   complement is a single GT or LE keep-mask -- or, under
+   -mtt-tensix-optimize-cc-region-general, the exhaustively proven
+   EQ/NE two-compare compositions (tt/proofs/ccmask-eqne-zero/:
+   EQ keep = SFPOR (SFPGT (x, 0), SFPGT (0, x)), NE keep =
+   SFPAND (SFPLE (x, 0), SFPLE (0, x)); EQUAL over 2^32 per
+   direction).  */
+
+static bool
+check_compare_form (ccmask_group *g)
+{
   {
     long mod = int_arg (g->fcmp, 5);
     if (mod < 0)
@@ -432,18 +449,26 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
     if (type != SFPXCMP_MOD1_TYPE_FLOAT)
       return refuse ("ccmask-compare-kind-unsupported", g->fcmp);
     g->cc = (unsigned) mod & SFPXCMP_MOD1_CC_MASK;
+    bool eqne = (g->cc == SFPXCMP_MOD1_CC_EQ || g->cc == SFPXCMP_MOD1_CC_NE)
+      && riscv_tt_opt_cc_region_general > 0;
     if (g->cc != SFPXCMP_MOD1_CC_LE && g->cc != SFPXCMP_MOD1_CC_GT
-	&& g->cc != SFPXCMP_MOD1_CC_LT && g->cc != SFPXCMP_MOD1_CC_GE)
-      /* EQ/NE have no single-order complement.  */
+	&& g->cc != SFPXCMP_MOD1_CC_LT && g->cc != SFPXCMP_MOD1_CC_GE
+	&& !eqne)
+      /* EQ/NE have no single-order complement.  The stage-B flag
+	 licenses their two-compare compositions per the shipped
+	 exhaustive proof; without it (and for the unused mod
+	 encodings 6/7) the refusal stands byte-identically.  */
       return refuse ("ccmask-compare-direction-unsupported", g->fcmp);
-    if (g->cc == SFPXCMP_MOD1_CC_LT || g->cc == SFPXCMP_MOD1_CC_GE)
+    if (g->cc == SFPXCMP_MOD1_CC_LT || g->cc == SFPXCMP_MOD1_CC_GE || eqne)
       {
 	/* The strict-direction keep-masks are the swapped-operand
 	   compares (0 <= x, 0 > x): SET_DEST writes the first operand,
 	   so the zero must be a writable materialization the compare
 	   can overwrite.  Reuse the region's own zero; the read-only
 	   constant register cannot be a SET_DEST operand, and a zero
-	   with other uses is not silently split.  */
+	   with other uses is not silently split.  The EQ/NE
+	   compositions carry one swapped-operand compare each and
+	   need the same writable zero.  */
 	gcall *zdef = writable_zero_def (g->zv);
 	if (!zdef)
 	  return refuse ("ccmask-zero-not-writable", g->assign);
@@ -463,6 +488,193 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
   return true;
 }
 
+/* A executes before B on every execution of B: same-block linear order
+   or strict block dominance (a block's statements execute in order and
+   completely at GIMPLE).  */
+
+static bool
+stmt_ordered_before_p (gimple *a, gimple *b)
+{
+  basic_block ba = gimple_bb (a);
+  basic_block bb = gimple_bb (b);
+  if (!ba || !bb || a == b)
+    return false;
+  if (ba == bb)
+    {
+      for (gimple_stmt_iterator gsi = gsi_for_stmt (a); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	if (gsi_stmt (gsi) == b)
+	  return true;
+      return false;
+    }
+  return dominated_by_p (CDI_DOMINATORS, bb, ba);
+}
+
+/* Stage-B tree-keyed matcher (-mtt-tensix-optimize-cc-region-general;
+   FABLE_GOES_BURR item #14 stage B): admit the zeroing-conditional
+   fold for any BLOCK LAYOUT of the proven frame structure, keyed
+   entirely off the CC-region tree where the stage-A statement machine
+   (restricted to the historical linear/diamond shapes) said no.
+
+   The admission facts, each fail-closed:
+   - the pushc opens a tree frame R, structurally proven, refinement
+     pure, unpoisoned in its whole subtree, with no nested frames;
+   - R's refinement chain is exactly [xvif, fcmps, condb] with the
+     stage-A operand linkage;
+   - R has exactly one recorded exit popc;
+   - R's members beyond the structure are exactly the stage-A
+     transparent classes (scalar plumbing, pure LREG materializations,
+     CC-inert side-effect-free typed calls) plus scalar control flow
+     (the layout generality being admitted) and exactly ONE predicated
+     statement: the zeroing sfpassign_lv;
+   - execution order pushc -> xvif -> fcmps -> condb -> assign -> popc
+     is proven per pair (same-block order or block dominance), so the
+     assign executes exactly when the region does and the mask at the
+     assign is the chain's, pointwise in x -- the proof scope of the
+     shipped keep-mask equivalences.  */
+
+static bool
+match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
+		     gcall *pushc, ccmask_group *g, bool *candidate)
+{
+  *candidate = false;
+  memset (g, 0, sizeof (*g));
+
+  rvtt_cc_region *r = ccr->region_opened_by (pushc);
+  if (!r)
+    return false;
+  const vec<gimple *> &chain = ccr->refinement_chain (r);
+  if (chain.length () != 3
+      || !is_rvtt_call (chain[0], rvtt_insn_data::sfpxvif)
+      || !is_rvtt_call (chain[1], rvtt_insn_data::sfpxfcmps)
+      || !is_rvtt_call (chain[2], rvtt_insn_data::sfpxcondb))
+    return false;
+
+  g->pushc = pushc;
+  g->xvif = as_a <gcall *> (chain[0]);
+  g->fcmp = as_a <gcall *> (chain[1]);
+  g->condb = as_a <gcall *> (chain[2]);
+  g->x = gimple_call_arg (g->fcmp, 1);
+
+  /* Member census over the tree's statement mapping.  */
+  gcall *assign = nullptr;
+  unsigned n_assigns = 0;
+  bool nested = false;
+  gimple *foreign = nullptr;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, fun)
+    for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      {
+	gimple *stmt = gsi_stmt (gsi);
+	rvtt_cc_region *rs = ccr->region_of (stmt);
+	if (!rs || rs == r->parent)
+	  continue;
+	bool member = rs == r;
+	if (!member)
+	  {
+	    for (rvtt_cc_region *a = rs->parent; a; a = a->parent)
+	      if (a == r)
+		{
+		  nested = true;
+		  break;
+		}
+	    continue;
+	  }
+	if (stmt == g->pushc || stmt == g->xvif || stmt == g->fcmp
+	    || stmt == g->condb)
+	  continue;
+	if (ccr->closes_frame_p (stmt, r))
+	  continue;
+	if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
+	    || gimple_code (stmt) == GIMPLE_COND
+	    || gimple_code (stmt) == GIMPLE_GOTO)
+	  continue;
+	if (gimple_code (stmt) == GIMPLE_ASSIGN)
+	  {
+	    tree lhs = gimple_get_lhs (stmt);
+	    if (lhs && TREE_CODE (lhs) == SSA_NAME
+		&& !VECTOR_TYPE_P (TREE_TYPE (lhs)))
+	      continue;		/* scalar plumbing */
+	    foreign = stmt;
+	    continue;
+	  }
+	const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
+	if (!insnd)
+	  {
+	    foreign = stmt;
+	    continue;
+	  }
+	gcall *call = as_a <gcall *> (stmt);
+	switch (insnd->id)
+	  {
+	  case rvtt_insn_data::sfpassign_lv:
+	    n_assigns++;
+	    if (!assign && zero_vector_p (gimple_call_arg (call, 1)))
+	      assign = call;
+	    break;
+	  case rvtt_insn_data::sfpxloadi:
+	  case rvtt_insn_data::sfploadi:
+	  case rvtt_insn_data::sfploadi_lv:
+	  case rvtt_insn_data::sfpreadlreg:
+	    break;		/* pure LREG value materializations */
+	  default:
+	    if (insnd->sets_cc (call) || insnd->has_side_effects (call))
+	      foreign = stmt;
+	    break;
+	  }
+      }
+
+  if (!assign)
+    /* Not a zeroing conditional; stay silent like the machine.  */
+    return false;
+  *candidate = true;
+  g->assign = assign;
+  g->z = gimple_call_arg (assign, 0);
+  g->zv = gimple_call_arg (assign, 1);
+
+  if (n_assigns != 1 || foreign)
+    return refuse ("ccmask-region-foreign-stmt",
+		   foreign ? foreign : (gimple *) g->assign);
+  if (nested
+      || !ccr->structured_p (r)
+      || !ccr->refinements_pure_p (r)
+      || ccr->poisoned_p (r))
+    return refuse ("ccmask-region-shape", g->pushc);
+  if (r->exits.length () != 1)
+    return refuse ("ccmask-region-open-cfg", g->pushc);
+  g->popc = as_a <gcall *> (r->exits[0]);
+
+  /* Stage-A operand linkage of the structured condition.  */
+  {
+    tree c = gimple_call_arg (g->condb, 0);
+    tree t = gimple_call_arg (g->condb, 1);
+    if (TREE_CODE (c) != SSA_NAME || TREE_CODE (t) != SSA_NAME
+	|| SSA_NAME_DEF_STMT (c) != g->fcmp
+	|| SSA_NAME_DEF_STMT (t) != g->xvif
+	|| !has_single_use (c) || !has_single_use (t))
+      return refuse ("ccmask-region-shape", g->condb);
+  }
+
+  /* Layout-order proof: each structure statement executes before the
+     next on every path (same-block order or block dominance).  */
+  if (!stmt_ordered_before_p (g->pushc, g->xvif)
+      || !stmt_ordered_before_p (g->xvif, g->fcmp)
+      || !stmt_ordered_before_p (g->fcmp, g->condb)
+      || !stmt_ordered_before_p (g->condb, g->assign)
+      || !stmt_ordered_before_p (g->assign, g->popc))
+    return refuse ("ccmask-region-layout-unproven", g->pushc);
+
+  if (!check_compare_form (g))
+    return false;
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "ccmask: tree-keyed layout admission (cc-region-general) "
+	     "for frame at bb %d\n", gimple_bb (g->pushc)->index);
+  return true;
+}
+
 /* Commit the fold for G.  */
 
 static void
@@ -472,51 +684,84 @@ transform_group (ccmask_group *g)
      x <= 0  ->  SFPGT (x, 0);    x > 0  ->  SFPLE (x, 0);
      x <  0  ->  SFPLE (0, x);    x >= 0 ->  SFPGT (0, x)
      where the strict directions swap the operands and reuse the
-     region's writable zero as the SET_DEST (written) operand.  */
+     region's writable zero as the SET_DEST (written) operand; and the
+     stage-B EQ/NE compositions (tt/proofs/ccmask-eqne-zero/):
+     x == 0  ->  SFPOR  (SFPGT (x, 0), SFPGT (0, x))
+     x != 0  ->  SFPAND (SFPLE (x, 0), SFPLE (0, x))
+     one direct-operand compare against the constant-zero register plus
+     one swapped-operand compare overwriting the region's writable
+     zero.  */
+  bool eqne = (g->cc == SFPXCMP_MOD1_CC_EQ || g->cc == SFPXCMP_MOD1_CC_NE);
   bool swapped = (g->cc == SFPXCMP_MOD1_CC_LT
 		  || g->cc == SFPXCMP_MOD1_CC_GE);
   const rvtt_insn_data *cmp_insnd
     = rvtt_get_insn_data ((g->cc == SFPXCMP_MOD1_CC_LE
-			   || g->cc == SFPXCMP_MOD1_CC_GE)
+			   || g->cc == SFPXCMP_MOD1_CC_GE
+			   || g->cc == SFPXCMP_MOD1_CC_EQ)
 			  ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
   const rvtt_insn_data *and_insnd
     = rvtt_get_insn_data (rvtt_insn_data::sfpand);
+  const rvtt_insn_data *or_insnd
+    = rvtt_get_insn_data (rvtt_insn_data::sfpor);
   const rvtt_insn_data *zero_insnd
     = rvtt_get_insn_data (rvtt_insn_data::sfpreadlreg);
-  gcc_assert (cmp_insnd->decl && and_insnd->decl && zero_insnd->decl);
+  gcc_assert (cmp_insnd->decl && and_insnd->decl && or_insnd->decl
+	      && zero_insnd->decl);
 
   tree vec_type = TREE_TYPE (g->x);
   gimple_stmt_iterator at = gsi_for_stmt (g->assign);
   location_t loc = gimple_location (g->assign);
 
-  tree zero_ssa;
-  if (swapped)
-    /* The region's own zero materialization (checked writable and
-       single-use in match_group); its def dominates the assign, hence
-       this insertion point.  */
-    zero_ssa = g->zv;
-  else
+  auto build_creg_zero = [&] () -> tree
     {
       gcall *zero = gimple_build_call (zero_insnd->decl, 1,
 				       build_int_cst (unsigned_type_node,
 						      CREG_IDX_0));
-      zero_ssa = make_ssa_name (vec_type);
-      gimple_call_set_lhs (zero, zero_ssa);
+      tree ssa = make_ssa_name (vec_type);
+      gimple_call_set_lhs (zero, ssa);
       gimple_set_location (zero, loc);
       gsi_insert_before (&at, zero, GSI_SAME_STMT);
-    }
+      return ssa;
+    };
+  auto build_cmp = [&] (bool swap_operands, tree zero_ssa) -> tree
+    {
+      gcall *cmp = swap_operands
+	? gimple_build_call (cmp_insnd->decl, 3, zero_ssa, g->x,
+			     build_int_cst (unsigned_type_node,
+					    SFPGTLE_MOD1_SET_DEST))
+	: gimple_build_call (cmp_insnd->decl, 3, g->x, zero_ssa,
+			     build_int_cst (unsigned_type_node,
+					    SFPGTLE_MOD1_SET_DEST));
+      tree m = make_ssa_name (vec_type);
+      gimple_call_set_lhs (cmp, m);
+      gimple_set_location (cmp, loc);
+      gsi_insert_before (&at, cmp, GSI_SAME_STMT);
+      return m;
+    };
 
-  gcall *cmp = swapped
-    ? gimple_build_call (cmp_insnd->decl, 3, zero_ssa, g->x,
-			 build_int_cst (unsigned_type_node,
-					SFPGTLE_MOD1_SET_DEST))
-    : gimple_build_call (cmp_insnd->decl, 3, g->x, zero_ssa,
-			 build_int_cst (unsigned_type_node,
-					SFPGTLE_MOD1_SET_DEST));
-  tree mask = make_ssa_name (vec_type);
-  gimple_call_set_lhs (cmp, mask);
-  gimple_set_location (cmp, loc);
-  gsi_insert_before (&at, cmp, GSI_SAME_STMT);
+  tree mask;
+  if (eqne)
+    {
+      /* Direct-operand compare reads the constant register; the
+	 swapped-operand compare overwrites the region's own writable
+	 zero (checked in check_compare_form).  */
+      tree m_direct = build_cmp (false, build_creg_zero ());
+      tree m_swapped = build_cmp (true, g->zv);
+      gcall *comb = gimple_build_call ((g->cc == SFPXCMP_MOD1_CC_EQ
+					? or_insnd : and_insnd)->decl,
+				       2, m_direct, m_swapped);
+      mask = make_ssa_name (vec_type);
+      gimple_call_set_lhs (comb, mask);
+      gimple_set_location (comb, loc);
+      gsi_insert_before (&at, comb, GSI_SAME_STMT);
+    }
+  else if (swapped)
+    /* The region's own zero materialization (checked writable and
+       single-use in check_compare_form); its def dominates the assign,
+       hence this insertion point.  */
+    mask = build_cmp (true, g->zv);
+  else
+    mask = build_cmp (false, build_creg_zero ());
 
   gcall *land = gimple_build_call (and_insnd->decl, 2, g->z, mask);
   gimple_call_set_lhs (land, gimple_call_lhs (g->assign));
@@ -526,7 +771,7 @@ transform_group (ccmask_group *g)
   if (dump_file)
     {
       fprintf (dump_file, "ccmask: folded zeroing CC region into ");
-      print_gimple_stmt (dump_file, cmp, 0);
+      print_gimple_stmt (dump_file, SSA_NAME_DEF_STMT (mask), 0);
       fprintf (dump_file, "ccmask:   masking ");
       print_gimple_stmt (dump_file, land, 0);
     }
@@ -574,7 +819,8 @@ transform (function *fun)
 	{
 	  gimple_stmt_iterator next = gsi;
 	  gsi_next (&next);
-	  if (is_rvtt_call (gsi_stmt (gsi), rvtt_insn_data::sfppushc))
+	  if (gcall *pushc = is_rvtt_call (gsi_stmt (gsi),
+					   rvtt_insn_data::sfppushc))
 	    {
 	      ccmask_group g;
 	      bool candidate;
@@ -585,6 +831,18 @@ transform (function *fun)
 		  /* Statements around GSI were deleted; restart from
 		     the recorded successor, which is never a region
 		     member (the region begins at its pushc).  */
+		}
+	      else if (riscv_tt_opt_cc_region_general > 0
+		       && int_arg (pushc, 0) == 0
+		       && match_group_general (fun, &ccr, pushc, &g,
+					       &candidate))
+		{
+		  /* Stage B: the tree proved a layout the statement
+		     machine refused.  The fold deletes that whole leaf
+		     frame and inserts only CC-inert statements, so the
+		     no-rebuild contract above still holds.  */
+		  transform_group (&g);
+		  changed = true;
 		}
 	    }
 	  gsi = next;
@@ -631,6 +889,10 @@ public:
 	return 0;
       }
     n_folded = 0;
+    /* The stage-B layout proofs are dominance queries.  */
+    if (riscv_tt_opt_cc_region_general > 0
+	&& !dom_info_available_p (CDI_DOMINATORS))
+      calculate_dominance_info (CDI_DOMINATORS);
     bool changed = transform (fn);
     if (dump_file)
       fprintf (dump_file, "ccmask: folds=%u\n", n_folded);

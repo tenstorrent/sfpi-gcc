@@ -179,6 +179,29 @@ public:
      it in this item.  */
   bool ambient_preserving_fold_p () const;
 
+  /* Loop-scoped carry of the same discipline (FABLE_GOES_BURR R2 /
+     the crossloop-cc-unproven widening): LOOP's CC activity provably
+     PRESERVES the ambient lane-enable state it was entered with and
+     can only NARROW the state observed at any point inside -- every
+     CC-relevant statement in the loop body is mapped to a
+     structurally proven frame; every closed frame was opened inside
+     the loop (a popc of an outside save would rewind past the loop
+     entry's state); no opaque statement (raw `.ttinsn' constant words
+     of the audited CC-INERT class excepted -- rvtt-raw-boundary.cc;
+     the ALL_LANES class is a widening here and refuses) and no
+     SFPENCC anywhere in the body (ENCC can widen beyond the entry
+     ambient -- the all-lanes form included, since the entry ambient
+     is not proven all-lanes here); and the ambient (root) frame
+     itself carries no refinement or vocabulary-external write inside
+     the loop.
+     In-frame refinements, COMPC and vocabulary-external writers are
+     admitted: relative to their frame entry every one of them narrows
+     (pinned-sim for_each_lane discipline), and the frame's recorded
+     popc restores the saved state.  Fail-closed in every ambiguous
+     direction (unmapped statement, unstructured frame, drain-join or
+     broken block carrying CC words).  */
+  bool loop_cc_ambient_preserving_p (class loop *loop) const;
+
 private:
   void build ();
   void clear ();

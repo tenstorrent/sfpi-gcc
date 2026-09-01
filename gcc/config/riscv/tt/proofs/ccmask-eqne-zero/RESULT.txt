@@ -1,0 +1,46 @@
+sweep_ccmask_eqne.c — ccmask keep-mask equivalence, the EQ and NE
+float directions vs +0.0, exhaustive over 2^32 lane encodings each
+(FABLE_GOES_BURR R2 widening 2: the class named by the standing
+ccmask-compare-direction-unsupported refusal).
+
+Oracle provenance: craq-sim pinned @ 9f324140
+  SFPSETCC  src/tensix.cpp:8969-9000 (mod6 LREG_EQ0 / mod2 LREG_NE0;
+            raw-bit test: "SFPI uses 0x80000000 as a lane
+            predicate/sign sentinel" -- EQ enables the +0 encoding
+            only, -0 = 0x80000000 stays disabled)
+  SFPGT     src/tensix.cpp:10236-10261 (mod1==8 SET_DEST arm)
+  SFPLE     src/tensix.cpp:10210-10235 (mod1==8 SET_DEST arm)
+  SFPOR     src/tensix.cpp:9085-9101
+  SFPAND    src/tensix.cpp:9068-9084
+  sign_mag32_total_order src/tensix.cpp:3816-3822
+Compiler-side lowering provenance: rvtt_emit_sfpxfcmps
+  gcc/config/riscv/tt/rvtt.cc (fval==0 arm,
+  rvtt_cmp_ex_to_setcc_mod1_map: EQ -> SETCC mod6, NE -> SETCC mod2).
+
+Run (laneKL, 2026-08-31, cc -O2, host x86-64):
+
+EQ (x==0)  mismatches=0  cut-stream=4cf31ed57bdddcda  hw-stream=4cf31ed57bdddcda  EQUAL
+NE (x!=0)  mismatches=0  cut-stream=adc84c787bdddcda  hw-stream=adc84c787bdddcda  EQUAL
+RESULT: EQUAL over 2^32 x 2 directions
+
+Stream commitments are position-salted FNV-1a 64 over the per-x
+expected keep-mask (cut) and computed keep-mask (hw); equality per
+direction plus mismatches=0 is the licensing condition.
+
+Keep-mask compositions proven (two SET_DEST total-order compares plus
+one bitwise combine; the swapped-operand compare overwrites the
+region's own writable zero, the LT/GE arms' discipline):
+  EQ keep = SFPOR  (SFPGT (x, 0), SFPGT (0, x))   [raw != 0]
+  NE keep = SFPAND (SFPLE (x, 0), SFPLE (0, x))   [raw == 0]
+The core identity: sign_mag32_total_order is a bijection with
+sx(+0) == 0 and sx(-0) == -1, so sx != 0 is exactly raw != 0 -- the
+single-SETCC raw-bit enable sets are order-expressible even though no
+SINGLE order test expresses them (the historical refusal's literal
+claim stays true; the widening is compositional).
+
+LICENSES: the EQ/NE arms of the rvtt_ccmask fold
+(-mtt-tensix-optimize-ccmask AND -mtt-tensix-optimize-cc-region-general,
+gimple-rvtt-ccmask.cc); bit-exact, so the arms carry the proof citation
+and the plain Init(0) stage-B flag rather than a licensed token (the
+int-abs/int-not precedent).  Retire those arms if this RESULT ever
+stops being EQUAL.  BH-only (SFPGT/SFPLE are BH; the pass gate is BH).
