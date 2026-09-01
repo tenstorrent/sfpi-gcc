@@ -17,9 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* -mtt-tensix-optimize-lreg-rename (default off).
-
-   After allocation, a row can carry a FALSE recurrence: an
+/* After allocation, a row can carry a FALSE recurrence: an
    invariant-input member's destination register is also written by
    other row members purely as storage reuse (the allocator packed
    unrelated short lifetimes into one LREG).  The downstream stall-fill
@@ -27,33 +25,43 @@ along with GCC; see the file COPYING3.  If not see
    then refuse the member as a filler by name -- "writes a register
    another row member also writes" -- although no value ever flows
    between the colliding lifetimes.  This is regrename's classic du-chain
-   problem (gcc/regrename.cc) scoped to the capturable-row shape with
+   problem (gcc/regrename.cc) scoped to the architectural LREG file with
    typed-effect proofs instead of constraint queries.
 
-   v1 renames, per row, single-SET invariant-input members of audited
-   latency 0 with no CC, configuration, or counter involvement, whose
-   destination collides with other row members' writes, onto an LREG
-   that is provably untouched: read and written by no row member, not
-   live into the row (which excludes every loop-carried value and every
-   hoisted invariant), and never a constant register.  The complete
-   def-use web moves: the member's SET_DEST and every in-row reader of
-   that definition up to the next writer of the old register.  A later
-   in-row writer of the old register must exist (it proves the renamed
-   value dies inside the row and cannot be live around the backedge).
+   V1 RETIREMENT (item #7 stage W4-C).  The original single-shape pass
+   (self-loop capturable rows, single-SET latency-0 invariant-input
+   members, whole-pattern register replacement) was RETIRED after the
+   W4-C parity adjudication proved it WRONG-CODE-BEARING, not merely
+   subsumed: its whole-pattern writer edit rewrote every occurrence of
+   the old register in the writer's pattern, including GENUINE INPUT
+   READS of the register's previous live range (the allocator's
+   dest-reuses-dying-source shape: p = op (x, ...) packed into x's
+   register) and the tied live-value source of the SFPLOADI mod0-8/10
+   half-word merges.  Its invariant-input admission mask
+   (lreg_read & ~lreg_write) is blind to exactly those reads, so the
+   committed stream read the fresh (dead, garbage) register instead of
+   the true source.  Of its 13 corpus fires under its own flag, 11
+   severed dataflow this way (calculate_cube_root x2, calculate_sine,
+   calculate_i0 split constant pair, calculate_lcm_fresh_cpp x3, plus
+   run_kernel inline copies); only the 2 pure-LOADI cosine fires were
+   correct renames -- and those are general-engine fires too.  The
+   laneKE development near-miss ("L5 = mul (L5, L5)") was this exact
+   defect, live in v1.  The flag was never in any production or
+   reviewed-ON set, so no shipped bytes ever carried a v1 rename.
+   Evidence: laneKK-evidence-20260831/ (per-fire committed-stream
+   adjudication from the laneKE census legs).
 
-   Admission requires every row member to carry complete typed effects
-   (any opaque member kills the row) and an audited-latency stall to
-   exist in the row (a rename without a stall to open has nothing to
-   pay for and refuses).  Every proof failure refuses by name and
-   changes nothing.
+   -mtt-tensix-optimize-lreg-rename is RETAINED as a frozen-API alias:
+   it now requests this file's general du-chain engine (the pass gates
+   on either flag).  The retired pass's refusal vocabulary (rename-*)
+   keeps its registry rows per the append-only rule; the rows no
+   longer fire.
 
    -mtt-tensix-optimize-lreg-rename-chains (default off) is the
    GENERAL du-chain engine (FABLE_GOES_BURR.md item #7): post-RA
    register renaming over def-use chains in the gcc/regrename.cc
    formulation, restricted to the architectural LREG file, over
-   single-basic-block regions of ANY shape (the v1 pass above is the
-   self-loop capturable-row special case; it keeps its flag and
-   behavior until the parity-census retirement ceremony).  One chain =
+   single-basic-block regions of ANY shape.  One chain =
    one single-LREG definition plus every true reader of that
    definition up to the chain close (the next writer of the register,
    or the register's death at block exit).  The whole web moves to a
@@ -125,7 +133,7 @@ along with GCC; see the file COPYING3.  If not see
    regrename-postcommit-divergence (hard assert under -fchecking),
    and changes nothing.
 
-   Pipeline placement: immediately after the v1 pass above -- post
+   Pipeline placement (the retired pass's seam, inherited) -- post
    allocation (rtl-rvtt-lp-alloc), post Dst-ownership, post macro
    formation, and AHEAD of the hazard scheduler's fill passes, so a
    broken storage collision widens the fill candidate sets the same
@@ -165,16 +173,6 @@ extern unsigned rvtt_pressure_capacity ();
 
 namespace {
 
-static unsigned n_renamed;
-
-static void
-refuse (const char *reason, basic_block bb)
-{
-  rvtt_refuse_by_name (reason, dump_file,
-		       "Lreg rename refused: %s in bb %d\n",
-		       reason, bb->index);
-}
-
 struct row_member
 {
   rtx_insn *insn;
@@ -183,9 +181,12 @@ struct row_member
 
 /* BB is a self-loop whose payload is SFPU words plus the counter step
    and jump (the capturable-row shape).  Collect the SFPU members with
-   their typed effects; refuse on any opaque or scalar-extra content.
+   their typed effects; fail on any opaque or scalar-extra content.
    Mirrors the admission the stall-fill passes use, so a rename here is
-   visible exactly where the fills look.  */
+   visible exactly where the fills look.  Since the single-shape pass's
+   retirement this serves only the standalone mode's phase-1 candidate
+   PRIORITIZATION (proven-payoff rows claim free registers first); the
+   *REASON strings are informational and never emitted.  */
 
 static bool
 rename_row_p (basic_block bb, std::vector<row_member> *members,
@@ -292,237 +293,6 @@ queue_reg_replacements (rtx_insn *insn, rtx *loc, unsigned oldr, rtx newreg)
 	  queue_reg_replacements (insn, &XVECEXP (x, i, j), oldr, newreg);
     }
 }
-
-/* Try to rename one colliding invariant-input single-writer chain in
-   the row.  Returns true when a rename committed.  */
-
-static bool
-rename_one_chain (basic_block bb, std::vector<row_member> &members)
-{
-  /* Row-wide write masks and per-register writer counts.  */
-  uint32_t row_writes = 0, row_reads = 0;
-  bool row_writes_cc = false;
-  for (const row_member &m : members)
-    {
-      row_writes |= m.fx.lreg_write;
-      row_reads |= m.fx.lreg_read;
-      row_writes_cc |= m.fx.cc_write;
-    }
-
-  for (size_t wi = 0; wi < members.size (); ++wi)
-    {
-      const row_member &w = members[wi];
-      /* Single-destination, audited-latency-0, invariant-input,
-	 pure-value member: the admissible filler class.  Renaming does
-	 not move the instruction, so a lane-predicated (CC-reading)
-	 writer is sound WHEN no row member writes CC: the mask is then
-	 constant across the row, every reader executes under the same
-	 mask as the writer, and lanewise operations never read their
-	 sources on disabled lanes -- the renamed register's undefined
-	 disabled lanes are unobservable (the prologue-rotation CC
-	 discipline).  A CC-writing member refuses.  */
-      if (w.fx.result_latency != 0
-	  || w.fx.cc_write
-	  || (w.fx.cc_read && row_writes_cc)
-	  || w.fx.config_dests_written || w.fx.addr_mod_slot_write
-	  || w.fx.rwc.kind != xtt_rwc_effect_t::NONE
-	  || w.fx.dst_mem_read || w.fx.dst_mem_write
-	  || popcount_hwi (w.fx.lreg_write) != 1)
-	continue;
-      unsigned oldr_bit_mask = w.fx.lreg_write;
-      /* Inputs must be row-invariant: nothing another member writes.
-	 The audited read mask includes the tied destination operand
-	 position; a MERGING use of the prior destination value (a live
-	 lv operand equal to the destination) would make the rename
-	 read undefined lanes and refuses below via operand scan.  */
-      if ((w.fx.lreg_read & ~w.fx.lreg_write) & row_writes)
-	continue;
-      /* The wall: another member also writes this register.  */
-      uint32_t others_writes = 0;
-      for (size_t i = 0; i < members.size (); ++i)
-	if (i != wi)
-	  others_writes |= members[i].fx.lreg_write;
-      if (!(oldr_bit_mask & others_writes))
-	continue;
-      /* Genuine self-merge check: the destination register appearing as
-	 an INPUT operand (a live lv merge) makes the output depend on
-	 the destination's prior value; renaming would change it.  */
-      {
-	extract_insn (w.insn);
-	rtx dest_op = recog_data.operand[0];
-	bool self_merge = false;
-	for (int oi = 1; oi < recog_data.n_operands; ++oi)
-	  {
-	    rtx op = recog_data.operand[oi];
-	    if (REG_P (op) && REG_P (dest_op)
-		&& REGNO (op) == REGNO (dest_op)
-		&& recog_data.operand_type[oi] == OP_IN
-		/* The tied compare/merge source alternative: treat any
-		   input occurrence beyond the canonical unspec sources
-		   as a merge.  Conservative: the plain forms carry a
-		   noval marker there instead of a register.  */
-		&& oi == 1)
-	      self_merge = true;
-	  }
-	if (self_merge)
-	  {
-	    refuse ("rename-dest-self-merge", bb);
-	    continue;
-	  }
-      }
-
-      /* Locate hard regno.  Effect masks are L-indexed from L0.  */
-      int lidx = exact_log2 (oldr_bit_mask);
-      unsigned oldr = SFPU_REG_FIRST + lidx;
-
-      /* Readers of W's definition: members after W (in row order) whose
-	 TRUE reads (audited reads minus own writes -- the audited mask
-	 counts the tied destination position) include OLDR, up to the
-	 next writer of OLDR.  A next writer must exist (it proves the
-	 value dies in-row); a next writer that also truly reads OLDR is
-	 a tied merge whose read and write share one operand -- the
-	 rename cannot split them and refuses.  */
-      std::vector<rtx_insn *> readers;
-      bool next_writer = false, tied_consumer = false;
-      for (size_t i = wi + 1; i < members.size (); ++i)
-	{
-	  uint32_t true_reads
-	    = members[i].fx.lreg_read & ~members[i].fx.lreg_write;
-	  if (members[i].fx.lreg_write & oldr_bit_mask)
-	    {
-	      /* Audited reads on the writer that are not the tied
-		 destination artifact: a genuine merge.  Detect via the
-		 operand scan: any input operand register equal to OLDR
-		 beyond the destination position.  */
-	      extract_insn (members[i].insn);
-	      for (int oi = 1; oi < recog_data.n_operands; ++oi)
-		{
-		  rtx op = recog_data.operand[oi];
-		  if (REG_P (op) && REGNO (op) == oldr)
-		    tied_consumer = true;
-		}
-	      next_writer = true;
-	      break;
-	    }
-	  if (true_reads & oldr_bit_mask)
-	    readers.push_back (members[i].insn);
-	}
-      if (!next_writer)
-	{
-	  refuse ("rename-value-crosses-row-boundary", bb);
-	  continue;
-	}
-      if (tied_consumer)
-	{
-	  refuse ("rename-consumer-clobbers", bb);
-	  continue;
-	}
-
-      /* A free architectural LREG: L0..L7, untouched by every member,
-	 not live into the row (excludes loop-carried values and hoisted
-	 invariants), never a constant register.  */
-      int free_l = -1;
-      for (int l = 0; l < 8; ++l)
-	{
-	  uint32_t bit = 1u << l;
-	  if ((row_writes | row_reads) & bit)
-	    continue;
-	  if (REGNO_REG_SET_P (df_get_live_in (bb), SFPU_REG_FIRST + l))
-	    continue;
-	  free_l = l;
-	  break;
-	}
-      if (free_l < 0)
-	{
-	  refuse ("rename-no-free-lreg", bb);
-	  continue;
-	}
-      rtx newreg = gen_rtx_REG (XTT32SImode, SFPU_REG_FIRST + free_l);
-
-      /* Queue the writer's destination and each reader's uses, then
-	 commit atomically.  */
-      queue_reg_replacements (w.insn, &PATTERN (w.insn), oldr, newreg);
-      for (rtx_insn *r : readers)
-	queue_reg_replacements (r, &PATTERN (r), oldr, newreg);
-      if (!apply_change_group ())
-	{
-	  refuse ("rename-constraint", bb);
-	  continue;
-	}
-      if (dump_file)
-	{
-	  fprintf (dump_file,
-		   "Lreg rename: chain L%d -> L%d in bb %d (writer uid=%d,"
-		   " %zu readers)\n",
-		   lidx, free_l, bb->index, INSN_UID (w.insn),
-		   readers.size ());
-	}
-      n_renamed++;
-      return true;
-    }
-  return false;
-}
-
-const pass_data pass_data_rvtt_lreg_rename =
-{
-  RTL_PASS,
-  "rvtt_lreg_rename",
-  OPTGROUP_OTHER,
-  TV_NONE,
-  0,
-  0,
-  0,
-  0,
-  0,
-};
-
-class pass_rvtt_lreg_rename : public rtl_opt_pass
-{
-public:
-  pass_rvtt_lreg_rename (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rvtt_lreg_rename, ctxt)
-  {}
-
-  bool gate (function *) final override
-  {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_lreg_rename > 0;
-  }
-
-  unsigned execute (function *) final override
-  {
-    df_analyze ();
-    n_renamed = 0;
-    basic_block bb;
-    FOR_EACH_BB_FN (bb, cfun)
-      {
-	std::vector<row_member> members;
-	const char *reason;
-	if (!rename_row_p (bb, &members, &reason))
-	  {
-	    if (reason)
-	      refuse (reason, bb);
-	    continue;
-	  }
-	if (!row_has_audited_stall_p (members))
-	  {
-	    refuse ("rename-no-stall-decrease", bb);
-	    continue;
-	  }
-	while (rename_one_chain (bb, members))
-	  {
-	    /* Effects changed; recollect for further chains.  */
-	    members.clear ();
-	    if (!rename_row_p (bb, &members, &reason))
-	      break;
-	  }
-      }
-    if (dump_file)
-      fprintf (dump_file, "Lreg rename: renames=%u\n", n_renamed);
-    if (n_renamed)
-      df_analyze ();
-    return 0;
-  }
-};
 
 /* ==================================================================
    The general du-chain engine (item #7).  See the file header.  */
@@ -1230,19 +1000,23 @@ public:
 
   bool gate (function *) final override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_lreg_rename_chains > 0;
+    /* -mtt-tensix-optimize-lreg-rename is the retired single-shape
+       pass's flag, retained as a frozen-API alias for this engine
+       (see the file header's W4-C retirement note).  */
+    return TARGET_XTT_TENSIX
+	   && (riscv_tt_opt_lreg_rename_chains > 0
+	       || riscv_tt_opt_lreg_rename > 0);
   }
 
-  /* The candidate at SCAN[I] matches the v1 single-shape pass's
-     admission profile (rename_one_chain's writer conditions): a
-     latency-0, invariant-input, pure-value colliding definition in a
-     capturable self-loop row with an audited stall.  Phase 1 of the
-     standalone mode renames exactly these FIRST, in v1's own order,
-     so the scarce free registers are never spent on general chains
-     before every v1-renameable chain has claimed its target -- the
-     subsumption acceptance (v1 fires form a subset of this pass's
-     fires) holds by construction wherever the general proof admits
-     the v1 candidate.  */
+  /* The candidate at SCAN[I] matches the retired single-shape pass's
+     admission profile: a latency-0, invariant-input, pure-value
+     colliding definition in a capturable self-loop row with an
+     audited stall.  Phase 1 of the standalone mode renames exactly
+     these FIRST, in row order, so the scarce free registers are never
+     spent on general chains before every proven-payoff v1-profile
+     chain has claimed its target (this kept the retirement census
+     deterministic and is a payoff-first heuristic in its own right:
+     these are exactly the chains the stall fills are blocked on).  */
   static bool
   v1_profile_candidate_p (const std::vector<span_insn> &scan, size_t i)
   {
@@ -1280,10 +1054,10 @@ public:
       {
 	/* Standalone mode, two phases per block, re-scanning after
 	   every commit (effects moved):
-	   1. v1-profile candidates in the v1 pass's own row order --
-	      on rows the v1 admission accepts -- so the general
-	      engine's fires subsume the single-shape pass's fires
-	      (free registers are claimed in the same order);
+	   1. v1-profile candidates in row order -- on rows the
+	      retired pass's admission accepted -- so the scarce free
+	      registers go to the proven-payoff fill-blocking chains
+	      first;
 	   2. the general greedy sweep over every remaining
 	      storage-collision chain.
 	   Both phases run the identical analyze/price/commit/belt
@@ -1339,10 +1113,9 @@ public:
 		    if (!analyze_chain (bb, scan, i, fn_has_opaque, -1, &ch))
 		      continue;
 		    /* Phase 1 admits only v1-SHAPED chains end to end:
-		       a pure kill close inside the row (v1 refuses
-		       reading closes as tied consumers and open chains
-		       at the boundary), so the free registers phase 1
-		       claims are exactly the ones the v1 pass would --
+		       a pure kill close inside the row (the retired
+		       single-shape pass refused reading closes as tied
+		       consumers and open chains at the boundary) --
 		       general chains wait for phase 2.  */
 		    if (phase == 0
 			&& (ch.close == ch.scan.size () || ch.close_reads))
@@ -1410,11 +1183,6 @@ rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg)
   return commit_chain (ch);
 }
 
-rtl_opt_pass *
-make_pass_rvtt_lreg_rename (gcc::context *ctxt)
-{
-  return new pass_rvtt_lreg_rename (ctxt);
-}
 
 rtl_opt_pass *
 make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt)

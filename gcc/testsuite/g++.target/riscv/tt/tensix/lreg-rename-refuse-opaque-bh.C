@@ -1,8 +1,9 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename-details" }
-// Near miss: an opaque assembly statement inside the row kills the
-// span (its register contacts are unknowable).  Refuse by name.
-// { dg-final { scan-rtl-dump "Lreg rename refused: rename-span-opaque" "rvtt_lreg_rename" } }
-// { dg-final { scan-rtl-dump-not "Lreg rename: chain" "rvtt_lreg_rename" } }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
+// Near miss under the retired flag (an alias for the general du-chain
+// engine since the W4-C v1 retirement): an opaque assembly statement
+// inside the row kills every chain span that crosses it (its register
+// contacts are unknowable).  Refuse by name.
+// { dg-final { scan-rtl-dump "Lreg chain rename refused: regrename-span-opaque" "rvtt_lreg_rename_chains" } }
 void ren_opaque ()
 {
   auto k1 = __builtin_rvtt_sfpreadlreg (0);

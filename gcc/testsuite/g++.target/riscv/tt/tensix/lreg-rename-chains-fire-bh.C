@@ -1,10 +1,9 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -mtt-tensix-optimize-lreg-rename-chains -fdump-rtl-rvtt_lreg_rename-details -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// The item-#7 fire twin: a two-chain rename in a self-loop row the v1
-// single-shape pass refuses outright (every colliding writer carries
-// a nonzero audited latency -- the multi-member class), proven by the
-// v1 dump in the same compilation.  The general engine renames both
-// storage-collision chains under the whole-row no-worse acceptance.
-// { dg-final { scan-rtl-dump "Lreg rename: renames=0" "rvtt_lreg_rename" } }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename-chains -fdump-rtl-rvtt_lreg_rename_chains-details" }
+// The item-#7 fire twin: a two-chain rename in a self-loop row the
+// retired v1 single-shape pass refused outright (every colliding
+// writer carries a nonzero audited latency -- the multi-member
+// class).  The general engine renames both storage-collision chains
+// under the whole-row no-worse acceptance.
 // { dg-final { scan-rtl-dump-times "Lreg chain rename: L\\d+ -> L\\d+" 2 "rvtt_lreg_rename_chains" } }
 // { dg-final { scan-rtl-dump "Lreg chain rename: renames=2" "rvtt_lreg_rename_chains" } }
 // { dg-final { scan-rtl-dump-not "regrename-postcommit-divergence" "rvtt_lreg_rename_chains" } }

@@ -214,7 +214,6 @@ extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_lreg_rename (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);
 /* Item-#7 rename service (rtl-rvtt-lreg-rename.cc): rename the
    du-chain of DEF_INSN's single-LREG definition inside its block onto
