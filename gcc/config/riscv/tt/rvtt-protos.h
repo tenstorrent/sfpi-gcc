@@ -220,9 +220,23 @@ extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);
    du-chain of DEF_INSN's single-LREG definition inside its block onto
    TARGET_LREG (L index; -1 = lowest proven-free), full legality proof
    plus post-commit structural re-verification; refuses by name and
-   changes nothing on any unproven clause.  DF must be current.  */
+   changes nothing on any unproven clause.  DF must be current.
+   WEB, when non-null, receives the committed web for the consumer's
+   exact undo (a web too large for the record refuses by name,
+   regrename-web-record-overflow, before any edit) -- the R1
+   cyclic-interior consumer's transactional contract.  */
+#define RVTT_LREG_RENAME_WEB_MAX 32
+struct rvtt_lreg_rename_web
+{
+  int old_l, new_l;		/* L indices, source -> target */
+  unsigned n_insns;		/* edited members (writer, readers,
+				   reading close)  */
+  rtx_insn *insns[RVTT_LREG_RENAME_WEB_MAX];
+};
 extern bool rvtt_lreg_rename_chain (struct basic_block_def *bb,
-				    rtx_insn *def_insn, int target_lreg);
+				    rtx_insn *def_insn, int target_lreg,
+				    rvtt_lreg_rename_web *web = nullptr);
+extern void rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web);
 extern rtl_opt_pass *make_pass_rvtt_lp_alloc (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_spill_diag (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_macro_planner (gcc::context *ctxt);
