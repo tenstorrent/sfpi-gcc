@@ -1,11 +1,11 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename-details" }
-// Near miss: the candidate's register is shared with an earlier
-// latency-bearing chain (the wall) but has no later in-row writer --
-// the definition is live around the backedge (next trip's reader
-// consumes it) and a rename cannot prove the value dies in-row.
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
+// Near miss under the retired flag (an alias for the general du-chain
+// engine since the W4-C v1 retirement): the candidate's register is
+// shared with an earlier chain (the wall) but has no later in-row
+// writer -- the definition is live around the backedge (next trip's
+// reader consumes it) and no rename can prove the value dies in-row.
 // Refuse by name.
-// { dg-final { scan-rtl-dump "Lreg rename refused: rename-value-crosses-row-boundary" "rvtt_lreg_rename" } }
-// { dg-final { scan-rtl-dump-not "Lreg rename: chain" "rvtt_lreg_rename" } }
+// { dg-final { scan-rtl-dump "Lreg chain rename refused: regrename-chain-open" "rvtt_lreg_rename_chains" } }
 void ren_boundary ()
 {
   auto k1 = __builtin_rvtt_sfpreadlreg (0);

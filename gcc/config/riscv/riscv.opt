@@ -875,7 +875,7 @@ Default-off licensed derivation for the loop-carried arm of the Tensix SFPU reas
 
 mtt-tensix-optimize-lreg-rename
 Target Var(riscv_tt_opt_lreg_rename) Init(0)
-Rename storage-colliding invariant-input LREG chains inside capturable rows to a proven-free register so the audited stall-fill mechanisms stop refusing them; every unproven case refuses by name.
+Retired alias (W4-C, kept as frozen API): the original single-shape capturable-row rename pass was retired as wrong-code-bearing (its whole-pattern writer edit rewrote genuine input reads of the destination register's previous live range); this flag now requests the general du-chain LREG renaming engine, exactly as -mtt-tensix-optimize-lreg-rename-chains does.
 
 mtt-tensix-optimize-lreg-rename-chains
 Target Var(riscv_tt_opt_lreg_rename_chains) Init(0)

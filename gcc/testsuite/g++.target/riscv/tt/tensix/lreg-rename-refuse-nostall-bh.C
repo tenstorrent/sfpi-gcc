@@ -1,8 +1,13 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename-details" }
-// Near miss: the row carries no audited-latency stall -- a rename has
-// nothing to pay for.  Refuse by name, bytes unchanged.
-// { dg-final { scan-rtl-dump "Lreg rename refused: rename-no-stall-decrease" "rvtt_lreg_rename" } }
-// { dg-final { scan-rtl-dump-not "Lreg rename: chain" "rvtt_lreg_rename" } }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
+// The item-#7 payoff decoupling, pinned at the W4-C retirement: the
+// retired single-shape pass refused this stall-free row by
+// rename-no-stall-decrease (payoff smuggled into admission); the
+// general engine the retired flag now requests renames whenever the
+// chain is legal and the whole-row cost is no worse (equal counts
+// accepted -- strict acceptance rejects only regressions).
+// { dg-final { scan-rtl-dump "Lreg chain rename: L\\d+ -> L\\d+" "rvtt_lreg_rename_chains" } }
+// { dg-final { scan-rtl-dump-not "regrename-cost-regressed" "rvtt_lreg_rename_chains" } }
+// { dg-final { scan-rtl-dump-not "regrename-postcommit-divergence" "rvtt_lreg_rename_chains" } }
 void ren_nostall ()
 {
   auto k1 = __builtin_rvtt_sfpreadlreg (0);

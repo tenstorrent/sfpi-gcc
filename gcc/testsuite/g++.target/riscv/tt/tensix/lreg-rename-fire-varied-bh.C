@@ -1,7 +1,13 @@
-// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename-details" }
-// Renamed-equivalent, varied consumer operation and trip count: the
-// rename decision is name- and operation-independent.
-// { dg-final { scan-rtl-dump-times "Lreg rename: chain L\\d+ -> L\\d+" 1 "rvtt_lreg_rename" } }
+// { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
+// Renamed-equivalent, varied consumer operation and trip count under
+// the retired flag (now an alias for the general du-chain engine):
+// the rename decision is name- and operation-independent, and the OR
+// consumer body renames TWO further kill+read chains the XOR body's
+// destructive "0"-tied family refuses through constraint
+// re-recognition (regrename-constraint) -- pinned.
+// { dg-final { scan-rtl-dump-times "Lreg chain rename: L\\d+ -> L\\d+" 4 "rvtt_lreg_rename_chains" } }
+// { dg-final { scan-rtl-dump "Lreg chain rename: renames=4" "rvtt_lreg_rename_chains" } }
+// { dg-final { scan-rtl-dump-not "regrename-postcommit-divergence" "rvtt_lreg_rename_chains" } }
 #define REN_FN wallaby_row
 #define REN_TRIPS 12
 #define REN_K1 quokka
