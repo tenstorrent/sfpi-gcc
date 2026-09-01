@@ -869,6 +869,18 @@ RVTT_REFUSAL (MEMORY_OPERAND,
 RVTT_REFUSAL (MEMORY_OR_UNREPRESENTED_CALL,
   "memory-or-unrepresented-call",
   "reason; first seen in gimple-rvtt-invariant.cc")
+RVTT_REFUSAL (MERGE_RENAME_AMBIENT_UNPROVEN,
+  "merge-rename-ambient-unproven",
+  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+RVTT_REFUSAL (MERGE_RENAME_FORM_UNSUPPORTED,
+  "merge-rename-form-unsupported",
+  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+RVTT_REFUSAL (MERGE_RENAME_PLACEMENT_REFUSED,
+  "merge-rename-placement-refused",
+  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+RVTT_REFUSAL (MERGE_RENAME_WORD_NEUTRAL,
+  "merge-rename-word-neutral",
+  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
 RVTT_REFUSAL (MISC_MISMATCH,
   "misc-mismatch",
   "reason; first seen in rvtt-macro-verify-core.h")
