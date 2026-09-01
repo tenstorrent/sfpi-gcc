@@ -241,17 +241,26 @@ madr_licensed_pair_p (gcall *mul_call, gcall *add_call, const char *arm)
       return false;
     }
 
-  /* Pressure: the kept SFPLOADI is one live range the fold would have
-     absorbed; a licensed transform must never make a compilable
-     kernel uncompilable (the corpus lreg-pressure finding).  */
-  unsigned peak = rvtt_pressure_bb_peak (bb);
+  /* Pressure: pointwise, suppressing the fold adds exactly ONE live
+     value on the points strictly between the pair members (muli arm:
+     the kept cst plus the extended multiplicand minus the dead
+     product; addi arm: the extended mul operands minus the dead
+     product; elsewhere the live sets are unchanged, the kept loadi
+     included -- it is live up to the product in the PRE state this
+     query measures).  Budget = the engine's windowed peak over
+     (product, add] plus that one; a licensed transform must never
+     make a compilable kernel uncompilable (the corpus lreg-pressure
+     finding).  The whole-block peak would be dishonest here: it
+     refuses every candidate in any block that merely touches the
+     8-LREG file somewhere else (the trig body's wall).  */
+  unsigned peak = rvtt_pressure_window_peak (mul_call, add_call);
   if (peak + 1 > rvtt_pressure_capacity ())
     {
       rvtt_refuse (RVTT_REF_REASSOC_PRESSURE_BUDGET_EXCEEDED, dump_file,
 		   "reassoc: refusing mad restructure (%s immediate-fold "
 		   "kept, bb %d) (reassoc-pressure-budget-exceeded: "
-		   "conservative block peak %u + the kept loadi live range "
-		   "> 8 LREGs)\n",
+		   "conservative pair-window peak %u + the kept loadi live "
+		   "range > 8 LREGs)\n",
 		   arm, bb->index, peak);
       return false;
     }
