@@ -1181,6 +1181,9 @@ RVTT_REFUSAL (REGRENAME_SPAN_OPAQUE,
 RVTT_REFUSAL (REGRENAME_TIED_CLOSE,
   "regrename-tied-close",
   "item #7: the closing writer genuinely reads the chain register (a tied merge the rename cannot split) (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_WEB_RECORD_OVERFLOW,
+  "regrename-web-record-overflow",
+  "R1 consumer contract: the chain web exceeds the transactional undo record a consumer requested; refused before any edit (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REISSUE_UNPROVED,
   "reissue-unproved",
   "dump; first seen in rtl-rvtt-replay.cc")

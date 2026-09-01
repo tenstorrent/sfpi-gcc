@@ -140,7 +140,55 @@ along with GCC; see the file COPYING3.  If not see
    compilation (the identical seam rationale as v1; see
    rvtt-passes.def).  Renames neither add upward-exposed uses nor
    extend any live range across a block boundary, so DF liveness
-   computed at pass entry stays valid across commits.  */
+   computed at pass entry stays valid across commits.
+
+   -mtt-tensix-optimize-rename-temporal (default off; the R1
+   composition, FABLE_GOES_BURR section 4) widens TARGET selection
+   from whole-block freeness to SPAN freeness: when no register is
+   untouched across the whole block, a target is still admissible when
+   it is untouched across the chain span itself and its lifetimes
+   outside the span provably cannot observe the chain value.  The
+   proof obligations, all fail-closed:
+
+   - the target is untouched by every position inside the span
+     (writer through close inclusive; to block end for a dead-at-exit
+     chain);
+   - no zero-length pinned-LREG protocol marker references the target
+     ANYWHERE in the block (pinned interfaces never temporal-rename);
+   - if the target is touched after the close, the FIRST such position
+     is an effect-audited Tensix instruction that freshly defines the
+     target (writes it, does not read it), and no CC-state event
+     occurs between the close and that definition: the fresh
+     definition then executes under the same lane mask as the chain
+     span, so it overwrites exactly the lanes the renamed web wrote,
+     and the disabled lanes -- which no masked write in either world
+     ever touched -- carry the identical pre-existing contents; after
+     that definition the two worlds' register contents are equal
+     everywhere.  A first post-span touch that reads the target, is
+     not effect-audited, or sits beyond a CC event refuses the
+     candidate;
+   - if the target is never touched after the close, it must be
+     DF-dead at block exit, and DF hard-register liveness is trusted
+     only in functions with no opaque instruction (the dead-at-exit
+     close's own discipline);
+   - touches BEFORE the writer need no extra proof: the span rule plus
+     the post-span rule leave no position that can read the target
+     between the chain's first write and the point the two worlds
+     re-converge, and every ordering constraint the shared register
+     creates is carried by the pattern-derived dependence vocabulary
+     the downstream schedulers consult.
+
+   The post-commit belt generalizes accordingly: target references
+   outside the span are recorded before the commit and re-verified
+   untouched after it (for a whole-block-free target that record is
+   empty, which is the old census exactly).
+
+   The same flag gates the CYCLIC-INTERIOR CONSUMER in
+   rtl-rvtt-schedule.cc: interior regions of a barrier-chopped
+   self-loop row request storage-collision chain renames through the
+   service before candidate generation (rvtt_lreg_rename_web records
+   the committed web so a scheduling refusal undoes it exactly via
+   rvtt_lreg_rename_web_undo).  */
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
@@ -436,6 +484,9 @@ struct chain_desc
   bool close_reads;		/* the close also reads the chain value
 				   through clean OP_IN operands */
   int old_l, new_l;		/* L indices */
+  bool temporal;		/* target admitted by the span-scoped
+				   (temporal) tier, not whole-block
+				   freeness */
 };
 
 static unsigned n_chain_renamed;
@@ -661,6 +712,7 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
   if (rvtt_pressure_capacity () < nlreg)
     nlreg = rvtt_pressure_capacity ();
   int new_l = -1;
+  bool temporal = false;
   for (unsigned l = 0; l < nlreg; ++l)
     {
       if (target_l >= 0 && (int) l != target_l)
@@ -673,6 +725,80 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
 	continue;
       new_l = l;
       break;
+    }
+  if (new_l < 0 && riscv_tt_opt_rename_temporal)
+    {
+      /* Temporal tier (the R1 composition; see the file header): a
+	 target free across the SPAN whose out-of-span lifetimes
+	 provably cannot observe the chain value.  Deterministic
+	 lowest admissible index.  */
+      size_t span_end = close == scan.size () ? scan.size () - 1 : close;
+      for (unsigned l = 0; l < nlreg; ++l)
+	{
+	  if (target_l >= 0 && (int) l != target_l)
+	    continue;
+	  uint32_t bit = 1u << l;
+	  if (bit & oldbit)
+	    continue;
+	  /* Untouched across the span (writer through close, or to the
+	     block end for a dead-at-exit chain).  */
+	  bool span_clear = true;
+	  for (size_t i = wi; i <= span_end && span_clear; ++i)
+	    span_clear = !(scan[i].touch & bit);
+	  if (!span_clear)
+	    continue;
+	  /* Pinned protocol markers bar the register block-wide.  */
+	  bool pinned = false;
+	  for (const span_insn &si : scan)
+	    if (si.kind == span_insn::SI_MARKER && (si.touch & bit))
+	      pinned = true;
+	  if (pinned)
+	    continue;
+	  /* Post-span rule: the first later touch must be a fresh
+	     effect-audited Tensix definition with no CC event between
+	     the close and it; no later touch needs beyond-suspicion
+	     DF death at block exit instead.  */
+	  size_t first_post = scan.size ();
+	  for (size_t i = span_end + 1; i < scan.size (); ++i)
+	    if (scan[i].touch & bit)
+	      {
+		first_post = i;
+		break;
+	      }
+	  if (first_post != scan.size ())
+	    {
+	      const span_insn &p = scan[first_post];
+	      if (p.kind != span_insn::SI_TENSIX || p.fx.opaque
+		  || !(p.fx.lreg_write & bit) || (p.fx.lreg_read & bit))
+		continue;
+	      bool gap_clear = true;
+	      for (size_t i = span_end; i < first_post && gap_clear; ++i)
+		{
+		  if (scan[i].kind == span_insn::SI_OPAQUE)
+		    gap_clear = false;
+		  else if (scan[i].kind == span_insn::SI_TENSIX
+			   && (scan[i].fx.opaque || scan[i].fx.cc_write))
+		    gap_clear = false;
+		}
+	      if (!gap_clear)
+		continue;
+	    }
+	  else
+	    {
+	      /* Live-in with no in-block touch would mean the write
+		 clobbers a value DF still carries -- incoherent with
+		 dead-out, but fail closed on it anyway.  */
+	      if (fn_has_opaque
+		  || REGNO_REG_SET_P (df_get_live_in (bb),
+				      SFPU_REG_FIRST + l)
+		  || REGNO_REG_SET_P (df_get_live_out (bb),
+				      SFPU_REG_FIRST + l))
+		continue;
+	    }
+	  new_l = l;
+	  temporal = true;
+	  break;
+	}
     }
   if (new_l < 0)
     {
@@ -688,6 +814,7 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
   ch->close_reads = close_reads;
   ch->old_l = old_l;
   ch->new_l = new_l;
+  ch->temporal = temporal;
   return true;
 }
 
@@ -755,10 +882,12 @@ span_no_worse_p (const chain_desc &ch)
    the chain shape on the ACTUAL committed stream (the laneID
    final-lockstep discipline; see the file header).  Any divergence
    reverts, refuses by name, and hard-asserts under -fchecking.
-   Returns true iff the rename stands.  */
+   Returns true iff the rename stands.  WEB, when non-null, receives
+   the committed web (the consumer undo record; a web too large for
+   the record refuses before any edit).  */
 
 static bool
-commit_chain (const chain_desc &ch)
+commit_chain (const chain_desc &ch, rvtt_lreg_rename_web *web = nullptr)
 {
   basic_block bb = ch.bb;
   unsigned oldr = SFPU_REG_FIRST + ch.old_l;
@@ -780,6 +909,28 @@ commit_chain (const chain_desc &ch)
       pre_len.push_back (get_attr_length (ch.scan[e].insn));
       pre_write.push_back (ch.scan[e].fx.lreg_write);
     }
+
+  /* Fail closed on a web the consumer record cannot carry, BEFORE any
+     edit (the record is the undo contract).  */
+  if (web
+      && edited.size () + (ch.close_reads ? 1 : 0)
+	 > RVTT_LREG_RENAME_WEB_MAX)
+    {
+      refuse_chain ("regrename-web-record-overflow", w_insn, bb);
+      return false;
+    }
+
+  /* Pre-commit census of target references OUTSIDE the span: empty
+     for a whole-block-free target, the temporal tier's out-of-span
+     lifetimes otherwise.  The post-commit belt re-verifies these
+     positions are exactly preserved.  */
+  size_t span_end
+    = ch.close == ch.scan.size () ? ch.scan.size () - 1 : ch.close;
+  std::vector<rtx_insn *> outside;
+  for (size_t i = 0; i < ch.scan.size (); ++i)
+    if ((i < ch.wi || i > span_end) && (ch.scan[i].touch & newbit))
+      outside.push_back (ch.scan[i].insn);
+  gcc_assert (ch.temporal || outside.empty ());
 
   /* The WRITER's edit is output-operands-only: an input occurrence of
      the source register is a read of its previous live range and must
@@ -923,14 +1074,30 @@ commit_chain (const chain_desc &ch)
     }
   if (!diverged)
     {
-      /* No other position in the block may reference the target.  */
+      /* Every position referencing the target must be an edited web
+	 member, the reading close, or a recorded out-of-span lifetime
+	 position (temporal targets only; exactly preserved).  */
       std::vector<span_insn> rescan;
       scan_block (bb, &rescan);
-      unsigned hits = 0;
+      unsigned hits = 0, strays = 0;
       for (const span_insn &si : rescan)
-	if (si.touch & newbit)
+	{
+	  if (!(si.touch & newbit))
+	    continue;
 	  ++hits;
-      if (hits != edited.size () + (ch.close_reads ? 1 : 0))
+	  bool known = ch.close_reads && si.insn == ch.scan[ch.close].insn;
+	  for (size_t e : edited)
+	    if (si.insn == ch.scan[e].insn)
+	      known = true;
+	  for (rtx_insn *o : outside)
+	    if (si.insn == o)
+	      known = true;
+	  if (!known)
+	    ++strays;
+	}
+      if (strays
+	  || hits != edited.size () + (ch.close_reads ? 1 : 0)
+		     + outside.size ())
 	diverged = "target reference census";
     }
   if (diverged)
@@ -958,14 +1125,24 @@ commit_chain (const chain_desc &ch)
       return false;
     }
 
+  /* Keep DF insn-level references current: consumers (the scheduler's
+     node collections) read register webs through DF refs, not raw
+     patterns.  Block-level liveness needs no update (no upward
+     exposure or cross-block extension is ever added).  */
+  for (size_t e : edited)
+    df_insn_rescan (ch.scan[e].insn);
+  if (ch.close_reads)
+    df_insn_rescan (ch.scan[ch.close].insn);
+
   if (dump_file)
     {
       int words = 0;
       for (size_t e : edited)
 	words += get_attr_length (ch.scan[e].insn) / 4;
       fprintf (dump_file,
-	       "Lreg chain rename: L%d -> L%d in bb %d (def uid=%d,"
+	       "Lreg chain rename%s: L%d -> L%d in bb %d (def uid=%d,"
 	       " %zu readers, close=%s)\n",
+	       ch.temporal ? " (temporal)" : "",
 	       ch.old_l, ch.new_l, bb->index, INSN_UID (w_insn),
 	       ch.readers.size (),
 	       ch.close == ch.scan.size () ? "dead-at-exit"
@@ -973,6 +1150,16 @@ commit_chain (const chain_desc &ch)
       fprintf (dump_file,
 	       "Lreg chain census: %d words before == %d words after,"
 	       " register fields only\n", words, words);
+    }
+  if (web)
+    {
+      web->old_l = ch.old_l;
+      web->new_l = ch.new_l;
+      web->n_insns = 0;
+      for (size_t e : edited)
+	web->insns[web->n_insns++] = ch.scan[e].insn;
+      if (ch.close_reads)
+	web->insns[web->n_insns++] = ch.scan[ch.close].insn;
     }
   n_chain_renamed++;
   return true;
@@ -1155,10 +1342,14 @@ public:
    requesting consumer prices (the item-#7 decoupling).  DF liveness
    must be current on entry; a committed rename leaves it valid (no
    upward exposure or cross-block extension is ever added).  Returns
-   true iff a rename committed.  */
+   true iff a rename committed.  WEB, when non-null, receives the
+   committed web for the consumer's exact undo
+   (rvtt_lreg_rename_web_undo); a web too large for the record
+   refuses by name before any edit.  */
 
 bool
-rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg)
+rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg,
+			rvtt_lreg_rename_web *web)
 {
   std::vector<span_insn> scan;
   scan_block (bb, &scan);
@@ -1180,7 +1371,33 @@ rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg)
   if (!analyze_chain (bb, scan, wi, function_has_opaque_insn_p (cfun),
 		      target_lreg, &ch))
     return false;
-  return commit_chain (ch);
+  return commit_chain (ch, web);
+}
+
+/* Exact inverse of a committed service rename: move every occurrence
+   of the target register inside the recorded web members back to the
+   source register.  Sound because the belt proved the web members'
+   only target references are the moved fields (a temporal target's
+   out-of-span lifetimes live in OTHER instructions by construction).
+   The inverse re-recognizes by construction (the forward commit
+   re-recognized both worlds); divergence is a hard assert.  */
+
+void
+rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web)
+{
+  unsigned oldr = SFPU_REG_FIRST + web.old_l;
+  unsigned newr = SFPU_REG_FIRST + web.new_l;
+  rtx oldreg = gen_rtx_REG (XTT32SImode, oldr);
+  for (unsigned i = 0; i < web.n_insns; ++i)
+    queue_reg_replacements (web.insns[i], &PATTERN (web.insns[i]),
+			    newr, oldreg);
+  bool ok = apply_change_group ();
+  gcc_assert (ok);
+  for (unsigned i = 0; i < web.n_insns; ++i)
+    df_insn_rescan (web.insns[i]);
+  if (dump_file)
+    fprintf (dump_file, "Lreg chain rename undo: L%d -> L%d (%u insns)\n",
+	     web.new_l, web.old_l, web.n_insns);
 }
 
 

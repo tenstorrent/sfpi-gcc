@@ -881,6 +881,10 @@ mtt-tensix-optimize-lreg-rename-chains
 Target Var(riscv_tt_opt_lreg_rename_chains) Init(0)
 General post-allocation du-chain LREG renaming (the gcc/regrename.cc formulation scoped to the Tensix vector file): move a storage-colliding single-definition def-use web in any basic block onto a proven-free LREG under the typed-effect veto, a fail-closed no-CC-event span rule, a lane-exact death proof, and a post-commit structural re-verification; delivered words never change, only register fields move, and every unproven clause refuses by name.  Also exports the rename service the fill/rotation/modulo-scheduling consumers request chains through.
 
+mtt-tensix-optimize-rename-temporal
+Target Var(riscv_tt_opt_rename_temporal) Init(0)
+The R1 8-LREG-wall composition (FABLE_GOES_BURR section 4) over the item-#7 du-chain rename engine: (1) TEMPORALLY-SCOPED rename targets -- when no LREG is untouched across the whole block, a target is still admissible when it is untouched across the chain span itself and its out-of-span lifetimes provably cannot observe the chain value (any later touch must open with a fresh effect-audited all-write definition with no CC-state event between the chain close and it, a never-again-touched target must be DF-dead at block exit in an opaque-free function, and pinned-protocol registers never temporal-rename); the post-commit belt re-verifies the out-of-span lifetimes untouched.  (2) The CYCLIC-INTERIOR rename consumer: interior regions of a barrier-chopped self-loop row request storage-collision chain renames through the item-#7 service before candidate generation, the established strict whole-row steady-state II acceptance prices the composition unchanged, and a refused candidate undoes every requested rename exactly.  Every unproven clause refuses by name; with the flag absent codegen is byte-identical.
+
 mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
 Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.
