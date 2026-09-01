@@ -234,32 +234,41 @@ expand_cmp_using_sub (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&a
 static bool
 expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&args)[2], unsigned op, unsigned type)
 {
-  if (op == LT || op == GE
-      || ((op == EQ || op == NE) && args[0].is_zero ()))
-    op = commute_cmp_args (op, args);
-
-  if ((op == EQ && args[1].is_zero ())
-      || op == NE)
+  if (op == SFPXCMP_MOD1_CC_EQ || op == SFPXCMP_MOD1_CC_NE)
+    // Add a combine pattern to turn an sfpiadd_v/setcc into sfple's
     return expand_cmp_using_sub (right, cmp, args, op, type);
 
+  if (op < SFPXCMP_MOD1_CC_GT)
+    op = commute_cmp_args (op, args);
   
   // Quasar and later use the int field to specify data type
   // Blackhole treats gtle as smag/float
   static const uint16_t gtle_type_map[] = {
-    0xffff, //SFPGTLE_IMM_TYPE_UINT,for 4.1
+    0xffff, //SFPGTLE_IMM_TYPE_UINT, for 4.1
     SFPGTLE_IMM_TYPE_INT,
     SFPGTLE_IMM_TYPE_SMAG,
     SFPGTLE_IMM_TYPE_FLOAT,
   };
-  static const uint16_t setcc_type_map[] = {
-    SFPSETCC_IMM_TYPE_INT,
-    SFPSETCC_IMM_TYPE_INT,
-    SFPSETCC_IMM_TYPE_SMAG,
-    SFPSETCC_IMM_TYPE_FLOAT,
-  };
 
-  
+  gcc_assert (op == SFPXCMP_MOD1_CC_GT
+	      || op == SFPXCMP_MOD1_CC_LE);
 
+  // Emit sfpgt or sfple for ordering compates
+  // Emit sfple, sfple for equality compares
+  auto *insnd = rvtt_get_insn_data (op == SFPXCMP_MOD1_CC_GT
+				    ? rvtt_insn_data::sfpgt : rvtt_insn_data::sfple);
+  auto mod_arg = build_int_cst (unsigned_type_node, SFPGTLE_MOD1_SET_CC);
+  auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
+  gimple_call_set_arg (call, insnd->src_arg (), args[0].get_arg ());
+  gimple_call_set_arg (call, insnd->src_arg () + 1, args[1].get_arg ());
+  gimple_call_set_arg (call, insnd->mod_arg (), mod_arg);
+  if (TARGET_XTT_TENSIX_QSR)
+    {
+      auto type_arg = build_int_cst (unsigned_type_node, gtle_type_map[type]);
+      gimple_call_set_arg (call, insnd->mod_arg () + 1, type_arg);
+    }
+  gimple_set_location (call, gimple_location (cmp));
+  gsi_insert_after (right, call, GSI_NEW_STMT);
   return false;
 }
 
@@ -397,7 +406,7 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
   */
 
   bool negated = false;
-#if 0
+#if 1
   if ((TARGET_XTT_TENSIX_QSR && type >= SFPXCMP_MOD1_TYPE_INT)
        || (TARGET_XTT_TENSIX_BH && type >= SFPXCMP_MOD1_TYPE_SMAG))
     negated = expand_cmp_using_gtle (right, cmp, args, op, type);

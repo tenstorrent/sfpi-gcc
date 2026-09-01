@@ -80,16 +80,15 @@ void slength () {
 **	# READ L1
 **	SFPMOV	L0, L1, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSETCC	L0, 0, 0
+**	SFPGT	L9, L0, 0, 1
 **	# READ L2
 **	SFPMOV	L0, L2, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPMOV	L1, L0, 2
-**	SFPIADD	L1, L9, 0, 2
+**	SFPGT	L0, L9, 0, 1
 **	# READ L3
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPSETCC	L0, 0, 4
+**	SFPLE	L9, L0, 0, 1
 **	# READ L4
 **	SFPMOV	L0, L4, 0	# LV:L0
 **	SFPENCC	3, 10
@@ -164,17 +163,18 @@ void ulength () {
 **	# READ L1
 **	SFPMOV	L0, L1, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPIADD	L15, L0, -16, 1
+**	SFPLOADI	L1, 16, 2
+**	SFPGT	L1, L0, 0, 1
 **	# READ L2
 **	SFPMOV	L0, L2, 0	# LV:L0
 **	SFPENCC	3, 10
 **	SFPLOADI	L1, 16, 2
-**	SFPMOV	L2, L0, 2
-**	SFPIADD	L2, L1, 0, 2
+**	SFPGT	L0, L1, 0, 1
 **	# READ L3
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPIADD	L15, L0, -16, 9
+**	SFPLOADI	L1, 16, 2
+**	SFPLE	L1, L0, 0, 1
 **	# READ L4
 **	SFPMOV	L0, L4, 0	# LV:L0
 **	SFPENCC	3, 10

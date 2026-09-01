@@ -215,7 +215,7 @@ RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI_USI,                   
 RVTT_FN (sfpwriteconfig_i,      ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI,                   VOL|EXP, ({CU, 16, 8}, {M, 0x55}, {CU, 4}))
 
 RVTT_FN (sfpgt,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))
-RVTT_OVR(sfpgt,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                     CC(0xeeee), ({M, 0xffff}, {U, 1}))
+RVTT_OVR(sfpgt,             qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI_USI,                      CC(0xeeee), ({M, 0xffff}, {U, 1}))
 RVTT_FN (sfpgt_lv,        bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI,                  LV|CC(0xeeee), ({M, 0xffff}))
 RVTT_OVR(sfpgt_lv,          qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,              LV|CC(0xeeee), ({M, 0xffff}, {U, 1}))
 RVTT_FN (sfple,           bh,_bh,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,                          CC(0xeeee), ({M, 0xffff}))

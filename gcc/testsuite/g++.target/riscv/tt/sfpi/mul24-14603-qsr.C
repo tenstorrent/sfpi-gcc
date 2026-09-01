@@ -53,8 +53,7 @@ void bar () {
 **	# READ L1
 **	# READ L4
 **	# READ L5
-**	SFPMAD	L2, L10, L1, L0, 1
-**	SFPSETCC	L2, 2048, 0
+**	SFPGT	L1, L0, 1, 1
 **	SFPCOMPC
 **	SFPMOV	L2, L4, 2
 **	SFPMUL24	L2, L0, L1, 0	# LV:L2
