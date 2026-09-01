@@ -129,11 +129,20 @@ deferred_combine () MULI_ADDI {
   res = sfpmuli_lv (0, lv, a, val, 0, 0, 0);
 }
 
+// Do these in preference to mul,add->mad, as the register pressure is
+// immediately reduced.  EXCEPTION (licensed, FABLE_GOES_BURR R3): a
+// product dying into an add serializes two MAD-subunit roundings where
+// the contract mad rule below delivers one; under BOTH license keys
+// (-fassociative-math + -mtt-tensix-optimize-reassoc-mad-restructure)
+// the fold is vetoed for exactly those pairs and the mad rule fuses
+// them instead (madr_suppress_*_fold_p, gimple-rvtt-combine.cc).
 // a * fp16b(scalar)
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpmul_lv (lv, %a, cst, 0);
   {}
+    if (madr_suppress_mul_fold_p (res_call))
+      return false;
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
 }
 
@@ -154,6 +163,8 @@ deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpadd_lv (lv, %a, cst, 0);
   {}
+    if (madr_suppress_add_fold_p (a, res_call))
+      return false;
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
 }
 
