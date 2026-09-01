@@ -2,7 +2,7 @@
 // The fixed eight-row SFPU body is recorded before the enclosing eight-page
 // loop, then replayed eight times per page.  In particular, the page
 // backedge targets the label after the sole record-only capture.
-// { dg-final { scan-rtl-dump-times "Persistent counted hoist: row loop \\d+ across outer loop \\d+ \\(8 trips\\)" 1 "rvtt_replay" } }
+// { dg-final { scan-rtl-dump-times "Persistent counted hoist: loop \\d+ across outer loop \\d+ \\(8 trips\\)" 1 "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture \\[0,\\+18\\) to preheader" 1 "rvtt_replay" } }
 // { dg-final { scan-assembler-times "TTREPLAY\\t0, 18, 0, 1" 1 } }
 // { dg-final { scan-assembler-times "TTREPLAY\\t0, 18, 0, 0" 8 } }

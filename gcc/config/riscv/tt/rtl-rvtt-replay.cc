@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt-effects.h"
+#include "rvtt-mop-tables.h"
 #include "rvtt-raw-boundary.h"
 
 // Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
@@ -1622,14 +1623,21 @@ dedicated_loop_preheader (class loop *loop)
     ? preheader : nullptr;
 }
 
-// A raw asm or an unknown callee can own or overwrite replay state without
-// exposing that fact to this function's RTL.  Typed barriers are harmless
-// here: they remain outside the payload and do not change the selected replay
-// slots.  A typed owner is conservatively a boundary for this first hoisting
+// An unknown callee or opaque asm can own or overwrite replay state without
+// exposing that fact to this function's RTL.  A constant raw .ttinsn is less
+// opaque: the shared raw-boundary decoder can prove that its architectural
+// opcode is neither REPLAY nor a MOP launch.  Such a word is replay-buffer
+// preserving even though it remains a formation boundary.  MOP itself is a
+// replay consumer: a MOP template may contain a REPLAY launch referring to
+// the same 32-slot buffer, so moving a capture before an intervening MOP can
+// change what that MOP observes even though MOP does not overwrite the
+// buffer.  A typed owner is conservatively a boundary for this first hoisting
 // implementation even though global slot accounting has already excluded its
-// declared range.
+// declared range.  Return a stable refusal name and blocker when requested so
+// actual generated page shells can be audited without guessing from source.
 static bool
-loop_preserves_replay_p (class loop *loop)
+loop_preserves_replay_p (class loop *loop, const char **why = nullptr,
+			 rtx_insn **blocker = nullptr)
 {
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
@@ -1637,13 +1645,40 @@ loop_preserves_replay_p (class loop *loop)
       {
 	rtx_insn *insn;
 	FOR_BB_INSNS (bb, insn)
-	  if (NONDEBUG_INSN_P (insn)
-	      && (CALL_P (insn)
-		  || asm_noperands (PATTERN (insn)) >= 0
-		  || (GET_CODE (insn) == INSN
-		      && recog_memoized (insn) >= 0
-		      && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)))
-	    return false;
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      const char *refusal = nullptr;
+	      if (CALL_P (insn))
+		refusal = "unknown-call";
+	      else if (asm_noperands (PATTERN (insn)) >= 0)
+		{
+		  uint32_t raw_word;
+		  if (rvtt_raw_ttinsn_word (insn, &raw_word)
+		      && !rvtt_raw_replay_owner_word_p (raw_word))
+		    {
+		      if ((raw_word >> 24) != XTT_MOP_OPCODE)
+			continue;
+		      refusal = "raw-mop-replay-consumer";
+		    }
+		  else
+		    refusal = "opaque-asm";
+		}
+	      else if (GET_CODE (insn) == INSN
+		       && recog_memoized (insn) == CODE_FOR_rvtt_ttmop_int)
+		refusal = "typed-mop-replay-consumer";
+	      else if (GET_CODE (insn) == INSN
+		       && recog_memoized (insn) >= 0
+		       && get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
+		refusal = "typed-replay-owner";
+	      if (refusal)
+		{
+		  if (why)
+		    *why = refusal;
+		  if (blocker)
+		    *blocker = insn;
+		  return false;
+		}
+	    }
       }
   return true;
 }
@@ -1952,15 +1987,26 @@ counted_loop_payload (class loop *loop, replay_block &info,
   return true;
 }
 
-/* The counted row loop's ordinary preheader is often the header of a
-   compile-time-sized page loop.  Recording there still re-records the same
-   fixed instruction words once per page.  With record-hoist enabled, lift
-   directly to the page-loop preheader when the exact nested shape proves:
+/* The counted row loop's ordinary preheader is inside a compile-time-sized
+   page loop.  Recording there still re-records the same fixed instruction
+   words once per page.  With record-hoist enabled, lift directly to the
+   page-loop preheader when the exact nested shape proves:
 
-     - the row preheader is the outer header and flows straight to the row;
+     - the row has a dedicated preheader inside its immediate outer loop;
      - the outer loop is a positive, constant-trip latch-tested do-while;
-     - no call, opaque asm, or existing replay owner can overwrite slots;
+     - no call, opaque asm, MOP consumer, or existing replay owner can
+       observe or overwrite slots;
      - neither preheader has an open user recording epoch.
+
+   Requiring the row preheader to be the outer header was unnecessarily
+   restrictive.  A real compute page has replay-transparent acquire/copy
+   blocks before the row and commit/pack/pop blocks after it.  Moving a
+   no-exec, fixed-encoding capture across those blocks is legal: its declared
+   payload closes the recording epoch in the outer preheader itself, and the
+   buffer remains live until each later playback.  LOOP_PRESERVES_REPLAY_P
+   audits every block of the outer loop, so ordinary control, memory and
+   replay-nonconsumer Tensix operations may intervene while calls, opaque
+   asm, MOP consumers and REPLAY owners still refuse the promotion.
 
    This is direct ancestor placement, not a permissive second scan over an
    already-created replay owner.  Consequently the existing fixed-encoding
@@ -1973,40 +2019,64 @@ persistent_counted_preheader (class loop *row_loop,
 {
   if (riscv_tt_opt_replay_record_hoist <= 0)
     return row_preheader;
-  class loop *outer = loop_outer (row_loop);
-  if (!outer || outer->num == 0 || row_preheader != outer->header
-      || !single_succ_p (row_preheader)
-      || single_succ (row_preheader) != row_loop->header)
-    return row_preheader;
+  basic_block capture_preheader = row_preheader;
+  class loop *inner = row_loop;
 
-  basic_block outer_preheader = dedicated_loop_preheader (outer);
-  uint64_t outer_trips = 0;
-  const char *why = nullptr;
-  if (!outer_preheader)
-    why = "no-dedicated-outer-preheader";
-  else if (bitmap_bit_p (dirty_bbs, outer_preheader->index))
-    why = "outer-preheader-recording-open";
-  else if (!loop_preserves_replay_p (outer))
-    why = "outer-loop-opaque";
-  else if (!provable_constant_latch_trips (outer, outer_preheader,
-					  &outer_trips)
-	   || outer_trips < 1)
-    why = "outer-trip-count-unproven";
-
-  if (why)
+  // A Tensix face loop commonly adds one more constant loop level between the
+  // eight-row SFPU payload and the page loop.  Promote to a fixed point over
+  // immediate ancestors.  Every level independently proves its trip count,
+  // dedicated preheader, recording epoch, and complete replay ownership; a
+  // refusal stops at the last proven preheader rather than discarding a legal
+  // inner promotion.
+  while (class loop *outer = loop_outer (inner))
     {
+      if (outer->num == 0
+	  || !flow_bb_inside_loop_p (outer, capture_preheader))
+	break;
+
+      basic_block outer_preheader = dedicated_loop_preheader (outer);
+      uint64_t outer_trips = 0;
+      const char *why = nullptr;
+      if (!outer_preheader)
+	why = "no-dedicated-outer-preheader";
+      else if (bitmap_bit_p (dirty_bbs, outer_preheader->index))
+	why = "outer-preheader-recording-open";
+      else
+	{
+	  const char *blocker_kind = nullptr;
+	  rtx_insn *blocker = nullptr;
+	  if (!loop_preserves_replay_p (outer, &blocker_kind, &blocker))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "Persistent counted ownership blocker: %s at insn %d"
+			 " in bb %d\n", blocker_kind, INSN_UID (blocker),
+			 BLOCK_FOR_INSN (blocker)->index);
+	      why = "outer-loop-opaque";
+	    }
+	}
+      if (!why && (!provable_constant_latch_trips (outer, outer_preheader,
+						   &outer_trips)
+		   || outer_trips < 1))
+	why = "outer-trip-count-unproven";
+
+      if (why)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Persistent counted hoist refused: %s\n", why);
+	  break;
+	}
       if (dump_file)
 	fprintf (dump_file,
-		 "Persistent counted hoist refused: %s\n", why);
-      return row_preheader;
+		 "Persistent counted hoist: loop %d across outer loop %d"
+		 " (%llu trips) to preheader bb %d\n",
+		 inner->num, outer->num,
+		 (unsigned long long) outer_trips, outer_preheader->index);
+      capture_preheader = outer_preheader;
+      inner = outer;
     }
-  if (dump_file)
-    fprintf (dump_file,
-	     "Persistent counted hoist: row loop %d across outer loop %d"
-	     " (%llu trips) to preheader bb %d\n",
-	     row_loop->num, outer->num,
-	     (unsigned long long) outer_trips, outer_preheader->index);
-  return outer_preheader;
+  return capture_preheader;
 }
 
 static void
