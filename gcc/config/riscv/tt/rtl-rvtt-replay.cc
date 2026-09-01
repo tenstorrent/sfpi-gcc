@@ -970,6 +970,150 @@ provable_constant_trips (class loop *loop, basic_block preheader,
   return false;
 }
 
+/* Prove the constant trip count of the outer, latch-tested loop shape that
+   encloses a counted SFPU row loop.  Unlike provable_constant_trips, whose
+   self-loop discipline is intentionally exact for the row loop itself, this
+   admits a multi-block do-while only when its unique latch owns the sole
+   counter update and branches directly either to the header or out of the
+   loop.  The record-only capture may then be placed before the outer loop:
+   the do-while executes at least once, and the caller separately proves that
+   no replay owner, call, or opaque asm can overwrite the selected slots on
+   the path to any playback.  */
+
+static bool
+provable_constant_latch_trips (class loop *loop, basic_block preheader,
+			       uint64_t *trips)
+{
+  basic_block latch = loop->latch;
+  if (!latch || latch == loop->header)
+    return false;
+  rtx_insn *jump = BB_END (latch);
+  if (!JUMP_P (jump) || !any_condjump_p (jump) || !onlyjump_p (jump)
+      || EDGE_COUNT (latch->succs) != 2)
+    return false;
+
+  edge e_branch = BRANCH_EDGE (latch);
+  edge e_fall = FALLTHRU_EDGE (latch);
+  bool taken_continues;
+  if (e_branch->dest == loop->header
+	  && !flow_bb_inside_loop_p (loop, e_fall->dest))
+    taken_continues = true;
+  else if (e_fall->dest == loop->header
+	   && !flow_bb_inside_loop_p (loop, e_branch->dest))
+    taken_continues = false;
+  else
+    return false;
+
+  rtx set = pc_set (jump);
+  if (!set || GET_CODE (SET_SRC (set)) != IF_THEN_ELSE)
+    return false;
+  rtx src = SET_SRC (set);
+  rtx cond = XEXP (src, 0);
+  if (!COMPARISON_P (cond))
+    return false;
+  bool taken_when_true = GET_CODE (XEXP (src, 1)) != PC;
+  rtx op0 = XEXP (cond, 0);
+  rtx op1 = XEXP (cond, 1);
+
+  rtx counter = nullptr, bound = nullptr;
+  rtx_insn *step_insn = nullptr;
+  for (int side = 0; side != 2; ++side)
+    {
+      rtx cand = side ? op1 : op0;
+      if (!REG_P (cand))
+	continue;
+      rtx_insn *found = nullptr;
+      bool bad = false;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, cfun)
+	if (flow_bb_inside_loop_p (loop, bb))
+	  {
+	    rtx_insn *insn;
+	    FOR_BB_INSNS (bb, insn)
+	      if (NONDEBUG_INSN_P (insn) && insn != jump
+		  && reg_set_p (cand, insn))
+		{
+		  if (found)
+		    bad = true;
+		  found = insn;
+		}
+	  }
+      if (bad)
+	return false;
+      if (found)
+	{
+	  if (counter)
+	    return false;
+	  counter = cand;
+	  bound = side ? op0 : op1;
+	  step_insn = found;
+	}
+    }
+  if (!counter)
+    return false;
+
+  rtx step_set = single_set (step_insn);
+  if (!step_set || !REG_P (SET_DEST (step_set))
+      || REGNO (SET_DEST (step_set)) != REGNO (counter)
+      || GET_CODE (SET_SRC (step_set)) != PLUS
+      || !REG_P (XEXP (SET_SRC (step_set), 0))
+      || REGNO (XEXP (SET_SRC (step_set), 0)) != REGNO (counter)
+      || !CONST_INT_P (XEXP (SET_SRC (step_set), 1)))
+    return false;
+  uint64_t step = UINTVAL (XEXP (SET_SRC (step_set), 1));
+
+  scalar_int_mode mode;
+  if (!is_a<scalar_int_mode> (GET_MODE (counter), &mode)
+      || GET_MODE_PRECISION (mode) > 64)
+    return false;
+  unsigned prec = GET_MODE_PRECISION (mode);
+  uint64_t mask = prec == 64 ? ~uint64_t (0)
+    : (uint64_t (1) << prec) - 1;
+  uint64_t init;
+  if (!constant_reaching_value (preheader, counter, &init))
+    return false;
+
+  uint64_t bound_val;
+  if (CONST_INT_P (bound))
+    bound_val = UINTVAL (bound);
+  else if (REG_P (bound))
+    {
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, cfun)
+	if (flow_bb_inside_loop_p (loop, bb))
+	  {
+	    rtx_insn *insn;
+	    FOR_BB_INSNS (bb, insn)
+	      if (NONDEBUG_INSN_P (insn) && insn != jump
+		  && reg_set_p (bound, insn))
+		return false;
+	  }
+      if (!constant_reaching_value (preheader, bound, &bound_val))
+	return false;
+    }
+  else
+    return false;
+  bound_val &= mask;
+
+  bool counter_is_op0 = rtx_equal_p (counter, op0);
+  uint64_t c = init & mask;
+  constexpr uint64_t TRIP_BOUND = uint64_t (1) << 16;
+  for (uint64_t t = 1; t <= TRIP_BOUND; ++t)
+    {
+      c = (c + step) & mask;
+      uint64_t v0 = counter_is_op0 ? c : bound_val;
+      uint64_t v1 = counter_is_op0 ? bound_val : c;
+      bool cond_holds = eval_int_condition (GET_CODE (cond), v0, v1, prec);
+      bool taken = cond_holds == taken_when_true;
+      if (taken != taken_continues)
+	{
+	  *trips = t;
+	  return true;
+	}
+    }
+  return false;
+}
+
 /* Generic replay-hoist profitability model.
 
    Hoisting converts one in-loop recording pass per trip (re-recording the
@@ -1808,6 +1952,63 @@ counted_loop_payload (class loop *loop, replay_block &info,
   return true;
 }
 
+/* The counted row loop's ordinary preheader is often the header of a
+   compile-time-sized page loop.  Recording there still re-records the same
+   fixed instruction words once per page.  With record-hoist enabled, lift
+   directly to the page-loop preheader when the exact nested shape proves:
+
+     - the row preheader is the outer header and flows straight to the row;
+     - the outer loop is a positive, constant-trip latch-tested do-while;
+     - no call, opaque asm, or existing replay owner can overwrite slots;
+     - neither preheader has an open user recording epoch.
+
+   This is direct ancestor placement, not a permissive second scan over an
+   already-created replay owner.  Consequently the existing fixed-encoding
+   payload proof and global persistent-slot allocation remain unchanged.  */
+
+static basic_block
+persistent_counted_preheader (class loop *row_loop,
+			      basic_block row_preheader,
+			      bitmap dirty_bbs)
+{
+  if (riscv_tt_opt_replay_record_hoist <= 0)
+    return row_preheader;
+  class loop *outer = loop_outer (row_loop);
+  if (!outer || outer->num == 0 || row_preheader != outer->header
+      || !single_succ_p (row_preheader)
+      || single_succ (row_preheader) != row_loop->header)
+    return row_preheader;
+
+  basic_block outer_preheader = dedicated_loop_preheader (outer);
+  uint64_t outer_trips = 0;
+  const char *why = nullptr;
+  if (!outer_preheader)
+    why = "no-dedicated-outer-preheader";
+  else if (bitmap_bit_p (dirty_bbs, outer_preheader->index))
+    why = "outer-preheader-recording-open";
+  else if (!loop_preserves_replay_p (outer))
+    why = "outer-loop-opaque";
+  else if (!provable_constant_latch_trips (outer, outer_preheader,
+					  &outer_trips)
+	   || outer_trips < 1)
+    why = "outer-trip-count-unproven";
+
+  if (why)
+    {
+      if (dump_file)
+	fprintf (dump_file,
+		 "Persistent counted hoist refused: %s\n", why);
+      return row_preheader;
+    }
+  if (dump_file)
+    fprintf (dump_file,
+	     "Persistent counted hoist: row loop %d across outer loop %d"
+	     " (%llu trips) to preheader bb %d\n",
+	     row_loop->num, outer->num,
+	     (unsigned long long) outer_trips, outer_preheader->index);
+  return outer_preheader;
+}
+
 static void
 hoist_counted_loops (function *cfn,
 		     std::vector<replay_span> const &replay_spans,
@@ -1847,6 +2048,8 @@ hoist_counted_loops (function *cfn,
 		     " state\n", preheader->index);
 	  continue;
 	}
+      basic_block capture_preheader
+	= persistent_counted_preheader (loop, preheader, dirty_bbs);
       // The counted-loop payload is its own single clone; across trips the
       // launch is always separated from the next by the loop-control
       // delivery, so the contiguous launch run is 1.
@@ -1863,7 +2066,8 @@ hoist_counted_loops (function *cfn,
 	continue;
 
       unsigned length
-	= replace_hoisted_sequence (seq, info, slot->begin, preheader);
+	= replace_hoisted_sequence (seq, info, slot->begin,
+				    capture_preheader);
       std::fill (persistent_slots.begin () + slot->begin,
 		 persistent_slots.begin () + slot->begin + length, true);
       if (dump_file)
