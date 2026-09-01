@@ -1148,6 +1148,9 @@ RVTT_REFUSAL (RECORD_HOIST_VARIANT_ENCODING,
 RVTT_REFUSAL (REGRENAME_CC_SPAN,
   "regrename-cc-span",
   "item #7: a CC-state event inside the chain span; the disabled-lane contents of the two worlds diverge (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_CC_SPAN_REGION_UNPROVEN,
+  "regrename-cc-span-region-unproven",
+  "laneKQ widening: -mtt-tensix-optimize-rename-cc-region was live but the CC-region engine's RTL view could not prove the span's CC activity balanced-and-narrowing or all-lanes-entry (outside-save popc, unbalanced frame, unrestored end mask, unproven entry, unproven SFPENCC, nonzero pushc/popc mod, vocabulary-external writer, opaque insn, or replay record window); the dumped view class names the arm (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_CHAIN_OPEN,
   "regrename-chain-open",
   "item #7: no in-block kill and no beyond-suspicion DF death at block exit; the chain is open at the region boundary (rtl-rvtt-lreg-rename.cc)")
