@@ -955,6 +955,117 @@ rvtt_cc_region_tree::loop_cc_ambient_preserving_p (class loop *loop) const
   return ok;
 }
 
+/* Kill-modeling block classification for the all-lanes entry proof
+   (see rvtt-cc-region.h edge_entry_all_lanes_p; the
+   prepeel_ambient_all_lanes_p discipline of gimple-rvtt-prgm-const.cc
+   with fail-closed calls/raw-words).  The LAST CC-relevant event of
+   the block decides: an all-lanes SFPENCC (typed, or an audited
+   ALL_LANES raw word) KILLS (re-establishes all-lanes); any other
+   CC-relevant statement, foreign call, or unaudited/CC-INERT-refuted
+   raw word makes the block DIRTY; CC-INERT raw words and everything
+   else are transparent.  */
+
+enum cc_kill_class
+{
+  CC_KILL_TRANSPARENT,
+  CC_KILL_KILLS,
+  CC_KILL_DIRTY
+};
+
+static cc_kill_class
+classify_cc_kill_block (basic_block bb)
+{
+  cc_kill_class cls = CC_KILL_TRANSPARENT;
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
+       gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      stmt_cc_kind kind = classify_stmt (stmt);
+      switch (kind)
+	{
+	case STMT_CC_NONE:
+	  break;
+	case STMT_CC_ENCC:
+	  cls = rvtt_all_lanes_encc_p (stmt) ? CC_KILL_KILLS : CC_KILL_DIRTY;
+	  break;
+	case STMT_CC_OPAQUE:
+	  {
+	    gasm *a = dyn_cast <gasm *> (stmt);
+	    uint32_t w;
+	    if (a && rvtt_raw_ttinsn_word_p (a, &w))
+	      {
+		rvtt_raw_cc_class c = rvtt_raw_cc_word_class (w);
+		if (c == RVTT_RAW_CC_INERT)
+		  break;
+		cls = c == RVTT_RAW_CC_ALL_LANES ? CC_KILL_KILLS
+						 : CC_KILL_DIRTY;
+	      }
+	    else
+	      /* Foreign call or undecodable asm: fail closed.  */
+	      cls = CC_KILL_DIRTY;
+	    break;
+	  }
+	default:
+	  /* pushc/popc/refinements/vocabulary-external/breakers all
+	     leave a non-all-lanes state possible.  */
+	  cls = CC_KILL_DIRTY;
+	  break;
+	}
+    }
+  return cls;
+}
+
+bool
+rvtt_cc_region_tree::block_entry_all_lanes_p (basic_block bb) const
+{
+  hash_set<basic_block> visited;
+  auto_vec<basic_block, 16> work;
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    work.safe_push (e->src);
+  while (!work.is_empty ())
+    {
+      basic_block b = work.pop ();
+      if (b == ENTRY_BLOCK_PTR_FOR_FN (m_fn))
+	continue;		/* function entry: all-lanes ambient */
+      if (visited.add (b))
+	continue;
+      switch (classify_cc_kill_block (b))
+	{
+	case CC_KILL_DIRTY:
+	  return false;
+	case CC_KILL_KILLS:
+	  continue;		/* path re-established all-lanes */
+	case CC_KILL_TRANSPARENT:
+	  FOR_EACH_EDGE (e, ei, b->preds)
+	    work.safe_push (e->src);
+	  continue;
+	}
+    }
+  return true;
+}
+
+/* See rvtt-cc-region.h.  */
+
+bool
+rvtt_cc_region_tree::edge_entry_all_lanes_p (edge e) const
+{
+  if (!e || !e->src)
+    return false;
+  /* State on the edge = state at the END of E->src.  */
+  switch (classify_cc_kill_block (e->src))
+    {
+    case CC_KILL_KILLS:
+      return true;
+    case CC_KILL_DIRTY:
+      return false;
+    case CC_KILL_TRANSPARENT:
+      return block_entry_all_lanes_p (e->src);
+    }
+  return false;
+}
+
 /* See rvtt-cc-region.h.  */
 
 bool

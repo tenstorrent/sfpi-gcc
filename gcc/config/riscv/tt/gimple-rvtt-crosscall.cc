@@ -3346,12 +3346,27 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
   if (riscv_tt_opt_cc_region_general > 0 && !cc_immaterial)
     {
       rvtt_cc_region_tree ccr (cfun);
-      ctx.cc_ambient_ok = ccr.loop_cc_ambient_preserving_p (loop);
+      /* Two tree-proven admissions, either sufficient:
+	 - the lifted entry edge carries the ALL-LANES state (kill-
+	   modeling backward proof): a placement there writes EVERY
+	   lane, so any crossed CC activity leaves the consumers'
+	   enable sets subsets of the placement's -- the containment
+	   fact holds unconditionally and the typed-atom whitelist
+	   below is the only remaining discipline;
+	 - the crossed loop's CC activity is ambient-preserving-and-
+	   narrowing (balanced structured frames; pre-canonicalization
+	   pipeline positions).  */
+      bool entry_all = ccr.edge_entry_all_lanes_p (entry);
+      ctx.cc_ambient_ok = entry_all
+	|| ccr.loop_cc_ambient_preserving_p (loop);
       if (dump_file && ctx.cc_ambient_ok)
 	fprintf (dump_file,
-		 "crossloop-hoist: loop bb %d CC activity tree-proven "
-		 "ambient-preserving (cc-region-general)\n",
-		 loop->header->index);
+		 entry_all
+		 ? "crossloop-hoist: entry bb %d proven ALL-LANES "
+		   "(cc-region-general): crossed CC atoms admitted\n"
+		 : "crossloop-hoist: loop bb %d CC activity tree-proven "
+		   "ambient-preserving (cc-region-general)\n",
+		 entry_all ? entry->dest->index : loop->header->index);
     }
 
   bool ok = true;

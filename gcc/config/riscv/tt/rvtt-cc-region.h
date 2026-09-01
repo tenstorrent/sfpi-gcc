@@ -202,7 +202,24 @@ public:
      broken block carrying CC words).  */
   bool loop_cc_ambient_preserving_p (class loop *loop) const;
 
+  /* The lane-enable state carried into edge E is provably the
+     architectural ALL-LANES state: every backward CFG path from E
+     reaches the function entry (all-lanes ambient) or a block whose
+     LAST CC-relevant event is a word-exact all-lanes SFPENCC (typed
+     rvtt_all_lanes_encc_p, or a raw `.ttinsn' word of the audited
+     ALL_LANES class) before any other CC-relevant statement.  The
+     kill-modeling discipline is gimple-rvtt-prgm-const.cc's
+     prepeel_ambient_all_lanes_p, made fail-closed on calls and on
+     unaudited raw words (no TU-audit gate is assumed here).  Under
+     this fact a placement at E writes EVERY lane, so ANY in-loop
+     enable state is a subset of E's -- the containment fact holds for
+     arbitrary crossed CC activity (FABLE_GOES_BURR R2; the
+     tt/proofs/cc-narrowing-writers/ record carries the argument).  */
+  bool edge_entry_all_lanes_p (edge e) const;
+
 private:
+  /* Backward-walk core of edge_entry_all_lanes_p.  */
+  bool block_entry_all_lanes_p (basic_block bb) const;
   void build ();
   void clear ();
 
