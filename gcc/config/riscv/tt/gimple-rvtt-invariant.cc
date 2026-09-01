@@ -764,6 +764,32 @@ cc_narrowing_modifier_p (const rvtt_insn_data *insnd)
     case rvtt_insn_data::sfpxiadd_i:
     case rvtt_insn_data::sfpxiadd_i_lv:
       return true;
+
+    /* R2 widening 1 (-mtt-tensix-optimize-cc-region-general): the
+       remaining raw typed CC writers, audited narrowing against the
+       pinned simulator (tt/proofs/cc-narrowing-writers/): every one
+       computes its per-lane flag decision inside
+       for_each_lane (current-enable-mask), so a lane disabled at the
+       write stays disabled -- the enable set only narrows relative to
+       the region entry.  SFPENCC stays excluded (it assigns the
+       enable state outright), as does the empty-stack COMPC (no save
+       to cap against; COMPC is admitted above because the restore
+       proof only queries in-region positions, where the save
+       exists).  */
+    case rvtt_insn_data::sfpgt:
+    case rvtt_insn_data::sfpgt_lv:
+    case rvtt_insn_data::sfple:
+    case rvtt_insn_data::sfple_lv:
+    case rvtt_insn_data::sfpexexp:
+    case rvtt_insn_data::sfpexexp_lv:
+    case rvtt_insn_data::sfplz:
+    case rvtt_insn_data::sfplz_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_v_lv:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+      return riscv_tt_opt_cc_region_general > 0;
+
     default:
       return false;
     }
@@ -857,9 +883,18 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 		   depth-zero position) is not the loop-entry state.  */
 		a.why = "cc-restore-ambient-cc-write";
 	      else if (!cc_narrowing_modifier_p (insnd))
-		/* Restore still holds (the POPC discards it), but
-		   in-region candidates lose the containment fact.  */
-		a.narrow_ok = false;
+		{
+		  /* Restore still holds (the POPC discards it), but
+		     in-region candidates lose the containment fact.  */
+		  a.narrow_ok = false;
+		  /* Census channel (laneKL, R2 widening 1): name the
+		     unaudited modifier so the corpus shows which
+		     writers the narrowing set still lacks.  */
+		  if (dump_file)
+		    fprintf (dump_file,
+			     "cc-restore: in-region modifier %s outside "
+			     "the audited narrowing set\n", insnd->name);
+		}
 	      return !a.why;
 	    }
 	  if (insnd->has_side_effects (call) && !allowed_dst_effect_p (insnd))
