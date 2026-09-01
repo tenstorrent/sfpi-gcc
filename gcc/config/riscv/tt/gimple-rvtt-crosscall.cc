@@ -279,6 +279,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-derive.h"
 #include "rvtt-ipa-summary.h"
 #include "rvtt-cc-region.h"
+#include "rvtt-raw-boundary.h"
 
 namespace {
 
@@ -414,88 +415,15 @@ call_has_vector_dataflow_p (gcall *call)
 /* ------------------------------------------------------------------ */
 /* Audited 32-bit word classification (LREG face).
 
-   Mirrors the audited raw-word capability table of rvtt-mop-derive.cc
-   (provenance recorded there per class), asking the LREG question
-   instead of the PRGM/CC one: can this word write an ALLOCATABLE hard
-   LREG in the contract set?  Refusing default for every class not on
-   record.  */
+   The classifier now lives in THE unified audited word-fact table
+   (rvtt-raw-boundary.cc rvtt_word_facts_classify, FABLE item #4
+   Deliverable B); rvtt_word_lreg_class is this face's query accessor
+   -- same question (can this word write an ALLOCATABLE hard LREG in
+   the contract set?), same verdicts, same refusal names, refusing
+   default for every class not on record.  The verdict struct keeps
+   its local spelling.  */
 
-struct word_verdict
-{
-  bool ok;			/* audited contract-LREG-inert	     */
-  bool is_mop;			/* defer to the TU template audit    */
-  bool is_replay;		/* recorded content: refuse	     */
-  const char *why;
-};
-
-static word_verdict
-classify_word_lreg (uint32_t word, unsigned contract_mask,
-		    bool region_strict = false, bool config_strict = false)
-{
-  word_verdict v = { true, false, false, nullptr };
-  unsigned opcode = word >> 24;
-  switch (opcode)
-    {
-    case 0x00:			/* TENSIX NOP (zero word)	     */
-    case 0x02:			/* Tensix NOP: swallowed at the FIFO */
-      return v;
-    case XTT_MOP_OPCODE:	/* effects live in the template file */
-      v.is_mop = true;
-      return v;
-    case XTT_MOP_CFG_OPCODE:	/* zmask high half only		     */
-      return v;
-    case XTT_REPLAY_OPCODE:	/* plays back recorded content	     */
-      v.ok = false;
-      v.is_replay = true;
-      v.why = "crosscall-caller-replay-unproven";
-      return v;
-    case 0x12:			/* MOVA2D: Dst rows only, l_regs
-				   untouched (spec + sim facts recorded
-				   in rvtt-mop-derive.cc)	     */
-    case 0x28:			/* ELWADD: matrix-unit state only    */
-    case 0x36:			/* CLEARDVALID			     */
-    case 0x37:			/* SETRWC: RWC counters/bank valids
-				   only (rvtt-raw-boundary.h class)  */
-      return v;
-    case 0x71:			/* SFPLOADI: writes LREG bits 23:20  */
-      if ((contract_mask >> ((word >> 20) & 0xf)) & 1)
-	{
-	  v.ok = false;
-	  v.why = "crosscall-caller-word-unproven";
-	}
-      return v;
-    case 0x91:			/* SFPCONFIG: LReg writes exist solely
-				   in the VD 11..14 arm (constant
-				   registers, never allocatable L0-7;
-				   spec case-15 + sim facts recorded in
-				   rvtt-mop-derive.cc).  The audited
-				   hoist-region discipline refuses it
-				   outright: a region-delivered config
-				   word could rewrite a programmable
-				   constant register or the LaneConfig
-				   lane-enable state the hoisted
-				   materialization relies on.	     */
-      /* CONFIG_STRICT (the config-prefix contract): the hoisted
-	 programming's target IS a programmable-constant register --
-	 any delivered SFPCONFIG-class word in the scanned range could
-	 rewrite it between calls (the per-call original re-programmed
-	 at every entry); refusing default, no dest-field decode.  */
-      if (region_strict || config_strict)
-	{
-	  v.ok = false;
-	  v.why = "crosscall-caller-config-word-unproven";
-	}
-      return v;
-    default:
-      if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
-	return v;
-      if (opcode >= 0xB0 && opcode <= 0xB8)	/* thread-config     */
-	return v;
-      v.ok = false;
-      v.why = "crosscall-caller-word-unproven";
-      return v;
-    }
-}
+typedef rvtt_wf_lreg_verdict word_verdict;
 
 /* Constant-base extraction for a composed pushed word, per AXIOM
    tt-op-field-discipline (rtl-rvtt-mop-form.cc file header: runtime
@@ -693,7 +621,7 @@ classify_delivered_value (tree val, unsigned contract_mask,
 {
   word_verdict v = { false, false, false, "crosscall-caller-word-unproven" };
   if (TREE_CODE (val) == INTEGER_CST)
-    return classify_word_lreg ((uint32_t) (TREE_INT_CST_LOW (val)
+    return rvtt_word_lreg_class ((uint32_t) (TREE_INT_CST_LOW (val)
 					   & 0xffffffff), contract_mask,
 			       region_strict, config_strict);
   uint32_t base;
@@ -726,7 +654,7 @@ classify_delivered_value (tree val, unsigned contract_mask,
     /* Runtime-completed SFPLOADI: the destination field is not pinned
        by the base under the field axiom alone.  */
     return v;
-  return classify_word_lreg (base, contract_mask, region_strict,
+  return rvtt_word_lreg_class (base, contract_mask, region_strict,
 			     config_strict);
 }
 
@@ -960,7 +888,7 @@ audit_slot_word (uint32_t word)
       tu_facts.slot_replay = true;
       return;
     }
-  word_verdict v = classify_word_lreg (word, 0);
+  word_verdict v = rvtt_word_lreg_class (word, 0);
   if (!v.ok || v.is_mop /* nested MOP in a slot: no recorded fact */)
     census_slot_refusal ("mop-template-slot-word-unproven");
 }
@@ -3473,87 +3401,16 @@ namespace {
 
 /* Word classification for the init face: can this delivered word write
    LoadMacroConfig (SFPCONFIG class), launch a macro, or replay recorded
-   content?  OWNED_ROWS_CHECK additionally tracks SETC16-class writes to
-   the contract's owned rows (stage 2).  Refusing default for every
-   class not on record; classes mirror the audited raw-word capability
-   table of rvtt-mop-derive.cc, asking the config/launch question.  */
+   content?  The classifier now lives in THE unified audited word-fact
+   table (rvtt-raw-boundary.cc rvtt_word_facts_classify, FABLE item #4
+   Deliverable B); rvtt_word_init_class is this face's query accessor
+   -- same question, same verdicts, same refusal names, refusing
+   default for every class not on record, with the caps-keyed
+   SETC16/SFPCONFIG opcode checks and the owned-row tracking (stage 2)
+   applied at the accessor.  The verdict struct keeps its local
+   spelling.  */
 
-struct init_word_verdict
-{
-  bool ok;
-  bool is_mop;
-  bool owned_row_write;		/* SETC16-class write to an owned row */
-  uint32_t word;		/* the resolved word (constant only)  */
-  bool word_exact;
-  const char *why;
-};
-
-static init_word_verdict
-classify_word_init (uint32_t word, const rvtt_init_hoist_program &prog,
-		    const rvtt_macro::caps *c)
-{
-  init_word_verdict v = { true, false, false, word, true, nullptr };
-  unsigned opcode = word >> 24;
-  if (c && opcode == c->setc16_opcode)
-    {
-      unsigned reg, value;
-      if (!rvtt_macro::decode_setc16 (c, word, &reg, &value))
-	{
-	  v.ok = false;
-	  v.why = "drain-init-ownership-unproven";
-	  return v;
-	}
-      for (unsigned i = 0; i != prog.n_setc16; ++i)
-	if (prog.setc16[i].reg == reg)
-	  v.owned_row_write = true;
-      return v;
-    }
-  if (c && opcode == c->sfpconfig_opcode)
-    {
-      /* Any SFPCONFIG-class word: LoadMacroConfig/LaneConfig writer.  */
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    }
-  switch (opcode)
-    {
-    case 0x00:			/* TENSIX NOP (zero word)	     */
-    case 0x02:			/* Tensix NOP: swallowed at the FIFO */
-      return v;
-    case XTT_MOP_OPCODE:	/* effects live in the template file */
-      v.is_mop = true;
-      return v;
-    case XTT_MOP_CFG_OPCODE:	/* zmask high half only		     */
-      return v;
-    case XTT_REPLAY_OPCODE:	/* recorded content: not derivable   */
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    case 0x12:			/* MOVA2D: Dst rows only	     */
-    case 0x28:			/* ELWADD: matrix-unit state only    */
-    case 0x36:			/* CLEARDVALID			     */
-    case 0x37:			/* SETRWC: RWC counters only	     */
-    case 0x38:			/* INCRWC: RWC counters only	     */
-      return v;
-    case 0x71:			/* SFPLOADI: LREG staging only; lane-
-				   predicated under the architectural
-				   outermost all-lanes contract	     */
-      return v;
-    default:
-      if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
-	return v;
-      if (opcode >= 0xB0 && opcode <= 0xB8)
-	/* Main-CFG family (WRCFG/RDCFG/RMWCIB/...): a DIFFERENT
-	   register file from both the SETC16 thread-config rows and
-	   the SFPU-internal SFPCONFIG state (the simulator's
-	   separated thread_cfg / config / sfpu state stores; SETC16's
-	   own opcode was handled above).  */
-	return v;
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    }
-}
+typedef rvtt_wf_init_verdict init_word_verdict;
 
 static init_word_verdict
 classify_delivered_init (tree val, const rvtt_init_hoist_program &prog,
@@ -3562,12 +3419,12 @@ classify_delivered_init (tree val, const rvtt_init_hoist_program &prog,
   init_word_verdict v
     = { false, false, false, 0, false, "drain-init-ownership-unproven" };
   if (TREE_CODE (val) == INTEGER_CST)
-    return classify_word_init ((uint32_t) (TREE_INT_CST_LOW (val)
+    return rvtt_word_init_class ((uint32_t) (TREE_INT_CST_LOW (val)
 					   & 0xffffffff), prog, c);
   uint32_t base;
   if (!pushed_word_base (val, &base))
     return v;
-  v = classify_word_init (base, prog, c);
+  v = rvtt_word_init_class (base, prog, c);
   /* A runtime-completed word keeps its opcode and non-value fields
      under the field axiom, but its exact value is not a constant --
      the stage-2 value-equality proof cannot use it.  */
@@ -3811,7 +3668,7 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
    ADDR_MOD hoist each re-walked every hop per callee).  The digest
    records init_scan_stmt's classification of one body ONCE in a
    parameter-independent event stream; init_replay_events re-folds it
-   against a contract's parameters (owned rows via classify_word_init
+   against a contract's parameters (owned rows via rvtt_word_init_class
    on the recorded word image, call admission via the contract's decl
    set) with the exact legacy accumulator and refusal emission.  Every
    arm below mirrors init_scan_stmt / init_scan_asm /
@@ -4036,7 +3893,7 @@ init_replay_events (init_scan_ctx *ctx, const vec<rvtt_ipa_event> &evs)
       case rvtt_ipa_event::EV_DELIVER:
 	{
 	  init_word_verdict v
-	    = classify_word_init (ev.word, *ctx->prog, ctx->c);
+	    = rvtt_word_init_class (ev.word, *ctx->prog, ctx->c);
 	  if (!ev.word_exact)
 	    v.word_exact = false;
 	  if (!apply_init_verdict (ctx, v, ev.stmt))
@@ -4462,7 +4319,7 @@ mop_init_ok_p (const rvtt_init_hoist_program &prog,
     }
   for (uint32_t w : tu_facts.slot_words)
     {
-      init_word_verdict v = classify_word_init (w, prog, c);
+      init_word_verdict v = rvtt_word_init_class (w, prog, c);
       if (v.owned_row_write)
 	*owned_dirty = true;
       if (v.is_mop || !v.ok)

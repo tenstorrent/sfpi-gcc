@@ -115,4 +115,157 @@ extern rvtt_raw_cc_class rvtt_raw_cc_word_class (uint32_t word);
    from the all-lanes ambient (either proven class above).  */
 extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
 
+/* ================================================================== */
+/* THE unified audited word-fact table (FABLE item #4, Deliverable B).
+
+   One recorded-fact table `word -> {LREG, CC, PRGM, ADDR_MOD, Dst/RWC}
+   face verdicts', replacing the four parallel audited-word classifiers
+   that grew up mirroring each other -- the LREG and init faces of
+   gimple-rvtt-crosscall.cc (classify_word_lreg / classify_word_init),
+   the CC face above (rvtt_raw_cc_word_class), and the PRGM face of the
+   TU freedom proof (rvtt_mop_audited_word_p, declared in
+   rvtt-mop-derive.h) -- plus the pure-Dst/RWC word test.  Every face
+   asks a DIFFERENT architectural question of the same word, so the
+   verdicts stay per-face; but the opcode-class decode, the field
+   extraction, and the recorded provenance now live in exactly one
+   place: the row blocks of rvtt_word_facts_classify
+   (rvtt-raw-boundary.cc).  A new audited opcode is ONE row block there
+   (all five face verdicts + provenance keys), never 3-4 coordinated
+   edits.
+
+   TABLE PROPERTY (the preserving-vs-kill doctrine above, now binding
+   on the table itself): every face's proven verdict means
+   ambient-PRESERVING only -- never a KILL/GEN fact.  A raw word can
+   sit swallowed in a REPLAY record window (stored, not executed --
+   lane HS, rvtt-mop-tables.h), so its EXECUTION can never be asserted
+   from the word alone; only effects sound under BOTH the executed and
+   the swallowed reading are recordable in a row.  The vocabulary
+   enforces it: face verdicts are `proven inert / proven
+   ambient-establishing / UNPROVEN'; no accessor exposes, and no row
+   may ever record, a kill face.
+
+   Known face ASYMMETRIES, preserved verdict-identically from the four
+   legacy classifiers (per-face fidelity beats cross-face tidiness;
+   widening any of them is an owner adjudication, never a merge edit):
+     - INCRWC (0x38) is admitted on the ADDR_MOD face only; the LREG
+       and PRGM faces never audited it and keep refusing it.
+     - SFPCAST/SFPSTOCHRND (0x90/0x8E) are CC-INERT (the lane IV
+       audit) but stay unaudited on the LREG/PRGM/ADDR_MOD faces.
+     - SFPENCC's word-exact all-lanes form is a CC-face fact only.  */
+
+/* The audited opcode-class row a word decodes to.  Exactly one row per
+   recorded architectural fact class; RVTT_WF_UNAUDITED is the refusing
+   default row (every face refuses).  */
+
+enum rvtt_wf_row
+{
+  RVTT_WF_UNAUDITED = 0,
+  RVTT_WF_NOP,			/* 0x00 zero word / 0x02 FIFO NOP    */
+  RVTT_WF_MOP,			/* XTT_MOP_OPCODE		     */
+  RVTT_WF_MOP_CFG,		/* XTT_MOP_CFG_OPCODE		     */
+  RVTT_WF_REPLAY,		/* XTT_REPLAY_OPCODE		     */
+  RVTT_WF_MATRIX,		/* 0x12 MOVA2D / 0x28 ELWADD	     */
+  RVTT_WF_CLEARDVALID,		/* 0x36				     */
+  RVTT_WF_SETRWC,		/* 0x37				     */
+  RVTT_WF_INCRWC,		/* 0x38				     */
+  RVTT_WF_SFPLOADI,		/* 0x71				     */
+  RVTT_WF_SFPENCC,		/* 0x8A				     */
+  RVTT_WF_SFPCAST,		/* 0x90 SFPCAST / 0x8E SFPSTOCHRND   */
+  RVTT_WF_SFPCONFIG,		/* 0x91				     */
+  RVTT_WF_SYNC,			/* 0xA0..0xA7			     */
+  RVTT_WF_THREAD_CFG		/* 0xB0..0xB8 (SETC16 and neighbours)*/
+};
+
+/* The recorded facts of one word: its row, the decoded fields the
+   field-sensitive rows pin, and one verdict per face.  Target
+   capability gates (the CC and Dst/RWC faces refuse everything on a
+   CPU without a capability table) and consumer context (contract
+   masks, strictness stances, slot discipline, owned rows) are applied
+   by the face accessors -- the facts here are pure functions of the
+   word.  */
+
+struct rvtt_word_facts
+{
+  rvtt_wf_row row;
+
+  /* Row-identity deferral flags (context applied at the faces).  */
+  bool is_mop;			/* effects live in the template file */
+  bool is_mop_cfg;		/* zmask high half only		     */
+  bool is_replay;		/* plays back recorded content	     */
+
+  /* Decoded fields (valid per row; refusing defaults elsewhere).  */
+  unsigned loadi_dest;		/* SFPLOADI bits 23:20		     */
+
+  /* LREG face: can the word write an ALLOCATABLE hard LREG?  */
+  bool lreg_inert;		/* unconditionally proven inert	     */
+  bool lreg_loadi_dest_rule;	/* SFPLOADI: writes LREG loadi_dest  */
+  bool lreg_config_class;	/* SFPCONFIG: inert, but refused
+				   under region/config-strict stances */
+
+  /* CC face: lane-enable classification (pre-capability-gate).  */
+  rvtt_raw_cc_class cc;
+
+  /* PRGM face: PRGM register / LaneConfig / CC write audit.  */
+  bool prgm_ok;
+  unsigned prgm_claim_mask;	/* SFPCONFIG: claimed PRGM dest	     */
+  const char *prgm_why;		/* refusal name when !prgm_ok	     */
+
+  /* ADDR_MOD/init face: LoadMacroConfig / launch / replay audit
+     (the caps-keyed SETC16/SFPCONFIG opcodes are the accessor's).  */
+  bool init_ok;
+
+  /* Dst/RWC face: field-pure Dst-leg RWC counter write (the typed
+     TTSETRWC mirror; the run/row-separator class).  */
+  bool pure_dst_rwc;
+};
+
+extern void rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f);
+
+/* ------------------------------------------------------------------ */
+/* Per-face query accessors.  The CC face accessor is
+   rvtt_raw_cc_word_class above (name unchanged); the PRGM face
+   accessor is rvtt_mop_audited_word_p (declaration stays in
+   rvtt-mop-derive.h with its state type; body now lives here, over
+   the table).  */
+
+/* LREG face verdict (the cross-call contract scan's vocabulary).  */
+
+struct rvtt_wf_lreg_verdict
+{
+  bool ok;			/* audited contract-LREG-inert	     */
+  bool is_mop;			/* defer to the TU template audit    */
+  bool is_replay;		/* recorded content: refuse	     */
+  const char *why;
+};
+
+extern rvtt_wf_lreg_verdict
+rvtt_word_lreg_class (uint32_t word, unsigned contract_mask,
+		      bool region_strict = false,
+		      bool config_strict = false);
+
+/* ADDR_MOD/init face verdict (the init-hoist ownership scan's
+   vocabulary).  */
+
+struct rvtt_init_hoist_program;
+namespace rvtt_macro { struct caps; }
+
+struct rvtt_wf_init_verdict
+{
+  bool ok;
+  bool is_mop;
+  bool owned_row_write;		/* SETC16-class write to an owned row */
+  uint32_t word;		/* the resolved word (constant only)  */
+  bool word_exact;
+  const char *why;
+};
+
+extern rvtt_wf_init_verdict
+rvtt_word_init_class (uint32_t word, const rvtt_init_hoist_program &prog,
+		      const rvtt_macro::caps *c);
+
+/* Dst/RWC face word-level test (the rvtt_raw_pure_dst_rwc extractors
+   above apply it after canonical-word extraction).  */
+
+extern bool rvtt_word_pure_dst_rwc_p (uint32_t word);
+
 #endif /* GCC_RVTT_RAW_BOUNDARY_H */
