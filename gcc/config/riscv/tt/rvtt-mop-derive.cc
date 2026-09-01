@@ -144,132 +144,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-mop-derive.h"
 
 /* ------------------------------------------------------------------ */
-/* The audited raw-word capability table.			      */
-
-bool
-rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed, const char **why,
-			 rvtt_mop_derive_state *st, bool in_slot)
-{
-  unsigned opcode = word >> 24;
-  if (opcode == XTT_MOP_OPCODE || opcode == XTT_MOP_CFG_OPCODE)
-    {
-      if (in_slot)
-	{
-	  /* A MOP/MOP_CFG word inside a template slot re-enters the
-	     expander from inside an expansion; no recorded fact pins
-	     that behavior.  */
-	  *why = "mop-template-nested-unproven: MOP word in a template slot";
-	  return false;
-	}
-      if (!st)
-	{
-	  *why = "unaudited raw opcode";
-	  return false;
-	}
-      if (opcode == XTT_MOP_OPCODE)
-	/* Effects live in the template slots; admission is deferred to
-	   rvtt_mop_derive_finish once every TU slot write is audited.
-	   The word's own fields (mop_type/loop_count/zmask) are
-	   expansion-count facts, not effect facts
-	   (rvtt-mop-tables.h).  */
-	st->mop_pushed = true;
-      /* MOP_CFG writes only the persistent zmask high half -- a
-	 type-0 iteration-count fact ([SIM] mop_cfg(),
-	 rvtt-mop-tables.h).  Unconditionally inert.  */
-      return true;
-    }
-  if (in_slot && opcode == XTT_REPLAY_OPCODE)
-    {
-      /* The slot word would play back recorded replay-buffer content;
-	 auditing recorded content is a later increment.  */
-      *why = "mop-template-replay-unproven: REPLAY word in a template slot";
-      return false;
-    }
-  if (opcode == 0x00)		/* TENSIX NOP */
-    return true;
-  if (opcode == 0x02)
-    /* Tensix NOP (0x02 << 24): classified by opcode alone and
-       swallowed at the instruction FIFO -- delivers nothing.  [SIM]
-       tensix.cpp IS_TENSIX_NOP (bits<31,24> == 0x02) and
-       tensix_push_inst_fifo's NOP early-return; rvtt-mop-tables.h NOP
-       fact.  The production template constructors park unused slots
-       on exactly this word (ckernel_template ctor TT_OP_NOP).  */
-    return true;
-  if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family */
-    return true;
-  if (opcode >= 0xB0 && opcode <= 0xB8)	/* thread-config family (SETC16) */
-    return true;
-  if (opcode == 0x36 || opcode == 0x37)	/* CLEARDVALID / SETRWC */
-    return true;
-  if (opcode == 0x28)
-    /* ELWADD: FPU elementwise add, the production math datacopy's MOP
-       loop word (llk_math_eltwise_unary_datacopy.h).  Consumes
-       SrcA/SrcB banks, writes Dst rows, steps the RWC per its
-       addr_mode field, and optionally clears dvalid -- matrix-unit
-       state only, for EVERY field value.  [SPEC]
-       craq-sim tests/aristotle/mega-union/specs/ELWADD.md functional
-       model (no LReg/LaneConfig/lane-flag reference); [SIM]
-       tensix.cpp TENSIX_EXECUTE_ELWADD -> tensix_execute_elw_op @
-       9f324140: reads src banks, writes dst[], RWC/dvalid bookkeeping;
-       l_regs/lane_config untouched.  */
-    return true;
-  if (opcode == 0x12)
-    /* MOVA2D: SrcA-to-Dst row move, the other production math
-       datacopy MOP loop word.  Reads SrcA and (read-only) the
-       LaneConfig BLOCK_DEST_MOV gate; writes Dst rows only, for EVERY
-       field value (the one flagged field combination, TF32 source
-       with the Dst32bLo modifier, is UndefinedBehavior confined to
-       the WRITTEN DST DATA -- "write data will be corrupted").
-       [SPEC] specs/MOVA2D.md functional model (LaneConfig read at the
-       column gate; all writes are Dst32b/Dst16b rows); [SIM]
-       tensix.cpp TENSIX_EXECUTE_MOVA2D @ 9f324140: dst[] writes only,
-       l_regs/lane_config untouched.  */
-    return true;
-  if (opcode == 0x71)		/* SFPLOADI: dest architecturally < 8 */
-    {
-      if (((word >> 20) & 0xf) < 8)
-	return true;
-      *why = "raw SFPLOADI with non-allocatable destination";
-      return false;
-    }
-  if (opcode == 0x91)		/* SFPCONFIG: claim the decoded dest */
-    {
-      unsigned dest = (word >> 4) & 0xf;
-      if (dest == 15)
-	{
-	  /* LaneConfig default-reset class: dest 15, mod1 bit0
-	     (MOD1_IMM16_IS_VALUE) set, imm16 == 0 -- the SFPU init's
-	     TTI_SFPCONFIG (0, 0xF, 1), word 0x910000F1.
-
-	     Audited by the architectural spec (SFPCONFIG.md functional
-	     model) and the corrected simulator (craq tensix.cpp
-	     TENSIX_EXECUTE_SFPCONFIG, craq 9f324140): the VD == 15 arm
-	     assigns LaneConfig only; LReg[11..14] writes exist solely in
-	     the VD 11..14 arm, so the programmable constant registers
-	     SURVIVE this word.  Within the admitted class every mod1
-	     completion is still LaneConfig-confined: set/AND with value
-	     0 is the hardware default-reset (reserved high bits
-	     restored per spec), OR/XOR with 0 is a no-op, and
-	     IMM16_IS_LANE_MASK with imm16 == 0 masks every lane off.
-	     The resulting LaneConfig is always {unchanged, default}, and
-	     default (0) is exactly the all-lanes, no-ROW_MASK state the
-	     allocator's own SFPCONFIG programming write assumes.  No
-	     destination is claimed: the word touches no PRGM register.
-
-	     Near misses stay refused by class: imm16 != 0 can set
-	     ROW_MASK/behavior bits (unproven lane model); mod1 bit0 == 0
-	     takes the value from LReg[0] (unauditable from the word).  */
-	  if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
-	    return true;
-	  *why = "raw SFPCONFIG writes LaneConfig";
-	  return false;
-	}
-      *claimed |= 1u << dest;
-      return true;
-    }
-  *why = "unaudited raw opcode";
-  return false;
-}
+/* The audited raw-word capability table (rvtt_mop_audited_word_p,
+   declared above in rvtt-mop-derive.h) is now the PRGM face of THE
+   unified audited word-fact table: its body lives in
+   rvtt-raw-boundary.cc over rvtt_word_facts_classify's row blocks
+   (FABLE item #4 Deliverable B), where the recorded facts and their
+   provenance are shared with the LREG/CC/ADDR_MOD/Dst-RWC faces.
+   Verdicts, refusal names, the template-slot discipline and the
+   derive-state deferral are unchanged.  */
 
 namespace {
 

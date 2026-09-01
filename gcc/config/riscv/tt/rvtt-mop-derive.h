@@ -65,7 +65,10 @@ struct rvtt_mop_derive_state
    MOP words are admitted provisionally (recorded for the finish
    adjudication) and MOP_CFG words unconditionally; with ST null both
    refuse as before.  IN_SLOT selects the template-slot discipline
-   (REPLAY and nested MOP/MOP_CFG refuse by name).  */
+   (REPLAY and nested MOP/MOP_CFG refuse by name).  This is the PRGM
+   face of THE unified audited word-fact table: the body lives in
+   rvtt-raw-boundary.cc over rvtt_word_facts_classify (FABLE item #4
+   Deliverable B); verdicts and refusal names are unchanged.  */
 extern bool rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed,
 				     const char **why,
 				     rvtt_mop_derive_state *st,
