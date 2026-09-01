@@ -889,6 +889,10 @@ mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
 Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.
 
+mtt-tensix-optimize-cc-region-general
+Target Var(riscv_tt_opt_cc_region_general) Init(0)
+Open the CC-region-tree-proven admissions (FABLE_GOES_BURR item #14 stage B / residual attack R2): consumers whose stage-A recognizers were restricted to their historical statement shapes admit any layout the shared pushc/popc frame tree proves equivalent -- the ccmask fold accepts tree-proven frames in any block placement and the exhaustively proven EQ/NE keep-mask compositions (tt/proofs/ccmask-eqne-zero/), the cross-loop placement walk crosses loop bodies whose CC activity is tree-proven ambient-preserving-and-narrowing, the loop-invariant in-region containment fact accepts the tree's narrowing verdict, and the reassociation window treats tree-proven balanced child frames as CC-transparent (value-changing FP rebalancing still needs its own license keys).  Every unproven arm refuses by the standing or a new name, byte-identically to the flag being absent.
+
 mtt-tensix-optimize-native-compare
 Target Var(riscv_tt_opt_native_compare) Init(0)
 Lower the strict-greater and less-or-equal float vector comparison webs (SETCC sign/nonzero pair, plus the trailing COMPC on the less-or-equal side) to the single Blackhole-native SFPGT/SFPLE SET_CC compare against the constant +0.0 register, per the shipped exhaustive pointwise equivalence proof over all 2^32 compared bit patterns (tt/proofs/native-compare-gtle/); every other comparison direction, operand shape, and target keeps the established lowering byte-identically.

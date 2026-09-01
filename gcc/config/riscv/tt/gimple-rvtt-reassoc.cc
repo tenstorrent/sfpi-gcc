@@ -336,8 +336,42 @@ static const char *const window_barrier_replay
 static const char *const window_barrier_fpu
   = "reassoc-fpu-choreography-boundary";
 
+/* Stage-B frame transparency (laneKL, FABLE_GOES_BURR R2): the
+   CC-region tree for the current function, live only under
+   -mtt-tensix-optimize-cc-region-general (null otherwise -- every
+   query below then fails closed to the historical barrier).  Built
+   once per execute; statements minted by earlier rebalances in the
+   same run are unmapped and simply keep the fail-closed verdicts.  */
+static rvtt_cc_region_tree *window_ccr;
+
+/* STMT is a typed CC event whose whole effect is confined to a
+   structurally proven frame STRICTLY inside the window's own frame WR:
+   the frame's popc restores the lane-enable state it saved, so the
+   mask AT the window's own depth is identical on both sides -- the
+   event is transparent to a code-motion window whose links all sit at
+   WR (checked by the callers).  Raw asm and foreign calls stay
+   barriers (they may deliver configuration or arbitrary words); the
+   non-CC barrier arms (config/replay/FPU) still apply to every
+   statement inside the skipped frame, each scanned on its own.  */
+
+static bool
+window_cc_event_frame_transparent_p (gimple *stmt, rvtt_cc_region *wr)
+{
+  if (!window_ccr || !wr)
+    return false;
+  if (!rvtt_get_insn_data (stmt))
+    return false;		/* raw asm / foreign call: barrier */
+  rvtt_cc_region *r = window_ccr->region_of (stmt);
+  if (!r || r == wr || !window_ccr->structured_p (r))
+    return false;
+  for (rvtt_cc_region *a = r->parent; a; a = a->parent)
+    if (a == wr)
+      return true;		/* strictly inside a proven child frame */
+  return false;
+}
+
 static const char *
-window_stmt_barrier_name (gimple *stmt)
+window_stmt_barrier_name (gimple *stmt, rvtt_cc_region *wr)
 {
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL)
     return nullptr;
@@ -345,8 +379,10 @@ window_stmt_barrier_name (gimple *stmt)
      (FABLE_GOES_BURR #14, rvtt-cc-region.cc): raw asm, calls with
      unknown bodies, CC writers, and the typed all-lanes SFPENCC --
      exactly the classification this walk historically spelled
-     locally.  */
-  if (rvtt_cc_window_cc_event_p (stmt))
+     locally.  Stage B: an event tree-proven confined to a frame
+     strictly inside WR falls through to the non-CC arms.  */
+  if (rvtt_cc_window_cc_event_p (stmt)
+      && !window_cc_event_frame_transparent_p (stmt, wr))
     return window_barrier_cc;
   gcall *call = dyn_cast<gcall *> (stmt);
   if (!call)
@@ -402,6 +438,27 @@ window_stmt_barrier_name (gimple *stmt)
 static const char *
 window_barrier (chain *c, gimple *first, gimple *last)
 {
+  /* Stage-B frame transparency context: the window's own frame, valid
+     only when the root and every link provably sit in that one frame
+     (same mask at every original link position and at the rewrite
+     point).  Null keeps the historical verdicts fail-closed.  */
+  rvtt_cc_region *wr = nullptr;
+  if (window_ccr)
+    {
+      rvtt_cc_region *r = window_ccr->region_of (c->root);
+      if (r && window_ccr->structured_p (r)
+	  && window_ccr->region_of (first) == r)
+	{
+	  wr = r;
+	  for (gcall *l : c->links)
+	    if (window_ccr->region_of (l) != r)
+	      {
+		wr = nullptr;
+		break;
+	      }
+	}
+    }
+
   for (gimple_stmt_iterator gsi = gsi_for_stmt (first);
        gsi_stmt (gsi) != last; gsi_next (&gsi))
     {
@@ -417,7 +474,7 @@ window_barrier (chain *c, gimple *first, gimple *last)
 	  }
       if (is_link)
 	continue;
-      if (const char *why = window_stmt_barrier_name (stmt))
+      if (const char *why = window_stmt_barrier_name (stmt, wr))
 	return why;
     }
   return nullptr;
@@ -1014,6 +1071,35 @@ split_loop_carried_phi (class loop *loop, gphi *phi)
      writer, replay boundary, or FPU-choreography statement anywhere in
      the body refuses by its established window name.  */
   {
+    /* Stage-B frame transparency context for the whole-body walk: the
+       links' one frame, valid only when every link, the exit block's
+       controlling statement (the reduction's mask on the exit edge)
+       and the header's first statement (the identity reads' mask on
+       the entry edge) provably sit in it.  Null keeps the historical
+       verdicts fail-closed.  */
+    rvtt_cc_region *wr = nullptr;
+    if (window_ccr && !lc.links.is_empty ())
+      {
+	rvtt_cc_region *r = window_ccr->region_of (lc.links[0]);
+	if (r && window_ccr->structured_p (r))
+	  {
+	    wr = r;
+	    for (gcall *l : lc.links)
+	      if (window_ccr->region_of (l) != r)
+		{
+		  wr = nullptr;
+		  break;
+		}
+	    gimple_stmt_iterator lsi = gsi_last_nondebug_bb (lc.bb);
+	    gimple_stmt_iterator hsi = gsi_start_nondebug_bb (loop->header);
+	    if (wr
+		&& (gsi_end_p (lsi) || gsi_end_p (hsi)
+		    || window_ccr->region_of (gsi_stmt (lsi)) != r
+		    || window_ccr->region_of (gsi_stmt (hsi)) != r))
+	      wr = nullptr;
+	  }
+      }
+
     basic_block *body = get_loop_body (loop);
     const char *barrier = nullptr;
     for (unsigned i = 0; !barrier && i != loop->num_nodes; ++i)
@@ -1030,7 +1116,7 @@ split_loop_carried_phi (class loop *loop, gphi *phi)
 	      }
 	  if (is_link)
 	    continue;
-	  if ((barrier = window_stmt_barrier_name (stmt)))
+	  if ((barrier = window_stmt_barrier_name (stmt, wr)))
 	    break;
 	}
     free (body);
@@ -1386,6 +1472,17 @@ public:
   unsigned execute (function *fn) final override
   {
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+    /* Stage-B frame transparency (laneKL, R2): one tree per function,
+       live for both window walks only under the flag.  Rebalances
+       insert CC-inert statements and delete only links, so the
+       surviving frames' facts stay exact; minted statements are
+       unmapped and fail closed.  */
+    rvtt_cc_region_tree *ccr = nullptr;
+    if (riscv_tt_opt_cc_region_general > 0)
+      {
+	ccr = new rvtt_cc_region_tree (fn);
+	window_ccr = ccr;
+      }
     bool changed = false;
     if (riscv_tt_opt_reassoc_loop_carried > 0)
       /* The derived split (item #8); every non-fitting candidate
@@ -1398,6 +1495,8 @@ public:
       note_loop_carried (fn);
     if (riscv_tt_opt_reassoc > 0)
       changed |= transform (fn);
+    window_ccr = nullptr;
+    delete ccr;
     loop_optimizer_finalize ();
     return changed ? TODO_update_ssa_only_virtuals | TODO_verify_all : 0;
   }

@@ -68,3 +68,26 @@ re-mined.
   store-sink-format-canonicalizing: an all-lanes write-back
   canonicalizes Dst, so eliding it is architecturally visible.  laneEK
   2026-08-21.
+- ccmask-eqne-zero/ — the EQ/NE float directions vs +0.0 of the ccmask
+  zeroing fold (FABLE_GOES_BURR R2 widening 2): the single-SETCC
+  raw-bit lowerings (mod6 LREG_EQ0 / mod2 LREG_NE0) vs the two-compare
+  SET_DEST compositions EQ keep = SFPOR(SFPGT(x,0), SFPGT(0,x)),
+  NE keep = SFPAND(SFPLE(x,0), SFPLE(0,x)).  EQUAL (0 mismatches per
+  direction over 2^32; cut/hw stream commitments identical).  LICENSES
+  the EQ/NE arms of the rvtt_ccmask fold under
+  -mtt-tensix-optimize-ccmask AND -mtt-tensix-optimize-cc-region-general
+  (gimple-rvtt-ccmask.cc); retire those arms if this RESULT ever stops
+  being EQUAL.  BH-only (the pass gate is BH).  laneKL 2026-08-31.
+- cc-narrowing-writers/ — STRUCTURAL certificate (audit, not a value
+  sweep; the obligation is decided by the simulator's enable-masked
+  for_each_lane loop guard, not by operand values): the raw typed CC
+  writers admitted into the audited-narrowing set by
+  -mtt-tensix-optimize-cc-region-general (gimple-rvtt-invariant.cc
+  cc_narrowing_modifier_p: SFPGT/SFPLE SET_CC, SFPEXEXP, SFPLZ,
+  SFPIADD families) never touch a disabled lane's enable bit; SFPENCC
+  and the empty-stack COMPC are recorded NOT-narrowing.  Also the
+  soundness record for the tree's loop-scoped in-frame
+  vocabulary-external admission
+  (rvtt_cc_region_tree::loop_cc_ambient_preserving_p).  Retire those
+  arms if any listed writer's pinned-simulator semantics stop visiting
+  lanes through the enable-masked for_each_lane.  laneKL 2026-08-31.

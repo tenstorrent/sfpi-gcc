@@ -179,7 +179,47 @@ public:
      it in this item.  */
   bool ambient_preserving_fold_p () const;
 
+  /* Loop-scoped carry of the same discipline (FABLE_GOES_BURR R2 /
+     the crossloop-cc-unproven widening): LOOP's CC activity provably
+     PRESERVES the ambient lane-enable state it was entered with and
+     can only NARROW the state observed at any point inside -- every
+     CC-relevant statement in the loop body is mapped to a
+     structurally proven frame; every closed frame was opened inside
+     the loop (a popc of an outside save would rewind past the loop
+     entry's state); no opaque statement (raw `.ttinsn' constant words
+     of the audited CC-INERT class excepted -- rvtt-raw-boundary.cc;
+     the ALL_LANES class is a widening here and refuses) and no
+     SFPENCC anywhere in the body (ENCC can widen beyond the entry
+     ambient -- the all-lanes form included, since the entry ambient
+     is not proven all-lanes here); and the ambient (root) frame
+     itself carries no refinement or vocabulary-external write inside
+     the loop.
+     In-frame refinements, COMPC and vocabulary-external writers are
+     admitted: relative to their frame entry every one of them narrows
+     (pinned-sim for_each_lane discipline), and the frame's recorded
+     popc restores the saved state.  Fail-closed in every ambiguous
+     direction (unmapped statement, unstructured frame, drain-join or
+     broken block carrying CC words).  */
+  bool loop_cc_ambient_preserving_p (class loop *loop) const;
+
+  /* The lane-enable state carried into edge E is provably the
+     architectural ALL-LANES state: every backward CFG path from E
+     reaches the function entry (all-lanes ambient) or a block whose
+     LAST CC-relevant event is a word-exact all-lanes SFPENCC (typed
+     rvtt_all_lanes_encc_p, or a raw `.ttinsn' word of the audited
+     ALL_LANES class) before any other CC-relevant statement.  The
+     kill-modeling discipline is gimple-rvtt-prgm-const.cc's
+     prepeel_ambient_all_lanes_p, made fail-closed on calls and on
+     unaudited raw words (no TU-audit gate is assumed here).  Under
+     this fact a placement at E writes EVERY lane, so ANY in-loop
+     enable state is a subset of E's -- the containment fact holds for
+     arbitrary crossed CC activity (FABLE_GOES_BURR R2; the
+     tt/proofs/cc-narrowing-writers/ record carries the argument).  */
+  bool edge_entry_all_lanes_p (edge e) const;
+
 private:
+  /* Backward-walk core of edge_entry_all_lanes_p.  */
+  bool block_entry_all_lanes_p (basic_block bb) const;
   void build ();
   void clear ();
 
