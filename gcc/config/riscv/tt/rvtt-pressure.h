@@ -91,6 +91,18 @@ extern int rvtt_pressure_residual (function *fn);
    before adding live ranges.  */
 extern unsigned rvtt_pressure_bb_peak (basic_block bb);
 
+/* Peak point pressure over the window of points immediately before
+   each statement after FIRST through LAST (same block, FIRST before
+   LAST), counted with the function-wide may-live model's exact
+   semantics (backward may-live fixpoint, tracked values, lreg_width,
+   dead-def transients) -- NEW windowed vocabulary (laneKO/R3), for
+   budgets whose added live range spans only that window (the licensed
+   mad-restructure's kept loadi: the +1 applies pointwise only between
+   the pair members, so charging a whole-block conservative peak would
+   refuse every candidate in any block that merely TOUCHES the file's
+   capacity somewhere else).  */
+extern unsigned rvtt_pressure_window_peak (gimple *first, gimple *last);
+
 /* Keeping every load in LOADS live across LOOP holds the loop's peak
    vector pressure within the architectural LREG file (conservative
    liveness proof; refusal is all-or-nothing for the given candidate
