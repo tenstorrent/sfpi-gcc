@@ -4377,6 +4377,94 @@ ls_schedule_cyclic_interior (basic_block bb,
 	  continue;
 	}
 
+      /* R1 (-mtt-tensix-optimize-rename-temporal): break the region's
+	 storage-collision chains through the item-#7 rename service
+	 BEFORE generating candidates.  The service carries the
+	 complete legality proof (typed-effect veto, span/CC rule,
+	 death proof, temporal-target admission, post-commit belt);
+	 this consumer only selects collision roots -- a region
+	 member's fresh LREG definition another issued row word also
+	 defines -- and prices the composition through the unchanged
+	 whole-row acceptance below, undoing every requested rename
+	 exactly when no candidate commits.  Each root is attempted at
+	 most once (a committed rename must never be re-rooted -- the
+	 rename ping-pong guard).  The pristine pad census guards the
+	 rename half exactly as the one-region path's original-code
+	 baseline discipline does.  */
+      std::vector<rvtt_lreg_rename_web> region_webs;
+      auto refresh_nodes = [] (std::vector<ls_node> &nodes)
+	{
+	  /* The body model's own collection form: defless CC/store
+	     words keep their real LREG uses via the reference scan
+	     (they are never renamed, but their reads order the row).  */
+	  for (ls_node &nd : nodes)
+	    {
+	      if (!collect_sfpu_regs (nd.insn, &nd.regs))
+		sfpu_reg_refs (nd.insn, &nd.regs);
+	      nd.raw_defs = nd.regs.defs;
+	    }
+	};
+      auto undo_region_renames = [&] ()
+	{
+	  if (region_webs.empty ())
+	    return;
+	  for (unsigned i = region_webs.size (); i--;)
+	    rvtt_lreg_rename_web_undo (region_webs[i]);
+	  if (dump_file)
+	    fprintf (dump_file, "List-schedule (interior-rename): undid "
+		     "%zu chain rename(s) in bb %d region at uid=%d\n",
+		     region_webs.size (), bb->index,
+		     INSN_UID (r.nodes[0].insn));
+	  region_webs.clear ();
+	  refresh_nodes (r.nodes);
+	  refresh_nodes (body);
+	};
+      if (riscv_tt_opt_rename_temporal
+	  && (riscv_tt_opt_cyclic_region_schedule
+	      || (riscv_tt_opt_ims && ims_row_ok)))
+	{
+	  /* Earlier regions' committed renames may have moved webs.  */
+	  refresh_nodes (r.nodes);
+	  unsigned pads_pristine = ls_pad_sites (visited, bb, r.nodes);
+	  for (unsigned k = 0; k != n; ++k)
+	    for (unsigned reg = SFPU_REG_FIRST; reg <= SFPU_REG_LAST; ++reg)
+	      {
+		if (!TEST_HARD_REG_BIT (r.nodes[k].raw_defs, reg)
+		    || TEST_HARD_REG_BIT (r.nodes[k].regs.uses, reg))
+		  continue;	/* not a fresh-definition chain root */
+		bool collision = false;
+		for (unsigned j = 0; j != bn && !collision; ++j)
+		  if (j != first + k
+		      && TEST_HARD_REG_BIT (body[j].raw_defs, reg))
+		    collision = true;
+		if (!collision)
+		  continue;
+		rvtt_lreg_rename_web web;
+		if (!rvtt_lreg_rename_chain (bb, r.nodes[k].insn, -1, &web))
+		  break;	/* refused by name in the service */
+		region_webs.push_back (web);
+		refresh_nodes (r.nodes);
+		refresh_nodes (body);
+		if (dump_file)
+		  fprintf (dump_file, "List-schedule (interior-rename): "
+			   "chain L%d -> L%d at uid=%d in bb %d region at "
+			   "uid=%d\n", web.old_l, web.new_l,
+			   INSN_UID (r.nodes[k].insn), bb->index,
+			   INSN_UID (r.nodes[0].insn));
+		break;		/* one rename attempt per root insn */
+	      }
+	  if (!region_webs.empty ()
+	      && ls_pad_sites (visited, bb, r.nodes) > pads_pristine)
+	    {
+	      undo_region_renames ();
+	      rvtt_refuse (RVTT_REF_PAD_SITE, dump_file,
+			   "List-schedule (interior-rename) refused: "
+			   "pad-site increase, undid renames in bb %d "
+			   "region at uid=%d\n",
+			   bb->index, INSN_UID (r.nodes[0].insn));
+	    }
+	}
+
       /* Entry pins: the straight-line scheduler's own discipline over
 	 the region's acyclic baseline (candidate construction only;
 	 acceptance is the cyclic model below).  */
@@ -4469,10 +4557,30 @@ ls_schedule_cyclic_interior (basic_block bb,
 		}
 	    }
 	}
+      if (!region_webs.empty ())
+	{
+	  /* The committed renames themselves are a candidate: the
+	     region's CURRENT order over the renamed webs (a pure
+	     rename commit when it wins), judged by the identical
+	     whole-row acceptance.  */
+	  int ident_ii = ls_cyclic_ii (body, body_order);
+	  if (ident_ii < cand_ii)
+	    {
+	      order.resize (n);
+	      for (unsigned k = 0; k != n; ++k)
+		order[k] = (int) k;
+	      cand_ii = ident_ii;
+	      used_ims = false;
+	    }
+	}
       if (order.empty ())
-	continue;	/* every candidate already refused by name */
+	{
+	  undo_region_renames ();
+	  continue;	/* every candidate already refused by name */
+	}
       if (cand_ii >= cur_ii)
 	{
+	  undo_region_renames ();
 	  if (riscv_tt_opt_cyclic_region_schedule)
 	    rvtt_refuse (RVTT_REF_CYCLIC_INTERIOR_NO_II_DECREASE, dump_file,
 			 "List-schedule (cyclic-interior) refused: "
@@ -4534,6 +4642,7 @@ ls_schedule_cyclic_interior (basic_block bb,
 		reorder_insns (insn, insn, after);
 	      after = insn;
 	    }
+	  undo_region_renames ();
 	  if (dump_file)
 	    fprintf (dump_file, "List-schedule (cyclic-interior) refused: "
 		     "%s, restored bb %d region at uid=%d\n",
@@ -4545,6 +4654,11 @@ ls_schedule_cyclic_interior (basic_block bb,
 
       if (dump_file)
 	{
+	  if (!region_webs.empty ())
+	    fprintf (dump_file, "List-schedule (interior-rename): committed "
+		     "%zu chain rename(s) in bb %d region at uid=%d\n",
+		     region_webs.size (), bb->index,
+		     INSN_UID (r.nodes[0].insn));
 	  fprintf (dump_file, "List-schedule (%s): bb %d "
 		   "region at uid=%d nodes=%u row II %d -> %d "
 		   "target=%s\n",
