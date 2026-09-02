@@ -412,7 +412,7 @@ displacement_cost (const rvtt_sched_problem &problem,
   return cost;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rvtt_solver_solution
 rvtt_bnb_schedule (const rvtt_sched_problem &problem)
@@ -685,7 +685,7 @@ delivery_payload_for (const rvtt_delivery_problem &p, unsigned factor)
   return best;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rvtt_delivery_solution
 rvtt_bnb_delivery_shape (const rvtt_delivery_problem &p)

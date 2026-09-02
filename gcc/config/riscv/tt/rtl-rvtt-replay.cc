@@ -52,30 +52,30 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-refuse.h"
 #include "rvtt-timing.h"
 
-// Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
-// them.  Finding the sequences is O(N^2), and allocating them to the replay
-// buffer is the knapsack problem.  We aim for 'good enough'
+/* Look for repeated sequences of Tensix insns, and use REPLAy/ instruction for
+   them.  Finding the sequences is O(N^2), and allocating them to the replay
+   buffer is the knapsack problem.  We aim for 'good enough' */
 
-// 1) Only consider single BBs.  This works well for unrolled loops anyway.
-//    Looking accross BBs would require considering the dominator graph, and
-//    better live value computation for synthesized insns
-// 2) If sequence A's occurrences are all before sequence B's, B could reuse
-//    the replay buffer locations.  We do not consider this.
-// 3) If the user has explicitly used replay, we use the parts of the replay
-//    buffer that have not used (anywhere in the function).
-// 4) We use all of a discovered sequence (or none of it).  We could of course
-//    use the first N insns, if that is profitable and no room for the whole sequence.
+/* 1) Only consider single BBs.  This works well for unrolled loops anyway.
+      Looking accross BBs would require considering the dominator graph, and
+      better live value computation for synthesized insns
+   2) If sequence A's occurrences are all before sequence B's, B could reuse
+      the replay buffer locations.  We do not consider this.
+   3) If the user has explicitly used replay, we use the parts of the replay
+      buffer that have not used (anywhere in the function).
+   4) We use all of a discovered sequence (or none of it).  We could of course
+      use the first N insns, if that is profitable and no room for the whole sequence.  */
 
-// FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn. This isn't
-// always necessary.  The non-Tensix insn could be hoisted upwards, provided it
-// doesn't affect the generation of any insn hoisted past. This may improve
-// synthesized insns where opcode or address computation is in the middle of a sequence.
+/* FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn. This isn't
+   always necessary.  The non-Tensix insn could be hoisted upwards, provided it
+   doesn't affect the generation of any insn hoisted past. This may improve
+   synthesized insns where opcode or address computation is in the middle of a sequence.  */
 
-// Minimum acceptable sequence length.  4 mirrors
-// XTT_REPLAY_LOOP_UNROLL_MIN_WORDS (rvtt-cost.md): smaller rows cannot
-// amortize a record/playback window.  Self-declared uncalibrated there --
-// no silicon point separates 3 from 4 (DG2 audit item; a calibration
-// experiment remains the pricing lane's follow-up).
+/* Minimum acceptable sequence length.  4 mirrors
+   XTT_REPLAY_LOOP_UNROLL_MIN_WORDS (rvtt-cost.md): smaller rows cannot
+   amortize a record/playback window.  Self-declared uncalibrated there --
+   no silicon point separates 3 from 4 (DG2 audit item; a calibration
+   experiment remains the pricing lane's follow-up).  */
 constexpr unsigned MIN_SEQUENCE = 4;
 
 /* Post-auto-increment window RE-FORMATION mode (lane IH).  Under
@@ -147,25 +147,25 @@ constexpr unsigned MIN_SEQUENCE = 4;
      requires.  */
 static bool reform_mode = false;
 
-// Information about a tensix insn wrt replayability.  For an insn to be
-// replayable it must be the same as the original and same generation.
-// Sequences must not stradle a must_end insn.  Empty insns are ignored.
+/* Information about a tensix insn wrt replayability.  For an insn to be
+   replayable it must be the same as the original and same generation.
+   Sequences must not stradle a must_end insn.  Empty insns are ignored.  */
 struct replay_info
 {
   rtx_insn *insn;
-  unsigned hash;       // hash for insn, used in extending sequences
-  unsigned generation; // Oldest SI value used (in synth insns)
-  bool must_end = true; // Cannot be extended (followed by asm, non-Tensix)
-  bool empty = false; // Is an empty tensix insn -- doesn't increase length
+  unsigned hash;       /* hash for insn, used in extending sequences */
+  unsigned generation; /* Oldest SI value used (in synth insns) */
+  bool must_end = true; /* Cannot be extended (followed by asm, non-Tensix) */
+  bool empty = false; /* Is an empty tensix insn -- doesn't increase length */
 
   replay_info (rtx_insn *insn, unsigned gen, unsigned hash, bool empty)
     : insn (insn),  hash (hash), generation (gen), empty (empty) {}
 };
 
-// The replay info about all instructions in a BB
+/* The replay info about all instructions in a BB */
 using replay_block = std::vector<replay_info>;
 
-// A half-open interval
+/* A half-open interval */
 struct replay_span
 {
   unsigned begin;
@@ -177,18 +177,18 @@ struct replay_span
   {}
 };
 
-// A sequence of insns, and all the clones of that instance.
-// Each instance is its own clone.
+/* A sequence of insns, and all the clones of that instance.
+   Each instance is its own clone.  */
 struct replay_sequence
 {
-  unsigned parent; // The 1-shorter sequence from whence this grew
+  unsigned parent; /* The 1-shorter sequence from whence this grew */
   unsigned hash;
-  unsigned length; // number of insns (does not include empty insns)
-  int companion_ok = -1; // cached span_companion_sound_p verdict (-1 unset)
+  unsigned length; /* number of insns (does not include empty insns) */
+  int companion_ok = -1; /* cached span_companion_sound_p verdict (-1 unset) */
 
-  // Instances of this sequence. By construction these are in increasing
-  // starting insn. During construction these might overlap.  We deal with that
-  // before use.
+  /* Instances of this sequence. By construction these are in increasing
+     starting insn. During construction these might overlap.  We deal with that
+     before use.  */
   std::vector<replay_span> clones;
 
   replay_sequence ()
@@ -199,14 +199,14 @@ struct replay_sequence
   {}
 };
 
-// Set of sequences, by contstruction these are in incressing length first and
-// within each length by starting insn position.
+/* Set of sequences, by contstruction these are in incressing length first and
+   within each length by starting insn position.  */
 using replay_list = std::vector<replay_sequence>;
 
-// Map from hash to set of sequences, used to find matches during construction
+/* Map from hash to set of sequences, used to find matches during construction */
 using replay_map = std::map<unsigned, std::vector<unsigned>>;
 
-// It is cheaper to remove/copy pointers than sequence info itself.
+/* It is cheaper to remove/copy pointers than sequence info itself.  */
 using replay_active = std::vector<replay_sequence *>;
 
 enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_variable_capture};
@@ -231,7 +231,7 @@ is_replay_insn (replay_span &span, rtx_insn *insn)
   return type;
 }
 
-// Scan insns o block computing hashes and must_end.
+/* Scan insns o block computing hashes and must_end.  */
 
 static bool
 scan_insns (std::vector<replay_info> &info, basic_block bb)
@@ -284,27 +284,27 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	    auto type = is_replay_insn (span, insn);
 	    gcc_assert (type != REPLAY_none);
 	    if (type == REPLAY_variable_capture)
-	      // We don't know where this ends, so have to stop scanning the
-	      // BB.
+	      /* We don't know where this ends, so have to stop scanning the
+	         BB.  */
 	      break;
 
 	    if (type == REPLAY_fixed_capture)
 	      shadow = span.end;
-	    // A replay owner is a slot-occupying word.  A sequence
-	    // spanning it would form a capture whose recording swallows
-	    // the owner word (a REPLAY issued while recording is
-	    // recorded, not executed) and the counted-row phase's inline
-	    // reference body along with it.  End sequence continuity
-	    // here: the owner and its recorded shadow separate runs.
+	    /* A replay owner is a slot-occupying word.  A sequence
+	       spanning it would form a capture whose recording swallows
+	       the owner word (a REPLAY issued while recording is
+	       recorded, not executed) and the counted-row phase's inline
+	       reference body along with it.  End sequence continuity
+	       here: the owner and its recorded shadow separate runs.  */
 	    may_continue = false;
 	    continue;
 	  }
 
-	// Only machine-described replay-safe instructions may enter a payload.
-	// Explicit replay owners are handled above so their reserved slots remain
-	// visible to the allocator.  In particular, an opaque asm remains a
-	// boundary even if it happens to print a constant `.ttinsn' word in the
-	// final assembly.
+	/* Only machine-described replay-safe instructions may enter a payload.
+	   Explicit replay owners are handled above so their reserved slots remain
+	   visible to the allocator.  In particular, an opaque asm remains a
+	   boundary even if it happens to print a constant `.ttinsn' word in the
+	   final assembly.  */
 	if (get_attr_type (insn) != TYPE_TENSIX
 	    || replay_class != XTT_REPLAY_SAFE)
 	  goto not_tensix;
@@ -312,7 +312,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	bool is_empty = !get_attr_length (insn);
 	if (shadow)
 	  {
-	    // We're in the shadow of a replay capture
+	    /* We're in the shadow of a replay capture */
 	    if (!is_empty)
 	      shadow--;
 	    continue;
@@ -321,7 +321,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	if (may_continue)
 	  info.back ().must_end = false;
 
-	// Just use crc32, it's right there
+	/* Just use crc32, it's right there */
 	unsigned age = 0;
 	auto hasher = [&reg_ages, &age] (auto &self, unsigned hash, rtx rtl) -> unsigned
 	{
@@ -334,11 +334,11 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	    case UNSPEC:
 	    case UNSPEC_VOLATILE:
 	      hash = crc32_unsigned (hash, XINT (rtl, 1));
-	      // FALLTHROUGH
+	      /* FALLTHROUGH */
 
 	    case PARALLEL:
 	      {
-		// All 3 have the vector at position 0
+		/* All 3 have the vector at position 0 */
 		auto &vec = XVEC (rtl, 0);
 		for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
 		  hash = self (self, hash, RTVEC_ELT (vec, ix));
@@ -361,8 +361,8 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	      break;
 
 	    case MEM:
-	      // MEMs are to store a synthesized insn.  All are equivalent.
-	      // In broken code, we could meet simple sets moving to/from MEM.
+	      /* MEMs are to store a synthesized insn.  All are equivalent.
+	         In broken code, we could meet simple sets moving to/from MEM.  */
 	      break;
 
 	    case CLOBBER:
@@ -421,36 +421,36 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
       if (!rvtt_dcost_replay_word_equal_p (seq_insn.insn, insn.insn))
 	continue;
 
-      // Clones must be in ascending order (the invalidation presumes that)
+      /* Clones must be in ascending order (the invalidation presumes that) */
       gcc_assert (begin > seq.clones.back ().begin);
 
-      // This might create overlapping clones, but we still need this as a
-      // later extension could only apply to one of these.
+      /* This might create overlapping clones, but we still need this as a
+         later extension could only apply to one of these.  */
       seq.clones.emplace_back (begin, end);
       return;
     }
 
   slot.first->second.emplace_back (unsigned (list.size ()));
 
-  // New sequence
+  /* New sequence */
   list.emplace_back (parent, hash, length);
-  // It is its own clone
+  /* It is its own clone */
   list.back ().clones.emplace_back (begin, end);  
 }
 
-// Build sequences of insns and their copies.  This is fundamentally O(N^2).
-// Return number index of first sequence >= MIN_SEQUENCE.
+/* Build sequences of insns and their copies.  This is fundamentally O(N^2).
+   Return number index of first sequence >= MIN_SEQUENCE.  */
 
 static unsigned
 build_sequences (replay_map &map, replay_list &list, replay_block &block, unsigned max_length)
 {
   list.clear ();
-  list.push_back (replay_sequence ()); // null sequence
+  list.push_back (replay_sequence ()); /* null sequence */
   map.clear ();
 
-  // Initialize sequences of length 1.  These are the seeds from whence
-  // sequences grow. Historically we started sequences at load insns (those
-  // being the first of a loop), to further reduce N.
+  /* Initialize sequences of length 1.  These are the seeds from whence
+     sequences grow. Historically we started sequences at load insns (those
+     being the first of a loop), to further reduce N.  */
   for (unsigned ix = 0, end_ix = block.size (); ix != end_ix; ++ix)
     {
       if (block[ix].empty)
@@ -460,7 +460,7 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
     }
   unsigned lwm = unsigned (list.size ());
 
-  // Grow each sequence by 1, until we can grow no more, or we get too long
+  /* Grow each sequence by 1, until we can grow no more, or we get too long */
   unsigned from = 1, length = 1;
   while (length++ < max_length)
     {
@@ -470,11 +470,11 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
       for (unsigned seq_ix = from; seq_ix != seq_end; seq_ix++)
 	{
 	  if (list[seq_ix].clones.size () == 1)
-	    // There is only one instance, no point extending this.
+	    /* There is only one instance, no point extending this.  */
 	    continue;
 
-	  // Warning, list is extended inside this loop. Beware iterator
-	  // invalidation
+	  /* Warning, list is extended inside this loop. Beware iterator
+	     invalidation */
 	  for (unsigned clone_ix = 0, clone_end = list[seq_ix].clones.size ();
 	       clone_ix != clone_end; ++clone_ix)
 	    {
@@ -520,8 +520,8 @@ dump_sequence (FILE *stream, replay_block const &block, replay_span span,
 }
 
 
-// LIST has been computed, but sequences might contain overlapping runs.
-// Remove overlaps, and push a pointer to valid ones into the ACTIVE array.
+/* LIST has been computed, but sequences might contain overlapping runs.
+   Remove overlaps, and push a pointer to valid ones into the ACTIVE array.  */
 
 static void
 active_triage (replay_block const &block, replay_active &active, replay_list &list, unsigned from)
@@ -543,7 +543,7 @@ active_triage (replay_block const &block, replay_active &active, replay_list &li
 	}
       seq.clones.erase (write, end);
 
-      // Remember this if it has more than one instance.
+      /* Remember this if it has more than one instance.  */
       if (seq.clones.size () > 1)
 	{
 	  if (dump_file)
@@ -622,8 +622,8 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 	{
 	  uint32_t group_mask
 	    = group.value_write_mask | group.companion_write_mask;
-	  // Boundary integrity: adjacent zero-length companion markers
-	  // outside the span must not be split from their instruction.
+	  /* Boundary integrity: adjacent zero-length companion markers
+	     outside the span must not be split from their instruction.  */
 	  if (ix + 1 >= span.end)
 	    for (unsigned probe = span.end; probe != block.size (); ++probe)
 	      {
@@ -1226,8 +1226,8 @@ struct view
 static void
 build_symbols (view &v, replay_block const &block)
 {
-  std::map<unsigned, std::vector<unsigned> > buckets; // hash -> class ids
-  std::vector<unsigned> rep;			     // class id -> block index
+  std::map<unsigned, std::vector<unsigned> > buckets; /* hash -> class ids */
+  std::vector<unsigned> rep;			     /* class id -> block index */
   int next_sep = -1;
 
   v.sym_of.assign (block.size (), -1);
@@ -1376,7 +1376,7 @@ span_symbols (view const &v, replay_block const &block, replay_span span)
   return out;
 }
 
-} // namespace replay_sa
+} /* namespace replay_sa */
 
 /* Run the shadow.  BLOCK/ACTIVE are the legacy scan and its triaged
    candidate list, MAX_LENGTH the replay-buffer bound the legacy
@@ -1408,7 +1408,7 @@ shadow_discovery_census (replay_block const &block,
 
   /* -------- the stage-A obligation: legacy candidates are a subset. */
   unsigned legacy_n = 0, violations = 0;
-  std::set<uint64_t> legacy_key; // (first clone begin << 32) | length
+  std::set<uint64_t> legacy_key; /* (first clone begin << 32) | length */
   unsigned legacy_best_saving = 0;
   for (auto *seq : active)
     {
@@ -1588,7 +1588,7 @@ pick_replay (replay_active &active, unsigned limit, replay_block const &block,
 	  = span_companion_sound_p (block, seq->clones.front (), sticky);
       if (!seq->companion_ok)
 	continue;
-      // Quasar exec-while-load doesn't work, so we need an extra replay
+      /* Quasar exec-while-load doesn't work, so we need an extra replay */
       unsigned saving = (seq->clones.size () - 1) * (seq->length - 1)
 	- !(riscv_tt_fix_qsr_replay > 0);
       /* Measurement-only selection override (reform mode,
@@ -1633,14 +1633,14 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
       fprintf (dump_file, "\n");
     }
 
-  // Cannot exec while capturing on quasar
+  /* Cannot exec while capturing on quasar */
   rtx capture = gen_rvtt_ttreplay_int
     (const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
      rvtt_gen_rtx_noval (XTT32SImode),
      GEN_INT (replay_start), GEN_INT (not_quasar_fix), GEN_INT (1));
   emit_insn_before (capture, block[seq.clones.front ().begin].insn);
 
-  // Make sure we've not deleted anything in this instance already
+  /* Make sure we've not deleted anything in this instance already */
   for (auto pos = block.data () + seq.clones.front ().begin,
 	 end = block.data () + seq.clones.front ().end;
        pos != end; pos++)
@@ -1685,10 +1685,10 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
   return length;
 }
 
-// Return true when X is a post-RA, fixed-encoding SFPU pattern.  Hard LREGs,
-// constants and compiler scratch outputs are fixed.  A GPR or MEM means that
-// the instruction word can still be synthesized at run time and therefore
-// cannot be recorded without executing at its original location.
+/* Return true when X is a post-RA, fixed-encoding SFPU pattern.  Hard LREGs,
+   constants and compiler scratch outputs are fixed.  A GPR or MEM means that
+   the instruction word can still be synthesized at run time and therefore
+   cannot be recorded without executing at its original location.  */
 static bool
 fixed_replay_rtx_p (const_rtx x)
 {
@@ -1862,9 +1862,9 @@ fixed_replay_rtx_p (const_rtx x)
 static HOST_WIDE_INT
 exec_interlocked_slots (replay_block const &block, replay_span span)
 {
-  // QSR carries no audited latency facts (the simulator refuses these
-  // opcode semantics, rvtt-cost.md): the whole target is unpriceable,
-  // matching the interlock scheduler's target-level refusal.
+  /* QSR carries no audited latency facts (the simulator refuses these
+     opcode semantics, rvtt-cost.md): the whole target is unpriceable,
+     matching the interlock scheduler's target-level refusal.  */
   if (TARGET_XTT_TENSIX_QSR)
     return -1;
   /* The 16-register ready[] scoreboard is the item-#11 engine's; this
@@ -2146,19 +2146,19 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		 (long) trips, (long) words, (long) benefit);
       return true;
     }
-  // The re-record shapes split on which resource paces the in-loop
-  // record-with-execution pass (rvtt-cost.md, re-record derivation):
-  // execution-bound (exec >= deliver_record) exposes the record
-  // engine's per-pass overhead on the critical path and hides the
-  // hoisted preheader pass's delivery behind the loop's own execution
-  // backlog (Reduce-class silicon A/B); delivery-bound keeps the
-  // pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
-  // engine overhead absorbed in the per-word delivery slack.
-  //
-  // Both shapes -- and the counted branch, the execution-saturation
-  // context term, and the completion guard's full-record charge --
-  // are priced by the shared spelling in rvtt-delivery-cost-core.h
-  // (replay_pricing); PRICE above carries every term.
+  /* The re-record shapes split on which resource paces the in-loop
+     record-with-execution pass (rvtt-cost.md, re-record derivation):
+     execution-bound (exec >= deliver_record) exposes the record
+     engine's per-pass overhead on the critical path and hides the
+     hoisted preheader pass's delivery behind the loop's own execution
+     backlog (Reduce-class silicon A/B); delivery-bound keeps the
+     pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
+     engine overhead absorbed in the per-word delivery slack.
+
+     Both shapes -- and the counted branch, the execution-saturation
+     context term, and the completion guard's full-record charge --
+     are priced by the shared spelling in rvtt-delivery-cost-core.h
+     (replay_pricing); PRICE above carries every term.  */
   bool exec_bound_rerecord = price.exec_bound;
   HOST_WIDE_INT record = price.record;
   HOST_WIDE_INT before = price.before;
@@ -2191,15 +2191,15 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
     }
   else if (price.hidden)
     {
-      // Execution-saturation term (delivery-bound re-record bodies
-      // only; silicon-witnessed on the unary-maxmin shape): when the
-      // body's contiguous run of sibling launches of this same buffer
-      // has enough execution surplus to hide the record pass's
-      // delivery, hoisting relieves nothing per trip.  An
-      // execution-bound record pass is never hidden this way: its cost
-      // is its own execution plus the exposed record-engine overhead,
-      // which no sibling surplus can absorb (Reduce-class silicon A/B,
-      // rvtt-cost.md).
+      /* Execution-saturation term (delivery-bound re-record bodies
+         only; silicon-witnessed on the unary-maxmin shape): when the
+         body's contiguous run of sibling launches of this same buffer
+         has enough execution surplus to hide the record pass's
+         delivery, hoisting relieves nothing per trip.  An
+         execution-bound record pass is never hidden this way: its cost
+         is its own execution plus the exposed record-engine overhead,
+         which no sibling surplus can absorb (Reduce-class silicon A/B,
+         rvtt-cost.md).  */
       if (dump_file)
 	fprintf (dump_file,
 		 "Record delivery hidden: contiguous launch run %u exec"
@@ -2288,9 +2288,9 @@ max_contiguous_launch_run (replay_sequence const &seq,
 	{
 	  if (!insn)
 	    {
-	      // Clones are within one block; a broken chain refuses the
-	      // discount conservatively toward "separated" (fires are
-	      // gated by the benefit model as before).
+	      /* Clones are within one block; a broken chain refuses the
+	         discount conservatively toward "separated" (fires are
+	         gated by the benefit model as before).  */
 	      contiguous = false;
 	      break;
 	    }
@@ -2302,12 +2302,12 @@ max_contiguous_launch_run (replay_sequence const &seq,
 	  if (GET_CODE (insn) == INSN && recog_memoized (insn) >= 0)
 	    {
 	      if (!get_attr_length (insn))
-		// Zero-length ghost: no delivered word.
+		/* Zero-length ghost: no delivered word.  */
 		continue;
 	      if (recog_memoized (insn) == CODE_FOR_rvtt_ttincrwc
 		  && riscv_tt_opt_dst_autoincr > 0)
-		// Typed per-row Dst increment the later auto-increment
-		// pass absorbs around replay launches.
+		/* Typed per-row Dst increment the later auto-increment
+		   pass absorbs around replay launches.  */
 		continue;
 	    }
 	  contiguous = false;
@@ -2383,15 +2383,15 @@ dedicated_loop_preheader (class loop *loop)
     ? preheader : nullptr;
 }
 
-// A volatile store whose address is not provably outside the
-// instruction-FIFO aperture can deliver ANY word -- including a REPLAY
-// record that re-records hoisted slots (lane FW fail-closed widening of
-// the loop scan below; the flag-gated record-hoist path re-audits
-// refused loops with the interval walk in rvtt-macro-epoch.cc, which
-// also classifies the stored WORD).  Named data objects other than the
-// recorded ABI anchor __instrn_buffer (crosscall precedent) and stack
-// slots are provably not the FIFO; a constant address outside the
-// aperture range is too; everything else refuses.
+/* A volatile store whose address is not provably outside the
+   instruction-FIFO aperture can deliver ANY word -- including a REPLAY
+   record that re-records hoisted slots (lane FW fail-closed widening of
+   the loop scan below; the flag-gated record-hoist path re-audits
+   refused loops with the interval walk in rvtt-macro-epoch.cc, which
+   also classifies the stored WORD).  Named data objects other than the
+   recorded ABI anchor __instrn_buffer (crosscall precedent) and stack
+   slots are provably not the FIFO; a constant address outside the
+   aperture range is too; everything else refuses.  */
 static bool
 volatile_store_maybe_fifo_p (rtx pat)
 {
@@ -2431,14 +2431,14 @@ volatile_store_maybe_fifo_p (rtx pat)
   return true;			/* unresolvable: fail closed */
 }
 
-// A raw asm or an unknown callee can own or overwrite replay state without
-// exposing that fact to this function's RTL.  Typed barriers are harmless
-// here: they remain outside the payload and do not change the selected replay
-// slots.  A typed owner is conservatively a boundary for this first hoisting
-// implementation even though global slot accounting has already excluded its
-// declared range.  Volatile stores that could target the instruction FIFO
-// refuse fail-closed (they could push a REPLAY record word); see
-// volatile_store_maybe_fifo_p.
+/* A raw asm or an unknown callee can own or overwrite replay state without
+   exposing that fact to this function's RTL.  Typed barriers are harmless
+   here: they remain outside the payload and do not change the selected replay
+   slots.  A typed owner is conservatively a boundary for this first hoisting
+   implementation even though global slot accounting has already excluded its
+   declared range.  Volatile stores that could target the instruction FIFO
+   refuse fail-closed (they could push a REPLAY record word); see
+   volatile_store_maybe_fifo_p.  */
 static bool
 loop_preserves_replay_p (class loop *loop)
 {
@@ -3260,8 +3260,8 @@ replace_hoisted_sequence_peel (replay_sequence &seq, replay_block &block,
   return length;
 }
 
-// Remove or adjust those sequences that are invalidated by having used SEQ.
-// (SEQ itself auto-invalidates).
+/* Remove or adjust those sequences that are invalidated by having used SEQ.
+   (SEQ itself auto-invalidates).  */
 
 static bool
 active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_length)
@@ -3299,7 +3299,7 @@ active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_len
       if (ptr->clones.size () < 2)
 	continue;
 
-      // Keep this one
+      /* Keep this one */
       *write = *pos;
       ++write;
 
@@ -3503,7 +3503,7 @@ hoist_counted_loops (function *cfn,
       if (!loop || loop->num == 0 || loop->header != bb)
 	continue;
       if (bitmap_bit_p (dirty_bbs, bb->index))
-	// Recording state may be open here (unprovable user epoch).
+	/* Recording state may be open here (unprovable user epoch).  */
 	continue;
 
       replay_block info;
@@ -3535,9 +3535,9 @@ hoist_counted_loops (function *cfn,
 		     " state\n", preheader->index);
 	  continue;
 	}
-      // The counted-loop payload is its own single clone; across trips the
-      // launch is always separated from the next by the loop-control
-      // delivery, so the contiguous launch run is 1.
+      /* The counted-loop payload is its own single clone; across trips the
+         launch is always separated from the next by the loop-control
+         delivery, so the contiguous launch run is 1.  */
       peel_plan peel;
       if (!hoist_profitable_p (loop, preheader, info, seq.clones.front (),
 			       /*body_rerecords=*/false,
@@ -3599,48 +3599,48 @@ hoist_counted_loops (function *cfn,
     }
 }
 
-// ---- Complete unroll of proven-trip replay-launch loops ----
-//
-// After hoisting, a counted loop's body can be reduced to pure replay
-// delivery: playback launches of an already-recorded capture plus typed
-// Dst-counter steps, with only the induction-variable update and the
-// conditional branch as per-trip work.  Driving that loop control through
-// the RISC costs two delivered scalar words per trip and separates
-// consecutive launches in the final instruction stream.  When the trip
-// count is provable (the same rvtt_loop_trips discipline the hoist
-// itself uses -- estimated or profile counts refuse), the body replicates
-// textually: emit TRIPS copies of the per-trip delivery back to back,
-// materialize the counter's proven final value once (later passes delete it
-// when dead), and remove the loop control entirely.  This is the
-// no-source-pragma counterpart of the accepted replay-aware complete unroll:
-// the gimple-side unroll request needs the payload before recording, while
-// this shape only exists after replay formation has hoisted the capture.
-//
-// Admission is purely structural.  Every non-debug insn in the single-block
-// body must be one of:
-//   (a) a fixed-encoding TTREPLAY playback launch,
-//   (b) a typed TTINCRWC with constant operands (the per-trip Dst step the
-//       counted-loop capture leaves explicit; the Dst auto-increment pass
-//       runs later and sees every launch site with equivalent RWC coverage),
-//   (c) the loop's single counter-step insn, or
-//   (d) the final conditional jump.
-// Anything else -- another scalar insn, a recording, a non-playback replay
-// owner, an asm, a call, memory, USE/CLOBBER markers -- refuses and leaves
-// the loop byte-identical.  No operation identity, opcode calendar,
-// coefficient value, or instruction-word fingerprint participates.
-//
-// Cost: the per-trip benefit is the two removed loop-control words (positive
-// for every proven trips >= 2); the only cost is straight-line code size,
-// bounded by the cost-table constant XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS on
-// the total delivered words of the unrolled run.
-//
-// Interaction with the hoist's execution-saturation context term: the
-// contiguous launch run this unroll creates exists only in the hoisted
-// world, so it never re-prices the hoist decision.  The LAUNCH_RUN input of
-// hoist_profitable_p measures sibling launches present in the body
-// independently of the hoist under evaluation; a run manufactured by a
-// post-hoist delivery optimization is a consequence of the decision, not
-// context for it (see rvtt-cost.md).
+/* ---- Complete unroll of proven-trip replay-launch loops ----
+
+   After hoisting, a counted loop's body can be reduced to pure replay
+   delivery: playback launches of an already-recorded capture plus typed
+   Dst-counter steps, with only the induction-variable update and the
+   conditional branch as per-trip work.  Driving that loop control through
+   the RISC costs two delivered scalar words per trip and separates
+   consecutive launches in the final instruction stream.  When the trip
+   count is provable (the same rvtt_loop_trips discipline the hoist
+   itself uses -- estimated or profile counts refuse), the body replicates
+   textually: emit TRIPS copies of the per-trip delivery back to back,
+   materialize the counter's proven final value once (later passes delete it
+   when dead), and remove the loop control entirely.  This is the
+   no-source-pragma counterpart of the accepted replay-aware complete unroll:
+   the gimple-side unroll request needs the payload before recording, while
+   this shape only exists after replay formation has hoisted the capture.
+
+   Admission is purely structural.  Every non-debug insn in the single-block
+   body must be one of:
+     (a) a fixed-encoding TTREPLAY playback launch,
+     (b) a typed TTINCRWC with constant operands (the per-trip Dst step the
+         counted-loop capture leaves explicit; the Dst auto-increment pass
+         runs later and sees every launch site with equivalent RWC coverage),
+     (c) the loop's single counter-step insn, or
+     (d) the final conditional jump.
+   Anything else -- another scalar insn, a recording, a non-playback replay
+   owner, an asm, a call, memory, USE/CLOBBER markers -- refuses and leaves
+   the loop byte-identical.  No operation identity, opcode calendar,
+   coefficient value, or instruction-word fingerprint participates.
+
+   Cost: the per-trip benefit is the two removed loop-control words (positive
+   for every proven trips >= 2); the only cost is straight-line code size,
+   bounded by the cost-table constant XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS on
+   the total delivered words of the unrolled run.
+
+   Interaction with the hoist's execution-saturation context term: the
+   contiguous launch run this unroll creates exists only in the hoisted
+   world, so it never re-prices the hoist decision.  The LAUNCH_RUN input of
+   hoist_profitable_p measures sibling launches present in the body
+   independently of the hoist under evaluation; a run manufactured by a
+   post-hoist delivery optimization is a consequence of the decision, not
+   context for it (see rvtt-cost.md).  */
 
 static bool
 unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
@@ -3649,19 +3649,19 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
   if (loop->num_nodes != 1 || loop->header != loop->latch)
     return false;
   if (bitmap_bit_p (dirty_bbs, header->index))
-    // Recording state may be open here (unprovable user epoch).
+    /* Recording state may be open here (unprovable user epoch).  */
     return false;
 
-  // Pragma scope.  "#pragma GCC unroll" governs payload duplication: the
-  // gimple replay-unroll REQUEST defers to it and an annotated payload is
-  // never replicated.  This unroll is a delivery transformation on the
-  // residual launch loop the (equally pragma-blind, post-reload) hoist
-  // leaves behind: the capture stays recorded once and only delivered
-  // launch words replicate -- the same class of rewrite as the hoist
-  // itself, which has always fired on annotated loops.  Loop structures
-  // are rebuilt after reload, so loop->unroll is normally cleared here;
-  // honor it if it ever survives (a preserved "#pragma GCC unroll 1" must
-  // keep even its launch loop).
+  /* Pragma scope.  "#pragma GCC unroll" governs payload duplication: the
+     gimple replay-unroll REQUEST defers to it and an annotated payload is
+     never replicated.  This unroll is a delivery transformation on the
+     residual launch loop the (equally pragma-blind, post-reload) hoist
+     leaves behind: the capture stays recorded once and only delivered
+     launch words replicate -- the same class of rewrite as the hoist
+     itself, which has always fired on annotated loops.  Loop structures
+     are rebuilt after reload, so loop->unroll is normally cleared here;
+     honor it if it ever survives (a preserved "#pragma GCC unroll 1" must
+     keep even its launch loop).  */
   if (loop->unroll)
     {
       if (dump_file)
@@ -3682,14 +3682,14 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 
   edge e_branch = BRANCH_EDGE (header);
   edge e_fall = FALLTHRU_EDGE (header);
-  // A fallthrough cannot re-enter its own block, so the backedge must be
-  // the taken branch and the fallthrough the unique exit.
+  /* A fallthrough cannot re-enter its own block, so the backedge must be
+     the taken branch and the fallthrough the unique exit.  */
   if (e_branch->dest != header || e_fall->dest == header
       || (e_branch->flags & EDGE_ABNORMAL) || (e_fall->flags & EDGE_ABNORMAL))
     return false;
 
-  // A loop without a playback launch is silently out of scope; refusal
-  // diagnostics below are only meaningful for launch-carrying bodies.
+  /* A loop without a playback launch is silently out of scope; refusal
+     diagnostics below are only meaningful for launch-carrying bodies.  */
   bool has_playback = false;
   rtx_insn *insn;
   FOR_BB_INSNS (header, insn)
@@ -3707,8 +3707,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
   if (!has_playback)
     return false;
 
-  // Classify the body.  DELIVERY collects the per-trip delivered words in
-  // program order; STEP is the single scalar counter update.
+  /* Classify the body.  DELIVERY collects the per-trip delivered words in
+     program order; STEP is the single scalar counter update.  */
   std::vector<rtx_insn *> delivery;
   rtx_insn *step = nullptr;
   unsigned launches = 0;
@@ -3770,8 +3770,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		 " provably constant\n", header->index);
       return false;
     }
-  // The one scalar insn must be exactly the proven counter step; any other
-  // scalar state would be silently frozen by removing the loop.
+  /* The one scalar insn must be exactly the proven counter step; any other
+     scalar state would be silently frozen by removing the loop.  */
   if (counter_step != step || trips < 2)
     return false;
 
@@ -3779,8 +3779,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
   rtx counter = SET_DEST (step_set);
   machine_mode counter_mode = GET_MODE (counter);
   rtx final_rtx = gen_int_mode (final_value, counter_mode);
-  // The counter's proven exit value replaces the removed per-trip updates.
-  // Post-reload only single-insn constants may be materialized directly.
+  /* The counter's proven exit value replaces the removed per-trip updates.
+     Post-reload only single-insn constants may be materialized directly.  */
   if (!SMALL_OPERAND (INTVAL (final_rtx)) && !LUI_OPERAND (INTVAL (final_rtx)))
     return false;
 
@@ -3798,29 +3798,29 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
       return false;
     }
 
-  // ---- Execute-while-recording increment ----
-  //
-  // The hoisted capture in the dedicated preheader records without
-  // executing, so the first trip's launch re-delivers work the recording
-  // already streamed through the buffer.  When the structural conditions
-  // below hold, flip the capture to execute-while-loading and drop the
-  // first trip's launch: the payload's first execution happens at the
-  // record itself (the same semantics the planner CC path emits, and the
-  // in-place replace_sequence has always used).  Conditions, all
-  // refusing by leaving the plain unroll behavior:
-  //   - not Quasar (cannot exec while capturing there; the same guard
-  //     replace_sequence applies);
-  //   - the first delivered word of the trip is a playback launch of
-  //     exactly the capture's span (payload execution moves from that
-  //     launch site to the record site);
-  //   - the preheder's only Tensix content after the capture is the
-  //     capture's own payload: scalar insns cannot interact with Tensix
-  //     state, so crossing them preserves the payload's CC, Dst, and RWC
-  //     context; any other Tensix word between record and first launch
-  //     refuses.
-  // The typed Dst auto-increment pass models an executing capture as a
-  // row of its own (ROW_CAPTURE_EXEC), so its later ownership placement
-  // sees the record-time execution site like any other row.
+  /* ---- Execute-while-recording increment ----
+
+     The hoisted capture in the dedicated preheader records without
+     executing, so the first trip's launch re-delivers work the recording
+     already streamed through the buffer.  When the structural conditions
+     below hold, flip the capture to execute-while-loading and drop the
+     first trip's launch: the payload's first execution happens at the
+     record itself (the same semantics the planner CC path emits, and the
+     in-place replace_sequence has always used).  Conditions, all
+     refusing by leaving the plain unroll behavior:
+       - not Quasar (cannot exec while capturing there; the same guard
+         replace_sequence applies);
+       - the first delivered word of the trip is a playback launch of
+         exactly the capture's span (payload execution moves from that
+         launch site to the record site);
+       - the preheder's only Tensix content after the capture is the
+         capture's own payload: scalar insns cannot interact with Tensix
+         state, so crossing them preserves the payload's CC, Dst, and RWC
+         context; any other Tensix word between record and first launch
+         refuses.
+     The typed Dst auto-increment pass models an executing capture as a
+     row of its own (ROW_CAPTURE_EXEC), so its later ownership placement
+     sees the record-time execution site like any other row.  */
   rtx_insn *exec_capture = nullptr;
   rtx_insn *exec_payload_end = nullptr;
   bool drop_first_launch = false;
@@ -3829,8 +3829,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
       replay_span lead_span;
       if (is_replay_insn (lead_span, delivery.front ()) == REPLAY_playback)
 	{
-	  // Find the capture of this span in the preheader and prove it is
-	  // the last Tensix content (past its own payload words).
+	  /* Find the capture of this span in the preheader and prove it is
+	     the last Tensix content (past its own payload words).  */
 	  rtx_insn *pinsn;
 	  rtx_insn *cap = nullptr;
 	  unsigned payload_left = 0;
@@ -3847,21 +3847,21 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		{
 		  if (asm_noperands (pat) >= 0)
 		    {
-		      // An empty-template asm (the compiler memory-barrier
-		      // idiom) emits nothing; every real asm is an
-		      // unclassified word.  Position decides (lane FJ,
-		      // FE-F1 follow-up): the transformation moves the
-		      // payload's execution from the first launch back to
-		      // the record, so only words BETWEEN the record and
-		      // that launch are crossed -- a word before the
-		      // record is outside the motion window, exactly like
-		      // the typed Tensix words the branch below already
-		      // admits (the LLK per-tile wrapper's raw
-		      // TTI_STALLWAIT word sits there on every
-		      // llk_math_eltwise_sfpu_common.h tile loop).  A raw
-		      // word inside the payload span corrupts the typed
-		      // slot count, and one after the payload is crossed
-		      // by the motion: both keep refusing.
+		      /* An empty-template asm (the compiler memory-barrier
+		         idiom) emits nothing; every real asm is an
+		         unclassified word.  Position decides (lane FJ,
+		         FE-F1 follow-up): the transformation moves the
+		         payload's execution from the first launch back to
+		         the record, so only words BETWEEN the record and
+		         that launch are crossed -- a word before the
+		         record is outside the motion window, exactly like
+		         the typed Tensix words the branch below already
+		         admits (the LLK per-tile wrapper's raw
+		         TTI_STALLWAIT word sits there on every
+		         llk_math_eltwise_sfpu_common.h tile loop).  A raw
+		         word inside the payload span corrupts the typed
+		         slot count, and one after the payload is crossed
+		         by the motion: both keep refusing.  */
 		      const char *tmpl
 			= GET_CODE (pat) == ASM_OPERANDS
 			  ? ASM_OPERANDS_TEMPLATE (pat)
@@ -3882,7 +3882,7 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 			  break;
 			}
 		    }
-		  continue;	// scalar work / empty barrier / pre-record raw word
+		  continue;	/* scalar work / empty barrier / pre-record raw word */
 		}
 	      if (payload_left)
 		{
@@ -3899,8 +3899,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		}
 	      replay_span span;
 	      auto type = is_replay_insn (span, pinsn);
-	      // is_replay_insn's raw span carries {begin = start slot,
-	      // end = length}.
+	      /* is_replay_insn's raw span carries {begin = start slot,
+	         end = length}.  */
 	      if (type == REPLAY_fixed_capture && !cap
 		  && span.begin == lead_span.begin
 		  && span.end == lead_span.end
@@ -3911,14 +3911,14 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		  continue;
 		}
 	      if (!cap)
-		// Tensix work BEFORE the record retires before it and is
-		// unaffected by executing the payload at the record point.
+		/* Tensix work BEFORE the record retires before it and is
+		   unaffected by executing the payload at the record point.  */
 		continue;
 	      if (!get_attr_length (pinsn))
-		// Zero-length architectural markers deliver no word.
+		/* Zero-length architectural markers deliver no word.  */
 		continue;
-	      // A Tensix word between the capture's payload and the first
-	      // launch: refuse (the payload's execution would cross it).
+	      /* A Tensix word between the capture's payload and the first
+	         launch: refuse (the payload's execution would cross it).  */
 	      clean = false;
 	      if (dump_file)
 		fprintf (dump_file,
@@ -3943,23 +3943,23 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		 " word is not the playback launch\n");
     }
 
-  // Commit.  Replicate the per-trip delivery TRIPS-1 further times in body
-  // order (the scalar counter step commutes with every delivered word: it
-  // touches only the counter register), set the counter's proven final
-  // value, and remove the loop control.  The loop structure loses its
-  // backedge; record the pending fixup before mutating the CFG.
+  /* Commit.  Replicate the per-trip delivery TRIPS-1 further times in body
+     order (the scalar counter step commutes with every delivered word: it
+     touches only the counter register), set the counter's proven final
+     value, and remove the loop control.  The loop structure loses its
+     backedge; record the pending fixup before mutating the CFG.  */
   loops_state_set (LOOPS_NEED_FIXUP);
 
   if (drop_first_launch)
     {
-      // Flip the record to execute-while-loading, drop the first trip's
-      // now-redundant launch, and emit the WHOLE unrolled delivery run in
-      // the preheader directly after the executed payload: trip 1's
-      // remaining typed Dst steps followed by trips 2..N.  Everything
-      // crossed is scalar work (proven above), and the later Dst
-      // auto-increment ownership pass then sees the record-time execution
-      // row and every launch row in ONE block -- the same shared-placement
-      // shape an in-place capture produces.
+      /* Flip the record to execute-while-loading, drop the first trip's
+         now-redundant launch, and emit the WHOLE unrolled delivery run in
+         the preheader directly after the executed payload: trip 1's
+         remaining typed Dst steps followed by trips 2..N.  Everything
+         crossed is scalar work (proven above), and the later Dst
+         auto-increment ownership pass then sees the record-time execution
+         row and every launch row in ONE block -- the same shared-placement
+         shape an in-place capture produces.  */
       XVECEXP (PATTERN (exec_capture), 0, 6) = const1_rtx;
       INSN_CODE (exec_capture) = -1;
       rtx_insn *anchor = exec_payload_end;
@@ -4013,34 +4013,34 @@ unroll_launch_loops (function *cfn, bitmap dirty_bbs)
     }
 }
 
-// ---- Launch conversion of isomorphic instruction runs ----
-//
-// After formation, a payload recorded in the replay buffer may have further
-// executions that were not textually identical to the recorded sequence --
-// typically the final copy of a completely unrolled counted loop, whose
-// separate register allocation chose different temporaries (and may clobber
-// registers the recorded rows preserve).  When such a run is
-// effect-isomorphic to a payload under a register value map, executing it as
-// one more launch is equivalent provided every register whose final contents
-// differ between the two worlds is dead after the run.
-//
-// Matching is purely structural: identical instruction codes and
-// non-register operands in lockstep, with register operands related by an
-// evolving value map (a use of a run-local definition must correspond to the
-// matched definition; a live-in use must be the identical hard register).
-// No operation names, opcode calendars, immediate fingerprints, or raw
-// encodings participate in any decision.
-//
-// Refusals, all leaving the function byte-identical:
-//   - any lockstep mismatch (code, immediate, structure, or value map);
-//   - a register of a differing definition pair live after the run;
-//   - a run whose trailing Dst-advance context differs from the uniform
-//     trailing context of the payload's other execution sites: the typed Dst
-//     auto-increment ownership pass runs later and must see every execution
-//     site with equivalent RWC coverage, so a conversion may not create the
-//     only uncovered site;
-//   - payloads whose recorded contents, buffer span, or execution sites are
-//     ambiguous, and runs not dominated by their recording.
+/* ---- Launch conversion of isomorphic instruction runs ----
+
+   After formation, a payload recorded in the replay buffer may have further
+   executions that were not textually identical to the recorded sequence --
+   typically the final copy of a completely unrolled counted loop, whose
+   separate register allocation chose different temporaries (and may clobber
+   registers the recorded rows preserve).  When such a run is
+   effect-isomorphic to a payload under a register value map, executing it as
+   one more launch is equivalent provided every register whose final contents
+   differ between the two worlds is dead after the run.
+
+   Matching is purely structural: identical instruction codes and
+   non-register operands in lockstep, with register operands related by an
+   evolving value map (a use of a run-local definition must correspond to the
+   matched definition; a live-in use must be the identical hard register).
+   No operation names, opcode calendars, immediate fingerprints, or raw
+   encodings participate in any decision.
+
+   Refusals, all leaving the function byte-identical:
+     - any lockstep mismatch (code, immediate, structure, or value map);
+     - a register of a differing definition pair live after the run;
+     - a run whose trailing Dst-advance context differs from the uniform
+       trailing context of the payload's other execution sites: the typed Dst
+       auto-increment ownership pass runs later and must see every execution
+       site with equivalent RWC coverage, so a conversion may not create the
+       only uncovered site;
+     - payloads whose recorded contents, buffer span, or execution sites are
+       ambiguous, and runs not dominated by their recording.  */
 
 struct conv_capture
 {
@@ -4050,10 +4050,10 @@ struct conv_capture
   unsigned len = 0;
   bool exec = false;
   bool valid = true;
-  std::vector<rtx_insn *> members; // slot-occupying payload insns, in order
-  rtx_insn *shadow_end = nullptr;  // last member
+  std::vector<rtx_insn *> members; /* slot-occupying payload insns, in order */
+  rtx_insn *shadow_end = nullptr;  /* last member */
   unsigned sites = 0;
-  int trailing = -2;               // uniform site context; -2 unset, -1 none
+  int trailing = -2;               /* uniform site context; -2 unset, -1 none */
 };
 
 struct conv_launch
@@ -4064,8 +4064,8 @@ struct conv_launch
   conv_capture *payload = nullptr;
 };
 
-// A typed TTINCRWC advancing only Dst by a constant stride, mirroring the
-// Dst auto-increment pass's row separator test.
+/* A typed TTINCRWC advancing only Dst by a constant stride, mirroring the
+   Dst auto-increment pass's row separator test.  */
 
 static bool
 conv_pure_dst_increment_p (rtx_insn *insn, HOST_WIDE_INT *stride)
@@ -4087,9 +4087,9 @@ conv_pure_dst_increment_p (rtx_insn *insn, HOST_WIDE_INT *stride)
   return *stride > 0 && *stride <= 15;
 }
 
-// The trailing Dst-advance context of an execution site whose last issued
-// instruction is LAST: the stride of an immediately following pure typed Dst
-// TTINCRWC, or -1.
+/* The trailing Dst-advance context of an execution site whose last issued
+   instruction is LAST: the stride of an immediately following pure typed Dst
+   TTINCRWC, or -1.  */
 
 static int
 conv_trailing_context (rtx_insn *last)
@@ -4109,8 +4109,8 @@ conv_trailing_context (rtx_insn *last)
   return -1;
 }
 
-// An insn eligible to appear in a matched run: replay-safe, slot-occupying,
-// fixed-encoding Tensix work.
+/* An insn eligible to appear in a matched run: replay-safe, slot-occupying,
+   fixed-encoding Tensix work.  */
 
 static bool
 conv_run_insn_p (rtx_insn *insn)
@@ -4127,19 +4127,19 @@ conv_run_insn_p (rtx_insn *insn)
   return fixed_replay_rtx_p (PATTERN (insn));
 }
 
-// Is hard register REGNO consumed by a real instruction on any path from
-// after FROM (in BB) before being fully redefined?  Mirrors the load-macro
-// pass's lifetime test (reg_referenced_p before reg_set_p, a later full
-// definition ends the old value's lifetime).  The exit block is not a
-// consumer: SFPU register state is not an implicit cross-function
-// interface in this programming model -- an explicit hand-off is an
-// ordinary instruction definition or use (sfpwritelreg/sfpreadlreg), the
-// ABI's blanket call-saved marking otherwise has no residual-contents
-// contract (kernels clobber the file without saving; accepted-risk
-// precedent from the region-scoped ownership review), and calls are
-// conservatively treated as consumers.  Declared asm register operands
-// appear as pattern references and are honored; undeclared asm dependence
-// on residual register contents has no contract.
+/* Is hard register REGNO consumed by a real instruction on any path from
+   after FROM (in BB) before being fully redefined?  Mirrors the load-macro
+   pass's lifetime test (reg_referenced_p before reg_set_p, a later full
+   definition ends the old value's lifetime).  The exit block is not a
+   consumer: SFPU register state is not an implicit cross-function
+   interface in this programming model -- an explicit hand-off is an
+   ordinary instruction definition or use (sfpwritelreg/sfpreadlreg), the
+   ABI's blanket call-saved marking otherwise has no residual-contents
+   contract (kernels clobber the file without saving; accepted-risk
+   precedent from the region-scoped ownership review), and calls are
+   conservatively treated as consumers.  Declared asm register operands
+   appear as pattern references and are honored; undeclared asm dependence
+   on residual register contents has no contract.  */
 
 /* Architectural LREG interface markers (the typed variable-LREG read and
    write patterns) observe or pin a specific physical register out of band:
@@ -4218,10 +4218,10 @@ conv_reg_consumed_after_p (unsigned regno, rtx_insn *from, basic_block bb)
   return false;
 }
 
-// Structural isomorphism of one payload/run instruction pair under the
-// evolving value map.  DEFINED_P/DEFINED_R track registers defined so far in
-// the payload and run; P2R/R2P is the current correspondence; PAIRS collects
-// every definition pair for the liveness proof.
+/* Structural isomorphism of one payload/run instruction pair under the
+   evolving value map.  DEFINED_P/DEFINED_R track registers defined so far in
+   the payload and run; P2R/R2P is the current correspondence; PAIRS collects
+   every definition pair for the liveness proof.  */
 
 struct conv_map
 {
@@ -4253,8 +4253,8 @@ conv_match_rtx (rtx a, rtx b, bool in_def, conv_map &map,
 	if (map.defined_p.count (pa))
 	  return map.p2r.count (pa) && map.p2r[pa] == rb
 		 && map.r2p.count (rb) && map.r2p[rb] == pa;
-	// Live-in use: the identical register, not shadowed by a run-local
-	// definition.
+	/* Live-in use: the identical register, not shadowed by a run-local
+	   definition.  */
 	return pa == rb && !map.defined_r.count (rb);
       }
 
@@ -4282,7 +4282,7 @@ conv_match_rtx (rtx a, rtx b, bool in_def, conv_map &map,
     case UNSPEC_VOLATILE:
       if (XINT (a, 1) != XINT (b, 1))
 	return false;
-      // FALLTHROUGH
+      /* FALLTHROUGH */
     case PARALLEL:
       {
 	if (XVECLEN (a, 0) != XVECLEN (b, 0))
@@ -4307,7 +4307,7 @@ conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
   std::vector<std::pair<unsigned, unsigned>> pending_defs;
   if (!conv_match_rtx (PATTERN (p), PATTERN (r), false, map, pending_defs))
     return false;
-  // Definitions take effect after all of the instruction's uses.
+  /* Definitions take effect after all of the instruction's uses.  */
   for (auto const &def : pending_defs)
     {
       map.p2r[def.first] = def.second;
@@ -4322,7 +4322,7 @@ conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
 static void
 convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 {
-  // Rediscover captures and launches structurally.
+  /* Rediscover captures and launches structurally.  */
   std::vector<conv_capture *> captures;
   std::vector<conv_launch> launches;
   std::set<rtx_insn *> shadow;
@@ -4348,7 +4348,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 	  if (!CONST_INT_P (len) || !CONST_INT_P (begin)
 	      || !CONST_INT_P (exec) || !CONST_INT_P (load))
 	    {
-	      bail = true; // variable replay: buffer contents unprovable
+	      bail = true; /* variable replay: buffer contents unprovable */
 	      break;
 	    }
 	  if (INTVAL (load) == 0)
@@ -4361,7 +4361,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 	  cap->insn = insn;
 	  cap->bb = bb;
 	  if (bitmap_bit_p (dirty_bbs, bb->index))
-	    // Recording state may already be open around this capture.
+	    /* Recording state may already be open around this capture.  */
 	    cap->valid = false;
 	  cap->begin = UINTVAL (begin);
 	  cap->len = UINTVAL (len);
@@ -4380,9 +4380,9 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 	      if (!NONDEBUG_INSN_P (cur))
 		continue;
 	      shadow.insert (cur);
-	      // Anything in the shadow that does not occupy a slot (or that
-	      // this conversion could not itself have matched) makes the
-	      // recorded contents unsuitable.
+	      /* Anything in the shadow that does not occupy a slot (or that
+	         this conversion could not itself have matched) makes the
+	         recorded contents unsuitable.  */
 	      if (!conv_run_insn_p (cur))
 		{
 		  cap->valid = false;
@@ -4403,8 +4403,8 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 
   if (!bail)
     {
-      // Buffer-span ambiguity: overlapping spans invalidate all parties;
-      // each launch must resolve to exactly one capture.
+      /* Buffer-span ambiguity: overlapping spans invalidate all parties;
+         each launch must resolve to exactly one capture.  */
       auto overlap = [] (unsigned b0, unsigned l0, unsigned b1, unsigned l1)
       { return b0 < b1 + l1 && b1 < b0 + l0; };
       for (conv_capture *cap : captures)
@@ -4423,7 +4423,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 	      cap->valid = false;
 	}
 
-      // Uniform trailing Dst-advance context across every execution site.
+      /* Uniform trailing Dst-advance context across every execution site.  */
       for (conv_capture *cap : captures)
 	if (cap->valid)
 	  {
@@ -4458,7 +4458,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
       FOR_EACH_BB_FN (bb, cfn)
 	{
 	  if (bitmap_bit_p (dirty_bbs, bb->index))
-	    // Recording state may be open here (unprovable user epoch).
+	    /* Recording state may be open here (unprovable user epoch).  */
 	    continue;
 	  rtx_insn *stop = NEXT_INSN (BB_END (bb));
 	  rtx_insn *insn = BB_HEAD (bb);
@@ -4479,10 +4479,10 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		{
 		  if (!cap->valid)
 		    continue;
-		  // The recording must reach this run on every path.
+		  /* The recording must reach this run on every path.  */
 		  if (cap->bb == bb)
 		    {
-		      // Same block: the shadow must precede the run.
+		      /* Same block: the shadow must precede the run.  */
 		      bool before = false;
 		      for (rtx_insn *probe = cap->shadow_end; probe;
 			   probe = NEXT_INSN (probe))
@@ -4578,7 +4578,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		    }
 		}
 
-	      // Trailing Dst-advance context parity with the other sites.
+	      /* Trailing Dst-advance context parity with the other sites.  */
 	      if (conv_trailing_context (run_last) != matched->trailing)
 		{
 		  if (dump_file)
@@ -4590,9 +4590,9 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		  continue;
 		}
 
-	      // Every register of a differing definition pair must be dead
-	      // after the run: the launch clobbers the payload's registers
-	      // and no longer writes the run's.
+	      /* Every register of a differing definition pair must be dead
+	         after the run: the launch clobbers the payload's registers
+	         and no longer writes the run's.  */
 	      bool live_conflict = false;
 	      for (auto const &pair : map.pairs)
 		if (pair.first != pair.second
@@ -4610,7 +4610,7 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
 		  continue;
 		}
 
-	      // Convert: one launch replaces the whole run.
+	      /* Convert: one launch replaces the whole run.  */
 	      rtx replay = gen_rvtt_ttreplay_int
 		(const0_rtx, const0_rtx, const0_rtx, GEN_INT (matched->len),
 		 rvtt_gen_rtx_noval (XTT32SImode), GEN_INT (matched->begin),
@@ -4698,8 +4698,8 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
    the SFPMAD.md stall-detection erratum list makes that silicon
    wrong-code, laneHI-F1).  */
 
-// LREG index domain helpers: xtt_effect_set masks are over L0..L15; the
-// allocatable SFPU hard registers are L0..L7.
+/* LREG index domain helpers: xtt_effect_set masks are over L0..L15; the
+   allocatable SFPU hard registers are L0..L7.  */
 static inline uint32_t
 crf_reg_bit (unsigned regno)
 {
@@ -4707,13 +4707,13 @@ crf_reg_bit (unsigned regno)
   return 1u << (regno - SFPU_REG_FIRST);
 }
 
-// A member admissible for exclusion from a parameterized record: a
-// single-slot immediate materialization -- every non-register operand a
-// compile-time constant, its only SFPU dataflow the write (and
-// read-modify-write) of its single destination register, and its audited
-// effect set free of CC, Dst, RWC, and configuration effects.  Derived
-// from the effect audit and the cross-clone invariance proof; never from
-// instruction identity.
+/* A member admissible for exclusion from a parameterized record: a
+   single-slot immediate materialization -- every non-register operand a
+   compile-time constant, its only SFPU dataflow the write (and
+   read-modify-write) of its single destination register, and its audited
+   effect set free of CC, Dst, RWC, and configuration effects.  Derived
+   from the effect audit and the cross-clone invariance proof; never from
+   instruction identity.  */
 
 static bool
 crf_excludable_insn_p (rtx_insn *insn)
@@ -4729,9 +4729,9 @@ crf_excludable_insn_p (rtx_insn *insn)
       || !fixed_replay_rtx_p (pattern))
     return false;
 
-  // cc_read (the audited model of a lane-gated write) is admissible: the
-  // movement window is proven free of CC writes, so the lane state at the
-  // new position is the state at the old one.  A CC write is not.
+  /* cc_read (the audited model of a lane-gated write) is admissible: the
+     movement window is proven free of CC writes, so the lane state at the
+     new position is the state at the old one.  A CC write is not.  */
   xtt_effect_set e = rvtt_insn_effects (insn);
   if (e.opaque || e.cc_write
       || e.config_dests_written || e.config_dests_read
@@ -4748,7 +4748,7 @@ crf_excludable_insn_p (rtx_insn *insn)
   return true;
 }
 
-// Classified SFPU register mentions of an rtx, by pattern position.
+/* Classified SFPU register mentions of an rtx, by pattern position.  */
 
 static void
 crf_scan_rtx (rtx x, bool in_def, uint32_t *defs, uint32_t *uses,
@@ -4780,14 +4780,14 @@ crf_scan_rtx (rtx x, bool in_def, uint32_t *defs, uint32_t *uses,
       return;
 
     case MEM:
-      // Address registers are uses even under a store destination.
+      /* Address registers are uses even under a store destination.  */
       crf_scan_rtx (XEXP (x, 0), false, defs, uses, unhandled);
       return;
 
     case SUBREG:
     case STRICT_LOW_PART:
     case ZERO_EXTRACT:
-      // Partial or indirect register access: not a whole-value def/use.
+      /* Partial or indirect register access: not a whole-value def/use.  */
       {
 	uint32_t d = 0, u = 0;
 	crf_scan_rtx (XEXP (x, 0), false, &d, &u, unhandled);
@@ -4810,37 +4810,37 @@ crf_scan_rtx (rtx x, bool in_def, uint32_t *defs, uint32_t *uses,
     }
 }
 
-// One whole-register value in the linear in-block dataflow model.
+/* One whole-register value in the linear in-block dataflow model.  */
 
 struct crf_value
 {
-  int def_pos = -1;		 // -1: live into the block
+  int def_pos = -1;		 /* -1: live into the block */
   rtx_insn *def_insn = nullptr;
-  unsigned reg = 0;		 // original hard register
+  unsigned reg = 0;		 /* original hard register */
   std::vector<unsigned> use_positions;
   int last_pos = -1;
-  bool live_out = false;	 // consumed on some path after the block
-  bool fixed = false;		 // multi-definition or hidden-effect def
-  bool poisoned = false;	 // range crosses an opaque event or shadow
-  int renamed_to = -1;		 // planned final hard register (-1 = keep)
+  bool live_out = false;	 /* consumed on some path after the block */
+  bool fixed = false;		 /* multi-definition or hidden-effect def */
+  bool poisoned = false;	 /* range crosses an opaque event or shadow */
+  int renamed_to = -1;		 /* planned final hard register (-1 = keep) */
 };
 
-// Per-position facts for the whole block.
+/* Per-position facts for the whole block.  */
 
 struct crf_position
 {
   rtx_insn *insn;
-  uint32_t defs = 0, uses = 0;	 // SFPU reg masks (pattern + audited extra)
-  bool eligible = false;	 // may be a family member
-  bool excludable = false;	 // admissible for invariant-violation exclusion
-  bool barrier = false;		 // breaks family runs
-  bool empty = false;		 // zero-length marker: transparent
+  uint32_t defs = 0, uses = 0;	 /* SFPU reg masks (pattern + audited extra) */
+  bool eligible = false;	 /* may be a family member */
+  bool excludable = false;	 /* admissible for invariant-violation exclusion */
+  bool barrier = false;		 /* breaks family runs */
+  bool empty = false;		 /* zero-length marker: transparent */
   bool cc_write = false;
   bool opaque = false;
-  uint32_t marker_mask = 0;	 // zero-length LREG interface marker
-  unsigned phash = 0;		 // parameterized structural hash
-  int value_of_def[8];		 // value index defined per reg, or -1
-  int value_of_use[8];		 // value index consumed per reg, or -1
+  uint32_t marker_mask = 0;	 /* zero-length LREG interface marker */
+  unsigned phash = 0;		 /* parameterized structural hash */
+  int value_of_def[8];		 /* value index defined per reg, or -1 */
+  int value_of_use[8];		 /* value index consumed per reg, or -1 */
   crf_position () { memset (value_of_def, -1, sizeof (value_of_def));
 		    memset (value_of_use, -1, sizeof (value_of_use)); }
 };
@@ -4852,10 +4852,10 @@ struct crf_block
   std::vector<crf_value> values;
 };
 
-// Parameterized structural hash: instruction code and full structure with
-// SFPU register numbers abstracted, and with constant operands abstracted
-// only for exclusion-admissible instructions (their constants never enter
-// the record; every other constant is part of the recorded word).
+/* Parameterized structural hash: instruction code and full structure with
+   SFPU register numbers abstracted, and with constant operands abstracted
+   only for exclusion-admissible instructions (their constants never enter
+   the record; every other constant is part of the recorded word).  */
 
 static unsigned
 crf_param_hash (rtx_insn *insn, bool excludable)
@@ -4868,7 +4868,7 @@ crf_param_hash (rtx_insn *insn, bool excludable)
       case UNSPEC:
       case UNSPEC_VOLATILE:
 	hash = crc32_unsigned (hash, XINT (rtl, 1));
-	// FALLTHROUGH
+	/* FALLTHROUGH */
       case PARALLEL:
 	{
 	  auto &vec = XVEC (rtl, 0);
@@ -4905,8 +4905,8 @@ crf_param_hash (rtx_insn *insn, bool excludable)
   return hasher (hasher, recog_memoized (insn), PATTERN (insn));
 }
 
-// Build the linear value model and per-position facts for BB.  Returns
-// false when the block cannot be modeled (variable user capture).
+/* Build the linear value model and per-position facts for BB.  Returns
+   false when the block cannot be modeled (variable user capture).  */
 
 static bool
 crf_scan_block (basic_block bb, crf_block &blk)
@@ -4925,7 +4925,7 @@ crf_scan_block (basic_block bb, crf_block &blk)
   {
     if (cur[regix] < 0)
       {
-	// Live into the block.
+	/* Live into the block.  */
 	blk.values.emplace_back ();
 	crf_value &v = blk.values.back ();
 	v.reg = SFPU_REG_FIRST + regix;
@@ -4992,8 +4992,8 @@ crf_scan_block (basic_block bb, crf_block &blk)
 	      else
 		{
 		  p.cc_write = e.cc_write;
-		  // Audited architectural effects beyond the pattern's
-		  // registers: hidden dataflow, modeled as fixed def+use.
+		  /* Audited architectural effects beyond the pattern's
+		     registers: hidden dataflow, modeled as fixed def+use.  */
 		  fixed_extra = ((e.lreg_write | e.lreg_read) & 0xFF)
 		    & ~(p.defs | p.uses);
 		  p.defs |= fixed_extra;
@@ -5010,8 +5010,8 @@ crf_scan_block (basic_block bb, crf_block &blk)
 
       if (opaque_event)
 	{
-	  // Unknown reads and writes: poison every live value, extend
-	  // their ranges, and act as a run barrier.
+	  /* Unknown reads and writes: poison every live value, extend
+	     their ranges, and act as a run barrier.  */
 	  for (int i = 0; i != 8; ++i)
 	    if (cur[i] >= 0)
 	      {
@@ -5023,12 +5023,12 @@ crf_scan_block (basic_block bb, crf_block &blk)
 	  continue;
 	}
 
-      // Uses consume the current values.
+      /* Uses consume the current values.  */
       for (int i = 0; i != 8; ++i)
 	if (p.uses & (1u << i))
 	  p.value_of_use[i] = value_at (i, pos_ix);
 
-      // Definitions begin new values.
+      /* Definitions begin new values.  */
       unsigned ndefs = popcount_hwi (p.defs);
       for (int i = 0; i != 8; ++i)
 	if (p.defs & (1u << i))
@@ -5047,8 +5047,8 @@ crf_scan_block (basic_block bb, crf_block &blk)
 
       if (in_shadow)
 	{
-	  // Values consumed by a user capture payload feed a recorded
-	  // program with launch sites this analysis cannot see.
+	  /* Values consumed by a user capture payload feed a recorded
+	     program with launch sites this analysis cannot see.  */
 	  for (int i = 0; i != 8; ++i)
 	    if (p.value_of_use[i] >= 0)
 	      blk.values[p.value_of_use[i]].poisoned = true;
@@ -5061,8 +5061,8 @@ crf_scan_block (basic_block bb, crf_block &blk)
 
       p.excludable = crf_excludable_insn_p (insn);
       if (p.excludable)
-	// Transparent to discovery: re-attached to the containing clone
-	// at verification, moved to its head or tail by dataflow.
+	/* Transparent to discovery: re-attached to the containing clone
+	   at verification, moved to its head or tail by dataflow.  */
 	continue;
       p.eligible = conv_run_insn_p (insn);
       if (p.eligible)
@@ -5071,7 +5071,7 @@ crf_scan_block (basic_block bb, crf_block &blk)
 	p.barrier = true;
     }
 
-  // Values still live at the block's end that some path consumes.
+  /* Values still live at the block's end that some path consumes.  */
   for (int i = 0; i != 8; ++i)
     if (cur[i] >= 0)
       blk.values[cur[i]].live_out
@@ -5080,13 +5080,13 @@ crf_scan_block (basic_block bb, crf_block &blk)
   return !blk.pos.empty ();
 }
 
-// One clone of a parameterized family: a span of positions and the
-// evolving register value map relating it to the family's first clone.
+/* One clone of a parameterized family: a span of positions and the
+   evolving register value map relating it to the family's first clone.  */
 
 struct crf_clone
 {
-  unsigned begin, end;		 // half-open position span
-  std::map<unsigned, unsigned> p2r, r2p; // seed reg <-> clone reg
+  unsigned begin, end;		 /* half-open position span */
+  std::map<unsigned, unsigned> p2r, r2p; /* seed reg <-> clone reg */
   std::map<unsigned, bool> defined_p, defined_r;
 };
 
@@ -5094,16 +5094,16 @@ struct crf_seq
 {
   unsigned parent = 0;
   unsigned hash = 0;
-  unsigned length = 0;		 // members (excludable/empty not counted)
-  std::vector<crf_clone> clones; // clones[0] is the seed
+  unsigned length = 0;		 /* members (excludable/empty not counted) */
+  std::vector<crf_clone> clones; /* clones[0] is the seed */
 };
 
-// Structural lockstep match of one seed/clone member pair under the
-// evolving map.  Extends the launch-conversion matcher in exactly one
-// way: a live-in register pair may differ, recorded in the map as a
-// canonicalization requirement rather than failing.  Everything else --
-// codes, modes, structure, constants, run-local value correspondence --
-// must agree.
+/* Structural lockstep match of one seed/clone member pair under the
+   evolving map.  Extends the launch-conversion matcher in exactly one
+   way: a live-in register pair may differ, recorded in the map as a
+   canonicalization requirement rather than failing.  Everything else --
+   codes, modes, structure, constants, run-local value correspondence --
+   must agree.  */
 
 static bool
 crf_match_rtx (rtx a, rtx b, bool in_def, crf_clone &map,
@@ -5126,11 +5126,11 @@ crf_match_rtx (rtx a, rtx b, bool in_def, crf_clone &map,
 	    return true;
 	  }
 	if (map.defined_p.count (pa) || map.defined_r.count (rb))
-	  // Run-local value: must be the corresponding definition.
+	  /* Run-local value: must be the corresponding definition.  */
 	  return map.defined_p.count (pa) && map.defined_r.count (rb)
 	    && map.p2r.count (pa) && map.p2r[pa] == rb
 	    && map.r2p.count (rb) && map.r2p[rb] == pa;
-	// Live-in use: record the (possibly differing) correspondence.
+	/* Live-in use: record the (possibly differing) correspondence.  */
 	auto pi = map.p2r.find (pa), ri = map.r2p.find (rb);
 	if (pi != map.p2r.end () || ri != map.r2p.end ())
 	  return pi != map.p2r.end () && pi->second == rb
@@ -5165,7 +5165,7 @@ crf_match_rtx (rtx a, rtx b, bool in_def, crf_clone &map,
     case UNSPEC_VOLATILE:
       if (XINT (a, 1) != XINT (b, 1))
 	return false;
-      // FALLTHROUGH
+      /* FALLTHROUGH */
     case PARALLEL:
       {
 	if (XVECLEN (a, 0) != XVECLEN (b, 0))
@@ -5200,9 +5200,9 @@ crf_match_insn (rtx_insn *p, rtx_insn *r, crf_clone &map)
   return true;
 }
 
-// Transparent positions never become members: zero-length markers and
-// exclusion-admissible materializations (the latter are re-attached to
-// the clone that contains them at verification).
+/* Transparent positions never become members: zero-length markers and
+   exclusion-admissible materializations (the latter are re-attached to
+   the clone that contains them at verification).  */
 
 static inline bool
 crf_transparent_p (crf_position const &p)
@@ -5210,9 +5210,9 @@ crf_transparent_p (crf_position const &p)
   return p.empty || p.excludable;
 }
 
-// Grow parameterized sequences over the block, mirroring build_sequences'
-// grow-by-one architecture with the lockstep matcher in place of word
-// equality.
+/* Grow parameterized sequences over the block, mirroring build_sequences'
+   grow-by-one architecture with the lockstep matcher in place of word
+   equality.  */
 
 static void
 crf_extend (std::map<unsigned, std::vector<unsigned>> &map,
@@ -5228,8 +5228,8 @@ crf_extend (std::map<unsigned, std::vector<unsigned>> &map,
     {
       if (list[ix].parent != parent)
 	continue;
-      // A joining clone matches all members from scratch against the
-      // sequence's seed.
+      /* A joining clone matches all members from scratch against the
+         sequence's seed.  */
       crf_clone cand;
       cand.begin = begin;
       cand.end = end;
@@ -5269,7 +5269,7 @@ crf_extend (std::map<unsigned, std::vector<unsigned>> &map,
   crf_clone seed;
   seed.begin = begin;
   seed.end = end;
-  // Seed self-match establishes the identity map and def sets.
+  /* Seed self-match establishes the identity map and def sets.  */
   {
     unsigned spos = begin;
     for (unsigned member = 0; member != length; ++member)
@@ -5288,7 +5288,7 @@ crf_build_sequences (std::vector<crf_seq> &list, crf_block &blk,
 		     unsigned max_residual)
 {
   list.clear ();
-  list.push_back (crf_seq ()); // null
+  list.push_back (crf_seq ()); /* null */
   std::map<unsigned, std::vector<unsigned>> map;
 
   unsigned n = blk.pos.size ();
@@ -5335,25 +5335,25 @@ crf_build_sequences (std::vector<crf_seq> &list, crf_block &blk,
     }
 }
 
-// A selected family, fully verified: the rename plan, bridges, and
-// member movements ready to apply.
+/* A selected family, fully verified: the rename plan, bridges, and
+   member movements ready to apply.  */
 
 struct crf_plan
 {
-  unsigned residual = 0;		   // recorded slot words (= members)
-  int saving = 0;			   // modeled issued-slot saving
-  std::vector<crf_clone> clones;	   // surviving, disjoint
-  // per clone: member positions (block indices), lockstep with the seed's
+  unsigned residual = 0;		   /* recorded slot words (= members) */
+  int saving = 0;			   /* modeled issued-slot saving */
+  std::vector<crf_clone> clones;	   /* surviving, disjoint */
+  /* per clone: member positions (block indices), lockstep with the seed's */
   std::vector<std::vector<unsigned>> members;
-  // value index -> final hard reg
+  /* value index -> final hard reg */
   std::map<unsigned, unsigned> renames;
-  // value index -> clone whose lockstep walk required the rename
-  // (bystander cascade swaps carry -1)
+  /* value index -> clone whose lockstep walk required the rename
+     (bystander cascade swaps carry -1) */
   std::map<unsigned, int> rename_source;
-  // per clone: bridge moves (dest_reg <- src_reg) inserted at clone head
+  /* per clone: bridge moves (dest_reg <- src_reg) inserted at clone head */
   std::vector<std::vector<std::pair<unsigned, unsigned>>> bridges;
-  // per clone: excludable positions inside the span moving to the head
-  // (its consumer is a member) or the tail (consumers all later)
+  /* per clone: excludable positions inside the span moving to the head
+     (its consumer is a member) or the tail (consumers all later) */
   std::vector<std::vector<unsigned>> moves_head;
   std::vector<std::vector<unsigned>> moves_tail;
 };
@@ -5436,7 +5436,7 @@ crf_final_lockstep_rtx (rtx a, rtx b, bool in_def,
     case UNSPEC_VOLATILE:
       if (XINT (a, 1) != XINT (b, 1))
 	return false;
-      // FALLTHROUGH
+      /* FALLTHROUGH */
     case PARALLEL:
       {
 	if (XVECLEN (a, 0) != XVECLEN (b, 0))
@@ -5465,7 +5465,7 @@ crf_clone_members (crf_block const &blk, crf_clone const &c, unsigned length,
       out.push_back (pos);
 }
 
-// The final register of a value under the plan.
+/* The final register of a value under the plan.  */
 
 static inline unsigned
 crf_final_reg (crf_block const &blk, crf_plan const &plan, int vix)
@@ -5474,7 +5474,7 @@ crf_final_reg (crf_block const &blk, crf_plan const &plan, int vix)
   return it != plan.renames.end () ? it->second : blk.values[vix].reg;
 }
 
-// Final-assignment def/use register masks of the instruction at POS.
+/* Final-assignment def/use register masks of the instruction at POS.  */
 
 static void
 crf_final_masks (crf_block const &blk, crf_plan const &plan, unsigned pos,
@@ -5493,11 +5493,11 @@ crf_final_masks (crf_block const &blk, crf_plan const &plan, unsigned pos,
   *uses |= p.marker_mask & 0xFF;
 }
 
-// Can the excluded materialization at POS move to the clone HEAD (before
-// ANCHOR) or TAIL (after LAST), under the FINAL register assignment?
-// Ordinary dependence check against every crossed instruction; a crossed
-// CC write would change the member's lane gating.  Positions in SKIP move
-// with it (order preserved) and are transparent.
+/* Can the excluded materialization at POS move to the clone HEAD (before
+   ANCHOR) or TAIL (after LAST), under the FINAL register assignment?
+   Ordinary dependence check against every crossed instruction; a crossed
+   CC write would change the member's lane gating.  Positions in SKIP move
+   with it (order preserved) and are transparent.  */
 
 static bool
 crf_move_ok (crf_block const &blk, crf_plan const &plan, unsigned pos,
@@ -5576,7 +5576,7 @@ crf_plan_order (crf_block &blk, crf_plan &plan)
 	  for (unsigned m : plan.moves_head[ac->second])
 	    order.push_back (int (m));
 	  for (unsigned b = 0; b != plan.bridges[ac->second].size (); ++b)
-	    order.push_back (-1 - int (ac->second));	// bridge of clone
+	    order.push_back (-1 - int (ac->second));	/* bridge of clone */
 	}
       if (!is_moved[pos])
 	order.push_back (int (pos));
@@ -5621,15 +5621,15 @@ crf_plan_order (crf_block &blk, crf_plan &plan)
 static bool
 crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
 {
-  // The final order, from the one plan-order interpreter crf_apply
-  // realizes (crf_plan_order above).
+  /* The final order, from the one plan-order interpreter crf_apply
+     realizes (crf_plan_order above).  */
   std::vector<int> order = crf_plan_order (blk, plan);
 
   unsigned bug_mask = TARGET_XTT_TENSIX_BH ? XTT_DYNAMIC_BUG_BH
     : TARGET_XTT_TENSIX_QSR ? XTT_DYNAMIC_BUG_QSR : 0;
 
-  int prod = -1;		// order entry of the open delay producer
-  unsigned bridge_ix = 0;	// running index into the clone's bridges
+  int prod = -1;		/* order entry of the open delay producer */
+  unsigned bridge_ix = 0;	/* running index into the clone's bridges */
   int bridge_clone = -1;
   for (unsigned oi = 0; oi != order.size (); ++oi)
     {
@@ -5639,9 +5639,9 @@ crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
       rtx_insn *cinsn = nullptr;
       if (is_bridge)
 	{
-	  // A bridge is an all-lanes register move: it occupies a slot,
-	  // reads its source, and (not yet emitted) carries no audited
-	  // erratum attribute -- treat a dependent one conservatively.
+	  /* A bridge is an all-lanes register move: it occupies a slot,
+	     reads its source, and (not yet emitted) carries no audited
+	     erratum attribute -- treat a dependent one conservatively.  */
 	  unsigned c = unsigned (-1 - e);
 	  if (bridge_clone != int (c))
 	    {
@@ -5660,7 +5660,7 @@ crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
 	      || recog_memoized (q.insn) < 0
 	      || get_attr_type (q.insn) != TYPE_TENSIX)
 	    {
-	      prod = -1;	// conservative segment end
+	      prod = -1;	/* conservative segment end */
 	      continue;
 	    }
 	  cinsn = q.insn;
@@ -5704,18 +5704,18 @@ crf_shadow_contract_ok (crf_block &blk, crf_plan &plan)
 	}
 
       if (!slot_word)
-	continue;		// zero-length marker: the shadow stays open
+	continue;		/* zero-length marker: the shadow stays open */
       prod = (!is_bridge && get_attr_xtt_delay (cinsn) != XTT_DELAY_NONE)
 	? int (oi) : -1;
     }
   return true;
 }
 
-// True read-modify-write tie of INSN's definition of REG: a source
-// operand carries a matching constraint naming the destination operand,
-// so both share one encoded register field and a rename must carry the
-// register's previous value along.  A source that merely happens to name
-// the same register in an independently encoded field is not a tie.
+/* True read-modify-write tie of INSN's definition of REG: a source
+   operand carries a matching constraint naming the destination operand,
+   so both share one encoded register field and a rename must carry the
+   register's previous value along.  A source that merely happens to name
+   the same register in an independently encoded field is not a tie.  */
 
 static bool
 crf_tied_rmw_p (rtx_insn *insn, unsigned reg)
@@ -5752,8 +5752,8 @@ crf_tied_rmw_p (rtx_insn *insn, unsigned reg)
   return false;
 }
 
-// Verify one candidate family and build its plan.  Returns true with PLAN
-// filled on success; every refusal dumps its taxonomy name.
+/* Verify one candidate family and build its plan.  Returns true with PLAN
+   filled on success; every refusal dumps its taxonomy name.  */
 
 static bool
 crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
@@ -5761,7 +5761,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 {
   unsigned length = seq.length;
 
-  // Overlap triage: clones ascending by begin; keep a maximal disjoint set.
+  /* Overlap triage: clones ascending by begin; keep a maximal disjoint set.  */
   plan.clones.clear ();
   {
     unsigned bound = 0;
@@ -5798,9 +5798,9 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	return false;
     }
 
-  // Residual soundness under possibly-enabled shadow coupling, and the
-  // v1 multi-result restriction (companion-group boundary semantics stay
-  // with the word-exact machinery).
+  /* Residual soundness under possibly-enabled shadow coupling, and the
+     v1 multi-result restriction (companion-group boundary semantics stay
+     with the word-exact machinery).  */
   for (unsigned c = 0; c != plan.clones.size (); ++c)
     for (unsigned m = 0; m != length; ++m)
       {
@@ -5818,12 +5818,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 			 plan.clones.front ().end, m);
 	    return false;
 	  }
-	// Rename planning (seed_def_reg below and the clone definition
-	// roles) requires a single canonical definition register per
-	// member.  A member defining several registers (a two-register
-	// SFPSWAP, or audited hidden dataflow modeled as fixed def+use)
-	// has no single seed register: refuse by name rather than
-	// asserting.
+	/* Rename planning (seed_def_reg below and the clone definition
+	   roles) requires a single canonical definition register per
+	   member.  A member defining several registers (a two-register
+	   SFPSWAP, or audited hidden dataflow modeled as fixed def+use)
+	   has no single seed register: refuse by name rather than
+	   asserting.  */
 	if (popcount_hwi (mp.defs) > 1)
 	  {
 	    rvtt_refuse (RVTT_REF_COUNTED_ROW_MULTIDEF_MEMBER, dump_file,
@@ -5846,15 +5846,15 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	  }
       }
 
-  // Rename planning with seed chain-closure.  SEED_REMAP retargets the
-  // seed's own definition at member M when a cross-clone value carries a
-  // def role and a live-in role that demand different registers.  A
-  // refusal specific to one clone drops that clone; only seed-side
-  // refusals and non-converging chain closure refuse the whole family.
+  /* Rename planning with seed chain-closure.  SEED_REMAP retargets the
+     seed's own definition at member M when a cross-clone value carries a
+     def role and a live-in role that demand different registers.  A
+     refusal specific to one clone drops that clone; only seed-side
+     refusals and non-converging chain closure refuse the whole family.  */
   plan.bridges.assign (plan.clones.size (), {});
   plan.moves_head.assign (plan.clones.size (), {});
   plan.moves_tail.assign (plan.clones.size (), {});
-  std::map<unsigned, unsigned> seed_remap; // member index -> target reg
+  std::map<unsigned, unsigned> seed_remap; /* member index -> target reg */
 
   auto seed_def_reg = [&] (unsigned m) -> int
   {
@@ -5902,8 +5902,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	b.clear ();
       bool remapped = false;
       bool refused = false;
-      // Which member's definition role planned a value's rename, for
-      // chain closure from the live-in side.
+      /* Which member's definition role planned a value's rename, for
+         chain closure from the live-in side.  */
       std::map<unsigned, unsigned> plan_def_member;
 
       uint32_t seed_writes = 0;
@@ -5914,12 +5914,12 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	    seed_writes |= crf_reg_bit (r);
 	}
 
-      // Plan one value's rename with read-modify-write chain closure:
-      // when a renamed value's definition also consumes the register's
-      // previous value (an RMW half), that value must move to the same
-      // register or the single encoded register field would tear.
-      // Returns 1 on success, 0 on an in-plan conflict (caller decides),
-      // -1 on an unrenameable value.
+      /* Plan one value's rename with read-modify-write chain closure:
+         when a renamed value's definition also consumes the register's
+         previous value (an RMW half), that value must move to the same
+         register or the single encoded register field would tear.
+         Returns 1 on success, 0 on an in-plan conflict (caller decides),
+         -1 on an unrenameable value.  */
       int planning_clone = -1;
       auto plan_rename = [&] (int vix0, unsigned target) -> int
       {
@@ -5942,8 +5942,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	      return -1;
 	    plan.renames[vix] = target;
 	    plan.rename_source[vix] = planning_clone;
-	    // RMW chain: the definition consumes the register's previous
-	    // value through a TIED operand (one encoded field).
+	    /* RMW chain: the definition consumes the register's previous
+	       value through a TIED operand (one encoded field).  */
 	    crf_position const &dp = blk.pos[v.def_pos];
 	    int bit = int (v.reg) - SFPU_REG_FIRST;
 	    if (dp.value_of_use[bit] >= 0
@@ -5981,7 +5981,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 
 	      crf_position const &cp = blk.pos[cpos];
 
-	      // New live-in correspondences discovered at this member.
+	      /* New live-in correspondences discovered at this member.  */
 	      for (auto const &pr : map.r2p)
 		{
 		  if (map.defined_r.count (pr.first))
@@ -6004,9 +6004,9 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 			continue;
 		      if (rr == 0)
 			{
-			  // Def role vs live-in role conflict: close the
-			  // chain by retargeting the seed definition the
-			  // def role mirrors, then replan.
+			  /* Def role vs live-in role conflict: close the
+			     chain by retargeting the seed definition the
+			     def role mirrors, then replan.  */
 			  auto dm = plan_def_member.find (vu);
 			  if (dm != plan_def_member.end ())
 			    {
@@ -6024,9 +6024,9 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 				   plan.clones[c].end, t, s);
 		      break;
 		    }
-		  // Unrenameable live-in: bridge with one all-lanes move,
-		  // unless the recorded program would clobber the source
-		  // still needed later.
+		  /* Unrenameable live-in: bridge with one all-lanes move,
+		     unless the recorded program would clobber the source
+		     still needed later.  */
 		  bool used_later = false;
 		  for (unsigned up : v.use_positions)
 		    if (up >= plan.clones[c].end)
@@ -6050,7 +6050,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	      if (refused || drop_clone >= 0 || remapped)
 		break;
 
-	      // Definition roles.
+	      /* Definition roles.  */
 	      if (cp.defs)
 		{
 		  gcc_assert (popcount_hwi (cp.defs) == 1);
@@ -6064,9 +6064,9 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  if (it != plan.renames.end ()
 		      && int (it->second) != want)
 		    {
-		      // The value already carries a live-in role demanding
-		      // a different register: close the seed chain at this
-		      // member and replan.
+		      /* The value already carries a live-in role demanding
+		         a different register: close the seed chain at this
+		         member and replan.  */
 		      seed_remap[m] = it->second;
 		      remapped = true;
 		      break;
@@ -6106,7 +6106,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	    }
 	}
 
-      // Seed remap entries are renames of the seed's own def values.
+      /* Seed remap entries are renames of the seed's own def values.  */
       planning_clone = -1;
       if (!remapped && drop_clone < 0 && !refused)
 	for (auto const &sr : seed_remap)
@@ -6128,28 +6128,28 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 
       if (!remapped && drop_clone < 0 && !refused)
 	{
-	  // Excludable materializations: every one whose value feeds a
-	  // clone member relocates to that clone's head (canonical-register
-	  // recips serialize between launches, the hand's own delivery
-	  // discipline); one inside a span but feeding nothing in the
-	  // family moves out past the tail.  Movement legality is
-	  // VALUE-based: uses must follow the new position, no CC write or
-	  // opaque instruction may be crossed (lane-state constancy), and
-	  // the whole-block occupancy simulation of the final assignment
-	  // is the authoritative gate.
+	  /* Excludable materializations: every one whose value feeds a
+	     clone member relocates to that clone's head (canonical-register
+	     recips serialize between launches, the hand's own delivery
+	     discipline); one inside a span but feeding nothing in the
+	     family moves out past the tail.  Movement legality is
+	     VALUE-based: uses must follow the new position, no CC write or
+	     opaque instruction may be crossed (lane-state constancy), and
+	     the whole-block occupancy simulation of the final assignment
+	     is the authoritative gate.  */
 	  for (auto &mh : plan.moves_head)
 	    mh.clear ();
 	  for (auto &mt : plan.moves_tail)
 	    mt.clear ();
 
-	  // Clone of the first member-use of an excludable's value,
-	  // following chains through other excludables (the RMW pair).
-	  std::map<unsigned, int> consumer_clone; // position -> clone or -1
+	  /* Clone of the first member-use of an excludable's value,
+	     following chains through other excludables (the RMW pair).  */
+	  std::map<unsigned, int> consumer_clone; /* position -> clone or -1 */
 	  std::vector<unsigned> excl_all;
 	  for (unsigned pos = 0; pos != blk.pos.size (); ++pos)
 	    if (blk.pos[pos].excludable)
 	      excl_all.push_back (pos);
-	  std::map<unsigned, unsigned> member_clone; // member pos -> clone
+	  std::map<unsigned, unsigned> member_clone; /* member pos -> clone */
 	  for (unsigned c = 0; c != plan.clones.size (); ++c)
 	    for (unsigned m = 0; m != length; ++m)
 	      member_clone[plan.members[c][m]] = c;
@@ -6183,7 +6183,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	      consumer_clone[pos] = cc;
 	    }
 
-	  // Lane-state/opacity constancy over a movement range.
+	  /* Lane-state/opacity constancy over a movement range.  */
 	  auto move_window_ok = [&] (unsigned lo, unsigned hi) -> bool
 	  {
 	    for (unsigned ix = lo; ix < hi; ++ix)
@@ -6201,8 +6201,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  unsigned anchor = plan.members[cc].front ();
 		  if (pos < anchor)
 		    {
-		      // Already directly ahead of the clone (only
-		      // transparent positions between): leave it.
+		      /* Already directly ahead of the clone (only
+		         transparent positions between): leave it.  */
 		      bool clean = true;
 		      for (unsigned ix = pos + 1; ix != anchor; ++ix)
 			if (!crf_transparent_p (blk.pos[ix]))
@@ -6210,9 +6210,9 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      if (clean)
 			continue;
 		    }
-		  // Uses must all follow the new position; a use by a
-		  // fellow excludable relocating to the same head keeps
-		  // its original order there.
+		  /* Uses must all follow the new position; a use by a
+		     fellow excludable relocating to the same head keeps
+		     its original order there.  */
 		  crf_position const &p = blk.pos[pos];
 		  bool uses_ok = true;
 		  for (int i = 0; i != 8; ++i)
@@ -6255,8 +6255,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  plan.moves_head[cc].push_back (pos);
 		  continue;
 		}
-	      // No consumer in the family: if inside a clone span, move
-	      // out past the tail.
+	      /* No consumer in the family: if inside a clone span, move
+	         out past the tail.  */
 	      for (unsigned c = 0; c != plan.clones.size (); ++c)
 		if (pos > plan.members[c].front ()
 		    && pos < plan.members[c].back ())
@@ -6296,10 +6296,10 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	  (void) moves_ok;
 	}
 
-      // Occupancy of the final assignment, with the bystander cascade:
-      // a conflict against an untouched renameable value swaps it into
-      // the evacuated register; a non-cascadable conflict drops the
-      // clone whose lockstep walk required the conflicting rename.
+      /* Occupancy of the final assignment, with the bystander cascade:
+         a conflict against an untouched renameable value swaps it into
+         the evacuated register; a non-cascadable conflict drops the
+         clone whose lockstep walk required the conflicting rename.  */
       if (!remapped && drop_clone < 0 && !refused)
 	{
 	  bool occupancy = false;
@@ -6340,7 +6340,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      continue;
 		    }
 		}
-	      // Not cascadable: drop the responsible clone.
+	      /* Not cascadable: drop the responsible clone.  */
 	      int src = -1;
 	      for (int v : { a, b })
 		if (v >= 0 && plan.rename_source.count (v)
@@ -6369,15 +6369,15 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
       break;
     }
 
-  // FINAL LOCKSTEP AUDIT (lane ID): the occupancy cascade's bystander
-  // swaps rewrite value registers AFTER the lockstep walk verified the
-  // member words' operand correspondence, and nothing re-checked the
-  // words against the FINAL assignment -- the launch replays the
-  // seed's words byte-exactly at every clone, so any remaining
-  // divergence is wrong code (observed live: the tanh corr TU under
-  // crossrow-2datum x loop-prgm-reclaim replayed a read of the
-  // register a bystander swap had just evacuated).  Re-verify every
-  // member pair under the final assignment, refusing by name.
+  /* FINAL LOCKSTEP AUDIT (lane ID): the occupancy cascade's bystander
+     swaps rewrite value registers AFTER the lockstep walk verified the
+     member words' operand correspondence, and nothing re-checked the
+     words against the FINAL assignment -- the launch replays the
+     seed's words byte-exactly at every clone, so any remaining
+     divergence is wrong code (observed live: the tanh corr TU under
+     crossrow-2datum x loop-prgm-reclaim replayed a read of the
+     register a bystander swap had just evacuated).  Re-verify every
+     member pair under the final assignment, refusing by name.  */
   for (unsigned c = 0; c != plan.clones.size (); ++c)
     {
       if (c == ref)
@@ -6419,8 +6419,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	}
     }
 
-  // Modeled saving: every non-seed clone's residual collapses to one
-  // launch; bridges are bought slots; the capture word is one slot.
+  /* Modeled saving: every non-seed clone's residual collapses to one
+     launch; bridges are bought slots; the capture word is one slot.  */
   {
     int bridges_total = 0;
     for (auto const &b : plan.bridges)
@@ -6438,7 +6438,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
       return false;
     }
 
-  // A plan that changes nothing is the word-exact machinery's territory.
+  /* A plan that changes nothing is the word-exact machinery's territory.  */
   {
     bool any_change = !plan.renames.empty ();
     for (unsigned c = 0; c != plan.clones.size () && !any_change; ++c)
@@ -6448,20 +6448,20 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
       return false;
   }
 
-  // The moves and bridges above may not re-open a delay shadow the nop
-  // inserter already discharged (lane HM, laneHI-F1): re-verify the
-  // whole delay contract over the plan's final order, refusing by name.
+  /* The moves and bridges above may not re-open a delay shadow the nop
+     inserter already discharged (lane HM, laneHI-F1): re-verify the
+     whole delay contract over the plan's final order, refusing by name.  */
   if (!crf_shadow_contract_ok (blk, plan))
     return false;
 
   return true;
 }
 
-// Whole-block occupancy verification of the plan's final register
-// assignment, over the stream in its FINAL order (excluded members moved,
-// bridges inserted), plus the lane-state window proof: no CC write may
-// fall inside the span affected by any rewritten value (state-constancy
-// makes the rewrites lane-exact for any entry lane state).
+/* Whole-block occupancy verification of the plan's final register
+   assignment, over the stream in its FINAL order (excluded members moved,
+   bridges inserted), plus the lane-state window proof: no CC write may
+   fall inside the span affected by any rewritten value (state-constancy
+   makes the rewrites lane-exact for any entry lane state).  */
 
 static bool
 crf_occupancy_ok (crf_block &blk, crf_plan &plan,
@@ -6509,8 +6509,8 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
   struct interval { long start, end; int val; };
   std::vector<std::vector<interval>> per_reg (8);
 
-  // Bridged values: their uses inside the bridging clone move to the
-  // bridge read.
+  /* Bridged values: their uses inside the bridging clone move to the
+     bridge read.  */
   std::map<unsigned, std::vector<unsigned>> value_bridge_clones;
   for (unsigned c = 0; c < plan.clones.size (); ++c)
     for (auto const &br : plan.bridges[c])
@@ -6562,8 +6562,8 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 						  int (vix) });
     }
 
-  // Bridge destination values: from the bridge write to the end of the
-  // clone's span (conservative).
+  /* Bridge destination values: from the bridge write to the end of the
+     clone's span (conservative).  */
   for (unsigned c = 0; c < plan.clones.size (); ++c)
     for (auto const &br : plan.bridges[c])
       {
@@ -6578,8 +6578,8 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
       std::sort (iv.begin (), iv.end (),
 		 [] (interval const &a, interval const &b)
 		 { return a.start < b.start; });
-      // Abutment (def at 2t+1 after uses at 2t) is already encoded in the
-      // timestamps; any remaining overlap is a conflict.
+      /* Abutment (def at 2t+1 after uses at 2t) is already encoded in the
+         timestamps; any remaining overlap is a conflict.  */
       long reach = LONG_MIN;
       int reach_val = -1;
       for (unsigned i = 0; i < iv.size (); ++i)
@@ -6616,8 +6616,8 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 	}
     }
 
-  // Lane-state window: the rewrites are lane-exact only while the lane
-  // state is constant over every affected value's span.
+  /* Lane-state window: the rewrites are lane-exact only while the lane
+     state is constant over every affected value's span.  */
   long wmin = LONG_MAX, wmax = LONG_MIN;
   auto widen = [&] (long s, long e) { wmin = MIN (wmin, s);
 				      wmax = MAX (wmax, e); };
@@ -6656,20 +6656,20 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
   return true;
 }
 
-// Apply a verified plan: queue every register replacement in one change
-// group (recog and constraints re-verify each rewritten instruction),
-// then fix the dead-note registers, move the excluded members, and issue
-// the bridge moves.
+/* Apply a verified plan: queue every register replacement in one change
+   group (recog and constraints re-verify each rewritten instruction),
+   then fix the dead-note registers, move the excluded members, and issue
+   the bridge moves.  */
 
 static bool
 crf_apply (crf_block &blk, crf_plan &plan)
 {
-  // Replace registers per value, ROLE-AWARE: a definition rename touches
-  // only definition positions (SET_DEST outside a MEM), a use rename only
-  // use positions.  One instruction can carry two same-numbered registers
-  // belonging to different values with different targets (the abutting
-  // accumulator chain).  Renames can chain (L5->L1 while L1->L3), so all
-  // locations are collected against the ORIGINAL patterns first.
+  /* Replace registers per value, ROLE-AWARE: a definition rename touches
+     only definition positions (SET_DEST outside a MEM), a use rename only
+     use positions.  One instruction can carry two same-numbered registers
+     belonging to different values with different targets (the abutting
+     accumulator chain).  Renames can chain (L5->L1 while L1->L3), so all
+     locations are collected against the ORIGINAL patterns first.  */
   std::vector<std::pair<rtx_insn *, std::pair<rtx *, unsigned>>> changes;
   auto queue_reg = [&changes] (rtx_insn *insn, unsigned from, unsigned to,
 			       bool def_side)
@@ -6741,7 +6741,7 @@ crf_apply (crf_block &blk, crf_plan &plan)
       return false;
     }
 
-  // Dead/unused notes riding the rewritten instructions.
+  /* Dead/unused notes riding the rewritten instructions.  */
   for (auto const &rn : plan.renames)
     {
       crf_value const &v = blk.values[rn.first];
@@ -6761,17 +6761,17 @@ crf_apply (crf_block &blk, crf_plan &plan)
 	fix_notes (blk.pos[up].insn);
     }
 
-  // Move the excluded members and issue the bridges by REALIZING the
-  // final order of the one plan-order interpreter (crf_plan_order) --
-  // the same stream the shadow-contract verifier simulated.  Walk the
-  // order keeping LAST = the previously realized instruction: an
-  // unmoved position realizes in place (unmoved insns keep block
-  // order, which the interpreter preserves), a moved member reseats
-  // directly after LAST, a bridge entry emits its move there.  Moved
-  // entries always follow at least one realized fixed position or
-  // moved neighbor by construction (heads/bridges seat at their
-  // clone's anchor), so LAST is the anchor's final predecessor when
-  // they are placed -- the same seat the per-clone placement used.
+  /* Move the excluded members and issue the bridges by REALIZING the
+     final order of the one plan-order interpreter (crf_plan_order) --
+     the same stream the shadow-contract verifier simulated.  Walk the
+     order keeping LAST = the previously realized instruction: an
+     unmoved position realizes in place (unmoved insns keep block
+     order, which the interpreter preserves), a moved member reseats
+     directly after LAST, a bridge entry emits its move there.  Moved
+     entries always follow at least one realized fixed position or
+     moved neighbor by construction (heads/bridges seat at their
+     clone's anchor), so LAST is the anchor's final predecessor when
+     they are placed -- the same seat the per-clone placement used.  */
   {
     std::vector<int> order = crf_plan_order (blk, plan);
     std::vector<char> is_moved (blk.pos.size (), 0);
@@ -6786,8 +6786,8 @@ crf_apply (crf_block &blk, crf_plan &plan)
     for (int e : order)
       if (e >= 0 && !is_moved[e])
 	{
-	  // Seat for leading moved/bridge entries: the final
-	  // predecessor of the first fixed position.
+	  /* Seat for leading moved/bridge entries: the final
+	     predecessor of the first fixed position.  */
 	  last = blk.pos[e].insn;
 	  break;
 	}
@@ -6851,11 +6851,11 @@ crf_apply (crf_block &blk, crf_plan &plan)
 }
 
 
-// Form the record and launches for an applied plan, mirroring
-// replace_sequence: the first clone hosts the capture (executing while
-// recording where the target allows), every other clone collapses to a
-// launch.  The consumed slots are marked persistent so the word-exact
-// machinery below never reallocates them.
+/* Form the record and launches for an applied plan, mirroring
+   replace_sequence: the first clone hosts the capture (executing while
+   recording where the target allows), every other clone collapses to a
+   launch.  The consumed slots are marked persistent so the word-exact
+   machinery below never reallocates them.  */
 
 static void
 crf_form (crf_block &blk, crf_plan &plan, unsigned slot_start)
@@ -6890,11 +6890,11 @@ crf_form (crf_block &blk, crf_plan &plan, unsigned slot_start)
 	     unsigned (plan.clones.size ()) - keep);
 }
 
-// Driver: canonicalize parameterized counted-row families so the ordinary
-// word-exact discovery below records one parameterized row program per
-// family.  Budget honesty: candidates are ranked by modeled slot saving
-// with shorter residuals winning ties, and the local budget model shrinks
-// by each applied family's residual.
+/* Driver: canonicalize parameterized counted-row families so the ordinary
+   word-exact discovery below records one parameterized row program per
+   family.  Budget honesty: candidates are ranked by modeled slot saving
+   with shorter residuals winning ties, and the local budget model shrinks
+   by each applied family's residual.  */
 
 static void
 canonicalize_counted_rows (function *cfn,
@@ -6913,10 +6913,10 @@ canonicalize_counted_rows (function *cfn,
       if (bitmap_bit_p (dirty_bbs, bb->index))
 	continue;
 
-      // Iterate: apply the best verifiable family, rescan, repeat.
-      // Instructions of an applied family are frozen: a later family may
-      // not rewrite values they define or use, or it would break the
-      // earlier family's canonical form.
+      /* Iterate: apply the best verifiable family, rescan, repeat.
+         Instructions of an applied family are frozen: a later family may
+         not rewrite values they define or use, or it would break the
+         earlier family's canonical form.  */
       std::set<rtx_insn *> frozen;
       for (unsigned round = 0; round != 8 && budget >= MIN_SEQUENCE;
 	   ++round)
@@ -6928,8 +6928,8 @@ canonicalize_counted_rows (function *cfn,
 	  std::vector<crf_seq> list;
 	  crf_build_sequences (list, blk, budget);
 
-	  // Rank candidates: modeled saving descending, residual
-	  // ascending (budget honesty), position ascending.
+	  /* Rank candidates: modeled saving descending, residual
+	     ascending (budget honesty), position ascending.  */
 	  std::vector<unsigned> order;
 	  for (unsigned ix = 1; ix < list.size (); ++ix)
 	    {
@@ -6940,8 +6940,8 @@ canonicalize_counted_rows (function *cfn,
 		* int (seq.length - 1) - 1;
 	      if (bound < 1)
 		continue;
-	      // Identity families (no divergence, nothing excludable in
-	      // any span) are the word-exact machinery's own territory.
+	      /* Identity families (no divergence, nothing excludable in
+	         any span) are the word-exact machinery's own territory.  */
 	      bool any_divergence = false;
 	      for (auto const &c : seq.clones)
 		{
@@ -7002,9 +7002,9 @@ canonicalize_counted_rows (function *cfn,
 			 s.length, unsigned (s.clones.size ()));
 	      }
 
-	  // Verify every ranked candidate and apply the best VERIFIED
-	  // plan: a high-bound family that lost most of its clones must
-	  // not shadow a smaller family that survived whole.
+	  /* Verify every ranked candidate and apply the best VERIFIED
+	     plan: a high-bound family that lost most of its clones must
+	     not shadow a smaller family that survived whole.  */
 	  bool applied = false;
 	  crf_plan best;
 	  bool have_best = false;
@@ -7053,7 +7053,7 @@ canonicalize_counted_rows (function *cfn,
 	    }
 	  if (have_best && crf_apply (blk, best))
 	    {
-	      // Best-fit slot span (smallest that holds the record).
+	      /* Best-fit slot span (smallest that holds the record).  */
 	      auto avail = available_replay_spans (replay_spans,
 						   persistent_slots);
 	      unsigned start = 0;
@@ -7065,7 +7065,7 @@ canonicalize_counted_rows (function *cfn,
 		    found = true;
 		    break;
 		  }
-	      gcc_assert (found); // budget model guaranteed a fit
+	      gcc_assert (found); /* budget model guaranteed a fit */
 	      std::fill (persistent_slots.begin () + start,
 			 persistent_slots.begin () + start + best.residual,
 			 true);
@@ -7084,8 +7084,8 @@ canonicalize_counted_rows (function *cfn,
     }
 }
 
-// The replay pass looks for sequences of instructions that repeat and replaces
-// the repeated portions w/ a REPLAY instruction
+/* The replay pass looks for sequences of instructions that repeat and replaces
+   the repeated portions w/ a REPLAY instruction */
 
 /* Audited mod-write classification for the no-exec record placement
    obligation (lane FL, FH-1; rvtt-cost.md AUDITED COMPOSITION FACT
@@ -7531,10 +7531,10 @@ transform (function *cfn, unsigned buffer_size)
      default configuration the legacy whole-function refusal is preserved
      byte-identically.  */
   bool scoped = riscv_tt_opt_replay_hoist > 0;
-  auto_bitmap dirty_bbs;      // excluded from formation/rewrites
-  auto_bitmap open_exit_bbs;  // recording state possibly open at exit
+  auto_bitmap dirty_bbs;      /* excluded from formation/rewrites */
+  auto_bitmap open_exit_bbs;  /* recording state possibly open at exit */
 
-  // Determine replay_spans ranges
+  /* Determine replay_spans ranges */
   replay_spans.emplace_back (0, buffer_size);
   FOR_EACH_BB_FN (bb, cfn)
     {
@@ -7555,7 +7555,7 @@ transform (function *cfn, unsigned buffer_size)
 
 	  if (skip_until)
 	    {
-	      // Inside a typed-closed user capture payload.
+	      /* Inside a typed-closed user capture payload.  */
 	      if (insn == skip_until)
 		skip_until = nullptr;
 	      continue;
@@ -7571,8 +7571,8 @@ transform (function *cfn, unsigned buffer_size)
 	      if (scoped)
 		{
 		  if (open_unprovable && get_attr_length (insn))
-		    // A slot-occupying word in a possibly-recording
-		    // region.
+		    /* A slot-occupying word in a possibly-recording
+		       region.  */
 		    bitmap_set_bit (dirty_bbs, bb->index);
 		}
 	      else if (shadow && get_attr_length (insn))
@@ -7580,8 +7580,8 @@ transform (function *cfn, unsigned buffer_size)
 	      continue;
 	    }
 	  if (scoped)
-	    // Owner epoch boundary: possibly-open recording state is
-	    // proven closed at an explicit owner operation.
+	    /* Owner epoch boundary: possibly-open recording state is
+	       proven closed at an explicit owner operation.  */
 	    open_unprovable = false;
 	  else if (shadow)
 	    {
@@ -7591,7 +7591,7 @@ transform (function *cfn, unsigned buffer_size)
 	    }
 
 	  if (type == REPLAY_variable_capture)
-	    // Using remainder of the buffer.
+	    /* Using remainder of the buffer.  */
 	    span.end = buffer_size;
 	  else
 	    {
@@ -7652,24 +7652,24 @@ transform (function *cfn, unsigned buffer_size)
 	      span.end += span.begin;
 	    }
 
-	  // Cut out [from,to) from replay_spans.
+	  /* Cut out [from,to) from replay_spans.  */
 	  for (auto pos = replay_spans.begin (), end = replay_spans.end (); pos != end;)
 	    if (pos->end <= span.begin)
-	      ++pos; // not reached, continue
+	      ++pos; /* not reached, continue */
 	    else if (pos->begin >= span.end)
-	      break; // gone past, we're done
+	      break; /* gone past, we're done */
 	    else if (pos->begin >= span.begin && pos->end <= span.end)
-	      replay_spans.erase (pos), --end; // entirely consumed
+	      replay_spans.erase (pos), --end; /* entirely consumed */
 	    else if (pos->begin >= span.begin)
 	      {
-		pos->begin = span.end; // snip front
+		pos->begin = span.end; /* snip front */
 		break;
 	      }
 	    else if (pos->end <= span.end)
-	      pos->end = span.begin, ++pos; // snip back
+	      pos->end = span.begin, ++pos; /* snip back */
 	    else
 	      {
-		// punch hole, and we're done
+		/* punch hole, and we're done */
 		unsigned e = pos->end;
 		pos->end = span.begin;
 		replay_spans.emplace (pos, span.end, e);
@@ -7744,17 +7744,17 @@ transform (function *cfn, unsigned buffer_size)
 	}
     }
 
-  // Convert replay_spans to be [start, +length)
+  /* Convert replay_spans to be [start, +length) */
   for (auto &slot : replay_spans)
     slot.end -= slot.begin;
-  // Sort in decreasing length
+  /* Sort in decreasing length */
   std::sort (replay_spans.begin (), replay_spans.end (),
 	     [] (replay_span const a, replay_span const b)
 	     {
 	       return a.end > b.end
 		 || (a.end == b.end && a.begin < b.begin);
 	     });
-  // Remove spans that are too short
+  /* Remove spans that are too short */
   while (!replay_spans.empty ()
 	 && replay_spans.back ().end < MIN_SEQUENCE)
     replay_spans.pop_back ();
@@ -7773,8 +7773,8 @@ transform (function *cfn, unsigned buffer_size)
       fprintf (dump_file, "\n");
     }
 
-  // Shadow-coupling possibility gates the companion-pairing refusals in
-  // span_companion_sound_p; computed once per function.
+  /* Shadow-coupling possibility gates the companion-pairing refusals in
+     span_companion_sound_p; computed once per function.  */
   bool sticky = rvtt_shadow_coupling_possible (cfn);
 
   std::vector<bool> persistent_slots (buffer_size, false);
@@ -7782,9 +7782,9 @@ transform (function *cfn, unsigned buffer_size)
     hoist_counted_loops (cfn, replay_spans, persistent_slots, dirty_bbs,
 			 sticky);
 
-  // Counted-row parameterized formation: canonicalize eligible clone
-  // families so the word-exact discovery below records one parameterized
-  // row program per family (docs/COUNTED_ROW_FORMATION.md).
+  /* Counted-row parameterized formation: canonicalize eligible clone
+     families so the word-exact discovery below records one parameterized
+     row program per family (docs/COUNTED_ROW_FORMATION.md).  */
   /* In reform mode this is the FUNCTION'S ONLY formation (the pre-fold
      invocation defers, see pass_rvtt_replay::gate), so the counted-row
      canonicalization runs here exactly once, with all its own audits
@@ -7797,24 +7797,24 @@ transform (function *cfn, unsigned buffer_size)
     canonicalize_counted_rows (cfn, replay_spans, persistent_slots,
 			       dirty_bbs, sticky);
 
-  replay_block info; // insn info
-  replay_list list; // list of sequences
-  replay_map map; // map of sequences
-  replay_active active; // pointers to active (under-consideration) sequences
+  replay_block info; /* insn info */
+  replay_list list; /* list of sequences */
+  replay_map map; /* map of sequences */
+  replay_active active; /* pointers to active (under-consideration) sequences */
   FOR_EACH_BB_FN (bb, cfn)
     {
       if (bitmap_bit_p (dirty_bbs, bb->index))
-	// Recording state may be open here (unprovable user epoch).
+	/* Recording state may be open here (unprovable user epoch).  */
 	continue;
       if (!scan_insns (info, bb))
 	continue;
 
-      // This is N^2
+      /* This is N^2 */
       unsigned lwm = build_sequences (map, list, info, replay_spans.front ().end);
 
       active_triage (info, active, list, lwm);
 
-      // This is the knapsack problem :(
+      /* This is the knapsack problem :( */
       auto spans = available_replay_spans (replay_spans, persistent_slots);
       if (spans.empty ())
 	continue;
@@ -7908,8 +7908,8 @@ transform (function *cfn, unsigned buffer_size)
 	    }
 
 	  auto slot = spans.begin ();
-	  // Is there a better fit?
-	  // FIXME: should we only accept exact fit?
+	  /* Is there a better fit?
+	     FIXME: should we only accept exact fit?  */
 	  for (auto probe = slot;
 	       ++probe != spans.end () && probe->end >= seq->length;)
 	    slot = probe;
@@ -7943,15 +7943,15 @@ transform (function *cfn, unsigned buffer_size)
 	  if (spans.empty ())
 	    break;
 
-	  // Remove unuseable sequences
+	  /* Remove unuseable sequences */
 	  active_invalidate (active, seq, spans.front ().end);
 	}
     }
 
-  // The launch-loop unroll and the launch conversion of isomorphic runs
-  // are part of the replay-hoist mechanism family: the shapes they target
-  // are produced by the replay-aware complete unroll and the hoist above,
-  // and the flag keeps the default configuration byte-identical.
+  /* The launch-loop unroll and the launch conversion of isomorphic runs
+     are part of the replay-hoist mechanism family: the shapes they target
+     are produced by the replay-aware complete unroll and the hoist above,
+     and the flag keeps the default configuration byte-identical.  */
   if (riscv_tt_opt_replay_hoist > 0)
     {
       unroll_launch_loops (cfn, dirty_bbs);
@@ -8019,7 +8019,7 @@ public:
       }
     return 0;
   }
-}; // class pass_rvtt_replay
+}; /* class pass_rvtt_replay */
 
 /* Post-auto-increment window RE-FORMATION (lane IH): the same formation,
    run a second time after pass_rvtt_dst_autoincr, under reform_mode (see
@@ -8073,9 +8073,9 @@ public:
       }
     return 0;
   }
-}; // class pass_rvtt_replay_reform
+}; /* class pass_rvtt_replay_reform */
 
-} // anon namespace
+} /* anon namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_replay (gcc::context *ctxt)

@@ -162,7 +162,7 @@ fill_latency_bubbles (function *fn)
       }
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* The generated target cost hook deliberately returns one for the existing
    STATIC/DYNAMIC contracts.  Do not generalize this to instruction distance:
@@ -192,10 +192,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 
   if (check_probe)
     {
-      // Each block, other than the starting block, should only be
-      // walked once -- don't get trapped in a loop of non-TENSIX
-      // insns. The starting block should be walked exactly twice, if
-      // reachable from itself.
+      /* Each block, other than the starting block, should only be
+         walked once -- don't get trapped in a loop of non-TENSIX
+         insns. The starting block should be walked exactly twice, if
+         reachable from itself.  */
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
     }
@@ -212,7 +212,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	rtx pattern = PATTERN (probe_insn);
 
 	if (GET_CODE (pattern) == USE)
-	  // The case where this would be a dependency does not arise.
+	  /* The case where this would be a dependency does not arise.  */
 	  continue;
 	if (GET_CODE (pattern) == CLOBBER)
 	  continue;
@@ -236,14 +236,14 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	  switch (GET_CODE (rtl))
 	    {
 	    default:
-	      // Unknown tensix insn component
+	      /* Unknown tensix insn component */
 	      gcc_unreachable ();
 
 	    case PARALLEL:
 	    case UNSPEC:
 	    case UNSPEC_VOLATILE:
 	      {
-		// All 3 have the vector at position 0
+		/* All 3 have the vector at position 0 */
 		auto &vec = XVEC (rtl, 0);
 		for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
 		  if (self (self, regno, RTVEC_ELT (vec, ix)))
@@ -277,7 +277,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	      TARGET_XTT_TENSIX_BH ? XTT_DYNAMIC_BUG_BH :
 	      TARGET_XTT_TENSIX_QSR ? XTT_DYNAMIC_BUG_QSR :
 	      0)
-	    // BH & QSR has scoreboarding, but with bugs
+	    /* BH & QSR has scoreboarding, but with bugs */
 	    if (!(mask & get_attr_xtt_dynamic_bug (probe_insn)))
 	      is_dependent = false;
 
@@ -292,7 +292,7 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 	return is_dependent;
       }
 
-  // Walk all the successors
+  /* Walk all the successors */
   edge_iterator ei;
   edge e;
   FOR_EACH_EDGE (e, ei, bb->succs)
@@ -302,10 +302,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
   return false;
 }
 
-// Decide whether the nop inserter below would pad INSN's delay: the exact
-// probe transform uses, factored out so the shadow-filling phase can target
-// (and re-verify) precisely the bubbles that would otherwise become SFPNOPs.
-// DELAY must be INSN's non-NONE delay contract.
+/* Decide whether the nop inserter below would pad INSN's delay: the exact
+   probe transform uses, factored out so the shadow-filling phase can target
+   (and re-verify) precisely the bubbles that would otherwise become SFPNOPs.
+   DELAY must be INSN's non-NONE delay contract.  */
 
 static bool
 delay_nop_needed_p (std::vector<basic_block> &visited, basic_block bb,
@@ -336,7 +336,7 @@ delay_nop_needed_p (std::vector<basic_block> &visited, basic_block bb,
 		unsigned regno = REGNO (SET_DEST (rtl));
 		if (SFPU_REG_P (regno))
 		  {
-		    // Writing to a constant reg falls on the floor
+		    /* Writing to a constant reg falls on the floor */
 		    bool insert = regno < SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
 		      && find_next_insn (visited, bb, regno, insn);
 
@@ -716,15 +716,15 @@ audited_latency (rtx_insn *insn)
   if (!issued_tensix_p (insn))
     return -1;
   xtt_effect_set e = rvtt_insn_effects (insn);
-  // Lane BM (minimal, coordinated with the drain-model work): an
-  // instruction with the architectural next-slot ACCEPTANCE stall
-  // (xtt_next_slot_stall; SFPSWAP.md) keeps refusing here even once it
-  // carries an audited result latency for the reissue-pricing model --
-  // this preserves the pass's documented pre-audit behavior exactly
-  // ("SFPSWAP ... never becomes a fill target").  That discipline,
-  // like every timing rule, has ONE spelling: the item-#11 engine's
-  // (verdict identity proven by the stage-A shadow over a full corpus
-  // -fchecking leg, zero disagreements).
+  /* Lane BM (minimal, coordinated with the drain-model work): an
+     instruction with the architectural next-slot ACCEPTANCE stall
+     (xtt_next_slot_stall; SFPSWAP.md) keeps refusing here even once it
+     carries an audited result latency for the reissue-pricing model --
+     this preserves the pass's documented pre-audit behavior exactly
+     ("SFPSWAP ... never becomes a fill target").  That discipline,
+     like every timing rule, has ONE spelling: the item-#11 engine's
+     (verdict identity proven by the stage-A shadow over a full corpus
+     -fchecking leg, zero disagreements).  */
   return rvtt_timing::audited_latency (e.opaque, e.next_slot_stall,
 				       e.result_latency);
 }
@@ -1119,7 +1119,7 @@ struct ls_node
   bool pin_to_baseline;	 /* unaudited entry producer dependence      */
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Node admission; returns false with *WHY naming the barrier class.  */
 
@@ -1920,7 +1920,7 @@ struct ls_ims_candidate
   unsigned demand = 0;
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Generate the IMS candidate order for the region NODES (admitted
    members, audited 0/1-slot latencies).  MAX_II is the acceptance
@@ -5773,7 +5773,7 @@ list_schedule_regions (function *fn)
 struct rotation_row
 {
   basic_block bb;
-  std::vector<rtx_insn *> issued; // issued Tensix words, in order
+  std::vector<rtx_insn *> issued; /* issued Tensix words, in order */
 };
 
 /* The non-self predecessor of self-loop BB when it is a dedicated
@@ -5851,7 +5851,7 @@ rotation_row_p (basic_block bb, rotation_row *row, const char **reason)
       if (recog_memoized (insn) >= 0 && get_attr_type (insn) == TYPE_TENSIX)
 	{
 	  if (!get_attr_length (insn))
-	    continue; // bookkeeping ghost
+	    continue; /* bookkeeping ghost */
 	  if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
 	    {
 	      *reason = "explicit replay owner";
@@ -6707,8 +6707,8 @@ rotate_capture_rows (function *fn)
     }
 }
 
-// Perform instruction scheduling. We conditionally insert a nop after
-// instructions.
+/* Perform instruction scheduling. We conditionally insert a nop after
+   instructions.  */
 
 static void
 transform (function *fn)
@@ -6807,9 +6807,9 @@ public:
     transform (fn);
     return 0;
   }
-}; // class pass_rvtt_schedule
+}; /* class pass_rvtt_schedule */
 
-} // anon namespace
+} /* anon namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_schedule (gcc::context *ctxt)

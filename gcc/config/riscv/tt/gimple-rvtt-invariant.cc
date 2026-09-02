@@ -106,7 +106,7 @@ canonical_insn_buffer_p (tree addr)
 		"__instrn_buffer");
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Shared loop invariant-materialization proofs (declared in
    rvtt-macro-ownership.h): the invariant-loadi pass below and the LUT
@@ -1803,7 +1803,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_invariant (gcc::context *ctxt)

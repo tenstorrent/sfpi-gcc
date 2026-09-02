@@ -271,7 +271,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_int_not (gcc::context *ctxt)

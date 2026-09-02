@@ -127,7 +127,7 @@ body_stmt_signature (function *fn)
   return sig;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* See rvtt-ipa-summary.h.  */
 

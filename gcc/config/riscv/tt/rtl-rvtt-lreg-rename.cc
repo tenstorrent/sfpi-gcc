@@ -1571,7 +1571,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Service export (item #7): attempt to rename the du-chain of
    DEF_INSN's single-LREG definition inside BB onto TARGET_LREG (an L

@@ -974,9 +974,9 @@ public:
     wc.run ();
     return 0;
   }
-}; // class pass_rvtt_crosslane_window
+}; /* class pass_rvtt_crosslane_window */
 
-} // anon namespace
+} /* anon namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_crosslane_window (gcc::context *ctxt)

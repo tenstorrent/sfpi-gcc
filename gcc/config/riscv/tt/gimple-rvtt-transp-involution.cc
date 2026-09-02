@@ -1330,9 +1330,9 @@ public:
       return TODO_update_ssa;
     return 0;
   }
-}; // class pass_rvtt_transp_involution
+}; /* class pass_rvtt_transp_involution */
 
-} // anon namespace
+} /* anon namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_transp_involution (gcc::context *ctxt)

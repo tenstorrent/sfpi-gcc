@@ -298,7 +298,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_lreg_livein (gcc::context *ctxt)

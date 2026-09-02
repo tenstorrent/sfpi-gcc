@@ -5110,7 +5110,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_prgm_const (gcc::context *ctxt)

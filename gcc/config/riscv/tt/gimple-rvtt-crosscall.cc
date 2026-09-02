@@ -3212,7 +3212,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Audited hoist-region scan for the cross-loop hoist consumers
    (rvtt-macro-ownership.h).  The region is {LOOP body} union
@@ -4350,7 +4350,7 @@ init_commit_caller (cgraph_node *caller, edge entry,
 	     caller->dump_name (), ph->index);
 }
 
-} // anonymous namespace (lane CA init hoist)
+} /* anonymous namespace (lane CA init hoist) */
 
 /* Item #15: the ONE caller-chain resolver behind the init-face
    contracts (lane CA init hoist, lane IK ADDR_MOD hoist) -- previously

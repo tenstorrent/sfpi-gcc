@@ -1050,7 +1050,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_lp_schedule (gcc::context *ctxt)
