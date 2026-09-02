@@ -3447,10 +3447,6 @@ struct init_scan_ctx
   bool saw_mop = false;
   bool cc_dirty = false;	/* loop CC write: demotes stage 2      */
   bool owned_row_dirty = false;	/* in-loop owned-row write: demotes    */
-  /* Item #15 shadow discipline: a flag_checking twin of the
-     summary-fed hop replay records verdicts without emitting (no
-     double dump lines, no double refusal-counter fires).  */
-  bool quiet = false;
   const char *why = nullptr;
   gimple *why_stmt = nullptr;
 };
@@ -3460,8 +3456,6 @@ init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
 {
   ctx->why = why;
   ctx->why_stmt = stmt;
-  if (ctx->quiet)
-    return false;
   rvtt_refuse_by_name_at (why, stmt, dump_file,
 			  "init-hoist: refused (%s)", why);
   if (dump_file)
@@ -3672,9 +3666,9 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
    on the recorded word image, call admission via the contract's decl
    set) with the exact legacy accumulator and refusal emission.  Every
    arm below mirrors init_scan_stmt / init_scan_asm /
-   classify_delivered_init's input handling verbatim; a divergence
-   between replay and the legacy walk is a hard flag_checking FINDING
-   (scan_chain_hops).  */
+   classify_delivered_init's input handling verbatim (the one-pin
+   flag_checking shadow walk that hard-asserted this was deleted at
+   pin 53 on a clean corpus -fchecking leg).  */
 
 static void
 init_digest_push_refuse (vec<rvtt_ipa_event> *out, gimple *stmt,
@@ -3917,10 +3911,7 @@ init_replay_events (init_scan_ctx *ctx, const vec<rvtt_ipa_event> &evs)
 
 /* The chain hops' whole-body epoch scans, summary-fed (item #15): one
    digest per hop body, computed once and consulted per contract,
-   replacing the per-contract re-walks.  Under flag_checking the legacy
-   per-statement walk shadows every hop quietly and the verdicts must
-   agree exactly -- the stage-A assertion phase (shadow walk DELETE
-   NEXT PIN on a clean corpus -fchecking leg).  FACE_UNAVAILABLE is the
+   replacing the per-contract re-walks.  FACE_UNAVAILABLE is the
    consuming face's closure refusal; TAG its dump prefix.  Returns the
    refusal name, or null with CTX's accumulators advanced.  */
 
@@ -3969,48 +3960,7 @@ scan_chain_hops (init_scan_ctx *ctx, const auto_vec<cgraph_node *, 4> &chain,
 		     "ipa-summary: init-face digest built (%s, %u events)\n",
 		     body_node->dump_name (), sum->init_events.length ());
 	}
-      init_scan_ctx shadow;
-      if (flag_checking)
-	shadow = *ctx;
       bool ok = init_replay_events (ctx, sum->init_events);
-      if (flag_checking)
-	{
-	  /* Stage-A assertion phase: the legacy whole-body walk, run
-	     quietly on a twin accumulator, must reach the identical
-	     verdict.  DELETE NEXT PIN.  */
-	  shadow.quiet = true;
-	  bool sok = true;
-	  basic_block hbb;
-	  FOR_EACH_BB_FN (hbb, hfn)
-	    {
-	      for (gimple_stmt_iterator gsi = gsi_start_bb (hbb);
-		   sok && !gsi_end_p (gsi); gsi_next (&gsi))
-		sok = init_scan_stmt (&shadow, gsi_stmt (gsi));
-	      if (!sok)
-		break;
-	    }
-	  bool why_equal = shadow.why == ctx->why
-	    || (shadow.why && ctx->why && !strcmp (shadow.why, ctx->why));
-	  if (sok != ok
-	      || shadow.saw_mop != ctx->saw_mop
-	      || shadow.cc_dirty != ctx->cc_dirty
-	      || shadow.owned_row_dirty != ctx->owned_row_dirty
-	      || !why_equal
-	      || shadow.why_stmt != ctx->why_stmt)
-	    {
-	      fprintf (stderr,
-		       "ipa-summary: init-face hop verdict disagreement"
-		       " (%s: summary %s vs walk %s)\n",
-		       body_node->dump_name (),
-		       ctx->why ? ctx->why : "ok",
-		       shadow.why ? shadow.why : "ok");
-	      gcc_assert (sok == ok && why_equal
-			  && shadow.saw_mop == ctx->saw_mop
-			  && shadow.cc_dirty == ctx->cc_dirty
-			  && shadow.owned_row_dirty == ctx->owned_row_dirty
-			  && shadow.why_stmt == ctx->why_stmt);
-	    }
-	}
       if (!ok)
 	return ctx->why;
     }

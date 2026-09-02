@@ -61,9 +61,9 @@ along with GCC; see the file COPYING3.  If not see
    mismatch fires the registered `ipa-summary-stale' name and recomputes
    fail-closed -- recomputing from the current body is exactly the
    legacy read-at-consult behavior), and under flag_checking a full
-   statement-count signature plus the shadow legacy walks in the
-   consumer files (hard-assert verdict identity; the corpus -fchecking
-   leg proves the wiring complete).  */
+   statement-count signature.  (The consumer files' one-pin shadow
+   legacy walks hard-asserted verdict identity through the corpus
+   -fchecking leg and were deleted at pin 53.)  */
 
 /* One classified statement event.  The union of the faces' event
    vocabularies; each face uses its own subset.  */
