@@ -28,7 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 
    This module is the single computer of the execution-side
    stall/latency semantics that five hand-kept simulators previously
-   maintained by convention (AUDIT-scheduling.md impr.1):
+   maintained by convention:
 
      1. the interlock fill's adjacency model
 	(rtl-rvtt-schedule.cc adjacency_stall / audited_latency);

@@ -116,8 +116,8 @@ extern const char *rvtt_solver_status_name (rvtt_solver_status);
    outside a compiler pass.  All costs are centislots (hundredths of a
    Tensix issue slot), int64.
 
-   Measured delivery table (lane EE loser-anatomy closure, 14 silicon
-   rows reproduced within ~3%, laneEE-evidence-20260821):
+   Measured delivery table (a 14-row hardware study; every row's
+   modeled cost reproduced within ~3% of the measurement):
      - an issue-bound leg costs ~1.0 cycle per delivered word
        (WORD = 100 cs; scalar loop-control pairs partially dual-issue
        fold -- the closure's documented <= 7% slack);

@@ -25,9 +25,9 @@ along with GCC; see the file COPYING3.  If not see
    window re-played by one-word launches, or as a record hoisted out of
    the loop -- is decided today by a fixed-factor unroll request
    (gimple-rvtt-replay-unroll.cc, XTT_REPLAY_LOOP_UNROLL_FACTOR) and by
-   the downstream formers' own local gates.  Measured anatomy (lane EE,
-   laneEE-evidence-20260821: fourteen silicon rows closed within ~3%)
-   shows the shape choice is a real, priced trade -- straight-pushed
+   the downstream formers' own local gates.  Measured anatomy (a
+   fourteen-row hardware study, each row's modeled cost closed within
+   ~3% of the measurement) shows the shape choice is a real, priced trade -- straight-pushed
    words cost ~1.0 cycle each, launches carry a measured 1.3..1.8-cycle
    serial-chain boundary cost, records cost their words -- and that the
    winning shape differs per loop (sqrt-fresh measures best rolled

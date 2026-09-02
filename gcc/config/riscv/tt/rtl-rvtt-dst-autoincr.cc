@@ -1246,21 +1246,20 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
    launch issues ONE frontend word while the expander delivers the
    payload's mod-write asynchronously, so no frontend word count after
    the launch bounds the store's retirement, and admission decays to
-   runtime pacing the model cannot see.  Lane FE finding F1 is the
-   refuting witness (laneFE-evidence-20260822): the sparse_k_filter
-   Int32/dest-acc composition -- 32-launch group, its own no-exec
-   record re-ingesting the mod-write payload one block earlier in the
-   tile loop, admitted covered at 20+ frontend words -- wedges Tensix
-   at runtime trip count 32 and passes at trip 8 on BYTE-IDENTICAL
-   code (2/2 device, flush-verified), while the pinned sim passes both
-   (frontend/RWC retirement timing unmodeled).  So for groups with any
-   replay-delivered row, a same-function no-exec capture refuses at ANY
-   distance -- lane FS (FP-3) widened this from forward-reachable to any
-   same-function capture, because the Replay Expander buffer persists
-   across function/kernel-invocation boundaries (laneFS-evidence-
-   20260822 silicon model) so a sibling-arm capture is armed by a prior
-   caller-loop invocation.  The window rule applies to issue-parity
-   (explicit-row) groups only.  */
+   runtime pacing the model cannot see.  The refuting hardware witness:
+   a sparse_k_filter Int32/dest-acc composition -- 32-launch group, its
+   own no-exec record re-ingesting the mod-write payload one block
+   earlier in the tile loop, admitted covered at 20+ frontend words --
+   wedges Tensix at runtime trip count 32 and passes at trip 8 on
+   BYTE-IDENTICAL code (reproduced twice on device, flush-verified),
+   while the reference simulator passes both (frontend/RWC retirement
+   timing unmodeled).  So for groups with any replay-delivered row, a
+   same-function no-exec capture refuses at ANY distance -- widened
+   from forward-reachable to any same-function capture, because the
+   Replay Expander buffer persists across function/kernel-invocation
+   boundaries (hardware-established persistence model) so a sibling-arm
+   capture is armed by a prior caller-loop invocation.  The window rule
+   applies to issue-parity (explicit-row) groups only.  */
 
 /* True when any surviving row of GRP delivers its terminator through
    the replay expander (a launch or an executing capture) instead of as
@@ -1359,12 +1358,12 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	}
 
       /* Replay-delivered rows break the issue-parity premise of the
-	 frontend-word distance audit (see the block comment above; lane
-	 FE finding F1 is the refuting silicon witness): a reachable no-exec
-	 capture refuses at any distance.  Lane FS (FP-3, the BH REPLAY doc
-	 gap): the per-thread Replay Expander buffer PERSISTS across function
-	 and kernel-invocation boundaries (laneFS-evidence-20260822 silicon
-	 model, EXP-1/EXP-2), so the successor-reachability relation is not
+	 frontend-word distance audit (see the block comment above for
+	 the refuting hardware witness): a reachable no-exec
+	 capture refuses at any distance.  The per-thread Replay Expander
+	 buffer PERSISTS across function and kernel-invocation boundaries
+	 (hardware-established persistence model, undocumented in the BH
+	 REPLAY ISA text), so the successor-reachability relation is not
 	 the true consumer relation.  A capture that DOMINATES the group is
 	 its legitimate deliverer -- it executes (records) before every launch
 	 in the same invocation, the witnessed-good record-hoist mechanism

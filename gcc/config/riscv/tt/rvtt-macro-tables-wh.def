@@ -70,12 +70,11 @@ XTT_MACRO_CAPS_SCALARS ("wh", /*n_templates*/4, /*n_sequence_slots*/4,
    kernels (llk_math_eltwise_unary_datacopy.h MOV_8_ROWS, Dst+8).  The
    historical dual-slot program (transcribed from the frozen pass,
    rtl-rvtt-loadmacro.cc:834-843) wrote both banks and corrupted every
-   tile after the first; the WH dst-autoincr adjudication convicted the
-   compiler and the corrected sim reproduced the corruption (sfpi-gcc
-   2a0ba1e6602; laneAJ-evidence-20260817).  Lane R1's WH
-   position-shuffled formed-calendar failure (laneR1-evidence-20260817
-   wh-onma trace) was this same mechanism.  Raw words asserted by
-   loadmacro-periodic-minmax-wh.C.  */
+   tile after the first; the WH dst-autoincr hardware adjudication
+   convicted the compiler and the corrected reference simulator
+   reproduced the corruption.  The WH position-shuffled formed-calendar
+   failure (hardware trace) was this same mechanism.  Raw words
+   asserted by loadmacro-periodic-minmax-wh.C.  */
 XTT_MACRO_ADDR_MOD_SLOT (/*phys*/6, /*src*/19, 0, /*dst*/29, 2,
 			 /*fid*/54, 0)
 

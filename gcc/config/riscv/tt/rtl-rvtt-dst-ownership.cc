@@ -17,7 +17,7 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-/* Track B (SFPI_COMPILER_UPGRADE.md 18.9): model the Dst accumulator and
+/* Model the Dst accumulator and
    its read-write-clear (RWC) counters as compiler-visible state so that
    author-written Dst round-trips ("reload due to register pressure")
    fold into LREG-resident values.

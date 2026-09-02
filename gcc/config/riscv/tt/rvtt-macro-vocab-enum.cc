@@ -644,9 +644,9 @@ main (int argc, char **argv)
 	  "[sim:8950] -- no semantic gap for\n   templates (imm12 packs "
 	  "0), recorded for completeness.\n");
 
-  /* mulint32 ceiling (enumeration-complete upgrade of lane CI's
+  /* mulint32 ceiling (enumeration-complete upgrade of the historical
      refusal): the V0 row's formed calendar uses ALL FOUR
-     InstructionTemplate destinations (laneCI-evidence worktree-v0
+     InstructionTemplate destinations (formed-calendar
      dump: 0x900000c3, 0x94fe90d6, 0x980009e0, 0x900003f3).  Template
      sharing requires BIT-IDENTICAL words (derive_row's sharing gate);
      every explicit member of the row is a different opcode byte or

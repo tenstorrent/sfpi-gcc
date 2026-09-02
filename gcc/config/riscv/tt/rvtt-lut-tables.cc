@@ -163,8 +163,9 @@ rvtt_lut_modes (const rvtt_lut_mode_desc **modes)
    BlackholeA0 SFPMAD.md "IEEE754 conformance / divergence"; craq-sim
    @ 9f324140 src/fma.cpp fma_model_bh/_wh, src/tensix.cpp
    TENSIX_EXECUTE_SFPLUTFP32).  The facts below were certified by
-   exhaustive enumeration against those pinned models (certifier and
-   raw logs archived in laneCY-evidence-20260820/admission-proofs/):
+   exhaustive enumeration against those pinned models; the sweep
+   parameters and outcomes are recorded inline here, and any change to
+   the models voids and re-owes the certification:
 
    - Multiply-only leaves (B := +0.0): SFPMAD.md states "adding zero
      [makes] the partially fused operation equivalent to a standalone
@@ -214,8 +215,8 @@ rvtt_lut_modes (const rvtt_lut_mode_desc **modes)
      formation without a -ffinite-math-only license by the name
      lut-wh-negative-nan-divergent.)
 
-   Six-entry extension (laneGU, 2026-08-25; certifier and raw logs
-   archived in laneGU-evidence-20260825/admission-proofs/):
+   Six-entry extension (certified the same way, against the same
+   pinned models):
 
    - Bucket agreement for the six-range partitions: the tree compare
      chain (SFPABS float; per-boundary MAD-subtract; SETCC sign test)

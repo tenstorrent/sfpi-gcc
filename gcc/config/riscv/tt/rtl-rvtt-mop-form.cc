@@ -76,9 +76,8 @@ along with GCC; see the file COPYING3.  If not see
    (mop-config-unowned below) only shows that nothing INSIDE the
    function disturbs the formed template; it says nothing about a
    caller that programmed its own template, calls this function inside
-   a loop, and launches that template again after we return.  Silicon
-   evidence (the 2026-08-17 minmax force-leg adjudication): a perf
-   harness that hoists a type-1 template program out of its tile loop
+   a loop, and launches that template again after we return.  Hardware
+   evidence: a perf harness that hoists a type-1 template program out of its tile loop
    and issues MOP per tile around a call into the formed function hangs
    the Tensix deterministically -- the caller's post-return launch
    expands OUR template words.

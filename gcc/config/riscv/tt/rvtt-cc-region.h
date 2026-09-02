@@ -24,8 +24,7 @@ along with GCC; see the file COPYING3.  If not see
    frame structure: the tree of sfppushc (0) / sfppopc (0) frames,
    computed once per function, that the frame-shape consumers
    (store-fold, ccmask, lut-select, reassoc's window CC arm) query
-   instead of each re-deriving the same facts with a private scan
-   (FABLE_GOES_BURR item #14; AUDIT-licensed-folds.md improvement 4).
+   instead of each re-deriving the same facts with a private scan.
 
    Stage A contract (CLASS-I): every consumer keeps its full historical
    shape discipline as a compatibility predicate (each converted

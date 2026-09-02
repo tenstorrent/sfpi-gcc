@@ -789,7 +789,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
 /* Timing-calendar derivation (Layer 4b): when no proven whole-word
    program matches, derive the sequence words, delays, and misc fields
    from the schedule and the established architectural facts
-   (docs/TIMING_CALENDAR_DERIVATION.md section 4).  The admitted template
+   (see rvtt-macro-derive-core.h).  The admitted template
    class grows one CRAQ-validated increment at a time; today it is the
    constant-register SFPSWAP family (the unary max/min shape).  Rows
    outside the admitted class keep the established
@@ -2001,7 +2001,7 @@ rvtt_macro_synthesize (const macro_region &region,
      an unproven per-event delay does not block a whole-word program
      proven end to end) and sequence-encoding-unproven (the missing
      proven sequence program is exactly what Layer 4b derives,
-     docs/TIMING_CALENDAR_DERIVATION.md).  Every other refusal --
+     rvtt-macro-derive-core.h).  Every other refusal --
      including the compact candidate's mandatory-absorption failure
      (WP10), whose partially-compact structure must never fall through
      to a program keyed for a different calendar, and the physical
