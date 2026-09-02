@@ -463,6 +463,62 @@ make_mod_prob (const seq &s)
   return p;
 }
 
+/* Realization-tier marshaller (item #5 stage 2): identical edge
+   derivation, with the CROSS-iteration kind matrix supplied as its own
+   seq (ops shared with INTRA; only CROSS.dep is consulted for the
+   omega-1 edges).  The single-matrix marshaller above wraps the kernel
+   onto its own STORAGE -- every constrained pair, WAW/WAR included --
+   which is exactly right for pricing an unrealized overlap (stage 1's
+   conservative bookkeeping) and exactly wrong for generating the
+   realized placement: the storage collisions the modulo-variable-
+   expansion ROTATION removes must not bound the placement it exists to
+   enable.  The caller supplies in CROSS only the cross-iteration
+   constraints that survive its rotation vocabulary (e.g. registers
+   live into the row); everything dropped here is optimism in the
+   CANDIDATE-GENERATION direction only -- the realized order is judged
+   by the exact acceptance model and the caller's legality/lockstep
+   belts downstream, so a wrong optimism can only produce a refused
+   candidate, never an unsound commit.  */
+
+inline mod_prob
+make_mod_prob (const seq &intra, const seq &cross)
+{
+  mod_prob p;
+  const unsigned n = intra.ops.size ();
+  p.words.resize (n);
+  for (unsigned i = 0; i != n; ++i)
+    p.words[i] = intra.ops[i].words;
+  for (unsigned a = 0; a != n; ++a)
+    for (unsigned b = 0; b != n; ++b)
+      {
+	dep_kind k0 = intra.kind (a, b);
+	if (k0 != DEP_NONE && a < b)
+	  {
+	    mod_edge e;
+	    e.from = a;
+	    e.to = b;
+	    e.delta = intra.ops[a].words
+		      + (k0 == DEP_LATENCY ? intra.ops[a].lat : 0);
+	    e.kind = k0;
+	    e.omega = 0;
+	    p.edges.push_back (e);
+	  }
+	dep_kind k1 = cross.kind (a, b);
+	if (k1 != DEP_NONE)
+	  {
+	    mod_edge e;
+	    e.from = a;
+	    e.to = b;
+	    e.delta = intra.ops[a].words
+		      + (k1 == DEP_LATENCY ? intra.ops[a].lat : 0);
+	    e.kind = k1;
+	    e.omega = 1;
+	    p.edges.push_back (e);
+	  }
+      }
+  return p;
+}
+
 /* Resource-minimum II of the single-issue front end: the body's total
    issue-slot count.  */
 

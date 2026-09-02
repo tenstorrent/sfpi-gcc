@@ -355,6 +355,89 @@ t7_marshal ()
   CHECK (self1 == 2);
 }
 
+/* Realization-tier two-matrix marshaller (item #5 stage 2): the CROSS
+   matrix alone supplies the omega-1 edges, so storage the rotation
+   renames never bounds the placement, while the intra matrix keeps the
+   in-iteration constraints.  */
+
+static void
+t8_marshal_split ()
+{
+  /* Three ops, chain 0 -> 1 -> 2 by RAW (lat 1) intra; merged
+     single-matrix marshalling would wrap every pair (self-WAW
+     included) and bound RecMII; an EMPTY cross matrix must leave the
+     problem acyclic (RecMII 0) with the intra edges intact.  */
+  seq s;
+  s.ops.resize (3);
+  for (unsigned i = 0; i != 3; ++i)
+    {
+      s.ops[i].words = 1;
+      s.ops[i].lat = 1;
+    }
+  s.dep.assign (9, (unsigned char) DEP_NONE);
+  s.dep[0 * 3 + 1] = DEP_LATENCY;
+  s.dep[1 * 3 + 2] = DEP_LATENCY;
+  /* Allocator self-reuse: every op redefines its own register each
+     iteration (the diagonal) -- the single-matrix marshalling wraps it
+     into a binding self-recurrence; the rotation dissolves it.  */
+  for (unsigned i = 0; i != 3; ++i)
+    s.dep[i * 3 + i] = DEP_LATENCY;
+  seq cross = s;
+  cross.dep.assign (9, (unsigned char) DEP_NONE);
+
+  mod_prob merged = make_mod_prob (s);
+  mod_prob split = make_mod_prob (s, cross);
+  CHECK (recmii (merged) > 0);	/* the wrapped self-constraints bind */
+  CHECK (recmii (split) == 0);	/* rotation-optimistic: acyclic */
+  CHECK (resmii (split) == 3);
+  unsigned omega0 = 0, omega1 = 0;
+  for (unsigned k = 0; k != split.edges.size (); ++k)
+    if (split.edges[k].omega == 0)
+      {
+	++omega0;
+	CHECK (split.edges[k].delta == 2);	/* words 1 + lat 1 */
+      }
+    else
+      ++omega1;
+  CHECK (omega0 == 2 && omega1 == 0);
+
+  /* One surviving cross constraint (a loop-carried value 2 -> 0):
+     exactly one omega-1 edge, delta from the producing op, and the
+     recurrence becomes exact again.  */
+  cross.dep[2 * 3 + 0] = DEP_LATENCY;
+  mod_prob carried = make_mod_prob (s, cross);
+  omega1 = 0;
+  for (unsigned k = 0; k != carried.edges.size (); ++k)
+    if (carried.edges[k].omega == 1)
+      {
+	++omega1;
+	CHECK (carried.edges[k].from == 2 && carried.edges[k].to == 0);
+	CHECK (carried.edges[k].delta == 2);
+	CHECK (carried.edges[k].kind == DEP_LATENCY);
+      }
+  CHECK (omega1 == 1);
+  /* Cycle 0->1->2->0: length 6 over one iteration distance.  */
+  CHECK (recmii (carried) == 6);
+  mod_placement pl = ims_schedule (carried, 6, 8, 64);
+  CHECK (pl.scheduled && pl.ii == 6);
+  CHECK (mve_kmin (carried, pl) == 1);
+
+  /* Force an overlapped lifetime: op 0's value is also read by op 2
+     (edge 0 -> 2), so at II 3 (the resource floor) that value spans
+     sigma[2] - sigma[0] >= 4 > II -- realizing the placement owes
+     kmin 2 and the demand counts the overlapped copies.  */
+  seq s2 = s;
+  s2.dep[0 * 3 + 2] = DEP_LATENCY;
+  seq cross2 = s2;
+  cross2.dep.assign (9, (unsigned char) DEP_NONE);
+  mod_prob rot = make_mod_prob (s2, cross2);
+  mod_placement pl3 = ims_schedule (rot, 3, 3, 64);
+  CHECK (pl3.scheduled && pl3.ii == 3);
+  CHECK (pl3.sigma[2] - pl3.sigma[0] >= 4);
+  CHECK (mve_kmin (rot, pl3) == 2);
+  CHECK (mve_live_demand (rot, pl3) >= 2);
+}
+
 int
 main ()
 {
@@ -365,6 +448,7 @@ main ()
   t5_budget ();
   t6_mve ();
   t7_marshal ();
+  t8_marshal_split ();
   if (failures)
     {
       std::fprintf (stderr, "%u/%u checks FAILED\n", failures, tests);
