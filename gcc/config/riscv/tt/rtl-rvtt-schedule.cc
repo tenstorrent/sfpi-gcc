@@ -2017,6 +2017,21 @@ ls_ims_order (basic_block bb, const std::vector<ls_node> &nodes,
 		     INSN_UID (nodes[0].insn), bb->index, out->kmin,
 		     out->demand, capacity, invariants,
 		     rename_exhausted ? " rename-search-exhausted" : "");
+      else if (riscv_tt_opt_mve_expand)
+	/* Stage 2 is live: the owed expansion is adjudicated by name.
+	   This region path cannot perform it -- the realization
+	   authority is the counted-kernel seam in the cross-row
+	   pairing (which runs before these paths and owns the
+	   replay-formable unroll); a region of a barrier-chopped or
+	   otherwise non-counted row has no sound kernel copy.  The
+	   flat order still competes exactly as before.  */
+	rvtt_refuse (RVTT_REF_MVE_EXPAND_ROW_NOT_COUNTED_KERNEL, dump_file,
+		     "List-schedule (ims) refused: "
+		     "mve-expand-row-not-counted-kernel at uid=%d in bb %d "
+		     "(kmin=%d demand=%u invariants=%u fits; flat order "
+		     "still offered)\n",
+		     INSN_UID (nodes[0].insn), bb->index, out->kmin,
+		     out->demand, invariants);
       else if (dump_file)
 	fprintf (dump_file, "List-schedule (ims) MVE owed: bb %d kmin=%d "
 		 "demand=%u invariants=%u (fits; kernel unroll is the "
@@ -3643,6 +3658,731 @@ crp_undo_last_rename (std::vector<ls_rename> *record)
   record->pop_back ();
 }
 
+/* ---- MVE kernel-unroll realization (item #5 stage 2, default off) ----
+
+   -mtt-tensix-optimize-mve-expand PERFORMS the modulo-variable-
+   expansion the bookkeeping tier (stage 1) only priced: on the counted
+   replay-formable kernel the cross-row pairing admits -- that shape IS
+   the crp-parity obligation, structurally: Dst rebase, doubled row
+   step, halved countdown, capture budget, so the realized kernel stays
+   replay-formable by the same admission that lets the pairing fire --
+   the doubled row is ordered by an ITEM-LEVEL modulo placement of the
+   single kernel (each CC atom one indivisible multi-word item, pure
+   words their own items; the same aggregation the pairing's greedy
+   scheduler uses) with the second iteration offset by one placement II
+   (Lam PLDI-88, kmin = 2 realized as the pairing's two copies), instead
+   of the greedy interleave.  Register rotation for the copy's colliding
+   webs routes through the item-#7 du-chain rename service
+   (rvtt_lreg_rename_chain: block-free targets first, the temporal tier
+   where block-free registers are exhausted), the expansion demand is
+   priced against the register file net of loop-live invariants exactly
+   as stage 1 prices it, and an independent producer-lockstep belt
+   re-verifies every rename's value web (each consumer's nearest-
+   preceding producer must keep its identity across the renames -- the
+   check a mis-rotated register cannot pass).  The realized order
+   commits only under the pairing's own acceptance authority (strict
+   modeled steady-state II decrease over the doubled sequential
+   baseline, pad-site and capture belts unchanged) AND only when it
+   strictly beats the greedy pairing candidate; every unproven piece
+   refuses by name and leaves the established pairing path untouched
+   (the service webs are undone exactly).
+
+   Refusals by name:
+     mve-expand-row-mutated            seeds or shared-reload dedupe
+					broke the pure textual pairing
+     mve-expand-kmin-beyond-pairing    lifetimes demand > 2 copies
+     mve-rename-exhausted              demand does not fit the file net
+					of loop-live invariants (stage
+					1's name; the realization site)
+     mve-expand-lockstep-divergence    the producer-lockstep belt caught
+					a diverging rename web
+     mve-expand-order-hazard           an unrenamed shared web would
+					reverse an original-order
+					dependence in the realized order
+     mve-expand-no-ii-decrease         the realized order does not
+					strictly beat the greedy
+					candidate and the baseline  */
+
+/* Nearest-preceding-producer map over ALL in sequential index order:
+   for each node, the sorted multiset of producing node indices of its
+   register uses (-1 = live into the row).  Rename-invariant for any
+   value-preserving whole-web rename; a mis-rotated or partially
+   renamed web changes some consumer's producer identity.  */
+
+static std::vector<std::vector<int> >
+mve_producer_map (const std::vector<ls_node> &all)
+{
+  std::vector<std::vector<int> > map (all.size ());
+  for (unsigned v = 0; v != all.size (); ++v)
+    {
+      for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+	{
+	  if (!TEST_HARD_REG_BIT (all[v].regs.uses, r))
+	    continue;
+	  int producer = -1;
+	  for (unsigned j = v; j-- != 0;)
+	    if (TEST_HARD_REG_BIT (all[j].raw_defs, r))
+	      {
+		producer = (int) j;
+		break;
+	      }
+	  map[v].push_back (producer);
+	}
+      for (unsigned i = 1; i < map[v].size (); ++i)  /* insertion sort */
+	{
+	  int x = map[v][i];
+	  unsigned j = i;
+	  while (j > 0 && map[v][j - 1] > x)
+	    {
+	      map[v][j] = map[v][j - 1];
+	      --j;
+	    }
+	  map[v][j] = x;
+	}
+    }
+  return map;
+}
+
+/* The realization arm.  ALL/GROUP hold the pairing's doubled row after
+   the established collision renames; N is the single-kernel node
+   count; BASE_II the doubled sequential baseline.  On success returns
+   true with *CANDIDATE_OUT the realized order, *II_OUT its modeled
+   steady-state II (strictly below both the greedy candidate's and
+   BASE_II), *PLACE_II_OUT the kernel placement II, and *WEBS_OUT the
+   committed service webs (the caller undoes them exactly on any later
+   refusal).  On every refusal returns false with the state restored
+   exactly as at entry.  */
+
+static bool
+crp_mve_expand_arm (basic_block bb, std::vector<ls_node> &all,
+		    std::vector<int> &group, unsigned n, int base_ii,
+		    bool row_mutated,
+		    std::vector<rtx_insn *> *candidate_out, int *ii_out,
+		    int *place_ii_out,
+		    std::vector<rvtt_lreg_rename_web> *webs_out)
+{
+  if (row_mutated || all.size () != 2 * n)
+    {
+      rvtt_refuse (RVTT_REF_MVE_EXPAND_ROW_MUTATED, dump_file,
+		   "Crossrow mve-expand refused: mve-expand-row-mutated "
+		   "in bb %d\n", bb->index);
+      return false;
+    }
+  /* Copy-mirror belt: the two halves' item structure must be index-
+     isomorphic (it is by construction; the realization never trusts
+     its own bookkeeping).  */
+  for (unsigned k = 0; k != n; ++k)
+    {
+      bool a_open = group[k] >= 0 && k > 0 && group[k - 1] == group[k];
+      bool b_open = group[n + k] >= 0 && group[n + k - 1] == group[n + k];
+      if ((group[k] >= 0) != (group[n + k] >= 0)
+	  || (k > 0 && a_open != b_open))
+	{
+	  rvtt_refuse (RVTT_REF_MVE_EXPAND_ROW_MUTATED, dump_file,
+		       "Crossrow mve-expand refused: mve-expand-row-mutated "
+		       "(halves not item-isomorphic) in bb %d\n", bb->index);
+	  return false;
+	}
+    }
+
+  /* Items over the single kernel (first half): each atom instance one
+     indivisible multi-word item, pure words their own items -- the
+     pairing's own aggregation, marshalled into the one timing
+     vocabulary (data only; the engine's marshaller and placement do
+     the rest).  */
+  struct mve_item
+  {
+    std::vector<unsigned> members;	/* indices into ALL, first half */
+    HARD_REG_SET uses, raw_defs;
+    int words, lat;
+  };
+  std::vector<mve_item> items;
+  {
+    unsigned i = 0;
+    while (i != n)
+      {
+	mve_item it;
+	CLEAR_HARD_REG_SET (it.uses);
+	CLEAR_HARD_REG_SET (it.raw_defs);
+	it.words = 0;
+	it.lat = 0;
+	unsigned end = i + 1;
+	if (group[i] >= 0)
+	  while (end != n && group[end] == group[i])
+	    ++end;
+	for (unsigned k = i; k != end; ++k)
+	  {
+	    it.members.push_back (k);
+	    it.uses |= all[k].regs.uses;
+	    it.raw_defs |= all[k].raw_defs;
+	    it.words += all[k].words;
+	    if (all[k].lat > it.lat)
+	      it.lat = all[k].lat;
+	  }
+	items.push_back (std::move (it));
+	i = end;
+      }
+  }
+  const unsigned m = items.size ();
+
+  /* Item-granularity seqs for the engine: aggregated register sets
+     through the established dependence classification (latency
+     conservative at the item maximum -- refusing-direction: an
+     overestimated delta only spaces the placement wider).  The INTRA
+     matrix carries the full storage classification (within one
+     iteration the physical registers are what they are); the CROSS
+     matrix carries only the constraints that survive the rotation --
+     interactions through registers LIVE INTO THE ROW (invariants and
+     loop-carried values, which no rotation renames).  Everything else
+     wrapping the kernel onto itself is storage the expansion's whole
+     purpose is to rotate away; the optimism is candidate-generation
+     only (the exact acceptance model, the legality belt, and the
+     producer-lockstep belt judge the realized order downstream).  */
+  HARD_REG_SET nonrot;
+  CLEAR_HARD_REG_SET (nonrot);
+  for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+    if (REGNO_REG_SET_P (df_get_live_in (bb), r))
+      SET_HARD_REG_BIT (nonrot, r);
+  rvtt_timing::seq s, cross;
+  s.ops.resize (m);
+  s.dep.resize (m * m);
+  cross.dep.resize (m * m);
+  for (unsigned a = 0; a != m; ++a)
+    {
+      s.ops[a].words = items[a].words;
+      s.ops[a].lat = items[a].lat;
+      s.ops[a].entry_pin = 0;
+      HARD_REG_SET da = items[a].raw_defs;
+      HARD_REG_SET ua = items[a].uses;
+      da &= nonrot;
+      ua &= nonrot;
+      for (unsigned b = 0; b != m; ++b)
+	{
+	  s.dep[a * m + b] = (unsigned char) rvtt_timing::classify_dependence
+	    (hard_reg_set_intersect_p (items[a].raw_defs, items[b].uses)
+	     || hard_reg_set_intersect_p (items[a].raw_defs,
+					  items[b].raw_defs),
+	     hard_reg_set_intersect_p (items[a].uses, items[b].raw_defs));
+	  cross.dep[a * m + b]
+	    = (unsigned char) rvtt_timing::classify_dependence
+	      (hard_reg_set_intersect_p (da, items[b].uses)
+	       || hard_reg_set_intersect_p (da, items[b].raw_defs),
+	       hard_reg_set_intersect_p (ua, items[b].raw_defs));
+	}
+    }
+  cross.ops = s.ops;
+  rvtt_timing::mod_prob prob = rvtt_timing::make_mod_prob (s, cross);
+
+  /* Value-lifetime problem for the expansion pricing: RAW flow only.
+     The placement problem above must keep the merged RAW/WAW storage
+     constraints (within one iteration the physical registers are what
+     they are), but kmin and the live-copy demand price what the
+     ROTATION must supply -- value copies (Lam's definition); a
+     WAW-only span is storage the renames dissolve, and counting it
+     would refuse expansions the rename service can trivially fit.
+     Fail-closed: an optimistic count here can only admit a candidate
+     the legality/lockstep belts and the exact acceptance then judge.  */
+  rvtt_timing::seq raws, rawc;
+  raws.ops = s.ops;
+  rawc.ops = s.ops;
+  raws.dep.assign (m * m, (unsigned char) rvtt_timing::DEP_NONE);
+  rawc.dep.assign (m * m, (unsigned char) rvtt_timing::DEP_NONE);
+  {
+    /* Value flow is nearest-definition flow, not register-mask
+       intersection: the allocator's register reuse would otherwise
+       alias distinct values into one endless "lifetime" (a late
+       reader of a REUSED register is not a reader of the early
+       value).  */
+    std::vector<unsigned> item_of (n, 0);
+    for (unsigned a = 0; a != m; ++a)
+      for (unsigned k : items[a].members)
+	item_of[k] = a;
+    for (unsigned v = 0; v != n; ++v)
+      for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+	{
+	  if (!TEST_HARD_REG_BIT (all[v].regs.uses, r))
+	    continue;
+	  int producer = -1;
+	  for (unsigned j = v; j-- != 0;)
+	    if (TEST_HARD_REG_BIT (all[j].raw_defs, r))
+	      {
+		producer = (int) j;
+		break;
+	      }
+	  if (producer >= 0)
+	    raws.dep[item_of[producer] * m + item_of[v]]
+	      = (unsigned char) rvtt_timing::DEP_LATENCY;
+	  else
+	    /* Upward-exposed use: a loop-carried value when the row
+	       itself redefines the register later (true iteration-
+	       distance-1 flow), an invariant otherwise (no producer
+	       edge; its register is in NONROT either way).  */
+	    for (unsigned j = v + 1; j != n; ++j)
+	      if (TEST_HARD_REG_BIT (all[j].raw_defs, r))
+		{
+		  rawc.dep[item_of[j] * m + item_of[v]]
+		    = (unsigned char) rvtt_timing::DEP_LATENCY;
+		  break;
+		}
+	}
+  }
+  rvtt_timing::mod_prob prob_raw = rvtt_timing::make_mod_prob (raws, rawc);
+  int res = rvtt_timing::resmii (prob);
+  int rec = rvtt_timing::recmii (prob);
+  int mii = res > rec ? res : rec;
+  if (dump_file)
+    {
+      unsigned omega1 = 0;
+      for (unsigned k = 0; k != prob.edges.size (); ++k)
+	omega1 += prob.edges[k].omega;
+      fprintf (dump_file, "Crossrow mve-expand model: bb %d items=%u "
+	       "ResMII=%d RecMII=%d cross-edges=%u\n",
+	       bb->index, m, res, rec, omega1);
+    }
+
+  /* The greedy pairing candidate this arm must strictly beat at the
+     final compare (the shipping selection when the arm refuses); the
+     PLACEMENT bound is the baseline only -- the greedy candidate is
+     priced on the pre-rotation state, and the rotation renames below
+     (the service's temporal tier especially) can lower the realized
+     II below orders the pre-rotation state could ever express.  */
+  int crp_ii = crp_model_ii (all, group);
+  int bound = (base_ii - 1) / 2;	/* realized II ~ 2 * place-II */
+  if (rec < 0 || mii > bound)
+    {
+      rvtt_refuse (RVTT_REF_MVE_EXPAND_NO_II_DECREASE, dump_file,
+		   "Crossrow mve-expand refused: mve-expand-no-ii-decrease "
+		   "in bb %d (MII %d, place bound %d)\n",
+		   bb->index, mii, bound);
+      return false;
+    }
+  /* The expansion demand is priced exactly as stage 1 prices it: peak
+     simultaneously-live value copies vs the file net of loop-live
+     invariants (live into the row, defined by no kernel node).  */
+  unsigned invariants = 0;
+  for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+    {
+      if (!REGNO_REG_SET_P (df_get_live_in (bb), r))
+	continue;
+      bool defined = false;
+      for (unsigned i = 0; i != n && !defined; ++i)
+	defined = TEST_HARD_REG_BIT (all[i].raw_defs, r);
+      if (!defined)
+	++invariants;
+    }
+  unsigned capacity = rvtt_pressure_capacity ();
+  unsigned net = capacity > invariants ? capacity - invariants : 0;
+
+  /* Lam's smallest-fitting-II rule: place at each II from MII up to
+     the bound and take the FIRST placement whose expansion fits --
+     raising the II shortens the overlap, so the live-copy demand only
+     falls; a placement whose demand does not fit at the lowest II may
+     fit one slot higher and still beat the greedy candidate.  Refusal
+     naming keeps the doorway fact of the LOWEST placed II (the
+     8-LREG-wall census convention).  */
+  int budget = riscv_tt_ims_budget > 0 ? (int) riscv_tt_ims_budget
+					: 8 * (int) m;
+  rvtt_timing::mod_placement pl;
+  int kmin = 0;
+  unsigned demand = 0;
+  bool any_budget_exhausted = false, fits = false;
+  int first_kmin = 0;
+  unsigned first_demand = 0;
+  int first_ii = 0;
+  for (int ii = mii; ii <= bound && !fits; ++ii)
+    {
+      rvtt_timing::mod_placement at
+	= rvtt_timing::ims_schedule (prob, ii, ii, budget);
+      if (!at.scheduled)
+	{
+	  any_budget_exhausted |= at.budget_exhausted;
+	  continue;
+	}
+      int k = rvtt_timing::mve_kmin (prob_raw, at);
+      unsigned d = rvtt_timing::mve_live_demand (prob_raw, at);
+      if (k == 1)
+	{
+	  /* No lifetime exceeds this placement's II: nothing to expand
+	     at or above it.  When NO lower II owed an expansion this is
+	     simply not a stage-2 row (a dump note, not a refusal --
+	     the established candidates own that ground); when a lower
+	     II did owe one, fall through so its unfittable demand is
+	     adjudicated by name (the doorway fact).  */
+	  if (!first_ii && dump_file)
+	    fprintf (dump_file, "Crossrow mve-expand: bb %d kmin=1 at "
+		     "place-II=%d -- no expansion owed, greedy candidate "
+		     "proceeds\n", bb->index, at.ii);
+	  if (!first_ii)
+	    return false;
+	  break;
+	}
+      if (!first_ii)
+	{
+	  first_ii = at.ii;
+	  first_kmin = k;
+	  first_demand = d;
+	}
+      if (k > 2 || d > net)
+	continue;
+      pl = at;
+      kmin = k;
+      demand = d;
+      fits = true;
+    }
+  if (!fits)
+    {
+      if (first_ii && first_kmin > 2)
+	rvtt_refuse (RVTT_REF_MVE_EXPAND_KMIN_BEYOND_PAIRING, dump_file,
+		     "Crossrow mve-expand refused: "
+		     "mve-expand-kmin-beyond-pairing in bb %d (kmin=%d at "
+		     "place-II=%d)\n", bb->index, first_kmin, first_ii);
+      else if (first_ii)
+	rvtt_refuse (RVTT_REF_MVE_RENAME_EXHAUSTED, dump_file,
+		     "Crossrow mve-expand refused: mve-rename-exhausted "
+		     "in bb %d (kmin=%d demand=%u capacity=%u invariants=%u "
+		     "at place-II=%d)\n",
+		     bb->index, first_kmin, first_demand, capacity,
+		     invariants, first_ii);
+      else if (any_budget_exhausted)
+	rvtt_refuse (RVTT_REF_IMS_BUDGET_EXHAUSTED, dump_file,
+		     "Crossrow mve-expand refused: ims-budget-exhausted "
+		     "in bb %d (MII %d, bound %d, budget %d)\n",
+		     bb->index, mii, bound, budget);
+      else
+	rvtt_refuse (RVTT_REF_MVE_EXPAND_NO_II_DECREASE, dump_file,
+		     "Crossrow mve-expand refused: mve-expand-no-ii-decrease "
+		     "in bb %d (no feasible placement below %d)\n",
+		     bb->index, bound);
+      return false;
+    }
+
+  /* Producer-lockstep reference, captured before any rotation
+     rename.  */
+  std::vector<std::vector<int> > producers_before = mve_producer_map (all);
+
+  /* Rotation renames: every copy-half fresh definition whose register
+     the first iteration also defines is a colliding web the realized
+     interleave cannot ride unrenamed; targets route through the
+     item-#7 service (block-free first, the temporal tier where
+     block-free registers are exhausted -- the service carries the
+     complete legality proof and refuses by name inside).  One attempt
+     per root insn; committed webs are recorded for exact undo.  */
+  std::vector<rvtt_lreg_rename_web> webs;
+  auto undo_webs = [&] ()
+    {
+      for (unsigned i = webs.size (); i--;)
+	rvtt_lreg_rename_web_undo (webs[i]);
+      if (!webs.empty () && dump_file)
+	fprintf (dump_file, "Crossrow mve-expand: undid %zu rotation "
+		 "rename(s) in bb %d\n", webs.size (), bb->index);
+      webs.clear ();
+      ls_refresh_node_regs (all);
+    };
+  /* Rotated register ASSIGNMENT by placement-slot arithmetic (Lam's
+     rotation, kmin = 2): every register's occupancy in the realized
+     steady state is the union of its webs' placement-slot windows
+     (copy B offset by one placement II, the whole pattern repeating
+     every 2*II); a copy-B web moves to the register whose windows are
+     free across the web's own window modulo 2*II.  The arithmetic
+     only CHOOSES the target -- the item-#7 service then carries the
+     complete sequential-order legality proof for the edit (typed
+     effects, span/CC rules, death proof, temporal-tier admission
+     where the target is busy elsewhere in the block, post-commit
+     re-verify), refusing by name inside; and the realized-order
+     acceptance downstream prices whatever could not rotate.  */
+  const long period = 2 * (long) pl.ii;
+  std::vector<unsigned> item_of_node (n, 0);
+  for (unsigned a = 0; a != m; ++a)
+    for (unsigned k : items[a].members)
+      item_of_node[k] = a;
+  auto node_slot = [&] (unsigned v) -> long	/* v indexes ALL */
+    {
+      unsigned half = v < n ? 0 : 1;
+      return pl.sigma[item_of_node[v - half * n]] + (long) half * pl.ii;
+    };
+  /* Occupancy windows per register over the CURRENT doubled row.  */
+  struct mve_win { long lo, hi; };
+  std::vector<std::vector<mve_win> > occ (SFPU_REG_LAST + 1);
+  auto add_windows = [&] ()
+    {
+      for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+	{
+	  occ[r].clear ();
+	  for (unsigned half = 0; half != 2; ++half)
+	    {
+	      bool any = false;
+	      long lo = 0, hi = 0;
+	      for (unsigned k = 0; k != n; ++k)
+		{
+		  unsigned v = half * n + k;
+		  if (!TEST_HARD_REG_BIT (all[v].regs.uses, r)
+		      && !TEST_HARD_REG_BIT (all[v].raw_defs, r))
+		    continue;
+		  long s = node_slot (v);
+		  long e = s + all[v].words + all[v].lat;
+		  if (!any)
+		    {
+		      lo = s;
+		      hi = e;
+		      any = true;
+		    }
+		  else
+		    {
+		      if (s < lo)
+			lo = s;
+		      if (e > hi)
+			hi = e;
+		    }
+		}
+	      if (any)
+		occ[r].push_back ({lo, hi});
+	    }
+	}
+    };
+  auto wins_conflict = [&] (const mve_win &a, const mve_win &b) -> bool
+    {
+      for (int k = -1; k != 2; ++k)
+	{
+	  long b1 = b.lo + k * period, b2 = b.hi + k * period;
+	  if (a.lo <= b2 && b1 <= a.hi)
+	    return true;
+	}
+      return false;
+    };
+  for (unsigned k = 0; k != n; ++k)
+    for (unsigned r = SFPU_REG_FIRST; r <= SFPU_REG_LAST; ++r)
+      {
+	if (!TEST_HARD_REG_BIT (all[n + k].raw_defs, r)
+	    || TEST_HARD_REG_BIT (all[n + k].regs.uses, r))
+	  continue;		/* not a fresh-definition root */
+	bool collision = false;
+	for (unsigned j = 0; j != n && !collision; ++j)
+	  collision = TEST_HARD_REG_BIT (all[j].raw_defs, r);
+	if (!collision)
+	  continue;
+	/* The copy web's own realized window: the fresh def through the
+	   last copy-half touch before the next fresh redefinition.  */
+	mve_win w;
+	w.lo = node_slot (n + k);
+	w.hi = w.lo + all[n + k].words + all[n + k].lat;
+	for (unsigned j = k + 1; j != n; ++j)
+	  {
+	    unsigned v = n + j;
+	    if (TEST_HARD_REG_BIT (all[v].raw_defs, r)
+		&& !TEST_HARD_REG_BIT (all[v].regs.uses, r))
+	      break;		/* next fresh writer: web ends */
+	    if (TEST_HARD_REG_BIT (all[v].regs.uses, r)
+		|| TEST_HARD_REG_BIT (all[v].raw_defs, r))
+	      {
+		long e = node_slot (v) + all[v].words + all[v].lat;
+		if (e > w.hi)
+		  w.hi = e;
+	      }
+	  }
+	add_windows ();
+	for (unsigned t = SFPU_REG_FIRST; t <= SFPU_REG_LAST; ++t)
+	  {
+	    if (t == r || fixed_regs[t] || TEST_HARD_REG_BIT (nonrot, t))
+	      continue;
+	    bool free_across = true;
+	    for (const mve_win &o : occ[t])
+	      if (wins_conflict (w, o))
+		{
+		  free_across = false;
+		  break;
+		}
+	    if (!free_across)
+	      continue;
+	    rvtt_lreg_rename_web web;
+	    if (!rvtt_lreg_rename_chain (bb, all[n + k].insn,
+					 (int) (t - SFPU_REG_FIRST), &web))
+	      continue;		/* refused by name in the service; the
+				   next slot-free target may prove */
+	    webs.push_back (web);
+	    ls_refresh_node_regs (all);
+	    if (dump_file)
+	      fprintf (dump_file, "Crossrow mve-expand: rotation rename "
+		       "L%d -> L%d at uid=%d in bb %d (window %ld..%ld "
+		       "mod %ld)\n",
+		       web.old_l, web.new_l, INSN_UID (all[n + k].insn),
+		       bb->index, w.lo, w.hi, period);
+	    break;
+	  }
+	break;			/* one rename attempt per root insn */
+      }
+
+  /* Deliberate mis-rotation under the testing knob: the last committed
+     web's WRITER is re-pointed back at its old register while its
+     readers keep the new one -- the classic partial-web wrong code the
+     belt below must catch (the red/green proof).  */
+  bool sabotaged = false;
+  rtx_insn *sab_insn = nullptr;
+  unsigned sab_oldr = 0, sab_newr = 0;
+  if (riscv_tt_mve_expand_sabotage && !webs.empty ())
+    {
+      const rvtt_lreg_rename_web &w = webs.back ();
+      sab_insn = w.insns[0];
+      sab_oldr = SFPU_REG_FIRST + w.new_l;
+      sab_newr = SFPU_REG_FIRST + w.old_l;
+      ls_queue_reg_replacements (sab_insn, &PATTERN (sab_insn), sab_oldr,
+				 sab_newr);
+      if (apply_change_group ())
+	{
+	  df_insn_rescan (sab_insn);
+	  ls_refresh_node_regs (all);
+	  sabotaged = true;
+	}
+    }
+  auto undo_sabotage = [&] ()
+    {
+      if (!sabotaged)
+	return;
+      ls_queue_reg_replacements (sab_insn, &PATTERN (sab_insn), sab_newr,
+				 sab_oldr);
+      bool ok = apply_change_group ();
+      gcc_assert (ok);
+      df_insn_rescan (sab_insn);
+      ls_refresh_node_regs (all);
+      sabotaged = false;
+    };
+
+  /* The producer-lockstep belt: every consumer's producer multiset
+     must be exactly what it was -- a value-preserving whole-web rename
+     cannot change it; a mis-rotated or partial web must.  Independent
+     of the dependence engine (recomputed from the raw register sets).  */
+  std::vector<std::vector<int> > producers_after = mve_producer_map (all);
+  if (producers_after != producers_before)
+    {
+      gcc_checking_assert (sabotaged);	/* the service cannot diverge */
+      undo_sabotage ();
+      undo_webs ();
+      rvtt_refuse (RVTT_REF_MVE_EXPAND_LOCKSTEP_DIVERGENCE, dump_file,
+		   "Crossrow mve-expand refused: "
+		   "mve-expand-lockstep-divergence in bb %d (renames "
+		   "undone)\n", bb->index);
+      return false;
+    }
+  /* A clean lockstep under the sabotage knob means the sabotage edit
+     never applied; drop it either way before judging the order.  */
+  undo_sabotage ();
+
+  /* Realized order: both halves' items at their modulo issue slots,
+     the copy offset by one placement II; members emit contiguously in
+     original interior order (atoms stay indivisible).  The emission is
+     a SLOT-KEYED TOPOLOGICAL walk over the doubled row's item
+     dependences, re-aggregated AFTER the rotation renames: an item
+     issues at its placement slot unless a dependence that survived the
+     renames still holds it back (an unrenamed shared web), in which
+     case it waits for its predecessors -- legal by construction, and
+     the exact acceptance below prices whatever the surviving storage
+     cost the placement.  */
+  struct mve_ditem
+  {
+    HARD_REG_SET uses, defs;
+    long slot;
+    unsigned half, idx;
+  };
+  std::vector<mve_ditem> ditems (2 * m);
+  for (unsigned half = 0; half != 2; ++half)
+    for (unsigned a = 0; a != m; ++a)
+      {
+	mve_ditem &d = ditems[half * m + a];
+	d.half = half;
+	d.idx = a;
+	CLEAR_HARD_REG_SET (d.uses);
+	CLEAR_HARD_REG_SET (d.defs);
+	for (unsigned k : items[a].members)
+	  {
+	    d.uses |= all[half * n + k].regs.uses;
+	    d.defs |= all[half * n + k].raw_defs;
+	  }
+	d.slot = pl.sigma[a] + (long) half * pl.ii;
+      }
+  auto ditem_dep = [&] (unsigned j, unsigned i) -> bool
+    {
+      /* Original-order dependence j -> i (j earlier).  */
+      return hard_reg_set_intersect_p (ditems[j].defs, ditems[i].uses)
+	     || hard_reg_set_intersect_p (ditems[j].defs, ditems[i].defs)
+	     || hard_reg_set_intersect_p (ditems[j].uses, ditems[i].defs);
+    };
+  candidate_out->clear ();
+  std::vector<bool> emitted (2 * m, false);
+  for (unsigned step = 0; step != 2 * m; ++step)
+    {
+      int best = -1;
+      for (unsigned i = 0; i != 2 * m; ++i)
+	{
+	  if (emitted[i])
+	    continue;
+	  bool ready = true;
+	  for (unsigned j = 0; j != i && ready; ++j)
+	    if (!emitted[j] && ditem_dep (j, i))
+	      ready = false;
+	  if (!ready)
+	    continue;
+	  if (best < 0
+	      || ditems[i].slot < ditems[best].slot
+	      || (ditems[i].slot == ditems[best].slot
+		  && (ditems[i].half < ditems[best].half
+		      || (ditems[i].half == ditems[best].half
+			  && ditems[i].idx < ditems[best].idx))))
+	    best = (int) i;
+	}
+      gcc_assert (best >= 0);	/* original order is always admissible */
+      emitted[best] = true;
+      for (unsigned k : items[ditems[best].idx].members)
+	candidate_out->push_back (all[ditems[best].half * n + k].insn);
+    }
+
+  /* Legality belt: original-order dependences that survive the
+     rotation renames must keep their direction (an unrenamed shared
+     web serializes the copies -- the realized interleave cannot ride
+     it).  */
+  if (!crp_order_legal_p (all, *candidate_out))
+    {
+      undo_webs ();
+      rvtt_refuse (RVTT_REF_MVE_EXPAND_ORDER_HAZARD, dump_file,
+		   "Crossrow mve-expand refused: mve-expand-order-hazard "
+		   "in bb %d (renames undone)\n", bb->index);
+      return false;
+    }
+
+  /* The realized kernel's steady state, judged by the one wrapped
+     acceptance model; it must strictly beat both the greedy candidate
+     and the doubled sequential baseline.  */
+  std::vector<int> idx;
+  for (rtx_insn *ci : *candidate_out)
+    for (unsigned i = 0; i != all.size (); ++i)
+      if (all[i].insn == ci)
+	{
+	  idx.push_back ((int) i);
+	  break;
+	}
+  int mve_ii = idx.size () == all.size () ? ls_cyclic_ii (all, idx)
+					   : INT_MAX;
+  if (mve_ii >= (crp_ii < base_ii ? crp_ii : base_ii))
+    {
+      undo_webs ();
+      rvtt_refuse (RVTT_REF_MVE_EXPAND_NO_II_DECREASE, dump_file,
+		   "Crossrow mve-expand refused: mve-expand-no-ii-decrease "
+		   "in bb %d (realized %d vs greedy %d, base %d)\n",
+		   bb->index, mve_ii, crp_ii, base_ii);
+      return false;
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "Crossrow mve-expand: bb %d items=%u "
+	     "ResMII=%d RecMII=%d place-II=%d kmin=%d demand=%u "
+	     "invariants=%u renames=%zu realized II %d (greedy %d, "
+	     "base %d)\n",
+	     bb->index, m, res, rec, pl.ii, kmin, demand, invariants,
+	     webs.size (), mve_ii, crp_ii, base_ii);
+  *ii_out = mve_ii;
+  *place_ii_out = pl.ii;
+  *webs_out = webs;
+  return true;
+}
+
 /* The transform proper.  Returns true when the pairing committed.  */
 
 static bool
@@ -4035,11 +4775,42 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   if (riscv_tt_opt_crossrow_shared_reload > 0)
     crp_shared_reload (bb, lp, all, group, copies, n, &shared_reload);
 
+  /* Phase 2e-mve (item #5 stage 2, sub-flag): the kernel-unroll
+     realization -- an item-level modulo placement of the single kernel
+     orders the doubled row with the copy offset by one placement II,
+     rotation renames routed through the item-#7 service.  Fail-closed:
+     every refusal inside restores the state exactly and the greedy
+     path below proceeds untouched; a success hands over the realized
+     order plus the committed service webs (undone exactly on any later
+     belt's refusal).  */
+  std::vector<rvtt_lreg_rename_web> mve_webs;
+  auto crp_undo_mve_webs = [&mve_webs, &all] ()
+    {
+      for (unsigned i = mve_webs.size (); i--;)
+	rvtt_lreg_rename_web_undo (mve_webs[i]);
+      if (!mve_webs.empty ())
+	{
+	  mve_webs.clear ();
+	  ls_refresh_node_regs (all);
+	}
+    };
+  bool used_mve = false;
+  int mve_ii = 0, mve_place_ii = 0;
+  std::vector<rtx_insn *> candidate;
+  if (riscv_tt_opt_mve_expand)
+    used_mve = crp_mve_expand_arm (bb, all, group, n, base_ii,
+				   !seed_insns.empty ()
+				   || shared_reload.reg != ~0u,
+				   &candidate, &mve_ii, &mve_place_ii,
+				   &mve_webs);
+
   /* Phase 2e: candidate order -- the dependence-legal global item
      schedule (atoms indivisible, unrenamed shared webs serialize).  */
-  std::vector<rtx_insn *> candidate = crp_candidate_order (all, group);
+  if (!used_mve)
+    candidate = crp_candidate_order (all, group);
   if (!crp_order_legal_p (all, candidate))
     {
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4047,6 +4818,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     }
   if (!crp_shared_reload_order_sound_p (shared_reload, candidate))
     {
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4065,6 +4837,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     ? ls_cyclic_ii (all, cand_index) : base_ii;
   if (cand_ii >= base_ii)
     {
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4110,6 +4883,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   if (pads_after > pads_before)
     {
       crp_restore_chain ();
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4126,6 +4900,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       && all.size () + pads_after > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
     {
       crp_restore_chain ();
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4143,6 +4918,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   if (!apply_change_group ())
     {
       crp_restore_chain ();
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4169,6 +4945,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
       df_insn_rescan (lp.separator);
       df_insn_rescan (lp.counter);
       crp_restore_chain ();
+      crp_undo_mve_webs ();
       ls_undo_renames (renames);
       crp_delete_seeds ();
       crp_delete_copies ();
@@ -4177,14 +4954,20 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     }
 
   if (dump_file)
-    fprintf (dump_file, "Crossrow pairing: bb %d rows=2 nodes=%zu "
-	     "II %d -> %d renames=%zu seeds=%zu dst-addr=%ld/%ld "
-	     "step=%ld->%ld trips=%ld->%ld target=bh\n",
-	     bb->index, all.size (), base_ii, cand_ii, renames.size (),
-	     seed_insns.size (),
-	     (long) lp.dst_addr, (long) (lp.dst_addr + lp.dst_step),
-	     (long) lp.dst_step, (long) (2 * lp.dst_step),
-	     (long) lp.trips, (long) (lp.trips / 2));
+    {
+      fprintf (dump_file, "Crossrow pairing: bb %d rows=2 nodes=%zu "
+	       "II %d -> %d renames=%zu seeds=%zu dst-addr=%ld/%ld "
+	       "step=%ld->%ld trips=%ld->%ld target=bh\n",
+	       bb->index, all.size (), base_ii, cand_ii, renames.size (),
+	       seed_insns.size (),
+	       (long) lp.dst_addr, (long) (lp.dst_addr + lp.dst_step),
+	       (long) lp.dst_step, (long) (2 * lp.dst_step),
+	       (long) lp.trips, (long) (lp.trips / 2));
+      if (used_mve)
+	fprintf (dump_file, "Crossrow pairing mve-expand committed: bb %d "
+		 "kmin=2 place-II=%d rotation-renames=%zu realized II %d\n",
+		 bb->index, mve_place_ii, mve_webs.size (), mve_ii);
+    }
   return true;
 }
 

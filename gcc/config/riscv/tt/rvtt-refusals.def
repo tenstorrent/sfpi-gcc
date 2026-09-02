@@ -947,6 +947,24 @@ RVTT_REFUSAL (MULTIBB_LOOP,
 RVTT_REFUSAL (MULTIRESULT_COMPANION_SPLIT,
   "multiresult-companion-split",
   "dump; first seen in rtl-rvtt-replay.cc")
+RVTT_REFUSAL (MVE_EXPAND_KMIN_BEYOND_PAIRING,
+  "mve-expand-kmin-beyond-pairing",
+  "item #5 stage 2: the kernel placement's value lifetimes demand more than two kernel copies (kmin > 2); the counted-kernel realization is pairwise (one copy, doubled row step, halved countdown) and refuses deeper unrolls by name -- the corpus-wide census fact is kmin = 2 everywhere the bookkeeping tier fires (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (MVE_EXPAND_LOCKSTEP_DIVERGENCE,
+  "mve-expand-lockstep-divergence",
+  "item #5 stage 2: the producer-lockstep belt caught a rename whose value web diverged -- some consumer's nearest-preceding producer changed identity after the rotation renames (a mis-rotated register would read the other iteration's value); every rename is undone exactly and the unrealized pairing kept byte-identically (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (MVE_EXPAND_NO_II_DECREASE,
+  "mve-expand-no-ii-decrease",
+  "item #5 stage 2: the realized (placement-ordered, rotation-renamed) doubled kernel does not strictly beat the pairing's own greedy candidate under the wrapped steady-state acceptance model; the realization's renames are undone exactly and the established pairing candidate proceeds untouched (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (MVE_EXPAND_ORDER_HAZARD,
+  "mve-expand-order-hazard",
+  "item #5 stage 2: the realized order would reverse an original-order dependence that survives the rotation renames (an unrenamed shared web serializes the copies); fail-closed legality belt -- the realization refuses and the pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (MVE_EXPAND_ROW_MUTATED,
+  "mve-expand-row-mutated",
+  "item #5 stage 2: the doubled row is no longer the pure textual pairing (preservation seeds inserted or shared-reload words deleted), so the copy-mirror index arithmetic the realization's item placement rests on does not hold; refused by name, the mutated pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
+RVTT_REFUSAL (MVE_EXPAND_ROW_NOT_COUNTED_KERNEL,
+  "mve-expand-row-not-counted-kernel",
+  "item #5 stage 2: a region placement owes a fitting kernel expansion (kmin > 1, demand within capacity) but the row is not the counted replay-formable kernel the realization seam admits (the cross-row pairing shape: one load/store pair, flat atoms, typed row step, canonical countdown) -- the expansion cannot be performed without breaking replay formation, so it is adjudicated by name and the flat order still competes (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_RENAME_EXHAUSTED,
   "mve-rename-exhausted",
   "item #5: the IMS placement's value lifetimes exceed the II (kernel copies owed -- modulo variable expansion) but the rename resources do not fit: the steady-state live-copy demand exceeds the register file net of loop-live invariants, or the region rename search already exhausted the free LREGs (the 8-LREG wall).  The EXPANSION refuses; the flat IMS order is still judged by the wrapped acceptance model, which cannot ride the unrealized overlap (rtl-rvtt-schedule.cc)")
