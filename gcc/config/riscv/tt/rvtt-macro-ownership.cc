@@ -35,7 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-macro-ownership.h"
 #include "rvtt-raw-boundary.h"
 
-/* ---------------- RTL ownership lattice (planner, WP4+) -------------- */
+/* ---------------- RTL ownership lattice (planner) ------------------- */
 
 rvtt_ownership_state
 rvtt_ownership_state::pessimum ()

@@ -1,4 +1,4 @@
-// WP8 step 4, dynamic form: the face loop's body region forms with the
+// Typecast four-face shape, dynamic form: the face loop's body region forms with the
 // configuration hoisted once into the guarded structural preheader and
 // the all-lanes proof taken from the dominating enable outside the loop
 // (no Tensix issue sits between it and the loop entry).  Each trip is

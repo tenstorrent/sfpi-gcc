@@ -3,7 +3,7 @@
 // NEVER-hang witness twin of the no-exec-record composition refusal:
 // the SAME in-nest placement with the capture recorded WITH execution
 // (TTREPLAY load=1 exec=1) keeps firing -- exec-while-record composition
-// carries fleet-wide silicon witnesses (minmax, sdpa, where, typecast,
+// carries fleet-wide hardware witnesses (minmax, sdpa, where, typecast,
 // lcm ON-set in-body re-record), and the guard must key on exec=0,
 // never on the presence of replay.
 // { dg-final { scan-rtl-dump-not "mod-write-noexec-record-composition-unaudited" "rvtt_dst_autoincr" } }

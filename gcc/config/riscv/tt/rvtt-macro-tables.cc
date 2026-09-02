@@ -20,8 +20,9 @@ along with GCC; see the file COPYING3.  If not see
 /* Pure data + pure field packing.  No IR, RTL, or GCC-internal types:
    this object must stay compilable standalone so the capability data can
    be unit-tested against the frozen-pass expectations without a toolchain
-   build (see rvtt-macro-tables-test.cc).  Provenance for every raw word:
-   NOTES-wp6-prep.md in this directory.  */
+   build (see rvtt-macro-tables-test.cc).  Every raw word below was
+   transcribed from the frozen pass or the vendor kernels, with its
+   provenance audited constant by constant (see rvtt-macro-tables.h).  */
 
 #include "rvtt-macro-tables.h"
 
@@ -496,8 +497,8 @@ encode_template (const caps *c, const template_spec &t, uint32_t *word)
      destination selector: SFPCONFIG.md / SFPLOADMACRO.md name
      InstructionTemplate[i] through VD = 12 + i (the production
      handwritten inits write templates via that VD; the frozen shapes
-     exercised 0xc/0xd, widened to the full architectural 0xc..0xf at
-     WP12).  */
+     exercised 0xc/0xd, later widened to the full architectural
+     0xc..0xf).  */
   if (t.dest_sel > 7 && (t.dest_sel < 0xc || t.dest_sel > 0xf))
     return false;
   /* SFP_STOCH_RND (0x8e) has a different field layout above bit 12
@@ -567,8 +568,7 @@ encode_misc_select (const caps *c, unsigned store_mod0, uint32_t *word)
   if (!c || store_mod0 > 0xf)
     return false;
   /* rtl-rvtt-loadmacro.cc:1572: misc = 0x700 | StoreMod0 (select shape;
-     bits 10:8 hypothesis: per-macro delay-mode bits, see
-     NOTES-wp6-prep.md).  */
+     bits 10:8 remain a hypothesis: per-macro delay-mode bits).  */
   *word = 0x700u | store_mod0;
   return true;
 }
@@ -576,8 +576,8 @@ encode_misc_select (const caps *c, unsigned store_mod0, uint32_t *word)
 unsigned
 cc_visibility_lag ()
 {
-  /* CRAQ tensix_retire_load_macro_events: "CC results computed by a
-     retiring event become architecturally visible to instructions
+  /* The reference simulator's retirement model: "CC results computed
+     by a retiring event become architecturally visible to instructions
      issued in the cycle after the event executed, matching the
      hardware's flag-forwarding latency."  The frozen select calendar
      relied on exactly this lag (the payload load issued one slot after
@@ -591,13 +591,12 @@ store_lane_mask_live_at_execution ()
   /* SFPLOADMACRO.md StoreSubUnit extras latch only Addr, the Mod0
      source, and the backdoor-load bit; the lane predicate keeps
      SFPSTORE's live evaluation at execution (a same-cycle CC retire is
-     not yet visible; an earlier-cycle one is).  Proven on BH silicon
-     (Where adjudication 2026-08-17) and modeled by the corrected CRAQ
-     executor (craq-sim 9f324140 tensix_retire_load_macro_events: the
+     not yet visible; an earlier-cycle one is).  Proven on Blackhole
+     hardware and modeled by the corrected reference simulator (the
      store event reads cc/cc_en from its retirement group's pre-write
      snapshot).  The prior launch-latched reading
-     (store_lane_mask_latched_at_launch) was an S2-only model fact the
-     adjudication invalidated.  */
+     (store_lane_mask_latched_at_launch) was a simulator-only model
+     fact the hardware adjudication invalidated.  */
   return true;
 }
 
@@ -662,9 +661,10 @@ dst_step8_setrwc_word ()
   /* TT_OP_{WH,BH}_SETRWC (0x37): clear_ab_vld << 22 | rwc_cr << 18
      | rwc_d << 14 | rwc_b << 10 | rwc_a << 6 | BitMask, with
      (0, CR=4, D=8, B=0, A=0, mask=4): the CR-mode Dst += 8 counter step.
-     Two of these advance one face (typed rvtt_ttdstface, WP1); the same
-     value was the frozen pass's magic word (rtl-rvtt-loadmacro.cc:161,
-     deleted at WP1).  */
+     Two of these advance one face (the typed rvtt_ttdstface insn);
+     the same value was the frozen pass's magic word
+     (rtl-rvtt-loadmacro.cc:161, deleted when the typed insn replaced
+     it).  */
   return (0x37u << 24) | (4u << 18) | (8u << 14) | 4u;	/* 0x37120004 */
 }
 
@@ -707,8 +707,8 @@ setrwc_decode (uint32_t word, setrwc_fields *f)
 /*  (S1) ISA SFPLOADMACRO.md (BlackholeA0 documentation) -- the       */
 /*       SequenceBits format, the sub-unit legality table, the	      */
 /*       (dag)/(ddag) rules, the Misc field layout;			      */
-/*  (S2) craq-sim f80a8d64 src/sfploadmacro_events.h +		      */
-/*       TENSIX_EXECUTE_SFPLOADMACRO -- the executable model the CRAQ */
+/*  (S2) the pinned reference simulator's SFPLOADMACRO event model    */
+/*       and executor -- the executable model the bit-exactness       */
 /*       gates run against (ready = issue + 1 + delay,		      */
 /*       retire-before-issue, build_dispatch routing classes);	      */
 /*  (S3) tt_llk_blackhole ckernel_sfpu_mul_int.h _init_mul_int_ --    */
@@ -866,15 +866,15 @@ opcode_reads_vd (const caps *c, uint8_t opcode)
 bool
 opcode_l16_target_proven (const caps *c, uint8_t opcode)
 {
-  /* The ORACLE-PROVEN LReg16-target evaluator set (lane IS, F1 honest
-     fix, 2026-08-29).  An event redirected to the LReg16 staging
+  /* The ORACLE-PROVEN LReg16-target evaluator set.  An event
+     redirected to the LReg16 staging
      register has no encodable VD, so it executes through the direct
      template evaluator -- and that path is proven ONLY for the opcode
-     set the reviewed oracle implements (craq-sim
-     execute_load_macro_template_direct).  The first shape outside the
-     set to reach formation -- the int-abs knob's SFPABS (0x7d) row,
+     set the reviewed oracle implements (the reference simulator's
+     direct template evaluator).  The first shape outside the
+     set to reach formation -- an SFPABS (0x7d) row
      admitted by the entry-ambient derivation -- was adjudicated WRONG
-     on BH silicon (device corr FAIL, laneIS absint32 int-abs witness)
+     on Blackhole hardware (device correctness FAIL)
      and refused by the oracle (UnsupportedFunctionality), so the old
      assumption that any simple-unit template can stage via LReg16 is
      architecturally false.  Opcodes outside this set keep the VD-direct

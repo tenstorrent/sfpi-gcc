@@ -1,6 +1,6 @@
 // P0/D1: a lanes-off SFPENCC ahead of a formable eight-row Min/Max
 // region is NOT an ambient all-lanes enable.  The written lane state is
-// outside the CRAQ-proven store/misc envelope (the deleted quarantined
+// outside the simulator-proven store/misc envelope (the deleted quarantined
 // pass required exactly the all-lanes operands and refused this case),
 // so discovery refuses by name, the region keeps no enable, formation
 // refuses the missing proof, and the bytes stay identical to flags-off

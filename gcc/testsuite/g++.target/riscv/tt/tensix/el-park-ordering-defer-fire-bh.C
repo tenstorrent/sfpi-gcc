@@ -1,5 +1,5 @@
-// EL-vs-RESIDENCY ORDERING fire (lane HN, candidates re-positioned by
-// lane HY): a CC-restore loop's IN-REGION invariant immediate (depth
+// EL-vs-RESIDENCY ORDERING fire (candidates re-positioned by
+// class): a CC-restore loop's IN-REGION invariant immediate (depth
 // above zero -- the class whose early hoist forges lane merges and
 // starves the late arbiter, the softplus-fresh anatomy) is
 // EL-hoistable under the audited-narrowing admission, but with the

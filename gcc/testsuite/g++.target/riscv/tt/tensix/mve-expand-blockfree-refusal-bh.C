@@ -1,4 +1,4 @@
-// MVE realization composition doorway (item #5 stage 2): the identical
+// MVE realization composition doorway (modulo variable expansion): the identical
 // fire-twin row WITHOUT -mtt-tensix-optimize-rename-temporal -- the
 // rotation targets need registers the block-free tier cannot supply
 // (every LREG is touched block-wide), so the slot-arithmetic

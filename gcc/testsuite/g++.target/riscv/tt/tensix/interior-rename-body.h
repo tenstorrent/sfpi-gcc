@@ -4,7 +4,7 @@
    popc/store/incrwc behind own the seam).  Inside the region the
    allocator packs the short lifetimes into the load's register --
    the storage collisions the consumer requests chain renames for
-   through the item-#7 service -- and the composed candidate commits
+   through the du-chain rename engine service -- and the composed candidate commits
    on a strict whole-row steady-state II decrease.  */
 void IRN_FN ()
 {

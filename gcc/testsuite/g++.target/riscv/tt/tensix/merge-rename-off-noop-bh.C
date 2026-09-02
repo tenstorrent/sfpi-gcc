@@ -1,4 +1,4 @@
-// MERGE-RENAME off-identity (lane KP, R1(b)): without the class flag
+// MERGE-RENAME off-identity (R1(b)): without the class flag
 // the walk never collects the merge -- the adjudication override alone
 // does nothing (CLASS-B byte-inertness; the flag-off leg is the
 // established lowering verbatim).

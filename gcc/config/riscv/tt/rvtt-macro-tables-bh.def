@@ -18,11 +18,11 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* X-macro data consumed by rvtt-macro-tables.cc.  Every raw word below is
-   transcribed from the frozen Min/Max pass (review SHA 4e045d31d,
-   worktree /localdev/nkapre/sfpi-gcc-minmax-macro, file
-   gcc/config/riscv/tt/rtl-rvtt-loadmacro.cc unless noted) or from the
-   TT_OP_* field tables (sfpu-ops-bh.h).  Provenance and architectural
-   meaning for each value: NOTES-wp6-prep.md.  Descriptor-state words
+   transcribed from the frozen Min/Max pass (the retired
+   rtl-rvtt-loadmacro.cc, preserved in the version-control history;
+   its :N line references below are into that file unless noted) or
+   from the TT_OP_* field tables (sfpu-ops-bh.h), with provenance and
+   architectural meaning audited per constant.  Descriptor-state words
    (templates, sequences, misc) are WH/BH-COMMON by test evidence
    (loadmacro-periodic-minmax-wh.C asserts the identical SFPCONFIG words);
    they appear in both .def files and the unit test asserts the two tables
@@ -36,17 +36,17 @@ along with GCC; see the file COPYING3.  If not see
    : 14)`), consistent with the BH SFPLOAD/SFPSTORE layouts
    (sfpu-ops-bh.h: addr_mode << 13) and with the 3-bit BH
    addr-mode values 6/7 fitting bits 15:13 below InstrMod0 at bit 16.
-   RESOLVED 2026-08-17 (was NOTES-wp6-prep.md 9(a) CONFLICT with the
+   RESOLVED (this was once in conflict with the
    then-stale TT_OP_BH_SFPLOADMACRO << 14, since corrected): three
    independent references agree on << 13 with a 3-bit field --
-   (1) the CRAQ simulator's authoritative decode (craq-sim
-   data/bh/tensix_isa.json SFPLOADMACRO: sfpu_addr_mode "15:13",
+   (1) the reference simulator's authoritative decode (BH decode table
+   SFPLOADMACRO: sfpu_addr_mode "15:13",
    dest_reg_addr "9:0"; wh: "15:14"), semantically consumed by
-   TENSIX_EXECUTE_SFPLOADMACRO's SFPLOAD re-dispatch, so the 8/8 CRAQ
+   its SFPLOAD re-dispatch, so the 8/8 simulator
    validations genuinely discriminate the shift; (2) the production
    TT-Metal LLK (tt_llk_blackhole common/inc/ckernel_ops.h
    TT_OP_SFPLOADMACRO << 13, is_valid (sfpu_addr_mode, 3)); (3) the
-   shipped minmax-final-craq-v2 BH oracle ELF launch words 0x9300E000 /
+   shipped Min/Max reference-oracle ELF launch words 0x9300E000 /
    0x9370C000 (addr modes 7 / 6 in bits 15:13; mode 7 is unrepresentable
    at << 14 without overlapping InstrMod0 bit 16), independently decoded
    the same way by riscv-tt-elf-objdump.  The 10-bit address_bits below
@@ -55,7 +55,7 @@ along with GCC; see the file COPYING3.  If not see
    restriction, not a field width -- see rtl-rvtt-loadmacro.cc).
    No-increment addr mode 7 (:442,579,717,1489); Dst += 2 auto-increment
    addr mode 6 (:503,619,1024-1025).  Owned config dests: the frozen pass
-   exercised {0,1,4,5,6,8} = 0x0173 (:164-169); widened at WP12 to the
+   exercised {0,1,4,5,6,8} = 0x0173 (:164-169); later widened to the
    full LoadMacroConfig class {0..8} = 0x01ff -- SFPCONFIG destinations
    0-3 (InstructionTemplate[0..3]), 4-7 (Sequence[0..3]), and 8 (Misc)
    are one architectural state class (SFPCONFIG.md / SFPLOADMACRO.md
@@ -64,7 +64,7 @@ along with GCC; see the file COPYING3.  If not see
    writes templates 2-3 and Sequence[2-3]) and executed by the
    simulator's single generic decode path.  Ownership is a refusal
    surface: widening only makes foreign-access proofs stricter.  Drain 3 slots (:988-990,1059-1062).
-   Break-even 7 rows (:1123) -- reference data for the WP7 cost-model
+   Break-even 7 rows (:1123) -- reference data for the cost-model
    regression only, never a planner input.  */
 XTT_MACRO_CAPS_SCALARS ("bh", /*n_templates*/4, /*n_sequence_slots*/4,
 			/*delay_bits*/3,
@@ -164,10 +164,11 @@ XTT_MACRO_SEQ_PROGRAM ("select-m2", 2, 0x00000005, 1,
    2.  The whole word is the frozen "ENCC d0" program (:1571); the
    macro index only selects the SFPCONFIG destination (4 + K), which
    the word itself does not encode.  Validated by the generic
-   descriptor-driven CRAQ path (paired BH+WH bit-exact where nodes) and
+   descriptor-driven reference-simulator path (paired BH+WH bit-exact
+   where nodes) and
    the in-tree byte-pinned formation tests; the bit-level word format
-   remains unestablished and the word is carried whole per Sec. 3 of
-   docs/MACRO_PLANNER.md.  */
+   remains unestablished and the word is carried whole (the standing
+   rule for unestablished sequence encodings).  */
 XTT_MACRO_SEQ_PROGRAM ("select-m1-encc", 1, 0x00000005, 1,
 		       SU_SIMPLE, 1, 0, false,
 		       SU_NONE, -1, 0, false,
@@ -183,15 +184,15 @@ XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)  /* :855  */
 XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)  /* :870  */
 /* Select: 0x700 | StoreMod0 (:1572); proven instance StoreMod0 = 6.  */
 XTT_MACRO_MISC_WORD ("select-u16",    0x00000706, true, 6)
-/* Select, launch-sourced store mod0 (WP10 compact 3-slot calendar):
+/* Select, launch-sourced store mod0 (compact 3-slot calendar):
    the shipped handwritten Where protocol's own misc word
    (tt-metal ckernel_sfpu_where.h _init_where_: TTI_SFPCONFIG(0x770, 8, 1),
    "{UsesLoadMod0ForStore=1, WaitForElapsedInstructions=1} for all
-   macros"; simulator tensix.cpp: bit 4+macro selects the launch's own
-   instr_mod0 as the delayed store's format).  Carried as a proven
-   whole word per Sec. 3 of docs/MACRO_PLANNER.md -- the bit layout
-   above 3:0 remains architecturally unestablished; bits 3:0 are inert
-   under launch sourcing.  */
+   macros"; the reference simulator: bit 4+macro selects the launch's
+   own instr_mod0 as the delayed store's format).  Carried as a proven
+   whole word (the standing rule for unestablished encodings) -- the
+   bit layout above 3:0 remains architecturally unestablished; bits 3:0
+   are inert under launch sourcing.  */
 XTT_MACRO_MISC_WORD ("select-launch-mod0", 0x00000770, false, 0)
 
 /* ------------------------------------------------------------------ */
@@ -205,7 +206,7 @@ XTT_MACRO_MISC_WORD ("select-launch-mod0", 0x00000770, false, 0)
 XTT_MACRO_HIDDEN_WRITE (0x920002c0, 0xfffffff0, /*L2*/ (1u << 2))
 
 /* ------------------------------------------------------------------ */
-/* Reference descriptor-word sets (WP7 audit expectations).	       */
+/* Reference descriptor-word sets (byte-parity audit expectations).    */
 /* ------------------------------------------------------------------ */
 
 /* Min/Max (rtl-rvtt-loadmacro.cc:873-887).  dest0 = SFPSWAP template

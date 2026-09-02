@@ -1,4 +1,4 @@
-// Pre-peel ambient near miss (lane IN): an UNKILLED CC write reaches
+// Pre-peel ambient near miss: an UNKILLED CC write reaches
 // the pre-peel point -- the outer loop rewrites the lane state with a
 // non-all-lanes SFPENCC before the canonical loop and never restores
 // all lanes on that path -- so park-prepeel-ambient-unproven refuses by

@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
-// Flag off: the contract machinery never runs and the lane IA
+// Flag off: the contract machinery never runs and the
 // per-execution refusal is byte-identical.
 // { dg-final { scan-rtl-dump "Dst-autoincr refusal: unprofitable group .config.entry slots 8 >= removed 8" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump-not "addrmod-hoist" "rvtt_dst_autoincr" } }

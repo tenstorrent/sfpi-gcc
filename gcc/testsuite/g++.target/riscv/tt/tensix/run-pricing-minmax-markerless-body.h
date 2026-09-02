@@ -1,4 +1,4 @@
-/* Init-hoist-aware run pricing bodies (lane IU, 2026-08-29): the
+/* Init-hoist-aware run pricing bodies: the
    POST-F1 production minmax shape -- MARKER-FREE rows (the deleted
    sfppushc(0)/sfppopc(0) pair; the planner derives the entry-ambient
    all-lanes enable), four eight-row face runs (rows=32 runs=4) in a

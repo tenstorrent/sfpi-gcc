@@ -851,7 +851,7 @@ rvtt_cc_region_tree::refinement_chain (const rvtt_cc_region *r) const
   return r->refinements;
 }
 
-/* See rvtt-cc-region.h: the item-#15 stage-A cross-call carry fold.  */
+/* See rvtt-cc-region.h: the carry-only cross-call carry fold.  */
 
 bool
 rvtt_cc_region_tree::ambient_preserving_fold_p () const

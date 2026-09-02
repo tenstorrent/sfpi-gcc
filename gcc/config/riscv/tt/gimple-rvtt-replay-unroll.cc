@@ -29,8 +29,8 @@ along with GCC; see the file COPYING3.  If not see
    delivery shape of every winning hand eltwise kernel.  A semantic body
    without the pragma never reaches that machinery: replay formation has
    no textual repeats to fold, and the counted-loop record-once hoist is
-   a DIFFERENT delivery shape whose silicon pricing (lane BP's
-   TURNAROUND/RECORD_OVERHEAD calibration, rvtt-cost.md) refuses this
+   a DIFFERENT delivery shape whose hardware-calibrated pricing
+   (TURNAROUND/RECORD_OVERHEAD, rvtt-cost.md) refuses this
    row class outright.
 
    THE MECHANISM.  Grant the compiler the same request the production
@@ -40,7 +40,7 @@ along with GCC; see the file COPYING3.  If not see
    the cost-table group factor (XTT_REPLAY_LOOP_UNROLL_FACTOR) by
    setting loop->unroll -- exactly what the pragma sets at
    gimplification (tree-cfg.cc replace_loop_annotate).  Everything
-   downstream is existing, silicon-validated machinery: the generic RTL
+   downstream is existing, hardware-validated machinery: the generic RTL
    unroller duplicates the row, the replay former records it, the Dst
    auto-increment and MOP-form passes absorb the separators they own.
    This pass never edits a statement; a refusal leaves the function
@@ -695,7 +695,7 @@ public:
   }
 };
 
-/* ---- Launch-flatten: complete-unroll request for delivery loops (lane HH) ----
+/* ---- Launch-flatten: complete-unroll request for delivery loops ----
 
    -mtt-tensix-optimize-launch-flatten (default off).
 
@@ -1091,7 +1091,7 @@ public:
   }
 };
 
-/* ---- Round-chain interleave: unroll-by-two request (lane EI) ----
+/* ---- Round-chain interleave: unroll-by-two request ----
 
    -mtt-tensix-optimize-round-interleave (default off).
 

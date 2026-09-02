@@ -1,4 +1,4 @@
-// Lane GJ window-pairing stride-phase generalization, WH inertness
+// Window-pairing stride-phase generalization, WH inertness
 // control: the lane-FT signbit tune shape (frozen whole-word program,
 // launch-only rows, drain 3) with the stride flag ON.  The absorber
 // already rides the row's last issued word, so every stride phase is

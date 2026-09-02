@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc -fdump-tree-rvtt_reassoc -fdump-tree-rvtt_combine" }
 // THE LICENSED FIRE: with BOTH halves of the reassociation license
 // (the effective -fassociative-math triple AND -mtt-tensix-optimize-reassoc, owner
-// ratification 2026-08-21) the 4-term left-associated sfpadd chain
+// ratification) the 4-term left-associated sfpadd chain
 // rebalances to the balanced tree: depth 3 -> 2, same statement count,
 // named dump line.  The serial link (the root consuming s2) is gone
 // from the post-pass stream.

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// MopCfg template-census fire (lane FW): the loop dispatches a type-1
+// MopCfg template-census fire: the loop dispatches a type-1
 // MOP (TT_OP_MOP(1,0,0) = 0x01800000, the LLK datacopy dispatch).  The
 // MOP Expander may legally emit REPLAY words from its template (ISA
 // MOPExpander.md), so the MOP admits only under the census: all nine

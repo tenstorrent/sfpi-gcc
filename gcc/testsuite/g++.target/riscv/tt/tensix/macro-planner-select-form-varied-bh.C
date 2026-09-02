@@ -1,8 +1,9 @@
-// WP9 genericity: varied-constant twin of the select formation --
+// Select-formation genericity: varied-constant twin of the select formation --
 // different Dst addresses, a different payload/store data mode, and
 // the COMPLEMENTED source predicate sense (setcc mod 6 = EQ0, so the
 // template takes the direct complement 2 = NE0).  Everything
-// re-derives; no value fingerprint participates anywhere.  Since WP10:
+// re-derives; no value fingerprint participates anywhere.  Since the
+// compact-calendar generalization:
 // this twin's modes are UNIFORM (condition mode == payload/store mode
 // 2), so the compact 3-slot calendar proves first -- misc is the
 // proven launch-sourced-mod0 word 0x770, the second launch carries the

@@ -1,8 +1,8 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-record-hoist-lift -fdump-rtl-rvtt_replay -fdump-rtl-rvtt_dst_autoincr" }
 // Record-hoist placement lift, UNCOUNTED (data-dependent trips) fire
-// (lane IL).  The inner row loop's trip count is a runtime parameter:
-// the record-hoist admits it under the lane FW structural trips>=1
+//.  The inner row loop's trip count is a runtime parameter:
+// the record-hoist admits it under the structural trips>=1
 // fact and the 2-trip break-even, the downstream-fallback oracle
 // refuses the inner preheader (the row's would-be mod-write store
 // reaches it across the backedge), and the lift walks out to the

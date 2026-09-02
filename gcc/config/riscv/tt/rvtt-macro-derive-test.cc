@@ -37,7 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include <cstring>
 #include <initializer_list>
 
-/* The WP12 event_spec extensions (template sharing, explicit-issue
+/* The event_spec extensions (template sharing, explicit-issue
    hazard bounds) are zero-meaning-unconstrained by design, so the
    frozen-row cases below intentionally leave them brace-omitted.  */
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -420,7 +420,7 @@ test_packers ()
 	      " documented)");
 }
 
-/* WP12 template sharing: events with equal template_key share one
+/* Template sharing: events with equal template_key share one
    InstructionTemplate slot and capacity counts DISTINCT slots (two
    in-place casts on two macros, one shared template; the second cast
    is the store's sole producer and routes through LReg16).  */
@@ -448,15 +448,15 @@ test_wp12_template_sharing (const caps *c)
 
   derived_calendar cal;
   bool ok = derive_calendar (c, row, &cal);
-  check (ok && !cal.refusal, "wp12 shared-template row derives");
+  check (ok && !cal.refusal, "shared-template row derives");
   if (!ok || cal.refusal)
     return;
-  check (cal.n_templates == 1, "wp12 equal keys share one template slot");
+  check (cal.n_templates == 1, "equal keys share one template slot");
   check (cal.template_index_of[0] == 0 && cal.template_index_of[1] == 0,
-	 "wp12 both events reference the shared slot");
+	 "both events reference the shared slot");
 }
 
-/* WP12 explicit-issue hazards: the WAR floor delays an event past an
+/* Explicit-issue hazards: the WAR floor delays an event past an
    earlier explicit reader of its written register, and an
    impossible overwrite deadline refuses.  */
 static void
@@ -482,9 +482,9 @@ test_wp12_explicit_hazards (const caps *c)
 
   derived_calendar cal;
   bool ok = derive_calendar (c, row, &cal);
-  check (ok && !cal.refusal, "wp12 war-floored row derives");
+  check (ok && !cal.refusal, "war-floored row derives");
   if (ok && !cal.refusal)
-    check (cal.exec_of[0] == 3, "wp12 war floor delays exec past the reader");
+    check (cal.exec_of[0] == 3, "war floor delays exec past the reader");
 
   /* Same row with an overwriter strictly before the floored exec: the
      deadline is unsatisfiable and refuses by the hazard name.  */
@@ -492,7 +492,7 @@ test_wp12_explicit_hazards (const caps *c)
   ok = derive_calendar (c, row, &cal);
   check (!ok && cal.refusal
 	 && std::strcmp (cal.refusal, refusal_hazard ()) == 0,
-	 "wp12 impossible overwrite deadline refuses (hazard)");
+	 "impossible overwrite deadline refuses (hazard)");
 }
 
 int

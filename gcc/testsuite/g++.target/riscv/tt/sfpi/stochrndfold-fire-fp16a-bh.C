@@ -3,7 +3,7 @@
 // round feeding the runtime-resolved (SRCB) converting store fires just
 // like the FP16B row -- the licensed pair set is
 // {FP16B->BF16, FP16A->FP16, either->SRCB} (the swept proof rows plus
-// the laneHL SRCB-resolution precedent).
+// the SRCB-resolution precedent).
 // { dg-final { scan-tree-dump-times "store-fold: licensed stochrnd fold" 1 "rvtt_store_fold" } }
 // { dg-final { scan-tree-dump "stochrnd-folded=1" "rvtt_store_fold" } }
 // { dg-final { scan-assembler-not "SFPSTOCHRND" } }

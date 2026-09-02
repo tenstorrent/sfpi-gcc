@@ -1,4 +1,4 @@
-// Zero-trip preheader refusal (WP8): when the loop's external
+// Zero-trip preheader refusal: when the loop's external
 // predecessor has more than one successor, at least one trip is
 // unproven, hoisting the all-lanes enable would be a zero-trip CC
 // change, and the region refuses by name.  Bytes stay explicit.

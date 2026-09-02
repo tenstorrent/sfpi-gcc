@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_prgm_const-details" }
 // Pre-peel park-placement RENAMED-EQUIVALENT / VARIED-CONSTANTS
-// adversary twin (lane IP audit, GY recipe): different function and
+// adversary twin (renamed-twin recipe): different function and
 // value names, a different input LREG (3), a different trip count
 // (17), and four entirely different loop-invariant constants (none
 // shared with any board row's coefficients).  The pre-peel LREG-tier

@@ -722,7 +722,7 @@ audited_latency (rtx_insn *insn)
   // carries an audited result latency for the reissue-pricing model --
   // this preserves the pass's documented pre-audit behavior exactly
   // ("SFPSWAP ... never becomes a fill target").  That discipline,
-  // like every timing rule, has ONE spelling: the item-#11 engine's
+  // like every timing rule, has ONE spelling: the timing engine's
   // (verdict identity proven by the stage-A shadow over a full corpus
   // -fchecking leg, zero disagreements).
   return rvtt_timing::audited_latency (e.opaque, e.next_slot_stall,
@@ -1229,7 +1229,7 @@ ls_dependence (const ls_node &p, const ls_node &c)
      hard_reg_set_intersect_p (p.regs.uses, c.raw_defs));
 }
 
-/* Marshal the region NODES into the item-#11 engine's plain-data
+/* Marshal the region NODES into the timing engine's plain-data
    vocabulary: per-node {words, lat, entry_pin} plus the full
    dependence matrix (both directions; the diagonal carries the
    cross-copy self-dependence the cyclic model consumes).  */
@@ -1551,7 +1551,7 @@ ls_schedule_region (basic_block bb, std::vector<ls_node> &nodes,
   return true;
 }
 
-/* ---- Round-chain interleave extensions (lane EI, default off) ----
+/* ---- Round-chain interleave extensions (default off) ----
 
    -mtt-tensix-optimize-round-interleave lifts the two formation
    deferrals above for exactly the shapes whose proofs hold, refusing
@@ -1852,7 +1852,7 @@ ls_cyclic_ii (const std::vector<ls_node> &nodes,
   return rvtt_timing::cyclic_ii (ls_timing_seq (nodes), order);
 }
 
-/* ---- Rau iterative modulo scheduling (item #5, default off) ----
+/* ---- Rau iterative modulo scheduling (default off) ----
 
    -mtt-tensix-optimize-ims adds an IMS-generated candidate order to
    the established cyclic paths (the one-region wrapped row below, and
@@ -1878,7 +1878,7 @@ ls_cyclic_ii (const std::vector<ls_node> &nodes,
    flat order (judged by the same acceptance); the rename half is
    bounded fail-closed -- when the steady-state live-copy demand does
    not fit the register file net of loop-live invariants (capacity
-   through item #10's one constant, rvtt_pressure_capacity), or the
+   through the pressure engine's one constant, rvtt_pressure_capacity), or the
    region rename search already exhausted the free LREGs (the 8-LREG
    wall), the IMS candidate refuses `mve-rename-exhausted'.  The
    kernel-unroll realization of kmin > 1 placements is the item's
@@ -1902,7 +1902,7 @@ ls_cyclic_ii (const std::vector<ls_node> &nodes,
      mve-rename-exhausted              kmin > 1 with unfittable rename
 					demand (see above)  */
 
-/* Capacity of the allocatable vector-register file -- item #10's one
+/* Capacity of the allocatable vector-register file -- the pressure engine's one
    spelling (rvtt-pressure.h; the header's model types are GIMPLE-side,
    the constant is not).  */
 extern unsigned rvtt_pressure_capacity ();
@@ -2153,7 +2153,7 @@ ls_schedule_region_cyclic (basic_block bb, std::vector<ls_node> &nodes,
 
   /* Candidate orders, one per enabled mechanism, all judged by the one
      wrapped acceptance model: the deterministic list order
-     (round-interleave), and the IMS placement order (item #5).  */
+     (round-interleave), and the IMS placement order.  */
   std::vector<int> order;
   int cand_ii = INT_MAX;
   bool used_ims = false;
@@ -2424,8 +2424,8 @@ ls_schedule_iso_pair (basic_block bb, ls_region &r1, ls_region &r2,
 	established transactional cyclic renamer, restricted to webs
 	rooted in the ambient all-lanes state (rename-cc-domain: a
 	fresh predicated definition renamed to a dead register would
-	expose stale disabled-lane bits -- the adjudicated defect of the
-	round-cc-modulo prototype, NO-GO 2026-08-25);
+	expose stale disabled-lane bits -- the adjudicated defect that
+	rejected the round-cc-modulo prototype);
      4. pure spans of the two rows list-schedule together interval by
 	interval; CC atoms stay indivisible, in original interior order,
 	atom A before atom B (each atom computes its own lane state from
@@ -2534,7 +2534,7 @@ crp_node (basic_block bb, rtx_insn *insn, ls_node *node)
      rvtt-cost.md consumer rule: one extra slot per occurrence),
      charged identically in the doubled sequential baseline and every
      candidate.  audited_latency () itself keeps returning -1 for
-     these words (lane BM): the interlock scheduler and capture
+     these words: the interlock scheduler and capture
      rotation never gain them as fill participants.  */
   bool stall_word = e.next_slot_stall
     && riscv_tt_opt_crossrow_pairing_stall_words > 0;
@@ -2876,7 +2876,7 @@ crp_queue_dst_rebase (rtx_insn *insn, HOST_WIDE_INT value)
    shared web serializes exactly as the two original iterations would
    (the round-cc-modulo prototype's span construction ignored these
    edges and could order a copy's redefinition ahead of the first row's
-   store -- the CRAQ-caught WAR defect this constructor removes by
+   store -- a WAR defect the reference simulator caught, removed here by
    construction).  */
 
 struct crp_item
@@ -3658,7 +3658,7 @@ crp_undo_last_rename (std::vector<ls_rename> *record)
   record->pop_back ();
 }
 
-/* ---- MVE kernel-unroll realization (item #5 stage 2, default off) ----
+/* ---- MVE kernel-unroll realization (modulo variable expansion, default off) ----
 
    -mtt-tensix-optimize-mve-expand PERFORMS the modulo-variable-
    expansion the bookkeeping tier (stage 1) only priced: on the counted
@@ -3672,7 +3672,7 @@ crp_undo_last_rename (std::vector<ls_rename> *record)
    scheduler uses) with the second iteration offset by one placement II
    (Lam PLDI-88, kmin = 2 realized as the pairing's two copies), instead
    of the greedy interleave.  Register rotation for the copy's colliding
-   webs routes through the item-#7 du-chain rename service
+   webs routes through the du-chain rename service
    (rvtt_lreg_rename_chain: block-free targets first, the temporal tier
    where block-free registers are exhausted), the expansion demand is
    priced against the register file net of loop-live invariants exactly
@@ -4063,7 +4063,7 @@ crp_mve_expand_arm (basic_block bb, std::vector<ls_node> &all,
   /* Rotation renames: every copy-half fresh definition whose register
      the first iteration also defines is a colliding web the realized
      interleave cannot ride unrenamed; targets route through the
-     item-#7 service (block-free first, the temporal tier where
+     rename service (block-free first, the temporal tier where
      block-free registers are exhausted -- the service carries the
      complete legality proof and refuses by name inside).  One attempt
      per root insn; committed webs are recorded for exact undo.  */
@@ -4084,7 +4084,7 @@ crp_mve_expand_arm (basic_block bb, std::vector<ls_node> &all,
      (copy B offset by one placement II, the whole pattern repeating
      every 2*II); a copy-B web moves to the register whose windows are
      free across the web's own window modulo 2*II.  The arithmetic
-     only CHOOSES the target -- the item-#7 service then carries the
+     only CHOOSES the target -- the rename service then carries the
      complete sequential-order legality proof for the edit (typed
      effects, span/CC rules, death proof, temporal-tier admission
      where the target is busy elsewhere in the block, post-commit
@@ -4775,10 +4775,10 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
   if (riscv_tt_opt_crossrow_shared_reload > 0)
     crp_shared_reload (bb, lp, all, group, copies, n, &shared_reload);
 
-  /* Phase 2e-mve (item #5 stage 2, sub-flag): the kernel-unroll
+  /* Phase 2e-mve (modulo variable expansion, sub-flag): the kernel-unroll
      realization -- an item-level modulo placement of the single kernel
      orders the doubled row with the copy offset by one placement II,
-     rotation renames routed through the item-#7 service.  Fail-closed:
+     rotation renames routed through the rename service.  Fail-closed:
      every refusal inside restores the state exactly and the greedy
      path below proceeds untouched; a success hands over the realized
      order plus the committed service webs (undone exactly on any later
@@ -4984,7 +4984,7 @@ crossrow_pair_rows (function *fn)
     }
 }
 
-/* ---- Cyclic-interior region scheduling (lane IJ, default off) ----
+/* ---- Cyclic-interior region scheduling (default off) ----
 
    -mtt-tensix-optimize-cyclic-region-schedule lifts the self-loop
    deferral for the MULTI-REGION row shape the one-region cyclic
@@ -5161,7 +5161,7 @@ ls_schedule_cyclic_interior (basic_block bb,
 	}
 
       /* R1 (-mtt-tensix-optimize-rename-temporal): break the region's
-	 storage-collision chains through the item-#7 rename service
+	 storage-collision chains through the du-chain rename service
 	 BEFORE generating candidates.  The service carries the
 	 complete legality proof (typed-effect veto, span/CC rule,
 	 death proof, temporal-target admission, post-commit belt);
@@ -5305,7 +5305,7 @@ ls_schedule_cyclic_interior (basic_block bb,
 
       /* Candidates, one per enabled mechanism, all judged on the WHOLE
 	 row's steady-state II: the deterministic list order (the
-	 cyclic-interior flag), and the IMS placement order (item #5).  */
+	 cyclic-interior flag), and the IMS placement order.  */
       std::vector<int> order;
       int cand_ii = INT_MAX;
       bool used_ims = false;
@@ -5937,7 +5937,7 @@ rotation_crossed_segment (rtx_insn *from, rtx_insn *to, bool hidden_free,
   return nullptr;
 }
 
-/* ---- Plain-reorder filler pool widening (lane DL, D3 follow-up) ----
+/* ---- Plain-reorder filler pool widening ----
 
    The plain-reorder movers (seam fill and the interior gap fill below)
    change only the within-iteration issue order; no prologue copy ever
@@ -6244,7 +6244,7 @@ rotate_seam_fill (rotation_row const &row, std::vector<basic_block> &visited)
 /* Close a modeled in-row stall by moving one provably independent row
    member into the gap -- a plain within-iteration reorder exactly like
    the seam fill, extended to interior gaps and the widened filler
-   classes (lane DL).  Runs after the seam and prologue movers, so the
+   classes.  Runs after the seam and prologue movers, so the
    established fire shapes keep their movers byte-identically.
    Adjacency accounting is cyclic: the row replays, so a candidate at
    either row end trades against the seam adjacency.  */
@@ -7068,18 +7068,19 @@ drain_decode_horizon (const macro_schedule &schedule,
    issues no earlier than boundary + sep_credit + 1 + P, its launched
    events execute at issue + 1 + delay, an explicit word's own access
    is counted at issue (the conservative earliest), and a carrier
-   word's own front-end VD write is counted at issue too (lane FL,
-   FH-4: admitted only under the lane-EV protections -- VD
-   alternation, store-only sacrificial VD, the CC-template model's
-   next-row obligations).  Ordering at equal
+   word's own front-end VD write is counted at issue too (admitted
+   only under the established protections -- VD alternation,
+   store-only sacrificial VD, the CC-template model's next-row
+   obligations).  Ordering at equal
    cycles follows the established transactional model
-   (rvtt-macro-tables.h derived-calendar provenance: ISA spec + CRAQ
-   generic executor + hand MulInt32 -- "retire-before-issue"): a
+   (rvtt-macro-tables.h derived-calendar provenance: ISA spec +
+   reference-simulator executor + the hand MulInt32 kernel --
+   "retire-before-issue"): a
    staged event retiring at cycle X retires BEFORE the front-end
    instruction issuing at X executes, so a FRONT-END access at the
    last retirement cycle is ordered after every pending event
    (equality admitted); two staged EVENTS at one cycle stay a race --
-   the silicon-adjudicated cc-restore-store-race failure mode -- so
+   the hardware-adjudicated cc-restore-store-race failure mode -- so
    launched follower events keep the strict inequality.  The
    enumerated follower words must cover the whole horizon.  */
 
@@ -7099,19 +7100,19 @@ drain_follower_rows_ok (const macro_region &region,
 	break;			/* every later access clears by time */
       if (region.rows[r].insns.length () != schedule.events.length ())
 	return drain_refuse (dump, "drain-follower-opaque", nullptr);
-      /* The launch word's OWN front-end VD write (lane FL, FH-4; the
-	 lane-EV corruption class at a RUN boundary).  A launch is a
+      /* The launch word's OWN front-end VD write (the fixed-VD
+	 corruption class at a RUN boundary).  A launch is a
 	 front-end instruction: retire-before-issue admits it at the
 	 last retirement cycle (equality), but an EARLIER issue writes
 	 its VD while the horizon's events -- hosted consumers of the
 	 SAME descriptor's previous rows -- are still in flight.  The
-	 established protections are exactly the lane-EV predicate
+	 established protections are exactly the launch-spec predicate
 	 (rvtt-macro-desc.h macro_launch_spec): VD alternation (the
 	 conservative VD policy's own envelope -- adjacent rows target
 	 different registers), a store-only sacrificial VD (written,
 	 never read), and the CC-template model's proven next-row
 	 obligations (macro_cc_model: store-before-next-def,
-	 restore-visibility; silicon-proven multi-row on the unified
+	 restore-visibility; hardware-proven multi-row on the unified
 	 where kernel).  A fixed-VD VALUE carrier has none of them --
 	 the previous run's pending events read the register this
 	 launch overwrites -- so the boundary refuses by name.  A
@@ -7276,7 +7277,7 @@ rvtt_macro_drain_boundary_elidable (const macro_region &region,
 }
 
 /* ----------------------------------------------------------------------
-   Loop-backedge drain elision (the drain-route remainder, lane CA).
+   Loop-backedge drain elision (the drain-route remainder).
 
    A loop-body region has one boundary the intra-region proof above can
    never reach: its final run ends at the loop latch, so today the
@@ -7537,7 +7538,8 @@ rvtt_macro_drain_backedge_elidable (const macro_region &region,
    blocker named.  Every distance is a stream-slot count: H2 makes it a
    lower bound on issue-cycle distance, and dynamic stalls only move
    followers later (the safe direction).  Emission under refusal is
-   byte-identical to lane EV's placement.  Frozen whole-word programs
+   byte-identical to the established placement.  Frozen whole-word
+   programs
    whose events the schedule cannot account for refuse through the
    mapping rule -- the signbit family stays on its proven rolled
    calendar.  */

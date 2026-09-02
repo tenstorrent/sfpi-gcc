@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc-loop-carried -fdump-tree-rvtt_reassoc" }
-// Arch breadth for the item-#8 fire: the loop-carried split is
+// Arch breadth for the accumulator-splitting fire: the loop-carried split is
 // target-independent gimple (charter: >= 2 unrelated shapes/targets).
 // WH load/store addr-mode 3.
 // { dg-final { scan-tree-dump-times "licensed loop-carried split P=2 over 2-link" 1 "rvtt_reassoc" } }

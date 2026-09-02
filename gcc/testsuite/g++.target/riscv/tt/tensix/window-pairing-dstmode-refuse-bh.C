@@ -1,4 +1,4 @@
-// Lane FT window-pairing: mod0 10 (INT32_ALL) couples the Dst address
+// Window-pairing: mod0 10 (INT32_ALL) couples the Dst address
 // to the Sp counter and mutates it (SFPLOAD.md), so the typed
 // shared-base distance model cannot see the access -- the Dst clause
 // refuses by name and the boundary keeps the Dst-RAW spacing (one NOP,

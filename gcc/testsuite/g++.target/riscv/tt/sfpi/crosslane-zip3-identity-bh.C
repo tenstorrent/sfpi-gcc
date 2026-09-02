@@ -1,4 +1,4 @@
-// Zip-chain collapse (lane FG, X4): the 8-row out-riffle has order 3
+// Zip-chain collapse (X4): the 8-row out-riffle has order 3
 // (zip^2 == unzip is the canonical unzip lowering; zip^3 == identity
 // -- FB battery zip/unzip inverses), so a chain of three canonical zip
 // frames on one pair dissolves entirely.

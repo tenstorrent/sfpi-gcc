@@ -1,4 +1,4 @@
-// George-test near-miss (FABLE_GOES_BURR.md item #6): the copy's dest
+// George-test near-miss (the Briggs/George coalescing work): the copy's dest
 // is precolored but dies BEFORE the anchors are read, while the source
 // half lives across them -- the uncolored half has significant
 // (precolored) neighbors that do NOT interfere with the precolored

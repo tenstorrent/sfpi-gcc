@@ -1,4 +1,4 @@
-// MAD-PAIR vocabulary fire (lane HJ, smoothstep shape): the pair's mul
+// MAD-PAIR vocabulary fire (smoothstep shape): the pair's mul
 // feeds the add through a single-use SFPMOV complement wrapper --
 // -(a*b) + c, exactly the shape the combine's -a+b rule reduces before
 // the mad rule fires.  The base discovery walks only a direct

@@ -1,4 +1,4 @@
-// Recognition-only proof for the fused-MAD admission (laneDM
+// Recognition-only proof for the fused-MAD admission (widened
 // correction record): an UNFUSED mul+add chain is NEVER converted to a
 // MAD by this pass -- MUL+ADD carries two roundings, SFPMAD one, so
 // the conversion is bit-changing and banned.  Here the chain's

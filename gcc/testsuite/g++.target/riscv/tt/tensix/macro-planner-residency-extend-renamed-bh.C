@@ -1,4 +1,4 @@
-// WP13 residency outward extension, renamed-equivalent twin: identical
+// Residency outward extension, renamed-equivalent twin: identical
 // shape under fresh names -- the mechanism keys on derived structure
 // and proofs, never on names.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-planner-residency -fdump-rtl-rvtt_macro_planner-details" }

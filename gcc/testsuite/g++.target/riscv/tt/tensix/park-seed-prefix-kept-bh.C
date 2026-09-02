@@ -1,4 +1,4 @@
-// PARK-SEED COMPOSITION fire (lane HY): a CC-restore loop's invariant
+// PARK-SEED COMPOSITION fire: a CC-restore loop's invariant
 // immediate positioned BEFORE the body's first CC-machinery statement
 // keeps the early invariant hoist under -mtt-tensix-optimize-
 // park-ordering (depth-zero-hoist-dominant): the hoist is a
@@ -6,7 +6,7 @@
 // could re-place the candidate only behind its manufactured
 // first-iteration peel -- extra prologue words on every kernel entry
 // and a trip-parity flip that kills the crossrow-pairing capture on
-// even-trip paired row loops (the ceil/roundingops pin-34 regression
+// even-trip paired row loops (the ceil/roundingops measured-regression
 // anatomy).  The walk must see NO loop-class candidate here (the
 // materialization is already in the preheader).  The twin varies
 // names, the constant, and the trip count.

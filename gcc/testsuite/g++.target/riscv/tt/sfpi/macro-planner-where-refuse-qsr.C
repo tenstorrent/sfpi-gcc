@@ -1,4 +1,4 @@
-// WP9: on QSR the predicated-select shape is admitted by discovery (the
+// On QSR the predicated-select shape is admitted by discovery (the
 // CC-template row structure is target-independent) and refuses at
 // schedule time by the capability tables' stable name -- no macro
 // encoding is proven for QSR.  Every byte stays explicit.

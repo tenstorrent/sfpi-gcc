@@ -4,7 +4,7 @@
 // TODAY: refuses by name (lreg-pressure-exceeded).
 // FUTURE-VERDICT (LREG allocator): COMPILE via exact Dst-row spill
 // (INT32 format = 32-bit rows, lossless round-trip) and match the
-// recorded CRAQ golden bit-exactly (see ARSENAL.md; golden defined by
+// recorded simulator golden bit-exactly (see ARSENAL.md; golden defined by
 // the hand-spilled same-DAG twin ladder12_spilled).
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-remat -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }

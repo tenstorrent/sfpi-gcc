@@ -54,7 +54,7 @@ along with GCC; see the file COPYING3.  If not see
        the MOP template file (slot rules above), the instruction-FIFO
        aperture (push: the stored word classifies through the audited
        table), the PC_BUF sync/semaphore words (inert), the
-       RISCV_DEBUG_REGS block (refuses: silicon documents an
+       RISCV_DEBUG_REGS block (refuses: the hardware documentation records an
        instruction-injection interface there), anything else (inert
        for this proof: no other MMIO-write arm reaches instruction
        delivery or SFPU state);
@@ -147,8 +147,8 @@ along with GCC; see the file COPYING3.  If not see
 /* The audited raw-word capability table (rvtt_mop_audited_word_p,
    declared above in rvtt-mop-derive.h) is now the PRGM face of THE
    unified audited word-fact table: its body lives in
-   rvtt-raw-boundary.cc over rvtt_word_facts_classify's row blocks
-   (FABLE item #4 Deliverable B), where the recorded facts and their
+   rvtt-raw-boundary.cc over rvtt_word_facts_classify's row blocks,
+   where the recorded facts and their
    provenance are shared with the LREG/CC/ADDR_MOD/Dst-RWC faces.
    Verdicts, refusal names, the template-slot discipline and the
    derive-state deferral are unchanged.  */
@@ -320,7 +320,7 @@ ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
   return true;
 }
 
-/* ---- Context-bound resolution (lane CF; contract in
+/* ---- Context-bound resolution (contract in
    rvtt-mop-derive.h).  */
 
 /* Resolve VAL through the PARM-binding chain of *CTX_IO: while VAL is
@@ -1107,7 +1107,7 @@ classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
       return false;
     }
   /* The debug-register block documents an instruction-injection
-     interface on silicon (ckernel_debug.h); no recorded fact pins
+     interface on the device (ckernel_debug.h); no recorded fact pins
      which offsets are inert.  */
   if (addr >= XTT_DEBUG_REGS_MMIO_BASE && addr <= XTT_DEBUG_REGS_MMIO_LIMIT)
     {
@@ -1533,8 +1533,8 @@ rvtt_mop_derive_finish (const rvtt_mop_derive_state *st, const char **why)
 }
 
 /* ------------------------------------------------------------------ */
-/* Raw REPLAY record regions (lane HS;
-   -mtt-tensix-optimize-opaque-replay-record).
+/* Raw REPLAY record regions
+   (-mtt-tensix-optimize-opaque-replay-record).
 
    THE THEOREM.  A raw REPLAY word with load_mode=1 opens a record
    window: the thread's next COUNT delivered frontend words are stored
@@ -1888,7 +1888,7 @@ rvtt_mop_replay_record_admit (gasm *record, uint32_t word,
       || idx + len > XTT_REPLAY_BUF_SLOTS)
     {
       /* The sim model TTSIM_VERIFY-faults these encodings; no recorded
-	 fact pins what silicon does with them.  */
+	 fact pins what the hardware does with them.  */
       *why = "replay-record-word-unproven: malformed REPLAY encoding";
       return false;
     }

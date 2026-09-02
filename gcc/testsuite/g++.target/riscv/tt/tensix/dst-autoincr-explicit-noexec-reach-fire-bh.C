@@ -1,7 +1,7 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Silicon PASS witness twin (celu/eqz-class ON-set rows, 24 corpus rows,
-// silicon-good across many pins): EXPLICIT mod-write rows composed with
+// hardware-good across many pins): EXPLICIT mod-write rows composed with
 // an in-loop no-exec wrapper record that is reachable from the group but
 // separated by at least the audited W_drain frontend-word window.  The
 // store is itself a frontend word (issue parity), so the frontend-word

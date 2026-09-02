@@ -1,4 +1,4 @@
-// X6 FPU face-transpose builtins: QSR refusal twin (lane FV).  QSR
+// X6 FPU face-transpose builtins: QSR refusal twin.  QSR
 // encodes this family with different operand ranges (gas rejects the
 // WH/BH forms) and no choreography is audited there: every builtin
 // refuses at expansion, by message.

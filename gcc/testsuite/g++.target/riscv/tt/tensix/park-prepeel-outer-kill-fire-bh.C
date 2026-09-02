@@ -1,4 +1,4 @@
-// Pre-peel ambient proof, ENCC-kill arm (lane IN): the softplus
+// Pre-peel ambient proof, ENCC-kill arm: the softplus
 // PRODUCTION anatomy -- the canonical loop sits inside an OUTER loop,
 // so its own lowered CC writers reach the pre-peel point around the
 // outer backedge.  The plain reachability oracle

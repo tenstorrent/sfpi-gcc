@@ -1,4 +1,4 @@
-// X6 named refusal: unaligned face row (lane FV).  The static_assert
+// X6 named refusal: unaligned face row.  The static_assert
 // fires in the header at instantiation; match it file-wide (line 0).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -std=c++17 -I [SFPI]/include -fno-exceptions -fno-rtti" }
 

@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD near miss, neutered nested window (lane HS): a
+// OPAQUE-REPLAY-RECORD near miss, neutered nested window: a
 // REPLAY word arriving inside an OPEN window is stored as data by the
 // hardware (the window arm precedes the REPLAY decode arm) -- it never
 // acts.  Here an exec-while-loading record's window contains a nested

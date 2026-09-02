@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* FABLE_GOES_BURR.md item #11: ONE timing model instead of five.
+/* ONE timing model instead of five.
 
    Pure functions over plain data in the rvtt-macro-sched-core.h style:
    no GIMPLE or RTL pointers, no GCC headers, no target facts.  Every
@@ -59,18 +59,18 @@ along with GCC; see the file COPYING3.  If not see
    scoreboard, the crp stall-word two-slot rule) the caller passes it
    as data.
 
-   Two precision tiers, callers choose (the item-#11 contract):
+   Two precision tiers, callers choose (the module contract):
    cyclic_ii is the 6-copy convergence probe moved verbatim (CLASS-I,
    the acceptance oracle); the exact tier (ResMII / RecMII / the Rau
    iterative-modulo-scheduling placement over an II-column modulo
-   reservation table, item #5) lives below in the modulo-scheduling
+   reservation table) lives below in the modulo-scheduling
    section -- same seq/dep vocabulary, one marshaller (make_mod_prob),
    so the MRT and the acceptance simulator cannot drift.
 
-   Jointly owned seam with item #12 (one delivery-cost API): the hoist
+   Jointly owned seam with the delivery-cost API: the hoist
    pricing forms below own the execution-side stall/latency simulation;
    the words->centislot economics constants arrive as data
-   (hoist_costs) and migrate to item #12's module when it lands.
+   (hoist_costs) and belong to rvtt-delivery-cost-core.h.
 
    The macro DAG scheduler's constraint core (rvtt-macro-sched-core.h)
    stays a calendar-occupancy legality model, not a timeline simulator;
@@ -91,7 +91,7 @@ namespace rvtt_timing
 
 /* Audited result latency in issue slots; -1 refuses: opaque effects,
    an unaudited `xtt_result_latency' entry (RESULT_LATENCY < 0), or the
-   architectural next-slot acceptance stall (lane BM: an instruction
+   architectural next-slot acceptance stall (an instruction
    with the acceptance stall keeps refusing here even once it carries
    an audited result latency for the reissue-pricing model).  */
 
@@ -147,7 +147,7 @@ adjacent_stall (bool dependent, int producer_latency)
 }
 
 /* ------------------------------------------------------------------
-   Loop-carried accumulator splitting arithmetic (FABLE item #8).
+   Loop-carried accumulator splitting arithmetic.
 
    A loop-carried associative chain of K links per iteration, each
    link WORDS issue slots with audited result latency LAT, has the
@@ -332,7 +332,7 @@ private:
    All costs are centislots (hundredths of a Tensix issue slot),
    int64.  The constants arrive as data (rvtt-cost.md
    XTT_REPLAY_COST_* carriers); their words->centislot economics
-   migrate to item #12's delivery-cost module when it lands.  */
+   belong to the delivery-cost module.  */
 
 struct hoist_costs
 {
@@ -377,7 +377,7 @@ extern hoist_pricing rerecord_hoist_price (const hoist_costs &c,
 					   bool completion_guard);
 
 /* ------------------------------------------------------------------
-   Modulo-scheduling exact tier (FABLE_GOES_BURR item #5).
+   Modulo-scheduling exact tier.
 
    Rau's Iterative Modulo Scheduling (Rau, MICRO-27 1994) over the SAME
    dependence vocabulary the acceptance simulator (cyclic_ii above)
@@ -404,8 +404,8 @@ extern hoist_pricing rerecord_hoist_price (const hoist_costs &c,
    the kernel-copy count ceil(maxlifetime/II) the placement's value
    lifetimes demand, and mve_live_demand the peak simultaneously-live
    value-copy count of the steady state -- the consumer prices it
-   against the register file (item #10's capacity) and refuses
-   `mve-rename-exhausted' when it does not fit.  Lifetimes are read
+   against the register file (the pressure engine's capacity) and
+   refuses `mve-rename-exhausted' when it does not fit.  Lifetimes are read
    from DEP_LATENCY edges; the vocabulary merges RAW and WAW, so a
    WAW-only edge can only LENGTHEN a computed lifetime -- conservative
    in the refusing direction, never admitting.
@@ -463,7 +463,7 @@ make_mod_prob (const seq &s)
   return p;
 }
 
-/* Realization-tier marshaller (item #5 stage 2): identical edge
+/* Realization-tier marshaller (modulo variable expansion): identical edge
    derivation, with the CROSS-iteration kind matrix supplied as its own
    seq (ops shared with INTRA; only CROSS.dep is consulted for the
    omega-1 edges).  The single-matrix marshaller above wraps the kernel

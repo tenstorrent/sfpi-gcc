@@ -1,8 +1,8 @@
-// MVE kernel-unroll realization fire (item #5 stage 2): the paired
+// MVE kernel-unroll realization fire (modulo variable expansion): the paired
 // row's doubled body is ordered by the item-level modulo placement
 // (place-II 12, copy offset one II) instead of the greedy interleave,
 // realizing the kmin=2 overlap the flat order cannot ride.  Two copy
-// webs rotate by placement-slot arithmetic through the item-#7 rename
+// webs rotate by placement-slot arithmetic through the du-chain rename engine rename
 // service -- the L2-class target arrives through the TEMPORAL tier
 // (block-free registers are exhausted; see the composition twin) --
 // and the realized steady state commits at II 28, strictly below both

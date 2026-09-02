@@ -1,4 +1,4 @@
-// The ICE reproducer (lane BR finding, 2026-08-18): this exact shape
+// ICE reproducer: this exact shape
 // made the reference compiler crash at assembly output with
 // "internal compiler error: cannot store sfpu register (register
 // spill)".  Under the remat flag it must simply compile.

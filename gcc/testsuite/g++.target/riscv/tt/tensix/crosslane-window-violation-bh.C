@@ -1,6 +1,6 @@
-// TEN-2932 negative twin (lane FG, X4): a non-exempt instruction
+// the ENABLE_DEST_INDEX write-restriction erratum negative twin (X4): a non-exempt instruction
 // computing a value INTO the companion bank inside an open
-// ENABLE_DEST_INDEX window -- the class lane EX caught in the wild as
+// ENABLE_DEST_INDEX window -- the class caught in the wild as
 // an allocator-inserted `SFPMOV L5, L4` -- is a named compile error on
 // the final stream.  The write is forced by pinning the in-window
 // arithmetic result to LReg5.

@@ -1,6 +1,6 @@
-// Acceptance twin of the replay-delivery violation (lane FR): the same
+// Acceptance twin of the replay-delivery violation: the same
 // record-outside/launch-inside composition whose delivered companion
-// writes are all TEN-2932-EXEMPT opcodes (SFPLOAD into LReg5/6/7) must
+// writes are all the ENABLE_DEST_INDEX write-restriction erratum-EXEMPT opcodes (SFPLOAD into LReg5/6/7) must
 // keep compiling silently -- the checker audits the delivered words, it
 // does not refuse the delivery machinery.  The scans prove the former
 // actually fired (the composition is present, not vacuously absent).

@@ -175,11 +175,11 @@ static bool combiner_enable_REASSOC_FP () { return rvtt_reassoc_fp_licensed_p ()
 static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
 
 /* ==================================================================
-   THE LICENSED MAD RESTRUCTURE (FABLE_GOES_BURR residual attack R3;
-   -mtt-tensix-optimize-reassoc-mad-restructure, laneKO) -- the
-   trigonometry constrained-floor cert's named "muli+add -> fused mad"
-   value-changing successor, shipped as licensed COMBINE-PREFERENCE
-   STEERING.
+   THE LICENSED MAD RESTRUCTURE
+   (-mtt-tensix-optimize-reassoc-mad-restructure) -- the
+   trigonometry constrained-floor certificate's named "muli+add ->
+   fused mad" value-changing successor, shipped as licensed
+   COMBINE-PREFERENCE STEERING.
 
    The immediate-fold rules in rvtt.gc (loadi+mul -> SFPMULI,
    loadi+add -> SFPADDI) run "in preference to mul,add->mad" because
@@ -189,9 +189,9 @@ static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
    contract's single-use mul+add->SFPMAD rule would deliver ONE
    partially-fused rounding (round(x*imm + c), tt-isa-documentation
    SFPMAD.md) -- on recurrence-bound rows that extra result-latency
-   hop is the row's critical path (the trigonometry-fresh cert's
-   autopsy names the "exponent muli->add" and Newton "mul+addi" stall
-   pairs by shape).
+   hop is the row's critical path (the trigonometry-fresh
+   certificate's autopsy names the "exponent muli->add" and Newton
+   "mul+addi" stall pairs by shape).
 
    Under BOTH license keys (-fassociative-math + the token) the two
    immediate-fold guards below VETO the fold exactly when the pair
@@ -206,8 +206,8 @@ static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
    Value-change class (why the license): double->single rounding on
    the fused product, plus the sign-of-zero flush SFPMULI's embedded
    "+0" performs and SFPMAD does not (a -0 product stays -0).  This is
-   the ratified licensed-fold divergence family (the pin-42/laneIJ
-   cert lineage); with either key absent every candidate refuses by
+   the ratified licensed-fold divergence family; with either key
+   absent every candidate refuses by
    name (dump + registry) and codegen is byte-identical.  */
 
 static bool
@@ -219,7 +219,7 @@ madr_licensed_pair_p (gcall *mul_call, gcall *add_call, const char *arm)
 
   /* The pair must be exactly what the contract a*b+c rule consumes:
      the mul a feed shape of the mad rule per the GENERATED tables
-     (item #3 -- no hand mirror), dying into the add.  */
+     (no hand mirror), dying into the add.  */
   if (!rvtt_combine_will_fuse_p (mul_call, rvtt_insn_data::sfpmul_lv,
 				 rvtt_insn_data::sfpadd_lv))
     return false;
@@ -364,7 +364,7 @@ Shape::is_match (const rvtt_insn_data *insnd) const
   return false;
 }
 
-/* The generated-vocabulary query (FABLE_GOES_BURR item #3).  Discovery
+/* The generated-vocabulary query.  Discovery
    passes used to hand-mirror which spellings the combiner walks (the
    madpair discovery vocabulary; the muli/addi immediate-fold
    vulnerability test).  Answering from the same generated tables the

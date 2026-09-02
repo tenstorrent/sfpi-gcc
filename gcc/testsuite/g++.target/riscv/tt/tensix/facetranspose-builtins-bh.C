@@ -1,7 +1,7 @@
-// X6 FPU face-transpose builtins: emission forms on Blackhole (lane FV,
-// 2026-08-22).  Each builtin must emit the architectural mnemonic with
+// FPU face-transpose builtins: emission forms on Blackhole (per-word
+// pairwise-oracle-proven).  Each builtin must emit the architectural mnemonic with
 // the operands in TTI order; word-identity vs the TT_OP macro encodings
-// was proven with the .ttinsn pairwise oracle (laneFV evidence
+// was proven with the .ttinsn pairwise oracle (recorded
 // gas-probe/).  No LReg staging anywhere: the family is immediate-only.
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
 

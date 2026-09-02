@@ -210,10 +210,10 @@ along with GCC; see the file COPYING3.  If not see
 					externally-visible symbol): the
 					whole template audit fails closed
 
-   Config-prefix widening (-mtt-tensix-optimize-crosscall-config-prefix,
-   lane HC): a callee prefix pair -- a qualifying materialization whose
+   Config-prefix widening (-mtt-tensix-optimize-crosscall-config-prefix):
+   a callee prefix pair -- a qualifying materialization whose
    SINGLE consumer is sfpwriteconfig_v to a programmable-constant
-   register 11..14 (never allocatable; laneAR audited-table provenance)
+   register 11..14 (never allocatable; audited-table provenance)
    -- joins the contract: re-materialized in every proven caller's loop
    preheader AHEAD of the contract loads (the SFPCONFIG source operand
    is md-pinned to L0) and deleted from the callee.  The caller proofs
@@ -416,8 +416,8 @@ call_has_vector_dataflow_p (gcall *call)
 /* Audited 32-bit word classification (LREG face).
 
    The classifier now lives in THE unified audited word-fact table
-   (rvtt-raw-boundary.cc rvtt_word_facts_classify, FABLE item #4
-   Deliverable B); rvtt_word_lreg_class is this face's query accessor
+   (rvtt-raw-boundary.cc rvtt_word_facts_classify);
+   rvtt_word_lreg_class is this face's query accessor
    -- same question (can this word write an ALLOCATABLE hard LREG in
    the contract set?), same verdicts, same refusal names, refusing
    default for every class not on record.  The verdict struct keeps
@@ -702,8 +702,8 @@ struct crosscall_tu_facts
   bool slot_replay = false;
   unsigned slot_loadi_dests = 0;   /* SFPLOADI destinations programmed
 				      into instruction slots	       */
-  vec<uint32_t> slot_words = vNULL; /* every audited slot word (lane CA:
-				      re-classified per proof face)    */
+  vec<uint32_t> slot_words = vNULL; /* every audited slot word
+				      (re-classified per proof face)    */
   hash_map<tree, global_census_entry> *globals = nullptr;
   vec<slot_demand> demands = vNULL;
   /* The executable closure and its direct roots (file header, [TU]).
@@ -1581,8 +1581,8 @@ compute_tu_facts ()
       if (!ofn || !ofn->cfg || (ofn->curr_properties & PROP_rtl))
 	{
 	  /* A pre-materialization clone carries no body of its own; the
-	     clone_of origin's is the sound over-approximation (the
-	     laneBT resolution: the clone's statements are the origin's
+	     clone_of origin's is the sound over-approximation
+	     (the clone's statements are the origin's
 	     under parameter substitution, and any word the origin
 	     leaves unresolved defers to the demands machinery).  An
 	     already-EXPANDED body (PROP_rtl: the init-hoist service
@@ -1800,15 +1800,15 @@ struct scan_ctx
 				   contract: delivered SFPCONFIG-class
 				   words refuse (they could rewrite the
 				   programmed constant register)       */
-  bool cc_immaterial = false;	/* programming-only region discipline
-				   (lane HR): typed structured-CC atoms
+  bool cc_immaterial = false;	/* programming-only region discipline:
+				   typed structured-CC atoms
 				   are admitted -- the consumer's lifted
 				   object executes before the region and
 				   its parked constant-register state is
 				   out of any CC write's reach; every
 				   other discipline is unchanged        */
-  bool cc_ambient_ok = false;	/* -mtt-tensix-optimize-cc-region-general
-				   (FABLE_GOES_BURR R2): the scanned
+  bool cc_ambient_ok = false;	/* -mtt-tensix-optimize-cc-region-general:
+				   the scanned
 				   loop's CC activity is CC-region-tree
 				   proven ambient-preserving-and-
 				   narrowing (rvtt-cc-region.h,
@@ -1979,7 +1979,7 @@ scan_store (scan_ctx *ctx, gimple *stmt)
   return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
 }
 
-/* Structured typed CC atom (lane HR, the cc-immaterial region
+/* Structured typed CC atom (the cc-immaterial region
    discipline): a typed RVTT call whose WHOLE architectural effect is
    the SFPU CC/lane-enable state plus its SSA-visible definition.  Such
    a statement cannot touch a programmable constant register, deliver a
@@ -2056,20 +2056,20 @@ scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 		return scan_refuse (ctx,
 				    (ctx->region
 				     && riscv_tt_opt_cc_region_general > 0)
-				    /* The stage-B widening was live and
-				       the tree could not prove the
-				       loop: its own name.  */
+				    /* The general-region widening was
+				       live and the tree could not prove
+				       the loop: its own name.  */
 				    ? "crossloop-cc-ambient-unproven"
 				    : in_caller
 				    ? "crosscall-caller-cc-unproven"
 				    : "crosscall-callee-cc-unproven", stmt);
-	      /* Programming-only discipline (cc_immaterial, lane HR):
+	      /* Programming-only discipline (cc_immaterial):
 		 a structured typed CC atom changes only the lane-enable
 		 state and its own SSA definition; the consumer's lifted
 		 placement executes before this region and parks state
 		 in a claimed constant register no CC write can reach.
-		 Tree-proven discipline (cc_ambient_ok, FABLE_GOES_BURR
-		 R2): the loop's CC activity is ambient-preserving-and-
+		 Tree-proven discipline (cc_ambient_ok): the loop's
+		 CC activity is ambient-preserving-and-
 		 narrowing, so the enable set at every in-loop consumer
 		 stays a subset of the lifted entry's -- the hoisted
 		 all-lanes materialization is a refinement.  Either way
@@ -2292,10 +2292,10 @@ struct contract_entry
   int lreg;			/* the pinned hard LREG		     */
 };
 
-/* A config-prefix pair (lane HC, -mtt-tensix-optimize-crosscall-
+/* A config-prefix pair (-mtt-tensix-optimize-crosscall-
    config-prefix): a qualifying prefix materialization whose SINGLE
    consumer programs a programmable-constant register (SFPCONFIG
-   destinations 11..14 -- never allocatable, laneAR audited-table
+   destinations 11..14 -- never allocatable, audited-table
    provenance in rvtt-lut-tables.cc).  The pair joins the contract:
    re-materialized once in every proven caller's loop preheader (ahead
    of the contract loads -- the SFPCONFIG source operand is pinned to
@@ -3034,7 +3034,7 @@ transform (function *fn)
 	     IDENTIFIER_POINTER (DECL_NAME (fn->decl)),
 	     contract.length (), contract_mask);
 
-  /* Config-prefix pairs (flag-gated widening, lane HC): with the flag
+  /* Config-prefix pairs (flag-gated widening): with the flag
      off, discovery never runs and every proof and refusal below is
      byte-identical to the pre-flag pass.  */
   auto_vec<config_prefix_entry> config;
@@ -3191,10 +3191,11 @@ public:
     /* TU facts first, while every body is still gimple (the
        prgm-const timing argument).  */
     compute_tu_facts ();
-    /* Item #15 stage A: surface the cross-call CC carry fact
-       (rvtt-cc-region fold, cached in the IPA summary).  Dump-gated
-       and verdict-inert by contract -- no consumer admission widens on
-       it in this item (that is R2/stage-B, by name).  */
+    /* Surface the cross-call CC carry fact (rvtt-cc-region fold,
+       cached in the IPA summary).  Dump-gated and verdict-inert by
+       contract -- no consumer admission here widens on it; the
+       general-region widening consumes it under its own flag and
+       names.  */
     if (dump_file)
       {
 	cgraph_node *self = cgraph_node::get (fn->decl);
@@ -3262,7 +3263,7 @@ rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
   ctx.region = true;
   ctx.cc_immaterial = cc_immaterial;
 
-  /* FABLE_GOES_BURR R2 (the crossloop-cc-unproven widening): under
+  /* The crossloop-cc-unproven widening: under
      -mtt-tensix-optimize-cc-region-general, a crossed loop whose CC
      activity the CC-region tree proves ambient-preserving-and-
      narrowing admits its typed structured-CC atoms -- the enable set
@@ -3402,8 +3403,8 @@ namespace {
 /* Word classification for the init face: can this delivered word write
    LoadMacroConfig (SFPCONFIG class), launch a macro, or replay recorded
    content?  The classifier now lives in THE unified audited word-fact
-   table (rvtt-raw-boundary.cc rvtt_word_facts_classify, FABLE item #4
-   Deliverable B); rvtt_word_init_class is this face's query accessor
+   table (rvtt-raw-boundary.cc rvtt_word_facts_classify);
+   rvtt_word_init_class is this face's query accessor
    -- same question, same verdicts, same refusal names, refusing
    default for every class not on record, with the caps-keyed
    SETC16/SFPCONFIG opcode checks and the owned-row tracking (stage 2)
@@ -3441,7 +3442,7 @@ struct init_scan_ctx
   /* The resolved contract call STATEMENT, admitted by identity: a
      constprop/IPA clone's call statement can still spell the origin
      decl while the cgraph edge targets the clone, so decl comparison
-     alone mis-refuses the contract call itself (lane IK).  Statement
+     alone mis-refuses the contract call itself.  Statement
      identity admits exactly the one proven edge and nothing else.  */
   gimple *contract_call = nullptr;
   bool saw_mop = false;
@@ -3580,7 +3581,7 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
 	    case rvtt_insn_data::tttrnspsrcb:
 	    case rvtt_insn_data::ttstallwait:
 	    case rvtt_insn_data::ttrmwcib:
-	      /* X6 FPU face-transpose family (lane FV): Matrix-Unit
+	      /* The FPU face-transpose family: Matrix-Unit
 		 choreography programming Dst rows, Src banks, and backend
 		 configuration -- state this contract neither owns nor
 		 orders against.  Fail closed.  */
@@ -3909,7 +3910,7 @@ init_replay_events (init_scan_ctx *ctx, const vec<rvtt_ipa_event> &evs)
   return true;
 }
 
-/* The chain hops' whole-body epoch scans, summary-fed (item #15): one
+/* The chain hops' whole-body epoch scans, IPA-summary-fed: one
    digest per hop body, computed once and consulted per contract,
    replacing the per-contract re-walks.  FACE_UNAVAILABLE is the
    consuming face's closure refusal; TAG its dump prefix.  Returns the
@@ -3987,7 +3988,7 @@ init_value_equal_stmt (gimple *stmt, basic_block dom_bb, class loop *loop,
 		       bool *have_dom)
 {
   /* Typed ttsetc16 builtin calls are SETC16 deliveries too.  Only the
-     ADDR_MOD contract commit (lane IK) plants them in caller bodies, so
+     ADDR_MOD contract commit plants them in caller bodies, so
      the widening is gated by its flag: with the flag off no such call
      exists on any audited path and the historical walk is byte-
      identical.  An owned-row write with a non-constant operand or an
@@ -4201,7 +4202,7 @@ init_value_equal_p (cgraph_node *ucaller, function *caller_fn,
   /* Committed-inline bodies (inlined_to == UCALLER): their statements
      execute at their U-level call sites -- the production hw-configure
      init lives here until the inline transform materializes it.  The
-     body resolves through the clone_of origin (laneBT); the write's
+     body resolves through the clone_of origin; the write's
      dominance is its U-level call block's.  */
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
@@ -4350,16 +4351,16 @@ init_commit_caller (cgraph_node *caller, edge entry,
 	     caller->dump_name (), ph->index);
 }
 
-} // anonymous namespace (lane CA init hoist)
+} // anonymous namespace (init hoist)
 
-/* Item #15: the ONE caller-chain resolver behind the init-face
-   contracts (lane CA init hoist, lane IK ADDR_MOD hoist) -- previously
+/* The ONE caller-chain resolver behind the init-face
+   contracts (the init hoist and the ADDR_MOD hoist) -- previously
    two byte-similar copies.  Resolve the effective caller chain
    F <- W1 <- ... <- U: each intermediate must be the target of exactly
    one call edge, not address-taken, and COMMITTED into its inliner
    (inlined_to) -- so at execution time its statements run inline at
    the call site, between the loop's trips -- and its body (through the
-   clone_of origin chain, the laneBT resolution: origin body = sound
+   clone_of origin chain: origin body = sound
    over-approximation) is scanned as part of the loop epoch.  U is the
    outermost node still carrying its own gimple CFG; the hoist lands in
    U's loop preheader.  REQUIRE_GIMPLE_BODY adds the ADDR_MOD face's
@@ -4475,7 +4476,7 @@ resolve_contract_chain (function *callee_fn,
 
 /* See rvtt-protos.h.  Returns the refusal name, or NULL after a
    committed caller-side insertion with PROG->stage set.  COMMIT false
-   (lane IU pricing pre-run) evaluates the identical proof chain and
+   (the pricing pre-run) evaluates the identical proof chain and
    sets every out field -- stage and the caller-loop trip weight --
    without inserting anything.  */
 
@@ -4494,7 +4495,7 @@ rvtt_crosscall_init_hoist (function *callee_fn,
   if (!c)
     return "drain-init-callers-unproven";
 
-  /* The one caller-chain resolver (item #15); dump lines and refusal
+  /* The one caller-chain resolver; dump lines and refusal
      verdicts are the historical ones.  */
   auto_vec<cgraph_node *, 4> chain;	/* intermediates, innermost first */
   cgraph_node *ucaller = nullptr;
@@ -4570,7 +4571,7 @@ rvtt_crosscall_init_hoist (function *callee_fn,
      calls: the same epoch discipline over every hop body (through the
      clone_of origin when the clone carries no materialized body --
      statement classification is parameter-independent, so the origin
-     over-approximates soundly), summary-fed (item #15): each hop
+     over-approximates soundly), IPA-summary-fed: each hop
      body's digest is computed once per TU and replayed here.  */
   if (!result)
     result = scan_chain_hops (&ctx, chain, "drain-init-callers-unproven",
@@ -4601,7 +4602,7 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 		     : ctx.owned_row_dirty ? "loop-owned-row-write"
 		     : "value-equality-unproven");
 	}
-      /* Caller-loop trip weight (lane IU init-hoist-aware run
+      /* Caller-loop trip weight (init-hoist-aware run
 	 pricing): the proven loop's profile entry/body execution-count
 	 fraction, filled for BOTH the proof-only and the committing
 	 call under the planner's loop_trip_weight discipline (exact
@@ -4645,10 +4646,10 @@ rvtt_crosscall_init_hoist (function *callee_fn,
 }
 
 /* ==================================================================
-   Lane IK: cross-call ADDR_MOD contract (Dst auto-increment service).
+   Cross-call ADDR_MOD contract (Dst auto-increment service).
 
    A straight-line callee whose Dst auto-increment groups refuse solely
-   by the per-execution configuration pricing (lane IA: each SETC16
+   by the per-execution configuration pricing (each SETC16
    occupies the audited two-cycle configuration issue class plus the
    once-per-entry drain residual on EVERY call) re-programs its owned
    address-modifier slot on every invocation, although the program is
@@ -4656,14 +4657,14 @@ rvtt_crosscall_init_hoist (function *callee_fn,
    programs its ADDR_MOD slots ONCE at kernel init.  This service --
    called from the callee's Dst auto-increment pass
    (rtl-rvtt-dst-autoincr.cc) while every caller body is still gimple
-   (the lane CA ordering fact) -- proves the caller side and, on a
+   (the pass-pipeline ordering fact) -- proves the caller side and, on a
    complete proof, inserts the slot program as typed ttsetc16 builtin
    calls in the caller's loop-entry preheader, LIFTED across enclosing
-   caller loops by the residency walk (lane HC's discipline: a failing
+   caller loops by the residency walk (a failing
    level stops the walk, never refuses).  The callee's groups then fire
    with the program omitted entirely.
 
-   Soundness is the ISA-adjudicated slot-clobber census
+   Soundness is the ISA-documented slot-clobber census
    (tt-isa-documentation: ThreadConfig ADDR_MOD rows are per-thread and
    writable ONLY by same-thread SETC16 -- WRCFG/CFGSHIFTMASK/RMWCIB
    cannot write ThreadConfig), instantiated as:
@@ -4734,9 +4735,9 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
       iprog.setc16[iprog.n_setc16++].value = 0;
     }
 
-  /* The one caller-chain resolver (item #15; the lane CA discipline:
-     each intermediate committed inline, single-sited; U = the
-     outermost node still carrying gimple).  Dump lines and refusal
+  /* The one caller-chain resolver (each intermediate committed
+     inline, single-sited; U = the outermost node still carrying
+     gimple).  Dump lines and refusal
      verdicts are the historical ones.  */
   auto_vec<cgraph_node *, 4> chain;
   cgraph_node *ucaller = nullptr;
@@ -4806,14 +4807,14 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
     }
 
   /* Chain hops' statements execute per trip, between calls: same epoch
-     discipline over every hop body, summary-fed (item #15): one digest
+     discipline over every hop body, IPA-summary-fed: one digest
      per hop body, computed once per TU and replayed here.  */
   if (!result)
     result = scan_chain_hops (&ctx, chain,
 			      "crosscall-addrmod-callers-unproven",
 			      "addrmod-hoist");
 
-  /* Placement residency walk (lane HC's discipline): lift the program
+  /* Placement residency walk (the config-prefix discipline): lift the program
      point across enclosing caller loops whose EXTRA bodies pass the
      same epoch scan.  A failing level stops the walk -- the inner
      placement stands, nothing refuses -- and a rejected level's

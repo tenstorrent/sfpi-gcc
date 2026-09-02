@@ -33,7 +33,7 @@ struct macro_event
 {
   rtx_insn *origin;		/* region insn this event realizes     */
   xtt_subunit_t subunit;
-  /* CC_COALESCED (WP9): a lane-merge value event (a CC-predicated
+  /* CC_COALESCED: a lane-merge value event (a CC-predicated
      operation that reads its own destination) realized by the
      calendar's predicated-overwrite dataflow -- the shared launch VD
      receives every payload load and the post-visibility load is the
@@ -51,7 +51,7 @@ struct macro_event
   bool is_store;
   bool issues_word;		/* carrier launch or explicit issue    */
   bool is_carrier;		/* the Dst access carried by a launch  */
-  /* WP10 compact CC calendar: this explicit trailing load absorbs the
+  /* Compact CC calendar: this explicit trailing load absorbs the
      row's typed Dst stride through its own auto-increment address mode
      (the tables' owned address-modifier slot), replacing the deleted
      separator.  */
@@ -69,7 +69,7 @@ struct macro_schedule
   uint32_t lreg_footprint;
   bool alternating_vd;		/* derived (conservatively), not assumed */
   int absorbed_stride;		/* Dst delta absorbed by auto-inc mode */
-  /* WP10: the absorber is the trailing EXPLICIT load (compact CC
+  /* Compact calendar: the absorber is the trailing EXPLICIT load (compact CC
      calendar) rather than the last carrier; launches keep the
      no-increment mode.  */
   bool absorb_into_explicit;
@@ -88,15 +88,15 @@ extern const char *macro_sched_refusal_latency_violation;
    realization (template hosting or coalescing) cannot be proven; shared
    spelling with the descriptor layer's CC refusal.  */
 extern const char *macro_sched_refusal_cc_template_unproved;
-/* An immediate-delta region (macro_region::imm_stride, lane IS F1
+/* An immediate-delta region (macro_region::imm_stride,
    honest fix) whose schedule did not absorb the stride: its rows'
    address immediates differ and cannot replay verbatim, so only the
    absorbed calendar expresses it.  */
 extern const char *macro_sched_refusal_imm_stride_unabsorbed;
-/* The 2026-08-17 silicon adjudication's separator-kept mis-select is
+/* The hardware-adjudicated separator-kept mis-select is
    no longer a scheduler-level structural refusal
-   (cc-separator-kept-silicon-unproven, retired): the corrected CRAQ
-   delivery model (craq-sim 9f324140) pinned the ARCHITECTURAL cause --
+   (cc-separator-kept-silicon-unproven, retired): the corrected
+   reference-simulator delivery model pinned the ARCHITECTURAL cause --
    the store's lane predicate is live at execution and the 4-slot
    calendar retires its all-lanes restore in the store's own cycle --
    so the descriptor CC model now refuses such schedules by the

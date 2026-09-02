@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER non-store no-op (lane HO): the knob touches ONLY
+// STORE-SOURCE TIER non-store no-op: the knob touches ONLY
 // store-consumed candidates.  A loop constant consumed by SFPMUL alone
 // has no encoding ceiling -- constant registers are legal SFPMUL
 // sources -- so the established residency park proceeds untouched and

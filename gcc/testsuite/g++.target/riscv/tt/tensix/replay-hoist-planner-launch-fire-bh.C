@@ -1,5 +1,5 @@
 // Planner emission records unblock the reissue pricing of a
-// planner-emitted SFPLOADMACRO payload (lane CK; rvtt-effects.h
+// planner-emitted SFPLOADMACRO payload (rvtt-effects.h
 // contract).  The eight-trip typecast face loop forms the alternating
 // L0/L1 launch calendar; the replay former's [0,+4) launch payload was
 // previously refused replay-reissue-latency-unproved (the launch

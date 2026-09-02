@@ -1,4 +1,4 @@
-// IMS FIRE on Wormhole (item #5): the same mechanism under the WH
+// IMS FIRE on Wormhole (the modulo-scheduling tier): the same mechanism under the WH
 // delay discipline -- the commit re-verifies the nop inserter's
 // pad-site probe (the WH correctness carrier) before keeping the
 // reorder.  A CC-atom row whose interior region carries a serial mul

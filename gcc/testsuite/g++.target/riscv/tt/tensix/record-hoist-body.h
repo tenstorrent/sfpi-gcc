@@ -1,6 +1,6 @@
 // Shared re-record fire shape (see record-hoist-fire-bh.C).
 //
-// The separator is a SYMBOL-ADDRESSED volatile store (lane FW): a named
+// The separator is a SYMBOL-ADDRESSED volatile store: a named
 // data object is provably not the instruction FIFO, so the narrow
 // loop_preserves_replay_p scan admits it in every flag state (a
 // pointer-parameter store now refuses fail-closed -- it could be a FIFO

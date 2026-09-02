@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD near miss, playback word (lane HS): a raw
+// OPAQUE-REPLAY-RECORD near miss, playback word: a raw
 // REPLAY execute (load_mode=0) delivers recorded buffer content --
 // auditing playback is a later increment, and admitting records is
 // SOUND ONLY BECAUSE executes refuse (the no-playback theorem's arm

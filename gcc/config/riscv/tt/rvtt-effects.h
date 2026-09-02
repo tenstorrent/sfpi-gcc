@@ -78,14 +78,15 @@ extern xtt_subunit_t rvtt_builtin_subunit (const rvtt_insn_data *);
    default, also returned for unlisted builtins).  Only builtins whose
    late pattern carries a constant (operand-free) latency attribute are
    listed in the map; the timing semantics consuming this value live in
-   rvtt-timing.h (item #11 discipline: facts read once at the consumer
+   rvtt-timing.h (the timing-engine discipline: facts read once at the
+   consumer
    seam, math in the engine).  */
 extern int rvtt_builtin_result_latency (const rvtt_insn_data *);
 
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 
-/* Audited lane-local value-op family (FABLE item #4: the
+/* Audited lane-local value-op family (the
    effect_overrides tables formerly copied verbatim between
    rtl-rvtt-lp-alloc.cc and rtl-rvtt-dst-ownership.cc, migrated to the
    xtt_lane_local/xtt_cc_write attributes at the definitions in
@@ -101,7 +102,7 @@ extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
    (planner-oracle re-freeze: oracles/refreeze-pin49-20260831.txt).  */
 extern bool rvtt_lane_local_effects (rtx_insn *, bool *cc_writes);
 
-/* Lane-gated consumer family (FABLE item #4: rtl-rvtt-lp-alloc.cc's
+/* Lane-gated consumer family (rtl-rvtt-lp-alloc.cc's
    hand lane_gated_consumers allowlist migrated to the xtt_lane_gated
    attribute): true iff INSN's LREG/Dst writes are lane-gated and its
    dataflow is lane-local.  The CC-gated predicated-assign copy is NOT
@@ -203,8 +204,8 @@ extern bool rvtt_shadow_coupling_possible (function *);
      - lreg_read = 0: SFPLOADMACRO issue is never operand-gated.  [ISA]
        SFPLOADMACRO.md schedules every sub-unit event for an absolute
        later cycle (issue + 1 + delay) and states no issue-cycle
-       register rule; [SIM] the CRAQ executor (craq-sim f80a8d64
-       sfploadmacro_events.h) enqueues events unconditionally at issue
+       register rule; [SIM] the reference simulator's event model
+       enqueues events unconditionally at issue
        -- "there is no FIFO between launches"; [HAND] the production
        Where kernel and handwritten typecast issue launches
        back-to-back.  Every register a launch's events read is either

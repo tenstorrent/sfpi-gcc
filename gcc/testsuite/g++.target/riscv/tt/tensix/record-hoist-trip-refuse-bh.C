@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Named refusal (lane FW repin): a volatile store through an UNKNOWN
+// Named refusal: a volatile store through an UNKNOWN
 // pointer inside the loop could be an instruction-FIFO push, and with a
 // runtime trip bound the stored word's interval is unresolvable (the
 // induction has no resolvable equality bound), so it cannot be proven

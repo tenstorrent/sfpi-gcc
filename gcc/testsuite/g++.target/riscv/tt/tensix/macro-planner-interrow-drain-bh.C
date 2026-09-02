@@ -1,11 +1,11 @@
-// Lane EV (P0 wrong-code adjudication, 2026-08-21): a multi-row region
+// P0 wrong-code adjudication: a multi-row region
 // formed on the frozen whole-word unary shift/cast program pins the
 // launch VD (fixed_vd) -- the conservative VD policy's own rule says
 // back-to-back rows are sound only under VD alternation, so emission
 // must place the FULL derived drain between consecutive rows.  The
 // unfixed emission issued the 8 launches back-to-back with a single
 // trailing drain: three launches' hosted events in flight on one LReg,
-// device corr FAIL (weekly pin-15 + pin-18 e2e) reproduced on the
+// device corr FAIL (recurring end-to-end hardware runs) reproduced on the
 // pinned simulator.  Fixed shape: 8 launches, each followed by the
 // derived drain (8 x 3 SFPNOPs), byte-for-byte the proven rolled
 // per-row calendar.

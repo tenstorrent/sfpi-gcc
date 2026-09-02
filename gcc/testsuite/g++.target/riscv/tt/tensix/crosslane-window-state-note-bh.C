@@ -1,4 +1,4 @@
-// TEN-2932 window model (lane FP audit): a value-form LaneConfig write
+// The ENABLE_DEST_INDEX write-restriction window model: a value-form LaneConfig write
 // leaves the window state UNKNOWN; a companion-bank write under an
 // unproven state is a dump NOTE, never an error (ROW_MASK traffic must
 // not be punished).  The name had no testsuite coverage (FH-17).

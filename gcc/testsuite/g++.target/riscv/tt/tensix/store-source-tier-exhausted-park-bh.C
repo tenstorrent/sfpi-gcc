@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER near miss, LREG budget (lane HO): seven
+// STORE-SOURCE TIER near miss, LREG budget: seven
 // live-through vector values plus the in-loop materialization temp put
 // the function-wide SSA pressure model at the full 8-LREG file, so
 // the tier's hoist refuses by the established name

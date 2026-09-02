@@ -8,7 +8,7 @@
 // typed face-advance body).  No scalar row backedge remains.
 //
 // The record-only preheader hoist REFUSES here by the execution-saturation
-// cross-check retained in the interlock-aware model (silicon: the
+// cross-check retained in the interlock-aware model (hardware: the
 // unary-max/min +2.06% flip root-cause): with the per-row increments
 // absorbed, the eight sibling launches of the same buffer are contiguous
 // in the final stream, their execution surplus 8 * (600 - 123) = 3816
@@ -17,7 +17,7 @@
 // degenerates to -record = -915 -- below any non-negative threshold, so
 // even the =0 override cannot force the hoist.  The capture therefore stays in the
 // face-loop body as a record-with-execution first row (TTREPLAY count 8:
-// one recording plus seven launches), the silicon-measured winning form
+// one recording plus seven launches), the hardware-measured winning form
 // for this shape class.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -mtt-tensix-optimize-dst-autoincr -fdump-tree-rvtt_invariant-details -fdump-rtl-rvtt_dst_autoincr-details -fdump-rtl-rvtt_replay-details" }
 // { dg-final { scan-tree-dump-times "Hoisted invariant SFPU immediate" 2 "rvtt_invariant" } }

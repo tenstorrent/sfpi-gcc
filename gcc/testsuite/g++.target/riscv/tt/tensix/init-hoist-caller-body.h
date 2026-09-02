@@ -1,4 +1,4 @@
-/* Cross-call invariant-init hoist bodies (lane CA, D2): the production
+/* Cross-call invariant-init hoist bodies (D2): the production
    minmax shape -- a noinline per-tile callee whose macro formation
    emits the idempotent init prefix, called from a counted caller
    loop.  The callee body is the established in-place periodic minmax

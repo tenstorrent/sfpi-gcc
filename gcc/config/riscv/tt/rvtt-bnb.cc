@@ -435,7 +435,7 @@ rvtt_solver_backend_name ()
 }
 
 /* ---------------------------------------------------------------------
-   Delivery-shape arbitration (lane EG): exact minimization over the
+   Delivery-shape arbitration: exact minimization over the
    discrete shape lattice {U} x {payload R} of one proven-trip counted
    SFPU row loop.
 
@@ -454,8 +454,8 @@ rvtt_solver_backend_name ()
        out of the loop; its decision is predicted by mirroring its own
        published rvtt-cost.md model with the DOWNSTREAM constants and
        ITS interlock exec estimate (ds_exec) -- prediction, never
-       re-pricing (the mirror reproduces the recorded pin-13 refusal
-       arithmetic exactly);
+       re-pricing (the mirror reproduces the recorded hardshrink
+       refusal arithmetic exactly);
      - the Dst auto-increment pass runs after replay formation and
        absorbs the separator words around launches, so on replay legs
        under -mtt-tensix-optimize-dst-autoincr the separators neither
@@ -505,11 +505,12 @@ window_sep (const rvtt_delivery_problem &p)
 
 /* Downstream-mirror: does the replay-hoist gate lift the counted-loop
    record of a ROLLED row loop (rvtt-cost.md counted-loop capture
-   branch, the gate's own interlock exec estimate)?  Since item #12 the
+   branch, the gate's own interlock exec estimate)?  Since the
+   delivery-cost unification the
    mirror calls the SAME replay_pricing spelling the RTL gate prices
    with (rvtt-delivery-cost-core.h) -- prediction, never re-pricing,
    and drift is structurally impossible.  Validated: at trips 31,
-   words 9, ds_exec 10 this prices the recorded pin-13 hardshrink
+   words 9, ds_exec 10 this prices the recorded hardshrink
    refusal -383 exactly (pinned in rvtt-delivery-cost-test.cc).  */
 bool
 mirror_counted_hoist_fires (const rvtt_delivery_problem &p)
@@ -583,7 +584,7 @@ delivery_rolled_explicit_cost (const rvtt_delivery_problem &p)
    (the pass's former W_drain MODEL SEAM, now the delivery-cost
    module's named quantity carried in the problem; current-model
    value 0 keeps every priced total unchanged, and a future
-   silicon-priced value moves every consumer together).  */
+   hardware-measured value moves every consumer together).  */
 int64_t
 autoincr_setup_term (const rvtt_delivery_problem &p)
 {

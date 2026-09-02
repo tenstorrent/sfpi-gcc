@@ -1,8 +1,8 @@
-// WP8 cast-round parity: eight adjacent rows with a single all-lanes
+// Cast-round parity: eight adjacent rows with a single all-lanes
 // proof form one region (the enable proof is required at the first row
 // only -- no member can write CC); the alternating-VD launch pair and
 // three-slot drain are byte-identical to the quarantined oracle
-// (oracles/wp8-oracle-manifest, cast-round bh).
+// (oracles/wp8-oracle-manifest.txt, cast-round bh).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPENCC" 1 } }
 // { dg-final { scan-assembler-times "SFPCONFIG" 4 } }

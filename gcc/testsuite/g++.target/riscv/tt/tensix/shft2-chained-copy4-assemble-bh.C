@@ -1,5 +1,5 @@
-// SFPSHFT2 SUBVEC_CHAINED_COPY4 must ASSEMBLE (lane FB finding, lane FA
-// fix, 2026-08-21): the insn template printed "SFPSHFT2\t%x0 %x0, ..."
+// SFPSHFT2 SUBVEC_CHAINED_COPY4 must ASSEMBLE (a binutils
+// fix): the insn template printed "SFPSHFT2\t%x0 %x0, ..."
 // with the comma missing, so gas rejected every emission of the chained
 // form.  dg-do assemble makes the assembler the oracle; the
 // scan-assembler twin pins the corrected spelling.

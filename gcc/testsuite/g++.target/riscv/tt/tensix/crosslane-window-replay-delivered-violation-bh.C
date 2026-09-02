@@ -1,4 +1,4 @@
-// TEN-2932 replay-delivery vision (lane FR, closing lane FP's FP-2):
+// The window checker's replay-delivery vision:
 // the default-ON replay former records this row BEFORE the window
 // opens and delivers it via TTREPLAY launches INSIDE the window -- the
 // launch carries no LReg SET, so the positional checker used to accept

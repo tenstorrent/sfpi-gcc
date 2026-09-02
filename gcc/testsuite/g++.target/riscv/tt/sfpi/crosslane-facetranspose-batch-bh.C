@@ -1,4 +1,4 @@
-// X6 batched surface (lane FV): face_transpose_dst_32b_batch<8> = the
+// X6 batched surface: face_transpose_dst_32b_batch<8> = the
 // topk_xl transpose_8_faces shape -- ONE cfg block, eight faces at
 // +0..+112.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -std=c++17 -I [SFPI]/include -fno-exceptions -fno-rtti" }

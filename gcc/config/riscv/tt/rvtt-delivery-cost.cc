@@ -1,4 +1,4 @@
-/* The one delivery-cost API of the Tensix backend (FABLE_GOES_BURR #12).
+/* The one delivery-cost API of the Tensix backend.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.

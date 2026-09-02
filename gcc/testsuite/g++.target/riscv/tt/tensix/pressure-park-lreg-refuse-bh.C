@@ -1,4 +1,4 @@
-// PRESSURE-PARK near miss, LREG tier budget (lane GV): seven
+// PRESSURE-PARK near miss, LREG tier budget: seven
 // live-through vector values plus the in-loop materialization temp put
 // the function-wide SSA pressure model at the full 8-LREG file, so
 // after the three PRGM destinations are taken the fourth admitted

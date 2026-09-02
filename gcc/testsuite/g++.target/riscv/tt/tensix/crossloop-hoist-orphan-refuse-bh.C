@@ -1,10 +1,10 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -fdump-tree-rvtt_crossloop" }
-// FC-I fail-closed twin (lane DK, from lane DG2's adversarial audit):
+// Fail-closed twin (from an adversarial audit):
 // crossloop consumed the census verdict but never checked that the
 // function it is EDITING is inside the rooted closure.  Here the in-TU
 // `_start' anchor pins the external surface, so the public kernel no
 // live code calls is an orphan the census SKIPS entirely (its body was
-// never audited) -- yet the pin-14 crossloop hoisted inside it
+// never audited) -- yet the earlier crossloop hoisted inside it
 // (verified: 2 fires on the installed binary), converting the
 // extern-fixed-surface axiom into a wrong-code exposure on
 // naked-asm-entry TUs.  Editing an unaudited body must refuse by name.

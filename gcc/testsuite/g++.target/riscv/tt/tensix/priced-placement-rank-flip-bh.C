@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER priced residency ranking fire (item #13; shadow
+// PLACEMENT-ARBITER priced residency ranking fire (the placement arbiter; shadow
 // leg = priced-placement-rank-shadow-bh.C, same body): GV's
 // uses-then-value key ranks the 3-use cold-loop constant above the
 // 1-use hot-loop constant; the arbiter's run-amortized delivery

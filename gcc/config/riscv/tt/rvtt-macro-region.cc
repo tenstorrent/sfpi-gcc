@@ -195,7 +195,7 @@ region_scanner::close_row (basic_block bb)
   gcc_assert (!span_.is_empty ());
 
   /* Effect legality inside the row.  A CC-writing member is admitted in
-     exactly two structural roles (WP9 CC-template extension); whether a
+     exactly two structural roles (the CC-template extension); whether a
      proven CC-template program realizes them is a descriptor question:
        - a predicate DEFINITION: a value event that reads LREGs, writes
 	 CC, and produces NO LREG result (the typed
@@ -326,7 +326,7 @@ dst_address_operand_pos (rtx_insn *insn)
    pattern structure position by position, identical constant operands,
    and a consistent renaming of register operands.
 
-   Immediate Dst-address deltas (lane IS, F1 honest fix): the loop
+   Immediate Dst-address deltas: the loop
    fusion passes (gimple rvtt_dst_iteration and kin) carry part of the
    per-row Dst advance in the address immediates -- consecutive rows
    differ ONLY in their typed Dst address constants, with the residual
@@ -422,7 +422,7 @@ region_scanner::isomorphic_to_first (macro_row &row)
 void
 region_scanner::finalize_region (basic_block bb)
 {
-  /* Single-row regions are admitted (WP8): a lone row is a complete
+  /* Single-row regions are admitted: a lone row is a complete
      dataflow-closed slice; whether one launch amortizes its
      configuration is a Layer-6 profitability question (straight-line
      single rows refuse there; loop bodies weigh the row by the trip
@@ -451,7 +451,7 @@ region_scanner::finalize_region (basic_block bb)
 	      stride_uniform = false;
 	  }
 
-      /* Immediate-delta rows (lane IS, F1 honest fix): absolute
+      /* Immediate-delta rows: absolute
 	 progression proof.  Row k's absolute Dst advance -- the
 	 separator deltas accumulated before it plus its own immediate
 	 delta -- must equal k * S for one uniform S, and the region's
@@ -644,7 +644,7 @@ region_scanner::scan_bb (basic_block bb)
 	}
 
       /* Configuration writers and CC-writing value events refuse at the
-	 event itself (WP8) so shapes name their missing capability even
+	 event itself, so shapes name their missing capability even
 	 when later slice members are opaque: a config write can never
 	 be a region member, and a CC writer would need a
 	 CC-manipulating instruction template no proven program
@@ -666,11 +666,11 @@ region_scanner::scan_bb (basic_block bb)
       if (e.cc_write)
 	{
 	  /* CC-writing value events extend the span in their two
-	     admitted structural roles (WP9; see close_row): a predicate
+	     admitted structural roles (see close_row): a predicate
 	     definition (reads LREGs, writes CC, no LREG result) or the
 	     in-row all-lanes restore (pure, proven, and only AFTER a
 	     definition -- a restore with nothing to restore is not the
-	     select structure and keeps the pre-WP9 refusal).  A
+	     select structure and keeps the established refusal).  A
 	     mid-span pure CC write that is NOT the proven all-lanes
 	     pattern is a partial-lane/unproved enable
 	     (cc-enable-unproved); any other CC writer -- including the

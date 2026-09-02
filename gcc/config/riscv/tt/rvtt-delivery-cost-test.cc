@@ -47,7 +47,7 @@ check (bool ok, const char *what)
     }
 }
 
-/* The audited table (rvtt-cost.md define_constants, pin-49 values).  */
+/* The audited table (rvtt-cost.md define_constants, recorded values).  */
 static const cost_table T = { 123, 100, 70, 300 };
 static const int64_t MIN_BENEFIT = 60;	/* XTT_REPLAY_HOIST_MIN_BENEFIT */
 
@@ -63,16 +63,16 @@ main ()
 	 && planner_word_plane (true) == PLANE_REPLAY_SLOT,
 	 "planner-replay wrap selects the slot plane");
 
-  /* ---- Recorded pin-13 hardshrink refusal (the downstream-mirror
+  /* ---- Recorded hardshrink-kernel refusal (the downstream-mirror
      validation anchor: trips 31, words 9, interlock exec 10 slots
      prices -383 exactly; rvtt-bnb.cc mirror_counted_hoist_fires).  */
   {
     replay_price p = replay_pricing (T, SHAPE_COUNTED, 31, 9, 10, 1,
 				     false, MIN_BENEFIT);
-    check (p.benefit == -383, "pin-13 hardshrink counted refusal -383");
-    check (!p.profitable, "pin-13 hardshrink refuses");
+    check (p.benefit == -383, "recorded hardshrink counted refusal -383");
+    check (!p.profitable, "recorded hardshrink refuses");
     check (p.before == 1107 && p.after == 1070 && p.record == 1530,
-	   "pin-13 hardshrink terms (before 1107 after 1070 record 1530)");
+	   "recorded hardshrink terms (before 1107 after 1070 record 1530)");
   }
 
   /* ---- Counted-peel spelling: same before/after, (trips-1) weighting,
@@ -157,7 +157,7 @@ main ()
 	 && rerecord_shape (true, true, true) == SHAPE_RERECORD,
 	 "rerecord shape selection mirrors the flag pair");
 
-  /* ---- WP13 refusal-biased one-sidedness (module invariant): the
+  /* ---- Refusal-biased one-sidedness (module invariant): the
      replay alternative is priced at its steady-state lower bound --
      for every shape and every input in the sweep, the alternative's
      per-instance price never exceeds what the same rows cost through
@@ -182,10 +182,10 @@ main ()
 	  if (alt > priced)
 	    one_sided = false;
 	}
-    check (one_sided, "WP13 alternative is a lower bound (refusal-biased)");
+    check (one_sided, "replay alternative is a lower bound (refusal-biased)");
   }
 
-  /* ---- Formed-side WP13 composition.  */
+  /* ---- Formed-side arbitration composition.  */
   check (ims_formed_cost_x100 (T, 7, 12, 3, false)
 	 == 7u * 123u + 12u * 123u + 3u * 100u,
 	 "formed cost: prefix and calendar at PUSH, drain at SLOT");

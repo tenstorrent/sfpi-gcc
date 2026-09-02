@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay -fdump-rtl-rvtt_dst_autoincr" }
-// Downstream-fallback composition pricing, refusal side (lane FZ; the
+// Downstream-fallback composition pricing, refusal side (the
 // lcm-fresh ON-28 regression shape, rvtt-cost.md "RECORD-HOIST x
 // MOD-WRITE COMPOSITION").  The inner loop re-records an invariant
 // 6-word window every trip AND ends with a would-be dst-autoincr row
@@ -9,7 +9,7 @@
 // issue words downstream of the row across the outer backedge --
 // inside the audited drained-frontend window -- so the dst-autoincr
 // group guard would refuse the group and the mod-write would fall
-// back: different executed streams, premise void, silicon point
+// back: different executed streams, premise void, hardware point
 // negative.  The hoist refuses by name; the in-body exec-record stays
 // byte-identically, and dst-autoincr keeps its mod-write fire.
 // { dg-final { scan-rtl-dump "record-hoist refused: record-hoist-downstream-fallback-unprofitable" "rvtt_replay" } }

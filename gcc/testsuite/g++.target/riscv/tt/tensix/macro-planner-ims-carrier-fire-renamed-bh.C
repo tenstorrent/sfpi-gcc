@@ -1,4 +1,4 @@
-// WP15 renamed-equivalence twin: identical dataflow under fresh names
+// Init-hoist renamed-equivalence twin: identical dataflow under fresh names
 // (function and macro identifiers participate in no decision) -- the
 // upward-carrier formation must fire identically to
 // macro-planner-ims-carrier-fire-bh.C.

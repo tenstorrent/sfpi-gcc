@@ -1,4 +1,4 @@
-/* Licensed MAD-restructure test shapes (FABLE_GOES_BURR R3): an
+/* Licensed MAD-restructure test shapes: an
    immediate-fold candidate pair whose product dies into an add.  The
    default combine prefers the SFPMULI/SFPADDI immediate fold (register
    pressure); under BOTH license keys the fold is vetoed and the pair

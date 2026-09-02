@@ -42,8 +42,8 @@ along with GCC; see the file COPYING3.  If not see
        mask = SFPGT/SFPLE (x, LCONST_0, SET_DEST)    -- keep-mask
        z'   = SFPAND (z, mask)
 
-   Bit-exactness (BH, all 2^32 x per lane, from the simulator models --
-   craq-sim TENSIX_EXECUTE_SFPSETCC/SFPCOMPC/SFPMOV/SFPENCC vs
+   Bit-exactness (BH, all 2^32 x per lane, from the reference
+   simulator's TENSIX_EXECUTE_SFPSETCC/SFPCOMPC/SFPMOV/SFPENCC vs
    TENSIX_EXECUTE_SFPGT/SFPLE mod1=8 and SFPAND):
    the CC lowering of "x <= 0.0f" enables the zeroing on lanes with
    {sign set} union {encoding == 0}; its complement -- the kept set --
@@ -213,7 +213,7 @@ static bool check_compare_form (ccmask_group *g);
    Returns true with G filled; CANDIDATE marks that the region
    identified itself as a zeroing conditional (enables named
    refusals).  The statement machine is the stage-A compatibility
-   predicate for the CC-region tree (FABLE_GOES_BURR #14): admission is
+   predicate for the CC-region tree: admission is
    keyed off CCR's frame facts at region close -- the matched frame
    must be the one the tree computed (entry, single exit, the exact
    xvif/fcmp/condb refinement chain, the assign inside it) -- with the
@@ -511,8 +511,8 @@ stmt_ordered_before_p (gimple *a, gimple *b)
   return dominated_by_p (CDI_DOMINATORS, bb, ba);
 }
 
-/* Stage-B tree-keyed matcher (-mtt-tensix-optimize-cc-region-general;
-   FABLE_GOES_BURR item #14 stage B): admit the zeroing-conditional
+/* Stage-B tree-keyed matcher (-mtt-tensix-optimize-cc-region-general):
+   admit the zeroing-conditional
    fold for any BLOCK LAYOUT of the proven frame structure, keyed
    entirely off the CC-region tree where the stage-A statement machine
    (restricted to the historical linear/diamond shapes) said no.
@@ -808,10 +808,10 @@ transform (function *fun)
 {
   bool changed = false;
   basic_block bb;
-  /* The CC-region tree, computed once per function (FABLE_GOES_BURR
-     #14).  A fold deletes a whole leaf frame and inserts only CC-inert
-     statements, so the surviving frames' facts stay exact and no
-     rebuild is needed between fires.  */
+  /* The CC-region tree, computed once per function
+     (rvtt-cc-region.h).  A fold deletes a whole leaf frame and
+     inserts only CC-inert statements, so the surviving frames' facts
+     stay exact and no rebuild is needed between fires.  */
   rvtt_cc_region_tree ccr (fun);
   FOR_EACH_BB_FN (bb, fun)
     {

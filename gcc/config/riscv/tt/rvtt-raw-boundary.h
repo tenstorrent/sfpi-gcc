@@ -74,7 +74,7 @@ extern bool rvtt_raw_ttinsn_word (rtx_insn *insn, uint32_t *word);
 extern bool rvtt_raw_replay_owner_word_p (uint32_t word);
 
 /* Audited CC/lane-enable classification of one raw instruction word
-   (lane IV, the typecast walk-transparency class).  The question is the
+   (the typecast walk-transparency class).  The question is the
    entry-ambient walk's: can this word disturb the architectural
    all-lanes lane-enable state (the per-lane LaneFlags /
    UseLaneFlagsForLaneEnable pair written by SFPENCC and friends, plus
@@ -96,7 +96,7 @@ extern bool rvtt_raw_replay_owner_word_p (uint32_t word);
    Consumers must treat both proven classes as AMBIENT-PRESERVING only
    (a state already all-lanes stays all-lanes) and never as a KILL: a
    raw word can sit inside a REPLAY record load window, where it is
-   architecturally swallowed (stored, not executed -- lane HS,
+   architecturally swallowed (stored, not executed --
    rvtt-mop-tables.h), so its execution can never be asserted from the
    word alone.  Preserving-classification is sound under both readings;
    kill-classification is not.  QSR has no capability table and every
@@ -116,7 +116,7 @@ extern rvtt_raw_cc_class rvtt_raw_cc_word_class (uint32_t word);
 extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
 
 /* ================================================================== */
-/* THE unified audited word-fact table (FABLE item #4, Deliverable B).
+/* THE unified audited word-fact table.
 
    One recorded-fact table `word -> {LREG, CC, PRGM, ADDR_MOD, Dst/RWC}
    face verdicts', replacing the four parallel audited-word classifiers
@@ -137,7 +137,7 @@ extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
    on the table itself): every face's proven verdict means
    ambient-PRESERVING only -- never a KILL/GEN fact.  A raw word can
    sit swallowed in a REPLAY record window (stored, not executed --
-   lane HS, rvtt-mop-tables.h), so its EXECUTION can never be asserted
+   rvtt-mop-tables.h), so its EXECUTION can never be asserted
    from the word alone; only effects sound under BOTH the executed and
    the swallowed reading are recordable in a row.  The vocabulary
    enforces it: face verdicts are `proven inert / proven
@@ -149,7 +149,7 @@ extern bool rvtt_raw_cc_word_ambient_preserving_p (uint32_t word);
    widening any of them is an owner adjudication, never a merge edit):
      - INCRWC (0x38) is admitted on the ADDR_MOD face only; the LREG
        and PRGM faces never audited it and keep refusing it.
-     - SFPCAST/SFPSTOCHRND (0x90/0x8E) are CC-INERT (the lane IV
+     - SFPCAST/SFPSTOCHRND (0x90/0x8E) are CC-INERT (the
        audit) but stay unaudited on the LREG/PRGM/ADDR_MOD faces.
      - SFPENCC's word-exact all-lanes form is a CC-face fact only.  */
 

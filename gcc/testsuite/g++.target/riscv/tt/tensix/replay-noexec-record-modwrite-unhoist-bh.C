@@ -1,6 +1,6 @@
-// Lane FL (FH-1): the replay former's no-exec record PLACEMENT must
-// audit the silicon-refuted mod-write composition (rvtt-cost.md
-// AUDITED COMPOSITION FACT, lane ES 2x2): a recording window opening
+// The replay former's no-exec record PLACEMENT must
+// audit the hardware-refuted mod-write composition (rvtt-cost.md
+// AUDITED COMPOSITION FACT, hardware-established): a recording window opening
 // within the audited W_drain issue-word window of an audited mod-write
 // is the device-wedge adjacency the dst-autoincr guard refuses for its
 // own groups.  Here a USER typed TTSETC16 is the last preheader word

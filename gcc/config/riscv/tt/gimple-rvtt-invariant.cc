@@ -204,7 +204,8 @@ rvtt_all_lanes_encc_p (gimple *stmt)
    - the LAST CC-writing statement is the all-lanes SFPENCC (word-exact
      against the capability table); every statement after it therefore
      executes -- and the loop backedge is taken -- in the architectural
-     all-lanes state (craq-sim TENSIX_EXECUTE_SFPENCC writes cc/cc_en
+     all-lanes state (the reference simulator's TENSIX_EXECUTE_SFPENCC
+     writes cc/cc_en
      from the immediate; nothing after the last CC writer changes
      them);
    - everything else that would be a barrier still is: opaque
@@ -241,8 +242,8 @@ rvtt_loop_cc_canonical_body (class loop *loop)
 	  gcall *call = as_a <gcall *> (stmt);
 	  /* SFPPUSHC/SFPPOPC are CC-stack machinery (a nested v_if
 	     region the lowering kept): PUSHC copies the live flags to
-	     the stack, POPC restores them from it (craq-sim
-	     TENSIX_EXECUTE_SFPPUSHC/SFPPOPC; SFPPUSHC.md/SFPPOPC.md).
+	     the stack, POPC restores them from it (the reference
+	     simulator; SFPPUSHC.md/SFPPOPC.md functional models).
 	     Both only move state between the flags and the flag stack
 	     -- and the body's trailing all-lanes SFPENCC then
 	     OVERWRITES cc/cc_en from its immediates, so the mask
@@ -346,7 +347,7 @@ rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
    crossloop, crosscall and LUT-placement consumers) uses lives in the
    unified pressure engine, tt/rvtt-pressure.cc
    (rvtt_pressure_loop_legal_p and the incremental rvtt_loop_pressure
-   profile; FABLE_GOES_BURR.md item #10).  */
+   profile).  */
 
 /* Prove that the loop's first header test enters the loop body.  This
    avoids speculating an architectural LREG write out of a zero-trip loop,
@@ -444,7 +445,7 @@ rvtt_sfpxloadi_materialization_cost (gcall *call)
 
   uint32_t value = TREE_INT_CST_LOW (gimple_call_arg (call, 1));
   /* The one value-classification spelling (rvtt-delivery-cost-core.h
-     loadi_issue_words; FABLE_GOES_BURR #12 -- this function's prior
+     loadi_issue_words -- this function's prior
      inline spelling and the macro-planner's config_word_loadi_issues
      were proven equivalent term-by-term at migration: the halfword
      cases match set-for-set and both FLOATA exponent windows are
@@ -662,7 +663,7 @@ short_constant_replay_loop_p (class loop *loop, edge entry)
    UseLaneFlagsForLaneEnable} (VectorUnit.md IsLaneEnabled).  SFPPUSHC
    mod 0 pushes exactly that pair onto the flag stack and SFPPOPC mod 0
    pops it back VERBATIM (SFPPUSHC.md / SFPPOPC.md functional models;
-   craq-sim TENSIX_EXECUTE_SFPPUSHC/SFPPOPC agree).  Therefore, in a
+   the reference simulator agrees).  Therefore, in a
    loop body where
 
      (a) every SFPPUSHC is the plain push (gimple mod
@@ -887,7 +888,7 @@ cc_restore_classify_stmt (gimple *stmt, int *depth, cc_restore_analysis &a)
 		  /* Restore still holds (the POPC discards it), but
 		     in-region candidates lose the containment fact.  */
 		  a.narrow_ok = false;
-		  /* Census channel (laneKL, R2 widening 1): name the
+		  /* Census channel: name the
 		     unaudited modifier so the corpus shows which
 		     writers the narrowing set still lacks.  */
 		  if (dump_file)
@@ -1403,12 +1404,12 @@ transform (function *fn)
       if (loads.is_empty ())
 	continue;
 
-      /* EL-vs-RESIDENCY ORDERING (lane HN): when the late
+      /* EARLY-vs-RESIDENCY ORDERING: when the late
 	 const-residency walk with its pressure-park tier is enabled in
 	 this compilation, a CC-restore loop DEFERS its invariant
 	 immediate hoists to that walk entirely.  Two composition
 	 defects make the early hoist here strictly dominated on this
-	 loop class (softplus-fresh anatomy, laneHJ census):
+	 loop class (established on the softplus kernel's anatomy):
 
 	 - BUDGET ORDERING: each hoist below pins one LREG across the
 	   loop under this pass's conservative single-body SSA walk,
@@ -1427,13 +1428,12 @@ transform (function *fn)
 	   tie and lowers to a per-iteration lane-predicated SFPMOV
 	   merge -- a forged word no later pass can remove.
 
-	 PARK-SEED COMPOSITION REFINEMENT (lane HY): the original
+	 PARK-SEED COMPOSITION REFINEMENT: the original
 	 wholesale deferral over-reached.  Its claim -- "the late walk
 	 supersedes every hoist this pass could commit (same
 	 candidates, superset of placements)" -- is REFUTED on the
-	 depth-zero candidate class by six measured pin-34 loss rows
-	 (ceil/roundingops/rdiv/sqrt/softsign/i0, laneHV attribution +
-	 laneHX dump chain + laneHY censuses): this pass's hoist of a
+	 depth-zero candidate class by six measured kernel loss rows
+	 (ceil/roundingops/rdiv/sqrt/softsign/i0): this pass's hoist of a
 	 depth-zero candidate is a mask-exact free code motion (the
 	 restore proof makes its position carry the preheader's
 	 lane-enable mask, so the moved statement reads the identical
@@ -1476,7 +1476,7 @@ transform (function *fn)
 	 (depth > 0) candidate is exactly where both HN defects live
 	 and where the walk's audited post-CC admission is the safe
 	 placement authority; it defers.  Measured discharge of the
-	 depth-zero claim: the six pin-34 loss rows above; measured
+	 depth-zero claim: the six measured loss rows above; measured
 	 discharge of the in-region claim: softplus-fresh, whose
 	 deferral class is entirely in-region and whose booked winning
 	 bytes this split preserves wholesale.  Loops without CC
@@ -1494,7 +1494,7 @@ transform (function *fn)
 	     materializations there are LUT slot coefficients whose
 	     placement authority belongs to the lut-select passes
 	     (shortened slot materializations at the LUT programming
-	     point, lane HT's machinery); an early depth-zero hoist
+	     point, the lut-select placement machinery); an early depth-zero hoist
 	     moves the coefficient out from under that discovery and
 	     the 5-word LUT row decays to a mov-laden 7-word body
 	     (measured on hardware: 29861 -> 43447 cycles under an
@@ -1566,8 +1566,8 @@ transform (function *fn)
 	     side's value is UNPRICEABLE at this point -- it hands the
 	     candidates to the late walk, whose admission proofs live
 	     in that pass and may refuse them all, leaving pure hoist
-	     loss (the trigonometry census anatomy; the pin-34/35
-	     lesson) -- so that direction refuses by name
+	     loss (the trigonometry census anatomy showed
+	     exactly this) -- so that direction refuses by name
 	     (place-alternative-unpriceable) and keeps the legacy
 	     verdict.  Shadow mode dumps both verdicts and changes
 	     nothing; under -mtt-tensix-optimize-priced-placement the

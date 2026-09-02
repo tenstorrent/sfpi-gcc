@@ -1,4 +1,4 @@
-// PARK-SEED COMPOSITION mixed split (lane HY): ONE CC-restore loop
+// PARK-SEED COMPOSITION mixed split: ONE CC-restore loop
 // carrying BOTH candidate classes.  The DEPTH-ZERO invariant immediate
 // keeps the early hoist (depth-zero-hoist-dominant); the IN-REGION one
 // defers to the late const-residency walk (residency-walk-ordering),

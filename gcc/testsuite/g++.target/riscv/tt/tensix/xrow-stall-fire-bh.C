@@ -1,4 +1,4 @@
-// Next-slot acceptance-stall vocabulary (lane IC,
+// Next-slot acceptance-stall vocabulary (the
 // -mtt-tensix-optimize-crossrow-pairing-stall-words): a capturable Dst
 // row whose tail carries an SFPSWAP (min-vs-creg clamp) pairs two
 // iterations once the stall word joins the vocabulary -- the word is

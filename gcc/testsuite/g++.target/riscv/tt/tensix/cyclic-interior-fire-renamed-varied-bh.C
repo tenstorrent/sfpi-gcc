@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-cyclic-region-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // Cyclic-interior RENAMED-EQUIVALENT / VARIED-SHAPE adversary twin
-// (lane IP audit, GY recipe): different function and value names, a
+// (renamed-twin recipe): different function and value names, a
 // different trip count (24) and a LONGER serial latency chain (FOUR
 // muls) with the independent mad pair still available to fill its
 // shadows.  The re-list-scheduling must key on the structural

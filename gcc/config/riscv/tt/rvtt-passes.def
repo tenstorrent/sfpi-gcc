@@ -140,7 +140,7 @@ INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_transp_involution);
    annotation.  */
 INSERT_PASS_BEFORE (pass_expand, 1, pass_rvtt_delivery_shape);
 
-/* Launch-flatten complete-unroll request (lane HH): annotation only
+/* Launch-flatten complete-unroll request: annotation only
    (loop->unroll = the proven trip count on counted innermost DELIVERY
    loops -- typed replay records/launches, fixed raw .ttinsn words, typed
    SFPU builtins, own scalar control).  Placed immediately BEFORE the
@@ -195,17 +195,17 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_spill_diag);
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_synth_opcode);
 /* The generic macro planner analyzes and forms macro regions after IRA
    has assigned LREGs, ahead of the hazard scheduler and replay
-   formation.  (The quarantined exact-calendar pass it replaced was
-   deleted at WP8.)  */
+   formation.  (The quarantined exact-calendar pass it replaced has
+   been deleted.)  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_macro_planner);
-/* The GENERAL du-chain rename (item #7) runs post dst-ownership and
+/* The GENERAL du-chain rename runs post dst-ownership and
    lp-alloc (the collisions it breaks are the allocator's storage
    reuse, so it must see final hard LREGs), post macro formation
    (planner calendars are effect-opaque members and refuse chain spans
    by name rather than being half-visible), and AHEAD of the hazard
    scheduler's fill passes -- a broken collision widens the fill
    candidate sets the same compilation.  (The single-shape v1 rename
-   pass that owned this seam was retired at W4-C as wrong-code-bearing
+   pass that owned this seam was retired as wrong-code-bearing
    -- see rtl-rvtt-lreg-rename.cc's header; its flag now requests this
    pass.)  */
 INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_lreg_rename_chains);
@@ -217,7 +217,7 @@ INSERT_PASS_BEFORE (pass_postreload, 1, pass_rvtt_schedule);
    separators that would otherwise break launch runs.  Per the anchor
    rule below, this line precedes both and therefore RUNS AFTER both.  */
 INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_mop_form);
-/* Post-auto-increment window RE-FORMATION (lane IH, default off): the
+/* Post-auto-increment window RE-FORMATION (default off): the
    replay formation DEFERRED past the fold -- under the knob the
    pre-fold pass_rvtt_replay invocation gates itself off and this
    invocation is the function's ONLY formation, placed so it RUNS AFTER
@@ -255,7 +255,8 @@ INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 // free_bb_for_insn resulting in problems w/ df_analyze, so call before that
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_hll);
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_raw);
-/* TEN-2932 ENABLE_DEST_INDEX window enforcement must see the FINAL
+/* The ENABLE_DEST_INDEX write-restriction window enforcement must see
+   the FINAL
    stream -- after allocation (allocator-inserted moves ARE the caught
    violation class), the hazard scheduler, and replay/MOP formation --
    so it runs last among the Tensix RTL passes, right before free_cfg.

@@ -1,4 +1,4 @@
-// Interfering-copy + web-class near-miss (FABLE_GOES_BURR.md item #6):
+// Interfering-copy + web-class near-miss (the Briggs/George coalescing work):
 // the lreg-alloc-fire-bh.C loop body under the coalescing flag.  Its
 // loop-rotation copy's halves genuinely interfere (the source is
 // redefined while the dest lives across the backedge) -- different

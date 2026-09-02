@@ -1,12 +1,12 @@
-// Lane GJ window-pairing stride-phase generalization, the lane-GG
+// Window-pairing stride-phase generalization, the measured
 // interleaved-source keep twin: hand-interleaving two limb-2 rows into
 // one source pair (the lane-FI interleave-2 precedent) LOSES macro
 // formation entirely -- the planner refuses row-not-closed and the
 // stream falls back to plain 21-word replay windows (10.5 words per
-// row, WORSE than the macro-hosted 6+drain form; lane GG measured this
+// row, WORSE than the macro-hosted 6+drain form; hardware measurement showed this
 // empirically and banked the refusal).  The stride flag never reaches
 // a tuner on this shape and is inert: no drain-interrow service, no
-// window-pairing line.  The mechanism does not re-walk lane GG's
+// window-pairing line.  The mechanism does not re-walk that
 // refused interleave -- macro hosting keeps owning the row.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -mtt-tensix-optimize-window-pairing-stride -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner refusal: row-not-closed" 8 "rvtt_macro_planner" } }

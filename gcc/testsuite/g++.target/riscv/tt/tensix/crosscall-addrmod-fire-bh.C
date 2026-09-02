@@ -1,7 +1,7 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-crosscall-addrmod -fdump-rtl-rvtt_dst_autoincr-details" }
-// Cross-call ADDR_MOD contract FIRE (lane IK): the binopscalar shape --
-// an eight-row straight-line callee whose group refuses by the lane IA
+// Cross-call ADDR_MOD contract FIRE: the binopscalar shape --
+// an eight-row straight-line callee whose group refuses by the
 // per-execution pricing (removed 8 <= 3*2 + 2) -- fires under the
 // contract: the three-SETC16 slot program hoists to the caller's loop
 // entry (once per kernel), the callee's group prices at ZERO per-call

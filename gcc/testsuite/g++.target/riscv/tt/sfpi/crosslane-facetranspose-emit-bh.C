@@ -1,4 +1,4 @@
-// X6 surface emission (lane FV): a two-face 32-bit Dst face transpose
+// X6 surface emission: a two-face 32-bit Dst face transpose
 // under one cfg block must emit exactly the hand choreography counts
 // (topk_xl transpose_dest_face_32b x2): per face 8 TTMOVD2B + 2
 // TTTRNSPSRCB + 4 TTMOVB2A + 4 TTMOVB2D + 2 TTMOVA2D + 5 config-byte

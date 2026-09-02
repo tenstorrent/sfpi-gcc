@@ -1,4 +1,4 @@
-// LOOP-RECLAIM window refuse twin (lane ID): the loop-class hoist
+// LOOP-RECLAIM window refuse twin: the loop-class hoist
 // admission already excludes foreign calls and asm from the loop body
 // (opaque-hoist-region), so the reachable unproven-window shape is a
 // LIFTED programming point -- under -mtt-tensix-optimize-crossloop-hoist

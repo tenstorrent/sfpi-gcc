@@ -1,5 +1,5 @@
-/* Shared prologue for the real-kernel LREG-pressure victims (lane DS
-   acceptance arsenal).  Provides the instruction-buffer stub the sfpi
+/* Shared prologue for the real-kernel LREG-pressure victims (the
+   allocator acceptance arsenal).  Provides the instruction-buffer stub the sfpi
    macros reference, plus the self-contained numeric helpers the victim
    bodies inline (restated from the tt-metal storm-contract fresh_cpp
    helpers; published identities, no LLK dependencies).  */

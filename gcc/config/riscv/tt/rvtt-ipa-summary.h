@@ -20,7 +20,7 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RVTT_IPA_SUMMARY_H
 #define GCC_RVTT_IPA_SUMMARY_H
 
-/* FABLE_GOES_BURR item #15 (stage A): interprocedural facts computed
+/* Interprocedural summaries, carry-only stage: facts computed
    once per function body and consulted across call boundaries, so that
    no tt pass re-walks another function's statements per consumer.
 
@@ -45,9 +45,9 @@ along with GCC; see the file COPYING3.  If not see
        skeleton it runs over;
 
      - CC carry (rvtt-cc-region): the function-level all-lanes-ambient
-       preservation fact, folded from the CC-region tree.  Stage A only
-       CARRIES the fact (dump + API); no consumer admission widens on
-       it (that is R2/stage-B, by name).
+       preservation fact, folded from the CC-region tree.  This stage
+       only CARRIES the fact (dump + API); no consumer admission widens
+       on it (a later widening stage owns that, by name).
 
    VALIDITY.  A digest answers for one snapshot of the subject's gimple
    body.  Every tt pass that mutates ANOTHER function's body (the

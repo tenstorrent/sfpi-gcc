@@ -1,4 +1,4 @@
-// MAD-PAIR vocabulary fire (lane HJ, tanhderivlut plain-leg shape):
+// MAD-PAIR vocabulary fire (tanhderivlut plain-leg shape):
 // the pair's add is the lane-carrier _lv spelling -- a CC-region
 // merge whose carrier holds the other arm's value -- and both the mul
 // and add constants are EL-hoisted shortened FLOATB materializations.

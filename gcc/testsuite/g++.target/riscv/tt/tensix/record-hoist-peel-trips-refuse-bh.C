@@ -4,7 +4,7 @@
 // single-bb loop is do-while, so an unproven or single trip refuses) --
 // record-hoist-peel-trips-unproven, the doomed-hoist mirror keeps its
 // own refusal, and the in-body exec-record formation is kept
-// byte-identically.  The lane FW runtime-trip admission is deliberately
+// byte-identically.  The runtime-trip admission is deliberately
 // NOT extended to the peel.
 // { dg-final { scan-rtl-dump "record-hoist refused: record-hoist-peel-trips-unproven" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump "record-hoist refused: noexec-rerecord-dststore-composition-unaudited" "rvtt_replay" } }

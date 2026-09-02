@@ -1,4 +1,4 @@
-// IMS BUDGET-EXHAUSTION twin (item #5): the fire kernel under an
+// IMS BUDGET-EXHAUSTION twin (the modulo-scheduling tier): the fire kernel under an
 // absolute placement budget of ONE (-mtt-tensix-ims-budget=1, the
 // testing knob) -- Rau's eviction loop runs out at every II below the
 // acceptance bound in every region, refuses ims-budget-exhausted by

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Named refusal (lane FW): a runtime-trip loop whose window is too
+// Named refusal: a runtime-trip loop whose window is too
 // small to clear the 2-trip break-even (per_trip = 4*123 - 70 = 422;
 // record_once = 5*123 + 300 = 915; 2-trip benefit = -71 < 60) refuses
 // by name and keeps the in-body exec-record byte-identically -- the

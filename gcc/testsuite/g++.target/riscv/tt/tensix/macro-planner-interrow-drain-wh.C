@@ -1,4 +1,4 @@
-// Lane EV: the WH mirror of macro-planner-interrow-drain-bh.C -- the WH
+// The WH mirror of macro-planner-interrow-drain-bh.C -- the WH
 // capability tables carry the same fixed-VD unary shift/cast program,
 // so the inter-row drain applies identically (WH no-increment address
 // mode is 3).

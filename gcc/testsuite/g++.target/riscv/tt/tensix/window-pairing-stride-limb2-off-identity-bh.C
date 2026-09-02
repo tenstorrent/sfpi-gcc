@@ -1,4 +1,4 @@
-// Lane GJ window-pairing stride-phase generalization, FLAG-OFF control:
+// Window-pairing stride-phase generalization, FLAG-OFF control:
 // the same limb-2 MulInt32-class row (store hosted on the FIRST issued
 // word, the stride-absorbing launch) WITHOUT
 // -mtt-tensix-optimize-window-pairing-stride keeps the lane-FT

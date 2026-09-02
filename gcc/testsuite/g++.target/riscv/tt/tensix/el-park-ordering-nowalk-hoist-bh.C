@@ -1,4 +1,4 @@
-// EL-vs-RESIDENCY ORDERING near-miss (lane HN): knob ON but the
+// EL-vs-RESIDENCY ORDERING near-miss: knob ON but the
 // pressure-park tier is NOT enabled -- there is no late walk capable
 // of superseding the early hoist (the residency classes alone stop at
 // the body's first CC writer and refuse LREG parks), so the ordering

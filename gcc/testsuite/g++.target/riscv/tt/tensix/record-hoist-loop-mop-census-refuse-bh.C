@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// MopCfg template-census refusal (lane FW): as the census-fire twin
+// MopCfg template-census refusal: as the census-fire twin
 // but MopCfg[8] (Loop1Last, consumed by both templates) is never
 // programmed in-function -- a caller-armed slot could hold a REPLAY
 // record word (MopCfg is per-thread state that outlives calls), so the

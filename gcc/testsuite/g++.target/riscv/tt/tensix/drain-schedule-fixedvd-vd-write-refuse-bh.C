@@ -1,4 +1,4 @@
-// Lane FL (FH-4): the run-boundary drain elision's follower proof must
+// The run-boundary drain elision's follower proof must
 // count the follower LAUNCH word's own front-end VD write.  A fixed-VD
 // VALUE carrier (the lane-EV corruption class) re-targets the SAME
 // register every row while the previous run's hosted events still pend

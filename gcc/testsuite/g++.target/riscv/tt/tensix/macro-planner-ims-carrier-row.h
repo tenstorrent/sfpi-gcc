@@ -1,4 +1,4 @@
-// The WP15 upward-carrier fire row (macro-planner-ims-carrier-fire-bh.C),
+// The init-hoist upward-carrier fire row (macro-planner-ims-carrier-fire-bh.C),
 // shared by its renamed and varied twins.  SHIFT and ADDR parameterize
 // the constant-variation twin (value-independence proof).
 #define ROW(SHIFT, ADDR)                                                      \

@@ -1,4 +1,4 @@
-// Lane FL (FH-4 boundary keep): the SAME fixed-VD value-carrier region
+// Boundary-keep twin: the SAME fixed-VD value-carrier region
 // with the two-word CR-class face advance between runs.  The separator
 // credit (2) places the next run's launch issue exactly AT the last
 // pending retirement cycle; the established retire-before-issue model

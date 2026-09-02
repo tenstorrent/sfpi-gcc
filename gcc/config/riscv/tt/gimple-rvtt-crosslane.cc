@@ -1,4 +1,4 @@
-/* Cross-lane structured-op lowering/fusion pass (lane FG, X4).
+/* Cross-lane structured-op lowering/fusion pass.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -19,8 +19,8 @@ along with GCC; see the file COPYING3.  If not see
 
 /* -mtt-tensix-optimize-crosslane (default off).
 
-   THE PROBLEM.  The typed cross-lane vocabulary (sfpi_crosslane.h, lane
-   FA; design: lane EY-R CROSSLANE-DESIGN-INPUT.md) lowers its composite
+   THE PROBLEM.  The typed cross-lane vocabulary (sfpi_crosslane.h)
+   lowers its composite
    primitives as PINNED canonical inline frames -- rotate chains of
    SFPSHFT2 SUBVEC_SHFLROR1, SFPSWAP compare-exchange stages, dual-bank
    SFPTRANSP frames, and the zip frame (staged dual-bank transpose plus
@@ -48,9 +48,8 @@ along with GCC; see the file COPYING3.  If not see
      R5 zip-chain collapse       zip^3 == identity (the 8-row riffle has
                                  order 3; zip^2 == unzip is canonical)
 
-   Each identity is host-proven in the independent acceptance arsenal
-   (lane FB, tt-metal tests/python_tests/test_crosslane_oracle_identities
-   .py: rotate/transpose/zip inverses, swap mask table and tie-model
+   Each identity is host-proven in an independent acceptance battery
+   (rotate/transpose/zip inverses, swap mask table and tie-model
    witnesses) -- that battery is the specification of the algebra used
    here, derived only from the tt-isa-documentation functional models
    (SFPSHFT2.md, SFPSWAP.md, SFPTRANSP.md, SFPCONFIG.md).
@@ -74,11 +73,11 @@ along with GCC; see the file COPYING3.  If not see
 
    KEY-VALUE REFUSAL (tie divergence).  The indexed (ENABLE_DEST_INDEX)
    compare-exchange moves companion payloads on the swap decision, and
-   the swap decision on EQUAL keys is an UNADJUDICATED doc-vs-sim
-   divergence (lane FB finding: SFPSWAP.md keys tie-swaps on sign; the
-   pinned simulator uses min c<d / max c>=d).  Under the doc model a
+   the swap decision on EQUAL keys is an UNRESOLVED doc-vs-sim
+   divergence (SFPSWAP.md keys tie-swaps on sign; the reference
+   simulator uses min c<d / max c>=d).  Under the doc model a
    second identical exchange moves companions AGAIN on ties, so indexed
-   refolding is not provable until silicon adjudicates: refused by name
+   refolding is not provable until hardware resolves it: refused by name
    (crosslane-kv-refold-tie-unadjudicated).  The mod-0 indexed pair
    (unconditional swap, no comparison) has no tie arm and cancels
    exactly like the value form.
@@ -86,7 +85,7 @@ along with GCC; see the file COPYING3.  If not see
    PER-ARCH CAPABILITY TABLE.  Following the surface's own per-arch
    split (subvec_slideup: Wormhole's SUBVEC_SHFLSHR1 gives lane 0 an
    UnpredictableValue -- WormholeB0 SFPSHFT2.md -- so WH lowers slides
-   via rotate+mask), R2's re-lowering into SHFLSHR1 consults the table
+   via rotate+mask), the R2 rotate re-lowering into SHFLSHR1 consults the table
    and refuses by name on targets without the fixed shift
    (crosslane-shflshr1-unsupported).  Quasar is not covered by the
    pinned-simulator proof battery yet: the whole pass refuses there
@@ -106,8 +105,8 @@ along with GCC; see the file COPYING3.  If not see
      crosslane-shflshr1-unsupported, crosslane-companion-escape,
      crosslane-priced-no-gain, crosslane-frame-value-escape.
 
-   All refusals leave the function byte-identical.  The TEN-2932
-   ENABLE_DEST_INDEX window model (the other half of the X4 charter) is
+   All refusals leave the function byte-identical.  The
+   ENABLE_DEST_INDEX window model (the dest-index write restriction) is
    enforced on the FINAL RTL stream by the companion pass
    rtl-rvtt-crosslane-window.cc, behind the same flag.  */
 
@@ -262,7 +261,7 @@ thread_assign (tree v, basic_block bb, std::vector<gimple *> *stmts)
    (Imm12 first, Mod1 second -- gas-verified: the inverted spelling
    rejects with an invalid-mod error).  Mirrors the structured-CC
    lowering's region-exit emission and transp-involution's check.
-   NOTE (lane FG finding): several in-tree compile-only dg tests spell
+   NOTE: several in-tree compile-only dg tests spell
    the call inverted, (3, 10); their .s would not assemble.  */
 
 static bool
@@ -1006,7 +1005,7 @@ crosslane_transform::relower_slides ()
    value form (no comparison, no tie arm).  Mods 1..8 REFUSE BY NAME
    (crosslane-kv-refold-tie-unadjudicated): under the doc tie model a
    second exchange moves equal-key companions again, and the doc-vs-sim
-   divergence is unadjudicated (lane FB finding).  */
+   divergence is unresolved.  */
 
 void
 crosslane_transform::refold_swaps ()
@@ -1784,8 +1783,8 @@ crosslane_transform::collapse_zip_chains ()
 	  unsigned keep = m;
 	  unsigned del_from = start + keep;
 
-	  /* Use-exclusivity over the deleted suffix (lane FP audit,
-	     FP-1): every value a to-be-deleted frame defines must be
+	  /* Use-exclusivity over the deleted suffix: every
+	     value a to-be-deleted frame defines must be
 	     consumed inside the chain.  An external tap keeps its
 	     value-carrying producers alive through delete_stmt's use
 	     guard, but the frame's lhs-less CC statements (the row>=2

@@ -1,4 +1,4 @@
-// Conservative-test near-miss (FABLE_GOES_BURR.md item #6): both copy
+// Conservative-test near-miss (the Briggs/George coalescing work): both copy
 // halves live across the seven precolored anchors AND a significant-
 // degree heavy, so the merged node would have 8 significant-degree
 // neighbors -- exactly the Briggs bound.  The merge refuses by name

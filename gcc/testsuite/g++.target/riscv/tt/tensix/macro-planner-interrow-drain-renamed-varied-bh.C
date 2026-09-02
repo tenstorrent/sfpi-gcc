@@ -1,4 +1,4 @@
-// Lane EV genericity twin: renamed symbols, a different row count, a
+// Inter-row drain genericity twin: renamed symbols, a different row count, a
 // different Dst address, and a different (still encodable) shift
 // amount -- the inter-row drain keys on the derived launch plan
 // (fixed-VD value carrier, drain > 0), never on names, trip counts, or

@@ -1,4 +1,4 @@
-// Disjoint configuration state must not suppress formation (WP8): a
+// Disjoint configuration state must not suppress formation: a
 // prelude write to a NON-owned configuration destination (15, the LLK
 // prelude shape) refuses locally at the writer (row-config-write, a
 // config write is never a region member) without invalidating the

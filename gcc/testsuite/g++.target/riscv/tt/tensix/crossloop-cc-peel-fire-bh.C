@@ -1,4 +1,4 @@
-// CROSSLOOP-CC-PEEL fire (lane HR): the CC-canonical peel class's
+// CROSSLOOP-CC-PEEL fire: the CC-canonical peel class's
 // programming lifts across the enclosing tile loop as a
 // PROGRAMMING-ONLY placement.  The row loop's post-CC candidate (the
 // pressure-park admission, consumer audited) would otherwise be

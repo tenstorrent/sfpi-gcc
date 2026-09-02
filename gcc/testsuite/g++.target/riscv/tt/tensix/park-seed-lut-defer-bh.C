@@ -1,4 +1,4 @@
-// PARK-SEED COMPOSITION LUT gate (lane HY): a CC-restore loop whose
+// PARK-SEED COMPOSITION LUT gate: a CC-restore loop whose
 // body carries LUT machinery (SFPLUTFP32) keeps the ESTABLISHED
 // wholesale deferral even for depth-zero candidates
 // (lut-coefficient-authority): the in-loop constant materializations

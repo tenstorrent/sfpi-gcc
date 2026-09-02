@@ -1,4 +1,4 @@
-// Lane FT window-pairing on the lane-EV signbit shape (frozen
+// Window-pairing on the frozen signbit shape (frozen
 // whole-word shift/cast program, launch-only rows, drain 3): the exact
 // model tunes the inter-row spacing to TWO NOPs -- the follower launch
 // then issues AT the last pending retirement cycle, the established

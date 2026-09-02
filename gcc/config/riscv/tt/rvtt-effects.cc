@@ -87,7 +87,7 @@ lreg_mask_of_positions (int position_mask)
 }
 
 /* The canonical no-increment load/store address mode.  This constant is
-   target capability data; it migrates into the WP6 capability tables and
+   target capability data; it migrates into the capability tables and
    must never be duplicated into pass decision logic.  */
 
 static int
@@ -262,7 +262,7 @@ rvtt_insn_effects (rtx_insn *insn)
 	else if (INTVAL (recog_data.operand[pos]) == no_inc)
 	  e.rwc.kind = xtt_rwc_effect_t::NONE;
 	else
-	  /* Auto-increment deltas are capability-table data (WP6);
+	  /* Auto-increment deltas are capability-table data;
 	     unaudited modes stay UNKNOWN so consumers refuse.  */
 	  e.rwc.kind = xtt_rwc_effect_t::UNKNOWN;
       }
@@ -776,7 +776,7 @@ rvtt_planner_launch_effects (rtx_insn *insn, xtt_effect_set *out)
 }
 
 /* ------------------------------------------------------------------ */
-/* FABLE item #4: the audited-effect attribute migration.
+/* The audited-effect attribute migration.
 
    The two queries below are the ONLY decoders of the xtt_lane_local /
    xtt_cc_write / xtt_lane_gated attributes (rvtt-cost.md).  They

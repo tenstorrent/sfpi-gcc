@@ -4,7 +4,7 @@
 // still fires (rows carried, separators absorbed) but with
 // -mtt-tensix-optimize-post-autoincr-window off the re-formation pass
 // does not run: no replay window forms over the folded rows and all 16
-// carried loads stay inline (the pin-39 load-carrier delivery shape,
+// carried loads stay inline (the load-carrier delivery shape,
 // byte-identical to the pre-lane-IH pipeline).
 // { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 16 stride 2 config 3 words" "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }

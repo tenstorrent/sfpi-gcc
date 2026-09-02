@@ -1,4 +1,4 @@
-// Renamed-varied twin of the replay-delivery violation (lane FR): a
+// Renamed-varied twin of the replay-delivery violation: a
 // differently-spelled row (SFPOR result pinned to LReg4) records before
 // the window and launches inside it -- the delivered LReg4 write errors
 // by mechanism, not by any name or opcode keying.

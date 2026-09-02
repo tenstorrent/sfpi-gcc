@@ -1,7 +1,7 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 //
-// lane FS (FP-3) preservation twin: the sibling-arm widening must NOT refuse
+// Preservation twin: the sibling-arm widening must NOT refuse
 // the LEGITIMATE deliverer of a replay-delivered group -- a no-exec record
 // that DOMINATES the group (records once, in a block that runs before every
 // launch of the same invocation) and is not re-ingested inside a loop the

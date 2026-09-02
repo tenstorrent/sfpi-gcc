@@ -1,4 +1,4 @@
-// Config-mutation-between-faces refusal (WP8 step 4): a typed write to
+// Config-mutation-between-faces refusal: a typed write to
 // a planner-owned configuration destination between two faces refuses
 // every formation in the function (function-global ownership), keeping
 // the bytes explicit.

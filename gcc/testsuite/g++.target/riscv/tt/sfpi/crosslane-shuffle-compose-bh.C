@@ -1,4 +1,4 @@
-// Shuffle-of-shuffle composition (lane FG, X4): the surface's
+// Shuffle-of-shuffle composition (X4): the surface's
 // constant-pattern shuffle<> canonicalizes rotation patterns to
 // subvec_rotr chains at compile time, so composed shuffles inline into
 // ONE ror1 chain, which the rotate-collapse rule reduces modulo 8 --

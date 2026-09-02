@@ -1,4 +1,4 @@
-/* The cross-tile prefix-elision shape (WP11): the compact select body
+/* The cross-tile prefix-elision shape: the compact select body
    inside a counted face loop, nested in a TILE loop carrying the
    LLK-shaped per-tile boilerplate -- raw addr-mod SETC16 words, the
    LaneConfig default reset, a sync word, and a dynamic MMIO push of a

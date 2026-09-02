@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
-// Explicit-issue cap fail-closed twin (lane DK, from lane DG2's
+// Explicit-issue cap fail-closed twin (from an
 // adversarial audit 4.4): the descriptor builder silently TRUNCATED
 // the explicit-issue record at an 8-entry array bound, so derive-core's
 // silent-discard hazard rule judged calendars against an INCOMPLETE
@@ -8,7 +8,7 @@
 // the identical calendar there, proving those fires benign).  The
 // fixed builder records every CONSTRAINT-CARRYING (nonzero sub-unit
 // mask) explicit up to the architectural sequencer bound of 16 and
-// refuses BY NAME beyond it; the pin-14 binary carried this row's 20
+// refuses BY NAME beyond it; the earlier binary carried this row's 20
 // explicits into derivation with no cap complaint and only refused
 // downstream under an unrelated generic name.
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: descriptor-explicit-issue-cap-exceeded" "rvtt_macro_planner" } }

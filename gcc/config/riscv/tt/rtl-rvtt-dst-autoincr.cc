@@ -89,15 +89,15 @@ along with GCC; see the file COPYING3.  If not see
      - Profitability compares the configuration cost against the number of
        dynamically removed per-row increments, both in frontend issue slots
        per execution of the configuration program, and the cost model splits
-       by PLACEMENT (lane IA silicon, bracketed in both directions):
+       by PLACEMENT (hardware-measured, bracketed in both directions):
 
          A PREHEADER program executes once per loop entry inside the same
          pre-steady-state window the once-per-entry drain residual already
-         prices (the lane EP covered witnesses measured that whole window,
+         prices (the covered hardware witnesses measured that whole window,
          three-word program included, at ~2 cycles/entry), so its words
          price at their word count, plus the residual through a live
          crossing -- the original pricing.  Charging more there is refuted
-         by silicon: the lcm row loop (692423 -> 694979) and the relu hand
+         by hardware: the lcm row loop (692423 -> 694979) and the relu hand
          rolled loop (45744 -> 49330) are preheader 8x1 groups measured
          BETTER fired.
 
@@ -123,7 +123,7 @@ along with GCC; see the file COPYING3.  If not see
      - Mod-write backedge-crossing price.  The transform replaces an explicit
        TTINCRWC -- an audited latency-0 issue-time RWC counter update
        (rvtt-cost.md row step: [ISA] pure counter update, [SIM] applied at
-       issue, [HAND] TTINCRWC->SFPLOAD back-to-back in every silicon-proven
+       issue, [HAND] TTINCRWC->SFPLOAD back-to-back in every hardware-proven
        counted production row) -- with a positional-state side effect of the
        terminator access itself, executed inside the vector unit.  The
        audited latency table DELIBERATELY REFUSES an entry for the
@@ -136,13 +136,13 @@ along with GCC; see the file COPYING3.  If not see
        scalar loop control drains the frontend and the next iteration's
        first Dst access issues onto an empty pipe a few slots after the
        mod-write, inside the unaudited retirement window.  Five whole-ELF
-       silicon witnesses now bracket that window from both sides (lane DX
-       finding F2, lane EE anatomy row 8, lane EP finding F1): SKINNY
+       hardware witnesses now bracket that window from both sides: SKINNY
        5-slot iterations stall 1.38-1.57 cycles per crossing (absint32
        hand 16.950 -> 18.853, unaryshift-fresh semantic 16.962 -> 19.631,
        bitwisenot hand 16.950 -> 18.853), while FAT 10/12-slot iterations
        stall ~0.06 per crossing (threshold-fresh, hardshrink-fresh:
-       refusing them cost +26.95/+27.06 booked at pin 16, the EP-F1
+       refusing them measured +26.95/+27.06 against hand-scheduled
+       references, the
        counterexample); the same transform in eight-row-per-iteration and
        straight-line bodies stays a measured win.  Fitting
        stall = max(0, W - iteration_slots) gives W ~= 6.4..6.6 from the
@@ -156,16 +156,16 @@ along with GCC; see the file COPYING3.  If not see
        The pricing term charges each loop-iteration crossing the part of
        the audited drained-frontend retirement window
        (drained_frontend_window, rvtt-cost.md: fit from five whole-ELF
-       silicon witnesses bracketing both regimes) that the iteration's OWN
+       hardware witnesses bracketing both regimes) that the iteration's OWN
        slot-occupying words do not cover.  Consecutive backedge-crossing
        mod-writes serialize at the window: the covering distance per
        crossing is the whole iteration's issue-slot word count -- Tensix
        words at their audited slot counts, launch words at the one-word
        conservative floor, and SCALAR words included, because they occupy
        the same frontend issue slots that elapse while the mod-write
-       retires (lane EP finding F1: the original walk counted only the
+       retires (the original walk counted only the
        tail-after-terminator and consume-prefix words and ignored the
-       iteration body, implying a 64-slot/tile cost on a shape silicon
+       iteration body, implying a 64-slot/tile cost on a shape hardware
        measures at ~2 cycles/tile TOTAL).  An audited issue-time RWC
        writer (a surviving explicit TTINCRWC or a typed face advance)
        standing between the last terminator and the backedge re-anchors
@@ -248,7 +248,7 @@ struct autoincr_caps
 
      Architectural basis: SETC16 retires through the configuration issue
      class, which the target issue model (rvtt-cost.md, rvtt_issue_cfg)
-     and craq-sim's tensix_rtl_issue_class_for_inst both model as a
+     and the reference simulator's tensix_rtl_issue_class_for_inst both model as a
      two-cycle resource, one cycle longer than the single-cycle math/SFPU
      classes.  Two intervening issued words therefore guarantee the
      configuration write has retired before the consumer issues in that
@@ -260,7 +260,7 @@ struct autoincr_caps
   unsigned min_config_distance;
   /* Drained-frontend retirement window for the mod-write backedge
      crossing, in frontend issue-slot words (rvtt-cost.md audited entry,
-     lane EP finding F1): the number of issue slots a backedge-crossing
+     the covered-crossing fit): the number of issue slots a backedge-crossing
      mod-write needs before the next crossing's consumer may issue
      stall-free.  Fit W ~= 6.4..6.6 from the uncovered witness class
      (absint32-hand 1.38, unaryshift-sem 1.57, bitwisenot-hand 1.38
@@ -269,19 +269,19 @@ struct autoincr_caps
      iterations); the audited value takes the CONSERVATIVE 7, which
      preserves every witness verdict on both sides.  The Wormhole entry
      carries the Blackhole-fit value as the same-frontend-class
-     conservative adoption (no WH silicon witness; larger W only widens
+     conservative adoption (no WH hardware witness; larger W only widens
      refusal).  */
   unsigned drained_frontend_window;
   /* Frontend issue-slot occupancy of one SETC16 configuration word: the
      configuration issue class is an audited two-cycle resource
-     (rvtt-cost.md rvtt_issue_cfg; craq-sim tensix_rtl_issue_class_for_inst
+     (rvtt-cost.md rvtt_issue_cfg; the reference simulator's tensix_rtl_issue_class_for_inst
      models the same), one cycle longer than the single-cycle class a
      removed TTINCRWC occupies.  The profitability comparison prices the
      slot program in these units so both sides are frontend issue slots.  */
   unsigned config_issue_slots;
   autoincr_slot slots[2];
   /* Refuse-only watched configuration rows for the cross-call ADDR_MOD
-     contract (lane IK): thread-configuration registers whose rewrite
+     contract: thread-configuration registers whose rewrite
      would re-target the scratch modifier WITHOUT writing the owned slot
      registers.  Wormhole: the two-bit modifier field reaches physical
      slot 6 only through the ADDR_MOD_SET_Base bank-select bit (thread
@@ -298,7 +298,7 @@ struct autoincr_caps
 static autoincr_caps
 target_autoincr_caps ()
 {
-  /* Named-member construction (FABLE_GOES_BURR #12): the audited
+  /* Named-member construction (the delivery-cost API): the audited
      frontend quantities come from the rvtt-cost.md define_constants
      they document (single-sourced at build time); the per-target
      modifier encodings and slot registers are the ISA facts the file
@@ -557,14 +557,14 @@ struct function_scan
   /* Replay captures recorded WITHOUT execution (TTREPLAY load=1 exec=0)
      seen anywhere in the function.  Composing the store-side mod-write
      with a no-exec recording window that begins ingesting while a
-     group's mod-write is still retiring is silicon-refuted (rvtt-cost.md,
+     group's mod-write is still retiring is hardware-refuted (rvtt-cost.md,
      "no-exec record composition"; see noexec_record_composition_p for
      the audited-window guard and its witnesses).  */
   std::vector<capture_rec *> noexec_captures;
 };
 
 /* Load-carrier word counting (riscv_tt_opt_dst_autoincr_load_carrier,
-   lane IF): a canonical single-constant `.ttinsn' asm (the TTI_ macro
+   the load-carrier extension): a canonical single-constant `.ttinsn' asm (the TTI_ macro
    shape the LLK library issues its raw boundary words in) is by
    construction exactly one 32-bit Tensix word in the issue stream, so
    it occupies exactly one replay slot and one frontend issue slot.
@@ -575,11 +575,11 @@ struct function_scan
    class), so raw words never become rewritable payload members,
    gap-legal items, or configuration-window-legal items.
 
-   The pin-38 behavior this knob replaces counted raw words as ZERO
+   The prior behavior this knob replaces counted raw words as ZERO
    slots, so a replay recording whose shadow is raw words (every LLK
    datacopy envelope record) overran its block and refused the whole
    function ("replay capture crosses block") -- the adjudicated blocker
-   of the load-carrier class (lane IE useq probe: unit-stride
+   of the load-carrier class (a microbenchmark probe: unit-stride
    `load dst_reg[0]; dst_reg += 1' walks emitted 32 raw TTINCRWC with
    zero capture while the very same rows fire in a record-free
    function).  Knob off preserves that behavior byte-identically.  */
@@ -1018,7 +1018,7 @@ crossing_reanchored_p (const bb_scan &scan, const candidate &cand)
    anything unrecognized (undercounting the covering distance only widens
    the charge -- conservative).  Scalar words occupy the same frontend
    issue slots that elapse while a mod-write retires, so they cover
-   crossing distance exactly like Tensix words do (lane EP finding F1:
+   crossing distance exactly like Tensix words do (the covered-crossing fit:
    the five-witness fit is over whole-iteration slot counts with scalar
    included).  */
 
@@ -1045,10 +1045,10 @@ scalar_issue_words (rtx_insn *insn)
 }
 
 /* Frontend issue-slot cover of one raw INSN: the ONE cover spelling
-   (FABLE_GOES_BURR #12) behind both the per-item view below and the
-   raw-insn block walks (lane FZ): slot words occupy frontend issue
+   (the delivery-cost API) behind both the per-item view below and the
+   raw-insn block walks: slot words occupy frontend issue
    slots, and scalar words cover crossing distance exactly like Tensix
-   words do (lane EP finding F1).  */
+   words do (the covered-crossing fit).  */
 
 static unsigned
 insn_frontend_cover_words (rtx_insn *insn)
@@ -1103,7 +1103,7 @@ struct group
      on the configuration-cost side.  */
   bool live_crossing = false;
   /* Set when the group's slot program is provided by the cross-call
-     ADDR_MOD contract (lane IK): the program is hoisted to the proven
+     ADDR_MOD contract: the program is hoisted to the proven
      caller's loop entry and the group emits nothing, at zero per-call
      configuration cost.  */
   bool contract = false;
@@ -1217,10 +1217,10 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
 }
 
 /* Silicon-refuted composition guard (rvtt-cost.md, "no-exec record
-   composition", lane ES 2x2): a replay capture recorded WITHOUT
+   composition"): a replay capture recorded WITHOUT
    execution (TTREPLAY load=1 exec=0) may not begin ingesting while a
    mod-write of GRP is still inside its unaudited positional-state
-   retirement window.  The lane ES device 2x2 on the lcm-fresh kernel
+   retirement window.  The device A/B on the lcm-fresh kernel
    hangs Tensix (TENSIX TIMED OUT, reset required) when the record
    re-executes two Tensix words after the previous face group's final
    mod-write store, while every composition whose record is separated
@@ -1228,7 +1228,7 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
    the per-tile LLK wrapper records behind the chunk-boundary
    synchronization (celu/eqz-class ON-set rows), the loop-free preamble
    records (xielu-fresh), records unreachable from any store (gcd/lcm
-   run_kernel init) -- passes on silicon.  So the guard prices the SAME
+   run_kernel init) -- passes on hardware.  So the guard prices the SAME
    audited quantity the crossing charge does: the minimum issue-slot
    word distance, over CFG paths, from GRP's block to the capture.
    Unreachable or covered (>= drained_frontend_window) admits; anything
@@ -1241,7 +1241,7 @@ crossing_penalty (const group &grp, const autoincr_caps &caps,
    retirement distance from below (the W_drain fit's witnesses are all
    explicit-row shapes, and the celu/eqz-class chunk-boundary
    compositions -- explicit mod-write rows with a reachable in-loop
-   no-exec wrapper record behind >= W_drain words -- are silicon-good
+   no-exec wrapper record behind >= W_drain words -- are hardware-good
    across many pins).  A REPLAY-DELIVERED row breaks that premise: the
    launch issues ONE frontend word while the expander delivers the
    payload's mod-write asynchronously, so no frontend word count after
@@ -1372,7 +1372,7 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	 case already refused above; the sibling case is this walk's blind
 	 spot (FP delta-audit probe pfj1): a previous caller-loop invocation
 	 of this function arms it while the group's mod-write runs on the
-	 next, reassembling the exact silicon-refuted trio the intra-function
+	 next, reassembling the exact hardware-refuted trio the intra-function
 	 walk cannot see.  For a replay-delivered group, therefore, refuse any
 	 same-function no-exec capture that does not dominate the group.  (FP
 	 filed this widening as analytically zero-delta on the mapped corpus --
@@ -1387,11 +1387,11 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 	     launch of the same invocation (record-hoist preheader,
 	     dst-autoincr-loop-bh).  Two shapes are hazards: (a) the capture
 	     is forward-reachable from the group -- an in-loop re-record whose
-	     replay-delivered payload retires asynchronously (lane FE F1,
-	     block_reachable_p, kept from ES/FJ); (b) the capture does NOT
+	     replay-delivered payload retires asynchronously (the wedge
+	     witness, block_reachable_p); (b) the capture does NOT
 	     dominate the group -- a sibling-arm record armed by a prior
-	     caller-loop invocation once the Replay buffer persists (lane FS
-	     FP-3, the new case).  A dominating, non-reachable capture is the
+	     caller-loop invocation once the Replay buffer persists
+	     (the persistence case).  A dominating, non-reachable capture is the
 	     deliverer and admits.  */
 	  bool reachable = block_reachable_p (grp.scan->bb, cap->bb);
 	  bool cap_dominates_group
@@ -1826,15 +1826,15 @@ transform_group (const group &grp, const autoincr_caps &caps)
     }
 }
 
-/* Cross-call ADDR_MOD contract (lane IK, flag-gated by
+/* Cross-call ADDR_MOD contract (flag-gated by
    -mtt-tensix-optimize-crosscall-addrmod): a straight-line callee whose
    groups ALL refuse by the per-execution configuration pricing may
    instead have its slot program hoisted, once, into the proven caller's
    loop entry (gimple-rvtt-crosscall.cc, rvtt_crosscall_addrmod_hoist:
-   the lane CA init-hoist machinery with the lane HC residency walk) --
+   the init-hoist machinery with the residency walk) --
    the hand kernel's once-per-kernel ADDR_MOD discipline.  The groups
    then fire with the program omitted entirely: the hoisted program is
-   preheader-class (lane IA placement split -- it executes once per
+   preheader-class (the placement split -- it executes once per
    caller-loop entry inside the entry window the drain residual already
    prices), so the per-call configuration cost is ZERO.
 
@@ -1845,7 +1845,7 @@ transform_group (const group &grp, const autoincr_caps &caps)
        unshared, single stride, explicit rows only (a fired sibling or a
        second stride would leave a per-call slot program in the callee
        that clobbers the contract between calls; replay-delivered rows
-       keep the lane FE/FS issue-parity scope bound);
+       keep the issue-parity scope bound);
 
      - WHOLE-CALLEE slot-clobber census: every instruction of every
        block is a contract row/increment or configuration-window legal
@@ -2207,12 +2207,12 @@ transform (function *cfn)
 	     shared program's cost is paid once for every group it serves.
 	     The cost model splits by PLACEMENT (see group_cost below): a
 	     preheader program keeps the original word pricing plus the
-	     live-crossing entry residual (the lane EP covered witnesses
+	     live-crossing entry residual (the covered hardware witnesses
 	     measured the whole entry window, program included, at ~2
 	     cycles); a non-preheader program re-executes per region
 	     execution and pays the audited two-cycle configuration issue
 	     class per SETC16 word plus the once-per-entry drain residual
-	     (lane IA binopscalar silicon witness, both directions
+	     (the binopscalar hardware witness, both directions
 	     bracketed on lcm/relu).  */
 	  auto priced_rows = [] (const group &grp)
 	  {
@@ -2226,11 +2226,11 @@ transform (function *cfn)
 	    if (grp.shared_set >= 0)
 	      shared_rows[grp.shared_set] += priced_rows (grp);
 
-	  /* Placement decides the program's slot pricing (lane IA silicon,
+	  /* Placement decides the program's slot pricing (hardware-measured,
 	     both directions):
 	     - A PREHEADER program executes once per loop entry inside the
 	       same pre-steady-state window the once-per-entry drain
-	       residual already prices: the covered fat witnesses (lane EP)
+	       residual already prices: the covered fat witnesses
 	       measured ~2 cycles per entry TOTAL with the three-word
 	       program in the preheader, so its words price at their word
 	       count and the residual is charged only through a live
@@ -2238,7 +2238,7 @@ transform (function *cfn)
 	       occupancy there double-counts the entry window: doing so
 	       refused the lcm row loop (692423 -> 694979, +0.37%) and the
 	       relu hand rolled loop (45744 -> 49330, +7.8%) -- both
-	       preheader 8x1 groups silicon-measured BETTER fired.
+	       preheader 8x1 groups hardware-measured BETTER fired.
 	     - A NON-PREHEADER program re-executes on every execution of
 	       its region: each SETC16 occupies the audited two-cycle
 	       configuration issue class (rvtt_issue_cfg) against the
@@ -2268,7 +2268,7 @@ transform (function *cfn)
 	     distinct emitted program (a shared placement's program counted
 	     once for its set).  Pricing an orphan member in isolation
 	     would let a small split-off group's refusal poison a paying
-	     sibling stream through payload coverage (lane IA: the rdiv
+	     sibling stream through payload coverage (the rdiv
 	     hand kernel's 32-launch stream splits 8+24; 32 removed vs two
 	     programs' 16 slots pays, the 8-row orphan alone does not).
 	     Union-find over shared captures.  */
@@ -2351,7 +2351,7 @@ transform (function *cfn)
 		refuse[gx] = true;
 	    }
 
-	  /* Cross-call ADDR_MOD contract (lane IK, flag-gated): a function
+	  /* Cross-call ADDR_MOD contract (flag-gated): a function
 	     whose groups ALL refuse by this pricing may fire them instead
 	     at zero per-call configuration cost under the hoisted-program
 	     contract; every unproven link keeps the verdicts untouched
@@ -2473,8 +2473,8 @@ public:
 } // anon namespace
 
 /* Exported single source of the audited W_drain value (rvtt-protos.h;
-   lane FL, FH-1): the replay former's no-exec record placement
-   obligation audits the same silicon-refuted composition this file's
+   see rtl-rvtt-replay.cc): the replay former's no-exec record placement
+   obligation audits the same hardware-refuted composition this file's
    group guard does, so both must price the same audited quantity.  */
 
 unsigned
@@ -2495,7 +2495,7 @@ rvtt_modwrite_drained_frontend_window (void)
    (launch / executing capture) are NOT candidates here: their
    candidacy needs the vetted payload terminator (payload_ok), which
    needs whole-function launch resolution -- and their formed groups
-   refuse ANY same-function no-exec capture under the lane FS
+   refuse ANY same-function no-exec capture under the expander
    persistence clause regardless of distance, so mirroring them buys
    no byte outcome the group guard does not already own (documented
    scope bound; the sdpa pack TUs are the witnessed shape: launch-led
@@ -2572,7 +2572,7 @@ block_has_explicit_candidate_increment_p (basic_block bb,
 
 /* The raw-insn block walk prices blocks identically to the scan's
    item view BY CONSTRUCTION: insn_frontend_cover_words (defined with
-   item_frontend_words above -- the one cover spelling, item #12) is
+   item_frontend_words above -- the one cover spelling) is
    the per-insn primitive both views sum.  */
 
 static unsigned
@@ -2586,7 +2586,7 @@ block_frontend_cover_words (basic_block bb)
   return words;
 }
 
-/* Exported to the replay former (rvtt-protos.h; lane FZ): would a
+/* Exported to the replay former (rvtt-protos.h): would a
    NO-EXEC replay capture hoisted into PREHEADER (at the replay pass's
    anchor rule: before a trailing jump, else at block end) lie within
    the audited drained-frontend window of a WOULD-BE mod-write row --
@@ -2668,7 +2668,7 @@ rvtt_dst_autoincr_hoist_capture_composition_p (basic_block preheader,
 }
 
 /* Exported to the post-auto-increment window re-formation (rvtt-protos.h;
-   lane IH): is INSN a typed Dst access this pass has retargeted to the
+   the reform mode): is INSN a typed Dst access this pass has retargeted to the
    compiler-owned auto-increment scratch modifier -- a CARRIED access
    whose every execution advances the Dst RWC through the owned ADDR_MOD
    program?  Classification is this pass's own classify_access over the

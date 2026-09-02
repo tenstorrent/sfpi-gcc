@@ -1,4 +1,4 @@
-// Loop-backedge drain elision (lane CA, the drain-route remainder) on
+// Loop-backedge drain elision (the drain-route remainder) on
 // the TTNN-Where-class compact loop: the loop-body region's final run
 // ends at the latch, so its derived drain used to execute once per
 // trip.  The backedge follower stream proves -- the loop tail is

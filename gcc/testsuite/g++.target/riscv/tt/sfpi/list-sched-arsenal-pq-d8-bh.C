@@ -1,4 +1,4 @@
-// Lane DT list-scheduler acceptance arsenal: dual-Horner P/Q rational,
+// List-scheduler acceptance arsenal: dual-Horner P/Q rational,
 // degree 8 (widest of the three-width interleave family; see the d3
 // twin for the full dependence argument).
 //
@@ -19,7 +19,7 @@
 // hideable one-slot shadows is the largest of the family.  Oracle pins
 // scheduled == lower bound.
 //
-// CRAQ-golden on the pinned craq-sim 9f324140 (lane DT evidence).
+// simulator-golden on the pinned reference simulator.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // Measured (pinned): nodes=34, baseline 64 = 34 words + 30 stalls,
 // interleaved 34 = word count.  Oracle: 67 -> 37 == lower bound.

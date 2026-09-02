@@ -1,4 +1,4 @@
-// WP8 signbit loop parity, Wormhole: single-slot Base=1 owned SETC16
+// Signbit loop parity, Wormhole: single-slot Base=1 owned SETC16
 // program (physical slot 6, regs 19/29/54 -- the launch's two-bit
 // selector reaches it through the pinned ADDR_MOD_SET_Base=1 contract;
 // the base-0 bank is never written, sfpi-gcc 2a0ba1e6602), preheader

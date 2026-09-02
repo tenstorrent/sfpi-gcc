@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER unpriceable near-miss (item #13): the run-bound of
+// PLACEMENT-ARBITER unpriceable near-miss (the placement arbiter): the run-bound of
 // the candidates' loop is a runtime parameter the trips facade cannot
 // prove, so the priced alternative refuses by name
 // (place-alternative-unpriceable) and the whole class keeps GV's

@@ -1,4 +1,4 @@
-/* One vector-register pressure/liveness engine for Tensix (item #10).
+/* One vector-register pressure/liveness engine for Tensix.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -17,8 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* GIMPLE-side vector-register (LREG) pressure engine
-   (FABLE_GOES_BURR.md item #10).
+/* GIMPLE-side vector-register (LREG) pressure engine.
 
    Three formerly hand-kept mirrors of the same conservative counting
    are owned here now, each reproduced verdict-identically (CLASS-I):
@@ -42,11 +41,11 @@ along with GCC; see the file COPYING3.  If not see
    - the value width table (lreg_width);
    - the tracked-value predicate (rvtt_pressure_tracked_p);
    - the CC-transient per-insn charges (rvtt_pressure_cc_transient,
-     declared facts -- the item-#4 effect-table handoff point);
+     declared facts -- the typed-effect-table handoff point);
    - the LUT table-slot operand-class fact
      (rvtt_pressure_lut_slot_args, declared per insn and validated
      under flag_checking against the machine description's hard-LREG
-     operand constraints, so the laneHF class of bug -- a new
+     operand constraints, so a known class of bug -- a new
      slot-reading position silently treated as creg-capable -- fails
      the checking build instead of undercounting).
 
@@ -99,7 +98,7 @@ rvtt_pressure_capacity ()
    compare-immediate loads (rvtt_emit_sfpxfcmps/xicmps) and the
    boolean-tree saved-enables value (gimple-rvtt-expand.cc
    process_bool_tree) -- which no SSA walk can see.  Declared here as
-   data; when the item-#4 per-insn effect table reaches gimple, these
+   data; when the typed per-insn effect table reaches gimple, these
    rows move there and this function becomes a lookup.  */
 
 unsigned
@@ -122,7 +121,7 @@ rvtt_pressure_cc_transient (gimple *stmt)
    hard register: the formed instruction reads the architectural table
    LRegs directly, so a slot operand defined by a constant-register
    read forces a physical copy into the slot LReg at register
-   allocation (laneHF: the FP32-direct placement exemption would
+   allocation (the FP32-direct placement exemption would
    otherwise undercount that copy).  The declared rows are the leading
    table-slot argument counts of the LUT-family builtins; the checking
    validation below ties every row -- and the absence of undeclared
@@ -177,7 +176,7 @@ hard_lreg_constraint_p (const insn_operand_data &op)
      cannot go stale against a renumbered or retired pattern);
    - every target insn whose operands 1 and 2 are both hard-pinned
      vector inputs is a declared row (a NEW LUT-family pattern cannot
-     be added without declaring its slot fact -- the laneHF bug class
+     be added without declaring its slot fact -- that bug class
      fails the checking build instead of undercounting).  */
 
 static void
@@ -542,8 +541,8 @@ engine_loop_legal_p (class loop *loop,
      reads the architectural table registers -- so a constant-register
      value feeding a slot must be physically copied into that hard LREG
      and holds it across the loop like any other coefficient.  A creg
-     read with such a use is therefore counted, not exempted (laneHF:
-     the FP32-direct placement exemption would otherwise undercount the
+     read with such a use is therefore counted, not exempted (the
+     FP32-direct placement exemption would otherwise undercount the
      copy; for the FP16 packed modes slot words are compile-time-packed
      immediates, so this test never fires there and their counting is
      unchanged).  */
@@ -767,7 +766,7 @@ rvtt_pressure_bb_peak (basic_block bb)
   return engine_bb_peak (bb);
 }
 
-/* Windowed point-pressure peak (laneKO/R3, NEW vocabulary -- no
+/* Windowed point-pressure peak (NEW vocabulary -- no
    historical mirror).  Counts with the function-wide may-live model's
    exact semantics (engine_compute_lreg_pressure: backward may-live
    fixpoint over pressure-tracked values, lreg_width weights, dead-def

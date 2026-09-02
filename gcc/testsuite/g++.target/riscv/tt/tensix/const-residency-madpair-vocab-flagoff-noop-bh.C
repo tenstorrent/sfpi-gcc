@@ -1,4 +1,4 @@
-// MAD-PAIR vocabulary flag-off control (lane HJ): the exact
+// MAD-PAIR vocabulary flag-off control: the exact
 // compl-wrapper and _lv fire shapes of the vocab fire twins, compiled
 // WITHOUT -mtt-tensix-optimize-madpair-vocabulary.  The base discovery
 // must keep its established recognition byte-identically: no madpair

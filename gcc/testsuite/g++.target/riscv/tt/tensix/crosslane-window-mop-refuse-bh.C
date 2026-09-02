@@ -1,4 +1,4 @@
-// MOP-delivery refusal (lane FR, lane FP's mop-form composition row):
+// MOP-delivery refusal (the mop-form composition row):
 // the MOP expander re-delivers replay playback words from a template
 // the window checker cannot audit positionally -- a TTMOP inside a
 // proven-OPEN window errors by name (the counted playback loop re-rolls

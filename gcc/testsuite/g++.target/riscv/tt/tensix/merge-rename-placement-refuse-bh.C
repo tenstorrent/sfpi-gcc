@@ -1,4 +1,4 @@
-// MERGE-RENAME placement refusal (lane KP, R1(b)): seven live-through
+// MERGE-RENAME placement refusal (R1(b)): seven live-through
 // vector values put the function-wide SSA pressure model at the full
 // 8-LREG file, so the LREG tier cannot place the full-lane twin
 // (lreg-file-exhausted) and the rename refuses by name WITHOUT

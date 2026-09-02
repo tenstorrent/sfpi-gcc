@@ -1,4 +1,4 @@
-// The ICE reproducer (lane DS finding, 2026-08-20): an sfpxor fold over
+// ICE reproducer: an sfpxor fold over
 // variable-address sfploads in a counted loop.  Complete peeling plus
 // constant propagation folds each iteration's synthesized-encoding
 // operand to a constant, leaving adds of the form "sum = li + CST"

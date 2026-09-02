@@ -1,10 +1,10 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
-// The silicon-regressive witness class (lane DX finding F2): a one-row
+// The hardware-regressive witness class: a one-row
 // rolled loop whose implicit advance would cross the backedge with zero
 // covering slot words -- the mod-write's unaudited positional-state
 // retirement lands on the loop-carried RWC dependence every iteration
-// (measured +11.2% and +15.7% on the two pin-14 whole-ELF witnesses).
+// (measured +11.2% and +15.7% on the two whole-ELF hardware witnesses).
 // One row per iteration cannot pay the audited retirement guard: the
 // pass refuses by name and the function is byte-identical.
 // { dg-final { scan-rtl-dump "Dst-autoincr refusal: mod-write-dominates-rolled-body .rows 1, uncovered crossing slots 2, bb \[0-9\]+." "rvtt_dst_autoincr" } }

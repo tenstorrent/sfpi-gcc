@@ -893,9 +893,9 @@ mop_profitable_p (mop_candidate const &cand, HOST_WIDE_INT config_words,
 		  HOST_WIDE_INT *benefit_out)
 {
   HOST_WIDE_INT k = (HOST_WIDE_INT) cand.step_words.size ();
-  /* Plane rates through the one delivery-cost API (FABLE_GOES_BURR
-     #12): the executed row at the slot rate, delivered words and the
-     MMIO configuration block at the push rate.  */
+  /* Plane rates through the one delivery-cost API: the executed row
+     at the slot rate, delivered words and the MMIO configuration
+     block at the push rate.  */
   HOST_WIDE_INT exec_row = rvtt_dcost_words_to_centislots
     ((HOST_WIDE_INT) cand.len + k, rvtt_delivery_cost::PLANE_REPLAY_SLOT);
   // RUN rows deliver the launch word plus their step words; LOOP trips
@@ -1484,9 +1484,9 @@ mop_apply_event (mop_outward_ctx &ctx, const mop_event &ev,
    single-constant `.ttinsn %0' form; every other template (including
    the base-ISA store-idiom shapes mop_classify_asm line-parsed)
    classifies as an opaque potential launch, strictly MORE
-   conservative.  The corpus -fchecking census adjudicated the
+   conservative.  A whole-corpus -fchecking comparison verified the
    tightening clean; the legacy walk, its asm line parser, and the
-   one-pin verification shadow were deleted at pin 53.  */
+   transitional verification shadow were then deleted.  */
 
 static void
 mop_digest_push (vec<rvtt_ipa_event> *out, const mop_event &ev, gimple *stmt)

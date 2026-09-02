@@ -2,7 +2,7 @@
 // callee's return in thread-shared, RISC-write-only registers, so a
 // caller that launches its own (type-1, hoisted-program) template
 // after calling the formed function would expand OUR template -- the
-// deterministic silicon hang of the 2026-08-17 minmax perf-shape
+// deterministic hardware hang of the minmax perf-shape
 // adjudication.  All three shapes here refuse by name and leave the
 // delivery byte-identical (force is on: every refusal is structural):
 // - direct: the caller launches per iteration around the call with its

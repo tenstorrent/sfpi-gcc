@@ -1,4 +1,4 @@
-// Drain-aware boundary placement (WP13) on the production minmax shape:
+// Drain-aware boundary placement on the production minmax shape:
 // rows=32 runs=4 in-place face runs separated by the typed architectural
 // face advance.  Every intra-region boundary proves -- the separators are
 // launch-latched pure-RWC words of the never-absorbed AIC_RWC_STEP class

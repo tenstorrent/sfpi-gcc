@@ -1,4 +1,4 @@
-/* Standalone unit tests for the SFPLOADMACRO capability tables (WP6).
+/* Standalone unit tests for the SFPLOADMACRO capability tables.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -18,18 +18,18 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* Host-compiled, self-contained (the tables layer is freestanding by
-   design; a DejaGnu compiler test cannot exercise it until the planner
-   consumes it at WP7).  Build and run from this directory:
+   design; a DejaGnu compiler test cannot exercise it except through
+   the planner).  Build and run from this directory:
 
      g++ -std=c++11 -Wall -Wextra -Werror -I. \
 	 rvtt-macro-tables-test.cc rvtt-macro-tables.cc \
 	 -o /tmp/rvtt-macro-tables-test && /tmp/rvtt-macro-tables-test
 
    Every hex literal below is a TEST EXPECTATION transcribed from the
-   frozen Min/Max pass (4e045d31d, rtl-rvtt-loadmacro.cc), its DejaGnu
+   frozen Min/Max pass (the retired rtl-rvtt-loadmacro.cc), its DejaGnu
    assertions, or the TT_OP_* tables -- the legitimate home for such
    values per the non-negotiable compiler rule.  Derivations are cited
-   inline; the full provenance audit is NOTES-wp6-prep.md.  */
+   inline; the provenance was audited constant by constant.  */
 
 #include "rvtt-macro-tables.h"
 
@@ -110,8 +110,8 @@ test_launch_bh (const caps *bh)
   CHECK (decode_launch (bh, 0x9370c080u, &m, &vd, &mode, &am, &addr));
   CHECK (m == 1 && vd == 3 && mode == 0 && am == 6 && addr == 128);
 
-  /* 9(a) resolution ground truth (2026-08-17): the shipped 8/8-CRAQ
-     minmax-final-craq-v2 BH oracle ELFs contain exactly the launch words
+  /* Launch-field-layout ground truth: the shipped simulator-validated
+     Min/Max reference-oracle BH ELFs contain exactly the launch words
      0x9300E000 and 0x9370C000 (RISC-V-embedded as 0x4C038002/0x4DC30002,
      tensix = ror32 (embedded, 2)); riscv-tt-elf-objdump decodes them as
      `sfploadmacro 0,L0,0,0,7` / `sfploadmacro 1,L3,0,0,6`.  Pin that the
@@ -446,7 +446,7 @@ test_misc (const caps *c)
 	}
       else if (strcmp (m.name, "select-launch-mod0") == 0)
 	{
-	  /* WP10 compact select: the shipped handwritten Where
+	  /* Compact select: the shipped handwritten Where
 	     protocol's whole misc word (UsesLoadMod0ForStore +
 	     WaitForElapsedInstructions for all macros).  */
 	  saw_launch_mod0 = true;
@@ -518,7 +518,7 @@ test_scalars (const caps *bh, const caps *wh)
   CHECK (bh->owned_config_dests == 0x0173);	/* {0,1,4,5,6,8}       */
   CHECK (wh->owned_config_dests == 0x0173);
   CHECK (bh->proven_drain_slots == 3 && wh->proven_drain_slots == 3);
-  /* Frozen-pass break-evens: reference data for the WP7 cost-model
+  /* Frozen-pass break-evens: reference data for the cost-model
      regression, never a planner input.  */
   CHECK (bh->reference_breakeven_rows == 7);
   CHECK (wh->reference_breakeven_rows == 8);
@@ -651,9 +651,10 @@ test_ref_setc16_words (const caps *c, const uint32_t *expect, unsigned n)
     }
 }
 
-/* WP9 CC-template facts: the deferred-CC visibility lag, the
-   live-at-execution store lane mask (silicon adjudication 2026-08-17;
-   craq-sim 9f324140), the architecturally-defined SFPSETCC
+/* CC-template facts: the deferred-CC visibility lag, the
+   live-at-execution store lane mask (hardware-adjudicated;
+   reproduced by the reference simulator), the architecturally-defined
+   SFPSETCC
    complement class, and the select restore program on macro one (the
    whole frozen "ENCC d0" word at the derived calendar's macro index;
    both CPUs carry it identically -- asserted by test_wh_bh_identity's

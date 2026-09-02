@@ -1,15 +1,15 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -fdump-tree-rvtt_crossloop" }
-// FC-E fail-closed twin (lane DK, from lane DG2's adversarial audit):
+// Fail-closed twin (from an adversarial audit):
 // a static address-taken template programmer stores a PARAM-relative
 // slot word (the ckernel_template::program shape -- a deferred slot
 // DEMAND) and is called only through a function pointer, so it has
 // ZERO enumerable cgraph caller edges.  The resolver's fail-closed
 // contract ("every site of every demand must resolve") was vacuously
-// satisfied: the demand was silently dropped and the pin-14 census
+// satisfied: the demand was silently dropped and the earlier census
 // reported "proven loadi-dests=0" while the pointed-to template object
 // programs an SFPLOADI -> L3 -- the crossloop hoist then lifted L-file
 // materializations across the MOP-carrying loop (fail-open fire,
-// verified on the installed pin-14 binary).  A demand with no resolved
+// verified on the earlier installed binary).  A demand with no resolved
 // site must refuse by name.
 // { dg-final { scan-tree-dump "mop-template-slot-caller-unenumerable" "rvtt_crossloop" } }
 // { dg-final { scan-tree-dump "refused .crossloop-mop-slot-unproven." "rvtt_crossloop" } }

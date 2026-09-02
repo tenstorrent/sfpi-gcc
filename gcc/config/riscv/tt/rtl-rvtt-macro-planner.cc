@@ -59,7 +59,7 @@ along with GCC; see the file COPYING3.  If not see
 
 namespace {
 
-/* ---------------- Formation (WP7): emission from the descriptor ------ */
+/* ---------------- Formation: emission from the descriptor ------------ */
 
 /* Function-global configuration-ownership proof, typed: the planner owns
    the macro configuration destinations and address-modifier slots for
@@ -156,7 +156,7 @@ planner_config_window_ok (const macro_region &region)
   return true;
 }
 
-/* Region-scoped configuration ownership (WP9; the refinement the
+/* Region-scoped configuration ownership (the refinement the
    function-global proof documents).  Used ONLY for proven CC-template
    programs, and only as the ADDITIONAL fallback after the loop-scoped
    window proof above (which covers any loop-body region) has been
@@ -183,7 +183,7 @@ planner_config_window_ok (const macro_region &region)
      issue can sit between the lane-state proof and the loop.
 
    - Foreign code AFTER the region is tolerated: the LLK ownership
-     convention (carried from the frozen pass and its silicon-proven
+     convention (carried from the frozen pass and its hardware-proven
      integrations) is that every SFPLOADMACRO consumer programs its own
      descriptors before launching.  This is a documented accepted risk,
      mirrored in docs/MACRO_PLANNER.md.  */
@@ -264,7 +264,7 @@ planned_value_dead_after_p (rtx value, rtx_insn *start)
 /* Issue cost of materializing one 32-bit configuration word through an
    LREG: the SFPLOADI half count mirrors rvtt_emit_sfpxloadi's forms --
    the one delivery-cost spelling (rvtt-delivery-cost-core.h
-   loadi_issue_words; FABLE_GOES_BURR #12).  */
+   loadi_issue_words; the one delivery-cost API).  */
 
 static unsigned
 config_word_loadi_issues (uint32_t w)
@@ -304,7 +304,7 @@ explicit_row_cost (const macro_region &region)
    the full configuration prefix (the frozen conservative-per-run
    discipline): rows*ii + drain + config < rows * explicit-row issues.
 
-   Init-hoist-aware run pricing (lane IU, 2026-08-29; rvtt-cost.md
+   Init-hoist-aware run pricing (rvtt-cost.md
    caller-loop prefix amortization): when the crosscall init hoist's
    FULL contract (stage 2) is already proven for this region -- the
    proof-only pre-run ahead of this gate, committed after every later
@@ -348,7 +348,7 @@ run_profitable_p (const macro_region &region, const macro_schedule &schedule,
 					      explicit_side, 1, 1);
 }
 
-/* WP13 formation-vs-replay arbitration (-mtt-tensix-macro-ims).  The
+/* Formation-vs-replay arbitration (-mtt-tensix-macro-ims).  The
    established profitability gates above price the formed calendar
    against RISC-pushed explicit rows word-for-word.  When the replay
    optimization is enabled and every row word is replay-admissible, the
@@ -445,7 +445,7 @@ ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
     return true;
   uint64_t formed = ims_formed_cost_x100 (schedule, desc, run_rows);
   uint64_t alt = ims_replay_alt_cost_x100 (region, run_rows);
-  /* Init-hoist-aware arbitration (lane IU): under the proven stage-2
+  /* Init-hoist-aware arbitration: under the proven stage-2
      contract the prefix's push words execute once per caller-loop
      entry; weigh both sides by the same profile fraction the run
      pricing uses (cross-multiplied, no rounding).  The replay
@@ -509,7 +509,7 @@ ims_arbitrate_loop (const macro_region &region,
   return formed < alt;
 }
 
-/* Loop trip weight (WP8): the profile-estimated body/preheader
+/* Loop trip weight: the profile-estimated body/preheader
    execution-count ratio of a loop-body region.  Purely a profitability
    weight -- never a correctness input -- exact where the profile is
    (constant-bound loops), the static estimate elsewhere.  The two
@@ -629,26 +629,26 @@ preheader_trailing_enable (basic_block preheader)
   return nullptr;
 }
 
-/* Entry-ambient all-lanes derivation (lane IS, owner-ratified F1
-   honest fix): whether the lane-enable state at the configuration
+/* Entry-ambient all-lanes derivation (an owner-ratified honesty
+   fix): whether the lane-enable state at the configuration
    placement point is provably the architectural all-lanes state, with
    NO marker instruction in the stream.  The ambient model is the
    established structured-CC lowering contract (gimple-rvtt-cc.cc: the
    outermost lane state is pinned all-lanes -- the same license behind
-   the outermost POPC -> ENCC rewrite, the WP10 materialization, the
+   the outermost POPC -> ENCC rewrite, the enable materialization, the
    crossrow-pairing loop-entry walk, and prgm-const's pre-peel walk):
    function entry is all-lanes ambient; a word-exact all-lanes SFPENCC
    KILLS (re-establishes the state); any other CC-affecting statement
    dirties.  Scalar (non-Tensix) instructions cannot touch SFPU lane
    state and are transparent.
 
-   Audited-TU walk transparency (lane IV, typecast recovery): the v1
+   Audited-word walk transparency: the original
    walk was fail-closed on ALL asm -- the real LLK kernels inline their
    envelope init as raw `.ttinsn' TTI_ words, so every production
    preheader chain crossed "opaque" init and refused
    (ambient-entry-unproven).  The walk now DERIVES a verdict from the
-   decoded content instead of refusing on shape (the lane HS
-   record-window discipline: derive from decoded fields, never trust):
+   decoded content instead of refusing on shape (the record-window
+   discipline: derive from decoded fields, never trust):
 
      - a canonical raw `.ttinsn' constant word classifies through the
        audited lane-enable table (rvtt_raw_cc_word_class,
@@ -832,7 +832,7 @@ entry_ambient_all_lanes_p (basic_block point_bb, rtx_insn *before,
 }
 
 /* Structural preheader of a loop-body region, with the zero-trip and
-   whole-body ownership obligations (WP8).  The loop header must have
+   whole-body ownership obligations.  The loop header must have
    exactly its backedge plus one external incoming edge; the incoming
    block must have no other successor, which proves at least one trip on
    this edge, so hoisting the all-lanes enable is not a zero-trip CC
@@ -902,7 +902,7 @@ loop_region_preheader (function *fn, const macro_region &region, FILE *dump)
 }
 
 /* Rewrite the typed address-mode operand of a copied explicit-load
-   pattern to ADDR_MODE (WP10 compact CC calendar: the trailing load's
+   pattern to ADDR_MODE (compact CC calendar: the trailing load's
    own auto-increment mode absorbs the deleted separator's stride).
    The operand position mirrors rvtt_dst_access_operands' positional
    knowledge for the one admitted load pattern: rvtt_sfpload_lv_int
@@ -928,7 +928,7 @@ planner_rewrite_load_addr_mode (rtx_insn *orig, rtx pat, unsigned addr_mode)
 }
 
 /* Rewrite the typed Dst address immediate of a copied row pattern to
-   NEW_ADDR (lane IS, F1 honest fix: immediate-delta rows normalize
+   NEW_ADDR (honesty fix: immediate-delta rows normalize
    their explicit reloads back to rows[0]'s base -- the absorbed-stride
    calendar supplies the per-row advance through the counter).  The
    operand positions mirror rvtt_dst_access_operands' positional
@@ -1073,12 +1073,12 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		     run -- the FULL derived drain when a fixed-VD VALUE
 		     carrier's hosted events pend past the next row's
 		     launch (see form_region for the derivation and
-		     provenance), or the smaller residual lane FT's
+		     provenance), or the smaller residual
 		     window-pairing tuning proved
 		     (rvtt_macro_interrow_drain_tuned, under
 		     -mtt-tensix-optimize-window-pairing).  */
 		  int interrow_drain_slots,
-		  /* WP13 residency (rvtt-macro-desc.cc): elide the
+		  /* Descriptor residency (rvtt-macro-desc.cc): elide the
 		     descriptor words when a bit-identical dominating
 		     resident program exists; collect the programming
 		     insns (benign for later residency walks); report
@@ -1105,10 +1105,10 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
   if (emit_config)
     {
       /* The all-lanes proof source ENABLE_SRC is the first row's local
-	 enable, or (WP10) the first row's own proven all-lanes restore
+	 enable, or the first row's own proven all-lanes restore
 	 materialized in the prefix -- both proven word-exact all-lanes
 	 by formation (cc_enable_all_lanes_proved_p), so this copy
-	 re-establishes exactly the proven state; the WP8 relaxation
+	 re-establishes exactly the proven state; the first-row relaxation
 	 from every-row holds because no region member may write CC
 	 outside the admitted CC-template roles, whose only lane-state
 	 net effect is the proven all-lanes restore.  A null ENABLE_SRC
@@ -1161,7 +1161,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	}
       else if (resident_elide)
 	{
-	  /* WP13 residency: the descriptor words are already resident
+	  /* Descriptor residency: the descriptor words are already resident
 	     (a bit-identical program at a proven dominating placement
 	     under function-wide owned-state invariance) -- only the
 	     per-region ambient enable and owned SETC16 program are
@@ -1185,7 +1185,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 	}
       else if (hoist_preheader)
 	{
-	  /* Cross-tile configuration epoch (WP11): the descriptor words
+	  /* Cross-tile configuration epoch: the descriptor words
 	     execute once, in the enclosing loop's structural preheader
 	     -- the epoch proof shows no intervening owner, so every
 	     trip's launches read exactly these words.  The block is
@@ -1285,7 +1285,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 
   /* Planned destination of each explicit reload: the src field of the
      template consuming its value (decoded from the descriptor), or --
-     for a load feeding the coalesced lane-merge (WP9) -- the shared
+     for a load feeding the coalesced lane-merge -- the shared
      launch VD the predicated-overwrite dataflow flows through.  */
   unsigned explicit_planned[8] = {};
   bool explicit_planned_valid[8] = {};
@@ -1410,7 +1410,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 			= gen_rtx_REG (XTT32SImode,
 				       SFPU_REG_FIRST + explicit_planned[ix]);
 		  }
-		/* WP10 compact CC calendar: the trailing explicit load
+		/* Compact CC calendar: the trailing explicit load
 		   absorbs the deleted separator's Dst stride through the
 		   tables' owned auto-increment address-modifier slot
 		   (the SETC16 programs in the configuration prefix own
@@ -1423,7 +1423,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		       c->auto_increment_dst2_addr_mode);
 		    gcc_assert (ok);
 		  }
-		/* Immediate-delta row (lane IS, F1 honest fix):
+		/* Immediate-delta row (honesty fix):
 		   normalize the copied explicit Dst access back to
 		   rows[0]'s base -- the absorbed calendar's counter
 		   supplies the per-row advance.  Formation dry-ran the
@@ -1449,7 +1449,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
 		emit_insn (pat);
 	      }
 	  }
-      /* WP9: the proven CC-template program keeps the row's typed
+      /* The proven CC-template program keeps the row's typed
 	 separator in place -- its issue slot is the restore's
 	 visibility slot (macro_cc_model), so the next row opens under
 	 the restored all-lanes mask.  Re-emitted verbatim.  */
@@ -1477,7 +1477,7 @@ emit_planner_run (macro_region &region, const macro_schedule &schedule,
   rtx_insn *replacement = get_insns ();
   end_sequence ();
   /* The emitted calendar (launches, explicit reloads, separators,
-     drain) is planner-emitted and benign for the WP13 residency walks
+     drain) is planner-emitted and benign for the residency walks
      by construction -- launch effects are deliberately opaque to the
      effect vocabulary (descriptor-dependent), so without this the
      walks would refuse on our own launches.  Collected BEFORE
@@ -1593,13 +1593,13 @@ form_region (function *fn, macro_region &region,
     return false;
 
   /* Configuration ownership: the function-global proof, or the ordered
-     region-scoped fallbacks (union merge, WP9 x cross-function
+     region-scoped fallbacks (union merge, CC-template x cross-function
      regions): (1) any loop-body region first tries the loop-scoped
      preheader+body WINDOW proof (the cheaper, more general path -- the
      preheader is computed quietly here; the window dump line names the
      sharing); (2) a proven CC-template program that the window path
      did not prove -- including the straight-line shapes the window
-     never covers -- additionally tries the WP9 CC-scoped proof
+     never covers -- additionally tries the CC-scoped proof
      (planner_region_config_ownership_ok; no success dump line, as
      before).  Only when every applicable proof fails does the refusal
      keep its established name.  Configuration placement is decided
@@ -1698,7 +1698,7 @@ form_region (function *fn, macro_region &region,
       }
 
   /* A lane-predicated calendar needs the ambient all-lanes proof: the
-     region's first row's local enable (WP8 relaxation from every-row:
+     region's first row's local enable (relaxed from every-row:
      region members cannot write CC -- such rows refuse
      cc-template-unsupported at discovery -- so the entry lane state
      holds across every row), or, for a loop-body region whose enable
@@ -1728,7 +1728,7 @@ form_region (function *fn, macro_region &region,
 	}
       else
 	{
-	  /* Materialized enable (WP10, superseding the WP9 first-row
+	  /* Materialized enable (superseding the first-row
 	     peel): when no typed ambient enable exists -- the real LLK
 	     kernels establish the lane state through opaque init the
 	     typed IR cannot see -- a CC-template row's OWN all-lanes
@@ -1763,13 +1763,13 @@ form_region (function *fn, macro_region &region,
 	      enable_src = proof_restore;
 	      materialized_enable = true;
 	    }
-	  /* Entry-ambient derivation (lane IS, owner-ratified F1 honest
+	  /* Entry-ambient derivation (owner-ratified honesty
 	     fix, 2026-08-29): when no typed enable exists anywhere --
 	     the source carries no marker instruction -- the compiler
 	     derives the lane state itself.  The license is the SAME
 	     architectural contract every established consumer already
 	     stands on (rvtt_cc's outermost POPC -> ENCC rewrite, the
-	     WP10 materialization above, crossrow-pairing's loop-entry
+	     enable materialization above, crossrow-pairing's loop-entry
 	     walk, prgm-const's pre-peel walk): the structured-CC
 	     lowering pins the function-entry and outermost lane state
 	     to the architectural all-lanes state.  The derivation is a
@@ -1777,7 +1777,7 @@ form_region (function *fn, macro_region &region,
 	     placement point: every path must reach the function entry
 	     or a word-exact all-lanes SFPENCC before any other
 	     CC-affecting, unaudited, or opaque instruction.  Raw asm is
-	     seen THROUGH, never trusted (lane IV, typecast recovery):
+	     seen THROUGH, never trusted:
 	     decoded `.ttinsn' words classify against the audited
 	     lane-enable table and the rest leans on the TU-wide
 	     CC/lane-enable audit; calls and anything undecodable stay
@@ -1822,17 +1822,17 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
-  /* WP13 residency de-duplication (rvtt-macro-desc.cc): when a
+  /* Residency de-duplication (rvtt-macro-desc.cc): when a
      bit-identical descriptor program is already resident at a proven
      dominating placement under function-wide owned-state invariance,
      this region elides its descriptor-word programming entirely.
-     Proof-only; computed here (lane IU) so the init-hoist pricing
+     Proof-only; computed here so the init-hoist pricing
      pre-run below sees the same eligibility the commit site keeps.
      Refusals keep today's emission byte-identically.  */
   bool resident_elide
     = rvtt_macro_residency_lookup (fn, region, desc, c, resid, dump);
 
-  /* Init-hoist pricing pre-run (lane IU, 2026-08-29): the crosscall
+  /* Init-hoist pricing pre-run: the crosscall
      init hoist's proof chain, evaluated PROOF-ONLY ahead of the
      profitability gate under exactly the guards the committing site
      (below, still last among the refusal points) applies.  A proven
@@ -1855,7 +1855,7 @@ form_region (function *fn, macro_region &region,
 	       || recog_memoized (enable_src) != CODE_FOR_rvtt_sfpencc)
 	/* v1: the prefix's lane proof must be the typed proven
 	   all-lanes SFPENCC (the minmax-class ambient enable); the
-	   WP10 in-row-restore materialization license is not carried
+	   in-row-restore materialization license is not carried
 	   cross-call.  The entry-ambient SYNTHESIZED enable (F1 honest
 	   fix) is admitted: it is the same canonical word the hoist's
 	   caller-side emission synthesizes itself
@@ -1980,7 +1980,7 @@ form_region (function *fn, macro_region &region,
 
   /* Emission deletes each row's typed Dst separator; that is only
      sound when the launch calendar absorbed the stride, or when the
-     proven program keeps the separator in place (WP9: the CC-template
+     proven program keeps the separator in place (the CC-template
      programs re-emit it verbatim as the restore-visibility slot).  */
   for (const macro_row &row : region.rows)
     if (row.separator && !schedule.absorbed_stride && !desc.keep_separator)
@@ -1991,10 +1991,10 @@ form_region (function *fn, macro_region &region,
 	return false;
       }
 
-  /* Immediate-delta regions (lane IS, F1 honest fix): only the
+  /* Immediate-delta regions (honesty fix): only the
      absorbed calendar expresses them (the schedule already refuses
      imm-stride-not-absorbed; this re-check keeps the contract locally
-     auditable), the WP9 kept-separator program never carries them, and
+     auditable), the kept-separator program never carries them, and
      every Dst access of every offset row must be address-rewritable
      back to rows[0]'s base -- proven here as a dry run BEFORE any
      mutation.  */
@@ -2033,7 +2033,7 @@ form_region (function *fn, macro_region &region,
 	}
     }
 
-  /* WP10 compact CC calendar: the absorbing explicit load's address
+  /* Compact CC calendar: the absorbing explicit load's address
      mode operand must be rewritable (the one admitted load pattern);
      proven here as a dry run -- refusal paths never mutate.  */
   if (schedule.absorb_into_explicit)
@@ -2050,7 +2050,7 @@ form_region (function *fn, macro_region &region,
 	  return false;
 	}
 
-  /* WP11: cross-tile prefix elision for formed CC calendars.  When the
+  /* Cross-tile prefix elision for formed CC calendars.  When the
      configuration preheader itself sits inside an enclosing issue loop
      (the tile loop) and the configuration-epoch proof shows no
      intervening owner of the planner's SFPCONFIG destinations across
@@ -2062,10 +2062,10 @@ form_region (function *fn, macro_region &region,
      region relying purely on an in-place trailing enable copies that
      proven word.  Every refusal keeps today's per-trip prefix
      byte-identically, under a stable name.  */
-  /* WP13 residency de-duplication: RESIDENT_ELIDE was computed above
-     (moved ahead of profitability by lane IU, decision-identical --
+  /* Residency de-duplication: RESIDENT_ELIDE was computed above
+     (proof-only ahead of profitability, decision-identical --
      the lookup is proof-only and profitability reads no residency
-     state); a resident program makes the WP11 hoist moot.  */
+     state); a resident program makes the cross-tile hoist moot.  */
   basic_block hoist_preheader = nullptr;
   edge hoist_edge = nullptr;
   rtx_insn *hoist_enable_src = nullptr;
@@ -2085,10 +2085,10 @@ form_region (function *fn, macro_region &region,
 					     &hoist_edge, &epoch_refusal,
 					     &epoch_refusal_insn))
 	    {
-	      /* WP13 residency outward extension (rvtt-macro-desc.cc):
+	      /* Residency outward extension (rvtt-macro-desc.cc):
 		 proof-only iteration of the epoch discipline through
 		 further enclosing loops; on any refusal the placement
-		 stays WP11's, byte-identically.  */
+		 stays the cross-tile hoist's, byte-identically.  */
 	      unsigned resid_levels = 0;
 	      rvtt_macro_residency_extend (fn, region, desc, c, resid,
 					   &hoist_preheader, &hoist_edge,
@@ -2134,7 +2134,7 @@ form_region (function *fn, macro_region &region,
      prefix is call-invariant descriptor data, prove the (single)
      caller's loop epoch and move the prefix to the caller's loop
      preheader -- once per loop instead of once per call.  The proof
-     chain ran PROOF-ONLY ahead of profitability (lane IU pricing
+     chain ran PROOF-ONLY ahead of profitability (pricing
      pre-run); the COMMIT stays here, LAST among the refusal points (a
      committed caller-side insertion and the callee-side suppression
      stand together).  The committing call re-evaluates the identical
@@ -2171,19 +2171,19 @@ form_region (function *fn, macro_region &region,
      mutation.  The final run's drain -- the region's exit contract (no
      events in flight may reach the invisible follower stream) -- is
      never elided.  */
-  /* Inter-row drain (lane EV, P0 wrong-code adjudication 2026-08-21).
+  /* Inter-row drain (a wrong-code adjudication).
      Within a run, rows are emitted back-to-back.  The conservative VD
      policy's own stated rule (rvtt-macro-sched.cc: a hosted launched
      event consumes the launch VD; without a proven consumption slot
      before the next row's launch, consecutive rows must alternate VDs)
      makes that sound ONLY under VD alternation.  When descriptor
-     synthesis pins a VALUE carrier's VD (WP12 name-encoded consumers;
+     synthesis pins a VALUE carrier's VD (name-encoded consumers;
      the frozen whole-word programs' fixed_vd), every row re-targets the
      SAME register while the previous row's hosted consumers still pend
      up to drain_slots past its launch -- back-to-back rows race the
      next launch's VD write against the pending events.  Adjudicated on
-     the replay-loop-unroll signbit shape (device corr FAIL, weekly
-     pin-15 + pin-18 e2e; pinned-sim 32489dda reproduction; sim trace
+     the replay-loop-unroll signbit shape (device correctness failure,
+     reproduced by the reference simulator; the simulator trace
      shows three launches' events in flight on one LReg and the shift
      event consuming overwritten data).  Placement: the FULL derived
      drain between consecutive rows, reproducing exactly the proven
@@ -2192,7 +2192,7 @@ form_region (function *fn, macro_region &region,
      envelope, store-only sacrificial VDs (written, never read), and
      the CC-template model (its macro_cc_model next-row obligations --
      store-before-next-def, restore-visibility <= row interval -- are
-     the proven inter-row contract, silicon-proven multi-row on the
+     the proven inter-row contract, hardware-proven multi-row on the
      unified where kernel) keep today's bytes.  */
   bool interrow_drain = false;
   if (desc.drain_slots > 0 && region.rows.length () > 1 && !desc.cc.active)
@@ -2237,7 +2237,7 @@ form_region (function *fn, macro_region &region,
 	  ++drains_elided;
       }
 
-  /* Loop-backedge drain elision (lane CA): a loop-body region's FINAL
+  /* Loop-backedge drain elision: a loop-body region's FINAL
      run ends at the loop latch, so its drain executes once per trip
      where the architecture requires it once per loop exit.  When the
      backedge follower stream proves (rvtt_macro_drain_backedge_elidable,
@@ -2304,7 +2304,7 @@ form_region (function *fn, macro_region &region,
 	 this loop is its only predecessor, else a commit-time edge
 	 split (every proof has passed; the split block executes
 	 exactly when the loop exits) -- the same discipline as the
-	 WP11 hoist's guarded-enclosing-loop split.  */
+	 cross-tile hoist's guarded-enclosing-loop split.  */
       basic_block dest = drain_exit_edge->dest;
       if (dest == EXIT_BLOCK_PTR_FOR_FN (fn) || !single_pred_p (dest)
 	  || !bb_note (dest))
@@ -2344,7 +2344,7 @@ form_region (function *fn, macro_region &region,
    descriptor synthesis (and Layer-7 verification) proves is committed
    through form_region.  Returns true when a candidate PROVED (the search
    stops there whether or not formation committed); *CHANGED accumulates
-   actual code mutation.  Shared verbatim by the spine and the WP15
+   actual code mutation.  Shared verbatim by the spine and the
    upward-carrier commit path so both can never diverge.  */
 
 static bool
@@ -2379,9 +2379,9 @@ planner_process_region (function *fn, macro_region &region,
     }
 }
 
-/* ---------------- WP15: upward-IMS carrier former ------------------- */
-/* The upward half of the WP14 IMS mapping (-mtt-tensix-macro-ims-carrier,
-   default off).  WP14's repair driver searches DOWNWARD -- reduced
+/* ---------------- Upward-IMS carrier former ------------------------- */
+/* The upward half of the IMS mapping (-mtt-tensix-macro-ims-carrier,
+   default off).  The repair driver searches DOWNWARD -- reduced
    hosted sets -- and provably conserves the initiation interval on rows
    whose maximal hosting already proves (docs/MACRO_PLANNER.md 2d).  The
    upward former searches the other direction, the handwritten kernels'
@@ -2391,7 +2391,7 @@ planner_process_region (function *fn, macro_region &region,
    web onto the new carrier so its events can host there.  Everything is
    applied as a REAL commit-or-revert mutation of every unrolled row
    copy: the mutated region re-runs the full established pipeline --
-   discovery, scheduling (including WP14 repair when enabled), descriptor
+   discovery, scheduling (including IMS repair when enabled), descriptor
    synthesis, Layer-7 verification, and every formation gate -- which
    remains the only feasibility oracle.  A variant commits only when it
    re-proves at a STRICTLY smaller initiation interval than the
@@ -3025,7 +3025,7 @@ upward_probe_region (const macro_region &region, int *ii_out,
     }
 }
 
-/* The WP15 driver: try upward-carrier variants on REGION; returns true
+/* The upward-carrier driver: try variants on REGION; returns true
    when one committed (the mutated region formed).  On false the
    function is byte-identical to entry.  */
 
@@ -3039,7 +3039,7 @@ upward_carrier_try (function *fn, macro_region &region,
 
   /* Predicate-definition rows keep the established candidate space:
      their hosting rules are the proven CC select programs' territory
-     (the WP14 discipline).  */
+     (the IMS-repair discipline).  */
   for (rtx_insn *insn : region.rows[0].insns)
     {
       xtt_effect_set e = rvtt_insn_effects (insn);
@@ -3051,7 +3051,7 @@ upward_carrier_try (function *fn, macro_region &region,
   /* The established outcome is the improvement baseline: the upward
      search only ever replaces a PROVEN formation by a strictly denser
      one.  When the established search proves NOTHING, the upward
-     variants may still recover the region (the WP14 repair symmetry:
+     variants may still recover the region (the repair symmetry:
      the re-load can be exactly what makes a refusing hosted set
      realizable); the baseline is then no formation at all, and the
      established profitability and arbitration gates inside
@@ -3242,7 +3242,7 @@ upward_carrier_try (function *fn, macro_region &region,
       bool committed = false;
       int new_ii = 0;
       unsigned new_candidate = 0;
-      /* The variant's re-derivation search is dumped in full (the WP14
+      /* The variant's re-derivation search is dumped in full (the
 	 repair discipline): the probe's schedule and descriptor lines
 	 are the reviewable record of why a variant proves or dies.  */
       if (dump)
@@ -3341,7 +3341,7 @@ public:
        (rvtt-effects.h contract; lookups additionally verify the
        function identity, so this reset is belt-and-braces).  */
     rvtt_planner_launch_effects_reset ();
-    /* WP13 residency: per-function store of programmed descriptor
+    /* Descriptor residency: per-function store of programmed descriptor
        content and planner-emitted insns (rvtt-macro-desc.cc).  Regions
        are processed in discovery order = forward program order, the
        increment-1 first-formed-wins selection policy.  */
@@ -3350,7 +3350,7 @@ public:
     rvtt_macro_regions_discover (fn, dump_file, &regions);
     for (macro_region &region : regions)
       {
-	/* WP15 upward-IMS carrier former (default off): when a variant
+	/* Upward-IMS carrier former (default off): when a variant
 	   commits, the mutated region has already formed and the
 	   established search is superseded for this region.  On any
 	   refusal the function is byte-identical and the established

@@ -1,4 +1,4 @@
-/* Shared body for the item-#9 stage-A shadow-discovery twins.  RUN is
+/* Shared body for the stage-A shadow-discovery twins.  RUN is
    one six-word SFPU row whose recurrence on a/b/c keeps every clone's
    register encoding identical, so the discovery's generation-aged class
    hash maps the clones onto one symbol string.  */

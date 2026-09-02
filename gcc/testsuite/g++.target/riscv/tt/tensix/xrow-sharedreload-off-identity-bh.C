@@ -1,6 +1,6 @@
 // Sub-flag-off identity: the identical composed tanh 2-datum shape
 // WITHOUT -mtt-tensix-optimize-crossrow-shared-reload keeps the
-// duplicated 30-word paired record exactly (lane IC's shipped form) --
+// duplicated 30-word paired record exactly (the shipped form) --
 // no shared-reload line appears and the copy half's coefficient
 // materializations stay in the stream.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-hoisted-prgm-reuse -mtt-tensix-optimize-crossrow-pairing -mtt-tensix-optimize-crossrow-pairing-stall-words -fdump-rtl-rvtt_schedule-details" }

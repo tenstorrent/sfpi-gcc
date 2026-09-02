@@ -1,4 +1,4 @@
-// Cross-lane rotate-chain collapse (lane FG, X4): ror1^n == ror1^(n mod
+// Cross-lane rotate-chain collapse (X4): ror1^n == ror1^(n mod
 // 8) under a proven all-lanes state (SFPSHFT2.md; FB battery rotate
 // inverses).  Renamed-equivalent + varied chain lengths and sources.
 // Replay formation disabled only to keep the assembler counts literal.

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc -fdump-tree-rvtt_reassoc" }
-// Token-absent control for the item-#8 fire body: without
+// Token-absent control for the accumulator-splitting fire body: without
 // -mtt-tensix-optimize-reassoc-loop-carried the standing
 // reassoc-loop-carried-underived refusal continues byte-identically
 // (the historical diagnostic walk, kept verbatim) and nothing splits.

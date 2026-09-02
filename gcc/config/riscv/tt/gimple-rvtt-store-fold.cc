@@ -93,7 +93,7 @@ along with GCC; see the file COPYING3.  If not see
    License absent, behavior is byte-identical by construction (the same
    named refusal on the same statement).  Licensed cells follow the
    licensed-knob discipline (LICENSED booking, device-golden authority
-   at the row's documented tolerance, LICENSED-EXPECTED paired-CRAQ
+   at the row's documented tolerance, LICENSED-EXPECTED paired-simulator
    disposition).
 
    The mask-subset argument for S2 admits only region refinements
@@ -123,12 +123,12 @@ along with GCC; see the file COPYING3.  If not see
    re-mined.
 
    THE STOCHRND-STORE-FOLD LICENSE (-mtt-tensix-optimize-stochrnd-
-   store-fold, lane HZ under the owner overnight mandate 2026-08-27):
+   store-fold):
    the divergence above is exactly the delta between the semantic
    body's explicit rounding and the HANDWRITTEN idiom the row's hand
    kernel ships (bare converting store, binary-float class: one
    delivered word per SIMD row).  The owner-side accuracy authority
-   (laneCX golden re-spec: golden = proven hw cast behavior) accepts
+   (golden = proven hardware cast behavior) accepts
    the hand arm's bits -- the hand cell is the row's passing
    correctness arm -- so folding the semantic body ONTO the hand
    idiom's instruction stream is a licensed value change whose
@@ -151,8 +151,8 @@ along with GCC; see the file COPYING3.  If not see
      - the store's Mod0 targets the MATCHING precision: FP16B->BF16,
        FP16A->FP16, or the runtime-resolved SRCB store (the swept
        rows; the row's ALU config owns the SRCB resolution and the
-       licensed booking's device-golden gate is the authority --
-       the laneHL SRCB precedent) -- cross-precision static pairs
+       licensed booking's device-golden gate is the
+       authority) -- cross-precision static pairs
        refuse (stochrnd-store-fold-format-mismatch);
      - the round's result has the store as its ONLY consumer
        (stochrnd-store-fold-multi-use);
@@ -170,12 +170,12 @@ along with GCC; see the file COPYING3.  If not see
    byte-identical by construction (the same standing named refusal on
    the same statement).  Licensed cells follow the licensed-knob
    discipline (LICENSED booking, device-golden authority at the row's
-   documented tolerance, LICENSED-EXPECTED paired-CRAQ disposition).
+   documented tolerance, LICENSED-EXPECTED paired-simulator disposition).
 
    The license token gates the pass BY ITSELF (the knob leg's delta
    must read as the license's own effect): with only the token given,
-   the value-preserving S1/S2 merge folds stay OFF -- lane HZ's
-   silicon A/B showed the S1 forward alone re-shapes the production
+   the value-preserving S1/S2 merge folds stay OFF -- a hardware
+   A/B showed the S1 forward alone re-shapes the production
    (hand) binary-float TU's replay window (0,4,1,1 x8 -> 0,6,1,1 x4,
    25766 -> 19498 cycles), so a knob string carrying the parent flag
    would move BOTH arms and conflate two mechanisms.  Because the
@@ -233,8 +233,8 @@ rvtt_store_sink_licensed_p (void)
   return riscv_tt_opt_store_sink > 0;
 }
 
-/* The SFPSTOCHRND-into-store fold license key (lane HZ, owner overnight
-   mandate 2026-08-27): the value-changing rounding-elision fold fires
+/* The SFPSTOCHRND-into-store fold license key: the
+   value-changing rounding-elision fold fires
    ONLY when the user passed the dedicated default-off license token
    -mtt-tensix-optimize-stochrnd-store-fold (in addition to the pass's
    own -mtt-tensix-optimize-store-fold).  Token absent = the standing
@@ -247,8 +247,8 @@ rvtt_stochrnd_store_fold_licensed_p (void)
 }
 
 /* SFPLOAD/SFPSTORE Mod0 data-format selectors (capability data:
-   BlackholeA0 SFPSTORE.md/SFPLOAD.md supporting definitions; pinned
-   craq-sim tensix.cpp sfpstore_values/TENSIX_EXECUTE_SFPLOAD arms).  */
+   BlackholeA0 SFPSTORE.md/SFPLOAD.md supporting definitions; the pinned
+   reference simulator's sfpstore_values/TENSIX_EXECUTE_SFPLOAD arms).  */
 constexpr long SFPMEM_MOD0_FMT_SRCB  = 0;
 constexpr long SFPMEM_MOD0_FMT_FP16  = 1;
 constexpr long SFPMEM_MOD0_FMT_BF16  = 2;
@@ -424,7 +424,7 @@ storable_source_p (tree z)
 
 enum span_kind { SPAN_BAD, SPAN_SAME_MASK, SPAN_REGION_CLOSED };
 
-/* The stage-A CC-region-tree agreement check (FABLE_GOES_BURR #14):
+/* The stage-A CC-region-tree agreement check:
    where the historical shape walk admits a span, the shared frame
    analysis must agree -- SAME_MASK means the store executes under the
    assign's own frame, REGION_CLOSED means the store's frame is the
@@ -560,7 +560,7 @@ classify_assign_to_store (const rvtt_cc_region_tree *ccr, gcall *assign,
    frame opened after the load (the load's frame is its parent frame),
    entered by the pushc the walk found, whose refinement chain is
    exactly the mask-refining statements the walk admitted
-   (FABLE_GOES_BURR #14 -- the refinement-chain query).  */
+   (the CC-region tree's refinement-chain query).  */
 
 static bool
 check_load_to_assign (const rvtt_cc_region_tree *ccr, gcall *load,
@@ -1025,7 +1025,7 @@ transform (function *fun)
   basic_block bb;
 
   /* The CC-region tree: the frame structure computed once per function
-     (FABLE_GOES_BURR #14); the shape walks below are its stage-A
+     (rvtt-cc-region.h); the shape walks below are its stage-A
      compatibility predicates.  Rebuilt only after an S2 sink mints a
      new store statement.  */
   rvtt_cc_region_tree ccr (fun);

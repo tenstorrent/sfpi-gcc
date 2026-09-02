@@ -1,4 +1,4 @@
-// Fail-closed launch resolution (lane FR): a playback launch whose slots
+// Fail-closed launch resolution: a playback launch whose slots
 // no record in the function accounts for delivers device-persistent
 // content this compilation cannot audit -- inside a proven-OPEN window
 // that is a named error, never a silent acceptance.

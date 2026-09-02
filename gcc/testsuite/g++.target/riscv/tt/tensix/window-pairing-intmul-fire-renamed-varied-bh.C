@@ -1,4 +1,4 @@
-// Lane FT window-pairing, renamed-varied variant of the MulInt32-class
+// Window-pairing, renamed-varied variant of the MulInt32-class
 // fire: different symbol names, Dst bases (128/192), and row count (6).
 // The verdict is mechanism-keyed, not shape-keyed: same tune to zero.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-window-pairing -fdump-rtl-rvtt_macro_planner" }

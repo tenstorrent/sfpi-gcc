@@ -1,4 +1,4 @@
-// PRESSURE-PARK fire, post-CC position admission (lane GV): the
+// PRESSURE-PARK fire, post-CC position admission: the
 // invariant materialization sits AFTER the body's first CC writer --
 // exactly the shape the peel class's position rule refuses today
 // (const-residency-peel-position-refuse-bh.C is this body without the

@@ -1,9 +1,9 @@
-// WP9: the predicated-select (TTNN Where) shape in raw typed builtins:
+// The predicated-select (TTNN Where) shape in raw typed builtins:
 // three loads, a predicate write, a lane-predicated merge, the in-row
-// all-lanes restore, a store.  Before the 2026-08-17 Where silicon
+// all-lanes restore, a store.  Before the Where hardware
 // adjudication this refused the missing lane proof AFTER the 4-slot
 // descriptor proved; the descriptor CC model now refuses the calendar
-// itself (root cause craq-sim 9f324140 -- the store's lane mask is
+// itself (root cause the reference simulator -- the store's lane mask is
 // live at execution and this calendar retires its all-lanes restore
 // in the store's own cycle): the mixed-mode compact candidate refuses
 // its descriptor by name and the established calendar's descriptor

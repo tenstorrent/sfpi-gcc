@@ -74,11 +74,11 @@ along with GCC; see the file COPYING3.  If not see
 // Minimum acceptable sequence length.  4 mirrors
 // XTT_REPLAY_LOOP_UNROLL_MIN_WORDS (rvtt-cost.md): smaller rows cannot
 // amortize a record/playback window.  Self-declared uncalibrated there --
-// no silicon point separates 3 from 4 (DG2 audit item; a calibration
-// experiment remains the pricing lane's follow-up).
+// no hardware measurement separates 3 from 4 (a calibration
+// experiment remains a follow-up).
 constexpr unsigned MIN_SEQUENCE = 4;
 
-/* Post-auto-increment window RE-FORMATION mode (lane IH).  Under
+/* Post-auto-increment window RE-FORMATION mode.  Under
    -mtt-tensix-optimize-post-autoincr-window the formation DEFERS
    wholesale past pass_rvtt_dst_autoincr: the pre-fold pass_rvtt_replay
    invocation gates itself off and pass_rvtt_replay_reform (bottom of
@@ -111,12 +111,12 @@ constexpr unsigned MIN_SEQUENCE = 4;
      downstream pipeline, WormholeB0 REPLAY.md functional model;
      pinned-sim replay_expander); a hoisted no-exec capture's preheader
      payload is INGESTED, never executed (Load=1/Exec=0 swallowed
-     words, lane FR delivery-vision model), and every clone becomes one
+     words, the delivery-vision expander model), and every clone becomes one
      launch in place.  The delivered instruction stream is therefore an
      insertion-only extension of the (canonicalized) folded stream:
-     per-execution-cumulative RWC and ADDR_MOD walk arithmetic (lane IF
+     per-execution-cumulative RWC and ADDR_MOD walk arithmetic (the
      replay-soundness model) and every positionally discharged
-     delay-shadow contract (lane HM: gaps only grow under insertion)
+     delay-shadow contract (gaps only grow under insertion)
      are preserved verbatim.
 
    - For payloads containing a CARRIED access (a Dst access the
@@ -140,9 +140,9 @@ constexpr unsigned MIN_SEQUENCE = 4;
 
    - Every fail-closed belt of the formation runs here over the
      post-fold layout: the raw-REPLAY census, the recording-epoch
-     scoping, the FS/FJ/FL un-hoist sweep rules 1-3, and the slot-span
+     scoping, the un-hoist sweep rules 1-3, and the slot-span
      subtraction (records take only slots no prior owner -- user or LLK
-     envelope -- declared).  The downstream TEN-2932 window checker and
+     envelope -- declared).  The downstream dest-index window checker and
      MOP formation see the formed stream as their pass ordering already
      requires.  */
 static bool reform_mode = false;
@@ -393,7 +393,7 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
    re-check: MEM operands (synthesized-insn spill slots) and
    clobber/scratch outputs compare equal by class, everything else
    compares structurally.  Extracted verbatim from extend_sequence so the
-   suffix-automaton shadow discovery (item #9 stage A) can form its
+   suffix-automaton shadow discovery can form its
    symbol classes under EXACTLY the legacy predicate -- symbol equality
    diverging from this callback is the failure mode the stage-A superset
    assertion exists to catch, so the two must not be spelled twice.  */
@@ -415,8 +415,8 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
       auto &seq_insn = block[seq.clones.front ().end - 1];
       if (seq_insn.generation != insn.generation)
 	continue;
-      /* The one word-exact comparator (rvtt-delivery-cost.cc,
-	 FABLE_GOES_BURR #12): pattern equality under the
+      /* The one word-exact comparator (rvtt-delivery-cost.cc):
+	 pattern equality under the
 	 scratch-operand tolerance.  */
       if (!rvtt_dcost_replay_word_equal_p (seq_insn.insn, insn.insn))
 	continue;
@@ -699,7 +699,7 @@ payload_contains_carried_p (replay_block const &block, replay_span span)
    mirrors the discovery's own equality (compiler GPR scratch and
    synthesized-word MEMs do not reach the delivered Tensix word).  */
 
-/* The ONE clone word-exact lockstep walk (FABLE_GOES_BURR #12),
+/* The ONE clone word-exact lockstep walk (rvtt-delivery-cost.cc),
    shared by the reform-mode launch-arithmetic audit and the
    window-sizing re-verification below (previously two per-site
    spellings; the per-word comparator itself is the module's
@@ -814,8 +814,8 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
    each replaced clone saves (length - 1) words against one launch word,
    and the record itself stays in the body -- so a shorter window with
    more instances wins (lcm-fresh: 14 words x 7 instances, saving 77,
-   over 28 words x 3 instances, saving 53), and lane IH measured that
-   key RIGHT for in-block windows.  A record the driver then HOISTS out
+   over 28 words x 3 instances, saving 53) -- a key measured RIGHT
+   for in-block windows.  A record the driver then HOISTS out
    of the loop (record-hoist / replay-hoist preheader placement) changes
    the economics: the record is delivered once per placement and the
    per-trip cost is the LAUNCH WORDS alone, so the widest word-exact
@@ -841,7 +841,8 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
      as one partial launch (ISA: a REPLAY launch emits
      ReplayBuffer[(Index+i)%32] for i in [0,Count) -- a pure prefix of
      the recorded program, independent of the recorded length; both
-     functional models, and the hand kernels' REPLAY(0,13) on silicon).
+     functional models, and the hand kernels' REPLAY(0,13) on
+     hardware).
      The walk mirrors sequence-growth continuity exactly: it never
      crosses a must_end word, a deleted insn, or the block end, and
      stops one word short of a full extra clone.
@@ -866,7 +867,7 @@ reform_carried_launch_arithmetic_ok (replay_block const &block,
    payload would need the launch-arithmetic audit re-derived for the
    trim; refused by name window-sizing-reform-composition-unaudited),
    and widening of exec-while-record in-block picks (pick_replay's key
-   is measured right there; lane IH).  */
+   is measured right there).  */
 
 static bool
 window_sizing_clones_exact_p (replay_block const &block,
@@ -1000,7 +1001,7 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
       unsigned covered = cand->length * unsigned (cand->clones.size ()) + trim;
       gcc_checking_assert (ne >= covered);
       /* The one delivered-issue spelling (rvtt-delivery-cost-core.h
-	 window_trip_issue_words; FABLE_GOES_BURR #12).  */
+	 window_trip_issue_words).  */
       unsigned cost_cand = rvtt_delivery_cost::window_trip_issue_words
 	(unsigned (cand->clones.size ()), trim != 0, ne - covered);
       unsigned cur_covered = seq->length * unsigned (seq->clones.size ());
@@ -1062,8 +1063,7 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
 }
 
 /* ==================================================================
-   FABLE_GOES_BURR.md item #9, STAGE A -- SUFFIX-AUTOMATON MAXIMAL-REPEAT
-   DISCOVERY, RUN AS A SHADOW.
+   SUFFIX-AUTOMATON MAXIMAL-REPEAT DISCOVERY, RUN AS A SHADOW.
 
    The legacy discovery (build_sequences) grows every candidate by one
    insn at a time and is self-admittedly O(N^2) (":448"); the classical
@@ -1724,7 +1724,7 @@ fixed_replay_rtx_p (const_rtx x)
 
 /* Provable constant trip counts.
 
-   Lane JR (FABLE_GOES_BURR item #2 stage A): the bounded forward
+   The bounded forward
    evaluation this pass founded (see the design comment retired to
    rvtt-trips.cc) moved verbatim to the shared trip-count facade
    rvtt_loop_trips (rvtt-trips.{h,cc}).  The facade is dual-oracle:
@@ -1742,7 +1742,7 @@ fixed_replay_rtx_p (const_rtx x)
    real work, so removing it saves only the delivery/overhead premium
    over replay reissue, while the added preheader record-only pass
    executes nothing.  The pricing arithmetic lives in the next comment
-   block and the full silicon-anchor derivation with the constants in
+   block and the full hardware-anchor derivation with the constants in
    rvtt-cost.md.
 
    Execution-saturation context term (the LAUNCH_RUN parameter;
@@ -1819,7 +1819,7 @@ fixed_replay_rtx_p (const_rtx x)
                                          ; execution, rvtt-cost.md)
 
      re-record body, delivery-bound (exec < deliver_record):
-       before = deliver_record           ; pin-11 calibration restored:
+       before = deliver_record           ; original calibration restored:
                                          ; execution and the record
                                          ; overhead absorb into the
                                          ; per-word delivery slack
@@ -1835,7 +1835,7 @@ fixed_replay_rtx_p (const_rtx x)
    operation identity, opcode calendar, coefficient value, or
    instruction-word fingerprint participates.
 
-   Planner-emitted macro launches (lane CK): an SFPLOADMACRO pattern is
+   Planner-emitted macro launches: an SFPLOADMACRO pattern is
    attribute-opaque (descriptor-dependent effects), but when the macro
    planner itself emitted the launch it recorded the launch's
    issue-plane effect interface, derived from the descriptor it
@@ -1866,7 +1866,7 @@ exec_interlocked_slots (replay_block const &block, replay_span span)
   // matching the interlock scheduler's target-level refusal.
   if (TARGET_XTT_TENSIX_QSR)
     return -1;
-  /* The 16-register ready[] scoreboard is the item-#11 engine's; this
+  /* The 16-register ready[] scoreboard is the timing engine's; this
      walker owns only the IR-side effect extraction, dumps and
      refusals (verdict identity proven by the stage-A shadow over a
      full corpus -fchecking leg before the local scoreboard retired).  */
@@ -1996,12 +1996,12 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      soundness half is carried by the unhoisted world itself: every
      window here has at least two clones, so the identical word stream is
      ALREADY delivered by playback launches at expander pace in the
-     unhoisted world (the always-on former's formation, the
-     silicon-witnessed class); converting the first clone from
+     unhoisted world (the always-on former's formation, a class
+     witnessed good on hardware); converting the first clone from
      exec-while-record delivery to one more playback of that same stream
      adds no reissue exposure a proven latency could bound.  The gate
      stays for the default hoist model, whose pricing consumes the
-     estimate, and for unproven targets (no silicon-witnessed playback
+     estimate, and for unproven targets (no hardware-witnessed playback
      class to carry the discharge -- QSR keeps the refusal).  */
   bool reissue_gate_discharged
     = record_hoist_mode && !record_completion_model
@@ -2031,7 +2031,7 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   HOST_WIDE_INT min_benefit = rvtt_dcost_replay_hoist_min_benefit ();
 
   /* The one replay pricing spelling (rvtt-delivery-cost-core.h
-     replay_pricing; FABLE_GOES_BURR #12).  The shape selector is the
+     replay_pricing).  The shape selector is the
      same flag-pair spelling the delivery-shape downstream mirror
      consumes, so the mirror can no longer drift from this gate.  */
   rvtt_delivery_cost::replay_shape shape
@@ -2083,7 +2083,7 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
       HOST_WIDE_INT per_trip = price.per_trip;
       if (runtime_trips)
 	{
-	  /* Runtime trip count (lane FW; rvtt-cost.md RECORD-HOIST
+	  /* Runtime trip count (rvtt-cost.md RECORD-HOIST
 	     RUNTIME-TRIP derivation).  The delivery delta is monotone in
 	     the realized trip count: each trip saves per_trip delivered
 	     centislots, bought once at record_once.  With trips >= 1
@@ -2150,8 +2150,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   // execution-bound (exec >= deliver_record) exposes the record
   // engine's per-pass overhead on the critical path and hides the
   // hoisted preheader pass's delivery behind the loop's own execution
-  // backlog (Reduce-class silicon A/B); delivery-bound keeps the
-  // pin-11-calibrated delivery pricing (Log/Log1p refusals) with the
+  // backlog (Reduce-class hardware A/B); delivery-bound keeps the
+  // originally calibrated delivery pricing (Log/Log1p refusals) with the
   // engine overhead absorbed in the per-word delivery slack.
   //
   // Both shapes -- and the counted branch, the execution-saturation
@@ -2191,13 +2191,13 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   else if (price.hidden)
     {
       // Execution-saturation term (delivery-bound re-record bodies
-      // only; silicon-witnessed on the unary-maxmin shape): when the
+      // only; hardware-witnessed on the unary-maxmin shape): when the
       // body's contiguous run of sibling launches of this same buffer
       // has enough execution surplus to hide the record pass's
       // delivery, hoisting relieves nothing per trip.  An
       // execution-bound record pass is never hidden this way: its cost
       // is its own execution plus the exposed record-engine overhead,
-      // which no sibling surplus can absorb (Reduce-class silicon A/B,
+      // which no sibling surplus can absorb (Reduce-class hardware A/B,
       // rvtt-cost.md).
       if (dump_file)
 	fprintf (dump_file,
@@ -2319,7 +2319,7 @@ max_contiguous_launch_run (replay_sequence const &seq,
   return max_run;
 }
 
-/* Playback launches THIS PASS emitted this function (lane FW): their
+/* Playback launches THIS PASS emitted this function: their
    recorded slot content is the pass's own audited payload, so the
    record-hoist loop replay-preservation walk may admit them where a
    user-authored launch (unknowable recorded content) refuses.  */
@@ -2384,7 +2384,7 @@ dedicated_loop_preheader (class loop *loop)
 
 // A volatile store whose address is not provably outside the
 // instruction-FIFO aperture can deliver ANY word -- including a REPLAY
-// record that re-records hoisted slots (lane FW fail-closed widening of
+// record that re-records hoisted slots (a fail-closed widening of
 // the loop scan below; the flag-gated record-hoist path re-audits
 // refused loops with the interval walk in rvtt-macro-epoch.cc, which
 // also classifies the stored WORD).  Named data objects other than the
@@ -2460,15 +2460,15 @@ loop_preserves_replay_p (class loop *loop)
   return true;
 }
 
-/* Lane GQ: exec-while-record first-trip peel
+/* Exec-while-record first-trip peel
    (-mtt-tensix-optimize-record-hoist-peel, composing on
    -mtt-tensix-optimize-replay-record-hoist).
 
-   The no-exec composition mirror below (lane FJ/FW) refuses every
+   The no-exec composition mirror below refuses every
    Dst-store re-record hoist whose preheader sits inside an outer loop:
    a STILL-NO-EXEC Dst-store capture re-ingested per outer trip with
-   launches of its span in between is the silicon-refuted wedge (ES 2x2
-   / FE-F1 / FJ HANG-3), and the end-of-pass sweep would un-hoist it
+   launches of its span in between is the hardware-refuted wedge
+   (three independent device hangs), and the end-of-pass sweep would un-hoist it
    into a strict pessimization.  The refusal is exact for the no-exec
    shape -- but the SAME payload hoisted as an EXEC-WHILE-RECORD pass is
    the fleet-witnessed composition (minmax, sdpa, where, typecast, lcm
@@ -2635,7 +2635,7 @@ peel_admissible_p (class loop *loop, basic_block preheader,
        open user recording state, and itself pass the same
        downstream-fallback oracle (a placement still within a
        mod-write's drained-frontend window walks on);
-     - a failing level stops the walk (never refuses; the lane HC
+     - a failing level stops the walk (never refuses; the
        residency-walk discipline); with no oracle-clean admissible
        level the original composition refusal stands byte-identically
        (record-hoist-lift-no-admissible-level).
@@ -2643,11 +2643,11 @@ peel_admissible_p (class loop *loop, basic_block preheader,
    Soundness is the EXISTING hoisted no-exec capture class at a
    different placement: the record still DOMINATES every launch and is
    not forward-reachable from any without re-entering the placement
-   itself (preheader chain -- the FS persistence rules hold), the
+   itself (preheader chain -- the expander persistence rules hold), the
    payload is storeless here (the Dst-store mirror above refuses those
    payloads before the oracle ever runs; rule 1 of the end-of-pass
    sweep is keyed to Dst-store payloads, and storeless no-exec captures
-   are the silicon-good celu/eqz class), a placement still inside an
+   are the hardware-witnessed-good celu/eqz class), a placement still inside an
    outer loop re-ingests the SAME fixed-encoding words once per that
    loop's trip (idempotent; invariance is the record-hoist
    fixed-encoding admission, checked before the oracle), and the
@@ -2901,11 +2901,11 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	  return nullptr;
 	}
 
-  /* Admission-side mirror of the fail-closed re-record sweep's rule 1
-     (lane FW): a Dst-store payload whose no-exec record would land in a
+  /* Admission-side mirror of the fail-closed re-record sweep's rule 1:
+     a Dst-store payload whose no-exec record would land in a
      preheader that itself sits inside a natural loop is EXACTLY the
      shape unhoist_hazard_rerecords un-hoists at the end of transform
-     (noexec-rerecord-dststore-composition-unaudited, lane FJ) -- and the
+     (noexec-rerecord-dststore-composition-unaudited) -- and the
      un-hoist's identity restoration is relative to the HOISTED world
      (every launch becomes an inline payload copy), a strict delivery
      pessimization against never having hoisted.  Forming a provably
@@ -2977,7 +2977,7 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	    }
     }
 
-  /* Downstream-fallback composition pricing (lane FZ; rvtt-cost.md
+  /* Downstream-fallback composition pricing (rvtt-cost.md
      "RECORD-HOIST x MOD-WRITE COMPOSITION").  The record-hoist pricing
      below is licensed by the streams-identical premise: the hoisted and
      unhoisted worlds EXECUTE the same word stream, so the modeled delta
@@ -2985,13 +2985,13 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
      drained-frontend window of a row the dst-autoincr pass would
      otherwise transform into a mod-write voids that premise: the
      dst-autoincr group guard is certain to refuse the group (the
-     silicon-refuted no-exec-record x mod-write composition, fail-closed
+     hardware-refuted no-exec-record x mod-write composition, fail-closed
      and correct), so the hoisted world executes the explicit-increment
      fallback while the unhoisted world executes the mod-write form --
      different executed streams whose delta the delivery-only model
-     cannot price.  The one silicon point on the composed shape measured
-     it NET NEGATIVE (lcm-fresh ON-28, +6.0 cyc/tile against the
-     unhoisted+mod-write world; rvtt-cost.md entry), so a hoist that
+     cannot price.  The one hardware measurement on the composed shape
+     found it NET NEGATIVE (+6.0 cycles/tile on the lcm-fresh kernel
+     against the unhoisted+mod-write world; rvtt-cost.md entry), so a hoist that
      induces the fallback refuses by name and keeps today's bytes.  The
      oracle mirrors the group guard's own distance semantics and audited
      window (single source, rtl-rvtt-dst-autoincr.cc); no distance an
@@ -3054,8 +3054,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 }
 
 /* No-exec captures THIS PASS hoisted into preheaders this function, for
-   the fail-closed re-record sweep at the end of transform () (lane FJ,
-   FE-F1 follow-up; see unhoist_hazard_rerecords).  User-authored records
+   the fail-closed re-record sweep at the end of transform ()
+   (see unhoist_hazard_rerecords).  User-authored records
    are never entered here and stay untouched.  */
 static std::vector<rtx_insn *> formed_noexec_captures;
 
@@ -3462,7 +3462,7 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
   HOST_WIDE_INT words = delivered_words (block, payload);
   HOST_WIDE_INT min_benefit = rvtt_dcost_replay_hoist_min_benefit ();
   /* The one replay pricing spelling (rvtt-delivery-cost-core.h,
-     SHAPE_COUNTED_PEEL; FABLE_GOES_BURR #12).  */
+     SHAPE_COUNTED_PEEL).  */
   rvtt_delivery_cost::replay_price price = rvtt_dcost_replay_pricing
     (rvtt_delivery_cost::SHAPE_COUNTED_PEEL, trips, words, eslots,
      /*launch_run=*/1, false, min_benefit);
@@ -3546,7 +3546,7 @@ hoist_counted_loops (function *cfn,
 	     as the exec-while-record first-trip peel (see
 	     counted_peel_profitable_p above); every refusal below keeps
 	     the plain refusal's bytes.  A reform-mode carried payload
-	     refuses the peel by lane IH's name: the peel RELOCATES one
+	     refuses the peel by the reform-mode name: the peel RELOCATES one
 	     trip's carried executions into the preheader, across the
 	     configuration program's placement, and the walk-order proof
 	     for that relocation is not in this increment.  */
@@ -3848,8 +3848,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 		    {
 		      // An empty-template asm (the compiler memory-barrier
 		      // idiom) emits nothing; every real asm is an
-		      // unclassified word.  Position decides (lane FJ,
-		      // FE-F1 follow-up): the transformation moves the
+		      // unclassified word.  Position decides: the
+		      // transformation moves the
 		      // payload's execution from the first launch back to
 		      // the record, so only words BETWEEN the record and
 		      // that launch are crossed -- a word before the
@@ -4692,10 +4692,10 @@ convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
    counted-row-map-live-out, counted-row-slot-budget,
    counted-row-rename-interference, counted-row-rename-constraint,
    counted-row-lane-state, counted-row-bridge-clobber,
-   counted-row-vacated-delay-shadow (lane HM: a move may not re-open a
+   counted-row-vacated-delay-shadow (a move may not re-open a
    delay shadow the nop inserter discharged against the original order;
-   the SFPMAD.md stall-detection erratum list makes that silicon
-   wrong-code, laneHI-F1).  */
+   the SFPMAD.md stall-detection erratum list makes that wrong code
+   on hardware).  */
 
 // LREG index domain helpers: xtt_effect_set masks are over L0..L15; the
 // allocatable SFPU hard registers are L0..L7.
@@ -5357,7 +5357,7 @@ struct crf_plan
   std::vector<std::vector<unsigned>> moves_tail;
 };
 
-/* FINAL LOCKSTEP AUDIT comparator (lane ID): structural equality of a
+/* FINAL LOCKSTEP AUDIT comparator: structural equality of a
    seed/clone member pair under the plan's FINAL register assignment
    (every value's register read through plan.renames).  Mirrors
    crf_match_rtx's structure walk, but where the walk RECORDED live-in
@@ -5529,7 +5529,7 @@ static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 			      int *conflict_a = nullptr,
 			      int *conflict_b = nullptr);
 
-/* THE plan-order interpreter (FABLE_GOES_BURR item #3): the final
+/* THE plan-order interpreter: the final
    instruction order of a plan over BLK, as entries into blk.pos --
    e >= 0 is block position e; e < 0 is one bridge move of clone
    (-1 - e), one entry per bridge in plan order.  Per-clone head moves,
@@ -5587,8 +5587,8 @@ crf_plan_order (crf_block &blk, crf_plan &plan)
   return order;
 }
 
-/* Delay-contract verification of the plan's FINAL order (lane HM,
-   P1 laneHI-F1 adjudication).
+/* Delay-contract verification of the plan's FINAL order (a
+   hardware-adjudicated wrong-code guard).
 
    The nop inserter (rtl-rvtt-schedule.cc transform) discharges every
    XTT_DELAY contract against the ORIGINAL instruction order: a
@@ -5600,7 +5600,7 @@ crf_plan_order (crf_block &blk, crf_plan &plan)
    discharged contract silently re-opens, no later pass re-probes it,
    and the recorded window replays the unpadded pair forever.  On the
    tanh fresh sem body the canonicalization moved the next row's
-   SFPLOADI out of the SFPMUL->SFPSWAP gap; silicon's stall logic
+   SFPLOADI out of the SFPMUL->SFPSWAP gap; the hardware stall logic
    cannot see SFPSWAP's 1st-cycle read (documented hardware bug), the
    min clamp consumed the STALE accumulator and polynomial values > 1
    escaped (device corr FAIL) while the pinned sim -- which executes
@@ -6368,7 +6368,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
       break;
     }
 
-  // FINAL LOCKSTEP AUDIT (lane ID): the occupancy cascade's bystander
+  // FINAL LOCKSTEP AUDIT: the occupancy cascade's bystander
   // swaps rewrite value registers AFTER the lockstep walk verified the
   // member words' operand correspondence, and nothing re-checked the
   // words against the FINAL assignment -- the launch replays the
@@ -6448,7 +6448,7 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
   }
 
   // The moves and bridges above may not re-open a delay shadow the nop
-  // inserter already discharged (lane HM, laneHI-F1): re-verify the
+  // inserter already discharged: re-verify the
   // whole delay contract over the plan's final order, refusing by name.
   if (!crf_shadow_contract_ok (blk, plan))
     return false;
@@ -7087,8 +7087,8 @@ canonicalize_counted_rows (function *cfn,
 // the repeated portions w/ a REPLAY instruction
 
 /* Audited mod-write classification for the no-exec record placement
-   obligation (lane FL, FH-1; rvtt-cost.md AUDITED COMPOSITION FACT
-   "no-exec record composition").  The silicon-refuted composition is a
+   obligation (rvtt-cost.md AUDITED COMPOSITION FACT
+   "no-exec record composition").  The hardware-refuted composition is a
    no-exec recording window opening while a mod-write's positional-state
    retirement (the audited W_drain window) can still be in flight; the
    guard in rtl-rvtt-dst-autoincr.cc prices it only for that pass's OWN
@@ -7108,7 +7108,7 @@ canonicalize_counted_rows (function *cfn,
    pure-Dst/RWC words) are NOT in the class: the crossing model records
    them as re-anchoring issue-time words, and the celu/eqz-class wrapper
    adjacency (records behind raw STALLWAIT-class words) is
-   silicon-witnessed good across many pins -- treating undecoded words
+   hardware-witnessed good across many toolchain snapshots -- treating undecoded words
    as hazards would refuse the witnessed-good class.  Undecodable words
    (calls, non-raw asm, opaque typed words) instead earn ZERO cover in
    the distance walk: they can never manufacture separation.
@@ -7248,37 +7248,37 @@ capture_modwrite_within_window_p (rtx_insn *cap, unsigned window,
   return false;
 }
 
-/* Fail-closed no-exec re-record sweep (lane FJ; rvtt-cost.md "no-exec
+/* Fail-closed no-exec re-record sweep (rvtt-cost.md "no-exec
    record composition", delivery-boundary paragraph).  A pass-hoisted
    NO-EXEC capture whose placement block lies inside a loop re-ingests
    its payload every iteration; when that payload carries a Dst store,
    the re-ingestion follows the previous iteration's launch-delivered
-   stores at runtime pacing no static model prices.  The silicon
-   witnesses: lcm-fresh ON+record-hoist (hang, lane ES 2x2) and
-   sparse_k_filter ON-25 at runtime trip 32 (hang, lane FE F1) -- and
-   lane FJ's device datum that the same shape hangs WITH EXPLICIT
+   stores at runtime pacing no static model prices.  The hardware
+   witnesses: the lcm-fresh kernel under record-hoist (hang) and
+   sparse_k_filter at runtime trip 32 (hang) -- and
+   a device measurement showing the same shape hangs WITH EXPLICIT
    TTINCRWC rows too, so the composition is the re-record x launches
    x Dst-store-payload, not the mod-write alone.  The witnessed-good
-   exec-while-record conversion (fleet silicon: minmax, sdpa, where,
-   typecast, lcm ON-set) is the intended deliverer of these shapes;
+   exec-while-record conversion (proven on device across minmax, sdpa,
+   where, typecast, and lcm kernels) is the intended deliverer of these shapes;
    when it has NOT fired by the end of the pass, this sweep un-hoists
    the capture by name: every launch of the span is replaced by an
    inline copy of the payload (a launch executes exactly the payload,
    so this is the identity the capture was formed from), and the record
    and its never-executed shadow are deleted.  Storeless payloads
-   (celu/eqz-class wrapper records, silicon-good across many pins) and
+   (celu/eqz-class wrapper records, hardware-witnessed good) and
    loop-free placements (xielu preamble, single-loop preheaders) are
    untouched.  Only captures this pass formed are swept: user-authored
    records are the user's own contract.
 
-   Second placement obligation (lane FL, FH-1; same sweep, same
+   Second placement obligation (same sweep, same
    identity-restoring action): a still-no-exec formed capture whose
    recording window can open within the audited W_drain issue-word
    window of an audited mod-write (placement_modwrite_hazard_p; the
    rvtt-cost.md AUDITED COMPOSITION FACT's distance boundary, priced
    with the same exported constant the dst-autoincr group guard uses,
    rvtt_modwrite_drained_frontend_window) is un-hoisted by name -- the
-   compiler must never FORM the silicon-refuted wedge adjacency it
+   compiler must never FORM the hardware-refuted wedge adjacency it
    refuses to compose elsewhere.  Loop-free placements are audited
    too: the wedge condition is the record's ingestion inside the
    retirement window; once is enough.  Captures proven separated
@@ -7304,9 +7304,9 @@ unhoist_hazard_rerecords (function *cfn)
       if (!bb)
 	continue;
       class loop *loop = bb->loop_father;
-      /* Rule 1 (lane FJ) applies to in-loop placements only (a
+      /* Rule 1 applies to in-loop placements only (a
 	 loop-free record's payload executes once, the witnessed
-	 class); rule 2 (lane FL) audits every placement.  */
+	 class); rule 2 audits every placement.  */
       bool in_loop = loop && loop->num != 0;
       if (!CONST_INT_P (XVECEXP (pat, 0, 3))
 	  || !CONST_INT_P (XVECEXP (pat, 0, 5)))
@@ -7370,10 +7370,10 @@ unhoist_hazard_rerecords (function *cfn)
 	    }
 	}
 
-      /* Rule 1 (lane FJ): in-loop re-record with a Dst-store payload.
-	 Rule 2 (lane FL, FH-1): recording window opens inside the
-	 audited W_drain window of an audited mod-write.  Rule 3 (lane FS,
-	 FP-3): a still-no-exec Dst-store capture whose record does NOT
+      /* Rule 1: in-loop re-record with a Dst-store payload.
+	 Rule 2: recording window opens inside the
+	 audited W_drain window of an audited mod-write.  Rule 3:
+	 a still-no-exec Dst-store capture whose record does NOT
 	 dominate every launch of its span (or has no in-function launch
 	 at all) is live-at-exit relative to that launch -- the recorded
 	 store can be delivered from a launch the record never executed
@@ -7959,7 +7959,7 @@ transform (function *cfn, unsigned buffer_size)
 
   /* Fail-closed: any pass-hoisted no-exec capture the exec-while-record
      conversion did not reach, placed on a loop with a Dst-store payload,
-     is the silicon-refuted re-record composition -- un-hoist it.  */
+     is the hardware-refuted re-record composition -- un-hoist it.  */
   unhoist_hazard_rerecords (cfn);
 }
 
@@ -8020,7 +8020,7 @@ public:
   }
 }; // class pass_rvtt_replay
 
-/* Post-auto-increment window RE-FORMATION (lane IH): the same formation,
+/* Post-auto-increment window RE-FORMATION: the same formation,
    run a second time after pass_rvtt_dst_autoincr, under reform_mode (see
    the block comment at reform_mode near the top of this file for the
    design and its soundness obligations).  Default off

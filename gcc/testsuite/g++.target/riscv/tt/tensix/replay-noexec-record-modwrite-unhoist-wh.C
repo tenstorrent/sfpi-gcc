@@ -1,4 +1,4 @@
-// Lane FL (FH-1): the WH mirror of
+// The WH mirror of
 // replay-noexec-record-modwrite-unhoist-bh.C -- the Wormhole
 // capability entry carries the same audited W_drain window
 // (same-frontend-class conservative adoption, rvtt-cost.md), so the

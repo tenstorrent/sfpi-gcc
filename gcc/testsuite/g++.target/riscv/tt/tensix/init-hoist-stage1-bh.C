@@ -1,4 +1,4 @@
-// Cross-call invariant-init hoist (lane CA, D2), stage 1: the callee's
+// Cross-call invariant-init hoist (D2), stage 1: the callee's
 // derived descriptor program (five SFPCONFIG words and their staged
 // loads) is call-invariant descriptor data; the caller's loop epoch
 // proves LoadMacroConfig-clean, so the words program once in the loop

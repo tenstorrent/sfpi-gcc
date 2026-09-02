@@ -88,7 +88,7 @@ RVTT_FN (sfprawlreg_access,  ,,VOID_FTYPE_USI_USI,                              
 // region writes (bit 15 = LaneConfig may never be claimed); operand 1 is
 // reserved flag space (0).  The declared region additionally asserts it
 // neither reads nor writes any other PRGM register.  Both markers must sit
-// in the same basic block as the raw statements they cover; CRAQ is the
+// in the same basic block as the raw statements they cover; the reference simulator is the
 // check (the sfprawlreg_access discipline).
 RVTT_FN (ttregion_begin,     ,,VOID_FTYPE_USI_USI,                                           VOL, ({CU, 16}, {CU, 8}))
 RVTT_FN (ttregion_end,       ,,VOID_FTYPE,                                                   VOL, ())
@@ -99,7 +99,7 @@ RVTT_FN (sfpselect4,         ,,XTT_VEC_FTYPE_XTT_VEC4_USI,                      
 
 RVTT_FN (sfpsetcc_i,         ,,VOID_FTYPE_USI_USI,                                           CC(), ({U, 1}, {M, 0x102}))
 RVTT_FN (sfpsetcc_v,         ,,VOID_FTYPE_XTT_VEC_USI,                                       CC(), ({M, 0x55}))
-// PRE-EXISTING QUIRK (documented lane CA, not changed here): the ops
+// PRE-EXISTING QUIRK (documented, not changed here): the ops
 // spec checks (arg1 imm12 {U,2}, arg2 mod1 {M,0x707}) while the direct
 // positional expansion maps (arg1 -> operand0 = mod1, arg2 -> operand1
 // = imm12); the compiler-built calls (gimple-rvtt-cc.cc) use the
@@ -263,7 +263,7 @@ RVTT_OVR(sfpstochrnd_v_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_XTT_VEC_USI_USI,
 RVTT_FN (sfpreadconfig,   bh_qsr,,XTT_VEC_FTYPE_USI,                                         0, ({CU, 4}))
 RVTT_FN (sfpreadconfig_lv,bh_qsr,,XTT_VEC_FTYPE_XTT_VEC_USI,                                 LV, ({CU, 4}))
 RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                                    VOL, ({CU, 4}))
-// Immediate-form SFPCONFIG (lane FA, 2026-08-21): (imm16, dest, mod1).
+// Immediate-form SFPCONFIG: (imm16, dest, mod1).
 // MOD1_IMM16_IS_VALUE (bit 0) is mandatory -- the mod mask 0xaa admits only
 // {1,3,5,7} (write/OR/AND/XOR of Imm16) so the instruction never reads
 // LReg[0]; that register-free property is the whole point (the value form
@@ -277,11 +277,11 @@ RVTT_FN (sfpwriteconfig_v,      ,,VOID_FTYPE_XTT_VEC_USI,                       
 // (SFPCONFIG.md functional model) and are therefore NOT immediate-form:
 // refused by the same mod mask.
 RVTT_FN (sfpconfig_i,           ,,VOID_FTYPE_USI_USI_USI,                                    VOL, ({CU, 16}, {CU, 4}, {M, 0xaa}))
-// Owned SETC16 programming, gimple-spellable (lane CA init hoist): the
+// Owned SETC16 programming, gimple-spellable (the init hoist): the
 // caller-side materialization of a callee's owned address-modifier
 // program.  Args: SETC16 configuration register index, 16-bit value.
 RVTT_FN (ttsetc16,              ,,VOID_FTYPE_USI_USI,                                        VOL, ({CU, 8}, {CU, 16}))
-// Canonical proven all-lanes enable, gimple-spellable (lane CA init
+// Canonical proven all-lanes enable, gimple-spellable (the init
 // hoist): expands to the architectural all-lanes SFPENCC encoding from
 // the capability tables (the exact word cc_enable_all_lanes_proved_p
 // proves against); zero arguments by design.
@@ -310,7 +310,7 @@ RVTT_FN (ttdstface,            ,,VOID_FTYPE,                                    
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}))
 RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}))
 
-// X6 FPU face-transpose family (lane FV): the Matrix-Unit (FPU) Dst <->
+// FPU face-transpose family: the Matrix-Unit (FPU) Dst <->
 // SrcA/SrcB row moves, the SrcB[16:32) 16x16 transpose, the backend-config
 // byte RMW, and the wait-gate stall the hand face-transpose choreography
 // issues (tt-isa-documentation WormholeB0 MOVD2B/MOVB2A/MOVB2D/MOVA2D/

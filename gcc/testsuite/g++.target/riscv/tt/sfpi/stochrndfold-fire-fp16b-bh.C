@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-stochrnd-store-fold -fdump-tree-rvtt_store_fold" }
-// The LICENSED stochrnd-into-store fold (lane HZ) on the binary-float
+// The LICENSED stochrnd-into-store fold on the binary-float
 // shape: the -mtt-tensix-optimize-stochrnd-store-fold license token
 // ALONE (it gates the pass by itself; the S1/S2 merge folds stay off) --
 // the explicit deterministic-nearest FP32_TO_FP16B rounding word whose

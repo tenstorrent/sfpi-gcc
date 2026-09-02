@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-replay-shadow-discovery -fdump-rtl-rvtt_replay-details" }
-// FABLE_GOES_BURR.md item #9 STAGE A -- the TRUNCATION class, which is
+// Suffix-automaton discovery, STAGE A -- the TRUNCATION class, which is
 // the stage-B value this census exists to size.  A 40-word periodic run:
 // the legacy discovery only ever grows to the replay buffer's own length
 // (32 words on Blackhole), so the repeats that are LONGER than the buffer

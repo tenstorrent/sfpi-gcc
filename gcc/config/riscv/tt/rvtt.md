@@ -558,7 +558,7 @@
      return which_alternative == 1 ? "BADLOAD\t%x0, %1" :"BADSTORE\t%x1, %0";
   }
   ;; Effect audit (D3 latency audit, WH/BH): the surviving alternative
-  ;; is the all-lanes SFPMOV mod-2 copy (craq-sim TENSIX_EXECUTE_SFPMOV
+  ;; is the all-lanes SFPMOV mod-2 copy (the reference simulator's TENSIX_EXECUTE_SFPMOV
   ;; mod 2 forces the full lane mask): reads operand 1, writes every
   ;; lane of operand 0, no CC access, configuration, or counter effect.
   ;; S1 Simple; result latency 0 (Simple chains step one slot; the
@@ -623,7 +623,7 @@
     // Setting it to a normal mov will leave DCE to deal with
     // the REG_UNUSED case, that's simpler than redetecting here.
   }
-  ;; Audited (WP9 CC-template extension): the surviving alternative is
+  ;; Audited (CC-template extension): the surviving alternative is
   ;; the lane-predicated SFPMOV merge (result tied to the live value,
   ;; enabled lanes take the source).  Simple unit, reads CC, reads
   ;; operands 1 (live, tied to 0) and 2, writes operand 0; no config or
@@ -719,12 +719,12 @@
        : "SFPLOADI\t%x0, %4, %7",
       operands, true, 8);
   }
-  ;; Effect audit (D3 latency audit, WH/BH): craq-sim
+  ;; Effect audit (D3 latency audit, WH/BH): the reference simulator
   ;; TENSIX_EXECUTE_SFPLOADI writes the destination's enabled lanes for
   ;; mod0 0-8 and 10 (8/10 are the half-word merges, reading the tied
   ;; live value), touches no CC bit, no configuration word and no
   ;; counter; SFPLOADI.md carries no next-cycle constraint, and the
-  ;; silicon-proven hand exp kernel (ckernel_sfpu_exp.h) consumes its
+  ;; hardware-proven hand exp kernel (ckernel_sfpu_exp.h) consumes its
   ;; in-body SFPLOADI one slot later (SFPSWAP reads LREG1 back-to-back):
   ;; result latency 0.  Mod0 9 and >10 are UndefinedBehavior in the
   ;; simulator and keep the refusing defaults.  Sub-unit placement is
@@ -773,7 +773,7 @@
 				   && (IN_RANGE (INTVAL (operands[7]), 0, 8)
 				       || INTVAL (operands[7]) == 10)")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override row (FABLE item #4): lane-predicated LREG
+   ;; Migrated effect-override row (now typed-effect attributes): lane-predicated LREG
    ;; immediate materialization, never touches CC; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -835,7 +835,7 @@
 ;; Field-operand owned SETC16 (macro-planner design 4.3): the pass hands
 ;; only the architectural fields; the emitted word is packed by the
 ;; capability tables at output time.  (The pre-encoded-word form
-;; rvtt_owned_setc16_int was deleted with the quarantined pass at WP8.)
+;; rvtt_owned_setc16_int was deleted with the quarantined pass.)
 (define_insn "rvtt_owned_setc16"
   [(unspec_volatile:SI [
      (match_operand:SI 0 "const_int_operand" "n") ;; config register
@@ -978,7 +978,7 @@
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "addr_mode")
    ;; D3 latency audit: SFPLOAD.md's three-instruction rule is the
-   ;; cross-unit Dst race, not an SFPU result delay; the silicon-proven
+   ;; cross-unit Dst race, not an SFPU result delay; the hardware-proven
    ;; hand exp kernel consumes SFPLOAD's LREG result in the next slot
    ;; (SFPLOAD->SFPMAD back-to-back): result latency 0.
    (set (attr "xtt_result_latency")
@@ -1008,7 +1008,7 @@
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
-   ;; Replay-membership audit (WP10): a launch is a pure instruction
+   ;; Replay-membership audit: a launch is a pure instruction
    ;; WORD -- recording captures the word, never state; execution at a
    ;; replay site reads the then-current descriptor configuration,
    ;; identical to executing the original word there.  The formation
@@ -1019,7 +1019,7 @@
    ;; precedent the simulator executes through the same path.
    ;; Membership is the opt-in -mtt-tensix-macro-planner-replay
    ;; delivery increment: off keeps every formed calendar
-   ;; byte-identical to the pre-flag output (the CRAQ-proven shapes are
+   ;; byte-identical to the pre-flag output (the simulator-proven shapes are
    ;; admitted per A/B, not wholesale).
    (set (attr "xtt_replay")
 	(if_then_else (match_test "riscv_tt_macro_planner_replay")
@@ -1034,7 +1034,7 @@
 ;; physical-LREG write of the launched template is a register operand the
 ;; planner fills from the capability tables'
 ;; template_hidden_lreg_writes(), never a pattern-frozen register.
-;; (Replaced the fixed-L2 rvtt_sfploadmacro_swap_int, deleted at WP7.)
+;; (Replaced the fixed-L2 rvtt_sfploadmacro_swap_int, since deleted.)
 (define_insn "rvtt_sfploadmacro_hidden_int"
   [(set (match_operand:XTT32SI 0 "register_operand" "=xr")
         (unspec_volatile:XTT32SI [
@@ -1053,7 +1053,7 @@
   ".ttinsn\t%6"
   [(set_attr "type" "tensix")
    (set_attr "xtt_macro_resource" "load")
-   ;; Replay-membership audit (WP10): as rvtt_sfploadmacro_int above;
+   ;; Replay-membership audit: as rvtt_sfploadmacro_int above;
    ;; the hidden template write re-executes at every replay exactly as
    ;; the original word would, and stays modeled by the clobber.
    (set (attr "xtt_replay")
@@ -1150,23 +1150,23 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "addr_mode")
-   ;; D3 latency audit (lane DL): SFPSTORE writes Dst only -- it has no
+   ;; Latency audit: SFPSTORE writes Dst only -- it has no
    ;; LREG result a following issue slot could wait on.  SFPSTORE.md
    ;; (BH and WH) carries no next-cycle rule (the audited latency-0
    ;; page convention), and the BH SFPMAD.md hardware-bug list of
    ;; consumers the automatic stalling logic misses does not name
    ;; SFPSTORE, so a store consuming a MAD result is scoreboard-covered
    ;; on BH and nop-inserter territory on WH (xtt_delay untouched by
-   ;; this row).  The silicon-proven hand exp kernel issues its stores
-   ;; back-to-back with dependent neighbours; craq-sim
-   ;; TENSIX_EXECUTE_SFPSTORE commits Dst at issue (sim proof archived,
-   ;; laneDL-evidence-20260820).  Result latency 0, BH/WH only.
+   ;; this row).  The hardware-proven hand exp kernel issues its stores
+   ;; back-to-back with dependent neighbours; the reference simulator
+   ;; TENSIX_EXECUTE_SFPSTORE commits Dst at issue.  Result latency 0,
+   ;; BH/WH only.
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
 		      (const_int 1) (const_int 0)))
    (set_attr "xtt_macro_encodable" "yes")
-   ;; Lane-gated consumer (FABLE item #4): SFPSTORE moves only
+   ;; Lane-gated consumer (typed-effect attributes): SFPSTORE moves only
    ;; CC-enabled lanes to Dst.
    (set_attr "xtt_lane_gated" "yes")])
 
@@ -1240,12 +1240,12 @@
    (set_attr "xtt_cc_effect" "readwrite")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
-;; Audited (WP8) so predicated shapes name their CC capability at the
+;; Audited so predicated shapes name their CC capability at the
 ;; predicate write instead of dissolving into an opaque boundary; since
-;; the WP9 CC-template extension this is the select calendar's
+;; the CC-template extension this is the select calendar's
 ;; predicate-definition event (region discovery admits it as a row
 ;; member; unproven CC forms still refuse by name).
 (define_insn "rvtt_sfpsetcc_v"
@@ -1263,7 +1263,7 @@
    (set_attr "xtt_cc_effect" "readwrite")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpencc"
@@ -1284,9 +1284,9 @@
 
   ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
   ;; state, no register result -- [ISA] SFPCOMPC.md: reads and rewrites the
-  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPCOMPC
+  ;; lane flags / flag stack only; [SIM] the reference simulator's TENSIX_EXECUTE_SFPCOMPC
   ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
-  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; or counter state; [HAND] the hardware-proven hand sign/is*-family
   ;; calendars issue these back-to-back inside recorded replay payloads.
   ;; Latency entry 1 (= 0 slots): there is no register result to wait
   ;; on; the flag update is architecturally visible to the next issued
@@ -1309,9 +1309,9 @@
 
   ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
   ;; state, no register result -- [ISA] SFPPUSHC.md: reads and rewrites the
-  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPPUSHC
+  ;; lane flags / flag stack only; [SIM] the reference simulator's TENSIX_EXECUTE_SFPPUSHC
   ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
-  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; or counter state; [HAND] the hardware-proven hand sign/is*-family
   ;; calendars issue these back-to-back inside recorded replay payloads.
   ;; Latency entry 1 (= 0 slots): there is no register result to wait
   ;; on; the flag update is architecturally visible to the next issued
@@ -1334,9 +1334,9 @@
 
   ;; Effect audit (2026-08-18, Lane BM; three sources): pure lane-flag
   ;; state, no register result -- [ISA] SFPPOPC.md: reads and rewrites the
-  ;; lane flags / flag stack only; [SIM] craq TENSIX_EXECUTE_SFPPOPC
+  ;; lane flags / flag stack only; [SIM] the reference simulator's TENSIX_EXECUTE_SFPPOPC
   ;; (TT_VERSION <= 1) touches cc/cc_en/cc_stack only, no LREG, config,
-  ;; or counter state; [HAND] the silicon-proven hand sign/is*-family
+  ;; or counter state; [HAND] the hardware-proven hand sign/is*-family
   ;; calendars issue these back-to-back inside recorded replay payloads.
   ;; Latency entry 1 (= 0 slots): there is no register result to wait
   ;; on; the flag update is architecturally visible to the next issued
@@ -1408,7 +1408,7 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpmad"
@@ -1452,7 +1452,7 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_int_iterator rvtt_muliaddi_op [
@@ -1562,7 +1562,7 @@
    (set_attr "xtt_cc_effect" "read")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "none")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpiadd_v"
@@ -1616,7 +1616,7 @@
    ;; inference already recorded for SFPSHFT/SFPCAST.
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "shared_simple_round")
-   ;; Effects audited per mod1 (operand 4) from craq-sim
+   ;; Effects audited per mod1 (operand 4) from the reference simulator
    ;; TENSIX_EXECUTE_SFPIADD + the SFPIADD.md functional model, both of
    ;; which cover WH and BH only (QSR has no simulator specification and
    ;; keeps the refusing defaults).  The proven envelope for this
@@ -1624,7 +1624,7 @@
    ;; clear: reads VC (operand 3) and VB=VD (operand 2), writes VD
    ;; (operand 0), lane-predicated.  LaneFlags are written unless
    ;; MOD1_CC_NONE is set without MOD1_CC_GTE0 ((mod1 & 12) == 4);
-   ;; craq-sim and the functional model agree on that effect class for
+   ;; the reference simulator and the functional model agree on that effect class for
    ;; every admitted mod (their mod-12 value divergence -- invert
    ;; vs sign-derived -- stays inside the cc-write class).  An ARG_IMM
    ;; mod in this operand shape would not read VB, so its read claim is
@@ -1672,7 +1672,7 @@
 				   && (INTVAL (operands[4]) & 1) == 0")
 		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
-   ;; Migrated effect-override row (FABLE item #4): SFPIADD's mod field
+   ;; Migrated effect-override row (now typed-effect attributes): SFPIADD's mod field
    ;; can architecturally set CC -- conservative CC write, any mod.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "yes")
@@ -1689,7 +1689,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
-   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; Migrated effect-override row (now typed-effect attributes): conservative CC
    ;; write, any mod; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "yes")
@@ -1793,7 +1793,7 @@
    ;; register-argument pattern above.
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "shared_simple_round")
-   ;; Effects audited per mod1 (operand 7) from craq-sim
+   ;; Effects audited per mod1 (operand 7) from the reference simulator
    ;; TENSIX_EXECUTE_SFPIADD (tensix.cpp:8894: verifies mod1 <= 10 and
    ;; (mod1 & 3) <= 2; TT_VERSION <= 1 = WH/BH) + the SFPIADD.md
    ;; functional model (QSR has no simulator specification and keeps
@@ -1859,7 +1859,7 @@
 				   && IN_RANGE (INTVAL (operands[7]), 0, 10)
 				   && (INTVAL (operands[7]) & 3) == 1")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; Migrated effect-override row (now typed-effect attributes): conservative CC
    ;; write, any mod; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "yes")
@@ -1883,7 +1883,7 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Migrated effect-override row (FABLE item #4): conservative CC
+   ;; Migrated effect-override row (now typed-effect attributes): conservative CC
    ;; write, any mod; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "yes")
@@ -1945,7 +1945,7 @@
     DONE;
   }
   ;; Effect audit (D3 latency audit, WH/BH), per mod1 (operand 3) against
-  ;; the craq-sim executors (TENSIX_EXECUTE_SFPMOV/SFPEXEXP/SFPEXMAN/
+  ;; the the reference simulator executors (TENSIX_EXECUTE_SFPMOV/SFPEXEXP/SFPEXMAN/
   ;; SFPABS/SFPLZ): each reads operand 2 and lane-writes operand 0 (tied
   ;; live value read for disabled lanes); no configuration or counter
   ;; effect.  CC: SFPMOV mod 0/1 and every other audited mod are
@@ -1956,7 +1956,7 @@
   ;; refusing defaults.  Sub-unit: all five opcodes sit in the S1 Simple
   ;; column; every proven Simple dependence chain steps one slot
   ;; (frozen signbit calendar shift->cast->store; hand exp kernel
-  ;; exexp->exman->shft->exman->cast back-to-back on silicon): result
+  ;; exexp->exman->shft->exman->cast back-to-back on hardware): result
   ;; latency 0.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
@@ -2068,7 +2068,7 @@
 					  || INTVAL (operands[3]) == 4)
 				       : IN_RANGE (INTVAL (operands[3]), 0, 1))")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override rows (FABLE item #4), keyed per insn
+   ;; Migrated effect-override rows (now typed-effect attributes), keyed per insn
    ;; code and deliberately mod-independent: pure value unaries;
    ;; SFPEXEXP/SFPLZ mod fields can architecturally set CC
    ;; (conservative CC write), the rest never touch CC.
@@ -2088,7 +2088,7 @@
   "SFP<rvtt_unary_insn>\tL15, %x0, %1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Migrated effect-override rows (FABLE item #4): same per-family
+   ;; Migrated effect-override rows (now typed-effect attributes): same per-family
    ;; classification as the _lv forms above.
    (set_attr "xtt_lane_local" "yes")
    (set (attr "xtt_cc_write")
@@ -2146,14 +2146,14 @@
     rvtt_merge_lv_src (&operands[1], &operands[3]);
   }
   ;; Effect audit (D3 latency audit, WH/BH), per mod1 (operand 4)
-  ;; against craq-sim TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN:
+  ;; against the reference simulator's TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN:
   ;; the register forms (SETEXP mod 0/2, SETMAN mod 0, SETSGN mod 0)
   ;; read the source (operand 2) and the tied destination, lane-write
   ;; the destination, touch no CC bit, configuration word, or counter
   ;; (mod 1 is the immediate form carried by the _i patterns; higher
   ;; mods are simulator-refused and keep the refusing defaults).
   ;; Sub-unit: S1 Simple column; Simple dependence chains step one slot
-  ;; (silicon-proven hand exp kernel runs SFPAND->SFPSETEXP and
+  ;; (hardware-proven hand exp kernel runs SFPAND->SFPSETEXP and
   ;; SFPSETEXP->SFPSTOCHRND back-to-back): result latency 0.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
@@ -2206,7 +2206,7 @@
 				       || (<rvtt_set_op> == UNSPECV_SFPSETEXP
 					   && INTVAL (operands[4]) == 2))")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override rows (FABLE item #4): field inserts
+   ;; Migrated effect-override rows (now typed-effect attributes): field inserts
    ;; never touch CC; lane-gated consumers.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -2290,13 +2290,13 @@
       : "SFPSET<rvtt_set_insn>\t%x0, %x5, %4, %7",
       operands, true, 8);
   }
-  ;; Effect audit extension (2026-08-18, Lane BM; WH/BH, the mod-1
-  ;; immediate arm the register-form audit above names): [SIM] craq
-  ;; TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN mod-1 arms read the
+  ;; Effect audit extension (WH/BH, the mod-1
+  ;; immediate arm the register-form audit above names): [SIM] the
+  ;; reference simulator's TENSIX_EXECUTE_SFPSETEXP/SFPSETMAN/SFPSETSGN mod-1 arms read the
   ;; source and the tied destination, lane-write the destination, touch
   ;; no CC bit, configuration word, or counter; [ISA] the SFPSET*.md
   ;; immediate arms carry no next-cycle result-read rule (the audited
-  ;; latency-0 page convention); [HAND] the silicon-proven hand
+  ;; latency-0 page convention); [HAND] the hardware-proven hand
   ;; signbit/round-class calendars record and replay immediate-form
   ;; SETSGN back-to-back.  S1 Simple column, result latency 0.  Every
   ;; other mod keeps the refusing defaults.
@@ -2337,7 +2337,7 @@
 				    || TARGET_XTT_TENSIX_WH)
 				   && INTVAL (operands[7]) == 1")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override rows (FABLE item #4): field inserts
+   ;; Migrated effect-override rows (now typed-effect attributes): field inserts
    ;; never touch CC; lane-gated consumers.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -2416,11 +2416,11 @@
   {
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
-  ;; Effect audit (D3 latency audit, WH/BH): craq-sim
+  ;; Effect audit (D3 latency audit, WH/BH): the reference simulator
   ;; TENSIX_EXECUTE_SFPAND/SFPOR/SFPXOR (tensix_execute_sfpu_int32)
   ;; read the tied destination and operand 3 and lane-write the
   ;; destination; no CC write, configuration, or counter effect.
-  ;; Sub-unit: S1 Simple; the silicon-proven hand exp kernel runs
+  ;; Sub-unit: S1 Simple; the hardware-proven hand exp kernel runs
   ;; SFPAND->SFPSETEXP back-to-back: result latency 0.
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
@@ -2452,7 +2452,7 @@
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
 		      (const_int 1) (const_int 0)))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfp<rvtt_logical_name>_lv_bh"
@@ -2467,12 +2467,12 @@
   "@
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
-  ;; Effect audit (D3 latency audit, BH): craq-sim mod1<=1 branch of
+  ;; Effect audit (D3 latency audit, BH): the reference simulator mod1<=1 branch of
   ;; TENSIX_EXECUTE_SFPAND/SFPOR -- reads operands 2 and 3 (and the tied
   ;; live value), lane-writes the destination; no CC write,
   ;; configuration, or counter effect.  Higher mods are simulator-
   ;; refused and keep the refusing defaults.  S1 Simple; result latency
-  ;; 0 (hand exp kernel SFPAND->SFPSETEXP back-to-back on silicon).
+  ;; 0 (hand exp kernel SFPAND->SFPSETEXP back-to-back on hardware).
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_subunit")
@@ -2497,7 +2497,7 @@
 	(if_then_else (match_test "IN_RANGE (INTVAL (operands[4]), 0, 1)")
 		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH)"))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpnot"
@@ -2523,7 +2523,7 @@
    SFPNOT\t%x0, %x2\t# LV:%x1"
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpshft_v"
@@ -2574,11 +2574,11 @@
     rvtt_merge_lv_src (&operands[1], &operands[2]);
   }
   ;; Effect audit (D3 latency audit), per mod1 (operand 4) against
-  ;; craq-sim TENSIX_EXECUTE_SFPSHFT: the variable-shift forms (mod 0
+  ;; the reference simulator's TENSIX_EXECUTE_SFPSHFT: the variable-shift forms (mod 0
   ;; logical on both, mod 2 arithmetic-right on BH only) read the shift
   ;; amount (operand 3) and the tied destination, lane-write the
   ;; destination, touch no CC bit, configuration word, or counter.
-  ;; Sub-unit: S1 Simple; the silicon-proven hand exp kernel runs
+  ;; Sub-unit: S1 Simple; the hardware-proven hand exp kernel runs
   ;; SFPSHFT->SFPEXMAN back-to-back and SFPSHFT.md has no next-cycle
   ;; constraint: result latency 0.
   [(set_attr "type" "tensix")
@@ -2633,7 +2633,7 @@
 				      && INTVAL (operands[4]) == 2)")
 		      (const_int 1) (const_int 0)))
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))
-   ;; Lane-gated consumer (FABLE item #4).  The starred immediate-shift
+   ;; Lane-gated consumer (typed-effect attributes).  The starred immediate-shift
    ;; forms are deliberately NOT annotated: the migrated allowlist named
    ;; only the never-recognized sfpshft_i expand codes, so the effective
    ;; membership -- this register-shift pattern only -- is preserved
@@ -2738,10 +2738,9 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Subunit is the 9(h)-class inference recorded in NOTES-wp6-prep.md:
-   ;; the shift is a Simple-unit event by analogy with the documented
-   ;; cast-round Simple assignments; flagged for the architectural
-   ;; reference.
+   ;; Subunit is an inference, not a documented fact: the shift is a
+   ;; Simple-unit event by analogy with the documented cast-round
+   ;; Simple assignments; flagged for the architectural reference.
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "shared_simple_round")
    (set_attr "xtt_lreg_read_ops" "97")
@@ -2837,19 +2836,18 @@
    ;; The effect claims (reads operand 2, writes operand 0, lane-
    ;; predicated CC read, no CC write / config / RWC effect) are audited
    ;; per mod1 (operand 3) and hold only for the proven conversions:
-   ;;   mod1 0 (SM32->FP32 round-nearest-even): craq-sim
+   ;;   mod1 0 (SM32->FP32 round-nearest-even): the reference simulator
    ;;     TENSIX_EXECUTE_SFPCAST + SFPCAST.md functional model.
    ;;   mod1 3, BH only (self-inverse sign-preserving conditional
-   ;;     negate, the SM32<->INT32 conversion): craq-sim mod3 branch +
-   ;;     SFPCAST_IntInt.md; silicon exact-equality boundary evidence
-   ;;     (convert-smag-evidence-20260816).
+   ;;     negate, the SM32<->INT32 conversion): the reference simulator mod3 branch +
+   ;;     SFPCAST_IntInt.md; hardware exact-equality boundary testing).
    ;; mod1 1 (stochastic rounding) additionally advances the PRNG --
    ;; architectural state outside the effect vocabulary -- and BH mod1 2
    ;; is the documented cast-as-ABS hardware bug the simulator refuses
    ;; to execute; both keep the refusing defaults, as does every higher
-   ;; (non-contractual) mod.  QSR retains only the mod-0 claim the WP5
-   ;; audit recorded (unproven-by-simulator; flagged with review
-   ;; carry-forward risk 1).
+   ;; (non-contractual) mod.  QSR retains only the mod-0 claim the
+   ;; original effect audit recorded (unproven-by-simulator; flagged
+   ;; with review carry-forward risk).
    (set (attr "xtt_lreg_read_ops")
 	(if_then_else (match_test "INTVAL (operands[3]) == 0
 				   || (TARGET_XTT_TENSIX_BH
@@ -2877,7 +2875,7 @@
 		      (const_string "none") (const_string "unknown")))
    ;; D3 latency audit: S1 Simple; the frozen cast-round calendar
    ;; steps cast->rnd one slot and the hand exp kernel runs
-   ;; SFPCAST->SFPMAD back-to-back on silicon: result latency 0
+   ;; SFPCAST->SFPMAD back-to-back on hardware: result latency 0
    ;; (audited mods only; unaudited mods stay opaque via the fields
    ;; above).
    (set (attr "xtt_result_latency")
@@ -2885,7 +2883,7 @@
 				   || (TARGET_XTT_TENSIX_BH
 				       && INTVAL (operands[3]) == 3)")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; Migrated effect-override row (now typed-effect attributes): pure value unary,
    ;; never touches CC; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -2972,7 +2970,7 @@
    ;; exponent operations.
    (set_attr "xtt_subunit" "simple")
    (set_attr "xtt_lreg_write_port" "shared_simple_round")
-   ;; Effects audited per mod1 (operand 7) from craq-sim
+   ;; Effects audited per mod1 (operand 7) from the reference simulator
    ;; TENSIX_EXECUTE_SFPDIVP2 (verifies mod1 <= 1; TT_VERSION <= 1 =
    ;; WH/BH) + the SFPDIVP2.md functional model (QSR has no simulator
    ;; specification and keeps the refusing defaults).  Both mods read
@@ -3023,7 +3021,7 @@
 				   && CONST_INT_P (operands[4])
 				   && IN_RANGE (INTVAL (operands[7]), 0, 1)")
 		      (const_int 1) (const_int 0)))
-   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; Migrated effect-override row (now typed-effect attributes): pure value unary,
    ;; never touches CC; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -3127,12 +3125,12 @@
    ;; D3 latency audit: Round sub-unit; the frozen cast-round calendar
    ;; places the dependent store one slot after SFPSTOCHRND, and the
    ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
-   ;; silicon: result latency 0.
+   ;; hardware: result latency 0.
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
 		      (const_int 1) (const_int 0)))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpstochrnd_v"
@@ -3176,12 +3174,12 @@
    ;; D3 latency audit: Round sub-unit; the frozen cast-round calendar
    ;; places the dependent store one slot after SFPSTOCHRND, and the
    ;; hand exp kernel runs SFPSTOCHRND->SFPSTORE back-to-back on
-   ;; silicon: result latency 0.
+   ;; hardware: result latency 0.
    (set (attr "xtt_result_latency")
 	(if_then_else (match_test "TARGET_XTT_TENSIX_BH
 				   || TARGET_XTT_TENSIX_WH")
 		      (const_int 1) (const_int 0)))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfpreadconfig"
@@ -3234,7 +3232,7 @@
    (set_attr "xtt_replay" "barrier")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_BH | XTT_DYNAMIC_BUG_QSR)"))])
 
-;; Immediate-form SFPCONFIG (lane FA, 2026-08-21).  Operands:
+;; Immediate-form SFPCONFIG.  Operands:
 ;; 0 = Imm16, 1 = destination (VD field), 2 = Mod1.  Assembler operand
 ;; order is (VD, Imm16, Mod1) -- binutils riscv-opc-sfpu-insns.h
 ;; "J4mf9ff,J8u16,J0md7ff" -- matching the hand kernels' TTI_SFPCONFIG
@@ -3249,8 +3247,8 @@
 ;;    sfpconfig-imm-dest-unaudited.  Within that envelope the functional
 ;;    model's case-15 arm reads Imm16 only: NO LReg read (that is the
 ;;    point of the form) and NO LReg write (the audited case-15 fact:
-;;    SFPCONFIG dest-15 words never touch LReg[11..14] -- laneAR
-;;    laneconfig-word-audit; both craq tensix.cpp models agree).  Hence
+;;    SFPCONFIG dest-15 words never touch LReg[11..14] -- the
+;;    LaneConfig word audit; both reference-simulator models agree).  Hence
 ;;    lreg_read_ops/write_ops = empty audited masks (bias 1), not the
 ;;    refusing 0.
 ;;  - cc_effect read: the write is gated per column by
@@ -3299,13 +3297,13 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")
-   ;; D3 effect/latency audit (lane DL, 2026-08-20): SFPLUT.md (BH+WH,
+   ;; Effect/latency audit: SFPLUT.md (BH+WH,
    ;; identical functional models) reads LReg[0..2] (coefficient table)
    ;; and LReg[3] (input, the tied destination), lane-predicated write
    ;; to the destination, no CC write, no configuration, RWC, or Dst
    ;; access; MAD sub-unit; instruction scheduling "as per SFPMAD" ->
-   ;; result latency 1 (craq tensix.cpp TENSIX_EXECUTE_SFPLUT matches
-   ;; the model; extract archived, laneDL-evidence-20260820).  Audited
+   ;; result latency 1 (the reference simulator's TENSIX_EXECUTE_SFPLUT matches
+   ;; the model).  Audited
    ;; envelope: mod0 in {0, SGN_RETAIN=4} on BH/WH only --
    ;; INDIRECT_VD (mod0 & 8) redirects the write through LReg[7] and
    ;; keeps every refusing default (position masks cannot express it).
@@ -3358,7 +3356,7 @@
 				   && (INTVAL (operands[5]) == 0
 				       || INTVAL (operands[5]) == 4)")
 		      (const_int 2) (const_int 0)))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn_and_split "rvtt_sfplutfp32_3r"
@@ -3392,7 +3390,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfplutfp32_3r_split"
@@ -3410,7 +3408,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfplutfp32_6r"
@@ -3430,7 +3428,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_insn "rvtt_sfpswap_int"
@@ -3455,7 +3453,7 @@
    ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
    ;; next-cycle rule is an ACCEPTANCE stall with no result-read
    ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
-   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; reduce_custom's hardware-proven chained back-to-back dependent
    ;; SFPSWAPs.  The acceptance stall is the separate structural fact
    ;; xtt_next_slot_stall (pricing charges one slot; the interlock
    ;; scheduler refuses next-slot-stall insns as fill participants).
@@ -3487,7 +3485,7 @@
    ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
    ;; next-cycle rule is an ACCEPTANCE stall with no result-read
    ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
-   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; reduce_custom's hardware-proven chained back-to-back dependent
    ;; SFPSWAPs.  The acceptance stall is the separate structural fact
    ;; xtt_next_slot_stall (pricing charges one slot; the interlock
    ;; scheduler refuses next-slot-stall insns as fill participants).
@@ -3498,7 +3496,7 @@
    ;; envelope, the planner refuses config mutation around rows).  Here
    ;; the VC source (operand 2) is a hardware constant register -- every
    ;; cstlreg is L8..L15 (SFPU_CREG_IDX_LWM) -- and SFPSWAP.md drops
-   ;; writes to LRegs >= 8 ("if (VC < 8)"), matching craq-sim
+   ;; writes to LRegs >= 8 ("if (VC < 8)"), matching the reference simulator
    ;; TENSIX_EXECUTE_SFPSWAP.  The dual write therefore reduces to the
    ;; single VD result tied to operand 0; both sources are read
    ;; (constant-register reads fall outside the allocatable-LREG mask
@@ -3553,7 +3551,7 @@
    ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
    ;; next-cycle rule is an ACCEPTANCE stall with no result-read
    ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
-   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; reduce_custom's hardware-proven chained back-to-back dependent
    ;; SFPSWAPs.  The acceptance stall is the separate structural fact
    ;; xtt_next_slot_stall (pricing charges one slot; the interlock
    ;; scheduler refuses next-slot-stall insns as fill participants).
@@ -3564,7 +3562,7 @@
    ;; constraint (cstlreg < 12) is exactly SFPSWAP.md's VD execution
    ;; gate ("if (VD < 12 || ...)"), and since every cstlreg is L8..L15
    ;; the VD-side write is architecturally dropped ("if (VD < 8)",
-   ;; matching craq-sim).  The surviving write is the VC result tied to
+   ;; matching the reference simulator).  The surviving write is the VC result tied to
    ;; operand 0; both sources are read.  Lane-predicated; never writes
    ;; CC.  Default-LaneConfig envelope as for rvtt_sfpswap_int.
    (set_attr "xtt_subunit" "simple")
@@ -3616,7 +3614,7 @@
    ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
    ;; next-cycle rule is an ACCEPTANCE stall with no result-read
    ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
-   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; reduce_custom's hardware-proven chained back-to-back dependent
    ;; SFPSWAPs.  The acceptance stall is the separate structural fact
    ;; xtt_next_slot_stall (pricing charges one slot; the interlock
    ;; scheduler refuses next-slot-stall insns as fill participants).
@@ -3626,7 +3624,7 @@
    ;; operands hardware constant registers (VD constrained "xs" < 12,
    ;; SFPSWAP.md's VD execution gate).  Every cstlreg is L8..L15, so
    ;; both architectural writes are dropped ("if (VC < 8)" /
-   ;; "if (VD < 8)", matching craq-sim): under the default-LaneConfig
+   ;; "if (VD < 8)", matching the reference simulator): under the default-LaneConfig
    ;; envelope this event reads its two constant sources and the lane
    ;; state and writes no allocatable LREG (write mask audited empty; no
    ;; writeback-port occupancy claim).  Never writes CC.
@@ -3786,14 +3784,14 @@
    ;; rvtt-cost.md's table): result latency 0 -- [ISA] SFPSWAP.md's
    ;; next-cycle rule is an ACCEPTANCE stall with no result-read
    ;; constraint; [SIM] TENSIX_EXECUTE_SFPSWAP atomic update; [HAND]
-   ;; reduce_custom's silicon-proven chained back-to-back dependent
+   ;; reduce_custom's hardware-proven chained back-to-back dependent
    ;; SFPSWAPs.  The acceptance stall is the separate structural fact
    ;; xtt_next_slot_stall (pricing charges one slot; the interlock
    ;; scheduler refuses next-slot-stall insns as fill participants).
    (set_attr "xtt_result_latency" "1")
    (set_attr "xtt_next_slot_stall" "yes")
    ;; Audited multi-result effect envelope (SFPSWAP.md functional model,
-   ;; ENABLE_DEST_INDEX leg; craq-sim TENSIX_EXECUTE_SFPSWAP agrees).  One
+   ;; ENABLE_DEST_INDEX leg; the reference simulator's TENSIX_EXECUTE_SFPSWAP agrees).  One
    ;; SFPSWAP event on the Simple sub-unit, LREG writeback borrowing the
    ;; MAD port exactly as the audited rvtt_sfpswap_int envelope.  Under
    ;; LaneConfig.ENABLE_DEST_INDEX the single event conditionally swaps
@@ -3880,7 +3878,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    ;; Audited multi-result effect envelope (SFPTRANSP.md: "Backend
-   ;; execution unit: Vector Unit (SFPU), simple sub-unit"; craq-sim
+   ;; execution unit: Vector Unit (SFPU), simple sub-unit"; the reference simulator
    ;; TENSIX_EXECUTE_SFPTRANSP agrees).  One event permutes BOTH
    ;; four-register banks -- Transpose4(0) and Transpose4(4) -- so the
    ;; eight SETs of this PARALLEL are the complete architectural write
@@ -3938,7 +3936,7 @@
 ;;   SFPTRANSP             (transposes the fresh loads; descrambles L4-L7)
 ;;
 ;; Soundness of the four-SET-only write claim (audited against
-;; SFPTRANSP.md's Transpose4 functional model and craq-sim
+;; SFPTRANSP.md's Transpose4 functional model and the reference simulator
 ;; TENSIX_EXECUTE_SFPTRANSP, and SFPLOAD.md / TENSIX_EXECUTE_SFPLOAD):
 ;; under the all-lanes lane state the bundle's formation proof establishes
 ;; (or its leading SFPENCC forces), TRANSP-then-TRANSP is the identity
@@ -4118,10 +4116,9 @@
 	  (match_dup 8)
 	  ] UNSPECV_SFPSHFT2_SUBVEC_COPY4))]
   "TARGET_XTT_TENSIX"
-  ;; Missing-comma asm bug fixed (lane FB finding, lane FA fix,
-  ;; 2026-08-21): the template printed "SFPSHFT2\t%x0 %x0, ..." which gas
+  ;; Missing-comma asm bug fixed: the template printed "SFPSHFT2\t%x0 %x0, ..." which gas
   ;; rejects, so every emission of the CHAINED_COPY4 form failed to
-  ;; assemble.  The instruction itself is doc-exact (FB raw-probed
+  ;; assemble.  The instruction itself is doc-exact (raw-word probed,
   ;; SFPSHFT2.md Mod1=1 SUBVEC_CHAINED_COPY4); dg twin
   ;; shft2-chained-copy4-assemble-bh.C asserts assembly succeeds.
   "SFPSHFT2\t%x0, %x0, 0, %8"
@@ -4368,10 +4365,10 @@
   ;;     SFPLE): "simple sub-unit"; SET_VD writes -1/0 into VD under
   ;;     LaneEnabled; LaneFlags written only under SFPGT_MOD1_SET_CC and
   ;;     the flag stack only under MUTATE_STACK -- neither in mod 8;
-  ;; (2) craq-sim TENSIX_EXECUTE_SFPGT/SFPLE (mod1==8 arm): reads the
+  ;; (2) the reference simulator's TENSIX_EXECUTE_SFPGT/SFPLE (mod1==8 arm): reads the
   ;;     tied destination and lreg_c, lane-writes the destination mask,
   ;;     no CC write, configuration, or counter effect;
-  ;; (3) the silicon-proven hand exp kernel issues SFPGT inside the
+  ;; (3) the hardware-proven hand exp kernel issues SFPGT inside the
   ;;     poly-MAD chain's shadow with its consumer SFPAND in the S1
   ;;     Simple column -- the same one-slot Simple dependence stepping
   ;;     whose latency-0 the SFPAND->SFPSETEXP back-to-back audit
@@ -4441,11 +4438,11 @@
 ;;     "simple sub-unit"; with Mod1 == SET_CC only LaneFlags is written,
 ;;     under LaneEnabled (disabled lanes keep their flags); VD and VC are
 ;;     read; no flag-stack, configuration, or counter effect;
-;; (2) craq-sim TENSIX_EXECUTE_SFPGT/SFPLE (instr_mod1 == 1 arm): reads
+;; (2) the reference simulator's TENSIX_EXECUTE_SFPGT/SFPLE (instr_mod1 == 1 arm): reads
 ;;     lreg_dest and lreg_c, lane-writes only the cc mask under the
 ;;     current enables -- the identical read-modify-write flag shape the
 ;;     SFPSETCC "readwrite" audit carries;
-;; (3) the silicon-proven hand corpus issues SFPGT mod1 == 1 in the
+;; (3) the hardware-proven hand corpus issues SFPGT mod1 == 1 in the
 ;;     rounding_ops floor/ceil fixups and softmax_k with its dependent
 ;;     predicated consumer in the next Simple slot.
 ;; Every other mod1 (SET_VD and stack-mutating forms) keeps its own
@@ -4504,7 +4501,7 @@
    (set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set_attr "xtt_delay" "dynamic")
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_sfparecip"
@@ -4567,7 +4564,7 @@
 }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
-   ;; Migrated effect-override row (FABLE item #4): pure value unary,
+   ;; Migrated effect-override row (now typed-effect attributes): pure value unary,
    ;; never touches CC; lane-gated consumer.
    (set_attr "xtt_lane_local" "yes")
    (set_attr "xtt_cc_write" "no")
@@ -4601,7 +4598,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "safe")
    (set (attr "xtt_dynamic_bug") (symbol_ref "xtt_dynamic_bug (XTT_DYNAMIC_BUG_QSR)"))
-   ;; Lane-gated consumer (FABLE item #4).
+   ;; Lane-gated consumer (typed-effect attributes).
    (set_attr "xtt_lane_gated" "yes")])
 
 (define_expand "rvtt_ttsetrwc"
@@ -4699,13 +4696,13 @@
    (set_attr "xtt_cc_effect" "none")
    (set_attr "xtt_config_effect" "none")
    (set_attr "xtt_rwc_effect" "inc")
-   ;; D3 latency audit (lane DL): INCRWC updates the RWC counters and
+   ;; Latency audit: INCRWC updates the RWC counters and
    ;; nothing else -- no LREG result exists.  WH INCRWC.md's functional
    ;; model is the pure counter update with no next-cycle rule; the BH
-   ;; tree carries no INCRWC page (doc gap, recorded in
-   ;; laneDL-evidence-20260820); craq-sim TENSIX_EXECUTE_INCRWC applies
+   ;; tree carries no INCRWC page (a documentation gap); the reference
+   ;; simulator's TENSIX_EXECUTE_INCRWC applies
    ;; the counter deltas at issue (sim proof archived); every
-   ;; silicon-proven counted production row issues TTINCRWC ->
+   ;; hardware-proven counted production row issues TTINCRWC ->
    ;; SFPLOAD back-to-back at the row boundary, consuming the stepped
    ;; counter in the next slot.  Result latency 0, BH/WH only.
    (set (attr "xtt_result_latency")
@@ -4772,7 +4769,7 @@
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "barrier")])
 
-;; Canonical proven all-lanes enable (lane CA init hoist): expands to the
+;; Canonical proven all-lanes enable (init hoist): expands to the
 ;; architectural all-lanes SFPENCC operands -- the exact word the
 ;; formation's cc_enable_all_lanes_proved_p proof compares against
 ;; (capability tables, rvtt_macro::sfpencc_all_lanes_word).  Zero
@@ -4791,7 +4788,7 @@
   DONE;
 })
 
-;; Gimple-spellable owned SETC16 (lane CA init hoist): the caller-side
+;; Gimple-spellable owned SETC16 (init hoist): the caller-side
 ;; materialization of a callee's owned address-modifier program, emitted
 ;; only by the init-hoist commit under its proven contract.  Forwards to
 ;; the compiler-owned pattern above; the assembler owns the encoding.
@@ -4807,11 +4804,11 @@
 })
 
 ;; ---------------------------------------------------------------------
-;; X6 FPU face-transpose family (lane FV).  Matrix-Unit (FPU) Dst <->
+;; FPU face-transpose family.  Matrix-Unit (FPU) Dst <->
 ;; SrcA/SrcB row moves, the SrcB[16:32) 16x16 transpose, the wait-gate
 ;; stall, and the backend-config byte RMW -- the typed spellings of the
 ;; hand face-transpose choreography (tt_llk_blackhole
-;; llk_math_transpose_dest.h / blaze ckernel_sfpu_topk_xl.h
+;; llk_math_transpose_dest.h / the vendored ckernel_sfpu_topk_xl.h
 ;; transpose_dest_face_32b).  Semantics: tt-isa-documentation WormholeB0
 ;; MOVD2B/MOVB2A/MOVB2D/MOVA2D/TRNSPSRCB/RMWCIB .md functional models
 ;; (which carry the Blackhole arms; the BlackholeA0 tree is a doc gap and
@@ -5049,7 +5046,7 @@
 ;; the programmed template; the operands are the raw encoding fields
 ;; (mop_type, loop_count, zmask low half).  MOP_CFG (opcode 0x03) sets
 ;; the persistent zmask high half.  Both are frontend work like REPLAY,
-;; which craq-sim classifies as Tdma.  QSR's MOP encoding differs and is
+;; which the reference simulator classifies as Tdma.  QSR's MOP encoding differs and is
 ;; not provided.
 (define_insn "rvtt_ttmop_int"
   [(unspec_volatile:SI [
@@ -5132,6 +5129,6 @@
   }
   [(set_attr "type" "tensix")
    (set_attr "xtt_replay" "owner")
-   ;; REPLAY is frontend work (opcode 0x04), which craq-sim classifies as
+   ;; REPLAY is frontend work (opcode 0x04), which the reference simulator classifies as
    ;; Tdma rather than as the SFPU work it may later expand into.
    (set_attr "xtt_issue" "tdma")])

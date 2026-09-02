@@ -187,12 +187,12 @@ rvtt_raw_pure_dst_rwc_gimple (const gimple *stmt)
 }
 
 /* ================================================================== */
-/* THE unified audited word-fact table (FABLE item #4, Deliverable B).
+/* THE unified audited word-fact table.
 
    See rvtt-raw-boundary.h for the contract, the table property
    (preserving-vs-kill doctrine), and the recorded face asymmetries.
    Discipline identical to every audited class this file has carried
-   since lane IV: each row is a recorded architectural fact with
+   for every face: each row is a recorded architectural fact with
    provenance, classified by opcode/field derivation -- never by
    operation identity or trust in the emitting library.  Provenance
    keys (the shared vocabulary of the four pre-table classifiers this
@@ -201,7 +201,7 @@ rvtt_raw_pure_dst_rwc_gimple (const gimple *stmt)
      [ISA]  tt-isa-documentation BlackholeA0+WormholeB0
 	    TensixTile/TensixCoprocessor (the mandatory prior); the
 	    named .md file carries the cited functional model.
-     [SIM]  craq-sim src/tensix.cpp (pinned tree) executors.
+     [SIM]  the pinned reference simulator's executors.
      [MOPT] an audited fact recorded in rvtt-mop-tables.h with its own
 	    provenance.
 
@@ -364,8 +364,8 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
     }
 
   /* INCRWC (0x38): RWC counter increments only ([ISA] INCRWC.md).
-     Recorded fact on the ADDR_MOD face only (the init-hoist scan,
-     lane CA); the LREG/PRGM/CC faces never audited it and keep their
+     Recorded fact on the ADDR_MOD face only (the init-hoist scan);
+     the LREG/PRGM/CC faces never audited it and keep their
      refusing defaults (asymmetry note in the header).  */
   if (opcode == 0x38)
     {
@@ -449,7 +449,7 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
      TTI_SFPCONFIG (0, 0xF, 1), 0x910000F1): every mod1 completion is
      LaneConfig-confined and the resulting LaneConfig is the default
      all-lanes, ROW_MASK == 0 state ([MOPT] LaneConfig default-reset
-     fact, lane AR audit) -- an ambient-establishing write.  Near
+     fact, audited) -- an ambient-establishing write.  Near
      misses stay refused by class: imm16 != 0 can set
      ROW_MASK/behavior bits; mod1 bit0 == 0 takes the value from
      LReg[0] (unauditable from the word).  VD != 15 claims the decoded
@@ -615,8 +615,8 @@ rvtt_word_init_class (uint32_t word, const rvtt_init_hoist_program &prog,
   return v;
 }
 
-/* See rvtt-raw-boundary.h: the CC face accessor (lane IV contract,
-   unchanged name and vocabulary).  The capability gate is this
+/* See rvtt-raw-boundary.h: the CC face accessor (contract
+   unchanged in name and vocabulary).  The capability gate is this
    face's: QSR (and any future CPU without a table) answers UNPROVEN
    for every word.  */
 

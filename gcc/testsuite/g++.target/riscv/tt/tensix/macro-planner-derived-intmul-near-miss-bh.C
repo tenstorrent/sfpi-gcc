@@ -1,4 +1,4 @@
-// WP12 near misses for the derived integer-row template classes: each
+// Near misses for the derived integer-row template classes: each
 // function perturbs exactly one admission fact and its event must stay
 // an EXPLICIT issue (present in the assembler) -- never enter a
 // template.  The unproven classes: SFPMUL24 indirect-VA mod (2), the

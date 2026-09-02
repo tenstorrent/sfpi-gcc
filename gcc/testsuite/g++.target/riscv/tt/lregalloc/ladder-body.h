@@ -1,5 +1,5 @@
 /* Graded-pressure ladder body (raw rvtt builtins, no headers).
-   Lane DS acceptance arsenal for the LREG allocator.
+   Acceptance arsenal for the LREG allocator.
 
    Parameters (define before including):
      LADDER_NAME   function name
@@ -26,7 +26,7 @@
 
    XOR only, on purpose: the builtins are opaque unspecs (no folding),
    XOR carries no CC state, is format-independent, and is exactly
-   reproducible on the host in int32 -- the CRAQ golden needs no
+   reproducible on the host in int32 -- the simulator golden needs no
    floating-point rounding model.  No literal constants appear anywhere,
    so no value can be parked in a constant LREG (CREG 8..15) by
    const-remat/const-residency: the ladder measures the allocatable

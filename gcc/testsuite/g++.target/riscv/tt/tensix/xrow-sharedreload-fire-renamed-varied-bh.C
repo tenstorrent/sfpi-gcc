@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-hoisted-prgm-reuse -mtt-tensix-optimize-crossrow-pairing -mtt-tensix-optimize-crossrow-pairing-stall-words -mtt-tensix-optimize-crossrow-shared-reload -fdump-rtl-rvtt_schedule-details" }
 // Shared-reload RENAMED-EQUIVALENT / VARIED-CONSTANTS adversary twin
-// (lane IP audit, GY recipe): the xrow-sharedreload-fire structure
+// (renamed-twin recipe): the xrow-sharedreload-fire structure
 // with every identifier renamed and EVERY coefficient replaced by
 // arbitrary non-tanh values (owner-init constants and both in-loop
 // reload constants).  The dedupe must key on the structural facts

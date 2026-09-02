@@ -1,4 +1,4 @@
-// Stage-A dual-oracle trip facade (FABLE_GOES_BURR item #2): on a known
+// Stage-A dual-oracle trip facade: on a known
 // counted loop BOTH oracles -- the legacy bounded simulation and the
 // classical SCEV niter analysis -- prove at the GIMPLE face and agree
 // (4 body executions), dumped as trip-oracle-agree.  The RTL face pins

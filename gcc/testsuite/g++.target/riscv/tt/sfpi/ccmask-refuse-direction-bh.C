@@ -3,7 +3,7 @@
 // no SINGLE-order complement, so no lone SFPGT/SFPLE keep-mask
 // expresses the kept set; refuse by name.  All four order directions
 // fold; equality does NOT under this flag alone.  FUTURE-VERDICT
-// (flipped by laneKL, FABLE R2): under
+// (later flipped by the crossed-loop widening): under
 // -mtt-tensix-optimize-cc-region-general the exhaustively proven
 // TWO-compare compositions (tt/proofs/ccmask-eqne-zero/) fold EQ/NE
 // too -- see ccmask-zero-eq-general-bh.C / ccmask-zero-ne-general-bh.C;

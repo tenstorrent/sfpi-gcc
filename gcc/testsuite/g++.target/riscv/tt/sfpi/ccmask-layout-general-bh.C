@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-ccmask -mtt-tensix-optimize-cc-region-general -fdump-tree-rvtt_ccmask" }
-// THE STAGE-B LAYOUT FIRE (FABLE_GOES_BURR item #14 stage B): the
+// THE STAGE-B LAYOUT FIRE (the refusal registry4 stage B): the
 // zeroing frame carries scalar control flow AFTER the predicated
 // assign, so its statements span blocks and the stage-A linear
 // machine refuses the layout (ccmask-region-foreign-stmt on the

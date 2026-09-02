@@ -175,16 +175,16 @@ extern gimple_opt_pass *make_pass_rvtt_unspec_prop_ssa (gcc::context *ctxt);
 /* The audited drained-frontend retirement window of a mod-write
    (rvtt-cost.md AUDITED CONSTANT W_drain; the per-target value lives in
    rtl-rvtt-dst-autoincr.cc's capability record).  Exported so every
-   pass that must audit the silicon-refuted no-exec-record x mod-write
+   pass that must audit the hardware-refuted no-exec-record x mod-write
    composition (rvtt-cost.md AUDITED COMPOSITION FACT) prices the SAME
    quantity: dst-autoincr's group guard and the replay former's record
-   placement obligation (lane FL, FH-1).  Zero when the target has no
+   placement obligation.  Zero when the target has no
    audited window (every distance then refuses -- the fail-closed
    direction).  */
 extern unsigned rvtt_modwrite_drained_frontend_window (void);
 
 /* Downstream-fallback composition oracle for the record-hoist pricing
-   (lane FZ; rvtt-cost.md "RECORD-HOIST x MOD-WRITE COMPOSITION"): true
+   (rvtt-cost.md "RECORD-HOIST x MOD-WRITE COMPOSITION"): true
    when a no-exec replay capture hoisted into PREHEADER would lie within
    the audited drained-frontend window of a row dst-autoincr would
    otherwise transform into a mod-write -- the placement that forces the
@@ -195,7 +195,7 @@ extern unsigned rvtt_modwrite_drained_frontend_window (void);
 extern bool rvtt_dst_autoincr_hoist_capture_composition_p
   (struct basic_block_def *preheader, unsigned *dist);
 
-/* Exported to the post-auto-increment window re-formation (lane IH):
+/* Exported to the post-auto-increment window re-formation:
    is INSN a typed Dst access the Dst auto-increment pass has retargeted
    to the compiler-owned auto-increment scratch modifier (a CARRIED
    access -- its execution advances the Dst RWC through the owned
@@ -432,7 +432,7 @@ struct rvtt_init_hoist_program
   unsigned n_words;
   struct { uint32_t word; unsigned dest; } words[16];
   int stage;			/* out */
-  /* Out (lane IU init-hoist-aware run pricing): the proven caller
+  /* Out (init-hoist-aware run pricing): the proven caller
      loop's profile trip weight as an unreduced entry/body fraction
      (the planner's loop_trip_weight discipline: exact where the
      profile is, the static estimate elsewhere; products kept inside
@@ -446,7 +446,7 @@ struct rvtt_init_hoist_program
 };
 
 /* COMMIT false runs every proof and sets the out fields but inserts
-   nothing (lane IU: the pricing pre-run ahead of the planner's
+   nothing (the pricing pre-run ahead of the planner's
    profitability gate); COMMIT true is the committing call.  Both
    evaluate the identical proof chain, so a proof-only success is
    exactly the committing call's success.  */

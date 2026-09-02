@@ -1,4 +1,4 @@
-// Lane FL (FH-3, fire direction): the playback barrier is the WINDOW
+// Playback-barrier rule, fire direction: the playback barrier is the WINDOW
 // boundary, not a function-wide poison -- a TTREPLAY playback BEFORE
 // the chain's earliest link is outside the window, and the integer
 // rebalance still fires (value-identical bitwise associativity).

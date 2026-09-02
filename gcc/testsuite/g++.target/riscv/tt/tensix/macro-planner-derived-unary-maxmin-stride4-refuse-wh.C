@@ -2,7 +2,7 @@
 // Near-miss twin of macro-planner-derived-unary-maxmin-loop-renamed-wh:
 // identical shape, but the row's Dst stride is 4.  The WH per-CPU
 // absorption refusal is discharged (the dual-slot machinery was the
-// adjudicated bug, sfpi-gcc 2a0ba1e6602), but the proven SETC16
+// adjudicated bug), but the proven SETC16
 // address-modifier program still covers ONLY Dst += 2
 // (rvtt-macro-tables.cc addr_mod_program), so the stride cannot be
 // absorbed, the schedule keeps its explicit separator, and formation

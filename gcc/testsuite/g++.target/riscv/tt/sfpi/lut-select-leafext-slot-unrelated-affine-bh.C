@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHT unrelated-shape twin 2: a formation whose slot operands are
+// Unrelated-shape twin 2: a formation whose slot operands are
 // all immediate materializations (affine leaves with literal
 // coefficients, no constant-register read anywhere near a slot) is
 // untouched by the slot conversion -- the LUT forms exactly as before

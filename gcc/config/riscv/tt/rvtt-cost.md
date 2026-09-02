@@ -17,7 +17,7 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 ;;
-;; The five classes deliberately mirror craq-sim's
+;; The five classes deliberately mirror the reference simulator's
 ;; tensix_rtl_issue_class_for_inst: Math, Sfpu, Tdma, Cfg and Sync.  The
 ;; default reservations model the simulator's top-level issue classes.  CFG
 ;; execution-resource occupancy will be added with the first compiler pattern
@@ -103,15 +103,15 @@
 ;;           the next cycle ... does not read what this wrote") name
 ;;           exactly the mad family; the audited latency-0 pages carry
 ;;           no next-cycle constraint.
-;;   [SIM]   craq-sim TENSIX_EXECUTE_* executors (state read/written,
+;;   [SIM]   the reference simulator's TENSIX_EXECUTE_* executors (state read/written,
 ;;           lane predication, CC effects; TT_VERSION <= 1 = WH/BH).
-;;   [HAND]  the silicon-proven hand exp kernel
+;;   [HAND]  the hardware-proven hand exp kernel
 ;;           (ckernel_sfpu_exp.h _sfpu_exp_21f_bf16_tti_): its
 ;;           back-to-back dependent adjacencies are latency-0 witness
 ;;           points, and its one deliberate filler placement ("slots
 ;;           into the SFPMAD's 2-cycle latency window") restates the
 ;;           mad fact.
-;;   [CAL]   the frozen, silicon-passing macro calendars (R1 derivation
+;;   [CAL]   the frozen, hardware-passing macro calendars (R1 derivation
 ;;           facts, rvtt-macro-tables.cc subunit_result_latency):
 ;;           Simple/Round chains step one slot per dependence, the MAD
 ;;           store distance is two slots.
@@ -163,7 +163,7 @@
 ;;                                             constraint; [SIM]
 ;;                                             TENSIX_EXECUTE_SFPSWAP
 ;;                                             atomic register update;
-;;                                             [HAND] the silicon-proven
+;;                                             [HAND] the hardware-proven
 ;;                                             reduce_custom bitonic
 ;;                                             calendar issues CHAINED
 ;;                                             dependent SFPSWAPs
@@ -226,7 +226,8 @@
 ;;                                             sub-unit, no next-cycle
 ;;                                             rule; the ARG_IMM arm
 ;;                                             reads only LReg[VC];
-;;                                             [SIM] craq tensix.cpp
+;;                                             [SIM] the reference
+;;                                             simulator
 ;;                                             TENSIX_EXECUTE_SFPIADD
 ;;                                             :8894 (envelope
 ;;                                             mod1 <= 10, (mod1&3)<=2;
@@ -261,13 +262,12 @@
 ;;                                             LReg[VC], writes VD
 ;;                                             lane-predicated, no
 ;;                                             lane-flag effect; [SIM]
-;;                                             craq tensix.cpp
+;;                                             the reference simulator's
 ;;                                             TENSIX_EXECUTE_SFPDIVP2
 ;;                                             (envelope mod1 <= 1);
 ;;                                             [CAL] Simple chains step
-;;                                             one slot.  D3-follow-up
-;;                                             audit (2026-08-19, lane
-;;                                             CF): unblocks the
+;;                                             one slot.  Follow-up
+;;                                             audit: unblocks the
 ;;                                             reissue pricing of the
 ;;                                             fresh-body rsqrt loop
 ;;                                             (25 words after
@@ -285,17 +285,15 @@
 ;;                                             name SFPSTORE, so the
 ;;                                             mad->store read IS
 ;;                                             scoreboard-covered; [SIM]
-;;                                             craq tensix.cpp
+;;                                             the reference simulator's
 ;;                                             TENSIX_EXECUTE_SFPSTORE
 ;;                                             commits Dst at issue
 ;;                                             (reorder-equivalence run
-;;                                             archived, laneDL-evidence-
-;;                                             20260820); [HAND] the
-;;                                             silicon-proven hand exp
+;;                                             archived); [HAND] the
+;;                                             hardware-proven hand exp
 ;;                                             kernel stores back-to-back
 ;;                                             with dependent neighbours.
-;;                                             D3-follow-up audit
-;;                                             (2026-08-20, lane DL):
+;;                                             Follow-up audit:
 ;;                                             admits the store class
 ;;                                             into capture-rotation's
 ;;                                             plain-reorder filler pool
@@ -312,14 +310,13 @@
 ;;                                             LREG result, no next-cycle
 ;;                                             rule; the BH tree carries
 ;;                                             NO INCRWC page (doc gap,
-;;                                             recorded); [SIM] craq
-;;                                             tensix.cpp
+;;                                             recorded); [SIM] the
+;;                                             reference simulator's
 ;;                                             TENSIX_EXECUTE_INCRWC
 ;;                                             applies counter deltas at
 ;;                                             issue (reorder-equivalence
-;;                                             run archived, laneDL-
-;;                                             evidence-20260820); [HAND]
-;;                                             every silicon-proven
+;;                                             run archived); [HAND]
+;;                                             every hardware-proven
 ;;                                             counted production row
 ;;                                             issues TTINCRWC->SFPLOAD
 ;;                                             back-to-back at the row
@@ -349,19 +346,17 @@
 ;;                                             scheduling "as per
 ;;                                             SFPMAD" -> the mad
 ;;                                             family's one-slot result
-;;                                             delay; [SIM] craq
-;;                                             tensix.cpp
+;;                                             delay; [SIM] the
+;;                                             reference simulator's
 ;;                                             TENSIX_EXECUTE_SFPLUT
 ;;                                             matches the model
-;;                                             (extract archived,
-;;                                             laneDL-evidence-
-;;                                             20260820); [HAND] the
+;;                                             (extract archived);
+;;                                             [HAND] the
 ;;                                             production sigmoid_appx
 ;;                                             LUT kernel issues SFPLUT
 ;;                                             in the mad-family
 ;;                                             calendar shape.
-;;                                             D3-follow-up audit
-;;                                             (2026-08-20, lane DL):
+;;                                             Follow-up audit:
 ;;                                             un-opaques the LUT rows
 ;;                                             for the replay reissue
 ;;                                             recurrence (LUT loops
@@ -377,7 +372,7 @@
 ;;                                             express it.
 ;;
 ;;   planner-emitted SFPLOADMACRO
-;;     (rvtt_sfploadmacro_int /          issue-plane record (lane CK):
+;;     (rvtt_sfploadmacro_int /          issue-plane record:
 ;;      rvtt_sfploadmacro_hidden_int,    the launch pattern itself stays
 ;;      planner emission records only)   attribute-UNAUDITED (its effects
 ;;                                             are descriptor-dependent and
@@ -395,7 +390,7 @@
 ;;                                             so launch issue is never
 ;;                                             operand-gated and reads
 ;;                                             nothing at the issue plane;
-;;                                             [SIM] craq-sim f80a8d64
+;;                                             [SIM] the reference simulator f80a8d64
 ;;                                             sfploadmacro_events.h:
 ;;                                             events enqueue
 ;;                                             unconditionally at issue,
@@ -435,18 +430,18 @@
 ;; keys on Mod1Mirror, not Mod1) and its per-mode register envelopes
 ;; (3-entry/6-entry/FP32 tables read different LReg sets) need their
 ;; own per-mod audit before any entry lands (SFPLUT's audit above does
-;; NOT transfer) -- this stance is unchanged by the laneGU FP16
-;; six-entry SELECTION rows (rvtt-lut-tables.cc mod0 2/3/6/7,
-;; 2026-08-25): those are capability rows for the instruction-
+;; NOT transfer) -- this stance is unchanged by the FP16
+;; six-entry SELECTION rows (rvtt-lut-tables.cc mod0 2/3/6/7): those
+;; are capability rows for the instruction-
 ;; selection pass only; the emitted rvtt_sfplutfp32_6r insn keeps
 ;; every refusing cost/effect default exactly as the mod0 0/4
 ;; formations always have; SFPLUT INDIRECT_VD (dynamic write target); the
 ;; auto-incrementing load/store address modes (positional Dst/RWC
-;; state, WP6 capability-table territory); everything QSR (simulator
+;; state, capability-table territory); everything QSR (simulator
 ;; returns MissingSpecification for these opcode semantics).
 ;;
-;; Deliberately UNAUDITED (refusing): the X6 FPU face-transpose family
-;; (lane FV 2026-08-22): TTMOVD2B / TTMOVB2A / TTMOVB2D / TTMOVA2D /
+;; Deliberately UNAUDITED (refusing): the FPU face-transpose family:
+;; TTMOVD2B / TTMOVB2A / TTMOVB2D / TTMOVA2D /
 ;; TTTRNSPSRCB / TTSTALLWAIT / TTRMWCIB0..3.  Matrix-Unit (FPU)
 ;; instructions moving Dst rows through the SrcA/SrcB banks under
 ;; ALU-format state, plus the backend-config byte RMW and the wait-gate
@@ -463,10 +458,10 @@
 ;; drain-init-ownership-unproven).  Operand envelopes are the
 ;; architectural encoding-field widths only (rvtt-insn.def {CU, width}
 ;; = ckernel_ops.h TT_*_VALID); semantic legality (format protocol,
-;; bank grants, TEN-4245's TF32+UseDst32bLo UB edge) is owned by the
-;; sfpi_crosslane.h X6 surface contract and its sim gate, not by
+;; bank grants, the documented TF32+UseDst32bLo UB edge) is owned by the
+;; sfpi_crosslane.h face-transpose surface contract and its sim gate, not by
 ;; per-operand compiler checks.
-;; Mod-write backedge-crossing price (lane EB, DX finding F2 / CK-P3).
+;; Mod-write backedge-crossing price.
 ;; The Dst auto-increment pass (rtl-rvtt-dst-autoincr.cc) turns the
 ;; audited-latency-0 TTINCRWC row step above into a positional-state
 ;; side effect of the terminator access -- an auto-incrementing access
@@ -476,26 +471,25 @@
 ;;   - consumers inside a continuous Tensix word stream are covered by
 ;;     [HAND] witnesses (production unrolled and replay-windowed kernels
 ;;     issue live-modifier stores back to back with dependent accesses;
-;;     the pass's own silicon winners -- cast, minmax, the unrolled
+;;     the pass's own hardware winners -- cast, minmax, the unrolled
 ;;     unaryshift hand kernel at 12.955 -- have this shape);
 ;;
 ;;   - a consumer reached ACROSS A LOOP BACKEDGE has no witness: the
 ;;     scalar loop control drains the frontend and the next iteration's
 ;;     first Dst access issues onto an empty pipe a few slots after the
-;;     mod-write, inside the unaudited retirement window.  Two pin-14
-;;     whole-ELF silicon witnesses measure that crossing regressive on
+;;     mod-write, inside the unaudited retirement window.  Two
+;;     whole-ELF hardware witnesses measure that crossing regressive on
 ;;     one-row rolled loops (absint32 hand 16.950 -> 18.853, +11.2%;
 ;;     unaryshift-fresh semantic 16.962 -> 19.631, +15.7%; the entire
 ;;     math.elf delta is the transform: three preheader SETC16, the
 ;;     store mode 7 -> 6, the TTINCRWC deleted), about two to three
 ;;     issue slots per iteration -- while the eight-row-per-iteration
 ;;     rolled hand kernel with the same live crossing measures a
-;;     -23.6% WIN (laneDX-evidence-20260820/EVIDENCE.md).
+;;     -23.6% WIN.
 ;;
 ;; AUDITED CONSTANT: W_drain = 7 -- the drained-frontend retirement
 ;; window of a backedge-crossing mod-write, in frontend issue-slot
-;; words (lane EP finding F1,
-;; laneEP-evidence-20260821/EP-FINDINGS.md).  Consecutive
+;; words (hardware-audited).  Consecutive
 ;; backedge-crossing mod-writes serialize at the window: the covering
 ;; distance per crossing is the WHOLE iteration's issue-slot word
 ;; count, scalar words included (they occupy the same frontend issue
@@ -504,7 +498,7 @@
 ;; conservative floor.  Per-crossing stall = max(0, W_drain -
 ;; iteration_slots).
 ;;
-;; Five-witness derivation (whole-ELF silicon, the entire math.elf
+;; Five-witness derivation (whole-ELF hardware, the entire math.elf
 ;; delta is the transform in every case):
 ;;
 ;;   UNCOVERED (skinny) regime -- 5-slot iterations (3 Tensix +
@@ -515,35 +509,35 @@
 ;;   => W_drain - 5 ~= 1.4..1.6, W_drain ~= 6.4..6.6.
 ;;
 ;;   COVERED (fat) regime -- 10/12-slot iterations, measured stall per
-;;   crossing (from the ~2-cycle/tile residual the pin-15 fired forms
+;;   crossing (from the ~2-cycle/tile residual the fired forms
 ;;   pay over 32 crossings):
 ;;     threshold-fresh sem   0.064 c/crossing
 ;;     hardshrink-fresh sem  0.061 c/crossing
-;;   => W_drain <= 10.  (Refusing these shapes at pin 16 under the
+;;   => W_drain <= 10.  (Refusing these shapes under the
 ;;   old 2-slot-guard walk -- which ignored the iteration's own body
-;;   words -- reinstated 29 slots/tile and measured +26.95/+27.06
-;;   booked: the EP-F1 counterexample that forced this audit.)
+;;   words -- reinstated 29 slots/tile and measured +26.95/+27.06:
+;;   the counterexample that forced this audit.)
 ;;
 ;; The audited value takes the CONSERVATIVE 7 (fit ~6.5): it preserves
 ;; every witness verdict on both sides, including the eight-row rolled
 ;; hand winner at 12.955 (-23.6%, ~26-slot iterations).  The Wormhole
 ;; capability entry carries the same value as the same-frontend-class
-;; conservative adoption (no WH silicon witness; a larger W only
+;; conservative adoption (no WH hardware witness; a larger W only
 ;; widens refusal).  The once-per-loop-entry drain residual -- the
 ;; ~2 cycles/tile TOTAL the covered witnesses still measure, the first
 ;; crossing's cost before the pipeline reaches steady state -- is
 ;; charged on the configuration-cost side at the audited
 ;; min_config_distance (2), never per iteration.
 ;;
-;; PER-EXECUTION CONFIGURATION PRICING (lane IA, pin 35).  The
+;; PER-EXECUTION CONFIGURATION PRICING.  The
 ;; profitability comparison is stated in frontend issue slots PER
 ;; EXECUTION OF THE CONFIGURATION PROGRAM on both sides, and the cost
-;; model splits by PLACEMENT -- lane IA silicon bracketed BOTH
-;; directions (laneIA-evidence-20260827, 3-rep cycle-identical):
+;; model splits by PLACEMENT -- hardware measurement bracketed BOTH
+;; directions (3-rep cycle-identical):
 ;;
 ;;   - a PREHEADER program executes once per loop entry inside the
 ;;     same pre-steady-state window the once-per-entry drain residual
-;;     already prices: the lane EP covered witnesses measured that
+;;     already prices: the covered witnesses measured that
 ;;     whole entry window, three-word program INCLUDED, at ~2
 ;;     cycles/entry -- so preheader words price at their word count,
 ;;     plus the residual through a live crossing (the original
@@ -558,7 +552,7 @@
 ;;     region, whose scalar entry control (call or branch) drains the
 ;;     frontend the configuration then consumes: each SETC16 word
 ;;     occupies the configuration issue class, an audited TWO-cycle
-;;     resource (rvtt_issue_cfg below; craq-sim
+;;     resource (rvtt_issue_cfg below; the reference simulator
 ;;     tensix_rtl_issue_class_for_inst models the same), while each
 ;;     removed TTINCRWC frees a single-cycle slot, and the program
 ;;     pays the once-per-entry drain residual (min_config_distance)
@@ -574,8 +568,8 @@
 ;;     sibling stream (the rdiv/sqrt/cbrt hand kernels' 32-launch
 ;;     streams split 8+24: 32 removed vs two programs' slots pays).
 ;;
-;; Silicon witness for the non-preheader term (binopscalar-fresh,
-;; pin 35): the eight-row straight-line callee
+;; Hardware witness for the non-preheader term (binopscalar-fresh):
+;; the eight-row straight-line callee
 ;; (8x{SFPLOAD,SFPADDI,SFPSTORE}) re-invoked 512 times per kernel
 ;; fired under the old 3-words-vs-8-rows admission and measured
 ;; KERNEL 21929 vs 21164 OFF (+3.61%, TILE_LOOP 168.95 vs 162.95 =
@@ -601,30 +595,29 @@
 ;; (threshold: covered, fire) and the eight-row winner (covered,
 ;; fire) with no trip-count or body-length threshold anywhere.
 ;;
-;; Calibration cross-check (lane EE whole-row closure model,
-;; laneEE-evidence-20260821/LOSER-ANATOMY.md -- reproduces all 14
-;; anatomized measured cells within ~3%): the measured
+;; Calibration cross-check (the whole-row closure model that
+;; reproduces all 14 anatomized measured cells within ~3%): the measured
 ;; per-TTREPLAY-launch boundary cost of ~1.3-1.8 cycles on
 ;; serial-chain windows means the launch word the covering walk
 ;; credits as ONE slot in fact separates producer from consumer by
 ;; MORE than a slot -- the credit is a conservative floor, never an
-;; overcount.  EE also supplies the third skinny witness (bitwisenot
-;; hand-ON, above); this pricing term restores that row's honest hand
-;; baseline.  (EE's launch-vs-straight-push arbitration -- pricing a
+;; overcount.  The same study supplies the third skinny witness
+;; (bitwisenot hand-ON, above); this pricing term restores that row's
+;; honest hand baseline.  (Its launch-vs-straight-push arbitration -- pricing a
 ;; whole replay-window formation against rolled push delivery with
 ;; the same boundary term -- is replay-formation territory, recorded
 ;; there as the named follow-up.)
 ;;
-;; CROSS-CALL ADDR_MOD CONTRACT PRICING (lane IK,
-;; -mtt-tensix-optimize-crosscall-addrmod).  A straight-line callee
+;; CROSS-CALL ADDR_MOD CONTRACT PRICING
+;; (-mtt-tensix-optimize-crosscall-addrmod).  A straight-line callee
 ;; whose groups ALL refuse by the non-preheader per-execution term may
 ;; have its slot program hoisted, ONCE, into the proven caller's loop
-;; entry (gimple-rvtt-crosscall.cc addrmod service: the lane CA
-;; init-hoist scan at every lane HC residency-walk level, plus the TU
+;; entry (gimple-rvtt-crosscall.cc addrmod service: the
+;; init-hoist scan at every residency-walk level, plus the TU
 ;; MOP template audit and the Wormhole ADDR_MOD_SET_Base watch row).
 ;; The hoisted program is PREHEADER-CLASS by construction -- it
 ;; executes once per caller-loop entry inside the same entry window
-;; the drain residual already prices (the lane EP covered-witness
+;; the drain residual already prices (the covered-witness
 ;; measurement above) -- so the callee's groups price at ZERO
 ;; configuration slots per call and the comparison becomes removed
 ;; rows against the CALL-BOUNDARY crossing charge alone: the block-
@@ -648,22 +641,22 @@
 ;; crosscall-addrmod-callers-unproven,
 ;; crosscall-addrmod-preheader-occupied.
 ;;
-;; AUDITED COMPOSITION FACT: no-exec record composition (lane ES,
-;; laneES-evidence-20260821).  Composing the store-side mod-write with
+;; AUDITED COMPOSITION FACT: no-exec record composition
+;; (hardware-adjudicated).  Composing the store-side mod-write with
 ;; a replay capture recorded WITHOUT execution (TTREPLAY load=1
-;; exec=0) in the same function is silicon-refuted.  The device 2x2 on
-;; the lcm-fresh Int32/dest-acc kernel (identical TU, pin-17 compiler
-;; ae7342e4fda3, one flag toggled per cell, solo flocked runs, .text
+;; exec=0) in the same function is hardware-refuted.  The device 2x2 on
+;; the lcm-fresh Int32/dest-acc kernel (identical TU, one compiler,
+;; one flag toggled per cell, solo runs, .text
 ;; recorded per cell):
 ;;
 ;;   autoincr fired, no-exec record absent   (08d62bac...)  PASS
 ;;   no-exec record fired, autoincr refused  (fd8c5ac4...)  PASS
 ;;   BOTH fired                              (1c0bdce0...)  TENSIX
 ;;     TIMED OUT (Math/Unpacker/Packer), device wedged until tt-smi
-;;     reset -- reproduced twice on a proven-healthy device (sweep
-;;     09:29:45 + lane ES controlled solo re-run), and the wedge
-;;     poisoned every subsequent device job until reset (the pin-17
-;;     divint32floor/log corr "hangs" were this collateral).
+;;     reset -- reproduced twice on a proven-healthy device (a sweep
+;;     hit plus a controlled solo re-run), and the wedge
+;;     poisoned every subsequent device job until reset (concurrent
+;;     kernels' correctness "hangs" were this collateral).
 ;;
 ;; The byte deltas between the hang binary and each passing neighbor
 ;; are exactly one transform each, so the hazard is the COMPOSITION:
@@ -673,7 +666,7 @@
 ;; and the composed state wedges the Vector Unit pipeline (the
 ;; math thread's STALLWAIT C11 drain condition never satisfies, so
 ;; SEMPOST to the packer never issues).  Exec-while-record captures
-;; and launches carry fleet-wide silicon witnesses (minmax, sdpa,
+;; and launches carry fleet-wide hardware witnesses (minmax, sdpa,
 ;; where, typecast, lcm ON-set) and stay admitted.  BlackholeA0 has NO
 ;; REPLAY functional model in tt-isa-documentation (doc gap, filed
 ;; ES-F1), so no finer-grained fact can be audited yet; until one is,
@@ -697,22 +690,21 @@
 ;; W_drain.  Unreachable or covered admits (bytes preserved on every
 ;; witnessed-good row); nearer refuses by name.
 ;;
-;; DELIVERY BOUNDARY OF THE DISTANCE PROXY (lane FE finding F1,
-;; laneFE-evidence-20260822; guard extension lane FJ).  The
+;; DELIVERY BOUNDARY OF THE DISTANCE PROXY.  The
 ;; frontend-word distance is an audited retirement proxy only at
 ;; ISSUE PARITY: an explicit row's mod-write store is itself a
 ;; frontend word, so N subsequent frontend words bound its retirement
 ;; from below.  Every witness behind the W_drain fit is an
 ;; explicit-row shape, and the witnessed-good celu/eqz-class
-;; compositions (24 ON-set corpus rows, silicon-good across many
-;; pins) are explicit mod-write rows with an in-loop no-exec wrapper
+;; compositions (24 default-set corpus rows, hardware-good across many
+;; toolchain revisions) are explicit mod-write rows with an in-loop no-exec wrapper
 ;; record behind >= W_drain words.  A REPLAY-DELIVERED row (launch or
 ;; executing capture whose payload carries the mod-write terminator)
 ;; breaks the premise: the launch issues one frontend word while the
 ;; expander delivers the payload asynchronously, so no frontend word
 ;; count after the launch bounds the store's retirement.  The
-;; refuting silicon witness: sparse_k_filter Int32/dest-acc sem-ON
-;; (pin 19) -- a 32-launch group whose own no-exec record (TTREPLAY
+;; refuting hardware witness: a sparse_k_filter Int32/dest-acc
+;; kernel -- a 32-launch group whose own no-exec record (TTREPLAY
 ;; 0,11,0,1) re-ingests the mod-write payload one block earlier in
 ;; the tile loop, admitted covered at 20+ frontend words -- wedges
 ;; Tensix (TENSIX TIMED OUT, Math/Unpacker/Packer) at RUNTIME trip
@@ -722,13 +714,13 @@
 ;; passes both legs (frontend/RWC retirement timing unmodeled).
 ;; Admission at any static distance therefore decays to runtime
 ;; semaphore pacing the model cannot see.  Until BlackholeA0 REPLAY
-;; documentation exists (ES-F1 doc gap still open), groups with any
+;; documentation exists (a REPLAY doc gap still open), groups with any
 ;; replay-delivered row refuse every reachable (or same-block)
 ;; no-exec capture at ANY distance, by the same name; the W_drain
 ;; window rule remains in force for issue-parity (explicit-row)
 ;; groups, whose witnesses carry it.
 ;;
-;; PLACEMENT SIDE OF THE SAME FACT (lane FL, FH-1).  The dst-autoincr
+;; PLACEMENT SIDE OF THE SAME FACT.  The dst-autoincr
 ;; guard above prices the composition only against that pass's OWN
 ;; mod-write groups; the replay former PLACES no-exec captures and
 ;; must audit the identical fact against the stream's audited
@@ -746,17 +738,17 @@
 ;; raw pure-Dst/RWC words) are outside the class -- the crossing
 ;; model records them as re-anchoring issue-time words, and the
 ;; celu/eqz-class wrapper-record adjacency behind raw STALLWAIT-class
-;; words is silicon-witnessed good across many pins.  Undecodable
+;; words is hardware-witnessed good across many pins.  Undecodable
 ;; words earn zero cover in the walk (they never manufacture
 ;; separation) but are not themselves hazards -- the same audit
 ;; boundary the group guard's own function-scan has.
 ;;
-;; REPLAY-STATE PERSISTENCE MODEL (lane FS, FP-3; the BH REPLAY doc gap,
-;; laneFS-evidence-20260822).  The reach walks above (dst-autoincr group
-;; guard, W_drain placement sweep) are BOTH intra-function.  The FP delta
-;; audit (FP-3) witnessed shapes that ADMIT under both walks yet reassemble
+;; REPLAY-STATE PERSISTENCE MODEL (a BH REPLAY documentation gap,
+;; settled by experiment).  The reach walks above (dst-autoincr group
+;; guard, W_drain placement sweep) are BOTH intra-function.  A delta
+;; audit witnessed shapes that ADMIT under both walks yet reassemble
 ;; the wedge trio ACROSS the analysis boundary.  Controlled Blackhole
-;; silicon experiments (p150, dual flocks, flush-verified; vehicle =
+;; hardware experiments (flush-verified; vehicle =
 ;; datacopy-acquired 32-bit DEST with packer readback; sentinel FP32
 ;; 0x42F70000 written by a recorded SFPSTORE the launch delivers) settle the
 ;; hardware model the doc gap left open:
@@ -781,7 +773,7 @@
 ;;
 ;; CONSEQUENCE: a compiler-FORMED still-no-exec capture with a Dst-store
 ;; payload that is not consumed by a launch its record dominates is a latent
-;; cross-path / cross-invocation deliverer of the silicon-refuted composition
+;; cross-path / cross-invocation deliverer of the hardware-refuted composition
 ;; -- the intra-function walks cannot see the launch.  rtl-rvtt-replay.cc's
 ;; end-of-transform sweep therefore adds a third fail-closed rule
 ;; (noexec-record-dststore-nondominating-launch-persist-unaudited): a formed
@@ -896,8 +888,8 @@
 
 ;; Audited lane-local value-op class (the effect-override tables of
 ;; rtl-rvtt-lp-alloc.cc / rtl-rvtt-dst-ownership.cc migrated to the
-;; definitions, FABLE_GOES_BURR item #4; planner-oracle re-freeze
-;; recorded in oracles/refreeze-pin49-20260831.txt).  `yes' marks a
+;; definitions; planner-oracle re-freeze recorded in the testsuite's
+;; oracles/refreeze-pin49-20260831.txt).  `yes' marks a
 ;; typed SFPU LREG value operation with no Dst-memory, RWC-counter, or
 ;; configuration effect, keyed per insn code and deliberately
 ;; mod-independent -- a verbatim re-homing of the audited tables, not a
@@ -927,8 +919,8 @@
   (const_string "unknown"))
 
 ;; Lane-gated consumer class (rtl-rvtt-lp-alloc.cc's hand
-;; lane_gated_consumers allowlist migrated to the definitions,
-;; FABLE_GOES_BURR item #4): `yes' marks an instruction whose LREG/Dst
+;; lane_gated_consumers allowlist migrated to the definitions):
+;; `yes' marks an instruction whose LREG/Dst
 ;; writes are lane-gated and whose dataflow is lane-local (no value
 ;; movement between lanes) -- a reload feeding only such an insn is
 ;; complete under narrowed CC, and an RMW def by such an insn under
@@ -958,7 +950,7 @@
 ;;   RISC_PUSH_X100 (123)   - one instruction word pushed by the RISC
 ;;                            core through the Tensix instruction FIFO.
 ;;                            The 1.23x premium over a replayed slot is
-;;                            the silicon-refit delivery-cost model
+;;                            the hardware-refit delivery-cost model
 ;;                            (re-fit from measured actuals; the older
 ;;                            2.2:1 ratio over-predicted
 ;;                            launch-conversion gains ~7x).
@@ -1059,10 +1051,10 @@
 ;; records, so hoisting it away saves only the RISC-delivery premium,
 ;; while the hoisted record-only pass is bought at full delivery price
 ;; with no work done.  That accounting rewarded LONG captures at LOW
-;; trip counts -- exactly the class silicon measures as regressing --
+;; trip counts -- exactly the class hardware measures as regressing --
 ;; and starved short-payload shapes.
 ;;
-;; Calibration (Blackhole same-source silicon A/Bs, identical
+;; Calibration (Blackhole same-source hardware A/Bs, identical
 ;; source/input/golden, only compiler flags differing, three fresh
 ;; processes per selector; the 2026-08-16 p150-class re-measurement
 ;; reproduced the archived p100a absolutes for the Reduce-class rows,
@@ -1070,7 +1062,7 @@
 ;; 2026-08-16 nightly flip root-cause, MATH_ISOLATE TILE_LOOP,
 ;; deterministic on both eras):
 ;;
-;;   shape (trips, length)      old benefit  new benefit  silicon
+;;   shape (trips, length)      old benefit  new benefit  hardware
 ;;   counted loop (8, 24)           148         2325      -9.83%  WIN
 ;;   preheader capture (4, 8) x2     16          121      855.5 -> 834
 ;;                                                        cyc/body WIN
@@ -1085,8 +1077,8 @@
 ;; model, (3,17) = -672 and (3,31) = -1428, so the fit is insensitive to
 ;; that ambiguity.)
 ;;
-;; The superseded model ordered the (4,8) silicon WINNER (16) strictly
-;; below both silicon LOSERS (34, 62): no threshold could separate them,
+;; The superseded model ordered the (4,8) hardware WINNER (16) strictly
+;; below both hardware LOSERS (34, 62): no threshold could separate them,
 ;; which is how the old default-64 gate refused the measured
 ;; 21.5-cycle/body Reduce-class win.  The new model is sign-correct on
 ;; all four measured points using only the pre-existing 1.23 delivery
@@ -1123,7 +1115,7 @@
 ;; of RECORD_OVERHEAD.  The counted-loop and delivery-bound branches of that
 ;; model already charge the complete record and are unchanged.  This is
 ;; deliberately opt-in: it is a completion-accurate scope guard, not a
-;; replacement for the silicon-calibrated body throughput model, and contains
+;; replacement for the hardware-calibrated body throughput model, and contains
 ;; no operation or kernel identity test.  Guarded record-hoist deliberately
 ;; changes from its delivery-only model to the shared binding-resource model.
 ;; The semantic definition is completion accuracy, not a heuristic demand for
@@ -1155,7 +1147,7 @@
 ;;   final-stream run is 8, surplus 8*(400-123) = 2216 >= deliver 615,
 ;;   the record delivery is hidden, before = after, benefit = -615 <
 ;;   60: refuse, byte-identical to the pre-recalibration refusal (the
-;;   silicon-measured winning form).  ReduceSDPA at its measurement
+;;   hardware-measured winning form).  ReduceSDPA at its measurement
 ;;   flags disables the auto-increment pass, its increments survive,
 ;;   run = 1, surplus 677 < 1107: not hidden, benefit +121 exactly as
 ;;   before.  Counted-loop shapes pass run = 1 by construction (one
@@ -1176,18 +1168,17 @@
 ;; first re-record spelling -- before = max(deliver_record +
 ;; RECORD_OVERHEAD, exec), record = deliver_record + RECORD_OVERHEAD,
 ;; saturation term applied to every re-record body -- inverted BOTH
-;; re-record silicon anchors at the installed pin:
+;; re-record hardware anchors at the installed pin:
 ;;
 ;;   - Reduce-class (trips 4, words 8, exec_ilk 12 with the audited
 ;;     SFPSWAP acceptance stalls, deliver_record 1107, two hoist
 ;;     sites): priced -859 (its measurement flags, launch run 1) and
 ;;     -1407 (full ON set, run 8, saturation-clamped) -- refusing the
-;;     measured 855.5 -> 832.75 = 21.5+ cyc/body silicon WIN
-;;     (gatefix-evidence-20260816 step-1 A/B, three fresh processes
-;;     per selector).
+;;     measured 855.5 -> 832.75 = 21.5+ cyc/body hardware WIN
+;;     (controlled A/B, three fresh processes per selector).
 ;;   - Log-class (trips 4, words 17, exec_ilk 17, deliver_record
 ;;     2214): priced +462 and FIRED at its measurement flags (run 1)
-;;     -- firing a measured +1.81% silicon LOSS the delivery-era
+;;     -- firing a measured +1.81% hardware LOSS the delivery-era
 ;;     model refused at -158.
 ;;
 ;; The corrected split prices which resource the in-loop
@@ -1206,7 +1197,7 @@
 ;;   apiece); its exposed cost is charged at the full engine overhead:
 ;;   record = RECORD_OVERHEAD.  Anchor arithmetic, Reduce-class:
 ;;   before = 1200 + 300 = 1500, after = 1200 + 70 = 1270, benefit =
-;;   4*(1500-1270) - 300 = +620 >= 60, FIRE -- against silicon net
+;;   4*(1500-1270) - 300 = +620 >= 60, FIRE -- against hardware net
 ;;   +1075 cs/site (855.5 -> 832.75 over two 4-trip sites) and
 ;;   measured per-trip record exposure 2275/8 ~= 284 cs vs the modeled
 ;;   RECORD_OVERHEAD - TURNAROUND = 230 cs: the model under-claims
@@ -1214,7 +1205,7 @@
 ;;   hidden preheader delivery: the Reduce-class net leaves ~61 cs per
 ;;   preheader pass unaccounted (2*record_true ~= 2275 - 8*284), and
 ;;   the counted-loop clamp row measured +0.58 cyc/tile amortized
-;;   record delivery (laneBP-evidence-20260818 section 4) against a 12-word
+;;   record delivery (measured decomposition) against a 12-word
 ;;   deliver_record of 1476 cs -- both ~ 4-25x smaller than the
 ;;   RECORD_OVERHEAD = 300 charged.
 ;;
@@ -1224,39 +1215,39 @@
 ;;   per-word delivery slack), with the interlock era's TURNAROUND in
 ;;   `after' and RECORD_OVERHEAD in `record' pushing every refusal
 ;;   further negative -- byte-identical refusals.  Anchors: Log
-;;   (4,17): 4*(2214 - 1770) - 2514 = -738, refuse (silicon +1.81%
+;;   (4,17): 4*(2214 - 1770) - 2514 = -738, refuse (hardware +1.81%
 ;;   LOSS; delivery-era -158); Log1p (4,31): 4*(3936 - 3170) - 4236 =
-;;   -1172, refuse (silicon +2.30% LOSS); unary-max/min (4,4, run 8,
+;;   -1172, refuse (hardware +2.30% LOSS); unary-max/min (4,4, run 8,
 ;;   full ON): saturation-clamped, benefit = -record = -915, refuse
-;;   (silicon +2.06%/+3.93 cyc/tile LOSS) -- today that payload's
+;;   (hardware +2.06%/+3.93 cyc/tile LOSS) -- today that payload's
 ;;   cst-LREG SFPSWAP is effect-unaudited and the shape refuses
 ;;   upstream as replay-reissue-latency-unproved; the clamp arithmetic
 ;;   documents the class for the day the audit lands, at which point
-;;   the unary-max/min silicon point must re-validate this branch.
+;;   the unary-max/min hardware point must re-validate this branch.
 ;;
 ;;   The counted-loop branch is untouched by the re-derivation: the
-;;   14-shape validation matrix (laneBP-evidence-20260818) and the
+;;   14-shape hardware validation matrix and the
 ;;   five-loser refusals calibrate it as of the interlock
 ;;   recalibration.
 ;;
-;;   No-silicon bands of the re-derivation, pre-registered: (a)
+;;   No-hardware bands of the re-derivation, pre-registered: (a)
 ;;   execution-bound re-record fires at any provable trips >= 2
-;;   (benefit = trips*230 - 300); the only silicon point is trips 4
+;;   (benefit = trips*230 - 300); the only hardware point is trips 4
 ;;   (Reduce-class, two sites) -- a trips-2 or trips-3 fire has no
-;;   silicon yet.  (b) The full-ON Reduce-class form (Dst
+;;   hardware yet.  (b) The full-ON Reduce-class form (Dst
 ;;   auto-increment absorbs the launch separators, run 8) fires by the
-;;   same execution-bound arithmetic; its silicon record is the run-1
+;;   same execution-bound arithmetic; its hardware record is the run-1
 ;;   measurement-flag form -- the run-8 fire is pre-registered for
 ;;   nightly full2x2 adjudication (expected <= the 855.5 unhoisted
 ;;   bound, target ~832.75).  (c) The execution-bound boundary exec ==
 ;;   deliver_record sits in the exec-bound branch; shapes within one
 ;;   stall slot of the boundary flip branches on a single audit fact
-;;   change and have no silicon.
+;;   change and have no hardware.
 ;;
 ;; RECORD-HOIST MEASUREMENT PRICING (-mtt-tensix-optimize-replay-record-
 ;; hoist, default off; re-record bodies only, the counted-loop branch is
-;; untouched).  DX-F3 (laneDX-evidence-20260820, lcm decomposition)
-;; measured the in-loop `ttreplay 0,len,1,1' re-delivering len+1 words
+;; untouched).  A measured lcm decomposition
+;; showed the in-loop `ttreplay 0,len,1,1' re-delivering len+1 words
 ;; per row on a shape the saturation term prices as fully hidden, and
 ;; attributed ~2-3 words/row of the row's residual loss to that
 ;; re-delivery by word accounting.  Under this flag a re-record body
@@ -1269,9 +1260,9 @@
 ;;
 ;; The per-trip TURNAROUND term charges the launch boundary the hoist
 ;; ADDS (the first clone converts from inline delivery to one more
-;; playback launch).  Lane EE's boundary calibration measured 1.3-1.8
+;; playback launch).  Hardware boundary calibration measured 1.3-1.8
 ;; cycles per launch boundary on serial-chain windows (independent fits
-;; on the ceil/log/rsqrt anatomy, laneEE-evidence-20260821) -- above the
+;; on the ceil/log/rsqrt anatomy) -- above the
 ;; 0.7-slot table constant; the ~60-110 cs/trip under-charge is absorbed
 ;; by the MIN_BENEFIT margin and is on the fire side, which is
 ;; acceptable for a measurement flag and recorded here for the
@@ -1286,13 +1277,13 @@
 ;; preheader record's full delivery plus engine overhead.  For proven
 ;; trips >= 2 the hoisted world delivers strictly fewer words on every
 ;; execution (monotone in the delivery model).  HONEST OPPOSITION: the
-;; Log-class silicon anchors above ((4,17) +1.81%, (4,31) +2.30%) are
+;; Log-class hardware anchors above ((4,17) +1.81%, (4,31) +2.30%) are
 ;; re-record shapes whose hoist FIRED under the delivery-only era model
 ;; and MEASURED AS LOSSES -- evidence that on those rows the per-trip
 ;; record delivery was in fact hidden behind execution (the physics the
 ;; saturation/MAX model encodes).  lcm's shape differs in trips (8 vs
 ;; 4), sibling launch count, and round-chain seriality, and has NO
-;; hoisted silicon point in either direction.  This flag is therefore a
+;; hoisted hardware point in either direction.  This flag is therefore a
 ;; measurement class in the -mtt-tensix-mop-form-force pattern: every
 ;; structural, invariance, slot-liveness, and audited-latency proof
 ;; still gates admission and refuses by name (record-hoist-loop-shape /
@@ -1300,7 +1291,7 @@
 ;; -trip-count-unproven / -variant-encoding /
 ;; replay-reissue-latency-unproved / record-hoist-benefit); only the
 ;; profitability verdict changes, and promotion into any default or ON
-;; set requires this class's own silicon A/B.
+;; set requires this class's own hardware A/B.
 ;;
 ;; MIN_BENEFIT = 60 centislots (0.6 slot per loop entry): every measured
 ;; losing shape models negative (max -158), so any non-negative
@@ -1311,9 +1302,9 @@
 ;; byte-identical code and costs nothing.  The dynamic-pipeline costs
 ;; Blackhole adds around a hoisted record-only capture are not itemized
 ;; by this static model; the threshold margin is the only buffer
-;; standing in for them.  No-silicon band: the acceptance region
+;; standing in for them.  No-hardware band: the acceptance region
 ;; [60, 121) of modeled benefit -- including the test-pinned (4,9)=90
-;; fire -- has zero silicon points; a silicon A/B remains the promotion
+;; fire -- has zero hardware points; a hardware A/B remains the promotion
 ;; backstop for any shape class landing there.  The
 ;; -mtt-tensix-replay-hoist-min-benefit= option (same centislot units)
 ;; overrides this table value for experimentation.
@@ -1348,11 +1339,11 @@
 ;; resource effects.  A two-word arithmetic reversal exists outside this
 ;; domain, but is not a compiler candidate because it is below MIN_SEQUENCE.
 ;;
-;; RECORD-HOIST RUNTIME-TRIP ADMISSION (lane FW, 2026-08-22; rides the
-;; same measurement flag without the completion guard).  The blaze
+;; RECORD-HOIST RUNTIME-TRIP ADMISSION (rides the
+;; same measurement flag without the completion guard).  The
 ;; sdpa_reduce_row loss class -- the
-;; only corpus kernel whose loss WIDENS with tile count (+0.6% t8 ->
-;; +1.6% t32, laneFE scaling table) -- is a per-tile re-record inside a
+;; only corpus kernel whose loss WIDENS with tile count (+0.6% at 8
+;; tiles -> +1.6% at 32, measured) -- is a per-tile re-record inside a
 ;; RUNTIME-counted tile loop (TILE_CNT from RuntimeParams), where
 ;; provable_constant_trips can never resolve trips.  Two facts replace
 ;; the proven trip count:
@@ -1400,8 +1391,8 @@
 ;; regardless of value; this pass's OWN playback launches are admitted
 ;; (their recorded content is the pass's audited payload -- the
 ;; multi-record calendar), while user-authored launches refuse (their
-;; recorded slot content is unknowable and, by the lane FS persistence
-;; model, may predate the kernel).  MOP dispatches admit only under the
+;; recorded slot content is unknowable and, by the hardware-established
+;; persistence model, may predate the kernel).  MOP dispatches admit only under the
 ;; MopCfg template census: the MOP Expander may legally emit REPLAY
 ;; words (ISA MOPExpander.md -- its performance section even recommends
 ;; it), so every MopCfg[0..8] word (the consumption set of BOTH
@@ -1421,11 +1412,11 @@
 ;; SOUNDNESS half is carried structurally: every window has >= 2
 ;; clones, so the identical word stream is already playback-delivered
 ;; at expander pace in the unhoisted world (the always-on former's
-;; silicon-witnessed formation); converting the first clone from
+;; hardware-witnessed formation); converting the first clone from
 ;; exec-while-record delivery to one more playback of that same stream
 ;; adds no exposure an audited latency could bound.  The gate stays for
 ;; the default hoist model, which consumes the estimate, and on
-;; unproven targets (QSR): the discharge cites the silicon-witnessed
+;; unproven targets (QSR): the discharge cites the hardware-witnessed
 ;; playback class, which only BH/WH carry.  The completion guard also keeps
 ;; this gate enabled: its shared binding-resource arithmetic consumes the
 ;; audited interlocked execution estimate.  Audited BH/WH payloads proceed to
@@ -1435,16 +1426,16 @@
 ;;
 ;; ADMISSION-SIDE DOOMED-HOIST MIRROR: a Dst-store payload whose record
 ;; would land in a preheader that itself sits inside a natural loop is
-;; exactly the shape the fail-closed re-record sweep un-hoists (lane FJ,
-;; noexec-rerecord-dststore-composition-unaudited) -- and the un-hoist
+;; exactly the shape the fail-closed re-record sweep un-hoists
+;; (noexec-rerecord-dststore-composition-unaudited) -- and the un-hoist
 ;; inlines every launch as a payload copy, a strict delivery
 ;; pessimization against never hoisting.  The record-hoist refuses that
 ;; shape at admission by the sweep's own name; the dominating loop-free
 ;; preheader Dst-store class stays admitted (the sweep's rule 3 keeps
 ;; it -- the witnessed init-record class).
 ;;
-;; RECORD-HOIST x MOD-WRITE COMPOSITION (downstream-fallback pricing,
-;; lane FZ, 2026-08-23; record-hoist mode only, gated on the
+;; RECORD-HOIST x MOD-WRITE COMPOSITION (downstream-fallback pricing;
+;; record-hoist mode only, gated on the
 ;; dst-autoincr pass being enabled).  The measurement pricing above is
 ;; LICENSED by the streams-identical premise: both worlds execute the
 ;; same words, so the modeled delta is pure delivery.  That premise has
@@ -1452,7 +1443,7 @@
 ;; drained-frontend window (W_drain above) of a row the dst-autoincr
 ;; pass would otherwise transform into a mod-write forces that pass's
 ;; group guard (the AUDITED COMPOSITION FACT above -- fail-closed and
-;; CORRECT, the lane ES hang class) to refuse the group, so the hoisted
+;; CORRECT, the hardware-witnessed hang class) to refuse the group, so the hoisted
 ;; world executes the explicit-increment fallback (no-increment store +
 ;; TTINCRWC per row, no slot program) while the unhoisted world executes
 ;; the mod-write form.  Different EXECUTED streams: the execution-side
@@ -1460,13 +1451,13 @@
 ;; (config words, crossing charges, entry residual, the W_drain-fit
 ;; dynamic behavior) -- is priced by dst-autoincr's model in a currency
 ;; the delivery-only benefit above deliberately excludes.  The composed
-;; delta is therefore UNPRICEABLE here, and its one silicon point is
-;; NET NEGATIVE: lcm-fresh at ON-28 (record-hoist fires trips 8 words
+;; delta is therefore UNPRICEABLE here, and its one hardware point is
+;; NET NEGATIVE: the lcm-fresh kernel (record-hoist fires trips 8 words
 ;; 14 modeled benefit 11071; dst-autoincr falls back, sfpstore mod 6->7
 ;; + 1 TTINCRWC/row) measured 681.86 vs 675.85 cyc/tile against the
-;; unhoisted+mod-write ON-25 world = +6.0 cyc/tile, kernel-causal
-;; -0.37% -> +0.52% (headline-laneFY-plain-20260823c, device-golden
-;; corr PASS; laneFZ-evidence-20260823) -- the modeled 11071-centislot
+;; unhoisted+mod-write world = +6.0 cyc/tile, kernel-causal
+;; -0.37% -> +0.52% (device-golden
+;; correctness PASS) -- the modeled 11071-centislot
 ;; delivery saving was execution-hidden while the forfeited mod-write
 ;; fire cost real cycles.  RULE: a re-record hoist whose planned no-exec
 ;; capture placement would induce the fallback refuses by name
@@ -1484,7 +1475,7 @@
 ;; are deliberately NOT mirrored: their candidacy needs the vetted
 ;; payload terminator (whole-function launch resolution), and their
 ;; formed groups refuse ANY same-function no-exec capture under the
-;; lane FS persistence clause regardless of distance -- a coarse
+;; buffer-persistence clause regardless of distance -- a coarse
 ;; replay-lead arm measurably over-refused (the sfpu_reduce_sdpa pack
 ;; TUs: launch-led increments find_candidates rejects as "no owned
 ;; terminator access" would have forfeited two real corpus hoists).
@@ -1492,27 +1483,26 @@
 ;; audited entries above.  Consistency: for every admitted hoist the guard later
 ;; sees the capture at >= W_drain (or unreachable), so an admitted hoist
 ;; can never flip a group the unhoisted world would have kept -- the
-;; ON-28 corpus point of this fact is that the refusal's only fire is
-;; the lcm TU (bytes revert to the reviewed ON-25 stream) with the other
+;; corpus point of this fact is that the refusal's only fire is
+;; the lcm TU (bytes revert to the reviewed pre-flag stream) with the other
 ;; 44 record-hoist fires byte-identical.  SCOPE BOUND (documented, zero
 ;; corpus instances): a replay-row-lead candidate BEYOND the window is
 ;; not mirrored (the guard still refuses its group soundly; the composed
 ;; bytes then price honestly worse) -- widening needs its own witness.
 ;; The counted-loop hoist branch is deliberately untouched: it exists in
-;; both flag states (pin-11 class, reviewed bytes), so pricing it here
+;; both flag states (long-reviewed bytes), so pricing it here
 ;; would churn proven streams outside this flag's measurement charter.
 ;;
-;; EXEC-WHILE-RECORD FIRST-TRIP PEEL (lane GQ, 2026-08-25;
-;; -mtt-tensix-optimize-record-hoist-peel, Init(0), composing on
+;; EXEC-WHILE-RECORD FIRST-TRIP PEEL (-mtt-tensix-optimize-record-hoist-peel, Init(0), composing on
 ;; record-hoist mode only).  Rescues exactly the ADMISSION-SIDE
 ;; DOOMED-HOIST MIRROR refusal above (Dst-store payload, preheader
 ;; inside an outer loop -- the recip-fresh face-loop shape: 4 in-body
-;; exec-record sites per tile, ON-28 dump witness
+;; exec-record sites per tile, dump witness
 ;; noexec-rerecord-dststore-composition-unaudited).  SOUNDNESS: the
 ;; mirror's hazard class is keyed to a capture that is STILL NO-EXEC at
 ;; end of pass (the sweep's own skip: exec-converted captures are the
-;; fleet-witnessed class -- minmax/sdpa/where/typecast/lcm ON-set all
-;; re-record exec-while-record per trip with sibling launches between
+;; fleet-witnessed class -- the minmax/sdpa/where/typecast/lcm default
+;; set all re-record exec-while-record per trip with sibling launches between
 ;; re-ingestions; the dst-autoincr group guard's refuted composition is
 ;; likewise keyed TTREPLAY load=1 exec=0 in
 ;; noexec_record_composition_p).  The peel therefore never forms the
@@ -1555,8 +1545,8 @@
 ;; re-ingestion cadence at one exec-record per outer-loop entry, the
 ;; witnessed class.
 ;;
-;; RECORD-HOIST PLACEMENT LIFT (lane IL, 2026-08-28;
-;; -mtt-tensix-optimize-record-hoist-lift, Init(0), composing on
+;; RECORD-HOIST PLACEMENT LIFT (-mtt-tensix-optimize-record-hoist-lift,
+;; Init(0), composing on
 ;; record-hoist mode only).  Rescues exactly the DOWNSTREAM-FALLBACK
 ;; refusal above for STORELESS payloads
 ;; (record-hoist-downstream-fallback-unprofitable: the lcm-fresh shape
@@ -1581,7 +1571,7 @@
 ;; intermediate block), each candidate placement must be a DEDICATED
 ;; preheader with no open user recording state, and each is re-audited
 ;; by the SAME oracle (a still-covered placement walks on).  A failing
-;; level STOPS the walk (never refuses; the lane HC residency-walk
+;; level STOPS the walk (never refuses; the residency-walk
 ;; discipline); no oracle-clean level keeps today's bytes by name
 ;; (record-hoist-lift-no-admissible-level).  SOUNDNESS is the existing
 ;; hoisted no-exec capture class at a different placement: dominating
@@ -1589,7 +1579,7 @@
 ;; rules hold), STORELESS by construction (the Dst-store mirror
 ;; refuses those payloads before the oracle; sweep rule 1 is keyed to
 ;; Dst-store payloads and storeless no-exec captures are the
-;; silicon-good celu/eqz class), re-ingestion at a still-in-loop
+;; hardware-good celu/eqz class), re-ingestion at a still-in-loop
 ;; placement repeats the SAME fixed-encoding words once per that
 ;; loop's trip (idempotent; invariance is the record-hoist
 ;; fixed-encoding admission), and sweep rule 2 re-audits the final
@@ -1623,12 +1613,12 @@
 ;;   128 words = 512 bytes of straight-line launches, twice the largest
 ;;   currently measured winning shape (the 32-trip {launch, Dst-step}
 ;;   row loop = 64 words); larger runs refuse byte-identically until a
-;;   silicon A/B promotes them.  A size guard, not a shape key: it
+;;   hardware A/B promotes them.  A size guard, not a shape key: it
 ;;   depends only on the proven trip count and delivered word count.
 ;;
-;; COUNTED-CAPTURE PEEL (lane IO, 2026-08-29;
-;; -mtt-tensix-optimize-counted-capture-peel, Init(0)).  Extends the
-;; lane-GQ exec-while-record first-trip peel to the COUNTED-LOOP
+;; COUNTED-CAPTURE PEEL (-mtt-tensix-optimize-counted-capture-peel,
+;; Init(0)).  Extends the
+;; exec-while-record first-trip peel to the COUNTED-LOOP
 ;; capture class -- a counted single-block SFPU row loop whose body is
 ;; one fixed replay-safe run and records nothing per trip.  The plain
 ;; counted hoist places a NO-EXEC record in the dedicated preheader and
@@ -1646,7 +1636,7 @@
 ;; re-delivers the payload: the loop's proven first trip moves verbatim
 ;; to the dedicated preheader with the capture flipped to
 ;; exec-while-record (TTREPLAY load=1 exec=1 -- the fleet-witnessed
-;; class, never the silicon-refuted no-exec re-record wedge), every
+;; class, never the hardware-refuted no-exec re-record wedge), every
 ;; remaining trip becomes one playback launch, and the proven-constant
 ;; counter re-initializes one step later (trips -> trips-1):
 ;;
@@ -1668,8 +1658,8 @@
 ;; provable single-insn counter re-init).  An admitted PLAIN counted
 ;; hoist is never converted (the peel is evaluated only on the plain
 ;; pricing's refusal, so every booked counted-capture fire keeps its
-;; bytes).  A reform-mode carried payload refuses by lane IH's
-;; post-autoincr-window-carried-peel-launch-arithmetic-unproven (the
+;; bytes).  A reform-mode carried payload refuses by the re-formation
+;; pass's post-autoincr-window-carried-peel-launch-arithmetic-unproven (the
 ;; peel relocates one trip's carried executions across the
 ;; configuration program's placement; the walk-order proof is not in
 ;; this increment).  Refusal names (all keep the plain refusal's
@@ -1677,15 +1667,15 @@
 ;; counted-capture-peel-benefit, replay-reissue-latency-unproved, and
 ;; peel_admissible_p's record-hoist-peel-* names.  NO NEW CONSTANTS.
 ;;
-;; REPLAY WINDOW SIZING UNDER A HOISTED RECORD (lane IM, 2026-08-28;
-;; -mtt-tensix-optimize-replay-window-sizing, Init(0)).  pick_replay's
+;; REPLAY WINDOW SIZING UNDER A HOISTED RECORD
+;; (-mtt-tensix-optimize-replay-window-sizing, Init(0)).  pick_replay's
 ;; saving key, (clones-1) x (length-1), prices IN-BLOCK
 ;; exec-while-record economics: each replaced clone trades length words
 ;; for one launch word while the record's own words STAY IN THE BODY,
 ;; so a shorter window with more instances wins -- lcm-fresh picks the
 ;; 14-word Stein round-pair at 7 instances (saving 77) over the 28-word
 ;; round-quad at its only 3 non-overlapping instances (saving 53), and
-;; lane IH measured that key RIGHT for in-block windows (freed slots
+;; measurement showed that key RIGHT for in-block windows (freed slots
 ;; let tail windows form).  A HOISTED record (record-hoist /
 ;; replay-hoist preheader placement, incl. the placement lift above)
 ;; voids that model's record term: the record is delivered once per
@@ -1721,21 +1711,21 @@
 ;;   a playback launch emits ReplayBuffer[(Index+i)%32] for i in
 ;;   [0,Count) -- a pure prefix of the recorded program, independent
 ;;   of the recorded length (WormholeB0 REPLAY.md functional model;
-;;   BH mirrors it per the lane FS silicon persistence model; the hand
-;;   kernels' REPLAY(0,13) is the silicon witness).  The prefix walk
+;;   BH mirrors it per the hardware persistence model; the hand
+;;   kernels' REPLAY(0,13) is the hardware witness).  The prefix walk
 ;;   mirrors sequence-growth continuity exactly (never crosses a
 ;;   must_end word, a deleted insn, or the block end; stops one word
 ;;   short of a full clone), so the launch replaces words that
 ;;   executed inline with the same delivered words in the same stream
 ;;   positions: stream identity, like every full clone replacement.
 ;;   The record dominates the partial launch (preheader placement),
-;;   the slots are persistent and disjoint (FS model; the widened
-;;   record's full span is marked), and the TEN-2932 window checker
-;;   resolves sub-span launches natively.
+;;   the slots are persistent and disjoint (the persistence model; the
+;;   widened record's full span is marked), and the dest-index window
+;;   checker resolves sub-span launches natively.
 ;;
 ;; PRICING: no new constants.  The widening comparison is a word count
 ;; over the covered span (launches are delivered words; the launch
-;; boundary crossing cost, ~1.3-1.8 cy each at the lane EE table, is
+;; boundary crossing cost, ~1.3-1.8 cy each at the measured table, is
 ;; NOT modeled -- fewer launches strictly reduces both terms, so the
 ;; word-count key is a conservative proxy).  The hoist pricing that
 ;; licenses the placement is hoist_profitable_p on the widened window
@@ -1746,7 +1736,7 @@
 ;; trim words -> 3 x REPLAY(0,28) + 1 x REPLAY(0,18) -- the hand
 ;; kernel's exact 4-launch row delivery.
 ;;
-;; LAUNCH-FLATTEN complete-unroll request (lane HH; the GIMPLE-side
+;; LAUNCH-FLATTEN complete-unroll request (the GIMPLE-side
 ;; generalization of the launch-loop unroll above).  A counted innermost
 ;; DELIVERY loop -- typed replay records/launches, fixed raw .ttinsn
 ;; words, computed-word volatile delivery stores (the LLK TT_ macro
@@ -1810,29 +1800,28 @@
   (XTT_REPLAY_COST_REPLAY_SLOT_X100 100)
   (XTT_REPLAY_HOIST_MIN_BENEFIT      60)
   (XTT_REPLAY_LAUNCH_UNROLL_MAX_WORDS 128)
-  ;; Interlock-aware reissue pricing (2026-08-18 recalibration; Lane BP
-  ;; diagnosis of the five causal ON regressions -- clamp/hardtanh/
-  ;; softsign/hardmish/tanhderivative-lut -- laneBP-evidence-20260818/
-  ;; DIAGNOSIS-AND-FIX-SPEC-laneBP.md, validation-matrix over 14
-  ;; independent silicon eltwise counted-loop shapes at pin 10):
+  ;; Interlock-aware reissue pricing (recalibrated from a diagnosis
+  ;; of five causal default-set regressions -- clamp/hardtanh/
+  ;; softsign/hardmish/tanhderivative-lut -- with a validation matrix
+  ;; over 14 independent hardware eltwise counted-loop shapes):
   ;;
   ;;   TURNAROUND_X100 (70)  - per-launch replay reissue turnaround.
   ;;     Provenance: residual analysis across the 14 shapes (consistent
   ;;     0.7 +/- 0.2 cyc/launch over payload lengths 4-27); the same
-  ;;     class of silicon-calibrated machine constant as PUSH=123
+  ;;     class of hardware-calibrated machine constant as PUSH=123
   ;;     (itself a re-fit measured actual).
   ;;   RECORD_OVERHEAD_X100 (300) - per-record-pass engine overhead
   ;;     beyond word delivery.  Provenance: the Reduce-SDPA hoist A/B
-  ;;     (silicon 21.5+ cyc/body over two 4-trip sites; measured
+  ;;     (hardware 21.5+ cyc/body over two 4-trip sites; measured
   ;;     per-trip record exposure ~284 cs vs the modeled
-  ;;     RECORD_OVERHEAD - TURNAROUND = 230); keeps that silicon
+  ;;     RECORD_OVERHEAD - TURNAROUND = 230); keeps that hardware
   ;;     winner firing (+620 per site under the 2026-08-19 re-record
   ;;     derivation above) while making the five counted-loop
   ;;     refusals MORE negative (the safe direction).
   (XTT_REPLAY_COST_TURNAROUND_X100      70)
   (XTT_REPLAY_COST_RECORD_OVERHEAD_X100 300)
   ;; Replay-window loop-unroll request (-mtt-tensix-optimize-replay-
-  ;; loop-unroll, lane CV 2026-08-20).  A counted single-block SFPU row
+  ;; loop-unroll).  A counted single-block SFPU row
   ;; loop delivers its whole row every trip; the same row written by a
   ;; production author under `#pragma GCC unroll 8' is captured by the
   ;; always-on replay former as one execute-while-record pass plus
@@ -1840,7 +1829,7 @@
   ;; compiler that same request from typed loop-shape facts alone.
   ;;
   ;;   LOOP_UNROLL_FACTOR (8) - the group size requested.  Provenance:
-  ;;     the five measured pin-12 hand/semantic pairs whose hand arms
+  ;;     five measured hand/semantic kernel pairs whose hand arms
   ;;     are exactly this factor (sqrt/cbrt/hardsigmoid/hardshrink/
   ;;     softsign: every production eltwise row kernel in the corpus
   ;;     carries `#pragma GCC unroll 8'); the per-group record
@@ -1861,7 +1850,7 @@
   (XTT_REPLAY_LOOP_UNROLL_MAX_WORDS 256)
   (XTT_LAUNCH_FLATTEN_FN_BUDGET_WORDS 1024)
   ;; Round-chain interleave request (-mtt-tensix-optimize-round-
-  ;; interleave, lane EI 2026-08-21).  A counted round loop whose
+  ;; interleave).  A counted round loop whose
   ;; iterations are independent by dataflow (every loop-carried value's
   ;; recurrence is at most a single word-delivering update) is asked to
   ;; unroll by TWO so the post-RA cyclic list scheduler can interleave
@@ -1886,8 +1875,8 @@
 ])
 
 ;; ---------------------------------------------------------------------
-;; Delivery-shape arbitration (-mtt-tensix-optimize-delivery-shape,
-;; lane EG 2026-08-21).  Additive section; every model above is
+;; Delivery-shape arbitration (-mtt-tensix-optimize-delivery-shape).
+;; Additive section; every model above is
 ;; unchanged and its constants are reused read-only.
 ;;
 ;; One solver, one model: per proven-trip counted single-block SFPU row
@@ -1904,9 +1893,9 @@
 ;; (rvtt-bnb.cc), deterministic branch-and-bound with an admissible
 ;; prune over the (tiny) lattice.
 ;;
-;; MEASURED DELIVERY TABLE.  Provenance: lane EE loser-anatomy closure
-;; (laneEE-evidence-20260821/LOSER-ANATOMY.md) -- fourteen silicon rows
-;; (pin-15 headline + pin-13 storm cells) reproduced within ~3% from
+;; MEASURED DELIVERY TABLE.  Provenance: a loser-anatomy closure study
+;; -- fourteen hardware rows (headline and stress cells from two
+;; measurement rounds) reproduced within ~3% from
 ;; instruction-class censuses of the timed ELFs:
 ;;
 ;;   WORD_X100 (100)        - one delivered word (RISC-pushed SFPU word
@@ -1950,27 +1939,27 @@
 ;;     no audited latency fact at all makes the term unpriceable and
 ;;     the loop refuses by name (delivery-shape-exec-term-unaudited).
 ;;
-;; GIMPLE LATENCY MIRROR page audits (2026-08-21, lane EG; the audited
-;; latency-0 page convention of the D3 audit above, applied at the
+;; GIMPLE LATENCY MIRROR page audits (the audited
+;; latency-0 page convention of the effect audit above, applied at the
 ;; pre-expansion census where the RTL attributes are not yet
 ;; readable):
 ;;   CC family (SFPSETCC/SFPENCC/SFPCOMPC/SFPPUSHC/SFPPOPC): no
 ;;     next-cycle rule on either architecture's page
 ;;     (tt-isa-documentation BlackholeA0 + WormholeB0
 ;;     TensixCoprocessor); lane-flag state consumed by the next
-;;     instruction by construction of every silicon-passing kernel.
+;;     instruction by construction of every hardware-passing kernel.
 ;;   SFPARECIP (BH-only): "simple sub-unit", functional model writes
 ;;     LReg[VD] at issue, no next-cycle rule (SFPARECIP.md); the
-;;     silicon-measured fresh_recip_hwseed bodies (lane DJ, addcdiv
+;;     hardware-measured fresh_recip_hwseed bodies (addcdiv
 ;;     -25.3%) issue SFPARECIP -> SFPMAD back-to-back.
 ;;   SFPSETEXP/SFPSETMAN/SFPSETSGN immediate arms: the pages carry no
 ;;     next-cycle rule on either architecture and the immediate arms
-;;     share the register forms' functional model (the D3 simple-unit
-;;     row listed only the register forms as an audit-scope choice,
+;;     share the register forms' functional model (the original audit's
+;;     simple-unit row listed only the register forms as a scope choice,
 ;;     not a hardware distinction); latency 0 in the gimple mirror.
 ;;   Structured float compares (sfpxfcmps/sfpxfcmpv): the lowered
 ;;     compare-vs-operand executes as a mad-family member in the final
-;;     stream (lane EE anatomy; the recorded pin-13 hoist refusal
+;;     stream (measured anatomy; the recorded hoist refusal
 ;;     arithmetic on the hardshrink body requires exec_ilk = words + 1)
 ;;     -- charged one slot in the downstream-mirror exec, absorbed in
 ;;     the measured exec like the rest of the mad family.  Integer
@@ -1979,19 +1968,19 @@
 ;;     mods, iadd mods, cast mods) are enforced by the RTL consumers;
 ;;     a mis-refined mod in this mirror can only shift the modeled
 ;;     delta, never semantics (the transform is an unroll request;
-;;     bit-exactness is CRAQ-gated independently of every cost term).
+;;     bit-exactness is simulator-gated independently of every cost term).
 ;;
 ;; MODEL SEAMS (stubbed to current-model values, documented):
-;;   - the dst-autoincr crossing price (lane EB's DX-F2 term, corrected
-;;     to the W_drain covering walk above by lane EQ / EP-F1, LANDED at
-;;     pins 16/17) is NOT yet joined into this mirror: the solver models
+;;   - the dst-autoincr crossing price (since corrected
+;;     to the W_drain covering walk above, and LANDED)
+;;     is NOT yet joined into this mirror: the solver models
 ;;     no autoincr setup cost (value 0) and consumes only the enable bit
 ;;     for the mirror's saturation run term.  Joining the W_drain term
-;;     into this mirror is the named follow-up (FH audit FHI-1/FHS-11).
-;;   - lane EC's record-hoist scope widening (DX-F3) LANDED at pin 16;
+;;     into this mirror is a named follow-up.
+;;   - the record-hoist scope widening LANDED;
 ;;     its wider hoist scope is NOT YET JOINED into this mirror -- the
-;;     downstream mirror still models only the pre-EC hoist branches.
-;;     The join is the named follow-up (same owner as the term above).
+;;     downstream mirror still models only the narrower hoist branches.
+;;     The join is a named follow-up (same owner as the term above).
 ;;   - rolled-override seam: where the modeled winner is the explicit
 ;;     ROLLED shape but the downstream hoist's own gate is predicted
 ;;     to window the loop anyway (the ceil-fresh class: straight-push
@@ -2006,7 +1995,7 @@
 ;;
 ;; MIN_BENEFIT (60) mirrors the replay-hoist threshold's rationale
 ;; verbatim: refusal (staying rolled) is byte-identical code and costs
-;; nothing, and no silicon point yet anchors this solver's own
+;; nothing, and no hardware point yet anchors this solver's own
 ;; acceptance region -- the interval discipline (boundary ends) is the
 ;; buffer.  -mtt-tensix-delivery-shape-min-benefit= (same centislot
 ;; units) overrides it for experimentation and A/B legs.
@@ -2024,20 +2013,20 @@
 
 
 ;; ---------------------------------------------------------------------
-;; Dst auto-increment audited frontend constants (FABLE_GOES_BURR item
-;; #12: the target_autoincr_caps positional literals re-expressed as
+;; Dst auto-increment audited frontend constants
+;; (the target_autoincr_caps positional literals re-expressed as
 ;; named initializers cross-checked against THESE constants -- the
 ;; audited entries above carry the provenance; this block is only their
 ;; GCC-idiomatic single-source carrier).
 ;;
 ;;   AUTOINCR_MIN_CONFIG_DISTANCE (2) - SETC16-to-consume distance
 ;;     guard: the configuration issue class is a two-cycle resource
-;;     (rvtt_issue_cfg below; craq-sim tensix_rtl_issue_class_for_inst
+;;     (rvtt_issue_cfg below; the reference simulator tensix_rtl_issue_class_for_inst
 ;;     models the same), so two intervening issued words guarantee the
 ;;     configuration write has retired before the consumer issues.
 ;;   MODWRITE_DRAINED_FRONTEND_WINDOW (7) - the audited W_drain
-;;     retirement window (lane EP finding F1 fit, conservative 7; the
-;;     full derivation and its silicon witnesses are the W_drain
+;;     retirement window (hardware fit, conservative 7; the
+;;     full derivation and its hardware witnesses are the W_drain
 ;;     entry above).  Target caps adopt it on BH and WH (same
 ;;     frontend class); QSR has no capability entry and its caps row
 ;;     stays zero.
@@ -2052,7 +2041,7 @@
 ;;     stubbed to zero by comment; now this named quantity, consumed
 ;;     through rvtt-delivery-cost only).  The measured lane-EE table
 ;;     absorbs the SETC16 program in the once-per-group record
-;;     delivery; a future silicon-priced value lands here and every
+;;     delivery; a future hardware-priced value lands here and every
 ;;     consumer moves together.
 (define_constants [
   (XTT_AUTOINCR_MIN_CONFIG_DISTANCE      2)
@@ -2072,8 +2061,8 @@
 ;; footprint (one extra Dst row at +2 address units) stays inside the
 ;; separator's own per-iteration frame, and the doubled live set is the
 ;; only shape the eight-LREG file is known to carry for the target row
-;; class (laneGJ AUTOPSY roundingops: rename web L0-L2 -> L4-L6,
-;; pressure 7 <= 8).  Wider factors have no audited pressure or Dst
+;; class (measured autopsy of the roundingops kernel: rename web
+;; L0-L2 -> L4-L6, pressure 7 <= 8).  Wider factors have no audited pressure or Dst
 ;; footprint story and refuse structurally (capture budget).
 ;;
 ;; MIN_ROW_WORDS (4) - mirrors the replay pass's MIN_SEQUENCE (4,
@@ -2086,8 +2075,7 @@
 ;; the buffer or the counted-loop capture downstream stops firing and
 ;; the pairing would trade record-plus-launch delivery for a rolled
 ;; issue stream -- the adjudicated profitability defect of the
-;; round-cc-modulo prototype (NO-GO 2026-08-25, evidence
-;; round-cc-modulo-evidence-20260825/REPORT.md: the committed rolled
+;; round-cc-modulo prototype (its recorded NO-GO: the committed rolled
 ;; two-row loop lost the TTREPLAY delivery entirely).  The separator
 ;; stays explicit per launch (counted_loop_payload's contract) and
 ;; dst-autoincr may absorb it afterwards exactly as in the single-row
@@ -2097,7 +2085,7 @@
 ;; (0, 2, 0, 0) advances the Dst RWC by 2 address units = one 32-bit
 ;; row (SFPLOAD/SFPSTORE unit addressing; tt-isa-documentation
 ;; TTINCRWC/SFPLOAD address-unit semantics, the same 1-index-=-2-units
-;; fact laneFI's walk lift used with TTINCRWC imm <= 7).  Two accesses
+;; fact the walk lift above uses with TTINCRWC imm <= 7).  Two accesses
 ;; at constant offsets A and A+2 of one counter frame with A == 0 mod 4
 ;; therefore touch disjoint unit footprints, and the doubled separator
 ;; (0, 4, 0, 0) advances exactly the two rows the pair consumed
@@ -2114,7 +2102,7 @@
 ;; CC writer (must be the all-lanes restore) or to the function entry,
 ;; whose all-lanes ambient is the shipped structured-CC lowering
 ;; contract (gimple-rvtt-cc.cc: outermost PUSHC removed, every
-;; outermost region closed by the exact all-lanes ENCC; laneEL's
+;; outermost region closed by the exact all-lanes ENCC; the
 ;; structured-CC-restore proof).  Rename webs may root only in that
 ;; ambient state (crossrow-pairing-rename-cc-domain): a fresh
 ;; lane-predicated definition renamed to a dead LREG would expose stale
@@ -2136,7 +2124,7 @@
 ;;
 ;; Lane-exactness fact: the seed word is the bare-SET rvtt_sfpassign
 ;; alternative -- SFPMOV mod-2 -- which writes EVERY lane regardless of
-;; the CC state (craq-sim TENSIX_EXECUTE_SFPMOV mod 2 forces the full
+;; the CC state (the reference simulator's TENSIX_EXECUTE_SFPMOV mod 2 forces the full
 ;; lane mask; the same audited hidden-state-free fact the shadow-fill
 ;; crossing rule relies on).  Seeded immediately after the LAST
 ;; definition of the old register that precedes the root -- in the
@@ -2159,8 +2147,8 @@
 ;; A web whose ROOT is itself a bare all-lanes copy (a full-lane root:
 ;; SFPMOV mod-2 writes every lane wherever it sits, so the fresh
 ;; register carries the complete value from the root on) renames
-;; seed-free at zero word cost -- DESIGN-V2 Rule A carried into the
-;; atom interior by the same lane-immunity fact.
+;; seed-free at zero word cost -- preservation-seed Rule A carried
+;; into the atom interior by the same lane-immunity fact.
 ;;
 ;; Pricing: NO new constants.  A seed is one issued word charged in the
 ;; SAME steady-state II model and the SAME capture-budget bound
@@ -2171,14 +2159,14 @@
 ;; back to the last strict checkpoint) is the complete cost comparison:
 ;; a seed whose slot costs more than the serialization it removes never
 ;; commits, and delivery stays record-plus-launch because the budget
-;; bound keeps the counted-loop capture firing.  Provenance:
-;; round-cc-modulo-evidence-20260825/DESIGN-V2.md (Rule B), the laneEL
-;; structured-CC restore contract (ambient positions), and the laneGP
+;; bound keeps the counted-loop capture firing.  Provenance: the
+;; round-cc-modulo successor design's Rule B, the
+;; structured-CC restore contract (ambient positions), and the recorded
 ;; adjudication that Rule-A pairing alone leaves the atom-rooted webs
-;; serialized (laneGP-evidence-20260825/RESULTS.md).
+;; serialized.
 ;;
 ;; Stall-words extension (-mtt-tensix-optimize-crossrow-pairing-stall-
-;; words, lane IC).  Additive; NO new constants.  Three coordinated
+;; words).  Additive; NO new constants.  Three coordinated
 ;; pieces, all priced through the existing models:
 ;;   1. Vocabulary: a word carrying the architectural next-slot
 ;;      ACCEPTANCE stall (xtt_next_slot_stall -- the SFPSWAP family)
@@ -2189,7 +2177,7 @@
 ;;      recorded-word count against XTT_DELIVERY_CAPTURE_SLOTS stays
 ;;      one (the stall is an issue fact, not a stream word).
 ;;      audited_latency () itself is untouched: fill passes keep
-;;      refusing these words (lane BM).
+;;      refusing these words.
 ;;   2. Free-LREG priority: the Rule-A cyclic renamer offers the free
 ;;      registers to the COPY half's webs first (scan order only; web
 ;;      extents and rewrites stay in stream order).  Breaking row-B
@@ -2213,8 +2201,8 @@
 ;; STATIC/DYNAMIC delay (including the BH SFPMAD->SFPSWAP scoreboard
 ;; erratum, xtt_dynamic_bug) over the committed final order; the
 ;; pad-site probe and the overflow belt only PRICE that discharge.
-;; Provenance: laneIC-evidence-20260827 (tanh 2-datum window-density
-;; autopsy), SFPSWAP.md acceptance-stall rule, laneHM
+;; Provenance: a measured tanh 2-datum window-density
+;; autopsy, SFPSWAP.md's acceptance-stall rule, and the
 ;; counted-row-vacated-delay-shadow adjudication (the delay-contract
 ;; positional-discharge hazard class).
 
@@ -2234,7 +2222,7 @@
 ;;                  with no RISC involvement per iteration.
 ;;
 ;; Pricing follows the corrected concurrent-delivery accounting (the
-;; exp-parity re-basing, NOTES-exp-parity-laneR2.md): during replay
+;; exp-parity re-basing): during replay
 ;; playback, RISC delivery is CONCURRENT with execution -- per-row time
 ;; is max(exec, 1.23 x delivered words), NOT their sum -- proven by the
 ;; sigmoidappx pure-delivery control (64 delivered loop-control words
@@ -2272,13 +2260,13 @@
 ;;                  ~16 with three step slots; computed exactly per
 ;;                  candidate.
 ;;
-;; Consequences the model asserts (falsifiable, no silicon yet for this
+;; Consequences the model asserts (falsifiable, no hardware yet for this
 ;; tier):
 ;;   - execution-bound rows (len >= 2 in a straight-line run) model
 ;;     <= 0 and refuse byte-identically: their launch pushes were
 ;;     already free under the corrected accounting.  This is exactly
 ;;     the MOP-tier correction the TOP3-3 design doc names as the
-;;     falsification arm of its 1.23:1 additive prediction; a silicon
+;;     falsification arm of its 1.23:1 additive prediction; a hardware
 ;;     A/B on the minmax gate adjudicates between them (the testing-only
 ;;     -mtt-tensix-mop-form-force flag exists to build that leg, since
 ;;     no non-negative threshold admits a negative modeled benefit).
@@ -2289,11 +2277,11 @@
 ;;
 ;; MIN_BENEFIT mirrors the replay-hoist threshold (60 centislots =
 ;; 0.6 slot per formation): refusal is byte-identical code and costs
-;; nothing, and no silicon point yet anchors this tier's acceptance
+;; nothing, and no hardware point yet anchors this tier's acceptance
 ;; region.  -mtt-tensix-mop-form-min-benefit= (same centislot units)
-;; overrides it for experimentation and for building silicon A/B legs.
+;; overrides it for experimentation and for building hardware A/B legs.
 ;;
-;; Outward ownership (2026-08-17 silicon adjudication follow-up): the
+;; Outward ownership (a hardware-adjudication follow-up): the
 ;; formed template lives in thread-shared registers that survive the
 ;; function's return, so formation additionally requires the outward
 ;; ownership proof (rtl-rvtt-mop-form.cc; refusal
@@ -2340,8 +2328,8 @@
   (eq_attr "xtt_issue" "sync") "rvtt_sync")
 
 ;; -----------------------------------------------------------------------
-;; Constant residency and rematerialization pricing (lane BS,
-;; gimple-rvtt-prgm-const.cc const-residency / const-remat phases).
+;; Constant residency and rematerialization pricing
+;; (gimple-rvtt-prgm-const.cc const-residency / const-remat phases).
 ;;
 ;; Both mechanisms move SFPLOADI materializations, so they price in the
 ;; same delivered-word units as the replay model above (RISC_PUSH_X100).
@@ -2350,8 +2338,8 @@
 ;;                          16-bit-encodable forms are 1 word -- the
 ;;                          conservative bound prices 2)
 ;;   PRGM programming     = 3 pushed words once (2 staging SFPLOADI +
-;;                          1 SFPCONFIG; the staging register model is
-;;                          NOTES-exp-parity-laneR2.md D1)
+;;                          1 SFPCONFIG; the staging-register pair is
+;;                          the exp-parity re-basing's audited model)
 ;;   PRGM read-back       = 0 allocatable-LREG pressure and 0 delivered
 ;;                          words (constant-register operand folded into
 ;;                          the consumer by the unspec propagation)
@@ -2371,7 +2359,7 @@
 ;; fires only under residual over-pressure -- where the alternative is
 ;; not slower code but NO code (the spill diagnosis error).
 ;;
-;; Residency-peel extension (lane CF, CC-canonical loop bodies): when
+;; Residency-peel extension (CC-canonical loop bodies): when
 ;; the loop body carries a lowered v_if region ending in the all-lanes
 ;; SFPENCC, the programming point is created by peeling iteration one
 ;; onto the entry edge (the lane-state proof: the programming executes
@@ -2395,7 +2383,7 @@
 ;; above).  Overestimating body_words only raises the required trip
 ;; proof; it never admits an unpriced fire.
 ;;
-;; MAD-PAIR extension (lane GA, FX-F1): a constant the invariant pass
+;; MAD-PAIR extension: a constant the invariant pass
 ;; has already HOISTED out of the loop executes once either way, so
 ;; the LOOP-class per-iteration saving is zero -- but when the hoisted
 ;; constant is the shortened SFPLOADI FLOATB form feeding one half of
@@ -2421,7 +2409,7 @@
 ;; Non-vulnerable sfpxloadi chain operands are never claimed: the folds
 ;; cannot match them and the mad rule fuses them from plain LREGs.
 ;;
-;; PRESSURE-PARK extension (lane GV, -mtt-tensix-optimize-pressure-park;
+;; PRESSURE-PARK extension (-mtt-tensix-optimize-pressure-park;
 ;; the FX PASS-GAP "invariant-loadi rename/pressure admission" class):
 ;; two widenings of the CC-canonical residency PEEL class, both riding
 ;; the peel's existing break-even proof (the candidate's issue words
@@ -2457,8 +2445,8 @@
 ;; peel-class refusal unchanged.  Flag off: byte-identical (the scan
 ;; break and single-tier placement are restored verbatim).
 ;;
-;; STORE-SOURCE TIER (lane HO, -mtt-tensix-optimize-store-source-tier;
-;; the HL-F1 encoding-ceiling copy tax, generalizing lane HL's
+;; STORE-SOURCE TIER (-mtt-tensix-optimize-store-source-tier;
+;; the encoding-ceiling copy tax, generalizing the earlier
 ;; license-gated refusal): SFPSTORE sources L0-L11 only
 ;; (SFPSTORE_MAX_SRC_LREG), so a PRGM-parked (L12-L14) store-source
 ;; constant is NOT free at its store consumers -- the register
@@ -2486,7 +2474,7 @@
 ;; line: "store-source-tier (store-source-encoding-ceiling)"; refusal
 ;; names unchanged (lreg-file-exhausted).  Flag off: byte-identical.
 
-;; CROSSLOOP-CC-PEEL (lane HR, -mtt-tensix-optimize-crossloop-cc-peel;
+;; CROSSLOOP-CC-PEEL (-mtt-tensix-optimize-crossloop-cc-peel;
 ;; the atan2 "crossloop-cc-unproven" peel-composition class): a
 ;; PROGRAMMING-ONLY lift of the CC-canonical peel class's placement
 ;; across enclosing loops.  The peel exists only to manufacture an
@@ -2526,7 +2514,7 @@
 ;; deletes, and reorders NO CC-writing statement relative to the
 ;; original program (the peel it forgoes was this pass's own duplicate)
 ;; -- no exec-state shape can form that the source did not already
-;; contain (the ES/FJ hazard discipline).  Named refusals:
+;; contain (the composition-hazard discipline above).  Named refusals:
 ;; crossloop-cc-atom-unproven (a CC writer off the typed whitelist),
 ;; crossloop-cc-peel-entrycc-unproven (a CC write reaches the lifted
 ;; preheader), trip-count-single-trip, plus every walk-stop name
@@ -2536,8 +2524,8 @@
 ;; peel path is restored verbatim).
 ;;
 ;; ---------------------------------------------------------------------
-;; CROSSCALL CONFIG-PREFIX + RESIDENCY (lane HC,
-;; -mtt-tensix-optimize-crosscall-config-prefix; the geluappx
+;; CROSSCALL CONFIG-PREFIX + RESIDENCY
+;; (-mtt-tensix-optimize-crosscall-config-prefix; the geluappx
 ;; "table-prefix/crosscall-residency" residual class): two widenings of
 ;; the cross-call coefficient contract, no new pricing constants -- the
 ;; contract's own amortization argument (per-call prefix words become
@@ -2573,7 +2561,7 @@
 ;; verbatim).
 
 ;; ---------------------------------------------------------------------
-;; Dual-bank pinned-chain binding caps (lane FU, rtl-rvtt-lp-alloc.cc
+;; Dual-bank pinned-chain binding caps (rtl-rvtt-lp-alloc.cc
 ;; layer 3).  These are STRUCTURAL bounds, not pricing constants: they
 ;; cap the shapes and the search the binding layer will model, and an
 ;; exceeded cap is a named refusal that keeps today's allocation
@@ -2604,7 +2592,7 @@
 ;;                               Evidence: the eager forced-color
 ;;                               consistency pruning collapses anchored
 ;;                               chains to near-linear search -- the
-;;                               lane-EX generic_moe_gate_topk top16
+;;                               generic_moe_gate_topk top16
 ;;                               kernel, the largest known pinned-chain
 ;;                               body (1744 webs, 447 pin sites, 186
 ;;                               relational), solves with budget 1336;
@@ -2614,16 +2602,17 @@
 ;;                               while bounding the worst (infeasible-
 ;;                               instance exhaustion) case.
 ;;
-;; WINDOW-PAIRING INTER-ROW DRAIN MODEL (lane FT; consumed by
+;; WINDOW-PAIRING INTER-ROW DRAIN MODEL (consumed by
 ;; rvtt_macro_interrow_drain_tuned in rtl-rvtt-schedule.cc under
-;; -mtt-tensix-optimize-window-pairing).  The lane-EV inter-row
-;; obligation (P0 adjudication 2026-08-21) placed the FULL derived drain
+;; -mtt-tensix-optimize-window-pairing).  The original inter-row
+;; obligation (a wrong-code adjudication) placed the FULL derived drain
 ;; between consecutive rows whenever any launch is a fixed-VD VALUE
 ;; carrier -- a register-blind shape rule.  The tuner derives the
 ;; minimal spacing from the SAME architectural facts as the boundary and
 ;; backedge drain proofs (L1-L3/E1-E4/H1-H2, the retire-before-issue
 ;; transactional model whose provenance is the derived-calendar table's:
-;; ISA spec + CRAQ generic executor + hand MulInt32), made exact by
+;; ISA spec + the reference simulator's generic executor + hand
+;; MulInt32), made exact by
 ;; per-event footprints.  Audited facts specific to this model:
 ;;
 ;;   F1  Hosted-event operand overrides.  For Simple/MAD/Round events
@@ -2678,7 +2667,7 @@
 ;;       clause (a pending store reads the live lane mask; any follower
 ;;       CC write inside the horizon conflicts).
 ;;
-;;   F5' Stride-phase rebase (lane GJ; under
+;;   F5' Stride-phase rebase (under
 ;;       -mtt-tensix-optimize-window-pairing-stride).  F5's compact-
 ;;       absorber invariant (the advancing address mode rides the row's
 ;;       LAST issued word) is one sufficient condition for the uniform
@@ -2697,7 +2686,7 @@
 ;;       extras: "the computation in SFPSTORE will resolve to whatever
 ;;       was computed in SFPLOADMACRO, regardless of whether SFPLOADMACRO
 ;;       (or any other intermediate instruction) advanced any RWCs";
-;;       [SIM] craq-sim 9f324140 src/tensix.cpp macro_dst_row latched
+;;       [SIM] the reference simulator 9f324140 src/tensix.cpp macro_dst_row latched
 ;;       from dst_rwc before the SFPLOAD dispatch applies the modifier,
 ;;       = the L1 fact the boundary proofs already consume).  Rebasing
 ;;       every footprint by phase*stride (pending events: phase*stride;
@@ -2719,8 +2708,8 @@
 ;; signbit family keeps its proven rolled calendar byte-identically.
 
 ;; ---------------------------------------------------------------------
-;; LOAD-CARRIER unlock (lane IF,
-;; -mtt-tensix-optimize-dst-autoincr-load-carrier).  Additive section;
+;; LOAD-CARRIER unlock
+;; (-mtt-tensix-optimize-dst-autoincr-load-carrier).  Additive section;
 ;; no new pricing constant -- one audited COUNTING fact and one
 ;; replay-soundness model note.
 ;;
@@ -2731,16 +2720,17 @@
 ;; slot during a recording ([ISA] WormholeB0 REPLAY.md functional
 ;; model: the Load loop stores every incoming instruction, one slot
 ;; per word, with no opcode filtering; BlackholeA0 carries no REPLAY
-;; functional model -- doc gap already adjudicated by the lane FS
-;; silicon persistence experiments -- and the pinned craq sim ingests
+;; functional model -- a doc gap already adjudicated by the
+;; hardware persistence experiments -- and the pinned reference
+;; simulator ingests
 ;; recorded words identically) and exactly one frontend issue slot
 ;; ([SIM] every slot-word walk in the sim's issue model counts words,
-;; not classifications).  The pin-38 dst-autoincr walks counted raw
+;; not classifications).  The earlier dst-autoincr walks counted raw
 ;; words as ZERO slots, so an LLK envelope recording whose shadow is
 ;; raw words overran its block and the scan refused the whole function
 ;; ("replay capture crosses block") -- adjudicated as THE blocker of
-;; the load-carrier class (lane IE useq probe; the identical
-;; load-terminated rows fire in a record-free function at pin 38, so
+;; the load-carrier class (probed: the identical
+;; load-terminated rows fire in a record-free function, so
 ;; no admission gap exists in the row machinery itself).  The knob
 ;; makes the count exact in occupies_replay_slot_p and every walk
 ;; built on it (shadow folding, consume prefixes, iteration cover,
@@ -2749,7 +2739,7 @@
 ;; become rewritable payload members, gap-legal items, or
 ;; configuration-window-legal items, so every ownership wall stands.
 ;;
-;; REPLAY-SOUNDNESS MODEL for carried walks (the lane IF adjudication,
+;; REPLAY-SOUNDNESS MODEL for carried walks (adjudicated,
 ;; ISA-doc-derived; the walk-must-restart question answered):
 ;;
 ;;   [ISA] REPLAY (WormholeB0 REPLAY.md): a launch re-emits the STORED
@@ -2776,13 +2766,13 @@
 ;;   [HAND] the production sdpa_reduce_row kernel records an SFPLOAD
 ;;   with a live Dst increment on its ADDR_MOD as the last recorded
 ;;   word and launches the window repeatedly per tile -- the
-;;   silicon-proven precedent that a carried access inside a replayed
+;;   hardware-proven precedent that a carried access inside a replayed
 ;;   payload walks exactly once per execution.
 ;; ---------------------------------------------------------------------
 
 ;; ---------------------------------------------------------------------
-;; POST-AUTOINCR WINDOW RE-FORMATION (lane IH,
-;; -mtt-tensix-optimize-post-autoincr-window).  Additive section; no new
+;; POST-AUTOINCR WINDOW RE-FORMATION
+;; (-mtt-tensix-optimize-post-autoincr-window).  Additive section; no new
 ;; pricing constant -- one ordering fact, one soundness theorem, and the
 ;; carried-payload launch-arithmetic discipline.
 ;;
@@ -2792,16 +2782,16 @@
 ;; (xtt_replay barrier), so a carried row body is word-uniform -- and
 ;; therefore capturable -- only AFTER the fold, at a program point the
 ;; formation never sees.  Capturing the increments instead is the
-;; silicon-refuted direction (lane IE uniform-block twins: every
+;; hardware-refuted direction (uniform-block twin measurements: every
 ;; captured pre-fold form measured +17-39 cy/tile WORSE than the
 ;; straight-push lift -- raw sync words excluded from windows, boundary
-;; and epilogue cost; the FI envelope law).  The knob DEFERS the
+;; and epilogue cost; the envelope law above).  The knob DEFERS the
 ;; formation wholesale: pass_rvtt_replay gates itself off and the same
 ;; transform runs once, between pass_rvtt_dst_autoincr and
 ;; pass_rvtt_mop_form (which by its own contract must see the final
 ;; launch stream).  Deferral rather than a second run: a pre-fold run
 ;; consumes replay-buffer slots on the small pre-fold-visible windows
-;; and starves the fold's larger windows (measured on the lane IE useq
+;; and starves the fold's larger windows (measured on a useq
 ;; vehicle: tail-shuffle windows worth <= 11 delivered words claimed
 ;; slots [0,14) and left 2 free slots against a 45-word carried-body
 ;; candidate); the single post-fold allocation prices every candidate
@@ -2823,7 +2813,7 @@
 ;;   pinned-sim replay_expander, same tensix_push_inst_fifo);
 ;;
 ;;   hoisted: the no-exec record's preheader payload is INGESTED, never
-;;   executed (Load=1/Exec=0 swallowed words, the lane FR delivery
+;;   executed (Load=1/Exec=0 swallowed words, the audited delivery
 ;;   model), and every clone becomes one launch in place;
 ;;
 ;; so the delivered word sequence equals the folded sequence with words
@@ -2832,7 +2822,7 @@
 ;;   - carried walk arithmetic (per-execution-cumulative RWC/ADDR_MOD,
 ;;     the LOAD-CARRIER model above) is preserved verbatim: each carried
 ;;     access executes exactly once per replaced site, in stream order;
-;;   - every positionally discharged delay-shadow contract (lane HM) is
+;;   - every positionally discharged delay-shadow contract is
 ;;     preserved: word gaps only GROW under insertion.  The one
 ;;     word-MUTATING phase (counted-row canonicalization) runs exactly
 ;;     once, in the deferred invocation, with all its own audits
@@ -2887,7 +2877,7 @@
 ;; first run's own terms over the folded stream.
 ;; ---------------------------------------------------------------------
 ;; ---------------------------------------------------------------------
-;; PRESSURE-PARK PRE-PEEL PLACEMENT (lane IN, 2026-08-28; refinement of
+;; PRESSURE-PARK PRE-PEEL PLACEMENT (refinement of
 ;; the park LREG tier under -mtt-tensix-optimize-park-ordering; no new
 ;; flag, no new constants).  The park-ordering deferral hands a
 ;; CC-restore loop's in-region constants to the const-residency walk;
@@ -2896,9 +2886,9 @@
 ;; duplicated the in-body load -- the parked constant was materialized
 ;; TWICE per loop entry (peel inline copy + park hoist), a per-entry
 ;; word tax the early invariant hoist never paid (it materialized
-;; BEFORE the peel copied the body).  Witness: softplus PRODUCTION body
-;; at ON-36, hand cell 138163 -> 139060 (+0.65% KERNEL, 8 duplicated
-;; words per face-loop entry; lane HN's named hand-arm residual).
+;; BEFORE the peel copied the body).  Witness: the softplus PRODUCTION
+;; body, hand cell 138163 -> 139060 (+0.65% KERNEL, 8 duplicated
+;; words per face-loop entry; a named hand-arm residual).
 ;;
 ;; The refinement places the park-tier materialization at the HEAD of
 ;; the peel block and erases the peel's duplicate (uses redirected to
@@ -2924,8 +2914,8 @@
 ;; duplicate only removes issue words from the loop-entry path.
 ;; ---------------------------------------------------------------------
 ;; ---------------------------------------------------------------------
-;; ENTRY-AMBIENT ENABLE DERIVATION + IMMEDIATE-DELTA ROWS (lane IS,
-;; 2026-08-29; the owner-ratified F1 honest fix: the semantic sources'
+;; ENTRY-AMBIENT ENABLE DERIVATION + IMMEDIATE-DELTA ROWS
+;; (the owner-ratified honest fix: the semantic sources'
 ;; empty sfppushc(0)/sfppopc(0) marker pairs are DELETED tree-wide and
 ;; the compiler derives what the marker used to signal).
 ;;
@@ -2940,7 +2930,7 @@
 ;;
 ;; (a) ENTRY-AMBIENT DERIVATION (rtl-rvtt-macro-planner.cc
 ;; entry_ambient_all_lanes_p): when a needs-all-lanes region has no
-;; typed enable, no proven trailing enable, and no WP10 in-row restore,
+;; typed enable, no proven trailing enable, and no in-row restore,
 ;; a kill-aware backwards CFG walk from the configuration placement
 ;; point proves the fn-entry ambient all-lanes state (the established
 ;; structured-CC lowering contract; kills = the word-exact all-lanes
@@ -2956,7 +2946,7 @@
 ;; Refusal: all-lanes-proof-missing (ambient-entry-unproven).  The
 ;; crosscall init hoist v1 admits the ambient-synthesized enable (it is
 ;; the same canonical word the hoist's caller side already synthesizes);
-;; the WP10 in-row materialization stays refused cross-call.
+;; the in-row materialization stays refused cross-call.
 ;;
 ;; (b) IMMEDIATE-DELTA ROWS (rvtt-macro-region.cc / rvtt-macro-sched.cc
 ;; / formation): fusion-shaped rows equal to rows[0] up to ONE common
@@ -2978,7 +2968,7 @@
 ;; ---------------------------------------------------------------------
 ;; ---------------------------------------------------------------------
 ;; INIT-HOIST-AWARE RUN PRICING -- CALLER-LOOP PREFIX AMORTIZATION
-;; (lane IU, 2026-08-29; the laneIS-named successor for the minmax
+;; (the named successor of the honest fix above, for the minmax
 ;; class).
 ;;
 ;; THE GAP.  The macro planner's straight-line run gate froze the
@@ -2987,18 +2977,18 @@
 ;; charging the FULL configuration prefix (all-lanes enable + owned
 ;; SETC16 program + descriptor-word materializations, in issue words)
 ;; to EVERY run -- priced BEFORE the crosscall init hoist was known,
-;; although the hoist (lane CA, D2) is decided in the same formation
+;; although the hoist is decided in the same formation
 ;; and, at stage 2, removes the prefix from the callee ENTIRELY: the
 ;; init contract words execute once per proven caller-loop entry.  The
-;; post-F1 minmax shape (rows=32 runs=4, fused imm-stride rows,
+;; post-marker-deletion minmax shape (rows=32 runs=4, fused imm-stride rows,
 ;; explicit row = 4 words after the deleted marker's padding) refused
 ;; `unprofitable' at that arithmetic while the formed+hoisted form
 ;; measures 17451 cy vs the refusal's replay-delivered 25000 cy on
-;; silicon (laneIS RESULTS.md) -- a pure pricing artifact.
+;; hardware -- a pure pricing artifact.
 ;;
 ;; THE DERIVATION.  Let E = caller-loop entry executions and B = in-loop
 ;; call executions (the caller's profile counts, B >= E > 0, the SAME
-;; unreduced-fraction discipline as loop_trip_weight/WP8 one call level
+;; unreduced-fraction discipline as loop_trip_weight one call level
 ;; up).  Under the proven stage-2 contract the formed shape's issue
 ;; words per caller-loop entry are config_prefix once plus B *
 ;; (rows*ii + drain) per call; the explicit alternative pays B * rows *
@@ -3020,13 +3010,13 @@
 ;; call could ever diverge -- it cannot on the refusal-free path, the
 ;; proof chain is deterministic over an unchanged function.
 ;;
-;; The WP13/IMS arbitration composes identically: under the proven
+;; The placement-arbiter/IMS arbitration composes identically: under the proven
 ;; stage-2 contract the formed side's prefix push words
 ;; (XTT_REPLAY_COST_RISC_PUSH_X100 centislots each) weigh by E while
 ;; both sides' per-call words weigh by B; the replay alternative
-;; carries no prefix, so its lower-bound bias is preserved.  The lane
-;; IA per-execution config pricing is untouched: it prices the
+;; carries no prefix, so its lower-bound bias is preserved.  The
+;; per-execution config pricing is untouched: it prices the
 ;; dst-autoincr SETC16 slot programs a NON-hoisted callee re-emits per
-;; call, and its own crosscall relief is the lane IK ADDR_MOD service
+;; call, and its own crosscall relief is the crosscall ADDR_MOD service
 ;; -- the two contracts price disjoint words.
 ;; ---------------------------------------------------------------------

@@ -1,5 +1,5 @@
-// The WP12 derived-intmul row (macro-planner-derived-intmul-row-bh.C),
-// shared by the WP13 arbitration delivery-arm twins.
+// The derived-intmul row (macro-planner-derived-intmul-row-bh.C),
+// shared by the IMS arbitration delivery-arm twins.
 #define ROW()                                                                 \
   do                                                                          \
     {                                                                          \

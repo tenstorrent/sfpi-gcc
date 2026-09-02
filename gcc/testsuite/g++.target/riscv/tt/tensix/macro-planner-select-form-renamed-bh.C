@@ -1,7 +1,7 @@
 // Genericity: renamed-equivalent twin of macro-planner-select-form-bh.C
 // -- different function and value names, identical structure -- must
-// refuse IDENTICALLY (name independence): since the 2026-08-17 Where
-// silicon adjudication was root-caused (craq-sim 9f324140, live store
+// refuse IDENTICALLY (name independence): since the Where
+// hardware adjudication was root-caused (the reference simulator, live store
 // lane mask) the established 4-slot select calendar refuses
 // cc-restore-store-race, keyed on the derived slots and proven delays
 // alone (restore exec == store exec == 3) -- no name, misc word, or

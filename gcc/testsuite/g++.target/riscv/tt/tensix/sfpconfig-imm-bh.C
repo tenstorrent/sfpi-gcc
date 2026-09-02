@@ -1,4 +1,4 @@
-// Immediate-form SFPCONFIG builtin: encode forms (lane FA, 2026-08-21).
+// Immediate-form SFPCONFIG builtin: encode forms.
 // The builtin takes (imm16, dest, mod1) and must assemble to the gas
 // spelling "SFPCONFIG <dest>, <imm16>, <mod1>" with NO LReg staging --
 // that register-free property is the builtin's contract (the value form

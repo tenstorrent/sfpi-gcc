@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -fdump-rtl-rvtt_replay" }
-// Boundary twin of the no-exec re-record sweep (lane FJ): the SAME
+// Boundary twin of the no-exec re-record sweep: the SAME
 // in-loop hoisted-record placement with a STORELESS payload is the
-// celu/eqz-class wrapper-record shape, silicon-good across many pins --
+// celu/eqz-class wrapper-record shape, hardware-good across many pins --
 // the sweep leaves it untouched and the record plus launches survive.
 // Delivery flipped against replay-noexec-rerecord-dststore-unhoist-bh.C:
 // only the payload's Dst store separates keep from un-hoist.

@@ -1,8 +1,7 @@
-// WP9 CC-template extension, REFUSING by the ARCHITECTURAL name since
-// the 2026-08-17 Where silicon adjudication (tt-quietbox-0, BH p150;
-// evidence root ~/sfpi-uplift/where-adjudication-20260817,
-// verdicts/VERDICT.md) was root-caused by the corrected CRAQ delivery
-// model (craq-sim 9f324140: the store's lane predicate is LIVE at
+// The CC-template extension, REFUSING by the ARCHITECTURAL name since
+// the Where hardware adjudication (Blackhole device,
+// verdicts/VERDICT.md) was root-caused by the corrected reference-simulator delivery
+// model (the reference simulator: the store's lane predicate is LIVE at
 // execution, never launch-latched): the predicated-select (TTNN Where
 // class) at MIXED modes (condition mode 2, payload/store mode 6).  The
 // compact 3-slot candidate is tried first and its descriptor refuses
@@ -14,7 +13,7 @@
 // so the store executes under the SFPSETCC complement mask) and
 // refuses cc-restore-store-race.  Every candidate refuses, so the
 // region refuses byte-identically: the semantic (planner-OFF) lowering
-// below is the silicon-green form.
+// below is the hardware-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }

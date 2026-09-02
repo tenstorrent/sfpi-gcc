@@ -1,4 +1,4 @@
-// George precolored-pair fire twin (FABLE_GOES_BURR.md item #6): the
+// George precolored-pair fire twin (the Briggs/George coalescing work): the
 // fold-minted copy's dest is precolored (writelreg consumer), so the
 // merge runs George's test -- every significant neighbor of the
 // UNCOLORED half already interferes with the precolored half (the six

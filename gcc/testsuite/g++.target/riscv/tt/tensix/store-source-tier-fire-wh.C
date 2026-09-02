@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER fire, Wormhole arm (lane HO): the encoding
+// STORE-SOURCE TIER fire, Wormhole arm: the encoding
 // ceiling is architecture-independent (SFPSTORE sources L0-L11 on both
 // generations -- the store-fold pass's SFPSTORE_MAX_SRC_LREG capability
 // fact), so the tier routes the store-consumed loop constant to a

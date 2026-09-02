@@ -2,7 +2,7 @@
 // Class-boundary twin: the plain replay-hoist's calibrated re-record
 // model refuses this shape (delivery-bound, run 1: benefit
 // 4*(861-670) - 1161 = -397); only the record-hoist measurement flag
-// admits it.  Keeps the Log-class silicon-anchored default intact.
+// admits it.  Keeps the Log-class hardware-anchored default intact.
 // { dg-final { scan-rtl-dump "Not hoisting: modeled benefit -397 < 60" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "record-hoist:" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump-not "record-hoist refused" "rvtt_replay" } }

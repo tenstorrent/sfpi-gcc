@@ -1,9 +1,9 @@
 // REAL ICE VICTIM: xielu with alpha_p/alpha_n held as LOOP-INVARIANT
-// vFloats (lanes BS/S5; body verbatim from laneBS-evidence-20260818/
-// xielu-loopheld-standalone.C, itself the BR fresh body with per-use
-// host-float materialization replaced by the loop-held vFloat form).
+// vFloats (body verbatim from the recorded loop-held reconstruction,
+// itself the fresh body with per-use host-float materialization
+// replaced by the loop-held vFloat form).
 // The shipped fresh body materializes the alphas per use purely because
-// this form refuses at the OFF leg (laneS5 GATES.md:21-26).
+// this form refuses at the OFF leg.
 // TODAY: refuses lreg-pressure-exceeded under default flags (it
 // COMPILES with -mtt-tensix-optimize-const-remat -- the twin
 // sfpi-victim-xielu-remat-bh.C pins that contrast).

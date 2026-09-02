@@ -1,10 +1,10 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 //
-// lane FS (FP-3, the BH REPLAY doc gap): the no-exec-record composition
+// The replay-expander persistence model (a BH REPLAY doc gap): the no-exec-record composition
 // guard's reachability relation (block_reachable_p) is intra-function, but
 // the per-thread Replay Expander buffer PERSISTS across function and
-// kernel-invocation boundaries (laneFS-evidence-20260822 silicon model:
+// kernel-invocation boundaries (hardware-established model:
 // EXP-1 delivers a prior kernel's recorded store across a TRISC soft-reset +
 // ELF reload; EXP-2 delivers across a sibling function boundary in one
 // launch).  A replay-DELIVERED group in one arm of a diamond and a no-exec
@@ -12,7 +12,7 @@
 // forward walk, so the pre-FS guard ADMITTED (FP delta-audit probe pfj1) --
 // yet a caller tile loop that alternates the arms arms the sibling record on
 // one invocation and runs the group's mod-write on the next, reassembling the
-// exact silicon-refuted trio (ES 2x2 / FE-F1 / FJ HANG-3).  For a replay-
+// exact hardware-refuted trio (ES 2x2 / FE-F1 / FJ HANG-3).  For a replay-
 // delivered group the guard now refuses ANY same-function no-exec capture,
 // not only a forward-reachable one.
 //

@@ -1,5 +1,5 @@
-// Shared-reload dedupe fire (lane II): the distilled tanh 2-datum body
-// (lane IC's composed shape) carries FOUR duplicated in-loop coefficient
+// Shared-reload dedupe fire: the distilled tanh 2-datum body
+// (the composed shape) carries FOUR duplicated in-loop coefficient
 // loadi words per pair -- both halves materialize C3 and C1 through the
 // same reload register in identical two-word definition groups.  Under
 // -mtt-tensix-optimize-crossrow-shared-reload the copy half's groups

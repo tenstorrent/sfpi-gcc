@@ -5,7 +5,7 @@
 // TODAY: refuses lreg-pressure-exceeded.
 // FUTURE-VERDICT (LREG allocator): either NAMED REFUSAL
 // lreg-spill-no-free-dst, or compile with a spill slot PROVABLY outside
-// rows 0..63 -- in which case the CRAQ golden checks all 64 rows
+// rows 0..63 -- in which case the simulator golden checks all 64 rows
 // bit-exactly and any clobber fails the gate (see ARSENAL.md).
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops" }

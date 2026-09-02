@@ -1,5 +1,5 @@
 // Varied-constant twin of the cc-restore-store-race refusal
-// (2026-08-17 Where silicon adjudication root-caused by craq-sim
+// (Where hardware adjudication root-caused by the reference simulator
 // 9f324140): different Dst addresses, the OPPOSITE mixed-mode pairing
 // (condition mode 6, payload/store mode 2 -- the reverse of
 // macro-planner-select-form-bh.C), and the EQ0 predicate sense.  The

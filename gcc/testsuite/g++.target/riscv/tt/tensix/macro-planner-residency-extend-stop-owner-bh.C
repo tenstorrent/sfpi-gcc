@@ -1,10 +1,10 @@
-// WP13 residency outward extension, near miss: a foreign pure-CC write
+// Residency outward extension, near miss: a foreign pure-CC write
 // (lanes-off SFPENCC -- no owned-destination effect, so the
 // function-wide owned-state invariance walk admits it) at BLOCK level,
-// inside the block loop but outside the tile loop.  WP11's tile-loop
+// inside the block loop but outside the tile loop.  Prefix elision's tile-loop
 // proof stays clean and fires; the extension's block-loop walk keeps
-// WP11's full conservative discipline (foreign CC dataflow refuses)
-// and STOPS at WP11's placement byte-identically: no residency fire,
+// prefix elision's full conservative discipline (foreign CC dataflow refuses)
+// and STOPS at the prefix-elision placement byte-identically: no residency fire,
 // same word counts.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-planner-residency -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner prefix-epoch: cross-tile config invariance proven" "rvtt_macro_planner" } }

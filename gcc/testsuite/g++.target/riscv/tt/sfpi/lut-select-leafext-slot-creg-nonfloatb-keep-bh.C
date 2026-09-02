@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -Wno-deprecated-declarations -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHT near-miss twin: a slot operand read from a constant register
+// Near-miss twin: a slot operand read from a constant register
 // whose architectural value is NOT on the audited record (LReg[8],
 // 0.8373 -- and not FLOATB-exact either) must REFUSE the conversion
 // by name and keep the historical operand byte shape: the affine

@@ -1,4 +1,4 @@
-// LOOP-RECLAIM (lane ID, -mtt-tensix-optimize-loop-prgm-reclaim): the
+// LOOP-RECLAIM (-mtt-tensix-optimize-loop-prgm-reclaim): the
 // DEAD-claim reclaim tier offered to the const-residency walk's own
 // IN-LOOP candidate classes.  An init claims all three PRGM slots; no
 // statement in the TU ever reads any of them (the creg_read no-reader

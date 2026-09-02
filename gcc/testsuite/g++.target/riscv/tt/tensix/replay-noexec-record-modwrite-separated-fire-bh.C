@@ -1,4 +1,4 @@
-// Lane FL (FH-1, fire direction): the SAME counted-loop hoist shape
+// No-exec-record placement rule, fire direction: the SAME counted-loop hoist shape
 // with the user mod-write separated from the record placement by seven
 // audited issue-time words (>= W_drain=7 on every path) is the PROVEN
 // class -- the sweep leaves the hoist untouched and the no-exec

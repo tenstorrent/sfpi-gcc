@@ -1,17 +1,17 @@
 // The real TTNN Where shape -- the eight-row MIXED-mode select body
 // inside a counted loop with no typed ambient enable anywhere --
-// REFUSING by the architectural name since the 2026-08-17 Where
-// silicon adjudication: this is exactly the shape whose formed
+// REFUSING by the architectural name since the Where
+// hardware adjudication: this is exactly the shape whose formed
 // separator-kept 4-slot calendar (misc 0x706 class, the fp16b/Float32
-// TTNN Where rows) mis-selected on BH silicon across two resets while
-// passing CRAQ on identical bytes -- root-caused by craq-sim 9f324140
+// TTNN Where rows) mis-selected on BH hardware across two resets while
+// passing the reference simulator on identical bytes -- root-caused by the reference simulator
 // to the live store lane mask: that calendar retires its all-lanes
 // restore in the Delay-2 store's own cycle.  The compact candidate
 // refuses by name (mixed modes cannot ride the launch-sourced store
 // mod0), the established calendar's descriptor refuses
 // cc-restore-store-race on the derived slots, and the loop body stays
 // byte-identically on the semantic (planner-OFF) lowering -- the
-// silicon-green form.
+// hardware-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner region: rows=8 row-len=7 runs=1 stride=2 loop=yes" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }

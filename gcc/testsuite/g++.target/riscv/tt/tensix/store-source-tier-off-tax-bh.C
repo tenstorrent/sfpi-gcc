@@ -1,5 +1,5 @@
 // STORE-SOURCE TIER knob-off control -- the HL-F1 copy tax made
-// visible (lane HO): the exact store-source-tier-fire-bh.C first body
+// visible: the exact store-source-tier-fire-bh.C first body
 // WITHOUT -mtt-tensix-optimize-store-source-tier.  The established
 // residency placement parks the store-consumed constant in a PRGM
 // register (L12-L14); SFPSTORE sources L0-L11 only, so the register

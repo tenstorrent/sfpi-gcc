@@ -1,4 +1,4 @@
-// WP10 compact CC calendar: a UNIFORM-mode predicated select (the
+// Compact CC calendar: a UNIFORM-mode predicated select (the
 // condition's data mode equals the payload/store mode, here 6) forms
 // the production handwritten Where protocol's own 3-slot row: the
 // definition carrier hosts the SETCC template and the delayed store

@@ -1,8 +1,8 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Named refusal (lane FW, doomed-hoist mirror): a Dst-store payload
+// Named refusal (doomed-hoist mirror): a Dst-store payload
 // whose no-exec record would land in a preheader INSIDE an outer loop
 // is exactly the shape the fail-closed re-record sweep un-hoists
-// (lane FJ) -- and the un-hoist inlines every launch, a strict delivery
+// -- and the un-hoist inlines every launch, a strict delivery
 // pessimization.  The admission refuses by the sweep's own name and the
 // in-body exec-record formation is kept byte-identically.
 // { dg-final { scan-rtl-dump "record-hoist refused: noexec-rerecord-dststore-composition-unaudited" "rvtt_replay" } }

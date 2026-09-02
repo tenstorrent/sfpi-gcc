@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-counted-capture-peel -fdump-rtl-rvtt_replay-details" }
-// Counted-capture exec-while-record peel fire (lane IO, rvtt-cost.md
+// Counted-capture exec-while-record peel fire (rvtt-cost.md
 // "COUNTED-CAPTURE PEEL"): a counted single-block SFPU row loop whose
 // plain counted hoist refuses on modeled benefit (8 delivery-bound
 // words x 8 trips, the WH shadow word included) admits as the peeled

@@ -1,4 +1,4 @@
-// TU value-identical PRGM reuse (lane CF): the TU's own init function
+// TU value-identical PRGM reuse: the TU's own init function
 // claims L12..L14, but every write to L12 stores the SAME 32-bit value
 // the loop candidate materializes, so the candidate reuses the claimed
 // register.  Soundness is value idempotence, not ordering: every write

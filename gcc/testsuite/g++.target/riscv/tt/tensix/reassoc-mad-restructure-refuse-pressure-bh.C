@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc-mad-restructure -fdump-tree-rvtt_combine" }
-// Pressure near-miss (the item-#10 engine budget, windowed form):
+// Pressure near-miss (the pressure-engine budget, windowed form):
 // seven extra vector values live ACROSS the pair take the
 // pair-window peak to exactly the 8-LREG file (the kernel itself
 // still allocates at eight), so keeping the loadi live to the mad has

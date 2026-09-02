@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -mtt-tensix-optimize-interlock-schedule -fdump-rtl-rvtt_lreg_rename_chains-details -fdump-rtl-rvtt_schedule-details" }
-// The retired single-shape pass's fire twin, retargeted at W4-C: the
+// The retired single-shape pass's fire twin, retargeted at the retirement: the
 // -mtt-tensix-optimize-lreg-rename flag is frozen API and now requests
 // the GENERAL du-chain engine (the single-shape v1 pass was retired as
 // wrong-code-bearing; see rtl-rvtt-lreg-rename.cc).  On v1's own fire

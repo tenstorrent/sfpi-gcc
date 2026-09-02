@@ -1,4 +1,4 @@
-// Wormhole twin of synth-renumber-constfold-bh.C (lane DS ICE finding):
+// Wormhole twin of synth-renumber-constfold-bh.C (ICE reproducer):
 // top-level constant adds on a synth_opcode value after complete
 // peeling + constant propagation must renumber, not assert.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops" }

@@ -1,4 +1,4 @@
-// Trip-weight profitability (WP8): a proven three-trip loop cannot
+// Trip-weight profitability: a proven three-trip loop cannot
 // amortize the configuration prefix, so the loop-body region refuses
 // unprofitable under the exact trip weight (the profile ratio is
 // exactly 3).  Bytes stay explicit.  (Complete unrolling is disabled so

@@ -1,4 +1,4 @@
-// CROSSLOOP-CC-PEEL near miss, unrelated shape 1 (lane HR): a REPLAY
+// CROSSLOOP-CC-PEEL near miss, unrelated shape 1: a REPLAY
 // word in the tile loop.  The cc-immaterial discipline relaxes ONLY
 // the typed structured-CC-atom refusal -- recorded replay content is
 // still not derivable, the walk stops by the established name, and the

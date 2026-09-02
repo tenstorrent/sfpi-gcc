@@ -1,4 +1,4 @@
-/* Cross-tile configuration-epoch proof for the macro planner (WP11).
+/* Cross-tile configuration-epoch proof for the macro planner.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -665,7 +665,7 @@ outer_structural_entry (function *fn, basic_block header, bitmap body,
     *entry = incoming;
 }
 
-/* Residency-mode classification (WP13, consumed by rvtt-macro-desc.cc's
+/* Residency-mode classification (consumed by rvtt-macro-desc.cc's
    descriptor-residency solver).  Deliberately WEAKER than
    epoch_insn_check, with a documented rationale: the residency
    transforms only (a) move an owned-dest programming block to a point
@@ -677,7 +677,7 @@ outer_structural_entry (function *fn, basic_block header, bitmap body,
    survive differently), unresolvable pushed words, opaque Tensix
    issues, and calls.  Foreign LREG/CC dataflow and foreign reads of the
    owned destinations cannot distinguish the two placements and are
-   admitted here (they stay refused in the WP11 per-loop walk, which
+   admitted here (they stay refused in the per-loop epoch walk, which
    guards the enable-materialization license).  */
 
 static const char *
@@ -721,7 +721,7 @@ resid_insn_check (epoch_resolver *ctx, rtx_insn *insn,
 }
 
 /* ------------------------------------------------------------------ */
-/* Replay-state preservation walk (lane FW, record-hoist admission).  */
+/* Replay-state preservation walk (record-hoist admission).  */
 /*								      */
 /* The owner vocabulary here is the per-thread Replay Expander	      */
 /* buffer, not the configuration state the walks above guard: an      */

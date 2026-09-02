@@ -1,4 +1,4 @@
-// Near misses for the fused-MAD admission (laneDM widening), in a TU
+// Near misses for the fused-MAD admission (widened form), in a TU
 // whose freedom proof passes:
 // 1. a non-plain mod refuses by name -- SFPMAD mods select implicit
 //    operand indirection, so the value-only replacement proof does not

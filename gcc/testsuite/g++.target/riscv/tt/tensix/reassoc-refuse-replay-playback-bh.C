@@ -1,4 +1,4 @@
-// Lane FL (FH-3): a TTREPLAY playback point inside the chain window is
+// A TTREPLAY playback point inside the chain window is
 // a delivery BOUNDARY, not a transparent statement -- its recorded
 // slots can contain CC or configuration writers (crosscall refuses the
 // same class by name), so value-order across it is unproven and the

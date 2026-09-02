@@ -1,4 +1,4 @@
-// The trusted effects-declaration channel is RETIRED (2026-08-18
+// The trusted effects-declaration channel is RETIRED (
 // ruling): __builtin_rvtt_ttregion_begin/end are deprecated no-ops that
 // declare NOTHING in either direction.  The bracketed raw MOP word is
 // admitted by the mop_cfg effects DERIVATION (the TU programs no

@@ -1,4 +1,4 @@
-// Lane DT list-scheduler acceptance arsenal: the d5 dual-Horner P/Q
+// List-scheduler acceptance arsenal: the d5 dual-Horner P/Q
 // pair on Wormhole.  Same kernel and dependence argument as the BH d5
 // twin; the architectural difference is the witness: WH has no
 // scoreboard, so every unhidden mad-family shadow is an EXPLICIT

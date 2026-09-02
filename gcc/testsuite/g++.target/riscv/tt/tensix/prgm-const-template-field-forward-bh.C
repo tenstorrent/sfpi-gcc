@@ -1,4 +1,4 @@
-// MOP template words programmed through a local aggregate (lane CF):
+// MOP template words programmed through a local aggregate:
 // the production ckernel_template discipline builds the template in an
 // automatic struct and a separate (not-early-inlined) program()
 // routine stores the FIELDS into the MOP slot registers.  The TU scan

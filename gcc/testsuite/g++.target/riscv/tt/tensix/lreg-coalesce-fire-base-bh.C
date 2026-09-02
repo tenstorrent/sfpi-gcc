@@ -1,5 +1,5 @@
-// Baseline half of the Briggs-coalescing fire twin (FABLE_GOES_BURR.md
-// item #6).  A dst-ownership identity-reload fold mints the only
+// Baseline half of the Briggs-coalescing fire twin (the Briggs/George coalescing
+// work).  A dst-ownership identity-reload fold mints the only
 // non-interfering plain copy that reaches lp-alloc (out-of-SSA has
 // already coalesced every tree-visible one).  Uncoalesced, the copy
 // web is the cheapest member of the blocked neighborhood and is picked

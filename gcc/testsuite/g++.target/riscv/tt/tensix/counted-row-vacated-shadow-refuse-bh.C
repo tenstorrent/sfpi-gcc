@@ -1,11 +1,11 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-latency-schedule -mtt-tensix-optimize-interlock-schedule -mtt-tensix-optimize-counted-row-formation -mtt-tensix-optimize-replay-loop-unroll -fdump-rtl-rvtt_replay" }
-// Fire witness (lane HM, laneHI-F1): the unrolled tanh-shaped row parks a
+// Fire witness: the unrolled tanh-shaped row parks a
 // shadow-filling SFPLOADI between the SFPMUL and the min/max SFPSWAP -- the
 // nop inserter discharged the mul's DYNAMIC delay against that word.  The
 // counted-row canonicalization wants to move the loadi to the clone head,
 // which would re-open the shadow: SFPSWAP's 1st-cycle reads are invisible
 // to the BH stall logic (SFPMAD.md CAUTION list), so the replayed window
-// would consume the STALE accumulator on silicon (device corr FAIL while
+// would consume the STALE accumulator on hardware (device corr FAIL while
 // the atomic-execution sim passes).  The family refuses BY NAME; the
 // word-exact machinery still folds the unrolled rows -- with the loadi
 // kept inside the recorded body -- so the delivery win survives.

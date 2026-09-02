@@ -1,4 +1,4 @@
-// IMS RENAMED-EQUIVALENT / VARIED-SHAPE generality twin (item #5; the
+// IMS RENAMED-EQUIVALENT / VARIED-SHAPE generality twin (the modulo-scheduling tier; the
 // GY adversary recipe): different function and value names, a
 // different trip count (24), the two regions in REVERSED order (the
 // mul/mad mixed span first, the serial-chain-plus-pair span second),

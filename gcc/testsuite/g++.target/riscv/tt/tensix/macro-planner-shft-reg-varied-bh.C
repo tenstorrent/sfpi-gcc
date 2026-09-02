@@ -1,5 +1,5 @@
 // Derived-template SFPSHFT register-amount admission, varied surface
-// (lane CZ): the BH arithmetic arm (mod 2, sign-propagating right
+//: the BH arithmetic arm (mod 2, sign-propagating right
 // shift for negative amounts -- the audited envelope's other member),
 // different names and immediate.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }

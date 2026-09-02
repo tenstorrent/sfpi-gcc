@@ -1,5 +1,5 @@
-// Derived-template Simple-unary admission, SFPEXEXP (lane CZ):
-// exexp takes NO operand override (craq build_dispatch has no arm for
+// Derived-template Simple-unary admission, SFPEXEXP:
+// exexp takes NO operand override (the reference simulator's build_dispatch has no arm for
 // opcode 0x77), so its source is always NAME-encoded -- here the
 // second carrier's loaded register survives as the template VC and
 // the exponent feeds an in-place hosted iadd-reg accumulate on the

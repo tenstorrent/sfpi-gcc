@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-counted-capture-peel -fdump-rtl-rvtt_replay-details" }
-// Counted-capture peel benefit refusal (lane IO): the fire twin's body
+// Counted-capture peel benefit refusal: the fire twin's body
 // at 3 proven trips cannot amortize even the peel's capture-word +
 // record-overhead cost (2*114 - 423 = -195 < 60): refuse by
 // counted-capture-peel-benefit and keep the plain refusal's bytes (the

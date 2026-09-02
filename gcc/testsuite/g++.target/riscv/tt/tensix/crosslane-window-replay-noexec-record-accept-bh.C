@@ -1,4 +1,4 @@
-// Swallowed-words acceptance twin (lane FR): a no-exec capture's payload
+// Swallowed-words acceptance twin: a no-exec capture's payload
 // words are ingested by the Replay Expander and NEVER issued (REPLAY.md
 // functional model: Load=1/Exec=0 ingests and emits nothing), so a
 // non-exempt LReg5-writing payload recorded INSIDE an open window is

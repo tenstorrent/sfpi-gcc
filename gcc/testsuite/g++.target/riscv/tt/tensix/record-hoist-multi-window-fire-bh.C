@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Multi-record calendar (lane FW; the blaze sdpa_reduce_row shape has
+// Multi-record calendar (the blaze sdpa_reduce_row shape has
 // exactly this structure): TWO distinct invariant windows re-record in
 // the same runtime-trip tile loop.  The first hoist leaves its playback
 // launches in the loop; the second window's replay-preservation audit

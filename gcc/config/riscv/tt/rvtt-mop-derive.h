@@ -67,14 +67,14 @@ struct rvtt_mop_derive_state
    refuse as before.  IN_SLOT selects the template-slot discipline
    (REPLAY and nested MOP/MOP_CFG refuse by name).  This is the PRGM
    face of THE unified audited word-fact table: the body lives in
-   rvtt-raw-boundary.cc over rvtt_word_facts_classify (FABLE item #4
-   Deliverable B); verdicts and refusal names are unchanged.  */
+   rvtt-raw-boundary.cc over rvtt_word_facts_classify; verdicts and
+   refusal names are unchanged.  */
 extern bool rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed,
 				     const char **why,
 				     rvtt_mop_derive_state *st,
 				     bool in_slot = false);
 
-/* ---- Context-bound scanning (lane CF) ----
+/* ---- Context-bound scanning ----
 
    The TU walk scans callee bodies on demand for calls whose callee
    will be inlined later (the eager scan runs before the callers'
@@ -162,8 +162,8 @@ extern bool rvtt_mop_init_array_call_p (gcall *call);
 extern bool rvtt_mop_derive_finish (const rvtt_mop_derive_state *st,
 				    const char **why);
 
-/* ---- Raw REPLAY record regions (lane HS;
-   -mtt-tensix-optimize-opaque-replay-record) ----
+/* ---- Raw REPLAY record regions
+   (-mtt-tensix-optimize-opaque-replay-record) ----
 
    Parse STMT as the canonical raw `.ttinsn' asm with one constant
    input; on success *WORD receives the 32-bit instruction word.  */

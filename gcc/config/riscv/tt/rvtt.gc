@@ -131,7 +131,7 @@ combine () {
 }
 
 // Do these in preference to mul,add->mad, as the register pressure is
-// immediately reduced.  EXCEPTION (licensed, FABLE_GOES_BURR R3): a
+// immediately reduced.  EXCEPTION (licensed): a
 // product dying into an add serializes two MAD-subunit roundings where
 // the contract mad rule below delivers one; under BOTH license keys
 // (-fassociative-math + -mtt-tensix-optimize-reassoc-mad-restructure)
@@ -223,7 +223,7 @@ combine () {
   r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
-// a * b + c, MULTI-USE mul -- THE LICENSED MAD FUSION (lane EJ).
+// a * b + c, MULTI-USE mul -- THE LICENSED MAD FUSION.
 // The default rule above is the sfpi single-use contract: the mul dies
 // into the mad, every consumer sees one rounding.  When the mul has
 // OTHER uses, fusing the add makes the add's consumers see the singly-
@@ -351,7 +351,7 @@ combine () {
 // combiner's same-BB/same-CC-region discipline keeps the lane masks of both
 // instructions identical, which the equivalence requires.
 // Gated: -mtt-tensix-optimize-setexp-fold (compiler-default ON, promoted
-// after silicon validation; -mno-tt-tensix-optimize-setexp-fold disables).
+// after hardware validation; -mno-tt-tensix-optimize-setexp-fold disables).
 combine (SETEXP_FOLD) {
   exp|OU = sfpexexp_lv (exp_lv, z, SFPEXEXP_MOD1_NODEBIAS);
   res = sfpsetexp_v_lv (lv, man, exp, SFPSETEXP_MOD1_LREG);

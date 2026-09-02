@@ -1,4 +1,4 @@
-/* Config-prefix pair test shape (lane HC): the crosscall-hoist-body.h
+/* Config-prefix pair test shape: the crosscall-hoist-body.h
    callee additionally programs a programmable-constant register from an
    all-constant immediate (the sfpi vConstFloatPrgm idiom the licensed
    fp16-LUT bodies emit) and reads it back inside the row loop.  With

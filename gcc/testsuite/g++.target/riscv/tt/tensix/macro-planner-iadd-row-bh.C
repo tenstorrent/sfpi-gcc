@@ -2,7 +2,7 @@
 // The fresh add/sub-int row shape (load, cast3, load, cast3, iadd
 // CC_NONE, cast3, store).  With SFPIADD and the BH mod-3 SFPCAST
 // carrying audited effects the rows are discovered as a closed region;
-// formation now derives a full calendar for this shape (WP12 generic
+// formation now derives a full calendar for this shape (generic
 // template classes: shared in-place cast template, launch-VD-pinned
 // carriers, LReg16 store source) and refuses ONLY on the honest
 // per-run economics: a four-row straight-line region cannot amortize

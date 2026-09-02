@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-loop-prgm-reclaim -fdump-tree-rvtt_prgm_const-details" }
 // LOOP-RECLAIM RENAMED-EQUIVALENT / VARIED-CONSTANTS adversary twin
-// (lane IP audit, GY recipe): the const-residency-loop-reclaim-fire
+// (renamed-twin recipe): the const-residency-loop-reclaim-fire
 // structure with every identifier renamed, a different trip count
 // (21), and every constant replaced by arbitrary non-production
 // values (no ln2/pi/half anywhere).  The reclaim tier must key on the

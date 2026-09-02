@@ -290,8 +290,8 @@ extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_P
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
 
 /* Generated-vocabulary query (gimple-rvtt-combine.cc, answered from
-   the rvtt-combine.inc tables genrvtt-combine emits from rvtt.gc;
-   FABLE_GOES_BURR item #3): true when DEF matches the FEED_ID interior
+   the rvtt-combine.inc tables genrvtt-combine emits from rvtt.gc):
+   true when DEF matches the FEED_ID interior
    pattern shape (insn identity, the _lv pattern covering the non-lv
    spelling, plus every constant pattern operand) of some combine rule
    whose final consumed pattern is CONSUMER_ID -- i.e. the downstream

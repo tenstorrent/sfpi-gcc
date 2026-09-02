@@ -1,5 +1,5 @@
-// Wormhole twin of the replay-delivery violation (lane FR): the
-// TEN-2932 window model and the replay-delivery expansion are
+// Wormhole twin of the replay-delivery violation: the
+// the ENABLE_DEST_INDEX write-restriction erratum window model and the replay-delivery expansion are
 // arch-shared (the erratum is WH/BH); the delivered non-exempt LReg5
 // write errors on WH exactly as on BH.
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane" }

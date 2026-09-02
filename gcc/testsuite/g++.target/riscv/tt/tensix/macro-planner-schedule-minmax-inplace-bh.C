@@ -1,7 +1,7 @@
 // In-place store (store Dst address == first load's): maximal carrier
 // sharing (candidate 0) merges the store into the load's launch carrier,
 // which violates the latency model, so the candidate is refused at
-// schedule time (and, since WP10, never reaches descriptor
+// schedule time (and never reaches descriptor
 // synthesis).  The deterministic fallback (candidate 1, stores-demoted)
 // then re-derives the three-slot alternating-VD calendar -- launch 0
 // carries the first load and hosts the launched simple event, the second
@@ -13,7 +13,7 @@
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule: ii=2 issues=2 launches=1 explicit=1 launched-events=2 vd=alternating drain=1" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner issue 0: launch macro=0 carries=load\\+store hosted=2 absorbs-stride=2" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule-refusal: latency-violation" 1 "rvtt_macro_planner" } }
-// (Since WP10 a schedule that names its own blocker never reaches
+// (A schedule that names its own blocker never reaches
 // descriptor synthesis -- except the documented event-delay-unproven
 // carve-out below -- so the latency-refused candidate produces no
 // descriptor-refusal line.)

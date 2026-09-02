@@ -1,4 +1,4 @@
-// cc-region granularity for the M3 fusion class (laneDM widening): a
+// cc-region granularity for the template-programming fusion class: a
 // post-loop CC block cannot reach the entry-edge programming point, so
 // it no longer defeats the all-lanes proof; the fusion-enabling SFPADDI
 // still allocates and the re-offered pair fuses to SFPMAD.  The second

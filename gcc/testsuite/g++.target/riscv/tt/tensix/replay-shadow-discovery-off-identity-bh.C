@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -fdump-rtl-rvtt_replay-details" }
-// FABLE_GOES_BURR.md item #9 STAGE A, OFF IDENTITY.  The same row as
+// Suffix-automaton discovery, STAGE A, OFF IDENTITY.  The same row as
 // replay-shadow-discovery-barrier-bh.C with the measurement knob absent:
 // the shadow prints nothing at all, so the pass's dump stream (which the
 // twin suite and the board's dump mining key on) is byte-identical to

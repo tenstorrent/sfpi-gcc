@@ -1,4 +1,4 @@
-// Audited-TU walk transparency, TU-lean POISON near-miss (lane IV):
+// Audited-TU walk transparency, TU-lean POISON near-miss:
 // the lean is a TU-level fact -- ONE unauditable statement anywhere in
 // the translation unit (here an unrecognized asm template in a
 // function the fire never calls) dirties the CC/lane-enable audit, and

@@ -1,4 +1,4 @@
-// The direct unsound-shape near-miss (lane IC's adjudication): the two
+// The direct unsound-shape near-miss: the two
 // halves interact through registers BEYOND the shared reload one -- a
 // loop-carried accumulator is live into the row (the renamer refuses
 // round-interleave-rename-live-in), and the row's pressure (four

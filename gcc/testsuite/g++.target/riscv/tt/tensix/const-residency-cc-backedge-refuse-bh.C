@@ -1,4 +1,4 @@
-// cc-region near miss for the reach-scoped proof (laneDM widening): a
+// cc-region near miss for the reach-scoped proof (widened admission): a
 // CC block AFTER the candidate loop but INSIDE an enclosing loop
 // reaches the programming point through the outer backedge -- the
 // second outer iteration enters the inner loop with a lane state the

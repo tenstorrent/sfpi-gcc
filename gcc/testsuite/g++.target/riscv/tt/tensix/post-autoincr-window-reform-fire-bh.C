@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-post-autoincr-window -fdump-rtl-rvtt_dst_autoincr -fdump-rtl-rvtt_replay_reform-details" }
-// Post-autoincr window RE-FORMATION (lane IH): before the fold each row
+// Post-autoincr window RE-FORMATION: before the fold each row
 // ends in an explicit TTINCRWC -- a window-excluded barrier word -- so
 // the FIRST replay formation cannot capture the rows (2-word runs
 // between barriers are under MIN_SEQUENCE).  The Dst auto-increment

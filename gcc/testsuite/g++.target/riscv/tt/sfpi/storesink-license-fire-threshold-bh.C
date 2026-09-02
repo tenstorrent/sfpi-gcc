@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-store-fold -mtt-tensix-optimize-store-sink -fdump-tree-rvtt_store_fold" }
-// The LICENSED S2 sink (owner ratification 2026-08-26) on the
+// The LICENSED S2 sink (owner-ratified) on the
 // threshold-class float shape: with BOTH -mtt-tensix-optimize-store-fold
 // and the -mtt-tensix-optimize-store-sink license token, the post-region
 // all-lanes store of the predicated value merge sinks into the region as

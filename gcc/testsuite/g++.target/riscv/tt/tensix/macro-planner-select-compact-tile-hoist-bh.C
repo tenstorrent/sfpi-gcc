@@ -1,4 +1,4 @@
-// WP11 cross-tile prefix elision: the compact select face loop nested
+// Cross-tile prefix elision: the compact select face loop nested
 // in a guarded tile loop full of LLK-shaped boilerplate (raw SETC16 /
 // LaneConfig-reset / sync words plus a dynamic partially-constant MMIO
 // push).  The configuration-epoch proof shows no intervening owner of

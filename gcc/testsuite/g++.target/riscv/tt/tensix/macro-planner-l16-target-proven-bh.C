@@ -1,10 +1,10 @@
-// LReg16-staging opcode guard (lane IS, F1 honest fix, 2026-08-29): an
+// LReg16-staging opcode guard (honest-modeling fix): an
 // event redirected to the LReg16 staging register has no encodable VD
 // and executes through the direct template evaluator, which is proven
 // only for the oracle's opcode set (rvtt-macro-tables.cc
 // opcode_l16_target_proven).  The SFPABS (0x7d) row -- the first shape
 // outside the set to reach formation, via the entry-ambient derivation
-// -- was adjudicated WRONG on BH silicon under LReg16 staging (laneIS
+// -- was adjudicated WRONG on BH hardware under LReg16 staging (a
 // absint32 int-abs witness; the oracle refuses it as
 // UnsupportedFunctionality).  The derivation now realizes it VD-DIRECT:
 // the template targets the launch VD (rewritten-word execution, full

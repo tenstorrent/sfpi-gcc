@@ -1,5 +1,5 @@
 // Derived-template SFPIADD-immediate admission, fail-closed twin
-// (lane CZ): a RUNTIME immediate takes the register-argument
+//: a RUNTIME immediate takes the register-argument
 // alternative of rvtt_sfpiadd_i_lv_int (the runtime-synthesized
 // instruction push), which is outside the pattern's audited effect
 // envelope and outside the admitted class -- the region refuses by

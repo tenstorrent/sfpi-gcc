@@ -2,7 +2,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-crosscall-addrmod -fdump-rtl-rvtt_dst_autoincr-details" }
 // Residency walk FIRE: the call loop sits inside a scalar batch loop
 // whose extra body passes the same epoch scan -- the program lifts to
-// the BATCH loop's entry, the hand init discipline (lane HC's walk on
+// the BATCH loop's entry, the hand init discipline (a survey of
 // the ADDR_MOD face).
 // { dg-final { scan-rtl-dump "addrmod-hoist: placement lifted to enclosing loop" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump "lifted 1 levels" "rvtt_dst_autoincr" } }

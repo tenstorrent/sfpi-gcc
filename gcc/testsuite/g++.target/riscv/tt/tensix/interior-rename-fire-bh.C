@@ -4,7 +4,7 @@
 // -- the allocator packs the serial chain's dying lifetime into the
 // independent pair's register, and the false WAW/WAR serializes the
 // interleave.  The consumer requests the chain rename through the
-// item-#7 service before candidate generation; the composition
+// the du-chain rename engine service before candidate generation; the composition
 // commits on the established strict whole-row steady-state II
 // decrease.  The sibling control twin pins the same TU without the
 // flag never printing an interior-rename line.

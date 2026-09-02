@@ -1,9 +1,9 @@
-/* WP13 descriptor-residency shapes.
+/* Descriptor-residency shapes.
 
-   BLOCK_KERNEL: the WP11 cross-tile elision shape (TILE_ROW / the
+   BLOCK_KERNEL: the cross-tile elision shape (TILE_ROW / the
    per-tile LLK boilerplate from macro-planner-tile-hoist-body.h)
    nested in one FURTHER enclosing guarded loop (the "block" loop of
-   the ttnn perf harness).  WP11 alone hoists the descriptor words to
+   the ttnn perf harness).  Prefix elision alone hoists the descriptor words to
    the tile loop's entry -- INSIDE the block loop, once per block; the
    residency extension re-proves the epoch discipline over the block
    loop's body and moves them once further out, once per kernel.

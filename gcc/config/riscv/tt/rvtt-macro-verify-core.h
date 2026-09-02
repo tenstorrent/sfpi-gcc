@@ -50,7 +50,7 @@ struct expect_template
   uint8_t mod1;
 };
 
-/* CC-template model facts (WP9), re-derived by the expectation builder
+/* CC-template model facts, re-derived by the expectation builder
    from the region's explicit facts and compared against the
    synthesized descriptor's model; the timing inequalities are
    re-checked here from the exchanged slots so a wrong model cannot
@@ -177,7 +177,7 @@ verify (const rvtt_macro::caps *c, const descriptor_words &desc,
 	return "hidden-write-unowned";
     }
 
-  /* CC-template model (WP9): the synthesized model must equal the
+  /* CC-template model: the synthesized model must equal the
      re-derived expectation field for field, and the deferred-CC timing
      obligations are re-checked here from the exchanged slots.  */
   if (desc.cc.active != expect.cc.active)
@@ -193,8 +193,8 @@ verify (const rvtt_macro::caps *c, const descriptor_words &desc,
 	  || desc.cc.row_interval != expect.cc.row_interval)
 	return "cc-model";
       /* Deferred-CC dataflow, plus the live-store-mask race constraint
-	 (store_lane_mask_live_at_execution; silicon adjudication
-	 2026-08-17, craq-sim 9f324140): the all-lanes restore must
+	 (store_lane_mask_live_at_execution; hardware-adjudicated and
+	 simulator-reproduced): the all-lanes restore must
 	 retire strictly before the store executes -- in the exchanged
 	 visible-slot form, restore_visible (= restore_exec + lag) <=
 	 store_exec with lag = 1 -- and the store must retire before

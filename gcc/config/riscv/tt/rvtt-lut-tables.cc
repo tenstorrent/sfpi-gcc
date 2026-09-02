@@ -25,7 +25,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-lut-tables.h"
 
 /* SFPLUTFP32 mode-word (Mod0) vocabulary, per the WH/BH SFPLUTFP32
-   specification (tt-isa-documentation SFPLUTFP32.md; craq-sim
+   specification (tt-isa-documentation SFPLUTFP32.md; the reference
+   simulator's
    tensix.cpp TENSIX_EXECUTE_SFPLUTFP32 decode, verified identical):
      value 0	     the FP32 three-entry table (LReg0-2 = A
 		     coefficients, LReg4-6 = B coefficients, all
@@ -156,13 +157,13 @@ rvtt_lut_modes (const rvtt_lut_mode_desc **modes)
   return ARRAY_SIZE (wh_bh_lut_modes);
 }
 
-/* Extended leaf-class certification (laneCY, 2026-08-20).
+/* Extended leaf-class certification.
 
    A LUT slot evaluates fma_model (A, |x|, B) -- one partially-fused
    multiply-add with a single rounding (tt-isa-documentation
-   BlackholeA0 SFPMAD.md "IEEE754 conformance / divergence"; craq-sim
-   @ 9f324140 src/fma.cpp fma_model_bh/_wh, src/tensix.cpp
-   TENSIX_EXECUTE_SFPLUTFP32).  The facts below were certified by
+   BlackholeA0 SFPMAD.md "IEEE754 conformance / divergence"; the
+   pinned reference simulator's fma_model_bh/_wh and
+   SFPLUTFP32 executor).  The facts below were certified by
    exhaustive enumeration against those pinned models; the sweep
    parameters and outcomes are recorded inline here, and any change to
    the models voids and re-owes the certification:
@@ -237,7 +238,7 @@ rvtt_lut_modes (const rvtt_lut_mode_desc **modes)
      so the slot computes bit-for-bit the same fma the source leaf's
      MAD computed, and the leaf-class facts above (mul0 zero-addend,
      constant zero-product, tail behavior at non-finite inputs) carry
-     over unchanged -- re-verified by the laneGU enumeration over the
+     over unchanged -- re-verified by the six-entry enumeration over the
      full LUT16 coefficient grid at the non-finite input classes.  */
 
 bool
@@ -277,7 +278,8 @@ rvtt_lut_const_value_certified_p (uint32_t bits)
 }
 
 /* Exact LUT16 re-encoding.  The decode this must invert is the
-   architectural Lut16ToFp32 (SFPLUTFP32.md; craq-sim lut16_to_fp32):
+   architectural Lut16ToFp32 (SFPLUTFP32.md; the reference
+   simulator's lut16_to_fp32):
      exp16 == 31  ->  +/-0.0
      otherwise    ->  (sign) (1 + man10/1024) * 2^(exp16 - 15)
    so the exactly representable FP32 values are +/-0.0 (canonical

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Named refusal (lane FW): the capture bb executes CONDITIONALLY inside
+// Named refusal: the capture bb executes CONDITIONALLY inside
 // the loop (it does not dominate the latch), so the per-trip delivery
 // saving the pricing consumes is not structural -- refuse by the shape
 // name and keep the in-body record.

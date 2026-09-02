@@ -1,4 +1,4 @@
-// WP9 near miss: a lanes-off pure CC write sits between the row's
+// Near miss: a lanes-off pure CC write sits between the row's
 // proven restore and its store -- the lane state reaching the store is
 // not the all-lanes pattern.  Discovery refuses the unproved enable by
 // name; nothing forms and every byte stays explicit.

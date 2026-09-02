@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* FABLE_GOES_BURR.md item #1: the refusal registry plus one emission
+/* The refusal registry plus one emission
    helper, routed through -fopt-info.
 
    THE DUAL-EMISSION CONTRACT

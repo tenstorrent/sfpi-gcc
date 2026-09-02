@@ -1,11 +1,11 @@
-/* Hand-spilled twin of ladder-body.h (lane DS acceptance arsenal).
+/* Hand-spilled twin of ladder-body.h (allocator acceptance arsenal).
 
    SAME dataflow DAG as the LADDER_N-live ladder rung -- same XOR ops on
    the same values in the same sequential order -- but values a6..a(N-1)
    are parked in scratch Dst rows with explicit exact (INT32, 32-bit
    row) store/load round-trips, keeping at most 8 values LREG-resident
-   at any point.  This twin therefore COMPILES TODAY, runs on CRAQ
-   today, and -- because an exact spill round-trip is lossless -- its
+   at any point.  This twin therefore COMPILES TODAY, runs on the reference
+   simulator today, and -- because an exact spill round-trip is lossless -- its
    output is bit-identical to what ANY correct exact-only Dst-spilling
    allocator must produce for the ladder rung, regardless of which
    values that allocator chooses to spill.  It defines the rung's
