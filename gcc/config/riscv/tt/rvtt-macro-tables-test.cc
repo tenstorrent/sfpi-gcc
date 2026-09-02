@@ -322,7 +322,7 @@ test_templates (const caps *c)
   CHECK_EQ_HEX (w, 0x8a0000d0u);
 
   /* Boundaries: unknown routing selector, selector outside both the
-     physical-LREG range and the WP12-widened InstructionTemplate
+     physical-LREG range and the ratified widened InstructionTemplate
      selector range 0xc..0xf (SFPCONFIG.md VD = 12 + i; the frozen
      shapes exercised 0xc/0xd only), STOCH_RND with nonzero imm12
      (field layout differs above bit 12), imm12 overflow.  */
@@ -520,7 +520,7 @@ test_scalars (const caps *bh, const caps *wh)
 	 && bh->delay_bits == 3);
   CHECK (wh->n_templates == 4 && wh->n_sequence_slots == 4
 	 && wh->delay_bits == 3);
-  /* WP12 widened ownership from the frozen pass's exercised
+  /* Ratified widened ownership from the frozen pass's exercised
      {0,1,4,5,6,8} = 0x0173 to the full LoadMacroConfig class
      {0..8} = 0x01ff (one architectural state class; ownership is a
      refusal surface, so widening only makes foreign-access proofs

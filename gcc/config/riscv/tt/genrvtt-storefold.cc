@@ -18,7 +18,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* FABLE_GOES_BURR item #3: the format-pair verdict ladders of
+/* Generator for the format-pair verdict ladders of
    gimple-rvtt-store-fold.cc (the S2 sink admission and the licensed
    stochrnd fold's matching-precision pair_ok) used to be if-else
    chains transcribing tt/proofs verdicts by hand.  This tool
@@ -51,8 +51,8 @@ along with GCC; see the file COPYING3.  If not see
 	    negative-zero divergence), refuses with or without the
 	    license token.
      - the SRCB store format resolves at RUNTIME to one of the swept
-       float paths (the row's ALU config owns the resolution -- the
-       laneHL SRCB precedent), so the emitted SRCB row carries the
+       float paths (the row's ALU config owns the
+       resolution), so the emitted SRCB row carries the
        MOST REFUSING class of the swept float pairs (FP16/BF16/FP32).
      - each stochrnd proof row pairs one SFPSTOCHRND float conversion
        with its matching-precision store Mod0 (that pairing IS the

@@ -38,7 +38,7 @@ SFPSHFT SFPMOV SFPIADD
 
 The current replay pass captures the two loads plus those 13 words and the
 store/increment boundary as a 17-slot body and plays it seven more times.
-Blackhole silicon measures `562.625` `MATH_ISOLATE` cycles, versus
+Blackhole hardware measures `562.625` `MATH_ISOLATE` cycles, versus
 `283.9296875` for the handwritten implementation.
 
 The handwritten body is not a differently scheduled copy of that sequence.
@@ -48,7 +48,7 @@ interleaved with one explicit `SFPMUL24` and one `SFPIADD`.  Formation therefore
 cannot be implemented as a `SFPLOAD; SFPMUL24; SFPSTORE` peephole, nor can the
 existing 32-slot replay pass manufacture the missing parallel sub-unit work.
 
-Pinned evidence from `/localdev/nkapre/mul-int-validation-device`:
+Pinned validation artifacts (SHA-256 recorded when the study was frozen):
 
 | artifact | SHA-256 |
 | --- | --- |
@@ -114,16 +114,17 @@ others.
 ## Validation gate
 
 Compiler emission remains default-off while each admitted shape is proved in
-craq-sim's persistent transactional per-sub-unit delayed-event queues.  The
+the reference simulator's persistent transactional per-sub-unit
+delayed-event queues.  The
 generic event model now executes the first clean Round-to-LReg16, Cast, and
 Store chain bit-exact against the legacy signature oracle; unsupported and
 dual-write shapes still fall back.  The bring-up order is:
 
-1. general CRAQ event model and differential tests against the ISA model;
+1. general simulator event model and differential tests against the ISA model;
 2. post-RA candidate discovery and a dump-only descriptor/verifier;
 3. compile tests proving refusal at every invariant above;
-4. transformed CRAQ correctness and event-calendar equivalence;
-5. Blackhole silicon correctness, then device-cycle A/B;
+4. transformed-kernel simulator correctness and event-calendar equivalence;
+5. Blackhole hardware correctness, then device-cycle A/B;
 6. Wormhole and Quasar gates before enabling either target.
 
 Static instruction count is diagnostic only.  Device kernel cycles are the

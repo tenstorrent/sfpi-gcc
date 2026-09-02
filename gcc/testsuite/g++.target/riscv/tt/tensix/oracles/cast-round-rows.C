@@ -1,4 +1,4 @@
-// Quarantined-pass cast-round group shape (WP8 oracle body): one
+// Quarantined-pass cast-round group shape (loadmacro-formation oracle body): one
 // all-lanes proof, eight adjacent load/cast/round/store rows with typed
 // Dst increments.  Operand values are the frozen pass's proven envelope
 // (load mode 6, round instr_mod1 1, store mode 2).

@@ -16,7 +16,7 @@
      along with GCC; see the file COPYING3.  If not see
      <http://www.gnu.org/licenses/>.  -->
 
-# int-abs spelling reductions (laneDN, 2026-08-20)
+# int-abs spelling reductions (2026-08-20)
 
 The RESULT here proves ONE value function over all 2^32 raw lane
 encodings w:
