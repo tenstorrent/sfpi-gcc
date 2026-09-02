@@ -18,7 +18,32 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* SFPU intrinsic calls carry virtual operands (the intrinsics are
+   declared with side effects so that generic optimizers do not reorder
+   them), which hides genuinely dead intrinsic computations from the
+   generic tree-ssa DCE.  This pass performs mark-and-sweep dead-code
+   elimination specialized to SFPU intrinsic calls:
+
+     1. Collect every SFPU intrinsic call in the function.  Calls whose
+	semantics really are effectful (stores, config writes, ...) per
+	rvtt_insn_data::has_side_effects seed the live worklist; all
+	others start out presumed dead.
+     2. Propagate liveness backwards: for each live call, every SSA
+	input's defining intrinsic call becomes live, walking through
+	PHI nodes (with a visited set to terminate on cycles).
+     3. Delete the calls that were never marked live, first unlinking
+	any PHI nodes that use their results (such PHIs are themselves
+	dead, or step 2 would have reached the call through them).
+
+   The propagation is complete because SFPU vector values flow only
+   between intrinsic calls and PHI nodes -- the vector types have no
+   other consumers in the IL -- so walking those two statement kinds
+   reaches every use-def chain that could keep a call alive.
+
+   Runs under -mtt-tensix-optimize-dce (default on).  */
+
 #define INCLUDE_VECTOR
+#define INCLUDE_UNORDERED_SET
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -33,12 +58,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
-#include <unordered_set>
 
-// Collect all tensix insns,
-// Record those that are necessarily needed (have side-effects)
-// Recursively mark every insn providing an input
-// Delete unmarked insns
+/* Populate INSNS with every side-effect-free SFPU intrinsic call in FN
+   (the presumed-dead set) and WORKLIST with the effectful ones (the
+   liveness seeds).  Synthetic-opcode markers are skipped: generic DCE
+   handles them, this pass does not.  */
 
 static void
 gather_insns (function *fn, std::unordered_set<gcall *> &insns, std::vector<gcall *> &worklist)
@@ -68,6 +92,12 @@ gather_insns (function *fn, std::unordered_set<gcall *> &insns, std::vector<gcal
 	  }
       }
 }
+
+/* Liveness propagation for one SSA input VAR of a live call: if VAR is
+   defined by a presumed-dead intrinsic call, move that call from INSNS
+   to WORKLIST (it is now known live); if VAR is defined by a PHI, walk
+   all the PHI's arguments, using PHIS as the visited set so cyclic PHI
+   webs terminate.  */
 
 static void
 gather_var_defs (std::unordered_set<gcall *> &insns, std::vector<gcall *> &worklist,
@@ -99,6 +129,12 @@ gather_var_defs (std::unordered_set<gcall *> &insns, std::vector<gcall *> &workl
 	worklist.push_back (as_a <gcall *> (stmt));
       }
 }
+
+/* VAR is the result of a call about to be deleted.  Remove any PHI
+   nodes using it (recursively, since a removed PHI's result may itself
+   feed further PHIs).  Such PHIs are necessarily dead: were any of
+   them live, liveness would have propagated back to VAR's defining
+   call.  */
 
 static void
 remove_phi_uses (tree var)

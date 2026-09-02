@@ -17,6 +17,54 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Fusion and interleaving of adjacent Dst-register iterations.
+
+   LLK kernels iterate over rows of the Tensix Dst register file with a
+   fixed pattern: a body of SFPU loads/computes/stores addressed
+   relative to the row-write counter (RWC), closed by a TTINCRWC that
+   advances the counter.  Two passes here widen that iteration grain
+   from one row-pair to two, which halves the TTINCRWC overhead and
+   doubles the straight-line body available to the RTL schedulers.
+
+   rvtt_dst_iteration (fusion): scan each block for two consecutive
+   iterations -- body, TTINCRWC(+2), identical body, TTINCRWC(+2) --
+   whose calls match pairwise (same operations, same scalar operands,
+   vector operands isomorphic under the value map established by the
+   pair, same Dst addresses).  Legality requires: every typed Dst
+   access uses the no-auto-increment addressing mode with a provable
+   in-range address (VRP-backed) even after +2 rewriting; each body's
+   vector values are consumed only inside its own iteration; and at
+   least two loads and a store are present (the shapes worth fusing).
+   The fusion rewrites the second body's Dst addresses to base+2 and
+   merges the two TTINCRWC(+2)s into one TTINCRWC(+4), deleting the
+   first.
+
+   rvtt_dst_interleave: runs late, after lowering has exposed the final
+   typed SFPU operations but before RTL expansion.  A fused group
+   (recognized by its TTINCRWC(+4) marker) whose two halves still match
+   pairwise is rescheduled load/load/compute/compute/drain/drain so the
+   two rows' independent chains overlap; legality further requires the
+   loads-computes-drains shape, one store per half placed last, 4-byte
+   alignment of the first row's typed addresses (making the +2 row's
+   accesses provably disjoint from the first row's store under the
+   interleaved order), all scalar operand definitions to dominate the
+   group, and closed vector def-use within the group.  Rescheduling
+   drops the group-internal virtual operands (the accesses were proven
+   disjoint) and lengthens independent live ranges before IRA assigns
+   physical LREGs.
+
+   Both passes only reorder/rewrite proven-identical bodies; any
+   unrecognized statement inside a candidate window rejects the whole
+   candidate (with a TDF_DETAILS reason line).  On Quasar
+   (TARGET_XTT_TENSIX_QSR) the analysis runs and dumps its verdicts,
+   but the rewrite itself is suppressed (emit=no).
+
+   Runs under -mtt-tensix-optimize-dst-iteration-fusion.  */
+
+
+#define INCLUDE_UNORDERED_MAP
+#define INCLUDE_UNORDERED_SET
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -35,11 +83,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-effects.h"
 
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 namespace {
+
+/* One candidate iteration: its body calls and closing TTINCRWC.  */
 
 struct dst_iteration
 {
@@ -48,6 +94,8 @@ struct dst_iteration
   bool rejected = false;
 };
 
+/* Are A and B equal integer constants?  */
+
 static bool
 integer_cst_eq (tree a, tree b)
 {
@@ -55,11 +103,15 @@ integer_cst_eq (tree a, tree b)
     && tree_int_cst_equal (a, b);
 }
 
+/* Is VALUE an SFPU vector value?  */
+
 static bool
 vector_value_p (tree value)
 {
   return value && VECTOR_TYPE_P (TREE_TYPE (value));
 }
+
+/* Is INSND a typed Dst access (SFPLOAD/SFPSTORE)?  */
 
 static bool
 typed_dst_access_p (const rvtt_insn_data *insnd)
@@ -67,6 +119,10 @@ typed_dst_access_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpload
     || insnd->id == rvtt_insn_data::sfpstore;
 }
+
+/* May CALL (an INSND intrinsic) be part of a fusible iteration body?
+   Typed accesses always; otherwise only effect-free, CC-preserving
+   operations.  */
 
 static bool
 body_call_p (gcall *call, const rvtt_insn_data *insnd)
@@ -84,6 +140,8 @@ body_call_p (gcall *call, const rvtt_insn_data *insnd)
     && !insnd->sets_cc (call);
 }
 
+/* Width of the Dst address field of INSND on this architecture.  */
+
 static unsigned
 dst_address_bits (const rvtt_insn_data *insnd)
 {
@@ -96,6 +154,10 @@ dst_address_bits (const rvtt_insn_data *insnd)
       gcc_unreachable ();
     }
 }
+
+/* Is CALL a Dst access whose address provably stays in range after
+   adding INCREMENT, in the no-auto-increment addressing mode?  Uses
+   VRP ranges for non-constant addresses.  */
 
 static bool
 dst_access_legal_p (gcall *call, HOST_WIDE_INT increment)
@@ -126,6 +188,9 @@ dst_access_legal_p (gcall *call, HOST_WIDE_INT increment)
   return wi::leu_p (range.upper_bound (), limit - increment);
 }
 
+/* Is ADJUSTED provably BASE + INCREMENT (as constants, or as the
+   direct PLUS_EXPR rewrite the fusion pass inserted)?  */
+
 static bool
 address_plus_p (tree base, tree adjusted, HOST_WIDE_INT increment)
 {
@@ -144,6 +209,8 @@ address_plus_p (tree base, tree adjusted, HOST_WIDE_INT increment)
 	      && tree_to_shwi (lhs) == increment));
 }
 
+/* Is ADDRESS provably ALIGNMENT-aligned (by known nonzero bits)?  */
+
 static bool
 address_aligned_p (tree address, unsigned alignment)
 {
@@ -151,6 +218,9 @@ address_aligned_p (tree address, unsigned alignment)
   wide_int nonzero = get_nonzero_bits (address);
   return wi::extract_uhwi (nonzero, 0, exact_log2 (alignment)) == 0;
 }
+
+/* Is CALL a plain row increment -- TTINCRWC advancing only the Dst
+   counter, by 2?  Sets *AMOUNT.  */
 
 static bool
 increment_p (gcall *call, HOST_WIDE_INT *amount)
@@ -168,6 +238,9 @@ increment_p (gcall *call, HOST_WIDE_INT *amount)
   *amount = tree_to_shwi (dst);
   return *amount == 2;
 }
+
+/* Perform the fusion: rebase SECOND's Dst addresses by INCREMENT,
+   widen its TTINCRWC to INCREMENT*2 and delete FIRST's.  */
 
 static void
 fuse_iterations (dst_iteration &first, dst_iteration &second,
@@ -207,6 +280,10 @@ fuse_iterations (dst_iteration &first, dst_iteration &second,
     unlink_stmt_vdef (first.increment);
   gsi_remove (&gsi, true);
 }
+
+/* Do iterations A and B have pairwise-matching bodies, legal for
+   fusion at INCREMENT?  See the file comment for the criteria; VALUES
+   carries the A-value -> B-value isomorphism as it is established.  */
 
 static bool
 same_body_p (const dst_iteration &a, const dst_iteration &b,
@@ -308,6 +385,9 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
   return loads >= 2 && stores >= 1;
 }
 
+/* Are all of ITERATION's vector results consumed only within the
+   iteration itself?  */
+
 static bool
 defs_closed_p (const dst_iteration &iteration)
 {
@@ -328,6 +408,9 @@ defs_closed_p (const dst_iteration &iteration)
 	}
   return true;
 }
+
+/* The rvtt_dst_iteration pass body: find and fuse candidate adjacent
+   iterations per block.  Returns the candidate count (dumped).  */
 
 static unsigned
 discover (function *fn)
@@ -456,6 +539,9 @@ namespace {
    opportunity to lengthen the independent live ranges before IRA assigns
    physical LREGs.  */
 
+/* Is CALL the fused group marker -- a TTINCRWC advancing only the Dst
+   counter by 4?  */
+
 static bool
 final_increment_p (gcall *call)
 {
@@ -481,6 +567,10 @@ dynamic_result_p (const rvtt_insn_data *insnd)
   return rvtt_builtin_subunit (insnd) == XTT_SU_MAD;
 }
 
+/* Is INSND a "drain" operation (rounding/store subunits, or the
+   compiler-internal SFPASSIGN placeholder) -- the tail of a row chain
+   that consumes the dynamic results?  */
+
 static bool
 drain_operation_p (const rvtt_insn_data *insnd)
 {
@@ -493,6 +583,8 @@ drain_operation_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpassign_lv;
 }
 
+/* May CALL (an INSND intrinsic) be part of an interleavable group?  */
+
 static bool
 late_body_call_p (gcall *call, const rvtt_insn_data *insnd)
 {
@@ -501,6 +593,10 @@ late_body_call_p (gcall *call, const rvtt_insn_data *insnd)
   return (dynamic_result_p (insnd) || drain_operation_p (insnd))
     && !insnd->has_side_effects (call) && !insnd->sets_cc (call);
 }
+
+/* Do the two halves A and B of a fused group still match pairwise and
+   satisfy the interleaving legality conditions (addresses exactly +2,
+   first-row 4-alignment, one store)?  */
 
 static bool
 late_pair_p (const std::vector<gcall *> &a,
@@ -578,6 +674,9 @@ late_pair_p (const std::vector<gcall *> &a,
   return stores == 1 && store_load_disjoint;
 }
 
+/* Do all scalar operands of OPS have definitions that dominate the
+   group (so hoisted calls cannot see undefined operands)?  */
+
 static bool
 scalar_defs_before_increment_p (const std::vector<gcall *> &ops,
 				 gcall *increment)
@@ -618,6 +717,8 @@ scalar_defs_before_increment_p (const std::vector<gcall *> &ops,
   return true;
 }
 
+/* Are all of OPS's vector results consumed only within the group?  */
+
 static bool
 closed_group_p (const std::vector<gcall *> &ops, gcall *increment)
 {
@@ -637,6 +738,12 @@ closed_group_p (const std::vector<gcall *> &ops, gcall *increment)
 	}
   return true;
 }
+
+/* Compute the interleaved schedule of halves A and B into ORDER:
+   all loads (A's then B's), then compute pairs alternating A/B, then
+   the drains (A's then B's).  Requires the loads/computes/drains shape
+   with the store last; returns false if the halves do not have it.
+   *LOADS and *DYNAMIC_PAIRS report the shape for dumping.  */
 
 static bool
 make_interleaved_order (const std::vector<gcall *> &a,
@@ -677,6 +784,10 @@ make_interleaved_order (const std::vector<gcall *> &a,
   return true;
 }
 
+/* Reorder OPS into ORDER immediately before INCREMENT, dropping the
+   group-internal virtual operand links (the accesses were proven
+   disjoint).  */
+
 static void
 apply_interleaved_order (const std::vector<gcall *> &ops,
 			 const std::vector<gcall *> &order,
@@ -704,6 +815,9 @@ apply_interleaved_order (const std::vector<gcall *> &ops,
       gsi_move_before (&from, &boundary);
     }
 }
+
+/* Check and (if legal) interleave one fused group OPS ending at
+   INCREMENT in BB.  Returns true if the schedule was applied.  */
 
 static bool
 interleave_group (basic_block bb, std::vector<gcall *> &ops,
@@ -744,6 +858,9 @@ interleave_group (basic_block bb, std::vector<gcall *> &ops,
 	     emit ? "yes" : "no");
   return emit;
 }
+
+/* The rvtt_dst_interleave pass body: find fused groups (by their
+   TTINCRWC(+4) markers) and interleave them.  */
 
 static bool
 interleave_function (function *fn)

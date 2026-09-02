@@ -17,6 +17,36 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* SFPI kernels access device memory heavily through volatile pointers,
+   and GCC declines to merge zero/sign extensions into loads and stores
+   of volatile memory.  The resulting redundant extension instructions
+   are pure overhead on RV32.  This early RTL pass removes the common
+   shapes:
+
+   1. load + extend: a narrow load whose (sole-use, dying) result feeds
+      an extension merges into an extending load.
+
+   2. extend + stores: an extension of a subreg whose every use is a
+      narrow store of the matching mode is bypassed -- the stores read
+      the unextended register directly and the extension is deleted.
+
+   3. extend + left-shift: a 16-bit extension followed by a left shift
+      of its (dying) result becomes shift-left-16 + logical/arithmetic
+      shift-right of (16 - amount), saving one instruction.
+
+   Two rarer shapes (one extension feeding several stores plus another
+   safe use; extension chains) are recognized as future work.
+
+   Def-use information comes from two purpose-built maps: single-block
+   LOG_LINKS (the classic combine structure -- create_log_links below
+   is copied from combine.cc) for the load/extend and shift cases, and
+   a def -> all-uses map (create_links) for the store case.
+
+   Enabled by -mtt-optimize-extend; defaulted on at -O1+ for
+   -mcpu=tt-wh* and tt-bh* (not Quasar, where it has an unresolved
+   ICE -- see riscv_override_options_internal).  */
+
+
 #define INCLUDE_UNORDERED_MAP
 #define INCLUDE_VECTOR
 #include "config.h"
@@ -60,7 +90,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 
 
-// The insn_link/log links code below was shamelessly copied from combine.c
+/* The insn_link/LOG_LINKS machinery below is copied from combine.cc
+   (which keeps it private).  */
 
 struct insn_link {
   rtx_insn *insn;
@@ -215,11 +246,12 @@ create_log_links (void)
 
 typedef std::unordered_map<rtx_insn *, std::vector<rtx_insn *>> insn_map;
 
-// Build up a map of insns from a def to all of its uses
-// This is modeled after create_log_links.  TODO: replace create_log_link with
-// this routine for the other use cases
+/* Build MAP from each single-def insn to all of its (block-local) uses.
+   Modeled after create_log_links; TODO: it could replace the LOG_LINKS
+   scheme for the other cases too.  */
+
 static void
-create_links (function *fn, insn_map& map)
+create_links (function *fn, insn_map &map)
 {
   basic_block bb;
   rtx_insn *insn;
@@ -269,9 +301,12 @@ create_links (function *fn, insn_map& map)
   all_uses.resize(0);
 }
 
-/* Return TRUE if INSN is deleted.  */
+/* Case 1 (load + extend): if INSN is an extension whose single
+   LOG_LINK is a same-mode narrow load with a dying result, merge the
+   extension into the load.  Returns true if INSN was deleted.  */
+
 static bool
-check_extend(rtx_insn *insn)
+check_extend (rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
 
@@ -311,7 +346,7 @@ check_extend(rtx_insn *insn)
   rtx lpat = PATTERN (load_insn);
   rtx extend = which == SIGN_EXTEND ? gen_rtx_SIGN_EXTEND (SImode, SET_SRC (lpat))
     : gen_rtx_ZERO_EXTEND (SImode, SET_SRC (lpat));
-  
+
   if (validate_change (load_insn, &SET_DEST (lpat), SET_DEST (pat), true)
       && validate_change (load_insn, &SET_SRC (lpat), extend, true)
       && apply_change_group ())
@@ -322,14 +357,17 @@ check_extend(rtx_insn *insn)
       return true;
     }
 
-  // Huh?
+  // validate_change with in_group set cannot fail.
   gcc_unreachable ();
 }
 
-/* Return true if INSN is deleted.  */
+/* Case 2 (extend + stores): if INSN extends a subreg and every use of
+   its result is a narrow store of the source mode, redirect the stores
+   to the unextended register (fixing up the REG_DEAD note of the last
+   store) and delete INSN.  Returns true if INSN was deleted.  */
 
 static bool
-check_store(insn_map& map, rtx_insn *insn)
+check_store (insn_map &map, rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
   if (GET_CODE (pat) != SET
@@ -415,17 +453,18 @@ check_store(insn_map& map, rtx_insn *insn)
       return true;
     }
 
-  // HUH?
+  // validate_change with in_group set cannot fail.
   gcc_unreachable ();
 }
 
-// Look for a left shift after a zero/sign extend
-// Replace with a shift left/shift right (saves a shift)
-//
-// Haven't seen a shift before by a zero/sign extend, could
-// handle that case as well
+/* Case 3 (extend + shift): if INSN left-shifts the dying result of a
+   HI->SI extension, rewrite the pair as shift-left-16 followed by a
+   logical (zero-extend) or arithmetic (sign-extend) right shift of
+   16 - amount.  (A shift BEFORE an extension is not handled; it has
+   not been seen in practice.)  */
+
 static void
-check_shift(rtx_insn *insn)
+check_shift (rtx_insn *insn)
 {
   rtx pat = PATTERN (insn);
 
@@ -486,22 +525,11 @@ check_shift(rtx_insn *insn)
     }
 }
 
-// This pass removes unnecessary sign/zero extension operations
-//
-// This shows up in our code a lot because, at present, we use volatiles
-// heavily and GCC bails out on merging zero/sign extend ops with loads/stores
-// when the address is volatile.
-//
-// The 2 (most common) cases handled are:
-// 1) A load followed immediately by a zero/sign ext
-// 2) A zero/sign ext followed immediately by a store
-//
-// There are 2 more less common more complex cases that aren't handled at
-// present:
-// 1) A zero/sign ext followed by multiple stores of the result
-// 2) A zero/sign ext followed by a store and another (safe) use of the result
+/* Pass body: set up dataflow and both def-use structures, then try the
+   three cases at every insn.  */
+
 static void
-transform(function *fn)
+transform (function *fn)
 {
   if (dump_file)
     fprintf (dump_file, "TT Riscv opt pass on: %s\n", function_name(fn));

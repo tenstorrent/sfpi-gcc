@@ -21,6 +21,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
+#define INCLUDE_UNORDERED_MAP
+#define INCLUDE_UNORDERED_SET
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -42,38 +44,40 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-delivery-cost.h"
-#include <unordered_map>
-#include <unordered_set>
 
-// A pattern-driven combiner.  We iterate until no changes happen -- this
-// allows combine patterns to enable other patterns, or overlap and be executed
-// in some order. The patterns are described in a GimpleCombine (.gc) file,
-// processed by genrvtt-combine whose output is #included above. Each combiner
-// is a list of patterns to match, a list of replacements to substitute, a set of
-// bespoke predicates, init & fini functions and a few extraneous flags.
+/* A pattern-driven combiner over SFPU intrinsic calls.
 
-// The matcher is pretty simplistic -- it doesn't try and minimize searches
-// beyond recording possible starting points.  We do order the checks to do the
-// simplest ones first and only do the complicated ones when those all
-// pass. The starting point for a match is the last pattern in a sequence, and
-// once found we search backwards to calls producing inputs to that pattern.
+   The patterns are described in a GimpleCombine (.gc) file (rvtt.gc),
+   processed by genrvtt-combine, whose generated tables are #included
+   below.  Each combiner rule is a list of call shapes to match, a list
+   of replacement templates, optional bespoke predicates and init/fini
+   hooks, and flags.  Rules can be gated (per architecture or per
+   option); a fired rule is identified in the dump by its stable tag.
 
-// A single pass finds all the combines that match, and then throws out matches
-// that overlap the end(s) of other combines (the intention is that the
-// later-matching combination iwll match (part-of) the output on the next pass. If two combines
-// overlap differently, the longer combine is selected.
+   Matching: the matcher is deliberately simple -- it records possible
+   starting points and orders its checks cheapest-first.  A match is
+   anchored at the LAST pattern of a sequence and searched backwards
+   through the calls producing that pattern's inputs.  Iteration
+   continues until no rule fires, so one rule's output can enable
+   another's match.
 
-// We (currently) have a simplistic model of CC-regions -- every CC-setting
-// builtin separates two regions. Regions are also separated by basic
-// blocks. All non-SetAnywhere patterns are treated as SameRegion. It would be
-// nicer to have better information, but that's a task for another day.
+   Overlap resolution: rules anchored on one statement are tried in
+   priority (.gc line) order and the first match is applied
+   immediately; a rule whose input was consumed by an earlier rewrite
+   simply re-matches against the rewritten output on a later
+   iteration.
+
+   CC-region model: deliberately coarse -- every CC-setting builtin
+   separates two regions, and block boundaries separate regions too.
+   All non-SetAnywhere patterns are treated as SameRegion.  (The RTL
+   engines have an exact region tree; refining this remains open.)  */
 
 namespace {
   constexpr unsigned args_hwm = 10;
 
   // pattern possibilities
   enum class Flags : uint8_t {
-    OtherUses = 1 << 0, // Other uses are permissable (do not delete)
+    OtherUses = 1 << 0, // Other uses are permissible (do not delete)
     MaybeUnused = 1 << 1, // There might be no uses of this (it could be null)
     SetAnywhere = 1 << 2, // It may be set anywhere, (not in the same live region)
     SameRegion = 1 << 3, // It must be in the same CC region
@@ -110,8 +114,8 @@ namespace {
     uint8_t pat_var_hwm;
     uint8_t rep_var_hwm;
 
-    uint8_t replace_mask; // patterns whos output is a replacement output
-    uint8_t rep_use_mask; // patterns whos output is used in a replacement
+    uint8_t replace_mask; // patterns whose output is a replacement output
+    uint8_t rep_use_mask; // patterns whose output is used in a replacement
     int8_t commute_arg; // final pattern commutable arg, if non-negative
 
     unsigned lineno; // line in rvtt.gc file
@@ -429,6 +433,9 @@ rvtt_combine_will_fuse_p (gcall *def, rvtt_insn_data::insn_id feed_id,
   return false;
 }
 
+/* Is there a CC-setting intrinsic strictly between FIRST and LAST
+   (same block)?  The coarse region test of the file comment.  */
+
 static bool
 has_cc_insn_between (gcall *first, gcall *last)
 {
@@ -439,6 +446,9 @@ has_cc_insn_between (gcall *first, gcall *last)
 
   return false;
 }
+
+/* Does VAR have any non-debug use outside the NUM_ALLOWED statements
+   of ALLOWED (the matched calls)?  */
 
 static bool
 has_other_use (tree var, gcall *allowed[], unsigned num_allowed)
@@ -460,6 +470,9 @@ has_other_use (tree var, gcall *allowed[], unsigned num_allowed)
     }
   return false;
 }
+
+/* Is VAR referenced by a statement strictly between BEGIN and END that
+   is not one of the NUM_ALLOWED statements of ALLOWED?  */
 
 static bool
 has_use_between (tree var, gcall *begin, gcall *end,
@@ -895,6 +908,10 @@ static std::vector<const Combiner *> combiner_map;
 // This maps builtin ids to points in the combiner_map array.
 static std::map<rvtt_insn_data::insn_id, std::vector<const Combiner *>::iterator> starting_ids;
 
+/* Build the dispatch tables once: instantiate every enabled combiner
+   rule, keyed (and prioritized by .gc line order) on the insn id of
+   its anchor (last) pattern -- under both the _lv and non-_lv id.  */
+
 static void
 init ()
 {
@@ -1201,6 +1218,12 @@ addimuli_resynthing ()
 	}
     }
 }
+
+/* Run one matching iteration over BB: at each statement try the rules
+   anchored on its insn id in priority order, applying the first that
+   matches and rescanning from the replacement.  Also records
+   SYNTH_OPCODEs for the dynamic muli/addi bookkeeping.  Returns true
+   if anything changed.  */
 
 static bool
 combine_block (basic_block bb)

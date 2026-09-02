@@ -18,6 +18,27 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* The SFPU's predicated-execution model expresses conditional lane
+   assignment as an ASSIGN_LV intrinsic: within a lane-condition region
+   the destination vector receives the new value in enabled lanes and
+   keeps its prior ("live") value in disabled lanes.  The front end
+   seeds the live input of a not-yet-initialized vector with a NOVALUE
+   marker intrinsic.
+
+   When the live input is NOVALUE there is nothing to preserve: the
+   assignment is unconditional as far as the disabled lanes are
+   concerned, so the ASSIGN_LV wrapper is redundant.  This pass removes
+   such wrappers by substituting the assigned value for the wrapper's
+   result and deleting the call.  Removing the wrapper early both
+   shrinks the IL and unblocks later passes (combine, DCE) that do not
+   look through ASSIGN_LV.
+
+   Algorithm: a single linear scan over all statements collects
+   ASSIGN_LV calls whose live operand is defined by NOVALUE; each is
+   then elided via rvtt_substitute_value.  No control-flow or dominance
+   information is needed because the NOVALUE marker dominates its use
+   by SSA construction.  */
+
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -37,9 +58,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "rvtt.h"
 
-// We need to compute the v_if nesting regions to do the djob that the existing
-// pass does.  This is a simple change to remove assign_lv's whose live input
-// is novalue
+/* Return true if VAR (the live input of an ASSIGN_LV) is defined by a
+   NOVALUE marker intrinsic, i.e. carries no prior lane values that
+   would need preserving.  */
 
 static bool
 lv_is_noval (tree var)
@@ -50,6 +71,10 @@ lv_is_noval (tree var)
 
   return false;
 }
+
+/* Remove the redundant wrapper ASSIGN_LV: replace all uses of its
+   result with its assigned-value operand (argument 1) and delete the
+   call.  */
 
 static void
 elide_assign_lv (gcall *assign_lv)
