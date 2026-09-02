@@ -16,7 +16,7 @@
 # along with GCC; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 
-# LREG-allocator acceptance arsenal (lane DS).  Raw-builtin tests
+# LREG-allocator acceptance arsenal.  Raw-builtin tests
 # (raw-*.C) need no headers and always run; sfpi-dialect tests
 # (sfpi-*.C) need the SFPI headers and are skipped silently when the
 # SFPI environment variable is unset (same contract as tt/sfpi).
