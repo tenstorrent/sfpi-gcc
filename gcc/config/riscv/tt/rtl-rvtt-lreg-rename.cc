@@ -139,6 +139,24 @@ along with GCC; see the file COPYING3.  If not see
    register's absence from the block's DF live-out set.  Anything else
    refuses regrename-chain-open.
 
+   Target deadness proof (the SAME DF trust boundary; laneKZ soundness
+   fix): a whole-block-free target must be dead ACROSS the block --
+   neither live-in nor live-out -- so the rename clobbers no value that
+   flows around the block.  That proof reads DF hard-register
+   live-in/live-out, reliable only in a function with no opaque
+   instruction.  The original engine trusted it UNCONDITIONALLY (unlike
+   the dead-at-exit close and the temporal never-touched arm, which both
+   gate on fn_has_opaque); in an opaque function a block-untouched
+   register can be loop-carried live-THROUGH the block (produced in a
+   successor, consumed around the backedge) and is invisible to DF
+   hard-register liveness, so the rename overwrites the loop-carried
+   value -- the deepseek_top32 semantic-lift wrong code (laneKV bisect;
+   6 asm insns in the TU, L7 loop-carried through bb2, DF-reported free).
+   The whole-block tier is now fail-closed in opaque functions
+   (regrename-liveness-untrusted); the temporal tier's admitted arm
+   re-establishes the target with an in-block fresh definition and is
+   DF-independent, so it stays available.
+
    Post-commit structural lockstep re-verification (the laneID
    final-lockstep precedent: renames verified only before commit are
    the known wrong-code shape): after apply_change_group commits, the
@@ -149,7 +167,13 @@ along with GCC; see the file COPYING3.  If not see
    and every edited instruction re-recognizes with its delivered word
    count unchanged.  Any divergence reverts the rename, refuses
    regrename-postcommit-divergence (hard assert under -fchecking),
-   and changes nothing.
+   and changes nothing.  This census scans only BB, so it is
+   structurally blind to a loop-carried live-THROUGH target (whose other
+   references live in OTHER blocks): the belt therefore ALSO fails closed
+   on a committed whole-block (non-temporal) target in a function with an
+   opaque instruction, the defense-in-depth that keeps the
+   untrusted-liveness class from re-shipping even if a future edit
+   restores a DF-trusting admission path (laneKZ).
 
    Pipeline placement (the retired pass's seam, inherited) -- post
    allocation (rtl-rvtt-lp-alloc), post Dst-ownership, post macro
@@ -823,6 +847,24 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
     nlreg = rvtt_pressure_capacity ();
   int new_l = -1;
   bool temporal = false;
+  /* Whole-block-free tier.  A target's deadness ACROSS the block boundary
+     (not live-in, not live-out) is proven from DF hard-register liveness,
+     which is reliable ONLY in a function with no opaque instruction
+     (call, asm, raw .ttinsn word).  This is the SAME trust boundary the
+     dead-at-exit close (fn_has_opaque above) and the temporal
+     never-touched-after arm (fn_has_opaque below) already enforce -- the
+     whole-block tier used to trust df_get_live_in/out unconditionally,
+     the laneKZ soundness hole: in an opaque function a register untouched
+     in the block can be loop-carried live-THROUGH it (produced in a
+     successor, consumed around the backedge), invisible to DF hard-reg
+     liveness; renaming onto it clobbers the loop-carried value
+     (deepseek_top32 semantic-lift, 6 asm insns: L7 loop-carried through
+     bb2 was DF-reported free and overwritten, dropping a top-32 value).
+     Fail-closed: in an opaque function this tier admits no target; the
+     candidate wall is recorded so the refusal names the class, and the
+     temporal tier's DF-independent first-post-definition arm may still
+     admit a target.  */
+  bool liveness_untrusted_wall = false;
   for (unsigned l = 0; l < nlreg; ++l)
     {
       if (target_l >= 0 && (int) l != target_l)
@@ -830,6 +872,13 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
       uint32_t bit = 1u << l;
       if (block_touch & bit)
 	continue;
+      if (fn_has_opaque)
+	{
+	  /* A by-touch-free candidate exists, but its cross-block
+	     deadness cannot be proven (DF hard-reg liveness untrusted).  */
+	  liveness_untrusted_wall = true;
+	  continue;
+	}
       if (REGNO_REG_SET_P (df_get_live_in (bb), SFPU_REG_FIRST + l)
 	  || REGNO_REG_SET_P (df_get_live_out (bb), SFPU_REG_FIRST + l))
 	continue;
@@ -912,7 +961,13 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
     }
   if (new_l < 0)
     {
-      refuse_chain ("regrename-no-free-lreg", w.insn, bb);
+      /* Name the class precisely: a by-touch-free target existed but its
+	 cross-block deadness could not be trusted in this opaque function
+	 (and no temporal DF-independent target was admissible either);
+	 otherwise the ordinary no-free-lreg wall.  */
+      refuse_chain (liveness_untrusted_wall
+		    ? "regrename-liveness-untrusted"
+		    : "regrename-no-free-lreg", w.insn, bb);
       return false;
     }
 
@@ -1210,6 +1265,22 @@ commit_chain (const chain_desc &ch, rvtt_lreg_rename_web *web = nullptr)
 		     + outside.size ())
 	diverged = "target reference census";
     }
+  /* laneKZ belt (the WHY-THE-BELT-MISSED-IT closure): the in-block census
+     above scans only BB (scan_block (bb)), so it is STRUCTURALLY blind to
+     a loop-carried live-through target -- that register's other references
+     live in OTHER basic blocks the belt never visits, so the in-block
+     census passes even when the rename clobbered a value live across the
+     block.  The cross-block deadness of a whole-block (non-temporal)
+     target rests entirely on DF hard-register live-in/out, trustworthy
+     only in a function with no opaque instruction.  Fail closed here too,
+     so the untrusted-liveness class cannot re-ship even if a future edit
+     restores a DF-trusting admission path: a committed non-temporal
+     target in an opaque function is a soundness violation.  (The temporal
+     tier's admitted arm re-establishes the target with an in-block fresh
+     definition -- DF-independent -- so temporal targets are exempt.)  */
+  if (!diverged && !ch.temporal && function_has_opaque_insn_p (cfun))
+    diverged = "whole-block target committed in opaque function"
+	       " (DF hard-register liveness untrusted)";
   if (diverged)
     {
       /* Fail closed: revert the web, refuse by name.  (For a reading

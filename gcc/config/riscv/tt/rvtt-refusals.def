@@ -1199,6 +1199,9 @@ RVTT_REFUSAL (REGRENAME_EFFECT_VETO,
 RVTT_REFUSAL (REGRENAME_IMPLICIT_OPERAND,
   "regrename-implicit-operand",
   "item #7: an effect-mask reference to the chain register with no explicit REG occurrence (the LUT implicit-slot class); uneditable (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_LIVENESS_UNTRUSTED,
+  "regrename-liveness-untrusted",
+  "laneKZ (item #7 soundness fix): a whole-block-free rename target's cross-block deadness rests on DF hard-register live-in/live-out, but the function contains an opaque instruction (call, asm, raw .ttinsn word) that makes DF hard-register liveness unreliable -- the register may be loop-carried live-through the block; refused fail-closed, exactly as the dead-at-exit close and the temporal never-touched arm already gate on fn_has_opaque (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_NO_FREE_LREG,
   "regrename-no-free-lreg",
   "item #7: no architectural LREG is untouched in the block and dead across it (rtl-rvtt-lreg-rename.cc)")
