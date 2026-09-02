@@ -131,7 +131,12 @@ combine () {
 }
 
 // Do these in preference to mul,add->mad, as the register pressure is
-// immediately reduced.
+// immediately reduced.  EXCEPTION (licensed, FABLE_GOES_BURR R3): a
+// product dying into an add serializes two MAD-subunit roundings where
+// the contract mad rule below delivers one; under BOTH license keys
+// (-fassociative-math + -mtt-tensix-optimize-reassoc-mad-restructure)
+// the fold is vetoed for exactly those pairs and the mad rule fuses
+// them instead (madr_suppress_*_fold_p, gimple-rvtt-combine.cc).
 // a * fp16b(scalar)
 combine () {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
@@ -139,6 +144,8 @@ combine () {
   {
     if (TREE_INT_CST_LOW (id)
 	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
+      return false;
+    if (madr_suppress_mul_fold_p (res_call))
       return false;
   }
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
@@ -155,6 +162,8 @@ combine () {
   {
     if (TREE_INT_CST_LOW (id)
 	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
+      return false;
+    if (madr_suppress_add_fold_p (a, res_call))
       return false;
   }
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);

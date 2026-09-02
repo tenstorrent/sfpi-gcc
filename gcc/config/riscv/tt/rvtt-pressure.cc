@@ -767,6 +767,89 @@ rvtt_pressure_bb_peak (basic_block bb)
   return engine_bb_peak (bb);
 }
 
+/* Windowed point-pressure peak (laneKO/R3, NEW vocabulary -- no
+   historical mirror).  Counts with the function-wide may-live model's
+   exact semantics (engine_compute_lreg_pressure: backward may-live
+   fixpoint over pressure-tracked values, lreg_width weights, dead-def
+   transients), NOT with engine_bb_peak's single-block count -- that
+   walk pins every outside-used value for the whole block, which on a
+   loop-body block overstates the trig body's point pressure by 8x and
+   would refuse every candidate the file actually admits.  The peak is
+   taken over the points immediately BEFORE each statement after FIRST
+   through LAST (equivalently: the points strictly between FIRST and
+   LAST plus LAST's own operand-live point) -- exactly the span where
+   a licensed mad-restructure's kept loadi adds its one live range.  */
+
+unsigned
+rvtt_pressure_window_peak (gimple *first, gimple *last)
+{
+  basic_block bb = gimple_bb (first);
+  gcc_assert (bb && gimple_bb (last) == bb);
+
+  rvtt_pressure_model m;
+  rvtt_pressure_compute (cfun, rvtt_pressure_capacity (), &m);
+
+  /* live-out of BB, per the model's own edge vocabulary.  */
+  bitmap live = BITMAP_ALLOC (&m.obstack);
+  edge e;
+  edge_iterator ei;
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    {
+      if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      bitmap_ior_into (live, m.live_in[e->dest->index]);
+      for (gphi_iterator psi = gsi_start_phis (e->dest); !gsi_end_p (psi);
+	   gsi_next (&psi))
+	{
+	  tree arg = gimple_phi_arg_def (psi.phi (), e->dest_idx);
+	  if (rvtt_pressure_tracked_p (arg))
+	    bitmap_set_bit (live, SSA_NAME_VERSION (arg));
+	}
+    }
+
+  unsigned count = 0;
+  {
+    bitmap_iterator bi;
+    unsigned v;
+    EXECUTE_IF_SET_IN_BITMAP (live, 0, v, bi)
+      count += lreg_width (ssa_name (v));
+  }
+
+  unsigned peak = 0;
+  bool in_window = false;
+  for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
+       gsi_prev (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      if (is_gimple_debug (stmt))
+	continue;
+      if (stmt == last)
+	in_window = true;
+      bool record = in_window && stmt != first;
+      tree lhs = gimple_get_lhs (stmt);
+      if (lhs && rvtt_pressure_tracked_p (lhs))
+	{
+	  if (bitmap_clear_bit (live, SSA_NAME_VERSION (lhs)))
+	    count -= lreg_width (lhs);
+	  else if (record)
+	    /* Dead def: transiently occupies its registers here.  */
+	    peak = MAX (peak, count + lreg_width (lhs));
+	}
+      ssa_op_iter iter;
+      tree use;
+      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
+	if (rvtt_pressure_tracked_p (use)
+	    && bitmap_set_bit (live, SSA_NAME_VERSION (use)))
+	  count += lreg_width (use);
+      if (record)
+	peak = MAX (peak, count);
+      if (stmt == first)
+	break;
+    }
+  BITMAP_FREE (live);
+  return peak;
+}
+
 bool
 rvtt_pressure_loop_legal_p (class loop *loop,
 			    const auto_vec<gcall *> &loads,

@@ -40,6 +40,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "rvtt.h"
 #include "rvtt-pressure.h"
+#include "rvtt-refuse.h"
+#include "rvtt-delivery-cost.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -171,6 +173,170 @@ static bool combiner_enable_REASSOC_FP () { return rvtt_reassoc_fp_licensed_p ()
 /* Used by the licensed multi-use mad-fuse pattern in rvtt.gc (defined
    below the generated include).  */
 static bool has_other_use (tree var, gcall *allowed[], unsigned num_allowed);
+
+/* ==================================================================
+   THE LICENSED MAD RESTRUCTURE (FABLE_GOES_BURR residual attack R3;
+   -mtt-tensix-optimize-reassoc-mad-restructure, laneKO) -- the
+   trigonometry constrained-floor cert's named "muli+add -> fused mad"
+   value-changing successor, shipped as licensed COMBINE-PREFERENCE
+   STEERING.
+
+   The immediate-fold rules in rvtt.gc (loadi+mul -> SFPMULI,
+   loadi+add -> SFPADDI) run "in preference to mul,add->mad" because
+   absorbing the SFPLOADI immediately frees a register.  The cost of
+   that preference is SERIALIZATION: the folded pair is TWO dependent
+   MAD-subunit roundings (round(round(x*imm) + c)) where the sfpi
+   contract's single-use mul+add->SFPMAD rule would deliver ONE
+   partially-fused rounding (round(x*imm + c), tt-isa-documentation
+   SFPMAD.md) -- on recurrence-bound rows that extra result-latency
+   hop is the row's critical path (the trigonometry-fresh cert's
+   autopsy names the "exponent muli->add" and Newton "mul+addi" stall
+   pairs by shape).
+
+   Under BOTH license keys (-fassociative-math + the token) the two
+   immediate-fold guards below VETO the fold exactly when the pair
+   would instead fuse through the following contract mad rule; the
+   combiner's own sweep then forms the SFPMAD.  Nothing is emitted
+   here: the fuse itself is the audited default rule, so the only
+   delta vs the unlicensed pipeline is WHICH rule wins -- word-neutral
+   by construction (fold: muli+add or mul+addi = 2 words; suppressed:
+   loadi+mad = 2 words), one dependent MAD-subunit hop shorter, one
+   loadi live range longer (pressure-checked).
+
+   Value-change class (why the license): double->single rounding on
+   the fused product, plus the sign-of-zero flush SFPMULI's embedded
+   "+0" performs and SFPMAD does not (a -0 product stays -0).  This is
+   the ratified licensed-fold divergence family (the pin-42/laneIJ
+   cert lineage); with either key absent every candidate refuses by
+   name (dump + registry) and codegen is byte-identical.  */
+
+static bool
+madr_licensed_pair_p (gcall *mul_call, gcall *add_call, const char *arm)
+{
+  basic_block bb = gimple_bb (mul_call);
+  if (!bb || gimple_bb (add_call) != bb)
+    return false;
+
+  /* The pair must be exactly what the contract a*b+c rule consumes:
+     the mul a feed shape of the mad rule per the GENERATED tables
+     (item #3 -- no hand mirror), dying into the add.  */
+  if (!rvtt_combine_will_fuse_p (mul_call, rvtt_insn_data::sfpmul_lv,
+				 rvtt_insn_data::sfpadd_lv))
+    return false;
+  gcall *allowed[1] = { add_call };
+  if (has_other_use (gimple_call_lhs (mul_call), allowed, 1))
+    return false;
+
+  /* License wall: both keys or refuse by name (the fold proceeds
+     byte-identically).  */
+  if (!flag_associative_math)
+    {
+      rvtt_refuse (RVTT_REF_ASSOCIATIVE_MATH_LICENSE_ABSENT, dump_file,
+		   "reassoc: refusing mad restructure (%s immediate-fold "
+		   "kept, bb %d) (associative-math-license-absent: re-"
+		   "offering the pair to the singly-rounded SFPMAD contract "
+		   "rule is value-changing; needs -fassociative-math AND "
+		   "-mtt-tensix-optimize-reassoc-mad-restructure)\n",
+		   arm, bb->index);
+      return false;
+    }
+
+  /* Pressure: pointwise, suppressing the fold adds exactly ONE live
+     value on the points strictly between the pair members (muli arm:
+     the kept cst plus the extended multiplicand minus the dead
+     product; addi arm: the extended mul operands minus the dead
+     product; elsewhere the live sets are unchanged, the kept loadi
+     included -- it is live up to the product in the PRE state this
+     query measures).  Budget = the engine's windowed peak over
+     (product, add] plus that one; a licensed transform must never
+     make a compilable kernel uncompilable (the corpus lreg-pressure
+     finding).  The whole-block peak would be dishonest here: it
+     refuses every candidate in any block that merely touches the
+     8-LREG file somewhere else (the trig body's wall).  */
+  unsigned peak = rvtt_pressure_window_peak (mul_call, add_call);
+  if (peak + 1 > rvtt_pressure_capacity ())
+    {
+      rvtt_refuse (RVTT_REF_REASSOC_PRESSURE_BUDGET_EXCEEDED, dump_file,
+		   "reassoc: refusing mad restructure (%s immediate-fold "
+		   "kept, bb %d) (reassoc-pressure-budget-exceeded: "
+		   "conservative pair-window peak %u + the kept loadi live "
+		   "range > 8 LREGs)\n",
+		   arm, bb->index, peak);
+      return false;
+    }
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "reassoc: licensed mad restructure (%s immediate-fold "
+	     "suppressed, bb %d): pair re-offered to the single-use "
+	     "mul+add->SFPMAD contract rule -- double->single rounding on "
+	     "the fused product, one dependent MAD-subunit result-latency "
+	     "hop removed, word-neutral (loadi kept: %+" PRId64
+	     " centislots, mul+add fused: %+" PRId64 " centislots) "
+	     "(flag_associative_math && "
+	     "-mtt-tensix-optimize-reassoc-mad-restructure)\n",
+	     arm, bb->index,
+	     rvtt_dcost_words_to_centislots
+	       (1, rvtt_delivery_cost::PLANE_RISC_PUSH),
+	     rvtt_dcost_words_to_centislots
+	       (-1, rvtt_delivery_cost::PLANE_RISC_PUSH));
+  return true;
+}
+
+/* Guard hook for the loadi+mul -> SFPMULI fold: MUL_CALL is the
+   matched product statement.  True = veto the fold (the pair fuses
+   through the contract mad rule later in this sweep).  */
+
+static bool
+madr_suppress_mul_fold_p (gcall *mul_call)
+{
+  if (riscv_tt_opt_reassoc_mad_restructure <= 0)
+    return false;
+  tree lhs = gimple_call_lhs (mul_call);
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+    return false;
+  use_operand_p use_p;
+  gimple *use_stmt;
+  if (!single_imm_use (lhs, &use_p, &use_stmt))
+    return false;
+  gcall *add_call = dyn_cast<gcall *> (use_stmt);
+  if (!add_call)
+    return false;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (add_call);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpadd
+	  && insnd->id != rvtt_insn_data::sfpadd_lv))
+    return false;
+  /* The product must feed a VALUE operand, not an _lv lane victim.  */
+  unsigned base = insnd->id == rvtt_insn_data::sfpadd_lv ? 1 : 0;
+  if (gimple_call_arg (add_call, base) != lhs
+      && gimple_call_arg (add_call, base + 1) != lhs)
+    return false;
+  return madr_licensed_pair_p (mul_call, add_call, "muli");
+}
+
+/* Guard hook for the loadi+add -> SFPADDI fold: OTHER is the add's
+   non-immediate operand, ADD_CALL the matched add.  True = veto the
+   fold (the pair fuses through the contract mad rule with the loadi
+   as the mad's addend).  */
+
+static bool
+madr_suppress_add_fold_p (tree other, gcall *add_call)
+{
+  if (riscv_tt_opt_reassoc_mad_restructure <= 0)
+    return false;
+  if (TREE_CODE (other) != SSA_NAME)
+    return false;
+  gcall *mul_call = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (other));
+  if (!mul_call)
+    return false;
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (mul_call);
+  if (!insnd
+      || (insnd->id != rvtt_insn_data::sfpmul
+	  && insnd->id != rvtt_insn_data::sfpmul_lv))
+    return false;
+  return madr_licensed_pair_p (mul_call, add_call, "addi");
+}
 
 #define OU unsigned (Flags::OtherUses)
 #define MU unsigned (Flags::MaybeUnused)
