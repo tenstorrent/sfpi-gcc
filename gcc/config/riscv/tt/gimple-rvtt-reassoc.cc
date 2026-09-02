@@ -681,7 +681,7 @@ process_root (gcall *root, chain_kind kind, tree mod)
 	  else if (barrier == window_barrier_fpu)
 	    rvtt_refuse (RVTT_REF_REASSOC_FPU_CHOREOGRAPHY_BOUNDARY, dump_file,
 			 "reassoc: refusing %s chain rebalance in bb %d "
-			 "(reassoc-fpu-choreography-boundary: an X6 Matrix-"
+			 "(reassoc-fpu-choreography-boundary: a Matrix-"
 			 "Unit face-transpose family statement sits inside "
 			 "the chain window -- its Dst and backend-"
 			 "configuration effects are unmodeled at gimple)\n",
@@ -1135,7 +1135,7 @@ split_loop_carried_phi (class loop *loop, gphi *phi)
 		       dump_file,
 		       "reassoc: refusing loop-carried split of %u-link "
 		       "chain (loop %d, bb %d) "
-		       "(reassoc-fpu-choreography-boundary: an X6 "
+		       "(reassoc-fpu-choreography-boundary: a "
 		       "Matrix-Unit face-transpose family statement sits "
 		       "inside the loop body)\n",
 		       k, loop->num, lc.bb->index);

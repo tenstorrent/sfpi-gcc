@@ -1407,7 +1407,7 @@ noexec_record_composition_p (const function_scan &fn, const group &grp,
 		      "reachable from the group"
 		    : "replay-delivered mod-write, no-exec replay capture in "
 		      "the same function (persistent replay slot, cross-"
-		      "invocation reassembly; lane FS FP-3)";
+		      "invocation reassembly)";
 	      return true;
 	    }
 	}

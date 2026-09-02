@@ -3154,7 +3154,7 @@ rvtt_macro_residency_lookup (function *fn, const macro_region &region,
 	  fprintf (dump, "Macro-planner residency: descriptor program"
 		   " content-identical to a dominating resident program;"
 		   " %u descriptor words elided for this region"
-		   " (delivery priced by the R2 model, 1.23"
+		   " (delivery priced by the delivery-cost model, 1.23"
 		   " slot-equivalents per pushed word)\n", words);
 	}
       return true;

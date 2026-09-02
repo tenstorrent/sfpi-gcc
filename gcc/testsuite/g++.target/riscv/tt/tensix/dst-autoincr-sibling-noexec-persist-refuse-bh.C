@@ -16,7 +16,7 @@
 // delivered group the guard now refuses ANY same-function no-exec capture,
 // not only a forward-reachable one.
 //
-// { dg-final { scan-rtl-dump "Dst-autoincr refusal: mod-write-noexec-record-composition-unaudited .replay-delivered mod-write, no-exec replay capture in the same function .persistent replay slot, cross-invocation reassembly; lane FS FP-3." "rvtt_dst_autoincr" } }
+// { dg-final { scan-rtl-dump "Dst-autoincr refusal: mod-write-noexec-record-composition-unaudited .replay-delivered mod-write, no-exec replay capture in the same function .persistent replay slot, cross-invocation reassembly." "rvtt_dst_autoincr" } }
 
 using vec_t = __xtt_vector;
 volatile unsigned sink;

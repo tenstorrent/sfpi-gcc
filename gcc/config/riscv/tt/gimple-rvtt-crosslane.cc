@@ -1091,9 +1091,10 @@ crosslane_transform::refold_swaps ()
 	if (indexed && mod2 != 0)
 	  {
 	    DUMP ("crosslane: indexed swap refold at uid %u refused "
-		  "(crosslane-kv-refold-tie-unadjudicated: SFPSWAP.md "
-		  "sign-keyed tie swap vs pinned-sim compare -- companion "
-		  "movement on equal keys unproven)\n", gimple_uid (call));
+		  "(crosslane-kv-refold-tie-unadjudicated: the ISA's "
+		  "sign-keyed tie-swap rule and the reference simulator "
+		  "disagree -- companion movement on equal keys "
+		  "unproven)\n", gimple_uid (call));
 	    continue;
 	  }
 
