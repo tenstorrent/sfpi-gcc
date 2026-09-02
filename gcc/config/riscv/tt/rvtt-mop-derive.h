@@ -1,4 +1,5 @@
-/* MOP template-effect derivation for the TU-wide PRGM freedom proof.  -*- C++ -*-
+/* MOP template-effect derivation for the TU-wide PRGM freedom
+   proof.  -*- C++ -*-
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
