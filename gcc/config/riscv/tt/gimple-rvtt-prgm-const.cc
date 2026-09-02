@@ -3202,6 +3202,46 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
 
+      /* Plain (non-cc-lifted) placement point for this loop's
+	 candidates: the outermost audited entry for a NON-peel
+	 candidate, exactly the fusion class's discipline.  A PEEL-class
+	 candidate is ENTRY-ANCHORED: peel_first_iteration copies the
+	 loop body's first iteration onto the placement edge, so a
+	 lifted placement would (a) seed the copy's header PHIs from an
+	 edge that does not enter the loop, (b) move the copied body
+	 above the crossed loops' own definitions, and (c) execute the
+	 peeled iteration once per function instead of once per loop
+	 entry.  Before the R2 stage-B widening (laneKL,
+	 -mtt-tensix-optimize-cc-region-general) the anchoring was
+	 implicit -- the enclosing region scans refused the peel loop's
+	 own CC writers (CROSSLOOP-CC-PEEL block comment above), so the
+	 walk could never lift a peel-class placement -- but the
+	 widening admits those crossed CC atoms and the structural fact
+	 must refuse by name (the laneKV board P0: the lifted peel's
+	 uses reached RTL above their defs and init-regs materialized a
+	 zero const_vector no move pattern recognizes).  The candidate
+	 keeps the established entry-anchored peel placement
+	 byte-identically.  The sound lift for a peel-class loop is the
+	 dedicated programming-only path above (lane HR: no peel,
+	 consumer audit, entry-CC proof).  */
+      auto plain_entry = [&] () -> edge
+	{
+	  if (riscv_tt_opt_crossloop_hoist <= 0)
+	    return entry;
+	  edge oentry = rvtt_crossloop_outermost_entry (loop, entry, 0x7fff);
+	  if (peel && oentry != entry)
+	    {
+	      rvtt_refuse (RVTT_REF_CROSSLOOP_PEEL_ENTRY_ANCHORED, dump_file,
+			   "const-residency: loop bb %d lift refused "
+			   "(crossloop-peel-entry-anchored: the "
+			   "first-iteration peel is anchored to the loop's "
+			   "own entry edge; keeping the entry-anchored "
+			   "placement)\n", loop->header->index);
+	      return entry;
+	    }
+	  return oentry;
+	};
+
       auto_vec<residency_candidate> this_loop;
       basic_block *body = get_loop_body_in_dom_order (loop);
       for (unsigned ix = 0; ix != loop->num_nodes; ++ix)
@@ -3267,10 +3307,7 @@ residency_transform (function *fn, prgm_state *st)
 		      m.cc_lifted = cc_lifted_loop;
 		      m.peel = cc_lifted_loop ? false : peel;
 		      m.entry = cc_lifted_loop ? lifted_entry
-			: (riscv_tt_opt_crossloop_hoist > 0
-			   ? rvtt_crossloop_outermost_entry (loop, entry,
-							     0x7fff)
-			   : entry);
+			: plain_entry ();
 		      merge_cands.safe_push (m);
 		    }
 		  continue;
@@ -3365,10 +3402,9 @@ residency_transform (function *fn, prgm_state *st)
 	      else
 		{
 		  /* Same outermost audited placement as the fusion
-		     class.  */
-		  c.entry = riscv_tt_opt_crossloop_hoist > 0
-		    ? rvtt_crossloop_outermost_entry (loop, entry, 0x7fff)
-		    : entry;
+		     class; a peel-class candidate stays entry-anchored
+		     (block comment at plain_entry).  */
+		  c.entry = plain_entry ();
 		  c.peel = peel;
 		}
 	      c.uses = count_nondebug_uses (gimple_call_lhs (load));

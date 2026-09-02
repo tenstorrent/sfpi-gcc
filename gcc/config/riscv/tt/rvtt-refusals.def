@@ -341,6 +341,9 @@ RVTT_REFUSAL (CROSSLOOP_LREG_CLOBBER,
 RVTT_REFUSAL (CROSSLOOP_MOP_SLOT_UNPROVEN,
   "crossloop-mop-slot-unproven",
   "reason; first seen in gimple-rvtt-crosscall.cc")
+RVTT_REFUSAL (CROSSLOOP_PEEL_ENTRY_ANCHORED,
+  "crossloop-peel-entry-anchored",
+  "laneLB P0 fix (laneKV board ICE): a CC-canonical PEEL-class const-residency placement is structurally anchored to its loop's own entry edge -- the first-iteration peel copies the loop body onto the placement edge, so a crossed-loop lift (admissible for programming-only placements under -mtt-tensix-optimize-cc-region-general) would seed the copy's header PHIs from a non-incident edge, move the copied body above the crossed loops' definitions, and run the peeled iteration once per function instead of once per loop entry; the candidate keeps the entry-anchored peel placement")
 RVTT_REFUSAL (CROSSLOOP_PREHEADER_UNPROVEN,
   "crossloop-preheader-unproven",
   "dump; first seen in gimple-rvtt-crossloop.cc")
