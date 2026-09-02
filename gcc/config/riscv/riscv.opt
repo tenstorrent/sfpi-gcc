@@ -548,31 +548,31 @@ Mask(XTT_TENSIX_WH) Var(riscv_tt_subext)
 
 mtt-fix-qsrreplay
 Target Var(riscv_tt_fix_qsr_replay) Init(-1)
-Emit code to address Quasar replay erratum
+Emit code to address the Quasar replay erratum.
 
 mtt-fix-whfence
 Target Var(riscv_tt_fix_wh_fence) Init(-1)
-Emit code to address Wormhole's inoperative fence instruction
+Emit code to address Wormhole's inoperative fence instruction.
 
 mtt-fix-whbhebreak
 Target Var(riscv_tt_fix_whbh_ebreak) Init(-1)
-Emit code to address Wormhole/Blackhole ebreak erratum
+Emit code to address the Wormhole/Blackhole ebreak erratum.
 
 mtt-fix-whraw
 Target Var(riscv_tt_fix_wh_raw) Init(-1)
-Emit code to address Wormhole RAW hazard
+Emit code to address the Wormhole read-after-write hazard.
 
 mtt-optimize-extend
 Target Var(riscv_tt_opt_extend) Init(-1)
-TT-specific removal of extraneous zero/sign extension operations.
+Remove extraneous zero- and sign-extension operations.
 
 mtt-optimize-hll
 Target Var(riscv_tt_opt_hll) Init(-1)
-TT-specific scheduling of high latency loads.
+Schedule high-latency loads early to hide their latency.
 
 mtt-tensix-optimize-cc
 Target Var(riscv_tt_opt_cc) Init(1)
-Optimize Tensix CC usage.
+Optimize Tensix lane condition-code (CC) state handling.
 
 mtt-tensix-optimize-combine
 Target Var(riscv_tt_opt_combine) Init(1)
@@ -580,238 +580,250 @@ Combine Tensix instructions.
 
 mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
-Remove dead tensix instructions
+Remove dead Tensix instructions.
 
 mtt-tensix-optimize-pressure-schedule
 Target Var(riscv_tt_opt_pressure_schedule) Init(0)
-Schedule allowlisted straight-line SFPU regions to reduce register pressure
+Schedule straight-line SFPU regions to reduce vector register pressure.
 
 mtt-tensix-optimize-pressure-schedule-prera
 Target Var(riscv_tt_opt_pressure_schedule_prera) Init(0)
-Pressure-cost list scheduling of audited straight-line SFPU regions on pre-allocation pseudo-register RTL, immediately before the LREG allocator stack (the model-schedule excess-cost-change algorithm of GCC's own -fsched-pressure, adapted to the typed-effect region model): a pressure-minimizing model schedule bounds the achievable peak, the real candidate ranks ready instructions by pressure excess cost plus modeled stall, and a candidate commits only when both its modeled peak pressure and its modeled makespan are non-worse than the original order's with a strict decrease in at least one (exact restore otherwise); baseline and committed pressure are re-verified against the dataflow live-register oracle, disagreement refuses by name, and unaudited producers, CC/config/RWC/Dst effects, self-loop rows, and repeated row shapes bound or defer regions by name
+Run pressure-cost list scheduling on straight-line SFPU regions before register allocation.
 
 mtt-tensix-optimize-latency-schedule
 Target Var(riscv_tt_opt_latency_schedule) Init(0)
-Fill Tensix result-latency bubbles with independent ready SFPU instructions
+Fill Tensix result-latency bubbles with independent ready SFPU instructions.
 
 mtt-tensix-optimize-interlock-schedule
 Target Var(riscv_tt_opt_interlock_schedule) Init(0)
-Fill audited transparent hardware-interlock stalls with independent SFPU instructions
+Fill known hardware-interlock stalls with independent SFPU instructions.
 
 mtt-tensix-optimize-list-schedule
 Target Var(riscv_tt_opt_list_schedule) Init(0)
-List-schedule audited straight-line SFPU regions over the typed-effect dependence DAG against the modeled issue timeline (latency-shadow filling and independent-chain interleaving; post-allocation, where the eight hard LREGs and their WAR/WAW edges are themselves the pressure bound); unaudited or effect-unproven instructions bound regions and refuse by name, self-loop and repeated-row shapes defer to capture formation by name, and any schedule without a strict modeled-makespan decrease keeps the original order byte-identically
+List-schedule straight-line SFPU regions against the modeled issue timeline.
 
 mtt-tensix-optimize-cyclic-region-schedule
 Target Var(riscv_tt_opt_cyclic_region_schedule) Init(0)
-Lift the list scheduler's self-loop deferral for the INTERIOR regions of a multi-region self-loop row (the shape the round-interleave one-region cyclic extension refuses as round-interleave-row-not-one-region): each maximal run of admitted straight-line nodes strictly between issued Tensix barrier words (CC writes, Dst traffic, config accesses -- all of which keep their positions byte-identically) is re-list-scheduled under the established region vocabulary and entry-pin discipline, and the candidate commits only on a STRICT decrease of the WHOLE ROW's modeled steady-state initiation interval (the wrapped cyclic issue model over every issued word of the block, unaudited latencies floored at zero identically in baseline and candidate) -- the linear boundary model that motivated the deferral is never consulted for acceptance.  The reorder never crosses a barrier word or the backedge, so per-iteration semantics are bit-exact by construction (any dependence crossing iterations also crosses a fixed barrier or whole-region order, both preserved).  A region touching the block's first or last issued word (the backedge seam), a repeated region shape (replay/MOP re-roll isomorphism), a row containing a replay owner, a call, or a raw/opaque word, and any candidate without a strict modeled II decrease refuse by name and keep the original order byte-identically.
+Reschedule the interior regions of single-block SFPU loops to reduce the modeled steady-state initiation interval.
 
 mtt-tensix-optimize-ims
 Target Var(riscv_tt_opt_ims) Init(0)
-Schedule Tensix SFPU self-loop rows by Rau iterative modulo scheduling (FABLE_GOES_BURR item #5): the timing engine's exact tier computes MII = max(ResMII, RecMII) from the row's dependence-distance graph (cross-iteration edges at distance 1 only; the same seq/dep vocabulary the acceptance simulator consumes, through one marshaller) and places the region's words against a single-issue modulo reservation table of II columns with Rau's budgeted eviction rule, incrementing II on exhaustion; the placement's sorted order is offered as a candidate to the established cyclic paths -- the one-region wrapped row and the interior regions of a barrier-chopped row -- and commits ONLY on the established strict whole-row steady-state II decrease (the wrapped acceptance model is never bypassed), with the same pad-site and entry-pad-flip guards, so per-iteration semantics stay bit-exact by construction (renames and within-region placement only; barrier words and the backedge are never crossed).  Modulo-variable-expansion bookkeeping is priced, not assumed: a placement whose value lifetimes exceed the II owes kmin kernel copies, and that EXPANSION -- never performed by this flag; the kernel-unroll realization is the item's staged follow-up -- is adjudicated by name now (mve-rename-exhausted when the steady-state live-copy demand does not fit the register file net of loop-live invariants or the region rename search exhausted the free LREGs), while the flat placement order still competes under the acceptance model, which cannot ride the unrealized overlap; a result-bearing row word without an audited in-window latency refuses the whole row (ims-unaudited-latency); an exhausted eviction budget (ims-budget-exhausted), a candidate without a provable strict decrease (ims-no-ii-decrease), a reversed original-order dependence in the committed order (ims-order-hazard, fail-closed belt), and any deeper dependence distance (ims-dependence-distance-unproven) all refuse by name and keep the existing schedule byte-identically.  Default off; flag absent, the generated stream is byte-identical to the baseline.
+Schedule single-block SFPU loops by iterative modulo scheduling.
 
 mtt-tensix-ims-budget=
 Target Joined RejectNegative UInteger Var(riscv_tt_ims_budget) Init(0)
-Testing and tuning only: absolute placement budget for the Rau iterative-modulo-scheduling eviction loop (0 = the engine default of eight placements per region word); exhaustion refuses by name (ims-budget-exhausted) and keeps the existing schedule, so a tightened budget can only refuse more, never change an accepted schedule's soundness.
+Set the placement budget for the modulo-scheduling eviction loop (0 = the engine default).
 
 mtt-tensix-optimize-capture-rotation
 Target Var(riscv_tt_opt_capture_rotation) Init(0)
-Rotate replayed capture rows to fill audited interlock stalls across the row boundary
+Rotate replayed capture rows to fill known interlock stalls across the row boundary.
 
 mtt-tensix-optimize-drain-schedule
 Target Var(riscv_tt_opt_drain_schedule) Init(0)
-Prove per-boundary macro-event drain requirements from the derived descriptor calendars and elide structurally multiplied drain NOPs at proven-neutral macro run boundaries (refusals keep the full derived drain byte-identically)
+Elide provably unnecessary drain NOPs at macro run boundaries.
 
 mtt-tensix-optimize-window-pairing
 Target Var(riscv_tt_opt_window_pairing) Init(0)
-Tune the macro planner's inter-row drain (the lane-EV fixed-VD full-drain obligation) down to the minimal spacing the exact pending-event model proves -- per-event footprints from the schedule's own transcribed delays and the descriptor's SequenceBits, register/CC/config conflict intersection, the audited Dst physical-row and column-parity disjointness model, and the sub-unit occupancy rule -- restoring back-to-back paired replay windows where every obligation discharges; any unproven piece refuses by name and keeps the full derived drain byte-identically.  The column-parity clause carries the same documented ambient-LaneConfig platform contract as the LREG spill machinery (architectural default column-exchange state; any function-local writer that could reach SFPCONFIG destination 15 refuses the clause).
+Reduce inter-row drain spacing to the minimum the pending-event model proves safe.
 
 mtt-tensix-optimize-window-pairing-stride
 Target Var(riscv_tt_opt_window_pairing_stride) Init(0)
-Generalize the window-pairing stride proof to advancing address modes riding ANY issued word of the row (the compact-absorber invariant relaxed): every Dst access footprint is rebased by the stride phase of its carrying word -- accesses carried at or before the absorbing word resolve at the row-entry counter value, accesses carried after it resolve one stride later (SFPLOAD resolves its own address before ApplyPartialAddrMod; SFPLOADMACRO-hosted events latch their Dst row at the launch word regardless of later RWC advances) -- restoring the uniform row-to-row distance arithmetic; any unproven piece refuses by the established window-pairing names and keeps the full derived drain byte-identically.  Effective only where -mtt-tensix-optimize-window-pairing reaches the tuner.
+Extend window-pairing proofs to rows whose addresses advance with any issued word of the row.
 
 mtt-tensix-optimize-crossrow-pairing
 Target Var(riscv_tt_opt_crossrow_pairing) Init(0)
-Pair consecutive iterations of a capturable single-row Dst loop (one constant-address no-increment load/store pair, flat structured-CC atoms, one trailing typed Dst row step, the canonical scalar countdown) into one doubled row whose two iterations interleave: the second copy's Dst accesses are rebased to the typed static offset the removed interior row step would have supplied, the shared trailing row step advances both rows at once, the countdown halves under a proven even constant trip count, and pure spans of the two copies list-schedule together while CC atoms stay indivisible in original interior order and every fresh rename web must root in the proven ambient all-lanes state.  The doubled row keeps the counted-loop replay capture shape, so delivery stays record-plus-launch.  Any unproven piece (entry CC state, Dst operand form or disjointness, counter shape or parity, scalar or GPR dependence, unaudited effect or latency, register pressure, modeled steady-state II, pad sites) refuses by name and keeps the single row byte-identically.  Blackhole only.
+Pair consecutive iterations of eligible single-row Dst loops into one doubled row (Blackhole only).
 
 mtt-tensix-optimize-crossrow-pairing-stall-words
 Target Var(riscv_tt_opt_crossrow_pairing_stall_words) Init(0)
-Admit words carrying the architectural next-slot ACCEPTANCE stall (xtt_next_slot_stall: the SFPSWAP family -- SFPSWAP.md: only SFPNOP can be accepted on the following cycle, hardware stalls the thread otherwise) into the cross-row pairing vocabulary.  Such a word remains fully audited (replay-safe, fixed encoding, biased xtt_result_latency on record -- an unaudited latency still refuses by name), and is priced at TWO issue slots in the pairing's steady-state II model, both in the doubled sequential baseline and in every candidate (the rvtt-cost.md consumer rule: the acceptance stall charges one extra slot per occurrence); its recorded-word count against the replay capture budget stays one (the stall is a hardware issue fact, not a stream word).  The general audited_latency() contract is untouched: the interlock scheduler and capture rotation keep refusing next-slot-stall instructions as fill participants exactly as before (lane BM), and the downstream nop inserter re-discharges every delay contract -- including the BH SFPMAD->SFPSWAP scoreboard erratum (xtt_dynamic_bug) -- over the pairing's final order, with the pairing's own pad-site probe refusing any transform that would grow the inserter's pad sites.  Effective only where -mtt-tensix-optimize-crossrow-pairing admits the loop.  Blackhole only.
+Admit next-slot-stall instructions into cross-row pairing, priced at two issue slots (Blackhole only).
 
 mtt-tensix-optimize-crossrow-pairing-seed
 Target Var(riscv_tt_opt_crossrow_pairing_seed) Init(0)
-Extend cross-row pairing with Rule-B preservation-seed renames (round-cc-modulo DESIGN-V2): a collision web whose fresh root executes INSIDE a flat CC atom -- refused by the ambient-only rename discipline (crossrow-pairing-rename-cc-domain) -- may rename to a dead LREG when a typed all-lanes copy of the old register (SFPMOV mod-2, the audited hidden-state-free assign that writes every lane regardless of the CC state) is seeded immediately after the old register's last definition preceding the root -- in the ambient position before the atom's first CC writer, or inside the atom's indivisible item directly after an in-atom producer (e.g. the atom-opening compare whose result the predicated root preserves): the seed makes the fresh register lane-wise equal to the original at the predicated root, so disabled lanes observe the identical preserved value, and every later web member across all later CC domains is rewritten until the web's fresh terminator.  A web whose root IS a bare all-lanes copy (a full-lane root: it writes every lane itself, wherever it sits) renames seed-free at zero word cost.  Each seed is charged as one issued word in the same steady-state II model; the seed set commits only on a strict modeled II improvement over the unseeded candidate (trailing non-improving seeds roll back to the last strict checkpoint), the doubled row plus seeds must still fit the replay capture budget, and any unproven piece (register pressure, live-in/live-out, word admission, rename constraints) refuses by name and keeps the unseeded pairing byte-identically.  Effective only where -mtt-tensix-optimize-crossrow-pairing admits the loop.  Blackhole only.
+Allow cross-row pairing to seed all-lanes copies so predicated value webs can be renamed (Blackhole only).
 
 mtt-tensix-optimize-crossrow-shared-reload
 Target Var(riscv_tt_opt_crossrow_shared_reload) Init(0)
-Deduplicate the cross-row pairing's duplicated in-loop constant materializations: when the doubled row's two halves both materialize the SAME reload register through IDENTICAL word-for-word constant-only definition groups (the textual-copy fact, re-verified byte-for-byte -- a rename that touched either half's web refuses), the copy half's definition groups are deleted and its consumers read the first half's materializations through a VALUE-CORRECT re-sequencing of the pairing's original order: the row splits at each definition group into epoch segments and the merged order interleaves the halves epoch by epoch (first half's segment, then the copy's), so every surviving consumer sits between its own epoch's definition group and the next -- the name-based dependence vocabulary then derives exactly the sharing constraints (RAW from the epoch's definition, WAR into the next epoch's definition) from position alone, which is the soundness condition a position-blind dedupe cannot express (deleting the copy's definitions without re-sequencing would bind the copy's consumers to the first half's LATER definition -- wrong code by construction, the lane-IC adjudication).  Admission requires the shared register dead into and out of the loop, definition groups that are pure constant materializations (one fresh writer plus read-modify-write completions referencing no other register), every consumer after its group's last member, no definition or consumer inside a CC atom, no atom spanning an epoch boundary, and NO cross-half register interaction beyond the shared register among the words the merge reorders (the halves' other webs must be disjoint -- renamed or read-only); the deduplicated candidate commits only when its modeled steady-state II does not exceed the duplicated candidate's, a committed order whose value-oracle walk diverges from the epoch assignment refuses the whole pairing by name, and every unproven piece refuses by name leaving the established pairing untouched.  One register per paired loop (the deepest duplicated-word saving; deterministic tie).  Effective only where -mtt-tensix-optimize-crossrow-pairing admits the loop.  Blackhole only.
+Share identical constant materializations between the two halves of a paired row (Blackhole only).
 
 mtt-tensix-optimize-mve-expand
 Target Var(riscv_tt_opt_mve_expand) Init(0)
-Realize the modulo-variable-expansion kernel unroll (FABLE_GOES_BURR item #5 stage 2) on the counted replay-formable kernel shape the cross-row pairing admits: where the timing engine's exact tier proves an item-level modulo placement of the single kernel (CC atoms indivisible as one multi-word item each -- the CC-state-equality placement proof carried into the reservation model) whose value lifetimes exceed the placement II by exactly one kernel copy (kmin = 2, Lam PLDI-88), the pairing's doubled row is ordered by that placement -- copy words at their modulo issue slots, the second iteration offset by one II -- instead of the greedy interleave, realizing the overlap the flat order cannot ride; rotated register targets for the copy's colliding webs route through the item-#7 du-chain rename service (rvtt_lreg_rename_chain -- block-free targets first, the temporal tier where block-free registers are exhausted), the expansion demand is priced against the register file net of loop-live invariants exactly as the bookkeeping tier prices it (mve-rename-exhausted when it does not fit), and an independent producer-lockstep belt re-verifies every rename's value web post-commit (a diverging web refuses mve-expand-lockstep-divergence and restores byte-identically).  The realized kernel keeps the pairing's counted replay-capture shape whole -- Dst rebase, doubled row step, halved countdown, capture-budget bound, pad-site guard -- so delivery stays record-plus-launch (the crp-parity obligation is structural: a row outside that shape cannot realize and the bookkeeping paths adjudicate the owed expansion by name, mve-expand-row-not-counted-kernel).  The realized order commits only when its modeled steady-state II strictly beats both the greedy pairing candidate and the doubled sequential baseline (mve-expand-no-ii-decrease otherwise, the pairing's own candidate untouched); kmin above two refuses mve-expand-kmin-beyond-pairing, a mutated doubled row (seeds, dedupe) refuses mve-expand-row-mutated, and a reversed original-order dependence refuses mve-expand-order-hazard (fail-closed belt).  Effective only where -mtt-tensix-optimize-crossrow-pairing admits the loop; default off; flag absent, the generated stream is byte-identical to the baseline.  Blackhole only.
+Realize the modulo-variable-expansion kernel unroll on eligible paired SFPU loops (Blackhole only).
 
+; Internal red/green test knob: deliberately breaks one rename so the
+; post-commit verification is seen to catch it; never a tuning knob.
 mtt-tensix-mve-expand-sabotage
-Target Var(riscv_tt_mve_expand_sabotage) Init(0)
-Testing only: deliberately mis-rotate one committed modulo-variable-expansion rename (the realized copy's web is re-pointed at a register the first iteration defines) so the producer-lockstep belt's red/green proof can fire; the belt must catch the divergence (mve-expand-lockstep-divergence), undo every rename exactly, and keep the unrealized pairing byte-identical.  Never a tuning knob.
+Target Undocumented Var(riscv_tt_mve_expand_sabotage) Init(0)
+Testing only: mis-rotate one committed modulo-variable-expansion rename to exercise the post-commit verification.
 
 mtt-tensix-optimize-init-hoist
 Target Var(riscv_tt_opt_init_hoist) Init(0)
-Hoist a noinline callee's loop-invariant idempotent macro-planner init prefix (the derived descriptor program, and where the caller's reaching configuration is proven value-equal, the owned SETC16 program and all-lanes enable) into the proven caller's loop preheader, executing it once per loop instead of once per call; every unproven link refuses by name and keeps the per-call prefix byte-identically.
+Hoist a callee's loop-invariant initialization prefix into the calling loop's preheader.
 
 mtt-tensix-optimize-prgm-const
 Target Var(riscv_tt_opt_prgm_const) Init(0)
-Allocate programmable constant registers to loop-invariant SFPU immediates
+Allocate programmable constant registers to loop-invariant SFPU immediates.
 
 mtt-tensix-optimize-const-residency
 Target Var(riscv_tt_opt_const_residency) Init(0)
-Allocate programmable constant registers to proven-constant SFPU values by priced selection, in-loop materializations first
+Allocate programmable constant registers to proven-constant SFPU values by priced selection.
 
 mtt-tensix-optimize-const-remat
 Target Var(riscv_tt_opt_const_remat) Init(0)
-Rematerialize proven loadi-materialized SFPU values at their uses when vector register pressure exceeds the LREG file
+Rematerialize proven-constant SFPU values at their uses when vector register pressure exceeds the register file.
 
 mtt-tensix-optimize-pressure-park
 Target Var(riscv_tt_opt_pressure_park) Init(0)
-Widen the CC-canonical residency peel class to invariant constant materializations positioned at or after the body's first CC writer -- admitted only when every consumer is in the audited lane-predicated set, so the all-lanes constant-register read refines exactly the lanes the original fresh predicated load left indeterminate -- and, when the programmable constant registers are exhausted, hoist remaining admitted materializations to the same proven programming point as plain LREG live ranges while the function-wide SSA pressure model stays within the 8-LREG file; every unproven piece refuses by name and keeps the established placement byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes.
+Hoist qualifying constant materializations placed after a CC write when a whole-function pressure model proves it safe.
 
 mtt-tensix-optimize-crossloop-cc-peel
 Target Var(riscv_tt_opt_crossloop_cc_peel) Init(0)
-Lift the CC-canonical residency peel class's constant programming across enclosing loops as a PROGRAMMING-ONLY placement: when the crossloop placement walk proves the crossed loops under the cc-immaterial region discipline (every CC-writing statement is a structured typed CC atom whose whole effect is the lane-enable state plus its SSA definition -- the parked constant register is out of its reach -- while delivered words, replay, MOP slots, and explicit LREG writes keep their established refusals) and no function-local CC write reaches the lifted preheader (the fn-entry all-lanes ambient the plain loop class already relies on), the loop's parked constants are programmed once at the outermost proven entry and the first-iteration peel is never created: the crossed loop re-entered the peel-plus-programming every iteration for a value that cannot change.  Any unproven piece -- a non-atom CC write, an unproven crossed region, a CC write reaching the lifted preheader, an unproven second trip -- refuses by name and keeps the established peel placement byte-identically.  Effective only where -mtt-tensix-optimize-const-residency collects the peel class and -mtt-tensix-optimize-crossloop-hoist provides the placement walk.
+Program parked constants once at the outermost proven loop entry instead of once per enclosing-loop iteration.
 
 mtt-tensix-optimize-opaque-replay-record
 Target Var(riscv_tt_opt_opaque_replay_record) Init(0)
-Derive the TU-wide PRGM freedom proof through raw Tensix REPLAY record words instead of refusing the whole translation unit as opaque: a raw load_mode=1 word's effect is replay-buffer content plus the disposition of the next COUNT delivered words -- with execute_while_loading=0 those words are architecturally SWALLOWED (stored, never pushed to the backend), and in a translation unit whose every playback path keeps its established refusal (raw execute words, REPLAY words in MOP template slots) the recorded content is never delivered, so a record region whose swallowed words are statically identified raw constant words (straight-line, or one structurally counted single-block loop whose every trip is swallowed) contributes NO PRGM/LaneConfig/CC effect.  Recorded words that could write PRGM state if a future increment ever admitted playback (SFPCONFIG, SFPLOADI to a non-allocatable destination, nested MOP/REPLAY) still refuse by name, as does any region whose swallow count, loop trip count, or statement interleaving (a call, a typed builtin, a volatile store, an unrecognized asm) is unproven.  Flag off, and on every refusal, the established opaque-region refusal is kept byte-identically.  Effective only where the freedom proof's consumers (-mtt-tensix-optimize-prgm-const, -mtt-tensix-optimize-const-residency and its tiers) run.
+Analyze raw replay record regions for the constant-register freedom proof instead of treating the whole translation unit as opaque.
 
 mtt-tensix-optimize-hoisted-prgm-reuse
 Target Var(riscv_tt_opt_hoisted_prgm_reuse) Init(0)
-Add the HOISTED-REUSE class to the const-residency walk: a loop-invariant constant materialization already parked OUTSIDE the loop (the invariant pass's preheader hoist) whose full 32-bit lane image derives through the audited single-issue derivation may re-claim a programmable constant register through the established placement machinery -- a free PRGM slot, or (the TU value-identical reuse already shipped for in-loop candidates) a claimed slot whose EVERY typed TU write derives to the same 32-bit value, reprogrammed idempotently in place.  The programming point is the hoisted materialization's own position (the pressure class's in-place discipline, same cc-reach proof); the materialization becomes a zero-pressure constant-register read keeping its SSA name, releasing one loop-wide LREG live range for downstream consumers (the cross-row pairing's rename search is the motivating one: an 8/8-pressure row loop has no dead LREG for its row-B webs).  Pricing: one extra issued word once per claim (the SFPCONFIG; the staged materialization replaces the hoisted one) -- a proven single-trip loop refuses by name, and every unproven piece (underivable image, TU freedom proof, cc reach, no matching slot) refuses byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes.
+Let invariant constants already hoisted out of a loop claim programmable constant registers.
 
 mtt-tensix-optimize-loop-prgm-reclaim
 Target Var(riscv_tt_opt_loop_prgm_reclaim) Init(0)
-Offer the DEAD-claim reclaim placement tier to the const-residency walk's own IN-LOOP candidate classes (LOOP, CC-canonical peel, and the pressure-park post-CC admission): a claimed programmable constant register NO statement in the translation unit ever reads (the typed sfpreadlreg no-reader census; raw words closed by the audited-word table) may be reprogrammed with a DIFFERENT value at the candidate's established loop programming point, provided the programming-to-readers window is call- and asm-free (the loop body, plus the candidate's own entry edge -- a crossloop- or cc-lifted entry refuses by name, its wider window is unproven here) so no callee can interpose the dead claim's own store between this function's programming and its in-loop reads.  The placement, pricing (the peel break-even and entry-edge models unchanged -- a reclaimed slot costs exactly a free slot), and the replacement constant-register read are the established loop-class machinery; a later same-value candidate landing on a reclaimed slot must re-prove its own window and always reprograms (the dead claim's foreign writer makes cross-window value persistence unprovable; reprogramming is idempotent).  Selection order is the established uses-then-value ranking, unchanged (a words-saved key is pressure-blind and can starve a pressure-relieving parking of its slot).  Every unproven piece -- a TU reader of every claimed slot, a foreign call or asm in the window, no dead slot remaining -- refuses by name and keeps the established placement byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes.
+Reprogram provably unread programmable constant registers with new values at loop entry.
 
 mtt-tensix-optimize-madpair-vocabulary
 Target Var(riscv_tt_opt_madpair_vocabulary) Init(0)
-Widen the const-residency MAD-PAIR discovery to the mul+add operand vocabulary the downstream combine rules themselves fuse through: the lane-carrier _lv spellings of the pair members (sfpmul_lv/sfpadd_lv, exactly the forms the muli/addi immediate folds also match) and a single-use SFPMOV complement wrapper between the mul and the add (the shape the -a+b rewrite reduces before the mad rule fires).  Discovery-only widening of the pin-16 EL-composition rescue: candidate admission, the shared-constant refusal, pair-atomic grouping, the cc-reach proof, and pricing are the reviewed MAD-PAIR class unchanged; a pair outside the widened vocabulary keeps its established recognition byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes.
+Recognize additional multiply-add operand spellings when collecting constant-residency candidates.
 
 mtt-tensix-optimize-park-ordering
 Target Var(riscv_tt_opt_park_ordering) Init(0)
-Order the invariant-immediate placement passes: a CC-restore loop's IN-REGION invariant SFPU immediate materializations (CC-region depth above zero, the class whose early hoist can forge a per-iteration lane-predicated SFPMOV merge and starve the late arbiter's budget) DEFER from the early conservative invariant pass to the late const-residency walk whenever that walk's residency classes (-mtt-tensix-optimize-const-residency) and pressure-park tier (-mtt-tensix-optimize-pressure-park) are both enabled -- the late walk allocates those candidates under its exact function-wide pressure model and audited post-CC admission (programmable-constant tiers first, LREG parks by priced rank).  DEPTH-ZERO candidates keep the early hoist (depth-zero-hoist-dominant): the restore proof makes that hoist a mask-exact free code motion, while the late walk could re-place such a candidate only behind its manufactured first-iteration peel -- extra prologue words on every kernel entry, and a trip-parity flip that kills the crossrow-pairing capture on even-trip paired row loops.  A loop whose body carries LUT machinery (SFPLUT/SFPLUTFP32) defers wholesale regardless of depth (lut-coefficient-authority): its in-loop constants are LUT slot coefficients owned by the lut-select placement.  A loop with three or more in-region invariant constants also defers wholesale (in-region-demand): that demand puts the loop in the pressure-arbitrated regime where the later placement authorities (the lut-select coefficient placement, the walk's audited parks) own the 8-LREG headroom an early keep would pin.  Loops without CC machinery, and compilations without both late flags, keep the early pass's established hoists byte-identically.
+Defer qualifying in-loop constant placements from the early invariant hoist to the late constant-residency walk.
 
 mtt-tensix-optimize-residency-merge-rename
 Target Var(riscv_tt_opt_residency_merge_rename) Init(0)
-Add the MERGE-RENAME class to the const-residency walk (FABLE_GOES_BURR residual attack R1(b), the addrsqrt cert's GIMPLE-side rename successor): an IN-LOOP constant-immediate CC-merge -- a single-issue FLOATB sfploadi_lv whose live-value link is a loop-varying vector, the one materialization shape no invariant or residency class can hoist because the STATEMENT is loop-variant even though its immediate is not -- is RENAMED at the gimple level into a fresh full-lane twin materialization of the same immediate (placeable by the established pressure-park LREG tier at its proven all-lanes programming point) plus an in-loop register-source predicated move (sfpassign_lv) merging the parked value under the identical lane mask.  The rename is delivery-word-neutral by construction (one in-loop word before, one after) while the park adds its materialization word once, so the class REFUSES BY NAME (merge-rename-word-neutral) unless the adjudication override admits the neutral rename for measurement legs; a rename whose twin the LREG tier cannot place undoes exactly and refuses by name (merge-rename-placement-refused), and every out-of-vocabulary shape (non-FLOATB mod, runtime immediate, multi-issue chain, memory-carrying form) refuses by name (merge-rename-form-unsupported) byte-identically.  Effective only where -mtt-tensix-optimize-const-residency runs the residency classes and -mtt-tensix-optimize-pressure-park provides the LREG tier.
+Rename in-loop constant CC merges so the constant can be parked outside the loop.
 
+; Internal measurement override: admits renames the priced verdict
+; refuses so a floor certificate can be re-measured on hardware.
 mtt-tensix-merge-rename-allow-neutral
-Target Var(riscv_tt_merge_rename_allow_neutral) Init(0)
-Adjudication override for the MERGE-RENAME residency class (-mtt-tensix-optimize-residency-merge-rename): admit delivery-word-neutral renames -- the in-loop immediate CC-merge becomes a register-source predicated move reading a parked full-lane twin -- so a certified floor's rename successor can be executed and measured on silicon even where the priced verdict is neutral.  Never on by default; the word-neutral refusal is the shipped behavior.
+Target Undocumented Var(riscv_tt_merge_rename_allow_neutral) Init(0)
+Measurement only: admit delivery-word-neutral merge renames that the priced verdict refuses.
 
 mtt-tensix-optimize-priced-placement
 Target Var(riscv_tt_opt_priced_placement) Init(0)
-Arbitrate the competing invariant-constant placement tiers through one priced authority (FABLE_GOES_BURR item #13): the early invariant hoist's park-ordering deferral, the const-residency walk's within-class candidate ranking, and the pressure-park LREG tier's marginal register stop deciding by their locally-greedy measured cut lines and take the placement arbiter's verdict -- delivery words priced through the one delivery-cost API, pressure through the one pressure engine, trip amortization through the one trips facade -- with every legality proof (CC-canonical peel proofs, ambient proofs, consumer audits, slot-clobber censuses) kept exactly in its owning pass and every named refusal preserved.  The pressure-park tier's last free LREG can be outbid by the priced demand of a downstream dst-ownership identity-reload fold (place-fold-reserve-outbid), relieving the fold's lreg-pressure-exceeded guard where the fold is worth more than the marginal park; the park-ordering verdict is monotone fail-closed (it may rescue an over-deferral whose keep side is fully proven -- free-move restore proof plus capacity -- but never manufactures a new deferral: the late walk's re-placement ability is unprovable at the early pass, so that direction refuses by name); an unpriceable alternative refuses by name (place-alternative-unpriceable) and keeps the legacy decision, an over-budget candidate set refuses whole (place-budget-exhausted), and the LUT-coefficient authority keeps its wholesale deferral (the lut-select placement owns the loop's slot coefficients).  Off, every decision point keeps the established policy chain byte-identically while dumping the arbiter's shadow verdict beside it.
+Arbitrate the competing invariant-constant placement tiers through one priced authority.
 
 mtt-tensix-optimize-lreg-alloc
 Target Var(riscv_tt_opt_lreg_alloc) Init(0)
-When SFPU vector pressure exceeds the 8-register LREG file, DSATUR-color the interference graph before IRA and spill selected vector webs through proven-free 32-bit Dst scratch rows (SFPSTORE/SFPLOAD round trip) until the graph is 8-colorable; assignment stays with IRA, every unproven ingredient refuses by name, and the lreg-pressure-exceeded error is kept byte-identically on refusal
+Color the SFPU vector interference graph before register allocation, spilling selected value webs through free Dst scratch rows.
 
 mtt-tensix-optimize-lreg-coalesce
 Target Var(riscv_tt_opt_lreg_coalesce) Init(0)
-Apply Briggs/George conservative coalescing to the DSATUR allocator's interference graph before the colorability verdict and spill-victim selection: copy-related SFPU vector webs merge when the merged node provably keeps the graph 8-colorable (Briggs: fewer than eight significant-degree merged neighbors; George for precolored pairs: every significant neighbor of the merging web already interferes with the precolored web), so a web that only spilled through a Dst round trip because its copy halves were counted separately colors for free; every failed conservative test refuses by name and keeps the uncoalesced verdict, and spilling a merged web round-trips all of its copy-related constituents through one proven-free scratch row.  Effective only where -mtt-tensix-optimize-lreg-alloc engages the DSATUR allocator (one knob = one mechanism; below the pressure wall both flags are proven no-ops)
+Apply conservative (Briggs/George) coalescing to the SFPU vector interference graph.
 
 mtt-tensix-dst-layout-32b
 Target Var(riscv_tt_dst_layout_32b) Init(0)
-Integration-layer declaration that every SFPU calc body in this translation unit executes under a 32-bit-row Dst layout (fp32 dest accumulation / 32-bit dest addressing); consumed by -mtt-tensix-optimize-lreg-alloc to admit runtime-resolved (SRCB mode 0) and Dst-untouched kernels for scratch-row spilling. DECLARING THIS FALSELY ON A 16-BIT-LAYOUT KERNEL MAKES A SPILLED COMPILATION PRODUCE SILENT WRONG OUTPUT (no run-time error exists); the build layer must set it from the kernel's dest-accumulation mode. Affirmative 16-bit-format accesses refuse regardless of this declaration
+Declare that every SFPU calculation body in this translation unit executes under a 32-bit-row Dst layout; a false declaration causes silent wrong output.
 
 mtt-tensix-optimize-transp-involution
 Target Var(riscv_tt_opt_transp_involution) Init(0)
-Fuse a Tensix SFPTRANSP with the full-bank loads defining its operands into one companion-preserving involution bundle, and forward proven-identity Dst parks across it.
+Fuse an SFPTRANSP with the full-bank loads defining its operands into one companion-preserving bundle.
 
 mtt-tensix-optimize-crosslane
 Target Var(riscv_tt_opt_crosslane) Init(0)
-Recognize the typed cross-lane vocabulary's canonical instruction frames (SFPSHFT2 rotate chains, SFPSWAP compare-exchange stages, dual-bank SFPTRANSP and zip frames) and apply their proven permutation algebra -- rotate-chain collapse, per-arch slide re-lowering, swap refolding, transpose-involution and zip-round-trip cancellation -- with per-arch capability tables, issue-slot pricing from the audited next-slot-stall facts, and named refusals; also enforce the TEN-2932 ENABLE_DEST_INDEX window model on the final instruction stream (non-exempt LReg4-LReg7 writes inside a typed window become named compile errors).
+Optimize recognized cross-lane instruction sequences through their proven permutation algebra.
 
 mtt-tensix-optimize-replay-exec-record
 Target Var(riscv_tt_opt_replay_exec_record) Init(0)
-Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch when the unrolled launch run structurally proves the exchange (effective only with -mtt-tensix-optimize-replay-hoist).
+Execute a hoisted Tensix replay capture while recording and drop the first now-redundant playback launch.
 
 mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
-Recognize legal adjacent Tensix Dst-register iterations
+Recognize and fuse legal adjacent Tensix Dst-register iterations.
 
+; Historical spelling of -mtt-tensix-optimize-pressure-schedule, kept for
+; command-line compatibility; no in-tree or known external consumer
+; remains, so it is a candidate for removal.
 mtt-tensix-optimize-lp-schedule
 Target Undocumented Alias(mtt-tensix-optimize-pressure-schedule)
+Historical alias for -mtt-tensix-optimize-pressure-schedule.
 
 mtt-tensix-pressure-schedule-use-milp
 Target Var(riscv_tt_pressure_schedule_use_milp) Init(0)
-Use the built-in exact branch-and-bound solver for Tensix pressure scheduling when the list schedule cannot satisfy capacity (--with-lp-solve builds also cross-check it against lp_solve).
+Use the exact branch-and-bound solver when the pressure-scheduling list heuristic cannot satisfy capacity.
 
 mtt-tensix-optimize-replay
 Target Var(riscv_tt_opt_replay) Init(1)
-Generate Tensix replay instruction.
+Generate Tensix replay instructions.
 
 mtt-tensix-optimize-replay-hoist
 Target Var(riscv_tt_opt_replay_hoist) Init(0)
-Hoist fixed-encoding Tensix replay capture out of profitable loops.
+Hoist fixed-encoding Tensix replay captures out of profitable loops.
 
 mtt-tensix-replay-hoist-completion-guard
 Target Var(riscv_tt_replay_hoist_completion_guard) Init(0)
-Use a drain-inclusive completion contract for hoisted Tensix replay records.  With -mtt-tensix-optimize-replay-hoist, execution-bound re-record profitability charges the complete preheader record delivery instead of hiding it behind the loop's execution backlog.  With -mtt-tensix-optimize-replay-record-hoist, retain the audited interlocked-execution term and use the shared binding-resource model instead of assuming payload execution cancels; an unaudited payload refuses, and the complete record is charged exactly once.
+Use a drain-inclusive completion contract when pricing hoisted Tensix replay records.
 
 mtt-tensix-optimize-replay-record-hoist
 Target Var(riscv_tt_opt_replay_record_hoist) Init(0)
-Hoist the record phase of a proven iteration-invariant re-recorded Tensix replay capture window to the loop's dedicated preheader, leaving one playback launch per former record site.  Measurement class (DX-F3): admission keeps every structural, invariance, slot-liveness, and audited-latency proof (refusing by name), while profitability prices the removed per-trip record delivery as real issue cost where the default saturation-calibrated model refuses; the Log-class silicon anchors price the opposite verdict for this shape family, so promotion requires its own silicon A/B (default off).
+Hoist the record phase of an iteration-invariant re-recorded replay capture to the loop's preheader.
 
 mtt-tensix-optimize-record-hoist-peel
 Target Var(riscv_tt_opt_record_hoist_peel) Init(0)
-With -mtt-tensix-optimize-replay-record-hoist, rescue the Dst-store re-record class that the no-exec composition mirror refuses (noexec-rerecord-dststore-composition-unaudited) by hoisting the capture as an EXEC-WHILE-RECORD pass with a first-trip peel: the loop's proven first trip (record pass plus its sibling launches) moves verbatim to the dedicated preheader, every former in-body record site becomes a playback launch, and the proven-constant loop counter is re-initialized one step later.  The executed word stream is a reordering-free peel of today's witnessed exec-while-record composition (never the silicon-refuted no-exec re-record shape); trips, counter rewrite, and full body coverage must all prove, refusing by name (default off).
+Hoist a Dst-storing replay capture by peeling the loop's first iteration into the preheader.
 
 mtt-tensix-optimize-record-hoist-lift
 Target Var(riscv_tt_opt_record_hoist_lift) Init(0)
-With -mtt-tensix-optimize-replay-record-hoist, rescue the storeless re-record class the downstream-fallback composition oracle refuses (record-hoist-downstream-fallback-unprofitable) by walking the no-exec record's placement OUTWARD across enclosing loops to the outermost admissible dedicated preheader that the same oracle proves separated from every upstream would-be mod-write row (ultimately the function entry -- the witnessed init-record discipline), so the record is delivered once per kernel entry instead of once per trip.  Every crossed loop must prove replay-preserving under the record-hoist interval walk, each candidate placement must be a dedicated preheader free of open recording state, and the committed transform is the unchanged no-exec hoist (dominating, storeless, fixed-encoding); a failing level stops the walk and no admissible level keeps today's bytes by name (record-hoist-lift-no-admissible-level; default off).
+Move a hoisted replay record outward across enclosing loops to the outermost provably safe preheader.
 
 mtt-tensix-optimize-counted-capture-peel
 Target Var(riscv_tt_opt_counted_capture_peel) Init(0)
-Extend the exec-while-record first-trip peel to the COUNTED-LOOP capture class: when the counted-loop replay hoist refuses on modeled benefit (the preheader no-exec record's full payload re-delivery cannot amortize over the loop's proven trips), re-price the PEELED shape -- the loop's proven first trip moves verbatim to the dedicated preheader with the capture flipped to exec-while-record, paying only the capture word and the record-engine overhead (the payload delivery the baseline first trip already paid; never a second payload delivery), every remaining trip becomes one playback launch, and the proven-constant counter is re-initialized one step later.  The counted-loop capture's own admissions (fixed-encoding replay-safe payload, replay-preserving loop, dedicated preheader) and the peel's structural admissions (proven constant trips >= 2, single-block body with full coverage, provable counter rewrite, non-QSR) must all prove, refusing by name (counted-capture-peel-benefit keeps the plain refusal's bytes); an admitted plain counted hoist is never converted (default off).
+Extend the first-iteration peel to counted-loop replay captures whose plain hoist is unprofitable.
 
 mtt-tensix-optimize-replay-window-sizing
 Target Var(riscv_tt_opt_replay_window_sizing) Init(0)
-Re-size a replay window that is about to be HOISTED out of its loop (record-hoist or replay-hoist preheader placement): the in-block selection key prices exec-while-record economics, where a shorter window's smaller in-body record wins, but a hoisted record is delivered once per placement and the per-trip cost is launches alone -- so a WIDER same-anchor word-exact candidate that fits the free replay slots and strictly reduces per-trip deliveries is committed instead, and a trailing run that is a word-exact PREFIX of the recorded window is delivered as one partial playback launch (REPLAY count below the recorded length -- the hand kernels' trim discipline).  The widened candidate must re-prove the whole hoist admission (oracle, pricing, placement) itself, its clones and trim are structurally re-verified word-exact, and any failing premise keeps the original pick by name (window-sizing-slot-exhausted / -no-wider-candidate / -no-cheaper-delivery / -coverage-short / -hoist-refused; default off).
+Prefer wider replay windows when the capture is hoisted and the per-iteration cost is launches alone.
 
+; Internal measurement knob: reporting-only shadow of the window
+; discovery; it never changes which windows are formed.
 mtt-tensix-replay-shadow-discovery
-Target Var(riscv_tt_replay_shadow_discovery) Init(0)
-Run the suffix-automaton maximal-repeat discovery for Tensix replay formation as a SHADOW alongside the legacy grow-by-one window discovery and dump the census (FABLE_GOES_BURR.md item #9 stage A).  Measurement class: the automaton never decides -- the legacy candidate list and the existing greedy picker choose the formed windows byte-identically -- it only enumerates every repeated factor of the register-generation-aged symbol stream and reports, by name, the admissible candidates the legacy discovery did not offer the picker (replay-maximal-repeats-missed) together with the maximal repeats truncated by the replay-buffer length bound (replay-maximal-repeats-truncated).  A checking build (-fchecking) additionally asserts, independently of this flag, that every legacy candidate is enumerable from the automaton with the identical clone set (the stage-A superset obligation).
+Target Undocumented Var(riscv_tt_replay_shadow_discovery) Init(0)
+Measurement only: run the suffix-automaton window discovery as a reporting shadow beside the standard discovery.
 
 mtt-tensix-optimize-counted-row-formation
 Target Var(riscv_tt_opt_counted_row) Init(0)
-Canonicalize parameterized repeated Tensix SFPU rows (immediate-varying members excluded from the record and delivered between launches; clone register maps rewritten to the recorded registers) so replay formation records one parameterized row program.
+Canonicalize parameterized repeated SFPU rows so replay formation can record one parameterized row program.
 
 mtt-tensix-optimize-replay-loop-unroll
 Target Var(riscv_tt_opt_replay_loop_unroll) Init(0)
-Request generic loop unrolling for counted single-block Tensix SFPU row loops whose every statement is a typed SFPU builtin, so the existing replay formation can capture the repeated row (default off).
+Request generic unrolling of counted single-block SFPU row loops so replay formation can capture the repeated row.
 
 mtt-tensix-optimize-launch-flatten
 Target Var(riscv_tt_opt_launch_flatten) Init(0)
-Request COMPLETE generic unrolling of counted innermost Tensix DELIVERY loops -- bodies whose statements are typed replay records or playback launches (TTREPLAY), fixed single-word raw .ttinsn asm with constant-only operands, computed-word volatile delivery stores (the LLK TT_ macro shape; volatile loads refuse), typed SFPU builtins, and the loop's own scalar control -- so the per-trip RISC loop-control words leave the timed issue path and the flattened word stream reaches replay formation and the delivery passes exactly as a hand `#pragma GCC unroll' world does.  The annotation is placed before the GIMPLE complete unroller so per-trip conditionals fold at their proven values.  Trip count must prove (single exit, constant latch count), the flattened total is bounded by the replay-unroll word budget per loop and per function, the body must carry at least one typed SFPU word (a raw-only body is priced correctly by the size model already and is refused), and every unproven piece refuses by name, leaving the function byte-identical (default off).
+Request complete unrolling of counted innermost delivery loops so the flattened word stream reaches replay formation.
 
 mtt-tensix-optimize-delivery-shape
 Target Var(riscv_tt_opt_delivery_shape) Init(0)
-Choose the delivery shape (unroll factor and delivery tier) of each proven-trip counted single-block Tensix SFPU row loop by exact optimization over the audited issue-cost model (rvtt-cost.md rates; exec bounds from the audited latency mirror); the winning shape is requested through the same generic annotation the unroll-request pass uses, every uncalibrated model term refuses by name, and a refusal or rolled selection leaves the function byte-identical (default off).
+Choose each counted SFPU row loop's unroll factor and delivery tier by exact optimization over the issue-cost model.
 
 mtt-tensix-delivery-shape-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_delivery_shape_min_benefit) Init(-1)
-Minimum modeled benefit, in hundredths of an issue slot per loop entry, required for the delivery-shape solver to request a non-rolled shape; overrides the target cost-table default.
+Set the minimum modeled benefit, in hundredths of an issue slot per loop entry, required for a non-rolled delivery shape.
 
 mtt-tensix-optimize-round-interleave
 Target Var(riscv_tt_opt_round_interleave) Init(0)
-Interleave two consecutive iterations of counted Tensix SFPU round loops whose iterations are provably independent by dataflow (unroll-by-two request plus cyclic list scheduling of the doubled body with region-scoped storage-collision renaming; dependent recurrences, pressure beyond the 8-LREG file, and replay/MOP-owned shapes refuse by name; default off).
+Interleave two iterations of counted SFPU round loops whose iterations are provably independent.
 
 mtt-tensix-replay-hoist-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_replay_hoist_min_benefit) Init(-1)
-Minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture; overrides the target cost-table default.
+Set the minimum modeled benefit, in hundredths of an issue slot, required to hoist a replay capture.
 
+; Internal diagnostic-test knob: manufactures a trip-oracle-divergence
+; diagnostic; the deciding oracle and generated code are unchanged.
 mtt-tensix-trips-oracle-skew=
-Target Joined RejectNegative UInteger Var(riscv_tt_trips_oracle_skew) Init(0) IntegerRange(0,65535)
-Testing only: add this many trips to a proven classical (loop-iv/SCEV) verdict inside the dual-oracle trip-count facade to manufacture a trip-oracle-divergence diagnostic; the legacy bounded-simulation oracle still decides, so generated code is unchanged.
+Target Undocumented Joined RejectNegative UInteger Var(riscv_tt_trips_oracle_skew) Init(0) IntegerRange(0,65535)
+Testing only: skew the classical trip-count verdict to manufacture a trip-oracle-divergence diagnostic.
 
 mtt-tensix-optimize-mop-form
 Target Var(riscv_tt_opt_mop_form) Init(0)
@@ -819,183 +831,193 @@ Re-roll runs and counted loops of identical Tensix replay playback launches into
 
 mtt-tensix-mop-form-min-benefit=
 Target Joined RejectNegative UInteger Var(riscv_tt_mop_form_min_benefit) Init(-1)
-Minimum modeled benefit, in hundredths of an issue slot, required to form a MOP loop; overrides the target cost-table default.
+Set the minimum modeled benefit, in hundredths of an issue slot, required to form a MOP loop.
 
+; Internal measurement override: bypasses only the profitability verdict
+; so hardware A/B comparisons of refused shapes can be built.
 mtt-tensix-mop-form-force
-Target Var(riscv_tt_mop_form_force) Init(0)
-Testing and measurement only: bypass the MOP formation profitability refusal (every structural, ownership, and buffer proof still applies), to build silicon A/B legs for shapes the corrected delivery model prices as non-winning.
+Target Undocumented Var(riscv_tt_mop_form_force) Init(0)
+Measurement only: bypass the MOP formation profitability refusal; every structural and soundness proof still applies.
 
 mtt-tensix-optimize-invariant-loadi
 Target Var(riscv_tt_opt_invariant_loadi) Init(0)
-Hoist loop-invariant Tensix immediate-vector materialization before register allocation.
+Hoist loop-invariant Tensix immediate-vector materializations before register allocation.
 
 mtt-tensix-optimize-dst-autoincr
 Target Var(riscv_tt_opt_dst_autoincr) Init(0)
-Replace constant-stride per-row Dst RWC increments with owned address-modifier auto-increment.
+Replace constant-stride per-row Dst counter increments with owned address-modifier auto-increment.
 
 mtt-tensix-optimize-dst-autoincr-load-carrier
 Target Var(riscv_tt_opt_dst_autoincr_load_carrier) Init(0)
-Default-off: count audited raw single-constant .ttinsn words as replay-slot-occupying in the Dst auto-increment pass's capture-shadow and issue-word walks, unlocking load-carrier rows in functions whose replay recordings are raw LLK words (the recording-shadow scan otherwise overruns the block and refuses the whole function).  Raw words stay classification-refused: they never become rewritable payload members or configuration-window-legal items.
+Count audited raw single-constant instruction words as replay-slot-occupying so load-carrier rows can form.
 
 mtt-tensix-optimize-post-autoincr-window
 Target Var(riscv_tt_opt_post_autoincr_window) Init(0)
-Default-off: DEFER the Tensix replay window formation until after Dst auto-increment ownership has absorbed the per-row typed TTINCRWC separators, so bodies the pre-fold formation structurally cannot capture (the explicit row separators are window-excluded barrier words) form as replay windows once the fold has made them word-uniform, and one post-fold allocation prices every candidate -- the folded carried bodies included -- against the single replay buffer.  Deferral loses no opportunity: the fold only removes barrier words and retargets modifier operands of the rows those barriers separated, so every pre-fold-capturable run is post-fold-capturable verbatim.  Formation itself is the reviewed machinery unchanged; its word-exact replacement paths keep the delivered instruction stream an insertion-only extension of the (separately audited) canonicalized folded stream, so every carried access's per-execution-cumulative ADDR_MOD walk arithmetic and every discharged delay-shadow contract are preserved verbatim.  For payloads containing a carried access (an access retargeted to the compiler-owned auto-increment scratch modifier), the fold's payload-coverage discipline extends to the window's launch arithmetic: the formed window's delivered payload executions must equal the replaced row sites, re-verified structurally with a named refusal on any imbalance, and the two stream-restructuring sub-mechanisms whose delivered words are not the replaced site's words (isomorphic-run launch conversion; the exec-while-record first-trip peel) refuse carried members by name.
+Defer replay window formation until after Dst auto-increment folding so word-uniform bodies can be captured.
 
+; Internal measurement override: alternate candidate-selection key for
+; building hardware A/B comparisons; soundness proofs unchanged.
 mtt-tensix-post-autoincr-window-prefer-longest
-Target Var(riscv_tt_post_autoincr_window_prefer_longest) Init(0)
-Testing and measurement only (the mop-form-force precedent): in the post-auto-increment window formation, select candidate sequences by maximal payload length first (ties by the standard word-saving key) instead of by word saving alone, to build silicon A/B legs for the longer-window/fewer-launch delivery shapes the word-count key prices as non-winning.  Every structural, soundness, and slot proof still applies.
+Target Undocumented Var(riscv_tt_post_autoincr_window_prefer_longest) Init(0)
+Measurement only: select post-auto-increment window candidates by maximal payload length first.
 
 mtt-tensix-optimize-dst-ownership
 Target Var(riscv_tt_opt_dst_ownership) Init(1)
-Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-dst-ownership): fold proven-identity Dst reloads into LREG-resident values using the pre-IRA Dst/RWC ownership analysis.
+Fold proven-identity Dst reloads into register-resident values using the Dst ownership analysis.
 
 mtt-tensix-optimize-lut-select
 Target Var(riscv_tt_opt_lut_select) Init(1)
-Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-lut-select): select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
+Select Tensix SFPU LUT instructions from encodable magnitude range-dispatch trees.
 
 mtt-tensix-optimize-lut-select-leaf-ext
 Target Var(riscv_tt_opt_lut_select_leaf_ext) Init(0)
-Default-off: extend LUT instruction selection with certified non-affine leaf classes (multiply-only leaves, provable-constant leaves) and below-arity partition duplication; admission per slot is the exhaustive bit-exact certification recorded in rvtt-lut-tables.cc.
+Extend LUT instruction selection with certified multiply-only and provable-constant leaf classes.
 
 mtt-tensix-optimize-lut-select-fp16
 Target Var(riscv_tt_opt_lut_select_fp16) Init(0)
-Default-off: extend LUT instruction selection with the FP16-coefficient six-entry SFPLUTFP32 table modes (TABLE1/TABLE2): a six-range magnitude dispatch tree over the architectural 0.5/1.0/1.5/2.0/{3.0,4.0} boundaries whose leaf coefficients are compile-time-provable and exactly re-encodable in the instruction's LUT16 coefficient format forms one packed-coefficient SFPLUTFP32; every unprovable or unrepresentable coefficient and every unproven partition refuses by name.  Admission facts are the exhaustive bit-exact certifications recorded in rvtt-lut-tables.cc.
+Extend LUT instruction selection with the FP16-coefficient six-entry SFPLUTFP32 table modes.
 
 mtt-tensix-optimize-crosscall-hoist
 Target Var(riscv_tt_opt_crosscall_hoist) Init(0)
-Hoist a noinline callee's call-invariant pinned-LREG immediate materializations (the LUT coefficient prefix) into every proven caller's loop preheader, carrying the values across calls in the architecturally pinned hard LREGs; every unproven link refuses by name.
+Hoist a callee's call-invariant pinned-register immediate materializations into proven callers' loop preheaders.
 
 mtt-tensix-optimize-crosscall-config-prefix
 Target Var(riscv_tt_opt_crosscall_config_prefix) Init(0)
-Default-off widening of the cross-call prefix hoist: a callee prefix pair (all-constant immediate materialization whose single consumer is an SFPCONFIG write to a programmable-constant register 11..14) joins the pinned-LREG coefficient contract -- the pair is re-materialized once in every proven caller's loop preheader (ahead of the contract loads: the SFPCONFIG source operand is the same pinned L0 the first coefficient uses) and deleted from the callee; the caller proofs extend to the programmed constant register (delivered SFPCONFIG-class words refuse, SFPLOADI destinations and explicit lreg reads check the widened mask, MOP template slots must be config-word-free); every unproven link refuses by name and without -mtt-tensix-optimize-crosscall-hoist the flag is inert.
+Extend the cross-call hoist to a callee's constant SFPCONFIG programming prefix.
 
 mtt-tensix-optimize-crosscall-addrmod
 Target Var(riscv_tt_opt_crosscall_addrmod) Init(0)
-Default-off cross-call contract for the Dst auto-increment address-modifier slot program (lane IK): a straight-line callee whose only Dst auto-increment groups share one stride and refuse solely by the per-execution configuration pricing gets its three-SETC16 owned-slot program hoisted, once, into the proven caller's loop entry (lifted across enclosing caller loops by the residency walk), and the callee's groups fire at ZERO per-call configuration cost; soundness = the ISA-adjudicated slot-clobber census (only same-thread SETC16 writes ThreadConfig ADDR_MOD state) over the whole callee, the caller epoch at every lifted level, and the TU MOP template slots, plus the Wormhole ADDR_MOD_SET_Base watch row; every unproven link refuses by name and the pre-flag refusal is byte-identical.
+Hoist a callee's owned address-modifier configuration program into proven callers' loop entries.
 
 mtt-tensix-optimize-crossloop-hoist
 Target Var(riscv_tt_opt_crossloop_hoist) Init(0)
-Hoist loop-invariant SFPU immediate materializations (and, with the programmable-constant passes, their SFPCONFIG programming points) across enclosing loops whose bodies deliver only audited-inert instruction words (raw .ttinsn constants, instruction-FIFO stores, MOPs with a proven TU template census); every unaudited word or statement class refuses by name.
+Hoist loop-invariant SFPU immediate materializations across enclosing loops proven free of interfering effects.
 
 mtt-tensix-optimize-repr-prop
 Target Var(riscv_tt_opt_repr_prop) Init(0)
-Cancel Tensix SFPU representation-conversion pairs (audited bit involutions, e.g. the BH sign-magnitude/two's-complement cast) across value webs that only lanewise choose bits (control joins, predicated live-value merges, copies); any unaudited conversion, non-transparent consumer, or unproven web leaf refuses by name.
+Cancel proven-involution SFPU representation-conversion pairs across value webs.
 
 mtt-tensix-optimize-reassoc
 Target Var(riscv_tt_opt_reassoc) Init(0)
-Default-off licensing half-key for value-changing floating-point reassociation in the Tensix SFPU passes (accumulation-chain rebalancing, multi-use MUL+ADD->SFPMAD fusion): a reassociating FP transform fires ONLY when -fassociative-math is ALSO given (the explicit industry opt-in that licenses changed rounding; owner ratification 2026-08-21); with either flag absent every site refuses by name and codegen is byte-identical.  Every reassociating site prints a named reassoc: dump line.  Integer/bitwise chain rebalancing under this flag alone is value-identical (mod-2^32 and bitwise associativity) and is separately labeled in dumps; it needs no FP license.
+Allow value-changing floating-point reassociation in the Tensix SFPU passes; requires -fassociative-math to take effect.
 
 mtt-tensix-optimize-reassoc-loop-carried
 Target Var(riscv_tt_opt_reassoc_loop_carried) Init(0)
-Default-off licensed derivation for the loop-carried arm of the Tensix SFPU reassociation vocabulary (FABLE_GOES_BURR item #8; the reassoc license lineage, owner ratification 2026-08-21): a loop-carried FP accumulation chain (header PHI cycling through plain SFPADD/SFPMAD links) is split into P round-robin partial accumulators initialized to the +0.0 identity and reduced by a balanced tree after the loop, cutting the recurrence bound by P; the value-change class is re-association order only (identity legality included: -0.0 + x vs x is exactly the divergence class the FP license ratifies).  An FP split fires ONLY when -fassociative-math is ALSO given (the same two-key wall as -mtt-tensix-optimize-reassoc); with this flag absent the standing reassoc-loop-carried-underived refusal continues byte-identically, and every non-fitting candidate under the flag refuses by name (reassoc-partials-*).
+Allow splitting loop-carried floating-point accumulations into parallel partial sums; requires -fassociative-math to take effect.
 
 mtt-tensix-optimize-reassoc-mad-restructure
 Target Var(riscv_tt_opt_reassoc_mad_restructure) Init(0)
-Default-off licensed derivation for the MAD-restructure arm of the Tensix SFPU reassociation vocabulary (FABLE_GOES_BURR R3, the trigonometry constrained-floor cert's named muli+add-to-fused-mad successor; the reassoc license lineage, owner ratification 2026-08-21): a single-use SFPMULI+SFPADD, SFPMUL+SFPADDI, or post-placement SFPMUL+SFPADD pair -- two serial MAD-subunit roundings -- is fused into one partially-fused SFPMAD (immediates re-materialized through SFPLOADI), removing one dependent result-latency hop from the pair's chain; the value-change class is double->single rounding on the fused product plus the sign-of-zero flush SFPMULI's embedded +0 performs and SFPMAD does not.  An FP fuse fires ONLY when -fassociative-math is ALSO given (the same two-key wall as -mtt-tensix-optimize-reassoc); with either key absent every candidate refuses by name (reassoc-madrestructure-*) and codegen is byte-identical.
+Allow fusing separate multiply and add instructions into one fused multiply-add; requires -fassociative-math to take effect.
 
+; Historical spelling: requests the same renaming engine as
+; -mtt-tensix-optimize-lreg-rename-chains.
 mtt-tensix-optimize-lreg-rename
 Target Var(riscv_tt_opt_lreg_rename) Init(0)
-Retired alias (W4-C, kept as frozen API): the original single-shape capturable-row rename pass was retired as wrong-code-bearing (its whole-pattern writer edit rewrote genuine input reads of the destination register's previous live range); this flag now requests the general du-chain LREG renaming engine, exactly as -mtt-tensix-optimize-lreg-rename-chains does.
+Rename storage-colliding vector register webs (historical spelling of -mtt-tensix-optimize-lreg-rename-chains).
 
 mtt-tensix-optimize-lreg-rename-chains
 Target Var(riscv_tt_opt_lreg_rename_chains) Init(0)
-General post-allocation du-chain LREG renaming (the gcc/regrename.cc formulation scoped to the Tensix vector file): move a storage-colliding single-definition def-use web in any basic block onto a proven-free LREG under the typed-effect veto, a fail-closed no-CC-event span rule, a lane-exact death proof, and a post-commit structural re-verification; delivered words never change, only register fields move, and every unproven clause refuses by name.  Also exports the rename service the fill/rotation/modulo-scheduling consumers request chains through.
+Rename storage-colliding vector register def-use webs onto proven-free registers after allocation.
 
 mtt-tensix-optimize-rename-temporal
 Target Var(riscv_tt_opt_rename_temporal) Init(0)
-The R1 8-LREG-wall composition (FABLE_GOES_BURR section 4) over the item-#7 du-chain rename engine: (1) TEMPORALLY-SCOPED rename targets -- when no LREG is untouched across the whole block, a target is still admissible when it is untouched across the chain span itself and its out-of-span lifetimes provably cannot observe the chain value (any later touch must open with a fresh effect-audited all-write definition with no CC-state event between the chain close and it, a never-again-touched target must be DF-dead at block exit in an opaque-free function, and pinned-protocol registers never temporal-rename); the post-commit belt re-verifies the out-of-span lifetimes untouched.  (2) The CYCLIC-INTERIOR rename consumer: interior regions of a barrier-chopped self-loop row request storage-collision chain renames through the item-#7 service before candidate generation, the established strict whole-row steady-state II acceptance prices the composition unchanged, and a refused candidate undoes every requested rename exactly.  Every unproven clause refuses by name; with the flag absent codegen is byte-identical.
+Admit temporally-scoped rename targets and cyclic-interior rename requests in the vector register renaming engine.
 
 mtt-tensix-optimize-rename-cc-region
 Target Var(riscv_tt_opt_rename_cc_region) Init(0)
-Widen the du-chain LREG rename service's fail-closed no-CC-event-in-span rule to the CC-region engine's RTL view (the laneKE file-header successor): a chain span crossing CC activity is admitted when every event is proven confined to balanced in-span pushc/popc frames with narrowing-only vocabulary (every interior lane-enable state a subset of the span-entry mask, a kill-close overwriting exactly the definition-written lanes), or when the span entry is proven the architectural all-lanes state by the kill-modeling backward walk and any required end state is restored word-exactly by the all-lanes SFPENCC; every unproven arm refuses by name (regrename-cc-span-region-unproven) and with the flag absent the standing regrename-cc-span refusal and codegen are byte-identical.
+Admit renames across proven-balanced CC regions in the vector register renaming engine.
 
 mtt-tensix-optimize-ccmask
 Target Var(riscv_tt_opt_ccmask) Init(0)
-Fold a single-zero-assign Tensix SFPU CC region (predicated zeroing under a float order test against +0.0) into a value-mask compare and AND; misses refuse by name and keep the CC lowering byte-identically.
+Fold a single-zero-assign predicated SFPU region into a value-mask compare and AND.
 
 mtt-tensix-optimize-cc-region-general
 Target Var(riscv_tt_opt_cc_region_general) Init(0)
-Open the CC-region-tree-proven admissions (FABLE_GOES_BURR item #14 stage B / residual attack R2): consumers whose stage-A recognizers were restricted to their historical statement shapes admit any layout the shared pushc/popc frame tree proves equivalent -- the ccmask fold accepts tree-proven frames in any block placement and the exhaustively proven EQ/NE keep-mask compositions (tt/proofs/ccmask-eqne-zero/), the cross-loop placement walk crosses loop bodies whose CC activity is tree-proven ambient-preserving-and-narrowing, the loop-invariant in-region containment fact accepts the tree's narrowing verdict, and the reassociation window treats tree-proven balanced child frames as CC-transparent (value-changing FP rebalancing still needs its own license keys).  Every unproven arm refuses by the standing or a new name, byte-identically to the flag being absent.
+Accept any statement layout the shared CC-region frame tree proves equivalent to the historically recognized shapes.
 
 mtt-tensix-optimize-native-compare
 Target Var(riscv_tt_opt_native_compare) Init(0)
-Lower the strict-greater and less-or-equal float vector comparison webs (SETCC sign/nonzero pair, plus the trailing COMPC on the less-or-equal side) to the single Blackhole-native SFPGT/SFPLE SET_CC compare against the constant +0.0 register, per the shipped exhaustive pointwise equivalence proof over all 2^32 compared bit patterns (tt/proofs/native-compare-gtle/); every other comparison direction, operand shape, and target keeps the established lowering byte-identically.
+Lower eligible float vector comparison webs to the native Blackhole SFPGT/SFPLE instructions.
 
 mtt-tensix-optimize-int-abs
 Target Var(riscv_tt_opt_int_abs) Init(0)
-Fold a conditional-negate Tensix SFPU CC region (predicated two's-complement negation under a signed-int sign test against 0) into the single integer SFPABS, per the shipped exhaustive equivalence proof; misses refuse by name and keep the CC lowering byte-identically.
+Fold a conditional-negate predicated SFPU region into the single integer SFPABS instruction.
 
 mtt-tensix-optimize-int-not
 Target Var(riscv_tt_opt_int_not) Init(0)
-Select the single SFPNOT for the all-ones-minus-x one's-complement value function, per the shipped exhaustive equivalence proof; misses refuse by name and keep the subtract byte-identically.
+Select the single SFPNOT instruction for the all-ones-minus-x one's-complement pattern.
 
 mtt-tensix-optimize-store-fold
 Target Var(riscv_tt_opt_store_fold) Init(0)
-Fold a lane-predicated SFPU value merge into its consuming Dst store: forward the merge source into a same-mask store, and sink a post-region store into the region as a predicated store where the format pair's Dst round trip is proven the identity; every unproven case refuses by name.
+Fold lane-predicated SFPU value merges into their consuming Dst stores where the round trip is proven the identity.
 
 mtt-tensix-optimize-store-sink
 Target Var(riscv_tt_opt_store_sink) Init(0)
-Default-off LICENSE TOKEN for the value-changing store-fold S2 sink on the Dst-canonicalizing float format pairs (owner ratification 2026-08-26, threshold/hardshrink predicated value-merge class).  With -mtt-tensix-optimize-store-fold also given, a post-region all-lanes store of a lane-predicated value merge sinks into the region as a predicated store even though the elided enabled-complement write-back would have canonicalized Dst (denormal flush -- tt/proofs/store-sink-roundtrip NOT-EQUAL float rows, every mismatch in the denormal class): the store-under-predicate form PRESERVES the original Dst bits on the untouched lanes, which is strictly closer to the framework golden (torch keeps pass-through lanes exactly; the all-lanes write-back flushes them).  This deliberately changes delivered values on denormal pass-through lanes and follows the licensed-knob discipline: cells book as LICENSED, correctness authority is the device-golden run at the row's documented tolerance.  Without this flag every such site keeps the standing named refusal and codegen is byte-identical.  The license covers ONLY the float pairs whose proven round-trip divergence class is exclusively denormal flush; the WH INT32_SM pair (negative-zero normalization, an integer sign-magnitude class) refuses regardless, as does every unproven pair and every shape refusal of the sink itself.
+Allow sinking an all-lanes store of a predicated merge into its region as a predicated store; changes stored values on denormal pass-through lanes.
 
 mtt-tensix-optimize-stochrnd-store-fold
 Target Var(riscv_tt_opt_stochrnd_store_fold) Init(0)
-Default-off LICENSE TOKEN for the value-changing SFPSTOCHRND-into-store fold (lane HZ, owner overnight mandate 2026-08-27, binary-float explicit-rounding class).  The token gates the store-fold pass BY ITSELF (the licensed knob leg must not carry the S1/S2 flag -- its delta has to read as the license's own effect; the value-preserving merge folds stay behind -mtt-tensix-optimize-store-fold, and giving both composes): an explicit deterministic-nearest SFPSTOCHRND float precision reduction (FP32_TO_FP16A/FP16B, RND_NEAREST) whose only consumer is a format-converting Dst store of the matching target precision (FP16A->FP16, FP16B->BF16, either->SRCB-resolved) -- directly, or through the typed convert wrapper's all-lanes merge validated against the S1 same-mask dataflow contract -- is DELETED and the store's own conversion path delivers the value: the handwritten idiom (bare converting store) this fold reproduces bit-for-bit.  The delivered bits CHANGE by exactly the proven divergence census of tt/proofs/stochrnd-store-round (NOT-EQUAL: the store truncates toward zero and preserves -0/denormal signs; the explicit instruction rounds nearest-ties-away and normalizes -0/denormal to +0 and NaN to signed infinity; BF16 row 2,155,741,184 / 2^32, FP16 row 268,435,456 / 2^32).  Licensed-knob discipline: cells book as LICENSED, correctness authority is the device-golden run at the row's documented tolerance -- on the licensed class the folded stream is instruction-for-instruction the hand kernel's, so matching the hand arm's exact bits is the accuracy certificate.  Without this flag every such site keeps the standing named refusal (stochrnd-store-rounding-divergent) and codegen is byte-identical.  The license covers ONLY the deterministic-nearest float rows the proof swept: stochastic-mode rounding (a semantic entropy feature), integer conversion paths (no store conversion exists), cross-precision static pairs, multi-consumer rounds, mask-divergent spans, and functions with other PRNG-stream consumers (deleting the instruction removes one PRNG advance) all refuse by name regardless of the token.
+Allow folding an explicit nearest-rounding precision reduction into its consuming converting store; changes delivered bits on the proven divergence classes.
 
 mtt-tensix-optimize-store-source-tier
 Target Var(riscv_tt_opt_store_source_tier) Init(0)
-Route store-consumed loop-class const-residency candidates to the pressure-park LREG tier instead of a programmable-constant park: SFPSTORE sources L0-L11 only, so a parked (L12-L14) store-source constant makes the register allocator materialize a per-consumer SFPMOV copy out of the constant file -- one word per row inside the loop -- while the LREG-tier hoist of the materialization is SFPSTORE-sourceable at zero programming cost.  When the tier refuses (lreg-file-exhausted, or without -mtt-tensix-optimize-pressure-park providing the tier) the candidate keeps the established parked placement byte-identically -- the per-row copy never loses to the in-loop rematerialization a bare refusal would leave.  Effective only where -mtt-tensix-optimize-const-residency collects the loop class; the -mtt-tensix-optimize-store-sink license token keeps its own stricter refusal unchanged.
+Keep store-consumed constants in ordinary vector registers instead of programmable constant registers.
 
 mtt-tensix-optimize-setexp-fold
 Target Var(riscv_tt_opt_setexp_fold) Init(1)
-Default-on (promoted after silicon validation; disable with -mno-tt-tensix-optimize-setexp-fold): fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
+Fold a biased Tensix SFPU exponent extract feeding SFPSETEXP into the exponent-copy addressing mode.
 
+; Retired option retained so stale build flags produce a clear error.
 mtt-tensix-analyze-loadmacro
-Target Var(riscv_tt_analyze_loadmacro) Init(0)
-Removed with the quarantined exact-calendar SFPLOADMACRO pass (WP8); errors on use.
+Target Undocumented Var(riscv_tt_analyze_loadmacro) Init(0)
+Removed; using this option is an error.
 
+; Retired option retained so stale build flags produce a clear error.
 mtt-tensix-emit-loadmacro
-Target Var(riscv_tt_emit_loadmacro) Init(0)
-Removed with the quarantined exact-calendar SFPLOADMACRO pass (WP8); errors on use.
+Target Undocumented Var(riscv_tt_emit_loadmacro) Init(0)
+Removed; using this option is an error.
 
 mtt-tensix-macro-planner
 Target Var(riscv_tt_macro_planner) Init(0)
-Default-off: plan, prove, and materialize SFPLOADMACRO schedules from typed effects and target capability tables.
+Plan, prove, and materialize SFPLOADMACRO schedules from typed effects and target capability tables.
 
 mtt-tensix-macro-planner-analyze
 Target Var(riscv_tt_macro_planner_analyze) Init(0)
-Discover, prove, and report generic macro-planner regions and named refusals without changing code.
+Report macro-planner regions and their recorded decline reasons without changing code.
 
 mtt-tensix-macro-planner-verify
 Target Var(riscv_tt_macro_planner_verify) Init(0)
-Differentially verify synthesized macro-planner descriptors against the region's explicit facts (also forced on under internal checking).
+Differentially verify synthesized macro-planner descriptors against the region's explicit facts.
 
+; Internal red/green test knob: corrupts only the verifier-local copy,
+; pinning that a verification mismatch refuses formation.
 mtt-tensix-macro-planner-verify-corrupt-template
-Target Var(riscv_tt_macro_planner_verify_corrupt_template) Init(0)
-Testing only: corrupt the verifier's local copy of the first synthesized template word before Layer-7 comparison, pinning that a verification mismatch refuses formation.  Never touches the descriptor itself.
+Target Undocumented Var(riscv_tt_macro_planner_verify_corrupt_template) Init(0)
+Testing only: corrupt the verifier's local copy of one template word to check that a mismatch refuses formation.
 
 mtt-tensix-macro-planner-replay
 Target Var(riscv_tt_macro_planner_replay) Init(0)
-Default-off delivery increment: admit planner-formed SFPLOADMACRO launches into automatic replay recording (the launch is a pure instruction word; execution at a replay site reads the then-current descriptor configuration, matching the production handwritten Where kernel's own recorded launches).  Off keeps every planner-formed calendar byte-identical to the pre-flag output.
+Admit planner-formed SFPLOADMACRO launches into automatic replay recording.
 
 mtt-tensix-macro-planner-residency
 Target Var(riscv_tt_macro_planner_residency) Init(0)
-Default-off delivery increment: descriptor-program residency for the macro planner.  Extends the proven cross-tile configuration epoch outward through successively enclosing loops (the programming words become resident once per kernel entry instead of once per enclosing-loop trip), and elides the descriptor-word programming of a later region whose derived descriptor words are bit-identical to an already-programmed dominating one (content-equality de-duplication; the per-region ambient enable and owned SETC16 program always stay).  Every proof failure refuses by a stable name and keeps today's placement byte-identically.
+Extend proven macro descriptor programming outward across enclosing loops and share identical descriptor programs.
 
 mtt-tensix-macro-ims
 Target Var(riscv_tt_macro_ims) Init(0)
-Default-off placement increment (WP13): iterative-modulo-scheduling repair over the macro sub-unit calendar -- when the maximal hosting proposal refuses downstream, deterministically retry with reduced hosted sets (Rau-style bounded unplacement) instead of refusing the whole region -- plus delivery-model formation-vs-replay arbitration: formation additionally requires the formed calendar to price below the replay-compressed explicit alternative under the shared issue-cost model.  Off keeps every schedule candidate and formation decision byte-identical to the pre-flag output.
+Retry refused macro-calendar proposals with reduced hosted sets and arbitrate formation against the replay alternative.
 
 mtt-tensix-macro-ims-carrier
 Target Var(riscv_tt_macro_ims_carrier) Init(0)
-Default-off placement increment (WP15, the upward half of the WP14 IMS mapping): extra-value-carrier formation for the macro planner.  When the established (and, under -mtt-tensix-macro-ims, repaired) search proves a formed calendar, deterministically enumerate re-load carrier variants -- duplicate one of the row's proven no-increment Dst loads into a provably free LREG, replicate its in-place cooking prefix, and version-split-rename one explicit consumer web onto the new carrier -- applied by commit-or-revert mutation across every unrolled row copy.  A variant commits only when the mutated region re-proves through the full derivation pipeline at a strictly smaller initiation interval and passes every established formation gate; otherwise the mutation reverts byte-identically under a stable refusal name.  Off keeps every schedule and formation decision byte-identical to the pre-flag output.
+Form extra-value-carrier variants of proven macro calendars, committing only variants that re-prove at a smaller initiation interval.
 
 mtt-tensix-dump-effects
 Target Var(riscv_tt_dump_effects) Init(0)
-Annotate assembler output with the generated Tensix architectural effect set of each instruction (debug/self-check aid).
+Annotate assembler output with each instruction's modeled Tensix architectural effect set.
 
 mtt-tensix-replay-buffer-size=
 Target Joined RejectNegative Var(riscv_tt_replay_size) UInteger Init(32) IntegerRange(1,32)
-Length of replay buffer for replay optimization use.
+Set the length of the replay buffer available for replay optimization.
 
 TargetVariable
 int riscv_fmv_priority = 0
