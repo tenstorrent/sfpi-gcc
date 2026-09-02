@@ -17931,6 +17931,7 @@ instructions, but allow the compiler to schedule those calls.
 * PRU Built-in Functions::
 * RISC-V Built-in Functions::
 * RISC-V Vector Intrinsics::
+* RISC-V Tensix Built-in Functions::
 * CORE-V Built-in Functions::
 * RX Built-in Functions::
 * S/390 System z Built-in Functions::
@@ -26406,6 +26407,599 @@ GCC supports vector intrinsics as specified in version 0.11 of the RISC-V
 vector intrinsic specification, which is available at the following link:
 @uref{https://github.com/riscv-non-isa/rvv-intrinsic-doc/tree/v0.11.x}.
 All of these functions are declared in the include file @file{riscv_vector.h}.
+
+@node RISC-V Tensix Built-in Functions
+@subsection RISC-V Tensix Built-in Functions
+@cindex Tensix built-in functions
+
+These built-in functions are available when GCC targets a RISC-V
+processor with the Tenstorrent Tensix extensions, selected with
+@option{-mcpu} values such as @samp{tt-wh-tensix} and
+@samp{tt-bh-tensix} (@pxref{RISC-V Tensix Options}).  Most of them
+generate exactly one Tensix coprocessor instruction, named in each
+entry; consult the Tensix instruction-set documentation for the full
+semantics of an instruction and the encodings its modifier operands
+accept.  These builtins are the code-generation substrate of the SFPI
+C++ wrapper library, which is the intended programming interface;
+entries marked as internal primitives exist for that library and for
+compiler-generated code, and are not meant to be called directly.
+
+The builtins operate on three vector types registered by the compiler:
+@code{__xtt_vector}, a 32-lane vector with one 32-bit element per lane,
+and @code{__xtt_vector2} and @code{__xtt_vector4}, aggregates of two
+and four such vectors used by multi-result instructions.
+
+Three conventions apply throughout:
+
+@itemize @bullet
+@item
+Builtins whose name ends in @code{_lv} (``live value'') take one
+additional leading vector operand.  Lanes disabled by the current CC
+state receive that operand's lane values, making the predicated merge
+explicit to the optimizers; enabled lanes receive the operation's
+result.  Each @code{_lv} builtin is listed with its base operation.
+
+@item
+Builtins with immediate operands take a leading @code{volatile void *}
+operand, normally a null pointer constant.  When the immediate argument
+is not a compile-time constant, the compiler synthesizes the
+instruction word at run time, and this pointer participates in that
+mechanism.
+
+@item
+Trailing @code{unsigned int} operands are instruction modifiers and
+must be compile-time constants; the compiler checks each value against
+the set the target processor accepts.  Some processors accept wider
+modifier sets than others for the same builtin.
+@end itemize
+
+Availability notes such as @emph{Blackhole only} name the Tensix
+processor generations that provide an instruction; unmarked builtins
+are available on every supported Tensix processor.
+
+@defbuiltin{{unsigned int} __builtin_rvtt_synth_opcode (unsigned int, unsigned int)}
+Compose a Tensix instruction word at run time from a template and a field value.  This is the primitive beneath the run-time-operand mechanism described above; user code does not normally spell it.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxvif (void)}
+Open a structured per-lane conditional frame and return its token.  Internal primitive of the SFPI library's @code{v_if} construct.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxbool (unsigned int, unsigned int, unsigned int)}
+Combine two lane-condition tokens under a boolean operation.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpxcondb (unsigned int, unsigned int)}
+Attach a boolean condition tree to the enclosing conditional frame.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxcondi (unsigned int)}
+Materialize a lane-condition token from an integer condition.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxicmps (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Compare an integer vector against a scalar immediate and return a lane-condition token.  Internal primitive of the SFPI library; lowered to @code{SFPIADD}/@code{SFPSETCC} sequences.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxicmpv (__xtt_vector, __xtt_vector, unsigned int)}
+Compare two integer vectors and return a lane-condition token.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxfcmps (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Compare a floating-point vector against a scalar immediate and return a lane-condition token.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{{unsigned int} __builtin_rvtt_sfpxfcmpv (__xtt_vector, __xtt_vector, unsigned int)}
+Compare two floating-point vectors and return a lane-condition token.  Internal primitive of the SFPI library.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxloadi (volatile void *, unsigned int, unsigned int, unsigned int, int)}
+Load an immediate vector, keeping the full 32-bit literal visible to the optimizers; the compiler assembles it from half-word loads as needed.  Generic form of @code{__builtin_rvtt_sfploadi}.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxiadd_v (__xtt_vector, __xtt_vector, unsigned int)}
+Integer vector add/subtract returning condition information; generic form the compiler lowers to @code{SFPIADD}.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxiadd_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Integer vector add/subtract with a scalar immediate, returning condition information; generic form the compiler lowers to @code{SFPIADD}.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxiadd_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpxiadd_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpnop (void)}
+Generate one @code{SFPNOP}.  The builtin is volatile, so deliberately inserted NOPs are preserved.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpbankdone (unsigned int, unsigned int, unsigned int)}
+Signal completion of a register bank to the sequencer.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpreadlreg (unsigned int)}
+Read the current value of the vector register selected by the operand (a compile-time constant).
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpwritelreg (__xtt_vector, unsigned int)}
+Write a vector value to the vector register selected by the second operand (a compile-time constant).
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfprawlreg_access (unsigned int, unsigned int)}
+Metadata marker, generating no code: describes the vector-register effects of an adjacent raw (inline-assembly) instruction region.  The first operand is a release/last-use register mask, the second a mask of newly written registers.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttregion_begin (unsigned int, unsigned int)}
+Metadata marker, generating no code: opens a raw instruction region carrying a trusted declaration of its configuration effects.  The first operand is the mask of configuration destinations the region writes; the second is reserved and must be zero.  Must be matched by @code{__builtin_rvtt_ttregion_end} in the same basic block.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttregion_end (void)}
+Metadata marker closing a region opened by @code{__builtin_rvtt_ttregion_begin}.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpnovalue (void)}
+Produce an unspecified vector value, generating no code.  Used to seed values that are wholly overwritten later.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpselect2 (__xtt_vector2, unsigned int)}
+Select one vector (by compile-time-constant index) from a two-vector aggregate.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpselect4 (__xtt_vector4, unsigned int)}
+Select one vector (by compile-time-constant index) from a four-vector aggregate.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpsetcc_i (unsigned int, unsigned int)}
+Generate @code{SFPSETCC} testing an immediate: narrow the lane-enable state by the selected test.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpsetcc_v (__xtt_vector, unsigned int)}
+Generate @code{SFPSETCC} testing a vector: narrow the lane-enable state by the selected per-lane test.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpencc (unsigned int, unsigned int)}
+Generate @code{SFPENCC}: set the lane-enable state as selected by the operands.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpcompc (void)}
+Generate @code{SFPCOMPC}: complement the enabled lane set within the enclosing CC frame.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfppushc (unsigned int)}
+Generate @code{SFPPUSHC}: push the current CC state onto the hardware CC stack.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfppopc (unsigned int)}
+Generate @code{SFPPOPC}: pop the hardware CC stack, restoring the saved CC state.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpassign (__xtt_vector)}
+Value-assignment placeholder used to express merges to the optimizers; real uses are elided during lowering.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpassign_lv (__xtt_vector, __xtt_vector)}
+Variant of @code{__builtin_rvtt_sfpassign} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfploadi (volatile void *, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPLOADI}: load an immediate vector from a 16-bit encoded immediate; the modifier selects the format interpretation (float, integer, high/low half).
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfploadi_lv (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfploadi} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmov (__xtt_vector, unsigned int)}
+Generate @code{SFPMOV}: copy a vector register.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmov_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpmov} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpexexp (__xtt_vector, unsigned int)}
+Generate @code{SFPEXEXP}: extract the floating-point exponent field of each lane.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpexexp_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpexexp} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpexman (__xtt_vector, unsigned int)}
+Generate @code{SFPEXMAN}: extract the floating-point mantissa field of each lane.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpexman_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpexman} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpabs (__xtt_vector, unsigned int)}
+Generate @code{SFPABS}: per-lane absolute value; the modifier selects integer or floating-point interpretation.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpabs_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpabs} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfplz (__xtt_vector, unsigned int)}
+Generate @code{SFPLZ}: count leading zeros per lane.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfplz_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfplz} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpand (__xtt_vector, __xtt_vector)}
+Generate @code{SFPAND}: bitwise AND of two vectors.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpand_lv (__xtt_vector, __xtt_vector, __xtt_vector)}
+Variant of @code{__builtin_rvtt_sfpand} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpor (__xtt_vector, __xtt_vector)}
+Generate @code{SFPOR}: bitwise OR of two vectors.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpor_lv (__xtt_vector, __xtt_vector, __xtt_vector)}
+Variant of @code{__builtin_rvtt_sfpor} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxor (__xtt_vector, __xtt_vector)}
+Generate @code{SFPXOR}: bitwise XOR of two vectors.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpxor_lv (__xtt_vector, __xtt_vector, __xtt_vector)}
+Variant of @code{__builtin_rvtt_sfpxor} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpnot (__xtt_vector)}
+Generate @code{SFPNOT}: bitwise complement of a vector.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpnot_lv (__xtt_vector, __xtt_vector)}
+Variant of @code{__builtin_rvtt_sfpnot} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft_v (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPSHFT} with per-lane shift amounts taken from a vector.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpshft_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSHFT} with an immediate shift amount (negative values shift right).
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpshft_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfplut (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPLUT}: evaluate the three-entry lookup table held in registers @code{L0}--@code{L2} for each lane of the input.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfplutfp32_3r (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate the three-register form of @code{SFPLUTFP32}: evaluate the FP32 lookup table described by three coefficient registers.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfplutfp32_6r (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate the six-register form of @code{SFPLUTFP32}: evaluate the lookup table described by six coefficient registers; the modifier selects the table mode.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector2 __builtin_rvtt_sfpswap (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPSWAP}: conditionally exchange two vectors per lane (including min/max modes); returns both results.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfptransp (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector)}
+Generate @code{SFPTRANSP}: transpose the four-register bank formed by the operands; returns the four results.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfpswap_indexed (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Index-tracking form of @code{SFPSWAP}: with index tracking enabled the instruction also updates the @code{L4}--@code{L7} companion registers; returns the four affected results.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfptransp8 (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector)}
+Two-bank form of @code{SFPTRANSP}: transforms both four-register banks formed by the eight operands.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfptransp_gather (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Compiler-internal companion-preserving bundle (a transpose, four full-bank loads, and a transpose) formed by the @option{-mtt-tensix-optimize-transp-involution} pass; never spelled by users.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfpshft2_copy4 (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate the @code{SFPSHFT2} copy-4 form: copy a shifted arrangement across the four-register bank.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfpshft2_subvec_copy4 (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate the @code{SFPSHFT2} sub-vector copy-4 form: rotate the sub-vectors of the operand bank.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector4 __builtin_rvtt_sfpshft2_subvec_shfl1_copy4 (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate the @code{SFPSHFT2} sub-vector shuffle-1 copy-4 form.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft2_subvec_shfl1 (__xtt_vector, unsigned int)}
+Generate the @code{SFPSHFT2} sub-vector shuffle-1 form: shift lanes by one within sub-vectors; the modifier selects the direction.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpshft2_subvec_shfl1_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpshft2_subvec_shfl1} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpload (volatile void *, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPLOAD}: load a vector from a Dst row.  The modifier and mode select the format and address mode; loads may advance the hardware row counter, so the builtin is volatile.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfploaddiscard (unsigned int, unsigned int, unsigned int)}
+Generate an @code{SFPLOAD} whose result is unused, for its addressing side effects only.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfploadsrcs (volatile void *, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Quasar variant of @code{__builtin_rvtt_sfpload} with an additional source-bank select operand.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpload_lv (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpload} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfploadsrcs_lv (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfploadsrcs} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpstore (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSTORE}: store a vector to a Dst row.  The modifier and mode select the format and address mode.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpstoresrcs (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Quasar variant of @code{__builtin_rvtt_sfpstore} with an additional source-bank select operand.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpiadd_v (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPIADD} on two vectors; the modifier selects add or subtract and the condition-code update.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpiadd_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpiadd_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpiadd_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPIADD} with a scalar immediate; the modifier selects add or subtract and the condition-code update.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpiadd_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpiadd_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmul (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPMUL}: floating-point multiply.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmul_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpmul} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmuli (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPMULI}: floating-point multiply by a 16-bit encoded immediate.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmuli_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpmuli} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpadd (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPADD}: floating-point add.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpadd_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpadd} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpaddi (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPADDI}: floating-point add of a 16-bit encoded immediate.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpaddi_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpaddi} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetexp_v (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPSETEXP} with per-lane exponents from a vector: replace the exponent field.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetexp_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetexp_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetexp_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSETEXP} with an immediate exponent: replace the exponent field.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetexp_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetexp_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetman_v (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPSETMAN} with per-lane mantissas from a vector: replace the mantissa field.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetman_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetman_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetman_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSETMAN} with an immediate mantissa: replace the mantissa field.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetman_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetman_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetsgn_v (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPSETSGN} with per-lane signs from a vector: replace the sign bit.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetsgn_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetsgn_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetsgn_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSETSGN} with an immediate sign: replace the sign bit.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpsetsgn_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpsetsgn_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmad (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPMAD}: fused floating-point multiply-add.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmad_lv (__xtt_vector, __xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpmad} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpdivp2 (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPDIVP2}: scale each lane by a power of two by adjusting the exponent.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpdivp2_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpdivp2} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpcast (__xtt_vector, unsigned int)}
+Generate @code{SFPCAST}: convert lane representations (for example between sign-magnitude and two's-complement integers); the modifier selects the conversion.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpcast_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpcast} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpstochrnd_i (volatile void *, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SFPSTOCHRND} with an immediate descale amount: reduce precision with stochastic or round-to-nearest rounding.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpstochrnd_i_lv (volatile void *, __xtt_vector, __xtt_vector, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpstochrnd_i} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpstochrnd_v (__xtt_vector, __xtt_vector, unsigned int, unsigned int)}
+Generate @code{SFPSTOCHRND} with a per-lane descale vector: reduce precision with stochastic or round-to-nearest rounding.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpstochrnd_v_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpstochrnd_v} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpreadconfig (unsigned int)}
+Read the SFPU configuration register selected by the operand as a vector value.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpreadconfig_lv (__xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpreadconfig} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpwriteconfig_v (__xtt_vector, unsigned int)}
+Generate @code{SFPCONFIG}: program the selected configuration register from a vector value.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpconfig_i (unsigned int, unsigned int, unsigned int)}
+Generate the immediate form of @code{SFPCONFIG}: write, OR, AND, or XOR a 16-bit immediate into the lane-configuration register without reading any vector register.  Only the lane-configuration destination is accepted.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttsetc16 (unsigned int, unsigned int)}
+Generate @code{SETC16}: write a 16-bit value to a thread configuration register.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_sfpencc_all_lanes (void)}
+Generate the canonical all-lanes @code{SFPENCC} encoding, enabling every lane.
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpgt (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPGT}: native strict-greater comparison, updating the lane-enable state.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpgt_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpgt} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfple (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPLE}: native less-or-equal comparison, updating the lane-enable state.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfple_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfple} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmul24 (__xtt_vector, __xtt_vector, unsigned int)}
+Generate @code{SFPMUL24}: 24-bit integer multiply.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpmul24_lv (__xtt_vector, __xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpmul24} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Blackhole and Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfparecip (__xtt_vector, unsigned int)}
+Generate @code{SFPARECIP}: approximate-reciprocal family instruction; the modifier selects the operation.  @emph{Blackhole only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfparecip_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfparecip} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Blackhole only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpnonlinear (__xtt_vector, unsigned int)}
+Generate the Quasar nonlinear-function-approximation instruction; the modifier selects the function.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{__xtt_vector __builtin_rvtt_sfpnonlinear_lv (__xtt_vector, __xtt_vector, unsigned int)}
+Variant of @code{__builtin_rvtt_sfpnonlinear} with an explicit live-value operand (the leading additional vector): the result is that vector with the lanes enabled by the current CC state replaced by the operation's result.  @emph{Quasar only.}
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttsetrwc (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{SETRWC}: set the Dst/source row counters and their carriage-return behavior.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttdstface (void)}
+Advance the Dst face: two architectural Dst row-counter steps of eight, with no register, CC, or configuration effect.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttincrwc (int, int, int, int)}
+Generate @code{INCRWC}: increment the row counters by the given amounts.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttreplay (volatile void *, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{REPLAY}: record delivered instruction words into the replay buffer or launch a recorded window, as selected by the operands.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttmovd2b (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{MOVD2B}: move rows from Dst to the SrcB bank of the matrix unit.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttmovb2a (unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{MOVB2A}: move rows from the SrcB bank to the SrcA bank.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttmovb2d (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{MOVB2D}: move rows from the SrcB bank to Dst.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttmova2d (unsigned int, unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{MOVA2D}: move rows from the SrcA bank to Dst.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_tttrnspsrcb (void)}
+Generate @code{TRNSPSRCB}: transpose the upper sixteen SrcB rows.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttstallwait (unsigned int, unsigned int)}
+Generate @code{STALLWAIT}: stall the issuing thread until the selected resources are idle.
+@enddefbuiltin
+
+@defbuiltin{void __builtin_rvtt_ttrmwcib (unsigned int, unsigned int, unsigned int, unsigned int)}
+Generate @code{RMWCIB}: byte-granular read-modify-write of the current-state backend configuration word; the first operand selects the byte.
+@enddefbuiltin
 
 @node CORE-V Built-in Functions
 @subsection CORE-V Built-in Functions
