@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
 #define INCLUDE_STRING
+#define INCLUDE_SET
 #include "bconfig.h"
 #include "system.h"
 
@@ -36,7 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 /* WARNING, BNF may have bit rotted.  The lexer strips white space including
    C/C++ comments (both line and block forms)
 
-  combine (TARGET) {
+  combine | deferred_combine (TARGET) name [opt] {
     { enable } [opt]
     var = bltin (args, ...);
     ...
@@ -57,8 +58,13 @@ along with GCC; see the file COPYING3.  If not see
 
   expr : [A-Z0-9(] paren-balanced-chars until ) or ,
 
-  combine : 'combine' '(' ident ')' '{' enable?
+  combine_tag : 'combine'
+              | 'deferred_combine'
+  
+  combine : combine_tag '(' ident ')' label? '{' enable?
 	shape+ pred setup? shape+ finalize? '}'
+
+  label : ident
 
   shape: var modifiers? '=' ident '(' args ')' ';'
 
@@ -452,6 +458,7 @@ public:
   Vars vars;
   std::vector<unsigned> remap;
   std::string_view target;
+  std::string_view label;
   Shapes pats;
   Shapes reps;
   Code hooks[H_HWM];
@@ -465,9 +472,17 @@ public:
 
   int commute_arg = -1;
 
+  bool deferred = false;
+
+public:
+  Combine (unsigned lineno, bool deferred)
+    : lineno (lineno), deferred (deferred) {}
+
 public:
   bool parse (Lexer &);
   bool has_hook (Hooks ix) const { return hooks[ix]; }
+  static void emit_label (Stream &, std::string_view);
+  void emit_label (Stream &out) const { emit_label (out, label); }
   void emit_hook (Stream &, Hooks) const;
   void emit_hook_name (Stream &, Hooks) const;
 
@@ -599,7 +614,7 @@ Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
 
   out.print (", ", unsigned (args.size ()));
   out.print (", ", used_by_mask);
-  out.print (", {");
+  out.print (",\n    {");
   bool first = true;
   for (auto const &arg : args)
     {
@@ -653,8 +668,6 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
 bool
 Combine::parse (Lexer &lexer)
 {
-  lineno = lexer.lineno;
-
   if (!lexer.consume ('('))
     return false;
 
@@ -665,6 +678,8 @@ Combine::parse (Lexer &lexer)
 
   if (!lexer.consume ('{'))
     return false;
+
+  lexer.consume_ident (label, true);
 
   lexer.consume_code (hooks[H_Enable], true);
   if (!parse_patterns (lexer, true))
@@ -756,9 +771,10 @@ parse (Combines &combines, Helpers &helpers, char const *name)
 
   for (;;)
     {
-      if (lexer.consume ("combine", true))
+      bool deferred = lexer.consume ("deferred_combibe");
+      if (deferred || lexer.consume ("combine", true))
 	{
-	  combines.emplace_back (Combine ());
+	  combines.emplace_back (Combine (lexer.lineno, deferred));
 	  if (!combines.back ().parse (lexer))
 	    return false;
 	}
@@ -795,10 +811,20 @@ Stream::pop ()
 }
 
 void
+Combine::emit_label (Stream &out, std::string_view label)
+{
+  if (label.empty ())
+    out.print ("T_none");
+  else
+    out.print ("T_", label);
+}
+
+void
 Combine::emit_enable_name (Stream &out) const
 {
   out.print ("combiner_enable_", target);
 }
+
 void
 Combine::emit_hook_name (Stream &out, Hooks hook) const
 {
@@ -913,10 +939,13 @@ main (int argc, const char **argv)
 	     "\"increase args_hwm\");\n");
   out.print ("\n");
 
+  std::set<std::string_view> labels;
+
   // Emit shapes
   out.print ("static const Shape combiner_shapes[] = {\n");
   for (auto const &combine : combines)
     {
+      labels.insert (combine.label);
       if (&combine != &combines.front ())
 	out.print ("\n");
       out.print ("// ", combine.lineno, "\n");
@@ -928,6 +957,16 @@ main (int argc, const char **argv)
     }
   out.print ("};\n\n");
 
+  // Define the labels
+  out.print ("enum Combiner::Tags : uint16_t {\n");
+  for (auto const &label : labels)
+    {
+      out.print ("  ");
+      Combine::emit_label (out, label);
+      out.print (",\n");
+    }
+  out.print ("};\n\n");
+  
   // Emit combines
   unsigned shape_off = 0;
   out.print ("static const Combiner combiners[] = {\n");
@@ -944,10 +983,15 @@ main (int argc, const char **argv)
 		 ", ", combine.rep_use_mask,
 		 ", ", combine.commute_arg,
 
-		 ", ", combine.lineno);
+		 ", ", combine.lineno,
+		 ", ", combine.deferred,
+		 ", Combiner::");
+      combine.emit_label (out);
+      out.print (",\n    ");
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
-	  out.print (", ");
+	  if (ix)
+	    out.print (", ");
 	  if (combine.has_hook (Combine::Hooks (ix)))
 	    combine.emit_hook_name (out, Combine::Hooks (ix));
 	  else if (ix == Combine::H_Enable && combine.has_enable ())

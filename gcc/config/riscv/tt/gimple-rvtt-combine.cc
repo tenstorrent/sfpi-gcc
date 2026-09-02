@@ -99,6 +99,8 @@ namespace {
   // those with.  The templates are placed at the last pattern's
   // location. Patterns other than OtherUses are deleted
   struct Combiner {
+    struct Deferred;
+    enum Tags : uint16_t;
     Shape const *shapes;
     uint8_t pats_hwm;
     uint8_t reps_hwm;
@@ -112,6 +114,8 @@ namespace {
     int8_t commute_arg; // final pattern commutable arg, if non-negative
 
     unsigned lineno; // line in rvtt.gc file
+    bool deferred;
+    Tags label;
 
     bool (*enable_hook) (); // combiner-specific emablement
     bool (*pred_hook) (gcall *[], tree [], bool); // combiner-specific checks
@@ -121,7 +125,7 @@ namespace {
   public:
     struct matched_data;
     bool match (gcall *call, const rvtt_insn_data *insnd, matched_data &) const;
-    void replace (gimple_stmt_iterator *, matched_data &, gcall **replace) const;
+    void replace (gimple_stmt_iterator *, matched_data &, Deferred &deferred) const;
 
   private:
     struct match_masks;
@@ -133,6 +137,7 @@ namespace {
 		      matched_data &matched, match_masks &masks) const;
   };
 }
+
 
 // sfp{add,mul}i insns that need dynamic imm reconstitution
 struct imminfo {
@@ -249,9 +254,46 @@ has_use_between (tree var, gcall *begin, gcall *end,
 
 struct Combiner::matched_data {
   gcall *calls[combiner_pats_hwm];
+  gcall *replace[combiner_reps_hwm];
   tree vars[combiner_vars_hwm];
-  bool commuted = false;
+  const Combiner *combiner;
   unsigned deleted = 0;
+  bool commuted = false;
+  bool moot = false; // Another combiner deleted a call we rewrite
+
+  matched_data (const Combiner *c)
+    : combiner (c) {};
+};
+
+struct Combiner::Deferred {
+  std::vector<matched_data> matches;
+  std::multimap<gcall *, unsigned> map;
+
+public:
+  matched_data &push (const Combiner *c) {
+    matches.emplace_back (c);
+    return matches.back ();
+  }
+  void pop () { matches.pop_back (); }
+
+public:
+  void moot (gcall *call) {
+    for (auto I = map.lower_bound (call);
+	 I != map.end () && I->first == call;
+	 ++I)
+      {
+	if (dump_file)
+	  fprintf (dump_file, "Mooting deferral %u\n", I->second);
+	matches[I->second].moot = true;
+      }
+  }
+  unsigned defer () {
+    auto &match = matches.back ();
+    unsigned slot = matches.size () - 1;
+    for (unsigned ix = match.combiner->pats_hwm; ix--;)
+      map.insert ({match.calls[ix], slot});
+    return slot;
+  }
 };
 
 struct Combiner::match_masks {
@@ -285,7 +327,6 @@ Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &
 
   return true;
 }
-
 
 bool
 Combiner::match_fini (const Shape &pat, const rvtt_insn_data *insnd, match_masks &masks) const
@@ -523,7 +564,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 }
 
 void
-Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **replace) const
+Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &deferred) const
 {
   if (init_hook)
     init_hook (matched.calls, matched.vars, matched.commuted);
@@ -552,12 +593,16 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
       gcc_assert (insnd->num_args () + lv_delta == rep.num_args
 		  && insnd->decl);
       auto *call = gimple_build_call (insnd->decl, insnd->num_args ());
-      replace[rep.lhs] = call;
+      matched.replace[rep.lhs] = call;
 
-      gimple_set_location (call, gimple_location (matched.calls[rep.lhs]));
+      unsigned from_loc = rep.lhs;
       if (rep.lhs >= pats_hwm)
-	matched.vars[rep.lhs]
-	  = make_temp_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)), nullptr, "cmb");
+	{
+	  matched.vars[rep.lhs]
+	    = make_temp_ssa_name (TREE_TYPE (TREE_TYPE (insnd->decl)), nullptr, "cmb");
+	  from_loc = pats_hwm - 1;
+	}
+      gimple_set_location (call, gimple_location (matched.calls[from_loc]));
 
       gimple_set_lhs (call, matched.vars[rep.lhs]);
 
@@ -586,23 +631,25 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
   for (int ix = pats_hwm - 1; ix--;)
     if ((1 << ix) & matched.deleted)
       {
-	auto gsi = gsi_for_stmt (matched.calls[ix]);
-	unlink_stmt_vdef (matched.calls[ix]);
+	auto *call = matched.calls[ix];
+	deferred.moot (call);
+	auto gsi = gsi_for_stmt (call);
+	unlink_stmt_vdef (call);
 	gsi_remove (&gsi, true);
       }
 
   unlink_stmt_vdef (**gsi);
   gsi_remove (gsi, true);
-  *gsi = gsi_for_stmt (replace[shapes[reps_hwm - 1].lhs]);
+  *gsi = gsi_for_stmt (matched.replace[shapes[reps_hwm - 1].lhs]);
 
   if (fini_hook)
-    fini_hook (replace, matched.vars);
+    fini_hook (matched.replace, matched.vars);
 
   if (dump_file)
     {
       fprintf (dump_file, "Replaced with:\n");
       for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
-	print_gimple_stmt (dump_file, replace[shapes[ix].lhs], 2);
+	print_gimple_stmt (dump_file, matched.replace[shapes[ix].lhs], 2);
     }
 
   assign_mask |= assign_lv_mask;
@@ -614,7 +661,7 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, gcall **rep
 	  auto const &shape = shapes[ix];
 	  if ((1 << shape.lhs) & assign_mask)
 	    {
-	      auto *rep = replace[shape.lhs];
+	      auto *rep = matched.replace[shape.lhs];
 	      auto lhs = gimple_call_lhs (rep);
 	      if (lhs && ((1 << shape.lhs) & assign_lv_mask)
 		  && gimple_call_arg (rep, 0) != gimple_call_arg (rep, 1))
@@ -955,7 +1002,7 @@ addimuli_resynthing ()
 }
 
 static bool
-combine_block (basic_block bb)
+combine_block (basic_block bb, Combiner::Deferred &deferred)
 {
   bool changed = false;
 
@@ -976,21 +1023,29 @@ combine_block (basic_block bb)
 	  // starting_ids.end ()
 	  if (start->first == insnd->id)
 	    {
-	      bool matched = false;
+	      bool found = false;
 	      for (auto I = start->second, E = (++start)->second; I != E; ++I)
 		{
 		  auto *combiner = *I;
-		  Combiner::matched_data matched_data;
-		  if (combiner->match (as_a <gcall *> (*gsi), insnd, matched_data))
+		  auto &match = deferred.push (combiner);
+		  if (combiner->match (as_a <gcall *> (*gsi), insnd, match))
 		    {
-		      gcall *replace[combiner_reps_hwm];
-		      combiner->replace (&gsi, matched_data, replace);
+		      if (combiner->deferred)
+			{
+			  unsigned ix = deferred.defer ();
+			  if (dump_file)
+			    fprintf (dump_file, "Deferment %u\n\n", ix);
+			  break;
+			}
+		      combiner->replace (&gsi, match, deferred);
 		      changed = true;
-		      matched = true;
+		      found = true;
+		      deferred.pop ();
 		      break;
 		    }
+		  deferred.pop ();
 		}
-	      if (matched)
+	      if (found)
 		continue;
 	    }
 	}
@@ -1033,12 +1088,29 @@ public:
     addimuli.clear ();
     synths.clear ();
 
+    Combiner::Deferred deferred;
     bool changed = false;
     basic_block bb;
 
     FOR_EACH_BB_FN (bb, fn)
-      if (combine_block (bb))
+      if (combine_block (bb, deferred))
 	changed = true;
+
+    // Process deferred matches in reverse order
+    for (unsigned ix = deferred.matches.size (); ix--;)
+      {
+	auto &match = deferred.matches[ix];
+	if (dump_file)
+	  fprintf (dump_file,
+		   match.moot ? "Deferment %u is moot\n\n"
+		   : "Deferment %u:\n", ix);
+
+	if (match.moot)
+	  continue;
+
+	auto gsi = gsi_for_stmt (match.calls[match.combiner->pats_hwm - 1]);
+	match.combiner->replace (&gsi, match, deferred);
+      }
 
     if (!addimuli.empty ())
       addimuli_resynthing ();
