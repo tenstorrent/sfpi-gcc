@@ -1290,6 +1290,111 @@ See RS/6000 and PowerPC Options.
 -minline-strncmp  -mno-inline-strncmp
 -mtls-dialect=desc  -mtls-dialect=trad}
 
+@emph{RISC-V Tensix Options} (@ref{RISC-V Tensix Options})
+@gccoptlist{-mtt-fix-qsrreplay  -mno-tt-fix-qsrreplay
+-mtt-fix-whfence  -mno-tt-fix-whfence
+-mtt-fix-whbhebreak  -mno-tt-fix-whbhebreak
+-mtt-fix-whraw  -mno-tt-fix-whraw
+-mtt-optimize-extend
+-mtt-optimize-hll
+-mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
+-mtt-tensix-optimize-combine  -mno-tt-tensix-optimize-combine
+-mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
+-mtt-tensix-optimize-dst-ownership  -mno-tt-tensix-optimize-dst-ownership
+-mtt-tensix-optimize-lut-select  -mno-tt-tensix-optimize-lut-select
+-mtt-tensix-optimize-lut-select-leaf-ext
+-mtt-tensix-optimize-lut-select-fp16
+-mtt-tensix-optimize-setexp-fold  -mno-tt-tensix-optimize-setexp-fold
+-mtt-tensix-optimize-ccmask
+-mtt-tensix-optimize-int-abs
+-mtt-tensix-optimize-int-not
+-mtt-tensix-optimize-native-compare
+-mtt-tensix-optimize-repr-prop
+-mtt-tensix-optimize-store-fold
+-mtt-tensix-optimize-store-source-tier
+-mtt-tensix-optimize-transp-involution
+-mtt-tensix-optimize-crosslane
+-mtt-tensix-optimize-dst-iteration-fusion
+-mtt-tensix-optimize-cc-region-general
+-mtt-tensix-optimize-pressure-schedule
+-mtt-tensix-optimize-pressure-schedule-prera
+-mtt-tensix-pressure-schedule-use-milp
+-mtt-tensix-optimize-latency-schedule
+-mtt-tensix-optimize-interlock-schedule
+-mtt-tensix-optimize-list-schedule
+-mtt-tensix-optimize-cyclic-region-schedule
+-mtt-tensix-optimize-ims
+-mtt-tensix-ims-budget=@var{n}
+-mtt-tensix-optimize-round-interleave
+-mtt-tensix-optimize-capture-rotation
+-mtt-tensix-optimize-invariant-loadi
+-mtt-tensix-optimize-prgm-const
+-mtt-tensix-optimize-const-residency
+-mtt-tensix-optimize-const-remat
+-mtt-tensix-optimize-pressure-park
+-mtt-tensix-optimize-park-ordering
+-mtt-tensix-optimize-madpair-vocabulary
+-mtt-tensix-optimize-hoisted-prgm-reuse
+-mtt-tensix-optimize-loop-prgm-reclaim
+-mtt-tensix-optimize-residency-merge-rename
+-mtt-tensix-optimize-priced-placement
+-mtt-tensix-optimize-init-hoist
+-mtt-tensix-optimize-crosscall-hoist
+-mtt-tensix-optimize-crosscall-config-prefix
+-mtt-tensix-optimize-crosscall-addrmod
+-mtt-tensix-optimize-crossloop-hoist
+-mtt-tensix-optimize-crossloop-cc-peel
+-mtt-tensix-optimize-opaque-replay-record
+-mtt-tensix-optimize-lreg-alloc
+-mtt-tensix-optimize-lreg-coalesce
+-mtt-tensix-dst-layout-32b
+-mtt-tensix-optimize-lreg-rename-chains
+-mtt-tensix-optimize-lreg-rename
+-mtt-tensix-optimize-rename-temporal
+-mtt-tensix-optimize-rename-cc-region
+-mtt-tensix-optimize-replay  -mno-tt-tensix-optimize-replay
+-mtt-tensix-replay-buffer-size=@var{words}
+-mtt-tensix-optimize-replay-hoist
+-mtt-tensix-replay-hoist-min-benefit=@var{n}
+-mtt-tensix-optimize-replay-exec-record
+-mtt-tensix-optimize-replay-record-hoist
+-mtt-tensix-replay-hoist-completion-guard
+-mtt-tensix-optimize-record-hoist-peel
+-mtt-tensix-optimize-record-hoist-lift
+-mtt-tensix-optimize-counted-capture-peel
+-mtt-tensix-optimize-replay-window-sizing
+-mtt-tensix-optimize-counted-row-formation
+-mtt-tensix-optimize-replay-loop-unroll
+-mtt-tensix-optimize-launch-flatten
+-mtt-tensix-optimize-delivery-shape
+-mtt-tensix-delivery-shape-min-benefit=@var{n}
+-mtt-tensix-optimize-mop-form
+-mtt-tensix-mop-form-min-benefit=@var{n}
+-mtt-tensix-optimize-dst-autoincr
+-mtt-tensix-optimize-dst-autoincr-load-carrier
+-mtt-tensix-optimize-post-autoincr-window
+-mtt-tensix-optimize-drain-schedule
+-mtt-tensix-optimize-window-pairing
+-mtt-tensix-optimize-window-pairing-stride
+-mtt-tensix-optimize-crossrow-pairing
+-mtt-tensix-optimize-crossrow-pairing-stall-words
+-mtt-tensix-optimize-crossrow-pairing-seed
+-mtt-tensix-optimize-crossrow-shared-reload
+-mtt-tensix-optimize-mve-expand
+-mtt-tensix-macro-planner
+-mtt-tensix-macro-planner-analyze
+-mtt-tensix-macro-planner-verify
+-mtt-tensix-macro-planner-replay
+-mtt-tensix-macro-planner-residency
+-mtt-tensix-macro-ims
+-mtt-tensix-macro-ims-carrier
+-mtt-tensix-optimize-reassoc
+-mtt-tensix-optimize-reassoc-loop-carried
+-mtt-tensix-optimize-reassoc-mad-restructure
+-mtt-tensix-optimize-store-sink
+-mtt-tensix-optimize-stochrnd-store-fold
+-mtt-tensix-dump-effects}
+
 @emph{RL78 Options} (@ref{RL78 Options})
 @gccoptlist{-msim  -mmul=none  -mmul=g13  -mmul=g14  -mallregs
 -mcpu=g10  -mcpu=g13  -mcpu=g14  -mg10  -mg13  -mg14
@@ -21643,6 +21748,7 @@ platform.
 * PowerPC Options::
 * PRU Options::
 * RISC-V Options::
+* RISC-V Tensix Options::
 * RL78 Options::
 * RS/6000 and PowerPC Options::
 * RX Options::
@@ -31736,6 +31842,1094 @@ of TLS variables.
 @item -mtls-dialect=trad
 Use traditional TLS as the thread-local storage mechanism for dynamic accesses
 of TLS variables.  This is the default.
+@end table
+
+@node RISC-V Tensix Options
+@subsection RISC-V Tensix Options
+@cindex RISC-V Tensix Options
+@cindex Tensix
+@cindex SFPU
+
+These additional command-line options are defined for RISC-V processors
+with the Tenstorrent Tensix extensions, selected with @option{-mcpu}
+values such as @samp{tt-wh-tensix} and @samp{tt-bh-tensix}
+(@pxref{RISC-V Options}).  A Tensix core pairs a small RISC-V control
+processor with a vector coprocessor (the SFPU) and a matrix engine.
+The RISC-V core drives the coprocessor by delivering 32-bit Tensix
+instruction words to it; the compiler generates those words from the
+Tensix built-in functions (@pxref{RISC-V Tensix Built-in Functions}) and
+optimizes the delivered instruction stream with the passes controlled by
+the options below.
+
+A few terms recur throughout this section:
+
+@table @dfn
+@item SFPU
+The Tensix vector unit.  It computes on 32-lane vectors held in eight
+general vector registers (@dfn{LREGs}, @code{L0}--@code{L7}) plus a
+file of constant registers, some of them programmable.
+
+@item Dst
+The destination register file shared with the matrix engine.  SFPU
+loads and stores move vectors between LREGs and Dst, addressed in rows;
+a hardware row counter (the @dfn{RWC}) supplies the base row and can be
+advanced explicitly or by configured auto-increment.
+
+@item lane condition codes (CC)
+Per-lane enable state.  Vector instructions only write lanes that are
+currently enabled; compare instructions and explicit CC instructions
+narrow the enabled set, and a stack discipline (@code{SFPPUSHC} and
+@code{SFPPOPC}) saves and restores it.  A range of code executed under
+narrowed CC state is called a @dfn{predicated region}.
+
+@item replay buffer
+A hardware buffer that can record a window of delivered instruction
+words while (or instead of) executing them, and re-deliver the whole
+window later from a single @code{REPLAY} launch word.
+
+@item MOP
+The hardware macro-op expander, a small engine that re-delivers a
+programmed instruction template a counted number of times from a single
+launch word.
+
+@item issue slot
+The unit of delivery cost: one instruction word pushed to the Tensix
+frontend.  Optimization decisions in these passes are priced in modeled
+issue slots.
+
+@item initiation interval (II)
+For a loop, the modeled steady-state number of issue slots consumed per
+iteration.  Loop-scheduling flags accept a new schedule only when it
+strictly decreases the modeled II.
+@end table
+
+@noindent
+The Tensix optimization passes share a common transformation contract:
+
+@table @dfn
+@item declines with a recorded reason
+A transformation fires only when every one of its enabling conditions
+is proven.  When any condition cannot be proven, the transformation
+@dfn{declines}: it leaves the instruction stream exactly as it would
+have been without the attempt, and records the reason as a stable
+identifier (for example @samp{ims-no-ii-decrease}).  Recorded reasons
+are reported through the @option{-fopt-info} machinery: with
+@option{-fopt-info-missed} each declined site produces a missed
+optimization remark of the form @samp{tt-refusal: @var{reason}
+[@var{pass}]} carrying the source location.  @xref{Developer Options},
+for @option{-fopt-info}.  In addition, when the environment variable
+@env{RVTT_REFUSAL_SUMMARY} is set (to any value), the compiler prints a
+table of per-reason decline counts to the standard error stream when it
+exits.  Reason identifiers are stable interfaces: scripts may key on
+them.
+
+@item byte-identical
+Many options below promise that, when the option is absent or a
+transformation declines, generated code is @dfn{byte-identical}: the
+assembled instruction stream is exactly the one that would have been
+produced otherwise, so enabling such an option can be validated by
+byte-for-byte comparison of the affected objects.
+
+@item value-changing options
+Unless explicitly stated otherwise, these optimizations never change
+the values a kernel computes, only the instruction sequence that
+computes them.  The exceptions are documented as value-changing below
+and require their own explicit opt-in:
+@option{-mtt-tensix-optimize-reassoc} and its two companions
+additionally require @option{-fassociative-math}, and
+@option{-mtt-tensix-optimize-store-sink} and
+@option{-mtt-tensix-optimize-stochrnd-store-fold} alter delivered bits
+in narrowly defined ways described in their entries.
+@option{-mtt-tensix-dst-layout-32b} is not an optimization but a
+declaration whose misuse produces wrong output; see its entry.
+@end table
+
+Options marked @emph{Blackhole only} have no effect on other Tensix
+processors.  Options documented as effective only in combination with
+another option are inert without it.
+
+@menu
+* Tensix Errata Options::       Working around processor errata.
+* Tensix Instruction Selection Options::  Folds and instruction selection.
+* Tensix Scheduling Options::   Straight-line and loop scheduling.
+* Tensix Constant Placement Options::  Constant registers and hoisting.
+* Tensix Register Allocation Options::  Vector register allocation/renaming.
+* Tensix Replay and Delivery Options::  Replay, MOP, and delivery shaping.
+* Tensix Macro Planner Options::  SFPLOADMACRO planning.
+* Tensix Value-Changing Options::  Options that change computed values.
+* Tensix Diagnostic Options::   Diagnostic aids.
+@end menu
+
+@node Tensix Errata Options
+@subsubsection Tensix Errata Options
+
+These options control the workarounds for processor errata.  Each is
+enabled by default for the processors it affects; disabling one is only
+useful when the surrounding system already guarantees the erratum
+cannot be hit.
+
+@table @gcctabopt
+@opindex mtt-fix-qsrreplay
+@item -mtt-fix-qsrreplay
+@itemx -mno-tt-fix-qsrreplay
+Emit code to address the Quasar replay erratum.
+
+@opindex mtt-fix-whfence
+@item -mtt-fix-whfence
+@itemx -mno-tt-fix-whfence
+Emit code to address Wormhole's inoperative @code{fence} instruction.
+
+@opindex mtt-fix-whbhebreak
+@item -mtt-fix-whbhebreak
+@itemx -mno-tt-fix-whbhebreak
+Emit code to address the Wormhole/Blackhole @code{ebreak} erratum.
+
+@opindex mtt-fix-whraw
+@item -mtt-fix-whraw
+@itemx -mno-tt-fix-whraw
+Emit code to address the Wormhole read-after-write hazard.
+@end table
+
+@node Tensix Instruction Selection Options
+@subsubsection Tensix Instruction Selection Options
+
+These options control pattern folds and instruction selection on the
+Tensix instruction stream.  Defaults are stated per option; the
+remaining options are disabled by default.
+
+@table @gcctabopt
+@opindex mtt-optimize-extend
+@item -mtt-optimize-extend
+Remove zero- and sign-extension operations that the surrounding Tensix
+code makes redundant.  Enabled by default when optimizing for Wormhole
+and Blackhole processors.
+
+@opindex mtt-optimize-hll
+@item -mtt-optimize-hll
+Schedule high-latency loads earlier within their basic block to hide
+their latency.
+
+@opindex mtt-tensix-optimize-cc
+@item -mtt-tensix-optimize-cc
+@itemx -mno-tt-tensix-optimize-cc
+Optimize the lane condition-code state handling: remove redundant CC
+saves, restores, and enables.  Enabled by default.
+
+@opindex mtt-tensix-optimize-combine
+@item -mtt-tensix-optimize-combine
+@itemx -mno-tt-tensix-optimize-combine
+Combine adjacent Tensix instructions into shorter equivalent sequences,
+for example folding a multiply and a dependent add into a fused
+multiply-add where the values are provably unchanged.  Enabled by
+default.
+
+@opindex mtt-tensix-optimize-dce
+@item -mtt-tensix-optimize-dce
+@itemx -mno-tt-tensix-optimize-dce
+Remove Tensix instructions whose results are provably unused.  Enabled
+by default.
+
+@opindex mtt-tensix-optimize-dst-ownership
+@item -mtt-tensix-optimize-dst-ownership
+@itemx -mno-tt-tensix-optimize-dst-ownership
+Track ownership of Dst rows and the row counter before register
+allocation, and fold Dst reloads that provably reload a value still
+resident in a vector register into direct register references.  Enabled
+by default.
+
+@opindex mtt-tensix-optimize-lut-select
+@item -mtt-tensix-optimize-lut-select
+@itemx -mno-tt-tensix-optimize-lut-select
+Select the SFPU lookup-table instructions (@code{SFPLUT},
+@code{SFPLUTFP32}) for value trees that dispatch on the magnitude of an
+input over encodable ranges with affine leaves.  Enabled by default.
+
+@opindex mtt-tensix-optimize-lut-select-leaf-ext
+@item -mtt-tensix-optimize-lut-select-leaf-ext
+Extend lookup-table selection to multiply-only and provably constant
+leaf classes, and permit duplicating a leaf across ranges when the tree
+has fewer branches than the table has entries.  Each extended class is
+admitted only where an exhaustive bit-exactness check over all
+input encodings has been recorded for the target instruction; ranges
+without a recorded certification decline.
+
+@opindex mtt-tensix-optimize-lut-select-fp16
+@item -mtt-tensix-optimize-lut-select-fp16
+Extend lookup-table selection to the six-entry FP16-coefficient
+@code{SFPLUTFP32} table modes: a six-range magnitude dispatch over the
+architectural range boundaries whose leaf coefficients are compile-time
+constants exactly representable in the instruction's coefficient
+format becomes one packed-coefficient instruction.  Unrepresentable
+coefficients and unproven ranges decline.
+
+@opindex mtt-tensix-optimize-setexp-fold
+@item -mtt-tensix-optimize-setexp-fold
+@itemx -mno-tt-tensix-optimize-setexp-fold
+Fold an exponent extract that feeds @code{SFPSETEXP} into the
+instruction's exponent-copy addressing mode.  Enabled by default.
+
+@opindex mtt-tensix-optimize-ccmask
+@item -mtt-tensix-optimize-ccmask
+Fold a predicated region whose only effect is zeroing selected lanes
+under a floating-point ordering test against @code{+0.0} into an
+unpredicated compare and bitwise AND, removing the CC save/restore
+pair.  Non-matching regions decline.
+
+@opindex mtt-tensix-optimize-int-abs
+@item -mtt-tensix-optimize-int-abs
+Fold a predicated region performing a conditional two's-complement
+negation under a sign test into the single integer @code{SFPABS}
+instruction.  The equivalence is backed by an exhaustive check over all
+32-bit inputs, recorded in the source tree; non-matching regions
+decline.
+
+@opindex mtt-tensix-optimize-int-not
+@item -mtt-tensix-optimize-int-not
+Select the single @code{SFPNOT} instruction for the
+all-ones-minus-@var{x} spelling of one's complement, backed by an
+exhaustive equivalence check; other subtract shapes decline.
+
+@opindex mtt-tensix-optimize-native-compare
+@item -mtt-tensix-optimize-native-compare
+Lower strict-greater and less-or-equal floating-point vector comparison
+sequences to the native Blackhole @code{SFPGT} and @code{SFPLE}
+instructions, backed by an exhaustive pointwise equivalence check over
+all 2^32 compared bit patterns recorded in the source tree.  Other
+comparison directions and operand shapes keep the generic lowering.
+@emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-repr-prop
+@item -mtt-tensix-optimize-repr-prop
+Cancel pairs of representation-conversion instructions that are proven
+bit-level involutions (for example the Blackhole
+sign-magnitude/two's-complement cast) when they face each other across
+a web of operations that only choose bits lane-wise (copies, control
+joins, predicated merges).  Any unproven conversion or non-transparent
+intermediate operation declines.
+
+@opindex mtt-tensix-optimize-store-fold
+@item -mtt-tensix-optimize-store-fold
+Fold lane-predicated value merges into the Dst stores that consume
+them: forward the merged source into a store executed under the same
+lane mask, and sink a store that follows a predicated region into the
+region as a predicated store where the format's Dst round trip is
+proven to be the identity.  Every unproven case declines.  This option
+never changes stored values; see
+@option{-mtt-tensix-optimize-store-sink} for the value-changing
+extension.
+
+@opindex mtt-tensix-optimize-store-source-tier
+@item -mtt-tensix-optimize-store-source-tier
+Keep constants that feed Dst stores in ordinary vector registers rather
+than programmable constant registers.  @code{SFPSTORE} cannot read the
+programmable constant registers directly, so parking a store-consumed
+constant there would cost a copy per store; this option routes such
+constants to the vector-register placement tier instead.  Effective
+only with @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-transp-involution
+@item -mtt-tensix-optimize-transp-involution
+Fuse an @code{SFPTRANSP} with the full-bank loads that define its
+operands into a single bundle that provably preserves the companion
+register bank, and forward provably identical Dst values across it.
+
+@opindex mtt-tensix-optimize-crosslane
+@item -mtt-tensix-optimize-crosslane
+Recognize the canonical cross-lane instruction sequences
+(@code{SFPSHFT2} rotate chains, @code{SFPSWAP} compare-exchange stages,
+dual-bank @code{SFPTRANSP} and interleave frames) and simplify them
+through their proven permutation algebra: collapsing rotate chains,
+re-lowering lane slides per architecture, refolding swaps, and
+cancelling transpose and interleave round trips.  This option also
+enforces the architectural restriction on writes to registers
+@code{L4}--@code{L7} inside an indexed-destination window, reporting
+violations as compile-time errors.
+
+@opindex mtt-tensix-optimize-dst-iteration-fusion
+@item -mtt-tensix-optimize-dst-iteration-fusion
+Recognize adjacent Tensix Dst iterations that are provably legal to
+fuse, and fuse them.
+
+@opindex mtt-tensix-optimize-cc-region-general
+@item -mtt-tensix-optimize-cc-region-general
+Generalize the recognizers of the CC-consuming folds above.  The
+compiler builds a tree of the CC save/restore frames in each function;
+with this option, consumers whose recognizers historically demanded one
+specific statement layout (the @option{-mtt-tensix-optimize-ccmask}
+fold, the cross-loop placement walk, the loop-invariant containment
+check, and the reassociation window) accept any layout the frame tree
+proves equivalent.  Every unproven layout declines exactly as without
+the option.
+@end table
+@node Tensix Scheduling Options
+@subsubsection Tensix Scheduling Options
+
+These options control instruction scheduling of SFPU code, both
+straight-line and cyclic.  All are disabled by default.  The schedulers
+share three properties: they operate only on regions in which every
+instruction's architectural effects and latencies are known to the
+compiler (an instruction outside that set bounds or declines the
+region); they never move an instruction across a barrier such as a CC
+write, Dst traffic with unproven disjointness, or a configuration
+access; and they accept a candidate schedule only when the modeled
+metric strictly improves, keeping the original order byte-identically
+otherwise.
+
+@table @gcctabopt
+@opindex mtt-tensix-optimize-pressure-schedule
+@item -mtt-tensix-optimize-pressure-schedule
+Schedule straight-line SFPU regions to reduce vector register pressure,
+using a list scheduler whose primary key is modeled pressure.
+
+@opindex mtt-tensix-optimize-pressure-schedule-prera
+@item -mtt-tensix-optimize-pressure-schedule-prera
+Run pressure-cost list scheduling on straight-line SFPU regions before
+register allocation, on pseudo-register RTL.  The algorithm is the
+model-schedule excess-cost-change formulation used by GCC's own
+@option{-fsched-pressure}, adapted to the Tensix region model: a
+pressure-minimizing model schedule bounds the achievable peak, ready
+instructions are ranked by pressure excess cost plus modeled stall, and
+a candidate schedule commits only when both its modeled peak pressure
+and its modeled length are no worse than the original order's, with a
+strict improvement in at least one.  Baseline and committed pressure
+are re-verified against the dataflow liveness oracle; any disagreement
+declines.
+
+@opindex mtt-tensix-pressure-schedule-use-milp
+@item -mtt-tensix-pressure-schedule-use-milp
+Use the built-in exact branch-and-bound solver for Tensix pressure
+scheduling when the list schedule cannot satisfy the register capacity.
+
+@opindex mtt-tensix-optimize-latency-schedule
+@item -mtt-tensix-optimize-latency-schedule
+Fill result-latency bubbles---cycles in which a result is not yet
+available to its consumer---with independent ready SFPU instructions.
+
+@opindex mtt-tensix-optimize-interlock-schedule
+@item -mtt-tensix-optimize-interlock-schedule
+Fill hardware-interlock stalls whose duration the compiler can prove
+with independent SFPU instructions.
+
+@opindex mtt-tensix-optimize-list-schedule
+@item -mtt-tensix-optimize-list-schedule
+List-schedule straight-line SFPU regions over the dependence graph
+against the modeled issue timeline, filling latency shadows and
+interleaving independent chains.  This scheduler runs after register
+allocation, where the eight LREGs and their anti- and output-dependence
+edges are themselves the pressure bound.
+
+@opindex mtt-tensix-optimize-cyclic-region-schedule
+@item -mtt-tensix-optimize-cyclic-region-schedule
+Reschedule the interior regions of a single-block SFPU loop whose body
+contains barrier words.  Each maximal run of schedulable instructions
+strictly between barrier words (which keep their positions) is
+re-scheduled, and the result commits only on a strict decrease of the
+whole loop's modeled steady-state initiation interval under a wrapped
+(cyclic) issue model.  Because no instruction crosses a barrier word or
+the loop back edge, per-iteration semantics are preserved by
+construction.  Regions touching the loop boundary, repeated region
+shapes, and rows containing calls or unanalyzable words decline.
+
+@opindex mtt-tensix-optimize-ims
+@item -mtt-tensix-optimize-ims
+Schedule single-block SFPU loops by iterative modulo scheduling.  The
+compiler computes the minimum initiation interval from resource and
+recurrence bounds, places the loop's instructions against a modulo
+reservation table with a budgeted eviction rule, and offers the
+resulting order as a candidate to the cyclic acceptance path above,
+committing only on a strict whole-loop II decrease.  Placements whose
+value lifetimes exceed the II would owe kernel copies
+(modulo-variable expansion); this option only prices that obligation
+and declines it (see @option{-mtt-tensix-optimize-mve-expand} for the
+realization).  Loops with unknown instruction latencies, exhausted
+placement budgets, or no provable II decrease decline.
+
+@opindex mtt-tensix-ims-budget
+@item -mtt-tensix-ims-budget=@var{n}
+Set the absolute placement budget for the modulo-scheduling eviction
+loop.  The default of 0 selects the built-in budget of eight placements
+per region word.  Exhausting the budget declines the loop, so
+tightening the budget can only cause more loops to keep their original
+schedule; it never affects the soundness of an accepted schedule.
+
+@opindex mtt-tensix-optimize-round-interleave
+@item -mtt-tensix-optimize-round-interleave
+Interleave two consecutive iterations of a counted SFPU round loop
+whose iterations are provably independent: the body is unrolled by two
+and the doubled body is cyclically list-scheduled, renaming registers
+where the two copies would collide.  Dependent recurrences, register
+pressure beyond the eight LREGs, and loops owned by replay or MOP
+formation decline.
+
+@opindex mtt-tensix-optimize-capture-rotation
+@item -mtt-tensix-optimize-capture-rotation
+Rotate the instruction rows of a replayed capture so that a stall at
+the row boundary is overlapped with independent work from the other end
+of the row.  Only stalls whose duration the compiler can prove are
+considered.
+@end table
+
+@node Tensix Constant Placement Options
+@subsubsection Tensix Constant Placement Options
+
+The SFPU can materialize immediate vectors with @code{SFPLOADI}, keep
+values in its eight general vector registers, or program a constant
+into one of the programmable constant registers with @code{SFPCONFIG}.
+These options control where loop-invariant and proven-constant values
+are placed.  All are disabled by default.
+
+@table @gcctabopt
+@opindex mtt-tensix-optimize-invariant-loadi
+@item -mtt-tensix-optimize-invariant-loadi
+Hoist loop-invariant immediate-vector materializations out of loops
+before register allocation.
+
+@opindex mtt-tensix-optimize-prgm-const
+@item -mtt-tensix-optimize-prgm-const
+Allocate programmable constant registers to loop-invariant SFPU
+immediates, replacing an in-loop materialization with a one-time
+@code{SFPCONFIG} programming and a constant-register read.
+
+@opindex mtt-tensix-optimize-const-residency
+@item -mtt-tensix-optimize-const-residency
+Allocate programmable constant registers to proven-constant SFPU values
+generally, selecting candidates by priced comparison of the programming
+cost against the saved in-loop materializations.  In-loop
+materializations are preferred as candidates.  Several of the options
+below add candidate classes or placement tiers to this walk and are
+inert without it.
+
+@opindex mtt-tensix-optimize-const-remat
+@item -mtt-tensix-optimize-const-remat
+Rematerialize proven-constant SFPU values at their uses when vector
+register pressure exceeds the eight-register file, instead of keeping
+them live across the region.
+
+@opindex mtt-tensix-optimize-pressure-park
+@item -mtt-tensix-optimize-pressure-park
+Widen the class of constant materializations that may be hoisted to a
+proven programming point to include invariant constants positioned at
+or after a loop body's first CC write.  Such a constant is admitted
+only when every consumer is proven lane-predicated, so that reading the
+hoisted all-lanes value changes nothing on any lane the original code
+defined; and hoisting to an ordinary vector register is permitted only
+while a whole-function pressure model stays within the eight-register
+file.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-park-ordering
+@item -mtt-tensix-optimize-park-ordering
+Coordinate the early conservative invariant hoist with the late
+constant-residency walk.  In-region invariant constants inside a
+CC-restoring loop defer to the late walk when both
+@option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-pressure-park} are enabled, since the late
+walk places them under an exact pressure model; constants at region
+depth zero keep the early hoist, which for them is a free code motion.
+Loops carrying lookup-table machinery, and loops with three or more
+in-region invariant constants, defer wholesale to the later placement
+authorities.
+
+@opindex mtt-tensix-optimize-madpair-vocabulary
+@item -mtt-tensix-optimize-madpair-vocabulary
+Recognize additional multiply-add operand spellings when collecting
+constant-residency candidates, so that a multiply and add pair the
+instruction combiner will later fuse is treated as one candidate pair.
+Discovery only: admission checks and pricing are unchanged.  Effective
+only with @option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-hoisted-prgm-reuse
+@item -mtt-tensix-optimize-hoisted-prgm-reuse
+Let a loop-invariant constant that has already been hoisted out of the
+loop claim a programmable constant register: a free register, or one
+whose every write in the translation unit is proven to program the same
+32-bit value, in which case it is reprogrammed idempotently in place.
+The materialization then becomes a constant-register read, releasing a
+loop-wide vector register.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-loop-prgm-reclaim
+@item -mtt-tensix-optimize-loop-prgm-reclaim
+Reprogram a claimed programmable constant register that no statement in
+the translation unit ever reads with a different value at a loop's
+programming point, provided the window from the programming to the last
+in-loop read is free of calls and assembler statements that could
+interpose.  Effective only with
+@option{-mtt-tensix-optimize-const-residency}.
+
+@opindex mtt-tensix-optimize-residency-merge-rename
+@item -mtt-tensix-optimize-residency-merge-rename
+Rename an in-loop constant-immediate predicated merge---the one
+materialization shape no invariant or residency class can hoist,
+because the statement is loop-variant even though its immediate is
+not---into a hoistable full-lane twin materialization plus an in-loop
+register-source predicated move under the identical lane mask.  The
+rename is admitted only when the placement of the twin succeeds and the
+priced verdict improves delivery cost; a merely cost-neutral rename
+declines.  Effective only with
+@option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-pressure-park}.
+
+@opindex mtt-tensix-optimize-priced-placement
+@item -mtt-tensix-optimize-priced-placement
+Arbitrate the competing constant-placement tiers above through one
+priced authority instead of their individual local heuristics.
+Delivery cost, register pressure, and loop-trip amortization are each
+taken from a single shared model, while every legality proof remains in
+its owning pass.  With this option the last free vector register can be
+awarded to a downstream fold worth more than the marginal constant
+parking, and an early-hoist deferral can be rescued when its
+keep-side is fully proven; unpriceable alternatives decline and keep
+the established decision.
+
+@opindex mtt-tensix-optimize-init-hoist
+@item -mtt-tensix-optimize-init-hoist
+Hoist a non-inlined callee's loop-invariant, idempotent initialization
+prefix (its derived descriptor programming, and where the caller's
+reaching configuration is proven equal, its configuration writes and
+lane-enable setup) into the calling loop's preheader, executing it once
+per loop instead of once per call.  Every unproven link declines and
+keeps the per-call prefix.
+
+@opindex mtt-tensix-optimize-crosscall-hoist
+@item -mtt-tensix-optimize-crosscall-hoist
+Hoist a non-inlined callee's call-invariant immediate materializations
+into every proven caller's loop preheader, carrying the values across
+the calls in architecturally pinned vector registers.  Every unproven
+link declines.
+
+@opindex mtt-tensix-optimize-crosscall-config-prefix
+@item -mtt-tensix-optimize-crosscall-config-prefix
+Extend the cross-call hoist to a callee prefix pair consisting of an
+all-constant materialization whose single consumer is an
+@code{SFPCONFIG} write to a programmable constant register: the pair is
+re-materialized once in every proven caller's loop preheader and
+deleted from the callee.  Effective only with
+@option{-mtt-tensix-optimize-crosscall-hoist}.
+
+@opindex mtt-tensix-optimize-crosscall-addrmod
+@item -mtt-tensix-optimize-crosscall-addrmod
+Hoist the configuration program for a callee's Dst auto-increment
+address-modifier slots into the proven caller's loop entry, so the
+callee's auto-increment groups run at zero per-call configuration cost.
+Soundness rests on a whole-callee census showing nothing else writes
+the owned configuration slots.  Every unproven link declines.
+
+@opindex mtt-tensix-optimize-crossloop-hoist
+@item -mtt-tensix-optimize-crossloop-hoist
+Hoist loop-invariant SFPU immediate materializations (and, with the
+programmable-constant options, their programming points) across
+enclosing loops whose bodies deliver only instruction words proven free
+of interfering effects.  Every unanalyzable word or statement class
+declines.
+
+@opindex mtt-tensix-optimize-crossloop-cc-peel
+@item -mtt-tensix-optimize-crossloop-cc-peel
+Lift the programming of constants parked under
+@option{-mtt-tensix-optimize-pressure-park} across enclosing loops as a
+programming-only motion, placing it once at the outermost proven loop
+entry instead of once per enclosing-loop iteration.  The crossed loops
+must be proven to confine all their CC activity to balanced structured
+regions that cannot reach the parked register, and no local CC write
+may reach the lifted preheader.  Effective only with
+@option{-mtt-tensix-optimize-const-residency} and
+@option{-mtt-tensix-optimize-crossloop-hoist}.
+
+@opindex mtt-tensix-optimize-opaque-replay-record
+@item -mtt-tensix-optimize-opaque-replay-record
+Derive the translation-unit-wide constant-register freedom proof
+through raw replay record regions instead of declining the whole
+translation unit as unanalyzable.  Recorded words that are statically
+identified constant words and provably never delivered contribute no
+configuration effect; recorded words that could write configuration
+state, and regions whose extent or trip count is unproven, still
+decline.  Effective only where the freedom proof's consumers
+(@option{-mtt-tensix-optimize-prgm-const},
+@option{-mtt-tensix-optimize-const-residency}) run.
+@end table
+@node Tensix Register Allocation Options
+@subsubsection Tensix Register Allocation Options
+
+These options control allocation and renaming of the eight SFPU vector
+registers.  All are disabled by default except as noted.
+
+@table @gcctabopt
+@opindex mtt-tensix-optimize-lreg-alloc
+@item -mtt-tensix-optimize-lreg-alloc
+When SFPU vector pressure exceeds the eight-register file, color the
+interference graph before GCC's register allocator runs and spill
+selected vector value webs through proven-free 32-bit Dst scratch rows
+(an @code{SFPSTORE}/@code{SFPLOAD} round trip) until the graph is
+colorable with eight registers.  Register assignment itself stays with
+the normal allocator.  Every unproven ingredient declines, in which
+case the over-pressure compile error is reported exactly as without the
+option.
+
+@opindex mtt-tensix-optimize-lreg-coalesce
+@item -mtt-tensix-optimize-lreg-coalesce
+Apply conservative coalescing (in the Briggs and George formulations)
+to the interference graph built by
+@option{-mtt-tensix-optimize-lreg-alloc}, merging copy-related vector
+webs whenever the merged node provably keeps the graph colorable.  A
+web that only spilled because its copy halves were counted separately
+then colors without a spill.  Effective only with
+@option{-mtt-tensix-optimize-lreg-alloc}.
+
+@opindex mtt-tensix-dst-layout-32b
+@item -mtt-tensix-dst-layout-32b
+Declare that every SFPU calculation body in the translation unit
+executes under a 32-bit-row Dst layout (32-bit destination
+accumulation and addressing).  This declaration is consumed by
+@option{-mtt-tensix-optimize-lreg-alloc} to admit additional kernels
+for Dst scratch-row spilling.
+
+@strong{Warning:} this option asserts a property of the execution
+environment that the compiler cannot check.  Declaring it for a kernel
+that actually runs under a 16-bit-row layout makes any spilled
+compilation produce silent wrong output; no run-time error exists.  The
+build system must derive this option from the kernel's actual
+destination-accumulation mode.  Code with explicit 16-bit-format Dst
+accesses is refused for spilling regardless of the declaration.
+
+@opindex mtt-tensix-optimize-lreg-rename-chains
+@item -mtt-tensix-optimize-lreg-rename-chains
+After register allocation, move storage-colliding single-definition
+def-use webs of vector registers onto proven-free registers,
+following the formulation of GCC's own register renaming pass scoped
+to the Tensix vector file.  A rename is admitted only under an effect
+check for every instruction touched, a conservative rule declining
+spans containing CC events, and a lane-exact proof that the old value
+is dead; the committed result is re-verified structurally.  Delivered
+instruction words never change; only register fields move.  This pass
+also provides the renaming service that the schedulers above request
+renames through.
+
+@opindex mtt-tensix-optimize-lreg-rename
+@item -mtt-tensix-optimize-lreg-rename
+Historical spelling: requests exactly the same renaming engine as
+@option{-mtt-tensix-optimize-lreg-rename-chains}.  (The distinct
+single-shape renaming pass this option originally selected was retired;
+the spelling is kept for command-line compatibility.)
+
+@opindex mtt-tensix-optimize-rename-temporal
+@item -mtt-tensix-optimize-rename-temporal
+Extend the renaming engine in two ways.  First, admit temporally scoped
+rename targets: when no register is untouched across the whole block, a
+target is still admissible when it is untouched across the renamed span
+itself and its lifetimes outside the span provably cannot observe the
+renamed value.  Second, let the cyclic-interior scheduler request
+renames for storage collisions before candidate generation, undoing
+every rename exactly when the candidate schedule is not accepted.
+Every unproven clause declines.
+
+@opindex mtt-tensix-optimize-rename-cc-region
+@item -mtt-tensix-optimize-rename-cc-region
+Relax the renaming engine's conservative no-CC-events-in-span rule
+using the CC-region frame tree: a span crossing CC activity is admitted
+when every event is proven confined to balanced in-span save/restore
+frames that only narrow the lane-enable state, or when the span's entry
+state is proven to be the all-lanes state and any required final state
+is restored exactly.  Every unproven case declines exactly as under the
+conservative rule.
+@end table
+
+@node Tensix Replay and Delivery Options
+@subsubsection Tensix Replay and Delivery Options
+
+The largest cost in many Tensix kernels is delivery: the RISC-V core
+must push every instruction word to the coprocessor.  The hardware
+provides two amplifiers---the replay buffer and the MOP expander---and
+these options control how the compiler forms replay windows and MOP
+loops, hoists recordings out of loops, and shapes delivery loops.
+All are disabled by default except
+@option{-mtt-tensix-optimize-replay}.
+
+@table @gcctabopt
+@opindex mtt-tensix-optimize-replay
+@item -mtt-tensix-optimize-replay
+@itemx -mno-tt-tensix-optimize-replay
+Form Tensix replay windows: repeated runs of delivered instruction
+words are recorded into the replay buffer once and re-delivered from
+single launch words.  Enabled by default.
+
+@opindex mtt-tensix-replay-buffer-size
+@item -mtt-tensix-replay-buffer-size=@var{words}
+Set the length, in instruction words (1--32, default 32), of the replay
+buffer available to replay optimization.
+
+@opindex mtt-tensix-optimize-replay-hoist
+@item -mtt-tensix-optimize-replay-hoist
+Hoist replay captures whose recorded words have fixed encodings out of
+loops in which the capture is re-recorded every iteration, when the
+modeled benefit clears the threshold.
+
+@opindex mtt-tensix-replay-hoist-min-benefit
+@item -mtt-tensix-replay-hoist-min-benefit=@var{n}
+Set the minimum modeled benefit, in hundredths of an issue slot,
+required to hoist a replay capture; overrides the built-in cost-table
+default.
+
+@opindex mtt-tensix-optimize-replay-exec-record
+@item -mtt-tensix-optimize-replay-exec-record
+When a hoisted replay capture is immediately followed by a playback
+launch of the same window, execute the capture while recording and drop
+the now-redundant first launch, when the loop structure proves the
+exchange.  Effective only with
+@option{-mtt-tensix-optimize-replay-hoist}.
+
+@opindex mtt-tensix-optimize-replay-record-hoist
+@item -mtt-tensix-optimize-replay-record-hoist
+Hoist the record phase of a replay capture window that is provably
+iteration-invariant to the loop's dedicated preheader, leaving one
+playback launch per former record site.  Admission keeps every
+structural, invariance, and latency proof; profitability is priced with
+the removed per-iteration record delivery counted as real issue cost.
+
+@opindex mtt-tensix-replay-hoist-completion-guard
+@item -mtt-tensix-replay-hoist-completion-guard
+Use a drain-inclusive completion contract when pricing hoisted replay
+records: the complete preheader record delivery is charged instead of
+assuming it hides behind the loop's execution backlog.  Affects the
+profitability verdicts of @option{-mtt-tensix-optimize-replay-hoist}
+and @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-record-hoist-peel
+@item -mtt-tensix-optimize-record-hoist-peel
+Hoist a Dst-storing replay capture---a shape the no-execute record
+hoist must decline---by peeling the loop's proven first iteration
+verbatim into the dedicated preheader as an execute-while-record pass.
+Former in-body record sites become playback launches and the proven
+constant loop counter is re-initialized one step later.  Trip count,
+counter rewrite, and full body coverage must all be proven.  Effective
+only with @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-record-hoist-lift
+@item -mtt-tensix-optimize-record-hoist-lift
+Walk a hoisted storeless replay record outward across enclosing loops
+to the outermost preheader the pricing oracle proves admissible
+(ultimately the function entry), so the record is delivered once per
+kernel entry instead of once per loop iteration.  Every crossed loop
+must be proven replay-preserving; a failing level stops the walk.
+Effective only with @option{-mtt-tensix-optimize-replay-record-hoist}.
+
+@opindex mtt-tensix-optimize-counted-capture-peel
+@item -mtt-tensix-optimize-counted-capture-peel
+Extend the first-iteration peel to counted-loop captures whose plain
+hoist is unprofitable because the preheader record cannot amortize over
+the loop's proven trip count: the peeled shape pays only the capture
+word and record-engine overhead, since the first iteration already paid
+the payload delivery.  Requires a proven constant trip count of at
+least two and a single-block body with full coverage.
+
+@opindex mtt-tensix-optimize-replay-window-sizing
+@item -mtt-tensix-optimize-replay-window-sizing
+Re-size a replay window that is about to be hoisted out of its loop.
+The normal in-block selection prefers shorter windows, whose in-body
+record is cheaper; but a hoisted record is delivered once, so a wider
+candidate with the same anchor that fits the free replay slots and
+strictly reduces per-iteration deliveries is committed instead, with a
+trailing run that is a word-exact prefix of the window delivered as one
+partial playback launch.  The widened candidate must re-prove the whole
+hoist admission itself.
+
+@opindex mtt-tensix-optimize-counted-row-formation
+@item -mtt-tensix-optimize-counted-row-formation
+Canonicalize parameterized repeated SFPU rows---identical rows that
+differ only in immediate operands---so replay formation can record one
+parameterized row program, delivering the varying immediates between
+launches.
+
+@opindex mtt-tensix-optimize-replay-loop-unroll
+@item -mtt-tensix-optimize-replay-loop-unroll
+Request generic loop unrolling for counted single-block SFPU row loops
+whose every statement is a Tensix built-in operation, so the existing
+replay formation can capture the repeated row.
+
+@opindex mtt-tensix-optimize-launch-flatten
+@item -mtt-tensix-optimize-launch-flatten
+Request complete unrolling of counted innermost delivery loops---bodies
+consisting of replay records and launches, fixed single-word inline
+assembly with constant operands, delivery stores, Tensix built-in
+operations, and the loop's own control---so the per-iteration RISC-V
+loop-control instructions leave the timed issue path and the flattened
+word stream reaches replay formation.  The trip count must be proven,
+the flattened size is bounded per loop and per function, and the body
+must contain at least one Tensix vector operation.
+
+@opindex mtt-tensix-optimize-delivery-shape
+@item -mtt-tensix-optimize-delivery-shape
+Choose the delivery shape---unroll factor and delivery tier---of each
+proven-trip counted single-block SFPU row loop by exact optimization
+over the issue-cost model, requesting the winning shape through the
+same annotation the unroll-request pass uses.  Every uncalibrated model
+term declines, and a declined or rolled selection leaves the function
+byte-identical.
+
+@opindex mtt-tensix-delivery-shape-min-benefit
+@item -mtt-tensix-delivery-shape-min-benefit=@var{n}
+Set the minimum modeled benefit, in hundredths of an issue slot per
+loop entry, required for the delivery-shape solver to request a
+non-rolled shape; overrides the built-in cost-table default.
+
+@opindex mtt-tensix-optimize-mop-form
+@item -mtt-tensix-optimize-mop-form
+Re-roll runs and counted loops of identical replay playback launches
+into a hardware MOP loop, replacing @var{n} launch words with a
+constant-size MOP program.
+
+@opindex mtt-tensix-mop-form-min-benefit
+@item -mtt-tensix-mop-form-min-benefit=@var{n}
+Set the minimum modeled benefit, in hundredths of an issue slot,
+required to form a MOP loop; overrides the built-in cost-table default.
+
+@opindex mtt-tensix-optimize-dst-autoincr
+@item -mtt-tensix-optimize-dst-autoincr
+Replace constant-stride per-row advances of the Dst row counter with a
+compiler-owned address-modifier auto-increment configuration, removing
+the explicit counter-advance words from the loop body.
+
+@opindex mtt-tensix-optimize-dst-autoincr-load-carrier
+@item -mtt-tensix-optimize-dst-autoincr-load-carrier
+Count raw single-constant inline-assembly instruction words whose
+effects the compiler has audited as occupying replay slots in the Dst
+auto-increment analysis, unlocking the fold in functions whose replay
+recordings contain such words.  The raw words themselves are never
+rewritten.
+
+@opindex mtt-tensix-optimize-post-autoincr-window
+@item -mtt-tensix-optimize-post-autoincr-window
+Defer replay window formation until after the Dst auto-increment fold,
+so loop bodies that the earlier formation could not capture---because
+explicit row-advance words acted as window barriers---form as replay
+windows once the fold has made them word-uniform, and one post-fold
+allocation prices every candidate against the single replay buffer.
+The deferral loses no opportunity: every window capturable before the
+fold is capturable verbatim after it.
+
+@opindex mtt-tensix-optimize-drain-schedule
+@item -mtt-tensix-optimize-drain-schedule
+Prove per-boundary drain requirements from the derived event calendars
+and elide structurally multiplied drain NOPs at boundaries proven
+neutral; any unproven boundary keeps the full derived drain.
+
+@opindex mtt-tensix-optimize-window-pairing
+@item -mtt-tensix-optimize-window-pairing
+Tune the planner's fixed inter-row drain down to the minimal spacing an
+exact pending-event model proves safe, restoring back-to-back paired
+replay windows where every outstanding event is proven discharged.  The
+model covers per-event footprints, register, CC and configuration
+conflicts, and the audited Dst row and column-parity disjointness
+rules; any unproven piece declines and keeps the full drain.
+
+@opindex mtt-tensix-optimize-window-pairing-stride
+@item -mtt-tensix-optimize-window-pairing-stride
+Generalize the window-pairing proof to rows whose Dst addresses advance
+with any issued word of the row, rebasing each access footprint by the
+stride phase of its carrying word.  Effective only where
+@option{-mtt-tensix-optimize-window-pairing} reaches the tuner.
+
+@opindex mtt-tensix-optimize-crossrow-pairing
+@item -mtt-tensix-optimize-crossrow-pairing
+Pair consecutive iterations of an eligible single-row Dst loop into one
+doubled row whose two iterations interleave, halving the loop-control
+overhead per row: the second copy's Dst accesses are rebased to the
+static offset the removed row advance would have supplied, the shared
+trailing row advance steps both rows at once, and the counter is halved
+under a proven even trip count.  The doubled row keeps the counted-loop
+replay capture shape.  Any unproven ingredient (entry CC state, operand
+disjointness, counter shape or parity, register pressure, modeled II)
+declines and keeps the single row.  @emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-pairing-stall-words
+@item -mtt-tensix-optimize-crossrow-pairing-stall-words
+Admit instructions carrying the architectural next-slot acceptance
+stall (the @code{SFPSWAP} family) into cross-row pairing.  Such an
+instruction is priced at two issue slots in both baseline and candidate
+schedules and counts as one recorded word against the replay budget.
+Effective only where @option{-mtt-tensix-optimize-crossrow-pairing}
+admits the loop.  @emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-pairing-seed
+@item -mtt-tensix-optimize-crossrow-pairing-seed
+Allow cross-row pairing to rename register webs whose defining
+instruction executes inside a predicated region, by seeding an
+all-lanes copy of the old register immediately after its last preceding
+definition so disabled lanes observe the identical preserved value.
+Each seed is charged as one issued word, and the seed set commits only
+on a strict modeled II improvement.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-crossrow-shared-reload
+@item -mtt-tensix-optimize-crossrow-shared-reload
+When both halves of a paired row materialize the same register through
+word-for-word identical constant-only definition groups, delete the
+copy's definitions and re-sequence the merged row so every surviving
+consumer reads the first half's materializations in a provably correct
+order.  Admission requires the shared register dead into and out of the
+loop, purely constant definition groups, and no other register
+interaction between the reordered words; the result commits only when
+its modeled II does not regress.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+
+@opindex mtt-tensix-optimize-mve-expand
+@item -mtt-tensix-optimize-mve-expand
+Realize the modulo-variable-expansion kernel unroll on counted,
+replay-formable kernels admitted by cross-row pairing: when the modulo
+placement of the single kernel proves an initiation interval whose
+value lifetimes require exactly two kernel copies, order the doubled
+row by that placement---each copy's words at their modulo issue slots,
+the second iteration offset by one II---realizing the overlap the flat
+order cannot.  Colliding register webs are renamed through the renaming
+engine, the expansion demand is priced against the register file, and
+an independent post-commit check re-verifies every rename, restoring
+the original bytes on any divergence.  The realized order commits only
+when its modeled II strictly beats both the paired candidate and the
+doubled sequential baseline.  Effective only where
+@option{-mtt-tensix-optimize-crossrow-pairing} admits the loop.
+@emph{Blackhole only.}
+@end table
+
+@node Tensix Macro Planner Options
+@subsubsection Tensix Macro Planner Options
+
+@code{SFPLOADMACRO} launches a small hardware sequencer that replays a
+pre-programmed calendar of sub-unit operations alongside the load that
+carries it.  The macro planner derives such calendars from the typed
+effects of the instructions in a region and the target's capability
+tables, proves them equivalent to the explicit instruction sequence,
+and materializes the descriptor programming.  All of these options are
+disabled by default.
+
+@table @gcctabopt
+@opindex mtt-tensix-macro-planner
+@item -mtt-tensix-macro-planner
+Plan, prove, and materialize @code{SFPLOADMACRO} schedules from typed
+effects and target capability tables.
+
+@opindex mtt-tensix-macro-planner-analyze
+@item -mtt-tensix-macro-planner-analyze
+Discover, prove, and report macro-planner regions and their recorded
+decline reasons without changing generated code.
+
+@opindex mtt-tensix-macro-planner-verify
+@item -mtt-tensix-macro-planner-verify
+Differentially verify each synthesized macro-planner descriptor against
+the region's explicit facts; a mismatch declines the formation.  This
+verification is also forced on in checking builds of the compiler.
+
+@opindex mtt-tensix-macro-planner-replay
+@item -mtt-tensix-macro-planner-replay
+Admit planner-formed @code{SFPLOADMACRO} launches into automatic replay
+recording; the launch is a pure instruction word, and execution at a
+replay site reads the descriptor configuration current at that site.
+
+@opindex mtt-tensix-macro-planner-residency
+@item -mtt-tensix-macro-planner-residency
+Extend a proven descriptor-programming configuration epoch outward
+through successively enclosing loops, so the programming words become
+resident once per kernel entry instead of once per loop iteration, and
+elide the descriptor programming of a later region whose derived words
+are bit-identical to an already-programmed dominating one.  Every proof
+failure declines and keeps the established placement.
+
+@opindex mtt-tensix-macro-ims
+@item -mtt-tensix-macro-ims
+When a maximal macro-hosting proposal is declined downstream,
+deterministically retry with reduced hosted sets instead of declining
+the whole region; and additionally require a formed calendar to price
+below the replay-compressed explicit alternative under the shared
+issue-cost model.
+
+@opindex mtt-tensix-macro-ims-carrier
+@item -mtt-tensix-macro-ims-carrier
+Enumerate extra-value-carrier variants of proven macro calendars:
+duplicate one of the row's provably non-advancing Dst loads into a
+provably free register, replicate its setup, and move one consumer web
+onto the new carrier.  A variant commits only when the mutated region
+re-proves through the full derivation pipeline at a strictly smaller
+initiation interval; otherwise it is reverted exactly.
+@end table
+
+@node Tensix Value-Changing Options
+@subsubsection Tensix Value-Changing Options
+
+The options in this section are the only Tensix optimization options
+that can change the values a kernel computes.  Each is disabled by
+default, changes values only in the narrowly defined class stated in
+its entry, and declines with a recorded reason everywhere outside that
+class.  The three reassociation options additionally require
+@option{-fassociative-math}, the generic opt-in to value-changing
+floating-point reassociation (@pxref{Optimize Options}): with either
+option of the pair absent, every candidate site declines and code
+generation is byte-identical.
+
+@table @gcctabopt
+@opindex mtt-tensix-optimize-reassoc
+@item -mtt-tensix-optimize-reassoc
+Permit value-changing floating-point reassociation in the Tensix SFPU
+passes: accumulation-chain rebalancing and multi-use multiply-add
+fusion.  The value change is limited to the different rounding of a
+re-associated evaluation order.  Requires @option{-fassociative-math}.
+Integer and bitwise chain rebalancing under this option alone is
+value-identical and needs no such opt-in.
+
+@opindex mtt-tensix-optimize-reassoc-loop-carried
+@item -mtt-tensix-optimize-reassoc-loop-carried
+Permit splitting a loop-carried floating-point accumulation chain into
+several round-robin partial accumulators initialized to @code{+0.0} and
+reduced by a balanced tree after the loop, cutting the recurrence bound
+by the number of partials.  The value change is re-association order
+only, including the treatment of signed zero in the identity element.
+Requires @option{-fassociative-math}.
+
+@opindex mtt-tensix-optimize-reassoc-mad-restructure
+@item -mtt-tensix-optimize-reassoc-mad-restructure
+Permit fusing a single-use multiply-and-add pair---two serial
+roundings---into one @code{SFPMAD}---a single rounding---removing one
+dependent latency hop.  The value change is double versus single
+rounding on the fused product, plus the signed-zero flush the
+immediate-multiply form performs and @code{SFPMAD} does not.  Requires
+@option{-fassociative-math}.
+
+@opindex mtt-tensix-optimize-store-sink
+@item -mtt-tensix-optimize-store-sink
+With @option{-mtt-tensix-optimize-store-fold} also given, sink an
+all-lanes store of a lane-predicated value merge into the predicated
+region as a predicated store even for the floating-point format pairs
+whose elided complement write-back would have canonicalized Dst.  The
+predicated store preserves the original Dst bits on untouched lanes,
+where the all-lanes write-back would have flushed denormal values on
+those lanes; the delivered values therefore change exactly on denormal
+pass-through lanes.  The option covers only the format pairs whose
+proven round-trip divergence is exclusively denormal flush; every other
+pair and shape declines regardless.
+
+@opindex mtt-tensix-optimize-stochrnd-store-fold
+@item -mtt-tensix-optimize-stochrnd-store-fold
+Delete an explicit deterministic nearest-rounding precision-reduction
+instruction (@code{SFPSTOCHRND} in a rounding mode and precision
+matching its single consumer, a format-converting Dst store) and let
+the store's own conversion path deliver the value, reproducing the
+common handwritten idiom of a bare converting store.  The delivered
+bits change by exactly the recorded divergence of the two conversion
+paths: the store truncates toward zero and preserves the signs of zero
+and denormal values, while the explicit instruction rounds to nearest
+and normalizes them.  Stochastic-mode rounding, integer conversions,
+multi-consumer roundings, and functions with other consumers of the
+random-number stream decline regardless of the option.
+@end table
+
+@node Tensix Diagnostic Options
+@subsubsection Tensix Diagnostic Options
+
+@table @gcctabopt
+@opindex mtt-tensix-dump-effects
+@item -mtt-tensix-dump-effects
+Annotate the assembler output with the compiler's modeled architectural
+effect set for each Tensix instruction, as an aid to debugging and
+review of the effect model.
 @end table
 
 @node RL78 Options
