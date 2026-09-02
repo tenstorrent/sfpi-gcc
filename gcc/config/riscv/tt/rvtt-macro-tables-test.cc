@@ -321,10 +321,15 @@ test_templates (const caps *c)
   CHECK (encode_template (c, encc, &w));
   CHECK_EQ_HEX (w, 0x8a0000d0u);
 
-  /* Boundaries: unknown routing selector, unproven selector range,
-     STOCH_RND with nonzero imm12 (field layout differs above bit 12),
-     imm12 overflow.  */
-  template_spec bad_sel = { 0x92, 0, 2, 0xe, 1 };
+  /* Boundaries: unknown routing selector, selector outside both the
+     physical-LREG range and the WP12-widened InstructionTemplate
+     selector range 0xc..0xf (SFPCONFIG.md VD = 12 + i; the frozen
+     shapes exercised 0xc/0xd only), STOCH_RND with nonzero imm12
+     (field layout differs above bit 12), imm12 overflow.  */
+  template_spec wide_sel = { 0x92, 0, 2, 0xe, 1 };
+  CHECK (encode_template (c, wide_sel, &w));
+  CHECK_EQ_HEX (w, 0x920002e1u);
+  template_spec bad_sel = { 0x92, 0, 2, 0xb, 1 };
   CHECK (!encode_template (c, bad_sel, &w));
   template_spec bad_sel2 = { 0x92, 0, 2, 8, 1 };
   CHECK (!encode_template (c, bad_sel2, &w));
@@ -515,8 +520,13 @@ test_scalars (const caps *bh, const caps *wh)
 	 && bh->delay_bits == 3);
   CHECK (wh->n_templates == 4 && wh->n_sequence_slots == 4
 	 && wh->delay_bits == 3);
-  CHECK (bh->owned_config_dests == 0x0173);	/* {0,1,4,5,6,8}       */
-  CHECK (wh->owned_config_dests == 0x0173);
+  /* WP12 widened ownership from the frozen pass's exercised
+     {0,1,4,5,6,8} = 0x0173 to the full LoadMacroConfig class
+     {0..8} = 0x01ff (one architectural state class; ownership is a
+     refusal surface, so widening only makes foreign-access proofs
+     stricter -- rvtt-macro-tables-bh.def derivation).  */
+  CHECK (bh->owned_config_dests == 0x01ff);	/* {0..8}	       */
+  CHECK (wh->owned_config_dests == 0x01ff);
   CHECK (bh->proven_drain_slots == 3 && wh->proven_drain_slots == 3);
   /* Frozen-pass break-evens: reference data for the cost-model
      regression, never a planner input.  */

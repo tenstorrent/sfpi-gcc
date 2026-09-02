@@ -214,3 +214,49 @@ rvtt-storefold-verdicts-regen: build/genrvtt-storefold$(build_exeext)
 	$(RUN_GEN) build/genrvtt-storefold$(build_exeext) \
 		$(RVTT_STOREFOLD_PROOFS) \
 		$(srcdir)/config/riscv/tt/rvtt-storefold-verdicts.def
+
+# Standalone unit harnesses for the header-inline engine layers.
+# Host-compiled against the tt headers only (no GCC internals; the
+# tables harnesses additionally link the freestanding-by-design
+# rvtt-macro-tables.cc), so they run wherever a host C++ compiler
+# exists.  Opt-in: `make rvtt-unit-tests' in the gcc build directory;
+# each harness exits nonzero on any failed check.
+RVTT_UNIT_TEST_FLAGS = -Wall -Wextra -Werror -I$(srcdir)/config/riscv/tt
+
+RVTT_UNIT_TESTS = \
+	rvtt-unit-delivery-cost \
+	rvtt-unit-macro-derive \
+	rvtt-unit-macro-sched \
+	rvtt-unit-macro-tables \
+	rvtt-unit-macro-verify \
+	rvtt-unit-timing
+
+rvtt-unit-tests: $(RVTT_UNIT_TESTS)
+
+rvtt-unit-delivery-cost: \
+		$(srcdir)/config/riscv/tt/rvtt-delivery-cost-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-sched: $(srcdir)/config/riscv/tt/rvtt-macro-sched-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-timing: $(srcdir)/config/riscv/tt/rvtt-timing-test.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $< -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-derive: $(srcdir)/config/riscv/tt/rvtt-macro-derive-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++17 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-tables: $(srcdir)/config/riscv/tt/rvtt-macro-tables-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
+
+rvtt-unit-macro-verify: $(srcdir)/config/riscv/tt/rvtt-macro-verify-test.cc \
+		$(srcdir)/config/riscv/tt/rvtt-macro-tables.cc
+	$(CXX) -std=c++11 $(RVTT_UNIT_TEST_FLAGS) $^ -o tmp-$@
+	./tmp-$@ && rm -f tmp-$@
