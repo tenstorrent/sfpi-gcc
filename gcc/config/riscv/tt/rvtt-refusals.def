@@ -18,8 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* The single source of truth for the backend's named refusal / verdict
-   vocabulary (FABLE_GOES_BURR.md item #1; the anchor audit is
-   AUDIT-cost-model-refusals.md section 1.6).
+   vocabulary.
 
    One row per name:
 
@@ -27,25 +26,24 @@ along with GCC; see the file COPYING3.  If not see
 
    Rules of the table:
 
-   - APPEND-ONLY.  The name strings are frozen API: the twin testsuite
-     pins them in dump scans and the board's dump-mining tooling keys on
+   - APPEND-ONLY.  The name strings are frozen API: the testsuite
+     pins them in dump scans and external dump-mining tooling keys on
      them.  Never rename or delete a row; a retired mechanism keeps its
      rows (they simply stop firing).
-   - Names are lowercase hyphenated, mechanism-prefixed, dump-stable
-     (see FABLE_GOES_BURR.md section 0.3).
+   - Names are lowercase hyphenated, mechanism-prefixed, dump-stable.
    - Uniqueness of ENUM_ID is a compile-time fact (duplicate = build
      break via the enum); uniqueness of the name string is checked by
      the rvtt-refusals.txt catalogue rule in t-riscv-tt.
    - The catalogue rvtt-refusals.txt is GENERATED from this table by
-     the build; the 87-reason refusal catalogue class of artifact is
-     derived, never re-derived by hand (the laneJC lesson).
+     the build; catalogues derived from this table are never
+     re-derived by hand.
    - The third column is a one-line provenance note seeded by the
-     mechanical laneJQ census of the pin-48 fprintf sites: the census
+     mechanical census of the pre-registry fprintf sites: the census
      tag (reason = literal in refusal-helper call/return/reason-carrier
      position; dump = named in a refusal-shaped dump message; composed
      = full spelling of a prefix+%s assembled name) plus the file the
-     name was first seen in.  Rows added after item #1 should carry a
-     real one-line contract instead.
+     name was first seen in.  Rows added after the registry's
+     introduction should carry a real one-line contract instead.
 
    Emission goes through tt/rvtt-refuse.h; see there for the dual
    legacy-dump / -fopt-info routing contract.  */
@@ -148,7 +146,7 @@ RVTT_REFUSAL (CCMASK_REGION_FOREIGN_STMT,
   "reason; first seen in gimple-rvtt-ccmask.cc")
 RVTT_REFUSAL (CCMASK_REGION_LAYOUT_UNPROVEN,
   "ccmask-region-layout-unproven",
-  "stage-B tree-keyed matcher (laneKL, FABLE #14 stage B): the frame's structure statements lack a proven pairwise execution order (same-block order or block dominance), so the mask at the assign is not the chain's")
+  "tree-keyed frame matcher: the frame's structure statements lack a proven pairwise execution order (same-block order or block dominance), so the mask at the assign is not the chain's")
 RVTT_REFUSAL (CCMASK_REGION_OPEN_CFG,
   "ccmask-region-open-cfg",
   "reason; first seen in gimple-rvtt-ccmask.cc")
@@ -319,10 +317,10 @@ RVTT_REFUSAL (CROSSLOOP_CALLER_UNROOTED,
   "reason; first seen in gimple-rvtt-crosscall.cc")
 RVTT_REFUSAL (CROSSLOOP_CC_AMBIENT_UNPROVEN,
   "crossloop-cc-ambient-unproven",
-  "R2 stage-B widening (laneKL): -mtt-tensix-optimize-cc-region-general was live but the CC-region tree could not prove the crossed loop's CC activity ambient-preserving-and-narrowing (unmapped CC word, unstructured frame, outside-save popc, SFPENCC, ambient-depth write, or opaque statement)")
+  "crossed-loop widening: -mtt-tensix-optimize-cc-region-general was live but the CC-region tree could not prove the crossed loop's CC activity ambient-preserving-and-narrowing (unmapped CC word, unstructured frame, outside-save popc, SFPENCC, ambient-depth write, or opaque statement)")
 RVTT_REFUSAL (CROSSLOOP_CC_ATOM_UNPROVEN,
   "crossloop-cc-atom-unproven",
-  "reason; first seen in gimple-rvtt-crosscall.cc (lane HR cc-immaterial discipline; row backfilled by laneKL)")
+  "reason; first seen in gimple-rvtt-crosscall.cc (cc-immaterial discipline; row backfilled at registry introduction)")
 RVTT_REFUSAL (CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED,
   "crossloop-cc-peel-consumer-unaudited",
   "dump; first seen in gimple-rvtt-prgm-const.cc")
@@ -343,7 +341,7 @@ RVTT_REFUSAL (CROSSLOOP_MOP_SLOT_UNPROVEN,
   "reason; first seen in gimple-rvtt-crosscall.cc")
 RVTT_REFUSAL (CROSSLOOP_PEEL_ENTRY_ANCHORED,
   "crossloop-peel-entry-anchored",
-  "laneLB P0 fix (laneKV board ICE): a CC-canonical PEEL-class const-residency placement is structurally anchored to its loop's own entry edge -- the first-iteration peel copies the loop body onto the placement edge, so a crossed-loop lift (admissible for programming-only placements under -mtt-tensix-optimize-cc-region-general) would seed the copy's header PHIs from a non-incident edge, move the copied body above the crossed loops' definitions, and run the peeled iteration once per function instead of once per loop entry; the candidate keeps the entry-anchored peel placement")
+  "wrong-code guard: a CC-canonical PEEL-class const-residency placement is structurally anchored to its loop's own entry edge -- the first-iteration peel copies the loop body onto the placement edge, so a crossed-loop lift (admissible for programming-only placements under -mtt-tensix-optimize-cc-region-general) would seed the copy's header PHIs from a non-incident edge, move the copied body above the crossed loops' definitions, and run the peeled iteration once per function instead of once per loop entry; the candidate keeps the entry-anchored peel placement")
 RVTT_REFUSAL (CROSSLOOP_PREHEADER_UNPROVEN,
   "crossloop-preheader-unproven",
   "dump; first seen in gimple-rvtt-crossloop.cc")
@@ -616,7 +614,7 @@ RVTT_REFUSAL (IMM_STRIDE_REWRITE_UNPROVEN,
   "dump; first seen in rtl-rvtt-macro-planner.cc")
 RVTT_REFUSAL (IMS_BUDGET_EXHAUSTED,
   "ims-budget-exhausted",
-  "item #5: Rau iterative modulo scheduling ran out of its eviction budget at every II up to the acceptance bound; the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: Rau iterative modulo scheduling ran out of its eviction budget at every II up to the acceptance bound; the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (IMS_CARRIER_LEGALITY_UNPROVEN,
   "ims-carrier-legality-unproven",
   "reason; first seen in rtl-rvtt-macro-planner.cc")
@@ -637,16 +635,16 @@ RVTT_REFUSAL (IMS_CARRIER_WEB_UNSPLITTABLE,
   "reason; first seen in rtl-rvtt-macro-planner.cc")
 RVTT_REFUSAL (IMS_DEPENDENCE_DISTANCE_UNPROVEN,
   "ims-dependence-distance-unproven",
-  "item #5: the modulo-scheduling DDG carries cross-iteration edges at distance 1 only; a deeper distance is outside the proven vocabulary and refuses (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: the modulo-scheduling DDG carries cross-iteration edges at distance 1 only; a deeper distance is outside the proven vocabulary and refuses (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (IMS_NO_II_DECREASE,
   "ims-no-ii-decrease",
-  "item #5: the IMS candidate cannot prove a strict whole-row steady-state II decrease (MII at or above the current II, or the placed order not accepted by the wrapped model); the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: the IMS candidate cannot prove a strict whole-row steady-state II decrease (MII at or above the current II, or the placed order not accepted by the wrapped model); the existing schedule is kept byte-identically (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (IMS_ORDER_HAZARD,
   "ims-order-hazard",
-  "item #5: the committed-order legality belt found an original-order dependence direction the IMS placement's sorted order would reverse; fail-closed, existing schedule kept (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: the committed-order legality belt found an original-order dependence direction the IMS placement's sorted order would reverse; fail-closed, existing schedule kept (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (IMS_UNAUDITED_LATENCY,
   "ims-unaudited-latency",
-  "item #5: a result-bearing (or acceptance-stall) word of the self-loop row carries no audited in-window result latency; IMS refuses the whole row rather than place under a floored fact (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: a result-bearing (or acceptance-stall) word of the self-loop row carries no audited in-window result latency; IMS refuses the whole row rather than place under a floored fact (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (INCOMPLETE_ORDER,
   "incomplete-order",
   "reason; first seen in rvtt-lpsolve.cc")
@@ -874,16 +872,16 @@ RVTT_REFUSAL (MEMORY_OR_UNREPRESENTED_CALL,
   "reason; first seen in gimple-rvtt-invariant.cc")
 RVTT_REFUSAL (MERGE_RENAME_AMBIENT_UNPROVEN,
   "merge-rename-ambient-unproven",
-  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
 RVTT_REFUSAL (MERGE_RENAME_FORM_UNSUPPORTED,
   "merge-rename-form-unsupported",
-  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
 RVTT_REFUSAL (MERGE_RENAME_PLACEMENT_REFUSED,
   "merge-rename-placement-refused",
-  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
 RVTT_REFUSAL (MERGE_RENAME_WORD_NEUTRAL,
   "merge-rename-word-neutral",
-  "dump; first seen in gimple-rvtt-prgm-const.cc (lane KP, R1(b))")
+  "dump; first seen in gimple-rvtt-prgm-const.cc")
 RVTT_REFUSAL (MISC_MISMATCH,
   "misc-mismatch",
   "reason; first seen in rvtt-macro-verify-core.h")
@@ -952,25 +950,25 @@ RVTT_REFUSAL (MULTIRESULT_COMPANION_SPLIT,
   "dump; first seen in rtl-rvtt-replay.cc")
 RVTT_REFUSAL (MVE_EXPAND_KMIN_BEYOND_PAIRING,
   "mve-expand-kmin-beyond-pairing",
-  "item #5 stage 2: the kernel placement's value lifetimes demand more than two kernel copies (kmin > 2); the counted-kernel realization is pairwise (one copy, doubled row step, halved countdown) and refuses deeper unrolls by name -- the corpus-wide census fact is kmin = 2 everywhere the bookkeeping tier fires (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: the kernel placement's value lifetimes demand more than two kernel copies (kmin > 2); the counted-kernel realization is pairwise (one copy, doubled row step, halved countdown) and refuses deeper unrolls by name -- the corpus-wide census fact is kmin = 2 everywhere the bookkeeping tier fires (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_EXPAND_LOCKSTEP_DIVERGENCE,
   "mve-expand-lockstep-divergence",
-  "item #5 stage 2: the producer-lockstep belt caught a rename whose value web diverged -- some consumer's nearest-preceding producer changed identity after the rotation renames (a mis-rotated register would read the other iteration's value); every rename is undone exactly and the unrealized pairing kept byte-identically (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: the producer-lockstep belt caught a rename whose value web diverged -- some consumer's nearest-preceding producer changed identity after the rotation renames (a mis-rotated register would read the other iteration's value); every rename is undone exactly and the unrealized pairing kept byte-identically (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_EXPAND_NO_II_DECREASE,
   "mve-expand-no-ii-decrease",
-  "item #5 stage 2: the realized (placement-ordered, rotation-renamed) doubled kernel does not strictly beat the pairing's own greedy candidate under the wrapped steady-state acceptance model; the realization's renames are undone exactly and the established pairing candidate proceeds untouched (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: the realized (placement-ordered, rotation-renamed) doubled kernel does not strictly beat the pairing's own greedy candidate under the wrapped steady-state acceptance model; the realization's renames are undone exactly and the established pairing candidate proceeds untouched (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_EXPAND_ORDER_HAZARD,
   "mve-expand-order-hazard",
-  "item #5 stage 2: the realized order would reverse an original-order dependence that survives the rotation renames (an unrenamed shared web serializes the copies); fail-closed legality belt -- the realization refuses and the pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: the realized order would reverse an original-order dependence that survives the rotation renames (an unrenamed shared web serializes the copies); fail-closed legality belt -- the realization refuses and the pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_EXPAND_ROW_MUTATED,
   "mve-expand-row-mutated",
-  "item #5 stage 2: the doubled row is no longer the pure textual pairing (preservation seeds inserted or shared-reload words deleted), so the copy-mirror index arithmetic the realization's item placement rests on does not hold; refused by name, the mutated pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: the doubled row is no longer the pure textual pairing (preservation seeds inserted or shared-reload words deleted), so the copy-mirror index arithmetic the realization's item placement rests on does not hold; refused by name, the mutated pairing's own candidate proceeds (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_EXPAND_ROW_NOT_COUNTED_KERNEL,
   "mve-expand-row-not-counted-kernel",
-  "item #5 stage 2: a region placement owes a fitting kernel expansion (kmin > 1, demand within capacity) but the row is not the counted replay-formable kernel the realization seam admits (the cross-row pairing shape: one load/store pair, flat atoms, typed row step, canonical countdown) -- the expansion cannot be performed without breaking replay formation, so it is adjudicated by name and the flat order still competes (rtl-rvtt-schedule.cc)")
+  "modulo variable expansion: a region placement owes a fitting kernel expansion (kmin > 1, demand within capacity) but the row is not the counted replay-formable kernel the realization seam admits (the cross-row pairing shape: one load/store pair, flat atoms, typed row step, canonical countdown) -- the expansion cannot be performed without breaking replay formation, so it is adjudicated by name and the flat order still competes (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (MVE_RENAME_EXHAUSTED,
   "mve-rename-exhausted",
-  "item #5: the IMS placement's value lifetimes exceed the II (kernel copies owed -- modulo variable expansion) but the rename resources do not fit: the steady-state live-copy demand exceeds the register file net of loop-live invariants, or the region rename search already exhausted the free LREGs (the 8-LREG wall).  The EXPANSION refuses; the flat IMS order is still judged by the wrapped acceptance model, which cannot ride the unrealized overlap (rtl-rvtt-schedule.cc)")
+  "modulo scheduling: the IMS placement's value lifetimes exceed the II (kernel copies owed -- modulo variable expansion) but the rename resources do not fit: the steady-state live-copy demand exceeds the register file net of loop-live invariants, or the region rename search already exhausted the free LREGs (the 8-LREG wall).  The EXPANSION refuses; the flat IMS order is still judged by the wrapped acceptance model, which cannot ride the unrealized overlap (rtl-rvtt-schedule.cc)")
 RVTT_REFUSAL (NATIVE_COMPARE_OPERAND_SHAPE,
   "native-compare-operand-shape",
   "reason; first seen in gimple-rvtt-combine.cc")
@@ -1033,13 +1031,13 @@ RVTT_REFUSAL (PHI_USE_UNCLONABLE,
   "dump; first seen in gimple-rvtt-prgm-const.cc")
 RVTT_REFUSAL (PLACE_ALTERNATIVE_UNPRICEABLE,
   "place-alternative-unpriceable",
-  "item #13 placement arbiter: an arbitrated alternative whose trip weight or word count cannot be derived refuses pricing and keeps the legacy decision (rvtt-placement.cc)")
+  "placement arbiter: an arbitrated alternative whose trip weight or word count cannot be derived refuses pricing and keeps the legacy decision (rvtt-placement.cc)")
 RVTT_REFUSAL (PLACE_BUDGET_EXHAUSTED,
   "place-budget-exhausted",
-  "item #13 placement arbiter: a decision point whose candidate set exceeds the deterministic arbitration budget refuses whole and keeps the legacy policy chain (rvtt-placement.cc)")
+  "placement arbiter: a decision point whose candidate set exceeds the deterministic arbitration budget refuses whole and keeps the legacy policy chain (rvtt-placement.cc)")
 RVTT_REFUSAL (PLACE_FOLD_RESERVE_OUTBID,
   "place-fold-reserve-outbid",
-  "item #13 placement arbiter: the marginal pressure-park LREG park yields the last free register to the priced dst-ownership fold demand (the erfinv 9>8 relief lever; gimple-rvtt-prgm-const.cc)")
+  "placement arbiter: the marginal pressure-park LREG park yields the last free register to the priced dst-ownership fold demand (relieves a nine-live-values-versus-eight-registers peak; gimple-rvtt-prgm-const.cc)")
 RVTT_REFUSAL (PLANNED_LREG_LIVE,
   "planned-lreg-live",
   "dump; first seen in rtl-rvtt-macro-planner.cc")
@@ -1111,16 +1109,16 @@ RVTT_REFUSAL (REASSOC_LOOP_CARRIED_UNDERIVED,
   "dump; first seen in gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PARTIALS_LATENCY_UNAUDITED,
   "reassoc-partials-latency-unaudited",
-  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+  "dump; loop-carried reassociation split, gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PARTIALS_LOOP_SHAPE,
   "reassoc-partials-loop-shape",
-  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+  "dump; loop-carried reassociation split, gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PARTIALS_PRESSURE,
   "reassoc-partials-pressure",
-  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+  "dump; loop-carried reassociation split, gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PARTIALS_UNPROFITABLE,
   "reassoc-partials-unprofitable",
-  "dump; item #8 loop-carried split, gimple-rvtt-reassoc.cc")
+  "dump; loop-carried reassociation split, gimple-rvtt-reassoc.cc")
 RVTT_REFUSAL (REASSOC_PRESSURE_BUDGET_EXCEEDED,
   "reassoc-pressure-budget-exceeded",
   "dump; first seen in gimple-rvtt-reassoc.cc")
@@ -1180,61 +1178,61 @@ RVTT_REFUSAL (RECORD_HOIST_VARIANT_ENCODING,
   "dump; first seen in rtl-rvtt-replay.cc")
 RVTT_REFUSAL (REGRENAME_CC_SPAN,
   "regrename-cc-span",
-  "item #7: a CC-state event inside the chain span; the disabled-lane contents of the two worlds diverge (rtl-rvtt-lreg-rename.cc)")
+  "rename: a CC-state event inside the chain span; the disabled-lane contents of the two worlds diverge (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_CC_SPAN_REGION_UNPROVEN,
   "regrename-cc-span-region-unproven",
-  "laneKQ widening: -mtt-tensix-optimize-rename-cc-region was live but the CC-region engine's RTL view could not prove the span's CC activity balanced-and-narrowing or all-lanes-entry (outside-save popc, unbalanced frame, unrestored end mask, unproven entry, unproven SFPENCC, nonzero pushc/popc mod, vocabulary-external writer, opaque insn, or replay record window); the dumped view class names the arm (rtl-rvtt-lreg-rename.cc)")
+  "CC-region widening: -mtt-tensix-optimize-rename-cc-region was live but the CC-region engine's RTL view could not prove the span's CC activity balanced-and-narrowing or all-lanes-entry (outside-save popc, unbalanced frame, unrestored end mask, unproven entry, unproven SFPENCC, nonzero pushc/popc mod, vocabulary-external writer, opaque insn, or replay record window); the dumped view class names the arm (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_CHAIN_OPEN,
   "regrename-chain-open",
-  "item #7: no in-block kill and no beyond-suspicion DF death at block exit; the chain is open at the region boundary (rtl-rvtt-lreg-rename.cc)")
+  "rename: no in-block kill and no beyond-suspicion DF death at block exit; the chain is open at the region boundary (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_COMPANION_COUPLED,
   "regrename-companion-coupled",
-  "item #7: the definition is a companion-bank coupled multi-result group; the banks move together or not at all (rtl-rvtt-lreg-rename.cc)")
+  "rename: the definition is a companion-bank coupled multi-result group; the banks move together or not at all (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_CONSTRAINT,
   "regrename-constraint",
-  "item #7: the queued register-field edits failed constraint re-recognition; nothing changed (rtl-rvtt-lreg-rename.cc)")
+  "rename: the queued register-field edits failed constraint re-recognition; nothing changed (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_COST_REGRESSED,
   "regrename-cost-regressed",
-  "item #7 standalone mode: the whole-row modeled issue-slot count regressed; strict no-worse acceptance (rtl-rvtt-lreg-rename.cc)")
+  "standalone rename mode: the whole-row modeled issue-slot count regressed; strict no-worse acceptance (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_EFFECT_VETO,
   "regrename-effect-veto",
-  "item #7: the definition carries a vetoed typed effect (CC write, config dest, RWC/Dst counter, Dst store, multi-register write) (rtl-rvtt-lreg-rename.cc)")
+  "rename: the definition carries a vetoed typed effect (CC write, config dest, RWC/Dst counter, Dst store, multi-register write) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_IMPLICIT_OPERAND,
   "regrename-implicit-operand",
-  "item #7: an effect-mask reference to the chain register with no explicit REG occurrence (the LUT implicit-slot class); uneditable (rtl-rvtt-lreg-rename.cc)")
+  "rename: an effect-mask reference to the chain register with no explicit REG occurrence (the LUT implicit-slot class); uneditable (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_LIVENESS_UNTRUSTED,
   "regrename-liveness-untrusted",
-  "laneKZ (item #7 soundness fix): a whole-block-free rename target's cross-block deadness rests on DF hard-register live-in/live-out, but the function contains an opaque instruction (call, asm, raw .ttinsn word) that makes DF hard-register liveness unreliable -- the register may be loop-carried live-through the block; refused fail-closed, exactly as the dead-at-exit close and the temporal never-touched arm already gate on fn_has_opaque (rtl-rvtt-lreg-rename.cc)")
+  "soundness fix: a whole-block-free rename target's cross-block deadness rests on DF hard-register live-in/live-out, but the function contains an opaque instruction (call, asm, raw .ttinsn word) that makes DF hard-register liveness unreliable -- the register may be loop-carried live-through the block; refused fail-closed, exactly as the dead-at-exit close and the temporal never-touched arm already gate on fn_has_opaque (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_NO_FREE_LREG,
   "regrename-no-free-lreg",
-  "item #7: no architectural LREG is untouched in the block and dead across it (rtl-rvtt-lreg-rename.cc)")
+  "rename: no architectural LREG is untouched in the block and dead across it (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_PINNED_PROTOCOL,
   "regrename-pinned-protocol",
-  "item #7: the chain register is part of a pinned fixed-LREG interface (zero-length protocol marker or non-effect-audited pattern reference) (rtl-rvtt-lreg-rename.cc)")
+  "rename: the chain register is part of a pinned fixed-LREG interface (zero-length protocol marker or non-effect-audited pattern reference) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_POSTCOMMIT_DIVERGENCE,
   "regrename-postcommit-divergence",
-  "item #7: the post-commit structural lockstep re-verification diverged; the rename was reverted (assert channel under -fchecking) (rtl-rvtt-lreg-rename.cc)")
+  "rename: the post-commit structural lockstep re-verification diverged; the rename was reverted (assert channel under -fchecking) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_REPLAY_BOUNDARY,
   "regrename-replay-boundary",
-  "item #7: a replay-owner instruction is the definition or a reader; explicitly managed replay ranges never rename (rtl-rvtt-lreg-rename.cc)")
+  "rename: a replay-owner instruction is the definition or a reader; explicitly managed replay ranges never rename (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_ROW_UNPRICEABLE,
   "regrename-row-unpriceable",
-  "item #7 standalone mode: an unaudited producer feeds a span consumer; the no-worse acceptance cannot price the row (rtl-rvtt-lreg-rename.cc)")
+  "standalone rename mode: an unaudited producer feeds a span consumer; the no-worse acceptance cannot price the row (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_SELF_MERGE,
   "regrename-self-merge",
-  "item #7: the definition reads its own destination (a live-value merge); the chain is not closed at the top (rtl-rvtt-lreg-rename.cc)")
+  "rename: the definition reads its own destination (a live-value merge); the chain is not closed at the top (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_SPAN_OPAQUE,
   "regrename-span-opaque",
-  "item #7: an effect-opaque instruction (call, asm, raw word, unaudited pattern) inside the chain span (rtl-rvtt-lreg-rename.cc)")
+  "rename: an effect-opaque instruction (call, asm, raw word, unaudited pattern) inside the chain span (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_TEMPORAL_DEST_REUSE,
   "regrename-temporal-dest-reuse",
-  "laneLA (R1 temporal-tier soundness fix): the chain writer reads its own destination (dest-reuses-dying-source, p = op (x, ...) packed into x's register); the rename moves the write off the old register but keeps the input read, so the dying-source value stays live on the old register through the close -- an extended range the span-scoped temporal target-freedom proof does not model, letting a later temporal chain alias it (register-aliasing wrong code, all lanes enabled -- the addcmul corr TUs, silicon + both sim oracles; laneKV bisect).  Whole-block-free targets are immune (all block-globally dead); temporal only (rtl-rvtt-lreg-rename.cc)")
+  "temporal-tier soundness fix: the chain writer reads its own destination (dest-reuses-dying-source, p = op (x, ...) packed into x's register); the rename moves the write off the old register but keeps the input read, so the dying-source value stays live on the old register through the close -- an extended range the span-scoped temporal target-freedom proof does not model, letting a later temporal chain alias it (register-aliasing wrong code with every vector lane enabled; observed on hardware and confirmed by both reference simulators).  Whole-block-free targets are immune (all block-globally dead); temporal only (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_TIED_CLOSE,
   "regrename-tied-close",
-  "item #7: the closing writer genuinely reads the chain register (a tied merge the rename cannot split) (rtl-rvtt-lreg-rename.cc)")
+  "rename: the closing writer genuinely reads the chain register (a tied merge the rename cannot split) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_WEB_RECORD_OVERFLOW,
   "regrename-web-record-overflow",
-  "R1 consumer contract: the chain web exceeds the transactional undo record a consumer requested; refused before any edit (rtl-rvtt-lreg-rename.cc)")
+  "consumer contract: the chain web exceeds the transactional undo record a consumer requested; refused before any edit (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REISSUE_UNPROVED,
   "reissue-unproved",
   "dump; first seen in rtl-rvtt-replay.cc")

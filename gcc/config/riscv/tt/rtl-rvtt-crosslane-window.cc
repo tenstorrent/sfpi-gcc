@@ -653,7 +653,8 @@ window_check::expand_launch (rtx_insn *launch, window_state st,
 		      "crosslane-window-replay-unproven: replay launch "
 		      "inside an ENABLE_DEST_INDEX window delivers "
 		      "recorded content this compilation cannot audit "
-		      "against TEN-2932 (no dominating single-record "
+		      "against the dest-index write restriction (no "
+		      "dominating single-record "
 		      "resolution for the played slots)");
 	  else if (st == WS_UNKNOWN)
 	    DUMP ("crosslane-window: note crosslane-window-replay-unproven "
@@ -746,7 +747,8 @@ window_check::diagnose (rtx_insn *insn, window_state st)
 	  error_at (INSN_LOCATION (insn),
 		    "crosslane-window-raw-unproven: raw assembly inside an "
 		    "ENABLE_DEST_INDEX window cannot be audited against "
-		    "TEN-2932 (only SFPLOAD/SFPLOADI/SFPSWAP/SFPTRANSP may "
+		    "the dest-index write restriction (only "
+		    "SFPLOAD/SFPLOADI/SFPSWAP/SFPTRANSP may "
 		    "write %<LReg4%>..%<LReg7%> while the window is open)");
 	  return;
 	}
@@ -755,7 +757,7 @@ window_check::diagnose (rtx_insn *insn, window_state st)
 	  error_at (INSN_LOCATION (insn),
 		    "crosslane-window-call-unproven: call inside an "
 		    "ENABLE_DEST_INDEX window cannot be audited against "
-		    "TEN-2932");
+		    "the dest-index write restriction");
 	  return;
 	}
       unsigned hit = writes_companion_lreg (insn);
@@ -763,7 +765,7 @@ window_check::diagnose (rtx_insn *insn, window_state st)
 	error_at (INSN_LOCATION (insn),
 		  "dest-index-window-violation: instruction writes "
 		  "%<LReg%d%> inside an ENABLE_DEST_INDEX window "
-		  "(TEN-2932: only SFPLOAD/SFPLOADI/SFPSWAP/SFPTRANSP "
+		  "(only SFPLOAD/SFPLOADI/SFPSWAP/SFPTRANSP "
 		  "may write %<LReg4%>..%<LReg7%> while "
 		  "%<LaneConfig.ENABLE_DEST_INDEX%> is set)",
 		  (int) (hit - 1 - SFPU_REG_FIRST));
@@ -798,7 +800,7 @@ window_check::diagnose_delivered (rtx_insn *pw, rtx_insn *launch,
       error_at (INSN_LOCATION (launch),
 		"dest-index-window-violation: replay launch delivers a "
 		"recorded instruction writing %<LReg%d%> inside an "
-		"ENABLE_DEST_INDEX window (TEN-2932: only "
+		"ENABLE_DEST_INDEX window (only "
 		"SFPLOAD/SFPLOADI/SFPSWAP/SFPTRANSP may write "
 		"%<LReg4%>..%<LReg7%> while "
 		"%<LaneConfig.ENABLE_DEST_INDEX%> is set; the write was "
@@ -904,7 +906,7 @@ window_check::run ()
 			  "crosslane-window-mop-unproven: MOP inside an "
 			  "ENABLE_DEST_INDEX window re-delivers replay "
 			  "content this compilation cannot audit against "
-			  "TEN-2932");
+			  "the dest-index write restriction");
 	      else if (cur == WS_UNKNOWN)
 		DUMP ("crosslane-window: note crosslane-window-mop-unproven "
 		      "at insn %d (MOP under unproven window state)\n",
@@ -936,8 +938,7 @@ window_check::run ()
     }
   if (any_open_exit)
     DUMP ("crosslane-window: note window open at function exit "
-	  "(deliberate cross-phase inheritance is a documented pattern; "
-	  "lane FD)\n");
+	  "(deliberate cross-phase inheritance is a documented pattern)\n");
   free_dominance_info (CDI_DOMINATORS);
 }
 
