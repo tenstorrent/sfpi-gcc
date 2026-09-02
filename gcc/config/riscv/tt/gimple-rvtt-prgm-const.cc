@@ -2906,6 +2906,132 @@ prepeel_ambient_all_lanes_p (basic_block point_bb)
   return true;
 }
 
+/* MERGE-RENAME class (lane KP; FABLE_GOES_BURR residual attack R1(b),
+   the addrsqrt cert's GIMPLE-side rename successor).
+
+   The one materialization shape no invariant or residency class can
+   reach is the IN-LOOP constant-immediate CC-merge
+
+       y' = sfploadi_lv (0B, y, imm, 0, 0, 0)
+
+   whose live-value link Y is a loop-varying vector: the STATEMENT is
+   loop-variant even though its immediate is not, so
+   rvtt_invariant_constant_load_p can never admit it and the walk's
+   candidate classes never see the immediate (the pin-44 addrsqrt
+   census's "the one in-loop loadi is an lv CC-merge, not a hoistable
+   full-lane materialization").  The GIMPLE-side rename gives the
+   immediate its own pre-RA value name:
+
+       t  = sfploadi (0B, imm, 0, 0, 0)      ; full-lane twin, parked
+       y' = sfpassign_lv (y, t)              ; register-source merge
+
+   Bit-exactness: sfpassign_lv writes Y's CC-ENABLED lanes from its
+   newval operand and keeps the link's value on disabled lanes --
+   exactly the original merge's lane function -- and it READS the
+   newval only on enabled lanes, so the rename is exact whenever T
+   carries IMM on (at least) every lane enabled at the merge point.
+   The twin is placed by the established pressure-park LREG tier at its
+   proven programming point (the pre-peel head under the prepeel
+   ambient-all-lanes proof, or the post-peel / plain loop entry point
+   after the all-lanes SFPENCC), where EVERY lane is written -- a
+   strict superset.  No consumer audit of the original merge's users is
+   needed: the merge keeps its lhs, lane mask, and value function
+   verbatim; the parked twin's only consumer is the constructed
+   sfpassign_lv reading it in the (non-live) newval position.
+
+   Vocabulary (minimal, prove-or-refuse): the single-issue shortened
+   FLOATB form only (mod 0, all scalar args INTEGER_CST, null
+   instruction-buffer operand, no virtual operands) -- exactly the
+   constant-image derivation constant_chain_value_p already blesses for
+   the walk's own shortened candidates.  Multi-issue merge chains and
+   every other mod refuse by name (merge-rename-form-unsupported), so
+   the registry counters census the out-of-vocabulary breadth
+   corpus-wide.
+
+   Delivery economics are structural: one in-loop word before (the
+   SFPLOADI _lv), one after (the SFPMOV-lowered sfpassign_lv), plus the
+   twin's own materialization word once at the programming point -- the
+   rename's priced delivery benefit is identically negative, so the
+   class refuses by name (merge-rename-word-neutral) unless the
+   -mtt-tensix-merge-rename-allow-neutral adjudication override admits
+   the neutral rename for measurement legs (the laneIO
+   counted-capture-peel precedent: mechanism shipped default-off, the
+   cert's named successor executed and measured).  A twin the LREG tier
+   cannot place undoes exactly (merge-rename-placement-refused); the
+   undo leg is byte-identical to the flag-off leg.  */
+
+struct merge_rename_cand
+{
+  gcall *tail;			/* the in-loop constant-immediate CC-merge */
+  tree link;			/* its loop-varying live-value operand */
+  unsigned value;		/* full 32-bit lane image of the immediate */
+  class loop *loop;
+  edge entry;			/* placement entry (mirrors the LOOP class's
+				   own derivation at collection) */
+  bool peel;
+  bool cc_lifted;
+};
+
+/* Classify LOAD as a merge-rename candidate.  Returns true and fills
+   *LINK_OUT / *VALUE_OUT for the in-vocabulary shape; fires the
+   form-unsupported refusal (and returns false) for an immediate
+   CC-merge outside the vocabulary; returns false silently for
+   statements that are not immediate CC-merges at all.  */
+
+static bool
+merge_rename_shape_p (gcall *load, FILE *stream,
+		      tree *link_out, unsigned *value_out)
+{
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (load);
+  if (!insnd || insnd->id != rvtt_insn_data::sfploadi_lv)
+    return false;
+  tree lhs = gimple_call_lhs (load);
+  if (!lhs || TREE_CODE (lhs) != SSA_NAME)
+    return false;
+  tree link = loadi_lv_link (load);
+  if (!link || TREE_CODE (link) != SSA_NAME)
+    return false;
+  /* A constant-chain link is the established two-issue materialization
+     owned by the invariant/residency classes; only a varying link is
+     the un-hoistable CC-merge this class renames.  */
+  remat_chain chain;
+  if (remat_chain_p (lhs, &chain))
+    return false;
+  auto unsupported = [&] (const char *what) -> bool
+    {
+      rvtt_refuse (RVTT_REF_MERGE_RENAME_FORM_UNSUPPORTED, stream,
+		   "merge-rename: refused (merge-rename-form-unsupported: "
+		   "%s): ", what);
+      if (stream)
+	print_gimple_stmt (stream, load, 0);
+      return false;
+    };
+  /* Conservative call virtual operands (VUSE, and the builtin decl's
+     clobber VDEF) are fine: the walk's own materialization hoists
+     unlink them at commit under TODO_update_ssa_only_virtuals (the
+     invariant pass's virtual-operand discipline, lreg_hoist), and the
+     null instruction-buffer operand required below rules out the one
+     memory channel with real ordering semantics (the synth FIFO).  */
+  if (!integer_zerop (gimple_call_arg (load, 0)))
+    return unsupported ("non-null instruction-buffer operand");
+  for (unsigned ix = 2; ix != gimple_call_num_args (load); ++ix)
+    if (TREE_CODE (gimple_call_arg (load, ix)) != INTEGER_CST)
+      return unsupported ("runtime immediate");
+  tree mod = gimple_call_arg (load, gimple_call_num_args (load) - 1);
+  if (!integer_zerop (mod))
+    return unsupported ("non-FLOATB mod");
+  /* The lv link chained through ANOTHER immediate CC-merge is the
+     multi-issue chain (a 32-bit immediate merged in halves): out of
+     this stage's vocabulary, counted by name for the stage-B census.  */
+  if (gcall *ldef = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link)))
+    if (const rvtt_insn_data *ld = rvtt_get_insn_data (ldef))
+      if (ld->id == rvtt_insn_data::sfploadi_lv)
+	return unsupported ("multi-issue merge chain");
+  *link_out = link;
+  *value_out = (TREE_INT_CST_LOW (gimple_call_arg (load, 2)) & 0xffff) << 16;
+  return true;
+}
+
 static bool
 residency_transform (function *fn, prgm_state *st)
 {
@@ -2916,6 +3042,7 @@ residency_transform (function *fn, prgm_state *st)
   auto_vec<residency_candidate> pressure_cands;
   auto_vec<residency_candidate> madpair_cands;
   auto_vec<residency_candidate> hoistreuse_cands;
+  auto_vec<merge_rename_cand> merge_cands;
   unsigned madpair_group = 0;
   hash_set<int_hash<unsigned, 0> > invalid_madpair_groups;
   hash_set<gimple *> taken;
@@ -3114,10 +3241,40 @@ residency_transform (function *fn, prgm_state *st)
 	      if (cc_reached && riscv_tt_opt_pressure_park <= 0)
 		break;
 	      gcall *load = dyn_cast <gcall *> (gsi_stmt (gsi));
-	      if (!load || taken.contains (load)
-		  || !rvtt_invariant_constant_load_p (load, loop,
-						      /*allow_shortened=*/true))
+	      if (!load || taken.contains (load))
 		continue;
+	      if (!rvtt_invariant_constant_load_p (load, loop,
+						   /*allow_shortened=*/true))
+		{
+		  /* MERGE-RENAME collection (lane KP, R1(b)): the
+		     immediate CC-merge whose loop-varying link fails
+		     the invariant predicate above.  Recorded only; the
+		     rename and its placement run after every
+		     established class has placed (block comment at
+		     merge_rename_cand).  */
+		  tree mlink;
+		  unsigned mvalue;
+		  if (riscv_tt_opt_residency_merge_rename > 0
+		      && riscv_tt_opt_pressure_park > 0
+		      && merge_rename_shape_p (load, dump_file,
+					       &mlink, &mvalue))
+		    {
+		      merge_rename_cand m;
+		      m.tail = load;
+		      m.link = mlink;
+		      m.value = mvalue;
+		      m.loop = loop;
+		      m.cc_lifted = cc_lifted_loop;
+		      m.peel = cc_lifted_loop ? false : peel;
+		      m.entry = cc_lifted_loop ? lifted_entry
+			: (riscv_tt_opt_crossloop_hoist > 0
+			   ? rvtt_crossloop_outermost_entry (loop, entry,
+							     0x7fff)
+			   : entry);
+		      merge_cands.safe_push (m);
+		    }
+		  continue;
+		}
 	      remat_chain chain { load, load };
 	      unsigned value;
 	      if (!constant_chain_value_p (chain, &value))
@@ -3712,11 +3869,16 @@ residency_transform (function *fn, prgm_state *st)
   }
 
   if (loop_cands.is_empty () && pressure_cands.is_empty ()
-      && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
+      && madpair_cands.is_empty () && hoistreuse_cands.is_empty ()
+      && merge_cands.is_empty ())
     return false;
 
   /* The freedom proof and the all-lanes proof gate every allocation,
-     exactly as for the M3 fusion class.  */
+     exactly as for the M3 fusion class.  MERGE-RENAME candidates
+     inherit both gates fail-closed: a refused TU refuses the rename
+     with everything else, and the peel / cc-lifted classes they ride
+     carry their own all-lanes proofs (non-peel candidates re-prove the
+     ambient by name in the placement phase below).  */
   const prgm_tu_facts &facts = tu_prgm_facts ();
   if (facts.refused)
     {
@@ -3821,7 +3983,8 @@ residency_transform (function *fn, prgm_state *st)
 	  }
 	hoistreuse_cands.truncate (kept);
 	if (loop_cands.is_empty () && pressure_cands.is_empty ()
-	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ())
+	    && madpair_cands.is_empty () && hoistreuse_cands.is_empty ()
+	    && merge_cands.is_empty ())
 	  {
 	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
 			 "const-residency: refused (cc-region-unproven)"
@@ -4670,10 +4833,186 @@ residency_transform (function *fn, prgm_state *st)
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);
 
+  /* MERGE-RENAME placement (lane KP, R1(b); block comment at
+     merge_rename_cand): runs after every established class has placed,
+     so the rename can only consume placement capacity the reviewed
+     classes left behind.  */
+  bool merge_writers_collected = false;
+  bool merge_probed = false;
+  auto_vec<gimple *> merge_cc_writers;
+  for (merge_rename_cand &m : merge_cands)
+    {
+      if (riscv_tt_merge_rename_allow_neutral <= 0)
+	{
+	  rvtt_refuse (RVTT_REF_MERGE_RENAME_WORD_NEUTRAL, dump_file,
+		       "merge-rename: refused (merge-rename-word-neutral: "
+		       "the single-issue CC-merge is one in-loop word "
+		       "before and after the rename while the parked twin "
+		       "adds its materialization word -- the priced "
+		       "delivery benefit is identically negative): ");
+	  if (dump_file)
+	    print_gimple_stmt (dump_file, m.tail, 0);
+	  continue;
+	}
+      /* The twin's all-lanes proof: the peel and cc-lifted classes
+	 carry their own (the peel's post-ENCC / pre-peel-ambient
+	 points, the lift's no-CC-reaches-entry admission proof); a
+	 plain loop-class candidate re-proves that no function-local CC
+	 write reaches its programming point (the lifted-entry proof's
+	 own check), else the parked twin's disabled-lane content would
+	 be unproven at the merge.  */
+      if (!m.peel && !m.cc_lifted)
+	{
+	  if (!merge_writers_collected)
+	    {
+	      collect_cc_writers (fn, &merge_cc_writers);
+	      merge_writers_collected = true;
+	    }
+	  if (cc_write_reaches_point_p (merge_cc_writers,
+					m.entry->src, nullptr))
+	    {
+	      rvtt_refuse (RVTT_REF_MERGE_RENAME_AMBIENT_UNPROVEN, dump_file,
+			   "merge-rename: refused (merge-rename-ambient-"
+			   "unproven: a function-local CC write reaches the "
+			   "plain loop programming point): ");
+	      if (dump_file)
+		print_gimple_stmt (dump_file, m.tail, 0);
+	      continue;
+	    }
+	}
+      gcc_assert (gimple_call_num_args (m.tail) == 6);
+      /* Full-lane twin of the merge's immediate: the _lv insn's
+	 non-live sibling, scalar arguments verbatim.  Inserted before
+	 the merge, then offered to the LREG tier BEFORE the merge is
+	 touched -- a refused placement erases only the fresh twin, so
+	 the fail-closed leg is the flag-off IR verbatim (virtual
+	 operands included).  */
+      const rvtt_insn_data *lvd = rvtt_get_insn_data (m.tail);
+      const rvtt_insn_data *twin_d = lvd->get_non_live ();
+      gcc_assert (twin_d && twin_d->decl
+		  && twin_d->id == rvtt_insn_data::sfploadi);
+      gcall *t_stmt = gimple_build_call
+	(twin_d->decl, 5, gimple_call_arg (m.tail, 0),
+	 gimple_call_arg (m.tail, 2), gimple_call_arg (m.tail, 3),
+	 gimple_call_arg (m.tail, 4), gimple_call_arg (m.tail, 5));
+      tree lhs = gimple_call_lhs (m.tail);
+      tree t = make_ssa_name (TREE_TYPE (lhs));
+      gimple_call_set_lhs (t_stmt, t);
+      gimple_set_location (t_stmt, gimple_location (m.tail));
+      gimple_stmt_iterator tgsi = gsi_for_stmt (m.tail);
+      gsi_insert_before (&tgsi, t_stmt, GSI_SAME_STMT);
+      /* The insertion marks virtual-operand renaming; even an undone
+	 probe must surface the pass-level TODO (the IL stays
+	 byte-identical, the virtual web is recomputed).  */
+      merge_probed = true;
+
+      residency_candidate c;
+      c.load = t_stmt;
+      c.value = m.value;
+      c.loop = m.loop;
+      c.entry = m.entry;
+      c.uses = 1;
+      c.peel = m.peel;
+      c.cc_lifted = m.cc_lifted;
+      if (!lreg_hoist (c))
+	{
+	  /* Fail-closed: erase the fresh twin; the merge was never
+	     touched.  */
+	  gimple_stmt_iterator dgsi = gsi_for_stmt (t_stmt);
+	  gsi_remove (&dgsi, true);
+	  release_defs (t_stmt);
+	  rvtt_refuse (RVTT_REF_MERGE_RENAME_PLACEMENT_REFUSED, dump_file,
+		       "merge-rename: refused (merge-rename-placement-"
+		       "refused: the LREG tier could not place the "
+		       "full-lane twin; rename not performed): ");
+	  if (dump_file)
+	    print_gimple_stmt (dump_file, m.tail, 0);
+	  continue;
+	}
+
+      /* Placement committed: rewrite the merge to the register-source
+	 predicated move.  Virtual-operand discipline as lreg_hoist's
+	 (the merge's conservative call clobber is unlinked; the
+	 pass-level TODO renumbers the rest).  */
+      if (tree vdef = gimple_vdef (m.tail))
+	{
+	  if (TREE_CODE (vdef) == SSA_NAME)
+	    {
+	      unlink_stmt_vdef (m.tail);
+	      release_ssa_name (vdef);
+	    }
+	  gimple_set_vdef (m.tail, NULL_TREE);
+	}
+      if (gimple_vuse (m.tail))
+	{
+	  gimple_set_vuse (m.tail, NULL_TREE);
+	  update_stmt (m.tail);
+	}
+      const rvtt_insn_data *asg_d
+	= rvtt_get_insn_data (rvtt_insn_data::sfpassign_lv);
+      gcc_assert (asg_d && asg_d->decl);
+      gcall *merge = gimple_build_call (asg_d->decl, 2, m.link, t);
+      gimple_call_set_lhs (merge, lhs);
+      gimple_set_location (merge, gimple_location (m.tail));
+      gimple_stmt_iterator mgsi = gsi_for_stmt (m.tail);
+      gsi_replace (&mgsi, merge, false);
+      changed = true;
+
+      /* The peel's duplicate of the twin -- created only when the peel
+	 was manufactured AFTER the twin's insertion (this candidate's
+	 own ensure_peeled) -- has no reader: the peel iteration keeps
+	 its original immediate merge verbatim.  Erase the dead word
+	 (the prepeel path's own duplicate-erase discipline; a peel
+	 record predating the twin has no mapping and this is a
+	 no-op).  */
+      if (peel_record **rec = peeled.get (m.loop))
+	if (tree *fresh = (*rec)->names.get (t))
+	  if (*fresh && TREE_CODE (*fresh) == SSA_NAME
+	      && has_zero_uses (*fresh))
+	    {
+	      gimple *cp = SSA_NAME_DEF_STMT (*fresh);
+	      if (cp && gimple_bb (cp) == (*rec)->copy_bb)
+		{
+		  gimple_stmt_iterator cgsi = gsi_for_stmt (cp);
+		  gsi_remove (&cgsi, true);
+		  release_defs (cp);
+		}
+	    }
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "merge-rename: renamed in-loop immediate CC-merge "
+		   "0x%08x to a parked full-lane twin + register-source "
+		   "merge: ", m.value);
+	  print_gimple_stmt (dump_file, merge, 0);
+	}
+      if (flag_checking)
+	{
+	  /* Shadow re-verification (the KH pattern, live under
+	     -fchecking in every build): the widened admission
+	     re-proven from the committed IR before belief.  */
+	  basic_block tbb = gimple_bb (t_stmt);
+	  basic_block mbb = gimple_bb (merge);
+	  gcc_assert (tbb && mbb
+		      && !flow_bb_inside_loop_p (m.loop, tbb)
+		      && dominated_by_p (CDI_DOMINATORS, mbb, tbb));
+	  gcc_assert (gimple_call_lhs (merge) == lhs
+		      && gimple_call_arg (merge, 0) == m.link
+		      && gimple_call_arg (merge, 1) == t);
+	  gcc_assert (single_nondebug_use_p (t, merge));
+	  unsigned tvalue;
+	  gcc_assert (single_issue_constant_image_p
+		      (as_a <gcall *> (SSA_NAME_DEF_STMT (t)), &tvalue)
+		      && tvalue == m.value);
+	}
+    }
+
   for (peel_record *rec : peel_records)
     delete rec;
   delete arb_model;
-  return changed;
+  /* An undone merge-rename probe left the IL byte-identical but marked
+     virtual-operand renaming; surface the pass TODO either way.  */
+  return changed || merge_probed;
 }
 
 const pass_data pass_data_rvtt_prgm_const =
