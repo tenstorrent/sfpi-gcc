@@ -18,8 +18,8 @@ void poly1 () {
 **_Z5poly1v:
 **	# READ L0
 **	# READ L1
-**	SFPMUL	L1, L0, L1, 0
-**	SFPADDI	L1, 16384, 0
+**	SFPLOADI	L2, 16384, 0
+**	SFPMAD	L1, L0, L1, L2, 0
 **	SFPMAD	L0, L0, L1, L10, 0
 **	# WRITE L0
 **	ret
