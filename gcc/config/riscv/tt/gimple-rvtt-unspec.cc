@@ -1,5 +1,4 @@
-/* Pass to generate SFPU synth-opcode and opcode synth sequences for
-   currently-non-constant operands.
+/* Pass to give SFPU special builtins block-local defs and uses.
    Copyright (C) 2026 Tenstorrent Inc.
    Originated by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +17,36 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* A few SFPU builtins must sit in the same basic block as their uses
+   or their defs, because the RTL passes that consume them perform only
+   intra-block value propagation.  This pass restores that locality
+   invariant late in the GIMPLE pipeline, after CSE/PRE and code motion
+   may have broken it.  Two transformations are performed:
+
+   1. Sinking constant-register reads (SFPREADLREG of a constant LREG,
+      index >= 8) and NOVALUE markers to their use blocks.  SFPREADLREG
+      serves both variable and constant registers; for constant
+      registers the early RTL combine-like pass (rtl-rvtt-unspec.cc)
+      folds the read directly into the consuming instruction, but --
+      like the generic combiner it is modeled on -- it works only
+      within a block.  So each cross-block use gets its own clone of
+      the read inserted immediately before it; the original becomes
+      dead and RTL DCE sweeps it up.
+
+   2. Hoisting multi-result selectors (SFPSELECT2/SFPSELECT4) to their
+      definition blocks.  A builtin returning multiple vector values
+      models the result as one wide vector, and a selector call picks
+      out one element (the underlying instruction is a parallel set;
+      VEC_CONCAT-style modeling did not work out).  Expansion of the
+      wide def and its selector must see each other, so a clone of the
+      selector is placed immediately after the defining call and all
+      the selector's uses are redirected to the clone.
+
+   Both transforms only clone/move calls -- values are never changed --
+   so the pass is idempotent, and cloned calls are excluded from
+   rescanning within the run.  */
+
 
 #include "config.h"
 #define INCLUDE_SET
@@ -40,27 +69,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 
 
-// Excitingly we have a few builtins that need placing close to eachother or
-// their uses or their defs.  (By close I mean, in the same BB.)  This is so
-// the associated RTL pass can do its work without having to know more than
-// simple intra-block value propagation.
-
-// The sfpreadlreg builtin is used for both const regs and var regs (because
-// that's the API). The RTL combine pass is relied upon to move const lreg
-// reads directly into the instruction using that value (rather than go via a
-// temp).  Unfortunately combine only combines within a BB, and sometimes
-// late-combine or ira doesn't fix it up. Therefore we have our own rtl
-// combine-like pass that runs very early. As with combine, it only works in a
-// single BB.  This pass duplicates sfpreadlregs of constant regs into the
-// block into the bb that it is used. (RTL DCE will fix up the detritus we
-// leave behind.)
-
-// Multiple builtin return values are handled as a multi-width vector (because
-// builtins are almost-but-not-quite functions, the regular ABI is not in play
-// here).  But the underlying instructions will be parallel sets.  At the
-// gimple level we have an sfpselectN to pick one of the results.  Using
-// VEC_CONCAT and friends didn't work out. Move each sfpselectN into the same
-// BB as its def.
+/* Apply both locality transforms across FN; returns TODO_update_ssa if
+   anything was cloned.  */
 
 static unsigned
 transform (function *fn)

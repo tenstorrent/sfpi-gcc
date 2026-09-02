@@ -1,4 +1,4 @@
-/* Pass to work around GS' memory arbitration bug
+/* Pass to work around the Wormhole load-store read-after-write hazard.
    Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
@@ -18,6 +18,30 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* Wormhole has a read-after-write hazard: a word-sized load issued
+   after a byte or half store can be issued before the store retires.
+   The hardware's address comparator is 32 bits wide, so when the
+   addresses MATCH exactly the hazard is detected and handled; the
+   problem arises for a narrow store followed by a load of a different
+   width/alignment over the same bytes (a word-aligned narrow store is
+   in fact safe, but we do not exploit that).  Memory logic prioritizes
+   loads over stores, and although there is no reorder buffer, two
+   loads can issue before a store drains.  Whether an intervening
+   unrelated store resolves the hazard is not established.
+
+   Because the failure is so sensitive, the workaround annuls it in all
+   cases: after every narrow (QI/HI) store to a plausible hazard target
+   (register-space stores are exempt, see rvtt_reg_store_p), a dummy
+   volatile load of the stored location is placed as LATE as possible
+   -- at the first control-flow change, write to the store's pointer
+   register, any load, another narrow store, or the end of the block --
+   forcing the store to drain before any subsequent real load can pass
+   it.
+
+   Enabled by -mtt-fix-whraw, defaulted on for -mcpu=tt-wh*; a
+   correctness workaround, not an optimization.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -27,6 +51,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgbuild.h"
 #include "rvtt.h"
 
+
+/* Is PAT a load: a SET reading memory into a register (excluding calls
+   and asm)?  */
 
 static bool
 load_mem_p (rtx pat)
@@ -45,6 +72,10 @@ load_mem_p (rtx pat)
   return contains_mem_rtx_p (src);
 }
 
+/* Extract the base register (*REG) and constant offset (*OFFSET) of
+   memory reference PAT (looking through extensions).  Returns false
+   for shapes without a simple base register.  */
+
 static bool
 get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
 {
@@ -59,7 +90,7 @@ get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
 
   if (REG_P (XEXP (pat, 0)))
     {
-      *reg = REGNO(XEXP(pat, 0));;
+      *reg = REGNO (XEXP (pat, 0));
       *offset = 0;
     }
   else if (GET_CODE (XEXP(pat, 0)) != PLUS
@@ -78,6 +109,9 @@ get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
   return true;
 }
 
+/* Emit the hazard-annulling dummy load of MEM (forced volatile, into
+   x0) before or after INSN.  */
+
 static void
 emit_load (rtx_insn *insn, bool before, rtx mem)
 {
@@ -90,18 +124,9 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
     emit_insn_after (new_insn, insn);
 }
 
-// WH has a read after write hazard bug where loading a word after a byte or
-// half store issues the load before the store.  The bug is in the address
-// comparator logic and it's 32bits wide. if addresses match, RAW hazard will
-// be detected. So if the shorter store is word-aligned, we have no hazard. (we
-// do not take advantage of that) Mem logic is prioritizing loads over stores
-// and even though there's no reorder buffer, 2 loads could get issued before a
-// store actually gets out. If there is an intervening store, it is not clear
-// whether the hazard is resolved.  As the bug is very sensitive, we anull it
-// in all cases by placing a short load as late as possible after the short
-// store. That's when we encounter the first control-flow change, write to
-// store's ptr register, a load of any size, or the end of the block. (It is
-// desirable to sink the load as late as possible.)
+/* Walk CFN placing the annulling loads; see the file comment.  Only
+   one pending narrow store is tracked at a time -- a second narrow
+   store first flushes the previous one's annulment.  */
 
 static void
 workaround_raw (function *cfn)
@@ -194,8 +219,6 @@ const pass_data pass_data_rvtt_fix_raw =
 
 class pass_rvtt_fix_raw : public rtl_opt_pass
 {
-private:
-
 public:
   pass_rvtt_fix_raw (gcc::context *ctxt)
     : rtl_opt_pass (pass_data_rvtt_fix_raw, ctxt)
@@ -206,7 +229,7 @@ public:
   {
     return riscv_tt_fix_wh_raw > 0;
   }
-  
+
   /* opt_pass methods: */
   virtual unsigned execute (function *cfn) override
     {
@@ -214,7 +237,7 @@ public:
 
       return 0;
     }
-}; // class pass_rvtt_fix_wh
+}; // class pass_rvtt_fix_raw
 
 } // anon namespace
 

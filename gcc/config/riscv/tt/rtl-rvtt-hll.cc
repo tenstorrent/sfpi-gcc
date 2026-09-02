@@ -1,4 +1,4 @@
-/* Pass to schedule Grayskull high-latency loads away from their uses
+/* Pass to schedule high-latency loads away from their uses.
    Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
@@ -17,6 +17,27 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* Late scheduling pass separating high-latency loads (HLLs) from their
+   first uses.  Loads from L1 scratch memory and from memory-mapped
+   configuration registers stall the simple in-order cores for many
+   cycles when consumed too soon (see the l1/reg/local load-shadow
+   constants below and the reservations in rvtt-tune.md, keyed on the
+   rvtt_l1_ptr/rvtt_reg_ptr type attributes recovered by
+   gimple-rvtt-attrib.cc).  The pass hoists such loads -- singly or as
+   small clusters with their address computations -- as far up their
+   block as dependences allow, and tracks unresolved load shadows
+   across block boundaries so successors can insert a dummy use ("war")
+   where a shadow would otherwise reach a use too early.
+
+   STATUS: this pass originated on Grayskull hardware and is DISABLED
+   BY DEFAULT everywhere -- -mtt-optimize-hll defaults to off, and the
+   code that once auto-enabled it for Wormhole/Blackhole is
+   deliberately #if 0 with a do-not-reenable note (see
+   riscv_override_options_internal in riscv.cc).  It survives only for
+   explicit opt-in experiments; the modern interlock/latency schedulers
+   address the same stalls.  It is a candidate for retirement.  */
+
 #define INCLUDE_VECTOR
 #define INCLUDE_UNORDERED_MAP
 #include "config.h"
@@ -129,13 +150,6 @@ load_mem_p(rtx pat)
 }
 
 static bool
-stack_load_mem_p(rtx pat)
-{
-  return load_mem_p (pat)
-    && refers_to_regno_p (stack_ptr_regno, pat);
-}
-
-static bool
 store_mem_p(rtx pat)
 {
   if (GET_CODE (pat) != SET)
@@ -159,15 +173,6 @@ nonstack_store_p(rtx pat)
     return false;
   
   return !refers_to_regno_p (stack_ptr_regno, pat);
-}
-
-static bool
-stack_store_p(rtx pat)
-{
-  return
-    GET_CODE(pat) == SET &&
-    contains_mem_rtx_p(SET_DEST(pat)) &&
-    refers_to_regno_p(stack_ptr_regno, pat);
 }
 
 static bool

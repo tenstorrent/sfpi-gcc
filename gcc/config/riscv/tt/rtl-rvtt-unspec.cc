@@ -1,5 +1,4 @@
-/* Pass to generate SFPU synth-opcode and opcode synth sequences for
-   currently-non-constant operands.
+/* Combine-like RTL pass propagating SFPU special unspecs to their uses.
    Copyright (C) 2026 Tenstorrent Inc.
    Originated by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +17,30 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* A combine-like pass over Tensix instructions that:
+
+   1. copies constant-LREG-read unspecs (UNSPEC_SFPCSTLREG) and NOVALUE
+      markers (UNSPEC_SFPNOVAL) into the instructions that use them, so
+      the constant register is encoded directly rather than routed
+      through a temporary.  As described in the companion GIMPLE pass
+      (gimple-rvtt-unspec.cc), the generic combine/late-combine/IRA
+      machinery does not reliably perform this fold for these unspecs;
+      the GIMPLE pass guarantees def and use share a block, and this
+      pass performs the actual substitution.
+
+   2. resolves multi-register builtin results: a constant-index select
+      from a cleave-together unspec (UNSPEC_SFPCLEAVE) is replaced by
+      the selected input directly.
+
+   Value tracking is strictly intra-block: a simple regno -> unspec
+   map is maintained while scanning each block, invalidated at
+   redefinitions, and consulted when a Tensix instruction reads a
+   tracked register.  match_dup operands reading the same register are
+   substituted as one change group.  Failed validations simply leave
+   the instruction unchanged (the register-routed form remains
+   correct).  */
+
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
@@ -47,16 +70,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "print-rtl.h"
 #include "rvtt.h"
 
-// A combine-like pass that copies cstlreg unspecs into the insns that use
-// them. (As described in the related gimple pass, we can't rely on combine,
-// late-combine, ira or other passes to do this in all cases.)
-
-// A combine-like pass that
-// 1 copies cstlreg unspecs into the insns that use
-// them.  (As described in the related gimple pass, we can't rely on combine,
-// late-combine, ira or other passes to do this in all cases.)
-// 2. copies cleave-together inputs to cleave-apart outputs, thereby handling
-// multi-register builtin results.
+/* Scan FN, propagating tracked unspec values into Tensix instruction
+   operands as described in the file comment.  */
 
 static void
 transform (function *fn)
@@ -187,7 +202,7 @@ transform (function *fn)
 	  case CONST_INT:
 	  case MEM:
 	  case CLOBBER:
-	  case SCRATCH: 
+	  case SCRATCH:
 	  case USE:
 	    break;
 	  }

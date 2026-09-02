@@ -19,6 +19,23 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Final phase of variable-immediate ("synth") processing; the GIMPLE
+   phases live in gimple-rvtt-synth.cc.  By this point every SFPU
+   instruction with a run-time-synthesized instruction word carries the
+   synthesized value as an operand, and the SYNTH_OPCODE marker that
+   anchors its prologue carries the matching id.
+
+   The base opcode folded into each prologue is chosen here: for each
+   id, scan all the instructions using that id's synthesized word and
+   compute the instruction encoding each use would need (opcode field
+   plus destination/source register fields).  The most frequent
+   encoding (ties broken toward the numerically smallest) becomes the
+   base value added into the SYNTH_OPCODE; every use records the same
+   base so the run-time add produces exactly the intended word for the
+   modal uses, and the RTL templates emit fix-up arithmetic only for
+   the outliers.  */
+
+
 #define INCLUDE_VECTOR
 #define INCLUDE_UNORDERED_MAP
 #include "config.h"
@@ -36,15 +53,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt.h"
 
-// This phase of the non-immediate processing works by:
-//  - finding all of the load_immediate calls and creating a lookup table
-//    based on their id (the value currently being loaded, as set in the
-//    nonimm-tag gimple pass)
-//  - finding all of the non-immediate insns and matching them via the table
-//    to their load immediate
-//  - updating the immediate value to match that needed by the insn.  if the
-//    value was already set, then confirming the match.  if the old value and
-//    new value do not match, the nonimm is flagged to emit the fallback code
+/* Gather all SYNTH_OPCODE markers and synth-using instructions by id,
+   pick each id's modal base encoding, and patch it into both the
+   markers and the uses.  */
+
 static void
 transform (function *fn)
 {
