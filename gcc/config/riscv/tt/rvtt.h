@@ -106,26 +106,38 @@ public:
     static_assert (HWM_shift <= 32);
 
   public:
-    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0, unsigned encode = 0, unsigned bias = 0)
-      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift | kind_and_check << KIND_shift)
+    constexpr op_t (kind_t kind_and_check = NONE, unsigned bits_or_mask = 0,
+		    unsigned encode = 0, unsigned bias = 0)
+      : enc (bits_or_mask | encode << ENCODE_shift | bias << BIAS_shift
+	     | kind_and_check << KIND_shift)
     {}
 
-    static kind_t early (kind_t kind) { return kind_t (kind | EARLY | CHECKED); }
+    static kind_t early (kind_t kind)
+    { return kind_t (kind | EARLY | CHECKED); }
     static kind_t checked (kind_t kind) { return kind_t (kind | CHECKED); }
     operator bool () const { return enc != 0; }
     bool is_checked () const { return bool ((enc >> KIND_shift) & CHECKED); }
     bool is_early () const { return bool ((enc >> KIND_shift) & EARLY); }
-    kind_t kind () const { return kind_t ((enc >> KIND_shift) & (((1u << KIND_bits) - 1u) ^ (CHECKED | EARLY))); }
+    kind_t kind () const
+    {
+      return kind_t ((enc >> KIND_shift)
+		     & (((1u << KIND_bits) - 1u) ^ (CHECKED | EARLY)));
+    }
     bool is_mod () const { return kind () == MOD; }
     bool is_xmod () const { return kind () == XMOD; }
     bool is_runtime () const { return kind () == RUNTIME; }
 
-    unsigned mod () const { return (enc >> MOD_shift) & ((1u << MOD_bits) - 1u); }
-    unsigned bits () const { return (enc >> BITS_shift) & ((1u << BITS_bits) - 1u); }
-    unsigned encode () const { return (enc >> ENCODE_shift) & ((1u << ENCODE_bits) - 1u); }
-    unsigned bias () const { return (enc >> BIAS_shift) & ((1u << BIAS_bits) - 1u); }
+    unsigned mod () const
+    { return (enc >> MOD_shift) & ((1u << MOD_bits) - 1u); }
+    unsigned bits () const
+    { return (enc >> BITS_shift) & ((1u << BITS_bits) - 1u); }
+    unsigned encode () const
+    { return (enc >> ENCODE_shift) & ((1u << ENCODE_bits) - 1u); }
+    unsigned bias () const
+    { return (enc >> BIAS_shift) & ((1u << BIAS_bits) - 1u); }
 
-    int argno () const { return (enc >> ARGNO_shift) & ((1u << ARGNO_bits) - 1u); }
+    int argno () const
+    { return (enc >> ARGNO_shift) & ((1u << ARGNO_bits) - 1u); }
 
     void argno (unsigned n) { enc |= n << ARGNO_shift; }
   };
@@ -167,7 +179,8 @@ public:
   };
 
 public:
-  constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_, ops_t ops_)
+  constexpr rvtt_insn_data (insn_id id_, const char *name_, uint32_t flags_,
+			    ops_t ops_)
     : decl (nullptr), name (name_), flags (flags_t (flags_ & 0xffff)),
       cc_mask (uint16_t ((flags_ >> CC_MASK_SHIFT) & 0xffff)),
       id (id_), src_pos (-1), arg_num (0), ops (ops_) {}
@@ -276,9 +289,12 @@ public:
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 
-extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
-extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
-extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
+extern const rvtt_insn_data *
+rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
+extern const rvtt_insn_data *
+rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
+extern const rvtt_insn_data *
+rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
 
 /* Generated-vocabulary query (gimple-rvtt-combine.cc, answered from
    the rvtt-combine.inc tables genrvtt-combine emits from rvtt.gc;

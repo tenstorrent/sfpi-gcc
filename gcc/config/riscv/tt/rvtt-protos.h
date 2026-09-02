@@ -102,7 +102,8 @@ class rvtt_synth
 extern void rvtt_emit_sfpxfcmps (rtx v1, rtx f, rtx mod);
 extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
 extern void rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm);
-extern void rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
+extern void rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src,
+				  rtx imm, rtx mod, bool dst_used = false);
 extern void rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod);
 
 /* The reassociation license key (owner ratification 2026-08-21): true
@@ -287,8 +288,10 @@ constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
 
 /* EU: enable unmodified, EC: complement, EI: immediate
    R1: result set, RI: immediate */
-constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   /* Imm value to clear both enable/result */
-constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      /* Imm value to set both enable/result */
+constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   /* Imm value to clear
+						       both enable/result */
+constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      /* Imm value to set
+						       both enable/result */
 
 constexpr unsigned int SFPENCC_MOD1_EU_R1 = 0;
 constexpr unsigned int SFPENCC_MOD1_EC_R1 = 1;

@@ -32,30 +32,30 @@ enum xtt_subunit_t { XTT_SU_NONE, XTT_SU_SIMPLE, XTT_SU_MAD, XTT_SU_ROUND,
 
 struct xtt_rwc_effect_t {
   enum kind_t { NONE, INC, SET, FACE, UNKNOWN } kind;
-  int dst_delta;		/* meaningful for INC; FACE == one face step   */
-  int cr_delta;			/* counter-register semantics, typed operands  */
-  unsigned set_mask;		/* for SET (TTSETRWC)                          */
+  int dst_delta;		/* meaningful for INC; FACE == one face step */
+  int cr_delta;			/* counter-register semantics, typed operands */
+  unsigned set_mask;		/* for SET (TTSETRWC) */
 };
 
 struct xtt_effect_set {
-  uint32_t lreg_read, lreg_write; /* hard-reg mask over L0..L15/LREG16	       */
+  uint32_t lreg_read, lreg_write; /* hard-reg mask over L0..L15/LREG16 */
   bool	   cc_read, cc_write;
   bool	   cc_write_all_lanes;	  /* cc_write provably writes the all-lanes
 				     enabled state (word-exact against the
 				     capability table's architectural
 				     all-lanes SFPENCC encoding); refusing
 				     default false -- any other CC write is
-				     lane-state-unproved		       */
-  uint32_t config_dests_written;  /* bitmask over SFPCONFIG dests 0..15	       */
-  uint32_t config_dests_read;	  /* bitmask over SFPCONFIG dests 0..15	       */
-  bool	   addr_mod_slot_write;	  /* SETC16 into an address-mod slot reg       */
+				     lane-state-unproved */
+  uint32_t config_dests_written;  /* bitmask over SFPCONFIG dests 0..15 */
+  uint32_t config_dests_read;	  /* bitmask over SFPCONFIG dests 0..15 */
+  bool	   addr_mod_slot_write;	  /* SETC16 into an address-mod slot reg */
   xtt_rwc_effect_t rwc;
-  bool	   dst_mem_read, dst_mem_write;	  /* from MEM operands (existing)      */
-  int	   result_latency;	  /* from xtt_result_latency		       */
+  bool	   dst_mem_read, dst_mem_write;	  /* from MEM operands (existing) */
+  int	   result_latency;	  /* from xtt_result_latency */
   bool	   next_slot_stall;	  /* architectural next-slot acceptance
-				     stall (xtt_next_slot_stall)	       */
+				     stall (xtt_next_slot_stall) */
   xtt_subunit_t subunit;
-  bool	   opaque;		  /* CALL_P, unclassified asm, unknown	       */
+  bool	   opaque;		  /* CALL_P, unclassified asm, unknown */
 };
 
 /* Attribute-driven; opaque=true default.  */
