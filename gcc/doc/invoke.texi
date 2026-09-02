@@ -1296,7 +1296,6 @@ See RS/6000 and PowerPC Options.
 -mtt-fix-whbhebreak  -mno-tt-fix-whbhebreak
 -mtt-fix-whraw  -mno-tt-fix-whraw
 -mtt-optimize-extend
--mtt-optimize-hll
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
 -mtt-tensix-optimize-combine  -mno-tt-tensix-optimize-combine
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
@@ -32003,11 +32002,6 @@ remaining options are disabled by default.
 Remove zero- and sign-extension operations that the surrounding Tensix
 code makes redundant.  Enabled by default when optimizing for Wormhole
 and Blackhole processors.
-
-@opindex mtt-optimize-hll
-@item -mtt-optimize-hll
-Schedule high-latency loads earlier within their basic block to hide
-their latency.
 
 @opindex mtt-tensix-optimize-cc
 @item -mtt-tensix-optimize-cc
