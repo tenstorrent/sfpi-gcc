@@ -216,10 +216,10 @@ struct caps
      valid under the Base=1 SFPU platform contract -- proven by the
      typed LLK start/done bracket (cmath_common.h
      set/clear_addr_mod_base from _llk_math_eltwise_sfpu_start_/_done_)
-     and adjudicated at sfpi-gcc 2a0ba1e6602 (laneAJ-evidence-20260817:
-     programming the base-0 bank destroys the FPU's live ADDR_MOD_2 and
-     corrupts the next tile's datacopy, so dual-slot "defensive"
-     ownership is a miscompile, not a proof).  */
+     and adjudicated on hardware: programming the base-0 bank destroys
+     the FPU's live ADDR_MOD_2 and corrupts the next tile's datacopy,
+     so dual-slot "defensive" ownership is a miscompile, not a
+     proof.  */
   bool needs_bank_base_ownership;
   const addr_mod_slot *addr_mod_slots;
   unsigned n_addr_mod_slots;
@@ -356,11 +356,9 @@ extern unsigned cc_visibility_lag ();   /* 1 */
    lane-enable evaluation.  A CC write retiring in the SAME cycle as
    the store is architecturally not yet visible to it (the retirement
    group's pre-write snapshot); one retiring in any EARLIER cycle is.
-   Proven on BH silicon (Where adjudication 2026-08-17, tt-quietbox-0
-   p150, two resets, deterministic;
-   ~/sfpi-uplift/where-adjudication-20260817/verdicts/VERDICT.md) and
-   reproduced bit-exactly by the corrected CRAQ executor (craq-sim
-   9f324140): the 4-slot select calendar, whose all-lanes restore
+   Proven on Blackhole hardware (deterministic across two device
+   resets) and reproduced bit-exactly by the corrected reference
+   simulator: the 4-slot select calendar, whose all-lanes restore
    retires in the Delay-2 store's own cycle, executes the store under
    the SFPSETCC complement mask and leaves the true-branch lanes
    unwritten; the compact 3-slot calendar, whose restore retires one
@@ -388,7 +386,7 @@ extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 /*								      */
 /* The sequence-word bit format and the per-event delay semantics are  */
 /* ESTABLISHED by three independent sources (see			      */
-/* docs/TIMING_CALENDAR_DERIVATION.md section 1-2): the ISA functional	      */
+/* the derivation notes in rvtt-macro-derive-core.h): the ISA functional     */
 /* specification SFPLOADMACRO.md (SequenceBits, the per-sub-unit      */
 /* opcode legality table, the Simple/Round VD16 rule, the SFPSWAP     */
 /* adjacency rule, the Misc field layout), the CRAQ generic executor  */
@@ -487,12 +485,11 @@ extern void decode_misc_fields (uint32_t word, unsigned *store_mod0,
 
 /* Whether a DERIVED calendar may absorb the row's Dst stride into a
    launch's auto-increment address mode on this CPU.  BH is proven end
-   to end (the derived unary max/min calendar is CRAQ bit-exact through
-   the generic simulator path).  WH is now proven too: the laneR1
-   position-shuffled-tiles failure that grounded the former WH refusal
-   (laneR1-evidence-20260817 wh-onma trace: every latched launch
-   dst_row/mask correct, data displaced from the second tile on) was
-   adjudicated at sfpi-gcc 2a0ba1e6602 (laneAJ-evidence-20260817) as
+   to end (the derived unary max/min calendar is bit-exact against the
+   reference simulator through the generic path).  WH is now proven
+   too: the position-shuffled-tiles failure that grounded the former WH
+   refusal (hardware trace: every latched launch dst_row/mask correct,
+   data displaced from the second tile on) was adjudicated as
    the DUAL-SLOT SETC16 program itself -- the emitted words clobbered
    LLK's live base-0 ADDR_MOD_2 and corrupted the NEXT tile's datacopy;
    the absorption machinery (launch auto-increment through the owned

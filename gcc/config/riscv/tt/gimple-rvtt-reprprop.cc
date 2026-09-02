@@ -101,8 +101,7 @@ along with GCC; see the file COPYING3.  If not see
    sm<->2c pairs on the two sign-magnitude zeros).  Eliding those is
    an owner CONTRACT decision (whether the boundary observer is
    value-typed), not a compiler proof; this pass only performs
-   bit-exact rewrites, so such candidates refuse.  See
-   NOTES-representation-propagation.md.  */
+   bit-exact rewrites, so such candidates refuse.  */
 
 #include "config.h"
 #include "system.h"

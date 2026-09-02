@@ -19,6 +19,15 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Citation rule for every file under config/riscv/tt/ (comments,
+   dump strings, and docs alike): cite only files that live in this
+   source tree (tt/proofs/ artifacts, tt/doc/, the .md machine
+   description sources) or published literature and published ISA
+   documentation.  Correctness arguments must stand on their own in
+   the comment that carries them; historical measurement campaigns and
+   working notes live in the version-control history, not in citations
+   the tree cannot resolve.  */
+
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
 

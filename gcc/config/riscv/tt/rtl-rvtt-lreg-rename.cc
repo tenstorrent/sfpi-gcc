@@ -28,10 +28,10 @@ along with GCC; see the file COPYING3.  If not see
    problem (gcc/regrename.cc) scoped to the architectural LREG file with
    typed-effect proofs instead of constraint queries.
 
-   V1 RETIREMENT (item #7 stage W4-C).  The original single-shape pass
+   V1 RETIREMENT.  The original single-shape pass
    (self-loop capturable rows, single-SET latency-0 invariant-input
-   members, whole-pattern register replacement) was RETIRED after the
-   W4-C parity adjudication proved it WRONG-CODE-BEARING, not merely
+   members, whole-pattern register replacement) was RETIRED after a
+   per-fire parity adjudication against this engine proved it WRONG-CODE-BEARING, not merely
    subsumed: its whole-pattern writer edit rewrote every occurrence of
    the old register in the writer's pattern, including GENUINE INPUT
    READS of the register's previous live range (the allocator's
@@ -44,12 +44,12 @@ along with GCC; see the file COPYING3.  If not see
    severed dataflow this way (calculate_cube_root x2, calculate_sine,
    calculate_i0 split constant pair, calculate_lcm_fresh_cpp x3, plus
    run_kernel inline copies); only the 2 pure-LOADI cosine fires were
-   correct renames -- and those are general-engine fires too.  The
-   laneKE development near-miss ("L5 = mul (L5, L5)") was this exact
+   correct renames -- and those are general-engine fires too.  A
+   development near-miss ("L5 = mul (L5, L5)") was this exact
    defect, live in v1.  The flag was never in any production or
-   reviewed-ON set, so no shipped bytes ever carried a v1 rename.
-   Evidence: laneKK-evidence-20260831/ (per-fire committed-stream
-   adjudication from the laneKE census legs).
+   reviewed default set, so no shipped bytes ever carried a v1 rename.
+   Each of the 13 fires was adjudicated on its committed instruction
+   stream before the retirement.
 
    -mtt-tensix-optimize-lreg-rename is RETAINED as a frozen-API alias:
    it now requests this file's general du-chain engine (the pass gates
@@ -58,7 +58,7 @@ along with GCC; see the file COPYING3.  If not see
    longer fire.
 
    -mtt-tensix-optimize-lreg-rename-chains (default off) is the
-   GENERAL du-chain engine (FABLE_GOES_BURR.md item #7): post-RA
+   GENERAL du-chain engine: post-RA
    register renaming over def-use chains in the gcc/regrename.cc
    formulation, restricted to the architectural LREG file, over
    single-basic-block regions of ANY shape.  One chain =
@@ -68,7 +68,7 @@ along with GCC; see the file COPYING3.  If not see
    proven-free LREG; delivered words are unchanged, only register
    fields move (asserted post-commit).
 
-   Differences from v1, per the item-#7 plan:
+   Differences from v1:
    - any basic block, not only self-loop rows;
    - writers of any audited latency (v1: latency 0 only);
    - non-invariant inputs admitted (a pure rename moves no
@@ -79,16 +79,16 @@ along with GCC; see the file COPYING3.  If not see
      admission: the engine renames whenever a chain is legal and a
      consumer requests it.  Consumers price.  The standalone pass mode
      renames storage-collision chains greedily under a whole-row
-     no-worse acceptance through the item-#11 timing engine
-     (rvtt_timing::interlock_sim), the laneIJ strict-acceptance
-     discipline;
+     no-worse acceptance through the shared timing engine
+     (rvtt_timing::interlock_sim), under the strict-acceptance
+     discipline (nothing unpriceable is ever accepted);
    - the service export: rvtt_lreg_rename_chain (bb, def_insn,
      target) carries the complete legality proof and the post-commit
      re-verification, so the fill/rotation/IMS consumers can request
      renames without duplicating any proof.
 
    Typed-effect veto (the Tensix half; every fact through
-   rvtt_insn_effects -- the item-#4 single table -- and
+   rvtt_insn_effects -- the single typed-effect table -- and
    rvtt-effects.h's post-admission helpers): a chain refuses on a CC
    write, config-dest write, RWC/Dst counter effect, Dst store
    destination, replay owner class, companion-coupled multi-result
@@ -110,8 +110,8 @@ along with GCC; see the file COPYING3.  If not see
    NOTE on tt/rvtt-cc-region.{h,cc}: the GIMPLE tree has no RTL
    mapping, and the successor this note used to name -- "a later stage
    that wants cross-region renames must extend the cc-region engine
-   with an RTL view first, not fork a local scan" -- is now DISCHARGED
-   (laneKQ): tt/rvtt-cc-region-rtl.cc derives the span-scoped frame
+   with an RTL view first, not fork a local scan" -- is now DISCHARGED:
+   tt/rvtt-cc-region-rtl.cc derives the span-scoped frame
    view from the post-RA insn stream.  With
    -mtt-tensix-optimize-rename-cc-region (default off) the cc-span
    rule widens to the view's two proven arms: CC activity confined to
@@ -139,8 +139,8 @@ along with GCC; see the file COPYING3.  If not see
    register's absence from the block's DF live-out set.  Anything else
    refuses regrename-chain-open.
 
-   Target deadness proof (the SAME DF trust boundary; laneKZ soundness
-   fix): a whole-block-free target must be dead ACROSS the block --
+   Target deadness proof (the SAME DF trust boundary): a
+   whole-block-free target must be dead ACROSS the block --
    neither live-in nor live-out -- so the rename clobbers no value that
    flows around the block.  That proof reads DF hard-register
    live-in/live-out, reliable only in a function with no opaque
@@ -150,16 +150,16 @@ along with GCC; see the file COPYING3.  If not see
    register can be loop-carried live-THROUGH the block (produced in a
    successor, consumed around the backedge) and is invisible to DF
    hard-register liveness, so the rename overwrites the loop-carried
-   value -- the deepseek_top32 semantic-lift wrong code (laneKV bisect;
-   6 asm insns in the TU, L7 loop-carried through bb2, DF-reported free).
+   value -- demonstrated wrong code (a translation unit with 6 asm
+   insns; L7 loop-carried through bb2 was DF-reported free).
    The whole-block tier is now fail-closed in opaque functions
    (regrename-liveness-untrusted); the temporal tier's admitted arm
    re-establishes the target with an in-block fresh definition and is
    DF-independent, so it stays available.
 
-   Post-commit structural lockstep re-verification (the laneID
-   final-lockstep precedent: renames verified only before commit are
-   the known wrong-code shape): after apply_change_group commits, the
+   Post-commit structural lockstep re-verification (renames verified
+   only before commit are a known wrong-code shape): after
+   apply_change_group commits, the
    pass re-extracts every edited pattern's typed effects and re-proves
    the chain shape on the ACTUAL stream -- writer defines exactly the
    target, readers read the target and no longer the source, no other
@@ -173,7 +173,7 @@ along with GCC; see the file COPYING3.  If not see
    on a committed whole-block (non-temporal) target in a function with an
    opaque instruction, the defense-in-depth that keeps the
    untrusted-liveness class from re-shipping even if a future edit
-   restores a DF-trusting admission path (laneKZ).
+   restores a DF-trusting admission path.
 
    Pipeline placement (the retired pass's seam, inherited) -- post
    allocation (rtl-rvtt-lp-alloc), post Dst-ownership, post macro
@@ -184,8 +184,8 @@ along with GCC; see the file COPYING3.  If not see
    extend any live range across a block boundary, so DF liveness
    computed at pass entry stays valid across commits.
 
-   -mtt-tensix-optimize-rename-temporal (default off; the R1
-   composition, FABLE_GOES_BURR section 4) widens TARGET selection
+   -mtt-tensix-optimize-rename-temporal (default off) widens TARGET
+   selection
    from whole-block freeness to SPAN freeness: when no register is
    untouched across the whole block, a target is still admissible when
    it is untouched across the chain span itself and its lifetimes
@@ -219,7 +219,7 @@ along with GCC; see the file COPYING3.  If not see
      re-converge, and every ordering constraint the shared register
      creates is carried by the pattern-derived dependence vocabulary
      the downstream schedulers consult;
-   - the WRITER must not read its own destination (laneLA soundness fix):
+   - the WRITER must not read its own destination:
      a dest-reuses-dying-source writer (w.fx.lreg_read & oldbit -- and not
      the operand-1 live-value merge, already refused regrename-self-merge)
      is renamed asymmetrically -- the WRITE moves to the target, but the
@@ -230,9 +230,10 @@ along with GCC; see the file COPYING3.  If not see
      target-freedom proof models only each chain's own span, not this
      extended old-register range, so a LATER temporal chain can pick the
      old register (or an overlapping span-marginal one) and alias the
-     still-live value -- register-aliasing wrong code, demonstrated ALL
-     LANES ENABLED (the addcmul corr TUs carry no CC/mask op; silicon and
-     both sim oracles; laneKV caught it).  Refuse
+     still-live value -- register-aliasing wrong code, demonstrated with
+     EVERY LANE ENABLED (the reproducing translation units carry no
+     CC/mask op; observed on hardware and confirmed by two independent
+     reference simulators).  Refuse
      regrename-temporal-dest-reuse; the whole-block tier is immune (its
      targets are all block-globally dead, colliding with nothing) and
      still serves such writers when a globally-dead target exists.
@@ -274,7 +275,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-timing.h"
 #include "rvtt-cc-region.h"
 
-/* The one place the LREG-file capacity is read (item #10's engine;
+/* The one place the LREG-file capacity is read (the pressure engine;
    rvtt-pressure.h itself is a GIMPLE-side header, so the constant is
    reached through its extern).  */
 extern unsigned rvtt_pressure_capacity ();
@@ -403,7 +404,7 @@ queue_reg_replacements (rtx_insn *insn, rtx *loc, unsigned oldr, rtx newreg)
 }
 
 /* ==================================================================
-   The general du-chain engine (item #7).  See the file header.  */
+   The general du-chain engine.  See the file header.  */
 
 /* One scanned block position.  */
 
@@ -855,7 +856,7 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
      effects plus the paranoid pattern scan), not live into and not
      live out of the block, never a constant register (the L0..L7
      range is the allocatable file; the capacity is read through the
-     item-#10 engine).  */
+     pressure engine).  */
   uint32_t block_touch = 0;
   for (const span_insn &si : scan)
     block_touch |= si.touch;
@@ -870,13 +871,14 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
      (call, asm, raw .ttinsn word).  This is the SAME trust boundary the
      dead-at-exit close (fn_has_opaque above) and the temporal
      never-touched-after arm (fn_has_opaque below) already enforce -- the
-     whole-block tier used to trust df_get_live_in/out unconditionally,
-     the laneKZ soundness hole: in an opaque function a register untouched
+     whole-block tier used to trust df_get_live_in/out unconditionally --
+     the untrusted-liveness soundness hole: in an opaque function a register untouched
      in the block can be loop-carried live-THROUGH it (produced in a
      successor, consumed around the backedge), invisible to DF hard-reg
      liveness; renaming onto it clobbers the loop-carried value
-     (deepseek_top32 semantic-lift, 6 asm insns: L7 loop-carried through
-     bb2 was DF-reported free and overwritten, dropping a top-32 value).
+     (demonstrated: with 6 asm insns in the function, L7 loop-carried
+     through bb2 was DF-reported free and overwritten, dropping a live
+     value).
      Fail-closed: in an opaque function this tier admits no target; the
      candidate wall is recorded so the refusal names the class, and the
      temporal tier's DF-independent first-post-definition arm may still
@@ -902,7 +904,7 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
       new_l = l;
       break;
     }
-  /* Temporal-tier dest-reuse-writer gate (laneLA, the addcmul wrong-code
+  /* Temporal-tier dest-reuse-writer gate (a demonstrated wrong-code
      fix).  A chain whose WRITER reads its own destination register
      (w.fx.lreg_read & oldbit -- the allocator's dest-reuses-dying-source
      shape p = op (x, ...) packed into x's register; not the operand-1
@@ -924,10 +926,11 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
      rename leaves on the OLD register, so a LATER temporal chain can pick
      that old register (or an overlapping span-marginal one) as its target
      and alias the still-live dying-source value -- register-aliasing
-     wrong code, demonstrated ALL LANES ENABLED (the addcmul corr TUs have
-     no CC/mask op at all: silicon + both sim oracles, ~per-face golden
-     mismatch; laneKV bisect, laneLA RESULTS).  Every narrower predicate
-     (reader count, reading-close shape) still miscompiles addcmul; the
+     wrong code, demonstrated with every lane enabled (the reproducing
+     translation units have no CC/mask op at all; observed on hardware
+     and confirmed by two independent reference simulators).  Every
+     narrower predicate (reader count, reading-close shape) still
+     miscompiles the reproducer; the
      unsound class is the whole dest-reuse-writer set, because any one of
      them can be the extended range a later chain aliases.
 
@@ -945,7 +948,7 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
     }
   if (new_l < 0 && riscv_tt_opt_rename_temporal)
     {
-      /* Temporal tier (the R1 composition; see the file header): a
+      /* Temporal tier (see the file header): a
 	 target free across the SPAN whose out-of-span lifetimes
 	 provably cannot observe the chain value.  Deterministic
 	 lowest admissible index.  */
@@ -1043,10 +1046,10 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
 
 /* Whole-row no-worse acceptance for the standalone pass mode: the
    modeled interlocked issue-slot count of the span (writer through
-   close inclusive) under the item-#11 scoreboard, before and after
-   the register-field edit.  Returns false (refusing by name) when the
-   span is unpriceable -- an unaudited producer feeding a span
-   consumer; the laneIJ strict-acceptance discipline prices nothing it
+   close inclusive) under the timing engine's scoreboard, before and
+   after the register-field edit.  Returns false (refusing by name) when
+   the span is unpriceable -- an unaudited producer feeding a span
+   consumer; the strict-acceptance discipline prices nothing it
    cannot prove.  */
 
 static bool
@@ -1102,8 +1105,8 @@ span_no_worse_p (const chain_desc &ch)
 }
 
 /* Commit CH: move the def-use web from OLD_L to NEW_L, then re-prove
-   the chain shape on the ACTUAL committed stream (the laneID
-   final-lockstep discipline; see the file header).  Any divergence
+   the chain shape on the ACTUAL committed stream (the final-lockstep
+   discipline; see the file header).  Any divergence
    reverts, refuses by name, and hard-asserts under -fchecking.
    Returns true iff the rename stands.  WEB, when non-null, receives
    the committed web (the consumer undo record; a web too large for
@@ -1323,7 +1326,7 @@ commit_chain (const chain_desc &ch, rvtt_lreg_rename_web *web = nullptr)
 		     + outside.size ())
 	diverged = "target reference census";
     }
-  /* laneKZ belt (the WHY-THE-BELT-MISSED-IT closure): the in-block census
+  /* Untrusted-liveness belt (why the belt alone missed it): the in-block census
      above scans only BB (scan_block (bb)), so it is STRUCTURALLY blind to
      a loop-carried live-through target -- that register's other references
      live in OTHER basic blocks the belt never visits, so the in-block
@@ -1428,7 +1431,7 @@ public:
   {
     /* -mtt-tensix-optimize-lreg-rename is the retired single-shape
        pass's flag, retained as a frozen-API alias for this engine
-       (see the file header's W4-C retirement note).  */
+       (see the file header's v1 retirement note).  */
     return TARGET_XTT_TENSIX
 	   && (riscv_tt_opt_lreg_rename_chains > 0
 	       || riscv_tt_opt_lreg_rename > 0);
@@ -1440,7 +1443,7 @@ public:
      audited stall.  Phase 1 of the standalone mode renames exactly
      these FIRST, in row order, so the scarce free registers are never
      spent on general chains before every proven-payoff v1-profile
-     chain has claimed its target (this kept the retirement census
+     chain has claimed its target (this kept the retirement adjudication
      deterministic and is a payoff-first heuristic in its own right:
      these are exactly the chains the stall fills are blocked on).  */
   static bool
@@ -1573,12 +1576,12 @@ public:
 
 } // anonymous namespace
 
-/* Service export (item #7): attempt to rename the du-chain of
+/* Service export: attempt to rename the du-chain of
    DEF_INSN's single-LREG definition inside BB onto TARGET_LREG (an L
    index; -1 = lowest proven-free).  Carries the complete legality
    proof and the post-commit structural re-verification; refuses by
    name and changes nothing on any unproven clause.  No pricing: the
-   requesting consumer prices (the item-#7 decoupling).  DF liveness
+   requesting consumer prices (the legality/pricing decoupling).  DF liveness
    must be current on entry; a committed rename leaves it valid (no
    upward exposure or cross-block extension is ever added).  Returns
    true iff a rename committed.  WEB, when non-null, receives the

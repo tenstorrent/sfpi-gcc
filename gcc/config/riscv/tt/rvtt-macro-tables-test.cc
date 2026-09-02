@@ -246,8 +246,7 @@ test_addr_mod (const caps *bh, const caps *wh)
   /* WH: exactly ONE physical slot -- scratch modifier 2 under the
      pinned ADDR_MOD_SET_Base=1 = physical slot 6, regs (19,0)(29,2)
      (54,0).  The base-0 bank (11/25/50 = LLK's live ADDR_MOD_2) must
-     never appear (sfpi-gcc 2a0ba1e6602 adjudication;
-     laneAJ-evidence-20260817).  */
+     never appear (see the adjudication note in rvtt-macro-tables-wh.def).  */
   CHECK (addr_mod_program (wh, 2, prog, &n, &base));
   CHECK (n == 3 && base);
   CHECK (prog[0].config_reg == 19 && prog[0].value == 0);

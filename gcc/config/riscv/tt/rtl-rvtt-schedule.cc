@@ -3554,8 +3554,8 @@ crp_shared_reload (basic_block bb, const crp_loop &lp,
 
 /* ---- Rule-B preservation seeds (-mtt-tensix-optimize-crossrow-pairing-seed)
 
-   The DESIGN-V2 Rule-B rename (round-cc-modulo-evidence-20260825/
-   DESIGN-V2.md): a collision web whose fresh root executes INSIDE a
+   The Rule-B preservation-seed rename: a collision web whose fresh
+   root executes INSIDE a
    flat CC atom cannot rename to a dead LREG directly (the predicated
    root writes only enabled lanes, so the dead register's stale
    disabled-lane bits would reach an all-lanes consumer -- the
@@ -4533,7 +4533,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 	 RENAMES: the emitted seed word, or null for a full-lane root
 	 (a bare all-lanes copy needs no preservation seed -- it writes
 	 every lane itself, so the fresh register never exposes dead
-	 bits; DESIGN-V2 Rule A carried into the atom interior by the
+	 bits; preservation-seed Rule A carried into the atom interior by the
 	 mod-2 lane-immunity fact).  */
       std::vector<rtx_insn *> commits;
       bool progress = rule_a_ii != INT_MAX;
@@ -4566,7 +4566,7 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 		     spill vocabulary) writes every lane regardless of
 		     the CC state, so the fresh register carries the
 		     complete value from the root on and no disabled
-		     lane can expose dead bits (DESIGN-V2 Rule A,
+		     lane can expose dead bits (preservation-seed Rule A,
 		     carried into the atom interior by the mod-2
 		     lane-immunity fact).  */
 		  bool full_lane_root = bare_lreg_copy_p (all[i].insn)
@@ -6831,10 +6831,9 @@ make_pass_rvtt_schedule (gcc::context *ctxt)
    executes the drain once per run where the architecture requires it
    only before the first genuinely conflicting follower access.
 
-   Architectural basis (the corrected simulator's adjudicated retirement
-   semantics, craq-sim 9f324140 src/tensix.cpp:9820-9945, pinned to the
-   BlackholeA0 SFPLOADMACRO functional spec; recorded in the
-   pre-registered design ~/sfpi-uplift/drain-study-20260818):
+   Architectural basis (the reference simulator's adjudicated
+   retirement semantics, pinned to the BlackholeA0 SFPLOADMACRO
+   functional spec):
 
      Launch-latched state (safe to mutate while events are in flight):
        L1  the store event's Dst row (dst_rwc + imm10 + DEST_TARGET
@@ -6956,7 +6955,7 @@ struct drain_horizon
    descriptor's OWN sequence words through the established SequenceBits
    format (rvtt-macro-tables.h: byte i programs sub-unit i; case = bits
    2:0, the event executes at issue + 1 + delay(bits 5:3); provenance
-   docs/TIMING_CALENDAR_DERIVATION.md 1-2).  The frozen whole-word
+   the derivation notes in rvtt-macro-derive-core.h).  The frozen whole-word
    programs left per-event delays untranscribed in the schedule
    (DELAY_UNKNOWN), but the words themselves carry them -- decoding
    the emitted words is the one derivation that can never drift from

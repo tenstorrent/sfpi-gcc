@@ -97,8 +97,8 @@ extern void rvtt_refusal_fire_composed (const char *prefix,
 extern unsigned rvtt_refusal_count (enum rvtt_refusal);
 extern void rvtt_refusal_print_counts (FILE *);
 
-/* The licensed-refusal invariants (AUDIT-licensed-folds.md section
-   1.6), mechanically enforced: token absent => the standing named
+/* The licensed-refusal invariants, mechanically enforced: token
+   absent => the standing named
    refusal fires and the caller must change nothing; token present but
    proof class out of scope => the same standing refusal fires
    regardless (the WH INT32_SM pattern).  Returns true only when the

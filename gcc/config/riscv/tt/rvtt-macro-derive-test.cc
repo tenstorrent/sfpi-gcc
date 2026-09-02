@@ -18,7 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* THE EXECUTABLE FORM OF THE PAPER VALIDATION
-   (docs/TIMING_CALENDAR_DERIVATION.md section 3): the derivation core, fed
+   (see rvtt-macro-derive-core.h): the derivation core, fed
    only each frozen calendar's SCHEDULE, must reproduce the
    independently recorded frozen sequence words bit-exactly, reproduce
    the handwritten MulInt32 descriptor's words, and refuse the shapes

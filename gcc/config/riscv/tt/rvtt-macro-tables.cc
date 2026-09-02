@@ -714,7 +714,7 @@ setrwc_decode (uint32_t word, setrwc_fields *f)
 /*  (S3) tt_llk_blackhole ckernel_sfpu_mul_int.h _init_mul_int_ --    */
 /*       the production handwritten descriptor with author-annotated  */
 /*       field meanings.					      */
-/* See docs/TIMING_CALENDAR_DERIVATION.md section 1-3 (including the	      */
+/* See the derivation notes in rvtt-macro-derive-core.h (including the	      */
 /* byte-exact re-derivation of every frozen calendar word above).     */
 /* ------------------------------------------------------------------ */
 
@@ -951,17 +951,16 @@ derived_stride_absorption_proven (const caps *c)
 {
   /* BH: the derived unary max/min calendar (absorbed stride through
      the owned single-slot SETC16 program, launch auto-increment mode)
-     is CRAQ bit-exact through the generic simulator path.  WH: the
-     former refusal's grounding failure (laneR1 wh-onma trace,
-     2026-08-17: position-shuffled tiles after the first, every
-     latched launch dst_row/mask correct) was adjudicated as the
-     dual-slot SETC16 program clobbering LLK's live base-0 ADDR_MOD_2
-     and corrupting the NEXT tile's datacopy (sfpi-gcc 2a0ba1e6602;
-     laneAJ-evidence-20260817) -- the machinery was wrong, not
-     unproven.  With this table's corrected single-slot Base=1 program
-     the derived absorbed-stride calendar is CRAQ bit-exact on the
-     faithful WH sim (wh 8f0079a9; laneAP evidence, derived unary
-     max/min multi-tile).  QSR has no capability entry and refuses.  */
+     is bit-exact against the reference simulator through the generic
+     path.  WH: the former refusal's grounding failure (hardware trace:
+     position-shuffled tiles after the first, every latched launch
+     dst_row/mask correct) was adjudicated as the dual-slot SETC16
+     program clobbering LLK's live base-0 ADDR_MOD_2 and corrupting the
+     NEXT tile's datacopy -- the machinery was wrong, not unproven.
+     With this table's corrected single-slot Base=1 program the derived
+     absorbed-stride calendar is bit-exact on the faithful WH reference
+     simulator (derived unary max/min multi-tile).  QSR has no
+     capability entry and refuses.  */
   return c && (c->cpu == CPU_BH || c->cpu == CPU_WH);
 }
 

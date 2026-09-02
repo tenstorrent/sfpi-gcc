@@ -17,9 +17,8 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* This pass is the M2 milestone allocator (SFPI_COMPILER_UPGRADE.md
-   section 4), replacing the former dump-only audit stub.  It has two
-   independent layers:
+/* The SFPU vector-register (LREG) allocator, replacing the former
+   dump-only audit stub.  It has two independent layers:
 
    1. The pre-IRA pressure audit (under
       -mtt-tensix-optimize-pressure-schedule, byte-identical to the

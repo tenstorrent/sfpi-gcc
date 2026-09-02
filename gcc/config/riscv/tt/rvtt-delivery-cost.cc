@@ -19,10 +19,8 @@ along with GCC; see the file COPYING3.  If not see
 
 /* This translation unit is the ONLY consumer that turns the
    rvtt-cost.md `define_constants' delivery economics into arithmetic
-   (via the IR-free core, rvtt-delivery-cost-core.h) -- see the item
-   #12 charter in FABLE_GOES_BURR.md and the audit citations
-   (AUDIT-cost-model-refusals.md impr.3, AUDIT-replay-formation.md
-   impr.2, AUDIT-addressing-delivery.md impr.1).  */
+   (via the IR-free core, rvtt-delivery-cost-core.h).  New pricing
+   arithmetic belongs here, never in a pass.  */
 
 #define IN_TARGET_CODE 1
 

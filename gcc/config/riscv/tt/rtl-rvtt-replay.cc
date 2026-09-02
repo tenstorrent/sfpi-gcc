@@ -1787,12 +1787,11 @@ fixed_replay_rtx_p (const_rtx x)
    are exactly the provable trip count, the capture length, the longest
    contiguous sibling-launch run, and the cost-table constants.  */
 
-/* Interlock-aware replay-hoist pricing (2026-08-18 recalibration; Lane
-   BP's five-shape diagnosis + 14-shape silicon validation matrix,
-   laneBP-evidence-20260818/DIAGNOSIS-AND-FIX-SPEC-laneBP.md; re-record
-   branch re-derived 2026-08-19 against the Reduce-class and Log-class
-   silicon anchors after the first spelling inverted both -- full
-   derivation and the five-anchor table in rvtt-cost.md).
+/* Interlock-aware replay-hoist pricing (recalibrated from a
+   five-shape diagnosis validated by a 14-shape hardware matrix; the
+   re-record branch was re-derived against the Reduce-class and
+   Log-class hardware anchors after the first spelling inverted both --
+   full derivation and the five-anchor table in rvtt-cost.md).
 
    The delivery-only model priced the replay reissue stall-free
    (after = max(PUSH, len*SLOT)): on serially-chained short bodies that
@@ -2058,14 +2057,14 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      in-body world re-delivers the capture word plus the payload every trip
      where the hoisted world delivers one launch word, a per-trip saving of
      `words' pushed words, bought once at the preheader record's full
-     delivery plus the record-engine overhead.  This is the DX-F3
-     issue-side accounting (laneDX-evidence-20260820, lcm decomposition:
-     the in-loop `ttreplay 0,len,1,1' re-delivers len words per row while
-     the hand kernel records once at init).  The default model's
+     delivery plus the record-engine overhead.  This is the issue-side
+     accounting (measured decomposition: the in-loop `ttreplay 0,len,1,1'
+     re-delivers len words per row while a hand-scheduled reference
+     kernel records once at init).  The default model's
      saturation/MAX pricing keeps the opposite verdict for this class from
-     the Log-class silicon anchors (rvtt-cost.md, re-record derivation);
-     this flag exists to build the silicon A/B legs for the DX-F3 class,
-     the same measurement-flag pattern as -mtt-tensix-mop-form-force --
+     the Log-class hardware anchors (rvtt-cost.md, re-record derivation);
+     this flag exists to build the hardware A/B measurement legs for this
+     class, the same measurement-flag pattern as -mtt-tensix-mop-form-force --
      with the difference that every structural proof still gates admission
      and the delivery model itself is monotone: for proven trips >= 2 the
      hoisted world delivers strictly fewer words on every execution.  */
@@ -2074,11 +2073,11 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
     {
       /* The hoisted world converts the first clone from inline delivery
 	 to one more playback launch per trip: charge that added launch
-	 boundary at the audited turnaround constant.  Lane EE's
+	 boundary at the audited turnaround constant.  Hardware
 	 calibration measured 1.3-1.8 cycles per launch boundary on
-	 serial-chain windows (laneEE-evidence-20260821, boundary fits on
-	 ceil/log/rsqrt) -- above the 0.7-slot table constant; the
-	 under-charge (~60-110 cs/trip) is absorbed by the MIN_BENEFIT
+	 serial-chain windows (boundary fits on ceil/log/rsqrt kernels)
+	 -- above the 0.7-slot table constant; the under-charge
+	 (~60-110 cs/trip) is absorbed by the MIN_BENEFIT
 	 margin and noted in rvtt-cost.md.  */
       HOST_WIDE_INT record_once = price.record_once;
       HOST_WIDE_INT per_trip = price.per_trip;
@@ -7380,12 +7379,12 @@ unhoist_hazard_rerecords (function *cfn)
 	 store can be delivered from a launch the record never executed
 	 before, on a sibling CFG path or, since the per-thread Replay
 	 Expander buffer PERSISTS across the soft-reset kernel-invocation
-	 boundary (lane FS silicon model, laneFS-evidence-20260822: EXP-1
-	 cross-invocation + EXP-2 within-launch cross-function delivery),
+	 boundary (hardware-established persistence model: cross-invocation
+	 and within-launch cross-function delivery both demonstrated),
 	 from a caller-loop re-entry or an entirely later kernel.  The
-	 intra-function reach walks (FJ dst-autoincr, FL W_drain) cannot
-	 see that consumer; forming the adjacency is the same silicon-
-	 refuted wedge (ES 2x2 / FE-F1 / FJ HANG-3), so fail closed.  The
+	 intra-function reach walks (dst-autoincr, W_drain) cannot
+	 see that consumer; forming the adjacency is the same hardware-
+	 refuted wedge class, so fail closed.  The
 	 dominating-preamble class (xielu/gcd/lcm init record dominates its
 	 in-loop launches, all device PASS) is preserved: a dominating
 	 record executes before every launch in the same invocation.  All

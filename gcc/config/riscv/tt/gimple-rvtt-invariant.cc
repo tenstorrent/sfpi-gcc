@@ -1497,9 +1497,10 @@ transform (function *fn)
 	     point, lane HT's machinery); an early depth-zero hoist
 	     moves the coefficient out from under that discovery and
 	     the 5-word LUT row decays to a mov-laden 7-word body
-	     (silicon: 29861 -> 43447 under an unconditional keep;
-	     byte-identical under this gate).  The kept-hoist evidence
-	     rows (ceil/rops/rdiv/sqrt/softsign/i0, hardsigmoid) carry
+	     (measured on hardware: 29861 -> 43447 cycles under an
+	     unconditional keep; byte-identical under this gate).  The
+	     kernels whose measurements justified keeping the hoist
+	     (ceil/rops/rdiv/sqrt/softsign/i0, hardsigmoid) carry
 	     no LUT statement.  */
 	  bool lut_body = false;
 	  basic_block *nest = get_loop_body (loop);

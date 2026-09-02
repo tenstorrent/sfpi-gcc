@@ -53,8 +53,9 @@ along with GCC; see the file COPYING3.  If not see
    {sign clear and encoding != 0}: the same set, including both zeros,
    both NaN sign classes, and infinities.  AND with ~0/0 reproduces the
    lane merge exactly.  The mirrored argument covers "x > 0.0f" with
-   SFPLE.  A host-side exhaustive sweep over all 2^32 x encodings of
-   both lane models accompanies the lane evidence.
+   SFPLE.  The in-tree proof artifact tt/proofs/ccmask-direction-complete/
+   records the host-side exhaustive sweep over all 2^32 x encodings of
+   both lane models.
 
    The strict directions complete the family with the SWAPPED operand
    order.  "x < 0.0f" lowers to the single SETCC mod0 (raw sign bit

@@ -134,9 +134,9 @@ build/genrvtt-combine.o: $(srcdir)/config/riscv/tt/genrvtt-combine.cc
 rvtt-combine.inc: build/genrvtt-combine$(build_exeext) $(srcdir)/config/riscv/tt/rvtt.gc
 	$(RUN_GEN) $^ $@
 
-# FABLE_GOES_BURR.md item #1: the refusal catalogue is a generated
-# build artifact (never re-derived by hand), and generating it enforces
-# the registry invariants at build time:
+# The refusal catalogue is a generated build artifact (never
+# re-derived by hand), and generating it enforces the registry
+# invariants at build time:
 #   - name-string uniqueness across rvtt-refusals.def (duplicate enum
 #     ids already break the build via the enum);
 #   - append-only coverage: every string literal passed to a
@@ -168,7 +168,7 @@ rvtt-refusals.txt: $(srcdir)/config/riscv/tt/rvtt-refusals.def \
 
 rvtt-refuse.o: rvtt-refusals.txt
 
-# Store-fold format-pair verdict table (FABLE_GOES_BURR item #3).
+# Store-fold format-pair verdict table.
 # tt/rvtt-storefold-verdicts.def is GENERATED from its sources of
 # truth -- the exhaustive proof RESULT files below -- by
 # genrvtt-storefold.  Every build regenerates the table into a scratch

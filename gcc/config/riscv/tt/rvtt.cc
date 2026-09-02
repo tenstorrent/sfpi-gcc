@@ -551,8 +551,7 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
 static bool
 rvtt_native_compare_gtle_p (rtx v)
 {
-  /* Named telemetry for the previously silent unit (plan item #1;
-     AUDIT-interprocedural.md native-compare).  */
+  /* Named telemetry for the previously silent unit.  */
   if (!TARGET_XTT_TENSIX_BH || !riscv_tt_opt_native_compare)
     {
       rvtt_refuse (RVTT_REF_NATIVE_COMPARE_TARGET_UNGATED, dump_file,

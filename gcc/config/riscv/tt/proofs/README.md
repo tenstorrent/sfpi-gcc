@@ -6,7 +6,7 @@ verbatim from the pinned craq-sim with file:line provenance), the swept
 result with SHA256 stream commitments, and the matched cut's gimple.
 A rule may ship in rvtt.gc ONLY citing a directory here whose RESULT is
 EQUAL over the full input space; a NOT-EQUAL result is a standing named
-refusal (see the NOTES-*-refusal-*.md records) so the cut is never
+refusal (a permanent row in tt/rvtt-refusals.def) so the cut is never
 re-mined.
 
 - cast-fp16a-rne/ — castfp32tofp16a software-RNE cut vs SFP_STOCH_RND
@@ -35,14 +35,12 @@ re-mined.
   INT32_2S_COMP conversion-in-load (cast-free) form. Amount dimension
   EQUAL (2^32); value dimension NOT-EQUAL (92,341,796,868 over 32x2^32,
   two exact closed-form classes, other=0; sound only at k=0 and k=31).
-  Refusal: sm32-cast-elision-refuted. laneCU 2026-08-20
-  (NOTES-sm32-cast-elision-refusal-laneCU.md).
+  Refusal: sm32-cast-elision-refuted.
 - shft-imm-vs-reg/ — SFPSHFT dynamic-immediate form vs register form,
   per amount k in [0,31] x 2^32 values. EQUAL (0 mismatches every
   stratum). Pre-discharged obligation for a FUTURE loop-invariant
   amount-materialization (formation) mechanism on the unaryshift row;
-  no rule attached here (NOTES-unaryshift-adjudication-laneCU.md).
-  laneCU 2026-08-20.
+  no rule attached here.
 - int-not-allones-subtract/ — one's complement stated as (-1) - v
   (SFPIADD mod1=2SCOMP|CC_NONE with all-ones minuend) vs SFPNOT.
   EQUAL (0/2^32; streams hash-identical).  LICENSES the rvtt_int_not

@@ -19,7 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Pure derivation of per-macro SEQUENCE WORDS and per-event DELAYS from
    a scheduled row, using only the architectural facts in the capability
-   tables (docs/TIMING_CALENDAR_DERIVATION.md section 2, section 4.3).  Freestanding
+   tables (rvtt-macro-tables.{h,cc} and their .def rows).  Freestanding
    (tables + <stdint.h>), shared between descriptor synthesis, the
    Layer-7 verifier's expectation builder, and the standalone
    reproduction unit test rvtt-macro-derive-test.cc, which pins this
