@@ -479,7 +479,7 @@ lpsolve_model::solve ()
   return solution;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rvtt_solver_solution
 rvtt_lpsolve_schedule (const rvtt_sched_problem &problem)

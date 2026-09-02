@@ -1010,7 +1010,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_dst_ownership (gcc::context *ctxt)

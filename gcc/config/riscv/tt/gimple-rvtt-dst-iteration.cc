@@ -523,7 +523,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_dst_iteration (gcc::context *ctxt)
@@ -932,7 +932,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_dst_interleave (gcc::context *ctxt)

@@ -186,7 +186,7 @@ struct bb_state
   basic_block drain_pred;
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rvtt_cc_region_tree::rvtt_cc_region_tree (function *fn)
   : m_fn (fn), m_root (nullptr), m_map (nullptr), m_opened (nullptr)

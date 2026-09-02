@@ -287,7 +287,7 @@ resolve_int_cst (tree t, HOST_WIDE_INT *out, int depth = 0)
     }
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Bounded forward evaluation of a single-block counted loop's own scalar
    control (the same discipline as the programmable-constant pass's trip
@@ -1746,7 +1746,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_replay_unroll (gcc::context *ctxt)

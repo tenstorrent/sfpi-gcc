@@ -1096,7 +1096,7 @@ replay_insn_ck (replay_walk *ctx, rtx_insn *insn)
   return "unrecognized instruction";
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* See rvtt-macro-epoch.h.  */
 

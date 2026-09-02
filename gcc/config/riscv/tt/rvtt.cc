@@ -80,7 +80,7 @@ rvtt_init_builtins ()
 #include "rvtt-insn.def"
   };
 
-  // Process overrides
+  /* Process overrides */
   for (auto const &ovr : overrides)
     if (ovr.avail ())
       sfpu_insn_data[ovr.index].override (ovr.flags, ovr.ops);
@@ -93,7 +93,7 @@ rvtt_init_builtins ()
 void
 rvtt_insn_data::init ()
 {
-  // Compute derived fields;
+  /* Compute derived fields; */
   int argno = 0, ix = 0;
   tree arg_types = TYPE_ARG_TYPES (TREE_TYPE (decl));
 
@@ -130,7 +130,7 @@ rvtt_insn_data::init ()
 
   if (has_var ())
     {
-      // imm, var & id operands
+      /* imm, var & id operands */
       ops.set_argno (ix, argno);
       arg_types = TREE_CHAIN (arg_types);
 
@@ -174,7 +174,7 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     return false;
 
   if (ix < 300)
-    // Save a bunch of strcmps on the grounds there are at least this many others.
+    /* Save a bunch of strcmps on the grounds there are at least this many others.  */
     return false;
 
   unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
@@ -318,49 +318,49 @@ void rvtt_mov_error (const rtx_insn *insn)
   free (buffer);
 }
 
-// If a stmt's single use args aren't tracked back to their
-// defs and deleted prior to deleting the stmt, errors occur w/
-// flag_checking=1
-// There has to be an internal version of this...
-void rvtt_prep_stmt_for_deletion(gimple *stmt)
+/* If a stmt's single use args aren't tracked back to their
+   defs and deleted prior to deleting the stmt, errors occur w/
+   flag_checking=1
+   There has to be an internal version of this...  */
+void rvtt_prep_stmt_for_deletion (gimple *stmt)
 {
-  // Any SSA definition removed by an RVTT lowering may still be named by
-  // GIMPLE_DEBUG_BIND statements when compiling with -g.  Debug uses are not
-  // semantic uses and must not keep an otherwise-deleted definition alive.
+  /* Any SSA definition removed by an RVTT lowering may still be named by
+     GIMPLE_DEBUG_BIND statements when compiling with -g.  Debug uses are not
+     semantic uses and must not keep an otherwise-deleted definition alive.  */
   reset_debug_uses (stmt);
 
   for (unsigned int i = 0; i < gimple_call_num_args (stmt); i++)
     {
-      tree arg = gimple_call_arg(stmt, i);
+      tree arg = gimple_call_arg (stmt, i);
 
-      if (TREE_CODE(arg) == SSA_NAME && num_imm_uses (arg) == 1)
+      if (TREE_CODE (arg) == SSA_NAME && num_imm_uses (arg) == 1)
 	{
 	  gimple *def_g = SSA_NAME_DEF_STMT (arg);
 
 	  if (def_g->code == GIMPLE_PHI)
 	    {
-	      // XXXX handle phi
-	      // this seems to work fine and SSA checks are ok w/ doing nothing
+	      /* XXXX handle phi
+	         this seems to work fine and SSA checks are ok w/ doing nothing */
 	    }
 	  else if (def_g->code == GIMPLE_CALL)
 	    {
 	      tree lhs_name = gimple_call_lhs (def_g);
-	      gimple_call_set_lhs(def_g, NULL_TREE);
-	      release_ssa_name(lhs_name);
+	      gimple_call_set_lhs (def_g, NULL_TREE);
+	      release_ssa_name (lhs_name);
 	      update_stmt (def_g);
 	    }
 	  else if (def_g->code == GIMPLE_ASSIGN)
 	    {
-	      unlink_stmt_vdef(def_g);
-	      gimple_stmt_iterator gsi = gsi_for_stmt(def_g);
-	      gsi_remove(&gsi, true);
-	      release_defs(def_g);
+	      unlink_stmt_vdef (def_g);
+	      gimple_stmt_iterator gsi = gsi_for_stmt (def_g);
+	      gsi_remove (&gsi, true);
+	      release_defs (def_g);
 	    }
 	}
     }
 }
 
-// Generate the assembly for an sfpsynt_insn{,_dst} insn.
+/* Generate the assembly for an sfpsynt_insn{,_dst} insn.  */
 
 const char *
 rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
@@ -369,7 +369,7 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   if (!is_synthed || tmpl[0] == '#')
     return tmpl;
 
-  operands += is_set; // Whee!
+  operands += is_set; /* Whee!  */
 
   auto enc = rvtt_synth (INTVAL (operands[rvtt_synth::IX_encode]));
   uint32_t reg_mask = 0;
@@ -413,10 +413,10 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   unsigned pos = 0;
   if (uint32_t reg_change = (opcode & reg_mask) ^ reg_ops)
     {
-      // The register assignments here are different from those of the
-      // first synth encountered.  We must adjust the incomming
-      // pattern.
-      // Swap, so the templ prints the temp reg
+      /* The register assignments here are different from those of the
+         first synth encountered.  We must adjust the incomming
+         pattern.
+         Swap, so the templ prints the temp reg */
       std::swap (operands[rvtt_synth::IX_insn], operands[tmp_ix - is_set]);
       opcode ^= reg_change;
       operands[rvtt_synth::IX_opcode] = gen_rtx_CONST_INT (SImode, reg_change);
@@ -545,113 +545,113 @@ rvtt_substitute_value (tree orig, tree replacement)
 
 static bool rvtt_has_attrib_p(const char *attrib, rtx pat)
 {
-  if (GET_CODE(pat) == ZERO_EXTEND ||
-      GET_CODE(pat) == SIGN_EXTEND)
+  if (GET_CODE (pat) == ZERO_EXTEND ||
+      GET_CODE (pat) == SIGN_EXTEND)
     {
-      pat = XEXP(pat, 0);
+      pat = XEXP (pat, 0);
     }
 
-  if (GET_CODE(pat) == MEM &&
-      MEM_EXPR(pat) != NULL_TREE)
+  if (GET_CODE (pat) == MEM &&
+      MEM_EXPR (pat) != NULL_TREE)
     {
-      tree exp = MEM_EXPR(pat);
-      if (TREE_CODE(exp) == PARM_DECL ||
-	  TREE_CODE(exp) == VAR_DECL)
+      tree exp = MEM_EXPR (pat);
+      if (TREE_CODE (exp) == PARM_DECL ||
+	  TREE_CODE (exp) == VAR_DECL)
 	{
-	  // Top level PARM/VAR DECL's are address calculation
-	  // (fingers crossed...)
+	  /* Top level PARM/VAR DECL's are address calculation
+	     (fingers crossed...) */
 	  return false;
 	}
 
-      while (TREE_CODE(exp) != MEM_REF &&
-	     TREE_CODE(exp) != TARGET_MEM_REF &&
-	     TREE_CODE(exp) != PARM_DECL &&
-	     TREE_CODE(exp) != VAR_DECL)
+      while (TREE_CODE (exp) != MEM_REF &&
+	     TREE_CODE (exp) != TARGET_MEM_REF &&
+	     TREE_CODE (exp) != PARM_DECL &&
+	     TREE_CODE (exp) != VAR_DECL)
 	{
-	  if (TREE_CODE(exp) == ARRAY_REF ||
-	      TREE_CODE(exp) == COMPONENT_REF ||
-	      TREE_CODE(exp) == BIT_FIELD_REF ||
-	      TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
-	      TREE_CODE(exp) == REALPART_EXPR ||
-	      TREE_CODE(exp) == IMAGPART_EXPR)
+	  if (TREE_CODE (exp) == ARRAY_REF ||
+	      TREE_CODE (exp) == COMPONENT_REF ||
+	      TREE_CODE (exp) == BIT_FIELD_REF ||
+	      TREE_CODE (exp) == VIEW_CONVERT_EXPR ||
+	      TREE_CODE (exp) == REALPART_EXPR ||
+	      TREE_CODE (exp) == IMAGPART_EXPR)
 	    {
-	      exp = TREE_OPERAND(exp, 0);
+	      exp = TREE_OPERAND (exp, 0);
 	    }
-	  else if (TREE_CODE(exp) == STRING_CST ||
-		   TREE_CODE(exp) == VECTOR_CST ||
-		   TREE_CODE(exp) == RESULT_DECL)
+	  else if (TREE_CODE (exp) == STRING_CST ||
+		   TREE_CODE (exp) == VECTOR_CST ||
+		   TREE_CODE (exp) == RESULT_DECL)
 	    {
-	      // CST won't be in L1
+	      /* CST won't be in L1 */
 	      return false;
 	    }
 	  else
 	    {
-	      debug_rtx(pat);
-	      debug_tree(MEM_EXPR(pat));
-	      gcc_unreachable();
+	      debug_rtx (pat);
+	      debug_tree (MEM_EXPR (pat));
+	      gcc_unreachable ();
 	    }
 	}
-      gcc_assert(TREE_CODE(exp) == MEM_REF ||
-		 TREE_CODE(exp) == TARGET_MEM_REF ||
-		 TREE_CODE(exp) == PARM_DECL ||
-		 TREE_CODE(exp) == VAR_DECL);
+      gcc_assert (TREE_CODE (exp) == MEM_REF ||
+		 TREE_CODE (exp) == TARGET_MEM_REF ||
+		 TREE_CODE (exp) == PARM_DECL ||
+		 TREE_CODE (exp) == VAR_DECL);
 
-      tree decl = (TREE_CODE(exp) == PARM_DECL ||
-		   TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+      tree decl = (TREE_CODE (exp) == PARM_DECL ||
+		   TREE_CODE (exp) == VAR_DECL) ? exp : TREE_OPERAND (exp, 0);
       if (decl != NULL_TREE &&
-	  lookup_attribute(attrib, TYPE_ATTRIBUTES(TREE_TYPE(decl))))
+	  lookup_attribute (attrib, TYPE_ATTRIBUTES (TREE_TYPE (decl))))
 	return true;
     }
 
   return false;
 }
 
-bool rvtt_store_has_restrict_p(const rtx pat)
+bool rvtt_store_has_restrict_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      rtx dst = SET_DEST(pat);
+      rtx dst = SET_DEST (pat);
 
-      if (GET_CODE(dst) == MEM &&
-	  MEM_EXPR(dst) != NULL_TREE)
+      if (GET_CODE (dst) == MEM &&
+	  MEM_EXPR (dst) != NULL_TREE)
 	{
-	  tree exp = MEM_EXPR(dst);
-	  while (TREE_CODE(exp) != MEM_REF &&
-		 TREE_CODE(exp) != TARGET_MEM_REF &&
-		 TREE_CODE(exp) != PARM_DECL &&
-		 TREE_CODE(exp) != VAR_DECL)
+	  tree exp = MEM_EXPR (dst);
+	  while (TREE_CODE (exp) != MEM_REF &&
+		 TREE_CODE (exp) != TARGET_MEM_REF &&
+		 TREE_CODE (exp) != PARM_DECL &&
+		 TREE_CODE (exp) != VAR_DECL)
 	    {
-	      if (TREE_CODE(exp) == ARRAY_REF ||
-		  TREE_CODE(exp) == COMPONENT_REF ||
-		  TREE_CODE(exp) == BIT_FIELD_REF ||
-		  TREE_CODE(exp) == VIEW_CONVERT_EXPR ||
-		  TREE_CODE(exp) == REALPART_EXPR ||
-		  TREE_CODE(exp) == IMAGPART_EXPR)
+	      if (TREE_CODE (exp) == ARRAY_REF ||
+		  TREE_CODE (exp) == COMPONENT_REF ||
+		  TREE_CODE (exp) == BIT_FIELD_REF ||
+		  TREE_CODE (exp) == VIEW_CONVERT_EXPR ||
+		  TREE_CODE (exp) == REALPART_EXPR ||
+		  TREE_CODE (exp) == IMAGPART_EXPR)
 		{
-		  exp = TREE_OPERAND(exp, 0);
+		  exp = TREE_OPERAND (exp, 0);
 		}
-	      else if (TREE_CODE(exp) == STRING_CST ||
-		       TREE_CODE(exp) == VECTOR_CST ||
-		       TREE_CODE(exp) == RESULT_DECL)
+	      else if (TREE_CODE (exp) == STRING_CST ||
+		       TREE_CODE (exp) == VECTOR_CST ||
+		       TREE_CODE (exp) == RESULT_DECL)
 		{
 		  return false;
 		}
 	      else
 		{
-		  debug_rtx(pat);
-		  debug_tree(MEM_EXPR(dst));
-		  gcc_unreachable();
+		  debug_rtx (pat);
+		  debug_tree (MEM_EXPR (dst));
+		  gcc_unreachable ();
 		}
 	    }
-	  gcc_assert(TREE_CODE(exp) == MEM_REF ||
-		     TREE_CODE(exp) == TARGET_MEM_REF ||
-		     TREE_CODE(exp) == PARM_DECL ||
-		     TREE_CODE(exp) == VAR_DECL);
+	  gcc_assert (TREE_CODE (exp) == MEM_REF ||
+		     TREE_CODE (exp) == TARGET_MEM_REF ||
+		     TREE_CODE (exp) == PARM_DECL ||
+		     TREE_CODE (exp) == VAR_DECL);
 
-	  tree decl = (TREE_CODE(exp) == PARM_DECL ||
-		       TREE_CODE(exp) == VAR_DECL) ? exp : TREE_OPERAND(exp, 0);
+	  tree decl = (TREE_CODE (exp) == PARM_DECL ||
+		       TREE_CODE (exp) == VAR_DECL) ? exp : TREE_OPERAND (exp, 0);
 	  if (decl != NULL_TREE &&
-	      TYPE_RESTRICT(TREE_TYPE(decl)))
+	      TYPE_RESTRICT (TREE_TYPE (decl)))
 	    {
 	      return true;
 	    }
@@ -661,21 +661,21 @@ bool rvtt_store_has_restrict_p(const rtx pat)
   return false;
 }
 
-bool rvtt_l1_load_p(const rtx pat)
+bool rvtt_l1_load_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_SRC(pat));
+      return rvtt_has_attrib_p ("rvtt_l1_ptr", SET_SRC (pat));
     }
 
   return false;
 }
 
-bool rvtt_reg_load_p(const rtx pat)
+bool rvtt_reg_load_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_SRC(pat));
+      return rvtt_has_attrib_p ("rvtt_reg_ptr", SET_SRC (pat));
     }
 
   return false;
@@ -683,19 +683,19 @@ bool rvtt_reg_load_p(const rtx pat)
 
 bool rvtt_l1_store_p(const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_l1_ptr", SET_DEST(pat));
+      return rvtt_has_attrib_p ("rvtt_l1_ptr", SET_DEST (pat));
     }
 
   return false;
 }
 
-bool rvtt_reg_store_p(const rtx pat)
+bool rvtt_reg_store_p (const rtx pat)
 {
-  if (GET_CODE(pat) == SET)
+  if (GET_CODE (pat) == SET)
     {
-      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_DEST(pat));
+      return rvtt_has_attrib_p ("rvtt_reg_ptr", SET_DEST (pat));
     }
 
   return false;

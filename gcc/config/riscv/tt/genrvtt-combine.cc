@@ -144,7 +144,7 @@ struct Code {
 };
 
 class Lexer {
-  // WARNING: Embedded NUL chars will be treated as EOF
+  /* WARNING: Embedded NUL chars will be treated as EOF */
 
 public:
   unsigned lineno = 1;
@@ -229,7 +229,7 @@ void Stream::print (int n) { fprintf (fd, "%d", n); }
 template<>
 void Stream::print (std::size_t n) { fprintf (fd, "%zu", n); }
 
-void __attribute__((format (printf, 2, 3)))
+void __attribute__ ((format (printf, 2, 3)))
 Lexer::error (char const *fmt, ...)
 {
   fprintf (stderr, "%s:%d: ", name, lineno);
@@ -303,14 +303,14 @@ Lexer::next () {
 	      return ptr;
 
 	    case '/':
-	      // Line comment
+	      /* Line comment */
 	      while (*++ptr)
 		if (*ptr == '\n')
 		  break;
 	      continue;
 
 	    case '*':
-	      // Block comment
+	      /* Block comment */
 	      while (*++ptr)
 		if (*ptr == '\n')
 		  lineno++;
@@ -358,7 +358,7 @@ Lexer::consume_expr (std::string_view &res, bool optional)
       || (*start >= 'A' && *start <= 'Z')
       || *start == '(')
     {
-      // Consume balanced parens until , or )
+      /* Consume balanced parens until , or ) */
       unsigned depth = 0;
       while (advance (1), true)
 	{
@@ -418,7 +418,7 @@ Lexer::consume_code (Code &res, bool optional)
 	    }
 	  else if (c == '"' || c == '\'')
 	    {
-	      // skip string
+	      /* skip string */
 	      auto p = pos () + 1;
 	      for (; *p && *p != c; p++)
 		if (*p == '\\'
@@ -683,8 +683,8 @@ Combine::parse (Lexer &lexer)
   if (!lexer.consume ('}'))
     return false;
 
-  // Remap Vars so that they are ordered as
-  // pat/lhs, rep/lhs, pat/arg, rep/arg
+  /* Remap Vars so that they are ordered as
+     pat/lhs, rep/lhs, pat/arg, rep/arg */
   std::sort (vars.begin (), vars.end (),
 	     [] (Var const &a, Var const & b) {
 	       if (a.is_lhs != b.is_lhs) return a.is_lhs;
@@ -702,7 +702,7 @@ Combine::parse (Lexer &lexer)
   for (unsigned ix = vars.size (); --ix;)
       remap[vars[ix].remap] = ix;
 
-  // Compute the patterns' used_by masks
+  /* Compute the patterns' used_by masks */
   for (unsigned ix = pats.size (); ix--;)
     {
       unsigned use = 0;
@@ -717,7 +717,7 @@ Combine::parse (Lexer &lexer)
       pats[ix].used_by_mask = use;
     }
 
-  // Compute replace & rep_use masks;
+  /* Compute replace & rep_use masks; */
   for (unsigned ix = reps.size (); ix--;)
     {
       auto &rep = reps[ix];
@@ -902,7 +902,7 @@ main (int argc, const char **argv)
       out.print ("\n");
     }
 
-  // Emit hook functions
+  /* Emit hook functions */
   unsigned max_args = 0;
   unsigned max_vars = 0;
   unsigned max_pats = 0;

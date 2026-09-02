@@ -727,7 +727,7 @@ region_scanner::scan_bb (basic_block bb)
   finalize_region (bb);
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 void
 rvtt_macro_regions_discover (function *fn, FILE *dump,

@@ -206,7 +206,7 @@ loop_header_has_exit_p (class loop *loop)
   return false;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* BB provably executes on the first iteration of LOOP entered through
    ENTRY (rvtt-macro-ownership.h).  */
@@ -511,7 +511,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 gimple_opt_pass *
 make_pass_rvtt_crossloop (gcc::context *ctxt)

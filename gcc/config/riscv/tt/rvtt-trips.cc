@@ -134,13 +134,13 @@ along with GCC; see the file COPYING3.  If not see
    matching; no operation identity, opcode calendar, coefficient pattern,
    or instruction-word fingerprint participates.  */
 
-// Walk backwards from the end of PREHEADER through the unique-predecessor
-// chain looking for the last definition of REG.  Return true and set *VALUE
-// if that definition is a simple constant load; refuse on any other
-// definition or on a call (potential clobber).  Only a unique predecessor is
-// followed, so this remains a reaching-definition proof rather than a guess;
-// the visited set makes malformed or cyclic predecessor chains fail closed
-// without making the result depend on the number of harmless CFG splits.
+/* Walk backwards from the end of PREHEADER through the unique-predecessor
+   chain looking for the last definition of REG.  Return true and set *VALUE
+   if that definition is a simple constant load; refuse on any other
+   definition or on a call (potential clobber).  Only a unique predecessor is
+   followed, so this remains a reaching-definition proof rather than a guess;
+   the visited set makes malformed or cyclic predecessor chains fail closed
+   without making the result depend on the number of harmless CFG splits.  */
 bool
 rvtt_constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
 {
@@ -172,8 +172,8 @@ rvtt_constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
   return false;
 }
 
-// Evaluate an integer condition CODE on VAL0, VAL1, both already reduced to
-// PREC-bit values.  Signed comparisons sign-extend from PREC.
+/* Evaluate an integer condition CODE on VAL0, VAL1, both already reduced to
+   PREC-bit values.  Signed comparisons sign-extend from PREC.  */
 static bool
 eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
 		    unsigned prec)
@@ -201,13 +201,13 @@ eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
     }
 }
 
-// Prove the constant trip count of single-block LOOP whose dedicated
-// preheader is PREHEADER.  Return true and set *TRIPS (number of times the
-// loop body executes) on success; any structural mismatch refuses.  On
-// success the optional outputs receive the loop's single counter-step insn
-// (*STEP_OUT) and the counter's proven value at loop exit (*FINAL_OUT,
-// reduced to the counter mode's precision) -- the launch-loop unroll
-// consumes them to replace the removed per-trip updates.
+/* Prove the constant trip count of single-block LOOP whose dedicated
+   preheader is PREHEADER.  Return true and set *TRIPS (number of times the
+   loop body executes) on success; any structural mismatch refuses.  On
+   success the optional outputs receive the loop's single counter-step insn
+   (*STEP_OUT) and the counter's proven value at loop exit (*FINAL_OUT,
+   reduced to the counter mode's precision) -- the launch-loop unroll
+   consumes them to replace the removed per-trip updates.  */
 static bool
 legacy_constant_trips (class loop *loop, basic_block preheader,
 		       uint64_t *trips, rtx_insn **step_out,
@@ -238,15 +238,15 @@ legacy_constant_trips (class loop *loop, basic_block preheader,
   rtx cond = XEXP (src, 0);
   if (!COMPARISON_P (cond))
     return false;
-  // Branch taken when the condition holds, unless the label is in the
-  // else arm.
+  /* Branch taken when the condition holds, unless the label is in the
+     else arm.  */
   bool taken_when_true = GET_CODE (XEXP (src, 1)) != PC;
 
   rtx op0 = XEXP (cond, 0);
   rtx op1 = XEXP (cond, 1);
 
-  // Identify the counter operand: a hard register with exactly one in-loop
-  // modification of the form reg = reg + const.
+  /* Identify the counter operand: a hard register with exactly one in-loop
+     modification of the form reg = reg + const.  */
   rtx counter = nullptr, bound = nullptr;
   rtx_insn *step_insn = nullptr;
   for (int side = 0; side != 2; ++side)
@@ -270,7 +270,7 @@ legacy_constant_trips (class loop *loop, basic_block preheader,
       if (found)
 	{
 	  if (counter)
-	    // Both operands are modified in the loop.
+	    /* Both operands are modified in the loop.  */
 	    return false;
 	  counter = cand;
 	  bound = side ? op0 : op1;
@@ -307,7 +307,7 @@ legacy_constant_trips (class loop *loop, basic_block preheader,
     bound_val = UINTVAL (bound);
   else if (REG_P (bound))
     {
-      // The bound must be loop-invariant with a provable constant value.
+      /* The bound must be loop-invariant with a provable constant value.  */
       rtx_insn *insn;
       FOR_BB_INSNS (header, insn)
 	if (NONDEBUG_INSN_P (insn) && insn != jump
@@ -320,8 +320,8 @@ legacy_constant_trips (class loop *loop, basic_block preheader,
     return false;
   bound_val &= mask;
 
-  // Directly evaluate the counter chain, wrapping at the mode precision,
-  // until the continue condition first fails.
+  /* Directly evaluate the counter chain, wrapping at the mode precision,
+     until the continue condition first fails.  */
   bool counter_is_op0 = rtx_equal_p (counter, op0);
   uint64_t c = init & mask;
   constexpr uint64_t TRIP_BOUND = uint64_t (1) << 16;

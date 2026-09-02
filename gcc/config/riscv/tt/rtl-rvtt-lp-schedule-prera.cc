@@ -1329,7 +1329,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt)

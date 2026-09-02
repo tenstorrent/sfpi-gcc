@@ -152,7 +152,7 @@ find_seq_program (const caps *c, unsigned macro_index,
   return nullptr;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 void
 rvtt_macro_schedule_release (macro_schedule *sched)

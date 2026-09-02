@@ -1900,7 +1900,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   return true;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Realized hosted sub-unit of a value insn, for the scheduler's
    per-(carrier, unit) capacity bookkeeping: the capability-table
@@ -3003,7 +3003,7 @@ residency_benign_set (const macro_region &region,
     benign->add (sep);
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* See rvtt-macro-desc.h.  */
 

@@ -329,7 +329,7 @@ ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
    The hop bound is proof work, not semantics (an unresolved chain
    refuses downstream).  */
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 tree
 rvtt_mop_resolve_bound (tree val, rvtt_mop_scan_ctx **ctx_io)
@@ -1121,7 +1121,7 @@ classify_constant_target (unsigned HOST_WIDE_INT addr, tree value,
   return true;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* ------------------------------------------------------------------ */
 /* Store classification entry point.				      */
@@ -1845,7 +1845,7 @@ region_loop_trip_count (basic_block header, edge entry_e, edge latch_e,
   return false;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 bool
 rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word)

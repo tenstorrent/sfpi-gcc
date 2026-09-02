@@ -122,7 +122,7 @@ transform (function *fn)
 		rtx slot = XVECEXP (src, 0, 1);
 		if (GET_CODE (slot) == CONST_INT)
 		  {
-		    // select
+		    /* select */
 		    unsigned ix = INTVAL (slot);
 		    unsigned regno = REGNO (XVECEXP (src, 0, 0));
 
@@ -148,7 +148,7 @@ transform (function *fn)
 		    continue;
 		  }
 	      }
-	      // FALLTHROUGH
+	      /* FALLTHROUGH */
 
 	    case UNSPEC_SFPNOVAL:
 	    case UNSPEC_SFPCSTLREG:
@@ -167,14 +167,14 @@ transform (function *fn)
 	switch (GET_CODE (*slot))
 	  {
 	  default:
-	    // Unknown tensix insn component
+	    /* Unknown tensix insn component */
 	    gcc_unreachable ();
 
 	  case PARALLEL:
 	  case UNSPEC:
 	  case UNSPEC_VOLATILE:
 	    {
-	      // All 3 have the vector at position 0
+	      /* All 3 have the vector at position 0 */
 	      auto &vec = XVEC (*slot, 0);
 	      for (unsigned ix = GET_NUM_ELEM (vec); ix--;)
 		self (self, &RTVEC_ELT (vec, ix));
@@ -212,10 +212,10 @@ transform (function *fn)
 
       if (!operands.empty ())
 	{
-	  // We have to deal with match_dups, where multiple operands must be
-	  // changed simultaneously.  In general we could try every combination
-	  // of operands reading the same input register, but it is sufficient
-	  // just to try changing all such operands simultaneously.
+	  /* We have to deal with match_dups, where multiple operands must be
+	     changed simultaneously.  In general we could try every combination
+	     of operands reading the same input register, but it is sufficient
+	     just to try changing all such operands simultaneously.  */
 	  std::sort (operands.begin (), operands.end (),
 		     [] (auto const &a, auto const &b) { return a.regno < b.regno; });
 
@@ -227,7 +227,7 @@ transform (function *fn)
 	      for (; pos != operands.end () && pos->regno == regno; ++pos)
 		{
 		  if (GET_CODE (val) == UNSPEC)
-		    // Do not share unspec RTL
+		    /* Do not share unspec RTL */
 		    val = gen_rtx_UNSPEC (GET_MODE (val), XVEC (val, 0),
 					  XINT (val, 1));
 
@@ -287,7 +287,7 @@ public:
   }
 };
 
-} // anon namespace
+} /* anon namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt)

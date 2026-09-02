@@ -3213,7 +3213,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Audited hoist-region scan for the cross-loop hoist consumers
    (rvtt-macro-ownership.h).  The region is {LOOP body} union

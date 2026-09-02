@@ -2468,9 +2468,9 @@ public:
     free_dominance_info (CDI_DOMINATORS);
     return 0;
   }
-}; // class pass_rvtt_dst_autoincr
+}; /* class pass_rvtt_dst_autoincr */
 
-} // anon namespace
+} /* anon namespace */
 
 /* Exported single source of the audited W_drain value (rvtt-protos.h;
    see rtl-rvtt-replay.cc): the replay former's no-exec record placement

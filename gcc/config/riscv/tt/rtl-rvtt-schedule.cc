@@ -163,7 +163,7 @@ fill_latency_bubbles (function *fn)
       }
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* The generated target cost hook deliberately returns one for the existing
    STATIC/DYNAMIC contracts.  Do not generalize this to instruction distance:
@@ -199,10 +199,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
     }
   else
     {
-      // Each block, other than the starting block, should only be
-      // walked once -- don't get trapped in a loop of non-TENSIX
-      // insns. The starting block should be walked exactly twice, if
-      // reachable from itself.
+      /* Each block, other than the starting block, should only be
+         walked once -- don't get trapped in a loop of non-TENSIX
+         insns. The starting block should be walked exactly twice, if
+         reachable from itself.  */
       bb->flags |= BB_VISITED;
       visited.push_back (bb);
       if (!probe_insn)
@@ -440,7 +440,7 @@ delay_nop_needed_p (std::vector<basic_block> &visited, basic_block bb,
 		unsigned regno = REGNO (SET_DEST (rtl));
 		if (SFPU_REG_P (regno))
 		  {
-		    // Writing to a constant reg falls on the floor
+		    /* Writing to a constant reg falls on the floor */
 		    bool insert = regno < SFPU_REG_FIRST + SFPU_CREG_IDX_LWM
 		      && find_next_insn (visited, bb, regno, insn);
 
@@ -1223,7 +1223,7 @@ struct ls_node
   bool pin_to_baseline;	 /* unaudited entry producer dependence      */
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Node admission; returns false with *WHY naming the barrier class.  */
 
@@ -2024,7 +2024,7 @@ struct ls_ims_candidate
   unsigned demand = 0;
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Generate the IMS candidate order for the region NODES (admitted
    members, audited 0/1-slot latencies).  MAX_II is the acceptance
@@ -5877,7 +5877,7 @@ list_schedule_regions (function *fn)
 struct rotation_row
 {
   basic_block bb;
-  std::vector<rtx_insn *> issued; // issued Tensix words, in order
+  std::vector<rtx_insn *> issued; /* issued Tensix words, in order */
 };
 
 /* The non-self predecessor of self-loop BB when it is a dedicated
@@ -5955,7 +5955,7 @@ rotation_row_p (basic_block bb, rotation_row *row, const char **reason)
       if (recog_memoized (insn) >= 0 && get_attr_type (insn) == TYPE_TENSIX)
 	{
 	  if (!get_attr_length (insn))
-	    continue; // bookkeeping ghost
+	    continue; /* bookkeeping ghost */
 	  if (get_attr_xtt_replay (insn) == XTT_REPLAY_OWNER)
 	    {
 	      *reason = "explicit replay owner";
@@ -6932,9 +6932,9 @@ public:
     transform (fn);
     return 0;
   }
-}; // class pass_rvtt_schedule
+}; /* class pass_rvtt_schedule */
 
-} // anon namespace
+} /* anon namespace */
 
 rtl_opt_pass *
 make_pass_rvtt_schedule (gcc::context *ctxt)
