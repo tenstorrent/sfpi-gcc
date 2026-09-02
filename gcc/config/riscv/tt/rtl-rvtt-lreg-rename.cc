@@ -194,7 +194,24 @@ along with GCC; see the file COPYING3.  If not see
      between the chain's first write and the point the two worlds
      re-converge, and every ordering constraint the shared register
      creates is carried by the pattern-derived dependence vocabulary
-     the downstream schedulers consult.
+     the downstream schedulers consult;
+   - the WRITER must not read its own destination (laneLA soundness fix):
+     a dest-reuses-dying-source writer (w.fx.lreg_read & oldbit -- and not
+     the operand-1 live-value merge, already refused regrename-self-merge)
+     is renamed asymmetrically -- the WRITE moves to the target, but the
+     input read of the old register STAYS (it reads that register's
+     PREVIOUS live range).  The original writer killed the old register;
+     the renamed one does not, so the dying-source value stays LIVE on the
+     old register from the writer through to the close.  The span-scoped
+     target-freedom proof models only each chain's own span, not this
+     extended old-register range, so a LATER temporal chain can pick the
+     old register (or an overlapping span-marginal one) and alias the
+     still-live value -- register-aliasing wrong code, demonstrated ALL
+     LANES ENABLED (the addcmul corr TUs carry no CC/mask op; silicon and
+     both sim oracles; laneKV caught it).  Refuse
+     regrename-temporal-dest-reuse; the whole-block tier is immune (its
+     targets are all block-globally dead, colliding with nothing) and
+     still serves such writers when a globally-dead target exists.
 
    The post-commit belt generalizes accordingly: target references
    outside the span are recorded before the commit and re-verified
@@ -835,6 +852,47 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
 	continue;
       new_l = l;
       break;
+    }
+  /* Temporal-tier dest-reuse-writer gate (laneLA, the addcmul wrong-code
+     fix).  A chain whose WRITER reads its own destination register
+     (w.fx.lreg_read & oldbit -- the allocator's dest-reuses-dying-source
+     shape p = op (x, ...) packed into x's register; not the operand-1
+     live-value merge, already refused regrename-self-merge above) has an
+     asymmetric register-field edit: the commit moves the WRITE off the
+     old register but must LEAVE the input read of the old register in
+     place (it is a read of that register's PREVIOUS live range).  So the
+     original writer KILLED the old register (overwrote it with the chain
+     value); the renamed writer does NOT -- the dying-source value it read
+     now STAYS LIVE on the old register from the writer through to the
+     close (the next instruction to overwrite it).
+
+     The whole-block-free tier is immune: its target is dead across the
+     WHOLE block and every OTHER admissible target it could hand out is
+     equally block-dead, so this extended old-register live range collides
+     with nothing.  The TEMPORAL tier is NOT: it proves target freedom
+     only over each chain's OWN span (span_clear below), a span-local
+     fact.  It does not model the extended live range this dest-reuse
+     rename leaves on the OLD register, so a LATER temporal chain can pick
+     that old register (or an overlapping span-marginal one) as its target
+     and alias the still-live dying-source value -- register-aliasing
+     wrong code, demonstrated ALL LANES ENABLED (the addcmul corr TUs have
+     no CC/mask op at all: silicon + both sim oracles, ~per-face golden
+     mismatch; laneKV bisect, laneLA RESULTS).  Every narrower predicate
+     (reader count, reading-close shape) still miscompiles addcmul; the
+     unsound class is the whole dest-reuse-writer set, because any one of
+     them can be the extended range a later chain aliases.
+
+     Fail closed by name: a non-dest-reuse writer does not extend any
+     old-register range (its original def had no live predecessor) and
+     still admits temporally.  The whole-block tier already ran above;
+     refusing here forgoes only a temporal target for this chain, never a
+     whole-block one, and the chain may still rename through the
+     whole-block tier in a later pass state.  */
+  if (new_l < 0 && riscv_tt_opt_rename_temporal
+      && (w.fx.lreg_read & oldbit))
+    {
+      refuse_chain ("regrename-temporal-dest-reuse", w.insn, bb);
+      return false;
     }
   if (new_l < 0 && riscv_tt_opt_rename_temporal)
     {

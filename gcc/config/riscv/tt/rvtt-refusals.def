@@ -1220,6 +1220,9 @@ RVTT_REFUSAL (REGRENAME_SELF_MERGE,
 RVTT_REFUSAL (REGRENAME_SPAN_OPAQUE,
   "regrename-span-opaque",
   "item #7: an effect-opaque instruction (call, asm, raw word, unaudited pattern) inside the chain span (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_TEMPORAL_DEST_REUSE,
+  "regrename-temporal-dest-reuse",
+  "laneLA (R1 temporal-tier soundness fix): the chain writer reads its own destination (dest-reuses-dying-source, p = op (x, ...) packed into x's register); the rename moves the write off the old register but keeps the input read, so the dying-source value stays live on the old register through the close -- an extended range the span-scoped temporal target-freedom proof does not model, letting a later temporal chain alias it (register-aliasing wrong code, all lanes enabled -- the addcmul corr TUs, silicon + both sim oracles; laneKV bisect).  Whole-block-free targets are immune (all block-globally dead); temporal only (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_TIED_CLOSE,
   "regrename-tied-close",
   "item #7: the closing writer genuinely reads the chain register (a tied merge the rename cannot split) (rtl-rvtt-lreg-rename.cc)")
