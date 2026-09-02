@@ -94,6 +94,14 @@ sfpu_mem_move_p (rtx_insn *insn, bool *is_fill)
   return false;
 }
 
+/* Report every allocated SFPU memory move in FN as the named user error
+   lreg-pressure-exceeded, then DELETE the offenders so the later Tensix
+   RTL passes never see a memory vector operand.  Each spill store is a
+   distinct error site; when only fills exist, one fill is reported (it
+   still proves over-pressure).  The relief-option note is emitted once.
+   Sets rvtt_spill_diag_reported when anything was found and returns the
+   number of errors emitted.  */
+
 static unsigned
 diagnose_spills (function *fn)
 {
@@ -192,6 +200,10 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the spill-diagnosis pass for CTXT; rvtt-passes.def places
+   it before postreload, ahead of every other post-allocation Tensix RTL
+   pass, and it gates unconditionally on the Tensix extension.  */
 
 rtl_opt_pass *
 make_pass_rvtt_spill_diag (gcc::context *ctxt)

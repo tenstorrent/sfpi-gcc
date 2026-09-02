@@ -141,6 +141,9 @@ public:
 
 } /* anon namespace */
 
+/* Instantiate the ebreak-workaround pass for CTXT; rvtt-passes.def
+   places it after cse, and it gates on -mtt-fix-whbhebreak.  */
+
 rtl_opt_pass *
 make_pass_rvtt_fix_ebreak (gcc::context *ctxt)
 {

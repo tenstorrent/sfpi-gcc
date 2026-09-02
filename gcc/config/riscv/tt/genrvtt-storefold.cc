@@ -189,6 +189,12 @@ struct input {
   std::string filehash;
 };
 
+/* Read the RESULT file PATH into IN: hash the whole byte stream into
+   filehash (the commitment recorded in the generated header), derive
+   the citation path (the tail under tt/proofs/), and split the
+   contents into lines.  Returns false, with a report, when the file
+   cannot be read.  */
+
 static bool
 read_input (const char *path, input *in)
 {
@@ -279,6 +285,10 @@ struct sink_pair {
   std::string roundtrip_sha, identity_sha;
 };
 
+/* The SFPSTORE/SFPLOAD Mod0 format capability constant for numeric
+   encoding MOD0, or null for an encoding outside the transcribed
+   vocabulary (see the file comment).  */
+
 static const char *
 mod0_name (long mod0)
 {
@@ -321,6 +331,13 @@ license_class (const std::string &verdict, const char *divergence)
     return "LICENSED";
   return "REFUSE";
 }
+
+/* Parse the store-sink RESULT lines of IN into OUT: a "pair (...)"
+   line opens a block -- flushing, and completeness-checking, the
+   previous one -- and the following lines fill its divergence census
+   counters, verdict, and roundtrip/identity stream commitments.
+   Fails, with a report, when a block ends without both Mod0s, a
+   mismatch total, a verdict, and both commitments.  */
 
 static bool
 parse_sink_pairs (const input &in, std::vector<sink_pair> *out)
@@ -407,6 +424,10 @@ struct stochrnd_row {
   std::string fused_sha, direct_sha;
 };
 
+/* The SFPSTOCHRND Mod1 capability constant for the RESULT file's
+   conversion spelling CONV, or null for a spelling outside the sweep's
+   vocabulary.  */
+
 static const char *
 conv_name (const std::string &conv)
 {
@@ -416,6 +437,13 @@ conv_name (const std::string &conv)
     return "SFPSTOCHRND_MOD1_FP32_TO_FP16B";
   return nullptr;
 }
+
+/* Parse the stochrnd RESULT lines of IN into OUT: a "row <tag> ...
+   STOCHRND" line opens a row, capturing its fp32-><conv> spelling and
+   STORE mod0; the next "verdict" line fills the newest verdict-less
+   row; "row<tag> ... stream sha256" lines attach the fused/direct
+   stream commitments by tag.  Fails, with a report, when any row ends
+   up missing its conversion, Mod0, verdict, or a commitment.  */
 
 static bool
 parse_stochrnd_rows (const input &in, std::vector<stochrnd_row> *out)
@@ -475,6 +503,17 @@ parse_stochrnd_rows (const input &in, std::vector<stochrnd_row> *out)
 }
 
 }
+
+/* Generator entry point: ARGV[1] the store-sink round-trip RESULT,
+   ARGV[2] the stochrnd store RESULT, ARGV[3] the output .def path.
+   Parse both inputs, cross-check every encoding and every verdict
+   against its mismatch census and stream commitments (refusing on
+   anything unknown or inconsistent), derive the SRCB
+   runtime-resolution rows as the most refusing of the swept float
+   pairs, and write the table: one proof commitment per input, one
+   RVTT_STOREFOLD_SINK_PAIR per proven pair plus the derived SRCB row,
+   and one RVTT_STOCHRND_STORE_PAIR per licensed pairing plus its SRCB
+   twin.  Returns nonzero on any failure.  */
 
 int
 main (int argc, const char **argv)

@@ -49,6 +49,9 @@ using namespace rvtt_macro_derive;
 
 static int checks, failures;
 
+/* Count a check; when OK is false, count a failure and report it to
+   stderr labeled WHAT.  */
+
 static void
 check (bool ok, const char *what)
 {
@@ -59,6 +62,9 @@ check (bool ok, const char *what)
       std::fprintf (stderr, "FAIL: %s\n", what);
     }
 }
+
+/* Count a check that word GOT equals expectation WANT; on mismatch
+   count a failure and report both values labeled WHAT.  */
 
 static void
 check_word (uint32_t got, uint32_t want, const char *what)
@@ -71,6 +77,11 @@ check_word (uint32_t got, uint32_t want, const char *what)
 		    got, want);
     }
 }
+
+/* A zeroed row_spec carrying the frozen-calendar defaults: two owned
+   template dests, three owned sequence dests, and the store-tracking
+   fields cleared to "none" (-1).  Each case then fills only what its
+   schedule constrains.  */
 
 static row_spec
 fresh_row ()
@@ -285,8 +296,8 @@ test_mul_int32_three_address (const caps *c)
 /* The handwritten MulInt32 ONE-SLOT in-place variant (macro 0, ii=1)
    fails the LReg16 lifetime proof: the next row's MUL24 rewrites
    LReg16 strictly before this row's store executes.  The derivation
-   REFUSES it (docs section 3/section 7 -- a finding about the hand kernel, whose
-   one-slot case appears unexercised).  */
+   REFUSES it (docs section 3/section 7 -- a finding about the hand
+   kernel, whose one-slot case appears unexercised).  */
 static void
 test_mul_int32_one_slot_refuses (const caps *c)
 {
@@ -494,6 +505,11 @@ test_wp12_explicit_hazards (const caps *c)
 	 && std::strcmp (cal.refusal, refusal_hazard ()) == 0,
 	 "impossible overwrite deadline refuses (hazard)");
 }
+
+/* Run the packer checks once, then the whole derivation suite against
+   both the BH and WH capability tables, and verify QSR stays
+   table-absent.  Prints the check/failure counts; exits nonzero on
+   any failure.  */
 
 int
 main ()

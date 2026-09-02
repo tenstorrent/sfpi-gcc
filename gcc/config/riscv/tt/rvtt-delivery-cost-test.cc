@@ -36,6 +36,9 @@ using namespace rvtt_delivery_cost;
 
 static int checks, failures;
 
+/* Count a check; when OK is false, count a failure and report it to
+   stderr labeled WHAT.  */
+
 static void
 check (bool ok, const char *what)
 {
@@ -50,6 +53,14 @@ check (bool ok, const char *what)
 /* The audited table (rvtt-cost.md define_constants, recorded values).  */
 static const cost_table T = { 123, 100, 70, 300 };
 static const int64_t MIN_BENEFIT = 60;	/* XTT_REPLAY_HOIST_MIN_BENEFIT */
+
+/* Exercise every delivery-cost formula against the audited constant
+   table: plane rates, each replay pricing shape (counted, peel,
+   record-hoist, runtime, re-record with its guard/surplus cases) with
+   recorded anchors, shape selection, the WP13 one-sidedness sweep and
+   formed-side composition, run amortization, trip-weight scaling,
+   SFPLOADI word classification, and the peel/window helpers.  Exits
+   nonzero on any failure.  */
 
 int
 main ()

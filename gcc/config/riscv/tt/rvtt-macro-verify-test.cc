@@ -35,6 +35,9 @@ using namespace rvtt_macro_verify;
 
 static int checks, failures;
 
+/* Count a check; when OK is false, count a failure and report it to
+   stderr labeled WHAT.  */
+
 static void
 check (bool ok, const char *what)
 {
@@ -45,6 +48,12 @@ check (bool ok, const char *what)
       std::fprintf (stderr, "FAIL: %s\n", what);
     }
 }
+
+/* Fill D and E with the matching known-good pair: the frozen Min/Max
+   BH descriptor words (templates, sequence words, misc word, the
+   derived Dst += 2 SETC16 program, and both launch words) and the
+   expectations that describe exactly those words.  Each test then
+   corrupts one component of this baseline.  */
 
 static void
 baseline (const caps *c, descriptor_words *d, expectations *e)
@@ -92,6 +101,11 @@ baseline (const caps *c, descriptor_words *d, expectations *e)
   e->planned_lregs = 0xf;
 }
 
+/* Build the baseline descriptor and expectations, apply CORRUPT to
+   them when given, and return the verifier's verdict: null for a
+   clean pass, otherwise the refusal tag naming the failing
+   component.  */
+
 static const char *
 run (const caps *c, void (*corrupt) (descriptor_words *, expectations *))
 {
@@ -102,6 +116,13 @@ run (const caps *c, void (*corrupt) (descriptor_words *, expectations *))
     corrupt (&d, &e);
   return verify (c, d, e);
 }
+
+/* Verify the uncorrupted baseline, then corrupt one component at a
+   time (templates, sequence words, misc word, SETC16 programs, launch
+   words and counts, hidden-write ownership) and assert the verifier
+   names exactly that component's tag; finish with the CC-model timing
+   cases around the restore-before-store inequality.  Prints the
+   check/failure counts; exits nonzero on any failure.  */
 
 int
 main ()

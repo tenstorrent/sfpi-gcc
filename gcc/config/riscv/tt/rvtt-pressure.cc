@@ -241,11 +241,6 @@ rvtt_pressure_lut_slot_use_p (tree name)
     }
   return false;
 }
-/* A vector SSA value that will occupy an allocatable LREG.  Constant
-   register reads (rvtt_sfpreadlreg with index >= SFPU_CREG_IDX_LWM)
-   expand to a zero-cost cstlreg unspec folded into consumers
-   (rvtt.md rvtt_sfpreadlreg expander; riscv.cc rtx cost 0) and are
-   excluded.  */
 
 /* LREG occupancy of a tracked value.  The multi-result classes carry
    2 or 4 registers (riscv-modes.def XTT64SI/XTT128SI; the
@@ -269,6 +264,12 @@ lreg_width (tree name)
     }
 }
 
+/* A vector SSA value that will occupy an allocatable LREG.  Constant
+   register reads (rvtt_sfpreadlreg with index >= SFPU_CREG_IDX_LWM)
+   expand to a zero-cost cstlreg unspec folded into consumers
+   (rvtt.md rvtt_sfpreadlreg expander; riscv.cc rtx cost 0) and are
+   excluded.  */
+
 bool
 rvtt_pressure_tracked_p (tree name)
 {
@@ -291,8 +292,9 @@ rvtt_pressure_tracked_p (tree name)
    maximum.  PHI results are defined at block entry; PHI arguments are
    live out of the corresponding predecessor.  Deliberately mirrors the
    conservative counting of the loop proof (engine_loop_legal_p,
-   below).  */
-
+   below).  Fills M's live-in sets and function-wide peak, and records
+   in M->over_bbs every block whose point-pressure maximum exceeds
+   CAPACITY.  */
 
 static void
 engine_compute_lreg_pressure (function *fn, unsigned capacity,
@@ -733,7 +735,8 @@ engine_loop_legal_p (class loop *loop,
     return true;
   if (report && dump_file)
     fprintf (dump_file,
-	     "Invariant SFPU immediate hoist refused: loop LREG pressure %zu exceeds %u\n",
+	     "Invariant SFPU immediate hoist refused: loop LREG pressure "
+	     "%zu exceeds %u\n",
 	     peak, limit);
   return false;
 }
@@ -752,6 +755,10 @@ rvtt_pressure_compute (function *fn, unsigned capacity,
   engine_compute_lreg_pressure (fn, capacity, m);
 }
 
+/* Residual capacity of FN: the file capacity minus the function-wide
+   modeled peak, negative when the model already exceeds the file.
+   Recomputes the whole-function model on every call.  */
+
 int
 rvtt_pressure_residual (function *fn)
 {
@@ -759,6 +766,10 @@ rvtt_pressure_residual (function *fn)
   rvtt_pressure_compute (fn, rvtt_pressure_capacity (), &model);
   return (int) rvtt_pressure_capacity () - (int) model.peak;
 }
+
+/* Conservative peak count of simultaneously live SFPU vector SSA
+   values across BB -- the single-block budget the reassociation sites
+   check (see engine_bb_peak for the over-approximation rules).  */
 
 unsigned
 rvtt_pressure_bb_peak (basic_block bb)
@@ -848,6 +859,15 @@ rvtt_pressure_window_peak (gimple *first, gimple *last)
   BITMAP_FREE (live);
   return peak;
 }
+
+/* Whether keeping every load in LOADS live across LOOP holds the
+   loop's peak vector pressure within the LREG file (conservative
+   liveness proof; all-or-nothing for the candidate set).  REPORT
+   selects the dump-file refusal line; CC_TRANSIENTS charges the
+   RTL-only CC temporaries at their positions; EXEMPT_CREG_READS
+   excludes constant-register-file reads from the count (the LUT
+   coefficient placement's refined model).  Under flag_checking also
+   validates the declared LUT slot facts against the md.  */
 
 bool
 rvtt_pressure_loop_legal_p (class loop *loop,
@@ -1017,6 +1037,13 @@ rvtt_loop_pressure::rvtt_loop_pressure (class loop *loop, bool cc_transients)
       }
   free (body);
 }
+
+/* Verdict for keeping every load in CANDIDATES live across the loop,
+   answered from the precomputed base profile: subtract each
+   candidate's recorded base interval via a difference array, take the
+   sample maximum, and add one pinned register per candidate.  Under
+   flag_checking the verdict is asserted identical to the full
+   rvtt_pressure_loop_legal_p proof.  */
 
 bool
 rvtt_loop_pressure::legal_with (const auto_vec<gcall *> &candidates)

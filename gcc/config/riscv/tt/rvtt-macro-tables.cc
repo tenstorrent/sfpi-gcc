@@ -367,6 +367,10 @@ rvtt_macro_caps_for_cpu (cpu_t cpu)
     }
 }
 
+/* Return the stable refusal-vocabulary name explaining why CPU has no
+   macro capability table ("target-macro-encoding-unproven"), or null
+   when the CPU does have one.  */
+
 const char *
 rvtt_macro_caps_refusal (cpu_t cpu)
 {
@@ -389,6 +393,12 @@ dst_address_encodable (const caps *c, unsigned address)
   return (address & 1u) == 0 && address < (1u << c->address_bits);
 }
 
+/* Pack a macro-launch instruction word for capability set C into
+   *WORD: MACRO_INDEX/VD combine into the lreg_ind field, with MODE,
+   ADDR_MODE and the Dst row ADDRESS in their per-target positions.
+   Returns false (refusing) when any field is out of range or the
+   address is not launch-encodable.  */
+
 bool
 encode_launch (const caps *c, unsigned macro_index, unsigned vd,
 	       unsigned mode, unsigned addr_mode, unsigned address,
@@ -406,6 +416,11 @@ encode_launch (const caps *c, unsigned macro_index, unsigned vd,
     | address;
   return true;
 }
+
+/* Inverse of encode_launch: unpack WORD's fields into *MACRO_INDEX,
+   *VD, *MODE, *ADDR_MODE and *ADDRESS.  Returns false unless WORD
+   carries C's launch opcode and re-encoding the decoded fields
+   reproduces WORD bit-exactly (stray bits refuse).  */
 
 bool
 decode_launch (const caps *c, uint32_t word, unsigned *macro_index,
@@ -430,6 +445,10 @@ decode_launch (const caps *c, uint32_t word, unsigned *macro_index,
   return rebuilt == word;
 }
 
+/* Pack a SETC16 word (opcode << 24 | CONFIG_REG << 16 | VALUE); the
+   field layout is identical on WH and BH.  Out-of-range fields refuse
+   rather than alias under masking.  */
+
 bool
 encode_setc16 (const caps *c, unsigned config_reg, unsigned value,
 	       uint32_t *word)
@@ -439,6 +458,10 @@ encode_setc16 (const caps *c, unsigned config_reg, unsigned value,
   *word = ((uint32_t) c->setc16_opcode << 24) | (config_reg << 16) | value;
   return true;
 }
+
+/* Unpack SETC16 WORD into its configuration-register number and 16-bit
+   value.  Returns false when WORD's opcode byte is not C's SETC16
+   opcode.  */
 
 bool
 decode_setc16 (const caps *c, uint32_t word, unsigned *config_reg,
@@ -451,6 +474,10 @@ decode_setc16 (const caps *c, uint32_t word, unsigned *config_reg,
   return true;
 }
 
+/* Pack an SFPCONFIG instruction word (opcode << 24 | IMM16 << 8
+   | DEST << 4 | MOD1).  Reference encoder: fields are masked to their
+   widths, not range-checked.  */
+
 uint32_t
 encode_sfpconfig (const caps *c, unsigned imm16, unsigned dest,
 		  unsigned mod1)
@@ -458,6 +485,13 @@ encode_sfpconfig (const caps *c, unsigned imm16, unsigned dest,
   return ((uint32_t) c->sfpconfig_opcode << 24) | ((imm16 & 0xffff) << 8)
     | ((dest & 0xf) << 4) | (mod1 & 0xf);
 }
+
+/* Expand into OUT the owned SETC16 program (three register writes per
+   capability slot: Src, Dst, fidelity) that establishes the
+   Dst += DST_DELTA auto-increment address modifier from any incoming
+   state; *N_OUT counts the entries written (OUT must hold at least 6).
+   *NEEDS_BANK_BASE_OWNERSHIP reports whether the program's slot naming
+   stands on the Base=1 SFPU platform contract.  */
 
 bool
 addr_mod_program (const caps *c, int dst_delta, setc16_program *out,
@@ -485,6 +519,11 @@ addr_mod_program (const caps *c, int dst_delta, setc16_program *out,
   *needs_bank_base_ownership = c->needs_bank_base_ownership;
   return true;
 }
+
+/* Pack instruction template T into *WORD (opcode << 24 | imm12 << 12
+   | src_c << 8 | dest_sel << 4 | mod1).  Refuses out-of-range fields
+   and destination selectors outside physical L0-L7 and the
+   InstructionTemplate selector range.  */
 
 bool
 encode_template (const caps *c, const template_spec &t, uint32_t *word)
@@ -514,6 +553,10 @@ encode_template (const caps *c, const template_spec &t, uint32_t *word)
   return true;
 }
 
+/* Unpack template WORD into *OUT over the generic
+   opcode/imm12/src_c/dest_sel/mod1 layout.  Purely mechanical field
+   extraction; performs no validation and always succeeds.  */
+
 bool
 decode_template (uint32_t word, template_spec *out)
 {
@@ -524,6 +567,11 @@ decode_template (uint32_t word, template_spec *out)
   out->mod1 = word & 0xf;
   return true;
 }
+
+/* Find the proven sequence word for MACRO_INDEX realizing
+   EVENTS[0..N_EVENTS): a whole-word lookup over C's validated sequence
+   programs, never a bit-level synthesis.  Returns the word in *WORD, or
+   false when no proven program matches.  */
 
 bool
 encode_sequence (const caps *c, unsigned macro_index,
@@ -562,6 +610,10 @@ encode_sequence (const caps *c, unsigned macro_index,
   return false;
 }
 
+/* Encode the select-shape misc word for a proven STORE_MOD0 store data
+   format -- the only field-parameterized misc rule; the other proven
+   misc words are exposed as whole-word reference data.  */
+
 bool
 encode_misc_select (const caps *c, unsigned store_mod0, uint32_t *word)
 {
@@ -572,6 +624,11 @@ encode_misc_select (const caps *c, unsigned store_mod0, uint32_t *word)
   *word = 0x700u | store_mod0;
   return true;
 }
+
+/* Return the deferred-CC visibility lag in issue slots: a CC result
+   computed by a retiring macro event becomes architecturally visible
+   only to instructions issued at least this many slots after the event
+   executed.  */
 
 unsigned
 cc_visibility_lag ()
@@ -584,6 +641,11 @@ cc_visibility_lag ()
      the SETCC launch still reads the ambient all-lanes state).  */
   return 1;
 }
+
+/* Architectural fact: a scheduled macro store's lane predicate is the
+   LIVE CC state at the store's execution cycle, never a launch-latched
+   copy.  A CC write retiring in the store's own cycle is not yet
+   visible to it; one retiring in any earlier cycle is.  */
 
 bool
 store_lane_mask_live_at_execution ()
@@ -600,6 +662,11 @@ store_lane_mask_live_at_execution ()
   return true;
 }
 
+/* Store in *OUT the SFPSETCC instr_mod1 that encodes the complement of
+   MOD1's lane test.  Only the plain register-test class {0, 2, 4, 6}
+   has an architecturally defined complement (toggling the complement
+   bit); immediate-operand and force-false forms refuse.  */
+
 bool
 sfpsetcc_complement_mod1 (uint64_t mod1, unsigned *out)
 {
@@ -615,6 +682,11 @@ sfpsetcc_complement_mod1 (uint64_t mod1, unsigned *out)
   *out = (unsigned) (mod1 ^ 4);
   return true;
 }
+
+/* Return the hidden physical-LREG writes recorded for template WORD as
+   a bitmask over LREG indices (bit N = LN, N in 0..15), or 0 when no
+   proven hidden-write entry matches (WORD & mask) == value in C's
+   table.  */
 
 uint32_t
 template_hidden_lreg_writes (const caps *c, uint32_t word)
@@ -644,6 +716,10 @@ sfpencc_encode (uint64_t imm12, uint64_t mod1, uint32_t *word)
   return true;
 }
 
+/* Return the fixed SFPENCC word that enables all lanes and sets all
+   results from the immediate, derived through sfpencc_encode so the
+   constant can never drift from the encoder.  */
+
 uint32_t
 sfpencc_all_lanes_word ()
 {
@@ -654,6 +730,9 @@ sfpencc_all_lanes_word ()
   bool ok = sfpencc_encode (3, 10, &word);
   return ok ? word : 0;		/* 0x8a00300a */
 }
+
+/* Return the fixed SETRWC word for one CR-mode Dst += 8 counter step;
+   a Dst face advance issues it dst_face_advance_step_count times.  */
 
 uint32_t
 dst_step8_setrwc_word ()
@@ -668,11 +747,18 @@ dst_step8_setrwc_word ()
   return (0x37u << 24) | (4u << 18) | (8u << 14) | 4u;	/* 0x37120004 */
 }
 
+/* Return how many dst_step8_setrwc_word issues make up one
+   architectural Dst face advance (two CR-mode Dst += 8 steps).  */
+
 unsigned
 dst_face_advance_step_count ()
 {
   return 2;
 }
+
+/* Return the instruction word of the one explicit Dst increment a
+   formed launch may absorb into its auto-increment address mode:
+   TTINCRWC with Dst += 2 and every other leg zero.  */
 
 uint32_t
 absorbed_dst_increment_word ()
@@ -682,6 +768,12 @@ absorbed_dst_increment_word ()
      TTINCRWC (0, 2, 0, 0) (rtl-rvtt-loadmacro.cc:1401-1418).  */
   return (0x38u << 24) | (2u << 14);	/* 0x38008000 */
 }
+
+/* Decode SETRWC instruction WORD into its counter-control fields *F.
+   The single home of the SETRWC field layout: dst_step8_setrwc_word
+   round-trips through it.  Returns false for any other opcode byte;
+   field semantics are documented at setrwc_fields in
+   rvtt-macro-tables.h.  */
 
 bool
 setrwc_decode (uint32_t word, setrwc_fields *f)
@@ -746,12 +838,19 @@ decode_sequence_bits (uint8_t byte, unsigned *case_kind, unsigned *delay,
   return *case_kind != 1;
 }
 
+/* Assemble a sequence word from its four per-sub-unit BYTES: byte I,
+   stored little-endian in the word, programs sub-unit I (Simple, MAD,
+   Round, Store).  */
+
 uint32_t
 compose_sequence_word (const uint8_t bytes[4])
 {
   return (uint32_t) bytes[0] | ((uint32_t) bytes[1] << 8)
     | ((uint32_t) bytes[2] << 16) | ((uint32_t) bytes[3] << 24);
 }
+
+/* Split sequence WORD into its four per-sub-unit BYTES -- the exact
+   inverse of compose_sequence_word.  */
 
 void
 decompose_sequence_word (uint32_t word, uint8_t bytes[4])
@@ -815,6 +914,10 @@ static const subunit_legal_entry subunit_legality[] = {
   { 0x72, 1u << SEQ_UNIT_STORE },	/* SFPSTORE	*/
 };
 
+/* Return the sub-units that can execute OPCODE as a bitmask with bit N
+   = sequence byte N (SEQ_UNIT_SIMPLE .. SEQ_UNIT_STORE), or 0 when the
+   opcode has no entry on record (the refusing default).  */
+
 unsigned
 subunit_legal_mask (const caps *c, uint8_t opcode)
 {
@@ -826,6 +929,10 @@ subunit_legal_mask (const caps *c, uint8_t opcode)
   return 0;
 }
 
+/* Return the result latency, in issue slots, of a value produced on
+   SEQ_UNIT (a SEQ_UNIT_* index): the earliest a consuming event may
+   execute after its producer.  */
+
 unsigned
 subunit_result_latency (unsigned seq_unit)
 {
@@ -836,6 +943,11 @@ subunit_result_latency (unsigned seq_unit)
      the multiply pipeline's writeback distance (S3).  */
   return seq_unit == SEQ_UNIT_MAD ? 2 : 1;
 }
+
+/* Architectural operand-routing class of value OPCODE under
+   capability set C: which source fields (VB/VC) the sequencer's
+   dispatch reroutes for that opcode, RC_NONE when unrouted or C is
+   null.  The ranges mirror the simulator's dispatch table.  */
 
 route_class
 opcode_route_class (const caps *c, uint8_t opcode)
@@ -854,6 +966,10 @@ opcode_route_class (const caps *c, uint8_t opcode)
   return RC_NONE;
 }
 
+/* Return whether OPCODE reads its VD operand (today only SFPSWAP), in
+   which case the event can be neither redirected to LReg16 nor have its
+   planned VC routing overridden.  */
+
 bool
 opcode_reads_vd (const caps *c, uint8_t opcode)
 {
@@ -862,6 +978,12 @@ opcode_reads_vd (const caps *c, uint8_t opcode)
      planned VC survives.  */
   return c && opcode == 0x92;
 }
+
+/* Return whether OPCODE may be realized with its result redirected to
+   the LReg16 staging register.  Such an event has no encodable VD and
+   executes through the simulator's direct template evaluator, which is
+   proven only for the opcode set below; every other opcode keeps the
+   VD-direct or staging-copy realization or refuses.  */
 
 bool
 opcode_l16_target_proven (const caps *c, uint8_t opcode)
@@ -903,6 +1025,10 @@ opcode_l16_target_proven (const caps *c, uint8_t opcode)
     }
 }
 
+/* Return whether OPCODE is subject to the SFPSWAP adjacency rule: the
+   MAD sub-unit must host nothing in the swap's execution cycle, and
+   Simple and Round must host nothing in the cycle after it.  */
+
 bool
 opcode_needs_swap_adjacency (const caps *c, uint8_t opcode)
 {
@@ -911,6 +1037,10 @@ opcode_needs_swap_adjacency (const caps *c, uint8_t opcode)
      delay (3, not the dependence-minimal 2) is this rule in action.  */
   return c && opcode == 0x92;
 }
+
+/* Fill *OUT with the one proven realization of a staging copy into the
+   transient LReg16 (opcode, mod1, and hosting sub-unit).  Returns false
+   only when C has no capability table.  */
 
 bool
 staging_copy_realization (const caps *c, staging_copy_facts *out)
@@ -928,6 +1058,11 @@ staging_copy_realization (const caps *c, staging_copy_facts *out)
   return true;
 }
 
+/* Pack the macro misc configuration word from its three four-bit
+   fields: STORE_MOD0 (store data format, bits 3:0), the per-macro
+   USES_LOAD_MOD0_MASK (bits 7:4), and the per-sub-unit DELAY_KIND_MASK
+   (bits 11:8, instruction-counted rather than cycle-counted delays).  */
+
 uint32_t
 encode_misc_fields (unsigned store_mod0, unsigned uses_load_mod0_mask,
 		    unsigned delay_kind_mask)
@@ -935,6 +1070,9 @@ encode_misc_fields (unsigned store_mod0, unsigned uses_load_mod0_mask,
   return (store_mod0 & 0xfu) | ((uses_load_mod0_mask & 0xfu) << 4)
     | ((delay_kind_mask & 0xfu) << 8);
 }
+
+/* Unpack misc WORD into its three four-bit fields -- the exact inverse
+   of encode_misc_fields.  */
 
 void
 decode_misc_fields (uint32_t word, unsigned *store_mod0,
@@ -945,6 +1083,12 @@ decode_misc_fields (uint32_t word, unsigned *store_mod0,
   *uses_load_mod0_mask = (word >> 4) & 0xfu;
   *delay_kind_mask = (word >> 8) & 0xfu;
 }
+
+/* Return whether a DERIVED calendar may absorb the row's Dst stride
+   into a launch's auto-increment address mode on C's CPU.  True for BH
+   and WH, where the derived absorbed-stride calendar is simulator
+   bit-exact through the owned single-slot SETC16 program; CPUs without
+   a capability table refuse.  */
 
 bool
 derived_stride_absorption_proven (const caps *c)

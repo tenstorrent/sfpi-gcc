@@ -419,6 +419,12 @@ region_scanner::isomorphic_to_first (macro_row &row)
   return true;
 }
 
+/* Close out the rows collected so far in BB as one region: prove the
+   uniform typed stride (including the immediate-delta absolute
+   progression) and whole-region row closure (no LREG lives past its
+   row), then either push the region onto the output vector or refuse
+   by name.  Always resets the scanner's per-region state.  */
+
 void
 region_scanner::finalize_region (basic_block bb)
 {
@@ -565,6 +571,14 @@ region_scanner::finalize_region (basic_block bb)
     }
   reset_region ();
 }
+
+/* Scan basic block BB, classifying each insn by its typed effect set:
+   audited value instructions extend the current row span (a Dst store
+   closes the row), pure CC writes between rows become pending ambient
+   enables when proven all-lanes, pure counter effects become row or
+   run separators, and opaque effects, configuration writes, and
+   unadmitted CC writers refuse by name and bound the region.  Collects
+   completed regions through finalize_region.  */
 
 void
 region_scanner::scan_bb (basic_block bb)
@@ -729,6 +743,13 @@ region_scanner::scan_bb (basic_block bb)
 
 } /* anonymous namespace */
 
+/* Discover the macro-candidate regions of FN into *OUT (rows of
+   isomorphic dataflow-closed load-to-store slices with a uniform typed
+   Dst stride), scanning every basic block independently.  Refusals and
+   accepted regions are reported on DUMP.  OUT may be null (analysis
+   only); collected regions own their vectors and are released with
+   rvtt_macro_region_release.  */
+
 void
 rvtt_macro_regions_discover (function *fn, FILE *dump,
 			     vec<macro_region> *out)
@@ -738,6 +759,9 @@ rvtt_macro_regions_discover (function *fn, FILE *dump,
   FOR_EACH_BB_FN (bb, fn)
     scanner.scan_bb (bb);
 }
+
+/* Free the heap storage owned by REGION: every row's insn and
+   value-map vectors, the row vector itself, and the run separators.  */
 
 void
 rvtt_macro_region_release (macro_region *region)
@@ -750,6 +774,9 @@ rvtt_macro_region_release (macro_region *region)
   region->rows.release ();
   region->run_separators.release ();
 }
+
+/* Dump-only entry point: run region discovery over FN for its refusal
+   and region reports on DUMP, collecting nothing.  */
 
 void
 rvtt_macro_region_analyze (function *fn, FILE *dump)

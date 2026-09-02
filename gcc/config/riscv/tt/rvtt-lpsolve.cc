@@ -39,6 +39,9 @@ along with GCC; see the file COPYING3.  If not see
 #include <limits>
 #include <unordered_set>
 
+/* Dump-stable name of solver STATUS, shared by the built-in solver's
+   and the cross-check's dump lines.  */
+
 const char *
 rvtt_solver_status_name (rvtt_solver_status status)
 {
@@ -55,6 +58,9 @@ rvtt_solver_status_name (rvtt_solver_status status)
   gcc_unreachable ();
 }
 
+/* Whether this compiler was configured --with-lp-solve, i.e. whether
+   rvtt_lpsolve_schedule can return anything but `unavailable'.  */
+
 bool
 rvtt_lpsolve_available ()
 {
@@ -66,6 +72,10 @@ rvtt_lpsolve_available ()
 }
 
 #ifndef HAVE_LPSOLVE
+
+/* Stub for builds without --with-lp-solve: the default-initialized
+   solution carries status `unavailable', so the cross-check caller
+   simply skips the comparison.  */
 
 rvtt_solver_solution
 rvtt_lpsolve_schedule (const rvtt_sched_problem &)
@@ -135,6 +145,11 @@ private:
   lprec *m_lp;
 };
 
+/* Add one constraint row: sum of COEFFICIENTS over COLUMNS related to
+   RHS by KIND (lp_solve LE/GE/EQ).  An empty row degenerates to the
+   constant comparison 0 <op> RHS and returns its truth instead of
+   calling lp_solve.  Returns false on failure.  */
+
 bool
 lpsolve_model::add_row (const std::vector<int> &columns,
 			const std::vector<REAL> &coefficients,
@@ -147,6 +162,13 @@ lpsolve_model::add_row (const std::vector<int> &columns,
 			   const_cast<REAL *> (coefficients.data ()),
 			   const_cast<int *> (columns.data ()), kind, rhs);
 }
+
+/* Sanity- and size-check the problem before any lp_solve call: 2..24
+   operations, at most 32 values, nonzero capacity, a permutation as
+   the preferred schedule, in-range non-self dependency edges, and
+   in-range value def/use indices.  The size caps bound the MILP the
+   cross-check is willing to build (a larger problem reports
+   `capped', not `invalid-model' -- see solve).  */
 
 bool
 lpsolve_model::valid_problem () const
@@ -179,6 +201,14 @@ lpsolve_model::valid_problem () const
     }
   return true;
 }
+
+/* Populate the lp_solve model: variable bounds (issue choices fixed
+   when the preferred schedule is certified feasible, binary
+   otherwise), the one-op-per-slot/one-slot-per-op assignment rows,
+   dependency ordering rows, the exact LIVE/USED_AFTER linearization
+   of after-slot liveness, and the per-slot register-capacity rows.
+   Returns false on an invalid problem, a live-in set already over
+   capacity, or any lp_solve failure.  */
 
 bool
 lpsolve_model::build ()
@@ -382,6 +412,14 @@ lpsolve_model::build ()
   return true;
 }
 
+/* Build and solve the MILP.  The objective counts issue-slot choices
+   that deviate from the preferred list schedule, so a capacity-legal
+   preferred schedule is the unique zero-cost optimum and hard cases
+   find the fewest changed slots.  Returns the recovered slot order
+   with status `optimal', or an empty order with the status naming why
+   (over-cap problem, invalid model, infeasible, node-capped or other
+   nonoptimal end, or an internal lp_solve failure).  */
+
 rvtt_solver_solution
 lpsolve_model::solve ()
 {
@@ -480,6 +518,9 @@ lpsolve_model::solve ()
 }
 
 } /* anonymous namespace */
+
+/* Cross-check entry point: build the MILP for PROBLEM and solve it,
+   returning the schedule and status (see lpsolve_model::solve).  */
 
 rvtt_solver_solution
 rvtt_lpsolve_schedule (const rvtt_sched_problem &problem)

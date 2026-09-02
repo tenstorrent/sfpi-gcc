@@ -540,6 +540,15 @@ report_oracles (const char *face, class loop *loop,
 	     " (%s)\n", loop->num, classical_trips, face);
 }
 
+/* RTL face of the dual-oracle facade: prove the constant trip count
+   of single-block LOOP whose dedicated preheader is PREHEADER.  On
+   success return true, set *TRIPS, and fill the optional *STEP_OUT
+   (the loop's single counter-step insn) and *FINAL_OUT (the counter's
+   proven value at loop exit).  Runs both the legacy pattern-matcher
+   and the classical loop-iv oracle, dumps the comparison census fact,
+   and returns the legacy verdict only -- the classical result never
+   reaches the caller.  */
+
 bool
 rvtt_loop_trips (class loop *loop, basic_block preheader, uint64_t *trips,
 		 rtx_insn **step_out, uint64_t *final_out)
@@ -567,6 +576,12 @@ rvtt_loop_trips (class loop *loop, basic_block preheader, uint64_t *trips,
     *final_out = legacy_final;
   return true;
 }
+
+/* GIMPLE face of the dual-oracle facade: prove the constant trip
+   count (body executions) of LOOP, returning true and setting *TRIPS
+   on success.  Runs the legacy pattern-matcher and the classical SCEV
+   oracle, dumps the comparison census fact, and returns the legacy
+   verdict only -- the classical result never reaches the caller.  */
 
 bool
 rvtt_loop_trips_gimple (class loop *loop, unsigned HOST_WIDE_INT *trips)

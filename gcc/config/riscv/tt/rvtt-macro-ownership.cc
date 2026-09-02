@@ -51,6 +51,10 @@ rvtt_ownership_state::pessimum ()
   return s;
 }
 
+/* The optimistic reset state used at a proven ownership boundary:
+   nothing foreign, counters derivable -- but the CC lane state and the
+   WH bank-base ABI state stay unknown until separately proven.  */
+
 rvtt_ownership_state
 rvtt_ownership_state::owned_clean ()
 {
@@ -65,6 +69,10 @@ rvtt_ownership_state::owned_clean ()
   return s;
 }
 
+/* Pointwise-pessimistic join of OTHER's path into this state: foreign
+   sets union, knowledge bits intersect, and disagreeing CC states
+   become CC_UNKNOWN.  */
+
 void
 rvtt_ownership_state::join (const rvtt_ownership_state &other)
 {
@@ -77,6 +85,12 @@ rvtt_ownership_state::join (const rvtt_ownership_state &other)
   rwc_known &= other.rwc_known;
   opaque_reached |= other.opaque_reached;
 }
+
+/* Forward transfer of one instruction's typed EFFECTS across this
+   state.  Only ever pessimistic: foreign config/address-modifier/LREG
+   writes accumulate, a CC write drops lane-state knowledge, an unknown
+   counter effect drops RWC derivability, and an opaque effect set
+   poisons every dimension.  */
 
 void
 rvtt_ownership_state::transfer (const xtt_effect_set &effects)
@@ -140,6 +154,10 @@ rvtt_gimple_opaque_stmt_p (gimple *stmt)
   return is_gimple_call (stmt) && !rvtt_get_insn_data (stmt);
 }
 
+/* Return LOOP's unique non-abnormal entry edge (the one header
+   predecessor from outside the loop), or null when the header has
+   several external predecessors or the only entry is abnormal.  */
+
 edge
 rvtt_loop_entry_edge (class loop *loop)
 {
@@ -156,6 +174,11 @@ rvtt_loop_entry_edge (class loop *loop)
 
   return entry && !(entry->flags & EDGE_ABNORMAL) ? entry : nullptr;
 }
+
+/* Return whether ENTRY's source block is a dedicated preheader: a
+   single-successor block other than the function entry block, so
+   hoisted statements can be inserted at its end without executing on
+   any other path.  */
 
 bool
 rvtt_dedicated_preheader_p (edge entry)
@@ -212,6 +235,12 @@ rvtt_loop_hoist_region_opaque_p (class loop *loop, edge entry)
     }
   return false;
 }
+
+/* Return whether ENTRY's dedicated preheader ends in a
+   block-terminating statement, which an end-of-block insertion cannot
+   be placed after -- the hoist must then refuse structurally.  False
+   when the preheader is not dedicated (a fresh split block would be
+   used instead).  */
 
 bool
 rvtt_preheader_insertion_blocked_p (edge entry)

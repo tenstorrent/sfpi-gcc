@@ -58,6 +58,14 @@ static rvtt_insn_data sfpu_insn_data[] = {
 
 static unsigned riscv_builtin_rvtt_first;
 
+/* Finalize the SFPU insn table once riscv_init_builtins has recorded
+   every RVTT builtin decl (via rvtt_record_builtin): apply the
+   RVTT_OVR rows of rvtt-insn.def whose architecture predicate (BH,
+   QSR, or both) holds, overriding the base flags and operand
+   descriptors, then compute each recorded insn's derived operand
+   layout (rvtt_insn_data::init).  No-op unless the Tensix extension
+   is enabled.  */
+
 void
 rvtt_init_builtins ()
 {
@@ -76,7 +84,8 @@ rvtt_init_builtins ()
     rvtt_insn_data::ops_t ops;
   } overrides[] = {
 #define RVTT_OVR(id, av, sfx, fmt, fl, ops)		\
-    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
+    { tensix##av, rvtt_insn_data::id,			\
+      rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
 
@@ -89,6 +98,15 @@ rvtt_init_builtins ()
     if (insn.decl)
       insn.init ();
 }
+
+/* Compute this insn's derived operand layout by walking the argument
+   types of its recorded builtin decl: a leading pointer argument sets
+   HAS_VAR (the instruction-buffer operand), the live and source
+   vector arguments are skipped (recording src_pos), and each ops[]
+   descriptor is then bound to its integer argument's index, latching
+   HAS_MOD and mod_pos at the MOD/XMOD operand.  Sets arg_num to the
+   total argument count and asserts the decl's signature matches the
+   rvtt-insn.def operand list.  */
 
 void
 rvtt_insn_data::init ()
@@ -167,6 +185,15 @@ rvtt_insn_data::init ()
   arg_num = argno;
 }
 
+/* Callback from the RISC-V builtin registration loop: record DECL,
+   the builtin numbered IX with name NAME, in the SFPU insn table.
+   The first "__builtin_rvtt_" builtin encountered latches the base
+   index all later ones are offset from (it is synth_opcode, the one
+   const RVTT function, so it is also marked TREE_READONLY here).
+   Returns true exactly for that first builtin, telling the caller to
+   apply the Tensix icode/prototype overrides to its own descriptor
+   table.  */
+
 bool
 rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 {
@@ -174,7 +201,8 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     return false;
 
   if (ix < 300)
-    /* Save a bunch of strcmps on the grounds there are at least this many others.  */
+    /* Save a bunch of strcmps on the grounds there are at least this
+       many others.  */
     return false;
 
   unsigned ecf_flags = ECF_NOTHROW | ECF_NOVOPS;
@@ -200,11 +228,19 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
   return !ix;
 }
 
+/* Return the insn descriptor for ID.  Every insn_id has an entry,
+   whether or not its builtin is available on the current target.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (rvtt_insn_data::insn_id id)
 {
   return &sfpu_insn_data[id];
 }
+
+/* Return the insn descriptor for CALL when it calls an RVTT SFPU
+   builtin, null otherwise.  Recognition is by the machine-dependent
+   builtin function code falling in the index range latched by
+   rvtt_record_builtin.  */
 
 const rvtt_insn_data *
 rvtt_get_insn_data (gcall const *call)
@@ -241,6 +277,9 @@ rvtt_reassoc_fp_licensed_p (void)
   return riscv_tt_opt_reassoc > 0 && flag_associative_math;
 }
 
+/* As above, for an arbitrary statement: return the insn descriptor
+   when STMT is a call to an RVTT SFPU builtin, null otherwise.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (gimple const *stmt)
 {
@@ -248,6 +287,12 @@ rvtt_get_insn_data (gimple const *stmt)
     return nullptr;
   return rvtt_get_insn_data (as_a <gcall const *> (stmt));
 }
+
+/* Return true if STMT, a call to this insn's builtin, writes the SFPU
+   condition codes: the insn must have a nonzero cc_mask, and, when it
+   takes a mod operand, the mode selected by the low four bits of
+   STMT's mod argument must be one of the CC-writing modes recorded in
+   cc_mask.  */
 
 bool
 rvtt_insn_data::sets_cc (gcall *stmt) const
@@ -340,7 +385,8 @@ void rvtt_prep_stmt_for_deletion (gimple *stmt)
 	  if (def_g->code == GIMPLE_PHI)
 	    {
 	      /* XXXX handle phi
-	         this seems to work fine and SSA checks are ok w/ doing nothing */
+	         this seems to work fine and SSA checks are ok w/ doing
+	         nothing */
 	    }
 	  else if (def_g->code == GIMPLE_CALL)
 	    {
@@ -489,12 +535,19 @@ rvtt_arg_info::rvtt_arg_info (tree arg, bool only_zeroness)
   def = call;
 }
 
+/* Return an UNSPEC_SFPCSTLREG rtx in MODE denoting the SFPU constant
+   register numbered SFPU_REGNO (a CREG_IDX_* value), for use where a
+   hardware constant register stands in for a vector operand.  */
+
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
-  return gen_rtx_UNSPEC (mode,
-			 gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
+  return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)),
+			 UNSPEC_SFPCSTLREG);
 }
+
+/* Return the UNSPEC_SFPNOVAL placeholder in MODE, standing for an
+   absent live-value (or other optional vector) operand.  */
 
 rtx
 rvtt_gen_rtx_noval (machine_mode mode)
@@ -502,6 +555,12 @@ rvtt_gen_rtx_noval (machine_mode mode)
   return gen_rtx_UNSPEC (mode,
 			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
 }
+
+/* Fold the live-value operand *LV of an _lv insn into its source.
+   When *LV is the no-value placeholder there is nothing to preserve.
+   Otherwise emit an sfpassign_lv merging *LV and *SRC into a fresh
+   pseudo, make that pseudo the new *SRC, and mark *LV with the
+   UNSPEC_SFPOMIT placeholder.  */
 
 bool
 rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
@@ -520,6 +579,10 @@ rvtt_merge_lv_src (rtx *lv, rtx *src, rtx *commute)
 			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
   return commuted;
 }
+
+/* Replace every use of the SSA name ORIG with REPLACEMENT, updating
+   (and, with dumping enabled, logging) each affected statement.
+   No-op when ORIG is null.  */
 
 void
 rvtt_substitute_value (tree orig, tree replacement)
@@ -649,7 +712,8 @@ bool rvtt_store_has_restrict_p (const rtx pat)
 		     TREE_CODE (exp) == VAR_DECL);
 
 	  tree decl = (TREE_CODE (exp) == PARM_DECL ||
-		       TREE_CODE (exp) == VAR_DECL) ? exp : TREE_OPERAND (exp, 0);
+		       TREE_CODE (exp) == VAR_DECL)
+		      ? exp : TREE_OPERAND (exp, 0);
 	  if (decl != NULL_TREE &&
 	      TYPE_RESTRICT (TREE_TYPE (decl)))
 	    {

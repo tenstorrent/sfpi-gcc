@@ -146,7 +146,8 @@ op_sema (uint8_t opcode, unsigned mod1)
       if (mod1 <= 2 || mod1 == 10)
 	r = { true,
 	      (unsigned) (F_READS_VC
-			  | ((mod1 == 2 || mod1 == 10) ? (unsigned) F_CC_WRITE : 0u)),
+			  | ((mod1 == 2 || mod1 == 10)
+			     ? (unsigned) F_CC_WRITE : 0u)),
 	      "[doc:SFPEXEXP][sim:8845-8875][md:~2000] exp extract" };
       break;
     case 0x78:			/* SFPEXMAN [sim:8877] */
@@ -218,7 +219,8 @@ op_sema (uint8_t opcode, unsigned mod1)
     case 0x81:			/* SFPLZ [sim:9106] sim mods {0,2,4}   */
       if (mod1 == 0 || mod1 == 2 || mod1 == 4)
 	r = { true,
-	      (unsigned) (F_READS_VC | (mod1 == 2 ? (unsigned) F_CC_WRITE : 0u)),
+	      (unsigned) (F_READS_VC
+			  | (mod1 == 2 ? (unsigned) F_CC_WRITE : 0u)),
 	      "[doc:SFPLZ][sim:9106-9131][md:~1960] clz, VD unread; "
 	      "imm12 must be 0; DOC/SIM DIVERGENCE on mods 6+ (below)" };
       break;
@@ -471,6 +473,10 @@ static const admitted_class admitted[] = {
   { 0x8d, 1u << 0, 1u << B_INPLACE, "xor" },
 };
 
+/* Return whether the (OPCODE, MOD1, ARM) class is in the admitted set
+   above, i.e. already realizable by the compiler's derived template
+   classes.  */
+
 static bool
 is_admitted (uint8_t opcode, unsigned mod1, binding arm)
 {
@@ -515,6 +521,9 @@ static const hosting_need hosting[] = {
   { "float-bodies.mad",	       0x84, (1u << 0) | (1u << 1) | (1u << 2)
 	  | (1u << 3), B_VB_CARRIER, 1 },
 };
+
+/* Sum the per-row-iteration hosting demand the corpus shapes above
+   place on the (OPCODE, MOD1, ARM) class; 0 when no shape needs it.  */
 
 static unsigned
 hosting_value (uint8_t opcode, unsigned mod1, binding arm)
