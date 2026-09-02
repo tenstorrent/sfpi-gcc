@@ -75,6 +75,11 @@ over_scope_p (const rvtt_sched_problem &problem)
   return problem.operation_count > 24 || problem.values.size () > 32;
 }
 
+/* Well-formedness beyond the scope caps: at least two operations, a
+   nonzero capacity, preferred slots forming a permutation, dependence
+   endpoints in range and non-self, and every value's def/uses in
+   range with no use at its own def.  */
+
 bool
 valid_problem_p (const rvtt_sched_problem &problem)
 {
@@ -234,6 +239,11 @@ bnb_search::issue_would_overflow (unsigned op, unsigned &live_after) const
   return live_after > m_problem.register_capacity;
 }
 
+/* Issue OP at the next slot: reads reaching their final wanting
+   position kill their values, a still-wanted definition is born, the
+   successors' pending-pred counts drop, and OP is appended to the
+   current order.  */
+
 void
 bnb_search::issue (unsigned op)
 {
@@ -248,6 +258,10 @@ bnb_search::issue (unsigned op)
     --m_pending_preds[successor];
   m_order.push_back (op);
 }
+
+/* Undo issue (OP): restore the wanting counts, the successors'
+   pending-pred counts and the order; LIVE_BEFORE is the live count
+   the caller saved before issuing.  */
 
 void
 bnb_search::retract (unsigned op, unsigned live_before)
@@ -272,6 +286,13 @@ bnb_search::forced_displacements (unsigned next_slot) const
       ++forced;
   return forced;
 }
+
+/* Fill SLOT and deeper by depth-first search over the ready
+   operations: the operation keeping SLOT undisplaced branches first,
+   then ascending operation index; prune against the incumbent with
+   the forced-displacement lower bound and per-candidate capacity
+   checks; every issued node counts against the cap.  Improvements
+   land in m_best_order / m_best_cost.  */
 
 void
 bnb_search::dfs (unsigned slot)
@@ -326,6 +347,12 @@ bnb_search::dfs (unsigned slot)
 	retract (op, live_before);
       }
 }
+
+/* Top-level solve: validate the envelope (an over-scope problem maps
+   to the capped verdict, a malformed one to invalid_model), build the
+   per-op tables, then either verify the asserted-feasible preferred
+   schedule exactly or run the full depth-first search.  A node-capped
+   search returns no order.  */
 
 rvtt_solver_solution
 bnb_search::run ()
@@ -414,6 +441,9 @@ displacement_cost (const rvtt_sched_problem &problem,
 
 } /* anonymous namespace */
 
+/* Solve PROBLEM (the model in the file header) exactly with one
+   branch-and-bound search instance.  */
+
 rvtt_solver_solution
 rvtt_bnb_schedule (const rvtt_sched_problem &problem)
 {
@@ -421,12 +451,19 @@ rvtt_bnb_schedule (const rvtt_sched_problem &problem)
   return search.run ();
 }
 
+/* An exact solver is always available: unlike the optional lp_solve
+   adapter, this backend is unconditionally compiled in.  */
+
 bool
 rvtt_solver_available ()
 {
   /* The built-in exact solver is always compiled in.  */
   return true;
 }
+
+/* The configuration name recorded in dumps: "bnb" alone, or
+   "bnb+lpsolve-check" when the optional cross-check backend was
+   configured in.  */
 
 const char *
 rvtt_solver_backend_name ()
@@ -474,6 +511,10 @@ rvtt_solver_backend_name ()
    both.  */
 
 namespace {
+
+/* The larger of A and B; all delivery pricing below is carried in
+   int64_t (slot counts scaled by 100 overflow int32 headroom
+   otherwise).  */
 
 int64_t
 imax64 (int64_t a, int64_t b)
@@ -687,6 +728,15 @@ delivery_payload_for (const rvtt_delivery_problem &p, unsigned factor)
 
 } /* anonymous namespace */
 
+/* Exact minimizer over the delivery-shape lattice described in the
+   block comment above: build the U = 1 reference from the predicted
+   materialization, then for every admitted unroll factor predict the
+   shape and price it at both boundary ends.  Returns the candidate
+   list, the rolled reference, the deterministic selection (strictly
+   better at the conservative boundary end wins, ties keep the smaller
+   factor) and the firing benefit minimized over the boundary
+   interval.  A malformed problem P fails closed (invalid_model).  */
+
 rvtt_delivery_solution
 rvtt_bnb_delivery_shape (const rvtt_delivery_problem &p)
 {
@@ -816,6 +866,12 @@ rvtt_bnb_delivery_shape (const rvtt_delivery_problem &p)
   sol.diagnostic = "ok";
   return sol;
 }
+
+/* Solve PROBLEM with the built-in exact backend and, when GCC was
+   configured --with-lp-solve, additionally run the lp_solve adapter
+   as an independent cross-check, recording agree/disagree/skipped in
+   the returned solution.  The check's answer is never selected, so
+   code generation is identical across build configurations.  */
 
 rvtt_solver_solution
 rvtt_solve_schedule (const rvtt_sched_problem &problem)

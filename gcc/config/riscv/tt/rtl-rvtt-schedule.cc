@@ -19,6 +19,151 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* ALGORITHM OVERVIEW
+
+   Pipeline position
+   -----------------
+   pass_rvtt_schedule is registered in tt/rvtt-passes.def immediately
+   before pass_postreload: register allocation has assigned hard LREGs,
+   and the Tensix passes queued ahead of it there have already run --
+   spill diagnosis, opcode synthesis, the generic macro planner (formed
+   macro calendars appear here as effect-opaque barrier words), and the
+   du-chain LREG rename (a broken storage collision widens this pass's
+   fill candidate sets).  The replay former, the Dst auto-increment
+   fold, and MOP formation run AFTER this pass and consume the
+   scheduled stream, so every transform below preserves the shapes they
+   recognize: unrolled row copies stay textually isomorphic, counted
+   replay-capture shapes stay intact, and nothing reorders across an
+   explicit replay owner.  The pass gates on TARGET_XTT_TENSIX, uses DF
+   (hard-register reference sets, complete for allocatable registers
+   after allocation), and never changes per-iteration semantics: every
+   transform is a reorder, a proven register rename, or a NOP insertion
+   required by a delay contract.
+
+   What runs, in execute () order.  Each optimization is off by default
+   behind its own -mtt-tensix-optimize-* flag; only the final NOP
+   inserter is unconditional.
+
+   1. Cross-row pairing (crossrow-pairing; sub-flags -stall-words,
+      -seed, crossrow-shared-reload, mve-expand): pairs two consecutive
+      iterations of an admitted capturable single-row Dst loop into one
+      doubled row -- textual copy, Dst rebase by the typed row stride,
+      doubled separator advance, halved countdown -- then interleaves
+      the halves (CC atoms indivisible) so modeled dependency stalls
+      fill while the counted replay-capture delivery shape survives.
+      Acceptance: strict modeled steady-state II decrease plus pad-site
+      and capture-budget belts; one transaction, exact restore.
+   2. Region list scheduling (list_schedule_regions), four flags:
+      . list-schedule: straight-line regions.  Maximal runs of audited
+	pure-LREG words are collected between named barriers, a
+	dependence DAG is built over DF hard-register references (RAW
+	and WAW edges weighted by audited result latency, WAR by issue
+	distance), and a deterministic critical-path list order is
+	adopted only on a strict modeled makespan decrease with
+	boundary terms from the entry producer and exit consumer.
+      . round-interleave: lifts the self-loop and repeated-shape
+	deferrals for two proven shapes -- a one-region self-loop row
+	judged on the wrapped steady-state initiation interval, after a
+	region-scoped storage-collision rename; and exactly two
+	dataflow-isomorphic region copies scheduled under one shared
+	permutation, transactionally as a pair.
+      . cyclic-region-schedule: a self-loop row chopped into several
+	regions by barrier words has each INTERIOR region rescheduled,
+	judged on the whole row's cyclic II; rename-temporal routes
+	collision roots through the shared rename service first.
+      . ims: adds a Rau iterative-modulo-scheduling candidate order on
+	both cyclic paths.  The engine is rvtt-timing.h's modulo tier:
+	MII = max (ResMII, exact RecMII) over a dependence-distance
+	graph produced by the same marshaller the acceptance simulator
+	consumes, then budgeted-eviction placement in a single-issue
+	modulo reservation table (-mtt-tensix-ims-budget=).  Modulo
+	variable expansion is priced, never assumed (Lam, PLDI 1988):
+	a kmin > 1 placement offers only its flat order unless the
+	mve-expand arm inside the cross-row pairing realizes the
+	kernel unroll with rotation renames.
+   3. Latency scheduling (latency-schedule): fill_latency_bubbles
+      moves the one instruction immediately behind an exposed one-slot
+      result-latency bubble; fill_nop_shadows searches a bounded
+      window for an independent filler for exactly the bubbles the NOP
+      inserter would pad -- delay_nop_needed_p, the same probe,
+      decides before and after, and the move is undone unless the
+      bubble closed and no new pad site appeared.
+   4. Interlock scheduling (interlock-schedule): fill_interlock_shadows
+      fills the transparent scoreboard stalls modeled by the audited
+      result-latency facts (no NOP word exists to remove), committing
+      only on a strict modeled stall decrease over every adjacency the
+      move changes; unaudited producers and targets refuse by name.
+   5. Capture rotation (capture-rotation): a capturable self-loop row
+      replays back-to-back, so its last word is issue-adjacent to the
+      next playback's first.  Three movers close modeled stalls in that
+      cycle: seam fill (plain reorder to the row tail or head),
+      prologue rotation (an invariant-input filler moves forward past
+      its own consumers, one prologue copy in the dedicated preheader
+      covering the first trip), and interior gap fill.  The two
+      plain-reorder movers use a widened filler pool (audited
+      Dst-touching words, the typed row-step word) over provably inert
+      crossings; the prologue mover keeps the pure-LREG pool.
+   6. transform (): the always-on NOP inserter.  For every insn with a
+      STATIC or DYNAMIC delay contract it walks the CFG forward to the
+      next issued Tensix word and emits an SFPNOP when that word is
+      dependent (DYNAMIC) or is not already a NOP (STATIC).
+      Everything above exists to make this insert less often, or to
+      hide the stalls it cannot express.
+
+   The tail of the file is not part of execute (): it exports three
+   emission services the macro planner calls.  Under drain-schedule,
+   rvtt_macro_drain_boundary_elidable and
+   rvtt_macro_drain_backedge_elidable prove a formed run's derived
+   drain NOPs redundant at an intra-region run boundary or across a
+   loop backedge; under window-pairing (with the -stride extension),
+   rvtt_macro_interrow_drain_tuned derives the minimal inter-row drain
+   from the descriptor's own decoded sequence delays with register-,
+   Dst-row-, and sub-unit-exact conflict checks.
+
+   Core data structures
+   --------------------
+   insn_regs	    DF-derived SFPU hard-register use/def sets.
+   ls_node	    one schedulable word: insn, register sets, audited
+		    latency, word count, original index, entry pin.
+   ls_region	    a collected straight-line region: nodes, anchor,
+		    entry producer, unaudited entry defs, signature.
+   ls_rename	    one committed register-web rename, for exact undo.
+   ls_ims_candidate an IMS order with its ResMII/RecMII/place-II/kmin.
+   crp_loop	    an admitted pairable loop: row nodes, CC atoms,
+		    load/store/separator/counter/jump, trip count, Dst
+		    address and stride.
+   crp_item	    an indivisible scheduling item (one CC atom or one
+		    word) with aggregated register sets and latency.
+   crp_shared_reload_info  the dedupe's value oracle: the shared
+		    register and per-insn definition/consumer epochs.
+   rotation_row     a capturable row: its issued words in order.
+   drain_horizon    a run's decoded pending-event horizon: per-macro
+		    carrier positions, event kinds and delays.
+   wp_event	    one staged or follower event with its realized
+		    footprint (LREGs, CC, config, typed Dst rows).
+
+   Invariants and refusal discipline
+   ---------------------------------
+   Everything is fail-closed.  Unproven shapes refuse BY NAME through
+   rvtt-refuse.h (rvtt_refuse, rvtt_refuse_by_name, and the composed
+   form), leaving the stream byte-identical.  Commits are transactional
+   against an exact-restore record (debug insns included) and are
+   re-verified after the move: the NOP inserter's own pad-site probe
+   must not count more sites, the entry producer's pad state must not
+   flip on, pairing orders re-verify every dependence direction, and
+   the shared-reload dedupe re-walks its value oracle independently.
+   Every timing fact has one spelling: rvtt-timing.h owns
+   audited_latency, adjacent_stall, classify_dependence, the makespan
+   simulator, the cyclic-II model, and the modulo tier.  Register-file
+   capacity is rvtt-pressure.h's rvtt_pressure_capacity; the capture
+   and row-size budgets (XTT_DELIVERY_CAPTURE_SLOTS,
+   XTT_CROSSROW_MIN_ROW_WORDS) come from the delivery-cost model
+   (rvtt-cost.md); renames beyond the local region-scoped form route
+   through the shared du-chain service (rvtt_lreg_rename_chain); and
+   the drain services decode macro timing exclusively from the
+   descriptor's own sequence words (rvtt-macro-sched.h,
+   rvtt-macro-desc.h), never from hand constants.  */
+
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -55,6 +200,11 @@ struct insn_regs
   HARD_REG_SET defs;
 };
 
+/* Collect INSN's SFPU hard-register uses and defs into REGS from DF.
+   Returns false when any reference is a pseudo or a non-SFPU register,
+   or when INSN defines no SFPU register -- the callers' schedulable-
+   node contract (pure vector operations with a vector result).  */
+
 static bool
 collect_sfpu_regs (rtx_insn *insn, insn_regs *regs)
 {
@@ -81,6 +231,11 @@ collect_sfpu_regs (rtx_insn *insn, insn_regs *regs)
   return !hard_reg_set_empty_p (regs->defs);
 }
 
+/* Whether INSN may participate in the simple latency-bubble move: a
+   recognized Tensix instruction whose reorderability is audited
+   (xtt_latency_reorder "safe"), with no memory reference and with
+   pure SFPU register references, collected into REGS.  */
+
 static bool
 latency_reorderable_p (rtx_insn *insn, insn_regs *regs)
 {
@@ -91,6 +246,12 @@ latency_reorderable_p (rtx_insn *insn, insn_regs *regs)
     && !contains_mem_rtx_p (PATTERN (insn))
     && collect_sfpu_regs (insn, regs);
 }
+
+/* The next issued instruction after INSN in BB: the first following
+   non-debug insn, provided it is a recognized Tensix instruction with
+   a nonzero length.  Returns null at the block end or when that first
+   insn is anything else -- callers treat such a stop as an opaque
+   boundary, not something to skip.  */
 
 static rtx_insn *
 next_issued_insn (basic_block bb, rtx_insn *insn)
@@ -107,6 +268,10 @@ next_issued_insn (basic_block bb, rtx_insn *insn)
     }
   return nullptr;
 }
+
+/* Whether A and B share a register: a short-named wrapper for
+   hard_reg_set_intersect_p, keeping fill_latency_bubbles' six-way
+   legality conjunction readable.  */
 
 static bool
 intersect_p (const HARD_REG_SET &a, const HARD_REG_SET &b)
@@ -286,7 +451,8 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
 
 	if (dump_file)
 	  {
-	    fprintf (dump_file, "Found %sdependent insn ", is_dependent ? "" : "non-");
+	    fprintf (dump_file, "Found %sdependent insn ",
+		     is_dependent ? "" : "non-");
 	    dump_insn_slim (dump_file, probe_insn);
 	  }
 	return is_dependent;
@@ -322,8 +488,8 @@ delay_nop_needed_p (std::vector<basic_block> &visited, basic_block bb,
   else
     {
       gcc_assert (delay == XTT_DELAY_DYNAMIC);
-      auto find_next = [] (auto self, std::vector<basic_block> &visited, basic_block bb,
-			   rtx_insn *insn, rtx rtl) -> bool
+      auto find_next = [] (auto self, std::vector<basic_block> &visited,
+			   basic_block bb, rtx_insn *insn, rtx rtl) -> bool
       {
 	switch (GET_CODE (rtl))
 	  {
@@ -435,6 +601,10 @@ bare_lreg_copy_p (rtx_insn *insn)
     && REG_P (SET_SRC (set)) && SFPU_REG_P (REGNO (SET_SRC (set)));
 }
 
+/* Whether INSN is a recognized Tensix instruction that delivers at
+   least one instruction word: excludes USE/CLOBBER markers and
+   zero-length bookkeeping patterns.  */
+
 static bool
 issued_tensix_p (rtx_insn *insn)
 {
@@ -463,6 +633,14 @@ sfpu_reg_refs (rtx_insn *insn, insn_regs *regs)
 	&& SFPU_REG_P (DF_REF_REGNO (ref)))
       SET_HARD_REG_BIT (regs->defs, DF_REF_REGNO (ref));
 }
+
+/* Whether a moving filler may cross INSN.  A replay-buffer owner is
+   never crossable (a fixed capture records delivered words by
+   position).  When HIDDEN_FREE_FILLER (the bare all-lanes copy, which
+   is invariant to CC, Dst, RWC, and configuration state), any other
+   recognized Tensix word may be crossed on register facts alone;
+   otherwise INSN must be provably non-CC-writing: audited
+   reorder-safe, a bare copy, or on record with no CC write.  */
 
 static bool
 shadow_crossing_safe_p (rtx_insn *insn, bool hidden_free_filler)
@@ -514,6 +692,14 @@ shadow_filler_p (rtx_insn *insn, insn_regs *regs, bool *hidden_free)
    are simply not considered -- refusal-direction only).  One definition
    so the two phases cannot drift (FH audit FHS-3).  */
 constexpr unsigned SEARCH_WINDOW = 24;
+
+/* The generalized shadow filler (see the section comment above).  For
+   every dynamic-delay producer in FN whose bubble the nop inserter
+   would pad, search up to SEARCH_WINDOW candidates further down the
+   block for a provably independent filler and move it into the bubble.
+   The move commits only when the probe confirms the producer's bubble
+   closed, the filler opened none of its own, and no new pad site
+   appeared at the vacated position; otherwise it is undone.  */
 
 static void
 fill_nop_shadows (function *fn)
@@ -749,6 +935,17 @@ adjacency_stall (rtx_insn *p, rtx_insn *c)
       || hard_reg_set_intersect_p (p_regs.defs, c_regs.defs);
   return rvtt_timing::adjacent_stall (dependent, audited_latency (p));
 }
+
+/* The interlock-stall filler (see the section comment above).  For
+   every issued producer in FN with an audited one-slot latency and an
+   immediately following dependent consumer -- a modeled transparent
+   scoreboard stall, not a required-nop site -- search the bounded
+   window for an independent zero-latency filler and move it into the
+   stall.  The move commits only when the modeled stall count strictly
+   decreases over every changed adjacency (any unaudited term refuses)
+   and the required-nop guards stay clean; otherwise it is undone
+   byte-identically.  Targets without audited latency facts refuse
+   wholesale.  */
 
 static void
 fill_interlock_shadows (function *fn)
@@ -1658,6 +1855,9 @@ struct ls_rename
   std::vector<rtx_insn *> insns;	/* web members rewritten */
 };
 
+/* Refresh every node's cached register sets from its (possibly just
+   rewritten) pattern, so dependence tests see the renamed registers.  */
+
 static void
 ls_refresh_node_regs (std::vector<ls_node> &nodes)
 {
@@ -1667,6 +1867,16 @@ ls_refresh_node_regs (std::vector<ls_node> &nodes)
       nd.raw_defs = nd.regs.defs;
     }
 }
+
+/* Rename the colliding definition webs of the region NODES in BB to
+   provably untouched LREGs, per the contract in the comment above.
+   START_ALLOWED, when given, restricts which nodes may root a web (the
+   cross-row pairing's ambient all-lanes rule); SCAN_ORDER reorders
+   only the root search -- web extents, collision detection, and member
+   rewrites stay in stream index order; *NO_FREE_LREG, when given, is
+   set once the free-register search comes up empty.  Every committed
+   rename is appended to *RECORD for exact undo.  Returns true when at
+   least one web was renamed.  */
 
 static bool
 ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
@@ -1776,7 +1986,8 @@ ls_cyclic_rename_collisions (basic_block bb, std::vector<ls_node> &nodes,
 	  {
 	    if (no_free_lreg)
 	      *no_free_lreg = true;
-	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_NO_FREE_LREG, dump_file,
+	    rvtt_refuse (RVTT_REF_ROUND_INTERLEAVE_RENAME_NO_FREE_LREG,
+			 dump_file,
 			 "List-schedule rename refused: "
 			 "round-interleave-rename-no-free-lreg reg %u "
 			 "uid=%d\n", r, INSN_UID (nodes[i].insn));
@@ -2462,6 +2673,10 @@ struct crp_loop
   HOST_WIDE_INT dst_step = 0;
 };
 
+/* Fire and dump the named cross-row pairing refusal WHY in BB, naming
+   INSN when given.  Returns false so admission checks can refuse in a
+   single return statement.  */
+
 static bool
 crp_refuse (basic_block bb, const char *why, rtx_insn *insn = nullptr)
 {
@@ -2605,7 +2820,8 @@ crp_entry_all_lanes_p (basic_block bb, basic_block preheader)
   basic_block cur = preheader;
   while (true)
     {
-      for (rtx_insn *insn = BB_END (cur); insn && insn != PREV_INSN (BB_HEAD (cur));
+      for (rtx_insn *insn = BB_END (cur);
+	   insn && insn != PREV_INSN (BB_HEAD (cur));
 	   insn = PREV_INSN (insn))
 	{
 	  if (!NONDEBUG_INSN_P (insn))
@@ -2888,6 +3104,11 @@ struct crp_item
   unsigned orig;			/* first member's original index */
 };
 
+/* Register dependence between super-items P (earlier) and C (later):
+   RAW, WAW, or WAR overlap between their aggregated register sets.
+   Ghost/marker references live in uses only, so pure readers never
+   conflict.  */
+
 static bool
 crp_item_dep (const crp_item &p, const crp_item &c)
 {
@@ -2895,6 +3116,14 @@ crp_item_dep (const crp_item &p, const crp_item &c)
     || hard_reg_set_intersect_p (p.raw_defs, c.raw_defs)
     || hard_reg_set_intersect_p (p.uses, c.raw_defs);
 }
+
+/* Compute the paired-row candidate emission order for the doubled
+   body ALL, whose nodes GROUP assigns to indivisible atom instances
+   (runs of one non-negative id; -1 nodes stand alone).  Aggregates
+   each atom into a super-item and greedily list-schedules the items
+   (details in the in-body comments); dependence edges always point in
+   original order, so the returned insn order is legal by
+   construction.  */
 
 static std::vector<rtx_insn *>
 crp_candidate_order (const std::vector<ls_node> &all,
@@ -3117,6 +3346,10 @@ struct crp_shared_reload_info
   std::vector<std::pair<rtx_insn *, unsigned> > consumer_epoch;
 };
 
+/* Fire and dump the composed shared-reload refusal
+   "crossrow-shared-reload-WHY" against register R in BB, naming INSN
+   when given.  */
+
 static void
 crp_sr_refuse (basic_block bb, const char *why, unsigned r,
 	       rtx_insn *insn = nullptr)
@@ -3249,9 +3482,9 @@ crp_shared_reload (basic_block bb, const crp_loop &lp,
   struct sr_cand
   {
     unsigned r;
-    std::vector<char> is_def;			/* row index -> group member */
-    std::vector<int> epoch_of;			/* row index -> consumer epoch */
-    std::vector<unsigned> seg_of;		/* row index -> segment */
+    std::vector<char> is_def;		/* row index -> group member */
+    std::vector<int> epoch_of;		/* row index -> consumer epoch */
+    std::vector<unsigned> seg_of;	/* row index -> segment */
     unsigned removed;
     unsigned epochs;
   };
@@ -4641,7 +4874,8 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 		     bound), or the counted-loop capture downstream
 		     stops firing.  */
 		  if (!full_lane_root
-		      && all.size () + 1 > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
+		      && all.size () + 1
+			 > (unsigned) XTT_DELIVERY_CAPTURE_SLOTS)
 		    {
 		      crp_seed_refuse (bb, "capture-budget", r, all[i].insn);
 		      continue;
@@ -4735,7 +4969,8 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
 	 modeled improvement (all of it when nothing improved).  */
       if (commits.size () > strict_commits)
 	{
-	  rvtt_refuse (RVTT_REF_CROSSROW_PAIRING_SEED_NO_II_IMPROVEMENT, dump_file,
+	  rvtt_refuse (RVTT_REF_CROSSROW_PAIRING_SEED_NO_II_IMPROVEMENT,
+		       dump_file,
 		       "Crossrow pairing seeds rolled back: "
 		       "crossrow-pairing-seed-no-ii-improvement in bb %d "
 		       "(kept=%u of %zu, II %d)\n",
@@ -4970,6 +5205,10 @@ crp_pair_loop (basic_block bb, std::vector<basic_block> &visited)
     }
   return true;
 }
+
+/* Cross-row pairing driver: refresh dataflow, then attempt the pairing
+   transaction on every block of FN (non-self-loop blocks fall out of
+   admission silently).  */
 
 static void
 crossrow_pair_rows (function *fn)
@@ -5458,6 +5697,17 @@ ls_schedule_cyclic_interior (basic_block bb,
     }
 }
 
+/* Region-scheduler driver over FN.  Refuses targets without audited
+   latency facts.  Per block: collects candidate regions of admissible
+   nodes between named barriers (an explicit replay owner ends the
+   block's eligibility); a self-loop block dispatches to the cyclic
+   paths -- the one-region wrapped-row model when the row is a single
+   region with no seam hazards, else the cyclic-interior path -- under
+   their flags, deferring by name otherwise; in straight-line blocks,
+   exactly two isomorphic region copies schedule as a pair under one
+   permutation, larger families defer to replay formation, and single
+   regions list-schedule under the list-schedule flag.  */
+
 static void
 list_schedule_regions (function *fn)
 {
@@ -5899,6 +6149,9 @@ rotation_row_p (basic_block bb, rotation_row *row, const char **reason)
     }
   return true;
 }
+
+/* Target tag used in capture-rotation dump lines ("wh" or "bh"; the
+   rotation gate admits no other target).  */
 
 static const char *
 rotation_target_name ()
@@ -6669,6 +6922,12 @@ rotate_prologue_fill (rotation_row const &row, basic_block preheader,
   return false;
 }
 
+/* Capture-rotation driver.  Refuses targets without audited latency
+   facts; otherwise, for every block of FN that admits as a capturable
+   self-loop row, repeatedly applies the three movers (seam fill,
+   prologue fill, interior fill -- each committed move restarts the
+   trio) until none fires or the row no longer re-admits.  */
+
 static void
 rotate_capture_rows (function *fn)
 {
@@ -6811,6 +7070,10 @@ public:
 
 } /* anon namespace */
 
+/* Instantiate the pass for CTXT.  Registered in tt/rvtt-passes.def
+   immediately before pass_postreload; see the overview at the top of
+   this file for the pipeline placement rationale.  */
+
 rtl_opt_pass *
 make_pass_rvtt_schedule (gcc::context *ctxt)
 {
@@ -6909,6 +7172,9 @@ drain_region_member_p (const macro_region &region, rtx_insn *insn)
     }
   return false;
 }
+
+/* Whether INSN is one of REGION's discovery-recorded run separators
+   (the words allowed to stand between two formed runs).  */
 
 static bool
 drain_run_separator_p (const macro_region &region, rtx_insn *insn)
@@ -7181,6 +7447,17 @@ drain_follower_rows_ok (const macro_region &region,
   return true;
 }
 
+/* The intra-region boundary verdict (see the section comment above):
+   prove that the drain after REGION's run ending at row END may be
+   elided.  BEGIN is unused (the run's own rows need no re-proof);
+   the follower run is rows [END, NEXT_END).  SCHEDULE and DESC are
+   the adopted row schedule and its descriptor.  Proves (a) the
+   inter-run stream holds only recorded run separators, earning slot
+   credit for never-absorbed pure-RWC words, (b) the decoded pending
+   horizon equals the emitted drain figure, and (c) every follower
+   access clears that horizon.  Returns true when elidable; any
+   unproven piece refuses by name to DUMP.  */
+
 bool
 rvtt_macro_drain_boundary_elidable (const macro_region &region,
 				    const macro_schedule &schedule,
@@ -7380,6 +7657,17 @@ drain_stream_insn_neutral (rtx_insn *insn, unsigned *credit,
     return false;
   return true;
 }
+
+/* The loop-backedge verdict (see the section comment above): prove
+   that REGION's final-run drain may be elided across the backedge of
+   its single-block loop body.  SCHEDULE and DESC are the adopted row
+   schedule and its descriptor; FIRST_RUN_END bounds the rows of the
+   region's first run, the follower stream's next-iteration rows.  The
+   in-body tail after the final run and anything ahead of the region at
+   the body head are classified for slot credit; the decoded pending
+   horizon (conservative form: decoded pending, at most the emitted
+   drain) must then clear against those first-run rows.  Returns true
+   when elidable; any unproven piece refuses by name to DUMP.  */
 
 bool
 rvtt_macro_drain_backedge_elidable (const macro_region &region,
@@ -7595,6 +7883,10 @@ wp_access_rows (int addr, int mod0, unsigned rows[20])
     }
   return n;
 }
+
+/* Whether the typed Dst accesses (ADDR_A, MOD0_A) and (ADDR_B, MOD0_B)
+   touch disjoint physical row sets under the audited access-row model
+   above.  */
 
 static bool
 wp_rows_disjoint (int addr_a, int mod0_a, int addr_b, int mod0_b)

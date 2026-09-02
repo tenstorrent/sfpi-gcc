@@ -56,6 +56,12 @@ along with GCC; see the file COPYING3.  If not see
 
 namespace {
 
+/* Whether INSND is a typed Dst-side operation the barrier walk admits
+   inside a loop: Dst loads/stores and the RWC/face counters.  These
+   are explicit architectural boundaries but change neither an
+   invariant SFPLOADI value nor the incoming CC state (see
+   rvtt_loop_has_sfpu_barrier_p below).  */
+
 static bool
 allowed_dst_effect_p (const rvtt_insn_data *insnd)
 {
@@ -65,6 +71,10 @@ allowed_dst_effect_p (const rvtt_insn_data *insnd)
     || insnd->id == rvtt_insn_data::ttincrwc
     || insnd->id == rvtt_insn_data::ttdstface;
 }
+
+/* Whether every non-debug use of the SSA name VALUE sits inside LOOP,
+   so hoisting its definition to the entry edge cannot stretch the
+   value's live range beyond the loop.  */
 
 static bool
 all_uses_in_loop_p (tree value, class loop *loop)
@@ -313,6 +323,13 @@ rvtt_loop_cc_canonical_body (class loop *loop)
   return out;
 }
 
+/* Whether CALL is an invariant constant materialization hoistable
+   from LOOP: the canonical sfpxloadi form -- or, when ALLOW_SHORTENED,
+   also the shortened single-issue sfploadi form, an opt-in reserved
+   for consumers running after pass_rvtt_immload_shorten -- with the
+   canonical instruction-buffer operand, all-constant scalar operands,
+   and every non-debug use inside LOOP.  */
+
 bool
 rvtt_invariant_constant_load_p (gcall *call, class loop *loop,
 				bool allow_shortened)
@@ -475,7 +492,8 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads,
   std::stable_sort (loads.begin (), loads.end (),
 		    [] (gcall *a, gcall *b)
 		    {
-		      return materialization_cost (a) > materialization_cost (b);
+		      return materialization_cost (a)
+			     > materialization_cost (b);
 		    });
 
   /* One base profile; each verdict is an incremental residual query
@@ -492,7 +510,8 @@ select_pressure_legal_loads (class loop *loop, auto_vec<gcall *> &loads,
 	  if (dump_file)
 	    {
 	      fprintf (dump_file,
-		       "Invariant SFPU immediate left in loop by LREG pressure: ");
+		       "Invariant SFPU immediate left in loop"
+		       " by LREG pressure: ");
 	      print_gimple_stmt (dump_file, call, 0);
 	    }
 	}
@@ -1286,6 +1305,15 @@ cc_depth_at_stmt (const cc_restore_analysis &a, gcall *call)
   gcc_unreachable ();
 }
 
+/* The invariant-loadi hoist over FN, innermost loops first (a load
+   hoists stepwise: out of its own loop into the enclosing body, where
+   the enclosing loop's proofs decide again).  Each loop must pass the
+   entry-edge, opacity, preheader-insertion, first-iteration and CC
+   proofs; the admitted loads are filtered by the loop pressure
+   profile and moved to the preheader (split from the entry edge only
+   at commit time).  Short constant replay loops may instead have a
+   complete unroll requested.  Returns whether the IL changed.  */
+
 static bool
 transform (function *fn)
 {
@@ -1314,7 +1342,8 @@ transform (function *fn)
 	{
 	  if (dump_file)
 	    fprintf (dump_file,
-		     "Invariant SFPU immediate hoist refused: function has opaque LREG state\n");
+		     "Invariant SFPU immediate hoist refused:"
+		     " function has opaque LREG state\n");
 	  continue;
 	}
 
@@ -1388,7 +1417,8 @@ transform (function *fn)
 		  {
 		    if (dump_file)
 		      {
-			rvtt_refuse (RVTT_REF_CC_POSITION_WIDENING_UNPROVEN, dump_file,
+			rvtt_refuse (RVTT_REF_CC_POSITION_WIDENING_UNPROVEN,
+				     dump_file,
 				     "Invariant SFPU immediate left in loop:"
 				     " cc-position-widening-unproven: ");
 			print_gimple_stmt (dump_file, call, 0);
@@ -1645,7 +1675,8 @@ transform (function *fn)
 		{
 		  if (dump_file)
 		    {
-		      rvtt_refuse (RVTT_REF_DEPTH_ZERO_HOIST_DOMINANT, dump_file,
+		      rvtt_refuse (RVTT_REF_DEPTH_ZERO_HOIST_DOMINANT,
+				   dump_file,
 				   "Invariant SFPU immediate hoist kept"
 				   " under park-ordering:"
 				   " depth-zero-hoist-dominant"
@@ -1717,7 +1748,8 @@ transform (function *fn)
 	  loop->unroll = USHRT_MAX;
 	  if (dump_file)
 	    fprintf (dump_file,
-		     "Requested complete unroll for constant replay loop bb %d\n",
+		     "Requested complete unroll for constant replay"
+		     " loop bb %d\n",
 		     bb->index);
 	}
 
@@ -1753,7 +1785,8 @@ transform (function *fn)
 	  if (dump_file)
 	    {
 	      fprintf (dump_file,
-		       "Hoisted invariant SFPU immediate from loop bb %d to preheader bb %d: ",
+		       "Hoisted invariant SFPU immediate from loop bb %d"
+		       " to preheader bb %d: ",
 		       bb->index, preheader->index);
 	      print_gimple_stmt (dump_file, call, 0);
 	    }
@@ -1793,7 +1826,8 @@ public:
     if (TARGET_XTT_TENSIX_QSR)
       {
 	if (dump_file)
-	  fprintf (dump_file, "Invariant SFPU immediate hoist refused on QSR\n");
+	  fprintf (dump_file,
+		   "Invariant SFPU immediate hoist refused on QSR\n");
 	return 0;
       }
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
@@ -1804,6 +1838,10 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: early, before
+   pass_rvtt_immvar_expand, placing semantic SFPU constants outside
+   counted loops while values are still SSA pseudos.  */
 
 gimple_opt_pass *
 make_pass_rvtt_invariant (gcc::context *ctxt)

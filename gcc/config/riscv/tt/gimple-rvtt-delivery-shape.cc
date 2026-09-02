@@ -260,6 +260,9 @@ delivery_latency_class (const rvtt_insn_data *insnd)
     }
 }
 
+/* Dump name of delivery MODE, matching the rvtt_delivery_mode
+   vocabulary declared in rvtt-schedule.h.  */
+
 static const char *
 delivery_mode_name (rvtt_delivery_mode mode)
 {
@@ -579,6 +582,11 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: after every
+   body-shaping gimple pass, and before the fixed-factor unroll
+   request pass, whose decision an affirmative annotation here
+   preempts.  */
 
 gimple_opt_pass *
 make_pass_rvtt_delivery_shape (gcc::context *ctxt)

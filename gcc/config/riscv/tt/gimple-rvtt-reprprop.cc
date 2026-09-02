@@ -591,6 +591,11 @@ public:
 
 } /* anonymous namespace */
 
+/* Instantiate the pass for its rvtt-passes.def seat: after the synth
+   CSE/DCE have canonicalized duplicate conversions and before
+   pass_rvtt_expand lowers the structured CC forms, so the whole
+   downstream pipeline sees the shorter bodies.  */
+
 gimple_opt_pass *
 make_pass_rvtt_reprprop (gcc::context *ctxt)
 {

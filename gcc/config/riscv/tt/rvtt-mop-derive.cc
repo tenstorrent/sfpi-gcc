@@ -323,13 +323,13 @@ ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
 /* ---- Context-bound resolution (lane CF; contract in
    rvtt-mop-derive.h).  */
 
+} /* anonymous namespace */
+
 /* Resolve VAL through the PARM-binding chain of *CTX_IO: while VAL is
    the default definition of a bound parameter, replace it by the
    driving call's actual argument, read under the caller's context.
    The hop bound is proof work, not semantics (an unresolved chain
    refuses downstream).  */
-
-} /* anonymous namespace */
 
 tree
 rvtt_mop_resolve_bound (tree val, rvtt_mop_scan_ctx **ctx_io)
@@ -350,6 +350,11 @@ rvtt_mop_resolve_bound (tree val, rvtt_mop_scan_ctx **ctx_io)
     }
   return val;
 }
+
+/* Poison VAR in CTX's field census: its address escaped the scanned
+   subtree, so unaudited stores to its fields can no longer be
+   excluded and every load from it must refuse.  No-op without a
+   census (a root scan that recorded nothing).  */
 
 void
 rvtt_mop_census_poison (rvtt_mop_scan_ctx *ctx, tree var)
@@ -437,8 +442,10 @@ pushed_word_opcode_byte (tree val, unsigned depth = 0,
       tree_code code = gimple_assign_rhs_code (def);
       if (code == PLUS_EXPR || code == BIT_IOR_EXPR)
 	{
-	  int a = pushed_word_opcode_byte (gimple_assign_rhs1 (def), depth + 1, ctx);
-	  int b = pushed_word_opcode_byte (gimple_assign_rhs2 (def), depth + 1, ctx);
+	  int a = pushed_word_opcode_byte (gimple_assign_rhs1 (def),
+					   depth + 1, ctx);
+	  int b = pushed_word_opcode_byte (gimple_assign_rhs2 (def),
+					   depth + 1, ctx);
 	  /* Exactly one side carries the opcode base; two competing
 	     bases (or none) leave the word unclassified.  */
 	  if (a > 0 && b <= 0)
@@ -450,7 +457,8 @@ pushed_word_opcode_byte (tree val, unsigned depth = 0,
 	  return -1;
 	}
       if (CONVERT_EXPR_CODE_P (code) || code == SSA_NAME || code == NOP_EXPR)
-	return pushed_word_opcode_byte (gimple_assign_rhs1 (def), depth + 1, ctx);
+	return pushed_word_opcode_byte (gimple_assign_rhs1 (def),
+					depth + 1, ctx);
       /* Shifted single fields below the opcode byte cannot construct
 	 an opcode by themselves under the discipline axiom.  */
       if (code == LSHIFT_EXPR || code == BIT_AND_EXPR || code == RSHIFT_EXPR)
@@ -680,6 +688,10 @@ crt0_data_anchor_p (const char *name)
   return false;
 }
 
+/* DECL's assembler name when one is set, else its source-level
+   DECL_NAME, else null -- the spelling the anchor and ABI-symbol
+   string compares below match against.  */
+
 static const char *
 decl_asm_name (tree decl)
 {
@@ -701,6 +713,12 @@ enum addr_class
   ADDR_INSTRN_FIFO,	/* the __instrn_buffer ABI anchor */
   ADDR_UNKNOWN		/* neither provable: refuse */
 };
+
+/* Classify the store-address base DECL: the `__instrn_buffer' ABI
+   anchor is the FIFO; a variable defined in this TU or a known
+   C-runtime data-image anchor is link-image data (disjoint from the
+   MMIO delivery ranges, XTT_LINK_IMAGE_DISJOINT); any other external
+   refuses as unknown.  */
 
 static addr_class
 classify_decl_base (tree decl)
@@ -1307,6 +1325,15 @@ rvtt_mop_blocking_store_asm_p (const gasm *stmt)
 			"and x0, x0, %[raw]");
 }
 
+/* Classify the blocking-store asm STMT (both the positional and the
+   named-operand spelling) exactly like an ordinary store: resolve its
+   address operand and route a constant address to the constant-target
+   classifier, a proven data-object base to admission, and a proven
+   FIFO base to word classification of its value operand.  Refuses
+   (false, *WHY) when the address is unresolvable or its FIFO
+   disjointness is unproven.  CLAIMED and ST are the shared derive
+   outputs of the word classifiers.  */
+
 bool
 rvtt_mop_derive_asm_store (const gasm *stmt, unsigned *claimed,
 			   const char **why, rvtt_mop_derive_state *st)
@@ -1428,6 +1455,14 @@ tu_init_array_extended_p ()
       return true;
   return false;
 }
+
+/* Prove that the indirect CALL is the C-runtime init-array walk
+   calling only this TU's own registered static constructors: the
+   callee must be loaded through a pointer anchored at
+   __init_array_start (MEM_REF or post-ivopts TARGET_MEM_REF form),
+   and nothing may extend the section beyond the registered
+   constructors (tu_init_array_extended_p).  Dumps the failing
+   obligation and returns false otherwise.  */
 
 bool
 rvtt_mop_init_array_call_p (gcall *call)
@@ -1642,6 +1677,15 @@ replay_record_word_disposition (uint32_t word)
 
 enum region_stmt_class { RGN_TRANSPARENT, RGN_WORD, RGN_REFUSE };
 
+/* Classify STMT inside an open record window: RGN_WORD for a raw
+   `.ttinsn' constant word that passes the recorded-content belt
+   (*WORD receives it); RGN_TRANSPARENT for statements that deliver no
+   Tensix word (debug/label/nop/control, empty or fence-only asm,
+   clobbers, non-volatile scalar assigns); RGN_REFUSE, with the named
+   reason in *WHY, for anything that could deliver a word the window
+   would swallow (calls, volatile stores, unrecognized asm) or that
+   the belt refuses.  */
+
 static region_stmt_class
 classify_region_stmt (gimple *stmt, uint32_t *word, const char **why)
 {
@@ -1847,6 +1891,11 @@ region_loop_trip_count (basic_block header, edge entry_e, edge latch_e,
 
 } /* anonymous namespace */
 
+/* Parse STMT as the canonical raw `.ttinsn %0' asm with exactly one
+   constant input and no outputs; on success set *WORD to the 32-bit
+   instruction word and return true.  Any other spelling or a
+   non-constant operand returns false.  */
+
 bool
 rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word)
 {
@@ -1868,6 +1917,17 @@ rvtt_raw_ttinsn_word_p (gasm *stmt, uint32_t *word)
   *word = (uint32_t) TREE_INT_CST_LOW (op);
   return true;
 }
+
+/* Adjudicate the raw REPLAY word WORD at asm statement RECORD for the
+   TU freedom proof (theorem and obligations: the file section above).
+   Playback words and malformed encodings refuse by name (*WHY).  A
+   record word walks its window from RECORD: exactly LEN raw constant
+   words along straight-line flow, allowing one structurally counted
+   loop whose every trip is swallowed, each word passing the recorded-
+   content belt.  On admission with exec_while_loading=0 every window
+   statement is added to *SUPPRESSED (architecturally swallowed --
+   excluded from the executed-word census); exec_while_loading=1
+   admits without suppression but still requires the proven window.  */
 
 bool
 rvtt_mop_replay_record_admit (gasm *record, uint32_t word,

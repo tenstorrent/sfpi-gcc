@@ -87,6 +87,10 @@ insn_unspecv (rtx_insn *insn)
   return -1;
 }
 
+/* Return the per-CPU architectural opcode byte realized by INSN's
+   unspec, read from the retained TT_OP encoding tables; 0 when the
+   unspec has no entry on record.  */
+
 static uint8_t
 source_opcode_byte (rtx_insn *insn)
 {
@@ -385,6 +389,14 @@ struct derived_structure
   unsigned n_load_insns;
 };
 
+/* Derive the canonical row's structure from REGION's first row under
+   SCHEDULE into *OUT: per-macro hosted value events in program order
+   (sub-unit plus source opcode byte), store placement, and the flat
+   value/load/store insns.  Returns false when the row exceeds the
+   descriptor shape limits (macros beyond two, more than two events per
+   macro or four value insns), hosts an instruction with no recorded
+   opcode byte, or lacks a store.  */
+
 static bool
 derive_structure (const macro_region &region, const macro_schedule &schedule,
 		  derived_structure *out)
@@ -427,6 +439,11 @@ derive_structure (const macro_region &region, const macro_schedule &schedule,
   return out->n_macros >= 1 && out->store_insn;
 }
 
+/* Return whether the row's DERIVED macro key matches program key KEY on
+   the current target (IS_WH selects the per-CPU opcode byte): the same
+   hosted-event count, store placement, and per-event sub-unit and
+   source opcode byte.  */
+
 static bool
 macro_key_matches (const desc_macro_key &key, const desc_macro_key &derived,
 		   bool is_wh)
@@ -459,6 +476,11 @@ find_seq_word (const caps *c, const char *name, uint32_t *word)
   return false;
 }
 
+/* Look up the capability table's miscellaneous instruction word
+   registered under NAME for target C into *WORD; false when no such
+   entry exists.  Companion of find_seq_word above for words outside
+   the sequence-program table.  */
+
 static bool
 find_misc_word (const caps *c, const char *name, uint32_t *word)
 {
@@ -488,6 +510,10 @@ operand_exists (rtx_insn *insn, int pos)
   return pos >= 0 && pos < recog_data.n_operands;
 }
 
+/* Return whether every template rule of P that reads a source operand
+   (mod1, imm12, or a pinned operand) finds it inside its source insn's
+   recog operand list -- the variant-layout guard described above.  */
+
 static bool
 program_operands_reachable (const desc_program &p,
 			    const derived_structure &derived)
@@ -508,6 +534,15 @@ program_operands_reachable (const desc_program &p,
     }
   return true;
 }
+
+/* Match DERIVED against the proven descriptor programs.
+   ABSORBED_INTO_EXPLICIT keys the compact select program (which exists
+   only for a schedule that absorbed the row stride into the trailing
+   explicit load) apart from every other program.  A program matches
+   only when every macro key agrees for the current target and its
+   template rules can reach their source operands.  Returns null when
+   no proven program applies (the caller then tries the
+   derived-calendar path).  */
 
 static const desc_program *
 find_program (const derived_structure &derived, bool absorbed_into_explicit)
@@ -550,6 +585,9 @@ second_set_reaches_store_p (rtx_insn *value_insn, rtx_insn *store_insn)
     return false;
   return (store_effects.lreg_read >> (regno - SFPU_REG_FIRST)) & 1;
 }
+
+/* Fetch INSN's recog operand POS as a constant integer into *VALUE;
+   false when POS is out of range or the operand is not a CONST_INT.  */
 
 static bool
 const_operand (rtx_insn *insn, int pos, HOST_WIDE_INT *value)
@@ -994,6 +1032,14 @@ struct derived_template_fields
      physical destination.  */
   uint32_t name_reads;
 };
+
+/* Map launched value insn INSN to the template fields its macro
+   realization would encode, under the admitted derived template classes
+   documented above.  LAUNCH_VD is the physical index of the hosting
+   carrier's launch VD (-1 unknown, -2 store-only sacrificial; see
+   below).  Fills *OUT, including the name-encoded physical source
+   reads, and returns true only when INSN lies inside an admitted class
+   with its audited operand envelope.  */
 
 static bool
 derived_value_template_fields (rtx_insn *insn, int launch_vd,
@@ -1950,6 +1996,11 @@ rvtt_macro_derived_template_probe (rtx_insn *insn, int launch_vd,
   return true;
 }
 
+/* Return the sub-unit (an xtt_subunit_t value) a launched realization
+   of INSN would occupy.  The in-place immediate shift hosts on Round
+   through its proven SHFT2 realization; everything else executes on
+   its own architectural sub-unit.  */
+
 int
 rvtt_macro_hosted_subunit (rtx_insn *insn)
 {
@@ -1971,11 +2022,22 @@ rvtt_macro_hosted_subunit (rtx_insn *insn)
   return (int) rvtt_insn_effects (insn).subunit;
 }
 
+/* Free the heap storage owned by DESC (the launch vector).  */
+
 void
 rvtt_macro_descriptor_release (macro_descriptor *desc)
 {
   desc->launches.release ();
 }
+
+/* Synthesize the macro descriptor for REGION under SCHEDULE into *OUT:
+   match a proven whole-word descriptor program, or derive the calendar
+   from the schedule and the capability tables' architectural facts.
+   Returns false when synthesis cannot begin (no capability table, or
+   the schedule carries a refusal outside the documented carve-outs);
+   otherwise returns true with *OUT complete or carrying a stable
+   refusal name in OUT->refusal.  Prints descriptor words and refusals
+   to DUMP when non-null; never mutates the function.  */
 
 bool
 rvtt_macro_synthesize (const macro_region &region,
@@ -2597,6 +2659,13 @@ rvtt_macro_synthesize (const macro_region &region,
 /* ------------------------------------------------------------------ */
 
 #include "rvtt-macro-verify-core.h"
+
+/* Assemble the verifier's expectation set for REGION under SCHEDULE
+   into *OUT, re-keying the proven program (or re-running the shared
+   derivation) from the region's explicit facts and independently
+   re-deriving the launch words and SETC16 slot program.  Returns false
+   when no expectation set can be built (no capability table, or the
+   derivation refuses).  */
 
 bool
 rvtt_macro_build_expectations (const macro_region &region,

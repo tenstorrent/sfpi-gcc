@@ -19,6 +19,143 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* ALGORITHM ESSAY
+
+   Hardware and problem.  Each Tensix thread owns a REPLAY buffer of
+   instruction slots (riscv_tt_replay_size of them).  One TTREPLAY word
+   with load=1 (a "capture" or "record") stores the next LEN delivered
+   words into slots [IDX, IDX+LEN), either executing them as they
+   record (exec=1) or swallowing them un-executed (exec=0); one
+   TTREPLAY word with load=0 (a "launch" or "playback") re-emits the
+   stored words through the normal downstream pipeline at its own
+   stream position.  Replacing an N-word repeat with a 1-word launch
+   thus saves N-1 delivered words per site, bought at one recording
+   pass and N buffer slots.  Profit is word/issue-slot economics
+   throughout: every priced decision goes through the shared
+   delivery-cost engine (rvtt-delivery-cost.h; constants and their
+   derivations in rvtt-cost.md) and, where reissue stalls matter, the
+   shared interlock timing engine (rvtt-timing.h).
+
+   Pass placement (tt/rvtt-passes.def).  This file registers two
+   passes over the same transform ().  pass_rvtt_replay runs after
+   reload -- on the final explicit or macro issue stream, with hard
+   registers and recognizable patterns -- and BEFORE both Dst
+   auto-increment ownership (which absorbs typed TTINCRWC separators
+   around the launches this pass emits) and MOP loop-delivery
+   formation (which re-rolls runs of those launches).
+   pass_rvtt_replay_reform is the alternative placement selected by
+   -mtt-tensix-optimize-post-autoincr-window: the first invocation
+   gates itself off and the SAME transform () runs once, after the Dst
+   auto-increment fold, with the file-static reform_mode flag raised.
+   The fold absorbs the per-row separator words that break repeated
+   row bodies, so those bodies become word-uniform only after it, and
+   a single post-fold allocation prices every candidate against the
+   one buffer.  reform_mode adds launch-arithmetic audits for
+   "carried" Dst accesses (fold-retargeted positional-walk accesses;
+   see the reform_mode block comment below).  Both passes keep the CFG
+   intact except for the complete unroll of launch loops, which
+   removes a backedge and requests loop fixup.
+
+   Data structures.  scan_insns digests one basic block into a
+   replay_block: a vector of replay_info entries carrying the insn, a
+   structural hash, a register-age GENERATION (see invariants below),
+   a MUST_END barrier flag, and an EMPTY flag for zero-length words.
+   replay_span is a half-open [begin, end) interval of block indices.
+   replay_sequence is a candidate window: length, hash, and the
+   ascending clone spans that deliver the same words; replay_list,
+   replay_map and replay_active are the sequence store, the hash index
+   used during growth, and the picker's surviving-candidate set.
+   Around these: replay_sa::state/automaton/view (the shadow suffix
+   automaton), peel_plan and hoist_lift_plan (the hoist variants),
+   conv_capture/conv_launch under a conv_map register value map (the
+   launch conversion), and crf_block/crf_position/crf_value with
+   crf_seq/crf_clone families committed as a verified crf_plan (the
+   counted-row canonicalization).
+
+   Algorithm, in transform () order:
+
+   1. Slot census.  Typed user captures subtract their declared slot
+      ranges from the free spans; a variable-length user capture
+      claims the rest of the buffer; a raw asm word carrying the
+      REPLAY opcode refuses all formation in the function (its slot
+      range is unknowable).  Under the hoist flag, recording-epoch
+      scoping excludes only the blocks where a user recording may
+      still be open (up to the next explicit replay owner on each
+      path) instead of refusing the whole function.
+
+   2. Counted-loop hoisting (hoist_counted_loops).  A single-block
+      counted loop whose body is one uninterrupted fixed-encoding SFPU
+      run becomes a single-clone payload: a no-exec capture of the
+      body in the dedicated preheader and one launch per trip, when
+      the trip count is provable (rvtt-trips.h) and the priced benefit
+      clears the audited minimum.  A benefit-refused candidate may
+      still admit as an exec-while-record first-trip peel.
+
+   3. Counted-row canonicalization (canonicalize_counted_rows, the
+      crf_* machinery; docs/COUNTED_ROW_FORMATION.md).  Row families
+      that repeat modulo per-row immediate materializations and
+      register rotation are REWRITTEN into word-exact form -- excluded
+      members moved to clone heads or tails, registers renamed under a
+      verified occupancy simulation, live-in divergence bridged with
+      all-lanes moves -- so the ordinary discovery below records one
+      parameterized row program per family.
+
+   4. Discovery (build_sequences), one basic block at a time.
+      Candidates grow one instruction per round from length-1 seeds;
+      equal (hash, generation, word) prefixes merge, so the clone
+      lists of every repeated run emerge together.  This is O(N^2) by
+      construction.  active_triage drops overlapping clones and
+      single-instance sequences.  A suffix-automaton shadow
+      (replay_sa) enumerates every maximal repeat of the same symbol
+      string as a census; under checking builds it asserts that each
+      legacy candidate is enumerable with the identical clone set, and
+      it never feeds the picker.
+
+   5. Allocation and replacement.  The knapsack aspect is greedy:
+      pick_replay selects the candidate with the greatest modeled word
+      saving that fits the largest free span, the tightest-fitting
+      span hosts it, and active_invalidate retires candidates
+      overlapping the consumed positions before the next pick.
+      In-block commits (replace_sequence) record the first clone
+      exec-while-record and launch the rest; when the full hoist
+      admission holds (hoist_preheader) the record moves to the
+      preheader as a no-exec capture (replace_hoisted_sequence),
+      possibly peeled, lifted to an outer preheader, or re-sized to a
+      wider same-anchor window plus one partial prefix launch (the
+      window_sizing_* helpers).
+
+   6. Delivery cleanups on the formed stream.  unroll_launch_loops
+      completely unrolls a proven-trip loop whose body is nothing but
+      playback launches, typed Dst steps and its own control, removing
+      two loop-control words per trip.  convert_isomorphic_runs turns
+      a run that matches a recorded payload under a register value map
+      (conv_match_insn) into one more launch, provided every register
+      whose final contents differ is dead after the run and the
+      trailing Dst-advance context matches the payload's other sites.
+
+   7. Fail-closed sweep (unhoist_hazard_rerecords).  A pass-hoisted
+      no-exec capture left in a hazardous placement -- inside a loop
+      with a Dst-store payload, within the audited drained-frontend
+      window of a mod-write, or not dominating every launch of its
+      span -- is un-hoisted by name: its launches become inline
+      payload copies again (the identity the capture was formed from).
+
+   Invariants and refusal discipline.  Clones must be word-exact under
+   the one comparator (rvtt_dcost_replay_word_equal_p) and of the same
+   GENERATION: the hash folds a per-GPR write counter, so two
+   textually equal synthesized-word insns whose scalar inputs may
+   differ never merge.  Sequences never cross a MUST_END word (asm,
+   non-Tensix, replay owner, variable capture) and never span a replay
+   owner's recorded shadow.  User-reserved slots are never allocated;
+   slots consumed by hoisted or canonicalized records are marked
+   persistent against later formation.  On targets that cannot execute
+   while recording, the capture swallows its payload and the first
+   clone launches too.  Every transformation either fires with its
+   stated proof or refuses BY NAME through the refusal registry
+   (rvtt-refuse.h), leaving the emitted bytes identical to the
+   untransformed stream -- an unpriceable or unproven candidate is a
+   named refusal, never a guess.  */
+
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
 #define INCLUDE_SET
@@ -64,12 +201,14 @@ along with GCC; see the file COPYING3.  If not see
    3) If the user has explicitly used replay, we use the parts of the replay
       buffer that have not used (anywhere in the function).
    4) We use all of a discovered sequence (or none of it).  We could of course
-      use the first N insns, if that is profitable and no room for the whole sequence.  */
+      use the first N insns, if that is profitable and no room for the whole
+      sequence.  */
 
-/* FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn. This isn't
-   always necessary.  The non-Tensix insn could be hoisted upwards, provided it
-   doesn't affect the generation of any insn hoisted past. This may improve
-   synthesized insns where opcode or address computation is in the middle of a sequence.  */
+/* FIXME: PR 36496 We terminate sequences if they meet a non TENSIX insn.
+   This isn't always necessary.  The non-Tensix insn could be hoisted
+   upwards, provided it doesn't affect the generation of any insn hoisted
+   past. This may improve synthesized insns where opcode or address
+   computation is in the middle of a sequence.  */
 
 /* Minimum acceptable sequence length.  4 mirrors
    XTT_REPLAY_LOOP_UNROLL_MIN_WORDS (rvtt-cost.md): smaller rows cannot
@@ -203,13 +342,23 @@ struct replay_sequence
    within each length by starting insn position.  */
 using replay_list = std::vector<replay_sequence>;
 
-/* Map from hash to set of sequences, used to find matches during construction */
+/* Map from hash to set of sequences, used to find matches during
+   construction */
 using replay_map = std::map<unsigned, std::vector<unsigned>>;
 
 /* It is cheaper to remove/copy pointers than sequence info itself.  */
 using replay_active = std::vector<replay_sequence *>;
 
-enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture, REPLAY_variable_capture};
+enum REPLAY_TYPE {REPLAY_none, REPLAY_playback, REPLAY_fixed_capture,
+		  REPLAY_variable_capture};
+
+/* Classify INSN as a typed TTREPLAY word.  Returns REPLAY_none unless
+   INSN is the typed replay pattern; otherwise fills SPAN with the raw
+   operands -- begin = the start slot, end = the LENGTH (not a half-open
+   bound; 0 when the length is not a compile-time constant) -- and
+   returns REPLAY_playback (load operand 0), or REPLAY_fixed_capture vs
+   REPLAY_variable_capture for a recording with a constant vs unknown
+   length.  */
 
 static REPLAY_TYPE
 is_replay_insn (replay_span &span, rtx_insn *insn)
@@ -301,10 +450,10 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	  }
 
 	/* Only machine-described replay-safe instructions may enter a payload.
-	   Explicit replay owners are handled above so their reserved slots remain
-	   visible to the allocator.  In particular, an opaque asm remains a
-	   boundary even if it happens to print a constant `.ttinsn' word in the
-	   final assembly.  */
+	   Explicit replay owners are handled above so their reserved slots
+	   remain visible to the allocator.  In particular, an opaque asm
+	   remains a boundary even if it happens to print a constant `.ttinsn'
+	   word in the final assembly.  */
 	if (get_attr_type (insn) != TYPE_TENSIX
 	    || replay_class != XTT_REPLAY_SAFE)
 	  goto not_tensix;
@@ -323,7 +472,8 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 
 	/* Just use crc32, it's right there */
 	unsigned age = 0;
-	auto hasher = [&reg_ages, &age] (auto &self, unsigned hash, rtx rtl) -> unsigned
+	auto hasher = [&reg_ages, &age] (auto &self, unsigned hash, rtx rtl)
+	  -> unsigned
 	{
 	  hash = crc32_unsigned (hash, GET_CODE (rtl) + (GET_MODE (rtl) << 16));
 	  switch (GET_CODE (rtl))
@@ -362,7 +512,8 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 
 	    case MEM:
 	      /* MEMs are to store a synthesized insn.  All are equivalent.
-	         In broken code, we could meet simple sets moving to/from MEM.  */
+	         In broken code, we could meet simple sets moving to/from
+	         MEM.  */
 	      break;
 
 	    case CLOBBER:
@@ -404,7 +555,8 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
 {
   auto &insn = block[end - 1];
 
-  unsigned hash = parent ? crc32_unsigned (list[parent].hash, insn.hash) : insn.hash;
+  unsigned hash
+    = parent ? crc32_unsigned (list[parent].hash, insn.hash) : insn.hash;
   auto slot = map.emplace (hash, std::vector<unsigned> ());
   for (auto ix : slot.first->second)
     {
@@ -442,7 +594,8 @@ extend_sequence (replay_map &map, replay_list &list, replay_block &block,
    Return number index of first sequence >= MIN_SEQUENCE.  */
 
 static unsigned
-build_sequences (replay_map &map, replay_list &list, replay_block &block, unsigned max_length)
+build_sequences (replay_map &map, replay_list &list, replay_block &block,
+		 unsigned max_length)
 {
   list.clear ();
   list.push_back (replay_sequence ()); /* null sequence */
@@ -492,7 +645,8 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
 		  goto skip_empty;
 		}
 
-	      extend_sequence (map, list, block, seq_ix, length, span.begin, span.end + 1);
+	      extend_sequence (map, list, block, seq_ix, length, span.begin,
+			       span.end + 1);
 	    }
 	}
 
@@ -503,6 +657,12 @@ build_sequences (replay_map &map, replay_list &list, replay_block &block, unsign
 
   return lwm;
 }
+
+/* Dump SPAN's insns to STREAM, one per line, numbering the
+   slot-occupying entries upward from BASE (a replay-buffer slot or a
+   block position, per caller).  With IGNORE_EMPTY, zero-length entries
+   print an unnumbered "-:"; otherwise they consume a number but are
+   marked with '-' instead of ':'.  */
 
 static void
 dump_sequence (FILE *stream, replay_block const &block, replay_span span,
@@ -524,7 +684,8 @@ dump_sequence (FILE *stream, replay_block const &block, replay_span span,
    Remove overlaps, and push a pointer to valid ones into the ACTIVE array.  */
 
 static void
-active_triage (replay_block const &block, replay_active &active, replay_list &list, unsigned from)
+active_triage (replay_block const &block, replay_active &active,
+	       replay_list &list, unsigned from)
 {
   active.clear ();
   for (; from != list.size (); from++)
@@ -633,7 +794,8 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 		if (rvtt_lreg_marker (block[probe].insn, &mask)
 		    && (mask & group_mask))
 		  {
-		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT, dump_file,
+		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT,
+				 dump_file,
 				 "Refusing capture:"
 				 " multiresult-companion-split: boundary"
 				 " separates insn %d from companion marker"
@@ -651,7 +813,8 @@ span_companion_sound_p (replay_block const &block, replay_span span,
 		if (rvtt_lreg_marker (block[probe].insn, &mask)
 		    && (mask & group_mask))
 		  {
-		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT, dump_file,
+		    rvtt_refuse (RVTT_REF_MULTIRESULT_COMPANION_SPLIT,
+				 dump_file,
 				 "Refusing capture:"
 				 " multiresult-companion-split: boundary"
 				 " separates insn %d from companion marker"
@@ -765,6 +928,14 @@ clones_word_exact_walk (replay_block const &block,
     }
   return CLONE_WALK_OK;
 }
+
+/* The reform-mode launch-arithmetic audit for a carried-payload
+   candidate SEQ (contract in the design comment before
+   clones_word_exact_walk): run the shared clone walk and map each
+   failing verdict onto the named refusal
+   post-autoincr-window-launch-arithmetic-skew.  True means one delivery
+   per replaced site is structurally proven, so the carried access
+   executes exactly as often as the fold accounted.  */
 
 static bool
 reform_carried_launch_arithmetic_ok (replay_block const &block,
@@ -899,6 +1070,13 @@ window_sizing_clones_exact_p (replay_block const &block,
   return true;
 }
 
+/* Measure CAND's trailing prefix run (second bullet of the
+   window-sizing design comment above): the longest run after the last
+   clone that is a word-exact prefix of the recorded window, stopping
+   one word short of a full extra clone and never crossing a must_end
+   word or the block end.  Returns the run's word count (0: no trim) and
+   stores the block position one past the run in *TRIM_END_OUT.  */
+
 static unsigned
 window_sizing_prefix_trim (replay_block const &block,
 			   replay_sequence const &cand,
@@ -940,6 +1118,16 @@ window_sizing_prefix_trim (replay_block const &block,
   *trim_end_out = end;
   return matched;
 }
+
+/* Re-pick an admitted hoist's window (third bullet of the window-sizing
+   design comment above): among ACTIVE candidates longer than SEQ that
+   share its anchor position, fit in FREE_SPAN slots, and pass the
+   companion (under STICKY) and clone-exactness checks, return the one
+   whose covered span costs strictly the fewest delivered per-trip issue
+   words -- counting launches, one partial prefix launch for the
+   trailing trim, and the words left inline -- with its trim reported
+   through *TRIM_LEN_OUT/*TRIM_END_OUT.  Null (with a named refusal)
+   keeps SEQ, the original pick.  */
 
 static replay_sequence *
 window_sizing_widen (replay_active &active, replay_sequence *seq,
@@ -1038,8 +1226,10 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
 			 free_span, begin, seq->length);
 	  else
 	    rvtt_refuse (RVTT_REF_WINDOW_SIZING_NO_WIDER_CANDIDATE, dump_file,
-			 "window-sizing refused: window-sizing-no-wider-candidate:"
-			 " no admissible wider same-anchor candidate; keeping the"
+			 "window-sizing refused:"
+			 " window-sizing-no-wider-candidate:"
+			 " no admissible wider same-anchor"
+			 " candidate; keeping the"
 			 " picked [%u,+%u) window\n", begin, seq->length);
 	}
       return nullptr;
@@ -1080,9 +1270,9 @@ window_sizing_widen (replay_active &active, replay_sequence *seq,
    same crc32 class hash (which folds in the register GENERATION counter
    reg_ages, the piece that makes textual equality value-safe), same
    generation equality, same word-equality re-check through the same
-   rvtt_dcost_replay_word_equal_p comparator (rvtt-delivery-cost.cc), first-match-wins in increasing block
-   order.  Two insns therefore get one symbol iff the legacy discovery
-   would have merged them.
+   rvtt_dcost_replay_word_equal_p comparator (rvtt-delivery-cost.cc),
+   first-match-wins in increasing block order.  Two insns therefore get
+   one symbol iff the legacy discovery would have merged them.
 
    BOUNDARIES.  Wherever the legacy extension refuses to walk (a
    must_end entry -- asm, non-Tensix, a replay owner, a variable
@@ -1227,7 +1417,8 @@ static void
 build_symbols (view &v, replay_block const &block)
 {
   std::map<unsigned, std::vector<unsigned> > buckets; /* hash -> class ids */
-  std::vector<unsigned> rep;			     /* class id -> block index */
+  /* class id -> block index */
+  std::vector<unsigned> rep;
   int next_sep = -1;
 
   v.sym_of.assign (block.size (), -1);
@@ -1571,6 +1762,14 @@ shadow_discovery_census (replay_block const &block,
     gcc_assert (!violations);
 }
 
+/* Greedy selection: return the candidate from ACTIVE with the greatest
+   modeled word saving -- (clones - 1) * (length - 1), less the extra
+   launch the no-exec-while-record workaround costs -- whose recorded
+   length fits LIMIT free slots and whose first clone passes the
+   companion-soundness contract (verdict cached in companion_ok; STICKY
+   is the function's shadow-coupling possibility).  Ties prefer the
+   longer window.  Null when nothing qualifies.  */
+
 static replay_sequence *
 pick_replay (replay_active &active, unsigned limit, replay_block const &block,
 	     bool sticky)
@@ -1605,7 +1804,8 @@ pick_replay (replay_active &active, unsigned limit, replay_block const &block,
 	    }
 	  continue;
 	}
-      if (best < saving || (best == saving && result && result->length < seq->length))
+      if (best < saving
+	  || (best == saving && result && result->length < seq->length))
 	{
 	  best = saving;
 	  result = seq;
@@ -1615,8 +1815,18 @@ pick_replay (replay_active &active, unsigned limit, replay_block const &block,
   return result;
 }
 
+/* Commit the picked in-block candidate SEQ, recording into slots
+   [REPLAY_START, +length).  Normally the capture executes while
+   recording: it is emitted before the first clone (which stays as the
+   recorded payload) and every later clone becomes one playback launch
+   with its insns deleted.  Under the no-exec-while-record workaround
+   the capture swallows the first clone instead, that clone's insns stay
+   as the (un-executed) payload, and ALL clones -- the first included --
+   launch.  Returns the recorded length.  */
+
 static unsigned
-replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_start)
+replace_sequence (replay_sequence &seq, replay_block &block,
+		  unsigned replay_start)
 {
   unsigned length = seq.length;
   bool not_quasar_fix = !(riscv_tt_fix_qsr_replay > 0);
@@ -1624,7 +1834,9 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
     {
       unsigned saving = (seq.length - 1) * (unsigned (seq.clones.size ()) - 1)
       - not_quasar_fix;
-      fprintf (dump_file, "Capturing %ssequence [%u,%u) %u instances to [%u,+%u) saving=%u\n",
+      fprintf (dump_file,
+	       "Capturing %ssequence [%u,%u) %u instances to [%u,+%u)"
+	       " saving=%u\n",
 	       not_quasar_fix ? "and executing " : "",
 	       seq.clones.front ().begin, seq.clones.front ().end,
 	       unsigned (seq.clones.size ()),
@@ -1646,7 +1858,8 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
        pos != end; pos++)
     gcc_assert (GET_CODE (pos->insn) == INSN);
 
-  for (auto clone = seq.clones.begin () + not_quasar_fix; clone != seq.clones.end (); ++clone)
+  for (auto clone = seq.clones.begin () + not_quasar_fix;
+       clone != seq.clones.end (); ++clone)
     {
       rtx replay = gen_rvtt_ttreplay_int
 	(const0_rtx, const0_rtx, const0_rtx, GEN_INT (length),
@@ -1655,13 +1868,15 @@ replace_sequence (replay_sequence &seq, replay_block &block, unsigned replay_sta
       auto *insn = emit_insn_after (replay, block[clone->end - 1].insn);
       if (dump_file)
 	{
-	  fprintf (dump_file, not_quasar_fix ? "Replaying " : "Replaying original ");
+	  fprintf (dump_file,
+		   not_quasar_fix ? "Replaying " : "Replaying original ");
 	  dump_insn_slim (dump_file, insn);
 	}
       if (not_quasar_fix)
 	{
 	  unsigned ix = replay_start;
-	  for (auto pos = block.data () + clone->begin, end = block.data () + clone->end;
+	  for (auto pos = block.data () + clone->begin,
+		 end = block.data () + clone->end;
 	       pos != end; pos++)
 	    {
 	      if (dump_file)
@@ -1936,6 +2151,19 @@ delivered_words (replay_block const &block, replay_span span)
   return words;
 }
 
+/* The hoist pricing gate (models and constants in the two design
+   comments above and in rvtt-cost.md).  Decide whether recording
+   PAYLOAD (a span of BLOCK) once in PREHEADER instead of in LOOP's body
+   is modeled profitable.  BODY_RERECORDS distinguishes a body that
+   re-records the payload every trip (the in-block formation's shape)
+   from a counted-loop capture; LAUNCH_RUN is the longest contiguous
+   sibling-launch run, the execution-saturation context term.  Requires
+   a provable trip count (rvtt_loop_trips) except on the structural
+   runtime-trip record-hoist path, and audited reissue latencies unless
+   the record-hoist discharge applies; prices through
+   rvtt_dcost_replay_pricing and refuses by name below the audited
+   minimum benefit.  */
+
 static bool
 hoist_profitable_p (class loop *loop, basic_block preheader,
 		    replay_block const &block, replay_span payload,
@@ -1982,7 +2210,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		   loop->num, (long) trips);
 	  if (record_hoist_mode)
 	    rvtt_refuse (RVTT_REF_RECORD_HOIST_TRIP_COUNT_UNPROVEN, dump_file,
-			 "record-hoist refused: record-hoist-trip-count-unproven\n");
+			 "record-hoist refused:"
+			 " record-hoist-trip-count-unproven\n");
 	}
       return false;
     }
@@ -2017,11 +2246,13 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 	    {
 	      rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED, dump_file,
 			   "Not hoisting: replay-reissue-latency-unproved: a"
-			   " consumed payload producer carries no audited result"
+			   " consumed payload producer carries no"
+			   " audited result"
 			   " latency (loop %d, %ld words)\n",
 			   loop->num, (long) words);
 	      if (record_hoist_mode)
-		rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED, dump_file,
+		rvtt_refuse (RVTT_REF_REPLAY_REISSUE_LATENCY_UNPROVED,
+			     dump_file,
 			     "record-hoist refused:"
 			     " replay-reissue-latency-unproved\n");
 	    }
@@ -2106,7 +2337,8 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
 		     (long) min_benefit, (long) exposure);
 	  if (!price.profitable)
 	    {
-	      rvtt_refuse (RVTT_REF_RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN, dump_file,
+	      rvtt_refuse (RVTT_REF_RECORD_HOIST_RUNTIME_TRIPS_BREAK_EVEN,
+			   dump_file,
 			   "record-hoist refused:"
 			   " record-hoist-runtime-trips-break-even: 2-trip"
 			   " benefit %ld < %ld\n",
@@ -2233,9 +2465,12 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
      synthetic zero-trip profitability loss.  */
   if (runtime_trips && record_completion_model)
     {
-      rvtt_refuse (RVTT_REF_RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN, dump_file,
-		   "Not hoisting: record-hoist-completion-runtime-trips-unproven:"
-		   " completion-accurate shared model requires a proven trip count"
+      rvtt_refuse (RVTT_REF_RECORD_HOIST_COMPLETION_RUNTIME_TRIPS_UNPROVEN,
+		   dump_file,
+		   "Not hoisting:"
+		   " record-hoist-completion-runtime-trips-unproven:"
+		   " completion-accurate shared model requires a proven"
+		   " trip count"
 		   " (loop %d)\n",
 		   loop->num);
       return false;
@@ -2363,6 +2598,12 @@ window_sizing_commit_trim (replay_sequence &seq, replay_block &block,
   seq.clones.emplace_back (begin, trim_end);
 }
 
+/* Return LOOP's dedicated preheader: the unique block outside the loop
+   with an edge into the header, provided that entry edge is normal and
+   the block's only successor is the header (so an insn placed at its
+   end executes exactly once per loop entry).  Null when the loop has
+   several entry blocks or the candidate is shared with other code.  */
+
 static basic_block
 dedicated_loop_preheader (class loop *loop)
 {
@@ -2379,7 +2620,8 @@ dedicated_loop_preheader (class loop *loop)
 	entry = e;
       }
 
-  return preheader && !(entry->flags & EDGE_ABNORMAL) && single_succ_p (preheader)
+  return preheader && !(entry->flags & EDGE_ABNORMAL)
+    && single_succ_p (preheader)
     ? preheader : nullptr;
 }
 
@@ -2521,6 +2763,16 @@ struct peel_plan
   machine_mode mode = VOIDmode;
   uint64_t trips = 0;
 };
+
+/* Structural admission of the exec-while-record first-trip peel (see
+   the design comment above struct peel_plan).  LOOP must be a
+   single-block loop with constant proven trips >= 2 whose counter
+   re-init constant is materializable in one insn at PREHEADER, and
+   whose every non-debug body insn is a clone-span member of SEQ, a
+   typed fixed-encoding TTINCRWC, the counter step, or the final jump.
+   On success fills *PLAN (counter, re-init value, mode, trips) and
+   returns true; each failing premise fires its named refusal and
+   returns false.  */
 
 static bool
 peel_admissible_p (class loop *loop, basic_block preheader,
@@ -2665,6 +2917,15 @@ struct hoist_lift_plan
   unsigned levels = 0;
 };
 
+/* The placement lift's outward walk (see the block comment above
+   hoist_lift_plan): starting at the oracle-refused PREHEADER, cross
+   enclosing loops as long as each proves replay-preserving, has a
+   dedicated preheader, and holds no open recording state (DIRTY_BBS);
+   remember the outermost crossed preheader the mod-write oracle
+   accepts.  On success fills *LIFT with that placement and its level
+   count and returns true; otherwise fires the named refusal
+   record-hoist-lift-no-admissible-level and returns false.  */
+
 static bool
 hoist_lift_admit (basic_block preheader, bitmap dirty_bbs,
 		  hoist_lift_plan *lift)
@@ -2749,6 +3010,18 @@ hoist_lift_admit (basic_block preheader, bitmap dirty_bbs,
   return true;
 }
 
+/* Full hoist admission for candidate SEQ (its clones live in BLOCK).
+   Returns the loop's dedicated preheader when every proof holds -- loop
+   shape (single-block header, or latch-dominating capture under the
+   record-hoist flag), loop replay preservation, no open recording state
+   (DIRTY_BBS), fixed-encoding payload, the Dst-store composition mirror
+   (rescuable by an admitted first-trip peel into *PEEL), the
+   downstream-fallback oracle (rescuable by an admitted placement lift
+   into *LIFT), and the pricing gate -- and nullptr otherwise, leaving
+   the in-block formation to proceed.  Refusals are named; see the
+   design comments above hoist_profitable_p, peel_admissible_p and
+   hoist_lift_admit.  */
+
 static basic_block
 hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		 bitmap dirty_bbs, peel_plan *peel, hoist_lift_plan *lift)
@@ -2784,7 +3057,9 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	{
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "Not hoisting: candidate bb %d is not a single-bb loop header\n",
+	      fprintf (dump_file,
+		       "Not hoisting: candidate bb %d is not a single-bb loop"
+		       " header\n",
 		       bb->index);
 	      if (record_hoist)
 		rvtt_refuse (RVTT_REF_RECORD_HOIST_LOOP_SHAPE, dump_file,
@@ -2829,7 +3104,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	  if (dump_file)
 	    {
 	      fprintf (dump_file,
-		       "Not hoisting: loop contains call, opaque asm, or replay owner\n");
+		       "Not hoisting: loop contains call, opaque asm, or replay"
+		       " owner\n");
 	      /* For the record-hoist this is also the in-loop slot-liveness
 		 proof: an in-loop replay owner (or an asm/call that could hide
 		 one) could re-record the hoisted capture's slots between the
@@ -2859,10 +3135,13 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
     {
       if (dump_file)
 	{
-	  fprintf (dump_file, "Not hoisting: loop has no dedicated preheader\n");
+	  fprintf (dump_file,
+		   "Not hoisting: loop has no dedicated preheader\n");
 	  if (record_hoist)
-	    rvtt_refuse (RVTT_REF_RECORD_HOIST_NO_DEDICATED_PREHEADER, dump_file,
-			 "record-hoist refused: record-hoist-no-dedicated-preheader\n");
+	    rvtt_refuse (RVTT_REF_RECORD_HOIST_NO_DEDICATED_PREHEADER,
+			 dump_file,
+			 "record-hoist refused:"
+			 " record-hoist-no-dedicated-preheader\n");
 	}
       return nullptr;
     }
@@ -2874,8 +3153,10 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		   "Not hoisting: preheader bb %d may hold open recording"
 		   " state\n", preheader->index);
 	  if (record_hoist)
-	    rvtt_refuse (RVTT_REF_RECORD_HOIST_PREHEADER_RECORDING_OPEN, dump_file,
-			 "record-hoist refused: record-hoist-preheader-recording-open\n");
+	    rvtt_refuse (RVTT_REF_RECORD_HOIST_PREHEADER_RECORDING_OPEN,
+			 dump_file,
+			 "record-hoist refused:"
+			 " record-hoist-preheader-recording-open\n");
 	}
       return nullptr;
     }
@@ -2968,12 +3249,14 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 			     (unsigned long) (peel->trips - 1));
 		  break;
 		}
-	      rvtt_refuse (RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED, dump_file,
-			   "record-hoist refused:"
-			   " noexec-rerecord-dststore-composition-unaudited:"
-			   " Dst-store payload, preheader bb %d inside loop %d"
-			   " (the re-record sweep would un-hoist)\n",
-			   preheader->index, ph_loop->num);
+	      rvtt_refuse
+		(RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED,
+		 dump_file,
+		 "record-hoist refused:"
+		 " noexec-rerecord-dststore-composition-unaudited:"
+		 " Dst-store payload, preheader bb %d inside loop %d"
+		 " (the re-record sweep would un-hoist)\n",
+		 preheader->index, ph_loop->num);
 	      return nullptr;
 	    }
     }
@@ -3021,15 +3304,17 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 	  if (!(riscv_tt_opt_record_hoist_lift > 0
 		&& hoist_lift_admit (preheader, dirty_bbs, lift)))
 	    {
-	      rvtt_refuse (RVTT_REF_RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE, dump_file,
-			   "record-hoist refused:"
-			   " record-hoist-downstream-fallback-unprofitable:"
-			   " hoisted no-exec record within the drained-frontend"
-			   " window of a would-be dst-autoincr mod-write row"
-			   " (distance %u < %u, preheader bb %d; the group guard"
-			   " would refuse and the mod-write falls back)\n",
-			   dist, rvtt_modwrite_drained_frontend_window (),
-			   preheader->index);
+	      rvtt_refuse
+		(RVTT_REF_RECORD_HOIST_DOWNSTREAM_FALLBACK_UNPROFITABLE,
+		 dump_file,
+		 "record-hoist refused:"
+		 " record-hoist-downstream-fallback-unprofitable:"
+		 " hoisted no-exec record within the drained-frontend"
+		 " window of a would-be dst-autoincr mod-write row"
+		 " (distance %u < %u, preheader bb %d; the group guard"
+		 " would refuse and the mod-write falls back)\n",
+		 dist, rvtt_modwrite_drained_frontend_window (),
+		 preheader->index);
 	      return nullptr;
 	    }
 	}
@@ -3046,7 +3331,8 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
     if (!pos->empty && !fixed_replay_rtx_p (PATTERN (pos->insn)))
       {
 	if (dump_file)
-	  fprintf (dump_file, "Not hoisting: payload insn %d is not fixed encoding\n",
+	  fprintf (dump_file,
+		   "Not hoisting: payload insn %d is not fixed encoding\n",
 		   INSN_UID (pos->insn));
 	return nullptr;
       }
@@ -3060,6 +3346,14 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
    are never entered here and stay untouched.  */
 static std::vector<rtx_insn *> formed_noexec_captures;
 
+
+/* Commit an admitted hoist of SEQ: emit a no-exec capture followed by a
+   copy of the payload's non-empty insns at the end of PREHEADER (before
+   its jump if it has one), recording into slots [REPLAY_START,
+   +length); then replace EVERY clone -- the first included -- with one
+   playback launch and delete the clone's insns.  Registers the capture
+   and launches for the end-of-pass sweeps.  Returns the recorded
+   length.  */
 
 static unsigned
 replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
@@ -3107,7 +3401,8 @@ replace_hoisted_sequence (replay_sequence &seq, replay_block &block,
 
   if (dump_file)
     fprintf (dump_file,
-	     "Hoisted no-exec capture [%u,+%u) to preheader bb %d; %u playbacks\n\n",
+	     "Hoisted no-exec capture [%u,+%u) to preheader bb %d;"
+	     " %u playbacks\n\n",
 	     replay_start, length, preheader->index,
 	     unsigned (seq.clones.size ()));
   return length;
@@ -3264,7 +3559,8 @@ replace_hoisted_sequence_peel (replay_sequence &seq, replay_block &block,
    (SEQ itself auto-invalidates).  */
 
 static bool
-active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_length)
+active_invalidate (replay_active &active, replay_sequence *seq,
+		   unsigned max_length)
 {
   auto write = active.begin ();
   auto end = active.end ();
@@ -3319,6 +3615,12 @@ active_invalidate (replay_active &active, replay_sequence *seq, unsigned max_len
 
   return !active.empty ();
 }
+
+/* Subtract the PERSISTENT slots (already consumed by hoisted or
+   canonicalized records) from the free spans in BASE and return the
+   remaining sub-spans of at least MIN_SEQUENCE slots, as [start,
+   +length) pairs sorted by decreasing length.  BASE spans are [start,
+   +length) too (transform's post-census form).  */
 
 static std::vector<replay_span>
 available_replay_spans (std::vector<replay_span> const &base,
@@ -3489,6 +3791,17 @@ counted_peel_profitable_p (class loop *loop, basic_block preheader,
     }
   return true;
 }
+
+/* Hoist every eligible counted loop of CFN: a single-block loop whose
+   body is one uninterrupted fixed-encoding SFPU run
+   (counted_loop_payload) becomes a no-exec capture in its dedicated
+   preheader plus one playback launch per trip -- or, when the plain
+   pricing refuses and the peel flag admits, an exec-while-record
+   first-trip peel.  Slots come from REPLAY_SPANS minus
+   PERSISTENT_SLOTS; a committed capture marks its slots persistent so
+   the later in-block formation never reuses them.  DIRTY_BBS excludes
+   blocks with possibly-open user recording state; STICKY is the
+   function's shadow-coupling possibility for the companion checks.  */
 
 static void
 hoist_counted_loops (function *cfn,
@@ -3882,7 +4195,8 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 			  break;
 			}
 		    }
-		  continue;	/* scalar work / empty barrier / pre-record raw word */
+		  /* scalar work / empty barrier / pre-record raw word */
+		  continue;
 		}
 	      if (payload_left)
 		{
@@ -3999,6 +4313,10 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
 	     trip_words);
   return true;
 }
+
+/* Apply the complete launch-loop unroll (unroll_launch_loop and the
+   design comment above it) to every loop header block of CFN.
+   DIRTY_BBS excludes blocks where user recording state may be open.  */
 
 static void
 unroll_launch_loops (function *cfn, bitmap dirty_bbs)
@@ -4166,6 +4484,13 @@ conv_mentions_varlreg_p (const_rtx x)
   return false;
 }
 
+/* The lifetime test described above (the comment preceding
+   conv_mentions_varlreg_p): is hard register REGNO's value at FROM
+   possibly consumed later?  Scans the remainder of BB after FROM, then
+   every successor path, returning true at the first call, variable-LREG
+   interface marker, or pattern reference to REGNO, and pruning a path
+   at a full redefinition.  The exit block is never a consumer.  */
+
 static bool
 conv_reg_consumed_after_p (unsigned regno, rtx_insn *from, basic_block bb)
 {
@@ -4229,6 +4554,16 @@ struct conv_map
   std::vector<std::pair<unsigned, unsigned>> pairs;
   std::map<unsigned, bool> defined_p, defined_r;
 };
+
+/* Recursive structural comparison of payload rtx A against run rtx B.
+   IN_DEF marks definition context (SET_DEST, CLOBBER).  SFPU register
+   pairs met in definition context are deferred into PENDING_DEFS --
+   conv_match_insn commits them into MAP only after the whole insn
+   matches; register uses must agree with MAP's current correspondence,
+   and a live-in use (no definition seen yet) must be the identical hard
+   register, unshadowed by a run-local definition.  Everything else --
+   codes, modes, constants, unspec numbers, vector shapes -- must match
+   exactly; SCRATCH matches SCRATCH.  */
 
 static bool
 conv_match_rtx (rtx a, rtx b, bool in_def, conv_map &map,
@@ -4299,6 +4634,13 @@ conv_match_rtx (rtx a, rtx b, bool in_def, conv_map &map,
     }
 }
 
+/* Lockstep-match payload insn P against run insn R under MAP: same insn
+   code, patterns structurally isomorphic via conv_match_rtx.  Only on a
+   whole-insn match are the pair's register definitions committed into
+   MAP (p2r/r2p, the defined sets, and the PAIRS list the liveness proof
+   consumes) -- definitions take effect after all of the instruction's
+   uses.  */
+
 static bool
 conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
 {
@@ -4318,6 +4660,14 @@ conv_match_insn (rtx_insn *p, rtx_insn *r, conv_map &map)
     }
   return true;
 }
+
+/* Driver of the isomorphic-run launch conversion (section comment
+   above): structurally rediscover CFN's captures and launches, group
+   launch-led instruction runs that are register-isomorphic to a
+   recorded capture, and convert each proven run into a launch of that
+   capture.  Blocks whose contents changed are marked in DIRTY_BBS for
+   the caller's df rescan.  Bails wholesale on any unparseable capture
+   ownership.  */
 
 static void
 convert_isomorphic_runs (function *cfn, bitmap dirty_bbs)
@@ -4832,7 +5182,8 @@ struct crf_position
   rtx_insn *insn;
   uint32_t defs = 0, uses = 0;	 /* SFPU reg masks (pattern + audited extra) */
   bool eligible = false;	 /* may be a family member */
-  bool excludable = false;	 /* admissible for invariant-violation exclusion */
+  bool excludable = false;	 /* admissible for invariant-violation
+				    exclusion */
   bool barrier = false;		 /* breaks family runs */
   bool empty = false;		 /* zero-length marker: transparent */
   bool cc_write = false;
@@ -5182,6 +5533,13 @@ crf_match_rtx (rtx a, rtx b, bool in_def, crf_clone &map,
     }
 }
 
+/* Lockstep-match seed member P against clone member R under MAP's
+   evolving register correspondence (see the block comment above
+   crf_match_rtx): same insn code, patterns structurally equal via
+   crf_match_rtx.  Only on a whole-insn match are the pair's register
+   definitions committed into MAP -- definitions take effect after all
+   of the instruction's uses.  */
+
 static bool
 crf_match_insn (rtx_insn *p, rtx_insn *r, crf_clone &map)
 {
@@ -5282,6 +5640,14 @@ crf_extend (std::map<unsigned, std::vector<unsigned>> &map,
   }
   seq.clones.push_back (std::move (seed));
 }
+
+/* Discover parameterized clone families over BLK into LIST: seed a
+   length-1 sequence at every eligible position, then grow every
+   multi-clone sequence by one member per round through crf_extend, up
+   to MAX_RESIDUAL members (the record must fit the slot budget).
+   Transparent positions (zero-length markers, excludable
+   materializations) are stepped over; a barrier or ineligible position
+   ends growth of that clone.  LIST[0] is the null sequence.  */
 
 static void
 crf_build_sequences (std::vector<crf_seq> &list, crf_block &blk,
@@ -5453,6 +5819,11 @@ crf_final_lockstep_rtx (rtx a, rtx b, bool in_def,
       return false;
     }
 }
+
+/* Collect into OUT the block positions of clone C's LENGTH members: the
+   eligible, non-transparent, non-barrier positions of BLK inside C's
+   span, in stream order.  A caller finding fewer than LENGTH entries
+   knows the clone's span no longer carries a full member set.  */
 
 static void
 crf_clone_members (crf_block const &blk, crf_clone const &c, unsigned length,
@@ -5971,7 +6342,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 				   map))
 		{
 		  drop_clone = int (c);
-		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RESIDUAL_NOT_UNIFORM, dump_file,
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RESIDUAL_NOT_UNIFORM,
+			       dump_file,
 			       "Dropping counted-row clone"
 			       " [%u,%u): counted-row-residual-not-uniform:"
 			       " diverges at member %u\n",
@@ -6036,7 +6408,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  if (used_later && (seed_writes & crf_reg_bit (t)))
 		    {
 		      drop_clone = int (c);
-		      rvtt_refuse (RVTT_REF_COUNTED_ROW_BRIDGE_CLOBBER, dump_file,
+		      rvtt_refuse (RVTT_REF_COUNTED_ROW_BRIDGE_CLOBBER,
+				   dump_file,
 				   "Dropping counted-row clone"
 				   " [%u,%u): counted-row-bridge-clobber:"
 				   " r%u is written by the recorded program"
@@ -6076,7 +6449,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      if (v.fixed || v.poisoned || v.live_out)
 			{
 			  drop_clone = int (c);
-			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT,
+				       dump_file,
 				       "Dropping counted-row"
 				       " clone [%u,%u):"
 				       " counted-row-map-live-out: pinned or"
@@ -6089,7 +6463,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      if (rr != 1)
 			{
 			  drop_clone = int (c);
-			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT, dump_file,
+			  rvtt_refuse (RVTT_REF_COUNTED_ROW_MAP_LIVE_OUT,
+				       dump_file,
 				       "Dropping counted-row"
 				       " clone [%u,%u):"
 				       " counted-row-map-live-out:"
@@ -6229,25 +6604,29 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		    {
 		      if (unsigned (cc) == ref)
 			{
-			  rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
-				       "Refusing counted-row"
-				       " family [%u,%u):"
-				       " counted-row-excluded-member-"
-				       "unmovable: insn %d cannot reach its"
-				       " consumer clone\n",
-				       plan.clones.front ().begin,
-				       plan.clones.front ().end,
-				       INSN_UID (blk.pos[pos].insn));
+			  rvtt_refuse
+			    (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE,
+			     dump_file,
+			     "Refusing counted-row"
+			     " family [%u,%u):"
+			     " counted-row-excluded-member-"
+			     "unmovable: insn %d cannot reach its"
+			     " consumer clone\n",
+			     plan.clones.front ().begin,
+			     plan.clones.front ().end,
+			     INSN_UID (blk.pos[pos].insn));
 			  return false;
 			}
-		      rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
-				   "Dropping counted-row clone"
-				   " [%u,%u):"
-				   " counted-row-excluded-member-unmovable:"
-				   " insn %d cannot reach its consumer"
-				   " clone\n", plan.clones[cc].begin,
-				   plan.clones[cc].end,
-				   INSN_UID (blk.pos[pos].insn));
+		      rvtt_refuse
+			(RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE,
+			 dump_file,
+			 "Dropping counted-row clone"
+			 " [%u,%u):"
+			 " counted-row-excluded-member-unmovable:"
+			 " insn %d cannot reach its consumer"
+			 " clone\n", plan.clones[cc].begin,
+			 plan.clones[cc].end,
+			 INSN_UID (blk.pos[pos].insn));
 		      drop_clone = cc;
 		      moves_ok = false;
 		      break;
@@ -6275,14 +6654,16 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		      {
 			if (c == ref)
 			  return false;
-			rvtt_refuse (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE, dump_file,
-				     "Dropping counted-row clone"
-				     " [%u,%u):"
-				     " counted-row-excluded-member-"
-				     "unmovable: insn %d cannot move past"
-				     " the tail\n", plan.clones[c].begin,
-				     plan.clones[c].end,
-				     INSN_UID (blk.pos[pos].insn));
+			rvtt_refuse
+			  (RVTT_REF_COUNTED_ROW_EXCLUDED_MEMBER_UNMOVABLE,
+			   dump_file,
+			   "Dropping counted-row clone"
+			   " [%u,%u):"
+			   " counted-row-excluded-member-"
+			   "unmovable: insn %d cannot move past"
+			   " the tail\n", plan.clones[c].begin,
+			   plan.clones[c].end,
+			   INSN_UID (blk.pos[pos].insn));
 			drop_clone = int (c);
 			moves_ok = false;
 		      }
@@ -6348,7 +6729,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 		  src = plan.rename_source[v];
 	      if (src >= 0 && unsigned (src) != ref)
 		{
-		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE,
+			       dump_file,
 			       "Dropping counted-row clone"
 			       " [%u,%u): counted-row-rename-interference:"
 			       " unresolvable occupancy conflict\n",
@@ -6394,7 +6776,8 @@ crf_verify_family (crf_block &blk, crf_seq &seq, unsigned budget,
 	    {
 	      if (dump_file)
 		{
-		  rvtt_refuse (RVTT_REF_COUNTED_ROW_FINAL_LOCKSTEP_DIVERGENCE, dump_file,
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_FINAL_LOCKSTEP_DIVERGENCE,
+			       dump_file,
 			       "Refusing counted-row family"
 			       " [%u,%u): counted-row-final-lockstep-"
 			       "divergence: member %u of clone %u diverges"
@@ -6593,7 +6976,8 @@ crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 		}
 	      if (dump_file)
 		{
-		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE,
+			       dump_file,
 			       "Refusing counted-row family"
 			       " [%u,%u): counted-row-rename-interference:"
 			       " two values occupy r%u:\n",
@@ -7029,7 +7413,8 @@ canonicalize_counted_rows (function *cfn,
 		}
 	      if (touches_frozen)
 		{
-		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE, dump_file,
+		  rvtt_refuse (RVTT_REF_COUNTED_ROW_RENAME_INTERFERENCE,
+			       dump_file,
 			       "Refusing counted-row family"
 			       " [%u,%u): counted-row-rename-interference:"
 			       " rewrite touches an already-canonicalized"
@@ -7433,13 +7818,16 @@ unhoist_hazard_rerecords (function *cfn)
       if (dump_file)
 	{
 	  if (dststore_rule)
-	    rvtt_refuse (RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED, dump_file,
-			 "Replay refusal: noexec-rerecord-dststore-"
-			 "composition-unaudited (capture bb %d in loop %d "
-			 "un-hoisted, %u launches inlined)\n",
-			 bb->index, loop->num, launches);
+	    rvtt_refuse
+	      (RVTT_REF_NOEXEC_RERECORD_DSTSTORE_COMPOSITION_UNAUDITED,
+	       dump_file,
+	       "Replay refusal: noexec-rerecord-dststore-"
+	       "composition-unaudited (capture bb %d in loop %d "
+	       "un-hoisted, %u launches inlined)\n",
+	       bb->index, loop->num, launches);
 	  else if (modwrite_rule)
-	    rvtt_refuse (RVTT_REF_NOEXEC_RECORD_MODWRITE_WINDOW_UNAUDITED, dump_file,
+	    rvtt_refuse (RVTT_REF_NOEXEC_RECORD_MODWRITE_WINDOW_UNAUDITED,
+			 dump_file,
 			 "Replay refusal: noexec-record-modwrite-"
 			 "window-unaudited (capture bb %d %u issue words after "
 			 "an audited mod-write, window %u; un-hoisted, "
@@ -7448,7 +7836,8 @@ unhoist_hazard_rerecords (function *cfn)
 	  else
 	    rvtt_refuse (RVTT_REF_NOEXEC_RECORD_DSTSTORE_NONDOMINATING_LAUNCH_PERSIST_UNAUDITED, dump_file,
 			 "Replay refusal: noexec-record-dststore-"
-			 "nondominating-launch-persist-unaudited (capture bb %d "
+			 "nondominating-launch-persist-unaudited"
+			 " (capture bb %d "
 			 "does not dominate all %u launches of its span; "
 			 "un-hoisted, %u launches inlined)\n",
 			 bb->index, (unsigned) launch_insns.size (), launches);
@@ -7459,6 +7848,15 @@ unhoist_hazard_rerecords (function *cfn)
   formed_noexec_captures.clear ();
   formed_playback_launches.clear ();
 }
+
+/* The formation driver for one function (both pass invocations end up
+   here; reform_mode distinguishes them).  BUFFER_SIZE is the replay
+   buffer's slot count.  In order: the raw-capture census (a raw REPLAY
+   word refuses the whole function), user-slot subtraction and
+   recording-epoch scoping, counted-loop hoisting, counted-row
+   canonicalization, the per-block discover/pick/commit loop, the
+   launch-loop unroll and isomorphic-run conversion, and the fail-closed
+   un-hoist sweep.  See the algorithm essay at the top of the file.  */
 
 static void
 transform (function *cfn, unsigned buffer_size)
@@ -7586,7 +7984,8 @@ transform (function *cfn, unsigned buffer_size)
 	  else if (shadow)
 	    {
 	      if (dump_file)
-		fprintf (dump_file, "User capturing or replaying during capture\n");
+		fprintf (dump_file,
+			 "User capturing or replaying during capture\n");
 	      return;
 	    }
 
@@ -7621,7 +8020,8 @@ transform (function *cfn, unsigned buffer_size)
 			case xtt_replay_epoch::OWNER_DURING_CAPTURE:
 			  if (dump_file)
 			    fprintf (dump_file,
-				     "User capturing or replaying during capture\n");
+				     "User capturing or replaying"
+				     " during capture\n");
 			  return;
 
 			case xtt_replay_epoch::OPAQUE_PAYLOAD:
@@ -7653,7 +8053,8 @@ transform (function *cfn, unsigned buffer_size)
 	    }
 
 	  /* Cut out [from,to) from replay_spans.  */
-	  for (auto pos = replay_spans.begin (), end = replay_spans.end (); pos != end;)
+	  for (auto pos = replay_spans.begin (), end = replay_spans.end ();
+	       pos != end;)
 	    if (pos->end <= span.begin)
 	      ++pos; /* not reached, continue */
 	    else if (pos->begin >= span.end)
@@ -7810,7 +8211,8 @@ transform (function *cfn, unsigned buffer_size)
 	continue;
 
       /* This is N^2 */
-      unsigned lwm = build_sequences (map, list, info, replay_spans.front ().end);
+      unsigned lwm
+	= build_sequences (map, list, info, replay_spans.front ().end);
 
       active_triage (info, active, list, lwm);
 
@@ -7869,12 +8271,14 @@ transform (function *cfn, unsigned buffer_size)
 	    {
 	      if (reform_mode)
 		{
-		  rvtt_refuse (RVTT_REF_WINDOW_SIZING_REFORM_COMPOSITION_UNAUDITED, dump_file,
-			       "window-sizing refused:"
-			       " window-sizing-reform-composition-unaudited:"
-			       " widening a re-formation pick would need the"
-			       " carried launch-arithmetic audit re-derived for"
-			       " the partial trim; keeping the picked window\n");
+		  rvtt_refuse
+		    (RVTT_REF_WINDOW_SIZING_REFORM_COMPOSITION_UNAUDITED,
+		     dump_file,
+		     "window-sizing refused:"
+		     " window-sizing-reform-composition-unaudited:"
+		     " widening a re-formation pick would need the"
+		     " carried launch-arithmetic audit re-derived for"
+		     " the partial trim; keeping the picked window\n");
 		}
 	      else if (replay_sequence *wide
 		       = window_sizing_widen (active, seq, info,
@@ -7896,7 +8300,8 @@ transform (function *cfn, unsigned buffer_size)
 		  else
 		    {
 		      trim_len = trim_end = 0;
-		      rvtt_refuse (RVTT_REF_WINDOW_SIZING_HOIST_REFUSED, dump_file,
+		      rvtt_refuse (RVTT_REF_WINDOW_SIZING_HOIST_REFUSED,
+				   dump_file,
 				   "window-sizing refused:"
 				   " window-sizing-hoist-refused: widened"
 				   " window [%u,+%u) does not re-prove the"
@@ -8077,11 +8482,20 @@ public:
 
 } /* anon namespace */
 
+/* Instantiate the post-reload replay-formation pass; inserted by
+   tt/rvtt-passes.def ahead of Dst auto-increment ownership and MOP
+   formation.  */
+
 rtl_opt_pass *
 make_pass_rvtt_replay (gcc::context *ctxt)
 {
   return new pass_rvtt_replay (ctxt);
 }
+
+/* Instantiate the post-auto-increment re-formation pass; inserted by
+   tt/rvtt-passes.def after pass_rvtt_dst_autoincr.  Its gate is the
+   exact complement of pass_rvtt_replay's, so exactly one of the two
+   invocations forms replay windows for a function.  */
 
 rtl_opt_pass *
 make_pass_rvtt_replay_reform (gcc::context *ctxt)

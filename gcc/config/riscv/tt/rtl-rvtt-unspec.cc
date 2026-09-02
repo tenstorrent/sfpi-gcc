@@ -118,7 +118,8 @@ transform (function *fn)
 		      {
 			rtx sel = XVECEXP (reg_vals[regno].val, 0, ix);
 
-			bool ok = validate_change (insn, &SET_SRC (pattern), sel, false);
+			bool ok = validate_change (insn, &SET_SRC (pattern),
+						   sel, false);
 			gcc_assert (ok);
 			msg = "Replaced select";
 		      }
@@ -147,7 +148,8 @@ transform (function *fn)
 	}
 
       auto find_operands
-	= [&operands, &invalidate, bb, reg_vals, insn](auto &self, rtx *slot) -> void
+	= [&operands, &invalidate, bb, reg_vals, insn]
+	  (auto &self, rtx *slot) -> void
       {
 	switch (GET_CODE (*slot))
 	  {
@@ -202,7 +204,8 @@ transform (function *fn)
 	     of operands reading the same input register, but it is sufficient
 	     just to try changing all such operands simultaneously.  */
 	  std::sort (operands.begin (), operands.end (),
-		     [] (auto const &a, auto const &b) { return a.regno < b.regno; });
+		     [] (auto const &a, auto const &b)
+		     { return a.regno < b.regno; });
 
 	  for (auto pos = operands.begin (); pos != operands.end ();)
 	    {
@@ -273,6 +276,9 @@ public:
 };
 
 } /* anon namespace */
+
+/* Instantiate the RTL unspec-propagation pass for CTXT; rvtt-passes.def
+   places it before lower_subreg, and it gates on the Tensix extension.  */
 
 rtl_opt_pass *
 make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt)

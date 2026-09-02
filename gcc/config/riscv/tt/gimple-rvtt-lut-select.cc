@@ -253,6 +253,9 @@ refuse (const char *reason, gimple *stmt)
   return false;
 }
 
+/* Argument ARG of STMT as a host integer, or -1 when it is not a
+   literal INTEGER_CST.  */
+
 static long
 int_arg (gcall *stmt, unsigned arg)
 {
@@ -559,7 +562,8 @@ slot_coeff_operand (tree val, tree vectype, gimple_stmt_iterator *gsi,
     {
       if (dump_file)
 	{
-	  rvtt_refuse (RVTT_REF_LUT_SLOT_COEFF_FLOATB_UNREPRESENTABLE, dump_file,
+	  rvtt_refuse (RVTT_REF_LUT_SLOT_COEFF_FLOATB_UNREPRESENTABLE,
+		       dump_file,
 		       "lut-select: slot creg value %#x not"
 		       " FLOATB-exact, operand kept"
 		       " (lut-slot-coeff-floatb-unrepresentable): ", bits);
@@ -1489,6 +1493,11 @@ place_coefficients (gcall *lut)
     }
 }
 
+/* Walk FUN for structured CC regions opened by an sfppushc and form a
+   LUT instruction from every matched range-dispatch group.  Each
+   formed LUT call is appended to FORMED for the caller's coefficient
+   placement.  Returns whether the IL changed.  */
+
 static bool
 transform (function *fun, auto_vec<gcall *> *formed)
 {
@@ -1589,6 +1598,10 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: while the
+   range-dispatch trees' structured condition form is still explicit,
+   i.e. before pass_rvtt_expand lowers it to raw CC side effects.  */
 
 gimple_opt_pass *
 make_pass_rvtt_lut_select (gcc::context *ctxt)

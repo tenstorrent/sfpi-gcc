@@ -19,8 +19,8 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Pure derivation of per-macro SEQUENCE WORDS and per-event DELAYS from
    a scheduled row, using only the architectural facts in the capability
-   tables (docs/TIMING_CALENDAR_DERIVATION.md section 2, section 4.3).  Freestanding
-   (tables + <stdint.h>), shared between descriptor synthesis, the
+   tables (docs/TIMING_CALENDAR_DERIVATION.md section 2, section 4.3).
+   Freestanding (tables + <stdint.h>), shared between descriptor synthesis, the
    Layer-7 verifier's expectation builder, and the standalone
    reproduction unit test rvtt-macro-derive-test.cc, which pins this
    algorithm against every frozen calendar's independently recorded
@@ -43,7 +43,8 @@ const unsigned MAX_EVENTS = 8;
 
 /* Stable refusal names (append-only vocabulary).  */
 inline const char *refusal_placement () { return "subunit-placement-unproven"; }
-inline const char *refusal_store_source () { return "store-source-unreachable"; }
+inline const char *refusal_store_source ()
+{ return "store-source-unreachable"; }
 inline const char *refusal_hazard () { return "sequence-derivation-hazard"; }
 inline const char *refusal_delay_range () { return "delay-range-exceeded"; }
 inline const char *refusal_delay_model () { return "delay-model-unproven"; }
@@ -173,6 +174,17 @@ same_residue (int a, int b, int ii)
   int d = (a - b) % ii;
   return d == 0;
 }
+
+/* Derive the per-macro sequence words and per-event delays for ROW on
+   capability table C into *OUT: place every value event on a legal
+   sub-unit and template slot, resolve how the delayed store reads its
+   source (an LReg16 redirect, the same macro's VD, or the proven
+   staging copy), grow execution cycles to a dependence fixpoint with
+   hazard bumps over the periodic occupancy, VD16, SFPSWAP-adjacency,
+   and explicit-issue rules, then prove delay ranges, cross-row value
+   lifetimes, the delay-counting kinds, and operand routing before
+   packing the sequence bytes and the drain.  Returns true on success;
+   otherwise false with the stable refusal name in OUT->refusal.  */
 
 inline bool
 derive_calendar (const rvtt_macro::caps *c, const row_spec &row,

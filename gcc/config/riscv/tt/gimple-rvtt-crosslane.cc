@@ -160,6 +160,10 @@ struct crosslane_caps
   unsigned transp_slots;
 };
 
+/* Capability and pricing row for the current Tensix target, or null
+   when the target is outside the pinned-simulator proof battery
+   (Quasar), which makes the whole pass refuse by name.  */
+
 static const crosslane_caps *
 get_crosslane_caps ()
 {
@@ -195,6 +199,9 @@ const_uarg (const gcall *call, unsigned argno, unsigned *out)
   *out = (unsigned) tree_to_uhwi (arg);
   return true;
 }
+
+/* Insn data of STMT when it is an rvtt builtin call; null for
+   non-calls and for calls outside the builtin vocabulary.  */
 
 static const rvtt_insn_data *
 call_insnd (gimple *stmt)
@@ -291,6 +298,11 @@ enum stmt_class
   SC_CC_WRITE,	/* typed CC writer				*/
   SC_BARRIER,	/* everything unproven				*/
 };
+
+/* Audited allowlist of builtin ids that neither write the
+   lane-enable CC state nor carry hidden raw effects; any id not
+   listed is a barrier for the lane-state and CC-window scans
+   (refusing default).  */
 
 static bool
 safe_compute_id_p (rvtt_insn_data::insn_id id)
@@ -392,6 +404,11 @@ safe_compute_id_p (rvtt_insn_data::insn_id id)
     }
 }
 
+/* Builtin ids that write the CC / lane-enable state and so end any
+   proven all-lanes or unchanged-CC window.  A word-exact all-lanes
+   sfpencc is recognized separately (SC_ENCC_ALL) before this list
+   applies.  */
+
 static bool
 cc_writer_id_p (rvtt_insn_data::insn_id id)
 {
@@ -420,6 +437,13 @@ cc_writer_id_p (rvtt_insn_data::insn_id id)
       return false;
     }
 }
+
+/* Classify STMT for the lane-state and CC-window scans: SC_SKIP for
+   no-code statements, SC_ENCC_ALL for a word-exact all-lanes enable,
+   SC_CC_WRITE for typed CC writers, SC_SAFE for plain scalar gimple,
+   empty asm and the audited safe-compute builtins, and SC_BARRIER
+   for everything unproven (real calls, non-empty asm, unlisted
+   builtins).  */
 
 static stmt_class
 classify_stmt (gimple *stmt)
@@ -541,6 +565,11 @@ crosslane_transform::compute_lane_states ()
     }
 }
 
+/* IN lane state of BB from the current OUT solution: proven
+   all-lanes only when every predecessor's OUT is clean and none is
+   the entry block (the entry is DIRTY -- no reaching-state
+   axiom).  */
+
 bool
 crosslane_transform::bb_in_clean (basic_block bb)
 {
@@ -601,6 +630,11 @@ crosslane_transform::cc_unchanged_between (gimple *from, gimple *to)
     }
   return !gsi_end_p (gsi);
 }
+
+/* Delete STMT unless its SSA result still has uses, releasing its
+   defs and marking the function changed.  Frame deletions run in
+   reverse program order so use-exclusive constituents reach zero
+   uses before their own turn.  */
 
 void
 crosslane_transform::delete_stmt (gimple *stmt)
@@ -664,6 +698,12 @@ ror1_link_p (gimple *stmt)
     }
   return NULL_TREE;
 }
+
+/* R1 driver: walk each BB for maximal single-use ror1 chains and
+   collapse every provable chain of N links to N mod 8, forwarding
+   the tail's uses to the surviving link (or the source when N mod 8
+   is zero) and deleting the dead links.  Requires the all-lanes
+   proof and a lane-preserving span across the chain.  */
 
 void
 crosslane_transform::collapse_rotate_chains ()
@@ -839,7 +879,8 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
     return false;		/* vConstTileId == 2*lane (sfpi.h) */
   gcall *shft = next_call (rvtt_insn_data::sfpshft_i);
   unsigned shimm;
-  if (!shft || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
+  if (!shft
+      || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
       || !const_uarg (shft, 2, &shimm) || shimm != 0xffffffffu)
     return false;		/* tileid >> 1 */
   gcall *mask = next_call (rvtt_insn_data::sfploadi);
@@ -892,6 +933,13 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
   gcc_assert (gimple_bb (encc) == bb);
   return true;
 }
+
+/* R2 driver: find each ror1 chain of K < 8 links whose tail feeds
+   the canonical predicated-zero region (match_slide_region); on
+   targets whose capability row carries SUBVEC_SHFLSHR1, flip every
+   link's mod operand to the zero-fill shift, forward the merged
+   result to the chain tail and delete the region.  Refuses by name
+   on Wormhole and under an unproven lane state.  */
 
 void
 crosslane_transform::relower_slides ()
@@ -1226,6 +1274,14 @@ struct transp8_frame
   gimple *last;			/* last constituent in program order */
 };
 
+/* Parse the canonical transp8 inline frame anchored at CALL into FR:
+   the SFPTRANSP8 call, the four bank-A selects on its tuple (each
+   optionally threaded through an assign), and up to four trailing
+   bank-B readlreg (4..7) reads.  Missing companion reads leave their
+   out[] slot null.  Returns false when the shape does not match; on
+   success FR lists every constituent statement and the last one in
+   program order.  */
+
 static bool
 match_transp8_frame (gcall *call, transp8_frame *fr)
 {
@@ -1507,6 +1563,13 @@ struct zip_frame
   gimple *first, *last;
 };
 
+/* Match the zip idiom rooted at TRANSP_CALL (an sfptransp8 frame whose
+   inputs stage the pair (A, B, A, B) with proven bit-pattern-zero
+   companions and whose outputs consume exactly the two riffled
+   halves), filling *ZF with the constituent statements and the frame's
+   value boundary.  Returns false when any leg of the idiom is
+   unproven.  */
+
 static bool
 match_zip_frame (gcall *transp_call, zip_frame *zf)
 {
@@ -1689,6 +1752,13 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
     }
   return true;
 }
+
+/* Collapse chains of zip frames feeding each other on the same value
+   pair using the group order of the riffle permutation (see the
+   zip_frame comment above): a chain of N zips is equivalent to N mod 3
+   zips, so complete triples delete outright.  Frames are matched in
+   program order per block and consumed frame statements are marked for
+   deletion.  */
 
 void
 crosslane_transform::collapse_zip_chains ()
@@ -1908,6 +1978,9 @@ public:
 }; /* class pass_rvtt_crosslane */
 
 } /* anon namespace */
+
+/* Pass factory for rvtt_crosslane, referenced from
+   rvtt-passes.def.  */
 
 gimple_opt_pass *
 make_pass_rvtt_crosslane (gcc::context *ctxt)

@@ -48,6 +48,9 @@ struct dst_iteration
   bool rejected = false;
 };
 
+/* Return true if A and B are both INTEGER_CSTs of equal value; false
+   when either operand is not a constant.  */
+
 static bool
 integer_cst_eq (tree a, tree b)
 {
@@ -55,11 +58,18 @@ integer_cst_eq (tree a, tree b)
     && tree_int_cst_equal (a, b);
 }
 
+/* Return true if VALUE is a non-null tree of vector type -- an SFPU
+   vector datum rather than a scalar or address operand.  */
+
 static bool
 vector_value_p (tree value)
 {
   return value && VECTOR_TYPE_P (TREE_TYPE (value));
 }
+
+/* Return true if INSND is a typed Dst-register access (sfpload or
+   sfpstore) -- the calls whose address argument the fusion
+   rewrites.  */
 
 static bool
 typed_dst_access_p (const rvtt_insn_data *insnd)
@@ -67,6 +77,10 @@ typed_dst_access_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpload
     || insnd->id == rvtt_insn_data::sfpstore;
 }
+
+/* Return true if CALL (insn data INSND) may appear in a fusable
+   iteration body: a typed Dst access, or a side-effect-free and
+   CC-neutral operation (live variants only via sfpassign_lv).  */
 
 static bool
 body_call_p (gcall *call, const rvtt_insn_data *insnd)
@@ -84,6 +98,10 @@ body_call_p (gcall *call, const rvtt_insn_data *insnd)
     && !insnd->sets_cc (call);
 }
 
+/* Number of bits in the Dst address field of a typed sfpload or
+   sfpstore on the current Tensix target, bounding how far an
+   address can be raised when the second iteration is rewritten.  */
+
 static unsigned
 dst_address_bits (const rvtt_insn_data *insnd)
 {
@@ -96,6 +114,12 @@ dst_address_bits (const rvtt_insn_data *insnd)
       gcc_unreachable ();
     }
 }
+
+/* Return true if typed Dst access CALL tolerates having its address
+   raised by INCREMENT: the mod operand is zero, the addressing mode
+   is the target's no-auto-increment mode, and the address (constant,
+   or an SSA name with a proven non-negative range) stays within the
+   Dst address field after adding INCREMENT.  */
 
 static bool
 dst_access_legal_p (gcall *call, HOST_WIDE_INT increment)
@@ -126,6 +150,11 @@ dst_access_legal_p (gcall *call, HOST_WIDE_INT increment)
   return wi::leu_p (range.upper_bound (), limit - increment);
 }
 
+/* Return true if ADJUSTED is provably BASE + INCREMENT: either both
+   are constants with that difference, or ADJUSTED is defined by a
+   PLUS_EXPR of BASE and constant INCREMENT in either operand
+   order.  */
+
 static bool
 address_plus_p (tree base, tree adjusted, HOST_WIDE_INT increment)
 {
@@ -144,6 +173,9 @@ address_plus_p (tree base, tree adjusted, HOST_WIDE_INT increment)
 	      && tree_to_shwi (lhs) == increment));
 }
 
+/* Return true if ADDRESS is provably a multiple of ALIGNMENT (a
+   power of two), judged by its known-zero low bits.  */
+
 static bool
 address_aligned_p (tree address, unsigned alignment)
 {
@@ -151,6 +183,10 @@ address_aligned_p (tree address, unsigned alignment)
   wide_int nonzero = get_nonzero_bits (address);
   return wi::extract_uhwi (nonzero, 0, exact_log2 (alignment)) == 0;
 }
+
+/* Return true if CALL is a TTINCRWC that steps only the Dst counter,
+   storing the constant step in *AMOUNT.  The CR/B/A operands must be
+   zero, and only the unit iteration step of 2 is accepted.  */
 
 static bool
 increment_p (gcall *call, HOST_WIDE_INT *amount)
@@ -168,6 +204,11 @@ increment_p (gcall *call, HOST_WIDE_INT *amount)
   *amount = tree_to_shwi (dst);
   return *amount == 2;
 }
+
+/* Merge iteration SECOND into FIRST's Dst window: raise every typed
+   Dst address in SECOND by INCREMENT (emitting a PLUS_EXPR before
+   the call for non-constant addresses), double SECOND's TTINCRWC
+   step to cover both iterations, and remove FIRST's increment.  */
 
 static void
 fuse_iterations (dst_iteration &first, dst_iteration &second,
@@ -199,7 +240,8 @@ fuse_iterations (dst_iteration &first, dst_iteration &second,
 
   tree old_increment = gimple_call_arg (second.increment, 1);
   gimple_call_set_arg (second.increment, 1,
-		       build_int_cst (TREE_TYPE (old_increment), increment * 2));
+		       build_int_cst (TREE_TYPE (old_increment),
+				      increment * 2));
   update_stmt (second.increment);
 
   gimple_stmt_iterator gsi = gsi_for_stmt (first.increment);
@@ -207,6 +249,14 @@ fuse_iterations (dst_iteration &first, dst_iteration &second,
     unlink_stmt_vdef (first.increment);
   gsi_remove (&gsi, true);
 }
+
+/* Return true if iterations A and B have isomorphic bodies fusable
+   under Dst step INCREMENT: pairwise-equal opcodes, arities, scalar
+   operands and typed addresses; every typed access legal to rewrite
+   (dst_access_legal_p); and vector operands matched through the map
+   of paired definitions, so B computes A's dataflow over its own
+   loads.  Requires at least two loads and one store, the shape the
+   fusion targets.  */
 
 static bool
 same_body_p (const dst_iteration &a, const dst_iteration &b,
@@ -240,7 +290,8 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      || !dst_access_legal_p (cb, increment))
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
-		fprintf (dump_file, "Dst-body mismatch: call=%u access-legality\n", i);
+		fprintf (dump_file,
+			 "Dst-body mismatch: call=%u access-legality\n", i);
 	      return false;
 	    }
 	  ia->id == rvtt_insn_data::sfpload ? ++loads : ++stores;
@@ -264,7 +315,9 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      if (!operand_equal_p (va, vb, 0))
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u address\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u address\n",
+			     i, argno);
 		  return false;
 		}
 	      continue;
@@ -275,21 +328,27 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      if (ia->is_live () && it == values.end ())
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u live-in\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u live-in\n",
+			     i, argno);
 		  return false;
 		}
 	      if ((it == values.end () && va != vb)
 		  || (it != values.end () && it->second != vb))
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u vector\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u vector\n",
+			     i, argno);
 		  return false;
 		}
 	    }
 	  else if (!operand_equal_p (va, vb, 0))
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
-		fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u scalar\n", i, argno);
+		fprintf (dump_file,
+			 "Dst-body mismatch: call=%u arg=%u scalar\n",
+			 i, argno);
 	      return false;
 	    }
 	}
@@ -307,6 +366,10 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
     }
   return loads >= 2 && stores >= 1;
 }
+
+/* Return true if every vector value defined by ITERATION's calls is
+   consumed only by other statements of the same iteration (debug
+   uses aside) -- the group is a self-contained unrolled body.  */
 
 static bool
 defs_closed_p (const dst_iteration &iteration)
@@ -328,6 +391,13 @@ defs_closed_p (const dst_iteration &iteration)
 	}
   return true;
 }
+
+/* Scan each basic block of FN for adjacent TTINCRWC-delimited
+   iteration groups and fuse each legal pair: equal step, isomorphic
+   closed bodies, and rewritable typed addresses.  Unrecognized
+   statements with memory or other side effects poison the open
+   group.  Fusion is suppressed (candidates only counted and dumped)
+   on QSR targets.  Returns the number of candidates seen.  */
 
 static unsigned
 discover (function *fn)
@@ -352,7 +422,8 @@ discover (function *fn)
 	      if (started && previous.increment)
 		{
 		  HOST_WIDE_INT prior;
-		  bool increment_legal = increment_p (previous.increment, &prior)
+		  bool increment_legal
+		    = increment_p (previous.increment, &prior)
 		    && prior == increment;
 		  bool same_body = increment_legal
 		    && same_body_p (previous, current, increment);
@@ -364,8 +435,9 @@ discover (function *fn)
 			     "Dst-iteration rejected: bb=%d first-ops=%zu "
 			     "second-ops=%zu rejected=%d/%d increment=%d "
 			     "same-body=%d closed=%d/%d\n",
-			     bb->index, previous.calls.size (), current.calls.size (),
-			     previous.rejected, current.rejected, increment_legal,
+			     bb->index, previous.calls.size (),
+			     current.calls.size (), previous.rejected,
+			     current.rejected, increment_legal,
 			     same_body, first_closed, second_closed);
 		  if (legal)
 		    {
@@ -376,9 +448,10 @@ discover (function *fn)
 		      if (dump_file)
 			fprintf (dump_file,
 				 "Dst-iteration candidate: bb=%d ops=%zu "
-				 "addr-delta=%ld final-rwc=%ld target=%s emit=%s\n",
-				 bb->index, current.calls.size (), (long) increment,
-				 (long) (increment * 2),
+				 "addr-delta=%ld final-rwc=%ld "
+				 "target=%s emit=%s\n",
+				 bb->index, current.calls.size (),
+				 (long) increment, (long) (increment * 2),
 				 TARGET_XTT_TENSIX_WH ? "wh" :
 				 TARGET_XTT_TENSIX_BH ? "bh" : "qsr",
 				 emit ? "yes" : "no");
@@ -442,6 +515,9 @@ public:
 
 } /* anonymous namespace */
 
+/* Pass factory for rvtt_dst_iteration, referenced from
+   rvtt-passes.def.  */
+
 gimple_opt_pass *
 make_pass_rvtt_dst_iteration (gcc::context *ctxt)
 {
@@ -481,6 +557,11 @@ dynamic_result_p (const rvtt_insn_data *insnd)
   return rvtt_builtin_subunit (insnd) == XTT_SU_MAD;
 }
 
+/* Return true if INSND may form the tail of an interleaved row: a
+   ROUND- or STORE-subunit operation, or the sfpassign_lv value move.
+   Tail operations stay in per-row order after the interleaved
+   dynamic pairs (see make_interleaved_order).  */
+
 static bool
 drain_operation_p (const rvtt_insn_data *insnd)
 {
@@ -493,6 +574,11 @@ drain_operation_p (const rvtt_insn_data *insnd)
   return insnd->id == rvtt_insn_data::sfpassign_lv;
 }
 
+/* Late-pass counterpart of body_call_p: return true if CALL (insn
+   data INSND) may appear in an interleave-candidate row -- a typed
+   Dst access, or a side-effect-free, CC-neutral MAD-subunit or
+   drain operation.  */
+
 static bool
 late_body_call_p (gcall *call, const rvtt_insn_data *insnd)
 {
@@ -501,6 +587,13 @@ late_body_call_p (gcall *call, const rvtt_insn_data *insnd)
   return (dynamic_result_p (insnd) || drain_operation_p (insnd))
     && !insnd->has_side_effects (call) && !insnd->sets_cc (call);
 }
+
+/* Return true if rows A and B are isomorphic bodies one Dst step
+   apart and safe to interleave: pairwise-equal opcodes, arities and
+   scalar operands; typed addresses where B's is provably A's plus 2,
+   in range, and A's is 4-aligned (so B's moved loads cannot alias
+   A's store); vector operands matched through the paired-lhs map;
+   and exactly one store per row.  */
 
 static bool
 late_pair_p (const std::vector<gcall *> &a,
@@ -526,25 +619,28 @@ late_pair_p (const std::vector<gcall *> &a,
 	: ia->id == rvtt_insn_data::sfpstore ? 2 : ~0u;
       if (typed_dst_access_p (ia))
 	{
-	  /* Prove BASE+2 from BASE's established range.  The newly inserted SSA
-	     name deliberately has no independent VRP cache entry at this point.  */
+	  /* Prove BASE+2 from BASE's established range.  The newly
+	     inserted SSA name deliberately has no independent VRP cache
+	     entry at this point.  */
 	  if (!dst_access_legal_p (ca, 2))
 	    return false;
 	  tree aa = gimple_call_arg (ca, addr_arg);
 	  tree ab = gimple_call_arg (cb, addr_arg);
 	  if (!address_plus_p (aa, ab, 2))
 	    return false;
-	  /* Interleaving moves every row-B load before the row-A store.  Requiring
-	     row-A typed addresses to be 4-aligned makes their residues 0 mod 4,
-	     while the exact +2 row-B rewrite has residue 2 mod 4.  Thus no moved
-	     load can alias the earlier row's store.  */
+	  /* Interleaving moves every row-B load before the row-A store.
+	     Requiring row-A typed addresses to be 4-aligned makes their
+	     residues 0 mod 4, while the exact +2 row-B rewrite has
+	     residue 2 mod 4.  Thus no moved load can alias the earlier
+	     row's store.  */
 	  if (ia->id == rvtt_insn_data::sfpload
 	      || ia->id == rvtt_insn_data::sfpstore)
 	    {
 	      bool aligned = address_aligned_p (aa, 4);
 	      if (!aligned && dump_file && (dump_flags & TDF_DETAILS))
 		fprintf (dump_file,
-			 "Dst-interleave mismatch: call=%u address-alignment\n", i);
+			 "Dst-interleave mismatch: call=%u "
+			 "address-alignment\n", i);
 	      store_load_disjoint &= aligned;
 	    }
 	  stores += ia->id == rvtt_insn_data::sfpstore;
@@ -577,6 +673,14 @@ late_pair_p (const std::vector<gcall *> &a,
     }
   return stores == 1 && store_load_disjoint;
 }
+
+/* Return true if every scalar SSA argument of the calls in OPS is
+   defined before INCREMENT: either earlier in INCREMENT's own block
+   (PHIs allowed), or in a dominating block.  Interleaving moves the
+   row-B calls up to the INCREMENT boundary, so any scalar input
+   defined between the boundary and its use would be torn from its
+   definition.  Vector arguments are exempt (their producers move as
+   part of the same group).  */
 
 static bool
 scalar_defs_before_increment_p (const std::vector<gcall *> &ops,
@@ -618,6 +722,11 @@ scalar_defs_before_increment_p (const std::vector<gcall *> &ops,
   return true;
 }
 
+/* Return true if the candidate group is value-closed: every vector
+   value defined by a call in OPS is consumed only by other members of
+   OPS (or by INCREMENT).  A use escaping the group would observe the
+   reordered schedule.  Debug statements are ignored.  */
+
 static bool
 closed_group_p (const std::vector<gcall *> &ops, gcall *increment)
 {
@@ -637,6 +746,15 @@ closed_group_p (const std::vector<gcall *> &ops, gcall *increment)
 	}
   return true;
 }
+
+/* Build the interleaved schedule for the paired rows A and B into
+   ORDER.  Each row must have the shape loads / dynamic-result body /
+   drain tail ending in the row store; the result is A's loads, then
+   B's loads, then the two dynamic bodies interleaved pairwise, then
+   both drain tails.  Returns false (ORDER unusable) when either row
+   does not have that shape.  *LOADS and *DYNAMIC_PAIRS return the
+   combined load count and the per-row dynamic-body length for the
+   dump line.  */
 
 static bool
 make_interleaved_order (const std::vector<gcall *> &a,
@@ -677,6 +795,11 @@ make_interleaved_order (const std::vector<gcall *> &a,
   return true;
 }
 
+/* Commit the interleaving: strip the virtual operands from every call
+   in OPS (their Dst accesses were proven disjoint, so the vdef/vuse
+   chain no longer constrains them), then move the calls in ORDER, in
+   sequence, to just before INCREMENT.  */
+
 static void
 apply_interleaved_order (const std::vector<gcall *> &ops,
 			 const std::vector<gcall *> &order,
@@ -704,6 +827,14 @@ apply_interleaved_order (const std::vector<gcall *> &ops,
       gsi_move_before (&from, &boundary);
     }
 }
+
+/* Decide and (when everything proves out) perform the interleave of
+   one candidate group OPS in BB, ending at INCREMENT.  REJECTED is the
+   scan's poison flag (an unanalyzable statement inside the group).
+   The group must split into two equal rows that pair instruction-for-
+   instruction, be value-closed, and have its scalar inputs defined
+   before the boundary; QSR targets prove but never emit.  Returns
+   true iff the block was changed.  */
 
 static bool
 interleave_group (basic_block bb, std::vector<gcall *> &ops,
@@ -745,6 +876,12 @@ interleave_group (basic_block bb, std::vector<gcall *> &ops,
   return emit;
 }
 
+/* Scan FN block by block for interleave candidates: runs of typed-Dst
+   SFPU body calls delimited by final-increment calls.  Statements that
+   are neither body calls nor synthesized opcode bookkeeping poison the
+   current group when they could alias or order against it.  Returns
+   true iff any group was interleaved.  */
+
 static bool
 interleave_function (function *fn)
 {
@@ -772,9 +909,9 @@ interleave_function (function *fn)
 
 	  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
 	  /* Dynamic typed addresses carry synthesized instruction-buffer
-	     bookkeeping between semantic SFPU calls.  It is neither part of a row
-	     chain nor a side effect, and its var/id pairing was already proven by
-	     phase 2.  */
+	     bookkeeping between semantic SFPU calls.  It is neither part
+	     of a row chain nor a side effect, and its var/id pairing was
+	     already proven by phase 2.  */
 	  if (insnd && insnd->id == rvtt_insn_data::synth_opcode)
 	    continue;
 	  if (insnd && typed_dst_access_p (insnd))
@@ -816,6 +953,9 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Pass factory for rvtt_dst_interleave, referenced from
+   rvtt-passes.def.  */
 
 gimple_opt_pass *
 make_pass_rvtt_dst_interleave (gcc::context *ctxt)

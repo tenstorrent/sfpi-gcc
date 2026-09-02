@@ -313,6 +313,10 @@ cc_writer_id_p (rvtt_insn_data::insn_id id)
     }
 }
 
+/* Read argument ARGNO of CALL into *OUT when it is an INTEGER_CST
+   fitting an unsigned HWI.  Returns false, leaving *OUT untouched,
+   for a missing or non-constant argument.  */
+
 static bool
 const_uarg (gcall *call, unsigned argno, unsigned *out)
 {
@@ -376,6 +380,11 @@ struct classified
   unsigned gather_mod0;
 };
 
+/* Classify STMT into the stmt_class vocabulary above, refusing
+   default SC_BARRIER.  For a parsed constant Dst access the result
+   also carries the access in ACC; for a formed gather bundle, the
+   four addresses and the format in GATHER_ADDR/GATHER_MOD0.  */
+
 static classified
 classify_stmt (gimple *stmt)
 {
@@ -383,7 +392,8 @@ classify_stmt (gimple *stmt)
   c.cls = SC_BARRIER;
 
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
-      || gimple_code (stmt) == GIMPLE_NOP || gimple_code (stmt) == GIMPLE_PREDICT)
+      || gimple_code (stmt) == GIMPLE_NOP
+      || gimple_code (stmt) == GIMPLE_PREDICT)
     {
       c.cls = SC_SKIP;
       return c;
@@ -525,6 +535,10 @@ access_rows (const dst_access &acc, std::vector<unsigned> *rows)
 	}
     }
 }
+
+/* Whether the conservative physical-row sets of accesses A and B (see
+   access_rows above) share no row, proving the two accesses cannot
+   overlap under any layout configuration.  */
 
 static bool
 rows_disjoint (const dst_access &a, const dst_access &b)
@@ -1190,7 +1204,8 @@ involution_transform::dse_parks (basic_block bb)
 	      bool over = false;
 	      for (unsigned k = 0; k != 4 && !over; ++k)
 		{
-		  dst_access g { c.gather_addr[k], c.gather_mod0, 0, NULL_TREE };
+		  dst_access g { c.gather_addr[k], c.gather_mod0, 0,
+				  NULL_TREE };
 		  over = !rows_disjoint (g, acc);
 		}
 	      if (over)
@@ -1219,6 +1234,14 @@ involution_transform::dse_parks (basic_block bb)
 	}
     }
 }
+
+/* Run the whole transform over the function: refuse on any typed CC
+   writer other than the word-exact all-lanes enable, find the
+   transpose-pair candidates, compute the all-lanes reaching states,
+   decide per candidate whether a fresh SFPENCC must head its bundle,
+   rewrite each candidate to the atomic gather bundle, then forward
+   and dead-store-eliminate the Dst parks around the bundles.  Returns
+   whether the IL changed.  */
 
 bool
 involution_transform::run ()
@@ -1333,6 +1356,11 @@ public:
 }; /* class pass_rvtt_transp_involution */
 
 } /* anon namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: late, after the
+   structured-CC lowering and scheduling shape are final, so the
+   operand-def windows and lane-state scan see the stream that will
+   expand.  */
 
 gimple_opt_pass *
 make_pass_rvtt_transp_involution (gcc::context *ctxt)

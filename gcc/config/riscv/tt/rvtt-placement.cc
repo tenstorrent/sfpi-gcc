@@ -41,6 +41,11 @@ along with GCC; see the file COPYING3.  If not see
    through tt/rvtt-delivery-cost; every trip fact routes through
    tt/rvtt-trips.  */
 
+/* Proven trip weight of a placement inside LOOP: body/entry execution
+   weights (delivery-cost scaled) with proven=false when LOOP's trip
+   count cannot be established.  Outside any real loop the weight is
+   the exact 1/1.  */
+
 rvtt_place_weight
 rvtt_place_loop_weight (class loop *loop)
 {
@@ -61,6 +66,13 @@ rvtt_place_loop_weight (class loop *loop)
   rvtt_delivery_cost::scale_trip_weight (&w.body, &w.entry);
   return w;
 }
+
+/* Amortized net benefit, in centislots, of a placement that saves
+   WORDS_BODY_SAVED issue words per body execution and pays
+   WORDS_ENTRY_PAID issue words once per entry, weighted by the proven
+   trip weight W.  Both sides price on the RISC-push plane (placement
+   words are pushed, never replay-delivered).  Negative means the
+   placement loses.  */
 
 int64_t
 rvtt_place_net_benefit (unsigned words_body_saved, unsigned words_entry_paid,
@@ -102,6 +114,17 @@ struct fold_shape_key
     return true;
   }
 };
+
+/* Census FN for priced identity-reload fold demand: scan every basic
+   block for typed Dst loads (sfpload calls) whose operand tuple is
+   all-constant, and price each REPEATED identical tuple in the same
+   block as one fold shape saving one delivered SFPLOAD word per
+   execution of the reload's position.  Returns the shape count, the
+   best single-shape benefit, and the unpriceable count; a census with
+   more than RVTT_PLACE_MAX_CANDIDATES distinct tuples refuses whole
+   (zero demand).  DECIDE selects stage-B registry refusals over
+   stage-A shadow dump lines.  Structural demand only -- whether a
+   shape actually folds stays decided by rtl-rvtt-dst-ownership.cc.  */
 
 rvtt_place_fold_demand
 rvtt_place_fold_demand_of (function *fn, FILE *dump, bool decide)
@@ -161,8 +184,9 @@ rvtt_place_fold_demand_of (function *fn, FILE *dump, bool decide)
 		if (decide)
 		  rvtt_refuse (RVTT_REF_PLACE_BUDGET_EXHAUSTED, dump,
 			       "placement-arbiter: fold-demand census refused "
-			       "(place-budget-exhausted): more than %d distinct "
-			       "Dst-load tuples\n", RVTT_PLACE_MAX_CANDIDATES);
+			       "(place-budget-exhausted): more than %d "
+			       "distinct Dst-load tuples\n",
+			       RVTT_PLACE_MAX_CANDIDATES);
 		else if (dump)
 		  fprintf (dump,
 			   "placement-arbiter: fold-demand census over "
@@ -210,6 +234,15 @@ rvtt_place_fold_demand_of (function *fn, FILE *dump, bool decide)
   return d;
 }
 
+/* The pressure-park reserve verdict: true when FN's best priced
+   fold-demand bid strictly exceeds PARK_BENEFIT, the marginal LREG
+   park's amortized net benefit -- the park must then yield the last
+   free LREG to the downstream identity-reload fold.  When
+   PARK_PRICEABLE is false the park is never outbid (fail closed; a
+   named refusal fires when DECIDE).  TIER names the calling placement
+   tier in the dump line; DECIDE selects stage-B wording and registry
+   refusals over the stage-A shadow wording.  */
+
 bool
 rvtt_place_fold_reserve_outbids (function *fn, int64_t park_benefit,
 				 bool park_priceable, const char *tier,
@@ -246,6 +279,11 @@ rvtt_place_fold_reserve_outbids (function *fn, int64_t park_benefit,
 	     " stands)");
   return outbid;
 }
+
+/* Emit the uniform shadow-census line to DUMP: decision point POINT
+   computed LEGACY and PRICED verdicts, tagged AGREE/DISAGREE by
+   string equality, with optional trailing DETAIL.  The corpus census
+   greps exactly this line format; no verdict is applied here.  */
 
 void
 rvtt_place_dump_verdict (FILE *dump, const char *point, const char *legacy,

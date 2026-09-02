@@ -353,6 +353,10 @@ mop_constant_reaching_value (basic_block preheader, rtx reg, uint64_t *value)
   return false;
 }
 
+/* Evaluate the integer comparison CODE on VAL0 and VAL1 taken as
+   PREC-bit values (sign-extended for the signed codes).  Any other
+   code is false.  */
+
 static bool
 mop_eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
 			unsigned prec)
@@ -379,6 +383,14 @@ mop_eval_int_condition (rtx_code code, uint64_t val0, uint64_t val1,
     default: return false;
     }
 }
+
+/* Prove the single-block LOOP entered through PREHEADER runs a
+   compile-time-constant number of trips: the header must step exactly
+   one counter register by a constant, the comparison's other side must
+   be constant (immediately or as a preheader-reaching constant
+   definition), and simulating up to 2^16 iterations must exit.  On
+   success returns true with *TRIPS the trip count, *STEP_OUT the step
+   insn, and *FINAL_OUT the counter's value at loop exit.  */
 
 static bool
 mop_provable_constant_trips (class loop *loop, basic_block preheader,
@@ -507,6 +519,10 @@ mop_provable_constant_trips (class loop *loop, basic_block preheader,
   return false;
 }
 
+/* LOOP's dedicated preheader: the unique block outside LOOP entering
+   its header, admitted only when the header is its sole successor and
+   the entry edge is not abnormal; null otherwise.  */
+
 static basic_block
 mop_dedicated_loop_preheader (class loop *loop)
 {
@@ -551,6 +567,13 @@ struct run_builder
   std::vector<unsigned HOST_WIDE_INT> cur_gap_words;
   std::vector<unsigned HOST_WIDE_INT> proto; /* the group's step words */
 };
+
+/* Close the run being accumulated in RB and, if it still spans at
+   least two iterations, append a RUN-form mop_candidate to OUT.  A
+   final launch whose trailing step words are incomplete is excluded
+   (only complete launch+step groups re-roll); with a complete tail the
+   trailing step insns are doomed along with the launches.  Resets RB
+   to inactive in all cases.  */
 
 static void
 run_finalize (run_builder &rb, std::vector<mop_candidate> &out)
@@ -597,6 +620,9 @@ run_finalize (run_builder &rb, std::vector<mop_candidate> &out)
   rb = run_builder ();
 }
 
+/* Restart RB as a fresh active run whose first launch is INSN, a
+   fixed playback launch of replay span S (start) / L (length).  */
+
 static void
 run_begin (run_builder &rb, rtx_insn *insn, unsigned s, unsigned l)
 {
@@ -606,6 +632,13 @@ run_begin (run_builder &rb, rtx_insn *insn, unsigned s, unsigned l)
   rb.len = l;
   rb.launches.push_back (insn);
 }
+
+/* Scan CFN for straight-line runs of identical fixed playback
+   launches separated by identical short step-word sequences (see the
+   run_builder comment above) and append each qualifying run to OUT.
+   The first gap fixes the group's step prototype; a mismatching gap
+   re-rolls the complete groups and restarts the run at the current
+   launch.  */
 
 static void
 collect_runs (function *cfn, std::vector<mop_candidate> &out)
@@ -803,7 +836,8 @@ collect_loops (function *cfn, std::vector<mop_candidate> &out)
 	{
 	  rvtt_refuse (RVTT_REF_MOP_BODY_EXTRA_DELIVERY, dump_file,
 		       "MOP-form refused (mop-body-extra-delivery): loop bb %d"
-		       " counter exit value is not materializable\n", bb->index);
+		       " counter exit value is not materializable\n",
+		       bb->index);
 	  continue;
 	}
 
@@ -858,12 +892,20 @@ mop_config_values (mop_candidate const &cand,
     }
 }
 
+/* GPR materialization cost of the 32-bit WORD: one instruction for a
+   small or LUI operand, two (lui + addi) otherwise.  */
+
 static HOST_WIDE_INT
 mop_li_words (unsigned HOST_WIDE_INT word)
 {
   HOST_WIDE_INT v = trunc_int_for_mode (word, SImode);
   return (LUI_OPERAND (v) || SMALL_OPERAND (v)) ? 1 : 2;
 }
+
+/* RISC push words of the whole MMIO configuration block for VALUES:
+   the mop_sync drain, the configuration base materialization, each
+   value's materialization (a repeated value reuses the data register;
+   zeros store from x0) plus its store, and the MOP_CFG + MOP words.  */
 
 static HOST_WIDE_INT
 mop_config_words (std::vector<std::pair<unsigned,
@@ -888,6 +930,14 @@ mop_config_words (std::vector<std::pair<unsigned,
     }
   return words;
 }
+
+/* Price CAND against its CONFIG_WORDS configuration block through the
+   delivery-cost API: the per-iteration saving is the pushed words the
+   MOP row no longer delivers (the concurrent-delivery accounting
+   above), less the serially delivered configuration.  Stores the
+   signed centislot benefit in *BENEFIT_OUT and tests it against the
+   minimum-benefit knob; -mtt-mop-form-force bypasses only this pricing
+   refusal.  */
 
 static bool
 mop_profitable_p (mop_candidate const &cand, HOST_WIDE_INT config_words,
@@ -1032,6 +1082,14 @@ build_mop_sequence (mop_candidate const &cand, unsigned scratch[2])
       }
   return seq;
 }
+
+/* Commit CAND: find two dead caller-saved GPRs, build the MMIO
+   configuration + TTMOPCFG/TTMOP sequence, place it before the first
+   launch, and delete the doomed launch and step insns.  For a
+   counted-loop candidate also materialize the counter's proven exit
+   value and remove the loop control (backedge and jump).  Returns
+   false -- named refusal, nothing placed -- when no scratch GPRs are
+   dead or an emitted insn fails recognition.  */
 
 static bool
 commit_candidate (mop_candidate &cand)
@@ -1999,12 +2057,14 @@ transform (function *cfn)
 	if (dump_file)
 	  {
 	    if (why_fn)
-	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN, dump_file,
+	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN,
+			   dump_file,
 			   "MOP-form refused (mop-caller-template-live-"
 			   "unproven): %s (%s); %u candidate(s) dropped\n",
 			   why, why_fn, unsigned (candidates.size ()));
 	    else
-	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN, dump_file,
+	      rvtt_refuse (RVTT_REF_MOP_CALLER_TEMPLATE_LIVE_UNPROVEN,
+			   dump_file,
 			   "MOP-form refused (mop-caller-template-live-"
 			   "unproven): %s; %u candidate(s) dropped\n",
 			   why, unsigned (candidates.size ()));
@@ -2136,6 +2196,11 @@ public:
 }; /* class pass_rvtt_mop_form */
 
 } /* anon namespace */
+
+/* Instantiate the MOP-formation pass for CTXT; rvtt-passes.def places
+   it after postreload, downstream of the replay and Dst auto-increment
+   formations whose launch stream it consumes, and it gates on a WH/BH
+   Tensix target plus -mtt-tensix-optimize-mop-form.  */
 
 rtl_opt_pass *
 make_pass_rvtt_mop_form (gcc::context *ctxt)

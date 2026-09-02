@@ -57,6 +57,14 @@ static rvtt_insn_data sfpu_insn_data[] = {
 
 static unsigned riscv_builtin_rvtt_first;
 
+/* Finalize the SFPU insn table once riscv_init_builtins has recorded
+   every RVTT builtin decl (via rvtt_record_builtin): apply the
+   RVTT_OVR rows of rvtt-insn.def whose architecture predicate (BH,
+   QSR, or both) holds, overriding the base flags and operand
+   descriptors, then compute each recorded insn's derived operand
+   layout (rvtt_insn_data::init).  No-op unless the Tensix extension
+   is enabled.  */
+
 void
 rvtt_init_builtins ()
 {
@@ -75,7 +83,8 @@ rvtt_init_builtins ()
     rvtt_insn_data::ops_t ops;
   } overrides[] = {
 #define RVTT_OVR(id, av, sfx, fmt, fl, ops)		\
-    { tensix##av, rvtt_insn_data::id, rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
+    { tensix##av, rvtt_insn_data::id,			\
+      rvtt_insn_data::flags_t (fl), rvtt_insn_data::ops_t ops },
 #include "rvtt-insn.def"
   };
 
@@ -88,6 +97,15 @@ rvtt_init_builtins ()
     if (insn.decl)
       insn.init ();
 }
+
+/* Compute this insn's derived operand layout by walking the argument
+   types of its recorded builtin decl: a leading pointer argument sets
+   HAS_VAR (the instruction-buffer operand), the live and source
+   vector arguments are skipped (recording src_pos), and each ops[]
+   descriptor is then bound to its integer argument's index, latching
+   HAS_MOD and mod_pos at the MOD/XMOD operand.  Sets arg_num to the
+   total argument count and asserts the decl's signature matches the
+   rvtt-insn.def operand list.  */
 
 void
 rvtt_insn_data::init ()
@@ -166,6 +184,15 @@ rvtt_insn_data::init ()
   arg_num = argno;
 }
 
+/* Callback from the RISC-V builtin registration loop: record DECL,
+   the builtin numbered IX with name NAME, in the SFPU insn table.
+   The first "__builtin_rvtt_" builtin encountered latches the base
+   index all later ones are offset from (it is synth_opcode, the one
+   const RVTT function, so it is also marked TREE_READONLY here).
+   Returns true exactly for that first builtin, telling the caller to
+   apply the Tensix icode/prototype overrides to its own descriptor
+   table.  */
+
 bool
 rvtt_record_builtin (unsigned ix, char const *name, tree decl)
 {
@@ -173,7 +200,8 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
     return false;
 
   if (ix < 300)
-    /* Save a bunch of strcmps on the grounds there are at least this many others.  */
+    /* Save a bunch of strcmps on the grounds there are at least this
+       many others.  */
     return false;
 
   if (!riscv_builtin_rvtt_first)
@@ -197,11 +225,19 @@ rvtt_record_builtin (unsigned ix, char const *name, tree decl)
   return !ix;
 }
 
+/* Return the insn descriptor for ID.  Every insn_id has an entry,
+   whether or not its builtin is available on the current target.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (rvtt_insn_data::insn_id id)
 {
   return &sfpu_insn_data[id];
 }
+
+/* Return the insn descriptor for CALL when it calls an RVTT SFPU
+   builtin, null otherwise.  Recognition is by the machine-dependent
+   builtin function code falling in the index range latched by
+   rvtt_record_builtin.  */
 
 const rvtt_insn_data *
 rvtt_get_insn_data (gcall const *call)
@@ -238,6 +274,9 @@ rvtt_reassoc_fp_licensed_p (void)
   return riscv_tt_opt_reassoc > 0 && flag_associative_math;
 }
 
+/* As above, for an arbitrary statement: return the insn descriptor
+   when STMT is a call to an RVTT SFPU builtin, null otherwise.  */
+
 const rvtt_insn_data *
 rvtt_get_insn_data (gimple const *stmt)
 {
@@ -245,6 +284,12 @@ rvtt_get_insn_data (gimple const *stmt)
     return nullptr;
   return rvtt_get_insn_data (as_a <gcall const *> (stmt));
 }
+
+/* Return true if STMT, a call to this insn's builtin, writes the SFPU
+   condition codes: the insn must have a nonzero cc_mask, and, when it
+   takes a mod operand, the mode selected by the low four bits of
+   STMT's mod argument must be one of the CC-writing modes recorded in
+   cc_mask.  */
 
 bool
 rvtt_insn_data::sets_cc (gcall *stmt) const
@@ -307,7 +352,8 @@ void rvtt_prep_stmt_for_deletion (gimple *stmt)
 	  if (def_g->code == GIMPLE_PHI)
 	    {
 	      /* XXXX handle phi
-	         this seems to work fine and SSA checks are ok w/ doing nothing */
+	         this seems to work fine and SSA checks are ok w/ doing
+	         nothing */
 	    }
 	  else if (def_g->code == GIMPLE_CALL)
 	    {
@@ -405,12 +451,19 @@ rvtt_synth::pattern (unsigned is_synthed, const char *tmpl,
   return pattern;
 }
 
+/* Return an UNSPEC_SFPCSTLREG rtx in MODE denoting the SFPU constant
+   register numbered SFPU_REGNO (a CREG_IDX_* value), for use where a
+   hardware constant register stands in for a vector operand.  */
+
 rtx
 rvtt_gen_rtx_creg (machine_mode mode, unsigned sfpu_regno)
 {
-  return gen_rtx_UNSPEC (mode,
-			 gen_rtvec (1, GEN_INT (sfpu_regno)), UNSPEC_SFPCSTLREG);
+  return gen_rtx_UNSPEC (mode, gen_rtvec (1, GEN_INT (sfpu_regno)),
+			 UNSPEC_SFPCSTLREG);
 }
+
+/* Return the UNSPEC_SFPNOVAL placeholder in MODE, standing for an
+   absent live-value (or other optional vector) operand.  */
 
 rtx
 rvtt_gen_rtx_noval (machine_mode mode)
@@ -418,6 +471,12 @@ rvtt_gen_rtx_noval (machine_mode mode)
   return gen_rtx_UNSPEC (mode,
 			 gen_rtvec (1, const0_rtx), UNSPEC_SFPNOVAL);
 }
+
+/* Fold the live-value operand *LV of an _lv insn into its source.
+   When *LV is the no-value placeholder there is nothing to preserve.
+   Otherwise emit an sfpassign_lv merging *LV and *SRC into a fresh
+   pseudo, make that pseudo the new *SRC, and mark *LV with the
+   UNSPEC_SFPOMIT placeholder.  */
 
 void
 rvtt_merge_lv_src (rtx *lv, rtx *src)
@@ -431,6 +490,10 @@ rvtt_merge_lv_src (rtx *lv, rtx *src)
   *lv = gen_rtx_UNSPEC (XTT32SImode,
 			gen_rtvec (1, const0_rtx), UNSPEC_SFPOMIT);
 }
+
+/* Replace every use of the SSA name ORIG with REPLACEMENT, updating
+   (and, with dumping enabled, logging) each affected statement.
+   No-op when ORIG is null.  */
 
 void
 rvtt_substitute_value (tree orig, tree replacement)
@@ -503,8 +566,8 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
     }
 
   if (new_mod >= 0)
-    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
-					 imm,
+    emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					 const0_rtx, imm,
 					 rvtt_gen_rtx_noval (XTT32SImode),
 					 lv, GEN_INT (new_mod)));
   else
@@ -513,11 +576,13 @@ rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm)
          preceding low half from LV, and the MD pattern ties LV to its result;
          using DST for both avoids materializing a distinct temporary (and the
          SFPMOV reload needed solely to satisfy that tie).  */
-      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					   const0_rtx,
 					   GEN_INT (int_imm & 0xFFFF),
 					   rvtt_gen_rtx_noval (XTT32SImode),
 					   lv, GEN_INT (SFPLOADI_MOD0_USHORT)));
-      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx, const0_rtx,
+      emit_insn (gen_rvtt_sfploadi_lv_int (dst, const0_rtx, const0_rtx,
+					   const0_rtx,
 					   GEN_INT (int_imm >> 16),
 					   rvtt_gen_rtx_noval (XTT32SImode),
 					   dst, GEN_INT (SFPLOADI_MOD0_UPPER)));
@@ -570,6 +635,11 @@ rvtt_native_compare_gtle_p (rtx v)
   return true;
 }
 
+/* Emit the licensed native compare of V against the +0.0 constant
+   register: SFPGT in SET_CC form when CMP is SFPXCMP_MOD1_CC_GT,
+   SFPLE when it is SFPXCMP_MOD1_CC_LE.  Callers must first have
+   cleared the emission with rvtt_native_compare_gtle_p.  */
+
 static void
 rvtt_emit_native_compare_gtle (rtx v, unsigned int cmp)
 {
@@ -582,6 +652,15 @@ rvtt_emit_native_compare_gtle (rtx v, unsigned int cmp)
       emit_insn (gen_rvtt_sfple_cc (v, zero));
     }
 }
+
+/* Expand the extended compare of vector V against the float constant
+   F (a bit pattern; the sfpi wrapper canonicalizes +0.0 to -0.0)
+   under the comparison kind encoded in MOD.  Against a nonzero
+   reference, materialize it (the +/-1.0 constant registers when the
+   pattern matches, otherwise an sfpxloadi) and subtract it from V
+   with an SFPMAD, then test the difference: LT/GE/EQ/NE map to one
+   SETCC, while GT/LE use the native SFPGT/SFPLE lowering when
+   licensed and the SETCC/SETCC (plus COMPC for LE) web otherwise.  */
 
 void
 rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
@@ -597,7 +676,8 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
   if (fval != 0 && fval != 0x8000)
     {
       need_sub = true;
-      /* FIXME: Just teach sfpxloadi about this. (add in one of the immvar opt pass) */
+      /* FIXME: Just teach sfpxloadi about this. (add in one of the
+	 immvar opt pass) */
       if (fval == 0x3f800000)
 	ref_val = rvtt_gen_rtx_creg (XTT32SImode, CREG_IDX_1);
       else if (fval == 0xbf800000)
@@ -624,7 +704,8 @@ rvtt_emit_sfpxfcmps (rtx v, rtx f, rtx mod)
 	rvtt_emit_native_compare_gtle (v, cmp);
       else
 	{
-	  emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
+	  emit_insn (gen_rvtt_sfpsetcc_v
+		     (v, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
 	  emit_insn (gen_rvtt_sfpsetcc_v (v, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
 	  if (cmp == SFPXCMP_MOD1_CC_LE)
 	    emit_insn (gen_rvtt_sfpcompc ());
@@ -650,14 +731,17 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
 	rvtt_emit_native_compare_gtle (tmp, cmp);
       else
 	{
-	  emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
-	  emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
+	  emit_insn (gen_rvtt_sfpsetcc_v
+		     (tmp, GEN_INT (SFPSETCC_MOD1_LREG_GTE0)));
+	  emit_insn (gen_rvtt_sfpsetcc_v
+		     (tmp, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
 	  if (cmp == SFPXCMP_MOD1_CC_LE)
 	    emit_insn (gen_rvtt_sfpcompc ());
 	}
     }
   else
-    emit_insn (gen_rvtt_sfpsetcc_v (tmp, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    emit_insn (gen_rvtt_sfpsetcc_v
+	       (tmp, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
 }
 
 /* Extended (or external?) iadd_i
@@ -683,7 +767,8 @@ rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod)
    handle it and if it did, the result would be inefficient.  */
 
 void
-rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used)
+rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod,
+		      bool dst_used)
 {
   unsigned int modi = INTVAL (mod);
   unsigned int cmp = modi & SFPXCMP_MOD1_CC_MASK;
@@ -693,8 +778,10 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
       rtx tmp = gen_reg_rtx (XTT32SImode);
-      rvtt_emit_sfpxiadd_i (tmp, lv, addr, src, imm, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE), true);
-      rvtt_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx, GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
+      rvtt_emit_sfpxiadd_i (tmp, lv, addr, src, imm,
+			    GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE), true);
+      rvtt_emit_sfpxiadd_i (dst, lv, addr, tmp, const0_rtx,
+			    GEN_INT (base_mod | SFPXCMP_MOD1_CC_NE));
       if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
       return;
@@ -704,7 +791,8 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
   bool is_const_int = CONST_INT_P (imm);
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   int iv = is_const_int ? INTVAL (imm) : 0xffffffff;
-  /* gcc_assert (is_sub); sub may not be set due to combine optimization we have */
+  /* gcc_assert (is_sub); sub may not be set due to combine optimization
+     we have */
 
   /* Figure out if we need to do a loadi (>12 bits signed) */
   if (is_const_int)
@@ -724,11 +812,13 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
       /* Load imm into dst */
       rvtt_emit_sfpxloadi (dst, rvtt_gen_rtx_noval (XTT32SImode), imm);
       
-      unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
+      unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST
+				 : SFPIADD_MOD1_ARG_LREG_DST;
       if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GE)
 	{
 	  /* Perform op w/ compare */
-	  mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+	  mod1 |= cmp == SFPXCMP_MOD1_CC_LT
+		  ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
 	  emit_insn (gen_rvtt_sfpiadd_v (dst, dst, src, GEN_INT (mod1)));
 	  need_setcc = false;
 	}
@@ -750,17 +840,20 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
 	      /* Perform op w/ compare */
 	      unsigned mod1 = cmp == SFPXCMP_MOD1_CC_LT
 		? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
-	      emit_insn (gen_rvtt_sfpiadd_i_lv (dst, const0_rtx, lv, src,
-						imm, const0_rtx, const0_rtx,
-						GEN_INT (mod1 | SFPIADD_MOD1_ARG_IMM)));
+	      emit_insn (gen_rvtt_sfpiadd_i_lv
+			 (dst, const0_rtx, lv, src, imm, const0_rtx,
+			  const0_rtx,
+			  GEN_INT (mod1 | SFPIADD_MOD1_ARG_IMM)));
 	      need_setcc = false;
 	    }
 	  else
 	    {
 	      /* Perform op w/o compare */
-	      emit_insn (gen_rvtt_sfpiadd_i_lv (dst, const0_rtx, lv, src,
-						imm, const0_rtx, const0_rtx,
-						GEN_INT (SFPIADD_MOD1_ARG_IMM | SFPIADD_MOD1_CC_NONE)));
+	      emit_insn (gen_rvtt_sfpiadd_i_lv
+			 (dst, const0_rtx, lv, src, imm, const0_rtx,
+			  const0_rtx,
+			  GEN_INT (SFPIADD_MOD1_ARG_IMM
+				   | SFPIADD_MOD1_CC_NONE)));
 	      set_cc_arg = dst;
 	    }
 	}
@@ -776,7 +869,8 @@ rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool
     }
 
   if (need_setcc)
-    emit_insn (gen_rvtt_sfpsetcc_v (set_cc_arg, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    emit_insn (gen_rvtt_sfpsetcc_v
+	       (set_cc_arg, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
 }
 
 /* See comment block above sfpiadd_i */
@@ -790,7 +884,8 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
   /* Decompose aggregate comparisons, recurse */
   if (cmp == SFPXCMP_MOD1_CC_LE || cmp == SFPXCMP_MOD1_CC_GT)
     {
-      rvtt_emit_sfpxiadd_v (dst, srcb, srca, GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE));
+      rvtt_emit_sfpxiadd_v (dst, srcb, srca,
+			    GEN_INT (base_mod | SFPXCMP_MOD1_CC_GE));
       emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (SFPSETCC_MOD1_LREG_NE0)));
       if (cmp == SFPXCMP_MOD1_CC_LE)
 	emit_insn (gen_rvtt_sfpcompc ());
@@ -799,12 +894,14 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
 
   bool is_sub = bool (modi & SFPXIADD_MOD1_IS_SUB);
   gcc_assert (is_sub);
-  unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST : SFPIADD_MOD1_ARG_LREG_DST;
+  unsigned int mod1 = is_sub ? SFPIADD_MOD1_ARG_2SCOMP_LREG_DST
+			     : SFPIADD_MOD1_ARG_LREG_DST;
 
   if (cmp == SFPXCMP_MOD1_CC_LT || cmp == SFPXCMP_MOD1_CC_GE)
     {
       /* Perform op w/ compare */
-      mod1 |= cmp == SFPXCMP_MOD1_CC_LT ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
+      mod1 |= cmp == SFPXCMP_MOD1_CC_LT
+	      ? SFPIADD_MOD1_CC_LT0 : SFPIADD_MOD1_CC_GTE0;
       emit_insn (gen_rvtt_sfpiadd_v (dst, srcb, srca, GEN_INT (mod1)));
     }
   else
@@ -814,7 +911,8 @@ rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod)
     emit_insn (gen_rvtt_sfpiadd_v (dst, srcb, srca, GEN_INT (mod1)));
     /* Must be EQ0 or NE0, compare with SETCC */
     gcc_assert (cmp == SFPXCMP_MOD1_CC_EQ || cmp == SFPXCMP_MOD1_CC_NE);
-    emit_insn (gen_rvtt_sfpsetcc_v (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
+    emit_insn (gen_rvtt_sfpsetcc_v
+	       (dst, GEN_INT (rvtt_cmp_ex_to_setcc_mod1_map[cmp])));
   }
 }
 
@@ -924,7 +1022,8 @@ bool rvtt_store_has_restrict_p (const rtx pat)
 		     TREE_CODE (exp) == VAR_DECL);
 
 	  tree decl = (TREE_CODE (exp) == PARM_DECL ||
-		       TREE_CODE (exp) == VAR_DECL) ? exp : TREE_OPERAND (exp, 0);
+		       TREE_CODE (exp) == VAR_DECL)
+		      ? exp : TREE_OPERAND (exp, 0);
 	  if (decl != NULL_TREE &&
 	      TYPE_RESTRICT (TREE_TYPE (decl)))
 	    {

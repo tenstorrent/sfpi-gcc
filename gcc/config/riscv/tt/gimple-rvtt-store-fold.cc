@@ -313,6 +313,9 @@ static constexpr stochrnd_store_row stochrnd_store_rows[] = {
 #undef RVTT_STOREFOLD_SINK_PAIR
 #undef RVTT_STOREFOLD_PROOF
 
+/* STMT as a gcall when it is the rvtt builtin call with insn identity
+   ID, null otherwise.  */
+
 static gcall *
 is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
 {
@@ -322,12 +325,19 @@ is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
   return nullptr;
 }
 
+/* Argument N of CALL as a host integer, or -1 when it is not a
+   literal INTEGER_CST.  */
+
 static long
 int_arg (gcall *call, unsigned n)
 {
   tree arg = gimple_call_arg (call, n);
   return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
 }
+
+/* Book the named refusal REASON against STMT and dump it.  Always
+   returns false so recognizers can bail with `return refuse
+   (...)'.  */
 
 static bool
 refuse (const char *reason, gimple *stmt)
@@ -622,6 +632,10 @@ check_load_to_assign (const rvtt_cc_region_tree *ccr, gcall *load,
     }
   return refuse ("store-fold-sink-region-shape", assign);
 }
+
+/* Delete STMT from the IL: run the target's deletion bookkeeping,
+   detach its virtual def, unlink it from its block and release its
+   SSA definitions.  */
 
 static void
 remove_stmt (gimple *stmt)
@@ -1018,6 +1032,13 @@ fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
   return true;
 }
 
+/* Run the store folds over FUN: first the merge-into-store folds
+   (only under the store-fold flag itself), then the
+   stochrnd-into-store candidates on the settled stream -- those run
+   even unlicensed so the standing named refusals are printed.  The
+   CC-region tree is computed once and shared by both walks.  Returns
+   whether the IL changed.  */
+
 static bool
 transform (function *fun)
 {
@@ -1173,6 +1194,10 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: early, while the
+   canonical structured CC forms are intact and before the invariant
+   pass sees the shortened bodies.  */
 
 gimple_opt_pass *
 make_pass_rvtt_store_fold (gcc::context *ctxt)

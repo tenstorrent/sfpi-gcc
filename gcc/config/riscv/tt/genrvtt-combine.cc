@@ -97,7 +97,8 @@ public:
   unsigned slot = 0;
 
 public:
-  bool lookup (Lexer &lexer, Vars &vars, std::string_view name, bool lhs, bool is_pattern);
+  bool lookup (Lexer &lexer, Vars &vars, std::string_view name, bool lhs,
+	       bool is_pattern);
 };
 
 struct Arg {
@@ -202,6 +203,11 @@ public:
 
 }
 
+/* Write STR to the output, counting the newlines it contains into
+   lineno so pop can emit a correct #line marker.  The scalar
+   specializations below format through fprintf and emit no
+   newlines.  */
+
 template<>
 void
 Stream::print (std::string_view str)
@@ -222,6 +228,10 @@ void Stream::print (int n) { fprintf (fd, "%d", n); }
 template<>
 void Stream::print (std::size_t n) { fprintf (fd, "%zu", n); }
 
+/* Report a parse diagnostic to stderr, prefixed with the source file
+   name and current line: printf-style FMT plus arguments.  Only
+   reports; callers unwind by returning false.  */
+
 void __attribute__ ((format (printf, 2, 3)))
 Lexer::error (char const *fmt, ...)
 {
@@ -234,6 +244,9 @@ Lexer::error (char const *fmt, ...)
 
   fprintf (stderr, "\n");
 }
+
+/* Consume the punctuator E when it is the next significant character.
+   Report an error unless OPTIONAL.  */
 
 bool
 Lexer::consume (char e, bool optional) {
@@ -248,6 +261,10 @@ Lexer::consume (char e, bool optional) {
     error ("Expected '%c' found '%c'", e, c);
   return false;
 }
+
+/* Consume the keyword E: the next identifier is read and matched
+   against it, with the position restored when it differs.  Report an
+   error unless OPTIONAL.  */
 
 bool
 Lexer::consume (std::string_view e, bool optional) {
@@ -269,6 +286,10 @@ Lexer::consume (std::string_view e, bool optional) {
 
   return false;
 }
+
+/* Skip whitespace and both C comment forms, counting newlines into
+   lineno, and return the position of the next significant character
+   -- which is NOT consumed.  */
 
 const char *
 Lexer::next () {
@@ -319,6 +340,10 @@ Lexer::next () {
   }
 }
 
+/* Consume a C-style identifier into RES.  When the next significant
+   character cannot start one, leave the position alone and report an
+   error unless OPTIONAL.  */
+
 bool
 Lexer::consume_ident (std::string_view &res, bool optional)
 {
@@ -342,6 +367,11 @@ Lexer::consume_ident (std::string_view &res, bool optional)
     error ("expected identifier, found '%c'", *pos ());
   return false;
 }
+
+/* Consume an expression into RES: it must start with a digit, a
+   capital letter, or '(', and extends to the first ',' or ')' outside
+   any nested parentheses (or to EOF).  When no expression starts
+   here, report an error unless OPTIONAL.  */
 
 bool
 Lexer::consume_expr (std::string_view &res, bool optional)
@@ -383,6 +413,12 @@ Lexer::consume_expr (std::string_view &res, bool optional)
 
   return false;
 }
+
+/* Consume a brace-balanced code block into RES, skipping over braces
+   inside string and character literals.  The captured text includes
+   the braces and any horizontal whitespace preceding the opening one;
+   an empty block records line 0, so RES converts to false.  When no
+   block starts here, report an error unless OPTIONAL.  */
 
 bool
 Lexer::consume_code (Code &res, bool optional)
@@ -481,6 +517,13 @@ using Combines = std::vector<Combine>;
 using Helpers = std::vector<Code>;
 }
 
+/* Resolve NAME in VARS, recording its slot here and creating the
+   variable on first sight.  LHS marks a definition: defining an
+   already-known name is an error inside a pattern (PATTERN), and
+   outside one is allowed only over an existing LHS (a replacement
+   redefining a matched value).  Resolving an existing name marks the
+   variable used.  Errors are reported through LEXER.  */
+
 bool
 Ref::lookup (Lexer &lexer, Vars &vars,
 	     std::string_view name, bool lhs, bool pattern)
@@ -507,6 +550,11 @@ Ref::lookup (Lexer &lexer, Vars &vars,
   return true;
 }
 
+/* Parse one shape argument: either an expression (leading digit,
+   capital letter, or open paren) captured verbatim into expr, or an
+   identifier resolved -- created if new -- in VARS.  IS_PATTERN
+   selects pattern-side lookup rules.  */
+
 bool
 Arg::parse (Lexer &lexer, Vars &vars, bool is_pattern)
 {
@@ -523,6 +571,11 @@ Arg::parse (Lexer &lexer, Vars &vars, bool is_pattern)
 
   return true;
 }
+
+/* Parse a shape's comma-separated argument list into args.  In a
+   pattern (IS_PATTERN), a '%' prefix marks the one argument the
+   matcher may commute, recorded in COMMUTE_ARG; a second such marker
+   in the same rule is an error.  */
 
 bool
 Shape::parse_args (Lexer &lexer, Vars &vars, int &commute_arg, bool is_pattern)
@@ -549,9 +602,16 @@ Shape::parse_args (Lexer &lexer, Vars &vars, int &commute_arg, bool is_pattern)
   return true;
 }
 
+/* Parse the rest of a shape whose LHS ident NAME has already been
+   consumed: an optional |-separated modifier list, '=', the builtin
+   ident, and the parenthesized argument list.  Registers NAME as an
+   LHS in VARS, keeps MAX_ARGS at the widest argument list seen, and
+   passes COMMUTE_ARG through to the argument parser.  IS_PATTERN
+   selects pattern-side name rules.  */
+
 bool
-Shape::parse (Lexer &lexer, Vars &vars,
-		std::string_view name, int &commute_arg, unsigned &max_args, bool is_pattern)
+Shape::parse (Lexer &lexer, Vars &vars, std::string_view name,
+	      int &commute_arg, unsigned &max_args, bool is_pattern)
 {
   char const *start = nullptr;
   char const *end = nullptr;
@@ -590,6 +650,12 @@ Shape::parse (Lexer &lexer, Vars &vars,
   return true;
 }
 
+/* Emit this shape's row of the generated Shape array into OUT: insn
+   id, remapped LHS index, modifier flags, argument count, used_by
+   mask, then each argument as {is_var, remapped index or verbatim
+   expression}.  REMAP translates parse-time var slots to the sorted
+   indices the consumer uses.  */
+
 void
 Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
 {
@@ -618,6 +684,12 @@ Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
   out.print ("}},\n");
 }
 
+/* Parse a run of shapes into the pattern (IS_PATTERN) or replacement
+   list, stopping at the first token that does not open one.  A
+   commuting marker is accepted only on the final pattern.  The run's
+   last LHS is the rule's result and counts as used; any other LHS
+   never referenced afterwards is an error.  */
+
 bool
 Combine::parse_patterns (Lexer &lexer, bool is_pattern)
 {
@@ -635,7 +707,8 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
 	  return false;
 	}
       slot.emplace_back (Shape ());
-      if (!slot.back ().parse (lexer, vars, name, commute_arg, max_args, is_pattern))
+      if (!slot.back ().parse (lexer, vars, name, commute_arg, max_args,
+			       is_pattern))
 	return false;
     }
 
@@ -643,12 +716,23 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
   for (auto &def : vars)
     if (!def.is_used)
       {
-	lexer.error ("LHS '%.*s' is never used", int (def.name.size ()), def.name.data ());
+	lexer.error ("LHS '%.*s' is never used",
+		     int (def.name.size ()), def.name.data ());
 	return false;
       }
 
   return true;
 }
+
+/* Parse one combine rule following the "combine" keyword: an optional
+   gate ident in parens, then within braces an optional enable block,
+   the pattern shapes, the mandatory pred block, an optional init
+   block, the replacement shapes, and an optional fini block.  On
+   success reorder vars to pattern LHSs, replacement LHSs, other
+   pattern vars, other replacement vars (boundaries in rep_lhs_hwm and
+   pat_var_hwm, original-slot-to-index permutation in remap) and
+   compute the patterns' used_by masks and the replace/rep_use
+   masks.  */
 
 bool
 Combine::parse (Lexer &lexer)
@@ -733,6 +817,14 @@ Combine::parse (Lexer &lexer)
   return true;
 }
 
+/* Parse the combine description file NAME (mmapped, then
+   NUL-terminated for the lexer) into COMBINES.  At the top level the
+   file is a sequence of "combine (...) {...}" rules and "namespace
+   {...}" helper blocks; helpers are collected verbatim (rewound to
+   reinclude the "namespace" keyword) into HELPERS for later copying
+   into the output.  Returns false, after reporting, on any parse
+   error or trailing garbage.  */
+
 static bool
 parse (Combines &combines, Helpers &helpers, char const *name)
 {
@@ -742,8 +834,8 @@ parse (Combines &combines, Helpers &helpers, char const *name)
   char *buf;
   if (handle < 0
       || fstat (handle, &stat) < 0
-      || (buf = (char *)mmap (nullptr, stat.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE,
-			      handle, 0)) == MAP_FAILED)
+      || (buf = (char *)mmap (nullptr, stat.st_size, PROT_READ | PROT_WRITE,
+			      MAP_PRIVATE, handle, 0)) == MAP_FAILED)
     {
       lexer.error ("cannot read: %m");
       if (handle >= 0)
@@ -782,11 +874,17 @@ parse (Combines &combines, Helpers &helpers, char const *name)
   return true;
 }
 
+/* Emit a #line marker redirecting diagnostics to line LINENO of the
+   source description file, ahead of copying user code from there.  */
+
 void
 Stream::push (unsigned lineno)
 {
   print ("#line ", lineno, " \"", src, "\"\n");
 }
+
+/* Emit the balancing #line marker returning diagnostics to the
+   generated file itself, using the running output line count.  */
 
 void
 Stream::pop ()
@@ -794,11 +892,20 @@ Stream::pop ()
   print ("#line ", lineno + 1, " \"", out, "\"\n");
 }
 
+/* Print the name of this rule's enable predicate into OUT:
+   combiner_enable_<gate ident>, a function gimple-rvtt-combine.cc
+   defines ahead of including the generated file.  */
+
 void
 Combine::emit_enable_name (Stream &out) const
 {
   out.print ("combiner_enable_", target);
 }
+
+/* Print HOOK's generated function name into OUT: "combiner_", the
+   rule's source line number, and the hook's tag -- unique per rule
+   without depending on any user-chosen name.  */
+
 void
 Combine::emit_hook_name (Stream &out, Hooks hook) const
 {
@@ -806,10 +913,20 @@ Combine::emit_hook_name (Stream &out, Hooks hook) const
   out.print ("combiner_", lineno, tags[hook]);
 }
 
+/* Emit the definition of this rule's HOOK function into OUT.  An
+   enable hook takes no arguments (and, for a gated rule, first tests
+   the target's enable predicate); the other hooks receive the matched
+   calls[] and vars[] arrays and are prefaced with by-name reference
+   bindings for each call and variable they may see (fini binds the
+   replacement calls, pred only the pattern variables).  The
+   user-supplied brace block is copied between #line push/pop markers;
+   enable and pred hooks fall through to "return true".  */
+
 void
 Combine::emit_hook (Stream &out, Hooks hook) const
 {
-  out.print ("static ", hook == H_Pred || hook == H_Enable ? "bool" : "void", " ");
+  out.print ("static ",
+	     hook == H_Pred || hook == H_Enable ? "bool" : "void", " ");
   emit_hook_name (out, hook);
   out.print (" (");
   if (hook != H_Enable)
@@ -837,7 +954,8 @@ Combine::emit_hook (Stream &out, Hooks hook) const
 	else if (hook == H_Pred && op >= pat_var_hwm)
 	  continue;
 	else
-	  out.print ("  auto &", vars[op].name, " ATTRIBUTE_UNUSED = vars[", op, "];\n");
+	  out.print ("  auto &", vars[op].name,
+		     " ATTRIBUTE_UNUSED = vars[", op, "];\n");
       out.print ("\n");
     }
   else if (has_enable ())
@@ -856,6 +974,15 @@ Combine::emit_hook (Stream &out, Hooks hook) const
     out.print ("  return true;\n");
   out.print ("}\n\n");
 }
+
+/* Generator entry point: ARGV[1] is the combine description source
+   (rvtt.gc), ARGV[2] the generated output (rvtt-combine.inc, included
+   by gimple-rvtt-combine.cc).  Parse the description, then emit the
+   helper namespace blocks, each rule's enable/pred/init/fini hook
+   functions, the combiner_*_hwm capacity constants, the flattened
+   Shape array, and the Combiner table indexing into it.  Emitted user
+   code is bracketed by #line markers so diagnostics point back into
+   the source.  Returns nonzero on parse failure.  */
 
 int
 main (int argc, const char **argv)

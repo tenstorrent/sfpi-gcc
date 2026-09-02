@@ -50,17 +50,29 @@ rvtt_dcost_table (void)
   return t;
 }
 
+/* Centislot price of delivering WORDS issue words on plane P (RISC
+   push vs replay slot), at the audited per-plane rate.  */
+
 int64_t
 rvtt_dcost_words_to_centislots (int64_t words, plane p)
 {
   return words_to_centislots (rvtt_dcost_table (), words, p);
 }
 
+/* SFPLOADI issue-word count (1 or 2) of materializing the 32-bit
+   value W through an LReg -- 1 when W fits one of the single-issue
+   immediate encodings, 2 otherwise (see loadi_issue_words in
+   rvtt-delivery-cost-core.h for the encoding forms).  */
+
 unsigned
 rvtt_dcost_loadi_issue_words (uint32_t w)
 {
   return loadi_issue_words (w);
 }
+
+/* Minimum modeled centislot benefit a replay hoist must clear: the
+   -mtt-tensix-replay-hoist-min-benefit= override when non-negative,
+   else the audited rvtt-cost.md default.  */
 
 int64_t
 rvtt_dcost_replay_hoist_min_benefit (void)
@@ -69,6 +81,14 @@ rvtt_dcost_replay_hoist_min_benefit (void)
     ? (int64_t) riscv_tt_replay_hoist_min_benefit
     : (int64_t) XTT_REPLAY_HOIST_MIN_BENEFIT;
 }
+
+/* Price one replay window against the audited cost table: SHAPE's
+   before/after delivery arithmetic over TRIPS trips of WORDS payload
+   words executing in EXEC_SLOTS slots, with LAUNCH_RUN feeding the
+   delivery-bound saturation term and DRAIN_CONTRACT selecting the
+   completion guard's full-record charge.  Returns every priced term
+   plus the profitability verdict against MIN_BENEFIT (core
+   replay_pricing bound to rvtt_dcost_table).  */
 
 replay_price
 rvtt_dcost_replay_pricing (replay_shape shape, int64_t trips, int64_t words,
@@ -79,6 +99,13 @@ rvtt_dcost_replay_pricing (replay_shape shape, int64_t trips, int64_t words,
 			 exec_slots, launch_run, drain_contract,
 			 min_benefit);
 }
+
+/* Once-per-formed-group Dst-auto-increment setup charge, in
+   centislots x100.  A named constant rather than arithmetic: the
+   current rvtt-cost.md model prices it at 0 (the measured record
+   delivery absorbs the SETC16 program); every consumer reads it from
+   here so a future non-zero silicon-priced value moves them
+   together.  */
 
 int64_t
 rvtt_dcost_autoincr_setup_cost_x100 (void)

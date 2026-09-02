@@ -551,6 +551,9 @@ struct chain_desc
 
 static unsigned n_chain_renamed;
 
+/* Register the named refusal REASON for a chain in BB, attributed to
+   the blocking insn AT, and print the standard dump line.  */
+
 static void
 refuse_chain (const char *reason, rtx_insn *at, basic_block bb)
 {
@@ -1639,6 +1642,11 @@ rvtt_lreg_rename_web_undo (const rvtt_lreg_rename_web &web)
 	     web.new_l, web.old_l, web.n_insns);
 }
 
+
+/* Instantiate the chain-rename pass for CTXT; rvtt-passes.def places it
+   before postreload, and it gates on the Tensix extension plus
+   -mtt-tensix-optimize-lreg-rename-chains (or the frozen alias
+   -mtt-tensix-optimize-lreg-rename).  */
 
 rtl_opt_pass *
 make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt)

@@ -226,6 +226,10 @@ xtt32_allocation_unit_p (unsigned regno)
     && GET_MODE (regno_reg_rtx[regno]) == XTT32SImode;
 }
 
+/* Number of XTT32SI allocation units (SFPU vector pseudos and live
+   hard LREGs, per xtt32_allocation_unit_p) set in the LIVE register
+   bitmap -- the unit every pressure figure here is measured in.  */
+
 static unsigned
 count_xtt32_units (bitmap live)
 {
@@ -468,6 +472,10 @@ struct spill_ctx
   auto_vec<int> mint_step;
   auto_vec<int> mint_trips;
 };
+
+/* Record in CTX the named spill-legality refusal NAME (with DETAIL and
+   the blocking insn AT).  Only the first refusal is kept; later calls
+   on a refused context are ignored.  */
 
 static void
 refuse (spill_ctx &ctx, const char *name, const char *detail, rtx_insn *at)
@@ -1026,6 +1034,10 @@ struct lpa_graph
   }
 };
 
+/* Hard LREG number named by the sentinel read pattern with insn code
+   CODE (the rvtt_sfpreadlreg<N> family), or -1 when CODE is not a
+   sentinel read.  */
+
 static int
 sentinel_read_lregno (int code)
 {
@@ -1042,6 +1054,10 @@ sentinel_read_lregno (int code)
     default: return -1;
     }
 }
+
+/* Hard LREG number named by the sentinel write pattern with insn code
+   CODE (the rvtt_sfpwritelreg<N> family), or -1 when CODE is not a
+   sentinel write.  */
 
 static int
 sentinel_write_lregno (int code)
@@ -1833,6 +1849,10 @@ struct spill_transaction
   unsigned n_round_trips () const { return emitted.length (); }
 };
 
+/* Undo everything TX recorded, newest first: revert each validated
+   operand rewrite to its original register and delete every emitted
+   round-trip insn, restoring the pre-allocation stream exactly.  */
+
 static void
 rollback (spill_transaction &tx)
 {
@@ -1987,6 +2007,10 @@ inform_refusal (function *fn, const char *name, const char *detail,
 	  name, detail ? detail : "unproven");
 }
 
+/* Report CTX's recorded spill-legality refusal for FN: count it in the
+   refusal registry, print the dump line, and tell the user the
+   lreg-pressure-exceeded error stands.  */
+
 static void
 dump_spill_refusal (function *fn, const spill_ctx &ctx)
 {
@@ -1997,6 +2021,15 @@ dump_spill_refusal (function *fn, const spill_ctx &ctx)
 	       ctx.at ? INSN_UID (ctx.at) : -1);
   inform_refusal (fn, ctx.refusal, ctx.detail, ctx.at);
 }
+
+/* Layer-2 enforcement over FN.  A no-op while the function's peak SFPU
+   pressure fits the 8-LREG file (allocation stays IRA's, as today).
+   Above it, iterate: build the web interference graph (Briggs/George-
+   coalesced under its flag), attempt a DSATUR coloring, and on a block
+   spill the chosen victim web through a Dst scratch row, re-analyzing
+   DF each round.  Every failure bails transactionally -- the stream is
+   rolled back exactly and the post-RA spill diagnosis speaks.  Returns
+   TODO_df_finish when spills were committed, 0 otherwise.  */
 
 static unsigned
 enforce_colorability (function *fn)
@@ -2034,7 +2067,8 @@ enforce_colorability (function *fn)
     {
       rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED, dump_file,
 		   "lreg-alloc refusal: %s (%s); rolling back %u round-trip "
-		   "insn(s) and %u rewrite(s); keeping lreg-pressure-exceeded\n",
+		   "insn(s) and %u rewrite(s); keeping "
+		   "lreg-pressure-exceeded\n",
 		   name, detail ? detail : "",
 		   tx.emitted.length (), tx.replaced_insn.length ());
       bool had_mutations = !tx.emitted.is_empty ()
@@ -2480,6 +2514,9 @@ struct lpa_bind_state
   }
 };
 
+/* Union-find root of node X in ST (no path compression: states are
+   copied throughout the search, so lookups must not mutate).  */
+
 static int
 bind_find (const lpa_bind_state &st, int x)
 {
@@ -2487,6 +2524,10 @@ bind_find (const lpa_bind_state &st, int x)
     x = st.uf[x];
   return x;
 }
+
+/* Merge the classes of A and B in ST (the lower root index survives).
+   Returns false when their forced colors disagree; otherwise the merged
+   root inherits whichever color was forced.  */
 
 static bool
 bind_union (lpa_bind_state &st, int a, int b)
@@ -2505,6 +2546,9 @@ bind_union (lpa_bind_state &st, int a, int b)
   return true;
 }
 
+/* Force NODE's class in ST to the color LREG; returns false when the
+   class already carries a different forced color.  */
+
 static bool
 bind_require (lpa_bind_state &st, int node, int lreg)
 {
@@ -2514,6 +2558,11 @@ bind_require (lpa_bind_state &st, int node, int lreg)
   st.col[r] = lreg;
   return true;
 }
+
+/* Apply one pin-site alternative ALT to ST: unify its matching-
+   equality pairs and force its singleton-class requirements.  Returns
+   false on the first inconsistency; ST may then be partially updated,
+   so the search always applies alternatives to a copy.  */
 
 static bool
 bind_apply_alt (lpa_bind_state &st, const lpa_pin_alt &alt)
@@ -2712,12 +2761,16 @@ bind_solve_rec (const lpa_graph &g,
   return false;
 }
 
+/* Register the named dual-bank binding refusal NAME (with DETAIL and
+   the blocking insn AT) and dump the standard stand-down line; today's
+   allocation then proceeds untouched.  */
+
 static void
 dump_bind_refusal (const char *name, const char *detail, rtx_insn *at)
 {
   rvtt_refuse_by_name (name, dump_file,
-		       "lreg-alloc dual-bank binding refusal: %s (%s) at insn %d; "
-		       "standing down (today's allocation)\n",
+		       "lreg-alloc dual-bank binding refusal: %s (%s) "
+		       "at insn %d; standing down (today's allocation)\n",
 		       name, detail ? detail : "", at ? INSN_UID (at) : -1);
 }
 
@@ -3033,6 +3086,12 @@ public:
 };
 
 } /* anonymous namespace */
+
+/* Instantiate the LREG pressure/allocation pass for CTXT;
+   rvtt-passes.def places it before ira, after the lreg-livein
+   reservations, and it gates on optimization, a WH/BH Tensix target,
+   and -mtt-tensix-optimize-pressure-schedule (audit dump) or
+   -mtt-tensix-optimize-lreg-alloc (enforcement).  */
 
 rtl_opt_pass *
 make_pass_rvtt_lp_alloc (gcc::context *ctxt)

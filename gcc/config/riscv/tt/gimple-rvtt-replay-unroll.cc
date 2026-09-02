@@ -225,7 +225,8 @@ rvtt_replay_unroll_row_words (const rvtt_insn_data *insnd)
     /* Everything else programs machine state outside the row or opens
        a raw/owner region: repetition semantics are not the row's.
        (sfpwritelreg, sfprawlreg_access, ttregion_begin/end,
-       sfpreadconfig, sfpwriteconfig_v, sfpconfig_i, ttsetc16, ttsetrwc, ttreplay,
+       sfpreadconfig, sfpwriteconfig_v, sfpconfig_i, ttsetc16, ttsetrwc,
+       ttreplay,
        sfpbankdone, synth_opcode, transpose family, shft2 family, ...)
        Fail closed.  */
     default:
@@ -695,7 +696,8 @@ public:
   }
 };
 
-/* ---- Launch-flatten: complete-unroll request for delivery loops (lane HH) ----
+/* ---- Launch-flatten: complete-unroll request for delivery loops
+   (lane HH) ----
 
    -mtt-tensix-optimize-launch-flatten (default off).
 
@@ -1748,17 +1750,30 @@ public:
 
 } /* anonymous namespace */
 
+/* Instantiate the replay-loop-unroll request pass for its
+   rvtt-passes.def seat: after every statement-editing pass, so its
+   typed census sees the final pre-expansion stream (only the
+   round-interleave annotation pass follows it).  */
+
 gimple_opt_pass *
 make_pass_rvtt_replay_unroll (gcc::context *ctxt)
 {
   return new pass_rvtt_replay_unroll (ctxt);
 }
 
+/* Instantiate the launch-flatten pass for its rvtt-passes.def seat:
+   just before the generic complete unroller whose decision it
+   requests.  */
+
 gimple_opt_pass *
 make_pass_rvtt_launch_flatten (gcc::context *ctxt)
 {
   return new pass_rvtt_launch_flatten (ctxt);
 }
+
+/* Instantiate the round-interleave annotation pass for its
+   rvtt-passes.def seat: after the replay-loop-unroll request, whose
+   annotation it never overrides.  */
 
 gimple_opt_pass *
 make_pass_rvtt_round_interleave (gcc::context *ctxt)
