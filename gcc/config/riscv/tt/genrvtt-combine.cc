@@ -328,7 +328,7 @@ Lexer::next () {
 bool
 Lexer::consume_ident (std::string_view &res, bool optional)
 {
-  auto start = pos ();
+  auto start = next ();
 
   if ((*start >= 'a' && *start <= 'z')
       || (*start >= 'A' && *start <= 'Z')
@@ -352,7 +352,7 @@ Lexer::consume_ident (std::string_view &res, bool optional)
 bool
 Lexer::consume_expr (std::string_view &res, bool optional)
 {
-  auto start = pos ();
+  auto start = next ();
   if ((*start >= '0' && *start <= '9')
       || (*start >= 'A' && *start <= 'Z')
       || *start == '(')
@@ -525,7 +525,6 @@ Ref::lookup (Lexer &lexer, Vars &vars,
 bool
 Arg::parse (Lexer &lexer, Vars &vars, bool is_pattern)
 {
-  lexer.next ();
   if (lexer.consume_expr (expr, true))
     return true;
 
@@ -584,7 +583,6 @@ Shape::parse (Lexer &lexer, Vars &vars,
   if (!lexer.consume ('='))
     return false;
 
-  lexer.next ();
   if (!lexer.consume_ident (func))
     return false;
 
@@ -639,7 +637,6 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
   auto &slot = is_pattern ? pats : reps;
   for (;;)
     {
-      lexer.next ();
       std::string_view name;
       if (!lexer.consume_ident (name, true))
 	break;
@@ -671,12 +668,10 @@ Combine::parse (Lexer &lexer)
   if (!lexer.consume ('('))
     return false;
 
-  lexer.next ();
   lexer.consume_ident (target, true);
   if (!lexer.consume (')'))
     return false;
 
-  lexer.next ();
   lexer.consume_ident (label, true);
 
   if (!lexer.consume ('{'))
