@@ -349,4 +349,3 @@ void loadimul2 (unsigned v) {
 **	# WRITE L2
 **	ret
 */
-

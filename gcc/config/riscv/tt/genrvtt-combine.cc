@@ -614,7 +614,7 @@ Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
 
   out.print (", ", unsigned (args.size ()));
   out.print (", ", used_by_mask);
-  out.print (",\n    {");
+  out.print (",\n   {");
   bool first = true;
   for (auto const &arg : args)
     {
@@ -676,10 +676,11 @@ Combine::parse (Lexer &lexer)
   if (!lexer.consume (')'))
     return false;
 
+  lexer.next ();
+  lexer.consume_ident (label, true);
+
   if (!lexer.consume ('{'))
     return false;
-
-  lexer.consume_ident (label, true);
 
   lexer.consume_code (hooks[H_Enable], true);
   if (!parse_patterns (lexer, true))
@@ -771,7 +772,7 @@ parse (Combines &combines, Helpers &helpers, char const *name)
 
   for (;;)
     {
-      bool deferred = lexer.consume ("deferred_combibe");
+      bool deferred = lexer.consume ("deferred_combine", true);
       if (deferred || lexer.consume ("combine", true))
 	{
 	  combines.emplace_back (Combine (lexer.lineno, deferred));
@@ -987,7 +988,7 @@ main (int argc, const char **argv)
 		 ", ", combine.deferred,
 		 ", Combiner::");
       combine.emit_label (out);
-      out.print (",\n    ");
+      out.print (",\n   ");
       for (unsigned ix = 0; ix != Combine::H_HWM; ix++)
 	{
 	  if (ix)

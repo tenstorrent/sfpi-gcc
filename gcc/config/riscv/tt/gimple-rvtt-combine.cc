@@ -257,9 +257,10 @@ struct Combiner::matched_data {
   gcall *replace[combiner_reps_hwm];
   tree vars[combiner_vars_hwm];
   const Combiner *combiner;
-  unsigned deleted = 0;
+  unsigned deleted = 0;  // Will delete insn
+  unsigned delete_last = 0; // Delete if this is last use
   bool commuted = false;
-  bool moot = false; // Another combiner deleted a call we rewrite
+  int mooted = false; // Another combiner deleted a call we rewrite
 
   matched_data (const Combiner *c)
     : combiner (c) {};
@@ -281,11 +282,12 @@ public:
     for (auto I = map.lower_bound (call);
 	 I != map.end () && I->first == call;
 	 ++I)
-      {
-	if (dump_file)
-	  fprintf (dump_file, "Mooting deferral %u\n", I->second);
-	matches[I->second].moot = true;
-      }
+      if (matches[I->second].mooted >= 0)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Mooting deferral %u\n", I->second);
+	  matches[I->second].mooted = true;
+	}
   }
   unsigned defer () {
     auto &match = matches.back ();
@@ -480,15 +482,13 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  // is ok and/or we should delete this insn.
 	  if (tree lhs = gimple_call_lhs (matched.calls[ix]))
 	    {
-	      if (pat.flags & unsigned (Flags::OtherUses)
-		  && rep_use_mask & (1 << ix))
-		;
-	      else if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
+	      if (pat.flags & unsigned (Flags::OtherUses))
 		{
-		  if (!(pat.flags & unsigned (Flags::OtherUses)))
-		    // Not allowed other uses
-		    goto commute_or_fail;
+		  if (!(rep_use_mask & (1 << ix)))
+		    matched.delete_last |= 1 << ix;
 		}
+	      else if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
+		goto commute_or_fail;
 	      else if (!(rep_use_mask & (1 << ix)))
 		matched.deleted |= 1 << ix;
 	    }
@@ -518,9 +518,9 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
     if (auto v = matched.vars[ix])
       for (unsigned jx = pats_hwm; jx--; )
 	if (v == matched.vars[jx]
-	    && ((1 << jx) & matched.deleted))
+	    && ((1 << jx) & (matched.deleted | matched.delete_last)))
 	  {
-	    // This non-lhs var matches an deleted (or replaced) lhs var
+	    // This non-lhs var matches a deleted (or replaced) lhs var
 	    if (!((1 << ix) & masks.live))
 	      goto commute_or_fail;  // Not a live, not a match
 
@@ -554,6 +554,8 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	    c = 'R';
 	  else if ((1 << ix) & matched.deleted)
 	    c = 'D';
+	  else if ((1 << ix) & matched.delete_last)
+	    c = 'L';
 
 	  fprintf (dump_file, "%c ", c);
 	  print_gimple_stmt (dump_file, matched.calls[ix], 2);
@@ -628,15 +630,28 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &d
       gsi_insert_before (gsi, call, GSI_SAME_STMT);
     }
 
-  for (int ix = pats_hwm - 1; ix--;)
-    if ((1 << ix) & matched.deleted)
-      {
-	auto *call = matched.calls[ix];
-	deferred.moot (call);
-	auto gsi = gsi_for_stmt (call);
-	unlink_stmt_vdef (call);
-	gsi_remove (&gsi, true);
-      }
+  for (int ix = pats_hwm; ix--;)
+    {
+      if ((1 << ix) & matched.delete_last)
+	{
+	  auto lhs = gimple_call_lhs (matched.calls[ix]);
+	  if (!has_zero_uses (lhs))
+	    continue;
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Deleting now-unused ");
+	      print_gimple_stmt (dump_file, matched.calls[ix], 0);
+	    }
+	}
+      else if (!((1 << ix) & matched.deleted))
+	continue;
+
+      auto *call = matched.calls[ix];
+      deferred.moot (call);
+      auto gsi = gsi_for_stmt (call);
+      unlink_stmt_vdef (call);
+      gsi_remove (&gsi, true);
+    }
 
   unlink_stmt_vdef (**gsi);
   gsi_remove (gsi, true);
@@ -1102,14 +1117,16 @@ public:
 	auto &match = deferred.matches[ix];
 	if (dump_file)
 	  fprintf (dump_file,
-		   match.moot ? "Deferment %u is moot\n\n"
+		   match.mooted ? "Deferment %u is moot\n\n"
 		   : "Deferment %u:\n", ix);
 
-	if (match.moot)
+	if (match.mooted)
 	  continue;
+	match.mooted = -1; // Avoid confusing self-mooting message
 
 	auto gsi = gsi_for_stmt (match.calls[match.combiner->pats_hwm - 1]);
 	match.combiner->replace (&gsi, match, deferred);
+	changed = true;
       }
 
     if (!addimuli.empty ())
