@@ -18,7 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* THE EXECUTABLE FORM OF THE PAPER VALIDATION
-   (docs/TIMING_CALENDAR_DERIVATION.md §3): the derivation core, fed
+   (docs/TIMING_CALENDAR_DERIVATION.md section 3): the derivation core, fed
    only each frozen calendar's SCHEDULE, must reproduce the
    independently recorded frozen sequence words bit-exactly, reproduce
    the handwritten MulInt32 descriptor's words, and refuse the shapes
@@ -121,7 +121,7 @@ test_minmax (const caps *c)
   check_word (cal.seq_words[1], 0x53000000, "minmax m1 sequence word");
   check (cal.has_staging_copy && cal.staging_macro == 0
 	 && cal.staging_delay == 3,
-	 "minmax staging copy derives on macro 0 at delay 3 ((‡) rule)");
+	 "minmax staging copy derives on macro 0 at delay 3 ((ddag) rule)");
   check (cal.delay_of[0] == 1,
 	 "minmax swap delay 1 (waits for the explicit load)");
   check (cal.delay_of[1] == 2 && cal.store_reads_l16,
@@ -285,7 +285,7 @@ test_mul_int32_three_address (const caps *c)
 /* The handwritten MulInt32 ONE-SLOT in-place variant (macro 0, ii=1)
    fails the LReg16 lifetime proof: the next row's MUL24 rewrites
    LReg16 strictly before this row's store executes.  The derivation
-   REFUSES it (docs §3/§7 -- a finding about the hand kernel, whose
+   REFUSES it (docs section 3/section 7 -- a finding about the hand kernel, whose
    one-slot case appears unexercised).  */
 static void
 test_mul_int32_one_slot_refuses (const caps *c)
@@ -312,7 +312,7 @@ test_mul_int32_one_slot_refuses (const caps *c)
 
 /* The derived unary max/min calendar (the formation target): SWAP
    against a constant register, store demoted to its own carrier;
-   ii=1 merged candidate refuses (‡); ii=2 derives the staging copy.  */
+   ii=1 merged candidate refuses (ddag); ii=2 derives the staging copy.  */
 static void
 test_unary_maxmin (const caps *c)
 {
@@ -334,7 +334,7 @@ test_unary_maxmin (const caps *c)
     derived_calendar cal;
     derive_calendar (c, row, &cal);
     check (cal.refusal && !std::strcmp (cal.refusal, refusal_hazard ()),
-	   "unary maxmin merged ii=1 refuses (‡)");
+	   "unary maxmin merged ii=1 refuses (ddag)");
   }
   /* Candidate 1: store demoted, ii=2.  */
   {

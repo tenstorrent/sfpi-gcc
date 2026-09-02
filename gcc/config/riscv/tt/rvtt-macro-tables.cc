@@ -706,7 +706,7 @@ setrwc_decode (uint32_t word, setrwc_fields *f)
 /* Provenance for everything in this section:			      */
 /*  (S1) ISA SFPLOADMACRO.md (BlackholeA0 documentation) -- the       */
 /*       SequenceBits format, the sub-unit legality table, the	      */
-/*       (†)/(‡) rules, the Misc field layout;			      */
+/*       (dag)/(ddag) rules, the Misc field layout;			      */
 /*  (S2) craq-sim f80a8d64 src/sfploadmacro_events.h +		      */
 /*       TENSIX_EXECUTE_SFPLOADMACRO -- the executable model the CRAQ */
 /*       gates run against (ready = issue + 1 + delay,		      */
@@ -714,7 +714,7 @@ setrwc_decode (uint32_t word, setrwc_fields *f)
 /*  (S3) tt_llk_blackhole ckernel_sfpu_mul_int.h _init_mul_int_ --    */
 /*       the production handwritten descriptor with author-annotated  */
 /*       field meanings.					      */
-/* See docs/TIMING_CALENDAR_DERIVATION.md §1-3 (including the	      */
+/* See docs/TIMING_CALENDAR_DERIVATION.md section 1-3 (including the	      */
 /* byte-exact re-derivation of every frozen calendar word above).     */
 /* ------------------------------------------------------------------ */
 
@@ -793,7 +793,7 @@ static const subunit_legal_entry subunit_legality[] = {
   { 0x83, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETMAN	*/
   { 0x89, 1u << SEQ_UNIT_SIMPLE },	/* SFPSETSGN	*/
   { 0x7a, 1u << SEQ_UNIT_SIMPLE },	/* SFPSHFT	*/
-  { 0x92, 1u << SEQ_UNIT_SIMPLE },	/* SFPSWAP (‡)	*/
+  { 0x92, 1u << SEQ_UNIT_SIMPLE },	/* SFPSWAP (ddag)	*/
   { 0x8c, 1u << SEQ_UNIT_SIMPLE },	/* SFPTRANSP	*/
   { 0x8d, 1u << SEQ_UNIT_SIMPLE },	/* SFPXOR	*/
   /* MAD column (S1; SFPMUL24 by S2/S3).  */
@@ -906,7 +906,7 @@ opcode_l16_target_proven (const caps *c, uint8_t opcode)
 bool
 opcode_needs_swap_adjacency (const caps *c, uint8_t opcode)
 {
-  /* S1 (‡): SWAP on Simple needs MAD idle in its execution cycle and
+  /* S1 (ddag): SWAP on Simple needs MAD idle in its execution cycle and
      Simple+Round idle (or NOP) in the next.  The frozen minmax copy
      delay (3, not the dependence-minimal 2) is this rule in action.  */
   return c && opcode == 0x92;

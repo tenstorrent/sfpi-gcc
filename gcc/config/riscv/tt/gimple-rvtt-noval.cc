@@ -1,4 +1,4 @@
-/* Pass to issue diagnostics for SFPU operations
+/* Pass to remove SFPU lv-assignments whose live input is novalue
    Copyright (C) 2026 Tenstorrent Inc.
    Originated Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -18,6 +18,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"

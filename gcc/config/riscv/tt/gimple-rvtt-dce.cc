@@ -1,4 +1,4 @@
-/* Pass to issue diagnostics for SFPU operations
+/* Pass to eliminate dead SFPU intrinsic calls
    Copyright (C) 2026 Tenstorrent Inc.
    Originated Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 

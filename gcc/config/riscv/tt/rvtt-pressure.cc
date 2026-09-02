@@ -684,7 +684,7 @@ engine_loop_legal_p (class loop *loop,
      before their non-PHI uses), releasing values at their last counted use
      and admitting locally defined vectors, tracking the peak.  PHI-argument
      uses are counted but never released here, so loop-carried values remain
-     live through the walk — conservative in the refusing direction.  For a
+     live through the walk -- conservative in the refusing direction.  For a
      multi-block body this measures pressure across the whole region,
      including any inner loops.  */
   size_t peak = live.size ();

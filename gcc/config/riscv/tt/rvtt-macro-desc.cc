@@ -789,7 +789,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
 /* Timing-calendar derivation (Layer 4b): when no proven whole-word
    program matches, derive the sequence words, delays, and misc fields
    from the schedule and the established architectural facts
-   (docs/TIMING_CALENDAR_DERIVATION.md §4).  The admitted template
+   (docs/TIMING_CALENDAR_DERIVATION.md section 4).  The admitted template
    class grows one CRAQ-validated increment at a time; today it is the
    constant-register SFPSWAP family (the unary max/min shape).  Rows
    outside the admitted class keep the established
@@ -1356,10 +1356,10 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	   supplies it at execution); the OTHER factor's register is
 	   named in the template's VA field.  Both audited mods are
 	   symmetric in VA/VB (LOWER: (a*b) low 23; UPPER:
-	   (a_23*b_23) >> 23 — craq-sim sfpmul24_result, SFPMUL24.md),
+	   (a_23*b_23) >> 23 -- craq-sim sfpmul24_result, SFPMUL24.md),
 	   so when the allocator tied the product in-place onto the
-	   VA-side factor instead, the commuted word — naming the
-	   VB-side factor — realizes the identical value.  The
+	   VA-side factor instead, the commuted word -- naming the
+	   VB-side factor -- realizes the identical value.  The
 	   established operand order is admitted first so previously
 	   derived words stay bit-identical.  */
 	int named;

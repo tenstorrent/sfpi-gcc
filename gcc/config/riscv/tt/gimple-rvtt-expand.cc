@@ -1,5 +1,5 @@
 /* Pass to expand (lower) boolean SFPU operators
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -17,6 +17,7 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+#define INCLUDE_UNORDERED_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -30,9 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "tree-ssa.h"
 #include "rvtt.h"
-#include <unordered_map>
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
 static void process_tree(gcall *stmt, gcall *parent);
 static void process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
@@ -296,7 +295,8 @@ mark_vif_stmts(gimple_stmt_iterator top,
 	    }
 	  else
 	    {
-	      DUMP("  already processed these stmts, bailing out\n");
+	      if (dump_file)
+	        fprintf (dump_file, "  already processed these stmts, bailing out\n");
 	      return;
 	    }
 	}
@@ -307,18 +307,8 @@ mark_vif_stmts(gimple_stmt_iterator top,
   if (gsi_end_p(top))
     {
       // Optimizing CCs split across BBs opens up a lot of cases, bail for now
-      DUMP("  didn't find xvif in same bb as xcondb, bailing out of optimization\n");
-#if 0
-      DUMP("  didn't find xvif in same bb as xcondb, processing BBs\n");
-      basic_block bb = gsi_bb(top);
-      edge_iterator ei;
-      edge e;
-      FOR_EACH_EDGE(e, ei, bb->succs)
-	{
-	  gimple_stmt_iterator next_gsi = gsi_start_bb (e->dest);
-	  mark_vif_stmts(vif_stmts, next_gsi, bot);
-	}
-#endif
+      if (dump_file)
+        fprintf (dump_file, "  didn't find xvif in same bb as xcondb, bailing out of optimization\n");
     }
 }
 
@@ -364,7 +354,8 @@ static void
 process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
 		  bool *negated, gcall *stmt, int op, bool negate)
 {
-  DUMP("    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
+  if (dump_file)
+    fprintf (dump_file, "    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
 
   bool negate_node = false;
   if (get_bool_type(op, negate) == SFPXBOOL_MOD1_OR)
@@ -376,7 +367,8 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
   // Emit LEFT
   gimple_stmt_iterator left_post_gsi;
   bool left_negated = false;
-  DUMP("    left\n");
+  if (dump_file)
+    fprintf (dump_file, "    left\n");
   process_tree_node(pre_gsip, &left_post_gsi, &left_negated,
 		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_LEFT_TREE_ARG_POS))),
 		    stmt, negate);
@@ -384,14 +376,16 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
   // Emit RIGHT
   gimple_stmt_iterator right_pre_gsi;
   bool right_negated = false;
-  DUMP("    right\n");
+  if (dump_file)
+    fprintf (dump_file, "    right\n");
   process_tree_node(&right_pre_gsi, post_gsip, &right_negated,
 		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXBOOL_RIGHT_TREE_ARG_POS))),
 		    stmt, negate);
 
   if (right_negated)
     {
-      DUMP("	right negated, emitting pre/post\n");
+      if (dump_file)
+        fprintf (dump_file, "	right negated, emitting pre/post\n");
       emit_pushc(&right_pre_gsi, stmt, true);
       tree saved_enables = emit_loadi(&right_pre_gsi, stmt, 1, true);
       saved_enables = emit_loadi_lv(post_gsip, stmt, NULL_TREE, saved_enables, 0, false);
@@ -401,7 +395,8 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 
   if (negate_node)
     {
-      DUMP("	node negated, emitting compc\n");
+      if (dump_file)
+        fprintf (dump_file, "	node negated, emitting compc\n");
       *negated = true;
       emit_compc(post_gsip, stmt, false);
     }
@@ -413,7 +408,8 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       *negated = true;
     }
 
-  DUMP("    exiting bool %d %d\n", op, negate);
+  if (dump_file)
+    fprintf (dump_file, "    exiting bool %d %d\n", op, negate);
 }
 
 static bool
@@ -430,7 +426,8 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
       has_single_use(cmp_lhs) &&
       vif_stmts.find(stmt) != vif_stmts.end())
     {
-      DUMP("  optimizing away xcondi\n");
+      if (dump_file)
+        fprintf (dump_file, "  optimizing away xcondi\n");
 
       // Parent is an xicmps, the single vuse is an xcondb, move the
       // conditional into the xcondb and optimize away the xcondi and the
@@ -452,7 +449,8 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
     }
   else
     {
-      DUMP("  expanding xcondi\n");
+      if (dump_file)
+        fprintf (dump_file, "  expanding xcondi\n");
 
       // The integer conditional comparison falls outside a v_if, can't optimize
       // Instead, save the result in an int to be used later
@@ -467,7 +465,8 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
 static void
 process_tree_phi(gcall *stmt, gimple *child)
 {
-  DUMP("  process tree node phi\n");
+  if (dump_file)
+    fprintf (dump_file, "  process tree node phi\n");
 
   // Don't recurse infinitely on phi nodes
   if (phi_stmts.find(stmt) != phi_stmts.end())
@@ -504,7 +503,8 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 		  bool negate)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
-  DUMP("  process %s n:%d\n", insnd->name, negate);
+  if (dump_file)
+    fprintf (dump_file, "  process %s n:%d\n", insnd->name, negate);
 
   switch (insnd->id)
     {
@@ -532,7 +532,8 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
 	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data(child_call);
 	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
 	      {
-		DUMP("  descending to process xcondi before xicmps\n");
+		if (dump_file)
+		  fprintf (dump_file, "  descending to process xcondi before xicmps\n");
 		// Process child before fixing up this insn
 		if (process_xcondi(child_call, stmt, true))
 		  {
@@ -601,7 +602,8 @@ process_tree(gcall *stmt, gcall *parent)
 static unsigned
 transform (function *fun)
 {
-  DUMP("Expand pass on: %s\n", function_name(fun));
+  if (dump_file)
+    fprintf (dump_file, "Expand pass on: %s\n", function_name(fun));
 
   phi_stmts.reserve(20);
   vif_stmts.reserve(20);
@@ -612,7 +614,8 @@ transform (function *fun)
   // in a BB other than the one containing the associated xcondb
   FOR_EACH_BB_FN (bb, fun)
     {
-      DUMP("  bb process vif loop\n");
+      if (dump_file)
+        fprintf (dump_file, "  bb process vif loop\n");
       gsi = gsi_start_bb (bb);
       while (!gsi_end_p (gsi))
 	{
@@ -623,7 +626,8 @@ transform (function *fun)
 	  if (insnd && insnd->id == rvtt_insn_data::sfpxcondb)
 	    {
 	      auto *stmt = as_a <gcall *> (*gsi);
-	      DUMP("  process xcondb\n");
+	      if (dump_file)
+	        fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
 	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_TREE_ARG_POS)));
 	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDB_START_ARG_POS)));
@@ -644,7 +648,8 @@ transform (function *fun)
   // Now process any xcondis that aren't associated w/ a xcondbs
   FOR_EACH_BB_FN (bb, fun)
     {
-      DUMP("  bb process outside vif loop\n");
+      if (dump_file)
+        fprintf (dump_file, "  bb process outside vif loop\n");
       gsi = gsi_start_bb (bb);
       while (!gsi_end_p (gsi))
 	{
@@ -656,7 +661,8 @@ transform (function *fun)
 	      if (insnd->id == rvtt_insn_data::sfpxcondi)
 		{
 		  auto *stmt = as_a <gcall *> (*gsi);
-		  DUMP("  process xcondi tree\n");
+		  if (dump_file)
+		    fprintf (dump_file, "  process xcondi tree\n");
 		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
 		  expand_xcondi(stmt);
 		  process_tree(child, stmt);

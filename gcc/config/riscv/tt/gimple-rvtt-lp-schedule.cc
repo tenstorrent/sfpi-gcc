@@ -791,8 +791,8 @@ apply_schedule (const std::vector<gcall *> &ops,
      region end; a bind left in place could then precede the definition it
      references.  Collect the span's debug statements now (original order)
      and re-emit them after the scheduled operations, where every region
-     definition dominates them and their relative order — hence every
-     variable's final bound value — is preserved.  */
+     definition dominates them and their relative order -- hence every
+     variable's final bound value -- is preserved.  */
   std::vector<gimple *> span_debugs;
   for (gimple_stmt_iterator gsi = gsi_for_stmt (ops.front ());
        gsi_stmt (gsi) != gsi_stmt (boundary); gsi_next (&gsi))
@@ -981,7 +981,7 @@ analyze_function (function *fn)
 	  gimple *stmt = *gsi;
 	  /* Debug statements are transparent: treating them as region
 	     boundaries (or gating the whole pass on the debug level, as this
-	     pass originally did) makes generated code depend on -g — and the
+	     pass originally did) makes generated code depend on -g -- and the
 	     LLK harness compiles with -g, which silently reduced every
 	     harness compile to a no-op leg.  Region formation, the pressure
 	     model, and the committed order are all debug-blind;

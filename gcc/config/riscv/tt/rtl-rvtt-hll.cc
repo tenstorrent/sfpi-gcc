@@ -1,5 +1,5 @@
-/* Pass to work around GS' memory aribtration bug
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to schedule Grayskull high-latency loads away from their uses
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -18,6 +18,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 #define INCLUDE_VECTOR
+#define INCLUDE_UNORDERED_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -28,9 +29,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgbuild.h"
 #include "insn-attr.h"
 #include "rvtt.h"
-#include <unordered_map>
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
 const int stack_ptr_regno = STACK_POINTER_REGNUM;
 
@@ -665,7 +664,8 @@ move_down(rtx_insn *use_insn, int how_far)
       insn = NEXT_INSN(insn);
     }
 
-  DUMP("  moving use down %d (wanted %d)\n", move_count, how_far);
+  if (dump_file)
+    fprintf (dump_file, "  moving use down %d (wanted %d)\n", move_count, how_far);
   if (anchor)
     {
       adjust_insn_count(use_insn, -move_count);
@@ -699,20 +699,6 @@ can_push_up_one(rtx_insn *move_insn, rtx_insn *target_insn)
 static bool
 can_push_down_one(rtx_insn *move_insn, rtx_insn *target_insn)
 {
-#if 0
-  // Hurts slightly.  Hmm.
-  auto move_insn_d = insn_count_map.find(move_insn);
-  auto target_insn_d = insn_count_map.find(target_insn);
-
-  // Don't move across another load, messes up schedule_shadows
-  if (move_insn_d != insn_count_map.end() &&
-      move_insn_d->second.type.hll_p() &&
-      target_insn_d != insn_count_map.end() &&
-      target_insn_d->second.type.any_load_p())
-    {
-      return false;
-    }
-#endif
   return can_move_past(move_insn, target_insn);
 }
 
@@ -907,7 +893,8 @@ push_gating_use_down(std::vector<load_def>& defs, int which, load_def& ld, int p
 static void
 schedule_hll(function *fn)
 {
-  DUMP("TT riscv GS rtl hll schedule pass on: %s\n", function_name(fn));
+  if (dump_file)
+    fprintf (dump_file, "TT riscv GS rtl hll schedule pass on: %s\n", function_name(fn));
 
   std::vector<load_def> load_defs;
 
@@ -924,7 +911,8 @@ schedule_hll(function *fn)
 	{
 	  continue;
 	}
-      DUMP("  processing hll load\n");
+      if (dump_file)
+        fprintf (dump_file, "  processing hll load\n");
 
       int dist_to_gate = 100;
       int shadow = ld.base.id->type.get_shadow();
@@ -1019,7 +1007,8 @@ get_closest_use(std::vector<load_dep>& uses)
 static void
 schedule_shadows(function *fn)
 {
-  DUMP("TT riscv GS rtl shadow cleanup schedule pass on: %s\n", function_name(fn));
+  if (dump_file)
+    fprintf (dump_file, "TT riscv GS rtl shadow cleanup schedule pass on: %s\n", function_name(fn));
 
   std::vector<load_def> load_defs;
 
@@ -1066,7 +1055,8 @@ schedule_shadows(function *fn)
 	  if (overall_closest_shadow_use != nullptr &&
 	      overall_closest_shadow_use->base.id->insn_count > closest_use->base.id->insn_count)
 	    {
-	      DUMP("  shuffling uses\n");
+	      if (dump_file)
+	        fprintf (dump_file, "  shuffling uses\n");
 
 	      int dist_between_lds = ld.base.id->insn_count - overall_closest_shadow_ld->base.id->insn_count;
 	      int dist_between_uses = overall_closest_shadow_use->base.id->insn_count - closest_use->base.id->insn_count;
@@ -1093,32 +1083,32 @@ print_uses(const std::vector<load_def>& load_defs,
 	{
 	  if (ic == init_ic && !print_ic)
 	    {
-	      fprintf(stderr, "\tuse ");
+	      fprintf (dump_file, "\tuse ");
 	    }
 	  else
 	    {
 	      if (needcr && !print_ic)
 		{
-		  fprintf(stderr, "\n");
+		  fprintf (dump_file, "\n");
 		  needcr = false;
 		}
-	      fprintf(stderr, "%4d:%4d\t\tuse ", ic, INSN_UID(deps[ic]->base.insn));
+	      fprintf (dump_file, "%4d:%4d\t\tuse ", ic, INSN_UID(deps[ic]->base.insn));
 	    }
 
 	  df_ref ruse;
 	  FOR_EACH_INSN_USE (ruse, deps[ic]->base.insn)
 	    {
 	      int regno = DF_REF_REGNO(ruse);
-	      fprintf(stderr, "%d ", regno);
+	      fprintf (dump_file, "%d ", regno);
 	    }
 	  needcr = false;
-	  fprintf(stderr, "\n");
+	  fprintf (dump_file, "\n");
 	}
     }
 
   if (needcr && !print_ic)
     {
-      fprintf(stderr, "\n");
+      fprintf (dump_file, "\n");
     }
 }
 
@@ -1158,7 +1148,7 @@ print_hll_schedule(function *fn)
   create_load_data(fn, load_defs, bb_reg_open_defs);
 
   int index = load_defs.size() - 1;
-  fprintf(stderr, "HLL schedule dump for: %s\n", function_name(fn));
+  fprintf (dump_file, "HLL schedule dump for: %s\n", function_name(fn));
   if (index < 0) return;
 
   std::vector<load_dep *>deps;
@@ -1190,7 +1180,7 @@ print_hll_schedule(function *fn)
       // Skip this BB or exit if no hlls
       if (index < 0 || bb->index != ld->bb->index)
 	{
-	  fprintf(stderr, "BB:%d <none>\n", bb->index);
+	  fprintf (dump_file, "BB:%d <none>\n", bb->index);
 	  if (index < 0) return;
 	  continue;
 	}
@@ -1200,7 +1190,7 @@ print_hll_schedule(function *fn)
       deps.resize(max_ic + 1);
       for (int i = 0; i < max_ic; i++) deps[i] = nullptr;
 
-      fprintf(stderr, "BB:%d (%d insns)\n", bb->index, max_ic);
+      fprintf (dump_file, "BB:%d (%d insns)\n", bb->index, max_ic);
       int ic = -1;
       do
 	{
@@ -1218,7 +1208,7 @@ print_hll_schedule(function *fn)
 	    }
 
 	  unsigned int regno = DF_REF_REGNO(df_single_def(DF_INSN_INFO_GET(ld->base.insn)));
-	  fprintf(stderr, "%4d:%4d\t%s%s %d",
+	  fprintf (dump_file, "%4d:%4d\t%s%s %d",
 		  ld->base.id->insn_count,
 		  INSN_UID(ld->base.insn),
 		  volatile_load_p(PATTERN(ld->base.insn)) ? "v" : "",
@@ -1274,6 +1264,9 @@ public:
       df_set_flags (DF_LR_RUN_DCE);
       df_note_add_problem ();
       df_analyze();
+
+      if (dump_file)
+	print_hll_schedule (cfn);
 
       schedule_shadows(cfn);
       schedule_hll(cfn);

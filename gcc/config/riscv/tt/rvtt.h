@@ -19,14 +19,11 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#include <tree.h>
-
-#include <map>
-#include <vector>
-#include "rvtt-protos.h"
-
 #ifndef GCC_RVTT_H
 #define GCC_RVTT_H
+
+#include "tree.h"
+#include "rvtt-protos.h"
 
 // order of operands:
 // XTT_IPTR:CST0/SSA:iptr

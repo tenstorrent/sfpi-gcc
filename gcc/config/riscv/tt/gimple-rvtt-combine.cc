@@ -1,4 +1,4 @@
-/* Pass to issue diagnostics for SFPU operations
+/* Pass to combine SFPU intrinsic sequences via generated patterns
    Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).

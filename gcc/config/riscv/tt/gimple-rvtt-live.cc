@@ -1,5 +1,5 @@
 /* Pass to handle SFPU CC "liveness"
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -17,6 +17,9 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+#define INCLUDE_TUPLE
+#define INCLUDE_UNORDERED_MAP
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -62,14 +65,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <vector>
-#include <unordered_map>
-#include <tuple>
 #include "rvtt.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
-
-using namespace std;
 
 //////////////////////////////////////////////////////////////////////////////
 // block_data: structure used when processing blocks to track:
@@ -79,7 +76,7 @@ using namespace std;
 //         this occurs when the block is entered multiple times with different
 //         nest levels
 //   BD_StackDepth: the CC stack depth at entry, used for sanity checks
-typedef vector<tuple<bool, unsigned int, bool, unsigned int>> block_data;
+typedef std::vector<std::tuple<bool, unsigned int, bool, unsigned int>> block_data;
 
 enum {
   BD_VisitedP = 0,
@@ -107,7 +104,7 @@ struct liveness_data {
   liveness_data(unsigned int l, unsigned int g, bool f) : level(l), generation(g), force(f) {}
 };
 
-typedef unordered_map<gcall *, struct liveness_data> call_liveness;
+typedef std::unordered_map<gcall *, struct liveness_data> call_liveness;
 
 static long int
 get_int_arg(gcall *stmt, unsigned int arg)
@@ -127,13 +124,14 @@ process_block_stmts(basic_block bb,
 		    liveness_data *current,
 		    bool *cascading,
 		    unsigned int *gen_count,
-		    vector<liveness_data> &stack,
+		    std::vector<liveness_data> &stack,
 		    call_liveness &liveness)
 {
   bool found_sfpu = false;
 
-  DUMP("    process_block_stmts CC %d gen %d depth %zu\n",
-	 current->level, current->generation, stack.size());
+  if (dump_file)
+    fprintf (dump_file, "    process_block_stmts CC %d gen %d depth %zu\n",
+	     current->level, current->generation, stack.size());
 
   for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
@@ -157,7 +155,8 @@ process_block_stmts(basic_block bb,
 	      *cascading = true;
 	    }
 	  current->generation = *gen_count;
-	  DUMP("      pushed to (l=%d, g=%d)\n", current->level, current->generation);
+	  if (dump_file)
+	    fprintf (dump_file, "      pushed to (l=%d, g=%d)\n", current->level, current->generation);
 	}
       else if (insnd->id == rvtt_insn_data::sfppopc)
 	{
@@ -167,14 +166,15 @@ process_block_stmts(basic_block bb,
 	      error_at(location, "malformed program, popc without matching pushc");
 	    }
 	  *current = stack.back();
-	  DUMP("      popped to (l=%d, g=%d)\n", current->level, current->generation);
+	  if (dump_file)
+	    fprintf (dump_file, "      popped to (l=%d, g=%d)\n", current->level, current->generation);
 	  *cascading = false;
 	  stack.pop_back();
 	}
       else
 	{
 	  gcc_assert(liveness.find(stmt) == liveness.end());
-	  liveness.insert(pair<gcall *, liveness_data>(stmt, *current));
+	  liveness.insert(std::pair<gcall *, liveness_data>(stmt, *current));
 	  if (insnd->sets_cc(stmt) &&
 	      insnd->id != rvtt_insn_data::sfpencc)
 	    {
@@ -199,30 +199,32 @@ process_block(function *fn,
 	      liveness_data current,
 	      bool cascading,
 	      unsigned int gen_count,
-	      vector<liveness_data> stack,
+	      std::vector<liveness_data> stack,
 	      call_liveness &liveness)
 {
   edge_iterator ei;
   edge e;
 
-  DUMP("    process_block bb %d CC %d gen %d depth %zu\n",
-       bb->index, current.level, current.generation, stack.size());
+  if (dump_file)
+    fprintf (dump_file, "    process_block bb %d CC %d gen %d depth %zu\n",
+	     bb->index, current.level, current.generation, stack.size());
 
-  if (get<BD_VisitedP>(bd[bb->index]))
+  if (std::get<BD_VisitedP>(bd[bb->index]))
     {
-      gcc_assert(stack.size() == get<BD_StackDepth>(bd[bb->index]));
+      gcc_assert(stack.size() == std::get<BD_StackDepth>(bd[bb->index]));
 
       // If we hit a BB and the CC level isn't the same as another hit, then
       // everything must be live
-      if (!get<BD_Live>(bd[bb->index]) &&
-	  current.level > get<BD_CCLevel>(bd[bb->index]))
+      if (!std::get<BD_Live>(bd[bb->index]) &&
+	  current.level > std::get<BD_CCLevel>(bd[bb->index]))
 	{
-	  DUMP("     re-visit block w/ higher CC, marking all live\n");
+	  if (dump_file)
+	    fprintf (dump_file, "     re-visit block w/ higher CC, marking all live\n");
 
 	  // This bb has been visited and the current CC level is greater than
 	  // previous, so mark all assignments within for variables defined
 	  // without as live
-	  get<BD_Live>(bd[bb->index]) = true;
+	  std::get<BD_Live>(bd[bb->index]) = true;
 
 	  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
 	       !gsi_end_p (gsi); gsi_next (&gsi))
@@ -237,9 +239,9 @@ process_block(function *fn,
       return false;
     }
 
-  get<BD_VisitedP>(bd[bb->index]) = true;
-  get<BD_CCLevel>(bd[bb->index]) = current.level;
-  get<BD_StackDepth>(bd[bb->index]) = stack.size();
+  std::get<BD_VisitedP>(bd[bb->index]) = true;
+  std::get<BD_CCLevel>(bd[bb->index]) = current.level;
+  std::get<BD_StackDepth>(bd[bb->index]) = stack.size();
 
   bool found_sfpu = process_block_stmts(bb, &current, &cascading, &gen_count, stack, liveness);
 
@@ -265,19 +267,21 @@ process_block(function *fn,
 // We don't care about all the paths, just one path back to the definition
 // However, if we hit a loop, we need to move on to the next path
 static liveness_data
-get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
+get_def_stmt_liveness_1(function *fn, std::vector<bool> &visited, liveness_data data,
 			gimple *def_g, const call_liveness& liveness)
 {
   if (def_g == nullptr)
     {
-      DUMP("      null gimple, unassigned var\n");
+      if (dump_file)
+        fprintf (dump_file, "      null gimple, unassigned var\n");
       data.level = liveness_undefined;
       return data;
     }
 
   if (def_g->code == GIMPLE_PHI)
     {
-      DUMP("      process phi\n");
+      if (dump_file)
+        fprintf (dump_file, "      process phi\n");
 
       int n = gimple_phi_num_args (def_g);
 
@@ -301,7 +305,8 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 
       if (stmt == nullptr)
 	{
-	  DUMP("      null statement, unassigned var\n");
+	  if (dump_file)
+	    fprintf (dump_file, "      null statement, unassigned var\n");
 	  data.level = liveness_undefined;
 	}
       else
@@ -311,7 +316,8 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 	    {
 	      if (insnd->is_live ())
 		{
-		  DUMP("      chase assignment\n");
+		  if (dump_file)
+		    fprintf (dump_file, "      chase assignment\n");
 		  // If the defining statement is another _lv insn, chase it through
 		  data = get_def_stmt_liveness_1(fn, visited, data,
 						 SSA_NAME_DEF_STMT(gimple_call_arg(stmt, insnd->live_arg ())), liveness);
@@ -322,19 +328,22 @@ get_def_stmt_liveness_1(function *fn, vector<bool> &visited, liveness_data data,
 		  if (liveness.find(stmt) == liveness.end())
 		    {
 		      // This is a malformed program
-		      DUMP("      confused, malformed program?\n");
+		      if (dump_file)
+		        fprintf (dump_file, "      confused, malformed program?\n");
 		      gcc_assert(0);
 		    }
 		  else
 		    {
-		      DUMP("      found base non-live assignment\n");
+		      if (dump_file)
+		        fprintf (dump_file, "      found base non-live assignment\n");
 		      data = liveness.find(stmt)->second;
 		    }
 		}
 	    }
 	  else
 	    {
-	      DUMP("      confused, chased to a non-sfpu instruction\n");
+	      if (dump_file)
+	        fprintf (dump_file, "      confused, chased to a non-sfpu instruction\n");
 	      gcc_assert(0);
 	    }
 	}
@@ -348,7 +357,7 @@ static liveness_data
 get_def_stmt_liveness(function *fn, gcall *stmt, const rvtt_insn_data *insnd, const call_liveness& liveness)
 {
   liveness_data data(0, 0, false);
-  vector<bool> visited;
+  std::vector<bool> visited;
 
   visited.resize(n_basic_blocks_for_fn(fn));
 
@@ -382,7 +391,8 @@ copy_args_to_live_insn (gimple *new_stmt, unsigned int live_arg, gcall *stmt)
 static void
 break_liveness(function *fn, call_liveness& liveness)
 {
-  DUMP("  Break liveness\n");
+  if (dump_file)
+    fprintf (dump_file, "  Break liveness\n");
   call_liveness::iterator it;
 
   // Iterate over all the sfpu instructions
@@ -397,10 +407,12 @@ break_liveness(function *fn, call_liveness& liveness)
 	  liveness_data cur_stmt_liveness = it->second;
 	  liveness_data def_stmt_liveness = get_def_stmt_liveness(fn, stmt, insnd, liveness);
 
-	  DUMP("    liveness: cur %d def %d curgen %d defgen %d force %d\n",
-	       cur_stmt_liveness.level, def_stmt_liveness.level,
-	       cur_stmt_liveness.generation, def_stmt_liveness.generation,
-	       cur_stmt_liveness.force);
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "    liveness: cur %d def %d curgen %d defgen %d force %d\n",
+		     cur_stmt_liveness.level, def_stmt_liveness.level,
+		     cur_stmt_liveness.generation, def_stmt_liveness.generation,
+		     cur_stmt_liveness.force);
 
 	  if (def_stmt_liveness.level == liveness_undefined)
 	    {
@@ -413,7 +425,8 @@ break_liveness(function *fn, call_liveness& liveness)
 	    {
 	      if (insnd->id == rvtt_insn_data::sfpassign_lv)
 		{
-		  DUMP("    removing sfpassign\n");
+		  if (dump_file)
+		    fprintf (dump_file, "    removing sfpassign\n");
 		  tree lhs = gimple_call_lhs (stmt);
 		  if (lhs != nullptr)
 		    {
@@ -487,7 +500,8 @@ fold_live_assign (function *fn)
   basic_block bb;
   gimple_stmt_iterator gsi;
 
-  DUMP("  Fold live\n");
+  if (dump_file)
+    fprintf (dump_file, "  Fold live\n");
 
   FOR_EACH_BB_FN (bb, fn) {
     gsi = gsi_start_bb (bb);
@@ -508,7 +522,8 @@ fold_live_assign (function *fn)
 
 	    if (prev_insnd && SSA_NAME_DEF_STMT (assgn_arg) == *prev_gsi)
 	      {
-		DUMP("    folding %s\n", prev_insnd->name);
+		if (dump_file)
+		  fprintf (dump_file, "    folding %s\n", prev_insnd->name);
 
 		auto *prev_stmt = as_a <gcall *> (*prev_gsi);
 		gcall *prev2_stmt = nullptr;
@@ -517,7 +532,8 @@ fold_live_assign (function *fn)
 		    // The only _lv insns at this point are from the non-imm
 		    // path injecting sfploadi_lv for a 32 bit load
 		    // Back up one insn and propogate liveness there
-		    DUMP("    handling nonimm %s\n", prev_insnd->name);
+		    if (dump_file)
+		      fprintf (dump_file, "    handling nonimm %s\n", prev_insnd->name);
 		    gcc_assert(prev_insnd->id == rvtt_insn_data::sfploadi_lv);
 		    prev2_stmt = prev_stmt;
 		    gsi_prev_nondebug (&prev_gsi);
@@ -528,7 +544,8 @@ fold_live_assign (function *fn)
 		if (new_insnd != nullptr)
 		  {
 		    // Create _lv version of prev, delete assign stmt, delete prev_stmt
-		    DUMP("    building new %s\n", new_insnd->name);
+		    if (dump_file)
+		      fprintf (dump_file, "    building new %s\n", new_insnd->name);
 		    gimple *new_stmt = gimple_build_call (new_insnd->decl,
 							  gimple_call_num_args (prev_stmt) + 1);
 
@@ -551,7 +568,8 @@ fold_live_assign (function *fn)
 		      }
 		    else
 		      {
-			DUMP("    updating both lhs'\n");
+			if (dump_file)
+			  fprintf (dump_file, "    updating both lhs'\n");
 			gimple_call_set_lhs (new_stmt, gimple_call_lhs(prev_stmt));
 			gimple_call_set_lhs (prev2_stmt, lhs);
 			update_stmt(prev2_stmt);
@@ -584,9 +602,10 @@ transform (function *fn)
 {
   block_data bd;
   call_liveness liveness;
-  vector<liveness_data> stack;
+  std::vector<liveness_data> stack;
 
-  DUMP("Liveness pass on: %s\n", function_name(fn));
+  if (dump_file)
+    fprintf (dump_file, "Liveness pass on: %s\n", function_name(fn));
 
   if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn->decl)) != NULL)
     {

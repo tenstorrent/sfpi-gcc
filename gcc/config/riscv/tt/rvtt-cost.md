@@ -3,6 +3,20 @@
 ;;
 ;; This file is part of GCC.
 ;;
+;; GCC is free software; you can redistribute it and/or modify it
+;; under the terms of the GNU General Public License as published
+;; by the Free Software Foundation; either version 3, or (at your
+;; option) any later version.
+;;
+;; GCC is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+;; License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with GCC; see the file COPYING3.  If not see
+;; <http://www.gnu.org/licenses/>.
+;;
 ;; The five classes deliberately mirror craq-sim's
 ;; tensix_rtl_issue_class_for_inst: Math, Sfpu, Tdma, Cfg and Sync.  The
 ;; default reservations model the simulator's top-level issue classes.  CFG
@@ -1200,7 +1214,7 @@
 ;;   hidden preheader delivery: the Reduce-class net leaves ~61 cs per
 ;;   preheader pass unaccounted (2*record_true ~= 2275 - 8*284), and
 ;;   the counted-loop clamp row measured +0.58 cyc/tile amortized
-;;   record delivery (laneBP-evidence-20260818 §4) against a 12-word
+;;   record delivery (laneBP-evidence-20260818 section 4) against a 12-word
 ;;   deliver_record of 1476 cs -- both ~ 4-25x smaller than the
 ;;   RECORD_OVERHEAD = 300 charged.
 ;;

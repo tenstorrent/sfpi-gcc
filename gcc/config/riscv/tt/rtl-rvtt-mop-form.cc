@@ -147,6 +147,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
+#define INCLUDE_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"

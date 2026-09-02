@@ -1,5 +1,5 @@
 /* TT .md file fn prototypes, etc
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.

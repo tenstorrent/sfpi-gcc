@@ -1,5 +1,5 @@
-/* Pass to work around GS' memory aribtration bug
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+/* Pass to work around GS' memory arbitration bug
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
    Rewritten by Nathan Sidwell (nsidwell@tenstorrent.com, nathan@acm.org).
 
@@ -27,7 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgbuild.h"
 #include "rvtt.h"
 
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
 
 static bool
 load_mem_p (rtx pat)
@@ -93,10 +92,10 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
 
 // WH has a read after write hazard bug where loading a word after a byte or
 // half store issues the load before the store.  The bug is in the address
-// comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
+// comparator logic and it's 32bits wide. if addresses match, RAW hazard will
 // be detected. So if the shorter store is word-aligned, we have no hazard. (we
 // do not take advantage of that) Mem logic is prioritizing loads over stores
-// and even though there’s no reorder buffer, 2 loads could get issued before a
+// and even though there's no reorder buffer, 2 loads could get issued before a
 // store actually gets out. If there is an intervening store, it is not clear
 // whether the hazard is resolved.  As the bug is very sensitive, we anull it
 // in all cases by placing a short load as late as possible after the short
@@ -107,12 +106,14 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
 static void
 workaround_raw (function *cfn)
 {
-  DUMP("RAW pass on: %s\n", function_name(cfn));
+  if (dump_file)
+    fprintf (dump_file, "RAW pass on: %s\n", function_name(cfn));
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
-      DUMP("Processing BB %d\n", bb->index);
+      if (dump_file)
+        fprintf (dump_file, "Processing BB %d\n", bb->index);
       rtx_insn *insn;
       bool have_store = false;
       int store_ptr_regno = 0;
@@ -143,7 +144,8 @@ workaround_raw (function *cfn)
 		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
 	    {
 	      // Emit the war when we hit a load or if the base reg gets modified
-	      DUMP("emitting raw war before load\n");
+	      if (dump_file)
+	        fprintf (dump_file, "emitting raw war before load\n");
 	      emit_load (insn, true, store_mem);
 	      have_store = false;
 	    }
@@ -158,18 +160,21 @@ workaround_raw (function *cfn)
 	      get_mem_reg_and_offset (SET_DEST (insn_pat), &store_ptr_regno, &dummy_offset);
 	      store_mem = SET_DEST (insn_pat);
 	      have_store = true;
-	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
+	      if (dump_file)
+	        fprintf (dump_file, "raw war pending for [%d]\n", store_ptr_regno);
 	    }
 	}
 
       if (have_store)
 	{
-	  DUMP("emitting raw war at end of bb\n");
+	  if (dump_file)
+	    fprintf (dump_file, "emitting raw war at end of bb\n");
 	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store_mem);
 	  have_store = false;
 	}
     }
-  DUMP("out raw pass\n");
+  if (dump_file)
+    fprintf (dump_file, "out raw pass\n");
 }
 
 namespace {

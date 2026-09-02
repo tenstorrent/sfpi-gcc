@@ -20,6 +20,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #define INCLUDE_VECTOR
+#define INCLUDE_UNORDERED_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -34,7 +35,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-codes.h"
 #include "recog.h"
 #include "rvtt.h"
-#include <unordered_map>
 
 // This phase of the non-immediate processing works by:
 //  - finding all of the load_immediate calls and creating a lookup table
