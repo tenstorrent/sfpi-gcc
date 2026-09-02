@@ -1,4 +1,4 @@
-// Lane GJ window-pairing stride-phase generalization, renamed-varied
+// Window-pairing stride-phase generalization, renamed-varied
 // twin: the limb-2 shape with different symbol names, a different
 // second-operand offset (96), and six copies instead of eight.  The
 // verdict is structural (first-word absorber admitted under the flag,

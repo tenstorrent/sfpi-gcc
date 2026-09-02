@@ -1,5 +1,5 @@
-// STORE-SOURCE TIER fire, post-CC peel class (lane HO): the
-// threshold/hardshrink shape lane HL measured -- the store-consumed
+// STORE-SOURCE TIER fire, post-CC peel class: the
+// threshold/hardshrink shape measured on hardware -- the store-consumed
 // constant materialization sits after the body's first CC writer, is
 // admitted by the pressure-park consumer audit (SFPSTORE is in the
 // audited lane-predicated set), and under

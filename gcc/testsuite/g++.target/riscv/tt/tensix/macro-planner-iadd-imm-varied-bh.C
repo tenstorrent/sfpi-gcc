@@ -1,5 +1,5 @@
 // Derived-template SFPIADD-immediate admission, varied surface
-// (lane CZ): a different immediate (+2047, the top of the signed
+//: a different immediate (+2047, the top of the signed
 // 12-bit range), different names, and composition with the
 // established in-place immediate-shift class -- the row hosts the
 // new iadd-imm word on the Simple sub-unit AND the frozen SHFT2 pair

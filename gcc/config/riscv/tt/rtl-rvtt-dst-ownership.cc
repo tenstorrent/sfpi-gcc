@@ -268,7 +268,7 @@ pattern_transparent_p (rtx_insn *insn)
    generated FULL effect sets are not on record (rvtt_insn_effects
    reports them opaque) now lives at the definitions: the
    xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
-   through rvtt_lane_local_effects (FABLE item #4; the former
+   through rvtt_lane_local_effects (the typed-effect tables; the former
    effect_overrides table copied verbatim from rtl-rvtt-lp-alloc.cc is
    deleted, and the planner-oracle re-freeze that blocked the migration
    is recorded in testsuite oracles/refreeze-pin49-20260831.txt).  The

@@ -1,4 +1,4 @@
-// WP12 varied twin of macro-planner-derived-intmul-row-bh.C: the same
+// Varied twin of macro-planner-derived-intmul-row-bh.C: the same
 // dataflow shape with DIFFERENT constants everywhere -- radix split 19
 // instead of 23, operand rows 32/96, a distinct output row 160 -- must
 // form through the same derived machinery with the varied values

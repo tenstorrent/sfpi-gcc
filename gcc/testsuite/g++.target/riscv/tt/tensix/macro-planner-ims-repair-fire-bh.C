@@ -1,4 +1,4 @@
-// WP13 (IMS placement repair, literature Idea 5 -- Rau): the established
+// IMS placement repair (Rau iterative modulo scheduling): the established
 // all-or-nothing search refuses this integer row on every grouping (the
 // in-place VB-factor SFPMUL24's write-after-read floor against the six
 // chained explicit partial products pushes hosted-event execution past

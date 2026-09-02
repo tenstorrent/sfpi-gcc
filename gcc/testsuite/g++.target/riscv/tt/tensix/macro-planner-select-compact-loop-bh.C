@@ -1,4 +1,4 @@
-// WP10 composition, the real TTNN Where delivery shape at uniform
+// Compact-calendar composition, the real TTNN Where delivery shape at uniform
 // modes: the eight-row compact select body inside a counted loop with
 // no typed ambient enable anywhere.  The configuration prefix hoists
 // to the proven structural preheader with the MATERIALIZED all-lanes

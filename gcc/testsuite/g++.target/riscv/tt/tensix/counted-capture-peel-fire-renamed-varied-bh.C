@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-counted-capture-peel -fdump-rtl-rvtt_replay-details" }
 // Counted-capture peel RENAMED-EQUIVALENT / VARIED-CONSTANTS adversary
-// twin (lane IP audit, GY recipe): different function and value names,
+// twin (renamed-twin recipe): different function and value names,
 // different LREGs (4/5/6), a DIFFERENT trip count (6) and a longer
 // mixed mul/add 9-word body.  The peel admission must key on the
 // structural facts (counted single-block SFPU row loop whose plain

@@ -37,7 +37,7 @@ along with GCC; see the file COPYING3.  If not see
      (edge split) is deferred until every proof has passed and a
      transform is committed, so refusals remain byte-identical.  */
 
-/* ---------------- RTL ownership lattice (planner, WP4+) -------------- */
+/* ---------------- RTL ownership lattice (planner) ------------------- */
 
 struct rvtt_ownership_state
 {
@@ -126,7 +126,7 @@ extern bool rvtt_loop_has_sfpu_barrier_p (class loop *loop);
    statement before FIRST_CC_WRITER equals, on every iteration after the
    first, the architectural all-lanes state the trailing SFPENCC
    re-establishes (capability word rvtt_macro::sfpencc_all_lanes_word;
-   craq-sim TENSIX_EXECUTE_SFPENCC).  The first iteration's mask is the
+   the reference simulator's SFPENCC executor).  The first iteration's mask is the
    unknown ambient state -- consumers must reproduce iteration one
    exactly (the const-residency first-iteration peel) rather than reason
    about it.  PROVEN is false for multi-block bodies, bodies with no CC
@@ -185,8 +185,8 @@ extern unsigned rvtt_sfpxloadi_materialization_cost (gcall *call);
    refusal returns false with the dump-stable name in *WHY (and the
    offending statement in *WHY_STMT when known).  Refusing default for
    every class not on record.
-   CC_IMMATERIAL selects the programming-only discipline (lane HR,
-   -mtt-tensix-optimize-crossloop-cc-peel): a CC-writing statement is
+   CC_IMMATERIAL selects the programming-only discipline
+   (-mtt-tensix-optimize-crossloop-cc-peel): a CC-writing statement is
    admitted exactly when it is a structured typed CC atom (whitelisted
    by insn id; its whole architectural effect is the lane-enable state
    plus its SSA definition) -- sound only for a consumer whose lifted

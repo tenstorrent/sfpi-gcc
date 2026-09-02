@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-replay-window-sizing -fdump-rtl-rvtt_replay" }
-// Exact-multiple widening (lane IM): the run is exactly 4 units (24
+// Exact-multiple widening: the run is exactly 4 units (24
 // words, no tail), so the widened 12-word window covers it with 2 full
 // launches and NO partial trim -- the partial-playback path must stay
 // silent (a trim only forms for a genuine prefix remainder).

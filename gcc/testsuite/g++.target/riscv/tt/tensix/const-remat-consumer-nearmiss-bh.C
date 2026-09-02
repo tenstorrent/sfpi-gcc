@@ -1,6 +1,6 @@
 // Consumer-audit near miss: the ninth value's only use is SFPTRANSP,
 // which predicates per DESTINATION lane while reading ANOTHER lane
-// (craq-sim tensix.cpp:9488-9493; SFPTRANSP.md:44-45) -- a cross-lane
+// (the reference simulator; SFPTRANSP.md:44-45) -- a cross-lane
 // reader OUTSIDE the audited predicated-writer class; the use refuses
 // by name and the residual over-pressure is the named spill error,
 // never an ICE.

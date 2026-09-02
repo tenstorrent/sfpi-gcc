@@ -12,7 +12,7 @@
 // (The multi-writer wall -- the exp sfpmov refusal "writes a register
 // another row member also writes" -- is register-allocation dependent
 // at dg level; the exp dump evidence carries that name.)
-// Lane DL: the interior plain-reorder mover legitimately serves shape 1
+// Note: the interior plain-reorder mover legitimately serves shape 1
 // (no prologue executes, so the entry-boundary read is untouched: the
 // invariant-input AND moves between the muls within each trip).  The
 // prologue mover's named refusal still stands and the prologue itself

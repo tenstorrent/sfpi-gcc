@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// The item-#7 payoff decoupling, pinned at the W4-C retirement: the
+// The rename engine's payoff decoupling, pinned at the v1 retirement: the
 // retired single-shape pass refused this stall-free row by
 // rename-no-stall-decrease (payoff smuggled into admission); the
 // general engine the retired flag now requests renames whenever the

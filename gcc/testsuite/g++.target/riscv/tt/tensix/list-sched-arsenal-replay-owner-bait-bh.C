@@ -1,4 +1,4 @@
-// Lane DT arsenal: formed-replay-region and opaque-word motion baits.
+// Scheduler arsenal: formed-replay-region and opaque-word motion baits.
 //
 // fn 1 (replay owner): an explicit TTREPLAY owner word records/plays a
 // FIXED range of following delivered words by POSITION.  Reordering
@@ -22,7 +22,7 @@
 // barrier printer only names recognized Tensix insns, so fn 2's
 // witness is its two INDEPENDENTLY refused sub-regions plus the
 // absence of any fire (an asm word is never crossed or moved).
-// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// [post-scheduler-hardening adjudication] Expectations updated from the
 // stage-1 measurements: (a) effect classification now precedes the
 // defless check, so Dst words all name dst-access; (b) identical chain
 // shapes now DEFER by name to replay capture formation (DU-S4

@@ -1,4 +1,4 @@
-// WP10 genericity: renamed-equivalent twin of the compact 3-slot
+// Compact-calendar genericity: renamed-equivalent twin of the compact 3-slot
 // select formation -- every function and macro name differs, the shape
 // and constants are the same, and the identical calendar re-derives
 // (no name participates in any planner decision).

@@ -3,8 +3,8 @@
 // store-fold S2 sink inside a counted loop with invariant-loadi on.
 // HISTORY: this twin originally ALSO scanned a cc-restore-unbalanced
 // refusal — an artifact of the old sfpi CC::pop rolled popc loop, whose
-// CFG shape left an unbalanceable cc-restore candidate.  The laneGU
-// sfpi fix (CC::pop constant-foldable popc chain, 2026-08-25) removes
+// CFG shape left an unbalanceable cc-restore candidate.  The later
+// sfpi fix (CC::pop constant-foldable popc chain) removes
 // that shape from every sfpi-generated body (final bytes were identical
 // either way — verified); the refusal path keeps its own direct
 // raw-builtin witness in tensix/ccrestore-loadi-underflow-pop-bh.C.

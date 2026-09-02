@@ -1,9 +1,9 @@
 // All-lanes proof near miss: a CC write that can execute BEFORE the
 // in-place programming points (here it precedes the materializations
 // in the same block) defeats the all-lanes proof (SFPCONFIG requires
-// every lane enabled: craq-sim tensix.cpp:9665 asserts it); every
+// every lane enabled: the reference simulator tensix.cpp:9665 asserts it); every
 // pressure candidate refuses by name and the pressure error stays
-// named.  (The laneDM reach-scoped widening admits only CC writes the
+// named.  (The reach-scoped widening admits only CC writes the
 // point can never be reached from -- a preceding write is exactly the
 // defeating case.)
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -fdump-tree-rvtt_prgm_const-details" }

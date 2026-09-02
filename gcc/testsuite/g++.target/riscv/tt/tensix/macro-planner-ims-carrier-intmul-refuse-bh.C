@@ -1,4 +1,4 @@
-// WP15 near-miss: the WP12 derived-intmul row (the MulInt32 production
+// Init-hoist near-miss: the derived-intmul row (the MulInt32 production
 // shape) MUST refuse the upward search and keep its established ii=12
 // formation byte-identically.  The refusals are structural, not tuned:
 //  - every chain whose moved MUL24 does not read the VA=L0 factor
@@ -14,7 +14,7 @@
 // { dg-final { scan-rtl-dump "Macro-planner upward-carrier-refusal: ims-carrier-legality-unproven" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner upward-carrier-refusal: ims-carrier-no-improvement" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-not "Macro-planner upward-carrier: formed" "rvtt_macro_planner" } }
-// The established WP12 calendar commits untouched (the derived-intmul
+// The established derived calendar commits untouched (the derived-intmul
 // expectations, unchanged under both flags):
 // { dg-final { scan-rtl-dump-times "Macro-planner formed: rows=8 runs=1" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-word dest=0: 0x900000c3" "rvtt_macro_planner" } }

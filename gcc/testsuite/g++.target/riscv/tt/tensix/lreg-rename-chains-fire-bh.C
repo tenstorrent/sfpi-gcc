@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename-chains -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// The item-#7 fire twin: a two-chain rename in a self-loop row the
+// The the du-chain rename engine fire twin: a two-chain rename in a self-loop row the
 // retired v1 single-shape pass refused outright (every colliding
 // writer carries a nonzero audited latency -- the multi-member
 // class).  The general engine renames both storage-collision chains

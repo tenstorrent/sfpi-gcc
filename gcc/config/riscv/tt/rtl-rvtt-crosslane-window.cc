@@ -1,5 +1,4 @@
-/* TEN-2932 ENABLE_DEST_INDEX window enforcement (lane FG, X4;
-   replay/MOP delivery vision lane FR).
+/* ENABLE_DEST_INDEX write-restriction window enforcement.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -21,15 +20,15 @@ along with GCC; see the file COPYING3.  If not see
 /* -mtt-tensix-optimize-crosslane (default off; shared with the gimple
    fusion pass gimple-rvtt-crosslane.cc).
 
-   THE PROBLEM (TEN-2932, Wormhole/Blackhole erratum; SFPCONFIG.md
-   LaneConfig table).  While LaneConfig.ENABLE_DEST_INDEX is set, an
-   instruction other than SFPLOAD / SFPLOADI / SFPSWAP / SFPTRANSP that
-   writes LReg[4..7] is UnsupportedFunctionality.  The compiler had no
-   model of this window: lane EX's bridge lifts caught a REAL
-   allocator-inserted `SFPMOV L5, L4` inside an open window, and every
-   bridged kernel has had to gate its emitted window content by
-   disassembly inspection (sfpu_bridge.hpp discipline; the lane-EY-R
-   design input names this the compiler-ownership item).
+   THE PROBLEM (the documented Wormhole/Blackhole dest-index write
+   restriction; SFPCONFIG.md LaneConfig table).  While
+   LaneConfig.ENABLE_DEST_INDEX is set, an instruction other than
+   SFPLOAD / SFPLOADI / SFPSWAP / SFPTRANSP that writes LReg[4..7] is
+   UnsupportedFunctionality.  The compiler had no model of this window:
+   a REAL allocator-inserted `SFPMOV L5, L4` was caught inside an open
+   window, and every kernel using the window had to gate its emitted
+   content by disassembly inspection (sfpu_bridge.hpp discipline) --
+   making the window a compiler-ownership obligation.
 
    THE MECHANISM.  The typed window toggles lower to the imm-form
    SFPCONFIG builtin (surface: sfpi_crosslane.h set_dest_index_window;
@@ -58,25 +57,25 @@ along with GCC; see the file COPYING3.  If not see
    words) inside a proven-OPEN window cannot be audited and errors by
    name too (crosslane-window-raw-unproven), as do calls
    (crosslane-window-call-unproven).  SFPLOADMACRO is deliberately NOT
-   exempt: TEN-2932 lists exactly four opcodes.
+   exempt: the restriction lists exactly four opcodes.
 
    UNKNOWN-state writes only DUMP a note (crosslane-window-state-
    unproven): the value form legitimately serves LaneConfig.ROW_MASK
    traffic whose imm never touches bit 2, and erroring there would
    punish kernels that never open a window.  A window left open at
-   function exit is a NOTE as well, not an error: lane FD proved the
-   packed-index kernels inherit an open window across phases
+   function exit is a NOTE as well, not an error: the packed-index
+   kernels demonstrably inherit an open window across phases
    deliberately (ENABLE_DEST_INDEX is store-visible state).
 
-   REPLAY / MOP DELIVERY VISION (lane FR, closing lane FP's FP-2).
-   The positional walk alone is blind to DELIVERED words: a TTREPLAY
-   playback launch carries no LReg SET of its own, and the payload
-   words sit at their record site -- where the state may be CLOSED --
-   so the default-ON replay former could convert a hard 3-error
-   TEN-2932 program into a silently-accepted binary that still
-   executes the violating LReg writes in-window at playback (lane FP's
-   pw1 witness).  The fix models the Replay Expander exactly
-   (WormholeB0 REPLAY.md functional model):
+   REPLAY / MOP DELIVERY VISION.  The positional walk alone is blind
+   to DELIVERED words: a TTREPLAY playback launch carries no LReg SET
+   of its own, and the payload words sit at their record site -- where
+   the state may be CLOSED -- so the default-ON replay former could
+   convert a program with three hard window violations into a
+   silently-accepted binary that still executes the violating LReg
+   writes in-window at playback (a demonstrated witness).  The fix
+   models the Replay Expander exactly (WormholeB0 REPLAY.md functional
+   model):
 
      - a fixed capture (load=1) claims slots (Index+i)%32, i<Count,
        and its payload words are the next Count slot-occupying words
@@ -117,8 +116,7 @@ along with GCC; see the file COPYING3.  If not see
    replay playback words from a template this pass cannot audit
    positionally; after any TTMOP the state degrades to UNKNOWN.
    MOP-form and record-hoist deliveries are thereby the same covered
-   class as the straight replay former (lane FP's composition matrix
-   rows).
+   class as the straight replay former.
 
    All diagnostics are gated behind the default-off crosslane flag;
    code that never uses the typed markers is never diagnosed.  */
@@ -149,7 +147,7 @@ namespace {
 
 #define DUMP(...) if (dump_file) fprintf (dump_file, __VA_ARGS__)
 
-/* LReg hard registers: SFPU_REG_FIRST + 0..7; the TEN-2932 window
+/* LReg hard registers: SFPU_REG_FIRST + 0..7; the dest-index window
    guards the companion bank L4..L7.  */
 static const unsigned LREG4_REGNO = SFPU_REG_FIRST + 4;
 static const unsigned LREG7_REGNO = SFPU_REG_FIRST + 7;
@@ -170,7 +168,7 @@ join_state (window_state a, window_state b)
   return a == b ? a : WS_UNKNOWN;
 }
 
-/* The four TEN-2932-exempt opcode families (SFPCONFIG.md LaneConfig
+/* The four window-exempt opcode families (SFPCONFIG.md LaneConfig
    table: SFPLOAD / SFPLOADI / SFPSWAP / SFPTRANSP), as the final
    define_insn codes the post-reload stream carries.  SFPLOADMACRO is
    deliberately absent.  */

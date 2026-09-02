@@ -1,4 +1,4 @@
-// Encodability direction (WP8, re-adjudicated at WP12): a run-time
+// Encodability direction (re-adjudicated for the derived calendar): a run-time
 // shift amount cannot pack the template imm12 field, so the SHIFT has
 // no template realization and stays an EXPLICIT issue -- while the
 // provable remainder of the row (the store-producer cast through

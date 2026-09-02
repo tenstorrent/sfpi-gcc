@@ -1,4 +1,4 @@
-// MAD-PAIR class fire (lane GA, FX-F1 hardsigmoid shape): the pair's
+// MAD-PAIR class fire (FX-F1 hardsigmoid shape): the pair's
 // constants sit OUTSIDE the loop (where the invariant pass's
 // cc-restore-discharged hoist parks them), so neither the in-loop
 // residency scan nor the fusion class sees them, and the downstream

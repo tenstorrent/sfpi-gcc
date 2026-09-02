@@ -1,4 +1,4 @@
-// Near misses for the template-field census (lane CF), both refusing
+// Near misses for the template-field census, both refusing
 // the TU freedom proof by name: (a) a RUNTIME-composed word stored
 // into a template field -- no audited word reaches the slot; (b) the
 // template object's ADDRESS ESCAPES the scanned subtree (stored

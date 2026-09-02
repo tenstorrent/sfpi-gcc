@@ -1,4 +1,4 @@
-// WP13 on a predicate-definition row (the compact select / Where class):
+// IMS arbitration on a predicate-definition row (the compact select / Where class):
 // the repair driver leaves the established CC candidate space untouched
 // (the proven select programs own those calendars -- no ims-repair
 // variants), and the arbitration prices the formed compact calendar

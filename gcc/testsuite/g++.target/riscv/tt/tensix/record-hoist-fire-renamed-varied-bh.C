@@ -2,7 +2,7 @@
 // Genericity twin of record-hoist-fire-bh.C: different LRegs, different
 // operand roles, different trip count and counter direction, different
 // separator value (symbol-addressed volatile store: a named object is
-// provably not the instruction FIFO -- lane FW classification).  The
+// provably not the instruction FIFO).  The
 // mechanism keys on structure only, never on a register calendar or
 // constant fingerprint.
 // 6 trips x (738 - 70) - 1161 = 2847.

@@ -1,6 +1,6 @@
 // Hand-spilled same-DAG twin of raw-ladder10-bh.C: at most 8 values
 // LREG-resident (a6..a9 parked in scratch Dst rows with exact INT32
-// round-trips).  COMPILES TODAY and defines the rung's CRAQ golden:
+// round-trips).  COMPILES TODAY and defines the rung's simulator golden:
 // any correct exact-only Dst-spilling allocator must make the 10-live
 // rung produce these exact bits (lossless spill => output depends only
 // on the DAG).  Also a member of the no-op byte-gate set: its own

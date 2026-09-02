@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Runtime-trip tile-loop fire (lane FW; the blaze sdpa_reduce_row
+// Runtime-trip tile-loop fire (the blaze sdpa_reduce_row
 // RECORD-HOIST loss-class shape): a RUNTIME-counted loop whose body
 // carries raw LLK sync words (constant .ttinsn SEMWAIT/SEMPOST) and a
 // computed instruction-FIFO push (SETC16 base plus a bounded field --

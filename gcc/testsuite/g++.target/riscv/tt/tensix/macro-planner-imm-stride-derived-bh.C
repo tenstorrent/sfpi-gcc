@@ -1,5 +1,5 @@
-// Immediate-delta row admission (lane IS, owner-ratified F1 honest fix,
-// 2026-08-29): the loop-fusion passes carry part of the per-row Dst
+// Immediate-delta row admission (owner-ratified F1 honest fix,
+// a later widening): the loop-fusion passes carry part of the per-row Dst
 // advance in the address immediates (rows alternate base/base+2 with a
 // shared +4 separator) -- previously this fragmented discovery
 // (row-not-isomorphic) even though the region is the SAME uniform

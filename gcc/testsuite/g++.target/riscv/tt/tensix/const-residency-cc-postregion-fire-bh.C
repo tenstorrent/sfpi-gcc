@@ -1,4 +1,4 @@
-// cc-region granularity (laneDM widening): a CC-writing region the
+// cc-region granularity (widened admission): a CC-writing region the
 // programming point can never be reached FROM does not defeat the
 // all-lanes proof.  The reach-scoped proof admits the loop -- the
 // post-loop CC block sits on no path to the entry-edge programming

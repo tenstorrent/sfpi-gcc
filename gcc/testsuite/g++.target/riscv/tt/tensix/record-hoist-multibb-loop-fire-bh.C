@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Multi-block runtime tile loop (lane FW; the MEASURED profiler-vehicle
+// Multi-block runtime tile loop (the MEASURED profiler-vehicle
 // shape): buffer-management control flow splits the tile loop into
 // several blocks around an always-executed body.  The capture bb
 // dominates the loop latch (per-trip execution is structural), the

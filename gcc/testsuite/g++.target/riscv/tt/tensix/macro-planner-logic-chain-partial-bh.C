@@ -1,4 +1,4 @@
-// Derived-template vocabulary composition honesty (lane CZ): the
+// Derived-template vocabulary composition honesty: the
 // gcd-fresh common-shift chain (m = a | b; m = lz(m); m += -31) puts
 // THREE Simple-class members on one register web -- a carrier hosts
 // at most one Simple event, so the planner hosts the iadd-imm, keeps

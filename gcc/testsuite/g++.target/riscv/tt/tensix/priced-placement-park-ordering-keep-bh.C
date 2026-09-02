@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER park-ordering priced keep (item #13; shadow leg =
+// PLACEMENT-ARBITER park-ordering priced keep (the placement arbiter; shadow leg =
 // priced-placement-park-ordering-shadow-bh.C, same body): three
 // in-region invariant constants trip the legacy `in_region >= 3'
 // demand cut -- the measured local optimum whose named successor is

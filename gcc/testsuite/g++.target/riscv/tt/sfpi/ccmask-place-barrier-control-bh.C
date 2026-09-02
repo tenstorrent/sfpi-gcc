@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_invariant" }
-// Control for ccmask-place-bh.C.  RE-RECORDED (lane EL,
+// Control for ccmask-place-bh.C.  RE-RECORDED (during
 // structured-CC-restore): with the fold off, the v_if's CC-setting
 // compare used to be a loop-scoped SFPU barrier refusing the whole
 // loop's immediate hoists; the restore proof now discharges that

@@ -1,5 +1,5 @@
 // Materialized SFPADD shape with the verbatim-image loadi forms
-// (laneDM widening): the sfpadd arm's value recovery now runs through
+// (widened admission): the sfpadd arm's value recovery now runs through
 // the same audited single-issue-chain derivation as the residency
 // classes, so the canonical sfpxloadi mod-31 (int bit-image) constant
 // the frontend emits is admitted -- previously only the mod -32

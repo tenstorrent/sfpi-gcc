@@ -1,4 +1,4 @@
-// WP9 near miss: the two payload loads carry DIFFERENT data modes.  The
+// Near miss: the two payload loads carry DIFFERENT data modes.  The
 // proven envelope requires one payload/store mode (the misc word's
 // StoreMod0 covers exactly one), so the CC model refuses by name and
 // every byte stays explicit.

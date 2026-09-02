@@ -49,10 +49,10 @@ along with GCC; see the file COPYING3.  If not see
    identity (unspec -> architectural opcode byte through the retained
    TT_OP encoding tables).  Shape names, operation names, and source
    structure never participate.  Raw whole words below are PROVEN
-   descriptor programs transcribed with provenance from the frozen pass
-   (see NOTES-wp6-prep.md); template fields are packed from admitted
-   operands wherever the field derivation is established, and stay
-   whole-word otherwise (9(d)/9(e) partial semantics).  */
+   descriptor programs transcribed with recorded provenance from the
+   frozen pass; template fields are packed from admitted operands
+   wherever the field derivation is established, and stay whole-word
+   where only the whole word (not its field layout) is proven.  */
 
 const char *macro_desc_refusal_program_unproven
   = "descriptor-program-unproven";
@@ -130,7 +130,7 @@ enum templ_rule_kind
      source's SECOND result set reaches the store, mod1 gains the
      routing bit (frozen provenance rtl-rvtt-loadmacro.cc:781-786).  */
   TR_FIELDS_FROM_SOURCE_ROUTING_MOD,
-  /* Pack the template entirely from table data (WP8: replaces the
+  /* Pack the template entirely from table data (this replaces the
      former proven-whole-word payloads, so no raw template words live
      outside the capability/encoding tables): the per-CPU opcode byte
      from the retained TT_OP encoding tables, a fixed proven mod1 field,
@@ -140,10 +140,10 @@ enum templ_rule_kind
      explicit shift amount; frozen :469, :852).  Covers templates whose
      event is internal to the macro program (no derivable source
      instruction) or whose opcode differs from the source instruction's
-     (the SHFT2 immediate variant realizing an explicit SFPSHFT,
-     NOTES-wp6-prep.md 9(e)).  */
+     (the SHFT2 immediate variant realizing an explicit SFPSHFT --
+     a single proven explicit-mode -> template-word pair).  */
   TR_TABLE_FIELDS,
-  /* WP9: pack opcode from the source predicate definition and derive
+  /* CC-template packing: pack opcode from the source predicate definition and derive
      the template's mod1 from the source's predicate-sense operand
      through the CC model: when the post-visibility payload load
      carries the merge's LIVE operand, the template takes the
@@ -177,12 +177,12 @@ struct desc_template_rule
   int mod1_op;			/* source operand carrying mod1	       */
   int imm12_op;			/* source operand carrying imm12; -1   */
   uint8_t routing_mod_bit;	/* TR_.._ROUTING_MOD only	       */
-  /* Proven-envelope operand pin (WP8): the source operand PIN_OP must
+  /* Proven-envelope operand pin: the source operand PIN_OP must
      equal the per-CPU pinned value or synthesis refuses
      program-unproven.  Used where the explicit operand has no
      established template field (it must be the proven constant) or
      where the explicit-mode -> template-word mapping is a single proven
-     pair (NOTES-wp6-prep.md 9(e)/9(f)).  -1 = no pin.  */
+     pair.  -1 = no pin.  */
   int pin_op;
   int pin_wh, pin_bh;
 };
@@ -203,10 +203,10 @@ struct desc_program
   const char *misc_name;
   int fixed_vd;			/* -1: alternating pair {0,1}	       */
   unsigned store_only_vd;	/* VD of a store-only carrier	       */
-  /* CRAQ-validated envelope: the program was proven only with one
+  /* Simulator-validated envelope: the program was proven only with one
      uniform data mode across every Dst access of the row.  */
   bool uniform_mode_required;
-  /* WP9 CC-template program: the row carries a predicate definition, a
+  /* CC-template program: the row carries a predicate definition, a
      coalesced lane-merge, and the all-lanes restore; synthesis derives
      and proves the macro_cc_model, the misc word is field-derived from
      the store's data mode (encode_misc_select) instead of a fixed
@@ -215,7 +215,7 @@ struct desc_program
   bool cc_select;
   bool misc_from_store_mode;
   bool keep_separator;
-  /* WP10 compact select program: matches only a schedule that absorbed
+  /* Compact select program: matches only a schedule that absorbed
      the row stride into the trailing explicit load (the 3-slot
      handwritten protocol shape), and sources the delayed store's data
      mode from its carrying launch's mod0 (misc UsesLoadMod0ForStore)
@@ -287,7 +287,7 @@ static const desc_program desc_programs[] = {
     /* The round template's low nibble is the explicit instruction's
        architectural instr_mod1 = operand 7 (the raw 0x8e word places
        instr_mod1 at bits 3:0 and the assemblable explicit form carries
-       it in operand 7; corrected at WP8 from the untestable operand-8
+       it in operand 7; corrected from the untestable operand-8
        reading).  Operand 8 has no field in the 0x8e template layout and
        is pinned to the proven zero.  The imm8 operand routes through
        the imm12 packer, whose 0x8e nonzero refusal keeps unproven
@@ -300,8 +300,9 @@ static const desc_program desc_programs[] = {
     "cast-round",
     -1, 0, false,
   },
-  /* Predicated select (the TTNN Where shape class; frozen select
-     calendar LM:1568-1606, re-derived generically at WP9).  The
+  /* Predicated select (the TTNN Where shape class; the select
+     calendar frozen from the retired formation pass, preserved in the
+     version-control history, later re-derived generically).  The
      definition carrier hosts the predicate template and the delayed
      store; the demoted middle payload issues as a plain load (the
      production handwritten Where protocol's own shape); the last
@@ -314,7 +315,7 @@ static const desc_program desc_programs[] = {
      slot.  VD is fixed at 0: every payload targets the shared launch
      VD (LM select emission).  */
   {
-    "predicated-select (LM:1568-1606; WP9 generic derivation)",
+    "predicated-select (loadmacro CC-template generic derivation)",
     2,
     { { 1, { { SU_SIMPLE, OPB_WH (TT_OP_WH_SFPSETCC (0, 0, 0, 0)),
 	       OPB_WH (TT_OP_BH_SFPSETCC (0, 0, 0, 0)) } }, true },
@@ -337,7 +338,7 @@ static const desc_program desc_programs[] = {
     true, true, true,
     false, false,
   },
-  /* Predicated select, COMPACT calendar (WP10; the production
+  /* Predicated select, COMPACT calendar (the production
      handwritten Where protocol's 3-slot row, ckernel_sfpu_where.h
      "3 cycles per input row"): the definition carrier hosts the
      predicate template and the delayed store; the SECOND launch hosts
@@ -351,7 +352,7 @@ static const desc_program desc_programs[] = {
      program above.  Matched only when the schedule absorbed the stride
      into the explicit load (require_absorbed_stride).  */
   {
-    "predicated-select-compact (ckernel_sfpu_where.h 3-slot; WP10)",
+    "predicated-select-compact (ckernel_sfpu_where.h 3-slot)",
     2,
     { { 1, { { SU_SIMPLE, OPB_WH (TT_OP_WH_SFPSETCC (0, 0, 0, 0)),
 	       OPB_WH (TT_OP_BH_SFPSETCC (0, 0, 0, 0)) } }, true },
@@ -479,7 +480,7 @@ find_misc_word (const caps *c, const char *name, uint32_t *word)
    to the derived-calendar path or refuses, instead of failing inside
    the matched program's packer.  An operand that EXISTS but is not the
    encodable constant stays this program's shape and keeps the
-   established encodability refusal (the WP8 dynamic-shift direction).  */
+   established encodability refusal (the dynamic-shift direction).  */
 
 static bool
 operand_exists (rtx_insn *insn, int pos)
@@ -563,7 +564,7 @@ const_operand (rtx_insn *insn, int pos, HOST_WIDE_INT *value)
 }
 
 /* ------------------------------------------------------------------ */
-/* WP9: derive and prove the CC-template model of a predicated-select
+/* Derive and prove the CC-template model of a predicated-select
    row from the schedule's slots, the matched program's proven delays,
    and the architectural CC facts in the capability tables.  Fills OUT
    and *STORE_MODE (the shared payload/store data mode) on success;
@@ -707,8 +708,9 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
   if (restore_visible > schedule.ii)
     return false;
 
-  /* ARCHITECTURAL CONSTRAINT (silicon adjudication 2026-08-17 ->
-     craq-sim 9f324140 -> this check): the store's lane predicate is
+  /* ARCHITECTURAL CONSTRAINT (hardware-adjudicated, reproduced by
+     the corrected reference simulator, enforced here): the store's
+     lane predicate is
      the LIVE CC state at its execution cycle
      (store_lane_mask_live_at_execution) -- the launch never latches
      it -- and a CC write retiring in the store's own cycle is not yet
@@ -718,9 +720,9 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
      The 4-slot separator-kept select calendar violates this
      (restore_exec == store_exec == 3: the store retires under the
      SFPSETCC complement mask and leaves the true-branch lanes
-     unwritten -- the deterministic BH silicon failure); the compact
-     3-slot calendar satisfies it (restore_exec 2 < store_exec 3) and
-     is silicon-correct.  Symmetrically the store must retire before
+     unwritten -- the deterministic Blackhole hardware failure); the
+     compact 3-slot calendar satisfies it (restore_exec 2 < store_exec 3)
+     and is correct on hardware.  Symmetrically the store must retire before
      the NEXT row's predicate definition executes (def_exec + ii with
      identical rows), or it would execute under that row's mask.  */
   if (!rvtt_macro::store_lane_mask_live_at_execution ())
@@ -757,7 +759,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
   st_mode = INTVAL (mode);
   if (live_mode != sel_mode || sel_mode != st_mode)
     return false;
-  /* Launch-sourced store mod0 (WP10 compact program,
+  /* Launch-sourced store mod0 (compact program,
      UsesLoadMod0ForStore): the delayed store's data mode is the
      carrying launch's own mod0, i.e. the definition carrier's load
      mode -- which must therefore equal the store mode.  The
@@ -790,7 +792,7 @@ derive_cc_model (const macro_region &region, const macro_schedule &schedule,
    program matches, derive the sequence words, delays, and misc fields
    from the schedule and the established architectural facts
    (see rvtt-macro-derive-core.h).  The admitted template
-   class grows one CRAQ-validated increment at a time; today it is the
+   class grows one simulator-validated increment at a time; today it is the
    constant-register SFPSWAP family (the unary max/min shape).  Rows
    outside the admitted class keep the established
    descriptor-program-unproven refusal byte-identically.	      */
@@ -882,7 +884,7 @@ lreg_index (rtx x)
   return cstlreg_index (x);
 }
 
-/* WP12: generic derived template classes beyond the constant-register
+/* Generic derived template classes beyond the constant-register
    SFPSWAP family.  Each admitted class maps one launched value insn to
    the template fields whose SFPLOADMACRO realization is EXACTLY the
    explicit instruction's semantics under the spec's override function
@@ -908,7 +910,8 @@ lreg_index (rtx x)
      effect envelope; the ISA functional model reads ONLY LReg[VC] and
      SignExtend(Imm12), never VD): the immediate rides the template
      imm12 field.  Two exact operand bindings, differentially proven
-     against the pinned simulators (laneCZ vocab_diff, WH+BH): the
+     against both pinned reference simulators by exhaustive
+     vocabulary-diff enumeration: the
      in-place form (source == destination == the launch-VD register)
      packs src_c 0 and takes the VC:=VD route; a named source survives
      as the encoded VC under route 1 (no override is applied).  The
@@ -919,8 +922,8 @@ lreg_index (rtx x)
    - SFPSHFT immediate in-place form: realized as the SFPSHFT2
      immediate template on the Round sub-unit -- the single proven
      explicit-mode -> template-word pair the frozen signbit calendar
-     established (WH mode 1 / BH mode 5 -> SHFT2 template mod1 6,
-     NOTES-wp6-prep.md 9(e); craq-sim executes both).  The shifted
+     established (WH mode 1 / BH mode 5 -> SHFT2 template mod1 6;
+     the reference simulator executes both).  The shifted
      value must be the launch-VD register (the SHFT2 realization
      consumes VB:=VD, SFPLOADMACRO.md special case), and the immediate
      rides the template imm12 field exactly as the frozen rule packed
@@ -989,7 +992,7 @@ struct derived_template_fields
   uint16_t imm12;
   /* Physical LRegs (L0..L7) the template encodes BY NAME (surviving
      source fields) -- as opposed to the launch-VD route.  Drives the
-     WP12 fixed-VD escape analysis: a name-encoded read of a value
+     fixed-VD escape analysis: a name-encoded read of a value
      carrier's loaded register requires that carrier to keep its own
      physical destination.  */
   uint32_t name_reads;
@@ -1122,8 +1125,8 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	       the SIGNED amount is LReg[VC] and survives as the
 	       encoded VC under route 1; imm12 must pack 0 (the
 	       simulator's decode requires it; the functional model
-	       never reads it).  Differentially proven WH+BH (laneCZ
-	       vocab_diff).  */
+	       never reads it).  Differentially proven WH+BH by the
+	       vocabulary-diff enumeration.  */
 	    rtx val = XVECEXP (un, 0, 1);
 	    rtx amt = XVECEXP (un, 0, 2);
 	    rtx mod = XVECEXP (un, 0, 3);
@@ -1191,10 +1194,11 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	     encoded VC or, when it is the launch-VD register, routes
 	     through the VC:=VD override with src_c 0.
 
-	   Functional models SFPAND/SFPOR/SFPXOR.md (BH tree);
-	   craq-sim tensix_execute_sfpu_int32; the patterns' effect
-	   audits.  Differentially proven WH+BH (laneCZ vocab_diff),
-	   including the route-0 arm and the VB=L0 name.  */
+	   Functional models SFPAND/SFPOR/SFPXOR.md (BH tree); the
+	   reference simulator's int32 executor; the patterns' effect
+	   audits.  Differentially proven WH+BH by the vocabulary-diff
+	   enumeration, including the route-0 arm and the VB=L0
+	   name.  */
 	int uv = value_insn_unspecv (insn);
 	uint8_t opb;
 	if (uv == UNSPECV_SFPAND)
@@ -1262,9 +1266,10 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
       {
 	/* The audited Simple unary family (rvtt_sfp<unary>_lv, one
 	   pattern iterator): each reads only LReg[VC] under its
-	   audited mods and lane-writes VD (the functional models;
-	   craq-sim executors; the pattern's per-mod effect audit).
-	   Differentially proven WH+BH (laneCZ vocab_diff), including
+	   audited mods and lane-writes VD (the functional models; the
+	   reference simulator's executors; the pattern's per-mod effect
+	   audit).  Differentially proven WH+BH by the
+	   vocabulary-diff enumeration, including
 	   the CC-writing mods (LZ 2, EXEXP 2/10 -- the register-form
 	   SFPIADD envelope precedent).  LZ, MOV, and ABS are
 	   route-overridable (RC_VC): source == launch VD packs src_c 0
@@ -1356,7 +1361,7 @@ derived_value_template_fields (rtx_insn *insn, int launch_vd,
 	   supplies it at execution); the OTHER factor's register is
 	   named in the template's VA field.  Both audited mods are
 	   symmetric in VA/VB (LOWER: (a*b) low 23; UPPER:
-	   (a_23*b_23) >> 23 -- craq-sim sfpmul24_result, SFPMUL24.md),
+	   (a_23*b_23) >> 23 -- the reference simulator's sfpmul24_result, SFPMUL24.md),
 	   so when the allocator tied the product in-place onto the
 	   VA-side factor instead, the commuted word -- naming the
 	   VB-side factor -- realizes the identical value.  The
@@ -1394,13 +1399,13 @@ struct derived_synthesis
   uint8_t template_opcode[4];
   uint8_t template_src_c[4];
   uint8_t template_mod1[4];
-  uint16_t template_imm12[4];	/* WP12 generic classes; swap packs 0  */
+  uint16_t template_imm12[4];	/* generic classes; swap packs 0       */
   unsigned n_templates;
   int store_macro;
   unsigned store_mode;
   bool store_uses_carrier_mode;
   unsigned store_only_vd;
-  /* WP12 fixed launch VDs: when any explicit row member consumes a
+  /* Fixed launch VDs: when any explicit row member consumes a
      value carrier's loaded register by name, every value carrier keeps
      its own physical load destination (vd_pin >= 0) instead of the
      alternating {0,1} pair, under the derivation core's launch-VD
@@ -1478,8 +1483,8 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 
   unsigned n_ev = 0;
   unsigned ev_pos[rvtt_macro_derive::MAX_EVENTS] = {};	/* insn index  */
-  uint32_t name_reads_all = 0;	/* WP12 fixed-VD escape analysis       */
-  uint32_t first_touch_write = 0, touched = 0;	/* WP12 sacrificial VD */
+  uint32_t name_reads_all = 0;	/* fixed-VD escape analysis	       */
+  uint32_t first_touch_write = 0, touched = 0;	/* sacrificial VD      */
   uint32_t name_reads_all_launched = 0;	/* launched surviving fields   */
   for (unsigned ix = 0; ix != row.insns.length (); ++ix)
     {
@@ -1499,7 +1504,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
       if (launched_value)
 	{
 	  /* Admitted derived template classes: constant-register SFPSWAP
-	     (the established family) and the WP12 generic families
+	     (the established family) and the generic families
 	     (derived_value_template_fields).  */
 	  derived_template_fields tf;
 	  uint8_t src_c = 0, mod1 = 0;
@@ -1533,7 +1538,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	    return false;
 	  name_reads_all |= tf.name_reads;
 	  name_reads_all_launched |= tf.name_reads;
-	  /* Template slot sharing (WP12): bit-identical derived field
+	  /* Template slot sharing: bit-identical derived field
 	     tuples encode to bit-identical template words and share one
 	     InstructionTemplate destination.  */
 	  int slot = -1;
@@ -1625,8 +1630,8 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	     derivation core's hazard rule (a zero mask never bumps:
 	     derive-core.h's silent-discard loop tests the mask first),
 	     so they are not recorded at all; recording them only burned
-	     cap slots the CONSTRAINT-CARRYING issues need (the lane DG2
-	     4.4 truncation dropped real constraints once zero-mask
+	     cap slots the CONSTRAINT-CARRYING issues need (an earlier
+	     truncation bug dropped real constraints once zero-mask
 	     entries filled the array).  */
 	}
       else if (ev.realization == macro_event::EXPLICIT_INSN)
@@ -1659,8 +1664,8 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	     derive-core's silent-discard rule (the mask test comes
 	     first), so omitting it cannot change any verdict, while a
 	     dropped NONZERO mask would judge the calendar against an
-	     INCOMPLETE hazard set (lane DG2 finding 4.4).  Beyond the
-	     cap: refuse by name, never truncate.  */
+	     INCOMPLETE hazard set (the truncation bug above).  Beyond
+	     the cap: refuse by name, never truncate.  */
 	  if (mask != 0)
 	    {
 	      if (ds->row.n_explicits >= 16)
@@ -1692,7 +1697,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   ds->row.last_issue_slot = schedule.ii - 1;
   ds->row.vd_alternates = schedule.alternating_vd;
 
-  /* WP12 hazards of hosted events against the row's EXPLICIT issues
+  /* Hazards of hosted events against the row's EXPLICIT issues
      and earlier events (register WAR floors, later-consumer/overwrite
      deadlines, same-cycle anti-dependences).  Slot+1 encoding; 0 = no
      constraint.  */
@@ -1740,7 +1745,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
 	}
     }
 
-  /* WP12 fixed launch VDs: when any surviving name-encoded read (an
+  /* Fixed launch VDs: when any surviving name-encoded read (an
      explicit issue's register operand or a hosted template's surviving
      source field) consumes a value carrier's loaded register, the
      alternating {0,1} VD pair would move the loaded value away from
@@ -1778,7 +1783,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
      for the even Dst addresses these calendars use), so the register
      must come from L0..L3.  The established choice -- the lowest
      register outside the alternating pair and the region's internal
-     set -- is kept whenever it is encodable; otherwise (WP12: every
+     set -- is kept whenever it is encodable; otherwise (every
      low register live inside the row) a PROVEN-CLOBBERABLE internal
      temporary serves: its first row access is a write (the next row
      instance never reads the garbage), it is no value carrier's
@@ -1870,7 +1875,7 @@ derive_row (const macro_region &region, const macro_schedule &schedule,
   /* Stride absorption in a DERIVED calendar is a per-CPU proven
      envelope (rvtt-macro-tables.cc derived_stride_absorption_proven):
      BH and WH are proven (WH via the corrected single-slot Base=1
-     program, sfpi-gcc 2a0ba1e6602 adjudication); an unproven CPU
+     program, hardware-adjudicated); an unproven CPU
      refuses by name.  */
   if (schedule.absorbed_stride
       && !rvtt_macro::derived_stride_absorption_proven (c))
@@ -1994,16 +1999,16 @@ rvtt_macro_synthesize (const macro_region &region,
 
   /* A schedule that named its own blocker is not a synthesis input:
      the candidate is unproven and the search advances.  THREE documented
-     carve-outs (union of WP10, the timing-calendar derivation, and the
-     WP12 template-sharing increment -- pre-sharing capacity overflow is
+     carve-outs (from the compact-select, timing-calendar derivation,
+     and template-sharing increments -- pre-sharing capacity overflow is
      re-decided by derive_row's post-sharing gate):
-     event-delay-unproven (NOTES 9(g), docs/MACRO_PLANNER.md Sec. 6 --
-     an unproven per-event delay does not block a whole-word program
-     proven end to end) and sequence-encoding-unproven (the missing
+     event-delay-unproven (an unproven per-event delay does not block a
+     whole-word program proven end to end) and
+     sequence-encoding-unproven (the missing
      proven sequence program is exactly what Layer 4b derives,
      rvtt-macro-derive-core.h).  Every other refusal --
-     including the compact candidate's mandatory-absorption failure
-     (WP10), whose partially-compact structure must never fall through
+     including the compact candidate's mandatory-absorption failure,
+     whose partially-compact structure must never fall through
      to a program keyed for a different calendar, and the physical
      latency/port violations no descriptor can repair -- stands.  */
   if (schedule.refusal
@@ -2146,7 +2151,7 @@ rvtt_macro_synthesize (const macro_region &region,
 		}
 	      else if (ds.vd_pin[m] >= 0)
 		{
-		  /* WP12 fixed launch VD: the carrier keeps its own
+		  /* Fixed launch VD: the carrier keeps its own
 		     physical load destination (name-encoded consumers;
 		     lifetime obligation proven in the derivation
 		     core).  */
@@ -2240,7 +2245,7 @@ rvtt_macro_synthesize (const macro_region &region,
       return true;
     }
 
-  /* WP9: a CC-template program must prove the full CC model -- the
+  /* A CC-template program must prove the full CC model -- the
      definition/merge/restore dataflow, the deferred-visibility slots,
      the live-mask restore-before-store-execution constraint, and the
      payload/store mode envelope -- before any word is packed.  */
@@ -2583,7 +2588,7 @@ rvtt_macro_synthesize (const macro_region &region,
    facts, so the verifier compares the synthesized words against an
    independently assembled expectation set.
 
-   LIMITATION (WP8 revisit): the template, sequence, and misc
+   LIMITATION: the template, sequence, and misc
    expectations are assembled from the SAME desc_program table that
    synthesis reads (derive_structure + find_program), so the verifier
    catches packing/encoding divergence but cannot catch a wrong table
@@ -2619,7 +2624,7 @@ rvtt_macro_build_expectations (const macro_region &region,
     {
       /* Mirror synthesis' proven-envelope filter exactly, so the
 	 expectation builder can never key a different program than the
-	 one synthesis realized (the WP12 mode-mismatch shape exposed
+	 one synthesis realized (a mode-mismatch shape exposed
 	 this asymmetry: synthesis fell through to the derived calendar
 	 while the expectations still keyed the frozen uniform-mode
 	 program).  */
@@ -2739,7 +2744,7 @@ rvtt_macro_build_expectations (const macro_region &region,
       return true;
     }
 
-  /* CC-template expectations (WP9), re-derived from the region's
+  /* CC-template expectations, re-derived from the region's
      explicit facts.  */
   macro_cc_model cc_model;
   memset (&cc_model, 0, sizeof (cc_model));
@@ -2930,7 +2935,7 @@ rvtt_output_owned_setc16 (rtx *operands)
 }
 
 /* ------------------------------------------------------------------ */
-/* WP13: descriptor-program residency (default-off,
+/* Descriptor-program residency (default-off,
    -mtt-tensix-macro-planner-residency).  Contract in
    rvtt-macro-desc.h; walk semantics in rvtt-macro-epoch.{h,cc}
    (rvtt_macro_epoch_owned_state_invariant_p).  Selection is keyed on
@@ -3020,9 +3025,9 @@ rvtt_macro_residency_extend (function *fn, const macro_region &region,
      paths that never reach the region (guarded loops), so every
      instruction of the function outside the benign set must be unable
      to observe or redefine the owned state.  The enable word
-     re-asserts the outermost-CC all-lanes contract under WP11's
-     materialization license (cc_enable_all_lanes_proved_p held at
-     formation).  */
+     re-asserts the outermost-CC all-lanes contract under the
+     config-epoch materialization license (cc_enable_all_lanes_proved_p
+     held at formation).  */
   hash_set<rtx_insn *> benign;
   residency_benign_set (region, state, &benign);
   rtx_insn *skip_insn = nullptr;
@@ -3039,7 +3044,7 @@ rvtt_macro_residency_extend (function *fn, const macro_region &region,
     }
 
   /* Iterate the per-level epoch proof outward.  Each level re-proves
-     the full WP11 discipline (including the conservative foreign
+     the full config-epoch discipline (including the conservative foreign
      LREG/CC refusal) over the next enclosing loop's body; a level
      without a unique structural entry, or any named refusal, stops the
      extension at the last proven placement.  Placement executions are

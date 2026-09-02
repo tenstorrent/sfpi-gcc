@@ -1,10 +1,10 @@
-// PLACEMENT-ARBITER monotone fail-closed near-miss (item #13): the
+// PLACEMENT-ARBITER monotone fail-closed near-miss (the placement arbiter): the
 // capacity query says the full candidate set does not fit (priced =
 // defer) while the legacy demand cut says keep (in-region 1 < 3).
 // The defer side's value is unpriceable at the early pass -- it hands
 // the candidates to the late walk, whose admission proofs live there
 // and may refuse them all (the trigonometry census anatomy; the
-// pin-34/35 lesson) -- so the priced defer refuses by name and the
+// demonstrated-regression lesson) -- so the priced defer refuses by name and the
 // legacy keep stands byte-identically even under the flag.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -mtt-tensix-optimize-priced-placement -fdump-tree-rvtt_invariant-details" }
 // { dg-final { scan-tree-dump "park-ordering loop bb \\d+ .in-region 1. legacy=keep priced=defer DISAGREE .deciding=legacy: the defer side is unpriceable." "rvtt_invariant" } }

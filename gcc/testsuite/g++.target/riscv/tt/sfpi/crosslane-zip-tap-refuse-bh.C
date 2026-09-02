@@ -1,4 +1,4 @@
-// Zip-chain use-exclusivity (lane FP audit, FP-1): an external consumer
+// Zip-chain use-exclusivity: an external consumer
 // of a deleted-suffix frame's output must refuse the collapse -- the
 // tap's value-carrying producers would survive deletion while the
 // frame's lhs-less CC statements (row>=2 SFPXIADD, region-exit SFPENCC)

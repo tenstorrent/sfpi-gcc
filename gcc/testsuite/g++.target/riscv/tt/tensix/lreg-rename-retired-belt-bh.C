@@ -1,9 +1,9 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fchecking=2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// W4-C retirement witness (the source-read class, armed): the retired
+// Retirement witness (the source-read class, armed): the retired
 // single-shape pass's whole-pattern writer edit rewrote genuine input
 // reads of the destination register's previous live range (the
 // dest-reuses-dying-source shape -- the calculate_lcm/cube_root/sine
-// wrong-code fires adjudicated at laneKK-evidence-20260831).  The
+// wrong-code fires adjudicated on their committed streams).  The
 // general engine's writer edit is dest-only and its post-commit belt
 // re-proves the operand webs on the committed stream; under
 // -fchecking=2 any writer-source rewrite is a hard assert.  This body

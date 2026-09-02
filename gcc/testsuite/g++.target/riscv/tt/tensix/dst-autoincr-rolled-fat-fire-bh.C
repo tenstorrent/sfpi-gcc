@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
-// The covered-regime silicon witness class (lane EP finding F1): a one-row
+// The covered-regime hardware witness class: a one-row
 // rolled loop whose FAT body's own slot-occupying words cover the audited
 // drained-frontend window (the threshold/hardshrink shape -- 10-slot
 // iterations measure the crossing at ~0.06 cycles, while refusing them

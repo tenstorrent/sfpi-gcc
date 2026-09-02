@@ -1,4 +1,4 @@
-// Transpose involution (lane FG, X4): SFPTRANSP o SFPTRANSP is the
+// Transpose involution (X4): SFPTRANSP o SFPTRANSP is the
 // identity on both banks (SFPTRANSP.md functional model; FB battery
 // transpose inverse); an adjacent frame pair whose second frame's
 // eight inputs are the first's eight outputs cancels entirely, under

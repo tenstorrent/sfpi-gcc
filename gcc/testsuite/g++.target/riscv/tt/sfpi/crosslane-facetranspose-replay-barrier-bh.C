@@ -1,4 +1,4 @@
-// X6 replay-formation barrier twin (lane FV): the face-transpose family
+// X6 replay-formation barrier twin: the face-transpose family
 // carries xtt_replay=barrier and opaque effects -- the replay-hoist pass
 // must NOT capture any of the choreography into a TTREPLAY record (its
 // Dst/config effects are unmodeled; FS persistence rules make an

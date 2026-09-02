@@ -1,4 +1,4 @@
-// The lane BR ICE reproducer at source level (xielu fresh body with
+// An ICE reproducer at source level (xielu fresh body with
 // alpha_p/alpha_n held as LOOP-INVARIANT vFloats): runtime scalars
 // materialize through two-issue SFPLOADI synthesis chains, and holding
 // them across the loop overfills the LREG file -- the reference

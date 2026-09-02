@@ -1,4 +1,4 @@
-// WP13 residency de-duplication, near miss: a CALL between the two
+// Residency de-duplication, near miss: a CALL between the two
 // identical regions.  Content matches and dominance holds, but the
 // function-wide owned-state invariance walk cannot see through the
 // call -- the de-duplication refuses (resid-span-unproven) and the

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHF (tanhderivlut +47.5% silicon residual): the loop's `+ 1.0f'
+// Motivating case (tanhderivlut, +47.5% hardware residual): the loop's `+ 1.0f'
 // addend reads the hardwired constant register (LReg[10]); the earlier
 // invariant hoist places that read in the preheader.  The historical
 // FP32-direct LREG budget counted the hoisted creg read as a ninth
@@ -13,7 +13,7 @@
 // { dg-final { scan-tree-dump-times "formed fp32-3entry-sgn-update \\(mod0 0\\) from 3-range magnitude dispatch tree, boundaries 0x3f800000,0x40000000, slot leaves mul0,affine,const" 1 "rvtt_lut_select" } }
 // The earlier invariant hoist has already placed the three value
 // immediates and the addend read in the preheader; formation creates
-// the two zero-slot materializations at the LUT site AND (laneHT
+// the two zero-slot materializations at the LUT site AND (the
 // 4-word unlock) a FLOATB materialization for the const leaf's slot
 // word -- a LUT table slot is an implicit hard register, so a slot
 // operand defined by a creg read would otherwise force the allocator

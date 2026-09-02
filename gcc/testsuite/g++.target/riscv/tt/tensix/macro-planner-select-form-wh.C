@@ -1,10 +1,10 @@
 // Wormhole twin of macro-planner-select-form-bh.C, REFUSING by the
-// architectural name since the 2026-08-17 Where silicon adjudication
-// (evidence root ~/sfpi-uplift/where-adjudication-20260817; root cause
-// craq-sim 9f324140 -- live store lane mask): the mixed-mode select's
+// architectural name since the Where hardware adjudication
+// (hardware-adjudicated; root cause
+// the reference simulator -- live store lane mask): the mixed-mode select's
 // compact candidate refuses by name and the established 4-slot
 // separator-kept calendar derives restore exec == store exec == 3, so
-// its descriptor refuses cc-restore-store-race (the silicon evidence
+// its descriptor refuses cc-restore-store-race (the hardware evidence
 // is BH; the calendar, its proven delays, and the delivery model are
 // the same table rows on WH -- the same race on both).  The region
 // refuses byte-identically to the semantic (planner-OFF) lowering.

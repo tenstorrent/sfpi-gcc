@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -mtt-tensix-optimize-lreg-rename-chains -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// Flag composition after the W4-C v1 retirement: BOTH flags on runs
+// Flag composition after the v1 retirement: BOTH flags on runs
 // the ONE general engine exactly once (the retired flag is an alias;
 // there is no second pass to collide with).  Phase 1 renames the
 // v1-profile latency-0 chain the retired pass used to take, phase 2

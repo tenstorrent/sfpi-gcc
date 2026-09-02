@@ -169,9 +169,9 @@ main ()
 
   /* CC-model timing: the re-checked inequalities are keyed on the
      exchanged SLOTS alone -- never on the separator structure, a misc
-     word, or a data format (the architectural constraint behind the
-     2026-08-17 silicon adjudication, root-caused by craq-sim
-     9f324140: the store's lane mask is live at execution, so the
+     word, or a data format (the hardware-adjudicated architectural
+     constraint, root-caused via the corrected reference
+     simulator: the store's lane mask is live at execution, so the
      all-lanes restore must retire strictly before the store executes,
      restore_visible <= store_exec with lag 1).  */
 
@@ -200,7 +200,7 @@ main ()
 
   /* The 4-slot separator-kept select model exactly as derived from
      the proven delays (SETCC d0 / store d2 on slot 0, ENCC d0 on slot
-     2): restore retires at cycle 3 == store exec 3 -- the silicon
+     2): restore retires at cycle 3 == store exec 3 -- the hardware
      failure -- names cc-timing.  */
   {
     descriptor_words d; expectations e;

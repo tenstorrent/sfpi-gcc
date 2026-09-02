@@ -1,4 +1,4 @@
-// WP9 near miss: TWO predicate writes inside one select row.  The
+// Near miss: TWO predicate writes inside one select row.  The
 // derived definition-carrier key carries two SETCC events; no proven
 // program hosts that structure, so the row refuses by name and every
 // byte stays explicit.

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-ccmask -mtt-tensix-optimize-cc-region-general -fdump-tree-rvtt_ccmask" }
-// R2 widening 2 fire (FABLE_GOES_BURR; tt/proofs/ccmask-eqne-zero/):
+// EQ/NE-zero widening fire (tt/proofs/ccmask-eqne-zero/):
 // under the stage-B flag the predicated zeroing under `x == 0.0f`
 // folds to the proven two-compare keep-mask composition
 // SFPOR (SFPGT (x, 0), SFPGT (0, x)) -- the raw-bit EQ0 enable set is

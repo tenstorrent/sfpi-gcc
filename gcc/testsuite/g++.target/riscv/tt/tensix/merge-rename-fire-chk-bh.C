@@ -1,4 +1,4 @@
-// MERGE-RENAME fire under -fchecking (the KH shadow belt live) (lane KP, FABLE_GOES_BURR R1(b)): an in-loop
+// MERGE-RENAME fire under -fchecking (the IPA shadow belt live): an in-loop
 // constant-immediate CC-merge (single-issue FLOATB sfploadi_lv whose
 // live-value link is loop-varying) is renamed under the adjudication
 // override into a parked full-lane twin (the pressure-park LREG tier's

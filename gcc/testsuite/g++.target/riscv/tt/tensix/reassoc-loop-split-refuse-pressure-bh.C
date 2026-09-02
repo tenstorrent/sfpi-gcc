@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc-loop-carried -fdump-tree-rvtt_reassoc" }
-// Pressure near-miss (the item-#10 engine budget): six extra vector
+// Pressure near-miss (the pressure-engine budget): six extra vector
 // values live ACROSS the loop leave no headroom for even one extra
 // partial accumulator in the 8-LREG file, so the 2-link chain refuses
 // BY NAME (reassoc-partials-pressure) and the kernel keeps compiling

@@ -1,4 +1,4 @@
-// Lane FL (FH-4 genericity twin): renamed symbols, a different Dst
+// Drain-elision genericity twin: renamed symbols, a different Dst
 // address, and a different (still encodable) shift amount -- the
 // follower VD-write refusal keys on the derived launch plan (fixed-VD
 // value carrier, launch issue inside the decoded pending horizon),

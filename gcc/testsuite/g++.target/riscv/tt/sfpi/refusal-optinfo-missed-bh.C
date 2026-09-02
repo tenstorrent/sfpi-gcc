@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-store-fold -fopt-info-missed -fdump-tree-rvtt_store_fold" }
-// FABLE_GOES_BURR.md item #1: named refusals are routed through
+// the refusal registry: named refusals are routed through
 // -fopt-info-missed (dual emission).  The S2 float-pair sink without
 // the store-sink license token fires the standing named refusal
 // store-fold-sink-format-canonicalizing through the registry: the

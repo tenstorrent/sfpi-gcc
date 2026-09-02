@@ -2,7 +2,7 @@
 // Fire witness: the parameterized rows canonicalize (register rotation
 // rewritten to the recorded registers, the varying immediates excluded
 // and delivered between launches) and ONE parameterized record forms.
-// Lane ID (final lockstep audit): the previous expected formation here
+// Final-lockstep audit: the previous expected formation here
 // (0,4 record + 2 launches from a 15-rename cross-swap plan) was WRONG
 // CODE -- decoded value flow shows the launches replaying reads of
 // registers the plan's own renames had evacuated (the audit's named

@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER mixed-consumer fire (lane HO): one store consumer
+// STORE-SOURCE TIER mixed-consumer fire: one store consumer
 // is enough -- the constant also feeds an SFPMUL, but the SFPSTORE use
 // pins the encoding ceiling, and the hoisted plain LREG serves BOTH
 // consumers (math reads the LREG exactly as it would read the parked

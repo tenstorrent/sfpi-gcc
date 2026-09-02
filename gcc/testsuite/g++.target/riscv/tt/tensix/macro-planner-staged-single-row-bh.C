@@ -1,4 +1,4 @@
-// A single straight-line row is DISCOVERED (WP8 single-row extension)
+// A single straight-line row is DISCOVERED (single-row extension)
 // but never formed: one launch cannot amortize the configuration
 // prefix, so Layer 6 refuses by name and the bytes stay identical to
 // flags-off.  (The quarantined pass formed this shape unconditionally;

@@ -35,7 +35,8 @@ along with GCC; see the file COPYING3.  If not see
        r = SFPNOT (v)
 
    Bit-exactness (all 2^32 v per lane, from the pinned simulator models
-   -- craq-sim TENSIX_EXECUTE_SFPIADD mod1&2 arm src(C) -= LReg[dest]
+   -- the reference simulator's TENSIX_EXECUTE_SFPIADD mod1&2 arm
+   src(C) -= LReg[dest]
    two's-complement wrap subtract vs TENSIX_EXECUTE_SFPNOT ~src_c):
    0xFFFFFFFF - v never borrows below any bit (the minuend is all-ones),
    so the wrapping subtract IS the bitwise complement.  The exhaustive

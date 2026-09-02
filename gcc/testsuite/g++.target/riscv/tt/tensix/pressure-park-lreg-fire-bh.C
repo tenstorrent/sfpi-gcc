@@ -1,4 +1,4 @@
-// PRESSURE-PARK fire, LREG tier (lane GV): four admitted post-CC
+// PRESSURE-PARK fire, LREG tier: four admitted post-CC
 // candidates against three free PRGM destinations -- the fourth hits
 // the established prgm-exhausted refusal and then hoists to the SAME
 // proven programming point (after the peeled iteration's all-lanes

@@ -30,7 +30,8 @@ along with GCC; see the file COPYING3.  If not see
    shape or operation names), with template fields packed from admitted
    source operands where the field derivation is established.  Synthesis
    is in-memory only at this stage: output goes to the analyze dump and
-   the Layer-7 verifier; WP7 owns emission.  */
+   the Layer-7 verifier; emission is owned by the planner's emission
+   stage.  */
 
 struct macro_launch_spec
 {
@@ -41,7 +42,7 @@ struct macro_launch_spec
      read); a fixed VD is then harmless across back-to-back rows.  A
      VALUE carrier's fixed VD is not -- its hosted consumers pend past
      the next row's launch (see the inter-row drain in form_region,
-     lane EV P0 adjudication 2026-08-21).  */
+     established by a hardware-adjudicated wrong-code fix).  */
   bool is_store_only;
   unsigned mode;
   unsigned addr_mode;
@@ -50,7 +51,7 @@ struct macro_launch_spec
   uint32_t word_alt;		/* odd-row word when vd_alternates     */
 };
 
-/* CC-template model (WP9): the descriptor's representation of a proven
+/* CC-template model: the descriptor's representation of a proven
    CC-writing calendar.  The row's predicate DEFINITION is a launched
    template event; its CC result becomes visible to later issue slots
    after the architectural deferred-CC lag (capability tables,
@@ -58,15 +59,16 @@ struct macro_launch_spec
    under the ambient all-lanes mask, the one issued at or after it under
    the definition.  The scheduled store's lane predicate is the LIVE CC
    state at the store's execution cycle
-   (store_lane_mask_live_at_execution; silicon adjudication 2026-08-17,
-   craq-sim 9f324140 -- the launch never latches it), so the row-end
+   (store_lane_mask_live_at_execution; hardware-adjudicated and
+   reproduced by the reference simulator -- the launch never latches
+   it), so the row-end
    all-lanes RESTORE must retire STRICTLY BEFORE the store executes: in
    visible-slot form, restore_visible_slot <= store_exec_slot (the
    restore's CC write, visible to issues from restore_exec + lag on, is
    visible to an event executing at cycle E exactly when restore_exec <
    E; with lag = 1 the two forms coincide).  A violating schedule
    refuses cc-restore-store-race -- the 4-slot separator-kept select
-   calendar's silicon failure mode.  The store must also retire before
+   calendar's hardware failure mode.  The store must also retire before
    the NEXT row's predicate definition executes (same race, other
    edge), and the restore's visibility slot must not exceed the row
    initiation interval so the next row opens under the restored mask.
@@ -123,7 +125,7 @@ extern const char *macro_desc_refusal_cc_template_unproved;
    row's predicate definition), so the store would execute under a
    predicate mask via the live lane-enable evaluation
    (store_lane_mask_live_at_execution).  The architectural constraint
-   behind the 2026-08-17 silicon adjudication's separator-kept 4-slot
+   behind the hardware-adjudicated separator-kept 4-slot
    failure; supersedes the structural stopgap
    cc-separator-kept-silicon-unproven.  */
 extern const char *macro_desc_refusal_cc_restore_store_race;
@@ -148,7 +150,7 @@ extern const char *rvtt_macro_verify_descriptor
 /* Build the verifier's expectations from the region's explicit facts
    (implemented beside synthesis; consumed by rvtt-macro-verify.cc).  */
 namespace rvtt_macro_verify { struct expectations; }
-/* WP12 scheduler-facing helpers (rvtt-macro-desc.cc).  */
+/* Scheduler-facing derivation helpers (rvtt-macro-desc.cc).  */
 extern int rvtt_macro_hosted_subunit (rtx_insn *);
 extern unsigned rvtt_macro_store_only_sacrificial_vd (uint32_t internal_lregs);
 extern bool rvtt_macro_derived_template_probe (rtx_insn *, int launch_vd,
@@ -171,7 +173,7 @@ extern bool rvtt_macro_drain_boundary_elidable
   (const macro_region &region, const macro_schedule &schedule,
    const macro_descriptor &desc, unsigned begin, unsigned end,
    unsigned next_end, FILE *dump);
-/* Loop-backedge drain elision (lane CA, the drain-route remainder):
+/* Loop-backedge drain elision (the drain-route remainder):
    prove that a loop-body region's FINAL run may elide its in-body
    drain because the backedge follower stream -- the in-body tail, the
    loop-head prefix, and the region's own first run [0, FIRST_RUN_END)
@@ -182,7 +184,7 @@ extern bool rvtt_macro_drain_boundary_elidable
 extern bool rvtt_macro_drain_backedge_elidable
   (const macro_region &region, const macro_schedule &schedule,
    const macro_descriptor &desc, unsigned first_run_end, FILE *dump);
-/* Window-pairing inter-row drain tuning (lane FT, rtl-rvtt-schedule.cc,
+/* Window-pairing inter-row drain tuning (rtl-rvtt-schedule.cc,
    consumed by the planner's emission under
    -mtt-tensix-optimize-window-pairing): the minimal proven inter-row
    drain for a run of uniform rows under the lane-EV fixed-VD obligation
@@ -195,7 +197,7 @@ extern int rvtt_macro_interrow_drain_tuned
   (function *fn, const macro_region &region, const macro_schedule &schedule,
    const macro_descriptor &desc, FILE *dump, const char **bound_name);
 /* ------------------------------------------------------------------ */
-/* WP13: descriptor-program residency (default-off,
+/* Descriptor-program residency (default-off,
    -mtt-tensix-macro-planner-residency).  Dictionary-selection residency
    of DERIVED descriptor programs (Lefurgy-line adaptation, literature
    scan 2026-08-18 Idea 6): descriptor words are canonicalized by
@@ -240,16 +242,16 @@ extern const char *macro_resid_refusal_span;	   /* dedupe span dirty  */
 extern const char *macro_resid_refusal_dominance;  /* no dominating
 						      resident program   */
 
-/* Outward residency extension: iterate the WP11 configuration-epoch
+/* Outward residency extension: iterate the configuration-epoch
    proof through successively enclosing loops from the already-proven
    placement in *HOIST_PREHEADER / *HOIST_EDGE, gated by the
    whole-function owned-state invariance walk (the skip-path inertness
    discharge: paths that reach the resident program but not the region
    observe nothing -- the enable re-asserts the outermost-CC all-lanes
-   contract under WP11's materialization license, and the owned-dest
-   words are unread outside the region).  On success updates the
-   placement to the outermost proven level and returns true; on any
-   refusal leaves the placement untouched (WP11 behavior) and returns
+   contract under the config-epoch materialization license, and the
+   owned-dest words are unread outside the region).  On success updates
+   the placement to the outermost proven level and returns true; on any
+   refusal leaves the placement untouched and returns
    false.  Proof-only: never mutates the function.  */
 extern bool rvtt_macro_residency_extend (function *fn,
 					 const macro_region &region,

@@ -1,4 +1,4 @@
-/* Stage-B layout-generality test shape (FABLE_GOES_BURR item #14
+/* Stage-B layout-generality test shape (the refusal registry4
    stage B): the same single-zero-assign CC frame as ccmask-body.h, but
    with scalar control flow INSIDE the region -- the frame's statements
    span several basic blocks, so the stage-A linear statement machine

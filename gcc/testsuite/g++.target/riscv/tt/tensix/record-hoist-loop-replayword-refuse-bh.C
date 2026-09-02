@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Named refusal (lane FW): a volatile instruction-FIFO push of a
+// Named refusal: a volatile instruction-FIFO push of a
 // constant REPLAY-opcode word (TT_OP_REPLAY(0,3,1,1) = 0x04000033)
 // inside the loop refuses the loop replay-preservation audit -- its
 // recorded slot content is unknowable and a record form could

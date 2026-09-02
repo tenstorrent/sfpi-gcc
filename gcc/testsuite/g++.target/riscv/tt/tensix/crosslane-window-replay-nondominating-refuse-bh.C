@@ -1,4 +1,4 @@
-// Fail-closed dominance rule (lane FR, lane FP's FP-3 boundary applied
+// Fail-closed dominance rule (the persistence boundary applied
 // to the window model): a record in a sibling arm does NOT dominate the
 // launch, so on some path the launch plays a previous invocation's --
 // unknowable -- slot content.  Inside a proven-OPEN window the launch

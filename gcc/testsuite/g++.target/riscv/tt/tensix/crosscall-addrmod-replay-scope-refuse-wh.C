@@ -2,7 +2,7 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-crosscall-addrmod -fdump-rtl-rvtt_dst_autoincr-details" }
 // Replay-delivered scope bound: the WH default former replay-forms the
 // short rows, and a replay-delivered mod-write breaks the issue-parity
-// premise of every frontend-word distance audit (lane FE F1 / lane FS
+// premise of every frontend-word distance audit (the hardware-refuted
 // FP-3) -- the contract refuses those rows by name and the payload-
 // family per-execution refusal stands byte-identically.
 // { dg-final { scan-rtl-dump "crosscall-addrmod-unproven .replay-delivered-row." "rvtt_dst_autoincr" } }

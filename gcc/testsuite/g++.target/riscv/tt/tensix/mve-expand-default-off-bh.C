@@ -1,4 +1,4 @@
-// MVE realization default-off identity (item #5 stage 2): without
+// MVE realization default-off identity (modulo variable expansion): without
 // -mtt-tensix-optimize-mve-expand the realization arm never runs -- no
 // mve-expand line of any kind appears -- and the established pairing
 // commits its greedy candidate exactly as before (the corpus byte-gate

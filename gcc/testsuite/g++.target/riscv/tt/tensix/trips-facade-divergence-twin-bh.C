@@ -1,4 +1,4 @@
-// Stage-A dual-oracle trip facade (FABLE_GOES_BURR item #2): manufactured
+// Stage-A dual-oracle trip facade: manufactured
 // near-miss for the trip-oracle-divergence diagnostic.  The testing-only
 // skew knob shifts a proven classical verdict by one trip, so on the same
 // counted loop as trips-facade-agree-bh.C the oracles now disagree at the

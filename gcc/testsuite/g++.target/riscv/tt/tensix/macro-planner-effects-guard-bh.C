@@ -8,9 +8,9 @@
 // Each row dissolves at the opaque member; a CC-writing SFPIADD
 // (CC_LT0) instead refuses at the CC write by name.  The D3 latency
 // audit gave SFPABS mod 1 a Layer-1 effect set (the rows then refused
-// one gate later at the Layer-4 tables), and the lane CZ enumerated
+// one gate later at the Layer-4 tables), and the enumerated
 // vocabulary admission PROVED the ABS descriptor program
-// (differential vs the pinned simulators, macro-planner-unary-*), so
+// (differential vs the reference simulatorulators, macro-planner-unary-*), so
 // the abs rows now legitimately FORM -- this guard keeps watching the
 // still-unproven neighbors: both stochastic/bug cast mods stay
 // opaque, and the CC-writing accumulate still refuses at the CC gate

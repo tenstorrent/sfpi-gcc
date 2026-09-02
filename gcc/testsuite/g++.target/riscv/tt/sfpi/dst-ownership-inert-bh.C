@@ -1,7 +1,7 @@
 // Track B (18.9 B2 gate): with the flag off the registered pass runs its
 // analysis, reports the provable identity, and mutates nothing -- the
 // stream keeps both loads byte-identically.
-// Default-ON promotion (silicon-validated: addcmul -10.9% vs hand,
+// Default-ON promotion (hardware-validated: addcmul -10.9% vs hand,
 // erfinv fold bit-exact): this inertness gate used to rely on the
 // ambient default being off; it now pins the -mno- spelling so the
 // analysis-only path stays covered.

@@ -5,7 +5,7 @@
 // { dg-final { scan-rtl-dump "Capturing and executing sequence" "rvtt_replay" } }
 
 // Execution-saturated sibling-launch shape, DELIVERY-bound payload (the
-// silicon-witnessed unary-max/min hoist LOSS class): a four-trip loop
+// hardware-witnessed unary-max/min hoist LOSS class): a four-trip loop
 // whose body is eight sibling copies of a four-slot payload of four
 // rotating accumulators (every dependence four slots apart, zero
 // modeled interlock stalls: exec = 4 * 100 = 400 < deliver_record
@@ -19,7 +19,7 @@
 // 4 * 0 - (615 + 300) = -915 < 60.  The capture must stay in the loop
 // as an ordinary record-with-execution, byte-identical to the
 // unhoisted form.  (The delivery-only model priced this shape +245 and
-// fired; silicon measured the class +3.93 cyc/tile.)  The saturation
+// fired; hardware measured the class +3.93 cyc/tile.)  The saturation
 // term applies only here, in the delivery-bound branch: an
 // execution-bound re-record payload is priced by
 // replay-hoist-rerecord-execbound-fire-bh.C instead.

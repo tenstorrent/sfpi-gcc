@@ -1,4 +1,4 @@
-/* The one delivery-cost API of the Tensix backend (FABLE_GOES_BURR #12).
+/* The one delivery-cost API of the Tensix backend.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -58,7 +58,7 @@ rvtt_dcost_replay_pricing (rvtt_delivery_cost::replay_shape shape,
    former W_drain MODEL SEAM, now this module's named quantity:
    rvtt-cost.md XTT_AUTOINCR_SETUP_COST_X100, current-model value 0 --
    the measured lane-EE table absorbs the SETC16 program in the
-   once-per-group record delivery; a future silicon-priced value lands
+   once-per-group record delivery; a future hardware-measured value lands
    HERE and every consumer moves together).  */
 extern int64_t rvtt_dcost_autoincr_setup_cost_x100 (void);
 

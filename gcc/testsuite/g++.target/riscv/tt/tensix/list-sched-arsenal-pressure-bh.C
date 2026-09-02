@@ -1,4 +1,4 @@
-// Lane DT arsenal: pressure-aware dispatch at the architectural
+// Scheduler arsenal: pressure-aware dispatch at the architectural
 // eight-LREG boundary.
 //
 // fn 1 (pressure_fit_7): seven independent two-mad chains plus the
@@ -26,15 +26,15 @@
 // the file (the makespan oracle documents the gap: virtual-register
 // lower bound < achieved == reuse-constrained lower bound).
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
-// MEASURED (hand-verified, see the oracle validation in the lane DT
+// MEASURED (hand-verified, see the recorded oracle
 // evidence): fn 1 baseline 22 = 14 words + 7 serial chain stalls +
 // 1 block-end drain; seven-wide interleave = 14 words + drain = 15 =
 // the critical-path lower bound.  fn 2: 15 nodes (the c1 sub-chain is
 // cut off by its writeback marker's region flush), same 22 -> 15, and
 // the emitted stream keeps c1's L1 writeback before c8's L1 reuse.
-// [lane DQ adjudication] fn2 baseline is now 23 (was 22): the DU-S6
+// [post-scheduler-hardening adjudication] fn2 baseline is now 23 (was 22): a
 // entry-producer walk reaches across the zero-length markers to the
-// real audited producer, so the boundary stall lane DT's oracle counted
+// real audited producer, so the boundary stall the original oracle counted
 // (finding 5) is now IN the region model -- same optimum, honest base.
 // { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=14 makespan 22 -> 15 target=bh" 1 "rvtt_schedule" } }
 // { dg-final { scan-rtl-dump-times "List-schedule: bb \\d+ nodes=15 makespan 23 -> 15 target=bh" 1 "rvtt_schedule" } }

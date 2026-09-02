@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD near miss, partial-trip swallow (lane HS): the
+// OPAQUE-REPLAY-RECORD near miss, partial-trip swallow: the
 // record window (21) does not cover the counted loop's full delivery
 // (4 x 7 = 28) -- some executions of the same statements would be
 // swallowed and others delivered, which cannot be attributed per

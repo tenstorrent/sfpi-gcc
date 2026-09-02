@@ -1,4 +1,4 @@
-// CROSSLOOP-CC-PEEL default-off twin (lane HR): the exact
+// CROSSLOOP-CC-PEEL default-off twin: the exact
 // crossloop-cc-peel-fire-bh.C primary body WITHOUT
 // -mtt-tensix-optimize-crossloop-cc-peel.  The established behavior is
 // kept byte-identically: the placement walk stops at the tile loop by

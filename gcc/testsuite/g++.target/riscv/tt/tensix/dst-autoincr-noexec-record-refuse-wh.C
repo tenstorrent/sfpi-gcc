@@ -2,7 +2,7 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Wormhole twin of the in-nest no-exec-record composition refusal: the
 // guard is capability-table generic (the mod-write retirement is
-// unaudited on both frontends; the silicon refutation is the BH lane ES
+// unaudited on both frontends; the hardware refutation is the BH
 // 2x2 and Wormhole adopts the same-frontend-class conservative verdict).
 // Dump-only scans: default Wormhole replay formation reshapes delivery.
 // { dg-final { scan-rtl-dump "Dst-autoincr refusal: mod-write-noexec-record-composition-unaudited .no-exec replay capture within the drained-frontend window of the group.s stores, bb \[0-9\]+, capture bb \[0-9\]+." "rvtt_dst_autoincr" } }

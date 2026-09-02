@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHT 4-word unlock, renamed/varied-const twin: the admission is
+// The 4-word-unlock renamed/varied-const twin: the admission is
 // the OPERAND class (a FLOATB-exact hardwired-constant-register value
 // feeding a LUT table slot), not an op key -- different identifiers,
 // different affine coefficients, and a DIFFERENT certified constant

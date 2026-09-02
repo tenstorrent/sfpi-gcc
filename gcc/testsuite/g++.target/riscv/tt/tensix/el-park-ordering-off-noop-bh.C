@@ -1,4 +1,4 @@
-// EL-vs-RESIDENCY ORDERING flag-off control (lane HN): the fire twin's
+// EL-vs-RESIDENCY ORDERING flag-off control: the fire twin's
 // bodies with -mtt-tensix-optimize-park-ordering ABSENT (every other
 // flag identical) keep the early invariant hoists byte-identically --
 // the knob's only reachable effect is the named deferral.

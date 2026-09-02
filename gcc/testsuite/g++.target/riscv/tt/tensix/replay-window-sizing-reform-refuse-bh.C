@@ -1,8 +1,8 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-post-autoincr-window -mtt-tensix-optimize-replay-window-sizing -fdump-rtl-rvtt_replay_reform" }
-// Reform-composition refusal (lane IM): under
+// Reform-composition refusal: under
 // -mtt-tensix-optimize-post-autoincr-window the function's only replay
-// formation runs as the re-formation pass (lane IH), whose carried
+// formation runs as the re-formation pass, whose carried
 // launch-arithmetic audit is derived for FULL-length launches only --
 // widening with a partial trim there is an unaudited composition, so
 // window sizing refuses by name and the picked window keeps the IH

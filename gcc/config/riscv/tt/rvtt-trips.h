@@ -23,7 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 /* The single entry point for proving the constant trip count (number
    of body executions) of a counted single-block Tensix loop, shared by
    the RTL replay formation machinery and the GIMPLE unroll-request /
-   delivery-shape / round-interleave passes (FABLE_GOES_BURR item #2).
+   delivery-shape / round-interleave passes.
 
    Stage A contract (CLASS-I): every query runs BOTH the legacy bounded
    forward simulation (the deciding oracle -- its verdict and outputs

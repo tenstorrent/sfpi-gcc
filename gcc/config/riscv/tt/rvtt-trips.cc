@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* FABLE_GOES_BURR item #2, stage A: one shared entry point for the
+/* One shared entry point for the
    constant-trip-count proof of counted single-block Tensix loops,
    re-founded on the classical in-tree analyses (RTL loop-iv's
    get_simple_loop_desc; GIMPLE SCEV's number_of_latch_executions)
@@ -47,9 +47,9 @@ along with GCC; see the file COPYING3.  If not see
    modular arithmetic in the IV's mode, but the check is the proof,
    not an argument.  One-sided proofs are dumped as
    `trip-oracle-legacy-only' (a classical blind spot to close before
-   stage B) and `trip-oracle-classical-only' (the stage-B widening
-   class: shapes the classical analysis proves that the legacy matcher
-   refuses).  Agreement is dumped as `trip-oracle-agree'.
+   any consumer switches oracles) and `trip-oracle-classical-only' (the
+   widening class: shapes the classical analysis proves that the legacy
+   matcher refuses).  Agreement is dumped as `trip-oracle-agree'.
 
    THE PREHEADER OBSTACLE, HANDLED.  Both the RTL and the GIMPLE
    consumers initialize loops with AVOID_CFG_MODIFICATIONS only
@@ -71,7 +71,7 @@ along with GCC; see the file COPYING3.  If not see
    the query so the census lines below are the facade's single
    spelling in pass dumps.
 
-   STAGE-A FINDING (laneJR, banked for stage B): RTL loop-iv refuses
+   FINDING (banked for the oracle-switch stage): RTL loop-iv refuses
    HARD registers categorically (simple_reg_p, loop-iv.cc
    HARD_REGISTER_NUM_P arm), and the replay formation family runs
    post-reload where every counter is a hard register -- so the

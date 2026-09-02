@@ -1,4 +1,4 @@
-// IMS REFUSALS (item #5), each by name, original order kept:
+// IMS REFUSALS (the modulo-scheduling tier), each by name, original order kept:
 //  - kd_ims_noimprove: the interior region is a pure serial chain; the
 //    IMS candidate cannot prove a strict whole-row II decrease ->
 //    ims-no-ii-decrease.

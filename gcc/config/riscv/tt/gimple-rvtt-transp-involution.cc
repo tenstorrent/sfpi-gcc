@@ -20,8 +20,9 @@ along with GCC; see the file COPYING3.  If not see
 /* -mtt-tensix-optimize-transp-involution (default off).
 
    THE PROBLEM.  Architectural SFPTRANSP permutes BOTH four-register
-   banks (SFPTRANSP.md: Transpose4(0) and Transpose4(4); craq-sim
-   TENSIX_EXECUTE_SFPTRANSP agrees).  The typed `subvec_transp' tuple
+   banks (SFPTRANSP.md: Transpose4(0) and Transpose4(4); the
+   reference simulator's TENSIX_EXECUTE_SFPTRANSP agrees).  The typed
+   `subvec_transp' tuple
    (rvtt_sfptransp_int) models only its four operands and is
    DELIBERATELY UNAUDITED, so any value the allocator leaves in the
    companion bank across a transpose is silently lane-scrambled.  Clean
@@ -101,18 +102,20 @@ along with GCC; see the file COPYING3.  If not see
    AUDITED ARCHITECTURAL FACTS used here (spec + corrected-simulator
    provenance cited at each table):
      - SFPTRANSP permutation and lane gating: SFPTRANSP.md functional
-       model; craq-sim TENSIX_EXECUTE_SFPTRANSP.
+       model; the reference simulator's TENSIX_EXECUTE_SFPTRANSP.
      - SFPLOAD/SFPSTORE lane gating, address->physical-row mapping and
-       format codecs: SFPLOAD.md/SFPSTORE.md; craq-sim
+       format codecs: SFPLOAD.md/SFPSTORE.md; the reference simulator's
        TENSIX_EXECUTE_SFPLOAD / sfpstore_values / read_dst32b /
        write_dst32b / dst32b_adjust_row / encode_fp32 / decode_fp32 /
        denormals_as_zeros.
      - no-increment address mode: rvtt_no_increment_address_mode
        (the platform contract the dst-autoincr pass stands on).
-     - FMA-family results are never nonzero denormals: craq-sim
-       fma.cpp fma_model_bh / fma_model_wh (input and output flush).
-     - fixed constant registers 8/9/10: craq-sim tensix reset state
-       (0x3F56594B / 0 / 0x3F800000), never nonzero denormals;
+     - FMA-family results are never nonzero denormals: the reference
+       simulator's fma.cpp fma_model_bh / fma_model_wh (input and
+       output flush).
+     - fixed constant registers 8/9/10: the reference simulator's
+       tensix reset state (0x3F56594B / 0 / 0x3F800000), never nonzero
+       denormals;
        programmable constant registers 11..14 refuse.
 
    REFUSAL NAMES (dump-visible, append-only):
@@ -543,7 +546,8 @@ rows_disjoint (const dst_access &a, const dst_access &b)
 
    mod0 == 4 (INT32 class): the store writes encode_fp32(value) and the
    load returns decode_fp32(stored) -- exact inverse bit permutations
-   (craq-sim encode_fp32/decode_fp32; "the FP32 encoding is also used
+   (the reference simulator's encode_fp32/decode_fp32; "the FP32
+   encoding is also used
    for INT32"), so every 32-bit value round-trips.
 
    mod0 == 3 (FP32): same codec pair, but the store arm flushes nonzero
@@ -572,8 +576,8 @@ park_format_bit_exact_p (unsigned mod0, bool *needs_denormal_proof)
 
 /* Is VAL provably never a nonzero fp32 denormal?  Refusing default.
    Audited producer classes:
-   - FMA-family arithmetic: craq-sim fma_model_bh / fma_model_wh flush
-     denormal inputs and outputs;
+   - FMA-family arithmetic: the reference simulator's fma_model_bh /
+     fma_model_wh flush denormal inputs and outputs;
    - fixed constant registers 8/9/10 (0x3F56594B / 0 / 0x3F800000, the
      simulator reset state; the programmable constants 11..14 refuse);
    - literal materializations whose fp32 image is not a nonzero

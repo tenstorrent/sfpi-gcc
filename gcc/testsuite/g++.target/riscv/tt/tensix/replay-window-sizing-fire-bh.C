@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-replay-window-sizing -fdump-rtl-rvtt_replay" }
-// Hoisted-record window sizing, fire side (lane IM; the lcm-fresh
+// Hoisted-record window sizing, fire side (the lcm-fresh
 // window-sizing shape, rvtt-cost.md "REPLAY WINDOW SIZING UNDER A
 // HOISTED RECORD").  The loop body is a 6-word unit repeated 9 times
 // plus a 3-word unit-prefix tail (57 words).  pick_replay's in-block

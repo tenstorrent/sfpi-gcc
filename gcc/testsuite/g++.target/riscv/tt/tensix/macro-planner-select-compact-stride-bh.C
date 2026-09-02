@@ -1,10 +1,10 @@
-// WP10 near-miss: a uniform-mode select whose typed Dst stride is 4.
+// Compact-calendar near-miss: a uniform-mode select whose typed Dst stride is 4.
 // The tables' address-modifier machinery proves only the Dst += 2
 // program, so the compact candidate refuses by name; the established
 // 4-slot calendar it falls back to derives the same racing slots as
 // every kept-separator select (restore exec == store exec == 3) and,
-// since the 2026-08-17 Where silicon adjudication was root-caused
-// (craq-sim 9f324140, live store lane mask), its descriptor refuses
+// since the Where hardware adjudication was root-caused
+// (the reference simulator, live store lane mask), its descriptor refuses
 // cc-restore-store-race -- the refusal keys on the derived slots and
 // proven delays, not on the stride value, the misc word, or the (here
 // uniform) data modes.  Every byte stays on the semantic (planner-OFF)

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename-chains -mtt-tensix-optimize-rename-cc-region -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// The laneKQ BALANCED-FRAMES fire (the cc-span RTL-view widening, arm
+// The BALANCED-FRAMES fire (the cc-span RTL-view widening, arm
 // F): the colliding chain lives INSIDE an outer predicated frame and
 // its span straddles a complete NESTED pushc/setcc/popc frame -- every
 // interior lane-enable state a proven subset of the span-entry mask,

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename-chains -mtt-tensix-optimize-rename-cc-region -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// The laneKQ ALL-LANES-ENTRY fire (the cc-span RTL-view widening): a
+// The ALL-LANES-ENTRY fire (the cc-span RTL-view widening): a
 // storage-collision chain span crosses a canonical predicated region
 // (the rvtt_cc ambient form: a depth-0 SETCC refinement restored by
 // the word-exact all-lanes SFPENCC).  The blanket rule refuses this

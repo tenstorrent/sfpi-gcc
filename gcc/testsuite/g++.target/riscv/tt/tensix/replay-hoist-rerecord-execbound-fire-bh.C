@@ -7,8 +7,8 @@
 // { dg-final { scan-rtl-dump-times "Hoisted no-exec capture" 2 "rvtt_replay" } }
 
 // EXECUTION-bound re-record hoists fire; the same-length delivery-bound
-// twin refuses.  This is the Reduce-class silicon anchor structure
-// (855.5 -> 832.75 cyc/body A/B, gatefix-evidence-20260816; two
+// twin refuses.  This is the Reduce-class hardware anchor structure
+// (855.5 -> 832.75 cyc/body hardware A/B; two
 // preheader hoists of a 4-trip, 8-word, interlock-stalled payload with
 // sibling launches): when the payload's interlocked reissue is at least
 // its own record delivery (exec >= deliver_record), the in-loop

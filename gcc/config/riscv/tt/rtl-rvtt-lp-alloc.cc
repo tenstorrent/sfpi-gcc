@@ -48,7 +48,7 @@ along with GCC; see the file COPYING3.  If not see
 	the bit-exact 32-bit round trip on both WH and BH (simulator
 	models read_dst32b/write_dst32b through the exact
 	encode_fp32/decode_fp32 involution, verified bit-exact over all
-	2^32 patterns in the adjudicated simulator; FP32 mod0 3 is NOT
+	2^32 patterns in the reference simulator; FP32 mod0 3 is NOT
 	used because the BH store flushes denormals).
 
       - The whole allocation is TRANSACTIONAL: every emitted round-trip
@@ -68,8 +68,8 @@ along with GCC; see the file COPYING3.  If not see
 	remains the backstop.
 
       - Under the additional default-off
-	-mtt-tensix-optimize-lreg-coalesce (FABLE_GOES_BURR.md item
-	#6), Briggs/George CONSERVATIVE COALESCING merges copy-related
+	-mtt-tensix-optimize-lreg-coalesce, Briggs/George
+	CONSERVATIVE COALESCING merges copy-related
 	webs on the just-built graph before the colorability verdict
 	and spill-victim selection, so a web that only spilled because
 	its copy halves were counted separately colors for free; a
@@ -173,8 +173,8 @@ along with GCC; see the file COPYING3.  If not see
 	reading result tiles, a neighbouring thread) touches Dst rows
 	the calc body does not itself address while it runs.  A kernel
 	that violates this cannot be detected function-locally; the
-	CRAQ gate on every newly-compiling kernel is the empirical
-	backstop.
+	reference-simulator bit-exactness gate on every newly-compiling
+	kernel is the empirical backstop.
 
    QSR is excluded by the gate (and independently by the unproven
    no-increment address mode).  XTT64/XTT128-mode pseudos refuse
@@ -332,7 +332,7 @@ pattern_transparent_p (rtx_insn *insn)
 /* Audited architectural effect data for typed value-op patterns the
    full generated effect sets do not cover lives at the definitions:
    the xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
-   through rvtt_lane_local_effects (FABLE item #4; the effect_overrides
+   through rvtt_lane_local_effects (the typed-effect tables; the effect_overrides
    table formerly copied verbatim from rtl-rvtt-dst-ownership.cc is
    deleted -- the migration's blocking planner-oracle re-freeze is
    recorded in testsuite oracles/refreeze-pin49-20260831.txt).  */
@@ -1571,7 +1571,7 @@ dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked)
    store-backs only its enabled lanes while the scratch keeps the old
    disabled lanes, which is exactly the predicated-write semantics.
    Membership lives at the definitions (the xtt_lane_gated attribute,
-   rvtt.md; FABLE item #4 -- the former ~100-entry hand insn_code
+   rvtt.md -- the former ~100-entry hand insn_code
    allowlist here is deleted): cross-lane ops
    (SFPSWAP/SFPTRANSP/SFPSHFT2/SELECT/CONCAT), plain all-lanes copies
    (the rvtt_sfpassign SET pattern -- the unconditional SFPMOV-mod-2

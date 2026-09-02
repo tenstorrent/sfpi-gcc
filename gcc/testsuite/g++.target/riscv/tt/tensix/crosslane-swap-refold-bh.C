@@ -1,4 +1,4 @@
-// Cross-lane swap refolding (lane FG, X4): re-exchanging an exchanged
+// Cross-lane swap refolding (X4): re-exchanging an exchanged
 // pair in the same operand roles is the identity on the results, exact
 // under BOTH tie models (SFPSWAP.md; FB battery swap table); a mod-0
 // pair cancels to the original operands.  The obligation is only an

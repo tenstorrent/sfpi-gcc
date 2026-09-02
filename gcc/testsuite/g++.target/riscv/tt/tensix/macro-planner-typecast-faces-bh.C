@@ -1,4 +1,4 @@
-// WP8 step 4, unrolled form: four typed-TTSETRWC-separated face runs
+// Typecast four-face shape, unrolled form: four typed-TTSETRWC-separated face runs
 // share ONE region and ONE descriptor configuration (SFPENCC + owned
 // SETC16 + four config words emitted once), with eight alternating-VD
 // launches and a three-slot drain per face and every architectural face

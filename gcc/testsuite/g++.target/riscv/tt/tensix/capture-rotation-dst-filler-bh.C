@@ -1,4 +1,4 @@
-// Capture rotation, widened Dst-filler class (lane DL, D3 follow-up):
+// Capture rotation, widened Dst-filler class (D3 follow-up):
 // the audited SFPSTORE (result latency 0, no RWC step of its own) moves
 // into a mad-family stall as a plain in-row reorder, because every
 // crossed word is proven Dst-, RWC-, CC-, and configuration-inert.  One

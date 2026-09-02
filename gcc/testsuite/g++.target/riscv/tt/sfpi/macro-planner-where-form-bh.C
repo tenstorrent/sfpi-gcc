@@ -1,19 +1,18 @@
 // The canonical SFPI where selector (the TTNN Where kernel's v_if
 // spelling, F16b condition / U16 payloads -- the fp16b class), eight
-// rows, REFUSING by the architectural name since the 2026-08-17 Where
-// silicon adjudication (tt-quietbox-0, BH p150; evidence root
-// ~/sfpi-uplift/where-adjudication-20260817, verdicts/VERDICT.md):
+// rows, REFUSING by the architectural name since the Where hardware
+// adjudication on a Blackhole device:
 // this is the exact source class whose formed separator-kept 4-slot
-// calendar (misc 0x706) mis-selected on silicon deterministically
-// across two resets while the byte-identical binaries passed CRAQ in
-// the generic sim -- root-caused by craq-sim 9f324140 to the live
+// calendar (misc 0x706) mis-selected on hardware deterministically
+// across two resets while the byte-identical binaries passed in the
+// generic simulator -- root-caused by the reference simulator to the live
 // store lane mask: the calendar retires its all-lanes restore in the
 // Delay-2 store's own cycle, so the store executes under the SFPSETCC
 // complement mask.  The mixed-mode compact candidate refuses its
 // descriptor by name, the established calendar's descriptor derives
 // restore exec == store exec == 3 and refuses cc-restore-store-race,
 // and the eight rows stay byte-identically on the semantic
-// (planner-OFF) lowering -- the silicon-green form.
+// (planner-OFF) lowering -- the hardware-green form.
 // { dg-options "-mcpu=tt-bh-tensix -O3 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner schedule-candidate: cc-compact" "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump "Macro-planner descriptor-refusal: cc-template-unproved" "rvtt_macro_planner" } }

@@ -1,4 +1,4 @@
-// WP9 near miss: the predicate's lane state reaches the row's store
+// Near miss: the predicate's lane state reaches the row's store
 // directly and survives PAST the row (a predicated store with no
 // in-row all-lanes restore before it).  The restore-less
 // definition-carrier structure matches no proven program; the row

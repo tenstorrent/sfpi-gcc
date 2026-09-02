@@ -1,12 +1,12 @@
-// Derived-template SFPSHFT register-amount admission (lane CZ,
+// Derived-template SFPSHFT register-amount admission (the
 // enumerated vocabulary): the variable-shift form (mod 0, the audited
 // envelope's logical arm) shifts LReg[VD] in place by the SIGNED
-// amount in LReg[VC] (SFPSHFT.md BH functional model; craq-sim
+// amount in LReg[VC] (SFPSHFT.md BH functional model; the reference simulator
 // TENSIX_EXECUTE_SFPSHFT), so an in-place row member v = v << amt
 // realizes exactly as an SFPSHFT template: VD supplied by the launch,
 // the amount register surviving as the encoded VC under route 1,
 // imm12 packing the 0 the decode requires.  The amount here is
-// another carrier's iadd-imm result (the lane CZ SFPIADD-immediate
+// another carrier's iadd-imm result (the SFPIADD-immediate
 // class), so the row composes both new words into one two-carrier
 // calendar -- the gcd-fresh round's strip step shape
 // (b >>= ctz: lz-derived amount, then the variable shift).

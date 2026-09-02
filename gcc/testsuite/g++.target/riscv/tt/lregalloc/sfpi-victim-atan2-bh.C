@@ -1,6 +1,5 @@
-// REAL ICE VICTIM: atan2, the naive pre-restructure form (lane S1;
-// never committed -- reconstructed per laneS1-evidence-20260819/
-// DISPOSITION.md:23 and sweep_2x2_ops.tsv row 138: quadrant folds
+// REAL ICE VICTIM: atan2, the naive pre-restructure form (never
+// committed -- reconstructed from the recorded disposition: quadrant folds
 // applied AFTER the degree-9 polynomial, so ay/ax/x/y all stay live
 // through t/t2/p plus the reciprocal's temporaries.  The shipped body
 // pre-composes the folds into one affine map (B + F*p) BEFORE the

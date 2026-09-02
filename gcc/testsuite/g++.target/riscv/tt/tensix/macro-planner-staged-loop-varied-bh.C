@@ -1,4 +1,4 @@
-// Varied-constant proof (WP8 genericity self-check): a shift of -15
+// Varied-constant proof (loadmacro-formation genericity self-check): a shift of -15
 // instead of -31 forms with the imm12 field packed from the typed
 // immediate (template hi16 0x94ff instead of 0x94fe) -- formation is
 // keyed by encodability, never by the -31 fingerprint.

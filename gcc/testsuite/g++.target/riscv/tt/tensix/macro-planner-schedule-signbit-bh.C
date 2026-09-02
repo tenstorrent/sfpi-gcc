@@ -1,8 +1,8 @@
 // Unary shift/cast row: one launch carries the load and the same-address
 // delayed store and hosts all three launched events; the typed Dst stride
 // is absorbed.  The shift/cast event delays are architecturally unproven
-// (NOTES-wp6-prep.md 9(g)), so the schedule refuses by name -- a
-// WP7-blocking item.
+// (no established encoding fact covers it), so the schedule refuses
+// by name.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner-analyze -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump-times "Macro-planner schedule: ii=1 issues=1 launches=1 explicit=0 launched-events=3 vd=alternating drain=unproven" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner issue 0: launch macro=0 carries=load\\+store hosted=3 absorbs-stride=2" 1 "rvtt_macro_planner" } }

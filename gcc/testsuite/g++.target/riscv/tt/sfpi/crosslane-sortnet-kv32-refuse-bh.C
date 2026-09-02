@@ -1,4 +1,4 @@
-// Named refusal (crosslane-kv32-register-file, lane FG X5): a
+// Named refusal (crosslane-kv32-register-file, sort-network surface): a
 // 32-element key-value machine needs 16 live registers -- twice the
 // LReg file -- so the library refuses at compile time and points at
 // bitonic_sort16_kv or the packed-index (P19) spelling.

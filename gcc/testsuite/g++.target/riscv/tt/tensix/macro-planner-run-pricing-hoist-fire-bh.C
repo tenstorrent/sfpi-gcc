@@ -1,4 +1,4 @@
-// Init-hoist-aware run pricing FIRE (lane IU, 2026-08-29): the post-F1
+// Init-hoist-aware run pricing FIRE: the post-F1
 // production minmax shape -- marker-free rows, entry-ambient derived
 // enable, rows=32 runs=4 in a noinline callee under a counted caller
 // loop.  The frozen conservative-per-run pricing refuses this shape

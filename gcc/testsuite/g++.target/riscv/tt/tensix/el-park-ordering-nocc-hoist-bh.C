@@ -1,4 +1,4 @@
-// EL-vs-RESIDENCY ORDERING near-miss pair (lane HN), knob ON with both
+// EL-vs-RESIDENCY ORDERING near-miss pair, knob ON with both
 // late flags: (1) a loop WITHOUT CC machinery keeps the early
 // invariant hoist byte-identically -- the deferral targets exactly the
 // CC-restore loop class the late peel/park walk owns; (2) a CC-restore

@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-dst-autoincr-load-carrier -fdump-rtl-rvtt_dst_autoincr-details" }
-// WALK-SKEW near-miss (lane IF replay-soundness adjudication): RWC
+// WALK-SKEW near-miss (replay-soundness adjudication): RWC
 // effects of a replayed word are per-execution cumulative counter adds
 // (WormholeB0 REPLAY.md + INCRWC.md/RWCs.md; no per-launch reset exists
 // or is needed), so the ONLY skew mechanism is executions of a carried

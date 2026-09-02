@@ -390,7 +390,7 @@ pnode_dependence (const pnode &p, const pnode &c)
      vec_intersect_p (p.uses, c.defs));
 }
 
-/* Marshal the region NODES into the item-#11 engine's plain-data
+/* Marshal the region NODES into the timing engine's plain-data
    vocabulary (the pseudo-dependence twin of the post-RA marshaller).  */
 
 static rvtt_timing::seq

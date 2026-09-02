@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -fdump-rtl-rvtt_replay-details" }
-// Counted-capture peel flag-off identity control (lane IO): the fire
+// Counted-capture peel flag-off identity control: the fire
 // twin's exact body WITHOUT -mtt-tensix-optimize-counted-capture-peel
 // keeps today's plain counted-hoist benefit refusal byte-identically --
 // no peel machinery runs, no replay words are emitted.

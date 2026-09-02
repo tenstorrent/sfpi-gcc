@@ -1,4 +1,4 @@
-/* Loop-backedge drain elision bodies (lane CA): the compact-select
+/* Loop-backedge drain elision bodies: the compact-select
    (TTNN Where class) eight-row body inside a counted loop -- the shape
    whose final-run drain previously executed once per trip
    (macro-planner-select-compact-loop-bh.C's row, parameterized).

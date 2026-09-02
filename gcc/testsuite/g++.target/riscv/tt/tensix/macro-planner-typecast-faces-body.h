@@ -1,4 +1,4 @@
-/* Typecast four-face shape (WP8 step 4): eight cast-round rows per
+/* Typecast four-face shape: eight cast-round rows per
    face, typed TTSETRWC face transitions, one all-lanes proof before
    the faces.  The planner must share ONE descriptor configuration
    across all four typed-TTSETRWC-separated face regions.  */

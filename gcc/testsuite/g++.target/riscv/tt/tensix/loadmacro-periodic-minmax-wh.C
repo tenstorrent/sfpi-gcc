@@ -5,7 +5,7 @@
 // The base-0 bank words 0xb20b0000/0xb2190002/0xb2320000 (regs 11/25/50
 // = LLK's live ADDR_MOD_2) must never be emitted: the dual-slot program
 // corrupted every tile after the first (sfpi-gcc 2a0ba1e6602;
-// laneAJ-evidence-20260817).  Total .ttinsn drops 22 -> 19 (three fewer
+// hardware-adjudicated).  Total .ttinsn drops 22 -> 19 (three fewer
 // config words).
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPCONFIG" 5 } }

@@ -1,4 +1,4 @@
-// SFPDIVP2 effect/latency audit (lane CF; rvtt-cost.md D3-follow-up
+// SFPDIVP2 effect/latency audit (rvtt-cost.md D3-follow-up
 // row): the constant-immediate SFPDIVP2 alternatives carry audited
 // effects (reads VC + the tied live-in, lane-predicated VD write, no
 // lane-flag effect, Simple-unit result latency 0), so a counted

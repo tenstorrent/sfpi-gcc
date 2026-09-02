@@ -98,12 +98,12 @@ rvtt_solve_schedule (const rvtt_sched_problem &);
 extern const char *rvtt_solver_status_name (rvtt_solver_status);
 
 /* ---------------------------------------------------------------------
-   Delivery-shape arbitration model (lane EG).
+   Delivery-shape arbitration model.
 
    One proven-trip counted single-block SFPU row loop; the solver picks
    the unroll factor U over the whole discrete candidate lattice by
    exact minimization of modeled cycles.  For each U it first PREDICTS
-   which delivery shape the downstream, silicon-calibrated machinery
+   which delivery shape the downstream, hardware-calibrated machinery
    will materialize (the always-on replay former groups textual copies
    into re-record + launches; the counted-loop/re-record hoist gate of
    rtl-rvtt-replay.cc may lift the record out of the loop) by mirroring
@@ -149,8 +149,8 @@ struct rvtt_delivery_problem
   unsigned ds_exec = 0;		/* downstream-mirror slots per row: the
 				   RTL gate's interlock estimate charges
 				   audited latency-1 producers one slot
-				   (verified against the recorded pin-13
-				   refusal arithmetic) */
+				   (verified against the recorded
+				   hardshrink refusal arithmetic) */
   unsigned barrier_words = 0;	/* replay-barrier words per row (typed
 				   Dst steps: TTINCRWC/TTDSTFACE are
 				   xtt_replay=barrier, so a window can
@@ -162,13 +162,13 @@ struct rvtt_delivery_problem
   unsigned min_sequence = 4;	/* replay former's MIN_SEQUENCE */
   unsigned capture_slots = 32;	/* replay buffer slots */
   unsigned max_words = 256;	/* XTT_REPLAY_LOOP_UNROLL_MAX_WORDS */
-  /* Measured delivery rates (centislots), lane EE table.  */
+  /* Measured delivery rates (centislots), the hardware-calibrated table.  */
   unsigned word = 100;		/* XTT_DELIVERY_WORD_X100 */
   unsigned boundary_lb = 130;	/* XTT_DELIVERY_BOUNDARY_{LB,UB}_X100 */
   unsigned boundary_ub = 180;
   unsigned min_benefit = 60;	/* XTT_DELIVERY_SHAPE_MIN_BENEFIT */
   /* Downstream-mirror table (rvtt-cost.md, carried through the one
-     delivery-cost API -- FABLE_GOES_BURR #12; used ONLY to predict
+     delivery-cost API; used ONLY to predict
      whether the replay-hoist gate lifts a record out of the loop):
      the mirror calls the SAME replay_pricing spelling the RTL gate
      prices with, so mirror drift is structurally impossible.  The

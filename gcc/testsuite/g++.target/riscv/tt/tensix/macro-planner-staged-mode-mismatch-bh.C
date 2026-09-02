@@ -1,7 +1,7 @@
-// WP8's uniform-mode envelope covered the frozen whole-word signbit
-// program; the WP12 DERIVED calendar carries the store's own data mode
+// The original uniform-mode envelope covered the frozen whole-word signbit
+// program; the DERIVED calendar carries the store's own data mode
 // in the architectural Misc.StoreMod0 field (SFPLOADMACRO.md; the same
-// field-derived route the silicon-validated where select misc uses),
+// field-derived route the hardware-validated where select misc uses),
 // so the mode-mismatched row now forms through the derived path -- the
 // frozen program still refuses it (build_expectations mirrors the
 // synthesis-side uniform-mode filter).

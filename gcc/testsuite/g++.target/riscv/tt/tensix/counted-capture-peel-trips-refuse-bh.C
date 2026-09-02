@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-counted-capture-peel -fdump-rtl-rvtt_replay-details" }
-// Counted-capture peel trips refusal (lane IO): a runtime trip count
+// Counted-capture peel trips refusal: a runtime trip count
 // refuses the peel by counted-capture-peel-trips-unproven (the counter
 // re-init needs the provable_constant_trips chain; runtime-trip
 // admission is deliberately not extended here) and keeps the rolled

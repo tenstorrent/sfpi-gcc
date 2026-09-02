@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHT unrelated-shape twin 1: no LUT forms here, so the slot
+// Unrelated-shape twin 1: no LUT forms here, so the slot
 // conversion has nothing to touch -- a plain row loop whose mad reads
 // the hardwired 1.0 keeps its direct creg addend (creg-capable
 // operand position; no physical slot is involved) and no FLOATB slot

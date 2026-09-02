@@ -1,4 +1,4 @@
-// WP13 formation-vs-replay arbitration: the WP12 intmul row forms under
+// Formation-vs-replay arbitration: the derived intmul row forms under
 // the established gates, but with the Dst auto-increment pass enabled
 // (the replay-compressed alternative exists: the separator is absorbed
 // around replay launches) and RISC-pushed launch delivery

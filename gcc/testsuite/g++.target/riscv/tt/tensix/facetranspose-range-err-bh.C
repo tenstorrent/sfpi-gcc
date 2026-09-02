@@ -1,4 +1,4 @@
-// X6 FPU face-transpose builtins: operand-envelope refusals (lane FV).
+// X6 FPU face-transpose builtins: operand-envelope refusals.
 // The {CU, width} specs are the architectural encoding-field widths
 // (ckernel_ops.h TT_*_VALID); out-of-range constants error by message.
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }

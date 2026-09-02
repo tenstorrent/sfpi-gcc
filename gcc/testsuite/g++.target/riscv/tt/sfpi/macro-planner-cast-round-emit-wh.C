@@ -1,7 +1,8 @@
-// WP8: converted from the quarantined pass to the generic macro
+// Converted from the quarantined pass to the generic macro
 // planner.  .ttinsn = 3 owned SETC16 (the single Base=1 slot, regs
 // 19/29/54 -- the base-0 bank is never written, sfpi-gcc 2a0ba1e6602)
-// + 8 launches; the WH planner hash in oracles/wp8-oracle-manifest is
+// + 8 launches; the WH planner hash in oracles/wp8-oracle-manifest.txt
+// is
 // re-minted with this correction.
 // { dg-options "-mcpu=tt-wh-tensix -O3 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }
 // { dg-final { scan-assembler-times "SFPCONFIG" 4 } }

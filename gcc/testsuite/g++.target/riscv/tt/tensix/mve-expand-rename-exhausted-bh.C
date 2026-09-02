@@ -1,4 +1,4 @@
-// MVE realization demand refusal (item #5 stage 2): four end-read
+// MVE realization demand refusal (modulo variable expansion): four end-read
 // long-lived values ride the fire row's chain, so every fitting-II
 // placement carries ten simultaneously-live value copies -- more than the 8-LREG file
 // net of loop-live invariants can ever hold -- so the expansion

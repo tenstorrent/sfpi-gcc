@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_dst_autoincr -fdump-rtl-rvtt_replay" }
-// Composition twin (FH audit FHD-5, re-keyed by lane FZ): the ES no-exec-
-// record x mod-write composition against a record-hoist-PRODUCED record
-// (the pin-17 device-hang composition class).  Since lane FZ the refusal
+// Composition twin: the no-exec-record x mod-write composition against
+// a record-hoist-PRODUCED record (a demonstrated device-hang
+// composition class).  The refusal has since
 // moved one layer EARLIER: the record-hoist admission itself prices the
 // would-be mod-write row within the drained-frontend window of its
 // planned capture and refuses the hoist by name

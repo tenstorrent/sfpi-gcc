@@ -1,6 +1,6 @@
-// Lane DT arsenal: unaudited-latency motion bait (SFPLUTFP32).
+// Scheduler arsenal: unaudited-latency motion bait (SFPLUTFP32).
 //
-// Lane DL's D3-follow-up latency audit (rvtt-cost.md) DELIBERATELY
+// The follow-up latency audit (rvtt-cost.md) DELIBERATELY
 // left SFPLUTFP32 unaudited, by name: its Mod1/Mod1Mirror scheduling
 // split (SFPLUTFP32.md keys the stalling logic on Mod1Mirror, not
 // Mod1) and its per-mode register envelopes (3-entry/6-entry/FP32
@@ -18,7 +18,7 @@
 // the named barrier and byte-identical order.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // MEASURED NAMING: SFPLUTFP32 prints "effect-opaque", the STRONGER
-// refusal -- lane DL's deferral left its whole effect record
+// refusal -- an earlier deferral left its whole effect record
 // unaudited (per-mode register envelopes included), so admission
 // refuses at the effect check before reaching the latency check.  The
 // "unaudited-latency" name is reserved for effect-audited classes

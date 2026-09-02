@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-replay-shadow-discovery -fdump-rtl-rvtt_replay-details" }
-// FABLE_GOES_BURR.md item #9 STAGE A -- the suffix automaton runs as a
+// Suffix-automaton discovery, STAGE A -- the suffix automaton runs as a
 // SHADOW beside the legacy grow-by-one discovery and never decides.
 //
 // FIRE + BOUNDARY NEAR-MISS IN ONE ROW.  Three copies of one six-word

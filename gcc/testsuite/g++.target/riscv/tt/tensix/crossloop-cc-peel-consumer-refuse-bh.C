@@ -1,5 +1,5 @@
 // CROSSLOOP-CC-PEEL near miss, unrelated shape 2 + the mixed
-// composition (lane HR): the lift requires the audited-consumer
+// composition: the lift requires the audited-consumer
 // superset-write refinement on EVERY candidate -- including the
 // pre-CC prefix, whose first-iteration lane state the forgone peel
 // used to reproduce verbatim (the cc-canonical proof says nothing

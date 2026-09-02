@@ -7,7 +7,7 @@
 // unique immediates: no repeated factor the sequence former could
 // re-segment into a shorter firing sub-candidate): the profitability model gives
 // 3*(3900 - 3970) - 2883 = -3093 centislots (execution-bound reissue), below the cost-table minimum
-// benefit of 60.  This is the silicon-regressing low-trip long-capture
+// benefit of 60.  This is the hardware-regressing low-trip long-capture
 // shape class and must refuse the hoist.
 void counted_refuse_3trip_long ()
 {

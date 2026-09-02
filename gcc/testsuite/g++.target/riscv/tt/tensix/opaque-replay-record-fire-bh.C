@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD fire, straight-line region (lane HS): a raw
+// OPAQUE-REPLAY-RECORD fire, straight-line region: a raw
 // Tensix REPLAY record word (load_mode=1, exec=0) followed by its
 // swallowed raw words -- the binary-GCD init idiom -- no longer
 // refuses the whole TU's PRGM freedom proof (opaque-region-undeclared).

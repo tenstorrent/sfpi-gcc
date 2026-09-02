@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc-mad-restructure -fdump-tree-rvtt_combine" }
-// THE LICENSED MAD RESTRUCTURE, addi arm (FABLE_GOES_BURR R3 -- the
+// THE LICENSED MAD RESTRUCTURE, addi arm (the
 // trig cert's Newton "mul+addi" stall-pair shape): a loadi'd bf16
 // addend on a two-register product that dies into the add.  With BOTH
 // license keys the SFPADDI immediate fold is vetoed and the pair fuses

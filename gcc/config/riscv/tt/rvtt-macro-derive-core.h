@@ -68,19 +68,19 @@ struct event_spec
      same-register event result).  */
   bool reads_carrier_vd_reg;
   uint8_t planned_src_c;	/* template VC field; 0 = unused       */
-  /* Template sharing (WP12): events whose derived template words are
+  /* Template sharing: events whose derived template words are
      bit-identical share one InstructionTemplate slot.  0 keeps the
      established one-template-per-event assignment; a nonzero value K
      assigns template index K-1, and equal keys share the slot.  The
      caller owns key consistency (equal keys iff equal derived words);
      capacity counts distinct slots.  */
   uint8_t template_key;
-  /* Template imm12 field (WP12 generic template classes; the
+  /* Template imm12 field (generic template classes; the
      established swap class always packed 0).  Carried here so the
      derivation's capacity/identity view and the descriptor encoder
      cannot diverge.  */
   uint16_t template_imm12;
-  /* WP12 hazards against the row's EXPLICIT issues and earlier events,
+  /* Hazards against the row's EXPLICIT issues and earlier events,
      required once hosted events share registers with explicit row
      members (all values are slot+1 with 0 = no constraint, so
      zero-initialized rows keep the established behavior):
@@ -120,7 +120,7 @@ struct row_spec
   int macro_slot[4];		/* issue slot per macro carrier	       */
   int ii;			/* row initiation interval	       */
   int last_issue_slot;
-  /* 16 = the architectural sequencer bound (lane DG2 4.4: the old 8
+  /* 16 = the architectural sequencer bound (the old 8
      was an array-size artifact whose silent overflow truncation
      dropped real hazard constraints).  The builder refuses by name
      beyond this bound -- never truncates.  */
@@ -251,7 +251,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	}
       unit_taken[ev.macro_index][unit] = true;
       out->unit_of[e] = unit;
-      /* Template slot: shared by key (WP12) when the caller proved the
+      /* Template slot: shared by key when the caller proved the
 	 derived words bit-identical; otherwise one slot per event (the
 	 established assignment).  next_template stays the count of
 	 DISTINCT slots so capacity and the staging-copy slot follow.  */
@@ -285,12 +285,12 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	if ((int) e != st && (row.events[e].dep_mask >> sp) & 1)
 	  sole_consumer = false;
       /* LReg16 staging is admitted ONLY for the oracle-proven direct-
-	 evaluator opcode set (lane IS, F1 honest fix): an LReg16 target
+	 evaluator opcode set: an LReg16 target
 	 has no encodable VD, so the event executes through the direct
 	 template evaluator, and that realization is proven for exactly
 	 the opcodes the reviewed oracle implements -- the SFPABS row the
 	 entry-ambient derivation first admitted was adjudicated WRONG on
-	 BH silicon under this staging (absint32 int-abs witness).
+	 Blackhole hardware under this staging.
 	 Unproven opcodes fall to the VD-direct or staging-copy
 	 realizations (rewritten-word execution) or refuse by name.  */
       if (!opcode_reads_vd (c, row.events[sp].opcode) && sole_consumer
@@ -535,7 +535,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	++exec[bump];
     }
 
-  /* Explicit-issue visibility deadlines (WP12): the fixpoint computes
+  /* Explicit-issue visibility deadlines: the fixpoint computes
      earliest-feasible cycles and hazard bumps only delay events, so a
      violated deadline is a genuine infeasibility.  */
   for (unsigned e = 0; e < row.n_events; ++e)
@@ -624,7 +624,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	}
     }
 
-  /* Fixed launch VD (WP12: the calendar keeps the row's own physical
+  /* Fixed launch VD (the calendar keeps the row's own physical
      load destinations because explicit row members consume them by
      name).  The next row instance's launch rewrites the same register
      one interval later, so every event consuming the launch-VD value

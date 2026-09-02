@@ -1,7 +1,7 @@
-// PLACEMENT-ARBITER fold-reserve fire (FABLE_GOES_BURR.md item #13;
+// PLACEMENT-ARBITER fold-reserve fire (the refusal registry3;
 // base = priced-placement-fold-reserve-base-bh.C, same body): the
 // erfinv relief lever, "price the dst-ownership fold through the
-// pressure-park tier" (the pin-48 named successor; laneJT structurally
+// pressure-park tier" (the named successor; structurally
 // refuted post-alloc coalescing as the alternative relief).  The
 // function's last free LREG is contested between the walk's marginal
 // park (k: one word saved per trip, one paid at entry -> bid

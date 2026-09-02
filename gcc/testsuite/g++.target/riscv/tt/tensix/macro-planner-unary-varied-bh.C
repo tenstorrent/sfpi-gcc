@@ -1,4 +1,4 @@
-// Derived-template Simple-unary admission, varied surface (lane CZ):
+// Derived-template Simple-unary admission, varied surface:
 // the SFPMOV negate arm (mod 1) and the SFPABS float arm (mod 1),
 // each an in-place single-carrier calendar.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }

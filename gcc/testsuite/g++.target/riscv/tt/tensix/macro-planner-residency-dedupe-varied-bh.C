@@ -1,4 +1,4 @@
-// WP13 residency de-duplication, varied twin: the second region's
+// Residency de-duplication, varied twin: the second region's
 // predicate uses the COMPLEMENTED source sense (setcc mod 6 = EQ0), so
 // its derived template word differs -- the canonical CONTENT key does
 // not match, no elision happens, and both regions program their own

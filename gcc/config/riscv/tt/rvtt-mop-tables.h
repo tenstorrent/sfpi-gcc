@@ -28,10 +28,10 @@ along with GCC; see the file COPYING3.  If not see
    shape that would depend on it.
 
    Provenance sources (all facts below):
-     [SIM]  craq-sim src/tensix.cpp @ 9f324140 -- mop_expander (~2576),
-            mop_cfg (~2569), replay_expander (~2417), tensix_push_inst
-            (~2683); src/tile.cpp tensix_mop_cfg_wr32 (~3076),
-            tensix_pc_buf_wr32 (~3263); src/_out/{wh,bh}/tile_regs.h.
+     [SIM]  the pinned reference simulator -- its MOP expander,
+            MOP-config path, replay expander, instruction-push path,
+            MOP-config/PC-buffer store handlers, and generated tile
+            register headers.
      [PROD] tt-llk (tt-metal tt_metal/tt-llk) tt_llk_{wormhole_b0,
             blackhole}/common/inc/ckernel_template.h --
             ckernel_unpack_template::{program,run,lA} and ckernel.h
@@ -152,9 +152,9 @@ constexpr unsigned XTT_MOP_CFG_SLOTS = 9;
    (sfpu-ops-wh.h / sfpu-ops-bh.h:155).  */
 constexpr unsigned XTT_REPLAY_OPCODE = 0x04;
 
-/* REPLAY word field decode and the record-window disposition fact
-   (lane HS).  [SIM] tensix.cpp replay expander arm (pinned craq
-   32489dda): load_mode = bits<0,0>, execute_while_loading =
+/* REPLAY word field decode and the record-window disposition fact.
+   [SIM] the pinned reference simulator's replay expander
+   arm: load_mode = bits<0,0>, execute_while_loading =
    bits<1,1>, reserved bits<3,2> TTSIM_VERIFY'd zero on BH/WH
    (TT_VERSION <= 1), len = bits<13,4> verified in [1,32], start_idx =
    bits<23,14> verified with start_idx + len <= 32 (the 32-slot
@@ -209,7 +209,8 @@ constexpr unsigned XTT_PC_BUF_TENSIX_SYNC_OFFSET = 0x4;
 constexpr unsigned XTT_PC_BUF_MOP_SYNC_OFFSET = 0x8;
 constexpr unsigned XTT_PC_BUF_SEMAPHORE_OFFSET = 0x20;
 
-/* The RISCV debug-register block: silicon documents an instruction-
+/* The RISCV debug-register block: the hardware documentation records
+   an instruction-
    injection interface behind it (DBG_INSTRN_BUF*, tile_regs.h wh/bh:55;
    LLK ckernel_debug.h), and the simulator leaves those offsets
    unimplemented -- so no store into the block has a recorded
@@ -251,7 +252,7 @@ constexpr unsigned HOST_WIDE_INT XTT_DEBUG_REGS_MMIO_LIMIT = 0xFFB12FFF;
    tt_mop_decode.sv:211-216), and a type-0 MOP expands the zero word,
    whose opcode (0x00) is an audited-table row.  [SIM] sim.h
    TensixState::mop_cfg lives in zero-initialized global tile state.
-   Residual (review carry-forward): the silicon power-on/soft-reset
+   Residual (review carry-forward): the hardware power-on/soft-reset
    value of the template registers is RTL-cited for type 1 but not
    independently confirmed for the type-0 zero-word path.  */
 

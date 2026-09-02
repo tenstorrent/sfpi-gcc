@@ -2,7 +2,7 @@
 // { dg-final { check-function-bodies "**" "" } }
 
 // Regression witness for the interposed-replay-owner sequence boundary
-// (lane BW fix 2, f071f551eb5): the word-exact scan used to treat an
+// (a demonstrated wrong-code fix): the word-exact scan used to treat an
 // interposed replay owner as transparent to sequence continuity, so a
 // repeated word-exact run split around an owner still matched and the
 // formed capture's RECORDING physically swallowed the owner word (a
@@ -10,7 +10,7 @@
 // then decodes a REPLAY from the buffer (pinned BH sim: "REPLAY should
 // not exist at this stage").  Production genesis: counted-row formation
 // leaves its inline reference record mid-row (tanh/tanh-fresh/addcmul/
-// lerp weekly-20260820 CRAQ FAILs).  Here the owners are planted with
+// lerp simulator failures).  Here the owners are planted with
 // the explicit ttreplay builtin, which reaches the same scan_insns
 // owner arm without depending on counted-row formation or allocator
 // behavior: every value chains through one lreg, so the words are

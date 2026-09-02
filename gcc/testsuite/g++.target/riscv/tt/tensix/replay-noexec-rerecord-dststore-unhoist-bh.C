@@ -1,10 +1,10 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-hoist -mtt-tensix-replay-hoist-min-benefit=0 -fdump-rtl-rvtt_replay" }
-// Fail-closed no-exec re-record sweep (lane FJ; rvtt-cost.md "no-exec
+// Fail-closed no-exec re-record sweep (rvtt-cost.md "no-exec
 // record composition", delivery-boundary paragraph): a hoisted NO-EXEC
 // record placed inside an enclosing loop re-ingests its payload every
 // outer iteration, and when the payload carries a Dst store the
 // re-ingestion follows the previous iteration's launch-delivered stores
-// at runtime pacing no static model prices (silicon: sparse_k_filter
+// at runtime pacing no static model prices (hardware: sparse_k_filter
 // ON-25 wedges at runtime trip 32 with explicit TTINCRWC rows too).
 // The witnessed-good exec-while-record conversion cannot fire here (the
 // flag is off in this configuration), so the sweep un-hoists: launches

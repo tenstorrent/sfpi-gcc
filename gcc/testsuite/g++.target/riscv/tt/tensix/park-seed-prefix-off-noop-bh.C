@@ -1,4 +1,4 @@
-// PARK-SEED COMPOSITION flag-off control (lane HY): without
+// PARK-SEED COMPOSITION flag-off control: without
 // -mtt-tensix-optimize-park-ordering the pre-CC-prefix source of
 // park-seed-prefix-kept-bh.C takes the identical early hoists and
 // prints NO ordering lines of either name -- the refinement's kept

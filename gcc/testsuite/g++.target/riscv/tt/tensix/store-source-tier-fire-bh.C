@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER fire, plain LOOP class (lane HO, HL-F1
+// STORE-SOURCE TIER fire, plain LOOP class (HL-F1
 // generalization): the in-loop invariant constant is consumed as an
 // SFPSTORE data source, and SFPSTORE sources L0-L11 only -- a PRGM
 // park (L12-L14) would make the register allocator materialize a

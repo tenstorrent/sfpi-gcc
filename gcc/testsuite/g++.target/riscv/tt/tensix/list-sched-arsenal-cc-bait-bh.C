@@ -1,4 +1,4 @@
-// Lane DT arsenal: CC-region motion bait.  Reordering ACROSS a lane
+// Scheduler arsenal: CC-region motion bait.  Reordering ACROSS a lane
 // enablement change is UNSOUND: an instruction moved into (or out of)
 // the SFPSETCC..SFPENCC region executes under different lane enables
 // and writes a different lane subset.  This kernel is CONSTRUCTED so a
@@ -24,7 +24,7 @@
 // refusal is sound either way (the words bound the region and nothing
 // crosses); the scan below accepts either name so a naming fix keeps
 // this twin green, and the finding is recorded in the arsenal verdicts.
-// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// [post-scheduler-hardening adjudication] Expectations updated from the
 // stage-1 measurements: (a) effect classification now precedes the
 // defless check, so Dst words all name dst-access; (b) identical chain
 // shapes now DEFER by name to replay capture formation (DU-S4

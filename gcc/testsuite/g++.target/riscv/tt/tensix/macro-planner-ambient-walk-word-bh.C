@@ -1,4 +1,4 @@
-// Audited-TU walk transparency, per-word arm (lane IV, typecast
+// Audited-TU walk transparency, per-word arm (typecast
 // recovery): the entry-ambient walk DERIVES through raw `.ttinsn'
 // constant words by decoding them against the audited lane-enable
 // table (rvtt_raw_cc_word_class) instead of refusing on asm shape.

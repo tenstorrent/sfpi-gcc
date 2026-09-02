@@ -21,7 +21,7 @@ along with GCC; see the file COPYING3.  If not see
    only: record storage, cgraph hook wiring, the staleness belts, the
    CC carry fold, and the TU anchor facts.  Face classifiers and their
    replays live with their legacy walks in the consumer files
-   (gimple-rvtt-crosscall.cc, rtl-rvtt-mop-form.cc) -- the item-#15
+   (gimple-rvtt-crosscall.cc, rtl-rvtt-mop-form.cc) -- the summary
    discipline is compute-once, never fork-the-classifier.  */
 
 #define INCLUDE_ALGORITHM

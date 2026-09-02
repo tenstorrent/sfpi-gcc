@@ -1,4 +1,4 @@
-// Lane FT window-pairing OFF-identity: without the flag the lane-EV
+// Window-pairing OFF-identity: without the flag the frozen
 // full inter-row drain placement is byte-identical -- the tuner never
 // runs (no window-pairing dump line) and every boundary keeps the full
 // derived drain.

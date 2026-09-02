@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD near miss, THE mandatory PRGM twin (lane HS):
+// OPAQUE-REPLAY-RECORD near miss, THE mandatory PRGM twin:
 // the recorded content contains an SFPCONFIG word (a PRGM/LaneConfig
 // writer if any future increment ever admitted playback).  The belt
 // refuses the region by name, the TU keeps its opaque refusal, and no

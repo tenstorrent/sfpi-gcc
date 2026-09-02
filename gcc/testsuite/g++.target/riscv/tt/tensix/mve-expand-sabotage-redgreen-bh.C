@@ -1,4 +1,4 @@
-// MVE realization lockstep belt red/green (item #5 stage 2): the
+// MVE realization lockstep belt red/green (modulo variable expansion): the
 // testing knob deliberately mis-rotates one committed rotation web
 // (the copy's WRITER is re-pointed back at its old register while the
 // readers keep the new one -- the classic partial-web wrong code).

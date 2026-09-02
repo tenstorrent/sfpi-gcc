@@ -1,4 +1,4 @@
-// PRESSURE-PARK knob-off twin (lane GV): the exact
+// PRESSURE-PARK knob-off twin: the exact
 // pressure-park-lreg-fire-bh.C body WITHOUT
 // -mtt-tensix-optimize-pressure-park.  All four materializations sit
 // after the body's first CC writer, so the established peel-class

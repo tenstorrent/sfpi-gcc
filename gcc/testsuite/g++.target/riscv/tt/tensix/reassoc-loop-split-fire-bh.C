@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -fassociative-math -fno-signed-zeros -fno-trapping-math -mtt-tensix-optimize-reassoc-loop-carried -fdump-tree-rvtt_reassoc" }
-// THE LICENSED LOOP-CARRIED FIRE (FABLE item #8): with BOTH license
+// THE LICENSED LOOP-CARRIED FIRE (accumulator splitting): with BOTH license
 // keys (the effective -fassociative-math triple AND
 // -mtt-tensix-optimize-reassoc-loop-carried) the 2-link loop-carried
 // sfpadd accumulation splits into P=2 round-robin partial

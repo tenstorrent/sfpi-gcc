@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* FABLE_GOES_BURR.md item #11 -- see rvtt-timing.h for the module
+/* See rvtt-timing.h for the module
    contract.  Every function here is a verdict-identical (CLASS-I) move
    of a previously hand-kept simulator; the provenance of each is named
    at its definition.  */
@@ -130,8 +130,8 @@ cyclic_ii (const seq &s, const std::vector<int> &order)
 
 /* Moved verbatim from rtl-rvtt-replay.cc hoist_profitable_p's shared
    model (counted-loop capture branch) == rvtt-bnb.cc
-   mirror_counted_hoist_fires (validated there against the recorded
-   pin-13 hardshrink refusal, -383 at trips 31, words 9, ds_exec 10).  */
+   mirror_counted_hoist_fires (validated there against a recorded
+   hardshrink-kernel refusal, -383 at trips 31, words 9, ds_exec 10).  */
 
 hoist_pricing
 counted_hoist_price (const hoist_costs &c, int64_t trips, int64_t words,
@@ -169,7 +169,7 @@ rerecord_hoist_price (const hoist_costs &c, int64_t trips, int64_t words,
     {
       /* Execution-bound: the record engine's per-pass overhead rides
 	 the critical path; the hoisted pass's delivery hides behind
-	 the loop's own execution backlog (Reduce-class silicon A/B) --
+	 the loop's own execution backlog (Reduce-class hardware A/B) --
 	 unless the completion-accurate guard charges it in full.  */
       r.before = r.exec + c.record_overhead;
       r.record = c.record_overhead;
@@ -178,8 +178,8 @@ rerecord_hoist_price (const hoist_costs &c, int64_t trips, int64_t words,
     }
   else
     {
-      /* Delivery-bound: pin-11-calibrated delivery pricing, with the
-	 execution-saturation context term (silicon-witnessed on the
+      /* Delivery-bound: hardware-calibrated delivery pricing, with the
+	 execution-saturation context term (hardware-witnessed on the
 	 unary-maxmin shape): when the contiguous run of sibling
 	 launches has enough execution surplus to hide the record
 	 pass's delivery, hoisting relieves nothing per trip.  */

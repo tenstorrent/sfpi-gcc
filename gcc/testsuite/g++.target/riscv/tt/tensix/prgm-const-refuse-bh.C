@@ -4,7 +4,7 @@
 //    assignments (sfpwriteconfig_v): prgm-exhausted;
 // 2. a CC-writing statement that can execute before the programming
 //    point (here it precedes the loop) defeats the all-lanes proof:
-//    cc-region-unproven (reach-scoped per the laneDM widening);
+//    cc-region-unproven (reach-scoped per the widened admission);
 // 3. an SFPADDI whose operand is not a single-use SFPMUL is not in the
 //    admitted fusion class: no candidate, bytes untouched.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-prgm-const -fdump-tree-rvtt_prgm_const-details" }

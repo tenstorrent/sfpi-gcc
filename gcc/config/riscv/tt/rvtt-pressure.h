@@ -1,4 +1,4 @@
-/* One vector-register pressure/liveness engine for Tensix (item #10).
+/* One vector-register pressure/liveness engine for Tensix.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -21,7 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_RVTT_PRESSURE_H
 
 /* GIMPLE-side vector-register (LREG) pressure, in one translation
-   unit (FABLE_GOES_BURR.md item #10).  Three formerly hand-kept
+   unit.  Three formerly hand-kept
    mirrors of the same conservative counting live here now:
 
    - the function-wide may-live model with per-point peaks (previously
@@ -95,7 +95,7 @@ extern unsigned rvtt_pressure_bb_peak (basic_block bb);
    each statement after FIRST through LAST (same block, FIRST before
    LAST), counted with the function-wide may-live model's exact
    semantics (backward may-live fixpoint, tracked values, lreg_width,
-   dead-def transients) -- NEW windowed vocabulary (laneKO/R3), for
+   dead-def transients) -- a NEW windowed vocabulary, for
    budgets whose added live range spans only that window (the licensed
    mad-restructure's kept loadi: the +1 applies pointwise only between
    the pair members, so charging a whole-block conservative peak would

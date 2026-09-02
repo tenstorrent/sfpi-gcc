@@ -1,4 +1,4 @@
-// HOISTED-REUSE class (lane IC, -mtt-tensix-optimize-hoisted-prgm-reuse):
+// HOISTED-REUSE class (-mtt-tensix-optimize-hoisted-prgm-reuse):
 // loop-invariant constant materializations already parked OUTSIDE the
 // loop (the invariant pass's preheader discipline; spelled hoisted
 // here) occupy loop-wide LREG live ranges.  Under the flag they

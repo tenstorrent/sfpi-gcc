@@ -3,7 +3,7 @@
 // { dg-final { scan-rtl-dump-not "Hoisted no-exec capture" "rvtt_replay" } }
 // { dg-final { scan-rtl-dump "Capturing and executing sequence" "rvtt_replay" } }
 
-// Repeated-sequence analog of the silicon-regressing scout shape (the
+// Repeated-sequence analog of the hardware-regressing scout shape (the
 // Log/Log1p class: a DELIVERY-bound payload at a low trip count): a
 // three-trip loop whose body re-records a repeated eight-word sequence
 // of four rotating accumulators every trip (zero modeled interlock

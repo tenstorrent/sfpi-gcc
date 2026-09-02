@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-replay-hoist-min-benefit=0 -fdump-rtl-rvtt_replay-details" }
-// Reissue-gate discharge (lane FW; this twin previously pinned the
+// Reissue-gate discharge (this twin previously pinned the
 // replay-reissue-latency-unproved refusal on this shape): in
 // record-hoist mode the exec-side estimate feeds nothing (pricing is
 // pure delivery -- the executed word stream is identical in both

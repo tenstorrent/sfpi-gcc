@@ -1,5 +1,5 @@
 // Raw content inside a typed ENABLE_DEST_INDEX window cannot be
-// audited against TEN-2932 and errors by name.
+// audited against the ENABLE_DEST_INDEX write-restriction erratum and errors by name.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane" }
 
 void raw_in_window ()

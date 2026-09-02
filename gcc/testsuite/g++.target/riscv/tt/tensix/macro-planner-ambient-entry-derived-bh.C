@@ -1,5 +1,5 @@
-// Entry-ambient all-lanes derivation (lane IS, owner-ratified F1 honest
-// fix, 2026-08-29): a marker-free loop-body region -- NO pushc/popc
+// Entry-ambient all-lanes derivation (owner-ratified F1 honest
+// fix): a marker-free loop-body region -- NO pushc/popc
 // pair, NO typed enable anywhere in the function -- forms when the
 // kill-aware backwards walk proves the configuration placement point
 // carries the architectural fn-entry all-lanes ambient state, and the

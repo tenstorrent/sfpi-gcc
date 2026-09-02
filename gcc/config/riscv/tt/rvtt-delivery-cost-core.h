@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* THE ONE DELIVERY-COST API (FABLE_GOES_BURR item #12).
+/* THE ONE DELIVERY-COST API.
 
    Every PUSH/SLOT issue-word pricing formula of the replay/planner/
    residency families lives HERE, once.  The audited machine constants
@@ -27,11 +27,11 @@ along with GCC; see the file COPYING3.  If not see
    consumer prices through the functions below.  This header is
    deliberately IR-free (no rtx, no gimple, no options): the standalone
    unit test rvtt-delivery-cost-test.cc compiles it with a fixture
-   table and pins the formulas -- including the recorded pin-13
-   hardshrink refusal (-383) that validates the delivery-shape
+   table and pins the formulas -- including a recorded
+   hardshrink-kernel refusal (-383) that validates the delivery-shape
    downstream mirror against the RTL gate's arithmetic.
 
-   MODULE INVARIANT (WP13 refusal-biased one-sidedness): the
+   MODULE INVARIANT (refusal-biased one-sidedness): the
    formation-vs-replay arbitration prices the replay-delivered
    alternative at its STEADY-STATE LOWER BOUND -- every row instance
    re-executes its words at the slot rate with delivery hidden, and the
@@ -57,7 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 namespace rvtt_delivery_cost {
 
 /* The audited centislot rates (rvtt-cost.md define_constants;
-   silicon-calibrated: PUSH=123 measured RISC-pushed word, SLOT=100
+   hardware-calibrated: PUSH=123 measured RISC-pushed word, SLOT=100
    replay-delivered word, TURNAROUND=70 per-launch reissue turnaround,
    RECORD_OVERHEAD=300 per-record-pass engine overhead).  Constructed
    from XTT_REPLAY_COST_* by rvtt-delivery-cost.cc only.  */
@@ -98,7 +98,7 @@ planner_word_plane (bool replay_wrapped)
 }
 
 /* Keep the products of trip-weighted profitability inside 64 bits
-   (WP8 loop_trip_weight discipline, shared verbatim with the
+   (the loop_trip_weight discipline, shared verbatim with the
    crosscall init-hoist caller weight): scale the body count down
    by octets until it fits 48 bits, scaling the entry count in
    lockstep (floor 1).  */
@@ -114,7 +114,7 @@ scale_trip_weight (int64_t *body, int64_t *entry)
 }
 
 /* The cross-multiplied run-amortization inequality, one spelling
-   (macro-planner run/loop profitability; lane IU init-hoist-aware run
+   (macro-planner run/loop profitability; init-hoist-aware run
    pricing):
 
      entry_cost * entry_weight + per_run * body_weight
@@ -182,8 +182,8 @@ enum replay_shape
   /* Record-hoist measurement model at a RUNTIME trip count (structural
      trips >= 1): admit at the 2-trip break-even.  */
   SHAPE_RECORD_HOIST_RUNTIME,
-  /* Exec-while-record first-trip peel of a counted capture
-     (lane IO): the peel pays the capture word and the record-engine
+  /* Exec-while-record first-trip peel of a counted capture:
+     the peel pays the capture word and the record-engine
      overhead once; every remaining trip becomes one launch.  */
   SHAPE_COUNTED_PEEL
 };
@@ -322,7 +322,7 @@ replay_pricing (const cost_table &t, replay_shape shape, int64_t trips,
 }
 
 /* ------------------------------------------------------------------
-   WP13 formation-vs-replay arbitration terms (rtl-rvtt-macro-planner.cc
+   Formation-vs-replay arbitration terms (rtl-rvtt-macro-planner.cc
    -mtt-tensix-macro-ims).  */
 
 /* Centislot price of a formed calendar: CONFIG_WORDS descriptor-prefix
@@ -376,7 +376,7 @@ residency_peel_break_even_trips (const cost_table &t, unsigned sum_w,
 
 /* ------------------------------------------------------------------
    Hoisted-window per-trip delivered-issue words (rtl-rvtt-replay.cc
-   window sizing, lane IM): LAUNCHES full playback launches, one
+   window sizing): LAUNCHES full playback launches, one
    partial prefix launch when HAS_TRIM, and every word the shape
    leaves inline.  */
 

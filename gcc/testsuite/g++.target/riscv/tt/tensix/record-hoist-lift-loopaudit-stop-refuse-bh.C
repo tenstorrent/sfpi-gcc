@@ -1,7 +1,7 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-record-hoist-lift -fdump-rtl-rvtt_replay" }
 // Record-hoist placement lift, walk-stop-at-first-level near miss
-// (lane IL): the outer loop's tail carries pointer-parameter volatile
+//: the outer loop's tail carries pointer-parameter volatile
 // stores whose address is not provably outside the instruction FIFO
 // (a possible push of a REPLAY word that could re-record the lifted
 // slots between the record and a later trip's launch), so the

@@ -3,11 +3,11 @@
 // function name, a different constant register (L11), a different Dst
 // address (64), the opposite operand layout, and the other CPU.  The
 // derived calendar's stride absorption WAS a per-CPU refusal here
-// (derived-stride-absorption-unproven): Lane R1's WH-formed
+// (derived-stride-absorption-unproven): the earlier WH-formed
 // absorbed-stride calendar returned position-shuffled tiles after the
 // first while every latched launch dst_row/mask was correct.  The WH
 // dst-autoincr adjudication (sfpi-gcc 2a0ba1e6602;
-// laneAJ-evidence-20260817) convicted the DUAL-SLOT SETC16 program --
+// hardware-adjudicated) convicted the DUAL-SLOT SETC16 program --
 // its base-0 bank words clobbered LLK's live ADDR_MOD_2 and corrupted
 // the NEXT tile's datacopy -- so the machinery was wrong, not
 // unproven.  With the corrected single-slot Base=1 program the WH

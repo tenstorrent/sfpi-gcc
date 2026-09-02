@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-record-hoist-peel -mtt-tensix-optimize-post-autoincr-window -fdump-rtl-rvtt_dst_autoincr -fdump-rtl-rvtt_replay_reform-details" }
-// Launch-arithmetic-skew NEAR-MISS (lane IH): a carried Dst-STORE row
+// Launch-arithmetic-skew NEAR-MISS: a carried Dst-STORE row
 // loop whose re-formed record would hoist into a preheader that itself
 // sits inside a natural loop -- exactly the shape the exec-while-record
 // first-trip peel rescues for ordinary payloads.  For a CARRIED payload

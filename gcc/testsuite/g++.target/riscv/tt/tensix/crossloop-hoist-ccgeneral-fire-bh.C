@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-crossloop-hoist -mtt-tensix-optimize-cc-region-general -fdump-tree-rvtt_crossloop" }
-// THE R2 CROSSLOOP TREE-FACT FIRE (FABLE_GOES_BURR R2; the
+// THE CROSSLOOP TREE-FACT FIRE (the crossed-loop widening; the
 // crossloop-cc-unproven widening, balanced-frame arm): the tile loop
 // carries a BALANCED structured CC frame (plain PUSHC, an audited
 // narrowing SETCC refinement, plain POPC).  A preceding structured

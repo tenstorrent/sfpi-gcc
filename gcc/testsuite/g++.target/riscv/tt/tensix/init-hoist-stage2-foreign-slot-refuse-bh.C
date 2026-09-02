@@ -1,12 +1,12 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-optimize-init-hoist -fdump-rtl-rvtt_macro_planner" }
-// FC-H fail-closed twin (lane DK, from lane DG2's adversarial audit):
+// Fail-closed twin (from an adversarial audit):
 // the stage-2 owned-row value-equality proof read TU_FACTS.SLOT_WORDS
 // without the SLOTS_UNPROVEN guard, and mop_init_ok_p (which checks)
 // runs only when a MOP word is delivered inside the scanned epoch --
 // while template words execute at their MOP sites before and between
 // calls.  Here a FOREIGN rooted function programs a template slot with
 // a word the census cannot resolve (slots UNPROVEN, no MOP in the
-// caller epoch): the pin-14 binary still hoisted stage 2 over the
+// caller epoch): the earlier binary still hoisted stage 2 over the
 // vacuous equality (verified on the installed binary); the fixed
 // compiler demotes to stage 1 by name.  Body-unavailability of the
 // contract subject ITSELF stays excused (init-hoist-stage2-bh.C keeps

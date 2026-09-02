@@ -1,4 +1,4 @@
-// TEN-2932 positive controls: (a) the exempt opcodes (SFPLOADI, the
+// the ENABLE_DEST_INDEX write-restriction erratum positive controls: (a) the exempt opcodes (SFPLOADI, the
 // indexed SFPSWAP, SFPTRANSP) writing the companion bank inside the
 // window are legal; (b) the same non-exempt computation OUTSIDE the
 // window is legal.

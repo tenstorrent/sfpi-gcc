@@ -1,4 +1,4 @@
-// The tanh 2-datum composition (lane IC): the distilled tanh row --
+// The tanh 2-datum composition: the distilled tanh row --
 // load, abs, Horner mads over three CReg-resident coefficients plus a
 // local and an in-loop reload, mul, min-vs-creg SFPSWAP clamp, setsgn,
 // store -- forms the two-datum pipelined replay body the hand kernel

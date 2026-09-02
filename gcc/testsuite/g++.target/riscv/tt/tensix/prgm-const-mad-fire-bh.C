@@ -1,4 +1,4 @@
-// Fused-MAD admission (laneDM widening): the canonical SFPMAD form
+// Fused-MAD admission (widened form): the canonical SFPMAD form
 // with materialized-constant operands.  Each in-loop invariant
 // single-issue constant materialization feeding only the plain-mod
 // sfpmad is parked in a PRGM register and the operand reads it back --

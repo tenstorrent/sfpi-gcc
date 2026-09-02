@@ -1,4 +1,4 @@
-// SFPIADD immediate-form effect/latency audit (lane CF; rvtt-cost.md
+// SFPIADD immediate-form effect/latency audit (rvtt-cost.md
 // D3-follow-up row): the constant-immediate SFPIADD alternatives carry
 // audited effects (reads VC + the tied live-in, lane-predicated VD
 // write, CC per mod1, Simple-unit result latency 0), so a counted

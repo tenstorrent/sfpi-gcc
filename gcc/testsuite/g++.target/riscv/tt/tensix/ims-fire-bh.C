@@ -1,4 +1,4 @@
-// IMS FIRE (item #5): a TWO-REGION self-loop row -- a Dst row loop
+// IMS FIRE (the modulo-scheduling tier): a TWO-REGION self-loop row -- a Dst row loop
 // chopped by CC and Dst barrier words into two interior regions with
 // different insn-code signatures.  Under -mtt-tensix-optimize-ims ALONE
 // (no legacy cyclic flag) each region gets a Rau iterative-modulo-

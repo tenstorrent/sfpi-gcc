@@ -3,7 +3,7 @@
    two loop invariants, the loop-carried accumulator, two values live
    through the whole loop (read before, written after), and the
    packed short lifetimes of the row itself -- so the whole-block-free
-   target search of the item-#7 engine is exhausted.  One register's
+   target search of the du-chain rename engine engine is exhausted.  One register's
    lifetimes are temporally disjoint from the colliding chain's span:
    the late pair (RENT_Y/RENT_Z) is materialized only AFTER the
    colliding chain closes, opening with a fresh all-write definition,

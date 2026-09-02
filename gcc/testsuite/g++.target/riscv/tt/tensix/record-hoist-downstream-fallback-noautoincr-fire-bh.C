@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay" }
-// Downstream-fallback composition pricing, pass-gate control (lane FZ):
+// Downstream-fallback composition pricing, pass-gate control:
 // the SAME shape as the refuse twin but with the dst-autoincr pass
 // DISABLED: no transform is forthcoming in either world, the would-be
 // row stays an explicit increment in both, the streams-identical

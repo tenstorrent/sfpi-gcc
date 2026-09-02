@@ -1,11 +1,11 @@
-// PARK-SEED COMPOSITION depth-boundary twin (lane HY): a depth-ZERO
+// PARK-SEED COMPOSITION depth-boundary twin: a depth-ZERO
 // invariant immediate positioned AFTER a balanced CC region keeps the
 // early hoist too -- the restore proof makes every depth-zero
 // position carry the preheader mask, so position relative to the
 // region is immaterial and only region MEMBERSHIP (depth) defers.
 // This is exactly the shape the pre-refinement wholesale deferral
 // handed to the walk (the original el-park-ordering fire twin), now
-// kept: the i0-fitted pin-34 row regressed on ten such depth-zero
+// kept: the i0-fitted row regressed on ten such depth-zero
 // candidates.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -fchecking=2 -mtt-tensix-optimize-invariant-loadi -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -mtt-tensix-optimize-park-ordering -fdump-tree-rvtt_invariant-details" }
 // { dg-final { scan-tree-dump-times "hoist kept under park-ordering: depth-zero-hoist-dominant" 1 "rvtt_invariant" } }

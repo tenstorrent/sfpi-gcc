@@ -1,4 +1,4 @@
-// Lane GJ window-pairing stride-phase generalization: the limb-2
+// Window-pairing stride-phase generalization: the limb-2
 // MulInt32-class row hosts its store on the FIRST issued word (the
 // launch that also absorbs the row's typed stride), so the established
 // compact-absorber invariant (advance on the LAST issued word) refuses

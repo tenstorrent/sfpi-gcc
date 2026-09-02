@@ -1,4 +1,4 @@
-// WP13 residency de-duplication, renamed-equivalent twin: identical
+// Residency de-duplication, renamed-equivalent twin: identical
 // two-region shape under fresh names.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -mtt-tensix-macro-planner-residency -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-rtl-dump "Macro-planner residency: descriptor program content-identical to a dominating resident program; 5 descriptor words elided" "rvtt_macro_planner" } }

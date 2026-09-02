@@ -1,7 +1,7 @@
-// WP15 (upward-IMS carrier former, the upward half of the WP14 mapping):
+// The upward-IMS carrier former (the upward half of the init-hoist mapping):
 // the row carries a fresh shift/product pair reading the RAW second
 // operand ahead of its in-place cooking chain.  The established search
-// (with WP14 repair) proves ii=13 with the pair explicit: the pair's
+// (with IMS repair) proves ii=13 with the pair explicit: the pair's
 // results cannot ride the two value carriers (their registers are no
 // carrier's destination) and the template budget is not the obstacle --
 // placement is.  Under -mtt-tensix-macro-ims-carrier the former re-loads

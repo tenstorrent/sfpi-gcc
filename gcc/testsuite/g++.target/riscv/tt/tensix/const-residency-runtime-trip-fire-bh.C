@@ -1,4 +1,4 @@
-// LOOP-class runtime trips (laneDM widening; re-record of the former
+// LOOP-class runtime trips (widened admission; re-record of the former
 // trip-count-unproven refusal): correctness of the entry-edge
 // programming is trip-independent -- the point is never speculated
 // (rotated do-while entry), the register is established before any

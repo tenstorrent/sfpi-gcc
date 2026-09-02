@@ -3,7 +3,7 @@
 // Knob-off half of dst-autoincr-load-carrier-rawrecord-fire-bh.C: the
 // same function, WITHOUT -mtt-tensix-optimize-dst-autoincr-load-carrier.
 // The no-exec recording's shadow is raw `.ttinsn' words, which the
-// pin-38 shadow scan counts as zero replay slots; the scan overruns the
+// earlier shadow scan counts as zero replay slots; the scan overruns the
 // recording's block and the whole function refuses byte-identically
 // ("replay capture crosses block").  Every explicit increment survives
 // and no slot program is emitted -- the preserved refusing baseline the

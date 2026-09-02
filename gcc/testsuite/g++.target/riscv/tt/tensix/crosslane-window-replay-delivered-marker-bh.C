@@ -1,4 +1,4 @@
-// Delivered-marker state tracking (lane FR, lane FP's marker-in-payload
+// Delivered-marker state tracking (the marker-in-payload
 // composition row): an ENABLE_DEST_INDEX OPEN marker captured inside a
 // no-exec payload does NOT open the window at the record site (the word
 // is swallowed) -- it opens it where the launch PLAYS it back.  The

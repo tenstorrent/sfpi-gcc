@@ -1,4 +1,4 @@
-// PARK-SEED COMPOSITION demand gate (lane HY): a CC-restore loop with
+// PARK-SEED COMPOSITION demand gate: a CC-restore loop with
 // THREE OR MORE in-region invariant constants defers wholesale
 // (in-region-demand) — that demand puts the loop in the
 // pressure-arbitrated regime where the later placement authorities

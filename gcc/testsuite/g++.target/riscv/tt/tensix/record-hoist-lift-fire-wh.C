@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-record-hoist-lift -fdump-rtl-rvtt_replay -fdump-rtl-rvtt_dst_autoincr" }
-// Record-hoist placement lift, fire side, WH (lane IL; the lcm-fresh
+// Record-hoist placement lift, fire side, WH (the lcm-fresh
 // window-density shape, rvtt-cost.md "RECORD-HOIST PLACEMENT LIFT").
 // The SAME re-record nest as the downstream-fallback refuse twin: the
 // inner preheader placement sits within the audited drained-frontend

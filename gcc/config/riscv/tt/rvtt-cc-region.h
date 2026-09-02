@@ -162,7 +162,7 @@ public:
   /* The root (ambient) region.  */
   rvtt_cc_region *root () const { return m_root; }
 
-  /* Cross-call carry fold (FABLE_GOES_BURR item #15, stage A): the
+  /* Cross-call carry fold (the carry-only stage): the
      function provably PRESERVES the all-lanes ambient lane-enable
      state across its whole execution -- every reachable block
      structurally proven (no break anywhere, blessed drain joins
@@ -170,16 +170,16 @@ public:
      frame unstructured or opaque anywhere, and the root (ambient)
      frame itself CC-inert: no refinement, no SFPENCC (the all-lanes
      ENCC included -- its ordering against a second root ENCC is not
-     folded here; sharpening that is stage-B precision), no
+     folded here; sharpening that is a later precision widening), no
      vocabulary-external write.  Inner frames may refine or ENCC
      freely: their recorded popc restores the saved state.  Fail-closed
      in every ambiguous direction.  Stage A only CARRIES this fact
      across calls (rvtt-ipa-summary); no consumer admission widens on
-     it in this item.  */
+     it at this stage.  */
   bool ambient_preserving_fold_p () const;
 
-  /* Loop-scoped carry of the same discipline (FABLE_GOES_BURR R2 /
-     the crossloop-cc-unproven widening): LOOP's CC activity provably
+  /* Loop-scoped carry of the same discipline (the
+     crossloop-cc-unproven widening): LOOP's CC activity provably
      PRESERVES the ambient lane-enable state it was entered with and
      can only NARROW the state observed at any point inside -- every
      CC-relevant statement in the loop body is mapped to a
@@ -195,7 +195,8 @@ public:
      the loop.
      In-frame refinements, COMPC and vocabulary-external writers are
      admitted: relative to their frame entry every one of them narrows
-     (pinned-sim for_each_lane discipline), and the frame's recorded
+     (the reference simulator's for_each_lane discipline), and the
+     frame's recorded
      popc restores the saved state.  Fail-closed in every ambiguous
      direction (unmapped statement, unstructured frame, drain-join or
      broken block carrying CC words).  */
@@ -212,7 +213,7 @@ public:
      unaudited raw words (no TU-audit gate is assumed here).  Under
      this fact a placement at E writes EVERY lane, so ANY in-loop
      enable state is a subset of E's -- the containment fact holds for
-     arbitrary crossed CC activity (FABLE_GOES_BURR R2; the
+     arbitrary crossed CC activity (the
      tt/proofs/cc-narrowing-writers/ record carries the argument).  */
   bool edge_entry_all_lanes_p (edge e) const;
 
@@ -252,7 +253,7 @@ extern bool rvtt_cc_window_cc_event_p (gimple *stmt);
 extern bool rvtt_cc_region_fn_ambient_preserving_p (function *fn);
 
 /* ==================================================================
-   The RTL-side view (laneKQ; the laneKE file-header note's named
+   The RTL-side view (the rename pass's file-header note's named
    successor: "a later stage that wants cross-region renames must
    extend the cc-region engine with an RTL view first, not fork a
    local scan").  Implemented in tt/rvtt-cc-region-rtl.cc.
@@ -264,7 +265,8 @@ extern bool rvtt_cc_region_fn_ambient_preserving_p (function *fn);
    canonicalization has already dissolved every outermost frame into
    the [refinements..., word-exact all-lanes SFPENCC] ambient form),
    while predication is EXPLICIT in the insn stream -- every CC event
-   is a typed instruction whose effects the item-#4 table audits.  A
+   is a typed instruction whose effects the typed-effect table
+   audits.  A
    carried mapping would be a second source of truth that can go
    stale; a derivation is checked against the same typed-effect facts
    its consumers already trust.

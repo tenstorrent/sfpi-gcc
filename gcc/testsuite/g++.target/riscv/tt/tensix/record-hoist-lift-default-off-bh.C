@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay" }
-// Record-hoist placement lift, default-off identity (lane IL): the
+// Record-hoist placement lift, default-off identity: the
 // lift flag is ABSENT, so the downstream-fallback composition refusal
 // and the in-body exec-while-record formation keep today's bytes; no
 // lift line may appear.

@@ -1,4 +1,4 @@
-// LOOP-RECLAIM off-twin (lane ID): the fire twin's exact source
+// LOOP-RECLAIM off-twin: the fire twin's exact source
 // WITHOUT -mtt-tensix-optimize-loop-prgm-reclaim keeps the established
 // placement byte-identically -- the TU value-identical reuse still
 // fires (shipped tier), every other value refuses prgm-exhausted, and

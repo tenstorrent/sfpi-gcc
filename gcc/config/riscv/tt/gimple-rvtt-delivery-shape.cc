@@ -36,11 +36,11 @@ along with GCC; see the file COPYING3.  If not see
    THE MECHANISM.  One solver, one model: per proven-trip counted
    single-block SFPU row loop, enumerate the whole discrete shape
    lattice {unroll factor U} x {payload rows R}, PREDICT the shape the
-   downstream silicon-calibrated machinery materializes for each U (a
+   downstream hardware-calibrated machinery materializes for each U (a
    read-only mirror of the replay former's grouping and the
    replay-hoist gate's published rvtt-cost.md model -- prediction,
    never re-pricing), price every predicted shape with the measured
-   lane-EE delivery table, and take the exact argmin
+   delivery table, and take the exact argmin
    (rvtt_bnb_delivery_shape, the vendored exact branch-and-bound home,
    rvtt-bnb.cc).  A winning non-rolled shape is requested through
    exactly the annotation the fixed-factor pass uses (loop->unroll);
@@ -57,8 +57,8 @@ along with GCC; see the file COPYING3.  If not see
    (delivery-shape-exec-term-unaudited).
 
    The two former MODEL SEAMS (dst-autoincr W_drain term, record-hoist
-   mirror) are CLOSED by the one delivery-cost API (FABLE_GOES_BURR
-   item #12): the autoincr setup charge is the module's named quantity
+   mirror) are CLOSED by the one delivery-cost API:
+   the autoincr setup charge is the module's named quantity
    (rvtt-cost.md XTT_AUTOINCR_SETUP_COST_X100, current-model value 0,
    carried per-problem and added once per window shape), and the
    downstream hoist mirrors call the same replay_pricing spelling the
@@ -104,10 +104,10 @@ namespace {
    closure prices exec == slots); 1 = audited next-slot ACCEPTANCE
    stall (one extra slot per occurrence, architectural, charged in
    BOTH exec estimates); 2 = audited latency-1 family (mad/LUT rows):
-   the lane-EE closure measures these stalls as ABSORBED (not charged
+   the hardware study measures these stalls as ABSORBED (not charged
    in the measured exec term), while the downstream RTL gate's
    interlock estimate charges them one slot each (verified against the
-   recorded pin-13 refusal arithmetic: hardshrink's -383 reproduces
+   recorded hardshrink refusal arithmetic: its -383 reproduces
    exactly at exec_ilk = 9 words + 1 mad stall), so they are charged
    only in the downstream-mirror exec; -1 = no audited latency fact,
    the row's execution term is unpriceable and the loop must refuse by
@@ -240,7 +240,7 @@ delivery_latency_class (const rvtt_insn_data *insnd)
 
     /* Structured float compares lower through the mad unit (the
        expanded compare-vs-operand is an SFPMAD-family member in the
-       final stream -- lane EE anatomy rows 1/2; the recorded pin-13
+       final stream -- hardware-anatomy rows; the recorded
        hoist-refusal arithmetic requires exec_ilk = words + 1 on
        exactly these bodies).  Same treatment as the mad family:
        absorbed in the measured exec, one slot in the downstream
@@ -433,7 +433,7 @@ public:
 	  ? (unsigned) riscv_tt_delivery_shape_min_benefit
 	  : (unsigned) XTT_DELIVERY_SHAPE_MIN_BENEFIT;
     /* The downstream-mirror table and flags, through the one
-       delivery-cost API (FABLE_GOES_BURR #12): the solver's hoist
+       delivery-cost API: the solver's hoist
        mirrors call the same replay_pricing spelling the RTL gate
        prices with.  */
     prob.dcost = rvtt_dcost_table ();

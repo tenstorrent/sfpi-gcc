@@ -279,13 +279,14 @@ is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
    constant_chain_value_p): the 32-bit sfpxloadi forms carry the
    pattern verbatim, the shortened SFPLOADI FLOATB form is imm16 << 16,
    the shortened SFPLOADI FLOATA form is the architectural fp16
-   exponent-rebias (SFPLOADI.md; craq-sim TENSIX_EXECUTE_SFPLOADI
-   case 1, verbatim: (s << 16) | ((em + (112 << 10)) << 13) -- no
-   special cases), and a read of a hardwired constant register carries
+   exponent-rebias (SFPLOADI.md; the reference simulator's
+   TENSIX_EXECUTE_SFPLOADI case 1, verbatim:
+   (s << 16) | ((em + (112 << 10)) << 13) -- no special cases), and a
+   read of a hardwired constant register carries
    that register's architectural value (LReg.md: LReg[9] is read-only
-   all-lanes zero, LReg[10] is read-only all-lanes 1.0; the craq-sim
-   SFPADD/SFPMUL executors enforce the same two constants).  Every
-   other form refuses: its value is not on record here.  */
+   all-lanes zero, LReg[10] is read-only all-lanes 1.0; the
+   reference simulator's SFPADD/SFPMUL executors enforce the same two
+   constants).  Every other form refuses: its value is not on record here.  */
 
 static bool
 const_leaf_value_p (gimple *def, uint32_t *bits)
@@ -515,7 +516,7 @@ synth_floatb_coeff (tree vectype, uint32_t imm16, gimple_stmt_iterator *gsi,
    operand defined by a constant-register read forces a physical copy
    into the slot LReg at register allocation -- and the allocator
    inserts that copy at the USE, inside the row loop (the tanhderivlut
-   5th loop word, laneHF's named residual).  Under the leaf extension,
+   5th loop word, a named measured residual).  Under the leaf extension,
    when the read is of a hardwired constant register whose
    architectural value is on record (const_leaf_value_p: LReg[9] zero,
    LReg[10] one) AND that value is FLOATB-exact (low 16 bits zero --
@@ -856,7 +857,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
   return *candidate ? refuse ("lut-region-open-cfg", g->pushc[0]) : false;
 
  region_closed:
-  /* Stage-A agreement with the CC-region tree (FABLE_GOES_BURR #14):
+  /* Stage-A agreement with the CC-region tree:
      the region discipline this scan tracked with its own depth counter
      -- each else-arm frame nested under the previous, the popc chain
      draining innermost-first, each predicated assign inside its own
@@ -1434,19 +1435,21 @@ place_coefficients (gcall *lut)
      value never competes for the eight allocatable LREGs -- without the
      exemption a kernel-shaped row like gelu (six packed words + input +
      a PRGM-constant half) counts a phantom ninth LREG and forfeits the
-     whole placement (laneGU silicon: 71223 -> hand-shape loop).
+     whole placement (measured on hardware: 71223 cycles -> the
+     hand-shape loop).
 
      The FP32-direct path under the leaf extension gets the same
-     exact-obligation counting (laneHF): the leaf extension is what puts
+     exact-obligation counting: the leaf extension is what puts
      creg reads around the formed LUT in the first place (constant
      leaves read LReg[10], and the surrounding kernel arithmetic reads
      hardwired constants the earlier invariant hoist may have placed in
      the preheader), and without the exemption a preheader-hoisted
      hardwired-constant read counts a phantom LREG and forfeits the
-     whole placement -- the tanhderivlut +47.5%% silicon residual was
-     exactly this shape (pins 14/15 placed 6 coefficients; the pin-16
-     preheader hoist of the loop's `+ 1.0f' creg read flipped the count
-     to 9 and every coefficient rematerialized per row).  The counting
+     whole placement -- a measured tanhderivlut +47.5%% hardware residual
+     was exactly this shape (an earlier build placed 6 coefficients; a
+     later build's preheader hoist of the loop's `+ 1.0f' creg read
+     flipped the count to 9 and every coefficient rematerialized per
+     row).  The counting
      itself now refuses the exemption for a creg read feeding a LUT
      table slot (that copy is physical -- see creg_resident_p), so the
      budget stays an over-approximation of the file.  Without either
@@ -1494,10 +1497,10 @@ transform (function *fun, auto_vec<gcall *> *formed)
 {
   bool changed = false;
   basic_block bb;
-  /* The CC-region tree, computed once per function (FABLE_GOES_BURR
-     #14).  A formation deletes whole frames and inserts only CC-inert
-     statements, so the surviving frames' facts stay exact and no
-     rebuild is needed between fires.  */
+  /* The CC-region tree, computed once per function
+     (rvtt-cc-region.h).  A formation deletes whole frames and
+     inserts only CC-inert statements, so the surviving frames' facts
+     stay exact and no rebuild is needed between fires.  */
   rvtt_cc_region_tree ccr (fun);
   FOR_EACH_BB_FN (bb, fun)
     {

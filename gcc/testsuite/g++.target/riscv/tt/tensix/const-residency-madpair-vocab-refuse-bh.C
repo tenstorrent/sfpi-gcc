@@ -1,4 +1,4 @@
-// MAD-PAIR vocabulary near-misses and named refusal (lane HJ).  Three
+// MAD-PAIR vocabulary near-misses and named refusal.  Three
 // twins under the widened discovery:
 //   1. nonvulnerable_wrapper: the compl-wrapped pair's constant is a
 //      full-image chain form (low bits set, not FLOATB-shortenable) --

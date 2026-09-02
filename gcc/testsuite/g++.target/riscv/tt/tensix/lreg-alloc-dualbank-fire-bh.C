@@ -1,4 +1,4 @@
-// The IRA dual-bank coloring gap (lane FU): the relational
+// The IRA dual-bank coloring gap: the relational
 // exact-register alternatives of rvtt_sfpswap_indexed_int
 // (companion == value + 4, twelve ordered pairs) are invisible to
 // IRA's per-operand alternative cost scan, so IRA can color the webs

@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD default-off (lane HS): the same TU as the fire
+// OPAQUE-REPLAY-RECORD default-off: the same TU as the fire
 // twin WITHOUT -mtt-tensix-optimize-opaque-replay-record keeps the
 // established opaque-region refusal byte-identically -- the record
 // word refuses through the audited table, no region machinery runs,

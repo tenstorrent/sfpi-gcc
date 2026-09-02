@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER budget near-miss (item #13): sixty-five distinct
+// PLACEMENT-ARBITER budget near-miss (the placement arbiter): sixty-five distinct
 // loop-class candidates exceed the deterministic arbitration budget
 // (RVTT_PLACE_MAX_CANDIDATES = 64), so the arbiter refuses the whole
 // class by name (place-budget-exhausted) and the legacy policy chain

@@ -1,4 +1,4 @@
-// Residency fire, CC-canonical peel class (lane CF): the loop body
+// Residency fire, CC-canonical peel class: the loop body
 // carries a lowered v_if region ending in the all-lanes SFPENCC (the
 // fresh-body kernel shape), so the plain LOOP class's sfpu-barrier and
 // the whole-function cc-region-unproven refusals do not apply.  The

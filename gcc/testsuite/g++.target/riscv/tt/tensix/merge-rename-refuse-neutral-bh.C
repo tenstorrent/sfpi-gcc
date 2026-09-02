@@ -1,4 +1,4 @@
-// MERGE-RENAME word-neutral refusal (lane KP, R1(b)): the class flag
+// MERGE-RENAME word-neutral refusal (R1(b)): the class flag
 // alone -- without the adjudication override -- refuses the rename by
 // name: the single-issue CC-merge is one in-loop delivered word before
 // and after the rename while the parked twin adds its materialization

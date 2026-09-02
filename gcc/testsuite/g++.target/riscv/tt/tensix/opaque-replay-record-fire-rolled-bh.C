@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD fire, rolled counted-loop region (lane HS):
+// OPAQUE-REPLAY-RECORD fire, rolled counted-loop region:
 // the production shape -- ckernel_sfpu_gcd.h calculate_sfpu_gcd_init's
 // TTI_REPLAY(0,28,0,1) followed by a 4-trip loop of 7 recorded words.
 // The einline-stage body the TU walk scans is still rolled, so the

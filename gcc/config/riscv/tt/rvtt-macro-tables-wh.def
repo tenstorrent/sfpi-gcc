@@ -18,8 +18,9 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* X-macro data consumed by rvtt-macro-tables.cc.  Transcribed from the
-   frozen Min/Max pass (4e045d31d, rtl-rvtt-loadmacro.cc) and
-   sfpu-ops-wh.h; provenance per constant in NOTES-wp6-prep.md.
+   frozen Min/Max pass (the retired rtl-rvtt-loadmacro.cc, preserved in
+   the version-control history) and
+   sfpu-ops-wh.h, with provenance audited per constant.
    Descriptor-state words (templates, sequences, misc) are WH/BH-COMMON by
    test evidence (loadmacro-periodic-minmax-wh.C asserts the identical
    SFPCONFIG words as the BH test); the unit test asserts the two .def
@@ -34,7 +35,7 @@ along with GCC; see the file COPYING3.  If not see
    No-increment addr mode 3 (:442,579,717,1489); Dst += 2 auto-increment
    addr mode 2 (:503,619,1024-1025).  Owned config dests {0,1,4,5,6,8}
    (:164-169) = 0x0173.  Drain 3 slots.  Break-even 8 rows (:1123) --
-   the FROZEN pass's dual-slot figure, reference data for the WP7
+   the FROZEN pass's dual-slot figure, reference data for the
    cost-model regression only and never a planner input; the corrected
    single-slot program (below) makes the planner's derived break-even
    7 rows, mirroring BH (loadmacro-periodic-minmax-seven-wh.C).  */
@@ -139,13 +140,14 @@ XTT_MACRO_MISC_WORD ("minmax-binary", 0x00000330, false, 0)
 XTT_MACRO_MISC_WORD ("signbit",	      0x00000110, false, 0)
 XTT_MACRO_MISC_WORD ("cast-round",    0x00000100, false, 0)
 XTT_MACRO_MISC_WORD ("select-u16",    0x00000706, true, 6)
-/* Select, launch-sourced store mod0 (WP10 compact 3-slot calendar):
+/* Select, launch-sourced store mod0 (compact 3-slot calendar):
    the shipped handwritten Where protocol's own misc word
    (tt-metal ckernel_sfpu_where.h _init_where_: TTI_SFPCONFIG(0x770, 8, 1),
    "{UsesLoadMod0ForStore=1, WaitForElapsedInstructions=1} for all
-   macros"; simulator tensix.cpp: bit 4+macro selects the launch's own
+   macros"; the reference simulator: bit 4+macro selects the launch's own
    instr_mod0 as the delayed store's format).  Carried as a proven
-   whole word per Sec. 3 of docs/MACRO_PLANNER.md -- the bit layout
+   whole word (the standing rule for unestablished encodings) -- the
+   bit layout
    above 3:0 remains architecturally unestablished; bits 3:0 are inert
    under launch sourcing.  */
 XTT_MACRO_MISC_WORD ("select-launch-mod0", 0x00000770, false, 0)

@@ -1,4 +1,4 @@
-// WP10 delivery increment (a): under the opt-in
+// Compact-calendar delivery increment (a): under the opt-in
 // -mtt-tensix-macro-planner-replay flag, planner-formed SFPLOADMACRO
 // launches are admitted into automatic replay recording, so the
 // compact loop body's eight identical 3-word rows record once

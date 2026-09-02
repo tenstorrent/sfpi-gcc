@@ -1,4 +1,4 @@
-/* One placement arbiter for invariant constants (FABLE_GOES_BURR #13).
+/* One placement arbiter for invariant constants.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.

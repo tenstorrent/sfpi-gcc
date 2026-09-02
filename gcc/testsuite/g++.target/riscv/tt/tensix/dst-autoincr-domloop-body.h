@@ -12,7 +12,7 @@
    loop backedge, and the iteration's own slot-occupying words cover the
    audited drained-frontend window with slots to spare (see
    rtl-rvtt-dst-autoincr.cc), so the dominating placement keeps firing.
-   The skinny one-row rolled shape is the silicon-regressive witness class
+   The skinny one-row rolled shape is the hardware-regressive witness class
    and lives in the rolled-tiny refusal twins instead.  */
 
 using vec_t = __xtt_vector;

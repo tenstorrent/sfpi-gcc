@@ -1,4 +1,4 @@
-// Config-mutation refusal (WP8): a typed write to a planner-owned
+// Config-mutation refusal: a typed write to a planner-owned
 // configuration destination between two rows refuses both the mutating
 // row (cc/config effect inside the slice) and, function-globally, the
 // clean rows' formation.  Bytes stay identical to flags-off.

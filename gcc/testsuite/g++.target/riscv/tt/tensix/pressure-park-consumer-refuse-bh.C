@@ -1,4 +1,4 @@
-// PRESSURE-PARK near miss, consumer audit (lane GV): the post-CC
+// PRESSURE-PARK near miss, consumer audit: the post-CC
 // candidate's value is consumed by a cross-lane SFPSHFT2 subvector
 // shuffle, which reads lanes of its operand OTHER than the one it
 // writes -- including lanes the original predicated SFPLOADI left

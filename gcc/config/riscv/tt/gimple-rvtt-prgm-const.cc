@@ -33,7 +33,7 @@ along with GCC; see the file COPYING3.  If not see
    Admitted class: a fusion-enabling SFPADDI whose vector operand is a
    single-use SFPMUL in the same loop, plain-add mod, all-constant
    scalar operands, canonical instruction-buffer operand; the
-   materialized SFPADD form of the same shape; and (laneDM widening)
+   materialized SFPADD form of the same shape; and
    an SFPMAD the front-end already fused, per materialized-constant
    operand (mad_operand_candidates -- RECOGNITION-ONLY: this pass never
    fuses a MUL+ADD into a MAD itself; that rewrite collapses two
@@ -60,7 +60,7 @@ along with GCC; see the file COPYING3.  If not see
      never trusted: every mop_cfg template-slot write in the TU is
      itself a scanned store whose word must decode through the same
      table, and the MOP word is admitted exactly when all of them do
-     (rvtt-mop-derive.cc; design NOTES-mop-effect-derivation-laneBC.md).
+     (rvtt-mop-derive.cc).
      The former `__builtin_rvtt_ttregion_begin/end' TRUSTED effects
      declarations are RETIRED (2026-08-18 ruling: the compiler proves
      region effects, it is not told them); the builtins are deprecated
@@ -92,7 +92,7 @@ along with GCC; see the file COPYING3.  If not see
      (cc-region-unproven).  A CC writer the point can never be reached
      from -- post-loop epilogue code, a sibling branch -- leaves the
      entry state provably intact on every path to the point, so it no
-     longer defeats the proof (laneDM widening; the fn-entry-all-lanes
+     longer defeats the proof (the fn-entry-all-lanes
      model and the call-transparency assumption are unchanged from the
      function-granular version of this proof).
 
@@ -347,7 +347,7 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	  print_gimple_stmt (dump_file, stmt, 0, TDF_NONE);
 	}
     };
-  /* Census-escape discipline (lane CF): a BARE ADDR_EXPR of an
+  /* Census-escape discipline: a BARE ADDR_EXPR of an
      automatic aggregate in a value position is an address escape and
      poisons the object's field census -- direct field references
      (var.field in a store/load lvalue) are not escapes and are
@@ -374,7 +374,7 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 	}
     };
 
-  /* Raw REPLAY record regions (lane HS, flag-gated Init(0)):
+  /* Raw REPLAY record regions (flag-gated, default off):
      prepass every raw REPLAY word in this body through the record
      admission (rvtt-mop-derive.cc theorem).  An admitted exec=0
      record's swallowed words are architecturally never delivered and
@@ -553,7 +553,7 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		  continue;
 		}
 	      /* X6 FPU face-transpose family (ttmovd2b/ttmovb2a/ttmovb2d/
-		 ttmova2d/tttrnspsrcb/ttstallwait/ttrmwcib, lane FV):
+		 ttmova2d/tttrnspsrcb/ttstallwait/ttrmwcib):
 		 ADJUDICATED transparent for THIS census.  The census
 		 tracks the SFPU unit's PRGM/LaneConfig state (SFPCONFIG
 		 destinations 0..15); the X6 family programs the Matrix
@@ -824,7 +824,7 @@ tu_prgm_facts ()
       tu_facts.refused = true;
       if (!tu_facts.reason)
 	tu_facts.reason = mop_why;
-      /* Lane IV: an unadjudicated MOP expansion could deliver template
+      /* An unproven MOP expansion could deliver template
 	 words the walk cannot see -- the CC audit dirties with it.  */
       if (!tu_facts.mop.cc_dirty)
 	{
@@ -969,8 +969,8 @@ madpair_value_base (const rvtt_insn_data *insnd)
 	  || insnd->id == rvtt_insn_data::sfpadd_lv) ? 1 : 0;
 }
 
-/* MAD-PAIR discovery vocabulary (lane HJ,
-   -mtt-tensix-optimize-madpair-vocabulary): the downstream combine
+/* MAD-PAIR discovery vocabulary
+   (-mtt-tensix-optimize-madpair-vocabulary): the downstream combine
    fuses the mul+add pair through spellings the base discovery does not
    walk -- the lane-carrier _lv forms of the members (the muli/addi
    immediate folds match those spellings too, so the fold decay exists
@@ -978,7 +978,7 @@ madpair_value_base (const rvtt_insn_data *insnd)
    between the mul and the add (the -a+b rewrite reduces it before the
    mad rule fires).  The vocabulary itself is answered by
    rvtt_combine_will_fuse_p from the combiner's own GENERATED tables
-   (rvtt-combine.inc <- rvtt.gc; FABLE_GOES_BURR item #3) -- the hand
+   (rvtt-combine.inc <- rvtt.gc, the generated verdict tables) -- the hand
    mirror of the spellings is deleted, so discovery/combine drift is
    impossible by construction and every future rvtt.gc widening reaches
    the discovery automatically.  Everything else stays the reviewed
@@ -1141,7 +1141,7 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
   return false;
 }
 
-/* The fused-MAD admission (laneDM widening) -- RECOGNITION-ONLY.
+/* The fused-MAD admission -- RECOGNITION-ONLY.
    This arm matches an sfpmad the front-end ALREADY emitted; it never
    forms one.  Fusing an unfused MUL+ADD into a MAD collapses two
    roundings into one and is bit-changing on any Horner step, so no
@@ -1224,7 +1224,7 @@ mad_operand_candidates (gcall *call, class loop *loop,
   return n;
 }
 
-/* The hoisted mad-pair operand (lane GA, FX-F1): a constant
+/* The hoisted mad-pair operand: a constant
    materialization defining SRC that sits OUTSIDE LOOP (the invariant
    pass's cc-restore-discharged hoist parks loop constants in the
    preheader) with ONLY_USE as its single non-debug consumer inside the
@@ -1255,8 +1255,8 @@ hoisted_madpair_load_p (tree src, class loop *loop, gimple *only_use,
     return nullptr;
   /* Fold-vulnerable = the materialization's spelling is one the
      downstream muli/addi immediate folds match, answered from the
-     combiner's GENERATED tables (the a{*,+}fp16b rules' sfploadi feed;
-     FABLE_GOES_BURR item #3) instead of a hand insn-id mirror: the
+     combiner's GENERATED tables (the a{*,+}fp16b rules' sfploadi feed)
+     instead of a hand insn-id mirror: the
      fold consumes exactly the shortened-SFPLOADI shape feeding this
      pair member's spelling.  The sfpxloadi verbatim-image forms match
      no fold row and need no re-claim.  */
@@ -1360,7 +1360,7 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
 }
 
 /* ==================================================================== */
-/* Constant residency + rematerialization (lane BS).
+/* Constant residency + rematerialization.
 
    Motivation: the SFPU register file has eight allocatable LREGs
    (riscv.h SFPU_REG_NUM; L0..L7, hard regs 80..87) and NO spill path --
@@ -1410,7 +1410,8 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
    always available.
 
    Lane-predication soundness of a rematerialized load: SFPLOADI writes
-   only CC-enabled lanes (craq-sim tensix.cpp:8546,8556-8568 [SIM];
+   only CC-enabled lanes (the reference simulator
+   tensix.cpp:8546,8556-8568 [SIM];
    specs SFPLOADI.md:37-39 "if (VD < 8) lanewise if (LaneEnabled)"
    [SPEC]).  A clone placed immediately before its consumer executes
    under the consumer's CC state, so every lane the consumer reads AND
@@ -1434,7 +1435,7 @@ cc_write_reaches_point_p (const auto_vec<gimple *> &writers,
 /* The pressure model itself -- the width table, the tracked-value
    predicate, and the function-wide may-live computation -- is the
    promoted seed of the unified pressure engine and lives in
-   tt/rvtt-pressure.cc (FABLE_GOES_BURR.md item #10).  */
+   tt/rvtt-pressure.cc.  */
 
 /* An SFPLOADI materialization chain defining a vector value from
    scalar-only inputs: a single sfpxloadi/sfploadi, or an sfploadi
@@ -1525,7 +1526,7 @@ remat_chain_p (tree name, remat_chain *out)
    residency dedup and programming write.  The 32-bit sfpxloadi forms
    carry the fp32/int32 pattern verbatim (gimple-rvtt-immvar.cc
    emit_loadimm bits 31/-32/32); the shortened SFPLOADI FLOATB form is
-   imm16 << 16 (rvtt-protos.h SFPLOADI_MOD0_FLOATB; craq-sim
+   imm16 << 16 (rvtt-protos.h SFPLOADI_MOD0_FLOATB; the reference simulator
    tensix.cpp:8556-8558 [SIM]).  Other encodings refuse -- their value
    reconstruction is not on record here (they remain remat
    candidates, which re-issue verbatim and never interpret the
@@ -1598,9 +1599,9 @@ staged_config_value (tree staged, unsigned *value)
    written only where CC-enabled and whose vector operand reads are
    lane-local, so a constant rematerialized immediately before them is
    observationally equivalent to the original long-lived value on every
-   consumed lane.  Facts audited against the craq-sim executors
-   (src/tensix.cpp @32489dda lineage) and the ISA functional models
-   (tests/aristotle/mega-union/specs/*.md):
+   consumed lane.  Facts audited against the reference simulator's executors
+   (src/tensix.cpp) and the ISA functional models (the SFP*.md
+   functional specifications):
    - the canonical predicate is the shared mask idiom
      `cc_en ? cc : ALL` + for_each_lane (tensix.cpp:8304-8310) [SIM];
      representative spec form: SFPMAD.md:19-22 "lanewise if
@@ -2230,7 +2231,7 @@ transform (function *fn, prgm_state *st)
 }
 
 /* ------------------------------------------------------------------ */
-/* Residency allocation (lane BS): park proven-constant values in free
+/* Residency allocation: park proven-constant values in free
    PRGM registers by priced selection.  Class LOOP: an in-loop
    invariant constant materialization is programmed once on the loop
    entry edge (saves two pushed SFPLOADI words per proven iteration for
@@ -2250,8 +2251,8 @@ struct residency_candidate
   bool peel = false;		/* LOOP class: CC-canonical body; the
 				   programming point is created by a
 				   first-iteration peel at placement */
-  bool cc_lifted = false;	/* LOOP class (lane HR,
-				   -mtt-tensix-optimize-crossloop-cc-peel):
+  bool cc_lifted = false;	/* LOOP class under
+				   -mtt-tensix-optimize-crossloop-cc-peel:
 				   a peel-class candidate whose
 				   programming lifted across the
 				   enclosing loops as a programming-only
@@ -2272,8 +2273,8 @@ struct residency_candidate
 				   leaves one immediate fold live and
 				   the mad rule still blocked: a pure
 				   loss) */
-  bool hoisted_reuse = false;	/* HOISTED-REUSE class (lane IC,
-				   -mtt-tensix-optimize-hoisted-prgm-reuse):
+  bool hoisted_reuse = false;	/* HOISTED-REUSE class under
+				   -mtt-tensix-optimize-hoisted-prgm-reuse:
 				   a preheader-hoisted loop-invariant
 				   materialization re-claims a PRGM slot
 				   (free, or TU value-identical) to
@@ -2465,17 +2466,17 @@ count_nondebug_uses (tree name)
 }
 
 /* ------------------------------------------------------------------ */
-/* CC-canonical loops: first-iteration peel (lane CF).
+/* CC-canonical loops: first-iteration peel.
 
    The LOOP class above requires a CC-write-free loop (sfpu-barrier)
    and a CC-write-free function (cc-region-unproven), because its
    entry-edge programming executes under the loop-entry lane state and
    every replaced in-loop materialization must have executed under that
-   SAME state.  The fresh-body kernels the storm lanes generate violate
+   SAME state.  Freshly authored kernel bodies routinely violate
    both: their row loop carries a lowered v_if region
    (SFPSETCC/SFPXFCMP* ... all-lanes SFPENCC) and re-materializes the
    loop-invariant paired-SFPLOADI constants every row -- the exact
-   structural gap adjudicated by lane CE (log 23 vs 17 replay slots,
+   structural gap a replay-slot census established (log 23 vs 17 replay slots,
    sqrt 27 vs 21, rsqrt 33 vs 25 crossing the 32-slot replay cliff).
 
    For the CC-canonical single-block body (rvtt_loop_cc_canonical_body:
@@ -2491,8 +2492,8 @@ count_nondebug_uses (tree name)
    - the staging SFPLOADI + SFPCONFIG programming is appended AFTER the
      peeled copy: it executes exactly when the loop continues past
      iteration one, in the proven all-lanes state (satisfying the
-     architectural all-lanes requirement on SFPCONFIG: craq-sim
-     tensix.cpp TENSIX_EXECUTE_SFPCONFIG verifies every lane enabled,
+     architectural all-lanes requirement on SFPCONFIG: the reference
+     simulator's TENSIX_EXECUTE_SFPCONFIG verifies every lane enabled,
      and its lanewise LReg[0][lane & 7] copy needs the staged constant
      present in ALL of L0's lanes);
    - every remaining iteration k >= 2 begins in that same all-lanes
@@ -2787,8 +2788,7 @@ peel_first_iteration (class loop *loop, edge entry,
 }
 
 /* -------------------------------------------------------------------- */
-/* Pre-peel ambient lane-state proof (lane IN, the HN hand-arm +0.65
-   residual).
+/* Pre-peel ambient lane-state proof.
 
    The park-ordering deferral (gimple-rvtt-invariant.cc,
    residency-walk-ordering) hands a CC-restore loop's in-region
@@ -2810,7 +2810,7 @@ peel_first_iteration (class loop *loop, edge entry,
    from the lowered statements: the pre-peel point is all-lanes exactly
    when NO function-local CC-affecting statement reaches it without an
    intervening word-exact all-lanes SFPENCC (the canonical-tail kill --
-   the very SFPENCC each CC-canonical body ends with; craq-sim
+   the very SFPENCC each CC-canonical body ends with; the reference simulator's
    TENSIX_EXECUTE_SFPENCC overwrites cc/cc_en from the immediates).
    cc_write_reaches_point_p cannot serve: it has no kill modeling, and
    a CC-canonical loop's own writers always "reach" their preheader
@@ -2906,8 +2906,8 @@ prepeel_ambient_all_lanes_p (basic_block point_bb)
   return true;
 }
 
-/* MERGE-RENAME class (lane KP; FABLE_GOES_BURR residual attack R1(b),
-   the addrsqrt cert's GIMPLE-side rename successor).
+/* MERGE-RENAME class (the GIMPLE-side rename successor identified
+   by the addrsqrt kernel's closure analysis).
 
    The one materialization shape no invariant or residency class can
    reach is the IN-LOOP constant-immediate CC-merge
@@ -2917,7 +2917,7 @@ prepeel_ambient_all_lanes_p (basic_block point_bb)
    whose live-value link Y is a loop-varying vector: the STATEMENT is
    loop-variant even though its immediate is not, so
    rvtt_invariant_constant_load_p can never admit it and the walk's
-   candidate classes never see the immediate (the pin-44 addrsqrt
+   candidate classes never see the immediate (the addrsqrt kernel
    census's "the one in-loop loadi is an lv CC-merge, not a hoistable
    full-lane materialization").  The GIMPLE-side rename gives the
    immediate its own pre-RA value name:
@@ -2953,11 +2953,11 @@ prepeel_ambient_all_lanes_p (basic_block point_bb)
    twin's own materialization word once at the programming point -- the
    rename's priced delivery benefit is identically negative, so the
    class refuses by name (merge-rename-word-neutral) unless the
-   -mtt-tensix-merge-rename-allow-neutral adjudication override admits
-   the neutral rename for measurement legs (the laneIO
-   counted-capture-peel precedent: mechanism shipped default-off, the
-   cert's named successor executed and measured).  A twin the LREG tier
-   cannot place undoes exactly (merge-rename-placement-refused); the
+   -mtt-tensix-merge-rename-allow-neutral measurement override admits
+   the neutral rename for measurement legs (an established precedent: mechanism
+   shipped default-off, its named successor executed and measured).
+   A twin the LREG tier cannot place undoes exactly
+   (merge-rename-placement-refused); the
    undo leg is byte-identical to the flag-off leg.  */
 
 struct merge_rename_cand
@@ -3022,7 +3022,8 @@ merge_rename_shape_p (gcall *load, FILE *stream,
     return unsupported ("non-FLOATB mod");
   /* The lv link chained through ANOTHER immediate CC-merge is the
      multi-issue chain (a 32-bit immediate merged in halves): out of
-     this stage's vocabulary, counted by name for the stage-B census.  */
+     this stage's vocabulary, counted by name for the registry's
+     breadth census.  */
   if (gcall *ldef = dyn_cast <gcall *> (SSA_NAME_DEF_STMT (link)))
     if (const rvtt_insn_data *ld = rvtt_get_insn_data (ldef))
       if (ld->id == rvtt_insn_data::sfploadi_lv)
@@ -3062,7 +3063,7 @@ residency_transform (function *fn, prgm_state *st)
 	: nullptr;
       if (!why && rvtt_loop_has_sfpu_barrier_p (loop))
 	{
-	  /* CC-canonical rescue (lane CF): a single-block body whose
+	  /* CC-canonical rescue: a single-block body whose
 	     only barrier statements are CC writers ending in the
 	     word-exact all-lanes SFPENCC admits the first-iteration
 	     peel below; candidates must precede the body's first CC
@@ -3116,13 +3117,12 @@ residency_transform (function *fn, prgm_state *st)
 	  case TRIPS_UNKNOWN:
 	    /* Dump deferred until candidates exist: this analysis
 	       admission printed on 144/179 corpus ops with zero
-	       candidates, drowning the fire signal (lane EM census
-	       gotcha; FH audit FHI-T3).  */
+	       candidates, drowning the fire signal.  */
 	    admits_runtime_trips = true;
 	    break;
 	  }
 
-      /* CROSSLOOP-CC-PEEL (lane HR): the peel exists only to
+      /* CROSSLOOP-CC-PEEL: the peel exists only to
 	 manufacture an all-lanes programming point INSIDE a loop whose
 	 body writes CC -- and any loop that needs one sits inside
 	 enclosing loops whose region scans refuse those very CC writes
@@ -3211,18 +3211,18 @@ residency_transform (function *fn, prgm_state *st)
 	 edge that does not enter the loop, (b) move the copied body
 	 above the crossed loops' own definitions, and (c) execute the
 	 peeled iteration once per function instead of once per loop
-	 entry.  Before the R2 stage-B widening (laneKL,
-	 -mtt-tensix-optimize-cc-region-general) the anchoring was
+	 entry.  Before the crossed-loop widening
+	 (-mtt-tensix-optimize-cc-region-general) the anchoring was
 	 implicit -- the enclosing region scans refused the peel loop's
 	 own CC writers (CROSSLOOP-CC-PEEL block comment above), so the
 	 walk could never lift a peel-class placement -- but the
 	 widening admits those crossed CC atoms and the structural fact
-	 must refuse by name (the laneKV board P0: the lifted peel's
+	 must refuse by name (demonstrated wrong code: the lifted peel's
 	 uses reached RTL above their defs and init-regs materialized a
 	 zero const_vector no move pattern recognizes).  The candidate
 	 keeps the established entry-anchored peel placement
 	 byte-identically.  The sound lift for a peel-class loop is the
-	 dedicated programming-only path above (lane HR: no peel,
+	 dedicated programming-only path above (no peel,
 	 consumer audit, entry-CC proof).  */
       auto plain_entry = [&] () -> edge
 	{
@@ -3259,7 +3259,7 @@ residency_transform (function *fn, prgm_state *st)
 		 lane state; only the pre-region prefix is proven
 		 all-lanes on iterations 2..N.
 
-		 PRESSURE-PARK widening (lane GV): such a position is
+		 PRESSURE-PARK widening: such a position is
 		 nevertheless admissible when every consumer of the
 		 candidate's value is in the audited lane-predicated
 		 set (remat_consumer_audited_p, the const-remat
@@ -3286,7 +3286,7 @@ residency_transform (function *fn, prgm_state *st)
 	      if (!rvtt_invariant_constant_load_p (load, loop,
 						   /*allow_shortened=*/true))
 		{
-		  /* MERGE-RENAME collection (lane KP, R1(b)): the
+		  /* MERGE-RENAME collection: the
 		     immediate CC-merge whose loop-varying link fails
 		     the invariant predicate above.  Recorded only; the
 		     rename and its placement run after every
@@ -3321,7 +3321,7 @@ residency_transform (function *fn, prgm_state *st)
 		{
 		  /* The consumer audit.  Post-CC candidates (the
 		     pressure-park admission) require it always.  A
-		     cc-lifted candidate (lane HR) requires it even in
+		     cc-lifted candidate requires it even in
 		     the pre-CC prefix: the peel this lift forgoes kept
 		     the FIRST iteration's materializations verbatim
 		     (the cc-canonical proof says nothing about the
@@ -3392,7 +3392,7 @@ residency_transform (function *fn, prgm_state *st)
 	      c.loop = loop;
 	      if (lift_this)
 		{
-		  /* Programming-only lift (lane HR): the lifted entry
+		  /* Programming-only lift: the lifted entry
 		     was proven at discovery; this candidate creates no
 		     peel.  */
 		  c.entry = lifted_entry;
@@ -3412,13 +3412,13 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
 
-      /* MAD-PAIR class (lane GA, FX-F1): the invariant pass's
+      /* MAD-PAIR class: the invariant pass's
 	 cc-restore-discharged hoist parks a loop's constants in the
 	 preheader, where neither this class's in-loop scan above nor
 	 the fusion class sees them; the downstream muli/addi immediate
 	 folds then consume the shortened FLOATB materializations "in
 	 preference to mul,add->mad" and a resident-MAD row body decays
-	 to a per-iteration MUL+ADDI (the pin-16 hardsigmoid
+	 to a per-iteration MUL+ADDI (a measured hardsigmoid
 	 regression).  Re-claim exactly the fold-vulnerable hoisted
 	 constants of a single-use mul+add pair into PRGM registers:
 	 the constant-register read is not an SFPLOADI, the immediate
@@ -3461,7 +3461,7 @@ residency_transform (function *fn, prgm_state *st)
 		  if (!add)
 		    continue;
 		  const rvtt_insn_data *addd = rvtt_get_insn_data (add);
-		  /* Vocabulary widening (lane HJ): the _lv spelling of
+		  /* Vocabulary widening: the _lv spelling of
 		     the pair's add joins the discovery under the flag;
 		     the base spelling keeps its established recognition
 		     byte-identically.  */
@@ -3574,8 +3574,8 @@ residency_transform (function *fn, prgm_state *st)
 	    }
       }
 
-      /* HOISTED-REUSE class (lane IC,
-	 -mtt-tensix-optimize-hoisted-prgm-reuse): a loop-invariant
+      /* HOISTED-REUSE class under
+	 -mtt-tensix-optimize-hoisted-prgm-reuse: a loop-invariant
 	 constant materialization the invariant pass already parked
 	 OUTSIDE the loop occupies a loop-wide LREG live range the
 	 downstream cross-row pairing cannot break (an 8/8-pressure row
@@ -3731,7 +3731,7 @@ residency_transform (function *fn, prgm_state *st)
       if (peel && !this_loop.is_empty ())
 	{
 	  /* Price only the candidates that still place through the
-	     peel: a cc-lifted candidate (lane HR) pays its programming
+	     peel: a cc-lifted candidate pays its programming
 	     once at the lifted preheader under the plain class's model
 	     and creates no peel.  With the flag off every candidate is
 	     a peel candidate and this is the established computation
@@ -3761,14 +3761,13 @@ residency_transform (function *fn, prgm_state *st)
 		++body_w;
 	    }
 	  /* The one break-even spelling (rvtt-delivery-cost-core.h
-	     residency_peel_break_even_trips; FABLE_GOES_BURR #12).  */
+	     residency_peel_break_even_trips).  */
 	  unsigned need = rvtt_delivery_cost::residency_peel_break_even_trips
 	    (rvtt_dcost_table (), sum_w, nprog, body_w);
 	  /* 64 bounds the trip-proof WORK (bounded forward evaluation),
 	     not the benefit model: a break-even needing more proven
-	     trips than the evaluator will walk refuses by name (cf.
-	     DP-11's const_iter bound of 96 for the same discipline in
-	     the allocator; FH audit FHI-T4).  */
+	     trips than the evaluator will walk refuses by name (cf. the
+	     allocator's const_iter bound of 96 for the same discipline).  */
 	  if (need > 64 || !loop_trips_at_least_p (loop, entry, need))
 	    {
 	      rvtt_refuse (RVTT_REF_PEEL_TRIP_COUNT_UNPROVEN, dump_file,
@@ -3778,7 +3777,7 @@ residency_transform (function *fn, prgm_state *st)
 			   "words, %u-word body)\n",
 			   loop->header->index, need, sum_w, sum_w + nprog,
 			   body_w);
-	      /* Drop the peel members; a cc-lifted member (lane HR)
+	      /* Drop the peel members; a cc-lifted member
 		 keeps its lifted placement, whose once-per-kernel
 		 pricing does not ride the peel break-even.  With the
 		 flag off every member is a peel member and this is
@@ -3942,7 +3941,7 @@ residency_transform (function *fn, prgm_state *st)
 	unsigned kept = 0;
 	for (residency_candidate &c : loop_cands)
 	  {
-	    /* A cc-lifted candidate (lane HR) carried its own
+	    /* A cc-lifted candidate carried its own
 	       preheader proof at discovery: the lifted point executes
 	       once, before every crossed iteration, and no fn-local CC
 	       write reaches it -- the header-reach test below would
@@ -4554,7 +4553,7 @@ residency_transform (function *fn, prgm_state *st)
       return true;
     };
 
-  /* PRESSURE-PARK LREG tier (lane GV): a loop-class candidate the
+  /* PRESSURE-PARK LREG tier: a loop-class candidate the
      programmable constant registers cannot take may still leave the
      loop as a plain LREG live range -- the rename-to-free-LREG
      admission the early invariant pass refuses under its conservative
@@ -4597,10 +4596,10 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	  return false;
 	}
-      /* ITEM #13 (placement arbiter), the erfinv relief lever: "price
-	 the dst-ownership fold through the pressure-park tier" (the
-	 pin-48 named successor; laneJT structurally refuted post-alloc
-	 coalescing as the alternative relief).  The MARGINAL park --
+      /* The placement arbiter's erfinv relief lever: "price the
+	 dst-ownership fold through the pressure-park tier"
+	 (post-allocation coalescing was structurally refuted as the
+	 alternative relief).  The MARGINAL park --
 	 the one about to take the function's last free LREG -- is
 	 priced against the downstream identity-reload fold demand
 	 whose lreg-pressure-exceeded guard loses to a full file: when
@@ -4631,7 +4630,7 @@ residency_transform (function *fn, prgm_state *st)
 	    }
 	}
       peel_record *rec = ensure_peeled (c);
-      /* Pre-peel placement (lane IN): under the park-ordering regime
+      /* Pre-peel placement: under the park-ordering regime
 	 the deferral moved this candidate from the early invariant
 	 hoist to this tier, and the post-peel placement would pay the
 	 peel's duplicated materialization on every loop entry.  When
@@ -4869,7 +4868,7 @@ residency_transform (function *fn, prgm_state *st)
   for (residency_candidate &c : pressure_cands)
     changed |= place (c);
 
-  /* MERGE-RENAME placement (lane KP, R1(b); block comment at
+  /* MERGE-RENAME placement (block comment at
      merge_rename_cand): runs after every established class has placed,
      so the rename can only consume placement capacity the reviewed
      classes left behind.  */

@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
-// Per-execution slot-pricing boundary, refusing side (lane IA silicon
+// Per-execution slot-pricing boundary, refusing side (hardware
 // witness: binopscalar-fresh, pin 35): an eight-row straight-line group
 // re-executes its three-SETC16 program on every entry, each word occupying
 // the audited two-cycle configuration issue class plus the once-per-entry

@@ -54,7 +54,7 @@ along with GCC; see the file COPYING3.  If not see
    consumers see the singly-rounded product while the mul's other
    consumers see the doubly-rounded one -- a value divergence only the
    license admits.  (The prgm-const fused-MAD arm stays RECOGNITION-
-   ONLY as shipped by laneDM: re-sourcing constant operands never needs
+   ONLY: re-sourcing constant operands never needs
    to form a MAD, licensed or not.)
 
    Integer/bitwise chains -- PROVEN, NOT LICENSED.  Rebalancing a chain
@@ -79,8 +79,7 @@ along with GCC; see the file COPYING3.  If not see
                                        writers; a link moved across a
                                        recording would change the
                                        recorded program), so value-order
-                                       across it is unproven (lane FL,
-                                       FH-3)
+                                       across it is unproven
      reassoc-chain-cap-exceeded        more than REASSOC_MAX_TERMS terms
      reassoc-pressure-budget-exceeded  the block's conservative live-vector
                                        peak plus the rebalance's new
@@ -109,8 +108,8 @@ along with GCC; see the file COPYING3.  If not see
      reassoc-partials-pressure         no pressure headroom for even one
                                        extra partial accumulator
 
-   Site 3 -- loop-carried accumulator SPLITTING (licensed; FABLE item
-   #8, -mtt-tensix-optimize-reassoc-loop-carried).  A loop-header PHI
+   Site 3 -- loop-carried accumulator SPLITTING (licensed;
+   -mtt-tensix-optimize-reassoc-loop-carried).  A loop-header PHI
    whose latch value chains through K plain-mod SFPADD/SFPMAD links back
    to the PHI result is the classical reduction-variable-expansion
    candidate (tree-vect-loop.cc reduction chains;
@@ -164,7 +163,7 @@ along with GCC; see the file COPYING3.  If not see
 /* The conservative single-block peak count this pass's pressure
    budget consumes (and the licensed mad-fuse in rvtt.gc shares) lives
    in the unified pressure engine, tt/rvtt-pressure.cc
-   (rvtt_pressure_bb_peak; FABLE_GOES_BURR.md item #10).  */
+   (rvtt_pressure_bb_peak, the shared pressure engine).  */
 
 
 namespace {
@@ -327,7 +326,7 @@ flatten (tree val, chain *c, basic_block bb)
    (no CC or configuration effect) are transparent.
 
    Returns null when STMT is transparent, else the stable refusal name
-   the window verdict prints (lane FL, FH-3: the replay owner class
+   the window verdict prints (the replay owner class
    gets its own name -- a playback point is a window BARRIER).  */
 
 static const char *const window_barrier_cc = "reassoc-cc-region-boundary";
@@ -336,7 +335,7 @@ static const char *const window_barrier_replay
 static const char *const window_barrier_fpu
   = "reassoc-fpu-choreography-boundary";
 
-/* Stage-B frame transparency (laneKL, FABLE_GOES_BURR R2): the
+/* Tree-proven frame transparency: the
    CC-region tree for the current function, live only under
    -mtt-tensix-optimize-cc-region-general (null otherwise -- every
    query below then fails closed to the historical barrier).  Built
@@ -376,10 +375,10 @@ window_stmt_barrier_name (gimple *stmt, rvtt_cc_region *wr)
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL)
     return nullptr;
   /* The CC arm is the shared CC-region analysis vocabulary
-     (FABLE_GOES_BURR #14, rvtt-cc-region.cc): raw asm, calls with
+     (rvtt-cc-region.cc): raw asm, calls with
      unknown bodies, CC writers, and the typed all-lanes SFPENCC --
      exactly the classification this walk historically spelled
-     locally.  Stage B: an event tree-proven confined to a frame
+     locally.  Tree-widened: an event tree-proven confined to a frame
      strictly inside WR falls through to the non-CC arms.  */
   if (rvtt_cc_window_cc_event_p (stmt)
       && !window_cc_event_frame_transparent_p (stmt, wr))
@@ -400,7 +399,7 @@ window_stmt_barrier_name (gimple *stmt, rvtt_cc_region *wr)
     case rvtt_insn_data::sfpwriteconfig_v:
     case rvtt_insn_data::sfpconfig_i:
       return window_barrier_cc;
-    /* Replay ownership (lane FL, FH-3).  A TTREPLAY word is a delivery
+    /* Replay ownership.  A TTREPLAY word is a delivery
        boundary, both directions: a PLAYBACK re-delivers recorded slots
        whose content is not derivable here (they may carry CC or
        configuration writers -- crosscall refuses the same class by
@@ -411,7 +410,7 @@ window_stmt_barrier_name (gimple *stmt, rvtt_cc_region *wr)
        name rather than rebalancing across it.  */
     case rvtt_insn_data::ttreplay:
       return window_barrier_replay;
-    /* X6 FPU face-transpose family (lane FV): Matrix-Unit Dst/Src-bank
+    /* The FPU face-transpose family: Matrix-Unit Dst/Src-bank
        moves, the SrcB transpose, the wait-gate stall, and the
        backend-config byte RMW.  None of them writes an LREG or the CC
        stack, but they read and write Dst rows and backend configuration
@@ -501,7 +500,7 @@ earliest_link (chain *c)
    Split point = ceiling half; term order is preserved exactly.  MOD is
    the shared mod operand tree (NULL for the modless bitwise ops).
    Shared by the straight-line rebalance and the loop-carried split's
-   post-loop reduction (item #8).  */
+   post-loop reduction.  */
 
 static tree
 rebalance_build (const vec<tree> &terms, tree mod, gimple_stmt_iterator *at,
@@ -792,14 +791,14 @@ note_loop_carried (function *fn)
 }
 
 /* ==================================================================
-   Loop-carried accumulator SPLITTING (FABLE_GOES_BURR item #8) --
+   Loop-carried accumulator SPLITTING --
    the derived restructure behind -mtt-tensix-optimize-reassoc-loop-
    carried.  Recognition is a widened form of the walk above (bound =
    REASSOC_MAX_TERMS, not the historical 8-step diagnostic bound, which
    note_loop_carried keeps verbatim for the token-off path); every
    non-fitting candidate refuses by name.  */
 
-/* Hard cap on the split factor (the item-#8 plan constant): beyond
+/* Hard cap on the split factor: beyond
    four partials the recurrence is issue-bound for every audited
    latency on record and the register cost outweighs.  */
 constexpr unsigned SPLIT_MAX_PARTIALS = 4;
@@ -1166,7 +1165,7 @@ split_loop_carried_phi (class loop *loop, gphi *phi)
     }
 
   /* Audited latency at the gimple seam; the benefit arithmetic lives
-     in rvtt-timing.h (item #11 discipline).  Every link is a one-word
+     in rvtt-timing.h (the shared timing engine).  Every link is a one-word
      MAD-family value op; the audited result latency must be on record
      for each.  */
   int lat = 0;
@@ -1203,7 +1202,7 @@ split_loop_carried_phi (class loop *loop, gphi *phi)
       return false;
     }
 
-  /* Pressure budget (item #10 engine): P-1 extra accumulators are
+  /* Pressure budget (the shared pressure engine): P-1 extra accumulators are
      simultaneously live across the loop body and, until the reduction
      retires them, across the exit block.  The same conservative
      single-block peak the straight-line arm budgets against.  */
@@ -1462,7 +1461,7 @@ public:
        -fassociative-math half is tested per FP chain (named refusal).
        Integer/bitwise rebalancing is value-identical and needs only
        the straight-line flag.  The loop-carried token gates ONLY the
-       split arm (one-knob-one-mechanism, item #8).  Default off: stock
+       split arm (one-knob-one-mechanism).  Default off: stock
        codegen is byte-identical.  */
     return TARGET_XTT_TENSIX
 	   && (riscv_tt_opt_reassoc > 0
@@ -1472,7 +1471,7 @@ public:
   unsigned execute (function *fn) final override
   {
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
-    /* Stage-B frame transparency (laneKL, R2): one tree per function,
+    /* Tree-proven frame transparency: one tree per function,
        live for both window walks only under the flag.  Rebalances
        insert CC-inert statements and delete only links, so the
        surviving frames' facts stay exact; minted statements are
@@ -1485,7 +1484,7 @@ public:
       }
     bool changed = false;
     if (riscv_tt_opt_reassoc_loop_carried > 0)
-      /* The derived split (item #8); every non-fitting candidate
+      /* The derived split; every non-fitting candidate
 	 refuses by its reassoc-partials-* name.  */
       changed |= split_loop_carried (fn);
     else

@@ -18,9 +18,9 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* WHAT THIS IS.  Every recent formation lane found ONE missing derived
-   template class by hand (the WP12 generic cast/iadd/shift classes,
-   Misc.StoreMod0, lane CI's commuted SFPMUL24).  This tool inverts the
+/* WHAT THIS IS.  Every derived template class before this tool was
+   found ONE at a time by hand (the generic cast/iadd/shift classes,
+   Misc.StoreMod0, the commuted SFPMUL24).  This tool inverts the
    discovery direction: it enumerates the ENCODABLE InstructionTemplate
    word space from the typed capability tables and a typed per-opcode
    semantic model (both provenance-cited), derives which (opcode, mod1,
@@ -30,13 +30,12 @@ along with GCC; see the file COPYING3.  If not see
    enumeration, not by lanes tripping over them.  This is the
    enumerate->fingerprint->validate loop of Ruler (OOPSLA'21) /
    Enumo, with VeGen's InstSema (ASPLOS'21) as the per-instruction
-   semantic-model precedent, applied to our template-word space
-   (laneCO PROPOSALS.md P5).
+   semantic-model precedent, applied to our template-word space.
 
    THE REALIZATION MODEL (what "exact" means).  A hosted value event
    executes the stored 32-bit template word with these overrides
-   (SFPLOADMACRO.md; CRAQ build_dispatch, sfploadmacro_events.h:384-424
-   at craq-sim 9f324140 -- mirrored by rvtt-macro-tables.cc
+   (SFPLOADMACRO.md; the reference simulator's build_dispatch --
+   mirrored by rvtt-macro-tables.cc
    opcode_route_class):
      1. The VD field (word bits 7:4) is UNCONDITIONALLY replaced by the
 	launch VD (or LReg16 under the VD16 sequence bit, which escapes
@@ -60,8 +59,8 @@ along with GCC; see the file COPYING3.  If not see
    functional models (tt-isa-documentation
    BlackholeA0/TensixTile/TensixCoprocessor .md files -- executable
    pseudocode; WH-shared documents resolve into the WormholeB0 tree),
-   cross-checked against the CRAQ executor (craq-sim src/tensix.cpp at
-   9f324140, BH decode tables data/bh/tensix_isa.json), which is the
+   cross-checked against the pinned reference simulator's executor
+   (BH decode tables included), which is the
    differential ORACLE for admissions.  Where doc and sim DISAGREE the
    tool takes the intersection (fail-closed) and reports the
    disagreement -- see the doc/sim divergence section of the report;
@@ -77,10 +76,10 @@ along with GCC; see the file COPYING3.  If not see
    commit by commit), candidate admissions ranked by hosting value,
    and named structural walls.  --diff-vectors: machine-readable
    DIFFVEC lines (explicit word vs template word + route/vd) consumed
-   by the out-of-tree differential validator that runs both paths
-   through the pinned CRAQ simulator from identical architectural
-   state (the descriptor-vs-decomposition discipline of craq-sim
-   tests/diff-fuzz/SFPLOADMACRO).
+   by a differential validator that runs both paths
+   through the pinned reference simulator from identical architectural
+   state (the descriptor-vs-decomposition discipline of its
+   SFPLOADMACRO differential fuzzer).
 
    Build:
      g++ -std=c++17 -Wall -Wextra -Werror -I. \
@@ -124,7 +123,8 @@ struct mod_sema
    [doc:X] = tt-isa-documentation BlackholeA0/TensixTile/
 	     TensixCoprocessor/X.md functional model (WH-shared docs
 	     resolve to the WormholeB0 tree file of the same name);
-   [sim:N] = craq-sim src/tensix.cpp line N at 9f324140 (BH build);
+   [sim:N] = the pinned reference simulator's executor line N (BH
+   build);
    [md:N] = rvtt.md audited effect attributes near line N (the
    in-tree per-mod audit the RTL patterns already carry).
    Every row is doc-grounded and sim-intersected: a mod the doc
@@ -327,7 +327,7 @@ enum binding
   B_VB_CARRIER,	/* VB+VC class: launch VD through the VB:=VD route
 		   (established MUL24 order)			       */
   B_VA_CARRIER,	/* VB+VC class: launch VD on the VA-side factor -- the
-		   commuted arm (lane CI)			       */
+		   commuted arm					       */
   B_COUNT
 };
 
@@ -442,7 +442,7 @@ static const admitted_class admitted[] = {
      mods 1/9, constant VC.  Listed for completeness though the
      enumerator's generic model refuses live SFPSWAP (dual write).  */
   { 0x92, (1u << 1) | (1u << 9), 1u << B_INPLACE, "swap-cst (established)" },
-  /* WP12 generic classes (derived_value_template_fields).  */
+  /* Generic derived classes (derived_value_template_fields).  */
   { 0x90, (1u << 0) | (1u << 3), (1u << B_INPLACE) | (1u << B_NAMED),
     "cast" },
   { 0x79, (1u << 0) | (1u << 2) | (1u << 4) | (1u << 6) | (1u << 8)
@@ -453,22 +453,22 @@ static const admitted_class admitted[] = {
   { 0x98, (1u << 0) | (1u << 1), 1u << B_VB_CARRIER, "mul24" },
   /* Lane CZ admissions (kept in sync with rvtt-macro-desc.cc).  */
   { 0x79, (1u << 1) | (1u << 5) | (1u << 9),
-    (1u << B_INPLACE) | (1u << B_NAMED), "iadd-imm (lane CZ)" },
-  { 0x7a, (1u << 0) | (1u << 2), 1u << B_INPLACE, "shft-reg (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "iadd-imm" },
+  { 0x7a, (1u << 0) | (1u << 2), 1u << B_INPLACE, "shft-reg" },
   { 0x81, (1u << 0) | (1u << 2) | (1u << 4),
-    (1u << B_INPLACE) | (1u << B_NAMED), "lz (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "lz" },
   { 0x7c, (1u << 0) | (1u << 1) | (1u << 2),
-    (1u << B_INPLACE) | (1u << B_NAMED), "mov (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "mov" },
   { 0x7d, (1u << 0) | (1u << 1),
-    (1u << B_INPLACE) | (1u << B_NAMED), "abs (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "abs" },
   { 0x77, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 10),
-    1u << B_NAMED, "exexp (lane CZ)" },
-  { 0x78, (1u << 0) | (1u << 1), 1u << B_NAMED, "exman (lane CZ)" },
+    1u << B_NAMED, "exexp" },
+  { 0x78, (1u << 0) | (1u << 1), 1u << B_NAMED, "exman" },
   { 0x7e, (1u << 0) | (1u << 1),
-    (1u << B_INPLACE) | (1u << B_NAMED), "and (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "and" },
   { 0x7f, (1u << 0) | (1u << 1),
-    (1u << B_INPLACE) | (1u << B_NAMED), "or (lane CZ)" },
-  { 0x8d, 1u << 0, 1u << B_INPLACE, "xor (lane CZ)" },
+    (1u << B_INPLACE) | (1u << B_NAMED), "or" },
+  { 0x8d, 1u << 0, 1u << B_INPLACE, "xor" },
 };
 
 static bool
@@ -495,10 +495,10 @@ struct hosting_need
   unsigned count;
 };
 
-/* gcd-fresh (tt-metal agent/gcd-fresh-v2 fresh_cpp/gcd.h, laneCS): per
+/* gcd-fresh kernel: per
    17x round: strip = iadd(0-v, mod 6 reg: admitted) + and (v & iso)
    + lz + iadd-imm(-31) + shft-reg; sort = SFPSWAP dual (WALL);
-   subtract = iadd reg mod 6 (admitted).  mulint32-fresh (laneCI V0):
+   subtract = iadd reg mod 6 (admitted).  mulint32-fresh:
    4 templates full at ii=12; every further hosted member needs a 5th
    distinct word.  */
 static const hosting_need hosting[] = {
@@ -655,13 +655,13 @@ main (int argc, char **argv)
      enumeration can ever produce, because word identity is a function
      of (opcode, mod1, src_c, imm12) only -- demands a fifth distinct
      word: template-capacity-exceeded.  The ii=11 restructure floor is
-     likewise vocabulary-independent: the WP12 visibility deadline
+     likewise vocabulary-independent: the visibility deadline
      (derive-core issue_consumer_slot_p1) prices slots and subunit
      latencies, never words.  */
   printf ("\nmulint32 ceiling: 4 resident words are pairwise distinct "
 	  "from every explicit\nrow member's class (different opcode "
 	  "byte or named factor); sharing needs\nbit-identity; the "
-	  "deadline floor consumes slots, not words -> the lane CI\n"
+	  "deadline floor consumes slots, not words -> the standing\n"
 	  "refusals are enumeration-complete over this vocabulary "
 	  "space.\n");
 

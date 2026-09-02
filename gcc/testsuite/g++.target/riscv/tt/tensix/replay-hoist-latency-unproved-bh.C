@@ -2,7 +2,7 @@
 // A dependence edge whose PRODUCER carries no audited result-latency
 // fact (SFPLUTFP32: audit deliberately deferred in the cost table --
 // its Mod1/Mod1Mirror scheduling split and per-mode register envelopes
-// need their own audit; SFPLUT itself is audited since lane DL) makes
+// need their own audit; SFPLUT itself is now audited) makes
 // the payload unpriceable: the hoist refuses BY NAME, and the
 // min-benefit override cannot force it.  The same body without the consumed
 // unaudited producer fires (see the counted fire witnesses) -- the

@@ -3,9 +3,9 @@
 // single dependence chain, the ONLY semantically valid stall-closing
 // move is the typed trailing TTINCRWC stepping backward into a
 // mad-family stall -- the audited RWC counter step commutes with the
-// crossed pure-LREG word.  This is laneDG1's refusing twin
+// crossed pure-LREG word.  This is the refusing twin
 // r2a-rotate.C (its sfpi source fires verbatim under the same flags;
-// archived in laneDL-evidence-20260820): every filler used to refuse on
+// recorded with the effect-audit change): every filler used to refuse on
 // the wholesale Dst/RWC pool exclusion or the unaudited store/row-step
 // result latency.  The second function is the renamed, constant-varied
 // twin.  The mad-family members still refuse by name (nonzero latency),

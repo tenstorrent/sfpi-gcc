@@ -1,6 +1,6 @@
 // setexp-fold OFF path: with -mno-tt-tensix-optimize-setexp-fold the
 // idiom must be left exactly as written.
-// Default-ON promotion (silicon-validated: exp/sdpa capture shortening):
+// Default-ON promotion (hardware-validated: exp/sdpa capture shortening):
 // this test used to rely on the ambient default being off; it now pins
 // the -mno- spelling so the disabled path stays covered.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mno-tt-tensix-optimize-setexp-fold" }

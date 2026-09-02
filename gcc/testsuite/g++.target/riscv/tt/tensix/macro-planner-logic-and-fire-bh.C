@@ -1,4 +1,4 @@
-// Derived-template logic-family admission, SFPAND (lane CZ,
+// Derived-template logic-family admission, SFPAND (the
 // enumerated vocabulary): the BH three-operand USE_VB form names one
 // source through the VB subfield (imm12 bits 3:0 -- L0 is a legal VB
 // name; the unused-code collision is a VC-field convention only) and

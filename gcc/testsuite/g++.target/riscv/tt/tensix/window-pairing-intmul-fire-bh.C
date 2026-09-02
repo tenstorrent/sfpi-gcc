@@ -1,5 +1,5 @@
-// Lane FT window-pairing (inter-row drain tuning): the MulInt32-class
-// derived calendar pins every value carrier (lane EV's inter-row
+// Window-pairing (inter-row drain tuning): the MulInt32-class
+// derived calendar pins every value carrier (the inter-row
 // obligation places the full drain-2 between rows).  The exact
 // pending-event model proves the boundary at ZERO spacing: the only
 // pending event is the store carrier's delayed store (reads the

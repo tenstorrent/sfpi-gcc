@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -ffinite-math-only -mtt-tensix-optimize-lut-select -mtt-tensix-optimize-lut-select-leaf-ext -mtt-tensix-optimize-invariant-loadi -fdump-tree-rvtt_lut_select" }
-// laneHF refusing twin: the exact-obligation counting exempts only
+// Refusing twin: the exact-obligation counting exempts only
 // values that never compete for the eight-LREG file.  Here a genuinely
 // held vector (an allocatable-LREG value read before the loop and
 // stored after it) pins an LREG across the body on top of the six

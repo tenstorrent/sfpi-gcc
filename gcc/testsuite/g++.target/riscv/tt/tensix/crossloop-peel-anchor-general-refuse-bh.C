@@ -1,5 +1,5 @@
-// PEEL-class placement under the R2 stage-B widening (laneLB, the
-// laneKV board P0): -mtt-tensix-optimize-cc-region-general's all-lanes
+// PEEL-class placement under the R2 stage-B widening (the
+// a demonstrated wrong-code class): -mtt-tensix-optimize-cc-region-general's all-lanes
 // entry proof admits the crossed CC atoms of the tile loop, so the
 // placement walk lifts the inner CC-canonical loop's entry to the tile
 // loop's preheader -- but a PEEL-class candidate is entry-anchored

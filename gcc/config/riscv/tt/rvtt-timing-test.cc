@@ -18,7 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* Synthetic-fixture tests for the header-inline modulo-scheduling tier
-   of rvtt-timing.h (FABLE_GOES_BURR item #5), following the
+   of rvtt-timing.h, following the
    rvtt-delivery-cost-test.cc pattern:
 
      g++ -std=c++11 -Wall -Wextra -Werror -I. \
@@ -355,7 +355,7 @@ t7_marshal ()
   CHECK (self1 == 2);
 }
 
-/* Realization-tier two-matrix marshaller (item #5 stage 2): the CROSS
+/* Realization-tier two-matrix marshaller (modulo variable expansion): the CROSS
    matrix alone supplies the omega-1 edges, so storage the rotation
    renames never bounds the placement, while the intra matrix keeps the
    in-iteration constraints.  */

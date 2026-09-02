@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-record-hoist-peel -fdump-rtl-rvtt_replay-details" }
-// Exec-while-record first-trip peel fire (lane GQ, rvtt-cost.md
+// Exec-while-record first-trip peel fire (rvtt-cost.md
 // "EXEC-WHILE-RECORD FIRST-TRIP PEEL"): the Dst-store re-record window
 // whose preheader sits inside an outer loop -- the exact shape the
 // doomed-hoist mirror refuses by

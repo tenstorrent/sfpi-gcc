@@ -1,7 +1,7 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-dump-effects" }
 // Layer-1 effect-set goldens for the SFPIADD / constant-LREG SFPSWAP /
 // per-mod SFPCAST audit (effect-attributes lane).  Sources of truth:
-// SFPIADD.md / SFPSWAP.md / SFPCAST.md functional models and craq-sim
+// SFPIADD.md / SFPSWAP.md / SFPCAST.md functional models and the reference simulator's
 // TENSIX_EXECUTE_{SFPIADD,SFPSWAP,SFPCAST}.
 //
 // SFPIADD mod1=4 (CC_NONE): reads VC+VB, writes VD, lane-predicated only

@@ -1,4 +1,4 @@
-// Lane DT list-scheduler acceptance arsenal: dual-Horner P/Q rational,
+// List-scheduler acceptance arsenal: dual-Horner P/Q rational,
 // degree 3 (the documented interleave case, production sfpi shape).
 //
 // P(x) = ((1.5 x - 2.25) x + 0.75) x + 3.5
@@ -25,9 +25,8 @@
 //   materializations (audited latency-0 loadi words) are extra
 //   schedulable fillers.
 //
-// CRAQ-golden: this exact kernel body runs bit-exact on the pinned
-// craq-sim (9f324140) with the scheduler ON and OFF (lane DT evidence,
-// laneDT-evidence-20260820/craq/).
+// simulator-golden: this exact kernel body runs bit-exact on the pinned
+// the reference simulator with the scheduler ON and OFF.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -I [SFPI]/include -fno-exceptions -fno-rtti -fno-shrink-wrap -mtt-tensix-optimize-list-schedule -mno-tt-tensix-optimize-replay -fdump-rtl-rvtt_schedule-details" }
 // Measured (pinned): region nodes=14 (2 chain-seed copies + 12
 // mad-family words; the dst load/store words are the region's

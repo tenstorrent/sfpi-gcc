@@ -1,4 +1,4 @@
-// WP13 residency outward extension, varied-constants twin: different
+// Residency outward extension, varied-constants twin: different
 // payload Dst addresses -- launch words change, the derived descriptor
 // program and every proof are address-independent, the extension still
 // fires.

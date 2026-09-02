@@ -1,4 +1,4 @@
-/* One placement arbiter for invariant constants (FABLE_GOES_BURR #13).
+/* One placement arbiter for invariant constants.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -20,16 +20,16 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RVTT_PLACEMENT_H
 #define GCC_RVTT_PLACEMENT_H
 
-/* FABLE_GOES_BURR.md item #13: where a loop-invariant constant lives is
+/* Where a loop-invariant constant lives is
    one decision co-owned today by the early invariant hoist's
    park-ordering deferral heuristics, the const-residency walk's tiers
    (PRGM park / pressure-park LREG tier / store-source tier), the
    lut-select coefficient placement, and -- downstream of all of them --
    the dst-ownership identity-reload fold whose LREG pressure guard
-   loses to whatever the placement authorities pinned (the erfinv
-   9 > 8 anatomy, conf pin-48 / laneIZ; laneJT structurally refuted
-   post-alloc coalescing as relief because dst-ownership runs before
-   lp-alloc).
+   loses to whatever the placement authorities pinned (the measured
+   nine-live-values-versus-eight-registers anatomy; post-alloc
+   coalescing was structurally refuted as relief because dst-ownership
+   runs before lp-alloc).
 
    This module is the one arbitration authority: the owning passes stop
    *deciding locally-greedily* and start *bidding* -- every legality
@@ -60,9 +60,9 @@ along with GCC; see the file COPYING3.  If not see
      set exceeds the deterministic budget refuses whole
      (place-budget-exhausted) and keeps the legacy decisions; the
      pressure-park tier's marginal LREG park can be outbid by the
-     priced downstream fold demand (place-fold-reserve-outbid) -- the
-     erfinv relief lever, "price the dst-ownership fold through the
-     pressure-park tier" (the pin-48 named successor).  */
+     priced downstream fold demand (place-fold-reserve-outbid) --
+     "price the dst-ownership fold through the
+     pressure-park tier", the relief lever for that anatomy.  */
 
 /* Deterministic arbitration budget: a single decision point arbitrates
    at most this many candidates; beyond it the arbiter refuses whole

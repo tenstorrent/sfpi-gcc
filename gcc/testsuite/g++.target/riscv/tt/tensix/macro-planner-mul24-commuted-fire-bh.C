@@ -1,5 +1,5 @@
 // Derived-template SFPMUL24 commuted-operand admission: both audited
-// mods are symmetric in VA/VB (craq-sim sfpmul24_result; SFPMUL24.md),
+// mods are symmetric in VA/VB (the reference simulator sfpmul24_result; SFPMUL24.md),
 // so an in-place product the register allocator tied onto the VA-side
 // factor is realizable through the commuted word — the launch VD
 // supplies that factor through the VB:=VD route at execution and the
@@ -12,7 +12,7 @@
 // a's register through the VA field.  The two shift words between the
 // product and its accumulate are load-bearing slack: they hold the
 // explicit consumer far enough past the MAD's two-cycle latency for
-// the WP12 visibility deadline.
+// the derived-calendar visibility deadline.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-macro-planner-verify -fdump-rtl-rvtt_macro_planner" }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor: derived-calendar events=5 staging=none drain=2 kind-mask=0x3" 1 "rvtt_macro_planner" } }
 // { dg-final { scan-rtl-dump-times "Macro-planner descriptor: templates=3 seq=2 misc=0x00000310 setc16=3 launches=2 drain=2 planned-lregs=0x7 prefix=all-lanes" 1 "rvtt_macro_planner" } }
@@ -25,7 +25,7 @@
 // The hosted product vanishes into the calendar; the accumulate, one
 // slack shift, and one cast remain the row's explicit issues.
 // { dg-final { scan-assembler-not "SFPMUL24" } }
-// Lane EV (2026-08-21): this row's launches are fixed-VD value
+// Adjudicated fact: this row's launches are fixed-VD value
 // carriers (drain=2), so the inter-row drain applies -- the old
 // back-to-back expectation pinned a stream whose next-row events land
 // ON the pending-writeback cycle (a staged-event same-cycle race by

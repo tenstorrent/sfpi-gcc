@@ -1,6 +1,6 @@
-// Derived-template Simple-unary admission, SFPLZ (lane CZ, enumerated
+// Derived-template Simple-unary admission, SFPLZ (enumerated
 // vocabulary): lz reads only LReg[VC] (SFPLZ.md functional model;
-// craq-sim TENSIX_EXECUTE_SFPLZ), so the in-place row member
+// the reference simulator TENSIX_EXECUTE_SFPLZ), so the in-place row member
 // a = lz(a) realizes exactly as an SFPLZ template with src_c 0 under
 // the VC:=VD route -- the gcd-fresh round's leading-zero step.
 // Before the admission the row refused derivation

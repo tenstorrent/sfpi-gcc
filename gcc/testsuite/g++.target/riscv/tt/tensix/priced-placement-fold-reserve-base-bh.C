@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER fold-reserve base leg (item #13; fire =
+// PLACEMENT-ARBITER fold-reserve base leg (the placement arbiter; fire =
 // priced-placement-fold-reserve-fire-bh.C, same body, flag on): with
 // -mtt-tensix-optimize-priced-placement ABSENT the arbiter runs in
 // shadow only -- it dumps the bid comparison (the fold demand outbids
@@ -6,7 +6,7 @@
 // LREG hoist proceeds, the parked constant web rides through the
 // record..reload span, and the dst-ownership fold refuses
 // lreg-pressure-exceeded (pressure 9 > budget 8) exactly as erfinv does
-// at ON (conf pin-48 witness anatomy).  The relief census names the
+// at ON (recorded witness anatomy).  The relief census names the
 // parked web as the remat-class occupant -- the arbiter's stage-A
 // proof artifact.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-const-residency -mtt-tensix-optimize-pressure-park -fdump-tree-rvtt_prgm_const-details -fdump-rtl-rvtt_dst_ownership" }

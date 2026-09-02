@@ -1,4 +1,4 @@
-// PRESSURE-PARK pre-peel placement fire (lane IN, the HN hand-arm
+// PRESSURE-PARK pre-peel placement fire (the HN hand-arm
 // +0.65 residual): under -mtt-tensix-optimize-park-ordering the park
 // LREG tier no longer pays the peel's duplicated materialization.
 // Four admitted post-CC candidates against three free PRGM

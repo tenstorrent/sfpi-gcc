@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD near miss, typed interleave (lane HS): a typed
+// OPAQUE-REPLAY-RECORD near miss, typed interleave: a typed
 // builtin call inside the open record window would be swallowed with
 // the raw words, silently discarding compiler-known semantics.  The
 // window refuses by name; the TU keeps its opaque refusal.

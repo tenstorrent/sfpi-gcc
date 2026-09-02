@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-replay-window-sizing -fdump-rtl-rvtt_replay" }
-// No-wider-candidate near miss (lane IM): the run is exactly 3 units
+// No-wider-candidate near miss: the run is exactly 3 units
 // (18 words, no tail), so no wider same-anchor candidate exists at all
 // (every longer window has a single non-overlapping instance and is
 // never an active candidate) -- window sizing refuses by name and the

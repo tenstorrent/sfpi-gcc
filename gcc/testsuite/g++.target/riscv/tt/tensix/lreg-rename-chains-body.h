@@ -1,5 +1,5 @@
 /* Parameterized double-collision row for the GENERAL du-chain rename
-   (item #7): a counted loop whose body materializes FOUR independent
+   (the du-chain rename engine): a counted loop whose body materializes FOUR independent
    latency-bearing values that the allocator packs pairwise into two
    LREGs (first-fit reuse), each consumed through the non-tied XOR
    source position.  The writers carry a nonzero audited latency, so

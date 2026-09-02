@@ -1,6 +1,6 @@
 // Narrow (chain-wise) source order of the fire body: compiles at plain
 // flags with no relief -- the wide twin's refusal is purely an issue
-// ORDER artifact, and this form is the CRAQ golden definer for the
+// ORDER artifact, and this form is the simulator golden definer for the
 // scheduled wide twin (identical dataflow, bit-identical outputs).
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops" }

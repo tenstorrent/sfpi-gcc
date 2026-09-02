@@ -11,7 +11,7 @@
 // translation unit.  On a toolchain built without comdat groups the
 // same source keeps a full D1 body and the pre-existing decl-level
 // on-demand scan covers it: the fire below is asserted for BOTH build
-// recipes (this was the pin-11 stock-vs-lane divergence: the identical
+// recipes (a demonstrated stock-vs-development-harness divergence: the identical
 // compiler source fired on lane-recipe builds and refused on the
 // shipping recipe).  -fno-early-inlining keeps the destructor call out
 // of the early inliner so the removed-node state is reached

@@ -25,14 +25,15 @@ along with GCC; see the file COPYING3.  If not see
    operation names, or source structure.  The planner (Layers 2/3/5/6) asks
    encodability questions; this layer answers them from per-CPU data.
 
-   Every constant is transcribed from the frozen Min/Max pass
-   (/localdev/nkapre/sfpi-gcc-minmax-macro, review SHA 4e045d31d,
-   gcc/config/riscv/tt/rtl-rvtt-loadmacro.cc) and from the legitimate
-   TT_OP_* field-shift tables (sfpu-ops-{wh,bh}.h).  See NOTES-wp6-prep.md
-   in this directory for the constant-by-constant provenance audit that the
-   WP7 byte-parity gate consumes, including the explicit list of constants
-   whose architectural meaning could NOT be established from the frozen pass
-   plus in-tree docs.
+   Every constant is transcribed from the frozen Min/Max pass (the
+   retired rtl-rvtt-loadmacro.cc, preserved in the version-control
+   history) and from the legitimate TT_OP_* field-shift tables
+   (sfpu-ops-{wh,bh}.h).  Each constant was audited one by one for the
+   byte-parity gate that compares formation output against the frozen
+   pass's emitted words; constants whose architectural meaning could
+   NOT be established from the frozen pass plus in-tree docs are marked
+   unestablished or hypothesis-only below and are never decision
+   inputs.
 
    The file is deliberately freestanding (only <stdint.h>/<stddef.h>) so the
    standalone unit test rvtt-macro-tables-test.cc can compile it against a
@@ -68,7 +69,7 @@ enum subunit_t { SU_NONE, SU_SIMPLE, SU_MAD, SU_ROUND,
 
 /* Sentinel for a per-event programmed delay that is present in a proven
    sequence word but whose value could not be established from the frozen
-   pass + docs (see NOTES-wp6-prep.md, unestablished list).  */
+   pass + docs (the unestablished class above).  */
 const uint8_t DELAY_UNKNOWN = 0xff;
 
 /* Stable refusal vocabulary name returned for CPUs with no capability
@@ -113,9 +114,10 @@ struct seq_event
   bool is_store;
 };
 
-/* A proven, CRAQ/testsuite-validated per-macro sequence program: the ONLY
+/* A proven, simulator- and testsuite-validated per-macro sequence
+   program: the ONLY
    sequence encodings this table can produce.  The bit-level format of the
-   sequence word is NOT established (NOTES-wp6-prep.md); until an
+   sequence word is NOT established; until an
    independent architectural reference is attached, encode_sequence () is a
    whole-word lookup over these entries and refuses everything else.
    The sequence word for macro K is written to SFPCONFIG dest 4+K
@@ -133,7 +135,7 @@ struct seq_program
 /* A proven misc word (SFPCONFIG dest 8).  For entries with
    store_mod0_in_bits_3_0, bits 3:0 carry the store data format (proven by
    the frozen pass computing 0x700 | mode at rtl-rvtt-loadmacro.cc:1572);
-   remaining bit semantics are hypothesis-only, see NOTES-wp6-prep.md.  */
+   remaining bit semantics are hypothesis-only.  */
 struct misc_word_entry
 {
   const char *name;
@@ -148,7 +150,7 @@ struct misc_word_entry
    of a physical LREG: observed selector values are 0xC and 0xD
    (comment-derived meanings: 0xC ~ the launch VD, 0xD ~ the macro
    transient LReg16; precise read/write-role semantics are PARTIALLY
-   established -- see NOTES-wp6-prep.md).  */
+   established).  */
 struct template_spec
 {
   uint8_t opcode;	/* Tensix opcode byte (0x92 SFPSWAP, ...)     */
@@ -171,7 +173,7 @@ struct hidden_write_entry
 };
 
 /* A reference descriptor word: (SFPCONFIG dest, word) pairs for each
-   validated shape.  This is AUDIT/EXPECTATION data for the WP7 byte-parity
+   validated shape.  This is AUDIT/EXPECTATION data for the byte-parity
    gate and the unit tests -- never an input to formation decisions.  */
 struct ref_descriptor_word
 {
@@ -242,7 +244,7 @@ struct caps
   const hidden_write_entry *hidden_writes;
   unsigned n_hidden_writes;
 
-  /* Reference expectation data (WP7 audit; not decision input).  */
+  /* Reference expectation data (byte-parity audit; not decision input).  */
   const ref_descriptor_word *ref_descriptors;
   unsigned n_ref_descriptors;
   const setc16_program *ref_addr_mod_setc16;   /* full owned program   */
@@ -255,7 +257,7 @@ struct caps
   unsigned proven_drain_slots;
 
   /* Frozen-pass profitability break-even (rows per run: BH 7, WH 8).
-     REFERENCE DATA ONLY for the WP7 cost-model regression -- the Layer-6
+     REFERENCE DATA ONLY for the cost-model regression -- the Layer-6
      model must DERIVE these values; it must never read them.  */
   unsigned reference_breakeven_rows;
 };
@@ -341,7 +343,7 @@ extern bool encode_misc_select (const caps *, unsigned store_mod0,
 /* Deferred-CC visibility lag: a CC result computed by a retiring macro
    event becomes architecturally visible to instructions issued in the
    cycle AFTER the event executed (the hardware's flag-forwarding
-   latency; modeled identically by the CRAQ simulator's
+   latency; modeled identically by the reference simulator's
    load_macro_cc_update_pending latch).  An event launched in slot S
    with programmed delay D executes in slot S + 1 + D; its CC write is
    visible to words issued in slots >= S + 1 + D + this lag.  */
@@ -362,14 +364,14 @@ extern unsigned cc_visibility_lag ();   /* 1 */
    retires in the Delay-2 store's own cycle, executes the store under
    the SFPSETCC complement mask and leaves the true-branch lanes
    unwritten; the compact 3-slot calendar, whose restore retires one
-   cycle earlier, writes all lanes and is silicon-correct.  A
+   cycle earlier, writes all lanes and is correct on hardware.  A
    CC-writing calendar must therefore retire its all-lanes restore
    STRICTLY BEFORE the scheduled store executes (macro_cc_model;
    refusal cc-restore-store-race).  */
 extern bool store_lane_mask_live_at_execution ();   /* true */
 
 /* Architecturally-defined complement of an SFPSETCC instr_mod1
-   (WormholeB0/BlackholeA0 SFPSETCC.md; mirrored by the CRAQ executor):
+   (WormholeB0/BlackholeA0 SFPSETCC.md; mirrored by the reference simulator):
    bit 0 selects the immediate operand, bit 1 selects the !=0 test over
    the sign test, bit 2 complements the register-test result, bit 3
    forces false.  Only the plain register-test class {0, 2, 4, 6} has a
@@ -389,12 +391,13 @@ extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 /* the derivation notes in rvtt-macro-derive-core.h): the ISA functional     */
 /* specification SFPLOADMACRO.md (SequenceBits, the per-sub-unit      */
 /* opcode legality table, the Simple/Round VD16 rule, the SFPSWAP     */
-/* adjacency rule, the Misc field layout), the CRAQ generic executor  */
-/* (craq-sim f80a8d64 sfploadmacro_events.h: absolute ready =	      */
-/* issue+1+delay, retire-before-issue, transactional same-cycle	      */
+/* adjacency rule, the Misc field layout), the reference simulator's  */
+/* generic executor (absolute ready = issue+1+delay,		      */
+/* retire-before-issue, transactional same-cycle		      */
 /* groups), and the handwritten MulInt32 init (tt_llk_blackhole	      */
-/* ckernel_sfpu_mul_int.h, author-annotated fields).  This resolves   */
-/* NOTES-wp6-prep.md section 9(b)/(c)/(g).  Every fact below carries that    */
+/* ckernel_sfpu_mul_int.h, author-annotated fields).  This resolved   */
+/* the formerly-open sequence-word bit-format questions.  Every fact  */
+/* below carries that						      */
 /* provenance; whole-word proven programs above remain the capability */
 /* for the frozen shapes (byte parity), while these facts let the     */
 /* planner DERIVE calendars for new shapes.			      */
@@ -443,7 +446,7 @@ extern unsigned subunit_legal_mask (const caps *, uint8_t opcode);
 extern unsigned subunit_result_latency (unsigned seq_unit);
 
 /* Operand-routing class of a template opcode (ISA field-override
-   rules; mirrored by the CRAQ build_dispatch).  */
+   rules; mirrored by the reference simulator's dispatch builder).  */
 enum route_class { RC_NONE, RC_VC, RC_VB_VC, RC_SHFT2 };
 extern route_class opcode_route_class (const caps *, uint8_t opcode);
 
@@ -451,7 +454,7 @@ extern route_class opcode_route_class (const caps *, uint8_t opcode);
    target LReg16 and must keep route=1 so a planned VC survives.  */
 extern bool opcode_reads_vd (const caps *, uint8_t opcode);
 /* Whether OPCODE may be realized with the LReg16 staging target: the
-   oracle-proven direct-evaluator set (lane IS F1; see the table's
+   oracle-proven direct-evaluator set (see the table's
    comment).  Everything else keeps VD-direct/staging-copy or refuses.  */
 extern bool opcode_l16_target_proven (const caps *, uint8_t opcode);
 
@@ -494,9 +497,9 @@ extern void decode_misc_fields (uint32_t word, unsigned *store_mod0,
    LLK's live base-0 ADDR_MOD_2 and corrupted the NEXT tile's datacopy;
    the absorption machinery (launch auto-increment through the owned
    slot) was wrong, not unproven.  With the corrected single-slot
-   Base=1 program (this table) the faithful WH sim (craq-sim wh
-   8f0079a9) executes the derived absorbed-stride calendar bit-exact
-   (laneAP WH CRAQ, derived unary max/min, multi-tile).  QSR has no
+   Base=1 program (this table) the faithful WH reference simulator
+   executes the derived absorbed-stride calendar bit-exact
+   (derived unary max/min, multi-tile).  QSR has no
    capability entry and refuses.  Refusal name (unproven CPUs):
    derived-stride-absorption-unproven.  */
 extern bool derived_stride_absorption_proven (const caps *);
@@ -521,7 +524,7 @@ extern uint32_t sfpencc_all_lanes_word ();
 
 /* One CR-mode Dst += 8 counter step: SETRWC (0, CR=4, D=8, B=0, A=0,
    mask=4) = 0x37120004.  A Dst face advance issues this word twice
-   (typed rvtt_ttdstface insn since WP1).  */
+   (the typed rvtt_ttdstface insn).  */
 extern uint32_t dst_step8_setrwc_word ();
 extern unsigned dst_face_advance_step_count ();   /* 2 */
 

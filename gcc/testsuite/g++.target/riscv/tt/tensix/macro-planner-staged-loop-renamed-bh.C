@@ -1,4 +1,4 @@
-// Renamed-equivalent proof (WP8 genericity self-check): identical
+// Renamed-equivalent proof (loadmacro-formation genericity self-check): identical
 // dataflow under different function and value names forms the identical
 // descriptor and launch words.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner" }

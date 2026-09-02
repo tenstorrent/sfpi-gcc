@@ -41,8 +41,9 @@ along with GCC; see the file COPYING3.  If not see
        r = SFPABS (x, mod1=INT)
 
    Bit-exactness (all 2^32 x per lane, from the pinned simulator
-   models -- craq-sim TENSIX_EXECUTE_SFPSETCC mod1=0 raw-sign-bit
-   select + TENSIX_EXECUTE_SFPIADD mod1=6 two's-complement wrap
+   models -- the reference simulator's TENSIX_EXECUTE_SFPSETCC
+   mod1=0 raw-sign-bit select + TENSIX_EXECUTE_SFPIADD mod1=6
+   two's-complement wrap
    subtract vs TENSIX_EXECUTE_SFPABS mod1=0):
    the CC lowering of "v < 0" enables the negation exactly on lanes
    whose raw bit 31 is set; SFPABS mod1=0 negates exactly the lanes
@@ -63,7 +64,8 @@ along with GCC; see the file COPYING3.  If not see
      - the v_else spelling, v_if (v >= 0) { } v_else { r = 0 - v; }:
        a single SFPCOMPC directly after the condition binds (an empty
        then-arm) complements the enabled set within the enclosing
-       frame (craq-sim TENSIX_EXECUTE_SFPCOMPC), so CC_GE folds to the
+       frame (the reference simulator's TENSIX_EXECUTE_SFPCOMPC), so
+       CC_GE folds to the
        CC_LT set and CC_GT to the CC_LE set on the enclosing-enabled
        lanes -- the sets already covered.
 

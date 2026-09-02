@@ -1,4 +1,4 @@
-// Lane FL (FH-4): the WH mirror of
+// The WH mirror of
 // drain-schedule-fixedvd-vd-write-refuse-bh.C -- the WH capability
 // tables carry the same fixed-VD unary shift/cast program (WH
 // no-increment address mode is 3), so the follower VD-write refusal

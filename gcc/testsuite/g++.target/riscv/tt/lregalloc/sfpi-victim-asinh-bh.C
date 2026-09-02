@@ -1,12 +1,11 @@
-// REAL ICE VICTIM: asinh, the clean fused form (lane BS flagship,
-// laneBS-evidence-20260818/flagship-acosh-asinh-clean.diff '+' side).
+// REAL ICE VICTIM: asinh, the clean fused form (the '+' side of the
+// recorded flagship acosh/asinh cleanup diff).
 // a = |x| and x2 = x*x HELD in vFloats across the sqrt/reciprocal
 // expression AND the log1p polynomial, no DST round-trip: the shipped
 // production kernel recomputes them inline and round-trips through DST
 // purely to duck the 8-LREG wall (in-tree comment,
 // ckernel_sfpu_trigonometry.h:1086-1089).
-// TODAY: refuses lreg-pressure-exceeded (verbatim refusal recorded at
-// laneBS-evidence-20260818/log-flagship-on-craq-final.log:51).
+// TODAY: refuses lreg-pressure-exceeded.
 // FUTURE-VERDICT (LREG allocator): COMPILE via exact fp32 Dst-row spill;
 // numeric contract = the op's existing golden (the spill round-trip is
 // exact, the DAG is the shipped math).

@@ -4,7 +4,7 @@
 // contract's full-lane write proof; rvtt-effects.h), so the launch
 // payload stays effect-opaque and the hoist keeps refusing BY THE SAME
 // NAME as before the records existed.  The eight-row compact select
-// loop is the WP10 TTNN Where delivery shape
+// loop is the TTNN Where delivery shape
 // (macro-planner-select-compact-replay-bh.C's body under a counted
 // loop): the in-body execute-while-record capture still forms exactly
 // as before; only the preheader hoist is (and stays) refused.

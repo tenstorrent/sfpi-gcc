@@ -1,4 +1,4 @@
-// WP12: derived-calendar FORMATION of a multi-sub-unit integer row (the
+// Derived-calendar FORMATION of a multi-sub-unit integer row (the
 // MulInt32 shape class): two INT32 loads with in-place sign-magnitude
 // casts, four SFPMUL24 partial products, immediate shifts, integer
 // accumulates, and an in-row store of the casted result.  No proven

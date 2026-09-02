@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER park-ordering shadow leg (item #13; priced leg =
+// PLACEMENT-ARBITER park-ordering shadow leg (the placement arbiter; priced leg =
 // priced-placement-park-ordering-keep-bh.C, same body): without
 // -mtt-tensix-optimize-priced-placement the arbiter dumps its verdict
 // beside the legacy demand cut and changes nothing: the `in_region >=

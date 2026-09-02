@@ -66,8 +66,8 @@ along with GCC; see the file COPYING3.  If not see
      delta.
    - Per-event programmed delays come exclusively from the tables' proven
      sequence programs.  DELAY_UNKNOWN never schedules: the derived
-     structure is dumped and the schedule refuses by name (WP7-blocking
-     until the architectural reference resolves the delay).
+     structure is dumped and the schedule refuses by name (formation-
+     blocking until an architectural reference resolves the delay).
    - The launch VD policy is derived conservatively: when a launched
      event consumes the launch VD and its execution slot is not proven to
      precede the next row's launch, consecutive rows must alternate VDs.
@@ -75,7 +75,7 @@ along with GCC; see the file COPYING3.  If not see
    Nothing here names an operation, matches an opcode calendar, or
    assembles a raw word.  */
 
-/* WP12 scheduler-facing helpers (rvtt-macro-desc.cc): the realized
+/* Scheduler-facing derivation helpers (rvtt-macro-desc.cc): the realized
    hosted sub-unit, the shared sacrificial-VD formula, and the derived
    template-class probe backing capacity-aware hosting.  */
 extern int rvtt_macro_hosted_subunit (rtx_insn *);
@@ -125,8 +125,8 @@ struct row_item
   rtx address, mode, addr_mode;	/* Dst accesses only */
   int carrier;			/* carrier group index, or -1	*/
   bool launched;		/* launched sequence event	*/
-  bool coalesced;		/* WP9 lane-merge, no issued word */
-  bool absorbs;			/* WP10 explicit auto-inc absorber */
+  bool coalesced;		/* CC-template lane-merge, no issued word */
+  bool absorbs;			/* compact-calendar auto-inc absorber */
 };
 
 /* Find the proven sequence program matching MACRO_INDEX and the derived
@@ -163,7 +163,7 @@ rvtt_macro_schedule_release (macro_schedule *sched)
 /* One deterministic scheduling attempt: grouping candidate CANDIDATE
    with the hosting proposals in BANNED (bit per row-item index) forced
    to stay explicit issues.  BANNED = 0 is the established maximal
-   greedy hosting; the WP13 IMS repair driver below enumerates reduced
+   greedy hosting; the IMS repair driver below enumerates reduced
    hosted sets when the maximal proposal refuses downstream.  */
 
 static bool
@@ -258,7 +258,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
       return store_merged;
     };
 
-  /* WP9 CC-template rows: a row whose slice carries a predicate
+  /* CC-template rows: a row whose slice carries a predicate
      definition (a CC-writing value event reading an LREG).  Region
      discovery only admits CC writers in the definition and proven
      all-lanes-restore roles; here they select the CC hosting and
@@ -268,7 +268,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
     row_has_cc_def |= !item.address && item.effects.cc_write
       && item.effects.lreg_read != 0 && !item.effects.lreg_write;
 
-  /* WP10: predicate-writing rows gain one more deterministic candidate
+  /* Compact calendar: predicate-writing rows gain one more deterministic candidate
      AHEAD of the established two -- the COMPACT CC calendar (the
      production handwritten select protocol's own 3-slot shape): the
      all-lanes restore rides the second-issued load carrier, the
@@ -307,11 +307,11 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
   if (cc_compact && dump)
     fprintf (dump, "Macro-planner schedule-candidate: cc-compact\n");
 
-  /* Launched-event hosting (generalized at WP12):
+  /* Launched-event hosting (generalized with the derived template classes):
 
      - CC-DEFINITION events (a CC write reading LREGs, writing none)
        keep the established rule: hosted on the carrier of their
-       earliest producing Dst load (the WP9/WP10 select programs key
+       earliest producing Dst load (the select programs key
        on exactly this assignment).
 
      - Any SIMPLE/ROUND/MAD value event whose single written register
@@ -365,7 +365,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
     {
       row_item &item = items[ix];
       if (ix < 64 && ((banned >> ix) & 1))
-	return;			/* IMS repair: forced explicit (WP13)  */
+	return;			/* IMS repair: forced explicit	       */
       if (item.address || item.launched)
 	return;
       if (item.effects.subunit != XTT_SU_SIMPLE
@@ -384,7 +384,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
       bool legacy_reads_rule = false;
       if (cc_definition)
 	{
-	  /* Established WP9/WP10 rule.  */
+	  /* Established select-program rule.  */
 	  uint32_t needed = item.effects.lreg_read;
 	  for (unsigned p = 0; p != ix && cand < 0; ++p)
 	    if (items[p].address && items[p].effects.dst_mem_read
@@ -399,7 +399,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
 	     the proven program envelopes and do not constrain the
 	     routing.  Events OUTSIDE the single-result class (the
 	     dual-result binary swap of the frozen binary-periodic
-	     program) keep the established pre-WP12 read-based hosting
+	     program) keep the established read-based hosting
 	     unchanged: SIMPLE/ROUND only, on the carrier of the
 	     earliest producing Dst load, no tuple accounting (the
 	     proven whole-word programs own their realization).  */
@@ -533,11 +533,11 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
      after a definition) rides a load carrier; which one is the
      candidate's CC hosting rule:
 
-     - established (WP9): the LAST-issued load carrier -- the latest
+     - established: the LAST-issued load carrier -- the latest
        launch available to a CC event -- so its execution follows every
        predicated event of the row;
 
-     - compact (WP10): the EARLIEST-issued load carrier that is not the
+     - compact: the EARLIEST-issued load carrier that is not the
        definition's -- the second launch of the handwritten select
        protocol -- freeing the trailing payload load to stay explicit
        (the deferred-CC visibility lag keeps the restore's write
@@ -576,7 +576,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
 	    }
     }
 
-  /* Lane-merge coalescing (WP9).  In a predicate-writing row every
+  /* Lane-merge coalescing.  In a predicate-writing row every
      unhosted CC-reading value event must be the lane-merge shape --
      it reads its own destination (the live value), takes exactly one
      other LREG input, both produced by this row's Dst loads, and its
@@ -619,7 +619,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
       ++launched_events;	/* the delayed store event	       */
 
   /* More launched events than InstructionTemplate destinations is no
-     longer a hard stop (WP12): bit-identical derived template words
+     longer a hard stop (template sharing): bit-identical derived template words
      share one destination, and only descriptor synthesis derives the
      words.  The refusal is recorded for the schedule dump and carved
      out at synthesis, whose own post-sharing capacity gate is
@@ -647,7 +647,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
   int absorb_carrier = -1;
   bool absorb_into_explicit = false;
   const char *cc_compact_refusal = nullptr;
-  /* A predicate-writing row's ESTABLISHED (WP9) calendar never absorbs
+  /* A predicate-writing row's ESTABLISHED calendar never absorbs
      its separator: the explicit counter word occupies the issue slot in
      which the row-end restore's CC result becomes visible
      (cc_visibility_lag), so the next row opens under the restored
@@ -657,8 +657,8 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
      model's live-mask race constraint (cc-restore-store-race) -- the
      established 4-slot calendar fails it and refuses there.  */
   /* The row's per-trip Dst advance: the classic separator-carried
-     delta, or -- for an immediate-delta region (lane IS, F1 honest
-     fix) -- the discovery-proven uniform absolute advance
+     delta, or -- for an immediate-delta region -- the
+     discovery-proven uniform absolute advance
      (macro_region::imm_stride), which the absorbed calendar reproduces
      exactly (discovery proved the total separator advance equals
      rows * imm_stride).  An immediate-delta region that fails to
@@ -687,12 +687,12 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
 	    absorb_carrier = -1;
 	}
     }
-  /* The compact CC calendar (WP10) MANDATES absorption -- into the
+  /* The compact CC calendar MANDATES absorption -- into the
      trailing EXPLICIT payload load's own auto-increment address mode
      (the restore was re-hosted onto the middle carrier precisely so
      the interval could compress: the restore becomes visible in the
-     next row's first slot, and -- the live-store-mask constraint the
-     silicon proved -- retires one cycle BEFORE the delayed store
+     next row's first slot, and -- the hardware-proven live-store-mask
+     constraint -- retires one cycle BEFORE the delayed store
      executes).  When the row's last Dst access is not a
      demoted explicit load, or the tables' address-modifier machinery
      does not cover the delta, this candidate is unprovable and the
@@ -727,8 +727,9 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
     }
   /* A predicate-writing row that keeps its typed separator (the
      established 4-slot select calendar) is no longer refused here
-     structurally: the 2026-08-17 silicon adjudication's mis-select was
-     root-caused (craq-sim 9f324140) to the ARCHITECTURAL live-store-
+     structurally: the hardware-adjudicated mis-select was
+     root-caused (via the corrected reference simulator) to the
+     ARCHITECTURAL live-store-
      mask race -- that calendar retires its all-lanes restore in the
      same cycle as its delayed store -- which the descriptor CC model
      now derives from the slots and proven delays and refuses by name
@@ -1054,7 +1055,7 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
   return true;
 }
 
-/* WP13 IMS placement repair (literature scan Idea 5, Rau's iterative
+/* IMS placement repair (Rau's iterative
    modulo scheduling adapted to the macro sub-unit calendar).  The
    established search is all-or-nothing per grouping candidate: when the
    maximal greedy hosting proposal refuses anywhere downstream

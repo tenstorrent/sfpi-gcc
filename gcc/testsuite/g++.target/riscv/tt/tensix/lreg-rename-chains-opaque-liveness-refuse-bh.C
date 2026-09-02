@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename-chains -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// laneKZ soundness twin (deepseek_top32 wrong-code class).  The chain
+// Untrusted-liveness soundness twin (a demonstrated wrong-code class).  The chain
 // SPAN itself is clean, but the FUNCTION contains an opaque instruction
 // (a raw .ttinsn word OUTSIDE the loop row), so DF hard-register
 // live-in/live-out is unreliable: a block-untouched LREG can be

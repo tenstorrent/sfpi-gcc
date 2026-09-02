@@ -1,4 +1,4 @@
-// Lane FL (FH-3, licensed direction): the FULL FP license
+// Playback-barrier rule, licensed direction: the FULL FP license
 // (-fassociative-math -fno-signed-zeros -fno-trapping-math +
 // -mtt-tensix-optimize-reassoc) never overrides the playback barrier --
 // a licensed FP chain with a TTREPLAY playback inside its window still

@@ -1,4 +1,4 @@
-// WP15 varied-constants twin: a different shift immediate and a
+// Init-hoist varied-constants twin: a different shift immediate and a
 // different second-operand row address -- the formation fires through
 // the same derivation with VISIBLY different derived words (the
 // SHFT2 template word carries the varied immediate), proving no

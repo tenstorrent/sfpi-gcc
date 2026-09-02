@@ -31,7 +31,7 @@ enum rvtt_lut_coeff_encoding
   /* Two adjacent slots pack into one LReg as a pair of LUT16 halves
      (low half = even slot, high half = odd slot).  LUT16 is the
      SFPLUTFP32 coefficient format (tt-isa-documentation SFPLUTFP32.md
-     Lut16ToFp32; craq-sim tensix.cpp lut16_to_fp32): NOT IEEE FP16 --
+     Lut16ToFp32; the reference simulator's lut16_to_fp32): NOT IEEE FP16 --
      a 5-bit exponent field of 31 decodes to +/-0.0, every other
      exponent (0 included) decodes as a normal with implicit leading
      one, (1 + man/1024) * 2^(exp-15).  Every compile-time coefficient

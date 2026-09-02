@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-wh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-replay-hoist -mtt-tensix-optimize-counted-row-formation -fdump-rtl-rvtt_replay" }
 // WH twin of the counted-row fire witness.
-// Lane ID (final lockstep audit): under WH's register rotation every
+// Final-lockstep audit: under WH's register rotation every
 // canonicalization plan for this body relied on post-verification
 // occupancy swaps that broke the member words' operand correspondence
 // (the launches would replay reads of registers the plan's own renames

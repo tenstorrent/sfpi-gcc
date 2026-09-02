@@ -1,10 +1,10 @@
 // Key-value refold refusal (crosslane-kv-refold-tie-unadjudicated):
 // under ENABLE_DEST_INDEX the swap decision moves companion payloads,
 // and the equal-key decision is an UNADJUDICATED doc-vs-sim divergence
-// (lane FB finding: SFPSWAP.md keys tie swaps on sign; the pinned sim
+// (SFPSWAP.md keys tie swaps on sign; the reference simulator
 // compares min c<d / max c>=d) -- a second identical exchange moves
 // equal-key companions again under the doc model, so indexed refolding
-// refuses by name until silicon adjudicates.
+// refuses by name until hardware adjudicates.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-optimize-crosslane -mno-tt-tensix-optimize-replay -fdump-tree-rvtt_crosslane" }
 
 void kv_sorted_twice ()

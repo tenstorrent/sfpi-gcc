@@ -5,7 +5,7 @@
 // executes once before any group store can be in flight -- the guard
 // admits it and the group keeps firing (device-witnessed composition:
 // xielu-fresh carries record 0,4,0,1 and a fired group in one function
-// and passes correctness and perf on silicon).
+// and passes correctness and perf on hardware).
 // { dg-final { scan-rtl-dump-not "mod-write-noexec-record-composition-unaudited" "rvtt_dst_autoincr" } }
 // { dg-final { scan-rtl-dump "Dst-autoincr group: bb \[0-9\]+ rows 1 stride 2 config 3 words .preheader." "rvtt_dst_autoincr" } }
 // { dg-final { scan-assembler-not "TTINCRWC" } }

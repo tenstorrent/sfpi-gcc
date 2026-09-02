@@ -1,4 +1,4 @@
-// MOP acceptance control (lane FR): the same counted playback loop with
+// MOP acceptance control: the same counted playback loop with
 // no window forms its TTMOP and compiles silently under the crosslane
 // flag -- the refusal keys on the proven-OPEN window, not on MOP
 // formation itself.

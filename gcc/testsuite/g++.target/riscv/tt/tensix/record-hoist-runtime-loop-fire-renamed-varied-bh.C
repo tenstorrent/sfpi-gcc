@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// Renamed-varied twin of record-hoist-runtime-loop-fire-bh.C (lane FW):
+// Renamed-varied twin of record-hoist-runtime-loop-fire-bh.C:
 // different names, LRegs and operand roles, a STALLWAIT sync word, and
 // a masked-counter field in the computed push.  Same structural facts,
 // so the same admission: per_trip = 6*123 - 70 = 668; record_once =

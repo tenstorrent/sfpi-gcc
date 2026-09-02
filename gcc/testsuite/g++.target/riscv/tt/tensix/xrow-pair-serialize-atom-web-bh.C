@@ -1,4 +1,4 @@
-// Serialization regression (the CRAQ-caught WAR defect): the store's
+// Serialization regression (the simulator-caught WAR defect): the store's
 // value web roots INSIDE a CC atom, so it cannot rename
 // (rename-cc-domain) and the copy's redefinition must stay behind the
 // first row's store in the dependence-legal candidate.  The pairing

@@ -1,4 +1,4 @@
-// PLACEMENT-ARBITER ranking shadow leg (item #13; priced leg =
+// PLACEMENT-ARBITER ranking shadow leg (the placement arbiter; priced leg =
 // priced-placement-rank-flip-bh.C, same body): without the flag the
 // arbiter dumps the priced order beside GV's uses-then-value order and
 // changes nothing -- the 3-use constant keeps PRGM L12

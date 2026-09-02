@@ -1,4 +1,4 @@
-// Audited-TU walk transparency, TU-lean arm (lane IV, typecast
+// Audited-TU walk transparency, TU-lean arm (typecast
 // recovery): asm shapes the per-word decode cannot classify -- scalar
 // scan-audited templates ("fence") and expander words whose delivered
 // content lives in template registers (a MOP run word, the typecast

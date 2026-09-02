@@ -1,4 +1,4 @@
-// OPAQUE-REPLAY-RECORD exec-while-loading admission (lane HS): a raw
+// OPAQUE-REPLAY-RECORD exec-while-loading admission: a raw
 // REPLAY record with execute_while_loading=1 delivers its window
 // words normally -- they are audited as executed by the ordinary scan
 // (so they must be table-audited words: here SETRWC), nothing is

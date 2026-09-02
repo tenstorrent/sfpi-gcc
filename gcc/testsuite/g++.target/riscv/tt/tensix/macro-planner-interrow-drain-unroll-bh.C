@@ -1,9 +1,9 @@
-// Lane EV composition twin: the exact weekly-RED shape -- a counted
+// Inter-row drain composition twin: the exact weekly-RED shape -- a counted
 // signbit-class row loop granted the replay-loop-unroll request, then
 // formed by the planner as an 8-row region on the fixed-VD whole-word
 // program.  The unfixed emission dropped the per-row drains (8
 // back-to-back launches, one trailing drain: device corr FAIL, weekly
-// pin-15 + pin-18 e2e, pinned-sim reproduced); with the inter-row
+// end to end on hardware, simulator-reproduced); with the inter-row
 // drain every launch again carries its derived drain.
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -mtt-tensix-macro-planner -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-loop-unroll -fdump-tree-rvtt_replay_unroll -fdump-rtl-rvtt_macro_planner-details" }
 // { dg-final { scan-tree-dump "requested unroll 8 of loop" "rvtt_replay_unroll" } }

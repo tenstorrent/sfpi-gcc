@@ -1,6 +1,6 @@
-// Derived-template Simple-unary admission, fail-closed twin (lane CZ):
+// Derived-template Simple-unary admission, fail-closed twin:
 // SFPLZ mod 8 (CC_COMP alone) is DOCUMENTED by the ISA functional
-// model but refused by the pinned simulator -- a standing doc/sim
+// model but refused by the reference simulatorulator -- a standing doc/sim
 // divergence (rvtt-macro-vocab-enum.cc report).  The admitted
 // envelope takes the intersection {0, 2, 4}, and the pattern's effect
 // audit already excludes mod 8, so the row stays opaque, nothing

@@ -1,4 +1,4 @@
-/* Tensix CC-region engine: the post-RA RTL view (laneKQ).
+/* Tensix CC-region engine: the post-RA RTL view.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -23,7 +23,7 @@ along with GCC; see the file COPYING3.  If not see
    See the contract comment in rvtt-cc-region.h.
 
    Soundness ledger for the span verdicts (the consumer obligation the
-   verdicts discharge is the item-#7 rename argument: a renamed web's
+   verdicts discharge is the rename pass's argument: a renamed web's
    target register carries the definition's value on exactly the lanes
    the definition wrote; a reader observes only lanes enabled at its
    own position; a kill-close must overwrite exactly the lanes the

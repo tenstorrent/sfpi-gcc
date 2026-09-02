@@ -1,4 +1,4 @@
-/* Cross-tile configuration-epoch proof for the macro planner (WP11).
+/* Cross-tile configuration-epoch proof for the macro planner.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -91,7 +91,7 @@ extern bool rvtt_macro_prefix_epoch_hoist (function *fn,
 					   const char **refusal,
 					   rtx_insn **refusal_insn);
 
-/* Residency-mode whole-function invariance walk (WP13; consumed by the
+/* Residency-mode whole-function invariance walk (consumed by the
    descriptor-residency solver in rvtt-macro-desc.cc).  Proves that no
    instruction of FN outside BENIGN can change the values held by the
    planner's owned SFPCONFIG destinations or deliver an unresolvable /
@@ -108,8 +108,8 @@ rvtt_macro_epoch_owned_state_invariant_p (function *fn,
 					  const rvtt_macro::caps *c,
 					  rtx_insn **refusal_insn);
 
-/* Replay-state preservation walk for the record-hoist loop admission
-   (lane FW).  Proves that no instruction of the loop body BODY[0..NBBS)
+/* Replay-state preservation walk for the record-hoist loop admission.
+   Proves that no instruction of the loop body BODY[0..NBBS)
    (header LOOP_HEADER) can modify per-thread Replay Expander buffer
    state between a preheader no-exec record and any trip's playback
    launch.  The owner

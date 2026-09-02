@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
 // Near miss under the retired flag (an alias for the general du-chain
-// engine since the W4-C v1 retirement): every architectural LREG is
+// engine since the v1 retirement): every architectural LREG is
 // live around the loop or touched by the row -- no free register
 // exists (the exp-with-swap shape's terminal state).  Refuse by name.
 // { dg-final { scan-rtl-dump "Lreg chain rename refused: regrename-no-free-lreg" "rvtt_lreg_rename_chains" } }

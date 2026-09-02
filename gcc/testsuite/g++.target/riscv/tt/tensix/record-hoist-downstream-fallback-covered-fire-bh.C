@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay -fdump-rtl-rvtt_dst_autoincr" }
-// Downstream-fallback composition pricing, covered side (lane FZ): the
+// Downstream-fallback composition pricing, covered side: the
 // SAME re-record loop and would-be mod-write row as the refuse twin,
 // but with twelve scalar separator words on the only path from the row
 // back to the inner preheader (the outer-loop tail).  The planned

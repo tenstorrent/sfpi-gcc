@@ -1,4 +1,4 @@
-// Lane FL (FH-1 genericity twin): renamed symbols, a different trip
+// No-exec-placement genericity twin: renamed symbols, a different trip
 // count, a different operation mix, and the OTHER audited mod-write
 // class -- a typed Dst STORE through a non-no-increment address
 // modifier (mod-2 auto-increment) as the last preheader word.  The

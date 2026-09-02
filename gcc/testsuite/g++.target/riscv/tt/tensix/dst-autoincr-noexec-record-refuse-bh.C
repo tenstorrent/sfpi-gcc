@@ -1,11 +1,11 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
-// Silicon-refuted composition (lane ES 2x2, rvtt-cost.md "no-exec record
+// Hardware-refuted composition (rvtt-cost.md "no-exec record
 // composition"): a replay capture recorded WITHOUT execution (TTREPLAY
 // load=1 exec=0) placed INSIDE the group's loop nest -- the inner loop's
 // preheader inside the face loop, the lcm-fresh hang shape -- re-executes
 // while the previous face group's final mod-write is still inside its
-// unaudited retirement window; on silicon the composition hangs Tensix
+// unaudited retirement window; on hardware the composition hangs Tensix
 // (TENSIX TIMED OUT, reset required) while either transform alone passes
 // on the same TU.  The rows are the fat covered-fire shape, so the
 // verdict tests the composition, not the shape (see the exec-record and

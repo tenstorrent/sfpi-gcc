@@ -1,6 +1,6 @@
-// Derived-template SFPIADD-immediate admission (lane CZ, enumerated
+// Derived-template SFPIADD-immediate admission (enumerated
 // vocabulary): the immediate form's functional model reads ONLY
-// LReg[VC] and SignExtend(Imm12) (SFPIADD.md; craq-sim
+// LReg[VC] and SignExtend(Imm12) (SFPIADD.md; the reference simulator
 // TENSIX_EXECUTE_SFPIADD), so the in-place row member
 // v = v + imm realizes exactly as an SFPIADD template with the
 // immediate riding the template imm12 field, src_c 0, and the VC:=VD

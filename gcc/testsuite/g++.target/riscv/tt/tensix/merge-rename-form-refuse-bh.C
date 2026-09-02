@@ -1,4 +1,4 @@
-// MERGE-RENAME vocabulary refusal (lane KP, R1(b)): a non-FLOATB
+// MERGE-RENAME vocabulary refusal (R1(b)): a non-FLOATB
 // immediate CC-merge (mod 1, FLOATA) is outside the minimal renaming
 // vocabulary -- exactly the constant-image derivation
 // constant_chain_value_p blesses -- and refuses by name

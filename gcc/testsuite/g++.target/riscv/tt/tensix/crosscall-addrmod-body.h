@@ -1,8 +1,8 @@
-/* Cross-call ADDR_MOD contract shape (lane IK): a straight-line noinline
+/* Cross-call ADDR_MOD contract shape: a straight-line noinline
    callee of CAM_ROWS explicit rows (no-increment load/compute/mod-write
    store + typed TTINCRWC of constant CAM_STRIDE) invoked from a caller
    loop.  Alone, the callee's group refuses by the per-execution
-   configuration pricing (lane IA); under the ADDR_MOD contract the
+   configuration pricing; under the ADDR_MOD contract the
    three-SETC16 slot program hoists to the caller's loop entry and the
    group fires at zero per-call configuration cost.  CAM_CALLER_EXTRA
    (optional) injects statements into the caller loop; CAM_CALLEE_TAIL

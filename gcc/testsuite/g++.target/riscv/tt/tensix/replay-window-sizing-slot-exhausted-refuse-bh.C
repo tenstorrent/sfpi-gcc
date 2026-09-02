@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -mtt-tensix-optimize-replay-window-sizing -fdump-rtl-rvtt_replay" }
-// Slot-exhausted near miss (lane IM): TWO hoisted-window loops.  The
+// Slot-exhausted near miss: TWO hoisted-window loops.  The
 // first widens to the 24-slot window (persistent slots [0,24)); the
 // second loop's identical 57-word run then has only 8 free slots --
 // every wider same-anchor candidate (24, 18, 12 words) exceeds the

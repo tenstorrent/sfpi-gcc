@@ -1,7 +1,7 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-unroll-loops -mtt-tensix-optimize-dst-autoincr -fdump-rtl-rvtt_dst_autoincr-details" }
 // Silicon-refuted delivery boundary of the composition guard's distance
-// proxy (lane FE finding F1, rvtt-cost.md "no-exec record composition"):
+// proxy (rvtt-cost.md "no-exec record composition"):
 // a REPLAY-DELIVERED mod-write (the group's rows are launches whose
 // payload carries the terminator store) composed with a no-exec capture
 // reachable from the group refuses at ANY frontend-word distance.  The

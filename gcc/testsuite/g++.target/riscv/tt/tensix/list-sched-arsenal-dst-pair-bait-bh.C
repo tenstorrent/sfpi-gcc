@@ -1,4 +1,4 @@
-// Lane DT arsenal: Dst store->load pair motion bait.  The SFPSTORE to
+// Scheduler arsenal: Dst store->load pair motion bait.  The SFPSTORE to
 // Dst offset 64 and the SFPLOAD from the SAME offset form a memory RAW
 // dependence that is INVISIBLE to a pure-LREG dependence DAG (disjoint
 // registers).  The kernel is constructed so a naive latency scheduler
@@ -17,7 +17,7 @@
 // "dst-access"; the stores carry no def and print "scalar-or-defless"
 // (the defless check precedes the dst check).  Sound but imprecise;
 // both accepted below, finding recorded in the arsenal verdicts.
-// [lane DQ adjudication, post-DU rounds] Expectations updated from the
+// [post-scheduler-hardening adjudication] Expectations updated from the
 // stage-1 measurements: (a) effect classification now precedes the
 // defless check, so Dst words all name dst-access; (b) identical chain
 // shapes now DEFER by name to replay capture formation (DU-S4

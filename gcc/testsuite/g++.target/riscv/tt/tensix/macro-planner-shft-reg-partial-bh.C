@@ -1,5 +1,5 @@
 // Derived-template SFPSHFT register-amount admission, capacity honesty
-// (lane CZ): a row whose value carrier feeds TWO Simple-class members
+//: a row whose value carrier feeds TWO Simple-class members
 // (an iadd-imm and the variable shift) cannot host both on one
 // carrier's Simple slot; the planner hosts the amount-side iadd-imm
 // and the shift, keeps the second iadd-imm EXPLICIT, and still forms

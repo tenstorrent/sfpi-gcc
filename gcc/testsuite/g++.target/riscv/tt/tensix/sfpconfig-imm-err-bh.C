@@ -1,4 +1,4 @@
-// Immediate-form SFPCONFIG builtin: refusal edges (lane FA, 2026-08-21).
+// Immediate-form SFPCONFIG builtin: refusal edges.
 // { dg-options "-mcpu=tt-bh-tensix -fno-exceptions -fno-rtti -O2" }
 
 // Destination envelope: only LaneConfig (15) is audited.  LoadMacroConfig

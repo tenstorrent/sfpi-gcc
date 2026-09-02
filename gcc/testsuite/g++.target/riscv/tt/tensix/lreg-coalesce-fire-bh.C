@@ -1,4 +1,4 @@
-// Fire half of the Briggs-coalescing twin (FABLE_GOES_BURR.md item
+// Fire half of the Briggs-coalescing twin (the coalescing work; item
 // #6; baseline = lreg-coalesce-fire-base-bh.C, same body).  The
 // dst-ownership fold mints the plain copy w = v; Briggs conservative
 // coalescing merges the halves on the interference graph (the merged

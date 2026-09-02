@@ -140,7 +140,8 @@ namespace {
      corner (sign-magnitude -0 <-> most-negative int32, 0x80000000) a
      FIXED POINT of the involution, so pair cancellation is bit-exact
      on the full domain.  Sources of truth: SFPCAST.md functional
-     model and craq-sim TENSIX_EXECUTE_SFPCAST; the sfpi binding
+     model and the reference simulator's TENSIX_EXECUTE_SFPCAST; the
+     sfpi binding
      (sfpi_constants.h, BH arm) spells BOTH directions mod1=3 for this
      reason; the per-mod effect audit (rvtt.md rvtt_sfpcast_lv
      attributes and effects-iadd-swap-cast-bh.C goldens) likewise

@@ -1,4 +1,4 @@
-// Derived-template logic-family admission, varied surface (lane CZ):
+// Derived-template logic-family admission, varied surface:
 // the SFPXOR tied in-place form (no operand override exists for
 // opcode 0x8d -- the named VC survives verbatim) and the SFPOR
 // USE_VB form with the operand order flipped.

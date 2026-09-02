@@ -1,4 +1,4 @@
-// WP10 compact CC calendar on Wormhole: identical proven descriptor
+// Compact CC calendar on Wormhole: identical proven descriptor
 // state words (the two capability tables never diverge on them); only
 // the launch-field layout (2-bit address-mode selector at bit 14,
 // no-increment 3 / auto-increment 2) and the single-slot Base=1 owned

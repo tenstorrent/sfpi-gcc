@@ -1,4 +1,4 @@
-// LOOP-RECLAIM reader near-miss twin (lane ID): every claimed slot IS
+// LOOP-RECLAIM reader near-miss twin: every claimed slot IS
 // read somewhere in the TU (typed sfpreadlreg census), so no claim is
 // DEAD -- the reclaim tier finds nothing and every non-matching value
 // keeps the established prgm-exhausted refusal, flag on.

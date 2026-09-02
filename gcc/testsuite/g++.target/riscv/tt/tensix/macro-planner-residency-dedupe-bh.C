@@ -1,4 +1,4 @@
-// WP13 residency content-equality de-duplication FIRE: two separate
+// Residency content-equality de-duplication FIRE: two separate
 // face-loop regions in one kernel derive bit-identical descriptor
 // programs (templates, sequence words, misc).  The first region
 // programs them; the second, whose launch block the first's

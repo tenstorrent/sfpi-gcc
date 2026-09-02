@@ -1,4 +1,4 @@
-// Sort-network library compile gate (lane FG, X5): the generated
+// Sort-network library compile gate (X5): the generated
 // bitonic networks allocate within the 8-register file -- value-8
 // (register axis), value-32 (column machines, transp8 sandwiches),
 // KV-16 (indexed swaps, companions pinned L4..L7, caller-owned

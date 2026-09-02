@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
 // Near miss under the retired flag (an alias for the general du-chain
-// engine since the W4-C v1 retirement): the candidate's register is
+// engine since the v1 retirement): the candidate's register is
 // shared with an earlier chain (the wall) but has no later in-row
 // writer -- the definition is live around the backedge (next trip's
 // reader consumes it) and no rename can prove the value dies in-row.

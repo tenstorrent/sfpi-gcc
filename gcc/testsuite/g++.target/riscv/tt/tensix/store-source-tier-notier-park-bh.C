@@ -1,4 +1,4 @@
-// STORE-SOURCE TIER without the LREG tier (lane HO): the knob is on
+// STORE-SOURCE TIER without the LREG tier: the knob is on
 // but -mtt-tensix-optimize-pressure-park is not, so the tier has no
 // hoist to offer.  The candidate falls through and KEEPS the
 // established parked placement (SFPCONFIG programs the PRGM register;

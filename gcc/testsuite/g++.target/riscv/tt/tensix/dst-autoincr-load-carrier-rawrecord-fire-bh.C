@@ -1,6 +1,6 @@
 // { dg-do compile }
 // { dg-options "-mcpu=tt-bh-tensix -O2 -mtt-tensix-optimize-dst-autoincr -mtt-tensix-optimize-dst-autoincr-load-carrier -fdump-rtl-rvtt_dst_autoincr-details" }
-// Load-carrier unlock (lane IF): the function's no-exec replay
+// Load-carrier unlock: the function's no-exec replay
 // recording has a RAW `.ttinsn' word shadow (the LLK envelope record
 // shape -- TTI_ macro words, not typed builtins).  Without the knob the
 // recording-shadow scan counts raw words as zero slots, overruns the

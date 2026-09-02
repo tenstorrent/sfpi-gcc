@@ -1,4 +1,4 @@
-// Lane FT window-pairing: the column-parity Dst-disjointness clause is
+// Window-pairing: the column-parity Dst-disjointness clause is
 // valid only under the architectural-default column-exchange LaneConfig
 // state; a function-local SFPCONFIG destination-15 write makes the
 // ambient state unprovable, so the parity clause refuses by name and

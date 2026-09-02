@@ -1,4 +1,4 @@
-// Per-arch slide re-lowering (lane FG, X4; capability-table split with
+// Per-arch slide re-lowering (X4; capability-table split with
 // the surface's own subvec_slideup split as precedent): the canonical
 // rotate+predicated-zero slide form re-lowers to SUBVEC_SHFLSHR1 chains
 // on Blackhole (SFPSHFT2.md: the shift is architectural there),

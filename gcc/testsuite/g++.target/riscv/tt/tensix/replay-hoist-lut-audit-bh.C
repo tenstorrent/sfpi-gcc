@@ -1,4 +1,4 @@
-// SFPLUT effect/latency audit (lane DL; rvtt-cost.md D3-follow-up row):
+// SFPLUT effect/latency audit (rvtt-cost.md D3-follow-up row):
 // SFPLUT carries audited effects for mod0 in {0, SGN_RETAIN=4} (reads
 // LReg[0..2] + the tied LReg[3] destination, lane-predicated write, no
 // lane-flag effect, MAD-unit result latency 1 "as per SFPMAD"), so a

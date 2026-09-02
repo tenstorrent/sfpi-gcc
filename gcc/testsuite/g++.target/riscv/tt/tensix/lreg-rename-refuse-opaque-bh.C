@@ -1,6 +1,6 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
 // Near miss under the retired flag (an alias for the general du-chain
-// engine since the W4-C v1 retirement): an opaque assembly statement
+// engine since the v1 retirement): an opaque assembly statement
 // inside the row kills every chain span that crosses it (its register
 // contacts are unknowable).  Refuse by name.
 // { dg-final { scan-rtl-dump "Lreg chain rename refused: regrename-span-opaque" "rvtt_lreg_rename_chains" } }

@@ -1,5 +1,5 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2 -fno-unroll-loops -mtt-tensix-optimize-replay-record-hoist -fdump-rtl-rvtt_replay-details" }
-// WH variant of record-hoist-runtime-loop-fire-bh.C (lane FW; the blaze
+// WH variant of record-hoist-runtime-loop-fire-bh.C (the blaze
 // sdpa_reduce_row loss-class shape): a RUNTIME-counted loop whose body
 // carries raw LLK sync words (constant .ttinsn SEMWAIT/SEMPOST) and a
 // computed instruction-FIFO push (SETC16 base plus a bounded field --

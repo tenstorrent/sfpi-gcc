@@ -45,7 +45,7 @@ struct macro_row
   /* Typed Dst stride established by the separator (0 when absent).  */
   int dst_delta;
   /* Immediate Dst-address delta of this row's typed Dst accesses
-     relative to rows[0] (lane IS, F1 honest fix): the loop-fusion
+     relative to rows[0]: the loop-fusion
      passes carry part of the per-row Dst advance in the address
      immediates instead of a separator.  Zero for the classic
      separator-carried shape.  Admitted only under the region-level
@@ -87,7 +87,7 @@ enum class macro_region_refusal
   /* A CC-writing value event inside the row slice would need a
      CC-manipulating instruction template; no such template program is
      proven, so the row refuses by that missing capability.  (Emitted
-     name supersedes the pre-WP8 "row-cc-write".)  */
+     name supersedes the earlier "row-cc-write".)  */
   row_cc_template_unsupported,
   row_config_write,
   row_not_isomorphic,

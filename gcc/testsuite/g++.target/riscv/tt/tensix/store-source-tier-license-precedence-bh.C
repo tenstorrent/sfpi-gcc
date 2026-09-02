@@ -1,7 +1,7 @@
-// STORE-SOURCE TIER vs the store-sink license token (lane HO): with
+// STORE-SOURCE TIER vs the store-sink license token: with
 // BOTH -mtt-tensix-optimize-store-sink and the tier knob on, the
 // license's own stricter place() refusal keeps precedence exactly as
-// lane HL shipped it (dump line "refused (store-source-encoding-
+// it first shipped (dump line "refused (store-source-encoding-
 // ceiling)", every candidate class, no park fallback) and the
 // loop-class fallback still reaches the LREG tier -- the licensed
 // word accounting is unchanged by the general knob.

@@ -1,11 +1,11 @@
 // { dg-options "-mcpu=tt-bh-tensix -O2 -fno-exceptions -fno-rtti -fno-unroll-loops -mno-tt-tensix-optimize-replay -mtt-tensix-optimize-lreg-rename -fdump-rtl-rvtt_lreg_rename_chains-details" }
-// W4-C retirement witness (the calculate_i0 residual class): a 32-bit
+// Retirement witness (the calculate_i0 residual class): a 32-bit
 // constant materialized in-row is a two-word SFPLOADI pair -- USHORT
 // lower half, then the mod0-8 UPPER half-word merge reading the tied
 // live value.  The RETIRED single-shape pass fired here and split the
 // pair by whole-pattern rename (upper half merged into a dead
 // register's garbage lower half -- wrong code, adjudicated at
-// laneKK-evidence-20260831).  The general engine the retired flag now
+// its committed stream).  The general engine the retired flag now
 // requests cannot split a "0"-tied lv family: the destructive edit
 // fails constraint re-recognition and refuses by name, and the pair
 // stays intact on one register in the final stream (the lower half's
