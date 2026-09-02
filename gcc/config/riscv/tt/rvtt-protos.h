@@ -112,7 +112,6 @@ extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
    this; integer/bitwise value-identical rebalancing tests only the
    target flag.  */
 extern bool rvtt_reassoc_fp_licensed_p (void);
-extern bool rvtt_hll_p (rtx pat);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
 
@@ -211,7 +210,6 @@ extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_dst_ownership (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_ebreak (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_fix_raw (gcc::context *ctxt);
-extern rtl_opt_pass *make_pass_rvtt_hll (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_livein (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_lreg_rename_chains (gcc::context *ctxt);

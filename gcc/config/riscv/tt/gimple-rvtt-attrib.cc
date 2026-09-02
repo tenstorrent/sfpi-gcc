@@ -22,10 +22,9 @@ along with GCC; see the file COPYING3.  If not see
    attributes "rvtt_l1_ptr" (L1 scratch memory) and "rvtt_reg_ptr"
    (memory-mapped configuration registers).  Several consumers key off
    these tags: the pipeline description assigns per-space load
-   latencies (rvtt-tune.md, via rvtt_l1_load_p/rvtt_reg_load_p), the
-   high-latency-load scheduler classifies loads by them
-   (rtl-rvtt-hll.cc), and the Wormhole read-after-write hazard
-   workaround exempts register-space stores (rtl-rvtt-fix-raw.cc).
+   latencies (rvtt-tune.md, via rvtt_l1_load_p/rvtt_reg_load_p), and
+   the Wormhole read-after-write hazard workaround exempts
+   register-space stores (rtl-rvtt-fix-raw.cc).
 
    Generic middle-end passes freely rebuild pointer SSA names (copy
    propagation, PRE, forwprop) using the bare pointer type, so by the
