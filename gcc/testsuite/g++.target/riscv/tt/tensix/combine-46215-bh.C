@@ -335,17 +335,16 @@ void loadimul2 (unsigned v) {
 }
 /*
 **_Z9loadimul2j:
-**	li	a3, 1946157056	# 2:74000000
-**	li	a5, 1897922560	# 1:71200000
+**	li	a5, 1896873984	# 1:71100000
 **	# READ L0
 **	zext.h	a0,a0
-**	slli	a4,a0,8
-**	add	a4,a4,a3
-**	sw	a4, 0\(zero\)	# 2:SFPMULI	L0, a4, 0
-**	SFPMOV	L1, L0, 2
-**	# WRITE L1
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L2, a0, 0
+**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L1, a0, 0
+**	SFPMUL	L1, L0, L1, 0
+**	# WRITE L1
+**	li	a5,3145728
+**	xor	a5,a5,a0
+**	sw	a5, 0\(zero\)	# 1:SFPLOADI	L2, a5, 0
 **	# WRITE L2
 **	ret
 */

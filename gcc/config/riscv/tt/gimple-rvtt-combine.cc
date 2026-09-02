@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
+#define INCLUDE_SET
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -268,19 +269,14 @@ struct Combiner::matched_data {
 
 struct Combiner::Deferred {
   std::vector<matched_data> matches;
-  std::multimap<gcall *, unsigned> map;
-
-public:
-  matched_data &push (const Combiner *c) {
-    matches.emplace_back (c);
-    return matches.back ();
-  }
-  void pop () { matches.pop_back (); }
+  std::multimap<gcall *, unsigned> call_map;
+  std::unordered_map<unsigned, gcall *> synth_map;
+  std::set<gassign *> add_map;
 
 public:
   void moot (gcall *call) {
-    for (auto I = map.lower_bound (call);
-	 I != map.end () && I->first == call;
+    for (auto I = call_map.lower_bound (call);
+	 I != call_map.end () && I->first == call;
 	 ++I)
       if (matches[I->second].mooted >= 0)
 	{
@@ -289,13 +285,31 @@ public:
 	  matches[I->second].mooted = true;
 	}
   }
-  unsigned defer () {
-    auto &match = matches.back ();
-    unsigned slot = matches.size () - 1;
+  unsigned defer (const matched_data &match) {
+    unsigned slot = matches.size ();
+    matches.emplace_back (match);
     for (unsigned ix = match.combiner->pats_hwm; ix--;)
-      map.insert ({match.calls[ix], slot});
+      call_map.insert ({match.calls[ix], slot});
     return slot;
   }
+
+public:
+  void record_synth (gcall *call) {
+    unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+    auto [I, inserted] = synth_map.insert ({id, call});
+    if (!inserted)
+      I->second = nullptr;
+  }
+
+public:
+  void record_muli_addi (gcall *call, const rvtt_insn_data *insnd)
+  {
+    auto var = gimple_call_arg (call, insnd->var_arg ());
+    auto add = as_a <gassign *> (SSA_NAME_DEF_STMT (var));
+    add_map.insert (add);
+  }
+  void preprocess_muli_addi ();
+  void postprocess_muli_addi ();
 };
 
 struct Combiner::match_masks {
@@ -755,6 +769,125 @@ init ()
   starting_ids.emplace (rvtt_insn_data::hwm, combiner_map.end ());
 }
 
+// Check every dynamic MULI_ADDI combiner is simple.
+void
+Combiner::Deferred::preprocess_muli_addi ()
+{
+  std::map<gcall *, std::pair<unsigned, const Combiner *>> loadis;
+  for (unsigned ix = matches.size (); ix--;)
+    {
+      auto &match = matches[ix];
+      if (match.combiner->label == Combiner::T_MULI_ADDI)
+	{
+	  auto *loadi_call = match.calls[0];
+	  auto *loadi_insnd = rvtt_get_insn_data (loadi_call);
+	  gcc_assert (loadi_insnd->id == rvtt_insn_data::sfploadi);
+	  if (auto id = TREE_INT_CST_LOW (gimple_call_arg (loadi_call, loadi_insnd->id_arg ())))
+	    loadis.insert ({loadi_call, {id, match.combiner}});
+	}
+    }
+
+  for (auto &loadi_pair : loadis)
+    {
+      auto [loadi, pair] = loadi_pair;
+      auto [id, combiner] = pair;
+
+      auto *synth = synth_map.find (id)->second;
+      if (!synth)
+	{
+	moot:
+	  loadi_pair.second.first = 0;
+	  continue;
+	}
+
+      use_operand_p use_p;
+      imm_use_iterator iter;
+      gimple *use_stmt;
+
+      // Check the synth's lhs goes to one add, and that add's result goes to
+      // this loadi.
+      if (!single_imm_use (gimple_call_lhs (synth), &use_p, &use_stmt))
+	goto moot;
+      auto *assign = dyn_cast <gassign *> (use_stmt);
+      if (!assign)
+	goto moot;
+      if (!single_imm_use (gimple_assign_lhs (assign), &use_p, &use_stmt))
+	goto moot;
+      if (use_stmt != loadi)
+	goto moot;
+
+      // Make sure every use of the loadi is to a non-mooted instance of this combiner
+      FOR_EACH_IMM_USE_FAST (use_p, iter, gimple_call_lhs (loadi))
+	{
+	  gimple *g = USE_STMT (use_p);
+	  if (is_gimple_debug (g))
+	    continue;
+
+	  gcall *call = dyn_cast <gcall *> (g);
+	  auto I = call_map.lower_bound (call);
+	  if (!(I != call_map.end ()
+		&& I->first == call
+		&& !matches[I->second].mooted
+		&& matches[I->second].combiner == combiner))
+	    goto moot;
+	}
+    }
+
+  for (unsigned ix = matches.size (); ix--;)
+    {
+      auto &match = matches[ix];
+      if (match.combiner->label == Combiner::T_MULI_ADDI)
+	{
+	  auto I = loadis.find (match.calls[0]);
+	  if (I != loadis.end () && !I->second.first)
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Mooting deferred %u due to synth complexity", ix);
+	      match.mooted = true;
+	    }
+	}
+    }
+  
+}
+
+void
+Combiner::Deferred::postprocess_muli_addi ()
+{
+  for (auto *add : add_map)
+    {
+      // One input is from a synth and the other is the value, which we need to
+      // convert from a loadi imm to a muli/addi imm.  Hard wire the shifts
+      // here.
+      constexpr unsigned left_shift = 8;
+
+      auto arg = gimple_assign_rhs1 (add);
+      bool is_second = rvtt_get_insn_data (SSA_NAME_DEF_STMT (arg));
+      if (is_second)
+	arg = gimple_assign_rhs2 (add);
+
+      tree var = make_temp_ssa_name (TREE_TYPE (arg), nullptr, "shift");
+      gassign *shift_stmt = gimple_build_assign (var, LSHIFT_EXPR, arg,
+						 build_int_cst (unsigned_type_node, left_shift));
+      gimple_set_location (shift_stmt, gimple_location (add));
+      auto add_gsi = gsi_for_stmt (add);
+      gsi_insert_before (&add_gsi, shift_stmt, GSI_SAME_STMT);
+      if (is_second)
+	gimple_assign_set_rhs2 (add, var);
+      else
+	gimple_assign_set_rhs1 (add, var);
+
+      if (dump_file)
+	{
+	  fprintf (dump_file, "Inserting ");
+	  print_gimple_stmt (dump_file, shift_stmt, 0);
+	  fprintf (dump_file, "Before ");
+	  print_gimple_stmt (dump_file, add, 0);
+	  fprintf (dump_file, "\n");
+	}
+    }
+  
+}
+
 // There is at least one dynamic muli transform.  For each synth_id of such
 // transforms, if all of them are used by the new muli/addi we can reuse.
 // Otherwise we need to add new synth opcodes.
@@ -1027,11 +1160,7 @@ combine_block (basic_block bb, Combiner::Deferred &deferred)
 	{
 	  // Record synth_opcodes to deal with dynamic muli/addi combinations.
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
-	    {
-	      auto *synth = as_a <gcall *> (*gsi);
-	      synths.emplace_back (synth, insnd,
-				   TREE_INT_CST_LOW (gimple_call_arg (synth, 0)));
-	    }
+	    deferred.record_synth (as_a <gcall *> (*gsi));
 
 	  auto start = starting_ids.lower_bound (insnd->id);
 	  // Because we've added insn_id::hwm, start will never be
@@ -1042,12 +1171,12 @@ combine_block (basic_block bb, Combiner::Deferred &deferred)
 	      for (auto I = start->second, E = (++start)->second; I != E; ++I)
 		{
 		  auto *combiner = *I;
-		  auto &match = deferred.push (combiner);
+		  Combiner::matched_data match (combiner);
 		  if (combiner->match (as_a <gcall *> (*gsi), insnd, match))
 		    {
 		      if (combiner->deferred)
 			{
-			  unsigned ix = deferred.defer ();
+			  unsigned ix = deferred.defer (match);
 			  if (dump_file)
 			    fprintf (dump_file, "Deferment %u\n\n", ix);
 			  break;
@@ -1055,10 +1184,8 @@ combine_block (basic_block bb, Combiner::Deferred &deferred)
 		      combiner->replace (&gsi, match, deferred);
 		      changed = true;
 		      found = true;
-		      deferred.pop ();
 		      break;
 		    }
-		  deferred.pop ();
 		}
 	      if (found)
 		continue;
@@ -1111,7 +1238,9 @@ public:
       if (combine_block (bb, deferred))
 	changed = true;
 
-    // Process deferred matches in reverse order
+    deferred.preprocess_muli_addi ();
+
+    // Apply deferred matches in reverse order
     for (unsigned ix = deferred.matches.size (); ix--;)
       {
 	auto &match = deferred.matches[ix];
@@ -1126,11 +1255,19 @@ public:
 
 	auto gsi = gsi_for_stmt (match.calls[match.combiner->pats_hwm - 1]);
 	match.combiner->replace (&gsi, match, deferred);
+
+	if (match.combiner->label == Combiner::T_MULI_ADDI)
+	  {
+	    auto *call = match.replace[match.combiner->pats_hwm - 1];
+	    auto *insnd = rvtt_get_insn_data (call);
+	    if (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->id_arg ())))
+	      deferred.record_muli_addi (call, insnd);
+	  }
+
 	changed = true;
       }
 
-    if (!addimuli.empty ())
-      addimuli_resynthing ();
+    deferred.postprocess_muli_addi ();
 
     return changed ? TODO_update_ssa : 0;
   }

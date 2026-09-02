@@ -140,34 +140,42 @@ combine () {
 // Do these in preference to mul,add->mad, as the register pressure is
 // immediately reduced.
 // a * fp16b(scalar)
-deferred_combine () MULI {
+deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpmul_lv (lv, %a, cst, 0);
   {
+#if 0
     if (TREE_INT_CST_LOW (id)
 	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
       return false;
+#endif
   }
   res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
   {
+#if 0
     if (auto iid = TREE_INT_CST_LOW (id))
       addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+#endif
   }
 }
 
 // a + fp16b(scalar)
-deferred_combine () ADDI {
+deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
   res = sfpadd_lv (lv, %a, cst, 0);
   {
+#if 0
     if (TREE_INT_CST_LOW (id)
 	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
       return false;
+#endif
   }
   res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
   {
+#if 0
     if (auto iid = TREE_INT_CST_LOW (id))
       addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+#endif
   }
 }
 
