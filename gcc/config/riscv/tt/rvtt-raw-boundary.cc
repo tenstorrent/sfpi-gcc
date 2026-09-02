@@ -54,35 +54,9 @@ along with GCC; see the file COPYING3.  If not see
      dead-field behavior.
 
    The capability table is the per-target admission: QSR (and any
-   future CPU without a table) refuses everything.
-
-   ONE-PIN EQUALITY-ASSERTION PHASE (FABLE item #4 Deliverable B):
-   this is now the LEGACY Dst/RWC face classifier, kept verbatim for
-   the -fchecking equality assertion inside rvtt_word_pure_dst_rwc_p
-   (the table-backed accessor below).  DELETE NEXT PIN.  */
-
-static bool
-legacy_pure_dst_rwc_word_p (uint32_t word)
-{
-  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
-    : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
-  if (!rvtt_macro_caps_for_cpu (cpu))
-    return false;
-
-  rvtt_macro::setrwc_fields f;
-  if (!rvtt_macro::setrwc_decode (word, &f))
-    return false;
-
-  if (f.clear_ab_vld != 0)
-    return false;
-  if (f.bit_mask != 0x4)
-    return false;
-  if ((f.rwc_cr & 0x3) != 0)
-    return false;
-  if (f.rwc_a != 0 || f.rwc_b != 0)
-    return false;
-  return true;
-}
+   future CPU without a table) refuses everything.  These semantics
+   are enforced by the SETRWC row of rvtt_word_facts_classify below
+   (queried through the rvtt_word_pure_dst_rwc_p accessor).  */
 
 /* Canonical `.ttinsn %0' template check, shared by both extractors.  */
 
@@ -212,140 +186,6 @@ rvtt_raw_pure_dst_rwc_gimple (const gimple *stmt)
   return rvtt_word_pure_dst_rwc_p ((uint32_t) value);
 }
 
-/* ------------------------------------------------------------------ */
-/* Lane IV: audited CC/lane-enable word classification.
-
-   Discipline identical to the pure-Dst/RWC class above and to
-   rvtt_mop_audited_word_p (rvtt-mop-derive.cc): every admitted class is
-   a recorded architectural fact with provenance, classified by
-   opcode/field derivation -- never by operation identity or trust in
-   the emitting library.  A word not covered by a recorded fact answers
-   UNPROVEN (the refusing direction for every consumer).
-
-   The state under audit is the Vector Unit's lane-enable predication:
-   the per-lane LaneFlags / UseLaneFlagsForLaneEnable pair (SFPENCC.md
-   functional model) and the LaneConfig ROW_MASK predication bits
-   (SFPCONFIG.md LaneConfig table).  Provenance keys:
-
-     [ISA]  tt-isa-documentation BlackholeA0+WormholeB0
-            TensixTile/TensixCoprocessor (the mandatory prior); the
-            named .md file carries the cited functional model.
-     [SIM]  craq-sim src/tensix.cpp (pinned tree) executors.
-     [MOPT] an audited fact already recorded in rvtt-mop-tables.h /
-            rvtt_mop_audited_word_p with its own provenance; the CC
-            question is implied by the recorded effect confinement.
-
-   ONE-PIN EQUALITY-ASSERTION PHASE (FABLE item #4 Deliverable B):
-   this is now the LEGACY CC face classifier, kept verbatim for the
-   -fchecking equality assertion inside the table-backed
-   rvtt_raw_cc_word_class below.  DELETE NEXT PIN.  */
-
-static rvtt_raw_cc_class
-legacy_rvtt_raw_cc_word_class (uint32_t word)
-{
-  rvtt_macro::cpu_t cpu = TARGET_XTT_TENSIX_BH ? rvtt_macro::CPU_BH
-    : TARGET_XTT_TENSIX_WH ? rvtt_macro::CPU_WH : rvtt_macro::CPU_QSR;
-  if (!rvtt_macro_caps_for_cpu (cpu))
-    return RVTT_RAW_CC_UNPROVEN;
-
-  unsigned opcode = word >> 24;
-
-  /* Tensix NOPs.  0x00 executes nothing; 0x02 is swallowed at the
-     instruction FIFO and delivers nothing.  [MOPT] NOP facts.  */
-  if (opcode == 0x00 || opcode == 0x02)
-    return RVTT_RAW_CC_INERT;
-
-  /* Sync family (ATGETM/ATRELM/SEMINIT/SEMPOST/SEMGET/SEMWAIT/
-     STALLWAIT/...): semaphore, mutex
-     and stall plumbing -- no SFPU lane state in any functional model.
-     [MOPT] sync-family fact; [ISA] SEMWAIT.md/STALLWAIT arms.  */
-  if (opcode >= 0xA0 && opcode <= 0xA7)
-    return RVTT_RAW_CC_INERT;
-
-  /* Thread-config family (SETC16 and neighbours): writes the backend
-     thread configuration space, disjoint from the Vector Unit's lane
-     state.  [MOPT] thread-config fact; [ISA] SETC16.md.  */
-  if (opcode >= 0xB0 && opcode <= 0xB8)
-    return RVTT_RAW_CC_INERT;
-
-  /* CLEARDVALID / SETRWC: Src/Dst counter and bank-valid bookkeeping
-     only.  [MOPT]; [ISA] SETRWC.md.  */
-  if (opcode == 0x36 || opcode == 0x37)
-    return RVTT_RAW_CC_INERT;
-
-  /* ELWADD / MOVA2D: matrix-unit data path (Src banks, Dst rows, RWC);
-     l_regs and lane predication untouched for every field value.
-     [MOPT] (spec + simulator citations recorded there).  */
-  if (opcode == 0x28 || opcode == 0x12)
-    return RVTT_RAW_CC_INERT;
-
-  /* SFPLOADI: writes LReg[VD] (or, VD >= 12 with backdoor loads
-     enabled, the LoadMacroConfig instruction template) -- never lane
-     flags, in either arm.  The dest >= 8 PRGM concern of the mop audit
-     is a PRGM-file question, not a lane-enable one.  [ISA] SFPLOADI.md;
-     SFPCONFIG.md DISABLE_BACKDOOR_LOAD row.  */
-  if (opcode == 0x71)
-    return RVTT_RAW_CC_INERT;
-
-  /* SFPCONFIG: every VD != 15 arm writes LoadMacroConfig storage or
-     LReg[11..14]; only the VD == 15 arm writes LaneConfig (which holds
-     the ROW_MASK predication bits).  [ISA] SFPCONFIG.md functional
-     model (no arm writes LaneFlags/UseLaneFlagsForLaneEnable).  The
-     admitted VD == 15 class is the audited default-reset word
-     (MOD1_IMM16_IS_VALUE set, imm16 == 0 -- TTI_SFPCONFIG (0, 0xF, 1),
-     0x910000F1): the resulting LaneConfig is the default all-lanes,
-     ROW_MASK == 0 state for every mod1 completion ([MOPT] LaneConfig
-     default-reset fact, lane AR audit) -- an ambient-establishing
-     write.  Any other VD == 15 word can set ROW_MASK and refuses.  */
-  if (opcode == 0x91)
-    {
-      unsigned dest = (word >> 4) & 0xf;
-      if (dest != 15)
-	return RVTT_RAW_CC_INERT;
-      if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
-	return RVTT_RAW_CC_ALL_LANES;
-      return RVTT_RAW_CC_UNPROVEN;
-    }
-
-  /* SFPCAST / SFPSTOCHRND: every mode of both functional models writes
-     only LReg[VD] (and only when VD < 8 || VD == 16); with VD >= 12 and
-     backdoor loads enabled the word is instead captured into
-     LoadMacroConfig.InstructionTemplate[VD-12] and executes nothing --
-     the LLK load-macro template-programming idiom (the typecast init's
-     0x900000C0 / 0x8E0000D1 words).  Lane-enable state is untouched
-     under BOTH the executed and the captured reading, so the class
-     needs no DISABLE_BACKDOOR_LOAD knowledge.  [ISA]
-     SFPCAST_{IntFloat,IntInt,IntAbs}.md,
-     SFPSTOCHRND_{FloatFloat,FloatInt,IntInt}.md, SFPCONFIG.md
-     DISABLE_BACKDOOR_LOAD row; [SIM] tensix.cpp SFPU dispatch
-     lreg_dest 12..15 capture arm + TENSIX_EXECUTE_SFPCAST/
-     SFP_STOCH_RND.  */
-  if (opcode == 0x90 || opcode == 0x8E)
-    return RVTT_RAW_CC_INERT;
-
-  /* SFPENCC: the lane-enable writer itself.  Only the word-exact
-     canonical all-lanes encoding is proven (the same capability-table
-     word the typed kill test and the synthesized enable stand on:
-     rvtt_macro::sfpencc_all_lanes_word, imm12 == SFPENCC_IMM12_BOTH,
-     mod1 == SFPENCC_MOD1_EI_RI, VD == 0).  Every other field
-     combination -- lanes-off, complement, VD >= 12 capture forms --
-     refuses.  [ISA] SFPENCC.md; [SIM] TENSIX_EXECUTE_SFPENCC.  */
-  if (opcode == 0x8A)
-    {
-      if (word == rvtt_macro::sfpencc_all_lanes_word ())
-	return RVTT_RAW_CC_ALL_LANES;
-      return RVTT_RAW_CC_UNPROVEN;
-    }
-
-  /* Everything else -- the SFPU CC writers (SFPSETCC/SFPCOMPC/
-     SFPPUSHC/SFPPOPC/compare-and-set mods), expander words whose
-     delivered content lives elsewhere (MOP/MOP_CFG/REPLAY), loads,
-     stores, packers, unaudited opcodes -- refuses.  Expander words are
-     a TU-level question (the mop derivation's slot audit), never a
-     word-level one.  */
-  return RVTT_RAW_CC_UNPROVEN;
-}
-
 /* ================================================================== */
 /* THE unified audited word-fact table (FABLE item #4, Deliverable B).
 
@@ -355,7 +195,8 @@ legacy_rvtt_raw_cc_word_class (uint32_t word)
    since lane IV: each row is a recorded architectural fact with
    provenance, classified by opcode/field derivation -- never by
    operation identity or trust in the emitting library.  Provenance
-   keys (the shared vocabulary of the four legacy classifiers):
+   keys (the shared vocabulary of the four pre-table classifiers this
+   table replaced):
 
      [ISA]  tt-isa-documentation BlackholeA0+WormholeB0
 	    TensixTile/TensixCoprocessor (the mandatory prior); the
@@ -501,10 +342,10 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
 
   /* SETRWC (0x37): RWC counter and bank-valid bookkeeping only.
      [MOPT]; [ISA] SETRWC.md.  The Dst/RWC face additionally demands
-     architectural field purity (semantics at legacy_pure_dst_rwc
-     above: no clear_ab_vld, Dst-leg-only mask, no Src CR-mode bits,
-     zero dead value fields) -- the run/row-separator class whose
-     derived effect mirrors the typed TTSETRWC entry.  */
+     architectural field purity (semantics at the architectural-purity
+     comment atop this file: no clear_ab_vld, Dst-leg-only mask, no
+     Src CR-mode bits, zero dead value fields) -- the run/row-separator
+     class whose derived effect mirrors the typed TTSETRWC entry.  */
   if (opcode == 0x37)
     {
       f->row = RVTT_WF_SETRWC;
@@ -616,7 +457,8 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
 
      ADDR_MOD face: any SFPCONFIG-class word is a
      LoadMacroConfig/LaneConfig writer -- refuses (the accessor keys
-     the opcode off the target caps, mirroring the legacy order).  */
+     the opcode off the target caps; caps are context, not word
+     facts).  */
   if (opcode == 0x91)
     {
       f->row = RVTT_WF_SFPCONFIG;
@@ -685,31 +527,7 @@ rvtt_word_facts_classify (uint32_t word, rvtt_word_facts *f)
 /* Per-face accessors.  Each applies its consumer context (contract
    masks, strictness stances, target capability gates, slot
    discipline, owned rows) over the word facts and names its own
-   refusals; under -fchecking each recomputes through its legacy
-   classifier and asserts verdict identity per word per query
-   (ONE-PIN EQUALITY-ASSERTION PHASE -- the legacy bodies and these
-   checks are DELETE NEXT PIN).  */
-
-static bool
-wf_why_equal (const char *a, const char *b)
-{
-  return a == b || (a && b && !strcmp (a, b));
-}
-
-/* Forward declarations of the legacy classifiers (bodies at the
-   bottom of the file, verbatim from their pre-table homes).  */
-
-static rvtt_wf_lreg_verdict
-legacy_classify_word_lreg (uint32_t word, unsigned contract_mask,
-			   bool region_strict, bool config_strict);
-static rvtt_wf_init_verdict
-legacy_classify_word_init (uint32_t word,
-			   const rvtt_init_hoist_program &prog,
-			   const rvtt_macro::caps *c);
-static bool
-legacy_rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed,
-				const char **why,
-				rvtt_mop_derive_state *st, bool in_slot);
+   refusals.  */
 
 /* See rvtt-raw-boundary.h: the LREG face accessor (formerly
    gimple-rvtt-crosscall.cc classify_word_lreg).  */
@@ -750,29 +568,13 @@ rvtt_word_lreg_class (uint32_t word, unsigned contract_mask,
       v.ok = false;
       v.why = "crosscall-caller-word-unproven";
     }
-  if (flag_checking)
-    {
-      rvtt_wf_lreg_verdict l
-	= legacy_classify_word_lreg (word, contract_mask, region_strict,
-				     config_strict);
-      if (l.ok != v.ok || l.is_mop != v.is_mop
-	  || l.is_replay != v.is_replay || !wf_why_equal (l.why, v.why))
-	{
-	  fprintf (stderr, "word-fact table: LREG face disagreement on"
-		   " 0x%08x (table %s vs legacy %s)\n", word,
-		   v.why ? v.why : "ok", l.why ? l.why : "ok");
-	  gcc_assert (l.ok == v.ok && l.is_mop == v.is_mop
-		      && l.is_replay == v.is_replay
-		      && wf_why_equal (l.why, v.why));
-	}
-    }
   return v;
 }
 
 /* See rvtt-raw-boundary.h: the ADDR_MOD/init face accessor (formerly
    gimple-rvtt-crosscall.cc classify_word_init).  The caps-keyed
-   SETC16/SFPCONFIG opcode checks precede the table row, mirroring
-   the legacy order (target caps are context, not word facts).  */
+   SETC16/SFPCONFIG opcode checks precede the table row (target caps
+   are context, not word facts).  */
 
 rvtt_wf_init_verdict
 rvtt_word_init_class (uint32_t word, const rvtt_init_hoist_program &prog,
@@ -810,22 +612,6 @@ rvtt_word_init_class (uint32_t word, const rvtt_init_hoist_program &prog,
 	  v.why = "drain-init-ownership-unproven";
 	}
     }
-  if (flag_checking)
-    {
-      rvtt_wf_init_verdict l = legacy_classify_word_init (word, prog, c);
-      if (l.ok != v.ok || l.is_mop != v.is_mop
-	  || l.owned_row_write != v.owned_row_write || l.word != v.word
-	  || l.word_exact != v.word_exact || !wf_why_equal (l.why, v.why))
-	{
-	  fprintf (stderr, "word-fact table: init face disagreement on"
-		   " 0x%08x (table %s vs legacy %s)\n", word,
-		   v.why ? v.why : "ok", l.why ? l.why : "ok");
-	  gcc_assert (l.ok == v.ok && l.is_mop == v.is_mop
-		      && l.owned_row_write == v.owned_row_write
-		      && l.word == v.word && l.word_exact == v.word_exact
-		      && wf_why_equal (l.why, v.why));
-	}
-    }
   return v;
 }
 
@@ -846,22 +632,11 @@ rvtt_raw_cc_word_class (uint32_t word)
       rvtt_word_facts_classify (word, &f);
       r = f.cc;
     }
-  if (flag_checking)
-    {
-      rvtt_raw_cc_class l = legacy_rvtt_raw_cc_word_class (word);
-      if (l != r)
-	{
-	  fprintf (stderr, "word-fact table: CC face disagreement on"
-		   " 0x%08x (table %d vs legacy %d)\n", word,
-		   (int) r, (int) l);
-	  gcc_assert (l == r);
-	}
-    }
   return r;
 }
 
-/* See rvtt-raw-boundary.h: the Dst/RWC face accessor (formerly the
-   static pure_dst_rwc_word_p above).  Same capability gate as the CC
+/* See rvtt-raw-boundary.h: the Dst/RWC face accessor (formerly this
+   file's static pure_dst_rwc_word_p).  Same capability gate as the CC
    face: no table, no admission.  */
 
 bool
@@ -875,16 +650,6 @@ rvtt_word_pure_dst_rwc_p (uint32_t word)
       rvtt_word_facts f;
       rvtt_word_facts_classify (word, &f);
       r = f.pure_dst_rwc;
-    }
-  if (flag_checking)
-    {
-      bool l = legacy_pure_dst_rwc_word_p (word);
-      if (l != r)
-	{
-	  fprintf (stderr, "word-fact table: Dst/RWC face disagreement"
-		   " on 0x%08x (table %d vs legacy %d)\n", word, r, l);
-	  gcc_assert (l == r);
-	}
     }
   return r;
 }
@@ -940,27 +705,6 @@ rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed, const char **why,
   else
     claim = f.prgm_claim_mask;
 
-  if (flag_checking)
-    {
-      bool saved_pushed = st ? st->mop_pushed : false;
-      unsigned lclaim = *claimed;
-      const char *lwhy = nullptr;
-      bool lok = legacy_rvtt_mop_audited_word_p (word, &lclaim, &lwhy, st,
-						 in_slot);
-      bool pushed_equal
-	= !st || st->mop_pushed == (saved_pushed || push_mop);
-      if (lok != ok || lclaim != (*claimed | claim)
-	  || (!ok && !wf_why_equal (lwhy, w)) || !pushed_equal)
-	{
-	  fprintf (stderr, "word-fact table: PRGM face disagreement on"
-		   " 0x%08x (table %s vs legacy %s)\n", word,
-		   ok ? "ok" : (w ? w : "?"),
-		   lok ? "ok" : (lwhy ? lwhy : "?"));
-	  gcc_assert (lok == ok && lclaim == (*claimed | claim)
-		      && (ok || wf_why_equal (lwhy, w)) && pushed_equal);
-	}
-    }
-
   if (!ok)
     {
       *why = w;
@@ -970,273 +714,6 @@ rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed, const char **why,
   if (push_mop && st)
     st->mop_pushed = true;
   return true;
-}
-
-/* ------------------------------------------------------------------ */
-/* ONE-PIN EQUALITY-ASSERTION PHASE (FABLE item #4 Deliverable B):
-   the remaining legacy classifiers, verbatim from their pre-table
-   homes (gimple-rvtt-crosscall.cc classify_word_lreg /
-   classify_word_init; rvtt-mop-derive.cc rvtt_mop_audited_word_p),
-   consulted only under -fchecking by the accessors above.
-   DELETE NEXT PIN together with legacy_rvtt_raw_cc_word_class,
-   legacy_pure_dst_rwc_word_p and the accessor checks.  */
-
-static rvtt_wf_lreg_verdict
-legacy_classify_word_lreg (uint32_t word, unsigned contract_mask,
-			   bool region_strict, bool config_strict)
-{
-  rvtt_wf_lreg_verdict v = { true, false, false, nullptr };
-  unsigned opcode = word >> 24;
-  switch (opcode)
-    {
-    case 0x00:			/* TENSIX NOP (zero word)	     */
-    case 0x02:			/* Tensix NOP: swallowed at the FIFO */
-      return v;
-    case XTT_MOP_OPCODE:	/* effects live in the template file */
-      v.is_mop = true;
-      return v;
-    case XTT_MOP_CFG_OPCODE:	/* zmask high half only		     */
-      return v;
-    case XTT_REPLAY_OPCODE:	/* plays back recorded content	     */
-      v.ok = false;
-      v.is_replay = true;
-      v.why = "crosscall-caller-replay-unproven";
-      return v;
-    case 0x12:			/* MOVA2D: Dst rows only, l_regs
-				   untouched (spec + sim facts recorded
-				   in rvtt-mop-derive.cc)	     */
-    case 0x28:			/* ELWADD: matrix-unit state only    */
-    case 0x36:			/* CLEARDVALID			     */
-    case 0x37:			/* SETRWC: RWC counters/bank valids
-				   only (rvtt-raw-boundary.h class)  */
-      return v;
-    case 0x71:			/* SFPLOADI: writes LREG bits 23:20  */
-      if ((contract_mask >> ((word >> 20) & 0xf)) & 1)
-	{
-	  v.ok = false;
-	  v.why = "crosscall-caller-word-unproven";
-	}
-      return v;
-    case 0x91:			/* SFPCONFIG: LReg writes exist solely
-				   in the VD 11..14 arm (constant
-				   registers, never allocatable L0-7;
-				   spec case-15 + sim facts recorded in
-				   rvtt-mop-derive.cc).  The audited
-				   hoist-region discipline refuses it
-				   outright: a region-delivered config
-				   word could rewrite a programmable
-				   constant register or the LaneConfig
-				   lane-enable state the hoisted
-				   materialization relies on.	     */
-      if (region_strict || config_strict)
-	{
-	  v.ok = false;
-	  v.why = "crosscall-caller-config-word-unproven";
-	}
-      return v;
-    default:
-      if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
-	return v;
-      if (opcode >= 0xB0 && opcode <= 0xB8)	/* thread-config     */
-	return v;
-      v.ok = false;
-      v.why = "crosscall-caller-word-unproven";
-      return v;
-    }
-}
-
-static rvtt_wf_init_verdict
-legacy_classify_word_init (uint32_t word,
-			   const rvtt_init_hoist_program &prog,
-			   const rvtt_macro::caps *c)
-{
-  rvtt_wf_init_verdict v = { true, false, false, word, true, nullptr };
-  unsigned opcode = word >> 24;
-  if (c && opcode == c->setc16_opcode)
-    {
-      unsigned reg, value;
-      if (!rvtt_macro::decode_setc16 (c, word, &reg, &value))
-	{
-	  v.ok = false;
-	  v.why = "drain-init-ownership-unproven";
-	  return v;
-	}
-      for (unsigned i = 0; i != prog.n_setc16; ++i)
-	if (prog.setc16[i].reg == reg)
-	  v.owned_row_write = true;
-      return v;
-    }
-  if (c && opcode == c->sfpconfig_opcode)
-    {
-      /* Any SFPCONFIG-class word: LoadMacroConfig/LaneConfig writer.  */
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    }
-  switch (opcode)
-    {
-    case 0x00:			/* TENSIX NOP (zero word)	     */
-    case 0x02:			/* Tensix NOP: swallowed at the FIFO */
-      return v;
-    case XTT_MOP_OPCODE:	/* effects live in the template file */
-      v.is_mop = true;
-      return v;
-    case XTT_MOP_CFG_OPCODE:	/* zmask high half only		     */
-      return v;
-    case XTT_REPLAY_OPCODE:	/* recorded content: not derivable   */
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    case 0x12:			/* MOVA2D: Dst rows only	     */
-    case 0x28:			/* ELWADD: matrix-unit state only    */
-    case 0x36:			/* CLEARDVALID			     */
-    case 0x37:			/* SETRWC: RWC counters only	     */
-    case 0x38:			/* INCRWC: RWC counters only	     */
-      return v;
-    case 0x71:			/* SFPLOADI: LREG staging only; lane-
-				   predicated under the architectural
-				   outermost all-lanes contract	     */
-      return v;
-    default:
-      if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family	     */
-	return v;
-      if (opcode >= 0xB0 && opcode <= 0xB8)
-	/* Main-CFG family (WRCFG/RDCFG/RMWCIB/...): a DIFFERENT
-	   register file from both the SETC16 thread-config rows and
-	   the SFPU-internal SFPCONFIG state (the simulator's
-	   separated thread_cfg / config / sfpu state stores; SETC16's
-	   own opcode was handled above).  */
-	return v;
-      v.ok = false;
-      v.why = "drain-init-ownership-unproven";
-      return v;
-    }
-}
-
-static bool
-legacy_rvtt_mop_audited_word_p (uint32_t word, unsigned *claimed,
-				const char **why,
-				rvtt_mop_derive_state *st, bool in_slot)
-{
-  unsigned opcode = word >> 24;
-  if (opcode == XTT_MOP_OPCODE || opcode == XTT_MOP_CFG_OPCODE)
-    {
-      if (in_slot)
-	{
-	  /* A MOP/MOP_CFG word inside a template slot re-enters the
-	     expander from inside an expansion; no recorded fact pins
-	     that behavior.  */
-	  *why = "mop-template-nested-unproven: MOP word in a template slot";
-	  return false;
-	}
-      if (!st)
-	{
-	  *why = "unaudited raw opcode";
-	  return false;
-	}
-      if (opcode == XTT_MOP_OPCODE)
-	/* Effects live in the template slots; admission is deferred to
-	   rvtt_mop_derive_finish once every TU slot write is audited.
-	   The word's own fields (mop_type/loop_count/zmask) are
-	   expansion-count facts, not effect facts
-	   (rvtt-mop-tables.h).  */
-	st->mop_pushed = true;
-      /* MOP_CFG writes only the persistent zmask high half -- a
-	 type-0 iteration-count fact ([SIM] mop_cfg(),
-	 rvtt-mop-tables.h).  Unconditionally inert.  */
-      return true;
-    }
-  if (in_slot && opcode == XTT_REPLAY_OPCODE)
-    {
-      /* The slot word would play back recorded replay-buffer content;
-	 auditing recorded content is a later increment.  */
-      *why = "mop-template-replay-unproven: REPLAY word in a template slot";
-      return false;
-    }
-  if (opcode == 0x00)		/* TENSIX NOP */
-    return true;
-  if (opcode == 0x02)
-    /* Tensix NOP (0x02 << 24): classified by opcode alone and
-       swallowed at the instruction FIFO -- delivers nothing.  [SIM]
-       tensix.cpp IS_TENSIX_NOP (bits<31,24> == 0x02) and
-       tensix_push_inst_fifo's NOP early-return; rvtt-mop-tables.h NOP
-       fact.  The production template constructors park unused slots
-       on exactly this word (ckernel_template ctor TT_OP_NOP).  */
-    return true;
-  if (opcode >= 0xA0 && opcode <= 0xA7)	/* sync family */
-    return true;
-  if (opcode >= 0xB0 && opcode <= 0xB8)	/* thread-config family (SETC16) */
-    return true;
-  if (opcode == 0x36 || opcode == 0x37)	/* CLEARDVALID / SETRWC */
-    return true;
-  if (opcode == 0x28)
-    /* ELWADD: FPU elementwise add, the production math datacopy's MOP
-       loop word (llk_math_eltwise_unary_datacopy.h).  Consumes
-       SrcA/SrcB banks, writes Dst rows, steps the RWC per its
-       addr_mode field, and optionally clears dvalid -- matrix-unit
-       state only, for EVERY field value.  [SPEC]
-       craq-sim tests/aristotle/mega-union/specs/ELWADD.md functional
-       model (no LReg/LaneConfig/lane-flag reference); [SIM]
-       tensix.cpp TENSIX_EXECUTE_ELWADD -> tensix_execute_elw_op @
-       9f324140: reads src banks, writes dst[], RWC/dvalid bookkeeping;
-       l_regs/lane_config untouched.  */
-    return true;
-  if (opcode == 0x12)
-    /* MOVA2D: SrcA-to-Dst row move, the other production math
-       datacopy MOP loop word.  Reads SrcA and (read-only) the
-       LaneConfig BLOCK_DEST_MOV gate; writes Dst rows only, for EVERY
-       field value (the one flagged field combination, TF32 source
-       with the Dst32bLo modifier, is UndefinedBehavior confined to
-       the WRITTEN DST DATA -- "write data will be corrupted").
-       [SPEC] specs/MOVA2D.md functional model (LaneConfig read at the
-       column gate; all writes are Dst32b/Dst16b rows); [SIM]
-       tensix.cpp TENSIX_EXECUTE_MOVA2D @ 9f324140: dst[] writes only,
-       l_regs/lane_config untouched.  */
-    return true;
-  if (opcode == 0x71)		/* SFPLOADI: dest architecturally < 8 */
-    {
-      if (((word >> 20) & 0xf) < 8)
-	return true;
-      *why = "raw SFPLOADI with non-allocatable destination";
-      return false;
-    }
-  if (opcode == 0x91)		/* SFPCONFIG: claim the decoded dest */
-    {
-      unsigned dest = (word >> 4) & 0xf;
-      if (dest == 15)
-	{
-	  /* LaneConfig default-reset class: dest 15, mod1 bit0
-	     (MOD1_IMM16_IS_VALUE) set, imm16 == 0 -- the SFPU init's
-	     TTI_SFPCONFIG (0, 0xF, 1), word 0x910000F1.
-
-	     Audited by the architectural spec (SFPCONFIG.md functional
-	     model) and the corrected simulator (craq tensix.cpp
-	     TENSIX_EXECUTE_SFPCONFIG, craq 9f324140): the VD == 15 arm
-	     assigns LaneConfig only; LReg[11..14] writes exist solely in
-	     the VD 11..14 arm, so the programmable constant registers
-	     SURVIVE this word.  Within the admitted class every mod1
-	     completion is still LaneConfig-confined: set/AND with value
-	     0 is the hardware default-reset (reserved high bits
-	     restored per spec), OR/XOR with 0 is a no-op, and
-	     IMM16_IS_LANE_MASK with imm16 == 0 masks every lane off.
-	     The resulting LaneConfig is always {unchanged, default}, and
-	     default (0) is exactly the all-lanes, no-ROW_MASK state the
-	     allocator's own SFPCONFIG programming write assumes.  No
-	     destination is claimed: the word touches no PRGM register.
-
-	     Near misses stay refused by class: imm16 != 0 can set
-	     ROW_MASK/behavior bits (unproven lane model); mod1 bit0 == 0
-	     takes the value from LReg[0] (unauditable from the word).  */
-	  if ((word & 1) == 1 && ((word >> 8) & 0xffff) == 0)
-	    return true;
-	  *why = "raw SFPCONFIG writes LaneConfig";
-	  return false;
-	}
-      *claimed |= 1u << dest;
-      return true;
-    }
-  *why = "unaudited raw opcode";
-  return false;
 }
 
 /* See rvtt-raw-boundary.h.  */
