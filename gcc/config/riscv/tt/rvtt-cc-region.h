@@ -252,4 +252,138 @@ extern bool rvtt_cc_window_cc_event_p (gimple *stmt);
    non-gimple body).  */
 extern bool rvtt_cc_region_fn_ambient_preserving_p (function *fn);
 
+/* ==================================================================
+   The RTL-side view (laneKQ; the laneKE file-header note's named
+   successor: "a later stage that wants cross-region renames must
+   extend the cc-region engine with an RTL view first, not fork a
+   local scan").  Implemented in tt/rvtt-cc-region-rtl.cc.
+
+   The view is DERIVED FROM the post-RA insn stream, not carried from
+   the GIMPLE tree: at the post-allocation seam the statements the
+   GIMPLE tree is keyed on no longer exist (expansion, scheduling and
+   the RTL passes have rewritten and reordered them, and the rvtt_cc
+   canonicalization has already dissolved every outermost frame into
+   the [refinements..., word-exact all-lanes SFPENCC] ambient form),
+   while predication is EXPLICIT in the insn stream -- every CC event
+   is a typed instruction whose effects the item-#4 table audits.  A
+   carried mapping would be a second source of truth that can go
+   stale; a derivation is checked against the same typed-effect facts
+   its consumers already trust.
+
+   The core question is span-scoped (the shape every named RTL
+   consumer -- the rename service's cc-span rule, the temporal tier's
+   close-to-fresh-definition gap, the cyclic schedulers' regions --
+   actually asks): for the insns strictly between two positions of one
+   basic block, how does the lane-enable state relate to the state M
+   at the span entry?  The classifier walks the interior once,
+   tracking the pushc/popc frame depth RELATIVE to the span entry and
+   the depth-0 mask state, against the positive event vocabulary the
+   engine's GIMPLE side and the tt/proofs/cc-narrowing-writers
+   certificate audit:
+
+     - sfppushc (0) opens an in-span frame; sfppopc (0) closes one;
+       a pop at relative depth 0 (an outside save) and any nonzero
+       operand refuse -- fail-closed unstructured, the tree's rule;
+     - the audited narrowing writers (SFPSETCC, the SET_CC
+       SFPGT/SFPLE compares, and the lane-local mod-conditional CC
+       writers of rvtt_lane_local_effects) only NARROW the mask
+       relative to their position (the for_each_lane guard,
+       tt/proofs/cc-narrowing-writers/): inside an in-span frame the
+       recorded popc restores the entry state, so the span-entry mask
+       M bounds every interior position;
+     - SFPCOMPC narrows relative to the enclosing SAVE, so it is
+       admitted only inside an in-span frame (where the save is
+       in-span and itself bounded by M); at depth 0 the enclosing
+       save is outside the span and the resulting mask is NOT bounded
+       by M -- provable only against an all-lanes entry;
+     - the word-exact all-lanes SFPENCC (cc_write_all_lanes) can
+       WIDEN beyond M, so any occurrence demands the all-lanes entry
+       proof (under which every state is trivially a subset of M and
+       the ENCC restores M exactly); every other SFPENCC refuses;
+     - every other CC writer, every opaque instruction (call, asm,
+       raw word) and every unaudited pattern refuses by class.
+
+   The all-lanes entry proof is the kill-modeling backward walk of
+   edge_entry_all_lanes_p re-derived over RTL: every backward path
+   reaches the function entry (the all-lanes ambient axiom) or an
+   executed word-exact all-lanes SFPENCC before any other CC event.
+   Raw `.ttinsn' words of the audited INERT and ALL_LANES classes are
+   PRESERVING-only and never a kill (a raw word can sit inside a
+   replay record window and be architecturally swallowed --
+   rvtt-raw-boundary.h); a typed replay-owner instruction poisons the
+   remainder of its block for the same reason (positions after it may
+   be recorded, not executed).  Everything else fails closed.  */
+
+/* Span classification verdicts.  The three ADMIT verdicts are ordered
+   facts: NO_EVENT is the blanket rule's own fact (no CC event in the
+   interior); BALANCED adds CC activity proven confined to balanced
+   in-span frames with narrowing-only vocabulary (every interior mask
+   a subset of the span-entry mask M, the end state equal to M);
+   ALL_LANES adds depth-0 mask activity proven against an all-lanes
+   span entry (M is the architectural all-lanes state; the end-state
+   obligation, when required, is proven restored word-exactly).  The
+   REFUSE verdicts name the census classes.  */
+enum rvtt_cc_rtl_span_verdict
+{
+  RVTT_CC_RTL_SPAN_NO_EVENT,
+  RVTT_CC_RTL_SPAN_BALANCED,
+  RVTT_CC_RTL_SPAN_ALL_LANES,
+  /* An sfppopc (0) at relative depth 0: pops a save taken outside the
+     span (rewinds to an unmodeled state).  */
+  RVTT_CC_RTL_SPAN_REFUSE_OUTSIDE_POP,
+  /* An in-span frame still open at a position whose mask must equal
+     the entry mask.  */
+  RVTT_CC_RTL_SPAN_REFUSE_UNBALANCED,
+  /* The end state must equal the entry mask but a depth-0 event
+     narrowed it with no word-exact restore.  */
+  RVTT_CC_RTL_SPAN_REFUSE_END_MASK,
+  /* Depth-0 (or widening) mask activity whose admission needs the
+     all-lanes entry proof, which failed.  */
+  RVTT_CC_RTL_SPAN_REFUSE_ENTRY_UNPROVEN,
+  /* An SFPENCC that is not the word-exact all-lanes form.  */
+  RVTT_CC_RTL_SPAN_REFUSE_ENCC,
+  /* An sfppushc/sfppopc with a nonzero operand (unmodeled shape).  */
+  RVTT_CC_RTL_SPAN_REFUSE_NONZERO_MOD,
+  /* A CC writer outside the audited vocabulary.  */
+  RVTT_CC_RTL_SPAN_REFUSE_VOCAB,
+  /* An opaque instruction (call, asm, raw word, unaudited pattern)
+     in the interior.  */
+  RVTT_CC_RTL_SPAN_REFUSE_OPAQUE,
+  /* A replay-owner instruction at or before the span end: interior CC
+     events may sit inside a record window and be architecturally
+     swallowed (stored, not executed -- rvtt-raw-boundary.h), so their
+     execution cannot be trusted; only the NO_EVENT fact survives.  */
+  RVTT_CC_RTL_SPAN_REFUSE_REPLAY,
+};
+
+/* Classify the interior of the span: the nondebug insns of BB strictly
+   AFTER `after' and strictly BEFORE `until' (until == NULL means
+   through the end of BB).  REQUIRE_ENTRY_MASK_AT_END demands the
+   lane-enable state at the span end be provably the entry state M
+   word-exactly (the writer-close obligation: a kill-close must
+   overwrite exactly the lanes the definition wrote); without it the
+   end state may be any proven SUBSET of M.  Both insns must belong to
+   BB; `after' may be BB_HEAD-adjacent (the first nondebug insn).  */
+extern rvtt_cc_rtl_span_verdict
+rvtt_cc_rtl_classify_span (basic_block bb, rtx_insn *after,
+			   rtx_insn *until, bool require_entry_mask_at_end);
+
+/* The census name of V (stable strings; dump/census channel).  */
+extern const char *rvtt_cc_rtl_span_verdict_name (rvtt_cc_rtl_span_verdict v);
+
+/* V admits the span (one of the three ADMIT verdicts).  */
+inline bool
+rvtt_cc_rtl_span_admissible_p (rvtt_cc_rtl_span_verdict v)
+{
+  return v == RVTT_CC_RTL_SPAN_NO_EVENT
+	 || v == RVTT_CC_RTL_SPAN_BALANCED
+	 || v == RVTT_CC_RTL_SPAN_ALL_LANES;
+}
+
+/* The lane-enable state entering AT's position is provably the
+   architectural all-lanes state (the RTL re-derivation of
+   edge_entry_all_lanes_p's kill-modeling walk; see the file
+   header comment above).  Fail-closed everywhere.  */
+extern bool rvtt_cc_rtl_entry_all_lanes_p (rtx_insn *at);
+
 #endif /* GCC_RVTT_CC_REGION_H */

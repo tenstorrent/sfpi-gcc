@@ -107,12 +107,30 @@ along with GCC; see the file COPYING3.  If not see
    renamed register's undefined disabled lanes are unobservable and
    the old register's disabled lanes carry the identical pre-def
    values (the v1 soundness argument, now enforced for every chain).
-   NOTE on tt/rvtt-cc-region.{h,cc}: that tree is a GIMPLE-statement
-   analysis with no RTL mapping; this pass's fail-closed no-CC-in-span
-   veto is strictly stronger than any structured-region query (no
-   rename ever crosses a predicated region, structured or not).  A
-   later stage that wants cross-region renames must extend the
-   cc-region engine with an RTL view first, not fork a local scan.
+   NOTE on tt/rvtt-cc-region.{h,cc}: the GIMPLE tree has no RTL
+   mapping, and the successor this note used to name -- "a later stage
+   that wants cross-region renames must extend the cc-region engine
+   with an RTL view first, not fork a local scan" -- is now DISCHARGED
+   (laneKQ): tt/rvtt-cc-region-rtl.cc derives the span-scoped frame
+   view from the post-RA insn stream.  With
+   -mtt-tensix-optimize-rename-cc-region (default off) the cc-span
+   rule widens to the view's two proven arms: CC activity confined to
+   balanced in-span pushc/popc frames with narrowing-only vocabulary
+   (every interior lane-enable state a subset of the span-entry mask,
+   so every reader still observes only definition-written lanes and a
+   kill-close still overwrites exactly them), or an all-lanes span
+   entry proven by the kill-modeling backward walk (the definition
+   wrote every lane; a required end state is restored word-exactly by
+   the all-lanes SFPENCC).  Every unproven arm refuses
+   regrename-cc-span-region-unproven with the view's class in the
+   dump; with the flag absent the blanket rule and its standing
+   regrename-cc-span refusal are byte-identical, and under
+   flag_checking the view SHADOWS the blanket rule (every span the
+   blanket rule allows must be NO_EVENT -- a divergence is a hard
+   assert).  The temporal tier's close-to-fresh-definition gap rule
+   deliberately keeps the blanket no-CC-event discipline: its
+   obligation is mask EQUALITY between the chain span and the fresh
+   definition, a different fact from the span's subset containment.
 
    Death proof: the close is the next writer of the register inside
    the block (lane-exact under the constant-mask span rule), or --
@@ -213,6 +231,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rvtt-refuse.h"
 #include "rvtt-timing.h"
+#include "rvtt-cc-region.h"
 
 /* The one place the LREG-file capacity is read (item #10's engine;
    rvtt-pressure.h itself is a GIMPLE-side header, so the constant is
@@ -598,6 +617,9 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
   std::vector<size_t> readers;
   size_t close = scan.size ();
   bool close_reads = false;
+  /* First CC-state event inside the span, when the widening flag lets
+     the walk continue past it (see the cc_write arm below).  */
+  rtx_insn *first_cc = nullptr;
   for (size_t i = wi + 1; i < scan.size (); ++i)
     {
       const span_insn &si = scan[i];
@@ -662,11 +684,43 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
 	     observe lanes the writer never wrote, and a lane-masked
 	     close past it kills only the narrowed lanes -- either way
 	     the disabled-lane contents of the two worlds diverge.
-	     Fail closed on ANY CC event inside the span (see the file
-	     header; strictly stronger than every structured-region
-	     query).  */
-	  refuse_chain ("regrename-cc-span", si.insn, bb);
-	  return false;
+	     Without the widening flag, fail closed on ANY CC event
+	     inside the span (the blanket rule), after asking the
+	     CC-region engine's RTL view for the dump-only census
+	     class.  With -mtt-tensix-optimize-rename-cc-region the
+	     walk continues (the event may be a collectable reader)
+	     and the view adjudicates the whole span after the close
+	     is known.  */
+	  if (!riscv_tt_opt_rename_cc_region)
+	    {
+	      if (dump_file)
+		{
+		  /* Census channel (dump-only; the byte-inert census
+		     the stage discipline requires): the close the
+		     blanket world would have found.  */
+		  size_t c = scan.size ();
+		  for (size_t j = i; j < scan.size (); ++j)
+		    if (scan[j].kind == span_insn::SI_TENSIX
+			&& (scan[j].fx.lreg_write & oldbit))
+		      {
+			c = j;
+			break;
+		      }
+		  rvtt_cc_rtl_span_verdict v
+		    = rvtt_cc_rtl_classify_span
+			(bb, w.insn,
+			 c == scan.size () ? nullptr : scan[c].insn,
+			 c != scan.size ());
+		  fprintf (dump_file,
+			   "Lreg chain rename cc-span rtl-view: %s"
+			   " in bb %d\n",
+			   rvtt_cc_rtl_span_verdict_name (v), bb->index);
+		}
+	      refuse_chain ("regrename-cc-span", si.insn, bb);
+	      return false;
+	    }
+	  if (!first_cc)
+	    first_cc = si.insn;
 	}
       if (si.fx.lreg_read & oldbit)
 	{
@@ -683,6 +737,62 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
 	  readers.push_back (i);
 	}
     }
+  if (first_cc)
+    {
+      /* The widened arm: the span crossed CC activity and the flag is
+	 live.  The RTL view adjudicates the whole interior (writer to
+	 close, or to the block end for an open chain); a kill-close
+	 demands the end state equal the span-entry mask (it must
+	 overwrite exactly the definition-written lanes).  Every
+	 unproven arm refuses by the new name; the dumped class names
+	 the census arm.  */
+      gcc_assert (riscv_tt_opt_rename_cc_region);
+      rvtt_cc_rtl_span_verdict v
+	= rvtt_cc_rtl_classify_span (bb, w.insn,
+				     close == scan.size ()
+				     ? nullptr : scan[close].insn,
+				     close != scan.size ());
+      if (dump_file)
+	fprintf (dump_file,
+		 "Lreg chain rename cc-span rtl-view: %s in bb %d\n",
+		 rvtt_cc_rtl_span_verdict_name (v), bb->index);
+      /* The walk saw a CC event, so the view cannot answer NO_EVENT
+	 (the two scans classify from the same typed-effect table).
+	 Runtime-gated like the shadow assert below: the production
+	 binary is a release-checking build, where gcc_checking_assert
+	 would compile away.  */
+      if (flag_checking)
+	gcc_assert (v != RVTT_CC_RTL_SPAN_NO_EVENT);
+      if (!rvtt_cc_rtl_span_admissible_p (v))
+	{
+	  refuse_chain ("regrename-cc-span-region-unproven", first_cc, bb);
+	  return false;
+	}
+    }
+  else if (flag_checking)
+    {
+      /* Stage-A shadow (the campaign discipline): every span the
+	 blanket rule allows must be NO_EVENT under the RTL view; a
+	 disagreement is a FINDING -- dumped by name, failed closed to
+	 the standing refusal, hard assert.  */
+      rvtt_cc_rtl_span_verdict v
+	= rvtt_cc_rtl_classify_span (bb, w.insn,
+				     close == scan.size ()
+				     ? nullptr : scan[close].insn,
+				     close != scan.size ());
+      if (v != RVTT_CC_RTL_SPAN_NO_EVENT)
+	{
+	  if (dump_file)
+	    fprintf (dump_file,
+		     "Lreg chain rename cc-span rtl-view SHADOW"
+		     " DIVERGENCE: %s in bb %d\n",
+		     rvtt_cc_rtl_span_verdict_name (v), bb->index);
+	  refuse_chain ("regrename-cc-span", w.insn, bb);
+	  gcc_assert (!"cc-span rtl-view shadow divergence");
+	  return false;
+	}
+    }
+
   if (close == scan.size ())
     {
       /* No kill inside the block: admissible only as a dead-at-exit
