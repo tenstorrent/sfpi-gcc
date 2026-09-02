@@ -4,9 +4,9 @@
 
    Sources of truth (SHA256 of the RESULT bytes at generation time):
      tt/proofs/store-sink-roundtrip/RESULT.txt
-       c8dec879ce6418896cdb7c6fb5cdf6d9062281bd3d80e2a161abecae7517f457
+       dec619dca89dad89981fa554efe8697efdfd1a0284ce3e7c29eeba267f155226
      tt/proofs/stochrnd-store-round/RESULT.txt
-       651ed50f909f269cfacf7644242926c9f09097896c71bdf0a5d21e308efe4b86
+       ca4742f94904d29f98154b9ba6969a79d29e9de7c89eabac4332954df5c24b9e
 
    Regenerate: `make rvtt-storefold-verdicts-regen` in the gcc
    build directory (writes back into the source tree).  Every
@@ -36,8 +36,8 @@
    their class is derived as the most refusing of the swept float
    pairs.  */
 
-RVTT_STOREFOLD_PROOF ("store-sink-roundtrip/RESULT.txt", "c8dec879ce6418896cdb7c6fb5cdf6d9062281bd3d80e2a161abecae7517f457")
-RVTT_STOREFOLD_PROOF ("stochrnd-store-round/RESULT.txt", "651ed50f909f269cfacf7644242926c9f09097896c71bdf0a5d21e308efe4b86")
+RVTT_STOREFOLD_PROOF ("store-sink-roundtrip/RESULT.txt", "dec619dca89dad89981fa554efe8697efdfd1a0284ce3e7c29eeba267f155226")
+RVTT_STOREFOLD_PROOF ("stochrnd-store-round/RESULT.txt", "ca4742f94904d29f98154b9ba6969a79d29e9de7c89eabac4332954df5c24b9e")
 
 /* BF16, 16-bit Dst layout: 254 mismatches / 65536 swept.  */
 RVTT_STOREFOLD_SINK_PAIR (SFPMEM_MOD0_FMT_BF16, SFPMEM_MOD0_FMT_BF16, NOT_EQUAL, DENORMAL_FLUSH, LICENSED,
