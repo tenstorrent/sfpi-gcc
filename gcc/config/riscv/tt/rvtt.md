@@ -2468,7 +2468,7 @@
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4
    SFP<rvtt_logical_insn>\t%x0, %x2, %x3, %4\t# LV:%1"
   ;; Effect audit (D3 latency audit, BH): craq-sim mod1<=1 branch of
-  ;; TENSIX_EXECUTE_SFPAND/SFPOR — reads operands 2 and 3 (and the tied
+  ;; TENSIX_EXECUTE_SFPAND/SFPOR -- reads operands 2 and 3 (and the tied
   ;; live value), lane-writes the destination; no CC write,
   ;; configuration, or counter effect.  Higher mods are simulator-
   ;; refused and keep the refusing defaults.  S1 Simple; result latency

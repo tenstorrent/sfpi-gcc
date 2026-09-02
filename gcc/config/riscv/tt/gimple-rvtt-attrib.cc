@@ -1,5 +1,5 @@
 /* Pass to restore lost memory space pointer attributes
-   Copyright (C) 2022-2025 Tenstorrent Inc.
+   Copyright (C) 2022-2026 Tenstorrent Inc.
    Originated by Paul Keller (pkeller@tenstorrent.com).
 
 This file is part of GCC.
@@ -17,8 +17,8 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-#include <unordered_map>
 
+#define INCLUDE_UNORDERED_MAP
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -64,15 +64,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "asan.h"
 #include "profile.h"
-#include <vector>
-#include <tuple>
 #include "rvtt.h"
-
-#if 0
-#define DUMP(...) (void)fprintf (stderr, __VA_ARGS__)
-#else
-#define DUMP(...) (void)0
-#endif
 
 static tree process_node (std::unordered_map<gimple *, tree>& stmts, gimple *stmt);
 
@@ -97,13 +89,6 @@ check_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt, tree node)
     }
 
   return NULL_TREE;
-}
-
-static void
-reinsert(std::unordered_map<gimple *, tree>& stmts, gimple *stmt, tree node)
-{
-  auto cached = stmts.find(stmt);
-  //  cached->second = node;
 }
 
 static tree
@@ -132,13 +117,11 @@ process_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt)
 		  tree ret;
 		  if ((ret = process_node(stmts, origin)) != NULL_TREE)
 		    {
-		      reinsert(stmts, stmt, ret);
 		      return ret;
 		    }
 		}
 	    }
 
-	  reinsert(stmts, stmt, NULL_TREE);
 	  return NULL_TREE;
 	}
       else if (stmt->code == GIMPLE_ASSIGN)
@@ -146,27 +129,22 @@ process_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt)
 	  tree ret;
 	  if ((ret = check_node(stmts, stmt, gimple_assign_rhs1(stmt))) != NULL_TREE)
 	    {
-	      reinsert(stmts, stmt, ret);
 	      return ret;
 	    }
 	  if ((ret = check_node(stmts, stmt, gimple_assign_rhs2(stmt))) != NULL_TREE)
 	    {
-	      reinsert(stmts, stmt, ret);
 	      return ret;
 	    }
 	  ret = check_node(stmts, stmt, gimple_assign_rhs3(stmt));
-	  reinsert(stmts, stmt, ret);
 	  return ret;
 	}
       else if (stmt->code == GIMPLE_CALL)
 	{
 	  // XXXX check fn signature?
-	  reinsert(stmts, stmt, NULL_TREE);
 	  return NULL_TREE;
 	}
     }
 
-  reinsert(stmts, stmt, NULL_TREE);
   return NULL_TREE;
 }
 
@@ -182,7 +160,8 @@ process_node(std::unordered_map<gimple *, tree>& stmts, gimple *stmt)
 static void
 transform (function *fn)
 {
-  DUMP ("TT attrib pass on %s\n", function_name (fn));
+  if (dump_file)
+    fprintf (dump_file, "TT attrib pass on %s\n", function_name (fn));
 
   std::unordered_map<gimple *, tree> stmts;
   stmts.reserve (40);
@@ -197,16 +176,21 @@ transform (function *fn)
 	    if (!lookup_attribute ("rvtt_l1_ptr", TYPE_ATTRIBUTES (type))
 		&& !lookup_attribute ("rvtt_reg_ptr", TYPE_ATTRIBUTES (type)))
 	      {
-		DUMP ("no attrib, searching\n");
+		if (dump_file)
+		  fprintf (dump_file, "no attrib, searching\n");
 		if (tree result = process_node (stmts, gsi_stmt (gsi)))
 		  {
 		    type = build_type_attribute_variant (type, TYPE_ATTRIBUTES (TREE_TYPE (result)));
 		    TREE_TYPE (lhs) = type;
-		    DUMP ("found one , adding attribute\n");
+		    if (dump_file)
+		      fprintf (dump_file, "found one , adding attribute\n");
 		  }
 	      }
 	    else
-	      DUMP ("found attrib, skipping\n");
+	      {
+	        if (dump_file)
+	          fprintf (dump_file, "found attrib, skipping\n");
+	      }
 	  }
       }
 }

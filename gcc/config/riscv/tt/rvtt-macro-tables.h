@@ -388,7 +388,7 @@ extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 /*								      */
 /* The sequence-word bit format and the per-event delay semantics are  */
 /* ESTABLISHED by three independent sources (see			      */
-/* docs/TIMING_CALENDAR_DERIVATION.md §1-2): the ISA functional	      */
+/* docs/TIMING_CALENDAR_DERIVATION.md section 1-2): the ISA functional	      */
 /* specification SFPLOADMACRO.md (SequenceBits, the per-sub-unit      */
 /* opcode legality table, the Simple/Round VD16 rule, the SFPSWAP     */
 /* adjacency rule, the Misc field layout), the CRAQ generic executor  */
@@ -396,7 +396,7 @@ extern uint32_t template_hidden_lreg_writes (const caps *, uint32_t word);
 /* issue+1+delay, retire-before-issue, transactional same-cycle	      */
 /* groups), and the handwritten MulInt32 init (tt_llk_blackhole	      */
 /* ckernel_sfpu_mul_int.h, author-annotated fields).  This resolves   */
-/* NOTES-wp6-prep.md §9(b)/(c)/(g).  Every fact below carries that    */
+/* NOTES-wp6-prep.md section 9(b)/(c)/(g).  Every fact below carries that    */
 /* provenance; whole-word proven programs above remain the capability */
 /* for the frozen shapes (byte parity), while these facts let the     */
 /* planner DERIVE calendars for new shapes.			      */
@@ -457,7 +457,7 @@ extern bool opcode_reads_vd (const caps *, uint8_t opcode);
    comment).  Everything else keeps VD-direct/staging-copy or refuses.  */
 extern bool opcode_l16_target_proven (const caps *, uint8_t opcode);
 
-/* The SFPSWAP scheduling rule (ISA (‡)): MAD hosts nothing in the
+/* The SFPSWAP scheduling rule (ISA (ddag)): MAD hosts nothing in the
    SWAP's execution cycle, and Simple and Round host nothing in the
    cycle after it.  */
 extern bool opcode_needs_swap_adjacency (const caps *, uint8_t opcode);

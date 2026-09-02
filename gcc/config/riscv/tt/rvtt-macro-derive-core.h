@@ -19,7 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Pure derivation of per-macro SEQUENCE WORDS and per-event DELAYS from
    a scheduled row, using only the architectural facts in the capability
-   tables (docs/TIMING_CALENDAR_DERIVATION.md §2, §4.3).  Freestanding
+   tables (docs/TIMING_CALENDAR_DERIVATION.md section 2, section 4.3).  Freestanding
    (tables + <stdint.h>), shared between descriptor synthesis, the
    Layer-7 verifier's expectation builder, and the standalone
    reproduction unit test rvtt-macro-derive-test.cc, which pins this
@@ -472,7 +472,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	    /* One event per sub-unit per cycle, across row instances.  */
 	    if (items[i].unit == items[j].unit)
 	      bump = (int) item_index[j];
-	    /* (†): a same-cycle Simple/Round pair splits the VD16 bit.  */
+	    /* (dag): a same-cycle Simple/Round pair splits the VD16 bit.  */
 	    else if (((items[i].unit == SEQ_UNIT_SIMPLE
 		       && items[j].unit == SEQ_UNIT_ROUND)
 		      || (items[i].unit == SEQ_UNIT_ROUND
@@ -486,7 +486,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	      bump = (int) item_index[j];
 	  }
 
-      /* (‡): SWAP needs MAD idle in its cycle and Simple+Round idle in
+      /* (ddag): SWAP needs MAD idle in its cycle and Simple+Round idle in
 	 the next -- including against its own next-row instance.  */
       for (unsigned i = 0; i < n_items && bump < 0; ++i)
 	{
@@ -495,7 +495,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
 	  if (row.ii == 1)
 	    {
 	      out->refusal = refusal_hazard ();
-	      return false;	/* its own successor violates (‡)      */
+	      return false;	/* its own successor violates (ddag)      */
 	    }
 	  for (unsigned j = 0; j < n_items && bump < 0; ++j)
 	    {
@@ -590,7 +590,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
      instance rewrites its source still reads this row's value.  (The
      handwritten MulInt32 two-slot variant sits exactly on this
      boundary; its one-slot in-place variant violates the strict part
-     of the bound and refuses -- see docs §3/§7.)  */
+     of the bound and refuses -- see docs section 3/section 7.)  */
   if (out->store_reads_l16)
     {
       int writer_exec = l16_writer == (int) MAX_EVENTS
@@ -644,7 +644,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
   /* Delay-counting kinds: an event consuming a value issued after its
      own launch requires instruction counting on its sub-unit, sound
      only over an all-SFPU issue window (the modal ISA semantics;
-     docs §2.4).  */
+     docs section 2.4).  */
   for (unsigned e = 0; e < row.n_events; ++e)
     if (row.events[e].latest_issued_input_slot
 	> row.events[e].carrier_slot)
@@ -655,7 +655,7 @@ derive_calendar (const rvtt_macro::caps *c, const row_spec &row,
       return false;
     }
 
-  /* Operand routing (docs §4.3(4)): route=1 for the SHFT2 immediate
+  /* Operand routing (docs section 4.3(4)): route=1 for the SHFT2 immediate
      class, VD-reading opcodes, and events shielding a planned VC;
      route=0 hands the launch VD to the VC side.  */
   for (unsigned e = 0; e < row.n_events; ++e)

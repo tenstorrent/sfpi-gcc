@@ -1361,7 +1361,7 @@ transform (function *fn)
       /* Collect candidate loads from the loop's direct body blocks (a load
 	 still inside a subloop was already refused there and would only see
 	 more pressure here).  Each load's block must provably execute on
-	 every iteration that enters the body — never speculate the
+	 every iteration that enters the body -- never speculate the
 	 architectural LREG write.  */
       auto_vec<gcall *> loads;
       basic_block *body_blocks = get_loop_body_in_dom_order (loop);
@@ -1490,7 +1490,7 @@ transform (function *fn)
 	  /* LUT-COEFFICIENT AUTHORITY (measured, sigmoid-appx-tree
 	     anatomy): a loop whose body carries LUT machinery
 	     (SFPLUT/SFPLUTFP32) keeps the ESTABLISHED wholesale
-	     deferral regardless of depth — the in-loop constant
+	     deferral regardless of depth -- the in-loop constant
 	     materializations there are LUT slot coefficients whose
 	     placement authority belongs to the lut-select passes
 	     (shortened slot materializations at the LUT programming
@@ -1527,11 +1527,11 @@ transform (function *fn)
 	     parks at 296t) whose budgets share the 8-LREG file with
 	     whatever this pass pins early.  A loop with THREE OR MORE
 	     in-region invariant constants is in the
-	     pressure-arbitrated regime — HN's budget-ordering defect
+	     pressure-arbitrated regime -- HN's budget-ordering defect
 	     applies to the depth-zero keeps too (sigmoid-appx-tree:
 	     three early keeps pushed the lut-select coefficient
 	     placement to lut-coefficient-pressure, LREG 9 > 8, and the
-	     5-word LUT row decayed to 43447 cycles) — so the whole
+	     5-word LUT row decayed to 43447 cycles) -- so the whole
 	     loop keeps the ESTABLISHED wholesale deferral, by name
 	     (in-region-demand).  Every measured kept-hoist winner
 	     (ceil/rops/rdiv/sqrt 1, softsign/i0 2, hardsigmoid 1)
@@ -1703,7 +1703,7 @@ transform (function *fn)
       /* Never overwrite an explicit user unroll request (loop->unroll is
 	 nonzero once "#pragma GCC unroll N" has been recorded during CFG
 	 construction); in particular "#pragma GCC unroll 1" must keep its
-	 scalar loop.  Only the unroll request defers to the pragma — the
+	 scalar loop.  Only the unroll request defers to the pragma -- the
 	 invariant hoist below is independent and still proceeds.  */
       /* CC-carrying loops are newly reachable here under the restore
 	 proof; the unroll request keeps its pre-existing surface (loops
