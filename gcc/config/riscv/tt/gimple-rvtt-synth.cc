@@ -20,7 +20,43 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Most SFPU instructions encode a small immediate operand directly in
+   the instruction word.  When the source operand is not a compile-time
+   constant the instruction word itself must be synthesized at run time:
+   a prologue masks and shifts the variable value into the immediate
+   field and adds it to a base opcode produced by a SYNTH_OPCODE marker
+   builtin; the consuming builtin then carries the synthesized word as
+   an extra operand.  This file implements the GIMPLE half of that
+   scheme as three passes (the RTL half is rtl-rvtt-synth.cc, which
+   picks the final base opcode values):
+
+   - rvtt_synth_split (early, after inlining): finds intrinsic calls
+     whose immediate argument is (still) non-constant and emits the
+     mask/shift/synth_opcode/add prologue, linking prologue and use
+     through a unique id.  The id also stops generic CSE from merging
+     unrelated SYNTH_OPCODEs.  Running after inlining lets later code
+     motion separate the prologue from the use.
+
+   - rvtt_synth_cse (late): duplication optimizations (unrolling,
+     unswitching, jump threading) clone the prologue; when every value
+     reaching a use's synthesized-word operand through PHI webs traces
+     back to identically-numbered SYNTH_OPCODEs with one common addend,
+     the web collapses back to a single synth_opcode(+add).
+
+   - rvtt_synth_renumber (last): the remaining duplicates get distinct
+     ids re-established so the RTL pass sees a 1:1 mapping between each
+     add chain and its SYNTH_OPCODE (clones that generic CSE chose to
+     keep separate are renumbered apart; constant-folded uses release
+     their prologue to DCE).  Ids reached through PHIs are left alone.
+
+   The nonimm_pos field of rvtt_insn_data locates the permissible
+   non-constant argument of a builtin; argument nonimm_pos+1 receives
+   the synthesized instruction word and nonimm_pos+2 the SYNTH_OPCODE
+   dependency id.  */
+
+
 #define INCLUDE_VECTOR
+#define INCLUDE_UNORDERED_SET
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -34,26 +70,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-pretty-print.h"
 #include "tree-into-ssa.h"
 #include "rvtt.h"
-#include <unordered_set>
 
-// This pass finds builtins with non-constant args and:
-//  - emit a prologue to synthesize the instruction (shift, mask,
-//    synth_opcode, add)
-//  - link the synth_opcode to the builtin via a unique id (this id
-// also prevents CSE combining unrelated synth_opcodes)
-//
-// The nonimm_pos field in insnd points to the permissible
-// non-constant argument in the builtin. The nonimm_pos+1 argument is
-// where the synthesized instruction is added and the nonimmm_pos+2 is
-// where the synth_opcode dependency is stored.
-//
-// This pass runs early in the pipe, but after inlining. Doing that
-// allows the prologue to be separated from the use.  After loop
-// unrolling, there can be multiple synth_opcodes with the same ids.
-// Not all constant propagation is done at this point, so later we can
-// discover some builtins have a constant argument (which is one
-// reason to leave that argument alone right now). We'll detach the
-// prologue at that point.
+/* Build (unlinked) a SYNTH_OPCODE marker call with id ID at LOC,
+   producing VAR (a fresh SSA name if none is given).  */
 
 static gcall *
 make_synth (location_t loc, tree id, tree var = nullptr)
@@ -69,6 +88,11 @@ make_synth (location_t loc, tree id, tree var = nullptr)
 
   return stmt;
 }
+
+/* Emit, before GSI, the synthesis prologue for a value VAL destined
+   for INSND's immediate field: mask VAL to the field width, shift it
+   into position, and add it to a new SYNTH_OPCODE marker carrying ID.
+   Returns the SSA name of the synthesized instruction word.  */
 
 static tree
 build_var_synth (gimple_stmt_iterator gsi, const rvtt_insn_data *insnd,
@@ -101,6 +125,11 @@ build_var_synth (gimple_stmt_iterator gsi, const rvtt_insn_data *insnd,
 
   return var_sum;
 }
+
+/* The rvtt_synth_split pass body: give every non-constant immediate
+   use a synthesis prologue; constant immediates get their prologue
+   slots cleared instead.  A user-supplied synthesized word ("User
+   set") is left untouched.  */
 
 static unsigned
 split (function *fn)
@@ -152,18 +181,26 @@ split (function *fn)
   return updated ? TODO_update_ssa : 0;
 }
 
-// After duplication optimizations we can end up with three cases of var_arg
-// inputs that we should simplify:
-//
-// 1.  A phi where every add is of the same SSA var and that other op is from
-// an identically numbered synth_opcode. Replace the phi with a newly
-// synthesized synth_opcode and add pair.
-//
-// 2.  An add where the synth_operand input is a phi, and every incoming edge
-// of that phi is an identically numbered synt.  Replace the phi with a newl
-// synthesized synth_opcode.
-//
-// 3. A combination of the above two cases.
+/* After duplication optimizations there are three shapes of
+   synthesized-word (var_arg) input that should collapse:
+
+   1. a PHI whose every incoming value is an add of one common SSA
+      addend with identically-numbered SYNTH_OPCODEs: replace the PHI
+      with a fresh synth_opcode + add pair;
+
+   2. an add whose SYNTH_OPCODE input is a PHI merging
+      identically-numbered SYNTH_OPCODEs: replace that PHI with a fresh
+      synth_opcode;
+
+   3. any combination of the two.
+
+   check_synth/check_add analyze a candidate web; cse_add rebuilds the
+   collapsed form.  */
+
+/* Walk VAR (through PHI webs, visited set PHIS) checking that every
+   reaching definition is a SYNTH_OPCODE with one common id, recorded
+   in ID.  Returns the number of SYNTH_OPCODE defs found, 0 on any
+   mismatch.  */
 
 static unsigned
 check_synth (std::unordered_set<gphi *> &phis, tree var, tree &id)
@@ -206,6 +243,12 @@ check_synth (std::unordered_set<gphi *> &phis, tree var, tree &id)
 
   return 1;
 }
+
+/* Walk VAR (through PHI webs, visited set ADD_PHIS) checking that
+   every reaching definition is an add of one common ADDEND with a
+   SYNTH_OPCODE web of one common ID (checked via check_synth with
+   visited set SYNTH_PHIS).  Returns {number of adds, number of
+   SYNTH_OPCODE defs}, {0, 0} on any mismatch.  */
 
 static std::pair<unsigned, unsigned>
 check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth_phis, tree var,
@@ -264,6 +307,11 @@ check_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &syn
 
   return {0, 0};
 }
+
+/* VAR is a synthesized-word input of an intrinsic call.  If its
+   reaching web collapses (see above), rebuild it as a single
+   synth_opcode (+ add) and remove the merged PHI.  Returns true if
+   anything changed.  */
 
 static bool
 cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth_phis, tree var)
@@ -334,6 +382,9 @@ cse_add (std::unordered_set<gphi *> &add_phis, std::unordered_set<gphi *> &synth
   return true;
 }
 
+/* The rvtt_synth_cse pass body: try to collapse the synthesized-word
+   web of every intrinsic call with a variable immediate.  */
+
 static unsigned
 cse (function *fn)
 {
@@ -368,21 +419,21 @@ cse (function *fn)
   return updated ? TODO_update_ssa : 0;
 }
 
-// After duplicative optimizations like loop unrolling and
-// loop unswitching we can have
-// 0 uses with a now-constant argument
-// 1 multiple synth_opcodes with the same ID
-// 2 multiple opcode adds using the same synth_opcode
-// #0 we should delete
-// #1 is when CSE decides not to eliminate. We may as well renumber
-// these to give the backend more flexibility (we presume it's
-// unlikely to do CSE we didn't).
-// #2 is when there are different non-immediate input values to the
-// dupliated use. We want to insert new synth_opcodes so there's a 1:1
-// mapping to the adds.
-// Applying the renumbering and insertion requires following SSA
-// DEF/USE lists. If we encounter something odd (like a PHI), we
-// abandon renumbering that ID.
+/* The rvtt_synth_renumber pass body.  After duplicative optimizations
+   (loop unrolling, unswitching) three residues remain:
+
+   0. uses whose immediate became constant -- their prologues die of
+      natural causes once detached;
+   1. multiple SYNTH_OPCODEs sharing an id that generic CSE chose not
+      to merge -- renumber them apart to give the RTL pass maximal
+      freedom (it is unlikely to find CSE we did not);
+   2. multiple opcode adds consuming one SYNTH_OPCODE (different
+      variable inputs into duplicated uses) -- insert fresh
+      SYNTH_OPCODEs so adds and opcodes map 1:1.
+
+   The rewrite follows SSA def-use chains; any shape it cannot model
+   (notably PHI merges, which would need a dominator-based CSE)
+   abandons renumbering for that id.  */
 
 static unsigned
 renumber (function *fn)
@@ -503,7 +554,7 @@ renumber (function *fn)
 	  {
 	    // We can encounter this when code duplication has cloned
 	    // synth_opcode insns in various blocks. We should be able
-	    // to CSE these cases into a dominator. Unfortunately
+	    // to CSE these cases into a dominator.  Unfortunately
 	    // there doesn't appear to be a (reusable) gimple CSE
 	    // pass. For now mark this id as not to be touched :(
 	    if (first_add_ix)
@@ -516,7 +567,7 @@ renumber (function *fn)
 	    else
 	      {
 		// The PHI is merging synth_opcode values themselves. Stop
-		// following, and then we'll not touch qnything here.
+		// following, and then we'll not touch anything here.
 	      }
 	    if (dump_file)
 	      {
@@ -547,7 +598,7 @@ renumber (function *fn)
 	    continue;
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
 	    {
-	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 0));;
+	      unsigned id = TREE_INT_CST_LOW (gimple_call_arg (call_stmt, 0));
 	      if (opcode_counts.size() < id + 1)
 		opcode_counts.resize (id + 1);
 	      opcode_counts[id]++;

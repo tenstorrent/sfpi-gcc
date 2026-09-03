@@ -253,7 +253,6 @@ INSERT_PASS_AFTER (pass_postreload, 1, pass_rvtt_replay);
 // However, the machine reorg pass, when using -msave-restore, injects an insn
 // that causes df_analyze to crash, so run before that And, free_cfg pass calls
 // free_bb_for_insn resulting in problems w/ df_analyze, so call before that
-INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_hll);
 INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_rvtt_fix_raw);
 /* The ENABLE_DEST_INDEX write-restriction window enforcement must see
    the FINAL

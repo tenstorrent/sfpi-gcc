@@ -17,6 +17,49 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* Lowering of SFPI boolean condition trees (v_if / v_elseif
+   conditions) into SFPU condition-code operations.
+
+   The front end represents a lane condition as an SSA tree of marker
+   builtins: comparisons (SFPXFCMPS/SFPXFCMPV for float,
+   SFPXICMPS/SFPXICMPV for integer), boolean combiners (SFPXBOOL:
+   AND/OR/NOT), an integer-condition escape (SFPXCONDI, a boolean used
+   as an ordinary integer value), all anchored by an SFPXCONDB at the
+   region head.  The hardware has no boolean registers: a comparison
+   narrows the lane-enable mask as a side effect, an AND is simply two
+   comparisons in sequence, and there is no OR at all.  Some comparison
+   senses (LE, GT) are themselves synthesized from the complement
+   operation (COMPC).
+
+   This pass deletes each tree and re-emits it in hardware terms:
+
+   - ORs become ANDs of negated children by De Morgan's laws; the
+     NEGATE flag toggles down the tree so double negations cancel, and
+     comparison senses flip instead of emitting complements wherever
+     possible.
+
+   - An AND's right-hand side that ends "negated" (its result exists
+     only as a complemented mask) is bracketed: the incoming enables
+     are saved to a temporary (LOADI 1 under the old mask, LOADI_LV 0
+     under the new), the region is closed with POPC, and SETCC_V
+     restores the computed mask -- see process_bool_tree.
+
+   - SFPXCONDI outside a lane-condition region expands to the integer
+     materialization LOADI 0 / PUSHC / cmp-tree / LOADI_LV 1 / POPC;
+     inside one, when its comparison result feeds the region's own
+     SFPXCONDB and nothing else, the tree is grafted directly into the
+     SFPXCONDB and the materialization is skipped (see the vif_stmts
+     marking in transform).
+
+   The scalar SSA results of the deleted markers cease to exist --
+   their value now lives in the CC state -- so lhs links are cleared
+   (with DEBUG_BIND uses reset) rather than replaced.
+
+   The emitted PUSHC/POPC/COMPC structure is exactly what the
+   downstream passes (gimple-rvtt-live.cc, gimple-rvtt-cc.cc) analyze;
+   this pass runs before both.  */
+
 #define INCLUDE_UNORDERED_MAP
 #include "config.h"
 #include "system.h"
@@ -30,6 +73,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-iterator.h"
 #include "tree-into-ssa.h"
 #include "tree-ssa.h"
+#include "diagnostic-core.h"
 #include "rvtt.h"
 
 
@@ -40,14 +84,19 @@ static void process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterat
 static std::unordered_map<gcall *, bool> vif_stmts;
 static std::unordered_map<gcall *, bool> phi_stmts;
 
+/* Return integer constant argument ARG of STMT.  */
+
 static unsigned
 get_int_arg (gcall *stmt, unsigned int arg)
 {
   return TREE_INT_CST_LOW (gimple_call_arg (stmt, arg));
 }
 
+/* Fully delete statement G (its intrinsic bookkeeping, virtual
+   operands, and defs).  */
+
 static void
-remove_stmt(gimple *g)
+remove_stmt (gimple *g)
 {
   rvtt_prep_stmt_for_deletion(g);
   unlink_stmt_vdef(g);
@@ -71,8 +120,11 @@ clear_call_lhs (gcall *stmt)
     }
 }
 
+/* Return MOD with its comparison sense negated (LT<->GE, EQ<->NE,
+   LE<->GT); other mod bits are preserved.  */
+
 static int
-negate_cmp_mod(int mod)
+negate_cmp_mod (int mod)
 {
     int op = mod & SFPXCMP_MOD1_CC_MASK;
     int new_op = 0;
@@ -101,13 +153,22 @@ negate_cmp_mod(int mod)
     return (mod & ~SFPXCMP_MOD1_CC_MASK) | new_op;
 }
 
+/* Does a comparison with mod MOD synthesize its sense via COMPC (i.e.
+   leave the CC state complemented relative to the tested condition)?
+   LE is implemented as LT-or-EQ followed by COMPC of the GT mask; the
+   GT case is produced by negation before this test is consulted.  */
+
 static bool
-cmp_issues_compc(int mod)
+cmp_issues_compc (int mod)
 {
   return (mod & SFPXCMP_MOD1_CC_MASK) == SFPXCMP_MOD1_CC_LE;
 }
 
-static int get_bool_type(int op, bool negate)
+/* Return the effective boolean operation for OP under NEGATE (De
+   Morgan: negated OR is AND of negated children and vice versa).  */
+
+static int
+get_bool_type (int op, bool negate)
 {
   if (op == SFPXBOOL_MOD1_OR)
     return negate ? SFPXBOOL_MOD1_AND : SFPXBOOL_MOD1_OR;
@@ -116,8 +177,11 @@ static int get_bool_type(int op, bool negate)
   gcc_unreachable ();
 }
 
+/* If NEGATE, flip the comparison sense of STMT (an INSND comparison)
+   in place.  Returns the (possibly updated) mod value.  */
+
 static int
-flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
+flip_negated_cmp (gcall *stmt, const rvtt_insn_data *insnd, bool negate)
 {
   int mod = TREE_INT_CST_LOW (gimple_call_arg (stmt, insnd->mod_arg ()));
   if (negate)
@@ -130,8 +194,13 @@ flip_negated_cmp(gcall *stmt, const rvtt_insn_data *insnd, bool negate)
   return mod;
 }
 
-static gcall*
-copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
+/* Replace integer comparison STMT by its CC-side-effect form ID
+   (SFPXIADD_I/SFPXIADD_V performing a subtract): copy the arguments,
+   drop the scalar lhs, mark the mod as a subtract-compare.  Returns
+   the new statement.  */
+
+static gcall *
+copy_and_replace_icmp (gcall *stmt, rvtt_insn_data::insn_id id)
 {
   const rvtt_insn_data *new_insnd = rvtt_get_insn_data(id);
   int nargs = gimple_call_num_args(stmt);
@@ -156,8 +225,11 @@ copy_and_replace_icmp(gcall *stmt, rvtt_insn_data::insn_id id)
   return new_stmt;
 }
 
+/* Finish NEW_STMT (location from STMT) and insert it at GSIP, before
+   or after per INSERT_BEFORE, leaving GSIP on the new statement.  */
+
 static void
-finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
+finish_new_insn (gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt, gcall *stmt)
 {
   gcc_assert(new_stmt != nullptr);
   gimple_set_location (new_stmt, gimple_location (stmt));
@@ -172,8 +244,10 @@ finish_new_insn(gimple_stmt_iterator *gsip, bool insert_before, gimple *new_stmt
     }
 }
 
+/* Emit a PUSHC at GSIP.  */
+
 static void
-emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
+emit_pushc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppushc);
@@ -182,8 +256,10 @@ emit_pushc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
+/* Emit a POPC at GSIP.  */
+
 static void
-emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
+emit_popc (gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfppopc);
@@ -192,8 +268,10 @@ emit_popc(gimple_stmt_iterator *gsip, gcall *stmt, bool insert_before)
   finish_new_insn(gsip, insert_before, new_stmt, stmt);
 }
 
+/* Emit a COMPC at GSIP.  */
+
 static void
-emit_compc(gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
+emit_compc (gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpcompc);
@@ -201,8 +279,10 @@ emit_compc(gimple_stmt_iterator *gsip, gcall *stmt, bool emit_before)
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
+/* Emit a short LOADI of VAL at GSIP; returns its result.  */
+
 static tree
-emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
+emit_loadi (gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfploadi);
@@ -218,8 +298,11 @@ emit_loadi(gimple_stmt_iterator *gsip, gcall *stmt, int val, bool emit_before)
   return tmp;
 }
 
+/* Emit a short LOADI_LV of VAL with live input IN into LHS (fresh if
+   null) at GSIP; returns the destination.  */
+
 static tree
-emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int val, bool emit_before)
+emit_loadi_lv (gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int val, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfploadi_lv);
@@ -236,8 +319,11 @@ emit_loadi_lv(gimple_stmt_iterator *gsip, gcall *stmt, tree lhs, tree in, int va
   return lhs;
 }
 
+/* Emit SETCC_V at GSIP: re-enable exactly the lanes where IN is
+   nonzero.  */
+
 static void
-emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
+emit_setcc_v (gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
 {
   const rvtt_insn_data *new_insnd =
     rvtt_get_insn_data(rvtt_insn_data::sfpsetcc_v);
@@ -246,8 +332,12 @@ emit_setcc_v(gimple_stmt_iterator *gsip, gcall *stmt, tree in, bool emit_before)
   finish_new_insn(gsip, emit_before, new_stmt, stmt);
 }
 
+/* Return the first statement of STMT's condition tree in program
+   order: the left-most comparison leaf.  New code bracketing the whole
+   tree is inserted before it.  */
+
 static gcall *
-find_top_of_cond_tree(gcall *stmt)
+find_top_of_cond_tree (gcall *stmt)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
 
@@ -273,16 +363,22 @@ find_top_of_cond_tree(gcall *stmt)
       break;
 
     default:
-      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
-      gcc_assert(0);
+      internal_error ("illegal rvtt builtin in conditional tree: %s",
+		      insnd->name);
     }
 
   return stmt;
 }
 
+/* Record in vif_stmts every intrinsic statement between TOP and BOT
+   (one lane-condition region's tree, in one block); process_xcondi
+   consults the set to recognize an SFPXCONDI whose comparison lies
+   inside the region and can be optimized.  Bails (leaving the set
+   partial) if the region spans blocks or was already visited.  */
+
 static void
-mark_vif_stmts(gimple_stmt_iterator top,
-	       gimple_stmt_iterator bot)
+mark_vif_stmts (gimple_stmt_iterator top,
+		gimple_stmt_iterator bot)
 {
   while (top.ptr != bot.ptr &&
 	 !gsi_end_p(top))
@@ -312,15 +408,15 @@ mark_vif_stmts(gimple_stmt_iterator top,
     }
 }
 
-// Expand xcondi into:
-//  loadi(0)
-//  pushc
-//  loadi(1)
-//  popc
-// Returns results of loadi back to the same SSA as the xcondi for testing, up
-//  to the caller to adjust the test as needed (compare against 0)
+/* Materialize SFPXCONDI STMT as an integer:
+     tmp = LOADI 0;  PUSHC;  <condition tree>;  lhs = LOADI_LV 1 (tmp);
+     POPC;
+   so lanes passing the condition hold 1 and the rest 0, in STMT's
+   original lhs (callers test it against zero).  The condition tree
+   itself is processed separately.  */
+
 static void
-expand_xcondi(gcall *stmt)
+expand_xcondi (gcall *stmt)
 {
   gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
   gcall *top = find_top_of_cond_tree(child);
@@ -339,20 +435,22 @@ expand_xcondi(gcall *stmt)
   gsi_remove(&gsi, true);
 }
 
-// Handle AND and OR conditionals
-//
-// Recursively processes a tree of boolean expressions.	 ORs are converted to
-// ANDs by negating the children of the current node.  The negation is toggled
-// as the tree is traversed to avoid accumulating redundant negations.
-//
-// Descending the LHS uses the last PUSHC as the "fence" against which a COMPC
-// can be issued, however, descending the RHS would mess up the results from
-// the LHS w/o a new fence, hence the PUSHC prior to the RHS.  The POPC would
-// destroy the results of the RHS and so those results are saved/restored with
-// saved_enables.
+/* Handle an AND/OR combiner STMT (recursively, with process_tree_node
+   for the children).  ORs convert to ANDs by negating the children;
+   NEGATE toggles down the tree so redundant negations cancel.
+
+   Descending the left child uses the last enclosing PUSHC as the fence
+   against which a COMPC can be issued; the right child, were it to
+   COMPC against that same fence, would destroy the left's result.  So
+   a right child that ends negated is bracketed: PUSHC before it, its
+   resulting enables saved to a temporary (LOADI 1 / LOADI_LV 0), POPC,
+   and SETCC_V to re-apply the saved mask.  *NEGATED reports to the
+   parent that this node's result is fenced/complemented.  On return
+   *PRE_GSIP / *POST_GSIP bracket the emitted sequence.  */
+
 static void
-process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
-		  bool *negated, gcall *stmt, int op, bool negate)
+process_bool_tree (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
+		   bool *negated, gcall *stmt, int op, bool negate)
 {
   if (dump_file)
     fprintf (dump_file, "    process %s n:%d\n", op == SFPXBOOL_MOD1_AND ? "AND" : "OR", negate);
@@ -412,8 +510,16 @@ process_bool_tree(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
     fprintf (dump_file, "    exiting bool %d %d\n", op, negate);
 }
 
+/* Handle SFPXCONDI STMT whose result feeds PARENT (an integer
+   comparison).  When OPTIMIZEIT and the comparison's single use is the
+   region's own SFPXCONDB (per vif_stmts), the condition value is
+   grafted directly into the SFPXCONDB and both STMT and PARENT are
+   deleted; otherwise STMT is materialized via expand_xcondi.  The
+   subtree below STMT is then processed as a fresh tree.  Returns true
+   if the optimized path was taken.  */
+
 static bool
-process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
+process_xcondi (gcall *stmt, gcall *parent, bool optimizeit)
 {
   // Process the child as a new tree
   gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT(gimple_call_arg(stmt, SFPXCONDI_TREE_ARG_POS)));
@@ -462,8 +568,13 @@ process_xcondi(gcall *stmt, gcall *parent, bool optimizeit)
   return optimized;
 }
 
+/* STMT (an integer comparison) reads CHILD, a PHI: chase every
+   incoming definition (through nested PHIs, phi_stmts breaking cycles)
+   and process any SFPXCONDI found so its materialized value flows into
+   the PHI.  */
+
 static void
-process_tree_phi(gcall *stmt, gimple *child)
+process_tree_phi (gcall *stmt, gimple *child)
 {
   if (dump_file)
     fprintf (dump_file, "  process tree node phi\n");
@@ -496,11 +607,16 @@ process_tree_phi(gcall *stmt, gimple *child)
     }
 }
 
+/* Lower one node STMT of a condition tree (child of PARENT) under
+   NEGATE; dispatches on the marker kind, see the file comment.  On
+   return *PRE_GSIP / *POST_GSIP bracket the emitted code and *NEGATED
+   reports a complemented/fenced result.  */
+
 static void
-process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
-		  bool *negated,
-		  gcall *stmt, gcall *parent,
-		  bool negate)
+process_tree_node (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsip,
+		   bool *negated,
+		   gcall *stmt, gcall *parent,
+		   bool negate)
 {
   const rvtt_insn_data *insnd = rvtt_get_insn_data(stmt);
   if (dump_file)
@@ -577,13 +693,15 @@ process_tree_node(gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gsi
       break;
 
     default:
-      fprintf(stderr, "Illegal rvtt builtin found in conditional tree: %s\n", insnd->name);
-      gcc_assert(0);
+      internal_error ("illegal rvtt builtin in conditional tree: %s",
+		      insnd->name);
     }
 }
 
+/* Lower the condition tree rooted at STMT (child of PARENT).  */
+
 static void
-process_tree(gcall *stmt, gcall *parent)
+process_tree (gcall *stmt, gcall *parent)
 {
   bool negated = false;
   gimple_stmt_iterator pre_gsi, post_gsi;
@@ -591,14 +709,11 @@ process_tree(gcall *stmt, gcall *parent)
   process_tree_node(&pre_gsi, &post_gsi, &negated, stmt, parent, false);
 }
 
-// Expand boolean trees
-//
-// The hardware does not support OR and generates some comparisons (LTE, GE)
-// by ANDing others together and issuing a compc.  This requires refactoring
-// boolean expressions using De Moragan's laws.	 The root of a tree is anchored
-// by an sfpxcondb.  All dependent operations are chained to this by their
-// return values.  This pass traverses the tree, more or less deletes it and
-// replaces it with one that works w/ the HW.
+/* Pass body: lower every SFPXCONDB-anchored tree, then any orphan
+   SFPXCONDIs.  The two phases are ordered because an SFPXCONDI's
+   materialization may sit in a different block than the SFPXCONDB
+   whose region contains its comparison.  */
+
 static unsigned
 transform (function *fun)
 {

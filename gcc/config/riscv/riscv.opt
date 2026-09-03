@@ -566,9 +566,10 @@ mtt-optimize-extend
 Target Var(riscv_tt_opt_extend) Init(-1)
 Remove extraneous zero- and sign-extension operations.
 
+; Retired option retained so stale build flags produce a clear error.
 mtt-optimize-hll
-Target Var(riscv_tt_opt_hll) Init(-1)
-Schedule high-latency loads early to hide their latency.
+Target Undocumented Var(riscv_tt_opt_hll) Init(-1)
+Removed; using this option is an error.
 
 mtt-tensix-optimize-cc
 Target Var(riscv_tt_opt_cc) Init(1)

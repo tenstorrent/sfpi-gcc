@@ -17,6 +17,38 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* The SFPU's lane-enable (condition-code) state is managed as a stack:
+   PUSHC saves the current lane mask on entry to a predicated (v_if)
+   region, the comparison ops narrow it, COMPC complements it for the
+   else-arm, and POPC restores the saved mask on exit.  ENCC simply
+   re-enables all lanes.  The SFPI front end emits fully general
+   PUSHC/POPC pairs; this pass removes the pairs that the stack
+   discipline makes redundant:
+
+   1. The outermost pair of a kernel: at depth zero there is no outer
+      mask worth saving, so the PUSHC is deleted and the matching POPC
+      becomes an ENCC (enable all lanes).
+
+   2. Tail pops: when a POPC is immediately followed (no intervening
+      SFPU ops or calls) by the enclosing region's POPC, and the inner
+      region used no COMPC, the inner PUSHC/POPC pair collapses into
+      the outer one.  All three statements must sit in one basic block
+      -- across blocks, different paths may disagree about intervening
+      instructions.
+
+   The walk is a depth-first traversal of the CFG from the entry block
+   carrying the open-PUSHC stack; each block is processed once (the
+   region-nesting depth at a block is path-invariant -- the liveness
+   pass asserts this).  PUSHC-with-replace-mod pops before it pushes
+   and is treated accordingly.  A malformed region structure (POPC or
+   COMPC outside any region, replace at depth zero) is a hard error.
+
+   Runs under -mtt-tensix-optimize-cc (default on).  The RTL-level CC
+   region machinery (tt/rvtt-cc-region.*) later rebuilds the region
+   tree from the surviving markers; this pass must stay conservative
+   precisely so that that reconstruction is exact.  */
+
 #define INCLUDE_TUPLE
 #define INCLUDE_VECTOR
 #include "config.h"
@@ -67,8 +99,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 
 
+/* Return integer constant argument ARG of STMT, or -1 if absent.  */
+
 static long int
-get_int_arg(gcall *stmt, unsigned int arg)
+get_int_arg (gcall *stmt, unsigned int arg)
 {
   tree decl = gimple_call_arg(stmt, arg);
   if (decl)
@@ -79,10 +113,13 @@ get_int_arg(gcall *stmt, unsigned int arg)
   return -1;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// bool in tuple tracks whether or not a COMPC was seen at this stack depth
+/* Scan the statements of BB, maintaining STACK, one entry per open
+   PUSHC: <saw-COMPC, was-replace-push, iterator at the PUSHC>.
+   Performs the outermost-pair and tail-pop removals described in the
+   file comment.  */
+
 static void
-process_block_stmts(basic_block bb,
+process_block_stmts (basic_block bb,
 		    std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> &stack)
 {
   constexpr int tuple_prior_removable = 0;
@@ -194,7 +231,7 @@ process_block_stmts(basic_block bb,
 		  }
 
 		// Not removable if we saw a compc
-		prior_removable = !std::get<tuple_prior_removable>(stack.back()); 
+		prior_removable = !std::get<tuple_prior_removable>(stack.back());
 		prior_is_replace = std::get<tuple_prior_replace>(stack.back());
 		prior_pushc = std::get<tuple_gsi>(stack.back());
 		prior_popc = gsi;
@@ -247,10 +284,14 @@ process_block_stmts(basic_block bb,
     }
 }
 
+/* Depth-first CFG walk from BB; BD marks visited blocks, STACK is
+   passed by value so sibling successors each see the state at the end
+   of their common predecessor.  */
+
 static void
-process_block(basic_block bb,
-	      std::vector<bool>& bd,
-	      std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> stack)
+process_block (basic_block bb,
+	       std::vector<bool> &bd,
+	       std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> stack)
 {
   edge_iterator ei;
   edge e;
@@ -278,13 +319,12 @@ process_block(basic_block bb,
     }
 }
 
-// This pass optimizes 2 things:
-// 1) The outermost pushc/popc: remove pushc, turn popc into encc
-// 2) Tail popc: if 2 popcs occur without intervening instructions and the
-//    inner pushc/popc did not have a compc in between, the inner pushc/popc
-//    can be removed.  Tricky because you have to track the prior popc.
-//    The inner push/pop and the outer pop must all be in the same BB
-static void transform (function *fn)
+/* Pass body: walk FN from its entry block.  always_inline wrappers are
+   skipped -- only instantiated bodies carry complete region
+   structures.  */
+
+static void
+transform (function *fn)
 {
   std::vector<std::tuple<bool, bool, gimple_stmt_iterator>> stack;
   std::vector<bool> bd;

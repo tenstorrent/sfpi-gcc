@@ -955,11 +955,6 @@ bool rvtt_reg_load_p(const rtx pat)
   return false;
 }
 
-bool rvtt_hll_p(const rtx pat)
-{
-  return rvtt_l1_load_p(pat) || rvtt_reg_load_p(pat);
-}
-
 bool rvtt_l1_store_p(const rtx pat)
 {
   if (GET_CODE(pat) == SET)

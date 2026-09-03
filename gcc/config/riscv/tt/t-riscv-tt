@@ -92,7 +92,6 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-dst-ownership.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
-	rtl-rvtt-hll.o \
 	rtl-rvtt-lreg-livein.o \
 	rtl-rvtt-lreg-rename.o \
 	rtl-rvtt-lp-alloc.o \
