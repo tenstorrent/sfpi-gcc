@@ -29,8 +29,8 @@ along with GCC; see the file COPYING3.  If not see
 
 constexpr unsigned NUM_NOPS = 8;
 
-// After an ebreak, insert 8 nops.  It is unclear whether one can emit a loop
-// with similar timing charactaristics.
+/* After an ebreak, insert 8 nops.  It is unclear whether one can emit a loop
+   with similar timing charactaristics.  */
 
 static void
 workaround_ebreak (function *cfn)
@@ -46,7 +46,7 @@ workaround_ebreak (function *cfn)
 	  if (recog_memoized (insn) >= 0)
 	    continue;
 
-	  // Ugh, why is this so hard?
+	  /* Ugh, why is this so hard?  */
 	  rtx body = PATTERN (insn);
 	  if (GET_CODE (body) == PARALLEL)
 	    body = XVECEXP (body, 0, 0);
@@ -137,9 +137,12 @@ public:
 
       return 0;
     }
-}; // class pass_rvtt_fix_wh
+}; /* class pass_rvtt_fix_wh */
 
-} // anon namespace
+} /* anon namespace */
+
+/* Instantiate the ebreak-workaround pass for CTXT; rvtt-passes.def
+   places it after cse, and it gates on -mtt-fix-whbhebreak.  */
 
 rtl_opt_pass *
 make_pass_rvtt_fix_ebreak (gcc::context *ctxt)

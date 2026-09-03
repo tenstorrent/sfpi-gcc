@@ -400,6 +400,9 @@ transfer_insn (dstown_state &s, const insn_facts &f, rtx_insn *insn)
     s.cc_pop ();
 }
 
+/* Abstract state at BB exit given entry state S: classify and apply
+   every real insn of the block in order.  */
+
 static dstown_state
 transfer_block (basic_block bb, dstown_state s)
 {
@@ -523,6 +526,9 @@ struct load_record
   rtx op1, op2, op3, op4, op5, op7, op8;
   const char *dead_reason;
 };
+
+/* Whether operand X is the SFPNOVAL placeholder, i.e. the load carries
+   no live-value merge input.  */
 
 static bool
 noval_p (rtx x)
@@ -755,8 +761,19 @@ dump_refusal (const char *reason, const char *detail, rtx_insn *insn)
 {
   rvtt_refuse_by_name (reason, dump_file,
 		       "Dst-ownership formation-refusal: %s (%s) at insn %d\n",
-		       reason, detail ? detail : "", insn ? INSN_UID (insn) : -1);
+		       reason, detail ? detail : "",
+		       insn ? INSN_UID (insn) : -1);
 }
+
+/* Pass body over FN (see the file comment).  Run the whole-function
+   dataflow, then scan each reached block keeping records of admitted
+   Dst loads: a later load with the identical typed operand tuple whose
+   record survived (no kill between, all-lanes CC at the record, no
+   live-value merge) is folded -- under -mtt-tensix-optimize-dst-
+   ownership and the LREG pressure guard -- into a plain LREG copy of
+   the earlier result.  Every failed proof dumps its named refusal and
+   changes nothing; QSR hard-refuses whole.  Returns TODO_df_finish
+   when any reload was folded, 0 otherwise.  */
 
 static unsigned
 dst_ownership (function *fn)
@@ -887,7 +904,8 @@ dst_ownership (function *fn)
 							hit->dest);
 		      if (pressure > budget)
 			{
-			  rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED, dump_file,
+			  rvtt_refuse (RVTT_REF_LREG_PRESSURE_EXCEEDED,
+				       dump_file,
 				       "Dst-ownership formation-refusal:"
 				       " lreg-pressure-exceeded"
 				       " (pressure %d > budget %d) at insn"
@@ -1010,7 +1028,12 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the Dst-ownership pass for CTXT; rvtt-passes.def places
+   it before ira, and it gates on the Tensix extension (the fold itself
+   additionally requires -mtt-tensix-optimize-dst-ownership; the
+   analysis and refusal dumps run regardless).  */
 
 rtl_opt_pass *
 make_pass_rvtt_dst_ownership (gcc::context *ctxt)

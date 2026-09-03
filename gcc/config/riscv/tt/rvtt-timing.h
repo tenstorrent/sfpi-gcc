@@ -837,6 +837,6 @@ mve_live_demand (const mod_prob &p, const mod_placement &pl)
   return peak;
 }
 
-} // namespace rvtt_timing
+} /* namespace rvtt_timing */
 
 #endif /* GCC_RVTT_TIMING_H */

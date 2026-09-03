@@ -61,6 +61,10 @@ read_lregno (rtx_insn *insn)
     }
 }
 
+/* The architectural L-register number written when INSN is one of the
+   rvtt_sfpwritelreg<N> metadata builtins, -1 otherwise.  Like a read,
+   a write builtin ends any raw interval open on that LREG.  */
+
 static int
 write_lregno (rtx_insn *insn)
 {
@@ -78,6 +82,11 @@ write_lregno (rtx_insn *insn)
     }
 }
 
+/* Return true when INSN is the rvtt_sfprawlreg_access marker,
+   extracting its two operands: *RELEASE_MASK names the LREGs whose raw
+   ownership ends at this point and *WRITE_MASK the LREGs the raw code
+   writes here (bit N is LREG N in both).  */
+
 static bool
 raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
 {
@@ -91,6 +100,10 @@ raw_access_p (rtx_insn *insn, unsigned *release_mask, unsigned *write_mask)
   *write_mask = UINTVAL (XVECEXP (pat, 0, 1)) & 0xff;
   return true;
 }
+
+/* RTL for a sentinel read of hard LREG REGNO defining the pseudo VALUE:
+   a zero-length fixed-register read whose interval is what makes IRA
+   reserve the LREG.  */
 
 static rtx
 make_sentinel (unsigned regno, rtx value)
@@ -109,17 +122,27 @@ make_sentinel (unsigned regno, rtx value)
     }
 }
 
+/* Emit a sentinel read of LREG REGNO defining VALUE just after insn
+   AFTER; returns the emitted insn.  */
+
 static rtx_insn *
 emit_sentinel_after (unsigned regno, rtx value, rtx_insn *after)
 {
   return emit_insn_after (make_sentinel (regno, value), after);
 }
 
+/* Emit a sentinel read of LREG REGNO defining VALUE just before insn
+   BEFORE; returns the emitted insn.  */
+
 static rtx_insn *
 emit_sentinel_before (unsigned regno, rtx value, rtx_insn *before)
 {
   return emit_insn_before (make_sentinel (regno, value), before);
 }
+
+/* Terminate a sentinel interval: emit a USE of VALUE just before
+   BEFORE, so the reserved LREG stays live up to that point.  A null
+   VALUE (no interval open) is a no-op.  */
 
 static void
 end_sentinel (rtx value, rtx_insn *before)
@@ -146,6 +169,12 @@ end_sentinel_at_block_end (rtx value, basic_block bb)
     emit_insn_after (gen_rtx_USE (VOIDmode, value), last);
 }
 
+/* Dataflow transfer over BB: LIVE is the block-entry bitmask of LREGs
+   holding a raw (RTL-invisible) value, bit N for LREG N.  A raw-access
+   marker clears its release mask and sets its write mask; a read or
+   write metadata builtin for LREG N clears bit N (from that point the
+   value has visible RTL).  Returns the block-exit mask.  */
+
 static unsigned
 transfer_block (basic_block bb, unsigned live)
 {
@@ -168,6 +197,15 @@ transfer_block (basic_block bb, unsigned live)
     }
   return live;
 }
+
+/* Pass body over FN.  First solve a forward dataflow fixed point over
+   the per-block raw-liveness masks; then, per block, materialize each
+   raw interval as a fresh XTT32SImode pseudo defined by a sentinel read
+   of its LREG -- before the first real insn for values live on entry,
+   after the raw write otherwise -- and end it with a USE at the
+   consuming builtin, the releasing or rewriting raw access, or block
+   end.  Each block gets its own local pseudo for a value it inherits,
+   deliberately avoiding any cross-CFG pseudo or phi.  */
 
 static void
 make_raw_lregs_live (function *fn)
@@ -298,7 +336,11 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the raw-LREG reservation pass for CTXT; rvtt-passes.def
+   places it before ira, ahead of rvtt_lp_alloc, and it gates on the
+   Tensix extension.  */
 
 rtl_opt_pass *
 make_pass_rvtt_lreg_livein (gcc::context *ctxt)

@@ -120,6 +120,9 @@ namespace {
 
 static unsigned n_folded;
 
+/* STMT as a gcall when it is the rvtt builtin call with insn identity
+   ID, null otherwise.  */
+
 static gcall *
 is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
 {
@@ -129,12 +132,19 @@ is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
   return nullptr;
 }
 
+/* Argument N of CALL as a host integer, or -1 when it is not a
+   literal INTEGER_CST.  */
+
 static long
 int_arg (gcall *call, unsigned n)
 {
   tree arg = gimple_call_arg (call, n);
   return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
 }
+
+/* Book the named refusal REASON against STMT and dump it.  Always
+   returns false so recognizers can bail with `return refuse
+   (...)'.  */
 
 static bool
 refuse (const char *reason, gimple *stmt)
@@ -803,6 +813,11 @@ transform_group (ccmask_group *g)
   n_folded++;
 }
 
+/* Walk FUN for structured CC regions opened by an sfppushc and fold
+   every matched single-zero-assign group into value-mask arithmetic
+   (stage A statement machine; under the general flag also the stage-B
+   tree-proven layouts).  Returns whether the IL changed.  */
+
 static bool
 transform (function *fun)
 {
@@ -901,7 +916,12 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: before the
+   invariant pass, so the removed CC statement no longer bars the
+   loop's immediate hoists, and while the canonical structured forms
+   are intact.  */
 
 gimple_opt_pass *
 make_pass_rvtt_ccmask (gcc::context *ctxt)

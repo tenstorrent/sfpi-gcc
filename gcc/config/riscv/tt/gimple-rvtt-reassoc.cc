@@ -174,13 +174,20 @@ namespace {
 constexpr unsigned REASSOC_MAX_TERMS = 64;
 
 /* Chain operator classes.  */
-enum class chain_kind { none, fp_add, fp_mul, int_add, bit_and, bit_or, bit_xor };
+enum class chain_kind { none, fp_add, fp_mul, int_add, bit_and, bit_or,
+			bit_xor };
+
+/* Whether chain kind K is a floating-point class, i.e. rebalancing it
+   additionally requires the -fassociative-math license.  */
 
 static bool
 chain_kind_fp (chain_kind k)
 {
   return k == chain_kind::fp_add || k == chain_kind::fp_mul;
 }
+
+/* Dump name of chain kind K: the plain-form rvtt insn every link of
+   such a chain is.  */
 
 static const char *
 chain_kind_name (chain_kind k)
@@ -368,6 +375,13 @@ window_cc_event_frame_transparent_p (gimple *stmt, rvtt_cc_region *wr)
       return true;		/* strictly inside a proven child frame */
   return false;
 }
+
+/* The window-barrier classification of STMT for a code-motion window
+   whose links sit in frame WR: the refusal-name constant for a CC
+   event (unless tree-proven confined strictly inside WR),
+   configuration writer, replay word, or FPU face-transpose statement,
+   or null when STMT is window-transparent (debug/label, scalar
+   assigns/conditions, other typed rvtt calls).  */
 
 static const char *
 window_stmt_barrier_name (gimple *stmt, rvtt_cc_region *wr)
@@ -766,7 +780,8 @@ note_loop_carried (function *fn)
 		  tree a = gimple_call_arg (def, ax);
 		  if (a == res)
 		    {
-		      rvtt_refuse (RVTT_REF_REASSOC_LOOP_CARRIED_UNDERIVED, dump_file,
+		      rvtt_refuse (RVTT_REF_REASSOC_LOOP_CARRIED_UNDERIVED,
+				   dump_file,
 				   "reassoc: loop-carried accumulator "
 				   "(loop %d, phi in bb %d) restructure "
 				   "underived -- refusing "
@@ -1390,6 +1405,12 @@ split_loop_carried (function *fn)
   return changed;
 }
 
+/* The straight-line rebalancing walk over FN: in each block, collect
+   the chain roots -- a qualifying link whose result is not itself
+   consumed as the single use of a same-kind, same-mod link in the
+   block -- and offer each root to process_root.  Returns whether the
+   IL changed.  */
+
 static bool
 transform (function *fn)
 {
@@ -1501,7 +1522,12 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: after the CC
+   analysis and immediately before the combiner, so a rebalance's
+   fresh add pairs are re-offered to the existing mul+add->mad
+   rule.  */
 
 gimple_opt_pass *
 make_pass_rvtt_reassoc (gcc::context *ctxt)

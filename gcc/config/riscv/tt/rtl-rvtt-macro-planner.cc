@@ -208,6 +208,13 @@ planner_scope_insn_clean_p (rtx_insn *insn, const rvtt_macro::caps *c)
   return true;
 }
 
+/* The region-scoped ownership check itself (bounds above): every insn
+   from SCOPE_BEGIN (straight-line: the prefix anchor) or from REGION's
+   block head (loop body, CONFIG_PREHEADER non-null) through the region
+   end must be clean -- no call, no unproven raw asm, no typed access to
+   a configuration destination owned per C; for a loop-body region the
+   preheader's tail insn (bar a trailing jump) is verified as well.  */
+
 static bool
 planner_region_config_ownership_ok (const macro_region &region,
 				    basic_block config_preheader,
@@ -433,6 +440,17 @@ ims_replay_alt_cost_x100 (const macro_region &region, unsigned run_rows)
   return rvtt_delivery_cost::ims_replay_alt_cost_x100
     (rvtt_dcost_table (), run_rows, ims_replayed_row_words (region));
 }
+
+/* Arbitration between forming RUN_ROWS rows of REGION as a macro run
+   and leaving them to replay delivery: the formed calendar's centislot
+   price (SCHEDULE, DESC) must beat the replay-delivered explicit
+   alternative's steady-state lower bound.  IH_STAGE/IH_ENTRY/IH_BODY
+   carry the crosscall init-hoist state: under a proven stage-2 contract
+   both sides are weighed by the caller-loop profile fraction (the
+   prefix by entry, the rest by body).  Returns true to form --
+   vacuously when the IMS or replay flag is off or the rows are not
+   replay-safe, so the arbitration only ever vetoes.  Prices and verdict
+   go to DUMP.  */
 
 static bool
 ims_arbitrate_run (const macro_region &region, const macro_schedule &schedule,
@@ -1059,6 +1077,20 @@ derive_planner_launch_effects (const macro_descriptor &desc,
   *out = e;
   return true;
 }
+
+/* Emit one formed run covering rows [BEGIN, END) of REGION under
+   SCHEDULE and DESC.  With EMIT_CONFIG the configuration prefix
+   (all-lanes enable copied from ENABLE_SRC, owned SETC16 program,
+   descriptor words) is established first -- before the anchor, at
+   CONFIG_PREHEADER's tail, or (WP11 cross-tile epoch) split between
+   HOIST_PREHEADER using HOIST_ENABLE_SRC and a retained per-trip part
+   -- reduced per the annotated INIT_HOIST_STAGE and RESIDENT_ELIDE
+   modes; *CONFIG_PLACEMENT reports where descriptor words were newly
+   programmed.  The rows' insns are then replaced by the scheduled
+   calendar: launches (with recorded issue-plane effects), retargeted
+   explicit reloads, kept separators, inter-row drains, and the run-end
+   drain under EMIT_DRAIN.  Everything emitted is recorded in RESID as
+   planner-emitted.  */
 
 static void
 emit_planner_run (macro_region &region, const macro_schedule &schedule,
@@ -2496,6 +2528,13 @@ struct upward_carrier_choice
   int relocate_to;		/* free high register, or -1	       */
 };
 
+/* Choose the carrier register for REGION per the rule above.  Prefer
+   the highest free register in L0..L3 (free: unreferenced anywhere in
+   the region's block and live neither in nor out); failing that, pick a
+   low register whose block usage is entirely region-row-internal and
+   pair it in OUT->RELOCATE_TO with a free high register its web will be
+   relocated to.  Returns false when neither exists.  */
+
 static bool
 upward_pick_carrier_reg (const macro_region &region,
 			 upward_carrier_choice *out)
@@ -3259,16 +3298,17 @@ upward_carrier_try (function *fn, macro_region &region,
 	{
 	  rvtt_refuse_by_name (upward_refusal_rederive, dump,
 			       "Macro-planner upward-carrier-refusal: %s"
-			       " (seed=%u chain={%s})\n", upward_refusal_rederive,
-			       v.seed_ix, chain_str);
+			       " (seed=%u chain={%s})\n",
+			       upward_refusal_rederive, v.seed_ix, chain_str);
 	}
       else if (new_ii >= est_ii)
 	{
 	  rvtt_refuse_by_name (upward_refusal_no_improvement, dump,
 			       "Macro-planner upward-carrier-refusal: %s"
-			       " (seed=%u chain={%s} est-ii=%d variant-ii=%d)\n",
-			       upward_refusal_no_improvement, v.seed_ix, chain_str,
-			       est_ii, new_ii);
+			       " (seed=%u chain={%s} est-ii=%d"
+			       " variant-ii=%d)\n",
+			       upward_refusal_no_improvement, v.seed_ix,
+			       chain_str, est_ii, new_ii);
 	}
       else
 	{
@@ -3375,7 +3415,12 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the macro-planner pass for CTXT; rvtt-passes.def places
+   it before postreload, and it gates on the Tensix extension plus
+   -mtt-tensix-macro-planner (or its analyze-only companion
+   -mtt-tensix-macro-planner-analyze).  */
 
 rtl_opt_pass *
 make_pass_rvtt_macro_planner (gcc::context *ctxt)

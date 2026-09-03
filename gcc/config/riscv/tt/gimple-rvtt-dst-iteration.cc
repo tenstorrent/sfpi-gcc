@@ -525,6 +525,9 @@ public:
 
 } // anonymous namespace
 
+/* Pass factory for rvtt_dst_iteration, referenced from
+   rvtt-passes.def.  */
+
 gimple_opt_pass *
 make_pass_rvtt_dst_iteration (gcc::context *ctxt)
 {
@@ -933,6 +936,9 @@ public:
 };
 
 } // anonymous namespace
+
+/* Pass factory for rvtt_dst_interleave, referenced from
+   rvtt-passes.def.  */
 
 gimple_opt_pass *
 make_pass_rvtt_dst_interleave (gcc::context *ctxt)

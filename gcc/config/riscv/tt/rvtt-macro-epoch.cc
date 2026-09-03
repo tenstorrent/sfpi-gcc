@@ -69,12 +69,17 @@ struct epoch_ival
 static const epoch_ival ival_unknown = { epoch_ival::UNKNOWN, 0, 0 };
 static const epoch_ival ival_ignore = { epoch_ival::IGNORE, 0, 0 };
 
+/* Singleton KNOWN interval holding the 32-bit truncation of V.  */
+
 static epoch_ival
 ival_const (uint64_t v)
 {
   epoch_ival r = { epoch_ival::KNOWN, v & 0xffffffff, v & 0xffffffff };
   return r;
 }
+
+/* Interval sum of A and B; UNKNOWN when either side is unknown or the
+   upper bound would wrap 32 bits (no modular interval claim).  */
 
 static epoch_ival
 ival_add (const epoch_ival &a, const epoch_ival &b)
@@ -333,6 +338,12 @@ resolve_reg_before (epoch_resolver *ctx, rtx reg, rtx_insn *from,
   return r;
 }
 
+/* Interval value of expression X as evaluated immediately before POS:
+   constants, register resolution, and the compositions the stored-word
+   proofs need (PLUS, constant left shift, constant AND, IOR of
+   constants or of disjoint bit ranges, comparison results in [0, 1]).
+   DEPTH bounds the recursion; every other form is UNKNOWN.  */
+
 static epoch_ival
 eval_rtx (epoch_resolver *ctx, rtx x, rtx_insn *pos, int depth)
 {
@@ -445,6 +456,11 @@ asm_template_eq (const char *s, const char *ref)
       return false;
   return true;
 }
+
+/* Return whether asm template S is on the audited scalar allowlist
+   above: base-ISA instructions with no Tensix encoding space and no
+   configuration effect.  An empty template is a pure barrier and
+   passes.  */
 
 static bool
 audited_scalar_asm_p (const char *s)
@@ -925,6 +941,10 @@ census_store_ck (replay_walk *ctx, rtx_insn *insn, rtx dest, rtx src,
   return nullptr;
 }
 
+/* Census view of one pattern PAT of INSN: descend PARALLELs and apply
+   census_store_ck to every volatile store found.  Returns null when
+   nothing objectionable is stored, else the failing detail string.  */
+
 static const char *
 census_walk_pattern (replay_walk *ctx, rtx_insn *insn, rtx pat,
 		     basic_block bb, unsigned *covered)
@@ -1096,7 +1116,7 @@ replay_insn_ck (replay_walk *ctx, rtx_insn *insn)
   return "unrecognized instruction";
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* See rvtt-macro-epoch.h.  */
 
@@ -1151,6 +1171,17 @@ rvtt_macro_epoch_owned_state_invariant_p (function *fn,
     }
   return nullptr;
 }
+
+/* Prove the cross-tile configuration epoch for REGION, whose
+   configuration prefix would be placed in CONFIG_PREHEADER (full
+   contract at the declaration in rvtt-macro-epoch.h): locate the
+   enclosing loop's structural entry, then scan every block of the loop
+   body for an instruction that could break the epoch.  On success sets
+   exactly one of *HOIST_PREHEADER or *HOIST_EDGE (the edge is split by
+   the caller at commit time only).  Returns false with *REFUSAL named
+   (and *REFUSAL_INSN when one insn is to blame), or with *REFUSAL null
+   when no enclosing loop exists (nothing to elide).  Never mutates the
+   function.  */
 
 bool
 rvtt_macro_prefix_epoch_hoist (function *fn, const macro_region &region,

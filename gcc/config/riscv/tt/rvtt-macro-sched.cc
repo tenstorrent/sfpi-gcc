@@ -109,6 +109,9 @@ static_assert ((int) XTT_SU_SIMPLE == (int) rvtt_macro_sched::CSU_SIMPLE
 	       && (int) XTT_SU_STORE == (int) rvtt_macro_sched::CSU_STORE,
 	       "core subunit vocabulary diverged");
 
+/* Map the compilation target to the capability tables' cpu_t
+   vocabulary; the target flags are asserted mutually exclusive.  */
+
 static rvtt_macro::cpu_t
 current_cpu ()
 {
@@ -152,7 +155,9 @@ find_seq_program (const caps *c, unsigned macro_index,
   return nullptr;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Free the heap storage owned by SCHED (the event vector).  */
 
 void
 rvtt_macro_schedule_release (macro_schedule *sched)
@@ -1083,6 +1088,13 @@ schedule_region_1 (const macro_region &region, macro_schedule *out,
    derivation exists (FH audit FHP-5); widening or deriving it is the
    planner lane's follow-up.  */
 static const unsigned IMS_REPAIR_BUDGET = 12; /* variants per grouping */
+
+/* Public entry point (contract in rvtt-macro-sched.h): derive the
+   timing schedule for REGION's candidate grouping CANDIDATE into *OUT,
+   dumping to DUMP.  Runs the established search first; under the IMS
+   repair mode (see the block comment above) a refused region may
+   additionally try up to IMS_REPAIR_BUDGET repair variants -- never
+   replacing a schedule the established search already proves.  */
 
 bool
 rvtt_macro_schedule_region (const macro_region &region, macro_schedule *out,

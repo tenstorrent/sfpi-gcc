@@ -667,7 +667,8 @@ scan_function_body (function *fn, unsigned *claimed, const char **why,
 		{
 		  if (dump_file)
 		    fprintf (dump_file,
-			     "prgm-const: on-demand scan of %s for call in %s\n",
+			     "prgm-const: on-demand scan of %s "
+			     "for call in %s\n",
 			     function_name (cfn), function_name (fn));
 		  /* Bind the callee's parameters to this call's actual
 		     arguments, each read under THIS context, and scan
@@ -888,6 +889,10 @@ tu_prgm_facts ()
    allocated.  */
 static const unsigned prgm_regs[] = { 12, 13, 14 };
 
+/* Whether ADDR, an SFPU builtin's instruction-buffer operand, is one
+   of the two canonical spellings: literal zero or the address of the
+   public external `__instrn_buffer' declaration.  */
+
 static bool
 canonical_buffer_arg_p (tree addr)
 {
@@ -919,6 +924,10 @@ struct candidate
   class loop *loop;
   edge entry;
 };
+
+/* Whether EXPECTED is the only non-debug statement using the SSA name
+   VALUE (several operands of EXPECTED may read it).  False when VALUE
+   has no non-debug use at all.  */
 
 static bool
 single_nondebug_use_p (tree value, gimple *expected)
@@ -1071,6 +1080,11 @@ invariant_float_load_p (tree src, class loop *loop, gimple *only_use,
     return nullptr;
   return load;
 }
+
+/* Recognize CALL inside LOOP as one of the two fusion-enabling
+   shapes -- the immediate SFPADDI form or the materialized SFPADD
+   form (struct candidate above) -- and fill *OUT except for the entry
+   edge, which the caller places.  Returns true on a match.  */
 
 static bool
 fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
@@ -1463,6 +1477,10 @@ loadi_lv_link (gcall *call)
   return VECTOR_TYPE_P (TREE_TYPE (arg)) ? arg : NULL_TREE;
 }
 
+/* Whether every argument of CALL other than SKIP is a scalar (no
+   vector type), so the call reads no SFPU register state and can be
+   re-issued anywhere its scalar operands' definitions dominate.  */
+
 static bool
 scalar_args_p (gcall *call, tree skip)
 {
@@ -1476,6 +1494,12 @@ scalar_args_p (gcall *call, tree skip)
     }
   return true;
 }
+
+/* Recognize NAME as the value of a rematerializable materialization
+   chain (see the chain comment above): a scalar-input
+   sfpxloadi/sfploadi, or an sfploadi_lv upper-half merge whose
+   live-value link is such a load dying into the merge.  Fills *OUT
+   (TAIL defines NAME; ROOT is the first issue) and returns true.  */
 
 static bool
 remat_chain_p (tree name, remat_chain *out)
@@ -1871,7 +1895,8 @@ remat_transform (function *fn)
 	    }
 	  if (!remat_consumer_audited_p (use_stmt, cand))
 	    {
-	      rvtt_refuse (RVTT_REF_CONSUMER_LANE_DISCIPLINE_UNAUDITED, dump_file,
+	      rvtt_refuse (RVTT_REF_CONSUMER_LANE_DISCIPLINE_UNAUDITED,
+			   dump_file,
 			   "const-remat: use refused "
 			   "(consumer-lane-discipline-unaudited): ");
 	      if (dump_file)
@@ -1942,6 +1967,16 @@ struct prgm_state
   unsigned claimed = 0;
   auto_vec<prgm_alloc, 4> allocs;
 };
+
+/* The M3 fusion-class transform over FN.  Collect the fusion-enabling
+   candidates from FN's loops, gate them on the TU freedom proof and
+   the cc-reach all-lanes proof, then for each allocate a free PRGM
+   register (identical fp32 values share one; a dominating earlier
+   programming is not repeated), program the constant on the loop
+   entry edge (staging SFPLOADI + SFPCONFIG) and rewrite the candidate
+   to read the constant register.  ST carries the SFPCONFIG claims and
+   the value-allocation table across this function's classes.  Returns
+   whether the IL changed; refusals leave it untouched.  */
 
 static bool
 transform (function *fn, prgm_state *st)
@@ -2425,6 +2460,12 @@ enum loop_trip_class
   TRIPS_UNKNOWN
 };
 
+/* Classify LOOP against the two-trip break-even (see the comment
+   above the enum): fold its single exit test with every operand
+   replaced by its first-iteration value as seen through ENTRY.  A
+   loop with multiple exits, a non-GIMPLE_COND exit, or an unfoldable
+   test answers TRIPS_UNKNOWN.  */
+
 static loop_trip_class
 classify_second_trip (class loop *loop, edge entry)
 {
@@ -2452,6 +2493,10 @@ classify_second_trip (class loop *loop, edge entry)
     return TRIPS_UNKNOWN;
   return taken == exit ? TRIPS_PROVEN_SINGLE : TRIPS_AT_LEAST_2;
 }
+
+/* Number of non-debug statements using the SSA name NAME.  Counts
+   statements, not operands: a statement reading NAME twice counts
+   once.  */
 
 static unsigned
 count_nondebug_uses (tree name)
@@ -2842,6 +2887,14 @@ enum cc_block_class
   CC_BLOCK_DIRTY		/* a CC-affecting statement escapes */
 };
 
+/* Classify BB by its LAST CC-affecting statement: CC_BLOCK_KILLS when
+   that is the word-exact all-lanes SFPENCC, CC_BLOCK_DIRTY when any
+   other CC writer (or a pushc/popc) follows the last kill, and
+   CC_BLOCK_TRANSPARENT when the block has no typed CC event at all.
+   Calls and raw asm classify as transparent because the TU
+   raw-boundary audit gates the whole transform (block comment
+   above).  */
+
 static cc_block_class
 classify_cc_block (basic_block bb)
 {
@@ -3033,6 +3086,13 @@ merge_rename_shape_p (gcall *load, FILE *stream,
   return true;
 }
 
+/* The constant-residency stage of the pass: collect hoist candidates
+   over FN by class (loop-invariant constant loads, pressure-bounded
+   block candidates, MAD-pair and hoist-reuse groups, and merge-rename
+   chains), prove each class's legality conditions, and commit the
+   winners.  ST carries the pass-wide statement state.  Returns true
+   iff any statement changed.  */
+
 static bool
 residency_transform (function *fn, prgm_state *st)
 {
@@ -3176,7 +3236,8 @@ residency_transform (function *fn, prgm_state *st)
 		  if (cc_write_reaches_point_p (lift_writers,
 						lifted_entry->src, nullptr))
 		    {
-		      rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN, dump_file,
+		      rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_ENTRYCC_UNPROVEN,
+				   dump_file,
 				   "const-residency: loop bb %d cc-peel lift "
 				   "refused (crossloop-cc-peel-entrycc-"
 				   "unproven: a CC write reaches the lifted "
@@ -3359,7 +3420,8 @@ residency_transform (function *fn, prgm_state *st)
 		      if (dump_file)
 			{
 			  rvtt_refuse_by_name (bad, dump_file,
-					       "pressure-park: refused (%s): ", bad);
+					       "pressure-park: refused (%s): ",
+					       bad);
 			  print_gimple_stmt (dump_file, bad_use, 0);
 			}
 		      continue;
@@ -3371,10 +3433,12 @@ residency_transform (function *fn, prgm_state *st)
 		      lift_this = false;
 		      if (dump_file)
 			{
-			  rvtt_refuse (RVTT_REF_CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED, dump_file,
-				       "const-residency: cc-peel lift refused "
-				       "(crossloop-cc-peel-consumer-unaudited; "
-				       "candidate keeps the peel placement): ");
+			  rvtt_refuse
+			    (RVTT_REF_CROSSLOOP_CC_PEEL_CONSUMER_UNAUDITED,
+			     dump_file,
+			     "const-residency: cc-peel lift refused "
+			     "(crossloop-cc-peel-consumer-unaudited; "
+			     "candidate keeps the peel placement): ");
 			  print_gimple_stmt (dump_file, bad_use, 0);
 			}
 		    }
@@ -3530,7 +3594,8 @@ residency_transform (function *fn, prgm_state *st)
 			continue;
 		      if (blocked)
 			{
-			  rvtt_refuse (RVTT_REF_MADPAIR_SHARED_CONSTANT, dump_file,
+			  rvtt_refuse (RVTT_REF_MADPAIR_SHARED_CONSTANT,
+				       dump_file,
 				       "const-residency: madpair loop bb %d "
 				       "refused (madpair-shared-constant): a "
 				       "fold-vulnerable materialization has "
@@ -3860,7 +3925,8 @@ residency_transform (function *fn, prgm_state *st)
 	FOR_EACH_SSA_NAME (version, name, fn)
 	  {
 	    remat_chain chain;
-	    if (!rvtt_pressure_tracked_p (name) || !remat_chain_p (name, &chain))
+	    if (!rvtt_pressure_tracked_p (name)
+		|| !remat_chain_p (name, &chain))
 	      continue;
 	    if (chain.root != chain.tail || taken.contains (chain.tail))
 	      continue;
@@ -4024,7 +4090,8 @@ residency_transform (function *fn, prgm_state *st)
 	    rvtt_refuse (RVTT_REF_CC_REGION_UNPROVEN, dump_file,
 			 "const-residency: refused (cc-region-unproven)"
 			 " -- in-function CC writes reach every candidate"
-			 " programming point; cross-call ambient proof is not on"
+			 " programming point; cross-call ambient proof is"
+			 " not on"
 			 " record here\n");
 	    return false;
 	  }
@@ -5109,7 +5176,11 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: after the CC
+   analysis and immediately before the combiner, so a rewritten
+   immediate pair is re-offered to the existing mul+add->mad rule.  */
 
 gimple_opt_pass *
 make_pass_rvtt_prgm_const (gcc::context *ctxt)

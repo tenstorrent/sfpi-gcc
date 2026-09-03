@@ -44,6 +44,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-refuse.h"
 #include "rvtt-ipa-summary.h"
 
+/* Free every cached per-face digest (init events, mop blocks, CC
+   carry) and mark them all uncomputed, so the next consult recomputes
+   from the current body.  The staleness signature fields are left for
+   the caller to reset.  */
+
 void
 rvtt_ipa_fn_summary::release_faces ()
 {
@@ -69,6 +74,9 @@ namespace {
 hash_map<cgraph_node *, rvtt_ipa_fn_summary *> *summaries;
 cgraph_node_hook_list *removal_hook;
 
+/* cgraph removal hook: destroy NODE's summary record so a later node
+   reusing the same storage can never observe a stale digest.  */
+
 void
 summary_node_removed (cgraph_node *node, void *)
 {
@@ -81,6 +89,8 @@ summary_node_removed (cgraph_node *node, void *)
       summaries->remove (node);
     }
 }
+
+/* Allocate the summary map and wire the cgraph removal hook, once.  */
 
 void
 ensure_storage ()
@@ -127,7 +137,7 @@ body_stmt_signature (function *fn)
   return sig;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* See rvtt-ipa-summary.h.  */
 
@@ -246,6 +256,13 @@ rvtt_ipa_cc_ambient_preserving_p (cgraph_node *node)
 
 static rvtt_ipa_tu_anchor_facts anchor_facts;
 
+/* Compute the TU anchor facts into F: whether a defined `_start' or a
+   public `main' exists, how many defined functions qualify as entry
+   roots (the anchor itself; every externally visible non-comdat
+   definition when no anchor exists; forced-output/interrupt
+   definitions), and whether anything roots the TU at all (an entry
+   root, a static ctor/dtor, or an address-taken definition).  */
+
 static void
 compute_tu_anchors (rvtt_ipa_tu_anchor_facts *f)
 {
@@ -287,6 +304,11 @@ compute_tu_anchors (rvtt_ipa_tu_anchor_facts *f)
 	f->rooted = true;
     }
 }
+
+/* The TU anchor facts, computed once on first consult and cached for
+   the rest of the compilation (decl/symtab flags only, stable after
+   IPA).  Under flag_checking every later consult recomputes and
+   asserts the cached facts did not drift.  */
 
 const rvtt_ipa_tu_anchor_facts &
 rvtt_ipa_tu_anchors ()

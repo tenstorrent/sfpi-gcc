@@ -88,12 +88,19 @@ namespace {
 
 static unsigned n_folded;
 
+/* Argument N of CALL as a host integer, or -1 when it is not a
+   literal INTEGER_CST.  */
+
 static long
 int_arg (gcall *call, unsigned n)
 {
   tree arg = gimple_call_arg (call, n);
   return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
 }
+
+/* Book the named refusal REASON against STMT and dump it.  Always
+   returns false so recognizers can bail with `return refuse
+   (...)'.  */
 
 static bool
 refuse (const char *reason, gimple *stmt)
@@ -211,6 +218,9 @@ fold_iadd (gcall *iadd)
   return true;
 }
 
+/* Walk every statement of FUN and offer each sfpiadd_v to the
+   all-ones-subtract fold.  Returns whether the IL changed.  */
+
 static bool
 transform (function *fun)
 {
@@ -272,7 +282,11 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: before the
+   invariant pass, so the dead all-ones immediate is deleted instead
+   of hoisted.  */
 
 gimple_opt_pass *
 make_pass_rvtt_int_not (gcc::context *ctxt)

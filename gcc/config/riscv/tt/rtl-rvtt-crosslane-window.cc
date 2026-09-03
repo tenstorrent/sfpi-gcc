@@ -162,6 +162,9 @@ enum window_state : unsigned char
   WS_UNKNOWN = 2,
 };
 
+/* Dataflow join of the window states A and B: agreement survives, any
+   disagreement is UNKNOWN.  */
+
 static window_state
 join_state (window_state a, window_state b)
 {
@@ -340,6 +343,10 @@ struct replay_ref
   unsigned len;
 };
 
+/* Return true when INSN is the rvtt_ttreplay_int owner word, filling *R
+   with its load and exec flags and, when index and count are both
+   constant, the slot span (begin reduced modulo the 32-slot buffer).  */
+
 static bool
 decode_ttreplay (rtx_insn *insn, replay_ref *r)
 {
@@ -377,6 +384,9 @@ span_slots (bool sane, unsigned begin, unsigned len)
     m |= (uint32_t) 1 << ((begin + i) % REPLAY_SLOTS);
   return m;
 }
+
+/* A span this pass models: R has constant begin and count, with count
+   in [1..32] (Count 0 means 64 words -- the double-write wrap).  */
 
 static bool
 span_sane_p (const replay_ref &r)
@@ -681,6 +691,13 @@ window_check::expand_launch (rtx_insn *launch, window_state st,
   return st;
 }
 
+/* Window state after INSN executes starting in ST.  Swallowed no-exec
+   payload words transfer nothing; a TTMOP degrades to UNKNOWN; a
+   capture is transparent when modeled (or when it executes while
+   loading) and degrades to UNKNOWN otherwise; a playback launch expands
+   its delivered words without diagnosing; everything else follows the
+   SFPCONFIG marker decoding.  */
+
 window_state
 window_check::transfer (rtx_insn *insn, window_state st)
 {
@@ -719,6 +736,13 @@ window_check::transfer (rtx_insn *insn, window_state st)
     return next;
   return st;
 }
+
+/* Diagnose one inline (non-delivered) INSN executing under window state
+   ST.  Under proven-OPEN, raw assembly and calls error as unauditable,
+   and a non-exempt write of an LReg in [4..7] is the hard
+   dest-index-window-violation; under UNKNOWN such a write only dumps a
+   note.  Zero-length bookkeeping insns emit no architectural word and
+   are never diagnosed.  */
 
 void
 window_check::diagnose (rtx_insn *insn, window_state st)
@@ -813,6 +837,13 @@ window_check::diagnose_delivered (rtx_insn *pw, rtx_insn *launch,
 	  "launch insn %d (delivered LReg%d write under unproven window "
 	  "state)\n", INSN_UID (launch), (int) (hit - 1 - SFPU_REG_FIRST));
 }
+
+/* Whole-function driver.  Collect captures and launches, resolve the
+   launches fail-closed, mark the swallowed no-exec payload words, run
+   the three-state forward fixpoint over the CFG (entry state CLOSED),
+   then walk each reached block once more diagnosing every insn under
+   the state it executes in (TTMOPs and launches expand in place).  A
+   window still open at function exit is only noted.  */
 
 void
 window_check::run ()
@@ -973,9 +1004,13 @@ public:
     wc.run ();
     return 0;
   }
-}; // class pass_rvtt_crosslane_window
+}; /* class pass_rvtt_crosslane_window */
 
-} // anon namespace
+} /* anon namespace */
+
+/* Instantiate the window-enforcement pass for CTXT; rvtt-passes.def
+   places it before free_cfg, after every code-motion pass, and it gates
+   on a WH/BH Tensix target plus -mtt-tensix-optimize-crosslane.  */
 
 rtl_opt_pass *
 make_pass_rvtt_crosslane_window (gcc::context *ctxt)

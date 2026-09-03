@@ -438,6 +438,11 @@ t8_marshal_split ()
   CHECK (mve_live_demand (rot, pl3) >= 2);
 }
 
+/* Run the eight fixture groups (independent ops, recurrence, ring,
+   interleave, budget probing, MVE lifetime demand, and the two
+   marshalling shapes) and report the totals; exits nonzero when any
+   check failed.  */
+
 int
 main ()
 {

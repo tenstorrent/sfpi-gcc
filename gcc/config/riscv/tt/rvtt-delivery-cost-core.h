@@ -387,6 +387,6 @@ window_trip_issue_words (unsigned launches, bool has_trim,
   return launches + (has_trim ? 1 : 0) + inline_words;
 }
 
-} // namespace rvtt_delivery_cost
+} /* namespace rvtt_delivery_cost */
 
 #endif /* GCC_RVTT_DELIVERY_COST_CORE_H */

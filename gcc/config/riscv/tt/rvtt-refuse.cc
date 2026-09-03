@@ -48,12 +48,17 @@ static const char *const rvtt_refusal_contracts[] =
 #undef RVTT_REFUSAL
 };
 
+/* The registered spelling of R, verbatim from its rvtt-refusals.def
+   row (the name counted and printed in the opt-info line).  */
+
 const char *
 rvtt_refusal_name (enum rvtt_refusal r)
 {
   gcc_checking_assert (r < RVTT_REF_COUNT_);
   return rvtt_refusal_names[r];
 }
+
+/* The contract text of R, verbatim from its rvtt-refusals.def row.  */
 
 const char *
 rvtt_refusal_contract (enum rvtt_refusal r)
@@ -67,6 +72,9 @@ rvtt_refusal_contract (enum rvtt_refusal r)
 struct rvtt_refusal_name_hash : nofree_string_hash {};
 
 static hash_map<rvtt_refusal_name_hash, int> *rvtt_refusal_index;
+
+/* NAME's registry entry, or RVTT_REF_COUNT_ when NAME is not
+   registered.  Builds the name -> enum hash map on first use.  */
 
 enum rvtt_refusal
 rvtt_refusal_lookup (const char *name)
@@ -90,12 +98,20 @@ rvtt_refusal_lookup (const char *name)
 static unsigned rvtt_refusal_counts[RVTT_REF_COUNT_];
 static hash_map<rvtt_refusal_name_hash, unsigned> *rvtt_unregistered_counts;
 
+/* The process-wide fire count of the registered refusal R.
+   Unregistered string-keyed fires are visible only through
+   rvtt_refusal_print_counts.  */
+
 unsigned
 rvtt_refusal_count (enum rvtt_refusal r)
 {
   gcc_checking_assert (r < RVTT_REF_COUNT_);
   return rvtt_refusal_counts[r];
 }
+
+/* Print every nonzero fire counter to F, one name<TAB>count line per
+   refusal; unregistered string-keyed names follow, marked
+   "(unregistered)".  */
 
 void
 rvtt_refusal_print_counts (FILE *f)
@@ -122,6 +138,10 @@ rvtt_refusal_summary_atexit (void)
   fprintf (stderr, "=== tt refusal fire counts ===\n");
   rvtt_refusal_print_counts (stderr);
 }
+
+/* Arm the atexit summary once, at the first fire, when
+   RVTT_REFUSAL_SUMMARY is set in the environment; remember the
+   decision so the environment is probed only once.  */
 
 static void
 rvtt_refusal_maybe_register_summary (void)
@@ -174,6 +194,11 @@ rvtt_refusal_default_loc (void)
   return dump_user_location_t ();
 }
 
+/* The shared fire core: lazily arm the atexit summary, bump NAME's
+   counter (the flat slot INDEX when registered; INDEX is -1 for an
+   unregistered name, counted under its own duplicated string key),
+   then route the structured opt-info line anchored at LOC.  */
+
 static void
 rvtt_refusal_fire_1 (const char *name, int index, dump_user_location_t loc)
 {
@@ -199,6 +224,11 @@ rvtt_refusal_fire_1 (const char *name, int index, dump_user_location_t loc)
     }
   rvtt_refusal_route_optinfo (name, loc);
 }
+
+/* Registry-keyed fires: count refusal R and route it to -fopt-info.
+   The three overloads differ only in the anchor location: the current
+   function's entry, STMT's location, or INSN's location (null anchors
+   fall back to the function entry).  */
 
 void
 rvtt_refusal_fire (enum rvtt_refusal r)
@@ -237,12 +267,18 @@ rvtt_refusal_index_of (const char *name)
   return r == RVTT_REF_COUNT_ ? -1 : (int) r;
 }
 
+/* Fire the refusal named NAME, registered or not (see the block
+   comment above), anchored at the current function's declaration.  */
+
 void
 rvtt_refusal_fire_by_name (const char *name)
 {
   rvtt_refusal_fire_1 (name, rvtt_refusal_index_of (name),
 		       rvtt_refusal_default_loc ());
 }
+
+/* As above, anchoring the opt-info line at STMT's location when STMT
+   is non-null.  */
 
 void
 rvtt_refusal_fire_by_name (const char *name, const gimple *stmt)
@@ -252,6 +288,9 @@ rvtt_refusal_fire_by_name (const char *name, const gimple *stmt)
 			    : rvtt_refusal_default_loc ());
 }
 
+/* As above, anchoring the opt-info line at INSN's location when INSN
+   is non-null.  */
+
 void
 rvtt_refusal_fire_by_name (const char *name, const rtx_insn *insn)
 {
@@ -259,6 +298,11 @@ rvtt_refusal_fire_by_name (const char *name, const rtx_insn *insn)
 		       insn ? dump_user_location_t (insn)
 			    : rvtt_refusal_default_loc ());
 }
+
+/* Fire the refusal spelled "PREFIX-SUFFIX" (the assembled
+   reason-carrier idiom; see rvtt-refuse.h).  The composed spelling is
+   built in a fixed local buffer, so a name past 191 bytes is
+   truncated -- and then counted under the truncated key.  */
 
 void
 rvtt_refusal_fire_composed (const char *prefix, const char *suffix)

@@ -393,6 +393,9 @@ prefix_load_p (gcall *call)
   return true;
 }
 
+/* Return true if T is a value of vector type (an SFPU vector datum).
+   Null-safe: NULL_TREE (e.g. a missing lhs) is not.  */
+
 static bool
 vector_typed_p (tree t)
 {
@@ -512,6 +515,13 @@ static bool blocking_store_asm_p (const gasm *stmt, tree *value, tree *addr);
 static bool pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
 				      unsigned depth = 0);
 
+/* Resolve into *WORD the 32-bit value LOAD reads from REF: walk the
+   virtual-operand chain backward to the dominating store of the same
+   lvalue and resolve its stored value (resolve_exact_word, bounded
+   by DEPTH).  Any statement that may clobber REF fails closed; the
+   audited blocking-store asm at a proven constant MMIO address is
+   stepped over (link-image disjointness).  */
+
 static bool
 resolve_field_load (gimple *load, tree ref, uint32_t *word, unsigned depth)
 {
@@ -553,6 +563,12 @@ resolve_field_load (gimple *load, tree ref, uint32_t *word, unsigned depth)
     }
   return false;
 }
+
+/* Exact 32-bit resolution of VAL into *WORD: constants, conversions,
+   constant arithmetic (a DEPTH-bounded SSA chase), and memory loads
+   resolvable to a dominating constant store of the same lvalue
+   (resolve_field_load).  Any unresolved leaf fails; the contract
+   comment above the forward declarations gives the census use.  */
 
 static bool
 resolve_exact_word (tree val, uint32_t *word, unsigned depth = 0)
@@ -754,6 +770,12 @@ foldable_global_p (tree decl, unsigned HOST_WIDE_INT *value)
     }
   return false;
 }
+
+/* Fold PTR to a constant byte address in *ADDR: integer constants,
+   conversions, constant-offset pointer arithmetic, and loads of a
+   foldable aperture global (the initializer is assumed and the
+   assumption recorded for the census's verify step).  DEPTH bounds
+   the SSA chase; anything else fails closed.  */
 
 static bool
 pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
@@ -1137,6 +1159,11 @@ static bool ptr_not_template_p (tree ptr, hash_set<tree> &visiting,
 				unsigned depth = 0,
 				hash_set<tree> *parm_visiting = nullptr);
 
+/* Whether the store target BASE, a declared object, provably lies
+   outside the MOP template file: any TU-defined data object
+   (link-image disjointness), the instruction-FIFO aperture, or a
+   recorded crt0 data anchor.  Unknown externals fail closed.  */
+
 static bool
 decl_not_template_p (tree base)
 {
@@ -1164,6 +1191,13 @@ decl_not_template_p (tree base)
 				   (rvtt-mop-derive.cc census) */
   return false;
 }
+
+/* Whether the pointer parameter PARM of a censused function provably
+   never carries the MOP template file: the function's caller set
+   must be enumerable (a definition, not address-taken or aliased,
+   not an entry root), and every executable call site must pass an
+   argument that is itself proven not-template.  DEPTH bounds the
+   recursion; PARM_VISITING breaks parameter cycles.  */
 
 static bool
 param_not_template_p (tree parm, hash_set<cgraph_node *> *executable,
@@ -1209,6 +1243,13 @@ param_not_template_p (tree parm, hash_set<cgraph_node *> *executable,
     }
   return true;
 }
+
+/* The recursive worker behind the contract described above the
+   forward declaration: classify pointer PTR as provably outside the
+   MOP template range.  VISITING breaks SSA cycles (a cycle member
+   defers to the other arms), EXECUTABLE scopes the parameter-binding
+   walk, DEPTH bounds recursion, PARM_VISITING breaks parameter
+   cycles.  Fail closed.  */
 
 static bool
 ptr_not_template_p (tree ptr, hash_set<tree> &visiting,
@@ -1391,6 +1432,12 @@ blocking_store_asm_p (const gasm *stmt, tree *value, tree *addr)
   return true;
 }
 
+/* One asm statement of the TU census walk: only the blocking-store
+   idiom can store; record a constant-address store for the template
+   audit (census_constant_store), dismiss a target provably outside
+   the template file, and refuse the rest.  EXECUTABLE scopes the
+   parameter-binding walk.  */
+
 static void
 census_asm (gasm *stmt, hash_set<cgraph_node *> *executable)
 {
@@ -1522,6 +1569,14 @@ compute_executable_closure (hash_set<cgraph_node *> *executable,
 	add (ref->referred);
     }
 }
+
+/* Compute the TU-wide facts once per translation unit into the
+   global tu_facts: the executable closure and its entry roots, the
+   fail-closed unrooted verdict, the census of every store and
+   blocking-store asm in every closure member (MOP template slot
+   words, foldable-global stores), verification of the assumed global
+   folds, and resolution of the deferred parameter-relative slot
+   words at every reachable call site.  */
 
 static void
 compute_tu_facts ()
@@ -2474,9 +2529,10 @@ discover_config_prefix (function *fn,
 	    {
 	      if (dump_file)
 		{
-		  rvtt_refuse (RVTT_REF_CROSSCALL_CONFIG_DEST_UNPROVEN, dump_file,
-			       "crosscall-hoist: config pair "
-			       "unqualified (crosscall-config-dest-unproven): ");
+		  rvtt_refuse (RVTT_REF_CROSSCALL_CONFIG_DEST_UNPROVEN,
+			       dump_file,
+			       "crosscall-hoist: config pair unqualified "
+			       "(crosscall-config-dest-unproven): ");
 		  print_gimple_stmt (dump_file, write, 0, TDF_NONE);
 		}
 	      continue;
@@ -2853,6 +2909,14 @@ insert_in_preheader (basic_block ph, gimple *stmt)
     gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
 }
 
+/* Commit the caller side of a proven contract: rebuild each config
+   pair (load + sfpwriteconfig_v) and then each contract load with
+   its pinning sfpwritelreg in CALLER's loop preheader on ENTRY --
+   config pairs first, so their L0 temporary's live range stays
+   disjoint from the pinned contract ranges -- creating the cgraph
+   edges the caller's later passes expect and updating virtual
+   SSA.  */
+
 static void
 commit_caller (cgraph_node *caller, edge entry,
 	       const auto_vec<contract_entry> &contract,
@@ -2931,6 +2995,13 @@ commit_caller (cgraph_node *caller, edge entry,
     }
   update_ssa (TODO_update_ssa_only_virtuals);
 }
+
+/* Commit the callee side in FN: delete each config pair (the caller
+   preheaders now program its register), replace each contract
+   materialization with an sfpreadlreg of its pinned register, and
+   write each contract value back to its register before every
+   return, keeping the value live -- in that register -- across the
+   whole body.  */
 
 static void
 commit_callee (function *fn, const auto_vec<contract_entry> &contract,
@@ -3213,7 +3284,7 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* Audited hoist-region scan for the cross-loop hoist consumers
    (rvtt-macro-ownership.h).  The region is {LOOP body} union
@@ -3413,6 +3484,13 @@ namespace {
 
 typedef rvtt_wf_init_verdict init_word_verdict;
 
+/* Init-face analogue of classify_delivered_value: classify the
+   delivered word VAL against contract program PROG under target
+   capabilities C.  A constant resolves exactly; a runtime-completed
+   composition keeps its opcode class but clears WORD_EXACT (the
+   stage-2 value-equality proof cannot use it); an underivable word
+   refuses.  */
+
 static init_word_verdict
 classify_delivered_init (tree val, const rvtt_init_hoist_program &prog,
 			 const rvtt_macro::caps *c)
@@ -3452,6 +3530,10 @@ struct init_scan_ctx
   gimple *why_stmt = nullptr;
 };
 
+/* Record the init-face refusal WHY at STMT in CTX, emit the named
+   refusal counter and its dump line, and return false as the scan's
+   failing result.  */
+
 static bool
 init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
 {
@@ -3471,6 +3553,10 @@ init_refuse (init_scan_ctx *ctx, const char *why, gimple *stmt)
     }
   return false;
 }
+
+/* Fold word verdict V into CTX: note a seen MOP launch and any
+   owned-row write (a stage-2 demotion), and refuse through
+   init_refuse when the word is not proven inert.  */
 
 static bool
 apply_init_verdict (init_scan_ctx *ctx, const init_word_verdict &v,
@@ -4138,6 +4224,15 @@ init_dom_call_bb (cgraph_node *ucaller, cgraph_node *n)
   return stmt ? gimple_bb (stmt) : nullptr;
 }
 
+/* The stage-2 value-equality proof for SUBJECT's contract hoisted
+   into UCALLER/CALLER_FN's LOOP: every decodable SETC16-class
+   delivery to an owned row of PROG -- in the caller body, in every
+   committed-inline body, and among the audited MOP template words --
+   must equal the contract's encoded word (C gives the encoding), and
+   each owned row needs a write whose block dominates the loop
+   header.  A slot-census failure is excusable only when attributable
+   solely to SUBJECT itself.  Returns false to demote to stage 1.  */
+
 static bool
 init_value_equal_p (cgraph_node *ucaller, function *caller_fn,
 		    class loop *loop,
@@ -4351,7 +4446,7 @@ init_commit_caller (cgraph_node *caller, edge entry,
 	     caller->dump_name (), ph->index);
 }
 
-} // anonymous namespace (init hoist)
+} /* anonymous namespace (init hoist) */
 
 /* The ONE caller-chain resolver behind the init-face
    contracts (the init hoist and the ADDR_MOD hoist) -- previously
@@ -4941,6 +5036,9 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
   pop_cfun ();
   return result;
 }
+
+/* Pass factory for rvtt_crosscall, referenced from
+   rvtt-passes.def.  */
 
 gimple_opt_pass *
 make_pass_rvtt_crosscall (gcc::context *ctxt)

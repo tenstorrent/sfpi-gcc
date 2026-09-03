@@ -141,6 +141,10 @@ test_launch_bh (const caps *bh)
   CHECK (!decode_launch (bh, 0x7000e000u, &m, &vd, &mode, &am, &addr));
 }
 
+/* WH launch words: the shift-14, 2-bit addr-mode layout (no-inc 3,
+   auto-inc 2), the three select launches (all with VD 0), the 2-bit
+   addr-mode boundary refusal, and a decode round trip.  */
+
 static void
 test_launch_wh (const caps *wh)
 {
@@ -591,6 +595,9 @@ ref_word (const caps *c, const char *shape, unsigned dest, bool *found)
   return 0;
 }
 
+/* Assert that C carries a reference descriptor for (SHAPE, DEST) and
+   that its word equals EXPECT.  */
+
 static void
 check_ref (const caps *c, const char *shape, unsigned dest,
 	   uint32_t expect)
@@ -601,6 +608,13 @@ check_ref (const caps *c, const char *shape, unsigned dest,
   if (found)
     CHECK_EQ_HEX (w, expect);
 }
+
+/* Check C's reference descriptor set against the frozen pass's words
+   for every proven shape (min/max, signbit, cast-round, select:
+   templates, sequence words, misc word), then require each template
+   word (dest 0/1) to round-trip through decode_template and
+   encode_template -- the generic packer must cover every proven
+   shape, not only the hand-listed instances.  */
 
 static void
 test_ref_descriptors (const caps *c)
@@ -718,6 +732,11 @@ test_cc_template_facts (const caps *bh, const caps *wh)
       CHECK_EQ_HEX (m1_encc, m2_encc);
     }
 }
+
+/* Fetch the BH and WH capability tables and run every check group
+   against them (plus the QSR refusal), finishing with the per-CPU
+   reference SETC16 word lists.  Prints the check/failure counts;
+   exits nonzero on any failure.  */
 
 int
 main ()

@@ -295,6 +295,13 @@ cc_rtl_block_entry_all_p (basic_block bb, hash_map<basic_block, int> &memo)
   return all;
 }
 
+/* Whether the lane-enable state at AT (i.e. just before it executes)
+   is provably the architectural all-lanes state: no CC event between
+   AT's block entry and AT, and every predecessor path reaches the
+   function entry or an executed word-exact all-lanes SFPENCC -- or an
+   unpoisoned all-lanes SFPENCC earlier in AT's own block.  Fails
+   closed on cycles, abnormal edges and replay-poisoned blocks.  */
+
 bool
 rvtt_cc_rtl_entry_all_lanes_p (rtx_insn *at)
 {
@@ -320,6 +327,15 @@ rvtt_cc_rtl_entry_all_lanes_p (rtx_insn *at)
 
 /* ==================================================================
    The span classifier.  */
+
+/* Classify the CC behaviour of BB's insn span (AFTER, UNTIL) -- see
+   rvtt-cc-region.h for the verdict vocabulary.  Tracks PUSHC/POPC
+   depth and mask narrowing across the span's CC events, walking the
+   whole block for replay-owner poisoning (comment in body), and fails
+   closed on opaque or out-of-vocabulary events.
+   REQUIRE_ENTRY_MASK_AT_END demands the stronger verdict that the
+   block-entry mask is re-established when the span ends (balanced
+   depth, no depth-0 narrowing).  */
 
 rvtt_cc_rtl_span_verdict
 rvtt_cc_rtl_classify_span (basic_block bb, rtx_insn *after,
@@ -421,6 +437,9 @@ rvtt_cc_rtl_classify_span (basic_block bb, rtx_insn *after,
     return RVTT_CC_RTL_SPAN_BALANCED;
   return RVTT_CC_RTL_SPAN_NO_EVENT;
 }
+
+/* Dump-stable name of span verdict V, for -fopt-info notes and dump
+   greps (the refuse-* names are the census vocabulary).  */
 
 const char *
 rvtt_cc_rtl_span_verdict_name (rvtt_cc_rtl_span_verdict v)

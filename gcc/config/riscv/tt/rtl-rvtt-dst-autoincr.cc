@@ -295,6 +295,11 @@ struct autoincr_caps
   unsigned watch_reg;
 };
 
+/* The current target's auto-increment capability entry: modifier
+   encodings, owned slot registers, and the audited frontend distance
+   and occupancy quantities (WH and BH only; QSR returns available ==
+   false, refusing the whole pass).  */
+
 static autoincr_caps
 target_autoincr_caps ()
 {
@@ -390,6 +395,13 @@ classify_access (rtx_insn *insn, int code, access_info *acc)
   acc->retargetable = recog_data.operand[static_opno] == const0_rtx;
   return true;
 }
+
+/* Classify INSN into the autoincr_class vocabulary, filling *ACC for a
+   typed Dst access.  Calls, opaque asm, unrecognized insns, scalar or
+   Dst-accessing code with unprovable effects, and Tensix instructions
+   without the replay-safe attribute contract all take the refusing
+   AIC_FOREIGN default; raw .ttinsn words are admitted only when the
+   audited decode proves the pure Dst/RWC counter class.  */
 
 static autoincr_class
 classify_insn (rtx_insn *insn, access_info *acc)
@@ -953,6 +965,12 @@ capture_members_config_ok (const capture_rec *cap, const autoincr_caps &caps)
   return true;
 }
 
+/* Configuration-window legality of one scanned ITEM (see the comment
+   above capture_members_config_ok): neutral items, RWC counter steps,
+   and accesses through modifiers other than CAPS's scratch modifier
+   qualify; replay recordings and launches qualify when their payload is
+   known and its members do.  Everything else refuses.  */
+
 static bool
 config_window_item_ok (const bb_item &item, const autoincr_caps &caps)
 {
@@ -1301,6 +1319,9 @@ block_reachable_p (basic_block from, basic_block to)
   return false;
 }
 
+/* Total frontend issue-slot words of BB per FN's scan; an unscanned
+   block counts zero (zero cover is the refusing direction).  */
+
 static unsigned
 block_frontend_words (const function_scan &fn, basic_block bb)
 {
@@ -1314,6 +1335,10 @@ block_frontend_words (const function_scan &fn, basic_block bb)
       }
   return 0; /* Unscanned block: zero cover is the refusing direction.  */
 }
+
+/* Frontend issue-slot words issued in CAP's block strictly before the
+   capture insn itself, from FN's scan; zero for an unscanned block (the
+   refusing direction for the distance search).  */
 
 static unsigned
 words_before_capture (const function_scan &fn, const capture_rec *cap)
@@ -1332,6 +1357,15 @@ words_before_capture (const function_scan &fn, const capture_rec *cap)
       }
   return 0;
 }
+
+/* The silicon-refuted composition guard: return true (setting *HAZARD
+   to the capture and *DETAIL to the refusal text) when a no-exec replay
+   capture in FN could begin ingesting while GRP's final mod-write is
+   still retiring.  Same-block captures refuse outright; for a
+   replay-delivered group any same-function no-exec capture that is
+   forward-reachable or does not dominate the group refuses; otherwise a
+   minimum frontend-word distance search from the group's block exit,
+   pruned at CAPS's drained-frontend window, decides.  */
 
 static bool
 noexec_record_composition_p (const function_scan &fn, const group &grp,
@@ -1769,6 +1803,12 @@ emit_owned_config (const autoincr_caps &caps, HOST_WIDE_INT stride,
     emit_insn_after (seq, after);
 }
 
+/* Rewrite one proven group GRP: emit the owned scratch-slot program at
+   its placement (loop preheader or in-block anchor) unless a dominating
+   same-program group or the cross-call contract already provides it,
+   retarget every row's terminator access to the scratch modifier per
+   CAPS, and delete the rows' explicit TTINCRWC increments.  */
+
 static void
 transform_group (const group &grp, const autoincr_caps &caps)
 {
@@ -2004,6 +2044,17 @@ attempt_addrmod_contract (function_scan &fn, std::vector<group> &groups,
 	     boundary_charge, prog.lift_levels);
 }
 
+/* Pass body over CFN.  Scan every block, refuse whole on a pre-existing
+   scratch-modifier access, resolve replay captures/launches, then
+   iterate to a fixed point: form maximal same-stride groups of
+   candidate rows, drop groups refused by the no-exec record-composition
+   guard, place slot programs (dominating/shared/per-group under the
+   distance guard), price the mod-write backedge crossing, and apply the
+   configuration-cost profitability test; a dropped group's candidates
+   restart the iteration.  When all survivors refused on pricing, the
+   cross-call ADDR_MOD contract may still admit them.  Finally rewrite
+   each surviving group (see transform_group).  */
+
 static void
 transform (function *cfn)
 {
@@ -2124,12 +2175,14 @@ transform (function *cfn)
 	      if (noexec_record_composition_p (fn, grp, caps, &hazard,
 					       &detail))
 		{
-		  rvtt_refuse (RVTT_REF_MOD_WRITE_NOEXEC_RECORD_COMPOSITION_UNAUDITED, dump_file,
-			       "Dst-autoincr refusal: "
-			       "mod-write-noexec-record-composition-"
-			       "unaudited (%s, bb %d, capture bb %d)\n",
-			       detail, grp.scan->bb->index,
-			       hazard->bb->index);
+		  rvtt_refuse
+		    (RVTT_REF_MOD_WRITE_NOEXEC_RECORD_COMPOSITION_UNAUDITED,
+		     dump_file,
+		     "Dst-autoincr refusal: "
+		     "mod-write-noexec-record-composition-"
+		     "unaudited (%s, bb %d, capture bb %d)\n",
+		     detail, grp.scan->bb->index,
+		     hazard->bb->index);
 		  for (unsigned cx : grp.cand_ix)
 		    grp.scan->candidates[cx].dropped = true;
 		  changed = true;
@@ -2176,7 +2229,8 @@ transform (function *cfn)
 	      if ((HOST_WIDE_INT) grp.crossing_charge
 		  >= (HOST_WIDE_INT) grp.cand_ix.size ())
 		{
-		  rvtt_refuse (RVTT_REF_MOD_WRITE_DOMINATES_ROLLED_BODY, dump_file,
+		  rvtt_refuse (RVTT_REF_MOD_WRITE_DOMINATES_ROLLED_BODY,
+			       dump_file,
 			       "Dst-autoincr refusal: "
 			       "mod-write-dominates-rolled-body (rows %u, "
 			       "uncovered crossing slots %u, bb %d)\n",
@@ -2468,9 +2522,9 @@ public:
     free_dominance_info (CDI_DOMINATORS);
     return 0;
   }
-}; // class pass_rvtt_dst_autoincr
+}; /* class pass_rvtt_dst_autoincr */
 
-} // anon namespace
+} /* anon namespace */
 
 /* Exported single source of the audited W_drain value (rvtt-protos.h;
    see rtl-rvtt-replay.cc): the replay former's no-exec record placement
@@ -2696,6 +2750,11 @@ rvtt_dst_autoincr_carried_access_p (rtx_insn *insn)
     return false;
   return acc.retargetable && acc.mode == caps.scratch_mode;
 }
+
+/* Instantiate the Dst auto-increment pass for CTXT; rvtt-passes.def
+   places it after postreload (after replay formation, before MOP
+   formation), and it gates on the Tensix extension plus
+   -mtt-tensix-optimize-dst-autoincr.  */
 
 rtl_opt_pass *
 make_pass_rvtt_dst_autoincr (gcc::context *ctxt)

@@ -148,6 +148,11 @@ static const rvtt_lut_mode_desc wh_bh_lut_modes[] =
   },
 };
 
+/* Return the number of LUT modes the current target supports and set
+   *MODES to the descriptor table (in selection-preference order).
+   Returns 0 -- LUT formation refuses -- on non-Tensix targets and on
+   Quasar, whose SFPLUT-family execution is unvalidated here.  */
+
 unsigned
 rvtt_lut_modes (const rvtt_lut_mode_desc **modes)
 {
@@ -267,6 +272,12 @@ rvtt_lut_leaf_class_certified_p (rvtt_lut_leaf_class cls,
     }
   return false;
 }
+
+/* Whether the FP32 value BITS is in the certified constant-leaf value
+   class -- +0.0 or a normal of either sign, the values the slot's
+   zero-product shortcut reproduces verbatim (see the value-class
+   paragraph of the certification comment above).  -0.0, denormals,
+   infinities and NaNs are refused.  */
 
 bool
 rvtt_lut_const_value_certified_p (uint32_t bits)

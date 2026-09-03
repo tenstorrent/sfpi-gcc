@@ -109,6 +109,13 @@ rvtt_no_increment_address_mode ()
   return no_increment_address_mode ();
 }
 
+/* The Layer-1 effect query (see rvtt-effects.h): resolve the
+   rvtt-cost.md attribute family against INSN's operands into one
+   xtt_effect_set.  Every default is refusing -- calls, unclassified
+   asm, unrecognized or non-Tensix insns, and any unaudited attribute
+   field keep opaque=true; the one audited asm exception is the raw
+   `.ttinsn' pure Dst/RWC counter word (see the comment above).  */
+
 xtt_effect_set
 rvtt_insn_effects (rtx_insn *insn)
 {
@@ -341,6 +348,11 @@ static const builtin_late_code_map builtin_late_codes[] = {
   { rvtt_insn_data::sfpstore,	    CODE_FOR_rvtt_sfpstore_int },
 };
 
+/* See rvtt-effects.h and the block comment above: the execution
+   sub-unit of the late RTL pattern the builtin INSND resolves to,
+   read from the constant xtt_subunit attribute through a pattern-less
+   scratch insn.  Unlisted builtins return the refusing XTT_SU_NONE.  */
+
 xtt_subunit_t
 rvtt_builtin_subunit (const rvtt_insn_data *insnd)
 {
@@ -356,6 +368,11 @@ rvtt_builtin_subunit (const rvtt_insn_data *insnd)
       }
   return XTT_SU_NONE;
 }
+
+/* See rvtt-effects.h: the audited result latency of the late RTL
+   pattern INSND resolves to, read through the same scratch-insn
+   attribute seam as rvtt_builtin_subunit.  -1 (unaudited or unlisted)
+   is the refusing default.  */
 
 int
 rvtt_builtin_result_latency (const rvtt_insn_data *insnd)
@@ -407,6 +424,12 @@ hard_lreg_bit (rtx op)
   return 0;
 }
 
+/* Fill *GROUP with INSN's value-bank and companion write masks when
+   INSN is one of the audited multi-result instructions (contract in
+   rvtt-effects.h).  EFFECTS must be INSN's own effect set; opaque
+   effects and instructions with no companion structure on record
+   return false.  */
+
 bool
 rvtt_multiresult_group (rtx_insn *insn, const xtt_effect_set &effects,
 			xtt_multiresult_group *group)
@@ -450,6 +473,9 @@ varlreg_reg_mask (const_rtx x)
   return mask;
 }
 
+/* Whether the rtx tree X contains the variable-LREG volatile unspec
+   (UNSPECV_SFPVARLREG) anywhere.  */
+
 static bool
 mentions_varlreg_p (const_rtx x)
 {
@@ -468,6 +494,11 @@ mentions_varlreg_p (const_rtx x)
 	  return true;
   return false;
 }
+
+/* Recognize the marker described above: INSN must be a recognized
+   zero-length TYPE_TENSIX pattern mentioning the variable-LREG
+   unspec.  On success *LREG_MASK receives the pinned hard-LREG bits
+   collected from the whole pattern.  */
 
 bool
 rvtt_lreg_marker (rtx_insn *insn, uint32_t *lreg_mask)
@@ -645,6 +676,10 @@ static const char *const port_names[] = {
   "none", "own", "shared_simple_round", "borrows_mad"
 };
 
+/* Print INSN's resolved effect set to FILE as one "# xtt-effects:"
+   assembler-comment line (see the block comment above).  Non-Tensix
+   non-asm insns print nothing; an opaque set prints "opaque".  */
+
 void
 rvtt_dump_insn_effects (FILE *file, rtx_insn *insn)
 {
@@ -722,11 +757,21 @@ struct planner_launch_record
 
 static vec<planner_launch_record> planner_launch_records;
 
+/* Drop every planner emission record.  The planner pass calls this at
+   entry for each function it visits, so records never leak across
+   functions.  */
+
 void
 rvtt_planner_launch_effects_reset ()
 {
   planner_launch_records.truncate (0);
 }
+
+/* Record the effect interface FX the planner derived for the launch
+   INSN it just emitted, keyed by INSN's UID, the current function's
+   DECL_UID, the encoded launch WORD, and the launch VD_REGNO -- the
+   integrity facts rvtt_planner_launch_effects re-verifies at
+   lookup.  */
 
 void
 rvtt_planner_launch_effects_record (rtx_insn *insn, uint64_t word,
@@ -742,6 +787,13 @@ rvtt_planner_launch_effects_record (rtx_insn *insn, uint64_t word,
   rec.fx = fx;
   planner_launch_records.safe_push (rec);
 }
+
+/* Look up the planner emission record for INSN (see rvtt-effects.h
+   and the block comment above).  Succeeds only for a recognized
+   SFPLOADMACRO pattern whose UID, containing function, encoded launch
+   word, and VD hard register all still match a record written at
+   emission; *OUT then receives the recorded effect set.  Everything
+   else fails closed.  */
 
 bool
 rvtt_planner_launch_effects (rtx_insn *insn, xtt_effect_set *out)
@@ -807,6 +859,10 @@ rvtt_lane_local_effects (rtx_insn *insn, bool *cc_writes)
     *cc_writes = ccw;
   return hit;
 }
+
+/* See rvtt-effects.h and the block comment above: the sole decoder of
+   the xtt_lane_gated attribute.  Refusing default: an unrecognized or
+   unannotated pattern answers false.  */
 
 bool
 rvtt_lane_gated_consumer_p (rtx_insn *insn)

@@ -56,6 +56,10 @@ struct schedule_solution
   unsigned claimed_peak = 0;
 };
 
+/* Whether TYPE is the SFPU vector type this pass models: an
+   __xtt_vector-attributed vector in XTT32SImode, i.e. a value that
+   occupies one allocatable LREG while live.  */
+
 static bool
 sfpu_vector_p (tree type)
 {
@@ -145,6 +149,10 @@ straight_line_bb_p (basic_block bb)
     && single_succ_p (bb) && single_succ (bb)->index == EXIT_BLOCK;
 }
 
+/* Whether the SSA name VALUE is defined by a constant-LREG read, so
+   consuming it costs no allocatable register (see
+   constant_lreg_read_p above).  */
+
 static bool
 free_constant_p (tree value)
 {
@@ -156,6 +164,15 @@ free_constant_p (tree value)
 }
 
 using value_map = std::unordered_map<tree, value_info>;
+
+/* Build the pressure model for the region OPS of BB: for each SFPU
+   vector SSA value touched by the region, the index in OPS of its
+   defining operation (-1 when defined outside), the count of its uses
+   by region operations, and whether it is live past the region (some
+   non-debug use outside OPS).  A value untouched by OPS but live
+   across the span (defined before it in BB or in another block, used
+   after it in BB) is entered with live_out set, since it occupies an
+   LREG throughout.  Constant-LREG reads are free and excluded.  */
 
 static value_map
 build_values (basic_block bb, const std::vector<gcall *> &ops)
@@ -354,7 +371,8 @@ pressure_for_order (const std::vector<gcall *> &order,
    scheduler's predecessor, remaining-use, or peak bookkeeping.  */
 static bool
 validate_schedule (basic_block bb, const std::vector<gcall *> &ops,
-		   const schedule_solution &solution, unsigned expected_old_peak,
+		   const schedule_solution &solution,
+		   unsigned expected_old_peak,
 		   unsigned &verified_peak, const char *&reason)
 {
   reason = "unknown";
@@ -432,9 +450,10 @@ validate_schedule (basic_block bb, const std::vector<gcall *> &ops,
 	  if (def && gimple_bb (def) == bb)
 	    {
 	      auto found = bb_position.find (def);
-	      /* apply_schedule places every operation immediately after the last
-		 original operation.  A skipped constant-LREG read inside the span
-		 therefore still precedes every scheduled consumer.  */
+	      /* apply_schedule places every operation immediately after
+		 the last original operation.  A skipped constant-LREG
+		 read inside the span therefore still precedes every
+		 scheduled consumer.  */
 	      if (found == bb_position.end () || found->second > region_last)
 		{
 		  reason = "source-availability";
@@ -628,8 +647,10 @@ validator_rejection_selftest (basic_block bb,
 	  continue;
 
 	gcall *consumer = use_before_def.order[use_position];
-	use_before_def.order.erase (use_before_def.order.begin () + use_position);
-	use_before_def.order.insert (use_before_def.order.begin () + found->second,
+	use_before_def.order.erase (use_before_def.order.begin ()
+				    + use_position);
+	use_before_def.order.insert (use_before_def.order.begin ()
+				     + found->second,
 				     consumer);
 	made_bad_edge = true;
 	break;
@@ -771,6 +792,13 @@ make_pressure_schedule (const std::vector<gcall *> &ops,
   return true;
 }
 
+/* Commit SCHEDULE: move every operation of OPS, in scheduled order,
+   to the end of the span (just before the statement following
+   OPS.back ()), re-emit the span's debug binds after them so no bind
+   precedes the definition it references, and drop the operations'
+   virtual operands for renaming.  Returns false without touching the
+   IL when SCHEDULE equals OPS or the span already ends the block.  */
+
 static bool
 apply_schedule (const std::vector<gcall *> &ops,
 		const std::vector<gcall *> &schedule)
@@ -831,6 +859,14 @@ apply_schedule (const std::vector<gcall *> &ops,
   return true;
 }
 
+/* Schedule one region OPS of BB.  Build the pressure model and, when
+   the original order's peak exceeds the eight allocatable LREGs, try
+   the list scheduler and -- when requested and available -- the MILP
+   solver, whose OPTIMAL order supersedes the list one.  A candidate
+   order is committed only after the independent validator and its
+   rejection self-test both pass.  Dumps the region verdict.  Returns
+   whether the IL changed.  */
+
 static bool
 analyze_region (basic_block bb, const std::vector<gcall *> &ops)
 {
@@ -868,8 +904,9 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
 	    else
 	      solver_order.push_back (ops[id]);
 
-	  /* A malformed OPTIMAL certificate is never allowed to fall through to
-	     mutation.  The independent validator below remains authoritative.  */
+	  /* A malformed OPTIMAL certificate is never allowed to fall
+	     through to mutation.  The independent validator below
+	     remains authoritative.  */
 	  if (valid_ids)
 	    {
 	      schedule = std::move (solver_order);
@@ -920,7 +957,8 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
 	       validation_reason, rejection_selftest ? "passed" : "not-run",
 	       applied ? "yes" : "no");
       fprintf (dump_file,
-	       "SFPU MILP: requested=%s backend=%s status=%s detail=%s nodes=%u "
+	       "SFPU MILP: requested=%s backend=%s status=%s "
+	       "detail=%s nodes=%u "
 	       "cross-check=%s selected=%s\n",
 	       riscv_tt_pressure_schedule_use_milp ? "yes" : "no",
 	       rvtt_solver_backend_name (),
@@ -942,6 +980,10 @@ analyze_region (basic_block bb, const std::vector<gcall *> &ops)
   return applied;
 }
 
+/* Close the region being accumulated: analyze (and possibly
+   reschedule) OPS in BB, then clear OPS for the next region.  Returns
+   whether the IL changed.  */
+
 static bool
 flush_region (basic_block bb, std::vector<gcall *> &ops)
 {
@@ -949,6 +991,12 @@ flush_region (basic_block bb, std::vector<gcall *> &ops)
   ops.clear ();
   return changed;
 }
+
+/* Walk FN's straight-line CC-free blocks, accumulating maximal runs
+   of schedulable calls (debug statements and constant-LREG reads are
+   transparent; any other statement ends the region) and analyzing
+   each run as one scheduling region.  Returns whether any region was
+   rescheduled.  */
 
 static bool
 analyze_function (function *fn)
@@ -1050,7 +1098,10 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat, just before RTL
+   expansion and after the Dst interleaver.  */
 
 gimple_opt_pass *
 make_pass_rvtt_lp_schedule (gcc::context *ctxt)

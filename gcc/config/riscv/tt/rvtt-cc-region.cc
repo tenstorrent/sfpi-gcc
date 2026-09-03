@@ -79,12 +79,22 @@ enum stmt_cc_kind
   STMT_CC_BREAKER,	/* pushc/popc with nonzero or non-constant arg */
 };
 
+/* Argument N of CALL as a compile-time integer, or -1 when it is not
+   an INTEGER_CST.  */
+
 static long
 int_arg (const gcall *call, unsigned n)
 {
   tree arg = gimple_call_arg (call, n);
   return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
 }
+
+/* Classify STMT into the structural CC vocabulary (stmt_cc_kind).
+   Only sfppushc/sfppopc with a constant-0 argument are structural
+   open/close words (any other argument is a BREAKER); the REFINE list
+   is exactly the positive vocabulary the shape matchers trust; raw
+   asm and calls with unseen bodies are OPAQUE; any other CC-setting
+   rvtt call is OTHER.  */
 
 static stmt_cc_kind
 classify_stmt (gimple *stmt)
@@ -186,7 +196,11 @@ struct bb_state
   basic_block drain_pred;
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* See rvtt-cc-region.h: runs the full build over FN's current IL
+   immediately; queries stay valid until the IL mutates (then use
+   rebuild).  */
 
 rvtt_cc_region_tree::rvtt_cc_region_tree (function *fn)
   : m_fn (fn), m_root (nullptr), m_map (nullptr), m_opened (nullptr)
@@ -194,10 +208,15 @@ rvtt_cc_region_tree::rvtt_cc_region_tree (function *fn)
   build ();
 }
 
+/* Frees the region nodes and hash maps the tree owns.  */
+
 rvtt_cc_region_tree::~rvtt_cc_region_tree ()
 {
   clear ();
 }
+
+/* Release the owned region nodes and both statement maps, returning
+   the tree to the empty state build starts from.  */
 
 void
 rvtt_cc_region_tree::clear ()
@@ -211,6 +230,10 @@ rvtt_cc_region_tree::clear ()
   m_opened = nullptr;
   m_root = nullptr;
 }
+
+/* See rvtt-cc-region.h: discard every node and mapping and re-derive
+   the tree from the current (possibly mutated) IL.  All region
+   pointers previously handed out are invalidated.  */
 
 void
 rvtt_cc_region_tree::rebuild ()
@@ -237,6 +260,14 @@ mark_stack_unstructured (const vec<rvtt_cc_region *> &stack)
   for (unsigned i = 1; i < stack.length (); i++)
     stack[i]->flags |= RVTT_CCR_UNSTRUCTURED;
 }
+
+/* Construct the region tree over m_fn's current IL: the three phases
+   of the file-header comment (per-block summaries, frame-stack
+   dataflow to a fixpoint with the counted-pop destructor diamond as
+   the one blessed nonlinear form, then per-statement mapping over the
+   proven blocks).  Any structural break marks the open frames
+   unstructured, leaves the affected statements unmapped, and clears
+   m_complete.  */
 
 void
 rvtt_cc_region_tree::build ()
@@ -767,6 +798,9 @@ rvtt_cc_region_tree::build ()
 /* ------------------------------------------------------------------ */
 /* Queries.  */
 
+/* Innermost region containing STMT (see rvtt-cc-region.h); null for a
+   null STMT or one the build never recorded.  */
+
 rvtt_cc_region *
 rvtt_cc_region_tree::region_of (gimple *stmt) const
 {
@@ -775,6 +809,9 @@ rvtt_cc_region_tree::region_of (gimple *stmt) const
   rvtt_cc_region **slot = m_map->get (stmt);
   return slot ? *slot : nullptr;
 }
+
+/* See rvtt-cc-region.h.  A PUSHC the dataflow never reached (broken
+   or unreachable block) has no node and answers null.  */
 
 rvtt_cc_region *
 rvtt_cc_region_tree::region_opened_by (gimple *pushc) const
@@ -785,6 +822,10 @@ rvtt_cc_region_tree::region_opened_by (gimple *pushc) const
   return slot ? *slot : nullptr;
 }
 
+/* See rvtt-cc-region.h.  Walks R and its ancestors for the
+   UNSTRUCTURED flag.  Note a null R answers true vacuously: callers
+   must pass a region obtained from a mapping query.  */
+
 bool
 rvtt_cc_region_tree::structured_p (const rvtt_cc_region *r) const
 {
@@ -794,6 +835,9 @@ rvtt_cc_region_tree::structured_p (const rvtt_cc_region *r) const
   return true;
 }
 
+/* See rvtt-cc-region.h.  A and B must both map to the same
+   structurally proven frame; any unmapped statement refuses.  */
+
 bool
 rvtt_cc_region_tree::same_frame_p (gimple *a, gimple *b) const
 {
@@ -802,6 +846,10 @@ rvtt_cc_region_tree::same_frame_p (gimple *a, gimple *b) const
   return ra && ra == rb && structured_p (ra);
 }
 
+/* See rvtt-cc-region.h.  Both statements must be mapped; the
+   structure check runs from INNER's frame, which covers OUTER's frame
+   as its parent.  */
+
 bool
 rvtt_cc_region_tree::parent_frame_p (gimple *outer, gimple *inner) const
 {
@@ -809,6 +857,9 @@ rvtt_cc_region_tree::parent_frame_p (gimple *outer, gimple *inner) const
   rvtt_cc_region *ri = region_of (inner);
   return ro && ri && ri->parent == ro && structured_p (ri);
 }
+
+/* See rvtt-cc-region.h.  A linear scan of R's recorded exit list; a
+   null POPC or R refuses.  */
 
 bool
 rvtt_cc_region_tree::closes_frame_p (gimple *popc,
@@ -822,6 +873,10 @@ rvtt_cc_region_tree::closes_frame_p (gimple *popc,
   return false;
 }
 
+/* See rvtt-cc-region.h.  Checks R's self-only poison bits (not the
+   subtree fold) plus structure over R and its ancestors; a null R
+   refuses.  */
+
 bool
 rvtt_cc_region_tree::refinements_pure_p (const rvtt_cc_region *r) const
 {
@@ -829,6 +884,10 @@ rvtt_cc_region_tree::refinements_pure_p (const rvtt_cc_region *r) const
     && !(r->flags
 	 & (RVTT_CCR_ENCC | RVTT_CCR_VOCAB_EXTERNAL | RVTT_CCR_OPAQUE));
 }
+
+/* See rvtt-cc-region.h.  Subtree semantics: folds subtree_flags in,
+   so poison anywhere below R answers true; a null R counts as
+   poisoned (fail-closed).  */
 
 bool
 rvtt_cc_region_tree::poisoned_p (const rvtt_cc_region *r) const
@@ -839,11 +898,17 @@ rvtt_cc_region_tree::poisoned_p (const rvtt_cc_region *r) const
 	  & (RVTT_CCR_ENCC | RVTT_CCR_VOCAB_EXTERNAL | RVTT_CCR_OPAQUE)) != 0;
 }
 
+/* See rvtt-cc-region.h.  A self-only fact: all-lanes SFPENCCs in
+   descendant frames are not folded in; a null R refuses.  */
+
 bool
 rvtt_cc_region_tree::region_all_lanes_p (const rvtt_cc_region *r) const
 {
   return r && (r->flags & RVTT_CCR_ALL_LANES) != 0;
 }
+
+/* See rvtt-cc-region.h.  R must be a region of this tree: unlike the
+   statement-keyed queries there is no null tolerance here.  */
 
 const vec<gimple *> &
 rvtt_cc_region_tree::refinement_chain (const rvtt_cc_region *r) const
@@ -972,6 +1037,9 @@ enum cc_kill_class
   CC_KILL_DIRTY
 };
 
+/* Classify BB per the scheme above: walk the block's statements in
+   order so that the LAST CC-relevant event decides the verdict.  */
+
 static cc_kill_class
 classify_cc_kill_block (basic_block bb)
 {
@@ -1014,6 +1082,12 @@ classify_cc_kill_block (basic_block bb)
     }
   return cls;
 }
+
+/* Backward-walk core of edge_entry_all_lanes_p: true when every
+   backward CFG path from BB's entry reaches the function entry (the
+   all-lanes ambient axiom) or a KILLS block (one whose last
+   CC-relevant event re-establishes all-lanes) before any DIRTY
+   block.  Fail-closed: a single reachable DIRTY block refuses.  */
 
 bool
 rvtt_cc_region_tree::block_entry_all_lanes_p (basic_block bb) const

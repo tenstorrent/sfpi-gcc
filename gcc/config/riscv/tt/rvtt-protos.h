@@ -45,7 +45,7 @@ extern void rvtt_merge_lv_src (rtx *lv, rtx *src);
 
 extern void rvtt_substitute_value (tree orig, tree replacement);
 
-// Instruction synthesis
+/* Instruction synthesis */
 class rvtt_synth
 {
  private:
@@ -56,26 +56,26 @@ class rvtt_synth
 
  public:
   enum RVTT_SYNTH_OFFSETS {
-    IX_mem,     // Memory operand (or zero)
-    IX_opcode,  // Opcode (or zero)
-    IX_encode,  // Encoded ID & src/dst shifts (or zero)
-    IX_insn,    // Instruction or immediate
-    IX_src,     // Src value (or noval)
-    IX_lv,      // Live value (if inside SET)
+    IX_mem,     /* Memory operand (or zero) */
+    IX_opcode,  /* Opcode (or zero) */
+    IX_encode,  /* Encoded ID & src/dst shifts (or zero) */
+    IX_insn,    /* Instruction or immediate */
+    IX_src,     /* Src value (or noval) */
+    IX_lv,      /* Live value (if inside SET) */
   };
 
  public:
   rvtt_synth (unsigned HOST_WIDE_INT val)
     : encode (unsigned (val)) {}
 
-  // Extract encode
+  /* Extract encode */
   operator int () const { return encode; }
 
-  // Generate pattern
+  /* Generate pattern */
   static const char *pattern (unsigned is_synthed, const char *tmpl,
 			      rtx operands[], bool is_set, int IX_tmp = -1);
 
-  // accessors
+  /* accessors */
   unsigned id () const {
     return encode & ((1u << ID_BITS) - 1u);
   }
@@ -88,7 +88,7 @@ class rvtt_synth
       & ((1u << REG_SHIFT_BITS) - 1u);
   }
 
-  // setters
+  /* setters */
   auto &dst_shift (unsigned shift) {
     encode |= shift << ID_BITS;
     return *this;
@@ -102,8 +102,9 @@ class rvtt_synth
 extern void rvtt_emit_sfpxfcmps (rtx v1, rtx f, rtx mod);
 extern void rvtt_emit_sfpxfcmpv (rtx v1, rtx v2, rtx mod);
 extern void rvtt_emit_sfpxloadi (rtx dst, rtx lv, rtx imm);
-extern void rvtt_emit_sfpxiadd_i(rtx dst, rtx lv, rtx addr, rtx src, rtx imm, rtx mod, bool dst_used = false);
-extern void rvtt_emit_sfpxiadd_v(rtx dst, rtx srcb, rtx srca, rtx mod);
+extern void rvtt_emit_sfpxiadd_i (rtx dst, rtx lv, rtx addr, rtx src,
+				  rtx imm, rtx mod, bool dst_used = false);
+extern void rvtt_emit_sfpxiadd_v (rtx dst, rtx srcb, rtx srca, rtx mod);
 
 /* The reassociation license key (owner ratification 2026-08-21): true
    only when BOTH -fassociative-math (the generic opt-in to
@@ -115,7 +116,7 @@ extern bool rvtt_reassoc_fp_licensed_p (void);
 extern bool rvtt_l1_load_p (rtx pat);
 extern bool rvtt_reg_load_p (rtx pat);
 
-// Gimple passes
+/* Gimple passes */
 class gimple_opt_pass;
 extern gimple_opt_pass *make_pass_rvtt_attrib (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_cc (gcc::context *ctxt);
@@ -204,7 +205,7 @@ extern bool rvtt_dst_autoincr_hoist_capture_composition_p
    static operand is authoritative.  */
 extern bool rvtt_dst_autoincr_carried_access_p (rtx_insn *insn);
 
-// RTL passes
+/* RTL passes */
 class rtl_opt_pass;
 extern rtl_opt_pass *make_pass_rvtt_dst_autoincr (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_dst_ownership (gcc::context *ctxt);
@@ -246,14 +247,14 @@ extern rtl_opt_pass *make_pass_rvtt_synth_opcode (gcc::context *ctxt);
 extern rtl_opt_pass *make_pass_rvtt_unspec_prop_rtl (gcc::context *ctxt);
 
 constexpr unsigned int SFPMAD_MOD1_OFFSET_NONE = 0;
-// A * B + C
-constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; // negate A operand
-constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; // negate C operand
+/* A * B + C */
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_A = 1; /* negate A operand */
+constexpr unsigned int SFPMAD_MOD1_BH_COMPL_C = 2; /* negate C operand */
 
 constexpr unsigned int SFPMOV_MOD1_NONE = 0;
-constexpr unsigned int SFPMOV_MOD1_COMPL = 1; // negate
-constexpr unsigned int SFPMOV_MOD1_ALL = 2; // copy all lanes
-constexpr unsigned int SFPMOV_MOD1_CFG = 8; // read cfg register
+constexpr unsigned int SFPMOV_MOD1_COMPL = 1; /* negate */
+constexpr unsigned int SFPMOV_MOD1_ALL = 2; /* copy all lanes */
+constexpr unsigned int SFPMOV_MOD1_CFG = 8; /* read cfg register */
 
 constexpr unsigned int SFPLOADI_MOD0_FLOATB = 0;
 constexpr unsigned int SFPLOADI_MOD0_FLOATA = 1;
@@ -283,10 +284,12 @@ constexpr unsigned int SFPSETCC_MOD1_LREG_GTE0 = 4;
 constexpr unsigned int SFPSETCC_MOD1_LREG_EQ0 = 6;
 constexpr unsigned int SFPSETCC_MOD1_COMP = 8;
 
-// EU: enable unmodified, EC: complement, EI: immediate
-// R1: result set, RI: immediate
-constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   // Imm value to clear both enable/result
-constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      // Imm value to set both enable/result
+/* EU: enable unmodified, EC: complement, EI: immediate
+   R1: result set, RI: immediate */
+constexpr unsigned int SFPENCC_IMM12_NEITHER = 0;   /* Imm value to clear
+						       both enable/result */
+constexpr unsigned int SFPENCC_IMM12_BOTH = 3;      /* Imm value to set
+						       both enable/result */
 
 constexpr unsigned int SFPENCC_MOD1_EU_R1 = 0;
 constexpr unsigned int SFPENCC_MOD1_EC_R1 = 1;
@@ -304,7 +307,7 @@ constexpr unsigned int SFPAND_MOD1_USE_VB = 1;
 
 constexpr unsigned int SFPOR_MOD1_USE_VB = 1;
 
-// sfpxor does not have USE_VB option
+/* sfpxor does not have USE_VB option */
 
 constexpr unsigned int SFPLZ_MOD1_CC_NONE = 0;
 constexpr unsigned int SFPLZ_MOD1_CC_NE0 = 2;
@@ -318,7 +321,7 @@ constexpr unsigned int SFPLZ_MOD1_NOSGN_CC_EQ0 = 14;
 
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNE = 0;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_FP32_RNS = 1;
-// Added in BlackHole:
+/* Added in BlackHole: */
 constexpr unsigned int SFPCAST_MOD1_SM32_TO_INT32 = 2;
 constexpr unsigned int SFPCAST_MOD1_INT32_TO_SM32 = 3;
 
@@ -334,7 +337,7 @@ constexpr unsigned int SFPSTOCHRND_MOD1_INT32_TO_INT8 = 5;
 constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_UINT16 = 6;
 constexpr unsigned int SFPSTOCHRND_MOD1_FP32_TO_INT16 = 7;
 constexpr unsigned int SFPSTOCHRND_MOD1_CONV_MASK = 7;
-constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; // only on INT32 src
+constexpr unsigned int SFPSTOCHRND_MOD1_IMM8 = 8; /* only on INT32 src */
 
 constexpr unsigned int SFPXCMP_MOD1_CC_LT = 0;
 constexpr unsigned int SFPXCMP_MOD1_CC_GE = 1;
@@ -379,7 +382,7 @@ constexpr unsigned int SFPXCONDI_TREE_ARG_POS = 0;
 
 constexpr unsigned int SFPSHFT_MOD1_SHFT_IMM = 1;
 constexpr unsigned int SFPSHFT_MOD1_SHFT_REG = 0;
-// Added in BlackHole
+/* Added in BlackHole */
 constexpr unsigned int SFPSHFT_MOD1_LOGICAL = 0;
 constexpr unsigned int SFPSHFT_MOD1_ARITHMETIC = 2;
 constexpr unsigned int SFPSHFT_MOD1_SRC_LREG_C = 4;
@@ -398,8 +401,8 @@ constexpr unsigned SFPGTLE_MOD1_OR_TOS = 0;
 constexpr unsigned SFPGTLE_MOD1_AND_TOS = 4;
 constexpr unsigned SFPGTLE_MOD1_SET_DEST = 8;
 
-// SFPARECIP (BH) Mod1 values, transcribed from the ISA functional model
-// (tt-isa-documentation BlackholeA0 SFPARECIP.md supporting definitions).
+/* SFPARECIP (BH) Mod1 values, transcribed from the ISA functional model
+   (tt-isa-documentation BlackholeA0 SFPARECIP.md supporting definitions).  */
 constexpr unsigned SFPARECIP_MOD1_RECIP = 0;
 constexpr unsigned SFPARECIP_MOD1_COND_RECIP = 1;
 constexpr unsigned SFPARECIP_MOD1_EXP = 2;

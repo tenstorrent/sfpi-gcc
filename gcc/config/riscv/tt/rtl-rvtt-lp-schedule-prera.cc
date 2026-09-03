@@ -145,6 +145,9 @@ vec_unit_p (unsigned regno)
     && GET_MODE (regno_reg_rtx[regno]) == XTT32SImode;
 }
 
+/* Number of XTT32SI allocation units set in the LIVE register bitmap
+   -- the unit in which all region pressure samples are taken.  */
+
 static unsigned
 count_vec_units (bitmap live)
 {
@@ -426,6 +429,9 @@ struct pressure_ctx
   std::vector<unsigned> live_after;
   std::vector<std::pair<unsigned, int>> use_count;
 };
+
+/* Address of REGNO's member-read counter in CTX's USE_COUNT table, or
+   null when no region member reading REGNO has been recorded yet.  */
 
 static int *
 ctx_use_slot (pressure_ctx &ctx, unsigned regno)
@@ -849,6 +855,11 @@ prera_entry_producer (basic_block bb, rtx_insn *first)
   return nullptr;
 }
 
+/* Mirror of prera_entry_producer in the exit direction: the first
+   issued Tensix insn following AFTER in BB, or null when an
+   unrecognized insn intervenes (fail closed) or none exists.  Gives
+   the region's downstream timing anchor.  */
+
 static rtx_insn *
 prera_exit_consumer (basic_block bb, rtx_insn *after)
 {
@@ -1158,6 +1169,13 @@ struct prera_region
   std::vector<int> signature;	/* insn codes, for the repeat deferral */
 };
 
+/* Pass driver over FN.  Per block: collect maximal admissible regions
+   (each barrier flushes the current region; a replay-capture owner ends
+   collection for the rest of the block; regions below three nodes are
+   skipped), then defer repeated region shapes by name and hand the
+   survivors to prera_schedule_region.  Self-loop blocks defer whole,
+   and targets without audited latency facts refuse up front.  */
+
 static void
 prera_schedule_function (function *fn)
 {
@@ -1329,7 +1347,12 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pre-allocation pressure scheduling pass for CTXT;
+   rvtt-passes.def places it before ira (ahead of the lreg-livein and
+   lp-alloc passes it feeds), and it gates on optimization plus
+   -mtt-tensix-optimize-pressure-schedule-prera.  */
 
 rtl_opt_pass *
 make_pass_rvtt_lp_schedule_prera (gcc::context *ctxt)

@@ -206,7 +206,7 @@ loop_header_has_exit_p (class loop *loop)
   return false;
 }
 
-} // anonymous namespace
+} /* anonymous namespace */
 
 /* BB provably executes on the first iteration of LOOP entered through
    ENTRY (rvtt-macro-ownership.h).  */
@@ -326,6 +326,14 @@ select_pressure_legal (class loop *loop, auto_vec<gcall *> &loads)
     }
   return selected;
 }
+
+/* The cross-loop hoist over FN, innermost loops first: for each loop
+   that ENCLOSES another, collect the qualifying constant
+   materializations sitting in its direct body blocks proven to
+   execute on first entry, prove the crossed region audited-inert and
+   the preheader insertable, filter by the loop pressure profile, and
+   move the survivors to the (only now split) preheader.  Returns
+   whether the IL changed.  */
 
 static bool
 transform (function *fn)
@@ -511,7 +519,11 @@ public:
   }
 };
 
-} // anonymous namespace
+} /* anonymous namespace */
+
+/* Instantiate the pass for its rvtt-passes.def seat: after the
+   cross-call hoist has settled contract placements and before
+   pass_rvtt_expand lowers the canonical builtin forms.  */
 
 gimple_opt_pass *
 make_pass_rvtt_crossloop (gcc::context *ctxt)

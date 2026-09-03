@@ -32,6 +32,9 @@ using namespace rvtt_macro_sched;
 
 static int checks, failures;
 
+/* Count a check; when OK is false, count a failure and report it to
+   stderr labeled WHAT.  */
+
 static void
 check (bool ok, const char *what)
 {
@@ -42,6 +45,12 @@ check (bool ok, const char *what)
       std::fprintf (stderr, "FAIL: %s\n", what);
     }
 }
+
+/* Exercise each constraint checker on synthetic event sets: subunit
+   occupancy (one event per subunit per slot, unknown delays refuse),
+   write-port sharing (Simple/Round shared port, MAD-port borrows, the
+   per-slot write budget, port-less stores), dependency latency
+   ordering, and drain measurement.  Exits nonzero on any failure.  */
 
 int
 main ()
