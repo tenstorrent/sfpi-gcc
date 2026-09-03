@@ -7,7 +7,11 @@
    lifetimes are temporally disjoint from the colliding chain's span:
    the late pair (RENT_Y/RENT_Z) is materialized only AFTER the
    colliding chain closes, opening with a fresh all-write definition,
-   which is exactly the temporal tier's admission shape.  */
+   which is exactly the temporal tier's admission shape.  Admission is
+   no longer acceptance: under the strict-gain pricing the candidate
+   must also buy modeled issue slots, which no temporal rename can
+   (the engine's pricing note), so the flag-on twin now pins the
+   regrename-temporal-no-modeled-gain refusal instead of a fire.  */
 void RENT_FN ()
 {
   auto k1 = __builtin_rvtt_sfpreadlreg (0);
