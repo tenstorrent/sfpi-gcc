@@ -1894,8 +1894,16 @@ crp_mve_expand_arm (basic_block bb, std::vector<ls_node> &all,
 	    if (!free_across)
 	      continue;
 	    rvtt_lreg_rename_web web;
+	    /* SHAPE_OWNED: this realization replaces the row's schedule
+	       under its own strict acceptance (realized II below both
+	       the greedy candidate and the baseline), preserves the
+	       counted replay-capture shape explicitly, and undoes the
+	       webs exactly on any refusal -- the temporal borrow's
+	       externalities are internalized here, so the tier's
+	       default self-pricing is waived (rvtt-protos.h).  */
 	    if (!rvtt_lreg_rename_chain (bb, all[n + k].insn,
-					 (int) (t - SFPU_REG_FIRST), &web))
+					 (int) (t - SFPU_REG_FIRST), &web,
+					 RVTT_RENAME_SHAPE_OWNED))
 	      continue;		/* refused by name in the service; the
 				   next slot-free target may prove */
 	    webs.push_back (web);
