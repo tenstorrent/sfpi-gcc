@@ -1206,6 +1206,9 @@ RVTT_REFUSAL (REGRENAME_LIVENESS_UNTRUSTED,
 RVTT_REFUSAL (REGRENAME_NO_FREE_LREG,
   "regrename-no-free-lreg",
   "rename: no architectural LREG is untouched in the block and dead across it (rtl-rvtt-lreg-rename.cc)")
+RVTT_REFUSAL (REGRENAME_PERIODIC_WINDOW,
+  "regrename-periodic-window",
+  "standalone rename mode: the chain's edited window sits inside a repeated delivered-word window (the Tensix word sequence from the writer through the last position the commit would rewrite occurs a second time in the block) -- the repetition is the downstream replay recorder's currency, a uniform rename of every repetition is structurally impossible under whole-block-free target selection, and a partial rename makes byte-identical copies diverge and splits the recording (demonstrated +0.93% kernel-cycle regression for renames the span slot model priced neutral); the consumer service path is exempt (consumers price and undo) (rtl-rvtt-lreg-rename.cc)")
 RVTT_REFUSAL (REGRENAME_PINNED_PROTOCOL,
   "regrename-pinned-protocol",
   "rename: the chain register is part of a pinned fixed-LREG interface (zero-length protocol marker or non-effect-audited pattern reference) (rtl-rvtt-lreg-rename.cc)")
