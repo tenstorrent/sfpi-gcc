@@ -243,7 +243,7 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
     {
       // Code to figure calculate_xielu problem
       // C) xcmp (var, -0.5f, GT)
-      if (op == SFPXCMP_MOD1_CC_GT && args[1].is_zero ()) {
+      if (false && op == SFPXCMP_MOD1_CC_GT && args[1].is_zero ()) {
 	// A) xcmp (var, 0, GT)
 	return expand_cmp_using_sub (right, cmp, args, op, type);
       }
@@ -251,7 +251,7 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
 	// B) xcmp (var, reg13, GE)
 	return expand_cmp_using_sub (right, cmp, args, op, type);
       }
-      else if (false && op == SFPXCMP_MOD1_CC_GT) {
+      else if (op == SFPXCMP_MOD1_CC_GT && !args[1].is_zero ()) {
 	// C) xcmp (var, -0.5f, GT)
 	return expand_cmp_using_sub (right, cmp, args, op, type);
       }
