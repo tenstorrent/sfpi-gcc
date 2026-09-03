@@ -10734,6 +10734,19 @@ riscv_override_options_internal (struct gcc_options *opts)
     error ("%<-mtt-optimize-hll%> was removed with the retired "
 	   "high-latency-load pass");
 
+  /* The Tensix instruction-combine flag was a dead knob: its variable had
+     no consumer, so both the enable and the -mno- form silently did
+     nothing.  It now errors rather than mislead.  */
+  if (opts->x_riscv_tt_opt_combine != -1)
+    error ("%<-mtt-tensix-optimize-combine%> was removed; it had no effect");
+
+  /* -mtt-tensix-optimize-lp-schedule was a historical alias with no
+     in-tree or external consumer; it now errors rather than silently
+     forward to the pressure scheduler.  */
+  if (opts->x_riscv_tt_opt_lp_schedule != -1)
+    error ("%<-mtt-tensix-optimize-lp-schedule%> was removed; use "
+	   "%<-mtt-tensix-optimize-pressure-schedule%>");
+
   if (auto cpu = opts->x_riscv_cpu_string)
     {
       // TT cpu implications
