@@ -81,7 +81,41 @@ along with GCC; see the file COPYING3.  If not see
      renames storage-collision chains greedily under a whole-row
      no-worse acceptance through the shared timing engine
      (rvtt_timing::interlock_sim), under the strict-acceptance
-     discipline (nothing unpriceable is ever accepted);
+     discipline (nothing unpriceable is ever accepted), and under the
+     PERIODIC-WINDOW guard (below) -- a repeated delivered-word window
+     is downstream replay currency the greedy sweep must not spend;
+
+   Periodic-window guard (standalone mode only; the demonstrated
+   rotate90 regression).  A fully unrolled loop leaves a block that is
+   k identical repetitions of one delivered-word body, and the
+   allocator's first-fit reuse packs each repetition's short lifetimes
+   into the SAME registers -- so every repetition boundary is a
+   storage collision, exactly the shape the greedy sweep chases.  But
+   those repetitions are what the downstream replay recorder monetizes
+   (one recorded window replayed k-1 times).  Renaming is guaranteed to
+   destroy that: the whole-block-free tier proves a target UNTOUCHED
+   ACROSS THE BLOCK, so once one repetition's chain takes a target no
+   other repetition can ever take the same one -- a uniform rename of
+   all k copies is structurally impossible, and a partial rename makes
+   previously byte-identical copies diverge.  Demonstrated on hardware:
+   a 16-repetition block whose 6 free LREGs were spent renaming
+   repetitions 1-2 (42 no-free-lreg refusals for the rest) split the
+   single replay recording into two, one extra record-execute per call
+   in place of a one-word replay (+5 text words, +0.93% kernel cycles),
+   while the renames bought nothing (the span slot model priced them
+   NEUTRAL -- they reordered no instruction).  The guard refuses, by
+   the name regrename-periodic-window, any standalone-mode chain whose
+   EDITED window's Tensix word sequence -- writer through the last
+   position the commit would rewrite; not the full span, whose kill
+   close is often the NEXT repetition's first word and whose
+   dead-at-exit tail is often unique block-end code -- occurs a second
+   time in the block's Tensix stream (INSN_CODE plus delivered-word
+   pattern equality -- rtx_equal_p widened so same-mode scratch
+   clobbers, which emit no word, compare equal).  The SERVICE path is
+   deliberately exempt: a consumer prices its own downstream benefit
+   against a realized schedule and undoes refused webs exactly, and the
+   ON-set consumers (MVE expand, IMS) must keep their committed webs
+   byte-for-byte;
    - the service export: rvtt_lreg_rename_chain (bb, def_insn,
      target) carries the complete legality proof and the post-commit
      re-verification, so the fill/rotation/IMS consumers can request
@@ -1204,6 +1238,147 @@ span_no_worse_p (const chain_desc &ch)
   return true;
 }
 
+/* Periodic-window guard for the standalone pass mode (see the file
+   header).  True iff the chain's EDITED window sits inside a repeated
+   delivered-word window: the Tensix word sequence from the writer
+   through the last position the commit would edit (the last reader,
+   or the close when the close's clean OP_IN reads move too) occurs a
+   second time in the block's Tensix stream.  The edited window -- not
+   the full span to the close -- is the honest currency: a chain whose
+   kill close is the NEXT repetition's first word, or whose
+   dead-at-exit span trails into unique block-end code, still rewrites
+   only the repeated body words, and any full-span repetition implies
+   an edited-window repetition (the edited window is a prefix), so
+   this choice strictly widens the refusal.  Word equality is
+   INSN_CODE plus delivered_pattern_equal_p below: post-RA, equal
+   patterns deliver equal words.  The comparison walks only SI_TENSIX members
+   (the replay recorder's currency is the launched Tensix word stream;
+   interleaved scalar instructions do not enter a recording), and a
+   second occurrence may overlap the window (an overlapping self-match
+   is a period shorter than the window -- still a repetition).
+   Single-word windows are never classified periodic (a lone recurring
+   word is not a window).  */
+
+/* Delivered-word pattern equality for the periodic-window guard:
+   rtx_equal_p with one deliberate widening -- two SCRATCH rtxes of the
+   same mode compare EQUAL.  rtx_equal_p hard-wires SCRATCH to false
+   (each scratch is a unique object), but a post-RA scratch clobber
+   emits no delivered word, and the Tensix load/store patterns all
+   carry one -- under rtx_equal_p no two loads ever compare equal and
+   the guard would be structurally blind to exactly the load/store
+   iteration bodies it exists for (the demonstrated rotate90 shape).
+   Everything else matches rtx_equal_p's discipline: registers by
+   number, ints/wide-ints/strings by value, vectors elementwise.  */
+
+static bool
+delivered_pattern_equal_p (const_rtx x, const_rtx y)
+{
+  if (x == y)
+    return true;
+  if (!x || !y)
+    return false;
+  enum rtx_code code = GET_CODE (x);
+  if (code != GET_CODE (y) || GET_MODE (x) != GET_MODE (y))
+    return false;
+  switch (code)
+    {
+    case SCRATCH:
+      return true;
+    case REG:
+      return REGNO (x) == REGNO (y);
+    case LABEL_REF:
+      return label_ref_label (x) == label_ref_label (y);
+    case SYMBOL_REF:
+      return XSTR (x, 0) == XSTR (y, 0);
+    default:
+      break;
+    }
+  const char *fmt = GET_RTX_FORMAT (code);
+  for (int i = GET_RTX_LENGTH (code) - 1; i >= 0; --i)
+    switch (fmt[i])
+      {
+      case 'e':
+	if (!delivered_pattern_equal_p (XEXP (x, i), XEXP (y, i)))
+	  return false;
+	break;
+      case 'E':
+	if (XVECLEN (x, i) != XVECLEN (y, i))
+	  return false;
+	for (int j = XVECLEN (x, i) - 1; j >= 0; --j)
+	  if (!delivered_pattern_equal_p (XVECEXP (x, i, j),
+					  XVECEXP (y, i, j)))
+	    return false;
+	break;
+      case 'i':
+      case 'n':
+	if (XINT (x, i) != XINT (y, i))
+	  return false;
+	break;
+      case 'w':
+	if (XWINT (x, i) != XWINT (y, i))
+	  return false;
+	break;
+      case 's':
+	if (strcmp (XSTR (x, i), XSTR (y, i)) != 0)
+	  return false;
+	break;
+      case '0':
+	break;
+      default:
+	/* An operand kind this comparator does not model: fail closed
+	   to inequality (the guard then sees no repetition, which only
+	   forgoes a refusal of the rename, never soundness).  */
+	return false;
+      }
+  return true;
+}
+
+static bool
+chain_in_periodic_window_p (const chain_desc &ch)
+{
+  /* Last position the commit would edit.  */
+  size_t edit_end = ch.wi;
+  if (!ch.readers.empty ())
+    edit_end = ch.readers.back ();
+  if (ch.close_reads && ch.close != ch.scan.size () && ch.close > edit_end)
+    edit_end = ch.close;
+  /* The block's Tensix members in delivery order, with the edited
+     window's first and last member located in that stream.  */
+  std::vector<size_t> tensix;
+  size_t s0 = SIZE_MAX, send = SIZE_MAX;
+  for (size_t i = 0; i < ch.scan.size (); ++i)
+    if (ch.scan[i].kind == span_insn::SI_TENSIX)
+      {
+	if (i == ch.wi)
+	  s0 = tensix.size ();
+	if (i >= ch.wi && i <= edit_end)
+	  send = tensix.size ();
+	tensix.push_back (i);
+      }
+  gcc_assert (s0 != SIZE_MAX && send != SIZE_MAX && send >= s0);
+  size_t len = send - s0 + 1;
+  if (len < 2)
+    return false;
+  auto same_word = [&] (size_t a, size_t b)
+    {
+      rtx_insn *x = ch.scan[tensix[a]].insn;
+      rtx_insn *y = ch.scan[tensix[b]].insn;
+      return INSN_CODE (x) == INSN_CODE (y)
+	     && delivered_pattern_equal_p (PATTERN (x), PATTERN (y));
+    };
+  for (size_t t = 0; t + len <= tensix.size (); ++t)
+    {
+      if (t == s0)
+	continue;
+      bool match = true;
+      for (size_t k = 0; k < len && match; ++k)
+	match = same_word (t + k, s0 + k);
+      if (match)
+	return true;
+    }
+  return false;
+}
+
 /* Commit CH: move the def-use web from OLD_L to NEW_L, then re-prove
    the chain shape on the ACTUAL committed stream (the final-lockstep
    discipline; see the file header).  Any divergence
@@ -1649,6 +1824,17 @@ public:
 		    if (phase == 0
 			&& (ch.close == ch.scan.size () || ch.close_reads))
 		      continue;
+		    /* Standalone-mode periodic-window guard (see the
+		       file header): never spend the block's
+		       repetitions -- the replay recorder's currency --
+		       on a greedy rename.  The service path is exempt
+		       (consumers price and undo).  */
+		    if (chain_in_periodic_window_p (ch))
+		      {
+			refuse_chain ("regrename-periodic-window",
+				      scan[i].insn, bb);
+			continue;
+		      }
 		    if (!span_no_worse_p (ch))
 		      continue;
 		    if (commit_chain (ch))
