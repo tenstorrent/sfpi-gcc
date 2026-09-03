@@ -251,7 +251,7 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
 	// B) xcmp (var, reg13, GE)
 	return expand_cmp_using_sub (right, cmp, args, op, type);
       }
-      else if (op == SFPXCMP_MOD1_CC_GT) {
+      else if (false && op == SFPXCMP_MOD1_CC_GT) {
 	// C) xcmp (var, -0.5f, GT)
 	return expand_cmp_using_sub (right, cmp, args, op, type);
       }
