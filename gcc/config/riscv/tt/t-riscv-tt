@@ -101,6 +101,12 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
+	rtl-rvtt-sched-fill.o \
+	rtl-rvtt-sched-interlock.o \
+	rtl-rvtt-sched-region.o \
+	rtl-rvtt-sched-pairing.o \
+	rtl-rvtt-sched-rotation.o \
+	rtl-rvtt-sched-drain.o \
 	rtl-rvtt-spill-diag.o \
 	rtl-rvtt-synth.o \
 	rtl-rvtt-unspec.o \
