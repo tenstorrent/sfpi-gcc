@@ -884,30 +884,21 @@ merge_rename_shape_p (gcall *load, FILE *stream,
   *value_out = (TREE_INT_CST_LOW (gimple_call_arg (load, 2)) & 0xffff) << 16;
   return true;
 }
+/* LOOP class candidate discovery: collect the loop-class,
+   MAD-pair, hoisted-reuse and merge-rename candidates of FN's loops
+   into LOOP_CANDS, MADPAIR_CANDS, HOISTREUSE_CANDS and MERGE_CANDS
+   (MADPAIR_GROUP numbers the pair groups; TAKEN marks claimed
+   statements).  Carved verbatim from residency_transform.  */
 
-/* The constant-residency stage of the pass: collect hoist candidates
-   over FN by class (loop-invariant constant loads, pressure-bounded
-   block candidates, MAD-pair and hoist-reuse groups, and merge-rename
-   chains), prove each class's legality conditions, and commit the
-   winners.  ST carries the pass-wide statement state.  Returns true
-   iff any statement changed.  */
-
-bool
-residency_transform (function *fn, prgm_state *st)
+static void
+residency_collect_loop_class (function *fn,
+			      auto_vec<residency_candidate> &loop_cands,
+			      auto_vec<residency_candidate> &madpair_cands,
+			      auto_vec<residency_candidate> &hoistreuse_cands,
+			      auto_vec<merge_rename_cand> &merge_cands,
+			      unsigned &madpair_group,
+			      hash_set<gimple *> &taken)
 {
-  if (!dom_info_available_p (CDI_DOMINATORS))
-    calculate_dominance_info (CDI_DOMINATORS);
-
-  auto_vec<residency_candidate> loop_cands;
-  auto_vec<residency_candidate> pressure_cands;
-  auto_vec<residency_candidate> madpair_cands;
-  auto_vec<residency_candidate> hoistreuse_cands;
-  auto_vec<merge_rename_cand> merge_cands;
-  unsigned madpair_group = 0;
-  hash_set<int_hash<unsigned, 0> > invalid_madpair_groups;
-  hash_set<gimple *> taken;
-
-  /* LOOP class.  */
   for (class loop *loop : loops_list (fn, LI_FROM_INNERMOST))
     {
       if (!loop->num)
@@ -1711,8 +1702,18 @@ residency_transform (function *fn, prgm_state *st)
 	  taken.add (c.load);
 	}
     }
+}
 
-  /* PRESSURE class: only when the model exceeds the LREG file.  */
+/* PRESSURE class candidate discovery: when the pressure model
+   exceeds the LREG file, collect FN's pressure-class candidates into
+   PRESSURE_CANDS (TAKEN marks claimed statements).  Carved verbatim
+   from residency_transform.  */
+
+static void
+residency_collect_pressure_class (function *fn,
+				  auto_vec<residency_candidate> &pressure_cands,
+				  hash_set<gimple *> &taken)
+{
   {
     const unsigned capacity = rvtt_pressure_capacity ();
     rvtt_pressure_model model;
@@ -1767,6 +1768,38 @@ residency_transform (function *fn, prgm_state *st)
       fprintf (dump_file, "const-residency: pressure %u within the %u-LREG "
 	       "file; pressure class idle\n", model.peak, capacity);
   }
+}
+
+
+/* The constant-residency stage of the pass: collect hoist candidates
+   over FN by class (loop-invariant constant loads, pressure-bounded
+   block candidates, MAD-pair and hoist-reuse groups, and merge-rename
+   chains), prove each class's legality conditions, and commit the
+   winners.  ST carries the pass-wide statement state.  Returns true
+   iff any statement changed.  */
+
+bool
+residency_transform (function *fn, prgm_state *st)
+{
+  if (!dom_info_available_p (CDI_DOMINATORS))
+    calculate_dominance_info (CDI_DOMINATORS);
+
+  auto_vec<residency_candidate> loop_cands;
+  auto_vec<residency_candidate> pressure_cands;
+  auto_vec<residency_candidate> madpair_cands;
+  auto_vec<residency_candidate> hoistreuse_cands;
+  auto_vec<merge_rename_cand> merge_cands;
+  unsigned madpair_group = 0;
+  hash_set<int_hash<unsigned, 0> > invalid_madpair_groups;
+  hash_set<gimple *> taken;
+
+  /* LOOP class.  */
+  residency_collect_loop_class (fn, loop_cands, madpair_cands,
+				hoistreuse_cands, merge_cands, madpair_group,
+				taken);
+
+  /* PRESSURE class: only when the model exceeds the LREG file.  */
+  residency_collect_pressure_class (fn, pressure_cands, taken);
 
   if (loop_cands.is_empty () && pressure_cands.is_empty ()
       && madpair_cands.is_empty () && hoistreuse_cands.is_empty ()
