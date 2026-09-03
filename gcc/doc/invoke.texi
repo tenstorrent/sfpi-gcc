@@ -32511,10 +32511,21 @@ Extend the renaming engine in two ways.  First, admit temporally scoped
 rename targets: when no register is untouched across the whole block, a
 target is still admissible when it is untouched across the renamed span
 itself and its lifetimes outside the span provably cannot observe the
-renamed value.  Second, let the cyclic-interior scheduler request
-renames for storage collisions before candidate generation, undoing
-every rename exactly when the candidate schedule is not accepted.
-Every unproven clause declines.
+renamed value.  Such a target is priced over a window extended through
+its first touch after the renamed span, and the rename is applied only
+when the timing model shows a strict issue-slot gain: a temporally
+scoped target borrows a register with a live downstream use, and a
+rename that buys nothing would only consume scheduling freedom the
+later fill and replay-formation passes need.  This bar applies both in
+the standalone renaming pass and to temporally scoped targets handed
+out through the rename service, except to a requester that replaces
+the whole row's schedule under its own strict acceptance and preserves
+the counted replay-capture shape (the kernel-unroll realization);
+under the present timing vocabulary no other temporal candidate clears
+the bar, so every one is declined by name.  Second, let the cyclic-interior
+scheduler request renames for storage collisions before candidate
+generation, undoing every rename exactly when the candidate schedule
+is not accepted.  Every unproven clause declines.
 
 @opindex mtt-tensix-optimize-rename-cc-region
 @item -mtt-tensix-optimize-rename-cc-region

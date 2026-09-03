@@ -238,6 +238,75 @@ along with GCC; see the file COPYING3.  If not see
      targets are all block-globally dead, colliding with nothing) and
      still serves such writers when a globally-dead target exists.
 
+   Standalone-mode PRICING of temporal targets (device-diagnosed on the
+   round-6 promotion refusal): a temporal target is not free storage the
+   way a whole-block target is -- it is BORROWED from a register with a
+   live downstream story, and the loan carries two costs the span-scoped
+   no-worse check could not see:
+
+   - span-external coupling: the priced window used to end at the
+     close, but a fresh-definition-arm target is by construction
+     touched again AFTER the close -- the rename couples the chain span
+     to that fresh definition (a new scoreboard dependence) and claims
+     the very register hole between the close and the definition that
+     the downstream interlock-fill pass uses to hide latency (measured:
+     a hot row's fill moves fell from 48 to 16 under the renames, worth
+     +7.1% kernel cycles on silicon).  The temporal priced window
+     therefore extends THROUGH the target's first post-span touch, so
+     the coupling is priced in the row it taxes;
+   - stream-identity externality: replay and MOP formation downstream
+     require textually identical unrolled bodies; a temporal rename
+     that fires in one unrolled body while its congruent siblings
+     refuse (a span-local accident of register history) diverges the
+     bodies and dissolves the replay window (measured: one temporal
+     rename turned 8 replay launches into 0, worth +4.2% kernel cycles
+     on silicon).  No local model can price a window another pass has
+     not yet formed, so the acceptance must demand payment up front:
+     a temporal rename must show a STRICT modeled issue-slot gain over
+     the extended window -- a rename that buys nothing in the model
+     cannot pay for the downstream schedule freedom it consumes.
+     Zero-gain temporal candidates refuse, by name,
+     regrename-temporal-no-modeled-gain.
+
+   Whole-block-free targets keep the plain no-worse acceptance: they
+   collide with nothing, couple to nothing, and their renames are the
+   uniform whole-web moves replay identity survives.  And because the
+   two externalities are properties of the temporal BORROW itself --
+   not of who asked for it -- the temporal tier self-prices in SERVICE
+   mode too: a consumer-requested temporal rename must clear the same
+   strict-gain bar before the consumer's own acceptance even sees it
+   (device-measured: an interior-scheduler request with a modeled
+   row-II win of 2 dissolved its row's 8 replay launches, +4.2% kernel
+   cycles).  One requester class is exempt: a consumer that OWNS the
+   row's delivery shape end to end -- the MVE kernel-unroll
+   realization, which replaces the row's schedule under its own strict
+   acceptance, preserves the counted replay-capture shape explicitly,
+   and undoes its webs exactly -- declares RVTT_RENAME_SHAPE_OWNED
+   (rvtt-protos.h) and internalizes both externalities.  Whole-block
+   service requests stay unpriced -- the requesting consumer prices
+   its own composition (the legality/pricing decoupling).
+
+   Be honest about what the bar admits TODAY: nothing.  Over a window
+   opened at the chain writer with a fresh scoreboard, the two worlds
+   are ISOMORPHIC through the close (the rename is a register bijection
+   with identical latencies; every in-span touch of either register
+   belongs to the web), so their slot counts are equal there, and the
+   only asymmetry -- the world-1 coupling at the target's fresh
+   definition -- can only ADD slots.  slots[1] >= slots[0] identically:
+   every temporal candidate refuses no-modeled-gain or cost-regressed,
+   and the tier is fail-closed in standalone and service mode alike.
+   That is the round-6 device verdict formalized: these renames buy
+   nothing the model can name and carry two measured harms.  The
+   admission stays spelled as PRICING (not a hard-coded refusal)
+   deliberately -- it is the mechanism, and a future dependence
+   vocabulary in which a rename can remove a modeled stall (a
+   backward-extended window pricing an unshadowed WAW against the
+   colliding web's writer, an issue-port contention class, a priced
+   fill-freedom account) re-admits exactly the candidates that pay,
+   with no admission edit.  Until then the temporal tier serves no
+   rename outside the shape-owning MVE realization, and the twins pin
+   the refusal by name.
+
    The post-commit belt generalizes accordingly: target references
    outside the span are recorded before the commit and re-verified
    untouched after it (for a whole-block-free target that record is
@@ -1047,13 +1116,21 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
   return true;
 }
 
-/* Whole-row no-worse acceptance for the standalone pass mode: the
-   modeled interlocked issue-slot count of the span (writer through
-   close inclusive) under the timing engine's scoreboard, before and
-   after the register-field edit.  Returns false (refusing by name) when
-   the span is unpriceable -- an unaudited producer feeding a span
-   consumer; the strict-acceptance discipline prices nothing it
-   cannot prove.  */
+/* Whole-row acceptance for the standalone pass mode: the modeled
+   interlocked issue-slot count of the priced window under the timing
+   engine's scoreboard, before and after the register-field edit.  For
+   a whole-block-free target the window is the span (writer through
+   close inclusive) and the acceptance is no-worse.  For a TEMPORAL
+   target the window extends through the target's first post-span
+   touch -- the fresh definition the rename newly couples to the span
+   -- and the acceptance is a STRICT modeled gain: a temporal target
+   is borrowed from a register with a live downstream story, and a
+   rename that buys no modeled slots cannot pay for the interlock-fill
+   hole it claims or the replay-window identity it risks (the file
+   header's pricing note; both costs device-measured).  Returns false
+   (refusing by name) when the window is unpriceable -- an unaudited
+   producer feeding a priced consumer; the strict-acceptance
+   discipline prices nothing it cannot prove.  */
 
 static bool
 span_no_worse_p (const chain_desc &ch)
@@ -1061,6 +1138,16 @@ span_no_worse_p (const chain_desc &ch)
   uint32_t oldbit = 1u << ch.old_l;
   uint32_t newbit = 1u << ch.new_l;
   size_t end = ch.close == ch.scan.size () ? ch.scan.size () : ch.close + 1;
+  /* The temporal coupling window: through the target's first
+     post-span touch (the admission's fresh-definition arm; the
+     never-touched arm leaves END at the close and the span alone).  */
+  if (ch.temporal && ch.close != ch.scan.size ())
+    for (size_t i = ch.close + 1; i < ch.scan.size (); ++i)
+      if (ch.scan[i].touch & newbit)
+	{
+	  end = i + 1;
+	  break;
+	}
   int64_t slots[2] = { 0, 0 };
   for (int world = 0; world < 2; ++world)
     {
@@ -1101,6 +1188,16 @@ span_no_worse_p (const chain_desc &ch)
   if (slots[1] > slots[0])
     {
       refuse_chain ("regrename-cost-regressed",
+		    ch.scan[ch.wi].insn, ch.bb);
+      return false;
+    }
+  /* Temporal targets must PAY: a zero-gain rename consumes downstream
+     schedule freedom (the fill hole, the replay identity) it cannot
+     repay -- strict gain or nothing (the file header's pricing
+     note).  */
+  if (ch.temporal && slots[1] == slots[0])
+    {
+      refuse_chain ("regrename-temporal-no-modeled-gain",
 		    ch.scan[ch.wi].insn, ch.bb);
       return false;
     }
@@ -1583,8 +1680,12 @@ public:
    DEF_INSN's single-LREG definition inside BB onto TARGET_LREG (an L
    index; -1 = lowest proven-free).  Carries the complete legality
    proof and the post-commit structural re-verification; refuses by
-   name and changes nothing on any unproven clause.  No pricing: the
-   requesting consumer prices (the legality/pricing decoupling).  DF liveness
+   name and changes nothing on any unproven clause.  No pricing for
+   whole-block-free targets: the requesting consumer prices (the
+   legality/pricing decoupling).  A TEMPORAL target, however,
+   self-prices under the strict-gain acceptance even here -- its
+   downstream externalities are the tier's own, invisible to any
+   consumer's acceptance (the file header's pricing note).  DF liveness
    must be current on entry; a committed rename leaves it valid (no
    upward exposure or cross-block extension is ever added).  Returns
    true iff a rename committed.  WEB, when non-null, receives the
@@ -1594,7 +1695,8 @@ public:
 
 bool
 rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg,
-			rvtt_lreg_rename_web *web)
+			rvtt_lreg_rename_web *web,
+			enum rvtt_lreg_rename_pricing pricing)
 {
   std::vector<span_insn> scan;
   scan_block (bb, &scan);
@@ -1615,6 +1717,23 @@ rvtt_lreg_rename_chain (basic_block bb, rtx_insn *def_insn, int target_lreg,
   chain_desc ch;
   if (!analyze_chain (bb, scan, wi, function_has_opaque_insn_p (cfun),
 		      target_lreg, &ch))
+    return false;
+  /* The temporal tier SELF-PRICES in service mode too (the file
+     header's pricing note): the borrow's downstream externalities --
+     the claimed interlock-fill hole, the risked replay-window identity
+     -- are properties of the temporal target itself, not of the
+     requesting consumer, and a consumer's own acceptance (e.g. a
+     modeled row-II decrease) cannot see them (device-measured: a
+     consumer-requested temporal rename with a modeled II win of 2
+     dissolved the row's 8 replay launches and cost +4.2% kernel
+     cycles).  The one exemption is a requester that OWNS the row's
+     delivery shape end to end (RVTT_RENAME_SHAPE_OWNED, the
+     rvtt-protos.h contract): it internalizes both externalities and
+     prices the whole composition itself.  Whole-block-free targets
+     stay unpriced service -- the consumer prices (the legality/pricing
+     decoupling).  */
+  if (ch.temporal && pricing == RVTT_RENAME_PRICE_TEMPORAL
+      && !span_no_worse_p (ch))
     return false;
   return commit_chain (ch, web);
 }
