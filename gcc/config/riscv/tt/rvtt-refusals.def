@@ -138,6 +138,9 @@ RVTT_REFUSAL (CCMASK_COMPARE_FORM,
 RVTT_REFUSAL (CCMASK_COMPARE_KIND_UNSUPPORTED,
   "ccmask-compare-kind-unsupported",
   "reason; first seen in gimple-rvtt-ccmask.cc")
+RVTT_REFUSAL (CCMASK_EQNE_FOLD_UNPROFITABLE,
+  "ccmask-eqne-fold-unprofitable",
+  "the EQ/NE two-compare keep-mask composition prices above the CC skeleton it replaces (rvtt-delivery-cost words; unattested frame words at zero, refusal-biased): the 2^32 equality proof licenses WHAT the composition computes, this priced gate decides WHEN it fires")
 RVTT_REFUSAL (CCMASK_OPERAND_FORM,
   "ccmask-operand-form",
   "reason; first seen in gimple-rvtt-ccmask.cc")

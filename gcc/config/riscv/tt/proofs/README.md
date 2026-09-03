@@ -94,6 +94,11 @@ re-mined.
   -mtt-tensix-optimize-ccmask AND -mtt-tensix-optimize-cc-region-general
   (gimple-rvtt-ccmask.cc); retire those arms if this RESULT ever stops
   being EQUAL.  BH-only (the pass gate is BH).  proved 2026-08-31.
+  The proof settles WHAT only: since 2026-09-03 the arms also pass a
+  delivery-cost WHEN-gate (eqne_fold_priced_profitable_p, refusal
+  ccmask-eqne-fold-unprofitable) after device round 6 measured the
+  unpriced compositions as kernel-cycle regressions on every folded
+  corpus row (sign +39.8%, atan2 +10.0%, remainder/fmod/trig ~+2%).
 - cc-narrowing-writers/ — STRUCTURAL certificate (audit, not a value
   sweep; the obligation is decided by the simulator's enable-masked
   for_each_lane loop guard, not by operand values): the raw typed CC

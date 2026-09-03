@@ -81,6 +81,16 @@ along with GCC; see the file COPYING3.  If not see
    direction); per the tt/proofs README contract the strict-direction
    folds may fire ONLY while that RESULT is EQUAL.
 
+   Under -mtt-tensix-optimize-cc-region-general the exhaustively
+   proven EQ/NE two-compare compositions (tt/proofs/ccmask-eqne-zero/)
+   extend WHAT is expressible; WHEN they fire is a separate, priced
+   question answered through the one delivery-cost engine
+   (eqne_fold_priced_profitable_p below): the composition inserts more
+   delivered words than the CC skeleton it removes, so it refuses by
+   name (ccmask-eqne-fold-unprofitable) under the current audited cost
+   table -- the proof stands, the admission waits for a cost model
+   under which it pays.
+
    Both replacement instructions execute under the enclosing CC state,
    so a fold inside an enclosing v_if keeps nested semantics: disabled
    lanes write neither mask nor z.  The deleted pushc/popc pair is
@@ -115,6 +125,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt.h"
 #include "rvtt-refuse.h"
 #include "rvtt-cc-region.h"
+#include "rvtt-delivery-cost.h"
 
 namespace {
 
@@ -438,6 +449,58 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
   return check_compare_form (g);
 }
 
+/* Priced WHEN-gate of the EQ/NE two-compare composition
+   (-mtt-tensix-optimize-cc-region-general).  The shipped 2^32
+   equality proof (tt/proofs/ccmask-eqne-zero/) licenses WHAT the
+   composition computes; whether firing pays is a delivery-cost
+   question, answered here through the one cost engine
+   (rvtt-delivery-cost) -- no new mirror.
+
+   Inserted delivered words (transform_group's exact sequence): a
+   preserving copy of X (the direct compare's SET_DEST overwrites its
+   first operand while the swapped compare still reads X, so the copy
+   is unconditional for the two-compare form), the two compares, the
+   OR/AND mask combine, the standalone writable-zero word the swapped
+   compare overwrites (pre-fold it fuses into the predicated assign's
+   lowering), and the AND value merge replacing the assign: six.
+
+   Removed delivered words: the EQ/NE fcmps lowering (a single SETCC
+   word -- EQ0/NE0 are direct mod1 encodings, unlike the LE/GT
+   SETCC pair) and the predicated assign move: two.  The frame's own
+   pushc/popc/encc words are priced at ZERO: whether they deliver
+   words at this position depends on the later rvtt_cc
+   canonicalization and the frame's nesting, unattested at this pass
+   -- omitting them only biases toward refusal, the cost core's
+   refusal-biased one-sidedness (rvtt-delivery-cost-core.h MODULE
+   INVARIANT).  Second-order enablements (shadow-fillability of the
+   mask form, the lifted invariant-hoist barrier) are likewise
+   unmodeled and unpriced: fail closed.
+
+   Both alternatives execute wherever the region executes, so both
+   sides price on the same delivery plane and the verdict is
+   plane-independent; the pre-replay RISC-push plane is used.  Device
+   measurement of the unpriced admission (promotion round 6,
+   2026-09-03) attributed kernel-cycle regressions on every
+   EQ/NE-folded corpus row -- sign +39.8%, atan2 +10.0%,
+   remainder/fmod/trigonometry/acosh ~+2% -- to exactly this word
+   growth, replay-amplified; the order directions' single-compare
+   folds (two words for the skeleton's five) price profitable and are
+   not gated here.  */
+
+static bool
+eqne_fold_priced_profitable_p (void)
+{
+  const int64_t inserted_words = 6;
+  const int64_t removed_words = 2;
+  int64_t inserted
+    = rvtt_dcost_words_to_centislots (inserted_words,
+				      rvtt_delivery_cost::PLANE_RISC_PUSH);
+  int64_t removed
+    = rvtt_dcost_words_to_centislots (removed_words,
+				      rvtt_delivery_cost::PLANE_RISC_PUSH);
+  return inserted < removed;
+}
+
 /* The compare-form half of the admission, shared by the stage-A
    statement machine and the stage-B tree-keyed matcher: float test
    against immediate bits 0 (+0.0), with a CC selection whose
@@ -446,7 +509,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
    EQ/NE two-compare compositions (tt/proofs/ccmask-eqne-zero/:
    EQ keep = SFPOR (SFPGT (x, 0), SFPGT (0, x)), NE keep =
    SFPAND (SFPLE (x, 0), SFPLE (0, x)); EQUAL over 2^32 per
-   direction).  */
+   direction), which additionally pass the priced WHEN-gate
+   above.  */
 
 static bool
 check_compare_form (ccmask_group *g)
@@ -495,6 +559,13 @@ check_compare_form (ccmask_group *g)
 
   if (TREE_CODE (g->x) != SSA_NAME || TREE_CODE (g->z) != SSA_NAME)
     return refuse ("ccmask-operand-form", g->assign);
+
+  /* Last check, so the priced refusal names only otherwise-admissible
+     EQ/NE shapes: the composition fires only when the delivery-cost
+     engine prices it strictly under the CC skeleton it replaces.  */
+  if ((g->cc == SFPXCMP_MOD1_CC_EQ || g->cc == SFPXCMP_MOD1_CC_NE)
+      && !eqne_fold_priced_profitable_p ())
+    return refuse ("ccmask-eqne-fold-unprofitable", g->fcmp);
 
   return true;
 }
