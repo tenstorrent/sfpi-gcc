@@ -99,6 +99,9 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-macro-planner.o \
 	rtl-rvtt-mop-form.o \
 	rtl-rvtt-replay.o \
+	rtl-rvtt-replay-discover.o \
+	rtl-rvtt-replay-hoist.o \
+	rtl-rvtt-replay-crf.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
 	rtl-rvtt-sched-fill.o \
