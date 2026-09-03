@@ -74,6 +74,8 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-lut-select.o \
 	gimple-rvtt-crosscall.o \
+	gimple-rvtt-crosscall-scan.o \
+	gimple-rvtt-crosscall-hoist.o \
 	gimple-rvtt-crossloop.o \
 	gimple-rvtt-reprprop.o \
 	gimple-rvtt-reassoc.o \

@@ -280,8 +280,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-ipa-summary.h"
 #include "rvtt-cc-region.h"
 #include "rvtt-raw-boundary.h"
+#include "gimple-rvtt-crosscall-int.h"
 
-namespace {
 
 /* ------------------------------------------------------------------ */
 /* Refusal plumbing.						      */
@@ -396,7 +396,7 @@ prefix_load_p (gcall *call)
 /* Return true if T is a value of vector type (an SFPU vector datum).
    Null-safe: NULL_TREE (e.g. a missing lhs) is not.  */
 
-static bool
+bool
 vector_typed_p (tree t)
 {
   return t && TREE_TYPE (t) && VECTOR_TYPE_P (TREE_TYPE (t));
@@ -404,7 +404,7 @@ vector_typed_p (tree t)
 
 /* Any vector-typed operand (lhs or argument) on a call.  */
 
-static bool
+bool
 call_has_vector_dataflow_p (gcall *call)
 {
   if (vector_typed_p (gimple_call_lhs (call)))
@@ -437,8 +437,8 @@ typedef rvtt_wf_lreg_verdict word_verdict;
    mop_pushed_word_base, additionally reporting the full base so field
    checks below the opcode can be applied where the class needs them.  */
 
-static bool
-pushed_word_base (tree val, uint32_t *base, unsigned depth = 0)
+bool
+pushed_word_base (tree val, uint32_t *base, unsigned depth)
 {
   if (depth > 12 || !val)
     return false;
@@ -511,9 +511,7 @@ pushed_word_base (tree val, uint32_t *base, unsigned depth = 0)
    address bypasses, by the link-image disjointness fact).  */
 
 static bool resolve_exact_word (tree val, uint32_t *word, unsigned depth);
-static bool blocking_store_asm_p (const gasm *stmt, tree *value, tree *addr);
-static bool pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
-				      unsigned depth = 0);
+bool blocking_store_asm_p (const gasm *stmt, tree *value, tree *addr);
 
 /* Resolve into *WORD the 32-bit value LOAD reads from REF: walk the
    virtual-operand chain backward to the dominating store of the same
@@ -682,57 +680,8 @@ classify_delivered_value (tree val, unsigned contract_mask,
    never stored differently -- the census below verifies the last
    condition over the same whole-TU walk).  */
 
-struct global_census_entry
-{
-  bool stored_unknown = false;	 /* some store didn't fold / disagreed */
-  bool assumed = false;		 /* some load assumed the initializer  */
-};
 
-/* A template-slot word that is a parameter-relative field load (the
-   out-of-line ckernel_template::program shape): the word is resolved
-   at every reachable call site instead, from the constant field
-   stores that dominate the call.  */
-
-struct slot_demand
-{
-  tree fndecl;			/* the demanding function	     */
-  unsigned parm_index;		/* which argument carries the object */
-  HOST_WIDE_INT offset;		/* field bit offset within it	     */
-};
-
-struct crosscall_tu_facts
-{
-  bool computed = false;
-  /* The MOP template-file audit.  */
-  bool slots_unproven = false;
-  const char *slot_reason = nullptr;
-  /* Refusal provenance for the slots_unproven verdict: every node whose
-     body the census could not walk (already expanded / no gimple cfg),
-     and whether ANY refusal other than body-unavailability fired
-     (SLOT_REASON keeps only the first).  The init-hoist value-equality
-     guard may excuse body-unavailability attributable solely to the
-     contract subject itself -- whose delivered words its own planner
-     audits -- and nothing else.  */
-  hash_set<cgraph_node *> *unavailable_bodies = nullptr;
-  bool slot_refusal_non_body = false;
-  bool slot_replay = false;
-  unsigned slot_loadi_dests = 0;   /* SFPLOADI destinations programmed
-				      into instruction slots	       */
-  vec<uint32_t> slot_words = vNULL; /* every audited slot word
-				      (re-classified per proof face)    */
-  hash_map<tree, global_census_entry> *globals = nullptr;
-  vec<slot_demand> demands = vNULL;
-  /* The executable closure and its direct roots (file header, [TU]).
-     ENTRY_ROOTS are the closure roots themselves -- the functions the
-     link image may enter from OUTSIDE the TU, whose call sites the TU
-     therefore cannot enumerate.  CENSUS_UNROOTED records the
-     fail-closed no-root verdict.  */
-  hash_set<cgraph_node *> *executable = nullptr;
-  hash_set<cgraph_node *> *entry_roots = nullptr;
-  bool census_unrooted = false;
-};
-
-static crosscall_tu_facts tu_facts;
+crosscall_tu_facts tu_facts;
 
 /* Context for the TU census: the function being scanned (the walk does
    not switch cfun).  */
@@ -777,7 +726,7 @@ foldable_global_p (tree decl, unsigned HOST_WIDE_INT *value)
    assumption recorded for the census's verify step).  DEPTH bounds
    the SSA chase; anything else fails closed.  */
 
-static bool
+bool
 pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
 			  unsigned depth)
 {
@@ -845,7 +794,7 @@ pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
 /* Fold REF (a store lhs) to a constant byte address if possible
    (mirrors rtl-rvtt-mop-form.cc mop_ref_constant_address).  */
 
-static bool
+bool
 ref_constant_address (tree ref, unsigned HOST_WIDE_INT *addr)
 {
   poly_int64 bitsize, bitpos;
@@ -1404,7 +1353,7 @@ census_store (gimple *stmt, hash_set<cgraph_node *> *executable)
    are irrelevant here: a `.ttinsn' word is delivered where it
    executes, and the audited scalar templates store nothing.  */
 
-static bool
+bool
 blocking_store_asm_p (const gasm *stmt, tree *value, tree *addr)
 {
   if (!rvtt_mop_blocking_store_asm_p (stmt))
@@ -1578,7 +1527,7 @@ compute_executable_closure (hash_set<cgraph_node *> *executable,
    folds, and resolution of the deferred parameter-relative slot
    words at every reachable call site.  */
 
-static void
+void
 compute_tu_facts ()
 {
   if (tu_facts.computed)
@@ -1795,7 +1744,7 @@ compute_tu_facts ()
 /* The MOP admission for a contract: every instruction slot audited,
    no REPLAY slot, no SFPLOADI slot writing a contract register.  */
 
-static bool
+bool
 mop_contract_ok_p (unsigned contract_mask, const char **why)
 {
   if (tu_facts.slots_unproven)
@@ -1825,7 +1774,7 @@ mop_contract_ok_p (unsigned contract_mask, const char **why)
    the prgm-const scan carry: base-ISA instructions with no Tensix
    encoding space).  */
 
-static bool
+bool
 audited_scalar_asm_p (const char *s)
 {
   while (*s == ' ' || *s == '\t')
@@ -1838,49 +1787,6 @@ audited_scalar_asm_p (const char *s)
 		   "la gp, __global_pointer$\n.option pop");
 }
 
-struct scan_ctx
-{
-  unsigned contract_mask;
-  tree callee_decl;		/* the contract call target (caller scan);
-				   NULL_TREE for the callee's own scan */
-  bool in_caller = false;	/* which side this scan covers (names) */
-  bool region = false;		/* audited hoist-region discipline (the
-				   cross-loop hoist consumers): vector
-				   dataflow is register-allocation
-				   visible and admitted, side-effecting
-				   typed calls beyond the explicit Dst
-				   boundary set refuse, and delivered
-				   SFPCONFIG words refuse */
-  bool config_strict = false;	/* a config-prefix pair rides the
-				   contract: delivered SFPCONFIG-class
-				   words refuse (they could rewrite the
-				   programmed constant register)       */
-  bool cc_immaterial = false;	/* programming-only region discipline:
-				   typed structured-CC atoms
-				   are admitted -- the consumer's lifted
-				   object executes before the region and
-				   its parked constant-register state is
-				   out of any CC write's reach; every
-				   other discipline is unchanged        */
-  bool cc_ambient_ok = false;	/* -mtt-tensix-optimize-cc-region-general:
-				   the scanned
-				   loop's CC activity is CC-region-tree
-				   proven ambient-preserving-and-
-				   narrowing (rvtt-cc-region.h,
-				   loop_cc_ambient_preserving_p) -- the
-				   enable set at every in-loop point is
-				   a subset of the lifted entry's
-				   ambient, so an all-lanes hoisted
-				   materialization is a refinement (the
-				   invariant pass's containment fact,
-				   carried across the crossed loop);
-				   typed structured-CC atoms are then
-				   admitted under the cc_immaterial
-				   whitelist discipline               */
-  bool saw_mop = false;
-  const char *why = nullptr;
-  gimple *why_stmt = nullptr;
-};
 
 /* Record a refusal.  The word/replay/statement classifiers share one
    code path for both scan sides; the dump name carries the side.  */
@@ -2087,7 +1993,7 @@ crossloop_cc_atom_p (const rvtt_insn_data *insnd)
    it against the pinned live range) but refuses the same delivered
    words, calls, and explicit-contract accesses.  */
 
-static bool
+bool
 scan_stmt (scan_ctx *ctx, gimple *stmt, bool in_caller)
 {
   if (is_gimple_debug (stmt) || gimple_code (stmt) == GIMPLE_LABEL
@@ -2899,7 +2805,7 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
    block-terminating statement if one ends the block -- the same
    insertion rule the prgm-const programming point uses).  */
 
-static void
+void
 insert_in_preheader (basic_block ph, gimple *stmt)
 {
   gimple_stmt_iterator gsi = gsi_last_bb (ph);
@@ -3284,133 +3190,6 @@ public:
   }
 };
 
-} /* anonymous namespace */
-
-/* Audited hoist-region scan for the cross-loop hoist consumers
-   (rvtt-macro-ownership.h).  The region is {LOOP body} union
-   {preheader tail at/after the ENTRY insertion point} -- the same
-   region rvtt_loop_hoist_region_opaque_p covers -- walked under the
-   region discipline of scan_stmt: vector dataflow is
-   register-allocation visible and admitted; CC writes, replay words,
-   delivered SFPCONFIG words, unaudited words/calls/asm, explicit
-   hard-LREG writes into LREG_MASK, and side-effecting typed calls
-   beyond the explicit Dst boundary set all refuse by name.  A MOP word
-   defers to the TU template census (LREG face) against LREG_MASK.  */
-
-bool
-rvtt_crossloop_region_scan (class loop *loop, edge entry, unsigned lreg_mask,
-			    const char **why, gimple **why_stmt,
-			    bool cc_immaterial)
-{
-  compute_tu_facts ();
-
-  /* The verdict below leans on the TU census (a MOP word defers to the
-     template audit; the extern-fixed-surface axiom covers only rooted
-     bodies, and the census SKIPS bodies outside the rooted closure
-     entirely).  The function being edited must itself be a closure
-     member -- an unrooted body (a naked-asm-entry TU, an unrooted
-     census) was never audited, so nothing vouches for the region.
-     Fail closed by name.  */
-  cgraph_node *self = cfun ? cgraph_node::get (cfun->decl) : nullptr;
-  if (tu_facts.census_unrooted || !self
-      || !tu_facts.executable->contains (self))
-    {
-      if (dump_file)
-	fprintf (dump_file,
-		 "crossloop-hoist: editing function %s outside the rooted "
-		 "census closure (crossloop-caller-unrooted)\n",
-		 self ? self->dump_name () : "?");
-      if (why)
-	*why = "crossloop-caller-unrooted";
-      if (why_stmt)
-	*why_stmt = nullptr;
-      return false;
-    }
-
-  scan_ctx ctx;
-  ctx.contract_mask = lreg_mask;
-  ctx.callee_decl = NULL_TREE;
-  ctx.in_caller = false;
-  ctx.region = true;
-  ctx.cc_immaterial = cc_immaterial;
-
-  /* The crossloop-cc-unproven widening: under
-     -mtt-tensix-optimize-cc-region-general, a crossed loop whose CC
-     activity the CC-region tree proves ambient-preserving-and-
-     narrowing admits its typed structured-CC atoms -- the enable set
-     at every in-loop point stays a subset of the lifted entry's
-     ambient, which is exactly the containment fact the consumers'
-     all-lanes hoisted writes need.  Computed once per scanned loop;
-     fail-closed to the standing refusal (with its own name) when the
-     tree cannot prove the loop.  */
-  if (riscv_tt_opt_cc_region_general > 0 && !cc_immaterial)
-    {
-      rvtt_cc_region_tree ccr (cfun);
-      /* Two tree-proven admissions, either sufficient:
-	 - the lifted entry edge carries the ALL-LANES state (kill-
-	   modeling backward proof): a placement there writes EVERY
-	   lane, so any crossed CC activity leaves the consumers'
-	   enable sets subsets of the placement's -- the containment
-	   fact holds unconditionally and the typed-atom whitelist
-	   below is the only remaining discipline;
-	 - the crossed loop's CC activity is ambient-preserving-and-
-	   narrowing (balanced structured frames; pre-canonicalization
-	   pipeline positions).  */
-      bool entry_all = ccr.edge_entry_all_lanes_p (entry);
-      ctx.cc_ambient_ok = entry_all
-	|| ccr.loop_cc_ambient_preserving_p (loop);
-      if (dump_file && ctx.cc_ambient_ok)
-	fprintf (dump_file,
-		 entry_all
-		 ? "crossloop-hoist: entry bb %d proven ALL-LANES "
-		   "(cc-region-general): crossed CC atoms admitted\n"
-		 : "crossloop-hoist: loop bb %d CC activity tree-proven "
-		   "ambient-preserving (cc-region-general)\n",
-		 entry_all ? entry->dest->index : loop->header->index);
-    }
-
-  bool ok = true;
-  basic_block *body = get_loop_body (loop);
-  for (unsigned ix = 0; ix != loop->num_nodes && ok; ++ix)
-    for (gimple_stmt_iterator gsi = gsi_start_bb (body[ix]);
-	 !gsi_end_p (gsi) && ok; gsi_next (&gsi))
-      ok = scan_stmt (&ctx, gsi_stmt (gsi), /*in_caller=*/false);
-  free (body);
-
-  /* Preheader tail at/after the hoist insertion point: with
-     end-of-block insertion only a block-terminating statement can
-     execute after the hoisted statements.  */
-  if (ok && single_succ_p (entry->src))
-    {
-      gimple_stmt_iterator last = gsi_last_nondebug_bb (entry->src);
-      if (!gsi_end_p (last) && stmt_ends_bb_p (gsi_stmt (last)))
-	ok = scan_stmt (&ctx, gsi_stmt (last), /*in_caller=*/false);
-    }
-
-  if (ok && ctx.saw_mop)
-    {
-      const char *mop_why = nullptr;
-      if (!mop_contract_ok_p (lreg_mask, &mop_why))
-	{
-	  if (dump_file && mop_why)
-	    fprintf (dump_file, "crossloop-hoist:   (%s)\n", mop_why);
-	  ctx.why = "crossloop-mop-slot-unproven";
-	  ctx.why_stmt = nullptr;
-	  ok = false;
-	}
-    }
-
-  if (!ok)
-    {
-      if (why)
-	*why = ctx.why;
-      if (why_stmt)
-	*why_stmt = ctx.why_stmt;
-    }
-  return ok;
-}
-
-/* ==================================================================
    Lane CA: cross-call invariant-init hoist (macro-planner service).
 
    A noinline per-tile callee whose macro formation emits an idempotent
@@ -4446,7 +4225,7 @@ init_commit_caller (cgraph_node *caller, edge entry,
 	     caller->dump_name (), ph->index);
 }
 
-} // anonymous namespace (init hoist)
+} /* anonymous namespace (init hoist) */
 
 /* The ONE caller-chain resolver behind the init-face
    contracts (the init hoist and the ADDR_MOD hoist) -- previously
@@ -5036,6 +4815,7 @@ rvtt_crosscall_addrmod_hoist (function *callee_fn,
   pop_cfun ();
   return result;
 }
+=======
 
 /* Pass factory for rvtt_crosscall, referenced from
    rvtt-passes.def.  */
