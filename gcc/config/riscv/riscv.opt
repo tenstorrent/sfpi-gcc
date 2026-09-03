@@ -576,8 +576,8 @@ Target Var(riscv_tt_opt_cc) Init(1)
 Optimize Tensix lane condition-code (CC) state handling.
 
 mtt-tensix-optimize-combine
-Target Var(riscv_tt_opt_combine) Init(1)
-Combine Tensix instructions.
+Target Undocumented Var(riscv_tt_opt_combine) Init(-1)
+Removed; using this option is an error.
 
 mtt-tensix-optimize-dce
 Target Var(riscv_tt_opt_dce) Init(1)
@@ -743,12 +743,9 @@ mtt-tensix-optimize-dst-iteration-fusion
 Target Var(riscv_tt_opt_dst_iteration_fusion) Init(0)
 Recognize and fuse legal adjacent Tensix Dst-register iterations.
 
-; Historical spelling of -mtt-tensix-optimize-pressure-schedule, kept for
-; command-line compatibility; no in-tree or known external consumer
-; remains, so it is a candidate for removal.
 mtt-tensix-optimize-lp-schedule
-Target Undocumented Alias(mtt-tensix-optimize-pressure-schedule)
-Historical alias for -mtt-tensix-optimize-pressure-schedule.
+Target Undocumented Var(riscv_tt_opt_lp_schedule) Init(-1)
+Removed; using this option is an error.
 
 mtt-tensix-pressure-schedule-use-milp
 Target Var(riscv_tt_pressure_schedule_use_milp) Init(0)

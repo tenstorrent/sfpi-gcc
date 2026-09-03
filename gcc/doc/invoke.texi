@@ -1297,7 +1297,6 @@ See RS/6000 and PowerPC Options.
 -mtt-fix-whraw  -mno-tt-fix-whraw
 -mtt-optimize-extend
 -mtt-tensix-optimize-cc  -mno-tt-tensix-optimize-cc
--mtt-tensix-optimize-combine  -mno-tt-tensix-optimize-combine
 -mtt-tensix-optimize-dce  -mno-tt-tensix-optimize-dce
 -mtt-tensix-optimize-dst-ownership  -mno-tt-tensix-optimize-dst-ownership
 -mtt-tensix-optimize-lut-select  -mno-tt-tensix-optimize-lut-select
@@ -32008,14 +32007,6 @@ and Blackhole processors.
 @itemx -mno-tt-tensix-optimize-cc
 Optimize the lane condition-code state handling: remove redundant CC
 saves, restores, and enables.  Enabled by default.
-
-@opindex mtt-tensix-optimize-combine
-@item -mtt-tensix-optimize-combine
-@itemx -mno-tt-tensix-optimize-combine
-Combine adjacent Tensix instructions into shorter equivalent sequences,
-for example folding a multiply and a dependent add into a fused
-multiply-add where the values are provably unchanged.  Enabled by
-default.
 
 @opindex mtt-tensix-optimize-dce
 @item -mtt-tensix-optimize-dce
