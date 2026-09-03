@@ -163,7 +163,7 @@ void llk1a () {
   sfpi::vUInt l2 = l_reg[sfpi::LRegs::LReg2];
 
   sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut(val, l0, l1, l2); // { dg -warning "is deprecated" "" }
+  val = sfpi::lut(val, l0, l1, l2); // { dg-warning "is deprecated" "" }
   sfpi::dst_reg[0] = val;
 }
 /*
@@ -252,7 +252,7 @@ void llk4a () {
   sfpi::vUInt l6 (0x7c00afa4);
 
   sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2_sign(val, l0, l1, l2, l4, l5, l6); // { dg -warning "is deprecated" "" }
+  val = sfpi::lut2_sign(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
   sfpi::dst_reg[0] = val;
 }
 /*
@@ -320,7 +320,7 @@ void llk5a () {
   sfpi::vUInt l6 (0x37ff34CCu);
 
   sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg -warning "is deprecated" "" }
+  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
   sfpi::dst_reg[0] = val;
 }
 /*
@@ -388,7 +388,7 @@ void llk6a () {
   sfpi::vUInt l6 (0x7c00afa4u);
 
   sfpi::vFloat val = sfpi::dst_reg[0];
-  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg -warning "is deprecated" "" }
+  val = sfpi::lut2(val, l0, l1, l2, l4, l5, l6); // { dg-warning "is deprecated" "" }
   sfpi::dst_reg[0] = val;
 }
 /*
