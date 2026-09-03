@@ -238,6 +238,26 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
     // Add a combine pattern to turn an sfpiadd_v/setcc into sfple's
     return expand_cmp_using_sub (right, cmp, args, op, type);
 
+#if 1
+  if (TARGET_XTT_TENSIX_BH)
+    {
+      // Code to figure calculate_xielu problem
+      // C) xcmp (var, -0.5f, GT)
+      if (op == SFPXCMP_MOD1_CC_GT && args[1].is_zero ()) {
+	// A) xcmp (var, 0, GT)
+	return expand_cmp_using_sub (right, cmp, args, op, type);
+      }
+      else if (op == SFPXCMP_MOD1_CC_GE) {
+	// B) xcmp (var, reg13, GE)
+	return expand_cmp_using_sub (right, cmp, args, op, type);
+      }
+      else if (op == SFPXCMP_MOD1_CC_GT) {
+	// C) xcmp (var, -0.5f, GT)
+	return expand_cmp_using_sub (right, cmp, args, op, type);
+      }
+    }
+#endif
+
   if (op < SFPXCMP_MOD1_CC_GT)
     op = commute_cmp_args (op, args);
   
