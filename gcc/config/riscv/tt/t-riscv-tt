@@ -86,6 +86,9 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-lp-schedule.o \
 	gimple-rvtt-noval.o \
 	gimple-rvtt-prgm-const.o \
+	gimple-rvtt-prgm-fuse.o \
+	gimple-rvtt-prgm-remat.o \
+	gimple-rvtt-prgm-residency.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
 	rtl-rvtt-dst-autoincr.o \
