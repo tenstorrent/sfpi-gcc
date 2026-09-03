@@ -80,7 +80,8 @@ void slength () {
 **	# READ L1
 **	SFPMOV	L0, L1, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPGT	L9, L0, 0, 1
+**	SFPMOV	L1, L9, 2
+**	SFPGT	L1, L0, 0, 1
 **	# READ L2
 **	SFPMOV	L0, L2, 0	# LV:L0
 **	SFPENCC	3, 10
@@ -88,7 +89,7 @@ void slength () {
 **	# READ L3
 **	SFPMOV	L0, L3, 0	# LV:L0
 **	SFPENCC	3, 10
-**	SFPLE	L9, L0, 0, 1
+**	SFPLE	L1, L0, 0, 1
 **	# READ L4
 **	SFPMOV	L0, L4, 0	# LV:L0
 **	SFPENCC	3, 10

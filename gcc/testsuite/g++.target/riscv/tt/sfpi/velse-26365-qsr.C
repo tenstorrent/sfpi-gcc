@@ -25,7 +25,8 @@ void bug1() {
 /*
 **_Z4bug1v:
 **	# READ L3
-**	SFPGT	L10, L3, 1, 1
+**	SFPMOV	L0, L10, 2
+**	SFPGT	L0, L3, 1, 1
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
@@ -55,7 +56,8 @@ void bug2() {
 /*
 **_Z4bug2v:
 **	# READ L3
-**	SFPGT	L10, L3, 1, 1
+**	SFPMOV	L0, L10, 2
+**	SFPGT	L0, L3, 1, 1
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
@@ -85,7 +87,8 @@ void good1() {
 /*
 **_Z5good1v:
 **	# READ L3
-**	SFPGT	L10, L3, 1, 1
+**	SFPMOV	L0, L10, 2
+**	SFPGT	L0, L3, 1, 1
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
@@ -115,7 +118,8 @@ void good2() {
 /*
 **_Z5good2v:
 **	# READ L3
-**	SFPGT	L10, L3, 1, 1
+**	SFPMOV	L0, L10, 2
+**	SFPGT	L0, L3, 1, 1
 **	SFPMOV	L0, L9, 2
 **	SFPMOV	L0, L10, 0	# LV:L0
 **	SFPCOMPC
