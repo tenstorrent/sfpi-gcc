@@ -40,6 +40,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1150,7 +1151,7 @@ addimuli_resynthing ()
 }
 
 static bool
-combine_block (basic_block bb, Combiner::Deferred &deferred)
+combine_block (Combiner::Deferred &deferred, unsigned &pressure, basic_block bb)
 {
   bool changed = false;
 
@@ -1232,11 +1233,39 @@ public:
 
     Combiner::Deferred deferred;
     bool changed = false;
-    basic_block bb;
 
-    FOR_EACH_BB_FN (bb, fn)
-      if (combine_block (bb, deferred))
-	changed = true;
+    // Walk the blocks in dominator order. Track register pressure state.
+    // I suppose I could learn about gcc's dominator API.
+    std::deque<std::pair<basic_block, unsigned>> worklist;
+
+    basic_block bb;
+    FOR_ALL_BB_FN (bb, fn)
+      bb->flags &= ~BB_VISITED;
+    
+    basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (fn);
+    entry->flags |= BB_VISITED;
+    worklist.emplace_back (entry, 0);
+
+    while (!worklist.empty ())
+      {
+	auto [bb, pressure] = worklist.front ();
+	worklist.pop_front ();
+	
+	if (combine_block (deferred, pressure, bb))
+	  changed = true;
+
+	edge e;
+	edge_iterator ei;
+	FOR_EACH_EDGE (e, ei, bb->succs)
+	  {
+	    auto s = e->dest;
+	    if (!(s->flags & BB_VISITED))
+	      {
+		s->flags |= BB_VISITED;
+		worklist.push_back ({s, pressure});
+	      }
+	  }
+      }
 
     deferred.preprocess_muli_addi ();
 

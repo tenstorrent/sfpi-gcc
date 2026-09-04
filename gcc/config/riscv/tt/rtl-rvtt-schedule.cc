@@ -170,6 +170,9 @@ transform (function *fn)
   std::vector<basic_block> visited;
 
   basic_block bb;
+  FOR_ALL_BB_FN (bb, fn)
+    bb->flags &= ~BB_VISITED;
+
   FOR_EACH_BB_FN (bb, fn)
     {
       rtx_insn *insn;
