@@ -35,7 +35,8 @@ along with GCC; see the file COPYING3.  If not see
 // UINT:CST/SSA:immediate
 // UINT:CST0/SSA:imm var
 // UINT:CST:imm id
-// UINT:CST:mod & int-ops
+// UINT:CST:mod
+// UINT:CST:int-ops
 
 // This doesn't need to be GTY as the decls are also held in a riscv_builtin
 // GTY array.
@@ -52,6 +53,7 @@ public:
     LV_SHIFT,
     VOLATILE_SHIFT,
     EXPANDED_SHIFT,
+    EMPTY_SHIFT,
 
     HWM,
 
@@ -61,8 +63,9 @@ public:
     HAS_MOD = 1 << MOD_SHIFT, // Has a MOD operand
     HAS_VAR = 1 << VAR_SHIFT, // Has a variable immediate operand
     HAS_LV = 1 << LV_SHIFT,   // Has an explicit live value operand
-    VOLATILE = 1 << VOLATILE_SHIFT, // has unrepresented side-effects
-    EXPANDED = 1 << EXPANDED_SHIFT, // immediate is expanded
+    VOLATILE = 1 << VOLATILE_SHIFT, // Has unrepresented side-effects
+    EXPANDED = 1 << EXPANDED_SHIFT, // Immediate is expanded
+    EMPTY = 1 << EMPTY_SHIFT, // (Usually) expands to no instruction
   };
   static_assert (HWM <= 16);
 
@@ -204,6 +207,7 @@ public:
   bool is_volatile () const { return flags & VOLATILE; }
   bool is_live () const { return flags & HAS_LV; }
   bool is_expanded () const { return flags & EXPANDED; }
+  bool is_empty () const { return flags & EMPTY; }
   int live_arg () const { return has_var (); }
 
 public:

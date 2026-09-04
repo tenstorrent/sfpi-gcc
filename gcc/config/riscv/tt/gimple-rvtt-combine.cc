@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -268,6 +269,9 @@ public:
     return *this;
   }
 };
+
+// Current register pressure
+static int lreg_pressure;
 
 bool
 Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &matched, match_masks &masks) const
@@ -970,6 +974,13 @@ combine_block (basic_block bb)
 	      synths.emplace_back (synth, insnd,
 				   TREE_INT_CST_LOW (gimple_call_arg (synth, 0)));
 	    }
+	  else if (insnd->id == rvtt_insn_data::lreg_pressure)
+	    {
+	      // Argument is constrained to [0,1]
+	      lreg_pressure += TREE_INT_CST_LOW (gimple_call_arg (*gsi, 0)) * 2 - 1;
+	      if (dump_file)
+		fprintf (dump_file, "Register pressure is now %d\n", lreg_pressure);
+	    }
 
 	  auto start = starting_ids.lower_bound (insnd->id);
 	  // Because we've added insn_id::hwm, start will never be
@@ -1034,11 +1045,47 @@ public:
     synths.clear ();
 
     bool changed = false;
-    basic_block bb;
 
-    FOR_EACH_BB_FN (bb, fn)
-      if (combine_block (bb))
-	changed = true;
+    // Walk the blocks in something like graph order.  With the exception of
+    // loop back edges every block is walked after its predecessors.
+    std::deque<std::pair<basic_block, int>> worklist;
+
+    basic_block bb;
+    FOR_ALL_BB_FN (bb, fn)
+      bb->flags &= ~BB_VISITED;
+    lreg_pressure = 0;
+
+    basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (fn);
+    entry->flags |= BB_VISITED;
+    worklist.emplace_back (entry, 0);
+
+    while (!worklist.empty ())
+      {
+	auto &front = worklist.front ();
+	auto bb = front.first;
+	if (lreg_pressure != front.second)
+	  {
+	    lreg_pressure = front.second;
+	    if (dump_file)
+	      fprintf (dump_file, "New block's register pressure is %d\n", lreg_pressure);
+	  }
+	worklist.pop_front ();
+
+	if (combine_block (bb))
+	  changed = true;
+
+	edge e;
+	edge_iterator ei;
+	FOR_EACH_EDGE (e, ei, bb->succs)
+	  {
+	    auto s = e->dest;
+	    if (!(s->flags & BB_VISITED))
+	      {
+		s->flags |= BB_VISITED;
+		worklist.push_back ({s, lreg_pressure});
+	      }
+	  }
+      }
 
     if (!addimuli.empty ())
       addimuli_resynthing ();

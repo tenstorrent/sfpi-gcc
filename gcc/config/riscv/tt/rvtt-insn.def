@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #define CC(N) (uint32_t((N+0) ? (N+0) : 0xffff) << rvtt_insn_data::CC_MASK_SHIFT)
 #define VOL rvtt_insn_data::VOLATILE
 #define EXP rvtt_insn_data::EXPANDED
+#define EMP rvtt_insn_data::EMPTY
 
 #define N rvtt_insn_data::op_t::NONE
 #define R rvtt_insn_data::op_t::RUNTIME
@@ -55,10 +56,11 @@ along with GCC; see the file COPYING3.  If not see
 
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U, 0}, {U, 0}))
+RVTT_FN (lreg_pressure,      ,,VOID_FTYPE_USI,                                               VOL|EMP, ({U, 1}))
 
 // These builtins are expanded to something else during compilation
 RVTT_FN (sfpxlogic,          ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x7}, {R}, {R}))
-RVTT_FN (sfpxpred,           ,,USI_FTYPE_USI_USI,                                            VOL, ({XM, 0x2}, {R}))
+RVTT_FN (sfpxpred,           ,,USI_FTYPE_USI_USI,                                            VOL|EMP, ({XM, 0x2}, {R}))
 RVTT_FN (sfpxcond,           ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x1}, {R}, {R}))
 RVTT_FN (sfpxcmp,            ,,USI_FTYPE_XTT_VEC_XTT_VEC_USI,                                CC(), ({XM, 0x3f}, {}))
 RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,                        0, ({E, 0}, {ES, 6, 0}))
@@ -67,8 +69,8 @@ RVTT_FN (sfpxloadi,          ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_SI,           
 RVTT_FN (sfpnop,             ,,VOID_FTYPE,                                                   VOL, ())
 RVTT_FN (sfpbankdone,     qsr,,VOID_FTYPE_USI_USI_USI,                                       VOL, ({CU, 1}, {CU, 1}, {CU, 1}))
 
-RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                            0, ({CU, 4}))
-RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                       VOL, ({CU, 3}))
+RVTT_FN (sfpreadlreg,        ,,XTT_VEC_FTYPE_USI,                                            EMP, ({CU, 4}))
+RVTT_FN (sfpwritelreg,       ,,VOID_FTYPE_XTT_VEC_USI,                                       VOL|EMP, ({CU, 3}))
 
 RVTT_FN (sfpnovalue,         ,,XTT_VEC_FTYPE,                                                0, ())
 RVTT_FN (sfpselect2,         ,,XTT_VEC_FTYPE_XTT_VEC2_USI,                                   0, ({CU, 1}))
@@ -82,9 +84,9 @@ RVTT_FN (sfppushc,           ,,VOID_FTYPE_USI,                                  
 RVTT_FN (sfppopc,            ,,VOID_FTYPE_USI,                                               VOL|CC(), ({M, 0xffff}))
 
 // sfpassign is a placeholder to allow describing some combines
-// simply -- that pass then elides any actual uses.
-RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                                        0, ())
-RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV, ())
+// simply -- that pass then elides any actual uses.  Marked as empty because they often go away.
+RVTT_FN (sfpassign,          ,,XTT_VEC_FTYPE_XTT_VEC,                                        EMP, ())
+RVTT_FN (sfpassign_lv,       ,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC,                                LV|EMP, ())
 
 RVTT_FN (sfploadi,           ,,XTT_VEC_FTYPE_XTT_IPTR_USI_USI_USI_USI,                       0, ({E, 16, 0}, {M, 0x17}))
 RVTT_FN (sfploadi_lv,        ,,XTT_VEC_FTYPE_XTT_IPTR_XTT_VEC_USI_USI_USI_USI,               LV, ({U, 16, 0}, {M, 0x517}))
