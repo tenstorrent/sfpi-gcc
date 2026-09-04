@@ -32,7 +32,7 @@ void bar ()
 /*
 **_ZN2gt3barEv:
 **	SFPMOV	L3, L8, 2
-**	SFPGT	L3, L9, 0, 1
+**	SFPGT	L8, L9, 0, 1
 **	SFPENCC	3, 10
 **	# WRITE L3
 **	ret
@@ -49,8 +49,7 @@ void baz ()
 }
 /*
 **_ZN2gt3bazEv:
-**	SFPMOV	L0, L8, 2
-**	SFPGT	L0, L9, 0, 1
+**	SFPGT	L8, L9, 0, 1
 **	SFPENCC	3, 10
 **	ret
 */
@@ -86,8 +85,8 @@ void bar ()
 }
 /*
 **_ZN2le3barEv:
+**	SFPLE	L8, L9, 0, 1
 **	SFPMOV	L3, L8, 2
-**	SFPLE	L3, L9, 0, 1
 **	SFPENCC	3, 10
 **	# WRITE L3
 **	ret
@@ -105,8 +104,7 @@ void baz ()
 }
 /*
 **_ZN2le3bazEv:
-**	SFPMOV	L0, L8, 2
-**	SFPLE	L0, L9, 0, 1
+**	SFPLE	L8, L9, 0, 1
 **	SFPENCC	3, 10
 **	ret
 */

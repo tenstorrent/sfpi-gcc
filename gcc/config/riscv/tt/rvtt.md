@@ -2636,7 +2636,7 @@
 
 (define_insn "rvtt_sfp<rvtt_gtle_name>_nv"
   [(unspec_volatile:XTT32SI [
-     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xr")
+     (match_operand:XTT32SI 0 "reg_or_cstlreg_operand"  "xrxs")
      (match_operand:XTT32SI 1 "reg_or_cstlreg_operand"  "xrxc")
      (match_operand:SI    2 "const_int_operand" "n")
      (match_operand:SI    3 "const_int_operand" "n")
