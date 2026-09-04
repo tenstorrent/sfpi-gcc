@@ -126,6 +126,7 @@ extern gimple_opt_pass *make_pass_rvtt_immload_shorten (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_immvar_expand (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_noval_elide (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_live (gcc::context *ctxt);
+extern gimple_opt_pass *make_pass_rvtt_schedule_ssa (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_cse (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_renumber (gcc::context *ctxt);
 extern gimple_opt_pass *make_pass_rvtt_synth_split (gcc::context *ctxt);
@@ -159,6 +160,10 @@ constexpr unsigned int SFPLOADI_MOD0_USHORT = 2;
 constexpr unsigned int SFPLOADI_MOD0_SHORT = 4;
 constexpr unsigned int SFPLOADI_MOD0_UPPER = 8;
 constexpr unsigned int SFPLOADI_MOD0_LOWER = 10;
+
+constexpr unsigned int SFPLOADSTORE_ADDR_MODE_WH_NOINC = 3;
+constexpr unsigned int SFPLOADSTORE_ADDR_MODE_NOINC = 7;
+constexpr unsigned int SFPLOADSTORE_MOD0_FMT_COPY_MASK = 0x18; // FP32 or FPINT32
 
 constexpr unsigned int SFPEXEXP_MOD1_DEBIAS = 0;
 constexpr unsigned int SFPEXEXP_MOD1_NODEBIAS = 1;
