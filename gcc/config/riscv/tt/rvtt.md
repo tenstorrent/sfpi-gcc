@@ -154,6 +154,17 @@
 }
   [(set_attr "type" "const")])
 
+(define_expand "rvtt_register_pressure"
+  [(unspec:SI [
+     (match_operand:SI 0 "const_int_operand")]
+     0)]
+  "TARGET_XTT_TENSIX"
+  {
+    // We have to emit something.  DCE will throw this away
+    emit_move_insn (gen_reg_rtx (SImode), operands[0]);
+    DONE;
+  })
+
 (define_expand "rvtt_sfpreadlreg"
   [(set (match_operand:XTT32SI 0 "register_operand")
         (unspec_volatile:XTT32SI [

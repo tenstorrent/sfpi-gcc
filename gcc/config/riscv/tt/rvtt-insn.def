@@ -55,6 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 
 // This is first
 RVTT_FN (synth_opcode,       ,,USI_FTYPE_USI_USI,                                            0, ({U, 0}, {U, 0}))
+RVTT_FN (register_pressure,  ,,VOID_FTYPE_USI,                                               VOL, ({U, 1}))
 
 // These builtins are expanded to something else during compilation
 RVTT_FN (sfpxlogic,          ,,USI_FTYPE_USI_USI_USI,                                        VOL, ({XM, 0x7}, {R}, {R}))

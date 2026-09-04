@@ -137,11 +137,53 @@ combine () {
   res = sfpassign_lv (lv, a);
 }
 
+// These are deferred because we (a) don't want to interrupt a muladd combiner,
+// and (b) we need information about all the sfploadi uses before proceeding.
+// a * fp16b(scalar)
+deferred_combine () MULI_ADDI {
+  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpmul_lv (lv, %a, cst, 0);
+  {
+#if 0
+    if (TREE_INT_CST_LOW (id)
+	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
+      return false;
+#endif
+  }
+  res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
+  {
+#if 0
+    if (auto iid = TREE_INT_CST_LOW (id))
+      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+#endif
+  }
+}
+
+// a + fp16b(scalar)
+deferred_combine () MULI_ADDI {
+  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
+  res = sfpadd_lv (lv, %a, cst, 0);
+  {
+#if 0
+    if (TREE_INT_CST_LOW (id)
+	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
+      return false;
+#endif
+  }
+  res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
+  {
+#if 0
+    if (auto iid = TREE_INT_CST_LOW (id))
+      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
+#endif
+  }
+}
+
 // -a * b
 combine (BH_QSR) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpmul_lv (lv2, %p, b, mod);
-  {}
+  { return moot_muli_ok (r_call); }
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
     if (commuted && imod)
@@ -157,7 +199,7 @@ combine (BH_QSR) {
 combine (BH_QSR) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpadd_lv (lv2, %p, b, mod);
-  {}
+  { return moot_muli_ok (r_call); }
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
     if (commuted && imod)
@@ -173,7 +215,7 @@ combine (BH_QSR) {
 combine () {
   p = sfpmul_lv (lv1, a, b, mul_mod);
   r = sfpadd_lv (lv2, %p, c, add_mod);
-  {}
+  { return moot_muli_ok (p_call) && moot_addi_ok (r_call); }
   {
     // For WH mul_mod and add_mod will be zero
     unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
@@ -230,48 +272,6 @@ combine (BH_QSR) {
 			 TREE_INT_CST_LOW (mod) ^ (SFPMAD_MOD1_BH_COMPL_A | SFPMAD_MOD1_BH_COMPL_C));
   }
   r = sfpmad_lv (lv2, a, b, c, mod);
-}
-
-// These are deferred because we (a) don't want to interrupt a muladd combiner,
-// and (b) we need information about all the sfploadi uses before proceeding.
-// a * fp16b(scalar)
-deferred_combine () MULI_ADDI {
-  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
-  res = sfpmul_lv (lv, %a, cst, 0);
-  {
-#if 0
-    if (TREE_INT_CST_LOW (id)
-	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpmul))
-      return false;
-#endif
-  }
-  res = sfpmuli_lv (ptr, lv, a, val, var, id, 0);
-  {
-#if 0
-    if (auto iid = TREE_INT_CST_LOW (id))
-      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
-#endif
-  }
-}
-
-// a + fp16b(scalar)
-deferred_combine () MULI_ADDI {
-  cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
-  res = sfpadd_lv (lv, %a, cst, 0);
-  {
-#if 0
-    if (TREE_INT_CST_LOW (id)
-	&& !all_uses_are (cst, res_call, rvtt_insn_data::sfpadd))
-      return false;
-#endif
-  }
-  res = sfpaddi_lv (ptr, lv, a, val, var, id, 0);
-  {
-#if 0
-    if (auto iid = TREE_INT_CST_LOW (id))
-      addimuli.emplace_back (res_call, rvtt_get_insn_data (res_call), iid);
-#endif
-  }
 }
 
 // Xiadd_i, Xiadd_i -> Xiadd_i

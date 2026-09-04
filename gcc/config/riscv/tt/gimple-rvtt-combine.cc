@@ -97,11 +97,12 @@ namespace {
     bool is_match (const rvtt_insn_data *) const;
   };
 
+  struct Deferred;
+
   // Combiner -- a set of patterns to match and a set of templates to replace
   // those with.  The templates are placed at the last pattern's
   // location. Patterns other than OtherUses are deleted
   struct Combiner {
-    struct Deferred;
     enum Tags : uint16_t;
     Shape const *shapes;
     uint8_t pats_hwm;
@@ -127,7 +128,7 @@ namespace {
   public:
     struct matched_data;
     bool match (gcall *call, const rvtt_insn_data *insnd, matched_data &) const;
-    void replace (gimple_stmt_iterator *, matched_data &, Deferred &deferred) const;
+    void replace (gimple_stmt_iterator *, matched_data &, Deferred &) const;
 
   private:
     struct match_masks;
@@ -159,6 +160,10 @@ struct imminfo {
 };
 static std::vector<imminfo> addimuli;
 static std::vector<imminfo> synths;
+
+static bool moot_muli_addi_ok (gcall *call);
+inline bool moot_muli_ok (gcall *call) { return moot_muli_addi_ok (call); }
+inline bool moot_addi_ok (gcall *call) { return moot_muli_addi_ok (call); }
 
 static bool ATTRIBUTE_UNUSED combiner_enable_false () { return false; }
 static bool combiner_enable_WH () { return TARGET_XTT_TENSIX_WH; }
@@ -268,13 +273,30 @@ struct Combiner::matched_data {
     : combiner (c) {};
 };
 
-struct Combiner::Deferred {
-  std::vector<matched_data> matches;
+namespace {
+struct Deferred {
+  std::vector<Combiner::matched_data> matches;
   std::multimap<gcall *, unsigned> call_map;
   std::unordered_map<unsigned, gcall *> synth_map;
   std::set<gassign *> add_map;
 
 public:
+  void clear () {
+    matches.clear ();
+    call_map.clear ();
+    synth_map.clear ();
+    add_map.clear ();
+  }
+  
+  bool is_deferred (gcall *call, Combiner::Tags tag) {
+    for (auto I = call_map.lower_bound (call);
+	 I != call_map.end () && I->first == call;
+	 ++I)
+      if (!matches[I->second].mooted
+	  && matches[I->second].combiner->label == tag)
+	return true;
+    return false;
+  }
   void moot (gcall *call) {
     for (auto I = call_map.lower_bound (call);
 	 I != call_map.end () && I->first == call;
@@ -286,7 +308,7 @@ public:
 	  matches[I->second].mooted = true;
 	}
   }
-  unsigned defer (const matched_data &match) {
+  unsigned defer (const Combiner::matched_data &match) {
     unsigned slot = matches.size ();
     matches.emplace_back (match);
     for (unsigned ix = match.combiner->pats_hwm; ix--;)
@@ -312,6 +334,7 @@ public:
   void preprocess_muli_addi ();
   void postprocess_muli_addi ();
 };
+}
 
 struct Combiner::match_masks {
   unsigned calls = 0; // Which calls we matched
@@ -327,6 +350,17 @@ public:
     return *this;
   }
 };
+
+static unsigned register_pressure;
+static Deferred deferred;
+
+// Mooting a deferred combine is ok, unless the register pressure is high and
+// there is one to moot.
+bool moot_muli_addi_ok (gcall *call)
+{
+  return !(register_pressure
+	   && deferred.is_deferred (call, Combiner::T_MULI_ADDI));
+}
 
 bool
 Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &matched, match_masks &masks) const
@@ -772,7 +806,7 @@ init ()
 
 // Check every dynamic MULI_ADDI combiner is simple.
 void
-Combiner::Deferred::preprocess_muli_addi ()
+Deferred::preprocess_muli_addi ()
 {
   std::map<gcall *, std::pair<unsigned, const Combiner *>> loadis;
   for (unsigned ix = matches.size (); ix--;)
@@ -852,7 +886,7 @@ Combiner::Deferred::preprocess_muli_addi ()
 }
 
 void
-Combiner::Deferred::postprocess_muli_addi ()
+Deferred::postprocess_muli_addi ()
 {
   for (auto *add : add_map)
     {
@@ -886,7 +920,6 @@ Combiner::Deferred::postprocess_muli_addi ()
 	  fprintf (dump_file, "\n");
 	}
     }
-  
 }
 
 // There is at least one dynamic muli transform.  For each synth_id of such
@@ -1151,48 +1184,57 @@ addimuli_resynthing ()
 }
 
 static bool
-combine_block (Combiner::Deferred &deferred, unsigned &pressure, basic_block bb)
+combine_block (Deferred &deferred, basic_block bb)
 {
   bool changed = false;
 
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
+  for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
+    again:;
       if (auto *insnd = rvtt_get_insn_data (*gsi))
 	{
 	  // Record synth_opcodes to deal with dynamic muli/addi combinations.
 	  if (insnd->id == rvtt_insn_data::synth_opcode)
 	    deferred.record_synth (as_a <gcall *> (*gsi));
-
-	  auto start = starting_ids.lower_bound (insnd->id);
-	  // Because we've added insn_id::hwm, start will never be
-	  // starting_ids.end ()
-	  if (start->first == insnd->id)
+	  else if (insnd->id == rvtt_insn_data::register_pressure)
 	    {
-	      bool found = false;
-	      for (auto I = start->second, E = (++start)->second; I != E; ++I)
-		{
-		  auto *combiner = *I;
-		  Combiner::matched_data match (combiner);
-		  if (combiner->match (as_a <gcall *> (*gsi), insnd, match))
-		    {
-		      if (combiner->deferred)
-			{
-			  unsigned ix = deferred.defer (match);
-			  if (dump_file)
-			    fprintf (dump_file, "Deferment %u\n\n", ix);
-			  break;
-			}
-		      combiner->replace (&gsi, match, deferred);
-		      changed = true;
-		      found = true;
-		      break;
-		    }
-		}
-	      if (found)
-		continue;
+	      if (TREE_INT_CST_LOW (gimple_call_arg (*gsi, 0)))
+		register_pressure++;
+	      else
+		// Avoid underflow
+		register_pressure -= bool (register_pressure);
+	    }
+	  else
+	    {
+	      auto start = starting_ids.lower_bound (insnd->id);
+	      // Because we've added insn_id::hwm, start will never be
+	      // starting_ids.end ()
+	      if (start->first == insnd->id)
+		for (auto I = start->second, E = (++start)->second; I != E; ++I)
+		  {
+		    auto *combiner = *I;
+		    Combiner::matched_data match (combiner);
+		    if (combiner->match (as_a <gcall *> (*gsi), insnd, match))
+		      {
+			if (combiner->deferred)
+			  {
+			    unsigned ix = deferred.defer (match);
+			    if (dump_file)
+			      fprintf (dump_file, "Deferment %u\n\n", ix);
+			    // Continue the loop because a later combiner might fire
+			    continue;
+			  }
+			else
+			  {
+			    combiner->replace (&gsi, match, deferred);
+			    changed = true;
+			    // Start over because another combiner might fire
+			    goto again;
+			  }
+		      }
+		  }
 	    }
 	}
-      gsi_next (&gsi);
     }
 
   return changed;
@@ -1228,10 +1270,10 @@ public:
   {
     init ();
 
+    deferred.clear ();
     addimuli.clear ();
     synths.clear ();
 
-    Combiner::Deferred deferred;
     bool changed = false;
 
     // Walk the blocks in dominator order. Track register pressure state.
@@ -1248,10 +1290,12 @@ public:
 
     while (!worklist.empty ())
       {
-	auto [bb, pressure] = worklist.front ();
+	auto &front = worklist.front ();
+	auto bb = front.first;
+	register_pressure = front.second;
 	worklist.pop_front ();
-	
-	if (combine_block (deferred, pressure, bb))
+
+	if (combine_block (deferred, bb))
 	  changed = true;
 
 	edge e;
@@ -1262,7 +1306,7 @@ public:
 	    if (!(s->flags & BB_VISITED))
 	      {
 		s->flags |= BB_VISITED;
-		worklist.push_back ({s, pressure});
+		worklist.push_back ({s, register_pressure});
 	      }
 	  }
       }
