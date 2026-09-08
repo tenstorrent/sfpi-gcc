@@ -518,7 +518,7 @@ expand_cond (pred_list &preds, unsigned &ix,
 // replaces it with one that works w/ the HW.
 
 static unsigned
-transform (function *fun)
+expand_vif (function *fun)
 {
   basic_block bb;
   pred_list preds;
@@ -598,10 +598,10 @@ transform (function *fun)
 
 namespace {
 
-const pass_data pass_data_rvtt_expand =
+const pass_data pass_data_rvtt_vif =
 {
   GIMPLE_PASS, /* type */
-  "rvtt_expand", /* name */
+  "rvtt_vif", /* name */
   OPTGROUP_NONE, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_ssa, /* properties_required */
@@ -611,11 +611,11 @@ const pass_data pass_data_rvtt_expand =
   0, /* todo_flags_finish */
 };
 
-class pass_rvtt_expand : public gimple_opt_pass
+class pass_rvtt_vif : public gimple_opt_pass
 {
 public:
-  pass_rvtt_expand (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_rvtt_expand, ctxt)
+  pass_rvtt_vif (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_rvtt_vif, ctxt)
   {}
 
   virtual bool gate (function *) override
@@ -625,14 +625,14 @@ public:
 
   virtual unsigned int execute (function *fn) override
   {
-    return transform (fn);
+    return expand_vif (fn);
   }
-}; // class pass_rvtt_expand
+}; // class pass_rvtt_vif
 
 } // anon namespace
 
 gimple_opt_pass *
-make_pass_rvtt_expand (gcc::context *ctxt)
+make_pass_rvtt_vif (gcc::context *ctxt)
 {
-  return new pass_rvtt_expand (ctxt);
+  return new pass_rvtt_vif (ctxt);
 }

@@ -34,10 +34,10 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-check.o \
 	gimple-rvtt-combine.o \
 	gimple-rvtt-dce.o \
-	gimple-rvtt-expand.o \
 	gimple-rvtt-immvar.o \
 	gimple-rvtt-live.o \
 	gimple-rvtt-noval.o \
+	gimple-rvtt-pred.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
 	rtl-rvtt-fix-ebreak.o \
