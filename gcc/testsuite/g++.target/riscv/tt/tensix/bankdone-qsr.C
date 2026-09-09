@@ -6,7 +6,7 @@ void foo1() {
 }
 /*
 **_Z4foo1v:
-**	SFPNOP	1, 1, 1
+**	SFPBANKDONE	1, 1, 1
 **	ret
 */
 
@@ -15,7 +15,7 @@ void foo2() {
 }
 /*
 **_Z4foo2v:
-**	SFPNOP	1, 0, 0
+**	SFPBANKDONE	1, 0, 0
 **	ret
 */
 
@@ -24,7 +24,7 @@ void foo3() {
 }
 /*
 **_Z4foo3v:
-**	SFPNOP	0, 1, 0
+**	SFPBANKDONE	0, 1, 0
 **	ret
 */
 
@@ -33,6 +33,6 @@ void foo4() {
 }
 /*
 **_Z4foo4v:
-**	SFPNOP	0, 0, 1
+**	SFPBANKDONE	0, 0, 1
 **	ret
 */
