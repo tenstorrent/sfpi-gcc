@@ -1303,7 +1303,7 @@ public:
 	  }
 	worklist.pop_front ();
 
-	if (combine_block (bb))
+	if (combine_block (deferred, bb))
 	  changed = true;
 
 	edge e;
@@ -1317,6 +1317,35 @@ public:
 		worklist.push_back ({s, lreg_pressure});
 	      }
 	  }
+      }
+
+    deferred.preprocess_muli_addi ();
+
+    // Apply deferred matches in reverse order
+    for (unsigned ix = deferred.matches.size (); ix--;)
+      {
+	auto &match = deferred.matches[ix];
+	if (dump_file)
+	  fprintf (dump_file,
+		   match.mooted ? "Deferment %u is moot\n\n"
+		   : "Deferment %u:\n", ix);
+
+	if (match.mooted)
+	  continue;
+	match.mooted = -1; // Avoid confusing self-mooting message
+
+	auto gsi = gsi_for_stmt (match.calls[match.combiner->pats_hwm - 1]);
+	match.combiner->replace (&gsi, match, deferred);
+
+	if (match.combiner->label == Combiner::T_MULI_ADDI)
+	  {
+	    auto *call = match.replace[match.combiner->pats_hwm - 1];
+	    auto *insnd = rvtt_get_insn_data (call);
+	    if (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->id_arg ())))
+	      deferred.record_muli_addi (call, insnd);
+	  }
+
+	changed = true;
       }
 
     deferred.postprocess_muli_addi ();

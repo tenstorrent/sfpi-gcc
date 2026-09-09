@@ -24,11 +24,10 @@ void one () {
 */
 
 void two () {
-  hrp _;
+  lreg_pressure _;
   vFloat a = l_reg[LRegs::LReg0];
 
   l_reg[LRegs::LReg0] = a * 1.5f + 2.0f;
-  __builtin_rvtt_register_pressure (0);
 }
 /*
 **_Z3twov:
