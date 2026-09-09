@@ -69,7 +69,7 @@ struct Access {
   Access &operator = (rtx);
 
   bool is_subword () const {
-    return GET_MODE (mem) == QImode || GET_MODE (mem) == HImode;
+    return GET_MODE (mem) != SImode;
   }
 
   bool overlaps (Access const &other) const {
@@ -78,6 +78,7 @@ struct Access {
 
     int size = GET_MODE_SIZE (GET_MODE (mem)).to_constant ();
     int other_size = GET_MODE_SIZE (GET_MODE (other.mem)).to_constant ();
+
     return (offset + size) > other.offset
       && (other.offset + other_size) > offset;
   }
@@ -93,7 +94,10 @@ Access::operator= (rtx m)
 	  || GET_CODE (m) == SIGN_EXTEND)
 	m = XEXP (m, 0);
 
-      if (MEM_P (m) && !rvtt_reg_mem_p (m))
+      if (MEM_P (m) && !rvtt_reg_mem_p (m)
+	  && (GET_MODE (m) == SImode
+	      || GET_MODE (m) == HImode
+	      || GET_MODE (m) == QImode))
 	{
 	  rtx op = XEXP (m, 0);
 	  if (REG_P (op))
