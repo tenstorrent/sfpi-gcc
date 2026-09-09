@@ -2,16 +2,30 @@
 // { dg-final { check-function-bodies "**" "" } }
 
 void foo () {
-  auto a =  __builtin_rvtt_sfpreadlreg (0);
-  __builtin_rvtt_sfpstore (nullptr, a, 4, 0, 0, 3, 7);
-  auto b = __builtin_rvtt_sfpload (nullptr, 4, 0, 0, 3, 7);
-  __builtin_rvtt_sfpwritelreg (b, 0);
+  {
+    auto a =  __builtin_rvtt_sfpreadlreg (0);
+    __builtin_rvtt_sfpstore (nullptr, a, 4, 0, 0, 3, 7);
+    auto b = __builtin_rvtt_sfpload (nullptr, 4, 0, 0, 3, 7);
+    __builtin_rvtt_sfpwritelreg (b, 0);
+  }
+  {
+    auto a =  __builtin_rvtt_sfpreadlreg (1);
+    __builtin_rvtt_sfpstore (nullptr, a, 4, 0, 0, 3, 7);
+    auto b = __builtin_rvtt_sfpload (nullptr, 8, 0, 0, 3, 7);
+    b = __builtin_rvtt_sfpload (nullptr, 4, 0, 0, 3, 7);
+    __builtin_rvtt_sfpwritelreg (b, 1);
+  }
 }
 /*
 **_Z3foov:
 **	# READ L0
 **	SFPSTORE	L0, 4, 3, 7, 0, 0
 **	# WRITE L0
+**	# READ L1
+**	SFPSTORE	L1, 4, 3, 7, 0, 0
+**	SFPLOAD	L0, 8, 3, 7, 0, 0
+**	SFPLOAD	L1, 4, 3, 7, 0, 0
+**	# WRITE L1
 **	ret
 */
 
