@@ -343,7 +343,7 @@
      (match_operand:SI   2 "const_int_operand" "n")
      ] UNSPECV_SFPBANKDONE)]
   "TARGET_XTT_TENSIX_QSR"
-  "SFPNOP\t%0, %1, %2"
+  "SFPBANKDONE\t%0, %1, %2"
   [(set_attr "type" "tensix")])
 
 (define_expand "movxtt32si"
