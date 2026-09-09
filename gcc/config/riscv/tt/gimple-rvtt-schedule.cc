@@ -39,7 +39,8 @@ along with GCC; see the file COPYING3.  If not see
 constexpr unsigned STORE_LOAD_WINDOW = 2;
 
 static std::pair <gcall *, const rvtt_insn_data *>
-find_store (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id, unsigned slot_count)
+find_store (gimple_stmt_iterator gsi, gcall *load,
+	    rvtt_insn_data::insn_id store_id, unsigned slot_count)
 {
   for (; !gsi_end_p (gsi); gsi_prev (&gsi))
     if (auto *insnd = rvtt_get_insn_data (*gsi))
@@ -59,6 +60,13 @@ find_store (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id, unsigned
 	  // Let's not hop over the other kind of store.
 	  return {nullptr, nullptr};
 
+	case rvtt_insn_data::sfpload:
+	case rvtt_insn_data::sfploadsrcs:
+	  if (*gsi == load)
+	    break;
+	  // These might mutate load/store state.
+	  [[fallthrough]];
+
 	case rvtt_insn_data::sfpbankdone:
 	case rvtt_insn_data::ttincrwc:
 	  // These can mutate load/store state
@@ -77,7 +85,7 @@ find_store (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id, unsigned
     return {nullptr, nullptr};
 
   return find_store (gsi_last_bb (single_pred_edge (gsi_bb (gsi))->src),
-		     store_id, slot_count);
+		     nullptr, store_id, slot_count);
 }
 
 static bool
@@ -85,7 +93,8 @@ maybe_elide_load (gimple_stmt_iterator gsi, rvtt_insn_data::insn_id store_id,
 		  const rvtt_insn_data *load_insnd)
 {
   // +1 because we must skip over the load
-  auto [store_call, store_insnd] = find_store (gsi, store_id, STORE_LOAD_WINDOW + 1);
+  auto [store_call, store_insnd] = find_store (gsi, as_a <gcall *> (*gsi),
+					       store_id, STORE_LOAD_WINDOW + 1);
   if (!store_call)
     return false;
 
