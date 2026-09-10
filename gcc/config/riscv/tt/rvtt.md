@@ -365,10 +365,14 @@
    && (register_operand (operands[0], XTT32SImode)
        || reg_or_cstlreg_operand (operands[1], XTT32SImode))"
   {
-    if (!which_alternative)
-      return "SFPMOV\t%0, %x1, 2";
-     rvtt_mov_error (insn, which_alternative == 1);
-     return which_alternative == 1 ? "BADLOAD\t%x0, %1" :"BADSTORE\t%x1, %0";
+    static const char *const assembly[] = {
+      "SFPMOV\t%0, %x1, 2",
+      "SFPBADLOAD\t%x0, %1",
+      "SFPBADSTORE\t%x1, %0",
+    };
+    if (which_alternative)
+      rvtt_mov_error (insn);
+    return assembly[which_alternative];
   }
   [(set_attr "type" "tensix")])
 
