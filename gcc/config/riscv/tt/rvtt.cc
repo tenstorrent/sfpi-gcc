@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "diagnostic-core.h"
+#include "print-rtl.h"
 #include "tm_p.h"
 #include "../riscv-protos.h"
 
@@ -243,14 +244,47 @@ rvtt_insn_data::sets_cc (gcall *stmt) const
   return false;
 }
 
-void rvtt_mov_error (const rtx_insn *insn, bool is_load)
+void rvtt_mov_error (const rtx_insn *insn)
 {
   if (INSN_HAS_LOCATION (insn))
     input_location = INSN_LOCATION (insn);
-  debug_rtx (insn);
-  internal_error ("cannot %s sfpu register (register %s)",
-		  is_load ? "load" : "store",
-		  is_load ? "fill" : "spill");
+
+  // Examine the mem to see if this is a stack load or store
+  auto pat = PATTERN (insn);
+  auto mem = SET_SRC (pat);
+  if (!MEM_P (mem))
+    mem = SET_DEST (pat);
+  auto addr = XEXP (mem, 0);
+  auto reg = GET_CODE (addr) == PLUS ? XEXP (addr, 0) : addr;
+  bool spill_fill = REG_P (reg)
+    && (REGNO (reg) == STACK_POINTER_REGNUM
+	|| (REGNO (reg) == HARD_FRAME_POINTER_REGNUM && frame_pointer_needed));
+
+  error_at (input_location,
+	    spill_fill ? "there are too few lregs to hold live values"
+	    : "cannot transfer sfpu register to/from memory");
+  if (spill_fill)
+    inform (input_location,
+	    "try %<sfpi::lreg_pressure%>, or reduce the number of live variables");
+
+  // Get the instruction into a diagnostic
+  char *buffer = nullptr;
+  size_t size = 0;
+  FILE *stream = open_memstream (&buffer, &size);
+  dump_insn_slim (stream, insn);
+  // Clean up the buffer
+  bool space = false;
+  for (unsigned pos = 0; buffer[pos]; pos++)
+    {
+      space = buffer[pos] == '\n';
+      if (space)
+	buffer[pos] = ' ';
+    }
+  if (space)
+    buffer[--size] = 0;
+  inform (input_location, "instruction is %qs", buffer + (buffer[0] == ' '));
+  fclose (stream);
+  free (buffer);
 }
 
 // If a stmt's single use args aren't tracked back to their
