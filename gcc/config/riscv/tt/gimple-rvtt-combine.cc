@@ -49,7 +49,7 @@ along with GCC; see the file COPYING3.  If not see
 // in some order. The patterns are described in a GimpleCombine (.gc) file,
 // processed by genrvtt-combine whose output is #included above. Each combiner
 // is a list of patterns to match, a list of replacements to substitute, a set of
-// bespoke predicates, init & fini functions and a few extraneous flags.
+// bespoke predicates & init functions and a few extraneous flags.
 
 // The matcher is pretty simplistic -- it doesn't try and minimize searches
 // beyond recording possible starting points.  We do order the checks to do the
@@ -123,7 +123,6 @@ namespace {
     bool (*enable_hook) (); // combiner-specific emablement
     bool (*pred_hook) (gcall *[], tree [], bool); // combiner-specific checks
     void (*init_hook) (gcall *[], tree [], bool); // combiner-specific initialization
-    void (*fini_hook) (gcall *[], tree []); // combiner-specific finalization
 
   public:
     struct matched_data;
@@ -688,9 +687,6 @@ Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &d
   unlink_stmt_vdef (**gsi);
   gsi_remove (gsi, true);
   *gsi = gsi_for_stmt (matched.replace[shapes[reps_hwm - 1].lhs]);
-
-  if (fini_hook)
-    fini_hook (matched.replace, matched.vars);
 
   if (dump_file)
     {

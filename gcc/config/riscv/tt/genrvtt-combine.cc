@@ -45,7 +45,6 @@ along with GCC; see the file COPYING3.  If not see
     { init } [opt]
     var = bltin (args, ...);
     ...
-    { fini } [opt]
   }
 
   file : def*
@@ -449,7 +448,6 @@ struct Combine {
       H_Enable,
       H_Pred,
       H_Init,
-      H_Fini,
       H_HWM
     };
 
@@ -686,7 +684,6 @@ Combine::parse (Lexer &lexer)
   lexer.consume_code (hooks[H_Init], true);
   if (!parse_patterns (lexer, false))
     return false;
-  lexer.consume_code (hooks[H_Fini], true);
   if (!lexer.consume ('}'))
     return false;
 
@@ -824,7 +821,7 @@ Combine::emit_enable_name (Stream &out) const
 void
 Combine::emit_hook_name (Stream &out, Hooks hook) const
 {
-  static char const *const tags[H_HWM] = {"_enable", "_pred", "_init", "_fini"};
+  static char const *const tags[H_HWM] = {"_enable", "_pred", "_init"};
   out.print ("combiner_", lineno, tags[hook]);
 }
 
@@ -837,24 +834,22 @@ Combine::emit_hook (Stream &out, Hooks hook) const
   if (hook != H_Enable)
     {
       out.print ("gcall *calls[], tree vars[]");
-      if (hook != H_Fini)
-	out.print (", bool commuted ATTRIBUTE_UNUSED");
+      out.print (", bool commuted ATTRIBUTE_UNUSED");
     }
   out.print (")\n{\n");
 
   if (hook != H_Enable)
     {
-      auto const &slot = hook == H_Fini ? reps : pats;
-      for (unsigned call = 0; call != slot.size (); call++)
+      for (unsigned call = 0; call != pats.size (); call++)
 	{
-	  auto ix = remap[slot[call].lhs.slot];
+	  auto ix = remap[pats[call].lhs.slot];
 	  out.print ("  auto &", vars[ix].name, "_call"
 		     " ATTRIBUTE_UNUSED = calls[", ix, "];\n");
 	}
       out.print ("\n");
 
       for (unsigned op = 0; op != vars.size (); op++)
-	if (hook != H_Fini && op >= pats.size () && op < rep_lhs_hwm)
+	if (op >= pats.size () && op < rep_lhs_hwm)
 	  continue;
 	else if (hook == H_Pred && op >= pat_var_hwm)
 	  continue;
