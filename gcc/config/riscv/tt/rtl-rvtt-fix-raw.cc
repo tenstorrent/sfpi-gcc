@@ -18,77 +18,32 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
 #include "rtl.h"
 #include "tree-pass.h"
+#include "print-rtl.h"
 #include "cfgbuild.h"
 #include "rvtt.h"
-
-#define DUMP(...) //fprintf(stderr, __VA_ARGS__)
-
-static bool
-load_mem_p (rtx pat)
-{
-  if (GET_CODE (pat) != SET)
-    return false;
-
-  if (GET_CODE (SET_DEST (pat)) != REG)
-    return false;
-
-  rtx src = SET_SRC (pat);
-  if (GET_CODE (src) == CALL
-      || GET_CODE (src) == ASM_OPERANDS)
-    return false;
-
-  return contains_mem_rtx_p (src);
-}
-
-static bool
-get_mem_reg_and_offset (rtx pat, int *reg, int *offset)
-{
-  if (GET_CODE (pat) == ZERO_EXTEND
-      || GET_CODE (pat) == SIGN_EXTEND)
-    pat = XEXP(pat, 0);
-
-  if (GET_CODE (pat) == ASM_OPERANDS)
-    return false;
-
-  gcc_assert (MEM_P (pat));
-
-  if (REG_P (XEXP (pat, 0)))
-    {
-      *reg = REGNO(XEXP(pat, 0));;
-      *offset = 0;
-    }
-  else if (GET_CODE (XEXP(pat, 0)) != PLUS
-	   && GET_CODE (XEXP(pat, 0)) != LO_SUM)
-    return false;
-  else
-    {
-      gcc_assert (REG_P (XEXP (XEXP (pat, 0), 0)));
-
-      *offset = CONST_INT_P (XEXP (XEXP (pat, 0), 1))
-	? INTVAL (XEXP (XEXP (pat, 0), 1))
-	: 0;
-      *reg = REGNO (XEXP (XEXP (pat, 0), 0));
-    }
-
-  return true;
-}
 
 static void
 emit_load (rtx_insn *insn, bool before, rtx mem)
 {
   mem = copy_rtx (mem);
   MEM_VOLATILE_P (mem) = true;
-  rtx new_insn = gen_rtx_SET (gen_rtx_REG (SImode, 0), gen_rtx_ZERO_EXTEND (SImode, mem));
-  if (before)
-    emit_insn_before (new_insn, insn);
-  else
-    emit_insn_after (new_insn, insn);
+  if (GET_MODE (mem) != SImode)
+    mem = gen_rtx_ZERO_EXTEND (SImode, mem);
+  rtx new_insn = gen_rtx_SET (gen_rtx_REG (SImode, 0), mem);
+  auto inserted = before ? emit_insn_before (new_insn, insn)
+    : emit_insn_after (new_insn, insn);
+  if (dump_file)
+    {
+      fprintf (dump_file, "Inserting ");
+      dump_insn_slim (dump_file, inserted);
+    }
 }
 
 // WH has a read after write hazard bug where loading a word after a byte or
@@ -104,72 +59,137 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
 // store's ptr register, a load of any size, or the end of the block. (It is
 // desirable to sink the load as late as possible.)
 
+namespace {
+struct Access {
+  rtx mem = nullptr;
+  int regno = -1;
+  int offset = 0;
+
+  operator bool () const { return mem; }
+  Access &operator = (rtx);
+
+  bool is_subword () const {
+    return GET_MODE (mem) != SImode;
+  }
+
+  bool overlaps (Access const &other) const {
+    if (regno != other.regno)
+      return false;
+
+    int size = GET_MODE_SIZE (GET_MODE (mem)).to_constant ();
+    int other_size = GET_MODE_SIZE (GET_MODE (other.mem)).to_constant ();
+
+    return (offset + size) > other.offset
+      && (other.offset + other_size) > offset;
+  }
+};
+}
+
+Access &
+Access::operator= (rtx m)
+{
+  if (m)
+    {
+      if (GET_CODE (m) == ZERO_EXTEND
+	  || GET_CODE (m) == SIGN_EXTEND)
+	m = XEXP (m, 0);
+
+      if (MEM_P (m) && !rvtt_reg_mem_p (m)
+	  && (GET_MODE (m) == SImode
+	      || GET_MODE (m) == HImode
+	      || GET_MODE (m) == QImode))
+	{
+	  rtx op = XEXP (m, 0);
+	  if (REG_P (op))
+	    regno = REGNO (op);
+	  else if (GET_CODE (op) == PLUS
+		   || GET_CODE (op) == LO_SUM)
+	    {
+	      regno = REGNO (XEXP (op, 0));
+	      offset = INTVAL (XEXP (op, 1));
+	    }
+	  else
+	    m = nullptr;;
+	}
+      else
+	m = nullptr;
+    }
+  mem = m;
+
+  return *this;
+}
+
 static void
 workaround_raw (function *cfn)
 {
-  DUMP("RAW pass on: %s\n", function_name(cfn));
-
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
-      DUMP("Processing BB %d\n", bb->index);
+      Access store; // most recent store we need to remember
       rtx_insn *insn;
-      bool have_store = false;
-      int store_ptr_regno = 0;
-      rtx store_mem = nullptr;
+
       FOR_BB_INSNS (bb, insn)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 
-	  rtx insn_pat = PATTERN (insn);
-	  bool new_store = false;
+	  rtx pat = PATTERN (insn);
+	  Access access;
+	  bool is_store = false;
+	  rtx set_dst = nullptr;
 
-	  if (GET_CODE (insn_pat) == SET
-	      && GET_CODE (SET_DEST (insn_pat)) == MEM)
+	  if (GET_CODE (pat) == SET)
 	    {
-	      machine_mode mode = GET_MODE (SET_SRC (insn_pat));
-	      if ((mode == HImode || mode == QImode)
-		  && !rvtt_reg_store_p (insn_pat))
-		new_store = true;
+	      access = set_dst = SET_DEST (pat);
+	      if (access)
+		{
+		  is_store = true;
+		  set_dst = nullptr;
+		}
+	      else
+		access = SET_SRC (pat);
 	    }
 
-	  if (!have_store)
-	    ;
-	  else if (new_store
-		   || GET_CODE (insn) == CALL_INSN
-		   || load_mem_p (insn_pat)
-		   || (GET_CODE (insn_pat) == SET
-		       && refers_to_regno_p (store_ptr_regno, SET_DEST (insn_pat))))
+	  // access indicates this insn's load or store info
+	  if (store)
 	    {
-	      // Emit the war when we hit a load or if the base reg gets modified
-	      DUMP("emitting raw war before load\n");
-	      emit_load (insn, true, store_mem);
-	      have_store = false;
-	    }
-	  else
-	    gcc_assert (insn == BB_END (bb)
-			|| !control_flow_insn_p (insn));
+	      bool need_load = false;
+	      if (store.is_subword ())
+		{
+		  if (is_store
+		      || GET_CODE (insn) == CALL_INSN
+		      || access
+		      || (set_dst && refers_to_regno_p (store.regno, set_dst)))
+		    need_load = true;
+		}
+	      else if (access && access.is_subword ()
+		       && store.overlaps (access))
+		need_load = true;
 
-	  if (new_store)
-	    {
-	      // Found a potential RAW issue store
-	      int dummy_offset;
-	      get_mem_reg_and_offset (SET_DEST (insn_pat), &store_ptr_regno, &dummy_offset);
-	      store_mem = SET_DEST (insn_pat);
-	      have_store = true;
-	      DUMP("raw war pending for [%d]\n", war_ptr_regno);
+	      if (need_load)
+		{
+		  emit_load (insn, true, store.mem);
+		  if (dump_file)
+		    {
+		      fprintf (dump_file, "before ");
+		      dump_insn_slim (dump_file, insn);
+		    }
+		  store.mem = nullptr;
+		}
 	    }
+
+	  if (is_store)
+	    store = access;
 	}
 
-      if (have_store)
+      if (store && store.is_subword ())
 	{
-	  DUMP("emitting raw war at end of bb\n");
-	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store_mem);
-	  have_store = false;
+	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store.mem);
+	  if (dump_file)
+	    fprintf (dump_file, "at end of block");
+	  store = nullptr;
 	}
     }
-  DUMP("out raw pass\n");
 }
 
 namespace {

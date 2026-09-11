@@ -290,7 +290,7 @@ extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PU
 extern void rvtt_prep_stmt_for_deletion(gimple *stmt);
 
 extern bool rvtt_store_has_restrict_p(const rtx pat);
-extern bool rvtt_reg_store_p(const rtx pat);
 extern bool rvtt_l1_store_p(const rtx pat);
+extern bool rvtt_reg_mem_p (rtx mem);
 
 #endif

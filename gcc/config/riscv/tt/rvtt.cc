@@ -657,12 +657,8 @@ bool rvtt_l1_store_p(const rtx pat)
   return false;
 }
 
-bool rvtt_reg_store_p(const rtx pat)
+bool
+rvtt_reg_mem_p (rtx mem)
 {
-  if (GET_CODE(pat) == SET)
-    {
-      return rvtt_has_attrib_p("rvtt_reg_ptr", SET_DEST(pat));
-    }
-
-  return false;
+  return rvtt_has_attrib_p ("rvtt_reg_ptr", mem);
 }
