@@ -1,5 +1,6 @@
 // { dg-do compile }
 // { dg-additional-options "-mcpu=tt-wh -mabi=ilp32 -fno-inline -O2 -fno-exceptions" }
+// { dg-final { check-function-bodies "**" "" } }
 
 // Read after write race with different sized accesses and different
 // effective addresses.
@@ -37,14 +38,46 @@ int foo (unsigned x, unsigned y) {
     + bad<short> (x, y) + bad<char> (x, y);
 }
 
-// Ideally we'd not insert in these cases ...
-// { dg-final { scan-assembler {_Z2okIsEjjj:\n[^:]*\n[\t ]+sh[\t ]+a.,8\(sp\)\n[\t ]+lhu[\t ]+zero,8\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} } }
-// { dg-final { scan-assembler {_Z2okIcEjjj:\n[^:]*\n[\t ]+sb[\t ]+a.,8\(sp\)\n[\t ]+lbu[\t ]+zero,8\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} } }
+/*
+**_Z2okIsEjjj:
+**	addi	sp,sp,-16
+**	sh	a1,10\(sp\)
+**	lhu	zero,10\(sp\)
+**	sh	a0,8\(sp\)
+**	lw	a0,8\(sp\)
+**	addi	sp,sp,16
+**	jr	ra
+*/
 
-// ... and generate this ...
-// { dg-final { scan-assembler {_Z2okIsEjjj:\n[^:]*\n[\t ]+sh[\t ]+a.,8\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} { xfail *-*-* } } }
-// { dg-final { scan-assembler {_Z2okIcEjjj:\n[^:]*\n[\t ]+sb[\t ]+a.,8\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} { xfail *-*-* } } }
+/*
+**_Z2okIcEjjj:
+**	addi	sp,sp,-16
+**	sb	a1,9\(sp\)
+**	lbu	zero,9\(sp\)
+**	sb	a0,8\(sp\)
+**	lw	a0,8\(sp\)
+**	addi	sp,sp,16
+**	jr	ra
+*/
 
-// ... but thse do need the workaround
-// { dg-final { scan-assembler {_Z3badIsEjjj:\n[^:]*\n[\t ]+sh[\t ]+a.,10\(sp\)\n[\t ]+lhu[\t ]+zero,10\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} } }
-// { dg-final { scan-assembler {_Z3badIcEjjj:\n[^:]+[\t ]+sb[\t ]+a.,9\(sp\)\n[\t ]+lbu[\t ]+zero,9\(sp\)\n[\t ]+lw[\t ]+a.,8\(sp\)\n} } }
+/*
+**_Z3badIsEjjj:
+**	addi	sp,sp,-16
+**	sh	a0,8\(sp\)
+**	sh	a1,10\(sp\)
+**	lhu	zero,10\(sp\)
+**	lw	a0,8\(sp\)
+**	addi	sp,sp,16
+**	jr	ra
+*/
+
+/*
+**_Z3badIcEjjj:
+**	addi	sp,sp,-16
+**	sb	a0,8\(sp\)
+**	sb	a1,9\(sp\)
+**	lbu	zero,9\(sp\)
+**	lw	a0,8\(sp\)
+**	addi	sp,sp,16
+**	jr	ra
+*/

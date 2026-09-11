@@ -24,6 +24,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "backend.h"
 #include "rtl.h"
+#include "memmodel.h"
+#include "emit-rtl.h"
 #include "tree-pass.h"
 #include "print-rtl.h"
 #include "cfgbuild.h"
@@ -34,7 +36,7 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
 {
   mem = copy_rtx (mem);
   MEM_VOLATILE_P (mem) = true;
-  if (GET_MODE (mem) != SImode)
+  if (GET_MODE (mem) != SImode && GET_MODE (mem) != SFmode)
     mem = gen_rtx_ZERO_EXTEND (SImode, mem);
   rtx new_insn = gen_rtx_SET (gen_rtx_REG (SImode, 0), mem);
   auto inserted = before ? emit_insn_before (new_insn, insn)
@@ -46,41 +48,48 @@ emit_load (rtx_insn *insn, bool before, rtx mem)
     }
 }
 
-// WH has a read after write hazard bug where loading a word after a byte or
-// half store issues the load before the store.  The bug is in the address
-// comparator logic and it’s 32bits wide. if addresses match, RAW hazard will
-// be detected. So if the shorter store is word-aligned, we have no hazard. (we
-// do not take advantage of that) Mem logic is prioritizing loads over stores
-// and even though there’s no reorder buffer, 2 loads could get issued before a
-// store actually gets out. If there is an intervening store, it is not clear
-// whether the hazard is resolved.  As the bug is very sensitive, we anull it
-// in all cases by placing a short load as late as possible after the short
-// store. That's when we encounter the first control-flow change, write to
-// store's ptr register, a load of any size, or the end of the block. (It is
-// desirable to sink the load as late as possible.)
-
 namespace {
 struct Access {
   rtx mem = nullptr;
-  int regno = -1;
+  int reg = 0;
   int offset = 0;
 
   operator bool () const { return mem; }
   Access &operator = (rtx);
 
   bool is_subword () const {
-    return GET_MODE (mem) != SImode;
+    return GET_MODE (mem) == HImode
+      || GET_MODE (mem) == QImode;
   }
 
+  // The accesses partially overlap.
   bool overlaps (Access const &other) const {
-    if (regno != other.regno)
+    if (reg != other.reg)
       return false;
 
-    int size = GET_MODE_SIZE (GET_MODE (mem)).to_constant ();
-    int other_size = GET_MODE_SIZE (GET_MODE (other.mem)).to_constant ();
+    auto get_size = [] (machine_mode mode) {
+      return mode == QImode ? UNITS_PER_WORD / 4
+	: mode == HImode ? UNITS_PER_WORD / 2
+	: UNITS_PER_WORD;
+    };
+    int size = get_size (GET_MODE (mem));
+    int other_size = get_size (GET_MODE (other.mem));
+
+    if (size == other_size)
+      return false;
 
     return (offset + size) > other.offset
       && (other.offset + other_size) > offset;
+  }
+
+  bool is_aligned () const {
+    // If there's an offset, assume base pointer was aligned.
+    if (offset)
+      return !(offset & 3);
+
+    // If there's no offset, only know sp and fp are aligned
+    return reg == STACK_POINTER_REGNUM
+      || (frame_pointer_needed && reg == HARD_FRAME_POINTER_REGNUM);
   }
 };
 }
@@ -101,11 +110,14 @@ Access::operator= (rtx m)
 	{
 	  rtx op = XEXP (m, 0);
 	  if (REG_P (op))
-	    regno = REGNO (op);
+	    {
+	      reg = REGNO (op);
+	      offset = 0;
+	    }
 	  else if (GET_CODE (op) == PLUS
 		   || GET_CODE (op) == LO_SUM)
 	    {
-	      regno = REGNO (XEXP (op, 0));
+	      reg = REGNO (XEXP (op, 0));
 	      offset = INTVAL (XEXP (op, 1));
 	    }
 	  else
@@ -119,6 +131,45 @@ Access::operator= (rtx m)
   return *this;
 }
 
+// WH has a read after write hazard bug because the load's checking of the
+// outstanding writes compares the entire address, (not ignoring the bottom 2
+// bits).  Thus:
+//
+// 1) A non-word-aligned byte (or half) store followed by an (aligneD) word
+// load will read stale data.
+//
+// 2) An (aligned) word store followed by a non-word-aligned byte (or half)
+// load will read stale data.
+//
+// Mem logic prioritizes loads over stores and even though there’s no reorder
+// buffer, 2 loads could get issued before a store actually gets out. If there
+// is an intervening store, it is not clear whether the hazard is resolved.
+//
+// Fully covering all cases is prohibitively expensive for performance.
+//
+// There are two access patterns, reg, or reg + cst.  The former is (usually)
+// an arbitrary pointer where we do not know the alignment, but the latter is a
+// structure (or stack, same thing) access, where we know the base pointer
+// alignment and can presume it's at least word aligned (let's igore char-only
+// structs).
+
+// For the former case, with a sub-word store, we need to insert a sub-word
+// load before the next larger load that is not a stack load.  If the base
+// pointer changes, also insert such a load before the base pointer change.
+
+// For the latter case, with a sub-word store at a non-aligned constant offset,
+// insert a load before the next load off the same base pointer, or when the
+// base pointer changes.
+
+// For the latter case, with a word store, insert a load before the next
+// subword load at a non-aligned offset from the same base pointer.
+
+// If we reach the end of a bb with a live unaligned sub-word store insert a
+// load.
+
+// If we have a live unaligned sub-word store at a call site, insert a
+// protecting load.
+
 static void
 workaround_raw (function *cfn)
 {
@@ -126,6 +177,7 @@ workaround_raw (function *cfn)
   FOR_EACH_BB_FN (bb, cfn)
     {
       Access store; // most recent store we need to remember
+      bool store_is_unaligned = false;
       rtx_insn *insn;
 
       FOR_BB_INSNS (bb, insn)
@@ -135,7 +187,7 @@ workaround_raw (function *cfn)
 
 	  rtx pat = PATTERN (insn);
 	  Access access;
-	  bool is_store = false;
+	  bool new_store = false;
 	  rtx set_dst = nullptr;
 
 	  if (GET_CODE (pat) == SET)
@@ -143,7 +195,7 @@ workaround_raw (function *cfn)
 	      access = set_dst = SET_DEST (pat);
 	      if (access)
 		{
-		  is_store = true;
+		  new_store = true;
 		  set_dst = nullptr;
 		}
 	      else
@@ -154,16 +206,17 @@ workaround_raw (function *cfn)
 	  if (store)
 	    {
 	      bool need_load = false;
-	      if (store.is_subword ())
+	      if (store_is_unaligned)
 		{
-		  if (is_store
+		  if (new_store
 		      || GET_CODE (insn) == CALL_INSN
 		      || access
-		      || (set_dst && refers_to_regno_p (store.regno, set_dst)))
+		      || (set_dst && refers_to_regno_p (store.reg, set_dst)))
 		    need_load = true;
 		}
-	      else if (access && access.is_subword ()
-		       && store.overlaps (access))
+	      else if (!new_store
+		       && access && access.is_subword () && !access.is_aligned ()
+		       && access.overlaps (store))
 		need_load = true;
 
 	      if (need_load)
@@ -178,11 +231,14 @@ workaround_raw (function *cfn)
 		}
 	    }
 
-	  if (is_store)
-	    store = access;
+	  if (new_store)
+	    {
+	      store = access;
+	      store_is_unaligned = store.is_subword () && !store.is_aligned ();
+	    }
 	}
 
-      if (store && store.is_subword ())
+      if (store && store_is_unaligned)
 	{
 	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store.mem);
 	  if (dump_file)

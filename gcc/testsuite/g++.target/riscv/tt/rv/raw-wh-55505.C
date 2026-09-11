@@ -52,7 +52,6 @@ Shape foo (int a, int b) {
 **_Z3fooii:
 **	addi	sp,sp,-16
 **	sb	a0,8\(sp\)
-**	lbu	zero,8\(sp\)
 **	sb	a1,9\(sp\)
 **	lbu	zero,9\(sp\)
 **	sh	zero,10\(sp\)
