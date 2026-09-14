@@ -73,7 +73,6 @@ namespace {
   // pattern possibilities
   enum class Flags : uint8_t {
     OtherUses = 1 << 0, // Other uses are permissable (do not delete)
-    MaybeUnused = 1 << 1, // There might be no uses of this (it could be null)
     SetAnywhere = 1 << 2, // It may be set anywhere, (not in the same live region)
     SameRegion = 1 << 3, // It must be in the same CC region
   };
@@ -91,6 +90,8 @@ namespace {
     uint8_t flags; // flags for lhs var
     uint8_t num_args; // number of args to fn
     uint8_t used_by_mask; // which patterns use lhs
+    uint8_t commute_arg; // arg that commutes (with previous)
+    uint8_t commute_bit; // bit in the commute mask
     Arg args[args_hwm];  // Argument information
 
   public:
@@ -114,35 +115,36 @@ namespace {
 
     uint8_t replace_mask; // patterns whos output is a replacement output
     uint8_t rep_use_mask; // patterns whos output is used in a replacement
-    int8_t commute_arg; // final pattern commutable arg, if non-negative
+    int8_t commute_bits;  // number of bits in the commute mask
 
     unsigned lineno; // line in rvtt.gc file
     bool is_deferred;
     Tags label;
 
     bool (*enable_hook) (); // combiner-specific emablement
-    bool (*pred_hook) (gcall *[], tree [], bool); // combiner-specific checks
-    void (*init_hook) (gcall *[], tree [], bool); // combiner-specific initialization
+    int (*pred_hook) (gcall *[], tree [], unsigned); // combiner-specific checks
+    void (*init_hook) (gcall *[], tree [], unsigned); // combiner-specific initialization
 
   public:
     struct matched_data;
-    bool match (gcall *call, const rvtt_insn_data *insnd, matched_data &) const;
+    int match (gcall *call, const rvtt_insn_data *insnd, matched_data &) const;
     void replace (gimple_stmt_iterator *, matched_data &, Deferred &) const;
 
   private:
     struct match_masks;
     bool match_init (unsigned ix, const Shape &, gcall *call, matched_data &matched, match_masks &masks) const;
     bool match_fini (const Shape &, const rvtt_insn_data *insnd, match_masks &masks) const;
-    bool match_arg (const Shape &, int argno, basic_block bb, int commute_delta,
-		    gcall *call, const rvtt_insn_data *insnd, matched_data &matched, match_masks &masks) const;
+    bool match_arg (const Shape &, int argno, basic_block bb, gcall *call,
+		    const rvtt_insn_data *insnd, matched_data &matched, match_masks &masks) const;
     bool match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn_data *insnd,
 		      matched_data &matched, match_masks &masks) const;
+    bool match_check (matched_data &matched, match_masks const &masks) const;
   };
 }
 
-static bool moot_muli_addi_ok (gcall *call);
-inline bool moot_muli_ok (gcall *call) { return moot_muli_addi_ok (call); }
-inline bool moot_addi_ok (gcall *call) { return moot_muli_addi_ok (call); }
+static bool moot_muli_addi_ok (gcall *call, bool never);
+inline bool moot_muli_ok (gcall *call, bool never = false) { return moot_muli_addi_ok (call, never); }
+inline bool moot_addi_ok (gcall *call, bool never = false) { return moot_muli_addi_ok (call, never); }
 
 static bool ATTRIBUTE_UNUSED combiner_enable_false () { return false; }
 static bool combiner_enable_WH () { return TARGET_XTT_TENSIX_WH; }
@@ -151,13 +153,11 @@ static bool combiner_enable_BH_QSR () { return TARGET_XTT_TENSIX_BH_QSR; }
 static bool combiner_enable_QSR () { return TARGET_XTT_TENSIX_QSR; }
 
 #define OU unsigned (Flags::OtherUses)
-#define MU unsigned (Flags::MaybeUnused)
 #define SA unsigned (Flags::SetAnywhere)
 #define SR unsigned (Flags::SameRegion)
 #include "rvtt-combine.inc"
 #undef SR
 #undef SA
-#undef MU
 #undef OU
 
 bool
@@ -245,7 +245,7 @@ struct Combiner::matched_data {
   const Combiner *combiner;
   unsigned deleted = 0;  // Will delete insn
   unsigned delete_last = 0; // Delete if this is last use
-  bool commuted = false;
+  unsigned commute_mask = 0; // Which shapes had commuted args
   int mooted = false; // Another combiner deleted a call we rewrite
 
   matched_data (const Combiner *c)
@@ -338,9 +338,9 @@ static Deferred deferred;
 
 // Mooting a deferred combine is ok, unless the register pressure is high and
 // there is one to moot.
-bool moot_muli_addi_ok (gcall *call)
+bool moot_muli_addi_ok (gcall *call, bool never)
 {
-  return !(lreg_pressure > 0
+  return !((never || lreg_pressure > 0)
 	   && deferred.is_deferred (call, Combiner::T_MULI_ADDI));
 }
 
@@ -348,14 +348,11 @@ bool
 Combiner::match_init (unsigned ix, const Shape &pat, gcall *call, matched_data &matched, match_masks &masks) const
 {
   gcc_assert (!((1 << pat.lhs) & masks.vars));
-  tree lhs = gimple_call_lhs (call);
-  if (!lhs && !(pat.flags & unsigned (Flags::MaybeUnused)))
-    return false;
 
   matched.calls[ix] = call;
   masks.calls |= 1 << ix;
 
-  matched.vars[pat.lhs] = lhs;
+  matched.vars[pat.lhs] = gimple_call_lhs (call);
   masks.vars |= 1u << pat.lhs;
 
   return true;
@@ -371,7 +368,7 @@ Combiner::match_fini (const Shape &pat, const rvtt_insn_data *insnd, match_masks
 }
 
 bool
-Combiner::match_arg (const Shape &pat, int argno, basic_block bb, int commute_delta,
+Combiner::match_arg (const Shape &pat, int argno, basic_block bb,
 		     gcall *call, const rvtt_insn_data *insnd,
 		     matched_data &matched, match_masks &masks) const
 {
@@ -385,10 +382,18 @@ Combiner::match_arg (const Shape &pat, int argno, basic_block bb, int commute_de
       return true;
     }
   else if (argno)
-    lv_delta = 1;
+    lv_delta = 1; // FIXME: Change if ever more than one LV
 
   auto &arg_info = pat.args[argno];
-  auto arg = gimple_call_arg (call, argno + commute_delta - lv_delta);
+  if (pat.commute_arg && matched.commute_mask & (1 << pat.commute_bit))
+    {
+      // We're commuting
+      if (argno == pat.commute_arg)
+	argno--;
+      else if (argno + 1 == pat.commute_arg)
+	argno++;
+    }
+  auto arg = gimple_call_arg (call, argno - lv_delta);
 
   if (!arg_info.is_var)
     // A constant, must match
@@ -432,65 +437,17 @@ Combiner::match_shape (unsigned ix, basic_block bb, gcall *call, const rvtt_insn
   if (!match_init (ix, pat, call, matched, masks))
     return false;
   for (int argno = 0; argno != pat.num_args; argno++)
-    if (!match_arg (pat, argno, bb, 0, call, insnd, matched, masks))
+    if (!match_arg (pat, argno, bb, call, insnd, matched, masks))
       return false;
 
   return match_fini (pat, insnd, masks);
 }
 
+// Expensive checks matching checks, defer to as late as possible
+
 bool
-Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
+Combiner::match_check (matched_data &matched, match_masks const &masks) const
 {
-  auto &pat = shapes[pats_hwm - 1];
-  match_masks commute_save;
-  match_masks masks;
-  int commute_delta = 0;
-
-  if (!match_init (pats_hwm - 1, pat, call, matched, masks))
-    return false;
-
-  int argno = 0;
-  if (false)
-    {
-    commute_or_fail:;
-      if (commute_arg < 0 || matched.commuted)
-	// Already tried commuting, or can't
-	return false;
-
-      commute_delta = +1;
-      matched.commuted = true;
-      argno = commute_arg;
-      masks = commute_save;
-      // fall into loop ...
-    }
-
-  for (; argno != pat.num_args; argno++)
-    {
-      if (argno == commute_arg && !matched.commuted)
-	// We might have to rewind to here, so remember these masks
-	commute_save = masks;
-
-      if (!match_arg (pat, argno, gimple_bb (call), commute_delta, call, insnd, matched, masks))
-	goto commute_or_fail;
-
-      if (commute_delta)
-	commute_delta = commute_delta < 0 ? 0 : -1;
-    }
-
-  if (!match_fini (pat, insnd, masks))
-    goto commute_or_fail;
-
-  gcc_assert (masks.calls == ((1u << pats_hwm) - 1)
-	      && masks.vars == (((1u << pats_hwm) - 1)
-				| (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
-
-  if (pred_hook && !pred_hook (matched.calls, matched.vars, matched.commuted))
-    goto commute_or_fail;
-
-  // Expensive checks now.  If these fail, we have to try commuting, because
-  // the commuted args might match.  Consider an add whose *two* inputs are
-  // muls.  For instance, it might be that only the second mul can be combined
-  // into a muladd due to other uses of the first mul's result.
   matched.deleted = replace_mask;
   for (int ix = 0; ix != pats_hwm; ix++)
     {
@@ -505,7 +462,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 				  matched.calls[ix], matched.calls[pats_hwm - 1],
 				  &matched.calls[ix + 1],
 				  pats_hwm - (ix + 1) - 1))
-	    goto commute_or_fail;
+	    return false;
 	}
       else
 	{
@@ -519,7 +476,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 		    matched.delete_last |= 1 << ix;
 		}
 	      else if (has_other_use (lhs, &matched.calls[ix + 1], pats_hwm - (ix + 1)))
-		goto commute_or_fail;
+		return false;
 	      else if (!(rep_use_mask & (1 << ix)))
 		matched.deleted |= 1 << ix;
 	    }
@@ -533,7 +490,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  // No cc insns between any non-setanywhere input and its last use
 	  unsigned last_use = HOST_BITS_PER_WIDE_INT - 1 - clz_hwi (pat.used_by_mask);
 	  if (has_cc_insn_between (matched.calls[ix], matched.calls[last_use]))
-	    goto commute_or_fail;
+	    return false;
 	}
     }
 
@@ -542,7 +499,7 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
     if (auto v = matched.vars[ix])
       for (unsigned jx = ix; jx--; )
 	if (v == matched.vars[jx])
-	  goto commute_or_fail;
+	  return false;
 
   // If any non-lhs non-live var is the same as a deleted lhs, we're not a match
   for (unsigned ix = rep_lhs_hwm; ix != pat_var_hwm; ix++)
@@ -553,54 +510,76 @@ Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched
 	  {
 	    // This non-lhs var matches a deleted (or replaced) lhs var
 	    if (!((1 << ix) & masks.live))
-	      goto commute_or_fail;  // Not a live, not a match
+	      return false;  // Not a live, not a match
 
 	    if (!((1 << jx) & replace_mask))
 	      {
 		// Chase live to deleted insn's live input
 		auto insnd = rvtt_get_insn_data (matched.calls[jx]);
 		if (!insnd->is_live ())
-		  goto commute_or_fail;
+		  return false;
 		v = gimple_call_arg (matched.calls[jx], insnd->live_arg ());
 		matched.vars[ix] = v;
 		// We'll continue checking this in the next iteration
 	      }
 	  }
+  return true;
+}
 
-  // We have a match.
-
-  // It's ok for any non-lhs vars to be the same
-  for (unsigned ix = pats_hwm; ix != rep_lhs_hwm; ix++)
-    matched.vars[ix] = nullptr;
-  for (unsigned ix = pat_var_hwm; ix != rep_var_hwm; ix++)
-    matched.vars[ix] = nullptr;
-
-  if (dump_file)
+int
+Combiner::match (gcall *call, const rvtt_insn_data *insnd, matched_data &matched) const
+{
+  for (; matched.commute_mask < (1u << commute_bits);
+       matched.commute_mask++)
     {
-      fprintf (dump_file, "Found pattern %u:\n", lineno);
-      for (unsigned ix = 0; ix != pats_hwm; ix++)
-	{
-	  char c = 'K';
-	  if ((1 << ix) & replace_mask)
-	    c = 'R';
-	  else if ((1 << ix) & matched.deleted)
-	    c = 'D';
-	  else if ((1 << ix) & matched.delete_last)
-	    c = 'L';
+      match_masks masks;
+      if (!match_shape (pats_hwm - 1, gimple_bb (call), call, insnd, matched, masks))
+	continue;
 
-	  fprintf (dump_file, "%c ", c);
-	  print_gimple_stmt (dump_file, matched.calls[ix], 2);
+      gcc_assert (masks.calls == ((1u << pats_hwm) - 1)
+		  && masks.vars == (((1u << pats_hwm) - 1)
+				    | (((1u << (pat_var_hwm - rep_lhs_hwm)) - 1) << rep_lhs_hwm)));
+      int ok = pred_hook ? pred_hook (matched.calls, matched.vars, matched.commute_mask) : true;
+      if (!ok)
+	continue;
+      if (!match_check (matched, masks))
+	continue;
+      // We have a match.
+
+      // It's ok for any non-lhs vars to be the same
+      for (unsigned ix = pats_hwm; ix != rep_lhs_hwm; ix++)
+	matched.vars[ix] = nullptr;
+      for (unsigned ix = pat_var_hwm; ix != rep_var_hwm; ix++)
+	matched.vars[ix] = nullptr;
+
+      if (dump_file)
+	{
+	  fprintf (dump_file, "Found pattern %u:\n", lineno);
+	  for (unsigned ix = 0; ix != pats_hwm; ix++)
+	    {
+	      char c = 'K';
+	      if ((1 << ix) & replace_mask)
+		c = 'R';
+	      else if ((1 << ix) & matched.deleted)
+		c = 'D';
+	      else if ((1 << ix) & matched.delete_last)
+		c = 'L';
+
+	      fprintf (dump_file, "%c ", c);
+	      print_gimple_stmt (dump_file, matched.calls[ix], 2);
+	    }
 	}
+      return ok;
     }
 
-  return true;
+  return false;
 }
 
 void
 Combiner::replace (gimple_stmt_iterator *gsi, matched_data &matched, Deferred &deferred) const
 {
   if (init_hook)
-    init_hook (matched.calls, matched.vars, matched.commuted);
+    init_hook (matched.calls, matched.vars, matched.commute_mask);
 
   unsigned assign_mask = 0, assign_lv_mask = 0;;
   for (unsigned ix = pats_hwm; ix != reps_hwm; ix++)
@@ -933,15 +912,17 @@ combine_block (Deferred &deferred, basic_block bb)
 		  {
 		    auto *combiner = *I;
 		    Combiner::matched_data match (combiner);
-		    if (combiner->match (as_a <gcall *> (*gsi), insnd, match))
+		    if (auto found = combiner->match (as_a <gcall *> (*gsi), insnd, match))
 		      {
-			if (combiner->is_deferred)
+			if (combiner->is_deferred || found < 0)
 			  {
 			    unsigned ix = deferred.defer (match);
 			    if (dump_file)
 			      fprintf (dump_file, "Deferment %u\n\n", ix);
-			    // Continue the loop because a later combiner might fire
-			    continue;
+			    if (combiner->is_deferred)
+			      // Continue the loop because a later combiner might fire
+			      continue;
+			    break;
 			  }
 			else
 			  {
@@ -1029,17 +1010,25 @@ public:
 	    if (!(s->flags & BB_VISITED))
 	      {
 		s->flags |= BB_VISITED;
-		worklist.push_back ({s, lreg_pressure});
+		worklist.emplace_back (s, lreg_pressure);
 	      }
 	  }
       }
 
     deferred.preprocess_muli_addi ();
 
-    // Apply deferred matches in reverse order
-    for (unsigned ix = deferred.matches.size (); ix--;)
+    std::vector<unsigned> post_list;
+
+    for (unsigned ix = 0; ix != deferred.matches.size (); ix++)
       {
 	auto &match = deferred.matches[ix];
+	if (!match.combiner->is_deferred)
+	  {
+	    // We deferred a non-deferred change.  Save it to apply later if
+	    // it's not mooted
+	    post_list.push_back (ix);
+	    continue;
+	  }
 	if (dump_file)
 	  fprintf (dump_file,
 		   match.mooted ? "Deferment %u is moot\n\n"
@@ -1054,6 +1043,7 @@ public:
 
 	if (match.combiner->label == Combiner::T_MULI_ADDI)
 	  {
+	    // If this is a dynamic constant, remember it
 	    auto *call = match.replace[match.combiner->pats_hwm - 1];
 	    auto *insnd = rvtt_get_insn_data (call);
 	    if (TREE_INT_CST_LOW (gimple_call_arg (call, insnd->id_arg ())))
@@ -1061,6 +1051,21 @@ public:
 	  }
 
 	changed = true;
+      }
+
+    for (unsigned ix : post_list)
+      {
+	auto &match = deferred.matches[ix];
+	if (dump_file)
+	  fprintf (dump_file,
+		   match.mooted ? "Non-defered %us is moot\n\n"
+		   : "Non-deferred %u:\n", ix);
+	if (match.mooted)
+	  continue;
+	match.mooted = -1;
+
+	auto gsi = gsi_for_stmt (match.calls[match.combiner->pats_hwm - 1]);
+	match.combiner->replace (&gsi, match, deferred);
       }
 
     deferred.postprocess_muli_addi ();
