@@ -22,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 
 // integer a + 0 -> a
 combine () {
-  res|MU = sfpiadd_i_lv (0, lv, val, 0, 0, 0, SFPIADD_MOD1_CC_NONE);
+  res = sfpiadd_i_lv (0, lv, val, 0, 0, 0, SFPIADD_MOD1_CC_NONE);
   {}
   res = sfpassign_lv (lv, val);
 }
@@ -114,7 +114,9 @@ combine () {
 }
 
 // These are deferred because we (a) don't want to interrupt a muladd combiner,
-// and (b) we need information about all the sfploadi uses before proceeding.
+// and (b) we need information about all runtime sfploadi uses before
+// proceeding.
+
 // a * fp16b(scalar)
 deferred_combine () MULI_ADDI {
   cst|SA|OU = sfploadi (ptr, val, var, id, SFPLOADI_MOD0_FLOATB);
@@ -135,10 +137,10 @@ deferred_combine () MULI_ADDI {
 combine (BH_QSR) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpmul_lv (lv2, %p, b, mod);
-  { return moot_muli_ok (r_call); }
+  { return moot_muli_ok (r_call, true); }
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
-    if (commuted && imod)
+    if (r_commuted && imod)
       imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
     mod = build_int_cst (TREE_TYPE (mod),
@@ -151,10 +153,10 @@ combine (BH_QSR) {
 combine (BH_QSR) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpadd_lv (lv2, %p, b, mod);
-  { return moot_muli_ok (r_call); }
+  { return moot_muli_ok (r_call, true); }
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
-    if (commuted && imod)
+    if (r_commuted && imod)
       imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
     mod = build_int_cst (TREE_TYPE (mod),
@@ -171,7 +173,7 @@ combine () {
   {
     // For WH mul_mod and add_mod will be zero
     unsigned iadd_mod = TREE_INT_CST_LOW (add_mod);
-    if (commuted && iadd_mod)
+    if (r_commuted && iadd_mod)
       iadd_mod = (iadd_mod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
 	| (iadd_mod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
 
@@ -185,7 +187,7 @@ combine () {
 combine (WH) {
   p = sfpmov_lv (lv1, a, SFPMOV_MOD1_COMPL);
   r = sfpadd_lv (lv2, %p, b, 0);
-  { return moot_addi_ok (r_call); }
+  { return moot_addi_ok (r_call, true); }
   {}
   n1 = sfpreadlreg (CREG_IDX_NEG_1);
   r = sfpmad_lv (lv2, a, n1, b, 0);
@@ -195,18 +197,19 @@ combine (WH) {
 combine (BH_QSR) {
   p = sfpmul_lv (lv1, a, b, mod);
   r = sfpmov_lv (lv2, p, SFPMOV_MOD1_COMPL);
-  { return moot_muli_ok (p_call); }
+  { return moot_muli_ok (p_call, true); }
   {
     mod = build_int_cst (TREE_TYPE (mod),
 			 TREE_INT_CST_LOW (mod) ^ SFPMAD_MOD1_BH_COMPL_A);
   }
   r = sfpmul_lv (lv2, a, b, mod);
 }
+
 // -(a + b)
 combine (BH_QSR) {
   p = sfpadd_lv (lv1, a, b, mod);
   r = sfpmov_lv (lv2, p, SFPMOV_MOD1_COMPL);
-  { return moot_addi_ok (p_call); }
+  { return moot_addi_ok (p_call, true); }
   {
     mod = build_int_cst (TREE_TYPE (mod),
 			 TREE_INT_CST_LOW (mod) ^ (SFPMAD_MOD1_BH_COMPL_A | SFPMAD_MOD1_BH_COMPL_C));
@@ -230,7 +233,7 @@ combine (BH_QSR) {
 // FIXME Overly tricky until we cleanup compares
 combine (WH_BH) {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
-  res|MU = sfpsetcc (sum, set_mod);
+  res = sfpsetcc (sum, set_mod);
   {
     // SUM_MOD can't set CC
     if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
@@ -254,7 +257,7 @@ combine (WH_BH) {
 
 combine (QSR) {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
-  res|MU = sfpsetcc (sum, set_mod, 0);
+  res = sfpsetcc (sum, set_mod, 0);
   {
     // SUM_MOD can't set CC
     if (rvtt_get_insn_data (sum_call)->sets_cc (sum_call))
@@ -279,7 +282,7 @@ combine (QSR) {
 // exexp, Xiadd_i -> exexp
 combine (WH_BH) {
   exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);
-  res|MU = sfpsetcc (exp, set_mod);
+  res = sfpsetcc (exp, set_mod);
   {
     // EX_MOD can't set cc
     if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))
@@ -305,7 +308,7 @@ combine (WH_BH) {
 
 combine (QSR) {
   exp|OU|SR = sfpexexp_lv (exp_lv, a, exp_mod);
-  res|MU = sfpsetcc (exp, set_mod, 0);
+  res = sfpsetcc (exp, set_mod, 0);
   {
     // EX_MOD can't set cc
     if (rvtt_get_insn_data (exp_call)->sets_cc (exp_call))

@@ -118,16 +118,18 @@ class Shape {
 public:
   Ref lhs;
   unsigned used_by_mask = 0; // Which patterns use our LHS
+  int commute_arg = 0;
+  unsigned commute_bit = 0;
   std::string_view modifiers;
   std::string_view func;
   std::vector<Arg> args;
 
 public:
-  bool parse (Lexer &, Vars &, std::string_view var, int &, unsigned &, bool);
+  bool parse (Lexer &, Vars &, std::string_view var, unsigned &, unsigned &, bool);
   void emit (Stream &, std::vector<unsigned> const &) const;
 
 private:
-  bool parse_args (Lexer &, Vars &, int &, bool);
+  bool parse_args (Lexer &, Vars &, unsigned &, bool);
 };
 using Shapes = std::vector<Shape>;
 
@@ -468,7 +470,7 @@ public:
   unsigned replace_mask = 0;
   unsigned rep_use_mask = 0;
 
-  int commute_arg = -1;
+  unsigned commute_bits = 0;
 
   bool is_deferred = false;
 
@@ -537,21 +539,17 @@ Arg::parse (Lexer &lexer, Vars &vars, bool is_pattern)
 }
 
 bool
-Shape::parse_args (Lexer &lexer, Vars &vars, int &commute_arg, bool is_pattern)
+Shape::parse_args (Lexer &lexer, Vars &vars, unsigned &commute_bits, bool is_pattern)
 {
-  for (unsigned argno = 0; ; argno++)
+  for (;;)
     {
       args.emplace_back (Arg ());
-
       if (is_pattern && lexer.consume ('%', true))
 	{
-	  if (commute_arg >= 0)
-	    {
-	      lexer.error ("Shape already has commuting arg");
-	      return false;
-	    }
-	  commute_arg = argno;
+	  commute_bit = commute_bits++;
+	  commute_arg = args.size ();
 	}
+
       auto &arg = args.back ();
       if (!arg.parse (lexer, vars, is_pattern))
 	return false;
@@ -563,7 +561,7 @@ Shape::parse_args (Lexer &lexer, Vars &vars, int &commute_arg, bool is_pattern)
 
 bool
 Shape::parse (Lexer &lexer, Vars &vars,
-		std::string_view name, int &commute_arg, unsigned &max_args, bool is_pattern)
+		std::string_view name, unsigned &commute_bits, unsigned &max_args, bool is_pattern)
 {
   char const *start = nullptr;
   char const *end = nullptr;
@@ -587,7 +585,7 @@ Shape::parse (Lexer &lexer, Vars &vars,
   if (!lexer.consume ('('))
     return false;
 
-  parse_args (lexer, vars, commute_arg, is_pattern);
+  parse_args (lexer, vars, commute_bits, is_pattern);
   if (args.size () > max_args)
     max_args = args.size ();
 
@@ -610,6 +608,7 @@ Shape::emit (Stream &out, std::vector<unsigned> const &remap) const
 
   out.print (", ", unsigned (args.size ()));
   out.print (", ", used_by_mask);
+  out.print (", ", commute_arg, ", ", commute_bit);
   out.print (",\n   {");
   bool first = true;
   for (auto const &arg : args)
@@ -639,13 +638,8 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
       if (!lexer.consume_ident (name, true))
 	break;
 
-      if (is_pattern && commute_arg >= 0)
-	{
-	  lexer.error ("Only last pattern may commute");
-	  return false;
-	}
       slot.emplace_back (Shape ());
-      if (!slot.back ().parse (lexer, vars, name, commute_arg, max_args, is_pattern))
+      if (!slot.back ().parse (lexer, vars, name, commute_bits, max_args, is_pattern))
 	return false;
     }
 
@@ -828,23 +822,29 @@ Combine::emit_hook_name (Stream &out, Hooks hook) const
 void
 Combine::emit_hook (Stream &out, Hooks hook) const
 {
-  out.print ("static ", hook == H_Pred || hook == H_Enable ? "bool" : "void", " ");
+  static char const *const types[H_HWM] = {"bool", "int", "void"};
+  out.print ("static ", types[hook], " ");
   emit_hook_name (out, hook);
   out.print (" (");
   if (hook != H_Enable)
     {
       out.print ("gcall *calls[], tree vars[]");
-      out.print (", bool commuted ATTRIBUTE_UNUSED");
+      out.print (", unsigned", commute_bits ? " commute_mask" : "");
     }
   out.print (")\n{\n");
 
   if (hook != H_Enable)
     {
+      unsigned bit = 0;
+
       for (unsigned call = 0; call != pats.size (); call++)
 	{
 	  auto ix = remap[pats[call].lhs.slot];
 	  out.print ("  auto &", vars[ix].name, "_call"
 		     " ATTRIBUTE_UNUSED = calls[", ix, "];\n");
+	  if (pats[call].commute_arg)
+	    out.print ("  bool ", vars[ix].name, "_commuted"
+		       " ATTRIBUTE_UNUSED = commute_mask & (1 << ", bit++, ");\n");
 	}
       out.print ("\n");
 
@@ -972,7 +972,7 @@ main (int argc, const char **argv)
 
 		 ", ", combine.replace_mask,
 		 ", ", combine.rep_use_mask,
-		 ", ", combine.commute_arg,
+		 ", ", combine.commute_bits,
 
 		 ", ", combine.lineno,
 		 ", ", combine.is_deferred,
