@@ -202,7 +202,6 @@ workaround_raw (function *cfn)
 		    new_sub_store = true;
 		  else
 		    new_full_store = true;
-		  set_dst = nullptr;
 		}
 	      else
 		{
@@ -217,7 +216,8 @@ workaround_raw (function *cfn)
 	  rtx load_mem = nullptr;
 	  if (sub_store)
 	    {
-	      if (new_sub_store || new_load
+	      if (new_sub_store
+		  || (new_load && access.overlaps (sub_store))
 		  || GET_CODE (insn) == CALL_INSN
 		  || (set_dst && refers_to_regno_p (sub_store.reg, set_dst)))
 		{
@@ -225,7 +225,6 @@ workaround_raw (function *cfn)
 		  sub_store.mem = nullptr;
 		}
 	    }
-
 	  else if (full_store && new_load && !access.is_aligned ()
 		   && access.overlaps (full_store))
 	    {
