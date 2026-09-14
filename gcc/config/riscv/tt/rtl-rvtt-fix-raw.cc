@@ -176,8 +176,9 @@ workaround_raw (function *cfn)
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfn)
     {
-      Access store; // most recent store we need to remember
-      bool store_is_unaligned = false;
+      Access sub_store;
+      Access full_store; // most recent store we need to remember
+      bool sub_store_is_unaligned = false;
       rtx_insn *insn;
 
       FOR_BB_INSNS (bb, insn)
@@ -187,63 +188,72 @@ workaround_raw (function *cfn)
 
 	  rtx pat = PATTERN (insn);
 	  Access access;
-	  bool new_store = false;
+	  bool new_sub_store = false;
+	  bool new_full_store = false;
+	  bool new_load = false;
 	  rtx set_dst = nullptr;
 
 	  if (GET_CODE (pat) == SET)
 	    {
-	      access = set_dst = SET_DEST (pat);
+	      access = SET_DEST (pat);
 	      if (access)
 		{
-		  new_store = true;
+		  if (access.is_subword ())
+		    new_sub_store = true;
+		  else
+		    new_full_store = true;
 		  set_dst = nullptr;
 		}
 	      else
-		access = SET_SRC (pat);
+		{
+		  access = SET_SRC (pat);
+		  if (access)
+		    new_load = true;
+		  set_dst = SET_DEST (pat);
+		}
 	    }
 
 	  // access indicates this insn's load or store info
-	  if (store)
+	  rtx load_mem = nullptr;
+	  if (sub_store)
 	    {
-	      bool need_load = false;
-	      if (store_is_unaligned)
+	      if (new_sub_store || new_load
+		  || GET_CODE (insn) == CALL_INSN
+		  || (set_dst && refers_to_regno_p (sub_store.reg, set_dst)))
 		{
-		  if (new_store
-		      || GET_CODE (insn) == CALL_INSN
-		      || access
-		      || (set_dst && refers_to_regno_p (store.reg, set_dst)))
-		    need_load = true;
-		}
-	      else if (!new_store
-		       && access && access.is_subword () && !access.is_aligned ()
-		       && access.overlaps (store))
-		need_load = true;
-
-	      if (need_load)
-		{
-		  emit_load (insn, true, store.mem);
-		  if (dump_file)
-		    {
-		      fprintf (dump_file, "before ");
-		      dump_insn_slim (dump_file, insn);
-		    }
-		  store.mem = nullptr;
+		  load_mem = sub_store.mem;
+		  sub_store.mem = nullptr;
 		}
 	    }
 
-	  if (new_store)
+	  else if (full_store && new_load && !access.is_aligned ()
+		   && access.overlaps (full_store))
 	    {
-	      store = access;
-	      store_is_unaligned = store.is_subword () && !store.is_aligned ();
+	      load_mem = full_store.mem;
+	      full_store.mem = nullptr;
 	    }
+
+	  if (load_mem)
+	    {
+	      emit_load (insn, true, load_mem);
+	      if (dump_file)
+		{
+		  fprintf (dump_file, "before ");
+		  dump_insn_slim (dump_file, insn);
+		}
+	    }
+
+	  if (new_sub_store && !access.is_aligned ())
+	    sub_store = access;
+	  if (new_full_store)
+	    full_store= access;
 	}
 
-      if (store && store_is_unaligned)
+      if (sub_store)
 	{
-	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), store.mem);
+	  emit_load (BB_END (bb), control_flow_insn_p (BB_END (bb)), sub_store.mem);
 	  if (dump_file)
 	    fprintf (dump_file, "at end of block");
-	  store = nullptr;
 	}
     }
 }
