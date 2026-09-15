@@ -23,11 +23,12 @@ void bar () {
   auto b = __builtin_rvtt_sfpreadlreg (2);
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
-  auto i = __builtin_rvtt_sfpxpred (1, 0);
+  auto i = __builtin_rvtt_sfpxpred (0x15, 0);
   auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
-  __builtin_rvtt_sfpxcond (0, i, cond);
+  auto j = __builtin_rvtt_sfpxcond (0, i, cond);
   auto r = __builtin_rvtt_sfpand (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
+  __builtin_rvtt_sfpxpred (0x10, j);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (r, 3);
 }
@@ -68,11 +69,12 @@ void bar () {
   auto b = __builtin_rvtt_sfpreadlreg (2);
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
-  auto i = __builtin_rvtt_sfpxpred (1, 0);
+  auto i = __builtin_rvtt_sfpxpred (0x15, 0);
   auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
-  __builtin_rvtt_sfpxcond (0, i, cond);
+  auto j = __builtin_rvtt_sfpxcond (0, i, cond);
   auto r = __builtin_rvtt_sfpor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
+  __builtin_rvtt_sfpxpred (0x10, j);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (r, 3);
 }
@@ -114,11 +116,12 @@ void bar () {
   auto b = __builtin_rvtt_sfpreadlreg (2);
   auto c = __builtin_rvtt_sfpreadlreg (4);
   __builtin_rvtt_sfppushc (0);
-  auto i = __builtin_rvtt_sfpxpred (1, 0);
+  auto i = __builtin_rvtt_sfpxpred (0x15, 0);
   auto cond = __builtin_rvtt_sfpxcmp (a, b, 0x32);
-  __builtin_rvtt_sfpxcond (0, i, cond);
+  auto j = __builtin_rvtt_sfpxcond (0, i, cond);
   auto r = __builtin_rvtt_sfpxor (a, b);
   r = __builtin_rvtt_sfpassign_lv (c, r);
+  __builtin_rvtt_sfpxpred (0x10, j);
   __builtin_rvtt_sfppopc (0);
   __builtin_rvtt_sfpwritelreg (r, 3);
 }

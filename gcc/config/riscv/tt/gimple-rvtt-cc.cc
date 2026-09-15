@@ -144,6 +144,10 @@ process_block_stmts(basic_block bb,
 	    case rvtt_insn_data::sfpxcmp:
 	      gcc_unreachable ();
 
+	    case rvtt_insn_data::sfpxpred:
+	    case rvtt_insn_data::sfpxcond:
+	      break;
+
 	    case rvtt_insn_data::sfpcompc:
 	      // Set compc to true for current pushc
 	      if (stack.size() == 0)
@@ -314,7 +318,8 @@ public:
 
   virtual bool gate (function *) override
   {
-    return TARGET_XTT_TENSIX && riscv_tt_opt_cc > 0;
+    return TARGET_XTT_TENSIX && riscv_tt_opt_cc > 0
+      && rvtt_preds_valid ();
   }
 
   virtual unsigned execute (function *fn) override
