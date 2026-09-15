@@ -1029,7 +1029,7 @@ public:
 	    if (!(s->flags & BB_VISITED))
 	      {
 		s->flags |= BB_VISITED;
-		worklist.push_back ({s, lreg_pressure});
+		worklist.push_back (s, lreg_pressure);
 	      }
 	  }
       }

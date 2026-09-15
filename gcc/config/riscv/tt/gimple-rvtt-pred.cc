@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -32,10 +33,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-into-ssa.h"
 #include "diagnostic-core.h"
 #include "rvtt.h"
+#include <deque>
 
-using pred_list = std::vector<gcall *>;
+using call_vec_t = std::vector<gcall *>;
+using ssa_map_t = std::unordered_map<tree, unsigned>;
 
-static bool expand_cond (pred_list &, unsigned &ix,
+static bool expand_cond (call_vec_t &, unsigned &ix,
 			 gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
 			 tree var, gcall *sink, bool negate);
 
@@ -270,16 +273,16 @@ expand_cmp_using_gtle (gimple_stmt_iterator *right, gcall *cmp, rvtt_arg_info (&
 }
 
 static bool
-verify_cond_call (pred_list &preds, unsigned &ix, gcall *call)
+verify_cond_call (call_vec_t &conds, unsigned &ix, gcall *call)
 {
-  if (!preds[0])
+  if (!conds[0])
     return true; // Already errored
 
-  auto expected = ix < preds.size () ? preds[ix++] : nullptr;
+  auto expected = ix < conds.size () ? conds[ix++] : nullptr;
   if (expected == call)
     return false; // OK
 
-  preds[0] = nullptr;
+  conds[0] = nullptr;
   error_at (gimple_location (call),
 	    "unexpected builtin %qD used within predication region",
 	    gimple_call_fndecl (call));
@@ -427,7 +430,7 @@ expand_cmp (gimple_stmt_iterator *left, gimple_stmt_iterator *right,
 // saved_enables.
 
 static bool
-expand_logical (pred_list &preds, unsigned &ix,
+expand_logical (call_vec_t &conds, unsigned &ix,
 		gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
 		gcall *call, const rvtt_insn_data *call_insnd, bool negate)
 {
@@ -435,19 +438,19 @@ expand_logical (pred_list &preds, unsigned &ix,
   tree lhs = gimple_call_arg (call, call_insnd->mod_arg () + 1);
   
   if (op == SFPXLOGIC_MOD1_NOT)
-    return expand_cond (preds, ix, leftmost, rightmost, lhs, call, !negate);
+    return expand_cond (conds, ix, leftmost, rightmost, lhs, call, !negate);
 
   bool negated = op == (negate ? SFPXLOGIC_MOD1_AND : SFPXLOGIC_MOD1_OR);
   negate ^= negated;
 
   // Emit LEFT
   gimple_stmt_iterator lhs_rightmost;
-  bool left_negated = expand_cond (preds, ix, leftmost, &lhs_rightmost, lhs, call, negate);
+  bool left_negated = expand_cond (conds, ix, leftmost, &lhs_rightmost, lhs, call, negate);
 
   // Emit RIGHT
   gimple_stmt_iterator rhs_leftmost;
   tree rhs = gimple_call_arg (call, call_insnd->mod_arg () + 2);
-  bool right_negated = expand_cond (preds, ix, &rhs_leftmost, rightmost, rhs, call, negate);
+  bool right_negated = expand_cond (conds, ix, &rhs_leftmost, rightmost, rhs, call, negate);
 
   if (right_negated)
     {
@@ -471,7 +474,7 @@ expand_logical (pred_list &preds, unsigned &ix,
 }
 
 static bool
-expand_cond (pred_list &preds, unsigned &ix,
+expand_cond (call_vec_t &conds, unsigned &ix,
 	     gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
 	     tree var, gcall *sink, bool negate)
 {
@@ -494,12 +497,12 @@ expand_cond (pred_list &preds, unsigned &ix,
 	break;
 
       case rvtt_insn_data::sfpxlogic:
-	negated = expand_logical (preds, ix, leftmost, rightmost,
+	negated = expand_logical (conds, ix, leftmost, rightmost,
 				  call, insnd, negate);
 	break;
       }
 
-  verify_cond_call (preds, ix, call);
+  verify_cond_call (conds, ix, call);
 
   unlink_stmt_vdef (call);
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
@@ -508,8 +511,173 @@ expand_cond (pred_list &preds, unsigned &ix,
   return negated;
 }
 
-// Expand v_if conditions
-//
+static bool
+expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, basic_block bb)
+{
+  bool changed = false;
+
+  for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      auto *insnd = rvtt_get_insn_data (*gsi);
+      if (!insnd)
+	continue;
+
+      auto *call = as_a <gcall *> (*gsi);
+      switch (insnd->id)
+	{
+	default:
+	  if (!conds.empty () && insnd->sets_cc (call))
+	    error_at (gimple_location (call),
+		      "disallowed cc-setting builtin %qD within predication region",
+		      gimple_call_fndecl (call));
+	  break;
+
+	case rvtt_insn_data::sfpxpred:
+	  {
+	    if (!conds.empty ())
+	      {
+		conds.clear ();
+		error_at (gimple_location (call),
+			  "Disallowed nested predication region");
+	      }
+
+	    tree dep = gimple_call_arg (call, insnd->mod_arg () + 1);
+	    unsigned ix;
+	    if (SSA_VAR_P (dep))
+	      {
+		auto slot = ssa_map.find (dep);
+		gcc_assert (slot != ssa_map.end ()); // ERROR
+		ix = slot->second;
+	      }
+	    else
+	      {
+		ix = preds.size ();
+		preds.push_back (call);
+	      }
+
+	    if (tree lhs = gimple_call_lhs (call))
+	      ssa_map.insert ({lhs, ix});
+
+	    int mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
+	    if (mod & SFPXPRED_MOD1_IF)
+	      conds.push_back (call);
+	  }
+	  break;
+
+	case rvtt_insn_data::sfpxlogic:
+	case rvtt_insn_data::sfpxcmp:
+	case rvtt_insn_data::sfpxcond:
+	  if (conds.empty ())
+	    error_at (gimple_location (call),
+		      "predication builtin %qD outside of predication region",
+		      gimple_call_fndecl (call));
+	  conds.push_back (call);
+	  if (insnd->id != rvtt_insn_data::sfpxcond)
+	    break;
+
+	  unsigned ix = 0;
+	  tree pred_var = gimple_call_arg (call, insnd->mod_arg () + 1);
+
+	  gcall *first = verify_cond_var (pred_var, call);
+	  if (!first)
+	    break;
+	  verify_cond_call (conds, ix, first);
+
+	  tree cond_var = gimple_call_arg (call, insnd->mod_arg () + 2);
+	  gimple_stmt_iterator leftmost, rightmost;
+
+	  expand_cond (conds, ix, &leftmost, &rightmost, cond_var, call, false);
+
+	  verify_cond_call (conds, ix, call);
+	  gimple_call_set_arg (call, insnd->mod_arg () + 2, integer_zero_node);
+	  update_stmt (call);
+	  conds.clear ();
+	  changed = true;
+	  break;
+	}
+    }
+
+  if (!conds.empty ())
+    {
+      error_at (gimple_location (conds.front ()),
+		"untermated predication region");
+      conds.clear ();
+    }
+
+  return changed;
+}
+
+static void
+check_pred_chain (gcall *call)
+{
+  bool is_block = false;
+  unsigned prev_mod = 0;
+  gcall *prev_call = nullptr;
+  unsigned depth = 0;
+
+  for (gcall *next; call; call = next)
+    {
+      unsigned xmodi = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+      unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
+
+      bool bad = false;
+      if (!prev_mod)
+	{
+	  if (mod == SFPXPRED_MOD1_PUSH)
+	    is_block = true;
+	  else if (mod != (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_IF))
+	    bad = true;
+	}
+      else if (prev_mod == SFPXPRED_MOD1_PUSH)
+	{
+	  if (mod != SFPXPRED_MOD1_IF)
+	    bad = true;
+	}
+      else if (prev_mod & SFPXPRED_MOD1_IF)
+	{
+	  if (!is_block
+	      && (mod == SFPXPRED_MOD1_ELSE
+		  || mod == SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_ELSE | SFPXPRED_MOD1_IF))
+	    ;
+	  else if (mod != SFPXPRED_MOD1_ENDIF)
+	    bad = true;
+	}
+      else if (prev == SFPXPRED_MOD1_ELSE)
+	{
+	  if (mod != SFPXPRED_MOD1_ENDIF)
+	    bad = true;
+	}
+      else
+	bad = true;
+
+      if (bad)
+	{
+	  gcc_unreachable (); // ERROR
+	}
+      if (mod & SFPXPRED_MOD1_PUSH)
+	depth++;
+      if (depth != (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT))
+	gcc_unreachable (); /// error
+
+      prev_mod = mod;
+      prev_call = call;
+      tree lhs = gimple_call_lhs (call);
+      if ((lhs != nullptr) != (mod != SFPXPRED_MOD1_ENDIF))
+	gcc_unreachable (); // ERROR
+
+      gcall *next = nullptr;
+      if (lhs)
+	{
+	  use_operand_p use;
+	  gimple *stmt;
+
+	  if (single_imm_use (lhs, &use_p, &stmt))
+	    {
+	    }
+	}
+  }
+}
+
 // The hardware does not support OR and generates some comparisons (LTE, GE)
 // by ANDing others together and issuing a compc.  This requires refactoring
 // boolean expressions using De Moragan's laws.	 The root of a tree is anchored
@@ -518,80 +686,49 @@ expand_cond (pred_list &preds, unsigned &ix,
 // replaces it with one that works w/ the HW.
 
 static unsigned
-expand_vif (function *fun)
+expand_xpred (function *fn)
 {
-  basic_block bb;
-  pred_list preds;
+  call_vec_t cond_vec;
+  call_vec_t pred_vec;
+  ssa_map_t pred_map;
   bool changed = false;
+  
+  // Walk the blocks in something like graph order.  With the exception of
+  // loop back edges every block is walked after its predecessors.
+  std::deque<basic_block> worklist;
 
-  FOR_EACH_BB_FN (bb, fun)
+  basic_block bb;
+  FOR_ALL_BB_FN (bb, fn)
+    bb->flags &= ~BB_VISITED;
+
+  basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (fn);
+  entry->flags |= BB_VISITED;
+  worklist.emplace_back (entry);
+
+  while (!worklist.empty ())
     {
-      for (auto gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+      auto bb = worklist.front ();
+      worklist.pop_front ();
+
+      if (expand_conditionals (cond_vec, pred_vec, pred_map, bb))
+	changed = true;
+
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->succs)
 	{
-	  auto *insnd = rvtt_get_insn_data (*gsi);
-	  if (!insnd)
-	    continue;
-
-	  auto *call = as_a <gcall *> (*gsi);
-	  switch (insnd->id)
+	  auto s = e->dest;
+	  if (!(s->flags & BB_VISITED))
 	    {
-	    default:
-	      if (!preds.empty () && insnd->sets_cc (call))
-		error_at (gimple_location (call),
-			  "disallowed cc-setting builtin %qD within predication region",
-			  gimple_call_fndecl (call));
-	      break;
-
-	    case rvtt_insn_data::sfpxpred:
-	      if (!preds.empty ())
-		{
-		  preds.clear ();
-		  error_at (gimple_location (call),
-			    "Disallowed nested predication region");
-		}
-	      preds.push_back (call);
-	      break;
-
-	    case rvtt_insn_data::sfpxlogic:
-	    case rvtt_insn_data::sfpxcmp:
-	    case rvtt_insn_data::sfpxcond:
-	      if (preds.empty ())
-		error_at (gimple_location (call),
-			  "predication builtin %qD outside of predication region",
-			  gimple_call_fndecl (call));
-	      preds.push_back (call);
-	      if (insnd->id != rvtt_insn_data::sfpxcond)
-		break;
-
-	      unsigned ix = 0;
-	      tree pred_var = gimple_call_arg (call, insnd->mod_arg () + 1);
-
-	      gcall *first = verify_cond_var (pred_var, call);
-	      if (!first)
-		break;
-	      verify_cond_call (preds, ix, first);
-
-	      tree cond_var = gimple_call_arg (call, insnd->mod_arg () + 2);
-	      gimple_stmt_iterator leftmost, rightmost;
-
-	      expand_cond (preds, ix, &leftmost, &rightmost, cond_var, call, false);
-
-	      verify_cond_call (preds, ix, call);
-	      gimple_call_set_arg (call, insnd->mod_arg () + 2, integer_zero_node);
-	      update_stmt (call);
-	      preds.clear ();
-	      changed = true;
-	      break;
+	      s->flags |= BB_VISITED;
+	      worklist.push_back (s);
 	    }
 	}
-
-      if (!preds.empty ())
-	{
-	  error_at (gimple_location (preds.front ()),
-		    "untermated predication region");
-	  preds.clear ();
-	}
     }
+
+  // Check the pred_vec contains well-formed xpred chains
+  for (auto *call : pred_vec)
+    check_pred_chain (call);
 
   return changed ? TODO_update_ssa : 0;
 }
@@ -625,7 +762,7 @@ public:
 
   virtual unsigned int execute (function *fn) override
   {
-    return expand_vif (fn);
+    return expand_xpred (fn);
   }
 }; // class pass_rvtt_vif
 
