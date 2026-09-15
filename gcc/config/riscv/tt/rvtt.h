@@ -286,6 +286,8 @@ public:
 extern void rvtt_init_builtins ();
 extern bool rvtt_record_builtin (unsigned idx, char const *, tree decl);
 
+extern bool rvtt_preds_valid ();
+
 extern const rvtt_insn_data *rvtt_get_insn_data (rvtt_insn_data::insn_id id) ATTRIBUTE_PURE;
 extern const rvtt_insn_data *rvtt_get_insn_data (gimple const *stmt) ATTRIBUTE_PURE;
 extern const rvtt_insn_data *rvtt_get_insn_data (gcall const *stmt) ATTRIBUTE_PURE;
