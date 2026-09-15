@@ -17,9 +17,8 @@ void round1 () {
 /*
 **_Z6round1v:
 **	# READ L0
-**	SFPLOADI	L1, 19264, 0
 **	SFPADDI	L0, 19264, 0
-**	SFPADD	L0, L1, L0, 1
+**	SFPADDI	L0, 52032, 0
 **	# WRITE L0
 **	ret
 */
@@ -54,7 +53,7 @@ void round3 () {
 **	SFPLOADI	L1, 19264, 0
 **	SFPADDI	L0, 19264, 0
 **	SFPMOV	L2, L0, 2
-**	SFPADD	L0, L1, L0, 1
+**	SFPADDI	L0, 52032, 0
 **	SFPIADD	L1, L2, 0, 6
 **	# WRITE L0
 **	# WRITE L1
