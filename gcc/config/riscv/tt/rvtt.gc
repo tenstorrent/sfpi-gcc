@@ -296,9 +296,24 @@ combine (BH_QSR) {
   r = sfpmad_lv (lv2, a, b, c, mod);
 }
 
-// Xiadd_i, Xiadd_i -> Xiadd_i
+// r = a - b; !r -> a <= n && a >= b
+combine (BH) {
+  diff|SR = sfpiadd_v (a, b, SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST);
+  res = sfpsetcc (diff, SFPSETCC_MOD1_LREG_EQ0);
+  {}
+  . = sfple (a, b, SFPGTLE_MOD1_SET_CC);
+  res = sfple (b, a, SFPGTLE_MOD1_SET_CC);
+}
+// The type is immaterial here, as we're checking bit pattern identitity
+combine (QSR) {
+  diff|SR = sfpiadd_v (a, b, SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_ARG_2SCOMP_LREG_DST);
+  res = sfpsetcc (diff, SFPSETCC_MOD1_LREG_EQ0, type);
+  {}
+  . = sfple (a, b, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_SMAG);
+  res = sfple (b, a, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_SMAG);
+}
 
-// FIXME Overly tricky until we cleanup compares
+// r = a - cst; r < or >= 0
 combine (WH_BH) {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
   res = sfpsetcc (sum, set_mod);

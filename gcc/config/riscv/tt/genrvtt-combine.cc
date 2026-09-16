@@ -498,26 +498,27 @@ using Helpers = std::vector<Code>;
 
 bool
 Ref::lookup (Lexer &lexer, Vars &vars,
-	     std::string_view name, bool lhs, bool pattern)
+	     std::string_view name, bool lhs, bool is_pattern)
 {
-  // Yeah, O(N), but N is small and we don't care about speed here anyway
-  for (unsigned ix = vars.size (); ix--;)
-    if (vars[ix].name == name)
-      {
-	slot = ix;
-	if (lhs && (pattern || !vars[ix].is_lhs))
-	  {
-	    lexer.error (pattern ? "'%.*s' already defined"
-			 : "'%.*s' not a LHS",
-			 int (name.size ()), name.data ());
-	    return false;
-	  }
-	vars[ix].is_used = true;
-	return true;
-      }
+  if (!name.empty ())
+    // Yeah, O(N), but N is small and we don't care about speed here anyway
+    for (unsigned ix = vars.size (); ix--;)
+      if (vars[ix].name == name)
+	{
+	  slot = ix;
+	  if (lhs && (is_pattern || !vars[ix].is_lhs))
+	    {
+	      lexer.error (is_pattern ? "'%.*s' already defined"
+			   : "'%.*s' not a LHS",
+			   int (name.size ()), name.data ());
+	      return false;
+	    }
+	  vars[ix].is_used = true;
+	  return true;
+	}
 
   slot = unsigned (vars.size ());
-  vars.push_back ({name, lhs, pattern, !lhs, slot});
+  vars.push_back ({name, lhs, is_pattern, !lhs, slot});
 
   return true;
 }
@@ -635,7 +636,8 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
   for (;;)
     {
       std::string_view name;
-      if (!lexer.consume_ident (name, true))
+      if (!((!is_pattern && lexer.consume ('.', true))
+	    || lexer.consume_ident (name, true)))
 	break;
 
       slot.emplace_back (Shape ());
@@ -645,7 +647,7 @@ Combine::parse_patterns (Lexer &lexer, bool is_pattern)
 
   vars[slot.back ().lhs.slot].is_used = true;
   for (auto &def : vars)
-    if (!def.is_used)
+    if (!def.name.empty () && !def.is_used)
       {
 	lexer.error ("LHS '%.*s' is never used", int (def.name.size ()), def.name.data ());
 	return false;
