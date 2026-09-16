@@ -55,7 +55,7 @@
   (match_operand 0 "cstlreg_operand"))
 
 (define_constraint "xs"
-  "Any of the storable constant SFPU registers"
+  "Any of non-sideways loading constant SFPU registers"
   (and (match_operand 0 "cstlreg_operand")
        (match_test "INTVAL (XVECEXP (op, 0, 0)) < 12")))
 

@@ -40,7 +40,7 @@ void addi () {
 /*
 **_Z4addiv:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	SFPIADD	L15, L0, 10, 1
+**	SFPIADD	L8, L0, 10, 1
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
@@ -120,7 +120,7 @@ void lz () {
 /*
 **_Z2lzv:
 **	SFPLOAD	L0, 0, 0, 0, 0, 0
-**	SFPLZ	L15, L0, 2
+**	SFPLZ	L8, L0, 2
 **	SFPMOV	L0, L9, 0	# LV:L0
 **	SFPENCC	3, 10
 **	SFPSTORE	L0, 0, 0, 0, 0, 0
