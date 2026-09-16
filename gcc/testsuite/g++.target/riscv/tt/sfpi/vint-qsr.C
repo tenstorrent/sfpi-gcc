@@ -183,7 +183,7 @@ void ulength () {
 **	# READ L1
 **	SFPMOV	L7, L1, 0	# LV:L7
 **	SFPENCC	3, 10
-**	SFPIADD	L15, L7, -16, 1
+**	SFPIADD	L8, L7, -16, 1
 **	# READ L2
 **	SFPMOV	L7, L2, 0	# LV:L7
 **	SFPENCC	3, 10
@@ -193,7 +193,7 @@ void ulength () {
 **	# READ L3
 **	SFPMOV	L7, L3, 0	# LV:L7
 **	SFPENCC	3, 10
-**	SFPIADD	L15, L7, -16, 9
+**	SFPIADD	L8, L7, -16, 9
 **	# READ L4
 **	SFPMOV	L7, L4, 0	# LV:L7
 **	SFPENCC	3, 10

@@ -1138,9 +1138,9 @@
     rtx opcode = operands[2];
     if (operands[1] != const0_rtx)
       {
-        // Bake L15 as the dst reg here
+        // Bake L8 as the dst reg here
         auto enc = rvtt_synth (INTVAL (operands[3]));
-        opcode = GEN_INT (INTVAL (opcode) | (0xf << enc.dst_shift ()));
+        opcode = GEN_INT (INTVAL (opcode) | (0x8 << enc.dst_shift ()));
       }
     emit_insn (gen_rvtt_sfpiadd_i_nv
       (operands[1], opcode, operands[3], operands[4],
@@ -1162,7 +1162,7 @@
   "TARGET_XTT_TENSIX_QSR"
   {
     return rvtt_synth::pattern (which_alternative,
-      "SFPIADD\tL15, %x4, %3, %5",
+      "SFPIADD\tL8, %x4, %3, %5",
       operands, false, 6);
   }
   [(set_attr "type" "tensix")])
@@ -1230,7 +1230,7 @@
      (match_operand:SI    1 "const_int_operand" "n")
      ] rvtt_unary_op)]
   "TARGET_XTT_TENSIX_QSR && <rvtt_unary_op> == UNSPECV_SFPLZ"
-  "SFP<rvtt_unary_insn>\tL15, %x0, %1"
+  "SFP<rvtt_unary_insn>\tL8, %x0, %1"
   [(set_attr "type" "tensix")])
 
 (define_int_iterator rvtt_set_op [
