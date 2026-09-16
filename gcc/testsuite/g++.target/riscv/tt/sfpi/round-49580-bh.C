@@ -52,11 +52,25 @@ void round3 () {
 **	# READ L0
 **	SFPLOADI	L1, 19264, 0
 **	SFPADDI	L0, 19264, 0
-**	SFPMOV	L2, L0, 2
+**	SFPNOP
+**	SFPIADD	L1, L0, 0, 6
 **	SFPADDI	L0, 52032, 0
-**	SFPIADD	L1, L2, 0, 6
 **	# WRITE L0
 **	# WRITE L1
+**	ret
+*/
+
+void round4 () {
+  vFloat x = l_reg[LRegs::LReg0];
+
+  vInt i = round (x, RoundIntMode::Biased);
+  l_reg[LRegs::LReg0] = i;
+}
+/*
+**_Z6round4v:
+**	# READ L0
+**	SFPADDI	L0, 19264, 0
+**	# WRITE L0
 **	ret
 */
 
