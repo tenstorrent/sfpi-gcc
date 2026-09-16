@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#define INCLUDE_ALGORITHM
 #define INCLUDE_VECTOR
 #include "config.h"
 #include "system.h"
@@ -38,7 +39,8 @@ along with GCC; see the file COPYING3.  If not see
 #include <unordered_map>
 
 using call_vec_t = std::vector<gcall *>;
-using ssa_map_t = std::unordered_map<tree, unsigned>;
+using stmt_vec_t = std::vector<gimple *>;
+using ssa_map_t = std::unordered_map<tree, std::pair<gcall *, unsigned>>;
 
 static bool expand_cond (call_vec_t &, unsigned &ix,
 			 gimple_stmt_iterator *leftmost, gimple_stmt_iterator *rightmost,
@@ -549,22 +551,10 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 			  "Disallowed nested predication region");
 	      }
 
-	    tree dep = gimple_call_arg (call, insnd->mod_arg () + 1);
-	    unsigned ix;
-	    if (SSA_VAR_P (dep))
-	      {
-		auto slot = ssa_map.find (dep);
-		gcc_assert (slot != ssa_map.end ()); // ERROR
-		ix = slot->second;
-	      }
-	    else
-	      {
-		ix = preds.size ();
-		preds.push_back (call);
-	      }
-
 	    if (tree lhs = gimple_call_lhs (call))
-	      ssa_map.insert ({lhs, ix});
+	      ssa_map.insert ({lhs, {call, 0}});
+	    else
+	      preds.push_back (call);
 
 	    int mod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
 	    if (mod & SFPXPRED_MOD1_IF)
@@ -589,14 +579,12 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
 	      print_gimple_stmt (dump_file, call, 0);
 	    }
 
-	  tree dep = gimple_call_arg (call, insnd->mod_arg () + 1);
 	  if (tree lhs = gimple_call_lhs (call))
-	    {
-	      auto slot = ssa_map.find (dep);
-	      gcc_assert (slot != ssa_map.end ()); // ERROR
-	      ssa_map.insert ({lhs, slot->second});
-	    }
+	    ssa_map.insert ({lhs, {call, 0}});
+	  else
+	    preds.push_back (call);
 
+	  tree dep = gimple_call_arg (call, insnd->mod_arg () + 1);
 	  gcall *first = verify_cond_var (dep, call);
 	  if (!first)
 	    break;
@@ -628,96 +616,150 @@ expand_conditionals (call_vec_t &conds, call_vec_t &preds, ssa_map_t &ssa_map, b
   return changed;
 }
 
+// Gather the predicate chains.  ENDS are the calls with no outgoing
+// dependency.  MAP are all the othered keyed by their outgoing dependency.
+// We might encounter phi nodes, which we record. We only permit one level of
+// phi nodes, even though the general case could be more.
+
+static stmt_vec_t
+gather_preds (call_vec_t const &ends, ssa_map_t &map)
+{
+  stmt_vec_t result;
+  result.reserve (ends.size () + map.size ());
+
+  for (auto *pos : ends)
+    for (;;)
+      {
+	result.push_back (pos);
+	tree dep = gimple_call_arg (pos, 1);
+	if (!SSA_VAR_P (dep))
+	  break;
+
+	auto from = map.find (dep);
+	if (from == map.end ())
+	  {
+	    // Must be a phi node, with one input being in the map
+	    auto phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (dep));
+	    gcc_assert (phi);
+	    result.push_back (phi);
+
+	    use_operand_p use_p;
+	    ssa_op_iter iter;
+	    FOR_EACH_PHI_ARG (use_p, phi, iter, SSA_OP_USE)
+	      {
+		from = map.find (USE_FROM_PTR (use_p));
+		if (from != map.end ())
+		  break;
+	      }
+	    gcc_assert (from != map.end ());
+	  }
+	from->second.second++;
+	pos = from->second.first;
+      }
+
+  // Check we found everything exactly once.
+  for (auto &node : map)
+    gcc_assert (node.second.second == 1);
+
+  std::reverse (result.begin (), result.end ());
+  return result;
+}
+
 static void
-check_pred_chain (gcall *call)
+check_preds (stmt_vec_t &preds)
 {
   bool is_block = false;
+  bool was_phi = false;
+  bool was_cond = false;
+
   unsigned prev_mod = 0;
-  gcall *prev_call = nullptr;
   unsigned depth = 0;
-  bool seen_cond = false;
 
-  for (gcall *next; call; prev_call = call, call = next)
+  for (auto *call : preds)
     {
-      bool bad = false;
-      auto insnd = rvtt_get_insn_data (call);
-      if (insnd->id == rvtt_insn_data::sfpxpred)
+      if (false)
 	{
-	  unsigned xmod = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-	  unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
+	bad:;
+	  gcc_unreachable (); // ERROR
+	  continue;
+	}
 
-	  if (!prev_mod)
-	    {
-	      if (mod == SFPXPRED_MOD1_PUSH)
-		is_block = true;
-	      else if (mod != (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_IF))
-		bad = true;
-	    }
-	  else if (prev_mod == SFPXPRED_MOD1_PUSH)
-	    {
-	      if (mod != SFPXPRED_MOD1_IF)
-		bad = true;
-	    }
-	  else if (prev_mod & SFPXPRED_MOD1_IF)
-	    {
-	      if (!seen_cond)
-		bad = true;
-	      else if (!is_block
-		  && (mod == SFPXPRED_MOD1_ELSE
-		      || mod == (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_ELSE | SFPXPRED_MOD1_IF)))
-		;
-	      else if (mod != SFPXPRED_MOD1_ENDIF)
-		bad = true;
-	    }
-	  else if (prev_mod == SFPXPRED_MOD1_ELSE)
-	    {
-	      if (mod != SFPXPRED_MOD1_ENDIF)
-		bad = true;
-	    }
-	  else
-	    bad = true;
+      if (is_a <gphi *> (call))
+	{
+	  if (was_phi
+	      || !(prev_mod == SFPXPRED_MOD1_PUSH
+		   || (was_cond && prev_mod & SFPXPRED_MOD1_IF)))
+	    goto bad;
+	  was_phi = true;
+	  continue;
+	}
 
-	  if (mod & SFPXPRED_MOD1_PUSH)
-	    depth++;
-	  if (depth != (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT))
-	    gcc_unreachable (); /// error
-	  seen_cond = false;
-	  prev_mod = mod;
+      auto insnd = rvtt_get_insn_data (call);
+      if (insnd->id == rvtt_insn_data::sfpxcond)
+	{
+	  if (was_phi
+	      || was_cond
+	      || !(prev_mod & SFPXPRED_MOD1_IF))
+	    goto bad;
+	  was_cond = true;
+	  continue;
+	}
+
+      unsigned xmod = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+      unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
+
+      if (!prev_mod)
+	{
+	  if (was_phi)
+	    goto bad;
+	  if (mod == SFPXPRED_MOD1_PUSH)
+	    is_block = true;
+	  else if (mod != (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_IF))
+	    goto bad;
+	}
+      else if (prev_mod == SFPXPRED_MOD1_PUSH)
+	{
+	  if (mod != SFPXPRED_MOD1_IF)
+	    goto bad;
+	}
+      else if (prev_mod & SFPXPRED_MOD1_IF)
+	{
+	  if (!was_cond)
+	    goto bad;
+
+	  if (was_phi && mod != SFPXPRED_MOD1_IF)
+	    goto bad;
+
+	  if (!is_block
+	      && (mod == SFPXPRED_MOD1_ELSE
+		  || mod == (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_ELSE | SFPXPRED_MOD1_IF)))
+	    ;
+	  else if (mod != SFPXPRED_MOD1_ENDIF)
+	    goto bad;
+	}
+      else if (prev_mod == SFPXPRED_MOD1_ELSE)
+	{
+	  if (was_phi && mod != SFPXPRED_MOD1_IF)
+	    goto bad;
+
+	  if (mod != SFPXPRED_MOD1_ENDIF
+	      && mod != SFPXPRED_MOD1_IF)
+	    goto bad;
 	}
       else
-	{
-	  if (!(prev_mod & SFPXPRED_MOD1_IF))
-	    bad = true;
-	  seen_cond = true;
-	}
+	goto bad;
 
-      if (bad)
-	{
-	  seen_cond = false;
-	  gcc_unreachable (); // ERROR
-	}
+      if (mod & SFPXPRED_MOD1_PUSH)
+	depth++;
+      if (depth != (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT))
+	gcc_unreachable (); /// error
 
-      prev_call = call;
-
-      tree lhs = gimple_call_lhs (call);
-      if ((lhs != nullptr) != (prev_mod != SFPXPRED_MOD1_ENDIF))
-	gcc_unreachable (); // ERROR
-
-      next = nullptr;
-      if (lhs)
-	{
-	  use_operand_p use;
-	  gimple *stmt;
-
-	  if (single_imm_use (lhs, &use, &stmt))
-	    {
-	      next = dyn_cast <gcall *> (stmt);
-	      gcc_assert (next); // ERROR
-	    }
-	  else
-	    gcc_unreachable (); // ERROR
-	}
-  }
+      if (mod == SFPXPRED_MOD1_ENDIF)
+	depth = 0;
+      prev_mod = mod;
+      was_cond = false;
+      was_phi = false;
+    }
 }
 
 // The hardware does not support OR and generates some comparisons (LTE, GE)
@@ -769,8 +811,8 @@ expand_xpred (function *fn)
     }
 
   // Check the pred_vec contains well-formed xpred chains
-  for (auto *call : pred_vec)
-    check_pred_chain (call);
+  auto pred_vector = gather_preds (pred_vec, pred_map);
+  check_preds (pred_vector);
 
   return changed ? TODO_update_ssa : 0;
 }
