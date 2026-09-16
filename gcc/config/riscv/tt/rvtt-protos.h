@@ -280,6 +280,7 @@ constexpr unsigned int SFPXPRED_MOD1_ENDIF = 0;
 constexpr unsigned int SFPXPRED_MOD1_IF = 1;
 constexpr unsigned int SFPXPRED_MOD1_ELSE = 2;
 constexpr unsigned int SFPXPRED_MOD1_PUSH = 4;
+constexpr unsigned int SFPXPRED_MOD1_DEPTH_SHIFT = 4;
 
 constexpr unsigned int SFPXLOGIC_MOD1_AND = 0;
 constexpr unsigned int SFPXLOGIC_MOD1_OR = 1;
