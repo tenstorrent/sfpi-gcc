@@ -81,8 +81,8 @@ void cond () {
 **	# READ L0
 **	# READ L1
 **	# READ L2
-**	SFPIADD	L1, L0, 0, 6
-**	SFPSETCC	L1, 0, 6
+**	SFPLE	L1, L0, 0, 1
+**	SFPLE	L0, L1, 0, 1
 **	SFPCAST	L0, L2, 0
 **	SFPCOMPC
 **	SFPCAST	L0, L2, 1	# LV:L0

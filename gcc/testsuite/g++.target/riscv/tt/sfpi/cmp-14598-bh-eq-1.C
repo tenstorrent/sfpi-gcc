@@ -29,8 +29,8 @@ void fnuvv () {
 **	# READ L1
 **	# READ L2
 **	# READ L3
-**	SFPIADD	L1, L0, 0, 6
-**	SFPSETCC	L1, 0, 6
+**	SFPLE	L1, L0, 0, 1
+**	SFPLE	L0, L1, 0, 1
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
@@ -68,8 +68,8 @@ void fnuvi (int i) {
 **	li	a5, 1897398272	# 2:71180000
 **	add	a0,a0,a5
 **	sw	a0, 0\(a3\)	# 2:SFPLOADI	L1, a0, 8	# LV:L1
-**	SFPIADD	L1, L0, 0, 6
-**	SFPSETCC	L1, 0, 6
+**	SFPLE	L1, L0, 0, 1
+**	SFPLE	L0, L1, 0, 1
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
@@ -128,8 +128,8 @@ void fns () {
 **	# READ L1
 **	# READ L2
 **	# READ L3
-**	SFPIADD	L1, L0, 0, 6
-**	SFPSETCC	L1, 0, 6
+**	SFPLE	L1, L0, 0, 1
+**	SFPLE	L0, L1, 0, 1
 **	SFPCOMPC
 **	SFPMOV	L0, L2, 2
 **	SFPMOV	L0, L3, 0	# LV:L0
