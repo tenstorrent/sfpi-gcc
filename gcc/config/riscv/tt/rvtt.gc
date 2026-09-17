@@ -164,13 +164,41 @@ combine (BH_QSR) {
   { return moot_muli_ok (r_call, true); }
   {
     unsigned imod = TREE_INT_CST_LOW (mod);
-    if (r_commuted && imod)
-      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
-	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
     mod = build_int_cst (TREE_TYPE (mod),
 			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
   }
   r = sfpmul_lv (lv2, a, b, mod);
+}
+
+// a + -1
+combine (QSR) {
+  cst = sfploadi (0, 0xbf80, 0, 0, SFPLOADI_MOD0_FLOATB);
+  r = sfpadd_lv (lv2, %a, cst, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    if (r_commuted && imod)
+      imod = (imod & SFPMAD_MOD1_BH_COMPL_A ? SFPMAD_MOD1_BH_COMPL_C : 0)
+	| (imod & SFPMAD_MOD1_BH_COMPL_C ? SFPMAD_MOD1_BH_COMPL_A : 0);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_C);
+  }
+  one = sfpreadlreg (CREG_IDX_1);
+  r = sfpadd_lv (lv2, a, one, mod);
+}
+
+// a * -1
+combine (QSR) {
+  cst = sfploadi (0, 0xbf80, 0, 0, SFPLOADI_MOD0_FLOATB);
+  r = sfpmul_lv (lv2, %a, cst, mod);
+  {}
+  {
+    unsigned imod = TREE_INT_CST_LOW (mod);
+    mod = build_int_cst (TREE_TYPE (mod),
+			 imod ^ SFPMAD_MOD1_BH_COMPL_A);
+  }
+  one = sfpreadlreg (CREG_IDX_1);
+  r = sfpmul_lv (lv2, a, one, mod);
 }
 
 // -a + b
