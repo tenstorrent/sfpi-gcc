@@ -38,6 +38,32 @@ along with GCC; see the file COPYING3.  If not see
 #include <deque>
 #include <unordered_map>
 
+// A predicate node marks an block.if/else/end.
+// We constrain the graph.  The graph doesn't persist beyond the current
+// function's processing. We allocate from ggc memory and it just all gets
+// blown away at the next GC.
+
+struct pred_node
+{
+  pred_node *next = nullptr; // next at this level
+
+  pred_node *parent = nullptr; // node withinn this one resides
+  pred_node *child = nullptr; // predicates inside this node
+
+  pred_node *chain = nullptr; // chained pred 
+
+  gcall *call = nullptr; // The call marking this point
+  gcall *cond = nullptr; // The sfpxcond (if applicable)
+
+  unsigned mod = 0; // The mod flags for this node
+};
+
+class pred_map
+{
+  std::unordered_map<gcall *, pred_node *> call_map;
+  pred_node *root;
+};
+
 using call_vec_t = std::vector<gcall *>;
 using stmt_vec_t = std::vector<gimple *>;
 using ssa_map_t = std::unordered_map<tree, std::pair<gcall *, unsigned>>;
@@ -735,7 +761,8 @@ check_preds (stmt_vec_t &preds)
 	}
       else if (prev_mod == SFPXPRED_MOD1_PUSH)
 	{
-	  if (mod != SFPXPRED_MOD1_IF)
+	  if (mod != SFPXPRED_MOD1_IF
+	      && mod != SFPXPRED_MOD1_END) // Empty block(!)
 	    goto bad;
 	}
       else if (prev_mod & SFPXPRED_MOD1_IF)
