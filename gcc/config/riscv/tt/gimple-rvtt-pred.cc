@@ -800,7 +800,10 @@ check_preds (stmt_vec_t &preds)
 	gcc_unreachable (); /// error
 
       if (mod == SFPXPRED_MOD1_END)
-	depth = 0;
+	{
+	  depth = 0;
+	  is_block = false;
+	}
       prev_mod = mod;
       was_cond = false;
       was_phi = false;
