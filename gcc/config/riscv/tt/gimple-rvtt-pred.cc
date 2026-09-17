@@ -671,6 +671,7 @@ check_preds (stmt_vec_t &preds)
   bool is_block = false;
   bool was_phi = false;
   bool was_cond = false;
+  gphi *pending_phi = nullptr;
 
   unsigned prev_mod = 0;
   unsigned depth = 0;
@@ -684,13 +685,14 @@ check_preds (stmt_vec_t &preds)
 	  continue;
 	}
 
-      if (is_a <gphi *> (call))
+      if (auto phi = dyn_cast <gphi *> (call))
 	{
-	  if (was_phi
+	  if (pending_phi
 	      || !(prev_mod == SFPXPRED_MOD1_PUSH
 		   || (was_cond && prev_mod & SFPXPRED_MOD1_IF)))
 	    goto bad;
 	  was_phi = true;
+	  pending_phi = phi;
 	  continue;
 	}
 
@@ -702,15 +704,29 @@ check_preds (stmt_vec_t &preds)
 	      || !(prev_mod & SFPXPRED_MOD1_IF))
 	    goto bad;
 	  was_cond = true;
+	  if (pending_phi)
+	    {
+	      use_operand_p use_p;
+	      ssa_op_iter iter;
+	      FOR_EACH_PHI_ARG (use_p, pending_phi, iter, SSA_OP_USE)
+		{
+		  auto var = USE_FROM_PTR (use_p);
+		  if (var == gimple_call_lhs (call))
+		    {
+		      pending_phi = nullptr;
+		      break;
+		    }
+		}
+	    }
 	  continue;
 	}
 
-      unsigned xmod = TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+      unsigned xmod = TREE_INT_CST_LOW (gimple_call_arg (call, insnd->mod_arg ()));
       unsigned mod = xmod & ((1 << SFPXPRED_MOD1_DEPTH_SHIFT) - 1);
 
       if (!prev_mod)
 	{
-	  if (was_phi)
+	  if (pending_phi)
 	    goto bad;
 	  if (mod == SFPXPRED_MOD1_PUSH)
 	    is_block = true;
@@ -727,22 +743,24 @@ check_preds (stmt_vec_t &preds)
 	  if (!was_cond)
 	    goto bad;
 
-	  if (was_phi && mod != SFPXPRED_MOD1_IF)
+	  if (mod != SFPXPRED_MOD1_IF && pending_phi)
 	    goto bad;
 
-	  if (!is_block
+	  if (mod == SFPXPRED_MOD1_IF)
+	    ;
+	  else if (!is_block
 	      && (mod == SFPXPRED_MOD1_ELSE
 		  || mod == (SFPXPRED_MOD1_PUSH | SFPXPRED_MOD1_ELSE | SFPXPRED_MOD1_IF)))
 	    ;
-	  else if (mod != SFPXPRED_MOD1_ENDIF)
+	  else if (mod != SFPXPRED_MOD1_END)
 	    goto bad;
 	}
       else if (prev_mod == SFPXPRED_MOD1_ELSE)
 	{
-	  if (was_phi && mod != SFPXPRED_MOD1_IF)
+	  if (mod != SFPXPRED_MOD1_IF && pending_phi)
 	    goto bad;
 
-	  if (mod != SFPXPRED_MOD1_ENDIF
+	  if (mod != SFPXPRED_MOD1_END
 	      && mod != SFPXPRED_MOD1_IF)
 	    goto bad;
 	}
@@ -754,7 +772,7 @@ check_preds (stmt_vec_t &preds)
       if (depth != (xmod >> SFPXPRED_MOD1_DEPTH_SHIFT))
 	gcc_unreachable (); /// error
 
-      if (mod == SFPXPRED_MOD1_ENDIF)
+      if (mod == SFPXPRED_MOD1_END)
 	depth = 0;
       prev_mod = mod;
       was_cond = false;
