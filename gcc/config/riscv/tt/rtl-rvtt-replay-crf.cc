@@ -927,32 +927,6 @@ crf_final_masks (crf_block const &blk, crf_plan const &plan, unsigned pos,
    CC write would change the member's lane gating.  Positions in SKIP move
    with it (order preserved) and are transparent.  */
 
-static bool
-crf_move_ok (crf_block const &blk, crf_plan const &plan, unsigned pos,
-	     unsigned from, unsigned to,
-	     std::vector<unsigned> const &skip)
-{
-  uint32_t mdefs, muses;
-  crf_final_masks (blk, plan, pos, &mdefs, &muses);
-  for (unsigned ix = from; ix != to; ++ix)
-    {
-      if (ix == pos)
-	continue;
-      if (std::find (skip.begin (), skip.end (), ix) != skip.end ())
-	continue;
-      crf_position const &q = blk.pos[ix];
-      if (q.empty && !q.marker_mask)
-	continue;
-      if (q.opaque || q.cc_write)
-	return false;
-      uint32_t qdefs, quses;
-      crf_final_masks (blk, plan, ix, &qdefs, &quses);
-      if ((qdefs & (mdefs | muses)) || (quses & mdefs))
-	return false;
-    }
-  return true;
-}
-
 static bool crf_occupancy_ok (crf_block &blk, crf_plan &plan,
 			      int *conflict_a = nullptr,
 			      int *conflict_b = nullptr);
