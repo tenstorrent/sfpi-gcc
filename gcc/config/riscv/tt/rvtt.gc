@@ -341,6 +341,56 @@ combine (QSR) {
   res = sfple (b, a, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_SMAG);
 }
 
+// r = a - b; r >=|< 0
+combine (QSR) {
+  diff|SR|OU = sfpiadd_v_lv (lv, a, b, mod);
+  zero|SA|OU = sfpreadlreg (CREG_IDX_0);
+  res = sfpgt (zero, diff, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_INT);
+  { return TREE_INT_CST_LOW (mod) & SFPIADD_MOD1_CC_NONE; }
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_CC_LT0));
+  }
+  diff = sfpiadd_v_lv (lv, a, b, mod);
+  res = sfpassign (diff);
+}
+combine (QSR) {
+  diff|SR|OU = sfpiadd_v_lv (lv, a, b, mod);
+  zero|SA|OU = sfpreadlreg (CREG_IDX_0);
+  res = sfple (zero, diff, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_INT);
+  { return TREE_INT_CST_LOW (mod) & SFPIADD_MOD1_CC_NONE; }
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_CC_GTE0));
+  }
+  diff = sfpiadd_v_lv (lv, a, b, mod);
+  res = sfpassign (diff);
+}
+combine (QSR) {
+  diff|SR|OU = sfpiadd_i_lv (iptr, lv, imm, var, id, b, mod);
+  zero|SA|OU = sfpreadlreg (CREG_IDX_0);
+  res = sfpgt (zero, diff, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_INT);
+  { return TREE_INT_CST_LOW (mod) & SFPIADD_MOD1_CC_NONE; }
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_CC_LT0));
+  }
+  diff = sfpiadd_i_lv (iptr, lv, imm, var, id, b, mod);
+  res = sfpassign (diff);
+}
+combine (QSR) {
+  diff|SR|OU = sfpiadd_i_lv (iptr, lv, imm, var, id, b, mod);
+  zero|SA|OU = sfpreadlreg (CREG_IDX_0);
+  res = sfple (zero, diff, SFPGTLE_MOD1_SET_CC, SFPGTLE_IMM_TYPE_INT);
+  { return TREE_INT_CST_LOW (mod) & SFPIADD_MOD1_CC_NONE; }
+  {
+    mod = build_int_cst (TREE_TYPE (mod),
+			 TREE_INT_CST_LOW (mod) ^ (SFPIADD_MOD1_CC_NONE | SFPIADD_MOD1_CC_GTE0));
+  }
+  diff = sfpiadd_i_lv (iptr, lv, imm, var, id, b, mod);
+  res = sfpassign (diff);
+}
+
 // r = a - cst; r < or >= 0
 combine (WH_BH) {
   sum|OU|SR = sfpiadd_i_lv (ptr, lv1, val, imm, var, id, sum_mod);
