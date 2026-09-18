@@ -1,5 +1,10 @@
 #pragma once
 
+// Wormhole SFPU opcode table, derived from Tenstorrent's ckernel_ops.h
+// (see sfpu-ops-qsr.h for the generating sed recipe).  Copyright and
+// licence follow the upstream header; confirm before redistributing
+// this file separately from the sfpi-gcc tree.
+
 #define TT_OP_WH(opcode, params) ( (opcode << 24) + params )
 
 #define TT_OP_WH_ADDDMAREG(OpBisConst, ResultRegIndex, OpBRegIndex, OpARegIndex) \
