@@ -235,6 +235,7 @@ RVTT_FN (sfpnonlinear_lv,   qsr,,XTT_VEC_FTYPE_XTT_VEC_XTT_VEC_USI,             
 
 RVTT_FN (ttincrwc,             ,,VOID_FTYPE_SI_SI_SI_SI,                                     VOL, ({CS, 6}, {CS, 4}, {CS, 4}, {CS, 4}))
 RVTT_FN (ttreplay,             ,,VOID_FTYPE_XTT_IPTR_USI_USI_USI_USI_USI_USI,                VOL, ({CU, 5, 4, 1}, {CU, 5}, {CU, 1}, {CU, 1}))
+RVTT_FN (ttinsn,               ,,VOID_FTYPE_XTT_IPTR_USI,                                    VOL|NV, ({R}, {}))
 
 // Make sure the last defn is never something we ask for get-live of.
 
