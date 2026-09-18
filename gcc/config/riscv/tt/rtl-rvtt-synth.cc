@@ -76,6 +76,8 @@ transform (function *fn)
 	    id = INTVAL (XVECEXP (SET_SRC (PATTERN (insn)), 0, 0));
 	  else if (get_attr_type (insn) != TYPE_TENSIX)
 	    continue;
+	  else if (INSN_CODE (insn) == CODE_FOR_rvtt_ttinsn_int)
+	    continue;
 	  else
 	    {
 	      rtx pat = PATTERN (insn);

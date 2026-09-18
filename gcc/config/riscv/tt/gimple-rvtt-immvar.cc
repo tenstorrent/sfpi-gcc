@@ -229,6 +229,11 @@ immvar_gather (const rvtt_insn_data *insnd,
       return false;
     }
 
+#if 1  // FIXME: Allow constifying later
+  if (insnd->id == rvtt_insn_data::ttinsn)
+    return false;
+#endif
+
   bool changed = false;
   if (!integer_zerop (gimple_call_arg (call, 0)))
     {

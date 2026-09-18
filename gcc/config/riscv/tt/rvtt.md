@@ -106,6 +106,7 @@
 
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
+  UNSPECV_TTINSN
 ])
 
 (define_enum "xtt_delay" [
@@ -2813,4 +2814,38 @@
       : "TTREPLAY\t%5, %3, %6, %7",
       operands, false, -1);
   }
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_ttinsn"
+  [(unspec_volatile
+    [(match_operand:SI    0 "reg_or_0_operand")
+     (match_operand:SI    1 "reg_or_const_int_operand")
+     ] UNSPECV_TTINSN)]
+  "TARGET_XTT_TENSIX"
+{
+  auto mem = const0_rtx;
+  auto reg = const0_rtx;
+  auto cst = operands[1];
+  // FIXME eventually just look at operands[1] constness
+  if (operands[0] != const0_rtx)
+    {
+      mem = gen_rtx_MEM (SImode, operands[0]);
+      reg = force_reg (SImode, operands[1]);
+      cst = const0_rtx;
+    }
+  emit_insn (gen_rvtt_ttinsn_int (mem, cst, reg));
+  DONE;
+})
+
+;; eventually there'll be no constant sw arg, but not yet.
+(define_insn "rvtt_ttinsn_int"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "mem_or_0_operand"  "J,m")
+     (match_operand:SI    1 "const_int_operand" "n,X")
+     (match_operand:SI    2 "reg_or_0_operand"  "X,rJ")
+     ] UNSPECV_TTINSN)]
+  "TARGET_XTT_TENSIX"
+  "@
+   .ttinsn\t%1
+   sw\t%z2,%0"
   [(set_attr "type" "tensix")])
