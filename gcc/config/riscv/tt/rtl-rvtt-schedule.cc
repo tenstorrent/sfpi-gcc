@@ -84,6 +84,10 @@ find_next_insn (std::vector<basic_block> &visited, basic_block bb, int regno,
       if (get_attr_type (probe_insn) != TYPE_TENSIX)
 	continue;
 
+      // FIXME: Eventually permit
+      if (INSN_CODE (probe_insn) == CODE_FOR_rvtt_ttinsn_int)
+	continue;
+
       if (!regno)
 	{
 	  bool is_nop = recog_memoized (probe_insn) == CODE_FOR_rvtt_sfpnop;

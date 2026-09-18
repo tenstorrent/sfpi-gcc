@@ -1,5 +1,7 @@
 // { dg-options "-mcpu=tt-wh-tensix -fno-exceptions -fno-rtti -O2" }
 
+extern volatile unsigned iptr[];
+
 void fn (int i)
 {
   __builtin_rvtt_sfpwritelreg (__builtin_rvtt_sfpreadlreg (i), 0); // { dg-error "is not a constant" }
@@ -58,7 +60,7 @@ void fn (int i)
 
   __builtin_rvtt_ttreplay (nullptr,  1, 0, 0,  0, 0, 0);
   __builtin_rvtt_ttreplay (nullptr, 32, 0, 0, 31, 1, 1);
-  __builtin_rvtt_ttreplay (nullptr,  i, 0, 0,  0, 0, 0);
+  __builtin_rvtt_ttreplay (iptr,  i, 0, 0,  0, 0, 0);
   __builtin_rvtt_ttreplay (nullptr,  0, 0, 0,  0, 0, 0); // { dg-error "is out of range" }
   __builtin_rvtt_ttreplay (nullptr,  1, 0, 0, 32, 0, 0); // { dg-error "is out of range" }
   __builtin_rvtt_ttreplay (nullptr,  1, 0, 0,  0, 2, 0); // { dg-error "is out of range" }

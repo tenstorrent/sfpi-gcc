@@ -101,10 +101,12 @@ rvtt_insn_data::init ()
       // The instrn ptr operand
       gcc_assert (!argno
 		  && VOID_TYPE_P (TREE_TYPE (TREE_VALUE (arg_types))));
-      flags = flags_t (flags | HAS_VAR);
+      flags = flags_t ((flags ^ HAS_VAR) | HAS_IPTR);
       arg_types = TREE_CHAIN (arg_types);
       argno++;
     }
+  else
+    gcc_assert (!(flags & HAS_VAR));
 
   if (is_live ())
     {

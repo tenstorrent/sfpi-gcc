@@ -259,7 +259,7 @@ void loadiadd () {
 
 void loadimul1 (unsigned v) {
   auto a = __builtin_rvtt_sfpreadlreg (0);
-  auto c = __builtin_rvtt_sfploadi (nullptr, v, 0, 0, 0);
+  auto c = __builtin_rvtt_sfploadi (iptr, v, 0, 0, 0);
   auto r = __builtin_rvtt_sfpmul (a, c, 0);
   __builtin_rvtt_sfpwritelreg (r, 1);
 }
@@ -270,7 +270,8 @@ void loadimul1 (unsigned v) {
 **	li	a5, 1946157056	# 1:74000000
 **	srli	a0,a0,8
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 1:SFPMULI	L0, a0, 0
+**	lui	a5,%hi\(iptr\)
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPMULI	L0, a0, 0
 **	SFPMOV	L1, L0, 2
 **	# WRITE L1
 **	ret
@@ -278,7 +279,7 @@ void loadimul1 (unsigned v) {
 
 void loadimul1a (unsigned v) {
   auto a = __builtin_rvtt_sfpreadlreg (0);
-  auto c = __builtin_rvtt_sfploadi (nullptr, v, 0, 0, 0);
+  auto c = __builtin_rvtt_sfploadi (iptr, v, 0, 0, 0);
   auto r = __builtin_rvtt_sfpmul (a, c, 0);
   __builtin_rvtt_sfpwritelreg (r, 1);
   __builtin_rvtt_sfpwritelreg (c, 2);
@@ -289,7 +290,8 @@ void loadimul1a (unsigned v) {
 **	zext.h	a0,a0
 **	li	a5, 1897922560	# 1:71200000
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L2, a0, 0
+**	lui	a5,%hi\(iptr\)
+**	sw	a0, %lo\(iptr\)\(a5\)	# 1:SFPLOADI	L2, a0, 0
 **	SFPMUL	L1, L0, L2, 0
 **	# WRITE L1
 **	# WRITE L2
@@ -299,7 +301,7 @@ void loadimul1a (unsigned v) {
 void loadimul1b (unsigned v) {
   auto a = __builtin_rvtt_sfpreadlreg (0);
   auto b = __builtin_rvtt_sfpreadlreg (1);
-  auto c = __builtin_rvtt_sfploadi (nullptr, v, 0, 0, 0);
+  auto c = __builtin_rvtt_sfploadi (iptr, v, 0, 0, 0);
   auto r1 = __builtin_rvtt_sfpmul (a, c, 0);
   auto r2 = __builtin_rvtt_sfpmul (b, c, 0);
   __builtin_rvtt_sfpwritelreg (r1, 0);
@@ -310,13 +312,15 @@ void loadimul1b (unsigned v) {
 **	# READ L0
 **	# READ L1
 **	slli	a0,a0,16
-**	li	a5, 1946157056	# 1:74000000
+**	li	a4, 1946157056	# 1:74000000
 **	srli	a0,a0,8
-**	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 1:SFPMULI	L0, a0, 0
-**	li	a5,16
-**	xor	a5,a5,a0
-**	sw	a5, 0\(zero\)	# 1:SFPMULI	L1, a5, 0
+**	lui	a5,%hi\(iptr\)
+**	add	a0,a0,a4
+**	addi	a5,a5,%lo\(iptr\)
+**	sw	a0, 0\(a5\)	# 1:SFPMULI	L0, a0, 0
+**	li	a4,16
+**	xor	a4,a4,a0
+**	sw	a4, 0\(a5\)	# 1:SFPMULI	L1, a4, 0
 **	# WRITE L0
 **	# WRITE L1
 **	ret
@@ -326,11 +330,11 @@ void loadimul2 (unsigned v) {
   auto id = __builtin_rvtt_synth_opcode (1, 0);
   
   auto a = __builtin_rvtt_sfpreadlreg (0);
-  auto c = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 1, 0);
+  auto c = __builtin_rvtt_sfploadi (iptr, v, id + (v & 0xffff), 1, 0);
   auto r = __builtin_rvtt_sfpmul (a, c, 0);
   __builtin_rvtt_sfpwritelreg (r, 1);
 
-  auto d = __builtin_rvtt_sfploadi (nullptr, v, id + (v & 0xffff), 1, 0);
+  auto d = __builtin_rvtt_sfploadi (iptr, v, id + (v & 0xffff), 1, 0);
   __builtin_rvtt_sfpwritelreg (d, 2);
 }
 /*
@@ -339,12 +343,14 @@ void loadimul2 (unsigned v) {
 **	# READ L0
 **	zext.h	a0,a0
 **	add	a0,a0,a5
-**	sw	a0, 0\(zero\)	# 1:SFPLOADI	L1, a0, 0
+**	lui	a5,%hi\(iptr\)
+**	addi	a5,a5,%lo\(iptr\)
+**	sw	a0, 0\(a5\)	# 1:SFPLOADI	L1, a0, 0
 **	SFPMUL	L1, L0, L1, 0
 **	# WRITE L1
-**	li	a5,3145728
-**	xor	a5,a5,a0
-**	sw	a5, 0\(zero\)	# 1:SFPLOADI	L2, a5, 0
+**	li	a4,3145728
+**	xor	a4,a4,a0
+**	sw	a4, 0\(a5\)	# 1:SFPLOADI	L2, a4, 0
 **	# WRITE L2
 **	ret
 */
