@@ -1,4 +1,4 @@
-/* Generic SFPLOADMACRO macro planner (analysis skeleton).
+/* Generic SFPLOADMACRO macro planner.
    Copyright (C) 2026 Tenstorrent Inc.
 
 This file is part of GCC.
@@ -16,6 +16,39 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
+
+/* SFPLOADMACRO lets a short instruction sequence be described once, in
+   configuration state, and then re-launched by a single instruction.  The
+   win is delivery: a RISC-pushed operation costs roughly 1.23x a replayed
+   slot on the audited model, so collapsing a repeated row into a macro
+   removes words from the instruction stream even when it removes no work.
+
+   The predecessor pass recognised a fixed calendar of known sequences.  That
+   is exactly the shape this backend is forbidden to use (see README section
+   1): it cannot generalise, and it silently does nothing on a body that is
+   one instruction away from a pattern it knows.  This pass instead DERIVES a
+   descriptor from the region's own dataflow, proves the derivation, and
+   schedules the result against a resource reservation table.  The old pass
+   was deleted only after byte-parity oracles minted from it confirmed the
+   generic path reproduced its output.
+
+   The work is layered, and the layers are separate files:
+
+     ownership   (rvtt-macro-ownership)  prove the region owns the
+                 configuration state it is about to program -- function-global
+                 first, then refined to the loop-body region
+     region      (rvtt-macro-region)     find candidate regions and their rows
+     desc        (rvtt-macro-desc)       synthesise the descriptor program
+     sched       (rvtt-macro-sched)      place rows against unit/slot capacity
+     epoch       (rvtt-macro-epoch)      configuration epochs across tiles
+     verify      (rvtt-macro-verify)     re-derive and compare before emitting
+
+   Every layer may decline, and a decline is a registered refusal name rather
+   than a silent fallthrough.  Verification failure is a refusal too: if the
+   re-derived descriptor does not match what was planned, the region is not
+   formed.
+
+   Gated by TARGET_XTT_TENSIX and the -mtt-tensix-macro-planner family.  */
 
 #define IN_TARGET_CODE 1
 

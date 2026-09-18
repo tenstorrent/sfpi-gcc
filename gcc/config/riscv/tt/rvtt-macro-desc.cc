@@ -17,6 +17,22 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Layer 4 of the macro planner (see rtl-rvtt-macro-planner.cc for the layer
+   map): turn a proven region into the descriptor program the hardware will
+   execute.
+
+   Selection is keyed by the DERIVED event structure of the canonical row --
+   per-carrier value events and the architectural opcode bytes they realise --
+   never by an operation's name or its coefficients.  That is the property
+   that makes the planner generic: two unrelated kernels whose rows have the
+   same event structure select the same descriptor, and a kernel whose
+   structure is not in the proven set is refused by name rather than
+   approximated.
+
+   The proven descriptor programs are keyed by derived structure plus
+   encoding, so admitting a new one is a deliberate act with its own evidence,
+   not a side effect of touching this file.  */
+
 #define IN_TARGET_CODE 1
 
 #include "config.h"

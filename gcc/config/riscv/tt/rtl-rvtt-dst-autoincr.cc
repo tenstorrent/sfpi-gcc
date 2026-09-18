@@ -17,6 +17,29 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Semantic SFPI addresses Dst explicitly: each logical access names its row,
+   and a separate TTINCRWC advances the read/write counters between rows.
+   The hardware can fold that advance into the access itself through the
+   address-modifier (ADDR_MOD) and RWC machinery, which removes one delivered
+   word per row -- and rows dominate the SFPU instruction stream, so this is
+   the widest-applying transform in the backend.
+
+   Folding is only legal if the pass can prove the region OWNS the counters:
+   that no other instruction between the access and the advance observes or
+   mutates the same counter state, and that the target actually supports the
+   modifier form for this access class.  Ownership is therefore proved, not
+   assumed, and the per-target capability table below states what each part
+   admits rather than hardcoding a single machine's behaviour.
+
+   Structure of the file: the capability table and the current target's entry;
+   a classification of instructions by architectural effect (derived from the
+   generated effect attributes, not from opcode names); recognition of typed
+   Dst accesses and of a TTINCRWC that advances Dst alone by a constant
+   stride; replay bookkeeping, because a fold inside a captured record must
+   account for the record's shadow; then the transform itself.
+
+   Gated by TARGET_XTT_TENSIX and -mtt-tensix-optimize-dst-autoincr.  */
+
 #define INCLUDE_ALGORITHM
 #define INCLUDE_MAP
 #define INCLUDE_VECTOR

@@ -17,6 +17,30 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* The SFPU exposes eight architectural vector registers (LREGs).  Before this
+   pass the backend had no real allocator for them, which put a hard ceiling
+   on every transform that wants a value to stay resident -- residency,
+   pressure-parking and store-to-load forwarding all bid for the same file.
+
+   This is Chaitin-style graph colouring with DSATUR ordering (Brelaz, CACM
+   1979): build the interference graph over SFPU pseudos, colour saturation-
+   first, and spill through scratch when a web will not fit.  It consumes the
+   dst-layout-32b ABI declaration and the IRA dual-bank binding rather than
+   re-deriving either.
+
+   Two layers live here and are worth separating when reading.  The first is
+   a pressure audit -- a backward simulation computing function-wide peak
+   simultaneous pressure, kept dump-byte-identical to its historical form
+   because the testsuite pins that output.  The second is the allocator
+   proper.  They share the gate, which is why one flag pair admits both.
+
+   Structural transparency matters to the audit: a pattern carrying
+   unspec_volatile is opaque to the effect model, so those are excluded
+   explicitly rather than mis-modelled.
+
+   Gated by TARGET_XTT_TENSIX_BH / _WH; see -mtt-tensix-optimize-lreg-alloc
+   and -mtt-tensix-optimize-pressure-schedule.  */
+
 /* The SFPU vector-register (LREG) allocator, replacing the former
    dump-only audit stub.  It has two independent layers:
 
