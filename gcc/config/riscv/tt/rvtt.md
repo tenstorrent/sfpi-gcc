@@ -106,6 +106,7 @@
 
   UNSPECV_TTINCRWC
   UNSPECV_TTREPLAY
+  UNSPECV_TTINSN
 ])
 
 (define_enum "xtt_delay" [
@@ -2897,4 +2898,34 @@
       : "TTREPLAY\t%5, %3, %6, %7",
       operands, false, -1);
   }
+  [(set_attr "type" "tensix")])
+
+(define_expand "rvtt_ttinsn"
+  [(unspec_volatile
+    [(match_operand:SI    0 "reg_or_0_operand")
+     (match_operand:SI    1 "reg_or_const_int_operand")
+     (match_operand:SI    2 "const_int_operand")
+     (match_operand:SI    3 "const_int_operand")
+     (match_operand:SI    4 "const_int_operand")
+     ] UNSPECV_TTINSN)]
+  "TARGET_XTT_TENSIX"
+{
+  auto mem = const0_rtx;
+  auto val = operands[1];
+
+  if (!CONST_INT_P (val))
+    mem = gen_rtx_MEM (SImode, operands[0]);
+  emit_insn (gen_rvtt_ttinsn_int (mem, val));
+  DONE;
+})
+
+(define_insn "rvtt_ttinsn_int"
+  [(unspec_volatile:XTT32SI [
+     (match_operand:SI    0 "mem_or_0_operand"  "J,m")
+     (match_operand:SI    1 "reg_or_const_int_operand" "n,r")
+     ] UNSPECV_TTINSN)]
+  "TARGET_XTT_TENSIX"
+  "@
+   .ttinsn\t%1
+   sw\t%1,%0"
   [(set_attr "type" "tensix")])
