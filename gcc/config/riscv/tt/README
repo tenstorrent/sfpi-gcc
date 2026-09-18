@@ -89,17 +89,46 @@ in the directory; check it before assuming an ordering.
 4. Flags: what is on, what is not
 ---------------------------------
 
-113 -mtt- options in ../riscv.opt:
+113 -mtt- options are declared in ../riscv.opt:
 
-	Init(1)	  15	on by default in every build
-	Init(0)	  98	off by default; measured individually
-	Init(-1)  12	tri-state -- cpu-derived errata workarounds, plus
-			five retirement tombstones that error() on use
+	Init(1)	   6	on by default
+	Init(0)	  95	off by default
+	Init(-1)  11	tri-state: cpu-derived errata workarounds, plus
+			retirement tombstones that error() on use
+	Init(32)   1	a numeric budget
+
+Six enabled is what the built compiler actually reports, not just what the
+source declares -- `riscv-tt-elf-g++ -Q --help=target` on the pin-59 install
+prints 6 [enabled] and 93 [disabled].  Those six are:
+
+	-mtt-tensix-optimize-cc
+	-mtt-tensix-optimize-dce
+	-mtt-tensix-optimize-dst-ownership
+	-mtt-tensix-optimize-lut-select
+	-mtt-tensix-optimize-replay
+	-mtt-tensix-optimize-setexp-fold
+
+HOW TO ENABLE THE REST.  Everything else is opt-in on the command line:
+
+	riscv-tt-elf-g++ -mtt-tensix-optimize-<name> ...
+
+and can be turned back off with the -mno- spelling.  Check what a build is
+actually using rather than assuming:
+
+	riscv-tt-elf-g++ -Q --help=target | grep '^ *-mtt-'
 
 A flag being present is not a claim that it is production-recommended.  The
-reviewed default set is the Init(1) group; everything else is either an
-experimental knob or measurement scaffolding.  Four options are testsuite
-fault-injection only and are marked Undocumented.
+95 default-off options are a mix of reviewed optimisations, experimental
+knobs and measurement scaffolding; four are testsuite fault-injection only
+and are marked Undocumented.  To see what a pass did or why it declined, add
+-fdump-<rtl|tree>-<pass name> and read the refusal (section 5).
+
+CAVEAT ON "ON-39".  The campaign's ceremony records describe a reviewed
+"ON set" of 39 flags.  That is NOT this compiler's default set -- the binary
+enables six.  The ON-39 set is harness-side bookkeeping in tt-metal's
+sweep_2x2.conf, and the committed material does not spell out the mapping
+between the two.  If you need to reproduce the campaign's measured
+configuration, take the flag list from the harness, not from this section.
 
 No pass is enabled by belief.  A new pass lands compiled-in but off, and the
 corpus gate proves that with the flag off every emitted binary is bit-for-bit
