@@ -1,0 +1,167 @@
+			The rvtt Tensix backend
+			=======================
+
+This directory implements the Tensix vector (SFPU) extensions to the RISC-V
+backend: 54 target passes, 113 -mtt- options, ~104k lines across 152 files.
+It is large, so this file is the map.  Read it before the sources.
+
+Machine descriptions here are named rvtt-*.md and are ordinary GCC .md files
+reached from ../riscv.md -- "*.md" in this directory means machine
+description, never Markdown.  Prose documentation lives in <repo>/docs/.
+
+
+1. What the passes are for
+--------------------------
+
+The Tensix SFPU is a 32-lane vector unit with a small architectural register
+file (8 LREGs), a tile-addressed destination file (Dst) reached through
+implicit read/write counters (RWC), and two mechanisms for amortising
+instruction delivery: replay (record a short sequence once, re-launch it
+cheaply) and SFPLOADMACRO (a descriptor-driven macro engine).  A RISC-pushed
+operation costs about 1.23x a replayed slot on the audited model, so most of
+the optimisation effort is about delivering fewer words, not doing less work.
+
+Standing design rule: no pass may recognise an operation by name, by a
+coefficient fingerprint, or by a magic instruction word.  A transform that
+cannot be derived from typed program structure must refuse -- by name, with
+a recorded reason (see section 5).
+
+
+2. Pass families
+----------------
+
+  macro planner (24 files)   SFPLOADMACRO descriptor synthesis, verification
+			     and region scheduling against a resource
+			     reservation table.  rtl-rvtt-macro-planner.cc
+			     plus rvtt-macro-{desc,sched,epoch,tables,region,
+			     ownership,verify}.
+  scheduling (15 files)      Post-RA list scheduling over a typed-effect DAG,
+			     hazard interlock filling, drain placement, and
+			     Rau-style iterative modulo scheduling.
+  replay formation (6)       Record/playback formation: hoisting a record out
+			     of a loop, first-trip peel, outward lift across
+			     enclosing loops, window sizing.
+  LREG pressure (5)          DSATUR graph-colouring allocation over the 8
+			     LREGs with spill-through-scratch, plus pressure
+			     scheduling and renaming tiers.
+  prgm constants (5)         Constant-register promotion and the priced
+			     residency walk that keeps invariants resident.
+  LUT selection (5)          If-conversion of piecewise range dispatch into
+			     SFPLUTFP32 table selection, including the FP16
+			     six-entry form.
+  Dst / RWC (4)              Auto-increment addressing formation, per-row
+			     address recurrence fusion, and store-to-load
+			     forwarding over Dst.
+  MOP (4)                    Hardware zero-overhead loop formation.
+  crosscall (4)              Interprocedural LICM across noinline boundaries.
+  crosslane (2)              Cross-lane permute and face-transpose surfaces.
+  effects (2)                rvtt-effects.h is the single source of truth for
+			     instruction effect classification.  New code must
+			     query it rather than write another switch.
+
+Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
+/ rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb and rvtt-lpsolve (an
+exact branch-and-bound solver used where a heuristic would guess), and six
+opt-in host-compiled unit harnesses wired up in ../t-riscv-tt.
+
+
+3. Where passes run
+-------------------
+
+Registrations live in rvtt-passes.def.  They cluster on a few anchors:
+
+	BEFORE pass_expand		28
+	BEFORE pass_all_optimizations	 8
+	BEFORE pass_postreload		 5
+	BEFORE pass_ira			 4
+	AFTER  pass_postreload		 4
+	BEFORE pass_free_cfg		 2
+	one each: pass_lower_subreg, pass_complete_unroll,
+		  AFTER pass_cse, AFTER pass_late_combine
+
+IMPORTANT: within a single anchor, ordering is encoded by textual position in
+rvtt-passes.def, and INSERT_PASS_AFTER reverses it -- each later line on the
+same anchor lands closer to the anchor and therefore runs earlier.  The .def
+file calls this out at the affected sites.  This is the least obvious thing
+in the directory; check it before assuming an ordering.
+
+
+4. Flags: what is on, what is not
+---------------------------------
+
+113 -mtt- options in ../riscv.opt:
+
+	Init(1)	  15	on by default in every build
+	Init(0)	  98	off by default; measured individually
+	Init(-1)  12	tri-state -- cpu-derived errata workarounds, plus
+			five retirement tombstones that error() on use
+
+A flag being present is not a claim that it is production-recommended.  The
+reviewed default set is the Init(1) group; everything else is either an
+experimental knob or measurement scaffolding.  Four options are testsuite
+fault-injection only and are marked Undocumented.
+
+No pass is enabled by belief.  A new pass lands compiled-in but off, and the
+corpus gate proves that with the flag off every emitted binary is bit-for-bit
+identical to the previous build.  Promotion into the default set requires
+dump-proven evidence that the flag transforms code in the installed binary,
+the full delta adjudicated program by program, a bit-accuracy gate, and
+re-measurement of every touched row.
+
+
+5. Refusals
+-----------
+
+rvtt-refusals.def is a registry of named reasons a transform declined.  Every
+refusal a pass can emit is registered there; ../t-riscv-tt regenerates
+rvtt-refusals.txt from it and fails the build on a duplicate or unregistered
+name.  "It did not fire" is therefore never silent -- there is always a name.
+
+The registry is append-only by rule, and the testsuite pins dump text, so
+removing a name can break a test that asserts the exact string.  Note also
+that some names are composed at run time (rvtt_refusal_fire_composed), so a
+name absent from a grep of the sources is not necessarily dead.
+
+
+6. Vocabulary
+-------------
+
+Terms used throughout the sources that are not standard GCC:
+
+  Dst		 the destination tile register file, addressed in 16x16 faces
+  RWC		 read/write counters -- implicit Dst address pointers advanced
+		 by SETRWC/INCRWC, which passes must model to know which face
+		 is live
+  LREG		 one of the 8 architectural SFPU vector registers
+  replay	 record a short instruction sequence once, re-launch cheaply
+  MOP		 the Tensix zero-overhead hardware loop engine
+  row		 one issue of a parameterised instruction sequence
+  delivered word the unit the delivery cost model prices
+  refusal	 a named, recorded decision not to transform (section 5)
+  priced	 a decision taken by asking a cost engine, not a heuristic
+  licensed	 an optimisation permitted to change numerical results, under
+		 explicit sign-off and a machine-checked divergence certificate
+  proof		 an entry under proofs/, wired into the build, backing a
+		 transform's legality claim
+
+
+7. Testing
+----------
+
+Tests are in ../../../testsuite/g++.target/riscv/tt/.  Most passes carry
+dump-scan tests keyed to their dump name; the pre-campaign lowering passes are
+covered by assembly scans instead.  proofs/ holds machine-checked equivalence
+results that ../t-riscv-tt verifies against their generated form, and the
+unit harnesses there can be built directly.
+
+
+8. Reading order for a newcomer
+-------------------------------
+
+  1. this file
+  2. rvtt-passes.def -- the pipeline, with its ordering caveats
+  3. rvtt-effects.h -- the effect vocabulary everything else should use
+  4. <repo>/docs/MACRO_PLANNER.md and docs/LREG_ALLOCATOR.md for the two
+     largest subsystems
+  5. a small self-contained pass, e.g. gimple-rvtt-int-not.cc (295 lines),
+     before one of the 3000-line ones
