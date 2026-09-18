@@ -492,3 +492,20 @@ combine (QSR) {
   exp = sfpexexp_lv (exp_lv, a, exp_mod);
   res = sfpassign_lv (add_lv, exp);
 }
+
+// smag->int->smag or vice versa
+combine (QSR) {
+  tmp|OU = sfpcast_lv (lv1, a, mod1);
+  r = sfpcast_lv (lv2, tmp, mod2);
+  {
+    unsigned imod1 = TREE_INT_CST_LOW (mod1);
+    if (imod1 != SFPCAST_MOD1_SM32_TO_INT32
+	&& imod1 != SFPCAST_MOD1_INT32_TO_SM32)
+      return false;
+    unsigned imod2 = TREE_INT_CST_LOW (mod2);
+    if (imod2 != (imod1 ^
+		  (SFPCAST_MOD1_SM32_TO_INT32 ^ SFPCAST_MOD1_INT32_TO_SM32)))
+      return false;
+  }
+  r = sfpassign_lv (lv2, a);
+}
