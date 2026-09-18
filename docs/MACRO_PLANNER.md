@@ -3,7 +3,7 @@
 Reconstructed design document (WP8).  The original DESIGN.md and WP
 notes existed only on the retired machine; this document is rebuilt
 from the implemented code, the capability-table provenance audit
-(`gcc/config/riscv/tt/NOTES-wp6-prep.md`), and the handoff's
+(`docs/campaign-notes/NOTES-wp6-prep.md`), and the handoff's
 branch-contents record.  It is the authoritative description of the
 planner as shipped at the end of WP8.
 
@@ -491,7 +491,7 @@ from a source instruction.  The section below is kept as the WP8-era
 rationale.
 
 The bit-level format of the sequence words and of misc bits above 3:0
-is architecturally UNESTABLISHED (NOTES-wp6-prep.md §9(b)/(c)); the
+is architecturally UNESTABLISHED (docs/campaign-notes/NOTES-wp6-prep.md §9(b)/(c)); the
 per-event delay fields of several proven programs are undocumented
 (§9(g)).  Until an independent architectural reference or a validated
 4-sub-unit timing model exists, sequences and misc words are proven

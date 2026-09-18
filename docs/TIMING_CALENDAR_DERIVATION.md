@@ -8,7 +8,7 @@ planner now discovers cleanly (unary max/min swap rows, add/sub_int
 This document establishes that the sequence-word bit format and the
 per-event delay semantics — carried until now as "architecturally
 UNESTABLISHED" whole-word capabilities (docs/MACRO_PLANNER.md §3,
-NOTES-wp6-prep.md §9(b)/(c)/(g)) — are in fact fully established by
+docs/campaign-notes/NOTES-wp6-prep.md §9(b)/(c)/(g)) — are in fact fully established by
 three mutually independent sources, derives every frozen calendar word
 from its schedule as validation, and specifies the generic derivation
 layer that replaces frozen per-shape calendars for new shapes.
@@ -51,7 +51,7 @@ the 0xC template dest selector, the store byte convention, and misc
 word 0x330.
 
 These sources agree with each other and with every frozen calendar
-word (§3).  §9(b)/(c)/(g) of NOTES-wp6-prep.md are therefore RESOLVED:
+word (§3).  §9(b)/(c)/(g) of docs/campaign-notes/NOTES-wp6-prep.md are therefore RESOLVED:
 the bit-level sequence format is established, and per-event delays are
 derivable.
 
