@@ -261,7 +261,7 @@ namespace {
 const pass_data pass_data_rvtt_unspec_prop_rtl =
 {
   RTL_PASS, /* type */
-  "rvtt_unspec_prop", /* name */
+  "rvtt_unspec_prop_rtl", /* name */
   OPTGROUP_OTHER, /* optinfo_flags */
   TV_NONE, /* tv_id */
   0, /* properties_required */

@@ -1770,9 +1770,19 @@ mop_contract_ok_p (unsigned contract_mask, const char **why)
    callee's own body): every statement must be proven unable to write
    a contract LREG.  */
 
-/* The audited scalar asm templates (the same list the epoch pass and
-   the prgm-const scan carry: base-ISA instructions with no Tensix
-   encoding space).  */
+/* The audited scalar asm templates: base-ISA instructions with no Tensix
+   encoding space.
+
+   WARNING: this is one of FOUR copies of this soundness allowlist --
+   rvtt-macro-epoch.cc, gimple-rvtt-prgm-const.cc and rtl-rvtt-mop-form.cc
+   carry their own.  They are NOT identical and must not be assumed so.
+   This copy is the strictest: it omits the pcbuf/mailbox
+   store-load-consume idiom that the epoch copy admits, and it compares
+   with strcmp where the epoch copy uses whitespace-tolerant
+   asm_template_eq.  Being strictest, it fails closed, which is the safe
+   direction -- but adding a template here does NOT add it elsewhere, and
+   adding one elsewhere does not add it here.  Consolidating these into one
+   shared predicate is filed work; until then, change all four or none.  */
 
 bool
 audited_scalar_asm_p (const char *s)
