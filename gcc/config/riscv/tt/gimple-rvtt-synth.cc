@@ -120,6 +120,11 @@ split (function *fn)
 	if (!insnd->has_iptr ())
 	  continue;
 
+#if 1 // FIXME ttinsn early fix
+	if (!insnd->has_var ())
+	  continue;
+#endif
+
 	auto *call = as_a <gcall *> (*gsi);
 	tree immarg = gimple_call_arg (call, insnd->imm_arg ());
 	const char *msg = nullptr;

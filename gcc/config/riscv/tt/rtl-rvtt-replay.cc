@@ -213,6 +213,11 @@ scan_insns (std::vector<replay_info> &info, basic_block bb)
 	    continue;
 	  }
 
+#if 1  // FIXME: eventually let these participate.
+	if (INSN_CODE (insn) == CODE_FOR_rvtt_ttinsn_int)
+	  goto not_tensix;
+#endif
+
 	if (may_continue)
 	  info.back ().must_end = false;
 
