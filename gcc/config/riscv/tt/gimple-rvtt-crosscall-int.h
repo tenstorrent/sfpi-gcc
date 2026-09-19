@@ -129,6 +129,25 @@ extern crosscall_tu_facts tu_facts;
 /* gimple-rvtt-crosscall.cc */
 extern bool vector_typed_p (tree t);
 extern bool call_has_vector_dataflow_p (gcall *call);
+
+/* The LREG-face verdict spelling shared by the census half and the
+   driver half (the unified word-fact table's verdict, locally
+   named).  */
+typedef rvtt_wf_lreg_verdict word_verdict;
+
+/* Record a named refusal for this pass.  Defined in
+   gimple-rvtt-crosscall.cc and shared with the census half; exported
+   rather than copied so both halves file refusals under one name.  */
+extern bool crosscall_refuse (const char *reason, tree fn, gimple *stmt);
+
+/* Classify a value delivered into a contract LREG.  Defined in the
+   census half, used by the caller-side proof in the driver half.  The
+   default arguments live here, not on the definition.  */
+extern word_verdict classify_delivered_value (tree val,
+					      unsigned contract_mask,
+					      bool region_strict = false,
+					      bool config_strict = false,
+					      unsigned phi_depth = 0);
 extern bool pushed_word_base (tree val, uint32_t *base, unsigned depth = 0);
 extern bool pointer_constant_address (tree ptr, unsigned HOST_WIDE_INT *addr,
 				      unsigned depth = 0);
