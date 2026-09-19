@@ -55,6 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-placement.h"
@@ -67,28 +68,6 @@ along with GCC; see the file COPYING3.  If not see
 
 /* ------------------------------------------------------------------ */
 /* Per-function transform.					      */
-
-/* Whether ADDR, an SFPU builtin's instruction-buffer operand, is one
-   of the two canonical spellings: literal zero or the address of the
-   public external `__instrn_buffer' declaration.  */
-
-static bool
-canonical_buffer_arg_p (tree addr)
-{
-  if (integer_zerop (addr))
-    return true;
-  STRIP_NOPS (addr);
-  if (TREE_CODE (addr) != ADDR_EXPR)
-    return false;
-  tree decl = TREE_OPERAND (addr, 0);
-  return VAR_P (decl)
-    && DECL_EXTERNAL (decl)
-    && TREE_PUBLIC (decl)
-    && DECL_ASSEMBLER_NAME (decl)
-    && !strcmp (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)),
-		"__instrn_buffer");
-}
-
 /* The fusion-enabling candidate: LHS = sfpaddi (buf, MUL, imm, 0, 0, 0)
    where MUL = sfpmul (a, b, 0) in the same loop with the addi as its
    only use.  */
@@ -277,7 +256,7 @@ fusion_candidate_p (gcall *call, class loop *loop, candidate *out)
       /* The immediate shape: LHS = sfpaddi (buf, MUL, imm, 0, 0, 0).  */
       if (!gimple_call_lhs (call)
 	  || TREE_CODE (gimple_call_lhs (call)) != SSA_NAME
-	  || !canonical_buffer_arg_p (gimple_call_arg (call, 0)))
+	  || !rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0)))
 	return false;
       for (unsigned ix = 2; ix != gimple_call_num_args (call); ++ix)
 	if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
