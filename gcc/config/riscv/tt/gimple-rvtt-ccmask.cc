@@ -123,6 +123,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-loop-niter.h"
 #include "cfgloop.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-refuse.h"
 #include "rvtt-cc-region.h"
 #include "rvtt-delivery-cost.h"
@@ -130,29 +131,6 @@ along with GCC; see the file COPYING3.  If not see
 namespace {
 
 static unsigned n_folded;
-
-/* STMT as a gcall when it is the rvtt builtin call with insn identity
-   ID, null otherwise.  */
-
-static gcall *
-is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
-{
-  if (const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt))
-    if (insnd->id == id)
-      return as_a <gcall *> (stmt);
-  return nullptr;
-}
-
-/* Argument N of CALL as a host integer, or -1 when it is not a
-   literal INTEGER_CST.  */
-
-static long
-int_arg (gcall *call, unsigned n)
-{
-  tree arg = gimple_call_arg (call, n);
-  return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
-}
-
 /* Book the named refusal REASON against STMT and dump it.  Always
    returns false so recognizers can bail with `return refuse
    (...)'.  */
@@ -183,12 +161,12 @@ zero_vector_p (tree val)
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpreadlreg:
-      return int_arg (call, 0) == CREG_IDX_0;
+      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
     case rvtt_insn_data::sfpxloadi:
       /* (ib, value, ...) -- all-constant argument forms only.  */
-      return int_arg (call, 1) == 0;
+      return rvtt_call_int_arg (call, 1) == 0;
     case rvtt_insn_data::sfploadi:
-      return int_arg (call, 1) == 0;
+      return rvtt_call_int_arg (call, 1) == 0;
     default:
       return false;
     }
@@ -213,7 +191,7 @@ writable_zero_def (tree val)
     {
     case rvtt_insn_data::sfpxloadi:
     case rvtt_insn_data::sfploadi:
-      return int_arg (call, 1) == 0 ? call : nullptr;
+      return rvtt_call_int_arg (call, 1) == 0 ? call : nullptr;
     default:
       return nullptr;
     }
@@ -252,8 +230,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
   *candidate = false;
   memset (g, 0, sizeof (*g));
 
-  gcall *pushc = is_rvtt_call (gsi_stmt (gsi), rvtt_insn_data::sfppushc);
-  if (!pushc || int_arg (pushc, 0) != 0)
+  gcall *pushc = rvtt_call_with_id (gsi_stmt (gsi), rvtt_insn_data::sfppushc);
+  if (!pushc || rvtt_call_int_arg (pushc, 0) != 0)
     return false;
   g->pushc = pushc;
 
@@ -349,7 +327,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 
 	case rvtt_insn_data::sfppopc:
 	  {
-	    if (want != WANT_POPC || int_arg (call, 0) != 0)
+	    if (want != WANT_POPC || rvtt_call_int_arg (call, 0) != 0)
 	      return *candidate ? refuse ("ccmask-region-shape", stmt)
 				: false;
 	    g->popc = call;
@@ -406,10 +384,10 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 		  if (is_gimple_debug (pstmt)
 		      || gimple_code (pstmt) == GIMPLE_LABEL)
 		    continue;
-		  if (gcall *pc = is_rvtt_call (pstmt,
+		  if (gcall *pc = rvtt_call_with_id (pstmt,
 						rvtt_insn_data::sfppopc))
 		    {
-		      if (popc || int_arg (pc, 0) != 0)
+		      if (popc || rvtt_call_int_arg (pc, 0) != 0)
 			only = false;
 		      else
 			popc = pc;
@@ -516,7 +494,7 @@ static bool
 check_compare_form (ccmask_group *g)
 {
   {
-    long mod = int_arg (g->fcmp, 5);
+    long mod = rvtt_call_int_arg (g->fcmp, 5);
     if (mod < 0)
       return refuse ("ccmask-compare-form", g->fcmp);
     unsigned type = ((unsigned) mod >> SFPXCMP_MOD1_TYPE_SHIFT)
@@ -550,8 +528,8 @@ check_compare_form (ccmask_group *g)
 	if (!has_single_use (g->zv))
 	  return refuse ("ccmask-zero-shared", g->assign);
       }
-    if (int_arg (g->fcmp, 2) != 0
-	|| int_arg (g->fcmp, 3) != 0 || int_arg (g->fcmp, 4) != 0)
+    if (rvtt_call_int_arg (g->fcmp, 2) != 0
+	|| rvtt_call_int_arg (g->fcmp, 3) != 0 || rvtt_call_int_arg (g->fcmp, 4) != 0)
       /* The equivalence proof is against the +0.0 boundary's pure
 	 sign/zero CC lowering; other immediates lower arithmetically.  */
       return refuse ("ccmask-boundary-unsupported", g->fcmp);
@@ -627,9 +605,9 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
     return false;
   const vec<gimple *> &chain = ccr->refinement_chain (r);
   if (chain.length () != 3
-      || !is_rvtt_call (chain[0], rvtt_insn_data::sfpxvif)
-      || !is_rvtt_call (chain[1], rvtt_insn_data::sfpxfcmps)
-      || !is_rvtt_call (chain[2], rvtt_insn_data::sfpxcondb))
+      || !rvtt_call_with_id (chain[0], rvtt_insn_data::sfpxvif)
+      || !rvtt_call_with_id (chain[1], rvtt_insn_data::sfpxfcmps)
+      || !rvtt_call_with_id (chain[2], rvtt_insn_data::sfpxcondb))
     return false;
 
   g->pushc = pushc;
@@ -906,7 +884,7 @@ transform (function *fun)
 	{
 	  gimple_stmt_iterator next = gsi;
 	  gsi_next (&next);
-	  if (gcall *pushc = is_rvtt_call (gsi_stmt (gsi),
+	  if (gcall *pushc = rvtt_call_with_id (gsi_stmt (gsi),
 					   rvtt_insn_data::sfppushc))
 	    {
 	      ccmask_group g;
@@ -920,7 +898,7 @@ transform (function *fun)
 		     member (the region begins at its pushc).  */
 		}
 	      else if (riscv_tt_opt_cc_region_general > 0
-		       && int_arg (pushc, 0) == 0
+		       && rvtt_call_int_arg (pushc, 0) == 0
 		       && match_group_general (fun, &ccr, pushc, &g,
 					       &candidate))
 		{

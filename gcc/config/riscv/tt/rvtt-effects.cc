@@ -872,3 +872,211 @@ rvtt_lane_gated_consumer_p (rtx_insn *insn)
 	     && get_attr_xtt_lane_gated (insn) == XTT_LANE_GATED_YES;
   return hit;
 }
+
+/* ---------------------------------------------------------------- */
+/* Builtin-call classification shared by the lane passes.
+   See rvtt-effects.h for the contracts; these were previously private
+   copies in gimple-rvtt-crosslane.cc and
+   gimple-rvtt-transp-involution.cc.  */
+
+bool
+rvtt_call_const_uarg (const gcall *call, unsigned argno, unsigned *out)
+{
+  if (gimple_call_num_args (call) <= argno)
+    return false;
+  tree arg = gimple_call_arg (call, argno);
+  if (TREE_CODE (arg) != INTEGER_CST || !tree_fits_uhwi_p (arg))
+    return false;
+  *out = (unsigned) tree_to_uhwi (arg);
+  return true;
+}
+
+/* Word-exact all-lanes SFPENCC, proven against the capability table's
+   architectural encoding.  The builtin's argument order is (mod1,
+   imm12): the correct all-lanes call is __builtin_rvtt_sfpencc (10, 3),
+   which the rvtt_sfpencc template ("SFPENCC\t%1, %0") prints as the gas
+   spelling "SFPENCC 3, 10" (Imm12 first, Mod1 second -- gas-verified:
+   the inverted spelling rejects with an invalid-mod error).  Mirrors
+   the structured-CC lowering's region-exit emission.
+   NOTE: several in-tree compile-only dg tests spell the call inverted,
+   (3, 10); their .s would not assemble.  */
+
+bool
+rvtt_encc_all_lanes_call_p (const gcall *call, const rvtt_insn_data *insnd)
+{
+  if (insnd->id != rvtt_insn_data::sfpencc)
+    return false;
+  unsigned mod1, imm12;
+  if (!rvtt_call_const_uarg (call, 0, &mod1)
+      || !rvtt_call_const_uarg (call, 1, &imm12))
+    return false;
+  uint32_t word;
+  return rvtt_macro::sfpencc_encode (imm12, mod1, &word)
+	 && word == rvtt_macro::sfpencc_all_lanes_word ();
+}
+
+bool
+rvtt_cc_writer_id_p (rvtt_insn_data::insn_id id)
+{
+  switch (id)
+    {
+    case rvtt_insn_data::sfpsetcc_i:
+    case rvtt_insn_data::sfpsetcc_v:
+    case rvtt_insn_data::sfpencc:
+    case rvtt_insn_data::sfpcompc:
+    case rvtt_insn_data::sfppushc:
+    case rvtt_insn_data::sfppopc:
+    case rvtt_insn_data::sfpxvif:
+    case rvtt_insn_data::sfpxbool:
+    case rvtt_insn_data::sfpxcondb:
+    case rvtt_insn_data::sfpxcondi:
+    case rvtt_insn_data::sfpxicmps:
+    case rvtt_insn_data::sfpxicmpv:
+    case rvtt_insn_data::sfpxfcmps:
+    case rvtt_insn_data::sfpxfcmpv:
+    case rvtt_insn_data::sfpgt:
+    case rvtt_insn_data::sfpgt_lv:
+    case rvtt_insn_data::sfple:
+    case rvtt_insn_data::sfple_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+bool
+rvtt_dst_inert_compute_id_p (rvtt_insn_data::insn_id id)
+{
+  switch (id)
+    {
+    case rvtt_insn_data::synth_opcode:
+    case rvtt_insn_data::sfpnop:
+    case rvtt_insn_data::sfpnovalue:
+    case rvtt_insn_data::sfpselect2:
+    case rvtt_insn_data::sfpselect4:
+    case rvtt_insn_data::sfpassign:
+    case rvtt_insn_data::sfpassign_lv:
+    case rvtt_insn_data::sfploadi:
+    case rvtt_insn_data::sfploadi_lv:
+    case rvtt_insn_data::sfpxloadi:
+    case rvtt_insn_data::sfpmov:
+    case rvtt_insn_data::sfpmov_lv:
+    case rvtt_insn_data::sfpexexp:
+    case rvtt_insn_data::sfpexexp_lv:
+    case rvtt_insn_data::sfpexman:
+    case rvtt_insn_data::sfpexman_lv:
+    case rvtt_insn_data::sfpabs:
+    case rvtt_insn_data::sfpabs_lv:
+    case rvtt_insn_data::sfplz:
+    case rvtt_insn_data::sfplz_lv:
+    case rvtt_insn_data::sfpand:
+    case rvtt_insn_data::sfpand_lv:
+    case rvtt_insn_data::sfpor:
+    case rvtt_insn_data::sfpor_lv:
+    case rvtt_insn_data::sfpxor:
+    case rvtt_insn_data::sfpxor_lv:
+    case rvtt_insn_data::sfpnot:
+    case rvtt_insn_data::sfpnot_lv:
+    case rvtt_insn_data::sfpshft_v:
+    case rvtt_insn_data::sfpshft_v_lv:
+    case rvtt_insn_data::sfpshft_i:
+    case rvtt_insn_data::sfpshft_i_lv:
+    case rvtt_insn_data::sfpiadd_v:
+    case rvtt_insn_data::sfpiadd_v_lv:
+    case rvtt_insn_data::sfpiadd_i:
+    case rvtt_insn_data::sfpiadd_i_lv:
+    case rvtt_insn_data::sfpxiadd_v:
+    case rvtt_insn_data::sfpxiadd_i:
+    case rvtt_insn_data::sfpxiadd_i_lv:
+    case rvtt_insn_data::sfpmul:
+    case rvtt_insn_data::sfpmul_lv:
+    case rvtt_insn_data::sfpmuli:
+    case rvtt_insn_data::sfpmuli_lv:
+    case rvtt_insn_data::sfpadd:
+    case rvtt_insn_data::sfpadd_lv:
+    case rvtt_insn_data::sfpaddi:
+    case rvtt_insn_data::sfpaddi_lv:
+    case rvtt_insn_data::sfpsetexp_v:
+    case rvtt_insn_data::sfpsetexp_v_lv:
+    case rvtt_insn_data::sfpsetexp_i:
+    case rvtt_insn_data::sfpsetexp_i_lv:
+    case rvtt_insn_data::sfpsetman_v:
+    case rvtt_insn_data::sfpsetman_v_lv:
+    case rvtt_insn_data::sfpsetman_i:
+    case rvtt_insn_data::sfpsetman_i_lv:
+    case rvtt_insn_data::sfpsetsgn_v:
+    case rvtt_insn_data::sfpsetsgn_v_lv:
+    case rvtt_insn_data::sfpsetsgn_i:
+    case rvtt_insn_data::sfpsetsgn_i_lv:
+    case rvtt_insn_data::sfpmad:
+    case rvtt_insn_data::sfpmad_lv:
+    case rvtt_insn_data::sfpdivp2:
+    case rvtt_insn_data::sfpdivp2_lv:
+    case rvtt_insn_data::sfpcast:
+    case rvtt_insn_data::sfpcast_lv:
+    case rvtt_insn_data::sfpstochrnd_i:
+    case rvtt_insn_data::sfpstochrnd_i_lv:
+    case rvtt_insn_data::sfpstochrnd_v:
+    case rvtt_insn_data::sfpstochrnd_v_lv:
+    case rvtt_insn_data::sfplut:
+    case rvtt_insn_data::sfplutfp32_3r:
+    case rvtt_insn_data::sfplutfp32_6r:
+    case rvtt_insn_data::sfpswap:
+    case rvtt_insn_data::sfpmul24:
+    case rvtt_insn_data::sfpmul24_lv:
+    case rvtt_insn_data::sfparecip:
+    case rvtt_insn_data::sfparecip_lv:
+    case rvtt_insn_data::sfpnonlinear:
+    case rvtt_insn_data::sfpnonlinear_lv:
+    case rvtt_insn_data::sfpreadconfig:
+    case rvtt_insn_data::sfpreadconfig_lv:
+    case rvtt_insn_data::sfpreadlreg:
+      return true;
+    default:
+      return false;
+    }
+}
+
+bool
+rvtt_cc_quiet_compute_id_p (rvtt_insn_data::insn_id id)
+{
+  /* Everything Dst-inert is also CC-quiet.  */
+  if (rvtt_dst_inert_compute_id_p (id))
+    return true;
+
+  /* Admitted here and nowhere else: these touch Dst memory or move data
+     between lanes, which the Dst-inert contract forbids, but they leave
+     the lane-enable CC state alone and carry no hidden raw effect, so a
+     CC-window or lane-state scan may walk through them.  */
+  switch (id)
+    {
+    case rvtt_insn_data::sfpload:
+    case rvtt_insn_data::sfpload_lv:
+    case rvtt_insn_data::sfpstore:
+    case rvtt_insn_data::sfpswap_indexed:
+    case rvtt_insn_data::sfptransp8:
+    case rvtt_insn_data::sfpshft2_subvec_shfl1:
+    case rvtt_insn_data::sfpshft2_subvec_shfl1_lv:
+      return true;
+    default:
+      return false;
+    }
+}
+
+long
+rvtt_call_int_arg (const gcall *call, unsigned n)
+{
+  tree arg = gimple_call_arg (call, n);
+  if (arg && TREE_CODE (arg) == INTEGER_CST)
+    return TREE_INT_CST_LOW (arg);
+  return -1;
+}
+
+gcall *
+rvtt_call_with_id (gimple *stmt, rvtt_insn_data::insn_id id)
+{
+  if (const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt))
+    if (insnd->id == id)
+      return as_a <gcall *> (stmt);
+  return nullptr;
+}

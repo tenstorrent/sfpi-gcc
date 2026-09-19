@@ -57,6 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfganal.h"
 #include "cfgloop.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-macro-ownership.h"
 #include "rvtt-mop-derive.h"
 #include "rvtt-raw-boundary.h"
@@ -78,17 +79,6 @@ enum stmt_cc_kind
   STMT_CC_OPAQUE,	/* raw asm / call with unknown body */
   STMT_CC_BREAKER,	/* pushc/popc with nonzero or non-constant arg */
 };
-
-/* Argument N of CALL as a compile-time integer, or -1 when it is not
-   an INTEGER_CST.  */
-
-static long
-int_arg (const gcall *call, unsigned n)
-{
-  tree arg = gimple_call_arg (call, n);
-  return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
-}
-
 /* Classify STMT into the structural CC vocabulary (stmt_cc_kind).
    Only sfppushc/sfppopc with a constant-0 argument are structural
    open/close words (any other argument is a BREAKER); the REFINE list
@@ -114,9 +104,9 @@ classify_stmt (gimple *stmt)
   switch (insnd->id)
     {
     case rvtt_insn_data::sfppushc:
-      return int_arg (call, 0) == 0 ? STMT_CC_PUSHC : STMT_CC_BREAKER;
+      return rvtt_call_int_arg (call, 0) == 0 ? STMT_CC_PUSHC : STMT_CC_BREAKER;
     case rvtt_insn_data::sfppopc:
-      return int_arg (call, 0) == 0 ? STMT_CC_POPC : STMT_CC_BREAKER;
+      return rvtt_call_int_arg (call, 0) == 0 ? STMT_CC_POPC : STMT_CC_BREAKER;
     /* The positive mask-refinement vocabulary: the structured
        condition forms and the raw SETCC/COMPC they lower to (the exact
        list the shape matchers trust; SFPENCC deliberately absent).  */

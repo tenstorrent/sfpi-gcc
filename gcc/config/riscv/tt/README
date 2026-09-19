@@ -57,12 +57,16 @@ a recorded reason (see section 5).
   crosslane (2)              Cross-lane permute and face-transpose surfaces.
   effects (2)                rvtt-effects.h is the single source of truth for
 			     instruction effect classification.  New code must
-			     query it rather than write another switch.
+			     query it rather than write another switch.  It
+			     also holds the builtin-call helpers the passes
+			     used to copy between themselves (argument
+			     readers, id predicates); add a shared helper
+			     there rather than a seventh private copy.
 
 Supporting infrastructure that is not a pass: rvtt-cost / rvtt-delivery-cost
 / rvtt-timing / rvtt-trips (pricing engines), rvtt-bnb and rvtt-lpsolve (an
 exact branch-and-bound solver used where a heuristic would guess), and six
-opt-in host-compiled unit harnesses wired up in ../t-riscv-tt.
+opt-in host-compiled unit harnesses wired up in t-riscv-tt.
 
 
 3. Where passes run
@@ -142,7 +146,7 @@ re-measurement of every touched row.
 -----------
 
 rvtt-refusals.def is a registry of named reasons a transform declined.  Every
-refusal a pass can emit is registered there; ../t-riscv-tt regenerates
+refusal a pass can emit is registered there; t-riscv-tt regenerates
 rvtt-refusals.txt from it and fails the build on a duplicate or unregistered
 name.  "It did not fire" is therefore never silent -- there is always a name.
 
@@ -180,7 +184,7 @@ Terms used throughout the sources that are not standard GCC:
 Tests are in ../../../testsuite/g++.target/riscv/tt/.  Most passes carry
 dump-scan tests keyed to their dump name; the pre-campaign lowering passes are
 covered by assembly scans instead.  proofs/ holds machine-checked equivalence
-results that ../t-riscv-tt verifies against their generated form, and the
+results that t-riscv-tt verifies against their generated form, and the
 unit harnesses there can be built directly.
 
 

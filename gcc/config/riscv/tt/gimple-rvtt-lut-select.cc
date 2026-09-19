@@ -166,6 +166,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "dominance.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-lut-tables.h"
@@ -253,29 +254,6 @@ refuse (const char *reason, gimple *stmt)
   return false;
 }
 
-/* Argument ARG of STMT as a host integer, or -1 when it is not a
-   literal INTEGER_CST.  */
-
-static long
-int_arg (gcall *stmt, unsigned arg)
-{
-  tree t = gimple_call_arg (stmt, arg);
-  if (t && TREE_CODE (t) == INTEGER_CST)
-    return TREE_INT_CST_LOW (t);
-  return -1;
-}
-
-/* Return the rvtt insn data if STMT is a call to rvtt insn ID.  */
-
-static gcall *
-is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
-{
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt);
-  if (insnd && insnd->id == id)
-    return as_a <gcall *> (stmt);
-  return nullptr;
-}
-
 /* The 32-bit lane value of a provable constant definition, or false.
    The audited forms and their value reconstructions follow the
    prgm-const residency discipline (gimple-rvtt-prgm-const.cc
@@ -303,7 +281,7 @@ const_leaf_value_p (gimple *def, uint32_t *bits)
 
   if (insnd->id == rvtt_insn_data::sfpreadlreg)
     {
-      long creg = int_arg (call, 0);
+      long creg = rvtt_call_int_arg (call, 0);
       if (creg == 9)
 	*bits = 0x00000000u;
       else if (creg == 10)
@@ -366,9 +344,9 @@ match_leaf (lut_group *g, unsigned ix, tree val, tree mag)
     return false;
   gimple *def = SSA_NAME_DEF_STMT (val);
 
-  if (gcall *mad = is_rvtt_call (def, rvtt_insn_data::sfpmad))
+  if (gcall *mad = rvtt_call_with_id (def, rvtt_insn_data::sfpmad))
     {
-      if (int_arg (mad, 3) != 0)
+      if (rvtt_call_int_arg (mad, 3) != 0)
 	return false;
       tree m0 = gimple_call_arg (mad, 0);
       tree m1 = gimple_call_arg (mad, 1);
@@ -384,8 +362,8 @@ match_leaf (lut_group *g, unsigned ix, tree val, tree mag)
       return true;
     }
 
-  gcall *add = is_rvtt_call (def, rvtt_insn_data::sfpadd);
-  if (add && int_arg (add, 2) == 0)
+  gcall *add = rvtt_call_with_id (def, rvtt_insn_data::sfpadd);
+  if (add && rvtt_call_int_arg (add, 2) == 0)
     /* One add operand must be a single-use mul by MAG; the other is
        B.  */
     for (int mul_ix = 0; mul_ix < 2; mul_ix++)
@@ -394,9 +372,9 @@ match_leaf (lut_group *g, unsigned ix, tree val, tree mag)
 	tree oval = gimple_call_arg (add, 1 - mul_ix);
 	if (TREE_CODE (mval) != SSA_NAME)
 	  continue;
-	gcall *mul = is_rvtt_call (SSA_NAME_DEF_STMT (mval),
+	gcall *mul = rvtt_call_with_id (SSA_NAME_DEF_STMT (mval),
 				   rvtt_insn_data::sfpmul);
-	if (!mul || int_arg (mul, 2) != 0 || !has_single_use (mval))
+	if (!mul || rvtt_call_int_arg (mul, 2) != 0 || !has_single_use (mval))
 	  continue;
 	tree m0 = gimple_call_arg (mul, 0);
 	tree m1 = gimple_call_arg (mul, 1);
@@ -420,8 +398,8 @@ match_leaf (lut_group *g, unsigned ix, tree val, tree mag)
   /* Mul-only leaf: the slot's B coefficient will be a synthesized
      +0.0 (certified: adding the exact zero to the partially fused
      product leaves the standalone multiply, rvtt-lut-tables.cc).  */
-  if (gcall *mul = is_rvtt_call (def, rvtt_insn_data::sfpmul))
-    if (int_arg (mul, 2) == 0)
+  if (gcall *mul = rvtt_call_with_id (def, rvtt_insn_data::sfpmul))
+    if (rvtt_call_int_arg (mul, 2) == 0)
       {
 	tree m0 = gimple_call_arg (mul, 0);
 	tree m1 = gimple_call_arg (mul, 1);
@@ -471,11 +449,11 @@ match_lt_boundary (gcall *fcmp, tree mag, uint32_t *bits)
   const rvtt_insn_data *insnd = rvtt_get_insn_data (fcmp);
   if (gimple_call_arg (fcmp, 1) != mag)
     return false;
-  long mod = int_arg (fcmp, insnd->mod_arg ());
+  long mod = rvtt_call_int_arg (fcmp, insnd->mod_arg ());
   if (mod != ((long)(SFPXCMP_MOD1_TYPE_FLOAT << SFPXCMP_MOD1_TYPE_SHIFT)
 	      | SFPXCMP_MOD1_CC_LT))
     return false;
-  long k = int_arg (fcmp, 2);
+  long k = rvtt_call_int_arg (fcmp, 2);
   if (k < 0)
     return false;
   *bits = (uint32_t) k;
@@ -627,7 +605,7 @@ dup_coeff_operand (tree val, gimple_stmt_iterator *gsi)
     return val;
   if (insnd->id == rvtt_insn_data::sfpreadlreg)
     {
-      long creg = int_arg (def, 0);
+      long creg = rvtt_call_int_arg (def, 0);
       if (creg != 9 && creg != 10)
 	return val;
     }
@@ -704,8 +682,8 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
   unsigned closed = 0;		/* popcs consumed */
 
   gimple *stmt = gsi_stmt (gsi);
-  gcall *pushc0 = is_rvtt_call (stmt, rvtt_insn_data::sfppushc);
-  if (!pushc0 || int_arg (pushc0, 0) != 0)
+  gcall *pushc0 = rvtt_call_with_id (stmt, rvtt_insn_data::sfppushc);
+  if (!pushc0 || rvtt_call_int_arg (pushc0, 0) != 0)
     return false;
   g->pushc[0] = pushc0;
 
@@ -753,9 +731,9 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 		 reported.  */
 	      tree v = gimple_call_arg (call, 1);
 	      if (TREE_CODE (v) == SSA_NAME)
-		if (gcall *abs = is_rvtt_call (SSA_NAME_DEF_STMT (v),
+		if (gcall *abs = rvtt_call_with_id (SSA_NAME_DEF_STMT (v),
 					       rvtt_insn_data::sfpabs))
-		  if (int_arg (abs, 1) == 1)
+		  if (rvtt_call_int_arg (abs, 1) == 1)
 		    {
 		      *candidate = true;
 		      g->mag = v;
@@ -812,7 +790,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	  continue;
 
 	case rvtt_insn_data::sfppushc:
-	  if (want != WANT_PUSHC || int_arg (call, 0) != 0)
+	  if (want != WANT_PUSHC || rvtt_call_int_arg (call, 0) != 0)
 	    return *candidate
 	      ? refuse ("lut-partition-arity-unsupported", stmt) : false;
 	  depth++;
@@ -823,7 +801,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 
 	case rvtt_insn_data::sfppopc:
 	  {
-	    if (int_arg (call, 0) != 0
+	    if (rvtt_call_int_arg (call, 0) != 0
 		|| (want != WANT_NEXT && want != CLOSING))
 	      return *candidate
 		? refuse ("lut-structure-mismatch", stmt) : false;
@@ -988,10 +966,10 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    break;
 	}
     if (n_uses == 1)
-      if (gcall *sgn = is_rvtt_call (use_stmt, rvtt_insn_data::sfpsetsgn_v))
+      if (gcall *sgn = rvtt_call_with_id (use_stmt, rvtt_insn_data::sfpsetsgn_v))
 	if (gimple_call_arg (sgn, 0) == g->result
 	    && gimple_call_arg (sgn, 1) == g->x
-	    && int_arg (sgn, 2) == 0
+	    && rvtt_call_int_arg (sgn, 2) == 0
 	    && gimple_call_lhs (sgn))
 	  sgn_use = sgn;
   }
@@ -1459,7 +1437,7 @@ place_coefficients (gcall *lut)
      budget stays an over-approximation of the file.  Without either
      flag the historical FP32-direct counting is byte-identical
      (default-off parameter).  */
-  bool fp16_mode = (int_arg (lut, 7) & 2) != 0;
+  bool fp16_mode = (rvtt_call_int_arg (lut, 7) & 2) != 0;
   bool creg_exempt = fp16_mode || riscv_tt_opt_lut_select_leaf_ext;
   if (!rvtt_pressure_loop_legal_p (loop, coeffs, /*report=*/true,
 				   /*cc_transients=*/false,
@@ -1518,7 +1496,7 @@ transform (function *fun, auto_vec<gcall *> *formed)
 	{
 	  gimple_stmt_iterator next = gsi;
 	  gsi_next (&next);
-	  if (is_rvtt_call (gsi_stmt (gsi), rvtt_insn_data::sfppushc))
+	  if (rvtt_call_with_id (gsi_stmt (gsi), rvtt_insn_data::sfppushc))
 	    {
 	      lut_group g;
 	      bool candidate;
