@@ -96,6 +96,7 @@ RVTT_OBJS := rvtt.o \
 	gimple-rvtt-synth.o \
 	gimple-rvtt-unspec.o \
 	rtl-rvtt-dst-autoincr.o \
+	rtl-rvtt-dst-autoincr-scan.o \
 	rtl-rvtt-dst-ownership.o \
 	rtl-rvtt-fix-ebreak.o \
 	rtl-rvtt-fix-raw.o \
