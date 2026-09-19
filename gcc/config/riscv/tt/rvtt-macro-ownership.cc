@@ -175,6 +175,18 @@ rvtt_loop_entry_edge (class loop *loop)
   return entry && !(entry->flags & EDGE_ABNORMAL) ? entry : nullptr;
 }
 
+/* See rvtt-macro-ownership.h.  Deliberately expressed on top of
+   rvtt_loop_entry_edge rather than repeating its header-predecessor
+   walk: the only extra requirement is that the entry block has no other
+   successor.  */
+
+basic_block
+rvtt_dedicated_loop_preheader (class loop *loop)
+{
+  edge entry = rvtt_loop_entry_edge (loop);
+  return entry && single_succ_p (entry->src) ? entry->src : nullptr;
+}
+
 /* Return whether ENTRY's source block is a dedicated preheader: a
    single-successor block other than the function entry block, so
    hoisted statements can be inserted at its end without executing on

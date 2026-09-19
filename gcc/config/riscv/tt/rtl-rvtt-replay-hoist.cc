@@ -52,6 +52,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-trips.h"
 #include "rvtt-delivery-cost.h"
 #include "rvtt-effects.h"
+#include "rvtt-macro-ownership.h"
 #include "rvtt-raw-boundary.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-macro-epoch.h"
@@ -399,33 +400,6 @@ hoist_profitable_p (class loop *loop, basic_block preheader,
   return true;
 }
 
-/* Return LOOP's dedicated preheader: the unique block outside the loop
-   with an edge into the header, provided that entry edge is normal and
-   the block's only successor is the header (so an insn placed at its
-   end executes exactly once per loop entry).  Null when the loop has
-   several entry blocks or the candidate is shared with other code.  */
-
-static basic_block
-dedicated_loop_preheader (class loop *loop)
-{
-  basic_block preheader = nullptr;
-  edge entry = nullptr;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, loop->header->preds)
-    if (!flow_bb_inside_loop_p (loop, e->src))
-      {
-	if (preheader)
-	  return nullptr;
-	preheader = e->src;
-	entry = e;
-      }
-
-  return preheader && !(entry->flags & EDGE_ABNORMAL)
-    && single_succ_p (preheader)
-    ? preheader : nullptr;
-}
-
 /* A volatile store whose address is not provably outside the
    instruction-FIFO aperture can deliver ANY word -- including a REPLAY
    record that re-records hoisted slots (a fail-closed widening of
@@ -740,7 +714,7 @@ hoist_lift_admit (basic_block preheader, bitmap dirty_bbs,
 		     refusal_insn ? INSN_UID (refusal_insn) : -1);
 	  break;
 	}
-      basic_block up = dedicated_loop_preheader (l);
+      basic_block up = rvtt_dedicated_loop_preheader (l);
       if (!up)
 	{
 	  if (dump_file)
@@ -915,7 +889,7 @@ hoist_preheader (replay_sequence const &seq, replay_block const &block,
 		 loop->num);
     }
 
-  basic_block preheader = dedicated_loop_preheader (loop);
+  basic_block preheader = rvtt_dedicated_loop_preheader (loop);
   if (!preheader)
     {
       if (dump_file)
@@ -1521,7 +1495,7 @@ hoist_counted_loops (function *cfn,
 	  && !reform_carried_launch_arithmetic_ok (info, seq))
 	continue;
 
-      basic_block preheader = dedicated_loop_preheader (loop);
+      basic_block preheader = rvtt_dedicated_loop_preheader (loop);
       if (!preheader)
 	{
 	  if (dump_file)
@@ -1673,7 +1647,7 @@ unroll_launch_loop (class loop *loop, bitmap dirty_bbs)
       return false;
     }
 
-  basic_block preheader = dedicated_loop_preheader (loop);
+  basic_block preheader = rvtt_dedicated_loop_preheader (loop);
   if (!preheader)
     return false;
 

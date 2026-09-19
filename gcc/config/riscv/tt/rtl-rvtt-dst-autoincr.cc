@@ -64,6 +64,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rvtt-macro-ownership.h"
 #include "rvtt-raw-boundary.h"
 
 /* Semantic SFPI code performs every logical Dst access through the target
@@ -1149,30 +1150,6 @@ struct group
      configuration cost.  */
   bool contract = false;
 };
-
-/* Mirror of the replay pass's dedicated preheader discovery.  */
-
-static basic_block
-dedicated_loop_preheader (class loop *loop)
-{
-  basic_block preheader = nullptr;
-  edge entry = nullptr;
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, loop->header->preds)
-    if (!flow_bb_inside_loop_p (loop, e->src))
-      {
-	if (preheader)
-	  return nullptr;
-	preheader = e->src;
-	entry = e;
-      }
-
-  return preheader && !(entry->flags & EDGE_ABNORMAL)
-	 && single_succ_p (preheader)
-    ? preheader : nullptr;
-}
-
 /* Locate the linearized scan of BB.  */
 
 static bb_scan *
@@ -1674,7 +1651,7 @@ place_groups (function_scan &fn, std::vector<group> &groups,
 	      members.push_back (&grp);
 	  if (members.empty ())
 	    continue;
-	  basic_block preheader = dedicated_loop_preheader (loop);
+	  basic_block preheader = rvtt_dedicated_loop_preheader (loop);
 	  if (preheader && !loop_config_owned_p (loop, fn, members, caps))
 	    {
 	      if (dump_file)

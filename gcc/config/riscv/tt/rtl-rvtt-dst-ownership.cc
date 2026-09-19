@@ -237,33 +237,6 @@ struct insn_facts
   bool cc_write_all_lanes;	/* ... provably to the all-lanes state */
   bool plain_load;		/* the admitted Dst load pattern       */
 };
-
-/* Structural transparency: no unspec_volatile anywhere in the pattern,
-   no memory store, no call, no asm.  Such an instruction cannot reach
-   Dst, the RWC counters, configuration state, or CC.  */
-
-static bool
-pattern_transparent_p (rtx_insn *insn)
-{
-  if (CALL_P (insn))
-    return false;
-  rtx pat = PATTERN (insn);
-  if (asm_noperands (pat) >= 0)
-    return false;
-  subrtx_iterator::array_type array;
-  FOR_EACH_SUBRTX (iter, array, pat, ALL)
-    {
-      const_rtx x = *iter;
-      if (GET_CODE (x) == UNSPEC_VOLATILE)
-	return false;
-      if (GET_CODE (x) == SET && MEM_P (SET_DEST (x)))
-	return false;
-      if (GET_CODE (x) == CLOBBER && MEM_P (XEXP (x, 0)))
-	return false;
-    }
-  return true;
-}
-
 /* Audited architectural effect data for typed value-op patterns whose
    generated FULL effect sets are not on record (rvtt_insn_effects
    reports them opaque) now lives at the definitions: the
@@ -332,7 +305,7 @@ classify (rtx_insn *insn)
       }
   }
 
-  if (pattern_transparent_p (insn))
+  if (rvtt_pattern_transparent_p (insn))
     return f;
 
   xtt_effect_set e = rvtt_insn_effects (insn);

@@ -127,34 +127,6 @@ refuse (const char *reason, gimple *stmt)
     print_gimple_stmt (dump_file, stmt, 0);
   return false;
 }
-
-/* Return true when VAL is an architectural all-zero vector: a read of
-   the constant-zero register or an immediate materialization of 0.  */
-
-static bool
-zero_vector_p (tree val)
-{
-  if (TREE_CODE (val) != SSA_NAME)
-    return false;
-  gimple *def = SSA_NAME_DEF_STMT (val);
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
-  if (!insnd)
-    return false;
-  gcall *call = as_a <gcall *> (def);
-  switch (insnd->id)
-    {
-    case rvtt_insn_data::sfpreadlreg:
-      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
-    case rvtt_insn_data::sfpxloadi:
-      /* (ib, value, ...) -- all-constant argument forms only.  */
-      return rvtt_call_int_arg (call, 1) == 0;
-    case rvtt_insn_data::sfploadi:
-      return rvtt_call_int_arg (call, 1) == 0;
-    default:
-      return false;
-    }
-}
-
 struct intabs_group
 {
   gcall *pushc, *xvif, *icmp, *condb, *iadd, *assign, *popc;
@@ -425,7 +397,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
     return refuse ("int-abs-iadd-mod-unsupported", g->iadd);
   if (gimple_call_arg (g->iadd, 0) != g->x)
     return refuse ("int-abs-operand-mismatch", g->iadd);
-  if (!zero_vector_p (gimple_call_arg (g->iadd, 1)))
+  if (!rvtt_zero_vector_p (gimple_call_arg (g->iadd, 1)))
     return refuse ("int-abs-minuend-not-zero", g->iadd);
 
   /* The merge must carry the compared value itself on untaken lanes:

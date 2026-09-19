@@ -126,6 +126,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
+#include "rtl-rvtt-sched-int.h"
 #include "rvtt-timing.h"
 
 namespace {
@@ -157,19 +158,6 @@ count_vec_units (bitmap live)
   EXECUTE_IF_SET_IN_BITMAP (live, 0, regno, iterator)
     count += vec_unit_p (regno);
   return count;
-}
-
-/* ------------------------- node admission -------------------------- */
-
-static bool
-issued_tensix_p (rtx_insn *insn)
-{
-  return GET_CODE (insn) == INSN
-    && GET_CODE (PATTERN (insn)) != USE
-    && GET_CODE (PATTERN (insn)) != CLOBBER
-    && recog_memoized (insn) >= 0
-    && get_attr_type (insn) == TYPE_TENSIX
-    && get_attr_length (insn) > 0;
 }
 
 /* Audited result latency of INSN in issue slots; -1 refuses (opaque
