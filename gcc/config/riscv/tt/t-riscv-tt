@@ -106,6 +106,7 @@ RVTT_OBJS := rvtt.o \
 	rtl-rvtt-lp-schedule-prera.o \
 	rtl-rvtt-macro-planner.o \
 	rtl-rvtt-mop-form.o \
+	rtl-rvtt-mop-outward.o \
 	rtl-rvtt-replay.o \
 	rtl-rvtt-rmext.o \
 	rtl-rvtt-schedule.o \
