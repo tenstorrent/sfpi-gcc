@@ -50,6 +50,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-effects.h"
 #include "rtl-rvtt-lp-alloc-int.h"
 
+namespace rvtt_lpa {
+
 /* 32-bit Dst format class (simulator-audited; the same class
    gimple-rvtt-transp-involution.cc uses), minus mod0 10 (INT32_ALL)
    which masks the RWC base and is handled separately.  */
@@ -1447,3 +1449,4 @@ choose_spill_web (const lpa_graph &g, int blocked, function *fn,
   return best;
 }
 
+} /* namespace rvtt_lpa */

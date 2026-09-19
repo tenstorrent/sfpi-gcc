@@ -22,6 +22,11 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RTL_RVTT_LP_ALLOC_INT_H
 #define GCC_RTL_RVTT_LP_ALLOC_INT_H
 
+/* Named, not global: these were file-local inside an anonymous
+   namespace before the split.  */
+
+namespace rvtt_lpa {
+
 /* rtl-rvtt-lp-alloc.cc grew past 3000 lines.  The colouring core --
    graph construction, conservative coalescing, DSATUR and the spill
    choices -- is in rtl-rvtt-lp-alloc-color.cc; the effect data, the
@@ -138,5 +143,7 @@ extern int choose_spill_web (const lpa_graph &g, int blocked, function *fn,
 			     const spill_ctx &ctx, int *max_delta,
 			     int *epoch_out, const char **why);
 extern bool dst_mode_32bit_p (HOST_WIDE_INT m);
+
+} /* namespace rvtt_lpa */
 
 #endif /* GCC_RTL_RVTT_LP_ALLOC_INT_H */

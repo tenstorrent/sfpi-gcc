@@ -73,6 +73,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt-protos.h"
 #include "rtl-rvtt-macro-planner-int.h"
+
+using namespace rvtt_planner;
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-delivery-cost.h"
