@@ -60,6 +60,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-delivery-cost.h"
@@ -390,7 +391,7 @@ init_scan_stmt (init_scan_ctx *ctx, gimple *stmt)
 	{
 	  const char *name = DECL_ASSEMBLER_NAME (base)
 	    ? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base)) : nullptr;
-	  if (name && !strcmp (name, "__instrn_buffer"))
+	  if (rvtt_instrn_buffer_name_p (name))
 	    return apply_init_verdict
 	      (ctx, classify_delivered_init (gimple_assign_rhs1 (stmt),
 					     *ctx->prog, ctx->c), stmt);
@@ -604,7 +605,7 @@ init_digest_stmt (vec<rvtt_ipa_event> *out, gimple *stmt)
 	{
 	  const char *name = DECL_ASSEMBLER_NAME (base)
 	    ? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base)) : nullptr;
-	  if (name && !strcmp (name, "__instrn_buffer"))
+	  if (rvtt_instrn_buffer_name_p (name))
 	    return init_digest_push_deliver (out, stmt,
 					     gimple_assign_rhs1 (stmt));
 	  if (!DECL_EXTERNAL (base))
@@ -817,9 +818,8 @@ init_value_equal_stmt (gimple *stmt, basic_block dom_bb, class loop *loop,
 	      {
 		tree base = get_base_address (lhs);
 		if (base && DECL_P (base) && DECL_ASSEMBLER_NAME (base)
-		    && !strcmp (IDENTIFIER_POINTER
-				  (DECL_ASSEMBLER_NAME (base)),
-				"__instrn_buffer"))
+		    && rvtt_instrn_buffer_name_p
+			 (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base))))
 		  val = gimple_assign_rhs1 (stmt);
 	      }
 	  }

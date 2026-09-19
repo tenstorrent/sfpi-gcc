@@ -808,7 +808,7 @@ symbol_not_fifo_addr_p (rtx addr)
   if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
     addr = XEXP (addr, 0);
   return GET_CODE (addr) == SYMBOL_REF
-    && strcmp (XSTR (addr, 0), "__instrn_buffer") != 0;
+    && !rvtt_instrn_buffer_name_p (XSTR (addr, 0));
 }
 
 /* One volatile store.  DEST is the volatile MEM, SRC the stored value.

@@ -153,6 +153,24 @@ extern bool rvtt_pattern_transparent_p (rtx_insn *insn);
    constant-zero register, or an immediate materialization of 0.  */
 extern bool rvtt_zero_vector_p (tree val);
 
+/* The recorded ABI anchor for the Tensix instruction FIFO.  Spelled in
+   exactly one place: seven sites across six passes previously repeated
+   the string literal, so a rename could not be done by grep with any
+   confidence.  Recognise it through the predicates below.  */
+#define RVTT_INSTRN_BUFFER_SYMBOL "__instrn_buffer"
+
+/* Whether NAME (an assembler or source symbol name, possibly null) is
+   the instruction-FIFO anchor.  */
+extern bool rvtt_instrn_buffer_name_p (const char *name);
+
+/* Whether ADDR is a canonical instruction-buffer operand of the SFPU
+   builtins: either a literal zero -- direct builtin tests use one
+   because the operand carries no SFPLOADI semantics -- or the address
+   of the public external __instrn_buffer declaration.  An arbitrary
+   buffer, whose memory ownership the target ABI has not established,
+   is not admitted.  */
+extern bool rvtt_canonical_buffer_arg_p (tree addr);
+
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 

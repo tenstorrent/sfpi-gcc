@@ -442,7 +442,7 @@ volatile_store_maybe_fifo_p (rtx pat)
   if (GET_CODE (base) == PLUS && CONST_INT_P (XEXP (base, 1)))
     base = XEXP (base, 0);
   if (GET_CODE (base) == SYMBOL_REF)
-    return strcmp (XSTR (base, 0), "__instrn_buffer") == 0;
+    return rvtt_instrn_buffer_name_p (XSTR (base, 0));
   if (REG_P (base) && REGNO (base) == STACK_POINTER_REGNUM)
     return false;
   return true;			/* unresolvable: fail closed */

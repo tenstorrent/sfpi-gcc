@@ -270,6 +270,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-pressure.h"
 #include "rvtt-refuse.h"
 #include "rvtt-delivery-cost.h"
@@ -281,7 +282,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-cc-region.h"
 #include "rvtt-raw-boundary.h"
 #include "gimple-rvtt-crosscall-int.h"
-
 
 /* ------------------------------------------------------------------ */
 /* Refusal plumbing.						      */
@@ -348,28 +348,6 @@ pinned_lreg_operand (const rvtt_insn_data *insnd, gcall *call, unsigned argno)
 
 /* ------------------------------------------------------------------ */
 /* Shared small predicates.					      */
-
-/* The canonical instruction-buffer operand of the loadi builtins
-   (mirrors gimple-rvtt-prgm-const.cc's qualification; the
-   "__instrn_buffer" name is the recorded ABI anchor).  */
-
-static bool
-canonical_buffer_arg_p (tree addr)
-{
-  if (integer_zerop (addr))
-    return true;
-  STRIP_NOPS (addr);
-  if (TREE_CODE (addr) != ADDR_EXPR)
-    return false;
-  tree decl = TREE_OPERAND (addr, 0);
-  return VAR_P (decl)
-    && DECL_EXTERNAL (decl)
-    && TREE_PUBLIC (decl)
-    && DECL_ASSEMBLER_NAME (decl)
-    && !strcmp (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)),
-		"__instrn_buffer");
-}
-
 /* A qualifying prefix load: the canonical sfpxloadi form or the
    shortened single-issue sfploadi form (this pass runs after
    pass_rvtt_immload_shorten, like the LUT coefficient placement), with
@@ -385,7 +363,7 @@ prefix_load_p (gcall *call)
     return false;
   tree lhs = gimple_call_lhs (call);
   if (!lhs || TREE_CODE (lhs) != SSA_NAME
-      || !canonical_buffer_arg_p (gimple_call_arg (call, 0)))
+      || !rvtt_canonical_buffer_arg_p (gimple_call_arg (call, 0)))
     return false;
   for (unsigned ix = 1; ix != gimple_call_num_args (call); ++ix)
     if (TREE_CODE (gimple_call_arg (call, ix)) != INTEGER_CST)
@@ -679,7 +657,6 @@ classify_delivered_value (tree val, unsigned contract_mask,
    globals (TU-defined, never address-taken, constant initializer,
    never stored differently -- the census below verifies the last
    condition over the same whole-TU walk).  */
-
 
 crosscall_tu_facts tu_facts;
 
@@ -1125,7 +1102,7 @@ decl_not_template_p (tree base)
     : (DECL_NAME (base) ? IDENTIFIER_POINTER (DECL_NAME (base)) : nullptr);
   if (!name)
     return false;
-  if (!strcmp (name, "__instrn_buffer"))
+  if (rvtt_instrn_buffer_name_p (name))
     return true;		/* FIFO aperture: not the template file */
   static const char *const anchors[] = {
     "__ldm_bss_start", "__ldm_bss_end", "__ldm_data_start",
@@ -1797,7 +1774,6 @@ audited_scalar_asm_p (const char *s)
 		   "la gp, __global_pointer$\n.option pop");
 }
 
-
 /* Record a refusal.  The word/replay/statement classifiers share one
    code path for both scan sides; the dump name carries the side.  */
 
@@ -1938,7 +1914,7 @@ scan_store (scan_ctx *ctx, gimple *stmt)
     {
       const char *name = DECL_ASSEMBLER_NAME (base)
 	? IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (base)) : nullptr;
-      if (name && !strcmp (name, "__instrn_buffer"))
+      if (rvtt_instrn_buffer_name_p (name))
 	return apply_word_verdict
 	  (ctx, classify_delivered_value (gimple_assign_rhs1 (stmt),
 					  ctx->contract_mask, ctx->region,

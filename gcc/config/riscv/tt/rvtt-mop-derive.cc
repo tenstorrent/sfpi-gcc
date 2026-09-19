@@ -140,6 +140,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pretty-print.h"
 #include "rvtt-protos.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-mop-tables.h"
 #include "rvtt-mop-derive.h"
 
@@ -726,7 +727,7 @@ classify_decl_base (tree decl)
   if (!VAR_P (decl))
     return ADDR_UNKNOWN;
   const char *name = decl_asm_name (decl);
-  if (name && !strcmp (name, "__instrn_buffer"))
+  if (rvtt_instrn_buffer_name_p (name))
     return ADDR_INSTRN_FIFO;
   if (!DECL_EXTERNAL (decl))
     /* Defined in this TU: the compiler allocates it in a linker-

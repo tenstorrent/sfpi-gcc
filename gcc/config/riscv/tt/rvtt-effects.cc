@@ -1127,3 +1127,27 @@ rvtt_zero_vector_p (tree val)
       return false;
     }
 }
+
+bool
+rvtt_instrn_buffer_name_p (const char *name)
+{
+  return name && !strcmp (name, RVTT_INSTRN_BUFFER_SYMBOL);
+}
+
+bool
+rvtt_canonical_buffer_arg_p (tree addr)
+{
+  if (integer_zerop (addr))
+    return true;
+  STRIP_NOPS (addr);
+  if (TREE_CODE (addr) != ADDR_EXPR)
+    return false;
+  tree decl = TREE_OPERAND (addr, 0);
+  return VAR_P (decl)
+    && DECL_EXTERNAL (decl)
+    && TREE_PUBLIC (decl)
+    && DECL_ASSEMBLER_NAME (decl)
+    && rvtt_instrn_buffer_name_p
+	 (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));
+}
+
