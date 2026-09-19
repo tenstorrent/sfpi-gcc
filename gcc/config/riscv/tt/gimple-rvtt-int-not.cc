@@ -127,7 +127,8 @@ all_ones_vector_p (tree val)
 	 zero is -- raw forms never match.  */
       {
 	/* (ib, value, ...) -- LITERAL-constant argument forms only: the
-	   rvtt_call_int_arg "not a constant" sentinel (-1) would collide with the
+	   rvtt_call_int_arg "not a constant" sentinel (-1) would collide
+	   with the
 	   all-ones value itself, and variable-immediate loads (the immvar
 	   RISC-composed forms) must never match.  */
 	tree varg = gimple_call_arg (call, 1);

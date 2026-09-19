@@ -991,7 +991,8 @@ discover_contract (function *fn, auto_vec<contract_entry> *contract,
 	  if (!pinned || lreg < 0)
 	    {
 	      if (dump_file && lreg >= 0)
-		crosscall_refuse ("crosscall-consumer-not-pinned", fn->decl, load);
+		crosscall_refuse ("crosscall-consumer-not-pinned", fn->decl,
+				  load);
 	      continue;
 	    }
 	  contract_entry e = { load, lhs, lreg };
@@ -1005,7 +1006,8 @@ discover_contract (function *fn, auto_vec<contract_entry> *contract,
   for (const contract_entry &e : *contract)
     {
       if ((mask >> e.lreg) & 1)
-	return crosscall_refuse ("crosscall-consumer-conflict", fn->decl, e.load);
+	return crosscall_refuse ("crosscall-consumer-conflict",
+				 fn->decl, e.load);
       mask |= 1u << e.lreg;
     }
   *consumer_loop = uses_loop;
@@ -1198,7 +1200,8 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
 	   gsi_next (&psi))
 	if (vector_typed_p (gimple_phi_result (psi.phi ()))
 	    && !flow_bb_inside_loop_p (consumer_loop, bb))
-	  return crosscall_refuse ("crosscall-callee-vector-outside-loop", fn->decl,
+	  return crosscall_refuse ("crosscall-callee-vector-outside-loop",
+				   fn->decl,
 			 psi.phi ());
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	   gsi_next (&gsi))
@@ -1262,7 +1265,8 @@ callee_body_ok_p (function *fn, const auto_vec<contract_entry> &contract,
   FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (fn)->preds)
     for (const contract_entry &c : contract)
       if (!dominated_by_p (CDI_DOMINATORS, e->src, gimple_bb (c.load)))
-	return crosscall_refuse ("crosscall-callee-shape-unproven", fn->decl, c.load);
+	return crosscall_refuse ("crosscall-callee-shape-unproven", fn->decl,
+				 c.load);
 
   return true;
 }
@@ -1284,11 +1288,13 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
 		   call_stmt);
   class loop *loop = bb->loop_father;
   if (!loop || !loop_outer (loop))
-    return crosscall_refuse ("crosscall-caller-no-loop", caller->decl, call_stmt);
+    return crosscall_refuse ("crosscall-caller-no-loop", caller->decl,
+			     call_stmt);
 
   edge entry = rvtt_loop_entry_edge (loop);
   if (!entry || rvtt_preheader_insertion_blocked_p (entry))
-    return crosscall_refuse ("crosscall-caller-preheader-unproven", caller->decl,
+    return crosscall_refuse ("crosscall-caller-preheader-unproven",
+			     caller->decl,
 		   call_stmt);
 
   scan_ctx ctx;
@@ -1387,7 +1393,8 @@ prove_caller (cgraph_node *caller, gcall *call_stmt, tree callee_decl,
     }
 
   if (vector_value_live_in_loop_p (fn, place_loop))
-    return crosscall_refuse ("crosscall-caller-lreg-live", caller->decl, call_stmt);
+    return crosscall_refuse ("crosscall-caller-lreg-live", caller->decl,
+			     call_stmt);
 
   /* Explicit architectural READS of a contract register anywhere in
      the caller OUTSIDE the loop: the one contract-carrying observer of
@@ -1678,7 +1685,8 @@ transform (function *fn)
      address-taken, at least one caller, no recursion.	*/
   if (!cn->definition || cn->address_taken || cn->alias || cn->thunk
       || cn->clones || !cn->callers)
-    return crosscall_refuse ("crosscall-caller-body-unavailable", fn->decl, nullptr);
+    return crosscall_refuse ("crosscall-caller-body-unavailable", fn->decl,
+			     nullptr);
 
   /* One call site per caller (v1); collect and prove each caller.  */
   auto_vec<caller_plan> plans;
@@ -1689,7 +1697,8 @@ transform (function *fn)
 		       nullptr);
       for (const caller_plan &p : plans)
 	if (p.node == e->caller)
-	  return crosscall_refuse ("crosscall-caller-multi-site", e->caller->decl,
+	  return crosscall_refuse ("crosscall-caller-multi-site",
+				   e->caller->decl,
 			 nullptr);
       if (!e->caller->definition || !e->caller->has_gimple_body_p ()
 	  || !e->call_stmt)
@@ -1702,7 +1711,8 @@ transform (function *fn)
       cgraph_node *ccheck = e->caller->inlined_to
 	? e->caller->inlined_to : e->caller;
       if (tu_facts.executable && !tu_facts.executable->contains (ccheck))
-	return crosscall_refuse ("crosscall-caller-unrooted", ccheck->decl, nullptr);
+	return crosscall_refuse ("crosscall-caller-unrooted", ccheck->decl,
+				 nullptr);
       function *cfn = DECL_STRUCT_FUNCTION (e->caller->decl);
       if (!cfn || !cfn->cfg)
 	return crosscall_refuse ("crosscall-caller-body-unavailable",

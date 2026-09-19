@@ -317,7 +317,8 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      || !dst_access_legal_p (cb, increment))
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
-		fprintf (dump_file, "Dst-body mismatch: call=%u access-legality\n", i);
+		fprintf (dump_file,
+			 "Dst-body mismatch: call=%u access-legality\n", i);
 	      return false;
 	    }
 	  ia->id == rvtt_insn_data::sfpload ? ++loads : ++stores;
@@ -341,7 +342,9 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      if (!operand_equal_p (va, vb, 0))
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u address\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u address\n", i,
+			     argno);
 		  return false;
 		}
 	      continue;
@@ -352,14 +355,18 @@ same_body_p (const dst_iteration &a, const dst_iteration &b,
 	      if (ia->is_live () && it == values.end ())
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u live-in\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u live-in\n", i,
+			     argno);
 		  return false;
 		}
 	      if ((it == values.end () && va != vb)
 		  || (it != values.end () && it->second != vb))
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    fprintf (dump_file, "Dst-body mismatch: call=%u arg=%u vector\n", i, argno);
+		    fprintf (dump_file,
+			     "Dst-body mismatch: call=%u arg=%u vector\n", i,
+			     argno);
 		  return false;
 		}
 	    }

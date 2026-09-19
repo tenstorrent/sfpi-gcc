@@ -384,7 +384,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
     if (eff != SFPXCMP_MOD1_CC_LT && eff != SFPXCMP_MOD1_CC_LE)
       return refuse ("int-abs-region-shape", g->icmp);
     if (rvtt_call_int_arg (g->icmp, 2) != 0
-	|| rvtt_call_int_arg (g->icmp, 3) != 0 || rvtt_call_int_arg (g->icmp, 4) != 0)
+	|| rvtt_call_int_arg (g->icmp, 3) != 0
+	|| rvtt_call_int_arg (g->icmp, 4) != 0)
       return refuse ("int-abs-boundary-unsupported", g->icmp);
   }
 

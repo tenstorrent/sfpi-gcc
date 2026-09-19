@@ -31,7 +31,8 @@ along with GCC; see the file COPYING3.  If not see
    V1 RETIREMENT.  The original single-shape pass
    (self-loop capturable rows, single-SET latency-0 invariant-input
    members, whole-pattern register replacement) was RETIRED after a
-   per-fire parity adjudication against this engine proved it WRONG-CODE-BEARING, not merely
+   per-fire parity adjudication against this engine proved it
+   WRONG-CODE-BEARING, not merely
    subsumed: its whole-pattern writer edit rewrote every occurrence of
    the old register in the writer's pattern, including GENUINE INPUT
    READS of the register's previous live range (the allocator's
@@ -978,7 +979,8 @@ analyze_chain (basic_block bb, const std::vector<span_insn> &scan,
      dead-at-exit close (fn_has_opaque above) and the temporal
      never-touched-after arm (fn_has_opaque below) already enforce -- the
      whole-block tier used to trust df_get_live_in/out unconditionally --
-     the untrusted-liveness soundness hole: in an opaque function a register untouched
+     the untrusted-liveness soundness hole: in an opaque function a
+     register untouched
      in the block can be loop-carried live-THROUGH it (produced in a
      successor, consumed around the backedge), invisible to DF hard-reg
      liveness; renaming onto it clobbers the loop-carried value
