@@ -145,33 +145,6 @@ refuse (const char *reason, gimple *stmt)
   return false;
 }
 
-/* Return true when VAL is an architectural all-zero vector: a read of
-   the constant-zero register or an immediate materialization of 0.  */
-
-static bool
-zero_vector_p (tree val)
-{
-  if (TREE_CODE (val) != SSA_NAME)
-    return false;
-  gimple *def = SSA_NAME_DEF_STMT (val);
-  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
-  if (!insnd)
-    return false;
-  gcall *call = as_a <gcall *> (def);
-  switch (insnd->id)
-    {
-    case rvtt_insn_data::sfpreadlreg:
-      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
-    case rvtt_insn_data::sfpxloadi:
-      /* (ib, value, ...) -- all-constant argument forms only.  */
-      return rvtt_call_int_arg (call, 1) == 0;
-    case rvtt_insn_data::sfploadi:
-      return rvtt_call_int_arg (call, 1) == 0;
-    default:
-      return false;
-    }
-}
-
 /* Return the defining call when VAL is a WRITABLE architectural zero
    -- an immediate materialization of 0 into an allocatable LREG (the
    read-only constant register does not qualify).  The swapped-operand
@@ -315,7 +288,7 @@ match_group (const rvtt_cc_region_tree *ccr, gimple_stmt_iterator gsi,
 	    /* Candidate identification: the single predicated statement
 	       assigns an architectural zero.  From here on refusals are
 	       reported by name.  */
-	    if (!zero_vector_p (gimple_call_arg (call, 1)))
+	    if (!rvtt_zero_vector_p (gimple_call_arg (call, 1)))
 	      return false;
 	    *candidate = true;
 	    g->assign = call;
@@ -670,7 +643,7 @@ match_group_general (function *fun, const rvtt_cc_region_tree *ccr,
 	  {
 	  case rvtt_insn_data::sfpassign_lv:
 	    n_assigns++;
-	    if (!assign && zero_vector_p (gimple_call_arg (call, 1)))
+	    if (!assign && rvtt_zero_vector_p (gimple_call_arg (call, 1)))
 	      assign = call;
 	    break;
 	  case rvtt_insn_data::sfpxloadi:

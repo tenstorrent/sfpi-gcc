@@ -84,6 +84,15 @@ extern edge rvtt_loop_entry_edge (class loop *loop);
    successor, not the function entry block).  */
 extern bool rvtt_dedicated_preheader_p (edge entry);
 
+/* LOOP's dedicated preheader: the unique block outside the loop with an
+   edge into the header, provided that entry edge is normal and the
+   block's only successor is the header, so an insn placed at its end
+   executes exactly once per loop entry.  Null when the loop has several
+   entry blocks or the candidate is shared with other code.  This is
+   rvtt_loop_entry_edge plus the single-successor requirement; two passes
+   previously open-coded the same header-predecessor walk.  */
+extern basic_block rvtt_dedicated_loop_preheader (class loop *loop);
+
 /* Region-scoped ownership proof for a loop hoist.  The region that must
    be free of opaque statements is {dedicated preheader at/after the
    hoist insertion point} union {loop body blocks}: values hoisted onto

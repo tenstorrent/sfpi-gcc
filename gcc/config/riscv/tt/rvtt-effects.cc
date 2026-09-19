@@ -32,6 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "memmodel.h"
 #include "emit-rtl.h"
+#include "rtl-iter.h"
 #include "tm_p.h"
 #include "rvtt.h"
 #include "rvtt-protos.h"
@@ -1079,4 +1080,50 @@ rvtt_call_with_id (gimple *stmt, rvtt_insn_data::insn_id id)
     if (insnd->id == id)
       return as_a <gcall *> (stmt);
   return nullptr;
+}
+
+bool
+rvtt_pattern_transparent_p (rtx_insn *insn)
+{
+  if (CALL_P (insn))
+    return false;
+  rtx pat = PATTERN (insn);
+  if (asm_noperands (pat) >= 0)
+    return false;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pat, ALL)
+    {
+      const_rtx x = *iter;
+      if (GET_CODE (x) == UNSPEC_VOLATILE)
+	return false;
+      if (GET_CODE (x) == SET && MEM_P (SET_DEST (x)))
+	return false;
+      if (GET_CODE (x) == CLOBBER && MEM_P (XEXP (x, 0)))
+	return false;
+    }
+  return true;
+}
+
+bool
+rvtt_zero_vector_p (tree val)
+{
+  if (TREE_CODE (val) != SSA_NAME)
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (val);
+  const rvtt_insn_data *insnd = rvtt_get_insn_data (def);
+  if (!insnd)
+    return false;
+  gcall *call = as_a <gcall *> (def);
+  switch (insnd->id)
+    {
+    case rvtt_insn_data::sfpreadlreg:
+      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
+    case rvtt_insn_data::sfpxloadi:
+      /* (ib, value, ...) -- all-constant argument forms only.  */
+      return rvtt_call_int_arg (call, 1) == 0;
+    case rvtt_insn_data::sfploadi:
+      return rvtt_call_int_arg (call, 1) == 0;
+    default:
+      return false;
+    }
 }

@@ -144,6 +144,15 @@ extern long rvtt_call_int_arg (const gcall *call, unsigned n);
    ID, null otherwise.  */
 extern gcall *rvtt_call_with_id (gimple *stmt, rvtt_insn_data::insn_id id);
 
+/* Structural transparency: no unspec_volatile anywhere in the pattern,
+   no memory store, no call, no asm.  Such an instruction cannot reach
+   Dst, the RWC counters, configuration state, or CC.  */
+extern bool rvtt_pattern_transparent_p (rtx_insn *insn);
+
+/* True when VAL is an architectural all-zero vector: a read of the
+   constant-zero register, or an immediate materialization of 0.  */
+extern bool rvtt_zero_vector_p (tree val);
+
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);
 

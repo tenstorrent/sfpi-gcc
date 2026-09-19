@@ -329,34 +329,6 @@ function_peak_pressure (function *fn)
 }
 
 /* ---------------------- effect classification ---------------------- */
-
-/* Structural transparency: no unspec_volatile anywhere in the pattern,
-   no memory store, no call, no asm.  Such an instruction cannot reach
-   Dst, the RWC counters, configuration state, or CC.  (Mirror of
-   rtl-rvtt-dst-ownership.cc pattern_transparent_p.)  */
-
-static bool
-pattern_transparent_p (rtx_insn *insn)
-{
-  if (CALL_P (insn))
-    return false;
-  rtx pat = PATTERN (insn);
-  if (asm_noperands (pat) >= 0)
-    return false;
-  subrtx_iterator::array_type array;
-  FOR_EACH_SUBRTX (iter, array, pat, ALL)
-    {
-      const_rtx x = *iter;
-      if (GET_CODE (x) == UNSPEC_VOLATILE)
-	return false;
-      if (GET_CODE (x) == SET && MEM_P (SET_DEST (x)))
-	return false;
-      if (GET_CODE (x) == CLOBBER && MEM_P (XEXP (x, 0)))
-	return false;
-    }
-  return true;
-}
-
 /* Audited architectural effect data for typed value-op patterns the
    full generated effect sets do not cover lives at the definitions:
    the xtt_lane_local/xtt_cc_write attribute rows in rvtt.md, reached
@@ -569,7 +541,7 @@ lpa_transfer (lpa_state &s, rtx_insn *insn, spill_ctx *collect)
       }
   }
 
-  if (pattern_transparent_p (insn))
+  if (rvtt_pattern_transparent_p (insn))
     return;
 
   xtt_effect_set e = rvtt_insn_effects (insn);
@@ -992,7 +964,6 @@ choose_scratch_row (spill_ctx &ctx, int max_delta, int epoch)
     }
   return -1;
 }
-
 
 /* --------------------------- web collection ------------------------ */
 
@@ -1772,7 +1743,7 @@ web_spill_admissible_p (function *fn, unsigned regno, const spill_ctx &ctx,
 /* Deterministic spill choice around BLOCKED: the cheapest spillable,
    round-trip-admissible web among the blocked node and its neighbors
    (cost = occurrences scaled down by degree).  -1 when none;
-   *WHY/*MAX_DELTA describe the choice or the cheapest inadmissible
+   *WHY / *MAX_DELTA describe the choice or the cheapest inadmissible
    candidate's blocker.  */
 
 static int
@@ -2358,7 +2329,7 @@ function_has_relational_pin_site (function *fn)
 }
 
 /* Collect every pin site in FN against graph G.  Returns false with
-   *WHY/*WHY_AT set on any shape the model does not cover.  */
+   *WHY / *WHY_AT set on any shape the model does not cover.  */
 
 static bool
 collect_pin_sites (function *fn, const lpa_graph &g,
