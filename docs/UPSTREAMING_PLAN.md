@@ -95,36 +95,67 @@ accounts for most of both counts on its own.
 
 ## 3. Can each pass be its own submission?
 
-No — but close, and the shape is worth knowing.
+Yes — as a stack, in dependency order.  Each pass ends up as one patch
+containing the pass, its `riscv.opt` flag, its `rvtt-passes.def` registration
+and its tests.  What follows is not a limit on how many passes can be
+reviewed separately; it is only the order they have to go in.
 
-Of the 42 pass translation units, **10 depend on nothing but the core**
-(`rvtt.h`, `rvtt-protos.h`, `rvtt-insn.def`, `rvtt-effects.h`, `rvtt-refuse.h`,
-`rvtt-raw-boundary.h`).  The other 32 pull in at least one further campaign
-subsystem.  The core itself is unavoidably shared: `rvtt-refuse.h` is included
-by 45 translation units, `rvtt-effects.h` by 40, `rvtt-raw-boundary.h` by 29.
+First, a correction to an earlier count.  There are 42 files matching
+`{gimple,rtl}-rvtt-*.cc`, but they are not 42 passes:
 
-So the unit of submission is **one foundation series, then one pass per
-patch**, not one pass in isolation.
+    registered-pass translation units (define make_pass_*)     28
+    support translation units (share the prefix, register none) 14
 
-The ten foundation-only passes, with their dump-scan test counts:
+The 14 support files -- `rtl-rvtt-replay-crf.cc`, `rtl-rvtt-sched-pairing.cc`,
+`gimple-rvtt-prgm-residency.cc` and the rest -- are library code for a
+subsystem and belong in that subsystem's patch, not in one of their own.
 
-| Pass | Lines | Tests |
-|---|---|---|
-| `rtl-rvtt-spill-diag.cc` | 212 | 2 |
-| `gimple-rvtt-int-not.cc` | 285 | 7 |
-| `rtl-rvtt-lreg-livein.cc` | 349 | 3 |
-| `gimple-rvtt-int-abs.cc` | 576 | 11 |
-| `gimple-rvtt-reprprop.cc` | 603 | 9 |
-| `gimple-rvtt-expand.cc` | 834 | — |
-| `gimple-rvtt-dst-iteration.cc` | 947 | 6 |
-| `rtl-rvtt-dst-ownership.cc` | 1,015 | 13 |
-| `rtl-rvtt-crosslane-window.cc` | 1,019 | 15 |
-| `rtl-rvtt-lp-alloc.cc` | 3,094 | 25 |
+The core is unavoidably shared, so it cannot be deferred: `rvtt-refuse.h` is
+included by 45 translation units, `rvtt-effects.h` by 40,
+`rvtt-raw-boundary.h` by 29.  Ten of the 28 passes need nothing beyond it.
+The rest each need one further subsystem header, which lands immediately
+before the passes it unblocks.
 
-Each of these, plus its `riscv.opt` flag, its `rvtt-passes.def` registration
-and its tests, is a self-contained patch in the 300–1,000 line range.  That is
-a reviewable size.  `rtl-rvtt-lp-alloc.cc` at 3,094 lines should be split
-first.
+### Readiness of the 28
+
+Size, which decides whether a reviewer can hold the patch in their head:
+
+    under 500 lines      3
+    500 - 1000          8
+    1000 - 2000        12
+    over 2000           5
+
+The 23 under 2000 lines are already a normal size for a new GCC pass carrying
+its own tests and file essay.  Five are not, and should be split before they
+are sent:
+
+    rtl-rvtt-macro-planner.cc   3462
+    gimple-rvtt-crosscall.cc    3186
+    rtl-rvtt-lp-alloc.cc        3094
+    rtl-rvtt-dst-autoincr.cc    2763
+    rtl-rvtt-mop-form.cc        2208
+
+Tests: 25 of the 28 carry dump-scan tests keyed to their dump name.  Three do
+not and need them written before submission -- `gimple-rvtt-expand.cc`,
+`rtl-rvtt-lreg-livein.cc`, `rtl-rvtt-spill-diag.cc`.
+
+### Does any of this need re-measuring on silicon?
+
+No -- and the reason matters, because it is cheaper as well as stronger.
+
+Everything in this plan is reorganisation: splitting files, moving shared
+helpers, restyling.  None of it is intended to change what the compiler emits.
+For a change like that, byte-identity of the emitted code is a *stronger*
+result than a timing run: if the bytes are identical the cycle count on the
+device is identical by construction, whereas a perf sweep re-measures the same
+binaries and adds measurement noise.  The identity gate takes minutes; the
+sweep takes hours.
+
+Silicon becomes necessary only when a reorganisation *does* move codegen -- and
+the identity gate is precisely what reports that.  So the gate is the trigger
+for a silicon run, not a substitute for one.  Board performance numbers are a
+separate concern from upstreaming in any case: review turns on correctness and
+structure, not on cycle counts.
 
 ## 4. Proposed order
 
@@ -189,3 +220,65 @@ land as their own series, each preceded by its shared header.
 - Documentation claims checked against the build rather than asserted — see
   the README's section 7, which now states that two of the eleven proofs are
   mechanically verified rather than implying all of them are.
+
+## 7. The stack, concretely
+
+Generated from the include graph; re-runnable.  Each `Pnn` is one patch: the
+pass, its `riscv.opt` flag, its `rvtt-passes.def` registration, its tests.
+Each `+ header` line is an infrastructure patch that must land before the
+passes under it.  Support translation units travel with their subsystem.
+
+```
+  --- after the core, passes needing nothing further ---
+  P01  rtl-rvtt-spill-diag.cc               212 lines    0 tests  NEEDS TESTS
+  P02  gimple-rvtt-int-not.cc               285 lines    7 tests
+  P03  rtl-rvtt-lreg-livein.cc              349 lines    0 tests  NEEDS TESTS
+  P04  gimple-rvtt-int-abs.cc               576 lines   11 tests
+  P05  gimple-rvtt-reprprop.cc              603 lines    8 tests
+  P06  gimple-rvtt-expand.cc                847 lines    0 tests  NEEDS TESTS
+  P07  gimple-rvtt-dst-iteration.cc         947 lines    7 tests
+  P08  rtl-rvtt-dst-ownership.cc           1015 lines   22 tests
+  P09  rtl-rvtt-crosslane-window.cc        1019 lines    1 tests
+  P10  rtl-rvtt-lp-alloc.cc                3094 lines   25 tests  SPLIT FIRST
+
+  --- + rvtt-macro-ownership.h (512 lines) ---
+  P11  gimple-rvtt-crossloop.cc             532 lines   22 tests
+  P12  rtl-rvtt-dst-autoincr.cc            2763 lines  103 tests  SPLIT FIRST
+
+  --- + rvtt-macro-tables.h (1675 lines) ---
+  P13  gimple-rvtt-transp-involution.cc    1205 lines    3 tests
+  P14  gimple-rvtt-crosslane.cc            1813 lines   15 tests
+
+  --- + rvtt-cc-region.h (1532 lines) ---
+  P15  gimple-rvtt-store-fold.cc           1183 lines   30 tests
+  P16  rtl-rvtt-lreg-rename.cc             1963 lines   30 tests
+
+  --- + rvtt-trips.h (671 lines) ---
+  P17  gimple-rvtt-replay-unroll.cc        1781 lines   16 tests
+
+  --- + rvtt-lut-tables.h (461 lines) ---
+  P18  gimple-rvtt-lut-select.cc           1591 lines   52 tests
+
+  --- + rtl-rvtt-sched-int.h (115 lines) ---
+  P19  rtl-rvtt-lp-schedule-prera.cc       1349 lines   11 tests
+
+  --- + rvtt-delivery-cost.h (216 lines) ---
+  P20  gimple-rvtt-ccmask.cc                952 lines   22 tests
+  P21  gimple-rvtt-reassoc.cc              1536 lines   24 tests
+  P22  rtl-rvtt-mop-form.cc                2208 lines   14 tests  SPLIT FIRST
+  P23  gimple-rvtt-crosscall.cc            3186 lines   30 tests  SPLIT FIRST
+  P24  rtl-rvtt-macro-planner.cc           3462 lines  186 tests  SPLIT FIRST
+
+  --- + rvtt-placement.h (438 lines) ---
+  P25  gimple-rvtt-prgm-const.cc            948 lines  144 tests
+  P26  gimple-rvtt-invariant.cc            1827 lines   89 tests
+
+  --- + rvtt-schedule.h (245 lines) ---
+  P27  gimple-rvtt-delivery-shape.cc        595 lines   17 tests
+  P28  gimple-rvtt-lp-schedule.cc          1110 lines   37 tests
+
+  28 of 28 registered passes placed
+```
+
+Five are flagged SPLIT FIRST at over 2000 lines, and three need tests written.
+The other 20 are submission-shaped as they stand.
