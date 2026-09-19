@@ -312,29 +312,6 @@ static constexpr stochrnd_store_row stochrnd_store_rows[] = {
 #undef RVTT_STOCHRND_STORE_PAIR
 #undef RVTT_STOREFOLD_SINK_PAIR
 #undef RVTT_STOREFOLD_PROOF
-
-/* STMT as a gcall when it is the rvtt builtin call with insn identity
-   ID, null otherwise.  */
-
-static gcall *
-is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
-{
-  if (const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt))
-    if (insnd->id == id)
-      return as_a <gcall *> (stmt);
-  return nullptr;
-}
-
-/* Argument N of CALL as a host integer, or -1 when it is not a
-   literal INTEGER_CST.  */
-
-static long
-int_arg (gcall *call, unsigned n)
-{
-  tree arg = gimple_call_arg (call, n);
-  return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
-}
-
 /* Book the named refusal REASON against STMT and dump it.  Always
    returns false so recognizers can bail with `return refuse
    (...)'.  */
@@ -421,9 +398,9 @@ storable_source_p (tree z)
   if (TREE_CODE (z) != SSA_NAME)
     return false;
   gimple *def = SSA_NAME_DEF_STMT (z);
-  if (gcall *read = is_rvtt_call (def, rvtt_insn_data::sfpreadlreg))
+  if (gcall *read = rvtt_call_with_id (def, rvtt_insn_data::sfpreadlreg))
     {
-      long idx = int_arg (read, 0);
+      long idx = rvtt_call_int_arg (read, 0);
       if (idx < 0 || idx >= (long) SFPSTORE_MAX_SRC_LREG)
 	return false;
     }
@@ -492,9 +469,9 @@ classify_assign_to_store (const rvtt_cc_region_tree *ccr, gcall *assign,
 	}
       if (inert_stmt_p (stmt))
 	continue;
-      if (gcall *popc = is_rvtt_call (stmt, rvtt_insn_data::sfppopc))
+      if (gcall *popc = rvtt_call_with_id (stmt, rvtt_insn_data::sfppopc))
 	{
-	  if (*popc_out || int_arg (popc, 0) != 0)
+	  if (*popc_out || rvtt_call_int_arg (popc, 0) != 0)
 	    return SPAN_BAD;
 	  *popc_out = popc;
 	  continue;
@@ -526,9 +503,9 @@ classify_assign_to_store (const rvtt_cc_region_tree *ccr, gcall *assign,
 	continue;
       if (gimple_code (pstmt) == GIMPLE_COND)
 	continue;
-      if (gcall *pc = is_rvtt_call (pstmt, rvtt_insn_data::sfppopc))
+      if (gcall *pc = rvtt_call_with_id (pstmt, rvtt_insn_data::sfppopc))
 	{
-	  if (popc || int_arg (pc, 0) != 0)
+	  if (popc || rvtt_call_int_arg (pc, 0) != 0)
 	    return SPAN_BAD;
 	  popc = pc;
 	  continue;
@@ -612,9 +589,9 @@ check_load_to_assign (const rvtt_cc_region_tree *ccr, gcall *load,
 	}
       if (inert_stmt_p (stmt))
 	continue;
-      if (gcall *pushc = is_rvtt_call (stmt, rvtt_insn_data::sfppushc))
+      if (gcall *pushc = rvtt_call_with_id (stmt, rvtt_insn_data::sfppushc))
 	{
-	  if (region_pushc || int_arg (pushc, 0) != 0)
+	  if (region_pushc || rvtt_call_int_arg (pushc, 0) != 0)
 	    return refuse ("store-fold-sink-region-shape", stmt);
 	  region_pushc = pushc;
 	  continue;
@@ -691,7 +668,7 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
      must be proven the identity.  */
   if (TREE_CODE (prev) != SSA_NAME)
     return refuse ("store-fold-sink-carried-not-load", assign);
-  gcall *load = is_rvtt_call (SSA_NAME_DEF_STMT (prev),
+  gcall *load = rvtt_call_with_id (SSA_NAME_DEF_STMT (prev),
 			      rvtt_insn_data::sfpload);
   if (!load)
     return refuse ("store-fold-sink-carried-not-load", assign);
@@ -705,11 +682,11 @@ fold_merge_store (rvtt_cc_region_tree *ccr, gcall *assign, gcall *store)
   /* The load must not advance the RWC state the store's address
      depends on (capability fact; -1 = unproven, refuse).  */
   int noinc = rvtt_no_increment_address_mode ();
-  if (noinc < 0 || int_arg (load, 5) != noinc)
+  if (noinc < 0 || rvtt_call_int_arg (load, 5) != noinc)
     return refuse ("store-fold-sink-addrmode-unproven", load);
 
-  long lfmt = int_arg (load, 4);
-  long sfmt = int_arg (store, 5);
+  long lfmt = rvtt_call_int_arg (load, 4);
+  long sfmt = rvtt_call_int_arg (store, 5);
   bool licensed = false;
   /* Format-pair admission by the GENERATED verdict table (one row per
      exhaustively swept Dst round trip plus the runtime-resolved SRCB
@@ -875,7 +852,7 @@ fn_has_prng_consumer_p (function *fun)
 	int mod1_pos, rnd_pos;
 	if (stochrnd_args (insnd, &mod1_pos, &rnd_pos))
 	  {
-	    long rnd_mode = int_arg (call, rnd_pos);
+	    long rnd_mode = rvtt_call_int_arg (call, rnd_pos);
 	    if (rnd_mode != (long) SFPSTOCHRND_RND_EVEN
 		&& rnd_mode != 2 /* BH round-to-zero: deterministic */)
 	      return true;
@@ -883,7 +860,7 @@ fn_has_prng_consumer_p (function *fun)
 	else if (insnd->id == rvtt_insn_data::sfpcast
 		 || insnd->id == rvtt_insn_data::sfpcast_lv)
 	  {
-	    long mod1 = int_arg (call, insnd->id == rvtt_insn_data::sfpcast
+	    long mod1 = rvtt_call_int_arg (call, insnd->id == rvtt_insn_data::sfpcast
 					? 1 : 2);
 	    if (mod1 < 0 || mod1 == (long) SFPCAST_MOD1_INT32_TO_FP32_RNS)
 	      return true;
@@ -930,7 +907,7 @@ fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
   int mod1_pos, rnd_pos;
   if (!stochrnd_args (insnd, &mod1_pos, &rnd_pos))
     return false;
-  long mod1 = int_arg (rnd, mod1_pos);
+  long mod1 = rvtt_call_int_arg (rnd, mod1_pos);
   unsigned conv = (unsigned) mod1 & SFPSTOCHRND_MOD1_CONV_MASK;
   bool float_row = mod1 >= 0
     && (conv == SFPSTOCHRND_MOD1_FP32_TO_FP16A
@@ -956,13 +933,13 @@ fold_stochrnd_store (rvtt_cc_region_tree *ccr, gcall *rnd, gcall *store,
       && mod1 != (long) SFPSTOCHRND_MOD1_FP32_TO_FP16B)
     return refuse ("stochrnd-store-fold-format-mismatch", store);
 
-  long rnd_mode = int_arg (rnd, rnd_pos);
+  long rnd_mode = rvtt_call_int_arg (rnd, rnd_pos);
   if (rnd_mode != (long) SFPSTOCHRND_RND_EVEN)
     /* Stochastic (and the BH round-to-zero mode, and any non-constant
        mode) is not the proof's deterministic-nearest class.  */
     return refuse ("stochrnd-store-fold-mode-unlicensed", store);
 
-  long mod0 = int_arg (store, 5);
+  long mod0 = rvtt_call_int_arg (store, 5);
   /* Matching-precision pairing by the GENERATED table (the swept
      stochrnd proof rows plus the runtime-resolved SRCB store per
      conversion; tt/rvtt-storefold-verdicts.def, byte-checked against
@@ -1062,13 +1039,13 @@ transform (function *fun)
 	  {
 	    gimple_stmt_iterator next = gsi;
 	    gsi_next (&next);
-	    if (gcall *store = is_rvtt_call (gsi_stmt (gsi),
+	    if (gcall *store = rvtt_call_with_id (gsi_stmt (gsi),
 					     rvtt_insn_data::sfpstore))
 	      {
 		tree v = gimple_call_arg (store, 1);
 		if (TREE_CODE (v) == SSA_NAME)
 		  if (gcall *assign
-		      = is_rvtt_call (SSA_NAME_DEF_STMT (v),
+		      = rvtt_call_with_id (SSA_NAME_DEF_STMT (v),
 				      rvtt_insn_data::sfpassign_lv))
 		    changed |= fold_merge_store (&ccr, assign, store);
 	      }
@@ -1090,7 +1067,7 @@ transform (function *fun)
 	{
 	  gimple_stmt_iterator next = gsi;
 	  gsi_next (&next);
-	  if (gcall *store = is_rvtt_call (gsi_stmt (gsi),
+	  if (gcall *store = rvtt_call_with_id (gsi_stmt (gsi),
 					   rvtt_insn_data::sfpstore))
 	    {
 	      tree v = gimple_call_arg (store, 1);
@@ -1105,7 +1082,7 @@ transform (function *fun)
 		  gcall *wrap = nullptr;
 		  if (rvtt_stochrnd_store_fold_licensed_p ())
 		    if (gcall *assign
-			= is_rvtt_call (def, rvtt_insn_data::sfpassign_lv))
+			= rvtt_call_with_id (def, rvtt_insn_data::sfpassign_lv))
 		      {
 			tree z = gimple_call_arg (assign, 1);
 			if (TREE_CODE (z) == SSA_NAME)

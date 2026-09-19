@@ -20,6 +20,11 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RVTT_EFFECTS_H
 #define GCC_RVTT_EFFECTS_H
 
+/* For rvtt_insn_data and its insn_id enum, used by the builtin-call
+   classifiers below.  Guarded and cycle-free: rvtt.h does not include
+   this header.  */
+#include "rvtt.h"
+
 /* This is the ONLY vocabulary macro-planner layers may use to classify
    instructions.  Values are derived from the generated effect attribute
    family in rvtt-cost.md (all of whose defaults are refusing), resolved
@@ -82,6 +87,62 @@ extern xtt_subunit_t rvtt_builtin_subunit (const rvtt_insn_data *);
    consumer
    seam, math in the engine).  */
 extern int rvtt_builtin_result_latency (const rvtt_insn_data *);
+
+/* Builtin-call classification shared by the two lane passes
+   ---------------------------------------------------------
+
+   gimple-rvtt-crosslane.cc and gimple-rvtt-transp-involution.cc each
+   carried private copies of the four entry points below.  Two were
+   byte-identical; two had drifted apart, and one of those drifts was
+   invisible because both spellings used the same name.  They live here
+   now for the reason stated at the top of this file: a pass that needs
+   to know what a builtin touches queries rvtt-effects rather than
+   growing another switch.  */
+
+/* Read argument ARGNO of CALL into *OUT when it is an INTEGER_CST that
+   fits an unsigned HWI.  Returns false, leaving *OUT untouched, for a
+   missing or non-constant argument.  */
+extern bool rvtt_call_const_uarg (const gcall *call, unsigned argno,
+				  unsigned *out);
+
+/* True for an sfpencc whose (mod1, imm12) operands encode, word-exactly,
+   the architectural all-lanes-enable word.  Derived from the macro
+   table's encoding rather than recognised by name; the builtin's
+   argument order is (mod1, imm12), the emission's operand roles.  */
+extern bool rvtt_encc_all_lanes_call_p (const gcall *call,
+					const rvtt_insn_data *insnd);
+
+/* Builtin ids that write the CC / lane-enable state and so end any
+   proven all-lanes or unchanged-CC window.  A word-exact all-lanes
+   sfpencc is recognised separately, before this predicate applies.  */
+extern bool rvtt_cc_writer_id_p (rvtt_insn_data::insn_id id);
+
+/* Typed builtins proven to have no Dst-memory access, no RWC effect, no
+   configuration write, and no hidden fixed-LREG contract.  A member may
+   still write CC through a mod operand; callers that care check
+   insnd->sets_cc on the concrete call first.  Everything absent from
+   the list keeps the refusing default.  */
+extern bool rvtt_dst_inert_compute_id_p (rvtt_insn_data::insn_id id);
+
+/* The weaker, strictly larger companion: ids that neither write the
+   lane-enable CC state nor carry hidden raw effects, but which MAY
+   touch Dst memory or move data between lanes.  Every
+   rvtt_dst_inert_compute_id_p id qualifies, plus seven Dst-memory and
+   lane-movement ops named at the definition.
+
+   Pick by what the caller actually needs: a CC-window or lane-state
+   scan wants this one; a transform that also relies on Dst residency
+   being untouched wants rvtt_dst_inert_compute_id_p.  */
+extern bool rvtt_cc_quiet_compute_id_p (rvtt_insn_data::insn_id id);
+
+/* Argument N of CALL as a host integer, or -1 when it is not a literal
+   INTEGER_CST.  (Six passes each carried their own spelling of this;
+   they differed only in argument naming and a redundant null check.)  */
+extern long rvtt_call_int_arg (const gcall *call, unsigned n);
+
+/* STMT as a gcall when it is the rvtt builtin call with insn identity
+   ID, null otherwise.  */
+extern gcall *rvtt_call_with_id (gimple *stmt, rvtt_insn_data::insn_id id);
 
 /* Annotate FILE with INSN's effect set (under -mtt-tensix-dump-effects).  */
 extern void rvtt_dump_insn_effects (FILE *, rtx_insn *);

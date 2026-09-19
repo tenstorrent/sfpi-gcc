@@ -133,6 +133,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-protos.h"
 #include "rvtt.h"
 #include "rvtt-macro-tables.h"
+#include "rvtt-effects.h"
 #include "tree-dfa.h"
 
 namespace {
@@ -185,20 +186,6 @@ static const unsigned SHFT2_MOD1_ROR1 = 3;
 static const unsigned SHFT2_MOD1_SHR1 = 4;
 
 /* ------------------------------------------------------------------ */
-/* Small gimple helpers.  */
-
-static bool
-const_uarg (const gcall *call, unsigned argno, unsigned *out)
-{
-  if (gimple_call_num_args (call) <= argno)
-    return false;
-  tree arg = gimple_call_arg (call, argno);
-  if (TREE_CODE (arg) != INTEGER_CST || !tree_fits_uhwi_p (arg))
-    return false;
-  *out = (unsigned) tree_to_uhwi (arg);
-  return true;
-}
-
 /* Insn data of STMT when it is an rvtt builtin call; null for
    non-calls and for calls outside the builtin vocabulary.  */
 
@@ -260,34 +247,11 @@ thread_assign (tree v, basic_block bb, std::vector<gimple *> *stmts)
   return lhs ? lhs : v;
 }
 
-/* Word-exact all-lanes SFPENCC -- proven against the capability
-   table's architectural encoding.  The builtin's argument order is
-   (mod1, imm12): the correct all-lanes call is
-   __builtin_rvtt_sfpencc (10, 3), which the rvtt_sfpencc template
-   ("SFPENCC\t%1, %0") prints as the gas spelling "SFPENCC 3, 10"
-   (Imm12 first, Mod1 second -- gas-verified: the inverted spelling
-   rejects with an invalid-mod error).  Mirrors the structured-CC
-   lowering's region-exit emission and transp-involution's check.
-   NOTE: several in-tree compile-only dg tests spell
-   the call inverted, (3, 10); their .s would not assemble.  */
-
-static bool
-encc_all_lanes_call_p (gcall *call, const rvtt_insn_data *insnd)
-{
-  if (insnd->id != rvtt_insn_data::sfpencc)
-    return false;
-  unsigned mod1, imm12;
-  if (!const_uarg (call, 0, &mod1) || !const_uarg (call, 1, &imm12))
-    return false;
-  uint32_t word;
-  return rvtt_macro::sfpencc_encode (imm12, mod1, &word)
-	 && word == rvtt_macro::sfpencc_all_lanes_word ();
-}
-
 /* ------------------------------------------------------------------ */
 /* Statement classification for the lane-state / CC-window scans
-   (refusing default; the audited safe-compute list mirrors
-   gimple-rvtt-transp-involution.cc).  */
+   (refusing default; the audited id lists are shared with
+   gimple-rvtt-transp-involution.cc via rvtt-effects.h, which is where
+   the two contracts and their seven-id difference are spelled out).  */
 
 enum stmt_class
 {
@@ -297,146 +261,6 @@ enum stmt_class
   SC_CC_WRITE,	/* typed CC writer				*/
   SC_BARRIER,	/* everything unproven				*/
 };
-
-/* Audited allowlist of builtin ids that neither write the
-   lane-enable CC state nor carry hidden raw effects; any id not
-   listed is a barrier for the lane-state and CC-window scans
-   (refusing default).  */
-
-static bool
-safe_compute_id_p (rvtt_insn_data::insn_id id)
-{
-  switch (id)
-    {
-    case rvtt_insn_data::synth_opcode:
-    case rvtt_insn_data::sfpnop:
-    case rvtt_insn_data::sfpnovalue:
-    case rvtt_insn_data::sfpselect2:
-    case rvtt_insn_data::sfpselect4:
-    case rvtt_insn_data::sfpassign:
-    case rvtt_insn_data::sfpassign_lv:
-    case rvtt_insn_data::sfploadi:
-    case rvtt_insn_data::sfploadi_lv:
-    case rvtt_insn_data::sfpxloadi:
-    case rvtt_insn_data::sfpmov:
-    case rvtt_insn_data::sfpmov_lv:
-    case rvtt_insn_data::sfpexexp:
-    case rvtt_insn_data::sfpexexp_lv:
-    case rvtt_insn_data::sfpexman:
-    case rvtt_insn_data::sfpexman_lv:
-    case rvtt_insn_data::sfpabs:
-    case rvtt_insn_data::sfpabs_lv:
-    case rvtt_insn_data::sfplz:
-    case rvtt_insn_data::sfplz_lv:
-    case rvtt_insn_data::sfpand:
-    case rvtt_insn_data::sfpand_lv:
-    case rvtt_insn_data::sfpor:
-    case rvtt_insn_data::sfpor_lv:
-    case rvtt_insn_data::sfpxor:
-    case rvtt_insn_data::sfpxor_lv:
-    case rvtt_insn_data::sfpnot:
-    case rvtt_insn_data::sfpnot_lv:
-    case rvtt_insn_data::sfpshft_v:
-    case rvtt_insn_data::sfpshft_v_lv:
-    case rvtt_insn_data::sfpshft_i:
-    case rvtt_insn_data::sfpshft_i_lv:
-    case rvtt_insn_data::sfpiadd_v:
-    case rvtt_insn_data::sfpiadd_v_lv:
-    case rvtt_insn_data::sfpiadd_i:
-    case rvtt_insn_data::sfpiadd_i_lv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
-    case rvtt_insn_data::sfpmul:
-    case rvtt_insn_data::sfpmul_lv:
-    case rvtt_insn_data::sfpmuli:
-    case rvtt_insn_data::sfpmuli_lv:
-    case rvtt_insn_data::sfpadd:
-    case rvtt_insn_data::sfpadd_lv:
-    case rvtt_insn_data::sfpaddi:
-    case rvtt_insn_data::sfpaddi_lv:
-    case rvtt_insn_data::sfpsetexp_v:
-    case rvtt_insn_data::sfpsetexp_v_lv:
-    case rvtt_insn_data::sfpsetexp_i:
-    case rvtt_insn_data::sfpsetexp_i_lv:
-    case rvtt_insn_data::sfpsetman_v:
-    case rvtt_insn_data::sfpsetman_v_lv:
-    case rvtt_insn_data::sfpsetman_i:
-    case rvtt_insn_data::sfpsetman_i_lv:
-    case rvtt_insn_data::sfpsetsgn_v:
-    case rvtt_insn_data::sfpsetsgn_v_lv:
-    case rvtt_insn_data::sfpsetsgn_i:
-    case rvtt_insn_data::sfpsetsgn_i_lv:
-    case rvtt_insn_data::sfpmad:
-    case rvtt_insn_data::sfpmad_lv:
-    case rvtt_insn_data::sfpdivp2:
-    case rvtt_insn_data::sfpdivp2_lv:
-    case rvtt_insn_data::sfpcast:
-    case rvtt_insn_data::sfpcast_lv:
-    case rvtt_insn_data::sfpstochrnd_i:
-    case rvtt_insn_data::sfpstochrnd_i_lv:
-    case rvtt_insn_data::sfpstochrnd_v:
-    case rvtt_insn_data::sfpstochrnd_v_lv:
-    case rvtt_insn_data::sfplut:
-    case rvtt_insn_data::sfplutfp32_3r:
-    case rvtt_insn_data::sfplutfp32_6r:
-    case rvtt_insn_data::sfpswap:
-    case rvtt_insn_data::sfpswap_indexed:
-    case rvtt_insn_data::sfptransp8:
-    case rvtt_insn_data::sfpshft2_subvec_shfl1:
-    case rvtt_insn_data::sfpshft2_subvec_shfl1_lv:
-    case rvtt_insn_data::sfpmul24:
-    case rvtt_insn_data::sfpmul24_lv:
-    case rvtt_insn_data::sfparecip:
-    case rvtt_insn_data::sfparecip_lv:
-    case rvtt_insn_data::sfpnonlinear:
-    case rvtt_insn_data::sfpnonlinear_lv:
-    case rvtt_insn_data::sfpreadconfig:
-    case rvtt_insn_data::sfpreadconfig_lv:
-    case rvtt_insn_data::sfpreadlreg:
-    case rvtt_insn_data::sfpload:
-    case rvtt_insn_data::sfpload_lv:
-    case rvtt_insn_data::sfpstore:
-      return true;
-    default:
-      return false;
-    }
-}
-
-/* Builtin ids that write the CC / lane-enable state and so end any
-   proven all-lanes or unchanged-CC window.  A word-exact all-lanes
-   sfpencc is recognized separately (SC_ENCC_ALL) before this list
-   applies.  */
-
-static bool
-cc_writer_id_p (rvtt_insn_data::insn_id id)
-{
-  switch (id)
-    {
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
-    case rvtt_insn_data::sfpencc:
-    case rvtt_insn_data::sfpcompc:
-    case rvtt_insn_data::sfppushc:
-    case rvtt_insn_data::sfppopc:
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxcondi:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpgt:
-    case rvtt_insn_data::sfpgt_lv:
-    case rvtt_insn_data::sfple:
-    case rvtt_insn_data::sfple_lv:
-      return true;
-    default:
-      return false;
-    }
-}
-
 /* Classify STMT for the lane-state and CC-window scans: SC_SKIP for
    no-code statements, SC_ENCC_ALL for a word-exact all-lanes enable,
    SC_CC_WRITE for typed CC writers, SC_SAFE for plain scalar gimple,
@@ -481,11 +305,11 @@ classify_stmt (gimple *stmt)
   if (insnd->id == rvtt_insn_data::sfpencc_all_lanes)
     return SC_ENCC_ALL;	/* the typed spelling; its expander asserts
 				   the word-exact all-lanes encoding */
-  if (encc_all_lanes_call_p (call, insnd))
+  if (rvtt_encc_all_lanes_call_p (call, insnd))
     return SC_ENCC_ALL;
-  if (cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
     return SC_CC_WRITE;
-  if (safe_compute_id_p (insnd->id))
+  if (rvtt_cc_quiet_compute_id_p (insnd->id))
     return SC_SAFE;
   return SC_BARRIER;
 }
@@ -685,13 +509,13 @@ ror1_link_p (gimple *stmt)
   unsigned mod;
   if (insnd->id == rvtt_insn_data::sfpshft2_subvec_shfl1)
     {
-      if (!const_uarg (call, 1, &mod) || mod != SHFT2_MOD1_ROR1)
+      if (!rvtt_call_const_uarg (call, 1, &mod) || mod != SHFT2_MOD1_ROR1)
 	return NULL_TREE;
       return gimple_call_arg (call, 0);
     }
   if (insnd->id == rvtt_insn_data::sfpshft2_subvec_shfl1_lv)
     {
-      if (!const_uarg (call, 2, &mod) || mod != SHFT2_MOD1_ROR1)
+      if (!rvtt_call_const_uarg (call, 2, &mod) || mod != SHFT2_MOD1_ROR1)
 	return NULL_TREE;
       return gimple_call_arg (call, 1);
     }
@@ -874,17 +698,17 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
        SFPENCC all-lanes                 [region exit]  */
   gcall *readl = next_call (rvtt_insn_data::sfpreadlreg);
   unsigned reg;
-  if (!readl || !const_uarg (readl, 0, &reg) || reg != 15)
+  if (!readl || !rvtt_call_const_uarg (readl, 0, &reg) || reg != 15)
     return false;		/* vConstTileId == 2*lane (sfpi.h) */
   gcall *shft = next_call (rvtt_insn_data::sfpshft_i);
   unsigned shimm;
   if (!shft
       || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
-      || !const_uarg (shft, 2, &shimm) || shimm != 0xffffffffu)
+      || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xffffffffu)
     return false;		/* tileid >> 1 */
   gcall *mask = next_call (rvtt_insn_data::sfploadi);
   unsigned maskimm;
-  if (!mask || !const_uarg (mask, 1, &maskimm) || maskimm != 7)
+  if (!mask || !rvtt_call_const_uarg (mask, 1, &maskimm) || maskimm != 7)
     return false;
   gcall *andc = next_call (rvtt_insn_data::sfpand);
   if (!andc)
@@ -900,21 +724,21 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
   unsigned imm, mod;
   if (!cmp
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (andc)
-      || !const_uarg (cmp, 2, &imm) || imm != k
-      || !const_uarg (cmp, 5, &mod) || mod != 8)
+      || !rvtt_call_const_uarg (cmp, 2, &imm) || imm != k
+      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 8)
     return false;		/* col < K (canonical LT-compare CC set) */
   /* The zero: a literal zero SFPLOADI or a read of the architectural
      constant-0 register LReg[9].  */
   gimple_stmt_iterator save = gsi;
   gcall *zero = next_call (rvtt_insn_data::sfpreadlreg);
   unsigned zimm;
-  if (zero && (!const_uarg (zero, 0, &zimm) || zimm != 9))
+  if (zero && (!rvtt_call_const_uarg (zero, 0, &zimm) || zimm != 9))
     zero = nullptr;
   if (!zero)
     {
       gsi = save;
       zero = next_call (rvtt_insn_data::sfploadi);
-      if (!zero || !const_uarg (zero, 1, &zimm) || zimm != 0)
+      if (!zero || !rvtt_call_const_uarg (zero, 1, &zimm) || zimm != 0)
 	return false;
     }
   gcall *assign = next_call (rvtt_insn_data::sfpassign_lv);
@@ -923,7 +747,7 @@ match_slide_region (gcall *tail, unsigned k, slide_match *m)
       || resolve_value (gimple_call_arg (assign, 1)) != gimple_call_lhs (zero))
     return false;
   gcall *encc = next_call (rvtt_insn_data::sfpencc);
-  if (!encc || !encc_all_lanes_call_p (encc, rvtt_get_insn_data (encc)))
+  if (!encc || !rvtt_encc_all_lanes_call_p (encc, rvtt_get_insn_data (encc)))
     return false;
 
   m->k = k;
@@ -1075,7 +899,7 @@ crosslane_transform::refold_swaps ()
 	unsigned nsel = indexed ? 4 : 2;
 	unsigned modpos = indexed ? 4 : 2;
 	unsigned mod2;
-	if (!const_uarg (call, modpos, &mod2) || mod2 > 8)
+	if (!rvtt_call_const_uarg (call, modpos, &mod2) || mod2 > 8)
 	  continue;
 
 	/* Resolve every operand to a select on one earlier swap.  */
@@ -1106,14 +930,14 @@ crosslane_transform::refold_swaps ()
 	    else if (first != sw)
 	      { shape = false; break; }
 	    unsigned idx;
-	    if (!const_uarg (sel, 1, &idx) || idx >= nsel)
+	    if (!rvtt_call_const_uarg (sel, 1, &idx) || idx >= nsel)
 	      { shape = false; break; }
 	    sel_of_arg[i] = idx;
 	  }
 	if (!shape || !first)
 	  continue;
 	unsigned mod1;
-	if (!const_uarg (first, modpos, &mod1) || mod1 != mod2)
+	if (!rvtt_call_const_uarg (first, modpos, &mod1) || mod1 != mod2)
 	  continue;
 
 	/* Same-role repeat (arg i carries select i) or the mod-0
@@ -1180,7 +1004,7 @@ crosslane_transform::refold_swaps ()
 	      if (!seld
 		  || seld->id != (indexed ? rvtt_insn_data::sfpselect4
 					  : rvtt_insn_data::sfpselect2)
-		  || !const_uarg (sel, 1, &j) || j >= nsel)
+		  || !rvtt_call_const_uarg (sel, 1, &j) || j >= nsel)
 		{
 		  bad = true;
 		  break;
@@ -1315,7 +1139,7 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
 	    || gimple_bb (sel) != bb)
 	  return false;
 	unsigned idx;
-	if (!const_uarg (sel, 1, &idx) || idx >= 4 || fr->out[idx])
+	if (!rvtt_call_const_uarg (sel, 1, &idx) || idx >= 4 || fr->out[idx])
 	  return false;
 	tree v = gimple_call_lhs (sel);
 	fr->stmts.push_back (sel);
@@ -1349,7 +1173,7 @@ match_transp8_frame (gcall *call, transp8_frame *fr)
       if (d && d->id == rvtt_insn_data::sfpreadlreg)
 	{
 	  unsigned reg;
-	  if (!const_uarg (c, 0, &reg))
+	  if (!rvtt_call_const_uarg (c, 0, &reg))
 	    break;
 	  if (reg >= 4 && reg <= 7 && !fr->out[reg])
 	    {
@@ -1393,7 +1217,7 @@ crosslane_transform::companion_escape_p ()
 	if (!d || d->id != rvtt_insn_data::sfpreadlreg)
 	  continue;
 	unsigned reg;
-	if (!const_uarg (c, 0, &reg) || reg < 4 || reg > 7)
+	if (!rvtt_call_const_uarg (c, 0, &reg) || reg < 4 || reg > 7)
 	  continue;
 	if (!m_frame_stmts.contains (gsi_stmt (gsi)))
 	  return true;
@@ -1596,9 +1420,9 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
       bool zero_ok
 	= d
 	  && ((d->id == rvtt_insn_data::sfploadi
-	       && const_uarg (def, 1, &imm) && imm == 0)
+	       && rvtt_call_const_uarg (def, 1, &imm) && imm == 0)
 	      || (d->id == rvtt_insn_data::sfpreadlreg
-		  && const_uarg (def, 0, &imm) && imm == 9));
+		  && rvtt_call_const_uarg (def, 0, &imm) && imm == 9));
       if (!zero_ok || gimple_bb (def) != gimple_bb (transp_call))
 	return false;
       zeros.push_back (def);
@@ -1648,20 +1472,20 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
 
   gcall *readl = next_call (rvtt_insn_data::sfpreadlreg);
   unsigned reg;
-  if (!readl || !const_uarg (readl, 0, &reg) || reg != 15)
+  if (!readl || !rvtt_call_const_uarg (readl, 0, &reg) || reg != 15)
     return false;
   gcall *shft = next_call (rvtt_insn_data::sfpshft_i);
   unsigned shimm;
   if (!shft
       || resolve_value (gimple_call_arg (shft, 1)) != gimple_call_lhs (readl)
-      || !const_uarg (shft, 2, &shimm) || shimm != 0xfffffffcu)
+      || !rvtt_call_const_uarg (shft, 2, &shimm) || shimm != 0xfffffffcu)
     return false;		/* tileid >> 4 == lane_row */
   gcall *cmp = next_call (rvtt_insn_data::sfpxiadd_i);
   unsigned imm, mod;
   if (!cmp
       || resolve_value (gimple_call_arg (cmp, 1)) != gimple_call_lhs (shft)
-      || !const_uarg (cmp, 2, &imm) || imm != 2
-      || !const_uarg (cmp, 5, &mod) || mod != 9)
+      || !rvtt_call_const_uarg (cmp, 2, &imm) || imm != 2
+      || !rvtt_call_const_uarg (cmp, 5, &mod) || mod != 9)
     return false;		/* row >= 2 (canonical GE-compare CC set) */
   region.push_back (readl);
   region.push_back (shft);
@@ -1675,7 +1499,7 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
     {
       gcall *sw = next_call (rvtt_insn_data::sfpswap);
       unsigned m0;
-      if (!sw || !const_uarg (sw, 2, &m0) || m0 != 0)
+      if (!sw || !rvtt_call_const_uarg (sw, 2, &m0) || m0 != 0)
 	return false;
       unsigned lo = pair * 2;
       if (resolve_value (gimple_call_arg (sw, 0)) != resolve_value (cur[lo])
@@ -1701,7 +1525,7 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
 	      || gimple_bb (sel) != bb)
 	    return false;
 	  unsigned idx;
-	  if (!const_uarg (sel, 1, &idx) || idx > 1 || newv[idx])
+	  if (!rvtt_call_const_uarg (sel, 1, &idx) || idx > 1 || newv[idx])
 	    return false;
 	  tree v = gimple_call_lhs (sel);
 	  sel_stmts.push_back (sel);
@@ -1725,7 +1549,7 @@ match_zip_frame (gcall *transp_call, zip_frame *zf)
   /* Region exit: the word-exact all-lanes re-enable the structured-CC
      lowering places at region exits.  */
   gcall *encc = next_call (rvtt_insn_data::sfpencc);
-  if (!encc || !encc_all_lanes_call_p (encc, rvtt_get_insn_data (encc)))
+  if (!encc || !rvtt_encc_all_lanes_call_p (encc, rvtt_get_insn_data (encc)))
     return false;
   region.push_back (encc);
 

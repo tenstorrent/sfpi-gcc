@@ -108,34 +108,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-loop-niter.h"
 #include "cfgloop.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-refuse.h"
 
 namespace {
 
 static unsigned n_folded;
-
-/* STMT as a gcall when it is the rvtt builtin call with insn identity
-   ID, null otherwise.  */
-
-static gcall *
-is_rvtt_call (gimple *stmt, rvtt_insn_data::insn_id id)
-{
-  if (const rvtt_insn_data *insnd = rvtt_get_insn_data (stmt))
-    if (insnd->id == id)
-      return as_a <gcall *> (stmt);
-  return nullptr;
-}
-
-/* Argument N of CALL as a host integer, or -1 when it is not a
-   literal INTEGER_CST.  */
-
-static long
-int_arg (gcall *call, unsigned n)
-{
-  tree arg = gimple_call_arg (call, n);
-  return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
-}
-
 /* Book the named refusal REASON against STMT and dump it.  Always
    returns false so recognizers can bail with `return refuse
    (...)'.  */
@@ -166,12 +144,12 @@ zero_vector_p (tree val)
   switch (insnd->id)
     {
     case rvtt_insn_data::sfpreadlreg:
-      return int_arg (call, 0) == CREG_IDX_0;
+      return rvtt_call_int_arg (call, 0) == CREG_IDX_0;
     case rvtt_insn_data::sfpxloadi:
       /* (ib, value, ...) -- all-constant argument forms only.  */
-      return int_arg (call, 1) == 0;
+      return rvtt_call_int_arg (call, 1) == 0;
     case rvtt_insn_data::sfploadi:
-      return int_arg (call, 1) == 0;
+      return rvtt_call_int_arg (call, 1) == 0;
     default:
       return false;
     }
@@ -200,8 +178,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
   *candidate = false;
   memset (g, 0, sizeof (*g));
 
-  gcall *pushc = is_rvtt_call (gsi_stmt (gsi), rvtt_insn_data::sfppushc);
-  if (!pushc || int_arg (pushc, 0) != 0)
+  gcall *pushc = rvtt_call_with_id (gsi_stmt (gsi), rvtt_insn_data::sfppushc);
+  if (!pushc || rvtt_call_int_arg (pushc, 0) != 0)
     return false;
   g->pushc = pushc;
 
@@ -288,7 +266,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 	    /* Candidate identification: the predicated statement is a
 	       two's-complement subtract form.  From here on refusals
 	       are reported by name.  */
-	    long mod = int_arg (call, 2);
+	    long mod = rvtt_call_int_arg (call, 2);
 	    if (mod < 0 || !(mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST))
 	      return false;
 	    *candidate = true;
@@ -314,7 +292,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 
 	case rvtt_insn_data::sfppopc:
 	  {
-	    if (want != WANT_POPC || int_arg (call, 0) != 0)
+	    if (want != WANT_POPC || rvtt_call_int_arg (call, 0) != 0)
 	      return *candidate ? refuse ("int-abs-region-shape", stmt)
 				: false;
 	    g->popc = call;
@@ -385,10 +363,10 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
 		  if (is_gimple_debug (pstmt)
 		      || gimple_code (pstmt) == GIMPLE_LABEL)
 		    continue;
-		  if (gcall *pc = is_rvtt_call (pstmt,
+		  if (gcall *pc = rvtt_call_with_id (pstmt,
 						rvtt_insn_data::sfppopc))
 		    {
-		      if (popc || int_arg (pc, 0) != 0)
+		      if (popc || rvtt_call_int_arg (pc, 0) != 0)
 			only = false;
 		      else
 			popc = pc;
@@ -418,7 +396,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
      EQ/NE are not order tests; every other type or boundary lowers
      differently.  */
   {
-    long mod = int_arg (g->icmp, 5);
+    long mod = rvtt_call_int_arg (g->icmp, 5);
     if (mod < 0)
       return refuse ("int-abs-compare-form", g->icmp);
     unsigned type = ((unsigned) mod >> SFPXCMP_MOD1_TYPE_SHIFT)
@@ -433,8 +411,8 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
     unsigned eff = g->compc ? (cc ^ 1) : cc;
     if (eff != SFPXCMP_MOD1_CC_LT && eff != SFPXCMP_MOD1_CC_LE)
       return refuse ("int-abs-region-shape", g->icmp);
-    if (int_arg (g->icmp, 2) != 0
-	|| int_arg (g->icmp, 3) != 0 || int_arg (g->icmp, 4) != 0)
+    if (rvtt_call_int_arg (g->icmp, 2) != 0
+	|| rvtt_call_int_arg (g->icmp, 3) != 0 || rvtt_call_int_arg (g->icmp, 4) != 0)
       return refuse ("int-abs-boundary-unsupported", g->icmp);
   }
 
@@ -442,7 +420,7 @@ match_group (gimple_stmt_iterator gsi, intabs_group *g, bool *candidate)
      two's-complement subtract and no CC side channel.
      sfpiadd_v (A, B, ARG_2SCOMP_LREG_DST) computes B - A: A must be
      the compared value and B an architectural zero.  */
-  if (int_arg (g->iadd, 2)
+  if (rvtt_call_int_arg (g->iadd, 2)
       != (long) (SFPIADD_MOD1_ARG_2SCOMP_LREG_DST | SFPIADD_MOD1_CC_NONE))
     return refuse ("int-abs-iadd-mod-unsupported", g->iadd);
   if (gimple_call_arg (g->iadd, 0) != g->x)
@@ -546,7 +524,7 @@ transform (function *fun)
 	{
 	  gimple_stmt_iterator next = gsi;
 	  gsi_next (&next);
-	  if (is_rvtt_call (gsi_stmt (gsi), rvtt_insn_data::sfppushc))
+	  if (rvtt_call_with_id (gsi_stmt (gsi), rvtt_insn_data::sfppushc))
 	    {
 	      intabs_group g;
 	      bool candidate;

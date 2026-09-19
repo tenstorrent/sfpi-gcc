@@ -182,174 +182,6 @@ struct dst_access
   unsigned addr_mode;
   tree value;		/* stored value (SC_DST_WRITE only)  */
 };
-
-/* Typed builtins proven to have no Dst-memory access, no RWC effect,
-   no configuration write, and no hidden fixed-LREG contract.  A member
-   may still write CC through a mod operand; callers check
-   insnd->sets_cc on the concrete call and classify SC_CC_WRITE first.
-   Everything absent from this list keeps the refusing default
-   (SC_BARRIER).  */
-
-static bool
-safe_compute_id_p (rvtt_insn_data::insn_id id)
-{
-  switch (id)
-    {
-    case rvtt_insn_data::synth_opcode:
-    case rvtt_insn_data::sfpnop:
-    case rvtt_insn_data::sfpnovalue:
-    case rvtt_insn_data::sfpselect2:
-    case rvtt_insn_data::sfpselect4:
-    case rvtt_insn_data::sfpassign:
-    case rvtt_insn_data::sfpassign_lv:
-    case rvtt_insn_data::sfploadi:
-    case rvtt_insn_data::sfploadi_lv:
-    case rvtt_insn_data::sfpxloadi:
-    case rvtt_insn_data::sfpmov:
-    case rvtt_insn_data::sfpmov_lv:
-    case rvtt_insn_data::sfpexexp:
-    case rvtt_insn_data::sfpexexp_lv:
-    case rvtt_insn_data::sfpexman:
-    case rvtt_insn_data::sfpexman_lv:
-    case rvtt_insn_data::sfpabs:
-    case rvtt_insn_data::sfpabs_lv:
-    case rvtt_insn_data::sfplz:
-    case rvtt_insn_data::sfplz_lv:
-    case rvtt_insn_data::sfpand:
-    case rvtt_insn_data::sfpand_lv:
-    case rvtt_insn_data::sfpor:
-    case rvtt_insn_data::sfpor_lv:
-    case rvtt_insn_data::sfpxor:
-    case rvtt_insn_data::sfpxor_lv:
-    case rvtt_insn_data::sfpnot:
-    case rvtt_insn_data::sfpnot_lv:
-    case rvtt_insn_data::sfpshft_v:
-    case rvtt_insn_data::sfpshft_v_lv:
-    case rvtt_insn_data::sfpshft_i:
-    case rvtt_insn_data::sfpshft_i_lv:
-    case rvtt_insn_data::sfpiadd_v:
-    case rvtt_insn_data::sfpiadd_v_lv:
-    case rvtt_insn_data::sfpiadd_i:
-    case rvtt_insn_data::sfpiadd_i_lv:
-    case rvtt_insn_data::sfpxiadd_v:
-    case rvtt_insn_data::sfpxiadd_i:
-    case rvtt_insn_data::sfpxiadd_i_lv:
-    case rvtt_insn_data::sfpmul:
-    case rvtt_insn_data::sfpmul_lv:
-    case rvtt_insn_data::sfpmuli:
-    case rvtt_insn_data::sfpmuli_lv:
-    case rvtt_insn_data::sfpadd:
-    case rvtt_insn_data::sfpadd_lv:
-    case rvtt_insn_data::sfpaddi:
-    case rvtt_insn_data::sfpaddi_lv:
-    case rvtt_insn_data::sfpsetexp_v:
-    case rvtt_insn_data::sfpsetexp_v_lv:
-    case rvtt_insn_data::sfpsetexp_i:
-    case rvtt_insn_data::sfpsetexp_i_lv:
-    case rvtt_insn_data::sfpsetman_v:
-    case rvtt_insn_data::sfpsetman_v_lv:
-    case rvtt_insn_data::sfpsetman_i:
-    case rvtt_insn_data::sfpsetman_i_lv:
-    case rvtt_insn_data::sfpsetsgn_v:
-    case rvtt_insn_data::sfpsetsgn_v_lv:
-    case rvtt_insn_data::sfpsetsgn_i:
-    case rvtt_insn_data::sfpsetsgn_i_lv:
-    case rvtt_insn_data::sfpmad:
-    case rvtt_insn_data::sfpmad_lv:
-    case rvtt_insn_data::sfpdivp2:
-    case rvtt_insn_data::sfpdivp2_lv:
-    case rvtt_insn_data::sfpcast:
-    case rvtt_insn_data::sfpcast_lv:
-    case rvtt_insn_data::sfpstochrnd_i:
-    case rvtt_insn_data::sfpstochrnd_i_lv:
-    case rvtt_insn_data::sfpstochrnd_v:
-    case rvtt_insn_data::sfpstochrnd_v_lv:
-    case rvtt_insn_data::sfplut:
-    case rvtt_insn_data::sfplutfp32_3r:
-    case rvtt_insn_data::sfplutfp32_6r:
-    case rvtt_insn_data::sfpswap:
-    case rvtt_insn_data::sfpmul24:
-    case rvtt_insn_data::sfpmul24_lv:
-    case rvtt_insn_data::sfparecip:
-    case rvtt_insn_data::sfparecip_lv:
-    case rvtt_insn_data::sfpnonlinear:
-    case rvtt_insn_data::sfpnonlinear_lv:
-    case rvtt_insn_data::sfpreadconfig:
-    case rvtt_insn_data::sfpreadconfig_lv:
-    case rvtt_insn_data::sfpreadlreg:
-      return true;
-    default:
-      return false;
-    }
-}
-
-/* Typed CC writers that are unconditionally CC writes (independent of a
-   mod operand).  The word-exact all-lanes SFPENCC is handled separately
-   (SC_ENCC_ALL).  */
-
-static bool
-cc_writer_id_p (rvtt_insn_data::insn_id id)
-{
-  switch (id)
-    {
-    case rvtt_insn_data::sfpsetcc_i:
-    case rvtt_insn_data::sfpsetcc_v:
-    case rvtt_insn_data::sfpencc:
-    case rvtt_insn_data::sfpcompc:
-    case rvtt_insn_data::sfppushc:
-    case rvtt_insn_data::sfppopc:
-    case rvtt_insn_data::sfpxvif:
-    case rvtt_insn_data::sfpxbool:
-    case rvtt_insn_data::sfpxcondb:
-    case rvtt_insn_data::sfpxcondi:
-    case rvtt_insn_data::sfpxicmps:
-    case rvtt_insn_data::sfpxicmpv:
-    case rvtt_insn_data::sfpxfcmps:
-    case rvtt_insn_data::sfpxfcmpv:
-    case rvtt_insn_data::sfpgt:
-    case rvtt_insn_data::sfpgt_lv:
-    case rvtt_insn_data::sfple:
-    case rvtt_insn_data::sfple_lv:
-      return true;
-    default:
-      return false;
-    }
-}
-
-/* Read argument ARGNO of CALL into *OUT when it is an INTEGER_CST
-   fitting an unsigned HWI.  Returns false, leaving *OUT untouched,
-   for a missing or non-constant argument.  */
-
-static bool
-const_uarg (gcall *call, unsigned argno, unsigned *out)
-{
-  if (gimple_call_num_args (call) <= argno)
-    return false;
-  tree arg = gimple_call_arg (call, argno);
-  if (TREE_CODE (arg) != INTEGER_CST || !tree_fits_uhwi_p (arg))
-    return false;
-  *out = (unsigned) tree_to_uhwi (arg);
-  return true;
-}
-
-/* Word-exact all-lanes SFPENCC call?  Proven against the capability
-   table's architectural encoding, mirroring the RTL
-   cc_write_all_lanes derivation (rvtt-effects.cc): the builtin's
-   argument order is (mod1, imm12), the emission's operand roles.  */
-
-static bool
-encc_all_lanes_call_p (gcall *call, const rvtt_insn_data *insnd)
-{
-  if (insnd->id != rvtt_insn_data::sfpencc)
-    return false;
-  unsigned mod1, imm12;
-  if (!const_uarg (call, 0, &mod1) || !const_uarg (call, 1, &imm12))
-    return false;
-  uint32_t word;
-  return rvtt_macro::sfpencc_encode (imm12, mod1, &word)
-	 && word == rvtt_macro::sfpencc_all_lanes_word ();
-}
-
 /* Parse a typed constant-address Dst access.  sfpload args:
    (instrn_ptr, addr, var, id, mod0, addr_mode); sfpstore args:
    (instrn_ptr, value, addr, var, id, mod0, addr_mode).  Only the fully
@@ -365,11 +197,11 @@ parse_dst_access (gcall *call, const rvtt_insn_data *insnd, dst_access *acc)
   if (!integer_zerop (ptr))
     return false;
   unsigned var, id;
-  if (!const_uarg (call, base + 1, &acc->addr)
-      || !const_uarg (call, base + 2, &var) || var != 0
-      || !const_uarg (call, base + 3, &id) || id != 0
-      || !const_uarg (call, base + 4, &acc->mod0)
-      || !const_uarg (call, base + 5, &acc->addr_mode))
+  if (!rvtt_call_const_uarg (call, base + 1, &acc->addr)
+      || !rvtt_call_const_uarg (call, base + 2, &var) || var != 0
+      || !rvtt_call_const_uarg (call, base + 3, &id) || id != 0
+      || !rvtt_call_const_uarg (call, base + 4, &acc->mod0)
+      || !rvtt_call_const_uarg (call, base + 5, &acc->addr_mode))
     return false;
   acc->value = store ? gimple_call_arg (call, 1) : NULL_TREE;
   return true;
@@ -456,20 +288,20 @@ classify_stmt (gimple *stmt)
       unsigned mode;
       bool ok = true;
       for (unsigned i = 0; i != 4; ++i)
-	ok &= const_uarg (g, i, &c.gather_addr[i]);
-      ok &= const_uarg (g, 4, &c.gather_mod0);
-      ok &= const_uarg (g, 5, &mode);
+	ok &= rvtt_call_const_uarg (g, i, &c.gather_addr[i]);
+      ok &= rvtt_call_const_uarg (g, 4, &c.gather_mod0);
+      ok &= rvtt_call_const_uarg (g, 5, &mode);
       c.cls = ok ? SC_GATHER : SC_BARRIER;
       return c;
     }
 
-  if (encc_all_lanes_call_p (call, insnd))
+  if (rvtt_encc_all_lanes_call_p (call, insnd))
     {
       c.cls = SC_ENCC_ALL;
       return c;
     }
 
-  if (cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
+  if (rvtt_cc_writer_id_p (insnd->id) || insnd->sets_cc (call))
     {
       c.cls = SC_CC_WRITE;
       return c;
@@ -484,7 +316,7 @@ classify_stmt (gimple *stmt)
       return c;
     }
 
-  if (safe_compute_id_p (insnd->id))
+  if (rvtt_dst_inert_compute_id_p (insnd->id))
     {
       c.cls = SC_SAFE;
       return c;
@@ -624,7 +456,7 @@ value_never_denormal_p (tree val, unsigned depth = 0)
     case rvtt_insn_data::sfpreadlreg:
       {
 	unsigned reg;
-	return const_uarg (def, 0, &reg) && (reg == 8 || reg == 9 || reg == 10);
+	return rvtt_call_const_uarg (def, 0, &reg) && (reg == 8 || reg == 9 || reg == 10);
       }
     case rvtt_insn_data::sfpassign:
     case rvtt_insn_data::sfpassign_lv:

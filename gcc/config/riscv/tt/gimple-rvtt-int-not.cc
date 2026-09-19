@@ -82,22 +82,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-pretty-print.h"
 #include "tree-cfg.h"
 #include "rvtt.h"
+#include "rvtt-effects.h"
 #include "rvtt-refuse.h"
 
 namespace {
 
 static unsigned n_folded;
-
-/* Argument N of CALL as a host integer, or -1 when it is not a
-   literal INTEGER_CST.  */
-
-static long
-int_arg (gcall *call, unsigned n)
-{
-  tree arg = gimple_call_arg (call, n);
-  return TREE_CODE (arg) == INTEGER_CST ? TREE_INT_CST_LOW (arg) : -1;
-}
-
 /* Book the named refusal REASON against STMT and dump it.  Always
    returns false so recognizers can bail with `return refuse
    (...)'.  */
@@ -137,7 +127,7 @@ all_ones_vector_p (tree val)
 	 zero is -- raw forms never match.  */
       {
 	/* (ib, value, ...) -- LITERAL-constant argument forms only: the
-	   int_arg "not a constant" sentinel (-1) would collide with the
+	   rvtt_call_int_arg "not a constant" sentinel (-1) would collide with the
 	   all-ones value itself, and variable-immediate loads (the immvar
 	   RISC-composed forms) must never match.  */
 	tree varg = gimple_call_arg (call, 1);
@@ -155,7 +145,7 @@ all_ones_vector_p (tree val)
 static bool
 fold_iadd (gcall *iadd)
 {
-  long mod = int_arg (iadd, 2);
+  long mod = rvtt_call_int_arg (iadd, 2);
   if (mod < 0 || !(mod & SFPIADD_MOD1_ARG_2SCOMP_LREG_DST))
     return false;
 
