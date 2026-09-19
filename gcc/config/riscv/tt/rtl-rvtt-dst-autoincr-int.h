@@ -22,7 +22,16 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_RTL_RVTT_DST_AUTOINCR_INT_H
 #define GCC_RTL_RVTT_DST_AUTOINCR_INT_H
 
+/* A named namespace, not the global one.  These types were file-local
+   before the split (inside the anonymous namespace of
+   rtl-rvtt-dst-autoincr.cc); putting them at global scope would collide
+   with the unrelated `candidate' in gimple-rvtt-prgm-fuse.cc and in
+   gcc/sched-rgn.cc, and would take core GCC's classify_insn name.  */
+
+
 #include <vector>
+
+namespace rvtt_autoincr {
 
 /* rtl-rvtt-dst-autoincr.cc grew past 2700 lines.  The scan/model half
    -- the target capability table, the classification vocabulary, the
@@ -305,5 +314,7 @@ insn_frontend_cover_words (rtx_insn *insn);
 
 extern unsigned
 item_frontend_words (const bb_item &item);
+
+} /* namespace rvtt_autoincr */
 
 #endif /* GCC_RTL_RVTT_DST_AUTOINCR_INT_H */

@@ -223,7 +223,7 @@ along with GCC; see the file COPYING3.  If not see
    the MOP template slots must be config-word-free.  Zero-trip
    soundness is the coefficient contract's own argument with the
    register file swapped: the destination is not allocatable, explicit
-   reads outside the loop crosscall_refuse (crosscall-caller-foreign-contract),
+   reads outside the loop refuse (crosscall-caller-foreign-contract),
    and every trip-taking execution already wrote this constant to this
    register.  Pair disqualifications (dump notes, behavior falls back
    to the pre-flag refusals byte-identically):
@@ -553,7 +553,7 @@ scan_store (scan_ctx *ctx, gimple *stmt)
 	/* Re-programming template slots inside the epoch: the written
 	   word joins the TU census anyway, but a slot write inside the
 	   scanned range plus a MOP launch is exactly the re-arm case;
-	   keep it simple and crosscall_refuse (no wired row needs it).  */
+	   keep it simple and refuse (no wired row needs it).  */
 	return scan_refuse (ctx, "crosscall-caller-word-unproven", stmt);
       return true;		/* other constant MMIO / L1: no LREG */
     }
