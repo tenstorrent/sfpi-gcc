@@ -122,16 +122,21 @@ struct lpa_graph
   }
 };
 
-extern void lpa_refuse (spill_ctx &ctx, const char *name, const char *detail, rtx_insn *at);
+extern void lpa_refuse (spill_ctx &ctx, const char *name,
+			const char *detail, rtx_insn *at);
 extern void scan_spill_legality (function *fn, spill_ctx &ctx);
-extern HOST_WIDE_INT choose_scratch_row (spill_ctx &ctx, int max_delta, int epoch);
+extern HOST_WIDE_INT choose_scratch_row (spill_ctx &ctx, int max_delta,
+					 int epoch);
 extern int sentinel_read_lregno (int code);
 extern int sentinel_write_lregno (int code);
 extern bool xtt32_pseudo_p (unsigned regno);
 extern void build_graph (function *fn, lpa_graph &g, bitmap spill_tmps);
 extern unsigned coalesce_conservative (function *fn, lpa_graph &g);
-extern bool dsatur_color (const lpa_graph &g, auto_vec<int> &color, int *blocked);
-extern int choose_spill_web (const lpa_graph &g, int blocked, function *fn, const spill_ctx &ctx, int *max_delta, int *epoch_out, const char **why);
+extern bool dsatur_color (const lpa_graph &g, auto_vec<int> &color,
+			  int *blocked);
+extern int choose_spill_web (const lpa_graph &g, int blocked, function *fn,
+			     const spill_ctx &ctx, int *max_delta,
+			     int *epoch_out, const char **why);
 extern bool dst_mode_32bit_p (HOST_WIDE_INT m);
 
 #endif /* GCC_RTL_RVTT_LP_ALLOC_INT_H */

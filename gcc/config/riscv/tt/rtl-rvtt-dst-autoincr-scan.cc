@@ -46,6 +46,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "rvtt-raw-boundary.h"
 #include "rtl-rvtt-dst-autoincr-int.h"
 
+namespace rvtt_autoincr {
+
 
 /* The current target's auto-increment capability entry: modifier
    encodings, owned slot registers, and the audited frontend distance
@@ -736,3 +738,5 @@ item_frontend_words (const bb_item &item)
       words += insn_frontend_cover_words (member);
   return words;
 }
+
+} /* namespace rvtt_autoincr */

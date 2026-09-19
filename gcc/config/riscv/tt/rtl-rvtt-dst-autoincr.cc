@@ -63,6 +63,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "rvtt-protos.h"
 #include "rtl-rvtt-dst-autoincr-int.h"
+
+using namespace rvtt_autoincr;
 #include "rvtt-refuse.h"
 #include "rvtt-effects.h"
 #include "rvtt-macro-ownership.h"
