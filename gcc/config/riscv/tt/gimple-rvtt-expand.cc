@@ -361,7 +361,7 @@ find_top_of_cond_tree (gcall *stmt)
     case rvtt_insn_data::sfpxbool:
       {
 	// Follow only child for NOT, left-most child for AND/OR, all degenerate to same case
-	gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
+	gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS)));
 	return find_top_of_cond_tree (child);
       }
       break;
@@ -428,7 +428,7 @@ mark_vif_stmts (gimple_stmt_iterator top,
 static void
 expand_xcondi (gcall *stmt)
 {
-  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
   gcall *top = find_top_of_cond_tree (child);
 
   gimple_stmt_iterator gsi = gsi_for_stmt (top);
@@ -479,7 +479,7 @@ process_bool_tree (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gs
   if (dump_file)
     fprintf (dump_file, "    left\n");
   process_tree_node (pre_gsip, &left_post_gsi, &left_negated,
-		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS))),
+		    dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_LEFT_TREE_ARG_POS))),
 		    stmt, negate);
 
   // Emit RIGHT
@@ -488,7 +488,7 @@ process_bool_tree (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gs
   if (dump_file)
     fprintf (dump_file, "    right\n");
   process_tree_node (&right_pre_gsi, post_gsip, &right_negated,
-		    dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_RIGHT_TREE_ARG_POS))),
+		    dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXBOOL_RIGHT_TREE_ARG_POS))),
 		    stmt, negate);
 
   if (right_negated)
@@ -534,7 +534,7 @@ static bool
 process_xcondi (gcall *stmt, gcall *parent, bool optimizeit)
 {
   // Process the child as a new tree
-  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
 
   bool optimized = false;
   tree cmp_lhs = gimple_call_lhs (parent);
@@ -608,7 +608,7 @@ process_tree_phi (gcall *stmt, gimple *child)
 	}
       else if (origin->code == GIMPLE_CALL)
 	{
-	  gcall *origin_stmt = dyn_cast<gcall *>(origin);
+	  gcall *origin_stmt = dyn_cast<gcall *> (origin);
 	  const rvtt_insn_data *origin_insnd;
 	  origin_insnd = rvtt_get_insn_data (origin_stmt);
 	  if (origin_insnd->id == rvtt_insn_data::sfpxcondi)
@@ -656,7 +656,7 @@ process_tree_node (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gs
 	  }
 	else if (child->code == GIMPLE_CALL) // could be inline asm...
 	  {
-	    gcall *child_call = dyn_cast<gcall *>(child);
+	    gcall *child_call = dyn_cast<gcall *> (child);
 	    const rvtt_insn_data *child_insnd = rvtt_get_insn_data (child_call);
 	    if (child_insnd->id == rvtt_insn_data::sfpxcondi)
 	      {
@@ -691,7 +691,7 @@ process_tree_node (gimple_stmt_iterator *pre_gsip, gimple_stmt_iterator *post_gs
 	  if (op == SFPXBOOL_MOD1_NOT)
 	    {
 	      process_tree_node (pre_gsip, post_gsip, negated,
-				dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, 1))), stmt, !negate);
+				dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, 1))), stmt, !negate);
 	    }
 	  else
 	    {
@@ -757,8 +757,8 @@ transform (function *fun)
 	      if (dump_file)
 	        fprintf (dump_file, "  process xcondb\n");
 	      // This will be the sfpxvif stmt
-	      gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_TREE_ARG_POS)));
-	      gcall* top = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_START_ARG_POS)));
+	      gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_TREE_ARG_POS)));
+	      gcall *top = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDB_START_ARG_POS)));
 	      mark_vif_stmts (gsi_for_stmt (top), gsi);
 
 	      process_tree (child, stmt);
@@ -791,7 +791,7 @@ transform (function *fun)
 		  auto *stmt = as_a <gcall *> (*gsi);
 		  if (dump_file)
 		    fprintf (dump_file, "  process xcondi tree\n");
-		  gcall *child = dyn_cast<gcall *>(SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
+		  gcall *child = dyn_cast<gcall *> (SSA_NAME_DEF_STMT (gimple_call_arg (stmt, SFPXCONDI_TREE_ARG_POS)));
 		  expand_xcondi (stmt);
 		  process_tree (child, stmt);
 		  phi_stmts.clear ();
